@@ -206,8 +206,7 @@ struct FirMemory {
         numReadPorts, numWritePorts, numReadWritePorts, dataWidth, depth,
         readLatency, writeLatency, maskBits, readUnderWrite, writeUnderWrite,
         writeClockIDs, groupID, init ? init.getFilename().getValue() : "",
-        init ? init.getIsBinary().getValue() : false,
-        init ? init.getIsInline().getValue() : false);
+        init ? init.getIsBinary() : false, init ? init.getIsInline() : false);
   }
   bool operator<(const FirMemory &rhs) const {
     return getTuple() < rhs.getTuple();

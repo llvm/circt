@@ -8,7 +8,7 @@
 
 #include "circt/Conversion/ConvertToArcs.h"
 #include "../PassDetail.h"
-#include "circt/Dialect/Arc/Ops.h"
+#include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/Namespace.h"
@@ -24,7 +24,7 @@ using llvm::MapVector;
 static bool isArcBreakingOp(Operation *op) {
   return op->hasTrait<OpTrait::ConstantLike>() ||
          isa<hw::InstanceOp, seq::CompRegOp, StateOp, ClockGateOp, MemoryOp,
-             MemoryReadOp, MemoryWriteOp>(op) ||
+             MemoryReadPortOp, MemoryWritePortOp>(op) ||
          op->getNumResults() > 1;
 }
 
@@ -89,7 +89,7 @@ LogicalResult Converter::runOnModule(HWModuleOp module) {
   if (module.getBodyBlock()->without_terminator().empty() &&
       isa<hw::OutputOp>(module.getBodyBlock()->getTerminator()))
     return success();
-  LLVM_DEBUG(llvm::dbgs() << "Analyzing " << module.moduleNameAttr() << " ("
+  LLVM_DEBUG(llvm::dbgs() << "Analyzing " << module.getModuleNameAttr() << " ("
                           << arcBreakers.size() << " breakers)\n");
 
   // For each operation, figure out the set of breaker ops it contributes to,
@@ -157,6 +157,7 @@ LogicalResult Converter::analyzeFanIn() {
     }
 
     auto duplicateOp = faninMasks.insert({op, mask});
+    (void)duplicateOp;
     assert(duplicateOp.second && "duplicate op in order");
   }
 
@@ -235,7 +236,7 @@ void Converter::extractArcs(HWModuleOp module) {
     auto defOp = builder.create<DefineOp>(
         lastOp->getLoc(),
         builder.getStringAttr(
-            globalNamespace.newName(module.moduleName() + "_arc")),
+            globalNamespace.newName(module.getModuleName() + "_arc")),
         builder.getFunctionType(inputTypes, outputTypes));
     defOp.getBody().push_back(block.release());
 
@@ -356,7 +357,7 @@ void Converter::absorbRegs(HWModuleOp module) {
     auto defOp =
         builder.create<DefineOp>(loc,
                                  builder.getStringAttr(globalNamespace.newName(
-                                     module.moduleName() + "_arc")),
+                                     module.getModuleName() + "_arc")),
                                  builder.getFunctionType(types, types));
     defOp.getBody().push_back(block.release());
 

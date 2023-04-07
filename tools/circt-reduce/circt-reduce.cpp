@@ -235,6 +235,9 @@ static LogicalResult execute(MLIRContext &context) {
       pattern.beforeReduction(*newModule);
       SmallVector<std::pair<Operation *, uint64_t>, 16> opBenefits;
       SmallDenseSet<Operation *> opsTouched;
+      pattern.notifyOpErasedCallback = [&](Operation *op) {
+        opsTouched.insert(op);
+      };
       newModule->walk([&](Operation *op) {
         uint64_t benefit = pattern.match(op);
         if (benefit > 0) {
@@ -256,6 +259,7 @@ static LogicalResult execute(MLIRContext &context) {
         }
       }
       pattern.afterReduction(*newModule);
+      pattern.notifyOpErasedCallback = nullptr;
       if (opIdx == 0) {
         VERBOSE({
           clearSummary();

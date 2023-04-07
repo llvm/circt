@@ -445,6 +445,14 @@ static void replaceRefEdges(SmallVectorImpl<Backedge> &edges) {
 
   // Ensure that all users of the `opToRemove` are defined after the driver.
   // This is required to ensure the driver dominates the users.
+  // XXX: This is fragile and incomplete and known to be broken.
+  // 1) If there are when's (or multiple blocks), this strategy is dead.
+  //    Inliner doesn't presently work before ExpandWhen's, however.
+  // 2) Even today this could be wrong as we have no place to put references
+  //    and inlining instances removes ref "storage" points, such that use
+  //    and defs cannot be maintained by moving things around.
+  // 3) This assumes you can freely move the user(s) which may depend on other
+  //    users or otherwise be unsafe to move (side-effects).
   auto moveUseAfterDef = [&](Operation *opToRemove, Operation *driver) {
     for (Operation *user : opToRemove->getUsers())
       if (user->isBeforeInBlock(driver))
@@ -507,13 +515,17 @@ private:
   /// referring to some other path.
   bool doesNLAMatchCurrentPath(hw::HierPathOp nla);
 
-  /// Rename an operation and unique any symbols it has. If the op is an
-  /// InstanceOp, then `validHierPaths` is the set of HierPaths that the
-  /// InstanceOp participates in. `validHierPaths` is required, since the
-  /// InstanceOp no longer contains the BreadCrumbs which indicated the
-  /// `HierPathOps` that it participates in.
-  void rename(StringRef prefix, Operation *op, ModuleNamespace &moduleNamespace,
-              SmallVector<StringAttr> &validHierPaths);
+  /// Rename an operation and unique any symbols it has.
+  /// Returns true iff symbol was changed.
+  bool rename(StringRef prefix, Operation *op,
+              ModuleNamespace &moduleNamespace);
+
+  /// Rename an InstanceOp and unique any symbols it has.
+  /// Requires old and new operations to appropriately update the `HierPathOp`'s
+  /// that it participates in.
+  bool renameInstance(StringRef prefix, InstanceOp oldInst, InstanceOp newInst,
+                      ModuleNamespace &moduleNamespace,
+                      const DenseMap<Attribute, Attribute> &symbolRenames);
 
   /// Clone and rename an operation.
   void cloneAndRename(StringRef prefix, OpBuilder &b, IRMapping &mapper,
@@ -550,7 +562,7 @@ private:
   /// the target, and does not trigger inlining on the target itself.
   void inlineInto(StringRef prefix, OpBuilder &b, IRMapping &mapper,
                   BackedgeBuilder &beb, SmallVectorImpl<Backedge> &edges,
-                  FModuleOp target,
+                  FModuleOp target, FModuleOp inlineToParent,
                   DenseMap<Attribute, Attribute> &symbolRenames,
                   ModuleNamespace &moduleNamespace);
 
@@ -628,10 +640,8 @@ bool Inliner::doesNLAMatchCurrentPath(hw::HierPathOp nla) {
 /// If this operation or any child operation has a name, add the prefix to that
 /// operation's name.  If the operation has any inner symbols, make sure that
 /// these are unique in the namespace.
-// NOLINTNEXTLINE(misc-no-recursion)
-void Inliner::rename(StringRef prefix, Operation *op,
-                     ModuleNamespace &moduleNamespace,
-                     SmallVector<StringAttr> &validHierPaths) {
+bool Inliner::rename(StringRef prefix, Operation *op,
+                     ModuleNamespace &moduleNamespace) {
   // Add a prefix to things that has a "name" attribute.  We don't prefix
   // memories since it will affect the name of the generated module.
   // TODO: We should find a way to prefix the instance of a memory module.
@@ -641,14 +651,6 @@ void Inliner::rename(StringRef prefix, Operation *op,
                                           (prefix + nameAttr.getValue())));
   }
 
-  // Record the list of HierPathOps that the original op participates in, so
-  // that they can be moved to the op after renaming.
-  StringAttr instanceParent, oldInstSym;
-  if (auto inst = dyn_cast<InstanceOp>(op))
-    if (auto instSym = getInnerSymName(inst)) {
-      instanceParent = inst->getParentOfType<FModuleOp>().getNameAttr();
-      oldInstSym = instSym;
-    }
   // If the operation has an inner symbol, ensure that it is unique.  Record
   // renames for any NLAs that this participates in if the symbol was renamed.
   if (auto sym = getInnerSymName(op)) {
@@ -670,29 +672,92 @@ void Inliner::rename(StringRef prefix, Operation *op,
           continue;
         mnla.setInnerSym(moduleNamespace.module.moduleNameAttr(), newSymAttr);
       }
-      if (instanceParent) {
-        // The InstanceOp is renamed, so move the HierPathOps to the new
-        // InnerRefAttr.
-        auto newInnerRef = InnerRefAttr::get(instanceParent, newSymAttr);
-        instOpHierPaths[newInnerRef] = validHierPaths;
-        // Update the innerSym for all the affected HierPathOps.
-        for (auto nla : instOpHierPaths[newInnerRef]) {
-          if (!nlaMap.count(nla))
-            continue;
-          auto &mnla = nlaMap[nla];
-          mnla.setInnerSym(moduleNamespace.module.moduleNameAttr(), newSymAttr);
-        }
-        auto oldInnerRef = InnerRefAttr::get(instanceParent, oldInstSym);
-        instOpHierPaths.erase(oldInnerRef);
-      }
+      // Indicate symbol was changed.
+      return true;
+    }
+  }
+  // No change to symbol, if present.
+  return false;
+}
+
+bool Inliner::renameInstance(
+    StringRef prefix, InstanceOp oldInst, InstanceOp newInst,
+    ModuleNamespace &moduleNamespace,
+    const DenseMap<Attribute, Attribute> &symbolRenames) {
+  // Add this instance to the activeHierpaths. This ensures that NLAs that this
+  // instance participates in will be updated correctly.
+  auto parentActivePaths = activeHierpaths;
+  if (auto instSym = getInnerSymName(oldInst))
+    setActiveHierPaths(oldInst->getParentOfType<FModuleOp>().getNameAttr(),
+                       instSym);
+  // List of HierPathOps that are valid based on the InstanceOp being inlined
+  // and the InstanceOp which is being replaced after inlining. That is the set
+  // of HierPathOps that is common between these two.
+  SmallVector<StringAttr> validHierPaths;
+  auto oldParent = oldInst->getParentOfType<FModuleOp>().getNameAttr();
+  auto oldInstSym = getInnerSymName(oldInst);
+
+  if (oldInstSym) {
+    // Get the innerRef to the original InstanceOp that is being inlined here.
+    // For all the HierPathOps that the instance being inlined participates
+    // in.
+    auto oldInnerRef = InnerRefAttr::get(oldParent, oldInstSym);
+    for (auto old : instOpHierPaths[oldInnerRef]) {
+      // If this HierPathOp is valid at the inlining context, where the
+      // instance is being inlined at. That is, if it exists in the
+      // activeHierpaths.
+      if (activeHierpaths.find(old) != activeHierpaths.end())
+        validHierPaths.push_back(old);
+      else
+        // The HierPathOp could have been renamed, check for the other retoped
+        // names, if they are active at the inlining context.
+        for (auto additionalSym : nlaMap[old].getAdditionalSymbols())
+          if (activeHierpaths.find(additionalSym.getName()) !=
+              activeHierpaths.end()) {
+            validHierPaths.push_back(old);
+            break;
+          }
     }
   }
 
-  // Recursively rename any child operations.
-  for (auto &region : op->getRegions())
-    for (auto &block : region)
-      for (auto &op : block)
-        rename(prefix, &op, moduleNamespace, validHierPaths);
+  assert(getInnerSymName(newInst) == oldInstSym);
+
+  // Do the renaming, creating new symbol as needed.
+  auto symbolChanged = rename(prefix, newInst, moduleNamespace);
+
+  // If the symbol changed, update instOpHierPaths accordingly.
+  auto newSymAttr = getInnerSymName(newInst);
+  if (symbolChanged) {
+    assert(newSymAttr);
+    // The InstanceOp is renamed, so move the HierPathOps to the new
+    // InnerRefAttr.
+    auto newInnerRef = InnerRefAttr::get(
+        newInst->getParentOfType<FModuleOp>().getNameAttr(), newSymAttr);
+    instOpHierPaths[newInnerRef] = validHierPaths;
+    // Update the innerSym for all the affected HierPathOps.
+    for (auto nla : instOpHierPaths[newInnerRef]) {
+      if (!nlaMap.count(nla))
+        continue;
+      auto &mnla = nlaMap[nla];
+      assert(newInnerRef.getModule() ==
+             moduleNamespace.module.moduleNameAttr());
+      mnla.setInnerSym(moduleNamespace.module.moduleNameAttr(), newSymAttr);
+    }
+  }
+
+  if (newSymAttr) {
+    auto innerRef = InnerRefAttr::get(
+        newInst->getParentOfType<FModuleOp>().getNameAttr(), newSymAttr);
+    SmallVector<StringAttr> &nlaList = instOpHierPaths[innerRef];
+    // Now rename the Updated HierPathOps that this InstanceOp participates in.
+    for (const auto &en : llvm::enumerate(nlaList)) {
+      auto oldNLA = en.value();
+      if (auto newSym = symbolRenames.lookup(oldNLA))
+        nlaList[en.index()] = newSym.cast<StringAttr>();
+    }
+  }
+  activeHierpaths = std::move(parentActivePaths);
+  return symbolChanged;
 }
 
 /// This function is used before inlining a module, to handle the conversion
@@ -743,10 +808,13 @@ void Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b, IRMapping &mapper,
     Value wire =
         TypeSwitch<FIRRTLType, Value>(type)
             .Case<FIRRTLBaseType>([&](auto base) {
-              return b.create<WireOp>(
-                  target.getLoc(), base, (prefix + portInfo[i].getName()).str(),
-                  NameKindEnum::DroppableName,
-                  ArrayAttr::get(context, newAnnotations), newSym);
+              return b
+                  .create<WireOp>(target.getLoc(), base,
+                                  (prefix + portInfo[i].getName()).str(),
+                                  NameKindEnum::DroppableName,
+                                  ArrayAttr::get(context, newAnnotations),
+                                  newSym)
+                  .getResult();
             })
             .Case<RefType>([&](auto refty) {
               // Symbols and annotations are not allowed, warn if dropping.
@@ -802,47 +870,26 @@ void Inliner::cloneAndRename(
 
   // Clone and rename.
   auto *newOp = b.clone(op, mapper);
-  // List of HierPathOps that are valid based on the InstanceOp being inlined
-  // and the InstanceOp which is being replaced after inlining. That is the set
-  // of HierPathOps that is common between these two.
-  SmallVector<StringAttr> validHierPaths;
-  if (auto instance = dyn_cast<InstanceOp>(&op))
-    if (auto instSym = getInnerSymName(instance)) {
-      // Get the innerRef to the original InstanceOp that is being inlined here.
-      auto oldInnerRef = InnerRefAttr::get(
-          instance->getParentOfType<FModuleOp>().getNameAttr(), instSym);
-      // For all the HierPathOps that the instance being inlined participates
-      // in.
-      for (auto old : instOpHierPaths[oldInnerRef]) {
-        // If this HierPathOp is valid at the inlining context, where the
-        // instance is being inlined at. That is, if it exists in the
-        // activeHierpaths.
-        if (activeHierpaths.find(old) != activeHierpaths.end())
-          validHierPaths.push_back(old);
-        else
-          // The HierPathOp could have been renamed, check for the other retoped
-          // names, if they are active at the inlining context.
-          for (auto additionalSym : nlaMap[old].getAdditionalSymbols())
-            if (activeHierpaths.find(additionalSym.getName()) !=
-                activeHierpaths.end()) {
-              validHierPaths.push_back(old);
-              break;
-            }
-      }
-    }
-  rename(prefix, newOp, moduleNamespace, validHierPaths);
-  if (isa<InstanceOp>(&op)) {
-    auto innerRef =
-        InnerRefAttr::get(newOp->getParentOfType<FModuleOp>().getNameAttr(),
-                          getInnerSymName(newOp));
-    SmallVector<StringAttr> &nlaList = instOpHierPaths[innerRef];
-    // Now rename the Updated HierPathOps that this InstanceOp participates in.
-    for (const auto &en : llvm::enumerate(nlaList)) {
-      auto oldNLA = en.value();
-      if (auto newSym = symbolRenames.lookup(oldNLA))
-        nlaList[en.index()] = newSym.cast<StringAttr>();
-    }
-  }
+
+  // Rename the new operation and any contained operations.
+  // (add prefix to it, if named, and unique-ify symbol, updating NLA's).
+  op.walk<mlir::WalkOrder::PreOrder>([&](Operation *origOp) {
+    auto *newOpToRename = mapper.lookup(origOp);
+    assert(newOpToRename);
+    // TODO: If want to work before ExpandWhen's, more work needed!
+    // Handle what we can for now.
+    assert(origOp == &op || !isa<InstanceOp>(origOp) &&
+                                "Cannot handle instances not at top-level");
+
+    // Instances require extra handling to update HierPathOp's if their symbols
+    // change.
+    if (auto oldInst = dyn_cast<InstanceOp>(origOp))
+      renameInstance(prefix, oldInst, cast<InstanceOp>(newOpToRename),
+                     moduleNamespace, symbolRenames);
+    else
+      rename(prefix, newOpToRename, moduleNamespace);
+  });
+
   // We want to avoid attaching an empty annotation array on to an op that
   // never had an annotation array in the first place.
   if (!newAnnotations.empty() || !oldAnnotations.empty())
@@ -980,7 +1027,7 @@ void Inliner::flattenInstances(FModuleOp module) {
 // NOLINTNEXTLINE(misc-no-recursion)
 void Inliner::inlineInto(StringRef prefix, OpBuilder &b, IRMapping &mapper,
                          BackedgeBuilder &beb, SmallVectorImpl<Backedge> &edges,
-                         FModuleOp target,
+                         FModuleOp target, FModuleOp inlineToParent,
                          DenseMap<Attribute, Attribute> &symbolRenames,
                          ModuleNamespace &moduleNamespace) {
   auto moduleName = target.getNameAttr();
@@ -1037,7 +1084,9 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b, IRMapping &mapper,
     if (!rootMap[childModule.getNameAttr()].empty()) {
       for (auto sym : rootMap[childModule.getNameAttr()]) {
         auto &mnla = nlaMap[sym];
-        sym = mnla.reTop(target);
+        // Retop to the new parent, which is the topmost module (and not
+        // immediate parent) in case of recursive inlining.
+        sym = mnla.reTop(inlineToParent);
         StringAttr instSym = getInnerSymName(instance);
         if (!instSym) {
           instSym = StringAttr::get(
@@ -1070,7 +1119,7 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b, IRMapping &mapper,
                   moduleNamespace);
     } else {
       inlineInto(nestedPrefix, b, mapper, beb, edges, childModule,
-                 symbolRenames, moduleNamespace);
+                 inlineToParent, symbolRenames, moduleNamespace);
     }
     currentPath.pop_back();
     activeHierpaths = parentActivePaths;
@@ -1166,8 +1215,10 @@ void Inliner::inlineInstances(FModuleOp parent) {
       flattenInto(nestedPrefix, b, mapper, beb, edges, target, {},
                   moduleNamespace);
     } else {
-      inlineInto(nestedPrefix, b, mapper, beb, edges, target, symbolRenames,
-                 moduleNamespace);
+      // Recursively inline all the child modules under `parent`, that are
+      // marked to be inlined.
+      inlineInto(nestedPrefix, b, mapper, beb, edges, target, parent,
+                 symbolRenames, moduleNamespace);
     }
     currentPath.pop_back();
     activeHierpaths = parentActivePaths;
@@ -1326,75 +1377,73 @@ void Inliner::run() {
   // Garbage collect any annotations which are now dead.  Duplicate annotations
   // which are now split.
   for (auto fmodule : circuit.getBodyBlock()->getOps<FModuleOp>()) {
-    for (auto &op : *fmodule.getBodyBlock()) {
-      AnnotationSet annotations(&op);
+    SmallVector<Attribute> newAnnotations;
+    auto processNLAs = [&](Annotation anno) -> bool {
+      if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
+        // If the symbol isn't in the NLA map, just skip it.  This avoids
+        // problems where the nlaMap "[]" will try to construct a default
+        // MutableNLA map (which it should never do).
+        if (!nlaMap.count(sym.getAttr()))
+          return false;
+
+        auto mnla = nlaMap[sym.getAttr()];
+
+        // Garbage collect dead NLA references.  This cleans up NLAs that go
+        // through modules which we never visited.
+        if (mnla.isDead())
+          return true;
+
+        // Do nothing if there are no additional NLAs to add or if we're
+        // dealing with a root module.  Root modules have already been updated
+        // earlier in the pass.  We only need to update NLA paths which are
+        // not the root.
+        auto newTops = mnla.getAdditionalSymbols();
+        if (newTops.empty() || mnla.hasRoot(fmodule))
+          return false;
+
+        // Add NLAs to the non-root portion of the NLA.  This only needs to
+        // add symbols for NLAs which are after the first one.  We reused the
+        // old symbol name for the first NLA.
+        NamedAttrList newAnnotation;
+        for (auto rootAndSym : newTops.drop_front()) {
+          for (auto pair : anno.getDict()) {
+            if (pair.getName().getValue() != "circt.nonlocal") {
+              newAnnotation.push_back(pair);
+              continue;
+            }
+            newAnnotation.push_back(
+                {pair.getName(), FlatSymbolRefAttr::get(rootAndSym.getName())});
+          }
+          newAnnotations.push_back(DictionaryAttr::get(context, newAnnotation));
+        }
+      }
+      return false;
+    };
+    fmodule.walk([&](Operation *op) {
+      AnnotationSet annotations(op);
       // Early exit to avoid adding an empty annotations attribute to operations
       // which did not previously have annotations.
       if (annotations.empty())
-        continue;
+        return;
 
-      SmallVector<Attribute> newAnnotations;
-      auto processNLAs = [&](Annotation anno) -> bool {
-        if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-          // If the symbol isn't in the NLA map, just skip it.  This avoids
-          // problems where the nlaMap "[]" will try to construct a default
-          // MutableNLA map (which it should never do).
-          if (!nlaMap.count(sym.getAttr()))
-            return false;
-
-          auto mnla = nlaMap[sym.getAttr()];
-
-          // Garbage collect dead NLA references.  This cleans up NLAs that go
-          // through modules which we never visited.
-          if (mnla.isDead())
-            return true;
-
-          // Do nothing if there are no additional NLAs to add or if we're
-          // dealing with a root module.  Root modules have already been updated
-          // earlier in the pass.  We only need to update NLA paths which are
-          // not the root.
-          auto newTops = mnla.getAdditionalSymbols();
-          if (newTops.size() == 0 || mnla.hasRoot(fmodule))
-            return false;
-
-          // Add NLAs to the non-root portion of the NLA.  This only needs to
-          // add symbols for NLAs which are after the first one.  We reused the
-          // old symbol name for the first NLA.
-          NamedAttrList newAnnotation;
-          for (auto rootAndSym : newTops.drop_front()) {
-            for (auto pair : anno.getDict()) {
-              if (pair.getName().getValue() != "circt.nonlocal") {
-                newAnnotation.push_back(pair);
-                continue;
-              }
-              newAnnotation.push_back(
-                  {pair.getName(),
-                   FlatSymbolRefAttr::get(rootAndSym.getName())});
-            }
-            newAnnotations.push_back(
-                DictionaryAttr::get(op.getContext(), newAnnotation));
-          }
-        }
-        return false;
-      };
-
-      // Update annotations on the module.
+      // Update annotations on the op.
+      newAnnotations.clear();
       annotations.removeAnnotations(processNLAs);
       annotations.addAnnotations(newAnnotations);
-      annotations.applyToOperation(&op);
+      annotations.applyToOperation(op);
+    });
 
-      // Update annotations on the ports.
-      SmallVector<Attribute> newPortAnnotations;
-      for (auto port : fmodule.getPorts()) {
-        newAnnotations.clear();
-        port.annotations.removeAnnotations(processNLAs);
-        port.annotations.addAnnotations(newAnnotations);
-        newPortAnnotations.push_back(
-            ArrayAttr::get(op.getContext(), port.annotations.getArray()));
-      }
-      fmodule->setAttr("portAnnotations",
-                       ArrayAttr::get(op.getContext(), newPortAnnotations));
+    // Update annotations on the ports.
+    SmallVector<Attribute> newPortAnnotations;
+    for (auto port : fmodule.getPorts()) {
+      newAnnotations.clear();
+      port.annotations.removeAnnotations(processNLAs);
+      port.annotations.addAnnotations(newAnnotations);
+      newPortAnnotations.push_back(
+          ArrayAttr::get(context, port.annotations.getArray()));
     }
+    fmodule->setAttr("portAnnotations",
+                     ArrayAttr::get(context, newPortAnnotations));
   }
 }
 

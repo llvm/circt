@@ -241,7 +241,8 @@ struct ModuleExternalizer : public Reduction {
     builder.create<firrtl::FExtModuleOp>(
         module->getLoc(),
         module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()),
-        module.getPorts(), StringRef(), module.getAnnotationsAttr());
+        module.getConventionAttr(), module.getPorts(), StringRef(),
+        module.getAnnotationsAttr());
     module->erase();
     return success();
   }
@@ -266,7 +267,7 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
 
   // Descend into bundles by creating subfield ops.
   if (auto bundleType = type.dyn_cast<firrtl::BundleType>()) {
-    for (auto &element : llvm::enumerate(bundleType.getElements())) {
+    for (auto element : llvm::enumerate(bundleType.getElements())) {
       auto subfield =
           builder.createOrFold<firrtl::SubfieldOp>(value, element.index());
       invalidateOutputs(builder, subfield, invalidCache,
@@ -306,7 +307,7 @@ static void connectToLeafs(ImplicitLocOpBuilder &builder, Value dest,
   if (!type)
     return;
   if (auto bundleType = type.dyn_cast<firrtl::BundleType>()) {
-    for (auto &element : llvm::enumerate(bundleType.getElements()))
+    for (auto element : llvm::enumerate(bundleType.getElements()))
       connectToLeafs(builder,
                      builder.create<firrtl::SubfieldOp>(dest, element.index()),
                      value);
@@ -340,7 +341,7 @@ static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
   if (!type)
     return;
   if (auto bundleType = type.dyn_cast<firrtl::BundleType>()) {
-    for (auto &element : llvm::enumerate(bundleType.getElements()))
+    for (auto element : llvm::enumerate(bundleType.getElements()))
       reduceXor(
           builder, into,
           builder.createOrFold<firrtl::SubfieldOp>(value, element.index()));
@@ -421,9 +422,12 @@ struct InstanceStubber : public Reduction {
       auto result = instOp.getResult(i);
       auto name = builder.getStringAttr(Twine(instOp.getName()) + "_" +
                                         instOp.getPortNameStr(i));
-      auto wire = builder.create<firrtl::WireOp>(
-          result.getType(), name, firrtl::NameKindEnum::DroppableName,
-          instOp.getPortAnnotation(i), StringAttr{});
+      auto wire =
+          builder
+              .create<firrtl::WireOp>(result.getType(), name,
+                                      firrtl::NameKindEnum::DroppableName,
+                                      instOp.getPortAnnotation(i), StringAttr{})
+              .getResult();
       invalidateOutputs(builder, wire, invalidCache,
                         instOp.getPortDirection(i) == firrtl::Direction::In);
       result.replaceAllUsesWith(wire);
@@ -469,9 +473,12 @@ struct MemoryStubber : public Reduction {
       auto result = memOp.getResult(i);
       auto name = builder.getStringAttr(Twine(memOp.getName()) + "_" +
                                         memOp.getPortNameStr(i));
-      auto wire = builder.create<firrtl::WireOp>(
-          result.getType(), name, firrtl::NameKindEnum::DroppableName,
-          memOp.getPortAnnotation(i), StringAttr{});
+      auto wire =
+          builder
+              .create<firrtl::WireOp>(result.getType(), name,
+                                      firrtl::NameKindEnum::DroppableName,
+                                      memOp.getPortAnnotation(i), StringAttr{})
+              .getResult();
       invalidateOutputs(builder, wire, invalidCache, true);
       result.replaceAllUsesWith(wire);
 
@@ -526,7 +533,7 @@ struct MemoryStubber : public Reduction {
 
 /// Starting at the given `op`, traverse through it and its operands and erase
 /// operations that have no more uses.
-static void pruneUnusedOps(Operation *initialOp) {
+static void pruneUnusedOps(Operation *initialOp, Reduction &reduction) {
   SmallVector<Operation *> worklist;
   SmallSet<Operation *, 4> handled;
   worklist.push_back(initialOp);
@@ -538,6 +545,7 @@ static void pruneUnusedOps(Operation *initialOp) {
       if (auto argOp = arg.getDefiningOp())
         if (handled.insert(argOp).second)
           worklist.push_back(argOp);
+    reduction.notifyOpErased(op);
     op->erase();
   }
 }
@@ -590,7 +598,7 @@ struct OperandForwarder : public Reduction {
       newOp = operand;
     LLVM_DEBUG(llvm::dbgs() << "Forwarding " << newOp << " in " << *op << "\n");
     result.replaceAllUsesWith(newOp);
-    pruneUnusedOps(op);
+    pruneUnusedOps(op, *this);
     return success();
   }
   std::string getName() const override {
@@ -619,7 +627,7 @@ struct Constantifier : public Reduction {
     auto newOp = builder.create<firrtl::ConstantOp>(
         op->getLoc(), type, APSInt(width, type.isa<firrtl::UIntType>()));
     op->replaceAllUsesWith(newOp);
-    pruneUnusedOps(op);
+    pruneUnusedOps(op, *this);
     return success();
   }
   std::string getName() const override { return "constantifier"; }
@@ -646,7 +654,7 @@ struct ConnectInvalidator : public Reduction {
     auto rhsOp = rhs.getDefiningOp();
     op->setOperand(1, invOp);
     if (rhsOp)
-      pruneUnusedOps(rhsOp);
+      pruneUnusedOps(rhsOp, *this);
     return success();
   }
   std::string getName() const override { return "connect-invalidator"; }
@@ -665,7 +673,7 @@ struct OperationPruner : public Reduction {
   }
   LogicalResult rewrite(Operation *op) override {
     assert(match(op));
-    pruneUnusedOps(op);
+    pruneUnusedOps(op, *this);
     return success();
   }
   std::string getName() const override { return "operation-pruner"; }
@@ -756,8 +764,12 @@ struct ExtmoduleInstanceRemover : public Reduction {
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
     SmallVector<Value> replacementWires;
     for (firrtl::PortInfo info : portInfo) {
-      auto wire = builder.create<firrtl::WireOp>(
-          info.type, (Twine(instOp.getName()) + "_" + info.getName()).str());
+      auto wire =
+          builder
+              .create<firrtl::WireOp>(
+                  info.type,
+                  (Twine(instOp.getName()) + "_" + info.getName()).str())
+              .getResult();
       if (info.isOutput()) {
         auto inv = builder.create<firrtl::InvalidValueOp>(info.type);
         builder.create<firrtl::ConnectOp>(wire, inv);
@@ -868,15 +880,19 @@ struct ConnectSourceOperandForwarder : public Reduction {
     ImplicitLocOpBuilder builder(destOp->getLoc(), destOp);
     Value newDest;
     if (auto wire = dyn_cast<firrtl::WireOp>(destOp))
-      newDest = builder.create<firrtl::WireOp>(forwardedOperand.getType(),
-                                               wire.getName());
+      newDest = builder
+                    .create<firrtl::WireOp>(forwardedOperand.getType(),
+                                            wire.getName())
+                    .getResult();
     else {
       auto regName = destOp->getAttrOfType<StringAttr>("name");
       // We can promote the register into a wire but we wouldn't do here because
       // the error might be caused by the register.
       auto clock = destOp->getOperand(0);
-      newDest = builder.create<firrtl::RegOp>(forwardedOperand.getType(), clock,
-                                              regName ? regName.str() : "");
+      newDest = builder
+                    .create<firrtl::RegOp>(forwardedOperand.getType(), clock,
+                                           regName ? regName.str() : "")
+                    .getResult();
     }
 
     // Create new connection between a new wire and the forwarded operand.
@@ -890,7 +906,7 @@ struct ConnectSourceOperandForwarder : public Reduction {
     // because destination has only one use.
     op->erase();
     destOp->erase();
-    pruneUnusedOps(srcOp);
+    pruneUnusedOps(srcOp, *this);
 
     return success();
   }
@@ -997,9 +1013,12 @@ struct EagerInliner : public Reduction {
       auto result = instOp.getResult(i);
       auto name = builder.getStringAttr(Twine(instOp.getName()) + "_" +
                                         instOp.getPortNameStr(i));
-      auto wire = builder.create<firrtl::WireOp>(
-          result.getType(), name, firrtl::NameKindEnum::DroppableName,
-          instOp.getPortAnnotation(i), StringAttr{});
+      auto wire =
+          builder
+              .create<firrtl::WireOp>(result.getType(), name,
+                                      firrtl::NameKindEnum::DroppableName,
+                                      instOp.getPortAnnotation(i), StringAttr{})
+              .getResult();
       result.replaceAllUsesWith(wire);
       argReplacements.push_back(wire);
     }

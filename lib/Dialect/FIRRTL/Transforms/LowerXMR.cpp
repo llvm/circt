@@ -108,8 +108,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
                   opName = name.getValue();
                   nameKind = NameKindEnum::InterestingName;
                 }
-                xmrDef = b.create<NodeOp>(xmrDef.getType(), xmrDef, opName,
-                                          nameKind);
+                xmrDef = b.create<NodeOp>(xmrDef, opName, nameKind).getResult();
               }
             }
             // Create a new entry for this RefSendOp. The path is currently
@@ -204,7 +203,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       if (!module)
         continue;
       LLVM_DEBUG(llvm::dbgs()
-                 << "Traversing module:" << module.moduleNameAttr() << "\n");
+                 << "Traversing module:" << module.getModuleNameAttr() << "\n");
       for (Operation &op : module.getBodyBlock()->getOperations())
         if (transferFunc(op).failed())
           return signalPassFailure();

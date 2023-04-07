@@ -212,6 +212,7 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue",
 
   let arguments = (ins);
   let results = (outs FIRRTLBaseType:$result);
+  let hasCanonicalizeMethod = 1;
 
   let assemblyFormat = "attr-dict `:` qualified(type($result))";
 }
@@ -310,6 +311,45 @@ def SubaccessOp : FIRRTLExprOp<"subaccess", [
      "$input `[` $index `]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))";
 
   let hasCanonicalizer = true;
+}
+
+def SubtagOp : FIRRTLExprOp<"subtag"> {
+  let summary = "Extract an element of a enum value";
+  let description = [{
+    The subtag expression refers to a subelement of a
+    enum-typed expression.
+    ```
+      %result = firrtl.subtag %input[field-name] : !input-type
+    ```
+    }];
+
+  let arguments = (ins FEnumType:$input, I32Attr:$fieldIndex);
+  let results = (outs FIRRTLBaseType:$result);
+  let hasVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
+
+  let builders = [
+    OpBuilder<(ins "Value":$input, "StringRef":$fieldName), [{
+      auto enumType = input.getType().cast<FEnumType>();
+      auto fieldIndex = enumType.getElementIndex(fieldName);
+      assert(fieldIndex.has_value() && "subtag operation to unknown field");
+      return build($_builder, $_state, input, *fieldIndex);
+    }]>
+  ];
+
+  let firrtlExtraClassDeclaration = [{
+    /// Return a `FieldRef` to the accessed field.
+    FieldRef getAccessedField() {
+      return FieldRef(getInput(), getInput().getType().cast<FEnumType>()
+                                            .getFieldID(getFieldIndex()));
+    }
+
+    /// Return the name of the accessed field.
+    StringRef getFieldName() {
+      return getInput().getType().cast<FEnumType>()
+        .getElementName(getFieldIndex());
+    }
+  }];
 }
 
 def MultibitMuxOp : FIRRTLExprOp<"multibit_mux"> {
@@ -492,6 +532,7 @@ def AsAsyncResetPrimOp
 def AsClockPrimOp : UnaryPrimOp<"asClock", OneBitCastableType, ClockType>;
 def CvtPrimOp : UnaryPrimOp<"cvt", IntType, SIntType>;
 def NegPrimOp : UnaryPrimOp<"neg", IntType, SIntType>;
+let hasCanonicalizer = true in
 def NotPrimOp : UnaryPrimOp<"not", IntType, UIntType>;
 
 let inferType = "impl::inferReductionResult" in {
@@ -795,20 +836,6 @@ def BitCastOp: FIRRTLOp<"bitcast", [Pure]> {
 //    - If the Reference ops are lowered to cross-module-reference, then it
 //    represents the location of the XMR.
 //===----------------------------------------------------------------------===//
-
-//===----------------------------------------------------------------------===//
-// Constraints on RefOps
-//===----------------------------------------------------------------------===//
-
-class RefTypeConstraint<string ref, string base>
-  : TypesMatchWith<"reference base type should match",
-                   ref, base,
-                   "$_self.cast<RefType>().getType()">;
-
-class RefResultTypeConstraint<string base, string ref>
-  : TypesMatchWith<"reference base type should match",
-                   base, ref,
-                   "RefType::get($_self.cast<FIRRTLBaseType>())">;
 
 //===----------------------------------------------------------------------===//
 // RefOps

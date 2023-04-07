@@ -1218,7 +1218,7 @@ static BlockControlTerm getBlockControlTerminator(Block *block) {
     if (auto endOp = dyn_cast<handshake::ReturnOp>(op))
       return {endOp, endOp.getOperands().back()};
   }
-  assert(false && "Block terminator must exist");
+  llvm_unreachable("Block terminator must exist");
 }
 
 static LogicalResult getOpMemRef(Operation *op, Value &out) {

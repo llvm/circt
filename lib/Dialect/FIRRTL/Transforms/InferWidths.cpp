@@ -85,7 +85,7 @@ inline llvm::hash_code hash_value(const T &e) {
 
 namespace {
 #define EXPR_NAMES(x)                                                          \
-  Root##x, Var##x, Id##x, Known##x, Add##x, Pow##x, Max##x, Min##x
+  Root##x, Var##x, Derived##x, Id##x, Known##x, Add##x, Pow##x, Max##x, Min##x
 #define EXPR_KINDS EXPR_NAMES()
 #define EXPR_CLASSES EXPR_NAMES(Expr)
 
@@ -137,6 +137,21 @@ struct VarExpr : public ExprBase<VarExpr, Expr::Kind::Var> {
   /// The upper bound this variable is supposed to be smaller than or equal to.
   Expr *upperBound = nullptr;
   std::optional<int32_t> upperBoundSolution;
+};
+
+/// A derived width.
+///
+/// These are generated for `InvalidValueOp`s which want to derived their width
+/// from connect operations that they are on the right hand side of.
+struct DerivedExpr : public ExprBase<DerivedExpr, Expr::Kind::Derived> {
+  void print(llvm::raw_ostream &os) const {
+    // Hash the `this` pointer into something somewhat human readable.
+    os << "derive"
+       << ((size_t)this / llvm::PowerOf2Ceil(sizeof(*this)) & 0xFFF);
+  }
+
+  /// The expression this derived width is equivalent to.
+  Expr *assigned = nullptr;
 };
 
 /// An identity expression.
@@ -316,12 +331,13 @@ public:
 
 /// A simple bump allocator. The allocated objects must not have a destructor.
 /// This allocator is mainly there for symmetry with the `InternedAllocator`.
-class VarAllocator {
+template <typename T, typename std::enable_if_t<
+                          std::is_trivially_destructible<T>::value, int> = 0>
+class Allocator {
   llvm::BumpPtrAllocator &allocator;
-  using T = VarExpr;
 
 public:
-  VarAllocator(llvm::BumpPtrAllocator &allocator) : allocator(allocator) {}
+  Allocator(llvm::BumpPtrAllocator &allocator) : allocator(allocator) {}
 
   /// Allocate a new object. `R` is the type of the object to be allocated. `R`
   /// must be derived from or be the type `T`.
@@ -571,6 +587,11 @@ public:
       locs[v].insert(*currentLoc);
     return v;
   }
+  DerivedExpr *derived() {
+    auto *d = derivs.alloc();
+    exprs.push_back(d);
+    return d;
+  }
   KnownExpr *known(int32_t value) { return alloc<KnownExpr>(knowns, value); }
   IdExpr *id(Expr *arg) { return alloc<IdExpr>(ids, arg); }
   PowExpr *pow(Expr *arg) { return alloc<PowExpr>(uns, arg); }
@@ -609,7 +630,8 @@ public:
 private:
   // Allocator for constraint expressions.
   llvm::BumpPtrAllocator allocator;
-  VarAllocator vars = {allocator};
+  Allocator<VarExpr> vars = {allocator};
+  Allocator<DerivedExpr> derivs = {allocator};
   InternedAllocator<KnownExpr> knowns = {allocator};
   InternedAllocator<IdExpr> ids = {allocator};
   InternedAllocator<UnaryExpr> uns = {allocator};
@@ -1011,6 +1033,24 @@ LogicalResult ConstraintSolver::solve() {
     }
   }
 
+  // Copy over derived widths.
+  for (auto *expr : exprs) {
+    // Only work on derived values.
+    auto *derived = dyn_cast<DerivedExpr>(expr);
+    if (!derived)
+      continue;
+
+    auto *assigned = derived->assigned;
+    if (!assigned || !assigned->solution) {
+      LLVM_DEBUG(llvm::dbgs() << "- Unused " << *derived << " set to 0\n");
+      derived->solution = 0;
+    } else {
+      LLVM_DEBUG(llvm::dbgs() << "- Deriving " << *derived << " = "
+                              << assigned->solution << "\n");
+      derived->solution = *assigned->solution;
+    }
+  }
+
   return failure(anyFailed);
 }
 
@@ -1083,7 +1123,7 @@ public:
   /// Declare all the variables in the value. If the value is a ground type,
   /// there is a single variable declared.  If the value is an aggregate type,
   /// it sets up variables for each unknown width.
-  void declareVars(Value value, Location loc);
+  void declareVars(Value value, Location loc, bool isDerived = false);
 
   /// Declare a variable associated with a specific field of an aggregate.
   Expr *declareVar(FieldRef fieldRef, Location loc);
@@ -1262,7 +1302,10 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       .Case<InvalidValueOp>([&](auto op) {
         // We must duplicate the invalid value for each use, since each use can
         // be inferred to a different width.
-        if (!hasUninferredWidth(op.getType()) || op->use_empty())
+        if (!hasUninferredWidth(op.getType()))
+          return;
+        declareVars(op.getResult(), op.getLoc(), /*isDerived=*/true);
+        if (op.use_empty())
           return;
 
         auto type = op.getType();
@@ -1272,7 +1315,10 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
           // - `make_early_inc_range` since `getUses()` is invalidated upon
           //   `use.set(...)`.
           // - `drop_begin` such that the first use can keep the original op.
-          use.set(builder.create<InvalidValueOp>(type));
+          auto clone = builder.create<InvalidValueOp>(type);
+          declareVars(clone.getResult(), clone.getLoc(),
+                      /*isDerived=*/true);
+          use.set(clone);
         }
       })
       .Case<WireOp, RegOp>(
@@ -1290,7 +1336,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       .Case<NodeOp>([&](auto op) {
         // Nodes have the same type as their input.
         unifyTypes(FieldRef(op.getResult(), 0), FieldRef(op.getInput(), 0),
-                   op.getType());
+                   op.getResult().getType());
       })
 
       // Aggregate Values
@@ -1427,13 +1473,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
 
       // Handle the various connect statements that imply a type constraint.
-      .Case<FConnectLike>([&](auto op) {
-        // If the source is an invalid value, we don't set a constraint between
-        // these two types.
-        if (dyn_cast_or_null<InvalidValueOp>(op.getSrc().getDefiningOp()))
-          return;
-        constrainTypes(op.getDest(), op.getSrc());
-      })
+      .Case<FConnectLike>(
+          [&](auto op) { constrainTypes(op.getDest(), op.getSrc()); })
       .Case<AttachOp>([&](auto op) {
         // Attach connects multiple analog signals together. All signals must
         // have the same bit width. Signals without bit width inherit from the
@@ -1570,12 +1611,18 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         mappingFailed = true;
       });
 
+  // Forceable declarations should have the ref constrained to data result.
+  if (auto fop = dyn_cast<Forceable>(op); fop && fop.isForceable()) {
+    declareVars(fop.getDataRef(), fop.getLoc());
+    constrainTypes(fop.getDataRef(), fop.getDataRaw());
+  }
+
   return failure(mappingFailed);
 }
 
 /// Declare free variables for the type of a value, and associate the resulting
 /// set of variables with that value.
-void InferenceMapping::declareVars(Value value, Location loc) {
+void InferenceMapping::declareVars(Value value, Location loc, bool isDerived) {
   auto ftype = value.getType().cast<FIRRTLType>();
 
   // Declare a variable for every unknown width in the type. If this is a Bundle
@@ -1591,7 +1638,10 @@ void InferenceMapping::declareVars(Value value, Location loc) {
       // Unknown width integers create a variable.
       FieldRef field(value, fieldID);
       solver.setCurrentContextInfo(field);
-      setExpr(field, solver.var());
+      if (isDerived)
+        setExpr(field, solver.derived());
+      else
+        setExpr(field, solver.var());
       fieldID++;
     } else if (auto bundleType = type.dyn_cast<BundleType>()) {
       // Bundle types recursively declare all bundle elements.
@@ -1694,11 +1744,23 @@ void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller,
                                       bool imposeUpperBounds) {
   assert(larger && "Larger expression should be specified");
   assert(smaller && "Smaller expression should be specified");
-  // Mimic the Scala implementation here by simply doing nothing if the larger
-  // expr is not a free variable. Apparently there are many cases where
-  // useless constraints can be added, e.g. on multiple well-known values. As
-  // long as we don't want to do type checking itself here, but only width
-  // inference, we should be fine ignoring expr we cannot constraint anyway.
+
+  // If one of the sides is `DerivedExpr`, simply assign the other side as the
+  // derived width. This allows `InvalidValueOp`s to properly infer their width
+  // from the connects they are used in, but also be inferred to something
+  // useful on their own.
+  if (auto *largerDerived = dyn_cast<DerivedExpr>(larger)) {
+    largerDerived->assigned = smaller;
+    LLVM_DEBUG(llvm::dbgs() << "Deriving " << *largerDerived << " from "
+                            << *smaller << "\n");
+    return;
+  }
+  if (auto *smallerDerived = dyn_cast<DerivedExpr>(smaller)) {
+    smallerDerived->assigned = larger;
+    LLVM_DEBUG(llvm::dbgs() << "Deriving " << *smallerDerived << " from "
+                            << *larger << "\n");
+    return;
+  }
 
   // If the larger expr is a free variable, create a `expr >= x` constraint for
   // it that we can try to satisfy with the smallest width.
@@ -1847,19 +1909,6 @@ LogicalResult InferenceTypeUpdate::update(CircuitOp op) {
 bool InferenceTypeUpdate::updateOperation(Operation *op) {
   bool anyChanged = false;
 
-  // Invalid value operations get their value from a connect which uses them. We
-  // set the width when we see the connect op later on, so that the destination
-  // operand width will have definitely been mapped in.
-  if (isa<InvalidValueOp>(op) &&
-      hasUninferredWidth(op->getResultTypes().front())) {
-    if (op->use_empty() || !isa<FConnectLike>(*op->getUsers().begin())) {
-      auto diag = mlir::emitError(
-          op->getLoc(), "uninferred width: invalid value is unconstrained");
-      anyFailed = true;
-    }
-    return false;
-  }
-
   for (Value v : op->getResults()) {
     anyChanged |= updateValue(v);
     if (anyFailed)
@@ -1878,12 +1927,6 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
     // Nothing to do if not base types.
     if (!lhsType || !rhsType)
       return anyChanged;
-
-    // If the source is an InvalidValue of unknown width, infer the type to be
-    // the same as the destination.
-    if (dyn_cast_or_null<InvalidValueOp>(rhs.getDefiningOp()) &&
-        hasUninferredWidth(rhs.getType()))
-      rhs.setType(lhsType);
 
     auto lhsWidth = lhsType.getBitWidthOrSentinel();
     auto rhsWidth = rhsType.getBitWidthOrSentinel();

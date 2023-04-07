@@ -11,14 +11,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/Arc/Dialect.h"
-#include "circt/Dialect/Arc/Ops.h"
-#include "circt/Dialect/Arc/Passes.h"
+#include "circt/Conversion/CombToArith.h"
+#include "circt/Dialect/Arc/ArcDialect.h"
+#include "circt/Dialect/Arc/ArcInterfaces.h"
+#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/InitAllDialects.h"
 #include "circt/InitAllPasses.h"
 #include "circt/Support/Version.h"
 #include "mlir/Bytecode/BytecodeReader.h"
 #include "mlir/Bytecode/BytecodeWriter.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -29,8 +32,12 @@
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/Timing.h"
 #include "mlir/Support/ToolUtilities.h"
+#include "mlir/Target/LLVMIR/Dialect/All.h"
+#include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
@@ -67,6 +74,13 @@ static cl::opt<bool> observeWires("observe-wires",
                                   cl::desc("Make all wires observable"),
                                   cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<std::string> stateFile("state-file", cl::desc("State file"),
+                                      cl::value_desc("filename"), cl::init(""),
+                                      cl::cat(mainCategory));
+
+static cl::opt<bool> shouldInline("inline", cl::desc("Inline arcs"),
+                                  cl::init(true), cl::cat(mainCategory));
+
 static cl::opt<bool>
     verifyPasses("verify-each",
                  cl::desc("Run the verifier after each transformation pass"),
@@ -85,11 +99,22 @@ static cl::opt<bool>
                    cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
 // Options to control early-out from pipeline.
-enum Until { UntilPreprocessing, UntilArcConversion, UntilArcOpt, UntilEnd };
+enum Until {
+  UntilPreprocessing,
+  UntilArcConversion,
+  UntilArcOpt,
+  UntilStateLowering,
+  UntilStateAlloc,
+  UntilLLVMLowering,
+  UntilEnd
+};
 static auto runUntilValues = cl::values(
     clEnumValN(UntilPreprocessing, "preproc", "Input preprocessing"),
     clEnumValN(UntilArcConversion, "arc-conv", "Conversion of modules to arcs"),
     clEnumValN(UntilArcOpt, "arc-opt", "Arc optimizations"),
+    clEnumValN(UntilStateLowering, "state-lowering", "Stateful arc lowering"),
+    clEnumValN(UntilStateAlloc, "state-alloc", "State allocation"),
+    clEnumValN(UntilLLVMLowering, "llvm-lowering", "Lowering to LLVM"),
     clEnumValN(UntilEnd, "all", "Run entire pipeline (default)"));
 static cl::opt<Until>
     runUntilBefore("until-before",
@@ -99,6 +124,16 @@ static cl::opt<Until>
     runUntilAfter("until-after",
                   cl::desc("Stop pipeline after a specified point"),
                   runUntilValues, cl::init(UntilEnd), cl::cat(mainCategory));
+
+// Options to control the output format.
+enum OutputFormat { OutputMLIR, OutputLLVM, OutputDisabled };
+static cl::opt<OutputFormat> outputFormat(
+    cl::desc("Specify output format"),
+    cl::values(clEnumValN(OutputMLIR, "emit-mlir", "Emit MLIR dialects"),
+               clEnumValN(OutputLLVM, "emit-llvm", "Emit LLVM"),
+               clEnumValN(OutputDisabled, "disable-output",
+                          "Do not output anything")),
+    cl::init(OutputLLVM), cl::cat(mainCategory));
 
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
@@ -151,7 +186,61 @@ static void populatePipeline(PassManager &pm) {
   pm.addPass(arc::createMakeTablesPass());
   pm.addPass(createCSEPass());
   pm.addPass(createSimpleCanonicalizerPass());
+
+  // TODO: the following is commented out because the backend does not support
+  // StateOp resets yet.
+  // pm.addPass(arc::createInferStatePropertiesPass());
+  // InferStateProperties does not remove all ops it bypasses and inserts a lot
+  // of constant ops that should be uniqued
+  // pm.addPass(createSimpleCanonicalizerPass());
+  // Now some arguments may be unused because reset conditions are not passed as
+  // inputs anymore pm.addPass(arc::createRemoveUnusedArcArgumentsPass());
+  // Because we replace a lot of StateOp inputs with constants in the enable
+  // patterns we may be able to sink a lot of them
+  // TODO: maybe merge RemoveUnusedArcArguments with SinkInputs?
+  // pm.addPass(arc::createSinkInputsPass());
+  // pm.addPass(createCSEPass());
+  // pm.addPass(createSimpleCanonicalizerPass());
+  // Removing some muxes etc. may lead to additional dedup opportunities
+  // pm.addPass(arc::createDedupPass());
+
+  // Lower stateful arcs into explicit state reads and writes.
+  if (untilReached(UntilStateLowering))
+    return;
+  pm.addPass(arc::createLowerStatePass());
+  pm.addPass(createCSEPass());
+  pm.addPass(createSimpleCanonicalizerPass());
+
+  // TODO: LowerClocksToFuncsPass might not properly consider scf.if operations
+  // (or nested regions in general) and thus errors out when muxes are also
+  // converted in the hw.module or arc.model
+  // TODO: InlineArcs seems to not properly handle scf.if operations, thus the
+  // following is commented out
+  // pm.addPass(arc::createMuxToControlFlowPass());
+
+  if (shouldInline) {
+    pm.addPass(arc::createInlineArcsPass());
+    pm.addPass(createSimpleCanonicalizerPass());
+    pm.addPass(createCSEPass());
+  }
+
+  // Allocate states.
+  if (untilReached(UntilStateAlloc))
+    return;
+  pm.addPass(arc::createLegalizeStateUpdatePass());
+  pm.nest<arc::ModelOp>().addPass(arc::createAllocateStatePass());
+  if (!stateFile.empty())
+    pm.addPass(arc::createPrintStateInfoPass(stateFile));
   pm.addPass(arc::createRemoveUnusedArcArgumentsPass());
+
+  // Lower the arcs and update functions to LLVM.
+  if (untilReached(UntilLLVMLowering))
+    return;
+  pm.addPass(arc::createLowerClocksToFuncsPass());
+  pm.addPass(createConvertCombToArithPass());
+  pm.addPass(createLowerArcToLLVMPass());
+  pm.addPass(createCSEPass());
+  pm.addPass(createSimpleCanonicalizerPass());
 }
 
 static LogicalResult
@@ -168,15 +257,30 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   PassManager pm(&context);
   pm.enableVerifier(verifyPasses);
   pm.enableTiming(ts);
-  applyPassManagerCLOptions(pm);
+  if (failed(applyPassManagerCLOptions(pm)))
+    return failure();
   populatePipeline(pm);
 
   if (failed(pm.run(module.get())))
     return failure();
 
-  {
+  // Handle MLIR output.
+  if (runUntilBefore != UntilEnd || runUntilAfter != UntilEnd ||
+      outputFormat == OutputMLIR) {
     auto outputTimer = ts.nest("Print MLIR output");
     module->print(outputFile.value()->os());
+    return success();
+  }
+
+  // Handle LLVM output.
+  if (outputFormat == OutputLLVM) {
+    auto outputTimer = ts.nest("Print LLVM output");
+    llvm::LLVMContext llvmContext;
+    auto llvmModule = mlir::translateModuleToLLVMIR(module.get(), llvmContext);
+    if (!llvmModule)
+      return failure();
+    llvmModule->print(outputFile.value()->os(), nullptr);
+    return success();
   }
 
   return success();
@@ -243,8 +347,14 @@ static LogicalResult executeArcilator(MLIRContext &context) {
   }
 
   // Register our dialects.
-  context.loadDialect<hw::HWDialect, comb::CombDialect, seq::SeqDialect,
-                      sv::SVDialect, arc::ArcDialect>();
+  DialectRegistry registry;
+  registry.insert<hw::HWDialect, comb::CombDialect, seq::SeqDialect,
+                  sv::SVDialect, arc::ArcDialect, mlir::arith::ArithDialect>();
+
+  arc::initAllExternalInterfaces(registry);
+  mlir::registerBuiltinDialectTranslation(registry);
+  mlir::registerLLVMDialectTranslation(registry);
+  context.appendDialectRegistry(registry);
 
   // Process the input.
   if (failed(processInput(context, ts, std::move(input), outputFile)))
@@ -293,7 +403,6 @@ int main(int argc, char **argv) {
   cl::ParseCommandLineOptions(argc, argv, "MLIR-based circuit simulator\n");
 
   MLIRContext context;
-
   auto result = executeArcilator(context);
 
   // Use "exit" instead of returning to signal completion. This avoids

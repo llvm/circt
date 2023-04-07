@@ -112,13 +112,13 @@ void InlineModulesPass::runOnOperation() {
 
         bool isLastModuleUse = --numUsesLeft == 0;
 
-        PrefixingInliner inliner(&getContext(), inst.instanceName());
+        PrefixingInliner inliner(&getContext(), inst.getInstanceName());
         if (failed(mlir::inlineRegion(inliner, &module.getBody(), inst,
                                       inst.getOperands(), inst.getResults(),
                                       std::nullopt, !isLastModuleUse))) {
           inst.emitError("failed to inline '")
-              << module.moduleName() << "' into instance '"
-              << inst.instanceName() << "'";
+              << module.getModuleName() << "' into instance '"
+              << inst.getInstanceName() << "'";
           return signalPassFailure();
         }
 

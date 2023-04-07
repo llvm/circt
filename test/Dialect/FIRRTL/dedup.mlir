@@ -482,20 +482,58 @@ firrtl.circuit "Bundle" {
   firrtl.module @Bundle() {
     // CHECK: firrtl.instance bundle0  @Bundle0
     %a = firrtl.instance bundle0 @Bundle0(out a: !firrtl.bundle<b: bundle<c flip: uint<1>, d: uint<1>>>)
+
     // CHECK: firrtl.instance bundle1  @Bundle0
+    // CHECK: %a = firrtl.wire : !firrtl.bundle<f: bundle<g flip: uint<1>, h: uint<1>>>
+    // CHECK: [[A_F:%.+]] = firrtl.subfield %a[f]
+    // CHECK: [[A_B:%.+]] = firrtl.subfield %bundle1_a[b]
+    // CHECK: [[A_F_G:%.+]] = firrtl.subfield %0[g]
+    // CHECK: [[A_B_C:%.+]] = firrtl.subfield %1[c]
+    // CHECK: firrtl.strictconnect [[A_B_C]], [[A_F_G]]
+    // CHECK: [[A_F_H:%.+]] = firrtl.subfield [[A_F]][h]
+    // CHECK: [[A_B_D:%.+]] = firrtl.subfield [[A_B]][d]
+    // CHECK: firrtl.strictconnect [[A_F_H]], [[A_B_D]]
     %e = firrtl.instance bundle1 @Bundle1(out e: !firrtl.bundle<f: bundle<g flip: uint<1>, h: uint<1>>>)
 
     // CHECK: [[B:%.+]] = firrtl.subfield %bundle0_a[b]
     %b = firrtl.subfield %a[b] : !firrtl.bundle<b: bundle<c flip: uint<1>, d: uint<1>>>
-    // CHECK: [[F:%.+]] = firrtl.subfield %bundle1_a[b]
+
+    // CHECK: [[F:%.+]] = firrtl.subfield %a[f]
     %f = firrtl.subfield %e[f] : !firrtl.bundle<f: bundle<g flip: uint<1>, h: uint<1>>>
 
     // Check that we properly fixup connects when the field names change.
     %w0 = firrtl.wire : !firrtl.bundle<g flip: uint<1>, h: uint<1>>
-    // CHECK: [[W0_G:%.+]] = firrtl.subfield %w0[g]
-    // CHECK: [[F_G:%.+]] = firrtl.subfield [[F]][c]
-    // CHECK: firrtl.connect [[F_G]], [[W0_G]]
+
+    // CHECK: firrtl.connect %w0, [[F]]
     firrtl.connect %w0, %f : !firrtl.bundle<g flip: uint<1>, h: uint<1>>, !firrtl.bundle<g flip: uint<1>, h: uint<1>>
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "MuxBundle"
+firrtl.circuit "MuxBundle" {
+  firrtl.module @Bar0(out %o: !firrtl.bundle<a: uint<1>>) {
+    %invalid = firrtl.invalidvalue : !firrtl.bundle<a: uint<1>>
+    firrtl.strictconnect %o, %invalid : !firrtl.bundle<a: uint<1>>
+  }
+  firrtl.module @Bar1(out %o: !firrtl.bundle<b: uint<1>>) {
+    %invalid = firrtl.invalidvalue : !firrtl.bundle<b: uint<1>>
+    firrtl.strictconnect %o, %invalid : !firrtl.bundle<b: uint<1>>
+  }
+  firrtl.module @MuxBundle(in %p: !firrtl.uint<1>, in %l: !firrtl.bundle<b: uint<1>>, out %o: !firrtl.bundle<b: uint<1>>) attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK: %bar0_o = firrtl.instance bar0 @Bar0(out o: !firrtl.bundle<a: uint<1>>)
+    %bar0_o = firrtl.instance bar0 @Bar0(out o: !firrtl.bundle<a: uint<1>>)
+
+    // CHECK: %bar1_o = firrtl.instance bar1 @Bar0(out o: !firrtl.bundle<a: uint<1>>)
+    // CHECK: [[WIRE:%.+]] = firrtl.wire {name = "o"} : !firrtl.bundle<b: uint<1>>
+    // CHECK: [[WIRE_B:%.+]] = firrtl.subfield [[WIRE]][b]
+    // CHECK: [[PORT_A:%.+]] = firrtl.subfield %bar1_o[a]
+    // CHECK: firrtl.strictconnect [[WIRE_B]], [[PORT_A]]
+    %bar1_o = firrtl.instance bar1 @Bar1(out o: !firrtl.bundle<b: uint<1>>)
+
+    // CHECK: %2 = firrtl.mux(%p, [[WIRE]], %l)
+    // CHECK: firrtl.strictconnect %o, %2 : !firrtl.bundle<b: uint<1>>
+    %0 = firrtl.mux(%p, %bar1_o, %l) : (!firrtl.uint<1>, !firrtl.bundle<b: uint<1>>, !firrtl.bundle<b: uint<1>>) -> !firrtl.bundle<b: uint<1>>
+    firrtl.strictconnect %o, %0 : !firrtl.bundle<b: uint<1>>
   }
 }
 
@@ -590,11 +628,11 @@ firrtl.circuit "NoDedup" {
 // CHECK-LABEL:   firrtl.circuit "InputRefTypePorts"
 // CHECK-COUNT-3: firrtl.module
 firrtl.circuit "InputRefTypePorts" {
-  firrtl.module @Foo(in %a: !firrtl.ref<uint<1>>) {}
-  firrtl.module @Bar(in %a: !firrtl.ref<uint<1>>) {}
+  firrtl.module @Foo(in %a: !firrtl.probe<uint<1>>) {}
+  firrtl.module @Bar(in %a: !firrtl.probe<uint<1>>) {}
   firrtl.module @InputRefTypePorts() {
-    %foo_a = firrtl.instance foo @Foo(in a: !firrtl.ref<uint<1>>)
-    %bar_a = firrtl.instance bar @Bar(in a: !firrtl.ref<uint<1>>)
+    %foo_a = firrtl.instance foo @Foo(in a: !firrtl.probe<uint<1>>)
+    %bar_a = firrtl.instance bar @Bar(in a: !firrtl.probe<uint<1>>)
   }
 }
 

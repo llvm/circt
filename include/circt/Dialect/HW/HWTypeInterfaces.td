@@ -23,7 +23,36 @@ def FieldIDTypeInterface : TypeInterface<"FieldIDTypeInterface"> {
 
   let methods = [
     InterfaceMethod<"Get the maximum field ID for this type",
-      "uint64_t", "getMaxFieldID">
+      "uint64_t", "getMaxFieldID">,
+
+    InterfaceMethod<[{
+      Get the sub-type of a type for a field ID, and the subfield's ID. Strip
+      off a single layer of this type and return the sub-type and a field ID
+      targeting the same field, but rebased on the sub-type.
+    }], "std::pair<circt::hw::FieldIDTypeInterface, uint64_t>",
+    "getSubTypeByFieldID", (ins "uint64_t":$fieldID)>,
+
+    InterfaceMethod<[{
+      Return the final type targeted by this field ID by recursively walking all
+      nested aggregate types. This is the identity function for ground types.
+    }], "circt::hw::FieldIDTypeInterface", "getFinalTypeByFieldID",
+    (ins "uint64_t":$fieldID)>,
+
+    InterfaceMethod<[{
+      Returns the effective field id when treating the index field as the
+      root of the type.  Essentially maps a fieldID to a fieldID after a
+      subfield op. Returns the new id and whether the id is in the given
+      child.
+    }], "std::pair<uint64_t, bool>", "rootChildFieldID",
+    (ins "uint64_t":$fieldID, "uint64_t":$index)>,
+
+    InterfaceMethod<[{
+      Returns the effective field id when treating the index field as the
+      root of the type.  Essentially maps a fieldID to a fieldID after a
+      subfield op. Returns the new id and whether the id is in the given
+      child.
+    }], "uint64_t", "getGroundFields">
+
   ];
 }
 

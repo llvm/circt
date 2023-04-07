@@ -24,6 +24,7 @@ namespace firrtl {
 namespace detail {
 struct BundleTypeStorage;
 struct VectorTypeStorage;
+struct FEnumTypeStorage;
 struct CMemoryTypeStorage;
 struct RefTypeStorage;
 } // namespace detail.
@@ -36,6 +37,7 @@ class UIntType;
 class AnalogType;
 class BundleType;
 class FVectorType;
+class FEnumType;
 class RefType;
 
 /// A collection of bits indicating the recursive properties of a type.
@@ -67,6 +69,10 @@ protected:
 // Common base class for all base FIRRTL types.
 class FIRRTLBaseType : public FIRRTLType {
 public:
+  /// Return true if this is a "passive" type - one that contains no "flip"
+  /// types recursively within itself.
+  bool isPassive() const { return getRecursiveTypeProperties().isPassive; }
+
   /// Returns true if this is a "passive" that which is not analog.
   bool isRegisterType() { return isPassive() && !containsAnalog(); }
 
@@ -97,7 +103,7 @@ public:
 
   /// Return the recursive properties of the type, containing the `isPassive`,
   /// `containsAnalog`, and `hasUninferredWidth` bits.
-  RecursiveTypeProperties getRecursiveTypeProperties();
+  RecursiveTypeProperties getRecursiveTypeProperties() const;
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLBaseType getPassiveType();
@@ -135,11 +141,12 @@ public:
   /// Get the sub-type of a type for a field ID, and the subfield's ID. Strip
   /// off a single layer of this type and return the sub-type and a field ID
   /// targeting the same field, but rebased on the sub-type.
-  std::pair<FIRRTLBaseType, uint64_t> getSubTypeByFieldID(uint64_t fieldID);
+  std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+  getSubTypeByFieldID(uint64_t fieldID);
 
   /// Return the final type targeted by this field ID by recursively walking all
   /// nested aggregate types. This is the identity function for ground types.
-  FIRRTLBaseType getFinalTypeByFieldID(uint64_t fieldID);
+  circt::hw::FieldIDTypeInterface getFinalTypeByFieldID(uint64_t fieldID);
 
   /// Returns the effective field id when treating the index field as the
   /// root of the type.  Essentially maps a fieldID to a fieldID after a

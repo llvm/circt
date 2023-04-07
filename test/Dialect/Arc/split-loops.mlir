@@ -159,3 +159,33 @@ arc.define @BreakFalseLoopsArc(%arg0: i4, %arg1: i4) -> (i4, i4) {
   %1 = comb.mul %arg1, %arg1 : i4
   arc.output %0, %1 : i4, i4
 }
+
+//===----------------------------------------------------------------------===//
+// COM: https://github.com/llvm/circt/issues/4862
+
+// CHECK-LABEL: @SplitDependencyModule
+hw.module @SplitDependencyModule(%a: i1) -> (x: i1, y: i1) {
+  // CHECK-NEXT: %0 = arc.state @SplitDependency_split_1(%a, %a) lat 0 : (i1, i1) -> i1
+  // CHECK-NEXT: %1 = arc.state @SplitDependency_split_0(%a, %a, %0) lat 0 : (i1, i1, i1) -> i1
+  // CHECK-NEXT: hw.output %0, %1 : i1, i1
+  %0, %1 = arc.state @SplitDependency(%a, %a, %a) lat 0 : (i1, i1, i1) -> (i1, i1)
+  hw.output %0, %1 : i1, i1
+}
+// CHECK-NEXT: }
+
+// CHECK-NEXT: arc.define @SplitDependency_split_0(%arg0: i1, %arg1: i1, %arg2: i1) -> i1 {
+// CHECK-NEXT:   %0 = comb.xor %arg0, %arg1 : i1
+// CHECK-NEXT:   %1 = comb.xor %0, %arg2 : i1
+// CHECK-NEXT:   arc.output %1 : i1
+// CHECK-NEXT: }
+// CHECK-NEXT: arc.define @SplitDependency_split_1(%arg0: i1, %arg1: i1) -> i1 {
+// CHECK-NEXT:   %0 = comb.xor %arg0, %arg1 : i1
+// CHECK-NEXT:   arc.output %0 : i1
+// CHECK-NEXT: }
+// CHECK-NOT:  arc.define @SplitDependency(
+arc.define @SplitDependency(%arg0: i1, %arg1: i1, %arg2: i1) -> (i1, i1) {
+  %0 = comb.xor %arg0, %arg1 : i1
+  %1 = comb.xor %arg2, %arg1 : i1
+  %2 = comb.xor %0, %1 : i1
+  arc.output %1, %2 : i1, i1
+}

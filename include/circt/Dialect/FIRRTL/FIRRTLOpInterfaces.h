@@ -29,6 +29,7 @@ namespace circt {
 namespace firrtl {
 
 class FIRRTLType;
+class Forceable;
 
 /// This holds the name and type that describes the module's ports.
 struct PortInfo {
@@ -96,8 +97,23 @@ struct PortInfo {
         annotations(annos) {}
 };
 
+enum class ConnectBehaviorKind {
+  /// Classic FIRRTL connections: last connect 'wins' across paths;
+  /// conditionally applied under 'when'.
+  LastConnect,
+  /// Exclusive connection to the destination, unconditional.
+  StaticSingleConnect,
+};
+
 /// Verification hook for verifying module like operations.
 LogicalResult verifyModuleLikeOpInterface(FModuleLike module);
+
+namespace detail {
+/// Return null or forceable reference result type.
+RefType getForceableResultType(bool forceable, Type type);
+/// Verify a Forceable op.
+LogicalResult verifyForceableOp(Forceable op);
+} // end namespace detail
 
 } // namespace firrtl
 } // namespace circt

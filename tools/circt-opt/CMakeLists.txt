@@ -11,6 +11,7 @@ target_link_libraries(circt-opt
   CIRCTAffineToPipeline
   CIRCTAnalysisTestPasses
   CIRCTArc
+  CIRCTArcToLLVM
   CIRCTArcTransforms
   CIRCTCalyx
   CIRCTCalyxToHW
@@ -47,6 +48,7 @@ target_link_libraries(circt-opt
   CIRCTHWToLLHD
   CIRCTHWToSystemC
   CIRCTHWTransforms
+  CIRCTLoopSchedule
   CIRCTSCFToCalyx
   CIRCTScheduling
   CIRCTSeq

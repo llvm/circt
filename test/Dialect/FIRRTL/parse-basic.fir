@@ -1155,3 +1155,110 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.instance module interesting_name @SomeModule
     module.in <= UInt(1)
 
+  ; CHECK-LABEL: module private @RefsChild(
+  ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>
+  ; CHECK-SAME: out %rw: !firrtl.probe<uint<1>>
+  module RefsChild :
+    input in : UInt<1>
+    output r : Probe<UInt<1>>
+    output rw : RWProbe<UInt<1>> ; expected-warning {{RWProbe not yet supported}}
+
+    ; CHECK-NEXT: %[[NODE:.+]] = firrtl.node
+    node n = in
+    ; CHECK-NEXT: %[[REF:.+]] = firrtl.ref.send %[[NODE]]
+    ; CHECK-NEXT: ref.define %r, %[[REF]]
+    define r = probe(n)
+    ; CHECK-NEXT: %[[RWREF:.+]] = firrtl.ref.send %[[NODE]]
+    ; CHECK-NEXT: ref.define %rw, %[[RWREF]]
+    define rw = rwprobe(n)
+
+  ; CHECK-LABEL: module private @Refs(
+  module Refs :
+    input in : UInt<1>
+    output r : Probe<UInt<1>>
+    output rw : RWProbe<UInt<1>> ; expected-warning {{RWProbe not yet supported}}
+    output out : UInt<1>
+    output out2 : UInt<1>
+    output out3 : UInt<3>
+    ; CHECK-SAME: out %agg_out: !firrtl.probe<bundle<a: uint<1>, b: uint>>
+    output agg_out : Probe<{a: UInt<1>, b: UInt}>
+
+    ; CHECK-NEXT: %[[RC_IN:.+]], %[[RC_R:.+]], %[[RC_RW:.+]] = firrtl.instance rc
+    inst rc of RefsChild
+    rc.in <= in
+    ; CHECK: %[[OUTREF:.+]] = firrtl.ref.send %out
+    ; CHECK-NEXT: ref.define %r, %[[OUTREF]]
+    define r = probe(out)
+    ; CHECK-NEXT: ref.define %rw, %[[RC_RW]]
+    define rw = rc.rw
+
+    ; CHECK-NEXT: %[[READ_RC_R:.+]] = firrtl.ref.resolve %[[RC_R]]
+    ; CHECK-NEXT: connect %out, %[[READ_RC_R]]
+    out <= read(rc.r)
+    ; CHECK-NEXT: %[[READ_RC_RW:.+]] = firrtl.ref.resolve %[[RC_RW]]
+    ; CHECK-NEXT: connect %out, %[[READ_RC_RW]]
+    out <= read(rc.rw)
+
+    ; ref.sub parsing
+    ; CHECK-DAG: %[[AGG:.+]] = firrtl.wire interesting_name : !firrtl.bundle<a flip: uint<1>, b: uint>
+    ; CHECK-DAG: %[[AGG2:.+]] = firrtl.wire interesting_name : !firrtl.bundle<a: uint, b flip: uint<1>>
+    wire agg : { flip a : UInt<1>, b : UInt }
+    wire agg2 : { a : UInt, flip b : UInt<1> }
+    ; CHECK-DAG: %[[AGG_B:.+]] = firrtl.subfield %[[AGG]][b]
+    ; CHECK-DAG: %[[AGG_B_PROBE:.+]] = firrtl.ref.send %[[AGG_B]]
+    ; CHECK-DAG: %[[READ_AGG_B_PROBE:.+]] = firrtl.ref.resolve %[[AGG_B_PROBE]]
+    ; CHECK-DAG: connect %out2, %[[READ_AGG_B_PROBE]]
+    out2 <= read(probe(agg.b))
+    ; CHECK-DAG: %[[AGG2_PROBE:.+]] = firrtl.ref.send %[[AGG2]]
+    ; CHECK-DAG: %[[READ_AGG2_PROBE:.+]] = firrtl.ref.resolve %[[AGG2_PROBE]]
+    ; CHECK-DAG: %[[READ_AGG2_PROBE__B:.+]] = firrtl.subfield %[[READ_AGG2_PROBE]][b]
+    ; CHECK-DAG: connect %out2, %[[READ_AGG2_PROBE__B]]
+    out2 <= read(probe(agg2)).b
+
+    ; CHECK: %[[AGG3:.+]] = firrtl.wire
+    wire agg3 : { a : UInt<1>, b : UInt }
+    ; CHECK-NEXT: %[[AGG3_PROBE:.+]] = firrtl.ref.send %[[AGG3]]
+    ; CHECK-NEXT: ref.define %agg_out, %[[AGG3_PROBE]]
+    define agg_out = probe(agg3)
+
+    ; CHECK: %{{.+}}, %[[REM_R:.+]], %{{.+}}, %[[REM_R2:.+]], %[[REM_UNUSED_REF:.+]] = firrtl.instance rem
+    ; CHECK-NEXT: %[[REM_R2_1:.+]] = firrtl.ref.sub %[[REM_R2]][1]
+    ; CHECK-NEXT: %[[REM_R2_1_A:.+]] = firrtl.ref.sub %[[REM_R2_1]][0]
+    ; CHECK-NEXT: %[[READ_REM_R2_1_A:.+]] = firrtl.ref.resolve %[[REM_R2_1_A]]
+    ; CHECK-NEXT: connect %out3, %[[READ_REM_R2_1_A]]
+    inst rem of RefExtMore
+    out3 <= read(rem.r2[1].a)
+
+    ; CHECK: %[[PROBE_IN:.+]] = firrtl.ref.send %in
+    ; CHECK-DAG: %[[READ_PROBE_IN:.+]] = firrtl.ref.resolve %[[PROBE_IN]]
+    ; CHECK-DAG: %[[SUM:.+]] = firrtl.and %[[READ_PROBE_IN]],
+    out <= and(read(probe(in)), UInt(1))
+
+  ; CHECK-LABEL: extmodule private @RefExt(
+  ; CHECK-SAME:  in in: !firrtl.uint<1>, out r: !firrtl.probe<uint<1>> 
+  ; CHECK-SAME: internalPaths = ["in"]
+  extmodule RefExt :
+    input in : UInt<1>
+    output r : Probe<UInt<1>>
+    ref r is "in"
+
+  ; CHECK-LABEL: extmodule private @RefExtMore(
+  ; CHECK-SAME:  in in: !firrtl.uint<1>
+  ; CHECK-SAME: out r: !firrtl.probe<uint<1>> 
+  ; CHECK-SAME: out data: !firrtl.uint<3> 
+  ; CHECK-SAME: out r2: !firrtl.probe<vector<bundle<a: uint<3>>, 3>>
+  ; CHECK-SAME: internalPaths = ["path.to.internal.signal", "in"]
+  extmodule RefExtMore :
+    input in : UInt<1>
+    output r : Probe<UInt<1>>
+    output data : UInt<3>
+    output r2 : Probe<{a : UInt<3>}[3]>
+    output no_ref_for_this : Probe<UInt<1>>
+    ref r2 is "in"
+    ref r is "path.to.internal.signal"
+
+  ; CHECK-LABEL: module private @ProbeInvalidate
+  ; CHECK-NEXT: }
+  module ProbeInvalidate:
+    output p : Probe<UInt<1>>
+    p is invalid
