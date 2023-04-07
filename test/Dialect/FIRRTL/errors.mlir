@@ -919,8 +919,8 @@ firrtl.circuit "Parent" {
 
 firrtl.circuit "Foo" {
   firrtl.module @Foo() {
-  // expected-error @+1 {{field id:'1' is greater than the maximum field id:'0'}}
-    %m = firrtl.mem sym [<@w3,1,public>,<@w3,2,private>,<@syh2,0,public>] Undefined {depth = 32 : i64, name = "m", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<>
+  // expected-error @below {{'firrtl.mem' op does not support per-field inner symbols}}
+    %m = firrtl.mem sym [<@x,1,public>,<@y,2,public>] Undefined {depth = 16 : i64, name = "ReadMemory", portNames = ["read0"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>
   }
 }
 
