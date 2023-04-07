@@ -235,20 +235,20 @@ def NodeOp : ReferableDeclOp<"node",
   let results = (outs FIRRTLBaseType:$result);
 
   let builders = [
-    OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$input,
-                  CArg<"StringRef", "{}">:$name,
-                  CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
-                  CArg<"ArrayRef<Attribute>", "{}">:$annotations,
-                  CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
-      return build($_builder, $_state, elementType, input, name, nameKind,
+    OpBuilder<(ins "::mlir::Value":$input,
+                   CArg<"StringRef", "{}">:$name,
+                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+      return build($_builder, $_state, input, name, nameKind,
                    $_builder.getArrayAttr(annotations),
                    inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
     }]>,
-    OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$input,
-                  "StringRef":$name, "NameKindEnum":$nameKind,
-                  "::mlir::ArrayAttr":$annotations,
-                  CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
-      return build($_builder, $_state, elementType, input, name, nameKind,
+    OpBuilder<(ins "::mlir::Value":$input,
+                   "StringRef":$name, "NameKindEnum":$nameKind,
+                   "::mlir::ArrayAttr":$annotations,
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+      return build($_builder, $_state, input, name, nameKind,
                    annotations,
                    inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
     }]>

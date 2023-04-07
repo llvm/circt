@@ -108,9 +108,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
                   opName = name.getValue();
                   nameKind = NameKindEnum::InterestingName;
                 }
-                xmrDef =
-                    b.create<NodeOp>(xmrDef.getType(), xmrDef, opName, nameKind)
-                        .getResult();
+                xmrDef = b.create<NodeOp>(xmrDef, opName, nameKind).getResult();
               }
             }
             // Create a new entry for this RefSendOp. The path is currently
