@@ -282,6 +282,5 @@ def MuxOp : CombOp<"mux",
   let assemblyFormat =
     "(`bin` $twoState^)? $cond `,` $trueValue `,` $falseValue  attr-dict `:` qualified(type($result))";
 
-  let hasFolder = true;
   let hasCanonicalizer = true;
 }

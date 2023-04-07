@@ -1785,29 +1785,6 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
 // MuxOp
 //===----------------------------------------------------------------------===//
 
-OpFoldResult MuxOp::fold(FoldAdaptor adaptor) {
-  // mux (c, b, b) -> b
-  if (getTrueValue() == getFalseValue())
-    return getTrueValue();
-
-  // mux(0, a, b) -> b
-  // mux(1, a, b) -> a
-  if (auto pred = adaptor.getCond().dyn_cast_or_null<IntegerAttr>()) {
-    if (pred.getValue().isZero())
-      return getFalseValue();
-    return getTrueValue();
-  }
-
-  // mux(cond, 1, 0) -> cond
-  if (auto tv = adaptor.getTrueValue().dyn_cast_or_null<IntegerAttr>())
-    if (auto fv = adaptor.getFalseValue().dyn_cast_or_null<IntegerAttr>())
-      if (tv.getValue().isOne() && fv.getValue().isZero() &&
-          hw::getBitWidth(getType()) == 1)
-        return getCond();
-
-  return {};
-}
-
 /// Check to see if the condition to the specified mux is an equality
 /// comparison `indexValue` and one or more constants.  If so, put the
 /// constants in the constants vector and return true, otherwise return false.
@@ -2007,106 +1984,6 @@ static Value extractOperandFromFullyAssociative(Operation *fullyAssoc,
                       ArrayRef<Value>{opWithoutExcluded, excluded}, rewriter);
   replaceOpAndCopyName(rewriter, fullyAssoc, fullResult);
   return opWithoutExcluded;
-}
-
-/// Fold things like `mux(cond, x|y|z|a, a)` -> `(x|y|z)&replicate(cond)|a` and
-/// `mux(cond, a, x|y|z|a) -> `(x|y|z)&replicate(~cond) | a` (when isTrueOperand
-/// is true.  Return true on successful transformation, false if not.
-///
-/// These are various forms of "predicated ops" that can be handled with a
-/// replicate/and combination.
-static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
-                               PatternRewriter &rewriter) {
-  // Check to see the operand in question is an operation.  If it is a port,
-  // we can't simplify it.
-  Operation *subExpr =
-      (isTrueOperand ? op.getFalseValue() : op.getTrueValue()).getDefiningOp();
-  if (!subExpr || subExpr->getNumOperands() < 2)
-    return false;
-
-  // If this isn't an operation we can handle, don't spend energy on it.
-  if (!isa<AndOp, XorOp, OrOp, MuxOp>(subExpr))
-    return false;
-
-  // Check to see if the common value occurs in the operand list for the
-  // subexpression op.  If so, then we can simplify it.
-  Value commonValue = isTrueOperand ? op.getTrueValue() : op.getFalseValue();
-  size_t opNo = 0, e = subExpr->getNumOperands();
-  while (opNo != e && subExpr->getOperand(opNo) != commonValue)
-    ++opNo;
-  if (opNo == e)
-    return false;
-
-  // If we got a hit, then go ahead and simplify it!
-  Value cond = op.getCond();
-
-  // `mux(cond, a, mux(cond2, a, b))` -> `mux(cond|cond2, a, b)`
-  // `mux(cond, a, mux(cond2, b, a))` -> `mux(cond|~cond2, a, b)`
-  // `mux(cond, mux(cond2, a, b), a)` -> `mux(~cond|cond2, a, b)`
-  // `mux(cond, mux(cond2, b, a), a)` -> `mux(~cond|~cond2, a, b)`
-  if (auto subMux = dyn_cast<MuxOp>(subExpr)) {
-    Value otherValue;
-    Value subCond = subMux.getCond();
-
-    // Invert th subCond if needed and dig out the 'b' value.
-    if (subMux.getTrueValue() == commonValue)
-      otherValue = subMux.getFalseValue();
-    else if (subMux.getFalseValue() == commonValue) {
-      otherValue = subMux.getTrueValue();
-      subCond = createOrFoldNot(op.getLoc(), subCond, rewriter);
-    } else {
-      // We can't fold `mux(cond, a, mux(a, x, y))`.
-      return false;
-    }
-
-    // Invert the outer cond if needed, and combine the mux conditions.
-    if (!isTrueOperand)
-      cond = createOrFoldNot(op.getLoc(), cond, rewriter);
-    cond = rewriter.createOrFold<OrOp>(op.getLoc(), cond, subCond, false);
-    replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, cond, commonValue,
-                                         otherValue, op.getTwoState());
-    return true;
-  }
-
-  // Invert the condition if needed.  Or/Xor invert when dealing with
-  // TrueOperand, And inverts for False operand.
-  bool isaAndOp = isa<AndOp>(subExpr);
-  if (isTrueOperand ^ isaAndOp)
-    cond = createOrFoldNot(op.getLoc(), cond, rewriter);
-
-  auto extendedCond =
-      rewriter.createOrFold<ReplicateOp>(op.getLoc(), op.getType(), cond);
-
-  // Cache this information before subExpr is erased by extraction below.
-  bool isaXorOp = isa<XorOp>(subExpr);
-  bool isaOrOp = isa<OrOp>(subExpr);
-
-  // Handle the fully associative ops, start by pulling out the subexpression
-  // from a many operand version of the op.
-  auto restOfAssoc =
-      extractOperandFromFullyAssociative(subExpr, opNo, rewriter);
-
-  // `mux(cond, x|y|z|a, a)` -> `(x|y|z)&replicate(cond) | a`
-  // `mux(cond, x^y^z^a, a)` -> `(x^y^z)&replicate(cond) ^ a`
-  if (isaOrOp || isaXorOp) {
-    auto masked = rewriter.createOrFold<AndOp>(op.getLoc(), extendedCond,
-                                               restOfAssoc, false);
-    if (isaXorOp)
-      replaceOpWithNewOpAndCopyName<XorOp>(rewriter, op, masked, commonValue,
-                                           false);
-    else
-      replaceOpWithNewOpAndCopyName<OrOp>(rewriter, op, masked, commonValue,
-                                          false);
-    return true;
-  }
-
-  // `mux(cond, a, x&y&z&a)` -> `((x&y&z)|replicate(cond)) & a`
-  assert(isaAndOp && "unexpected operation here");
-  auto masked = rewriter.createOrFold<OrOp>(op.getLoc(), extendedCond,
-                                            restOfAssoc, false);
-  replaceOpWithNewOpAndCopyName<AndOp>(rewriter, op, masked, commonValue,
-                                       false);
-  return true;
 }
 
 /// This function is invoke when we find a mux with true/false operations that
@@ -2443,13 +2320,6 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
         op.getTwoStateAttr());
     return success();
   }
-
-  // mux(cond, x|y|z|a, a) -> (x|y|z)&replicate(cond) | a
-  if (foldCommonMuxValue(op, false, rewriter))
-    return success();
-  // mux(cond, a, x|y|z|a) -> (x|y|z)&replicate(~cond) | a
-  if (foldCommonMuxValue(op, true, rewriter))
-    return success();
 
   // `mux(cond, op(a, b), op(a, c))` -> `op(a, mux(cond, b, c))`
   if (Operation *trueOp = op.getTrueValue().getDefiningOp())
