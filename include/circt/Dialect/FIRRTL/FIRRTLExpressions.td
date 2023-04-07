@@ -352,6 +352,21 @@ def SubtagOp : FIRRTLExprOp<"subtag"> {
   }];
 }
 
+def TagExtractOp : FIRRTLExprOp<"tagof", [InferTypeOpInterface]> {
+  let summary = "Extract the tag from a value";
+  let description = [{
+    The tagof expression returns the binary value of the current tag of an
+    enum value.
+    ```
+      %result = firrtl.tagof %input : !input-type
+    ```
+    }];
+
+  let arguments = (ins FEnumType:$input);
+  let results = (outs UIntType:$result);
+  let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
+}
+
 def MultibitMuxOp : FIRRTLExprOp<"multibit_mux"> {
   let summary = "Multibit multiplexer";
   let description = [{

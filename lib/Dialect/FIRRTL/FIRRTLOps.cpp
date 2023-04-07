@@ -2963,6 +2963,14 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
                                inType);
 }
 
+FIRRTLType TagExtractOp::inferReturnType(ValueRange operands,
+                                         ArrayRef<NamedAttribute> attrs,
+                                         std::optional<Location> loc) {
+  auto inType = operands[0].getType().cast<FEnumType>();
+  auto i = llvm::Log2_32_Ceil(inType.getNumElements());
+  return UIntType::get(inType.getContext(), i);
+}
+
 ParseResult MultibitMuxOp::parse(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::UnresolvedOperand index;
   SmallVector<OpAsmParser::UnresolvedOperand, 16> inputs;
@@ -3966,6 +3974,10 @@ void SubtagOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 void SubindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void TagExtractOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
