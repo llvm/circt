@@ -27,20 +27,25 @@ LogicalResult hw::verifyInnerSymAttr(InnerSymbolOpInterface op) {
   // If does not have any inner sym then ignore.
   if (!innerSym)
     return success();
-  if (isa<InstanceOp>(&op) || op->getNumResults() != 1) {
+
+  if (!op.supportsPerFieldSymbols()) {
     // The inner sym can only be specified on fieldID=0.
     if (innerSym.size() > 1 || !innerSym.getSymName()) {
-      op->emitOpError("cannot assign symbols to non-zero field id, for ops "
-                      "with zero or multiple results");
+      op->emitOpError("does not support per-field inner symbols");
       return failure();
     }
     return success();
   }
 
-  auto resultType =
-      op->getResultTypes()[0].dyn_cast<hw::FieldIDTypeInterface>();
+  auto result = op.getTargetResult();
+  // If op supports per-field symbols, but does not have a target result,
+  // its up to the operation to verify itself.
+  // (there are no uses for this presently, but be open to this anyway.)
+  if (!result)
+    return success();
+  auto resultType = result.getType().dyn_cast<hw::FieldIDTypeInterface>();
   // If this type doesn't implement the FieldIDTypeInterface, then there is
-  // nothing additional to check.
+  // nothing additional we can check.
   if (!resultType)
     return success();
   auto maxFields = resultType.getMaxFieldID();
