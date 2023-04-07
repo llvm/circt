@@ -10,7 +10,6 @@ add_circt_library(CIRCTStandardToHandshake
   CIRCTHandshake
   CIRCTHandshakeTransforms
   CIRCTSupport
-  CIRCTControlFlowLoopAnalysis
   MLIRIR
   MLIRPass
   MLIRArithDialect

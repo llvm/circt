@@ -7,8 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "../PassDetail.h"
-#include "circt/Analysis/ControlFlowLoopAnalysis.h"
 #include "circt/Conversion/StandardToHandshake.h"
+#include "mlir/Analysis/CFGLoopInfo.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
@@ -20,7 +20,6 @@
 
 using namespace mlir;
 using namespace circt;
-using namespace circt::analysis;
 
 /// Replaces the branching to oldDest of with an equivalent operation that
 /// instead branches to newDest.
@@ -80,7 +79,7 @@ static FailureOr<Block *> buildMergeBlock(Block *b1, Block *b2, Block *oldSucc,
 namespace {
 /// A dual CFG that contracts cycles into single logical blocks.
 struct DualGraph {
-  DualGraph(Region &r, ControlFlowLoopAnalysis &loopAnalysis);
+  DualGraph(Region &r, CFGLoopInfo &loopInfo);
 
   size_t getNumPredecessors(Block *b) { return predCnts.lookup(b); }
   void getPredecessors(Block *b, SmallVectorImpl<Block *> &res);
@@ -96,17 +95,19 @@ struct DualGraph {
   DenseMap<Block *, size_t> getPredCountMapCopy() { return predCnts; }
 
 private:
-  ControlFlowLoopAnalysis &loopAnalysis;
+  CFGLoopInfo &loopInfo;
 
   DenseMap<Block *, SmallVector<Block *>> succMap;
   DenseMap<Block *, size_t> predCnts;
 };
 } // namespace
 
-DualGraph::DualGraph(Region &r, ControlFlowLoopAnalysis &loopAnalysis)
-    : loopAnalysis(loopAnalysis), succMap(), predCnts() {
+DualGraph::DualGraph(Region &r, CFGLoopInfo &loopInfo)
+    : loopInfo(loopInfo), succMap(), predCnts() {
   for (Block &b : r) {
-    if (!loopAnalysis.isLoopHeader(&b) && loopAnalysis.isLoopElement(&b))
+    CFGLoop *loop = loopInfo.getLoopFor(&b);
+
+    if (loop && loop->getHeader() != &b)
       continue;
 
     // Create and get a new succ map entry for the current block.
@@ -116,13 +117,12 @@ DualGraph::DualGraph(Region &r, ControlFlowLoopAnalysis &loopAnalysis)
     // NOTE: This assumes that there is only one exiting node, i.e., not
     // two blocks from the same loop can be predecessors of one block.
     unsigned predCnt = 0;
-    LoopInfo *info = loopAnalysis.getLoopInfoForHeader(&b);
     for (auto *pred : b.getPredecessors())
-      if (!info || !info->inLoop.contains(pred))
+      if (!loop || !loop->contains(pred))
         predCnt++;
 
-    if (loopAnalysis.isLoopHeader(&b))
-      llvm::copy(info->exitBlocks, std::back_inserter(succs));
+    if (loop && loop->getHeader() == &b)
+      loop->getExitBlocks(succs);
     else
       llvm::copy(b.getSuccessors(), std::back_inserter(succs));
 
@@ -131,26 +131,26 @@ DualGraph::DualGraph(Region &r, ControlFlowLoopAnalysis &loopAnalysis)
 }
 
 Block *DualGraph::lookupDualBlock(Block *b) {
-  if (!loopAnalysis.isLoopElement(b))
+  CFGLoop *loop = loopInfo.getLoopFor(b);
+  if (!loop)
     return b;
 
-  return loopAnalysis.getLoopInfo(b)->loopHeader;
+  return loop->getHeader();
 }
 
 void DualGraph::getPredecessors(Block *b, SmallVectorImpl<Block *> &res) {
-  assert((loopAnalysis.isLoopHeader(b) || !loopAnalysis.isLoopElement(b)) &&
+  CFGLoop *loop = loopInfo.getLoopFor(b);
+  assert((!loop || loop->getHeader() == b) &&
          "can only get predecessors of blocks in the graph");
 
-  LoopInfo *info = loopAnalysis.getLoopInfoForHeader(b);
   for (auto *pred : b->getPredecessors()) {
-    if (info && info->inLoop.contains(pred))
+    if (loop && loop->contains(pred))
       continue;
 
-    if (loopAnalysis.isLoopElement(pred)) {
-      auto *info = loopAnalysis.getLoopInfo(pred);
-      assert(info->exitBlocks.size() == 1 &&
+    if (CFGLoop *predLoop = loopInfo.getLoopFor(pred)) {
+      assert(predLoop->getExitBlock() &&
              "multiple exit blocks are not yet supported");
-      res.push_back(info->loopHeader);
+      res.push_back(predLoop->getHeader());
       continue;
     }
     res.push_back(pred);
@@ -213,17 +213,17 @@ static LogicalResult buildMergeBlocks(Block *currBlock, SplitInfo &splitInfo,
 
     preds.push_back(*mergeBlock);
   }
-  if (predsToConsider.size() != 0)
+  if (!predsToConsider.empty())
     return currBlock->getParentOp()->emitError(
         "irregular control flow is not yet supported");
   return success();
 }
 
 /// Checks preconditions of this transformation.
-static LogicalResult preconditionCheck(Region &r,
-                                       ControlFlowLoopAnalysis &analysis) {
-  for (auto &info : analysis.topLevelLoops)
-    if (info.exitBlocks.size() > 1)
+static LogicalResult preconditionCheck(Region &r, CFGLoopInfo &loopInfo) {
+  for (auto &info : loopInfo.getTopLevelLoops())
+    // Does only return a block if it is the only exit block.
+    if (!info->getExitBlock())
       return r.getParentOp()->emitError(
           "multiple exit blocks are not yet supported");
 
@@ -243,11 +243,8 @@ LogicalResult circt::insertMergeBlocks(Region &r,
   Block *entry = &r.front();
   DominanceInfo domInfo(r.getParentOp());
 
-  ControlFlowLoopAnalysis loopAnalysis(r);
-  if (failed(loopAnalysis.analyzeRegion()))
-    return failure();
-
-  if (failed(preconditionCheck(r, loopAnalysis)))
+  CFGLoopInfo loopInfo(domInfo.getDomTree(&r));
+  if (failed(preconditionCheck(r, loopInfo)))
     return failure();
 
   // Traversing the graph in topological order can be simply done with a stack.
@@ -256,7 +253,7 @@ LogicalResult circt::insertMergeBlocks(Region &r,
 
   // Holds the graph that contains the relevant blocks. It for example contracts
   // loops into one block to preserve a DAG structure.
-  DualGraph graph(r, loopAnalysis);
+  DualGraph graph(r, loopInfo);
 
   // Counts the amount of predecessors remaining.
   auto predsToVisit = graph.getPredCountMapCopy();
