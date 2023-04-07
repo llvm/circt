@@ -14,6 +14,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/StringRef.h"
 
