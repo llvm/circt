@@ -1139,3 +1139,54 @@ firrtl.circuit "Bug4882Rename"  {
     // CHECK-NEXT: %bar2_x = firrtl.wire sym @x {annotations = [{class = "test0"}]}
   }
 }
+
+// -----
+
+// Issue #4920, the recursive inlining should consider the correct retop for NLAs.
+
+firrtl.circuit "DidNotContainSymbol" {
+  hw.hierpath private @path [@Bar1::@w, @Bar3]
+  firrtl.module private @Bar2() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance no sym @no @Bar1()
+  }
+  firrtl.module private @Bar1() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance bar3 sym @w @Bar3()
+  }
+  firrtl.module private @Bar3() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @path , class = "test0"}]} : !firrtl.uint<8>
+  }
+  firrtl.module @DidNotContainSymbol() {
+    firrtl.instance bar2 sym @w @Bar2()
+  }
+  // CHECK-LABEL: firrtl.module @DidNotContainSymbol() {
+  // CHECK-NEXT:     %bar2_no_bar3_w = firrtl.wire sym @w_0 {annotations = [{class = "test0"}]} : !firrtl.uint<8>
+  // CHECK-NEXT:  }
+}
+
+// -----
+
+// Issue #4915, the NLAs should be updated with renamed extern module instance.
+
+firrtl.circuit "SimTop" {
+  hw.hierpath private @nla_61 [@Rob::@difftest_3, @DifftestLoadEvent]
+  // CHECK: hw.hierpath private @nla_61 [@SimTop::@difftest_3_0, @DifftestLoadEvent]
+  hw.hierpath private @nla_60 [@Rob::@difftest_2, @DifftestLoadEvent]
+  // CHECK: hw.hierpath private @nla_60 [@SimTop::@difftest_2, @DifftestLoadEvent]
+  firrtl.extmodule private @DifftestIntWriteback()
+  firrtl.extmodule private @DifftestLoadEvent() attributes {annotations = [{circt.nonlocal = @nla_60, class = "B"}, {circt.nonlocal = @nla_61, class = "B"}]}
+	// CHECK: firrtl.extmodule private @DifftestLoadEvent() attributes {annotations = [{circt.nonlocal = @nla_60, class = "B"}, {circt.nonlocal = @nla_61, class = "B"}]}
+  firrtl.module private @Rob() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance difftest_2 sym @difftest_2 @DifftestLoadEvent()
+    firrtl.instance difftest_3 sym @difftest_3 @DifftestLoadEvent()
+  }
+  firrtl.module private @CtrlBlock() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance rob @Rob()
+  }
+  firrtl.module @SimTop() {
+    firrtl.instance difftest_3 sym @difftest_3 @DifftestIntWriteback()
+    firrtl.instance ctrlBlock @CtrlBlock()
+    // CHECK:  firrtl.instance difftest_3 sym @difftest_3 @DifftestIntWriteback()
+    // CHECK:  firrtl.instance ctrlBlock_rob_difftest_2 sym @difftest_2 @DifftestLoadEvent()
+    // CHECK:  firrtl.instance ctrlBlock_rob_difftest_3 sym @difftest_3_0 @DifftestLoadEvent()
+  }
+}
