@@ -146,6 +146,7 @@ def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
      "size_t":$numElements,
      "bool":$isConst
   );
+  let storageClass = "FVectorTypeStorage";
   let skipDefaultBuilders = true;
   let builders = [
     TypeBuilderWithInferredContext<(ins
@@ -201,6 +202,7 @@ def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
 def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
   let summary = "an aggregate of named elements. This is effectively a struct.";
   let parameters = (ins "ArrayRef<BundleElement>":$elements, "bool":$isConst);
+  let storageClass = "BundleTypeStorage";
   let skipDefaultBuilders = true;
   let builders = [
     TypeBuilder<(ins "ArrayRef<BundleElement>":$elements, CArg<"bool", "false">:$isConst)>
@@ -301,9 +303,13 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
 
 def FEnumImpl : FIRRTLImplType<"FEnum", [FieldIDTypeInterface]> {
   let summary = "a sum type of named elements.";
-  let genStorageClass = false;
-  let parameters = (ins "ArrayRef<EnumElement>":$elements);
+  let parameters = (ins "ArrayRef<EnumElement>":$elements, "bool":$isConst);
+  let storageClass = "FEnumTypeStorage";
   let genVerifyDecl = true;
+  let skipDefaultBuilders = true;
+  let builders = [
+    TypeBuilder<(ins "ArrayRef<EnumElement>":$elements, CArg<"bool", "false">:$isConst)>
+  ];
   let extraClassDeclaration = [{
     /// Each element of an enum, which is a name and type.
     struct EnumElement {
@@ -325,7 +331,11 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [FieldIDTypeInterface]> {
       }
     };
 
+    ArrayRef<EnumElement> getElements() const;
+
     size_t getNumElements() { return getElements().size(); }
+
+    FEnumType getConstType(bool isConst);
 
     /// Look up an element's index by name.  This returns None on failure.
     std::optional<unsigned> getElementIndex(StringAttr name);

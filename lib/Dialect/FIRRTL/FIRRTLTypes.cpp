@@ -253,7 +253,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
                                        parseEnumElement))
       return failure();
 
-    return result = FEnumType::get(context, elements), success();
+    return result = FEnumType::get(context, elements, isConst), success();
   }
 
   if (name.equals("vector")) {
@@ -1241,12 +1241,13 @@ std::pair<uint64_t, bool> FVectorType::rootChildFieldID(uint64_t fieldID,
 // Enum Type
 //===----------------------------------------------------------------------===//
 
-struct circt::firrtl::detail::FEnumTypeStorage : mlir::TypeStorage {
-  using KeyTy = ArrayRef<FEnumType::EnumElement>;
+struct circt::firrtl::detail::FEnumTypeStorage : detail::FIRRTLBaseTypeStorage {
+  using KeyTy = std::pair<ArrayRef<FEnumType::EnumElement>, char>;
 
-  FEnumTypeStorage(KeyTy elements)
-      : elements(elements.begin(), elements.end()) {
-    RecursiveTypeProperties props{true, false, false, false, false};
+  FEnumTypeStorage(ArrayRef<FEnumType::EnumElement> elements, bool isConst)
+      : detail::FIRRTLBaseTypeStorage(isConst),
+        elements(elements.begin(), elements.end()) {
+    RecursiveTypeProperties props{true, false, false, false, false, false};
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
@@ -1264,15 +1265,20 @@ struct circt::firrtl::detail::FEnumTypeStorage : mlir::TypeStorage {
     recProps = props;
   }
 
-  bool operator==(const KeyTy &key) const { return key == KeyTy(elements); }
+  bool operator==(const KeyTy &key) const {
+    return key == KeyTy(elements, isConst);
+  }
 
   static llvm::hash_code hashKey(const KeyTy &key) {
-    return llvm::hash_combine_range(key.begin(), key.end());
+    return llvm::hash_combine(
+        llvm::hash_combine_range(key.first.begin(), key.first.end()),
+        key.second);
   }
 
   static FEnumTypeStorage *construct(TypeStorageAllocator &allocator,
                                      KeyTy key) {
-    return new (allocator.allocate<FEnumTypeStorage>()) FEnumTypeStorage(key);
+    return new (allocator.allocate<FEnumTypeStorage>())
+        FEnumTypeStorage(key.first, static_cast<bool>(key.second));
   }
 
   SmallVector<FEnumType::EnumElement, 4> elements;
@@ -1282,8 +1288,17 @@ struct circt::firrtl::detail::FEnumTypeStorage : mlir::TypeStorage {
   RecursiveTypeProperties recProps;
 };
 
+FEnumType FEnumType::get(::mlir::MLIRContext *context,
+                         ArrayRef<EnumElement> elements, bool isConst) {
+  return Base::get(context, elements, isConst);
+}
+
 ArrayRef<FEnumType::EnumElement> FEnumType::getElements() const {
   return getImpl()->elements;
+}
+
+FEnumType FEnumType::getConstType(bool isConst) {
+  return get(getContext(), getElements(), isConst);
 }
 
 /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
@@ -1393,7 +1408,8 @@ std::pair<uint64_t, bool> FEnumType::rootChildFieldID(uint64_t fieldID,
 }
 
 auto FEnumType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
-                       ArrayRef<EnumElement> elements) -> LogicalResult {
+                       ArrayRef<EnumElement> elements, bool isConst)
+    -> LogicalResult {
   for (auto &elt : elements) {
     auto r = elt.type.getRecursiveTypeProperties();
     if (!r.isPassive)

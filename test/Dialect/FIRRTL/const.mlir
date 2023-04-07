@@ -21,6 +21,9 @@ firrtl.module @ConstReset(in %a: !firrtl.const.reset) {}
 // CHECK-LABEL: firrtl.module @ConstAsyncReset(in %a: !firrtl.const.asyncreset) {
 firrtl.module @ConstAsyncReset(in %a: !firrtl.const.asyncreset) {}
 
+// CHECK-LABEL: firrtl.module @ConstEnum(in %a: !firrtl.enum<a: uint<1>, b: uint<2>>) {
+firrtl.module @ConstEnum(in %a: !firrtl.enum<a: uint<1>, b: uint<2>>) {}
+
 // CHECK-LABEL: firrtl.module @ConstVec(in %a: !firrtl.const.vector<uint<1>, 3>) {
 firrtl.module @ConstVec(in %a: !firrtl.const.vector<uint<1>, 3>) {}
 
@@ -56,6 +59,15 @@ firrtl.module @ConstSubaccess(in %a: !firrtl.const.vector<uint<1>, 3>, in %const
   %1 = firrtl.subaccess %a[%dynamicIndex] : !firrtl.const.vector<uint<1>, 3>, !firrtl.uint<4>
   firrtl.connect %constOut, %0 : !firrtl.const.uint<1>, !firrtl.const.uint<1>
   firrtl.connect %dynamicOut, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+}
+
+// CHECK-LABEL: firrtl.module @ConstSubtag
+firrtl.module @ConstSubtag(in %in : !firrtl.const.enum<a: uint<1>, b: uint<2>>,
+                           out %out : !firrtl.const.uint<2>) {
+  // CHECK-NEXT: [[VAL:%.+]] = firrtl.subtag %in[b] : !firrtl.const.enum<a: uint<1>, b: uint<2>>
+  // CHECK-NEXT: firrtl.strictconnect %out, [[VAL]] : !firrtl.const.uint<2>
+  %0 = firrtl.subtag %in[b] : !firrtl.const.enum<a: uint<1>, b: uint<2>>
+  firrtl.strictconnect %out, %0 : !firrtl.const.uint<2>
 }
 
 }

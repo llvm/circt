@@ -2928,7 +2928,8 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
 
   // SubfieldOp verifier checks that the field index is valid with number of
   // subelements.
-  return inType.getElement(fieldIndex).type.getConstType(inType.isConst());
+  auto elementType = inType.getElement(fieldIndex).type;
+  return elementType.getConstType(elementType.isConst() || inType.isConst());
 }
 
 bool SubfieldOp::isFieldFlipped() {
@@ -2944,8 +2945,11 @@ FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
 
   if (auto vectorType = inType.dyn_cast<FVectorType>()) {
-    if (fieldIdx < vectorType.getNumElements())
-      return vectorType.getElementType().getConstType(vectorType.isConst());
+    if (fieldIdx < vectorType.getNumElements()) {
+      auto elementType = vectorType.getElementType();
+      return elementType.getConstType(elementType.isConst() ||
+                                      vectorType.isConst());
+    }
     return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
                                  "' in vector type ", inType);
   }
@@ -2967,7 +2971,8 @@ FIRRTLType SubtagOp::inferReturnType(ValueRange operands,
 
   // SubtagOp verifier checks that the field index is valid with number of
   // subelements.
-  return inType.getElement(fieldIndex).type;
+  auto elementType = inType.getElement(fieldIndex).type;
+  return elementType.getConstType(elementType.isConst() || inType.isConst());
 }
 
 FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
