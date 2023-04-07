@@ -265,6 +265,9 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
               circt::hw::InnerSymbolTable::getInnerSymbolAttrName());
       }]
     >,
+    // Ask an operation if per-field symbols are allowed.
+    // Defaults to indicating they're allowed iff there's a defined target result,
+    // but let operations answer this differently if for some reason that makes sense.
     StaticInterfaceMethod<"Returns whether per-field symbols are supported for this operation type.",
       "bool", "supportsPerFieldSymbols", (ins), [{}], /*defaultImplementation=*/[{
        return ConcreteOp::getTargetResultIndex().has_value();

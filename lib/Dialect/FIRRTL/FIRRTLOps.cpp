@@ -2189,7 +2189,10 @@ void MemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   }
 }
 
-std::optional<size_t> MemOp::getTargetResultIndex() { return std::nullopt; }
+std::optional<size_t> MemOp::getTargetResultIndex() {
+  // Inner symbols on memory operations target the op not any result.
+  return std::nullopt;
+}
 
 // Construct name of the module which will be used for the memory definition.
 StringAttr FirMemory::getFirMemoryName() const { return modName; }

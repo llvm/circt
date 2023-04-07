@@ -40,6 +40,7 @@ LogicalResult hw::verifyInnerSymAttr(InnerSymbolOpInterface op) {
   auto result = op.getTargetResult();
   // If op supports per-field symbols, but does not have a target result,
   // its up to the operation to verify itself.
+  // (there are no uses for this presently, but be open to this anyway.)
   if (!result)
     return success();
   auto resultType = result.getType().dyn_cast<hw::FieldIDTypeInterface>();
