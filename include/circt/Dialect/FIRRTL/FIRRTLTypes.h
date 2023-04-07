@@ -96,7 +96,7 @@ public:
     return getRecursiveTypeProperties().hasUninferredWidth;
   }
 
-  /// Return true if this type contains an uninferred bit width.
+  /// Return true if this type contains an uninferred bit reset.
   bool hasUninferredReset() {
     return getRecursiveTypeProperties().hasUninferredReset;
   }
