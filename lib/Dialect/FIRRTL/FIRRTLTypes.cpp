@@ -863,8 +863,7 @@ auto BundleType::getElements() const -> ArrayRef<BundleElement> {
 
 /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
 RecursiveTypeProperties BundleType::getRecursiveTypeProperties() const {
-  auto flags = getImpl()->passiveContainsAnalogTypeInfo.getInt();
-  return RecursiveTypeProperties::fromFlags(flags);
+  return getImpl()->props;
 }
 
 /// Return this type with any flip types recursively removed from itself.
@@ -1033,8 +1032,7 @@ size_t FVectorType::getNumElements() const { return getImpl()->value.second; }
 
 /// Return the recursive properties of the type.
 RecursiveTypeProperties FVectorType::getRecursiveTypeProperties() const {
-  auto flags = getImpl()->passiveContainsAnalogTypeInfo.getInt();
-  return RecursiveTypeProperties::fromFlags(flags);
+  return getElementType().getRecursiveTypeProperties();
 }
 
 /// Return this type with any flip types recursively removed from itself.
@@ -1104,7 +1102,7 @@ struct circt::firrtl::detail::FEnumTypeStorage : mlir::TypeStorage {
 
   FEnumTypeStorage(KeyTy elements)
       : elements(elements.begin(), elements.end()) {
-    RecursiveTypeProperties props{true, false, false};
+    RecursiveTypeProperties props{true, false, false, false, false};
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
