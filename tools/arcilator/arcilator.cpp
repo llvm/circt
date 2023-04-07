@@ -12,10 +12,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/CombToArith.h"
-#include "circt/Dialect/Arc/Dialect.h"
-#include "circt/Dialect/Arc/Interfaces.h"
-#include "circt/Dialect/Arc/Ops.h"
-#include "circt/Dialect/Arc/Passes.h"
+#include "circt/Dialect/Arc/ArcDialect.h"
+#include "circt/Dialect/Arc/ArcInterfaces.h"
+#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/InitAllDialects.h"
 #include "circt/InitAllPasses.h"
 #include "circt/Support/Version.h"

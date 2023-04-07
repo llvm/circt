@@ -16,7 +16,7 @@
 
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/Passes.h"
-#include "circt/Dialect/Arc/Passes.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Calyx/CalyxPasses.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/Passes.h"

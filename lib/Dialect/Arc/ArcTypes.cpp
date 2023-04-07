@@ -1,4 +1,4 @@
-//===- Types.cpp ----------------------------------------------------------===//
+//===- ArcTypes.cpp -------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/Arc/Types.h"
-#include "circt/Dialect/Arc/Dialect.h"
+#include "circt/Dialect/Arc/ArcTypes.h"
+#include "circt/Dialect/Arc/ArcDialect.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"

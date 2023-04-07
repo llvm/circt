@@ -10,7 +10,7 @@
 #include "circt/Conversion/ArcToLLVM.h"
 #include "circt/Conversion/CombToLLVM.h"
 #include "circt/Conversion/HWToLLVM.h"
-#include "circt/Dialect/Arc/Ops.h"
+#include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"

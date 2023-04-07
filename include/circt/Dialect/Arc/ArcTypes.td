@@ -1,4 +1,4 @@
-//===- Types.td - Arc dialect types ------------------------*- tablegen -*-===//
+//===- ArcTypes.td - Arc dialect types ---------------------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,10 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_ARC_TYPES_TD
-#define CIRCT_DIALECT_ARC_TYPES_TD
+#ifndef CIRCT_DIALECT_ARC_ARCTYPES_TD
+#define CIRCT_DIALECT_ARC_ARCTYPES_TD
 
-include "circt/Dialect/Arc/Dialect.td"
+include "circt/Dialect/Arc/ArcDialect.td"
 include "mlir/IR/AttrTypeBase.td"
 
 class ArcTypeDef<string name> : TypeDef<ArcDialect, name> { }
@@ -38,4 +38,4 @@ def StorageType : ArcTypeDef<"Storage"> {
   let assemblyFormat = "(`<` $size^ `>`)?";
 }
 
-#endif // CIRCT_DIALECT_ARC_TYPES_TD
+#endif // CIRCT_DIALECT_ARC_ARCTYPES_TD

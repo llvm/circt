@@ -1,4 +1,4 @@
-//===- Ops.td - Arc dialect operations ---------------------*- tablegen -*-===//
+//===- ArcOps.td - Arc dialect operations ------------------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,11 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_ARC_OPS_TD
-#define CIRCT_DIALECT_ARC_OPS_TD
+#ifndef CIRCT_DIALECT_ARC_ARCOPS_TD
+#define CIRCT_DIALECT_ARC_ARCOPS_TD
 
-include "circt/Dialect/Arc/Dialect.td"
-include "circt/Dialect/Arc/Types.td"
+include "circt/Dialect/Arc/ArcDialect.td"
+include "circt/Dialect/Arc/ArcTypes.td"
 include "circt/Dialect/Arc/ArcInterfaces.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/FunctionInterfaces.td"
@@ -580,4 +580,4 @@ def ZeroCountOp : ArcOp<"zero_count", [Pure, SameOperandsAndResultType]> {
   let assemblyFormat = "$predicate $input attr-dict `:` type($input)";
 }
 
-#endif // CIRCT_DIALECT_ARC_OPS_TD
+#endif // CIRCT_DIALECT_ARC_ARCOPS_TD

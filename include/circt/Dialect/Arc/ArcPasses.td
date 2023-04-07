@@ -1,4 +1,4 @@
-//===- Passes.td - Arc dialect passes ----------------------*- tablegen -*-===//
+//===- ArcPasses.td - Arc dialect passes -------------------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_ARC_PASSES_TD
-#define CIRCT_DIALECT_ARC_PASSES_TD
+#ifndef CIRCT_DIALECT_ARC_ARCPASSES_TD
+#define CIRCT_DIALECT_ARC_ARCPASSES_TD
 
 include "mlir/Pass/PassBase.td"
 
@@ -174,4 +174,4 @@ def StripSV : Pass<"arc-strip-sv", "mlir::ModuleOp"> {
   let dependentDialects = ["seq::SeqDialect", "arc::ArcDialect"];
 }
 
-#endif // CIRCT_DIALECT_ARC_PASSES_TD
+#endif // CIRCT_DIALECT_ARC_ARCPASSES_TD

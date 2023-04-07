@@ -1,4 +1,4 @@
-//===- Passes.h - Arc dialect passes --------------------------------------===//
+//===- ArcPasses.h - Arc dialect passes -----------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_ARC_PASSES_H
-#define CIRCT_DIALECT_ARC_PASSES_H
+#ifndef CIRCT_DIALECT_ARC_ARCPASSES_H
+#define CIRCT_DIALECT_ARC_ARCPASSES_H
 
 #include "mlir/Pass/Pass.h"
 #include <memory>
@@ -43,9 +43,9 @@ std::unique_ptr<mlir::Pass> createSplitLoopsPass();
 std::unique_ptr<mlir::Pass> createStripSVPass();
 
 #define GEN_PASS_REGISTRATION
-#include "circt/Dialect/Arc/Passes.h.inc"
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
 
 } // namespace arc
 } // namespace circt
 
-#endif // CIRCT_DIALECT_ARC_PASSES_H
+#endif // CIRCT_DIALECT_ARC_ARCPASSES_H
