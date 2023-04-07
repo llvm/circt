@@ -131,4 +131,55 @@ LogicalResult circt::firrtl::detail::verifyForceableOp(Forceable op) {
   return success();
 }
 
+Forceable circt::firrtl::detail::replaceWithNewForceability(Forceable op,
+                                                            bool forceable) {
+  if (forceable == op.isForceable())
+    return op;
+
+  assert(op->getNumRegions() == 0);
+
+  // Create copy of this operation with/without the forceable marker + result
+  // type.
+  OpBuilder b(op.getContext());
+
+  // Grab the current operation's results and attributes.
+  SmallVector<Type, 8> resultTypes(op->getResultTypes());
+  SmallVector<NamedAttribute, 16> attributes(op->getAttrs());
+
+  // Add/remove the optional ref result.
+  auto refType = firrtl::detail::getForceableResultType(true, op.getDataType());
+  if (forceable)
+    resultTypes.push_back(refType);
+  else {
+    assert(resultTypes.back() == refType &&
+           "expected forceable type as last result");
+    resultTypes.pop_back();
+  }
+
+  // Add/remove the forceable marker.
+  auto forceableMarker =
+      b.getNamedAttr(op.getForceableAttrName(), b.getUnitAttr());
+  if (forceable)
+    attributes.push_back(forceableMarker);
+  else {
+    llvm::erase_value(attributes, forceableMarker);
+    assert(attributes.size() != op->getAttrs().size());
+  }
+
+  // Create the replacement operation.
+  OperationState state(op.getLoc(), op->getName(), op->getOperands(),
+                       resultTypes, attributes, op->getSuccessors());
+  b.setInsertionPoint(op);
+  auto *replace = b.create(state);
+
+  // Dropping forceability (!forceable) -> no uses of forceable ref handle.
+  assert(forceable || op.getDataRef().use_empty());
+
+  // Replace results.
+  for (auto result : llvm::drop_end(op->getResults(), forceable ? 0 : 1))
+    result.replaceAllUsesWith(replace->getResult(result.getResultNumber()));
+  op->erase();
+  return cast<Forceable>(replace);
+}
+
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.cpp.inc"

@@ -113,6 +113,9 @@ namespace detail {
 RefType getForceableResultType(bool forceable, Type type);
 /// Verify a Forceable op.
 LogicalResult verifyForceableOp(Forceable op);
+/// Replace a Forceable op with equivalent, changing whether forceable.
+/// No-op if already has specified forceability.
+Forceable replaceWithNewForceability(Forceable op, bool forceable);
 } // end namespace detail
 
 } // namespace firrtl

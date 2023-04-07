@@ -2824,4 +2824,15 @@ firrtl.module @AggregateCreate(in %vector_in: !firrtl.vector<uint<1>, 2>,
   // CHECK-NEXT: firrtl.strictconnect %bundle_out, %bundle_in : !firrtl.bundle<a: uint<1>, b: uint<1>>
 }
 
+
+// CHECK-LABEL: firrtl.module private @RWProbeUnused
+firrtl.module private @RWProbeUnused(in %in: !firrtl.uint<4>, in %clk: !firrtl.clock, out %out: !firrtl.uint) {
+  // CHECK-NOT: forceable
+  %n, %n_ref = firrtl.node interesting_name %in forceable : !firrtl.uint<4>
+  %w, %w_ref = firrtl.wire interesting_name forceable : !firrtl.uint, !firrtl.rwprobe<uint>
+  firrtl.connect %w, %n : !firrtl.uint, !firrtl.uint<4>
+  %r, %r_ref = firrtl.reg interesting_name %clk forceable : !firrtl.clock, !firrtl.uint, !firrtl.rwprobe<uint>
+  firrtl.connect %r, %w : !firrtl.uint, !firrtl.uint
+  firrtl.connect %out, %r : !firrtl.uint, !firrtl.uint
+}
 }
