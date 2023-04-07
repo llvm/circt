@@ -123,7 +123,7 @@ int64_t circt::hw::getBitWidth(mlir::Type type) {
       .Case<UnionType>([](UnionType u) {
         int64_t maxSize = 0;
         for (auto field : u.getElements()) {
-          int64_t fieldSize = getBitWidth(field.type);
+          int64_t fieldSize = getBitWidth(field.type) + field.offset;
           if (fieldSize > maxSize)
             maxSize = fieldSize;
         }
@@ -301,14 +301,50 @@ void StructType::getInnerTypes(SmallVectorImpl<Type> &types) {
 // Union Type
 //===----------------------------------------------------------------------===//
 
+namespace circt {
+namespace hw {
+namespace detail {
+bool operator==(const OffsetFieldInfo &a, const OffsetFieldInfo &b) {
+  return a.name == b.name && a.type == b.type && a.offset == b.offset;
+}
+// NOLINTNEXTLINE
+llvm::hash_code hash_value(const OffsetFieldInfo &fi) {
+  return llvm::hash_combine(fi.name, fi.type, fi.offset);
+}
+} // namespace detail
+} // namespace hw
+} // namespace circt
+
 Type UnionType::parse(AsmParser &p) {
   llvm::SmallVector<FieldInfo, 4> parameters;
-  if (parseFields(p, parameters))
+  if (p.parseCommaSeparatedList(
+          mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
+            StringRef name;
+            Type type;
+            if (p.parseKeyword(&name) || p.parseColon() || p.parseType(type))
+              return failure();
+            size_t offset = 0;
+            if (succeeded(p.parseOptionalKeyword("offset")))
+              if (p.parseInteger(offset))
+                return failure();
+            parameters.push_back(UnionType::FieldInfo{
+                StringAttr::get(p.getContext(), name), type, offset});
+            return success();
+          }))
     return Type();
   return get(p.getContext(), parameters);
 }
 
-void UnionType::print(AsmPrinter &p) const { printFields(p, getElements()); }
+void UnionType::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << '<';
+  llvm::interleaveComma(
+      getElements(), odsPrinter, [&](const UnionType::FieldInfo &field) {
+        odsPrinter << field.name.getValue() << ": " << field.type;
+        if (field.offset)
+          odsPrinter << " offset " << field.offset;
+      });
+  odsPrinter << ">";
+}
 
 Type UnionType::getFieldType(mlir::StringRef fieldName) {
   for (const auto &field : getElements())
