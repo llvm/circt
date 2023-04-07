@@ -752,6 +752,7 @@ firrtl.circuit "Foo"  attributes {
     {class = "firrtl.transforms.DontTouchAnnotation", target = "~Foo|Foo>_T_6"},
     {class = "firrtl.transforms.DontTouchAnnotation", target = "~Foo|Foo>_T_8"},
     {class = "firrtl.transforms.DontTouchAnnotation", target = "~Foo|Foo>_T_9.a"},
+    {class = "firrtl.transforms.DontTouchAnnotation", target = "~Foo|Foo>_T_10.a"},
     {class = "firrtl.transforms.DontTouchAnnotation", target = "~Foo|Foo/bar:Bar>_T.a"}]} {
   // CHECK:      hw.hierpath private @nla [@Foo::@bar, @Bar]
   // CHECK-NEXT: firrtl.module @Foo
@@ -782,6 +783,9 @@ firrtl.circuit "Foo"  attributes {
     // CHECK: %_T_9 = firrtl.node %aggregate {annotations = [{circt.fieldID = 1 : i32, class = "firrtl.transforms.DontTouchAnnotation"}]}
     %_T_9 = firrtl.node %aggregate  : !firrtl.bundle<a: uint<1>>
     firrtl.instance bar @Bar()
+
+    // CHECK: %_T_10, %_T_10_ref = firrtl.node %aggregate forceable {annotations = [{circt.fieldID = 1 : i32, class = "firrtl.transforms.DontTouchAnnotation"}]}
+    %_T_10, %_T_10_ref = firrtl.node %aggregate forceable : !firrtl.bundle<a: uint<1>>
   }
   firrtl.module @Bar() {
     //  CHECK: %_T = firrtl.wire {annotations = [{circt.fieldID = 1 : i32, circt.nonlocal = @nla, class = "firrtl.transforms.DontTouchAnnotation"}]}
