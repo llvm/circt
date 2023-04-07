@@ -1805,7 +1805,7 @@ struct NodeBypass : public mlir::RewritePattern {
         node.use_empty())
       return failure();
     rewriter.startRootUpdate(node);
-    node.replaceAllUsesWith(node.getInput());
+    node.getResult().replaceAllUsesWith(node.getInput());
     rewriter.finalizeRootUpdate(node);
     return success();
   }
@@ -2041,7 +2041,7 @@ struct FoldResetMux : public mlir::RewritePattern {
       return failure();
 
     // Check all types should be typed by now
-    auto regTy = reg.getType();
+    auto regTy = reg.getResult().getType();
     if (con.getDest().getType() != regTy || con.getSrc().getType() != regTy ||
         mux.getHigh().getType() != regTy || mux.getLow().getType() != regTy ||
         regTy.getBitWidthOrSentinel() < 0)
@@ -2151,7 +2151,7 @@ static void erasePort(PatternRewriter &rewriter, Value port) {
     if (!subfield) {
       auto ty = port.getType();
       auto reg = rewriter.create<RegOp>(port.getLoc(), ty, getClock());
-      port.replaceAllUsesWith(reg);
+      port.replaceAllUsesWith(reg.getResult());
       return;
     }
   }
@@ -2177,8 +2177,8 @@ static void erasePort(PatternRewriter &rewriter, Value port) {
     // Replace read values with a register that is never written, handing off
     // the canonicalization of such a register to another canonicalizer.
     auto ty = access.getType();
-    Value reg = rewriter.create<RegOp>(access.getLoc(), ty, getClock());
-    rewriter.replaceOp(access, reg);
+    auto reg = rewriter.create<RegOp>(access.getLoc(), ty, getClock());
+    rewriter.replaceOp(access, reg.getResult());
   }
   assert(port.use_empty() && "port should have no remaining uses");
 }
@@ -2384,7 +2384,8 @@ struct FoldReadWritePorts : public mlir::RewritePattern {
       if (deadReads[i]) {
         // Create a wire to replace the old result. Wire the sub-fields of the
         // old result to the relevant sub-fields of the write port.
-        auto wire = rewriter.create<WireOp>(result.getLoc(), result.getType());
+        auto wire = rewriter.create<WireOp>(result.getLoc(), result.getType())
+                        .getResult();
         result.replaceAllUsesWith(wire);
 
         auto connect = [&](Value to, StringRef toName, Value from,
@@ -2687,7 +2688,8 @@ struct FoldRegMems : public mlir::RewritePattern {
     // Create a new register to store the data.
     auto ty = mem.getDataType();
     rewriter.setInsertionPointAfterValue(clock);
-    auto reg = rewriter.create<RegOp>(mem.getLoc(), ty, clock, mem.getName());
+    auto reg = rewriter.create<RegOp>(mem.getLoc(), ty, clock, mem.getName())
+                   .getResult();
 
     // Helper to insert a given number of pipeline stages through registers.
     auto pipeline = [&](Value value, Value clock, const Twine &name,
@@ -2699,8 +2701,10 @@ struct FoldRegMems : public mlir::RewritePattern {
           os << mem.getName() << "_" << name << "_" << i;
         }
 
-        auto reg = rewriter.create<RegOp>(mem.getLoc(), value.getType(), clock,
-                                          rewriter.getStringAttr(regName));
+        auto reg = rewriter
+                       .create<RegOp>(mem.getLoc(), value.getType(), clock,
+                                      rewriter.getStringAttr(regName))
+                       .getResult();
         rewriter.create<StrictConnectOp>(value.getLoc(), reg, value);
         value = reg;
       }
@@ -2860,7 +2864,7 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
     return failure();
 
   // Check all types should be typed by now
-  auto regTy = reg.getType();
+  auto regTy = reg.getResult().getType();
   if (con.getDest().getType() != regTy || con.getSrc().getType() != regTy ||
       mux.getHigh().getType() != regTy || mux.getLow().getType() != regTy ||
       regTy.getBitWidthOrSentinel() < 0)
@@ -2875,9 +2879,9 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   if (!constReg) {
     SmallVector<NamedAttribute, 2> attrs(reg->getDialectAttrs());
     auto newReg = replaceOpWithNewOpAndCopyName<RegResetOp>(
-        rewriter, reg, reg.getType(), reg.getClockVal(), mux.getSel(),
-        mux.getHigh(), reg.getName(), reg.getNameKind(), reg.getAnnotations(),
-        reg.getInnerSymAttr());
+        rewriter, reg, reg.getResult().getType(), reg.getClockVal(),
+        mux.getSel(), mux.getHigh(), reg.getNameAttr(), reg.getNameKindAttr(),
+        reg.getAnnotationsAttr(), reg.getInnerSymAttr());
     newReg->setDialectAttrs(attrs);
   }
   auto pt = rewriter.saveInsertionPoint();

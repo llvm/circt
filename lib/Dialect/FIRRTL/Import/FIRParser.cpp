@@ -2833,7 +2833,8 @@ ParseResult FIRStmtParser::parseNode() {
   auto result =
       builder.create<NodeOp>(initializer.getType(), initializer, id,
                              NameKindEnum::InterestingName, annotations, sym);
-  return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
+  return moduleContext.addSymbolEntry(id, result.getResult(),
+                                      startTok.getLoc());
 }
 
 /// wire ::= 'wire' id ':' type info?
@@ -2857,10 +2858,10 @@ ParseResult FIRStmtParser::parseWire() {
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
 
-  auto result = builder.create<WireOp>(
-      type, id, NameKindEnum::InterestingName, annotations,
-      sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
-  return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
+  auto result = builder.create<WireOp>(type, id, NameKindEnum::InterestingName,
+                                       annotations, sym);
+  return moduleContext.addSymbolEntry(id, result.getResult(),
+                                      startTok.getLoc());
 }
 
 /// register    ::= 'reg' id ':' type exp ('with' ':' reset_block)? info?
@@ -2949,12 +2950,16 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   Value result;
   StringAttr sym = {};
   if (resetSignal)
-    result = builder.create<RegResetOp>(type, clock, resetSignal, resetValue,
-                                        id, NameKindEnum::InterestingName,
-                                        annotations, sym);
+    result =
+        builder
+            .create<RegResetOp>(type, clock, resetSignal, resetValue, id,
+                                NameKindEnum::InterestingName, annotations, sym)
+            .getResult();
   else
-    result = builder.create<RegOp>(
-        type, clock, id, NameKindEnum::InterestingName, annotations, sym);
+    result = builder
+                 .create<RegOp>(type, clock, id, NameKindEnum::InterestingName,
+                                annotations, sym)
+                 .getResult();
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 

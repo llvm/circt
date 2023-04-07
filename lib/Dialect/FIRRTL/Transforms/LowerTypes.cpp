@@ -910,7 +910,7 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
     newMemories.push_back(cloneMemWithNewType(builder, op, field));
   // Hook up the new memories to the wires the old memory was replaced with.
   for (size_t index = 0, rend = op.getNumResults(); index < rend; ++index) {
-    auto result = oldPorts[index];
+    auto result = oldPorts[index].getResult();
     auto rType = result.getType().cast<BundleType>();
     for (size_t fieldIndex = 0, fend = rType.getNumElements();
          fieldIndex != fend; ++fieldIndex) {
