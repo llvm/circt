@@ -1362,7 +1362,7 @@ std::optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
               return std::nullopt;
             width = std::max(width, *w);
           }
-          return width + llvm::PowerOf2Ceil(fenum.getNumElements());
+          return width + llvm::Log2_32_Ceil(fenum.getNumElements());
         })
         .Case<FVectorType>([&](auto vector) -> std::optional<int64_t> {
           auto w = getBitWidth(vector.getElementType());
