@@ -148,14 +148,21 @@ private:
 
     // If this is operation doesn't have a single result (and no way to know
     // what its type is) or if it doesn't have a name, then do nothing.
-    if (op->getNumResults() != 1)
-      return false;
     StringAttr name = op->getAttrOfType<StringAttr>("name");
     if (!name)
       return false;
+    auto is = dyn_cast<hw::InnerSymbolOpInterface>(op);
+    Type type;
+    if (is && is.getTargetResult())
+      type = is.getTargetResult().getType();
+    else {
+      if (op->getNumResults() != 1)
+        return false;
+      type = op->getResultTypes().front();
+    }
 
-    auto type = getBaseType(cast<FIRRTLType>(op->getResultTypes()[0]));
-    return updateTargetImpl(anno, module, type, name);
+    auto baseType = getBaseType(cast<FIRRTLType>(type));
+    return updateTargetImpl(anno, module, baseType, name);
   }
 
   /// Add a "target" field to an Annotation on a Module that indicates the
