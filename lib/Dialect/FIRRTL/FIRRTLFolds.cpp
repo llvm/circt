@@ -1812,7 +1812,20 @@ struct NodeBypass : public mlir::RewritePattern {
     return success();
   }
 };
+
 } // namespace
+
+template <typename OpTy>
+static LogicalResult demoteForceableIfUnused(OpTy op,
+                                                  PatternRewriter &rewriter) {
+  if (!op.isForceable() || !op.getDataRef().use_empty())
+    return failure();
+
+  op.markForceable(false);
+  return success();
+}
+
+
 
 // Interesting names and symbols and don't touch force nodes to stick around.
 LogicalResult NodeOp::fold(FoldAdaptor adaptor,
@@ -1835,6 +1848,7 @@ LogicalResult NodeOp::fold(FoldAdaptor adaptor,
 void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
   results.insert<FoldNodeName>(context);
+  results.add(demoteForceableIfUnused<NodeOp>);
 }
 
 namespace {
@@ -1946,6 +1960,7 @@ struct SubfieldAggOneShot : public AggOneShot {
 void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
   results.insert<WireAggOneShot>(context);
+  results.add(demoteForceableIfUnused<WireOp>);
 }
 
 void SubindexOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -2096,6 +2111,7 @@ void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results.add<patterns::RegResetWithZeroReset, FoldResetMux>(context);
   results.add(canonicalizeRegResetWithOneReset);
+  results.add(demoteForceableIfUnused<RegResetOp>);
 }
 
 // Returns the value connected to a port, if there is only one.
@@ -2926,6 +2942,9 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
   if (!hasDontTouch(op.getOperation()) && !op.isForceable() &&
       succeeded(foldHiddenReset(op, rewriter)))
+    return success();
+
+  if (succeeded(demoteForceableIfUnused(op, rewriter)))
     return success();
 
   return failure();
