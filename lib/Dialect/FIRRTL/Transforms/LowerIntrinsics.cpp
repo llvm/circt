@@ -128,7 +128,7 @@ static bool lowerCirctSizeof(InstancePathCache &instancePathCache,
   for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    auto inputWire = builder.create<WireOp>(ports[0].type);
+    auto inputWire = builder.create<WireOp>(ports[0].type).getResult();
     inst.getResult(0).replaceAllUsesWith(inputWire);
     auto size = builder.create<SizeOfIntrinsicOp>(inputWire);
     inst.getResult(1).replaceAllUsesWith(size);
@@ -149,7 +149,7 @@ static bool lowerCirctIsX(InstancePathCache &instancePathCache,
   for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    auto inputWire = builder.create<WireOp>(ports[0].type);
+    auto inputWire = builder.create<WireOp>(ports[0].type).getResult();
     inst.getResult(0).replaceAllUsesWith(inputWire);
     auto size = builder.create<IsXIntrinsicOp>(inputWire);
     inst.getResult(1).replaceAllUsesWith(size);
