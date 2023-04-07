@@ -910,7 +910,7 @@ firrtl.circuit "Parent" {
     %w = firrtl.wire sym @w : !firrtl.uint<1>
   }
   firrtl.module @Parent() {
-    // expected-error @+1 {{cannot assign symbols to non-zero field id, for ops with zero or multiple results}}
+    // expected-error @below {{'firrtl.instance' op does not support per-field inner symbols}}
     firrtl.instance child sym [<@w3,1,public>,<@w3,2,private>,<@syh2,0,public>] @Child()
   }
 }
@@ -930,7 +930,7 @@ firrtl.circuit "Foo"   {
   firrtl.module @Bar(in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>>, out %c: !firrtl.uint<1>) {
   }
   firrtl.module @Foo() {
-    // expected-error @+1 {{cannot assign symbols to non-zero field id, for ops with zero or multiple results}}
+    // expected-error @+1 {{'firrtl.instance' op does not support per-field inner symbols}}
     %bar_a, %bar_b, %bar_c = firrtl.instance bar sym [<@w3,1,public>,<@w3,2,private>,<@syh2,0,public>] @Bar(in a: !firrtl.uint<1> [{one}], out b: !firrtl.bundle<baz: uint<1>, qux: uint<1>> [{circt.fieldID = 1 : i32, two}], out c: !firrtl.uint<1> [{four}])
   }
 }

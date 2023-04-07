@@ -1722,6 +1722,11 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   }
 }
 
+std::optional<size_t> InstanceOp::getTargetResultIndex() {
+  // Inner symbols on instance operations target the op not any result.
+  return std::nullopt;
+}
+
 void MemOp::build(OpBuilder &builder, OperationState &result,
                   TypeRange resultTypes, uint32_t readLatency,
                   uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
@@ -2184,6 +2189,8 @@ void MemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   }
 }
 
+std::optional<size_t> MemOp::getTargetResultIndex() { return 0; }
+
 // Construct name of the module which will be used for the memory definition.
 StringAttr FirMemory::getFirMemoryName() const { return modName; }
 
@@ -2216,9 +2223,13 @@ LogicalResult NodeOp::inferReturnTypes(
   return success();
 }
 
+std::optional<size_t> NodeOp::getTargetResultIndex() { return 0; }
+
 void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
+
+std::optional<size_t> RegOp::getTargetResultIndex() { return 0; }
 
 LogicalResult RegResetOp::verify() {
   auto reset = getResetValue();
@@ -2234,6 +2245,8 @@ LogicalResult RegResetOp::verify() {
   return success();
 }
 
+std::optional<size_t> RegResetOp::getTargetResultIndex() { return 0; }
+
 void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
@@ -2241,6 +2254,8 @@ void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
+
+std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
 
 //===----------------------------------------------------------------------===//
 // Statements

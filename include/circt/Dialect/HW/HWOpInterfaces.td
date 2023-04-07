@@ -265,6 +265,19 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
               circt::hw::InnerSymbolTable::getInnerSymbolAttrName());
       }]
     >,
+    StaticInterfaceMethod<"Returns whether per-field symbols are supported for this operation type.",
+      "bool", "supportsPerFieldSymbols", (ins), [{}], /*defaultImplementation=*/[{
+       return ConcreteOp::getTargetResultIndex().has_value();
+    }]>,
+    StaticInterfaceMethod<"Returns the index of the result the innner symbol targets, if applicable.  Per-field symbols are resolved into this.",
+      "std::optional<size_t>", "getTargetResultIndex">,
+    InterfaceMethod<"Returns the result the innner symbol targets, if applicable.  Per-field symbols are resolved into this.",
+      "OpResult", "getTargetResult", (ins), [{}], /*defaultImplementation=*/[{
+        auto idx = ConcreteOp::getTargetResultIndex();
+        if (!idx)
+          return {};
+        return $_op->getResult(*idx);
+      }]>,
   ];
 
   let verify = [{

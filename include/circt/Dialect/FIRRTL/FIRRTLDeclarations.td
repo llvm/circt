@@ -25,8 +25,9 @@ include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 
 class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
-  FIRRTLOp<mnemonic, traits # [HasCustomSSAName, InnerSymbol, FNamableOp]> {
-
+  FIRRTLOp<mnemonic, traits # [HasCustomSSAName,
+                               DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>,
+                               FNamableOp]> {
 }
 
 def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firrtl::WhenOp">,
