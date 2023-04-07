@@ -1040,6 +1040,11 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
             .Default([&](Operation *op) -> std::optional<Value> {
               auto module = cast<FModuleOp>(sourceRef.getModule());
               builder.setInsertionPointToEnd(module.getBodyBlock());
+              auto is = dyn_cast<hw::InnerSymbolOpInterface>(op);
+              // Resolve InnerSymbol references to their target result.
+              if (is && is.getTargetResult())
+                return getValueByFieldID(builder, is.getTargetResult(),
+                                         xmrSrcTarget->fieldIdx);
               if (sourceRef.getOp()->getNumResults() != 1) {
                 op->emitOpError()
                     << "cannot be used as a target of the Grand Central View \""
