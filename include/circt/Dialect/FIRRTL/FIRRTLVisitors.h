@@ -32,7 +32,7 @@ public:
         .template Case<
             ConstantOp, SpecialConstantOp, AggregateConstantOp, InvalidValueOp,
             SubfieldOp, SubindexOp, SubaccessOp, SubtagOp, BundleCreateOp,
-            VectorCreateOp, MultibitMuxOp, TagExtractOp, 
+            VectorCreateOp, MultibitMuxOp, TagExtractOp,
             // Arithmetic and Logical Binary Primitives.
             AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
             OrPrimOp, XorPrimOp,
