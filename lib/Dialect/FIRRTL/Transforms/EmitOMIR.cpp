@@ -1245,6 +1245,8 @@ hw::InnerRefAttr EmitOMIRPass::getInnerRefTo(FModuleLike module,
 }
 
 FIRRTLType EmitOMIRPass::getTypeOf(Operation *op) {
+  if (auto fop = dyn_cast<Forceable>(op))
+    return fop.getDataType();
   assert(op->getNumResults() == 1 &&
          op->getResult(0).getType().isa<FIRRTLType>() &&
          "op must have a single FIRRTLType result");
