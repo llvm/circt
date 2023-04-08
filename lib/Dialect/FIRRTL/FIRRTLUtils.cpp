@@ -45,7 +45,8 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 
   // If the types are the exact same we can just connect them.
   // Strict connect does not allow uninferred widths.
-  if (dstType == srcType && !dstType.hasUninferredWidth()) {
+  if (dstType == srcType && !dstType.hasUninferredWidth() &&
+      !dstType.hasUninferredReset()) {
     builder.create<StrictConnectOp>(dst, src);
     return;
   }
@@ -86,6 +87,12 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
       emitConnect(builder, dstField, srcField);
     }
     return;
+  }
+
+  if ((dstType.hasUninferredReset() || srcType.hasUninferredReset()) &&
+      dstType != srcType) {
+    src = builder.create<UninferredResetCastOp>(dstType, src);
+    srcType = dstType;
   }
 
   // Handle ground types with possibly uninferred widths.

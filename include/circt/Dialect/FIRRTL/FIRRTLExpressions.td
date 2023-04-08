@@ -785,6 +785,22 @@ def VerbatimWireOp : FIRRTLOp<"verbatim.wire",
 }
 
 //===----------------------------------------------------------------------===//
+// Special inference Operations
+//===----------------------------------------------------------------------===//
+
+def UninferredResetCastOp : FIRRTLOp<"resetCast", [HasCustomSSAName, Pure]> {
+  let description = [{
+    Cast between reset types.  This is used to enable strictconnects early in
+    the pipeline by isolating all uninferred reset connections to a single op.
+  }];
+  let arguments = (ins AnyResetType:$input);
+  let results = (outs AnyResetType:$result);
+  let hasFolder = 1;
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
+}
+
+//===----------------------------------------------------------------------===//
 // Conversions to/from fixed-width signless integer types in standard dialect.
 //===----------------------------------------------------------------------===//
 
