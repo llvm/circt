@@ -924,8 +924,8 @@ struct circt::firrtl::detail::BundleTypeStorage
 
   BundleTypeStorage(ArrayRef<BundleType::BundleElement> elements, bool isConst)
       : detail::FIRRTLBaseTypeStorage(isConst),
-        elements(elements.begin(), elements.end()) {
-    RecursiveTypeProperties props{true, false, false, false, false};
+        elements(elements.begin(), elements.end()), props{true, false, false,
+                                                          false, false} {
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
@@ -1176,7 +1176,7 @@ FIRRTLBaseType FVectorType::getPassiveType() {
     return impl->passiveType;
 
   // If this type is already passive, return it and remember for next time.
-  if (impl->value.first.getRecursiveTypeProperties().isPassive)
+  if (impl->elementType.getRecursiveTypeProperties().isPassive)
     return impl->passiveType = *this;
 
   // Otherwise, rebuild a passive version.
@@ -1239,7 +1239,7 @@ struct circt::firrtl::detail::FEnumTypeStorage : detail::FIRRTLBaseTypeStorage {
   FEnumTypeStorage(ArrayRef<FEnumType::EnumElement> elements, bool isConst)
       : detail::FIRRTLBaseTypeStorage(isConst),
         elements(elements.begin(), elements.end()) {
-    RecursiveTypeProperties props{true, false, false, false, false, false};
+    RecursiveTypeProperties props{true, false, false, false, false};
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
