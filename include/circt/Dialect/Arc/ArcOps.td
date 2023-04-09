@@ -96,6 +96,10 @@ def DefineOp : ArcOp<"define", [
                            "' attribute of function type";
       return mlir::success();
     }
+
+    /// Returns true if the arc returns the inputs directly and in the same
+    /// order, otherwise false.
+    bool isPassthrough();
   }];
 }
 

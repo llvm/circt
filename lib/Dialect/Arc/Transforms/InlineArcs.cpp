@@ -15,7 +15,6 @@
 
 using namespace circt;
 using namespace arc;
-using llvm::SetVector;
 using llvm::SmallDenseSet;
 using mlir::InlinerInterface;
 using mlir::SymbolUserMap;
