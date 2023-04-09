@@ -163,7 +163,7 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
       }
 
       friend llvm::hash_code hash_value(const BundleType::BundleElement &arg) {
-        return mlir::hash_value(arg.name) ^ mlir::hash_value(arg.type);
+        return llvm::hash_combine(arg.name, arg.isFlip, arg.type);
       }
     };
 
