@@ -61,7 +61,7 @@ firrtl.module @MixedConstSubfield(in %a: !firrtl.bundle<a: uint<1>, b: const.sin
   firrtl.connect %c, %1 : !firrtl.const.sint<2>, !firrtl.const.sint<2>
 }
 
-// Subaccess of a const vector should always have a const result
+// Subindex of a const vector should always have a const result
 // CHECK-LABEL: firrtl.module @ConstSubindex
 firrtl.module @ConstSubindex(in %a: !firrtl.const.vector<uint<1>, 3>, out %b: !firrtl.const.uint<1>) {
   // CHECK-NEXT: [[VAL:%.+]] = firrtl.subindex %a[1] : !firrtl.const.vector<uint<1>, 3>
@@ -70,7 +70,7 @@ firrtl.module @ConstSubindex(in %a: !firrtl.const.vector<uint<1>, 3>, out %b: !f
   firrtl.connect %b, %0 : !firrtl.const.uint<1>, !firrtl.const.uint<1>
 }
 
-// Subaccess of a non-const vector with a const element type should always have a const result
+// Subindex of a non-const vector with a const element type should always have a const result
 // CHECK-LABEL: firrtl.module @ConstElementSubindex
 firrtl.module @ConstElementSubindex(in %a: !firrtl.vector<const.uint<1>, 3>, out %b: !firrtl.const.uint<1>) {
   // CHECK-NEXT: [[VAL:%.+]] = firrtl.subindex %a[1] : !firrtl.vector<const.uint<1>, 3>
