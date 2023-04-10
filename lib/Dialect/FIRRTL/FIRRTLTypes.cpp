@@ -556,7 +556,7 @@ int32_t FIRRTLBaseType::getBitWidthOrSentinel() {
           [&](IntType intType) { return intType.getWidthOrSentinel(); })
       .Case<AnalogType>(
           [](AnalogType analogType) { return analogType.getWidthOrSentinel(); })
-      .Case<BundleType, FVectorType>([](Type) { return -2; })
+      .Case<BundleType, FVectorType, FEnumType>([](Type) { return -2; })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return -2;
