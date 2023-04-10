@@ -194,6 +194,12 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             resolveOps.push_back(resolve);
             return success();
           })
+          .Case<Forceable>([&](Forceable op) {
+            if (!op.isForceable() || op.getDataRef().use_empty())
+              return success();
+            addReachingSendsEntry(op.getDataRef(), getInnerRefTo(op));
+            return success();
+          })
           .Default([&](auto) { return success(); });
     };
 
