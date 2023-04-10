@@ -449,24 +449,30 @@ LogicalResult ModuleLowering::lowerState(MemoryReadPortOp memReadOp) {
   // Lowering MemoryReadOp to LLVM inserts a conditional branch to only perform
   // the read when the address is within bounds. By inserting an IfOp here I
   // hope that LLVM is able to merge them.
-  Value newRead =
-      info.clock.builder
-          .create<scf::IfOp>(
-              memReadOp.getLoc(), enable,
-              [&](OpBuilder &builder, Location loc) {
-                Value read = builder.create<MemoryReadOp>(
-                    memReadOp.getLoc(), memReadOp.getMemory(), address);
-                builder.create<scf::YieldOp>(memReadOp.getLoc(), read);
-              },
-              [&](OpBuilder &builder, Location loc) {
-                Value zero = builder.create<hw::ConstantOp>(
-                    memReadOp.getLoc(), memReadOp.getResult().getType(), 0);
-                builder.create<scf::YieldOp>(memReadOp.getLoc(), zero);
-              })
-          ->getResult(0);
+  if (enable) {
+    Value newRead =
+        info.clock.builder
+            .create<scf::IfOp>(
+                memReadOp.getLoc(), enable,
+                [&](OpBuilder &builder, Location loc) {
+                  Value read = builder.create<MemoryReadOp>(
+                      memReadOp.getLoc(), memReadOp.getMemory(), address);
+                  builder.create<scf::YieldOp>(memReadOp.getLoc(), read);
+                },
+                [&](OpBuilder &builder, Location loc) {
+                  Value zero = builder.create<hw::ConstantOp>(
+                      memReadOp.getLoc(), memReadOp.getResult().getType(), 0);
+                  builder.create<scf::YieldOp>(memReadOp.getLoc(), zero);
+                })
+            ->getResult(0);
+    memReadOp.replaceAllUsesWith(newRead);
+  } else {
+    Value newRead = info.clock.builder.create<MemoryReadOp>(
+        memReadOp.getLoc(), memReadOp.getMemory(), address);
+    memReadOp.replaceAllUsesWith(newRead);
+  }
 
   builder.setInsertionPointAfter(memReadOp);
-  memReadOp.replaceAllUsesWith(newRead);
   memReadOp.erase();
   return success();
 }

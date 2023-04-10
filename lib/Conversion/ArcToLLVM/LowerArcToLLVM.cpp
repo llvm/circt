@@ -259,8 +259,10 @@ struct MemoryWriteOpLowering : public OpConversionPattern<arc::MemoryWriteOp> {
     auto access = prepareMemoryAccess(
         op.getLoc(), adaptor.getMemory(), adaptor.getAddress(),
         op.getMemory().getType().cast<MemoryType>(), rewriter);
-    auto enable = rewriter.create<LLVM::AndOp>(op.getLoc(), adaptor.getEnable(),
-                                               access.withinBounds);
+    auto enable = access.withinBounds;
+    if (adaptor.getEnable())
+      enable = rewriter.create<LLVM::AndOp>(op.getLoc(), adaptor.getEnable(),
+                                            enable);
 
     // Only attempt to write the memory if the address is within bounds.
     rewriter.replaceOpWithNewOp<scf::IfOp>(

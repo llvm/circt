@@ -113,10 +113,15 @@ hw.module @memoryOps(%clk: i1, %en: i1) {
   // CHECK: [[MEM:%.+]] = arc.memory <4 x i32>
   %mem = arc.memory <4 x i32>
 
-  // CHECK-NEXT: %{{.+}} = arc.memory_read_port [[MEM]][%c0_i32], %en clock %clk : <4 x i32>, i32
-  %0 = arc.memory_read_port %mem[%c0_i32], %en clock %clk : <4 x i32>, i32
-  // CHECK-NEXT: arc.memory_write_port [[MEM]][%c0_i32], %en, %c0_i32 clock %clk : <4 x i32>, i32
-  arc.memory_write_port %mem[%c0_i32], %en, %c0_i32 clock %clk : <4 x i32>, i32
+  // CHECK-NEXT: %{{.+}} = arc.memory_read_port [[MEM]][%c0_i32] if %en clock %clk : <4 x i32>, i32
+  %0 = arc.memory_read_port %mem[%c0_i32] if %en clock %clk : <4 x i32>, i32
+  // CHECK-NEXT: arc.memory_write_port [[MEM]][%c0_i32], %c0_i32 if %en clock %clk : <4 x i32>, i32
+  arc.memory_write_port %mem[%c0_i32], %c0_i32 if %en clock %clk : <4 x i32>, i32
+
+  // CHECK-NEXT: %{{.+}} = arc.memory_read_port [[MEM]][%c0_i32] clock %clk : <4 x i32>, i32
+  %1 = arc.memory_read_port %mem[%c0_i32] clock %clk : <4 x i32>, i32
+  // CHECK-NEXT: arc.memory_write_port [[MEM]][%c0_i32], %c0_i32 clock %clk : <4 x i32>, i32
+  arc.memory_write_port %mem[%c0_i32], %c0_i32 clock %clk : <4 x i32>, i32
 
   // CHECK-NEXT: arc.clock_domain
   arc.clock_domain (%clk) clock %clk : (i1) -> () {
@@ -124,14 +129,22 @@ hw.module @memoryOps(%clk: i1, %en: i1) {
     %c1_i32 = hw.constant 1 : i32
     // CHECK: [[MEM2:%.+]] = arc.memory <4 x i32>
     %mem2 = arc.memory <4 x i32>
-    // CHECK-NEXT: %{{.+}} = arc.memory_read_port [[MEM2]][%c1_i32], %arg0 : <4 x i32>, i32
-    %1 = arc.memory_read_port %mem2[%c1_i32], %arg0 : <4 x i32>, i32
-    // CHECK-NEXT: arc.memory_write_port [[MEM2]][%c1_i32], %arg0, %c1_i32 : <4 x i32>, i32
-    arc.memory_write_port %mem2[%c1_i32], %arg0, %c1_i32 : <4 x i32>, i32
+    // CHECK-NEXT: %{{.+}} = arc.memory_read_port [[MEM2]][%c1_i32] if %arg0 : <4 x i32>, i32
+    %2 = arc.memory_read_port %mem2[%c1_i32] if %arg0 : <4 x i32>, i32
+    // CHECK-NEXT: arc.memory_write_port [[MEM2]][%c1_i32], %c1_i32 if %arg0 : <4 x i32>, i32
+    arc.memory_write_port %mem2[%c1_i32], %c1_i32 if %arg0 : <4 x i32>, i32
+
+    // CHECK-NEXT: %{{.+}} = arc.memory_read_port [[MEM2]][%c1_i32] : <4 x i32>, i32
+    %3 = arc.memory_read_port %mem2[%c1_i32] : <4 x i32>, i32
+    // CHECK-NEXT: arc.memory_write_port [[MEM2]][%c1_i32], %c1_i32 : <4 x i32>, i32
+    arc.memory_write_port %mem2[%c1_i32], %c1_i32 : <4 x i32>, i32
   }
 
   // CHECK: %{{.+}} = arc.memory_read [[MEM]][%c0_i32] : <4 x i32>, i32
-  %1 = arc.memory_read %mem[%c0_i32] : <4 x i32>, i32
-  // CHECK-NEXT: arc.memory_write [[MEM]][%c0_i32], %en, %c0_i32 : <4 x i32>, i32
-  arc.memory_write %mem[%c0_i32], %en, %c0_i32 : <4 x i32>, i32
+  %2 = arc.memory_read %mem[%c0_i32] : <4 x i32>, i32
+  // CHECK-NEXT: arc.memory_write [[MEM]][%c0_i32], %c0_i32 if %en : <4 x i32>, i32
+  arc.memory_write %mem[%c0_i32], %c0_i32 if %en : <4 x i32>, i32
+
+  // CHECK-NEXT: arc.memory_write [[MEM]][%c0_i32], %c0_i32 : <4 x i32>, i32
+  arc.memory_write %mem[%c0_i32], %c0_i32 : <4 x i32>, i32
 }
