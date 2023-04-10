@@ -2227,9 +2227,17 @@ LogicalResult NodeOp::inferReturnTypes(
     return failure();
   inferredReturnTypes.push_back(operands[0].getType());
   for (auto &attr : attributes)
-    if (attr.getName() == Forceable::getForceableAttrName())
-      inferredReturnTypes.push_back(
-          firrtl::detail::getForceableResultType(true, operands[0].getType()));
+    if (attr.getName() == Forceable::getForceableAttrName()) {
+      auto forceableType =
+          firrtl::detail::getForceableResultType(true, operands[0].getType());
+      if (!forceableType) {
+        if (location)
+          ::mlir::emitError(*location, "cannot force a node of type ")
+              << operands[0].getType();
+        return failure();
+      }
+      inferredReturnTypes.push_back(forceableType);
+    }
   return success();
 }
 

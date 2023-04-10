@@ -1838,6 +1838,9 @@ auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
                      FIRRTLBaseType base, bool forceable) -> LogicalResult {
   if (!base.isPassive())
     return emitErrorFn() << "reference base type must be passive";
+  if (forceable && base.containsConst())
+    return emitErrorFn()
+           << "forceable reference base type cannot contain const";
   return success();
 }
 

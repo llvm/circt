@@ -1205,6 +1205,38 @@ firrtl.circuit "ForceableTypeMismatch" {
 
 // -----
 
+// Check rwprobe<const T> is rejected.
+firrtl.circuit "ForceableConstWire" {
+  firrtl.module @ForceableConstWire() {
+    // expected-error @below {{forceable reference base type cannot contain const}}
+    %w, %w_f = firrtl.wire forceable : !firrtl.const.uint, !firrtl.rwprobe<const.uint>
+  }
+}
+
+// -----
+
+// Check forceable declarations of const-type w/o explicit ref type are rejected.
+firrtl.circuit "ForceableConstNode" {
+  firrtl.module @ForceableConstNode() {
+    %w = firrtl.wire : !firrtl.const.uint
+    // expected-error @below {{cannot force a node of type}}
+    %n, %n_ref = firrtl.node %w forceable : !firrtl.const.uint
+  }
+}
+
+// -----
+
+// Check forceable declarations of const-type w/o explicit ref type are rejected.
+firrtl.circuit "ForceableBundleConstNode" {
+  firrtl.module @ForceableBundleConstNode() {
+    %w = firrtl.wire : !firrtl.bundle<a: const.uint>
+    // expected-error @below {{cannot force a node of type}}
+    %n, %n_ref = firrtl.node %w forceable : !firrtl.bundle<a: const.uint>
+  }
+}
+
+// -----
+
 firrtl.circuit "RefForceProbe" {
   firrtl.module @RefForceProbe() {
     %a = firrtl.wire : !firrtl.uint<1>
