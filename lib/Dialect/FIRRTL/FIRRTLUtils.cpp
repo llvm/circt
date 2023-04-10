@@ -824,18 +824,30 @@ Type circt::firrtl::lowerType(Type type) {
     return hw::ArrayType::get(elemTy, vec.getNumElements());
   }
   if (auto fenum = firType.dyn_cast<FEnumType>()) {
-    mlir::SmallVector<Attribute, 8> hwfields;
+    mlir::SmallVector<hw::UnionType::FieldInfo, 8> hwfields;
+    SmallVector<Attribute> names;
+    bool simple = true;
     for (auto element : fenum) {
       Type etype = lowerType(element.type);
       if (!etype)
         return {};
+      hwfields.push_back(hw::UnionType::FieldInfo{element.name, etype, 0});
+      names.push_back(element.name);
       if (!element.type.isa<UIntType>() ||
           element.type.getBitWidthOrSentinel() != 0)
-        return {};
-      hwfields.push_back(element.name);
+        simple = false;
     }
-    return hw::EnumType::get(type.getContext(),
-                             ArrayAttr::get(type.getContext(), hwfields));
+    auto tagTy = hw::EnumType::get(type.getContext(),
+                                   ArrayAttr::get(type.getContext(), names));
+    if (simple)
+      return tagTy;
+    auto bodyTy = hw::UnionType::get(type.getContext(), hwfields);
+    auto tagImplTy = IntegerType::get(type.getContext(),
+                                      llvm::Log2_64_Ceil(hwfields.size()));
+    hw::StructType::FieldInfo fields[2] = {
+        {StringAttr::get(type.getContext(), "tag"), tagImplTy},
+        {StringAttr::get(type.getContext(), "body"), bodyTy}};
+    return hw::StructType::get(type.getContext(), fields);
   }
 
   auto width = firType.getBitWidthOrSentinel();
