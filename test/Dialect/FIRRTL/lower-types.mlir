@@ -1158,6 +1158,19 @@ firrtl.module private @is1436_FOO() {
     firrtl.strictconnect %bov, %x_read : !firrtl.bundle<a: vector<uint<1>,2>, b: uint<2>>
     // CHECK-NEXT: }
   }
+  // Check how rwprobe's of aggregates in instances are handled.
+  // Temporary until no longer need to lower these.
+  // CHECK-LABEL: firrtl.module private @InstWithRWProbeOfAgg
+  firrtl.module private @InstWithRWProbeOfAgg() {
+    // CHECK-NOT: firrtl.probe
+    // CHECK: probe: !firrtl.probe<uint<2>>)
+    %inst_vec_ref, %inst_vec, %inst_bov_ref, %inst_bov, %inst_probe = firrtl.instance inst @RefTypeBV_RW(
+      out vec_ref: !firrtl.rwprobe<vector<uint<1>,2>>,
+      out vec: !firrtl.vector<uint<1>,2>,
+      out bov_ref: !firrtl.rwprobe<bundle<a: vector<uint<1>,2>, b: uint<2>>>,
+      out bov: !firrtl.bundle<a: vector<uint<1>,2>, b: uint<2>>,
+      out probe: !firrtl.probe<uint<2>>)
+  }
 
   // CHECK-LABEL: firrtl.module private @ForeignTypes
   firrtl.module private @ForeignTypes() {

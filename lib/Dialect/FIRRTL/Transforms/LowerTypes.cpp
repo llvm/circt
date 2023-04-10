@@ -1304,9 +1304,8 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       for (const auto &field : fieldTypes) {
         newDirs.push_back(direction::get((unsigned)oldDir ^ field.isOutput));
         newNames.push_back(builder->getStringAttr(oldName + field.suffix));
-        resultTypes.push_back(srcType.isa<RefType>()
-                                  ? FIRRTLType(RefType::get(field.type))
-                                  : FIRRTLType(field.type));
+        resultTypes.push_back(
+            mapBaseType(srcType, [&](auto base) { return field.type; }));
         auto annos = filterAnnotations(
             context, oldPortAnno[i].dyn_cast_or_null<ArrayAttr>(), srcType,
             field);
