@@ -199,7 +199,7 @@ def FEnumCreateOp : FIRRTLOp<"enumcreate"> {
   let summary = "Produce a enum value";
   let description = [{
     Create an enum from tag and value.
-    ```
+    ```mlir
       %result = firrtl.enumcreate field-name(%input) : !firrtl.enum<None: uint<0>, Some: uint<8>>
 
     ```
@@ -213,8 +213,7 @@ def FEnumCreateOp : FIRRTLOp<"enumcreate"> {
 
   let builders = [
     OpBuilder<(ins "FEnumType":$resultType, "StringRef":$fieldName, "Value":$input), [{
-      auto enumType = input.getType().cast<FEnumType>();
-      auto fieldIndex = enumType.getElementIndex(fieldName);
+      auto fieldIndex = resultType.getElementIndex(fieldName);
       assert(fieldIndex.has_value() && "invalid type constructor");
       return build($_builder, $_state, resultType, (uint32_t)*fieldIndex, input);
     }]>
@@ -223,8 +222,7 @@ def FEnumCreateOp : FIRRTLOp<"enumcreate"> {
   let extraClassDeclaration = [{
     /// Return the name of the accessed field.
     StringRef getFieldName() {
-      return getResult().getType().cast<FEnumType>()
-        .getElementName(getFieldIndex());
+      return getResult().getType().getElementName(getFieldIndex());
     }
   }];
 }
