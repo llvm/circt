@@ -1,52 +1,56 @@
-# The Elastic Silicon Interconnect dialect
+# System Construction: The Elastic Silicon Interconnect (ESI) dialect
 
-Long ago, software function calling conventions were ad-hoc. This led to
-issues, particularly with register clobbering and stack corruption. This is --
-in large part -- the state of FPGA/ASIC design today: wire signaling protocols
-are often ad-hoc, which also leads to major issues. Though there are efforts
-to standardize the signaling protocols there are many minor and major
-variants, both of which lead to confusion which can cause real problems when
-one is listening to and twiddling the wires manually. ESI solves this by
-providing a simple, intuitive, common, and standardized interface to developers
-and then figures out the signaling details and conversions between them.
+At its core, system construction is "just" IP stitching -- gluing modules
+together into coherent "system". In practice, however, that simple task solves
+only one problem of many. ESI will provide:
 
-While the ABI/signaling problem is slowly being partially solved, it does not
-speak to the types of data on the wires – the software analogy being memory
-and registers. In the software world, data types were added. More and more
-complex type systems began to evolve – to great successes in some cases as
-strong typing can help developers avoid bugs and assist in debugging. In the
-FPGA/ASIC world, RTL-level languages are starting to get basic types but
-across interconnects it is still common for the data types to be informally
-specified in a data sheet. This indicates a total failure of the basic type
-system which RTL supports.
+- IP stitching
+  - Type safety -- static safety errors
+  - Elastic (latency insensitive) communication
+  - "Gearboxing" large data buses down to smaller ones
+  - Wire signaling protocol adaptation (i.e. FIFO vs Ready/Valid vs AXI streaming)
+  - Automatic construction of clock domain crossings
+  - Variable length types
+  - Interconnect pipelining
+- Multi-HDL support
+  - Specification-based
+- Board support packages
+  - Services that implement abstract logical interfaces from board-specific communication
+- Software (host) API generation
+  - Automatic, typed generation in multiple languages
+  - Same API regardless of communication method (e.g. real hardware vs cosim)
+  - Host-side multi-process orchestration
+- Separate modeling/specification from implementation
+  - Simple specification (with optional additional specifications)
+  - Performant implementations
+- System co-simulation
+  - RTL-level simulation
+  - Emulation of ESI interconnect (CAM interop)
 
-The Elastic Silicon Interconnect (ESI) project raises the bar on both fronts. On
-the data type front, it (will) define a rich, hardware-centric type system to
-allow more formal data type definitions and strong static type safety. On the
-ABI/signaling front, it can build simple, latency-insensitive interfaces and
-abstract away the signaling protocol. Essentially, the intent is to cleanly
-separate/abstract the physical signaling layer from the message layer. This
-enables many tasks to be automated including – but not limited to – the
-following:
-
-1) Inter-language communication
-2) Type checking to reduce bugs at interface boundaries
-3) Correct-by-construction building of communication fabric (including clock
-domain crossings)
-4) Decision making about the physical signaling between modules
-5) Software API generation which bridges over PCIe, network, or simulation
-6) Pipelining based on floor planning between modules to reduce timing closure
-pressure
-7) Compatibility between modules with different bandwidths (automatic
-gearboxing)
-8) Type and signal aware debuggers/monitors in communication fabric
-9) Common interface for board support packages
-10) Extensible services to support global resources (e.g. telemetry)
+- Runtime discovery of services/IP
+  - IP component meta-data (e.g. version, description)
+  - Types for external communication
+  - External communication methods (e.g. DMA engines, control offsets, etc)
+- Runtime telemetry
+  - Standardized collection methods
+  - Standardized reporting methods
+- Debugging
+  - System-level debug (e.g. interconnect monitors)
+  - HDL interface for language-specific debug
+- IP/system configuration / readout
+  - Standardized setup/tear down
+- Clock and reset domains
+  - IP assignment (to clk/rst domain)
+  - Soft reset of IP
+  - Standardized reset protocol
+  - Shared resource (e.g. DRAM) / reset orchestration
+- Multi-device orchestration
+  - Host side orchestration
+  - Device-device comms
 
 ## Status
 
-The ESI project is in its infancy -- it is not complete by any means. We are
-always looking for people to experiment with it and contribute!
+ESI supports only basic features and those are not yet production ready.
 
 ## Publications
 
