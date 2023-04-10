@@ -1144,6 +1144,7 @@ firrtl.module private @is1436_FOO() {
     // CHECK-NEXT: firrtl.ref.resolve %[[X_B_REF]]
     %x_ref_b = firrtl.ref.sub %x_ref[1] : !firrtl.rwprobe<bundle<a: vector<uint<1>,2>, b: uint<2>>>
     %x_b = firrtl.ref.resolve %x_ref_b : !firrtl.rwprobe<uint<2>>
+
     // TODO: Handle rwprobe --> probe define, enable this.
     // firrtl.ref.define %probe, %x_ref_b : !firrtl.probe<uint<2>>
 
@@ -1161,15 +1162,32 @@ firrtl.module private @is1436_FOO() {
   // Check how rwprobe's of aggregates in instances are handled.
   // Temporary until no longer need to lower these.
   // CHECK-LABEL: firrtl.module private @InstWithRWProbeOfAgg
-  firrtl.module private @InstWithRWProbeOfAgg() {
+  firrtl.module private @InstWithRWProbeOfAgg(in %clock : !firrtl.clock, in %pred : !firrtl.uint<1>) {
+    // CHECK: {{((%[^,]+, ){4})}}
+    // CHECK-SAME: %[[BOV_REF_A_0:[^,]+]], %[[BOV_REF_A_1:[^,]+]], %[[BOV_REF_B:[^,]+]],
+    // CHECK-SAME: %[[BOV_A_0:.+]],        %[[BOV_A_1:.+]],        %[[BOV_B:.+]],        %{{.+}} = firrtl.instance
     // CHECK-NOT: firrtl.probe
-    // CHECK: probe: !firrtl.probe<uint<2>>)
+    // CHECK-SAME: probe: !firrtl.probe<uint<2>>)
     %inst_vec_ref, %inst_vec, %inst_bov_ref, %inst_bov, %inst_probe = firrtl.instance inst @RefTypeBV_RW(
       out vec_ref: !firrtl.rwprobe<vector<uint<1>,2>>,
       out vec: !firrtl.vector<uint<1>,2>,
       out bov_ref: !firrtl.rwprobe<bundle<a: vector<uint<1>,2>, b: uint<2>>>,
       out bov: !firrtl.bundle<a: vector<uint<1>,2>, b: uint<2>>,
       out probe: !firrtl.probe<uint<2>>)
+
+    // Check lowering force and release operations.
+    // Use self-assigns for simplicity.
+    // CHECK: firrtl.ref.force %clock, %pred, %[[BOV_REF_A_0]], %[[BOV_A_0]] :
+    // CHECK: firrtl.ref.force %clock, %pred, %[[BOV_REF_A_1]], %[[BOV_A_1]] :
+    // CHECK: firrtl.ref.force %clock, %pred, %[[BOV_REF_B]], %[[BOV_B]] :
+    firrtl.ref.force %clock, %pred, %inst_bov_ref, %inst_bov : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: vector<uint<1>,2>, b: uint<2>>
+    // CHECK-COUNT-3: firrtl.ref.force_initial %pred,
+    firrtl.ref.force_initial %pred, %inst_bov_ref, %inst_bov : !firrtl.uint<1>, !firrtl.bundle<a: vector<uint<1>,2>, b: uint<2>>
+    // CHECK-COUNT-3: firrtl.ref.release %clock, %pred, 
+    firrtl.ref.release %clock, %pred, %inst_bov_ref : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<bundle<a: vector<uint<1>,2>, b: uint<2>>>
+    // CHECK-COUNT-3: firrtl.ref.release_initial %pred, 
+    firrtl.ref.release_initial %pred, %inst_bov_ref : !firrtl.uint<1>, !firrtl.rwprobe<bundle<a: vector<uint<1>,2>, b: uint<2>>>
+    // CHECK-NEXT: }
   }
 
   // CHECK-LABEL: firrtl.module private @ForeignTypes
