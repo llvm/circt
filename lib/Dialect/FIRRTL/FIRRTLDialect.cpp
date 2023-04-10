@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/FieldRef.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -82,6 +83,55 @@ Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
   }
 
   return nullptr;
+}
+
+namespace {
+// During canonicalization, constant folding can result in operand types
+// changing from non-'const' to 'const'. This can cause result types to likewise
+// change their inference from non-'const' to 'const'. This pattern handles
+// those result type changes.
+struct ReinferResultTypes
+    : public mlir::OpInterfaceRewritePattern<mlir::InferTypeOpInterface> {
+  ReinferResultTypes(MLIRContext *context)
+      : OpInterfaceRewritePattern<mlir::InferTypeOpInterface>(context) {}
+
+  LogicalResult matchAndRewrite(mlir::InferTypeOpInterface op,
+                                PatternRewriter &rewriter) const override {
+    SmallVector<Type> inferredResultTypes;
+    if (failed(op.inferReturnTypes(op->getContext(), op->getLoc(),
+                                   op->getOperands(), op->getAttrDictionary(),
+                                   op->getRegions(), inferredResultTypes))) {
+      return failure();
+    }
+
+    bool anyChanged = false;
+    for (size_t i = 0, e = inferredResultTypes.size(); i != e; ++i) {
+      auto result = op->getResult(i);
+      auto inferredType = inferredResultTypes[i];
+      if (result.getType() != inferredType) {
+        anyChanged = true;
+        break;
+      }
+    }
+
+    if (!anyChanged)
+      return failure();
+
+    rewriter.setInsertionPointAfter(op);
+
+    auto *updatedOp =
+        rewriter.create(op->getLoc(), op->getName().getIdentifier(),
+                        op->getOperands(), inferredResultTypes, op->getAttrs());
+
+    rewriter.replaceOp(op, updatedOp->getResults());
+    return success();
+  }
+};
+} // namespace
+
+void FIRRTLDialect::getCanonicalizationPatterns(
+    RewritePatternSet &results) const {
+  results.add<ReinferResultTypes>(getContext());
 }
 
 // Provide implementations for the enums we use.

@@ -79,8 +79,10 @@ public:
   /// types recursively within itself.
   bool isPassive() const { return getRecursiveTypeProperties().isPassive; }
 
-  /// Returns true if this is a "passive" that which is not analog.
-  bool isRegisterType() { return isPassive() && !containsAnalog(); }
+  /// Returns true if this is a non-const "passive" that which is not analog.
+  bool isRegisterType() {
+    return isPassive() && !containsAnalog() && !isConst();
+  }
 
   /// Return true if this is a 'ground' type, aka a non-aggregate type.
   bool isGround();
@@ -120,6 +122,10 @@ public:
 
   /// Return a 'const' or non-'const' version of this type.
   FIRRTLBaseType getConstType(bool isConst);
+
+  /// Return a non-'const' version of this type with any 'const' types
+  /// recursively set to non-'const'.
+  FIRRTLBaseType getPurelyNonConstType();
 
   /// Return this type with all ground types replaced with UInt<1>.  This is
   /// used for `mem` operations.
@@ -177,8 +183,10 @@ public:
 /// definition of type equivalence in the FIRRTL spec.  If the types being
 /// compared have any outer flips that encode FIRRTL module directions (input or
 /// output), these should be stripped before using this method.
+/// If `strict` is `true`, `srcFType` must be identical `destFType` except that
+/// 'const' sources can be connected to non-'const' sinks.
 bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType,
-                        bool srcOuterTypeIsConst = false);
+                        bool srcOuterTypeIsConst = false, bool strict = false);
 
 /// Returns true if two types are weakly equivalent.  See the FIRRTL spec,
 /// Section 4.6, for a full definition of this.  Roughly, the oriented types

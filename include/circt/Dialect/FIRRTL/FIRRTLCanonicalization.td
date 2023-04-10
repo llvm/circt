@@ -41,8 +41,12 @@ def GetDroppableNameAttr : NativeCodeCall<
 def NonEmptyAttr : Constraint<CPred<"!$0.getValue().empty()">>;
 def NullAttr : Constraint<CPred<"!$0">>;
 
-// Constraint that enforces equal types
-def EqualTypes : Constraint<CPred<"$0.getType() == $1.getType()">>;
+// Constraint that enforces types are equal except for constness
+def MixedConstTypes : Constraint<CPred<[{
+  $0.getType() == $1.getType() ||
+  ($0.getType().isa<FIRRTLBaseType>() && $1.getType().isa<FIRRTLBaseType>() &&
+   mixedConstTypes($0.getType().cast<FIRRTLBaseType>(), $1.getType().cast<FIRRTLBaseType>()))
+}]>>;
 
 // Constraint that enforces int types
 def IntTypes : Constraint<CPred<"$0.isa<IntType>()">>;
@@ -53,8 +57,11 @@ def SIntTypes : Constraint<CPred<"$0.isa<SIntType>()">>;
 // Constraint that enforces uint types
 def UIntTypes : Constraint<CPred<"$0.isa<UIntType>()">>;
 
-// Constraint that enforces types mismatches
-def mismatchTypes : Constraint<CPred<"$0.getType() != $1.getType()">>;
+// Constraint that enforces type width mismatches
+def MismatchWidth : Constraint<CPred<[{
+  !$0.getType().isa<FIRRTLBaseType>() || !$1.getType().isa<FIRRTLBaseType>() ||
+  $0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel() != $1.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel()
+}]>>;
 
 // Constraint that enforces types of known width
 def KnownWidth : Constraint<CPred<[{
@@ -84,6 +91,8 @@ def AllOneConstantOp : Constraint<CPred<"$0.getDefiningOp<ConstantOp>() && $0.ge
 // Delta between type widths
 def TypeWidthAdjust32 : NativeCodeCall<
   "$_builder.getI32IntegerAttr($0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel() - $1.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel())">;
+
+def NonConstType : Constraint<CPred<"!isConst($0.getType())">>;
 
 /// Drop the writer to the first argument and passthrough the second
 def DropWrite : NativeCodeCall<"dropWrite($_builder, $0, $1)">;
@@ -127,14 +136,14 @@ def NotNot : Pat <
 def ConnectSameType : Pat<
   (ConnectOp $dst, $src),
   (StrictConnectOp $dst, $src),
-  [(EqualTypes $dst, $src), (KnownWidth $dst)]>;
+  [(MixedConstTypes $dst, $src), (KnownWidth $dst)]>;
 
 // connect(a:t1,b:(t2<t1) -> strictconnect(a,(pad b))
 def ConnectExtension : Pat<
   (ConnectOp $dst, $src),
   (StrictConnectOp $dst, (PadPrimOp $src,
     (NativeCodeCall<"$0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel()"> $dst))),
-  [(IntType $dst), (IntType $src), (KnownWidth $dst), (KnownWidth $src), (mismatchTypes $src, $dst)]>;
+  [(IntType $dst), (IntType $src), (KnownWidth $dst), (KnownWidth $src), (MismatchWidth $src, $dst)]>;
 
 def LimitConstant32 : NativeCodeCall<
   "$_builder.getI32IntegerAttr($0.getValue().getLimitedValue(1ULL << 31))">;
@@ -162,19 +171,19 @@ def extendAnd : Pat <
   (AndPrimOp:$old $lhs, $rhs),
   (MoveNameHint $old, (AndPrimOp (PadPrimOp $lhs, (TypeWidth32 $old)),
                                  (PadPrimOp $rhs, (TypeWidth32 $old)))),
-  [(KnownWidth $lhs), (KnownWidth $rhs), (mismatchTypes $lhs, $rhs)]>;
+  [(KnownWidth $lhs), (KnownWidth $rhs), (MismatchWidth $lhs, $rhs)]>;
 
 def extendOr : Pat <
   (OrPrimOp:$old $lhs, $rhs),
   (MoveNameHint $old, (OrPrimOp (PadPrimOp $lhs, (TypeWidth32 $old)),
                                 (PadPrimOp $rhs, (TypeWidth32 $old)))),
-  [(KnownWidth $lhs), (KnownWidth $rhs), (mismatchTypes $lhs, $rhs)]>;
+  [(KnownWidth $lhs), (KnownWidth $rhs), (MismatchWidth $lhs, $rhs)]>;
 
 def extendXor : Pat <
   (XorPrimOp:$old $lhs, $rhs),
   (MoveNameHint $old, (XorPrimOp (PadPrimOp $lhs, (TypeWidth32 $old)),
                                  (PadPrimOp $rhs, (TypeWidth32 $old)))),
-  [(KnownWidth $lhs), (KnownWidth $rhs), (mismatchTypes $lhs, $rhs)]>;
+  [(KnownWidth $lhs), (KnownWidth $rhs), (MismatchWidth $lhs, $rhs)]>;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Move constants to the right
@@ -268,7 +277,7 @@ def AndOfZero : Pat <
 def AndOfAllOne : Pat <
   (AndPrimOp:$old $x, (ConstantOp:$ocst $cst)),
   (MoveNameHint $old, (AsUIntPrimOp (PadPrimOp $x, (TypeWidth32 $old)))),
-  [(KnownWidth $x), (EqualTypes $x, $ocst), (AllOneConstantOp $ocst)]>;
+  [(KnownWidth $x), (MixedConstTypes $x, $ocst), (AllOneConstantOp $ocst)]>;
 
 /// and(x,x) -> x, fold can't handle all cases
 def AndOfSelf : Pat <
@@ -280,7 +289,7 @@ def AndOfSelf : Pat <
 def AndOfPad : Pat <
   (AndPrimOp:$old (either $x, (PadPrimOp:$pad $y, $n))),
   (MoveNameHint $old, (PadPrimOp (AndPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y), $n)),
-  [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
+  [(KnownWidth $x), (UIntType $x), (MixedConstTypes $x, $pad)]>;
 
 // or(x, 0) -> x, fold can't handle all cases
 def OrOfZero : Pat <
@@ -292,7 +301,7 @@ def OrOfZero : Pat <
 def OrOfAllOne : Pat <
   (OrPrimOp:$old $x, (ConstantOp:$ocst $cst)),
   (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>(), getIntOnesAttr($0.getType()))"> $old),
-  [(KnownWidth $x), (EqualTypes $x, $ocst), (AllOneConstantOp $ocst)]>;
+  [(KnownWidth $x), (MixedConstTypes $x, $ocst), (AllOneConstantOp $ocst)]>;
 
 /// or(x,x) -> x, fold can't handle all cases
 def OrOfSelf : Pat <
@@ -305,7 +314,7 @@ def OrOfPad : Pat <
   (OrPrimOp:$old $x, (PadPrimOp:$pad $y, $n)),
   (MoveNameHint $old, (CatPrimOp (HeadPrimOp $x, (TypeWidthAdjust32 $x, $y)),
                                  (OrPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y))),
-  [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
+  [(KnownWidth $x), (UIntType $x), (MixedConstTypes $x, $pad)]>;
 
 // xor(x, 0) -> x, fold can't handle all cases
 def XorOfZero : Pat <
@@ -324,7 +333,7 @@ def XorOfPad : Pat <
   (XorPrimOp:$old $x, (PadPrimOp:$pad $y, $n)),
   (MoveNameHint $old, (CatPrimOp (HeadPrimOp $x, (TypeWidthAdjust32 $x, $y)),
                                  (XorPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y))),
-  [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
+  [(KnownWidth $x), (UIntType $x), (MixedConstTypes $x, $pad)]>;
 
 // bits(bits(x, ...), ...) -> bits(x, ...)
 def BitsOfBits : Pat<
@@ -345,7 +354,7 @@ def SubaccessOfConstant : Pat<
 def MuxNot : Pat<
   (MuxPrimOp:$old $cond, (ConstantOp:$zcst $_), (ConstantOp:$ocst $_)),
   (MoveNameHint $old, (NotPrimOp $cond)), [
-    (EqualTypes $cond, $zcst), (EqualTypes $cond, $ocst),
+    (MixedConstTypes $cond, $zcst), (MixedConstTypes $cond, $ocst),
     (ZeroConstantOp $zcst) , (OneConstantOp $ocst)
   ]>;
 
@@ -353,25 +362,25 @@ def MuxNot : Pat<
 def MuxSameTrue : Pat <
   (MuxPrimOp:$old $cond1, $t, (MuxPrimOp $cond2, $t, $f)),
   (MoveNameHint $old, (MuxPrimOp (OrPrimOp $cond1, $cond2), $t, $f)),
-  [(EqualTypes $t, $f), (KnownWidth $t)]>;
+  [(MixedConstTypes $t, $f), (KnownWidth $t)]>;
 
 // mux(cond1, mux(cond2, t, f), f) -> mux(and(cond1, cond2), t, f)
 def MuxSameFalse : Pat <
   (MuxPrimOp:$old $cond1, (MuxPrimOp $cond2, $t, $f), $f),
   (MoveNameHint $old, (MuxPrimOp (AndPrimOp $cond1, $cond2), $t, $f)),
-  [(EqualTypes $t, $f), (KnownWidth $f)]>;
+  [(MixedConstTypes $t, $f), (KnownWidth $f)]>;
 
 // mux(cond, (Concat a, b), (Concat a, c)) -> Concat(a, mux(cond, b, c))
 def NarrowMuxLHS : Pat <
   (MuxPrimOp:$old $cond, (CatPrimOp:$lhs $a, $b), (CatPrimOp:$rhs $a, $c)),
   (MoveNameHint $old, (CatPrimOp $a, (MuxPrimOp $cond, $b, $c))),
-  [(EqualTypes $lhs, $rhs), (KnownWidth $lhs)]>;
+  [(MixedConstTypes $lhs, $rhs), (KnownWidth $lhs)]>;
 
 // mux(cond, (Concat a, b), (Concat c, b)) -> Concat(mux(cond, a, c), b)
 def NarrowMuxRHS : Pat <
   (MuxPrimOp:$old $cond, (CatPrimOp:$lhs $a, $b), (CatPrimOp:$rhs $c, $b)),
   (MoveNameHint $old, (CatPrimOp (MuxPrimOp $cond, $a, $c), $b)),
-  [(EqualTypes $lhs, $rhs), (KnownWidth $lhs)]>;
+  [(MixedConstTypes $lhs, $rhs), (KnownWidth $lhs)]>;
 
 def CatDoubleConst : Pat <
   (CatPrimOp:$old $cst1, (CatPrimOp $cst2, $v)),

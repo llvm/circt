@@ -128,4 +128,25 @@ firrtl.module @MixedConstSubtag(in %in : !firrtl.enum<a: uint<1>, b: const.uint<
   firrtl.connect %b, %1 : !firrtl.const.uint<2>, !firrtl.const.uint<2>
 }
 
+// Test parsing/printing of strictconnect when both operands are const
+// CHECK-LABEL: firrtl.module @ConstStrictconnect
+firrtl.module @ConstStrictconnect(in %in : !firrtl.const.uint<3>, out %out : !firrtl.const.uint<3>) {
+  // CHECK-NEXT: firrtl.strictconnect %out, %in : !firrtl.const.uint<3>
+  firrtl.strictconnect %out, %in : !firrtl.const.uint<3>
+}
+
+// Test parsing/printing of strictconnect when constness of operands is mixed
+// CHECK-LABEL: firrtl.module @MixedConstStrictconnect
+firrtl.module @MixedConstStrictconnect(in %in : !firrtl.const.bundle<a: uint<1>, b: sint<2>>, out %out : !firrtl.bundle<a: uint<1>, b: sint<2>>) {
+  // CHECK-NEXT: firrtl.strictconnect %out, %in : !firrtl.bundle<a: uint<1>, b: sint<2>>, !firrtl.const.bundle<a: uint<1>, b: sint<2>>
+  firrtl.strictconnect %out, %in : !firrtl.bundle<a: uint<1>, b: sint<2>>, !firrtl.const.bundle<a: uint<1>, b: sint<2>>
+}
+
+// Test parsing/printing of multibit mux when constness of operands is mixed
+// CHECK-LABEL: firrtl.module @MixedConstMultibitMux
+firrtl.module @MixedConstMultibitMux(in %index: !firrtl.uint<2>, in %source_0: !firrtl.const.uint<1>, in %source_1: !firrtl.uint<1>, in %source_2: !firrtl.const.uint<1>) {
+  // CHECK-NEXT: [[VAL:%.+]] = firrtl.multibit_mux %index, %source_2, %source_1, %source_0 : !firrtl.uint<2>, !firrtl.const.uint<1>, !firrtl.uint<1>, !firrtl.const.uint<1>
+  %0 = firrtl.multibit_mux %index, %source_2, %source_1, %source_0 : !firrtl.uint<2>, !firrtl.const.uint<1>, !firrtl.uint<1>, !firrtl.const.uint<1>
+}
+
 }

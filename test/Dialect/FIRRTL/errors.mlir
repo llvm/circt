@@ -844,7 +844,7 @@ firrtl.circuit "Top"   {
 
 firrtl.circuit "AnalogRegister" {
   firrtl.module @AnalogRegister(in %clock: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog, but got '!firrtl.analog'}}
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.analog'}}
     %r = firrtl.reg %clock : !firrtl.clock, !firrtl.analog
   }
 }
@@ -853,7 +853,7 @@ firrtl.circuit "AnalogRegister" {
 
 firrtl.circuit "AnalogVectorRegister" {
   firrtl.module @AnalogVectorRegister(in %clock: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog, but got '!firrtl.vector<analog, 2>'}}
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.vector<analog, 2>'}}
     %r = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<analog, 2>
   }
 }
@@ -1005,7 +1005,7 @@ firrtl.module @NonRefNode(in %in1 : !firrtl.probe<uint<8>>) {
 
 firrtl.circuit "NonRefRegister" {
   firrtl.module @NonRefRegister(in %clock: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog}}
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog}}
     %r = firrtl.reg %clock : !firrtl.clock, !firrtl.probe<uint<8>>
   }
 }

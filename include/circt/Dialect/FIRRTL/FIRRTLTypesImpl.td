@@ -168,6 +168,10 @@ def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
     /// Return a 'const' or non-'const' version of this type.
     FVectorType getConstType(bool isConst);
 
+    /// Return a non-'const' version of this type with any 'const' types
+    /// recursively set to non-'const'.
+    FVectorType getPurelyNonConstType();
+
     /// Get an integer ID for the field. Field IDs start at 1, and are assigned
     /// to each field in a vector in a recursive depth-first walk of all
     /// elements. A field ID of 0 is used to reference the vector itself.
@@ -262,6 +266,10 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
 
     /// Return a 'const' or non-'const' version of this type.
     BundleType getConstType(bool isConst);
+
+    /// Return a non-'const' version of this type with any 'const' types
+    /// recursively set to non-'const'.
+    BundleType getPurelyNonConstType();
 
     /// Get an integer ID for the field. Field IDs start at 1, and are assigned
     /// to each field in a bundle in a recursive pre-order walk of all fields,

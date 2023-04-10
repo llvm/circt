@@ -484,8 +484,23 @@ FIRRTLBaseType FIRRTLBaseType::getPassiveType() {
 FIRRTLBaseType FIRRTLBaseType::getConstType(bool isConst) {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
       .Case<ClockType, ResetType, AsyncResetType, AnalogType, SIntType,
-            UIntType, BundleType, FVectorType>(
+            UIntType, BundleType, FVectorType, FEnumType>(
           [&](auto type) { return type.getConstType(isConst); })
+      .Default([](Type) {
+        llvm_unreachable("unknown FIRRTL type");
+        return FIRRTLBaseType();
+      });
+}
+
+/// Return a non-'const' version of this type with any 'const' types
+/// recursively set to non-'const'.
+FIRRTLBaseType FIRRTLBaseType::getPurelyNonConstType() {
+  return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
+      .Case<ClockType, ResetType, AsyncResetType, AnalogType, SIntType,
+            UIntType, FEnumType>(
+          [](auto type) { return type.getConstType(false); })
+      .Case<FVectorType, BundleType>(
+          [](auto type) { return type.getPurelyNonConstType(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return FIRRTLBaseType();
@@ -645,39 +660,45 @@ uint64_t FIRRTLBaseType::getGroundFields() const {
 /// canonicalizes flips in bundles, so only passive types can be compared here.
 static bool areBundleElementsEquivalent(BundleType::BundleElement destElement,
                                         BundleType::BundleElement srcElement,
-                                        bool srcOuterTypeIsConst) {
+                                        bool srcOuterTypeIsConst, bool strict) {
   if (destElement.name != srcElement.name)
     return false;
   if (destElement.isFlip != srcElement.isFlip)
     return false;
 
   return areTypesEquivalent(destElement.type, srcElement.type,
-                            srcOuterTypeIsConst);
+                            srcOuterTypeIsConst, strict);
 }
 
 /// Returns whether the two types are equivalent.  This implements the exact
 /// definition of type equivalence in the FIRRTL spec.  If the types being
 /// compared have any outer flips that encode FIRRTL module directions (input or
 /// output), these should be stripped before using this method.
+/// If `strict` is `true`, `srcFType` must be identical `destFType` except that
+/// 'const' sources can be connected to non-'const' sinks.
 bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
-                                bool srcOuterTypeIsConst) {
+                                bool srcOuterTypeIsConst, bool strict) {
+  // Identical types are always equivalent
+  if (destFType == srcFType)
+    return true;
+
   auto destType = destFType.dyn_cast<FIRRTLBaseType>();
   auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
 
   // For non-base types, only equivalent if identical.
   if (!destType || !srcType)
-    return destFType == srcFType;
+    return false;
 
   // Type constness must match for equivalence
   if (destType.isConst() && !srcType.isConst() && !srcOuterTypeIsConst)
     return false;
 
   // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
-  if (destType.isa<ResetType>())
+  if (!strict && destType.isa<ResetType>())
     return srcType.isResetType();
 
   // Reset types can drive UInt<1>, AsyncReset, or Reset types.
-  if (srcType.isa<ResetType>())
+  if (!strict && srcType.isa<ResetType>())
     return destType.isResetType();
 
   // Vector types can be connected if they have the same size and element type.
@@ -687,7 +708,7 @@ bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
     return destVectorType.getNumElements() == srcVectorType.getNumElements() &&
            areTypesEquivalent(destVectorType.getElementType(),
                               srcVectorType.getElementType(),
-                              srcVectorType.isConst());
+                              srcVectorType.isConst(), strict);
 
   // Bundle types can be connected if they have the same size, element names,
   // and element types.
@@ -704,11 +725,16 @@ bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
       auto destElement = destElements[i];
       auto srcElement = srcElements[i];
       if (!areBundleElementsEquivalent(destElement, srcElement,
-                                       srcBundleType.isConst()))
+                                       srcBundleType.isConst(), strict))
         return false;
     }
     return true;
   }
+
+  // Ground types can be strictly connected if the source type is a const
+  // version of the destination type
+  if (strict)
+    return destType == srcType.getConstType(false);
 
   // Ground types can be connected if their passive, widthless versions
   // are equal or the widthless source type is a const version of the widthless
@@ -968,6 +994,9 @@ struct circt::firrtl::detail::BundleTypeStorage
   /// pointer to a passive version of the type.
   RecursiveTypeProperties props;
   BundleType passiveType;
+
+  /// This can hold a pointer to a purely non-const version of this type.
+  BundleType purelyNonConstType;
 };
 
 BundleType BundleType::get(MLIRContext *context,
@@ -1014,6 +1043,25 @@ BundleType BundleType::getConstType(bool isConst) {
   if (isConst == this->isConst())
     return *this;
   return get(getContext(), getElements(), isConst);
+}
+
+BundleType BundleType::getPurelyNonConstType() {
+  auto *impl = getImpl();
+
+  // If we've already cached the non-const type, use it
+  if (impl->purelyNonConstType)
+    return impl->purelyNonConstType;
+
+  // Otherwise, build a non-const version
+  SmallVector<BundleType::BundleElement, 16> newElements;
+  newElements.reserve(impl->elements.size());
+  for (auto &elt : impl->elements) {
+    newElements.push_back(
+        {elt.name, elt.isFlip, elt.type.getPurelyNonConstType()});
+  }
+  auto purelyNonConstType = BundleType::get(getContext(), newElements, false);
+  impl->purelyNonConstType = purelyNonConstType;
+  return purelyNonConstType;
 }
 
 std::optional<unsigned> BundleType::getElementIndex(StringAttr name) {
@@ -1149,6 +1197,9 @@ struct circt::firrtl::detail::FVectorTypeStorage
   /// This holds the bits for the type's recursive properties, and can hold a
   /// pointer to a passive version of the type.
   FIRRTLBaseType passiveType;
+
+  /// This can hold a pointer to a purely non-const version of this type.
+  FVectorType purelyNonConstType;
 };
 
 FVectorType FVectorType::get(FIRRTLBaseType elementType, size_t numElements,
@@ -1190,6 +1241,21 @@ FVectorType FVectorType::getConstType(bool isConst) {
   if (isConst == this->isConst())
     return *this;
   return get(getElementType(), getNumElements(), isConst);
+}
+
+FVectorType FVectorType::getPurelyNonConstType() {
+  auto *impl = getImpl();
+
+  // If we've already cached the non-const type, use it
+  if (impl->purelyNonConstType)
+    return impl->purelyNonConstType;
+
+  // Otherwise, build a non-const version
+  auto purelyNonConstElementType = getElementType().getPurelyNonConstType();
+  auto purelyNonConstType =
+      FVectorType::get(purelyNonConstElementType, getNumElements(), false);
+  impl->purelyNonConstType = purelyNonConstType;
+  return purelyNonConstType;
 }
 
 uint64_t FVectorType::getFieldID(uint64_t index) {

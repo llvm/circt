@@ -55,6 +55,9 @@ bool isConstant(Value value);
 /// constant values
 bool isConst(Type type);
 
+// Returns true if the provided types are equal except for constness
+bool mixedConstTypes(FIRRTLBaseType a, FIRRTLBaseType b);
+
 /// Returns true if the value results from an expression with duplex flow.
 /// Duplex values have special treatment in bundle connect operations, and
 /// their flip orientation is not used to determine the direction of each

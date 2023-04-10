@@ -373,7 +373,7 @@ def RegResetOp : ReferableDeclOp<"regreset", [Forceable]> {
 
   let arguments = (
     ins ClockType:$clockVal, AnyResetType:$resetSignal,
-        AnyRegisterType:$resetValue,
+        FIRRTLBaseType:$resetValue,
         StrAttr:$name, NameKindAttr:$nameKind,
         AnnotationArrayAttr:$annotations,
         OptionalAttr<InnerSymAttr>:$inner_sym,

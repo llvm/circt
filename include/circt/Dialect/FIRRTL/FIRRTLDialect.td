@@ -30,6 +30,7 @@ def FIRRTLDialect : Dialect {
     page](https://github.com/freechipsproject/firrtl).
   }];
 
+  let hasCanonicalizer = 1;
   let hasConstantMaterializer = 1;
   let useDefaultTypePrinterParser = 0;
   let useDefaultAttributePrinterParser = 1;

@@ -734,7 +734,14 @@ void IMConstPropPass::visitOperation(Operation *op) {
   // fails or was an in-place fold, mark the results as overdefined.
   SmallVector<OpFoldResult, 8> foldResults;
   foldResults.reserve(op->getNumResults());
-  if (failed(op->fold(operandConstants, foldResults))) {
+
+  // Since folding can affect the result types, try folding on a temporary clone
+  // of the op
+  auto *tempClonedOp = op->clone();
+  auto foldResult = tempClonedOp->fold(operandConstants, foldResults);
+  tempClonedOp->erase();
+
+  if (failed(foldResult)) {
     LLVM_DEBUG({
       logger.startLine() << "Folding Failed operation : '" << op->getName()
                          << "\n";
