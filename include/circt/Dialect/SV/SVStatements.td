@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 include "mlir/IR/EnumAttr.td"
+include "mlir/IR/OpAsmInterface.td"
 
 /// Ensure symbol is one of the hw module.* types
 def isModuleSymbol : AttrConstraint<
@@ -747,4 +748,51 @@ def ReadMemOp : SVOp<"readmem", [ProceduralOp]> {
   let results = (outs);
   let assemblyFormat =
     "$dest `,` $filename `,` $base attr-dict `:` qualified(type($dest))";
+}
+
+def ForOp : SVOp<"for", [SingleBlock, NoTerminator, ProceduralOp,
+                         ProceduralRegion, OpAsmOpInterface,
+                         AllTypesMatch<["lowerBound", "upperBound", "step"]>]> {
+  let summary = "System verilog for loop";
+
+  let description = [{
+    The `sv.for` operation in System Verilog defines a for statement that requires
+    three SSA operands: `lowerBounds`, `upperBound`, and `step`. It functions
+    similarly to `scf.for`, where the loop iterates the induction variable from
+    `lowerBound` to `upperBound` with a step size of `step`, i.e:
+
+    ```
+     for (logic ... indVar = lowerBound; indVar < upperBound; indVar += step) begin
+     end
+    ```
+
+    It's important to note that since we are using a bit precise type instead of a Verilog
+    `integer` type, users must be cautious about potential overflow. For example, if
+    you wish to iterate over all 2-bit values, you must use a 3-bit value as the
+    induction variable type.
+  }];
+
+  let regions = (region SizedRegion<1>:$body);
+  let arguments = (ins HWIntegerType:$lowerBound,
+                       HWIntegerType:$upperBound,
+                       HWIntegerType:$step,
+                       DefaultValuedAttr<StrAttr, "{}">:$inductionVarName);
+  let results = (outs);
+  let builders = [
+      OpBuilder<(ins "Value":$lowerBound, "Value":$upperBound,
+                     "Value":$step, "StringRef":$inductionVarName,
+                     "llvm::function_ref<void(BlockArgument)>": $thenCtor)>,
+      OpBuilder<(ins "int64_t":$lowerBound, "int64_t":$upperBound,
+                     "int64_t":$step, "IntegerType": $type,
+                     "StringRef":$inductionVarName,
+                     "llvm::function_ref<void(BlockArgument)>": $thenCtor)>
+  ];
+  let hasCustomAssemblyFormat = 1;
+  let hasCanonicalizeMethod = 1;
+  let extraClassDeclaration = [{
+    Block* getBodyBlock() { return &getBody().front(); }
+    Value getInductionVar() { return getBodyBlock()->getArgument(0); }
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
+  }];
 }

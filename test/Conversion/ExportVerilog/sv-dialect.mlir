@@ -1732,6 +1732,25 @@ hw.module @ConditionalComments() {
   }                             // CHECK-NEXT: `endif // not def BAR
 }
 
+// CHECK-LABEL: module ForStatement
+hw.module @ForStatement(%a: i5) -> () {
+  %_RANDOM = sv.logic : !hw.inout<uarray<3xi32>>
+  sv.initial {
+    %c-2_i2 = hw.constant -2 : i2
+    %c1_i2 = hw.constant 1 : i2
+    %c-1_i2 = hw.constant -1 : i2
+    %c0_i2 = hw.constant 0 : i2
+    // CHECK:      for (logic [1:0] i = 2'h0; i < 2'h3; i += 2'h1) begin
+    // CHECK-NEXT:   _RANDOM[i] = `RANDOM;
+    // CHECK-NEXT: end
+    sv.for %i = %c0_i2 to %c-1_i2 step %c1_i2 : i2 {
+      %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+      %index = sv.array_index_inout %_RANDOM[%i] : !hw.inout<uarray<3xi32>>, i2
+      sv.bpassign %index, %RANDOM : i32
+    }
+  }
+}
+
 
 // CHECK-LABEL: module intrinsic
 hw.module @intrinsic(%clk: i1) -> (io1: i1, io2: i1, io3: i1, io4: i5) {

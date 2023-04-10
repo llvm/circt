@@ -57,6 +57,8 @@ public:
             ReadMemOp,
             // Generate statements
             GenerateOp, GenerateCaseOp,
+            // For statements
+            ForOp,
             // Sampled value functiions
             SampledOp>([&](auto expr) -> ResultType {
           return thisCast->visitSV(expr, args...);
@@ -164,6 +166,9 @@ public:
   // Generate statements
   HANDLE(GenerateOp, Unhandled);
   HANDLE(GenerateCaseOp, Unhandled);
+
+  // For loop.
+  HANDLE(ForOp, Unhandled);
 
   // Sampled Value Functions
   HANDLE(SampledOp, Unhandled);

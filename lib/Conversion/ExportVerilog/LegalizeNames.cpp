@@ -175,6 +175,8 @@ static void legalizeModuleLocalNames(HWModuleOp module,
         // Otherwise, get a verilog name via `getSymOpName`.
         nameEntries.emplace_back(
             op, StringAttr::get(op->getContext(), getSymOpName(op)));
+      } else if (auto forOp = dyn_cast<ForOp>(op)) {
+        nameEntries.emplace_back(op, forOp.getInductionVarNameAttr());
       } else if (isa<AssertOp, AssumeOp, CoverOp, AssertConcurrentOp,
                      AssumeConcurrentOp, CoverConcurrentOp>(op)) {
         // Notice and renamify the labels on verification statements.
