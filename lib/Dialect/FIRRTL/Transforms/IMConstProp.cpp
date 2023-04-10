@@ -365,6 +365,9 @@ void IMConstPropPass::runOnOperation() {
   instanceGraph = nullptr;
   latticeValues.clear();
   executableBlocks.clear();
+  assert(changedLatticeValueWorklist.empty());
+  fieldRefToUsers.clear();
+  valueToFieldRef.clear();
   resultPortToInstanceResultMapping.clear();
 }
 
