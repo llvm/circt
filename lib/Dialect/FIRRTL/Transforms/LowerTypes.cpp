@@ -408,6 +408,10 @@ private:
   bool lowerProducer(
       Operation *op,
       llvm::function_ref<Value(const FlatBundleFieldEntry &, ArrayAttr)> clone);
+  bool lowerForceable(
+      Forceable op,
+      llvm::function_ref<Forceable(const FlatBundleFieldEntry &, ArrayAttr)>
+          clone);
   /// Copy annotations from \p annotations to \p loweredAttrs, except
   /// annotations with "target" key, that do not match the field suffix.
   ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
@@ -572,10 +576,13 @@ bool TypeLoweringVisitor::lowerProducer(
 
   // FIXME: Don't presereve aggregates on RefType operations for now. This is
   // workaround for MemTap which causes type mismatches (issue 4479).
-  if (!peelType(srcType, fieldTypes,
-                isa<RefResolveOp, RefSendOp, RefSubOp>(op)
-                    ? PreserveAggregate::None
-                    : aggregatePreservationMode))
+  auto preserveMode = aggregatePreservationMode;
+  if (isa<RefResolveOp, RefSendOp, RefSubOp>(op))
+    preserveMode = PreserveAggregate::None;
+  // Because of the above, also insist on splitting force targets.
+  if (auto fop = dyn_cast<Forceable>(op); fop && fop.isForceable())
+    preserveMode = PreserveAggregate::None;
+  if (!peelType(srcType, fieldTypes, preserveMode))
     return false;
 
   // If an aggregate value has a symbol, emit errors.
@@ -589,7 +596,6 @@ bool TypeLoweringVisitor::lowerProducer(
   SmallVector<Value> lowered;
   // Loop over the leaf aggregates.
   SmallString<16> loweredName;
-  SmallString<16> loweredSymName;
   auto nameKindAttr = op->getAttrOfType<NameKindEnumAttr>(cache.nameKindAttr);
 
   if (auto nameAttr = op->getAttrOfType<StringAttr>(cache.nameAttr))
@@ -620,6 +626,28 @@ bool TypeLoweringVisitor::lowerProducer(
   }
 
   processUsers(op->getResult(0), lowered);
+  return true;
+}
+
+bool TypeLoweringVisitor::lowerForceable(
+    Forceable op,
+    llvm::function_ref<Forceable(const FlatBundleFieldEntry &, ArrayAttr)>
+        clone) {
+  // Lower primary result value as usual, but save refs for rewriting them too.
+  // Makes assumptions about lowerProducer's behavior.
+  SmallVector<Value> loweredRefs;
+  auto cloneAndSave = [&](auto entry, auto attrs) -> Value {
+    auto f = clone(entry, attrs);
+    assert(f.isForceable() == op.isForceable());
+    if (f.isForceable())
+      loweredRefs.push_back(f.getDataRef());
+    return f.getDataRaw();
+  };
+  if (!lowerProducer(op, cloneAndSave))
+    return false;
+
+  if (op.isForceable())
+    processUsers(op.getDataRef(), loweredRefs);
   return true;
 }
 
@@ -689,9 +717,7 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
                             unsigned insertPtOffset, FIRRTLType srcType,
                             FlatBundleFieldEntry field, PortInfo &oldArg) {
   Value newValue;
-  FIRRTLType fieldType = srcType.isa<RefType>()
-                             ? FIRRTLType(RefType::get(field.type))
-                             : field.type;
+  FIRRTLType fieldType = mapBaseType(srcType, [&](auto) { return field.type; });
   if (auto mod = dyn_cast<FModuleOp>(module)) {
     Block *body = mod.getBodyBlock();
     // Append the new argument.
@@ -1096,51 +1122,45 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
 /// Lower a wire op with a bundle to multiple non-bundled wires.
 bool TypeLoweringVisitor::visitDecl(WireOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Value {
-    return builder
-        ->create<WireOp>(field.type, "", NameKindEnum::DroppableName, attrs,
-                         StringAttr{})
-        .getResult();
+                   ArrayAttr attrs) -> Forceable {
+    return builder->create<WireOp>(field.type, "", NameKindEnum::DroppableName,
+                                   attrs, StringAttr{}, op.isForceable());
   };
-  return lowerProducer(op, clone);
+  return lowerForceable(op, clone);
 }
 
 /// Lower a reg op with a bundle to multiple non-bundled regs.
 bool TypeLoweringVisitor::visitDecl(RegOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Value {
-    return builder
-        ->create<RegOp>(field.type, op.getClockVal(), "",
-                        NameKindEnum::DroppableName, attrs, StringAttr{})
-        .getResult();
+                   ArrayAttr attrs) -> Forceable {
+    return builder->create<RegOp>(field.type, op.getClockVal(), "",
+                                  NameKindEnum::DroppableName, attrs,
+                                  StringAttr{}, op.isForceable());
   };
-  return lowerProducer(op, clone);
+  return lowerForceable(op, clone);
 }
 
 /// Lower a reg op with a bundle to multiple non-bundled regs.
 bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Value {
+                   ArrayAttr attrs) -> Forceable {
     auto resetVal = getSubWhatever(op.getResetValue(), field.index);
-    return builder
-        ->create<RegResetOp>(field.type, op.getClockVal(), op.getResetSignal(),
-                             resetVal, "", NameKindEnum::DroppableName, attrs,
-                             StringAttr{})
-        .getResult();
+    return builder->create<RegResetOp>(
+        field.type, op.getClockVal(), op.getResetSignal(), resetVal, "",
+        NameKindEnum::DroppableName, attrs, StringAttr{}, op.isForceable());
   };
-  return lowerProducer(op, clone);
+  return lowerForceable(op, clone);
 }
 
 /// Lower a wire op with a bundle to multiple non-bundled wires.
 bool TypeLoweringVisitor::visitDecl(NodeOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Value {
+                   ArrayAttr attrs) -> Forceable {
     auto input = getSubWhatever(op.getInput(), field.index);
-    return builder
-        ->create<NodeOp>(input, "", NameKindEnum::DroppableName, attrs)
-        .getResult();
+    return builder->create<NodeOp>(input, "", NameKindEnum::DroppableName,
+                                   attrs, StringAttr{}, op.isForceable());
   };
-  return lowerProducer(op, clone);
+  return lowerForceable(op, clone);
 }
 
 /// Lower an InvalidValue op with a bundle to multiple non-bundled InvalidOps.
