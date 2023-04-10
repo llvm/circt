@@ -38,6 +38,29 @@ static bool isAlways(Value value, bool expected) {
 // StateOp
 //===----------------------------------------------------------------------===//
 
+LogicalResult StateOp::fold(FoldAdaptor adaptor,
+                            SmallVectorImpl<OpFoldResult> &results) {
+  if ((isAlways(adaptor.getEnable(), false) ||
+       isAlways(adaptor.getReset(), true)) &&
+      !getOperation()->hasAttr("name") && !getOperation()->hasAttr("names")) {
+    // We can fold to zero here because the states are zero-initialized and
+    // don't ever change.
+    for (auto resTy : getResultTypes())
+      results.push_back(IntegerAttr::get(resTy, 0));
+    return success();
+  }
+
+  // Remove operand when input is default value.
+  if (isAlways(adaptor.getReset(), false))
+    return getResetMutable().clear(), success();
+
+  // Remove operand when input is default value.
+  if (isAlways(adaptor.getEnable(), true))
+    return getEnableMutable().clear(), success();
+
+  return failure();
+}
+
 LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
   // When there are no names attached, the state is not externaly observable.
   // When there are also no internal users, we can remove it.
