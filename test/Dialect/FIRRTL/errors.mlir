@@ -1195,8 +1195,8 @@ firrtl.module @EnumCreateWrongType(in %in : !firrtl.uint<7>) {
 
 // -----
 
-firrtl.circuit "EnumCreateNoCase" {
-firrtl.module @EnumCreateNoCase(in %in : !firrtl.enum<None: uint<0>, Some: uint<8>>) {
+firrtl.circuit "SubtagNoCase" {
+firrtl.module @SubtagNoCase(in %in : !firrtl.enum<None: uint<0>, Some: uint<8>>) {
   // expected-error @below {{unknown field SomeOther in enum type}}
   %some = firrtl.subtag %in[SomeOther] : !firrtl.enum<None: uint<0>, Some: uint<8>>
 }
