@@ -907,3 +907,23 @@ firrtl.circuit "ConstReset" {
     firrtl.connect %syncTarget, %sync : !firrtl.reset, !firrtl.const.uint<1>
   }
 }
+
+// -----
+
+// Check resets are inferred for forceable ops.
+
+// CHECK-LABEL: "InferToRWProbe"
+firrtl.circuit "InferToRWProbe" {
+  // CHECK-LABEL: firrtl.module @InferToRWProbe
+  // CHECK-NOT: firrtl.reset
+  firrtl.module @InferToRWProbe(in %driver: !firrtl.asyncreset, out %out: !firrtl.bundle<a: reset, b: reset>) {
+  %r, %r_rw = firrtl.wire forceable : !firrtl.bundle<a: reset, b flip: reset>, !firrtl.rwprobe<bundle<a: reset, b : reset>>
+  %reset = firrtl.ref.resolve %r_rw : !firrtl.rwprobe<bundle<a: reset, b: reset>>
+  firrtl.strictconnect %out, %reset : !firrtl.bundle<a: reset, b: reset>
+
+   %r_a = firrtl.subfield %r[a] : !firrtl.bundle<a: reset, b flip: reset>
+   %r_b = firrtl.subfield %r[b] : !firrtl.bundle<a: reset, b flip: reset>
+   firrtl.connect %r_a, %driver : !firrtl.reset, !firrtl.asyncreset
+   firrtl.connect %r_b, %driver : !firrtl.reset, !firrtl.asyncreset
+  }
+}

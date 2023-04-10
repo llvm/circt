@@ -636,3 +636,21 @@ firrtl.circuit "Issue4559" {
     %port_val = firrtl.ref.resolve %port_ref : !firrtl.probe<uint<1>>
   }
 }
+
+// -----
+// Check read-only XMR of a rwprobe.
+
+// CHECK-LABEL: firrtl.circuit "ReadForceable"
+firrtl.circuit "ReadForceable" {
+  // CHECK-LABEL: firrtl.module @ReadForceable(out %o: !firrtl.uint<2>)
+  firrtl.module @ReadForceable(out %o: !firrtl.uint<2>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
+    %x = firrtl.ref.resolve %w_ref : !firrtl.rwprobe<uint<2>>
+    // CHECK-NOT: firrtl.ref.resolve
+    firrtl.strictconnect %o, %x : !firrtl.uint<2>
+    // CHECK:      %w, %w_ref = firrtl.wire sym @[[wSym:[a-zA-Z0-9_]+]] forceable : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
+    // CHECK-NEXT: %[[#xmr:]] = sv.xmr.ref #hw.innerNameRef<@ReadForceable::@[[wSym]]> : !hw.inout<i2>
+    // CHECK-NEXT: %[[#cast:]] = builtin.unrealized_conversion_cast %[[#xmr]] : !hw.inout<i2> to !firrtl.uint<2>
+    // CHECK:      firrtl.strictconnect %o, %[[#cast]] : !firrtl.uint<2>
+  }
+}
