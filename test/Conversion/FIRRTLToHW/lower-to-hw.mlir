@@ -845,6 +845,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %fldout, %2 : !firrtl.uint<64>, !firrtl.uint<64>
   }
 
+  // CHECK-LABEL: hw.module private @SimpleEnum(%source: !hw.enum<valid, ready, data>) -> (sink: !hw.enum<valid, ready, data>) {
+  // CHECK-NEXT:    hw.output %source : !hw.enum<valid, ready, data>
+  // CHECK-NEXT:  }
+  firrtl.module private @SimpleEnum(in %source: !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>,
+                              out %sink: !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>) {
+    firrtl.strictconnect %sink, %source : !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>
+  }
+
   // CHECK-LABEL: IsInvalidIssue572
   // https://github.com/llvm/circt/issues/572
   firrtl.module private @IsInvalidIssue572(in %a: !firrtl.analog<1>) {

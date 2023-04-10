@@ -807,7 +807,7 @@ Type circt::firrtl::lowerType(Type type) {
   // Ignore flip types.
   firType = firType.getPassiveType();
 
-  if (BundleType bundle = firType.dyn_cast<BundleType>()) {
+  if (auto bundle = firType.dyn_cast<BundleType>()) {
     mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
     for (auto element : bundle) {
       Type etype = lowerType(element.type);
@@ -817,11 +817,25 @@ Type circt::firrtl::lowerType(Type type) {
     }
     return hw::StructType::get(type.getContext(), hwfields);
   }
-  if (FVectorType vec = firType.dyn_cast<FVectorType>()) {
+  if (auto vec = firType.dyn_cast<FVectorType>()) {
     auto elemTy = lowerType(vec.getElementType());
     if (!elemTy)
       return {};
     return hw::ArrayType::get(elemTy, vec.getNumElements());
+  }
+  if (auto fenum = firType.dyn_cast<FEnumType>()) {
+    mlir::SmallVector<Attribute, 8> hwfields;
+    for (auto element : fenum) {
+      Type etype = lowerType(element.type);
+      if (!etype)
+        return {};
+      if (!element.type.isa<UIntType>() ||
+          element.type.getBitWidthOrSentinel() != 0)
+        return {};
+      hwfields.push_back(element.name);
+    }
+    return hw::EnumType::get(type.getContext(),
+                             ArrayAttr::get(type.getContext(), hwfields));
   }
 
   auto width = firType.getBitWidthOrSentinel();
