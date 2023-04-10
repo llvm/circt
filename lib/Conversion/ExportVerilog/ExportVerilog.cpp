@@ -2945,6 +2945,10 @@ private:
   LogicalResult
   emitAssignLike(Op op, PPExtString syntax,
                  std::optional<PPExtString> wordBeforeLHS = std::nullopt);
+  void emitAssignLike(llvm::function_ref<void()> emitLHS,
+                      llvm::function_ref<void()> emitRHS, PPExtString syntax,
+                      PPExtString postSyntax = PPExtString(";"),
+                      std::optional<PPExtString> wordBeforeLHS = std::nullopt);
   LogicalResult visitSV(AssignOp op);
   LogicalResult visitSV(BPAssignOp op);
   LogicalResult visitSV(PAssignOp op);
@@ -3056,6 +3060,26 @@ void StmtEmitter::emitSVAttributes(Operation *op) {
   setPendingNewline();
 }
 
+void StmtEmitter::emitAssignLike(llvm::function_ref<void()> emitLHS,
+                                 llvm::function_ref<void()> emitRHS,
+                                 PPExtString syntax, PPExtString postSyntax,
+                                 std::optional<PPExtString> wordBeforeLHS) {
+  // If wraps, indent.
+  ps.scopedBox(PP::ibox2, [&]() {
+    if (wordBeforeLHS) {
+      ps << *wordBeforeLHS << PP::space;
+    }
+    emitLHS();
+    // Allow breaking before 'syntax' (e.g., '=') if long assignment.
+    ps << PP::space << syntax << PP::space;
+    // RHS is boxed to right of the syntax.
+    ps.scopedBox(PP::ibox0, [&]() {
+      emitRHS();
+      ps << postSyntax;
+    });
+  });
+}
+
 template <typename Op>
 LogicalResult
 StmtEmitter::emitAssignLike(Op op, PPExtString syntax,
@@ -3064,20 +3088,9 @@ StmtEmitter::emitAssignLike(Op op, PPExtString syntax,
   ops.insert(op);
 
   startStatement();
-  // If wraps, indent.
-  ps.scopedBox(PP::ibox2, [&]() {
-    if (wordBeforeLHS) {
-      ps << *wordBeforeLHS << PP::space;
-    }
-    emitExpression(op.getDest(), ops);
-    // Allow breaking before 'syntax' (e.g., '=') if long assignment.
-    ps << PP::space << syntax << PP::space;
-    // RHS is boxed to right of the syntax.
-    ps.scopedBox(PP::ibox0, [&]() {
-      emitExpression(op.getSrc(), ops);
-      ps << ";";
-    });
-  });
+  emitAssignLike([&]() { emitExpression(op.getDest(), ops); },
+                 [&]() { emitExpression(op.getSrc(), ops); }, syntax,
+                 PPExtString(";"), wordBeforeLHS);
 
   emitLocationInfoAndNewLine(ops);
   return success();
@@ -3552,17 +3565,37 @@ LogicalResult StmtEmitter::visitSV(ForOp op) {
   llvm::SmallPtrSet<Operation *, 8> ops;
   startStatement();
   auto inductionVarName = op->getAttrOfType<StringAttr>("hw.verilogName");
-  ps << "for (" << PP::ibox2 << "logic ";
-  ps.invokeWithStringOS([&](auto &os) {
-    emitter.emitTypeDims(op.getInductionVar().getType(), op.getLoc(), os);
+  ps << "for (";
+  // Emit statements on same line if possible, or put each on own line.
+  ps.scopedBox(PP::cbox0, [&]() {
+    // Emit initialization assignment.
+    emitAssignLike(
+        [&]() {
+          ps << "logic" << PP::nbsp;
+          ps.invokeWithStringOS([&](auto &os) {
+            emitter.emitTypeDims(op.getInductionVar().getType(), op.getLoc(),
+                                 os);
+          });
+          ps << PP::nbsp << PPExtString(inductionVarName);
+        },
+        [&]() { emitExpression(op.getLowerBound(), ops); }, PPExtString("="));
+    // Break between statements.
+    ps << PP::space;
+
+    // Emit bounds-check statement.
+    emitAssignLike([&]() { ps << PPExtString(inductionVarName); },
+                   [&]() { emitExpression(op.getUpperBound(), ops); },
+                   PPExtString("<"));
+    // Break between statements.
+    ps << PP::space;
+
+    // Emit update statement and trailing syntax.
+    emitAssignLike([&]() { ps << PPExtString(inductionVarName); },
+                   [&]() { emitExpression(op.getStep(), ops); },
+                   PPExtString("+="), PPExtString(") begin"));
   });
-  ps << PP::nbsp << inductionVarName << " = ";
-  emitExpression(op.getLowerBound(), ops);
-  ps << "; " << PPExtString(inductionVarName) << " < ";
-  emitExpression(op.getUpperBound(), ops);
-  ps << "; " << PPExtString(inductionVarName) << " += ";
-  emitExpression(op.getStep(), ops);
-  ps << PP::end << ") begin";
+  // Don't break for because of newline.
+  ps << PP::neverbreak;
   setPendingNewline();
   emitStatementBlock(op.getBody().getBlocks().front());
   startStatement();

@@ -234,3 +234,29 @@ hw.module @svattrs() {
       #sv.attribute<"end">
    ]} : !hw.inout<i10>
 }
+
+// -----
+
+// CHECK-LABEL:module ForStatement{{.*}}
+hw.module @ForStatement(%aaaaaaaaaaa: i5, %xxxxxxxxxxxxxxx : i2, %yyyyyyyyyyyyyyy : i2, %zzzzzzzzzzzzzzz : i2) -> () {
+  %_RANDOM = sv.logic : !hw.inout<uarray<3xi32>>
+  sv.initial {
+    %x_and_y = comb.and %xxxxxxxxxxxxxxx, %yyyyyyyyyyyyyyy : i2
+    %x_or_y = comb.or %xxxxxxxxxxxxxxx, %yyyyyyyyyyyyyyy : i2
+    %lowerBound = comb.sub %x_and_y, %x_or_y : i2
+    %upperBound = comb.and %x_or_y, %x_and_y : i2
+    %eq = comb.icmp eq %xxxxxxxxxxxxxxx, %yyyyyyyyyyyyyyy : i2
+    %step = comb.mux %eq, %x_and_y, %x_or_y : i2
+    //      CHECK:    for (logic [1:0] iiiiiiiiiiiiiiiiiiiiiiiii = _GEN - _GEN_0;
+    // CHECK-NEXT:         iiiiiiiiiiiiiiiiiiiiiiiii < _GEN_0 & _GEN;
+    // CHECK-NEXT:         iiiiiiiiiiiiiiiiiiiiiiiii +=
+    // CHECK-NEXT:           xxxxxxxxxxxxxxx == yyyyyyyyyyyyyyy ? _GEN : _GEN_0) begin
+    // CHECK-NEXT:      _RANDOM[iiiiiiiiiiiiiiiiiiiiiiiii] = `RANDOM;{{.*}}
+    // CHECK-NEXT:    end{{.*}}
+    sv.for %iiiiiiiiiiiiiiiiiiiiiiiii = %lowerBound to %upperBound step %step : i2 {
+      %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+      %index = sv.array_index_inout %_RANDOM[%iiiiiiiiiiiiiiiiiiiiiiiii] : !hw.inout<uarray<3xi32>>, i2
+      sv.bpassign %index, %RANDOM : i32
+    }
+  }
+}
