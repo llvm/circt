@@ -989,11 +989,11 @@ hw.module @ConstantDefBeforeUse() {
 
 // CHECK: `ifndef _TYPESCOPE___AnFSMTypedecl
 // CHECK: `define _TYPESCOPE___AnFSMTypedecl
-// CHECK: typedef enum {_state1_A, _state1_B} _state1;
-// CHECK: typedef enum {_state2_A, _state2_B} _state2;
+// CHECK: typedef enum bit [0:0] {_state1_A, _state1_B} _state1;
+// CHECK: typedef enum bit [0:0] {_state2_A, _state2_B} _state2;
 // CHECK: `endif // _TYPESCOPE___AnFSMTypedecl
 // CHECK-LABEL: module AnFSM
-// CHECK:   enum {A, B} reg_0;
+// CHECK:   enum bit [0:0] {A, B} reg_0;
 // OLD:   _state1     reg_state1;
 // OLD:   _state2     reg_state2;
 // CHECK:   always @(posedge clock) begin

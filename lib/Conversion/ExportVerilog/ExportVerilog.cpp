@@ -1397,7 +1397,10 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                    emitter);
       })
       .Case<EnumType>([&](EnumType enumType) {
-        os << "enum {";
+        os << "enum ";
+        if (enumType.getWidth() != 32)
+          os << "bit [" << enumType.getWidth() - 1 << ":0] ";
+        os << "{";
         Type enumPrefixType = optionalAliasType ? optionalAliasType : enumType;
         llvm::interleaveComma(
             enumType.getFields().getAsRange<StringAttr>(), os,
