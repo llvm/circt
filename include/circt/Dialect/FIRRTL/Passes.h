@@ -154,6 +154,8 @@ createResolveTracesPass(mlir::StringRef outputAnnotationFilename = "");
 
 std::unique_ptr<mlir::Pass> createInnerSymbolDCEPass();
 
+std::unique_ptr<mlir::Pass> createPreserveNamesPass();
+
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/FIRRTL/Passes.h.inc"

@@ -29,6 +29,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   MemToRegOfVec.cpp
   ModuleInliner.cpp
   PrefixModules.cpp
+  PreserveNames.cpp
   PrintFIRRTLFieldSource.cpp
   PrintInstanceGraph.cpp
   PrintNLATable.cpp

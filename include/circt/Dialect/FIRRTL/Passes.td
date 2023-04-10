@@ -668,4 +668,14 @@ def VBToBV : Pass<"firrtl-vb-to-bv", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createVBToBVPass()";
 }
 
+def PreserveNames : Pass<"firrtl-preserve-names", "firrtl::FModuleOp"> {
+  let summary = "Preserve names to improve output readability";
+  let description = [{
+    This pass runs before FIRRTL is lowered to HW, finds expressions with good
+    namehints, and creates `firrtl.node` ops with symbols to block optimizations
+    and preserve the names.
+  }];
+  let constructor = "circt::firrtl::createPreserveNamesPass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

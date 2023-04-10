@@ -667,6 +667,10 @@ static LogicalResult processBuffer(
         firrtl::createMergeConnectionsPass(
             !disableAggressiveMergeConnections.getValue()));
 
+  // Before lowering to HW, run any name preservation transforms.
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      firrtl::createPreserveNamesPass());
+
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {
 
