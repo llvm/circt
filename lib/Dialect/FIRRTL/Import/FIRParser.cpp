@@ -2464,7 +2464,7 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
     return emitError(startTok.getLoc(),
                      "rwprobe value must be defined by an operation");
   auto forceable = dyn_cast<Forceable>(op);
-  if (!forceable)
+  if (!forceable || !forceable.isForceable() /* e.g., is/has const type*/)
     return emitError(startTok.getLoc(), "rwprobe target not forceable")
         .attachNote(op->getLoc());
 
@@ -2840,8 +2840,11 @@ ParseResult FIRStmtParser::parseNode() {
 
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
-  auto result = builder.create<NodeOp>(
-      initializer, id, NameKindEnum::InterestingName, annotations, sym, true);
+  // TODO: isConst -> hasConst.
+  bool forceable = !isConst(initializer.getType());
+  auto result =
+      builder.create<NodeOp>(initializer, id, NameKindEnum::InterestingName,
+                             annotations, sym, forceable);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
@@ -2867,8 +2870,10 @@ ParseResult FIRStmtParser::parseWire() {
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
 
+  // TODO: isConst -> hasConst.
+  bool forceable = !isConst(type);
   auto result = builder.create<WireOp>(type, id, NameKindEnum::InterestingName,
-                                       annotations, sym, true);
+                                       annotations, sym, forceable);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
@@ -2958,16 +2963,18 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   ArrayAttr annotations = getConstants().emptyArrayAttr;
   Value result;
   StringAttr sym = {};
+  // TODO: isConst -> hasConst.
+  bool forceable = !isConst(type);
   if (resetSignal)
     result = builder
                  .create<RegResetOp>(type, clock, resetSignal, resetValue, id,
                                      NameKindEnum::InterestingName, annotations,
-                                     sym, true)
+                                     sym, forceable)
                  .getResult();
   else
     result = builder
                  .create<RegOp>(type, clock, id, NameKindEnum::InterestingName,
-                                annotations, sym, true)
+                                annotations, sym, forceable)
                  .getResult();
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
