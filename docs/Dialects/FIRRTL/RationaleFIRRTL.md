@@ -569,6 +569,10 @@ The expected lowering for strict connects is for the connect to be eliminated an
 
 The reason we provide this foreign type support is to allow for partial lowering of FIRRTL to HW and other dialects. Passes might lower a subset of types and operations to the target dialect and we need a mechanism to have the lowered values be passed around the FIRRTL module hierarchy untouched alongside the FIRRTL ops that are yet to be lowered.
 
+### Const Types
+
+FIRRTL hardware types can be specified as `const`, meaning they can only be assigned compile-time constant values or values of other `const` types.
+
 ## Operations
 
 ### Multiple result `firrtl.instance` operation

@@ -22,6 +22,8 @@
 namespace circt {
 namespace firrtl {
 namespace detail {
+struct FIRRTLBaseTypeStorage;
+struct WidthTypeStorage;
 struct BundleTypeStorage;
 struct VectorTypeStorage;
 struct FEnumTypeStorage;
@@ -67,8 +69,12 @@ protected:
 };
 
 // Common base class for all base FIRRTL types.
-class FIRRTLBaseType : public FIRRTLType {
+class FIRRTLBaseType
+    : public FIRRTLType::TypeBase<FIRRTLBaseType, FIRRTLType,
+                                  detail::FIRRTLBaseTypeStorage> {
 public:
+  using Base::Base;
+
   /// Return true if this is a "passive" type - one that contains no "flip"
   /// types recursively within itself.
   bool isPassive() const { return getRecursiveTypeProperties().isPassive; }
@@ -82,6 +88,10 @@ public:
   /// Return true if this is a "passive" type - one that contains no "flip"
   /// types recursively within itself.
   bool isPassive() { return getRecursiveTypeProperties().isPassive; }
+
+  /// Returns true if this is a 'const' type that can only hold compile-time
+  /// constant values
+  bool isConst();
 
   /// Return true if this is or contains an Analog type.
   bool containsAnalog() { return getRecursiveTypeProperties().containsAnalog; }
@@ -107,6 +117,9 @@ public:
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLBaseType getPassiveType();
+
+  /// Return a 'const' or non-'const' version of this type.
+  FIRRTLBaseType getConstType(bool isConst);
 
   /// Return this type with all ground types replaced with UInt<1>.  This is
   /// used for `mem` operations.
@@ -158,23 +171,22 @@ public:
   /// which is a bundle or vector is not counted, but the recursive ground
   /// fields of are.
   uint64_t getGroundFields() const;
-
-protected:
-  using FIRRTLType::FIRRTLType;
 };
 
 /// Returns whether the two types are equivalent.  This implements the exact
 /// definition of type equivalence in the FIRRTL spec.  If the types being
 /// compared have any outer flips that encode FIRRTL module directions (input or
 /// output), these should be stripped before using this method.
-bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType);
+bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType,
+                        bool srcOuterTypeIsConst = false);
 
 /// Returns true if two types are weakly equivalent.  See the FIRRTL spec,
 /// Section 4.6, for a full definition of this.  Roughly, the oriented types
 /// (the types with any flips pushed to the leaves) must match.  This allows for
 /// types with flips in different positions to be equivalent.
 bool areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
-                              bool destFlip = false, bool srcFlip = false);
+                              bool destFlip = false, bool srcFlip = false,
+                              bool srcOuterTypeIsConst = false);
 
 /// Returns true if the destination is at least as wide as a source.  The source
 /// and destination types must be equivalent non-analog types.  The types are
@@ -185,7 +197,6 @@ bool areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
 /// hold their counterparts.
 bool isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType);
 
-mlir::Type getVectorElementType(mlir::Type array);
 mlir::Type getPassiveType(mlir::Type anyBaseFIRRTLType);
 
 //===----------------------------------------------------------------------===//
@@ -229,15 +240,19 @@ class IntType : public FIRRTLBaseType, public WidthQualifiedTypeTrait<IntType> {
 public:
   using FIRRTLBaseType::FIRRTLBaseType;
 
-  /// Return an SIntType or UIntType with the specified signedness and width.
+  /// Return an SIntType or UIntType with the specified signedness, width, and
+  /// constness.
   static IntType get(MLIRContext *context, bool isSigned,
-                     int32_t widthOrSentinel = -1);
+                     int32_t widthOrSentinel = -1, bool isConst = false);
 
   bool isSigned() { return isa<SIntType>(); }
   bool isUnsigned() { return isa<UIntType>(); }
 
   /// Return the width of this type, or -1 if it has none specified.
   int32_t getWidthOrSentinel();
+
+  /// Return a 'const' or non-'const' version of this type.
+  IntType getConstType(bool isConst);
 
   static bool classof(Type type) {
     return type.isa<SIntType>() || type.isa<UIntType>();
@@ -290,25 +305,6 @@ struct DenseMapInfo<circt::firrtl::FIRRTLType> {
   }
   static unsigned getHashValue(FIRRTLType val) { return mlir::hash_value(val); }
   static bool isEqual(FIRRTLType LHS, FIRRTLType RHS) { return LHS == RHS; }
-};
-
-template <>
-struct DenseMapInfo<circt::firrtl::FIRRTLBaseType> {
-  using FIRRTLBaseType = circt::firrtl::FIRRTLBaseType;
-  static FIRRTLBaseType getEmptyKey() {
-    auto pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
-    return FIRRTLBaseType(static_cast<mlir::Type::ImplType *>(pointer));
-  }
-  static FIRRTLBaseType getTombstoneKey() {
-    auto pointer = llvm::DenseMapInfo<void *>::getTombstoneKey();
-    return FIRRTLBaseType(static_cast<mlir::Type::ImplType *>(pointer));
-  }
-  static unsigned getHashValue(FIRRTLBaseType val) {
-    return mlir::hash_value(val);
-  }
-  static bool isEqual(FIRRTLBaseType LHS, FIRRTLBaseType RHS) {
-    return LHS == RHS;
-  }
 };
 
 } // namespace llvm

@@ -24,11 +24,6 @@ def SameOperandsIntTypeKind : NativeOpTrait<"SameOperandsIntTypeKind"> {
   let cppNamespace = "::circt::firrtl";
 }
 
-class IndexConstraint<string value, string resultValue>
-  : TypesMatchWith<"type should be element of vector type",
-                   value, resultValue,
-                   "firrtl::getVectorElementType($_self)">;
-
 // A common base class for operations that implement type inference and parsed
 // argument validation.
 class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
@@ -261,9 +256,7 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
   }];
 }
 
-def SubindexOp : FIRRTLExprOp<"subindex", [
-    IndexConstraint<"input", "result">
-  ]> {
+def SubindexOp : FIRRTLExprOp<"subindex"> {
   let summary = "Extract an element of a vector value";
   let description = [{
     The subindex expression statically refers, by index, to a subelement
@@ -291,9 +284,7 @@ def SubindexOp : FIRRTLExprOp<"subindex", [
   }];
 }
 
-def SubaccessOp : FIRRTLExprOp<"subaccess", [
-    IndexConstraint<"input", "result">
-  ]> {
+def SubaccessOp : FIRRTLExprOp<"subaccess"> {
   let summary = "Extract a dynamic element of a vector value";
   let description = [{
     The subaccess expression dynamically refers to a subelement of a
