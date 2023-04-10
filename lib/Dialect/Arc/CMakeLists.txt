@@ -1,5 +1,6 @@
 add_circt_dialect_library(CIRCTArc
   ArcDialect.cpp
+  ArcFolds.cpp
   ArcOps.cpp
   ArcTypes.cpp
 

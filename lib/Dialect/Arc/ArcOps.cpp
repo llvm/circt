@@ -149,17 +149,6 @@ LogicalResult StateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return verifyArcSymbolUse(*this, getInputs(), getResults(), symbolTable);
 }
 
-LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
-  // When there are no names attached, the state is not externaly observable.
-  // When there are also no internal users, we can remove it.
-  if (op->use_empty() && !op->hasAttr("name") && !op->hasAttr("names")) {
-    rewriter.eraseOp(op);
-    return success();
-  }
-
-  return failure();
-}
-
 LogicalResult StateOp::verify() {
   if (getLatency() > 0 && !getOperation()->getParentOfType<ClockDomainOp>() &&
       !getClock())
