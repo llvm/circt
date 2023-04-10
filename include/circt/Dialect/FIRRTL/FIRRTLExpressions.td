@@ -195,6 +195,40 @@ def VectorCreateOp : FIRRTLOp<"vectorcreate"> {
   let hasFolder = 1;
 }
 
+def FEnumCreateOp : FIRRTLOp<"enumcreate"> {
+  let summary = "Produce a enum value";
+  let description = [{
+    Create an enum from tag and value.
+    ```
+      %result = firrtl.enumcreate field-name(%input) : !firrtl.enum<None: uint<0>, Some: uint<8>>
+
+    ```
+  }];
+
+  let arguments = (ins I32Attr:$fieldIndex, FIRRTLBaseType:$input);
+  let results = (outs FEnumType:$result);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins "FEnumType":$resultType, "StringRef":$fieldName, "Value":$input), [{
+      auto enumType = input.getType().cast<FEnumType>();
+      auto fieldIndex = enumType.getElementIndex(fieldName);
+      assert(fieldIndex.has_value() && "invalid type constructor");
+      return build($_builder, $_state, resultType, (uint32_t)*fieldIndex, input);
+    }]>
+  ];
+
+  let extraClassDeclaration = [{
+    /// Return the name of the accessed field.
+    StringRef getFieldName() {
+      return getResult().getType().cast<FEnumType>()
+        .getElementName(getFieldIndex());
+    }
+  }];
+}
+
 
 def InvalidValueOp : FIRRTLOp<"invalidvalue",
       [MemoryEffects<[MemAlloc]>, HasCustomSSAName]> {

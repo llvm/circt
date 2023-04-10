@@ -2750,6 +2750,63 @@ LogicalResult VectorCreateOp::verify() {
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// FEnumCreateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult FEnumCreateOp::verify() {
+  if (!getResult().getType().getElementIndex(getFieldName()))
+    return emitOpError("label ")
+           << getFieldName() << " is not a member of the enumeration type "
+           << getResult().getType();
+  return success();
+}
+
+void FEnumCreateOp::print(OpAsmPrinter &printer) {
+  printer << ' ';
+  printer.printKeywordOrString(getFieldName());
+  printer << '(' << getFieldName() << ')';
+  SmallVector<StringRef> elidedAttrs = {"fieldIndex"};
+  printer.printOptionalAttrDictWithKeyword((*this)->getAttrs(), elidedAttrs);
+  printer << " : " << getResult().getType();
+}
+
+ParseResult FEnumCreateOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto *context = parser.getContext();
+
+  OpAsmParser::UnresolvedOperand input;
+  std::string fieldName;
+  Type outputType;
+  if (parser.parseKeywordOrString(&fieldName) || parser.parseLParen() ||
+      parser.parseOperand(input) || parser.parseRParen() ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(outputType))
+    return failure();
+
+  auto enumType = outputType.dyn_cast<FEnumType>();
+  if (!enumType)
+    return parser.emitError(parser.getNameLoc(),
+                            "output must be enum type, got ")
+           << outputType;
+  auto fieldIndex = enumType.getElementIndex(fieldName);
+  if (!fieldIndex)
+    return parser.emitError(parser.getNameLoc(),
+                            "unknown field " + fieldName + " in enum type ")
+           << enumType;
+
+  Type inputType = enumType.getElementType(*fieldIndex);
+  if (parser.resolveOperand(input, inputType, result.operands))
+    return failure();
+
+  result.addAttribute(
+      "fieldIndex",
+      IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
+
+  result.addTypes(enumType);
+
+  return success();
+}
+
 ParseResult SubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
   auto *context = parser.getContext();
 

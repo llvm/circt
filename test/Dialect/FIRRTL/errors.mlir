@@ -1175,3 +1175,28 @@ firrtl.circuit "ForceableTypeMismatch" {
     %w, %w_f = firrtl.wire forceable : !firrtl.uint, !firrtl.rwprobe<uint<2>>
   }
 }
+
+// -----
+
+firrtl.circuit "EnumCreateNoCase" {
+firrtl.module @EnumCreateNoCase(in %in : !firrtl.uint<8>) {
+  // expected-error @below {{unknown field SomeOther in enum type}}
+  %some = firrtl.enumcreate SomeOther(%in) : !firrtl.enum<None: uint<0>, Some: uint<8>>
+}
+
+// -----
+
+firrtl.circuit "EnumCreateWrongType" {
+  // expected-note @below {{prior use here}}
+firrtl.module @EnumCreateWrongType(in %in : !firrtl.uint<7>) {
+  // expected-error @below {{expects different type than prior uses}}
+  %some = firrtl.enumcreate Some(%in) : !firrtl.enum<None: uint<0>, Some: uint<8>>
+}
+
+// -----
+
+firrtl.circuit "EnumCreateNoCase" {
+firrtl.module @EnumCreateNoCase(in %in : !firrtl.enum<None: uint<0>, Some: uint<8>>) {
+  // expected-error @below {{unknown field SomeOther in enum type}}
+  %some = firrtl.subtag %in[SomeOther] : !firrtl.enum<None: uint<0>, Some: uint<8>>
+}
