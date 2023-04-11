@@ -172,7 +172,8 @@ hw.module.extern private @SplitAtInstance2(%a: i4) -> (z: i4)
 hw.module @AbsorbNames(%clock: i1) -> () {
   // CHECK-NEXT: %x.z0, %x.z1 = hw.instance "x" @AbsorbNames2()
   // CHECK-NEXT: arc.state @AbsorbNames_arc(%x.z0, %x.z1) clock %clock lat 1
-  // CHECK-SAME:   {names = ["myRegA", "myRegB"]}
+  // CHECK-NEXT: arc.tap %0#0 : i4 register rw "myRegA" : i4
+  // CHECK-NEXT: arc.tap %0#1 : i4 register rw "myRegB" : i4
   // CHECK-NEXT: hw.output
   %x.z0, %x.z1 = hw.instance "x" @AbsorbNames2() -> (z0: i4, z1: i4)
   %myRegA = seq.compreg %x.z0, %clock : i4
@@ -188,8 +189,9 @@ hw.module.extern @AbsorbNames2() -> (z0: i4, z1: i4)
 
 // CHECK-LABEL: hw.module @Trivial(
 hw.module @Trivial(%clock: i1, %i0: i4, %reset: i1) -> (out: i4) {
-  // CHECK: [[RES0:%.+]] = arc.state @[[TRIVIAL_ARC]](%i0) clock %clock reset %reset lat 1 {names = ["foo"]
-  // CHECK-NEXT: hw.output [[RES0:%.+]]
+  // CHECK: [[RES0:%.+]] = arc.state @[[TRIVIAL_ARC]](%i0) clock %clock reset %reset lat 1
+  // CHECK-NEXT: [[RES1:%.+]] = arc.tap [[RES0]] : i4 register rw "foo" : i4
+  // CHECK-NEXT: hw.output [[RES1:%.+]]
   %0 = hw.constant 0 : i4
   %foo = seq.compreg %i0, %clock, %reset, %0 : i4
   hw.output %foo : i4
@@ -206,9 +208,11 @@ hw.module @Trivial(%clock: i1, %i0: i4, %reset: i1) -> (out: i4) {
 
 // CHECK-LABEL: hw.module @NonTrivial(
 hw.module @NonTrivial(%clock: i1, %i0: i4, %reset1: i1, %reset2: i1) -> (out1: i4, out2: i4) {
-  // CHECK: [[RES2:%.+]] = arc.state @[[NONTRIVIAL_ARC_0]](%i0) clock %clock reset %reset1 lat 1 {names = ["foo"]
-  // CHECK-NEXT: [[RES3:%.+]] = arc.state @[[NONTRIVIAL_ARC_1]](%i0) clock %clock reset %reset2 lat 1 {names = ["bar"]
-  // CHECK-NEXT: hw.output [[RES2]], [[RES3]]
+  // CHECK: [[RES2:%.+]] = arc.state @[[NONTRIVIAL_ARC_0]](%i0) clock %clock reset %reset1 lat 1
+  // CHECK-NEXT: [[V0:%.+]] = arc.tap [[RES2]] : i4 register rw "foo" : i4
+  // CHECK-NEXT: [[RES3:%.+]] = arc.state @[[NONTRIVIAL_ARC_1]](%i0) clock %clock reset %reset2 lat 1
+  // CHECK-NEXT: [[V1:%.+]] = arc.tap [[RES3]] : i4 register rw "bar" : i4
+  // CHECK-NEXT: hw.output [[V0]], [[V1]]
   %0 = hw.constant 0 : i4
   %foo = seq.compreg %i0, %clock, %reset1, %0 : i4
   %bar = seq.compreg %i0, %clock, %reset2, %0 : i4

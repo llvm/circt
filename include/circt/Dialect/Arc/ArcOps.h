@@ -20,6 +20,7 @@
 
 #include "circt/Dialect/Arc/ArcDialect.h"
 #include "circt/Dialect/Arc/ArcTypes.h"
+#include "circt/Dialect/HW/HWTypes.h"
 
 #include "circt/Dialect/Arc/ArcInterfaces.h.inc"
 

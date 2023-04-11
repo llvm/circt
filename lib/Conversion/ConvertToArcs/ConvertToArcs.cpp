@@ -8,6 +8,7 @@
 
 #include "circt/Conversion/ConvertToArcs.h"
 #include "../PassDetail.h"
+#include "circt/Dialect/Arc/ArcDialect.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -262,8 +263,8 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
     Value reset;
     SmallVector<seq::CompRegOp> absorbedRegs;
     SmallVector<Attribute> absorbedNames(arc.getNumResults(), {});
-    if (auto names = arc->getAttrOfType<ArrayAttr>("names"))
-      absorbedNames.assign(names.getValue().begin(), names.getValue().end());
+    // if (auto names = arc->getAttrOfType<ArrayAttr>("names"))
+    //   absorbedNames.assign(names.getValue().begin(), names.getValue().end());
 
     // Go through all every arc result and collect the single register that uses
     // it. If a result has multiple uses or is used by something other than a
@@ -320,6 +321,7 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
     // present and update the output names. Then replace the registers.
     arc.getClockMutable().assign(clock);
     arc.setLatency(arc.getLatency() + 1);
+
     if (reset) {
       if (arc.getReset())
         return arc.emitError(
@@ -327,11 +329,19 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
             "had a reset.");
       arc.getResetMutable().assign(reset);
     }
-    if (llvm::any_of(absorbedNames, [](auto name) {
-          return !name.template cast<StringAttr>().getValue().empty();
-        }))
-      arc->setAttr("names", ArrayAttr::get(module.getContext(), absorbedNames));
-    for (auto [arcResult, reg] : llvm::zip(arc.getResults(), absorbedRegs)) {
+
+    OpBuilder builder(arc);
+    builder.setInsertionPointAfter(arc);
+    SmallVector<Value> replacementValues(arc.getResults());
+    for (auto [i, name] : llvm::enumerate(absorbedNames)) {
+      if (cast<StringAttr>(name).getValue().empty())
+        continue;
+      replacementValues[i] = builder.create<TapOp>(
+          arc.getLoc(), arc->getResult(i), TapKind::Register,
+          TapMode::ReadWrite, cast<StringAttr>(name));
+    }
+
+    for (auto [arcResult, reg] : llvm::zip(replacementValues, absorbedRegs)) {
       auto it = arcBreakerIndices.find(reg);
       arcBreakers[it->second] = {};
       arcBreakerIndices.erase(it);
@@ -376,7 +386,7 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
         inputs.push_back(regOp.getInput());
         types.push_back(regOp.getType());
         outputs.push_back(block->addArgument(regOp.getType(), regOp.getLoc()));
-        names.push_back(regOp->getAttrOfType<StringAttr>("name"));
+        names.push_back(regOp.getNameAttr());
       }
       regToOutputMapping.push_back(it->second);
     }
@@ -399,12 +409,19 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
     auto reset = std::get<1>(clockAndResetAndOp);
     if (reset)
       arcOp.getResetMutable().assign(reset);
-    if (llvm::any_of(names, [](auto name) {
-          return !name.template cast<StringAttr>().getValue().empty();
-        }))
-      arcOp->setAttr("names", builder.getArrayAttr(names));
+
+    builder.setInsertionPointAfter(arcOp);
+    SmallVector<Value> replacementValues(arcOp.getResults());
+    for (auto [i, name] : llvm::enumerate(names)) {
+      if (cast<StringAttr>(name).getValue().empty())
+        continue;
+      replacementValues[i] = builder.create<TapOp>(
+          arcOp.getLoc(), arcOp->getResult(i), TapKind::Register,
+          TapMode::ReadWrite, cast<StringAttr>(name));
+    }
+
     for (auto [reg, resultIdx] : llvm::zip(regOps, regToOutputMapping)) {
-      reg.replaceAllUsesWith(arcOp.getResult(resultIdx));
+      reg.replaceAllUsesWith(replacementValues[resultIdx]);
       reg.erase();
     }
   }

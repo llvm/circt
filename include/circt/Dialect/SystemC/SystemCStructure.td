@@ -374,10 +374,17 @@ def FuncOp : SystemCOp<"cpp.func", [
                        OptionalAttr<StrAttr>:$sym_visibility);
   let regions = (region AnyRegion:$body);
 
-  let builders = [OpBuilder<(ins
-    "StringRef":$name, "ArrayAttr":$argNames, "FunctionType":$type,
-    CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs,
-    CArg<"ArrayRef<DictionaryAttr>", "{}">:$argAttrs)>
+  let builders = [
+    OpBuilder<(ins
+      "StringRef":$name, "ArrayAttr":$argNames, "FunctionType":$type,
+      CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs,
+      CArg<"ArrayRef<DictionaryAttr>", "{}">:$argAttrs
+    )>,
+    OpBuilder<(ins
+      "StringRef":$name, "ArrayRef<StringRef>":$argNames, "FunctionType":$type,
+      CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs,
+      CArg<"ArrayRef<DictionaryAttr>", "{}">:$argAttrs
+    )>,
   ];
 
   let extraClassDeclaration = [{

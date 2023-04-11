@@ -45,8 +45,7 @@ void AllocateStatePass::allocateBlock(Block *block) {
   // Group operations by their storage. There is generally just one storage,
   // passed into the model as a block argument.
   for (auto &op : *block) {
-    if (isa<AllocStateOp, RootInputOp, RootOutputOp, AllocMemoryOp,
-            AllocStorageOp>(&op))
+    if (isa<AllocOp>(&op))
       opsByStorage[op.getOperand(0)].push_back(&op);
   }
   LLVM_DEBUG(llvm::dbgs() << "- Visiting block in "
@@ -75,7 +74,7 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
   // Allocate storage for the operations.
   OpBuilder builder(block->getParentOp());
   for (auto *op : ops) {
-    if (isa<AllocStateOp, RootInputOp, RootOutputOp>(op)) {
+    if (isa<AllocOp>(op) && isa<StateType>(op->getResultTypes().front())) {
       auto result = op->getResult(0);
       auto storage = op->getOperand(0);
       auto intType = result.getType().cast<StateType>().getType();
@@ -86,8 +85,9 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
       continue;
     }
 
-    if (auto memOp = dyn_cast<AllocMemoryOp>(op)) {
-      auto memType = memOp.getType();
+    if (auto memOp = dyn_cast<AllocOp>(op);
+        memOp && isa<MemoryType>(memOp.getState().getType())) {
+      auto memType = cast<MemoryType>(memOp.getState().getType());
       unsigned stride = memType.getStride();
       unsigned numBytes = memType.getNumWords() * stride;
       auto offset = builder.getI32IntegerAttr(allocBytes(numBytes));
@@ -97,11 +97,13 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
       continue;
     }
 
-    if (auto allocStorageOp = dyn_cast<AllocStorageOp>(op)) {
+    if (auto allocStorageOp = dyn_cast<AllocOp>(op);
+        allocStorageOp &&
+        isa<StorageType>(allocStorageOp.getState().getType())) {
       auto offset = builder.getI32IntegerAttr(
-          allocBytes(allocStorageOp.getType().getSize()));
-      allocStorageOp.setOffsetAttr(offset);
-      gettersToCreate.emplace_back(allocStorageOp, allocStorageOp.getInput(),
+          allocBytes(cast<StorageType>(allocStorageOp.getType()).getSize()));
+      allocStorageOp->setAttr("offset", offset);
+      gettersToCreate.emplace_back(allocStorageOp, allocStorageOp.getStorage(),
                                    offset);
       continue;
     }
@@ -117,7 +119,9 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
       auto &getter = getterForBlock[user->getBlock()];
       // Create a local getter in front of each user, except for
       // `AllocStorageOp`s, for which we create a block-wider accessor.
-      if (!getter || !result.getDefiningOp<AllocStorageOp>()) {
+      if (auto allocOp = result.getDefiningOp<AllocOp>();
+          !getter ||
+          (!allocOp || isa<StorageType>(allocOp.getState().getType()))) {
         ImplicitLocOpBuilder builder(result.getLoc(), user);
         getter =
             builder.create<StorageGetOp>(result.getType(), storage, offset);
@@ -134,17 +138,19 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
     }
   }
 
+  // All alloc operations in this block are now unused and can be removed.
+  for (auto *op : ops)
+    op->erase();
+
   // Create the substorage accessor at the beginning of the block.
   Operation *storageOwner = storage.getDefiningOp();
   if (!storageOwner)
     storageOwner = storage.cast<BlockArgument>().getOwner()->getParentOp();
 
   if (storageOwner->isProperAncestor(block->getParentOp())) {
-    auto substorage = builder.create<AllocStorageOp>(
+    auto substorage = builder.create<AllocOp>(
         block->getParentOp()->getLoc(),
         StorageType::get(&getContext(), currentByte), storage);
-    for (auto *op : ops)
-      op->replaceUsesOfWith(storage, substorage);
     for (auto op : getters)
       op->replaceUsesOfWith(storage, substorage);
   } else {

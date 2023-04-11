@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/Arc/ArcDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 
 using namespace circt;
@@ -33,13 +34,15 @@ struct AddTapsPass : public AddTapsBase<AddTapsPass> {
     // Add taps to inputs.
     auto builder = OpBuilder::atBlockBegin(moduleOp.getBodyBlock());
     for (auto [port, arg] : llvm::zip(ports.inputs, moduleOp.getArguments()))
-      builder.create<arc::TapOp>(arg.getLoc(), arg, port.getName());
+      builder.create<arc::TapOp>(arg.getLoc(), arg, TapKind::Input,
+                                 TapMode::Read, port.getName());
 
     // Add taps to outputs.
     builder.setInsertionPoint(outputOp);
     for (auto [port, result] :
          llvm::zip(ports.outputs, outputOp->getOperands()))
-      builder.create<arc::TapOp>(result.getLoc(), result, port.getName());
+      builder.create<arc::TapOp>(result.getLoc(), result, TapKind::Output,
+                                 TapMode::Read, port.getName());
   }
 
   // Add taps for SV wires.
@@ -58,7 +61,8 @@ struct AddTapsPass : public AddTapsBase<AddTapsPass> {
     }
 
     builder.setInsertionPointAfter(readOp);
-    builder.create<arc::TapOp>(readOp.getLoc(), readOp, wireOp.getName());
+    builder.create<arc::TapOp>(readOp.getLoc(), readOp, TapKind::Wire,
+                               TapMode::Read, wireOp.getName());
   }
 
   // Add taps for HW wires.
@@ -68,7 +72,8 @@ struct AddTapsPass : public AddTapsBase<AddTapsPass> {
     if (auto name = wireOp.getName()) {
       OpBuilder builder(wireOp);
       builder.setInsertionPointAfter(wireOp);
-      builder.create<arc::TapOp>(wireOp.getLoc(), wireOp, *name);
+      builder.create<arc::TapOp>(wireOp.getLoc(), wireOp, TapKind::Wire,
+                                 TapMode::Read, *name);
     }
   }
 

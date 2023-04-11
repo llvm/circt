@@ -80,9 +80,9 @@ static cl::opt<bool> observeWires("observe-wires",
                                   cl::desc("Make all wires observable"),
                                   cl::init(false), cl::cat(mainCategory));
 
-static cl::opt<std::string> stateFile("state-file", cl::desc("State file"),
-                                      cl::value_desc("filename"), cl::init(""),
-                                      cl::cat(mainCategory));
+static cl::opt<std::string> apiFile("api-file", cl::desc("API header file"),
+                                    cl::value_desc("filename"), cl::init(""),
+                                    cl::cat(mainCategory));
 
 static cl::opt<bool> shouldInline("inline", cl::desc("Inline arcs"),
                                   cl::init(true), cl::cat(mainCategory));
@@ -234,10 +234,9 @@ static void populatePipeline(PassManager &pm) {
     return;
   pm.addPass(arc::createLegalizeStateUpdatePass());
   pm.nest<arc::ModelOp>().addPass(arc::createAllocateStatePass());
-  if (!stateFile.empty())
-    pm.addPass(arc::createPrintStateInfoPass(stateFile));
-  pm.addPass(createCSEPass());
+  // pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
+  pm.addPass(arc::createLowerTapsPass(apiFile));
 
   // Lower the arcs and update functions to LLVM.
   if (untilReached(UntilLLVMLowering))

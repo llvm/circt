@@ -36,10 +36,9 @@ std::unique_ptr<mlir::Pass> createLegalizeStateUpdatePass();
 std::unique_ptr<mlir::Pass> createLowerClocksToFuncsPass();
 std::unique_ptr<mlir::Pass> createLowerLUTPass();
 std::unique_ptr<mlir::Pass> createLowerStatePass();
+std::unique_ptr<mlir::Pass> createLowerTapsPass(llvm::StringRef apiFile = "");
 std::unique_ptr<mlir::Pass> createMakeTablesPass();
 std::unique_ptr<mlir::Pass> createMuxToControlFlowPass();
-std::unique_ptr<mlir::Pass>
-createPrintStateInfoPass(llvm::StringRef stateFile = "");
 std::unique_ptr<mlir::Pass> createSimplifyVariadicOpsPass();
 std::unique_ptr<mlir::Pass> createSplitLoopsPass();
 std::unique_ptr<mlir::Pass> createStripSVPass();

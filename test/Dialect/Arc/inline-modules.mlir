@@ -54,24 +54,26 @@ hw.module private @NestedRegionsB(%y: i42) {
 
 
 // CHECK-LABEL: hw.module @NamesA
-hw.module @NamesA() {
+hw.module @NamesA(%arg0: !arc.state<i1>) {
+  %true = hw.constant true
   // CHECK-NOT: hw.instance
-  // CHECK-NEXT: hw.constant true {name = "b0/c0/x"}
-  // CHECK-NEXT: hw.constant true {name = "b0/c1/x"}
-  // CHECK-NEXT: hw.constant true {names = ["b0/y", "b0/z"]}
-  // CHECK-NEXT: hw.constant true {name = "b1/c0/x"}
-  // CHECK-NEXT: hw.constant true {name = "b1/c1/x"}
-  // CHECK-NEXT: hw.constant true {names = ["b1/y", "b1/z"]}
-  hw.instance "b0" @NamesB() -> ()
-  hw.instance "b1" @NamesB() -> ()
+  // CHECK: arc.state_tap %arg0 input rw "b0/c0/x" : !arc.state<i1>
+  // CHECK-NEXT: arc.state_tap %arg0 input rw "b0/c1/x" : !arc.state<i1>
+  // CHECK-NEXT: %{{.*}} = arc.tap %true : i1 input rw "b0/y" : i1
+  // CHECK-NEXT: arc.state_tap %arg0 input rw "b1/c0/x" : !arc.state<i1>
+  // CHECK-NEXT: arc.state_tap %arg0 input rw "b1/c1/x" : !arc.state<i1>
+  // CHECK-NEXT: %{{.*}} = arc.tap %true : i1 input rw "b1/y" : i1
+  // CHECK-NOT: hw.instance
+  hw.instance "b0" @NamesB(arg0: %arg0: !arc.state<i1>, arg1: %true: i1) -> ()
+  hw.instance "b1" @NamesB(arg0: %arg0: !arc.state<i1>, arg1: %true: i1) -> ()
 }
 // CHECK-NOT: hw.module private @NamesB
-hw.module private @NamesB() {
-  hw.instance "c0" @NamesC() -> ()
-  hw.instance "c1" @NamesC() -> ()
-  hw.constant true {names = ["y", "z"]}
+hw.module private @NamesB(%arg0: !arc.state<i1>, %arg1: i1) {
+  hw.instance "c0" @NamesC(arg0: %arg0: !arc.state<i1>) -> ()
+  hw.instance "c1" @NamesC(arg0: %arg0: !arc.state<i1>) -> ()
+  %0 = arc.tap %arg1 : i1 input rw "y" : i1
 }
 // CHECK-NOT: hw.module private @NamesC
-hw.module private @NamesC() {
-  hw.constant true {name = "x"}
+hw.module private @NamesC(%arg0: !arc.state<i1>) {
+  arc.state_tap %arg0 input rw "x" : !arc.state<i1>
 }

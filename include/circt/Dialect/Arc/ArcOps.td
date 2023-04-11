@@ -12,6 +12,7 @@
 include "circt/Dialect/Arc/ArcDialect.td"
 include "circt/Dialect/Arc/ArcTypes.td"
 include "circt/Dialect/Arc/ArcInterfaces.td"
+include "circt/Dialect/HW/HWTypes.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/FunctionInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
@@ -272,6 +273,10 @@ def ClockGateOp : ArcOp<"clock_gate", [Pure]> {
   }];
 }
 
+//===----------------------------------------------------------------------===//
+// Memories
+//===----------------------------------------------------------------------===//
+
 def MemoryOp : ArcOp<"memory", [MemoryEffects<[MemAlloc]>]> {
   let summary = "Memory";
   let results = (outs MemoryType:$memory);
@@ -456,63 +461,19 @@ def PassThroughOp : ArcOp<"passthrough", [NoTerminator, NoRegionArguments]> {
 }
 
 //===----------------------------------------------------------------------===//
-// Storage Allocation
-//===----------------------------------------------------------------------===//
-
-def AllocStateOp : ArcOp<"alloc_state", [MemoryEffects<[MemAlloc]>]> {
-  let summary = "Allocate internal state";
-  let arguments = (ins StorageType:$storage, UnitAttr:$tap);
-  let results = (outs StateType:$state);
-  let assemblyFormat = [{
-    $storage (`tap` $tap^)? attr-dict `:` functional-type($storage, $state)
-  }];
-}
-
-def AllocMemoryOp : ArcOp<"alloc_memory", [MemoryEffects<[MemAlloc]>]> {
-  let summary = "Allocate a memory";
-  let arguments = (ins StorageType:$storage);
-  let results = (outs MemoryType:$memory);
-  let assemblyFormat = [{
-    $storage attr-dict `:` functional-type($storage, $memory)
-  }];
-}
-
-def AllocStorageOp : ArcOp<"alloc_storage", [MemoryEffects<[MemAlloc]>]> {
-  let summary = "Allocate contiguous storage space from a larger storage space";
-  let arguments = (ins StorageType:$input, OptionalAttr<I32Attr>:$offset);
-  let results = (outs StorageType:$output);
-  let assemblyFormat = [{
-    $input (`[` $offset^ `]`)? attr-dict `:` functional-type($input, $output)
-  }];
-}
-
-def RootInputOp : ArcOp<"root_input", [
-  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
-]> {
-  let summary = "A root input";
-  let arguments = (ins StrAttr:$name, StorageType:$storage);
-  let results = (outs StateType:$state);
-  let assemblyFormat = [{
-    $name `,` $storage attr-dict `:` functional-type($storage, $state)
-  }];
-}
-
-def RootOutputOp : ArcOp<"root_output", [
-  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
-]> {
-  let summary = "A root output";
-  let arguments = (ins StrAttr:$name, StorageType:$storage);
-  let results = (outs StateType:$state);
-  let assemblyFormat = [{
-    $name `,` $storage attr-dict `:` functional-type($storage, $state)
-  }];
-}
-
-//===----------------------------------------------------------------------===//
-// Storage Access
+// Storage Allocation and Access
 //===----------------------------------------------------------------------===//
 
 def AllocatableType : AnyTypeOf<[StateType, MemoryType, StorageType]>;
+
+def AllocOp : ArcOp<"alloc", [MemoryEffects<[MemAlloc]>]> {
+  let summary = "Allocate internal state";
+  let arguments = (ins StorageType:$storage);
+  let results = (outs AllocatableType:$state);
+  let assemblyFormat = [{
+    $storage attr-dict `:` functional-type($storage, $state)
+  }];
+}
 
 def StorageGetOp : ArcOp<"storage.get", [Pure]> {
   let summary = "Access an allocated state, memory, or storage slice";
@@ -574,10 +535,61 @@ def StateWriteOp : ArcOp<"state_write", [
 // Miscellaneous
 //===----------------------------------------------------------------------===//
 
+def Input    : I32EnumAttrCase<"Input", 0, "input">;
+def Output   : I32EnumAttrCase<"Output", 1, "output">;
+def Register : I32EnumAttrCase<"Register", 2, "register">;
+def Wire     : I32EnumAttrCase<"Wire", 3, "wire">;
+def Memory   : I32EnumAttrCase<"Memory", 4, "memory">;
+def TapKind  : I32EnumAttr<
+    "TapKind", "kind of value observed by a tap op",
+    [Input, Output, Register, Wire, Memory]> {
+  let cppNamespace = "circt::arc";
+}
+
+def Read      : I32EnumAttrCase<"Read", 2, "r">;
+def Write     : I32EnumAttrCase<"Write", 3, "w">;
+def ReadWrite : I32EnumAttrCase<"ReadWrite", 4, "rw">;
+def TapMode   : I32EnumAttr<
+    "TapMode", "access mode of a tap op",
+    [Read, Write, ReadWrite]> {
+  let cppNamespace = "circt::arc";
+}
+
+// TODO: extend to arrays and structs
+def TapableType : AnyTypeOf<[AnySignlessInteger, ArrayType]>;
+
 def TapOp : ArcOp<"tap"> {
   let summary = "A tracker op to observe a value under a given name";
-  let arguments = (ins AnySignlessInteger:$value, StrAttr:$name);
-  let assemblyFormat = [{ $value attr-dict `:` type($value) }];
+  let arguments = (ins Optional<TapableType>:$value,
+                       TapKind:$kind,
+                       TapMode:$mode,
+                       StrAttr:$tapName);
+  let results = (outs TapableType:$result);
+  let assemblyFormat = [{ ($value^ `:` type($value))? $kind $mode $tapName attr-dict `:` type($result) }];
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$resultType, "TapKind":$kind, "TapMode":$mode, "StringRef":$name), [{
+      build($_builder, $_state, resultType, nullptr, kind, mode, name);
+    }]>,
+    OpBuilder<(ins "::mlir::Type":$resultType, "TapKindAttr":$kind, "TapModeAttr":$mode, "StringAttr":$name), [{
+      build($_builder, $_state, resultType, nullptr, kind, mode, name);
+    }]>,
+    OpBuilder<(ins "::mlir::Value":$value, "TapKind":$kind, "TapMode":$mode, "StringRef":$name), [{
+      build($_builder, $_state, value.getType(), value, kind, mode, name);
+    }]>,
+    OpBuilder<(ins "::mlir::Value":$value, "TapKindAttr":$kind, "TapModeAttr":$mode, "StringAttr":$name), [{
+      build($_builder, $_state, value.getType(), value, kind, mode, name);
+    }]>,
+  ];
+}
+
+def StateTapOp : ArcOp<"state_tap"> {
+  let summary = "A tracker op to observe a state under a given name";
+  let arguments = (ins AllocatableType:$state,
+                       TapKind:$kind,
+                       TapMode:$mode,
+                       StrAttr:$tapName);
+  let assemblyFormat = [{ $state $kind $mode $tapName attr-dict `:` type($state) }];
 }
 
 def ModelOp : ArcOp<"model", [RegionKindInterface, IsolatedFromAbove,

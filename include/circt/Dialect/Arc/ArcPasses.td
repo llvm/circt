@@ -149,6 +149,18 @@ def LowerState : Pass<"arc-lower-state", "mlir::ModuleOp"> {
   ];
 }
 
+def LowerTaps : Pass<"arc-lower-taps", "mlir::ModuleOp"> {
+  let summary = "Lower tap operations to getter and setter functions";
+  let constructor = "circt::arc::createLowerTapsPass()";
+  let options = [
+    Option<"apiFile", "api-file", "std::string", "",
+      "Emit file with the C API header">
+  ];
+  let dependentDialects = [
+    "arc::ArcDialect", "systemc::SystemCDialect", "mlir::func::FuncDialect", "mlir::emitc::EmitCDialect"
+  ];
+}
+
 def MakeTables : Pass<"arc-make-tables", "mlir::ModuleOp"> {
   let summary = "Transform appropriate arc logic into lookup tables";
   let constructor = "circt::arc::createMakeTablesPass()";
@@ -159,15 +171,6 @@ def MuxToControlFlow : Pass<"arc-mux-to-control-flow", "mlir::ModuleOp"> {
   let summary = "Convert muxes with large independent fan-ins to if-statements";
   let constructor = "circt::arc::createMuxToControlFlowPass()";
   let dependentDialects = ["mlir::scf::SCFDialect"];
-}
-
-def PrintStateInfo : Pass<"arc-print-state-info", "mlir::ModuleOp"> {
-  let summary = "Print the state storage layout in JSON format";
-  let constructor = "circt::arc::createPrintStateInfoPass()";
-  let options = [
-    Option<"stateFile", "state-file", "std::string", "",
-      "Emit file with state description">
-  ];
 }
 
 def SimplifyVariadicOps : Pass<"arc-simplify-variadic-ops", "mlir::ModuleOp"> {

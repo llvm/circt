@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/Arc/ArcDialect.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -112,6 +113,7 @@ struct ModuleLowering {
 private:
   OpBuilder builder;
   SmallVector<StateReadOp, 0> readsToSink;
+  DenseSet<Operation *> toRemove;
 };
 } // namespace
 
@@ -126,9 +128,8 @@ static bool shouldMaterialize(Operation *op) {
   if (auto stateOp = dyn_cast<StateOp>(op); stateOp && stateOp.getLatency() > 0)
     return false;
 
-  if (isa<MemoryOp, AllocStateOp, AllocMemoryOp, AllocStorageOp, ClockTreeOp,
-          PassThroughOp, RootInputOp, RootOutputOp, StateWriteOp,
-          MemoryWritePortOp>(op))
+  if (isa<MemoryOp, AllocOp, ClockTreeOp, PassThroughOp, StateWriteOp,
+          MemoryWritePortOp, TapOp, StateTapOp>(op))
     return false;
 
   return true;
@@ -299,8 +300,10 @@ LogicalResult ModuleLowering::lowerPrimaryInputs() {
     if (!intType)
       return mlir::emitError(blockArg.getLoc(), "input ")
              << name << " is of non-integer type " << blockArg.getType();
-    auto state = builder.create<RootInputOp>(
-        blockArg.getLoc(), StateType::get(intType), name, storageArg);
+    Value state = builder.create<AllocOp>(blockArg.getLoc(),
+                                          StateType::get(intType), storageArg);
+    builder.create<StateTapOp>(blockArg.getLoc(), state, TapKind::Input,
+                               TapMode::ReadWrite, name.getValue());
     replaceValueWithStateRead(blockArg, state);
   }
   return success();
@@ -319,9 +322,11 @@ LogicalResult ModuleLowering::lowerPrimaryOutputs() {
         return mlir::emitError(outputOp.getLoc(), "output ")
                << name << " is of non-integer type " << value.getType();
       auto materializedValue = passThrough.materializeValue(value);
-      auto state = builder.create<RootOutputOp>(
-          outputOp.getLoc(), StateType::get(intType), name.cast<StringAttr>(),
-          storageArg);
+      Value state = builder.create<AllocOp>(
+          outputOp.getLoc(), StateType::get(intType), storageArg);
+      builder.create<StateTapOp>(outputOp.getLoc(), state, TapKind::Output,
+                                 TapMode::Read,
+                                 name.cast<StringAttr>().getValue());
       passThrough.builder.create<StateWriteOp>(outputOp.getLoc(), state,
                                                materializedValue, Value{});
     }
@@ -338,6 +343,9 @@ LogicalResult ModuleLowering::lowerStates() {
     if (failed(result))
       return failure();
   }
+
+  for (auto *op : toRemove)
+    op->erase();
   return success();
 }
 
@@ -370,10 +378,19 @@ LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
              << "; only integer types are supported";
     auto stateType = StateType::get(intType);
     auto state =
-        builder.create<AllocStateOp>(stateOp.getLoc(), stateType, storageArg);
-    if (auto names = stateOp->getAttrOfType<ArrayAttr>("names"))
-      state->setAttr("name", names[stateIdx]);
+        builder.create<AllocOp>(stateOp.getLoc(), stateType, storageArg);
     allocatedStates.push_back(state);
+
+    for (auto *user :
+         llvm::make_early_inc_range(stateOp.getResult(stateIdx).getUsers())) {
+      if (auto tapOp = dyn_cast<TapOp>(user);
+          tapOp && tapOp.getKind() == TapKind::Register) {
+        builder.create<StateTapOp>(tapOp.getLoc(), state, tapOp.getKind(),
+                                   tapOp.getMode(), tapOp.getTapName());
+        tapOp.getResult().replaceAllUsesWith(stateOp.getResult(stateIdx));
+        toRemove.insert(tapOp);
+      }
+    }
   }
 
   // Create a copy of the arc use with latency zero. This will effectively be
@@ -423,17 +440,15 @@ LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
   // Replace all uses of the arc with reads from the allocated state.
   for (auto [alloc, result] : llvm::zip(allocatedStates, stateOp.getResults()))
     replaceValueWithStateRead(result, alloc);
-  builder.setInsertionPointAfter(stateOp);
-  stateOp.erase();
+  toRemove.insert(stateOp);
   return success();
 }
 
 LogicalResult ModuleLowering::lowerState(MemoryOp memOp) {
-  auto allocMemOp = builder.create<AllocMemoryOp>(
-      memOp.getLoc(), memOp.getType(), storageArg, memOp->getAttrs());
+  auto allocMemOp =
+      builder.create<AllocOp>(memOp.getLoc(), memOp.getType(), storageArg);
   memOp.replaceAllUsesWith(allocMemOp.getResult());
-  builder.setInsertionPointAfter(memOp);
-  memOp.erase();
+  toRemove.insert(memOp);
   return success();
 }
 
@@ -508,27 +523,33 @@ LogicalResult ModuleLowering::lowerState(MemoryWritePortOp memWriteOp) {
   // track its reads, but will get legalized by the LegalizeStateUpdate pass.
   info.clock.builder.create<MemoryWriteOp>(
       memWriteOp.getLoc(), memWriteOp.getMemory(), address, info.enable, data);
-  builder.setInsertionPointAfter(memWriteOp);
-  memWriteOp.erase();
+  toRemove.insert(memWriteOp);
   return success();
 }
 
 // Add state for taps into the passthrough block.
 LogicalResult ModuleLowering::lowerState(TapOp tapOp) {
+  // Skip them here as they should be merged with the state op
+  if (tapOp.getValue().getDefiningOp<StateOp>() &&
+      tapOp.getKind() == TapKind::Register)
+    return success();
+
   auto intType = tapOp.getValue().getType().dyn_cast<IntegerType>();
   if (!intType)
     return mlir::emitError(tapOp.getLoc(), "tapped value ")
-           << tapOp.getNameAttr() << " is of non-integer type "
+           << tapOp.getTapNameAttr() << " is of non-integer type "
            << tapOp.getValue().getType();
   auto &passThrough = getOrCreatePassThrough();
   auto materializedValue = passThrough.materializeValue(tapOp.getValue());
-  auto state = builder.create<AllocStateOp>(
-      tapOp.getLoc(), StateType::get(intType), storageArg, true);
-  state->setAttr("name", tapOp.getNameAttr());
+  auto state = builder.create<AllocOp>(tapOp.getLoc(), StateType::get(intType),
+                                       storageArg);
+  builder.create<StateTapOp>(tapOp.getLoc(), state.getState(), tapOp.getKind(),
+                             tapOp.getMode(), tapOp.getTapName());
   passThrough.builder.create<StateWriteOp>(tapOp.getLoc(), state,
                                            materializedValue, Value{});
-  builder.setInsertionPointAfter(tapOp);
-  tapOp.erase();
+  replaceValueWithStateRead(tapOp.getResult(), state);
+  toRemove.insert(tapOp);
+
   return success();
 }
 

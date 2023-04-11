@@ -62,16 +62,9 @@ struct PrefixingInliner : public InlinerInterface {
   }
 
   void updateNames(Operation *op) const {
-    if (auto name = op->getAttrOfType<StringAttr>("name"))
-      op->setAttr("name", updateName(name));
-    if (auto namesAttr = op->getAttrOfType<ArrayAttr>("names")) {
-      SmallVector<Attribute> names(namesAttr.getValue().begin(),
-                                   namesAttr.getValue().end());
-      for (auto &name : names)
-        if (auto nameStr = name.dyn_cast<StringAttr>())
-          name = updateName(nameStr);
-      op->setAttr("names", ArrayAttr::get(namesAttr.getContext(), names));
-    }
+    TypeSwitch<Operation *>(op).Case<TapOp, StateTapOp>([&](auto tapOp) {
+      tapOp.setTapNameAttr(updateName(tapOp.getTapNameAttr()));
+    });
   }
 };
 } // namespace

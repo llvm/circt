@@ -2,11 +2,11 @@
 
 // CHECK-LABEL: func.func @Unaffected
 func.func @Unaffected(%arg0: !arc.storage, %arg1: i4) -> i4 {
-  %0 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i4>
+  %0 = arc.alloc %arg0 : (!arc.storage) -> !arc.state<i4>
   %1 = arc.state_read %0 : <i4>
   arc.state_write %0 = %arg1 : <i4>
   return %1 : i4
-  // CHECK-NEXT: arc.alloc_state
+  // CHECK-NEXT: arc.alloc
   // CHECK-NEXT: arc.state_read
   // CHECK-NEXT: arc.state_write
   // CHECK-NEXT: return
@@ -15,13 +15,13 @@ func.func @Unaffected(%arg0: !arc.storage, %arg1: i4) -> i4 {
 
 // CHECK-LABEL: func.func @SameBlock
 func.func @SameBlock(%arg0: !arc.storage, %arg1: i4) -> i4 {
-  %0 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i4>
+  %0 = arc.alloc %arg0 : (!arc.storage) -> !arc.state<i4>
   %1 = arc.state_read %0 : <i4>
-  // CHECK-NEXT: [[STATE:%.+]] = arc.alloc_state
+  // CHECK-NEXT: [[STATE:%.+]] = arc.alloc
   // CHECK-NEXT: arc.state_read [[STATE]]
 
   arc.state_write %0 = %arg1 : <i4>
-  // CHECK-NEXT: [[TMP:%.+]] = arc.alloc_state
+  // CHECK-NEXT: [[TMP:%.+]] = arc.alloc
   // CHECK-NEXT: [[CURRENT:%.+]] = arc.state_read [[STATE]]
   // CHECK-NEXT: arc.state_write [[TMP]] = [[CURRENT]]
   // CHECK-NEXT: arc.state_write [[STATE]] = %arg1
@@ -39,11 +39,11 @@ func.func @SameBlock(%arg0: !arc.storage, %arg1: i4) -> i4 {
 
 // CHECK-LABEL: func.func @FuncLegal
 func.func @FuncLegal(%arg0: !arc.storage, %arg1: i4) -> i4 {
-  %0 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i4>
+  %0 = arc.alloc %arg0 : (!arc.storage) -> !arc.state<i4>
   %1 = call @ReadFunc(%0) : (!arc.state<i4>) -> i4
   call @WriteFunc(%0, %arg1) : (!arc.state<i4>, i4) -> ()
   return %1 : i4
-  // CHECK-NEXT: arc.alloc_state
+  // CHECK-NEXT: arc.alloc
   // CHECK-NEXT: call @ReadFunc
   // CHECK-NEXT: call @WriteFunc
   // CHECK-NEXT: return
@@ -52,13 +52,13 @@ func.func @FuncLegal(%arg0: !arc.storage, %arg1: i4) -> i4 {
 
 // CHECK-LABEL: func.func @FuncIllegal
 func.func @FuncIllegal(%arg0: !arc.storage, %arg1: i4) -> i4 {
-  %0 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i4>
+  %0 = arc.alloc %arg0 : (!arc.storage) -> !arc.state<i4>
   %1 = call @ReadFunc(%0) : (!arc.state<i4>) -> i4
-  // CHECK-NEXT: [[STATE:%.+]] = arc.alloc_state
+  // CHECK-NEXT: [[STATE:%.+]] = arc.alloc
   // CHECK-NEXT: call @ReadFunc
 
   call @WriteFunc(%0, %arg1) : (!arc.state<i4>, i4) -> ()
-  // CHECK-NEXT: [[TMP:%.+]] = arc.alloc_state
+  // CHECK-NEXT: [[TMP:%.+]] = arc.alloc
   // CHECK-NEXT: [[CURRENT:%.+]] = arc.state_read [[STATE]]
   // CHECK-NEXT: arc.state_write [[TMP]] = [[CURRENT]]
   // CHECK-NEXT: call @WriteFunc
@@ -76,17 +76,17 @@ func.func @FuncIllegal(%arg0: !arc.storage, %arg1: i4) -> i4 {
 
 // CHECK-LABEL: func.func @NestedBlocks
 func.func @NestedBlocks(%arg0: !arc.storage, %arg1: i4) -> i4 {
-  %0 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i4>
-  %11 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i4>
-  // CHECK-NEXT: [[S0:%.+]] = arc.alloc_state
-  // CHECK-NEXT: [[S1:%.+]] = arc.alloc_state
+  %0 = arc.alloc %arg0 : (!arc.storage) -> !arc.state<i4>
+  %11 = arc.alloc %arg0 : (!arc.storage) -> !arc.state<i4>
+  // CHECK-NEXT: [[S0:%.+]] = arc.alloc
+  // CHECK-NEXT: [[S1:%.+]] = arc.alloc
 
   // CHECK-NEXT: scf.execute_region
   %10 = scf.execute_region -> i4 {
-    // CHECK-NEXT: [[TMP0:%.+]] = arc.alloc_state
+    // CHECK-NEXT: [[TMP0:%.+]] = arc.alloc
     // CHECK-NEXT: [[CURRENT:%.+]] = arc.state_read [[S0]]
     // CHECK-NEXT: arc.state_write [[TMP0]] = [[CURRENT]]
-    // CHECK-NEXT: [[TMP1:%.+]] = arc.alloc_state
+    // CHECK-NEXT: [[TMP1:%.+]] = arc.alloc
     // CHECK-NEXT: [[CURRENT:%.+]] = arc.state_read [[S1]]
     // CHECK-NEXT: arc.state_write [[TMP1]] = [[CURRENT]]
     // CHECK-NEXT: scf.execute_region
@@ -168,11 +168,11 @@ func.func @InnerWriteFunc(%arg0: !arc.state<i4>, %arg1: i4) {
 arc.model "DontLeakThroughClockTreeOrPassthrough" {
 ^bb0(%arg0: !arc.storage):
   %false = hw.constant false
-  %in_a = arc.root_input "a", %arg0 : (!arc.storage) -> !arc.state<i1>
-  %out_b = arc.root_output "b", %arg0 : (!arc.storage) -> !arc.state<i1>
-  // CHECK: arc.alloc_state %arg0 {foo}
-  %0 = arc.alloc_state %arg0 {foo} : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NOT: arc.alloc_state
+  %in_a = arc.alloc %arg0 : (!arc.storage) -> !arc.state<i1>
+  %out_b = arc.alloc %arg0 : (!arc.storage) -> !arc.state<i1>
+  // CHECK: arc.alloc %arg0 {foo}
+  %0 = arc.alloc %arg0 {foo} : (!arc.storage) -> !arc.state<i1>
+  // CHECK-NOT: arc.alloc
   // CHECK-NOT: arc.state_read
   // CHECK-NOT: arc.state_write
   // CHECK: arc.clock_tree
@@ -245,9 +245,9 @@ arc.model "Memory" {
     %mr2 = arc.memory_read %mem2[%false] : <2 x i32, i1>
   // CHECK-NEXT: }
   }
-  // CHECK: [[MEM1]] = arc.alloc_memory %arg0 :
-  // CHECK: [[MEM2]] = arc.alloc_memory %arg0 :
-  %mem1 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
-  %mem2 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
-  %s1 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i32>
+  // CHECK: [[MEM1]] = arc.alloc %arg0 :
+  // CHECK: [[MEM2]] = arc.alloc %arg0 :
+  %mem1 = arc.alloc %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
+  %mem2 = arc.alloc %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
+  %s1 = arc.alloc %arg0 : (!arc.storage) -> !arc.state<i32>
 }

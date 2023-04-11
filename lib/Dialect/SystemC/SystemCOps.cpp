@@ -844,7 +844,9 @@ void FuncOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   odsState.addAttribute(FuncOp::getFunctionTypeAttrName(odsState.name),
                         TypeAttr::get(type));
   odsState.attributes.append(attrs.begin(), attrs.end());
-  odsState.addRegion();
+  odsState.addRegion()->emplaceBlock().addArguments(
+      type.getInputs(),
+      SmallVector<Location>(type.getNumInputs(), odsState.location));
 
   if (argAttrs.empty())
     return;
@@ -853,6 +855,17 @@ void FuncOp::build(OpBuilder &odsBuilder, OperationState &odsState,
       odsBuilder, odsState, argAttrs,
       /*resultAttrs=*/std::nullopt, FuncOp::getArgAttrsAttrName(odsState.name),
       FuncOp::getResAttrsAttrName(odsState.name));
+}
+
+void FuncOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                   StringRef name, ArrayRef<StringRef> argNames,
+                   FunctionType type, ArrayRef<NamedAttribute> attrs,
+                   ArrayRef<DictionaryAttr> argAttrs) {
+  SmallVector<Attribute> nameAttrs;
+  for (auto name : argNames)
+    nameAttrs.push_back(odsBuilder.getStringAttr(name));
+  auto argNameAttr = odsBuilder.getArrayAttr(nameAttrs);
+  build(odsBuilder, odsState, name, argNameAttr, type, attrs, argAttrs);
 }
 
 ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {

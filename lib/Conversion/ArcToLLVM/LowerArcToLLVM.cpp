@@ -96,48 +96,6 @@ struct StateOpLowering : public OpConversionPattern<arc::StateOp> {
   }
 };
 
-struct AllocStorageOpLowering
-    : public OpConversionPattern<arc::AllocStorageOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(arc::AllocStorageOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    auto type = typeConverter->convertType(op.getType());
-    if (!op.getOffset().has_value())
-      return failure();
-    rewriter.replaceOpWithNewOp<LLVM::GEPOp>(op, type, adaptor.getInput(),
-                                             LLVM::GEPArg(*op.getOffset()));
-    return success();
-  }
-};
-
-template <class ConcreteOp>
-struct AllocStateLikeOpLowering : public OpConversionPattern<ConcreteOp> {
-  using OpConversionPattern<ConcreteOp>::OpConversionPattern;
-  using OpConversionPattern<ConcreteOp>::typeConverter;
-  using OpAdaptor = typename ConcreteOp::Adaptor;
-
-  LogicalResult
-  matchAndRewrite(ConcreteOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    // Get a pointer to the correct offset in the storage.
-    auto offsetAttr = op->template getAttrOfType<IntegerAttr>("offset");
-    if (!offsetAttr)
-      return failure();
-    Value ptr = rewriter.create<LLVM::GEPOp>(
-        op->getLoc(), adaptor.getStorage().getType(), adaptor.getStorage(),
-        LLVM::GEPArg(offsetAttr.getValue().getZExtValue()));
-
-    // Cast the raw storage pointer to a pointer of the state's actual type.
-    auto type = typeConverter->convertType(op.getType());
-    if (type != ptr.getType())
-      ptr = rewriter.create<LLVM::BitcastOp>(op->getLoc(), type, ptr);
-
-    rewriter.replaceOp(op, ptr);
-    return success();
-  }
-};
-
 struct StateReadOpLowering : public OpConversionPattern<arc::StateReadOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -168,37 +126,14 @@ struct StateWriteOpLowering : public OpConversionPattern<arc::StateWriteOp> {
   }
 };
 
-struct AllocMemoryOpLowering : public OpConversionPattern<arc::AllocMemoryOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(arc::AllocMemoryOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    auto offsetAttr = op->getAttrOfType<IntegerAttr>("offset");
-    if (!offsetAttr)
-      return failure();
-    Value ptr = rewriter.create<LLVM::GEPOp>(
-        op.getLoc(), adaptor.getStorage().getType(), adaptor.getStorage(),
-        LLVM::GEPArg(offsetAttr.getValue().getZExtValue()));
-
-    auto type = typeConverter->convertType(op.getType());
-    if (type != ptr.getType())
-      ptr = rewriter.create<LLVM::BitcastOp>(op.getLoc(), type, ptr);
-
-    rewriter.replaceOp(op, ptr);
-    return success();
-  }
-};
-
 struct StorageGetOpLowering : public OpConversionPattern<arc::StorageGetOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
   matchAndRewrite(arc::StorageGetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    Value offset = rewriter.create<LLVM::ConstantOp>(
-        op.getLoc(), rewriter.getI32Type(), op.getOffsetAttr());
-    Value ptr = rewriter.create<LLVM::GEPOp>(op.getLoc(),
-                                             adaptor.getStorage().getType(),
-                                             adaptor.getStorage(), offset);
+    Value ptr = rewriter.create<LLVM::GEPOp>(
+        op.getLoc(), adaptor.getStorage().getType(), adaptor.getStorage(),
+        LLVM::GEPArg(op.getOffset()));
     auto type = typeConverter->convertType(op.getType());
     if (type != ptr.getType())
       ptr = rewriter.create<LLVM::BitcastOp>(op.getLoc(), type, ptr);
@@ -405,11 +340,6 @@ static void populateOpConversion(RewritePatternSet &patterns,
   auto *context = patterns.getContext();
   // clang-format off
   patterns.add<
-    AllocMemoryOpLowering,
-    AllocStateLikeOpLowering<arc::AllocStateOp>,
-    AllocStateLikeOpLowering<arc::RootInputOp>,
-    AllocStateLikeOpLowering<arc::RootOutputOp>,
-    AllocStorageOpLowering,
     CallOpLowering,
     ClockGateOpLowering,
     DefineOpLowering,
