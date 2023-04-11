@@ -3516,11 +3516,12 @@ LogicalResult FIRRTLLowering::visitExpr(IsXIntrinsicOp op) {
 LogicalResult FIRRTLLowering::visitExpr(PlusArgsTestIntrinsicOp op) {
   auto resultType = builder.getIntegerType(1);
   auto str = builder.create<sv::ConstantStrOp>(op.getFormatString());
-  auto reg = builder.create<sv::RegOp>(resultType, builder.getStringAttr("_pargs"));
+  auto reg =
+      builder.create<sv::RegOp>(resultType, builder.getStringAttr("_pargs"));
   addToInitialBlock([&]() {
-    auto call = builder.create<sv::SystemFunctionOp>(resultType, "test$plusargs",
-                                             ArrayRef<Value>{str});
-                                             builder.create<sv::PAssignOp>(reg, call);
+    auto call = builder.create<sv::SystemFunctionOp>(
+        resultType, "test$plusargs", ArrayRef<Value>{str});
+    builder.create<sv::PAssignOp>(reg, call);
   });
   return setLoweringTo<sv::ReadInOutOp>(op, reg);
 }
@@ -3532,12 +3533,14 @@ LogicalResult FIRRTLLowering::visitExpr(PlusArgsValueIntrinsicOp op) {
     return failure();
 
   auto str = builder.create<sv::ConstantStrOp>(op.getFormatString());
-  auto regv = builder.create<sv::RegOp>(type, builder.getStringAttr("_pargs_v"));
-  auto regf = builder.create<sv::RegOp>(resultType, builder.getStringAttr("_pargs_f"));
+  auto regv =
+      builder.create<sv::RegOp>(type, builder.getStringAttr("_pargs_v"));
+  auto regf =
+      builder.create<sv::RegOp>(resultType, builder.getStringAttr("_pargs_f"));
   addToInitialBlock([&]() {
-  auto call = builder.create<sv::SystemFunctionOp>(
-      resultType, "value$plusargs", ArrayRef<Value>{str, regv});
-      builder.create<sv::PAssignOp>(regf, call);
+    auto call = builder.create<sv::SystemFunctionOp>(
+        resultType, "value$plusargs", ArrayRef<Value>{str, regv});
+    builder.create<sv::PAssignOp>(regf, call);
   });
   auto readf = builder.create<sv::ReadInOutOp>(regf);
   auto readv = builder.create<sv::ReadInOutOp>(regv);
