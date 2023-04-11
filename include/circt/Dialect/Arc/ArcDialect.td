@@ -18,6 +18,7 @@ def ArcDialect : Dialect {
   }];
   let cppNamespace = "circt::arc";
 
+  let hasConstantMaterializer = 1;
   let useDefaultTypePrinterParser = 1;
 
   let extraClassDeclaration = [{

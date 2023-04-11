@@ -260,22 +260,25 @@ class MemoryAndDataTypesMatch<string mem, string data> : TypesMatchWith<
 
 def MemoryReadPortOp : ArcOp<"memory_read_port", [
   MemoryEffects<[MemRead]>,
-  MemoryAndDataTypesMatch<"memory", "data">
+  MemoryAndDataTypesMatch<"memory", "data">,
+  AttrSizedOperandSegments
 ]> {
   let summary = "Read port from a memory";
   let arguments = (ins
     MemoryType:$memory,
     AnyInteger:$address,
     Optional<I1>:$clock,
-    I1:$enable
+    Optional<I1>:$enable
   );
   let results = (outs AnyInteger:$data);
+
   let assemblyFormat = [{
-    $memory `[` $address `]` `,` $enable ( `clock` $clock^ )?
+    $memory `[` $address `]` (`if` $enable^)? (`clock` $clock^)?
     attr-dict `:` type($memory) `,` type($address)
   }];
 
   let hasVerifier = 1;
+  let hasFolder = 1;
 }
 
 def MemoryWritePortOp : ArcOp<"memory_write_port", [
@@ -288,17 +291,20 @@ def MemoryWritePortOp : ArcOp<"memory_write_port", [
     MemoryType:$memory,
     AnyInteger:$address,
     Optional<I1>:$clock,
-    I1:$enable,
+    Optional<I1>:$enable,
     AnyInteger:$data,
     Optional<AnyInteger>:$mask
   );
+
   let assemblyFormat = [{
-    $memory `[` $address `]` `,` $enable `,` $data
-    ( `mask` `(` $mask^ `:` type($mask) `)`)? (`clock` $clock^)?
+    $memory `[` $address `]` `,` $data (`mask` `(` $mask^ `:` type($mask) `)`)?
+    (`if` $enable^)? (`clock` $clock^)?
     attr-dict `:` type($memory) `,` type($address)
   }];
 
   let hasVerifier = 1;
+  let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 def MemoryReadOp : ArcOp<"memory_read", [
@@ -311,6 +317,7 @@ def MemoryReadOp : ArcOp<"memory_read", [
     AnyInteger:$address
   );
   let results = (outs AnyInteger:$data);
+
   let assemblyFormat = [{
     $memory `[` $address `]` attr-dict `:` type($memory) `,` type($address)
   }];
@@ -324,13 +331,17 @@ def MemoryWriteOp : ArcOp<"memory_write", [
   let arguments = (ins
     MemoryType:$memory,
     AnyInteger:$address,
-    I1:$enable,
+    Optional<I1>:$enable,
     AnyInteger:$data
   );
+
   let assemblyFormat = [{
-    $memory `[` $address `]` `,` $enable `,` $data
+    $memory `[` $address `]` `,` $data (`if` $enable^)?
     attr-dict `:` type($memory) `,` type($address)
   }];
+
+  let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 //===----------------------------------------------------------------------===//

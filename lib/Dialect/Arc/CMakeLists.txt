@@ -16,6 +16,7 @@ add_circt_dialect_library(CIRCTArc
   Support
 
   LINK_LIBS PUBLIC
+  CIRCTHW
   MLIRIR
   MLIRInferTypeOpInterface
   MLIRSideEffectInterfaces

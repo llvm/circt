@@ -77,25 +77,41 @@ arc.define @DummyArc(%arg0: i42) -> i42 {
 
 // CHECK-LABEL: arc.model "MemoryReadAndNonMaskedWrite"
 hw.module @MemoryReadAndNonMaskedWrite(%clk0: i1) {
-  %true = hw.constant true
   %c0_i2 = hw.constant 0 : i2
   %c9001_i42 = hw.constant 9001 : i42
   %mem = arc.memory <4 x i42>
-  arc.memory_write_port %mem[%c0_i2], %true, %c9001_i42 clock %clk0 : <4 x i42>, i2
+  arc.memory_write_port %mem[%c0_i2], %c9001_i42 clock %clk0 : <4 x i42>, i2
   // COM: also checks that the read is properly reordered to be before the write
-  %read0 = arc.memory_read_port %mem[%c0_i2], %true clock %clk0 : <4 x i42>, i2
+  %read0 = arc.memory_read_port %mem[%c0_i2] clock %clk0 : <4 x i42>, i2
 
   // CHECK-NEXT: ([[PTR:%.+]]: !arc.storage):
   // CHECK-NEXT: [[INCLK0:%.+]] = arc.root_input "clk0", [[PTR]] : (!arc.storage) -> !arc.state<i1>
   // CHECK-NEXT: [[CLK0:%.+]] = arc.state_read [[INCLK0]] : <i1>
   // CHECK-NEXT: arc.clock_tree [[CLK0]] {
-  // CHECK:        %2 = scf.if %true -> (i42) {
+  // CHECK:        [[TMP:%.+]] = arc.memory_read [[MEM:%.+]][%c0_i2] : <4 x i42>, i2
+  // CHECK:        arc.memory_write [[MEM]][%c0_i2], %c9001_i42 : <4 x i42>, i2
+  // CHECK-NEXT: }
+  // CHECK-NEXT: [[MEM]] = arc.alloc_memory [[PTR]] : (!arc.storage) -> !arc.memory<4 x i42>
+}
+
+// CHECK-LABEL: arc.model "MemoryReadWithEnable"
+hw.module @MemoryReadWithEnable(%clk0: i1, %en: i1) {
+  %c0_i2 = hw.constant 0 : i2
+  %mem = arc.memory <4 x i42>
+  %read0 = arc.memory_read_port %mem[%c0_i2] if %en clock %clk0 : <4 x i42>, i2
+
+  // CHECK-NEXT: ([[PTR:%.+]]: !arc.storage):
+  // CHECK-NEXT: [[INCLK0:%.+]] = arc.root_input "clk0", [[PTR]] : (!arc.storage) -> !arc.state<i1>
+  // CHECK-NEXT: [[INEN:%.+]] = arc.root_input "en", [[PTR]] : (!arc.storage) -> !arc.state<i1>
+  // CHECK-NEXT: [[CLK0:%.+]] = arc.state_read [[INCLK0]] : <i1>
+  // CHECK-NEXT: arc.clock_tree [[CLK0]] {
+  // CHECK:        [[EN:%.+]] = arc.state_read [[INEN]] : <i1>
+  // CHECK-NEXT:   %{{.+}} = scf.if [[EN]] -> (i42) {
   // CHECK-NEXT:     [[TMP:%.+]] = arc.memory_read [[MEM:%.+]][%c0_i2] : <4 x i42>, i2
   // CHECK-NEXT:     scf.yield [[TMP]] : i42
   // CHECK-NEXT:   } else {
   // CHECK:          scf.yield %c0_i42 : i42
   // CHECK-NEXT:   }
-  // CHECK:        arc.memory_write [[MEM]][%c0_i2], %true, %c9001_i42 : <4 x i42>, i2
   // CHECK-NEXT: }
   // CHECK-NEXT: [[MEM]] = arc.alloc_memory [[PTR]] : (!arc.storage) -> !arc.memory<4 x i42>
 }
@@ -107,7 +123,7 @@ hw.module @maskedMemoryWrite(%clk: i1) {
   %c9001_i42 = hw.constant 9001 : i42
   %c1010_i42 = hw.constant 1010 : i42
   %mem = arc.memory <4 x i42>
-  arc.memory_write_port %mem[%c0_i2], %true, %c9001_i42 mask (%c1010_i42 : i42) clock %clk : <4 x i42>, i2
+  arc.memory_write_port %mem[%c0_i2], %c9001_i42 mask (%c1010_i42 : i42) if %true clock %clk : <4 x i42>, i2
 }
 // CHECK:      %c9001_i42 = hw.constant 9001 : i42
 // CHECK:      %c1010_i42 = hw.constant 1010 : i42
@@ -117,7 +133,7 @@ hw.module @maskedMemoryWrite(%clk: i1) {
 // CHECK:      [[OLD_MASKED:%.+]] = comb.and bin [[NEG_MASK]], [[RD]] : i42
 // CHECK:      [[NEW_MASKED:%.+]] = comb.and bin %c1010_i42, %c9001_i42 : i42
 // CHECK:      [[DATA:%.+]] = comb.or bin [[OLD_MASKED]], [[NEW_MASKED]] : i42
-// CHECK:      arc.memory_write [[MEM]][%c0_i2], %true, [[DATA]] : <4 x i42>, i2
+// CHECK:      arc.memory_write [[MEM]][%c0_i2], [[DATA]] if %true : <4 x i42>, i2
 
 // CHECK-LABEL: arc.model "Taps"
 hw.module @Taps() {
