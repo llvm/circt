@@ -701,9 +701,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
         parseToken(FIRToken::greater, "expected '>' in reference type"))
       return failure();
 
-    if (kind == FIRToken::kw_RWProbe)
-      emitWarning(translateLocation(loc),
-                  "RWProbe not yet supported, converting to Probe");
+    bool forceable = kind == FIRToken::kw_RWProbe;
 
     auto innerType = dyn_cast<FIRRTLBaseType>(type);
     if (!innerType) // TODO: "innerType.containsReference()"
@@ -712,7 +710,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     if (!innerType.isPassive())
       return emitError(loc, "probe inner type must be passive");
 
-    result = RefType::get(innerType);
+    result = RefType::get(innerType, forceable);
     break;
   }
 
@@ -2458,7 +2456,19 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
           staticRef.getDefiningOp()))
     return emitError(startTok.getLoc(), "cannot probe memories or their ports");
 
-  result = builder.create<RefSendOp>(staticRef);
+  // TODO: Support for non-public ports.
+  if (isa<BlockArgument>(staticRef))
+    return emitError(startTok.getLoc(), "rwprobe of port not yet supported");
+  auto *op = staticRef.getDefiningOp();
+  if (!op)
+    return emitError(startTok.getLoc(),
+                     "rwprobe value must be defined by an operation");
+  auto forceable = dyn_cast<Forceable>(op);
+  if (!forceable || !forceable.isForceable() /* e.g., is/has const type*/)
+    return emitError(startTok.getLoc(), "rwprobe target not forceable")
+        .attachNote(op->getLoc());
+
+  result = forceable.getDataRef();
 
   return success();
 }
@@ -2830,8 +2840,11 @@ ParseResult FIRStmtParser::parseNode() {
 
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
-  auto result = builder.create<NodeOp>(
-      initializer, id, NameKindEnum::InterestingName, annotations, sym);
+  // TODO: isConst -> hasConst.
+  bool forceable = !isConst(initializer.getType());
+  auto result =
+      builder.create<NodeOp>(initializer, id, NameKindEnum::InterestingName,
+                             annotations, sym, forceable);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
@@ -2857,8 +2870,10 @@ ParseResult FIRStmtParser::parseWire() {
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
 
+  // TODO: isConst -> hasConst.
+  bool forceable = !isConst(type);
   auto result = builder.create<WireOp>(type, id, NameKindEnum::InterestingName,
-                                       annotations, sym);
+                                       annotations, sym, forceable);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
@@ -2948,16 +2963,18 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   ArrayAttr annotations = getConstants().emptyArrayAttr;
   Value result;
   StringAttr sym = {};
+  // TODO: isConst -> hasConst.
+  bool forceable = !isConst(type);
   if (resetSignal)
-    result =
-        builder
-            .create<RegResetOp>(type, clock, resetSignal, resetValue, id,
-                                NameKindEnum::InterestingName, annotations, sym)
-            .getResult();
+    result = builder
+                 .create<RegResetOp>(type, clock, resetSignal, resetValue, id,
+                                     NameKindEnum::InterestingName, annotations,
+                                     sym, forceable)
+                 .getResult();
   else
     result = builder
                  .create<RegOp>(type, clock, id, NameKindEnum::InterestingName,
-                                annotations, sym)
+                                annotations, sym, forceable)
                  .getResult();
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
@@ -3435,6 +3452,12 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
     if (failed(result))
       return result;
   }
+
+  // Demote any forceable operations that aren't being forced.
+  deferredModule.moduleOp.walk([](Forceable fop) {
+    if (fop.isForceable() && fop.getDataRef().use_empty())
+      firrtl::detail::replaceWithNewForceability(fop, false);
+  });
 
   return success();
 }
