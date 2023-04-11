@@ -11,6 +11,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/TinyPtrVector.h"
@@ -20,6 +21,13 @@
 
 using namespace circt;
 using namespace firrtl;
+
+// Return true if this op has side-effects except for alloc and read.
+static bool hasUnknownSideEffect(Operation *op) {
+  return !(mlir::isMemoryEffectFree(op) ||
+           mlir::hasSingleEffect<mlir::MemoryEffects::Allocate>(op) ||
+           mlir::hasSingleEffect<mlir::MemoryEffects::Read>(op));
+}
 
 /// Return true if this is a wire or a register or a node.
 static bool isDeclaration(Operation *op) {
@@ -199,10 +207,10 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
       markDeclaration(&op);
     else if (auto instance = dyn_cast<InstanceOp>(op))
       markInstanceOp(instance);
-    else if (isa<FConnectLike, InvalidValueOp>(op))
-      // Skip connect op and invalid values.
+    else if (isa<FConnectLike>(op))
+      // Skip connect op.
       continue;
-    else if (!mlir::isMemoryEffectFree(&op))
+    else if (hasUnknownSideEffect(&op))
       markUnknownSideEffectOp(&op);
 
     // TODO: Handle attach etc.
@@ -389,8 +397,8 @@ void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
       continue;
     }
 
-    // Delete dead wires, regs and nodes.
-    if ((isDeclaration(&op) || isa<InvalidValueOp>(&op)) &&
+    // Delete dead wires, regs, nodes and alloc/read ops.
+    if ((isDeclaration(&op) || !hasUnknownSideEffect(&op)) &&
         isAssumedDead(&op)) {
       LLVM_DEBUG(llvm::dbgs() << "DEAD: " << op << "\n";);
       assert(op.use_empty() && "users should be already removed");
