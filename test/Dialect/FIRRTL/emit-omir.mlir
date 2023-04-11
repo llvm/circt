@@ -324,7 +324,28 @@ firrtl.circuit "Top"  attributes {annotations = [{
     },
     id = "OMID:4",
     info = #loc4
-  }]
+  }, {
+    fields = {
+      paths = {
+        index = 0 : i64,
+        info = #loc4,
+        value = [{
+          id = 8 : i64,
+          omir.tracker,
+          path = "~Top|Top/a:A>wf[0]",
+          type = "OMReferenceTarget"
+        }, {
+          id = 9 : i64,
+          omir.tracker,
+          path = "~Top|Top/a:A>wf[1]",
+          type = "OMReferenceTarget"
+        }]
+      }
+    },
+    id = "OMID:5",
+    info = #loc4
+  }
+]
 }]} {
   hw.hierpath private @nla [@Top::@a, @A]
   firrtl.module @Top(in %in0_0: !firrtl.uint<4>, in %in0_1: !firrtl.uint<4>, in %in1_f0: !firrtl.uint<4>, in %in1_f1: !firrtl.uint<4>, out %out0_0: !firrtl.uint<4>, out %out0_1: !firrtl.uint<4>, out %out1_f0: !firrtl.uint<4>, out %out1_f1: !firrtl.uint<4>) {
@@ -347,15 +368,22 @@ firrtl.circuit "Top"  attributes {annotations = [{
   // CHECK-LABEL: firrtl.module private @A
   // CHECK-SAME:    %in0: !firrtl.bundle<io: vector<uint<4>, 2>> sym @[[in0_sym:[^ ]+]],
   // CHECK-SAME:    %in1: !firrtl.bundle<io: bundle<f0: uint<4>, f1: uint<4>>> sym @[[in1_sym:[^ ]+]],
-  firrtl.module private @A(in %in0: !firrtl.bundle<io: vector<uint<4>, 2>> [{circt.fieldID = 3 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64}, {circt.fieldID = 2 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64}], in %in1: !firrtl.bundle<io: bundle<f0: uint<4>, f1: uint<4>>> [{circt.fieldID = 3 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 5 : i64}, {circt.fieldID = 2 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 4 : i64}], out %out0: !firrtl.vector<uint<4>, 2>, out %out1: !firrtl.bundle<f0: uint<4>, f1: uint<4>>) {
+  firrtl.module private @A(in %in0: !firrtl.bundle<io: vector<uint<4>, 2>> [{circt.fieldID = 3 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64},
+                                                                            {circt.fieldID = 2 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64}],
+                           in %in1: !firrtl.bundle<io: bundle<f0: uint<4>, f1: uint<4>>> [{circt.fieldID = 3 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 5 : i64},
+                                                                                          {circt.fieldID = 2 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 4 : i64}],
+                           out %out0: !firrtl.vector<uint<4>, 2>,
+                           out %out1: !firrtl.bundle<f0: uint<4>, f1: uint<4>>) {
     %0 = firrtl.subfield %in1[io] : !firrtl.bundle<io: bundle<f0: uint<4>, f1: uint<4>>>
     %1 = firrtl.subfield %in0[io] : !firrtl.bundle<io: vector<uint<4>, 2>>
     // CHECK: %w0 = firrtl.wire sym @[[w0_sym:[^ ]+]]
-    %w0 = firrtl.wire   {annotations = [{circt.fieldID = 2 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 3 : i64}, {circt.fieldID = 1 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 2 : i64}]} : !firrtl.vector<uint<4>, 2>
+    %w0 = firrtl.wire   {annotations = [{circt.fieldID = 2 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 3 : i64},
+                                        {circt.fieldID = 1 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 2 : i64}]} : !firrtl.vector<uint<4>, 2>
     %2 = firrtl.subindex %1[0] : !firrtl.vector<uint<4>, 2>
     %3 = firrtl.subindex %1[1] : !firrtl.vector<uint<4>, 2>
     // CHECK: %w1 = firrtl.wire sym @[[w1_sym:[^ ]+]]
-    %w1 = firrtl.wire   {annotations = [{circt.fieldID = 2 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 7 : i64}, {circt.fieldID = 1 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 6 : i64}]} : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
+    %w1 = firrtl.wire   {annotations = [{circt.fieldID = 2 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 7 : i64},
+                                        {circt.fieldID = 1 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 6 : i64}]} : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
     %4 = firrtl.subfield %0[f0] : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
     %5 = firrtl.subfield %0[f1] : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
     %6 = firrtl.subindex %w0[0] : !firrtl.vector<uint<4>, 2>
@@ -374,6 +402,14 @@ firrtl.circuit "Top"  attributes {annotations = [{
     firrtl.strictconnect %w0, %14 : !firrtl.vector<uint<4>, 2>
     %15 = firrtl.bundlecreate %4, %5 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.bundle<f0: uint<4>, f1: uint<4>>
     firrtl.strictconnect %w1, %15 : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
+
+    // CHECK: %wf, %wf_ref = firrtl.wire sym @[[wf_sym:[^ ]+]] forceable
+    %wf, %wf_ref = firrtl.wire forceable {annotations = [{circt.fieldID = 2 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 9 : i64},
+                                        {circt.fieldID = 1 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 8 : i64}]} : !firrtl.vector<uint<4>, 2>, !firrtl.rwprobe<vector<uint<4>, 2>>
+    %wf_0 = firrtl.subindex %wf[0] : !firrtl.vector<uint<4>, 2>
+    %wf_1 = firrtl.subindex %wf[1] : !firrtl.vector<uint<4>, 2>
+    firrtl.strictconnect %wf_0, %2 : !firrtl.uint<4>
+    firrtl.strictconnect %wf_1, %3 : !firrtl.uint<4>
   }
 }
 
@@ -386,6 +422,8 @@ firrtl.circuit "Top"  attributes {annotations = [{
 // CHECK-SAME{LITERAL}: OMReferenceTarget:~Top|{{0}}/{{1}}:{{2}}>{{5}}.io.f1
 // CHECK-SAME{LITERAL}: OMReferenceTarget:~Top|{{0}}/{{1}}:{{2}}>{{6}}
 // CHECK-SAME{LITERAL}: OMReferenceTarget:~Top|{{0}}/{{1}}:{{2}}>{{6}}
+// CHECK-SAME{LITERAL}: OMReferenceTarget:~Top|{{0}}/{{1}}:{{2}}>{{7}}[0]
+// CHECK-SAME{LITERAL}: OMReferenceTarget:~Top|{{0}}/{{1}}:{{2}}>{{7}}[1]
 // CHECK-SAME: symbols = [
 // CHECK-SAME:  @Top,
 // CHECK-SAME:  #hw.innerNameRef<@Top::@a>
@@ -394,6 +432,7 @@ firrtl.circuit "Top"  attributes {annotations = [{
 // CHECK-SAME:  #hw.innerNameRef<@A::@[[w0_sym]]>
 // CHECK-SAME:  #hw.innerNameRef<@A::@[[in1_sym]]>
 // CHECK-SAME:  #hw.innerNameRef<@A::@[[w1_sym]]>
+// CHECK-SAME:  #hw.innerNameRef<@A::@[[wf_sym]]>
 
 //===----------------------------------------------------------------------===//
 // Targets that are allowed to lose their tracker
