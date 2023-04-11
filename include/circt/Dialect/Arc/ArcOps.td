@@ -139,6 +139,7 @@ def StateOp : ArcOp<"state", [
     `:` functional-type($inputs, results)
   }];
 
+  let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
 
   let builders = [
