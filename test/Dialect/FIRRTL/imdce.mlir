@@ -321,6 +321,10 @@ firrtl.circuit "DeadInputPort"  {
 // -----
 
 firrtl.circuit "DeleteInstance" {
+  // CHECK-NOT: @InvalidValue
+  firrtl.module private @InvalidValue() {
+      %invalid_ui289 = firrtl.invalidvalue : !firrtl.uint<289>
+  }
   firrtl.module private @SideEffect1(in %a: !firrtl.uint<1>, in %clock: !firrtl.clock) {
     firrtl.printf %clock, %a, "foo"  : !firrtl.clock, !firrtl.uint<1>
   }
@@ -334,6 +338,8 @@ firrtl.circuit "DeleteInstance" {
   }
   // CHECK-LABEL: DeleteInstance
   firrtl.module @DeleteInstance(in %a: !firrtl.uint<1>, in %clock: !firrtl.clock, out %b: !firrtl.uint<1>) {
+    // CHECK-NOT: inv
+    firrtl.instance inv @InvalidValue()
     // CHECK-NOT: p1
     // CHECK: instance p2 @PassThrough
     // CHECK-NEXT: instance s @SideEffect2
