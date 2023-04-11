@@ -146,11 +146,14 @@ private:
   /// of a component in the circuit.
   bool updateTarget(FModuleLike &module, Operation *op, Annotation &anno) {
 
-    // If this is operation doesn't have a single result (and no way to know
-    // what its type is) or if it doesn't have a name, then do nothing.
+    // If this operation doesn't have a name, then do nothing.
     StringAttr name = op->getAttrOfType<StringAttr>("name");
     if (!name)
       return false;
+
+    // Get the type of the operation either by checking for the
+    // result targeted by symbols on it (which are used to track the op)
+    // or by inspecting its single result.
     auto is = dyn_cast<hw::InnerSymbolOpInterface>(op);
     Type type;
     if (is && is.getTargetResult())
