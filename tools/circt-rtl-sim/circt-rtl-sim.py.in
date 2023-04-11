@@ -189,7 +189,7 @@ class Verilator:
                      sources)
     self.ldPaths = ":".join([os.path.dirname(x) for x in dpiLibs])
     debugFlags = []
-    cflags = ["-DVL_TIME_CONTEXT"]
+    cflags = []
     if DebugBuild:
       debugFlags = ["--trace", "--trace-params", "--trace-structs"]
       cflags.append("-DTRACE")
