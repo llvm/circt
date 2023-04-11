@@ -6,7 +6,6 @@ add_circt_library(CIRCTTransforms
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Transforms
 
   LINK_LIBS PUBLIC
-  CIRCTControlFlowLoopAnalysis
   MLIRIR
   MLIRMemRefDialect
   MLIRFuncDialect
