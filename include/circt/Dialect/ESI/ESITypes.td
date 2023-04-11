@@ -12,6 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/HW/HWTypes.td"
+
 class ESI_Type<string name> : TypeDef<ESI_Dialect, name> { }
 
 def ESIAnyType : ESI_Type<"Any"> {
@@ -64,6 +66,7 @@ def ESIWindowType : ESI_Type<"Window"> {
     - Array fields whose array length is not evenly divisible by 'numItems' will
     have an implicit frame inserted directly after containing the leftover array
     items.
+    - Array fields with an array length MUST be in their own frame.
   }];
 
   let mnemonic = "window";
@@ -72,6 +75,11 @@ def ESIWindowType : ESI_Type<"Window"> {
   let parameters = (ins "StringAttr":$name, "mlir::Type":$into,
                         ArrayRefParameter<"WindowFrameType">:$frames);
   let assemblyFormat = [{ `<` $name `,` $into `,` `[` $frames `]` `>` }];
+
+  let extraClassDeclaration = [{
+    /// Get the union which realizes this window during lowering.
+    circt::hw::UnionType getLoweredType() const;
+  }];
 }
 
 def WindowFrameType : ESI_Type<"WindowFrame"> {
@@ -102,5 +110,33 @@ def WindowFieldType : ESI_Type<"WindowField"> {
 
   let assemblyFormat = [{
     `<` $fieldName (`,` $numItems^)? `>`
+  }];
+}
+
+def WrapWindow : ESI_Physical_Op<"window.wrap", [Pure]> {
+  let summary = "wrap a union into a data window";
+
+  let arguments = (ins UnionType:$frame);
+  let results = (outs ESIWindowType:$window);
+  let hasVerifier = 1;
+  let hasFolder = 1;
+
+  let assemblyFormat = [{
+     $frame attr-dict `:` custom<InferWindowRet>(type($frame), type($window))
+  }];
+}
+
+def UnwrapWindow : ESI_Physical_Op<"window.unwrap", [
+      Pure,
+      DeclareOpInterfaceMethods<InferTypeOpInterface>
+  ]> {
+  let summary = "unwrap a data window into a union";
+
+  let arguments = (ins ESIWindowType:$window);
+  let results = (outs UnionType:$frame);
+  let hasFolder = 1;
+
+  let assemblyFormat = [{
+     $window attr-dict `:` qualified(type($window))
   }];
 }

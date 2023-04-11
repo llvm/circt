@@ -156,3 +156,17 @@ hw.module.extern @TypeAModuleDst(%windowed: !TypeAwin1)
   ]>
 
 hw.module.extern @TypeAModuleDst(%windowed: !TypeAwin1)
+
+// -----
+
+!TypeA = !hw.struct<foo : i3, bar: !hw.array<5xi2>>
+// expected-error @+1 {{array with size specified must be in their own frame (in "bar")}}
+!TypeAwin1 = !esi.window<
+  "TypeAwin1", !TypeA, [
+    <"FrameA", [
+      <"foo">,
+      <"bar", 5>
+    ]>
+  ]>
+
+hw.module.extern @TypeAModuleDst(%windowed: !TypeAwin1)
