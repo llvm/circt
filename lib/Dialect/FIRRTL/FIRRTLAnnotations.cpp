@@ -604,6 +604,14 @@ OpAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
 
 FIRRTLType OpAnnoTarget::getType() const {
   auto *op = getOp();
+  // Annotations that target operations are resolved like inner symbols.
+  if (auto is = llvm::dyn_cast<hw::InnerSymbolOpInterface>(op)) {
+    auto result = is.getTargetResult();
+    if (!result)
+      return {};
+    return result.getType().cast<FIRRTLType>();
+  }
+  // Fallback to assuming the single result is the target.
   if (op->getNumResults() != 1)
     return {};
   return op->getResult(0).getType().cast<FIRRTLType>();
