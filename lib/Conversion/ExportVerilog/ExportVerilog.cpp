@@ -320,7 +320,7 @@ bool ExportVerilog::isZeroBitType(Type type) {
     return llvm::all_of(structType.getElements(),
                         [](auto elem) { return isZeroBitType(elem.type); });
   if (auto enumType = type.dyn_cast<hw::EnumType>())
-    return enumType.getFields().empty()
+    return enumType.getFields().empty();
 
   // We have an open type system, so assume it is ok.
   return false;
