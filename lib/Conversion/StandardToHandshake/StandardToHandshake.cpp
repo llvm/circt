@@ -1075,17 +1075,18 @@ LogicalResult LoopNetworkRewriter::processOuterLoop(Location loc,
            << "Multiple exits detected within a loop. Loop task pipelining is "
               "only supported for loops with unified loop exit blocks.";
 
-  BackedgeBuilder bebuilder(*rewriter, loop->getHeader()->front().getLoc());
+  Block *header = loop->getHeader();
+  BackedgeBuilder bebuilder(*rewriter, header->front().getLoc());
 
   // Build the loop continue network. Loop continuation is triggered solely by
   // backedges to the header.
   auto loopPrimingRegisterInput = bebuilder.get(rewriter->getI1Type());
-  auto loopPrimingRegister = buildContinueNetwork(
-      loop->getHeader(), loop->getLoopLatch(), loopPrimingRegisterInput);
+  auto loopPrimingRegister = buildContinueNetwork(header, loop->getLoopLatch(),
+                                                  loopPrimingRegisterInput);
 
   // Build the loop exit network. Loop exiting is driven solely by exit pairs
   // from the loop.
-  buildExitNetwork(loop->getHeader(), exitPairs, loopPrimingRegister,
+  buildExitNetwork(header, exitPairs, loopPrimingRegister,
                    loopPrimingRegisterInput);
 
   return success();
