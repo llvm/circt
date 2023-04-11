@@ -1556,4 +1556,46 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.strictconnect %r, %w : !firrtl.uint<4>
     firrtl.strictconnect %out, %r : !firrtl.uint<4>
   }
+
+  // Check lowering force and release operations.
+  hw.hierpath private @xmrPath [@ForceRelease::@xmr_sym, @RefMe::@xmr_sym]
+  firrtl.module private @RefMe() {
+    %x, %x_ref = firrtl.wire sym @xmr_sym forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
+  }
+  // CHECK-LABEL: hw.module @ForceRelease(
+  firrtl.module @ForceRelease(in %c: !firrtl.uint<1>, in %clock: !firrtl.clock, in %x: !firrtl.uint<4>) {
+    firrtl.instance r sym @xmr_sym @RefMe()
+    %0 = sv.xmr.ref @xmrPath : !hw.inout<i4>
+    %1 = builtin.unrealized_conversion_cast %0 : !hw.inout<i4> to !firrtl.rwprobe<uint<4>>
+    firrtl.ref.force %clock, %c, %1, %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>
+    %2 = sv.xmr.ref @xmrPath : !hw.inout<i4>
+    %3 = builtin.unrealized_conversion_cast %2 : !hw.inout<i4> to !firrtl.rwprobe<uint<4>>
+    firrtl.ref.force_initial %c, %3, %x : !firrtl.uint<1>, !firrtl.uint<4>
+    %4 = sv.xmr.ref @xmrPath : !hw.inout<i4>
+    %5 = builtin.unrealized_conversion_cast %4 : !hw.inout<i4> to !firrtl.rwprobe<uint<4>>
+    firrtl.ref.release %clock, %c, %5 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
+    %6 = sv.xmr.ref @xmrPath : !hw.inout<i4>
+    %7 = builtin.unrealized_conversion_cast %6 : !hw.inout<i4> to !firrtl.rwprobe<uint<4>>
+    firrtl.ref.release_initial %c, %7 : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
+  }
+  // CHECK-NEXT:  hw.instance "r" sym @xmr_sym @RefMe() -> ()
+  // CHECK-NEXT:  %[[XMR1:.+]] = sv.xmr.ref @xmrPath : !hw.inout<i4>
+  // CHECK-NEXT:  %[[XMR2:.+]] = sv.xmr.ref @xmrPath : !hw.inout<i4>
+  // CHECK-NEXT:  %[[XMR3:.+]] = sv.xmr.ref @xmrPath : !hw.inout<i4>
+  // CHECK-NEXT:  %[[XMR4:.+]] = sv.xmr.ref @xmrPath : !hw.inout<i4>
+  // CHECK-NEXT:  sv.ifdef  "VERILATOR" {
+  // CHECK-NEXT:  } else {
+  // CHECK-NEXT:    sv.always posedge %clock {
+  // CHECK-NEXT:      sv.if %c {
+  // CHECK-NEXT:        sv.force %[[XMR1]], %x : i4
+  // CHECK-NEXT:        sv.release %[[XMR3]] : !hw.inout<i4>
+  // CHECK-NEXT:      }
+  // CHECK-NEXT:    }
+  // CHECK-NEXT:    sv.initial {
+  // CHECK-NEXT:      sv.if %c {
+  // CHECK-NEXT:        sv.force %[[XMR2]], %x : i4
+  // CHECK-NEXT:        sv.release %[[XMR4]] : !hw.inout<i4>
+  // CHECK-NEXT:      }
+  // CHECK-NEXT:    }
+  // CHECK-NEXT:  }
 }
