@@ -215,15 +215,9 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
       StringAttr name;
       bool isFlip;
       FIRRTLBaseType type;
-      // Optional description of the field.
-      StringAttr description;
 
       BundleElement(StringAttr name, bool isFlip, FIRRTLBaseType type)
           : name(name), isFlip(isFlip), type(type) {}
-
-      BundleElement(StringAttr name, bool isFlip, FIRRTLBaseType type,
-          StringAttr description)
-          : name(name), isFlip(isFlip), type(type), description(description) {}
 
       bool operator==(const BundleElement &rhs) const {
         return name == rhs.name && isFlip == rhs.isFlip && type == rhs.type;

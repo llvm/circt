@@ -77,8 +77,6 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
                                 os << element.name.getValue();
                                 if (element.isFlip)
                                   os << " flip";
-                                if (element.description)
-                                  os << " " << element.description << " ";
                                 os << ": ";
                                 printNestedType(element.type, os);
                               });
@@ -200,7 +198,6 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       std::string nameStr;
       StringRef name;
       FIRRTLBaseType type;
-      StringAttr descriptionAttr;
 
       // The 'name' can be an identifier or an integer.
       uint32_t fieldIntName;
@@ -217,17 +214,10 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       }
 
       bool isFlip = succeeded(parser.parseOptionalKeyword("flip"));
-      std::string description;
-      if (parser.parseOptionalString(&description).succeeded()) {
-        if (!description.empty())
-          descriptionAttr = StringAttr::get(context, description);
-      }
-
       if (parser.parseColon() || parseNestedBaseType(type, parser))
         return failure();
 
-      elements.push_back(
-          {StringAttr::get(context, name), isFlip, type, descriptionAttr});
+      elements.push_back({StringAttr::get(context, name), isFlip, type});
       return success();
     };
 
