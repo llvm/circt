@@ -390,7 +390,7 @@ LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
   for (auto input : inputs)
     materializedOperands.push_back(info.clock.materializeValue(input));
 
-  OpBuilder &nonResetBuilder = info.clock.builder;
+  OpBuilder nonResetBuilder = info.clock.builder;
   if (stateOp.getReset()) {
     auto materializedReset = info.clock.materializeValue(stateOp.getReset());
     auto ifOp = info.clock.builder.create<scf::IfOp>(stateOp.getLoc(),
