@@ -161,6 +161,9 @@ def EnumTypeImpl : HWType<"Enum"> {
     /// Returns true if the requested field is part of this enum
     bool contains(mlir::StringRef field);
 
+    /// Returns the number of bits used by the enum
+    size_t getBitWidth();
+
     /// Returns the index of the requested field, or a nullopt if the field is
     // not part of this enum.
     std::optional<size_t> indexOf(mlir::StringRef field);

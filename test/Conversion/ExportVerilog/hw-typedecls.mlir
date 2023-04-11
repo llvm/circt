@@ -19,7 +19,7 @@ hw.type_scope @__hw_typedecls {
   hw.typedecl @qux, "customName" : i32
   // CHECK: typedef struct packed {foo a; _other_scope_foo b; } nestedRef;
   hw.typedecl @nestedRef : !hw.struct<a: !hw.typealias<@__hw_typedecls::@foo,i1>, b: !hw.typealias<@_other_scope::@foo,i2>>
-  // CHECK: typedef enum {myEnum_A, myEnum_B, myEnum_C} myEnum;
+  // CHECK: typedef enum bit [1:0] {myEnum_A, myEnum_B, myEnum_C} myEnum;
   hw.typedecl @myEnum : !hw.enum<A, B, C>
 }
 // CHECK: `endif // _TYPESCOPE___hw_typedecls

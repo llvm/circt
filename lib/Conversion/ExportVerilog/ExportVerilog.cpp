@@ -265,25 +265,6 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
   return isCombinational(op) || isExpression(op);
 }
 
-/// Return the width of the specified type in bits or -1 if it isn't
-/// supported.
-// NOLINTBEGIN(misc-no-recursion)
-static int getBitWidthOrSentinel(Type type) {
-  return TypeSwitch<Type, int>(type)
-      .Case<IntegerType>([](IntegerType integerType) {
-        // Verilog doesn't support zero bit integers.  We only support them in
-        // limited cases.
-        return integerType.getWidth();
-      })
-      .Case<InOutType>([](InOutType inoutType) {
-        return getBitWidthOrSentinel(inoutType.getElementType());
-      })
-      .Case<TypeAliasType>([](TypeAliasType alias) {
-        return getBitWidthOrSentinel(alias.getInnerType());
-      })
-      .Default([](Type) { return -1; });
-}
-
 /// Push this type's dimension into a vector.
 static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
                         Location loc) {
@@ -338,6 +319,8 @@ bool ExportVerilog::isZeroBitType(Type type) {
   if (auto structType = type.dyn_cast<hw::StructType>())
     return llvm::all_of(structType.getElements(),
                         [](auto elem) { return isZeroBitType(elem.type); });
+  if (auto enumType = type.dyn_cast<hw::EnumType>())
+    return enumType.getFields().empty();
 
   // We have an open type system, so assume it is ok.
   return false;
@@ -1397,7 +1380,10 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                    emitter);
       })
       .Case<EnumType>([&](EnumType enumType) {
-        os << "enum {";
+        os << "enum ";
+        if (enumType.getBitWidth() != 32)
+          os << "bit [" << enumType.getBitWidth() - 1 << ":0] ";
+        os << "{";
         Type enumPrefixType = optionalAliasType ? optionalAliasType : enumType;
         llvm::interleaveComma(
             enumType.getFields().getAsRange<StringAttr>(), os,

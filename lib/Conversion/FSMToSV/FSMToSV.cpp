@@ -365,8 +365,13 @@ void MachineOpConverter::buildStateCaseMux(
 
   // Case assignments.
   caseMux = b.create<sv::CaseOp>(
-      machineOp.getLoc(), CaseStmtType::CaseStmt, select,
-      /*numCases=*/machineOp.getNumStates(), [&](size_t caseIdx) {
+      machineOp.getLoc(), CaseStmtType::CaseStmt,
+      /*sv::ValidationQualifierTypeEnum::ValidationQualifierUnique, */ select,
+      /*numCases=*/machineOp.getNumStates() + 1, [&](size_t caseIdx) {
+        // Make Verilator happy for sized enums.
+        if (caseIdx == machineOp.getNumStates())
+          return std::unique_ptr<sv::CasePattern>(
+              new sv::CaseDefaultPattern(b.getContext()));
         StateOp state = orderedStates[caseIdx];
         return encoding->getCasePattern(state);
       });
