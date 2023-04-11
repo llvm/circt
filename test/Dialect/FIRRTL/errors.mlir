@@ -1178,6 +1178,30 @@ firrtl.circuit "ForceableTypeMismatch" {
 
 // -----
 
+firrtl.circuit "RefForceProbe" {
+  firrtl.module @RefForceProbe() {
+    %a = firrtl.wire : !firrtl.uint<1>
+    %1 = firrtl.ref.send %a : !firrtl.uint<1>
+    // expected-note @above {{prior use here}}
+    // expected-error @below {{use of value '%1' expects different type than prior uses: '!firrtl.rwprobe<uint<1>>' vs '!firrtl.probe<uint<1>>'}}
+    firrtl.ref.force_initial %a, %1, %a : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "RefReleaseProbe" {
+  firrtl.module @RefReleaseProbe() {
+    %a = firrtl.wire : !firrtl.uint<1>
+    %1 = firrtl.ref.send %a : !firrtl.uint<1>
+    // expected-error @below {{op operand #1 must be rwprobe type, but got '!firrtl.probe<uint<1>>'}}
+    firrtl.ref.release_initial %a, %1 : !firrtl.uint<1>, !firrtl.probe<uint<1>>
+  }
+}
+
+
+// -----
+
 firrtl.circuit "EnumCreateNoCase" {
 firrtl.module @EnumCreateNoCase(in %in : !firrtl.uint<8>) {
   // expected-error @below {{unknown field SomeOther in enum type}}

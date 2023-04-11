@@ -484,6 +484,10 @@ public:
   void visitStmt(PrintFOp op);
   void visitStmt(StopOp op);
   void visitStmt(WhenOp op);
+  void visitStmt(RefForceOp op);
+  void visitStmt(RefForceInitialOp op);
+  void visitStmt(RefReleaseOp op);
+  void visitStmt(RefReleaseInitialOp op);
 
 private:
   /// And a 1-bit value with the current condition.  If we are in the outer
@@ -528,6 +532,22 @@ void WhenOpVisitor::visitStmt(CoverOp op) {
 
 void WhenOpVisitor::visitStmt(WhenOp whenOp) {
   processWhenOp(whenOp, condition);
+}
+
+void WhenOpVisitor::visitStmt(RefForceOp op) {
+  op.getPredicateMutable().assign(andWithCondition(op, op.getPredicate()));
+}
+
+void WhenOpVisitor::visitStmt(RefForceInitialOp op) {
+  op.getPredicateMutable().assign(andWithCondition(op, op.getPredicate()));
+}
+
+void WhenOpVisitor::visitStmt(RefReleaseOp op) {
+  op.getPredicateMutable().assign(andWithCondition(op, op.getPredicate()));
+}
+
+void WhenOpVisitor::visitStmt(RefReleaseInitialOp op) {
+  op.getPredicateMutable().assign(andWithCondition(op, op.getPredicate()));
 }
 
 /// This is a common helper that is dispatched to by the concrete visitors.
