@@ -316,8 +316,8 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
     ++numTrivialRegs;
 
     // Set the arc's clock to the clock of the registers we've absorbed, bump
-    // the latency up by one to account for the registers, add the reset if present and
-    // update the output names. Then replace the registers.
+    // the latency up by one to account for the registers, add the reset if
+    // present and update the output names. Then replace the registers.
     arc.getClockMutable().assign(clock);
     arc.setLatency(arc.getLatency() + 1);
     if (reset)
