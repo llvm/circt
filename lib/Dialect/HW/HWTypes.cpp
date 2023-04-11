@@ -360,14 +360,13 @@ Type UnionType::getFieldType(mlir::StringRef fieldName) {
 Type EnumType::parse(AsmParser &p) {
   llvm::SmallVector<Attribute> fields;
 
-  if (p.parseLess() || p.parseCommaSeparatedList([&]() {
+  if (p.parseCommaSeparatedList(AsmParser::Delimiter::LessGreater, [&]() {
         StringRef name;
         if (p.parseKeyword(&name))
           return failure();
         fields.push_back(StringAttr::get(p.getContext(), name));
         return success();
-      }) ||
-      p.parseGreater())
+      }))
     return Type();
 
   return get(p.getContext(), ArrayAttr::get(p.getContext(), fields));
@@ -393,7 +392,10 @@ std::optional<size_t> EnumType::indexOf(mlir::StringRef field) {
 }
 
 size_t EnumType::getBitWidth() {
-  return llvm::Log2_64_Ceil(getFields().size());
+  auto w = getFields().size();
+  if (w > 1)
+    return llvm::Log2_64_Ceil(getFields().size());
+  return 1;
 }
 
 //===----------------------------------------------------------------------===//

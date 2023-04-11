@@ -1751,6 +1751,13 @@ hw.module @ForStatement(%a: i5) -> () {
   }
 }
 
+// CHECK-LABEL: module EnumCheck
+hw.module @EnumCheck(%a : !hw.enum<T>, %b: !hw.enum<>)
+                 -> (c: !hw.enum<T>, d: !hw.enum<>) {
+  // CHECK: input enum bit [0:0] {T} a
+  // CHECK: // input enum bit [0:0] {} b
+  hw.output %a, %b : !hw.enum<T>, !hw.enum<>
+}
 
 // CHECK-LABEL: module intrinsic
 hw.module @intrinsic(%clk: i1) -> (io1: i1, io2: i1, io3: i1, io4: i5) {
