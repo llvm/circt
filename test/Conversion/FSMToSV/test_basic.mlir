@@ -50,7 +50,7 @@ hw.module @top(%arg0: i1, %arg1: i1, %clk : i1, %rst : i1) -> (out: i8) {
 // CHECK-NEXT:    %output_0 = sv.reg  : !hw.inout<i8>
 // CHECK-NEXT:    %output_1 = sv.reg  : !hw.inout<i8>
 // CHECK-NEXT:    sv.alwayscomb {
-// CHECK-NEXT:      sv.case %state_reg : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>
+// CHECK-NEXT:      sv.case unique %state_reg : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>
 // CHECK-NEXT:      case A: {
 // CHECK-NEXT:        sv.bpassign %state_next, %1 : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>
 // CHECK-NEXT:        sv.bpassign %output_0, %c0_i8 : i8
@@ -60,6 +60,8 @@ hw.module @top(%arg0: i1, %arg1: i1, %clk : i1, %rst : i1) -> (out: i8) {
 // CHECK-NEXT:        sv.bpassign %state_next, %4 : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>
 // CHECK-NEXT:        sv.bpassign %output_0, %c1_i8 : i8
 // CHECK-NEXT:        sv.bpassign %output_1, %c42_i8 : i8
+// CHECK-NEXT:      }
+// CHECK-NEXT:      default: {
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
 // CHECK-NEXT:    %5 = sv.read_inout %output_0 : !hw.inout<i8>
@@ -93,20 +95,24 @@ fsm.machine @top(%a0: i1, %arg1: i1) -> (i8, i8) attributes {initialState = "A",
 // CHECK:       %[[CNT_ADD_1:.*]] = comb.add %cnt_reg, %c1_i16 : i16
 // CHECK:       sv.alwayscomb {
 // CHECK-NEXT:    sv.bpassign %cnt_next, %cnt_reg : i16
-// CHECK-NEXT:    sv.case %state_reg : !hw.typealias<@fsm_enum_typedecls::@FSM_state_t, !hw.enum<A, B>>
+// CHECK-NEXT:    sv.case unique %state_reg : !hw.typealias<@fsm_enum_typedecls::@FSM_state_t, !hw.enum<A, B>>
 // CHECK-NEXT:    case A: {
 // CHECK-NEXT:      sv.bpassign %state_next, %[[B:.*]] : !hw.typealias<@fsm_enum_typedecls::@FSM_state_t, !hw.enum<A, B>>
 // CHECK-NEXT:      sv.bpassign %output_0, %cnt_reg : i16
 // CHECK-NEXT:    }
 // CHECK-NEXT:    case B: {
 // CHECK-NEXT:      sv.bpassign %state_next, %[[A:.*]] : !hw.typealias<@fsm_enum_typedecls::@FSM_state_t, !hw.enum<A, B>>
-// CHECK-NEXT:      sv.case %[[STATE_NEXT:.*]] : !hw.typealias<@fsm_enum_typedecls::@FSM_state_t, !hw.enum<A, B>>
+// CHECK-NEXT:      sv.case unique %[[STATE_NEXT:.*]] : !hw.typealias<@fsm_enum_typedecls::@FSM_state_t, !hw.enum<A, B>>
 // CHECK-NEXT:      case A: {
 // CHECK-NEXT:        sv.bpassign %cnt_next, %[[CNT_ADD_1]] : i16
 // CHECK-NEXT:      }
 // CHECK-NEXT:      case B: {
 // CHECK-NEXT:      }
+// CHECK-NEXT:      default: {
+// CHECK-NEXT:      }
 // CHECK-NEXT:      sv.bpassign %output_0, %cnt_reg : i16
+// CHECK-NEXT:    }
+// CHECK-NEXT:    default: {
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 
