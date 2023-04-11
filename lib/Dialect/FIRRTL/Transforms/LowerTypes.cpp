@@ -397,6 +397,10 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitStmt(StrictConnectOp op);
   bool visitStmt(RefDefineOp op);
   bool visitStmt(WhenOp op);
+  bool visitStmt(RefForceOp op);
+  bool visitStmt(RefForceInitialOp op);
+  bool visitStmt(RefReleaseOp op);
+  bool visitStmt(RefReleaseInitialOp op);
 
   bool isFailed() const { return encounteredError; }
 
@@ -899,6 +903,65 @@ bool TypeLoweringVisitor::visitStmt(WhenOp op) {
   if (op.hasElseRegion())
     lowerBlock(&op.getElseBlock());
   return false; // don't delete the when!
+}
+
+bool TypeLoweringVisitor::visitStmt(RefForceOp op) {
+  // Attempt to get the bundle types.
+  SmallVector<FlatBundleFieldEntry> fields;
+
+  // We have to expand reference types regardless of specified mode, see 4479.
+  if (!peelType(op.getDest().getType(), fields, PreserveAggregate::None))
+    return false;
+
+  for (const auto &field : llvm::enumerate(fields)) {
+    auto dest = getSubWhatever(op.getDest(), field.index());
+    auto src = getSubWhatever(op.getSrc(), field.index());
+    builder->create<RefForceOp>(op.getClock(), op.getPredicate(), dest, src);
+  }
+  return true;
+}
+bool TypeLoweringVisitor::visitStmt(RefForceInitialOp op) {
+  // Attempt to get the bundle types.
+  SmallVector<FlatBundleFieldEntry> fields;
+
+  // We have to expand reference types regardless of specified mode, see 4479.
+  if (!peelType(op.getDest().getType(), fields, PreserveAggregate::None))
+    return false;
+
+  for (const auto &field : llvm::enumerate(fields)) {
+    auto dest = getSubWhatever(op.getDest(), field.index());
+    auto src = getSubWhatever(op.getSrc(), field.index());
+    builder->create<RefForceInitialOp>(op.getPredicate(), dest, src);
+  }
+  return true;
+}
+bool TypeLoweringVisitor::visitStmt(RefReleaseOp op) {
+  // Attempt to get the bundle types.
+  SmallVector<FlatBundleFieldEntry> fields;
+
+  // We have to expand reference types regardless of specified mode, see 4479.
+  if (!peelType(op.getDest().getType(), fields, PreserveAggregate::None))
+    return false;
+
+  for (const auto &field : llvm::enumerate(fields)) {
+    auto dest = getSubWhatever(op.getDest(), field.index());
+    builder->create<RefReleaseOp>(op.getClock(), op.getPredicate(), dest);
+  }
+  return true;
+}
+bool TypeLoweringVisitor::visitStmt(RefReleaseInitialOp op) {
+  // Attempt to get the bundle types.
+  SmallVector<FlatBundleFieldEntry> fields;
+
+  // We have to expand reference types regardless of specified mode, see 4479.
+  if (!peelType(op.getDest().getType(), fields, PreserveAggregate::None))
+    return false;
+
+  for (const auto &field : llvm::enumerate(fields)) {
+    auto dest = getSubWhatever(op.getDest(), field.index());
+    builder->create<RefReleaseInitialOp>(op.getPredicate(), dest);
+  }
+  return true;
 }
 
 /// Lower memory operations. A new memory is created for every leaf
