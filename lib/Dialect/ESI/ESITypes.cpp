@@ -66,7 +66,7 @@ WindowType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
                              << field.name;
         if (frame.getMembers().size() != 1)
           return emitError()
-                 << "array with size specified must by in their own frame (in "
+                 << "array with size specified must be in their own frame (in "
                  << field.name << ")";
       }
       frameFields.erase(f);
@@ -113,12 +113,12 @@ hw::UnionType WindowType::getLoweredType() const {
             {field.getFieldName(),
              hw::ArrayType::get(array.getElementType(), field.getNumItems())});
         unionFields.push_back(
-            {frame.getName(), hw::StructType::get(getContext(), fields)});
+            {frame.getName(), hw::StructType::get(getContext(), fields), 0});
         fields.clear();
 
         // If the array size is not a multiple of numItems, we need another
         // frame for the left overs.
-        auto leftOver = array.getSize() % field.getNumItems();
+        size_t leftOver = array.getSize() % field.getNumItems();
         if (leftOver) {
           fields.push_back(
               {field.getFieldName(),
@@ -127,7 +127,7 @@ hw::UnionType WindowType::getLoweredType() const {
           unionFields.push_back(
               {StringAttr::get(getContext(),
                                Twine(frame.getName().getValue(), "_leftOver")),
-               hw::StructType::get(getContext(), fields)});
+               hw::StructType::get(getContext(), fields), 0});
           fields.clear();
         }
       }
@@ -135,7 +135,7 @@ hw::UnionType WindowType::getLoweredType() const {
 
     if (!fields.empty())
       unionFields.push_back(
-          {frame.getName(), hw::StructType::get(getContext(), fields)});
+          {frame.getName(), hw::StructType::get(getContext(), fields), 0});
   }
 
   return hw::UnionType::get(getContext(), unionFields);
