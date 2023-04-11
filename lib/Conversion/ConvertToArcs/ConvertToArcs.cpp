@@ -38,7 +38,7 @@ struct Converter {
   LogicalResult runOnModule(HWModuleOp module);
   LogicalResult analyzeFanIn();
   void extractArcs(HWModuleOp module);
-  void absorbRegs(HWModuleOp module);
+  LogicalResult absorbRegs(HWModuleOp module);
 
   /// The global namespace used to create unique definition names.
   Namespace globalNamespace;
@@ -101,7 +101,8 @@ LogicalResult Converter::runOnModule(HWModuleOp module) {
   // Extract the fanin mask groups into separate combinational arcs and
   // combine them with the registers in the design.
   extractArcs(module);
-  absorbRegs(module);
+  if (failed(absorbRegs(module)))
+    return failure();
   return success();
 }
 
@@ -251,7 +252,7 @@ void Converter::extractArcs(HWModuleOp module) {
   }
 }
 
-void Converter::absorbRegs(HWModuleOp module) {
+LogicalResult Converter::absorbRegs(HWModuleOp module) {
   // Handle the trivial cases where all of an arc's results are used by
   // exactly one register each.
   unsigned outIdx = 0;
@@ -279,8 +280,27 @@ void Converter::absorbRegs(HWModuleOp module) {
         isTrivial = false;
         break;
       }
+
       clock = regOp.getClk();
       reset = regOp.getReset();
+
+      // Check that if there is a reset, it is to a constant zero
+      if (reset) {
+        Value resetValue = regOp.getResetValue();
+        Operation *op = resetValue.getDefiningOp();
+        if (!op)
+          return regOp->emitOpError(
+              "is reset by an input; not supported by ConvertToArcs");
+        if (auto constant = dyn_cast<hw::ConstantOp>(op)) {
+          if (constant.getValue() != 0)
+            return regOp->emitOpError("is reset to a constant non-zero value; "
+                                      "not supported by ConvertToArcs");
+        } else {
+          return regOp->emitOpError("is reset to a value that is not clearly "
+                                    "constant; not supported by ConvertToArcs");
+        }
+      }
+
       absorbedRegs.push_back(regOp);
       // If we absorb a register into the arc, the arc effectively produces that
       // register's value. So if the register had a name, ensure that we assign
@@ -296,8 +316,8 @@ void Converter::absorbRegs(HWModuleOp module) {
     ++numTrivialRegs;
 
     // Set the arc's clock to the clock of the registers we've absorbed, bump
-    // the latency up by one to account for the registers, and update the output
-    // names. Then replace the registers.
+    // the latency up by one to account for the registers, add the reset and
+    // update the output names. Then replace the registers.
     arc.getClockMutable().assign(clock);
     arc.setLatency(arc.getLatency() + 1);
     if (reset)
@@ -384,6 +404,8 @@ void Converter::absorbRegs(HWModuleOp module) {
   if (numMappedRegs > 0)
     LLVM_DEBUG(llvm::dbgs() << "- Mapped " << numMappedRegs << " regs to "
                             << regsByInput.size() << " shuffling arcs\n");
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
