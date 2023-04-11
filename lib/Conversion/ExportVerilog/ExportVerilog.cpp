@@ -321,6 +321,8 @@ bool ExportVerilog::isZeroBitType(Type type) {
                         [](auto elem) { return isZeroBitType(elem.type); });
   if (auto enumType = type.dyn_cast<hw::EnumType>())
     return enumType.getFields().empty();
+  if (auto unionType = type.dyn_cast<hw::UnionType>())
+    return hw::getBitWidth(unionType) == 0;
 
   // We have an open type system, so assume it is ok.
   return false;
@@ -363,6 +365,8 @@ static StringRef getVerilogDeclWord(Operation *op,
     auto elementType =
         op->getResult(0).getType().cast<InOutType>().getElementType();
     if (elementType.isa<StructType>())
+      return "";
+    if (elementType.isa<UnionType>())
       return "";
     if (elementType.isa<EnumType>())
       return "";
@@ -1414,6 +1418,59 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           os << ' ' << emitter.getVerilogStructFieldName(element.name);
           emitter.printUnpackedTypePostfix(element.type, os);
           os << "; ";
+        }
+        os << '}';
+        emitDims(dims, os, loc, emitter);
+        return true;
+      })
+      .Case<UnionType>([&](UnionType unionType) {
+        if (unionType.getElements().empty() || isZeroBitType(unionType)) {
+          os << "/*Zero Width*/";
+          return true;
+        }
+
+        int64_t unionWidth = hw::getBitWidth(unionType);
+        os << "union packed {";
+        for (auto &element : unionType.getElements()) {
+          if (isZeroBitType(element.type)) {
+            os << "/*" << emitter.getVerilogStructFieldName(element.name)
+               << ": Zero Width;*/ ";
+            continue;
+          }
+          int64_t elementWidth = hw::getBitWidth(element.type);
+          bool needsPadding = elementWidth < unionWidth || element.offset > 0;
+          if (needsPadding) {
+            os << " struct packed {";
+            if (element.offset) {
+              StringRef paddingName = "__pre_padding";
+              if (element.name == paddingName)
+                paddingName = "__pre_padding_real";
+              os << "logic [" << element.offset - 1 << ":0] " << paddingName
+                 << "; ";
+            }
+          }
+
+          SmallVector<Attribute, 8> structDims;
+          printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
+                              structDims,
+                              /*implicitIntType=*/false,
+                              /*singleBitDefaultType=*/true, emitter);
+          os << ' ' << emitter.getVerilogStructFieldName(element.name);
+          emitter.printUnpackedTypePostfix(element.type, os);
+          os << ";";
+
+          if (needsPadding) {
+            if (elementWidth + (int64_t)element.offset < unionWidth) {
+              StringRef paddingName = "__post_padding";
+              if (element.name == paddingName)
+                paddingName = "__post_padding_real";
+              os << " logic ["
+                 << unionWidth - (elementWidth + element.offset) - 1 << ":0] "
+                 << paddingName << ";";
+            }
+            os << "} " << emitter.getVerilogStructFieldName(element.name)
+               << ";";
+          }
         }
         os << '}';
         emitDims(dims, os, loc, emitter);
