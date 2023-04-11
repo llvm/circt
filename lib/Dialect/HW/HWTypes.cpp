@@ -392,7 +392,9 @@ std::optional<size_t> EnumType::indexOf(mlir::StringRef field) {
   return {};
 }
 
-size_t EnumType::getBitWidth() { return llvm::Log2_64_Ceil(getFields().size()); }
+size_t EnumType::getBitWidth() {
+  return llvm::Log2_64_Ceil(getFields().size());
+}
 
 //===----------------------------------------------------------------------===//
 // ArrayType
