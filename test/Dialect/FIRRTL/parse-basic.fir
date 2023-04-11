@@ -1236,6 +1236,31 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-DAG: %[[SUM:.+]] = firrtl.and %[[READ_PROBE_IN]],
     out <= and(read(probe(in)), UInt(1))
 
+  ; CHECK-LABEL: module private @ForceRelease(
+  module ForceRelease :
+    input in : UInt<1>
+    input clock : Clock
+    input cond : UInt<1>
+
+    ; CHECK-NEXT: %{{.+}}, %{{.+}}, %[[RC_RW:.+]] = firrtl.instance rc
+    inst rc of RefsChild
+    rc.in <= in
+
+    ; CHECK: firrtl.ref.force_initial %[[TRUE:.+]], %[[RC_RW]], %{{.+}} : !firrtl.uint<1>, !firrtl.uint<1>
+    force_initial(rc.rw, UInt<1>(0))
+
+    ; CHECK: firrtl.ref.force %clock, %cond, %[[RC_RW]], %{{.+}} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+    force(clock, cond, rc.rw, UInt<1>(1))
+    ; CHECK: %[[NOT_COND:.+]] = firrtl.not %cond
+    ; CHECK: firrtl.ref.release %clock, %[[NOT_COND]], %[[RC_RW]] : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+    release(clock, not(cond), rc.rw)
+
+    ; CHECK-NEXT: %{{.+}}, %{{.+}}, %[[RC2_RW:.+]] = firrtl.instance rc2
+    inst rc2 of RefsChild
+    rc2.in <= in
+    ; CHECK: firrtl.ref.release_initial %[[TRUE]], %[[RC2_RW]] : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+    release_initial(rc2.rw)
+
   ; CHECK-LABEL: extmodule private @RefExt(
   ; CHECK-SAME:  in in: !firrtl.uint<1>, out r: !firrtl.probe<uint<1>> 
   ; CHECK-SAME: internalPaths = ["in"]

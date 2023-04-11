@@ -824,6 +824,34 @@ struct FIRModuleContext : public FIRParser {
   // resulting IR.
   llvm::DenseMap<std::pair<Attribute, Type>, Value> constantCache;
 
+  /// Get a cached constant.
+  Value getCachedConstantInt(ImplicitLocOpBuilder &builder, Attribute attr,
+                             IntType type, APInt &value) {
+    auto &result = constantCache[{attr, type}];
+    if (result)
+      return result;
+
+    // Make sure to insert constants at the top level of the module to maintain
+    // dominance.
+    OpBuilder::InsertPoint savedIP;
+
+    auto *parentOp = builder.getInsertionBlock()->getParentOp();
+    if (!isa<FModuleOp>(parentOp)) {
+      savedIP = builder.saveInsertionPoint();
+      while (!isa<FModuleOp>(parentOp)) {
+        builder.setInsertionPoint(parentOp);
+        parentOp = builder.getInsertionBlock()->getParentOp();
+      }
+    }
+
+    result = builder.create<ConstantOp>(type, value);
+
+    if (savedIP.isSet())
+      builder.setInsertionPoint(savedIP.getBlock(), savedIP.getPoint());
+
+    return result;
+  }
+
   //===--------------------------------------------------------------------===//
   // SubaccessCache
 
@@ -1197,6 +1225,10 @@ private:
   ParseResult parseCover();
   ParseResult parseWhen(unsigned whenIndent);
   ParseResult parseRefDefine();
+  ParseResult parseRefForce();
+  ParseResult parseRefForceInitial();
+  ParseResult parseRefRelease();
+  ParseResult parseRefReleaseInitial();
   ParseResult parseRefRead(Value &result);
   ParseResult parseProbe(Value &result);
   ParseResult parseRWProbe(Value &result);
@@ -1783,26 +1815,8 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
     return success();
   }
 
-  // Make sure to insert constants at the top level of the module to maintain
-  // dominance.
-  OpBuilder::InsertPoint savedIP;
-
-  auto *parentOp = builder.getInsertionBlock()->getParentOp();
-  if (!isa<FModuleOp>(parentOp)) {
-    savedIP = builder.saveInsertionPoint();
-    while (!isa<FModuleOp>(parentOp)) {
-      builder.setInsertionPoint(parentOp);
-      parentOp = builder.getInsertionBlock()->getParentOp();
-    }
-  }
-
   locationProcessor.setLoc(loc);
-  auto op = builder.create<ConstantOp>(type, value);
-  entry = op;
-  result = op;
-
-  if (savedIP.isSet())
-    builder.setInsertionPoint(savedIP.getBlock(), savedIP.getPoint());
+  result = moduleContext.getCachedConstantInt(builder, attr, type, value);
   return success();
 }
 
@@ -1942,6 +1956,14 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseWhen(stmtIndent);
   case FIRToken::kw_define:
     return parseRefDefine();
+  case FIRToken::lp_force:
+    return parseRefForce();
+  case FIRToken::lp_force_initial:
+    return parseRefForceInitial();
+  case FIRToken::lp_release:
+    return parseRefRelease();
+  case FIRToken::lp_release_initial:
+    return parseRefReleaseInitial();
 
   default: {
     // Statement productions that start with an expression.
@@ -2469,6 +2491,133 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
         .attachNote(op->getLoc());
 
   result = forceable.getDataRef();
+
+  return success();
+}
+
+/// force ::= 'force(' exp exp ref_expr exp ')' info?
+ParseResult FIRStmtParser::parseRefForce() {
+  auto startTok = consumeToken(FIRToken::lp_force);
+
+  Value clock, pred, dest, src;
+  if (parseExp(clock, "expected clock expression in force") ||
+      parseExp(pred, "expected predicate expression in force") ||
+      parseRefExp(dest, "expected destination reference expression in force") ||
+      parseExp(src, "expected source expression in force") ||
+      parseToken(FIRToken::r_paren, "expected ')' in force") ||
+      parseOptionalInfo())
+    return failure();
+
+  // Check reference expression is of reference type.
+  if (auto ref = dyn_cast<RefType>(dest.getType()); !ref || !ref.getForceable())
+    return emitError(
+               startTok.getLoc(),
+               "expected rwprobe-type expression for force destination, got ")
+           << dest.getType();
+  if (isa<RefType>(src.getType()))
+    return emitError(startTok.getLoc(),
+                     "expected non-reference-type for force source, got ")
+           << src.getType();
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  builder.create<RefForceOp>(clock, pred, dest, src);
+
+  return success();
+}
+
+/// force_initial ::= 'force_initial(' ref_expr exp ')' info?
+ParseResult FIRStmtParser::parseRefForceInitial() {
+  auto startTok = consumeToken(FIRToken::lp_force_initial);
+
+  Value dest, src;
+  if (parseRefExp(
+          dest, "expected destination reference expression in force_initial") ||
+      parseExp(src, "expected source expression in force_initial") ||
+      parseToken(FIRToken::r_paren, "expected ')' in force_initial") ||
+      parseOptionalInfo())
+    return failure();
+
+  // Check reference expression is of reference type.
+  if (auto ref = dyn_cast<RefType>(dest.getType()); !ref || !ref.getForceable())
+    return emitError(startTok.getLoc(), "expected rwprobe-type expression for "
+                                        "force_initial destination, got ")
+           << dest.getType();
+  if (isa<RefType>(src.getType()))
+    return emitError(startTok.getLoc(),
+                     "expected non-reference-type expression for force_initial "
+                     "source, got ")
+           << src.getType();
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  auto value = APInt::getAllOnes(1);
+  auto type = UIntType::get(builder.getContext(), 1);
+  auto attr = builder.getIntegerAttr(IntegerType::get(type.getContext(),
+                                                      value.getBitWidth(),
+                                                      IntegerType::Unsigned),
+                                     value);
+  auto pred = moduleContext.getCachedConstantInt(builder, attr, type, value);
+  builder.create<RefForceInitialOp>(pred, dest, src);
+
+  return success();
+}
+
+/// release ::= 'release(' exp exp ref_expr ')' info?
+ParseResult FIRStmtParser::parseRefRelease() {
+  auto startTok = consumeToken(FIRToken::lp_release);
+
+  Value clock, pred, dest;
+  if (parseExp(clock, "expected clock expression in release") ||
+      parseExp(pred, "expected predicate expression in release") ||
+      parseRefExp(dest,
+                  "expected destination reference expression in release") ||
+      parseToken(FIRToken::r_paren, "expected ')' in release") ||
+      parseOptionalInfo())
+    return failure();
+
+  // Check reference expression is of reference type.
+  if (auto ref = dyn_cast<RefType>(dest.getType()); !ref || !ref.getForceable())
+    return emitError(
+               startTok.getLoc(),
+               "expected rwprobe-type expression for release destination, got ")
+           << dest.getType();
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  builder.create<RefReleaseOp>(clock, pred, dest);
+
+  return success();
+}
+
+/// release_initial ::= 'release_initial(' ref_expr ')' info?
+ParseResult FIRStmtParser::parseRefReleaseInitial() {
+  auto startTok = consumeToken(FIRToken::lp_release_initial);
+
+  Value dest;
+  if (parseRefExp(
+          dest,
+          "expected destination reference expression in release_initial") ||
+      parseToken(FIRToken::r_paren, "expected ')' in release_initial") ||
+      parseOptionalInfo())
+    return failure();
+
+  // Check reference expression is of reference type.
+  if (auto ref = dyn_cast<RefType>(dest.getType()); !ref || !ref.getForceable())
+    return emitError(startTok.getLoc(), "expected rwprobe-type expression for "
+                                        "release_initial destination, got ")
+           << dest.getType();
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  auto value = APInt::getAllOnes(1);
+  auto type = UIntType::get(builder.getContext(), 1);
+  auto attr = builder.getIntegerAttr(IntegerType::get(type.getContext(),
+                                                      value.getBitWidth(),
+                                                      IntegerType::Unsigned),
+                                     value);
+  auto pred = moduleContext.getCachedConstantInt(builder, attr, type, value);
+  builder.create<RefReleaseInitialOp>(pred, dest);
 
   return success();
 }
