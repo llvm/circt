@@ -258,6 +258,7 @@ void Converter::absorbRegs(HWModuleOp module) {
   unsigned numTrivialRegs = 0;
   for (auto &arc : arcUses) {
     Value clock = arc.getClock();
+    Value reset;
     SmallVector<seq::CompRegOp> absorbedRegs;
     SmallVector<Attribute> absorbedNames(arc.getNumResults(), {});
     if (auto names = arc->getAttrOfType<ArrayAttr>("names"))
@@ -279,6 +280,7 @@ void Converter::absorbRegs(HWModuleOp module) {
         break;
       }
       clock = regOp.getClk();
+      reset = regOp.getReset();
       absorbedRegs.push_back(regOp);
       // If we absorb a register into the arc, the arc effectively produces that
       // register's value. So if the register had a name, ensure that we assign
@@ -298,6 +300,8 @@ void Converter::absorbRegs(HWModuleOp module) {
     // names. Then replace the registers.
     arc.getClockMutable().assign(clock);
     arc.setLatency(arc.getLatency() + 1);
+    if (reset)
+      arc.getResetMutable().assign(reset);
     if (llvm::any_of(absorbedNames, [](auto name) {
           return !name.template cast<StringAttr>().getValue().empty();
         }))
@@ -315,18 +319,20 @@ void Converter::absorbRegs(HWModuleOp module) {
                             << " regs to arcs\n");
   arcUses.truncate(outIdx);
 
-  // Group the remaining registers by the operation they use as input. This
-  // will allow us to generally collapse registers derived from the same arc
-  // into one shuffling arc.
-  MapVector<std::pair<Value, Operation *>, SmallVector<seq::CompRegOp>>
+  // Group the remaining registers by their clock, their reset and the operation
+  // they use as input. This will allow us to generally collapse registers
+  // derived from the same arc into one shuffling arc.
+  MapVector<std::tuple<Value, Value, Operation *>, SmallVector<seq::CompRegOp>>
       regsByInput;
   for (auto *op : arcBreakers)
-    if (auto regOp = dyn_cast_or_null<seq::CompRegOp>(op))
-      regsByInput[{regOp.getClk(), regOp.getInput().getDefiningOp()}].push_back(
-          regOp);
+    if (auto regOp = dyn_cast_or_null<seq::CompRegOp>(op)) {
+      regsByInput[{regOp.getClk(), regOp.getReset(),
+                   regOp.getInput().getDefiningOp()}]
+          .push_back(regOp);
+    }
 
   unsigned numMappedRegs = 0;
-  for (auto [clockAndOp, regOps] : regsByInput) {
+  for (auto [clockAndResetAndOp, regOps] : regsByInput) {
     numMappedRegs += regOps.size();
     OpBuilder builder(module);
     auto block = std::make_unique<Block>();
@@ -362,8 +368,9 @@ void Converter::absorbRegs(HWModuleOp module) {
     defOp.getBody().push_back(block.release());
 
     builder.setInsertionPoint(module.getBodyBlock()->getTerminator());
-    auto arcOp = builder.create<StateOp>(loc, defOp, clockAndOp.first, Value{},
-                                         1, inputs);
+    auto arcOp =
+        builder.create<StateOp>(loc, defOp, std::get<0>(clockAndResetAndOp),
+                                std::get<1>(clockAndResetAndOp), 1, inputs);
     if (llvm::any_of(names, [](auto name) {
           return !name.template cast<StringAttr>().getValue().empty();
         }))
