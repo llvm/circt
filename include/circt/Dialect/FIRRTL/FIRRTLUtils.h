@@ -171,7 +171,11 @@ inline FIRRTLType mapBaseType(FIRRTLType type,
 /// cannot be lowered.
 Type lowerType(Type type);
 
-Type lowerType(Type type, hw::HWModuleOp module);
+/// Given a type, return the corresponding lowered type for the HW dialect.
+/// If the given type is a named bundle, then create a TypeScope at the Module level and the corresponding typedecl op inside it and return the corresponding TypeAliasType.
+Type lowerType(Type type, Location loc,
+               llvm::function_ref<hw::TypeAliasType(Type, BundleType, Location)>
+                   getTypeDeclFn);
 
 //===----------------------------------------------------------------------===//
 // Parser-related utilities

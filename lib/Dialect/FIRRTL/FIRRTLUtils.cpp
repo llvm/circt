@@ -859,12 +859,10 @@ Type circt::firrtl::lowerType(Type type) {
   return {};
 }
 
-Type circt::firrtl::lowerType(Type type, hw::HWModuleOp module) {
-  hw::TypeScopeOp typeScope;
-  for (auto scopeOp : module.getOps<hw::TypeScopeOp>()) {
-    typeScope = scopeOp;
-    break;
-  }
+Type circt::firrtl::lowerType(
+    Type type, Location loc,
+    llvm::function_ref<hw::TypeAliasType(Type, BundleType, Location)>
+        getTypeDeclFn) {
   auto firType = type.dyn_cast<FIRRTLBaseType>();
   if (!firType)
     return type;
@@ -875,34 +873,19 @@ Type circt::firrtl::lowerType(Type type, hw::HWModuleOp module) {
   if (BundleType bundle = firType.dyn_cast<BundleType>()) {
     mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
     for (auto element : bundle) {
-      Type etype = lowerType(element.type, module);
+      Type etype = lowerType(element.type, loc, getTypeDeclFn);
       if (!etype)
         return {};
       hwfields.push_back(hw::StructType::FieldInfo{element.name, etype});
     }
     Type rawType = hw::StructType::get(type.getContext(), hwfields);
-    if (auto bundleName = bundle.getBundleName()) {
-      if (!typeScope) {
-        auto b = OpBuilder(module);
-        b.setInsertionPointToStart(module.getBodyBlock());
-        typeScope = b.create<hw::TypeScopeOp>(
-            module.getLoc(),
-            b.getStringAttr(module.getName() + "__TYPESCOPE_"));
-        typeScope.getBodyRegion().push_back(new Block());
-      }
-      auto b = OpBuilder(typeScope);
-      b.setInsertionPointToEnd(&typeScope.getBodyRegion().front());
-      auto typeDecl = b.create<hw::TypedeclOp>(module.getLoc(), bundleName,
-                                               rawType, nullptr);
-      rawType = hw::TypeAliasType::get(
-          SymbolRefAttr::get(typeScope.getSymNameAttr(),
-                             {FlatSymbolRefAttr::get(typeDecl)}),
-          rawType);
-    }
+    if (auto bundleName = bundle.getBundleName())
+      rawType = getTypeDeclFn(rawType, bundle, loc);
+
     return rawType;
   }
   if (FVectorType vec = firType.dyn_cast<FVectorType>()) {
-    auto elemTy = lowerType(vec.getElementType(), module);
+    auto elemTy = lowerType(vec.getElementType(), loc, getTypeDeclFn);
     if (!elemTy)
       return {};
     return hw::ArrayType::get(elemTy, vec.getNumElements());

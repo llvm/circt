@@ -275,6 +275,72 @@ struct CircuitLoweringState {
     binds.push_back(op);
   }
 
+  /// Return a unique typedecl name, derived from the input `name`, and add the
+  /// new name to the typeDeclNames set.  There are two possible outcomes for
+  /// the returned name:
+  ///
+  /// 1. The original name is returned.
+  /// 2. The name is given a `_<n>` suffix where `<n>` is a number starting from
+  ///    `_0` and incrementing by one each time.
+  StringRef newTypedeclName(const Twine &name) {
+    // Special case the situation where there is no name collision to avoid
+    // messing with the SmallString allocation below.
+    llvm::SmallString<64> tryName;
+    auto inserted = typeDeclNames.insert(name.toStringRef(tryName));
+    if (inserted.second)
+      return inserted.first->getKey();
+
+    // Try different suffixes until we get a collision-free one.
+    size_t i = 0;
+    if (tryName.empty())
+      name.toVector(tryName); // toStringRef may leave tryName unfilled
+    tryName.push_back('_');
+    size_t baseLength = tryName.size();
+    for (;;) {
+      tryName.resize(baseLength);
+      Twine(i++).toVector(tryName); // append integer to tryName
+      auto inserted = typeDeclNames.insert(tryName);
+      if (inserted.second)
+        return inserted.first->getKey();
+    }
+  }
+
+  hw::TypeAliasType getTypeAlias(Type rawType, BundleType firrtlType,
+                                 Location typeLoc) {
+
+    std::lock_guard<std::mutex> lock(typeScopeMutex);
+    auto bundleName = firrtlType.getBundleName();
+    assert(bundleName && "getTypeAlias can only be called for a named bundle");
+    Block &topLevelBlock = circuitOp->getParentRegion()->getBlocks().back();
+    if (!typeScope) {
+      // Initialize typeScope.
+      auto b = ImplicitLocOpBuilder::atBlockBegin(circuitOp.getLoc(),
+                                                  &topLevelBlock);
+      typeScope = b.create<hw::TypeScopeOp>(
+          b.getStringAttr(circuitOp.getName() + "__TYPESCOPE_"));
+      typeScope.getBodyRegion().push_back(new Block());
+    }
+    auto iterT1 = firrtlTypeToAliasTypeMap.find(firrtlType);
+    if (iterT1 != firrtlTypeToAliasTypeMap.end())
+      return iterT1->second;
+
+    // Get a unique typedecl name.
+    bundleName = StringAttr::get(bundleName.getContext(),
+                                 newTypedeclName(bundleName.getValue()));
+
+    auto b =
+        ImplicitLocOpBuilder::atBlockEnd(typeLoc, typeScope.getBodyBlock());
+    auto typeDecl =
+        b.create<hw::TypedeclOp>(typeLoc, bundleName, rawType, nullptr);
+    auto aliasType = hw::TypeAliasType::get(
+        SymbolRefAttr::get(typeScope.getSymNameAttr(),
+                           {FlatSymbolRefAttr::get(typeDecl)}),
+        rawType);
+    // Record the typaAlias for the corresponding FIRRTL type.
+    firrtlTypeToAliasTypeMap[firrtlType] = aliasType;
+    return aliasType;
+  }
+
   FModuleLike getDut() { return dut; }
   FModuleLike getTestHarness() { return testHarness; }
 
@@ -354,6 +420,18 @@ private:
 
   /// Cached nla table analysis.
   NLATable *nlaTable = nullptr;
+
+  /// Global typescope for all the typedecls in this module.
+  hw::TypeScopeOp typeScope;
+
+  /// Mutex, to add new global typedecls while lowering the FIRRTLModules.
+  std::mutex typeScopeMutex;
+
+  /// Map of FIRRTL type to the lowered AliasType.
+  DenseMap<Type, hw::TypeAliasType> firrtlTypeToAliasTypeMap;
+
+  /// Set to keep track of unique typedecl names.
+  llvm::StringSet<> typeDeclNames;
 };
 
 void CircuitLoweringState::processRemainingAnnotations(
@@ -2755,7 +2833,11 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   }
   auto hwModule = cast<hw::HWModuleOp>(op->getParentOp());
 
-  auto resultType = lowerType(origResultType, hwModule);
+  auto getTypeDeclFn = [&](Type rawType, BundleType firrtlType,
+                           Location typeLoc) -> hw::TypeAliasType {
+    return circuitState.getTypeAlias(rawType, firrtlType, typeLoc);
+  };
+  auto resultType = lowerType(origResultType, op.getLoc(), getTypeDeclFn);
   if (!resultType)
     return failure();
 

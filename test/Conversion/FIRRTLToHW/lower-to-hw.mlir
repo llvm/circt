@@ -10,6 +10,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 "sifive.enterprise.firrtl.ExtractAssertionsAnnotation", directory = "dir3",  filename = "./dir3/filename3" }]}
 {
   // Headers
+  // CHECK-LABEL: hw.type_scope @Simple__TYPESCOPE_ {
+  // CHECK-NEXT:  hw.typedecl @VecOfBundle : !hw.struct<sint: i2, uint: i4>
+  // CHECK-NEXT:  hw.typedecl @Other : !hw.struct<sint: i2, uint: i4>
+  // CHECK-NEXT:  hw.typedecl @OtherOther : !hw.struct<other: !hw.typealias<@Simple__TYPESCOPE_::@Other, !hw.struct<sint: i2, uint: i4>>>
   // CHECK:      sv.ifdef  "PRINTF_COND_" {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ifdef  "PRINTF_COND" {
@@ -1620,14 +1624,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module @NamedBundles() {
     %vecOfBundle = firrtl.wire sym @vecOfBundle : !firrtl.vector<bundle "VecOfBundle" <sint: sint<2>, uint: uint<4>>, 2>
     %otherOther = firrtl.wire sym @otherOther : !firrtl<bundle "OtherOther" <other: bundle "Other" <sint: sint<2>, uint: uint<4>>>>
-    // CHECK-LABEL: hw.type_scope @NamedBundles__TYPESCOPE_ {
-    // CHECK-NEXT:   hw.typedecl @VecOfBundle : !hw.struct<sint: i2, uint: i4>
-    // CHECK-NEXT:   hw.typedecl @Other : !hw.struct<sint: i2, uint: i4>
-    // CHECK-NEXT:   hw.typedecl @OtherOther : !hw.struct<other: !hw.typealias<@NamedBundles__TYPESCOPE_::@Other, !hw.struct<sint: i2, uint: i4>>>
-    // CHECK-NEXT: }
     // CHECK: %vecOfBundle = hw.wire %z_i12 sym @vecOfBundle  : 
-    // CHECK-SAME: !hw.array<2xtypealias<@NamedBundles__TYPESCOPE_::@VecOfBundle, !hw.struct<sint: i2, uint: i4>>>
+    // CHECK-SAME: !hw.array<2xtypealias<@Simple__TYPESCOPE_::@VecOfBundle, !hw.struct<sint: i2, uint: i4>>>
     // CHECK-NEXT: %otherOther = hw.wire %z_i6 sym @otherOther  : 
-    // CHECK-SAME: !hw.typealias<@NamedBundles__TYPESCOPE_::@OtherOther, !hw.struct<other: !hw.typealias<@NamedBundles__TYPESCOPE_::@Other, !hw.struct<sint: i2, uint: i4>>>>
+    // CHECK-SAME: !hw.typealias<@Simple__TYPESCOPE_::@OtherOther, !hw.struct<other: !hw.typealias<@Simple__TYPESCOPE_::@Other, !hw.struct<sint: i2, uint: i4>>>>
   }
 }
