@@ -116,6 +116,10 @@ def RefType : FIRRTLDialectType<
   CPred<"$_self.isa<RefType>()">,
    "reference type", "::circt::firrtl::RefType">;
 
+def RWProbe : FIRRTLDialectType<
+  CPred<"$_self.isa<RefType>() && $_self.cast<RefType>().getForceable()">,
+   "rwprobe type", "::circt::firrtl::RefType">;
+
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates
 //===----------------------------------------------------------------------===//
