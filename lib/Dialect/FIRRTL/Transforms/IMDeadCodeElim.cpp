@@ -199,8 +199,8 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
       markDeclaration(&op);
     else if (auto instance = dyn_cast<InstanceOp>(op))
       markInstanceOp(instance);
-    else if (isa<FConnectLike>(op))
-      // Skip connect op.
+    else if (isa<FConnectLike, InvalidValueOp>(op))
+      // Skip connect op and invalid values.
       continue;
     else if (!mlir::isMemoryEffectFree(&op))
       markUnknownSideEffectOp(&op);
@@ -390,7 +390,8 @@ void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
     }
 
     // Delete dead wires, regs and nodes.
-    if (isDeclaration(&op) && isAssumedDead(&op)) {
+    if ((isDeclaration(&op) || isa<InvalidValueOp>(&op)) &&
+        isAssumedDead(&op)) {
       LLVM_DEBUG(llvm::dbgs() << "DEAD: " << op << "\n";);
       assert(op.use_empty() && "users should be already removed");
       op.erase();
