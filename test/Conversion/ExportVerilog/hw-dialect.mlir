@@ -1389,3 +1389,15 @@ hw.module @DontInlineAggregateConstantIntoPorts() -> () {
   %0 = hw.aggregate_constant [0 : i4, 1 : i4] : !hw.array<2xi4>
   hw.instance "i0" @Array(a: %0: !hw.array<2xi4>) -> ()
 }
+
+// CHECK-LABEL: module FooA(
+// CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [9:0] b; logic [5:0] __post_padding_b;} b;} test
+// CHECK-NEXT:  );
+!unionA = !hw.union<a: i16, b: i10>
+hw.module @FooA(%test: !unionA) {}
+
+// CHECK-LABEL: module FooB(
+// CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [1:0] __pre_padding_b; logic [9:0] b; logic [3:0] __post_padding_b;} b;} test
+// CHECK-NEXT:  );
+!unionB = !hw.union<a: i16, b: i10 offset 2>
+hw.module @FooB(%test: !unionB) {}
