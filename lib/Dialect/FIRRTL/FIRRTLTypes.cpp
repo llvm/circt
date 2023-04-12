@@ -1230,7 +1230,7 @@ std::pair<uint64_t, bool> FVectorType::rootChildFieldID(uint64_t fieldID,
 }
 
 //===----------------------------------------------------------------------===//
-// Enum Type
+// FEnum Type
 //===----------------------------------------------------------------------===//
 
 struct circt::firrtl::detail::FEnumTypeStorage : detail::FIRRTLBaseTypeStorage {
