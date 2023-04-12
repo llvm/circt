@@ -807,6 +807,19 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
           traceResets(op.getType(), op.getResult(), 0,
                       vectorType.getElementType(), op.getInput(),
                       getFieldID(vectorType), op.getLoc());
+        })
+
+        .Case<RefSubOp>([&](RefSubOp op) {
+          // Trace through ref.sub.
+          auto aggType = op.getInput().getType().getType();
+          uint64_t fieldID =
+              TypeSwitch<FIRRTLBaseType, uint64_t>(aggType)
+                  .Case<FVectorType>([](auto type) { return getFieldID(type); })
+                  .Case<BundleType>([&](auto type) {
+                    return getFieldID(type, op.getIndex());
+                  });
+          traceResets(op.getResult().getType().getType(), op.getResult(), 0,
+                      aggType, op.getInput(), fieldID, op.getLoc());
         });
   });
 }
