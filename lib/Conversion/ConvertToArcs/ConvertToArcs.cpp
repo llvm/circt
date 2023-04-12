@@ -322,8 +322,9 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
     arc.setLatency(arc.getLatency() + 1);
     if (reset) {
       if (arc.getReset())
-        return arc.emitError("StateOp tried to infer reset from CompReg, but already "
-                      "had a reset.");
+        return arc.emitError(
+            "StateOp tried to infer reset from CompReg, but already "
+            "had a reset.");
       arc.getResetMutable().assign(reset);
     }
     if (llvm::any_of(absorbedNames, [](auto name) {
