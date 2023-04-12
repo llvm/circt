@@ -30,6 +30,12 @@ git submodule update --init
 
 ### Installing and Building with Wheels
 
+You'll need the git tags since the package versioning step needs them:
+
+```bash
+git fetch upstream --tags
+```
+
 The simplest way to compile PyCDE for local use is to install it with the `pip
 install` command:
 
