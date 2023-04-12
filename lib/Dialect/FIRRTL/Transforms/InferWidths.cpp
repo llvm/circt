@@ -1353,6 +1353,17 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
                    op.getType());
       })
 
+      .Case<RefSubOp>([&](RefSubOp op) {
+        uint64_t fieldID = TypeSwitch<FIRRTLBaseType, uint64_t>(
+                               op.getInput().getType().getType())
+                               .Case<FVectorType>([](auto _) { return 1; })
+                               .Case<BundleType>([&](auto type) {
+                                 return type.getFieldID(op.getIndex());
+                               });
+        unifyTypes(FieldRef(op.getResult(), 0),
+                   FieldRef(op.getInput(), fieldID), op.getType());
+      })
+
       // Arithmetic and Logical Binary Primitives
       .Case<AddPrimOp, SubPrimOp>([&](auto op) {
         auto lhs = getExpr(op.getLhs());
