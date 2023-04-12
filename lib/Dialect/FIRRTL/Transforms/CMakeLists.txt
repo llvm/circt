@@ -22,11 +22,12 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp
   LowerIntrinsics.cpp
+  LowerMatches.cpp
   LowerMemory.cpp
   LowerTypes.cpp
   LowerXMR.cpp
-  MergeConnections.cpp
   MemToRegOfVec.cpp
+  MergeConnections.cpp
   ModuleInliner.cpp
   PrefixModules.cpp
   PrintFIRRTLFieldSource.cpp

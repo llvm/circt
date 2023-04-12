@@ -1655,6 +1655,8 @@ void InferenceMapping::declareVars(Value value, Location loc, bool isDerived) {
       declare(vecType.getElementType());
       // Skip past the rest of the elements
       fieldID = save + vecType.getMaxFieldID();
+    } else if (auto enumType = type.dyn_cast<FEnumType>()) {
+      // Enum types can't have uninferred widths, so just skip this element.
     } else {
       llvm_unreachable("Unknown type inside a bundle!");
     }

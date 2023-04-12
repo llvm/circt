@@ -1155,6 +1155,24 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.instance module interesting_name @SomeModule
     module.in <= UInt(1)
 
+  ; CHECK-LABEL: firrtl.module private @EnumTypes
+  module EnumTypes:
+    ; CHECK-SAME: in %i: !firrtl.enum<Some: uint<8>, None: uint<0>>
+    input i : [#Some : UInt<8>, #None]
+    output o : UInt<8>
+
+    ; CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
+    ; CHECK: %0 = firrtl.fenumcreate Some(%c0_ui8) : !firrtl.enum<Some: uint<8>, None: uint<0>>
+    node n = #Some(UInt<8>(0)) : [#Some : UInt<8>, #None]
+
+    match i:
+      #Some(x):
+        o <= x
+      #None:
+        o is invalid
+
+
+
   ; CHECK-LABEL: module private @RefsChild(
   ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>
   ; CHECK-SAME: out %rw: !firrtl.rwprobe<uint<1>>
@@ -1289,3 +1307,4 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module ProbeInvalidate:
     output p : Probe<UInt<1>>
     p is invalid
+  

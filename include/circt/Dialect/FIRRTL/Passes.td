@@ -257,6 +257,15 @@ def EmitOMIR : Pass<"firrtl-emit-omir", "firrtl::CircuitOp"> {
   let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
 }
 
+def LowerMatches : Pass<"firrtl-lower-matches", "firrtl::FModuleOp"> {
+  let summary = "Remove all matchs conditional blocks";
+  let description = [{
+    Lowers FIRRTL match statements in to when statements, which can later be
+    lowered with ExpandWhens.
+  }];
+  let constructor = "circt::firrtl::createLowerMatchesPass()";
+}
+
 def ExpandWhens : Pass<"firrtl-expand-whens", "firrtl::FModuleOp"> {
   let summary = "Remove all when conditional blocks.";
   let description = [{

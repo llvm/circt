@@ -604,6 +604,12 @@ void circt::firrtl::walkGroundTypes(
             f(f, vector.getElementType());
           }
         })
+        .template Case<FEnumType>([&](FEnumType fenum) {
+          for (size_t i = 0, e = fenum.getNumElements(); i < e; ++i) {
+            fieldID++;
+            f(f, fenum.getElementType(i));
+          }
+        })
         .Default([&](FIRRTLBaseType groundType) {
           assert(groundType.isGround() &&
                  "only ground types are expected here");
@@ -842,10 +848,8 @@ Type circt::firrtl::lowerType(Type type) {
     if (simple)
       return tagTy;
     auto bodyTy = hw::UnionType::get(type.getContext(), hwfields);
-    auto tagImplTy = IntegerType::get(type.getContext(),
-                                      llvm::Log2_64_Ceil(hwfields.size()));
     hw::StructType::FieldInfo fields[2] = {
-        {StringAttr::get(type.getContext(), "tag"), tagImplTy},
+        {StringAttr::get(type.getContext(), "tag"), tagTy},
         {StringAttr::get(type.getContext(), "body"), bodyTy}};
     return hw::StructType::get(type.getContext(), fields);
   }

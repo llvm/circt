@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWSymCache.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/HW/InstanceImplementation.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
@@ -2244,9 +2245,25 @@ void EnumConstantOp::getAsmResultNames(
   setNameFn(getResult(), getField().getField().str());
 }
 
+void EnumConstantOp::build(OpBuilder &builder, OperationState &odsState,
+                           EnumFieldAttr field) {
+  return build(builder, odsState, field.getType().getValue(), field);
+}
+
 OpFoldResult EnumConstantOp::fold(FoldAdaptor adaptor) {
   assert(adaptor.getOperands().empty() && "constant has no operands");
   return getFieldAttr();
+}
+
+//===----------------------------------------------------------------------===//
+// EnumCmpOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult EnumCmpOp::verify() {
+  if (getCanonicalType(getLhs().getType()) !=
+      getCanonicalType(getRhs().getType()))
+    return emitOpError("types are not compatible enumerations");
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -2640,6 +2657,17 @@ ParseResult UnionExtractOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void UnionExtractOp::print(OpAsmPrinter &printer) {
   printExtractOp(printer, *this);
+}
+
+LogicalResult UnionExtractOp::inferReturnTypes(MLIRContext *context,
+                                               std::optional<Location> loc,
+                                               ValueRange operands,
+                                               DictionaryAttr attrs,
+                                               mlir::RegionRange regions,
+                                               SmallVectorImpl<Type> &results) {
+  results.push_back(cast<UnionType>(operands[0].getType())
+                        .getFieldType(attrs.getAs<StringAttr>("field")));
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

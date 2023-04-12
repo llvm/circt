@@ -881,6 +881,49 @@ firrtl.circuit "MismatchedRegister" {
 
 // -----
 
+firrtl.circuit "EnumNonExistentLabel" {
+  firrtl.module @EnumNonExistentLabel(in %0 : !firrtl.uint<1>) {
+    // expected-error @+1 {{tag A is not a member of the enumeration '!firrtl.enum<B: uint<1>>'}}
+    %1 = firrtl.fenumcreate A(%0) : !firrtl.enum<B: uint<1>>
+  }
+}
+
+// -----
+
+firrtl.circuit "EnumNonExistentLabel" {
+  firrtl.module @EnumNonExistentLabel(in %enum : !firrtl.enum<a : uint<8>>) {
+    // expected-error @+1 {{the label "b" is not a member of the enumeration '!firrtl.enum<a: uint<8>>'}}
+    firrtl.match %enum : !firrtl.enum<a : uint<8>> {
+      case b(%0) { }
+    }
+  }
+}
+
+
+// -----
+
+firrtl.circuit "EnumSameCase" {
+  firrtl.module @EnumSameCase(in %enum : !firrtl.enum<a : uint<8>>) {
+    // expected-error @+1 {{the label "a" is matched more than once}}
+    "firrtl.match"(%enum) ({
+    ^bb0(%arg0: !firrtl.uint<8>):
+    }, {
+    ^bb0(%arg0: !firrtl.uint<8>):
+    }) {labels = ["a", "a"]} : (!firrtl.enum<a: uint<8>>) -> ()
+  }
+}
+
+// -----
+
+firrtl.circuit "EnumNonExaustive" {
+  firrtl.module @EnumNonExaustive(in %enum : !firrtl.enum<a : uint<8>>) {
+    // expected-error @+1 {{missing case for label "a"}}
+    "firrtl.match"(%enum) {labels = []} : (!firrtl.enum<a: uint<8>>) -> ()
+  }
+}
+
+// -----
+
 // expected-error @+1 {{'firrtl.circuit' op main module 'private_main' must be public}}
 firrtl.circuit "private_main" {
   firrtl.module private @private_main() {}

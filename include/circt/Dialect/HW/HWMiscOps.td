@@ -169,4 +169,20 @@ def EnumConstantOp : HWOp<"enum.constant", [Pure, ConstantLike,
   ];
 }
 
+def EnumCmpOp : HWOp<"enum.cmp", [Pure]> {
+  let summary = "Compare two values of an enumeration";
+  let description = [{
+    
+    Example:
+    ```mlir
+    ```
+  }];
+  let arguments = (ins EnumType:$lhs, EnumType:$rhs);
+  let results = (outs I1:$result);
+  let hasVerifier = 1;
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` qualified(type($lhs)) `,` qualified(type($rhs))
+  }];
+}
+
 #endif // CIRCT_DIALECT_HW_HWMISCOPS_TD

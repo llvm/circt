@@ -35,7 +35,9 @@ public:
                        // Cast operation
                        BitcastOp, ParamValueOp,
                        // Enum operations
-                       EnumConstantOp>([&](auto expr) -> ResultType {
+                       EnumConstantOp, EnumCmpOp,
+                       // Union operations
+                       UnionCreateOp, UnionExtractOp>([&](auto expr) -> ResultType {
           return thisCast->visitTypeOp(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -72,7 +74,10 @@ public:
   HANDLE(ArrayGetOp, Unhandled);
   HANDLE(ArrayCreateOp, Unhandled);
   HANDLE(ArrayConcatOp, Unhandled);
+  HANDLE(EnumCmpOp, Unhandled);
   HANDLE(EnumConstantOp, Unhandled);
+  HANDLE(UnionCreateOp, Unhandled);
+  HANDLE(UnionExtractOp, Unhandled);
 #undef HANDLE
 };
 

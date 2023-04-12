@@ -1419,6 +1419,26 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         emitDims(dims, os, loc, emitter);
         return true;
       })
+      .Case<UnionType>([&](UnionType unionType) {
+        os << "union packed {";
+        for (auto &element : unionType.getElements()) {
+          if (isZeroBitType(element.type)) {
+            os << "/*" << emitter.getVerilogStructFieldName(element.name)
+               << ": Zero Width;*/ ";
+            continue;
+          }
+          SmallVector<Attribute, 8> dimensions;
+          printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
+                              dimensions,
+                              /*implicitIntType=*/false,
+                              /*singleBitDefaultType=*/true, emitter);
+          os << ' ' << emitter.getVerilogStructFieldName(element.name);
+          emitter.printUnpackedTypePostfix(element.type, os);
+          os << "; ";
+        }
+        os << "}";
+        return true;
+      })
 
       .Case<InterfaceType>([](InterfaceType ifaceType) { return false; })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
@@ -1914,7 +1934,10 @@ private:
   SubExprInfo visitTypeOp(StructCreateOp op);
   SubExprInfo visitTypeOp(StructExtractOp op);
   SubExprInfo visitTypeOp(StructInjectOp op);
+  SubExprInfo visitTypeOp(EnumCmpOp op);
   SubExprInfo visitTypeOp(EnumConstantOp op);
+  // SubExprInfo visitTypeOp(UnionCreateOp op);
+  SubExprInfo visitTypeOp(UnionExtractOp op);
 
   // Comb Dialect Operations
   using CombinationalVisitor::visitComb;
@@ -2794,6 +2817,24 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
 
 SubExprInfo ExprEmitter::visitTypeOp(EnumConstantOp op) {
   ps << PPSaveString(emitter.fieldNameResolver.getEnumFieldName(op.getField()));
+  return {Selection, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(EnumCmpOp op) {
+  auto result = emitBinary(op, Comparison, "==", NoRequirement);
+  // SystemVerilog 11.8.1: "Comparison... operator results are unsigned,
+  // regardless of the operands".
+  result.signedness = IsUnsigned;
+  return result;
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(UnionExtractOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  emitSubExpr(op.getInput(), Selection);
+  ps << "."
+     << PPExtString(emitter.getVerilogStructFieldName(op.getFieldAttr()));
   return {Selection, IsUnsigned};
 }
 

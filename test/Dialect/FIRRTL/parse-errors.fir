@@ -415,6 +415,13 @@ circuit DefineIntoSubindex:
 
 ;// -----
 
+circuit EnumEmptyTagInType:
+  module EnumEmptyTagInType:
+    ; expected-error @+1 {{invalid tag name}}
+    wire w : [# : UInt<8>]
+
+;// -----
+
 circuit DefineIntoProbe:
   module DefineIntoProbe:
     input in : UInt<1>

@@ -240,7 +240,9 @@ FIRToken FIRLexer::lexTokenImpl() {
     case '_':
       // Handle identifiers.
       return lexIdentifierOrKeyword(tokStart);
-
+    case '#':
+      // Handle tags.
+      return lexTag(tokStart);
     case '.':
       return formToken(FIRToken::period, tokStart);
     case ':':
@@ -410,6 +412,22 @@ FIRToken FIRLexer::lexIdentifierOrKeyword(const char *tokStart) {
                             .Default(FIRToken::identifier);
 
   return FIRToken(kind, spelling);
+}
+
+FIRToken FIRLexer::lexTag(const char *tokStart) {
+  assert(*tokStart == '#');
+
+  // Match the rest of the identifier regex: [0-9a-zA-Z_$-]*
+  while (llvm::isAlpha(*curPtr) || llvm::isDigit(*curPtr) || *curPtr == '_' ||
+         *curPtr == '$' || *curPtr == '-')
+    ++curPtr;
+
+  StringRef spelling(tokStart, curPtr - tokStart);
+
+  if (spelling.empty())
+    return emitError(tokStart, "invalid tag name");
+
+  return FIRToken(FIRToken::tag, spelling);
 }
 
 /// Skip a comment line, starting with a ';' and going to end of line.

@@ -1542,6 +1542,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(VectorCreateOp op);
   LogicalResult visitExpr(BundleCreateOp op);
   LogicalResult visitExpr(AggregateConstantOp op);
+  LogicalResult visitExpr(IsTagOp op);
+  LogicalResult visitExpr(SubtagOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
   LogicalResult visitInvalidOp(Operation *op) { return failure(); }
 
@@ -2716,6 +2718,28 @@ LogicalResult FIRRTLLowering::visitExpr(AggregateConstantOp op) {
 
   return setLoweringTo<hw::AggregateConstantOp>(op, resultType,
                                                 attr.cast<ArrayAttr>());
+}
+
+LogicalResult FIRRTLLowering::visitExpr(IsTagOp op) {
+  auto tagName = op.getFieldNameAttr();
+  auto lhs = getLoweredValue(op.getInput());
+  if (isa<hw::StructType>(lhs.getType()))
+    lhs = builder.create<hw::StructExtractOp>(lhs, "tag");
+  llvm::errs() << "lhs=" << lhs << "\n";
+  auto enumField = hw::EnumFieldAttr::get(op.getLoc(), tagName, lhs.getType());
+  auto rhs = builder.create<hw::EnumConstantOp>(enumField);
+  return setLoweringTo<hw::EnumCmpOp>(op, lhs, rhs);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(SubtagOp op) {
+  auto tagName = op.getFieldNameAttr();
+  auto enumType = lowerType(op.getInput().getType());
+  auto input = getLoweredValue(op.getInput());
+  if (isa<hw::StructType>(enumType)) {
+    auto field = builder.create<hw::StructExtractOp>(input, "body");
+    return setLoweringTo<hw::UnionExtractOp>(op, field, tagName);
+  }
+  return setLoweringTo<hw::ConstantOp>(op, APInt(0, 0, false));
 }
 
 //===----------------------------------------------------------------------===//
