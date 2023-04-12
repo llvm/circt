@@ -91,14 +91,13 @@ static LogicalResult verifyIndexWideEnough(Operation *op, Value indexVal,
   else if (indexType.isIndex())
     indexWidth = IndexType::kInternalStorageBitWidth;
   else
-    return op->emitError("unsupported type for indexing operand: ")
-           << indexType;
+    return op->emitError("unsupported type for indexing value: ") << indexType;
 
   // Check whether the bitwidth can support the provided number of operands
   if (indexWidth < 64) {
     uint64_t maxNumOperands = (uint64_t)1 << indexWidth;
     if (numOperands > maxNumOperands)
-      return op->emitError("bitwidth of indexing operand is ")
+      return op->emitError("bitwidth of indexing value is ")
              << indexWidth << ", which can index into " << maxNumOperands
              << " operands, but found " << numOperands << " operands";
   }
@@ -447,19 +446,6 @@ LogicalResult MuxOp::verify() {
 std::string handshake::ControlMergeOp::getResultName(unsigned int idx) {
   assert(idx == 0 || idx == 1);
   return idx == 0 ? "dataOut" : "index";
-}
-
-LogicalResult ControlMergeOp::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> location, ValueRange operands,
-    DictionaryAttr attributes, mlir::RegionRange regions,
-    SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
-  // ControlMerge must have at least one data operand
-  if (operands.empty())
-    return failure();
-  // Result type is type of any data operand and, by default, an index type
-  inferredReturnTypes.push_back(operands[0].getType());
-  inferredReturnTypes.push_back(IndexType::get(context));
-  return success();
 }
 
 ParseResult ControlMergeOp::parse(OpAsmParser &parser, OperationState &result) {

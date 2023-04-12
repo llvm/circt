@@ -390,7 +390,6 @@ def MuxOp : Handshake_Op<"mux", [
 
 def ControlMergeOp : Handshake_Op<"control_merge", [
   Pure, MergeLikeOpInterface, HasClock, SOSTInterface,
-  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getResultName"]>
 ]> {
@@ -410,9 +409,21 @@ def ControlMergeOp : Handshake_Op<"control_merge", [
 
   let arguments = (ins Variadic<AnyType> : $dataOperands);
   let results = (outs AnyType : $result, AnyType : $index);
+  
+  let builders = [OpBuilder<
+    (ins "ValueRange":$operands), [{
+      assert(!operands.empty() && "cmerge needs at least one operand");
+      $_state.addOperands(operands);
+      // By default, the index result has an Index type
+      SmallVector<Type> resultTypes { operands[0].getType(), 
+                                      $_builder.getIndexType()};
+      $_state.addTypes(resultTypes);
+  }]>];
+  
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
   let hasCanonicalizer = 1;
+
 }
 
 def BranchOp : Handshake_Op<"br", [
