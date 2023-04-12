@@ -534,3 +534,19 @@ circuit DefineWidths:
     output p : Probe<UInt>
     define p = probe(in) ; expected-error {{'firrtl.ref.define' op requires all operands to have the same type}}
 
+
+;// -----
+
+circuit ForceProbe:
+  module ForceProbe:
+    input in : UInt<1>
+    force_initial(probe(in), UInt<1>(1)) ; expected-error {{expected rwprobe-type expression for force_initial destination, got '!firrtl.probe<uint<1>>'}}
+
+;// -----
+
+circuit ForceWithLiteral:
+  module ForceWithLiteral:
+    input in : UInt<1>
+    node n = in
+    force_initial(rwprobe(n), 1) ; expected-error {{expected source expression in force_initial}}
+

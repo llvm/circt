@@ -740,9 +740,9 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
         b.getNamedAttr("width", b.getUI32IntegerAttr(mem.dataWidth)),
         b.getNamedAttr("maskGran", b.getUI32IntegerAttr(maskGran)),
         b.getNamedAttr("readUnderWrite",
-                       b.getUI32IntegerAttr(mem.readUnderWrite)),
+                       seq::RUWAttr::get(b.getContext(), mem.readUnderWrite)),
         b.getNamedAttr("writeUnderWrite",
-                       hw::WUWAttr::get(b.getContext(), mem.writeUnderWrite)),
+                       seq::WUWAttr::get(b.getContext(), mem.writeUnderWrite)),
         b.getNamedAttr("writeClockIDs", b.getI32ArrayAttr(mem.writeClockIDs)),
         b.getNamedAttr("initFilename",
                        mem.init ? mem.init.getFilename() : b.getStringAttr("")),
@@ -3517,8 +3517,14 @@ LogicalResult FIRRTLLowering::visitExpr(IsXIntrinsicOp op) {
 LogicalResult FIRRTLLowering::visitExpr(PlusArgsTestIntrinsicOp op) {
   auto resultType = builder.getIntegerType(1);
   auto str = builder.create<sv::ConstantStrOp>(op.getFormatString());
-  return setLoweringTo<sv::SystemFunctionOp>(op, resultType, "test$plusargs",
-                                             ArrayRef<Value>{str});
+  auto reg =
+      builder.create<sv::RegOp>(resultType, builder.getStringAttr("_pargs"));
+  addToInitialBlock([&]() {
+    auto call = builder.create<sv::SystemFunctionOp>(
+        resultType, "test$plusargs", ArrayRef<Value>{str});
+    builder.create<sv::PAssignOp>(reg, call);
+  });
+  return setLoweringTo<sv::ReadInOutOp>(op, reg);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(PlusArgsValueIntrinsicOp op) {
@@ -3528,12 +3534,20 @@ LogicalResult FIRRTLLowering::visitExpr(PlusArgsValueIntrinsicOp op) {
     return failure();
 
   auto str = builder.create<sv::ConstantStrOp>(op.getFormatString());
-  auto wire = createTmpWireOp(type, "_pargs");
-  auto wireRead = builder.create<sv::ReadInOutOp>(wire);
-  (void)setLowering(op.getResult(), wireRead);
-  auto svfun = builder.create<sv::SystemFunctionOp>(
-      resultType, "value$plusargs", ArrayRef<Value>{str, wire});
-  return setLowering(op.getFound(), svfun);
+  auto regv =
+      builder.create<sv::RegOp>(type, builder.getStringAttr("_pargs_v"));
+  auto regf =
+      builder.create<sv::RegOp>(resultType, builder.getStringAttr("_pargs_f"));
+  addToInitialBlock([&]() {
+    auto call = builder.create<sv::SystemFunctionOp>(
+        resultType, "value$plusargs", ArrayRef<Value>{str, regv});
+    builder.create<sv::PAssignOp>(regf, call);
+  });
+  auto readf = builder.create<sv::ReadInOutOp>(regf);
+  auto readv = builder.create<sv::ReadInOutOp>(regv);
+
+  (void)setLowering(op.getResult(), readv);
+  return setLowering(op.getFound(), readf);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SizeOfIntrinsicOp op) {

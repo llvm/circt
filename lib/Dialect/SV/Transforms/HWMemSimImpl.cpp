@@ -18,6 +18,7 @@
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/Namespace.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Dialect/Seq/SeqAttributes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Path.h"
@@ -39,8 +40,8 @@ struct FirMemory {
   size_t maskGran;
   size_t readLatency;
   size_t writeLatency;
-  size_t readUnderWrite;
-  WUW writeUnderWrite;
+  seq::RUW readUnderWrite;
+  seq::WUW writeUnderWrite;
   SmallVector<int32_t> writeClockIDs;
   StringRef initFilename;
   bool initIsBinary;
@@ -110,9 +111,9 @@ static FirMemory analyzeMemOp(HWModuleGeneratedOp op) {
   else
     mem.maskGran = mem.dataWidth;
   mem.readUnderWrite =
-      op->getAttrOfType<IntegerAttr>("readUnderWrite").getUInt();
+      op->getAttrOfType<seq::RUWAttr>("readUnderWrite").getValue();
   mem.writeUnderWrite =
-      op->getAttrOfType<WUWAttr>("writeUnderWrite").getValue();
+      op->getAttrOfType<seq::WUWAttr>("writeUnderWrite").getValue();
   if (auto clockIDsAttr = op->getAttrOfType<ArrayAttr>("writeClockIDs"))
     for (auto clockID : clockIDsAttr)
       mem.writeClockIDs.push_back(
@@ -447,12 +448,12 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     switch (mem.writeUnderWrite) {
     // Undefined write order:  lower each write port into a separate always
     // block.
-    case WUW::Undefined:
+    case seq::WUW::Undefined:
       alwaysBlock();
       break;
     // Port-ordered write order:  lower each write port into an always block
     // based on its clock ID.
-    case WUW::PortOrder:
+    case seq::WUW::PortOrder:
       if (auto *existingAlwaysBlock =
               writeProcesses.lookup(mem.writeClockIDs[i])) {
         OpBuilder::InsertionGuard guard(b);

@@ -363,14 +363,18 @@ def SubtagOp : FIRRTLExprOp<"subtag"> {
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType().cast<FEnumType>()
+      return FieldRef(getInput(), getInput().getType()
                                             .getFieldID(getFieldIndex()));
     }
 
     /// Return the name of the accessed field.
+    StringAttr getFieldNameAttr() {
+      return getInput().getType().getElementNameAttr(getFieldIndex());
+    }
+
+    /// Return the name of the accessed field.
     StringRef getFieldName() {
-      return getInput().getType().cast<FEnumType>()
-        .getElementName(getFieldIndex());
+      return getFieldNameAttr().getValue();
     }
   }];
 }

@@ -182,7 +182,7 @@ struct NLARemover {
 // Reduction
 //===----------------------------------------------------------------------===//
 
-Reduction::~Reduction() {}
+Reduction::~Reduction() = default;
 
 //===----------------------------------------------------------------------===//
 // Pass Reduction
@@ -432,7 +432,7 @@ struct InstanceStubber : public Reduction {
                         instOp.getPortDirection(i) == firrtl::Direction::In);
       result.replaceAllUsesWith(wire);
     }
-    auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
+    auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
     nlaRemover.markNLAsInOperation(instOp);
     erasedInsts.insert(instOp);
@@ -538,11 +538,11 @@ static void pruneUnusedOps(Operation *initialOp, Reduction &reduction) {
   SmallSet<Operation *, 4> handled;
   worklist.push_back(initialOp);
   while (!worklist.empty()) {
-    auto op = worklist.pop_back_val();
+    auto *op = worklist.pop_back_val();
     if (!op->use_empty())
       continue;
     for (auto arg : op->getOperands())
-      if (auto argOp = arg.getDefiningOp())
+      if (auto *argOp = arg.getDefiningOp())
         if (handled.insert(argOp).second)
           worklist.push_back(argOp);
     reduction.notifyOpErased(op);
@@ -651,7 +651,7 @@ struct ConnectInvalidator : public Reduction {
     OpBuilder builder(op);
     auto invOp =
         builder.create<firrtl::InvalidValueOp>(rhs.getLoc(), rhs.getType());
-    auto rhsOp = rhs.getDefiningOp();
+    auto *rhsOp = rhs.getDefiningOp();
     op->setOperand(1, invOp);
     if (rhsOp)
       pruneUnusedOps(rhsOp, *this);
@@ -996,7 +996,7 @@ struct EagerInliner : public Reduction {
     auto instOp = dyn_cast<firrtl::InstanceOp>(op);
     if (!instOp)
       return 0;
-    auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
+    auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
     if (!isa<firrtl::FModuleOp>(moduleOp.getOperation()))
       return 0;
@@ -1022,7 +1022,7 @@ struct EagerInliner : public Reduction {
       result.replaceAllUsesWith(wire);
       argReplacements.push_back(wire);
     }
-    auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
+    auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = cast<firrtl::FModuleOp>(
         instOp.getReferencedModule(symbols.getSymbolTable(tableOp))
             .getOperation());

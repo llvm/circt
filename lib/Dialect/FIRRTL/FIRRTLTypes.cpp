@@ -1230,7 +1230,7 @@ std::pair<uint64_t, bool> FVectorType::rootChildFieldID(uint64_t fieldID,
 }
 
 //===----------------------------------------------------------------------===//
-// Enum Type
+// FEnum Type
 //===----------------------------------------------------------------------===//
 
 struct circt::firrtl::detail::FEnumTypeStorage : detail::FIRRTLBaseTypeStorage {
@@ -1318,10 +1318,14 @@ std::optional<unsigned> FEnumType::getElementIndex(StringRef name) {
   return std::nullopt;
 }
 
-StringRef FEnumType::getElementName(size_t index) {
+StringAttr FEnumType::getElementNameAttr(size_t index) {
   assert(index < getNumElements() &&
          "index must be less than number of fields in enum");
-  return getElements()[index].name.getValue();
+  return getElements()[index].name;
+}
+
+StringRef FEnumType::getElementName(size_t index) {
+  return getElementNameAttr(index).getValue();
 }
 
 std::optional<FEnumType::EnumElement> FEnumType::getElement(StringAttr name) {
