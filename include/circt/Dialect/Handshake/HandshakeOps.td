@@ -423,7 +423,6 @@ def ControlMergeOp : Handshake_Op<"control_merge", [
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
   let hasCanonicalizer = 1;
-
 }
 
 def BranchOp : Handshake_Op<"br", [
