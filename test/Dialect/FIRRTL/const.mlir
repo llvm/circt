@@ -142,6 +142,24 @@ firrtl.module @MixedConstStrictconnect(in %in : !firrtl.const.bundle<a: uint<1>,
   firrtl.strictconnect %out, %in : !firrtl.bundle<a: uint<1>, b: sint<2>>, !firrtl.const.bundle<a: uint<1>, b: sint<2>>
 }
 
+// Test parsing/printing of ref.define when both operands are const
+// CHECK-LABEL: firrtl.module @ConstRefDefine
+firrtl.module @ConstRefDefine(in %a: !firrtl.const.uint<1>, out %_a: !firrtl.probe<const.uint<1>>) {
+  // CHECK-NEXT: [[VAL:%.+]] = firrtl.ref.send %a : !firrtl.const.uint<1>
+  // CHECK-NEXT: firrtl.ref.define %_a, [[VAL]] : !firrtl.probe<const.uint<1>>
+  %0 = firrtl.ref.send %a : !firrtl.const.uint<1>
+  firrtl.ref.define %_a, %0 : !firrtl.probe<const.uint<1>>
+}
+
+// Test parsing/printing of ref.define when constness of operands is mixed
+// CHECK-LABEL: firrtl.module @MixedConstRefDefine
+firrtl.module @MixedConstRefDefine(in %a: !firrtl.const.uint<1>, out %_a: !firrtl.probe<uint<1>>) {
+  // CHECK-NEXT: [[VAL:%.+]] = firrtl.ref.send %a : !firrtl.const.uint<1>
+  // CHECK-NEXT: firrtl.ref.define %_a, [[VAL]] : !firrtl.probe<uint<1>>, !firrtl.probe<const.uint<1>>
+  %0 = firrtl.ref.send %a : !firrtl.const.uint<1>
+  firrtl.ref.define %_a, %0 : !firrtl.probe<uint<1>>, !firrtl.probe<const.uint<1>>
+}
+
 // Test parsing/printing of multibit mux when constness of operands is mixed
 // CHECK-LABEL: firrtl.module @MixedConstMultibitMux
 firrtl.module @MixedConstMultibitMux(in %index: !firrtl.uint<2>, in %source_0: !firrtl.const.uint<1>, in %source_1: !firrtl.uint<1>, in %source_2: !firrtl.const.uint<1>) {

@@ -2386,6 +2386,13 @@ LogicalResult StrictConnectOp::verify() {
 }
 
 LogicalResult RefDefineOp::verify() {
+  auto destBaseType = getDest().getType().getType();
+  auto srcBaseType = getSrc().getType().getType();
+  // Base types must be strictly equivalent
+  if (!areTypesEquivalent(destBaseType, srcBaseType, false, true))
+    return emitError("type mismatch between destination ")
+           << getDest().getType() << " and source " << getSrc().getType();
+
   // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))
     return failure();

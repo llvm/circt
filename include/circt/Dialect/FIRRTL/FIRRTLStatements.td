@@ -70,7 +70,7 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [FConnectLike]> {
     "$dest `,` $src  attr-dict `:` custom<ConstDecay>(qualified(type($dest)), qualified(type($src)))";
 }
 
-def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {
+def RefDefineOp : FIRRTLOp<"ref.define", [FConnectLike]> {
   let summary = "FIRRTL Define References";
   let description = [{
     Define a target reference to the source reference:
@@ -91,7 +91,7 @@ def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {
   let hasVerifier = 1;
 
   let assemblyFormat =
-    "$dest `,` $src  attr-dict `:` qualified(type($dest))";
+    "$dest `,` $src  attr-dict `:` custom<ConstDecay>(qualified(type($dest)), qualified(type($src)))";
 
   let extraClassDeclaration = [{
     static ConnectBehaviorKind getConnectBehaviorKind() {

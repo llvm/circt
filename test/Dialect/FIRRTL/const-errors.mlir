@@ -30,6 +30,17 @@ firrtl.module @test(in %in : !firrtl.bundle<a: uint<1>, b: sint<2>>, out %out : 
 
 // -----
 
+// firrtl.ref.define non-'const' to 'const' flow is invalid
+firrtl.circuit "test" {
+firrtl.module @test(in %a: !firrtl.uint<1>, out %_a: !firrtl.probe<const.uint<1>>) {
+  %0 = firrtl.ref.send %a : !firrtl.uint<1>
+  // expected-error @+1 {{type mismatch}}
+  firrtl.ref.define %_a, %0 : !firrtl.probe<const.uint<1>>, !firrtl.probe<uint<1>>
+}
+}
+
+// -----
+
 // Primitive ops with all 'const' operands must have a 'const' result type
 firrtl.circuit "test" {
 firrtl.module @test(in %a: !firrtl.const.uint<4>, in %b: !firrtl.const.uint<4>) {
