@@ -1391,25 +1391,13 @@ hw.module @DontInlineAggregateConstantIntoPorts() -> () {
 }
 
 // CHECK-LABEL: module FooA(
-// CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [9:0] b; logic [5:0] __post_padding;} b;} test
+// CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [9:0] b; logic [5:0] __post_padding_b;} b;} test
 // CHECK-NEXT:  );
 !unionA = !hw.union<a: i16, b: i10>
 hw.module @FooA(%test: !unionA) {}
 
 // CHECK-LABEL: module FooB(
-// CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [1:0] __pre_padding; logic [9:0] b; logic [3:0] __post_padding;} b;} test
+// CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [1:0] __pre_padding_b; logic [9:0] b; logic [3:0] __post_padding_b;} b;} test
 // CHECK-NEXT:  );
 !unionB = !hw.union<a: i16, b: i10 offset 2>
 hw.module @FooB(%test: !unionB) {}
-
-// CHECK-LABEL: module FooC(
-// CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [1:0] __pre_padding_real; logic [9:0] __pre_padding; logic [3:0] __post_padding;} __pre_padding;} test
-// CHECK-NEXT:  );
-!unionC = !hw.union<a: i16, __pre_padding: i10 offset 2>
-hw.module @FooC(%test: !unionC) {}
-
-// CHECK-LABEL: module FooD(
-// CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [1:0] __pre_padding; logic [9:0] __post_padding; logic [3:0] __post_padding_real;} __post_padding;} test
-// CHECK-NEXT:  );
-!unionD = !hw.union<a: i16, __post_padding: i10 offset 2>
-hw.module @FooD(%test: !unionD) {}

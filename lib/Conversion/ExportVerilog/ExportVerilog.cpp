@@ -1442,11 +1442,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           if (needsPadding) {
             os << " struct packed {";
             if (element.offset) {
-              StringRef paddingName = "__pre_padding";
-              if (element.name == paddingName)
-                paddingName = "__pre_padding_real";
-              os << "logic [" << element.offset - 1 << ":0] " << paddingName
-                 << "; ";
+              os << "logic [" << element.offset - 1 << ":0] "
+                 << "__pre_padding_" << element.name.getValue() << "; ";
             }
           }
 
@@ -1461,12 +1458,9 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
 
           if (needsPadding) {
             if (elementWidth + (int64_t)element.offset < unionWidth) {
-              StringRef paddingName = "__post_padding";
-              if (element.name == paddingName)
-                paddingName = "__post_padding_real";
               os << " logic ["
                  << unionWidth - (elementWidth + element.offset) - 1 << ":0] "
-                 << paddingName << ";";
+                 << "__post_padding_" << element.name.getValue() << ";";
             }
             os << "} " << emitter.getVerilogStructFieldName(element.name)
                << ";";
