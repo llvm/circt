@@ -305,12 +305,24 @@ struct CircuitLoweringState {
     }
   }
 
-  hw::TypeAliasType getTypeAlias(Type rawType, BundleType firrtlType,
-                                 Location typeLoc) {
+  /// For a given named bundle, return the corresponding AliasType. Create and
+  /// record the AliasType, if it doesn't exist for the given named bundle. Can
+  /// only be called for bundles with a valid name.
+  hw::TypeAliasType getTypeAliasForNamedBundle(Type rawType,
+                                               BundleType firrtlType,
+                                               Location typeLoc) {
 
-    std::lock_guard<std::mutex> lock(typeScopeMutex);
     auto bundleName = firrtlType.getBundleName();
-    assert(bundleName && "getTypeAlias can only be called for a named bundle");
+    assert(bundleName &&
+           "getTypeAliasForNamedBundle can only be called for a named bundle");
+    // If the lowered type already exists, return that.
+    auto iterT1 = firrtlTypeToAliasTypeMap.find(firrtlType);
+    if (iterT1 != firrtlTypeToAliasTypeMap.end())
+      return iterT1->second;
+    // Mutex, to update the top level Module, and add the TypeDeclOp inside the
+    // TypeDeclOp.
+    std::lock_guard<std::mutex> lock(typeScopeMutex);
+    // The typescope is created only at the top level module.
     Block &topLevelBlock = circuitOp->getParentRegion()->getBlocks().back();
     if (!typeScope) {
       // Initialize typeScope.
@@ -320,23 +332,23 @@ struct CircuitLoweringState {
           b.getStringAttr(circuitOp.getName() + "__TYPESCOPE_"));
       typeScope.getBodyRegion().push_back(new Block());
     }
-    auto iterT1 = firrtlTypeToAliasTypeMap.find(firrtlType);
-    if (iterT1 != firrtlTypeToAliasTypeMap.end())
-      return iterT1->second;
 
     // Get a unique typedecl name.
+    // The bundleName can conflict with other symbols, but must be unique within
+    // the TypeScopeOp.
     bundleName = StringAttr::get(bundleName.getContext(),
                                  newTypedeclName(bundleName.getValue()));
 
-    auto b =
+    auto typeScopeBuilder =
         ImplicitLocOpBuilder::atBlockEnd(typeLoc, typeScope.getBodyBlock());
-    auto typeDecl =
-        b.create<hw::TypedeclOp>(typeLoc, bundleName, rawType, nullptr);
+    auto typeDecl = typeScopeBuilder.create<hw::TypedeclOp>(typeLoc, bundleName,
+                                                            rawType, nullptr);
     auto aliasType = hw::TypeAliasType::get(
         SymbolRefAttr::get(typeScope.getSymNameAttr(),
                            {FlatSymbolRefAttr::get(typeDecl)}),
         rawType);
-    // Record the typaAlias for the corresponding FIRRTL type.
+    // Record the typaAlias for the corresponding FIRRTL type for later
+    // retrieval.
     firrtlTypeToAliasTypeMap[firrtlType] = aliasType;
     return aliasType;
   }
@@ -433,6 +445,19 @@ private:
   /// Set to keep track of unique typedecl names.
   llvm::StringSet<> typeDeclNames;
 };
+
+/// Given a type, return the corresponding lowered type for the HW dialect.
+///  A wrapper to the FIRRTLUtils::lowerType, required to ensure safe addition
+///  of TypeScopeOp for all the TypeDecls.
+static Type lowerType(Type type, Location loc,
+                      CircuitLoweringState &circuitState) {
+  auto getTypeDeclFn = [&](Type rawType, BundleType firrtlType,
+                           Location typeLoc) -> hw::TypeAliasType {
+    return circuitState.getTypeAliasForNamedBundle(rawType, firrtlType,
+                                                   typeLoc);
+  };
+  return ::lowerType(type, loc, getTypeDeclFn);
+}
 
 void CircuitLoweringState::processRemainingAnnotations(
     Operation *op, const AnnotationSet &annoSet) {
@@ -1015,7 +1040,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
   for (auto firrtlPort : firrtlPorts) {
     hw::PortInfo hwPort;
     hwPort.name = firrtlPort.name;
-    hwPort.type = lowerType(firrtlPort.type);
+    hwPort.type = lowerType(firrtlPort.type, firrtlPort.loc, loweringState);
     if (firrtlPort.sym)
       if (firrtlPort.sym.size() > 1 ||
           (firrtlPort.sym.size() == 1 && !firrtlPort.sym.getSymName()))
@@ -1326,8 +1351,9 @@ static Value tryEliminatingAttachesToAnalogValue(Value value,
 ///
 /// This can happen when there are no connects to the value.  The 'mergePoint'
 /// location is where a 'hw.merge' operation should be inserted if needed.
-static Value tryEliminatingConnectsToValue(Value flipValue,
-                                           Operation *insertPoint) {
+static Value
+tryEliminatingConnectsToValue(Value flipValue, Operation *insertPoint,
+                              CircuitLoweringState &loweringState) {
   // Handle analog's separately.
   if (flipValue.getType().isa<AnalogType>())
     return tryEliminatingAttachesToAnalogValue(flipValue, insertPoint);
@@ -1353,7 +1379,8 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
     return {}; // TODO: Emit an sv.constant here since it is unconnected.
 
   // Don't special case zero-bit results.
-  auto loweredType = lowerType(flipValue.getType());
+  auto loweredType =
+      lowerType(flipValue.getType(), connectOp->getLoc(), loweringState);
   if (loweredType.isInteger(0))
     return {};
 
@@ -1482,7 +1509,8 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
       continue;
     }
 
-    if (auto value = tryEliminatingConnectsToValue(oldArg, outputOp)) {
+    if (auto value =
+            tryEliminatingConnectsToValue(oldArg, outputOp, loweringState)) {
       // If we were able to find the value being connected to the output,
       // directly use it!
       outputs.push_back(value);
@@ -1500,7 +1528,7 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
     oldArg.replaceAllUsesWith(newArg);
 
     // Don't output zero bit results or inouts.
-    auto resultHWType = lowerType(port.type);
+    auto resultHWType = lowerType(port.type, port.loc, loweringState);
     if (!resultHWType.isInteger(0)) {
       auto output = castFromFIRRTLType(newArg, resultHWType, outputBuilder);
       outputs.push_back(output);
@@ -2189,7 +2217,7 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
           SmallVector<Value> temp(resultBuffer.begin() + size,
                                   resultBuffer.end());
           auto newStruct = builder.createOrFold<hw::StructCreateOp>(
-              lowerType(destStructType), temp);
+              lowerType(destStructType, builder.getLoc(), circuitState), temp);
           resultBuffer.resize(size);
           resultBuffer.push_back(newStruct);
           return success();
@@ -2698,7 +2726,8 @@ FailureOr<Value> FIRRTLLowering::lowerSubaccess(SubaccessOp op, Value input) {
 }
 
 FailureOr<Value> FIRRTLLowering::lowerSubfield(SubfieldOp op, Value input) {
-  auto resultType = lowerType(op->getResult(0).getType());
+  auto resultType =
+      lowerType(op->getResult(0).getType(), builder.getLoc(), circuitState);
   if (!resultType || !input) {
     op->emitError() << "subfield type lowering failed";
     return failure();
@@ -2765,7 +2794,8 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(VectorCreateOp op) {
-  auto resultType = lowerType(op.getResult().getType());
+  auto resultType =
+      lowerType(op.getResult().getType(), op.getLoc(), circuitState);
   SmallVector<Value> operands;
   // NOTE: The operand order must be inverted.
   for (auto oper : llvm::reverse(op.getOperands())) {
@@ -2778,7 +2808,8 @@ LogicalResult FIRRTLLowering::visitExpr(VectorCreateOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(BundleCreateOp op) {
-  auto resultType = lowerType(op.getResult().getType());
+  auto resultType =
+      lowerType(op.getResult().getType(), op.getLoc(), circuitState);
   SmallVector<Value> operands;
   for (auto oper : op.getOperands()) {
     auto val = getLoweredValue(oper);
@@ -2790,7 +2821,8 @@ LogicalResult FIRRTLLowering::visitExpr(BundleCreateOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(AggregateConstantOp op) {
-  auto resultType = lowerType(op.getResult().getType());
+  auto resultType =
+      lowerType(op.getResult().getType(), op.getLoc(), circuitState);
   auto attr =
       getOrCreateAggregateConstantAttribute(op.getFieldsAttr(), resultType);
 
@@ -2831,13 +2863,8 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     createBackedge(op.getResult(), origResultType);
     return success();
   }
-  auto hwModule = cast<hw::HWModuleOp>(op->getParentOp());
 
-  auto getTypeDeclFn = [&](Type rawType, BundleType firrtlType,
-                           Location typeLoc) -> hw::TypeAliasType {
-    return circuitState.getTypeAlias(rawType, firrtlType, typeLoc);
-  };
-  auto resultType = lowerType(origResultType, op.getLoc(), getTypeDeclFn);
+  auto resultType = lowerType(origResultType, op.getLoc(), circuitState);
   if (!resultType)
     return failure();
 
@@ -2848,7 +2875,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   StringAttr symName = getInnerSymName(op);
   auto name = op.getNameAttr();
   if (AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) && !symName) {
-    auto moduleName = hwModule.getName();
+    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
     // Prepend the name of the module to make the symbol name unique in the
     // symbol table, it is already unique in the module. Checking if the name
     // is unique in the SymbolTable is non-trivial.
@@ -2868,7 +2895,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
-  auto resultTy = lowerType(op.getType());
+  auto resultTy = lowerType(op.getType(), op.getLoc(), circuitState);
   if (!resultTy)
     return failure();
   resultTy = sv::InOutType::get(op.getContext(), resultTy);
@@ -2923,7 +2950,8 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
-  auto resultType = lowerType(op.getResult().getType());
+  auto resultType =
+      lowerType(op.getResult().getType(), op.getLoc(), circuitState);
   if (!resultType)
     return failure();
   if (resultType.isInteger(0))
@@ -2961,7 +2989,8 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
-  auto resultType = lowerType(op.getResult().getType());
+  auto resultType =
+      lowerType(op.getResult().getType(), op.getLoc(), circuitState);
   if (!resultType)
     return failure();
   if (resultType.isInteger(0))
@@ -3215,7 +3244,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   SmallVector<Value, 8> operands;
   for (size_t portIndex = 0, e = portInfo.size(); portIndex != e; ++portIndex) {
     auto &port = portInfo[portIndex];
-    auto portType = lowerType(port.type);
+    auto portType = lowerType(port.type, oldInstance.getLoc(), circuitState);
     if (!portType) {
       oldInstance->emitOpError("could not lower type of port ") << port.name;
       return failure();
@@ -3396,7 +3425,7 @@ LogicalResult FIRRTLLowering::visitExpr(BitCastOp op) {
   auto operand = getLoweredValue(op.getOperand());
   if (!operand)
     return failure();
-  auto resultType = lowerType(op.getType());
+  auto resultType = lowerType(op.getType(), op.getLoc(), circuitState);
   if (!resultType)
     return failure();
 
@@ -3441,7 +3470,7 @@ LogicalResult FIRRTLLowering::visitExpr(NegPrimOp op) {
   if (!operand)
     return failure();
 
-  auto resultType = lowerType(op.getType());
+  auto resultType = lowerType(op.getType(), op.getLoc(), circuitState);
 
   auto zero = getOrCreateIntConstant(resultType.getIntOrFloatBitWidth(), 0);
   return setLoweringTo<comb::SubOp>(op, zero, operand, true);
@@ -3584,7 +3613,8 @@ LogicalResult FIRRTLLowering::lowerDivLikeOp(Operation *op) {
 
   if (resultType == opType)
     return setLowering(op->getResult(0), result);
-  return setLoweringTo<comb::ExtractOp>(op, lowerType(opType), result, 0);
+  return setLoweringTo<comb::ExtractOp>(
+      op, lowerType(opType, op->getLoc(), circuitState), result, 0);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
@@ -3635,7 +3665,7 @@ LogicalResult FIRRTLLowering::visitExpr(PlusArgsTestIntrinsicOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(PlusArgsValueIntrinsicOp op) {
   auto resultType = builder.getIntegerType(1);
-  auto type = lowerType(op.getResult().getType());
+  auto type = lowerType(op.getResult().getType(), op.getLoc(), circuitState);
   if (!type)
     return failure();
 
@@ -3675,7 +3705,7 @@ LogicalResult FIRRTLLowering::visitExpr(BitsPrimOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
-  auto resultTy = lowerType(op.getType());
+  auto resultTy = lowerType(op.getType(), op.getLoc(), circuitState);
   if (!resultTy)
     return failure();
 
@@ -3859,7 +3889,7 @@ LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(VerbatimExprOp op) {
-  auto resultTy = lowerType(op.getType());
+  auto resultTy = lowerType(op.getType(), op.getLoc(), circuitState);
   if (!resultTy)
     return failure();
 
