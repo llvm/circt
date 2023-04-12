@@ -1394,24 +1394,21 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         os << "}";
         return true;
       })
-      .Case<StructType, UnionType>([&](auto type) {
-        if (type.getElements().empty() || isZeroBitType(type)) {
+      .Case<StructType>([&](StructType structType) {
+        if (structType.getElements().empty() || isZeroBitType(structType)) {
           os << "/*Zero Width*/";
           return true;
         }
-        if (isa<StructType>(type))
-          os << "struct";
-        else
-          os << "union";
-        os << " packed {";
-        for (auto &element : type.getElements()) {
+        os << "struct packed {";
+        for (auto &element : structType.getElements()) {
           if (isZeroBitType(element.type)) {
             os << "/*" << emitter.getVerilogStructFieldName(element.name)
                << ": Zero Width;*/ ";
             continue;
           }
-          SmallVector<Attribute, 8> dims;
-          printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc, dims,
+          SmallVector<Attribute, 8> structDims;
+          printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
+                              structDims,
                               /*implicitIntType=*/false,
                               /*singleBitDefaultType=*/true, emitter);
           os << ' ' << emitter.getVerilogStructFieldName(element.name);
