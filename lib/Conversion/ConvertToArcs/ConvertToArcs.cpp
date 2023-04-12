@@ -320,8 +320,13 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
     // present and update the output names. Then replace the registers.
     arc.getClockMutable().assign(clock);
     arc.setLatency(arc.getLatency() + 1);
-    if (reset)
-      arc.getResetMutable().assign(reset);
+    if (reset) {
+      if (arc.getReset())
+        arc.emitError("StateOp tried to infer reset from CompReg, but already "
+                      "had a reset.");
+      else
+        arc.getResetMutable().assign(reset);
+    }
     if (llvm::any_of(absorbedNames, [](auto name) {
           return !name.template cast<StringAttr>().getValue().empty();
         }))
