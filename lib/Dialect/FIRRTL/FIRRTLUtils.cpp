@@ -842,10 +842,8 @@ Type circt::firrtl::lowerType(Type type) {
     if (simple)
       return tagTy;
     auto bodyTy = hw::UnionType::get(type.getContext(), hwfields);
-    auto tagImplTy = IntegerType::get(type.getContext(),
-                                      llvm::Log2_64_Ceil(hwfields.size()));
     hw::StructType::FieldInfo fields[2] = {
-        {StringAttr::get(type.getContext(), "tag"), tagImplTy},
+        {StringAttr::get(type.getContext(), "tag"), tagTy},
         {StringAttr::get(type.getContext(), "body"), bodyTy}};
     return hw::StructType::get(type.getContext(), fields);
   }
