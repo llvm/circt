@@ -15,10 +15,10 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
-#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
+#include "circt/Dialect/Seq/SeqAttributes.h"
 #include "circt/Support/FieldRef.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionInterfaces.h"
@@ -186,8 +186,8 @@ struct FirMemory {
   size_t readLatency;
   size_t writeLatency;
   size_t maskBits;
-  size_t readUnderWrite;
-  hw::WUW writeUnderWrite;
+  seq::RUW readUnderWrite;
+  seq::WUW writeUnderWrite;
   SmallVector<int32_t> writeClockIDs;
   StringAttr modName;
   bool isMasked;

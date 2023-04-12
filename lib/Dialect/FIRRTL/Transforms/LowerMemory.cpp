@@ -16,7 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/Seq/SeqAttributes.h"
 #include "mlir/IR/Dominance.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/STLExtras.h"
@@ -72,11 +72,21 @@ FirMemory getSummary(MemOp op) {
     op.emitError("'firrtl.mem' should have simple type and known width");
     width = 0;
   }
-  return {numReadPorts,         numWritePorts,    numReadWritePorts,
-          (size_t)width,        op.getDepth(),    op.getReadLatency(),
-          op.getWriteLatency(), op.getMaskBits(), (size_t)op.getRuw(),
-          hw::WUW::PortOrder,   writeClockIDs,    op.getNameAttr(),
-          op.getMaskBits() > 1, op.getInitAttr(), op.getPrefixAttr(),
+  return {numReadPorts,
+          numWritePorts,
+          numReadWritePorts,
+          (size_t)width,
+          op.getDepth(),
+          op.getReadLatency(),
+          op.getWriteLatency(),
+          op.getMaskBits(),
+          *seq::symbolizeRUW(unsigned(op.getRuw())),
+          seq::WUW::PortOrder,
+          writeClockIDs,
+          op.getNameAttr(),
+          op.getMaskBits() > 1,
+          op.getInitAttr(),
+          op.getPrefixAttr(),
           op.getLoc()};
 }
 
