@@ -300,34 +300,32 @@ circt::esi::ChannelType UnwrapSVInterfaceOp::channelType() {
 
 LogicalResult WrapWindow::verify() {
   hw::UnionType expectedInput = getWindow().getType().getLoweredType();
-  auto frameType = hw::type_dyn_cast<hw::UnionType>(getFrame().getType());
-  if (frameType && expectedInput == frameType)
+  if (expectedInput == getFrame().getType())
     return success();
   return emitOpError("Expected input type is ") << expectedInput;
 }
 
+LogicalResult UnwrapWindow::inferReturnTypes(
+    MLIRContext *, std::optional<Location>, ValueRange operands, DictionaryAttr,
+    mlir::RegionRange, SmallVectorImpl<Type> &inferredReturnTypes) {
+  auto windowType = operands.front().getType().cast<WindowType>();
+  inferredReturnTypes.push_back(windowType.getLoweredType());
+  return success();
+}
+
 /// Determine the input type ('frame') from the return type ('window').
 static bool parseInferWindowRet(OpAsmParser &p, Type &frame, Type &windowOut) {
-  Type first;
-  if (p.parseType(first))
-    return true;
-  WindowType window = dyn_cast<WindowType>(first);
-  if (window) {
-    windowOut = window;
-    frame = window.getLoweredType();
-    return false;
-  }
-
-  frame = first;
-  if (p.parseArrow() || p.parseType(window))
+  WindowType window;
+  if (p.parseType(window))
     return true;
   windowOut = window;
+  frame = window.getLoweredType();
   return false;
 }
 
-static void printInferWindowRet(OpAsmPrinter &p, Operation *, Type frame,
+static void printInferWindowRet(OpAsmPrinter &p, Operation *, Type,
                                 Type window) {
-  p << frame << " -> " << window;
+  p << window;
 }
 
 //===----------------------------------------------------------------------===//
