@@ -395,7 +395,10 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
     builder.setInsertionPoint(module.getBodyBlock()->getTerminator());
     auto arcOp =
         builder.create<StateOp>(loc, defOp, std::get<0>(clockAndResetAndOp),
-                                std::get<1>(clockAndResetAndOp), 1, inputs);
+                                /*enable=*/Value{}, 1, inputs);
+    auto reset = std::get<1>(clockAndResetAndOp);
+    if (reset)
+      arcOp.getResetMutable().assign(reset);
     if (llvm::any_of(names, [](auto name) {
           return !name.template cast<StringAttr>().getValue().empty();
         }))
