@@ -62,10 +62,13 @@ void StripSVPass::runOnOperation() {
         return signalPassFailure();
       }
       clockGateModuleNames.insert(extModOp.getModuleNameAttr());
-    } else {
-      externModuleNames.insert(extModOp.getModuleNameAttr());
+      opsToDelete.push_back(extModOp);
+      continue;
     }
-    opsToDelete.push_back(extModOp);
+
+    externModuleNames.insert(extModOp.getModuleNameAttr());
+    if (replaceExtModuleOutputs)
+      opsToDelete.push_back(extModOp);
   }
   LLVM_DEBUG(llvm::dbgs() << "Found " << clockGateModuleNames.size()
                           << " clock gates, " << externModuleNames.size()
@@ -160,10 +163,14 @@ void StripSVPass::runOnOperation() {
           instOp.replaceAllUsesWith(gated);
           opsToDelete.push_back(instOp);
         } else if (externModuleNames.contains(modName)) {
-          for (auto result : instOp.getResults())
-            result.replaceAllUsesWith(
-                builder.create<hw::ConstantOp>(result.getType(), 0));
-          opsToDelete.push_back(instOp);
+          if (replaceExtModuleOutputs) {
+            instOp->emitWarning("StripSV: outputs of external module instance "
+                                "replaced with zero value!");
+            for (auto result : instOp.getResults())
+              result.replaceAllUsesWith(
+                  builder.create<hw::ConstantOp>(result.getType(), 0));
+            opsToDelete.push_back(instOp);
+          }
         }
         continue;
       }
