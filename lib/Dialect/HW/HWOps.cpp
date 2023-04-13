@@ -2244,6 +2244,11 @@ void EnumConstantOp::getAsmResultNames(
   setNameFn(getResult(), getField().getField().str());
 }
 
+void EnumConstantOp::build(OpBuilder &builder, OperationState &odsState,
+                           EnumFieldAttr field) {
+  return build(builder, odsState, field.getType().getValue(), field);
+}
+
 OpFoldResult EnumConstantOp::fold(FoldAdaptor adaptor) {
   assert(adaptor.getOperands().empty() && "constant has no operands");
   return getFieldAttr();
