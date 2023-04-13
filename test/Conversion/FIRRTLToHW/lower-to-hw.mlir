@@ -13,6 +13,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.type_scope @Simple__TYPESCOPE_ {
   // CHECK-NEXT:  hw.typedecl @Other : !hw.struct<sint: i2, uint: i4>
   // CHECK-NEXT:  hw.typedecl @VecOfBundle : !hw.struct<sint: i2, uint: i4>
+  // CHECK-NEXT:  hw.typedecl @Other_0 : !hw.struct<sint: i3, uint: i4>
   // CHECK-NEXT:  hw.typedecl @OtherOther : !hw.struct<other: !hw.typealias<@Simple__TYPESCOPE_::@Other, !hw.struct<sint: i2, uint: i4>>>
   // CHECK:      sv.ifdef  "PRINTF_COND_" {
   // CHECK-NEXT: } else {
@@ -1621,14 +1622,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:    }
   // CHECK-NEXT:  }
 
-  firrtl.extmodule @namedB(in a :!firrtl<bundle "Other" <sint: sint<2>, uint: uint<4>>>, out b: !firrtl.vector<bundle "VecOfBundle" <sint: sint<2>, uint: uint<4>>, 2>)
+  firrtl.extmodule @namedB(in a :!firrtl<bundle "Other" <sint: sint<2>, uint: uint<4>>>, out b: !firrtl.vector<bundle "VecOfBundle" <sint: sint<2>, uint: uint<4>>, 2>, out c: !firrtl<bundle "Other" <sint: sint<3>, uint: uint<4>>>)
   // CHECK-LABEL: hw.module.extern @namedB
   // CHECK-SAME: %a: !hw.typealias<@Simple__TYPESCOPE_::@Other, !hw.struct<sint: i2, uint: i4>>
   // CHECK-SAME:  b: !hw.array<2xtypealias<@Simple__TYPESCOPE_::@VecOfBundle, !hw.struct<sint: i2, uint: i4>>>
+  // CHECK-SAME:  c: !hw.typealias<@Simple__TYPESCOPE_::@Other_0, !hw.struct<sint: i3, uint: i4>>
   firrtl.module @NamedBundles() {
     %vecOfBundle = firrtl.wire sym @vecOfBundle : !firrtl.vector<bundle "VecOfBundle" <sint: sint<2>, uint: uint<4>>, 2>
     %otherOther = firrtl.wire sym @otherOther : !firrtl<bundle "OtherOther" <other: bundle "Other" <sint: sint<2>, uint: uint<4>>>>
-    %r1, %r2 = firrtl.instance inst @namedB(in a :!firrtl<bundle "Other" <sint: sint<2>, uint: uint<4>>>, out b: !firrtl.vector<bundle "VecOfBundle" <sint: sint<2>, uint: uint<4>>, 2>)
+    %renameOther = firrtl.wire : !firrtl<bundle "Other" <sint: sint<3>, uint: uint<4>>>
+    %r1, %r2, %r3 = firrtl.instance inst @namedB(in a :!firrtl<bundle "Other" <sint: sint<2>, uint: uint<4>>>, out b: !firrtl.vector<bundle "VecOfBundle" <sint: sint<2>, uint: uint<4>>, 2>, out c: !firrtl<bundle "Other" <sint: sint<3>, uint: uint<4>>>)
     %0 = firrtl.subindex %r2[0] : !firrtl.vector<bundle "VecOfBundle" <sint: sint<2>, uint: uint<4>>, 2>
     %1 = firrtl.subfield %0[sint] : !firrtl<bundle "VecOfBundle" <sint: sint<2>, uint: uint<4>>>
     %wire1 = firrtl.wire : !firrtl.sint<2>
@@ -1638,7 +1641,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: %z_i6_0 = sv.constantZ : !hw.typealias<@Simple__TYPESCOPE_::@OtherOther, !hw.struct<other: !hw.typealias<@Simple__TYPESCOPE_::@Other, !hw.struct<sint: i2, uint: i4>>>>
     // CHECK: %vecOfBundle = hw.wire %inst.b sym @vecOfBundle  : !hw.array<2xtypealias<@Simple__TYPESCOPE_::@VecOfBundle, !hw.struct<sint: i2, uint: i4>>>
     // CHECK: %otherOther = hw.wire %z_i6_0 sym @otherOther  : !hw.typealias<@Simple__TYPESCOPE_::@OtherOther, !hw.struct<other: !hw.typealias<@Simple__TYPESCOPE_::@Other, !hw.struct<sint: i2, uint: i4>>>>
-    // CHECK: %inst.b = hw.instance "inst" @namedB(a: %z_i6: !hw.typealias<@Simple__TYPESCOPE_::@Other, !hw.struct<sint: i2, uint: i4>>) -> (b: !hw.array<2xtypealias<@Simple__TYPESCOPE_::@VecOfBundle, !hw.struct<sint: i2, uint: i4>>>)
+    // CHECK: %inst.b, %inst.c  = hw.instance "inst" @namedB(a: %z_i6: !hw.typealias<@Simple__TYPESCOPE_::@Other, !hw.struct<sint: i2, uint: i4>>) -> (b: !hw.array<2xtypealias<@Simple__TYPESCOPE_::@VecOfBundle, !hw.struct<sint: i2, uint: i4>>>, c: !hw.typealias<@Simple__TYPESCOPE_::@Other_0, !hw.struct<sint: i3, uint: i4>>)
     // CHECK: %0 = hw.array_get %inst.b[%false] : !hw.array<2xtypealias<@Simple__TYPESCOPE_::@VecOfBundle, !hw.struct<sint: i2, uint: i4>>>, i1
     // CHECK: %sint = hw.struct_extract %0["sint"] : !hw.typealias<@Simple__TYPESCOPE_::@VecOfBundle, !hw.struct<sint: i2, uint: i4>>
     // CHECK: %wire1 = hw.wire %sint  : i2

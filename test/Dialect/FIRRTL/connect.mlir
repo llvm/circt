@@ -224,7 +224,6 @@ firrtl.module @ConstToExplicitConstElementsVec(in %in : !firrtl.const.vector<uin
 firrtl.module @ConstToNonConstVec(in %in : !firrtl.const.vector<uint<1>, 3>, out %out : !firrtl.vector<uint<1>, 3>) {
   // CHECK: firrtl.connect %out, %in : !firrtl.vector<uint<1>, 3>, !firrtl.const.vector<uint<1>, 3>
   firrtl.connect %out, %in : !firrtl.vector<uint<1>, 3>, !firrtl.const.vector<uint<1>, 3>
-
 }
 
 firrtl.module @namedBundles(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
@@ -245,4 +244,5 @@ firrtl.module @namedBundles(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %w2, %w1 : !firrtl<bundle "B1" <a: uint<1>, b: uint<1>>>
   firrtl.connect %w2, %w3 : !firrtl<bundle "B1" <a : uint<1>, b : uint<1>>>, !firrtl<bundle "B2" <a : uint<1>, b : uint<1>>>
   // CHECK: firrtl.connect %w2, %w3 : !firrtl<bundle "B1" <a: uint<1>, b: uint<1>>>, !firrtl<bundle "B2" <a: uint<1>, b: uint<1>>>
+}
 }
