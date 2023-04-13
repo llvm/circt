@@ -30,9 +30,10 @@ git submodule update --init
 
 ### Installing and Building with Wheels
 
-You'll need the git tags since the package versioning step needs them:
+If you are using a fork, you'll need the git tags since the package versioning step requires them:
 
 ```bash
+git remote add upstream git@github.com:llvm/circt.git
 git fetch upstream --tags
 ```
 
