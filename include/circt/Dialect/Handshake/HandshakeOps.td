@@ -415,9 +415,8 @@ def ControlMergeOp : Handshake_Op<"control_merge", [
       assert(!operands.empty() && "cmerge needs at least one operand");
       $_state.addOperands(operands);
       // By default, the index result has an Index type
-      SmallVector<Type> resultTypes { operands[0].getType(), 
-                                      $_builder.getIndexType()};
-      $_state.addTypes(resultTypes);
+      $_state.addTypes(ArrayRef<Type>{operands[0].getType(),
+                                      $_builder.getIndexType()});
   }]>];
   
   let hasCustomAssemblyFormat = 1;

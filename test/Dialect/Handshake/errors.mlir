@@ -26,7 +26,7 @@ handshake.func @invalid_mux_narrow_select(%arg0: i1, %arg1: i32, %arg2: i32, %ar
 // -----
 
 handshake.func @invalid_cmerge_unsupported_index(%arg1: i32, %arg2: i32) -> tensor<i1> {
-  // expected-error @+1 {{unsupported type for indexing value: 'tensor<i1>'}}
+  // expected-error @below {{unsupported type for indexing value: 'tensor<i1>'}}
   %result, %index = control_merge %arg1, %arg2 : i32, tensor<i1>
   return %index : tensor<i1>
 }
@@ -34,7 +34,7 @@ handshake.func @invalid_cmerge_unsupported_index(%arg1: i32, %arg2: i32) -> tens
 // -----
 
 handshake.func @invalid_cmerge_narrow_index(%arg1: i32, %arg2: i32, %arg3: i32) -> i1 {
-  // expected-error @+1 {{bitwidth of indexing value is 1, which can index into 2 operands, but found 3 operands}}
+  // expected-error @below {{bitwidth of indexing value is 1, which can index into 2 operands, but found 3 operands}}
   %result, %index = control_merge %arg1, %arg2, %arg3 : i32, i1
   return %index : i1
 }
