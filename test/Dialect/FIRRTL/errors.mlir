@@ -881,6 +881,38 @@ firrtl.circuit "MismatchedRegister" {
 
 // -----
 
+firrtl.circuit "EnumOutOfRange" {
+  firrtl.module @EnumSameCase(in %enum : !firrtl.enum<a : uint<8>>) {
+    // expected-error @+1 {{the tag index 1 is out of the range of valid tags in '!firrtl.enum<a: uint<8>>'}}
+    "firrtl.match"(%enum) ({
+    ^bb0(%arg0: !firrtl.uint<8>):
+    }) {tags = [1 : i32]} : (!firrtl.enum<a: uint<8>>) -> ()
+  }
+}
+// -----
+
+firrtl.circuit "EnumSameCase" {
+  firrtl.module @EnumSameCase(in %enum : !firrtl.enum<a : uint<8>>) {
+    // expected-error @+1 {{the tag "a" is matched more than once}}
+    "firrtl.match"(%enum) ({
+    ^bb0(%arg0: !firrtl.uint<8>):
+    }, {
+    ^bb0(%arg0: !firrtl.uint<8>):
+    }) {tags = [0 : i32, 0 : i32]} : (!firrtl.enum<a: uint<8>>) -> ()
+  }
+}
+
+// -----
+
+firrtl.circuit "EnumNonExaustive" {
+  firrtl.module @EnumNonExaustive(in %enum : !firrtl.enum<a : uint<8>>) {
+    // expected-error @+1 {{missing case for tag "a"}}
+    "firrtl.match"(%enum) {tags = []} : (!firrtl.enum<a: uint<8>>) -> ()
+  }
+}
+
+// -----
+
 // expected-error @+1 {{'firrtl.circuit' op main module 'private_main' must be public}}
 firrtl.circuit "private_main" {
   firrtl.module private @private_main() {}
