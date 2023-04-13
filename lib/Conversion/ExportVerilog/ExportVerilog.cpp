@@ -1968,6 +1968,7 @@ private:
   SubExprInfo visitTypeOp(StructExtractOp op);
   SubExprInfo visitTypeOp(StructInjectOp op);
   SubExprInfo visitTypeOp(UnionExtractOp op);
+  SubExprInfo visitTypeOp(EnumCmpOp op);
   SubExprInfo visitTypeOp(EnumConstantOp op);
 
   // Comb Dialect Operations
@@ -2849,6 +2850,16 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
 SubExprInfo ExprEmitter::visitTypeOp(EnumConstantOp op) {
   ps << PPSaveString(emitter.fieldNameResolver.getEnumFieldName(op.getField()));
   return {Selection, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(EnumCmpOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+  auto result = emitBinary(op, Comparison, "==", NoRequirement);
+  // SystemVerilog 11.8.1: "Comparison... operator results are unsigned,
+  // regardless of the operands".
+  result.signedness = IsUnsigned;
+  return result;
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(UnionExtractOp op) {
