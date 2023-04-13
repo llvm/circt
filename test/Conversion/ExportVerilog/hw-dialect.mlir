@@ -1018,6 +1018,15 @@ hw.module @structExtractFromTemporary(%cond: i1, %a: !hw.struct<c: i1>, %b: !hw.
     hw.output %1 : i1
 }
 
+// CHECK-LABEL: unionExtractFromTemporary
+hw.module @unionExtractFromTemporary(%cond: i1, %a: !hw.union<c: i1>, %b: !hw.union<c: i1>) -> (out: i1) {
+    %0 = comb.mux %cond, %a, %b : !hw.union<c: i1>
+    %1 = hw.union_extract %0["c"] : !hw.union<c: i1>
+    // CHECK: wire union packed {logic c;} _GEN = cond ? a : b;
+    // CHECK-NEXT: assign out = _GEN.c;
+    hw.output %1 : i1
+}
+
 // CHECK-LABEL: structExplodeLowering
 hw.module @structExplodeLowering(%a: !hw.struct<a: i1, b: i1>) -> (outA: i1, outB: i1) {
   // CHECK: assign outA = a.a;
@@ -1392,12 +1401,32 @@ hw.module @DontInlineAggregateConstantIntoPorts() -> () {
 
 // CHECK-LABEL: module FooA(
 // CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [9:0] b; logic [5:0] __post_padding_b;} b;} test
+// CHECK-NEXT:    output [15:0] a,
+// CHECK-NEXT:    output [9:0] b
 // CHECK-NEXT:  );
+// CHECK-EMPTY:
+// CHECK-NEXT:    assign a = test.a;
+// CHECK-NEXT:    assign b = test.b.b;
+// CHECK-NEXT:  endmodule
 !unionA = !hw.union<a: i16, b: i10>
-hw.module @FooA(%test: !unionA) {}
+hw.module @FooA(%test: !unionA) -> (a: i16, b: i10) {
+  %0 = hw.union_extract %test["a"] : !unionA
+  %1 = hw.union_extract %test["b"] : !unionA
+  hw.output %0, %1 : i16, i10
+}
 
 // CHECK-LABEL: module FooB(
-// CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [1:0] __pre_padding_b; logic [9:0] b; logic [3:0] __post_padding_b;} b;} test
+// CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [1:0] __pre_padding_b; logic [13:0] b;} b;} test,
+// CHECK-NEXT:    output [15:0] a,
+// CHECK-NEXT:    output [13:0] b
 // CHECK-NEXT:  );
-!unionB = !hw.union<a: i16, b: i10 offset 2>
-hw.module @FooB(%test: !unionB) {}
+// CHECK-EMPTY:
+// CHECK-NEXT:    assign a = test.a;
+// CHECK-NEXT:    assign b = test.b.b;
+// CHECK-NEXT:  endmodule
+!unionB = !hw.union<a: i16, b: i14 offset 2>
+hw.module @FooB(%test: !unionB) -> (a: i16, b: i14) {
+  %0 = hw.union_extract %test["a"] : !unionB
+  %1 = hw.union_extract %test["b"] : !unionB
+  hw.output %0, %1 : i16, i14
+}

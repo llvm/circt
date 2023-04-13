@@ -346,11 +346,15 @@ void UnionType::print(AsmPrinter &odsPrinter) const {
   odsPrinter << ">";
 }
 
-Type UnionType::getFieldType(mlir::StringRef fieldName) {
+UnionType::FieldInfo UnionType::getFieldInfo(::mlir::StringRef fieldName) {
   for (const auto &field : getElements())
     if (field.name == fieldName)
-      return field.type;
-  return Type();
+      return field;
+  return FieldInfo();
+}
+
+Type UnionType::getFieldType(mlir::StringRef fieldName) {
+  return getFieldInfo(fieldName).type;
 }
 
 //===----------------------------------------------------------------------===//

@@ -185,7 +185,10 @@ def UnionTypeImpl : HWType<"Union"> {
 
   let extraClassDeclaration = [{
     using FieldInfo = ::circt::hw::detail::OffsetFieldInfo;
-    mlir::Type getFieldType(mlir::StringRef fieldName);
+
+    FieldInfo getFieldInfo(::mlir::StringRef fieldName);
+    
+    ::mlir::Type getFieldType(::mlir::StringRef fieldName);
   }];
 }
 
