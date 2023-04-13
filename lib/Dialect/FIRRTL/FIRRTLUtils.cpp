@@ -803,7 +803,11 @@ circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
 /// Given a type, return the corresponding lowered type for the HW dialect.
 /// Non-FIRRTL types are simply passed through. This returns a null type if it
 /// cannot be lowered.
-Type circt::firrtl::lowerType(Type type) {
+Type circt::firrtl::lowerType(
+    Type type, std::optional<Location> loc,
+    std::optional<
+        llvm::function_ref<hw::TypeAliasType(Type, BundleType, Location)>>
+        getTypeDeclFn) {
   auto firType = type.dyn_cast<FIRRTLBaseType>();
   if (!firType)
     return type;
@@ -814,15 +818,22 @@ Type circt::firrtl::lowerType(Type type) {
   if (auto bundle = firType.dyn_cast<BundleType>()) {
     mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
     for (auto element : bundle) {
-      Type etype = lowerType(element.type);
+      Type etype = lowerType(element.type, loc, getTypeDeclFn);
       if (!etype)
         return {};
       hwfields.push_back(hw::StructType::FieldInfo{element.name, etype});
     }
-    return hw::StructType::get(type.getContext(), hwfields);
+    Type rawType = hw::StructType::get(type.getContext(), hwfields);
+    if (auto bundleName = bundle.getBundleName())
+      if (getTypeDeclFn.has_value())
+        rawType = getTypeDeclFn.value()(
+            rawType, bundle,
+            loc.has_value() ? loc.value()
+                            : UnknownLoc::get(bundle.getContext()));
+    return rawType;
   }
   if (auto vec = firType.dyn_cast<FVectorType>()) {
-    auto elemTy = lowerType(vec.getElementType());
+    auto elemTy = lowerType(vec.getElementType(), loc, getTypeDeclFn);
     if (!elemTy)
       return {};
     return hw::ArrayType::get(elemTy, vec.getNumElements());
@@ -832,7 +843,7 @@ Type circt::firrtl::lowerType(Type type) {
     SmallVector<Attribute> names;
     bool simple = true;
     for (auto element : fenum) {
-      Type etype = lowerType(element.type);
+      Type etype = lowerType(element.type, loc, getTypeDeclFn);
       if (!etype)
         return {};
       hwfields.push_back(hw::UnionType::FieldInfo{element.name, etype, 0});
@@ -850,45 +861,6 @@ Type circt::firrtl::lowerType(Type type) {
         {StringAttr::get(type.getContext(), "tag"), tagTy},
         {StringAttr::get(type.getContext(), "body"), bodyTy}};
     return hw::StructType::get(type.getContext(), fields);
-  }
-
-  auto width = firType.getBitWidthOrSentinel();
-  if (width >= 0) // IntType, analog with known width, clock, etc.
-    return IntegerType::get(type.getContext(), width);
-
-  return {};
-}
-
-Type circt::firrtl::lowerType(
-    Type type, Location loc,
-    llvm::function_ref<hw::TypeAliasType(Type, BundleType, Location)>
-        getTypeDeclFn) {
-  auto firType = type.dyn_cast<FIRRTLBaseType>();
-  if (!firType)
-    return type;
-
-  // Ignore flip types.
-  firType = firType.getPassiveType();
-
-  if (BundleType bundle = firType.dyn_cast<BundleType>()) {
-    mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
-    for (auto element : bundle) {
-      Type etype = lowerType(element.type, loc, getTypeDeclFn);
-      if (!etype)
-        return {};
-      hwfields.push_back(hw::StructType::FieldInfo{element.name, etype});
-    }
-    Type rawType = hw::StructType::get(type.getContext(), hwfields);
-    if (auto bundleName = bundle.getBundleName())
-      rawType = getTypeDeclFn(rawType, bundle, loc);
-
-    return rawType;
-  }
-  if (FVectorType vec = firType.dyn_cast<FVectorType>()) {
-    auto elemTy = lowerType(vec.getElementType(), loc, getTypeDeclFn);
-    if (!elemTy)
-      return {};
-    return hw::ArrayType::get(elemTy, vec.getNumElements());
   }
 
   auto width = firType.getBitWidthOrSentinel();

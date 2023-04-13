@@ -169,13 +169,14 @@ inline FIRRTLType mapBaseType(FIRRTLType type,
 /// Given a type, return the corresponding lowered type for the HW dialect.
 /// Non-FIRRTL types are simply passed through. This returns a null type if it
 /// cannot be lowered.
-Type lowerType(Type type);
-
-/// Given a type, return the corresponding lowered type for the HW dialect.
-/// If the given type is a named bundle, then create a TypeScope at the Module level and the corresponding typedecl op inside it and return the corresponding TypeAliasType.
-Type lowerType(Type type, Location loc,
-               llvm::function_ref<hw::TypeAliasType(Type, BundleType, Location)>
-                   getTypeDeclFn);
+/// If the given type is a named bundle, then create a TypeScope at the Module
+/// level and the corresponding typedecl op inside it and return the
+/// corresponding TypeAliasType.
+Type lowerType(
+    Type type, std::optional<Location> loc = {},
+    std::optional<
+        llvm::function_ref<hw::TypeAliasType(Type, BundleType, Location)>>
+        getTypeDeclFn = {});
 
 //===----------------------------------------------------------------------===//
 // Parser-related utilities
