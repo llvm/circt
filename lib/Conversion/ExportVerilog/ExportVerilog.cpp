@@ -568,7 +568,7 @@ static bool isOkToBitSelectFrom(Value v) {
     return true;
 
   // Aggregate access can be inlined.
-  if (isa_and_present<StructExtractOp, UnionExtractOp, ArrayGetOp>(
+  if (isa_and_nonnull<StructExtractOp, UnionExtractOp, ArrayGetOp>(
           v.getDefiningOp()))
     return true;
 
