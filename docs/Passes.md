@@ -8,6 +8,10 @@ This document describes the available CIRCT passes and their contracts.
 
 [include "CIRCTConversionPasses.md"]
 
+## Arc Dialect Passes
+
+[include "ArcPasses.md"]
+
 ## Calyx Dialect Passes
 
 [include "CalyxPasses.md"]
@@ -55,3 +59,7 @@ This document describes the available CIRCT passes and their contracts.
 ## SV Dialect Passes
 
 [include "SVPasses.md"]
+
+## SystemC Dialect Passes
+
+[include "SystemCPasses.md"]
