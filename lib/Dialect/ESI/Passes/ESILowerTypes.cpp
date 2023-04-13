@@ -32,13 +32,12 @@ private:
   void lowerMod(hw::HWMutableModuleLike mod);
   void lowerInstance(hw::HWInstanceLike inst);
 
+  TypeConverter types;
+
   /// Lower an individual port, modifing 'port'. Returns 'true' if the port was
   /// changed.
   bool lowerPort(hw::HWMutableModuleLike mod, hw::PortInfo &port);
 
-  /// Cache the lowered types to avoid running the same type lowering again and
-  /// again.
-  DenseMap<WindowType, hw::UnionType> typeCache;
   /// Track the modules we've modified both to make lookup easier and to avoid
   /// attempting to lower instances which do not have to be lowered.
   DenseMap<StringAttr, hw::HWMutableModuleLike> modsMutated;
@@ -47,13 +46,10 @@ private:
 
 bool ESILowerTypesPass::lowerPort(hw::HWMutableModuleLike mod,
                                   hw::PortInfo &port) {
-  auto window = hw::type_dyn_cast<WindowType>(port.type);
-  if (!window)
+  Type newType = types.convertType(port.type);
+  if (!newType)
     return false;
-  hw::UnionType &lowered = typeCache[window];
-  if (!lowered)
-    lowered = window.getLoweredType();
-  port.type = lowered;
+  port.type = newType;
   return true;
 }
 
@@ -132,9 +128,8 @@ void ESILowerTypesPass::lowerInstance(hw::HWInstanceLike inst) {
       newOperands.push_back(operand);
       continue;
     }
-    assert(typeCache.contains(window));
-    auto unwrapped =
-        b.create<UnwrapWindow>(inst.getLoc(), typeCache[window], operand);
+    auto unwrapped = b.create<UnwrapWindow>(inst.getLoc(),
+                                            types.convertType(window), operand);
     newOperands.push_back(unwrapped.getFrame());
   }
 
@@ -147,8 +142,7 @@ void ESILowerTypesPass::lowerInstance(hw::HWInstanceLike inst) {
       newResultTypes.push_back(result.getType());
       continue;
     }
-    assert(typeCache.contains(window));
-    newResultTypes.push_back(typeCache[window]);
+    newResultTypes.push_back(types.convertType(window));
   }
 
   // Since we cannot change the return type, we have to create a new operation
@@ -177,6 +171,9 @@ void ESILowerTypesPass::lowerInstance(hw::HWInstanceLike inst) {
 }
 
 void ESILowerTypesPass::runOnOperation() {
+  types.addConversion(
+      [](WindowType window) { return window.getLoweredType(); });
+
   auto design = cast<ModuleOp>(getOperation());
   for (auto mod : design.getOps<hw::HWMutableModuleLike>())
     lowerMod(mod);
