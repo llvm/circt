@@ -169,11 +169,12 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
   };
 
   if (auto blockArg = val.dyn_cast<BlockArgument>()) {
-    auto op = val.getParentBlock()->getParentOp();
-    auto direction =
-        cast<FModuleLike>(op).getPortDirection(blockArg.getArgNumber());
-    if (direction == Direction::Out)
-      return swap();
+    auto *op = val.getParentBlock()->getParentOp();
+    if (auto moduleLike = dyn_cast<FModuleLike>(op)) {
+      auto direction = moduleLike.getPortDirection(blockArg.getArgNumber());
+      if (direction == Direction::Out)
+        return swap();
+    }
     return accumulatedFlow;
   }
 
