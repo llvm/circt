@@ -255,7 +255,7 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
     }];
 
   let arguments = (ins BundleType:$input, I32Attr:$fieldIndex);
-  let results = (outs FIRRTLBaseType:$result);
+  let results = (outs FIRRTLType:$result);
   let hasFolder = 1;
   let hasCanonicalizer = 1;
   let hasVerifier = 1;

@@ -1677,7 +1677,7 @@ void InferenceMapping::declareVars(Value value, Location loc, bool isDerived) {
       // Bundle types recursively declare all bundle elements.
       fieldID++;
       for (auto &element : bundleType) {
-        declare(element.type);
+        declare(getBaseType(element.type));
       }
     } else if (auto vecType = type.dyn_cast<FVectorType>()) {
       fieldID++;
@@ -1706,7 +1706,7 @@ void InferenceMapping::maximumOfTypes(Value result, Value rhs, Value lhs) {
     if (auto bundleType = type.dyn_cast<BundleType>()) {
       fieldID++;
       for (auto &element : bundleType.getElements())
-        maximize(element.type);
+        maximize(getBaseType(element.type));
     } else if (auto vecType = type.dyn_cast<FVectorType>()) {
       fieldID++;
       auto save = fieldID;
@@ -1751,9 +1751,9 @@ void InferenceMapping::constrainTypes(Value larger, Value smaller) {
           fieldID++;
           for (auto &element : bundleType.getElements()) {
             if (element.isFlip)
-              constrain(element.type, smaller, larger);
+              constrain(getBaseType(element.type), smaller, larger);
             else
-              constrain(element.type, larger, smaller);
+              constrain(getBaseType(element.type), larger, smaller);
           }
         } else if (auto vecType = type.dyn_cast<FVectorType>()) {
           fieldID++;
@@ -1854,7 +1854,7 @@ void InferenceMapping::unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type) {
     } else if (auto bundleType = type.dyn_cast<BundleType>()) {
       fieldID++;
       for (auto &element : bundleType) {
-        unify(element.type);
+        unify(getBaseType(element.type));
       }
     } else if (auto vecType = type.dyn_cast<FVectorType>()) {
       fieldID++;
@@ -2116,7 +2116,9 @@ bool InferenceTypeUpdate::updateValue(Value value) {
       llvm::SmallVector<BundleType::BundleElement, 3> elements;
       for (auto &element : bundleType) {
         elements.emplace_back(element.name, element.isFlip,
-                              updateBase(element.type));
+                              mapBaseType(element.type, [&](auto base) {
+                                return updateBase(base);
+                              }));
       }
       return BundleType::get(context, elements, bundleType.isConst());
     } else if (auto vecType = type.dyn_cast<FVectorType>()) {

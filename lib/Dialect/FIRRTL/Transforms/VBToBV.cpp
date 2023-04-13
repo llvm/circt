@@ -149,7 +149,8 @@ FIRRTLBaseType Visitor::convertType(FIRRTLBaseType type,
     SmallVector<BundleType::BundleElement> elements;
     for (auto element : bundleType.getElements()) {
       elements.push_back(BundleType::BundleElement(
-          element.name, element.isFlip, convertType(element.type, dimensions)));
+          element.name, element.isFlip,
+          convertType(cast<FIRRTLBaseType>(element.type), dimensions)));
     }
     return BundleType::get(context, elements);
   }
@@ -795,7 +796,8 @@ Value Visitor::sinkVecDimIntoOperands(ImplicitLocOpBuilder &builder,
       SmallVector<Value> subValues;
       for (auto v : values)
         subValues.push_back(getSubfield(v, i));
-      auto newField = sinkVecDimIntoOperands(builder, elt.type, subValues);
+      auto newField = sinkVecDimIntoOperands(
+          builder, cast<FIRRTLBaseType>(elt.type), subValues);
       newFields.push_back(newField);
       newElements.emplace_back(elt.name, /*isFlip=*/false,
                                newField.getType().cast<FIRRTLBaseType>());

@@ -32,10 +32,13 @@ static const unsigned int indentIncrement = 2;
 
 /// Emits type construction expression for the port type, recursing into
 /// aggregate types as needed.
-static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
+static LogicalResult emitPortType(Location location, FIRRTLType type,
                                   Direction direction, llvm::raw_ostream &os,
                                   unsigned int indent,
                                   bool hasEmittedDirection = false) {
+  FIRRTLBaseType baseType = dyn_cast<FIRRTLBaseType>(type);
+  if (!baseType || baseType.containsReference())
+    return emitError(location, "reference types not supported yet");
   auto emitTypeWithArguments =
       [&](StringRef name,
           // A lambda of type (bool hasEmittedDirection) -> LogicalResult.
@@ -46,7 +49,7 @@ static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
     // signals and we haven't already emitted the direction before recursing to
     // this field.
     bool emitDirection =
-        type.isPassive() && !type.containsAnalog() && !hasEmittedDirection;
+        baseType.isPassive() && !baseType.containsAnalog() && !hasEmittedDirection;
     if (emitDirection) {
       switch (direction) {
       case Direction::In:
@@ -94,7 +97,7 @@ static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
     });
   };
 
-  return TypeSwitch<FIRRTLBaseType, LogicalResult>(type)
+  return TypeSwitch<FIRRTLBaseType, LogicalResult>(baseType)
       .Case<ClockType>([&](ClockType) { return emitType("Clock"); })
       .Case<AsyncResetType>(
           [&](AsyncResetType) { return emitType("AsyncReset"); })

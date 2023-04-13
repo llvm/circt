@@ -2067,13 +2067,22 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
           unsigned size = resultBuffer.size();
           unsigned indexWidth =
               getBitWidthFromVectorSize(srcVectorType.getNumElements());
+
+          // References must be handled before LowerToHW.
+          if (srcVectorType.containsReference() ||
+              destVectorType.containsReference())
+            return failure();
+
           for (size_t i = 0, e = std::min(srcVectorType.getNumElements(),
                                           destVectorType.getNumElements());
                i != e; ++i) {
             auto iIdx = getOrCreateIntConstant(indexWidth, i);
             auto arrayIndex = builder.create<hw::ArrayGetOp>(src, iIdx);
-            if (failed(recurse(arrayIndex, srcVectorType.getElementType(),
-                               destVectorType.getElementType())))
+            if (failed(recurse(
+                    arrayIndex,
+                    llvm::cast<FIRRTLBaseType>(srcVectorType.getElementType()),
+                    llvm::cast<FIRRTLBaseType>(
+                        destVectorType.getElementType()))))
               return failure();
           }
           SmallVector<Value> temp(resultBuffer.begin() + size,
@@ -2091,12 +2100,20 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
           if (destStructType.getNumElements() != srcStructType.getNumElements())
             return failure();
 
+          // References must be handled before LowerToHW.
+          if (srcStructType.containsReference() ||
+              destStructType.containsReference())
+            return failure();
+
           for (auto elem : llvm::enumerate(destStructType)) {
             auto structExtract =
                 builder.create<hw::StructExtractOp>(src, elem.value().name);
-            if (failed(recurse(structExtract,
-                               srcStructType.getElementType(elem.index()),
-                               destStructType.getElementType(elem.index()))))
+            if (failed(
+                    recurse(structExtract,
+                            llvm::cast<FIRRTLBaseType>(
+                                srcStructType.getElementType(elem.index())),
+                            llvm::cast<FIRRTLBaseType>(
+                                destStructType.getElementType(elem.index())))))
               return failure();
           }
           SmallVector<Value> temp(resultBuffer.begin() + size,

@@ -12,7 +12,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
-#include "circt/Dialect/HW/HWTypeInterfaces.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -495,6 +495,7 @@ FIRRTLBaseType FIRRTLBaseType::getConstType(bool isConst) {
 /// Return this type with all ground types replaced with UInt<1>.  This is
 /// used for `mem` operations.
 FIRRTLBaseType FIRRTLBaseType::getMaskType() {
+  assert(!containsReference() && "cannot create mask type for references");
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType>([&](Type) {
@@ -505,14 +506,15 @@ FIRRTLBaseType FIRRTLBaseType::getMaskType() {
         newElements.reserve(bundleType.getElements().size());
         for (auto elt : bundleType)
           newElements.push_back(
-              {elt.name, false /* FIXME */, elt.type.getMaskType()});
-        return BundleType::get(this->getContext(), newElements,
-                               bundleType.isConst());
+              {elt.name, false /* FIXME */,
+               llvm::cast<FIRRTLBaseType>(elt.type).getMaskType()});
+        return BundleType::get(this->getContext(), newElements);
       })
       .Case<FVectorType>([](FVectorType vectorType) {
-        return FVectorType::get(vectorType.getElementType().getMaskType(),
-                                vectorType.getNumElements(),
-                                vectorType.isConst());
+        return FVectorType::get(
+            llvm::cast<FIRRTLBaseType>(vectorType.getElementType())
+                .getMaskType(),
+            vectorType.getNumElements());
       })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
@@ -532,7 +534,9 @@ FIRRTLBaseType FIRRTLBaseType::getWidthlessType() {
         newElements.reserve(a.getElements().size());
         for (auto elt : a)
           newElements.push_back(
-              {elt.name, elt.isFlip, elt.type.getWidthlessType()});
+              {elt.name, elt.isFlip, mapBaseType(elt.type, [&](auto base) {
+                 return base.getWidthlessType();
+               })});
         return BundleType::get(this->getContext(), newElements, a.isConst());
       })
       .Case<FVectorType>([](auto a) {
@@ -629,11 +633,13 @@ uint64_t FIRRTLBaseType::getGroundFields() const {
       .Case<BundleType>([](auto type) {
         unsigned sum = 0;
         for (auto &field : type.getElements())
-          sum += field.type.getGroundFields();
+          sum += llvm::cast<hw::FieldIDTypeInterface>(field.type).getGroundFields();
         return sum;
       })
       .Case<FVectorType>([](auto type) {
-        return type.getNumElements() * type.getElementType().getGroundFields();
+        return type.getNumElements() *
+               llvm::cast<hw::FieldIDTypeInterface>(type.getElementType())
+                   .getGroundFields();
       })
       .Default([](Type) { return 1; });
 }
@@ -794,17 +800,20 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
 
 /// Returns true if the destination is at least as wide as an equivalent source.
 bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
+  assert(!dstType.containsReference() && !srcType.containsReference());
   return TypeSwitch<FIRRTLBaseType, bool>(dstType)
       .Case<BundleType>([&](auto dstBundle) {
         auto srcBundle = srcType.cast<BundleType>();
         for (size_t i = 0, n = dstBundle.getNumElements(); i < n; ++i) {
           auto srcElem = srcBundle.getElement(i);
           auto dstElem = dstBundle.getElement(i);
+          auto srcType = cast<FIRRTLBaseType>(srcElem.type);
+          auto dstType = cast<FIRRTLBaseType>(dstElem.type);
           if (dstElem.isFlip) {
-            if (!isTypeLarger(srcElem.type, dstElem.type))
+            if (!isTypeLarger(srcType, dstType))
               return false;
           } else {
-            if (!isTypeLarger(dstElem.type, srcElem.type))
+            if (!isTypeLarger(dstType, srcType))
               return false;
           }
         }
@@ -944,7 +953,10 @@ struct circt::firrtl::detail::BundleTypeStorage
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
       auto type = element.type;
-      auto eltInfo = type.getRecursiveTypeProperties();
+      bool isRef = isa<RefType>(type);
+      props.containsReference |= isRef;
+      auto baseType = getBaseType(type);
+      auto eltInfo = baseType.getRecursiveTypeProperties();
       props.isPassive &= eltInfo.isPassive & !element.isFlip;
       props.containsAnalog |= eltInfo.containsAnalog;
       props.containsReference |= eltInfo.containsReference;
@@ -953,7 +965,7 @@ struct circt::firrtl::detail::BundleTypeStorage
       fieldID += 1;
       fieldIDs.push_back(fieldID);
       // Increment the field ID for the next field by the number of subfields.
-      fieldID += type.getMaxFieldID();
+      fieldID += baseType.getMaxFieldID();
     }
     maxFieldID = fieldID;
   }
@@ -1016,7 +1028,10 @@ FIRRTLBaseType BundleType::getPassiveType() {
   SmallVector<BundleType::BundleElement, 16> newElements;
   newElements.reserve(impl->elements.size());
   for (auto &elt : impl->elements) {
-    newElements.push_back({elt.name, false, elt.type.getPassiveType()});
+    newElements.push_back(
+        {elt.name, false, mapBaseType(elt.type, [](auto base) {
+           return base.getPassiveType();
+         })});
   }
 
   auto passiveType = BundleType::get(getContext(), newElements, isConst());
@@ -1077,17 +1092,17 @@ BundleType::BundleElement BundleType::getElement(size_t index) {
   return getElements()[index];
 }
 
-FIRRTLBaseType BundleType::getElementType(StringAttr name) {
+FIRRTLType BundleType::getElementType(StringAttr name) {
   auto element = getElement(name);
-  return element ? element->type : FIRRTLBaseType();
+  return element ? element->type : FIRRTLType();
 }
 
-FIRRTLBaseType BundleType::getElementType(StringRef name) {
+FIRRTLType BundleType::getElementType(StringRef name) {
   auto element = getElement(name);
-  return element ? element->type : FIRRTLBaseType();
+  return element ? element->type : FIRRTLType();
 }
 
-FIRRTLBaseType BundleType::getElementType(size_t index) {
+FIRRTLType BundleType::getElementType(size_t index) {
   assert(index < getNumElements() &&
          "index must be less than number of fields in bundle");
   return getElements()[index].type;
@@ -1194,10 +1209,12 @@ FIRRTLBaseType FVectorType::getPassiveType() {
     return impl->passiveType = *this;
 
   // Otherwise, rebuild a passive version.
-  auto passiveType = FVectorType::get(getElementType().getPassiveType(),
-                                      getNumElements(), isConst());
-  impl->passiveType = passiveType;
-  return passiveType;
+  return impl->passiveType = FVectorType::get(getElementType().getPassiveType(),
+                                              getNumElements(), isConst());
+  //return impl->passiveType = FVectorType::get(
+  //           mapBaseType(getElementType(),
+  //                       [](auto base) { return base.getPassiveType(); }),
+  //           getNumElements(), isConst());
 }
 
 FVectorType FVectorType::getConstType(bool isConst) {
@@ -1207,13 +1224,21 @@ FVectorType FVectorType::getConstType(bool isConst) {
 }
 
 uint64_t FVectorType::getFieldID(uint64_t index) {
-  return 1 + index * (getElementType().getMaxFieldID() + 1);
+  auto type = getElementType();
+  auto base = getBaseType(type);
+  auto stride = 1 + (type == base ? base.getMaxFieldID() : 0);
+
+  return 1 + index * stride;
 }
 
 uint64_t FVectorType::getIndexForFieldID(uint64_t fieldID) {
   assert(fieldID && "fieldID must be at least 1");
+  auto type = getElementType();
+  auto base = getBaseType(type);
+  auto stride = 1 + (type == base ? base.getMaxFieldID() : 0);
+
   // Divide the field ID by the number of fieldID's per element.
-  return (fieldID - 1) / (getElementType().getMaxFieldID() + 1);
+  return (fieldID - 1) / stride;
 }
 
 std::pair<uint64_t, uint64_t>
@@ -1232,7 +1257,10 @@ FVectorType::getSubTypeByFieldID(uint64_t fieldID) {
 }
 
 uint64_t FVectorType::getMaxFieldID() {
-  return getNumElements() * (getElementType().getMaxFieldID() + 1);
+  auto type = getElementType();
+  auto base = getBaseType(type);
+  auto stride = 1 + (type == base ? base.getMaxFieldID() : 0);
+  return getNumElements() * stride;
 }
 
 std::pair<uint64_t, bool> FVectorType::rootChildFieldID(uint64_t fieldID,
@@ -1447,6 +1475,33 @@ auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
   return success();
 }
 
+//- RefType implementations of FieldIDTypeInterface --------------------------//
+// Needs to be implemented to be used in a FIRRTL aggregate.
+
+uint64_t RefType::getMaxFieldID() const { return 0; }
+
+// Identical to FIRRTLBaseType's implementation.
+circt::hw::FieldIDTypeInterface
+RefType::getFinalTypeByFieldID(uint64_t fieldID) const {
+  std::pair<circt::hw::FieldIDTypeInterface, uint64_t> pair(*this, fieldID);
+  while (pair.second)
+    pair = pair.first.getSubTypeByFieldID(pair.second);
+  return pair.first;
+}
+
+std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+RefType::getSubTypeByFieldID(uint64_t fieldID) const {
+  assert(fieldID == 0);
+  return {*this, 0};
+}
+
+std::pair<uint64_t, bool> RefType::rootChildFieldID(uint64_t fieldID,
+                                                       uint64_t index) const {
+  return {0, fieldID == 0};
+}
+
+uint64_t RefType::getGroundFields() const { return 1; }
+
 //===----------------------------------------------------------------------===//
 // AnalogType
 //===----------------------------------------------------------------------===//
@@ -1523,6 +1578,8 @@ void FIRRTLDialect::registerTypes() {
 // unknown bit width.
 std::optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
                                            bool ignoreFlip) {
+  if (type.containsReference())
+    return std::nullopt;
   std::function<std::optional<int64_t>(FIRRTLBaseType)> getWidth =
       [&](FIRRTLBaseType type) -> std::optional<int64_t> {
     return TypeSwitch<FIRRTLBaseType, std::optional<int64_t>>(type)
@@ -1531,7 +1588,7 @@ std::optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
           for (auto &elt : bundle) {
             if (elt.isFlip && !ignoreFlip)
               return std::nullopt;
-            auto w = getBitWidth(elt.type);
+            auto w = getBitWidth(cast<FIRRTLBaseType>(elt.type));
             if (!w.has_value())
               return std::nullopt;
             width += *w;

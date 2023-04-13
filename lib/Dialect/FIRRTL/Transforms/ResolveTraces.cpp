@@ -121,7 +121,7 @@ private:
             auto index = bundle.getIndexForFieldID(targetFieldID);
             newTarget.append(".");
             newTarget.append(bundle.getElementName(index));
-            type = bundle.getElementType(index);
+            type = getBaseType(bundle.getElementType(index));
             targetFieldID -= bundle.getFieldID(index);
           })
           .Default([&](auto) { targetFieldID = 0; });

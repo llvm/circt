@@ -334,7 +334,8 @@ private:
           // Check if this is the mask field.
           if (fName.contains("mask")) {
             // Already 1 bit, nothing to do.
-            if (sf.getResult().getType().getBitWidthOrSentinel() == 1)
+            if (cast<FIRRTLBaseType>(sf.getResult().getType())
+                    .getBitWidthOrSentinel() == 1)
               continue;
             // Check what is the mask field directly connected to.
             // If, a constant 1, then we can replace with unMasked memory.

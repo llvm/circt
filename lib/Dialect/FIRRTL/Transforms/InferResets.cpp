@@ -111,6 +111,7 @@ static inline StringAttr getResetName(Value reset) {
 /// Construct a zero value of the given type using the given builder.
 static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
                              SmallDenseMap<FIRRTLBaseType, Value> &cache) {
+  assert(!type.containsReference());
   auto it = cache.find(type);
   if (it != cache.end())
     return it->second;
@@ -133,7 +134,8 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
           .Case<BundleType>([&](auto type) {
             auto wireOp = builder.create<WireOp>(type);
             for (auto field : llvm::enumerate(type)) {
-              auto zero = createZeroValue(builder, field.value().type, cache);
+              auto zero = createZeroValue(
+                  builder, cast<FIRRTLBaseType>(field.value().type), cache);
               auto acc = builder.create<SubfieldOp>(
                   field.value().type, wireOp.getResult(), field.index());
               builder.create<StrictConnectOp>(acc, zero);
@@ -584,7 +586,7 @@ static unsigned getMaxFieldID(FIRRTLBaseType type) {
       .Case<BundleType>([](auto type) {
         unsigned id = 0;
         for (auto e : type.getElements())
-          id += getMaxFieldID(e.type) + 1;
+          id += getMaxFieldID(getBaseType(e.type)) + 1;
         return id;
       })
       .Case<FVectorType>(
@@ -596,7 +598,7 @@ static unsigned getFieldID(BundleType type, unsigned index) {
   assert(index < type.getNumElements());
   unsigned id = 1;
   for (unsigned i = 0; i < index; ++i)
-    id += getMaxFieldID(type.getElementType(i)) + 1;
+    id += getMaxFieldID(getBaseType(type.getElementType(i))) + 1;
   return id;
 }
 
@@ -606,7 +608,7 @@ static unsigned getIndexForFieldID(BundleType type, unsigned fieldID) {
   assert(type.getNumElements() && "Bundle must have >0 fields");
   --fieldID;
   for (const auto &e : llvm::enumerate(type.getElements())) {
-    auto numSubfields = getMaxFieldID(e.value().type) + 1;
+    auto numSubfields = getMaxFieldID(getBaseType(e.value().type)) + 1;
     if (fieldID < numSubfields)
       return e.index();
     fieldID -= numSubfields;
@@ -625,7 +627,7 @@ static bool isUselessVec(FIRRTLBaseType oldType, unsigned fieldID) {
   // If this is a bundle type, recurse.
   if (auto bundleType = oldType.dyn_cast<BundleType>()) {
     unsigned index = getIndexForFieldID(bundleType, fieldID);
-    return isUselessVec(bundleType.getElementType(index),
+    return isUselessVec(getBaseType(bundleType.getElementType(index)),
                         fieldID - getFieldID(bundleType, index));
   }
 
@@ -1174,8 +1176,10 @@ static FIRRTLBaseType updateType(FIRRTLBaseType oldType, unsigned fieldID,
     unsigned index = getIndexForFieldID(bundleType, fieldID);
     SmallVector<BundleType::BundleElement> fields(bundleType.begin(),
                                                   bundleType.end());
-    fields[index].type = updateType(
-        fields[index].type, fieldID - getFieldID(bundleType, index), fieldType);
+    fields[index].type = mapBaseType(fields[index].type, [&](auto base) {
+      return updateType(base, fieldID - getFieldID(bundleType, index),
+                        fieldType);
+    });
     return BundleType::get(oldType.getContext(), fields, bundleType.isConst());
   }
 

@@ -576,6 +576,7 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
   return value;
 }
 
+/// TODO: document, rename for desired ref behavior. ("walkLeafTypes"?)
 /// Walk leaf ground types in the `firrtlType` and apply the function `fn`.
 /// The first argument of `fn` is field ID, and the second argument is a
 /// leaf ground type.
@@ -584,7 +585,7 @@ void circt::firrtl::walkGroundTypes(
     llvm::function_ref<void(uint64_t, FIRRTLBaseType)> fn) {
   auto type = getBaseType(firrtlType);
   // If this is a ground type, don't call recursive functions.
-  if (type.isGround())
+  if (type.isGround() || isa<RefType>(type))
     return fn(0, type);
 
   uint64_t fieldID = 0;
@@ -593,7 +594,7 @@ void circt::firrtl::walkGroundTypes(
         .Case<BundleType>([&](BundleType bundle) {
           for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
             fieldID++;
-            f(f, bundle.getElementType(i));
+            f(f, getBaseType(bundle.getElementType(i)));
           }
         })
         .template Case<FVectorType>([&](FVectorType vector) {

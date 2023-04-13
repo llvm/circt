@@ -1861,12 +1861,12 @@ LogicalResult MemOp::verify() {
 
     // Safely search for the "data" field, erroring if it can't be
     // found.
-    FIRRTLBaseType dataType;
+    FIRRTLType dataFType;
     if (portKind == MemOp::PortKind::Debug) {
       auto resType = getResult(i).getType().dyn_cast<RefType>();
       if (!(resType && resType.getType().isa<FVectorType>()))
         return emitOpError() << "debug ports must be a RefType of FVectorType";
-      dataType = resType.getType().cast<FVectorType>().getElementType();
+      dataFType = resType.getType().cast<FVectorType>().getElementType();
     } else {
       auto dataTypeOption = portBundleType.getElement("data");
       if (!dataTypeOption && portKind == MemOp::PortKind::ReadWrite)
@@ -1877,12 +1877,18 @@ LogicalResult MemOp::verify() {
                          "port or \"rdata\" for a read/write port)";
         return failure();
       }
-      dataType = dataTypeOption->type;
+      dataFType = dataTypeOption->type;
       // Read data is expected to ba a flip.
       if (portKind == MemOp::PortKind::Read) {
         // FIXME error on missing bundle flip
       }
     }
+
+    auto dataType = dyn_cast<FIRRTLBaseType>(dataFType);
+    if (!dataType || dataType.containsReference())
+      return emitOpError()
+             << "has a data type that contains a reference type on port "
+             << portName << " (memory types cannot contain ref types)";
 
     // Error if the data type isn't passive.
     if (!dataType.isPassive()) {
@@ -2043,13 +2049,13 @@ size_t MemOp::getMaskBits() {
         getMemPortKindFromType(firstPortType) == PortKind::Debug)
       continue;
 
-    FIRRTLBaseType mType;
+    FIRRTLType mType;
     for (auto t : firstPortType.getPassiveType().cast<BundleType>()) {
       if (t.name.getValue().contains("mask"))
         mType = t.type;
     }
-    if (mType.dyn_cast_or_null<UIntType>())
-      return mType.getBitWidthOrSentinel();
+    if (auto uType = mType.dyn_cast_or_null<UIntType>())
+      return uType.getBitWidthOrSentinel();
   }
   // Mask of zero bits means, either there are no write/readwrite ports or the
   // mask is of aggregate type.
@@ -2061,15 +2067,16 @@ FIRRTLBaseType MemOp::getDataType() {
   assert(getNumResults() != 0 && "Mems with no read/write ports are illegal");
 
   if (auto refType = getResult(0).getType().dyn_cast<RefType>())
-    return refType.getType().cast<FVectorType>().getElementType();
+    return cast<FIRRTLBaseType>(refType.getType().cast<FVectorType>().getElementType());
   auto firstPortType = getResult(0).getType().cast<FIRRTLBaseType>();
 
   StringRef dataFieldName = "data";
   if (getMemPortKindFromType(firstPortType) == PortKind::ReadWrite)
     dataFieldName = "rdata";
 
-  return firstPortType.getPassiveType().cast<BundleType>().getElementType(
-      dataFieldName);
+  return cast<FIRRTLBaseType>(
+      firstPortType.getPassiveType().cast<BundleType>().getElementType(
+          dataFieldName));
 }
 
 StringAttr MemOp::getPortName(size_t resultNo) {
@@ -2810,6 +2817,11 @@ static bool checkAggConstant(Operation *op, Attribute attr,
     }
     return true;
   }
+  if (type.containsReference()) {
+    op->emitOpError("no reference-type constants");
+    return false;
+  }
+
   auto attrlist = attr.dyn_cast<ArrayAttr>();
   if (!attrlist) {
     op->emitOpError("expected array attribute for aggregate constant");
@@ -2823,7 +2835,7 @@ static bool checkAggConstant(Operation *op, Attribute attr,
       return false;
     }
     return llvm::all_of(attrlist, [&array, op](Attribute attr) {
-      return checkAggConstant(op, attr, array.getElementType());
+      return checkAggConstant(op, attr, cast<FIRRTLBaseType>(array.getElementType()));
     });
   }
   if (auto bundle = type.dyn_cast<BundleType>()) {
@@ -2838,7 +2850,8 @@ static bool checkAggConstant(Operation *op, Attribute attr,
         op->emitOpError("Cannot have constant bundle type with flip");
         return false;
       }
-      if (!checkAggConstant(op, attrlist[i], bundle.getElement(i).type))
+      if (!checkAggConstant(op, attrlist[i],
+                            cast<FIRRTLBaseType>(bundle.getElement(i).type)))
         return false;
     }
     return true;
@@ -2860,13 +2873,13 @@ Attribute AggregateConstantOp::getAttributeFromFieldID(uint64_t fieldID) {
     if (auto bundle = type.dyn_cast<BundleType>()) {
       auto index = bundle.getIndexForFieldID(fieldID);
       fieldID -= bundle.getFieldID(index);
-      type = bundle.getElementType(index);
+      type = cast<FIRRTLBaseType>(bundle.getElementType(index));
       value = value.cast<ArrayAttr>()[index];
     } else {
       auto vector = type.cast<FVectorType>();
       auto index = vector.getIndexForFieldID(fieldID);
       fieldID -= vector.getFieldID(index);
-      type = vector.getElementType();
+      type = cast<FIRRTLBaseType>(vector.getElementType());
       value = value.cast<ArrayAttr>()[index];
     }
   }
@@ -3190,7 +3203,11 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
   // SubfieldOp verifier checks that the field index is valid with number of
   // subelements.
   auto elementType = inType.getElement(fieldIndex).type;
-  return elementType.getConstType(elementType.isConst() || inType.isConst());
+  auto baseElementType = dyn_cast<FIRRTLBaseType>(elementType);
+  if (!baseElementType)
+    return elementType;
+  return baseElementType.getConstType(baseElementType.isConst() ||
+                                      inType.isConst());
 }
 
 bool SubfieldOp::isFieldFlipped() {
@@ -3689,6 +3706,12 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
         loc, "incompatible mux operand types, true value type: ", high,
         ", false value type: ", low);
 
+  if (high.containsReference() || low.containsReference())
+    return emitInferRetTypeError<FIRRTLBaseType>(
+        loc,
+        "mux operand types cannot contain references, true value type: ", high,
+        ", false value type: ", low);
+
   // Two different Int types can be compatible.  If either has unknown width,
   // then return it.  If both are known but different width, then return the
   // larger one.
@@ -3707,8 +3730,9 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
   auto lowVector = low.dyn_cast<FVectorType>();
   if (highVector && lowVector &&
       highVector.getNumElements() == lowVector.getNumElements()) {
-    auto inner = inferMuxReturnType(highVector.getElementType(),
-                                    lowVector.getElementType(), loc);
+    auto inner = inferMuxReturnType(
+        cast<FIRRTLBaseType>(highVector.getElementType()),
+        cast<FIRRTLBaseType>(lowVector.getElementType()), loc);
     if (!inner)
       return {};
     return FVectorType::get(inner, lowVector.getNumElements());
@@ -3733,7 +3757,8 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
         }
         auto element = highElements[i];
         element.type =
-            inferMuxReturnType(highElements[i].type, lowElements[i].type, loc);
+            inferMuxReturnType(cast<FIRRTLBaseType>(highElements[i].type),
+                               cast<FIRRTLBaseType>(lowElements[i].type), loc);
         if (!element.type)
           return {};
         newElements.push_back(element);
@@ -3887,6 +3912,8 @@ LogicalResult HWStructCastOp::verify() {
   BundleType bundleType;
   hw::StructType structType;
   if ((bundleType = getOperand().getType().dyn_cast<BundleType>())) {
+    if (bundleType.containsReference())
+      return emitError("source type cannot contain FIRRTL references");
     structType = getType().dyn_cast<hw::StructType>();
     if (!structType)
       return emitError("result type must be a struct");
@@ -3909,7 +3936,7 @@ LogicalResult HWStructCastOp::verify() {
              << firFields[findex].name.getValue() << "', '"
              << hwFields[findex].name.getValue() << "'";
     int64_t firWidth =
-        FIRRTLBaseType(firFields[findex].type).getBitWidthOrSentinel();
+        cast<FIRRTLBaseType>(firFields[findex].type).getBitWidthOrSentinel();
     int64_t hwWidth = hw::getBitWidth(hwFields[findex].type);
     if (firWidth > 0 && hwWidth > 0 && firWidth != hwWidth)
       return emitError("size of field '")
@@ -4328,13 +4355,17 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
   auto fieldIdx =
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
 
+   if (inType.containsReference())
+    return emitInferRetTypeError(loc, "unsupported nested reference type found");
+
   // TODO: Determine ref.sub + rwprobe behavior, test.
   // Probably best to demote to non-rw, but that has implications
   // for any LowerTypes behavior being relied on.
   // Allow for now, as need to LowerTypes things generally.
   if (auto vectorType = inType.dyn_cast<FVectorType>()) {
     if (fieldIdx < vectorType.getNumElements())
-      return RefType::get(vectorType.getElementType(), refType.getForceable());
+      return RefType::get(cast<FIRRTLBaseType>(vectorType.getElementType()),
+                          refType.getForceable());
     return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
                                  "' in RefType of vector type ", refType);
   }
@@ -4344,7 +4375,7 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
                                    "subfield element index is greater than "
                                    "the number of fields in the bundle type");
     }
-    return RefType::get(bundleType.getElement(fieldIdx).type,
+    return RefType::get(cast<FIRRTLBaseType>(bundleType.getElement(fieldIdx).type),
                         refType.getForceable());
   }
 

@@ -2760,7 +2760,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     // Since addresses coming from Handshake are IndexType and have a hardcoded
     // 64-bit width in this pass, we may need to truncate down to the actual
     // size of the address port used by the FIRRTL memory.
-    auto memAddrType = memAddr.getType();
+    auto memAddrType = cast<FIRRTLBaseType>(memAddr.getType());
     auto storeAddrType = storeAddrData.getType().cast<FIRRTLBaseType>();
     if (memAddrType != storeAddrType) {
       auto memAddrPassiveType = memAddrType.getPassiveType();

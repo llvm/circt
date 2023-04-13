@@ -57,7 +57,7 @@ namespace {
 /// This represents a flattened bundle field element.
 struct FlatBundleFieldEntry {
   /// This is the underlying ground type of the field.
-  FIRRTLBaseType type;
+  FIRRTLType type;
   /// The index in the parent type
   size_t index;
   /// The fieldID
@@ -67,7 +67,7 @@ struct FlatBundleFieldEntry {
   /// This indicates whether the field was flipped to be an output.
   bool isOutput;
 
-  FlatBundleFieldEntry(const FIRRTLBaseType &type, size_t index,
+  FlatBundleFieldEntry(const FIRRTLType &type, size_t index,
                        unsigned fieldID, StringRef suffix, bool isOutput)
       : type(type), index(index), fieldID(fieldID), suffix(suffix),
         isOutput(isOutput) {}
@@ -260,8 +260,8 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
   auto oldPorts = op.getPorts();
   for (size_t portIdx = 0, e = oldPorts.size(); portIdx < e; ++portIdx) {
     auto port = oldPorts[portIdx];
-    ports.push_back(
-        MemOp::getTypeForPort(op.getDepth(), field.type, port.second));
+    ports.push_back(MemOp::getTypeForPort(
+        op.getDepth(), cast<FIRRTLBaseType>(field.type), port.second));
     portNames.push_back(port.first);
   }
 
@@ -303,7 +303,8 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
           // `data` or `mask` sub-field to get the "real" fieldID.
           auto fieldID = field.fieldID + oldPortType.getFieldID(targetIndex);
           if (annoFieldID >= fieldID &&
-              annoFieldID <= fieldID + field.type.getMaxFieldID()) {
+              annoFieldID <=
+                  fieldID + cast<FIRRTLBaseType>(field.type).getMaxFieldID()) {
             // Set the field ID of the new annotation.
             auto newFieldID =
                 annoFieldID - fieldID + portType.getFieldID(targetIndex);
@@ -547,7 +548,9 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
     // Check whether the annotation falls into the range of the current field.
     if (fieldID != 0 &&
         !(fieldID >= field.fieldID &&
-          fieldID <= field.fieldID + field.type.getMaxFieldID()))
+          fieldID <=
+              field.fieldID +
+                  cast<hw::FieldIDTypeInterface>(field.type).getMaxFieldID()))
       continue;
 
     // Apply annotations to all elements if fieldID is equal to zero.
@@ -723,7 +726,10 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
                             unsigned insertPtOffset, FIRRTLType srcType,
                             FlatBundleFieldEntry field, PortInfo &oldArg) {
   Value newValue;
-  FIRRTLType fieldType = mapBaseType(srcType, [&](auto) { return field.type; });
+  FIRRTLType fieldType = field.type;
+  if (auto refType = dyn_cast<RefType>(srcType))
+    fieldType =
+        RefType::get(cast<FIRRTLBaseType>(field.type), refType.getForceable());
   if (auto mod = dyn_cast<FModuleOp>(module)) {
     Block *body = mod.getBodyBlock();
     // Append the new argument.
@@ -1265,13 +1271,15 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
   // If the input is of aggregate type, then cat all the leaf fields to form a
   // UInt type result. That is, first bitcast the aggregate type to a UInt.
   // Attempt to get the bundle types.
+  assert(!op.getInput().getType().containsReference());
   SmallVector<FlatBundleFieldEntry> fields;
   if (peelType(op.getInput().getType(), fields, PreserveAggregate::None)) {
     size_t uptoBits = 0;
     // Loop over the leaf aggregates and concat each of them to get a UInt.
     // Bitcast the fields to handle nested aggregate types.
     for (const auto &field : llvm::enumerate(fields)) {
-      auto fieldBitwidth = *getBitWidth(field.value().type);
+      auto fieldBitwidth =
+          *getBitWidth(cast<FIRRTLBaseType>(field.value().type));
       // Ignore zero width fields, like empty bundles.
       if (fieldBitwidth == 0)
         continue;
@@ -1298,7 +1306,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
     auto clone = [&](const FlatBundleFieldEntry &field,
                      ArrayAttr attrs) -> Value {
       // All the fields must have valid bitwidth, a requirement for BitCastOp.
-      auto fieldBits = *getBitWidth(field.type);
+      auto fieldBits = *getBitWidth(cast<FIRRTLBaseType>(field.type));
       // If empty field, then it doesnot have any use, so replace it with an
       // invalid op, which should be trivially removed.
       if (fieldBits == 0)
@@ -1369,8 +1377,12 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       for (const auto &field : fieldTypes) {
         newDirs.push_back(direction::get((unsigned)oldDir ^ field.isOutput));
         newNames.push_back(builder->getStringAttr(oldName + field.suffix));
-        resultTypes.push_back(
-            mapBaseType(srcType, [&](auto base) { return field.type; }));
+        if (isa<RefType>(srcType))
+          resultTypes.push_back(mapBaseType(srcType, [&](auto base) {
+            return cast<FIRRTLBaseType>(field.type);
+          }));
+        else
+          resultTypes.push_back(field.type);
         auto annos = filterAnnotations(
             context, oldPortAnno[i].dyn_cast_or_null<ArrayAttr>(), srcType,
             field);
