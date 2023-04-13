@@ -225,13 +225,8 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
                                        parseBundleElement))
       return failure();
 
-    BundleType bundleType;
-    if (!bundleNameAttr)
-      bundleType = BundleType::get(context, elements, isConst);
-    else
-      bundleType = BundleType::get(elements, isConst, bundleNameAttr);
-
-    return result = bundleType, success();
+    return result = BundleType::get(context, elements, isConst, bundleNameAttr),
+           success();
   }
 
   if (name.equals("enum")) {
@@ -932,13 +927,16 @@ UIntType UIntType::getConstType(bool isConst) {
 // Bundle Type
 //===----------------------------------------------------------------------===//
 
-struct circt::firrtl::detail::BundleTypeStorage : mlir::TypeStorage {
-  using ElementsType = ArrayRef<BundleType::BundleElement>;
-  using KeyTy = std::tuple<ArrayRef<BundleType::BundleElement>, char, StringAttr>;
+struct circt::firrtl::detail::BundleTypeStorage
+    : detail::FIRRTLBaseTypeStorage {
+  using KeyTy =
+      std::tuple<ArrayRef<BundleType::BundleElement>, char, StringAttr>;
 
-  BundleTypeStorage(ArrayRef<BundleType::BundleElement> elements, bool isConst, StringAttr bundleName)
+  BundleTypeStorage(ArrayRef<BundleType::BundleElement> elements, bool isConst,
+                    StringAttr bundleName)
       : detail::FIRRTLBaseTypeStorage(isConst),
-      elements(value.first.begin(), value.first.end()), bundleName(value.second), props{true, false, false} {
+        elements(elements.begin(), elements.end()),
+        bundleName(bundleName), props{true, false, false, false, false} {
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
@@ -962,16 +960,16 @@ struct circt::firrtl::detail::BundleTypeStorage : mlir::TypeStorage {
   }
 
   static llvm::hash_code hashKey(const KeyTy &key) {
-    return llvm::hash_combine(
-        llvm::hash_combine_range(std::get<0>(key).begin(), std::get<0>(key).end()),
-        std::get<1>(key), std::get<2>(key));
-
+    return llvm::hash_combine(llvm::hash_combine_range(std::get<0>(key).begin(),
+                                                       std::get<0>(key).end()),
+                              std::get<1>(key), std::get<2>(key));
   }
 
   static BundleTypeStorage *construct(TypeStorageAllocator &allocator,
                                       KeyTy key) {
     return new (allocator.allocate<BundleTypeStorage>())
-        BundleTypeStorage(key.first, static_cast<bool>(key.second));
+        BundleTypeStorage(std::get<0>(key), static_cast<bool>(std::get<1>(key)),
+                          std::get<2>(key));
   }
 
   SmallVector<BundleType::BundleElement, 4> elements;
@@ -986,26 +984,17 @@ struct circt::firrtl::detail::BundleTypeStorage : mlir::TypeStorage {
 };
 
 BundleType BundleType::get(MLIRContext *context,
-                           ArrayRef<BundleElement> elements, bool isConst) {
-  return Base::get(context, elements, isConst);
+                           ArrayRef<BundleElement> elements, bool isConst,
+                           StringAttr bundleName) {
+  return Base::get(context, elements, isConst, bundleName);
 }
+
 auto BundleType::getBundleName() const -> StringAttr {
   return getImpl()->bundleName;
 }
 
 auto BundleType::getElements() const -> ArrayRef<BundleElement> {
   return getImpl()->elements;
-}
-
-BundleType BundleType::get(ArrayRef<BundleElement> elements, bool isConst,
-                           StringAttr bundleName) {
-  return Base::get(bundleName.getContext(),
-                   std::make_tuple(elements, isConst, bundleName));
-}
-
-BundleType BundleType::get(MLIRContext *context,
-                           ArrayRef<BundleElement> elements) {
-  return Base::get(context, std::make_pair(elements, StringAttr()));
 }
 
 /// Return a pair with the 'isPassive' and 'containsAnalog' bits.

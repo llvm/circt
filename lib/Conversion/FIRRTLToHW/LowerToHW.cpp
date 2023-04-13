@@ -275,36 +275,6 @@ struct CircuitLoweringState {
     binds.push_back(op);
   }
 
-  /// Return a unique typedecl name, derived from the input `name`, and add the
-  /// new name to the typeDeclNames set.  There are two possible outcomes for
-  /// the returned name:
-  ///
-  /// 1. The original name is returned.
-  /// 2. The name is given a `_<n>` suffix where `<n>` is a number starting from
-  ///    `_0` and incrementing by one each time.
-  StringRef newTypedeclName(const Twine &name) {
-    // Special case the situation where there is no name collision to avoid
-    // messing with the SmallString allocation below.
-    llvm::SmallString<64> tryName;
-    auto inserted = typeDeclNames.insert(name.toStringRef(tryName));
-    if (inserted.second)
-      return inserted.first->getKey();
-
-    // Try different suffixes until we get a collision-free one.
-    size_t i = 0;
-    if (tryName.empty())
-      name.toVector(tryName); // toStringRef may leave tryName unfilled
-    tryName.push_back('_');
-    size_t baseLength = tryName.size();
-    for (;;) {
-      tryName.resize(baseLength);
-      Twine(i++).toVector(tryName); // append integer to tryName
-      auto inserted = typeDeclNames.insert(tryName);
-      if (inserted.second)
-        return inserted.first->getKey();
-    }
-  }
-
   /// For a given named bundle, return the corresponding AliasType. Create and
   /// record the AliasType, if it doesn't exist for the given named bundle. Can
   /// only be called for bundles with a valid name.
@@ -332,12 +302,12 @@ struct CircuitLoweringState {
           b.getStringAttr(circuitOp.getName() + "__TYPESCOPE_"));
       typeScope.getBodyRegion().push_back(new Block());
     }
-
     // Get a unique typedecl name.
     // The bundleName can conflict with other symbols, but must be unique within
     // the TypeScopeOp.
-    bundleName = StringAttr::get(bundleName.getContext(),
-                                 newTypedeclName(bundleName.getValue()));
+    bundleName =
+        StringAttr::get(bundleName.getContext(),
+                        typeDeclNamespace.newName(bundleName.getValue()));
 
     auto typeScopeBuilder =
         ImplicitLocOpBuilder::atBlockEnd(typeLoc, typeScope.getBodyBlock());
@@ -443,7 +413,7 @@ private:
   DenseMap<Type, hw::TypeAliasType> firrtlTypeToAliasTypeMap;
 
   /// Set to keep track of unique typedecl names.
-  llvm::StringSet<> typeDeclNames;
+  Namespace typeDeclNamespace;
 };
 
 /// Given a type, return the corresponding lowered type for the HW dialect.

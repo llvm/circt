@@ -201,13 +201,14 @@ def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
 
 def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
   let summary = "an aggregate of named elements. This is effectively a struct.";
-  let parameters = (ins "ArrayRef<BundleElement>":$elements, "bool":$isConst, "StringAttr":$bundleName);
+  let parameters = (ins "ArrayRef<BundleElement>":$elements, "bool":$isConst,
+                    "StringAttr":$bundleName);
   let storageClass = "BundleTypeStorage";
   let skipDefaultBuilders = true;
   let builders = [
-    TypeBuilder<(ins "ArrayRef<BundleElement>":$elements, CArg<"bool", "false">:$isConst)>
-    TypeBuilderWithInferredContext<(ins
-      "ArrayRef<BundleElement>":$elements, "StringAttr":$bundleName)>,
+    TypeBuilder<(ins "ArrayRef<BundleElement>":$elements,
+                  CArg<"bool", "false">:$isConst,
+                  CArg<"StringAttr", "{}">:$bundleName)>,
   ];
   let extraClassDeclaration = [{
     /// Each element of a bundle, which is a name and type.
@@ -232,6 +233,8 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
     };
 
     ArrayRef<BundleElement> getElements() const;
+
+    StringAttr getBundleName() const;
 
     size_t getNumElements() { return getElements().size(); }
 
