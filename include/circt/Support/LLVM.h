@@ -50,6 +50,7 @@ using mlir::dyn_cast_or_null;
 using mlir::function_ref;
 using mlir::isa;
 using mlir::isa_and_nonnull;
+using mlir::isa_and_present;
 using mlir::iterator_range;
 using mlir::MutableArrayRef;
 using mlir::PointerUnion;

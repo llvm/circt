@@ -21,6 +21,7 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/SV/SVAttributes.h"
@@ -152,7 +153,7 @@ static bool isDuplicatableExpression(Operation *op) {
     return isDuplicatableNullaryExpression(op);
 
   // It is cheap to inline extract op.
-  if (isa<comb::ExtractOp, hw::StructExtractOp>(op))
+  if (isa<comb::ExtractOp, hw::StructExtractOp, hw::UnionExtractOp>(op))
     return true;
 
   // We only inline array_get with a constant, port or wire index.
@@ -567,7 +568,8 @@ static bool isOkToBitSelectFrom(Value v) {
     return true;
 
   // Aggregate access can be inlined.
-  if (v.getDefiningOp<StructExtractOp>() || v.getDefiningOp<ArrayGetOp>())
+  if (isa_and_present<StructExtractOp, UnionExtractOp, ArrayGetOp>(
+          v.getDefiningOp()))
     return true;
 
   // Interface signal can be inlined.
@@ -622,7 +624,7 @@ static bool isExpressionUnableToInline(Operation *op,
     //
     // To handle these, we push the subexpression into a temporary.
     if (isa<ExtractOp, ArraySliceOp, ArrayGetOp, StructExtractOp,
-            IndexedPartSelectOp>(user))
+            UnionExtractOp, IndexedPartSelectOp>(user))
       if (op->getResult(0) == user->getOperand(0) && // ignore index operands.
           !isOkToBitSelectFrom(op->getResult(0)))
         return true;
@@ -1965,6 +1967,7 @@ private:
   SubExprInfo visitTypeOp(StructCreateOp op);
   SubExprInfo visitTypeOp(StructExtractOp op);
   SubExprInfo visitTypeOp(StructInjectOp op);
+  SubExprInfo visitTypeOp(UnionExtractOp op);
   SubExprInfo visitTypeOp(EnumConstantOp op);
 
   // Comb Dialect Operations
@@ -2845,6 +2848,30 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
 
 SubExprInfo ExprEmitter::visitTypeOp(EnumConstantOp op) {
   ps << PPSaveString(emitter.fieldNameResolver.getEnumFieldName(op.getField()));
+  return {Selection, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(UnionExtractOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+  emitSubExpr(op.getInput(), Selection);
+
+  // Check if this union type has been padded.
+  auto fieldName = op.getFieldAttr();
+  auto unionType = cast<UnionType>(getCanonicalType(op.getInput().getType()));
+  auto unionWidth = hw::getBitWidth(unionType);
+  auto element = unionType.getFieldInfo(fieldName.getValue());
+  auto elementWidth = hw::getBitWidth(element.type);
+  bool needsPadding = elementWidth < unionWidth || element.offset > 0;
+  auto verilogFieldName = emitter.getVerilogStructFieldName(fieldName);
+
+  // If the element needs padding then we need to get the actual element out
+  // of an anonymous structure.
+  if (needsPadding)
+    ps << "." << PPExtString(verilogFieldName);
+
+  // Get the correct member from the union.
+  ps << "." << PPExtString(verilogFieldName);
   return {Selection, IsUnsigned};
 }
 
