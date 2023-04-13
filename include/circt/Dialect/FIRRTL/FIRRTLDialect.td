@@ -60,6 +60,15 @@ class FIRRTLOp<string mnemonic, list<Trait> traits = []> :
   // `fold` functions to call a `constFold` function. `constFold` handles
   // folding logic as normal. `fold` automatically handles type changes
   // to 'const'.
+  //
+  // This type change is needed for folding both values and attributes:
+  // - MLIR's canonicalizer checks that folded values have types identical 
+  //   to the types of the op results they are replacing. 
+  //   Updating the op result type allows that check to pass. 
+  // - MLIR's canonicalizer calls `materializeConstant` on folded attributes. 
+  //   Updating the op result type ensures that `materializeConstant` is 
+  //   provided a 'const' type for constant ops and that the canonicalizer's 
+  //   internal bookkeeping of cached constants is consistent.
   
   // If the op `hasFolder`, generate a `constFold` prototype 
   // based on the number of results.
