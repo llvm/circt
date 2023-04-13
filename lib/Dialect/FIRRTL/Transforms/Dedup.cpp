@@ -216,6 +216,21 @@ struct Equivalence {
     nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
   }
 
+  std::string prettyPrint(Attribute attr) {
+    SmallString<64> buffer;
+    llvm::raw_svector_ostream os(buffer);
+    if (auto integerAttr = dyn_cast<IntegerAttr>(attr)) {
+      os << "0x";
+      if (integerAttr.getType().isSignlessInteger())
+        integerAttr.getValue().toStringUnsigned(buffer, /*radix=*/16);
+      else
+        integerAttr.getAPSInt().toString(buffer, /*radix=*/16);
+
+    } else
+      os << attr;
+    return std::string(buffer);
+  }
+
   // NOLINTNEXTLINE(misc-no-recursion)
   LogicalResult check(InFlightDiagnostic &diag, const Twine &message,
                       Operation *a, BundleType aType, Operation *b,
@@ -426,8 +441,9 @@ struct Equivalence {
       } else if (aAttr != bAttr) {
         diag.attachNote(a->getLoc())
             << "first operation has attribute '" << attrName.getValue()
-            << "' with value " << aAttr;
-        diag.attachNote(b->getLoc()) << "second operation has value " << bAttr;
+            << "' with value " << prettyPrint(aAttr);
+        diag.attachNote(b->getLoc())
+            << "second operation has value " << prettyPrint(bAttr);
         return failure();
       }
       seenAttrs.insert(attrName);
