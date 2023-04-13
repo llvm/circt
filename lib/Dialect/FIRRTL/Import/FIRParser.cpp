@@ -762,18 +762,13 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
 
           StringRef fieldName;
           FIRRTLType type;
-          auto fieldLoc = getToken().getLoc();
           if (parseFieldId(fieldName, "expected bundle field name") ||
               parseToken(FIRToken::colon, "expected ':' in bundle") ||
               parseType(type, "expected bundle field type"))
             return failure();
 
-          auto baseType = type.dyn_cast<FIRRTLBaseType>();
-          if (!baseType)
-            return emitError(fieldLoc, "field must be base type");
-
           elements.push_back(
-              {StringAttr::get(getContext(), fieldName), isFlipped, baseType});
+              {StringAttr::get(getContext(), fieldName), isFlipped, type});
           return success();
         }))
       return failure();
