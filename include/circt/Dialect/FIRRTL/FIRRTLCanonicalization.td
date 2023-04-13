@@ -92,8 +92,6 @@ def AllOneConstantOp : Constraint<CPred<"$0.getDefiningOp<ConstantOp>() && $0.ge
 def TypeWidthAdjust32 : NativeCodeCall<
   "$_builder.getI32IntegerAttr($0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel() - $1.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel())">;
 
-def NonConstType : Constraint<CPred<"!isConst($0.getType())">>;
-
 /// Drop the writer to the first argument and passthrough the second
 def DropWrite : NativeCodeCall<"dropWrite($_builder, $0, $1)">;
 

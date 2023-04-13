@@ -3215,7 +3215,7 @@ bool firrtl::isConst(Type type) {
   return false;
 }
 
-// Returns true if the provided types are equal except for constness
+/// Returns true if the provided types are equal except for constness
 bool firrtl::mixedConstTypes(FIRRTLBaseType a, FIRRTLBaseType b) {
   return a == b || a.getPurelyNonConstType() == b.getPurelyNonConstType();
 }
