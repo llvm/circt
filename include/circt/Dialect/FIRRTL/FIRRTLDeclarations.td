@@ -87,7 +87,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>
   ];
 
-  let extraClassDeclaration = [{
+  let firrtlExtraClassDeclaration = [{
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
     FModuleLike getReferencedModule(SymbolTable& symtbl);

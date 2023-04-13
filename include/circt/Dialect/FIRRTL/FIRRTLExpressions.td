@@ -54,11 +54,8 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
     return $_impl(operands, attrs, loc);
   } }]));
 
-  // Additional class declarations to emit alongside the type inference.
-  code firrtlExtraClassDeclaration = "";
-
   let extraClassDeclaration = firrtlExtraClassDeclaration # inferTypeDecl #
-      parseValidatorDecl # [{
+      parseValidatorDecl # constFoldDecl # [{
     /// Infer the return types of this operation. This is called by the
     /// `InferTypeOpInterface`. We simply forward to a narrower
     /// operation-specific implementation which is sufficient for FIRRTL ops.
@@ -140,7 +137,7 @@ def AggregateConstantOp : FIRRTLOp<"aggregateconstant", [Pure, ConstantLike]> {
     ```
   }];
 
-  let extraClassDeclaration = [{
+  let firrtlExtraClassDeclaration = [{
     Attribute getAttributeFromFieldID(uint64_t fieldID);
   }];
 
@@ -214,7 +211,7 @@ def FEnumCreateOp : FIRRTLOp<"enumcreate"> {
     }]>
   ];
 
-  let extraClassDeclaration = [{
+  let firrtlExtraClassDeclaration = [{
     /// Return the name of the accessed field.
     StringRef getFieldName() {
       return getResult().getType().getElementName(getFieldIndex());

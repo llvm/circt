@@ -52,6 +52,79 @@ def FIRRTLDialect : Dialect {
 
 // Base class for the operation in this dialect.
 class FIRRTLOp<string mnemonic, list<Trait> traits = []> :
-    Op<FIRRTLDialect, mnemonic, traits>;
+    Op<FIRRTLDialect, mnemonic, traits> {
+  
+  // Because FIRRTL hardware types can be 'const', folding an op can change
+  // it's type from a non-'const' to a 'const' type. 
+  // To accomodate this, ops with `hasFolder` automatically generate their
+  // `fold` functions to call a `constFold` function. `constFold` handles
+  // folding logic as normal. `fold` automatically handles type changes
+  // to 'const'.
+  
+  // If the op `hasFolder`, generate a `constFold` prototype 
+  // based on the number of results.
+  code constFoldDecl = !if(hasFolder, !if(!eq(!size(results), 1), 
+    [{
+      OpFoldResult constFold(FoldAdaptor adaptor);
+    }],
+    [{
+      LogicalResult constFold(FoldAdaptor adaptor, 
+                              SmallVectorImpl<OpFoldResult> &results);
+    }]
+  ), "");
+
+  // If the op `hasFolder`, generate a `fold` implementation that calls
+  // `constFold` and handles type changes.
+  code constFoldDef = !if(hasFolder, !if(!eq(!size(results), 1), 
+    [{    
+      OpFoldResult $cppClass::fold(FoldAdaptor adaptor) {
+        auto result = this->constFold(adaptor);
+        if (result) {
+          if (auto value = result.dyn_cast<Value>()) {
+            assert(mixedConstTypes((*this)->getResultTypes()[0].cast<FIRRTLBaseType>(),
+                                   value.getType().cast<FIRRTLBaseType>()) 
+                  && "result type can only differ by constness");
+            (*this)->getResult(0).setType(value.getType());
+          } else {
+            // TODO: Uncomment once constant ops return const types
+            // if (auto resultType =
+            // (*this)->getResultTypes()[0].dyn_cast<FIRRTLBaseType>())
+            //   (*this)->getResult(0).setType(resultType.getConstType(true));
+          }
+        }
+        return result;
+      }
+    }],
+    [{    
+      LogicalResult $cppClass::fold(FoldAdaptor adaptor,
+                                    SmallVectorImpl<OpFoldResult> &results) {
+        if (failed(this->constFold(adaptor, results)))
+          return failure();
+
+        for (size_t i = 0, e = results.size(); i != e; ++i) {
+          if (auto value = results[i].dyn_cast<Value>()) {
+            assert(mixedConstTypes((*this)->getResultTypes()[i].cast<FIRRTLBaseType>(),
+                                   value.getType().cast<FIRRTLBaseType>()) 
+                  && "result type can only differ by constness");
+            (*this)->getResult(i).setType(value.getType());
+          } else if (results[i]) {
+            // TODO: Uncomment once constant ops return const types
+            // if (auto resultType =
+            // (*this)->getResultTypes()[i].dyn_cast<FIRRTLBaseType>();
+            //     resultType && result)
+            //   (*this)->getResult(i).setType(resultType.getConstType(true));
+          }
+        }
+        return success();
+      }
+    }]
+  ), "");
+
+  // Additional class declarations to emit
+  code firrtlExtraClassDeclaration = "";
+
+  let extraClassDeclaration = constFoldDecl # firrtlExtraClassDeclaration;
+  let extraClassDefinition = constFoldDef;
+}
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLDIALECT_TD
