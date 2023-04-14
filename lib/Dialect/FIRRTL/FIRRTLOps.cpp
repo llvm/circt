@@ -4093,6 +4093,10 @@ void UninferredResetCastOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
+void UninferredWidthCastOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
 //===----------------------------------------------------------------------===//
 // RefOps
 //===----------------------------------------------------------------------===//

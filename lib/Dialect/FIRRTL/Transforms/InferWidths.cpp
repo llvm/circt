@@ -1471,7 +1471,10 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         constrainTypes(sel, solver.known(1));
         maximumOfTypes(op.getResult(), op.getHigh(), op.getLow());
       })
-
+      .Case<UninferredWidthCastOp>([&](auto op) {
+        declareVars(op.getResult(), op.getLoc());
+        constrainTypes(op.getResult(), op.getInput());
+      })
       // Handle the various connect statements that imply a type constraint.
       .Case<FConnectLike>(
           [&](auto op) { constrainTypes(op.getDest(), op.getSrc()); })
@@ -1945,8 +1948,41 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
     return anyChanged;
   }
 
+  if (auto cast = dyn_cast<UninferredWidthCastOp>(op)) {
+    auto lhs = cast.getResult();
+    auto rhs = cast.getInput();
+    auto lhsType = lhs.getType().dyn_cast<FIRRTLBaseType>();
+    auto rhsType = rhs.getType().dyn_cast<FIRRTLBaseType>();
+
+    auto lhsWidth = lhsType.getBitWidthOrSentinel();
+    auto rhsWidth = rhsType.getBitWidthOrSentinel();
+    if (lhsWidth < rhsWidth) {
+      OpBuilder builder(op);
+      auto trunc = builder.createOrFold<TailPrimOp>(cast.getLoc(), rhs,
+                                                    rhsWidth - lhsWidth);
+      if (rhsType.isa<SIntType>())
+        trunc =
+            builder.createOrFold<AsSIntPrimOp>(cast.getLoc(), lhsType, trunc);
+
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Truncating RHS to " << lhsType << " in " << cast << "\n");
+      lhs.replaceAllUsesWith(trunc);
+    } else if (lhsWidth > rhsWidth) {
+      OpBuilder builder(op);
+      auto extend =
+          builder.createOrFold<PadPrimOp>(cast.getLoc(), rhs, lhsWidth);
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Extending RHS to " << lhsType << " in " << cast << "\n");
+      lhs.replaceAllUsesWith(extend);
+    } else {
+      LLVM_DEBUG(llvm::dbgs() << "NOOP " << cast << "\n");
+      lhs.replaceAllUsesWith(rhs);
+    }
+    return anyChanged;
+  }
+
   // If this is a module, update its ports.
-  else if (auto module = dyn_cast<FModuleOp>(op)) {
+  if (auto module = dyn_cast<FModuleOp>(op)) {
     // Update the block argument types.
     bool argsChanged = false;
     SmallVector<Attribute> argTypes;

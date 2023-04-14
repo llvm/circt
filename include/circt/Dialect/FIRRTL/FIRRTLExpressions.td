@@ -827,6 +827,19 @@ def UninferredResetCastOp : FIRRTLOp<"resetCast", [HasCustomSSAName, Pure]> {
     "$input attr-dict `:` functional-type($input, $result)";
 }
 
+def UninferredWidthCastOp : FIRRTLOp<"widthCast", [HasCustomSSAName, Pure]> {
+  let description = [{
+    Cast between sized and unsized integer types.  This is used to enable 
+    strictconnects early in the pipeline by isolating all uninferred width 
+    connections to a single op.
+  }];
+  let arguments = (ins IntType:$input);
+  let results = (outs IntType:$result);
+  let hasFolder = 1;
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
+}
+
 //===----------------------------------------------------------------------===//
 // Conversions to/from fixed-width signless integer types in standard dialect.
 //===----------------------------------------------------------------------===//

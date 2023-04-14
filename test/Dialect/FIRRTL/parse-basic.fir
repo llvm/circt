@@ -7,7 +7,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input in: UInt
     output out: UInt<8>
 
-    ; CHECK: firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint
+    ; CHECK: %0 = firrtl.widthCast %in : (!firrtl.uint) -> !firrtl.uint<8>
+    ; CHECK: firrtl.strictconnect %out, %0 : !firrtl.uint<8>
     out <= in
 
   ; CHECK: }
@@ -477,7 +478,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module expr_stmt_ambiguity :
     ; CHECK: %reg = firrtl.wire interesting_name : !firrtl.uint
     wire reg : UInt
-    ; CHECK: firrtl.connect %reg,
+    ; CHECK: firrtl.strictconnect %reg,
     reg <= UInt(42)
 
     ; CHECK: %write = firrtl.wire
@@ -490,7 +491,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module expr_stmt_ambiguity2 :
     ; CHECK: firrtl.instance write interesting_name @circuit
     inst write of circuit
-    ; CHECK: firrtl.connect %write_in
+    ; CHECK: firrtl.strictconnect %write_in
     write.in <= UInt(1)
 
   ; CHECK-LABEL: firrtl.module private @oversize_shift(
@@ -1209,12 +1210,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-DAG: %[[AGG_B:.+]] = firrtl.subfield %[[AGG]][b]
     ; CHECK-DAG: %[[AGG_B_PROBE:.+]] = firrtl.ref.send %[[AGG_B]]
     ; CHECK-DAG: %[[READ_AGG_B_PROBE:.+]] = firrtl.ref.resolve %[[AGG_B_PROBE]]
-    ; CHECK-DAG: connect %out2, %[[READ_AGG_B_PROBE]]
+    ; CHECK-NEXT: %[[wfix:.*]] = firrtl.widthCast %[[READ_AGG_B_PROBE]]
+    ; CHECK-DAG: strictconnect %out2, %[[wfix]]
     out2 <= read(probe(agg.b))
     ; CHECK-DAG: %[[AGG2_PROBE:.+]] = firrtl.ref.send %[[AGG2]]
     ; CHECK-DAG: %[[READ_AGG2_PROBE:.+]] = firrtl.ref.resolve %[[AGG2_PROBE]]
     ; CHECK-DAG: %[[READ_AGG2_PROBE__B:.+]] = firrtl.subfield %[[READ_AGG2_PROBE]][b]
-    ; CHECK-DAG: connect %out2, %[[READ_AGG2_PROBE__B]]
+    ; CHECK-DAG: strictconnect %out2, %[[READ_AGG2_PROBE__B]]
     out2 <= read(probe(agg2)).b
 
     ; CHECK: %[[AGG3:.+]] = firrtl.wire
@@ -1227,7 +1229,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: %[[REM_R2_1:.+]] = firrtl.ref.sub %[[REM_R2]][1]
     ; CHECK-NEXT: %[[REM_R2_1_A:.+]] = firrtl.ref.sub %[[REM_R2_1]][0]
     ; CHECK-NEXT: %[[READ_REM_R2_1_A:.+]] = firrtl.ref.resolve %[[REM_R2_1_A]]
-    ; CHECK-NEXT: connect %out3, %[[READ_REM_R2_1_A]]
+    ; CHECK-NEXT: strictconnect %out3, %[[READ_REM_R2_1_A]]
     inst rem of RefExtMore
     out3 <= read(rem.r2[1].a)
 

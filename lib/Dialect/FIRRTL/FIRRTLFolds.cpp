@@ -1659,7 +1659,7 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
 
   // Ok, we know we are doing the transformation.
 
-  auto replacement = op.getSrc();
+  Value replacement = op.getSrc();
   if (srcValueOp) {
     // Replace with constant zero.
     if (isa<InvalidValueOp>(srcValueOp)) {
@@ -2028,6 +2028,12 @@ OpFoldResult VectorCreateOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult UninferredResetCastOp::fold(FoldAdaptor adaptor) {
+  if (getOperand().getType() == getType())
+    return getOperand();
+  return {};
+}
+
+OpFoldResult UninferredWidthCastOp::fold(FoldAdaptor adaptor) {
   if (getOperand().getType() == getType())
     return getOperand();
   return {};

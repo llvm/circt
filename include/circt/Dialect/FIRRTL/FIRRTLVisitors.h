@@ -49,10 +49,12 @@ public:
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
-            RefResolveOp, RefSubOp, mlir::UnrealizedConversionCastOp>(
-            [&](auto expr) -> ResultType {
-              return thisCast->visitExpr(expr, args...);
-            })
+            RefResolveOp, RefSubOp,
+            // Casts to deal with weird stuff
+            UninferredResetCastOp, UninferredWidthCastOp,
+            mlir::UnrealizedConversionCastOp>([&](auto expr) -> ResultType {
+          return thisCast->visitExpr(expr, args...);
+        })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidExpr(op, args...);
         });
@@ -159,6 +161,8 @@ public:
 
   // Conversions.
   HANDLE(HWStructCastOp, Unhandled);
+  HANDLE(UninferredResetCastOp, Unhandled);
+  HANDLE(UninferredWidthCastOp, Unhandled);
   HANDLE(mlir::UnrealizedConversionCastOp, Unhandled);
   HANDLE(BitCastOp, Unhandled);
 #undef HANDLE
