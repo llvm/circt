@@ -576,4 +576,3 @@ circuit ForceWithLiteral:
     input in : UInt<1>
     node n = in
     force_initial(rwprobe(n), 1) ; expected-error {{expected source expression in force_initial}}
-
