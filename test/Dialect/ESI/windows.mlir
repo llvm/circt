@@ -28,7 +28,7 @@ hw.module.extern @TypeAModuleSrc() -> (windowed: !TypeAwin1)
 
 // CHECK-LABEL: hw.module @TypeAModuleUnwrap
 // CHECK:         [[r0:%.+]] = esi.window.unwrap %a : !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>
-// CHECK          hw.output [[r0]] : !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>
+// CHECK:         hw.output [[r0]] : !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>
 hw.module @TypeAModuleUnwrap(%a: !TypeAwin1) -> (x: !lowered) {
   %u = esi.window.unwrap %a : !TypeAwin1
   hw.output %u : !lowered

@@ -17,6 +17,7 @@
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -30,146 +31,133 @@ struct ESILowerTypesPass : public LowerESITypesBase<ESILowerTypesPass> {
 };
 } // anonymous namespace
 
-namespace {
-struct ModuleConversionPattern
-    : public mlir::OpInterfaceConversionPattern<hw::HWMutableModuleLike> {
-public:
-  using OpInterfaceConversionPattern::OpInterfaceConversionPattern;
-  LogicalResult
-  matchAndRewrite(hw::HWMutableModuleLike mod, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const final;
+// Converts a function type wrt. the given type converter.
+static FunctionType convertFunctionType(TypeConverter &typeConverter,
+                                        FunctionType type) {
+  // Convert the original function types.
+  llvm::SmallVector<Type> res, arg;
+  llvm::transform(type.getResults(), std::back_inserter(res),
+                  [&](Type t) { return typeConverter.convertType(t); });
+  llvm::transform(type.getInputs(), std::back_inserter(arg),
+                  [&](Type t) { return typeConverter.convertType(t); });
 
-  /// Lower an individual port, modifing 'port'. Returns 'true' if the port was
-  /// changed.
-  bool lowerPort(hw::HWMutableModuleLike mod, hw::PortInfo &port) const {
-    Type newType = getTypeConverter()->convertType(port.type);
-    if (newType == port.type)
-      return false;
-    port.type = newType;
-    return true;
-  }
+  return FunctionType::get(type.getContext(), arg, res);
+}
+
+namespace {
+struct TypeConversionPattern : public ConversionPattern {
+public:
+  TypeConversionPattern(TypeConverter &converter, MLIRContext *context)
+      : ConversionPattern(converter, MatchAnyOpTypeTag(), 1, context) {}
+  using ConversionPattern::ConversionPattern;
+
+  // Generic pattern which replaces an operation by one of the same type, but
+  // with converted operands and result types. Uses generic builders based on
+  // OperationState to make sure that this pattern can apply to _any_ operation
+  // which uses HWArith types.
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override;
 };
 } // namespace
 
-LogicalResult ModuleConversionPattern::matchAndRewrite(
-    hw::HWMutableModuleLike mod, ArrayRef<Value>,
+LogicalResult TypeConversionPattern::matchAndRewrite(
+    Operation *op, ArrayRef<Value> operands,
     ConversionPatternRewriter &rewriter) const {
-  hw::ModulePortInfo ports = mod.getPorts();
-  Block *body = nullptr;
-  Operation *terminator;
-
-  // If 'mod' has a body, set up the necessary variables to modify it.
-  if (!mod->getRegions().empty() && !mod->getRegion(0).empty()) {
-    body = &mod->getRegion(0).getBlocks().front();
-    rewriter.setInsertionPointToStart(body);
-    terminator = body->getTerminator();
+  llvm::SmallVector<NamedAttribute, 4> newAttrs;
+  newAttrs.reserve(op->getAttrs().size());
+  for (auto attr : op->getAttrs()) {
+    if (auto typeAttr = attr.getValue().dyn_cast<TypeAttr>()) {
+      auto innerType = typeAttr.getValue();
+      // TypeConvert::convertType doesn't handle function types, so we need to
+      // handle them manually.
+      if (auto funcType = innerType.dyn_cast<FunctionType>(); innerType) {
+        innerType = convertFunctionType(*getTypeConverter(), funcType);
+      } else {
+        innerType = getTypeConverter()->convertType(innerType);
+      }
+      newAttrs.emplace_back(attr.getName(), TypeAttr::get(innerType));
+    } else {
+      newAttrs.push_back(attr);
+    }
   }
 
-  // Lower the input ports.
-  SmallVector<std::pair<unsigned, hw::PortInfo>> loweredInputs;
-  SmallVector<unsigned> loweredInputIdxs;
-  for (auto port : ports.inputs) {
-    if (!lowerPort(mod, port))
-      continue;
-    loweredInputs.emplace_back(port.argNum, port);
-    loweredInputIdxs.push_back(port.argNum);
-    if (!body)
-      continue;
+  llvm::SmallVector<Type, 4> newResults;
+  (void)getTypeConverter()->convertTypes(op->getResultTypes(), newResults);
 
-    // Build a wrapper op to wrap the lowered value. This will hopefully be
-    // canonicalized away.
-    BlockArgument oldArg = body->getArgument(port.argNum);
-    auto arg = body->insertArgument(port.argNum, port.type, oldArg.getLoc());
-    auto wrap =
-        rewriter.create<WrapWindow>(arg.getLoc(), oldArg.getType(), arg);
-    oldArg.replaceAllUsesWith(wrap);
-    body->eraseArgument(port.argNum + 1);
+  OperationState state(op->getLoc(), op->getName().getStringRef(), operands,
+                       newResults, newAttrs, op->getSuccessors());
+  for (size_t i = 0, e = op->getNumRegions(); i < e; ++i)
+    state.addRegion();
+
+  // Must create the op before running any modifications on the regions so that
+  // we don't crash with '-debug' and so we have something to 'root update'.
+  Operation *newOp = rewriter.create(state);
+
+  rewriter.startRootUpdate(newOp);
+  for (size_t i = 0, e = op->getNumRegions(); i < e; ++i) {
+    Region &region = op->getRegion(i);
+    Region *newRegion = &newOp->getRegion(i);
+
+    // TypeConverter::SignatureConversion drops argument locations, so we need
+    // to manually copy them over (a verifier in e.g. HWModule checks this).
+    llvm::SmallVector<Location, 4> argLocs;
+    for (auto arg : region.getArguments())
+      argLocs.push_back(arg.getLoc());
+
+    rewriter.inlineRegionBefore(region, *newRegion, newRegion->begin());
+    TypeConverter::SignatureConversion result(newRegion->getNumArguments());
+    (void)getTypeConverter()->convertSignatureArgs(
+        newRegion->getArgumentTypes(), result);
+    rewriter.applySignatureConversion(newRegion, result, getTypeConverter());
+
+    // Apply the argument locations.
+    for (auto [arg, loc] : llvm::zip(newRegion->getArguments(), argLocs))
+      arg.setLoc(loc);
   }
+  rewriter.finalizeRootUpdate(newOp);
 
-  // Lower the output ports.
-  SmallVector<std::pair<unsigned, hw::PortInfo>> loweredOutputs;
-  SmallVector<unsigned> loweredOutputIdxs;
-  if (body)
-    rewriter.setInsertionPoint(terminator);
-  for (auto port : ports.outputs) {
-    if (!lowerPort(mod, port))
-      continue;
-    loweredOutputs.emplace_back(port.argNum, port);
-    loweredOutputIdxs.push_back(port.argNum);
-    if (!body)
-      continue;
-
-    // Build an unwrap to unwrap the window into the lowered output. This will
-    // hopefully be canonicalized away.
-    assert(terminator->getNumOperands() > port.argNum);
-    auto unwrap = rewriter.create<UnwrapWindow>(
-        port.loc, port.type, terminator->getOperand(port.argNum));
-    terminator->setOperand(port.argNum, unwrap.getFrame());
-  }
-
-  rewriter.updateRootInPlace(mod, [&]() {
-    mod.modifyPorts(loweredInputs, loweredOutputs, loweredInputIdxs,
-                    loweredOutputIdxs);
-  });
+  rewriter.replaceOp(op, newOp->getResults());
   return success();
 }
 
 namespace {
-struct InstanceConversionPattern
-    : public mlir::OpInterfaceConversionPattern<hw::HWInstanceLike> {
+class LowerTypesConverter : public TypeConverter {
 public:
-  using OpInterfaceConversionPattern::OpInterfaceConversionPattern;
-  LogicalResult
-  matchAndRewrite(hw::HWInstanceLike inst, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const final;
+  LowerTypesConverter() {
+    addConversion([](Type t) { return t; });
+    addConversion([](WindowType window) { return window.getLoweredType(); });
+    addSourceMaterialization(wrapMaterialization);
+    addArgumentMaterialization(wrapMaterialization);
+    addTargetMaterialization(unwrapMaterialization);
+  }
+
+private:
+  static std::optional<mlir::Value> wrapMaterialization(OpBuilder &b,
+                                                        WindowType resultType,
+                                                        ValueRange inputs,
+                                                        Location loc) {
+    if (inputs.size() != 1)
+      return std::nullopt;
+    auto wrap = b.create<WrapWindow>(loc, resultType, inputs[0]);
+    return wrap.getWindow();
+  }
+
+  static std::optional<mlir::Value>
+  unwrapMaterialization(OpBuilder &b, hw::UnionType resultType,
+                        ValueRange inputs, Location loc) {
+    if (inputs.size() != 1 || !isa<WindowType>(inputs[0].getType()))
+      return std::nullopt;
+    auto unwrap = b.create<UnwrapWindow>(loc, resultType, inputs[0]);
+    return unwrap.getFrame();
+  }
 };
 } // namespace
-
-LogicalResult InstanceConversionPattern::matchAndRewrite(
-    hw::HWInstanceLike inst, ArrayRef<Value> operands,
-    ConversionPatternRewriter &rewriter) const {
-
-  // Build a list of new result types.
-  SmallVector<Type> newResultTypes;
-  if (failed(getTypeConverter()->convertTypes(inst->getResultTypes(),
-                                              newResultTypes)))
-    return rewriter.notifyMatchFailure(inst.getLoc(),
-                                       "could not convert all types");
-
-  // Since we cannot change the return types, we have to create a new operation
-  // with the new operands and result types.
-  Operation *newInst =
-      rewriter.create(OperationState(inst.getLoc(), inst->getName(), operands,
-                                     newResultTypes, inst->getAttrs()));
-  // Delete the old inst.
-  rewriter.replaceOp(inst, newInst->getResults());
-  return success();
-}
 
 void ESILowerTypesPass::runOnOperation() {
-  TypeConverter types;
-  types.addConversion([](Type t) { return t; });
-  types.addConversion(
-      [](WindowType window) { return window.getLoweredType(); });
-  types.addSourceMaterialization(
-      [&](OpBuilder &b, WindowType resultType, ValueRange inputs,
-          Location loc) -> std::optional<mlir::Value> {
-        if (inputs.size() != 1)
-          return std::nullopt;
-        auto wrap = b.create<WrapWindow>(loc, resultType, inputs[0]);
-        return wrap.getWindow();
-      });
-
-  types.addTargetMaterialization(
-      [&](OpBuilder &b, hw::UnionType resultType, ValueRange inputs,
-          Location loc) -> std::optional<mlir::Value> {
-        if (inputs.size() != 1 || !isa<WindowType>(inputs[0].getType()))
-          return std::nullopt;
-        auto unwrap = b.create<UnwrapWindow>(loc, resultType, inputs[0]);
-        return unwrap.getFrame();
-      });
-
   ConversionTarget target(getContext());
+
+  // We need to lower instances, modules, and outputs with data windows.
   target.markUnknownOpDynamicallyLegal([](Operation *op) {
     return TypeSwitch<Operation *, bool>(op)
         .Case([](hw::HWInstanceLike inst) {
@@ -184,12 +172,17 @@ void ESILowerTypesPass::runOnOperation() {
           return !(llvm::any_of(mod.getPorts().inputs, isWindowPort) ||
                    llvm::any_of(mod.getPorts().outputs, isWindowPort));
         })
-        .Default([](Operation *) { return true; });
+        .Default([](Operation *op) {
+          if (op->hasTrait<OpTrait::ReturnLike>())
+            return !llvm::any_of(op->getOperandTypes(),
+                                 hw::type_isa<WindowType>);
+          return true;
+        });
   });
 
+  LowerTypesConverter types;
   RewritePatternSet patterns(&getContext());
-  patterns.add<ModuleConversionPattern>(types, &getContext());
-  patterns.add<InstanceConversionPattern>(types, &getContext());
+  patterns.add<TypeConversionPattern>(types, &getContext());
 
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
