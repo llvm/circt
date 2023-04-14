@@ -27,42 +27,41 @@ namespace {
 /// Lower all "high-level" ESI types on modules to some lower construct.
 struct ESILowerTypesPass : public LowerESITypesBase<ESILowerTypesPass> {
   void runOnOperation() override;
-
-private:
-  void lowerMod(hw::HWMutableModuleLike mod);
-  void lowerInstance(hw::HWInstanceLike inst);
-
-  TypeConverter types;
-
-  /// Lower an individual port, modifing 'port'. Returns 'true' if the port was
-  /// changed.
-  bool lowerPort(hw::HWMutableModuleLike mod, hw::PortInfo &port);
-
-  /// Track the modules we've modified both to make lookup easier and to avoid
-  /// attempting to lower instances which do not have to be lowered.
-  DenseMap<StringAttr, hw::HWMutableModuleLike> modsMutated;
 };
 } // anonymous namespace
 
-bool ESILowerTypesPass::lowerPort(hw::HWMutableModuleLike mod,
-                                  hw::PortInfo &port) {
-  Type newType = types.convertType(port.type);
-  if (newType == port.type)
-    return false;
-  port.type = newType;
-  return true;
-}
+namespace {
+struct ModuleConversionPattern
+    : public mlir::OpInterfaceConversionPattern<hw::HWMutableModuleLike> {
+public:
+  using OpInterfaceConversionPattern::OpInterfaceConversionPattern;
+  LogicalResult matchAndRewrite(hw::HWMutableModuleLike mod,
+                                ArrayRef<Value> operands,
+                                ConversionPatternRewriter &rewriter) const;
 
-void ESILowerTypesPass::lowerMod(hw::HWMutableModuleLike mod) {
+  /// Lower an individual port, modifing 'port'. Returns 'true' if the port was
+  /// changed.
+  bool lowerPort(hw::HWMutableModuleLike mod, hw::PortInfo &port) const {
+    Type newType = getTypeConverter()->convertType(port.type);
+    if (newType == port.type)
+      return false;
+    port.type = newType;
+    return true;
+  }
+};
+} // namespace
+
+LogicalResult ModuleConversionPattern::matchAndRewrite(
+    hw::HWMutableModuleLike mod, ArrayRef<Value>,
+    ConversionPatternRewriter &rewriter) const {
   hw::ModulePortInfo ports = mod.getPorts();
   Block *body = nullptr;
   Operation *terminator;
-  OpBuilder b(&getContext());
 
   // If 'mod' has a body, set up the necessary variables to modify it.
   if (!mod->getRegions().empty() && !mod->getRegion(0).empty()) {
     body = &mod->getRegion(0).getBlocks().front();
-    b.setInsertionPointToStart(body);
+    rewriter.setInsertionPointToStart(body);
     terminator = body->getTerminator();
   }
 
@@ -81,7 +80,8 @@ void ESILowerTypesPass::lowerMod(hw::HWMutableModuleLike mod) {
     // canonicalized away.
     BlockArgument oldArg = body->getArgument(port.argNum);
     auto arg = body->insertArgument(port.argNum, port.type, oldArg.getLoc());
-    auto wrap = b.create<WrapWindow>(arg.getLoc(), oldArg.getType(), arg);
+    auto wrap =
+        rewriter.create<WrapWindow>(arg.getLoc(), oldArg.getType(), arg);
     oldArg.replaceAllUsesWith(wrap);
     body->eraseArgument(port.argNum + 1);
   }
@@ -90,7 +90,7 @@ void ESILowerTypesPass::lowerMod(hw::HWMutableModuleLike mod) {
   SmallVector<std::pair<unsigned, hw::PortInfo>> loweredOutputs;
   SmallVector<unsigned> loweredOutputIdxs;
   if (body)
-    b.setInsertionPoint(terminator);
+    rewriter.setInsertionPoint(terminator);
   for (auto port : ports.outputs) {
     if (!lowerPort(mod, port))
       continue;
@@ -102,17 +102,16 @@ void ESILowerTypesPass::lowerMod(hw::HWMutableModuleLike mod) {
     // Build an unwrap to unwrap the window into the lowered output. This will
     // hopefully be canonicalized away.
     assert(terminator->getNumOperands() > port.argNum);
-    auto unwrap = b.create<UnwrapWindow>(port.loc, port.type,
-                                         terminator->getOperand(port.argNum));
+    auto unwrap = rewriter.create<UnwrapWindow>(
+        port.loc, port.type, terminator->getOperand(port.argNum));
     terminator->setOperand(port.argNum, unwrap.getFrame());
   }
 
-  // Run the modifications if need to.
-  if (loweredInputs.empty() && loweredOutputs.empty())
-    return;
-  modsMutated[SymbolTable::getSymbolName(mod)] = mod;
+  rewriter.startRootUpdate(mod);
   mod.modifyPorts(loweredInputs, loweredOutputs, loweredInputIdxs,
                   loweredOutputIdxs);
+  rewriter.finalizeRootUpdate(mod);
+  return success();
 }
 
 namespace {
@@ -148,6 +147,7 @@ LogicalResult InstanceConversionPattern::matchAndRewrite(
 }
 
 void ESILowerTypesPass::runOnOperation() {
+  TypeConverter types;
   types.addConversion([](Type t) { return t; });
   types.addConversion(
       [](WindowType window) { return window.getLoweredType(); });
@@ -169,20 +169,26 @@ void ESILowerTypesPass::runOnOperation() {
         return unwrap.getFrame();
       });
 
-  auto design = cast<ModuleOp>(getOperation());
-  for (auto mod : design.getOps<hw::HWMutableModuleLike>())
-    lowerMod(mod);
-
   ConversionTarget target(getContext());
   target.markUnknownOpDynamicallyLegal([](Operation *op) {
     auto inst = dyn_cast<hw::HWInstanceLike>(op);
-    if (!inst)
-      return true;
-    return !(llvm::any_of(inst->getOperandTypes(), hw::type_isa<WindowType>) ||
-             llvm::any_of(inst->getResultTypes(), hw::type_isa<WindowType>));
+    if (inst &&
+        (llvm::any_of(inst->getOperandTypes(), hw::type_isa<WindowType>) ||
+         llvm::any_of(inst->getResultTypes(), hw::type_isa<WindowType>)))
+      return false;
+
+    auto mod = dyn_cast<hw::HWMutableModuleLike>(op);
+    auto isWindowPort = [](hw::PortInfo p) {
+      return hw::type_isa<WindowType>(p.type);
+    };
+    if (mod && (llvm::any_of(mod.getPorts().inputs, isWindowPort) ||
+                llvm::any_of(mod.getPorts().outputs, isWindowPort)))
+      return false;
+    return true;
   });
 
   RewritePatternSet patterns(&getContext());
+  patterns.add<ModuleConversionPattern>(types, &getContext());
   patterns.add<InstanceConversionPattern>(types, &getContext());
 
   if (failed(
