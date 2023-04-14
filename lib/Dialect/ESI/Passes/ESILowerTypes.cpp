@@ -47,7 +47,7 @@ private:
 bool ESILowerTypesPass::lowerPort(hw::HWMutableModuleLike mod,
                                   hw::PortInfo &port) {
   Type newType = types.convertType(port.type);
-  if (!newType)
+  if (newType == port.type)
     return false;
   port.type = newType;
   return true;
@@ -115,69 +115,79 @@ void ESILowerTypesPass::lowerMod(hw::HWMutableModuleLike mod) {
                   loweredOutputIdxs);
 }
 
-void ESILowerTypesPass::lowerInstance(hw::HWInstanceLike inst) {
-  if (!modsMutated.contains(inst.getReferencedModuleNameAttr()))
-    return;
+namespace {
+struct InstanceConversionPattern
+    : public mlir::OpInterfaceConversionPattern<hw::HWInstanceLike> {
+public:
+  using OpInterfaceConversionPattern::OpInterfaceConversionPattern;
+  LogicalResult matchAndRewrite(hw::HWInstanceLike inst,
+                                ArrayRef<Value> operands,
+                                ConversionPatternRewriter &rewriter) const;
+};
+} // namespace
 
-  // Build a list of new operands and drive the windows with new unwrap ops.
-  SmallVector<Value> newOperands;
-  OpBuilder b(inst);
-  for (Value operand : inst->getOperands()) {
-    WindowType window = hw::type_dyn_cast<WindowType>(operand.getType());
-    if (!window) {
-      newOperands.push_back(operand);
-      continue;
-    }
-    auto unwrapped = b.create<UnwrapWindow>(inst.getLoc(),
-                                            types.convertType(window), operand);
-    newOperands.push_back(unwrapped.getFrame());
-  }
+LogicalResult InstanceConversionPattern::matchAndRewrite(
+    hw::HWInstanceLike inst, ArrayRef<Value> operands,
+    ConversionPatternRewriter &rewriter) const {
 
   // Build a list of new result types.
   SmallVector<Type> newResultTypes;
-  b.setInsertionPointAfter(inst);
-  for (OpResult result : inst->getResults()) {
-    WindowType window = hw::type_dyn_cast<WindowType>(result.getType());
-    if (!window) {
-      newResultTypes.push_back(result.getType());
-      continue;
-    }
-    newResultTypes.push_back(types.convertType(window));
-  }
+  if (failed(getTypeConverter()->convertTypes(inst->getResultTypes(),
+                                              newResultTypes)))
+    return rewriter.notifyMatchFailure(inst.getLoc(),
+                                       "could not convert all types");
 
-  // Since we cannot change the return type, we have to create a new operation
+  // Since we cannot change the return types, we have to create a new operation
   // with the new operands and result types.
   Operation *newInst =
-      Operation::create(inst.getLoc(), inst->getName(), newResultTypes,
-                        newOperands, inst->getAttrs());
-  b.insert(newInst);
-
-  // Replace the old result users with the new results. For lowered outputs,
-  // insert a wrap to drive the original.
-  for (auto [oldResult, newResult] :
-       llvm::zip(inst->getResults(), newInst->getResults())) {
-    WindowType window = hw::type_dyn_cast<WindowType>(oldResult.getType());
-    if (!window) {
-      oldResult.replaceAllUsesWith(newResult);
-      continue;
-    }
-    auto wrap =
-        b.create<WrapWindow>(inst.getLoc(), oldResult.getType(), newResult);
-    oldResult.replaceAllUsesWith(wrap.getWindow());
-  }
-
+      rewriter.create(OperationState(inst.getLoc(), inst->getName(), operands,
+                                     newResultTypes, inst->getAttrs()));
   // Delete the old inst.
-  inst->erase();
+  rewriter.replaceOp(inst, newInst->getResults());
+  return success();
 }
 
 void ESILowerTypesPass::runOnOperation() {
+  types.addConversion([](Type t) { return t; });
   types.addConversion(
       [](WindowType window) { return window.getLoweredType(); });
+  types.addSourceMaterialization(
+      [&](OpBuilder &b, WindowType resultType, ValueRange inputs,
+          Location loc) -> std::optional<mlir::Value> {
+        if (inputs.size() != 1)
+          return std::nullopt;
+        auto wrap = b.create<WrapWindow>(loc, resultType, inputs[0]);
+        return wrap.getWindow();
+      });
+
+  types.addTargetMaterialization(
+      [&](OpBuilder &b, hw::UnionType resultType, ValueRange inputs,
+          Location loc) -> std::optional<mlir::Value> {
+        if (inputs.size() != 1 || !isa<WindowType>(inputs[0].getType()))
+          return std::nullopt;
+        auto unwrap = b.create<UnwrapWindow>(loc, resultType, inputs[0]);
+        return unwrap.getFrame();
+      });
 
   auto design = cast<ModuleOp>(getOperation());
   for (auto mod : design.getOps<hw::HWMutableModuleLike>())
     lowerMod(mod);
-  design.walk([&](hw::HWInstanceLike inst) { lowerInstance(inst); });
+
+  ConversionTarget target(getContext());
+  target.markUnknownOpDynamicallyLegal([](Operation *op) {
+    auto inst = dyn_cast<hw::HWInstanceLike>(op);
+    if (!inst)
+      return true;
+    return !(llvm::any_of(inst->getOperandTypes(), hw::type_isa<WindowType>) ||
+             llvm::any_of(inst->getResultTypes(), hw::type_isa<WindowType>));
+  });
+
+  RewritePatternSet patterns(&getContext());
+  patterns.add<InstanceConversionPattern>(types, &getContext());
+
+  if (failed(
+          applyPartialConversion(getOperation(), target, std::move(patterns))))
+    signalPassFailure();
 }
 
 std::unique_ptr<OperationPass<ModuleOp>>

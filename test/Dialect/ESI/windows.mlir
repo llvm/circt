@@ -34,7 +34,6 @@ hw.module @TypeAModuleUnwrap(%a: !TypeAwin1) -> (x: !lowered) {
   hw.output %u : !lowered
 }
 
-
 // CHECK-LABEL: hw.module @TypeAModuleUnwrapWrap
 // CHECK:         [[r0:%.+]] = esi.window.unwrap %a : !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>
 // CHECK:         [[r1:%.+]] = esi.window.wrap [[r0]] : !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>
