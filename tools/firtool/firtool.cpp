@@ -576,6 +576,7 @@ static LogicalResult processBuffer(
       preserveAggregate, firrtl::PreserveAggregate::None));
   // Only enable expand whens if lower types is also enabled.
   auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+  modulePM.addPass(firrtl::createLowerMatchesPass());
   modulePM.addPass(firrtl::createExpandWhensPass());
   modulePM.addPass(firrtl::createSFCCompatPass());
 
