@@ -224,6 +224,8 @@ static void populatePipeline(PassManager &pm) {
     pm.addPass(createCSEPass());
   }
 
+  pm.addPass(arc::createGroupResetsAndEnablesPass());
+
   // Allocate states.
   if (untilReached(UntilStateAlloc))
     return;

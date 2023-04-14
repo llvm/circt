@@ -37,6 +37,13 @@ def Dedup : Pass<"arc-dedup", "mlir::ModuleOp"> {
   let dependentDialects = ["arc::ArcDialect"];
 }
 
+def GroupResetsAndEnables : Pass<"arc-group-resets-and-enables",
+                                 "mlir::ModuleOp"> {
+  let summary = "Group reset and enable conditions of lowered states";
+  let constructor = "circt::arc::createGroupResetsAndEnablesPass()";
+  let dependentDialects = ["arc::ArcDialect", "mlir::scf::SCFDialect"];
+}
+
 def InferMemories : Pass<"arc-infer-memories", "mlir::ModuleOp"> {
   let summary = "Convert `FIRRTL_Memory` instances to dedicated memory ops";
   let constructor = "circt::arc::createInferMemoriesPass()";
