@@ -1715,29 +1715,6 @@ static LogicalResult lowerFuncOp(func::FuncOp funcOp, MLIRContext *ctx,
   return success();
 }
 
-namespace {
-struct ConvertSelectOps : public OpConversionPattern<mlir::arith::SelectOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(mlir::arith::SelectOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<handshake::SelectOp>(op, adaptor.getCondition(),
-                                                     adaptor.getFalseValue(),
-                                                     adaptor.getTrueValue());
-    return success();
-  };
-};
-} // namespace
-
-LogicalResult handshake::postDataflowConvert(Operation *op) {
-  MLIRContext *context = op->getContext();
-  ConversionTarget target(*context);
-  target.addLegalDialect<handshake::HandshakeDialect>();
-  target.addIllegalOp<mlir::arith::SelectOp>();
-  RewritePatternSet patterns(context);
-  patterns.insert<ConvertSelectOps>(context);
-  return applyPartialConversion(op, target, std::move(patterns));
-}
 
 namespace {
 
@@ -1765,11 +1742,8 @@ struct StandardToHandshakePass
 
     // Legalize the resulting regions, removing basic blocks and performing
     // any simple conversions.
-    for (auto func : m.getOps<handshake::FuncOp>()) {
+    for (auto func : m.getOps<handshake::FuncOp>())
       removeBasicBlocks(func);
-      if (failed(postDataflowConvert(func)))
-        return signalPassFailure();
-    }
   }
 };
 

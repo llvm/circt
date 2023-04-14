@@ -481,39 +481,6 @@ def ConditionalBranchOp : Handshake_Op<"cond_br", [
   }];
 }
 
-def SelectOp : Handshake_Op<"select", [
-  Pure,
-  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>,
-  DeclareOpInterfaceMethods<ControlInterface, ["isControl"]>,
-  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>,
-  TypesMatchWith<"data operand type matches true branch result type",
-                    "trueOperand", "falseOperand", "$_self">,
-  TypesMatchWith<"data operand type matches false branch result type",
-                    "falseOperand", "result", "$_self">
-]> {
-  let summary = "Select operation";
-  let description = [{
-     The select operation will select between two inputs based on an input
-     conditional. The select operation differs from a mux in that
-     1. All operands must be valid before the operation can transact
-     2. All operands will be transacted at simultaneously
-
-     The 'select' operation is intended to handle 'std.select' and other
-     ternary-like operators, which considers strictly dataflow. The 'mux' operator
-     considers control+dataflow between blocks.
-
-     Example:
-     ```mlir
-     %res = select %cond, %true, %false : i32
-     ```
-  }];
-
-  let arguments = (ins I1 : $condOperand,
-                       AnyType : $trueOperand, AnyType : $falseOperand);
-  let results = (outs AnyType : $result);
-  let hasCustomAssemblyFormat = 1;
-}
-
 def SinkOp : Handshake_Op<"sink", [
   SOSTInterface, DeclareOpInterfaceMethods<ExecutableOpInterface>
 ]> {

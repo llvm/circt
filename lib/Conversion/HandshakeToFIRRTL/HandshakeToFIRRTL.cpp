@@ -831,6 +831,7 @@ public:
   bool visitStdExpr(arith::ExtSIOp op);
   bool visitStdExpr(arith::TruncIOp op);
   bool visitStdExpr(arith::IndexCastOp op);
+  bool visitStdExpr(arith::SelectOp op);
 
 #define HANDLE(OPTYPE, FIRRTLTYPE)                                             \
   bool visitStdExpr(OPTYPE op) { return buildBinaryLogic<FIRRTLTYPE>(), true; }
@@ -1033,6 +1034,45 @@ void StdExprBuilder::buildBinaryLogic() {
   rewriter.create<ConnectOp>(insertLoc, arg1Ready, argReadyOp);
 }
 
+bool StdExprBuilder::visitStdExpr(arith::SelectOp op) {
+  ValueVector sel = portList[0];
+  Value selValid = sel[0];
+  Value selReady = sel[1];
+  Value selData = sel[2];
+  ValueVector t = portList[1];
+  Value tValid = t[0];
+  Value tReady = t[1];
+  Value tData = t[2];
+  ValueVector f = portList[2];
+  Value fValid = f[0];
+  Value fReady = f[1];
+  Value fData = f[2];
+
+  llvm::SmallVector<ValueVector *> inputs = {&sel, &t, &f};
+
+  ValueVector result = portList[3];
+  Value resultValid = result[0];
+  Value resultReady = result[1];
+  Value resultData = result[2];
+
+  // Data mux.
+  auto mux = rewriter.create<MuxPrimOp>(insertLoc, selData, tData, fData);
+  rewriter.create<ConnectOp>(insertLoc, resultData, mux);
+
+  // Join logic on the in- and outputs.
+  auto valid = rewriter.create<AndPrimOp>(
+      insertLoc, tValid.getType(), selValid,
+      rewriter.create<AndPrimOp>(insertLoc, tValid, fValid));
+  auto ready = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
+                                          resultReady, valid);
+
+  rewriter.create<ConnectOp>(insertLoc, resultValid, valid);
+  rewriter.create<ConnectOp>(insertLoc, selReady, ready);
+  rewriter.create<ConnectOp>(insertLoc, tReady, ready);
+  rewriter.create<ConnectOp>(insertLoc, fReady, ready);
+  return true;
+}
+
 //===----------------------------------------------------------------------===//
 // Handshake Builder class
 //===----------------------------------------------------------------------===//
@@ -1061,7 +1101,6 @@ public:
   bool visitHandshake(ExternalMemoryOp op);
   bool visitHandshake(MergeOp op);
   bool visitHandshake(MuxOp op);
-  bool visitHandshake(handshake::SelectOp op);
   bool visitHandshake(SinkOp op);
   bool visitHandshake(SourceOp op);
   bool visitHandshake(SyncOp op);
