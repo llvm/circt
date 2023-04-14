@@ -422,7 +422,7 @@ private:
                               FIRRTLType srcType, FlatBundleFieldEntry field);
 
   PreserveAggregate::PreserveMode
-  getPreservatinoModeForModule(FModuleLike moduleLike);
+  getPreservationModeForModule(FModuleLike moduleLike);
   Value getSubWhatever(Value val, size_t index);
 
   size_t uniqueIdx = 0;
@@ -456,7 +456,7 @@ private:
 /// Return aggregate preservation mode for the module. If the module has a
 /// scalarized linkage, then we may not preserve it's aggregate ports.
 PreserveAggregate::PreserveMode
-TypeLoweringVisitor::getPreservatinoModeForModule(FModuleLike module) {
+TypeLoweringVisitor::getPreservationModeForModule(FModuleLike module) {
   auto lookup = conventionTable.find(module);
   if (lookup == conventionTable.end())
     return aggregatePreservationMode;
@@ -761,7 +761,7 @@ bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry> fieldTypes;
   auto srcType = newArgs[argIndex].type.cast<FIRRTLType>();
-  if (!peelType(srcType, fieldTypes, getPreservatinoModeForModule(module)))
+  if (!peelType(srcType, fieldTypes, getPreservationModeForModule(module)))
     return false;
 
   for (const auto &field : llvm::enumerate(fieldTypes)) {
@@ -1346,7 +1346,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
   PreserveAggregate::PreserveMode mode =
-      getPreservatinoModeForModule(op.getReferencedModule(symTbl));
+      getPreservationModeForModule(op.getReferencedModule(symTbl));
 
   endFields.push_back(0);
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
