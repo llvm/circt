@@ -1527,8 +1527,8 @@ void LowerTypesPass::runOnOperation() {
     return LogicalResult::failure(tl.isFailed());
   };
 
-  auto result = failableParallelForEach(&getContext(), ops.begin(), ops.end(),
-                                        lowerModules);
+  auto result = failableParallelForEach(&getContext(), ops, lowerModules);
+
   if (failed(result))
     signalPassFailure();
 }
