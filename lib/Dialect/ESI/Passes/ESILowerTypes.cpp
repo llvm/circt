@@ -45,16 +45,16 @@ static FunctionType convertFunctionType(TypeConverter &typeConverter,
 }
 
 namespace {
+/// Generic pattern which replaces an operation by one of the same operation
+/// name, but with converted attributes, operands, and result types to eliminate
+/// illegal types. Uses generic builders based on OperationState to make sure
+/// that this pattern can apply to _any_ operation.
 struct TypeConversionPattern : public ConversionPattern {
 public:
   TypeConversionPattern(TypeConverter &converter, MLIRContext *context)
       : ConversionPattern(converter, MatchAnyOpTypeTag(), 1, context) {}
   using ConversionPattern::ConversionPattern;
 
-  // Generic pattern which replaces an operation by one of the same type, but
-  // with converted operands and result types. Uses generic builders based on
-  // OperationState to make sure that this pattern can apply to _any_ operation
-  // which uses HWArith types.
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override;
@@ -64,6 +64,8 @@ public:
 LogicalResult TypeConversionPattern::matchAndRewrite(
     Operation *op, ArrayRef<Value> operands,
     ConversionPatternRewriter &rewriter) const {
+
+  // Convert the TypeAttrs.
   llvm::SmallVector<NamedAttribute, 4> newAttrs;
   newAttrs.reserve(op->getAttrs().size());
   for (auto attr : op->getAttrs()) {
@@ -82,9 +84,11 @@ LogicalResult TypeConversionPattern::matchAndRewrite(
     }
   }
 
+  // Convert the result types.
   llvm::SmallVector<Type, 4> newResults;
   (void)getTypeConverter()->convertTypes(op->getResultTypes(), newResults);
 
+  // Build the state for the edited clone.
   OperationState state(op->getLoc(), op->getName().getStringRef(), operands,
                        newResults, newAttrs, op->getSuccessors());
   for (size_t i = 0, e = op->getNumRegions(); i < e; ++i)
@@ -94,6 +98,7 @@ LogicalResult TypeConversionPattern::matchAndRewrite(
   // we don't crash with '-debug' and so we have something to 'root update'.
   Operation *newOp = rewriter.create(state);
 
+  // Move the regions over, converting the signatures as we go.
   rewriter.startRootUpdate(newOp);
   for (size_t i = 0, e = op->getNumRegions(); i < e; ++i) {
     Region &region = op->getRegion(i);
@@ -122,6 +127,7 @@ LogicalResult TypeConversionPattern::matchAndRewrite(
 }
 
 namespace {
+/// Materializations and type conversions to lower ESI data windows.
 class LowerTypesConverter : public TypeConverter {
 public:
   LowerTypesConverter() {
@@ -183,7 +189,6 @@ void ESILowerTypesPass::runOnOperation() {
   LowerTypesConverter types;
   RewritePatternSet patterns(&getContext());
   patterns.add<TypeConversionPattern>(types, &getContext());
-
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
