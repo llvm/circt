@@ -127,6 +127,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.strictconnect %_t, %_t_2
     _t <- _t_2
 
+    ; CHECK: firrtl.strictconnect %_t, %_t_2
+    connect _t, _t_2
+
     ; CHECK: [[a0:%.+]] = firrtl.subfield %bundleWithAnalog[a]
     ; CHECK: [[a1:%.+]] = firrtl.subfield %bundleWithAnalog[a]
     ; CHECK: firrtl.attach [[a1]], [[a0]]
@@ -136,6 +139,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: [[INV:%.+]]  = firrtl.invalidvalue : !firrtl.uint<1>
     ; CHECK-NEXT: firrtl.strictconnect %auto, [[INV]] : !firrtl.uint<1>
     auto is invalid
+
+    ; CHECK: [[INV:%.+]]  = firrtl.invalidvalue : !firrtl.uint<1>
+    ; CHECK-NEXT: firrtl.strictconnect %auto, [[INV]] : !firrtl.uint<1>
+    invalidate auto
 
     ; CHECK-NOT: firrtl.attach %a1
     a1 is invalid
