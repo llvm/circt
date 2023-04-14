@@ -628,7 +628,7 @@ bool TypeLoweringVisitor::lowerProducer(
 }
 
 void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
-  for (auto user : llvm::make_early_inc_range(val.getUsers())) {
+  for (auto *user : llvm::make_early_inc_range(val.getUsers())) {
     TypeSwitch<Operation *, void>(user)
         .Case<SubindexOp>([mapping](SubindexOp sio) {
           Value repl = mapping[sio.getIndex()];
