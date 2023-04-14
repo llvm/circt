@@ -183,15 +183,19 @@ public:
 /// definition of type equivalence in the FIRRTL spec.  If the types being
 /// compared have any outer flips that encode FIRRTL module directions (input or
 /// output), these should be stripped before using this method.
-/// If `strict` is `true`, `srcFType` must be identical `destFType` except that
-/// 'const' sources can be connected to non-'const' sinks.
 bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType,
-                        bool srcOuterTypeIsConst = false, bool strict = false);
+                        bool srcOuterTypeIsConst = false);
+
+/// Returns whether the two types are strictly equivalent.  `srcFType` must be
+/// identical `destFType` except that 'const' sources can be connected to
+/// non-'const' sinks.
+bool areTypesStrictlyEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
+                                bool srcOuterTypeIsConst = false);
 
 /// Returns true if two types are weakly equivalent.  See the FIRRTL spec,
 /// Section 4.6, for a full definition of this.  Roughly, the oriented types
-/// (the types with any flips pushed to the leaves) must match.  This allows for
-/// types with flips in different positions to be equivalent.
+/// (the types with any flips pushed to the leaves) must match.  This allows
+/// for types with flips in different positions to be equivalent.
 bool areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
                               bool destFlip = false, bool srcFlip = false,
                               bool srcOuterTypeIsConst = false);

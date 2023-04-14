@@ -2372,7 +2372,7 @@ LogicalResult StrictConnectOp::verify() {
       return emitError("analog types may not be connected");
 
     // Types must be strictly equivalent
-    if (!areTypesEquivalent(destType, srcType, false, true))
+    if (!areTypesStrictlyEquivalent(destType, srcType))
       return typeMismatch();
   } else if (getDest().getType() != getSrc().getType()) {
     return typeMismatch();
@@ -2389,7 +2389,7 @@ LogicalResult RefDefineOp::verify() {
   auto destBaseType = getDest().getType().getType();
   auto srcBaseType = getSrc().getType().getType();
   // Base types must be strictly equivalent
-  if (!areTypesEquivalent(destBaseType, srcBaseType, false, true))
+  if (!areTypesStrictlyEquivalent(destBaseType, srcBaseType))
     return emitError("type mismatch between destination ")
            << getDest().getType() << " and source " << getSrc().getType();
 
