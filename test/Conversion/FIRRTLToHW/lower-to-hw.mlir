@@ -846,18 +846,29 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module private @SimpleEnum(%source: !hw.enum<valid, ready, data>) -> (sink: !hw.enum<valid, ready, data>) {
+  // CHECK-NEXT:    %valid = hw.enum.constant valid : !hw.enum<valid, ready, data
+  // CHECK-NEXT:    %0 = hw.enum.cmp %source, %valid : !hw.enum<valid, ready, data>, !hw.enum<valid, ready, data>
   // CHECK-NEXT:    hw.output %source : !hw.enum<valid, ready, data>
   // CHECK-NEXT:  }
   firrtl.module private @SimpleEnum(in %source: !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>,
                               out %sink: !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>) {
+    %0 = firrtl.istag %source valid : !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>
+    %1 = firrtl.subtag %source[valid] : !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>
     firrtl.strictconnect %sink, %source : !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>
   }
 
   // CHECK-LABEL:  hw.module private @DataEnum(%source: !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>) -> (sink: !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>) {
+  // CHECK-NEXT:    %tag = hw.struct_extract %source["tag"] : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>
+  // CHECK-NEXT:    %a = hw.enum.constant a : !hw.enum<a, b, c> 
+  // CHECK-NEXT:    %0 = hw.enum.cmp %tag, %a : !hw.enum<a, b, c>, !hw.enum<a, b, c>
+  // CHECK-NEXT:    %body = hw.struct_extract %source["body"] : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>
+  // CHECK-NEXT:    %1 = hw.union_extract %body["a"] : !hw.union<a: i2, b: i1, c: i32>
   // CHECK-NEXT:    hw.output %source : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>
   // CHECK-NEXT:  }
   firrtl.module private @DataEnum(in %source: !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>,
                               out %sink: !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>) {
+    %0 = firrtl.istag %source a : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
+    %1 = firrtl.subtag %source[a] : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
     firrtl.strictconnect %sink, %source : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
   }
 
