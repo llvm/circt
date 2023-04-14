@@ -33,6 +33,7 @@ using namespace seq;
 namespace {
 struct SeqToSVPass : public impl::LowerSeqToSVBase<SeqToSVPass> {
   void runOnOperation() override;
+  using LowerSeqToSVBase::lowerToAlwaysFF;
 };
 struct SeqFIRRTLToSVPass
     : public impl::LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass> {
@@ -63,8 +64,11 @@ namespace {
 /// Lower CompRegOp to `sv.reg` and `sv.alwaysff`. Use a posedge clock and
 /// synchronous reset.
 template <typename OpTy>
-struct CompRegLower : public OpConversionPattern<OpTy> {
+class CompRegLower : public OpConversionPattern<OpTy> {
 public:
+  CompRegLower(MLIRContext *context, bool lowerToAlwaysFF)
+      : OpConversionPattern<OpTy>(context), lowerToAlwaysFF(lowerToAlwaysFF) {}
+
   using OpConversionPattern<OpTy>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<OpTy>::OpAdaptor;
 
@@ -85,23 +89,41 @@ public:
     circt::sv::setSVAttributes(svReg, circt::sv::getSVAttributes(reg));
 
     auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
-    if (reg.getReset() && reg.getResetValue()) {
-      rewriter.create<sv::AlwaysFFOp>(
-          loc, sv::EventControl::AtPosEdge, reg.getClk(), ResetType::SyncReset,
-          sv::EventControl::AtPosEdge, reg.getReset(),
-          [&]() { createAssign(rewriter, svReg, reg); },
-          [&]() {
-            rewriter.create<sv::PAssignOp>(loc, svReg, reg.getResetValue());
-          });
+
+    auto assignValue = [&] { createAssign(rewriter, svReg, reg); };
+    auto assignReset = [&] {
+      rewriter.create<sv::PAssignOp>(loc, svReg, adaptor.getResetValue());
+    };
+
+    if (adaptor.getReset() && adaptor.getResetValue()) {
+      if (lowerToAlwaysFF) {
+        rewriter.create<sv::AlwaysFFOp>(
+            loc, sv::EventControl::AtPosEdge, adaptor.getClk(),
+            ResetType::SyncReset, sv::EventControl::AtPosEdge,
+            adaptor.getReset(), assignValue, assignReset);
+      } else {
+        rewriter.create<sv::AlwaysOp>(
+            loc, sv::EventControl::AtPosEdge, adaptor.getClk(), [&] {
+              rewriter.create<sv::IfOp>(loc, adaptor.getReset(), assignReset,
+                                        assignValue);
+            });
+      }
     } else {
-      rewriter.create<sv::AlwaysFFOp>(
-          loc, sv::EventControl::AtPosEdge, reg.getClk(),
-          [&]() { createAssign(rewriter, svReg, reg); });
+      if (lowerToAlwaysFF) {
+        rewriter.create<sv::AlwaysFFOp>(loc, sv::EventControl::AtPosEdge,
+                                        adaptor.getClk(), assignValue);
+      } else {
+        rewriter.create<sv::AlwaysOp>(loc, sv::EventControl::AtPosEdge,
+                                      adaptor.getClk(), assignValue);
+      }
     }
 
     rewriter.replaceOp(reg, {regVal});
     return success();
   }
+
+private:
+  bool lowerToAlwaysFF;
 };
 } // namespace
 
@@ -724,8 +746,8 @@ void SeqToSVPass::runOnOperation() {
   target.addIllegalDialect<SeqDialect>();
   target.addLegalDialect<sv::SVDialect>();
   RewritePatternSet patterns(&ctxt);
-  patterns.add<CompRegLower<CompRegOp>>(&ctxt);
-  patterns.add<CompRegLower<CompRegClockEnabledOp>>(&ctxt);
+  patterns.add<CompRegLower<CompRegOp>>(&ctxt, lowerToAlwaysFF);
+  patterns.add<CompRegLower<CompRegClockEnabledOp>>(&ctxt, lowerToAlwaysFF);
 
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
@@ -739,8 +761,12 @@ void SeqFIRRTLToSVPass::runOnOperation() {
   numSubaccessRestored += firRegLower.numSubaccessRestored;
 }
 
-std::unique_ptr<Pass> circt::seq::createSeqLowerToSVPass() {
-  return std::make_unique<SeqToSVPass>();
+std::unique_ptr<Pass>
+circt::seq::createSeqLowerToSVPass(std::optional<bool> lowerToAlwaysFF) {
+  auto pass = std::make_unique<SeqToSVPass>();
+  if (lowerToAlwaysFF)
+    pass->lowerToAlwaysFF = *lowerToAlwaysFF;
+  return pass;
 }
 
 std::unique_ptr<Pass> circt::seq::createSeqFIRRTLLowerToSVPass(
