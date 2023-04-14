@@ -1515,8 +1515,6 @@ void LowerTypesPass::runOnOperation() {
     ops.push_back(module);
   }
 
-  LLVM_DEBUG(llvm::dbgs() << "Recording Inner Symbol Renames:\n");
-
   // This lambda, executes in parallel for each Op within the circt.
   auto lowerModules = [&](FModuleLike op) -> LogicalResult {
     auto tl =
