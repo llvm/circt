@@ -1265,11 +1265,10 @@ bool TypeLoweringVisitor::visitExpr(RefSendOp op) {
     return builder->create<RefSendOp>(
         getSubWhatever(op.getBase(), field.index));
   };
-  // XXX: When stop force-lowering references, there's a problem
-  // if we lower because not passive, but this won't be reflected
-  // along the define chain.
-  // Handle in same reconstruction approach as Forceable?
-  return lowerProducer(op, clone, op.getBase().getType());
+  // Be careful re:what gets lowered, consider ref.send of non-passive
+  // and whether we're using the ref or the base type to choose
+  // whether this should be lowered.
+  return lowerProducer(op, clone);
 }
 
 bool TypeLoweringVisitor::visitExpr(RefResolveOp op) {
@@ -1279,6 +1278,7 @@ bool TypeLoweringVisitor::visitExpr(RefResolveOp op) {
     return builder->create<RefResolveOp>(src);
   };
   // Lower according to lowering of the reference.
+  // Particularly, preserve if rwprobe.
   return lowerProducer(op, clone, op.getRef().getType());
 }
 
