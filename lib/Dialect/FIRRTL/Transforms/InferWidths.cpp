@@ -1475,9 +1475,15 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         declareVars(op.getResult(), op.getLoc());
         constrainTypes(op.getResult(), op.getInput());
       })
-      // Handle the various connect statements that imply a type constraint.
-      .Case<FConnectLike>(
+      .Case<ConnectOp>(
           [&](auto op) { constrainTypes(op.getDest(), op.getSrc()); })
+      .Case<RefDefineOp>(
+          [&](auto op) { constrainTypes(op.getDest(), op.getSrc()); })
+      // StrictConnect is an identify constraint
+      .Case<StrictConnectOp>([&](auto op) {
+        constrainTypes(op.getDest(), op.getSrc());
+        constrainTypes(op.getSrc(), op.getDest());
+      })
       .Case<AttachOp>([&](auto op) {
         // Attach connects multiple analog signals together. All signals must
         // have the same bit width. Signals without bit width inherit from the
