@@ -405,7 +405,7 @@ firrtl.circuit "Top" {
     // Factoring of sync reset into mux works through subindex op.
     // CHECK: %reg5 = firrtl.regreset %clock, %extraReset, %8
     // CHECK: %10 = firrtl.mux(%init, %reset5, %reg5)
-    // CHECK: firrtl.connect %reg5, %10
+    // CHECK: firrtl.strictconnect %reg5, %10
     // CHECK: %11 = firrtl.subindex %reset5[0]
     // CHECK: %12 = firrtl.subindex %reg5[0]
     // CHECK: %13 = firrtl.mux(%init, %11, %in)
@@ -418,7 +418,7 @@ firrtl.circuit "Top" {
     // Factoring of sync reset into mux works through subaccess op.
     // CHECK: %reg6 = firrtl.regreset %clock, %extraReset, %14 
     // CHECK: %16 = firrtl.mux(%init, %reset6, %reg6)
-    // CHECK: firrtl.connect %reg6, %16
+    // CHECK: firrtl.strictconnect %reg6, %16
     // CHECK: %17 = firrtl.subaccess %reset6[%in]
     // CHECK: %18 = firrtl.subaccess %reg6[%in]
     // CHECK: %19 = firrtl.mux(%init, %17, %in)
@@ -754,7 +754,7 @@ firrtl.circuit "SubAccess" {
     firrtl.strictconnect %2, %in : !firrtl.uint<8>
     // CHECK:  %reg6 = firrtl.regreset %clock, %extraReset, %c0_ui2  : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<2>, !firrtl.uint<2>
     // CHECK-NEXT: %0 = firrtl.mux(%init, %c1_ui2, %reg6)
-    // CHECK: firrtl.connect %reg6, %0
+    // CHECK: firrtl.strictconnect %reg6, %0
     // CHECK-NEXT:  %[[v0:.+]] = firrtl.subaccess %arr[%reg6] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<2>
     // CHECK-NEXT:  firrtl.strictconnect %[[v0]], %in : !firrtl.uint<8>
 

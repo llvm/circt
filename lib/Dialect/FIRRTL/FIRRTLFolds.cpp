@@ -2944,7 +2944,8 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   auto pt = rewriter.saveInsertionPoint();
   rewriter.setInsertionPoint(con);
   auto v = constReg ? (Value)constOp.getResult() : (Value)mux.getLow();
-  replaceOpWithNewOpAndCopyName<ConnectOp>(rewriter, con, con.getDest(), v);
+  replaceOpWithNewOpAndCopyName<StrictConnectOp>(rewriter, con, con.getDest(),
+                                                 v);
   rewriter.restoreInsertionPoint(pt);
   return success();
 }

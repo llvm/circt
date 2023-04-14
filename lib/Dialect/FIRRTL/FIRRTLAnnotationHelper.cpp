@@ -666,7 +666,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
                     valType,
                     state.getNamespace(wireModule).newName(tapName.getValue()))
                 .getResult();
-        sinkBuilder.create<ConnectOp>(sink, createCast(wire));
+        emitConnect(sinkBuilder, sink, createCast(wire));
         sink = wire;
       };
       if (isa<IntType>(wireType))
