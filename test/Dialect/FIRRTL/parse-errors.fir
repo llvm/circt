@@ -460,12 +460,39 @@ circuit RefNotString:
 
 ;// -----
 
+circuit ConnectWrongType:
+  module ConnectWrongType:
+    input a: UInt<1>
+    output b: SInt<1>
+
+    b <= a ; expected-error {{cannot connect non-equivalent type}}
+
+;// -----
+
+circuit ConnectAlternateWrongType:
+  module ConnectAlternateWrongType:
+    input a: UInt<1>
+    output b: SInt<1>
+
+    connect b, a ; expected-error {{cannot connect non-equivalent type}}
+
+;// -----
+
 circuit ProbeConnect:
   module ProbeConnect:
     input in : UInt<1>
     output p : Probe<UInt<1>>
 
     p <= probe(in) ; expected-error {{cannot connect reference types}}
+
+;// -----
+
+circuit ProbeConnectAlternate:
+  module ProbeConnectAlternate:
+    input in : UInt<1>
+    output p : Probe<UInt<1>>
+
+    connect p, probe(in) ; expected-error {{cannot connect reference types}}
 
 ;// -----
 

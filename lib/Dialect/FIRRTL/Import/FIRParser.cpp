@@ -2631,13 +2631,25 @@ ParseResult FIRStmtParser::parseRefReleaseInitial() {
 /// connect ::= 'connect' expr expr
 ParseResult FIRStmtParser::parseConnect() {
   auto startTok = consumeToken(FIRToken::kw_connect);
+  auto loc = startTok.getLoc();
 
   Value lhs, rhs;
   if (parseExp(lhs, "expected connect expression") ||
       parseExp(rhs, "expected connect expression") || parseOptionalInfo())
     return failure();
 
-  locationProcessor.setLoc(startTok.getLoc());
+  auto lhsType = lhs.getType().cast<FIRRTLType>();
+  auto rhsType = rhs.getType().cast<FIRRTLType>();
+  // TODO: Once support lands, switch to .containsReference(), update error
+  // message.
+  if (!isa<FIRRTLBaseType>(lhsType) || !isa<FIRRTLBaseType>(rhsType))
+    return emitError(loc, "cannot connect reference types");
+
+  if (!areTypesEquivalent(lhsType, rhsType))
+    return emitError(loc, "cannot connect non-equivalent type ")
+           << rhsType << " to " << lhsType;
+
+  locationProcessor.setLoc(loc);
   emitConnect(builder, lhs, rhs);
   return success();
 }
