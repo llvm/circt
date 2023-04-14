@@ -401,8 +401,6 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitStmt(StrictConnectOp op);
   bool visitStmt(RefDefineOp op);
   bool visitStmt(WhenOp op);
-  bool visitStmt(RefForceOp op);
-  bool visitStmt(RefForceInitialOp op);
 
   bool isFailed() const { return encounteredError; }
 
@@ -631,52 +629,79 @@ bool TypeLoweringVisitor::lowerProducer(
 
 void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
   for (auto user : llvm::make_early_inc_range(val.getUsers())) {
-    if (SubindexOp sio = dyn_cast<SubindexOp>(user)) {
-      Value repl = mapping[sio.getIndex()];
-      sio.replaceAllUsesWith(repl);
-      sio.erase();
-    } else if (SubfieldOp sfo = dyn_cast<SubfieldOp>(user)) {
-      // Get the input bundle type.
-      Value repl = mapping[sfo.getFieldIndex()];
-      sfo.replaceAllUsesWith(repl);
-      sfo.erase();
-    } else if (auto refSub = dyn_cast<RefSubOp>(user)) {
-      Value repl = mapping[refSub.getIndex()];
-      refSub.replaceAllUsesWith(repl);
-      refSub.erase();
-    } else {
-      // This means, we have already processed the user, and it didn't lower its
-      // inputs. This is an opaque user, which will continue to have aggregate
-      // type as input, even after LowerTypes. So, construct the vector/bundle
-      // back from the lowered elements to ensure a valid input into the opaque
-      // op. This only supports Bundle or vector of ground type elements.
-      // Recursive aggregate types are not yet supported.
+    TypeSwitch<Operation *, void>(user)
+        .Case<SubindexOp>([mapping](SubindexOp sio) {
+          Value repl = mapping[sio.getIndex()];
+          sio.replaceAllUsesWith(repl);
+          sio.erase();
+        })
+        .Case<SubfieldOp>([mapping](SubfieldOp sfo) {
+          // Get the input bundle type.
+          Value repl = mapping[sfo.getFieldIndex()];
+          sfo.replaceAllUsesWith(repl);
+          sfo.erase();
+        })
+        .Case<RefSubOp>([mapping](RefSubOp refSub) {
+          Value repl = mapping[refSub.getIndex()];
+          refSub.replaceAllUsesWith(repl);
+          refSub.erase();
+        })
+        .Case<RefForceOp, RefForceInitialOp, RefSendOp, VectorCreateOp,
+              BundleCreateOp>([&](auto op) {
+          // Reconstruct the aggregate for the ref operation.
+          // (or vector/bundle create that were inserted.. woof.)
+          ImplicitLocOpBuilder b(user->getLoc(), user);
 
-      // This builder ensures that the aggregate construction happens at the
-      // user location, and the LowerTypes algorithm will not touch them any
-      // more, because LowerTypes was reverse iterating on the block and the
-      // user has already been processed.
-      ImplicitLocOpBuilder b(user->getLoc(), user);
-      // Cat all the field elements.
-      Value accumulate;
-      for (auto v : mapping) {
-        if (!v.getType().cast<FIRRTLBaseType>().isGround()) {
-          user->emitError("cannot handle an opaque user of aggregate types "
-                          "with non-ground type elements");
-          return;
-        }
-        if (isa<FVectorType>(val.getType()))
-          accumulate =
-              (accumulate ? b.createOrFold<CatPrimOp>(v, accumulate) : v);
-        else
-          // Bundle subfields are filled from MSB to LSB.
-          accumulate =
-              (accumulate ? b.createOrFold<CatPrimOp>(accumulate, v) : v);
-      }
-      // Cast it back to the original aggregate type.
-      auto input = b.createOrFold<BitCastOp>(val.getType(), accumulate);
-      user->replaceUsesOfWith(val, input);
-    }
+          Value input =
+              TypeSwitch<Type, Value>(val.getType())
+                  .template Case<FVectorType>([&](auto vecType) {
+                    return b.createOrFold<VectorCreateOp>(vecType, mapping);
+                  })
+                  .template Case<BundleType>([&](auto bundleType) {
+                    return b.createOrFold<BundleCreateOp>(bundleType, mapping);
+                  })
+                  .Default([&](auto _) -> Value { return {}; });
+          if (!input) {
+            user->emitError("unable to reconstruct source of type ")
+                << val.getType();
+            return;
+          }
+          user->replaceUsesOfWith(val, input);
+        })
+        .Default([&](auto _) {
+          // This means, we have already processed the user, and it didn't lower
+          // its inputs. This is an opaque user, which will continue to have
+          // aggregate type as input, even after LowerTypes. So, construct the
+          // vector/bundle back from the lowered elements to ensure a valid
+          // input into the opaque op. This only supports Bundle or vector of
+          // ground type elements. Recursive aggregate types are not yet
+          // supported.
+
+          // This builder ensures that the aggregate construction happens at the
+          // user location, and the LowerTypes algorithm will not touch them any
+          // more, because LowerTypes was reverse iterating on the block and the
+          // user has already been processed.
+          ImplicitLocOpBuilder b(user->getLoc(), user);
+          // Cat all the field elements.
+          Value accumulate;
+          for (auto v : mapping) {
+            if (!v.getType().cast<FIRRTLBaseType>().isGround()) {
+              user->emitError("cannot handle an opaque user of aggregate types "
+                              "with non-ground type elements");
+              return;
+            }
+            if (isa<FVectorType>(val.getType()))
+              accumulate =
+                  (accumulate ? b.createOrFold<CatPrimOp>(v, accumulate) : v);
+            else
+              // Bundle subfields are filled from MSB to LSB.
+              accumulate =
+                  (accumulate ? b.createOrFold<CatPrimOp>(accumulate, v) : v);
+          }
+          // Cast it back to the original aggregate type.
+          auto input = b.createOrFold<BitCastOp>(val.getType(), accumulate);
+          user->replaceUsesOfWith(val, input);
+        });
   }
 }
 
@@ -859,41 +884,6 @@ bool TypeLoweringVisitor::visitStmt(WhenOp op) {
   if (op.hasElseRegion())
     lowerBlock(&op.getElseBlock());
   return false; // don't delete the when!
-}
-
-bool TypeLoweringVisitor::visitStmt(RefForceOp op) {
-  // Attempt to get the bundle types.
-  SmallVector<FlatBundleFieldEntry> fields;
-
-  // Ideally wouldn't lower "force" at all, but if need to lower the source
-  // type, then expand the force into multiple smaller force ops.
-  // TODO: Re-construct source argument instead of splitting the force.
-  if (!peelType(op.getSrc().getType(), fields, aggregatePreservationMode))
-    return false;
-
-  for (const auto &field : llvm::enumerate(fields)) {
-    auto dest = getSubWhatever(op.getDest(), field.index());
-    auto src = getSubWhatever(op.getSrc(), field.index());
-    builder->create<RefForceOp>(op.getClock(), op.getPredicate(), dest, src);
-  }
-  return true;
-}
-bool TypeLoweringVisitor::visitStmt(RefForceInitialOp op) {
-  // Attempt to get the bundle types.
-  SmallVector<FlatBundleFieldEntry> fields;
-
-  // Ideally wouldn't lower "force" at all, but if need to lower the source
-  // type, then expand the force into multiple smaller force ops.
-  // TODO: Re-construct source argument instead of splitting the force.
-  if (!peelType(op.getSrc().getType(), fields, aggregatePreservationMode))
-    return false;
-
-  for (const auto &field : llvm::enumerate(fields)) {
-    auto dest = getSubWhatever(op.getDest(), field.index());
-    auto src = getSubWhatever(op.getSrc(), field.index());
-    builder->create<RefForceInitialOp>(op.getPredicate(), dest, src);
-  }
-  return true;
 }
 
 /// Lower memory operations. A new memory is created for every leaf

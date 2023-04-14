@@ -1179,16 +1179,12 @@ firrtl.module private @is1436_FOO() {
 
     // Check lowering force and release operations.
     // Use self-assigns for simplicity.
-    // For now, expand force if the "source" operand is expanded.
-    // CHECK: %[[BOV_REF_A:.+]] = firrtl.ref.sub %[[BOV_REF]][0]
-    // CHECK: %[[BOV_REF_A_0:.+]] = firrtl.ref.sub %[[BOV_REF_A]][0]
-    // CHECK: firrtl.ref.force %clock, %pred, %[[BOV_REF_A_0]], %[[BOV_A_0]] :
-    // CHECK: %[[BOV_REF_A_1:.+]] = firrtl.ref.sub %[[BOV_REF_A]][1]
-    // CHECK: firrtl.ref.force %clock, %pred, %[[BOV_REF_A_1]], %[[BOV_A_1]] :
-    // CHECK: %[[BOV_REF_B:.+]] = firrtl.ref.sub %[[BOV_REF]][1]
-    // CHECK: firrtl.ref.force %clock, %pred, %[[BOV_REF_B]], %[[BOV_B]] :
+    // Source operand may need to be materialized from its elements.
+    // CHECK: vectorcreate
+    // CHECK: bundlecreate
+    // CHECK: firrtl.ref.force %clock, %pred, %[[BOV_REF]],
     firrtl.ref.force %clock, %pred, %inst_bov_ref, %inst_bov : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>
-    // CHECK-COUNT-3: firrtl.ref.force_initial %pred,
+    // CHECK: firrtl.ref.force_initial %pred, %[[BOV_REF]],
     firrtl.ref.force_initial %pred, %inst_bov_ref, %inst_bov : !firrtl.uint<1>, !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>
     // CHECK: firrtl.ref.release %clock, %pred, %[[BOV_REF]] :
     firrtl.ref.release %clock, %pred, %inst_bov_ref : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<bundle<a: vector<uint<1>, 2>, b: uint<2>>>
