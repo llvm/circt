@@ -44,8 +44,15 @@ using NameUniquer = std::function<std::string(Operation *)>;
 static void legalizeFModule(FModuleOp moduleOp) {
   SmallVector<Operation *, 8> connectOps;
   moduleOp.walk([&](FConnectLike op) { connectOps.push_back(op); });
-  for (auto op : connectOps)
+  for (auto op : connectOps) {
     op->moveBefore(&moduleOp.getBodyBlock()->back());
+    if (
+      !op->getOperand(0).getType().cast<FIRRTLBaseType>().isPassive()) {
+        OpBuilder builder(op);
+        emitConnect(builder, op->getLoc(), op->getOperand(0), op->getOperand(1));
+        op->erase();
+      }
+  }
 }
 
 /// Return the number of bits needed to index the given number of values.
@@ -3051,12 +3058,8 @@ static void createInstOp(Operation *oldOp, FModuleLike subModuleOp,
 
     if (portIndex < numIns) {
       // Connect input ports.
-      if (result.getType() != oldOp->getOperand(portIndex).getType()) {
-        llvm::errs() << "Type mismatch\n";
-        result.getType().dump();
-        oldOp->getOperand(portIndex).getType().dump();
-      }
-      emitConnect(rewriter, oldOp->getLoc(), result, 
+      // We can get type mismatches here, so make a connect and fix it later.
+      rewriter.create<StrictConnectOp>(oldOp->getLoc(), result, 
                                  oldOp->getOperand(portIndex));
     } else if (portIndex < numArgs) {
       // Connect output ports.
