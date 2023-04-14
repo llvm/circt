@@ -1262,7 +1262,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     release_initial(rc2.rw)
 
   ; CHECK-LABEL: extmodule private @RefExt(
-  ; CHECK-SAME:  in in: !firrtl.uint<1>, out r: !firrtl.probe<uint<1>> 
+  ; CHECK-SAME:  in in: !firrtl.uint<1>, out r: !firrtl.probe<uint<1>>
   ; CHECK-SAME: internalPaths = ["in"]
   extmodule RefExt :
     input in : UInt<1>
@@ -1271,8 +1271,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK-LABEL: extmodule private @RefExtMore(
   ; CHECK-SAME:  in in: !firrtl.uint<1>
-  ; CHECK-SAME: out r: !firrtl.probe<uint<1>> 
-  ; CHECK-SAME: out data: !firrtl.uint<3> 
+  ; CHECK-SAME: out r: !firrtl.probe<uint<1>>
+  ; CHECK-SAME: out data: !firrtl.uint<3>
   ; CHECK-SAME: out r2: !firrtl.probe<vector<bundle<a: uint<3>>, 3>>
   ; CHECK-SAME: internalPaths = ["path.to.internal.signal", "in"]
   extmodule RefExtMore :
