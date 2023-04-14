@@ -2810,7 +2810,7 @@ firrtl.module @RemoveUnusedInvalid() {
 }
 // CHECK-NEXT: }
 
-// CHECK-LABEL: firrtl.module @AggregateCreate
+// CHECK-LABEL: firrtl.module @AggregateCreate(
 firrtl.module @AggregateCreate(in %vector_in: !firrtl.vector<uint<1>, 2>,
                                in %bundle_in: !firrtl.bundle<a: uint<1>, b: uint<1>>,
                                out %vector_out: !firrtl.vector<uint<1>, 2>,
@@ -2826,6 +2826,56 @@ firrtl.module @AggregateCreate(in %vector_in: !firrtl.vector<uint<1>, 2>,
   firrtl.strictconnect %bundle_out, %bundle : !firrtl.bundle<a: uint<1>, b: uint<1>>
   // CHECK-NEXT: firrtl.strictconnect %vector_out, %vector_in : !firrtl.vector<uint<1>, 2>
   // CHECK-NEXT: firrtl.strictconnect %bundle_out, %bundle_in : !firrtl.bundle<a: uint<1>, b: uint<1>>
+}
+
+// CHECK-LABEL: firrtl.module @AggregateCreateSingle(
+firrtl.module @AggregateCreateSingle(in %vector_in: !firrtl.vector<uint<1>, 1>,
+                               in %bundle_in: !firrtl.bundle<a: uint<1>>,
+                               out %vector_out: !firrtl.vector<uint<1>, 1>,
+                               out %bundle_out: !firrtl.bundle<a: uint<1>>) {
+
+  %0 = firrtl.subindex %vector_in[0] : !firrtl.vector<uint<1>, 1>
+  %vector = firrtl.vectorcreate %0 : (!firrtl.uint<1>) -> !firrtl.vector<uint<1>, 1>
+  firrtl.strictconnect %vector_out, %vector : !firrtl.vector<uint<1>, 1>
+
+  %2 = firrtl.subfield %bundle_in["a"] : !firrtl.bundle<a: uint<1>>
+  %bundle = firrtl.bundlecreate %2 : (!firrtl.uint<1>) -> !firrtl.bundle<a: uint<1>>
+  firrtl.strictconnect %bundle_out, %bundle : !firrtl.bundle<a: uint<1>>
+  // CHECK-NEXT: firrtl.strictconnect %vector_out, %vector_in : !firrtl.vector<uint<1>, 1>
+  // CHECK-NEXT: firrtl.strictconnect %bundle_out, %bundle_in : !firrtl.bundle<a: uint<1>>
+}
+
+// CHECK-LABEL: firrtl.module @AggregateCreateEmpty(
+firrtl.module @AggregateCreateEmpty(
+                               out %vector_out: !firrtl.vector<uint<1>, 0>,
+                               out %bundle_out: !firrtl.bundle<>) {
+
+  %vector = firrtl.vectorcreate : () -> !firrtl.vector<uint<1>, 0>
+  firrtl.strictconnect %vector_out, %vector : !firrtl.vector<uint<1>, 0>
+
+  %bundle = firrtl.bundlecreate : () -> !firrtl.bundle<>
+  firrtl.strictconnect %bundle_out, %bundle : !firrtl.bundle<>
+  // CHECK-DAG: %[[VEC:.+]] = firrtl.aggregateconstant [] : !firrtl.vector<uint<1>, 0>
+  // CHECK-DAG: %[[BUNDLE:.+]] = firrtl.aggregateconstant [] : !firrtl.bundle<>
+  // CHECK-DAG: firrtl.strictconnect %vector_out, %[[VEC]] : !firrtl.vector<uint<1>, 0>
+  // CHECK-DAG: firrtl.strictconnect %bundle_out, %[[BUNDLE]] : !firrtl.bundle<>
+}
+
+// CHECK-LABEL: firrtl.module @AggregateCreateConst(
+firrtl.module @AggregateCreateConst(
+                               out %vector_out: !firrtl.vector<uint<1>, 2>,
+                               out %bundle_out: !firrtl.bundle<a: uint<1>, b: uint<1>>) {
+
+  %const = firrtl.constant 0 : !firrtl.uint<1>
+  %vector = firrtl.vectorcreate %const, %const : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 2>
+  firrtl.strictconnect %vector_out, %vector : !firrtl.vector<uint<1>, 2>
+
+  %bundle = firrtl.bundlecreate %const, %const : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.bundle<a: uint<1>, b: uint<1>>
+  firrtl.strictconnect %bundle_out, %bundle : !firrtl.bundle<a: uint<1>, b: uint<1>>
+  // CHECK-DAG: %[[VEC:.+]] = firrtl.aggregateconstant [0 : ui1, 0 : ui1] : !firrtl.vector<uint<1>, 2>
+  // CHECK-DAG: %[[BUNDLE:.+]] = firrtl.aggregateconstant [0 : ui1, 0 : ui1] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+  // CHECK-DAG: firrtl.strictconnect %vector_out, %[[VEC]] : !firrtl.vector<uint<1>, 2>
+  // CHECK-DAG: firrtl.strictconnect %bundle_out, %[[BUNDLE]] : !firrtl.bundle<a: uint<1>, b: uint<1>>
 }
 
 
