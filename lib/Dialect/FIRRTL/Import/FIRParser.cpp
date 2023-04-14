@@ -704,7 +704,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     bool forceable = kind == FIRToken::kw_RWProbe;
 
     auto innerType = dyn_cast<FIRRTLBaseType>(type);
-    if (!innerType) // TODO: "innerType.containsReference()"
+    if (!innerType || innerType.containsReference())
       return emitError(loc, "cannot nest reference types");
 
     if (!innerType.isPassive())
@@ -2638,12 +2638,13 @@ ParseResult FIRStmtParser::parseConnect() {
       parseExp(rhs, "expected connect expression") || parseOptionalInfo())
     return failure();
 
-  auto lhsType = lhs.getType().cast<FIRRTLType>();
-  auto rhsType = rhs.getType().cast<FIRRTLType>();
-  // TODO: Once support lands, switch to .containsReference(), update error
-  // message.
-  if (!isa<FIRRTLBaseType>(lhsType) || !isa<FIRRTLBaseType>(rhsType))
+  auto lhsType = lhs.getType().dyn_cast<FIRRTLBaseType>();
+  auto rhsType = rhs.getType().dyn_cast<FIRRTLBaseType>();
+  if (!lhsType || !rhsType)
     return emitError(loc, "cannot connect reference types");
+  // TODO: Once support lands for agg-of-ref, add test for this check!
+  if (lhsType.containsReference() || rhsType.containsReference())
+    return emitError(loc, "cannot connect types containing references");
 
   if (!areTypesEquivalent(lhsType, rhsType))
     return emitError(loc, "cannot connect non-equivalent type ")
@@ -2695,12 +2696,13 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
 
   locationProcessor.setLoc(loc);
 
-  auto lhsType = lhs.getType().cast<FIRRTLType>();
-  auto rhsType = rhs.getType().cast<FIRRTLType>();
-  // TODO: Once support lands, switch to .containsReference(), update error
-  // message.
-  if (!isa<FIRRTLBaseType>(lhsType) || !isa<FIRRTLBaseType>(rhsType))
+  auto lhsType = lhs.getType().dyn_cast<FIRRTLBaseType>();
+  auto rhsType = rhs.getType().dyn_cast<FIRRTLBaseType>();
+  if (!lhsType || !rhsType)
     return emitError(loc, "cannot connect reference types");
+  // TODO: Once support lands for agg-of-ref, add test for this check!
+  if (lhsType.containsReference() || rhsType.containsReference())
+    return emitError(loc, "cannot connect types containing references");
 
   if (kind == FIRToken::less_equal) {
     if (!areTypesEquivalent(lhsType, rhsType))
