@@ -174,7 +174,7 @@ def StripSV : Pass<"arc-strip-sv", "mlir::ModuleOp"> {
   let options = [
     Option<"replaceExtModuleOutputs", "replace-ext-module-outputs",
       "bool", "true", "When enabled replaces all extern module instance "
-      "outputs with 0 and removes then and the external modules">,
+      "outputs with 0 and removes the instances and external modules">,
   ];
   let dependentDialects = ["arc::ArcDialect", "comb::CombDialect",
                            "hw::HWDialect", "seq::SeqDialect"];
