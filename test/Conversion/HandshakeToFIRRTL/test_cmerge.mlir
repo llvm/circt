@@ -82,9 +82,9 @@
 // Logic to assign arg ready outputs.
 // CHECK:   %[[WIN_OR_DEFAULT:.+]] = firrtl.mux(%fired, %win, %[[NO_WINNER]])
 // CHECK:   %[[ARG0_READY0:.+]] = firrtl.eq %[[WIN_OR_DEFAULT]], %[[INDEX0]]
-// CHECK:   firrtl.connect %[[ARG0_READY]], %[[ARG0_READY0]]
+// CHECK:   firrtl.strictconnect %[[ARG0_READY]], %[[ARG0_READY0]]
 // CHECK:   %[[ARG1_READY0:.+]] = firrtl.eq %[[WIN_OR_DEFAULT]], %[[INDEX1]]
-// CHECK:   firrtl.connect %[[ARG1_READY]], %[[ARG1_READY0]]
+// CHECK:   firrtl.strictconnect %[[ARG1_READY]], %[[ARG1_READY0]]
 
 // CHECK:           firrtl.module @test_cmerge(in %[[VAL_53:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_54:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_55:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_56:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_57:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_58:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_59:.*]]: !firrtl.clock, in %[[VAL_60:.*]]: !firrtl.uint<1>) {
 // CHECK:             %[[VAL_61:.*]], %[[VAL_62:.*]], %[[VAL_63:.*]], %[[VAL_64:.*]], %[[VAL_65:.*]], %[[VAL_66:.*]] = firrtl.instance handshake_control_merge0  @handshake_control_merge_out_ui64_2ins_2outs_ctrl(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in [[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out [[ARG2:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out [[ARG3:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)

@@ -35,10 +35,10 @@ handshake.func @test_index_cast(%arg0: index, %arg1: none, ...) -> (i8, none) {
 // CHECK-NEXT:   %4 = firrtl.subfield %[[ARG1]][ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
 // CHECK-NEXT:   %5 = firrtl.subfield %[[ARG1]][data] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
 // CHECK-NEXT:   %6 = firrtl.pad %2, 64 : (!firrtl.uint<8>) -> !firrtl.uint<64>
-// CHECK-NEXT:   firrtl.connect %5, %6 : !firrtl.uint<64>, !firrtl.uint<64>
-// CHECK-NEXT:   firrtl.connect %3, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.strictconnect %5, %6 : !firrtl.uint<64>
+// CHECK-NEXT:   firrtl.strictconnect %3, %0 : !firrtl.uint<1>
 // CHECK-NEXT:   %7 = firrtl.and %4, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.connect %1, %7 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.strictconnect %1, %7 : !firrtl.uint<1>
 // CHECK-NEXT: }
 // CHECK-NEXT: firrtl.module @arith_index_cast_in_ui9_out_ui64(in %[[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<9>>, out %[[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) {
 // CHECK-NEXT:   %0 = firrtl.subfield %[[ARG0]][valid] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<9>>
@@ -48,10 +48,10 @@ handshake.func @test_index_cast(%arg0: index, %arg1: none, ...) -> (i8, none) {
 // CHECK-NEXT:   %4 = firrtl.subfield %[[ARG1]][ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
 // CHECK-NEXT:   %5 = firrtl.subfield %[[ARG1]][data] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
 // CHECK-NEXT:   %6 = firrtl.pad %2, 64 : (!firrtl.uint<9>) -> !firrtl.uint<64>
-// CHECK-NEXT:   firrtl.connect %5, %6 : !firrtl.uint<64>, !firrtl.uint<64>
-// CHECK-NEXT:   firrtl.connect %3, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.strictconnect %5, %6 : !firrtl.uint<64>
+// CHECK-NEXT:   firrtl.strictconnect %3, %0 : !firrtl.uint<1>
 // CHECK-NEXT:   %7 = firrtl.and %4, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.connect %1, %7 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.strictconnect %1, %7 : !firrtl.uint<1>
 // CHECK-NEXT: }
 
 // CHECK: firrtl.module @test_index_cast2(in %[[VAL_20:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, in %[[VAL_21:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<9>>, in %[[VAL_22:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_23:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_24:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_25:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_26:.*]]: !firrtl.clock, in %[[VAL_27:.*]]: !firrtl.uint<1>) {

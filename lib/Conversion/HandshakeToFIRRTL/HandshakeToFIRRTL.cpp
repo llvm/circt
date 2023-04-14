@@ -14,6 +14,7 @@
 #include "../PassDetail.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Dialect/Handshake/Visitor.h"
@@ -619,8 +620,7 @@ static void createMergeArgReady(ArrayRef<Value> outputs, Value fired,
 
     Value argReadyWire = rewriter.create<EQPrimOp>(insertLoc, bitType,
                                                    winnerOrDefault, constIndex);
-
-    rewriter.create<ConnectOp>(insertLoc, outputs[i], argReadyWire);
+    emitConnect(rewriter, insertLoc, outputs[i], argReadyWire);
   }
 }
 
@@ -914,15 +914,15 @@ bool StdExprBuilder::buildSignExtendOp(unsigned dstWidth) {
   if (isSignedOp)
     resultDataOp = rewriter.create<AsUIntPrimOp>(insertLoc, resultDataOp);
 
-  rewriter.create<ConnectOp>(insertLoc, resultData, resultDataOp);
+  emitConnect(rewriter, insertLoc, resultData, resultDataOp);
 
   // Generate valid signal.
-  rewriter.create<ConnectOp>(insertLoc, resultValid, arg0Valid);
+  emitConnect(rewriter, insertLoc, resultValid, arg0Valid);
 
   // Generate ready signal.
   auto argReadyOp = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
                                                resultReady, arg0Valid);
-  rewriter.create<ConnectOp>(insertLoc, arg0Ready, argReadyOp);
+  emitConnect(rewriter, insertLoc, arg0Ready, argReadyOp);
   return true;
 }
 
