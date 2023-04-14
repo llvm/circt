@@ -35,9 +35,9 @@ struct ModuleConversionPattern
     : public mlir::OpInterfaceConversionPattern<hw::HWMutableModuleLike> {
 public:
   using OpInterfaceConversionPattern::OpInterfaceConversionPattern;
-  LogicalResult matchAndRewrite(hw::HWMutableModuleLike mod,
-                                ArrayRef<Value> operands,
-                                ConversionPatternRewriter &rewriter) const;
+  LogicalResult
+  matchAndRewrite(hw::HWMutableModuleLike mod, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final;
 
   /// Lower an individual port, modifing 'port'. Returns 'true' if the port was
   /// changed.
@@ -107,10 +107,10 @@ LogicalResult ModuleConversionPattern::matchAndRewrite(
     terminator->setOperand(port.argNum, unwrap.getFrame());
   }
 
-  rewriter.startRootUpdate(mod);
-  mod.modifyPorts(loweredInputs, loweredOutputs, loweredInputIdxs,
-                  loweredOutputIdxs);
-  rewriter.finalizeRootUpdate(mod);
+  rewriter.updateRootInPlace(mod, [&]() {
+    mod.modifyPorts(loweredInputs, loweredOutputs, loweredInputIdxs,
+                    loweredOutputIdxs);
+  });
   return success();
 }
 
@@ -119,9 +119,9 @@ struct InstanceConversionPattern
     : public mlir::OpInterfaceConversionPattern<hw::HWInstanceLike> {
 public:
   using OpInterfaceConversionPattern::OpInterfaceConversionPattern;
-  LogicalResult matchAndRewrite(hw::HWInstanceLike inst,
-                                ArrayRef<Value> operands,
-                                ConversionPatternRewriter &rewriter) const;
+  LogicalResult
+  matchAndRewrite(hw::HWInstanceLike inst, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final;
 };
 } // namespace
 
@@ -171,20 +171,20 @@ void ESILowerTypesPass::runOnOperation() {
 
   ConversionTarget target(getContext());
   target.markUnknownOpDynamicallyLegal([](Operation *op) {
-    auto inst = dyn_cast<hw::HWInstanceLike>(op);
-    if (inst &&
-        (llvm::any_of(inst->getOperandTypes(), hw::type_isa<WindowType>) ||
-         llvm::any_of(inst->getResultTypes(), hw::type_isa<WindowType>)))
-      return false;
-
-    auto mod = dyn_cast<hw::HWMutableModuleLike>(op);
-    auto isWindowPort = [](hw::PortInfo p) {
-      return hw::type_isa<WindowType>(p.type);
-    };
-    if (mod && (llvm::any_of(mod.getPorts().inputs, isWindowPort) ||
-                llvm::any_of(mod.getPorts().outputs, isWindowPort)))
-      return false;
-    return true;
+    return TypeSwitch<Operation *, bool>(op)
+        .Case([](hw::HWInstanceLike inst) {
+          return !(
+              llvm::any_of(inst->getOperandTypes(), hw::type_isa<WindowType>) ||
+              llvm::any_of(inst->getResultTypes(), hw::type_isa<WindowType>));
+        })
+        .Case([](hw::HWMutableModuleLike mod) {
+          auto isWindowPort = [](hw::PortInfo p) {
+            return hw::type_isa<WindowType>(p.type);
+          };
+          return !(llvm::any_of(mod.getPorts().inputs, isWindowPort) ||
+                   llvm::any_of(mod.getPorts().outputs, isWindowPort));
+        })
+        .Default([](Operation *) { return true; });
   });
 
   RewritePatternSet patterns(&getContext());
