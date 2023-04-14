@@ -28,20 +28,20 @@
 // CHECK:   %[[ARB1:.+]] = firrtl.mux(%[[ARG1_VALID]], %[[INDEX1]], %[[NO_WINNER]])
 // CHECK:   %[[INDEX0:.+]] = firrtl.constant 1
 // CHECK:   %[[ARB0:.+]] = firrtl.mux(%[[ARG0_VALID]], %[[INDEX0]], %[[ARB1]])
-// CHECK:   firrtl.connect %win, %[[ARB0]]
+// CHECK:   firrtl.strictconnect %win, %[[ARB0]]
 
 // Logic to assign result outputs.
-// CHECK:   firrtl.connect %[[ARG2_VALID]], %[[HAS_WINNER]]
+// CHECK:   firrtl.strictconnect %[[ARG2_VALID]], %[[HAS_WINNER]]
 // CHECK:   %[[DEFAULT1:.+]] = firrtl.constant 0
 // CHECK:   %[[BITS2:.+]] = firrtl.bits %win 1 to 1
 // CHECK:   %[[RESULT_DATA0:.+]] = firrtl.mux(%[[BITS2]], %[[ARG1_DATA]], %[[DEFAULT1]])
 // CHECK:   %[[BITS3:.+]] = firrtl.bits %win 0 to 0
 // CHECK:   %[[RESULT_DATA:.+]] = firrtl.mux(%[[BITS3]], %[[ARG0_DATA]], %[[RESULT_DATA0]])
-// CHECK:   firrtl.connect %[[ARG2_DATA]], %[[RESULT_DATA]]
+// CHECK:   firrtl.strictconnect %[[ARG2_DATA]], %[[RESULT_DATA]]
 
 // Logic to assign result done wire.
 // CHECK:   %[[RESULT_DONE0:.+]] = firrtl.and %[[HAS_WINNER]], %[[ARG2_READY]]
-// CHECK:   firrtl.connect %resultDone, %[[RESULT_DONE0]]
+// CHECK:   firrtl.strictconnect %resultDone, %[[RESULT_DONE0]]
 
 // Logic to assign arg ready outputs.
 // CHECK:   %[[WIN_OR_DEFAULT:.+]] = firrtl.mux(%resultDone, %win, %[[NO_WINNER]])

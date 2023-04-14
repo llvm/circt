@@ -19,15 +19,15 @@
 // CHECK:             %[[VAL_20:.*]] = firrtl.and %[[VAL_14]], %[[VAL_17]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:             %[[VAL_21:.*]] = firrtl.and %[[VAL_5]], %[[VAL_8]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:             %[[VAL_22:.*]] = firrtl.and %[[VAL_11]], %[[VAL_21]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:             firrtl.connect %[[VAL_19]], %[[VAL_22]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:             firrtl.strictconnect %[[VAL_19]], %[[VAL_22]] : !firrtl.uint<1>
 // CHECK:             %[[VAL_23:.*]] = firrtl.and %[[VAL_20]], %[[VAL_22]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:             firrtl.connect %[[VAL_9]], %[[VAL_23]] : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:             firrtl.connect %[[VAL_6]], %[[VAL_23]] : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:             firrtl.connect %[[VAL_12]], %[[VAL_23]] : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:             firrtl.connect %[[VAL_18]], %[[VAL_7]] : !firrtl.uint<64>, !firrtl.uint<64>
-// CHECK:             firrtl.connect %[[VAL_15]], %[[VAL_10]] : !firrtl.uint<8>, !firrtl.uint<8>
-// CHECK:             firrtl.connect %[[VAL_13]], %[[VAL_19]] : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:             firrtl.connect %[[VAL_16]], %[[VAL_19]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:             firrtl.strictconnect %[[VAL_9]], %[[VAL_23]] : !firrtl.uint<1>
+// CHECK:             firrtl.strictconnect %[[VAL_6]], %[[VAL_23]] : !firrtl.uint<1>
+// CHECK:             firrtl.strictconnect %[[VAL_12]], %[[VAL_23]] : !firrtl.uint<1>
+// CHECK:             firrtl.strictconnect %[[VAL_18]], %[[VAL_7]] : !firrtl.uint<64>
+// CHECK:             firrtl.strictconnect %[[VAL_15]], %[[VAL_10]] : !firrtl.uint<8>
+// CHECK:             firrtl.strictconnect %[[VAL_13]], %[[VAL_19]] : !firrtl.uint<1>
+// CHECK:             firrtl.strictconnect %[[VAL_16]], %[[VAL_19]] : !firrtl.uint<1>
 // CHECK:           }
 
 // CHECK: firrtl.module @main(in %[[VAL_24:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, in %[[VAL_25:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[VAL_26:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_27:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, out %[[VAL_28:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_29:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_30:.*]]: !firrtl.clock, in %[[VAL_31:.*]]: !firrtl.uint<1>) {

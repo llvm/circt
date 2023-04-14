@@ -10,10 +10,10 @@
 // CHECK:             %[[VAL_6:.*]] = firrtl.subfield %[[VAL_1]][ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>
 // CHECK:             %[[VAL_7:.*]] = firrtl.subfield %[[VAL_1]][data] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>
 // CHECK:             %[[VAL_8:.*]] = firrtl.bits %[[VAL_4]] 7 to 0 : (!firrtl.uint<32>) -> !firrtl.uint<8>
-// CHECK:             firrtl.connect %[[VAL_7]], %[[VAL_8]] : !firrtl.uint<8>, !firrtl.uint<8>
-// CHECK:             firrtl.connect %[[VAL_5]], %[[VAL_2]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:             firrtl.strictconnect %[[VAL_7]], %[[VAL_8]] : !firrtl.uint<8>
+// CHECK:             firrtl.strictconnect %[[VAL_5]], %[[VAL_2]] : !firrtl.uint<1>
 // CHECK:             %[[VAL_9:.*]] = firrtl.and %[[VAL_6]], %[[VAL_2]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:             firrtl.connect %[[VAL_3]], %[[VAL_9]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:             firrtl.strictconnect %[[VAL_3]], %[[VAL_9]] : !firrtl.uint<1>
 // CHECK:           }
 
 handshake.func @test_trunci(%arg0: i32, ...) -> i8 {
