@@ -46,12 +46,11 @@ static void legalizeFModule(FModuleOp moduleOp) {
   moduleOp.walk([&](FConnectLike op) { connectOps.push_back(op); });
   for (auto op : connectOps) {
     op->moveBefore(&moduleOp.getBodyBlock()->back());
-    if (
-      !op->getOperand(0).getType().cast<FIRRTLBaseType>().isPassive()) {
-        OpBuilder builder(op);
-        emitConnect(builder, op->getLoc(), op->getOperand(0), op->getOperand(1));
-        op->erase();
-      }
+    if (!op->getOperand(0).getType().cast<FIRRTLBaseType>().isPassive()) {
+      OpBuilder builder(op);
+      emitConnect(builder, op->getLoc(), op->getOperand(0), op->getOperand(1));
+      op->erase();
+    }
   }
 }
 
@@ -1357,8 +1356,7 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
         insertLoc, oneHot.getType(), oneHot, resultValidAndReady);
 
     // Connect that to this arg ready.
-    emitConnect(rewriter, insertLoc, argReady[i],
-                               oneHotAndResultValidAndReady);
+    emitConnect(rewriter, insertLoc, argReady[i], oneHotAndResultValidAndReady);
   }
 
   return true;
@@ -1734,15 +1732,13 @@ bool HandshakeBuilder::visitHandshake(ConditionalBranchOp op) {
       insertLoc, conditionData.getType(), conditionData);
 
   // Connect valid signal of both results.
-  emitConnect(rewriter, 
-      insertLoc, trueResultValid,
-      rewriter.create<AndPrimOp>(insertLoc, conditionData.getType(),
-                                 conditionData, conditionArgValid));
+  emitConnect(rewriter, insertLoc, trueResultValid,
+              rewriter.create<AndPrimOp>(insertLoc, conditionData.getType(),
+                                         conditionData, conditionArgValid));
 
-  emitConnect(rewriter, 
-      insertLoc, falseResultValid,
-      rewriter.create<AndPrimOp>(insertLoc, conditionNot.getType(),
-                                 conditionNot, conditionArgValid));
+  emitConnect(rewriter, insertLoc, falseResultValid,
+              rewriter.create<AndPrimOp>(insertLoc, conditionNot.getType(),
+                                         conditionNot, conditionArgValid));
 
   // Connect data signal of both results if applied.
   if (!isControlOp(op)) {
@@ -1838,9 +1834,8 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
   // Create a notAllDoneWire for later use.
   auto notAllDoneWire =
       rewriter.create<WireOp>(insertLoc, bitType, "notAllDone").getResult();
-  emitConnect(rewriter, 
-      insertLoc, notAllDoneWire,
-      rewriter.create<NotPrimOp>(insertLoc, bitType, allDoneWire));
+  emitConnect(rewriter, insertLoc, notAllDoneWire,
+              rewriter.create<NotPrimOp>(insertLoc, bitType, allDoneWire));
 
   // Create logic for each result port.
   unsigned idx = 0;
@@ -1880,9 +1875,8 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
         rewriter
             .create<WireOp>(insertLoc, bitType, "notEmtd" + std::to_string(idx))
             .getResult();
-    emitConnect(rewriter, 
-        insertLoc, notEmtdWire,
-        rewriter.create<NotPrimOp>(insertLoc, bitType, emtdReg));
+    emitConnect(rewriter, insertLoc, notEmtdWire,
+                rewriter.create<NotPrimOp>(insertLoc, bitType, emtdReg));
 
     // Create valid signal and connect to the result valid. The reason of this
     // AndPrimOp is each result can only be emitted once.
@@ -1897,15 +1891,15 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
             .create<WireOp>(insertLoc, bitType,
                             "validReady" + std::to_string(idx))
             .getResult();
-    emitConnect(rewriter, 
-        insertLoc, validReadyWire,
+    emitConnect(
+        rewriter, insertLoc, validReadyWire,
         rewriter.create<AndPrimOp>(insertLoc, bitType, resultReady, valid));
 
     // Finally, we can drive the doneWire we created in the beginning with
     // {validReadyWire || emtdReg}, where emtdReg indicates a successful
     // handshake in a previous clock cycle.
-    emitConnect(rewriter, 
-        insertLoc, doneWire,
+    emitConnect(
+        rewriter, insertLoc, doneWire,
         rewriter.create<OrPrimOp>(insertLoc, bitType, validReadyWire, emtdReg));
 
     // All done, move to the next result port.
@@ -1951,8 +1945,8 @@ bool HandshakeBuilder::visitHandshake(handshake::ConstantOp op) {
 
   emitConnect(rewriter, insertLoc, resultValid, controlValid);
   emitConnect(rewriter, insertLoc, controlReady, resultReady);
-  emitConnect(rewriter, 
-      insertLoc, resultData,
+  emitConnect(
+      rewriter, insertLoc, resultData,
       createConstantOp(constantType, constantValue, insertLoc, rewriter));
   return true;
 }
@@ -2846,8 +2840,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     auto writeValidBufferMux = rewriter.create<MuxPrimOp>(
         insertLoc, bitType, emptyOrComplete, writeValid, writeValidBuffer);
 
-    emitConnect(rewriter, insertLoc, writeValidBuffer,
-                               writeValidBufferMux);
+    emitConnect(rewriter, insertLoc, writeValidBuffer, writeValidBufferMux);
 
     // Get the store enable out of the bundle.
     auto memEnable = rewriter.create<SubfieldOp>(
@@ -3059,8 +3052,8 @@ static void createInstOp(Operation *oldOp, FModuleLike subModuleOp,
     if (portIndex < numIns) {
       // Connect input ports.
       // We can get type mismatches here, so make a connect and fix it later.
-      rewriter.create<StrictConnectOp>(oldOp->getLoc(), result, 
-                                 oldOp->getOperand(portIndex));
+      rewriter.create<StrictConnectOp>(oldOp->getLoc(), result,
+                                       oldOp->getOperand(portIndex));
     } else if (portIndex < numArgs) {
       // Connect output ports.
       Value newResult = oldOp->getResult(portIndex - numIns);
@@ -3088,8 +3081,8 @@ static void convertReturnOp(Operation *oldOp, FModuleOp topModuleOp,
   // output ports.
   unsigned argIndex = 0;
   for (auto result : oldOp->getOperands()) {
-    emitConnect(rewriter, 
-        oldOp->getLoc(), topModuleOp.getArgument(numIns + argIndex), result);
+    emitConnect(rewriter, oldOp->getLoc(),
+                topModuleOp.getArgument(numIns + argIndex), result);
     ++argIndex;
   }
 
