@@ -44,7 +44,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   }
 
   // If the types are the exact same we can just connect them.
-  if (dstType == srcType && dstType.isPassive()) {
+  if (dstType == srcType && dstType.isPassive() && !dstType.hasUninferredWidth()) {
     builder.create<StrictConnectOp>(dst, src);
     return;
   }
@@ -93,8 +93,10 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     srcType = dstType;
   }
 
-  if ((dstType.hasUninferredWidth() || srcType.hasUninferredWidth()) &&
-      dstType != srcType) {
+  // Be sure uint, uint -> uint, (uir uint) since we are changing extneding
+  // connect to identity.
+  if (dstType.hasUninferredWidth() || srcType.hasUninferredWidth()
+) {
     src = builder.create<UninferredWidthCastOp>(dstType, src);
     srcType = dstType;
   }

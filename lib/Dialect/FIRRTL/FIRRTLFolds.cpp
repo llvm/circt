@@ -2034,7 +2034,7 @@ OpFoldResult UninferredResetCastOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult UninferredWidthCastOp::fold(FoldAdaptor adaptor) {
-  if (getOperand().getType() == getType())
+  if (getOperand().getType() == getType() && !getType().hasUninferredWidth())
     return getOperand();
   return {};
 }

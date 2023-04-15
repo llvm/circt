@@ -1271,7 +1271,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
     else
       allWidthsKnown = false;
   }
-  if (allWidthsKnown && !isa<FConnectLike, AttachOp>(op))
+  if (allWidthsKnown && !isa<FConnectLike, AttachOp, UninferredWidthCastOp>(op))
     return success();
 
   // Actually generate the necessary constraint expressions.
@@ -1472,7 +1472,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         maximumOfTypes(op.getResult(), op.getHigh(), op.getLow());
       })
       .Case<UninferredWidthCastOp>([&](auto op) {
-        declareVars(op.getResult(), op.getLoc());
+        if (hasUninferredWidth(op.getResult().getType()))
+          declareVars(op.getResult(), op.getLoc());
         constrainTypes(op.getResult(), op.getInput());
       })
       .Case<ConnectOp>(
@@ -1483,6 +1484,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       .Case<StrictConnectOp>([&](auto op) {
         constrainTypes(op.getDest(), op.getSrc());
         constrainTypes(op.getSrc(), op.getDest());
+        //                unifyTypes(FieldRef(op.getDest(), 0), FieldRef(op.getSrc(), 0),
+        //           op.getDest().getType().template cast<FIRRTLType>());
       })
       .Case<AttachOp>([&](auto op) {
         // Attach connects multiple analog signals together. All signals must
@@ -1984,6 +1987,7 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
       LLVM_DEBUG(llvm::dbgs() << "NOOP " << cast << "\n");
       lhs.replaceAllUsesWith(rhs);
     }
+    cast.erase();
     return anyChanged;
   }
 
