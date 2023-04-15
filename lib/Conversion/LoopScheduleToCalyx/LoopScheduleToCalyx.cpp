@@ -1,5 +1,4 @@
-//=== LoopScheduleToCalyx.cpp - LoopSchedule to Calyx pass entry point
-//------*-----===//
+//=== LoopScheduleToCalyx.cpp - LoopSchedule to Calyx pass entry point-----===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -46,11 +45,10 @@ namespace pipelinetocalyx {
 // Utility types
 //===----------------------------------------------------------------------===//
 
-class PipelineWhileOp
-    : public calyx::WhileOpInterface<LoopSchedulePipelineWhileOp> {
+class PipelineWhileOp : public calyx::WhileOpInterface<LoopSchedulePipelineOp> {
 public:
-  explicit PipelineWhileOp(LoopSchedulePipelineWhileOp op)
-      : calyx::WhileOpInterface<LoopSchedulePipelineWhileOp>(op) {}
+  explicit PipelineWhileOp(LoopSchedulePipelineOp op)
+      : calyx::WhileOpInterface<LoopSchedulePipelineOp>(op) {}
 
   Block::BlockArgListType getBodyArgs() override {
     return getOperation().getStagesBlock().getArguments();
@@ -225,7 +223,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                              /// static logic
                              LoopScheduleTerminatorOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
-              .template Case<FuncOp, LoopSchedulePipelineWhileOp,
+              .template Case<FuncOp, LoopSchedulePipelineOp,
                              LoopScheduleRegisterOp,
                              LoopSchedulePipelineStageOp>([&](auto) {
                 /// Skip: these special cases will be handled separately.
@@ -845,10 +843,10 @@ class BuildWhileGroups : public calyx::FuncOpPartialLoweringPattern {
                            PatternRewriter &rewriter) const override {
     LogicalResult res = success();
     funcOp.walk([&](Operation *op) {
-      if (!isa<LoopSchedulePipelineWhileOp>(op))
+      if (!isa<LoopSchedulePipelineOp>(op))
         return WalkResult::advance();
 
-      PipelineWhileOp whileOp(cast<LoopSchedulePipelineWhileOp>(op));
+      PipelineWhileOp whileOp(cast<LoopSchedulePipelineOp>(op));
 
       getState<ComponentLoweringState>().setUniqueName(whileOp.getOperation(),
                                                        "while");
@@ -929,7 +927,7 @@ class BuildPipelineRegs : public calyx::FuncOpPartialLoweringPattern {
           if (auto term = dyn_cast<LoopScheduleTerminatorOp>(use.getOwner())) {
             if (use.getOperandNumber() < term.getIterArgs().size()) {
               PipelineWhileOp whileOp(
-                  dyn_cast<LoopSchedulePipelineWhileOp>(stage->getParentOp()));
+                  dyn_cast<LoopSchedulePipelineOp>(stage->getParentOp()));
               auto reg = getState<ComponentLoweringState>().getLoopIterReg(
                   whileOp, use.getOperandNumber());
               getState<ComponentLoweringState>().addPipelineReg(stage, reg, i);
@@ -971,7 +969,7 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
   LogicalResult
   partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
-    for (auto pipeline : funcOp.getOps<LoopSchedulePipelineWhileOp>())
+    for (auto pipeline : funcOp.getOps<LoopSchedulePipelineOp>())
       for (auto stage :
            pipeline.getStagesBlock().getOps<LoopSchedulePipelineStageOp>())
         if (failed(buildStageGroups(pipeline, stage, rewriter)))
@@ -980,7 +978,7 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
     return success();
   }
 
-  LogicalResult buildStageGroups(LoopSchedulePipelineWhileOp whileOp,
+  LogicalResult buildStageGroups(LoopSchedulePipelineOp whileOp,
                                  LoopSchedulePipelineStageOp stage,
                                  PatternRewriter &rewriter) const {
     // Collect pipeline registers for stage.

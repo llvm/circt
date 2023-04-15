@@ -1,5 +1,4 @@
-//===- AffineToLoopSchedule.cpp
-//--------------------------------------------===//
+//===- AffineToLoopSchedule.cpp--------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -432,7 +431,7 @@ LogicalResult AffineToLoopSchedule::createLoopSchedulePipeline(
   if (auto tripCount = getConstantTripCount(forOp))
     tripCountAttr = builder.getI64IntegerAttr(*tripCount);
 
-  auto pipeline = builder.create<LoopSchedulePipelineWhileOp>(
+  auto pipeline = builder.create<LoopSchedulePipelineOp>(
       resultTypes, ii, tripCountAttr, iterArgs);
 
   // Create the condition, which currently just compares the induction variable

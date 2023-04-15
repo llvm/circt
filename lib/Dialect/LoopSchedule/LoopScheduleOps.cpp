@@ -25,8 +25,8 @@ using namespace circt::loopschedule;
 // LoopSchedulePipelineWhileOp
 //===----------------------------------------------------------------------===//
 
-ParseResult LoopSchedulePipelineWhileOp::parse(OpAsmParser &parser,
-                                               OperationState &result) {
+ParseResult LoopSchedulePipelineOp::parse(OpAsmParser &parser,
+                                          OperationState &result) {
   // Parse initiation interval.
   IntegerAttr ii;
   if (parser.parseKeyword("II") || parser.parseEqual() ||
@@ -81,7 +81,7 @@ ParseResult LoopSchedulePipelineWhileOp::parse(OpAsmParser &parser,
   return success();
 }
 
-void LoopSchedulePipelineWhileOp::print(OpAsmPrinter &p) {
+void LoopSchedulePipelineOp::print(OpAsmPrinter &p) {
   // Print the initiation interval.
   p << " II = " << ' ' << getII();
 
@@ -111,7 +111,7 @@ void LoopSchedulePipelineWhileOp::print(OpAsmPrinter &p) {
   p.printRegion(getStages(), /*printEntryBlockArgs=*/false);
 }
 
-LogicalResult LoopSchedulePipelineWhileOp::verify() {
+LogicalResult LoopSchedulePipelineOp::verify() {
   // Verify the condition block is "combinational" based on an allowlist of
   // Arithmetic ops.
   Block &conditionBlock = getCondition().front();
@@ -156,11 +156,11 @@ LogicalResult LoopSchedulePipelineWhileOp::verify() {
 
   int64_t lastStartTime = -1;
   for (Operation &inner : stagesBlock) {
-    // Verify the stages block contains only `loopschedule.pipeline_stage` and
+    // Verify the stages block contains only `loopschedule.pipeline.stage` and
     // `loopschedule.terminator` ops.
     if (!isa<LoopSchedulePipelineStageOp, LoopScheduleTerminatorOp>(inner))
       return emitOpError(
-                 "stages may only contain 'loopschedule.pipeline_stage' or "
+                 "stages may only contain 'loopschedule.pipeline.stage' or "
                  "'loopschedule.terminator' ops, found ")
              << inner;
 
@@ -182,11 +182,10 @@ LogicalResult LoopSchedulePipelineWhileOp::verify() {
   return success();
 }
 
-void LoopSchedulePipelineWhileOp::build(OpBuilder &builder,
-                                        OperationState &state,
-                                        TypeRange resultTypes, IntegerAttr ii,
-                                        std::optional<IntegerAttr> tripCount,
-                                        ValueRange iterArgs) {
+void LoopSchedulePipelineOp::build(OpBuilder &builder, OperationState &state,
+                                   TypeRange resultTypes, IntegerAttr ii,
+                                   std::optional<IntegerAttr> tripCount,
+                                   ValueRange iterArgs) {
   OpBuilder::InsertionGuard g(builder);
 
   state.addTypes(resultTypes);
@@ -242,7 +241,7 @@ void LoopSchedulePipelineStageOp::build(OpBuilder &builder,
 unsigned LoopSchedulePipelineStageOp::getStageNumber() {
   unsigned number = 0;
   auto *op = getOperation();
-  auto parent = op->getParentOfType<LoopSchedulePipelineWhileOp>();
+  auto parent = op->getParentOfType<LoopSchedulePipelineOp>();
   Operation *stage = &parent.getStagesBlock().front();
   while (stage != op && stage->getNextNode()) {
     ++number;
@@ -279,8 +278,8 @@ LogicalResult LoopScheduleRegisterOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult LoopScheduleTerminatorOp::verify() {
-  LoopSchedulePipelineWhileOp pipeline =
-      (*this)->getParentOfType<LoopSchedulePipelineWhileOp>();
+  LoopSchedulePipelineOp pipeline =
+      (*this)->getParentOfType<LoopSchedulePipelineOp>();
 
   // Verify pipeline terminates with the same `iter_args` types as the pipeline.
   auto iterArgs = getIterArgs();
@@ -295,7 +294,7 @@ LogicalResult LoopScheduleTerminatorOp::verify() {
   for (auto iterArg : iterArgs)
     if (iterArg.getDefiningOp<LoopSchedulePipelineStageOp>() == nullptr)
       return emitOpError(
-          "'iter_args' must be defined by a 'loopschedule.pipeline_stage'");
+          "'iter_args' must be defined by a 'loopschedule.pipeline.stage'");
 
   // Verify pipeline terminates with the same result types as the pipeline.
   auto opResults = getResults();
@@ -310,7 +309,7 @@ LogicalResult LoopScheduleTerminatorOp::verify() {
   for (auto result : opResults)
     if (result.getDefiningOp<LoopSchedulePipelineStageOp>() == nullptr)
       return emitOpError(
-          "'results' must be defined by a 'loopschedule.pipeline_stage'");
+          "'results' must be defined by a 'loopschedule.pipeline.stage'");
 
   return success();
 }

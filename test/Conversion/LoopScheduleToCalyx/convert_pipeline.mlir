@@ -38,11 +38,11 @@ func.func @minimal() {
   %c0_i64 = arith.constant 0 : i64
   %c10_i64 = arith.constant 10 : i64
   %c1_i64 = arith.constant 1 : i64
-  loopschedule.pipeline_while II =  1 trip_count = 10 iter_args(%arg0 = %c0_i64) : (i64) -> () {
+  loopschedule.pipeline II =  1 trip_count = 10 iter_args(%arg0 = %c0_i64) : (i64) -> () {
     %0 = arith.cmpi ult, %arg0, %c10_i64 : i64
     loopschedule.register %0 : i1
   } do {
-    %0 = loopschedule.pipeline_stage start = 0 {
+    %0 = loopschedule.pipeline.stage start = 0 {
       %1 = arith.addi %arg0, %c1_i64 : i64
       loopschedule.register %1 : i64
     } : i64
@@ -163,21 +163,21 @@ func.func @dot(%arg0: memref<64xi32>, %arg1: memref<64xi32>) -> i32 {
   %c0 = arith.constant 0 : index
   %c64 = arith.constant 64 : index
   %c1 = arith.constant 1 : index
-  %0 = loopschedule.pipeline_while II =  1 trip_count = 5 iter_args(%arg2 = %c0, %arg3 = %c0_i32) : (index, i32) -> i32 {
+  %0 = loopschedule.pipeline II =  1 trip_count = 5 iter_args(%arg2 = %c0, %arg3 = %c0_i32) : (index, i32) -> i32 {
     %1 = arith.cmpi ult, %arg2, %c64 : index
     loopschedule.register %1 : i1
   } do {
-    %1:3 = loopschedule.pipeline_stage start = 0  {
+    %1:3 = loopschedule.pipeline.stage start = 0  {
       %4 = memref.load %arg0[%arg2] : memref<64xi32>
       %5 = memref.load %arg1[%arg2] : memref<64xi32>
       %6 = arith.addi %arg2, %c1 : index
       loopschedule.register %4, %5, %6 : i32, i32, index
     } : i32, i32, index
-    %2 = loopschedule.pipeline_stage start = 1  {
+    %2 = loopschedule.pipeline.stage start = 1  {
       %4 = arith.muli %1#0, %1#1 : i32
       loopschedule.register %4 : i32
     } : i32
-    %3 = loopschedule.pipeline_stage start = 4  {
+    %3 = loopschedule.pipeline.stage start = 4  {
       %4 = arith.addi %arg3, %2 : i32
       loopschedule.register %4 : i32
     } : i32
@@ -224,16 +224,16 @@ module {
     %c0 = arith.constant 0 : index
     %c4 = arith.constant 4 : index
     %c1 = arith.constant 1 : index
-    loopschedule.pipeline_while II =  1 trip_count =  4 iter_args(%arg2 = %c0) : (index) -> () {
+    loopschedule.pipeline II =  1 trip_count =  4 iter_args(%arg2 = %c0) : (index) -> () {
       %0 = arith.cmpi ult, %arg2, %c4 : index
       loopschedule.register %0 : i1
     } do {
-      %0:2 = loopschedule.pipeline_stage start = 0 {
+      %0:2 = loopschedule.pipeline.stage start = 0 {
         %1 = memref.load %arg0[%arg2] : memref<4xi32>
         %2 = arith.addi %arg2, %c1 : index
         loopschedule.register %1, %2 : i32, index
       } : i32, index
-      loopschedule.pipeline_stage start = 1 {
+      loopschedule.pipeline.stage start = 1 {
         memref.store %0#0, %arg1[%arg2] : memref<4xi32>
         memref.store %0#0, %arg1[%arg2] : memref<4xi32>
         loopschedule.register

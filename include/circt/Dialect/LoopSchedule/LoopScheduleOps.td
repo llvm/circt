@@ -21,10 +21,10 @@ include "circt/Dialect/LoopSchedule/LoopSchedule.td"
 class LoopScheduleOp<string mnemonic, list<Trait> traits = []> :
   Op<LoopSchedule_Dialect, mnemonic, traits>;
 
-def LoopSchedulePipelineWhileOp : LoopScheduleOp<"pipeline_while", []> {
-  let summary = "LoopSchedule dialect pipeline while-loop.";
+def LoopSchedulePipelineOp : LoopScheduleOp<"pipeline", []> {
+  let summary = "LoopSchedule dialect pipeline-loop.";
   let description = [{
-    The `loopschedule.pipeline_while` operation represents a statically scheduled
+    The `loopschedule.pipeline` operation represents a statically scheduled
     pipeline stucture that executes while a condition is true. For more details,
     see: https://llvm.discourse.group/t/rfc-representing-pipelined-loops/4171.
 
@@ -54,8 +54,8 @@ def LoopSchedulePipelineWhileOp : LoopScheduleOp<"pipeline_while", []> {
     "combinational" operations, which are currently defined to be simple
     arithmetic, comparisons, and selects from the `Standard` dialect.
 
-    The single-block `stages` region wraps `pipeline.stage`
-    operations. It has a `pipeline.terminator` terminator, which can
+    The single-block `stages` region wraps `loopschedule.pipeline.stage`
+    operations. It has a `loopschedule.terminator` terminator, which can
     both return results from the pipeline and register `iter_args`. Stages may
     access SSA values dominating the pipeline, as well as `iter_args`, which are
     block arguments.
@@ -93,9 +93,9 @@ def LoopSchedulePipelineWhileOp : LoopScheduleOp<"pipeline_while", []> {
   }];
 }
 
-def LoopSchedulePipelineStageOp : LoopScheduleOp<"pipeline_stage",
-    [HasParent<"LoopSchedulePipelineWhileOp">]> {
-  let summary = "LoopSchedule dialect while pipeline stage.";
+def LoopSchedulePipelineStageOp : LoopScheduleOp<"pipeline.stage",
+    [HasParent<"LoopSchedulePipelineOp">]> {
+  let summary = "LoopSchedule dialect pipeline stage.";
   let description = [{
     This operation has a single-block region which dictates the operations that
     may occur concurrently.
@@ -152,8 +152,8 @@ def LoopSchedulePipelineStageOp : LoopScheduleOp<"pipeline_stage",
 }
 
 def LoopScheduleRegisterOp : LoopScheduleOp<"register",
-    [ParentOneOf<["LoopSchedulePipelineWhileOp", "LoopSchedulePipelineStageOp"]>, Terminator]> {
-  let summary = "LoopSchedule dialect pipeline register.";
+    [ParentOneOf<["LoopSchedulePipelineOp", "LoopSchedulePipelineStageOp"]>, Terminator]> {
+  let summary = "LoopSchedule dialect loop register.";
   let description = [{
     The `loopschedule.register` terminates a pipeline stage and
     "registers" the values specified as operands. These values become the
@@ -172,11 +172,11 @@ def LoopScheduleRegisterOp : LoopScheduleOp<"register",
 }
 
 def LoopScheduleTerminatorOp : LoopScheduleOp<"terminator",
-    [HasParent<"LoopSchedulePipelineWhileOp">, Terminator, AttrSizedOperandSegments]> {
+    [HasParent<"LoopSchedulePipelineOp">, Terminator, AttrSizedOperandSegments]> {
   let summary = "LoopSchedule dialect terminator.";
   let description = [{
     The `loopschedule.terminator` operation represents the terminator of
-    a `loopschedule.pipeline_while`.
+    a `loopschedule.pipeline`.
 
     The `results` section accepts a variadic list of values which become the
     pipeline’s return values. These must be results of a stage, and their types
