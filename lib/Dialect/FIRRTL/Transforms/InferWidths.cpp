@@ -1484,7 +1484,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       .Case<StrictConnectOp>([&](auto op) {
         constrainTypes(op.getDest(), op.getSrc());
         constrainTypes(op.getSrc(), op.getDest());
-        //                unifyTypes(FieldRef(op.getDest(), 0), FieldRef(op.getSrc(), 0),
+        //                unifyTypes(FieldRef(op.getDest(), 0),
+        //                FieldRef(op.getSrc(), 0),
         //           op.getDest().getType().template cast<FIRRTLType>());
       })
       .Case<AttachOp>([&](auto op) {
