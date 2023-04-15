@@ -44,7 +44,7 @@ using NameUniquer = std::function<std::string(Operation *)>;
 static void legalizeFModule(FModuleOp moduleOp) {
   SmallVector<Operation *, 8> connectOps;
   moduleOp.walk([&](FConnectLike op) { connectOps.push_back(op); });
-  for (auto op : connectOps) {
+  for (auto *op : connectOps) {
     op->moveBefore(&moduleOp.getBodyBlock()->back());
     if (!op->getOperand(0).getType().cast<FIRRTLBaseType>().isPassive()) {
       OpBuilder builder(op);
