@@ -14,6 +14,7 @@ set(srcs
   ESIStdServices.cpp
   ESITranslations.cpp
   ESITypes.cpp
+  Passes/ESILowerTypes.cpp
 )
 
 set(ESI_LinkLibs
