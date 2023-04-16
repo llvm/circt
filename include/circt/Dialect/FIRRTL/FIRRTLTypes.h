@@ -81,7 +81,7 @@ public:
 
   /// Returns true if this is a non-const "passive" that which is not analog.
   bool isRegisterType() {
-    return isPassive() && !containsAnalog() && !isConst();
+    return isPassive() && !containsAnalog() && !hasConst();
   }
 
   /// Return true if this is a 'ground' type, aka a non-aggregate type.
@@ -94,6 +94,9 @@ public:
   /// Returns true if this is a 'const' type that can only hold compile-time
   /// constant values
   bool isConst();
+
+  /// Returns true if this is or contains a 'const' type
+  bool hasConst() { return isConst() || getPurelyNonConstType() != *this; }
 
   /// Return true if this is or contains an Analog type.
   bool containsAnalog() { return getRecursiveTypeProperties().containsAnalog; }

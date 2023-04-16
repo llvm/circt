@@ -345,6 +345,10 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [FieldIDTypeInterface]> {
 
     FEnumType getConstType(bool isConst);
 
+    /// Return a non-'const' version of this type with any 'const' types
+    /// recursively set to non-'const'.
+    FEnumType getPurelyNonConstType();
+
     /// Look up an element's index by name.  This returns None on failure.
     std::optional<unsigned> getElementIndex(StringAttr name);
     std::optional<unsigned> getElementIndex(StringRef name);

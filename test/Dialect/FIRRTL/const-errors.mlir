@@ -20,6 +20,26 @@ firrtl.module @test(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in 
 
 // -----
 
+// nested 'const' firrtl.reg is invalid
+firrtl.circuit "test" {
+firrtl.module @test(in %clock: !firrtl.clock) {
+  // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.bundle<a: const.uint<1>>'}}
+  %r = firrtl.reg %clock : !firrtl.clock, !firrtl.bundle<a: const.uint<1>>
+}
+}
+
+// -----
+
+// nested 'const' firrtl.regreset is invalid
+firrtl.circuit "test" {
+firrtl.module @test(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.const.bundle<a: uint<1>>) {
+  // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.bundle<a: const.uint<1>>'}}
+  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.bundle<a: uint<1>>, !firrtl.bundle<a: const.uint<1>>
+}
+}
+
+// -----
+
 // firrtl.strictconnect non-'const' to 'const' flow is invalid
 firrtl.circuit "test" {
 firrtl.module @test(in %in : !firrtl.bundle<a: uint<1>, b: sint<2>>, out %out : !firrtl.bundle<a: const.uint<1>, b: sint<2>>) {

@@ -497,9 +497,8 @@ FIRRTLBaseType FIRRTLBaseType::getConstType(bool isConst) {
 FIRRTLBaseType FIRRTLBaseType::getPurelyNonConstType() {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
       .Case<ClockType, ResetType, AsyncResetType, AnalogType, SIntType,
-            UIntType, FEnumType>(
-          [](auto type) { return type.getConstType(false); })
-      .Case<FVectorType, BundleType>(
+            UIntType>([](auto type) { return type.getConstType(false); })
+      .Case<FVectorType, BundleType, FEnumType>(
           [](auto type) { return type.getPurelyNonConstType(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
@@ -1391,6 +1390,9 @@ struct circt::firrtl::detail::FEnumTypeStorage : detail::FIRRTLBaseTypeStorage {
   uint64_t maxFieldID;
 
   RecursiveTypeProperties recProps;
+
+  /// This can hold a pointer to a purely non-const version of this type.
+  FEnumType purelyNonConstType;
 };
 
 FEnumType FEnumType::get(::mlir::MLIRContext *context,
@@ -1404,6 +1406,24 @@ ArrayRef<FEnumType::EnumElement> FEnumType::getElements() const {
 
 FEnumType FEnumType::getConstType(bool isConst) {
   return get(getContext(), getElements(), isConst);
+}
+
+FEnumType FEnumType::getPurelyNonConstType() {
+  auto *impl = getImpl();
+
+  // If we've already cached the non-const type, use it
+  if (impl->purelyNonConstType)
+    return impl->purelyNonConstType;
+
+  // Otherwise, build a non-const version
+  SmallVector<FEnumType::EnumElement, 16> newElements;
+  newElements.reserve(impl->elements.size());
+  for (auto &elt : impl->elements) {
+    newElements.push_back({elt.name, elt.type.getPurelyNonConstType()});
+  }
+  auto purelyNonConstType = FEnumType::get(getContext(), newElements, false);
+  impl->purelyNonConstType = purelyNonConstType;
+  return purelyNonConstType;
 }
 
 /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
