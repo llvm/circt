@@ -8,6 +8,7 @@ set_source_files_properties("${VERSION_CPP}" PROPERTIES GENERATED TRUE)
 add_circt_library(CIRCTSupport
   APInt.cpp
   BackedgeBuilder.cpp
+  ConversionPatterns.cpp
   CustomDirectiveImpl.cpp
   FieldRef.cpp
   JSON.cpp

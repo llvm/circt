@@ -18,6 +18,8 @@
 #include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Support/ConversionPatterns.h"
+
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -144,19 +146,6 @@ static bool isLegalOp(Operation *op) {
   bool resultsOK = llvm::none_of(op->getResultTypes(), isSignednessType);
   bool attrsOK = llvm::none_of(attrs, isSignednessAttr);
   return operandsOK && resultsOK && attrsOK;
-}
-
-// Converts a function type wrt. the given type converter.
-static FunctionType convertFunctionType(TypeConverter &typeConverter,
-                                        FunctionType type) {
-  // Convert the original function types.
-  llvm::SmallVector<Type> res, arg;
-  llvm::transform(type.getResults(), std::back_inserter(res),
-                  [&](Type t) { return typeConverter.convertType(t); });
-  llvm::transform(type.getInputs(), std::back_inserter(arg),
-                  [&](Type t) { return typeConverter.convertType(t); });
-
-  return FunctionType::get(type.getContext(), arg, res);
 }
 
 //===----------------------------------------------------------------------===//
@@ -349,69 +338,6 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
   }
 };
 
-struct TypeConversionPattern : public ConversionPattern {
-public:
-  TypeConversionPattern(MLIRContext *context, TypeConverter &converter)
-      : ConversionPattern(converter, MatchAnyOpTypeTag(), 1, context) {}
-  using ConversionPattern::ConversionPattern;
-
-  // Generic pattern which replaces an operation by one of the same type, but
-  // with converted operands and result types. Uses generic builders based on
-  // OperationState to make sure that this pattern can apply to _any_ operation
-  // which uses HWArith types.
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    llvm::SmallVector<NamedAttribute, 4> newAttrs;
-    newAttrs.reserve(op->getAttrs().size());
-    for (auto attr : op->getAttrs()) {
-      if (auto typeAttr = attr.getValue().dyn_cast<TypeAttr>()) {
-        auto innerType = typeAttr.getValue();
-        // TypeConvert::convertType doesn't handle function types, so we need to
-        // handle them manually.
-        if (auto funcType = innerType.dyn_cast<FunctionType>(); innerType) {
-          innerType = convertFunctionType(*getTypeConverter(), funcType);
-        } else {
-          innerType = getTypeConverter()->convertType(innerType);
-        }
-        newAttrs.emplace_back(attr.getName(), TypeAttr::get(innerType));
-      } else {
-        newAttrs.push_back(attr);
-      }
-    }
-
-    llvm::SmallVector<Type, 4> newResults;
-    (void)getTypeConverter()->convertTypes(op->getResultTypes(), newResults);
-
-    OperationState state(op->getLoc(), op->getName().getStringRef(), operands,
-                         newResults, newAttrs, op->getSuccessors());
-
-    for (Region &region : op->getRegions()) {
-      // TypeConverter::SignatureConversion drops argument locations, so we need
-      // to manually copy them over (a verifier in e.g. HWModule checks this).
-      llvm::SmallVector<Location, 4> argLocs;
-      for (auto arg : region.getArguments())
-        argLocs.push_back(arg.getLoc());
-
-      Region *newRegion = state.addRegion();
-      rewriter.inlineRegionBefore(region, *newRegion, newRegion->begin());
-      TypeConverter::SignatureConversion result(newRegion->getNumArguments());
-      (void)getTypeConverter()->convertSignatureArgs(
-          newRegion->getArgumentTypes(), result);
-      rewriter.applySignatureConversion(newRegion, result);
-
-      // Apply the argument locations.
-      for (auto [arg, loc] : llvm::zip(newRegion->getArguments(), argLocs))
-        arg.setLoc(loc);
-    }
-
-    Operation *newOp = rewriter.create(state);
-    rewriter.replaceOp(op, newOp->getResults());
-    return success();
-  }
-};
-
 } // namespace
 
 Type HWArithToHWTypeConverter::removeSignedness(Type type) {
@@ -497,7 +423,7 @@ public:
     // ALL other operations are converted via the TypeConversionPattern which
     // will replace an operation to an identical operation with replaced
     // result types and operands.
-    patterns.add<TypeConversionPattern>(patterns.getContext(), typeConverter);
+    patterns.add<TypeConversionPattern>(typeConverter, patterns.getContext());
 
     // Apply a full conversion - all operations must either be legal, be caught
     // by one of the HWArith patterns or be converted by the
