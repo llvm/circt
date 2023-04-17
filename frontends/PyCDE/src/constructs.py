@@ -191,7 +191,7 @@ def Mux(sel: BitVectorSignal, *data_inputs: typing.List[Signal]):
   if num_inputs == 2:
     m = comb.MuxOp(sel, data_inputs[1], data_inputs[0])
   else:
-    a = ArraySignal(data_inputs)
+    a = ArraySignal.create(data_inputs)
     a.name = "arr_" + "_".join([i.name for i in data_inputs])
     m = a[sel]
 
