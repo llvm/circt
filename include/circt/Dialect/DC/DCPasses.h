@@ -19,6 +19,9 @@ class Pass;
 namespace circt {
 namespace dc {
 
+std::unique_ptr<mlir::Pass> createDCMaterializeForksSinksPass();
+std::unique_ptr<mlir::Pass> createDCDematerializeForksSinksPass();
+
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/DC/DCPasses.h.inc"
 
