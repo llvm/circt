@@ -810,51 +810,6 @@ public:
     setAllReadyWithCond(s, inputs, output, allValid);
   }
 
-  // Builds mux logic for the given inputs and outputs.
-  // Note: it is assumed that the caller has removed the 'select' signal from
-  // the 'unwrapped' inputs and provide it as a separate argument.
-  void buildMuxLogic(RTLBuilder &s, UnwrappedIO &unwrapped,
-                     InputHandshake &select) const {
-    // ============================= Control logic =============================
-    size_t numInputs = unwrapped.inputs.size();
-    size_t selectWidth = llvm::Log2_64_Ceil(numInputs);
-    Value truncatedSelect =
-        select.data.getType().getIntOrFloatBitWidth() > selectWidth
-            ? s.truncate(select.data, selectWidth)
-            : select.data;
-
-    // Decimal-to-1-hot decoder. 'shl' operands must be identical in size.
-    auto selectZext = s.zext(truncatedSelect, numInputs);
-    auto select1h = s.shl(s.constant(numInputs, 1), selectZext);
-    auto &res = unwrapped.outputs[0];
-
-    // Mux input valid signals.
-    auto selectedInputValid =
-        s.mux(truncatedSelect, unwrapped.getInputValids());
-    // Result is valid when the selected input and the select input is valid.
-    auto selAndInputValid = s.bAnd({selectedInputValid, select.valid});
-    res.valid->setValue(selAndInputValid);
-    auto resValidAndReady = s.bAnd({selAndInputValid, res.ready});
-
-    // Select is ready when result is valid and ready (result transacting).
-    select.ready->setValue(resValidAndReady);
-
-    // Assign each input ready signal if it is currently selected.
-    for (auto [inIdx, in] : llvm::enumerate(unwrapped.inputs)) {
-      // Extract the selection bit for this input.
-      auto isSelected = s.bit(select1h, inIdx);
-
-      // '&' that with the result valid and ready, and assign to the input
-      // ready signal.
-      auto activeAndResultValidAndReady =
-          s.bAnd({isSelected, resValidAndReady});
-      in.ready->setValue(activeAndResultValidAndReady);
-    }
-
-    // ============================== Data logic ===============================
-    res.data->setValue(s.mux(truncatedSelect, unwrapped.getInputDatas()));
-  }
-
   // Builds fork logic between the single input and multiple outputs' control
   // networks. Caller is expected to handle data separately.
   void buildForkLogic(RTLBuilder &s, BackedgeBuilder &bb, InputHandshake &input,

@@ -36,10 +36,6 @@ namespace handshake {
 // 'index' types into a fixed-width type.
 Type toValidType(Type t);
 
-// Wraps a type into an ESI ChannelType type. The inner type is converted to
-// ensure comprehensability with the RTL dialects.
-esi::ChannelType esiWrapper(mlir::Type t);
-
 } // namespace handshake
 } // namespace circt
 
