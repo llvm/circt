@@ -19,6 +19,8 @@ In `dc`, there are two main classes of operations:
    * `pack/unpack` operations are used to pack/unpack values from the control- and data side of the graph. Most typically, these are used in cases of data-dependent control flow (branching).
    * `dc.node, dc.data, dc.control`: These are symbol defining/referencing operations which establish a mapping between the control and data side of the graph. `dc.data` and `dc.control` have no functional semantics, and simply serves as a means to associating a symbol with a def/use chain in the graph.
 
+Given the dialect's heavy resemblance to the `handshake` dialect, it's important to note that DC is _fully deterministic_. This means that non-deterministic operators such as `handshake.merge, handshake.control_merge` do **not** have a simple lowering (if it is even possible) to `dc`. `handshake` programs must therefore be converted or by construction not contain any of these non-deterministic operators.
+
 ## Modeling control- and data graph interactions
 When analyzing and transforming the `dc` dialect, we expect (based on the output abstraction) that there will often be a need to recursively analyze and optimize either the data- or control side of the graph, whereafter modifications must be performed in each side of the graph to maintain function semantics.
 
