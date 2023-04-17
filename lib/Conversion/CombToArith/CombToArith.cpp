@@ -231,6 +231,10 @@ void ConvertCombToArithPass::runOnOperation() {
   target.addIllegalDialect<comb::CombDialect>();
   target.addIllegalOp<hw::ConstantOp>();
   target.addLegalDialect<ArithDialect>();
+  // Arith does not have an operation equivalent to comb.parity. A lowering
+  // would result in undesirably complex logic, therefore, we mark it legal
+  // here.
+  target.addLegalOp<comb::ParityOp>();
 
   RewritePatternSet patterns(&getContext());
   TypeConverter converter;
