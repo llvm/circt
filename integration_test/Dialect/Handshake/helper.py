@@ -73,7 +73,7 @@ class HandshakeDataPort(HandshakePort):
     assert (self.isReady())
     for res in results:
       await self.waitUntilValid()
-      assert (self.data.value == res)
+      assert self.data.value == res, f"Expected {res}, got {self.data.value}"
       await RisingEdge(self.dut.clock)
 
 

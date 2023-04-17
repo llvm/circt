@@ -832,54 +832,6 @@ bool ConditionalBranchOp::isControl() {
                                       getDataOperand());
 }
 
-ParseResult SelectOp::parse(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
-  Type dataType;
-  SmallVector<Type> operandTypes;
-  llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
-  if (parser.parseOperandList(allOperands) ||
-      parser.parseOptionalAttrDict(result.attributes) ||
-      parser.parseColonType(dataType))
-    return failure();
-
-  if (allOperands.size() != 3)
-    return parser.emitError(parser.getCurrentLocation(),
-                            "Expected exactly 3 operands");
-
-  result.addTypes({dataType});
-  operandTypes.push_back(IntegerType::get(parser.getContext(), 1));
-  operandTypes.push_back(dataType);
-  operandTypes.push_back(dataType);
-  if (parser.resolveOperands(allOperands, operandTypes, allOperandLoc,
-                             result.operands))
-    return failure();
-  return success();
-}
-
-void SelectOp::print(OpAsmPrinter &p) {
-  Type type = getTrueOperand().getType();
-  p << " " << getOperands();
-  p.printOptionalAttrDict((*this)->getAttrs());
-  p << " : " << type;
-}
-
-std::string handshake::SelectOp::getOperandName(unsigned int idx) {
-  switch (idx) {
-  case 0:
-    return "sel";
-  case 1:
-    return "true";
-  case 2:
-    return "false";
-  default:
-    llvm_unreachable("Expected exactly 3 operands");
-  }
-}
-
-bool SelectOp::isControl() {
-  return getTrueOperand().getType().isa<NoneType>();
-}
-
 ParseResult SinkOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
   Type type;
