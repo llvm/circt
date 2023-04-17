@@ -1177,12 +1177,12 @@ namespace {
 struct FIRStmtParser : public FIRParser {
   explicit FIRStmtParser(Block &blockToInsertInto,
                          FIRModuleContext &moduleContext,
-                         Namespace &modNameSpace)
+                         Namespace &modNameSpace, const FIRVersion &version)
       : FIRParser(moduleContext.getConstants(), moduleContext.getLexer()),
         builder(mlir::ImplicitLocOpBuilder::atBlockEnd(
             UnknownLoc::get(getContext()), &blockToInsertInto)),
         locationProcessor(this->builder), moduleContext(moduleContext),
-        modNameSpace(modNameSpace) {}
+        modNameSpace(modNameSpace), version(version) {}
 
   ParseResult parseSimpleStmt(unsigned stmtIndent);
   ParseResult parseSimpleStmtBlock(unsigned indent);
@@ -1259,6 +1259,8 @@ private:
   ParseResult parseProbe(Value &result);
   ParseResult parseRWProbe(Value &result);
   ParseResult parseLeadingExpStmt(Value lhs);
+  ParseResult parseConnect();
+  ParseResult parseInvalidate();
 
   // Declarations
   ParseResult parseInstance();
@@ -1277,6 +1279,8 @@ private:
   FIRModuleContext &moduleContext;
 
   Namespace &modNameSpace;
+
+  const FIRVersion &version;
 };
 
 } // end anonymous namespace
@@ -1954,7 +1958,19 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
 ///      ::= register
 ///
 ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
-  switch (getToken().getKind()) {
+  auto kind = getToken().getKind();
+  /// Massage the kind based on the FIRRTL Version.
+  switch (kind) {
+  case FIRToken::kw_invalidate:
+  case FIRToken::kw_connect:
+    /// The "invalidate" and "connect" keywords were added in 3.0.0.
+    if (FIRVersion::compare(version, FIRVersion({3, 0, 0})) < 0)
+      kind = FIRToken::identifier;
+    break;
+  default:
+    break;
+  };
+  switch (kind) {
   // Statements.
   case FIRToken::kw_attach:
     return parseAttach();
@@ -1966,6 +1982,10 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseMemPort(MemDirAttr::Write);
   case FIRToken::kw_rdwr:
     return parseMemPort(MemDirAttr::ReadWrite);
+  case FIRToken::kw_connect:
+    return parseConnect();
+  case FIRToken::kw_invalidate:
+    return parseInvalidate();
   case FIRToken::lp_printf:
     return parsePrintf();
   case FIRToken::kw_skip:
@@ -2284,7 +2304,8 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 
     // We parse the substatements into their own parser, so they get inserted
     // into the specified 'when' region.
-    FIRStmtParser subParser(blockToInsertInto, moduleContext, modNameSpace);
+    FIRStmtParser subParser(blockToInsertInto, moduleContext, modNameSpace,
+                            version);
 
     // Figure out whether the body is a single statement or a nested one.
     auto stmtIndent = getIndentation();
@@ -2327,7 +2348,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   if (getToken().is(FIRToken::kw_when)) {
     // We create a sub parser for the else block.
     FIRStmtParser subParser(whenStmt.getElseBlock(), moduleContext,
-                            modNameSpace);
+                            modNameSpace, version);
     return subParser.parseSimpleStmt(whenIndent);
   }
 
@@ -2645,6 +2666,46 @@ ParseResult FIRStmtParser::parseRefReleaseInitial() {
   auto pred = moduleContext.getCachedConstantInt(builder, attr, type, value);
   builder.create<RefReleaseInitialOp>(pred, dest);
 
+  return success();
+}
+
+/// connect ::= 'connect' expr expr
+ParseResult FIRStmtParser::parseConnect() {
+  auto startTok = consumeToken(FIRToken::kw_connect);
+  auto loc = startTok.getLoc();
+
+  Value lhs, rhs;
+  if (parseExp(lhs, "expected connect expression") ||
+      parseExp(rhs, "expected connect expression") || parseOptionalInfo())
+    return failure();
+
+  auto lhsType = lhs.getType().dyn_cast<FIRRTLBaseType>();
+  auto rhsType = rhs.getType().dyn_cast<FIRRTLBaseType>();
+  if (!lhsType || !rhsType)
+    return emitError(loc, "cannot connect reference types");
+  // TODO: Once support lands for agg-of-ref, add test for this check!
+  if (lhsType.containsReference() || rhsType.containsReference())
+    return emitError(loc, "cannot connect types containing references");
+
+  if (!areTypesEquivalent(lhsType, rhsType))
+    return emitError(loc, "cannot connect non-equivalent type ")
+           << rhsType << " to " << lhsType;
+
+  locationProcessor.setLoc(loc);
+  emitConnect(builder, lhs, rhs);
+  return success();
+}
+
+/// invalidate ::= 'invalidate' expr
+ParseResult FIRStmtParser::parseInvalidate() {
+  auto startTok = consumeToken(FIRToken::kw_invalidate);
+
+  Value lhs;
+  if (parseExp(lhs, "expected connect expression") || parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(startTok.getLoc());
+  emitInvalidate(lhs);
   return success();
 }
 
@@ -3612,7 +3673,7 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
   }
 
   FIRStmtParser stmtParser(*moduleOp.getBodyBlock(), moduleContext,
-                           modNameSpace);
+                           modNameSpace, version);
 
   // Parse the moduleBlock.
   auto result = stmtParser.parseSimpleStmtBlock(deferredModule.indent);

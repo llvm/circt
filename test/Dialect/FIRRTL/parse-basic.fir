@@ -1,5 +1,6 @@
-; RUN: circt-translate -import-firrtl -verify-diagnostics %s | circt-opt | FileCheck %s
+; RUN: circt-translate -import-firrtl -verify-diagnostics -split-input-file %s | circt-opt | FileCheck %s
 
+FIRRTL version 2.1.0
 circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint, out %out: !firrtl.uint<8>) {
@@ -1289,3 +1290,18 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module ProbeInvalidate:
     output p : Probe<UInt<1>>
     p is invalid
+
+;// -----
+
+FIRRTL version 3.0.0
+circuit Foo_v3p0p0:
+  module Foo_v3p0p0:
+    input a: UInt<1>
+    output b: UInt<1>
+
+    ; CHECK: firrtl.strictconnect %b, %a
+    connect b, a
+
+    ; CHECK: [[INV:%.+]]  = firrtl.invalidvalue : !firrtl.uint<1>
+    ; CHECK-NEXT: firrtl.strictconnect %b, [[INV]] : !firrtl.uint<1>
+    invalidate b
