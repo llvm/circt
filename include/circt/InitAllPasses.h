@@ -23,6 +23,7 @@
 #include "circt/Dialect/FSM/FSMPasses.h"
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
+#include "circt/Dialect/DC/DCPasses.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "circt/Dialect/MSFT/MSFTPasses.h"
 #include "circt/Dialect/Pipeline/PipelinePasses.h"
@@ -44,6 +45,7 @@ inline void registerAllPasses() {
   // Standard Passes
   arc::registerPasses();
   calyx::registerPasses();
+  dc::registerPasses();
   esi::registerESIPasses();
   firrtl::registerPasses();
   fsm::registerPasses();
