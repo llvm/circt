@@ -98,6 +98,33 @@ private:
 //===----------------------------------------------------------------------===//
 
 namespace {
+/// The FIRRTL specification version.
+struct FIRVersion {
+  uint32_t major = 1;
+  uint32_t minor = 0;
+  uint32_t patch = 0;
+
+  /// Three way compare of one FIRRTL version with another FIRRTL version.
+  /// Return 1 if the first version is greater than the second version, -1 if
+  /// the first version is less than the second version, and 0 if the versions
+  /// are equal.
+  static int compare(const FIRVersion &a, const FIRVersion &b) {
+    if (a.major > b.major)
+      return 1;
+    if (a.major < b.major)
+      return -1;
+    if (a.minor > b.minor)
+      return 1;
+    if (a.minor < b.minor)
+      return -1;
+    if (a.patch > b.patch)
+      return 1;
+    if (a.patch < b.patch)
+      return -1;
+    return 0;
+  }
+};
+
 /// This class implements logic common to all levels of the parser, including
 /// things like types and helper logic.
 struct FIRParser {
@@ -220,8 +247,7 @@ struct FIRParser {
   ParseResult parseIntLit(int32_t &result, const Twine &message);
 
   // Parse 'verLit' into specified value
-  ParseResult parseVersionLit(uint32_t &major, uint32_t &minor, uint32_t &patch,
-                              const Twine &message);
+  ParseResult parseVersionLit(FIRVersion &version, const Twine &message);
 
   // Parse ('<' intLit '>')? setting result to -1 if not present.
   template <typename T>
@@ -540,8 +566,8 @@ ParseResult FIRParser::parseIntLit(int32_t &result, const Twine &message) {
 
 /// versionLit    ::= version
 /// deconstruct a version literal into parts and returns those.
-ParseResult FIRParser::parseVersionLit(uint32_t &major, uint32_t &minor,
-                                       uint32_t &patch, const Twine &message) {
+ParseResult FIRParser::parseVersionLit(FIRVersion &version,
+                                       const Twine &message) {
   auto spelling = getTokenSpelling();
   if (getToken().getKind() != FIRToken::version)
     return emitError(message), failure();
@@ -553,10 +579,10 @@ ParseResult FIRParser::parseVersionLit(uint32_t &major, uint32_t &minor,
       c.getAsInteger(10, cInt))
     return emitError("failed to parse version string"), failure();
   consumeToken(FIRToken::version);
-  major = aInt.getLimitedValue(UINT32_MAX);
-  minor = bInt.getLimitedValue(UINT32_MAX);
-  patch = cInt.getLimitedValue(UINT32_MAX);
-  if (major != aInt || minor != bInt || patch != cInt)
+  version.major = aInt.getLimitedValue(UINT32_MAX);
+  version.minor = bInt.getLimitedValue(UINT32_MAX);
+  version.patch = cInt.getLimitedValue(UINT32_MAX);
+  if (version.major != aInt || version.minor != bInt || version.patch != cInt)
     return emitError("integers out of range"), failure();
   return success();
 }
@@ -3177,6 +3203,10 @@ private:
 
   SmallVector<DeferredModuleToParse, 0> deferredModules;
   ModuleOp mlirModule;
+
+  /// Default Version to use when parsing.  Deviations from this version will
+  /// cause different behavior.
+  FIRVersion version;
 };
 
 } // end anonymous namespace
@@ -3626,19 +3656,14 @@ ParseResult FIRCircuitParser::parseCircuit(
     mlir::TimingScope &ts) {
 
   auto indent = getIndentation();
-  uint32_t verMajor(1), verMinor(0), verPatch(0);
   if (consumeIf(FIRToken::kw_FIRRTL)) {
     if (!indent.has_value())
       return emitError("'FIRRTL' must be first token on its line"), failure();
     if (parseToken(FIRToken::kw_version, "expected version after 'FIRRTL'") ||
-        parseVersionLit(verMajor, verMinor, verPatch,
-                        "expected version literal"))
+        parseVersionLit(version, "expected version literal"))
       return failure();
     indent = getIndentation();
   }
-  (void)verMajor;
-  (void)verMinor;
-  (void)verPatch;
 
   if (!indent.has_value())
     return emitError("'circuit' must be first token on its line"), failure();
