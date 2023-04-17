@@ -67,7 +67,7 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [FConnectLike]> {
   let hasVerifier = 1;
 
   let assemblyFormat =
-    "$dest `,` $src  attr-dict `:` custom<ConstDecay>(qualified(type($dest)), qualified(type($src)))";
+    "$dest `,` $src  attr-dict `:` custom<ConstDecay>(type($dest), type($src))";
 }
 
 def RefDefineOp : FIRRTLOp<"ref.define", [FConnectLike]> {
@@ -91,7 +91,7 @@ def RefDefineOp : FIRRTLOp<"ref.define", [FConnectLike]> {
   let hasVerifier = 1;
 
   let assemblyFormat =
-    "$dest `,` $src  attr-dict `:` custom<ConstDecay>(qualified(type($dest)), qualified(type($src)))";
+    "$dest `,` $src  attr-dict `:` custom<ConstDecay>(type($dest), type($src))";
 
   let extraClassDeclaration = [{
     static ConnectBehaviorKind getConnectBehaviorKind() {
