@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -442,22 +443,21 @@ LogicalResult ModuleLowering::lowerState(MemoryOp memOp) {
   return success();
 }
 
-LogicalResult ModuleLowering::lowerState(MemoryReadPortOp memReadOp) {
-  auto info = getOrCreateClockLowering(memReadOp.getClock());
-  auto enable = info.clock.materializeValue(memReadOp.getEnable());
-  auto address = info.clock.materializeValue(memReadOp.getAddress());
-
+static Value lowerMemoryReadPortOp(MemoryReadPortOp memReadOp,
+                                   OpBuilder &builder) {
   // Lowering MemoryReadOp to LLVM inserts a conditional branch to only perform
   // the read when the address is within bounds. By inserting an IfOp here I
   // hope that LLVM is able to merge them.
-  if (enable) {
-    Value newRead =
-        info.clock.builder
+  Value newRead;
+  if (memReadOp.getEnable()) {
+    newRead =
+        builder
             .create<scf::IfOp>(
-                memReadOp.getLoc(), enable,
+                memReadOp.getLoc(), memReadOp.getEnable(),
                 [&](OpBuilder &builder, Location loc) {
                   Value read = builder.create<MemoryReadOp>(
-                      memReadOp.getLoc(), memReadOp.getMemory(), address);
+                      memReadOp.getLoc(), memReadOp.getMemory(),
+                      memReadOp.getAddress());
                   builder.create<scf::YieldOp>(memReadOp.getLoc(), read);
                 },
                 [&](OpBuilder &builder, Location loc) {
@@ -466,15 +466,22 @@ LogicalResult ModuleLowering::lowerState(MemoryReadPortOp memReadOp) {
                   builder.create<scf::YieldOp>(memReadOp.getLoc(), zero);
                 })
             ->getResult(0);
-    memReadOp.replaceAllUsesWith(newRead);
   } else {
-    Value newRead = info.clock.builder.create<MemoryReadOp>(
-        memReadOp.getLoc(), memReadOp.getMemory(), address);
-    memReadOp.replaceAllUsesWith(newRead);
+    newRead = builder.create<MemoryReadOp>(
+        memReadOp.getLoc(), memReadOp.getMemory(), memReadOp.getAddress());
   }
-
+  memReadOp.replaceAllUsesWith(newRead);
   builder.setInsertionPointAfter(memReadOp);
   memReadOp.erase();
+  return newRead;
+}
+
+LogicalResult ModuleLowering::lowerState(MemoryReadPortOp memReadOp) {
+  auto info = getOrCreateClockLowering(memReadOp.getClock());
+
+  auto newRead = lowerMemoryReadPortOp(memReadOp, builder);
+  info.clock.materializeValue(newRead);
+
   return success();
 }
 
@@ -561,6 +568,17 @@ LogicalResult ModuleLowering::lowerState(TapOp tapOp) {
 }
 
 LogicalResult ModuleLowering::cleanup() {
+  // Lower remaining MemoryReadPort ops to MemoryRead ops. This can occur when
+  // the fan-in of a MemoryReadPortOp contains another such operation and is
+  // materialized before the one in the fan-in as the MemoryReadPortOp is not
+  // marked as a fan-in blocking/termination operation in `shouldMaterialize`.
+  // Adding it there can lead to dominance issues which would then have to be
+  // resolved instead.
+  moduleOp->walk([this](MemoryReadPortOp memReadOp) {
+    builder.setInsertionPoint(memReadOp);
+    lowerMemoryReadPortOp(memReadOp, builder);
+  });
+
   // Establish an order among all operations (to avoid an O(n²) pathological
   // pattern with `moveBefore`) and replicate read operations into the blocks
   // where they have uses. The established order is used to create the read
