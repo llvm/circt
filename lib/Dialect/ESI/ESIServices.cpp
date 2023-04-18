@@ -268,7 +268,8 @@ struct ESIConnectServicesPass
     : public ESIConnectServicesBase<ESIConnectServicesPass>,
       msft::PassCommon {
 
-  ESIConnectServicesPass(const ServiceGeneratorDispatcher& gen) : genDispatcher(gen) {}
+  ESIConnectServicesPass(const ServiceGeneratorDispatcher &gen)
+      : genDispatcher(gen) {}
   ESIConnectServicesPass()
       : genDispatcher(ServiceGeneratorDispatcher::globalDispatcher()) {}
 

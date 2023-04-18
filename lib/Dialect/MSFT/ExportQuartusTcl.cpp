@@ -291,7 +291,7 @@ LogicalResult TclEmitter::emit(Operation *hwMod, StringRef outputFile) {
 
   // Iterate through all the "instances" for 'hwMod' and produce a tcl proc for
   // each one.
-  for (const auto& tclOpsForInstancesKV : tclOpsForModInstance[hwMod]) {
+  for (const auto &tclOpsForInstancesKV : tclOpsForModInstance[hwMod]) {
     StringAttr instName = tclOpsForInstancesKV.first;
     os << "proc {{" << state.symbolRefs.size() << "}}";
     if (instName)

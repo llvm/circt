@@ -52,9 +52,9 @@ PrimitiveDB::DimPrimitiveType &PrimitiveDB::getLeaf(PhysLocationAttr loc) {
 
 void PrimitiveDB::foreach (
     function_ref<void(PhysLocationAttr)> callback) const {
-  for (const auto& x : placements)
-    for (const auto& y : x.second)
-      for (const auto& n : y.second)
+  for (const auto &x : placements)
+    for (const auto &y : x.second)
+      for (const auto &n : y.second)
         for (auto p : n.second)
           callback(PhysLocationAttr::get(ctxt, PrimitiveTypeAttr::get(ctxt, p),
                                          x.first, y.first, n.first));
@@ -381,7 +381,7 @@ void PlacementDB::walkPlacements(
                                                placements.end());
   maybeSort(cols, llvm::transformOptional(walkOrder,
                                           [](auto wo) { return wo.columns; }));
-  for (const auto& colF : cols) {
+  for (const auto &colF : cols) {
     size_t x = colF.first;
     if (x < xmin || x > xmax)
       continue;
@@ -391,19 +391,19 @@ void PlacementDB::walkPlacements(
     SmallVector<std::pair<size_t, DimNumMap>> rows(yMap.begin(), yMap.end());
     maybeSort(rows, llvm::transformOptional(walkOrder,
                                             [](auto wo) { return wo.rows; }));
-    for (const auto& rowF : rows) {
+    for (const auto &rowF : rows) {
       size_t y = rowF.first;
       if (y < ymin || y > ymax)
         continue;
       DimNumMap numMap = rowF.second;
 
       // Num loop.
-      for (auto & numF : numMap) {
+      for (auto &numF : numMap) {
         size_t num = numF.getFirst();
         DimDevType devMap = numF.getSecond();
 
         // DevType loop.
-        for (auto & devF : devMap) {
+        for (auto &devF : devMap) {
           PrimitiveType devtype = devF.getFirst();
           if (primType && devtype != *primType)
             continue;
