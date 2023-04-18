@@ -23,6 +23,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 
 #include <memory>
+#include <utility>
 
 using namespace circt;
 using namespace circt::esi;
@@ -252,7 +253,7 @@ ServiceGeneratorDispatcher &ServiceGeneratorDispatcher::globalDispatcher() {
 
 void ServiceGeneratorDispatcher::registerGenerator(StringRef implType,
                                                    ServiceGeneratorFunc gen) {
-  genLookupTable[implType] = gen;
+  genLookupTable[implType] = std::move(gen);
 }
 
 //===----------------------------------------------------------------------===//
@@ -267,7 +268,7 @@ struct ESIConnectServicesPass
     : public ESIConnectServicesBase<ESIConnectServicesPass>,
       msft::PassCommon {
 
-  ESIConnectServicesPass(ServiceGeneratorDispatcher gen) : genDispatcher(gen) {}
+  ESIConnectServicesPass(const ServiceGeneratorDispatcher& gen) : genDispatcher(gen) {}
   ESIConnectServicesPass()
       : genDispatcher(ServiceGeneratorDispatcher::globalDispatcher()) {}
 
@@ -551,7 +552,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
     hw::HWMutableModuleLike mod,
     ArrayRef<RequestToClientConnectionOp> toClientReqs,
     ArrayRef<RequestToServerConnectionOp> toServerReqs) {
-  auto ctxt = mod.getContext();
+  auto *ctxt = mod.getContext();
   Block *body = &mod->getRegion(0).front();
 
   // Track initial operand/result counts and the new IO.
@@ -646,7 +647,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
       else
         newAttrs.push_back(attr);
     }
-    auto newHWInst = b.insert(
+    auto *newHWInst = b.insert(
         Operation::create(inst->getLoc(), inst->getName(), newResultTypes,
                           newOperands, b.getDictionaryAttr(newAttrs),
                           inst->getSuccessors(), inst->getRegions()));

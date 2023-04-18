@@ -23,7 +23,7 @@ using namespace circt::esi::detail;
 using namespace circt::hw;
 
 /// Return a attribute with the specified suffix appended.
-static StringAttr appendToRtlName(StringAttr base, Twine suffix) {
+static StringAttr appendToRtlName(StringAttr base, const Twine &suffix) {
   auto *context = base.getContext();
   return StringAttr::get(context, base.getValue() + suffix);
 }
@@ -79,13 +79,13 @@ public:
   /// name and suffix. The specification for the new port is given by `newPort`
   /// and is recorded internally. Any changes to 'newPort' after calling this
   /// will not be reflected in the modules new port list.
-  Value createNewInput(PortInfo origPort, Twine suffix, Type type,
+  Value createNewInput(PortInfo origPort, const Twine &suffix, Type type,
                        PortInfo &newPort);
   /// Same as above. 'output' is the value fed into the new port and is required
   /// if 'body' is non-null. Important note: cannot be a backedge which gets
   /// replaced since this isn't attached to an op until later in the pass.
-  void createNewOutput(PortInfo origPort, Twine suffix, Type type, Value output,
-                       PortInfo &newPort);
+  void createNewOutput(PortInfo origPort, const Twine &suffix, Type type,
+                       Value output, PortInfo &newPort);
 
   bool shouldFlattenStructs() const { return flattenStructs; }
 
@@ -347,7 +347,7 @@ private:
 };
 } // namespace
 
-Value ChannelRewriter::createNewInput(PortInfo origPort, Twine suffix,
+Value ChannelRewriter::createNewInput(PortInfo origPort, const Twine &suffix,
                                       Type type, PortInfo &newPort) {
   newPort = PortInfo{appendToRtlName(origPort.name, suffix.isTriviallyEmpty()
                                                         ? ""
@@ -364,7 +364,7 @@ Value ChannelRewriter::createNewInput(PortInfo origPort, Twine suffix,
   return body->addArgument(type, origPort.loc);
 }
 
-void ChannelRewriter::createNewOutput(PortInfo origPort, Twine suffix,
+void ChannelRewriter::createNewOutput(PortInfo origPort, const Twine &suffix,
                                       Type type, Value output,
                                       PortInfo &newPort) {
   newPort = PortInfo{appendToRtlName(origPort.name, suffix.isTriviallyEmpty()
@@ -796,11 +796,11 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
 
 static StringRef getOperandName(Value operand) {
   if (BlockArgument arg = operand.dyn_cast<BlockArgument>()) {
-    auto op = arg.getParentBlock()->getParentOp();
+    auto *op = arg.getParentBlock()->getParentOp();
     if (op && hw::isAnyModule(op))
       return hw::getModuleArgumentName(op, arg.getArgNumber());
   } else {
-    auto srcOp = operand.getDefiningOp();
+    auto *srcOp = operand.getDefiningOp();
     if (auto instOp = dyn_cast<InstanceOp>(srcOp))
       return instOp.getInstanceName();
 

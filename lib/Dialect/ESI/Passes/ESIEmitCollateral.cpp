@@ -105,7 +105,7 @@ static llvm::json::Value toJSON(Attribute attr) {
       })
       .Case([&](DictionaryAttr a) {
         llvm::json::Object dict;
-        for (auto &entry : a.getValue())
+        for (const auto &entry : a.getValue())
           dict[entry.getName().getValue()] = toJSON(entry.getValue());
         return dict;
       })
