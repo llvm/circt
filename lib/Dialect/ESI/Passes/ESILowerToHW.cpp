@@ -148,7 +148,7 @@ public:
   RemoveWrapUnwrap(MLIRContext *context)
       : ConversionPattern(MatchAnyOpTypeTag(), /*benefit=*/1, context) {}
 
-  virtual LogicalResult
+  LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     Value valid, ready, data;
@@ -314,7 +314,7 @@ public:
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(CosimEndpointOp, OpAdaptor operands,
+  matchAndRewrite(CosimEndpointOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final;
 
 private:
@@ -474,7 +474,7 @@ public:
 
 void ESItoHWPass::runOnOperation() {
   auto top = getOperation();
-  auto ctxt = &getContext();
+  auto *ctxt = &getContext();
 
   // Set up a conversion and give it a set of laws.
   ConversionTarget pass1Target(*ctxt);

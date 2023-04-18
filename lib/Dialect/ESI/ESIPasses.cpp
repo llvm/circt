@@ -52,7 +52,7 @@ ESIHWBuilder::ESIHWBuilder(Operation *top)
       width(StringAttr::get(getContext(), "WIDTH")) {
 
   auto regions = top->getRegions();
-  if (regions.size() == 0) {
+  if (regions.empty()) {
     top->emitError("ESI HW Builder needs a region to insert HW.");
   }
   auto &region = regions.front();
