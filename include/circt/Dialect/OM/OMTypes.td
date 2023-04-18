@@ -27,4 +27,10 @@ def ClassType : TypeDef<OMDialect, "Class", []> {
   }];
 }
 
+def ReferenceType : TypeDef<OMDialect, "Reference", []> {
+  let summary = "A type that represents a reference to a hardware entity.";
+
+  let mnemonic = "ref";
+}
+
 #endif // CIRCT_DIALECT_OM_OMTYPES_TD
