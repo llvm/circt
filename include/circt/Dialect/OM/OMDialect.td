@@ -32,6 +32,9 @@ def OMDialect : Dialect {
   let extraClassDeclaration = [{
     /// Register all OM types.
     void registerTypes();
+
+    /// Register all OM types.
+    void registerAttributes();
   }];
 }
 

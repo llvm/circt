@@ -9,6 +9,7 @@
 add_circt_dialect_library(
   CIRCTOM
 
+  OMAttributes.cpp
   OMDialect.cpp
   OMOps.cpp
   OMTypes.cpp

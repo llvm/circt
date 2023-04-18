@@ -17,6 +17,8 @@ include "mlir/IR/OpBase.td"
 
 include "circt/Dialect/OM/OMDialect.td"
 
+include "circt/Dialect/OM/OMAttributes.td"
+
 include "circt/Dialect/OM/OMTypes.td"
 
 include "circt/Dialect/OM/OMOps.td"
