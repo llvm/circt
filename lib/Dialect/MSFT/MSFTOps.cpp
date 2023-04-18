@@ -541,9 +541,8 @@ MSFTModuleOp::addPorts(ArrayRef<std::pair<StringAttr, Type>> inputs,
 }
 
 // Remove the ports at the specified indexes.
-SmallVector<unsigned>
-MSFTModuleOp::removePorts(const llvm::BitVector &inputs,
-                          const llvm::BitVector &outputs) {
+SmallVector<unsigned> MSFTModuleOp::removePorts(llvm::BitVector inputs,
+                                                llvm::BitVector outputs) {
   MLIRContext *ctxt = getContext();
   FunctionType ftype = getFunctionType();
   Block *body = getBodyBlock();
@@ -625,7 +624,7 @@ void MSFTModuleOp::appendOutputs(
 }
 
 void MSFTModuleOp::build(OpBuilder &builder, OperationState &result,
-                         StringAttr name, const hw::ModulePortInfo &ports,
+                         StringAttr name, hw::ModulePortInfo ports,
                          ArrayRef<NamedAttribute> params) {
   buildModule(builder, result, name, ports);
 
