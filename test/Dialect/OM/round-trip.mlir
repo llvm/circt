@@ -78,11 +78,16 @@ om.class @NestedField4() {
   %1 = om.object.field %0, [@foo, @bar, @baz] : (!om.class.type<@NestedField3>) -> i1
 }
 
+// CHECK-LABEL: @ReferenceParameter
+// CHECK-SAME: !om.ref
 om.class @ReferenceParameter(%arg0: !om.ref) {
   om.class.field @myref, %arg0 : !om.ref
 }
 
+// CHECK-LABEL: @ReferenceConstant
 om.class @ReferenceConstant() {
+  // CHECK: %[[const:.+]] = om.constant #om.ref<<@A::@inst_1>> : !om.ref
   %0 = om.constant #om.ref<#hw.innerNameRef<@A::@inst_1>> : !om.ref
+  // CHECK: om.class.field @myref, %[[const]] : !om.ref
   om.class.field @myref, %0 : !om.ref
 }

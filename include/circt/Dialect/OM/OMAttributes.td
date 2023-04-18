@@ -14,5 +14,22 @@
 #define CIRCT_DIALECT_OM_OMATTRIBUTES_TD
 
 include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/BuiltinAttributeInterfaces.td"
+
+def ReferenceAttr : AttrDef<OMDialect, "Reference", [TypedAttrInterface]> {
+  let mnemonic = "ref";
+
+  let parameters = (ins
+    "circt::hw::InnerRefAttr":$innerRef
+  );
+
+  let assemblyFormat = [{
+    `<` $innerRef `>`
+  }];
+
+  let extraClassDeclaration = [{
+    mlir::Type getType();
+  }];
+}
 
 #endif // CIRCT_DIALECT_OM_OMATTRIBUTES_TD

@@ -13,9 +13,20 @@
 
 #include "circt/Dialect/OM/OMAttributes.h"
 #include "circt/Dialect/OM/OMDialect.h"
+#include "circt/Dialect/OM/OMTypes.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/TypeSwitch.h"
+
+using namespace mlir;
+using namespace circt::om;
 
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/OM/OMAttributes.cpp.inc"
+
+Type circt::om::ReferenceAttr::getType() {
+  return ReferenceType::get(getContext());
+}
 
 void circt::om::OMDialect::registerAttributes() {
   addAttributes<
