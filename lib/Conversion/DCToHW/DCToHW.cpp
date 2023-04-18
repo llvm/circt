@@ -37,6 +37,8 @@ using namespace circt;
 using namespace circt::dc;
 using namespace circt::hw;
 
+#ifdef false
+
 using NameUniquer = std::function<std::string(Operation *)>;
 
 static Type esiWrap(Type type) {
@@ -1116,6 +1118,15 @@ public:
 
 // TODO: remember to consider fork-sink materialization; must be run prior.
 // Just check it, like we do for handshake.
+
+#else
+
+class DCToHWPass : public DCToHWBase<DCToHWPass> {
+public:
+  void runOnOperation() override {}
+};
+
+#endif
 
 std::unique_ptr<mlir::Pass> circt::createDCToHWPass() {
   return std::make_unique<DCToHWPass>();
