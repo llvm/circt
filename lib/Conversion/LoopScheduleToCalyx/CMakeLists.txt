@@ -1,5 +1,5 @@
-add_circt_conversion_library(CIRCTPipelineToCalyx
-  PipelineToCalyx.cpp
+add_circt_conversion_library(CIRCTLoopScheduleToCalyx
+  LoopScheduleToCalyx.cpp
 
   DEPENDS
   CIRCTConversionPassIncGen
@@ -10,7 +10,7 @@ add_circt_conversion_library(CIRCTPipelineToCalyx
   LINK_LIBS PUBLIC
   CIRCTCalyx
   CIRCTCalyxTransforms
-  CIRCTPipelineOps
+  CIRCTLoopSchedule
   MLIRIR
   MLIRPass
   MLIRArithDialect

@@ -1,5 +1,5 @@
-add_circt_library(CIRCTAffineToPipeline
-  AffineToPipeline.cpp
+add_circt_library(CIRCTAffineToLoopSchedule
+  AffineToLoopSchedule.cpp
 
   DEPENDS
   CIRCTConversionPassIncGen
@@ -9,5 +9,5 @@ add_circt_library(CIRCTAffineToPipeline
   MLIRPass
   CIRCTScheduling
   CIRCTSchedulingAnalysis
-  CIRCTPipelineOps
+  CIRCTLoopSchedule
   )

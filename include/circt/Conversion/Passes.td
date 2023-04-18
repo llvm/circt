@@ -19,16 +19,16 @@ include "mlir/Pass/PassBase.td"
 // AffineToPipeline
 //===----------------------------------------------------------------------===//
 
-def AffineToPipeline : Pass<"convert-affine-to-pipeline", "mlir::func::FuncOp"> {
-  let summary = "Convert Affine dialect to Pipeline pipelines";
+def AffineToLoopSchedule : Pass<"convert-affine-to-loopschedule", "mlir::func::FuncOp"> {
+  let summary = "Convert Affine dialect to LoopSchedule scheduled loops";
   let description = [{
     This pass analyzes Affine loops and control flow, creates a Scheduling
     problem using the Calyx operator library, solves the problem, and lowers
-    the loops to a Pipeline pipeline.
+    the loops to a LoopSchedule.
   }];
-  let constructor = "circt::createAffineToPipeline()";
+  let constructor = "circt::createAffineToLoopSchedule()";
   let dependentDialects = [
-    "circt::pipeline::PipelineDialect",
+    "circt::loopschedule::LoopScheduleDialect",
     "mlir::arith::ArithDialect",
     "mlir::cf::ControlFlowDialect",
     "mlir::memref::MemRefDialect",
@@ -162,17 +162,17 @@ def SCFToCalyx : Pass<"lower-scf-to-calyx", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// PipelineToCalyx
+// LoopScheduleToCalyx
 //===----------------------------------------------------------------------===//
 
-def PipelineToCalyx : Pass<"lower-static-logic-to-calyx", "mlir::ModuleOp"> {
-  let summary = "Lower Pipeline to Calyx";
+def LoopScheduleToCalyx : Pass<"lower-loopschedule-to-calyx", "mlir::ModuleOp"> {
+  let summary = "Lower LoopSchedule to Calyx";
   let description = [{
-    This pass lowers Pipeline to Calyx.
+    This pass lowers LoopSchedule to Calyx.
   }];
-  let constructor = "circt::createPipelineToCalyxPass()";
+  let constructor = "circt::createLoopScheduleToCalyxPass()";
   let dependentDialects = [
-    "calyx::CalyxDialect", "::mlir::scf::SCFDialect", "hw::HWDialect",
+    "calyx::CalyxDialect", "loopschedule::LoopScheduleDialect", "hw::HWDialect",
     "comb::CombDialect"
   ];
   let options = [
