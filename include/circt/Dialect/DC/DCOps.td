@@ -120,6 +120,70 @@ def FuncOp : Op<DCDialect, "func", [
   }];
 }
 
+def CallOp : Op<DCDialect, "call",
+    [CallOpInterface, MemRefsNormalizable,
+     DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "call operation";
+  let description = [{
+    The `dc.call` operation represents a direct call to a function that is
+    within the same symbol scope as the call. The operands and result types of
+    the call must match the specified function type. The callee is encoded as a
+    symbol reference attribute named "callee".
+
+    Example:
+
+    ```mlir
+    %2 = dc.call @my_add(%0, %1) : (f32, f32) -> f32
+    ```
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$callee, Variadic<AnyType>:$operands);
+  let results = (outs Variadic<AnyType>);
+
+  let builders = [
+    OpBuilder<(ins "FuncOp":$callee, CArg<"ValueRange", "{}">:$operands), [{
+      $_state.addOperands(operands);
+      $_state.addAttribute("callee", SymbolRefAttr::get(callee));
+      $_state.addTypes(callee.getFunctionType().getResults());
+    }]>,
+    OpBuilder<(ins "SymbolRefAttr":$callee, "TypeRange":$results,
+      CArg<"ValueRange", "{}">:$operands), [{
+      $_state.addOperands(operands);
+      $_state.addAttribute("callee", callee);
+      $_state.addTypes(results);
+    }]>,
+    OpBuilder<(ins "StringAttr":$callee, "TypeRange":$results,
+      CArg<"ValueRange", "{}">:$operands), [{
+      build($_builder, $_state, SymbolRefAttr::get(callee), results, operands);
+    }]>,
+    OpBuilder<(ins "StringRef":$callee, "TypeRange":$results,
+      CArg<"ValueRange", "{}">:$operands), [{
+      build($_builder, $_state, StringAttr::get($_builder.getContext(), callee),
+            results, operands);
+    }]>];
+
+  let extraClassDeclaration = [{
+    FunctionType getCalleeType();
+
+    /// Get the argument operands to the called function.
+    operand_range getArgOperands() {
+      return {arg_operand_begin(), arg_operand_end()};
+    }
+
+    operand_iterator arg_operand_begin() { return operand_begin(); }
+    operand_iterator arg_operand_end() { return operand_end(); }
+
+    /// Return the callee of this operation.
+    CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<SymbolRefAttr>("callee");
+    }
+  }];
+
+  let assemblyFormat = [{
+    $callee `(` $operands `)` attr-dict `:` functional-type($operands, results)
+  }];
+}
+
 def ReturnOp : DCOp<"return", [Terminator, ReturnLike, HasParent<"dc::FuncOp">]> {
   let summary = "Return operation";
   let description = [{
@@ -129,7 +193,7 @@ def ReturnOp : DCOp<"return", [Terminator, ReturnLike, HasParent<"dc::FuncOp">]>
   }];
 
   let arguments = (ins Variadic<AnyType>:$operands);
-  let assemblyFormat = "$operands attr-dict `:` type($operands)";
+  let assemblyFormat = "($operands^ `:` type($operands))? attr-dict";
 }
 
 def BufferOp : DCOp<"buffer",

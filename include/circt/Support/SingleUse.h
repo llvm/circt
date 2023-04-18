@@ -22,7 +22,7 @@ LogicalResult verifyAllValuesHasOneUse(mlir::FunctionOpInterface funcOp) {
   if (funcOp.isExternal())
     return success();
 
-  auto checkUseFunc = [&](Operation *op, Value v, StringRef desc,
+  auto checkUseFunc = [&](Operation *op, Value v, Twine desc,
                           unsigned idx) -> LogicalResult {
     auto numUses = std::distance(v.getUses().begin(), v.getUses().end());
     if (numUses == 0)
@@ -32,20 +32,20 @@ LogicalResult verifyAllValuesHasOneUse(mlir::FunctionOpInterface funcOp) {
     return success();
   };
 
-  // Validate ops within the function
-  for (auto &subOp : funcOp.getOps()) {
-    for (auto res : llvm::enumerate(subOp.getResults())) {
-      if (failed(checkUseFunc(&subOp, res.value(), "result", res.index())))
-        return failure();
-    }
-  }
-
   // Validate blocks within the function
-  for (auto [block, idx] : enumerate(funcOp.getBlocks())) {
-    for (auto &barg : block->getArguments()) {
-      if (failed(checkUseFunc(funcOp.getOperation(), barg.value(),
+  for (auto [idx, block] : enumerate(funcOp.getBlocks())) {
+    // Validate ops within the block
+    for (auto &subOp : block) {
+      for (auto res : llvm::enumerate(subOp.getResults())) {
+        if (failed(checkUseFunc(&subOp, res.value(), "result", res.index())))
+          return failure();
+      }
+    }
+
+    for (auto &barg : block.getArguments()) {
+      if (failed(checkUseFunc(funcOp.getOperation(), barg,
                               "block #" + Twine(idx) + " argument",
-                              barg.index())))
+                              barg.getArgNumber())))
         return failure();
     }
   }
