@@ -27,4 +27,8 @@ def ClassType : TypeDef<OMDialect, "Class", []> {
   }];
 }
 
+def ReferenceType : TypeDef<OMDialect, "Reference", []> {
+  let mnemonic = "ref";
+}
+
 #endif // CIRCT_DIALECT_OM_OMTYPES_TD
