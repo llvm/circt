@@ -82,7 +82,7 @@ om.class @ReferenceParameter(%arg0: !om.ref) {
   om.class.field @myref, %arg0 : !om.ref
 }
 
-// om.class @ReferenceConstant() {
-//   %0 = om.constant #om.ref<#hw.innerNameRef<@A::@inst_1>> : !om.ref
-//   om.class.field @myref, %0 : !om.ref
-// }
+om.class @ReferenceConstant() {
+  %0 = om.constant #om.ref<#hw.innerNameRef<@A::@inst_1>> : !om.ref
+  om.class.field @myref, %0 : !om.ref
+}

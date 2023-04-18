@@ -1,4 +1,5 @@
-//===- OMDialect.cpp - Object Model dialect definition --------------------===//
+//===- OMAttributes.cpp - Object Model attribute definitions
+//------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,21 +7,19 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file contains the Object Model dialect definition.
+// This file contains the Object Model attribute definitions.
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/OM/OMAttributes.h"
 #include "circt/Dialect/OM/OMDialect.h"
-#include "circt/Dialect/OM/OMOps.h"
 
-#include "circt/Dialect/OM/OMDialect.cpp.inc"
+#define GET_ATTRDEF_CLASSES
+#include "circt/Dialect/OM/OMAttributes.cpp.inc"
 
-void circt::om::OMDialect::initialize() {
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/OM/OM.cpp.inc"
+void circt::om::OMDialect::registerAttributes() {
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "circt/Dialect/OM/OMAttributes.cpp.inc"
       >();
-
-  registerTypes();
-  registerAttributes();
 }
