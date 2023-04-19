@@ -1,7 +1,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 from pycde import dim, types, Input, Output, generator, System, Module
-from pycde.types import bit, Bits, StructType, TypeAlias, UInt
+from pycde.types import bit, Bits, List, StructType, TypeAlias, UInt
 from pycde.testing import unittestmodule
 from pycde.signals import Struct, UIntSignal
 
@@ -29,6 +29,10 @@ struct = types.struct({"a": types.i1, "b": types.si1})
 print(struct)
 
 dim_alias = dim(1, 8, name="myname5")
+
+# CHECK: List<Bits<5>>
+i5list = List(Bits(5))
+print(i5list)
 
 
 class Dummy(Module):
