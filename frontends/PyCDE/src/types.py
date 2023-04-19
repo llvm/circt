@@ -151,6 +151,8 @@ def _FromCirctType(type: typing.Union[ir.Type, Type]) -> Type:
     return Type.__new__(Any, type)
   if isinstance(type, esi.ChannelType):
     return Type.__new__(Channel, type)
+  if isinstance(type, esi.ListType):
+    return Type.__new__(List, type)
   return Type(type)
 
 
@@ -559,6 +561,29 @@ class Channel(Type):
       return wrap_op[0], wrap_op[1]
     else:
       raise TypeError("Unknown signaling standard")
+
+
+class List(Type):
+  """An ESI list type represents variable length data. Just like a Python list."""
+
+  def __new__(cls, element_type: Type):
+    return super(List, cls).__new__(cls, esi.ListType.get(element_type._type))
+
+  @property
+  def element_type(self):
+    return _FromCirctType(self._type.element_type)
+
+  @property
+  def _get_value_class(self):
+    from .signals import ListSignal
+    return ListSignal
+
+  def __repr__(self):
+    return f"List<{self.element_type}>"
+
+  @property
+  def inner(self):
+    return self.inner_type
 
 
 def dim(inner_type_or_bitwidth: typing.Union[Type, int],

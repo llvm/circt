@@ -91,4 +91,15 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
             return cls(circtESIAnyTypeGet(ctxt));
           },
           py::arg("self"), py::arg("ctxt") = nullptr);
+
+  mlir_type_subclass(m, "ListType", circtESITypeIsAListType)
+      .def_classmethod(
+          "get",
+          [](py::object cls, MlirType inner) {
+            return cls(circtESIListTypeGet(inner));
+          },
+          py::arg("cls"), py::arg("inner"))
+      .def_property_readonly("element_type", [](MlirType self) {
+        return circtESIListTypeGetElementType(self);
+      });
 }
