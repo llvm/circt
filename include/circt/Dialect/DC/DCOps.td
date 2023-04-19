@@ -205,13 +205,13 @@ def BufferOp : DCOp<"buffer",
 
     Example:
     ```mlir
-    %value_out = dc.buffer %value : !dc.value<i32, i1, i4>
+    %value_out = dc.buffer %value [2] : !dc.value<i32, i1, i4>
     ```
   }];
 
   let arguments = (ins
     ValueOrTokenType:$input,
-    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I64Attr, [IntMinValue<1>]>:$size,
     OptionalAttr<AnyAttr>:$initValues
   );
   let results = (outs ValueOrTokenType:$output);
@@ -219,8 +219,26 @@ def BufferOp : DCOp<"buffer",
   let assemblyFormat = "$input `[` $size `]` attr-dict `:` type($input)";
   let builders = [OpBuilder<(
     ins "Value":$input, "size_t":$size), [{
-        build(odsBuilder, odsState, input.getType(), input, odsBuilder.getI32IntegerAttr(size), {});
+        build(odsBuilder, odsState, input.getType(), input, odsBuilder.getI64IntegerAttr(size), {});
     }]>];
+  
+  let extraClassDeclaration = [{
+    // Returns the data type of this buffer, if any.
+    std::optional<TypeRange> getInnerTypes() {
+      if(auto type = getInput().getType().dyn_cast<ValueType>())
+        return type.getInnerTypes();
+      return std::nullopt;
+    }
+
+    // Returns the initial values of this buffer as a vector of int64's.
+    SmallVector<int64_t> getInitValueArray() {
+      assert(getInitValues() && "initValues attribute not set");
+      SmallVector<int64_t> values;
+      for (auto value : (*this)->getAttrOfType<ArrayAttr>("initValues"))
+        values.push_back(value.cast<IntegerAttr>().getValue().getSExtValue());
+      return values;
+    }
+  }];
 }
 
 def JoinOp : DCOp<"join"> {
