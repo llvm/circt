@@ -23,7 +23,7 @@
 // CHECK-NEXT: ********************************
 
 // Computes the maximum of all inputs
-func.func @top(%in0: i64, %in1: i64, %in2: i64, %in3: i64, %in4: i64, %in5: i64, %in6: i64, %in7: i64) -> i64 {
+handshake.func @top(%in0: i64, %in1: i64, %in2: i64, %in3: i64, %in4: i64, %in5: i64, %in6: i64, %in7: i64) -> i64 {
   %c0 = arith.cmpi slt, %in0, %in1 : i64
   %t0 = arith.select %c0, %in0, %in1 : i64
   %c1 = arith.cmpi slt, %in2, %in3 : i64

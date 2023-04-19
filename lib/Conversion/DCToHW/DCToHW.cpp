@@ -21,7 +21,6 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/BackedgeBuilder.h"
-#include "circt/Support/SingleUse.h"
 #include "circt/Support/ValueMapper.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -32,17 +31,73 @@
 #include "llvm/Support/MathExtras.h"
 #include <optional>
 
+#include "llvm/Support/Debug.h"
+
 using namespace mlir;
 using namespace circt;
 using namespace circt::dc;
 using namespace circt::hw;
 
-#ifdef false
-
 using NameUniquer = std::function<std::string(Operation *)>;
 
-static Type esiWrap(Type type) {
-  return esi::ChannelType::get(type.getContext(), type);
+// NOLINTNEXTLINE(misc-no-recursion)
+static Type tupleToStruct(TupleType tuple) {
+  auto *ctx = tuple.getContext();
+  mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
+  for (auto [i, innerType] : llvm::enumerate(tuple)) {
+    Type convertedInnerType = innerType;
+    if (auto tupleInnerType = innerType.dyn_cast<TupleType>())
+      convertedInnerType = tupleToStruct(tupleInnerType);
+    hwfields.push_back({StringAttr::get(ctx, "field" + std::to_string(i)),
+                        convertedInnerType});
+  }
+
+  return hw::StructType::get(ctx, hwfields);
+}
+
+// Converts the range of 'types' into a `hw`-dialect type. The range will be
+// converted to a `hw.struct` type.
+static Type toHWType(Type t);
+static Type toHWType(TypeRange types) {
+  if (types.size() == 1)
+    return toHWType(types.front());
+  return toHWType(mlir::TupleType::get(types[0].getContext(), types));
+}
+
+// Converts any type 't' into a `hw`-compatible type.
+// tuple -> hw.struct
+// none -> i0
+// (tuple[...] | hw.struct)[...] -> (tuple | hw.struct)[toHwType(...)]
+static Type toHWType(Type t) {
+  return TypeSwitch<Type, Type>(t)
+      .Case<TupleType>(
+          [&](TupleType tt) { return toHWType(tupleToStruct(tt)); })
+      .Case<hw::StructType>([&](auto st) {
+        llvm::SmallVector<hw::StructType::FieldInfo> structFields(
+            st.getElements());
+        for (auto &field : structFields)
+          field.type = toHWType(field.type);
+        return hw::StructType::get(st.getContext(), structFields);
+      })
+      .Case<NoneType>(
+          [&](NoneType nt) { return IntegerType::get(nt.getContext(), 0); })
+      .Default([&](Type t) { return t; });
+}
+
+static Type toESIHWType(Type t) {
+  auto *ctx = t.getContext();
+  Type outType =
+      llvm::TypeSwitch<Type, Type>(t)
+          .Case<ValueType>([&](auto vt) {
+            return esi::ChannelType::get(ctx, toHWType(vt.getInnerTypes()));
+          })
+          .Case<TokenType>([&](auto tt) {
+            return esi::ChannelType::get(ctx,
+                                         IntegerType::get(tt.getContext(), 0));
+          })
+          .Default([](auto t) { return toHWType(t); });
+
+  return outType;
 }
 
 namespace {
@@ -60,7 +115,7 @@ struct DCLoweringState {
 class ESITypeConverter : public TypeConverter {
 public:
   ESITypeConverter() {
-    addConversion([](Type type) -> Type { return esiWrap(type); });
+    addConversion([](Type type) -> Type { return toESIHWType(type); });
     addConversion([](esi::ChannelType t) -> Type { return t; });
 
     addTargetMaterialization(
@@ -85,40 +140,6 @@ public:
 
 } // namespace
 
-/// Returns a submodule name resulting from an operation, without discriminating
-/// type information.
-static std::string getBareSubModuleName(Operation *oldOp) {
-  // The dialect name is separated from the operation name by '.', which is not
-  // valid in SystemVerilog module names. In case this name is used in
-  // SystemVerilog output, replace '.' with '_'.
-  std::string subModuleName = oldOp->getName().getStringRef().str();
-  std::replace(subModuleName.begin(), subModuleName.end(), '.', '_');
-  return subModuleName;
-}
-
-static std::string getCallName(Operation *op) {
-  auto callOp = dyn_cast<handshake::InstanceOp>(op);
-  return callOp ? callOp.getModule().str() : getBareSubModuleName(op);
-}
-
-/// Extracts the type of the data-carrying type of opType. If opType is an ESI
-/// channel, getHandshakeBundleDataType extracts the data-carrying type, else,
-/// assume that opType itself is the data-carrying type.
-static Type getOperandDataType(Value op) {
-  auto opType = op.getType();
-  if (auto channelType = opType.dyn_cast<esi::ChannelType>())
-    return channelType.getInner();
-  return opType;
-}
-
-/// Filters NoneType's from the input.
-static SmallVector<Type> filterNoneTypes(ArrayRef<Type> input) {
-  SmallVector<Type> filterRes;
-  llvm::copy_if(input, std::back_inserter(filterRes),
-                [](Type type) { return !type.isa<NoneType>(); });
-  return filterRes;
-}
-
 //===----------------------------------------------------------------------===//
 // HW Sub-module Related Functions
 //===----------------------------------------------------------------------===//
@@ -140,26 +161,40 @@ struct OutputHandshake {
   Value channel;
   std::shared_ptr<Backedge> valid;
   Value ready;
-  Value data;
+  std::shared_ptr<Backedge> data;
 };
+
+// Directly connect an input handshake to an output handshake
+static void connect(InputHandshake &input, OutputHandshake &output) {
+  output.valid->setValue(input.valid);
+  input.ready->setValue(output.ready);
+}
 
 /// A helper struct that acts like a wire. Can be used to interact with the
 /// RTLBuilder when multiple built components should be connected.
 struct HandshakeWire {
-  HandshakeWire(BackedgeBuilder &bb) {
+  HandshakeWire(BackedgeBuilder &bb, Type dataType) {
     MLIRContext *ctx = dataType.getContext();
     auto i1Type = IntegerType::get(ctx, 1);
     valid = std::make_shared<Backedge>(bb.get(i1Type));
     ready = std::make_shared<Backedge>(bb.get(i1Type));
+    data = std::make_shared<Backedge>(bb.get(dataType));
   }
 
   // Functions that allow to treat a wire like an input or output port.
   // **Careful**: Such a port will not be updated when backedges are resolved.
-  InputHandshake getAsInput() { return {*valid, ready}; }
-  OutputHandshake getAsOutput() { return {valid, *ready}; }
+  InputHandshake getAsInput() {
+    return InputHandshake{
+        .channel = nullptr, .valid = *valid, .ready = ready, .data = *data};
+  }
+  OutputHandshake getAsOutput() {
+    return OutputHandshake{
+        .channel = nullptr, .valid = valid, .ready = *ready, .data = data};
+  }
 
   std::shared_ptr<Backedge> valid;
   std::shared_ptr<Backedge> ready;
+  std::shared_ptr<Backedge> data;
 };
 
 template <typename T, typename TInner>
@@ -185,9 +220,22 @@ struct UnwrappedIO {
     return extractValues<std::shared_ptr<Backedge>, OutputHandshake>(
         outputs, [](auto &hs) { return hs.valid; });
   }
+  llvm::SmallVector<Value> getInputDatas() {
+    return extractValues<Value, InputHandshake>(
+        inputs, [](auto &hs) { return hs.data; });
+  }
   llvm::SmallVector<Value> getOutputReadys() {
     return extractValues<Value, OutputHandshake>(
         outputs, [](auto &hs) { return hs.ready; });
+  }
+
+  llvm::SmallVector<Value> getOutputChannels() {
+    return extractValues<Value, OutputHandshake>(
+        outputs, [](auto &hs) { return hs.channel; });
+  }
+  llvm::SmallVector<std::shared_ptr<Backedge>> getOutputDatas() {
+    return extractValues<std::shared_ptr<Backedge>, OutputHandshake>(
+        outputs, [](auto &hs) { return hs.data; });
   }
 };
 
@@ -195,9 +243,9 @@ struct UnwrappedIO {
 // verbosity.
 // @todo: should be moved to support.
 struct RTLBuilder {
-  RTLBuilder(hw::ModulePortInfo info, OpBuilder &builder, Location loc,
-             Value clk = Value(), Value rst = Value())
-      : info(std::move(info)), b(builder), loc(loc), clk(clk), rst(rst) {}
+  RTLBuilder(Location loc, OpBuilder &builder, Value clk = Value(),
+             Value rst = Value())
+      : b(builder), loc(loc), clk(clk), rst(rst) {}
 
   Value constant(const APInt &apv, std::optional<StringRef> name = {}) {
     // Cannot use zero-width APInt's in DenseMap's, see
@@ -289,8 +337,6 @@ struct RTLBuilder {
 
     return buildNamedOp(
         [&]() { return b.create<comb::XorOp>(loc, value, allOnes); }, name);
-
-    return b.createOrFold<comb::XorOp>(loc, value, allOnes, false);
   }
 
   Value shl(Value value, Value shift, std::optional<StringRef> name = {}) {
@@ -307,7 +353,8 @@ struct RTLBuilder {
   Value pack(ValueRange values, Type structType = Type(),
              std::optional<StringRef> name = {}) {
     if (!structType)
-      structType = tupleToStruct(values.getTypes());
+      structType = toHWType(values.getTypes());
+
     return buildNamedOp(
         [&]() { return b.create<hw::StructCreateOp>(loc, structType, values); },
         name);
@@ -415,7 +462,6 @@ struct RTLBuilder {
     return muxValue;
   }
 
-  hw::ModulePortInfo info;
   OpBuilder &b;
   Location loc;
   Value clk, rst;
@@ -443,206 +489,20 @@ static Value createZeroDataConst(RTLBuilder &s, Location loc, Type type) {
       });
 }
 
-static void
-addSequentialIOOperandsIfNeeded(Operation *op,
-                                llvm::SmallVectorImpl<Value> &operands) {
-  if (op->hasTrait<mlir::OpTrait::HasClock>()) {
-    // Parent should at this point be a hw.module and have clock and reset
-    // ports.
-    auto parent = cast<hw::HWModuleOp>(op->getParentOp());
-    operands.push_back(parent.getArgument(parent.getNumArguments() - 2));
-    operands.push_back(parent.getArgument(parent.getNumArguments() - 1));
-  }
+static bool isZeroWidthType(Type type) {
+  if (auto intType = type.dyn_cast<IntegerType>())
+    return intType.getWidth() == 0;
+  if (type.isa<NoneType>())
+    return true;
+
+  return false;
 }
 
-template <typename T>
-class DCConversionPattern : public OpConversionPattern<T> {
-public:
-  DCConversionPattern(ESITypeConverter &typeConverter, MLIRContext *context,
-                      OpBuilder &submoduleBuilder, DCLoweringState &ls)
-      : OpConversionPattern<T>::OpConversionPattern(typeConverter, context),
-        submoduleBuilder(submoduleBuilder), ls(ls) {}
-
-  using OpAdaptor = typename T::Adaptor;
-
-  void setAllReadyWithCond(RTLBuilder &s, ArrayRef<InputHandshake> inputs,
-                           OutputHandshake &output, Value cond) const {
-    auto validAndReady = s.bAnd({output.ready, cond});
-    for (auto &input : inputs)
-      input.ready->setValue(validAndReady);
-  }
-
-  void buildJoinLogic(RTLBuilder &s, ArrayRef<InputHandshake> inputs,
-                      OutputHandshake &output) const {
-    llvm::SmallVector<Value> valids;
-    for (auto &input : inputs)
-      valids.push_back(input.valid);
-    Value allValid = s.bAnd(valids);
-    output.valid->setValue(allValid);
-    setAllReadyWithCond(s, inputs, output, allValid);
-  }
-
-  // Builds mux logic for the given inputs and outputs.
-  // Note: it is assumed that the caller has removed the 'select' signal from
-  // the 'unwrapped' inputs and provide it as a separate argument.
-  void buildMuxLogic(RTLBuilder &s, UnwrappedIO &unwrapped,
-                     InputHandshake &select) const {
-    // ============================= Control logic =============================
-    size_t numInputs = unwrapped.inputs.size();
-    size_t selectWidth = llvm::Log2_64_Ceil(numInputs);
-    Value truncatedSelect =
-        select.data.getType().getIntOrFloatBitWidth() > selectWidth
-            ? s.truncate(select.data, selectWidth)
-            : select.data;
-
-    // Decimal-to-1-hot decoder. 'shl' operands must be identical in size.
-    auto selectZext = s.zext(truncatedSelect, numInputs);
-    auto select1h = s.shl(s.constant(numInputs, 1), selectZext);
-    auto &res = unwrapped.outputs[0];
-
-    // Mux input valid signals.
-    auto selectedInputValid =
-        s.mux(truncatedSelect, unwrapped.getInputValids());
-    // Result is valid when the selected input and the select input is valid.
-    auto selAndInputValid = s.bAnd({selectedInputValid, select.valid});
-    res.valid->setValue(selAndInputValid);
-    auto resValidAndReady = s.bAnd({selAndInputValid, res.ready});
-
-    // Select is ready when result is valid and ready (result transacting).
-    select.ready->setValue(resValidAndReady);
-
-    // Assign each input ready signal if it is currently selected.
-    for (auto [inIdx, in] : llvm::enumerate(unwrapped.inputs)) {
-      // Extract the selection bit for this input.
-      auto isSelected = s.bit(select1h, inIdx);
-
-      // '&' that with the result valid and ready, and assign to the input
-      // ready signal.
-      auto activeAndResultValidAndReady =
-          s.bAnd({isSelected, resValidAndReady});
-      in.ready->setValue(activeAndResultValidAndReady);
-    }
-
-    // ============================== Data logic ===============================
-    res.data->setValue(s.mux(truncatedSelect, unwrapped.getInputDatas()));
-  }
-
-  // Builds fork logic between the single input and multiple outputs' control
-  // networks. Caller is expected to handle data separately.
-  void buildForkLogic(RTLBuilder &s, BackedgeBuilder &bb, InputHandshake &input,
-                      ArrayRef<OutputHandshake> outputs) const {
-    auto c0I1 = s.constant(1, 0);
-    llvm::SmallVector<Value> doneWires;
-    for (auto [i, output] : llvm::enumerate(outputs)) {
-      auto doneBE = bb.get(s.b.getI1Type());
-      auto emitted = s.bAnd({doneBE, s.bNot(*input.ready)});
-      auto emittedReg = s.reg("emitted_" + std::to_string(i), emitted, c0I1);
-      auto outValid = s.bAnd({s.bNot(emittedReg), input.valid});
-      output.valid->setValue(outValid);
-      auto validReady = s.bAnd({output.ready, outValid});
-      auto done = s.bOr({validReady, emittedReg}, "done" + std::to_string(i));
-      doneBE.setValue(done);
-      doneWires.push_back(done);
-    }
-    input.ready->setValue(s.bAnd(doneWires, "allDone"));
-  }
-
-  // Builds a unit-rate actor around an inner operation. 'unitBuilder' is a
-  // function which takes the set of unwrapped data inputs, and returns a
-  // value which should be assigned to the output data value.
-  void buildUnitRateJoinLogic(
-      RTLBuilder &s, UnwrappedIO &unwrappedIO,
-      llvm::function_ref<Value(ValueRange)> unitBuilder) const {
-    assert(unwrappedIO.outputs.size() == 1 &&
-           "Expected exactly one output for unit-rate join actor");
-    // Control logic.
-    this->buildJoinLogic(s, unwrappedIO.inputs, unwrappedIO.outputs[0]);
-
-    // Data logic.
-    auto unitRes = unitBuilder(unwrappedIO.getInputDatas());
-    unwrappedIO.outputs[0].data->setValue(unitRes);
-  }
-
-  void buildUnitRateForkLogic(
-      RTLBuilder &s, BackedgeBuilder &bb, UnwrappedIO &unwrappedIO,
-      llvm::function_ref<llvm::SmallVector<Value>(Value)> unitBuilder) const {
-    assert(unwrappedIO.inputs.size() == 1 &&
-           "Expected exactly one input for unit-rate fork actor");
-    // Control logic.
-    this->buildForkLogic(s, bb, unwrappedIO.inputs[0], unwrappedIO.outputs);
-
-    // Data logic.
-    auto unitResults = unitBuilder(unwrappedIO.inputs[0].data);
-    assert(unitResults.size() == unwrappedIO.outputs.size() &&
-           "Expected unit builder to return one result per output");
-    for (auto [res, outport] : llvm::zip(unitResults, unwrappedIO.outputs))
-      outport.data->setValue(res);
-  }
-
-  void buildExtendLogic(RTLBuilder &s, UnwrappedIO &unwrappedIO,
-                        bool signExtend) const {
-    size_t outWidth =
-        toValidType(static_cast<Value>(*unwrappedIO.outputs[0].data).getType())
-            .getIntOrFloatBitWidth();
-    buildUnitRateJoinLogic(s, unwrappedIO, [&](ValueRange inputs) {
-      if (signExtend)
-        return s.sext(inputs[0], outWidth);
-      return s.zext(inputs[0], outWidth);
-    });
-  }
-
-  void buildTruncateLogic(RTLBuilder &s, UnwrappedIO &unwrappedIO,
-                          unsigned targetWidth) const {
-    size_t outWidth =
-        toValidType(static_cast<Value>(*unwrappedIO.outputs[0].data).getType())
-            .getIntOrFloatBitWidth();
-    buildUnitRateJoinLogic(s, unwrappedIO, [&](ValueRange inputs) {
-      return s.truncate(inputs[0], outWidth);
-    });
-  }
-
-  /// Return the number of bits needed to index the given number of values.
-  static size_t getNumIndexBits(uint64_t numValues) {
-    return numValues > 1 ? llvm::Log2_64_Ceil(numValues) : 1;
-  }
-
-  Value buildPriorityArbiter(RTLBuilder &s, ArrayRef<Value> inputs,
-                             Value defaultValue,
-                             DenseMap<size_t, Value> &indexMapping) const {
-    auto numInputs = inputs.size();
-    auto priorityArb = defaultValue;
-
-    for (size_t i = numInputs; i > 0; --i) {
-      size_t inputIndex = i - 1;
-      size_t oneHotIndex = size_t{1} << inputIndex;
-      auto constIndex = s.constant(numInputs, oneHotIndex);
-      indexMapping[inputIndex] = constIndex;
-      priorityArb = s.mux(inputs[inputIndex], {priorityArb, constIndex});
-    }
-    return priorityArb;
-  }
-
-private:
-  OpBuilder &submoduleBuilder;
-  DCLoweringState &ls;
-};
-
-class ForkConversionPattern : public DCConversionPattern<ForkOp> {
-public:
-  using DCConversionPattern<ForkOp>::DCConversionPattern;
-  void buildModule(ForkOp op, BackedgeBuilder &bb, RTLBuilder &s,
-                   hw::HWModulePortAccessor &ports) const override {
-    auto unwrapped = unwrapIO(s, bb, ports);
-    buildUnitRateForkLogic(s, bb, unwrapped, [&](Value input) {
-      return llvm::SmallVector<Value>(unwrapped.outputs.size(), input);
-    });
-  }
-};
-
-static UnwrappedIO unwrapIO(Operation *op, ValueRange operands,
+static UnwrappedIO unwrapIO(Location loc, ValueRange operands,
+                            TypeRange results,
                             ConversionPatternRewriter &rewriter,
                             BackedgeBuilder &bb) {
-  RTLBuilder rtlb(rewriter);
+  RTLBuilder rtlb(loc, rewriter);
   UnwrappedIO unwrapped;
   for (auto in : operands) {
     assert(isa<esi::ChannelType>(in.getType()));
@@ -651,17 +511,28 @@ static UnwrappedIO unwrapIO(Operation *op, ValueRange operands,
     auto [data, valid] = rtlb.unwrap(in, *ready);
     hs.valid = valid;
     hs.ready = ready;
+    hs.data = data;
     hs.channel = in;
     unwrapped.inputs.push_back(hs);
   }
-  for (auto outputType : op->getResults()) {
-    esi::ChannelType channelType = dyn_cast<esi::ChannelType>(outputType);
-    assert(channelType);
+  for (auto outputType : results) {
+    outputType = toESIHWType(outputType);
+    esi::ChannelType channelType = cast<esi::ChannelType>(outputType);
     OutputHandshake hs;
     Type innerType = channelType.getInner();
-    auto data = std::make_shared<Backedge>(bb.get(innerType));
+    Value data;
+    if (isZeroWidthType(innerType)) {
+      // Feed the ESI wrap with an i0 constant.
+      data =
+          rewriter.create<hw::ConstantOp>(loc, rewriter.getIntegerType(0), 0);
+    } else {
+      // Create a backedge for the unresolved data.
+      auto dataBackedge = std::make_shared<Backedge>(bb.get(innerType));
+      hs.data = dataBackedge;
+      data = *dataBackedge;
+    }
     auto valid = std::make_shared<Backedge>(bb.get(rewriter.getI1Type()));
-    auto [dataCh, ready] = rtlb.wrap(*data, *valid);
+    auto [dataCh, ready] = rtlb.wrap(data, *valid);
     hs.valid = valid;
     hs.ready = ready;
     hs.channel = dataCh;
@@ -670,49 +541,104 @@ static UnwrappedIO unwrapIO(Operation *op, ValueRange operands,
   return unwrapped;
 }
 
-class JoinConversionPattern : public DCConversionPattern<JoinOp> {
+static UnwrappedIO unwrapIO(Operation *op, ValueRange operands,
+                            ConversionPatternRewriter &rewriter,
+                            BackedgeBuilder &bb) {
+  return unwrapIO(op->getLoc(), operands, op->getResultTypes(), rewriter, bb);
+}
+
+// Returns the clock and reset values from the containing hw::HWModuleOp.
+static std::pair<Value, Value> getClockAndReset(Operation *op) {
+  hw::HWModuleOp parent = cast<hw::HWModuleOp>(op->getParentOp());
+  size_t clockIdx = parent.getNumArguments() - 2;
+  size_t resetIdx = parent.getNumArguments() - 1;
+
+  return {parent.getArgument(clockIdx), parent.getArgument(resetIdx)};
+}
+
+class ForkConversionPattern : public OpConversionPattern<ForkOp> {
 public:
-  using DCConversionPattern<JoinOp>::DCConversionPattern;
-
+  using OpConversionPattern<ForkOp>::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(JoinOp op, ArrayRef<Value> operands,
+  matchAndRewrite(ForkOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    auto bb = BackedgeBuilder(rewriter);
-    auto io = unwrapIO(op, operands, rewriter, bb);
+    auto bb = BackedgeBuilder(rewriter, op.getLoc());
+    auto [clock, reset] = getClockAndReset(op);
+    auto rtlb = RTLBuilder(op.getLoc(), rewriter, clock, reset);
+    auto io = unwrapIO(op, operands.getOperands(), rewriter, bb);
 
-    Value allValid = s.bAnd(io.getInputValids());
-    output.valid->setValue(allValid);
-    setAllReadyWithCond(s, io.inputs, output, allValid);
-    rewriter.replaceOpWith(op, io.outputs[0].channel);
+    auto &input = io.inputs[0];
+
+    auto c0I1 = rtlb.constant(1, 0);
+    llvm::SmallVector<Value> doneWires;
+    for (auto [i, output] : llvm::enumerate(io.outputs)) {
+      auto doneBE = bb.get(rtlb.b.getI1Type());
+      auto emitted = rtlb.bAnd({doneBE, rtlb.bNot(*input.ready)});
+      auto emittedReg = rtlb.reg("emitted_" + std::to_string(i), emitted, c0I1);
+      auto outValid = rtlb.bAnd({rtlb.bNot(emittedReg), input.valid});
+      output.valid->setValue(outValid);
+      auto validReady = rtlb.bAnd({output.ready, outValid});
+      auto done =
+          rtlb.bOr({validReady, emittedReg}, "done" + std::to_string(i));
+      doneBE.setValue(done);
+      doneWires.push_back(done);
+    }
+    input.ready->setValue(rtlb.bAnd(doneWires, "allDone"));
+
+    rewriter.replaceOp(op, io.getOutputChannels());
     return success();
   }
 };
 
-class MergeConversionPattern : public DCConversionPattern<MergeOp> {
+class JoinConversionPattern : public OpConversionPattern<JoinOp> {
 public:
-  using DCConversionPattern<MergeOp>::DCConversionPattern;
+  using OpConversionPattern<JoinOp>::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(MergeOp op, ArrayRef<Value> operands,
+  matchAndRewrite(JoinOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    auto bb = BackedgeBuilder(rewriter);
-    auto io = unwrapIO(op, operands, rewriter, bb);
+    auto bb = BackedgeBuilder(rewriter, op.getLoc());
+    auto io = unwrapIO(op, operands.getOperands(), rewriter, bb);
+    auto rtlb = RTLBuilder(op.getLoc(), rewriter);
+    auto &output = io.outputs[0];
+
+    Value allValid = rtlb.bAnd(io.getInputValids());
+    output.valid->setValue(allValid);
+
+    auto validAndReady = rtlb.bAnd({output.ready, allValid});
+    for (auto &input : io.inputs)
+      input.ready->setValue(validAndReady);
+
+    rewriter.replaceOp(op, io.outputs[0].channel);
+    return success();
+  }
+};
+
+class MergeConversionPattern : public OpConversionPattern<MergeOp> {
+public:
+  using OpConversionPattern<MergeOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(MergeOp op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto bb = BackedgeBuilder(rewriter, op.getLoc());
+    auto io = unwrapIO(op, operands.getOperands(), rewriter, bb);
+    auto rtlb = RTLBuilder(op.getLoc(), rewriter);
 
     // Extract select signal from the unwrapped IO.
-    auto select = unwrappedIO.inputs[0];
-    io.inputs.erase(unwrappedIO.inputs.begin());
-    buildMuxLogic(rewriter, unwrappedIO, select);
+    auto select = io.inputs[0];
+    io.inputs.erase(io.inputs.begin());
+    buildMuxLogic(rtlb, io, select);
 
-    rewriter.replaceOpWith(op, io.outputs[0].channel);
+    rewriter.replaceOp(op, io.outputs[0].channel);
     return success();
   }
 
   // Builds mux logic for the given inputs and outputs.
   // Note: it is assumed that the caller has removed the 'select' signal from
   // the 'unwrapped' inputs and provide it as a separate argument.
-  void buildMuxLogic(OpBuilder &b, UnwrappedIO &unwrapped,
+  void buildMuxLogic(RTLBuilder &s, UnwrappedIO &unwrapped,
                      InputHandshake &select) const {
-    auto s = RTLBuilder(b);
 
     // ============================= Control logic =============================
     size_t numInputs = unwrapped.inputs.size();
@@ -749,9 +675,6 @@ public:
           s.bAnd({isSelected, resValidAndReady});
       in.ready->setValue(activeAndResultValidAndReady);
     }
-
-    // ============================== Data logic ===============================
-    res.data->setValue(s.mux(truncatedSelect, unwrapped.getInputDatas()));
   }
 };
 
@@ -763,109 +686,180 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     // Locate existing output op, Append operands to output op, and move to
     // the end of the block.
-    auto parent = cast<hw::HWModuleOp>(op->getParentOp());
-    auto outputOp = *parent.getBodyBlock()->getOps<hw::OutputOp>().begin();
+    auto hwModule = cast<hw::HWModuleOp>(op->getParentOp());
+    auto outputOp = *hwModule.getBodyBlock()->getOps<hw::OutputOp>().begin();
     outputOp->setOperands(adaptor.getOperands());
-    outputOp->moveAfter(&parent.getBodyBlock()->back());
+    outputOp->moveAfter(&hwModule.getBodyBlock()->back());
     rewriter.eraseOp(op);
     return success();
   }
 };
 
-class BranchConversionPattern : public DCConversionPattern<BranchOp> {
+class BranchConversionPattern : public OpConversionPattern<BranchOp> {
 public:
+  using OpConversionPattern::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(BranchOp op, ArrayRef<Value> operands,
+  matchAndRewrite(BranchOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    auto unwrappedIO = unwrapIO(op, operands, rewriter, bb);
-    auto cond = unwrappedIO.inputs[0];
-    auto arg = unwrappedIO.inputs[1];
-    auto trueRes = unwrappedIO.outputs[0];
-    auto falseRes = unwrappedIO.outputs[1];
+    auto bb = BackedgeBuilder(rewriter, op.getLoc());
+    auto io = unwrapIO(op, operands.getOperands(), rewriter, bb);
+    auto rtlb = RTLBuilder(op.getLoc(), rewriter);
+    auto cond = io.inputs[0];
+    auto arg = io.inputs[1];
+    auto trueRes = io.outputs[0];
+    auto falseRes = io.outputs[1];
 
-    auto condArgValid = s.bAnd({cond.valid, arg.valid});
+    auto condArgValid = rtlb.bAnd({cond.valid, arg.valid});
 
     // Connect valid signal of both results.
-    trueRes.valid->setValue(s.bAnd({cond.data, condArgValid}));
-    falseRes.valid->setValue(s.bAnd({s.bNot(cond.data), condArgValid}));
-
-    // Connecte data signals of both results.
-    trueRes.data->setValue(arg.data);
-    falseRes.data->setValue(arg.data);
+    trueRes.valid->setValue(rtlb.bAnd({cond.data, condArgValid}));
+    falseRes.valid->setValue(rtlb.bAnd({rtlb.bNot(cond.data), condArgValid}));
 
     // Connect ready signal of input and condition.
     auto selectedResultReady =
-        s.mux(cond.data, {falseRes.ready, trueRes.ready});
-    auto condArgReady = s.bAnd({selectedResultReady, condArgValid});
+        rtlb.mux(cond.data, {falseRes.ready, trueRes.ready});
+    auto condArgReady = rtlb.bAnd({selectedResultReady, condArgValid});
     arg.ready->setValue(condArgReady);
     cond.ready->setValue(condArgReady);
 
-    rewriter.replaceOpWith(
+    rewriter.replaceOp(
         op, llvm::SmallVector<Value>{trueRes.channel, falseRes.channel});
     return success();
   }
 };
 
-class SinkConversionPattern : public DCConversionPattern<SinkOp> {
+class SinkConversionPattern : public OpConversionPattern<SinkOp> {
 public:
-  using DCConversionPattern<SinkOp>::DCConversionPattern;
+  using OpConversionPattern<SinkOp>::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(SinkOp op, ArrayRef<Value> operands,
+  matchAndRewrite(SinkOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    auto bb = BackedgeBuilder(rewriter);
-    auto io = unwrapIO(op, operands, rewriter, bb);
-    io.inputs[0].ready->setValue(RTLBuilder(rewriter).constant(1, 1));
-    rewriter.replaceOpWith(op, io.outputs[0].channel);
+    auto bb = BackedgeBuilder(rewriter, op.getLoc());
+    auto io = unwrapIO(op, operands.getOperands(), rewriter, bb);
+    io.inputs[0].ready->setValue(
+        RTLBuilder(op.getLoc(), rewriter).constant(1, 1));
+    rewriter.replaceOp(op, io.outputs[0].channel);
     return success();
   }
 };
 
-class SourceConversionPattern : public DCConversionPattern<SourceOp> {
+class SourceConversionPattern : public OpConversionPattern<SourceOp> {
 public:
-  using DCConversionPattern<SourceOp>::DCConversionPattern;
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(SourceOp op, ArrayRef<Value> operands,
+  matchAndRewrite(SourceOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    auto bb = BackedgeBuilder(rewriter);
-    auto io = unwrapIO(op, operands, rewriter, bb);
-    auto rtlb = RTLBuilder(rewriter);
+    auto bb = BackedgeBuilder(rewriter, op.getLoc());
+    auto io = unwrapIO(op, operands.getOperands(), rewriter, bb);
+    auto rtlb = RTLBuilder(op.getLoc(), rewriter);
     io.outputs[0].valid->setValue(rtlb.constant(1, 1));
     io.outputs[0].data->setValue(rtlb.constant(0, 0));
-    rewriter.replaceOpWith(op, io.outputs[0].channel);
+    rewriter.replaceOp(op, io.outputs[0].channel);
     return success();
   }
 };
 
-class BufferConversionPattern : public DCConversionPattern<BufferOp> {
+class PackConversionPattern : public OpConversionPattern<PackOp> {
 public:
-  using DCConversionPattern<BufferOp>::DCConversionPattern;
+  using OpConversionPattern<PackOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(PackOp op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto bb = BackedgeBuilder(rewriter, op.getLoc());
+    auto io = unwrapIO(op, llvm::SmallVector<Value>{operands.getToken()},
+                       rewriter, bb);
+    auto rtlb = RTLBuilder(op.getLoc(), rewriter);
+    auto &input = io.inputs[0];
+    auto &output = io.outputs[0];
+
+    Value packedData;
+    if (operands.getInputs().size() > 1)
+      packedData = rtlb.pack(operands.getInputs());
+    else
+      packedData = operands.getInputs()[0];
+
+    output.data->setValue(packedData);
+    connect(input, output);
+    rewriter.replaceOp(op, output.channel);
+    return success();
+  }
+};
+
+class UnpackConversionPattern : public OpConversionPattern<UnpackOp> {
+public:
+  using OpConversionPattern<UnpackOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(UnpackOp op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto bb = BackedgeBuilder(rewriter, op.getLoc());
+    auto io = unwrapIO(
+        op.getLoc(), llvm::SmallVector<Value>{operands.getInput()},
+        // Only generate an output channel for the token typed output.
+        llvm::SmallVector<Type>{op.getToken().getType()}, rewriter, bb);
+    auto rtlb = RTLBuilder(op.getLoc(), rewriter);
+    auto &input = io.inputs[0];
+    auto &output = io.outputs[0];
+
+    llvm::SmallVector<Value> unpackedValues;
+    if (op.getInput().getType().cast<ValueType>().getInnerTypes().size() != 1)
+      unpackedValues = rtlb.unpack(input.data);
+    else
+      unpackedValues.push_back(input.data);
+
+    connect(input, output);
+    llvm::SmallVector<Value> outputs;
+    outputs.push_back(output.channel);
+    outputs.append(unpackedValues.begin(), unpackedValues.end());
+    rewriter.replaceOp(op, outputs);
+    return success();
+  }
+};
+
+class BufferConversionPattern : public OpConversionPattern<BufferOp> {
+public:
+  using OpConversionPattern<BufferOp>::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(BufferOp op, ArrayRef<Value> operands,
+  matchAndRewrite(BufferOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    auto bb = BackedgeBuilder(rewriter);
-    auto io = unwrapIO(op, operands, rewriter, bb);
-    auto input = io.inputs[0];
-    auto output = io.outputs[0];
-    InputHandshake lastStage;
-    SmallVector<int64_t> initValues;
+    auto [clock, reset] = getClockAndReset(op);
 
-    // For now, always build seq buffers.
-    if (op.getInitValues())
-      initValues = op.getInitValueArray();
-
-    lastStage =
-        buildSeqBufferLogic(s, bb, toValidType(op.getDataType()),
-                            op.getNumSlots(), input, output, initValues);
-
-    // Connect the last stage to the output handshake.
-    output.data->setValue(lastStage.data);
-    output.valid->setValue(lastStage.valid);
-    lastStage.ready->setValue(output.ready);
-
-    rewriter.replaceOpWith(op, output.channel);
+    // ... esi.buffer should in theory provide a correct (latency-insensitive)
+    // implementation...
+    Type channelType = operands.getInput().getType();
+    rewriter.replaceOpWithNewOp<esi::ChannelBufferOp>(
+        op, channelType, clock, reset, operands.getInput(), op.getSizeAttr(),
+        nullptr);
     return success();
+
+    /*
+      InputHandshake lastStage;
+      SmallVector<int64_t> initValues;
+
+      // For now, always build seq buffers.
+      if (op.getInitValues())
+        initValues = op.getInitValueArray();
+
+      Type dataType;
+      if (auto innerTypes = op.getInnerTypes(); innerTypes.has_value())
+        dataType = toHWType(innerTypes.value());
+      else {
+        // The "data" is i0.4
+        dataType = IntegerType::get(op.getContext(), 0);
+      }
+
+      lastStage = buildSeqBufferLogic(rtlb, bb, dataType, op.getSize(), input,
+                                      output, initValues);
+
+      // Connect the last stage to the output handshake.
+      output.data->setValue(lastStage.data);
+      output.valid->setValue(lastStage.valid);
+      lastStage.ready->setValue(output.ready);
+
+      rewriter.replaceOp(op, output.channel);
+      return success();
+      */
   };
 
   struct SeqBufferStage {
@@ -873,24 +867,26 @@ public:
                    RTLBuilder &s, size_t index,
                    std::optional<int64_t> initValue)
         : dataType(dataType), preStage(preStage), s(s), bb(bb), index(index) {
+      // TODO: refactor all of this - this is just taken from HandshakeToFIRRTL
+      // which is know to work (e.g. data and control registers are somewhat
+      // intermingled). When there is no data register, we just create that as
+      // an i0 registerring, which will get canonicalized away...
 
-      // Todo: Change when i0 support is added.
-      c0s = createZeroDataConst(s, s.loc, dataType);
       currentStage.ready = std::make_shared<Backedge>(bb.get(s.b.getI1Type()));
-
       auto hasInitValue = s.constant(1, initValue.has_value());
       auto validBE = bb.get(s.b.getI1Type());
       auto validReg = s.reg(getRegName("valid"), validBE, hasInitValue);
       auto readyBE = bb.get(s.b.getI1Type());
 
-      Value initValueCs = c0s;
+      Value initValueCs;
       if (initValue.has_value())
         initValueCs = s.constant(dataType.getIntOrFloatBitWidth(), *initValue);
+      else
+        initValueCs = createZeroDataConst(s, s.loc, dataType);
 
-      // This could/should be revised but needs a larger rethinking to avoid
-      // introducing new bugs. Implement similarly to HandshakeToFIRRTL.
       Value dataReg =
           buildDataBufferLogic(validReg, initValueCs, validBE, readyBE);
+
       buildControlBufferLogic(validReg, readyBE, dataReg);
     }
 
@@ -993,6 +989,39 @@ public:
   };
 };
 
+static hw::ModulePortInfo getModulePortInfo(dc::FuncOp funcOp) {
+  hw::ModulePortInfo ports({}, {});
+  auto *ctx = funcOp->getContext();
+  auto ft = funcOp.getFunctionType();
+
+  // Add all inputs of funcOp.
+  unsigned inIdx = 0;
+  for (auto [index, type] : llvm::enumerate(ft.getInputs())) {
+    ports.inputs.push_back({StringAttr::get(ctx, "in" + std::to_string(index)),
+                            hw::PortDirection::INPUT, toESIHWType(type), index,
+                            hw::InnerSymAttr{}});
+    inIdx++;
+  }
+
+  // Add all outputs of funcOp.
+  for (auto [index, type] : llvm::enumerate(ft.getResults())) {
+    ports.outputs.push_back({StringAttr::get(ctx, "in" + std::to_string(index)),
+                             hw::PortDirection::OUTPUT, toESIHWType(type),
+                             index, hw::InnerSymAttr{}});
+  }
+
+  // Add clock and reset signals.
+  Type i1Type = IntegerType::get(ctx, 1);
+  ports.inputs.push_back({StringAttr::get(ctx, "clock"),
+                          hw::PortDirection::INPUT, i1Type, inIdx++,
+                          hw::InnerSymAttr{}});
+  ports.inputs.push_back({StringAttr::get(ctx, "reset"),
+                          hw::PortDirection::INPUT, i1Type, inIdx,
+                          hw::InnerSymAttr{}});
+
+  return ports;
+}
+
 class FuncOpConversionPattern : public OpConversionPattern<dc::FuncOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
@@ -1000,36 +1029,25 @@ public:
   LogicalResult
   matchAndRewrite(dc::FuncOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    ModulePortInfo ports =
-        getPortInfoForOpTypes(op, op.getArgumentTypes(), op.getResultTypes());
+    ModulePortInfo ports = getModulePortInfo(op);
 
-    HWModuleLike hwModule;
     if (op.isExternal()) {
-      hwModule = rewriter.create<hw::HWModuleExternOp>(
+      rewriter.create<hw::HWModuleExternOp>(
           op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
     } else {
-      auto hwModuleOp = rewriter.create<hw::HWModuleOp>(
+      auto hwModule = rewriter.create<hw::HWModuleOp>(
           op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
-      auto args = hwModuleOp.getArguments().drop_back(2);
-      rewriter.inlineBlockBefore(&op.getBody().front(),
-                                 hwModuleOp.getBodyBlock()->getTerminator(),
-                                 args);
-      hwModule = hwModuleOp;
-    }
 
-    // Was any predeclaration associated with this func? If so, replace uses
-    // with the newly created module and erase the predeclaration.
-    if (auto predecl =
-            op->getAttrOfType<FlatSymbolRefAttr>(kPredeclarationAttr)) {
-      auto *parentOp = op->getParentOp();
-      auto *predeclModule =
-          SymbolTable::lookupSymbolIn(parentOp, predecl.getValue());
-      if (predeclModule) {
-        if (failed(SymbolTable::replaceAllSymbolUses(
-                predeclModule, hwModule.getModuleNameAttr(), parentOp)))
-          return failure();
-        rewriter.eraseOp(predeclModule);
-      }
+      auto &region = op->getRegions().front();
+
+      Region &moduleRegion = hwModule->getRegions().front();
+      rewriter.mergeBlocks(
+          &region.getBlocks().front(), hwModule.getBodyBlock(),
+          hwModule.getBodyBlock()->getArguments().drop_back(2));
+      TypeConverter::SignatureConversion result(moduleRegion.getNumArguments());
+      (void)getTypeConverter()->convertSignatureArgs(
+          moduleRegion.getArgumentTypes(), result);
+      rewriter.applySignatureConversion(&moduleRegion, result);
     }
 
     rewriter.eraseOp(op);
@@ -1044,38 +1062,59 @@ public:
 //===----------------------------------------------------------------------===//
 
 static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
-                                   ConversionTarget &target,
-                                   handshake::FuncOp op,
+                                   ConversionTarget &target, dc::FuncOp op,
                                    OpBuilder &moduleBuilder) {
 
   std::map<std::string, unsigned> instanceNameCntr;
-  NameUniquer instanceUniquer = [&](Operation *op) {
-    std::string instName = getCallName(op);
-    if (auto idAttr = op->getAttrOfType<IntegerAttr>("handshake_id"); idAttr) {
-      // We use a special naming convention for operations which have a
-      // 'handshake_id' attribute.
-      instName += "_id" + std::to_string(idAttr.getValue().getZExtValue());
-    } else {
-      // Fallback to just prefixing with an integer.
-      instName += std::to_string(instanceNameCntr[instName]++);
-    }
-    return instName;
-  };
 
-  auto ls =
-      DCLoweringState{op->getParentOfType<mlir::ModuleOp>(), instanceUniquer};
   RewritePatternSet patterns(op.getContext());
-  patterns.insert<FuncOpConversionPattern, ReturnConversionPattern>(
-      op.getContext());
 
   patterns.insert<
-      ForkConversionPattern, JoinConversionPattern, MergeConversionPattern,
-      BranchConversionPattern, PackConversionPattern, UnpackConversionPattern,
-      BufferConversionPattern, SourceConversionPattern, SinkConversionPattern>(
-      typeConverter, op.getContext(), moduleBuilder, ls);
+      FuncOpConversionPattern, ReturnConversionPattern, ForkConversionPattern,
+      JoinConversionPattern, MergeConversionPattern, BranchConversionPattern,
+      PackConversionPattern, UnpackConversionPattern, BufferConversionPattern,
+      SourceConversionPattern, SinkConversionPattern>(typeConverter,
+                                                      op.getContext());
 
   if (failed(applyPartialConversion(op, target, std::move(patterns))))
     return op->emitOpError() << "error during conversion";
+  return success();
+}
+
+static LogicalResult allDCValuesHasOneUse(mlir::FunctionOpInterface funcOp) {
+  if (funcOp.isExternal())
+    return success();
+
+  auto checkUseFunc = [&](Operation *op, Value v, Twine desc,
+                          unsigned idx) -> LogicalResult {
+    if (!v.getType().isa<TokenType, ValueType>())
+      return success();
+
+    auto numUses = std::distance(v.getUses().begin(), v.getUses().end());
+    if (numUses == 0)
+      return op->emitOpError() << desc << " " << idx << " has no uses.";
+    if (numUses > 1)
+      return op->emitOpError() << desc << " " << idx << " has multiple uses.";
+    return success();
+  };
+
+  // Validate blocks within the function
+  for (auto [idx, block] : enumerate(funcOp.getBlocks())) {
+    // Validate ops within the block
+    for (auto &subOp : block) {
+      for (auto res : llvm::enumerate(subOp.getResults())) {
+        if (failed(checkUseFunc(&subOp, res.value(), "result", res.index())))
+          return failure();
+      }
+    }
+
+    for (auto &barg : block.getArguments()) {
+      if (failed(checkUseFunc(funcOp.getOperation(), barg,
+                              "block #" + Twine(idx) + " argument",
+                              barg.getArgNumber())))
+        return failure();
+    }
+  }
   return success();
 }
 
@@ -1088,7 +1127,7 @@ public:
     // Lowering to HW requires that every DC-typed value is used exactly once.
     // Check whether this precondition is met, and if not, exit.
     for (auto f : mod.getOps<dc::FuncOp>()) {
-      if (auto res = verifyAllValuesHasOneUse(f); failed(res)) {
+      if (auto res = allDCValuesHasOneUse(f); failed(res)) {
         f.emitOpError() << "DCToHW: failed to verify that all values "
                            "are used exactly once. Remember to run the "
                            "fork/sink materialization pass before HW lowering.";
@@ -1102,11 +1141,12 @@ public:
     // All top-level logic of a handshake module will be the interconnectivity
     // between instantiated modules.
     target.addIllegalDialect<dc::DCDialect>();
-    target.addLegalDialect<hw::HWDialect, comb::CombDialect, seq::SeqDialect>();
+    target.addLegalDialect<hw::HWDialect, comb::CombDialect, seq::SeqDialect,
+                           esi::ESIDialect>();
 
     OpBuilder submoduleBuilder(mod.getContext());
     submoduleBuilder.setInsertionPointToStart(mod.getBody());
-    for (auto f : mod.getOps<dc::FuncOp>()) {
+    for (auto f : llvm::make_early_inc_range(mod.getOps<dc::FuncOp>())) {
       if (failed(convertFuncOp(typeConverter, target, f, submoduleBuilder))) {
         signalPassFailure();
         return;
@@ -1115,18 +1155,6 @@ public:
   }
 };
 } // namespace
-
-// TODO: remember to consider fork-sink materialization; must be run prior.
-// Just check it, like we do for handshake.
-
-#else
-
-class DCToHWPass : public DCToHWBase<DCToHWPass> {
-public:
-  void runOnOperation() override {}
-};
-
-#endif
 
 std::unique_ptr<mlir::Pass> circt::createDCToHWPass() {
   return std::make_unique<DCToHWPass>();
