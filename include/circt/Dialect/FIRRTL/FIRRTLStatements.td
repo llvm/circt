@@ -13,10 +13,10 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLSTATEMENTS_TD
 #define CIRCT_DIALECT_FIRRTL_FIRRTLSTATEMENTS_TD
 
-include "FIRRTLDialect.td"
-include "FIRRTLEnums.td"
-include "FIRRTLOpInterfaces.td"
-include "FIRRTLTypes.td"
+include "circt/Dialect/FIRRTL/FIRRTLDialect.td"
+include "circt/Dialect/FIRRTL/FIRRTLEnums.td"
+include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.td"
+include "circt/Dialect/FIRRTL/FIRRTLTypes.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def AttachOp : FIRRTLOp<"attach"> {

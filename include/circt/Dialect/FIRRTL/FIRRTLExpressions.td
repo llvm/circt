@@ -13,8 +13,8 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD
 #define CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD
 
-include "FIRRTLDialect.td"
-include "FIRRTLTypes.td"
+include "circt/Dialect/FIRRTL/FIRRTLDialect.td"
+include "circt/Dialect/FIRRTL/FIRRTLTypes.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Types.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"

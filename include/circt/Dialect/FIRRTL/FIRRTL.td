@@ -14,22 +14,22 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTL_TD
 
 // Dialect
-include "FIRRTLDialect.td"
+include "circt/Dialect/FIRRTL/FIRRTLDialect.td"
 
 // Operations
-include "FIRRTLStructure.td"
-include "FIRRTLDeclarations.td"
-include "FIRRTLStatements.td"
-include "FIRRTLExpressions.td"
+include "circt/Dialect/FIRRTL/FIRRTLStructure.td"
+include "circt/Dialect/FIRRTL/FIRRTLDeclarations.td"
+include "circt/Dialect/FIRRTL/FIRRTLStatements.td"
+include "circt/Dialect/FIRRTL/FIRRTLExpressions.td"
 
 // Types
-include "FIRRTLTypes.td"
-include "FIRRTLTypesImpl.td"
+include "circt/Dialect/FIRRTL/FIRRTLTypes.td"
+include "circt/Dialect/FIRRTL/FIRRTLTypesImpl.td"
 
 // Attributes
-include "FIRRTLAttributes.td"
+include "circt/Dialect/FIRRTL/FIRRTLAttributes.td"
 
 // Op Interfaces
-include "FIRRTLOpInterfaces.td"
+include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.td"
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTL_TD

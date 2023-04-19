@@ -13,7 +13,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD
 #define CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD
 
-include "FIRRTLDialect.td"
+include "circt/Dialect/FIRRTL/FIRRTLDialect.td"
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Definitions

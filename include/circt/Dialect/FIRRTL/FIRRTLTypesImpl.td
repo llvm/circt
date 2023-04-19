@@ -13,7 +13,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD
 #define CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD
 
-include "FIRRTLDialect.td"
+include "circt/Dialect/FIRRTL/FIRRTLDialect.td"
 include "circt/Dialect/HW/HWTypeInterfaces.td"
 
 // Base class for other typedefs. Provides dialact-specific defaults.
