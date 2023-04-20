@@ -1,6 +1,7 @@
 add_circt_dialect_library(CIRCTHWTransforms
   HWPrintInstanceGraph.cpp
   HWSpecialize.cpp
+  NarrowPorts.cpp
   PrintHWModuleGraph.cpp
   FlattenIO.cpp
 
