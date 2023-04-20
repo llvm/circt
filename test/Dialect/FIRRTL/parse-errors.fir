@@ -460,12 +460,41 @@ circuit RefNotString:
 
 ;// -----
 
+circuit ConnectWrongType:
+  module ConnectWrongType:
+    input a: UInt<1>
+    output b: SInt<1>
+
+    b <= a ; expected-error {{cannot connect non-equivalent type}}
+
+;// -----
+
+FIRRTL version 3.0.0
+circuit ConnectAlternateWrongType:
+  module ConnectAlternateWrongType:
+    input a: UInt<1>
+    output b: SInt<1>
+
+    connect b, a ; expected-error {{cannot connect non-equivalent type}}
+
+;// -----
+
 circuit ProbeConnect:
   module ProbeConnect:
     input in : UInt<1>
     output p : Probe<UInt<1>>
 
     p <= probe(in) ; expected-error {{cannot connect reference types}}
+
+;// -----
+
+FIRRTL version 3.0.0
+circuit ProbeConnectAlternate:
+  module ProbeConnectAlternate:
+    input in : UInt<1>
+    output p : Probe<UInt<1>>
+
+    connect p, probe(in) ; expected-error {{cannot connect reference types}}
 
 ;// -----
 
@@ -549,4 +578,3 @@ circuit ForceWithLiteral:
     input in : UInt<1>
     node n = in
     force_initial(rwprobe(n), 1) ; expected-error {{expected source expression in force_initial}}
-

@@ -602,6 +602,12 @@ void circt::firrtl::walkGroundTypes(
             f(f, vector.getElementType());
           }
         })
+        .template Case<FEnumType>([&](FEnumType fenum) {
+          for (size_t i = 0, e = fenum.getNumElements(); i < e; ++i) {
+            fieldID++;
+            f(f, fenum.getElementType(i));
+          }
+        })
         .Default([&](FIRRTLBaseType groundType) {
           assert(groundType.isGround() &&
                  "only ground types are expected here");

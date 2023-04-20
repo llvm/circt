@@ -48,7 +48,7 @@ private:
   void partition(MSFTModuleOp mod);
   MSFTModuleOp partition(DesignPartitionOp part, Block *partBlock);
 
-  void bubbleUp(MSFTModuleOp mod, Block *ops);
+  void bubbleUp(MSFTModuleOp mod, Block *partBlock);
   void bubbleUpGlobalRefs(Operation *op, StringAttr parentMod,
                           StringAttr parentName,
                           llvm::DenseSet<hw::GlobalRefAttr> &refsMoved);
@@ -272,7 +272,7 @@ static StringRef getOpName(Operation *op) {
 }
 /// Try to set the entity name.
 /// TODO: this needs to be more complex to deal with renaming symbols.
-static void setEntityName(Operation *op, Twine name) {
+static void setEntityName(Operation *op, const Twine &name) {
   StringAttr nameAttr = StringAttr::get(op->getContext(), name);
   if (op->hasAttrOfType<StringAttr>("name"))
     op->setAttr("name", nameAttr);

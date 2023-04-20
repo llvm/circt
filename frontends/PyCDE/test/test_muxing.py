@@ -4,6 +4,7 @@ from pycde import generator, dim, Clock, Input, Output, Module, types
 from pycde.signals import Signal
 from pycde.constructs import Mux
 from pycde.testing import unittestmodule
+from pycde.types import Bits
 
 # CHECK-LABEL: msft.module @ComplexMux {} (%Clk: i1, %In: !hw.array<5xarray<4xi3>>, %Sel: i1) -> (Out: !hw.array<4xi3>, OutArr: !hw.array<2xarray<4xi3>>, OutInt: i1, OutSlice: !hw.array<3xarray<4xi3>>)
 # CHECK:         %c3_i3 = hw.constant 3 : i3
@@ -82,3 +83,36 @@ class Slicing(Module):
     ports.OutIntSlice = i.slice(ports.Sel2, 2)
     ports.OutArrSlice2 = ports.In.slice(ports.Sel2, 2)
     ports.OutArrSlice8 = ports.In.slice(ports.Sel8, 2)
+
+
+# CHECK-LABEL:  msft.module @SimpleMux2 {} (%op: i1, %a: i32, %b: i32) -> (out: i32)
+# CHECK-NEXT:     [[r0:%.+]] = comb.mux bin %op, %b, %a
+# CHECK-NEXT:     msft.output %0 : i32
+@unittestmodule()
+class SimpleMux2(Module):
+  op = Input(Bits(1))
+  a = Input(Bits(32))
+  b = Input(Bits(32))
+  out = Output(Bits(32))
+
+  @generator
+  def construct(self):
+    self.out = Mux(self.op, self.a, self.b)
+
+
+# CHECK-LABEL:  msft.module @SimpleMux4 {} (%op: i2, %a: i32, %b: i32, %c: i32, %d: i32) -> (out: i32)
+# CHECK-NEXT:     [[r0:%.+]] = hw.array_create %d, %c, %b, %a
+# CHECK-NEXT:     [[r1:%.+]] = hw.array_get [[r0]][%op]
+# CHECK-NEXT:     msft.output [[r1]] : i32
+@unittestmodule()
+class SimpleMux4(Module):
+  op = Input(Bits(2))
+  a = Input(Bits(32))
+  b = Input(Bits(32))
+  c = Input(Bits(32))
+  d = Input(Bits(32))
+  out = Output(Bits(32))
+
+  @generator
+  def construct(self):
+    self.out = Mux(self.op, self.a, self.b, self.c, self.d)

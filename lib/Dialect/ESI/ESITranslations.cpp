@@ -147,8 +147,8 @@ LogicalResult ExportCosimSchema::emit() {
      << "## Types for your design.\n"
      << "#########################################################\n\n";
   // Iterate through the various types and emit their schemas.
-  auto end = std::unique(types.begin(), types.end());
-  for (auto typeIter = types.begin(); typeIter < end; ++typeIter) {
+  auto *end = std::unique(types.begin(), types.end());
+  for (auto *typeIter = types.begin(); typeIter < end; ++typeIter) {
     if (failed(typeIter->write(os)))
       // If we fail during an emission, dump out early since the output may be
       // corrupted.

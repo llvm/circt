@@ -682,6 +682,10 @@ class ChannelSignal(Signal):
       raise TypeError("Unknown signaling standard")
 
 
+class ListSignal(Signal):
+  pass
+
+
 def wrap_opviews_with_values(dialect, module_name, excluded=[]):
   """Wraps all of a dialect's OpView classes to have their create method return
      a Signal instead of an OpView. The wrapped classes are inserted into

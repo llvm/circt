@@ -1022,43 +1022,6 @@ public:
   };
 };
 
-class SelectConversionPattern
-    : public HandshakeConversionPattern<handshake::SelectOp> {
-public:
-  using HandshakeConversionPattern<
-      handshake::SelectOp>::HandshakeConversionPattern;
-  void buildModule(handshake::SelectOp op, BackedgeBuilder &bb, RTLBuilder &s,
-                   hw::HWModulePortAccessor &ports) const override {
-    auto unwrappedIO = unwrapIO(s, bb, ports);
-
-    // Extract select signal from the unwrapped IO.
-    auto select = unwrappedIO.inputs[0];
-    auto trueIn = unwrappedIO.inputs[1];
-    auto falseIn = unwrappedIO.inputs[2];
-    auto out = unwrappedIO.outputs[0];
-
-    // Mux the true and false data to the output.
-    auto muxedData = s.mux(select.data, {falseIn.data, trueIn.data});
-    out.data->setValue(muxedData);
-
-    // 'and' the arg valids and select valid
-    Value allValid = s.bAnd({select.valid, trueIn.valid, falseIn.valid});
-
-    // Connect that to the result valid.
-    out.valid->setValue(allValid);
-
-    // 'and' the result valid with the result ready.
-    auto resValidAndReady = s.bAnd({allValid, out.ready});
-
-    // Connect that to the 'ready' signal of all inputs. This implies that all
-    // inputs + select is transacted when all are valid (and the output is
-    // ready), but only the selected data is forwarded.
-    select.ready->setValue(resValidAndReady);
-    trueIn.ready->setValue(resValidAndReady);
-    falseIn.ready->setValue(resValidAndReady);
-  };
-};
-
 class ReturnConversionPattern
     : public OpConversionPattern<handshake::ReturnOp> {
 public:
@@ -1901,11 +1864,12 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
       UnitRateConversionPattern<arith::ShLIOp, comb::OrOp>,
       UnitRateConversionPattern<arith::ShRUIOp, comb::ShrUOp>,
       UnitRateConversionPattern<arith::ShRSIOp, comb::ShrSOp>,
+      UnitRateConversionPattern<arith::SelectOp, comb::MuxOp>,
       // HW operations.
       StructCreateConversionPattern,
       // Handshake operations.
       ConditionalBranchConversionPattern, MuxConversionPattern,
-      SelectConversionPattern, PackConversionPattern, UnpackConversionPattern,
+      PackConversionPattern, UnpackConversionPattern,
       ComparisonConversionPattern, BufferConversionPattern,
       SourceConversionPattern, SinkConversionPattern, ConstantConversionPattern,
       MergeConversionPattern, ControlMergeConversionPattern,

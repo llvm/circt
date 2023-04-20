@@ -837,6 +837,7 @@ public:
   bool visitStdExpr(arith::ExtSIOp op);
   bool visitStdExpr(arith::TruncIOp op);
   bool visitStdExpr(arith::IndexCastOp op);
+  bool visitStdExpr(arith::SelectOp op);
 
 #define HANDLE(OPTYPE, FIRRTLTYPE)                                             \
   bool visitStdExpr(OPTYPE op) { return buildBinaryLogic<FIRRTLTYPE>(), true; }
@@ -1039,6 +1040,45 @@ void StdExprBuilder::buildBinaryLogic() {
   emitConnect(rewriter, insertLoc, arg1Ready, argReadyOp);
 }
 
+bool StdExprBuilder::visitStdExpr(arith::SelectOp op) {
+  ValueVector sel = portList[0];
+  Value selValid = sel[0];
+  Value selReady = sel[1];
+  Value selData = sel[2];
+  ValueVector t = portList[1];
+  Value tValid = t[0];
+  Value tReady = t[1];
+  Value tData = t[2];
+  ValueVector f = portList[2];
+  Value fValid = f[0];
+  Value fReady = f[1];
+  Value fData = f[2];
+
+  llvm::SmallVector<ValueVector *> inputs = {&sel, &t, &f};
+
+  ValueVector result = portList[3];
+  Value resultValid = result[0];
+  Value resultReady = result[1];
+  Value resultData = result[2];
+
+  // Data mux.
+  auto mux = rewriter.create<MuxPrimOp>(insertLoc, selData, tData, fData);
+  rewriter.create<ConnectOp>(insertLoc, resultData, mux);
+
+  // Join logic on the in- and outputs.
+  auto valid = rewriter.create<AndPrimOp>(
+      insertLoc, tValid.getType(), selValid,
+      rewriter.create<AndPrimOp>(insertLoc, tValid, fValid));
+  auto ready = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
+                                          resultReady, valid);
+
+  rewriter.create<ConnectOp>(insertLoc, resultValid, valid);
+  rewriter.create<ConnectOp>(insertLoc, selReady, ready);
+  rewriter.create<ConnectOp>(insertLoc, tReady, ready);
+  rewriter.create<ConnectOp>(insertLoc, fReady, ready);
+  return true;
+}
+
 //===----------------------------------------------------------------------===//
 // Handshake Builder class
 //===----------------------------------------------------------------------===//
@@ -1067,7 +1107,6 @@ public:
   bool visitHandshake(ExternalMemoryOp op);
   bool visitHandshake(MergeOp op);
   bool visitHandshake(MuxOp op);
-  bool visitHandshake(handshake::SelectOp op);
   bool visitHandshake(SinkOp op);
   bool visitHandshake(SourceOp op);
   bool visitHandshake(SyncOp op);
@@ -1358,58 +1397,6 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
     // Connect that to this arg ready.
     emitConnect(rewriter, insertLoc, argReady[i], oneHotAndResultValidAndReady);
   }
-
-  return true;
-}
-
-bool HandshakeBuilder::visitHandshake(handshake::SelectOp op) {
-  ValueVector selectSubfields = portList[0];
-  Value selectValid = selectSubfields[0];
-  Value selectReady = selectSubfields[1];
-  Value selectData = selectSubfields[2];
-
-  ValueVector resultSubfields = portList[3];
-  Value resultValid = resultSubfields[0];
-  Value resultReady = resultSubfields[1];
-  Value resultData = resultSubfields[2];
-
-  ValueVector trueSubfields = portList[1];
-  Value trueValid = trueSubfields[0];
-  Value trueReady = trueSubfields[1];
-  Value trueData = trueSubfields[2];
-
-  ValueVector falseSubfields = portList[2];
-  Value falseValid = falseSubfields[0];
-  Value falseReady = falseSubfields[1];
-  Value falseData = falseSubfields[2];
-
-  auto bitType = UIntType::get(rewriter.getContext(), 1);
-
-  // Mux the true and false data.
-  auto muxedData =
-      createMuxTree({falseData, trueData}, selectData, insertLoc, rewriter);
-
-  // Connect the selected data signal to the result data.
-  emitConnect(rewriter, insertLoc, resultData, muxedData);
-
-  // 'and' the arg valids and select valid
-  Value allValid =
-      rewriter.create<WireOp>(insertLoc, bitType, "allValid").getResult();
-  buildReductionTree<AndPrimOp>({trueValid, falseValid, selectValid}, allValid);
-
-  // Connect that to the result valid.
-  emitConnect(rewriter, insertLoc, resultValid, allValid);
-
-  // 'and' the result valid with the result ready.
-  auto resultValidAndReady =
-      rewriter.create<AndPrimOp>(insertLoc, bitType, allValid, resultReady);
-
-  // Connect that to the 'ready' signal of all inputs. This implies that all
-  // inputs + select is transacted when all are valid (and the output is ready),
-  // but only the selected data is forwarded.
-  emitConnect(rewriter, insertLoc, selectReady, resultValidAndReady);
-  emitConnect(rewriter, insertLoc, trueReady, resultValidAndReady);
-  emitConnect(rewriter, insertLoc, falseReady, resultValidAndReady);
 
   return true;
 }

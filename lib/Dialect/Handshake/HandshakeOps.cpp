@@ -91,14 +91,13 @@ static LogicalResult verifyIndexWideEnough(Operation *op, Value indexVal,
   else if (indexType.isIndex())
     indexWidth = IndexType::kInternalStorageBitWidth;
   else
-    return op->emitError("unsupported type for indexing operand: ")
-           << indexType;
+    return op->emitError("unsupported type for indexing value: ") << indexType;
 
   // Check whether the bitwidth can support the provided number of operands
   if (indexWidth < 64) {
     uint64_t maxNumOperands = (uint64_t)1 << indexWidth;
     if (numOperands > maxNumOperands)
-      return op->emitError("bitwidth of indexing operand is ")
+      return op->emitError("bitwidth of indexing value is ")
              << indexWidth << ", which can index into " << maxNumOperands
              << " operands, but found " << numOperands << " operands";
   }
@@ -447,19 +446,6 @@ LogicalResult MuxOp::verify() {
 std::string handshake::ControlMergeOp::getResultName(unsigned int idx) {
   assert(idx == 0 || idx == 1);
   return idx == 0 ? "dataOut" : "index";
-}
-
-LogicalResult ControlMergeOp::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> location, ValueRange operands,
-    DictionaryAttr attributes, mlir::RegionRange regions,
-    SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
-  // ControlMerge must have at least one data operand
-  if (operands.empty())
-    return failure();
-  // Result type is type of any data operand and, by default, an index type
-  inferredReturnTypes.push_back(operands[0].getType());
-  inferredReturnTypes.push_back(IndexType::get(context));
-  return success();
 }
 
 ParseResult ControlMergeOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -844,54 +830,6 @@ std::string handshake::ConditionalBranchOp::getResultName(unsigned int idx) {
 bool ConditionalBranchOp::isControl() {
   return isControlCheckTypeAndOperand(getDataOperand().getType(),
                                       getDataOperand());
-}
-
-ParseResult SelectOp::parse(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
-  Type dataType;
-  SmallVector<Type> operandTypes;
-  llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
-  if (parser.parseOperandList(allOperands) ||
-      parser.parseOptionalAttrDict(result.attributes) ||
-      parser.parseColonType(dataType))
-    return failure();
-
-  if (allOperands.size() != 3)
-    return parser.emitError(parser.getCurrentLocation(),
-                            "Expected exactly 3 operands");
-
-  result.addTypes({dataType});
-  operandTypes.push_back(IntegerType::get(parser.getContext(), 1));
-  operandTypes.push_back(dataType);
-  operandTypes.push_back(dataType);
-  if (parser.resolveOperands(allOperands, operandTypes, allOperandLoc,
-                             result.operands))
-    return failure();
-  return success();
-}
-
-void SelectOp::print(OpAsmPrinter &p) {
-  Type type = getTrueOperand().getType();
-  p << " " << getOperands();
-  p.printOptionalAttrDict((*this)->getAttrs());
-  p << " : " << type;
-}
-
-std::string handshake::SelectOp::getOperandName(unsigned int idx) {
-  switch (idx) {
-  case 0:
-    return "sel";
-  case 1:
-    return "true";
-  case 2:
-    return "false";
-  default:
-    llvm_unreachable("Expected exactly 3 operands");
-  }
-}
-
-bool SelectOp::isControl() {
-  return getTrueOperand().getType().isa<NoneType>();
 }
 
 ParseResult SinkOp::parse(OpAsmParser &parser, OperationState &result) {

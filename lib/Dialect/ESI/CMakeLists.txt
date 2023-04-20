@@ -14,6 +14,11 @@ set(srcs
   ESIStdServices.cpp
   ESITranslations.cpp
   ESITypes.cpp
+  Passes/ESIEmitCollateral.cpp
+  Passes/ESILowerPhysical.cpp
+  Passes/ESILowerPorts.cpp
+  Passes/ESILowerToHW.cpp
+  Passes/ESILowerTypes.cpp
 )
 
 set(ESI_LinkLibs

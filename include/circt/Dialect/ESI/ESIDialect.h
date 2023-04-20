@@ -70,12 +70,12 @@ void findValidReadySignals(Operation *modOp,
 
 /// Given a list of logical port names, find the data/valid/ready port triples.
 void resolvePortNames(Operation *modOp, ArrayRef<StringRef> portNames,
-                      SmallVectorImpl<ESIPortValidReadyMapping> &portTriples);
+                      SmallVectorImpl<ESIPortValidReadyMapping> &names);
 
 /// Build an ESI module wrapper, converting the wires with latency-insensitive
 /// semantics to ESI channels and passing through the rest.
-Operation *buildESIWrapper(OpBuilder &b, Operation *mod,
-                           ArrayRef<ESIPortValidReadyMapping> esiPortNames);
+Operation *buildESIWrapper(OpBuilder &b, Operation *pearl,
+                           ArrayRef<ESIPortValidReadyMapping> portsToConvert);
 
 } // namespace esi
 } // namespace circt

@@ -336,6 +336,52 @@ def SubaccessOp : FIRRTLExprOp<"subaccess"> {
   let hasCanonicalizer = true;
 }
 
+def IsTagOp : FIRRTLExprOp<"istag"> {
+  let summary = "Test the active variant of an enumeration";
+  let description = [{
+    This operation is used to test the active variant of an enumeration. The
+    tag tested for must be one of the possible variants of the input type.  If
+    the tag is the currently active variant the result will be 1, otherwise the
+    result will be 0.
+    
+    Example:
+    ```mlir
+      %0 = firrtl.istag A %v : !firrtl.enum<A: UInt<0>, B: UInt<0>>
+    ```
+  }];
+  let arguments = (ins FEnumType:$input, I32Attr:$fieldIndex);
+  let results = (outs UInt1Type:$result);
+  let hasVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
+  let builders = [
+    OpBuilder<(ins "Value":$input, "StringRef":$fieldName), [{
+      auto enumType = input.getType().cast<FEnumType>();
+      auto fieldIndex = enumType.getElementIndex(fieldName);
+      assert(fieldIndex.has_value() && "subtag operation to unknown field");
+      return build($_builder, $_state, input, *fieldIndex);
+    }]>
+  ];
+  
+  let firrtlExtraClassDeclaration = [{
+    /// Return a `FieldRef` to the accessed field.
+    FieldRef getAccessedField() {
+      return FieldRef(getInput(), getInput().getType().cast<FEnumType>()
+                                            .getFieldID(getFieldIndex()));
+    }
+
+    /// Return the name of the accessed field.
+    StringAttr getFieldNameAttr() {
+      return getInput().getType().cast<FEnumType>()
+        .getElementNameAttr(getFieldIndex());
+    }
+
+    /// Return the name of the accessed field.
+    StringRef getFieldName() {
+      return getFieldNameAttr().getValue();
+    }
+  }];
+}
+
 def SubtagOp : FIRRTLExprOp<"subtag"> {
   let summary = "Extract an element of a enum value";
   let description = [{

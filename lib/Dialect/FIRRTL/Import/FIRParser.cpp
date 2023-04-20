@@ -98,6 +98,33 @@ private:
 //===----------------------------------------------------------------------===//
 
 namespace {
+/// The FIRRTL specification version.
+struct FIRVersion {
+  uint32_t major = 1;
+  uint32_t minor = 0;
+  uint32_t patch = 0;
+
+  /// Three way compare of one FIRRTL version with another FIRRTL version.
+  /// Return 1 if the first version is greater than the second version, -1 if
+  /// the first version is less than the second version, and 0 if the versions
+  /// are equal.
+  static int compare(const FIRVersion &a, const FIRVersion &b) {
+    if (a.major > b.major)
+      return 1;
+    if (a.major < b.major)
+      return -1;
+    if (a.minor > b.minor)
+      return 1;
+    if (a.minor < b.minor)
+      return -1;
+    if (a.patch > b.patch)
+      return 1;
+    if (a.patch < b.patch)
+      return -1;
+    return 0;
+  }
+};
+
 /// This class implements logic common to all levels of the parser, including
 /// things like types and helper logic.
 struct FIRParser {
@@ -220,8 +247,7 @@ struct FIRParser {
   ParseResult parseIntLit(int32_t &result, const Twine &message);
 
   // Parse 'verLit' into specified value
-  ParseResult parseVersionLit(uint32_t &major, uint32_t &minor, uint32_t &patch,
-                              const Twine &message);
+  ParseResult parseVersionLit(FIRVersion &version, const Twine &message);
 
   // Parse ('<' intLit '>')? setting result to -1 if not present.
   template <typename T>
@@ -540,8 +566,8 @@ ParseResult FIRParser::parseIntLit(int32_t &result, const Twine &message) {
 
 /// versionLit    ::= version
 /// deconstruct a version literal into parts and returns those.
-ParseResult FIRParser::parseVersionLit(uint32_t &major, uint32_t &minor,
-                                       uint32_t &patch, const Twine &message) {
+ParseResult FIRParser::parseVersionLit(FIRVersion &version,
+                                       const Twine &message) {
   auto spelling = getTokenSpelling();
   if (getToken().getKind() != FIRToken::version)
     return emitError(message), failure();
@@ -553,10 +579,10 @@ ParseResult FIRParser::parseVersionLit(uint32_t &major, uint32_t &minor,
       c.getAsInteger(10, cInt))
     return emitError("failed to parse version string"), failure();
   consumeToken(FIRToken::version);
-  major = aInt.getLimitedValue(UINT32_MAX);
-  minor = bInt.getLimitedValue(UINT32_MAX);
-  patch = cInt.getLimitedValue(UINT32_MAX);
-  if (major != aInt || minor != bInt || patch != cInt)
+  version.major = aInt.getLimitedValue(UINT32_MAX);
+  version.minor = bInt.getLimitedValue(UINT32_MAX);
+  version.patch = cInt.getLimitedValue(UINT32_MAX);
+  if (version.major != aInt || version.minor != bInt || version.patch != cInt)
     return emitError("integers out of range"), failure();
   return success();
 }
@@ -704,7 +730,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     bool forceable = kind == FIRToken::kw_RWProbe;
 
     auto innerType = dyn_cast<FIRRTLBaseType>(type);
-    if (!innerType) // TODO: "innerType.containsReference()"
+    if (!innerType || innerType.containsReference())
       return emitError(loc, "cannot nest reference types");
 
     if (!innerType.isPassive())
@@ -1151,12 +1177,12 @@ namespace {
 struct FIRStmtParser : public FIRParser {
   explicit FIRStmtParser(Block &blockToInsertInto,
                          FIRModuleContext &moduleContext,
-                         Namespace &modNameSpace)
+                         Namespace &modNameSpace, const FIRVersion &version)
       : FIRParser(moduleContext.getConstants(), moduleContext.getLexer()),
         builder(mlir::ImplicitLocOpBuilder::atBlockEnd(
             UnknownLoc::get(getContext()), &blockToInsertInto)),
         locationProcessor(this->builder), moduleContext(moduleContext),
-        modNameSpace(modNameSpace) {}
+        modNameSpace(modNameSpace), version(version) {}
 
   ParseResult parseSimpleStmt(unsigned stmtIndent);
   ParseResult parseSimpleStmtBlock(unsigned indent);
@@ -1233,6 +1259,8 @@ private:
   ParseResult parseProbe(Value &result);
   ParseResult parseRWProbe(Value &result);
   ParseResult parseLeadingExpStmt(Value lhs);
+  ParseResult parseConnect();
+  ParseResult parseInvalidate();
 
   // Declarations
   ParseResult parseInstance();
@@ -1251,6 +1279,8 @@ private:
   FIRModuleContext &moduleContext;
 
   Namespace &modNameSpace;
+
+  const FIRVersion &version;
 };
 
 } // end anonymous namespace
@@ -1925,7 +1955,19 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
 ///      ::= register
 ///
 ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
-  switch (getToken().getKind()) {
+  auto kind = getToken().getKind();
+  /// Massage the kind based on the FIRRTL Version.
+  switch (kind) {
+  case FIRToken::kw_invalidate:
+  case FIRToken::kw_connect:
+    /// The "invalidate" and "connect" keywords were added in 3.0.0.
+    if (FIRVersion::compare(version, FIRVersion({3, 0, 0})) < 0)
+      kind = FIRToken::identifier;
+    break;
+  default:
+    break;
+  };
+  switch (kind) {
   // Statements.
   case FIRToken::kw_attach:
     return parseAttach();
@@ -1937,6 +1979,10 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseMemPort(MemDirAttr::Write);
   case FIRToken::kw_rdwr:
     return parseMemPort(MemDirAttr::ReadWrite);
+  case FIRToken::kw_connect:
+    return parseConnect();
+  case FIRToken::kw_invalidate:
+    return parseInvalidate();
   case FIRToken::lp_printf:
     return parsePrintf();
   case FIRToken::kw_skip:
@@ -2255,7 +2301,8 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 
     // We parse the substatements into their own parser, so they get inserted
     // into the specified 'when' region.
-    FIRStmtParser subParser(blockToInsertInto, moduleContext, modNameSpace);
+    FIRStmtParser subParser(blockToInsertInto, moduleContext, modNameSpace,
+                            version);
 
     // Figure out whether the body is a single statement or a nested one.
     auto stmtIndent = getIndentation();
@@ -2298,7 +2345,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   if (getToken().is(FIRToken::kw_when)) {
     // We create a sub parser for the else block.
     FIRStmtParser subParser(whenStmt.getElseBlock(), moduleContext,
-                            modNameSpace);
+                            modNameSpace, version);
     return subParser.parseSimpleStmt(whenIndent);
   }
 
@@ -2619,6 +2666,46 @@ ParseResult FIRStmtParser::parseRefReleaseInitial() {
   return success();
 }
 
+/// connect ::= 'connect' expr expr
+ParseResult FIRStmtParser::parseConnect() {
+  auto startTok = consumeToken(FIRToken::kw_connect);
+  auto loc = startTok.getLoc();
+
+  Value lhs, rhs;
+  if (parseExp(lhs, "expected connect expression") ||
+      parseExp(rhs, "expected connect expression") || parseOptionalInfo())
+    return failure();
+
+  auto lhsType = lhs.getType().dyn_cast<FIRRTLBaseType>();
+  auto rhsType = rhs.getType().dyn_cast<FIRRTLBaseType>();
+  if (!lhsType || !rhsType)
+    return emitError(loc, "cannot connect reference types");
+  // TODO: Once support lands for agg-of-ref, add test for this check!
+  if (lhsType.containsReference() || rhsType.containsReference())
+    return emitError(loc, "cannot connect types containing references");
+
+  if (!areTypesEquivalent(lhsType, rhsType))
+    return emitError(loc, "cannot connect non-equivalent type ")
+           << rhsType << " to " << lhsType;
+
+  locationProcessor.setLoc(loc);
+  emitConnect(builder, lhs, rhs);
+  return success();
+}
+
+/// invalidate ::= 'invalidate' expr
+ParseResult FIRStmtParser::parseInvalidate() {
+  auto startTok = consumeToken(FIRToken::kw_invalidate);
+
+  Value lhs;
+  if (parseExp(lhs, "expected connect expression") || parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(startTok.getLoc());
+  emitInvalidate(lhs);
+  return success();
+}
+
 /// leading-exp-stmt ::= exp '<=' exp info?
 ///                  ::= exp '<-' exp info?
 ///                  ::= exp 'is' 'invalid' info?
@@ -2647,12 +2734,13 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
 
   locationProcessor.setLoc(loc);
 
-  auto lhsType = lhs.getType().cast<FIRRTLType>();
-  auto rhsType = rhs.getType().cast<FIRRTLType>();
-  // TODO: Once support lands, switch to .containsReference(), update error
-  // message.
-  if (!isa<FIRRTLBaseType>(lhsType) || !isa<FIRRTLBaseType>(rhsType))
+  auto lhsType = lhs.getType().dyn_cast<FIRRTLBaseType>();
+  auto rhsType = rhs.getType().dyn_cast<FIRRTLBaseType>();
+  if (!lhsType || !rhsType)
     return emitError(loc, "cannot connect reference types");
+  // TODO: Once support lands for agg-of-ref, add test for this check!
+  if (lhsType.containsReference() || rhsType.containsReference())
+    return emitError(loc, "cannot connect types containing references");
 
   if (kind == FIRToken::less_equal) {
     if (!areTypesEquivalent(lhsType, rhsType))
@@ -3173,6 +3261,10 @@ private:
 
   SmallVector<DeferredModuleToParse, 0> deferredModules;
   ModuleOp mlirModule;
+
+  /// Default Version to use when parsing.  Deviations from this version will
+  /// cause different behavior.
+  FIRVersion version;
 };
 
 } // end anonymous namespace
@@ -3578,7 +3670,7 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
   }
 
   FIRStmtParser stmtParser(*moduleOp.getBodyBlock(), moduleContext,
-                           modNameSpace);
+                           modNameSpace, version);
 
   // Parse the moduleBlock.
   auto result = stmtParser.parseSimpleStmtBlock(deferredModule.indent);
@@ -3622,19 +3714,14 @@ ParseResult FIRCircuitParser::parseCircuit(
     mlir::TimingScope &ts) {
 
   auto indent = getIndentation();
-  uint32_t verMajor(1), verMinor(0), verPatch(0);
   if (consumeIf(FIRToken::kw_FIRRTL)) {
     if (!indent.has_value())
       return emitError("'FIRRTL' must be first token on its line"), failure();
     if (parseToken(FIRToken::kw_version, "expected version after 'FIRRTL'") ||
-        parseVersionLit(verMajor, verMinor, verPatch,
-                        "expected version literal"))
+        parseVersionLit(version, "expected version literal"))
       return failure();
     indent = getIndentation();
   }
-  (void)verMajor;
-  (void)verMinor;
-  (void)verPatch;
 
   if (!indent.has_value())
     return emitError("'circuit' must be first token on its line"), failure();

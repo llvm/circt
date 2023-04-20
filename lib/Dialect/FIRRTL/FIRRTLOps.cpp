@@ -169,11 +169,12 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
   };
 
   if (auto blockArg = val.dyn_cast<BlockArgument>()) {
-    auto op = val.getParentBlock()->getParentOp();
-    auto direction =
-        cast<FModuleLike>(op).getPortDirection(blockArg.getArgNumber());
-    if (direction == Direction::Out)
-      return swap();
+    auto *op = val.getParentBlock()->getParentOp();
+    if (auto moduleLike = dyn_cast<FModuleLike>(op)) {
+      auto direction = moduleLike.getPortDirection(blockArg.getArgNumber());
+      if (direction == Direction::Out)
+        return swap();
+    }
     return accumulatedFlow;
   }
 
@@ -2425,6 +2426,143 @@ void WhenOp::build(OpBuilder &builder, OperationState &result, Value condition,
 }
 
 //===----------------------------------------------------------------------===//
+// MatchOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult MatchOp::verify() {
+  auto type = getInput().getType();
+
+  // Make sure that the number of tags matches the number of regions.
+  auto numCases = getTags().size();
+  auto numRegions = getNumRegions();
+  if (numRegions != numCases)
+    return emitOpError("expected ")
+           << numRegions << " tags but got " << numCases;
+
+  auto numTags = type.getNumElements();
+
+  SmallDenseSet<int64_t> seen;
+  for (const auto &[tag, region] : llvm::zip(getTags(), getRegions())) {
+    auto tagIndex = size_t(cast<IntegerAttr>(tag).getInt());
+
+    // Ensure that the block has a single argument.
+    if (region.getNumArguments() != 1)
+      return emitOpError("region should have exactly one argument");
+
+    // Make sure that it is a valid tag.
+    if (tagIndex >= numTags)
+      return emitOpError("the tag index ")
+             << tagIndex << " is out of the range of valid tags in " << type;
+
+    // Make sure we have not already matched this tag.
+    auto [it, inserted] = seen.insert(tagIndex);
+    if (!inserted)
+      return emitOpError("the tag ") << type.getElementNameAttr(tagIndex)
+                                     << " is matched more than once";
+
+    // Check that the block argument type matches the tag's type.
+    auto expectedType = type.getElementType(tagIndex);
+    auto regionType = region.getArgument(0).getType();
+    if (regionType != expectedType)
+      return emitOpError("region type ")
+             << regionType << " does not match the expected type "
+             << expectedType;
+  }
+
+  // Check that the match statement is exhaustive.
+  for (size_t i = 0, e = type.getNumElements(); i < e; ++i)
+    if (!seen.contains(i))
+      return emitOpError("missing case for tag ") << type.getElementNameAttr(i);
+
+  return success();
+}
+
+void MatchOp::print(OpAsmPrinter &p) {
+  auto input = getInput();
+  auto type = input.getType();
+  auto regions = getRegions();
+  p << " " << input << " : " << type;
+  SmallVector<StringRef> elided = {"tags"};
+  p.printOptionalAttrDictWithKeyword((*this)->getAttrs(), elided);
+  p << " {";
+  p.increaseIndent();
+  for (const auto &[tag, region] : llvm::zip(getTags(), regions)) {
+    p.printNewline();
+    p << "case ";
+    p.printKeywordOrString(
+        type.getElementName(tag.cast<IntegerAttr>().getInt()));
+    p << "(";
+    p.printRegionArgument(region.front().getArgument(0), /*attrs=*/{},
+                          /*omitType=*/true);
+    p << ") ";
+    p.printRegion(region, /*printEntryBlockArgs=*/false);
+  }
+  p.decreaseIndent();
+  p.printNewline();
+  p << "}";
+}
+
+ParseResult MatchOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto *context = parser.getContext();
+  OpAsmParser::UnresolvedOperand input;
+  if (parser.parseOperand(input) || parser.parseColon())
+    return failure();
+
+  auto loc = parser.getCurrentLocation();
+  Type type;
+  if (parser.parseType(type))
+    return failure();
+  auto enumType = type.dyn_cast<FEnumType>();
+  if (!enumType)
+    return parser.emitError(loc, "expected enumeration type but got") << type;
+
+  if (parser.resolveOperand(input, type, result.operands) ||
+      parser.parseOptionalAttrDictWithKeyword(result.attributes) ||
+      parser.parseLBrace())
+    return failure();
+
+  auto i32Type = IntegerType::get(context, 32);
+  SmallVector<Attribute> tags;
+  while (true) {
+    // Stop parsing when we don't find another "case" keyword.
+    if (failed(parser.parseOptionalKeyword("case")))
+      break;
+
+    // Parse the tag and region argument.
+    auto nameLoc = parser.getCurrentLocation();
+    std::string name;
+    OpAsmParser::Argument arg;
+    auto *region = result.addRegion();
+    if (parser.parseKeywordOrString(&name) || parser.parseLParen() ||
+        parser.parseArgument(arg) || parser.parseRParen())
+      return failure();
+
+    // Figure out the enum index of the tag.
+    auto index = enumType.getElementIndex(name);
+    if (!index)
+      return parser.emitError(nameLoc, "the tag \"")
+             << name << "\" is not a member of the enumeration " << enumType;
+    tags.push_back(IntegerAttr::get(i32Type, *index));
+
+    // Parse the region.
+    arg.type = enumType.getElementType(*index);
+    if (parser.parseRegion(*region, arg))
+      return failure();
+  }
+  result.addAttribute("tags", ArrayAttr::get(context, tags));
+
+  return parser.parseRBrace();
+}
+
+void MatchOp::build(OpBuilder &builder, OperationState &result, Value input,
+                    ArrayAttr tags,
+                    MutableArrayRef<std::unique_ptr<Region>> regions) {
+  result.addOperands(input);
+  result.addAttribute("tags", tags);
+  result.addRegions(regions);
+}
+
+//===----------------------------------------------------------------------===//
 // Expressions
 //===----------------------------------------------------------------------===//
 
@@ -2812,6 +2950,65 @@ ParseResult FEnumCreateOp::parse(OpAsmParser &parser, OperationState &result) {
   result.addTypes(enumType);
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// IsTagOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult IsTagOp::verify() {
+  if (getFieldIndex() >= getInput().getType().getNumElements())
+    return emitOpError("element index is greater than the number of fields in "
+                       "the bundle type");
+  return success();
+}
+
+void IsTagOp::print(::mlir::OpAsmPrinter &printer) {
+  printer << ' ' << getInput() << ' ';
+  printer.printKeywordOrString(getFieldName());
+  SmallVector<::llvm::StringRef, 1> elidedAttrs = {"fieldIndex"};
+  printer.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
+  printer << " : " << getInput().getType();
+}
+
+ParseResult IsTagOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto *context = parser.getContext();
+
+  OpAsmParser::UnresolvedOperand input;
+  std::string fieldName;
+  Type inputType;
+  if (parser.parseOperand(input) || parser.parseKeywordOrString(&fieldName) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(inputType))
+    return failure();
+
+  if (parser.resolveOperand(input, inputType, result.operands))
+    return failure();
+
+  auto enumType = inputType.dyn_cast<FEnumType>();
+  if (!enumType)
+    return parser.emitError(parser.getNameLoc(),
+                            "input must be enum type, got ")
+           << inputType;
+  auto fieldIndex = enumType.getElementIndex(fieldName);
+  if (!fieldIndex)
+    return parser.emitError(parser.getNameLoc(),
+                            "unknown field " + fieldName + " in enum type ")
+           << enumType;
+
+  result.addAttribute(
+      "fieldIndex",
+      IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
+
+  result.addTypes(UIntType::get(context, 1, /*isConst=*/false));
+
+  return success();
+}
+
+FIRRTLType IsTagOp::inferReturnType(ValueRange operands,
+                                    ArrayRef<NamedAttribute> attrs,
+                                    std::optional<Location> loc) {
+  return UIntType::get(operands[0].getContext(), 1, /*isConst=*/false);
 }
 
 ParseResult SubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -3998,6 +4195,9 @@ void GTPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void HeadPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void IsTagOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void IsXIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

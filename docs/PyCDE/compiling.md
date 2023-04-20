@@ -30,6 +30,13 @@ git submodule update --init
 
 ### Installing and Building with Wheels
 
+If you are using a fork, you'll need the git tags since the package versioning step requires them:
+
+```bash
+git remote add upstream git@github.com:llvm/circt.git
+git fetch upstream --tags
+```
+
 The simplest way to compile PyCDE for local use is to install it with the `pip
 install` command:
 

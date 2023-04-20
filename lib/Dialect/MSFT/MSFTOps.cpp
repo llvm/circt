@@ -33,7 +33,7 @@ using namespace msft;
 //===----------------------------------------------------------------------===//
 
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
-  for (auto &argAttr : attrs)
+  for (const auto &argAttr : attrs)
     if (argAttr.getName() == name)
       return true;
   return false;
@@ -443,9 +443,9 @@ InstanceOp::verifySignatureMatch(const hw::ModulePortInfo &ports) {
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &state,
-                       ArrayRef<Type> resultTypes, StringAttr sym_name,
+                       ArrayRef<Type> resultTypes, StringAttr symName,
                        FlatSymbolRefAttr moduleName, ArrayRef<Value> inputs) {
-  build(builder, state, resultTypes, sym_name, moduleName, inputs, ArrayAttr(),
+  build(builder, state, resultTypes, symName, moduleName, inputs, ArrayAttr(),
         SymbolRefAttr());
 }
 
@@ -951,7 +951,7 @@ hw::ModulePortInfo MSFTModuleExternOp::getPorts() {
 // OutputOp
 //===----------------------------------------------------------------------===//
 
-void OutputOp::build(OpBuilder &builder, OperationState &result) {}
+void OutputOp::build(OpBuilder &odsBuilder, OperationState &odsState) {}
 
 //===----------------------------------------------------------------------===//
 // MSFT high level design constructs

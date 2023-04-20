@@ -881,6 +881,31 @@ firrtl.circuit "RefResetBundle" {
 
 // -----
 
+// Check resets are inferred through ref.sub.
+
+// CHECK-LABEL: "RefResetSub"
+firrtl.circuit "RefResetSub" {
+  // CHECK-LABEL: firrtl.module @RefResetSub
+  // CHECK-NOT: firrtl.reset
+  firrtl.module @RefResetSub(in %driver: !firrtl.asyncreset, out %out_a : !firrtl.reset, out %out_b: !firrtl.reset) {
+  %r = firrtl.wire : !firrtl.bundle<a: reset, b flip: reset> 
+  %ref_r = firrtl.ref.send %r : !firrtl.bundle<a: reset, b flip: reset>
+  %ref_r_a = firrtl.ref.sub %ref_r[0] : !firrtl.probe<bundle<a: reset, b : reset>>
+  %ref_r_b = firrtl.ref.sub %ref_r[1] : !firrtl.probe<bundle<a: reset, b : reset>>
+  %reset_a = firrtl.ref.resolve %ref_r_a : !firrtl.probe<reset>
+  %reset_b = firrtl.ref.resolve %ref_r_b : !firrtl.probe<reset>
+  firrtl.strictconnect %out_a, %reset_a : !firrtl.reset
+  firrtl.strictconnect %out_b, %reset_b : !firrtl.reset
+
+   %r_a = firrtl.subfield %r[a] : !firrtl.bundle<a: reset, b flip: reset>
+   %r_b = firrtl.subfield %r[b] : !firrtl.bundle<a: reset, b flip: reset>
+   firrtl.connect %r_a, %driver : !firrtl.reset, !firrtl.asyncreset
+   firrtl.connect %r_b, %driver : !firrtl.reset, !firrtl.asyncreset
+  }
+}
+
+// -----
+
 // CHECK-LABEL: "ConstReset"
 firrtl.circuit "ConstReset" {
   // CHECK-LABEL: firrtl.module private @InfersConstAsync(in %r: !firrtl.const.asyncreset)

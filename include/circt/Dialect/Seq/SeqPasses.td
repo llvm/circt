@@ -19,6 +19,10 @@ def LowerSeqToSV: Pass<"lower-seq-to-sv", "mlir::ModuleOp"> {
   let summary = "Lower sequential ops to SV.";
   let constructor = "circt::seq::createSeqLowerToSVPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
+  let options = [
+    Option<"lowerToAlwaysFF", "lower-to-always-ff", "bool", "true",
+           "Place assignments to registers into `always_ff` blocks">
+  ];
 }
 
 def LowerSeqFIRRTLToSV: Pass<"lower-seq-firrtl-to-sv", "hw::HWModuleOp"> {

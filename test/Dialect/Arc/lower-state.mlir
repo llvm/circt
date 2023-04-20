@@ -231,3 +231,32 @@ hw.module @stateReset(%clk: i1, %arg0: i42, %rst: i1) -> (out0: i42, out1: i42) 
 // CHECK: }
 // CHECK: [[ALLOC1]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
 // CHECK: [[ALLOC2]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
+
+hw.module @SeparateResets(%clock: i1, %i0: i42, %rst1: i1, %rst2: i1) -> (out1: i42, out2: i42) {
+  %0 = arc.state @DummyArc(%i0) clock %clock reset %rst1 lat 1 {names = ["foo"]} : (i42) -> i42
+  %1 = arc.state @DummyArc(%i0) clock %clock reset %rst2 lat 1 {names = ["bar"]} : (i42) -> i42
+  hw.output %0, %1 : i42, i42
+}
+
+// CHECK-LABEL: arc.model "SeparateResets"
+// CHECK: arc.clock_tree %{{.*}} {
+// CHECK:   [[IN_RST1:%.+]] = arc.state_read %in_rst1 : <i1>
+// CHECK:   scf.if [[IN_RST1]] {
+// CHECK:     %c0_i42{{.*}} = hw.constant 0 : i42
+// CHECK:     arc.state_write [[FOO_ALLOC:%.+]] = %c0_i42{{.*}} : <i42>
+// CHECK:   } else {
+// CHECK:     [[IN_I0:%.+]] = arc.state_read %in_i0 : <i42>
+// CHECK:     [[STATE:%.+]] = arc.state @DummyArc([[IN_I0]]) lat 0 : (i42) -> i42
+// CHECK:     arc.state_write [[FOO_ALLOC]] = [[STATE]] : <i42>
+// CHECK:   }
+// CHECK:   [[IN_RST2:%.+]] = arc.state_read %in_rst2 : <i1>
+// CHECK:   scf.if [[IN_RST2]] {
+// CHECK:     %c0_i42{{.*}} = hw.constant 0 : i42
+// CHECK:     arc.state_write [[BAR_ALLOC:%.+]] = %c0_i42{{.*}} : <i42>
+// CHECK:   } else {
+// CHECK:     [[IN_I0_2:%.+]] = arc.state_read %in_i0 : <i42>
+// CHECK:     [[STATE_2:%.+]] = arc.state @DummyArc([[IN_I0_2]]) lat 0 : (i42) -> i42
+// CHECK:     arc.state_write [[BAR_ALLOC]] = [[STATE_2]] : <i42>
+// CHECK:   }
+// CHECK: [[FOO_ALLOC]] = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i42>
+// CHECK: [[BAR_ALLOC]] = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i42>

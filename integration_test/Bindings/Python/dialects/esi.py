@@ -15,6 +15,11 @@ with Context() as ctx:
   print()
   # CHECK: !esi.any
 
+  list_type = esi.ListType.get(IntegerType.get_signless(3))
+  print(list_type)
+  print()
+  # CHECK: !esi.list<i3>
+
 
 # CHECK-LABEL: === testGen called with op:
 # CHECK:       %0:2 = esi.service.impl_req svc @HostComms impl as "test"(%clk) : (i1) -> (i8, !esi.channel<i8>) {

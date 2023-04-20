@@ -1,4 +1,4 @@
-//=== PipelineToCalyx.cpp - Pipeline to Calyx pass entry point ------*-----===//
+//=== LoopScheduleToCalyx.cpp - LoopSchedule to Calyx pass entry point-----===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,18 +6,18 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This is the main Pipeline to Calyx conversion pass implementation.
+// This is the main LoopSchedule to Calyx conversion pass implementation.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/PipelineToCalyx.h"
+#include "circt/Conversion/LoopScheduleToCalyx.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxLoweringUtils.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/Pipeline/Pipeline.h"
+#include "circt/Dialect/LoopSchedule/LoopScheduleOps.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -36,6 +36,7 @@ using namespace mlir;
 using namespace mlir::arith;
 using namespace mlir::cf;
 using namespace mlir::func;
+using namespace circt::loopschedule;
 
 namespace circt {
 namespace pipelinetocalyx {
@@ -44,11 +45,10 @@ namespace pipelinetocalyx {
 // Utility types
 //===----------------------------------------------------------------------===//
 
-class PipelineWhileOp
-    : public calyx::WhileOpInterface<pipeline::PipelineWhileOp> {
+class PipelineWhileOp : public calyx::WhileOpInterface<LoopSchedulePipelineOp> {
 public:
-  explicit PipelineWhileOp(pipeline::PipelineWhileOp op)
-      : calyx::WhileOpInterface<pipeline::PipelineWhileOp>(op) {}
+  explicit PipelineWhileOp(LoopSchedulePipelineOp op)
+      : calyx::WhileOpInterface<LoopSchedulePipelineOp>(op) {}
 
   Block::BlockArgListType getBodyArgs() override {
     return getOperation().getStagesBlock().getArguments();
@@ -221,11 +221,11 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp, MulIOp,
                              DivUIOp, RemUIOp, IndexCastOp,
                              /// static logic
-                             pipeline::PipelineTerminatorOp>(
+                             LoopScheduleTerminatorOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
-              .template Case<FuncOp, pipeline::PipelineWhileOp,
-                             pipeline::PipelineRegisterOp,
-                             pipeline::PipelineWhileStageOp>([&](auto) {
+              .template Case<FuncOp, LoopSchedulePipelineOp,
+                             LoopScheduleRegisterOp,
+                             LoopSchedulePipelineStageOp>([&](auto) {
                 /// Skip: these special cases will be handled separately.
                 return true;
               })
@@ -268,7 +268,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, memref::LoadOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::StoreOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter,
-                        pipeline::PipelineTerminatorOp op) const;
+                        LoopScheduleTerminatorOp op) const;
 
   /// buildLibraryOp will build a TCalyxLibOp inside a TGroupOp based on the
   /// source operation TSrcOp.
@@ -545,9 +545,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   return buildAllocOp(getState<ComponentLoweringState>(), rewriter, allocOp);
 }
 
-LogicalResult
-BuildOpGroups::buildOp(PatternRewriter &rewriter,
-                       pipeline::PipelineTerminatorOp term) const {
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     LoopScheduleTerminatorOp term) const {
   if (term.getOperands().size() == 0)
     return success();
 
@@ -844,10 +843,10 @@ class BuildWhileGroups : public calyx::FuncOpPartialLoweringPattern {
                            PatternRewriter &rewriter) const override {
     LogicalResult res = success();
     funcOp.walk([&](Operation *op) {
-      if (!isa<pipeline::PipelineWhileOp>(op))
+      if (!isa<LoopSchedulePipelineOp>(op))
         return WalkResult::advance();
 
-      PipelineWhileOp whileOp(cast<pipeline::PipelineWhileOp>(op));
+      PipelineWhileOp whileOp(cast<LoopSchedulePipelineOp>(op));
 
       getState<ComponentLoweringState>().setUniqueName(whileOp.getOperation(),
                                                        "while");
@@ -910,10 +909,10 @@ class BuildPipelineRegs : public calyx::FuncOpPartialLoweringPattern {
   LogicalResult
   partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
-    funcOp.walk([&](pipeline::PipelineRegisterOp op) {
+    funcOp.walk([&](LoopScheduleRegisterOp op) {
       // Condition registers are handled in BuildWhileGroups.
       auto *parent = op->getParentOp();
-      auto stage = dyn_cast<pipeline::PipelineWhileStageOp>(parent);
+      auto stage = dyn_cast<LoopSchedulePipelineStageOp>(parent);
       if (!stage)
         return;
 
@@ -925,11 +924,10 @@ class BuildPipelineRegs : public calyx::FuncOpPartialLoweringPattern {
         Value stageResult = stage.getResult(i);
         bool isIterArg = false;
         for (auto &use : stageResult.getUses()) {
-          if (auto term =
-                  dyn_cast<pipeline::PipelineTerminatorOp>(use.getOwner())) {
+          if (auto term = dyn_cast<LoopScheduleTerminatorOp>(use.getOwner())) {
             if (use.getOperandNumber() < term.getIterArgs().size()) {
               PipelineWhileOp whileOp(
-                  dyn_cast<pipeline::PipelineWhileOp>(stage->getParentOp()));
+                  dyn_cast<LoopSchedulePipelineOp>(stage->getParentOp()));
               auto reg = getState<ComponentLoweringState>().getLoopIterReg(
                   whileOp, use.getOperandNumber());
               getState<ComponentLoweringState>().addPipelineReg(stage, reg, i);
@@ -971,17 +969,17 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
   LogicalResult
   partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
-    for (auto pipeline : funcOp.getOps<pipeline::PipelineWhileOp>())
+    for (auto pipeline : funcOp.getOps<LoopSchedulePipelineOp>())
       for (auto stage :
-           pipeline.getStagesBlock().getOps<pipeline::PipelineWhileStageOp>())
+           pipeline.getStagesBlock().getOps<LoopSchedulePipelineStageOp>())
         if (failed(buildStageGroups(pipeline, stage, rewriter)))
           return failure();
 
     return success();
   }
 
-  LogicalResult buildStageGroups(pipeline::PipelineWhileOp whileOp,
-                                 pipeline::PipelineWhileStageOp stage,
+  LogicalResult buildStageGroups(LoopSchedulePipelineOp whileOp,
+                                 LoopSchedulePipelineStageOp stage,
                                  PatternRewriter &rewriter) const {
     // Collect pipeline registers for stage.
     auto pipelineRegisters =
@@ -1366,10 +1364,11 @@ class CleanupFuncOps : public calyx::FuncOpPartialLoweringPattern {
 //===----------------------------------------------------------------------===//
 // Pass driver
 //===----------------------------------------------------------------------===//
-class PipelineToCalyxPass : public PipelineToCalyxBase<PipelineToCalyxPass> {
+class LoopScheduleToCalyxPass
+    : public LoopScheduleToCalyxBase<LoopScheduleToCalyxPass> {
 public:
-  PipelineToCalyxPass()
-      : PipelineToCalyxBase<PipelineToCalyxPass>(),
+  LoopScheduleToCalyxPass()
+      : LoopScheduleToCalyxBase<LoopScheduleToCalyxPass>(),
         partialPatternRes(success()) {}
   void runOnOperation() override;
 
@@ -1496,7 +1495,7 @@ private:
   std::shared_ptr<calyx::CalyxLoweringState> loweringState = nullptr;
 };
 
-void PipelineToCalyxPass::runOnOperation() {
+void LoopScheduleToCalyxPass::runOnOperation() {
   // Clear internal state. See https://github.com/llvm/circt/issues/3235
   loweringState.reset();
   partialPatternRes = LogicalResult::failure();
@@ -1641,8 +1640,8 @@ void PipelineToCalyxPass::runOnOperation() {
 // Pass initialization
 //===----------------------------------------------------------------------===//
 
-std::unique_ptr<OperationPass<ModuleOp>> createPipelineToCalyxPass() {
-  return std::make_unique<pipelinetocalyx::PipelineToCalyxPass>();
+std::unique_ptr<OperationPass<ModuleOp>> createLoopScheduleToCalyxPass() {
+  return std::make_unique<pipelinetocalyx::LoopScheduleToCalyxPass>();
 }
 
 } // namespace circt

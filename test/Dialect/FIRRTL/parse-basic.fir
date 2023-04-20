@@ -1,5 +1,6 @@
-; RUN: circt-translate -import-firrtl -verify-diagnostics %s | circt-opt | FileCheck %s
+; RUN: circt-translate -import-firrtl -verify-diagnostics -split-input-file %s | circt-opt | FileCheck %s
 
+FIRRTL version 2.1.0
 circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint, out %out: !firrtl.uint<8>) {
@@ -1264,7 +1265,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     release_initial(rc2.rw)
 
   ; CHECK-LABEL: extmodule private @RefExt(
-  ; CHECK-SAME:  in in: !firrtl.uint<1>, out r: !firrtl.probe<uint<1>> 
+  ; CHECK-SAME:  in in: !firrtl.uint<1>, out r: !firrtl.probe<uint<1>>
   ; CHECK-SAME: internalPaths = ["in"]
   extmodule RefExt :
     input in : UInt<1>
@@ -1273,8 +1274,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK-LABEL: extmodule private @RefExtMore(
   ; CHECK-SAME:  in in: !firrtl.uint<1>
-  ; CHECK-SAME: out r: !firrtl.probe<uint<1>> 
-  ; CHECK-SAME: out data: !firrtl.uint<3> 
+  ; CHECK-SAME: out r: !firrtl.probe<uint<1>>
+  ; CHECK-SAME: out data: !firrtl.uint<3>
   ; CHECK-SAME: out r2: !firrtl.probe<vector<bundle<a: uint<3>>, 3>>
   ; CHECK-SAME: internalPaths = ["path.to.internal.signal", "in"]
   extmodule RefExtMore :
@@ -1291,3 +1292,18 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module ProbeInvalidate:
     output p : Probe<UInt<1>>
     p is invalid
+
+;// -----
+
+FIRRTL version 3.0.0
+circuit Foo_v3p0p0:
+  module Foo_v3p0p0:
+    input a: UInt<1>
+    output b: UInt<1>
+
+    ; CHECK: firrtl.strictconnect %b, %a
+    connect b, a
+
+    ; CHECK: [[INV:%.+]]  = firrtl.invalidvalue : !firrtl.uint<1>
+    ; CHECK-NEXT: firrtl.strictconnect %b, [[INV]] : !firrtl.uint<1>
+    invalidate b

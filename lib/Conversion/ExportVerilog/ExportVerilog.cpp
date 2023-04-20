@@ -21,6 +21,7 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/SV/SVAttributes.h"
@@ -152,7 +153,7 @@ static bool isDuplicatableExpression(Operation *op) {
     return isDuplicatableNullaryExpression(op);
 
   // It is cheap to inline extract op.
-  if (isa<comb::ExtractOp, hw::StructExtractOp>(op))
+  if (isa<comb::ExtractOp, hw::StructExtractOp, hw::UnionExtractOp>(op))
     return true;
 
   // We only inline array_get with a constant, port or wire index.
@@ -321,6 +322,8 @@ bool ExportVerilog::isZeroBitType(Type type) {
                         [](auto elem) { return isZeroBitType(elem.type); });
   if (auto enumType = type.dyn_cast<hw::EnumType>())
     return enumType.getFields().empty();
+  if (auto unionType = type.dyn_cast<hw::UnionType>())
+    return hw::getBitWidth(unionType) == 0;
 
   // We have an open type system, so assume it is ok.
   return false;
@@ -363,6 +366,8 @@ static StringRef getVerilogDeclWord(Operation *op,
     auto elementType =
         op->getResult(0).getType().cast<InOutType>().getElementType();
     if (elementType.isa<StructType>())
+      return "";
+    if (elementType.isa<UnionType>())
       return "";
     if (elementType.isa<EnumType>())
       return "";
@@ -563,7 +568,8 @@ static bool isOkToBitSelectFrom(Value v) {
     return true;
 
   // Aggregate access can be inlined.
-  if (v.getDefiningOp<StructExtractOp>() || v.getDefiningOp<ArrayGetOp>())
+  if (isa_and_nonnull<StructExtractOp, UnionExtractOp, ArrayGetOp>(
+          v.getDefiningOp()))
     return true;
 
   // Interface signal can be inlined.
@@ -618,7 +624,7 @@ static bool isExpressionUnableToInline(Operation *op,
     //
     // To handle these, we push the subexpression into a temporary.
     if (isa<ExtractOp, ArraySliceOp, ArrayGetOp, StructExtractOp,
-            IndexedPartSelectOp>(user))
+            UnionExtractOp, IndexedPartSelectOp>(user))
       if (op->getResult(0) == user->getOperand(0) && // ignore index operands.
           !isOkToBitSelectFrom(op->getResult(0)))
         return true;
@@ -1419,6 +1425,53 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         emitDims(dims, os, loc, emitter);
         return true;
       })
+      .Case<UnionType>([&](UnionType unionType) {
+        if (unionType.getElements().empty() || isZeroBitType(unionType)) {
+          os << "/*Zero Width*/";
+          return true;
+        }
+
+        int64_t unionWidth = hw::getBitWidth(unionType);
+        os << "union packed {";
+        for (auto &element : unionType.getElements()) {
+          if (isZeroBitType(element.type)) {
+            os << "/*" << emitter.getVerilogStructFieldName(element.name)
+               << ": Zero Width;*/ ";
+            continue;
+          }
+          int64_t elementWidth = hw::getBitWidth(element.type);
+          bool needsPadding = elementWidth < unionWidth || element.offset > 0;
+          if (needsPadding) {
+            os << " struct packed {";
+            if (element.offset) {
+              os << "logic [" << element.offset - 1 << ":0] "
+                 << "__pre_padding_" << element.name.getValue() << "; ";
+            }
+          }
+
+          SmallVector<Attribute, 8> structDims;
+          printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
+                              structDims,
+                              /*implicitIntType=*/false,
+                              /*singleBitDefaultType=*/true, emitter);
+          os << ' ' << emitter.getVerilogStructFieldName(element.name);
+          emitter.printUnpackedTypePostfix(element.type, os);
+          os << ";";
+
+          if (needsPadding) {
+            if (elementWidth + (int64_t)element.offset < unionWidth) {
+              os << " logic ["
+                 << unionWidth - (elementWidth + element.offset) - 1 << ":0] "
+                 << "__post_padding_" << element.name.getValue() << ";";
+            }
+            os << "} " << emitter.getVerilogStructFieldName(element.name)
+               << ";";
+          }
+        }
+        os << '}';
+        emitDims(dims, os, loc, emitter);
+        return true;
+      })
 
       .Case<InterfaceType>([](InterfaceType ifaceType) { return false; })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
@@ -1914,6 +1967,8 @@ private:
   SubExprInfo visitTypeOp(StructCreateOp op);
   SubExprInfo visitTypeOp(StructExtractOp op);
   SubExprInfo visitTypeOp(StructInjectOp op);
+  SubExprInfo visitTypeOp(UnionExtractOp op);
+  SubExprInfo visitTypeOp(EnumCmpOp op);
   SubExprInfo visitTypeOp(EnumConstantOp op);
 
   // Comb Dialect Operations
@@ -2794,6 +2849,40 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
 
 SubExprInfo ExprEmitter::visitTypeOp(EnumConstantOp op) {
   ps << PPSaveString(emitter.fieldNameResolver.getEnumFieldName(op.getField()));
+  return {Selection, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(EnumCmpOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+  auto result = emitBinary(op, Comparison, "==", NoRequirement);
+  // SystemVerilog 11.8.1: "Comparison... operator results are unsigned,
+  // regardless of the operands".
+  result.signedness = IsUnsigned;
+  return result;
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(UnionExtractOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+  emitSubExpr(op.getInput(), Selection);
+
+  // Check if this union type has been padded.
+  auto fieldName = op.getFieldAttr();
+  auto unionType = cast<UnionType>(getCanonicalType(op.getInput().getType()));
+  auto unionWidth = hw::getBitWidth(unionType);
+  auto element = unionType.getFieldInfo(fieldName.getValue());
+  auto elementWidth = hw::getBitWidth(element.type);
+  bool needsPadding = elementWidth < unionWidth || element.offset > 0;
+  auto verilogFieldName = emitter.getVerilogStructFieldName(fieldName);
+
+  // If the element needs padding then we need to get the actual element out
+  // of an anonymous structure.
+  if (needsPadding)
+    ps << "." << PPExtString(verilogFieldName);
+
+  // Get the correct member from the union.
+  ps << "." << PPExtString(verilogFieldName);
   return {Selection, IsUnsigned};
 }
 

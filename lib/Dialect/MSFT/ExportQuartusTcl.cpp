@@ -291,7 +291,7 @@ LogicalResult TclEmitter::emit(Operation *hwMod, StringRef outputFile) {
 
   // Iterate through all the "instances" for 'hwMod' and produce a tcl proc for
   // each one.
-  for (auto tclOpsForInstancesKV : tclOpsForModInstance[hwMod]) {
+  for (const auto &tclOpsForInstancesKV : tclOpsForModInstance[hwMod]) {
     StringAttr instName = tclOpsForInstancesKV.first;
     os << "proc {{" << state.symbolRefs.size() << "}}";
     if (instName)
@@ -301,7 +301,7 @@ LogicalResult TclEmitter::emit(Operation *hwMod, StringRef outputFile) {
 
     // Loop through the ops relevant to the specified root module "instance".
     LogicalResult ret = success();
-    auto &tclOpsForMod = tclOpsForInstancesKV.second;
+    const auto &tclOpsForMod = tclOpsForInstancesKV.second;
     for (Operation *tclOp : tclOpsForMod) {
       LogicalResult rc =
           TypeSwitch<Operation *, LogicalResult>(tclOp)

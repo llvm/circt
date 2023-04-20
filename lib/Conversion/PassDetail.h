@@ -84,6 +84,10 @@ namespace llhd {
 class LLHDDialect;
 } // namespace llhd
 
+namespace loopschedule {
+class LoopScheduleDialect;
+} // namespace loopschedule
+
 namespace comb {
 class CombDialect;
 } // namespace comb

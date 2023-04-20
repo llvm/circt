@@ -22,7 +22,10 @@
 #include "mlir/Bytecode/BytecodeReader.h"
 #include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Parser/Parser.h"
@@ -349,7 +352,9 @@ static LogicalResult executeArcilator(MLIRContext &context) {
   // Register our dialects.
   DialectRegistry registry;
   registry.insert<hw::HWDialect, comb::CombDialect, seq::SeqDialect,
-                  sv::SVDialect, arc::ArcDialect, mlir::arith::ArithDialect>();
+                  sv::SVDialect, arc::ArcDialect, mlir::arith::ArithDialect,
+                  mlir::scf::SCFDialect, mlir::func::FuncDialect,
+                  mlir::cf::ControlFlowDialect, mlir::LLVM::LLVMDialect>();
 
   arc::initAllExternalInterfaces(registry);
   mlir::registerBuiltinDialectTranslation(registry);
