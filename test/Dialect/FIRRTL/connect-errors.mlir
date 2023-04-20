@@ -537,3 +537,17 @@ firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.const.uint<1>) {
   firrtl.connect %b, %a : !firrtl.const.uint<1>, !firrtl.uint<1>
 }
 }
+
+// -----
+
+/// Named bundles must match for strict connect.
+
+firrtl.circuit "namedBundles" {
+firrtl.module @namedBundles() {
+  %w1 = firrtl.wire : !firrtl<bundle "B1" <a : uint<1>>>
+  // expected-note @below {{prior use here}}
+  %w2 = firrtl.wire : !firrtl<bundle "B2" <a : uint<1>>>
+  // expected-error @below {{expects different type than prior uses}}
+  firrtl.strictconnect %w1, %w2 : !firrtl<bundle "B1" <a : uint<1>>>
+}
+}
