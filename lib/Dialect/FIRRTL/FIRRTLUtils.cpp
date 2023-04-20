@@ -805,8 +805,8 @@ circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
 /// cannot be lowered.
 Type circt::firrtl::lowerType(
     Type type, std::optional<Location> loc,
-    std::function<hw::TypeAliasType(Type, BundleType, Location)>
-        getTypeDeclFn) {
+    const std::function<hw::TypeAliasType(Type, BundleType, Location)>
+        &getTypeDeclFn) {
   auto firType = type.dyn_cast<FIRRTLBaseType>();
   if (!firType)
     return type;
