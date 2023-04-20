@@ -176,19 +176,23 @@ static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry> &fields,
         // Otherwise, we have a bundle type.  Break it down.
         for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
           auto elt = bundle.getElement(i);
+          auto eltType = elt.type;
+          eltType = eltType.getConstType(eltType.isConst() || bundle.isConst());
           // Construct the suffix to pass down.
           tmpSuffix.resize(0);
           tmpSuffix.push_back('_');
           tmpSuffix.append(elt.name.getValue());
-          fields.emplace_back(elt.type, i, bundle.getFieldID(i), tmpSuffix,
+          fields.emplace_back(eltType, i, bundle.getFieldID(i), tmpSuffix,
                               elt.isFlip);
         }
         return true;
       })
       .Case<FVectorType>([&](auto vector) {
         // Increment the field ID to point to the first element.
+        auto eltType = vector.getElementType();
+        eltType = eltType.getConstType(eltType.isConst() || vector.isConst());
         for (size_t i = 0, e = vector.getNumElements(); i != e; ++i) {
-          fields.emplace_back(vector.getElementType(), i, vector.getFieldID(i),
+          fields.emplace_back(eltType, i, vector.getFieldID(i),
                               "_" + std::to_string(i), false);
         }
         return true;

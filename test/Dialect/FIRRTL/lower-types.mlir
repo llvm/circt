@@ -1244,6 +1244,24 @@ firrtl.module private @is1436_FOO() {
     } @SubmoduleWithAggregate(out a: !firrtl.vector<uint<1>, 1>)
   }
 
+  // CHECK-LABEL: firrtl.module @ConstBundle
+  firrtl.module @ConstBundle(in %a: !firrtl.const.bundle<a: uint<1>>) {}
+  // CHECK-SAME: in %a_a: !firrtl.const.uint<1>
+
+  // CHECK-LABEL: firrtl.module @ConstBundleElement
+  firrtl.module @ConstBundleElement(in %a: !firrtl.bundle<a: const.uint<1>>) {}
+  // CHECK-SAME: in %a_a: !firrtl.const.uint<1>
+
+  // CHECK-LABEL: firrtl.module @ConstVector
+  firrtl.module @ConstVector(in %a: !firrtl.const.vector<uint<1>, 2>) {}
+  // CHECK-SAME: in %a_0: !firrtl.const.uint<1>
+  // CHECK-SAME: in %a_1: !firrtl.const.uint<1>
+
+  // CHECK-LABEL: firrtl.module @ConstVectorElement
+  firrtl.module @ConstVectorElement(in %a: !firrtl.vector<const.uint<1>, 2>) {}
+  // CHECK-SAME: in %a_0: !firrtl.const.uint<1>
+  // CHECK-SAME: in %a_1: !firrtl.const.uint<1>
+
 } // CIRCUIT
 
 // Check that we don't lose the DontTouchAnnotation when it is not the last
