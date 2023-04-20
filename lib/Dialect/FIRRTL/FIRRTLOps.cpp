@@ -3744,8 +3744,7 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
         if (lowName && highName && lowName == highName)
           // Only preserve the names that match, otherwise drop the name.
           return BundleType::get(low.getContext(), newElements, false, lowName);
-        else
-          return BundleType::get(low.getContext(), newElements);
+        return BundleType::get(low.getContext(), newElements);
       }
     }
     return emitInferRetTypeError<FIRRTLBaseType>(
