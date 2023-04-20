@@ -805,8 +805,7 @@ circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
 /// cannot be lowered.
 Type circt::firrtl::lowerType(
     Type type, std::optional<Location> loc,
-    std::optional<
-        llvm::function_ref<hw::TypeAliasType(Type, BundleType, Location)>>
+    std::function<hw::TypeAliasType(Type, BundleType, Location)>
         getTypeDeclFn) {
   auto firType = type.dyn_cast<FIRRTLBaseType>();
   if (!firType)
@@ -825,11 +824,11 @@ Type circt::firrtl::lowerType(
     }
     Type rawType = hw::StructType::get(type.getContext(), hwfields);
     if (auto bundleName = bundle.getBundleName())
-      if (getTypeDeclFn.has_value())
-        rawType = getTypeDeclFn.value()(
-            rawType, bundle,
-            loc.has_value() ? loc.value()
-                            : UnknownLoc::get(bundle.getContext()));
+      if (getTypeDeclFn)
+        rawType = getTypeDeclFn(rawType, bundle,
+                                loc.has_value()
+                                    ? loc.value()
+                                    : UnknownLoc::get(bundle.getContext()));
     return rawType;
   }
   if (auto vec = firType.dyn_cast<FVectorType>()) {

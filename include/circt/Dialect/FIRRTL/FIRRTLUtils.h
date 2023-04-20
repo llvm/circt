@@ -172,11 +172,9 @@ inline FIRRTLType mapBaseType(FIRRTLType type,
 /// If the given type is a named bundle, then create a TypeScope at the Module
 /// level and the corresponding typedecl op inside it and return the
 /// corresponding TypeAliasType.
-Type lowerType(
-    Type type, std::optional<Location> loc = {},
-    std::optional<
-        llvm::function_ref<hw::TypeAliasType(Type, BundleType, Location)>>
-        getTypeDeclFn = {});
+Type lowerType(Type type, std::optional<Location> loc = {},
+               std::function<hw::TypeAliasType(Type, BundleType, Location)>
+                   getTypeDeclFn = {});
 
 //===----------------------------------------------------------------------===//
 // Parser-related utilities
