@@ -666,3 +666,30 @@ firrtl.circuit "Foo"  {
     firrtl.instance y1 @Y()
   }
 }
+
+// Check that named bundles are deduped properly.
+
+firrtl.circuit "NamedBundle" {
+  // CHECK:  firrtl.module @NamedBundle0(in %in: !firrtl.uint<1>, out %o3: !firrtl.bundle<other: bundle "Other" <sint: sint<2>, uint: uint<4>>>) {
+  firrtl.module @NamedBundle0(in %in: !firrtl.uint<1>, out %o3  : !firrtl<bundle <other: bundle "Other" <sint: sint<2>, uint: uint<4>>>>) {
+    %o1 = firrtl.wire : !firrtl<bundle "OtherOther" <other: bundle "Other" <sint: sint<2>, uint: uint<4>>>>
+    %o2 = firrtl.wire : !firrtl<bundle "OtherOther2" <other: bundle "Other" <sint: sint<2>, uint: uint<4>>>>
+    %2 = firrtl.mux(%in, %o1, %o2) : (!firrtl.uint<1>, !firrtl<bundle "OtherOther" <other: bundle "Other" <sint: sint<2>, uint: uint<4>>>>, !firrtl<bundle "OtherOther2" <other: bundle "Other" <sint: sint<2>, uint: uint<4>>>>) -> !firrtl<bundle <other: bundle "Other" <sint: sint<2>, uint: uint<4>>>>
+    firrtl.strictconnect %o3, %2 : !firrtl<bundle <other: bundle "Other" <sint: sint<2>, uint: uint<4>>>>
+  }
+  // CHECK-NOT: @NamedBundle1
+  firrtl.module @NamedBundle1(in %in: !firrtl.uint<1>, out %o3  : !firrtl<bundle <other: bundle <sint: sint<2>, uint: uint<4>>>>) {
+    %o1 = firrtl.wire : !firrtl<bundle "OtherOther" <other: bundle <sint: sint<2>, uint: uint<4>>>>
+    %o2 = firrtl.wire : !firrtl<bundle <other: bundle <sint: sint<2>, uint: uint<4>>>>
+    %2 = firrtl.mux(%in, %o1, %o2) : (!firrtl.uint<1>, !firrtl<bundle "OtherOther" <other: bundle <sint: sint<2>, uint: uint<4>>>>, !firrtl<bundle <other: bundle <sint: sint<2>, uint: uint<4>>>>) -> !firrtl<bundle <other: bundle <sint: sint<2>, uint: uint<4>>>>
+    firrtl.strictconnect %o3, %2 : !firrtl<bundle <other: bundle <sint: sint<2>, uint: uint<4>>>>
+  }
+  firrtl.module @NamedBundle() {
+    %in1, %out1 = firrtl.instance NamedBundle0 @NamedBundle0(in in: !firrtl.uint<1>, out o3  : !firrtl<bundle <other: bundle "Other" <sint: sint<2>, uint: uint<4>>>>)
+    %in2, %out2 =firrtl.instance NamedBundle1 @NamedBundle1(in in: !firrtl.uint<1>, out o3  : !firrtl<bundle <other: bundle <sint: sint<2>, uint: uint<4>>>>)
+    // CHECK:   = firrtl.instance NamedBundle0 @NamedBundle0(in in: !firrtl.uint<1>, out o3: !firrtl.bundle<other: bundle "Other" <sint: sint<2>, uint: uint<4>>>)
+    // CHECK:   = firrtl.instance NamedBundle1 @NamedBundle0(in in: !firrtl.uint<1>, out o3: !firrtl.bundle<other: bundle "Other" <sint: sint<2>, uint: uint<4>>>)
+    // Ensure that the corresponding wire is created, for NamedBundle1 output port.
+    // CHECK:  %o3 = firrtl.wire : !firrtl.bundle<other: bundle<sint: sint<2>, uint: uint<4>>>
+  }
+}
