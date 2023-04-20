@@ -44,7 +44,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   }
 
   // If the types are the exact same we can just connect them.
-  if (dstType == srcType && dstType.isPassive() &&
+  if (mixedConstTypes(dstType, srcType) && dstType.isPassive() &&
       !dstType.hasUninferredWidth()) {
     builder.create<StrictConnectOp>(dst, src);
     return;
@@ -122,7 +122,8 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 
   // Strict connect requires the types to be completely equal, including
   // connecting uint<1> to abstract reset types.
-  assert("Connect Types are equal" && dstType == src.getType());
+  assert("Connect Types are equal" &&
+         mixedConstTypes(dstType, src.getType().cast<FIRRTLBaseType>()));
   builder.create<StrictConnectOp>(dst, src);
 }
 
