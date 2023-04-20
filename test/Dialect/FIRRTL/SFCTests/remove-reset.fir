@@ -28,8 +28,8 @@ circuit Example :
 ; is reset, given aggregate register 'foo' with 2-bit field 'a' and 1-bit field
 ; 'b', and aggregate, invalid wire 'bar' with the same fields, and 'foo' is
 ; initialized to 'bar', and 'bar.a[1]' connected to zero.
-circuit Example :
-  module Example :
+circuit Example1 :
+  module Example1 :
     input clock : Clock
     input arst : AsyncReset
     input srst : UInt<1>
@@ -59,8 +59,8 @@ circuit Example :
 ; with 1-bit field 'a' and 1-bit field 'b', and aggregate, invalid wires 'bar'
 ; and 'baz' with the same fields, and 'foo' is initialized to 'baz', and 'bar.a'
 ; is connected to zero, and 'baz' is connected to 'bar'.
-circuit Example :
-  module Example :
+circuit Example2 :
+  module Example2 :
     input clock : Clock
     input arst : AsyncReset
     input srst : UInt<1>
@@ -90,8 +90,8 @@ circuit Example :
 
 ; Should convert a reset wired to UInt<0> to a canonical non-reset, given foo's
 ; reset is connected to zero.
-circuit Example :
-  module Example :
+circuit Example3 :
+  module Example3 :
     input clock : Clock
     input in : UInt<2>
     output out : UInt<2>[3]

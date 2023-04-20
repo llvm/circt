@@ -16,12 +16,12 @@
 // CHECK:      %[[VAL_13:.*]] = firrtl.asSInt %[[VAL_8]] : (!firrtl.uint<32>) -> !firrtl.sint<32>
 // CHECK:      %[[VAL_14:.*]] = firrtl.gt %[[VAL_12]], %[[VAL_13]] : (!firrtl.sint<32>, !firrtl.sint<32>) -> !firrtl.uint<1>
 // CHECK:      %[[VAL_15:.*]] = firrtl.asUInt %[[VAL_14]] : (!firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:      firrtl.connect %[[VAL_11]], %[[VAL_15]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      firrtl.strictconnect %[[VAL_11]], %[[VAL_15]] : !firrtl.uint<1>
 // CHECK:      %[[VAL_16:.*]] = firrtl.and %[[VAL_3]], %[[VAL_6]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:      firrtl.connect %[[VAL_9]], %[[VAL_16]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      firrtl.strictconnect %[[VAL_9]], %[[VAL_16]] : !firrtl.uint<1>
 // CHECK:      %[[VAL_17:.*]] = firrtl.and %[[VAL_10]], %[[VAL_16]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:      firrtl.connect %[[VAL_4]], %[[VAL_17]] : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:      firrtl.connect %[[VAL_7]], %[[VAL_17]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      firrtl.strictconnect %[[VAL_4]], %[[VAL_17]] : !firrtl.uint<1>
+// CHECK:      firrtl.strictconnect %[[VAL_7]], %[[VAL_17]] : !firrtl.uint<1>
 // CHECK:    }
 
 handshake.func @test_cmpi(%arg0: i32, %arg1: i32, %arg2: none, ...) -> (i1, none) {
@@ -46,12 +46,12 @@ handshake.func @test_cmpi(%arg0: i32, %arg1: i32, %arg2: none, ...) -> (i1, none
 // CHECK:      %[[VAL_13:.*]] = firrtl.asSInt %[[VAL_8]] : (!firrtl.uint<32>) -> !firrtl.sint<32>
 // CHECK:      %[[VAL_14:.*]] = firrtl.div %[[VAL_12]], %[[VAL_13]] : (!firrtl.sint<32>, !firrtl.sint<32>) -> !firrtl.sint<33>
 // CHECK:      %[[VAL_15:.*]] = firrtl.bits %[[VAL_14]] 31 to 0 : (!firrtl.sint<33>) -> !firrtl.uint<32>
-// CHECK:      firrtl.connect %[[VAL_11]], %[[VAL_15]] : !firrtl.uint<32>, !firrtl.uint<32>
+// CHECK:      firrtl.strictconnect %[[VAL_11]], %[[VAL_15]] : !firrtl.uint<32>
 // CHECK:      %[[VAL_16:.*]] = firrtl.and %[[VAL_3]], %[[VAL_6]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:      firrtl.connect %[[VAL_9]], %[[VAL_16]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      firrtl.strictconnect %[[VAL_9]], %[[VAL_16]] : !firrtl.uint<1>
 // CHECK:      %[[VAL_17:.*]] = firrtl.and %[[VAL_10]], %[[VAL_16]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:      firrtl.connect %[[VAL_4]], %[[VAL_17]] : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:      firrtl.connect %[[VAL_7]], %[[VAL_17]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      firrtl.strictconnect %[[VAL_4]], %[[VAL_17]] : !firrtl.uint<1>
+// CHECK:      firrtl.strictconnect %[[VAL_7]], %[[VAL_17]] : !firrtl.uint<1>
 // CHECK:    }
 
 handshake.func @test_divsi(%arg0: i32, %arg1: i32, %arg2: none, ...) -> (i32, none) {
@@ -76,12 +76,12 @@ handshake.func @test_divsi(%arg0: i32, %arg1: i32, %arg2: none, ...) -> (i32, no
 // CHECK:      %[[VAL_13:.*]] = firrtl.asSInt %[[VAL_8]] : (!firrtl.uint<32>) -> !firrtl.sint<32>
 // CHECK:      %[[VAL_14:.*]] = firrtl.rem %[[VAL_12]], %[[VAL_13]] : (!firrtl.sint<32>, !firrtl.sint<32>) -> !firrtl.sint<32>
 // CHECK:      %[[VAL_15:.*]] = firrtl.asUInt %[[VAL_14]] : (!firrtl.sint<32>) -> !firrtl.uint<32>
-// CHECK:      firrtl.connect %[[VAL_11]], %[[VAL_15]] : !firrtl.uint<32>, !firrtl.uint<32>
+// CHECK:      firrtl.strictconnect %[[VAL_11]], %[[VAL_15]] : !firrtl.uint<32>
 // CHECK:      %[[VAL_16:.*]] = firrtl.and %[[VAL_3]], %[[VAL_6]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:      firrtl.connect %[[VAL_9]], %[[VAL_16]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      firrtl.strictconnect %[[VAL_9]], %[[VAL_16]] : !firrtl.uint<1>
 // CHECK:      %[[VAL_17:.*]] = firrtl.and %[[VAL_10]], %[[VAL_16]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:      firrtl.connect %[[VAL_4]], %[[VAL_17]] : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:      firrtl.connect %[[VAL_7]], %[[VAL_17]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      firrtl.strictconnect %[[VAL_4]], %[[VAL_17]] : !firrtl.uint<1>
+// CHECK:      firrtl.strictconnect %[[VAL_7]], %[[VAL_17]] : !firrtl.uint<1>
 // CHECK:    }
 
 handshake.func @test_remsi(%arg0: i32, %arg1: i32, %arg2: none, ...) -> (i32, none) {
@@ -102,10 +102,11 @@ handshake.func @test_remsi(%arg0: i32, %arg1: i32, %arg2: none, ...) -> (i32, no
 // CHECK:      %[[VAL_9:.*]] = firrtl.asSInt %[[VAL_5]] : (!firrtl.uint<16>) -> !firrtl.sint<16>
 // CHECK:      %[[VAL_10:.*]] = firrtl.pad %[[VAL_9]], 16 : (!firrtl.sint<16>) -> !firrtl.sint<16>
 // CHECK:      %[[VAL_11:.*]] = firrtl.asUInt %[[VAL_10]] : (!firrtl.sint<16>) -> !firrtl.uint<16>
-// CHECK:      firrtl.connect %[[VAL_8]], %[[VAL_11]] : !firrtl.uint<32>, !firrtl.uint<16>
-// CHECK:      firrtl.connect %[[VAL_6]], %[[VAL_3]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      %[[VAL_12:.*]] = firrtl.pad %[[VAL_11]], 32 : (!firrtl.uint<16>) -> !firrtl.uint<32>
+// CHECK:      firrtl.strictconnect %[[VAL_8]], %[[VAL_12]] : !firrtl.uint<32>
+// CHECK:      firrtl.strictconnect %[[VAL_6]], %[[VAL_3]] : !firrtl.uint<1>
 // CHECK:      %[[VAL_12:.*]] = firrtl.and %[[VAL_7]], %[[VAL_3]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:      firrtl.connect %[[VAL_4]], %[[VAL_12]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      firrtl.strictconnect %[[VAL_4]], %[[VAL_12]] : !firrtl.uint<1>
 // CHECK:    }
 
 handshake.func @test_extsi(%arg0: i16, %arg1: none, ...) -> (i32, none) {
@@ -129,12 +130,12 @@ handshake.func @test_extsi(%arg0: i16, %arg1: none, ...) -> (i32, none) {
 // CHECK:      %[[VAL_12:.*]] = firrtl.asSInt %[[VAL_5]] : (!firrtl.uint<32>) -> !firrtl.sint<32>
 // CHECK:      %[[VAL_14:.*]] = firrtl.dshr %[[VAL_12]], %[[VAL_8]] : (!firrtl.sint<32>, !firrtl.uint<32>) -> !firrtl.sint<32>
 // CHECK:      %[[VAL_15:.*]] = firrtl.asUInt %[[VAL_14]] : (!firrtl.sint<32>) -> !firrtl.uint<32>
-// CHECK:      firrtl.connect %[[VAL_11]], %[[VAL_15]] : !firrtl.uint<32>, !firrtl.uint<32>
+// CHECK:      firrtl.strictconnect %[[VAL_11]], %[[VAL_15]] : !firrtl.uint<32>
 // CHECK:      %[[VAL_16:.*]] = firrtl.and %[[VAL_3]], %[[VAL_6]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:      firrtl.connect %[[VAL_9]], %[[VAL_16]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      firrtl.strictconnect %[[VAL_9]], %[[VAL_16]] : !firrtl.uint<1>
 // CHECK:      %[[VAL_17:.*]] = firrtl.and %[[VAL_10]], %[[VAL_16]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:      firrtl.connect %[[VAL_4]], %[[VAL_17]] : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:      firrtl.connect %[[VAL_7]], %[[VAL_17]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      firrtl.strictconnect %[[VAL_4]], %[[VAL_17]] : !firrtl.uint<1>
+// CHECK:      firrtl.strictconnect %[[VAL_7]], %[[VAL_17]] : !firrtl.uint<1>
 // CHECK:    }
 
 handshake.func @test_shrsi(%arg0: i32, %arg1: i32, %arg2: none, ...) -> (i32, none) {

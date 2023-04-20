@@ -8,10 +8,10 @@
 // CHECK:   %[[ARG1_VALID:.+]] = firrtl.subfield %[[ARG1]][valid] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
 // CHECK:   %[[ARG1_READY:.+]] = firrtl.subfield %[[ARG1]][ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
 // CHECK:   %[[ARG1_DATA:.+]] = firrtl.subfield %[[ARG1]][data] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
-// CHECK:   firrtl.connect %[[ARG1_VALID:.+]], %[[ARG0_VALID:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:   firrtl.connect %[[ARG0_READY:.+]], %[[ARG1_READY:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   firrtl.strictconnect %[[ARG1_VALID:.+]], %[[ARG0_VALID:.+]] : !firrtl.uint<1>
+// CHECK:   firrtl.strictconnect %[[ARG0_READY:.+]], %[[ARG1_READY:.+]] : !firrtl.uint<1>
 // CHECK:   %c42_ui64 = firrtl.constant 42 : !firrtl.uint<64>
-// CHECK:   firrtl.connect %[[ARG1_DATA:.+]], %c42_ui64 : !firrtl.uint<64>, !firrtl.uint<64>
+// CHECK:   firrtl.strictconnect %[[ARG1_DATA:.+]], %c42_ui64 : !firrtl.uint<64>
 // CHECK: }
 
 // Submodule for the ui32 ConstantOp.

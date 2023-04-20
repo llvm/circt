@@ -34,14 +34,14 @@ firrtl.circuit "Simple" {
   // CHECK: firrtl.module @A(in %test_en: !firrtl.uint<1>)
   firrtl.module @A() {
     %in, %test_en, %en, %out = firrtl.instance eicg @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
-    // CHECK: firrtl.connect %eicg_test_en, %test_en : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %eicg_test_en, %test_en : !firrtl.uint<1>
   }
 
   firrtl.module @Simple() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     // CHECK: %a_test_en = firrtl.instance a  @A(in test_en: !firrtl.uint<1>)
     firrtl.instance a @A()
     %test_en = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]} : !firrtl.uint<1>
-    // CHECK: firrtl.connect %a_test_en, %test_en
+    // CHECK: firrtl.strictconnect %a_test_en, %test_en
   }
 }
 
@@ -57,7 +57,7 @@ firrtl.circuit "TestHarness" {
   firrtl.module @B() {
     %eicg_in, %eicg_test_en, %eicg_en, %eicg_out = firrtl.instance eicg @EICG_wrapper1(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
 
-    // CHECK: firrtl.connect %eicg_test_en, %test_en
+    // CHECK: firrtl.strictconnect %eicg_test_en, %test_en
   }
 
   // CHECK: firrtl.module @A(in %test_en: !firrtl.uint<1>)
@@ -66,8 +66,8 @@ firrtl.circuit "TestHarness" {
     // CHECK: %b_test_en = firrtl.instance b  @B(in test_en: !firrtl.uint<1>)
     firrtl.instance b @B()
 
-    // CHECK: firrtl.connect %eicg_test_en, %test_en : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %b_test_en, %test_en : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %eicg_test_en, %test_en : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %b_test_en, %test_en : !firrtl.uint<1>
   }
 
   // CHECK: firrtl.module @TestEn0(out %test_en: !firrtl.uint<1>)
@@ -76,10 +76,10 @@ firrtl.circuit "TestHarness" {
     %test_en = firrtl.wire {annotations = [{circt.fieldID = 3 : i32, class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
     // CHECK: %0 = firrtl.subindex %test_en_0[0] : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
     // CHECK: %1 = firrtl.subfield %0[qux] : !firrtl.bundle<baz: uint<1>, qux: uint<1>>
-    // CHECK: firrtl.connect %test_en, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %test_en, %1 : !firrtl.uint<1>
     firrtl.instance b @B()
 
-    // CHECK: firrtl.connect %b_test_en, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %b_test_en, %1 : !firrtl.uint<1>
   }
 
   // CHECK: firrtl.module @TestEn1(out %test_en: !firrtl.uint<1>)
@@ -87,7 +87,7 @@ firrtl.circuit "TestHarness" {
     // CHECK: %test_en0_test_en = firrtl.instance test_en0  @TestEn0(out test_en: !firrtl.uint<1>)
     firrtl.instance test_en0 @TestEn0()
 
-    // CHECK: firrtl.connect %test_en, %test_en0_test_en : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %test_en, %test_en0_test_en : !firrtl.uint<1>
   }
 
   // CHECK: firrtl.module @DUT()
@@ -99,8 +99,8 @@ firrtl.circuit "TestHarness" {
     // CHECK: %test_en1_test_en = firrtl.instance test_en1  @TestEn1(out test_en: !firrtl.uint<1>)
     firrtl.instance test_en1 @TestEn1()
 
-    // CHECK: firrtl.connect %a_test_en, %test_en1_test_en : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %b_test_en, %test_en1_test_en : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %a_test_en, %test_en1_test_en : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %b_test_en, %test_en1_test_en : !firrtl.uint<1>
   }
 
   // CHECK: firrtl.module @TestHarness()
@@ -122,7 +122,7 @@ firrtl.circuit "EnableOutsideDUT" {
   // CHECK: firrtl.module @A(in %test_en: !firrtl.uint<1>)
   firrtl.module @A() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     %in, %test_en, %en, %out = firrtl.instance eicg @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
-    // CHECK: firrtl.connect %eicg_test_en, %test_en : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %eicg_test_en, %test_en : !firrtl.uint<1>
   }
 
   // Regardless of enable signal origin, leave clocks outside DUT alone.
@@ -139,7 +139,7 @@ firrtl.circuit "EnableOutsideDUT" {
 
     // CHECK: %a_test_en = firrtl.instance a  @A(in test_en: !firrtl.uint<1>)
     firrtl.instance a @A()
-    // CHECK: firrtl.connect %a_test_en, %port_en
+    // CHECK: firrtl.strictconnect %a_test_en, %port_en
   }
 }
 
@@ -151,14 +151,14 @@ firrtl.circuit "EnableOutsideDUT2" {
   // CHECK: firrtl.module @A(in %test_en: !firrtl.uint<1>)
   firrtl.module @A() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     %in, %test_en, %en, %out = firrtl.instance eicg @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
-    // CHECK: firrtl.connect %eicg_test_en, %test_en : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %eicg_test_en, %test_en : !firrtl.uint<1>
   }
 
   // Regardless of enable signal origin, leave clocks outside DUT alone.
   // CHECK: @OutsideDUT()
   firrtl.module @OutsideDUT() {
     %in, %test_en, %en, %out = firrtl.instance eicg @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
-    // CHECK-NOT: firrtl.connect
+    // CHECK-NOT: firrtl.strictconnect
   }
 
   // CHECK-LABEL: @enableSignal
@@ -175,7 +175,7 @@ firrtl.circuit "EnableOutsideDUT2" {
 
     // CHECK: %[[a_en:.+]] = firrtl.instance a  @A(in test_en: !firrtl.uint<1>)
     firrtl.instance a @A()
-    // CHECK: firrtl.connect %[[a_en]], %[[en]]
+    // CHECK: firrtl.strictconnect %[[a_en]], %[[en]]
   }
 }
 

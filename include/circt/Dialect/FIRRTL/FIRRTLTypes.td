@@ -76,14 +76,6 @@ def AggregateType : FIRRTLDialectType<
   ]>,
   "a aggregate type", "::circt::firrtl::FIRRTLBaseType">;
 
-// TODO: When Refs can appear within Base, need to disallow that too.
-def ConnectableType : FIRRTLDialectType<
-    CPred<"$_self.isa<FIRRTLBaseType>()">,
-    "a connectable type (base type)", "::circt::firrtl::FIRRTLType", [{
-    Any type that is valid for use in connect statements.
-    Currently this is any base type.
-  }]>;
-
 def SizedType : FIRRTLDialectType<CPred<"$_self.isa<FIRRTLBaseType>() && "
     "!$_self.cast<FIRRTLBaseType>().hasUninferredWidth()">,
     "a sized type (contains no uninferred widths)", "::circt::firrtl::FIRRTLType">;
@@ -119,6 +111,10 @@ def RefType : FIRRTLDialectType<
 def RWProbe : FIRRTLDialectType<
   CPred<"$_self.isa<RefType>() && $_self.cast<RefType>().getForceable()">,
    "rwprobe type", "::circt::firrtl::RefType">;
+
+// TODO: When Refs can appear within Base, need to disallow that too.
+def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;
+def StrictConnectableType : AnyTypeOf<[PassiveType, ForeignType]>;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates

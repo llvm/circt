@@ -1786,7 +1786,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     insertResetMux(builder, regOp.getResult(), reset, value);
     builder.setInsertionPointAfterValue(regOp.getResult());
     auto mux = builder.create<MuxPrimOp>(reset, value, regOp.getResult());
-    builder.create<ConnectOp>(regOp.getResult(), mux);
+    emitConnect(builder, regOp.getResult(), mux);
 
     // Replace the existing reset with the async reset.
     builder.setInsertionPoint(regOp);

@@ -258,24 +258,24 @@ firrtl.circuit "Test" {
 
     // CHECK: %w3 = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
     // CHECK: %w4 = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
-    // CHECK: firrtl.strictconnect %w3, %w4 : !firrtl.bundle<a flip: uint<1>>
+    // CHECK: firrtl.connect %w3, %w4 : !firrtl.bundle<a flip: uint<1>>
     %w3 = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
     %w4 = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
-    firrtl.strictconnect %w3, %w4 : !firrtl.bundle<a flip: uint<1>>
+    firrtl.connect %w3, %w4 : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
 
     // CHECK: %w5 = firrtl.wire : !firrtl.bundle<a flip: uint<1>, b: uint<1>>
     // CHECK: %w6 = firrtl.wire : !firrtl.bundle<a flip: uint<1>, b: uint<1>>
-    // CHECK: firrtl.strictconnect %w5, %w6 : !firrtl.bundle<a flip: uint<1>, b: uint<1>>
+    // CHECK: firrtl.connect %w5, %w6 : !firrtl.bundle<a flip: uint<1>, b: uint<1>>
     %w5 = firrtl.wire : !firrtl.bundle<a flip: uint<1>, b: uint<1>>
     %w6 = firrtl.wire : !firrtl.bundle<a flip: uint<1>, b: uint<1>>
-    firrtl.strictconnect %w5, %w6 : !firrtl.bundle<a flip: uint<1>, b: uint<1>>
+    firrtl.connect %w5, %w6 : !firrtl.bundle<a flip: uint<1>, b: uint<1>>, !firrtl.bundle<a flip: uint<1>, b: uint<1>>
   
     // CHECK: %w7 = firrtl.wire : !firrtl.bundle<a: bundle<b flip: uint<8>>>
     // CHECK: %w8 = firrtl.wire : !firrtl.bundle<a: bundle<b flip: uint<8>>>
-    // CHECK: firrtl.strictconnect %w7, %w8 : !firrtl.bundle<a: bundle<b flip: uint<8>>>
+    // CHECK: firrtl.connect %w7, %w8 : !firrtl.bundle<a: bundle<b flip: uint<8>>>
     %w7 = firrtl.wire : !firrtl.bundle<a: bundle<b flip: uint<8>>>
     %w8 = firrtl.wire : !firrtl.bundle<a: bundle<b flip: uint<8>>>
-    firrtl.strictconnect %w7, %w8 : !firrtl.bundle<a: bundle<b flip: uint<8>>>
+    firrtl.connect %w7, %w8 : !firrtl.bundle<a: bundle<b flip: uint<8>>>, !firrtl.bundle<a: bundle<b flip: uint<8>>>
   
     // Test some deeper connections.
     // (access-path caching causes subfield/subindex op movement)
@@ -290,14 +290,14 @@ firrtl.circuit "Test" {
     // CHECK: %3 = firrtl.subfield %2[b] : !firrtl.bundle<b flip: uint<8>>
     %w10 = firrtl.wire : !firrtl.bundle<a flip: bundle<b flip: uint<8>>>
 
-    // CHECK: firrtl.strictconnect %w9, %w10 : !firrtl.bundle<a flip: bundle<b flip: uint<8>>>
-    firrtl.strictconnect %w9, %w10 : !firrtl.bundle<a flip: bundle<b flip: uint<8>>>
+    // CHECK: firrtl.connect %w9, %w10 : !firrtl.bundle<a flip: bundle<b flip: uint<8>>>
+    firrtl.connect %w9, %w10 : !firrtl.bundle<a flip: bundle<b flip: uint<8>>>, !firrtl.bundle<a flip: bundle<b flip: uint<8>>>
 
     %w9_a = firrtl.subfield %w9[a] : !firrtl.bundle<a flip: bundle<b flip: uint<8>>>
     %w10_a = firrtl.subfield %w10[a] : !firrtl.bundle<a flip: bundle<b flip: uint<8>>>
     
-    // CHECK: firrtl.strictconnect %0, %2 : !firrtl.bundle<b flip: uint<8>>
-    firrtl.strictconnect %w9_a, %w10_a: !firrtl.bundle<b flip: uint<8>>
+    // CHECK: firrtl.connect %0, %2 : !firrtl.bundle<b flip: uint<8>>
+    firrtl.connect %w9_a, %w10_a: !firrtl.bundle<b flip: uint<8>>, !firrtl.bundle<b flip: uint<8>>
   
     %w9_a_b = firrtl.subfield %w9_a[b] : !firrtl.bundle<b flip: uint<8>>
     %w10_a_b = firrtl.subfield %w10_a[b] : !firrtl.bundle<b flip: uint<8>>
@@ -440,12 +440,12 @@ firrtl.circuit "Test" {
     // CHECK: %rhs = firrtl.wire : !firrtl.bundle<a flip: uint<1>, b: uint<1>>
     // CHECK: %4 = firrtl.subfield %rhs[b] : !firrtl.bundle<a flip: uint<1>, b: uint<1>>
     // CHECK: %5 = firrtl.subfield %rhs[a] : !firrtl.bundle<a flip: uint<1>, b: uint<1>>
-    // CHECK: firrtl.strictconnect %5, %3 : !firrtl.uint<1>
-    // CHECK: firrtl.strictconnect %1, %4 : !firrtl.uint<1>
+    // CHECK: firrtl.connect %5, %3 : !firrtl.uint<1>
+    // CHECK: firrtl.connect %1, %4 : !firrtl.uint<1>
     %lhs_storage = firrtl.wire : !firrtl.vector<bundle<a flip: uint<1>, b: uint<1>>, 2>
     %lhs = firrtl.subindex %lhs_storage[0] : !firrtl.vector<bundle<a flip: uint<1>, b: uint<1>>, 2>
     %rhs = firrtl.wire : !firrtl.bundle<a flip: uint<1>, b: uint<1>>
-    firrtl.strictconnect %lhs, %rhs : !firrtl.bundle<a flip: uint<1>, b: uint<1>>
+    firrtl.connect %lhs, %rhs : !firrtl.bundle<a flip: uint<1>, b: uint<1>>, !firrtl.bundle<a flip: uint<1>, b: uint<1>>
   }
 
   // CHECK-LABEL: @TestRhsExploded
@@ -483,13 +483,13 @@ firrtl.circuit "Test" {
     // CHECK: %8 = firrtl.subindex %7[0] : !firrtl.vector<uint<1>, 2>
     // CHECK: %9 = firrtl.subfield %rhs_storage[a] : !firrtl.bundle<a: vector<uint<1>, 2>, b: bundle<c: vector<uint<1>, 2>, d flip: vector<uint<1>, 2>>>
     // CHECK: %10 = firrtl.subindex %9[0] : !firrtl.vector<uint<1>, 2>
-    // CHECK: firrtl.strictconnect %3, %10 : !firrtl.uint<1>
-    // CHECK: firrtl.strictconnect %2, %8 : !firrtl.uint<1>
-    // CHECK: firrtl.strictconnect %6, %1 : !firrtl.uint<1>
+    // CHECK: firrtl.connect %3, %10 : !firrtl.uint<1>
+    // CHECK: firrtl.connect %2, %8 : !firrtl.uint<1>
+    // CHECK: firrtl.connect %6, %1 : !firrtl.uint<1>
     %lhs = firrtl.wire : !firrtl.bundle<a: uint<1>, b: bundle<c: uint<1>, d flip: uint<1>>>
     %rhs_storage = firrtl.wire : !firrtl.vector<bundle<a: uint<1>, b: bundle<c: uint<1>, d flip: uint<1>>>, 2>
     %rhs = firrtl.subindex %rhs_storage[0] : !firrtl.vector<bundle<a: uint<1>, b: bundle<c: uint<1>, d flip: uint<1>>>, 2>
-    firrtl.strictconnect %lhs, %rhs : !firrtl.bundle<a: uint<1>, b: bundle<c: uint<1>, d flip: uint<1>>>
+    firrtl.connect %lhs, %rhs : !firrtl.bundle<a: uint<1>, b: bundle<c: uint<1>, d flip: uint<1>>>, !firrtl.bundle<a: uint<1>, b: bundle<c: uint<1>, d flip: uint<1>>>
   }
 
   // CHECK-LABEL: @TestBothSidesExploded
@@ -633,10 +633,10 @@ firrtl.circuit "Test" {
     // CHECK: %3 = firrtl.subindex %2[0] : !firrtl.vector<uint<8>, 2>
     // CHECK: %4 = firrtl.subfield %i[a] : !firrtl.bundle<a: vector<uint<8>, 2>, b flip: vector<uint<8>, 2>>
     // CHECK: %5 = firrtl.subindex %4[0] : !firrtl.vector<uint<8>, 2>
-    // CHECK: firrtl.strictconnect %1, %5 : !firrtl.uint<8>
-    // CHECK: firrtl.strictconnect %3, %0 : !firrtl.uint<8>
+    // CHECK: firrtl.connect %1, %5 : !firrtl.uint<8>
+    // CHECK: firrtl.connect %3, %0 : !firrtl.uint<8>
     %0 = firrtl.subindex %i[0] : !firrtl.vector<bundle<a: uint<8>, b flip: uint<8>>, 2>
-    firrtl.strictconnect %o, %0 : !firrtl.bundle<a: uint<8>, b flip: uint<8>>
+    firrtl.connect %o, %0 : !firrtl.bundle<a: uint<8>, b flip: uint<8>>, !firrtl.bundle<a: uint<8>, b flip: uint<8>>
   }
 
   // connect lhs is an exploded bundle with flip, Do we connect in the right direction?
@@ -653,9 +653,9 @@ firrtl.circuit "Test" {
     // CHECK: %4 = firrtl.subfield %o[a] : !firrtl.bundle<a: vector<uint<8>, 2>, b flip: vector<uint<8>, 2>>
     // CHECK: %5 = firrtl.subindex %4[0] : !firrtl.vector<uint<8>, 2>
     %0 = firrtl.subindex %o[0] : !firrtl.vector<bundle<a: uint<8>, b flip: uint<8>>, 2>
-    // CHECK: firrtl.strictconnect %5, %1 : !firrtl.uint<8>
-    // CHECK: firrtl.strictconnect %0, %3 : !firrtl.uint<8>
-    firrtl.strictconnect %0, %i : !firrtl.bundle<a: uint<8>, b flip: uint<8>>
+    // CHECK: firrtl.connect %5, %1 : !firrtl.uint<8>
+    // CHECK: firrtl.connect %0, %3 : !firrtl.uint<8>
+    firrtl.connect %0, %i : !firrtl.bundle<a: uint<8>, b flip: uint<8>>, !firrtl.bundle<a: uint<8>, b flip: uint<8>>
   }
 
   // CHECK-LABEL: TestBundleCreate_VB

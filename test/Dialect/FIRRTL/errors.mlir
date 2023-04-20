@@ -842,16 +842,6 @@ firrtl.circuit "Top"   {
 
 // -----
 
-firrtl.circuit "Top" {
-  firrtl.module @Top (in %in : !firrtl.uint) {
-    %a = firrtl.wire : !firrtl.uint
-    // expected-error @+1 {{op operand #0 must be a sized type}}
-    firrtl.strictconnect %a, %in : !firrtl.uint
-  }
-}
-
-// -----
-
 firrtl.circuit "AnalogRegister" {
   firrtl.module @AnalogRegister(in %clock: !firrtl.clock) {
     // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog, but got '!firrtl.analog'}}
@@ -1085,7 +1075,7 @@ firrtl.circuit "Top" {
   firrtl.module @Foo (in %in: !firrtl.probe<uint<2>>) {}
   firrtl.module @Top (in %in: !firrtl.probe<uint<2>>) {
     %foo_in = firrtl.instance foo @Foo(in in: !firrtl.probe<uint<2>>)
-    // expected-error @below {{must be a sized type (contains no uninferred widths) or foreign type}}
+    // expected-error @below {{must be a passive base type}}
     firrtl.strictconnect %foo_in, %in : !firrtl.probe<uint<2>>
   }
 }
