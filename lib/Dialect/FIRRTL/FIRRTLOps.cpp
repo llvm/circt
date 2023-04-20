@@ -3721,6 +3721,8 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
     auto highElements = highBundle.getElements();
     auto lowElements = lowBundle.getElements();
     size_t numElements = highElements.size();
+    auto lowName = lowBundle.getBundleName();
+    auto highName = highBundle.getBundleName();
 
     SmallVector<BundleType::BundleElement> newElements;
     if (numElements == lowElements.size()) {
@@ -3738,8 +3740,13 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
           return {};
         newElements.push_back(element);
       }
-      if (!failed)
-        return BundleType::get(low.getContext(), newElements);
+      if (!failed) {
+        if (lowName && highName && lowName == highName)
+          // Only preserve the names that match, otherwise drop the name.
+          return BundleType::get(low.getContext(), newElements, false, lowName);
+        else
+          return BundleType::get(low.getContext(), newElements);
+      }
     }
     return emitInferRetTypeError<FIRRTLBaseType>(
         loc, "incompatible mux operand bundle fields, true value type: ", high,
