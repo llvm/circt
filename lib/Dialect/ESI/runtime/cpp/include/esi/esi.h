@@ -8,21 +8,20 @@
 //
 // This file defines the ESI C++ runtime API which backends must adhere to.
 //
+// DO NOT EDIT!
+// This file is distributed as part of an ESI package. The source for this file
+// should always be modified within CIRCT (lib/dialect/ESI/runtime/cpp/esi.h).
+//
 //===----------------------------------------------------------------------===//
 
 #pragma once
 
-#include <any>
-#include <assert.h>
-#include <fstream>
-#include <iostream>
 #include <map>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
-namespace circt {
 namespace esi {
 namespace runtime {
 
@@ -115,4 +114,3 @@ protected:
 
 } // namespace runtime
 } // namespace esi
-} // namespace circt

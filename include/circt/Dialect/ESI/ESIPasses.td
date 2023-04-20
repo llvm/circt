@@ -29,10 +29,10 @@ def ESIAddCPPCapnpAPI: Pass<"esi-emit-cpp-cosim-api", "mlir::ModuleOp"> {
   let constructor = "circt::esi::createESIAddCPPCapnpAPIPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
     let options = [
-    Option<"tops", "tops", "std::string",
-           "\"Top\"", "File to output C++ API into">,
     Option<"outputFile", "output-file", "std::string",
-           "\"cppapi.h\"", "File to output C++ API into">
+           "\"cppapi.h\"", "File to output C++ API into">,
+    Option<"toStdErr", "to-stderr", "bool", "false",
+      "If true, will emit the generated API to stderr">
   ];
 }
 

@@ -38,6 +38,7 @@
 #include "llvm/Support/JSON.h"
 
 #include <memory>
+#include <iostream>
 
 #ifdef CAPNP
 #include "capnp/ESICapnp.h"
@@ -91,6 +92,11 @@ void ESIAddCPPCapnpAPIPass::runOnOperation() {
   if (!outputFile.empty()) {
     auto outputFileAttr = OutputFileAttr::getFromFilename(ctxt, outputFile);
     verbatim->setAttr("output_file", outputFileAttr);
+  }
+
+  if(toStdErr) {
+    // Also Print the API to stderr.
+    std::cerr << os.str();
   }
 }
 

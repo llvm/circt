@@ -9,11 +9,15 @@
 // This is a specialization of the ESI CPP interface to target Capnproto
 // cosimulation.
 //
+// DO NOT EDIT!
+// This file is distributed as part of an ESI package. The source for this file
+// should always be modified within CIRCT (lib/dialect/ESI/runtime/cpp/esi.h).
+//
 //===----------------------------------------------------------------------===//
 
 #pragma once
 
-#include "circt/Dialect/ESI/Runtime/esi.h"
+#include "esi/esi.h"
 
 #include <capnp/ez-rpc.h>
 
@@ -25,10 +29,89 @@
 #endif
 #include ESI_COSIM_CAPNP_H
 
-namespace circt {
 namespace esi {
 namespace runtime {
 namespace cosim {
+
+// Uses the capnp dynamic interface in conjunction with ESI type reflection to
+// de-serialize a capnp message into an ESI value.
+template<typename TESIType>
+TESIType fromCapnp(DynamicValue::Reader value) {
+  TESIType ret;
+  auto rttrType = type::get<TESIType>();
+
+  if(value.getType() != DynamicValue::STRUCT)
+    throw std::runtime_error("Expected a struct value (all ESI types should be capnp structs)");
+  
+  auto structValue = value.as<DynamicStruct>();
+  // Iterate over the capnp fields and assign the ESI values accordingly.
+  for (auto field: structValue.getSchema().getFields()) {
+    auto fieldName = field.getProto().getName().cStr();
+    auto rttrProp = rttrType.get_property(fieldName);
+    if(!rttrProp.is_valid())
+      throw std::runtime_error("Invalid property name: " + std::string(fieldName));
+    
+    auto fieldValue = structValue.get(field);
+
+    // And now, do Capnp-to-RTTR hoop jumping
+    switch(fieldValue.getType()) {
+    case DynamicValue::BOOL:
+      rttrProp.set_value(ret, fieldValue.as<bool>());
+      break;
+    case DynamicValue::INT:
+      rttrProp.set_value(ret, fieldValue.as<int64_t>());
+      break;
+    case DynamicValue::UINT:
+      rttrProp.set_value(ret, fieldValue.as<uint64_t>());
+      break;
+    case DynamicValue::FLOAT:
+      rttrProp.set_value(ret, fieldValue.as<double>());
+      break;
+    case DynamicValue::TEXT:
+      rttrProp.set_value(ret, value.as<Text>().cStr());
+      break;
+    default:
+      throw std::runtime_error("Unsupported capnp type");
+    }
+  }
+}
+
+template<typename TESIType>
+void toCapnp(const TESIType& value, DynamicValue::Writer writer) {
+  auto rttrType = type::get<TESIType>();
+  auto structValue = writer.as<DynamicStruct>();
+
+  // Iterate over the capnp fields and assign the ESI values accordingly.
+  for (auto field: structValue.getSchema().getFields()) {
+    auto fieldName = field.getProto().getName().cStr();
+    auto rttrProp = rttrType.get_property(fieldName);
+    if(!rttrProp.is_valid())
+      throw std::runtime_error("Invalid property name: " + std::string(fieldName));
+    
+    auto fieldValue = structValue.get(field);
+
+    // And now, do RTTR-to-Capnp hoop jumping
+    switch(fieldValue.getType()) {
+    case DynamicValue::BOOL:
+      fieldValue.set(rttrProp.get_value(value).get_value<bool>());
+      break;
+    case DynamicValue::INT:
+      fieldValue.set(rttrProp.get_value(value).get_value<int64_t>());
+      break;
+    case DynamicValue::UINT:
+      fieldValue.set(rttrProp.get_value(value).get_value<uint64_t>());
+      break;
+    case DynamicValue::FLOAT:
+      fieldValue.set(rttrProp.get_value(value).get_value<double>());
+      break;
+    case DynamicValue::TEXT:
+      fieldValue.set(rttrProp.get_value(value).get_value<std::string>().c_str());
+      break;
+    default:
+      throw std::runtime_error("Unsupported capnp type");
+    }
+  }
+}
 
 namespace detail {
 // Custom type to hold the interface descriptions because i can't for the life
@@ -129,9 +212,8 @@ public:
       }
     }
 
-    if (!found) {
+    if (!found)
       throw std::runtime_error("Could not find endpoint: " + clientPathStr);
-    }
 
     // Open the endpoint.
     auto openResp = openReq.send().wait(ezClient->getWaitScope());
@@ -253,4 +335,3 @@ private:
 } // namespace cosim
 } // namespace runtime
 } // namespace esi
-} // namespace circt

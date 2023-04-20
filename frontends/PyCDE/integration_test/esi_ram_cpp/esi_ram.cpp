@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-#include "circt/Dialect/ESI/Runtime/cosim/capnp.h"
+#include "esi/runtime/cosim/capnp.h"
 
 #include ESI_COSIM_CAPNP_H
 

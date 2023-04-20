@@ -127,6 +127,10 @@ public:
 
   /// Write out the type in its entirety.
   mlir::LogicalResult write(support::indenting_ostream &os) const;
+
+private:
+  // Emits an RTTR registration for this type.
+  void writeRTTRRegistration(support::indenting_ostream& os) const;
 };
 
 struct CPPEndpoint {
