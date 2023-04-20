@@ -244,5 +244,9 @@ firrtl.module @namedBundles(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %w2, %w1 : !firrtl<bundle "B1" <a: uint<1>, b: uint<1>>>
   firrtl.connect %w2, %w3 : !firrtl<bundle "B1" <a : uint<1>, b : uint<1>>>, !firrtl<bundle "B2" <a : uint<1>, b : uint<1>>>
   // CHECK: firrtl.connect %w2, %w3 : !firrtl<bundle "B1" <a: uint<1>, b: uint<1>>>, !firrtl<bundle "B2" <a: uint<1>, b: uint<1>>>
+    // Note: Output of a mux preseves only the names that are common to both the bundles.
+    %vecOfBundle = firrtl.wire sym @vecOfBundle : !firrtl.vector<bundle "VecOfBundle" <a: bundle "OtherOther" <other: bundle "Other" <sint: sint<2>, uint: uint<4>>>>, 2>
+    %vecOfBundle2 = firrtl.wire : !firrtl.vector<bundle "VecOfBundle2" <a: bundle "OtherOther" <other: bundle "Other" <sint: sint<2>, uint: uint<4>>>>, 2>
+    %2 = firrtl.mux(%in, %vecOfBundle, %vecOfBundle2) : (!firrtl.uint<1>, !firrtl.vector<bundle "VecOfBundle" <a: bundle "OtherOther" <other: bundle "Other" <sint: sint<2>, uint: uint<4>>>>, 2>, !firrtl.vector<bundle "VecOfBundle2" <a: bundle "OtherOther" <other: bundle "Other" <sint: sint<2>, uint: uint<4>>>>, 2>) -> !firrtl.vector<bundle <a: bundle "OtherOther" <other: bundle "Other" <sint: sint<2>, uint: uint<4>>>>, 2>
 }
 }
