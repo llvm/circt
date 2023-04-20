@@ -28,7 +28,7 @@
 #include "llvm/Support/JSON.h"
 
 #ifdef CAPNP
-#include "capnp/ESICapnp.h"
+#include "../capnp/ESICapnp.h"
 #endif
 
 using namespace circt;
