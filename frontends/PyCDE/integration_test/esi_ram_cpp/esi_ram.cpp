@@ -8,7 +8,7 @@
 
 // Create ESI CPP API
 // RUN: cmake -S %S -B %T/build -DCIRCT_DIR=%CIRCT_SOURCE% -DPYCDE_OUT_DIR=%t \
-// RUN:     -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
+// RUN:     -DCMAKE_CXX_COMPILER=clang++-10 -DCMAKE_C_COMPILER=clang-10
 // RUN: cmake --build %T/build
 
 // Run test
