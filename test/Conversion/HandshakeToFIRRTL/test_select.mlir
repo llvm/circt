@@ -26,11 +26,7 @@
 // CHECK:           }
 // CHECK:           firrtl.module @test_select(in %[[VAL_20:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<1>>, in %[[VAL_21:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>, in %[[VAL_22:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>, in %[[VAL_23:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_24:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>, out %[[VAL_25:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_26:.*]]: !firrtl.clock, in %[[VAL_27:.*]]: !firrtl.uint<1>) {
 // CHECK:             %[[VAL_28:.*]], %[[VAL_29:.*]], %[[VAL_30:.*]], %[[VAL_31:.*]] = firrtl.instance arith_select0 @arith_select_in_ui1_ui32_ui32_out_ui32(in in0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<1>>, in in1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>, in in2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>, out out0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>)
-// CHECK:             firrtl.connect %[[VAL_28]], %[[VAL_20]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<1>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<1>>
-// CHECK:             firrtl.connect %[[VAL_29]], %[[VAL_21]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>
-// CHECK:             firrtl.connect %[[VAL_30]], %[[VAL_22]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>
-// CHECK:             firrtl.connect %[[VAL_24]], %[[VAL_31]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>
-// CHECK:             firrtl.connect %[[VAL_25]], %[[VAL_23]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
+// Trivial connects.
 // CHECK:           }
 // CHECK:         }
 
