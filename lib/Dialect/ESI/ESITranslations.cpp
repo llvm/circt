@@ -289,11 +289,11 @@ LogicalResult CosimCPPAPI::emit() {
 
   ios << "#pragma once\n\n";
 
-  ios << "// The ESI C++ API relies on the RTTR library for type "
+  ios << "// The ESI C++ API relies on the refl-cpp library for type "
          "introspection. "
          "This must be provided by the user.\n";
-  ios << "// See https://github.com/rttrorg/rttr \n";
-  ios << "#include <rttr/registration>\n\n";
+  ios << "// See https://github.com/veselink1/refl-cpp \n";
+  ios << "#include \"refl.hpp\"\n\n";
 
   ios << "#include <cstdint>\n";
   ios << "#include \"esi/runtime/cosim/capnp.h\"\n";

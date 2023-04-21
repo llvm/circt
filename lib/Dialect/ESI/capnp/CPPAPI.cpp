@@ -205,24 +205,16 @@ circt::esi::capnp::CPPType::write(support::indenting_ostream &os) const {
   return success();
 }
 
-void
-circt::esi::capnp::CPPType::writeRTTRRegistration(support::indenting_ostream &os) const {
-  os.indent() << "RTTR_REGISTRATION {\n";
+void circt::esi::capnp::CPPType::writeRTTRRegistration(
+    support::indenting_ostream &os) const {
+  os.indent() << "REFL_AUTO {\n";
   os.addIndent();
-  os.indent() << "rttr::registration::class_<" << cppName() << ">(\""
-              << cppName() << "\")\n";
-  os.addIndent();
-  os.indent() << ".constructor<>()\n";
-  for (auto &field : getFields()) {
-    if (isZeroWidthInt(field.type))
-      continue;
-    os.indent() << ".property(\"" << field.name.getValue() << "\", &"
-                << cppName() << "::" << field.name.getValue() << ")\n";
-  }
+  os.indent() << "type(" << cppName() << "),\n";
+  for (auto &field : getFields())
+    os.indent() << "field(" << field.name.getValue() << "),\n";
+
   os.reduceIndent();
-  os.indent() << ";\n";
-  os.reduceIndent();
-  os.indent() << "}\n\n";
+  os.indent() << "}\n";
 }
 
 //===----------------------------------------------------------------------===//

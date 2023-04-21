@@ -6,14 +6,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # TODO: most of this stuff should be moved to a .cmake file that is included.
 
-# fetch https://github.com/rttrorg/rttr
+# fetch https://github.com/veselink1/refl-cpp
 include(FetchContent)
 FetchContent_Declare(
-  rttr
-  GIT_REPOSITORY https://github.com/rttrorg/rttr.git
-  GIT_TAG        v0.9.7
+  refl-cpp
+  GIT_REPOSITORY https://github.com/veselink1/refl-cpp
+  GIT_TAG        v0.12.4
 )
-FetchContent_MakeAvailable(rttr)
+FetchContent_MakeAvailable(refl-cpp)
 
 # Assert that CIRCT_DIR is defined.
 if(NOT DEFINED CIRCT_DIR)
@@ -24,6 +24,8 @@ if(NOT DEFINED PYCDE_OUT_DIR)
   message(FATAL_ERROR "PYCDE_OUT_DIR must be defined.")
 endif()
 
+message(STATUS "CIRCT_DIR= ${CIRCT_DIR}")
+message(STATUS "PYCDE_OUT_DIR= ${PYCDE_OUT_DIR}")
 
 set(CAPNP_SCHEMA "${PYCDE_OUT_DIR}/hw/schema.capnp")
 set(ESI_CPP_API "${PYCDE_OUT_DIR}/hw/ESIRuntime.h")
@@ -71,8 +73,13 @@ add_executable(esi_ram_test
   ${ESI_RAM_SRCS}
   ${ESI_RAM_HDRS}
 )
-target_link_libraries(esi_ram_test ${CAPNP_LIBRARIES})
-
+target_link_libraries(esi_ram_test
+  ${CAPNP_LIBRARIES}
+  refl-cpp
+)
+target_include_directories(esi_ram_test PUBLIC
+  # Include the copied ESI C++ runtime headers.
+  ${PYCDE_OUT_DIR}/runtime/cpp/include)
 
 message("ESI_RAM_SRCS: ${ESI_RAM_SRCS}")
 message("ESI_RAM_HDRS: ${ESI_RAM_HDRS}")

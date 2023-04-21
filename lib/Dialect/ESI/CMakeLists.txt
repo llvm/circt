@@ -23,6 +23,8 @@ set(srcs
   Passes/ESICleanMetadata.cpp
 )
 
+set(ESI_RUNTIME_DIR ${CIRCT_BINARY_DIR}/include/circt/Dialect/ESI)
+
 set(ESI_LinkLibs
   CIRCTSupport
   CIRCTComb
@@ -43,6 +45,24 @@ set(ESI_Deps
   MLIRESITransformsIncGen
   MLIRESIInterfacesIncGen
 )
+
+# configure_file all files in the 'runtime' subdirectory, recursively.
+# The output file should reside in ${ESI_RUNTIME_DIR} and have the same
+# relative path as the input file.
+function(esi_configure_runtime_files)
+  foreach(file ${ARGN})
+    get_filename_component(dir ${file} DIRECTORY)
+    get_filename_component(name ${file} NAME)
+    string(REPLACE ${CMAKE_CURRENT_SOURCE_DIR} "" dir ${dir})
+    set(output ${ESI_RUNTIME_DIR}/${dir}/${name})
+    configure_file(${file} ${output} COPYONLY)
+  endforeach()
+endfunction()
+
+# Configure all files in the 'runtime' subdirectory.
+file(GLOB_RECURSE ESI_RUNTIME_FILES ${CMAKE_CURRENT_SOURCE_DIR}/runtime/*)
+esi_configure_runtime_files(${ESI_RUNTIME_FILES})
+
 
 set(CP_FILES
   ESIPrimitives.sv
@@ -89,7 +109,7 @@ foreach(CP_FILE ${CP_FILES})
   list(APPEND ABS_CFILES ${SRC})
   add_custom_command(TARGET CIRCTESI PRE_BUILD
     COMMAND ${CMAKE_COMMAND} -E
-    copy ${SRC} ${CIRCT_BINARY_DIR}/include/circt/Dialect/ESI/${DST})
+    copy ${SRC} ${CIRCT_BINARY_DIR}/${DST})
 endforeach()
 
 # Create a package of ESI collateral for any compiler to include with its

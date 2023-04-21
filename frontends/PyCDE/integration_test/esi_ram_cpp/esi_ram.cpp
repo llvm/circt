@@ -6,15 +6,23 @@
 // RUN: rm -rf %t
 // RUN: %PYTHON% %S/../esi_ram.py %t 2>&1
 
-// Create ESI CPP API
-// RUN: cmake -S %S -B %T/build -DCIRCT_DIR=%CIRCT_SOURCE% -DPYCDE_OUT_DIR=%t \
-// RUN:     -DCMAKE_CXX_COMPILER=clang++-10 -DCMAKE_C_COMPILER=clang-10
-// RUN: cmake --build %T/build
+// Build the project using the CMakeLists.txt from this directory. Just move
+// everything to the output folder in the build directory; this is very convenient
+// if we want to run the build manually afterwards.
+// RUN: cp %s %t
+// RUN: cp %S/CMakeLists.txt %t
+// RUN: cmake -S %t \
+// RUN:   -B %t/build \
+// RUN:   -DCIRCT_DIR=%CIRCT_SOURCE% \
+// RUN:   -DPYCDE_OUT_DIR=%t \
+// RUN:   -DCMAKE_CXX_COMPILER=clang++-10 \
+// RUN:   -DCMAKE_C_COMPILER=clang-10
+// RUN: cmake --build %t/build
 
 // Run test
 // RUN: esi-cosim-runner.py --tmpdir=%t \
 // RUN:     --schema %t/hw/schema.capnp \
-// RUN:     --exec %T/build/esi_ram_test \
+// RUN:     --exec %t/build/esi_ram_test \
 // RUN:     %t/hw/*.sv
 
 // clang-format on
@@ -23,7 +31,7 @@
 #include <string>
 #include <vector>
 
-#include "esi/runtime/cosim/capnp.h"
+#include "esi/backends/cosim/capnp.h"
 
 #include ESI_COSIM_CAPNP_H
 
@@ -72,7 +80,7 @@ int runTest(TBackend &backend) {
 
 int run_cosim_test(const std::string &host, unsigned port) {
   // Run test with cosimulation backend.
-  circt::esi::runtime::cosim::CosimBackend cosim(host, port);
+  esi::runtime::cosim::CosimBackend cosim(host, port);
   return runTest(cosim);
 }
 
@@ -97,7 +105,7 @@ int main(int argc, char **argv) {
   auto host = rpchostport.substr(0, colon);
   auto port = stoi(rpchostport.substr(colon + 1));
 
-  auto res = esi_test::run_cosim_test(host, port);
+  auto res = run_cosim_test(host, port);
   if (res != 0) {
     std::cerr << "Test failed with error code " << res << std::endl;
     return 1;

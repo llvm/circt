@@ -18,8 +18,12 @@
 #pragma once
 
 #include "esi/esi.h"
+#include "refl.hpp"
 
+#include <capnp/dynamic.h>
 #include <capnp/ez-rpc.h>
+#include <capnp/message.h>
+#include <capnp/schema.h>
 
 // Assert that an ESI_COSIM_CAPNP_H variable is defined. This is the capnp
 // header file generated from the ESI schema, containing definitions for e.g.
@@ -29,88 +33,41 @@
 #endif
 #include ESI_COSIM_CAPNP_H
 
+using namespace capnp;
+
 namespace esi {
 namespace runtime {
 namespace cosim {
 
 // Uses the capnp dynamic interface in conjunction with ESI type reflection to
 // de-serialize a capnp message into an ESI value.
-template<typename TESIType>
+template <typename TESIType>
 TESIType fromCapnp(DynamicValue::Reader value) {
   TESIType ret;
-  auto rttrType = type::get<TESIType>();
+  if (value.getType() != DynamicValue::STRUCT)
+    throw std::runtime_error(
+        "Expected a struct value (all ESI types should be capnp structs)");
 
-  if(value.getType() != DynamicValue::STRUCT)
-    throw std::runtime_error("Expected a struct value (all ESI types should be capnp structs)");
-  
   auto structValue = value.as<DynamicStruct>();
-  // Iterate over the capnp fields and assign the ESI values accordingly.
-  for (auto field: structValue.getSchema().getFields()) {
-    auto fieldName = field.getProto().getName().cStr();
-    auto rttrProp = rttrType.get_property(fieldName);
-    if(!rttrProp.is_valid())
-      throw std::runtime_error("Invalid property name: " + std::string(fieldName));
-    
-    auto fieldValue = structValue.get(field);
+  for_each(refl::reflect(ret).members, [&](auto member) {
+    auto fieldValue = structValue.get(member.name);
+    using ValueType = typename decltype(member)::value_type;
+    auto castValue = fieldValue.template as<ValueType>();
+    member(ret) = castValue;
+  });
 
-    // And now, do Capnp-to-RTTR hoop jumping
-    switch(fieldValue.getType()) {
-    case DynamicValue::BOOL:
-      rttrProp.set_value(ret, fieldValue.as<bool>());
-      break;
-    case DynamicValue::INT:
-      rttrProp.set_value(ret, fieldValue.as<int64_t>());
-      break;
-    case DynamicValue::UINT:
-      rttrProp.set_value(ret, fieldValue.as<uint64_t>());
-      break;
-    case DynamicValue::FLOAT:
-      rttrProp.set_value(ret, fieldValue.as<double>());
-      break;
-    case DynamicValue::TEXT:
-      rttrProp.set_value(ret, value.as<Text>().cStr());
-      break;
-    default:
-      throw std::runtime_error("Unsupported capnp type");
-    }
-  }
+  return ret;
 }
 
-template<typename TESIType>
-void toCapnp(const TESIType& value, DynamicValue::Writer writer) {
-  auto rttrType = type::get<TESIType>();
-  auto structValue = writer.as<DynamicStruct>();
-
-  // Iterate over the capnp fields and assign the ESI values accordingly.
-  for (auto field: structValue.getSchema().getFields()) {
-    auto fieldName = field.getProto().getName().cStr();
-    auto rttrProp = rttrType.get_property(fieldName);
-    if(!rttrProp.is_valid())
-      throw std::runtime_error("Invalid property name: " + std::string(fieldName));
-    
-    auto fieldValue = structValue.get(field);
-
-    // And now, do RTTR-to-Capnp hoop jumping
-    switch(fieldValue.getType()) {
-    case DynamicValue::BOOL:
-      fieldValue.set(rttrProp.get_value(value).get_value<bool>());
-      break;
-    case DynamicValue::INT:
-      fieldValue.set(rttrProp.get_value(value).get_value<int64_t>());
-      break;
-    case DynamicValue::UINT:
-      fieldValue.set(rttrProp.get_value(value).get_value<uint64_t>());
-      break;
-    case DynamicValue::FLOAT:
-      fieldValue.set(rttrProp.get_value(value).get_value<double>());
-      break;
-    case DynamicValue::TEXT:
-      fieldValue.set(rttrProp.get_value(value).get_value<std::string>().c_str());
-      break;
-    default:
-      throw std::runtime_error("Unsupported capnp type");
-    }
-  }
+// A function like above, but which uses Capnproto dynamic message building
+// together with the refl-cpp reflection.
+template <typename TESIType>
+void toCapnp(TESIType &value, MallocMessageBuilder &message) {
+  auto structBuilder = message.initRoot<TESIType::CPType>();
+  for_each(refl::reflect(value).members, [&](auto member) {
+    auto fieldValue = member(value);
+    structBuilder.set(member.name, fieldValue);
+  });
 }
 
 namespace detail {
@@ -244,7 +201,8 @@ public:
 
   ReadType operator()(WriteType arg) {
     auto req = port->sendRequest();
-    arg.fillCapnp(req.getMsg());
+    MallocMessageBuilder mmb;
+    toCapnp<WriteType>(arg, req.getMsg());
     req.send().wait(this->backend->getWaitScope());
     std::optional<capnp::Response<typename EsiDpiEndpoint<
         typename WriteType::CPType, typename ReadType::CPType>::RecvResults>>
@@ -256,7 +214,7 @@ public:
       resp = recvReq.send().wait(this->backend->getWaitScope());
     } while (!resp->getHasData());
     auto data = resp->getResp();
-    return ReadType::fromCapnp(data);
+    return fromCapnp<ReadType>(data);
   }
 
   void initBackend() override {
@@ -322,7 +280,7 @@ public:
       resp = recvReq.send().wait(this->backend->getWaitScope());
     } while (!resp->getHasData());
     auto data = resp->getResp();
-    return ReadType::fromCapnp(data);
+    return fromCapnp<ReadType>(data);
   }
 
 private:
