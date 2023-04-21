@@ -23,14 +23,13 @@ using namespace mlir;
 // Rewrite Patterns
 //===----------------------------------------------------------------------===//
 
-class ResetGroupingPattern
-    : public RewritePattern {
+class ResetGroupingPattern : public RewritePattern {
 public:
   using RewritePattern::RewritePattern;
   ResetGroupingPattern(PatternBenefit benefit, MLIRContext *context)
       : RewritePattern(ClockTreeOp::getOperationName(), benefit, context) {}
-  LogicalResult
-  matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
     ClockTreeOp moduleOp = dyn_cast<ClockTreeOp>(*op);
 
     // Group similar resets into single IfOps
@@ -38,12 +37,12 @@ public:
     llvm::MapVector<mlir::Value, SmallVector<scf::IfOp>> resetMap;
     auto ifOps = moduleOp.getBody().getOps<scf::IfOp>();
 
-    for (auto ifOp: ifOps)
+    for (auto ifOp : ifOps)
       resetMap[ifOp.getCondition()].push_back(ifOp);
 
     // Combine IfOps
     bool changed = false;
-    for (auto [cond, oldOps]: resetMap) {
+    for (auto [cond, oldOps] : resetMap) {
       if (oldOps.size() > 1) {
         auto iteratorStart = oldOps.rbegin();
         scf::IfOp firstOp = *(iteratorStart++);
@@ -54,9 +53,9 @@ public:
                                      firstOp.thenBlock()->getTerminator());
           // Check we're not inlining an empty block
           if (!thisOp->elseBlock()->empty()) {
-              rewriter.eraseOp(thisOp->elseBlock()->getTerminator());
-              rewriter.inlineBlockBefore(thisOp->elseBlock(),
-                                         firstOp.elseBlock()->getTerminator());
+            rewriter.eraseOp(thisOp->elseBlock()->getTerminator());
+            rewriter.inlineBlockBefore(thisOp->elseBlock(),
+                                       firstOp.elseBlock()->getTerminator());
           }
           rewriter.eraseOp(*thisOp);
           changed = true;
@@ -69,41 +68,44 @@ public:
   }
 };
 
-class EnableGroupingPattern
-    : public RewritePattern {
+class EnableGroupingPattern : public RewritePattern {
 public:
   using RewritePattern::RewritePattern;
   EnableGroupingPattern(PatternBenefit benefit, MLIRContext *context)
       : RewritePattern(ClockTreeOp::getOperationName(), benefit, context) {}
-  LogicalResult
-  matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
     ClockTreeOp clockTreeOp = dyn_cast<ClockTreeOp>(*op);
 
     // Generate vector of blocks to amass StateWrite enables in
-    SmallVector<Block*> groupingBlocks;
+    SmallVector<Block *> groupingBlocks;
     groupingBlocks.push_back(&clockTreeOp.getBodyBlock());
-    for (auto ifOp: clockTreeOp.getBody().getOps<scf::IfOp>()) {
+    for (auto ifOp : clockTreeOp.getBody().getOps<scf::IfOp>()) {
       groupingBlocks.push_back(ifOp.thenBlock());
       groupingBlocks.push_back(ifOp.elseBlock());
     }
 
     bool changed = false;
-    for (auto *block: groupingBlocks) {
+    for (auto *block : groupingBlocks) {
       llvm::MapVector<mlir::Value, SmallVector<StateWriteOp>> enableMap;
       auto writeOps = block->getOps<StateWriteOp>();
-      for (auto writeOp: writeOps) {
+      for (auto writeOp : writeOps) {
         if (writeOp.getCondition())
           enableMap[writeOp.getCondition()].push_back(writeOp);
       }
-      for (auto [enable, writeOps]: enableMap) {
+      for (auto [enable, writeOps] : enableMap) {
         // Only group if multiple writes share a reset
         if (writeOps.size() > 1) {
-          scf::IfOp ifOp = rewriter.create<scf::IfOp>(rewriter.getUnknownLoc(), enable, false);
-          for (auto writeOp: writeOps) {
-            writeOp->moveBefore(ifOp.thenBlock()->getTerminator());
-            writeOp.getConditionMutable().erase(0);
+          scf::IfOp ifOp = rewriter.create<scf::IfOp>(rewriter.getUnknownLoc(),
+                                                      enable, false);
+          for (auto writeOp : writeOps) {
+            rewriter.updateRootInPlace(writeOp, [&]() {
+              writeOp->moveBefore(ifOp.thenBlock()->getTerminator());
+              writeOp.getConditionMutable().erase(0);
+            });
           }
-          ifOp->moveBefore(block->getTerminator());
+          rewriter.updateRootInPlace(
+              ifOp, [&]() { ifOp->moveBefore(block->getTerminator()); });
           changed = true;
         }
       }
@@ -119,33 +121,31 @@ public:
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct GroupResetsAndEnablesPass : public GroupResetsAndEnablesBase<GroupResetsAndEnablesPass> {
+struct GroupResetsAndEnablesPass
+    : public GroupResetsAndEnablesBase<GroupResetsAndEnablesPass> {
   GroupResetsAndEnablesPass() = default;
-  GroupResetsAndEnablesPass(const GroupResetsAndEnablesPass &pass) : GroupResetsAndEnablesPass() {}
+  GroupResetsAndEnablesPass(const GroupResetsAndEnablesPass &pass)
+      : GroupResetsAndEnablesPass() {}
 
   void runOnOperation() override;
   LogicalResult runOnModel(ModelOp modelOp);
-
 };
 } // namespace
 
 void GroupResetsAndEnablesPass::runOnOperation() {
-  for (auto op :
-       llvm::make_early_inc_range(getOperation().getOps<ModelOp>()))
+  for (auto op : llvm::make_early_inc_range(getOperation().getOps<ModelOp>()))
     if (failed(runOnModel(op)))
       return signalPassFailure();
 }
 
 LogicalResult GroupResetsAndEnablesPass::runOnModel(ModelOp modelOp) {
-  LLVM_DEBUG(llvm::dbgs() << "Grouping resets and enables in `" << modelOp.getName()
-                          << "`\n");
+  LLVM_DEBUG(llvm::dbgs() << "Grouping resets and enables in `"
+                          << modelOp.getName() << "`\n");
 
   MLIRContext &context = getContext();
   RewritePatternSet patterns(&context);
-  patterns.insert<ResetGroupingPattern>(1,
-      &context);
-  patterns.insert<EnableGroupingPattern>(1,
-      &context);
+  patterns.insert<ResetGroupingPattern>(1, &context);
+  patterns.insert<EnableGroupingPattern>(1, &context);
   GreedyRewriteConfig config;
   config.strictMode = GreedyRewriteStrictness::ExistingOps;
   (void)applyPatternsAndFoldGreedily(modelOp, std::move(patterns), config);
