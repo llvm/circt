@@ -41,7 +41,8 @@ using NameUniquer = std::function<std::string(Operation *)>;
 // Utils
 //===----------------------------------------------------------------------===//
 
-static void legalizeFModule(FModuleOp moduleOp) {
+static void legalizeFModule(ConversionPatternRewriter &rewriter,
+                            FModuleOp moduleOp) {
   SmallVector<Operation *, 8> connectOps;
   moduleOp.walk([&](FConnectLike op) { connectOps.push_back(op); });
   for (auto *op : connectOps) {
@@ -49,7 +50,7 @@ static void legalizeFModule(FModuleOp moduleOp) {
     if (!op->getOperand(0).getType().cast<FIRRTLBaseType>().isPassive()) {
       OpBuilder builder(op);
       emitConnect(builder, op->getLoc(), op->getOperand(0), op->getOperand(1));
-      op->erase();
+      rewriter.eraseOp(op);
     }
   }
 }
@@ -3201,7 +3202,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     }
     rewriter.eraseOp(funcOp);
 
-    legalizeFModule(topModuleOp);
+    legalizeFModule(rewriter, topModuleOp);
 
     return success();
   }
