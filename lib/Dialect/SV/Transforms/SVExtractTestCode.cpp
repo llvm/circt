@@ -657,35 +657,6 @@ private:
     return true;
   }
 
-  // Move any modules that had all instances extracted to the testbench path.
-  void maybeMoveExtractedModules(hw::InstanceGraph &instanceGraph,
-                                 Attribute testBenchDir) {
-    // Ensure we have a valid test code path.
-    if (!testBenchDir)
-      return;
-
-    // Check each module that had instances extracted.
-    for (auto &pair : extractedInstances) {
-      hw::InstanceGraphNode *node = instanceGraph.lookup(pair.first);
-      assert(!node->noUses() && "expected module whose instances were "
-                                "extracted to be instantiated at least once");
-
-      // See if all instances were extracted.
-      bool allInstancesExtracted = true;
-      for (hw::InstanceRecord *use : node->uses()) {
-        allInstancesExtracted &= extractedInstances[pair.first].contains(
-            use->getInstance().getOperation());
-      }
-
-      if (!allInstancesExtracted)
-        continue;
-
-      // If so, move the module to the test code path.
-      hw::HWModuleLike mod = node->getModule();
-      mod->setAttr("output_file", testBenchDir);
-    }
-  }
-
   // Map from module name to set of extracted instances for that module.
   DenseMap<StringAttr, SmallPtrSet<Operation *, 32>> extractedInstances;
 
@@ -706,8 +677,6 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.assume");
   auto coverDir =
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.cover");
-  auto testBenchDir =
-      top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.testbench");
   auto assertBindFile =
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.assert.bindfile");
   auto assumeBindFile =
@@ -807,10 +776,6 @@ void SVExtractTestCodeImplPass::runOnOperation() {
     }
   }
 
-  // After all instances are processed, move any modules that had all instances
-  // extracted to the testbench path.
-  maybeMoveExtractedModules(*instanceGraph, testBenchDir);
-
   // We have to wait until all the instances are processed to clean up the
   // annotations.
   for (auto &op : topLevelModule->getOperations())
@@ -819,7 +784,6 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       op.removeAttr("firrtl.extract.cover.extra");
       op.removeAttr("firrtl.extract.assume.extra");
     }
-  top->removeAttr("firrtl.extract.testbench");
 
   markAnalysesPreserved<circt::hw::InstanceGraph>();
 }
