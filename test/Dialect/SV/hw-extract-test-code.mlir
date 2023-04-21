@@ -227,14 +227,6 @@ module {
 // -----
 // Check instance extraction
 
-// All instances of Baz are extracted, so it should be output to the testbench.
-// CHECK-LABEL: @Baz
-// CHECK-SAME: output_file = #hw.output_file<"testbench{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>
-
-// All instances of Bozo are extracted, so it should be output to the testbench.
-// CHECK-LABEL: @Bozo
-// CHECK: #hw.output_file<"testbench
-
 // In AllExtracted, instances foo, bar, and baz should be extracted.
 // CHECK-LABEL: @AllExtracted_cover
 // CHECK: hw.instance "foo"
@@ -294,9 +286,7 @@ module {
 // CHECK: hw.instance "non_testcode_and_instance0"
 // CHECK: hw.instance "non_testcode_and_instance1"
 
-module attributes {
-  firrtl.extract.testbench = #hw.output_file<"testbench/", excludeFromFileList, includeReplicatedOps>
-} {
+module {
   hw.module private @Foo(%a: i1) -> (b: i1) {
     hw.output %a : i1
   }

@@ -1463,11 +1463,6 @@ modules. This attribute has type `OutputFileAttr`.
 Used by SVExtractTestCode.  Specifies the output directory for extracted
 modules. This attribute has type `OutputFileAttr`.
 
-### firrtl.extract.testbench
-
-Used by SVExtractTestCode.  Specifies the output directory for extracted
-testbench only modules. This attribute has type `OutputFileAttr`.
-
 ### firrtl.extract.assert.bindfile
 
 Used by SVExtractTestCode.  Specifies the output file for extracted
