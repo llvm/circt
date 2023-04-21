@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/Seq/SeqAttributes.td"
 include "circt/Dialect/Seq/SeqOpInterfaces.td"
 
 // Base class for the operation in this dialect.

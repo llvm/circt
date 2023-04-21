@@ -1018,6 +1018,15 @@ hw.module @structExtractFromTemporary(%cond: i1, %a: !hw.struct<c: i1>, %b: !hw.
     hw.output %1 : i1
 }
 
+// CHECK-LABEL: unionExtractFromTemporary
+hw.module @unionExtractFromTemporary(%cond: i1, %a: !hw.union<c: i1>, %b: !hw.union<c: i1>) -> (out: i1) {
+    %0 = comb.mux %cond, %a, %b : !hw.union<c: i1>
+    %1 = hw.union_extract %0["c"] : !hw.union<c: i1>
+    // CHECK: wire union packed {logic c;} _GEN = cond ? a : b;
+    // CHECK-NEXT: assign out = _GEN.c;
+    hw.output %1 : i1
+}
+
 // CHECK-LABEL: structExplodeLowering
 hw.module @structExplodeLowering(%a: !hw.struct<a: i1, b: i1>) -> (outA: i1, outB: i1) {
   // CHECK: assign outA = a.a;
@@ -1388,4 +1397,49 @@ hw.module @inline_bitcast_in_concat(%in1: i7, %in2: !hw.array<8xi4>) -> (out: i3
 hw.module @DontInlineAggregateConstantIntoPorts() -> () {
   %0 = hw.aggregate_constant [0 : i4, 1 : i4] : !hw.array<2xi4>
   hw.instance "i0" @Array(a: %0: !hw.array<2xi4>) -> ()
+}
+
+// CHECK-LABEL: module EnumCmp(
+// CHECK-NEXT:   input enum bit [0:0] {A, B} test,
+// CHECK-NEXT:   output result
+// CHECK-NEXT:  )
+// CHECK-EMPTY:
+// CHECK-NEXT:   assign result = test == A;
+// CHECK-NEXT: endmodule
+hw.module @EnumCmp(%test: !hw.enum<A, B>) -> (result: i1) {
+  %A = hw.enum.constant A : !hw.enum<A, B>
+  %0 = hw.enum.cmp %test, %A : !hw.enum<A, B>, !hw.enum<A, B>
+  hw.output %0 : i1
+}
+
+// CHECK-LABEL: module FooA(
+// CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [9:0] b; logic [5:0] __post_padding_b;} b;} test
+// CHECK-NEXT:    output [15:0] a,
+// CHECK-NEXT:    output [9:0] b
+// CHECK-NEXT:  );
+// CHECK-EMPTY:
+// CHECK-NEXT:    assign a = test.a;
+// CHECK-NEXT:    assign b = test.b.b;
+// CHECK-NEXT:  endmodule
+!unionA = !hw.union<a: i16, b: i10>
+hw.module @FooA(%test: !unionA) -> (a: i16, b: i10) {
+  %0 = hw.union_extract %test["a"] : !unionA
+  %1 = hw.union_extract %test["b"] : !unionA
+  hw.output %0, %1 : i16, i10
+}
+
+// CHECK-LABEL: module FooB(
+// CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [1:0] __pre_padding_b; logic [13:0] b;} b;} test,
+// CHECK-NEXT:    output [15:0] a,
+// CHECK-NEXT:    output [13:0] b
+// CHECK-NEXT:  );
+// CHECK-EMPTY:
+// CHECK-NEXT:    assign a = test.a;
+// CHECK-NEXT:    assign b = test.b.b;
+// CHECK-NEXT:  endmodule
+!unionB = !hw.union<a: i16, b: i14 offset 2>
+hw.module @FooB(%test: !unionB) -> (a: i16, b: i14) {
+  %0 = hw.union_extract %test["a"] : !unionB
+  %1 = hw.union_extract %test["b"] : !unionB
+  hw.output %0, %1 : i16, i14
 }

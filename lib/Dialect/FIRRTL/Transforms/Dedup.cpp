@@ -216,6 +216,21 @@ struct Equivalence {
     nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
   }
 
+  std::string prettyPrint(Attribute attr) {
+    SmallString<64> buffer;
+    llvm::raw_svector_ostream os(buffer);
+    if (auto integerAttr = dyn_cast<IntegerAttr>(attr)) {
+      os << "0x";
+      if (integerAttr.getType().isSignlessInteger())
+        integerAttr.getValue().toStringUnsigned(buffer, /*radix=*/16);
+      else
+        integerAttr.getAPSInt().toString(buffer, /*radix=*/16);
+
+    } else
+      os << attr;
+    return std::string(buffer);
+  }
+
   // NOLINTNEXTLINE(misc-no-recursion)
   LogicalResult check(InFlightDiagnostic &diag, const Twine &message,
                       Operation *a, BundleType aType, Operation *b,
@@ -426,8 +441,9 @@ struct Equivalence {
       } else if (aAttr != bAttr) {
         diag.attachNote(a->getLoc())
             << "first operation has attribute '" << attrName.getValue()
-            << "' with value " << aAttr;
-        diag.attachNote(b->getLoc()) << "second operation has value " << bAttr;
+            << "' with value " << prettyPrint(aAttr);
+        diag.attachNote(b->getLoc())
+            << "second operation has value " << prettyPrint(bAttr);
         return failure();
       }
       seenAttrs.insert(attrName);
@@ -1155,13 +1171,12 @@ private:
 /// This fixes up connects when the field names of a bundle type changes.  It
 /// finds all fields which were previously bulk connected and legalizes it
 /// into a connect for each field.
-template <typename T>
 void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
   // If the types already match we can emit a connect.
   auto dstType = dst.getType();
   auto srcType = src.getType();
   if (dstType == srcType) {
-    builder.create<T>(dst, src);
+    builder.create<StrictConnectOp>(dst, src);
     return;
   }
   // It must be a bundle type and the field name has changed. We have to
@@ -1175,50 +1190,7 @@ void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
       std::swap(srcBundle, dstBundle);
       std::swap(srcField, dstField);
     }
-    fixupConnect<T>(builder, dstField, srcField);
-  }
-}
-
-/// Replaces a ConnectOp or StrictConnectOp with new bundle types.
-template <typename T>
-void fixupConnect(T connect) {
-  ImplicitLocOpBuilder builder(connect.getLoc(), connect);
-  fixupConnect<T>(builder, connect.getDest(), connect.getSrc());
-  connect->erase();
-}
-
-/// When we replace a bundle type with a similar bundle with different field
-/// names, we have to rewrite all the code to use the new field names. This
-/// mostly affects subfield result types and any bulk connects.
-void fixupReferences(Value oldValue, Type newType) {
-  SmallVector<std::pair<Value, Type>> workList;
-  workList.emplace_back(oldValue, newType);
-  while (!workList.empty()) {
-    auto [oldValue, newType] = workList.pop_back_val();
-    auto oldType = oldValue.getType();
-    // If the two types are identical, we don't need to do anything, otherwise
-    // update the type in place.
-    if (oldType == newType)
-      continue;
-    oldValue.setType(newType);
-    for (auto *op : llvm::make_early_inc_range(oldValue.getUsers())) {
-      if (auto subfield = dyn_cast<SubfieldOp>(op)) {
-        // Rewrite a subfield op to return the correct type.
-        auto index = subfield.getFieldIndex();
-        auto result = subfield.getResult();
-        auto newResultType = newType.cast<BundleType>().getElementType(index);
-        workList.emplace_back(result, newResultType);
-        continue;
-      }
-      if (auto connect = dyn_cast<ConnectOp>(op)) {
-        fixupConnect<ConnectOp>(connect);
-        continue;
-      }
-      if (auto strict = dyn_cast<StrictConnectOp>(op)) {
-        fixupConnect<StrictConnectOp>(strict);
-        continue;
-      }
-    }
+    fixupConnect(builder, dstField, srcField);
   }
 }
 
@@ -1229,9 +1201,27 @@ void fixupAllModules(InstanceGraph &instanceGraph) {
   for (auto *node : instanceGraph) {
     auto module = cast<FModuleLike>(*node->getModule());
     for (auto *instRec : node->uses()) {
-      auto inst = instRec->getInstance();
-      for (unsigned i = 0, e = getNumPorts(module); i < e; ++i)
-        fixupReferences(inst->getResult(i), module.getPortType(i));
+      auto inst = cast<InstanceOp>(instRec->getInstance());
+      ImplicitLocOpBuilder builder(inst.getLoc(), inst->getContext());
+      builder.setInsertionPointAfter(inst);
+      for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
+        auto result = inst.getResult(i);
+        auto newType = module.getPortType(i);
+        auto oldType = result.getType();
+        // If the type has not changed, we don't have to fix up anything.
+        if (newType == oldType)
+          continue;
+        // If the type changed we transform it back to the old type with an
+        // intermediate wire.
+        auto wire =
+            builder.create<WireOp>(oldType, inst.getPortName(i)).getResult();
+        result.replaceAllUsesWith(wire);
+        result.setType(newType);
+        if (inst.getPortDirection(i) == Direction::Out)
+          fixupConnect(builder, wire, result);
+        else
+          fixupConnect(builder, result, wire);
+      }
     }
   }
 }

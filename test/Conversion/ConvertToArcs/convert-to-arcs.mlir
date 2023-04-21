@@ -181,3 +181,37 @@ hw.module @AbsorbNames(%clock: i1) -> () {
 // CHECK-NEXT: }
 
 hw.module.extern @AbsorbNames2() -> (z0: i4, z1: i4)
+
+// CHECK:   arc.define @[[TRIVIAL_ARC:.+]]([[ARG0:%.+]]: i4)
+// CHECK-NEXT:     arc.output [[ARG0]]
+// CHECK-NEXT:  }
+
+// CHECK-LABEL: hw.module @Trivial(
+hw.module @Trivial(%clock: i1, %i0: i4, %reset: i1) -> (out: i4) {
+  // CHECK: [[RES0:%.+]] = arc.state @[[TRIVIAL_ARC]](%i0) clock %clock reset %reset lat 1 {names = ["foo"]
+  // CHECK-NEXT: hw.output [[RES0:%.+]]
+  %0 = hw.constant 0 : i4
+  %foo = seq.compreg %i0, %clock, %reset, %0 : i4
+  hw.output %foo : i4
+}
+// CHECK-NEXT: }
+
+// CHECK-NEXT:   arc.define @[[NONTRIVIAL_ARC_0:.+]]([[ARG0_1:%.+]]: i4)
+// CHECK-NEXT:     arc.output [[ARG0_1]]
+// CHECK-NEXT:  }
+
+// CHECK-NEXT:   arc.define @[[NONTRIVIAL_ARC_1:.+]]([[ARG0_2:%.+]]: i4)
+// CHECK-NEXT:     arc.output [[ARG0_2]]
+// CHECK-NEXT:  }
+
+// CHECK-LABEL: hw.module @NonTrivial(
+hw.module @NonTrivial(%clock: i1, %i0: i4, %reset1: i1, %reset2: i1) -> (out1: i4, out2: i4) {
+  // CHECK: [[RES2:%.+]] = arc.state @[[NONTRIVIAL_ARC_0]](%i0) clock %clock reset %reset1 lat 1 {names = ["foo"]
+  // CHECK-NEXT: [[RES3:%.+]] = arc.state @[[NONTRIVIAL_ARC_1]](%i0) clock %clock reset %reset2 lat 1 {names = ["bar"]
+  // CHECK-NEXT: hw.output [[RES2]], [[RES3]]
+  %0 = hw.constant 0 : i4
+  %foo = seq.compreg %i0, %clock, %reset1, %0 : i4
+  %bar = seq.compreg %i0, %clock, %reset2, %0 : i4
+  hw.output %foo, %bar : i4, i4
+}
+// CHECK-NEXT: }

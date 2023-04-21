@@ -211,14 +211,8 @@ struct ConvertCombToArithPass
 };
 } // namespace
 
-void ConvertCombToArithPass::runOnOperation() {
-  ConversionTarget target(getContext());
-  target.addIllegalDialect<comb::CombDialect>();
-  target.addIllegalOp<hw::ConstantOp>();
-  target.addLegalDialect<ArithDialect>();
-
-  RewritePatternSet patterns(&getContext());
-  // TODO: a pattern for comb.parity
+void circt::populateCombToArithConversionPatterns(
+    TypeConverter &converter, mlir::RewritePatternSet &patterns) {
   patterns.add<
       CombReplicateOpConversion, HWConstantOpConversion, IcmpOpConversion,
       ExtractOpConversion, ConcatOpConversion,
@@ -229,7 +223,24 @@ void ConvertCombToArithPass::runOnOperation() {
       BinaryOpConversion<MuxOp, SelectOp>, VariadicOpConversion<AddOp, AddIOp>,
       VariadicOpConversion<MulOp, MulIOp>, VariadicOpConversion<AndOp, AndIOp>,
       VariadicOpConversion<OrOp, OrIOp>, VariadicOpConversion<XorOp, XOrIOp>>(
-      &getContext());
+      converter, patterns.getContext());
+}
+
+void ConvertCombToArithPass::runOnOperation() {
+  ConversionTarget target(getContext());
+  target.addIllegalDialect<comb::CombDialect>();
+  target.addIllegalOp<hw::ConstantOp>();
+  target.addLegalDialect<ArithDialect>();
+  // Arith does not have an operation equivalent to comb.parity. A lowering
+  // would result in undesirably complex logic, therefore, we mark it legal
+  // here.
+  target.addLegalOp<comb::ParityOp>();
+
+  RewritePatternSet patterns(&getContext());
+  TypeConverter converter;
+  converter.addConversion([](Type type) { return type; });
+  // TODO: a pattern for comb.parity
+  populateCombToArithConversionPatterns(converter, patterns);
 
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))

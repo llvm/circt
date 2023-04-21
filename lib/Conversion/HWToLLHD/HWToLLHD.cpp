@@ -179,7 +179,7 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
         });
 
       auto init = rewriter.create<ConstantOp>(arg.getLoc(), argType, 0);
-      SmallString<8> sigName(instance.instanceName());
+      SmallString<8> sigName(instance.getInstanceName());
       sigName += "_arg_";
       sigName += std::to_string(argIdx++);
       auto sig = rewriter.createOrFold<SigOp>(
@@ -230,7 +230,7 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
       // See github.com/llvm/circt/pull/988 for a discussion.
       if (!sig) {
         auto init = rewriter.create<ConstantOp>(loc, resultType, 0);
-        SmallString<8> sigName(instance.instanceName());
+        SmallString<8> sigName(instance.getInstanceName());
         sigName += "_result_";
         sigName += std::to_string(result.getResultNumber());
         sig = rewriter.createOrFold<SigOp>(loc, SigType::get(resultType),
@@ -255,7 +255,7 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
     // Create the LLHD instance from the operands and results. Then mark the
     // original instance for replacement with the new values probed from the
     // signals attached to the LLHD instance.
-    rewriter.create<InstOp>(instance.getLoc(), instance.instanceName(),
+    rewriter.create<InstOp>(instance.getLoc(), instance.getInstanceName(),
                             instance.getModuleName(), arguments, resultSigs);
     rewriter.replaceOp(instance, resultValues);
 

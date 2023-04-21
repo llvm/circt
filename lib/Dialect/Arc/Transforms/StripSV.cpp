@@ -47,7 +47,7 @@ void StripSVPass::runOnOperation() {
       if (extModOp.getArgNames() != expectedClockGateInputs ||
           extModOp.getResultNames() != expectedClockGateOutputs) {
         extModOp.emitError("clock gate module `")
-            << extModOp.moduleName() << "` has incompatible port names "
+            << extModOp.getModuleName() << "` has incompatible port names "
             << extModOp.getArgNamesAttr() << " -> "
             << extModOp.getResultNamesAttr();
         return signalPassFailure();
@@ -56,16 +56,19 @@ void StripSVPass::runOnOperation() {
               ArrayRef<Type>{i1Type, i1Type, i1Type} ||
           extModOp.getResultTypes() != ArrayRef<Type>{i1Type}) {
         extModOp.emitError("clock gate module `")
-            << extModOp.moduleName() << "` has incompatible port types "
+            << extModOp.getModuleName() << "` has incompatible port types "
             << extModOp.getArgumentTypes() << " -> "
             << extModOp.getResultTypes();
         return signalPassFailure();
       }
-      clockGateModuleNames.insert(extModOp.moduleNameAttr());
-    } else {
-      externModuleNames.insert(extModOp.moduleNameAttr());
+      clockGateModuleNames.insert(extModOp.getModuleNameAttr());
+      opsToDelete.push_back(extModOp);
+      continue;
     }
-    opsToDelete.push_back(extModOp);
+
+    externModuleNames.insert(extModOp.getModuleNameAttr());
+    if (replaceExtModuleOutputs)
+      opsToDelete.push_back(extModOp);
   }
   LLVM_DEBUG(llvm::dbgs() << "Found " << clockGateModuleNames.size()
                           << " clock gates, " << externModuleNames.size()
@@ -160,10 +163,14 @@ void StripSVPass::runOnOperation() {
           instOp.replaceAllUsesWith(gated);
           opsToDelete.push_back(instOp);
         } else if (externModuleNames.contains(modName)) {
-          for (auto result : instOp.getResults())
-            result.replaceAllUsesWith(
-                builder.create<hw::ConstantOp>(result.getType(), 0));
-          opsToDelete.push_back(instOp);
+          if (replaceExtModuleOutputs) {
+            instOp->emitWarning("StripSV: outputs of external module instance "
+                                "replaced with zero value!");
+            for (auto result : instOp.getResults())
+              result.replaceAllUsesWith(
+                  builder.create<hw::ConstantOp>(result.getType(), 0));
+            opsToDelete.push_back(instOp);
+          }
         }
         continue;
       }

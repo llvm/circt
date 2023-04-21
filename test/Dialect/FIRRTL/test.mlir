@@ -190,7 +190,30 @@ firrtl.module @InnerSymAttr() {
   // CHECK: %w1 = firrtl.wire sym @w1
   %w2 = firrtl.wire sym [<@w2,0,private>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
   // CHECK: %w2 = firrtl.wire sym [<@w2,0,private>]
-  %w3 = firrtl.wire sym [<@w3,2,public>,<@x2,1,private>,<@syh2,0,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
-  // CHECK: %w3 = firrtl.wire sym [<@syh2,0,public>, <@x2,1,private>, <@w3,2,public>]
+  %w3, %w3_ref = firrtl.wire sym [<@w3,2,public>,<@x2,1,private>,<@syh2,0,public>] forceable : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>, !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>>
+  // CHECK: %w3, %w3_ref = firrtl.wire sym [<@syh2,0,public>, <@x2,1,private>, <@w3,2,public>]
+}
+
+// CHECK-LABEL: firrtl.module @EnumTest
+firrtl.module @EnumTest(in %in : !firrtl.enum<a: uint<1>, b: uint<2>>,
+                        out %out : !firrtl.uint<2>, out %tag : !firrtl.uint<1>) {
+  %v = firrtl.subtag %in[b] : !firrtl.enum<a: uint<1>, b: uint<2>>
+  %t = firrtl.tagextract %in : !firrtl.enum<a: uint<1>, b: uint<2>>
+  firrtl.strictconnect %out, %v : !firrtl.uint<2>
+  firrtl.strictconnect %tag, %t : !firrtl.uint<1>
+
+  %p = firrtl.istag %in a : !firrtl.enum<a: uint<1>, b: uint<2>>
+
+  %c1_u1 = firrtl.constant 0 : !firrtl.uint<8>
+  %some = firrtl.enumcreate Some(%c1_u1) : !firrtl.enum<None: uint<0>, Some: uint<8>>
+
+  firrtl.match %in : !firrtl.enum<a: uint<1>, b: uint<2>> {
+    case a(%arg0) {
+      %w = firrtl.wire : !firrtl.uint<1>
+    }
+    case b(%arg0) {
+      %x = firrtl.wire : !firrtl.uint<1>
+    }
+  }
 }
 }

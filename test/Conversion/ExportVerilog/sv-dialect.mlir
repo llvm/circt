@@ -989,11 +989,11 @@ hw.module @ConstantDefBeforeUse() {
 
 // CHECK: `ifndef _TYPESCOPE___AnFSMTypedecl
 // CHECK: `define _TYPESCOPE___AnFSMTypedecl
-// CHECK: typedef enum {_state1_A, _state1_B} _state1;
-// CHECK: typedef enum {_state2_A, _state2_B} _state2;
+// CHECK: typedef enum bit [0:0] {_state1_A, _state1_B} _state1;
+// CHECK: typedef enum bit [0:0] {_state2_A, _state2_B} _state2;
 // CHECK: `endif // _TYPESCOPE___AnFSMTypedecl
 // CHECK-LABEL: module AnFSM
-// CHECK:   enum {A, B} reg_0;
+// CHECK:   enum bit [0:0] {A, B} reg_0;
 // OLD:   _state1     reg_state1;
 // OLD:   _state2     reg_state2;
 // CHECK:   always @(posedge clock) begin
@@ -1708,6 +1708,16 @@ hw.module @IndexPartSelectInoutArray(%a: !hw.array<2xi1>, %c: i1, %d: i1) {
   hw.output
 }
 
+hw.module @IndexPartSelect() -> (a : i3) {
+  // CHECK-LABEL: module IndexPartSelect(
+  // CHECK: wire [17:0] _GEN = 18'h3;
+  // CHECK-NEXT: assign a = _GEN[4'h3 +: 3];
+  %c3_i3 = hw.constant 3 : i4
+  %c3_i18 = hw.constant 3 : i18
+  %c = sv.indexed_part_select %c3_i18[%c3_i3 : 3] : i18,i4
+  hw.output %c : i3
+}
+
 // CHECK-LABEL: module ConditionalComments(
 hw.module @ConditionalComments() {
   sv.ifdef "FOO"  {             // CHECK-NEXT: `ifdef FOO
@@ -1722,6 +1732,32 @@ hw.module @ConditionalComments() {
   }                             // CHECK-NEXT: `endif // not def BAR
 }
 
+// CHECK-LABEL: module ForStatement
+hw.module @ForStatement(%a: i5) -> () {
+  %_RANDOM = sv.logic : !hw.inout<uarray<3xi32>>
+  sv.initial {
+    %c-2_i2 = hw.constant -2 : i2
+    %c1_i2 = hw.constant 1 : i2
+    %c-1_i2 = hw.constant -1 : i2
+    %c0_i2 = hw.constant 0 : i2
+    // CHECK:      for (logic [1:0] i = 2'h0; i < 2'h3; i += 2'h1) begin
+    // CHECK-NEXT:   _RANDOM[i] = `RANDOM;
+    // CHECK-NEXT: end
+    sv.for %i = %c0_i2 to %c-1_i2 step %c1_i2 : i2 {
+      %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+      %index = sv.array_index_inout %_RANDOM[%i] : !hw.inout<uarray<3xi32>>, i2
+      sv.bpassign %index, %RANDOM : i32
+    }
+  }
+}
+
+// CHECK-LABEL: module EnumCheck
+hw.module @EnumCheck(%a : !hw.enum<T>, %b: !hw.enum<>)
+                 -> (c: !hw.enum<T>, d: !hw.enum<>) {
+  // CHECK: input enum bit [0:0] {T} a
+  // CHECK: // input enum bit [0:0] {} b
+  hw.output %a, %b : !hw.enum<T>, !hw.enum<>
+}
 
 // CHECK-LABEL: module intrinsic
 hw.module @intrinsic(%clk: i1) -> (io1: i1, io2: i1, io3: i1, io4: i5) {

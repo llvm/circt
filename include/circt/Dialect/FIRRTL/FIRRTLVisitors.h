@@ -31,8 +31,8 @@ public:
         // Basic Expressions
         .template Case<
             ConstantOp, SpecialConstantOp, AggregateConstantOp, InvalidValueOp,
-            SubfieldOp, SubindexOp, SubaccessOp, BundleCreateOp, VectorCreateOp,
-            MultibitMuxOp,
+            SubfieldOp, SubindexOp, SubaccessOp, IsTagOp, SubtagOp,
+            BundleCreateOp, VectorCreateOp, MultibitMuxOp, TagExtractOp,
             // Arithmetic and Logical Binary Primitives.
             AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
             OrPrimOp, XorPrimOp,
@@ -49,10 +49,12 @@ public:
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
-            RefResolveOp, RefSubOp, mlir::UnrealizedConversionCastOp>(
-            [&](auto expr) -> ResultType {
-              return thisCast->visitExpr(expr, args...);
-            })
+            RefResolveOp, RefSubOp,
+            // Casts to deal with weird stuff
+            UninferredResetCastOp, UninferredWidthCastOp,
+            mlir::UnrealizedConversionCastOp>([&](auto expr) -> ResultType {
+          return thisCast->visitExpr(expr, args...);
+        })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidExpr(op, args...);
         });
@@ -97,6 +99,9 @@ public:
   HANDLE(SubfieldOp, Unhandled);
   HANDLE(SubindexOp, Unhandled);
   HANDLE(SubaccessOp, Unhandled);
+  HANDLE(IsTagOp, Unhandled);
+  HANDLE(SubtagOp, Unhandled);
+  HANDLE(TagExtractOp, Unhandled);
   HANDLE(MultibitMuxOp, Unhandled);
 
   // Arithmetic and Logical Binary Primitives.
@@ -157,6 +162,8 @@ public:
 
   // Conversions.
   HANDLE(HWStructCastOp, Unhandled);
+  HANDLE(UninferredResetCastOp, Unhandled);
+  HANDLE(UninferredWidthCastOp, Unhandled);
   HANDLE(mlir::UnrealizedConversionCastOp, Unhandled);
   HANDLE(BitCastOp, Unhandled);
 #undef HANDLE
@@ -170,9 +177,10 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<AttachOp, ConnectOp, StrictConnectOp, RefConnectOp,
+        .template Case<AttachOp, ConnectOp, StrictConnectOp, RefDefineOp,
                        ForceOp, PrintFOp, SkipOp, StopOp, WhenOp, AssertOp,
-                       AssumeOp, CoverOp, ProbeOp>(
+                       AssumeOp, CoverOp, ProbeOp, RefForceOp,
+                       RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitStmt(opNode, args...);
             })
@@ -201,7 +209,7 @@ public:
   HANDLE(AttachOp);
   HANDLE(ConnectOp);
   HANDLE(StrictConnectOp);
-  HANDLE(RefConnectOp);
+  HANDLE(RefDefineOp);
   HANDLE(ForceOp);
   HANDLE(PrintFOp);
   HANDLE(SkipOp);
@@ -211,6 +219,10 @@ public:
   HANDLE(AssumeOp);
   HANDLE(CoverOp);
   HANDLE(ProbeOp);
+  HANDLE(RefForceOp);
+  HANDLE(RefForceInitialOp);
+  HANDLE(RefReleaseOp);
+  HANDLE(RefReleaseInitialOp);
 
 #undef HANDLE
 };

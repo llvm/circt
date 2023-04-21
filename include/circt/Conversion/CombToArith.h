@@ -13,6 +13,9 @@
 #include <memory>
 
 namespace circt {
+void populateCombToArithConversionPatterns(TypeConverter &converter,
+                                           RewritePatternSet &patterns);
+
 std::unique_ptr<OperationPass<ModuleOp>> createConvertCombToArithPass();
 } // namespace circt
 

@@ -121,6 +121,10 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i5
   %bigArray = hw.array_concat %arrCreated, %arr2 : !hw.array<2 x i19>, !hw.array<3 x i19>
   // CHECK-NEXT: %A = hw.enum.constant A : !hw.enum<A, B, C>
   %A_enum = hw.enum.constant A : !hw.enum<A, B, C>
+  // CHECK-NEXT: %B = hw.enum.constant B : !hw.enum<A, B, C>
+  %B_enum = hw.enum.constant B : !hw.enum<A, B, C>
+  // CHECK-NEXT: = hw.enum.cmp %A, %B : !hw.enum<A, B, C>, !hw.enum<A, B, C>
+  %enumcmp = hw.enum.cmp %A_enum, %B_enum : !hw.enum<A, B, C>, !hw.enum<A, B, C>
 
   // CHECK-NEXT: hw.aggregate_constant [false, true] : !hw.struct<a: i1, b: i1>
   hw.aggregate_constant [false, true] : !hw.struct<a: i1, b: i1>

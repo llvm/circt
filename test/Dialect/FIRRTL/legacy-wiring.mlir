@@ -166,7 +166,8 @@ firrtl.circuit "ResetToI1" attributes {
   }
   // CHECK-LABEL module @ResetToI1
   firrtl.module @ResetToI1() {
-    // CHECK: firrtl.connect %x, %{{[^ ]*}} : !firrtl.uint<1>, !firrtl.reset
+    // CHECK: %[[r1:.+]] = firrtl.resetCast %{{[^ ]*}}
+    // CHECK-NEXT: firrtl.strictconnect %x, %[[r1]] : !firrtl.uint<1>
     firrtl.instance bar interesting_name @Bar()
     %x = firrtl.wire interesting_name : !firrtl.uint<1>
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
@@ -198,10 +199,11 @@ firrtl.circuit "IntWidths" attributes {
   }
   // CHECK-LABEL module @IntWidths
   firrtl.module @IntWidths() {
-    // CHECK: firrtl.connect %x, %{{[^ ]*}} : !firrtl.uint, !firrtl.uint<4>
+    // CHECK:  firrtl.widthCast %bar_y__bore
+    // CHECK-NEXT: firrtl.strictconnect %x, %{{[^ ]*}} 
     firrtl.instance bar interesting_name @Bar()
     %x = firrtl.wire interesting_name : !firrtl.uint
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint
-    firrtl.connect %x, %invalid_ui1 : !firrtl.uint, !firrtl.uint
+    firrtl.strictconnect %x, %invalid_ui1 : !firrtl.uint
   }
 }

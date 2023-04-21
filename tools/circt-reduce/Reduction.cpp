@@ -182,7 +182,7 @@ struct NLARemover {
 // Reduction
 //===----------------------------------------------------------------------===//
 
-Reduction::~Reduction() {}
+Reduction::~Reduction() = default;
 
 //===----------------------------------------------------------------------===//
 // Pass Reduction
@@ -241,7 +241,8 @@ struct ModuleExternalizer : public Reduction {
     builder.create<firrtl::FExtModuleOp>(
         module->getLoc(),
         module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()),
-        module.getPorts(), StringRef(), module.getAnnotationsAttr());
+        module.getConventionAttr(), module.getPorts(), StringRef(),
+        module.getAnnotationsAttr());
     module->erase();
     return success();
   }
@@ -421,14 +422,17 @@ struct InstanceStubber : public Reduction {
       auto result = instOp.getResult(i);
       auto name = builder.getStringAttr(Twine(instOp.getName()) + "_" +
                                         instOp.getPortNameStr(i));
-      auto wire = builder.create<firrtl::WireOp>(
-          result.getType(), name, firrtl::NameKindEnum::DroppableName,
-          instOp.getPortAnnotation(i), StringAttr{});
+      auto wire =
+          builder
+              .create<firrtl::WireOp>(result.getType(), name,
+                                      firrtl::NameKindEnum::DroppableName,
+                                      instOp.getPortAnnotation(i), StringAttr{})
+              .getResult();
       invalidateOutputs(builder, wire, invalidCache,
                         instOp.getPortDirection(i) == firrtl::Direction::In);
       result.replaceAllUsesWith(wire);
     }
-    auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
+    auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
     nlaRemover.markNLAsInOperation(instOp);
     erasedInsts.insert(instOp);
@@ -469,9 +473,12 @@ struct MemoryStubber : public Reduction {
       auto result = memOp.getResult(i);
       auto name = builder.getStringAttr(Twine(memOp.getName()) + "_" +
                                         memOp.getPortNameStr(i));
-      auto wire = builder.create<firrtl::WireOp>(
-          result.getType(), name, firrtl::NameKindEnum::DroppableName,
-          memOp.getPortAnnotation(i), StringAttr{});
+      auto wire =
+          builder
+              .create<firrtl::WireOp>(result.getType(), name,
+                                      firrtl::NameKindEnum::DroppableName,
+                                      memOp.getPortAnnotation(i), StringAttr{})
+              .getResult();
       invalidateOutputs(builder, wire, invalidCache, true);
       result.replaceAllUsesWith(wire);
 
@@ -531,11 +538,11 @@ static void pruneUnusedOps(Operation *initialOp, Reduction &reduction) {
   SmallSet<Operation *, 4> handled;
   worklist.push_back(initialOp);
   while (!worklist.empty()) {
-    auto op = worklist.pop_back_val();
+    auto *op = worklist.pop_back_val();
     if (!op->use_empty())
       continue;
     for (auto arg : op->getOperands())
-      if (auto argOp = arg.getDefiningOp())
+      if (auto *argOp = arg.getDefiningOp())
         if (handled.insert(argOp).second)
           worklist.push_back(argOp);
     reduction.notifyOpErased(op);
@@ -644,7 +651,7 @@ struct ConnectInvalidator : public Reduction {
     OpBuilder builder(op);
     auto invOp =
         builder.create<firrtl::InvalidValueOp>(rhs.getLoc(), rhs.getType());
-    auto rhsOp = rhs.getDefiningOp();
+    auto *rhsOp = rhs.getDefiningOp();
     op->setOperand(1, invOp);
     if (rhsOp)
       pruneUnusedOps(rhsOp, *this);
@@ -757,8 +764,12 @@ struct ExtmoduleInstanceRemover : public Reduction {
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
     SmallVector<Value> replacementWires;
     for (firrtl::PortInfo info : portInfo) {
-      auto wire = builder.create<firrtl::WireOp>(
-          info.type, (Twine(instOp.getName()) + "_" + info.getName()).str());
+      auto wire =
+          builder
+              .create<firrtl::WireOp>(
+                  info.type,
+                  (Twine(instOp.getName()) + "_" + info.getName()).str())
+              .getResult();
       if (info.isOutput()) {
         auto inv = builder.create<firrtl::InvalidValueOp>(info.type);
         builder.create<firrtl::ConnectOp>(wire, inv);
@@ -869,15 +880,19 @@ struct ConnectSourceOperandForwarder : public Reduction {
     ImplicitLocOpBuilder builder(destOp->getLoc(), destOp);
     Value newDest;
     if (auto wire = dyn_cast<firrtl::WireOp>(destOp))
-      newDest = builder.create<firrtl::WireOp>(forwardedOperand.getType(),
-                                               wire.getName());
+      newDest = builder
+                    .create<firrtl::WireOp>(forwardedOperand.getType(),
+                                            wire.getName())
+                    .getResult();
     else {
       auto regName = destOp->getAttrOfType<StringAttr>("name");
       // We can promote the register into a wire but we wouldn't do here because
       // the error might be caused by the register.
       auto clock = destOp->getOperand(0);
-      newDest = builder.create<firrtl::RegOp>(forwardedOperand.getType(), clock,
-                                              regName ? regName.str() : "");
+      newDest = builder
+                    .create<firrtl::RegOp>(forwardedOperand.getType(), clock,
+                                           regName ? regName.str() : "")
+                    .getResult();
     }
 
     // Create new connection between a new wire and the forwarded operand.
@@ -981,7 +996,7 @@ struct EagerInliner : public Reduction {
     auto instOp = dyn_cast<firrtl::InstanceOp>(op);
     if (!instOp)
       return 0;
-    auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
+    auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
     if (!isa<firrtl::FModuleOp>(moduleOp.getOperation()))
       return 0;
@@ -998,13 +1013,16 @@ struct EagerInliner : public Reduction {
       auto result = instOp.getResult(i);
       auto name = builder.getStringAttr(Twine(instOp.getName()) + "_" +
                                         instOp.getPortNameStr(i));
-      auto wire = builder.create<firrtl::WireOp>(
-          result.getType(), name, firrtl::NameKindEnum::DroppableName,
-          instOp.getPortAnnotation(i), StringAttr{});
+      auto wire =
+          builder
+              .create<firrtl::WireOp>(result.getType(), name,
+                                      firrtl::NameKindEnum::DroppableName,
+                                      instOp.getPortAnnotation(i), StringAttr{})
+              .getResult();
       result.replaceAllUsesWith(wire);
       argReplacements.push_back(wire);
     }
-    auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
+    auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = cast<firrtl::FModuleOp>(
         instOp.getReferencedModule(symbols.getSymbolTable(tableOp))
             .getOperation());

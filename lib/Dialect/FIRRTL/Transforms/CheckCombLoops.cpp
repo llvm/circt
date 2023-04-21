@@ -180,18 +180,28 @@ public:
           for (auto dfsFromVal : aliasingValues) {
 
             for (auto &use : dfsFromVal.getUses()) {
-              Operation *owner = use.getOwner();
-              if (isa<RegResetOp, RegOp>(owner))
-                continue;
-              Value childVal;
-              if (owner->getNumResults() == 1)
-                childVal = owner->getResult(0);
-              else if (auto connect = dyn_cast<FConnectLike>(owner))
-                if (use.getOperandNumber() == 1) {
-                  auto dst = connect.getDest();
-                  if (handleConnects(dst, inputArgFields).succeeded())
-                    childVal = dst;
-                }
+              auto childVal =
+                  TypeSwitch<Operation *, Value>(use.getOwner())
+                      // Registers stop walk for comb loops.
+                      .Case<RegOp, RegResetOp>([](auto _) { return Value(); })
+                      // For non-register declarations, look at data result.
+                      .Case<Forceable>([](auto op) { return op.getDataRaw(); })
+                      // Handle connect ops specially.
+                      .Case<FConnectLike>([&](FConnectLike connect) -> Value {
+                        if (use.getOperandNumber() == 1) {
+                          auto dst = connect.getDest();
+                          if (handleConnects(dst, inputArgFields).succeeded())
+                            return dst;
+                        }
+                        return {};
+                      })
+                      // For everything else (e.g., expressions), if has single
+                      // result use that.
+                      .Default([](auto op) -> Value {
+                        if (op->getNumResults() == 1)
+                          return op->getResult(0);
+                        return {};
+                      });
               if (childVal && childVal.getType().isa<FIRRTLBaseType>())
                 children.push_back(childVal);
             }
@@ -253,7 +263,7 @@ public:
           // Wire is added to the worklist
           .Case<WireOp>([&](WireOp wire) {
             worklist.push_back(wire.getResult());
-            if (!wire.getType().cast<FIRRTLBaseType>().isGround())
+            if (!wire.getResult().getType().cast<FIRRTLBaseType>().isGround())
               setValRefsTo(wire.getResult(), FieldRef(wire.getResult(), 0));
           })
           // All sub elements are added to the worklist.

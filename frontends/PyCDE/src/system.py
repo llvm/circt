@@ -45,7 +45,7 @@ class System:
 
   def __init__(self,
                top_modules: Union[list, Module],
-               name: str = "PyCDESystem",
+               name: str = None,
                output_directory: str = None,
                sw_api_langs: List[str] = None):
     from .module import Module
@@ -55,7 +55,10 @@ class System:
       self.top_modules = list(top_modules)
     else:
       self.top_modules = [top_modules]
-    self.name = name
+    if name is None:
+      self.name = self.top_modules[0].__name__
+    else:
+      self.name = name
     self._op_cache: _OpCache = _OpCache(self.mod)
 
     self._generate_queue = []
@@ -253,6 +256,7 @@ class System:
       "builtin.module(esi-emit-collateral{{tops={tops} schema-file=schema.capnp}})",
       "builtin.module(esi-clean-metadata)",
       "builtin.module(lower-msft-to-hw{{verilog-file={verilog_file}}})",
+      "builtin.module(lower-hwarith-to-hw)",
       "builtin.module(hw.module(lower-seq-hlmem))",
       "builtin.module(lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw)",
       "builtin.module(convert-fsm-to-sv)",

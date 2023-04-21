@@ -131,6 +131,14 @@ ArrayRef<mlir::Type> SCModuleOp::getCallableResults() {
   return getResultTypes();
 }
 
+ArrayAttr SCModuleOp::getCallableArgAttrs() {
+  return getArgAttrs().value_or(nullptr);
+}
+
+ArrayAttr SCModuleOp::getCallableResAttrs() {
+  return getResAttrs().value_or(nullptr);
+}
+
 StringRef SCModuleOp::getModuleName() {
   return (*this)
       ->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
@@ -439,6 +447,9 @@ LogicalResult SCFuncOp::verify() {
 void InstanceDeclOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getInstanceHandle(), getName());
 }
+
+StringRef InstanceDeclOp::getInstanceName() { return getName(); }
+StringAttr InstanceDeclOp::getInstanceNameAttr() { return getNameAttr(); }
 
 Operation *InstanceDeclOp::getReferencedModule(const hw::HWSymbolCache *cache) {
   if (cache)

@@ -100,7 +100,7 @@ void PassCommon::getAndSortModulesVisitor(
 
   mod.walk([&](hw::HWInstanceLike inst) {
     Operation *modOp =
-        topLevelSyms.getDefinition(inst.referencedModuleNameAttr());
+        topLevelSyms.getDefinition(inst.getReferencedModuleNameAttr());
     assert(modOp);
     moduleInstantiations[modOp].push_back(inst);
     if (auto modLike = dyn_cast<hw::HWModuleLike>(modOp))

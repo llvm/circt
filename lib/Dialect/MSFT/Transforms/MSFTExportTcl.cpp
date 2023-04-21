@@ -59,7 +59,7 @@ void ExportTclPass::runOnOperation() {
 
   // Traverse MSFT location attributes and export the required Tcl into
   // templated `sv::VerbatimOp`s with symbolic references to the instance paths.
-  for (std::string moduleName : tops) {
+  for (const std::string &moduleName : tops) {
     Operation *hwmod =
         emitter.getDefinition(FlatSymbolRefAttr::get(ctxt, moduleName));
     if (!hwmod) {

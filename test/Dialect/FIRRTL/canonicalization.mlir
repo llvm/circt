@@ -5,6 +5,7 @@ firrtl.circuit "Casts" {
 // CHECK-LABEL: firrtl.module @Casts
 firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
     in %clock : !firrtl.clock, in %asyncreset : !firrtl.asyncreset,
+    in %inreset : !firrtl.reset, out %outreset : !firrtl.reset,
     out %out_ui1 : !firrtl.uint<1>, out %out_si1 : !firrtl.sint<1>,
     out %out_clock : !firrtl.clock, out %out_asyncreset : !firrtl.asyncreset) {
 
@@ -42,6 +43,9 @@ firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
   // CHECK: firrtl.strictconnect %out_asyncreset, %c1_asyncreset : !firrtl.asyncreset
   %7 = firrtl.asAsyncReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
   firrtl.connect %out_asyncreset, %7 : !firrtl.asyncreset, !firrtl.asyncreset
+  // CHECK: firrtl.strictconnect %outreset, %inreset : !firrtl.reset
+  %8 = firrtl.resetCast %inreset : (!firrtl.reset) -> !firrtl.reset
+  firrtl.strictconnect %outreset, %8 : !firrtl.reset
 }
 
 // CHECK-LABEL: firrtl.module @Div
@@ -2051,6 +2055,19 @@ firrtl.module @RegresetToReg(in %clock: !firrtl.clock, in %dummy : !firrtl.uint<
   firrtl.connect %foo2, %bar2 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
+// CHECK-LABEL: firrtl.module @ForceableRegResetToNode
+// Correctness, revisit if this is "valid" if forceable.
+firrtl.module @ForceableRegResetToNode(in %clock: !firrtl.clock, in %dummy : !firrtl.uint<1>, out %foo: !firrtl.uint<1>, out %ref : !firrtl.rwprobe<uint<1>>) {
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %one_asyncreset = firrtl.asAsyncReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+  // CHECK: %reg, %reg_ref = firrtl.node %dummy forceable : !firrtl.uint<1>
+  %reg, %reg_f = firrtl.regreset %clock, %one_asyncreset, %dummy forceable : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+  firrtl.ref.define %ref, %reg_f: !firrtl.rwprobe<uint<1>>
+
+  firrtl.connect %reg, %dummy: !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %foo, %reg: !firrtl.uint<1>, !firrtl.uint<1>
+}
+
 // https://github.com/llvm/circt/issues/929
 // CHECK-LABEL: firrtl.module @MuxInvalidTypeOpt
 firrtl.module @MuxInvalidTypeOpt(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<4>) {
@@ -2786,4 +2803,90 @@ firrtl.module @MuxCondWidth(in %cond: !firrtl.uint<1>, out %foo: !firrtl.uint<3>
   firrtl.strictconnect %foo, %0 : !firrtl.uint<3>
 }
 
+// CHECK-LABEL: firrtl.module @RemoveUnusedInvalid
+firrtl.module @RemoveUnusedInvalid() {
+  // CHECK-NOT: firrtl.invalidvalue
+  %0 = firrtl.invalidvalue : !firrtl.uint<1>
+}
+// CHECK-NEXT: }
+
+// CHECK-LABEL: firrtl.module @AggregateCreate(
+firrtl.module @AggregateCreate(in %vector_in: !firrtl.vector<uint<1>, 2>,
+                               in %bundle_in: !firrtl.bundle<a: uint<1>, b: uint<1>>,
+                               out %vector_out: !firrtl.vector<uint<1>, 2>,
+                               out %bundle_out: !firrtl.bundle<a: uint<1>, b: uint<1>>) {
+  %0 = firrtl.subindex %vector_in[0] : !firrtl.vector<uint<1>, 2>
+  %1 = firrtl.subindex %vector_in[1] : !firrtl.vector<uint<1>, 2>
+  %vector = firrtl.vectorcreate %0, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 2>
+  firrtl.strictconnect %vector_out, %vector : !firrtl.vector<uint<1>, 2>
+
+  %2 = firrtl.subfield %bundle_in["a"] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+  %3 = firrtl.subfield %bundle_in["b"] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+  %bundle = firrtl.bundlecreate %2, %3 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.bundle<a: uint<1>, b: uint<1>>
+  firrtl.strictconnect %bundle_out, %bundle : !firrtl.bundle<a: uint<1>, b: uint<1>>
+  // CHECK-NEXT: firrtl.strictconnect %vector_out, %vector_in : !firrtl.vector<uint<1>, 2>
+  // CHECK-NEXT: firrtl.strictconnect %bundle_out, %bundle_in : !firrtl.bundle<a: uint<1>, b: uint<1>>
+}
+
+// CHECK-LABEL: firrtl.module @AggregateCreateSingle(
+firrtl.module @AggregateCreateSingle(in %vector_in: !firrtl.vector<uint<1>, 1>,
+                               in %bundle_in: !firrtl.bundle<a: uint<1>>,
+                               out %vector_out: !firrtl.vector<uint<1>, 1>,
+                               out %bundle_out: !firrtl.bundle<a: uint<1>>) {
+
+  %0 = firrtl.subindex %vector_in[0] : !firrtl.vector<uint<1>, 1>
+  %vector = firrtl.vectorcreate %0 : (!firrtl.uint<1>) -> !firrtl.vector<uint<1>, 1>
+  firrtl.strictconnect %vector_out, %vector : !firrtl.vector<uint<1>, 1>
+
+  %2 = firrtl.subfield %bundle_in["a"] : !firrtl.bundle<a: uint<1>>
+  %bundle = firrtl.bundlecreate %2 : (!firrtl.uint<1>) -> !firrtl.bundle<a: uint<1>>
+  firrtl.strictconnect %bundle_out, %bundle : !firrtl.bundle<a: uint<1>>
+  // CHECK-NEXT: firrtl.strictconnect %vector_out, %vector_in : !firrtl.vector<uint<1>, 1>
+  // CHECK-NEXT: firrtl.strictconnect %bundle_out, %bundle_in : !firrtl.bundle<a: uint<1>>
+}
+
+// CHECK-LABEL: firrtl.module @AggregateCreateEmpty(
+firrtl.module @AggregateCreateEmpty(
+                               out %vector_out: !firrtl.vector<uint<1>, 0>,
+                               out %bundle_out: !firrtl.bundle<>) {
+
+  %vector = firrtl.vectorcreate : () -> !firrtl.vector<uint<1>, 0>
+  firrtl.strictconnect %vector_out, %vector : !firrtl.vector<uint<1>, 0>
+
+  %bundle = firrtl.bundlecreate : () -> !firrtl.bundle<>
+  firrtl.strictconnect %bundle_out, %bundle : !firrtl.bundle<>
+  // CHECK-DAG: %[[VEC:.+]] = firrtl.aggregateconstant [] : !firrtl.vector<uint<1>, 0>
+  // CHECK-DAG: %[[BUNDLE:.+]] = firrtl.aggregateconstant [] : !firrtl.bundle<>
+  // CHECK-DAG: firrtl.strictconnect %vector_out, %[[VEC]] : !firrtl.vector<uint<1>, 0>
+  // CHECK-DAG: firrtl.strictconnect %bundle_out, %[[BUNDLE]] : !firrtl.bundle<>
+}
+
+// CHECK-LABEL: firrtl.module @AggregateCreateConst(
+firrtl.module @AggregateCreateConst(
+                               out %vector_out: !firrtl.vector<uint<1>, 2>,
+                               out %bundle_out: !firrtl.bundle<a: uint<1>, b: uint<1>>) {
+
+  %const = firrtl.constant 0 : !firrtl.uint<1>
+  %vector = firrtl.vectorcreate %const, %const : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 2>
+  firrtl.strictconnect %vector_out, %vector : !firrtl.vector<uint<1>, 2>
+
+  %bundle = firrtl.bundlecreate %const, %const : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.bundle<a: uint<1>, b: uint<1>>
+  firrtl.strictconnect %bundle_out, %bundle : !firrtl.bundle<a: uint<1>, b: uint<1>>
+  // CHECK-DAG: %[[VEC:.+]] = firrtl.aggregateconstant [0 : ui1, 0 : ui1] : !firrtl.vector<uint<1>, 2>
+  // CHECK-DAG: %[[BUNDLE:.+]] = firrtl.aggregateconstant [0 : ui1, 0 : ui1] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+  // CHECK-DAG: firrtl.strictconnect %vector_out, %[[VEC]] : !firrtl.vector<uint<1>, 2>
+  // CHECK-DAG: firrtl.strictconnect %bundle_out, %[[BUNDLE]] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+}
+
+
+// CHECK-LABEL: firrtl.module private @RWProbeUnused
+firrtl.module private @RWProbeUnused(in %in: !firrtl.uint<4>, in %clk: !firrtl.clock, out %out: !firrtl.uint) {
+  // CHECK-NOT: forceable
+  %n, %n_ref = firrtl.node interesting_name %in forceable : !firrtl.uint<4>
+  %w, %w_ref = firrtl.wire interesting_name forceable : !firrtl.uint, !firrtl.rwprobe<uint>
+  firrtl.connect %w, %n : !firrtl.uint, !firrtl.uint<4>
+  %r, %r_ref = firrtl.reg interesting_name %clk forceable : !firrtl.clock, !firrtl.uint, !firrtl.rwprobe<uint>
+  firrtl.connect %r, %w : !firrtl.uint, !firrtl.uint
+  firrtl.connect %out, %r : !firrtl.uint, !firrtl.uint
+}
 }

@@ -28,12 +28,12 @@ def HWModuleLike : OpInterface<"HWModuleLike"> {
     }]>,
 
     InterfaceMethod<"Get the module name",
-    "::llvm::StringRef", "moduleName", (ins),
+    "::llvm::StringRef", "getModuleName", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getName(); }]>,
 
     InterfaceMethod<"Get the module name",
-    "::mlir::StringAttr", "moduleNameAttr", (ins),
+    "::mlir::StringAttr", "getModuleNameAttr", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getNameAttr(); }]>,
 
@@ -159,29 +159,23 @@ def HWInstanceLike : OpInterface<"HWInstanceLike"> {
 
   let methods = [
     InterfaceMethod<"Get the name of the instance",
-    "::llvm::StringRef", "instanceName", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return $_op.getInstanceName(); }]>,
+    "::llvm::StringRef", "getInstanceName", (ins)>,
 
     InterfaceMethod<"Get the name of the instance",
-    "::mlir::StringAttr", "instanceNameAttr", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return $_op.getInstanceNameAttr(); }]>,
+    "::mlir::StringAttr", "getInstanceNameAttr", (ins)>,
 
     InterfaceMethod<"Get the name of the instantiated module",
-    "::llvm::StringRef", "referencedModuleName", (ins),
+    "::llvm::StringRef", "getReferencedModuleName", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getModuleName(); }]>,
 
     InterfaceMethod<"Get the name of the instantiated module",
-    "::mlir::StringAttr", "referencedModuleNameAttr", (ins),
+    "::mlir::StringAttr", "getReferencedModuleNameAttr", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getModuleNameAttr().getAttr(); }]>,
 
     InterfaceMethod<"Get the referenced module",
-    "::mlir::Operation *", "getReferencedModule", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{}]>,
+    "::mlir::Operation *", "getReferencedModule", (ins)>,
   ];
 }
 
@@ -271,6 +265,22 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
               circt::hw::InnerSymbolTable::getInnerSymbolAttrName());
       }]
     >,
+    // Ask an operation if per-field symbols are allowed.
+    // Defaults to indicating they're allowed iff there's a defined target result,
+    // but let operations answer this differently if for some reason that makes sense.
+    StaticInterfaceMethod<"Returns whether per-field symbols are supported for this operation type.",
+      "bool", "supportsPerFieldSymbols", (ins), [{}], /*defaultImplementation=*/[{
+       return ConcreteOp::getTargetResultIndex().has_value();
+    }]>,
+    StaticInterfaceMethod<"Returns the index of the result the innner symbol targets, if applicable.  Per-field symbols are resolved into this.",
+      "std::optional<size_t>", "getTargetResultIndex">,
+    InterfaceMethod<"Returns the result the innner symbol targets, if applicable.  Per-field symbols are resolved into this.",
+      "OpResult", "getTargetResult", (ins), [{}], /*defaultImplementation=*/[{
+        auto idx = ConcreteOp::getTargetResultIndex();
+        if (!idx)
+          return {};
+        return $_op->getResult(*idx);
+      }]>,
   ];
 
   let verify = [{

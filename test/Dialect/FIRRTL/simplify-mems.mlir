@@ -78,35 +78,18 @@ firrtl.circuit "ReadWriteToWrite" {
         !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>,
         !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
 
-
-    // CHECK: [[WIRE:%.+]] = firrtl.wire   : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
-    // CHECK: [[PORT_ADDR:%.+]] = firrtl.subfield %Memory_rw[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
-    // CHECK: [[GET_ADDR:%.+]] = firrtl.subfield [[WIRE]][addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
-    // CHECK: firrtl.strictconnect [[PORT_ADDR]], [[GET_ADDR]] : !firrtl.uint<4>
-    // CHECK: [[PORT_EN:%.+]] = firrtl.subfield %Memory_rw[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
-    // CHECK: [[GET_EN:%.+]] = firrtl.subfield [[WIRE]][en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
-    // CHECK: firrtl.strictconnect [[PORT_EN]], [[GET_EN]] : !firrtl.uint<1>
-    // CHECK: [[PORT_CLK:%.+]] = firrtl.subfield %Memory_rw[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
-    // CHECK: [[GET_CLK:%.+]] = firrtl.subfield [[WIRE]][clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
-    // CHECK: firrtl.strictconnect [[PORT_CLK]], [[GET_CLK]] : !firrtl.clock
-    // CHECK: [[PORT_DATA:%.+]] = firrtl.subfield %Memory_rw[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
-    // CHECK: [[GET_DATA:%.+]] = firrtl.subfield [[WIRE]][wdata] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
-    // CHECK: firrtl.strictconnect [[PORT_DATA]], [[GET_DATA]] : !firrtl.uint<42>
-    // CHECK: [[PORT_MASK:%.+]] = firrtl.subfield %Memory_rw[mask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
-    // CHECK: [[GET_MASK:%.+]] = firrtl.subfield [[WIRE]][wmask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
-    // CHECK: firrtl.strictconnect [[PORT_MASK]], [[GET_MASK]] : !firrtl.uint<1>
-    // CHECK: [[SET_ADDR:%.+]] = firrtl.subfield [[WIRE]][addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
-    // CHECK: firrtl.strictconnect [[SET_ADDR]], %addr : !firrtl.uint<4>
-    // CHECK: [[SET_EN:%.+]] = firrtl.subfield [[WIRE]][en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
-    // CHECK: firrtl.strictconnect [[SET_EN]], %c1_ui1 : !firrtl.uint<1>
-    // CHECK: [[SET_CLK:%.+]] = firrtl.subfield [[WIRE]][clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
-    // CHECK: firrtl.strictconnect [[SET_CLK]], %clock : !firrtl.clock
-    // CHECK: [[SET_WMODE:%.+]] = firrtl.subfield [[WIRE]][wmode] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
-    // CHECK: firrtl.strictconnect [[SET_WMODE]], %c1_ui1 : !firrtl.uint<1>
-    // CHECK: [[SET_WDATA:%.+]] = firrtl.subfield [[WIRE]][wdata] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
-    // CHECK: firrtl.strictconnect [[SET_WDATA]], %indata : !firrtl.uint<42>
-    // CHECK: [[SET_WMASK:%.+]] = firrtl.subfield [[WIRE]][wmask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
-    // CHECK: firrtl.strictconnect [[SET_WMASK]], %c1_ui1 : !firrtl.uint<1>
+    // CHECK: [[ADDR:%.+]] = firrtl.subfield %Memory_rw[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+    // CHECK: [[END:%.+]] = firrtl.subfield %Memory_rw[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+    // CHECK: [[CLK:%.+]] = firrtl.subfield %Memory_rw[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+    // CHECK: [[DATA:%.+]] = firrtl.subfield %Memory_rw[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+    // CHECK: [[MASK:%.+]] = firrtl.subfield %Memory_rw[mask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+    // CHECK: [[DUMMY_WMODE:%.+]] = firrtl.wire : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect [[ADDR]], %addr : !firrtl.uint<4>
+    // CHECK: firrtl.strictconnect [[END]], %c1_ui1 : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect [[CLK]], %clock : !firrtl.clock
+    // CHECK: firrtl.strictconnect [[DUMMY_WMODE]], %c1_ui1 : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect [[DATA]], %indata : !firrtl.uint<42>
+    // CHECK: firrtl.strictconnect [[MASK]], %c1_ui1 : !firrtl.uint<1>
 
     %0 = firrtl.subfield %Memory_rw[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
     firrtl.connect %0, %addr : !firrtl.uint<4>, !firrtl.uint<4>

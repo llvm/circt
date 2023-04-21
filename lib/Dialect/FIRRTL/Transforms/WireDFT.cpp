@@ -206,7 +206,7 @@ void WireDFTPass::runOnOperation() {
       instanceGraph.lookup(dut), [&](InstanceRecord *node) {
         auto module = node->getTarget()->getModule();
         // If this is a clock gate, record the module and return true.
-        if (module.moduleName().startswith("EICG_wrapper")) {
+        if (module.getModuleName().startswith("EICG_wrapper")) {
           clockGates.insert(node);
           return true;
         }
@@ -338,7 +338,7 @@ void WireDFTPass::runOnOperation() {
     module.insertPorts({{portNo, portInfo}});
     auto builder = ImplicitLocOpBuilder::atBlockEnd(module.getLoc(),
                                                     module.getBodyBlock());
-    builder.create<ConnectOp>(module.getArgument(portNo), signal);
+    emitConnect(builder, module.getArgument(portNo), signal);
 
     // Add an output port to the instance of this module.
     auto *instanceNode = (*node->usesBegin());
@@ -385,7 +385,7 @@ void WireDFTPass::runOnOperation() {
       auto signal = getSignal(parent);
       auto builder = ImplicitLocOpBuilder::atBlockEnd(module->getLoc(),
                                                       module.getBodyBlock());
-      builder.create<ConnectOp>(clone.getResult(portNo), signal);
+      emitConnect(builder, clone.getResult(portNo), signal);
     }
 
     return arg;
@@ -397,7 +397,8 @@ void WireDFTPass::runOnOperation() {
     auto module = cast<FModuleOp>(*parent->getModule());
     auto builder = ImplicitLocOpBuilder::atBlockEnd(module->getLoc(),
                                                     module.getBodyBlock());
-    builder.create<ConnectOp>(
+    emitConnect(
+        builder,
         cast<InstanceOp>(*instance->getInstance()).getResult(testEnPortNo),
         getSignal(parent));
   }

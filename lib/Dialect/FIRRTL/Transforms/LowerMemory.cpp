@@ -16,7 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/Seq/SeqAttributes.h"
 #include "mlir/IR/Dominance.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/STLExtras.h"
@@ -72,14 +72,21 @@ FirMemory getSummary(MemOp op) {
     op.emitError("'firrtl.mem' should have simple type and known width");
     width = 0;
   }
-  uint32_t groupID = 0;
-  if (auto gID = op.getGroupIDAttr())
-    groupID = gID.getUInt();
-  return {numReadPorts,         numWritePorts,    numReadWritePorts,
-          (size_t)width,        op.getDepth(),    op.getReadLatency(),
-          op.getWriteLatency(), op.getMaskBits(), (size_t)op.getRuw(),
-          hw::WUW::PortOrder,   writeClockIDs,    op.getNameAttr(),
-          op.getMaskBits() > 1, groupID,          op.getInitAttr(),
+  return {numReadPorts,
+          numWritePorts,
+          numReadWritePorts,
+          (size_t)width,
+          op.getDepth(),
+          op.getReadLatency(),
+          op.getWriteLatency(),
+          op.getMaskBits(),
+          *seq::symbolizeRUW(unsigned(op.getRuw())),
+          seq::WUW::PortOrder,
+          writeClockIDs,
+          op.getNameAttr(),
+          op.getMaskBits() > 1,
+          op.getInitAttr(),
+          op.getPrefixAttr(),
           op.getLoc()};
 }
 
@@ -222,7 +229,9 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
 
   // Create the wrapper module, inserting it into the bottom of the circuit.
   auto b = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
-  auto wrapper = b.create<FModuleOp>(mem->getLoc(), wrapperName, ports);
+  auto wrapper = b.create<FModuleOp>(
+      mem->getLoc(), wrapperName,
+      ConventionAttr::get(context, Convention::Internal), ports);
   SymbolTable::setSymbolVisibility(wrapper, SymbolTable::Visibility::Private);
 
   // Create an instance of the external memory module. The instance has the
@@ -231,7 +240,7 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
   b.setInsertionPointToStart(wrapper.getBodyBlock());
 
   auto memInst =
-      b.create<InstanceOp>(mem->getLoc(), memModule, memModule.moduleName(),
+      b.create<InstanceOp>(mem->getLoc(), memModule, memModule.getModuleName(),
                            mem.getNameKind(), mem.getAnnotations().getValue());
 
   // Wire all the ports together.
@@ -251,8 +260,8 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
   // module op, so we have to fix up the NLA to have the module as the leaf
   // element.
 
-  auto leafSym = memModule.moduleNameAttr();
-  auto leafAttr = FlatSymbolRefAttr::get(wrapper.moduleNameAttr());
+  auto leafSym = memModule.getModuleNameAttr();
+  auto leafAttr = FlatSymbolRefAttr::get(wrapper.getModuleNameAttr());
 
   // NLAs that we have already processed.
   llvm::SmallDenseMap<StringAttr, StringAttr> processedNLAs;

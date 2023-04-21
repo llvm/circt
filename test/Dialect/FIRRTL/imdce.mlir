@@ -197,55 +197,54 @@ firrtl.circuit "ForwardConstant" {
 // CHECK-LABEL: "RefPorts"
 firrtl.circuit "RefPorts" {
   // CHECK-NOT: @dead_ref_send
-  firrtl.module private @dead_ref_send(in %source: !firrtl.uint<1>, out %dest: !firrtl.ref<uint<1>>) {
+  firrtl.module private @dead_ref_send(in %source: !firrtl.uint<1>, out %dest: !firrtl.probe<uint<1>>) {
     %ref = firrtl.ref.send %source: !firrtl.uint<1>
-    firrtl.refconnect %dest, %ref : !firrtl.ref<uint<1>>
+    firrtl.ref.define %dest, %ref : !firrtl.probe<uint<1>>
   }
 
   // CHECK-LABEL: @dead_ref_port
   // CHECK-NOT: firrtl.ref
-  firrtl.module private @dead_ref_port(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>, out %ref_dest: !firrtl.ref<uint<1>>) {
+  firrtl.module private @dead_ref_port(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>, out %ref_dest: !firrtl.probe<uint<1>>) {
     %ref_not = firrtl.ref.send %source: !firrtl.uint<1>
-    firrtl.refconnect %ref_dest, %ref_not : !firrtl.ref<uint<1>>
+    firrtl.ref.define %ref_dest, %ref_not : !firrtl.probe<uint<1>>
     firrtl.strictconnect %dest, %source : !firrtl.uint<1>
   }
 
   // CHECK: @live_ref
-  firrtl.module private @live_ref(in %source: !firrtl.uint<1>, out %dest: !firrtl.ref<uint<1>>) {
+  firrtl.module private @live_ref(in %source: !firrtl.uint<1>, out %dest: !firrtl.probe<uint<1>>) {
     %ref_source = firrtl.ref.send %source: !firrtl.uint<1>
-    firrtl.refconnect %dest, %ref_source : !firrtl.ref<uint<1>>
+    firrtl.ref.define %dest, %ref_source : !firrtl.probe<uint<1>>
   }
 
   // CHECK-LABEL: @RefPorts
   firrtl.module @RefPorts(in %source : !firrtl.uint<1>, out %dest : !firrtl.uint<1>) {
     // Delete send's that aren't resolved, and check deletion of modules with ref ops + ports.
     // CHECK-NOT: @dead_ref_send
-    %source1, %dest1 = firrtl.instance dead_ref_send @dead_ref_send(in source: !firrtl.uint<1>, out dest: !firrtl.ref<uint<1>>)
+    %source1, %dest1 = firrtl.instance dead_ref_send @dead_ref_send(in source: !firrtl.uint<1>, out dest: !firrtl.probe<uint<1>>)
     firrtl.strictconnect %source1, %source : !firrtl.uint<1>
 
     // Check that an unused resolve doesn't keep send alive, and test ref port removal.
     // CHECK: @dead_ref_port
     // CHECK-NOT: firrtl.ref
-    %source2, %dest2, %ref_dest2 = firrtl.instance dead_ref_port @dead_ref_port(in source: !firrtl.uint<1>, out dest: !firrtl.uint<1>, out ref_dest: !firrtl.ref<uint<1>>)
+    %source2, %dest2, %ref_dest2 = firrtl.instance dead_ref_port @dead_ref_port(in source: !firrtl.uint<1>, out dest: !firrtl.uint<1>, out ref_dest: !firrtl.probe<uint<1>>)
     firrtl.strictconnect %source2, %source : !firrtl.uint<1>
-    %unused = firrtl.ref.resolve %ref_dest2 : !firrtl.ref<uint<1>>
+    %unused = firrtl.ref.resolve %ref_dest2 : !firrtl.probe<uint<1>>
     firrtl.strictconnect %dest, %dest2 : !firrtl.uint<1>
 
     // Check not deleted if live.
     // CHECK: @live_ref
-    %source3, %dest3 = firrtl.instance live_ref @live_ref(in source: !firrtl.uint<1>, out dest: !firrtl.ref<uint<1>>)
+    %source3, %dest3 = firrtl.instance live_ref @live_ref(in source: !firrtl.uint<1>, out dest: !firrtl.probe<uint<1>>)
     firrtl.strictconnect %source3, %source : !firrtl.uint<1>
     // CHECK: firrtl.ref.resolve
-    %dest3_resolved = firrtl.ref.resolve %dest3 : !firrtl.ref<uint<1>>
+    %dest3_resolved = firrtl.ref.resolve %dest3 : !firrtl.probe<uint<1>>
     firrtl.strictconnect %dest, %dest3_resolved : !firrtl.uint<1>
 
-    // Check dead resolve is deleted, even if send isn't.
-    // (Instance is dead too but need context-sensitive analysis to show that.)
-    // CHECK: @live_ref
-    %source4, %dest4 = firrtl.instance live_ref @live_ref(in source: !firrtl.uint<1>, out dest: !firrtl.ref<uint<1>>)
+    // Check dead resolve is deleted.
+    // CHECK-NOT: dead_instance
+    %source4, %dest4 = firrtl.instance dead_instance @live_ref(in source: !firrtl.uint<1>, out dest: !firrtl.probe<uint<1>>)
     firrtl.strictconnect %source4, %source : !firrtl.uint<1>
     // CHECK-NOT: firrtl.ref.resolve
-    %unused5 = firrtl.ref.resolve %dest4 : !firrtl.ref<uint<1>>
+    %unused5 = firrtl.ref.resolve %dest4 : !firrtl.probe<uint<1>>
   }
 }
 
@@ -316,5 +315,45 @@ firrtl.circuit "DeadInputPort"  {
     %bar_a = firrtl.instance bar  @Bar(in a: !firrtl.uint<1>)
     firrtl.strictconnect %bar_a, %a : !firrtl.uint<1>
     firrtl.strictconnect %b, %bar_a : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "DeleteInstance" {
+  // CHECK-NOT: @InvalidValue
+  firrtl.module private @InvalidValue() {
+      %invalid_ui289 = firrtl.invalidvalue : !firrtl.uint<289>
+  }
+  firrtl.module private @SideEffect1(in %a: !firrtl.uint<1>, in %clock: !firrtl.clock) {
+    firrtl.printf %clock, %a, "foo"  : !firrtl.clock, !firrtl.uint<1>
+  }
+  firrtl.module private @SideEffect2(in %a: !firrtl.uint<1>, in %clock: !firrtl.clock) {
+    %s1_a, %s1_clock = firrtl.instance s1 @SideEffect1(in a: !firrtl.uint<1>, in clock: !firrtl.clock)
+    firrtl.strictconnect %s1_a, %a : !firrtl.uint<1>
+    firrtl.strictconnect %s1_clock, %clock : !firrtl.clock
+  }
+  firrtl.module private @PassThrough(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    firrtl.strictconnect %b, %a : !firrtl.uint<1>
+  }
+  // CHECK-LABEL: DeleteInstance
+  firrtl.module @DeleteInstance(in %a: !firrtl.uint<1>, in %clock: !firrtl.clock, out %b: !firrtl.uint<1>) {
+    // CHECK-NOT: inv
+    firrtl.instance inv @InvalidValue()
+    // CHECK-NOT: p1
+    // CHECK: instance p2 @PassThrough
+    // CHECK-NEXT: instance s @SideEffect2
+    %p1_a, %p1_b = firrtl.instance p1 @PassThrough(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
+    %p2_a, %p2_b = firrtl.instance p2 @PassThrough(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
+    %s_a, %s_clock = firrtl.instance s @SideEffect2(in a: !firrtl.uint<1>, in clock: !firrtl.clock)
+    // CHECK-NEXT: firrtl.strictconnect %s_a, %a : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %s_clock, %clock : !firrtl.clock
+    // CHECK-NEXT: firrtl.strictconnect %p2_a, %a : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %b, %p2_b : !firrtl.uint<1>
+    firrtl.strictconnect %s_a, %a : !firrtl.uint<1>
+    firrtl.strictconnect %s_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %p1_a, %a : !firrtl.uint<1>
+    firrtl.strictconnect %p2_a, %a : !firrtl.uint<1>
+    firrtl.strictconnect %b, %p2_b : !firrtl.uint<1>
   }
 }

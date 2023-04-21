@@ -161,6 +161,9 @@ def EnumTypeImpl : HWType<"Enum"> {
     /// Returns true if the requested field is part of this enum
     bool contains(mlir::StringRef field);
 
+    /// Returns the number of bits used by the enum
+    size_t getBitWidth();
+
     /// Returns the index of the requested field, or a nullopt if the field is
     // not part of this enum.
     std::optional<size_t> indexOf(mlir::StringRef field);
@@ -181,8 +184,11 @@ def UnionTypeImpl : HWType<"Union"> {
   let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
-    using FieldInfo = ::circt::hw::detail::FieldInfo;
-    mlir::Type getFieldType(mlir::StringRef fieldName);
+    using FieldInfo = ::circt::hw::detail::OffsetFieldInfo;
+
+    FieldInfo getFieldInfo(::mlir::StringRef fieldName);
+    
+    ::mlir::Type getFieldType(::mlir::StringRef fieldName);
   }];
 }
 

@@ -14,6 +14,7 @@
 #include "PassDetails.h"
 
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -49,7 +50,7 @@ static void addHierarchy(hw::HierPathOp path, FModuleOp dut,
   newNamepath.reserve(namepath.size() + 1);
   while (path.modPart(nlaIdx) != dut.getNameAttr())
     newNamepath.push_back(namepath[nlaIdx++]);
-  newNamepath.push_back(hw::InnerRefAttr::get(dut.moduleNameAttr(),
+  newNamepath.push_back(hw::InnerRefAttr::get(dut.getModuleNameAttr(),
                                               getInnerSymName(wrapperInst)));
 
   // Add the extra level of hierarchy.
@@ -131,7 +132,7 @@ void InjectDUTHierarchy::runOnOperation() {
     if (dut) {
       auto diag = emitError(mod.getLoc())
                   << "is marked with a '" << dutAnnoClass << "', but '"
-                  << dut.moduleName()
+                  << dut.getModuleName()
                   << "' also had such an annotation (this should "
                      "be impossible!)";
       diag.attachNote(dut.getLoc()) << "the first DUT was found here";
@@ -169,7 +170,8 @@ void InjectDUTHierarchy::runOnOperation() {
   {
     b.setInsertionPointAfter(dut);
     auto newDUT = b.create<FModuleOp>(dut.getLoc(), dut.getNameAttr(),
-                                      dut.getPorts(), dut.getAnnotations());
+                                      dut.getConventionAttr(), dut.getPorts(),
+                                      dut.getAnnotations());
 
     SymbolTable::setSymbolVisibility(newDUT, dut.getVisibility());
     dut.setName(b.getStringAttr(circuitNS.newName(wrapperName.getValue())));
@@ -189,15 +191,15 @@ void InjectDUTHierarchy::runOnOperation() {
   b.setInsertionPointToStart(dut.getBodyBlock());
   ModuleNamespace dutNS(dut);
   auto wrapperInst = b.create<InstanceOp>(
-      b.getUnknownLoc(), wrapper, wrapper.moduleName(),
+      b.getUnknownLoc(), wrapper, wrapper.getModuleName(),
       NameKindEnum::DroppableName, ArrayRef<Attribute>{}, ArrayRef<Attribute>{},
-      false, b.getStringAttr(dutNS.newName(wrapper.moduleName())));
+      false, b.getStringAttr(dutNS.newName(wrapper.getModuleName())));
   for (const auto &pair : llvm::enumerate(wrapperInst.getResults())) {
     Value lhs = dut.getArgument(pair.index());
     Value rhs = pair.value();
     if (dut.getPortDirection(pair.index()) == Direction::In)
       std::swap(lhs, rhs);
-    b.create<ConnectOp>(b.getUnknownLoc(), lhs, rhs);
+    emitConnect(b, b.getUnknownLoc(), lhs, rhs);
   }
 
   // Compute a set of paths that are used _inside_ the wrapper.

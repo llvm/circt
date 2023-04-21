@@ -242,8 +242,7 @@ static void loadFIRRTLLoweringPipeline(OpPassManager &pm) {
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
       /*preserveAggregate=*/firrtl::PreserveAggregate::PreserveMode::None,
-      /*preserveMemories=*/firrtl::PreserveAggregate::PreserveMode::None,
-      /*preservePublicTypes=*/false));
+      /*preserveMemories=*/firrtl::PreserveAggregate::PreserveMode::None));
   auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
   modulePM.addPass(firrtl::createExpandWhensPass());
   // a bit of cleanup.
@@ -421,7 +420,8 @@ static LogicalResult processBuffer(
   PassManager pm(&context);
   pm.enableVerifier(verifyPasses);
   pm.enableTiming(ts);
-  applyPassManagerCLOptions(pm);
+  if (failed(applyPassManagerCLOptions(pm)))
+    return failure();
 
   if (hlsFlow == HLSFlow::HLSFlowDynamicFIRRTL ||
       hlsFlow == HLSFlow::HLSFlowDynamicHW) {

@@ -54,16 +54,15 @@ circuit Top : %[[
 
 ; CHECK:      module Top(
 ; CHECK-NOT:  module
-; CHECK:  assign memTap_0 = Top.dut.rf_ext.Memory[0];
-; CHECK:  assign memTap_1 = Top.dut.rf_ext.Memory[1];
-; CHECK:  assign memTap_2 = Top.dut.rf_ext.Memory[2];
-; CHECK:  assign memTap_3 = Top.dut.rf_ext.Memory[3];
-; CHECK:  assign memTap_4 = Top.dut.rf_ext.Memory[4];
-; CHECK:  assign memTap_5 = Top.dut.rf_ext.Memory[5];
-; CHECK:  assign memTap_6 = Top.dut.rf_ext.Memory[6];
-; CHECK:  assign memTap_7 = Top.dut.rf_ext.Memory[7];
-; AGGGREGATE:       wire [7:0][7:0] memTap;
-; AGGGREGATE-NEXT:  assign memTap =
+; CHECK:        wire [7:0] memTap_0 = Top.dut.rf_ext.Memory[0];
+; CHECK-NEXT:   wire [7:0] memTap_1 = Top.dut.rf_ext.Memory[1];
+; CHECK-NEXT:   wire [7:0] memTap_2 = Top.dut.rf_ext.Memory[2];
+; CHECK-NEXT:   wire [7:0] memTap_3 = Top.dut.rf_ext.Memory[3];
+; CHECK-NEXT:   wire [7:0] memTap_4 = Top.dut.rf_ext.Memory[4];
+; CHECK-NEXT:   wire [7:0] memTap_5 = Top.dut.rf_ext.Memory[5];
+; CHECK-NEXT:   wire [7:0] memTap_6 = Top.dut.rf_ext.Memory[6];
+; CHECK-NEXT:   wire [7:0] memTap_7 = Top.dut.rf_ext.Memory[7];
+; AGGGREGATE:       wire [7:0][7:0] memTap =
 ; AGGGREGATE-NEXT{LITERAL}: {{Top.dut.rf_ext.Memory[7]},
 ; AGGGREGATE-NEXT:           {Top.dut.rf_ext.Memory[6]},
 ; AGGGREGATE-NEXT:           {Top.dut.rf_ext.Memory[5]},

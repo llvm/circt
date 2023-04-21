@@ -29,16 +29,14 @@ func.func @singleton() -> (){
 
 // -----
 
-// Test non-canonical loops that have multiple entry points (irreducible cfg).
-
-// expected-error @+1 {{Non-canonical loop structures detected; a potential loop header has backedges not dominated by the loop header. This indicates that the loop has multiple entry points.}}
 func.func @non_canon_loop(%arg0 : memref<100xi32>, %arg1 : i32) -> i32 {
-    %c0_i32 = arith.constant 0 : i32
-    %c100 = arith.constant 100 : index
-    %c0 = arith.constant 0 : index
-    %c1 = arith.constant 1 : index
-    %c = arith.cmpi slt, %arg1, %c0_i32 : i32
-    cf.cond_br %c, ^bb1(%c0 : index) , ^bbx
+  // expected-error @below {{expected cmerges to have two operands}}
+  %c0_i32 = arith.constant 0 : i32
+  %c100 = arith.constant 100 : index
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %c = arith.cmpi slt, %arg1, %c0_i32 : i32
+  cf.cond_br %c, ^bb1(%c0 : index) , ^bbx
 ^bbx:
   // Jump directly to the loop body, skipping the header
   cf.br ^bb2(%c0 : index)

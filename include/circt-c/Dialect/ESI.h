@@ -33,6 +33,11 @@ MLIR_CAPI_EXPORTED uint32_t circtESIChannelGetSignaling(MlirType channelType);
 MLIR_CAPI_EXPORTED bool circtESITypeIsAnAnyType(MlirType type);
 MLIR_CAPI_EXPORTED MlirType circtESIAnyTypeGet(MlirContext);
 
+MLIR_CAPI_EXPORTED bool circtESITypeIsAListType(MlirType type);
+MLIR_CAPI_EXPORTED MlirType circtESIListTypeGet(MlirType inner);
+MLIR_CAPI_EXPORTED MlirType
+circtESIListTypeGetElementType(MlirType channelType);
+
 MLIR_CAPI_EXPORTED MlirOperation circtESIWrapModule(MlirOperation cModOp,
                                                     long numPorts,
                                                     const MlirStringRef *ports);

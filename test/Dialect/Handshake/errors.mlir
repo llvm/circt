@@ -10,7 +10,7 @@ handshake.func @invalid_merge_like_wrong_type(%arg0: i1, %arg1: i32, %arg2: i64)
 // -----
 
 handshake.func @invalid_mux_unsupported_select(%arg0: tensor<i1>, %arg1: i32, %arg2: i32) {
-  // expected-error @+1 {{unsupported type for select operand: 'tensor<i1>'}}
+  // expected-error @+1 {{unsupported type for indexing value: 'tensor<i1>'}}
   %0 = mux %arg0 [%arg1, %arg2] : tensor<i1>, i32
   return %0 : i32
 }
@@ -18,9 +18,25 @@ handshake.func @invalid_mux_unsupported_select(%arg0: tensor<i1>, %arg1: i32, %a
 // -----
 
 handshake.func @invalid_mux_narrow_select(%arg0: i1, %arg1: i32, %arg2: i32, %arg3: i32) {
-  // expected-error @+1 {{select bitwidth was 1, which can mux 2 operands, but found 3 operands}}
+  // expected-error @+1 {{bitwidth of indexing value is 1, which can index into 2 operands, but found 3 operands}}
   %0 = mux %arg0 [%arg1, %arg2, %arg3] : i1, i32
   return %0 : i32
+}
+
+// -----
+
+handshake.func @invalid_cmerge_unsupported_index(%arg1: i32, %arg2: i32) -> tensor<i1> {
+  // expected-error @below {{unsupported type for indexing value: 'tensor<i1>'}}
+  %result, %index = control_merge %arg1, %arg2 : i32, tensor<i1>
+  return %index : tensor<i1>
+}
+
+// -----
+
+handshake.func @invalid_cmerge_narrow_index(%arg1: i32, %arg2: i32, %arg3: i32) -> i1 {
+  // expected-error @below {{bitwidth of indexing value is 1, which can index into 2 operands, but found 3 operands}}
+  %result, %index = control_merge %arg1, %arg2, %arg3 : i32, i1
+  return %index : i1
 }
 
 // -----
@@ -239,7 +255,7 @@ handshake.func @invalid_sost_op_zero_size(%ctrl : none) -> (none, none) {
 
 handshake.func @invalid_sost_op_wrong_operands(%arg0 : i64, %arg1 : i32, %ctrl : none) -> (i64, none) { // expected-note {{prior use here}}
   // expected-error @+1 {{use of value '%arg1' expects different type than prior uses: 'i64' vs 'i32'}}
-  %0, %1 = control_merge %arg0, %arg1 : i64
+  %0, %1 = control_merge %arg0, %arg1 : i64, index
   return %0, %ctrl : i64, none
 }
 

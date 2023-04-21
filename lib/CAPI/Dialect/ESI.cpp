@@ -54,6 +54,19 @@ MlirType circtESIAnyTypeGet(MlirContext ctxt) {
   return wrap(AnyType::get(unwrap(ctxt)));
 }
 
+bool circtESITypeIsAListType(MlirType type) {
+  return unwrap(type).isa<ListType>();
+}
+
+MlirType circtESIListTypeGet(MlirType inner) {
+  auto cppInner = unwrap(inner);
+  return wrap(ListType::get(cppInner.getContext(), cppInner));
+}
+
+MlirType circtESIListTypeGetElementType(MlirType list) {
+  return wrap(unwrap(list).cast<ListType>().getElementType());
+}
+
 MlirOperation circtESIWrapModule(MlirOperation cModOp, long numPorts,
                                  const MlirStringRef *ports) {
   mlir::Operation *modOp = unwrap(cModOp);

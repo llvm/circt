@@ -745,7 +745,7 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   };
   // Add the path up to where the NLA starts.
   for (auto inst : paths[0])
-    addToPath(inst, inst.instanceNameAttr());
+    addToPath(inst, inst.getInstanceNameAttr());
   // Add the path from the NLA to the op.
   if (tracker.nla) {
     auto path = tracker.nla.getNamepath().getValue();
@@ -1245,6 +1245,8 @@ hw::InnerRefAttr EmitOMIRPass::getInnerRefTo(FModuleLike module,
 }
 
 FIRRTLType EmitOMIRPass::getTypeOf(Operation *op) {
+  if (auto fop = dyn_cast<Forceable>(op))
+    return fop.getDataType();
   assert(op->getNumResults() == 1 &&
          op->getResult(0).getType().isa<FIRRTLType>() &&
          "op must have a single FIRRTLType result");

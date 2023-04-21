@@ -23,6 +23,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 
 #include <memory>
+#include <utility>
 
 using namespace circt;
 using namespace circt::esi;
@@ -252,7 +253,7 @@ ServiceGeneratorDispatcher &ServiceGeneratorDispatcher::globalDispatcher() {
 
 void ServiceGeneratorDispatcher::registerGenerator(StringRef implType,
                                                    ServiceGeneratorFunc gen) {
-  genLookupTable[implType] = gen;
+  genLookupTable[implType] = std::move(gen);
 }
 
 //===----------------------------------------------------------------------===//
@@ -267,7 +268,8 @@ struct ESIConnectServicesPass
     : public ESIConnectServicesBase<ESIConnectServicesPass>,
       msft::PassCommon {
 
-  ESIConnectServicesPass(ServiceGeneratorDispatcher gen) : genDispatcher(gen) {}
+  ESIConnectServicesPass(const ServiceGeneratorDispatcher &gen)
+      : genDispatcher(gen) {}
   ESIConnectServicesPass()
       : genDispatcher(ServiceGeneratorDispatcher::globalDispatcher()) {}
 
@@ -413,10 +415,10 @@ void ESIConnectServicesPass::copyMetadata(hw::HWModuleLike mod) {
 
   for (auto inst : moduleInstantiations[mod]) {
     OpBuilder b(inst);
-    auto instName = b.getStringAttr(inst.instanceName());
+    auto instName = inst.getInstanceNameAttr();
     for (auto metadata : metadataOps) {
       SmallVector<Attribute, 4> path;
-      path.push_back(hw::InnerRefAttr::get(mod.moduleNameAttr(), instName));
+      path.push_back(hw::InnerRefAttr::get(mod.getModuleNameAttr(), instName));
       for (auto attr : metadata.getServerNamePathAttr())
         path.push_back(attr);
 
@@ -551,7 +553,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
     hw::HWMutableModuleLike mod,
     ArrayRef<RequestToClientConnectionOp> toClientReqs,
     ArrayRef<RequestToServerConnectionOp> toServerReqs) {
-  auto ctxt = mod.getContext();
+  auto *ctxt = mod.getContext();
   Block *body = &mod->getRegion(0).front();
 
   // Track initial operand/result counts and the new IO.
@@ -627,7 +629,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
     for (auto [toClient, newPort] : llvm::zip(toClientReqs, newInputs)) {
       auto instToClient = cast<RequestToClientConnectionOp>(b.clone(*toClient));
       instToClient.setClientNamePathAttr(prependNamePart(
-          instToClient.getClientNamePath(), inst.instanceName()));
+          instToClient.getClientNamePath(), inst.getInstanceName()));
       newOperands.push_back(instToClient.getToClient());
     }
 
@@ -646,7 +648,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
       else
         newAttrs.push_back(attr);
     }
-    auto newHWInst = b.insert(
+    auto *newHWInst = b.insert(
         Operation::create(inst->getLoc(), inst->getName(), newResultTypes,
                           newOperands, b.getDictionaryAttr(newAttrs),
                           inst->getSuccessors(), inst->getRegions()));
@@ -662,7 +664,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
     for (auto [toServer, newPort] : llvm::zip(toServerReqs, newOutputs)) {
       auto instToServer = cast<RequestToServerConnectionOp>(b.clone(*toServer));
       instToServer.setClientNamePathAttr(prependNamePart(
-          instToServer.getClientNamePath(), inst.instanceName()));
+          instToServer.getClientNamePath(), inst.getInstanceName()));
       instToServer->setOperand(0, newHWInst->getResult(outputCounter++));
     }
   }

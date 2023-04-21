@@ -33,7 +33,7 @@ using namespace msft;
 //===----------------------------------------------------------------------===//
 
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
-  for (auto &argAttr : attrs)
+  for (const auto &argAttr : attrs)
     if (argAttr.getName() == name)
       return true;
   return false;
@@ -382,6 +382,11 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
+/// Instance name is the same as the symbol name. This may change in the
+/// future.
+StringRef InstanceOp::getInstanceName() { return getSymName(); }
+StringAttr InstanceOp::getInstanceNameAttr() { return getSymNameAttr(); }
+
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
 Operation *InstanceOp::getReferencedModule() {
@@ -401,7 +406,7 @@ StringAttr InstanceOp::getResultName(size_t idx) {
 /// attribute.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // Provide default names for instance results.
-  std::string name = instanceName().str() + ".";
+  std::string name = getInstanceName().str() + ".";
   size_t baseNameLen = name.size();
 
   for (size_t i = 0, e = getNumResults(); i != e; ++i) {
@@ -438,9 +443,9 @@ InstanceOp::verifySignatureMatch(const hw::ModulePortInfo &ports) {
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &state,
-                       ArrayRef<Type> resultTypes, StringAttr sym_name,
+                       ArrayRef<Type> resultTypes, StringAttr symName,
                        FlatSymbolRefAttr moduleName, ArrayRef<Value> inputs) {
-  build(builder, state, resultTypes, sym_name, moduleName, inputs, ArrayAttr(),
+  build(builder, state, resultTypes, symName, moduleName, inputs, ArrayAttr(),
         SymbolRefAttr());
 }
 
@@ -946,7 +951,7 @@ hw::ModulePortInfo MSFTModuleExternOp::getPorts() {
 // OutputOp
 //===----------------------------------------------------------------------===//
 
-void OutputOp::build(OpBuilder &builder, OperationState &result) {}
+void OutputOp::build(OpBuilder &odsBuilder, OperationState &odsState) {}
 
 //===----------------------------------------------------------------------===//
 // MSFT high level design constructs

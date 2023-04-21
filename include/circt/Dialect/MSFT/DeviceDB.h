@@ -146,7 +146,7 @@ private:
   /// Load the placements from `inst`.  Return the number of placements which
   /// weren't added due to conflicts.
   size_t addPlacements(DynamicInstanceOp inst);
-  LogicalResult insertPlacement(DynInstDataOpInterface owner, PhysLocationAttr);
+  LogicalResult insertPlacement(DynInstDataOpInterface op, PhysLocationAttr);
 
   /// Load the database from the IR. Return the number of placements which
   /// failed to load due to invalid specifications.

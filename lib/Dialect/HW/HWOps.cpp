@@ -1618,7 +1618,7 @@ void InstanceOp::setResultName(size_t i, StringAttr name) {
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  instance_like_impl::getAsmResultNames(setNameFn, instanceName(),
+  instance_like_impl::getAsmResultNames(setNameFn, getInstanceName(),
                                         getResultNames(), getResults());
 }
 
@@ -2244,6 +2244,11 @@ void EnumConstantOp::getAsmResultNames(
   setNameFn(getResult(), getField().getField().str());
 }
 
+void EnumConstantOp::build(OpBuilder &builder, OperationState &odsState,
+                           EnumFieldAttr field) {
+  return build(builder, odsState, field.getType().getValue(), field);
+}
+
 OpFoldResult EnumConstantOp::fold(FoldAdaptor adaptor) {
   assert(adaptor.getOperands().empty() && "constant has no operands");
   return getFieldAttr();
@@ -2640,6 +2645,17 @@ ParseResult UnionExtractOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void UnionExtractOp::print(OpAsmPrinter &printer) {
   printExtractOp(printer, *this);
+}
+
+LogicalResult UnionExtractOp::inferReturnTypes(MLIRContext *context,
+                                               std::optional<Location> loc,
+                                               ValueRange operands,
+                                               DictionaryAttr attrs,
+                                               mlir::RegionRange regions,
+                                               SmallVectorImpl<Type> &results) {
+  results.push_back(cast<UnionType>(getCanonicalType(operands[0].getType()))
+                        .getFieldType(attrs.getAs<StringAttr>("field")));
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -3069,7 +3085,7 @@ LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
       return emitOpError() << " module: " << innerRef.getModule()
                            << " does not contain any instance with symbol: "
                            << innerRef.getName();
-    expectedModuleName = instOp.referencedModuleNameAttr();
+    expectedModuleName = instOp.getReferencedModuleNameAttr();
   }
   // The instance path has been verified. Now verify the last element.
   auto leafRef = getNamepath()[getNamepath().size() - 1];

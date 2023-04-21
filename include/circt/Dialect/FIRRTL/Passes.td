@@ -60,9 +60,6 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
   let options = [
     Option<"flattenAggregateMemData", "flatten-mem", "bool", "false",
            "Concat all elements of the aggregate data into a single element.">,
-    Option<"preservePublicTypes", "preserve-public-types", "bool",
-           "true", "Force to lower ports of toplevel and external modules even"
-           "when aggregate preservation mode.">,
     Option<"preserveAggregate", "preserve-aggregate", "PreserveAggregate::PreserveMode",
           "PreserveAggregate::None",
           "Specify aggregate preservation mode",
@@ -258,6 +255,15 @@ def EmitOMIR : Pass<"firrtl-emit-omir", "firrtl::CircuitOp"> {
   let options = [Option<"outputFilename", "file", "std::string", "",
       "Output file for the JSON-serialized OMIR data">];
   let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
+}
+
+def LowerMatches : Pass<"firrtl-lower-matches", "firrtl::FModuleOp"> {
+  let summary = "Remove all matchs conditional blocks";
+  let description = [{
+    Lowers FIRRTL match statements in to when statements, which can later be
+    lowered with ExpandWhens.
+  }];
+  let constructor = "circt::firrtl::createLowerMatchesPass()";
 }
 
 def ExpandWhens : Pass<"firrtl-expand-whens", "firrtl::FModuleOp"> {
@@ -656,8 +662,9 @@ def InnerSymbolDCE : Pass<"firrtl-inner-symbol-dce", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::firrtl::createInnerSymbolDCEPass()";
   let statistics = [
-    Statistic<"numSymbolsFound", "num-sym-found", "Number of symbols found">,
-    Statistic<"numSymbolsRemoved", "num-sym-removed", "Number of symbols removed">
+    Statistic<"numInnerRefsFound", "num-inner-refs-found", "Number of inner-refs found">,
+    Statistic<"numInnerSymbolsFound", "num-inner-sym-found", "Number of inner symbols found">,
+    Statistic<"numInnerSymbolsRemoved", "num-inner-sym-removed", "Number of inner symbols removed">
   ];
 }
 

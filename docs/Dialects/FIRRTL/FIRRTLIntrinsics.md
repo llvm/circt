@@ -19,6 +19,10 @@ Annotations here are written in their JSON format. A "reference target"
 indicates that the annotation could target any object in the hierarchy,
 although there may be further restrictions in the annotation.
 
+We also accept the `intmodule` version of any of these annotation strings used
+as the intrinsic name.  To work with the requirement of the intrinsic name being
+an identifier, replace any period is with an underscore in the intrinsic name.
+
 ### circt.sizeof
 
 Returns the size of a type.  The input port is not read from and may be any 

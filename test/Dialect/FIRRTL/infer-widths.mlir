@@ -43,6 +43,15 @@ firrtl.circuit "Foo" {
     %c2_ui = firrtl.constant 2 : !firrtl.uint
     firrtl.connect %w, %invalid_ui : !firrtl.uint, !firrtl.uint
     firrtl.connect %w, %c2_ui : !firrtl.uint, !firrtl.uint
+
+    // Check that invalid values are inferred to width zero if not used in a
+    // connect.
+    // CHECK: firrtl.invalidvalue : !firrtl.uint<0>
+    // CHECK: firrtl.invalidvalue : !firrtl.bundle<x: uint<0>>
+    // CHECK: firrtl.invalidvalue : !firrtl.vector<uint<0>, 2>
+    %invalid_0 = firrtl.invalidvalue : !firrtl.uint
+    %invalid_1 = firrtl.invalidvalue : !firrtl.bundle<x: uint>
+    %invalid_2 = firrtl.invalidvalue : !firrtl.vector<uint, 2>
   }
 
   // CHECK-LABEL: @InferOutput
@@ -523,13 +532,13 @@ firrtl.circuit "Foo" {
   ) {
     // CHECK: %0 = firrtl.regreset %clk, %rst, %c0_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<6>
     // CHECK: %1 = firrtl.regreset %clk, %rst, %c0_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<6>
-    // CHECK: %2 = firrtl.regreset %clk, %rst, %c0_ui17 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<17>, !firrtl.uint<17>
+    // CHECK: %2:2 = firrtl.regreset %clk, %rst, %c0_ui17 forceable : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<17>, !firrtl.uint<17>, !firrtl.rwprobe<uint<17>>
     // CHECK: %3 = firrtl.regreset %clk, %rst, %c0_ui17 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<17>, !firrtl.uint<17>
     %c0_ui = firrtl.constant 0 : !firrtl.uint
     %c0_ui17 = firrtl.constant 0 : !firrtl.uint<17>
     %0 = firrtl.regreset %clk, %rst, %c0_ui : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint, !firrtl.uint
     %1 = firrtl.regreset %clk, %rst, %c0_ui : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint, !firrtl.uint
-    %2 = firrtl.regreset %clk, %rst, %c0_ui17 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<17>, !firrtl.uint
+    %2:2 = firrtl.regreset %clk, %rst, %c0_ui17 forceable : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<17>, !firrtl.uint, !firrtl.rwprobe<uint>
     %3 = firrtl.regreset %clk, %rst, %c0_ui17 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<17>, !firrtl.uint
     %4 = firrtl.wire : !firrtl.uint
     %5 = firrtl.xor %1, %4 : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
@@ -715,10 +724,10 @@ firrtl.circuit "Foo" {
 
   // CHECK-LABEL: @MemScalar
   // CHECK-SAME: out %out: !firrtl.uint<7>
-  // CHECK-SAME: out %dbg: !firrtl.ref<vector<uint<7>, 8>>
-  firrtl.module @MemScalar(out %out: !firrtl.uint, out %dbg: !firrtl.ref<vector<uint, 8>>) {
+  // CHECK-SAME: out %dbg: !firrtl.probe<vector<uint<7>, 8>>
+  firrtl.module @MemScalar(out %out: !firrtl.uint, out %dbg: !firrtl.probe<vector<uint, 8>>) {
     // CHECK: firrtl.mem
-    // CHECK-SAME: !firrtl.ref<vector<uint<7>, 8>>
+    // CHECK-SAME: !firrtl.probe<vector<uint<7>, 8>>
     // CHECK-SAME: data flip: uint<7>
     // CHECK-SAME: data: uint<7>
     // CHECK-SAME: data: uint<7>
@@ -728,7 +737,7 @@ firrtl.circuit "Foo" {
       portNames = ["dbg", "p0", "p1", "p2"],
       readLatency = 0 : i32,
       writeLatency = 1 : i32} :
-      !firrtl.ref<vector<uint, 8>>,
+      !firrtl.probe<vector<uint, 8>>,
       !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint>,
       !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint, mask: uint<1>>,
       !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, rdata flip: uint, wmode: uint<1>, wdata: uint, wmask: uint<1>>
@@ -740,8 +749,8 @@ firrtl.circuit "Foo" {
     firrtl.connect %m_p1_data, %c0_ui5 : !firrtl.uint, !firrtl.uint<5>
     firrtl.connect %m_p2_wdata, %c0_ui7 : !firrtl.uint, !firrtl.uint<7>
     firrtl.connect %out, %m_p0_data : !firrtl.uint, !firrtl.uint
-    firrtl.connect %dbg, %m_dbg : !firrtl.ref<vector<uint, 8>>, !firrtl.ref<vector<uint, 8>>
-    // CHECK:  firrtl.connect %dbg, %m_dbg : !firrtl.ref<vector<uint<7>, 8>>, !firrtl.ref<vector<uint<7>, 8>>
+    firrtl.ref.define %dbg, %m_dbg : !firrtl.probe<vector<uint, 8>>
+    // CHECK:  firrtl.ref.define %dbg, %m_dbg : !firrtl.probe<vector<uint<7>, 8>>
   }
 
   // CHECK-LABEL: @MemBundle
@@ -808,32 +817,89 @@ firrtl.circuit "Foo" {
   firrtl.module @Foo() {}
 
   // CHECK-LABEL: @SubRef
-  // CHECK: out %x: !firrtl.ref<uint<2>>
-  firrtl.module private @SubRef(out %x: !firrtl.ref<uint>) {
-    %w = firrtl.wire : !firrtl.uint
+  // CHECK-SAME: out %x: !firrtl.probe<uint<2>>
+  // CHECK-SAME: out %y: !firrtl.rwprobe<uint<2>>
+  // CHECK-SAME: out %bov_ref: !firrtl.rwprobe<bundle<a: vector<uint<2>, 2>, b: uint<2>>>
+  firrtl.module private @SubRef(out %x: !firrtl.probe<uint>, out %y : !firrtl.rwprobe<uint>, out %bov_ref : !firrtl.rwprobe<bundle<a: vector<uint, 2>, b : uint>>) {
+    // CHECK: firrtl.wire forceable : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
+    %w, %w_rw = firrtl.wire forceable : !firrtl.uint, !firrtl.rwprobe<uint>
+    %bov, %bov_rw = firrtl.wire forceable : !firrtl.bundle<a: vector<uint, 2>, b flip: uint>, !firrtl.rwprobe<bundle<a: vector<uint, 2>, b : uint>>
+    firrtl.ref.define %bov_ref, %bov_rw : !firrtl.rwprobe<bundle<a: vector<uint, 2>, b : uint>>
+
     %ref_w = firrtl.ref.send %w : !firrtl.uint
-    firrtl.connect %x, %ref_w : !firrtl.ref<uint>, !firrtl.ref<uint>
+    firrtl.ref.define %x, %ref_w : !firrtl.probe<uint>
+    firrtl.ref.define %y, %w_rw : !firrtl.rwprobe<uint>
 
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     firrtl.connect %w, %c0_ui2 : !firrtl.uint, !firrtl.uint<2>
+    
+    %bov_a = firrtl.subfield %bov[a] : !firrtl.bundle<a: vector<uint, 2>, b flip: uint>
+    %bov_a_1 = firrtl.subindex %bov_a[1] : !firrtl.vector<uint, 2>
+    %bov_b = firrtl.subfield %bov[b] : !firrtl.bundle<a: vector<uint, 2>, b flip: uint>
+
+    firrtl.connect %w, %c0_ui2 : !firrtl.uint, !firrtl.uint<2>
+    firrtl.connect %bov_a_1, %c0_ui2 : !firrtl.uint, !firrtl.uint<2>
+    firrtl.connect %bov_b, %c0_ui2 : !firrtl.uint, !firrtl.uint<2>
   }
   // CHECK-LABEL: @Ref
-  // CHECK: out x: !firrtl.ref<uint<2>>
-  // CHECK: %sub_x : !firrtl.ref<uint<2>>
-  firrtl.module @Ref(out %r : !firrtl.uint) {
-    %sub_x = firrtl.instance sub @SubRef(out x: !firrtl.ref<uint>)
-    %res = firrtl.ref.resolve %sub_x : !firrtl.ref<uint>
-    firrtl.connect %r, %res : !firrtl.uint, !firrtl.uint
+  // CHECK: out x: !firrtl.probe<uint<2>>
+  // CHECK-SAME: out y: !firrtl.rwprobe<uint<2>>
+  // CHECK: firrtl.ref.resolve %sub_x : !firrtl.probe<uint<2>>
+  // CHECK: firrtl.ref.resolve %sub_y : !firrtl.rwprobe<uint<2>>
+  firrtl.module @Ref(out %r : !firrtl.uint, out %s : !firrtl.uint) {
+    %sub_x, %sub_y, %sub_bov_ref = firrtl.instance sub @SubRef(out x: !firrtl.probe<uint>, out y: !firrtl.rwprobe<uint>, out bov_ref : !firrtl.rwprobe<bundle<a: vector<uint, 2>, b : uint>>)
+    %res_x = firrtl.ref.resolve %sub_x : !firrtl.probe<uint>
+    %res_y = firrtl.ref.resolve %sub_y : !firrtl.rwprobe<uint>
+    firrtl.connect %r, %res_x : !firrtl.uint, !firrtl.uint
+    firrtl.connect %s, %res_y : !firrtl.uint, !firrtl.uint
+
+    // CHECK: !firrtl.rwprobe<bundle<a: vector<uint<2>, 2>, b: uint<2>>>
+    %read_bov = firrtl.ref.resolve %sub_bov_ref : !firrtl.rwprobe<bundle<a: vector<uint, 2>, b : uint>>
+    // CHECK: !firrtl.rwprobe<bundle<a: vector<uint<2>, 2>, b: uint<2>>>
+    %bov_ref_a = firrtl.ref.sub %sub_bov_ref[0] : !firrtl.rwprobe<bundle<a: vector<uint, 2>, b : uint>>
+    // CHECK: !firrtl.rwprobe<vector<uint<2>, 2>>
+    %bov_ref_a_1 = firrtl.ref.sub %bov_ref_a[1] : !firrtl.rwprobe<vector<uint, 2>>
+    // CHECK: !firrtl.rwprobe<bundle<a: vector<uint<2>, 2>, b: uint<2>>>
+    %bov_ref_b  = firrtl.ref.sub %sub_bov_ref[1] : !firrtl.rwprobe<bundle<a: vector<uint, 2>, b : uint>>
+
+    // CHECK: !firrtl.rwprobe<vector<uint<2>, 2>>
+    %bov_a = firrtl.ref.resolve %bov_ref_a : !firrtl.rwprobe<vector<uint,2>>
+    // CHECK: !firrtl.rwprobe<uint<2>>
+    %bov_a_1 = firrtl.ref.resolve %bov_ref_a_1 : !firrtl.rwprobe<uint>
+    // CHECK: !firrtl.rwprobe<uint<2>>
+    %bov_b = firrtl.ref.resolve %bov_ref_b : !firrtl.rwprobe<uint>
   }
 
   // CHECK-LABEL: @ForeignTypes
   firrtl.module @ForeignTypes(in %a: !firrtl.uint<42>, out %b: !firrtl.uint) {
     %0 = firrtl.wire : index
     %1 = firrtl.wire : index
-    firrtl.strictconnect %0, %1 : index
+    firrtl.connect %0, %1 : index, index
     firrtl.connect %b, %a : !firrtl.uint, !firrtl.uint<42>
     // CHECK-NEXT: [[W0:%.+]] = firrtl.wire : index
     // CHECK-NEXT: [[W1:%.+]] = firrtl.wire : index
-    // CHECK-NEXT: firrtl.strictconnect [[W0]], [[W1]] : index
+    // CHECK-NEXT: firrtl.connect [[W0]], [[W1]] : index
+  }
+
+  // CHECK-LABEL: @Issue4859
+  firrtl.module @Issue4859() {
+    %invalid = firrtl.invalidvalue : !firrtl.bundle<a: vector<uint, 2>>
+    %0 = firrtl.subfield %invalid[a] : !firrtl.bundle<a: vector<uint, 2>>
+    %1 = firrtl.subindex %0[0] : !firrtl.vector<uint, 2>
+  }
+  
+  // CHECK-LABEL: @InferConst
+  // CHECK-SAME: out %out: !firrtl.const.bundle<a: uint<1>, b: sint<2>, c: analog<3>, d: vector<uint<4>, 2>>
+  firrtl.module @InferConst(in %a: !firrtl.const.uint<1>, in %b: !firrtl.const.sint<2>, in %c: !firrtl.const.analog<3>, in %d: !firrtl.const.vector<uint<4>, 2>,
+    out %out: !firrtl.const.bundle<a: uint, b: sint, c: analog, d: vector<uint, 2>>) {
+    %0 = firrtl.subfield %out[a] : !firrtl.const.bundle<a: uint, b: sint, c: analog, d: vector<uint, 2>>
+    %1 = firrtl.subfield %out[b] : !firrtl.const.bundle<a: uint, b: sint, c: analog, d: vector<uint, 2>>
+    %2 = firrtl.subfield %out[c] : !firrtl.const.bundle<a: uint, b: sint, c: analog, d: vector<uint, 2>>
+    %3 = firrtl.subfield %out[d] : !firrtl.const.bundle<a: uint, b: sint, c: analog, d: vector<uint, 2>>
+
+    firrtl.connect %0, %a : !firrtl.const.uint, !firrtl.const.uint<1>
+    firrtl.connect %1, %b : !firrtl.const.sint, !firrtl.const.sint<2>
+    firrtl.attach %2, %c : !firrtl.const.analog, !firrtl.const.analog<3>
+    firrtl.connect %3, %d : !firrtl.const.vector<uint, 2>, !firrtl.const.vector<uint<4>, 2>
   }
 }

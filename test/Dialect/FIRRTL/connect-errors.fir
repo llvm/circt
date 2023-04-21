@@ -32,8 +32,8 @@ circuit PartialConnectMismatch:
 
 circuit Bar:
   module Bar:
-    output a: { flip a: UInt<1> }
 ; expected-note @+1 {{destination}}
+    output a: { flip a: UInt<1> }
     input b: { flip a: UInt<1> }
 
 ; expected-error @+1 {{invalid flow}}

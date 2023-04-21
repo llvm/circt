@@ -66,7 +66,7 @@ static void spillWiresForInstanceInputs(InstanceOp op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
-  SmallString<32> nameTmp{"_", op.instanceName(), "_"};
+  SmallString<32> nameTmp{"_", op.getInstanceName(), "_"};
   auto namePrefixSize = nameTmp.size();
 
   size_t nextOpNo = 0;
@@ -97,7 +97,7 @@ static void lowerInstanceResults(InstanceOp op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
-  SmallString<32> nameTmp{"_", op.instanceName(), "_"};
+  SmallString<32> nameTmp{"_", op.getInstanceName(), "_"};
   auto namePrefixSize = nameTmp.size();
 
   size_t nextResultNo = 0;
@@ -373,8 +373,7 @@ static bool rewriteSideEffectingExpr(Operation *op) {
   // Check to see if this is already rewritten.
   if (op->hasOneUse()) {
     if (auto assign = dyn_cast<BPAssignOp>(*op->user_begin()))
-      if (isa_and_nonnull<RegOp, LogicOp>(assign.getDest().getDefiningOp()))
-        return false;
+      return false;
   }
 
   // Otherwise, we have to transform it.  Insert a reg at the top level, make
@@ -423,9 +422,15 @@ static bool hoistNonSideEffectExpr(Operation *op) {
         // the top level of the module.  We can tell this quite efficiently by
         // looking for ops in a procedural region - because procedural regions
         // live in graph regions but not visa-versa.
+        if (BlockArgument block = operand.dyn_cast<BlockArgument>()) {
+          // References to ports are always ok.
+          if (isa<hw::HWModuleOp>(block.getParentBlock()->getParentOp()))
+            return false;
+
+          cantHoist = true;
+          return true;
+        }
         Operation *operandOp = operand.getDefiningOp();
-        if (!operandOp) // References to ports are always ok.
-          return false;
 
         if (operandOp->getParentOp()->hasTrait<ProceduralRegion>()) {
           cantHoist |= operandOp->getBlock() == op->getBlock();

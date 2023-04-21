@@ -6,21 +6,21 @@
 // CHECK:           %[[VAL_6:.*]] = merge %[[VAL_1]] : f32
 // CHECK:           %[[VAL_7:.*]] = merge %[[VAL_2]] : i32
 // CHECK:           %[[VAL_8:.*]] = merge %[[VAL_3]] : i32
-// CHECK:           %[[VAL_4x:.*]] = merge %[[VAL_4]] : none
-// CHECK:           %[[VAL_9:.*]] = arith.subf %[[VAL_5]], %[[VAL_6]] : f32
-// CHECK:           %[[VAL_10:.*]] = arith.subi %[[VAL_7]], %[[VAL_8]] : i32
-// CHECK:           %[[VAL_11:.*]] = arith.cmpi slt, %[[VAL_7]], %[[VAL_10]] : i32
-// CHECK:           %[[VAL_12:.*]] = arith.divsi %[[VAL_7]], %[[VAL_8]] : i32
-// CHECK:           %[[VAL_13:.*]] = arith.divui %[[VAL_7]], %[[VAL_8]] : i32
-// CHECK:           %[[VAL_14:.*]] = arith.remsi %[[VAL_7]], %[[VAL_8]] : i32
-// CHECK:           %[[VAL_15:.*]] = arith.remui %[[VAL_7]], %[[VAL_8]] : i32
-// CHECK:           %[[VAL_16:.*]] = select %[[VAL_11]], %[[VAL_8]], %[[VAL_7]] : i32
-// CHECK:           %[[VAL_17:.*]] = arith.divf %[[VAL_5]], %[[VAL_6]] : f32
-// CHECK:           %[[VAL_18:.*]] = arith.remf %[[VAL_5]], %[[VAL_6]] : f32
-// CHECK:           %[[VAL_19:.*]] = arith.andi %[[VAL_7]], %[[VAL_8]] : i32
-// CHECK:           %[[VAL_20:.*]] = arith.ori %[[VAL_7]], %[[VAL_8]] : i32
-// CHECK:           %[[VAL_21:.*]] = arith.xori %[[VAL_7]], %[[VAL_8]] : i32
-// CHECK:           return %[[VAL_9]], %[[VAL_12]], %[[VAL_4x]] : f32, i32, none
+// CHECK:           %[[VAL_9:.*]] = merge %[[VAL_4]] : none
+// CHECK:           %[[VAL_10:.*]] = arith.subf %[[VAL_5]], %[[VAL_6]] : f32
+// CHECK:           %[[VAL_11:.*]] = arith.subi %[[VAL_7]], %[[VAL_8]] : i32
+// CHECK:           %[[VAL_12:.*]] = arith.cmpi slt, %[[VAL_7]], %[[VAL_11]] : i32
+// CHECK:           %[[VAL_13:.*]] = arith.divsi %[[VAL_7]], %[[VAL_8]] : i32
+// CHECK:           %[[VAL_14:.*]] = arith.divui %[[VAL_7]], %[[VAL_8]] : i32
+// CHECK:           %[[VAL_15:.*]] = arith.remsi %[[VAL_7]], %[[VAL_8]] : i32
+// CHECK:           %[[VAL_16:.*]] = arith.remui %[[VAL_7]], %[[VAL_8]] : i32
+// CHECK:           %[[VAL_17:.*]] = arith.select %[[VAL_12]], %[[VAL_7]], %[[VAL_8]] : i32
+// CHECK:           %[[VAL_18:.*]] = arith.divf %[[VAL_5]], %[[VAL_6]] : f32
+// CHECK:           %[[VAL_19:.*]] = arith.remf %[[VAL_5]], %[[VAL_6]] : f32
+// CHECK:           %[[VAL_20:.*]] = arith.andi %[[VAL_7]], %[[VAL_8]] : i32
+// CHECK:           %[[VAL_21:.*]] = arith.ori %[[VAL_7]], %[[VAL_8]] : i32
+// CHECK:           %[[VAL_22:.*]] = arith.xori %[[VAL_7]], %[[VAL_8]] : i32
+// CHECK:           return %[[VAL_10]], %[[VAL_13]], %[[VAL_9]] : f32, i32, none
 // CHECK:         }
 func.func @ops(f32, f32, i32, i32) -> (f32, i32) {
 ^bb0(%arg0: f32, %arg1: f32, %arg2: i32, %arg3: i32):

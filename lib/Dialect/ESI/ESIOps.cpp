@@ -298,6 +298,36 @@ circt::esi::ChannelType UnwrapSVInterfaceOp::channelType() {
   return getChanInput().getType().cast<circt::esi::ChannelType>();
 }
 
+LogicalResult WrapWindow::verify() {
+  hw::UnionType expectedInput = getWindow().getType().getLoweredType();
+  if (expectedInput == getFrame().getType())
+    return success();
+  return emitOpError("Expected input type is ") << expectedInput;
+}
+
+LogicalResult UnwrapWindow::inferReturnTypes(
+    MLIRContext *, std::optional<Location>, ValueRange operands, DictionaryAttr,
+    mlir::RegionRange, SmallVectorImpl<Type> &inferredReturnTypes) {
+  auto windowType = operands.front().getType().cast<WindowType>();
+  inferredReturnTypes.push_back(windowType.getLoweredType());
+  return success();
+}
+
+/// Determine the input type ('frame') from the return type ('window').
+static bool parseInferWindowRet(OpAsmParser &p, Type &frame, Type &windowOut) {
+  WindowType window;
+  if (p.parseType(window))
+    return true;
+  windowOut = window;
+  frame = window.getLoweredType();
+  return false;
+}
+
+static void printInferWindowRet(OpAsmPrinter &p, Operation *, Type,
+                                Type window) {
+  p << window;
+}
+
 //===----------------------------------------------------------------------===//
 // Services ops.
 //===----------------------------------------------------------------------===//

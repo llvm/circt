@@ -51,13 +51,13 @@ func.func @sub(%arg0 : i32, %arg1: i32) -> i32 {
 // CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]] = cond_br %[[VAL_6]], %[[VAL_3x]] : none
 // CHECK:           %[[VAL_14:.*]] = merge %[[VAL_8]] : i32
 // CHECK:           %[[VAL_15:.*]] = merge %[[VAL_10]] : i32
-// CHECK:           %[[VAL_16:.*]], %[[VAL_17:.*]] = control_merge %[[VAL_12]] : none
+// CHECK:           %[[VAL_16:.*]], %[[VAL_17:.*]] = control_merge %[[VAL_12]] : none, index
 // CHECK:           %[[VAL_18:.*]]:2 = instance @add(%[[VAL_14]], %[[VAL_15]], %[[VAL_16]]) : (i32, i32, none) -> (i32, none)
 // CHECK:           %[[VAL_19:.*]] = br %[[VAL_16]] : none
 // CHECK:           %[[VAL_20:.*]] = br %[[VAL_18]]#0 : i32
 // CHECK:           %[[VAL_21:.*]] = merge %[[VAL_9]] : i32
 // CHECK:           %[[VAL_22:.*]] = merge %[[VAL_11]] : i32
-// CHECK:           %[[VAL_23:.*]], %[[VAL_24:.*]] = control_merge %[[VAL_13]] : none
+// CHECK:           %[[VAL_23:.*]], %[[VAL_24:.*]] = control_merge %[[VAL_13]] : none, index
 // CHECK:           %[[VAL_25:.*]]:2 = instance @sub(%[[VAL_21]], %[[VAL_22]], %[[VAL_23]]) : (i32, i32, none) -> (i32, none)
 // CHECK:           %[[VAL_26:.*]] = br %[[VAL_23]] : none
 // CHECK:           %[[VAL_27:.*]] = br %[[VAL_25]]#0 : i32

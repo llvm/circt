@@ -18,6 +18,7 @@
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/Namespace.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Dialect/Seq/SeqAttributes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Path.h"
@@ -39,8 +40,8 @@ struct FirMemory {
   size_t maskGran;
   size_t readLatency;
   size_t writeLatency;
-  size_t readUnderWrite;
-  WUW writeUnderWrite;
+  seq::RUW readUnderWrite;
+  seq::WUW writeUnderWrite;
   SmallVector<int32_t> writeClockIDs;
   StringRef initFilename;
   bool initIsBinary;
@@ -110,9 +111,9 @@ static FirMemory analyzeMemOp(HWModuleGeneratedOp op) {
   else
     mem.maskGran = mem.dataWidth;
   mem.readUnderWrite =
-      op->getAttrOfType<IntegerAttr>("readUnderWrite").getUInt();
+      op->getAttrOfType<seq::RUWAttr>("readUnderWrite").getValue();
   mem.writeUnderWrite =
-      op->getAttrOfType<WUWAttr>("writeUnderWrite").getValue();
+      op->getAttrOfType<seq::WUWAttr>("writeUnderWrite").getValue();
   if (auto clockIDsAttr = op->getAttrOfType<ArrayAttr>("writeClockIDs"))
     for (auto clockID : clockIDsAttr)
       mem.writeClockIDs.push_back(
@@ -447,12 +448,12 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     switch (mem.writeUnderWrite) {
     // Undefined write order:  lower each write port into a separate always
     // block.
-    case WUW::Undefined:
+    case seq::WUW::Undefined:
       alwaysBlock();
       break;
     // Port-ordered write order:  lower each write port into an always block
     // based on its clock ID.
-    case WUW::PortOrder:
+    case seq::WUW::PortOrder:
       if (auto *existingAlwaysBlock =
               writeProcesses.lookup(mem.writeClockIDs[i])) {
         OpBuilder::InsertionGuard guard(b);
@@ -525,7 +526,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
           boundModule, boundModule.getName(), ArrayRef<Value>());
       boundInstance->setAttr("inner_sym",
                              b.getStringAttr(moduleNamespace.newName(
-                                 boundInstance.getName().getValue())));
+                                 boundInstance.getInstanceName())));
       boundInstance->setAttr("doNotPrint", b.getBoolAttr(true));
 
       // Bind the new module.
@@ -542,25 +543,8 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     return;
 
   constexpr unsigned randomWidth = 32;
-  sv::RegOp randomMemReg;
   b.create<sv::IfDefOp>("SYNTHESIS", std::function<void()>(), [&]() {
     sv::RegOp randReg;
-    StringRef initvar;
-
-    // Declare variables for use by memory randomization logic.
-    if (!disableMemRandomization || !mem.initFilename.empty()) {
-      b.create<sv::IfDefOp>("RANDOMIZE_MEM_INIT", [&]() {
-        initvar = moduleNamespace.newName("initvar");
-        b.create<sv::VerbatimOp>("integer " + Twine(initvar) + ";\n");
-        randomMemReg = b.create<sv::RegOp>(
-            b.getIntegerType(llvm::divideCeil(mem.dataWidth, randomWidth) *
-                             randomWidth),
-            b.getStringAttr("_RANDOM_MEM"),
-            b.getStringAttr(moduleNamespace.newName("_RANDOM_MEM")));
-      });
-    }
-
-    // Declare variables for use by register randomization logic.
     SmallVector<sv::RegOp> randRegs;
     if (!disableRegRandomization) {
       b.create<sv::IfDefOp>("RANDOMIZE_REG_INIT", [&]() {
@@ -576,36 +560,55 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
         }
       });
     }
-
+    auto randomMemReg = b.create<sv::RegOp>(
+        b.getIntegerType(llvm::divideCeil(mem.dataWidth, randomWidth) *
+                         randomWidth),
+        b.getStringAttr("_RANDOM_MEM"));
     b.create<sv::InitialOp>([&]() {
       b.create<sv::VerbatimOp>("`INIT_RANDOM_PROLOG_");
 
       // Memory randomization logic.  The entire memory is randomized.
       if (!disableMemRandomization) {
         b.create<sv::IfDefProceduralOp>("RANDOMIZE_MEM_INIT", [&]() {
-          std::string verbatimForLoop;
-          llvm::raw_string_ostream s(verbatimForLoop);
-          s << "for (" << initvar << " = 0; " << initvar << " < " << mem.depth
-            << "; " << initvar << " = " << initvar << " + 1) begin\n"
-            << "  {{0}} = ";
-          auto repetitionCount = llvm::divideCeil(mem.dataWidth, randomWidth);
-          if (repetitionCount > 1)
-            s << "{";
-          for (size_t i = 0; i != repetitionCount; ++i) {
-            if (i > 0)
-              s << ", ";
-            s << "{`RANDOM}";
-          }
-          if (repetitionCount > 1)
-            s << "}";
-          s << ";\n";
-          s << "  Memory[" << initvar << "] = "
-            << "{{0}}[" << mem.dataWidth - 1 << ":" << 0 << "];\n"
-            << "end";
-          b.create<sv::VerbatimOp>(
-              verbatimForLoop, ValueRange{},
-              b.getArrayAttr({hw::InnerRefAttr::get(
-                  op.getNameAttr(), randomMemReg.getInnerSymAttr())}));
+          auto outerLoopIndVarType =
+              b.getIntegerType(llvm::Log2_64_Ceil(mem.depth + 1));
+          auto innerUpperBoundWidth = randomMemReg.getType()
+                                          .getElementType()
+                                          .cast<IntegerType>()
+                                          .getWidth();
+          auto innerLoopIndVarType =
+              b.getIntegerType(llvm::Log2_64_Ceil(innerUpperBoundWidth + 1));
+          // Construct the following nested for loops:
+          // ```
+          //   for (int i = 0; i < mem.depth; i++) begin
+          //     for (int j = 0; j < randomMeg.size; j += 32)
+          //       randomMem[j+31:j] = `RANDOM
+          //     Memory[i] = randomMem[mem.dataWidth - 1: 0];
+          // ```
+          b.create<sv::ForOp>(
+              0, mem.depth, 1, outerLoopIndVarType, "i",
+              [&](BlockArgument outerIndVar) {
+                b.create<sv::ForOp>(
+                    0, innerUpperBoundWidth, randomWidth, innerLoopIndVarType,
+                    "j", [&](BlockArgument innerIndVar) {
+                      auto rhs = b.create<sv::MacroRefExprSEOp>(
+                          b.getIntegerType(randomWidth), "RANDOM");
+                      auto lhs = b.create<sv::IndexedPartSelectInOutOp>(
+                          randomMemReg, innerIndVar, randomWidth, false);
+                      b.create<sv::BPAssignOp>(lhs, rhs);
+                    });
+
+                Value iterValue = outerIndVar;
+                // Truncate the induction variable if necessary.
+                if (!outerIndVar.getType().isInteger(
+                        llvm::Log2_64_Ceil(mem.depth)))
+                  iterValue = b.create<comb::ExtractOp>(
+                      iterValue, 0, llvm::Log2_64_Ceil(mem.depth));
+                auto lhs = b.create<sv::ArrayIndexInOutOp>(reg, iterValue);
+                auto rhs = b.createOrFold<comb::ExtractOp>(
+                    b.create<sv::ReadInOutOp>(randomMemReg), 0, mem.dataWidth);
+                b.create<sv::BPAssignOp>(lhs, rhs);
+              });
         });
       }
 

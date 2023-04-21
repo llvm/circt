@@ -12,6 +12,7 @@
 
 #include "circt/Conversion/LLHDToLLVM.h"
 #include "../PassDetail.h"
+#include "circt/Conversion/CombToArith.h"
 #include "circt/Conversion/CombToLLVM.h"
 #include "circt/Conversion/HWToLLVM.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
@@ -25,6 +26,7 @@
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
@@ -2053,6 +2055,8 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
   populateHWToLLVMConversionPatterns(converter, patterns, globals,
                                      constAggregateGlobalsMap);
   populateCombToLLVMConversionPatterns(converter, patterns);
+  populateCombToArithConversionPatterns(converter, patterns);
+  arith::populateArithToLLVMConversionPatterns(converter, patterns);
 
   target.addLegalDialect<LLVM::LLVMDialect>();
   target.addLegalOp<ModuleOp>();

@@ -181,10 +181,10 @@ def MemoryInitAttr : AttrDef<FIRRTLDialect, "MemoryInit"> {
     "firrtl.annotations.LoadMemoryFromFile" and
     "firrtl.annotations.MemoryFileInlineAnnotation".
   }];
-  let parameters = (
-    ins "::mlir::StringAttr":$filename,
-        "::mlir::BoolAttr":$isBinary,
-        "::mlir::BoolAttr":$isInline
+  let parameters = (ins
+    "::mlir::StringAttr":$filename,
+    "bool":$isBinary,
+    "bool":$isInline
   );
  let assemblyFormat = "`<` $filename `,` $isBinary `,` $isInline `>`";
 }

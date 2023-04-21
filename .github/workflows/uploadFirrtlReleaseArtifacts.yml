@@ -1,0 +1,176 @@
+name: Upload Firrtl Release Artifacts
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+
+jobs:
+  publish-sources: 
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-20.04
+    steps:
+      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
+      # time.
+      - name: Get CIRCT and LLVM
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
+          submodules: "true"
+
+      # Package up sources for distribution, as the default source bundles from GitHub don't include LLVM.
+      - name: Create Source Archive
+        run: |
+          touch circt-full-sources.tar.gz
+          tar \
+            --exclude-vcs \
+            --exclude=circt-full-sources.tar.gz \
+            -czf \
+            circt-full-sources.tar.gz .
+      - name: Upload Source Archive
+        uses: AButler/upload-release-assets@v2.0
+        with:
+          files: circt-full-sources.tar.gz
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+  publish:
+    strategy:
+      matrix:
+        build_config:
+          - mode: release
+            assert: OFF
+            shared: OFF
+            stats: ON
+            cmake-args: ''
+        runner: [ubuntu-20.04, ubuntu-18.04, macos-11]
+        include:
+          - runner: ubuntu-20.04
+            os: linux
+            tar: tar
+            # Default clang (11) is broken, see LLVM issue 59622.
+            cc: clang-12
+            cxx: clang++-12
+          - runner: ubuntu-18.04
+            os: linux
+            tar: tar
+            cc: clang
+            cxx: clang++
+          - runner: macos-11
+            os: macos
+            tar: gtar
+            cc: clang
+            cxx: clang++
+    runs-on: ${{ matrix.runner }}
+    steps:
+      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
+      # time.
+      - name: Get CIRCT
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
+          submodules: "true"
+
+      # We need unshallow CIRCT for later "git describe"
+      - name: Unshallow CIRCT (but not LLVM)
+        run: |
+          git fetch --unshallow --no-recurse-submodules
+
+      - name: Setup Ninja Linux
+        if: matrix.os == 'linux'
+        run: sudo apt-get install ninja-build
+
+      - name: Setup Ninja and GNU Tar Mac
+        if: matrix.os == 'macos'
+        run: brew install ninja gnu-tar
+
+      - name: Build LLVM
+        run: |
+          mkdir -p llvm/build
+          cd llvm/build
+          cmake -G Ninja ../llvm \
+              ${{ matrix.build_config.cmake-args }} \
+              -DCMAKE_BUILD_TYPE=${{ matrix.build_config.mode }} \
+              -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+              -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+              -DBUILD_SHARED_LIBS=${{ matrix.build_config.shared }} \
+              -DLLVM_BUILD_TOOLS=OFF \
+              -DLLVM_BUILD_EXAMPLES=OFF \
+              -DLLVM_ENABLE_ASSERTIONS=${{ matrix.build_config.assert }} \
+              -DLLVM_ENABLE_BINDINGS=OFF \
+              -DLLVM_ENABLE_OCAMLDOC=OFF \
+              -DLLVM_ENABLE_PROJECTS='mlir' \
+              -DLLVM_OPTIMIZED_TABLEGEN=ON \
+              -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
+              -DLLVM_ENABLE_TERMINFO=OFF \
+              -DLLVM_PARALLEL_LINK_JOBS=1 \
+              -DLLVM_TARGETS_TO_BUILD="host" \
+              -DLLVM_FORCE_ENABLE_STATS=${{ matrix.build_config.stats }} \
+              -DLLVM_ENABLE_ZSTD=OFF
+          ninja
+          #Checks temporarily disabled because current LLVM commit (9305b63d6) fails checks
+          #ninja check-llvm check-mlir
+
+      # --------
+      # Build and test CIRCT
+      # --------
+
+      - name: Build and Test CIRCT
+        run: |
+          mkdir build
+          cd build
+          cmake -G Ninja .. \
+            ${{ matrix.build_config.cmake-args }} \
+            -DBUILD_SHARED_LIBS=${{ matrix.build_config.shared }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_config.mode }} \
+            -DLLVM_ENABLE_ASSERTIONS=${{ matrix.build_config.assert }} \
+            -DMLIR_DIR=`pwd`/../llvm/build/lib/cmake/mlir \
+            -DLLVM_DIR=`pwd`/../llvm/build/lib/cmake/llvm \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DVERILATOR_DISABLE=ON \
+            -DLLVM_ENABLE_TERMINFO=OFF \
+            -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
+            -DLLVM_PARALLEL_LINK_JOBS=1 \
+            -DLLVM_FORCE_ENABLE_STATS=${{ matrix.build_config.stats }} \
+            -DCIRCT_RELEASE_TAG_ENABLED=ON \
+            -DCIRCT_RELEASE_TAG=firtool \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF \
+            -DCMAKE_INSTALL_PREFIX=`pwd`/../install
+          ninja
+          ninja check-circt check-circt-unit
+          ninja install-firtool
+          cd ..
+
+      - name: Display Files
+        run: |
+          file install/*
+          file install/bin/*
+
+      - name: Name Install Directory
+        id: name_dir
+        run: |
+          BASE=$(git describe --tag)
+          SANITIZED=$(echo -n $BASE | tr '/' '-')
+          echo "value=$SANITIZED" >> "$GITHUB_OUTPUT"
+
+      - name: Package Binaries
+        run: |
+          mv install ${{ steps.name_dir.outputs.value }}
+          ${{ matrix.tar }} czf firrtl-bin-${{ matrix.runner }}.tar.gz ${{ steps.name_dir.outputs.value }}
+      - name: Show Tarball
+        run: |
+          ls -l firrtl-bin-${{ matrix.runner }}.tar.gz
+          shasum -a 256 firrtl-bin-${{ matrix.runner }}.tar.gz
+      - name: Upload Binaries (Non-Tag)
+        uses: actions/upload-artifact@v3
+        if: github.ref_type != 'tag'
+        with:
+          name: firrtl-bin-${{ matrix.runner }}.tar.gz
+          path: firrtl-bin-${{ matrix.runner }}.tar.gz
+          retention-days: 7
+      - name: Upload Binaries (Tag)
+        uses: AButler/upload-release-assets@v2.0
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: firrtl-bin-${{ matrix.runner }}.tar.gz
+          repo-token: ${{ secrets.GITHUB_TOKEN }}

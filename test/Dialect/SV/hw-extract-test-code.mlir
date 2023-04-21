@@ -284,6 +284,16 @@ module {
 // CHECK: %[[or1:.+]] = comb.or
 // CHECK-NOT: %[[or1]]
 
+// In InstancesWithCycles, the only_testcode instances should be extracted, but the non_testcode instances should not
+// CHECK-LABEL: @InstancesWithCycles_cover
+// CHECK: hw.instance "only_testcode_and_instance0"
+// CHECK: hw.instance "only_testcode_and_instance1"
+// CHECK-LABEL: @InstancesWithCycles
+// CHECK-NOT: hw.instance "only_testcode_and_instance0"
+// CHECK-NOT: hw.instance "only_testcode_and_instance1"
+// CHECK: hw.instance "non_testcode_and_instance0"
+// CHECK: hw.instance "non_testcode_and_instance1"
+
 module attributes {
   firrtl.extract.testbench = #hw.output_file<"testbench/", excludeFromFileList, includeReplicatedOps>
 } {
@@ -383,5 +393,26 @@ module attributes {
       sv.cover %0, immediate
       sv.cover %foo.b, immediate
     }
+  }
+
+  hw.module private @Passthrough(%in: i1) -> (out: i1) {
+    hw.output %in : i1
+  }
+
+  hw.module @InstancesWithCycles(%clock: i1, %in: i1) -> (out: i1) {
+    %0 = hw.instance "non_testcode_and_instance0" @Passthrough(in: %1: i1) -> (out: i1)
+    %1 = hw.instance "non_testcode_and_instance1" @Passthrough(in: %0: i1) -> (out: i1)
+
+    %2 = hw.instance "only_testcode_and_instance0" @Passthrough(in: %3: i1) -> (out: i1)
+    %3 = hw.instance "only_testcode_and_instance1" @Passthrough(in: %2: i1) -> (out: i1)
+    %4 = comb.or %2, %3 : i1
+
+    sv.always posedge %clock {
+      sv.cover %1, immediate
+      sv.cover %2, immediate
+      sv.cover %4, immediate
+    }
+
+    hw.output %0 : i1
   }
 }

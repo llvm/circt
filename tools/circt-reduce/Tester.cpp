@@ -22,9 +22,9 @@ using namespace circt;
 // Tester
 //===----------------------------------------------------------------------===//
 
-Tester::Tester(StringRef scriptName, ArrayRef<std::string> scriptArgs,
+Tester::Tester(StringRef testScript, ArrayRef<std::string> testScriptArgs,
                bool testMustFail)
-    : testScript(scriptName), testScriptArgs(scriptArgs),
+    : testScript(testScript), testScriptArgs(testScriptArgs),
       testMustFail(testMustFail) {}
 
 std::pair<bool, size_t> Tester::isInteresting(ModuleOp module) const {

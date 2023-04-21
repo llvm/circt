@@ -106,14 +106,6 @@ firrtl.circuit "Foo" {
 // -----
 firrtl.circuit "Foo"  {
   firrtl.module @Foo() {
-    // expected-error @+1 {{uninferred width: invalid value is unconstrained}}
-    %0 = firrtl.invalidvalue : !firrtl.bundle<x: uint>
-  }
-}
-
-// -----
-firrtl.circuit "Foo"  {
-  firrtl.module @Foo() {
     // This should complain about the wire, not the invalid value.
     %0 = firrtl.invalidvalue : !firrtl.bundle<x: uint>
     // expected-error @+1 {{uninferred width: wire "w.x" is unconstrained}}
@@ -132,5 +124,26 @@ firrtl.circuit "AnalogWidths" {
     // expected-note @below {{width is constrained to be at least 2 here:}}
     // expected-note @below {{width is constrained to be at most 1 here:}}
     firrtl.attach %a, %c : !firrtl.analog, !firrtl.analog<1>
+  }
+}
+
+// -----
+// https://github.com/llvm/circt/issues/4863
+firrtl.circuit "Foo" {
+  // expected-error @below {{uninferred width: port "out.a" is unconstrained}}
+  firrtl.module @Foo(out %out : !firrtl.bundle<a: uint>) {
+    %invalid = firrtl.invalidvalue : !firrtl.bundle<a: uint>
+    firrtl.connect %out, %invalid : !firrtl.bundle<a: uint>, !firrtl.bundle<a: uint>
+  }
+}
+
+// -----
+// https://github.com/llvm/circt/issues/4863
+firrtl.circuit "Foo" {
+  // expected-error @below {{uninferred width: port "out" is unconstrained}}
+  firrtl.module @Foo(out %out : !firrtl.uint) {
+    %invalid = firrtl.invalidvalue : !firrtl.bundle<a: uint>
+    %0 = firrtl.subfield %invalid[a] : !firrtl.bundle<a: uint>
+    firrtl.connect %out, %0 : !firrtl.uint, !firrtl.uint
   }
 }

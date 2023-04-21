@@ -15,10 +15,10 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
-#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
+#include "circt/Dialect/Seq/SeqAttributes.h"
 #include "circt/Support/FieldRef.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionInterfaces.h"
@@ -50,6 +50,10 @@ size_t getNumPorts(Operation *op);
 /// and correctly handles wires driven with only constant values.
 bool isConstant(Operation *op);
 bool isConstant(Value value);
+
+/// Returns true if this is a 'const' type that can only hold compile-time
+/// constant values
+bool isConst(Type type);
 
 /// Returns true if the value results from an expression with duplex flow.
 /// Duplex values have special treatment in bundle connect operations, and
@@ -182,13 +186,13 @@ struct FirMemory {
   size_t readLatency;
   size_t writeLatency;
   size_t maskBits;
-  size_t readUnderWrite;
-  hw::WUW writeUnderWrite;
+  seq::RUW readUnderWrite;
+  seq::WUW writeUnderWrite;
   SmallVector<int32_t> writeClockIDs;
   StringAttr modName;
   bool isMasked;
-  uint32_t groupID;
   MemoryInitAttr init;
+  StringAttr prefix;
 
   // Location is carried along but not considered part of the identity of this.
   Location loc;
@@ -198,16 +202,13 @@ struct FirMemory {
   // The original MemOp, only used in LowerToHW.  Also not part of the identity.
   Operation *op = nullptr;
 
-  std::tuple<size_t, size_t, size_t, size_t, size_t, size_t, size_t, size_t,
-             size_t, hw::WUW, SmallVector<int32_t>, uint32_t, StringRef, bool,
-             bool>
-  getTuple() const {
+  auto getTuple() const {
     return std::make_tuple(
         numReadPorts, numWritePorts, numReadWritePorts, dataWidth, depth,
         readLatency, writeLatency, maskBits, readUnderWrite, writeUnderWrite,
-        writeClockIDs, groupID, init ? init.getFilename().getValue() : "",
-        init ? init.getIsBinary().getValue() : false,
-        init ? init.getIsInline().getValue() : false);
+        writeClockIDs, init ? init.getFilename().getValue() : "",
+        init ? init.getIsBinary() : false, init ? init.getIsInline() : false,
+        prefix ? prefix.getValue() : "");
   }
   bool operator<(const FirMemory &rhs) const {
     return getTuple() < rhs.getTuple();

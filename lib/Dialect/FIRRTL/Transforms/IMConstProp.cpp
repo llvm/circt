@@ -43,7 +43,8 @@ static bool isAggregate(Operation *op) {
 /// Return true if this is a wire or register we're allowed to delete.
 static bool isDeletableWireOrRegOrNode(Operation *op) {
   return (isWireOrReg(op) || isa<NodeOp>(op)) && AnnotationSet(op).empty() &&
-         !hasDontTouch(op) && hasDroppableName(op);
+         !hasDontTouch(op) && hasDroppableName(op) &&
+         !cast<Forceable>(op).isForceable();
 }
 
 //===----------------------------------------------------------------------===//
@@ -364,6 +365,9 @@ void IMConstPropPass::runOnOperation() {
   instanceGraph = nullptr;
   latticeValues.clear();
   executableBlocks.clear();
+  assert(changedLatticeValueWorklist.empty());
+  fieldRefToUsers.clear();
+  valueToFieldRef.clear();
   resultPortToInstanceResultMapping.clear();
 }
 
@@ -481,12 +485,12 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
 }
 
 void IMConstPropPass::markWireOp(WireOp wire) {
-  auto type = wire.getType().dyn_cast<FIRRTLType>();
+  auto type = wire.getResult().getType().dyn_cast<FIRRTLType>();
   if (!type)
-    return markOverdefined(wire);
+    return markOverdefined(wire.getResult());
 
-  if (hasDontTouch(wire.getResult()))
-    return markOverdefined(wire);
+  if (hasDontTouch(wire.getResult()) || wire.isForceable())
+    return markOverdefined(wire.getResult());
 
   // Otherwise, this starts out as unknown and is upgraded by connects.
 }
@@ -664,8 +668,9 @@ void IMConstPropPass::visitNode(NodeOp node) {
   // Nodes don't fold if they have interesting names, but they should still
   // propagate values.
   if (hasDontTouch(node.getResult()) ||
-      (node.getAnnotationsAttr() && !node.getAnnotationsAttr().empty()))
-    return markOverdefined(node);
+      (node.getAnnotationsAttr() && !node.getAnnotationsAttr().empty()) ||
+      node.isForceable())
+    return markOverdefined(node.getResult());
 
   return mergeLatticeValue(node.getResult(), node.getInput());
 }

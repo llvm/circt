@@ -29,7 +29,7 @@ handshake.func @top(%arg0: i64, %arg1: none, ...) -> (i64, none) attributes {arg
   %trueResult_0, %falseResult_1 = cond_br %6#0, %3#1 : none
   // introduce additional delay to simulate a slow branch
   %buffer = buffer [10] seq %trueResult_0 : none
-  %result, %index = control_merge %buffer, %falseResult_1 : none
+  %result, %index = control_merge %buffer, %falseResult_1 : none, index
   %7:2 = fork [2] %result : none
   %8 = mux %index [%trueResult, %falseResult] : index, i64
   %9:2 = fork [2] %8 : i64

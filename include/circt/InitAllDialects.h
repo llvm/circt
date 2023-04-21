@@ -14,7 +14,7 @@
 #ifndef CIRCT_INITALLDIALECTS_H_
 #define CIRCT_INITALLDIALECTS_H_
 
-#include "circt/Dialect/Arc/Dialect.h"
+#include "circt/Dialect/Arc/ArcDialect.h"
 #include "circt/Dialect/Calyx/CalyxDialect.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
@@ -26,6 +26,7 @@
 #include "circt/Dialect/Handshake/HandshakeDialect.h"
 #include "circt/Dialect/Interop/InteropDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
+#include "circt/Dialect/LoopSchedule/LoopScheduleDialect.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
@@ -52,6 +53,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     handshake::HandshakeDialect,
     interop::InteropDialect,
     llhd::LLHDDialect,
+    loopschedule::LoopScheduleDialect,
     msft::MSFTDialect,
     moore::MooreDialect,
     hw::HWDialect,

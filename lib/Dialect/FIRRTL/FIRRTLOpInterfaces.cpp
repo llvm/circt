@@ -14,6 +14,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/StringRef.h"
 
@@ -99,6 +100,99 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
     return module.emitOpError("requires one region");
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Forceable
+//===----------------------------------------------------------------------===//
+
+RefType circt::firrtl::detail::getForceableResultType(bool forceable,
+                                                      Type type) {
+  auto base = dyn_cast_or_null<FIRRTLBaseType>(type);
+  if (!forceable || !base)
+    return {};
+  return circt::firrtl::RefType::get(base.getPassiveType(), forceable);
+}
+
+LogicalResult circt::firrtl::detail::verifyForceableOp(Forceable op) {
+  bool forceable = op.isForceable();
+  auto ref = op.getDataRef();
+  if ((bool)ref != forceable)
+    return op.emitOpError("must have ref result iff marked forceable");
+  if (!forceable)
+    return success();
+  auto data = op.getDataRaw();
+  auto baseType = dyn_cast<FIRRTLBaseType>(data.getType());
+  if (!baseType)
+    return op.emitOpError("has data that is not a base type");
+  auto expectedRefType = getForceableResultType(forceable, baseType);
+  if (ref.getType() != expectedRefType)
+    return op.emitOpError("reference result of incorrect type, found ")
+           << ref.getType() << ", expected " << expectedRefType;
+  return success();
+}
+
+namespace {
+/// Simple wrapper to allow construction from a context for local use.
+class TrivialPatternRewriter : public PatternRewriter {
+public:
+  explicit TrivialPatternRewriter(MLIRContext *context)
+      : PatternRewriter(context) {}
+};
+} // end namespace
+
+Forceable
+circt::firrtl::detail::replaceWithNewForceability(Forceable op, bool forceable,
+                                                  PatternRewriter *rewriter) {
+  if (forceable == op.isForceable())
+    return op;
+
+  assert(op->getNumRegions() == 0);
+
+  // Create copy of this operation with/without the forceable marker + result
+  // type.
+
+  TrivialPatternRewriter localRewriter(op.getContext());
+  PatternRewriter &rw = rewriter ? *rewriter : localRewriter;
+
+  // Grab the current operation's results and attributes.
+  SmallVector<Type, 8> resultTypes(op->getResultTypes());
+  SmallVector<NamedAttribute, 16> attributes(op->getAttrs());
+
+  // Add/remove the optional ref result.
+  auto refType = firrtl::detail::getForceableResultType(true, op.getDataType());
+  if (forceable)
+    resultTypes.push_back(refType);
+  else {
+    assert(resultTypes.back() == refType &&
+           "expected forceable type as last result");
+    resultTypes.pop_back();
+  }
+
+  // Add/remove the forceable marker.
+  auto forceableMarker =
+      rw.getNamedAttr(op.getForceableAttrName(), rw.getUnitAttr());
+  if (forceable)
+    attributes.push_back(forceableMarker);
+  else {
+    llvm::erase_value(attributes, forceableMarker);
+    assert(attributes.size() != op->getAttrs().size());
+  }
+
+  // Create the replacement operation.
+  OperationState state(op.getLoc(), op->getName(), op->getOperands(),
+                       resultTypes, attributes, op->getSuccessors());
+  rw.setInsertionPoint(op);
+  auto *replace = rw.create(state);
+
+  // Dropping forceability (!forceable) -> no uses of forceable ref handle.
+  assert(forceable || op.getDataRef().use_empty());
+
+  // Replace results.
+  for (auto result : llvm::drop_end(op->getResults(), forceable ? 0 : 1))
+    rw.replaceAllUsesWith(result, replace->getResult(result.getResultNumber()));
+  rw.eraseOp(op);
+  return cast<Forceable>(replace);
 }
 
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.cpp.inc"

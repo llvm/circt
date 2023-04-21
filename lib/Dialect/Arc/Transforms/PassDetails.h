@@ -12,13 +12,15 @@
 #ifndef DIALECT_ARC_TRANSFORMS_PASSDETAILS_H
 #define DIALECT_ARC_TRANSFORMS_PASSDETAILS_H
 
-#include "circt/Dialect/Arc/Dialect.h"
-#include "circt/Dialect/Arc/Ops.h"
-#include "circt/Dialect/Arc/Passes.h"
-#include "circt/Dialect/Arc/Types.h"
+#include "circt/Dialect/Arc/ArcDialect.h"
+#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
+#include "circt/Dialect/Arc/ArcTypes.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Pass/Pass.h"
 
 namespace circt {
@@ -27,7 +29,7 @@ namespace arc {
 using namespace circt;
 
 #define GEN_PASS_CLASSES
-#include "circt/Dialect/Arc/Passes.h.inc"
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
 
 } // namespace arc
 } // namespace circt

@@ -61,6 +61,8 @@ hw.module @top(%arg0: i1, %arg1: i1, %clk : i1, %rst : i1) -> (out: i8) {
 // CHECK-NEXT:        sv.bpassign %output_0, %c1_i8 : i8
 // CHECK-NEXT:        sv.bpassign %output_1, %c42_i8 : i8
 // CHECK-NEXT:      }
+// CHECK-NEXT:      default: {
+// CHECK-NEXT:      }
 // CHECK-NEXT:    }
 // CHECK-NEXT:    %5 = sv.read_inout %output_0 : !hw.inout<i8>
 // CHECK-NEXT:    %6 = sv.read_inout %output_1 : !hw.inout<i8>
@@ -106,7 +108,11 @@ fsm.machine @top(%a0: i1, %arg1: i1) -> (i8, i8) attributes {initialState = "A",
 // CHECK-NEXT:      }
 // CHECK-NEXT:      case B: {
 // CHECK-NEXT:      }
+// CHECK-NEXT:      default: {
+// CHECK-NEXT:      }
 // CHECK-NEXT:      sv.bpassign %output_0, %cnt_reg : i16
+// CHECK-NEXT:    }
+// CHECK-NEXT:    default: {
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 

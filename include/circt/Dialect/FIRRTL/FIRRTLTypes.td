@@ -65,37 +65,21 @@ def BundleType : FIRRTLDialectType<CPred<"$_self.isa<BundleType>()">,
 def FVectorType : FIRRTLDialectType<CPred<"$_self.isa<FVectorType>()">,
   "FVectorType", "::circt::firrtl::FVectorType">;
 
+def FEnumType : FIRRTLDialectType<CPred<"$_self.isa<FEnumType>()">,
+ "FEnumType", "::circt::firrtl::FEnumType">;
+
 def AggregateType : FIRRTLDialectType<
   Or<[
     CPred<"$_self.isa<FVectorType>()">,
-    CPred<"$_self.isa<BundleType>()">
+    CPred<"$_self.isa<BundleType>()">,
+    CPred<"$_self.isa<FEnumType>()">
   ]>,
   "a aggregate type", "::circt::firrtl::FIRRTLBaseType">;
-
-def ConnectableType : FIRRTLDialectType<
-  Or<[
-    CPred<"$_self.isa<FIRRTLBaseType>()">,
-    CPred<"$_self.isa<RefType>()">,
-    ]>,
-    "a connectable type (base or ref type)", "::circt::firrtl::FIRRTLType", [{
-    Any type that is valid for use in connect statements.
-    Currently this is any base type or ref type.
-  }]>;
-
-def SizedBaseOrRefType : FIRRTLDialectType<
-  Or<[
-    CPred<"$_self.isa<FIRRTLBaseType>() && "
-          "!$_self.cast<FIRRTLBaseType>().hasUninferredWidth()">,
-    CPred<"$_self.isa<RefType>() && "
-          "!$_self.cast<RefType>().getType().hasUninferredWidth()">,
-    ]>,
-  "a sized base or ref type (contains no uninferred widths)", "::circt::firrtl::FIRRTLType">;
 
 def SizedType : FIRRTLDialectType<CPred<"$_self.isa<FIRRTLBaseType>() && "
     "!$_self.cast<FIRRTLBaseType>().hasUninferredWidth()">,
     "a sized type (contains no uninferred widths)", "::circt::firrtl::FIRRTLType">;
 def SizedOrForeignType : AnyTypeOf<[SizedType, ForeignType]>;
-def SizedBaseOrRefTypeOrForeignType : AnyTypeOf<[SizedBaseOrRefType, ForeignType]>;
 
 def UInt1Type : FIRRTLDialectType<
     CPred<"$_self.isa<UIntType>() && "
@@ -124,10 +108,13 @@ def RefType : FIRRTLDialectType<
   CPred<"$_self.isa<RefType>()">,
    "reference type", "::circt::firrtl::RefType">;
 
-def SizedRefType : FIRRTLDialectType<
-  CPred<"$_self.isa<RefType>() &&  "
-        "!$_self.cast<RefType>().getType().hasUninferredWidth()">,
-   "sized reference type", "::circt::firrtl::RefType">;
+def RWProbe : FIRRTLDialectType<
+  CPred<"$_self.isa<RefType>() && $_self.cast<RefType>().getForceable()">,
+   "rwprobe type", "::circt::firrtl::RefType">;
+
+// TODO: When Refs can appear within Base, need to disallow that too.
+def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;
+def StrictConnectableType : AnyTypeOf<[PassiveType, ForeignType]>;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates
@@ -157,5 +144,19 @@ def OneBitCastableType : AnyTypeOf<
   [OneBitType, AnyResetType, AsyncResetType, ClockType],
   "1-bit uint/sint/analog, reset, asyncreset, or clock",
                                   "::circt::firrtl::FIRRTLBaseType">;
+
+//===----------------------------------------------------------------------===//
+// Constraints on RefOps
+//===----------------------------------------------------------------------===//
+
+class RefTypeConstraint<string ref, string base>
+  : TypesMatchWith<"reference base type should match",
+                   ref, base,
+                   "$_self.cast<RefType>().getType()">;
+
+class RefResultTypeConstraint<string base, string ref>
+  : TypesMatchWith<"reference base type should match",
+                   base, ref,
+                   "RefType::get($_self.cast<FIRRTLBaseType>().getPassiveType())">;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD

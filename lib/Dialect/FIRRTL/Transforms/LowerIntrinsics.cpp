@@ -128,7 +128,7 @@ static bool lowerCirctSizeof(InstancePathCache &instancePathCache,
   for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    auto inputWire = builder.create<WireOp>(ports[0].type);
+    auto inputWire = builder.create<WireOp>(ports[0].type).getResult();
     inst.getResult(0).replaceAllUsesWith(inputWire);
     auto size = builder.create<SizeOfIntrinsicOp>(inputWire);
     inst.getResult(1).replaceAllUsesWith(size);
@@ -149,7 +149,7 @@ static bool lowerCirctIsX(InstancePathCache &instancePathCache,
   for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    auto inputWire = builder.create<WireOp>(ports[0].type);
+    auto inputWire = builder.create<WireOp>(ports[0].type).getResult();
     inst.getResult(0).replaceAllUsesWith(inputWire);
     auto size = builder.create<IsXIntrinsicOp>(inputWire);
     inst.getResult(1).replaceAllUsesWith(size);
@@ -206,9 +206,13 @@ static bool lowerCirctPlusArgValue(InstancePathCache &instancePathCache,
 std::pair<const char *, std::function<bool(InstancePathCache &, FModuleLike)>>
     intrinsics[] = {
         {"circt.sizeof", lowerCirctSizeof},
+        {"circt_sizeof", lowerCirctSizeof},
         {"circt.isX", lowerCirctIsX},
+        {"circt_isX", lowerCirctIsX},
         {"circt.plusargs.test", lowerCirctPlusArgTest},
+        {"circt_plusargs_test", lowerCirctPlusArgTest},
         {"circt.plusargs.value", lowerCirctPlusArgValue},
+        {"circt_plusargs_value", lowerCirctPlusArgValue},
 };
 
 // This is the main entrypoint for the lowering pass.

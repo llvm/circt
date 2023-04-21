@@ -12,6 +12,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
 
+#include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 
 namespace mlir {

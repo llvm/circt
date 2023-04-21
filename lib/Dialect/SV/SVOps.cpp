@@ -20,6 +20,7 @@
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
@@ -974,6 +975,111 @@ void OrderedOutputOp::build(OpBuilder &builder, OperationState &result,
   // Fill in the body of the ordered block.
   if (body)
     body();
+}
+
+//===----------------------------------------------------------------------===//
+// ForOp
+//===----------------------------------------------------------------------===//
+
+void ForOp::build(OpBuilder &builder, OperationState &result,
+                  int64_t lowerBound, int64_t upperBound, int64_t step,
+                  IntegerType type, StringRef name,
+                  llvm::function_ref<void(BlockArgument)> body) {
+  auto lb = builder.create<hw::ConstantOp>(result.location, type, lowerBound);
+  auto ub = builder.create<hw::ConstantOp>(result.location, type, upperBound);
+  auto st = builder.create<hw::ConstantOp>(result.location, type, step);
+  build(builder, result, lb, ub, st, name, body);
+}
+void ForOp::build(OpBuilder &builder, OperationState &result, Value lowerBound,
+                  Value upperBound, Value step, StringRef name,
+                  llvm::function_ref<void(BlockArgument)> body) {
+  OpBuilder::InsertionGuard guard(builder);
+  build(builder, result, lowerBound, upperBound, step, name);
+  auto *region = result.regions.front().get();
+  builder.createBlock(region);
+  BlockArgument blockArgument =
+      region->addArgument(lowerBound.getType(), result.location);
+
+  if (body)
+    body(blockArgument);
+}
+
+void ForOp::getAsmBlockArgumentNames(mlir::Region &region,
+                                     mlir::OpAsmSetValueNameFn setNameFn) {
+  auto *block = &region.front();
+  setNameFn(block->getArgument(0), getInductionVarNameAttr());
+}
+
+ParseResult ForOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto &builder = parser.getBuilder();
+  Type type;
+
+  OpAsmParser::Argument inductionVariable;
+  OpAsmParser::UnresolvedOperand lb, ub, step;
+  // Parse the optional initial iteration arguments.
+  SmallVector<OpAsmParser::Argument, 4> regionArgs;
+
+  // Parse the induction variable followed by '='.
+  if (parser.parseOperand(inductionVariable.ssaName) || parser.parseEqual() ||
+      // Parse loop bounds.
+      parser.parseOperand(lb) || parser.parseKeyword("to") ||
+      parser.parseOperand(ub) || parser.parseKeyword("step") ||
+      parser.parseOperand(step) || parser.parseColon() ||
+      parser.parseType(type))
+    return failure();
+
+  regionArgs.push_back(inductionVariable);
+
+  // Resolve input operands.
+  regionArgs.front().type = type;
+  if (parser.resolveOperand(lb, type, result.operands) ||
+      parser.resolveOperand(ub, type, result.operands) ||
+      parser.resolveOperand(step, type, result.operands))
+    return failure();
+
+  // Parse the body region.
+  Region *body = result.addRegion();
+  if (parser.parseRegion(*body, regionArgs))
+    return failure();
+
+  // Parse the optional attribute list.
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  if (!inductionVariable.ssaName.name.empty()) {
+    if (!isdigit(inductionVariable.ssaName.name[1]))
+      // Retrive from its SSA name.
+      result.attributes.append(
+          {builder.getStringAttr("inductionVarName"),
+           builder.getStringAttr(inductionVariable.ssaName.name.drop_front())});
+  }
+
+  return success();
+}
+
+void ForOp::print(OpAsmPrinter &p) {
+  p << " " << getInductionVar() << " = " << getLowerBound() << " to "
+    << getUpperBound() << " step " << getStep();
+  p << " : " << getInductionVar().getType() << ' ';
+  p.printRegion(getRegion(),
+                /*printEntryBlockArgs=*/false,
+                /*printBlockTerminators=*/false);
+  p.printOptionalAttrDict((*this)->getAttrs(), {"inductionVarName"});
+}
+
+LogicalResult ForOp::canonicalize(ForOp op, PatternRewriter &rewriter) {
+  APInt lb, ub, step;
+  if (matchPattern(op.getLowerBound(), mlir::m_ConstantInt(&lb)) &&
+      matchPattern(op.getUpperBound(), mlir::m_ConstantInt(&ub)) &&
+      matchPattern(op.getStep(), mlir::m_ConstantInt(&step)) &&
+      lb + step == ub) {
+    // Unroll the loop if it's executed only once.
+    op.getInductionVar().replaceAllUsesWith(op.getLowerBound());
+    replaceOpWithRegion(rewriter, op, op.getBodyRegion());
+    rewriter.eraseOp(op);
+    return success();
+  }
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//

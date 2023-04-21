@@ -45,7 +45,7 @@ void InferMemoriesPass::runOnOperation() {
   for (auto genOp : module.getOps<hw::HWModuleGeneratedOp>()) {
     if (!schemaNames.contains(genOp.getGeneratorKindAttr().getAttr()))
       continue;
-    memoryParams[genOp.moduleNameAttr()] = genOp->getAttrDictionary();
+    memoryParams[genOp.getModuleNameAttr()] = genOp->getAttrDictionary();
     opsToDelete.push_back(genOp);
   }
   LLVM_DEBUG(llvm::dbgs() << "Found " << memoryParams.size()
@@ -79,7 +79,7 @@ void InferMemoriesPass::runOnOperation() {
     auto wordType = builder.getIntegerType(width);
     auto memType = MemoryType::get(&getContext(), depth, wordType, {});
     auto memOp = builder.create<MemoryOp>(memType);
-    if (!instOp.instanceName().empty())
+    if (!instOp.getInstanceName().empty())
       memOp->setAttr("name", instOp.getInstanceNameAttr());
 
     unsigned argIdx = 0;
@@ -91,7 +91,6 @@ void InferMemoriesPass::runOnOperation() {
       return data;
     };
 
-    SmallVector<Value> readPorts;
     SmallVector<std::array<Value, 6>> writePorts;
 
     // Handle read ports.
@@ -102,9 +101,8 @@ void InferMemoriesPass::runOnOperation() {
       auto enable = instOp.getOperand(argIdx++);
       auto clock = instOp.getOperand(argIdx++);
       auto data = instOp.getResult(resultIdx++);
-      Value readOp =
-          builder.create<MemoryReadOp>(wordType, memOp, address, clock, enable);
-      readPorts.push_back(readOp);
+      Value readOp = builder.create<MemoryReadPortOp>(wordType, memOp, address,
+                                                      clock, enable);
       readOp = applyReadLatency(clock, readOp);
       data.replaceAllUsesWith(readOp);
     }
@@ -125,8 +123,8 @@ void InferMemoriesPass::runOnOperation() {
       auto constOne = builder.create<hw::ConstantOp>(builder.getI1Type(), 1);
       auto readMode = builder.create<comb::XorOp>(writeMode, constOne);
       auto readEnable = builder.create<comb::AndOp>(enable, readMode);
-      Value readOp = builder.create<MemoryReadOp>(wordType, memOp, address,
-                                                  clock, readEnable);
+      Value readOp = builder.create<MemoryReadPortOp>(wordType, memOp, address,
+                                                      clock, readEnable);
 
       if (writeMask) {
         unsigned maskWidth = writeMask.getType().cast<IntegerType>().getWidth();
@@ -140,7 +138,6 @@ void InferMemoriesPass::runOnOperation() {
             builder.create<comb::ConcatOp>(writeData.getType(), toConcat);
       }
 
-      readPorts.push_back(readOp);
       readOp = applyReadLatency(clock, readOp);
       readData.replaceAllUsesWith(readOp);
 
@@ -176,8 +173,8 @@ void InferMemoriesPass::runOnOperation() {
     // Create the actual write ports with a dependency arc to all read
     // ports.
     for (auto [memOp, address, clock, enable, data, mask] : writePorts) {
-      builder.create<MemoryWriteOp>(memOp, address, clock, enable, data, mask,
-                                    readPorts);
+      builder.create<MemoryWritePortOp>(memOp, address, clock, enable, data,
+                                        mask);
     }
 
     opsToDelete.push_back(instOp);
