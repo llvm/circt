@@ -526,8 +526,7 @@ public:
                    rewriter
                        .create<UnpackOp>(branchInput.getLoc(),
                                          branchInput.getCondition())
-                       .getToken(),
-                   branchInput.getToken()});
+                       .getToken()});
 
     return success();
   }

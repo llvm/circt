@@ -45,28 +45,17 @@ handshake.func @top(%arg0: i64, %arg1: i64, %arg8: none, ...) -> (i64, none) {
     return %1, %arg8 : i64, none
 }
 
-handshake.func @taskPipelining(%arg0: i64, %arg1: none, ...) -> (i64, none) attributes {argNames = ["in0", "in1"], resNames = ["out0", "out1"]} {
-  %0 = constant %arg1 {value = 0 : i64} : i64
-  %1 = arith.cmpi eq, %0, %arg0 : i64
-  %2 = buffer [2] fifo %1 : i1
-  %trueResult, %falseResult = cond_br %1, %arg0 : i64
-  %trueResult_0, %falseResult_1 = cond_br %1, %arg1 : none
-  %trueResult_2, %falseResult_3 = cond_br %1, %0 : i64
-  %3 = buffer [1] seq %9 {initValues = [0]} : i1
-  %4 = mux %3 [%trueResult_0, %falseResult_7] : i1, none
-  %5 = mux %3 [%trueResult_2, %11] : i1, i64
-  %6 = constant %4 {value = 100 : i64} : i64
-  %7 = arith.cmpi eq, %6, %5 : i64
-  %trueResult_4, %falseResult_5 = cond_br %7, %5 : i64
-  %8 = constant %4 {value = true} : i1
-  %9 = arith.xori %7, %8 : i1
-  %trueResult_6, %falseResult_7 = cond_br %7, %4 : none
-  %10 = constant %falseResult_7 {value = 1 : i64} : i64
-  %11 = arith.addi %falseResult_5, %10 : i64
-  %12 = mux %16 [%trueResult_4, %falseResult] : index, i64
-  %13 = mux %2 [%falseResult_1, %trueResult_6] : i1, none
-  %14 = constant %13 {value = true} : i1
-  %15 = arith.xori %2, %14 : i1
-  %16 = arith.index_cast %15 : i1 to index
-  return %12, %13 : i64, none
+handshake.func @mux(%select : i1, %a : i64, %b : i64) -> i64{
+  %0 = handshake.mux %select [%a, %b] : i1, i64
+  return %0 : i64
+}
+
+handshake.func @test_conditional_branch(%arg0: i1, %arg1: index, %arg2: none, ...) -> (index, index, none) {
+  %0:2 = cond_br %arg0, %arg1 : index
+  return %0#0, %0#1, %arg2 : index, index, none
+}
+
+handshake.func @test_constant(%arg0: none) -> (i32) {
+  %1 = constant %arg0 {value = 42 : i32} : i32
+  return %1: i32
 }

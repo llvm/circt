@@ -22,6 +22,9 @@ In `dc`, there are two main classes of operations:
 Given the dialect's heavy resemblance to the `handshake` dialect, it's important to note that DC is _fully deterministic_. This means that non-deterministic operators such as `handshake.merge, handshake.control_merge` do **not** have a simple lowering (if it is even possible) to `dc`. `handshake` programs must therefore be converted or by construction not contain any of these non-deterministic operators.
 
 ## Modeling control- and data graph interactions
+
+**TODO: do we actually want this? or is packing/unpacking enough of an indicator?**
+
 When analyzing and transforming the `dc` dialect, we expect (based on the output abstraction) that there will often be a need to recursively analyze and optimize either the data- or control side of the graph, whereafter modifications must be performed in each side of the graph to maintain function semantics.
 
  <img title="DC symbols" src="includes/img/dc-symbols.png"/>

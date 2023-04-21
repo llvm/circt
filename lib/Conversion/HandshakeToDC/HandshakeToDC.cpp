@@ -147,9 +147,12 @@ public:
     auto join = rewriter.create<dc::JoinOp>(
         op.getLoc(), ValueRange{condition.token, data.token});
 
+    // Pack that together with the condition data.
+    auto packedCondition = rewriter.create<dc::PackOp>(
+        op.getLoc(), join, ValueRange{condition.data});
+
     // Branch on the input data and the joined control input.
-    auto branch = rewriter.create<dc::BranchOp>(
-        op.getLoc(), adaptor.getConditionOperand(), join);
+    auto branch = rewriter.create<dc::BranchOp>(op.getLoc(), packedCondition);
 
     // Pack the branch output tokens with the input data, and replace the uses.
     llvm::SmallVector<Value, 4> packed;

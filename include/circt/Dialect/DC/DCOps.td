@@ -291,18 +291,18 @@ def ForkOp : DCOp<"fork"> {
 def BranchOp : DCOp<"branch"> {
     let summary = "Branch operation";
     let description = [{
-        The token is propagated to a selected output based on the value of the
-        condition signal.
+        The incoming select token is propagated to the selected output based on
+        the value of the condition.
     }];
 
-    let arguments = (ins I1ValueType:$condition, TokenType:$token);
+    let arguments = (ins I1ValueType:$condition);
     let results = (outs TokenType:$trueToken, TokenType:$falseToken);
 
-    let assemblyFormat = "$condition `,` $token attr-dict";
+    let assemblyFormat = "$condition attr-dict";
     let builders = [OpBuilder<(
-        ins "Value":$condition, "Value":$token), [{
+        ins "Value":$condition), [{
             auto tt = odsBuilder.getType<dc::TokenType>();
-            build(odsBuilder, odsState, tt, tt, condition, token);
+            build(odsBuilder, odsState, tt, tt, condition);
         }]>];
 }
 
