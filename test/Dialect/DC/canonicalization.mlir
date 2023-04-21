@@ -67,16 +67,15 @@ func.func @forkToFork(%a: !dc.token) -> (!dc.token, !dc.token, !dc.token) {
 }
 
 // CHECK-LABEL:   func.func @merge(
-// CHECK-SAME:                     %[[VAL_0:.*]]: !dc.value<i1>,
-// CHECK-SAME:                     %[[VAL_1:.*]]: !dc.token) -> !dc.token {
+// CHECK-SAME:                     %[[VAL_0:.*]]: !dc.value<i1>) -> !dc.token {
 // CHECK:           %[[VAL_2:.*]], %[[VAL_3:.*]] = dc.unpack %[[VAL_0]] : (!dc.value<i1>) -> i1
-// CHECK:           %[[VAL_4:.*]] = dc.join %[[VAL_2]], %[[VAL_1]]
+// CHECK:           %[[VAL_4:.*]] = dc.join %[[VAL_2]]
 // CHECK:           return %[[VAL_4]] : !dc.token
 // CHECK:         }
-func.func @merge(%sel : !dc.value<i1>, %token : !dc.token) -> (!dc.token) {
+func.func @merge(%sel : !dc.value<i1>) -> (!dc.token) {
     // Canonicalize away a merge that is fed by a branch with the same select
     // input.
-    %true, %false = dc.branch %sel, %token
+    %true, %false = dc.branch %sel
     %0 = dc.merge %sel [ %true, %false ] : !dc.value<i1>
     return %0 : !dc.token
 }
