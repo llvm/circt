@@ -260,3 +260,17 @@ hw.module @SeparateResets(%clock: i1, %i0: i42, %rst1: i1, %rst2: i1) -> (out1: 
 // CHECK:   }
 // CHECK: [[FOO_ALLOC]] = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i42>
 // CHECK: [[BAR_ALLOC]] = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i42>
+
+// Regression check on worklist producing false positive comb loop errors.
+// CHECK-LABEL: @CombLoopRegression
+hw.module @CombLoopRegression(%clk: i1) {
+  %0 = arc.state @CombLoopRegressionArc1(%3, %3) clock %clk lat 1 : (i1, i1) -> i1
+  %1, %2 = arc.state @CombLoopRegressionArc2(%0) lat 0 : (i1) -> (i1, i1)
+  %3 = arc.state @CombLoopRegressionArc1(%1, %2) lat 0 : (i1, i1) -> i1
+}
+arc.define @CombLoopRegressionArc1(%arg0: i1, %arg1: i1) -> i1 {
+  arc.output %arg0 : i1
+}
+arc.define @CombLoopRegressionArc2(%arg0: i1) -> (i1, i1) {
+  arc.output %arg0, %arg0 : i1, i1
+}
