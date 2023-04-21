@@ -6,6 +6,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # TODO: most of this stuff should be moved to a .cmake file that is included.
 
+# fetch https://github.com/rttrorg/rttr
+include(FetchContent)
+FetchContent_Declare(
+  rttr
+  GIT_REPOSITORY https://github.com/rttrorg/rttr.git
+  GIT_TAG        v0.9.7
+)
+FetchContent_MakeAvailable(rttr)
+
 # Assert that CIRCT_DIR is defined.
 if(NOT DEFINED CIRCT_DIR)
   message(FATAL_ERROR "CIRCT_DIR must be defined.")

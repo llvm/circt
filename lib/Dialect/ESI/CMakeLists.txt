@@ -20,6 +20,7 @@ set(srcs
   Passes/ESILowerPorts.cpp
   Passes/ESILowerToHW.cpp
   Passes/ESILowerTypes.cpp
+  Passes/ESICleanMetadata.cpp
 )
 
 set(ESI_LinkLibs

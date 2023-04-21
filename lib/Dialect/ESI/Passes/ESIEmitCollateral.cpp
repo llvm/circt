@@ -90,9 +90,9 @@ static llvm::json::Value toJSON(Attribute attr) {
           Type inner = chanType.getInner();
           typeMD["hw_bitwidth"] = hw::getBitWidth(inner);
 #ifdef CAPNP
-          capnp::TypeSchema schema(inner);
+          capnp::CapnpTypeSchema schema(inner);
           typeMD["capnp_type_id"] = schema.capnpTypeID();
-          typeMD["capnp_name"] = schema.name().str();
+          typeMD["capnp_name"] = schema.capnpName().str();
 #endif
         } else {
           typeMD["hw_bitwidth"] = hw::getBitWidth(t);
@@ -246,22 +246,6 @@ void ESIEmitCollateralPass::emitServiceJSON() {
                                            StringAttr::get(ctxt, os.str()));
   auto outputFileAttr = OutputFileAttr::getFromFilename(ctxt, "services.json");
   verbatim->setAttr("output_file", outputFileAttr);
-
-  // By now, we should be done with all of the service declarations and
-  // metadata ops so we should delete them.
-  mod.walk([&](ServiceHierarchyMetadataOp op) { op.erase(); });
-  // Track declarations which are still used so that the service impl reqs are
-  // still valid.
-  DenseSet<StringAttr> stillUsed;
-  mod.walk([&](ServiceImplementReqOp req) {
-    auto sym = req.getServiceSymbol();
-    if (sym.has_value())
-      stillUsed.insert(StringAttr::get(req.getContext(), *sym));
-  });
-  mod.walk([&](ServiceDeclOpInterface decl) {
-    if (!stillUsed.contains(SymbolTable::getSymbolName(decl)))
-      decl.getOperation()->erase();
-  });
 }
 
 void ESIEmitCollateralPass::runOnOperation() {

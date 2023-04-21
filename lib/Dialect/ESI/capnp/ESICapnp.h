@@ -130,7 +130,7 @@ public:
 
 private:
   // Emits an RTTR registration for this type.
-  void writeRTTRRegistration(support::indenting_ostream& os) const;
+  void writeRTTRRegistration(support::indenting_ostream &os) const;
 };
 
 struct CPPEndpoint {
@@ -185,7 +185,7 @@ public:
                   llvm::SmallVectorImpl<capnp::CPPService> &cppServices)
       : mod(mod), services(services), cppServices(cppServices) {}
 
-  llvm::StringRef getCPPName() { return mod.moduleName(); }
+  llvm::StringRef getCPPName() { return mod.getModuleName(); }
   LogicalResult write(support::indenting_ostream &ios);
 
 private:
