@@ -1,7 +1,4 @@
-// RUN: split-file %s %t
-
-//--- defaults
-// RUN: circt-opt %t/defaults --arc-strip-sv --verify-diagnostics | FileCheck %t/defaults
+// RUN: circt-opt %s --arc-strip-sv --verify-diagnostics | FileCheck %s
 
 // CHECK-NOT: sv.verbatim
 // CHECK-NOT: sv.ifdef
@@ -21,22 +18,6 @@ hw.module @Foo(%clock: i1, %a: i4) -> (z: i4) {
   hw.output %2 : i4
 }
 // CHECK-NEXT: }
-
-// CHECK-NOT: hw.module.extern @PeripheryBus
-hw.module.extern @PeripheryBus() -> (clock: i1, reset: i1)
-// CHECK-LABEL: hw.module @Top
-hw.module @Top() {
-  %c0_i7 = hw.constant 0 : i7
-  // expected-warning @below {{StripSV: outputs of external module instance replaced with zero value!}}
-  %subsystem_pbus.clock, %subsystem_pbus.reset = hw.instance "subsystem_pbus" @PeripheryBus() -> (clock: i1, reset: i1)
-  // CHECK-NOT: hw.instance
-  // CHECK: [[RST:%.+]] = comb.mux %false{{.*}}, %c0_i7, %int_rtc_tick_value : i7
-  // CHECK: %int_rtc_tick_value = seq.compreg [[RST]], %false{{.*}} : i7
-  %int_rtc_tick_value = seq.firreg %int_rtc_tick_value clock %subsystem_pbus.clock reset sync %subsystem_pbus.reset, %c0_i7 : i7
-}
-
-//--- dontReplaceExtModuleOutputs
-// RUN: circt-opt %t/dontReplaceExtModuleOutputs --arc-strip-sv=replace-ext-module-outputs=false | FileCheck %t/dontReplaceExtModuleOutputs
 
 // CHECK-LABEL: hw.module.extern @PeripheryBus
 hw.module.extern @PeripheryBus() -> (clock: i1, reset: i1)

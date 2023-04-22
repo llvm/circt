@@ -75,3 +75,16 @@ hw.module private @NamesB() {
 hw.module private @NamesC() {
   hw.constant true {name = "x"}
 }
+
+
+// CHECK-LABEL: hw.module @ExtModuleA
+hw.module @ExtModuleA() {
+  // CHECK-NEXT: hw.instance "c0" @ExtModuleC
+  // CHECK-NEXT: hw.instance "b/c1" @ExtModuleC
+  hw.instance "c0" @ExtModuleC() -> ()
+  hw.instance "b" @ExtModuleB() -> ()
+}
+hw.module private @ExtModuleB() {
+  hw.instance "c1" @ExtModuleC() -> ()
+}
+hw.module.extern private @ExtModuleC()
