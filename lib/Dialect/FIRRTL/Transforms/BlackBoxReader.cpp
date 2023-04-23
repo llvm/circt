@@ -392,7 +392,7 @@ bool BlackBoxReaderPass::isDut(Operation *module) {
     dutModuleMap[module] = true;
     return true;
   }
-  auto *node = instanceGraph->lookup(module);
+  auto *node = instanceGraph->lookup(cast<hw::HWModuleLike>(module));
   bool anyParentIsDut = false;
   if (node)
     for (auto *u : node->uses()) {

@@ -357,7 +357,7 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     static_assert(
         ConcreteOp::template hasTrait<OpTrait::InnerSymbolTable>(),
         "expected operation to be an inner symbol table");
-    return verifyModuleLikeOpInterface(op);
+    return verifyModuleLikeOpInterface(cast<::circt::firrtl::FModuleLike>(op));
   }];
 }
 
@@ -452,7 +452,9 @@ def Forceable : OpInterface<"Forceable"> {
     /// Attribute name for 'forceable' tracking.
     static StringRef getForceableAttrName() { return "forceable"; }
   }];
-  let verify = [{ return detail::verifyForceableOp($_op); }];
+  let verify = [{
+    return detail::verifyForceableOp(cast<::circt::firrtl::Forceable>($_op));
+  }];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLOPINTERFACES_TD

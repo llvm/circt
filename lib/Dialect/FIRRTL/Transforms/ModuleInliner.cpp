@@ -878,8 +878,8 @@ void Inliner::cloneAndRename(
     assert(newOpToRename);
     // TODO: If want to work before ExpandWhen's, more work needed!
     // Handle what we can for now.
-    assert(origOp == &op || !isa<InstanceOp>(origOp) &&
-                                "Cannot handle instances not at top-level");
+    assert((origOp == &op || !isa<InstanceOp>(origOp)) &&
+           "Cannot handle instances not at top-level");
 
     // Instances require extra handling to update HierPathOp's if their symbols
     // change.

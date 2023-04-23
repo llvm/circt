@@ -518,8 +518,9 @@ Value AggregateConstantOpConversion::constructAggregate(
   };
 
   return TypeSwitch<Type, Value>(type)
-      .Case<IntegerType>(
-          [&](auto ty) { return builder.create<LLVM::ConstantOp>(loc, data); })
+      .Case<IntegerType>([&](auto ty) {
+        return builder.create<LLVM::ConstantOp>(loc, data.cast<TypedAttr>());
+      })
       .Case<hw::ArrayType, hw::StructType>([&](auto ty) {
         Value aggVal = builder.create<LLVM::UndefOp>(loc, llvmType);
         auto arrayAttr = data.cast<ArrayAttr>();

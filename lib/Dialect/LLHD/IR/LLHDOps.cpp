@@ -681,8 +681,8 @@ static void printProcArguments(OpAsmPrinter &p, Operation *op,
   auto printList = [&](unsigned i, unsigned max) -> void {
     for (; i < max; ++i) {
       p << body.front().getArgument(i) << " : " << types[i];
-      p.printOptionalAttrDict(
-          ::mlir::function_interface_impl::getArgAttrs(op, i));
+      p.printOptionalAttrDict(::mlir::function_interface_impl::getArgAttrs(
+          cast<mlir::FunctionOpInterface>(op), i));
 
       if (i < max - 1)
         p << ", ";
