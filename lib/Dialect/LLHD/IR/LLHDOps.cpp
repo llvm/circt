@@ -677,12 +677,13 @@ ParseResult llhd::ProcOp::parse(OpAsmParser &parser, OperationState &result) {
 /// verification.
 static void printProcArguments(OpAsmPrinter &p, Operation *op,
                                ArrayRef<Type> types, uint64_t numIns) {
+  auto functionInterface = cast<mlir::FunctionOpInterface>(op);
   Region &body = op->getRegion(0);
   auto printList = [&](unsigned i, unsigned max) -> void {
     for (; i < max; ++i) {
       p << body.front().getArgument(i) << " : " << types[i];
       p.printOptionalAttrDict(
-          ::mlir::function_interface_impl::getArgAttrs(op, i));
+          ::mlir::function_interface_impl::getArgAttrs(functionInterface, i));
 
       if (i < max - 1)
         p << ", ";

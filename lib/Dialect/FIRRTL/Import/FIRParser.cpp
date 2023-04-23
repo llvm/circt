@@ -3521,7 +3521,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
         parseToken(FIRToken::equal, "expected '=' in parameter"))
       return failure();
 
-    Attribute value;
+    mlir::TypedAttr value;
     switch (getToken().getKind()) {
     default:
       return emitError("expected parameter value"), failure();

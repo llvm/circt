@@ -724,7 +724,9 @@ public:
     // Check if a submodule has already been created for the op. If so,
     // instantiate the submodule. Else, run the pattern-defined module
     // builder.
-    hw::HWModuleLike implModule = checkSubModuleOp(ls.parentModule, op);
+    hw::HWModuleLike implModule;
+    if (auto implOp = checkSubModuleOp(ls.parentModule, op))
+      implModule = dyn_cast<hw::HWModuleLike>(implOp);
     if (!implModule) {
       auto portInfo = ModulePortInfo(getPortInfoForOp(op));
 

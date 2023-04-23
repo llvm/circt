@@ -128,6 +128,7 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
                                             bool &needArgNamesAttr) {
   using namespace mlir::function_interface_impl;
 
+  auto functionInterface = cast<mlir::FunctionOpInterface>(op);
   Region &body = op->getRegion(0);
   bool isExternal = body.empty();
   SmallString<32> resultNameStr;
@@ -157,7 +158,7 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
     }
 
     p.printType(argTypes[i]);
-    p.printOptionalAttrDict(getArgAttrs(op, i));
+    p.printOptionalAttrDict(getArgAttrs(functionInterface, i));
 
     // TODO: `printOptionalLocationSpecifier` will emit aliases for locations,
     // even if they are not printed.  This will have to be fixed upstream.  For
@@ -184,7 +185,7 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
       p.printKeywordOrString(getModuleResultNameAttr(op, i).getValue());
       p << ": ";
       p.printType(resultTypes[i]);
-      p.printOptionalAttrDict(getResultAttrs(op, i));
+      p.printOptionalAttrDict(getResultAttrs(functionInterface, i));
 
       // TODO: `printOptionalLocationSpecifier` will emit aliases for locations,
       // even if they are not printed.  This will have to be fixed upstream. For

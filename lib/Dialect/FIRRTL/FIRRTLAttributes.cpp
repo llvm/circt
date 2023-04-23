@@ -92,7 +92,7 @@ Attribute ParamDeclAttr::parse(AsmParser &p, Type trailing) {
     return Attribute();
 
   if (value)
-    return ParamDeclAttr::get(name, value);
+    return ParamDeclAttr::get(name, value.cast<mlir::TypedAttr>());
   return ParamDeclAttr::get(name, type);
 }
 

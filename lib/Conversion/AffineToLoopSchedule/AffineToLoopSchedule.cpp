@@ -58,12 +58,14 @@ private:
   ModuloProblem getModuloProblem(CyclicProblem &prob);
   LogicalResult
   lowerAffineStructures(MemoryDependenceAnalysis &dependenceAnalysis);
-  LogicalResult populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest,
-                                      ModuloProblem &problem);
-  LogicalResult solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest,
-                                       ModuloProblem &problem);
   LogicalResult
-  createLoopSchedulePipeline(SmallVectorImpl<AffineForOp> &loopNest,
+  populateOperatorTypes(SmallVectorImpl<affine::AffineForOp> &loopNest,
+                        ModuloProblem &problem);
+  LogicalResult
+  solveSchedulingProblem(SmallVectorImpl<affine::AffineForOp> &loopNest,
+                         ModuloProblem &problem);
+  LogicalResult
+  createLoopSchedulePipeline(SmallVectorImpl<affine::AffineForOp> &loopNest,
                              ModuloProblem &problem);
 
   CyclicSchedulingAnalysis *schedulingAnalysis;
@@ -112,9 +114,9 @@ void AffineToLoopSchedule::runOnOperation() {
   schedulingAnalysis = &getAnalysis<CyclicSchedulingAnalysis>();
 
   // Collect perfectly nested loops and work on them.
-  auto outerLoops = getOperation().getOps<AffineForOp>();
+  auto outerLoops = getOperation().getOps<affine::AffineForOp>();
   for (auto root : llvm::make_early_inc_range(outerLoops)) {
-    SmallVector<AffineForOp> nestedLoops;
+    SmallVector<affine::AffineForOp> nestedLoops;
     getPerfectlyNestedLoops(nestedLoops, root);
 
     // Restrict to single loops to simplify things for now.
@@ -143,19 +145,19 @@ void AffineToLoopSchedule::runOnOperation() {
 /// the original 'affine.load').
 /// Also replaces the affine load with the memref load in dependenceAnalysis.
 /// TODO(mikeurbach): this is copied from AffineToStandard, see if we can reuse.
-class AffineLoadLowering : public OpConversionPattern<AffineLoadOp> {
+class AffineLoadLowering : public OpConversionPattern<affine::AffineLoadOp> {
 public:
   AffineLoadLowering(MLIRContext *context,
                      MemoryDependenceAnalysis &dependenceAnalysis)
       : OpConversionPattern(context), dependenceAnalysis(dependenceAnalysis) {}
 
   LogicalResult
-  matchAndRewrite(AffineLoadOp op, OpAdaptor adaptor,
+  matchAndRewrite(affine::AffineLoadOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Expand affine map from 'affineLoadOp'.
     SmallVector<Value, 8> indices(op.getMapOperands());
-    auto resultOperands =
-        expandAffineMap(rewriter, op.getLoc(), op.getAffineMap(), indices);
+    auto resultOperands = affine::expandAffineMap(rewriter, op.getLoc(),
+                                                  op.getAffineMap(), indices);
     if (!resultOperands)
       return failure();
 
@@ -177,19 +179,19 @@ private:
 /// the original 'affine.store').
 /// Also replaces the affine store with the memref store in dependenceAnalysis.
 /// TODO(mikeurbach): this is copied from AffineToStandard, see if we can reuse.
-class AffineStoreLowering : public OpConversionPattern<AffineStoreOp> {
+class AffineStoreLowering : public OpConversionPattern<affine::AffineStoreOp> {
 public:
   AffineStoreLowering(MLIRContext *context,
                       MemoryDependenceAnalysis &dependenceAnalysis)
       : OpConversionPattern(context), dependenceAnalysis(dependenceAnalysis) {}
 
   LogicalResult
-  matchAndRewrite(AffineStoreOp op, OpAdaptor adaptor,
+  matchAndRewrite(affine::AffineStoreOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Expand affine map from 'affineStoreOp'.
     SmallVector<Value, 8> indices(op.getMapOperands());
-    auto maybeExpandedMap =
-        expandAffineMap(rewriter, op.getLoc(), op.getAffineMap(), indices);
+    auto maybeExpandedMap = affine::expandAffineMap(rewriter, op.getLoc(),
+                                                    op.getAffineMap(), indices);
     if (!maybeExpandedMap)
       return failure();
 
@@ -238,7 +240,7 @@ static bool ifOpLegalityCallback(IfOp op) {
 
 /// Helper to mark AffineYieldOp legal, unless it is inside a partially
 /// converted scf::IfOp.
-static bool yieldOpLegalityCallback(AffineYieldOp op) {
+static bool yieldOpLegalityCallback(affine::AffineYieldOp op) {
   return !op->getParentOfType<IfOp>();
 }
 
@@ -255,11 +257,12 @@ LogicalResult AffineToLoopSchedule::lowerAffineStructures(
   auto op = getOperation();
 
   ConversionTarget target(*context);
-  target.addLegalDialect<AffineDialect, ArithDialect, MemRefDialect,
+  target.addLegalDialect<affine::AffineDialect, ArithDialect, MemRefDialect,
                          SCFDialect>();
-  target.addIllegalOp<AffineIfOp, AffineLoadOp, AffineStoreOp>();
+  target.addIllegalOp<affine::AffineIfOp, affine::AffineLoadOp,
+                      affine::AffineStoreOp>();
   target.addDynamicallyLegalOp<IfOp>(ifOpLegalityCallback);
-  target.addDynamicallyLegalOp<AffineYieldOp>(yieldOpLegalityCallback);
+  target.addDynamicallyLegalOp<affine::AffineYieldOp>(yieldOpLegalityCallback);
 
   RewritePatternSet patterns(context);
   populateAffineToStdConversionPatterns(patterns);
@@ -278,7 +281,7 @@ LogicalResult AffineToLoopSchedule::lowerAffineStructures(
 /// well-defined operator latencies. Ultimately, we should move this to a
 /// dialect interface in the Scheduling dialect.
 LogicalResult AffineToLoopSchedule::populateOperatorTypes(
-    SmallVectorImpl<AffineForOp> &loopNest, ModuloProblem &problem) {
+    SmallVectorImpl<affine::AffineForOp> &loopNest, ModuloProblem &problem) {
   // Scheduling analyis only considers the innermost loop nest for now.
   auto forOp = loopNest.back();
 
@@ -295,7 +298,7 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
   Operation *unsupported;
   WalkResult result = forOp.getBody()->walk([&](Operation *op) {
     return TypeSwitch<Operation *, WalkResult>(op)
-        .Case<AddIOp, IfOp, AffineYieldOp, arith::ConstantOp, CmpIOp,
+        .Case<AddIOp, IfOp, affine::AffineYieldOp, arith::ConstantOp, CmpIOp,
               IndexCastOp, memref::AllocaOp, YieldOp>([&](Operation *combOp) {
           // Some known combinational ops.
           problem.setLinkedOperatorType(combOp, combOpr);
@@ -307,12 +310,12 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
           problem.setLinkedOperatorType(seqOp, seqOpr);
           return WalkResult::advance();
         })
-        .Case<AffineStoreOp, memref::StoreOp>([&](Operation *memOp) {
+        .Case<affine::AffineStoreOp, memref::StoreOp>([&](Operation *memOp) {
           // Some known sequential ops. In certain cases, reads may be
           // combinational in Calyx, but taking advantage of that is left as
           // a future enhancement.
-          Value memRef = isa<AffineStoreOp>(*memOp)
-                             ? cast<AffineStoreOp>(*memOp).getMemRef()
+          Value memRef = isa<affine::AffineStoreOp>(*memOp)
+                             ? cast<affine::AffineStoreOp>(*memOp).getMemRef()
                              : cast<memref::StoreOp>(*memOp).getMemRef();
           Problem::OperatorType memOpr = problem.getOrInsertOperatorType(
               "mem_" + std::to_string(hash_value(memRef)));
@@ -321,12 +324,12 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
           problem.setLinkedOperatorType(memOp, memOpr);
           return WalkResult::advance();
         })
-        .Case<AffineLoadOp, memref::LoadOp>([&](Operation *memOp) {
+        .Case<affine::AffineLoadOp, memref::LoadOp>([&](Operation *memOp) {
           // Some known sequential ops. In certain cases, reads may be
           // combinational in Calyx, but taking advantage of that is left as
           // a future enhancement.
-          Value memRef = isa<AffineLoadOp>(*memOp)
-                             ? cast<AffineLoadOp>(*memOp).getMemRef()
+          Value memRef = isa<affine::AffineLoadOp>(*memOp)
+                             ? cast<affine::AffineLoadOp>(*memOp).getMemRef()
                              : cast<memref::LoadOp>(*memOp).getMemRef();
           Problem::OperatorType memOpr = problem.getOrInsertOperatorType(
               "mem_" + std::to_string(hash_value(memRef)));
@@ -354,7 +357,7 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
 
 /// Solve the pre-computed scheduling problem.
 LogicalResult AffineToLoopSchedule::solveSchedulingProblem(
-    SmallVectorImpl<AffineForOp> &loopNest, ModuloProblem &problem) {
+    SmallVectorImpl<affine::AffineForOp> &loopNest, ModuloProblem &problem) {
   // Scheduling analyis only considers the innermost loop nest for now.
   auto forOp = loopNest.back();
 
@@ -399,7 +402,7 @@ LogicalResult AffineToLoopSchedule::solveSchedulingProblem(
 
 /// Create the loopschedule pipeline op for a loop nest.
 LogicalResult AffineToLoopSchedule::createLoopSchedulePipeline(
-    SmallVectorImpl<AffineForOp> &loopNest, ModuloProblem &problem) {
+    SmallVectorImpl<affine::AffineForOp> &loopNest, ModuloProblem &problem) {
   // Scheduling analyis only considers the innermost loop nest for now.
   auto forOp = loopNest.back();
 
@@ -446,7 +449,7 @@ LogicalResult AffineToLoopSchedule::createLoopSchedulePipeline(
   // Add the non-yield operations to their start time groups.
   DenseMap<unsigned, SmallVector<Operation *>> startGroups;
   for (auto *op : problem.getOperations()) {
-    if (isa<AffineYieldOp, YieldOp>(op))
+    if (isa<affine::AffineYieldOp, YieldOp>(op))
       continue;
     auto startTime = problem.getStartTime(op);
     startGroups[*startTime].push_back(op);
@@ -489,7 +492,7 @@ LogicalResult AffineToLoopSchedule::createLoopSchedulePipeline(
     // Collect the return types for this stage. Operations whose results are not
     // used within this stage are returned.
     auto isLoopTerminator = [forOp](Operation *op) {
-      return isa<AffineYieldOp>(op) && op->getParentOp() == forOp;
+      return isa<affine::AffineYieldOp>(op) && op->getParentOp() == forOp;
     };
 
     // Initialize set of registers up until this point in time

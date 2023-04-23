@@ -34,7 +34,7 @@ static Value createGenericOp(Location loc, OperationName name,
   return builder.create(state)->getResult(0);
 }
 
-static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
+static IntegerAttr getIntAttr(const APInt &value, MLIRContext *context) {
   return IntegerAttr::get(IntegerType::get(context, value.getBitWidth()),
                           value);
 }
@@ -282,7 +282,8 @@ static Attribute constFoldBinaryOp(ArrayRef<Attribute> operands,
 
   // Fold constants with ParamExprAttr::get which handles simple constants as
   // well as parameter expressions.
-  return hw::ParamExprAttr::get(paramOpcode, operands[0], operands[1]);
+  return hw::ParamExprAttr::get(paramOpcode, cast<mlir::TypedAttr>(operands[0]),
+                                cast<mlir::TypedAttr>(operands[1]));
 }
 
 OpFoldResult ShlOp::fold(FoldAdaptor adaptor) {
@@ -1316,9 +1317,10 @@ OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
       auto negOne = getIntAttr(
           APInt::getAllOnes(getLhs().getType().getIntOrFloatBitWidth()),
           getContext());
-      auto rhsNeg =
-          hw::ParamExprAttr::get(hw::PEO::Mul, adaptor.getRhs(), negOne);
-      return hw::ParamExprAttr::get(hw::PEO::Add, adaptor.getLhs(), rhsNeg);
+      auto rhsNeg = hw::ParamExprAttr::get(
+          hw::PEO::Mul, cast<mlir::TypedAttr>(adaptor.getRhs()), negOne);
+      return hw::ParamExprAttr::get(
+          hw::PEO::Add, cast<mlir::TypedAttr>(adaptor.getLhs()), rhsNeg);
     }
 
     // sub(x - 0) -> x

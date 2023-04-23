@@ -719,7 +719,7 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
     mod = tracker.op->getParentOfType<FModuleOp>();
 
   // Get all the paths instantiating this module.
-  auto paths = instancePaths->getAbsolutePaths(mod);
+  auto paths = instancePaths->getAbsolutePaths(cast<hw::HWModuleLike>(mod));
   if (paths.empty()) {
     tracker.op->emitError("OMIR node targets uninstantiated component `")
         << opName.getValue() << "`";

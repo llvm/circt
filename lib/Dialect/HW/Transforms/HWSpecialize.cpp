@@ -232,8 +232,8 @@ static LogicalResult registerNestedParametricInstanceOps(
                                               instanceParameterValue);
       if (failed(evaluated))
         return WalkResult::interrupt();
-      evaluatedInstanceParameters.push_back(
-          hw::ParamDeclAttr::get(instanceParameterDecl.getName(), *evaluated));
+      evaluatedInstanceParameters.push_back(hw::ParamDeclAttr::get(
+          instanceParameterDecl.getName(), evaluated->cast<mlir::TypedAttr>()));
     }
 
     auto evaluatedInstanceParametersAttr =

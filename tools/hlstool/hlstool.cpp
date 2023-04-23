@@ -534,7 +534,7 @@ int main(int argc, char **argv) {
 
   DialectRegistry registry;
   // Register MLIR dialects.
-  registry.insert<mlir::AffineDialect>();
+  registry.insert<mlir::affine::AffineDialect>();
   registry.insert<mlir::memref::MemRefDialect>();
   registry.insert<mlir::func::FuncDialect>();
   registry.insert<mlir::arith::ArithDialect>();

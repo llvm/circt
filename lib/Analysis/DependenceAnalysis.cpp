@@ -39,11 +39,11 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
         results[destination] = SmallVector<MemoryDependence>();
 
       // Look for inter-iteration dependences on the same memory location.
-      MemRefAccess src(source);
-      MemRefAccess dst(destination);
-      FlatAffineValueConstraints dependenceConstraints;
-      SmallVector<DependenceComponent, 2> depComps;
-      DependenceResult result = checkMemrefAccessDependence(
+      affine::MemRefAccess src(source);
+      affine::MemRefAccess dst(destination);
+      affine::FlatAffineValueConstraints dependenceConstraints;
+      SmallVector<affine::DependenceComponent, 2> depComps;
+      affine::DependenceResult result = checkMemrefAccessDependence(
           src, dst, depth, &dependenceConstraints, &depComps, true);
 
       results[destination].emplace_back(source, result.value, depComps);
@@ -55,7 +55,7 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
 
       // Collect surrounding loops to use in dependence components. Only proceed
       // if we are in the innermost loop.
-      SmallVector<AffineForOp> enclosingLoops;
+      SmallVector<affine::AffineForOp> enclosingLoops;
       getAffineForIVs(*destination, &enclosingLoops);
       if (enclosingLoops.size() != depth)
         continue;
@@ -63,9 +63,9 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
       // Look for the common parent that src and dst share. If there is none,
       // there is nothing more to do.
       SmallVector<Operation *> srcParents;
-      getEnclosingAffineOps(*source, &srcParents);
+      affine::getEnclosingAffineOps(*source, &srcParents);
       SmallVector<Operation *> dstParents;
-      getEnclosingAffineOps(*destination, &dstParents);
+      affine::getEnclosingAffineOps(*destination, &dstParents);
 
       Operation *commonParent = nullptr;
       for (auto *srcParent : llvm::reverse(srcParents)) {
@@ -103,9 +103,9 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
         // Check if the src or its ancestor is before the dst or its ancestor.
         if (srcOrAncestor->isBeforeInBlock(dstOrAncestor)) {
           // Build dependence components for each loop depth.
-          SmallVector<DependenceComponent> intraDeps;
+          SmallVector<affine::DependenceComponent> intraDeps;
           for (size_t i = 0; i < depth; ++i) {
-            DependenceComponent depComp;
+            affine::DependenceComponent depComp;
             depComp.op = enclosingLoops[i];
             depComp.lb = 0;
             depComp.ub = 0;
@@ -113,7 +113,7 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
           }
 
           results[destination].emplace_back(
-              source, DependenceResult::HasDependence, intraDeps);
+              source, affine::DependenceResult::HasDependence, intraDeps);
         }
       }
     }
@@ -128,13 +128,13 @@ circt::analysis::MemoryDependenceAnalysis::MemoryDependenceAnalysis(
   auto funcOp = cast<func::FuncOp>(op);
 
   // Collect affine loops grouped by nesting depth.
-  std::vector<SmallVector<AffineForOp, 2>> depthToLoops;
-  mlir::gatherLoops(funcOp, depthToLoops);
+  std::vector<SmallVector<affine::AffineForOp, 2>> depthToLoops;
+  mlir::affine::gatherLoops(funcOp, depthToLoops);
 
   // Collect load and store operations to check.
   SmallVector<Operation *> memoryOps;
   funcOp.walk([&](Operation *op) {
-    if (isa<AffineReadOpInterface, AffineWriteOpInterface>(op))
+    if (isa<affine::AffineReadOpInterface, affine::AffineWriteOpInterface>(op))
       memoryOps.push_back(op);
   });
 

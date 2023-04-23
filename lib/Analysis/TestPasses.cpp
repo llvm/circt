@@ -47,13 +47,13 @@ void TestDependenceAnalysisPass::runOnOperation() {
   MemoryDependenceAnalysis analysis(getOperation());
 
   getOperation().walk([&](Operation *op) {
-    if (!isa<AffineReadOpInterface, AffineWriteOpInterface>(op))
+    if (!isa<affine::AffineReadOpInterface, affine::AffineWriteOpInterface>(op))
       return;
 
     SmallVector<Attribute> deps;
 
     for (auto dep : analysis.getDependences(op)) {
-      if (dep.dependenceType != mlir::DependenceResult::HasDependence)
+      if (dep.dependenceType != mlir::affine::DependenceResult::HasDependence)
         continue;
 
       SmallVector<Attribute> comps;
@@ -97,8 +97,8 @@ void TestSchedulingAnalysisPass::runOnOperation() {
 
   CyclicSchedulingAnalysis analysis = getAnalysis<CyclicSchedulingAnalysis>();
 
-  getOperation().walk([&](AffineForOp forOp) {
-    if (isa<AffineForOp>(forOp.getBody()->front()))
+  getOperation().walk([&](affine::AffineForOp forOp) {
+    if (isa<affine::AffineForOp>(forOp.getBody()->front()))
       return;
     CyclicProblem problem = analysis.getProblem(forOp);
     forOp.getBody()->walk([&](Operation *op) {

@@ -365,7 +365,7 @@ Attribute ParamDeclAttr::parse(AsmParser &p, Type trailing) {
     return Attribute();
 
   if (value)
-    return ParamDeclAttr::get(name, value);
+    return ParamDeclAttr::get(name, value.cast<mlir::TypedAttr>());
   return ParamDeclAttr::get(name, type);
 }
 
@@ -572,7 +572,7 @@ static TypedAttr simplifyAssocOp(
       operands.pop_back();
   }
 
-  return operands.size() == 1 ? operands[0] : Attribute();
+  return operands.size() == 1 ? operands[0] : TypedAttr();
 }
 
 /// Analyze an operand to an add.  If it is a multiplication by a constant (e.g.
@@ -939,7 +939,7 @@ replaceDeclRefInExpr(Location loc,
       auto res = replaceDeclRefInExpr(loc, parameters, operand);
       if (failed(res))
         return {failure()};
-      replacedOperands.push_back(*res);
+      replacedOperands.push_back(res->cast<mlir::TypedAttr>());
     }
     return {
         hw::ParamExprAttr::get(paramExprAttr.getOpcode(), replacedOperands)};
@@ -995,7 +995,7 @@ FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
                                    intAttr.getValue().getSExtValue())};
 
         // Otherwise parameter references are still involved
-        return hw::IntType::get(*evaluatedWidth);
+        return hw::IntType::get(evaluatedWidth->cast<mlir::TypedAttr>());
       })
       .Case<hw::ArrayType>([&](hw::ArrayType arrayType) -> FailureOr<Type> {
         auto size =

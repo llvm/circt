@@ -36,15 +36,15 @@ circt::analysis::CyclicSchedulingAnalysis::CyclicSchedulingAnalysis(
       am.getAnalysis<MemoryDependenceAnalysis>();
 
   // Only consider innermost loops of perfectly nested AffineForOps.
-  for (auto root : funcOp.getOps<AffineForOp>()) {
-    SmallVector<AffineForOp> nestedLoops;
+  for (auto root : funcOp.getOps<affine::AffineForOp>()) {
+    SmallVector<affine::AffineForOp> nestedLoops;
     getPerfectlyNestedLoops(nestedLoops, root);
     analyzeForOp(nestedLoops.back(), memoryAnalysis);
   }
 }
 
 void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
-    AffineForOp forOp, MemoryDependenceAnalysis memoryAnalysis) {
+    affine::AffineForOp forOp, MemoryDependenceAnalysis memoryAnalysis) {
   // Create a cyclic scheduling problem.
   CyclicProblem problem = CyclicProblem::get(forOp);
 
@@ -85,7 +85,7 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
     if (auto ifOp = dyn_cast<scf::IfOp>(op)) {
       thenBlock = ifOp.thenBlock();
       elseBlock = ifOp.elseBlock();
-    } else if (auto ifOp = dyn_cast<AffineIfOp>(op)) {
+    } else if (auto ifOp = dyn_cast<affine::AffineIfOp>(op)) {
       thenBlock = ifOp.getThenBlock();
       if (ifOp.hasElse())
         elseBlock = ifOp.getElseBlock();
@@ -117,7 +117,7 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
   // terminator to ensure the problem schedules them before the terminator.
   auto *anchor = forOp.getBody()->getTerminator();
   forOp.getBody()->walk([&](Operation *op) {
-    if (!isa<mlir::AffineStoreOp, memref::StoreOp>(op))
+    if (!isa<mlir::affine::AffineStoreOp, memref::StoreOp>(op))
       return;
     Problem::Dependence dep(op, anchor);
     auto depInserted = problem.insertDependence(dep);
@@ -152,8 +152,8 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
   problems.insert(std::pair<Operation *, CyclicProblem>(forOp, problem));
 }
 
-CyclicProblem &
-circt::analysis::CyclicSchedulingAnalysis::getProblem(AffineForOp forOp) {
+CyclicProblem &circt::analysis::CyclicSchedulingAnalysis::getProblem(
+    affine::AffineForOp forOp) {
   auto problem = problems.find(forOp);
   assert(problem != problems.end() && "expected problem to exist");
   return problem->second;

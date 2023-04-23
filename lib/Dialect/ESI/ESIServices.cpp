@@ -652,7 +652,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
         Operation::create(inst->getLoc(), inst->getName(), newResultTypes,
                           newOperands, b.getDictionaryAttr(newAttrs),
                           inst->getSuccessors(), inst->getRegions()));
-    newModuleInstantiations.push_back(newHWInst);
+    newModuleInstantiations.push_back(cast<hw::HWInstanceLike>(newHWInst));
 
     // Replace all uses of the instance being replaced.
     for (auto [newV, oldV] :
