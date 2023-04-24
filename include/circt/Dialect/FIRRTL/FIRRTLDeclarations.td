@@ -362,7 +362,8 @@ def RegOp : ReferableDeclOp<"reg", [Forceable]> {
   let hasCanonicalizeMethod = true;
 }
 
-def RegResetOp : ReferableDeclOp<"regreset", [Forceable]> {
+def RegResetOp : ReferableDeclOp<"regreset", [AllTypesMatch<["resetValue","result"]>,
+                                              Forceable]> {
   let summary = "Define a new register with a reset";
   let description = [{
     Declare a new register:
@@ -446,7 +447,7 @@ def RegResetOp : ReferableDeclOp<"regreset", [Forceable]> {
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
     operands (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict)
-    `:` type($clockVal) `,` qualified(type($resetSignal)) `,` qualified(type($resetValue)) `,` qualified(type($result)) (`,` qualified(type($ref))^)?
+    `:` type($clockVal) `,` qualified(type($resetSignal)) `,` qualified(type($result)) (`,` qualified(type($ref))^)?
 
   }];
 

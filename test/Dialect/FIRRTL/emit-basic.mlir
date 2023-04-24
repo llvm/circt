@@ -75,7 +75,7 @@ firrtl.circuit "Foo" {
     %someReg = firrtl.reg %someClock : !firrtl.clock, !firrtl.uint<1>
     // CHECK: reg someReg2 : UInt<1>, someClock with :
     // CHECK:   reset => (someReset, ui1)
-    %someReg2 = firrtl.regreset %someClock, %someReset, %ui1 : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
+    %someReg2 = firrtl.regreset %someClock, %someReset, %ui1 : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>
     // CHECK: node someNode = ui1
     %someNode = firrtl.node %ui1 : !firrtl.uint<1>
     // CHECK: stop(someClock, ui1, 42) : foo

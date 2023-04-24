@@ -83,7 +83,7 @@ circuit Foo:
     input x : SInt<4>
     output y : SInt<4>
     output z : SInt<4>
-    ; CHECK: %r = firrtl.regreset %clock, %reset, %c0_si1
+    ; CHECK: %r = firrtl.regreset %clock, %reset, %c0_si4
     reg r : SInt<4>, clock with : (reset => (reset, asSInt(UInt(0))))
     r <= x
     wire w : SInt<4>

@@ -1328,10 +1328,9 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // least 1 bit wide. We don't do this here since the MLIR FIRRTL
         // dialect enforces the reset signal to be an async reset or a
         // `uint<1>`.
-        declareVars(op.getResult(), op.getLoc());
-        // Contrain the register to be greater than or equal to the reset
-        // signal.
-        constrainTypes(op.getResult(), op.getResetValue());
+        // Contrain the register to beequal to the reset signal.
+        unifyTypes(FieldRef(op.getResult(), 0), FieldRef(op.getResetValue(), 0),
+                   op.getResult().getType());
       })
       .Case<NodeOp>([&](auto op) {
         // Nodes have the same type as their input.

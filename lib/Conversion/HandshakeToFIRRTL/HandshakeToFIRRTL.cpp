@@ -2134,24 +2134,32 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
   };
 
   // Signal declarations
-  auto zeroConst =
-      createConstantOp(bitType, APInt(1, 0), builder.getLoc(), builder);
+  auto zeroConstPtr = createConstantOp(
+      depthPtrType, APInt(depthPtrType.getBitWidthOrSentinel(), 0),
+      builder.getLoc(), builder);
+  auto zeroConstDepth =
+      createConstantOp(depthType, APInt(depthType.getBitWidthOrSentinel(), 0),
+                       builder.getLoc(), builder);
   auto oneConst =
-      createConstantOp(bitType, APInt(1, 1), builder.getLoc(), builder);
+      createConstantOp(bitType, APInt(bitType.getBitWidthOrSentinel(), 1),
+                       builder.getLoc(), builder);
 
   auto readEn = builder.create<WireOp>(bitType, "read_en").getResult();
   auto writeEn = builder.create<WireOp>(bitType, "write_en").getResult();
   auto tail =
-      builder.create<RegResetOp>(depthPtrType, clk, rst, zeroConst, "tail_reg")
+      builder
+          .create<RegResetOp>(depthPtrType, clk, rst, zeroConstPtr, "tail_reg")
           .getResult();
   auto head =
-      builder.create<RegResetOp>(depthPtrType, clk, rst, zeroConst, "head_reg")
+      builder
+          .create<RegResetOp>(depthPtrType, clk, rst, zeroConstPtr, "head_reg")
           .getResult();
   auto full = builder.create<WireOp>(bitType, "full").getResult();
   auto empty = builder.create<WireOp>(bitType, "empty").getResult();
   auto notEmpty = builder.create<NotPrimOp>(empty);
   auto count =
-      builder.create<RegResetOp>(depthType, clk, rst, zeroConst, "count_reg")
+      builder
+          .create<RegResetOp>(depthType, clk, rst, zeroConstDepth, "count_reg")
           .getResult();
 
   // Function for truncating results to a given types' width.
@@ -2163,28 +2171,28 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
   };
 
   // Full when number of elements in fifo is == depth
-  builder.create<ConnectOp>(
+  builder.create<StrictConnectOp>(
       full,
       builder.create<EQPrimOp>(count, getConstantOfEqWidth(depth, count)));
 
   // Empty when number of elements in fifo is == 0
-  builder.create<ConnectOp>(
+  builder.create<StrictConnectOp>(
       empty, builder.create<EQPrimOp>(count, getConstantOfEqWidth(0, count)));
 
   // Ready if there is space in the FIFO.
-  builder.create<ConnectOp>(
+  builder.create<StrictConnectOp>(
       readyOut,
       builder.create<OrPrimOp>(builder.create<NotPrimOp>(full), readyIn));
 
   // Ready if next can accept and there is something in the FIFO to read.
-  builder.create<ConnectOp>(readEn,
-                            builder.create<AndPrimOp>(notEmpty, readyIn));
+  builder.create<StrictConnectOp>(readEn,
+                                  builder.create<AndPrimOp>(notEmpty, readyIn));
 
   // Valid when not empty
-  builder.create<ConnectOp>(validOut, notEmpty);
+  builder.create<StrictConnectOp>(validOut, notEmpty);
 
   // Writing when input is valid and is not full or input ready.
-  builder.create<ConnectOp>(
+  builder.create<StrictConnectOp>(
       writeEn, builder.create<AndPrimOp>(
                    validIn, builder.create<OrPrimOp>(
                                 builder.create<NotPrimOp>(full), readyIn)));

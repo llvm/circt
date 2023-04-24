@@ -24,6 +24,10 @@ namespace firrtl {
 void emitConnect(OpBuilder &builder, Location loc, Value lhs, Value rhs);
 void emitConnect(ImplicitLocOpBuilder &builder, Value lhs, Value rhs);
 
+/// Emit a extend and uninferred cast of a passive type
+Value expandPassiveType(ImplicitLocOpBuilder &builder, FIRRTLBaseType dstType,
+                        Value rhs);
+
 /// Utiility for generating a constant attribute.
 IntegerAttr getIntAttr(Type type, const APInt &value);
 

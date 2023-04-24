@@ -224,7 +224,7 @@ firrtl.circuit "Forceable" {
     %reg, %reg_f = firrtl.reg %clock forceable : !firrtl.clock, !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
     firrtl.ref.define %reg_ref, %reg_f : !firrtl.rwprobe<uint<2>>
 
-    %regreset, %regreset_f = firrtl.regreset %clock, %reset, %value forceable : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
+    %regreset, %regreset_f = firrtl.regreset %clock, %reset, %value forceable : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
     firrtl.ref.define %regreset_ref, %regreset_f : !firrtl.rwprobe<uint<2>>
   }
 }
