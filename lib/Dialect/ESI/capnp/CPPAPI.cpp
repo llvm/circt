@@ -123,8 +123,8 @@ circt::esi::capnp::CPPType::write(support::indenting_ostream &os) const {
 
     emitCPPType(field.type, os.getStream());
     os << " " << field.name.getValue() << ";";
-    // Specify the actual type.
-    os << "\t// Actual type is " << field.type << "\n";
+    // Specify the mlir type.
+    os << "\t// MLIR type is " << field.type << "\n";
   }
   os << "\n";
 
@@ -151,12 +151,12 @@ circt::esi::capnp::CPPType::write(support::indenting_ostream &os) const {
   }
 
   // Comparison operator
-  os.indent() << "// Spaceship operator for comparison convenience\n";
+  os.indent() << "// Spaceship operator for all-things comparison\n";
   os.indent() << "auto operator<=>(const " << cppName()
               << " &other) const = default;\n\n";
 
   // Stream operator
-  os.indent() << "// Stream operator for printing\n";
+  os.indent() << "// Stream operator\n";
   os.indent() << "friend std::ostream &operator<<(std::ostream &os, const "
               << cppName() << " &val) {\n";
   os.addIndent();
@@ -182,14 +182,14 @@ circt::esi::capnp::CPPType::write(support::indenting_ostream &os) const {
   os.indent() << "}\n\n";
 
   // Capnproto type (todo: remove)
-  os.indent() << "// Generated Cap'nProto type which this ESI type maps to:\n";
+  os.indent() << "// Cap'nProto type which this ESI type maps to\n";
   os.indent() << "using CPType = ::";
   if (isI0)
     os << "UntypedData";
   else
     os << cppName();
 
-  os << ";\n\n";
+  os << ";\n";
 
   os.reduceIndent();
   os.indent() << "};\n\n";
