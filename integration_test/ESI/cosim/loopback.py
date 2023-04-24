@@ -97,7 +97,7 @@ class LoopbackTester(esi_cosim.CosimBase):
 if __name__ == "__main__":
   import os
   import sys
-  rpc = LoopbackTester(sys.argv[2], f"{os.uname()[1]}:{sys.argv[1]}")
+  rpc = LoopbackTester(sys.argv[2], sys.argv[1])
   print(rpc.list())
   rpc.test_two_chan_loopback(25)
   rpc.test_i32(25)

@@ -37,8 +37,8 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
 
-#include <memory>
 #include <iostream>
+#include <memory>
 
 #ifdef CAPNP
 #include "capnp/ESICapnp.h"
@@ -94,7 +94,7 @@ void ESIAddCPPCapnpAPIPass::runOnOperation() {
     verbatim->setAttr("output_file", outputFileAttr);
   }
 
-  if(toStdErr) {
+  if (toStdErr) {
     // Also Print the API to stderr.
     std::cerr << os.str();
   }
