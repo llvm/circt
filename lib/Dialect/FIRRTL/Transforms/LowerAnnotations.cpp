@@ -26,6 +26,7 @@
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -354,6 +355,27 @@ static LogicalResult applyConventionAnno(const AnnoPathValue &target,
   return error() << "can only target to a module or extmodule";
 }
 
+template <bool isComment = false>
+static LogicalResult applyAttributeAnnotation(const AnnoPathValue &target,
+                                              DictionaryAttr anno,
+                                              ApplyState &state) {
+  auto *op = target.ref.getOp();
+
+  if (!target.isLocal())
+    return mlir::emitError(op->getLoc()) << "must be local";
+
+  if (!target.ref.isa<OpAnnoTarget>())
+    return mlir::emitError(op->getLoc()) << "must target an operation";
+
+  if (!isa<FModuleOp, WireOp, NodeOp, RegOp, RegResetOp>(op))
+    return mlir::emitError(op->getLoc()) << "unhandled operation";
+
+  auto name = anno.getAs<StringAttr>("description");
+  auto svAttr = sv::SVAttributeAttr::get(name.getContext(), name, isComment);
+  sv::addSVAttributes(op, {svAttr});
+  return success();
+}
+
 /// Update a memory op with attributes about memory file loading.
 template <bool isInline>
 static LogicalResult applyLoadMemoryAnno(const AnnoPathValue &target,
@@ -534,8 +556,8 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
      {stdResolve, applyLoadMemoryAnno<true>}},
     {wiringSinkAnnoClass, {stdResolve, applyWiring}},
     {wiringSourceAnnoClass, {stdResolve, applyWiring}},
-
-}};
+    {attributeAnnoClass, {stdResolve, applyAttributeAnnotation<false>}},
+    {docStringAnnoClass, {stdResolve, applyAttributeAnnotation<true>}}}};
 
 /// Lookup a record for a given annotation class.  Optionally, returns the
 /// record for "circuit.missing" if the record doesn't exist.

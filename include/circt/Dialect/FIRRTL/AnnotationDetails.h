@@ -210,6 +210,9 @@ constexpr const char *wiringSinkAnnoClass =
 constexpr const char *wiringSourceAnnoClass =
     "firrtl.passes.wiring.SourceAnnotation";
 
+constexpr const char *attributeAnnoClass = "firrtl.AttributeAnnotation";
+constexpr const char *docStringAnnoClass = "firrtl.DocStringAnnotation";
+
 } // namespace firrtl
 } // namespace circt
 

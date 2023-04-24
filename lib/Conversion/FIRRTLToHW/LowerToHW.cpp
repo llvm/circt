@@ -1167,6 +1167,10 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   if (auto comment = oldModule->getAttrOfType<StringAttr>("comment"))
     newModule.setCommentAttr(comment);
 
+  // Move SV attributes.
+  if (auto svAttrs = sv::getSVAttributes(oldModule))
+    sv::setSVAttributes(newModule, svAttrs);
+
   // Pass along the number of random initialization bits needed for this module.
   if (auto randomWidth = oldModule->getAttr("firrtl.random_init_width"))
     newModule->setAttr("firrtl.random_init_width", randomWidth);
@@ -2795,8 +2799,13 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   }
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
-  return setLoweringTo<hw::WireOp>(op, getOrCreateZConstant(resultType), name,
-                                   symName);
+  auto wire = builder.create<hw::WireOp>(
+      op.getLoc(), getOrCreateZConstant(resultType), name, symName);
+
+  if (auto svAttrs = sv::getSVAttributes(op))
+    sv::setSVAttributes(wire, svAttrs);
+
+  return setLowering(op.getResult(), wire);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
@@ -2851,6 +2860,13 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   if (symName)
     operand = builder.create<hw::WireOp>(operand, name, symName);
 
+  // Move SV attributes.
+  if (auto svAttrs = sv::getSVAttributes(op)) {
+    if (!symName)
+      operand = builder.create<hw::WireOp>(operand, name);
+    sv::setSVAttributes(operand.getDefiningOp(), svAttrs);
+  }
+
   return setLowering(op.getResult(), operand);
 }
 
@@ -2885,6 +2901,10 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
     reg->setAttr("firrtl.random_init_start", randomStart);
   if (auto randomEnd = op->getAttr("firrtl.random_init_end"))
     reg->setAttr("firrtl.random_init_end", randomEnd);
+
+  // Move SV attributes.
+  if (auto svAttrs = sv::getSVAttributes(op))
+    sv::setSVAttributes(reg, svAttrs);
 
   inputEdge.setValue(reg);
   circuitState.used_RANDOMIZE_REG_INIT = 1;
@@ -2930,6 +2950,10 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
     reg->setAttr("firrtl.random_init_start", randomStart);
   if (auto randomEnd = op->getAttr("firrtl.random_init_end"))
     reg->setAttr("firrtl.random_init_end", randomEnd);
+
+  // Move SV attributes.
+  if (auto svAttrs = sv::getSVAttributes(op))
+    sv::setSVAttributes(reg, svAttrs);
 
   inputEdge.setValue(reg);
   circuitState.used_RANDOMIZE_REG_INIT = 1;

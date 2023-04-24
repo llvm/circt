@@ -1638,4 +1638,19 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:      }
   // CHECK-NEXT:    }
   // CHECK-NEXT:  }
+
+  // CHECK-LABEL: @SVAttr
+  // CHECK-SAME:  attributes {sv.attributes = [#sv.attribute<"keep_hierarchy = \22true\22">]}
+  // CHECK-NEXT: %w = hw.wire %a {sv.attributes = [#sv.attribute<"mark_debug = \22yes\22">]}
+  // CHECK-NEXT: %n = hw.wire %w {sv.attributes = [#sv.attribute<"mark_debug = \22yes\22">]}
+  // CHECK-NEXT: %r = seq.firreg %a clock %clock {firrtl.random_init_start = 0 : ui64, sv.attributes = [#sv.attribute<"keep = \22true\22">]}
+  firrtl.module @SVAttr(in %a: !firrtl.uint<1>, in %clock: !firrtl.clock, out %b1: !firrtl.uint<1>, out %b2: !firrtl.uint<1>) attributes {convention = #firrtl<convention scalarized>, sv.attributes = [#sv.attribute<"keep_hierarchy = \22true\22">]} {
+    %w = firrtl.wire {sv.attributes = [#sv.attribute<"mark_debug = \22yes\22">]} : !firrtl.uint<1>
+    %n = firrtl.node %w {sv.attributes = [#sv.attribute<"mark_debug = \22yes\22">]} : !firrtl.uint<1>
+    %r = firrtl.reg %clock {firrtl.random_init_start = 0 : ui64, sv.attributes = [#sv.attribute<"keep = \22true\22">]} : !firrtl.clock, !firrtl.uint<1>
+    firrtl.strictconnect %w, %a : !firrtl.uint<1>
+    firrtl.strictconnect %b1, %n : !firrtl.uint<1>
+    firrtl.strictconnect %r, %a : !firrtl.uint<1>
+    firrtl.strictconnect %b2, %r : !firrtl.uint<1>
+  }
 }
