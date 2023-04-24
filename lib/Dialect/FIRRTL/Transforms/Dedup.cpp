@@ -1176,7 +1176,7 @@ void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
   auto dstType = dst.getType();
   auto srcType = src.getType();
   if (dstType == srcType) {
-    builder.create<StrictConnectOp>(dst, src);
+    emitConnect(builder, dst, src);
     return;
   }
   // It must be a bundle type and the field name has changed. We have to
