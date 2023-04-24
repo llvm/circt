@@ -315,6 +315,7 @@ LogicalResult CosimCPPAPI::emit() {
   ios << "} // namespace runtime\n";
   ios << "} // namespace esi\n\n";
 
+  ios << "// ESI dynamic reflection support\n";
   if (failed(emitGlobalNamespace()))
     return failure();
 
