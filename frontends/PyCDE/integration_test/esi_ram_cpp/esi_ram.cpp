@@ -25,6 +25,17 @@
 // RUN:     --exec %t/build/esi_ram_test \
 // RUN:     %t/hw/*.sv
 
+// To run this test manually:
+// 1. run `ninja check-pycde-integration` (this will create the output folder, run PyCDE, ...)
+// 2. navigate to %t
+// 3. In a separate terminal, run esi-cosim-runner.py in server only mode:
+//   - cd %t
+//   - esi-cosim-runner.py --tmpdir=$(pwd) --schema=$(pwd)/hw/schema.capnp --server-only $(pwd)/hw/top.sv $(pwd)
+// 4. In another terminal, run the test executable. When running esi-cosim-runner, it'll print the $port which
+//    the test executable should connect to.
+//   - cd %t/build
+//   - ./esi_ram_test localhost:$port ../hw/schema.capn
+
 // clang-format on
 #include <iostream>
 #include <memory>
@@ -35,10 +46,17 @@
 
 #include ESI_COSIM_CAPNP_H
 
-#include "ESIRuntime.h"
+#include "ESISystem.h"
 
 using namespace esi;
 using namespace runtime;
+
+template <typename T>
+int logTestFailure(T expected, T actual, int testID) {
+  std::cerr << "Test " << testID << " failed: expected " << expected << ", got "
+            << actual << std::endl;
+  return testID;
+}
 
 template <typename TBackend>
 int runTest(TBackend &backend) {
@@ -50,22 +68,24 @@ int runTest(TBackend &backend) {
 
   auto loopback_result = (*top.bsp->loopback)(write_cmd);
   if (loopback_result != write_cmd)
-    return 1;
+    return logTestFailure(write_cmd, loopback_result, 1);
 
   auto read_result = (*top.bsp->read)(2);
   if (read_result != ESITypes::I64(0))
-    return 2;
+    return logTestFailure(ESITypes::I64(0), read_result, 2);
+
   read_result = (*top.bsp->read)(3);
   if (read_result != ESITypes::I64(0))
-    return 3;
+    return logTestFailure(ESITypes::I64(0), read_result, 3);
 
   (*top.bsp->write)(write_cmd);
   read_result = (*top.bsp->read)(2);
   if (read_result != ESITypes::I64(42))
-    return 4;
+    return logTestFailure(ESITypes::I64(42), read_result, 4);
+
   read_result = (*top.bsp->read)(3);
   if (read_result != ESITypes::I64(42))
-    return 5;
+    return logTestFailure(ESITypes::I64(42), read_result, 5);
 
   // Re-write a 0 to the memory (mostly for debugging purposes to allow us to
   // keep the server alive and rerun the test).
@@ -73,7 +93,7 @@ int runTest(TBackend &backend) {
   (*top.bsp->write)(write_cmd);
   read_result = (*top.bsp->read)(2);
   if (read_result != ESITypes::I64(0))
-    return 6;
+    return logTestFailure(ESITypes::I64(0), read_result, 6);
 
   return 0;
 }

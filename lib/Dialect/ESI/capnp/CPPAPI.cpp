@@ -38,12 +38,6 @@ using namespace support;
 // CPPType class implementation.
 //===----------------------------------------------------------------------===//
 
-static std::string capitalize(llvm::StringRef str) {
-  std::string result = str.str();
-  result[0] = toupper(result[0]);
-  return result;
-}
-
 static std::string lowercase(llvm::StringRef str) {
   std::string s;
   llvm::raw_string_ostream ss(s);
@@ -156,10 +150,38 @@ circt::esi::capnp::CPPType::write(support::indenting_ostream &os) const {
       isI0 = true;
   }
 
+  // Comparison operator
   os.indent() << "// Spaceship operator for comparison convenience\n";
   os.indent() << "auto operator<=>(const " << cppName()
               << " &other) const = default;\n\n";
 
+  // Stream operator
+  os.indent() << "// Stream operator for printing\n";
+  os.indent() << "friend std::ostream &operator<<(std::ostream &os, const "
+              << cppName() << " &val) {\n";
+  os.addIndent();
+  os.indent() << "os << \"" << cppName() << "(\";\n";
+  for (auto [idx, field] : llvm::enumerate(fieldTypes)) {
+    if (isZeroWidthInt(field.type))
+      continue;
+    os.indent() << "os << \"" << field.name.getValue() << ": \";\n";
+
+    // A bit of a hack - (u)int8_t types will by default be printed as chars.
+    // We want to avoid this and just print the underlying value.
+    os.indent() << "os << ";
+    if (field.type.getIntOrFloatBitWidth() > 1 &&
+        field.type.getIntOrFloatBitWidth() <= 8)
+      os << "(uint32_t)";
+    os << "val." << field.name.getValue() << ";\n";
+    if (idx != fieldTypes.size() - 1)
+      os.indent() << "os << \", \";\n";
+  }
+  os.indent() << "os << \")\";\n";
+  os.indent() << "return os;\n";
+  os.reduceIndent();
+  os.indent() << "}\n\n";
+
+  // Capnproto type (todo: remove)
   os.indent() << "// Generated Cap'nProto type which this ESI type maps to:\n";
   os.indent() << "using CPType = ::";
   if (isI0)
@@ -169,52 +191,36 @@ circt::esi::capnp::CPPType::write(support::indenting_ostream &os) const {
 
   os << ";\n\n";
 
-  os.indent() << "// generated Cap'nProto type en- and decoders\n";
-  os.indent() << "// -- C++ => Cap'nProto\n";
-  os.indent() << "void fillCapnp(CPType::Builder cp) {\n";
-  os.addIndent();
-  for (auto &field : fieldTypes) {
-    if (isZeroWidthInt(field.type))
-      continue;
-    os.indent() << "cp.set" << capitalize(field.name.getValue()) << "("
-                << field.name.getValue() << ");\n";
-  }
-  os.reduceIndent();
-  os.indent() << "}\n\n";
-
-  os.indent() << "// -- Cap'nProto => C++\n";
-  os.indent() << "static " << cppName() << " fromCapnp(CPType::Reader msg) {\n";
-  os.addIndent();
-  os.indent() << cppName() << " v;\n";
-  for (auto &field : fieldTypes) {
-    os.indent();
-    if (isZeroWidthInt(field.type))
-      os << "// ";
-    os << "v." << field.name.getValue() << " = msg.get"
-       << capitalize(field.name.getValue()) << "();\n";
-  }
-  os.indent() << "return v;\n";
-  os.reduceIndent();
-  os.indent() << "}\n";
-
   os.reduceIndent();
   os.indent() << "};\n\n";
-
-  writeRTTRRegistration(os);
 
   return success();
 }
 
-void circt::esi::capnp::CPPType::writeRTTRRegistration(
-    support::indenting_ostream &os) const {
-  os.indent() << "REFL_AUTO {\n";
+void circt::esi::capnp::CPPType::writeReflection(
+    support::indenting_ostream &os,
+    llvm::ArrayRef<std::string> namespaces) const {
+  os.indent() << "REFL_AUTO (\n";
   os.addIndent();
-  os.indent() << "type(" << cppName() << "),\n";
-  for (auto &field : getFields())
-    os.indent() << "field(" << field.name.getValue() << "),\n";
+
+  std::string ns;
+  if (!namespaces.empty()) {
+    for (auto &n : namespaces)
+      ns += n + "::";
+  }
+
+  os.indent() << "type(" << ns << cppName() << ")";
+
+  for (auto &field : getFields()) {
+    os.indent() << "\n";
+    bool isI0 = field.type.getIntOrFloatBitWidth() == 0;
+    if (isI0)
+      os << "//";
+    os << ", field(" << field.name.getValue() << ")";
+  };
 
   os.reduceIndent();
-  os.indent() << "}\n";
+  os.indent() << "\n)\n";
 }
 
 //===----------------------------------------------------------------------===//
@@ -238,18 +244,18 @@ LogicalResult circt::esi::capnp::CPPEndpoint::writeType(
   };
 
   if (portInfo.toClientType && portInfo.toServerType) {
-    os << "circt::esi::runtime::ReadWritePort<";
+    os << "esi::runtime::ReadWritePort<";
     if (failed(emitType("read", portInfo.toClientType)))
       return failure();
     os << ", ";
     if (failed(emitType("write", portInfo.toServerType)))
       return failure();
   } else if (portInfo.toServerType) {
-    os << "circt::esi::runtime::ReadPort<";
+    os << "esi::runtime::ReadPort<";
     if (failed(emitType("read", portInfo.toServerType)))
       return failure();
   } else if (portInfo.toClientType) {
-    os << "circt::esi::runtime::WritePort<";
+    os << "esi::runtime::WritePort<";
     if (failed(emitType("write", portInfo.toClientType)))
       return failure();
   } else {
@@ -274,10 +280,9 @@ LogicalResult
 circt::esi::capnp::CPPService::write(support::indenting_ostream &os) {
   auto loc = service.getLoc();
   os << "template <typename TBackend>\n";
-  os << "class " << name()
-     << " : public circt::esi::runtime::Module<TBackend> {\n";
+  os << "class " << name() << " : public esi::runtime::Module<TBackend> {\n";
   os.addIndent();
-  os.indent() << "  using Port = circt::esi::runtime::Port<TBackend>;\n"
+  os.indent() << "  using Port = esi::runtime::Port<TBackend>;\n"
               << "public:\n";
   os.indent() << "// Port type declarations.\n";
 
@@ -293,7 +298,7 @@ circt::esi::capnp::CPPService::write(support::indenting_ostream &os) {
   os << ")\n";
   os.indent().indent()
       << "// Initialize base class with knowledge of all endpoints.\n";
-  os.indent().indent() << ": circt::esi::runtime::Module<TBackend>({";
+  os.indent().indent() << ": esi::runtime::Module<TBackend>({";
   llvm::interleaveComma(endpoints, os, [&](auto &ep) { os << ep->getName(); });
   os << "}),\n";
 
@@ -315,7 +320,7 @@ circt::esi::capnp::CPPService::write(support::indenting_ostream &os) {
 
 circt::esi::capnp::CPPService::CPPService(
     esi::ServiceDeclOpInterface service,
-    const DenseMap<mlir::Type, circt::esi::capnp::CPPType> &types)
+    const llvm::MapVector<mlir::Type, circt::esi::capnp::CPPType> &types)
     : service(service) {
   llvm::SmallVector<esi::ServicePortInfo> portList;
   service.getPortList(portList);
@@ -353,7 +358,7 @@ circt::esi::capnp::CPPDesignModule::write(support::indenting_ostream &ios) {
     std::string cppMemberName;
     ArrayAttr clients;
   };
-  llvm::DenseMap<capnp::CPPService *, ServiceInfo> innerServices;
+  llvm::MapVector<capnp::CPPService *, ServiceInfo> innerServices;
   for (auto &service : services) {
     // Was this service implemented as cosim?
     if (service.getImplType() != "cosim")

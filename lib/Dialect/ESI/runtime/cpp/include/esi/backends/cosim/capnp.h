@@ -60,13 +60,17 @@ TESIType fromCapnp(DynamicValue::Reader value) {
 }
 
 // A function like above, but which uses Capnproto dynamic message building
-// together with the refl-cpp reflection.
+// together with the refl-cpp reflection to constuct the Capnp message.
 template <typename TESIType>
-void toCapnp(TESIType &value, MallocMessageBuilder &message) {
-  auto structBuilder = message.initRoot<TESIType::CPType>();
+void toCapnp(TESIType &value, DynamicValue::Builder &message) {
+  if (message.getType() != DynamicValue::STRUCT)
+    throw std::runtime_error(
+        "Expected a struct value (all ESI types should be capnp structs)");
+
+  auto structMessage = message.as<DynamicStruct>();
   for_each(refl::reflect(value).members, [&](auto member) {
-    auto fieldValue = member(value);
-    structBuilder.set(member.name, fieldValue);
+    auto &fieldValue = member(value);
+    structMessage.set(member.name, fieldValue);
   });
 }
 
@@ -202,7 +206,8 @@ public:
   ReadType operator()(WriteType arg) {
     auto req = port->sendRequest();
     MallocMessageBuilder mmb;
-    toCapnp<WriteType>(arg, req.getMsg());
+    auto dynBuilder = DynamicValue::Builder(req.getMsg());
+    toCapnp<WriteType>(arg, dynBuilder);
     req.send().wait(this->backend->getWaitScope());
     std::optional<capnp::Response<typename EsiDpiEndpoint<
         typename WriteType::CPType, typename ReadType::CPType>::RecvResults>>
@@ -245,7 +250,8 @@ public:
 
   void operator()(WriteType arg) {
     auto req = port->sendRequest();
-    arg.fillCapnp(req.getMsg());
+    auto dynBuilder = DynamicValue::Builder(req.getMsg());
+    toCapnp<WriteType>(arg, dynBuilder);
     req.send().wait(this->backend->getWaitScope());
   }
 

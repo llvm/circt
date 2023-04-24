@@ -317,6 +317,11 @@ def __main__(args):
   argparser.add_argument("--test-args",
                          default="",
                          help="Extra args to pass to the test.")
+  argparser.add_argument(
+      "--server-only",
+      action="store_true",
+      help="Only run the cosim server, and do not run any test files")
+
   argparser.add_argument("source",
                          help="The source run spec file",
                          default=None)
@@ -324,11 +329,6 @@ def __main__(args):
                          nargs=argparse.REMAINDER,
                          help="Additional arguments to pass through to " +
                          "'circt-rtl-sim.py'")
-  argparser.add_argument(
-      "--server-only",
-      action="store_true",
-      help="Only run the cosim server, and do not run any test files")
-
   if len(args) <= 1:
     argparser.print_help()
     return

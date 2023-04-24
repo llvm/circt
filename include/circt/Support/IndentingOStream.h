@@ -38,14 +38,17 @@ public:
     return *this;
   }
   void addIndent() { currentIndent += amt; }
-  void reduceIndent() { currentIndent -= amt; }
+  void reduceIndent() {
+    amt = std::min(amt, currentIndent);
+    currentIndent -= amt;
+  }
 
   llvm::raw_ostream &getStream() { return os; }
 
 private:
   llvm::raw_ostream &os;
   size_t currentIndent = 0;
-  unsigned amt = 2;
+  size_t amt = 2;
 };
 
 } // namespace support

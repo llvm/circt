@@ -16,6 +16,7 @@
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/Support/Format.h"
 
 #include <algorithm>
@@ -212,6 +213,7 @@ private:
   LogicalResult emitTypes();
   LogicalResult emitServiceDeclarations();
   LogicalResult emitDesignModules();
+  LogicalResult emitGlobalNamespace();
 
   ModuleOp module;
   support::indenting_ostream ios;
@@ -221,7 +223,7 @@ private:
 
   // All the `esi.cosim` input and output types encountered during the IR walk.
   // This is NOT in a deterministic order!
-  llvm::DenseMap<mlir::Type, capnp::CPPType> types;
+  llvm::MapVector<mlir::Type, capnp::CPPType> types;
   llvm::SmallVector<capnp::CPPService> cppServices;
 };
 } // anonymous namespace
@@ -296,7 +298,7 @@ LogicalResult CosimCPPAPI::emit() {
   ios << "#include \"refl.hpp\"\n\n";
 
   ios << "#include <cstdint>\n";
-  ios << "#include \"esi/runtime/cosim/capnp.h\"\n";
+  ios << "#include \"esi/backends/cosim/capnp.h\"\n";
   ios << "\n// Include the generated Cap'nProto schema header. This must "
          "defined "
          "by the build system.\n";
@@ -311,7 +313,10 @@ LogicalResult CosimCPPAPI::emit() {
     return failure();
 
   ios << "} // namespace runtime\n";
-  ios << "} // namespace esi\n";
+  ios << "} // namespace esi\n\n";
+
+  if (failed(emitGlobalNamespace()))
+    return failure();
 
   return success();
 }
@@ -325,6 +330,15 @@ LogicalResult CosimCPPAPI::emitServiceDeclarations() {
       return failure();
     cppServices.push_back(cppService);
   }
+
+  return success();
+}
+
+LogicalResult CosimCPPAPI::emitGlobalNamespace() {
+  // Emit ESI type reflection classes.
+  llvm::SmallVector<std::string> namespaces = {"esi", "runtime", "ESITypes"};
+  for (auto &cppType : types)
+    cppType.second.writeReflection(ios, namespaces);
 
   return success();
 }

@@ -28,7 +28,7 @@ message(STATUS "CIRCT_DIR= ${CIRCT_DIR}")
 message(STATUS "PYCDE_OUT_DIR= ${PYCDE_OUT_DIR}")
 
 set(CAPNP_SCHEMA "${PYCDE_OUT_DIR}/hw/schema.capnp")
-set(ESI_CPP_API "${PYCDE_OUT_DIR}/hw/ESIRuntime.h")
+set(ESI_CPP_API "${PYCDE_OUT_DIR}/hw/ESISystem.h")
 set(ESI_HW_INCLUDE_DIR "${PYCDE_OUT_DIR}/hw")
 
 # Ensure that the above files are present

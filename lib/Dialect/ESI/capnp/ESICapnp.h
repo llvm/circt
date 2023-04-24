@@ -17,6 +17,7 @@
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/IndentingOStream.h"
+#include "llvm/ADT/MapVector.h"
 
 #include <memory>
 
@@ -128,15 +129,16 @@ public:
   /// Write out the type in its entirety.
   mlir::LogicalResult write(support::indenting_ostream &os) const;
 
-private:
-  // Emits an RTTR registration for this type.
-  void writeRTTRRegistration(support::indenting_ostream &os) const;
+  // Emits an RTTR registration for this type. If provided, the `namespace`
+  // should indicate the namespace wherein this type was emitted.
+  void writeReflection(support::indenting_ostream &os,
+                       llvm::ArrayRef<std::string> namespaces) const;
 };
 
 struct CPPEndpoint {
   CPPEndpoint(
       esi::ServicePortInfo portInfo,
-      const llvm::DenseMap<mlir::Type, circt::esi::capnp::CPPType> &types)
+      const llvm::MapVector<mlir::Type, circt::esi::capnp::CPPType> &types)
       : portInfo(portInfo), types(types) {}
   StringRef getName() const { return portInfo.name.getValue(); }
   std::string getTypeName() const { return "T" + getName().str(); }
@@ -149,13 +151,14 @@ struct CPPEndpoint {
   // A mapping of MLIR types to their CPPType counterparts. Ensures consistency
   // between the emitted type signatures and those used in the service endpoint
   // API.
-  const llvm::DenseMap<mlir::Type, circt::esi::capnp::CPPType> &types;
+  const llvm::MapVector<mlir::Type, circt::esi::capnp::CPPType> &types;
 };
 
 class CPPService {
 public:
-  CPPService(esi::ServiceDeclOpInterface service,
-             const DenseMap<mlir::Type, circt::esi::capnp::CPPType> &types);
+  CPPService(
+      esi::ServiceDeclOpInterface service,
+      const llvm::MapVector<mlir::Type, circt::esi::capnp::CPPType> &types);
 
   // Return the name of this service.
   StringRef name() const {
