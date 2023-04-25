@@ -680,7 +680,8 @@ def HeadPrimOp : PrimOp<"head"> {
 }
 
 def MuxPrimOp : PrimOp<"mux"> {
-  let arguments = (ins UInt1Type:$sel, PassiveType:$high, PassiveType:$low);
+  let arguments = (ins UInt1OrUnsizedType:$sel, PassiveType:$high,
+                       PassiveType:$low);
   let results = (outs PassiveType:$result);
 
   let assemblyFormat =
@@ -754,7 +755,8 @@ def TailPrimOp : PrimOp<"tail"> {
 // Verif and SV specific
 //===----------------------------------------------------------------------===//
 
-def IsXIntrinsicOp : FIRRTLExprOp<"int.isX"> {
+def IsXIntrinsicOp : FIRRTLOp<"int.isX",
+    [HasCustomSSAName, Pure]> {
   let summary = "Test for 'x";
   let description = [{
     The `int.isX` expression checks that the operand is not a verilog literal
@@ -769,7 +771,8 @@ def IsXIntrinsicOp : FIRRTLExprOp<"int.isX"> {
   let assemblyFormat = "$arg attr-dict `:` type($arg)";
 }
 
-def PlusArgsTestIntrinsicOp : FIRRTLExprOp<"int.plusargs.test"> {
+def PlusArgsTestIntrinsicOp : FIRRTLOp<"int.plusargs.test",
+    [HasCustomSSAName, Pure]> {
   let summary = "SystemVerilog `$test$plusargs` call";
 
   let arguments = (ins StrAttr:$formatString);
@@ -777,13 +780,13 @@ def PlusArgsTestIntrinsicOp : FIRRTLExprOp<"int.plusargs.test"> {
   let assemblyFormat = "$formatString attr-dict";
 }
 
-def PlusArgsValueIntrinsicOp
-: FIRRTLOp<"int.plusargs.value", [HasCustomSSAName, Pure]> {
+def PlusArgsValueIntrinsicOp : FIRRTLOp<"int.plusargs.value",
+    [HasCustomSSAName, Pure]> {
   let summary = "SystemVerilog `$value$plusargs` call";
 
   let arguments = (ins StrAttr:$formatString);
   let results = (outs UInt1Type:$found, AnyType:$result);
-  let assemblyFormat = "$formatString attr-dict `:` type($found) `,` type($result)";
+  let assemblyFormat = "$formatString attr-dict `:` type($result)";
 }
 
 //===----------------------------------------------------------------------===//

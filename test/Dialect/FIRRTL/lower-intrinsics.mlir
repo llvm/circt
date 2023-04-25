@@ -36,7 +36,7 @@ firrtl.circuit "Foo" {
 
     %found4, %result1 = firrtl.instance "" @NameDoesNotMatter4(out found : !firrtl.uint<1>, out result: !firrtl.uint<5>)
     // CHECK-NOT: NameDoesNotMatter4
-    // CHECK: %5:2 = firrtl.int.plusargs.value "foo" : !firrtl.uint<1>, !firrtl.uint<5>
+    // CHECK: firrtl.int.plusargs.value "foo" : !firrtl.uint<5>
     firrtl.strictconnect %io3, %found4 : !firrtl.uint<1>
     firrtl.strictconnect %io4, %result1 : !firrtl.uint<5>
   }
@@ -75,9 +75,28 @@ firrtl.circuit "Foo" {
 
     %found4, %result1 = firrtl.instance "" @NameDoesNotMatter8(out found : !firrtl.uint<1>, out result: !firrtl.uint<5>)
     // CHECK-NOT: NameDoesNotMatter8
-    // CHECK: %5:2 = firrtl.int.plusargs.value "foo" : !firrtl.uint<1>, !firrtl.uint<5>
+    // CHECK: firrtl.int.plusargs.value "foo" : !firrtl.uint<5>
     firrtl.strictconnect %io3, %found4 : !firrtl.uint<1>
     firrtl.strictconnect %io4, %result1 : !firrtl.uint<5>
   }
 
+  // CHECK-NOT: ClockGate0
+  // CHECK-NOT: ClockGate1
+  firrtl.extmodule @ClockGate0(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {annotations = [{class = "circt.Intrinsic", intrinsic = "circt.clock_gate"}]}
+  firrtl.intmodule @ClockGate1(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {intrinsic = "circt.clock_gate"}
+
+  // CHECK: ClockGate
+  firrtl.module @ClockGate(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>) {
+    // CHECK-NOT: ClockGate0
+    // CHECK: firrtl.int.clock_gate
+    %in1, %en1, %out1 = firrtl.instance "" @ClockGate0(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    firrtl.strictconnect %in1, %clk : !firrtl.clock
+    firrtl.strictconnect %en1, %en : !firrtl.uint<1>
+
+    // CHECK-NOT: ClockGate1
+    // CHECK: firrtl.int.clock_gate
+    %in2, %en2, %out2 = firrtl.instance "" @ClockGate1(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    firrtl.strictconnect %in2, %clk : !firrtl.clock
+    firrtl.strictconnect %en2, %en : !firrtl.uint<1>
+  }
 }

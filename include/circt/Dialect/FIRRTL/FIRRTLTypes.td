@@ -20,7 +20,7 @@ include "FIRRTLDialect.td"
 //===----------------------------------------------------------------------===//
 
 class FIRRTLDialectType<Pred pred, string summary, string cpp, string desc = "">
-  : DialectType<FIRRTLDialect,pred, summary, cpp> {
+  : DialectType<FIRRTLDialect, pred, summary, cpp> {
   let description = desc;
 }
 
@@ -44,8 +44,10 @@ def FIRRTLBaseType : FIRRTLDialectType<
 def ForeignType : FIRRTLDialectType<CPred<"!$_self.isa<FIRRTLType>()">,
                                     "foreign type", "::mlir::Type">;
 
-def ClockType : FIRRTLDialectType<CPred<"$_self.isa<ClockType>()">,
-    "clock", "::circt::firrtl::ClockType">;
+def ClockType :
+  FIRRTLDialectType<CPred<"$_self.isa<ClockType>()">, "clock",
+                    "::circt::firrtl::ClockType">,
+  BuildableType<"::circt::firrtl::ClockType::get($_builder.getContext())">;
 
 def IntType : FIRRTLDialectType<CPred<"$_self.isa<IntType>()">,
  "sint or uint type", "::circt::firrtl::IntType">;
@@ -81,17 +83,6 @@ def SizedType : FIRRTLDialectType<CPred<"$_self.isa<FIRRTLBaseType>() && "
     "a sized type (contains no uninferred widths)", "::circt::firrtl::FIRRTLType">;
 def SizedOrForeignType : AnyTypeOf<[SizedType, ForeignType]>;
 
-def UInt1Type : FIRRTLDialectType<
-    CPred<"$_self.isa<UIntType>() && "
-          "($_self.cast<UIntType>().getWidth() == 1 ||"
-          " $_self.cast<UIntType>().getWidth() == std::nullopt)">,
-    "UInt<1> or UInt", "::circt::firrtl::UIntType">;
-
-def UInt32Type : FIRRTLDialectType<
-    CPred<"$_self.isa<UIntType>() && "
-          "$_self.cast<UIntType>().getWidth() == 32">,
-    "UInt<32>", "::circt::firrtl::UIntType">;
-
 def AsyncResetType : FIRRTLDialectType<
     CPred<"$_self.isa<AsyncResetType>()">,
     "AsyncReset", "::circt::firrtl::AsyncResetType">;
@@ -115,6 +106,30 @@ def RWProbe : FIRRTLDialectType<
 // TODO: When Refs can appear within Base, need to disallow that too.
 def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;
 def StrictConnectableType : AnyTypeOf<[PassiveType, ForeignType]>;
+
+//===----------------------------------------------------------------------===//
+// Sized and Unsized Integers
+//===----------------------------------------------------------------------===//
+
+def UnsizedUIntType :
+  FIRRTLDialectType<
+    CPred<"$_self.isa<UIntType>() && "
+          "$_self.cast<UIntType>().getWidth() == std::nullopt">,
+    "uint with uninferred width", "::circt::firrtl::UIntType">,
+  BuildableType<"::circt::firrtl::UIntType::get($_builder.getContext())">;
+
+class SizedUIntType<int width> :
+  FIRRTLDialectType<
+    CPred<"$_self.isa<UIntType>() && "
+          "$_self.cast<UIntType>().getWidth() == " # width>,
+    width # "-bit uint", "::circt::firrtl::UIntType">,
+  BuildableType<
+    "::circt::firrtl::UIntType::get($_builder.getContext(), " # width # ")">;
+
+def UInt1Type : SizedUIntType<1>;
+def UInt32Type : SizedUIntType<32>;
+
+def UInt1OrUnsizedType : AnyTypeOf<[UInt1Type, UnsizedUIntType]>;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates

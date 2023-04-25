@@ -62,17 +62,25 @@ static ParseResult namedPort(StringRef name, FModuleLike mod, unsigned n,
 }
 
 template <typename T>
-static ParseResult sizedPort(StringRef name, FModuleLike mod, unsigned n,
-                             int32_t size) {
+static ParseResult typedPort(StringRef name, FModuleLike mod, unsigned n) {
   auto ports = mod.getPorts();
   if (n >= ports.size()) {
     mod.emitError(name) << " missing port " << n;
     return failure();
   }
   if (!ports[n].type.isa<T>()) {
-    mod.emitError(name) << " port " << n << " not a correct type";
+    mod.emitError(name) << " port " << n << " not of correct type";
     return failure();
   }
+  return success();
+}
+
+template <typename T>
+static ParseResult sizedPort(StringRef name, FModuleLike mod, unsigned n,
+                             int32_t size) {
+  auto ports = mod.getPorts();
+  if (failed(typedPort<T>(name, mod, n)))
+    return failure();
   if (ports[n].type.cast<T>().getWidth() != size) {
     mod.emitError(name) << " port " << n << " not size " << size;
     return failure();
@@ -140,7 +148,7 @@ static bool lowerCirctSizeof(InstancePathCache &instancePathCache,
 static bool lowerCirctIsX(InstancePathCache &instancePathCache,
                           FModuleLike mod) {
   auto ports = mod.getPorts();
-  if (hasNPorts("circt.isaX", mod, 2) || namedPort("circt.isX", mod, 0, "i") ||
+  if (hasNPorts("circt.isX", mod, 2) || namedPort("circt.isX", mod, 0, "i") ||
       namedPort("circt.isX", mod, 1, "found") ||
       sizedPort<UIntType>("circt.isX", mod, 1, 1) ||
       hasNParam("circt.isX", mod, 0))
@@ -203,6 +211,32 @@ static bool lowerCirctPlusArgValue(InstancePathCache &instancePathCache,
   return true;
 }
 
+static bool lowerCirctClockGate(InstancePathCache &instancePathCache,
+                                FModuleLike mod) {
+  if (hasNPorts("circt.clock_gate", mod, 3) ||
+      namedPort("circt.clock_gate", mod, 0, "in") ||
+      namedPort("circt.clock_gate", mod, 1, "en") ||
+      namedPort("circt.clock_gate", mod, 2, "out") ||
+      typedPort<ClockType>("circt.clock_gate", mod, 0) ||
+      sizedPort<UIntType>("circt.clock_gate", mod, 1, 1) ||
+      typedPort<ClockType>("circt.clock_gate", mod, 2) ||
+      hasNParam("circt.clock_gate", mod, 0))
+    return false;
+
+  for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
+    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    auto en = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
+    inst.getResult(0).replaceAllUsesWith(in);
+    inst.getResult(1).replaceAllUsesWith(en);
+    auto out = builder.create<ClockGateIntrinsicOp>(in, en, Value{});
+    inst.getResult(2).replaceAllUsesWith(out);
+    inst.erase();
+  }
+  return true;
+}
+
 std::pair<const char *, std::function<bool(InstancePathCache &, FModuleLike)>>
     intrinsics[] = {
         {"circt.sizeof", lowerCirctSizeof},
@@ -213,6 +247,8 @@ std::pair<const char *, std::function<bool(InstancePathCache &, FModuleLike)>>
         {"circt_plusargs_test", lowerCirctPlusArgTest},
         {"circt.plusargs.value", lowerCirctPlusArgValue},
         {"circt_plusargs_value", lowerCirctPlusArgValue},
+        {"circt.clock_gate", lowerCirctClockGate},
+        {"circt_clock_gate", lowerCirctClockGate},
 };
 
 // This is the main entrypoint for the lowering pass.
@@ -230,14 +266,14 @@ void LowerIntrinsicsPass::runOnOperation() {
         continue;
       intname = anno.getMember<StringAttr>("intrinsic");
       if (!intname) {
-        op.emitError("Intrinsic annotation with no intrinsic name");
+        op.emitError("intrinsic annotation with no intrinsic name");
         ++numFailures;
         continue;
       }
     } else {
       intname = cast<FIntModuleOp>(op).getIntrinsicAttr();
       if (!intname) {
-        op.emitError("Intrinsic module with no intrinsic name");
+        op.emitError("intrinsic module with no intrinsic name");
         ++numFailures;
         continue;
       }
@@ -257,7 +293,7 @@ void LowerIntrinsicsPass::runOnOperation() {
       }
     }
     if (!found) {
-      op.emitError("Unknown intrinsic '") << intname << "'";
+      op.emitError("unknown intrinsic: '") << intname.getValue() << "'";
       ++numFailures;
     }
   }

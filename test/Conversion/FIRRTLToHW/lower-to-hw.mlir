@@ -1498,7 +1498,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     %2 = firrtl.int.plusargs.test "foo"
     firrtl.strictconnect %io2, %2 : !firrtl.uint<1>
-    %3, %4 = firrtl.int.plusargs.value "foo" : !firrtl.uint<1>, !firrtl.uint<5>
+    %3, %4 = firrtl.int.plusargs.value "foo" : !firrtl.uint<5>
     firrtl.strictconnect %io3, %3 : !firrtl.uint<1>
     firrtl.strictconnect %io4, %4 : !firrtl.uint<5>
 
