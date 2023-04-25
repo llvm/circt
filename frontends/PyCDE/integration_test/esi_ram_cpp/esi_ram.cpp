@@ -1,4 +1,5 @@
 // REQUIRES: esi-cosim
+// REQUIRES: esi-cosim-cpp
 
 // clang-format off
 
@@ -15,8 +16,8 @@
 // RUN:   -B %t/build \
 // RUN:   -DCIRCT_DIR=%CIRCT_SOURCE% \
 // RUN:   -DPYCDE_OUT_DIR=%t \
-// RUN:   -DCMAKE_CXX_COMPILER=clang++-10 \
-// RUN:   -DCMAKE_C_COMPILER=clang-10
+// RUN:   -DCMAKE_CXX_COMPILER=%ESI_CXX_COMPILER% \
+// RUN:   -DCMAKE_C_COMPILER=%ESI_C_COMPILER%
 // RUN: cmake --build %t/build
 
 // Run test

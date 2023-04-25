@@ -30,6 +30,7 @@ hw.module @Loopback(%clk: i1, %loopback_tohw: !esi.channel<i8>) -> (loopback_fro
 // CHECK: #pragma once
 // CHECK: #include "refl.hpp"
 // CHECK: #include <cstdint>
+// CHECK: #include <compare>
 // CHECK: #include "esi/backends/cosim/capnp.h"
 // CHECK: #include ESI_COSIM_CAPNP_H
 
