@@ -182,6 +182,14 @@ static bool isConstantZero(Attribute operand) {
   return false;
 }
 
+/// Determine whether a constant operand is a one value for the sake of constant
+/// folding.
+static bool isConstantOne(Attribute operand) {
+  if (auto cst = getConstant(operand))
+    return cst->isOne();
+  return false;
+}
+
 /// This is the policy for folding, which depends on the sort of operator we're
 /// processing.
 enum class BinOpKind {
@@ -3037,5 +3045,43 @@ LogicalResult InvalidValueOp::canonicalize(InvalidValueOp op,
     rewriter.eraseOp(op);
     return success();
   }
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// ClockGateIntrinsicOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ClockGateIntrinsicOp::fold(FoldAdaptor adaptor) {
+  // Forward the clock if one of the enables is always true.
+  if (isConstantOne(adaptor.getEnable()) ||
+      isConstantOne(adaptor.getTestEnable()))
+    return getInput();
+
+  // Fold to a constant zero clock if the enables are always false.
+  if (isConstantZero(adaptor.getEnable()) &&
+      (!getTestEnable() || isConstantZero(adaptor.getTestEnable())))
+    return BoolAttr::get(getContext(), false);
+
+  // Forward constant zero clocks.
+  if (isConstantZero(adaptor.getInput()))
+    return BoolAttr::get(getContext(), false);
+
+  return {};
+}
+
+LogicalResult ClockGateIntrinsicOp::canonicalize(ClockGateIntrinsicOp op,
+                                                 PatternRewriter &rewriter) {
+  // Remove constant false test enable.
+  if (auto testEnable = op.getTestEnable()) {
+    if (auto constOp = testEnable.getDefiningOp<ConstantOp>()) {
+      if (constOp.getValue().isZero()) {
+        rewriter.updateRootInPlace(op,
+                                   [&] { op.getTestEnableMutable().clear(); });
+        return success();
+      }
+    }
+  }
+
   return failure();
 }
