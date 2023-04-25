@@ -67,7 +67,6 @@ type of the result.
 | found      | output    | UInt<1>  | found in args                       |
 | result     | output    | AnyType  | found in args                       |
 
-
 ### circt.plusargs.test
 
 Tests simulator command line options with SystemVerilog `$test$plusargs`.  This
@@ -80,3 +79,18 @@ is described in SystemVerilog 2012 section 21.6.
 | Port       | Direction | Type     | Description                         |
 | ---------- | --------- | -------- | ----------------------------------- |
 | found      | output    | UInt<1>  | found in args                       |
+
+### circt.clock_gate
+
+Enables and disables a clock safely, without glitches, based on a boolean enable value. If the enable input is 1, the output clock produced by the clock gate is identical to the input clock. If the enable input is 0, the output clock is a constant zero.
+
+The enable input is sampled at the rising edge of the input clock; any changes on the enable before or after that edge are ignored and do not affect the output clock.
+
+| Parameter | Type | Description |
+| --------- | ---- | ----------- |
+
+| Port | Direction | Type     | Description                 |
+| ---- | --------- | -------- | --------------------------- |
+| in   | input     | Clock    | input clock                 |
+| en   | input     | UInt<1>  | enable for the output clock |
+| out  | output    | Clock    | gated output clock          |
