@@ -215,9 +215,14 @@ def FEnumCreateOp : FIRRTLOp<"enumcreate"> {
   ];
 
   let extraClassDeclaration = [{
+    /// Return the name attribute of the accessed field.
+    StringAttr getFieldNameAttr() {
+      return getResult().getType().getElementNameAttr(getFieldIndex());
+    }
+
     /// Return the name of the accessed field.
     StringRef getFieldName() {
-      return getResult().getType().getElementName(getFieldIndex());
+      return getFieldNameAttr().getValue();
     }
   }];
 }
