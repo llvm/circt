@@ -710,6 +710,20 @@ bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
     return true;
   }
 
+  // Enum types can be connected if they have the same size, element names, and
+  // element types.
+  auto dstEnumType = destType.dyn_cast<FEnumType>();
+  auto srcEnumType = destType.dyn_cast<FEnumType>();
+  if (dstEnumType && srcEnumType) {
+    if (dstEnumType.getNumElements() != srcEnumType.getNumElements())
+      return false;
+    // Enums requires the types to match exactly.
+    for (const auto &[dst, src] : llvm::zip(dstEnumType, srcEnumType))
+      if (!areTypesEquivalent(dst.type, src.type))
+        return false;
+    return true;
+  }
+
   // Ground types can be connected if their passive, widthless versions
   // are equal or the widthless source type is a const version of the widthless
   // destination type.

@@ -32,7 +32,8 @@ public:
         .template Case<
             ConstantOp, SpecialConstantOp, AggregateConstantOp, InvalidValueOp,
             SubfieldOp, SubindexOp, SubaccessOp, IsTagOp, SubtagOp,
-            BundleCreateOp, VectorCreateOp, MultibitMuxOp, TagExtractOp,
+            BundleCreateOp, VectorCreateOp, FEnumCreateOp, MultibitMuxOp,
+            TagExtractOp,
             // Arithmetic and Logical Binary Primitives.
             AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
             OrPrimOp, XorPrimOp,
@@ -96,6 +97,7 @@ public:
   HANDLE(AggregateConstantOp, Unhandled);
   HANDLE(BundleCreateOp, Unhandled);
   HANDLE(VectorCreateOp, Unhandled);
+  HANDLE(FEnumCreateOp, Unhandled);
   HANDLE(SubfieldOp, Unhandled);
   HANDLE(SubindexOp, Unhandled);
   HANDLE(SubaccessOp, Unhandled);
