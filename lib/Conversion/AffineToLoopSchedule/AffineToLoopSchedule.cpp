@@ -43,6 +43,7 @@ using namespace mlir::arith;
 using namespace mlir::memref;
 using namespace mlir::scf;
 using namespace mlir::func;
+using namespace mlir::affine;
 using namespace circt;
 using namespace circt::analysis;
 using namespace circt::scheduling;

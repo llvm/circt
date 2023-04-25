@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
   circt::registerAllDialects(registry);
 
   // From circt-opt, register subset of MLIR dialects.
-  registry.insert<mlir::AffineDialect>();
+  registry.insert<mlir::affine::AffineDialect>();
   registry.insert<mlir::LLVM::LLVMDialect>();
   registry.insert<mlir::memref::MemRefDialect>();
   registry.insert<mlir::func::FuncDialect>();
