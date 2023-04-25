@@ -16,6 +16,8 @@
 include "mlir/IR/AttrTypeBase.td"
 
 def ClassType : TypeDef<OMDialect, "Class", []> {
+  let summary = "A type that represents a reference to a Class.";
+
   let mnemonic = "class.type";
 
   let parameters = (ins
