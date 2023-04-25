@@ -46,3 +46,11 @@ hw.module @d0(%clk : i1, %rst : i1) -> () {
   %myMemory_rdata = seq.read %myMemory[%c0_i0] rden %c1_i1 { latency = 0} : !seq.hlmem<1xi32>
   hw.output
 }
+
+// CHECK-LABEL: hw.module @ClockGate
+hw.module @ClockGate(%clock: i1, %enable: i1, %test_enable: i1) {
+  // CHECK-NEXT: seq.clock_gate %clock, %enable
+  // CHECK-NEXT: seq.clock_gate %clock, %enable, %test_enable
+  %cg0 = seq.clock_gate %clock, %enable
+  %cg1 = seq.clock_gate %clock, %enable, %test_enable
+}
