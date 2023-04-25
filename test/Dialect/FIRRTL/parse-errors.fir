@@ -45,12 +45,12 @@ circuit test :
 ;// -----
 
 ; expected-error @below {{'circuit' must be first token on its line}}
-FIRRTL version 1.1.0 circuit test :
+FIRRTL version 2.0.0 circuit test :
   module test :
 
 ;// -----
 
-; expected-error @below {{FIRRTL version must be >=0.2.0}}
+; expected-error @below {{FIRRTL version must be >=2.0.0}}
 FIRRTL version 0.1.0
 circuit test :
   module test :
@@ -105,7 +105,7 @@ circuit subfield_of_ground_type :
 
 ;// -----
 
-FIRRTL version 1.2.0
+FIRRTL version 2.0.0
 circuit invalid_name :
   module invalid_name :
    input out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
@@ -114,7 +114,7 @@ circuit invalid_name :
 
 ;// -----
 
-FIRRTL version 1.2.0
+FIRRTL version 2.0.0
 circuit invalid_name :
   module invalid_name :
    input out_0 : SInt<8>[5]
@@ -147,7 +147,7 @@ circuit invalid_int_literal :
 
 ;// -----
 ; When scopes are local to the body
-FIRRTL version 1.2.0
+FIRRTL version 2.0.0
 circuit invalid_name :
   module invalid_name :
     input reset : UInt<1>
