@@ -12,4 +12,3 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     out <= in
 
   ; CHECK: }
-
