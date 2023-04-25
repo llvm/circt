@@ -2899,29 +2899,29 @@ firrtl.module @ClockGateIntrinsic(in %clock: !firrtl.clock, in %enable: !firrtl.
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
   // CHECK-NEXT: %zeroClock = firrtl.node interesting_name %c0_clock
-  %0 = firrtl.int.clock_gate %c0_clock, %enable : !firrtl.uint<1>
+  %0 = firrtl.int.clock_gate %c0_clock, %enable
   %zeroClock = firrtl.node interesting_name %0 : !firrtl.clock
 
   // CHECK-NEXT: %alwaysOff1 = firrtl.node interesting_name %c0_clock
   // CHECK-NEXT: %alwaysOff2 = firrtl.node interesting_name %c0_clock
-  %1 = firrtl.int.clock_gate %clock, %c0_ui1 : !firrtl.uint<1>
-  %2 = firrtl.int.clock_gate %clock, %c0_ui1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  %1 = firrtl.int.clock_gate %clock, %c0_ui1
+  %2 = firrtl.int.clock_gate %clock, %c0_ui1, %c0_ui1
   %alwaysOff1 = firrtl.node interesting_name %1 : !firrtl.clock
   %alwaysOff2 = firrtl.node interesting_name %2 : !firrtl.clock
 
   // CHECK-NEXT: %alwaysOn1 = firrtl.node interesting_name %clock
   // CHECK-NEXT: %alwaysOn2 = firrtl.node interesting_name %clock
   // CHECK-NEXT: %alwaysOn3 = firrtl.node interesting_name %clock
-  %3 = firrtl.int.clock_gate %clock, %c1_ui1 : !firrtl.uint<1>
-  %4 = firrtl.int.clock_gate %clock, %c1_ui1, %testEnable : !firrtl.uint<1>, !firrtl.uint<1>
-  %5 = firrtl.int.clock_gate %clock, %enable, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  %3 = firrtl.int.clock_gate %clock, %c1_ui1
+  %4 = firrtl.int.clock_gate %clock, %c1_ui1, %testEnable
+  %5 = firrtl.int.clock_gate %clock, %enable, %c1_ui1
   %alwaysOn1 = firrtl.node interesting_name %3 : !firrtl.clock
   %alwaysOn2 = firrtl.node interesting_name %4 : !firrtl.clock
   %alwaysOn3 = firrtl.node interesting_name %5 : !firrtl.clock
 
-  // CHECK-NEXT: [[TMP:%.+]] = firrtl.int.clock_gate %clock, %enable :
+  // CHECK-NEXT: [[TMP:%.+]] = firrtl.int.clock_gate %clock, %enable
   // CHECK-NEXT: %dropTestEnable = firrtl.node interesting_name [[TMP]]
-  %6 = firrtl.int.clock_gate %clock, %enable, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  %6 = firrtl.int.clock_gate %clock, %enable, %c0_ui1
   %dropTestEnable = firrtl.node interesting_name %6 : !firrtl.clock
 }
 

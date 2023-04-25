@@ -17,10 +17,10 @@ firrtl.module @Intrinsics(in %ui : !firrtl.uint, in %clock: !firrtl.clock, in %u
   %foo_found = firrtl.int.plusargs.test "foo"
   %bar_found, %bar_value = firrtl.int.plusargs.value "bar" : !firrtl.uint<5>
 
-  // CHECK-NEXT: firrtl.int.clock_gate %clock, %ui1 : !firrtl.uint<1>
-  // CHECK-NEXT: firrtl.int.clock_gate %clock, %ui1, %ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-  %cg0 = firrtl.int.clock_gate %clock, %ui1 : !firrtl.uint<1>
-  %cg1 = firrtl.int.clock_gate %clock, %ui1, %ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.int.clock_gate %clock, %ui1
+  // CHECK-NEXT: firrtl.int.clock_gate %clock, %ui1, %ui1
+  %cg0 = firrtl.int.clock_gate %clock, %ui1
+  %cg1 = firrtl.int.clock_gate %clock, %ui1, %ui1
 }
 
 }

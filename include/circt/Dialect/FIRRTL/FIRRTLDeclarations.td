@@ -566,7 +566,7 @@ def ClockGateIntrinsicOp : FIRRTLOp<"int.clock_gate", [Pure]> {
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
   let assemblyFormat = [{
-    operands attr-dict `:` type($enable) (`,` type($test_enable)^)?
+    $input `,` $enable (`,` $test_enable^)? attr-dict
   }];
 }
 
