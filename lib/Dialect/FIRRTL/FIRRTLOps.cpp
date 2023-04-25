@@ -2249,7 +2249,7 @@ LogicalResult RegResetOp::verify() {
   FIRRTLBaseType regType = getResult().getType();
 
   // The type of the initialiser must be equivalent to the register type.
-  if (!areTypesEquivalent(resetType, regType))
+  if (!areTypesEquivalent(regType, resetType))
     return emitError("type mismatch between register ")
            << regType << " and reset value " << resetType;
 

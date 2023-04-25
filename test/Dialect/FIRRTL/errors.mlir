@@ -844,7 +844,7 @@ firrtl.circuit "Top"   {
 
 firrtl.circuit "AnalogRegister" {
   firrtl.module @AnalogRegister(in %clock: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog, but got '!firrtl.analog'}}
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.analog'}}
     %r = firrtl.reg %clock : !firrtl.clock, !firrtl.analog
   }
 }
@@ -853,7 +853,7 @@ firrtl.circuit "AnalogRegister" {
 
 firrtl.circuit "AnalogVectorRegister" {
   firrtl.module @AnalogVectorRegister(in %clock: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog, but got '!firrtl.vector<analog, 2>'}}
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.vector<analog, 2>'}}
     %r = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<analog, 2>
   }
 }
@@ -1005,7 +1005,7 @@ firrtl.module @NonRefNode(in %in1 : !firrtl.probe<uint<8>>) {
 
 firrtl.circuit "NonRefRegister" {
   firrtl.module @NonRefRegister(in %clock: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog}}
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog}}
     %r = firrtl.reg %clock : !firrtl.clock, !firrtl.probe<uint<8>>
   }
 }
@@ -1245,4 +1245,44 @@ firrtl.circuit "SubtagNoCase" {
 firrtl.module @SubtagNoCase(in %in : !firrtl.enum<None: uint<0>, Some: uint<8>>) {
   // expected-error @below {{unknown field SomeOther in enum type}}
   %some = firrtl.subtag %in[SomeOther] : !firrtl.enum<None: uint<0>, Some: uint<8>>
+}
+
+// -----
+// 'const' firrtl.reg is invalid
+
+firrtl.circuit "ConstReg" {
+firrtl.module @ConstReg(in %clock: !firrtl.clock) {
+  // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.uint<1>'}}
+  %r = firrtl.reg %clock : !firrtl.clock, !firrtl.const.uint<1>
+}
+}
+
+// -----
+// 'const' firrtl.regreset is invalid
+
+firrtl.circuit "ConstRegReset" {
+firrtl.module @ConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.const.uint<1>) {
+  // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.uint<1>'}}
+  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.uint<1>, !firrtl.const.uint<1>
+}
+}
+
+// -----
+
+// nested 'const' firrtl.reg is invalid
+firrtl.circuit "NestedConstReg" {
+firrtl.module @NestedConstReg(in %clock: !firrtl.clock) {
+  // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.bundle<a: const.uint<1>>'}}
+  %r = firrtl.reg %clock : !firrtl.clock, !firrtl.bundle<a: const.uint<1>>
+}
+}
+
+// -----
+
+// nested 'const' firrtl.regreset is invalid
+firrtl.circuit "NestedConstRegReset" {
+firrtl.module @NestedConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.const.bundle<a: uint<1>>) {
+  // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.bundle<a: const.uint<1>>'}}
+  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.bundle<a: uint<1>>, !firrtl.bundle<a: const.uint<1>>
+}
 }

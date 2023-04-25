@@ -50,6 +50,8 @@ struct RecursiveTypeProperties {
   bool containsReference : 1;
   /// Whether the type contains an analog type.
   bool containsAnalog : 1;
+  /// Whether the type contains a const type.
+  bool containsConst : 1;
   /// Whether the type has any uninferred bit widths.
   bool hasUninferredWidth : 1;
   /// Whether the type has any uninferred reset.
@@ -79,8 +81,10 @@ public:
   /// types recursively within itself.
   bool isPassive() const { return getRecursiveTypeProperties().isPassive; }
 
-  /// Returns true if this is a "passive" that which is not analog.
-  bool isRegisterType() { return isPassive() && !containsAnalog(); }
+  /// Returns true if this is a non-const "passive" that which is not analog.
+  bool isRegisterType() {
+    return isPassive() && !containsAnalog() && !containsConst();
+  }
 
   /// Return true if this is a 'ground' type, aka a non-aggregate type.
   bool isGround();
@@ -92,6 +96,9 @@ public:
   /// Returns true if this is a 'const' type that can only hold compile-time
   /// constant values
   bool isConst();
+
+  /// Returns true if this is or contains a 'const' type.
+  bool containsConst() { return getRecursiveTypeProperties().containsConst; }
 
   /// Return true if this is or contains an Analog type.
   bool containsAnalog() { return getRecursiveTypeProperties().containsAnalog; }
