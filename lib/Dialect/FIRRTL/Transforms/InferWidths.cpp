@@ -2021,7 +2021,6 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
       LLVM_DEBUG(llvm::dbgs() << "NOOP " << cast << "\n");
       lhs.replaceAllUsesWith(rhs);
     }
-    cast.erase();
     return anyChanged;
   }
 
