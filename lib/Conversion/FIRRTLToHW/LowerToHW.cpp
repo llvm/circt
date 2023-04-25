@@ -351,6 +351,134 @@ struct CircuitLoweringState {
     return iter->getSecond();
   }
 
+  /// Given a type, return the corresponding lowered type for the HW dialect.
+  ///  A wrapper to the FIRRTLUtils::lowerType, required to ensure safe addition
+  ///  of TypeScopeOp for all the TypeDecls.
+  Type lowerType(Type type, Location loc) {
+    auto getTypeDeclFn = [&](Type rawType, BundleType firrtlType,
+                             Location typeLoc) -> hw::TypeAliasType {
+      return getTypeAliasForNamedBundle(rawType, firrtlType, typeLoc);
+    };
+    return ::lowerType(type, loc, getTypeDeclFn);
+  }
+
+  /// Given a value of analog type, check to see the only use of it is an
+  /// attach. If so, remove the attach and return the value being attached to
+  /// it, converted to an HW inout type.  If this isn't a situation we can
+  /// handle, just return null.
+  Value tryEliminatingAttachesToAnalogValue(Value value,
+                                            Operation *insertPoint) {
+    if (!value.hasOneUse())
+      return {};
+
+    auto attach = dyn_cast<AttachOp>(*value.user_begin());
+    if (!attach || attach.getNumOperands() != 2)
+      return {};
+
+    // Don't optimize zero bit analogs.
+    auto loweredType = ::lowerType(value.getType());
+    if (loweredType.isInteger(0))
+      return {};
+
+    // Check to see if the attached value dominates the insertion point.  If
+    // not, just fail.
+    auto attachedValue = attach.getOperand(attach.getOperand(0) == value);
+    auto *op = attachedValue.getDefiningOp();
+    if (op && op->getBlock() == insertPoint->getBlock() &&
+        !op->isBeforeInBlock(insertPoint))
+      return {};
+
+    attach.erase();
+
+    ImplicitLocOpBuilder builder(insertPoint->getLoc(), insertPoint);
+    return castFromFIRRTLType(attachedValue, hw::InOutType::get(loweredType),
+                              builder);
+  }
+
+  /// Given a value of flip type, check to see if all of the uses of it are
+  /// connects.  If so, remove the connects and return the value being connected
+  /// to it, converted to an HW type.  If this isn't a situation we can handle,
+  /// just return null.
+  ///
+  /// This can happen when there are no connects to the value.  The 'mergePoint'
+  /// location is where a 'hw.merge' operation should be inserted if needed.
+  Value tryEliminatingConnectsToValue(Value flipValue, Operation *insertPoint) {
+    // Handle analog's separately.
+    if (flipValue.getType().isa<AnalogType>())
+      return tryEliminatingAttachesToAnalogValue(flipValue, insertPoint);
+
+    Operation *connectOp = nullptr;
+    for (auto &use : flipValue.getUses()) {
+      // We only know how to deal with connects where this value is the
+      // destination.
+      if (use.getOperandNumber() != 0)
+        return {};
+      if (!isa<ConnectOp, StrictConnectOp>(use.getOwner()))
+        return {};
+
+      // We only support things with a single connect.
+      if (connectOp)
+        return {};
+      connectOp = use.getOwner();
+    }
+
+    // We don't have an HW equivalent of "poison" so just don't special case
+    // the case where there are no connects other uses of an output.
+    if (!connectOp)
+      return {}; // TODO: Emit an sv.constant here since it is unconnected.
+
+    // Don't special case zero-bit results.
+    auto loweredType = lowerType(flipValue.getType(), connectOp->getLoc());
+    if (loweredType.isInteger(0))
+      return {};
+
+    // Convert each connect into an extended version of its operand being
+    // output.
+    ImplicitLocOpBuilder builder(insertPoint->getLoc(), insertPoint);
+
+    auto connectSrc = connectOp->getOperand(1);
+
+    // Directly forward foreign types.
+    if (!connectSrc.getType().isa<FIRRTLType>()) {
+      connectOp->erase();
+      return connectSrc;
+    }
+
+    // Convert fliped sources to passive sources.
+    if (!connectSrc.getType().cast<FIRRTLBaseType>().isPassive())
+      connectSrc =
+          builder
+              .create<mlir::UnrealizedConversionCastOp>(
+                  connectSrc.getType().cast<FIRRTLBaseType>().getPassiveType(),
+                  connectSrc)
+              .getResult(0);
+
+    // We know it must be the destination operand due to the types, but the
+    // source may not match the destination width.
+    auto destTy = flipValue.getType().cast<FIRRTLBaseType>().getPassiveType();
+
+    if (!destTy.isGround()) {
+      // If types are not ground type and they don't match, we give up.
+      if (destTy != connectSrc.getType().cast<FIRRTLType>())
+        return {};
+    } else if (destTy.getBitWidthOrSentinel() != connectSrc.getType()
+                                                     .cast<FIRRTLBaseType>()
+                                                     .getBitWidthOrSentinel()) {
+      // The only type mismatchs we care about is due to integer width
+      // differences.
+      auto destWidth = destTy.getBitWidthOrSentinel();
+      assert(destWidth != -1 && "must know integer widths");
+      connectSrc =
+          builder.createOrFold<PadPrimOp>(destTy, connectSrc, destWidth);
+    }
+
+    // Remove the connect and use its source as the value for the output.
+    connectOp->erase();
+
+    // Convert from FIRRTL type to builtin type.
+    return castFromFIRRTLType(connectSrc, loweredType, builder);
+  }
+
 private:
   friend struct FIRRTLModuleLowering;
   friend struct FIRRTLLowering;
@@ -415,19 +543,6 @@ private:
   /// Set to keep track of unique typedecl names.
   Namespace typeDeclNamespace;
 };
-
-/// Given a type, return the corresponding lowered type for the HW dialect.
-///  A wrapper to the FIRRTLUtils::lowerType, required to ensure safe addition
-///  of TypeScopeOp for all the TypeDecls.
-static Type lowerType(Type type, Location loc,
-                      CircuitLoweringState &circuitState) {
-  auto getTypeDeclFn = [&](Type rawType, BundleType firrtlType,
-                           Location typeLoc) -> hw::TypeAliasType {
-    return circuitState.getTypeAliasForNamedBundle(rawType, firrtlType,
-                                                   typeLoc);
-  };
-  return ::lowerType(type, loc, getTypeDeclFn);
-}
 
 void CircuitLoweringState::processRemainingAnnotations(
     Operation *op, const AnnotationSet &annoSet) {
@@ -1010,7 +1125,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
   for (auto firrtlPort : firrtlPorts) {
     hw::PortInfo hwPort;
     hwPort.name = firrtlPort.name;
-    hwPort.type = lowerType(firrtlPort.type, firrtlPort.loc, loweringState);
+    hwPort.type = loweringState.lowerType(firrtlPort.type, firrtlPort.loc);
     if (firrtlPort.sym)
       if (firrtlPort.sym.size() > 1 ||
           (firrtlPort.sym.size() == 1 && !firrtlPort.sym.getSymName()))
@@ -1281,125 +1396,6 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   return newModule;
 }
 
-/// Given a value of analog type, check to see the only use of it is an
-/// attach. If so, remove the attach and return the value being attached to
-/// it, converted to an HW inout type.  If this isn't a situation we can
-/// handle, just return null.
-static Value tryEliminatingAttachesToAnalogValue(Value value,
-                                                 Operation *insertPoint) {
-  if (!value.hasOneUse())
-    return {};
-
-  auto attach = dyn_cast<AttachOp>(*value.user_begin());
-  if (!attach || attach.getNumOperands() != 2)
-    return {};
-
-  // Don't optimize zero bit analogs.
-  auto loweredType = lowerType(value.getType());
-  if (loweredType.isInteger(0))
-    return {};
-
-  // Check to see if the attached value dominates the insertion point.  If
-  // not, just fail.
-  auto attachedValue = attach.getOperand(attach.getOperand(0) == value);
-  auto *op = attachedValue.getDefiningOp();
-  if (op && op->getBlock() == insertPoint->getBlock() &&
-      !op->isBeforeInBlock(insertPoint))
-    return {};
-
-  attach.erase();
-
-  ImplicitLocOpBuilder builder(insertPoint->getLoc(), insertPoint);
-  return castFromFIRRTLType(attachedValue, hw::InOutType::get(loweredType),
-                            builder);
-}
-
-/// Given a value of flip type, check to see if all of the uses of it are
-/// connects.  If so, remove the connects and return the value being connected
-/// to it, converted to an HW type.  If this isn't a situation we can handle,
-/// just return null.
-///
-/// This can happen when there are no connects to the value.  The 'mergePoint'
-/// location is where a 'hw.merge' operation should be inserted if needed.
-static Value
-tryEliminatingConnectsToValue(Value flipValue, Operation *insertPoint,
-                              CircuitLoweringState &loweringState) {
-  // Handle analog's separately.
-  if (flipValue.getType().isa<AnalogType>())
-    return tryEliminatingAttachesToAnalogValue(flipValue, insertPoint);
-
-  Operation *connectOp = nullptr;
-  for (auto &use : flipValue.getUses()) {
-    // We only know how to deal with connects where this value is the
-    // destination.
-    if (use.getOperandNumber() != 0)
-      return {};
-    if (!isa<ConnectOp, StrictConnectOp>(use.getOwner()))
-      return {};
-
-    // We only support things with a single connect.
-    if (connectOp)
-      return {};
-    connectOp = use.getOwner();
-  }
-
-  // We don't have an HW equivalent of "poison" so just don't special case
-  // the case where there are no connects other uses of an output.
-  if (!connectOp)
-    return {}; // TODO: Emit an sv.constant here since it is unconnected.
-
-  // Don't special case zero-bit results.
-  auto loweredType =
-      lowerType(flipValue.getType(), connectOp->getLoc(), loweringState);
-  if (loweredType.isInteger(0))
-    return {};
-
-  // Convert each connect into an extended version of its operand being
-  // output.
-  ImplicitLocOpBuilder builder(insertPoint->getLoc(), insertPoint);
-
-  auto connectSrc = connectOp->getOperand(1);
-
-  // Directly forward foreign types.
-  if (!connectSrc.getType().isa<FIRRTLType>()) {
-    connectOp->erase();
-    return connectSrc;
-  }
-
-  // Convert fliped sources to passive sources.
-  if (!connectSrc.getType().cast<FIRRTLBaseType>().isPassive())
-    connectSrc =
-        builder
-            .create<mlir::UnrealizedConversionCastOp>(
-                connectSrc.getType().cast<FIRRTLBaseType>().getPassiveType(),
-                connectSrc)
-            .getResult(0);
-
-  // We know it must be the destination operand due to the types, but the
-  // source may not match the destination width.
-  auto destTy = flipValue.getType().cast<FIRRTLBaseType>().getPassiveType();
-
-  if (!destTy.isGround()) {
-    // If types are not ground type and they don't match, we give up.
-    if (destTy != connectSrc.getType().cast<FIRRTLType>())
-      return {};
-  } else if (destTy.getBitWidthOrSentinel() != connectSrc.getType()
-                                                   .cast<FIRRTLBaseType>()
-                                                   .getBitWidthOrSentinel()) {
-    // The only type mismatchs we care about is due to integer width
-    // differences.
-    auto destWidth = destTy.getBitWidthOrSentinel();
-    assert(destWidth != -1 && "must know integer widths");
-    connectSrc = builder.createOrFold<PadPrimOp>(destTy, connectSrc, destWidth);
-  }
-
-  // Remove the connect and use its source as the value for the output.
-  connectOp->erase();
-
-  // Convert from FIRRTL type to builtin type.
-  return castFromFIRRTLType(connectSrc, loweredType, builder);
-}
-
 static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
                                                    StringRef field) {
   SmallVector<SubfieldOp> accesses;
@@ -1480,7 +1476,7 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
     }
 
     if (auto value =
-            tryEliminatingConnectsToValue(oldArg, outputOp, loweringState)) {
+            loweringState.tryEliminatingConnectsToValue(oldArg, outputOp)) {
       // If we were able to find the value being connected to the output,
       // directly use it!
       outputs.push_back(value);
@@ -1498,7 +1494,7 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
     oldArg.replaceAllUsesWith(newArg);
 
     // Don't output zero bit results or inouts.
-    auto resultHWType = lowerType(port.type, port.loc, loweringState);
+    auto resultHWType = loweringState.lowerType(port.type, port.loc);
     if (!resultHWType.isInteger(0)) {
       auto output = castFromFIRRTLType(newArg, resultHWType, outputBuilder);
       outputs.push_back(output);
@@ -2187,7 +2183,7 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
           SmallVector<Value> temp(resultBuffer.begin() + size,
                                   resultBuffer.end());
           auto newStruct = builder.createOrFold<hw::StructCreateOp>(
-              lowerType(destStructType, builder.getLoc(), circuitState), temp);
+              circuitState.lowerType(destStructType, builder.getLoc()), temp);
           resultBuffer.resize(size);
           resultBuffer.push_back(newStruct);
           return success();
@@ -2697,7 +2693,7 @@ FailureOr<Value> FIRRTLLowering::lowerSubaccess(SubaccessOp op, Value input) {
 
 FailureOr<Value> FIRRTLLowering::lowerSubfield(SubfieldOp op, Value input) {
   auto resultType =
-      lowerType(op->getResult(0).getType(), builder.getLoc(), circuitState);
+      circuitState.lowerType(op->getResult(0).getType(), builder.getLoc());
   if (!resultType || !input) {
     op->emitError() << "subfield type lowering failed";
     return failure();
@@ -2765,7 +2761,8 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(VectorCreateOp op) {
   auto resultType =
-      lowerType(op.getResult().getType(), op.getLoc(), circuitState);
+      circuitState.lowerType(op.getResult().getType(), op.getLoc());
+
   SmallVector<Value> operands;
   // NOTE: The operand order must be inverted.
   for (auto oper : llvm::reverse(op.getOperands())) {
@@ -2779,7 +2776,7 @@ LogicalResult FIRRTLLowering::visitExpr(VectorCreateOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(BundleCreateOp op) {
   auto resultType =
-      lowerType(op.getResult().getType(), op.getLoc(), circuitState);
+      circuitState.lowerType(op.getResult().getType(), op.getLoc());
   SmallVector<Value> operands;
   for (auto oper : op.getOperands()) {
     auto val = getLoweredValue(oper);
@@ -2792,7 +2789,7 @@ LogicalResult FIRRTLLowering::visitExpr(BundleCreateOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(AggregateConstantOp op) {
   auto resultType =
-      lowerType(op.getResult().getType(), op.getLoc(), circuitState);
+      circuitState.lowerType(op.getResult().getType(), op.getLoc());
   auto attr =
       getOrCreateAggregateConstantAttribute(op.getFieldsAttr(), resultType);
 
@@ -2834,7 +2831,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     return success();
   }
 
-  auto resultType = lowerType(origResultType, op.getLoc(), circuitState);
+  auto resultType = circuitState.lowerType(origResultType, op.getLoc());
   if (!resultType)
     return failure();
 
@@ -2865,7 +2862,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
-  auto resultTy = lowerType(op.getType(), op.getLoc(), circuitState);
+  auto resultTy = circuitState.lowerType(op.getType(), op.getLoc());
   if (!resultTy)
     return failure();
   resultTy = sv::InOutType::get(op.getContext(), resultTy);
@@ -2921,7 +2918,7 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
 
 LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   auto resultType =
-      lowerType(op.getResult().getType(), op.getLoc(), circuitState);
+      circuitState.lowerType(op.getResult().getType(), op.getLoc());
   if (!resultType)
     return failure();
   if (resultType.isInteger(0))
@@ -2960,7 +2957,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
 
 LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   auto resultType =
-      lowerType(op.getResult().getType(), op.getLoc(), circuitState);
+      circuitState.lowerType(op.getResult().getType(), op.getLoc());
   if (!resultType)
     return failure();
   if (resultType.isInteger(0))
@@ -3214,7 +3211,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   SmallVector<Value, 8> operands;
   for (size_t portIndex = 0, e = portInfo.size(); portIndex != e; ++portIndex) {
     auto &port = portInfo[portIndex];
-    auto portType = lowerType(port.type, oldInstance.getLoc(), circuitState);
+    auto portType = circuitState.lowerType(port.type, oldInstance.getLoc());
     if (!portType) {
       oldInstance->emitOpError("could not lower type of port ") << port.name;
       return failure();
@@ -3395,7 +3392,7 @@ LogicalResult FIRRTLLowering::visitExpr(BitCastOp op) {
   auto operand = getLoweredValue(op.getOperand());
   if (!operand)
     return failure();
-  auto resultType = lowerType(op.getType(), op.getLoc(), circuitState);
+  auto resultType = circuitState.lowerType(op.getType(), op.getLoc());
   if (!resultType)
     return failure();
 
@@ -3440,7 +3437,7 @@ LogicalResult FIRRTLLowering::visitExpr(NegPrimOp op) {
   if (!operand)
     return failure();
 
-  auto resultType = lowerType(op.getType(), op.getLoc(), circuitState);
+  auto resultType = circuitState.lowerType(op.getType(), op.getLoc());
 
   auto zero = getOrCreateIntConstant(resultType.getIntOrFloatBitWidth(), 0);
   return setLoweringTo<comb::SubOp>(op, zero, operand, true);
@@ -3584,7 +3581,7 @@ LogicalResult FIRRTLLowering::lowerDivLikeOp(Operation *op) {
   if (resultType == opType)
     return setLowering(op->getResult(0), result);
   return setLoweringTo<comb::ExtractOp>(
-      op, lowerType(opType, op->getLoc(), circuitState), result, 0);
+      op, circuitState.lowerType(opType, op->getLoc()), result, 0);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
@@ -3635,7 +3632,7 @@ LogicalResult FIRRTLLowering::visitExpr(PlusArgsTestIntrinsicOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(PlusArgsValueIntrinsicOp op) {
   auto resultType = builder.getIntegerType(1);
-  auto type = lowerType(op.getResult().getType(), op.getLoc(), circuitState);
+  auto type = circuitState.lowerType(op.getResult().getType(), op.getLoc());
   if (!type)
     return failure();
 
@@ -3675,7 +3672,7 @@ LogicalResult FIRRTLLowering::visitExpr(BitsPrimOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
-  auto resultTy = lowerType(op.getType(), op.getLoc(), circuitState);
+  auto resultTy = circuitState.lowerType(op.getType(), op.getLoc());
   if (!resultTy)
     return failure();
 
@@ -3859,7 +3856,7 @@ LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(VerbatimExprOp op) {
-  auto resultTy = lowerType(op.getType(), op.getLoc(), circuitState);
+  auto resultTy = circuitState.lowerType(op.getType(), op.getLoc());
   if (!resultTy)
     return failure();
 
