@@ -33,7 +33,7 @@ public:
                        // Struct operations
                        StructCreateOp, StructExtractOp, StructInjectOp,
                        // Union operations
-                       UnionExtractOp,
+                       UnionCreateOp, UnionExtractOp,
                        // Cast operation
                        BitcastOp, ParamValueOp,
                        // Enum operations
@@ -70,6 +70,7 @@ public:
   HANDLE(StructCreateOp, Unhandled);
   HANDLE(StructExtractOp, Unhandled);
   HANDLE(StructInjectOp, Unhandled);
+  HANDLE(UnionCreateOp, Unhandled);
   HANDLE(UnionExtractOp, Unhandled);
   HANDLE(ArraySliceOp, Unhandled);
   HANDLE(ArrayGetOp, Unhandled);
