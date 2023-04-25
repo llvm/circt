@@ -2460,7 +2460,7 @@ struct FoldReadWritePorts : public mlir::RewritePattern {
 
           auto toField = rewriter.create<SubfieldOp>(newResult.getLoc(),
                                                      newResult, toName);
-          for (auto *op : result.getUsers()) {
+          for (auto *op : llvm::make_early_inc_range(result.getUsers())) {
             auto fromField = cast<SubfieldOp>(op);
             if (fromFieldIndex != fromField.getFieldIndex())
               continue;
@@ -2476,7 +2476,7 @@ struct FoldReadWritePorts : public mlir::RewritePattern {
 
         // Remove the wmode field, replacing it with dummy wires.
         auto wmodeFieldIndex = resultPortTy.getElementIndex("wmode");
-        for (auto *op : result.getUsers()) {
+        for (auto *op : llvm::make_early_inc_range(result.getUsers())) {
           auto wmodeField = cast<SubfieldOp>(op);
           if (wmodeFieldIndex != wmodeField.getFieldIndex())
             continue;
