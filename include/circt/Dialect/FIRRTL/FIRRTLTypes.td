@@ -46,6 +46,10 @@ def ForeignType : FIRRTLDialectType<CPred<"!$_self.isa<FIRRTLType>()">,
 
 def ClockType :
   FIRRTLDialectType<CPred<"$_self.isa<ClockType>()">, "clock",
+                    "::circt::firrtl::ClockType">;
+
+def NonConstClockType :
+  FIRRTLDialectType<CPred<"$_self.isa<ClockType>()">, "clock",
                     "::circt::firrtl::ClockType">,
   BuildableType<"::circt::firrtl::ClockType::get($_builder.getContext())">;
 
@@ -115,19 +119,21 @@ def UnsizedUIntType :
   FIRRTLDialectType<
     CPred<"$_self.isa<UIntType>() && "
           "$_self.cast<UIntType>().getWidth() == std::nullopt">,
-    "uint with uninferred width", "::circt::firrtl::UIntType">,
-  BuildableType<"::circt::firrtl::UIntType::get($_builder.getContext())">;
+    "uint with uninferred width", "::circt::firrtl::UIntType">;
 
-class SizedUIntType<int width> :
-  FIRRTLDialectType<
+class SizedUIntType<int width> : FIRRTLDialectType<
     CPred<"$_self.isa<UIntType>() && "
           "$_self.cast<UIntType>().getWidth() == " # width>,
-    width # "-bit uint", "::circt::firrtl::UIntType">,
+    width # "-bit uint", "::circt::firrtl::UIntType">;
+
+class NonConstSizedUIntType<int width> :
+  SizedUIntType<width>,
   BuildableType<
     "::circt::firrtl::UIntType::get($_builder.getContext(), " # width # ")">;
 
 def UInt1Type : SizedUIntType<1>;
 def UInt32Type : SizedUIntType<32>;
+def NonConstUInt1Type : NonConstSizedUIntType<1>;
 
 def UInt1OrUnsizedType : AnyTypeOf<[UInt1Type, UnsizedUIntType]>;
 

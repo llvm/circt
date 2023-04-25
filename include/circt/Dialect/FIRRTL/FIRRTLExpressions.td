@@ -766,7 +766,7 @@ def IsXIntrinsicOp : FIRRTLOp<"int.isX",
     }];
 
   let arguments = (ins FIRRTLBaseType:$arg);
-  let results = (outs UInt1Type:$result);
+  let results = (outs NonConstUInt1Type:$result);
   let hasFolder = 1;
   let assemblyFormat = "$arg attr-dict `:` type($arg)";
 }
@@ -776,7 +776,7 @@ def PlusArgsTestIntrinsicOp : FIRRTLOp<"int.plusargs.test",
   let summary = "SystemVerilog `$test$plusargs` call";
 
   let arguments = (ins StrAttr:$formatString);
-  let results = (outs UInt1Type:$found);
+  let results = (outs NonConstUInt1Type:$found);
   let assemblyFormat = "$formatString attr-dict";
 }
 
@@ -785,7 +785,7 @@ def PlusArgsValueIntrinsicOp : FIRRTLOp<"int.plusargs.value",
   let summary = "SystemVerilog `$value$plusargs` call";
 
   let arguments = (ins StrAttr:$formatString);
-  let results = (outs UInt1Type:$found, AnyType:$result);
+  let results = (outs NonConstUInt1Type:$found, AnyType:$result);
   let assemblyFormat = "$formatString attr-dict `:` type($result)";
 }
 

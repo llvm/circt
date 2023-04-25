@@ -559,10 +559,10 @@ def ClockGateIntrinsicOp : FIRRTLOp<"int.clock_gate", [Pure]> {
     affect the output clock.
   }];
 
-  let arguments = (ins ClockType:$input,
-                       UInt1Type:$enable,
-                       Optional<UInt1Type>:$test_enable);
-  let results = (outs ClockType:$output);
+  let arguments = (ins NonConstClockType:$input,
+                       NonConstUInt1Type:$enable,
+                       Optional<NonConstUInt1Type>:$test_enable);
+  let results = (outs NonConstClockType:$output);
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
   let assemblyFormat = [{
