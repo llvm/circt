@@ -145,7 +145,7 @@ circt::esi::capnp::CPPType::write(support::indenting_ostream &os) const {
       os.indent() << "// Unary types have convenience conversion operators\n";
       os.indent() << "operator ";
       emitCPPType(fieldType, os.getStream());
-      os.indent() << "() const { return " << fieldName << "; }\n\n";
+      os << "() const { return " << fieldName << "; }\n\n";
     } else
       isI0 = true;
   }
