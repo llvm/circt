@@ -44,10 +44,10 @@ hw.module @Loopback(%clk: i1, %loopback_tohw: !esi.channel<i8>) -> (loopback_fro
 // =============================================================================
 
 // CHECK: struct I8 {
-// CHECK:   uint8_t i;  // Actual type is i8
+// CHECK:   uint8_t i;  // MLIR type is i8
 // CHECK:   I8() = default;
 // CHECK:   I8(uint8_t i) : i(i) {}
-// CHECK:   operator uint8_t    () const { return i; }
+// CHECK:   operator uint8_t() const { return i; }
 // CHECK:   auto operator<=>(const I8 &other) const = default;
 // CHECK:   friend std::ostream &operator<<(std::ostream &os, const I8 &val) {
 // CHECK:     os << "I8(";
@@ -59,8 +59,8 @@ hw.module @Loopback(%clk: i1, %loopback_tohw: !esi.channel<i8>) -> (loopback_fro
 // CHECK:   using CPType = ::I8;
 
 // CHECK: struct Struct17656501409672388976 {
-// CHECK:   uint32_t addr;      // Actual type is i32
-// CHECK:   uint8_t data;       // Actual type is i8
+// CHECK:   uint32_t addr;      // MLIR type is i32
+// CHECK:   uint8_t data;       // MLIR type is i8
 // CHECK:   auto operator<=>(const Struct17656501409672388976 &other) const = default;
 // CHECK:   friend std::ostream &operator<<(std::ostream &os, const Struct17656501409672388976 &val) {
 // CHECK:     os << "Struct17656501409672388976(";
