@@ -1018,6 +1018,33 @@ hw.module @structExtractFromTemporary(%cond: i1, %a: !hw.struct<c: i1>, %b: !hw.
     hw.output %1 : i1
 }
 
+// CHECK-LABEL: module unionCreateNoPadding(
+// CHECK-NEXT:    input [1:0] in,
+// CHECK-NEXT:    output union packed { struct packed {logic a; logic [0:0] __post_padding_a;} a;logic [1:0] b;} out
+hw.module @unionCreateNoPadding(%in: i2) -> (out: !hw.union<a: i1, b: i2>) {
+  // CHECK: assign out = in;
+  %0 = hw.union_create "b", %in : !hw.union<a: i1, b: i2>
+  hw.output %0 : !hw.union<a: i1, b: i2>
+}
+
+// CHECK-LABEL: module unionCreatePadding(
+// CHECK-NEXT:    input in,
+// CHECK-NEXT:    output union packed { struct packed {logic a; logic [0:0] __post_padding_a;} a;logic [1:0] b;} out
+hw.module @unionCreatePadding(%in: i1) -> (out: !hw.union<a: i1, b: i2>) {
+  // CHECK: assign out = {in, 1'h0};
+  %0 = hw.union_create "a", %in : !hw.union<a: i1, b: i2>
+  hw.output %0 : !hw.union<a: i1, b: i2>
+}
+
+// CHECK-LABEL: module unionCreateZeroWidthElement(
+// CHECK-NEXT:    // input /*Zero Width*/ in,
+// CHECK-NEXT:    output union packed {/*a: Zero Width;*/ logic [1:0] b;} out
+hw.module @unionCreateZeroWidthElement(%in: i0) -> (out: !hw.union<a: i0, b: i2>) {
+  // CHECK: assign out = 2'h0;
+  %0 = hw.union_create "a", %in : !hw.union<a: i0, b: i2>
+  hw.output %0 : !hw.union<a: i0, b: i2>
+}
+
 // CHECK-LABEL: unionExtractFromTemporary
 hw.module @unionExtractFromTemporary(%cond: i1, %a: !hw.union<c: i1>, %b: !hw.union<c: i1>) -> (out: i1) {
     %0 = comb.mux %cond, %a, %b : !hw.union<c: i1>

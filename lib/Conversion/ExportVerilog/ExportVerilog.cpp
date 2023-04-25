@@ -600,7 +600,7 @@ static bool isExpressionUnableToInline(Operation *op,
 
   // StructCreateOp needs to be assigning to a named temporary so that types
   // are inferred properly by verilog
-  if (isa<StructCreateOp>(op))
+  if (isa<StructCreateOp, UnionCreateOp>(op))
     return true;
 
   // Aggregate literal syntax only works in an assignment expression, where
@@ -1967,6 +1967,7 @@ private:
   SubExprInfo visitTypeOp(StructCreateOp op);
   SubExprInfo visitTypeOp(StructExtractOp op);
   SubExprInfo visitTypeOp(StructInjectOp op);
+  SubExprInfo visitTypeOp(UnionCreateOp op);
   SubExprInfo visitTypeOp(UnionExtractOp op);
   SubExprInfo visitTypeOp(EnumCmpOp op);
   SubExprInfo visitTypeOp(EnumConstantOp op);
@@ -2860,6 +2861,49 @@ SubExprInfo ExprEmitter::visitTypeOp(EnumCmpOp op) {
   // regardless of the operands".
   result.signedness = IsUnsigned;
   return result;
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(UnionCreateOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  // Check if this union type has been padded.
+  auto fieldName = op.getFieldAttr();
+  auto unionType = cast<UnionType>(getCanonicalType(op.getType()));
+  auto unionWidth = hw::getBitWidth(unionType);
+  auto element = unionType.getFieldInfo(fieldName.getValue());
+  auto elementWidth = hw::getBitWidth(element.type);
+
+  // If the element is 0 width, just fill the union with 0s.
+  if (!elementWidth) {
+    ps.addAsString(unionWidth);
+    ps << "'h0";
+    return {Unary, IsUnsigned};
+  }
+
+  // If the element has no padding, emit it directly.
+  if (elementWidth == unionWidth) {
+    emitSubExpr(op.getInput(), Selection);
+    return {Unary, IsUnsigned};
+  }
+
+  // Emit the value as a bitconcat, supplying 0 for the padding bits.
+  ps << "{";
+  ps.scopedBox(PP::ibox0, [&]() {
+    if (auto prePadding = element.offset) {
+      ps.addAsString(prePadding);
+      ps << "'h0," << PP::space;
+    }
+    emitSubExpr(op.getInput(), Selection);
+    if (auto postPadding = unionWidth - elementWidth - element.offset) {
+      ps << "," << PP::space;
+      ps.addAsString(postPadding);
+      ps << "'h0";
+    }
+    ps << "}";
+  });
+
+  return {Unary, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(UnionExtractOp op) {
