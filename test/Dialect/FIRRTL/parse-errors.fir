@@ -50,6 +50,13 @@ FIRRTL version 1.1.0 circuit test :
 
 ;// -----
 
+; expected-error @below {{FIRRTL version must be >=0.2.0}}
+FIRRTL version 0.1.0
+circuit test :
+  module test :
+
+;// -----
+
 circuit test test : ; expected-error {{expected ':' in circuit definition}}
 
 ;// -----

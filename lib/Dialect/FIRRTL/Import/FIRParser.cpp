@@ -125,6 +125,16 @@ struct FIRVersion {
   }
 };
 
+/// Method to enable printing of FIRVersions
+template <typename T>
+static T &operator<<(T &os, const FIRVersion &version) {
+  os << version.major << "." << version.minor << "." << version.patch;
+  return os;
+}
+
+/// The minimum FIRRTL Version supported by this compiler.
+FIRVersion minimumFIRVersion{0, 2, 0};
+
 /// This class implements logic common to all levels of the parser, including
 /// things like types and helper logic.
 struct FIRParser {
@@ -578,12 +588,15 @@ ParseResult FIRParser::parseVersionLit(FIRVersion &version,
   if (a.getAsInteger(10, aInt) || b.getAsInteger(10, bInt) ||
       c.getAsInteger(10, cInt))
     return emitError("failed to parse version string"), failure();
-  consumeToken(FIRToken::version);
   version.major = aInt.getLimitedValue(UINT32_MAX);
   version.minor = bInt.getLimitedValue(UINT32_MAX);
   version.patch = cInt.getLimitedValue(UINT32_MAX);
   if (version.major != aInt || version.minor != bInt || version.patch != cInt)
     return emitError("integers out of range"), failure();
+  if (FIRVersion::compare(version, minimumFIRVersion) < 0)
+    return emitError() << "FIRRTL version must be >=" << minimumFIRVersion,
+           failure();
+  consumeToken(FIRToken::version);
   return success();
 }
 
