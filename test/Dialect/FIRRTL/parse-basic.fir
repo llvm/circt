@@ -146,9 +146,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NOT: firrtl.matchingconnect %reset
     reset is invalid
 
-    ; CHECK: %out_0 = firrtl.wire interesting_name : !firrtl.bundle<member: bundle<"0": bundle<clock: clock, reset: uint<1>>>>
-    wire out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
-
     ; CHECK: %_t_3 = firrtl.wire interesting_name : !firrtl.vector<uint<1>, 12>
     ; CHECK: [[A:%.+]] = firrtl.subindex %_t_3[0] : !firrtl.vector<uint<1>, 12>
     ; CHECK: %_t_4 = firrtl.wire interesting_name : !firrtl.vector<uint<1>, 12>
@@ -1302,32 +1299,6 @@ circuit Foo_v3p0p0:
     node `a` = `0`
     ; CHECK-NEXT: %b = firrtl.node {{.+}}%a
     node b = a
-
-;// -----
-
-FIRRTL version 1.2.0
-circuit Foo_v1p9p9:
-  module Foo_v1p9p9:
-    input a: UInt<1>
-    output b: UInt<1>
-    output auto : UInt<1>
-
-    ; CHECK: firrtl.matchingconnect %b, %a
-    b <- a
-
-    ; CHECK: [[a0:%.+]] = firrtl.subfield %bundleWithAnalog[a]
-    ; CHECK: [[a1:%.+]] = firrtl.subfield %bundleWithAnalog[a]
-    ; CHECK: firrtl.attach [[a1]], [[a0]]
-    wire bundleWithAnalog : {a: Analog<1>}
-    bundleWithAnalog <- bundleWithAnalog
-
-
-    ; CHECK: [[A:%.+]] = firrtl.subfield %out_0[member] : !firrtl.bundle<member: bundle<"0": bundle<clock: clock, reset: uint<1>>>>
-    ; CHECK: [[B:%.+]] = firrtl.subfield [[A]]["0"] : !firrtl.bundle<"0": bundle<clock: clock, reset: uint<1>>>
-    ; CHECK: [[C:%.+]] = firrtl.subfield [[B]][reset] : !firrtl.bundle<clock: clock, reset: uint<1>>
-    ; CHECK: firrtl.matchingconnect %auto, [[C]] : !firrtl.uint<1>
-    wire out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
-    auto <- out_0.member.0.reset @[Field 173:49]
 
 ;// -----
 ; Check reference expressions using literal identifiers or keywords.

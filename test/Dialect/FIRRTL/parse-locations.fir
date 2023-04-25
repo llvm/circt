@@ -46,7 +46,7 @@ circuit MyModule :  @[CIRCUIT.scala 127]
     ; CHECK: %2 = firrtl.subfield %1["0"] {{.*}} loc("Field":173:49)
     ; CHECK: %3 = firrtl.subfield %2[reset] : {{.*}} loc("Field":173:49)
     ; CHECK: firrtl.matchingconnect %0, %3 : {{.*}} loc("Field":173:49)
-    auto.out_0 <- out_0.member.0.reset @[Field 173:49]
+    auto.out_0 <= out_0.member.0.reset @[Field 173:49]
 
     ; Fused locators: https://github.com/llvm/circt/issues/224
 
