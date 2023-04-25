@@ -642,9 +642,7 @@ conditions for macro replacement are as follows:
 1. `–replSeqMem` option is passed and
 2. `readLatency == 1`  and
 3. `writeLatency == 1` and
-4. `numWritePorts + numReadWritePorts == 1` and
-5. `numReadPorts <= 1` and
-6. `width(data) > 0`
+4. `width(data) > 0`
 
 Any `MemOp` not satisfying the above conditions is lowered to Register vector.
 
