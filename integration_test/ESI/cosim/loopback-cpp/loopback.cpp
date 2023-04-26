@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include "esi/backends/cosim/capnp.h"
+#include "esi/cosim/backends/capnp.h"
 
 #include ESI_COSIM_CAPNP_H
 
@@ -38,7 +38,7 @@ int runTest(TBackend &backend) {
 
 int run_cosim_test(const std::string &host, unsigned port) {
   // Run test with cosimulation backend.
-  esi::runtime::cosim::CosimBackend cosim(host, port);
+  esi::runtime::cosim::CapnpBackend cosim(host, port);
   return runTest(cosim);
 }
 

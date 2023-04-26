@@ -1,4 +1,4 @@
-//===- capnp.h - ESI CPP Capnproto runtime layer ----------------*- C++ -*-===//
+//===- capnp.h - ESI C++ cosimulation Cap'n'proto backend -------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This is a specialization of the ESI CPP interface to target Capnproto
-// cosimulation.
+// This is a specialization of the ESI C++ cosimulation API for the Cap'n'proto
+// backend.
 //
 // DO NOT EDIT!
 // This file is distributed as part of an ESI package. The source for this file
@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "esi/esi.h"
+#include "esi/cosim/esi.h"
 #include "refl.hpp"
 
 #include <capnp/dynamic.h>
@@ -87,29 +87,29 @@ struct EsiDpiInterfaceDesc {
 using EsiDpiInterfaceDesc = detail::EsiDpiInterfaceDesc;
 
 template <typename WriteType, typename ReadType>
-class CosimReadWritePort;
+class CapnpReadWritePort;
 
 template <typename WriteType>
-class CosimWritePort;
+class CapnpWritePort;
 
 template <typename ReadType>
-class CosimReadPort;
+class CapnpReadPort;
 
-class CosimBackend {
+class CapnpBackend {
 public:
   // Using directives to point the base class implementations to the cosim
   // port implementations.
 
   template <typename WriteType, typename ReadType>
-  using ReadWritePort = CosimReadWritePort<WriteType, ReadType>;
+  using ReadWritePort = CapnpReadWritePort<WriteType, ReadType>;
 
   template <typename WriteType>
-  using WritePort = CosimWritePort<WriteType>;
+  using WritePort = CapnpWritePort<WriteType>;
 
   template <typename ReadType>
-  using ReadPort = CosimReadPort<ReadType>;
+  using ReadPort = CapnpReadPort<ReadType>;
 
-  CosimBackend(const std::string &host, uint64_t hostPort) {
+  CapnpBackend(const std::string &host, uint64_t hostPort) {
     ezClient = std::make_unique<capnp::EzRpcClient>(host, hostPort);
     dpiClient = std::make_unique<CosimDpiServer::Client>(
         ezClient->getMain<CosimDpiServer>());
@@ -195,12 +195,12 @@ protected:
 };
 
 template <typename WriteType, typename ReadType>
-class CosimReadWritePort : public Port<CosimBackend> {
-  using BasePort = Port<CosimBackend>;
+class CapnpReadWritePort : public Port<CapnpBackend> {
+  using BasePort = Port<CapnpBackend>;
 
 public:
-  CosimReadWritePort(const std::vector<std::string> &clientPath,
-                     CosimBackend &backend, const std::string &implType)
+  CapnpReadWritePort(const std::vector<std::string> &clientPath,
+                     CapnpBackend &backend, const std::string &implType)
       : BasePort(clientPath, backend, implType) {}
 
   ReadType operator()(WriteType arg) {
@@ -236,12 +236,12 @@ private:
 };
 
 template <typename WriteType>
-class CosimWritePort : public Port<CosimBackend> {
-  using BasePort = Port<CosimBackend>;
+class CapnpWritePort : public Port<CapnpBackend> {
+  using BasePort = Port<CapnpBackend>;
 
 public:
-  CosimWritePort(const std::vector<std::string> &clientPath,
-                 CosimBackend &backend, const std::string &implType)
+  CapnpWritePort(const std::vector<std::string> &clientPath,
+                 CapnpBackend &backend, const std::string &implType)
       : BasePort(clientPath, backend, implType) {}
 
   void initBackend() override {
@@ -263,12 +263,12 @@ private:
 };
 
 template <typename ReadType>
-class CosimReadPort : public Port<CosimBackend> {
-  using BasePort = Port<CosimBackend>;
+class CapnpReadPort : public Port<CapnpBackend> {
+  using BasePort = Port<CapnpBackend>;
 
 public:
-  CosimReadPort(const std::vector<std::string> &clientPath,
-                CosimBackend &backend, const std::string &implType)
+  CapnpReadPort(const std::vector<std::string> &clientPath,
+                CapnpBackend &backend, const std::string &implType)
       : BasePort(clientPath, backend, implType) {}
 
   void initBackend() override {

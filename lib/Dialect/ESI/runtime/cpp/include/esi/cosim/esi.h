@@ -1,4 +1,4 @@
-//===- esi.h - ESI CPP runtime API ------------------------------*- C++ -*-===//
+//===- esi.h - ESI C++ cosimulation API -------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,11 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the ESI C++ runtime API which backends must adhere to.
+// This file defines the ESI C++ cosimulation API which all cosimulation
+// backends must adhere to.
 //
 // DO NOT EDIT!
 // This file is distributed as part of an ESI package. The source for this file
-// should always be modified within CIRCT (lib/dialect/ESI/runtime/cpp/esi.h).
+// should always be modified within CIRCT.
 //
 //===----------------------------------------------------------------------===//
 
@@ -25,9 +26,24 @@
 namespace esi {
 namespace runtime {
 
-// ESI CPP API goes here. This is general for all backends.
+/*
+// A backend is anything that implements all of the TBackend:: types and functions
+// used in this file, e.g.:
 
-// Bas class for all ports.
+class TBackend {
+public:
+  template <typename WriteType, typename ReadType>
+  using ReadWritePort = ...
+
+  template <typename WriteType>
+  using WritePort = ...
+
+  template <typename ReadType>
+  using ReadPort = ...
+};
+*/
+
+// Base class for all ports.
 template <typename TBackend>
 class Port {
 

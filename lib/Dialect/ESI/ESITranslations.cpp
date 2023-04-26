@@ -2,7 +2,7 @@
 //
 // ESI translations:
 // - Cap'nProto schema generation
-// - C++ API generation
+// - C++ API cosimulation generation
 //
 //===----------------------------------------------------------------------===//
 

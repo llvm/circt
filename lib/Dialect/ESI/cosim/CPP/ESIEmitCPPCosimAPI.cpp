@@ -139,7 +139,7 @@ LogicalResult CosimCPPAPI::emit() {
   ios << "#include \"refl.hpp\"\n\n";
 
   ios << "#include <cstdint>\n";
-  ios << "#include \"esi/backends/cosim/capnp.h\"\n";
+  ios << "#include \"esi/cosim/backends/capnp.h\"\n";
   ios << "\n// Include the generated Cap'nProto schema header. This must "
          "defined "
          "by the build system.\n";
