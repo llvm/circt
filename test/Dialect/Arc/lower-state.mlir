@@ -282,9 +282,7 @@ hw.module private @MemoryPortRegression(%clock: i1, %reset: i1, %in: i3) -> (x: 
   hw.output %4 : i3
 }
 arc.define @Queue_arc_0(%arg0: i1) -> i1 {
-  %true = hw.constant true
-  %0 = comb.xor %arg0, %true : i1
-  arc.output %0 : i1
+  arc.output %arg0 : i1
 }
 arc.define @Queue_arc_1(%arg0: i3) -> i3 {
   arc.output %arg0 : i3
