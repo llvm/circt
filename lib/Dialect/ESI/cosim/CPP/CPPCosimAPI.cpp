@@ -100,8 +100,7 @@ static bool isZeroWidthInt(Type type) {
          (type.isa<IntegerType>() && type.cast<IntegerType>().getWidth() == 0);
 }
 
-LogicalResult
-CPPType::write(mlir::raw_indented_ostream &os) const {
+LogicalResult CPPType::write(mlir::raw_indented_ostream &os) const {
 
   os << "struct " << name() << " {\n";
   os.indent();
@@ -174,8 +173,8 @@ CPPType::write(mlir::raw_indented_ostream &os) const {
 
   // Stream operator
   os << "// Stream operator\n";
-  os << "friend std::ostream &operator<<(std::ostream &os, const "
-              << name() << " &val) {\n";
+  os << "friend std::ostream &operator<<(std::ostream &os, const " << name()
+     << " &val) {\n";
   os.indent();
   os << "os << \"" << name() << "(\";\n";
   for (auto [idx, field] : llvm::enumerate(fieldTypes)) {
@@ -214,15 +213,13 @@ CPPType::write(mlir::raw_indented_ostream &os) const {
   return success();
 }
 
-
 bool CPPType::isSupported() const {
   // C++ doesn't support esi.any (yet)
   return !type.isa<esi::AnyType>() && ESICosimType::isSupported();
 }
 
-void CPPType::writeReflection(
-    mlir::raw_indented_ostream &os,
-    llvm::ArrayRef<std::string> namespaces) const {
+void CPPType::writeReflection(mlir::raw_indented_ostream &os,
+                              llvm::ArrayRef<std::string> namespaces) const {
   os << "REFL_AUTO (\n";
   os.indent();
 
@@ -250,8 +247,8 @@ void CPPType::writeReflection(
 // Endpoint class implementation.
 //===----------------------------------------------------------------------===//
 
-LogicalResult CPPEndpoint::writeType(
-    Location loc, mlir::raw_indented_ostream &os) const {
+LogicalResult CPPEndpoint::writeType(Location loc,
+                                     mlir::raw_indented_ostream &os) const {
   auto emitType = [&](llvm::StringRef dir, mlir::Type type) -> LogicalResult {
     type = esi::innerType(type);
     auto cppTypeIt = types.find(type);
@@ -288,25 +285,24 @@ LogicalResult CPPEndpoint::writeType(
   return success();
 }
 
-LogicalResult CPPEndpoint::writeDecl(
-    Location loc, mlir::raw_indented_ostream &os) const {
+LogicalResult CPPEndpoint::writeDecl(Location loc,
+                                     mlir::raw_indented_ostream &os) const {
   os << "using " << getTypeName() << " = ";
   if (failed(writeType(loc, os)))
     return failure();
   os << ";\n";
   os << "using " << getPointerTypeName() << " = std::shared_ptr<"
-              << getTypeName() << ">;\n\n";
+     << getTypeName() << ">;\n\n";
   return success();
 }
 
-LogicalResult
-CPPService::write(mlir::raw_indented_ostream &os) {
+LogicalResult CPPService::write(mlir::raw_indented_ostream &os) {
   auto loc = service.getLoc();
   os << "template <typename TBackend>\n";
   os << "class " << name() << " : public esi::runtime::Module<TBackend> {\n";
   os.indent();
   os << "  using Port = esi::runtime::Port<TBackend>;\n"
-              << "public:\n";
+     << "public:\n";
   os << "// Port type declarations.\n";
 
   for (auto &ep : endpoints)
@@ -319,8 +315,7 @@ CPPService::write(mlir::raw_indented_ostream &os) {
     os << ep->getPointerTypeName() << " " << ep->getName();
   });
   os << ")\n";
-  os
-      << "// Initialize base class with knowledge of all endpoints.\n";
+  os << "// Initialize base class with knowledge of all endpoints.\n";
   os << ": esi::runtime::Module<TBackend>({";
   llvm::interleaveComma(endpoints, os, [&](auto &ep) { os << ep->getName(); });
   os << "}),\n";
@@ -340,9 +335,8 @@ CPPService::write(mlir::raw_indented_ostream &os) {
   return success();
 }
 
-CPPService::CPPService(
-    esi::ServiceDeclOpInterface service,
-    const llvm::MapVector<mlir::Type, CPPType> &types)
+CPPService::CPPService(esi::ServiceDeclOpInterface service,
+                       const llvm::MapVector<mlir::Type, CPPType> &types)
     : service(service) {
   llvm::SmallVector<esi::ServicePortInfo> portList;
   service.getPortList(portList);
@@ -350,15 +344,13 @@ CPPService::CPPService(
     endpoints.push_back(std::make_shared<CPPEndpoint>(portInfo, types));
 }
 
-llvm::SmallVector<esi::ServicePortInfo>
-CPPService::getPorts() {
+llvm::SmallVector<esi::ServicePortInfo> CPPService::getPorts() {
   llvm::SmallVector<ServicePortInfo> ports;
   getService().getPortList(ports);
   return ports;
 }
 
-CPPEndpoint *
-CPPService::getPort(llvm::StringRef portName) {
+CPPEndpoint *CPPService::getPort(llvm::StringRef portName) {
   auto it = llvm::find_if(
       endpoints, [&](auto &ep) { return ep->portInfo.name == portName; });
 
@@ -368,8 +360,7 @@ CPPService::getPort(llvm::StringRef portName) {
   return it->get();
 }
 
-LogicalResult
-CPPDesignModule::write(mlir::raw_indented_ostream &ios) {
+LogicalResult CPPDesignModule::write(mlir::raw_indented_ostream &ios) {
   ios << "template <typename TBackend>\n";
   ios << "class " << name() << " {\n";
   ios << "public:\n";
@@ -400,7 +391,7 @@ CPPDesignModule::write(mlir::raw_indented_ostream &ios) {
     info.cppMemberName = lowercase(cppServiceIt->name().str());
     info.clients = service.getClients();
     ios << "std::unique_ptr<" << cppServiceIt->name() << "<TBackend>> "
-                 << info.cppMemberName << ";\n";
+        << info.cppMemberName << ";\n";
     innerServices[cppServiceIt] = info;
   }
 
@@ -454,7 +445,7 @@ CPPDesignModule::write(mlir::raw_indented_ostream &ios) {
     });
 
     ios << serviceInfo.cppMemberName << " = std::make_unique<"
-                 << innerCppService->name() << "<TBackend>>(";
+        << innerCppService->name() << "<TBackend>>(";
     llvm::interleaveComma(portNames, ios, [&](auto &portName) {
       ios << portName.clientPortName;
     });

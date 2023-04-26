@@ -72,7 +72,8 @@ void ESIAddCPPCosimAPIPass::runOnOperation() {
   auto verbatim = b.create<sv::VerbatimOp>(b.getUnknownLoc(),
                                            StringAttr::get(ctxt, os.str()));
   if (!outputFile.empty()) {
-    auto outputFileAttr = circt::hw::OutputFileAttr::getFromFilename(ctxt, outputFile);
+    auto outputFileAttr =
+        circt::hw::OutputFileAttr::getFromFilename(ctxt, outputFile);
     verbatim->setAttr("output_file", outputFileAttr);
   }
 

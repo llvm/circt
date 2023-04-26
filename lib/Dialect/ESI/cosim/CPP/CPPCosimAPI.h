@@ -15,10 +15,10 @@
 #define CIRCT_DIALECT_ESI_COSIM_CPPAPI_CPPCOSIMAPI_H
 
 #include "circt/Dialect/ESI/ESIOps.h"
+#include "circt/Dialect/ESI/cosim/APIUtilities.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Support/IndentedOstream.h"
 #include "llvm/ADT/MapVector.h"
-#include "circt/Dialect/ESI/cosim/APIUtilities.h"
 
 #include <memory>
 
@@ -49,7 +49,6 @@ public:
   // should indicate the namespace wherein this type was emitted.
   void writeReflection(mlir::raw_indented_ostream &os,
                        llvm::ArrayRef<std::string> namespaces) const;
-
 };
 
 struct CPPEndpoint {

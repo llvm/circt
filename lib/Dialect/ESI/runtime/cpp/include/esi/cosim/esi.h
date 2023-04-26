@@ -27,7 +27,8 @@ namespace esi {
 namespace runtime {
 
 /*
-// A backend is anything that implements all of the TBackend:: types and functions
+// A backend is anything that implements all of the TBackend:: types and
+functions
 // used in this file, e.g.:
 
 class TBackend {

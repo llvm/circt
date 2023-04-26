@@ -87,7 +87,7 @@ LogicalResult CosimCPPAPI::visitEndpoint(CosimEndpointOp ep) {
       dirTypeSchemaIt = types.insert({dirType, dirTypeSchema}).first;
     }
 
-    ios << "//   " << (isSend ? "Send" : "Recv")  << "\n";
+    ios << "//   " << (isSend ? "Send" : "Recv") << "\n";
     return success();
   };
 
@@ -221,8 +221,7 @@ LogicalResult CosimCPPAPI::emitDesignModules() {
 
   SmallVector<CPPDesignModule> designMods;
   for (auto &mod : modsWithLocalServices)
-    designMods.push_back(
-        CPPDesignModule(mod.first, mod.second, cppServices));
+    designMods.push_back(CPPDesignModule(mod.first, mod.second, cppServices));
 
   // Write modules
   for (auto &designMod : designMods) {
@@ -233,8 +232,9 @@ LogicalResult CosimCPPAPI::emitDesignModules() {
   return success();
 }
 
-LogicalResult circt::esi::cppcosimapi::exportCosimCPPAPI(ModuleOp module,
-                                            llvm::raw_ostream &os) {
+LogicalResult
+circt::esi::cppcosimapi::exportCosimCPPAPI(ModuleOp module,
+                                           llvm::raw_ostream &os) {
   CosimCPPAPI api(module, os);
   return api.emit();
 }

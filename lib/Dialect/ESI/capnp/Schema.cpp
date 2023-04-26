@@ -1097,7 +1097,8 @@ circt::esi::capnp::CapnpTypeSchema::write(llvm::raw_ostream &os) const {
   return s->write(os);
 }
 
-void circt::esi::capnp::CapnpTypeSchema::writeMetadata(llvm::raw_ostream &os) const {
+void circt::esi::capnp::CapnpTypeSchema::writeMetadata(
+    llvm::raw_ostream &os) const {
   os << name() << " ";
   emitCapnpID(os, typeID());
 }

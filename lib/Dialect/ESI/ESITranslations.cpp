@@ -130,15 +130,13 @@ LogicalResult ExportCosimSchema::emit() {
   os << "#########################################################\n";
 
   // We need a sorted list to ensure determinism.
-  llvm::sort(types.begin(), types.end(), [](auto &a, auto &b) {
-    return a->typeID() > b->typeID();
-  });
+  llvm::sort(types.begin(), types.end(),
+             [](auto &a, auto &b) { return a->typeID() > b->typeID(); });
 
   // Compute and emit the capnp file id.
   uint64_t fileHash = 2544816649379317016; // Some random number.
   for (auto &schema : types)
-    fileHash =
-        llvm::hashing::detail::hash_16_bytes(fileHash, schema->typeID());
+    fileHash = llvm::hashing::detail::hash_16_bytes(fileHash, schema->typeID());
   // Capnp IDs always have a '1' high bit.
   fileHash |= 0x8000000000000000;
   capnp::emitCapnpID(os, fileHash) << ";\n\n";
@@ -178,7 +176,6 @@ LogicalResult circt::esi::exportCosimSchema(ModuleOp module,
 }
 
 #endif
-
 
 //===----------------------------------------------------------------------===//
 // Register all ESI translations.
