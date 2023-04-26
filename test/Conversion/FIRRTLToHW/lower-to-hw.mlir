@@ -857,6 +857,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.strictconnect %sink, %source : !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>
   }
 
+  // CHECK-LABEL: hw.module private @SimpleEnumCreate() -> (sink: !hw.enum<a, b, c>) { 
+  // CHECK-NEXT:   %a = hw.enum.constant a : !hw.enum<a, b, c> 
+  // CHECK-NEXT:   hw.output %a : !hw.enum<a, b, c> 
+  // CHECK-NEXT: }
+  firrtl.module private @SimpleEnumCreate(in %input: !firrtl.uint<0>,
+                                         out %sink: !firrtl.enum<a: uint<0>, b: uint<0>, c: uint<0>>) {
+    %0 = firrtl.enumcreate a(%input) : !firrtl.enum<a: uint<0>, b: uint<0>, c: uint<0>>
+    firrtl.strictconnect %sink, %0 : !firrtl.enum<a: uint<0>, b: uint<0>, c: uint<0>>
+  }
+
   // CHECK-LABEL:  hw.module private @DataEnum(%source: !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>) -> (sink: !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>) {
   // CHECK-NEXT:    %tag = hw.struct_extract %source["tag"] : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>
   // CHECK-NEXT:    %a = hw.enum.constant a : !hw.enum<a, b, c> 
@@ -870,6 +880,18 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %0 = firrtl.istag %source a : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
     %1 = firrtl.subtag %source[a] : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
     firrtl.strictconnect %sink, %source : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
+  }
+
+  // CHECK-LABEL: hw.module private @DataEnumCreate(%input: i2) -> (sink: !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>) { 
+  // CHECK-NEXT:   %a = hw.enum.constant a : !hw.enum<a, b, c> 
+  // CHECK-NEXT:   %0 = hw.union_create "a", %input : !hw.union<a: i2, b: i1, c: i32> 
+  // CHECK-NEXT:   %1 = hw.struct_create (%a, %0) : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>> 
+  // CHECK-NEXT:   hw.output %1 : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>> 
+  // CHECK-NEXT: } 
+  firrtl.module private @DataEnumCreate(in %input: !firrtl.uint<2>,
+                                       out %sink: !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>) {
+    %0 = firrtl.enumcreate a (%input) : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
+    firrtl.strictconnect %sink, %0 : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
   }
 
   // CHECK-LABEL: IsInvalidIssue572

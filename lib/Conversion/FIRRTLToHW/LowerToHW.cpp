@@ -1532,6 +1532,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(SubfieldOp op);
   LogicalResult visitExpr(VectorCreateOp op);
   LogicalResult visitExpr(BundleCreateOp op);
+  LogicalResult visitExpr(FEnumCreateOp op);
   LogicalResult visitExpr(AggregateConstantOp op);
   LogicalResult visitExpr(IsTagOp op);
   LogicalResult visitExpr(SubtagOp op);
@@ -2700,6 +2701,29 @@ LogicalResult FIRRTLLowering::visitExpr(BundleCreateOp op) {
     operands.push_back(val);
   }
   return setLoweringTo<hw::StructCreateOp>(op, resultType, operands);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(FEnumCreateOp op) {
+  // Zero width values must be lowered to nothing.
+  if (isZeroBitFIRRTLType(op.getType()))
+    return setLowering(op, Value());
+
+  auto input = getLoweredValue(op.getInput());
+  auto tagName = op.getFieldNameAttr();
+  auto type = lowerType(op.getType());
+
+  if (auto structType = dyn_cast<hw::StructType>(type)) {
+    auto enumType = structType.getFieldType("tag");
+    auto enumAttr = hw::EnumFieldAttr::get(op.getLoc(), tagName, enumType);
+    auto enumOp = builder.create<hw::EnumConstantOp>(enumAttr);
+    auto unionType = structType.getFieldType("body");
+    auto unionOp = builder.create<hw::UnionCreateOp>(unionType, tagName, input);
+    SmallVector<Value> operands = {enumOp.getResult(), unionOp.getResult()};
+    return setLoweringTo<hw::StructCreateOp>(op, structType, operands);
+  }
+
+  return setLoweringTo<hw::EnumConstantOp>(
+      op, hw::EnumFieldAttr::get(op.getLoc(), tagName, type));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(AggregateConstantOp op) {
