@@ -48,8 +48,8 @@ static LogicalResult emitPortType(Location location, FIRRTLType type,
     // Include the direction if the type is not composed of flips and analog
     // signals and we haven't already emitted the direction before recursing to
     // this field.
-    bool emitDirection =
-        baseType.isPassive() && !baseType.containsAnalog() && !hasEmittedDirection;
+    bool emitDirection = baseType.isPassive() && !baseType.containsAnalog() &&
+                         !hasEmittedDirection;
     if (emitDirection) {
       switch (direction) {
       case Direction::In:

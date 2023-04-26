@@ -2067,7 +2067,8 @@ FIRRTLBaseType MemOp::getDataType() {
   assert(getNumResults() != 0 && "Mems with no read/write ports are illegal");
 
   if (auto refType = getResult(0).getType().dyn_cast<RefType>())
-    return cast<FIRRTLBaseType>(refType.getType().cast<FVectorType>().getElementType());
+    return cast<FIRRTLBaseType>(
+        refType.getType().cast<FVectorType>().getElementType());
   auto firstPortType = getResult(0).getType().cast<FIRRTLBaseType>();
 
   StringRef dataFieldName = "data";
@@ -2835,7 +2836,8 @@ static bool checkAggConstant(Operation *op, Attribute attr,
       return false;
     }
     return llvm::all_of(attrlist, [&array, op](Attribute attr) {
-      return checkAggConstant(op, attr, cast<FIRRTLBaseType>(array.getElementType()));
+      return checkAggConstant(op, attr,
+                              cast<FIRRTLBaseType>(array.getElementType()));
     });
   }
   if (auto bundle = type.dyn_cast<BundleType>()) {
@@ -4355,8 +4357,9 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
   auto fieldIdx =
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
 
-   if (inType.containsReference())
-    return emitInferRetTypeError(loc, "unsupported nested reference type found");
+  if (inType.containsReference())
+    return emitInferRetTypeError(loc,
+                                 "unsupported nested reference type found");
 
   // TODO: Determine ref.sub + rwprobe behavior, test.
   // Probably best to demote to non-rw, but that has implications
@@ -4375,8 +4378,9 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
                                    "subfield element index is greater than "
                                    "the number of fields in the bundle type");
     }
-    return RefType::get(cast<FIRRTLBaseType>(bundleType.getElement(fieldIdx).type),
-                        refType.getForceable());
+    return RefType::get(
+        cast<FIRRTLBaseType>(bundleType.getElement(fieldIdx).type),
+        refType.getForceable());
   }
 
   return emitInferRetTypeError(

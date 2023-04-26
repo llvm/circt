@@ -67,8 +67,8 @@ struct FlatBundleFieldEntry {
   /// This indicates whether the field was flipped to be an output.
   bool isOutput;
 
-  FlatBundleFieldEntry(const FIRRTLType &type, size_t index,
-                       unsigned fieldID, StringRef suffix, bool isOutput)
+  FlatBundleFieldEntry(const FIRRTLType &type, size_t index, unsigned fieldID,
+                       StringRef suffix, bool isOutput)
       : type(type), index(index), fieldID(fieldID), suffix(suffix),
         isOutput(isOutput) {}
 
