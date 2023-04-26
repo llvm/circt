@@ -924,8 +924,9 @@ struct circt::firrtl::detail::BundleTypeStorage
 
   BundleTypeStorage(ArrayRef<BundleType::BundleElement> elements, bool isConst)
       : detail::FIRRTLBaseTypeStorage(isConst),
-        elements(elements.begin(), elements.end()), props{true,  false, false,
-                                                          false, false, false} {
+        elements(elements.begin(), elements.end()), props{true,  false,
+                                                          false, isConst,
+                                                          false, false} {
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
@@ -1169,7 +1170,7 @@ size_t FVectorType::getNumElements() const { return getImpl()->numElements; }
 
 /// Return the recursive properties of the type.
 RecursiveTypeProperties FVectorType::getRecursiveTypeProperties() const {
-  return getElementType().getRecursiveTypeProperties();
+  return getImpl()->props;
 }
 
 /// Return this type with any flip types recursively removed from itself.
@@ -1244,7 +1245,7 @@ struct circt::firrtl::detail::FEnumTypeStorage : detail::FIRRTLBaseTypeStorage {
   FEnumTypeStorage(ArrayRef<FEnumType::EnumElement> elements, bool isConst)
       : detail::FIRRTLBaseTypeStorage(isConst),
         elements(elements.begin(), elements.end()) {
-    RecursiveTypeProperties props{true, false, false, false, false, false};
+    RecursiveTypeProperties props{true, false, false, isConst, false, false};
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
