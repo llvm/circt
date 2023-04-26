@@ -1022,8 +1022,9 @@ hw.module @structExtractFromTemporary(%cond: i1, %a: !hw.struct<c: i1>, %b: !hw.
 // CHECK-NEXT:    input [1:0] in,
 // CHECK-NEXT:    output union packed { struct packed {logic a; logic [0:0] __post_padding_a;} a;logic [1:0] b;} out
 hw.module @unionCreateNoPadding(%in: i2) -> (out: !hw.union<a: i1, b: i2>) {
-  // CHECK: assign out = in;
-  %0 = hw.union_create "b", %in : !hw.union<a: i1, b: i2>
+  // CHECK: assign out = in + in;
+  %add = comb.add %in, %in : i2
+  %0 = hw.union_create "b", %add : !hw.union<a: i1, b: i2>
   hw.output %0 : !hw.union<a: i1, b: i2>
 }
 
