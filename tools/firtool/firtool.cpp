@@ -662,10 +662,10 @@ static LogicalResult processBuffer(
     pm.nest<firrtl::CircuitOp>().addPass(
         firrtl::createEmitOMIRPass(omirOutFile));
 
-  if (!disableOptimization)
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        firrtl::createMergeConnectionsPass(
-            !disableAggressiveMergeConnections.getValue()));
+  // Always run this, required for legalization of connects involving force targets.
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      firrtl::createMergeConnectionsPass(
+          !disableAggressiveMergeConnections.getValue()));
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {
