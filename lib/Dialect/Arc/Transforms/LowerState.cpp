@@ -446,8 +446,8 @@ LogicalResult ModuleLowering::lowerState(MemoryOp memOp) {
 static Value lowerMemoryReadPortOp(MemoryReadPortOp memReadOp,
                                    OpBuilder &builder) {
   // Lowering MemoryReadOp to LLVM inserts a conditional branch to only perform
-  // the read when the address is within bounds. By inserting an IfOp here I
-  // hope that LLVM is able to merge them.
+  // the read when the address is within bounds. Ideally, LLVM will be able to
+  // merge that check with the mux/condition here.
   Value newRead;
   if (memReadOp.getEnable()) {
     Value read = builder.create<MemoryReadOp>(
