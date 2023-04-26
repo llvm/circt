@@ -270,3 +270,22 @@ arc.define @CombLoopRegressionArc1(%arg0: i1, %arg1: i1) -> i1 {
 arc.define @CombLoopRegressionArc2(%arg0: i1) -> (i1, i1) {
   arc.output %arg0, %arg0 : i1, i1
 }
+
+// Regression check for invalid memory port lowering errors.
+// CHECK-LABEL: arc.model "MemoryPortRegression"
+hw.module private @MemoryPortRegression(%clock: i1, %reset: i1, %in: i3) -> (x: i3) {
+  %0 = arc.memory <2 x i3> {name = "ram_ext"}
+  %1 = arc.memory_read_port %0[%3] clock %clock : <2 x i3>, i1
+  arc.memory_write_port %0[%3], %in clock %clock : <2 x i3>, i1
+  %3 = arc.state @Queue_arc_0(%reset) clock %clock lat 1 {names = ["value"]} : (i1) -> i1
+  %4 = arc.state @Queue_arc_1(%1) lat 0 : (i3) -> i3
+  hw.output %4 : i3
+}
+arc.define @Queue_arc_0(%arg0: i1) -> i1 {
+  %true = hw.constant true
+  %0 = comb.xor %arg0, %true : i1
+  arc.output %0 : i1
+}
+arc.define @Queue_arc_1(%arg0: i3) -> i3 {
+  arc.output %arg0 : i3
+}
