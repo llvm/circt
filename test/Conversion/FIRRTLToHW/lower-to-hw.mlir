@@ -1623,7 +1623,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:  %[[XMR2:.+]] = sv.xmr.ref @xmrPath : !hw.inout<i4>
   // CHECK-NEXT:  %[[XMR3:.+]] = sv.xmr.ref @xmrPath : !hw.inout<i4>
   // CHECK-NEXT:  %[[XMR4:.+]] = sv.xmr.ref @xmrPath : !hw.inout<i4>
-  // CHECK-NEXT:  sv.ifdef  "VERILATOR" {
+  // CHECK-NEXT:  sv.ifdef  "SYNTHESIS" {
   // CHECK-NEXT:  } else {
   // CHECK-NEXT:    sv.always posedge %clock {
   // CHECK-NEXT:      sv.if %c {

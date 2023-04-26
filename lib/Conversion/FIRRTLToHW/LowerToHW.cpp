@@ -3914,7 +3914,8 @@ LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
   if (!destVal.getType().isa<hw::InOutType>())
     return op.emitError("destination isn't an inout type");
 
-  addToIfDefBlock("VERILATOR", std::function<void()>(), [&]() {
+  // #ifndef SYNTHESIS
+  addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToInitialBlock([&]() { builder.create<sv::ForceOp>(destVal, srcVal); });
   });
   return success();
@@ -3931,7 +3932,8 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceOp op) {
   if (!destVal)
     return failure();
 
-  addToIfDefBlock("VERILATOR", std::function<void()>(), [&]() {
+  // #ifndef SYNTHESIS
+  addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToAlwaysBlock(clock, [&]() {
       addIfProceduralBlock(
           pred, [&]() { builder.create<sv::ForceOp>(destVal, src); });
@@ -3949,7 +3951,8 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceInitialOp op) {
   if (!destVal)
     return failure();
 
-  addToIfDefBlock("VERILATOR", std::function<void()>(), [&]() {
+  // #ifndef SYNTHESIS
+  addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToInitialBlock([&]() {
       addIfProceduralBlock(
           pred, [&]() { builder.create<sv::ForceOp>(destVal, src); });
@@ -3967,7 +3970,8 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseOp op) {
   if (!destVal)
     return failure();
 
-  addToIfDefBlock("VERILATOR", std::function<void()>(), [&]() {
+  // #ifndef SYNTHESIS
+  addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToAlwaysBlock(clock, [&]() {
       addIfProceduralBlock(pred,
                            [&]() { builder.create<sv::ReleaseOp>(destVal); });
@@ -3981,7 +3985,8 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseInitialOp op) {
   if (!destVal || !pred)
     return failure();
 
-  addToIfDefBlock("VERILATOR", std::function<void()>(), [&]() {
+  // #ifndef SYNTHESIS
+  addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToInitialBlock([&]() {
       addIfProceduralBlock(pred,
                            [&]() { builder.create<sv::ReleaseOp>(destVal); });
