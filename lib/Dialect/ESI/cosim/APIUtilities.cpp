@@ -1,4 +1,4 @@
-//===- ESICapnp.cpp - ESI Cap'nProto utilities ------------------*- C++ -*-===//
+//===- APIUtilities.cpp - ESI general-purpose cosim API utilities - C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,10 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 //
+// Utilities and classes applicable to all cosim API generators.
 //
 //===----------------------------------------------------------------------===//
 
-#include "ESICapnp.h"
+#include "circt/Dialect/ESI/cosim/APIUtilities.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/HW/HWDialect.h"
@@ -29,15 +30,48 @@
 
 namespace circt {
 namespace esi {
-namespace capnp {
 
-//===----------------------------------------------------------------------===//
-// Utilities.
-//===----------------------------------------------------------------------===//
+/// Returns true if the type is currently supported.
+static bool _isSupported(Type type, bool outer = false) {
+  return llvm::TypeSwitch<::mlir::Type, bool>(type)
+      .Case([](IntegerType t) { return t.getWidth() <= 64; })
+      .Case([](hw::ArrayType t) { return _isSupported(t.getElementType()); })
+      .Case([outer](hw::StructType t) {
+        // We don't yet support structs containing structs.
+        if (!outer)
+          return false;
+        // A struct is supported if all of its elements are.
+        for (auto field : t.getElements()) {
+          if (!_isSupported(field.type))
+            return false;
+        }
+        return true;
+      })
+      .Default([](Type) { return false; });
+}
 
-/// Emit an ID in capnp format.
-llvm::raw_ostream &emitId(llvm::raw_ostream &os, int64_t id) {
-  return os << "@" << llvm::format_hex(id, /*width=*/16 + 2);
+bool ESICosimType::isSupported() const { return _isSupported(type, true); }
+
+ESICosimType::ESICosimType(Type _type) : type(_type) {
+  type = innerType(type);
+
+  TypeSwitch<Type>(type)
+      .Case([this](IntegerType t) {
+        fieldTypes.push_back(
+            FieldInfo{StringAttr::get(t.getContext(), "i"), t});
+      })
+      .Case([this](hw::ArrayType t) {
+        fieldTypes.push_back(
+            FieldInfo{StringAttr::get(t.getContext(), "l"), t});
+      })
+      .Case([this](hw::StructType t) {
+        fieldTypes.append(t.getElements().begin(), t.getElements().end());
+      })
+      .Default([](Type) {});
+}
+
+bool ESICosimType::operator==(const ESICosimType &that) const {
+  return type == that.type;
 }
 
 /// Write a valid Capnp name for 'type'.
@@ -62,57 +96,12 @@ static void emitName(Type type, uint64_t id, llvm::raw_ostream &os) {
       });
 }
 
-/// Returns true if the type is currently supported.
-static bool isSupported(Type type, bool outer = false) {
-  return llvm::TypeSwitch<::mlir::Type, bool>(type)
-      .Case([](IntegerType t) { return t.getWidth() <= 64; })
-      .Case([](hw::ArrayType t) { return isSupported(t.getElementType()); })
-      .Case([outer](hw::StructType t) {
-        // We don't yet support structs containing structs.
-        if (!outer)
-          return false;
-        // A struct is supported if all of its elements are.
-        for (auto field : t.getElements()) {
-          if (!isSupported(field.type))
-            return false;
-        }
-        return true;
-      })
-      .Default([](Type) { return false; });
-}
-
-bool ESICapnpType::isSupported() const {
-  return esi::capnp::isSupported(type, true);
-}
-
-circt::esi::capnp::ESICapnpType::ESICapnpType(Type _type) : type(_type) {
-  type = innerType(type);
-
-  TypeSwitch<Type>(type)
-      .Case([this](IntegerType t) {
-        fieldTypes.push_back(
-            FieldInfo{StringAttr::get(t.getContext(), "i"), t});
-      })
-      .Case([this](hw::ArrayType t) {
-        fieldTypes.push_back(
-            FieldInfo{StringAttr::get(t.getContext(), "l"), t});
-      })
-      .Case([this](hw::StructType t) {
-        fieldTypes.append(t.getElements().begin(), t.getElements().end());
-      })
-      .Default([](Type) {});
-}
-
-bool ESICapnpType::operator==(const ESICapnpType &that) const {
-  return type == that.type;
-}
-
 /// For now, the name is just the type serialized. This works only because we
 /// only support ints.
-StringRef ESICapnpType::capnpName() const {
+StringRef ESICosimType::name() const {
   if (cachedName == "") {
     llvm::raw_string_ostream os(cachedName);
-    emitName(type, capnpTypeID(), os);
+    emitName(type, typeID(), os);
     cachedName = os.str();
   }
   return cachedName;
@@ -120,7 +109,7 @@ StringRef ESICapnpType::capnpName() const {
 
 // We compute a deterministic hash based on the type. Since llvm::hash_value
 // changes from execution to execution, we don't use it.
-uint64_t ESICapnpType::capnpTypeID() const {
+uint64_t ESICosimType::typeID() const {
   if (cachedID)
     return *cachedID;
 
@@ -144,11 +133,5 @@ uint64_t ESICapnpType::capnpTypeID() const {
   return *cachedID;
 }
 
-void ESICapnpType::writeMetadata(llvm::raw_ostream &os) const {
-  os << capnpName() << " ";
-  emitId(os, capnpTypeID());
-}
-
-} // namespace capnp
 } // namespace esi
 } // namespace circt

@@ -14,13 +14,19 @@ set(srcs
   ESIStdServices.cpp
   ESITranslations.cpp
   ESITypes.cpp
-  capnp/ESIAddCPPCapnpAPI.cpp
   Passes/ESIEmitCollateral.cpp
   Passes/ESILowerPhysical.cpp
   Passes/ESILowerPorts.cpp
   Passes/ESILowerToHW.cpp
   Passes/ESILowerTypes.cpp
   Passes/ESICleanMetadata.cpp
+
+  cosim/APIUtilities.cpp
+
+  # C++ cosimulation API
+  cosim/CPP/ESIAddCPPCosimAPI.cpp
+  cosim/CPP/ESIEmitCPPCosimAPI.cpp
+  cosim/CPP/CPPCosimAPI.cpp
 )
 
 set(ESI_RUNTIME_DIR ${CIRCT_BINARY_DIR}/include/circt/Dialect/ESI)
@@ -75,8 +81,6 @@ endif()
 if (ESI_CAPNP)
   list(APPEND srcs
     capnp/Schema.cpp
-    capnp/ESICapnp.cpp
-    capnp/CPPAPI.cpp
   )
   list(APPEND ESI_LinkLibs CapnProto::capnp CapnProto::capnpc)
   list(APPEND CP_FILES ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/ESI/cosim/CosimDpi.capnp)

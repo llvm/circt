@@ -356,13 +356,13 @@ CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
         ParamDeclAttr::get("ENDPOINT_ID_EXT", StringAttr::get(ctxt, "")));
   params.push_back(ParamDeclAttr::get(
       "SEND_TYPE_ID",
-      IntegerAttr::get(ui64Type, sendTypeSchema.capnpTypeID())));
+      IntegerAttr::get(ui64Type, sendTypeSchema.typeID())));
   params.push_back(
       ParamDeclAttr::get("SEND_TYPE_SIZE_BITS",
                          rewriter.getI32IntegerAttr(sendTypeSchema.size())));
   params.push_back(ParamDeclAttr::get(
       "RECV_TYPE_ID",
-      IntegerAttr::get(ui64Type, recvTypeSchema.capnpTypeID())));
+      IntegerAttr::get(ui64Type, recvTypeSchema.typeID())));
   params.push_back(
       ParamDeclAttr::get("RECV_TYPE_SIZE_BITS",
                          rewriter.getI32IntegerAttr(recvTypeSchema.size())));

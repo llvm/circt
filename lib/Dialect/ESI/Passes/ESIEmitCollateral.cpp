@@ -91,8 +91,8 @@ static llvm::json::Value toJSON(Attribute attr) {
           typeMD["hw_bitwidth"] = hw::getBitWidth(inner);
 #ifdef CAPNP
           capnp::CapnpTypeSchema schema(inner);
-          typeMD["capnp_type_id"] = schema.capnpTypeID();
-          typeMD["capnp_name"] = schema.capnpName().str();
+          typeMD["capnp_type_id"] = schema.typeID();
+          typeMD["capnp_name"] = schema.name().str();
 #endif
         } else {
           typeMD["hw_bitwidth"] = hw::getBitWidth(t);

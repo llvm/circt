@@ -1,4 +1,4 @@
-//===- CPPAPI.cpp - ESI Cap'nProto schema utilities -------------*- C++ -*-===//
+//===- CPPCosimAPI.cpp ------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,10 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 //
+// Code for generating the ESI C++ cosimulation API.
 //
 //===----------------------------------------------------------------------===//
 
-#include "ESICapnp.h"
+#include "CPPCosimAPI.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/HW/HWDialect.h"
@@ -17,7 +18,6 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
 
-#include "capnp/schema-parser.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -29,8 +29,9 @@
 #include <initializer_list>
 #include <string>
 
-using namespace circt::esi::capnp::detail;
 using namespace circt;
+using namespace esi;
+using namespace cppcosimapi;
 
 //===----------------------------------------------------------------------===//
 // CPPType class implementation.
@@ -94,21 +95,15 @@ static void emitCPPType(Type type, mlir::raw_indented_ostream &os) {
       });
 }
 
-circt::esi::capnp::CPPType::CPPType(mlir::Type type) : ESICapnpType(type) {}
-
-llvm::StringRef circt::esi::capnp::CPPType::cppName() const {
-  return capnpName();
-}
-
 static bool isZeroWidthInt(Type type) {
   return type.isa<NoneType>() ||
          (type.isa<IntegerType>() && type.cast<IntegerType>().getWidth() == 0);
 }
 
 LogicalResult
-circt::esi::capnp::CPPType::write(mlir::raw_indented_ostream &os) const {
+CPPType::write(mlir::raw_indented_ostream &os) const {
 
-  os << "struct " << cppName() << " {\n";
+  os << "struct " << name() << " {\n";
   os.indent();
 
   os << "// Data members:\n";
@@ -129,12 +124,12 @@ circt::esi::capnp::CPPType::write(mlir::raw_indented_ostream &os) const {
   bool isI0 = false;
   if (fieldTypes.size() == 1) {
     os << "// Unary types have convenience constructors\n";
-    os << cppName() << "() = default;\n";
+    os << name() << "() = default;\n";
 
     auto fieldType = fieldTypes[0].type;
     if (!isZeroWidthInt(fieldType)) {
 
-      os << cppName() << "(";
+      os << name() << "(";
       auto fieldName = fieldTypes[0].name.getValue();
       emitCPPType(fieldType, os);
       os << " " << fieldName << ") : " << fieldName << "(" << fieldName << ")"
@@ -151,7 +146,7 @@ circt::esi::capnp::CPPType::write(mlir::raw_indented_ostream &os) const {
   // Comparison operator
   os << "// Equality operator\n";
   os << "// TODO (c++20): emit default <=> operator\n";
-  os << "auto operator==(const " << cppName() << " &other) const {\n";
+  os << "auto operator==(const " << name() << " &other) const {\n";
   os.indent();
   os << "return ";
   llvm::interleave(
@@ -171,7 +166,7 @@ circt::esi::capnp::CPPType::write(mlir::raw_indented_ostream &os) const {
 
   // != operator
   os << "// Inequality operator\n";
-  os << "auto operator!=(const " << cppName() << " &other) const {\n";
+  os << "auto operator!=(const " << name() << " &other) const {\n";
   os.indent();
   os << "return !(*this == other);\n";
   os.unindent();
@@ -180,9 +175,9 @@ circt::esi::capnp::CPPType::write(mlir::raw_indented_ostream &os) const {
   // Stream operator
   os << "// Stream operator\n";
   os << "friend std::ostream &operator<<(std::ostream &os, const "
-              << cppName() << " &val) {\n";
+              << name() << " &val) {\n";
   os.indent();
-  os << "os << \"" << cppName() << "(\";\n";
+  os << "os << \"" << name() << "(\";\n";
   for (auto [idx, field] : llvm::enumerate(fieldTypes)) {
     if (isZeroWidthInt(field.type))
       continue;
@@ -209,7 +204,7 @@ circt::esi::capnp::CPPType::write(mlir::raw_indented_ostream &os) const {
   if (isI0)
     os << "UntypedData";
   else
-    os << cppName();
+    os << name();
 
   os << ";\n";
 
@@ -219,7 +214,13 @@ circt::esi::capnp::CPPType::write(mlir::raw_indented_ostream &os) const {
   return success();
 }
 
-void circt::esi::capnp::CPPType::writeReflection(
+
+bool CPPType::isSupported() const {
+  // C++ doesn't support esi.any (yet)
+  return !type.isa<esi::AnyType>() && ESICosimType::isSupported();
+}
+
+void CPPType::writeReflection(
     mlir::raw_indented_ostream &os,
     llvm::ArrayRef<std::string> namespaces) const {
   os << "REFL_AUTO (\n";
@@ -231,7 +232,7 @@ void circt::esi::capnp::CPPType::writeReflection(
       ns += n + "::";
   }
 
-  os << "type(" << ns << cppName() << ")";
+  os << "type(" << ns << name() << ")";
 
   for (auto &field : getFields()) {
     os << "\n";
@@ -249,7 +250,7 @@ void circt::esi::capnp::CPPType::writeReflection(
 // Endpoint class implementation.
 //===----------------------------------------------------------------------===//
 
-LogicalResult circt::esi::capnp::CPPEndpoint::writeType(
+LogicalResult CPPEndpoint::writeType(
     Location loc, mlir::raw_indented_ostream &os) const {
   auto emitType = [&](llvm::StringRef dir, mlir::Type type) -> LogicalResult {
     type = esi::innerType(type);
@@ -261,7 +262,7 @@ LogicalResult circt::esi::capnp::CPPEndpoint::writeType(
       return failure();
     }
 
-    os << "/*" << dir << "Type=*/ ESITypes::" << cppTypeIt->second.cppName();
+    os << "/*" << dir << "Type=*/ ESITypes::" << cppTypeIt->second.name();
     return success();
   };
 
@@ -287,7 +288,7 @@ LogicalResult circt::esi::capnp::CPPEndpoint::writeType(
   return success();
 }
 
-LogicalResult circt::esi::capnp::CPPEndpoint::writeDecl(
+LogicalResult CPPEndpoint::writeDecl(
     Location loc, mlir::raw_indented_ostream &os) const {
   os << "using " << getTypeName() << " = ";
   if (failed(writeType(loc, os)))
@@ -299,7 +300,7 @@ LogicalResult circt::esi::capnp::CPPEndpoint::writeDecl(
 }
 
 LogicalResult
-circt::esi::capnp::CPPService::write(mlir::raw_indented_ostream &os) {
+CPPService::write(mlir::raw_indented_ostream &os) {
   auto loc = service.getLoc();
   os << "template <typename TBackend>\n";
   os << "class " << name() << " : public esi::runtime::Module<TBackend> {\n";
@@ -339,9 +340,9 @@ circt::esi::capnp::CPPService::write(mlir::raw_indented_ostream &os) {
   return success();
 }
 
-circt::esi::capnp::CPPService::CPPService(
+CPPService::CPPService(
     esi::ServiceDeclOpInterface service,
-    const llvm::MapVector<mlir::Type, circt::esi::capnp::CPPType> &types)
+    const llvm::MapVector<mlir::Type, CPPType> &types)
     : service(service) {
   llvm::SmallVector<esi::ServicePortInfo> portList;
   service.getPortList(portList);
@@ -350,14 +351,14 @@ circt::esi::capnp::CPPService::CPPService(
 }
 
 llvm::SmallVector<esi::ServicePortInfo>
-circt::esi::capnp::CPPService::getPorts() {
+CPPService::getPorts() {
   llvm::SmallVector<ServicePortInfo> ports;
   getService().getPortList(ports);
   return ports;
 }
 
-circt::esi::capnp::CPPEndpoint *
-circt::esi::capnp::CPPService::getPort(llvm::StringRef portName) {
+CPPEndpoint *
+CPPService::getPort(llvm::StringRef portName) {
   auto it = llvm::find_if(
       endpoints, [&](auto &ep) { return ep->portInfo.name == portName; });
 
@@ -368,9 +369,9 @@ circt::esi::capnp::CPPService::getPort(llvm::StringRef portName) {
 }
 
 LogicalResult
-circt::esi::capnp::CPPDesignModule::write(mlir::raw_indented_ostream &ios) {
+CPPDesignModule::write(mlir::raw_indented_ostream &ios) {
   ios << "template <typename TBackend>\n";
-  ios << "class " << getCPPName() << " {\n";
+  ios << "class " << name() << " {\n";
   ios << "public:\n";
   ios.indent();
 
@@ -379,7 +380,7 @@ circt::esi::capnp::CPPDesignModule::write(mlir::raw_indented_ostream &ios) {
     std::string cppMemberName;
     ArrayAttr clients;
   };
-  llvm::MapVector<capnp::CPPService *, ServiceInfo> innerServices;
+  llvm::MapVector<CPPService *, ServiceInfo> innerServices;
   for (auto &service : services) {
     // Was this service implemented as cosim?
     if (service.getImplType() != "cosim")
@@ -405,7 +406,7 @@ circt::esi::capnp::CPPDesignModule::write(mlir::raw_indented_ostream &ios) {
 
   // Add constructor
   constexpr static std::string_view backendName = "backend";
-  ios << getCPPName() << "(TBackend& " << backendName << ") {\n";
+  ios << name() << "(TBackend& " << backendName << ") {\n";
   ios.indent();
   for (auto &[innerCppService, serviceInfo] : innerServices) {
     ios << "// " << innerCppService->name() << " initialization.\n";

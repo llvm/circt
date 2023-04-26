@@ -24,13 +24,13 @@ def ESIConnectServices : Pass<"esi-connect-services", "mlir::ModuleOp"> {
     "circt::comb::CombDialect"];
 }
 
-def ESIAddCPPCapnpAPI: Pass<"esi-emit-cpp-cosim-api", "mlir::ModuleOp"> {
-  let summary = "Add C++ Capnp cosim API to the module";
-  let constructor = "circt::esi::createESIAddCPPCapnpAPIPass()";
+def ESIAddCPPCosimAPI: Pass<"esi-emit-cpp-cosim-api", "mlir::ModuleOp"> {
+  let summary = "Add C++ cosimulation API to the module";
+  let constructor = "circt::esi::createESIAddCPPCosimAPIPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
     let options = [
     Option<"outputFile", "output-file", "std::string",
-           "\"cppapi.h\"", "File to output C++ API into">,
+           "\"ESISystem.h\"", "File to output C++ API into">,
     Option<"toStdErr", "to-stderr", "bool", "false",
       "If true, will emit the generated API to stderr">
   ];

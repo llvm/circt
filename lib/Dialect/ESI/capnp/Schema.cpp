@@ -52,7 +52,7 @@ namespace detail {
 /// the header.
 struct CapnpTypeSchemaImpl {
 public:
-  CapnpTypeSchemaImpl(ESICapnpType &base);
+  CapnpTypeSchemaImpl(CapnpTypeSchema &base);
   CapnpTypeSchemaImpl(const CapnpTypeSchemaImpl &) = delete;
   LogicalResult write(llvm::raw_ostream &os) const;
 
@@ -70,7 +70,7 @@ private:
   ::capnp::ParsedSchema getSchema() const;
   ::capnp::StructSchema getCapnpTypeSchema() const;
 
-  ESICapnpType &base;
+  CapnpTypeSchema &base;
 
   ::capnp::SchemaParser parser;
   mutable ::capnp::ParsedSchema rootSchema;
@@ -141,7 +141,7 @@ static bool isPointerType(::capnp::schema::Type::Reader type) {
   }
 }
 
-CapnpTypeSchemaImpl::CapnpTypeSchemaImpl(ESICapnpType &base) : base(base) {}
+CapnpTypeSchemaImpl::CapnpTypeSchemaImpl(CapnpTypeSchema &base) : base(base) {}
 
 /// Write a valid capnp schema to memory, then parse it out of memory using the
 /// capnp library. Writing and parsing text within a single process is ugly, but
@@ -154,7 +154,7 @@ CapnpTypeSchemaImpl::CapnpTypeSchemaImpl(ESICapnpType &base) : base(base) {}
   // Write the schema to `schemaText`.
   std::string schemaText;
   llvm::raw_string_ostream os(schemaText);
-  emitId(os, 0xFFFFFFFFFFFFFFFF) << ";\n";
+  emitCapnpID(os, 0xFFFFFFFFFFFFFFFF) << ";\n";
   auto rc = write(os);
   assert(succeeded(rc) && "Failed schema text output.");
   (void)rc;
@@ -177,7 +177,7 @@ CapnpTypeSchemaImpl::CapnpTypeSchemaImpl(ESICapnpType &base) : base(base) {}
 ::capnp::StructSchema CapnpTypeSchemaImpl::getCapnpTypeSchema() const {
   if (typeSchema != ::capnp::StructSchema())
     return typeSchema;
-  uint64_t id = base.capnpTypeID();
+  uint64_t id = base.typeID();
   for (auto schemaNode : getSchema().getAllNested()) {
     if (schemaNode.getProto().getId() == id) {
       typeSchema = schemaNode.asStruct();
@@ -795,7 +795,7 @@ hw::HWModuleOp CapnpTypeSchemaImpl::buildEncoder(Value clk, Value valid,
 
   SmallString<64> modName;
   modName.append("encode");
-  modName.append(base.capnpName());
+  modName.append(base.name());
   SmallVector<hw::PortInfo, 4> ports;
   ports.push_back(hw::PortInfo{b.getStringAttr("clk"), hw::PortDirection::INPUT,
                                clk.getType(), 0});
@@ -970,7 +970,7 @@ hw::HWModuleOp CapnpTypeSchemaImpl::buildDecoder(Value clk, Value valid,
 
   SmallString<64> modName;
   modName.append("decode");
-  modName.append(base.capnpName());
+  modName.append(base.name());
   SmallVector<hw::PortInfo, 4> ports;
   ports.push_back(hw::PortInfo{b.getStringAttr("clk"), hw::PortDirection::INPUT,
                                clk.getType(), 0});
@@ -1067,7 +1067,7 @@ hw::HWModuleOp CapnpTypeSchemaImpl::buildDecoder(Value clk, Value valid,
             return GasketComponent(b, b.create<hw::StructCreateOp>(
                                           loc, base.getType(), rawValues));
           });
-  ret.name(base.capnpName());
+  ret.name(base.name());
 
   innerBlock->getTerminator()->erase();
   b.setInsertionPointToEnd(innerBlock);
@@ -1088,13 +1088,18 @@ llvm::SmallDenseMap<Type, hw::HWModuleOp>
 size_t circt::esi::capnp::CapnpTypeSchema::size() const { return s->size(); }
 
 circt::esi::capnp::CapnpTypeSchema::CapnpTypeSchema(Type _type)
-    : circt::esi::capnp::ESICapnpType(_type) {
+    : circt::esi::ESICosimType(_type) {
   s = std::make_shared<detail::CapnpTypeSchemaImpl>(*this);
 }
 
 LogicalResult
 circt::esi::capnp::CapnpTypeSchema::write(llvm::raw_ostream &os) const {
   return s->write(os);
+}
+
+void circt::esi::capnp::CapnpTypeSchema::writeMetadata(llvm::raw_ostream &os) const {
+  os << name() << " ";
+  emitCapnpID(os, typeID());
 }
 
 Value circt::esi::capnp::CapnpTypeSchema::buildEncoder(OpBuilder &builder,
@@ -1111,7 +1116,7 @@ Value circt::esi::capnp::CapnpTypeSchema::buildEncoder(OpBuilder &builder,
 
   SmallString<64> instName;
   instName.append("encode");
-  instName.append(capnpName());
+  instName.append(name());
   instName.append("Inst");
   auto encodeInst =
       builder.create<hw::InstanceOp>(operand.getLoc(), encImplMod, instName,
@@ -1133,7 +1138,7 @@ Value circt::esi::capnp::CapnpTypeSchema::buildDecoder(OpBuilder &builder,
 
   SmallString<64> instName;
   instName.append("decode");
-  instName.append(capnpName());
+  instName.append(name());
   instName.append("Inst");
   auto decodeInst =
       builder.create<hw::InstanceOp>(operand.getLoc(), decImplMod, instName,
