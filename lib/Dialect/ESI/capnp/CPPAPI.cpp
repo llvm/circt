@@ -103,7 +103,8 @@ llvm::StringRef circt::esi::capnp::CPPType::cppName() const {
 }
 
 static bool isZeroWidthInt(Type type) {
-  return type.isa<IntegerType>() && type.cast<IntegerType>().getWidth() == 0;
+  return type.isa<NoneType>() ||
+         (type.isa<IntegerType>() && type.cast<IntegerType>().getWidth() == 0);
 }
 
 LogicalResult
@@ -163,8 +164,7 @@ circt::esi::capnp::CPPType::write(support::indenting_ostream &os) const {
         if (isZeroWidthInt(field.type))
           os << "/*i0==*/true";
         else
-          os << field.name.getValue() << " == other."
-             << field.name.getValue();
+          os << field.name.getValue() << " == other." << field.name.getValue();
         os << ")";
       },
       " && ");
