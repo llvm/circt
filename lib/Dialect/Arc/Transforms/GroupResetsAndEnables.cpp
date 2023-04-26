@@ -30,12 +30,12 @@ public:
       : RewritePattern(ClockTreeOp::getOperationName(), benefit, context) {}
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
-    ClockTreeOp moduleOp = dyn_cast<ClockTreeOp>(*op);
+    ClockTreeOp clockTreeOp = dyn_cast<ClockTreeOp>(*op);
 
     // Group similar resets into single IfOps
     // Create a list of reset values and map from them to the states they reset
     llvm::MapVector<mlir::Value, SmallVector<scf::IfOp>> resetMap;
-    auto ifOps = moduleOp.getBody().getOps<scf::IfOp>();
+    auto ifOps = clockTreeOp.getBody().getOps<scf::IfOp>();
 
     for (auto ifOp : ifOps)
       resetMap[ifOp.getCondition()].push_back(ifOp);
