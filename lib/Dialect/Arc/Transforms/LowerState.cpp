@@ -450,22 +450,12 @@ static Value lowerMemoryReadPortOp(MemoryReadPortOp memReadOp,
   // hope that LLVM is able to merge them.
   Value newRead;
   if (memReadOp.getEnable()) {
-    newRead =
-        builder
-            .create<scf::IfOp>(
-                memReadOp.getLoc(), memReadOp.getEnable(),
-                [&](OpBuilder &builder, Location loc) {
-                  Value read = builder.create<MemoryReadOp>(
-                      memReadOp.getLoc(), memReadOp.getMemory(),
-                      memReadOp.getAddress());
-                  builder.create<scf::YieldOp>(memReadOp.getLoc(), read);
-                },
-                [&](OpBuilder &builder, Location loc) {
-                  Value zero = builder.create<hw::ConstantOp>(
-                      memReadOp.getLoc(), memReadOp.getResult().getType(), 0);
-                  builder.create<scf::YieldOp>(memReadOp.getLoc(), zero);
-                })
-            ->getResult(0);
+    Value read = builder.create<MemoryReadOp>(
+        memReadOp.getLoc(), memReadOp.getMemory(), memReadOp.getAddress());
+    Value zero = builder.create<hw::ConstantOp>(
+        memReadOp.getLoc(), memReadOp.getResult().getType(), 0);
+    newRead = builder.create<comb::MuxOp>(
+        memReadOp.getLoc(), memReadOp.getEnable(), read, zero, true);
   } else {
     newRead = builder.create<MemoryReadOp>(
         memReadOp.getLoc(), memReadOp.getMemory(), memReadOp.getAddress());
