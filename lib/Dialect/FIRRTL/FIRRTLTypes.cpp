@@ -1452,13 +1452,10 @@ auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
 
 uint64_t RefType::getMaxFieldID() const { return 0; }
 
-// Identical to FIRRTLBaseType's implementation.
 circt::hw::FieldIDTypeInterface
 RefType::getFinalTypeByFieldID(uint64_t fieldID) const {
-  std::pair<circt::hw::FieldIDTypeInterface, uint64_t> pair(*this, fieldID);
-  while (pair.second)
-    pair = pair.first.getSubTypeByFieldID(pair.second);
-  return pair.first;
+  assert(fieldID == 0);
+  return *this;
 }
 
 std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
