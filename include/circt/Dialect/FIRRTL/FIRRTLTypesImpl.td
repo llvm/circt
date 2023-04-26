@@ -400,7 +400,9 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [FieldIDTypeInterface]> {
   }];
 }
 
-def RefImpl : FIRRTLImplType<"Ref", [], "::circt::firrtl::FIRRTLType"> {
+def RefImpl : FIRRTLImplType<"Ref",
+                             [DeclareTypeInterfaceMethods<FieldIDTypeInterface>],
+                             "::circt::firrtl::FIRRTLType"> {
   let summary = [{
     A reference type, such as `firrtl.probe<uint<1>>` or `firrtl.rwprobe<uint<2>>`.
 
