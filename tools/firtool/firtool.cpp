@@ -662,8 +662,7 @@ static LogicalResult processBuffer(
     pm.nest<firrtl::CircuitOp>().addPass(
         firrtl::createEmitOMIRPass(omirOutFile));
 
-  if (!disableOptimization &&
-      preserveAggregate != firrtl::PreserveAggregate::None)
+  if (!disableOptimization)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createMergeConnectionsPass(
             !disableAggressiveMergeConnections.getValue()));
