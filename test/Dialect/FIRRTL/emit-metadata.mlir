@@ -137,7 +137,7 @@ firrtl.circuit "DualReadsSMem" {
   }
   firrtl.memmodule @DualReads_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, in R0_data: !firrtl.uint<42>, in R1_addr: !firrtl.uint<4>, in R1_en: !firrtl.uint<1>, in R1_clk: !firrtl.clock, in R1_data: !firrtl.uint<42>, in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 2 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
   // CHECK: sv.verbatim "[\0A {\0A \22module_name\22: \22DualReads_ext\22,\0A \22depth\22: 12,\0A \22width\22: 42,\0A \22masked\22: false,\0A \22read\22: 2,\0A \22write\22: 1,\0A \22readwrite\22: 0,\0A \22extra_ports\22: [],\0A \22hierarchy\22: [\0A \22DualReadsSMem.DualReads_ext\22\0A ]\0A }\0A]"
-  // CHECK: {output_file = #hw.output_file<"metadata/seq_mems.json", excludeFromFileList>}
+  // CHECK: {output_file = #hw.output_file<"metadata{{/|\\\\}}seq_mems.json", excludeFromFileList>}
   // CHECK: sv.verbatim "name DualReads_ext depth 12 width 42 ports write,read,read\0A" {output_file = #hw.output_file<"\22dut.conf\22"
 }
 
