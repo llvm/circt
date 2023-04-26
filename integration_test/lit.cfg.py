@@ -203,26 +203,3 @@ try:
   config.available_features.add('cocotb')
 except ImportError:
   pass
-
-# We need a C++20 compiler with spaceship operator support to run ESI CPP cosim
-# tests.
-out = subprocess.run([config.host_cxx.strip(), "--version"],
-                     check=True,
-                     stdout=subprocess.PIPE)
-version = out.stdout.decode("utf-8")
-cpp20_compiler = False
-if "gcc" in config.host_cxx:
-  # gcc version string example: g++ (Ubuntu 9.4.0-1ubuntu1~20.04.1) 9.4.0
-  version = version.split(" ")[2]
-  version = version.split(".")[0]
-  cpp20_compiler = int(version) >= 10
-elif "clang" in config.host_cxx:
-  # clang version string example: Ubuntu clang version 12.0.1-++202...
-  version = version.split(" ")[3]
-  version = version.split(".")[0]
-  cpp20_compiler = int(version) >= 12
-
-if cpp20_compiler:
-  config.available_features.add('esi-cosim-cpp')
-  config.substitutions.append(('%ESI_CXX_COMPILER%', f'{config.host_cxx}'))
-  config.substitutions.append(('%ESI_C_COMPILER%', f'{config.host_cc}'))

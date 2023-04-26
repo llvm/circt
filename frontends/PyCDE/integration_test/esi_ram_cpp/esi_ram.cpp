@@ -1,5 +1,4 @@
 // REQUIRES: esi-cosim
-// REQUIRES: esi-cosim-cpp
 
 // clang-format off
 
@@ -15,14 +14,16 @@
 // RUN: cmake -S %t \
 // RUN:   -B %t/build \
 // RUN:   -DCIRCT_DIR=%CIRCT_SOURCE% \
-// RUN:   -DPYCDE_OUT_DIR=%t \
-// RUN:   -DCMAKE_CXX_COMPILER=%ESI_CXX_COMPILER% \
-// RUN:   -DCMAKE_C_COMPILER=%ESI_C_COMPILER%
+// RUN:   -DPYCDE_OUT_DIR=%t
 // RUN: cmake --build %t/build
 
 // Run test
-// RUN: esi-cosim-runner.py --tmpdir=%t \
-// RUN:     --schema %t/hw/schema.capnp \
+// ... can't glob *.sv because PyCDE always includes driver.sv, but that's not the
+// top that we want to use. Just delete it.
+// RUN: rm %t/hw/driver.sv
+// RUN: esi-cosim-runner.py --tmpdir=%t  \
+// RUN:     --no-aux-files               \
+// RUN:     --schema %t/hw/schema.capnp  \
 // RUN:     --exec %t/build/esi_ram_test \
 // RUN:     %t/hw/*.sv
 

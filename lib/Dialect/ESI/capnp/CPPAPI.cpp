@@ -151,9 +151,34 @@ circt::esi::capnp::CPPType::write(support::indenting_ostream &os) const {
   }
 
   // Comparison operator
-  os.indent() << "// Spaceship operator for all-things comparison\n";
-  os.indent() << "auto operator<=>(const " << cppName()
-              << " &other) const = default;\n\n";
+  os.indent() << "// Equality operator\n";
+  os.indent() << "// TODO (c++20): emit default <=> operator\n";
+  os.indent() << "auto operator==(const " << cppName() << " &other) const {\n";
+  os.addIndent();
+  os.indent() << "return ";
+  llvm::interleave(
+      fieldTypes, os,
+      [&](auto field) {
+        os << "(";
+        if (isZeroWidthInt(field.type))
+          os << "/*i0==*/true";
+        else
+          os << field.name.getValue() << " == other."
+             << field.name.getValue();
+        os << ")";
+      },
+      " && ");
+  os << ";\n";
+  os.reduceIndent();
+  os.indent() << "}\n\n";
+
+  // != operator
+  os.indent() << "// Inequality operator\n";
+  os.indent() << "auto operator!=(const " << cppName() << " &other) const {\n";
+  os.addIndent();
+  os.indent() << "return !(*this == other);\n";
+  os.reduceIndent();
+  os.indent() << "}\n\n";
 
   // Stream operator
   os.indent() << "// Stream operator\n";

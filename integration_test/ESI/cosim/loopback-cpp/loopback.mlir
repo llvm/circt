@@ -1,6 +1,5 @@
 // clang-format off
 // REQUIRES: esi-cosim
-// REQUIRES: esi-cosim-cpp
 // RUN: rm -rf %t && mkdir %t && cd %t
 // RUN: circt-opt %s --esi-connect-services --esi-emit-cpp-cosim-api="output-file=ESISystem.h" --esi-emit-collateral=schema-file=%t/schema.capnp --esi-clean-metadata > %t/4.mlir
 // RUN: circt-opt %t/4.mlir --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw --export-split-verilog -o %t/3.mlir
@@ -14,9 +13,7 @@
 // RUN: cmake -S %t \
 // RUN:   -B %t/build \
 // RUN:   -DCIRCT_DIR=%CIRCT_SOURCE% \
-// RUN:   -DCAPNP_SCHEMA=%t/schema.capnp \
-// RUN:   -DCMAKE_CXX_COMPILER=%ESI_CXX_COMPILER% \
-// RUN:   -DCMAKE_C_COMPILER=%ESI_C_COMPILER%
+// RUN:   -DCAPNP_SCHEMA=%t/schema.capnp
 // RUN: cmake --build %t/build
 
 // Run test

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.13.4)
 project(esi_ram_test)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # TODO: most of this stuff should be moved to a .cmake file that is included.

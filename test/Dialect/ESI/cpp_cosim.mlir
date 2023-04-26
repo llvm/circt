@@ -30,7 +30,6 @@ hw.module @Loopback(%clk: i1, %loopback_tohw: !esi.channel<i8>) -> (loopback_fro
 // CHECK: #pragma once
 // CHECK: #include "refl.hpp"
 // CHECK: #include <cstdint>
-// CHECK: #include <compare>
 // CHECK: #include "esi/backends/cosim/capnp.h"
 // CHECK: #include ESI_COSIM_CAPNP_H
 
@@ -49,7 +48,12 @@ hw.module @Loopback(%clk: i1, %loopback_tohw: !esi.channel<i8>) -> (loopback_fro
 // CHECK:   I8() = default;
 // CHECK:   I8(uint8_t i) : i(i) {}
 // CHECK:   operator uint8_t() const { return i; }
-// CHECK:   auto operator<=>(const I8 &other) const = default;
+// CHECK:   auto operator==(const I8 &other) const {
+// CHECK:     return (i == other.i);
+// CHECK:   }
+// CHECK:   auto operator!=(const I8 &other) const {
+// CHECK:     return !(*this == other);
+// CHECK:   }
 // CHECK:   friend std::ostream &operator<<(std::ostream &os, const I8 &val) {
 // CHECK:     os << "I8(";
 // CHECK:     os << "i: ";
@@ -62,7 +66,12 @@ hw.module @Loopback(%clk: i1, %loopback_tohw: !esi.channel<i8>) -> (loopback_fro
 // CHECK: struct Struct17656501409672388976 {
 // CHECK:   uint32_t addr;      // MLIR type is i32
 // CHECK:   uint8_t data;       // MLIR type is i8
-// CHECK:   auto operator<=>(const Struct17656501409672388976 &other) const = default;
+// CHECK:   auto operator==(const Struct17656501409672388976 &other) const {
+// CHECK:     return (addr == other.addr) && (data == other.data);
+// CHECK:   }
+// CHECK:   auto operator!=(const Struct17656501409672388976 &other) const {
+// CHECK:     return !(*this == other);
+// CHECK:   }
 // CHECK:   friend std::ostream &operator<<(std::ostream &os, const Struct17656501409672388976 &val) {
 // CHECK:     os << "Struct17656501409672388976(";
 // CHECK:     os << "addr: ";

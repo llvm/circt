@@ -1,7 +1,10 @@
 # REQUIRES: esi-cosim
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1
-# RUN: esi-cosim-runner.py --tmpdir %t --schema %t/hw/schema.capnp %s %t/hw/*.sv
+# ... can't glob *.sv because PyCDE always includes driver.sv, but that's not the
+# top that we want to use. Just delete it.
+# RUN: rm -f %t/hw/driver.sv
+# RUN: esi-cosim-runner.py --no-aux-files --tmpdir %t --schema %t/hw/schema.capnp %s %t/hw/*.sv
 # PY: from esi_ram import run_cosim
 # PY: run_cosim(tmpdir, rpcschemapath, simhostport)
 
