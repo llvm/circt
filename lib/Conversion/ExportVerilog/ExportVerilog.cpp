@@ -2883,7 +2883,7 @@ SubExprInfo ExprEmitter::visitTypeOp(UnionCreateOp op) {
 
   // If the element has no padding, emit it directly.
   if (elementWidth == unionWidth) {
-    emitSubExpr(op.getInput(), Selection);
+    emitSubExpr(op.getInput(), LowestPrecedence);
     return {Unary, IsUnsigned};
   }
 
