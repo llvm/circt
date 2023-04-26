@@ -16,7 +16,7 @@
 
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Support/IndentingOStream.h"
+#include "mlir/Support/IndentedOstream.h"
 #include "llvm/ADT/MapVector.h"
 
 #include <memory>
@@ -127,11 +127,11 @@ public:
   void writeCppName(llvm::raw_ostream &os) const;
 
   /// Write out the type in its entirety.
-  mlir::LogicalResult write(support::indenting_ostream &os) const;
+  mlir::LogicalResult write(mlir::raw_indented_ostream &os) const;
 
   // Emits an RTTR registration for this type. If provided, the `namespace`
   // should indicate the namespace wherein this type was emitted.
-  void writeReflection(support::indenting_ostream &os,
+  void writeReflection(mlir::raw_indented_ostream &os,
                        llvm::ArrayRef<std::string> namespaces) const;
 };
 
@@ -143,8 +143,8 @@ struct CPPEndpoint {
   StringRef getName() const { return portInfo.name.getValue(); }
   std::string getTypeName() const { return "T" + getName().str(); }
   std::string getPointerTypeName() const { return getTypeName() + "Ptr"; }
-  LogicalResult writeType(Location loc, support::indenting_ostream &os) const;
-  LogicalResult writeDecl(Location loc, support::indenting_ostream &os) const;
+  LogicalResult writeType(Location loc, mlir::raw_indented_ostream &os) const;
+  LogicalResult writeDecl(Location loc, mlir::raw_indented_ostream &os) const;
 
   esi::ServicePortInfo portInfo;
 
@@ -166,7 +166,7 @@ public:
   }
 
   // Write out the C++ API of this service.
-  LogicalResult write(support::indenting_ostream &os);
+  LogicalResult write(mlir::raw_indented_ostream &os);
 
   esi::ServiceDeclOpInterface getService() { return service; }
   llvm::SmallVector<ServicePortInfo> getPorts();
@@ -189,7 +189,7 @@ public:
       : mod(mod), services(services), cppServices(cppServices) {}
 
   llvm::StringRef getCPPName() { return mod.getModuleName(); }
-  LogicalResult write(support::indenting_ostream &ios);
+  LogicalResult write(mlir::raw_indented_ostream &ios);
 
 private:
   hw::HWModuleLike mod;

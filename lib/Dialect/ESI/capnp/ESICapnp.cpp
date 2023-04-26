@@ -16,7 +16,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
-#include "circt/Support/IndentingOStream.h"
+#include "mlir/Support/IndentedOstream.h"
 
 #include "capnp/schema-parser.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"

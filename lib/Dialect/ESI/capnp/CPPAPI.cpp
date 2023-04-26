@@ -16,7 +16,6 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
-#include "circt/Support/IndentingOStream.h"
 
 #include "capnp/schema-parser.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -32,7 +31,6 @@
 
 using namespace circt::esi::capnp::detail;
 using namespace circt;
-using namespace support;
 
 //===----------------------------------------------------------------------===//
 // CPPType class implementation.
@@ -57,7 +55,7 @@ static std::string joinStringAttrArray(mlir::ArrayAttr strings,
   return s;
 }
 
-static void emitCPPType(Type type, llvm::raw_ostream &os) {
+static void emitCPPType(Type type, mlir::raw_indented_ostream &os) {
   llvm::TypeSwitch<Type>(type)
       .Case([&os](IntegerType intTy) {
         auto w = intTy.getWidth();
@@ -108,21 +106,20 @@ static bool isZeroWidthInt(Type type) {
 }
 
 LogicalResult
-circt::esi::capnp::CPPType::write(support::indenting_ostream &os) const {
+circt::esi::capnp::CPPType::write(mlir::raw_indented_ostream &os) const {
 
-  os.indent() << "struct " << cppName() << " {\n";
-  os.addIndent();
+  os << "struct " << cppName() << " {\n";
+  os.indent();
 
-  os.indent() << "// Data members:\n";
+  os << "// Data members:\n";
   auto fieldTypes = getFields();
   for (auto field : fieldTypes) {
 
     // Do not emit zero-width fields.
-    os.indent();
     if (isZeroWidthInt(field.type))
       os << "// Zero-width field: ";
 
-    emitCPPType(field.type, os.getStream());
+    emitCPPType(field.type, os);
     os << " " << field.name.getValue() << ";";
     // Specify the mlir type.
     os << "\t// MLIR type is " << field.type << "\n";
@@ -131,32 +128,32 @@ circt::esi::capnp::CPPType::write(support::indenting_ostream &os) const {
 
   bool isI0 = false;
   if (fieldTypes.size() == 1) {
-    os.indent() << "// Unary types have convenience constructors\n";
-    os.indent() << cppName() << "() = default;\n";
+    os << "// Unary types have convenience constructors\n";
+    os << cppName() << "() = default;\n";
 
     auto fieldType = fieldTypes[0].type;
     if (!isZeroWidthInt(fieldType)) {
 
-      os.indent() << cppName() << "(";
+      os << cppName() << "(";
       auto fieldName = fieldTypes[0].name.getValue();
-      emitCPPType(fieldType, os.getStream());
+      emitCPPType(fieldType, os);
       os << " " << fieldName << ") : " << fieldName << "(" << fieldName << ")"
          << " {}\n\n";
 
-      os.indent() << "// Unary types have convenience conversion operators\n";
-      os.indent() << "operator ";
-      emitCPPType(fieldType, os.getStream());
+      os << "// Unary types have convenience conversion operators\n";
+      os << "operator ";
+      emitCPPType(fieldType, os);
       os << "() const { return " << fieldName << "; }\n\n";
     } else
       isI0 = true;
   }
 
   // Comparison operator
-  os.indent() << "// Equality operator\n";
-  os.indent() << "// TODO (c++20): emit default <=> operator\n";
-  os.indent() << "auto operator==(const " << cppName() << " &other) const {\n";
-  os.addIndent();
-  os.indent() << "return ";
+  os << "// Equality operator\n";
+  os << "// TODO (c++20): emit default <=> operator\n";
+  os << "auto operator==(const " << cppName() << " &other) const {\n";
+  os.indent();
+  os << "return ";
   llvm::interleave(
       fieldTypes, os,
       [&](auto field) {
@@ -169,46 +166,46 @@ circt::esi::capnp::CPPType::write(support::indenting_ostream &os) const {
       },
       " && ");
   os << ";\n";
-  os.reduceIndent();
-  os.indent() << "}\n\n";
+  os.unindent();
+  os << "}\n\n";
 
   // != operator
-  os.indent() << "// Inequality operator\n";
-  os.indent() << "auto operator!=(const " << cppName() << " &other) const {\n";
-  os.addIndent();
-  os.indent() << "return !(*this == other);\n";
-  os.reduceIndent();
-  os.indent() << "}\n\n";
+  os << "// Inequality operator\n";
+  os << "auto operator!=(const " << cppName() << " &other) const {\n";
+  os.indent();
+  os << "return !(*this == other);\n";
+  os.unindent();
+  os << "}\n\n";
 
   // Stream operator
-  os.indent() << "// Stream operator\n";
-  os.indent() << "friend std::ostream &operator<<(std::ostream &os, const "
+  os << "// Stream operator\n";
+  os << "friend std::ostream &operator<<(std::ostream &os, const "
               << cppName() << " &val) {\n";
-  os.addIndent();
-  os.indent() << "os << \"" << cppName() << "(\";\n";
+  os.indent();
+  os << "os << \"" << cppName() << "(\";\n";
   for (auto [idx, field] : llvm::enumerate(fieldTypes)) {
     if (isZeroWidthInt(field.type))
       continue;
-    os.indent() << "os << \"" << field.name.getValue() << ": \";\n";
+    os << "os << \"" << field.name.getValue() << ": \";\n";
 
     // A bit of a hack - (u)int8_t types will by default be printed as chars.
     // We want to avoid this and just print the underlying value.
-    os.indent() << "os << ";
+    os << "os << ";
     if (field.type.getIntOrFloatBitWidth() > 1 &&
         field.type.getIntOrFloatBitWidth() <= 8)
       os << "(uint32_t)";
     os << "val." << field.name.getValue() << ";\n";
     if (idx != fieldTypes.size() - 1)
-      os.indent() << "os << \", \";\n";
+      os << "os << \", \";\n";
   }
-  os.indent() << "os << \")\";\n";
-  os.indent() << "return os;\n";
-  os.reduceIndent();
-  os.indent() << "}\n\n";
+  os << "os << \")\";\n";
+  os << "return os;\n";
+  os.unindent();
+  os << "}\n\n";
 
   // Capnproto type (todo: remove)
-  os.indent() << "// Cap'nProto type which this ESI type maps to\n";
-  os.indent() << "using CPType = ::";
+  os << "// Cap'nProto type which this ESI type maps to\n";
+  os << "using CPType = ::";
   if (isI0)
     os << "UntypedData";
   else
@@ -216,17 +213,17 @@ circt::esi::capnp::CPPType::write(support::indenting_ostream &os) const {
 
   os << ";\n";
 
-  os.reduceIndent();
-  os.indent() << "};\n\n";
+  os.unindent();
+  os << "};\n\n";
 
   return success();
 }
 
 void circt::esi::capnp::CPPType::writeReflection(
-    support::indenting_ostream &os,
+    mlir::raw_indented_ostream &os,
     llvm::ArrayRef<std::string> namespaces) const {
-  os.indent() << "REFL_AUTO (\n";
-  os.addIndent();
+  os << "REFL_AUTO (\n";
+  os.indent();
 
   std::string ns;
   if (!namespaces.empty()) {
@@ -234,18 +231,18 @@ void circt::esi::capnp::CPPType::writeReflection(
       ns += n + "::";
   }
 
-  os.indent() << "type(" << ns << cppName() << ")";
+  os << "type(" << ns << cppName() << ")";
 
   for (auto &field : getFields()) {
-    os.indent() << "\n";
+    os << "\n";
     bool isI0 = field.type.getIntOrFloatBitWidth() == 0;
     if (isI0)
       os << "//";
     os << ", field(" << field.name.getValue() << ")";
   };
 
-  os.reduceIndent();
-  os.indent() << "\n)\n";
+  os.unindent();
+  os << "\n)\n";
 }
 
 //===----------------------------------------------------------------------===//
@@ -253,7 +250,7 @@ void circt::esi::capnp::CPPType::writeReflection(
 //===----------------------------------------------------------------------===//
 
 LogicalResult circt::esi::capnp::CPPEndpoint::writeType(
-    Location loc, support::indenting_ostream &os) const {
+    Location loc, mlir::raw_indented_ostream &os) const {
   auto emitType = [&](llvm::StringRef dir, mlir::Type type) -> LogicalResult {
     type = esi::innerType(type);
     auto cppTypeIt = types.find(type);
@@ -291,54 +288,53 @@ LogicalResult circt::esi::capnp::CPPEndpoint::writeType(
 }
 
 LogicalResult circt::esi::capnp::CPPEndpoint::writeDecl(
-    Location loc, support::indenting_ostream &os) const {
-  os.indent() << "using " << getTypeName() << " = ";
+    Location loc, mlir::raw_indented_ostream &os) const {
+  os << "using " << getTypeName() << " = ";
   if (failed(writeType(loc, os)))
     return failure();
   os << ";\n";
-  os.indent() << "using " << getPointerTypeName() << " = std::shared_ptr<"
+  os << "using " << getPointerTypeName() << " = std::shared_ptr<"
               << getTypeName() << ">;\n\n";
   return success();
 }
 
 LogicalResult
-circt::esi::capnp::CPPService::write(support::indenting_ostream &os) {
+circt::esi::capnp::CPPService::write(mlir::raw_indented_ostream &os) {
   auto loc = service.getLoc();
   os << "template <typename TBackend>\n";
   os << "class " << name() << " : public esi::runtime::Module<TBackend> {\n";
-  os.addIndent();
-  os.indent() << "  using Port = esi::runtime::Port<TBackend>;\n"
+  os.indent();
+  os << "  using Port = esi::runtime::Port<TBackend>;\n"
               << "public:\n";
-  os.indent() << "// Port type declarations.\n";
+  os << "// Port type declarations.\n";
 
   for (auto &ep : endpoints)
     if (failed(ep->writeDecl(loc, os)))
       return failure();
 
-  os.indent() << "// Constructor initializes each endpoint.\n";
-  os.indent() << name() << "(";
+  os << "// Constructor initializes each endpoint.\n";
+  os << name() << "(";
   llvm::interleaveComma(endpoints, os, [&](auto &ep) {
     os << ep->getPointerTypeName() << " " << ep->getName();
   });
   os << ")\n";
-  os.indent().indent()
+  os
       << "// Initialize base class with knowledge of all endpoints.\n";
-  os.indent().indent() << ": esi::runtime::Module<TBackend>({";
+  os << ": esi::runtime::Module<TBackend>({";
   llvm::interleaveComma(endpoints, os, [&](auto &ep) { os << ep->getName(); });
   os << "}),\n";
 
-  os.indent().indent() << "// Initialize each individual endpoint handle.\n";
-  os.indent().indent();
+  os << "// Initialize each individual endpoint handle.\n";
   llvm::interleaveComma(endpoints, os, [&](auto &ep) {
     os << ep->getName() << "(" << ep->getName() << ")";
   });
   os << " {}\n\n";
 
-  os.indent() << "// Endpoint handles\n";
+  os << "// Endpoint handles\n";
   for (auto &ep : endpoints)
-    os.indent() << ep->getPointerTypeName() << " " << ep->getName() << ";\n";
+    os << ep->getPointerTypeName() << " " << ep->getName() << ";\n";
 
-  os.reduceIndent();
+  os.unindent();
   os << "};\n\n";
   return success();
 }
@@ -372,11 +368,11 @@ circt::esi::capnp::CPPService::getPort(llvm::StringRef portName) {
 }
 
 LogicalResult
-circt::esi::capnp::CPPDesignModule::write(support::indenting_ostream &ios) {
+circt::esi::capnp::CPPDesignModule::write(mlir::raw_indented_ostream &ios) {
   ios << "template <typename TBackend>\n";
   ios << "class " << getCPPName() << " {\n";
   ios << "public:\n";
-  ios.addIndent();
+  ios.indent();
 
   // Locate the inner services.
   struct ServiceInfo {
@@ -402,17 +398,17 @@ circt::esi::capnp::CPPDesignModule::write(support::indenting_ostream &ios) {
     ServiceInfo info;
     info.cppMemberName = lowercase(cppServiceIt->name().str());
     info.clients = service.getClients();
-    ios.indent() << "std::unique_ptr<" << cppServiceIt->name() << "<TBackend>> "
+    ios << "std::unique_ptr<" << cppServiceIt->name() << "<TBackend>> "
                  << info.cppMemberName << ";\n";
     innerServices[cppServiceIt] = info;
   }
 
   // Add constructor
   constexpr static std::string_view backendName = "backend";
-  ios.indent() << getCPPName() << "(TBackend& " << backendName << ") {\n";
-  ios.addIndent();
+  ios << getCPPName() << "(TBackend& " << backendName << ") {\n";
+  ios.indent();
   for (auto &[innerCppService, serviceInfo] : innerServices) {
-    ios.indent() << "// " << innerCppService->name() << " initialization.\n";
+    ios << "// " << innerCppService->name() << " initialization.\n";
 
     struct ClientPortName {
       std::string servicePortName;
@@ -429,7 +425,7 @@ circt::esi::capnp::CPPDesignModule::write(support::indenting_ostream &ios) {
 
       auto portName = joinStringAttrArray(clientName, "_");
       auto ep = innerCppService->getPort(port.getName());
-      ios.indent() << "auto " << portName << " = std::make_shared<";
+      ios << "auto " << portName << " = std::make_shared<";
       portNames.push_back(ClientPortName{port.getName().str(), portName});
       if (failed(ep->writeType(mod.getLoc(), ios)))
         return failure();
@@ -456,19 +452,19 @@ circt::esi::capnp::CPPDesignModule::write(support::indenting_ostream &ios) {
       return aIdx < bIdx;
     });
 
-    ios.indent() << serviceInfo.cppMemberName << " = std::make_unique<"
+    ios << serviceInfo.cppMemberName << " = std::make_unique<"
                  << innerCppService->name() << "<TBackend>>(";
     llvm::interleaveComma(portNames, ios, [&](auto &portName) {
       ios << portName.clientPortName;
     });
     ios << ");\n";
     // and initialize...
-    ios.indent() << serviceInfo.cppMemberName << "->init();\n";
+    ios << serviceInfo.cppMemberName << "->init();\n";
   }
 
-  ios.reduceIndent();
-  ios.indent() << "}\n";
-  ios.reduceIndent();
+  ios.unindent();
+  ios << "}\n";
+  ios.unindent();
   ios << "};\n";
   return success();
 }

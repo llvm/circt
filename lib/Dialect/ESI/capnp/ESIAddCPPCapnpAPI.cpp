@@ -12,7 +12,7 @@
 
 #include "../PassDetails.h"
 
-#include "circt/Support/IndentingOStream.h"
+#include "mlir/Support/IndentedOstream.h"
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIOps.h"
@@ -46,7 +46,6 @@
 
 using namespace mlir;
 using namespace circt;
-using namespace support;
 using namespace circt::comb;
 using namespace circt::esi;
 using namespace circt::hw;

@@ -10,7 +10,6 @@
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
-#include "circt/Support/IndentingOStream.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinDialect.h"
@@ -216,7 +215,7 @@ private:
   LogicalResult emitGlobalNamespace();
 
   ModuleOp module;
-  support::indenting_ostream ios;
+  mlir::raw_indented_ostream ios;
   mlir::DiagnosticEngine &diag;
   const Location unknown;
   size_t errorCount = 0;
@@ -245,7 +244,7 @@ LogicalResult CosimCPPAPI::visitEndpoint(CosimEndpointOp ep) {
     }
 
     ios << "//   " << (isSend ? "Send" : "Recv") << " type: ";
-    dirTypeSchemaIt->second.writeMetadata(ios.getStream());
+    dirTypeSchemaIt->second.writeMetadata(ios.getOStream());
     ios << "\n";
     return success();
   };
@@ -347,7 +346,7 @@ LogicalResult CosimCPPAPI::emitGlobalNamespace() {
 LogicalResult CosimCPPAPI::emitTypes() {
   ios << "class ESITypes {\n";
   ios << "public:\n";
-  ios.addIndent();
+  ios.indent();
 
   // Iterate through the various types and emit their CPP APIs.
   for (auto cppType : types) {
@@ -357,7 +356,7 @@ LogicalResult CosimCPPAPI::emitTypes() {
       return failure();
   }
 
-  ios.reduceIndent();
+  ios.unindent();
   ios << "};\n\n";
 
   return success();

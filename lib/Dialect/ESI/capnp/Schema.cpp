@@ -16,7 +16,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
-#include "circt/Support/IndentingOStream.h"
+#include "mlir/Support/IndentedOstream.h"
 
 #include "capnp/schema-parser.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -276,13 +276,13 @@ static void emitCapnpType(Type type, llvm::raw_ostream &os) {
 /// need to be re-worked when we start supporting structs, arrays, unions,
 /// enums, etc.
 LogicalResult CapnpTypeSchemaImpl::write(llvm::raw_ostream &rawOS) const {
-  support::indenting_ostream os(rawOS);
+  mlir::raw_indented_ostream os(rawOS);
 
   // Since capnp requires messages to be structs, emit a wrapper struct.
-  os.indent() << "struct ";
+  os << "struct ";
   base.writeMetadata(rawOS);
   os << " {\n";
-  os.addIndent();
+  os.indent();
 
   size_t counter = 0;
   size_t maxNameLength = 0;
@@ -291,14 +291,15 @@ LogicalResult CapnpTypeSchemaImpl::write(llvm::raw_ostream &rawOS) const {
 
   for (auto field : base.getFields()) {
     // Specify the actual type, followed by the capnp field.
-    os.indent() << field.name.getValue();
-    os.pad(maxNameLength - field.name.size()) << " @" << counter++ << " :";
-    emitCapnpType(field.type, os.getStream());
+    os << field.name.getValue();
+    std::string padding = std::string(maxNameLength - field.name.size(), ' ');
+    os << padding << " @" << counter++ << " :";
+    emitCapnpType(field.type, os.getOStream());
     os << ";  # Actual type is " << field.type << ".\n";
   }
 
-  os.reduceIndent();
-  os.indent() << "}\n\n";
+  os.unindent();
+  os << "}\n\n";
   return success();
 }
 
