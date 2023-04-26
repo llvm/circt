@@ -231,7 +231,6 @@ def CosimBSP(user_module):
         shutil.copy(f, hw_src)
       shutil.copy(bin_dir / "driver.cpp", hw_src)
       shutil.copy(bin_dir / "driver.sv", hw_src)
-
       shutil.copy(esi_inc_dir / "ESIPrimitives.sv", hw_src)
       shutil.copy(esi_inc_dir / "Cosim_DpiPkg.sv", hw_src)
       shutil.copy(esi_inc_dir / "Cosim_Endpoint.sv", hw_src)
