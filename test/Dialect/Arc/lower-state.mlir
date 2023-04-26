@@ -105,13 +105,9 @@ hw.module @MemoryReadWithEnable(%clk0: i1, %en: i1) {
   // CHECK-NEXT: [[INEN:%.+]] = arc.root_input "en", [[PTR]] : (!arc.storage) -> !arc.state<i1>
   // CHECK-NEXT: [[CLK0:%.+]] = arc.state_read [[INCLK0]] : <i1>
   // CHECK-NEXT: arc.clock_tree [[CLK0]] {
-  // CHECK:        [[EN:%.+]] = arc.state_read [[INEN]] : <i1>
-  // CHECK-NEXT:   %{{.+}} = scf.if [[EN]] -> (i42) {
-  // CHECK-NEXT:     [[TMP:%.+]] = arc.memory_read [[MEM:%.+]][%c0_i2] : <4 x i42>, i2
-  // CHECK-NEXT:     scf.yield [[TMP]] : i42
-  // CHECK-NEXT:   } else {
-  // CHECK:          scf.yield %c0_i42 : i42
-  // CHECK-NEXT:   }
+  // CHECK:        [[TMP:%.+]] = arc.memory_read [[MEM:%.+]][%c0_i2] : <4 x i42>, i2
+  // CHECK-NEXT:   [[EN:%.+]] = arc.state_read [[INEN]] : <i1>
+  // CHECK-NEXT:   %{{.+}} = comb.mux bin [[EN]], [[TMP]], %c0_i42 : i42
   // CHECK-NEXT: }
   // CHECK-NEXT: [[MEM]] = arc.alloc_memory [[PTR]] : (!arc.storage) -> !arc.memory<4 x i42>
 }
