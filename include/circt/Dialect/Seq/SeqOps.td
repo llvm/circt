@@ -220,3 +220,37 @@ def WritePortOp : SeqOp<"write", [
   let results = (outs);
   let hasCustomAssemblyFormat = 1;
 }
+
+//===----------------------------------------------------------------------===//
+// Clock Gate
+//===----------------------------------------------------------------------===//
+
+def ClockGateOp : SeqOp<"clock_gate", [Pure]> {
+  let summary = "Safely gates a clock with an enable signal";
+  let description = [{
+    The `seq.clock_gate` enables and disables a clock safely, without glitches,
+    based on a boolean enable value. If the enable operand is 1, the output
+    clock produced by the clock gate is identical to the input clock. If the
+    enable operand is 0, the output clock is a constant zero.
+
+    The `enable` operand is sampled at the rising edge of the input clock; any
+    changes on the enable before or after that edge are ignored and do not
+    affect the output clock.
+
+    The `test_enable` operand is optional and if present is OR'd together with
+    the `enable` operand to determine whether the output clock is gated or not.
+
+    ```
+    %gatedClock = seq.clock_gate %clock, %enable : i1
+    %gatedClock = seq.clock_gate %clock, %enable, %test_enable : i1, i1
+    ```
+  }];
+
+  let arguments = (ins I1:$input, I1:$enable, Optional<I1>:$test_enable);
+  let results = (outs I1:$output);
+  let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
+  let assemblyFormat = [{
+    $input `,` $enable (`,` $test_enable^)? attr-dict
+  }];
+}
