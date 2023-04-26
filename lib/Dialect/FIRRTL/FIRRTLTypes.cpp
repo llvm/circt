@@ -1468,7 +1468,7 @@ RefType::getSubTypeByFieldID(uint64_t fieldID) const {
 }
 
 std::pair<uint64_t, bool> RefType::rootChildFieldID(uint64_t fieldID,
-                                                       uint64_t index) const {
+                                                    uint64_t index) const {
   return {0, fieldID == 0};
 }
 
