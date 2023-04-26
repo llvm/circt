@@ -662,7 +662,7 @@ static LogicalResult processBuffer(
     pm.nest<firrtl::CircuitOp>().addPass(
         firrtl::createEmitOMIRPass(omirOutFile));
 
-  // Always run this, required for legalization of connects involving force targets.
+  // Always run this, required for legalization.
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createMergeConnectionsPass(
           !disableAggressiveMergeConnections.getValue()));
