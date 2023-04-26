@@ -1447,6 +1447,30 @@ auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
   return success();
 }
 
+//- RefType implementations of FieldIDTypeInterface --------------------------//
+// Needs to be implemented to be used in a FIRRTL aggregate.
+
+uint64_t RefType::getMaxFieldID() const { return 0; }
+
+circt::hw::FieldIDTypeInterface
+RefType::getFinalTypeByFieldID(uint64_t fieldID) const {
+  assert(fieldID == 0);
+  return *this;
+}
+
+std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+RefType::getSubTypeByFieldID(uint64_t fieldID) const {
+  assert(fieldID == 0);
+  return {*this, 0};
+}
+
+std::pair<uint64_t, bool> RefType::rootChildFieldID(uint64_t fieldID,
+                                                    uint64_t index) const {
+  return {0, fieldID == 0};
+}
+
+uint64_t RefType::getGroundFields() const { return 1; }
+
 //===----------------------------------------------------------------------===//
 // AnalogType
 //===----------------------------------------------------------------------===//
