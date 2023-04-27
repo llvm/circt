@@ -237,6 +237,11 @@ def CosimBSP(user_module):
       shutil.copy(__dir__ / "Makefile.cosim", sys.output_directory)
       shutil.copy(sys.hw_output_dir / "schema.capnp", sys.runtime_output_dir)
 
+      # Copy everything from the 'runtime' directory
+      shutil.copytree(esi_inc_dir / "runtime",
+                      sys.runtime_output_dir,
+                      dirs_exist_ok=True)
+
   return top
 
 
