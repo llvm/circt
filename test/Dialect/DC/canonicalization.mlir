@@ -28,7 +28,7 @@ func.func @redundantJoinOperands(%a: !dc.token, %b : !dc.token) -> (!dc.token) {
 // CHECK:           return %[[VAL_0]] : !dc.token
 // CHECK:         }
 func.func @fork(%a: !dc.token) -> (!dc.token) {
-    %0 = dc.fork %a : !dc.token
+    %0 = dc.fork [1] %a
     return %0 : !dc.token
 }
 
@@ -61,8 +61,8 @@ func.func @redundantPack(%a: !dc.token, %b : i32, %c : i1) -> (!dc.token) {
 // CHECK:           return %[[VAL_1]]#1, %[[VAL_1]]#1, %[[VAL_1]]#2 : !dc.token, !dc.token, !dc.token
 // CHECK:         }
 func.func @forkToFork(%a: !dc.token) -> (!dc.token, !dc.token, !dc.token) {
-    %0, %1 = dc.fork %a : !dc.token, !dc.token
-    %2, %3 = dc.fork %0 : !dc.token, !dc.token
+    %0, %1 = dc.fork [2] %a
+    %2, %3 = dc.fork [2] %0
     return %1, %2, %3 : !dc.token, !dc.token, !dc.token
 }
 
@@ -76,7 +76,7 @@ func.func @merge(%sel : !dc.value<i1>) -> (!dc.token) {
     // Canonicalize away a merge that is fed by a branch with the same select
     // input.
     %true, %false = dc.branch %sel
-    %0 = dc.merge %sel [ %true, %false ] : !dc.value<i1>
+    %0 = dc.select %sel, %true, %false
     return %0 : !dc.token
 }
 
@@ -99,6 +99,6 @@ func.func @joinOnSource(%a : !dc.token, %b : !dc.token) -> (!dc.token) {
 // CHECK:         }
 func.func @forkOfSource() -> (!dc.token, !dc.token) {
     %0 = dc.source
-    %1:2 = dc.fork %0 : !dc.token, !dc.token
+    %1:2 = dc.fork [2] %0
     return %1#0, %1#1 : !dc.token, !dc.token
 }

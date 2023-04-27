@@ -272,6 +272,48 @@ void JoinOp::getCanonicalizationPatterns(RewritePatternSet &results,
 // ForkOp
 // =============================================================================
 
+template <typename TInt>
+static ParseResult parseIntInSquareBrackets(OpAsmParser &parser, TInt &v) {
+  if (parser.parseLSquare() || parser.parseInteger(v) || parser.parseRSquare())
+    return failure();
+  return success();
+}
+
+ParseResult ForkOp::parse(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> operands;
+  llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
+  size_t size = 0;
+  if (parseIntInSquareBrackets(parser, size))
+    return failure();
+
+  if (size == 0)
+    return parser.emitError(parser.getNameLoc(),
+                            "fork size must be greater than 0");
+
+  if (parser.parseOperandList(operands) ||
+      parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  auto tt = dc::TokenType::get(parser.getContext());
+  llvm::SmallVector<Type> operandTypes{tt};
+  SmallVector<Type, 1> resultTypes{size, tt};
+  result.addTypes(resultTypes);
+  if (parser.resolveOperands(operands, operandTypes, allOperandLoc,
+                             result.operands))
+    return failure();
+  return success();
+}
+
+void ForkOp::print(OpAsmPrinter &p) {
+  p << "[" << getNumResults() << "] ";
+  p << getOperand() << " ";
+  auto attrs = (*this)->getAttrs();
+  if (!attrs.empty()) {
+    p << " ";
+    p.printOptionalAttrDict(attrs);
+  }
+}
+
 class EliminateForkToForkPattern : public OpRewritePattern<ForkOp> {
   // Canonicalization of forks where the output is fed into another fork.
 public:

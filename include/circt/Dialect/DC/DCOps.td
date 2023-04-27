@@ -271,14 +271,13 @@ def ForkOp : DCOp<"fork"> {
     
         Example:
         ```mlir
-        %0, %1 = dc.fork %a : !dc.token, !dc.token
+        %0, %1 = dc.fork [2] %a : !dc.token, !dc.token
         ```
     }];
     
     let arguments = (ins TokenType:$token);
     let results = (outs Variadic<TokenType>:$outputs);
-
-    let assemblyFormat = "$token attr-dict (`:` qualified(type($outputs))^)?";
+    let hasCustomAssemblyFormat = 1;
     let hasCanonicalizer = 1;
 
     let builders = [OpBuilder<(
