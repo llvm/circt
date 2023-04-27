@@ -2737,8 +2737,19 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
   }
 
   auto kind = getToken().getKind();
-  if (getToken().isNot(FIRToken::less_equal, FIRToken::less_minus))
-    return emitError("expected '<=', '<-', or 'is' in statement"), failure();
+  switch (kind) {
+  case FIRToken::less_equal:
+    break;
+  case FIRToken::less_minus:
+    // Partial connect ("<-") was removed in FIRRTL version 2.0.0.
+    if (FIRVersion::compare(version, FIRVersion({2, 0, 0})) < 0)
+      break;
+    [[fallthrough]];
+  default:
+    return emitError() << "unexpected token '" << getToken().getSpelling()
+                       << "' in statement",
+           failure();
+  }
   consumeToken();
 
   Value rhs;

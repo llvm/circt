@@ -126,15 +126,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.strictconnect %_t, %_t_2 : !firrtl.vector<uint<1>, 12>
     _t <= _t_2
 
-    ; CHECK: firrtl.strictconnect %_t, %_t_2
-    _t <- _t_2
-
-    ; CHECK: [[a0:%.+]] = firrtl.subfield %bundleWithAnalog[a]
-    ; CHECK: [[a1:%.+]] = firrtl.subfield %bundleWithAnalog[a]
-    ; CHECK: firrtl.attach [[a1]], [[a0]]
-    wire bundleWithAnalog : {a: Analog<1>}
-    bundleWithAnalog <- bundleWithAnalog
-
     ; CHECK: [[INV:%.+]]  = firrtl.invalidvalue : !firrtl.uint<1>
     ; CHECK-NEXT: firrtl.strictconnect %auto, [[INV]] : !firrtl.uint<1>
     auto is invalid
@@ -158,12 +149,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: %out_0 = firrtl.wire interesting_name : !firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>
     wire out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
-
-    ; CHECK: [[A:%.+]] = firrtl.subfield %out_0[member] : !firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>
-    ; CHECK: [[B:%.+]] = firrtl.subfield [[A]]["0"] : !firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>
-    ; CHECK: [[C:%.+]] = firrtl.subfield [[B]][reset] : !firrtl.bundle<clock: clock, reset: uint<1>>
-    ; CHECK: firrtl.strictconnect %auto, [[C]] : !firrtl.uint<1>
-    auto <- out_0.member.0.reset @[Field 173:49]
 
     ; CHECK: %_t_3 = firrtl.wire interesting_name : !firrtl.vector<uint<1>, 12>
     ; CHECK: [[A:%.+]] = firrtl.subindex %_t_3[0] : !firrtl.vector<uint<1>, 12>
@@ -252,7 +237,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: } else {
     ; CHECK:   firrtl.strictconnect %_t, %_t_2
     ; CHECK: }
-    when reset : _t <= _t_2 else : _t <- _t_2
+    when reset : _t <= _t_2 else : _t <= _t_2
 
     ; CHECK: firrtl.when %reset : !firrtl.uint<1> {
     ; CHECK:   [[N4A:%.+]] = firrtl.node interesting_name %_t_2
@@ -266,7 +251,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       _t <= n4
     else :
       node n4 = _t_2   ; 'n4' name is in unique scopes.
-      _t <- n4
+      _t <= n4
 
     ; CHECK: [[TMP:%.+]] = firrtl.constant 4
     ; CHECK: [[COND:%.+]] = firrtl.lt %reset, [[TMP]]
@@ -1307,3 +1292,29 @@ circuit Foo_v3p0p0:
     ; CHECK: [[INV:%.+]]  = firrtl.invalidvalue : !firrtl.uint<1>
     ; CHECK-NEXT: firrtl.strictconnect %b, [[INV]] : !firrtl.uint<1>
     invalidate b
+
+;// -----
+
+FIRRTL version 1.2.0
+circuit Foo_v1p9p9:
+  module Foo_v1p9p9:
+    input a: UInt<1>
+    output b: UInt<1>
+    output auto : UInt<1>
+
+    ; CHECK: firrtl.strictconnect %b, %a
+    b <- a
+
+    ; CHECK: [[a0:%.+]] = firrtl.subfield %bundleWithAnalog[a]
+    ; CHECK: [[a1:%.+]] = firrtl.subfield %bundleWithAnalog[a]
+    ; CHECK: firrtl.attach [[a1]], [[a0]]
+    wire bundleWithAnalog : {a: Analog<1>}
+    bundleWithAnalog <- bundleWithAnalog
+
+
+    ; CHECK: [[A:%.+]] = firrtl.subfield %out_0[member] : !firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>
+    ; CHECK: [[B:%.+]] = firrtl.subfield [[A]]["0"] : !firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>
+    ; CHECK: [[C:%.+]] = firrtl.subfield [[B]][reset] : !firrtl.bundle<clock: clock, reset: uint<1>>
+    ; CHECK: firrtl.strictconnect %auto, [[C]] : !firrtl.uint<1>
+    wire out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
+    auto <- out_0.member.0.reset @[Field 173:49]

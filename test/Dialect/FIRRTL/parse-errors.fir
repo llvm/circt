@@ -105,6 +105,7 @@ circuit subfield_of_ground_type :
 
 ;// -----
 
+FIRRTL version 1.2.0
 circuit invalid_name :
   module invalid_name :
    input out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
@@ -113,6 +114,7 @@ circuit invalid_name :
 
 ;// -----
 
+FIRRTL version 1.2.0
 circuit invalid_name :
   module invalid_name :
    input out_0 : SInt<8>[5]
@@ -145,6 +147,7 @@ circuit invalid_int_literal :
 
 ;// -----
 ; When scopes are local to the body
+FIRRTL version 1.2.0
 circuit invalid_name :
   module invalid_name :
     input reset : UInt<1>
@@ -505,6 +508,7 @@ circuit ProbeConnectAlternate:
 
 ;// -----
 
+FIRRTL version 1.2.0
 circuit ProbePartialConnect:
   module ProbePartialConnect:
     input in : UInt<1>
@@ -585,3 +589,13 @@ circuit ForceWithLiteral:
     input in : UInt<1>
     node n = in
     force_initial(rwprobe(n), 1) ; expected-error {{expected source expression in force_initial}}
+
+;// -----
+
+FIRRTL version 2.0.0
+circuit PartialConnect_v2p0p0:
+  module PartialConnect_v2p0p0:
+    input a: UInt<1>
+    output b: UInt<1>
+
+    b <- a ; expected-error {{unexpected token '<-' in statement}}
