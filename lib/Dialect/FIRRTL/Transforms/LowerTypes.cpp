@@ -409,10 +409,18 @@ private:
   bool processSAPath(Operation *);
   void lowerBlock(Block *);
   void lowerSAWritePath(Operation *, ArrayRef<Operation *> writePath);
+
+  /// Lower a "producer" operation one layer based on policy.
+  /// Use the provided \p clone function to generate individual ops for
+  /// the expanded subelements/fields.  The type used to determine if lowering
+  /// is needed is either \p srcType if provided or from the assumed-to-exist
+  /// first result of the operation.  When lowering, the clone callback will be
+  /// invoked with each subelement/field of this type.
   bool lowerProducer(
       Operation *op,
       llvm::function_ref<Value(const FlatBundleFieldEntry &, ArrayAttr)> clone,
-      Type type = {});
+      Type srcType = {});
+
   /// Copy annotations from \p annotations to \p loweredAttrs, except
   /// annotations with "target" key, that do not match the field suffix.
   ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
@@ -571,16 +579,16 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
 bool TypeLoweringVisitor::lowerProducer(
     Operation *op,
     llvm::function_ref<Value(const FlatBundleFieldEntry &, ArrayAttr)> clone,
-    Type type) {
+    Type srcType) {
 
-  if (!type)
-    type = op->getResult(0).getType();
-  auto srcType = dyn_cast<FIRRTLType>(type);
   if (!srcType)
+    srcType = op->getResult(0).getType();
+  auto srcFType = dyn_cast<FIRRTLType>(srcType);
+  if (!srcFType)
     return false;
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
 
-  if (!peelType(srcType, fieldTypes, aggregatePreservationMode))
+  if (!peelType(srcFType, fieldTypes, aggregatePreservationMode))
     return false;
 
   // If an aggregate value has a symbol, emit errors.
@@ -610,7 +618,7 @@ bool TypeLoweringVisitor::lowerProducer(
     // For all annotations on the parent op, filter them based on the target
     // attribute.
     ArrayAttr loweredAttrs =
-        filterAnnotations(context, oldAnno, srcType, field);
+        filterAnnotations(context, oldAnno, srcFType, field);
     auto newVal = clone(field, loweredAttrs);
 
     // Carry over the name, if present.
