@@ -44,9 +44,9 @@ public:
     bool changed = false;
     for (auto [cond, oldOps] : resetMap) {
       if (oldOps.size() > 1) {
-        auto iteratorStart = oldOps.rbegin();
+        auto *iteratorStart = oldOps.begin();
         scf::IfOp firstOp = *(iteratorStart++);
-        for (auto thisOp = iteratorStart; thisOp != oldOps.rend(); thisOp++) {
+        for (auto *thisOp = iteratorStart; thisOp != oldOps.end(); thisOp++) {
           // Inline the before and after region inside the original If
           rewriter.eraseOp(thisOp->thenBlock()->getTerminator());
           rewriter.inlineBlockBefore(thisOp->thenBlock(),
@@ -77,16 +77,16 @@ public:
                                 PatternRewriter &rewriter) const override {
     ClockTreeOp clockTreeOp = dyn_cast<ClockTreeOp>(*op);
 
-    // Generate vector of blocks to amass StateWrite enables in
-    SmallVector<Block *> groupingBlocks;
-    groupingBlocks.push_back(&clockTreeOp.getBodyBlock());
+    // Generate list of blocks to amass StateWrite enables in - these are accompanied by a boolean that dictates whether the body has a terminator to save on an unnecessary trait check later 
+    SmallVector<std::pair<Block *, bool>> groupingBlocks;
+    groupingBlocks.push_back(std::pair(&clockTreeOp.getBodyBlock(), false));
     for (auto ifOp : clockTreeOp.getBody().getOps<scf::IfOp>()) {
-      groupingBlocks.push_back(ifOp.thenBlock());
-      groupingBlocks.push_back(ifOp.elseBlock());
+      groupingBlocks.push_back(std::pair(ifOp.thenBlock(), true));
+      groupingBlocks.push_back(std::pair(ifOp.elseBlock(), true));
     }
 
     bool changed = false;
-    for (auto *block : groupingBlocks) {
+    for (auto [block, hasTerminator]: groupingBlocks) {
       llvm::MapVector<mlir::Value, SmallVector<StateWriteOp>> enableMap;
       auto writeOps = block->getOps<StateWriteOp>();
       for (auto writeOp : writeOps) {
@@ -96,6 +96,11 @@ public:
       for (auto [enable, writeOps] : enableMap) {
         // Only group if multiple writes share a reset
         if (writeOps.size() > 1) {
+            if (hasTerminator) {
+              rewriter.setInsertionPoint(block->getTerminator());
+            } else {
+              rewriter.setInsertionPointToEnd(block);
+            }
           scf::IfOp ifOp = rewriter.create<scf::IfOp>(rewriter.getUnknownLoc(),
                                                       enable, false);
           for (auto writeOp : writeOps) {
@@ -104,8 +109,6 @@ public:
               writeOp.getConditionMutable().erase(0);
             });
           }
-          rewriter.updateRootInPlace(
-              ifOp, [&]() { ifOp->moveBefore(block->getTerminator()); });
           changed = true;
         }
       }
