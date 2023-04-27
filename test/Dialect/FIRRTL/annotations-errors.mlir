@@ -284,3 +284,32 @@ firrtl.circuit "RefAnno" attributes {rawAnnotations = [{
     firrtl.ref.define %out, %ref : !firrtl.ref<uint<1>>
   }
 }
+
+// -----
+// Reject AttributeAnnotations on ports.
+
+
+
+// expected-error @+1 {{Unable to apply annotation:}}
+firrtl.circuit "Anno" attributes {rawAnnotations = [{
+  class = "firrtl.AttributeAnnotation",
+  target = "~Anno|Anno>in",
+  description = "attr"
+}]} {
+  // expected-error @+1 {{firrtl.AttributeAnnotation must target an operation. Currently ports are not supported}}
+  firrtl.module @Anno(in %in : !firrtl.uint<1>) {}
+}
+
+// -----
+// Reject AttributeAnnotations on external modules.
+
+// expected-error @+1 {{Unable to apply annotation:}}
+firrtl.circuit "Anno" attributes {rawAnnotations = [{
+  class = "firrtl.AttributeAnnotation",
+  target = "~Anno|Ext",
+  description = "ext"
+}]} {
+  // expected-error @+1 {{firrtl.AttributeAnnotation unhandled operation. The target must be a module, wire, node or register}}
+  firrtl.extmodule @Ext()
+  firrtl.module @Anno(in %in : !firrtl.uint<1>) {}
+}

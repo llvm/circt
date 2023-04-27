@@ -361,14 +361,23 @@ static LogicalResult applyAttributeAnnotation(const AnnoPathValue &target,
                                               ApplyState &state) {
   auto *op = target.ref.getOp();
 
-  if (!target.isLocal())
-    return mlir::emitError(op->getLoc()) << "must be local";
+  auto error = [&]() {
+    auto diag = mlir::emitError(op->getLoc());
+    diag << anno.getAs<StringAttr>("class").getValue() << " ";
+    return diag;
+  };
 
   if (!target.ref.isa<OpAnnoTarget>())
-    return mlir::emitError(op->getLoc()) << "must target an operation";
+    return error()
+           << "must target an operation. Currently ports are not supported";
+
+  if (!target.isLocal())
+    return error() << "must be local";
 
   if (!isa<FModuleOp, WireOp, NodeOp, RegOp, RegResetOp>(op))
-    return mlir::emitError(op->getLoc()) << "unhandled operation";
+    return error()
+           << "unhandled operation. The target must be a module, wire, node or "
+              "register";
 
   auto name = anno.getAs<StringAttr>("description");
   auto svAttr = sv::SVAttributeAttr::get(name.getContext(), name, isComment);

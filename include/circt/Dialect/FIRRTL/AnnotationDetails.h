@@ -210,6 +210,7 @@ constexpr const char *wiringSinkAnnoClass =
 constexpr const char *wiringSourceAnnoClass =
     "firrtl.passes.wiring.SourceAnnotation";
 
+// Attribute/DocString annotations.
 constexpr const char *attributeAnnoClass = "firrtl.AttributeAnnotation";
 constexpr const char *docStringAnnoClass = "firrtl.DocStringAnnotation";
 
