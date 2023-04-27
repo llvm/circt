@@ -1,8 +1,9 @@
 // Check behavior when attempting to "rematerialize" aggregates that
 // have their producers lowered but have active users still.
 
-// This test relies on the scalarization to expand the vectors,
-// and expects this to 1)no longer crash and 2)recreate the vector neatly.
+// This test relies on the scalarization to expand the aggregates fully
+// in the ports and checks that at various preservation levels this
+// 1)does not crash, and 2)appropriate aggregates are recreated.
 
 // Derived from this example:
 // https://github.com/llvm/circt/pull/5051/files#r1178556059
