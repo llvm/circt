@@ -25,4 +25,13 @@
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/ESI/ESITypes.h.inc"
 
+namespace circt {
+namespace esi {
+
+// If 'type' is an esi:ChannelType, will return the inner type of said channel.
+// Else, returns 'type'.
+mlir::Type innerType(mlir::Type type);
+} // namespace esi
+} // namespace circt
+
 #endif
