@@ -548,9 +548,9 @@ instance inputs which may be also read from).  A value with `source` flow may be
 read from, but not written to.  A value with `duplex` flow may be read from or
 written to.
 
-For FIRRTL connects or partial connect statements, it follows that the
-left-hand-side must be `sink` or `duplex` and the right-hand-side must be
-`source`, `duplex`, or a port/instance `sink`.
+For FIRRTL connect statements, it follows that the left-hand-side must be `sink`
+or `duplex` and the right-hand-side must be `source`, `duplex`, or a
+port/instance `sink`.
 
 Flow is _not_ represented as a first-class type in CIRCT.  We instead provide
 utilities for computing flow when needed, e.g., for connect statement
