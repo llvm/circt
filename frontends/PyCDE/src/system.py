@@ -253,6 +253,7 @@ class System:
       lambda sys: TypeAlias.declare_aliases(sys.mod),
       "builtin.module(msft-lower-constructs, msft-lower-instances)",
       "builtin.module(esi-emit-collateral{{tops={tops} schema-file=schema.capnp}})",
+      "builtin.module(esi-clean-metadata)",
       "builtin.module(lower-msft-to-hw{{verilog-file={verilog_file}}})",
       "builtin.module(lower-hwarith-to-hw)",
       "builtin.module(hw.module(lower-seq-hlmem))",
