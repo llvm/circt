@@ -154,5 +154,6 @@ if config.esi_cosim_path != "":
 # Enable ESI's Capnp tests if they're supported.
 if config.esi_capnp != "":
   config.available_features.add('capnp')
+  config.substitutions.append(('%CAPNP_CMAKE_DIR%', config.capnp_path))
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
