@@ -667,6 +667,13 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
           // user has already been processed.
           ImplicitLocOpBuilder b(user->getLoc(), user);
 
+          // This shouldn't happen (non-FIRRTLBaseType's in lowered types, or
+          // refs), check explicitly here for clarity/early detection.
+          assert(llvm::none_of(mapping, [](auto v) {
+            auto fbasetype = dyn_cast<FIRRTLBaseType>(v.getType());
+            return !fbasetype || fbasetype.containsReference();
+          }));
+
           Value input =
               TypeSwitch<Type, Value>(val.getType())
                   .template Case<FVectorType>([&](auto vecType) {
