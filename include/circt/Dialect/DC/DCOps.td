@@ -306,22 +306,24 @@ def BranchOp : DCOp<"branch"> {
         }]>];
 }
 
-def MergeOp : DCOp<"merge"> {
-    let summary = "Merge operation";
+def SelectOp : DCOp<"select"> {
+    let summary = "Select operation";
     let description = [{
         An input token is selected based on the value of the incoming select
         signal, and propagated to the single output. Only the condition value,
         the selected input, and the output will be transacted.
     }];
 
-    let arguments = (ins ValueType:$select, Variadic<TokenType>:$tokens);
+    let arguments = (ins I1ValueType:$condition, TokenType:$trueToken, TokenType:$falseToken);
     let results = (outs TokenType:$output);
-    let assemblyFormat = "$select `[` $tokens `]` attr-dict `:` qualified(type($select))";
-    let builders = [OpBuilder<(
-        ins "Value":$select, "ValueRange":$tokens), [{
-            build(odsBuilder, odsState, odsBuilder.getType<dc::TokenType>(), select, tokens);
-        }]>];
+    let assemblyFormat = "$condition `,` $trueToken `,` $falseToken attr-dict";
     let hasCanonicalizer = 1;
+    let builders = [OpBuilder<(
+      ins "Value":$condition, "Value":$trueToken, "Value":$falseToken), [{
+          auto tt = odsBuilder.getType<dc::TokenType>();
+          build(odsBuilder, odsState, tt, condition, trueToken, falseToken);
+      }]>];
+
 }
 
 def SinkOp : DCOp<"sink"> {

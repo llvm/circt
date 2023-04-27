@@ -490,24 +490,24 @@ OpFoldResult PackOp::fold(FoldAdaptor adaptor) {
 }
 
 // =============================================================================
-// MergeOp
+// SelectOp
 // =============================================================================
 
-class EliminateBranchToMergePattern : public OpRewritePattern<MergeOp> {
-  // Canonicalize away a merge that is fed only by a single branch
+class EliminateBranchToSelectPattern : public OpRewritePattern<SelectOp> {
+  // Canonicalize away a select that is fed only by a single branch
   // example:
   //   %true, %false = dc.branch %sel1 %token
-  //   %0 = dc.merge %sel2 [ %true, %false ] : !dc.value<i1>
+  //   %0 = dc.select %sel2, %true, %false
   // ->
   //   %0 = dc.join %sel1, %sel2, %token
 
 public:
-  using OpRewritePattern<MergeOp>::OpRewritePattern;
-  LogicalResult matchAndRewrite(MergeOp merge,
+  using OpRewritePattern<SelectOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(SelectOp select,
                                 PatternRewriter &rewriter) const override {
     // Do all the inputs come from a branch?
     BranchOp branchInput;
-    for (auto operand : merge.getTokens()) {
+    for (auto operand : {select.getTrueToken(), select.getFalseToken()}) {
       auto br = operand.getDefiningOp<BranchOp>();
       if (!br)
         return failure();
@@ -518,23 +518,24 @@ public:
         return failure();
     }
 
-    // Replace the merge with a join (unpack the select conditions).
+    // Replace the select with a join (unpack the select conditions).
     rewriter.replaceOpWithNewOp<JoinOp>(
-        merge, llvm::SmallVector<Value>{
-                   rewriter.create<UnpackOp>(merge.getLoc(), merge.getSelect())
-                       .getToken(),
-                   rewriter
-                       .create<UnpackOp>(branchInput.getLoc(),
-                                         branchInput.getCondition())
-                       .getToken()});
+        select,
+        llvm::SmallVector<Value>{
+            rewriter.create<UnpackOp>(select.getLoc(), select.getCondition())
+                .getToken(),
+            rewriter
+                .create<UnpackOp>(branchInput.getLoc(),
+                                  branchInput.getCondition())
+                .getToken()});
 
     return success();
   }
 };
 
-void MergeOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                          MLIRContext *context) {
-  results.insert<EliminateBranchToMergePattern>(context);
+void SelectOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.insert<EliminateBranchToSelectPattern>(context);
 }
 
 } // namespace dc

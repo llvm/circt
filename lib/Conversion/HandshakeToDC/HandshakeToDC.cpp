@@ -383,6 +383,7 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     auto select = unpack(rewriter, adaptor.getSelectOperand());
     auto selectData = select.data.front();
+    auto selectToken = select.token;
     bool isIndexType = selectData.getType().isa<IndexType>();
 
     bool withData = !op.getResult().getType().isa<NoneType>();
@@ -392,6 +393,7 @@ public:
       inputs.push_back(unpack(rewriter, input));
 
     Value dataMux;
+    Value controlMux = inputs.front().token;
     // Convert the data-side mux to a sequence of arith.select operations.
     // The data and control muxes are assumed one-hot and the base-case is set
     // as the first input.
@@ -401,10 +403,10 @@ public:
     llvm::SmallVector<Value> controlMuxInputs = {inputs.front().token};
     for (auto [i, input] :
          llvm::enumerate(llvm::make_range(inputs.begin() + 1, inputs.end()))) {
-      controlMuxInputs.push_back(input.token);
       if (withData) {
         Value cmpIndex;
         Value inputData = input.data.front();
+        Value inputControl = input.token;
         if (isIndexType) {
           cmpIndex = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), i);
         } else {
@@ -421,14 +423,19 @@ public:
         convertedOps->insert(cmpIndex.getDefiningOp());
         convertedOps->insert(dataMux.getDefiningOp());
         convertedOps->insert(inputSelected);
+
+        // And similarly for the control mux, by muxing the input token with a
+        // select value that has it's control from the original select token +
+        // the inputSelected value.
+        auto inputSelectedControl = rewriter.create<dc::PackOp>(
+            op.getLoc(), selectToken, ValueRange{inputSelected});
+        controlMux = rewriter.create<dc::SelectOp>(
+            op.getLoc(), inputSelectedControl, inputControl, controlMux);
+        convertedOps->insert(controlMux.getDefiningOp());
       }
     }
 
-    // Convert the control-side into a dc.merge operation.
-    auto controlMux = rewriter.create<dc::MergeOp>(
-        op.getLoc(), adaptor.getSelectOperand(), controlMuxInputs);
-
-    // finally, pack the dc.token-side muxing with the data-side mux.
+    // finally, pack the control and data side muxes into the output value.
     rewriter.replaceOpWithNewOp<dc::PackOp>(
         op, controlMux, withData ? ValueRange{dataMux} : ValueRange{});
     return success();

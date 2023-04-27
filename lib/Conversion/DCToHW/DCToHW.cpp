@@ -184,12 +184,20 @@ struct HandshakeWire {
   // Functions that allow to treat a wire like an input or output port.
   // **Careful**: Such a port will not be updated when backedges are resolved.
   InputHandshake getAsInput() {
-    return InputHandshake{
-        .channel = nullptr, .valid = *valid, .ready = ready, .data = *data};
+    InputHandshake ih;
+    ih.valid = *valid;
+    ih.ready = ready;
+    ih.data = *data;
+    ih.channel = nullptr;
+    return ih;
   }
   OutputHandshake getAsOutput() {
-    return OutputHandshake{
-        .channel = nullptr, .valid = valid, .ready = *ready, .data = data};
+    OutputHandshake oh;
+    oh.valid = valid;
+    oh.ready = *ready;
+    oh.data = data;
+    oh.channel = nullptr;
+    return oh;
   }
 
   std::shared_ptr<Backedge> valid;
@@ -614,12 +622,12 @@ public:
   }
 };
 
-class MergeConversionPattern : public OpConversionPattern<MergeOp> {
+class SelectConversionPattern : public OpConversionPattern<SelectOp> {
 public:
-  using OpConversionPattern<MergeOp>::OpConversionPattern;
+  using OpConversionPattern<SelectOp>::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(MergeOp op, OpAdaptor operands,
+  matchAndRewrite(SelectOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
     auto bb = BackedgeBuilder(rewriter, op.getLoc());
     auto io = unwrapIO(op, operands.getOperands(), rewriter, bb);
@@ -1071,7 +1079,7 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
 
   patterns.insert<
       FuncOpConversionPattern, ReturnConversionPattern, ForkConversionPattern,
-      JoinConversionPattern, MergeConversionPattern, BranchConversionPattern,
+      JoinConversionPattern, SelectConversionPattern, BranchConversionPattern,
       PackConversionPattern, UnpackConversionPattern, BufferConversionPattern,
       SourceConversionPattern, SinkConversionPattern>(typeConverter,
                                                       op.getContext());
