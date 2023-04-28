@@ -37,7 +37,6 @@ public:
     llvm::MapVector<mlir::Value, SmallVector<scf::IfOp>> resetMap;
     auto ifOps = clockTreeOp.getBody().getOps<scf::IfOp>();
 
-
     for (auto ifOp : ifOps)
       resetMap[ifOp.getCondition()].push_back(ifOp);
 
@@ -87,7 +86,7 @@ public:
     }
 
     bool changed = false;
-    for (auto *region: groupingRegions) {
+    for (auto *region : groupingRegions) {
       llvm::MapVector<mlir::Value, SmallVector<StateWriteOp>> enableMap;
       auto writeOps = region->getOps<StateWriteOp>();
       for (auto writeOp : writeOps) {
@@ -97,13 +96,13 @@ public:
       for (auto [enable, writeOps] : enableMap) {
         // Only group if multiple writes share an enable
         if (writeOps.size() > 1) {
-            if (isa<scf::IfOp>(region->getParentOp())) {
-              rewriter.setInsertionPoint(region->back().getTerminator());
-            } else {
-              rewriter.setInsertionPointToEnd(&region->back());
-            }
-          scf::IfOp ifOp = rewriter.create<scf::IfOp>(writeOps[0].getLoc(),
-                                                      enable, false);
+          if (isa<scf::IfOp>(region->getParentOp())) {
+            rewriter.setInsertionPoint(region->back().getTerminator());
+          } else {
+            rewriter.setInsertionPointToEnd(&region->back());
+          }
+          scf::IfOp ifOp =
+              rewriter.create<scf::IfOp>(writeOps[0].getLoc(), enable, false);
           for (auto writeOp : writeOps) {
             rewriter.updateRootInPlace(writeOp, [&]() {
               writeOp->moveBefore(ifOp.thenBlock()->getTerminator());
