@@ -26,7 +26,7 @@ std::unique_ptr<mlir::Pass> createHWLegalizeModulesPass();
 std::unique_ptr<mlir::Pass> createSVTraceIVerilogPass();
 std::unique_ptr<mlir::Pass> createHWGeneratorCalloutPass();
 std::unique_ptr<mlir::Pass> createHWMemSimImplPass(
-    bool replSeqMem = false, bool ignoreReadEnableMem = false,
+    bool replSeqMem = false, bool ignoreReadEnable = false,
     bool addMuxPragmas = false, bool disableMemRandomization = false,
     bool disableRegRandomization = false,
     bool addVivadoRAMAddressConflictSynthesisBugWorkaround = false);
