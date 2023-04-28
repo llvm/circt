@@ -369,3 +369,11 @@ hw.module @foo() {
   %0 = hw.enum.constant D : !hw.enum<A, B, C>
   hw.output
 }
+
+// -----
+
+hw.module @foo() {
+  // expected-error @+1 {{return type '!hw.enum<A, B>' does not match attribute type #hw.enum.field<A, !hw.enum<A>>}}
+  %0 = "hw.enum.constant"() {field = #hw.enum.field<A, !hw.enum<A>>} : () -> !hw.enum<A, B>
+  hw.output
+}

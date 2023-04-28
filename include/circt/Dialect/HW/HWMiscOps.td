@@ -163,7 +163,7 @@ def EnumConstantOp : HWOp<"enum.constant", [Pure, ConstantLike,
   let results = (outs EnumType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasFolder = true;
-
+  let hasVerifier = true;
   let builders = [
     OpBuilder<(ins "hw::EnumFieldAttr":$field)>,
   ];

@@ -2254,6 +2254,17 @@ OpFoldResult EnumConstantOp::fold(FoldAdaptor adaptor) {
   return getFieldAttr();
 }
 
+LogicalResult EnumConstantOp::verify() {
+  auto fieldAttr = getFieldAttr();
+  auto fieldType = fieldAttr.getType().getValue();
+  // This check ensures that we are using the exact same type, without looking
+  // through type aliases.
+  if (fieldType != getType())
+    emitOpError("return type ")
+        << getType() << " does not match attribute type " << fieldAttr;
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // StructCreateOp
 //===----------------------------------------------------------------------===//
