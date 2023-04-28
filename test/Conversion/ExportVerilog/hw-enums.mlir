@@ -1,19 +1,26 @@
 // RUN: circt-opt %s --test-apply-lowering-options='options=emittedLineLength=100,emitBindComments' -export-verilog -split-input-file -o %t.mlir | FileCheck %s
 
+// CHECK: typedef enum bit [0:0] {enum0_T} enum0;
+// CHECK: // typedef enum bit [0:0] {} enum1;
+// CHECK: typedef enum bit [0:0] {enum2_U} enum2;
 // CHECK-LABEL: module EnumCheck
-hw.module @EnumCheck(%a : !hw.enum<T>, %b: !hw.enum<>)
-                 -> (c: !hw.enum<T>, d: !hw.enum<>) {
-  // CHECK: input enum bit [0:0] {T} a
-  // CHECK: // input enum bit [0:0] {} b
-  hw.output %a, %b : !hw.enum<T>, !hw.enum<>
+hw.module @EnumCheck(%a : !hw.enum<T>, %b: !hw.enum<>, %c : !hw.enum<U>)
+    -> (d : !hw.enum<T>, e: !hw.enum<>, f: !hw.enum<U>) {
+  // CHECK: assign d = a;
+  // CHECK: // Zero width: assign e = b;
+  // CHECK: assign f = c;
+  hw.output %a, %b, %c : !hw.enum<T>, !hw.enum<>, !hw.enum<U>
 }
 
+// -----
+
+// CHECK:       typedef enum bit [0:0] {enum0_A, enum0_B} enum0;
 // CHECK-LABEL: module EnumCmp(
-// CHECK-NEXT:   input enum bit [0:0] {A, B} test,
-// CHECK-NEXT:   output result
+// CHECK-NEXT:   input  enum0 test,
+// CHECK-NEXT:   output       result
 // CHECK-NEXT:  )
 // CHECK-EMPTY:
-// CHECK-NEXT:   assign result = test == A;
+// CHECK-NEXT:   assign result = test == enum0_A;
 // CHECK-NEXT: endmodule
 hw.module @EnumCmp(%test: !hw.enum<A, B>) -> (result: i1) {
   %A = hw.enum.constant A : !hw.enum<A, B>
@@ -21,24 +28,29 @@ hw.module @EnumCmp(%test: !hw.enum<A, B>) -> (result: i1) {
   hw.output %0 : i1
 }
 
-// Mixing !hw.enum types which alias in their fields - one anonymous enum
-// and two aliasing named enums.
+// -----
 
+// Mixing !hw.enum types which alias in their fields - one anonymous enum
+// and two aliasing named enum
+// CHECK: `ifndef _TYPESCOPE_Enums
+// CHECK: `define _TYPESCOPE_Enums
+// CHECK: typedef enum bit [0:0] {enum0_A, enum0_B} enum0;
+// CHECK: `endif // _TYPESCOPE_Enums
 // CHECK: `ifndef _TYPESCOPE___AnFSMTypedecl
 // CHECK: `define _TYPESCOPE___AnFSMTypedecl
 // CHECK: typedef enum bit [0:0] {_state1_A, _state1_B} _state1;
 // CHECK: typedef enum bit [0:0] {_state2_A, _state2_B} _state2;
 // CHECK: `endif // _TYPESCOPE___AnFSMTypedecl
 // CHECK-LABEL: module AnFSM
-// CHECK:   enum bit [0:0] {A, B} reg_0;
+// CHECK:   enum0 reg_0;
 // OLD:   _state1     reg_state1;
 // OLD:   _state2     reg_state2;
 // CHECK:   always @(posedge clock) begin
 // CHECK:     case (reg_0)
 // CHECK:       A:
-// CHECK:         reg_0 <= B;
+// CHECK:         reg_0 <= enum0_B;
 // CHECK:       default:
-// CHECK:         reg_0 <= A;
+// CHECK:         reg_0 <= enum0_A;
 // CHECK:     endcase
 // CHECK:   end
 // NEW:   _state1     reg_state1;

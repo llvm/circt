@@ -92,6 +92,18 @@ def TestApplyLoweringOption : Pass<"test-apply-lowering-options",
   ];
 }
 
+def LegalizeAnonEnums : Pass<"legalize-anon-enums", "mlir::ModuleOp"> {
+  let summary = "Prepare anonymous enumeration types for ExportVerilog";
+  let description = [{
+    This pass transforms all anonymous enumeration types into typedecls to work
+    around difference in how anonymous enumerations work in SystemVerilog.
+  }];
+  let constructor = "createLegalizeAnonEnumsPass()";
+  let dependentDialects = [
+    "circt::sv::SVDialect", "circt::comb::CombDialect", "circt::hw::HWDialect"
+  ];
+}
+
 def PrepareForEmission : Pass<"prepare-for-emission",
                               "hw::HWModuleOp"> {
   let summary = "Prepare IR for ExportVerilog";
