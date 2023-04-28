@@ -309,6 +309,7 @@ static bool haveMatchingDims(Type a, Type b, Location loc) {
 
 // NOLINTBEGIN(misc-no-recursion)
 bool ExportVerilog::isZeroBitType(Type type) {
+  type = getCanonicalType(type);
   if (auto intType = type.dyn_cast<IntegerType>())
     return intType.getWidth() == 0;
   if (auto inout = type.dyn_cast<hw::InOutType>())
@@ -3392,6 +3393,10 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   startStatement();
+  auto zeroBitType = isZeroBitType(op.getType());
+  if (zeroBitType)
+    ps << PP::neverbox << "// ";
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   ps.scopedBox(PP::ibox2, [&]() {
@@ -3405,6 +3410,8 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
         [&](auto &os) { emitter.printUnpackedTypePostfix(op.getType(), os); });
     ps << ";";
   });
+  if (zeroBitType)
+    ps << PP::end;
   emitLocationInfoAndNewLine(ops);
   return success();
 }
@@ -5517,6 +5524,7 @@ struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
   void runOnOperation() override {
     // Prepare the ops in the module for emission.
     mlir::OpPassManager preparePM("builtin.module");
+    preparePM.addPass(createLegalizeAnonEnumsPass());
     auto &modulePM = preparePM.nest<hw::HWModuleOp>();
     modulePM.addPass(createPrepareForEmissionPass());
     if (failed(runPipeline(preparePM, getOperation())))
