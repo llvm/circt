@@ -95,14 +95,14 @@ public:
           enableMap[writeOp.getCondition()].push_back(writeOp);
       }
       for (auto [enable, writeOps] : enableMap) {
-        // Only group if multiple writes share a reset
+        // Only group if multiple writes share an enable
         if (writeOps.size() > 1) {
             if (isa<scf::IfOp>(region->getParentOp())) {
               rewriter.setInsertionPoint(region->back().getTerminator());
             } else {
               rewriter.setInsertionPointToEnd(&region->back());
             }
-          scf::IfOp ifOp = rewriter.create<scf::IfOp>(rewriter.getUnknownLoc(),
+          scf::IfOp ifOp = rewriter.create<scf::IfOp>(writeOps[0].getLoc(),
                                                       enable, false);
           for (auto writeOp : writeOps) {
             rewriter.updateRootInPlace(writeOp, [&]() {
