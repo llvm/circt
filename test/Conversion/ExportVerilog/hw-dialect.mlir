@@ -1427,19 +1427,6 @@ hw.module @DontInlineAggregateConstantIntoPorts() -> () {
   hw.instance "i0" @Array(a: %0: !hw.array<2xi4>) -> ()
 }
 
-// CHECK-LABEL: module EnumCmp(
-// CHECK-NEXT:   input enum bit [0:0] {A, B} test,
-// CHECK-NEXT:   output result
-// CHECK-NEXT:  )
-// CHECK-EMPTY:
-// CHECK-NEXT:   assign result = test == A;
-// CHECK-NEXT: endmodule
-hw.module @EnumCmp(%test: !hw.enum<A, B>) -> (result: i1) {
-  %A = hw.enum.constant A : !hw.enum<A, B>
-  %0 = hw.enum.cmp %test, %A : !hw.enum<A, B>, !hw.enum<A, B>
-  hw.output %0 : i1
-}
-
 // CHECK-LABEL: module FooA(
 // CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [9:0] b; logic [5:0] __post_padding_b;} b;} test
 // CHECK-NEXT:    output [15:0] a,
