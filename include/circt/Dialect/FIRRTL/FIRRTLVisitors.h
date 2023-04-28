@@ -33,7 +33,7 @@ public:
             ConstantOp, SpecialConstantOp, AggregateConstantOp, InvalidValueOp,
             SubfieldOp, SubindexOp, SubaccessOp, IsTagOp, SubtagOp,
             BundleCreateOp, VectorCreateOp, FEnumCreateOp, MultibitMuxOp,
-            TagExtractOp,
+            TagExtractOp, OpenSubfieldOp, OpenSubindexOp,
             // Arithmetic and Logical Binary Primitives.
             AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
             OrPrimOp, XorPrimOp,
@@ -107,6 +107,8 @@ public:
   HANDLE(SubtagOp, Unhandled);
   HANDLE(TagExtractOp, Unhandled);
   HANDLE(MultibitMuxOp, Unhandled);
+  HANDLE(OpenSubfieldOp, Unhandled);
+  HANDLE(OpenSubindexOp, Unhandled);
 
   // Arithmetic and Logical Binary Primitives.
   HANDLE(AddPrimOp, Binary);

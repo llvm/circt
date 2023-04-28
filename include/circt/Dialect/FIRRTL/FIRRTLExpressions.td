@@ -250,18 +250,18 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue",
   let assemblyFormat = "attr-dict `:` qualified(type($result))";
 }
 
-def SubfieldOp : FIRRTLExprOp<"subfield"> {
+class BaseSubfieldOp<string name, Type btype, Type rtype> : FIRRTLExprOp<name> {
   let summary = "Extract a subfield of another value";
   let description = [{
     The subfield expression refers to a subelement of an expression with a
     bundle type.
     ```
-      %result = firrtl.subfield %input[field-name] : !input-type
+      %result = firrtl.}] # name # [{ %input[field-name] : !input-type
     ```
     }];
 
-  let arguments = (ins BundleType:$input, I32Attr:$fieldIndex);
-  let results = (outs FIRRTLBaseType:$result);
+  let arguments = (ins btype:$input, I32Attr:$fieldIndex);
+  let results = (outs rtype:$result);
   let hasFolder = 1;
   let hasCanonicalizer = 1;
   let hasVerifier = 1;
@@ -269,7 +269,7 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
 
   let builders = [
     OpBuilder<(ins "Value":$input, "StringRef":$fieldName), [{
-      auto bundleType = input.getType().cast<BundleType>();
+      auto bundleType = input.getType().cast<}] # btype # [{>();
       auto fieldIndex = bundleType.getElementIndex(fieldName);
       assert(fieldIndex.has_value() && "subfield operation to unknown field");
       return build($_builder, $_state, input, *fieldIndex);
@@ -277,22 +277,26 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
   ];
 
   let firrtlExtraClassDeclaration = [{
+    using InputType = }] # btype # [{;
+
     /// Return true if the specified field is flipped.
     bool isFieldFlipped();
 
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType().cast<BundleType>()
+      return FieldRef(getInput(), getInput().getType()
                                             .getFieldID(getFieldIndex()));
     }
 
     /// Return the name of the accessed field.
     StringRef getFieldName() {
-      return getInput().getType().cast<BundleType>()
-        .getElementName(getFieldIndex());
+      return getInput().getType().getElementName(getFieldIndex());
     }
   }];
 }
+
+def SubfieldOp : BaseSubfieldOp<"subfield", BundleType, FIRRTLBaseType>;
+def OpenSubfieldOp : BaseSubfieldOp<"opensubfield", OpenBundleType, FIRRTLType>;
 
 def SubindexOp : FIRRTLExprOp<"subindex"> {
   let summary = "Extract an element of a vector value";
@@ -310,6 +314,32 @@ def SubindexOp : FIRRTLExprOp<"subindex"> {
   let results = (outs FIRRTLBaseType:$result);
   let hasFolder = 1;
   let hasCanonicalizer = 1;
+
+  let assemblyFormat =
+     "$input `[` $index `]` attr-dict `:` qualified(type($input))";
+
+  let firrtlExtraClassDeclaration = [{
+    /// Return a `FieldRef` to the accessed field.
+    FieldRef getAccessedField() {
+      return FieldRef(getInput(), getInput().getType().getFieldID(getIndex()));
+    }
+  }];
+}
+
+def OpenSubindexOp : FIRRTLExprOp<"opensubindex"> {
+  let summary = "Extract an element of a vector value";
+  let description = [{
+    The subindex expression statically refers, by index, to a subelement
+    of an expression with a vector type. The index must be a non-negative
+    integer and cannot be equal to or exceed the length of the vector it
+    indexes.
+    ```
+      %result = firrtl.opensubindex %input[index] : t1
+    ```
+    }];
+
+  let arguments = (ins OpenVectorType:$input, I32Attr:$index);
+  let results = (outs FIRRTLType:$result);
 
   let assemblyFormat =
      "$input `[` $index `]` attr-dict `:` qualified(type($input))";

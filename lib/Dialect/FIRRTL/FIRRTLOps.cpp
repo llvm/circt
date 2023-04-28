@@ -181,11 +181,11 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
   Operation *op = val.getDefiningOp();
 
   return TypeSwitch<Operation *, Flow>(op)
-      .Case<SubfieldOp>([&](auto op) {
+      .Case<SubfieldOp, OpenSubfieldOp>([&](auto op) {
         return foldFlow(op.getInput(),
                         op.isFieldFlipped() ? swap() : accumulatedFlow);
       })
-      .Case<SubindexOp, SubaccessOp, RefSubOp>(
+      .Case<SubindexOp, SubaccessOp, OpenSubindexOp, RefSubOp>(
           [&](auto op) { return foldFlow(op.getInput(), accumulatedFlow); })
       // Registers, Wires, and behavioral memory ports are always Duplex.
       .Case<RegOp, RegResetOp, WireOp, MemoryPortOp>(
@@ -3011,7 +3011,8 @@ FIRRTLType IsTagOp::inferReturnType(ValueRange operands,
   return UIntType::get(operands[0].getContext(), 1, /*isConst=*/false);
 }
 
-ParseResult SubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
+template <typename OpTy>
+ParseResult parseSubfieldLikeOp(OpAsmParser &parser, OperationState &result) {
   auto *context = parser.getContext();
 
   OpAsmParser::UnresolvedOperand input;
@@ -3026,7 +3027,7 @@ ParseResult SubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.resolveOperand(input, inputType, result.operands))
     return failure();
 
-  auto bundleType = inputType.dyn_cast<BundleType>();
+  auto bundleType = inputType.dyn_cast<typename OpTy::InputType>();
   if (!bundleType)
     return parser.emitError(parser.getNameLoc(),
                             "input must be bundle type, got ")
@@ -3042,10 +3043,10 @@ ParseResult SubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
       IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
 
   SmallVector<Type> inferredReturnTypes;
-  if (failed(SubfieldOp::inferReturnTypes(
-          context, result.location, result.operands,
-          result.attributes.getDictionary(context), result.getRawProperties(),
-          result.regions, inferredReturnTypes)))
+  if (failed(OpTy::inferReturnTypes(context, result.location, result.operands,
+                                    result.attributes.getDictionary(context),
+                                    result.getRawProperties(), result.regions,
+                                    inferredReturnTypes)))
     return failure();
   result.addTypes(inferredReturnTypes);
 
@@ -3093,14 +3094,28 @@ ParseResult SubtagOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-void SubfieldOp::print(::mlir::OpAsmPrinter &printer) {
-  printer << ' ' << getInput() << '[';
-  printer.printKeywordOrString(getFieldName());
+ParseResult SubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseSubfieldLikeOp<SubfieldOp>(parser, result);
+}
+ParseResult OpenSubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseSubfieldLikeOp<OpenSubfieldOp>(parser, result);
+}
+
+template <typename OpTy>
+static void printSubfieldLikeOp(OpTy op, ::mlir::OpAsmPrinter &printer) {
+  printer << ' ' << op.getInput() << '[';
+  printer.printKeywordOrString(op.getFieldName());
   printer << ']';
   ::llvm::SmallVector<::llvm::StringRef, 2> elidedAttrs;
   elidedAttrs.push_back("fieldIndex");
-  printer.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
-  printer << " : " << getInput().getType();
+  printer.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
+  printer << " : " << op.getInput().getType();
+}
+void SubfieldOp::print(::mlir::OpAsmPrinter &printer) {
+  return printSubfieldLikeOp<SubfieldOp>(*this, printer);
+}
+void OpenSubfieldOp::print(::mlir::OpAsmPrinter &printer) {
+  return printSubfieldLikeOp<OpenSubfieldOp>(*this, printer);
 }
 
 void SubtagOp::print(::mlir::OpAsmPrinter &printer) {
@@ -3113,11 +3128,18 @@ void SubtagOp::print(::mlir::OpAsmPrinter &printer) {
   printer << " : " << getInput().getType();
 }
 
-LogicalResult SubfieldOp::verify() {
-  if (getFieldIndex() >= getInput().getType().getNumElements())
-    return emitOpError("subfield element index is greater than the number "
-                       "of fields in the bundle type");
+template <typename OpTy>
+static LogicalResult verifySubfieldLike(OpTy op) {
+  if (op.getFieldIndex() >= op.getInput().getType().getNumElements())
+    return op.emitOpError("subfield element index is greater than the number "
+                          "of fields in the bundle type");
   return success();
+}
+LogicalResult SubfieldOp::verify() {
+  return verifySubfieldLike<SubfieldOp>(*this);
+}
+LogicalResult OpenSubfieldOp::verify() {
+  return verifySubfieldLike<OpenSubfieldOp>(*this);
 }
 
 LogicalResult SubtagOp::verify() {
@@ -3170,9 +3192,10 @@ bool firrtl::isConstant(Value value) {
 }
 
 bool firrtl::isConst(Type type) {
-  if (auto base = type.dyn_cast<FIRRTLBaseType>())
-    return base.isConst();
-  return false;
+  return TypeSwitch<Type, bool>(type)
+      .Case<FIRRTLBaseType, OpenBundleType, OpenVectorType>(
+          [](auto base) { return base.isConst(); })
+      .Default(false);
 }
 
 FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
@@ -3190,10 +3213,36 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
   // SubfieldOp verifier checks that the field index is valid with number of
   // subelements.
   auto elementType = inType.getElement(fieldIndex).type;
-  return elementType.getConstType(elementType.isConst() || inType.isConst());
+  return mapConstType(elementType, [&](auto T, bool isConst) {
+    return isConst || inType.isConst();
+  });
+}
+
+FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
+                                           ArrayRef<NamedAttribute> attrs,
+                                           std::optional<Location> loc) {
+  auto inType = operands[0].getType().cast<OpenBundleType>();
+  auto fieldIndex =
+      getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
+
+  if (fieldIndex >= inType.getNumElements())
+    return emitInferRetTypeError(loc,
+                                 "subfield element index is greater than the "
+                                 "number of fields in the bundle type");
+
+  // OpenSubfieldOp verifier checks that the field index is valid with number of
+  // subelements.
+  auto elementType = inType.getElement(fieldIndex).type;
+  return mapConstType(elementType, [&](auto T, bool isConst) {
+    return isConst || inType.isConst();
+  });
 }
 
 bool SubfieldOp::isFieldFlipped() {
+  auto bundle = getInput().getType();
+  return bundle.getElement(getFieldIndex()).isFlip;
+}
+bool OpenSubfieldOp::isFieldFlipped() {
   auto bundle = getInput().getType();
   return bundle.getElement(getFieldIndex()).isFlip;
 }
@@ -3208,8 +3257,30 @@ FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
   if (auto vectorType = inType.dyn_cast<FVectorType>()) {
     if (fieldIdx < vectorType.getNumElements()) {
       auto elementType = vectorType.getElementType();
-      return elementType.getConstType(elementType.isConst() ||
-                                      vectorType.isConst());
+      return mapConstType(elementType, [&](auto T, bool isConst) {
+        return isConst || vectorType.isConst();
+      });
+    }
+    return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
+                                 "' in vector type ", inType);
+  }
+
+  return emitInferRetTypeError(loc, "subindex requires vector operand");
+}
+
+FIRRTLType OpenSubindexOp::inferReturnType(ValueRange operands,
+                                           ArrayRef<NamedAttribute> attrs,
+                                           std::optional<Location> loc) {
+  Type inType = operands[0].getType();
+  auto fieldIdx =
+      getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
+
+  if (auto vectorType = inType.dyn_cast<OpenVectorType>()) {
+    if (fieldIdx < vectorType.getNumElements()) {
+      auto elementType = vectorType.getElementType();
+      return mapConstType(elementType, [&](auto T, bool isConst) {
+        return isConst || vectorType.isConst();
+      });
     }
     return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
                                  "' in vector type ", inType);
@@ -4266,12 +4337,19 @@ void SubaccessOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void SubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
+void OpenSubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
 
 void SubtagOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
 void SubindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void OpenSubindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 

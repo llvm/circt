@@ -1994,6 +1994,12 @@ void SubfieldOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.insert<SubfieldAggOneShot>(context);
 }
 
+OpFoldResult OpenSubfieldOp::fold(FoldAdaptor adaptor) { return {}; }
+void OpenSubfieldOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                 MLIRContext *context) {
+  return;
+}
+
 static Attribute collectFields(MLIRContext *context,
                                ArrayRef<Attribute> operands) {
   for (auto operand : operands)
