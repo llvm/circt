@@ -2266,6 +2266,19 @@ LogicalResult EnumConstantOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// EnumCmpOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult EnumCmpOp::verify() {
+  // Compare the canonical types.
+  auto lhsType = type_cast<EnumType>(getLhs().getType());
+  auto rhsType = type_cast<EnumType>(getRhs().getType());
+  if (rhsType != lhsType)
+    emitOpError("types do not match");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // StructCreateOp
 //===----------------------------------------------------------------------===//
 
