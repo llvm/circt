@@ -37,6 +37,7 @@ public:
     llvm::MapVector<mlir::Value, SmallVector<scf::IfOp>> resetMap;
     auto ifOps = clockTreeOp.getBody().getOps<scf::IfOp>();
 
+
     for (auto ifOp : ifOps)
       resetMap[ifOp.getCondition()].push_back(ifOp);
 
@@ -77,18 +78,18 @@ public:
                                 PatternRewriter &rewriter) const override {
     ClockTreeOp clockTreeOp = dyn_cast<ClockTreeOp>(*op);
 
-    // Generate list of blocks to amass StateWrite enables in - these are accompanied by a boolean that dictates whether the body has a terminator to save on an unnecessary trait check later 
-    SmallVector<std::pair<Block *, bool>> groupingBlocks;
-    groupingBlocks.push_back(std::pair(&clockTreeOp.getBodyBlock(), false));
+    // Amass regions that we want to group enables in
+    SmallVector<Region *> groupingRegions;
+    groupingRegions.push_back(&(clockTreeOp.getBody()));
     for (auto ifOp : clockTreeOp.getBody().getOps<scf::IfOp>()) {
-      groupingBlocks.push_back(std::pair(ifOp.thenBlock(), true));
-      groupingBlocks.push_back(std::pair(ifOp.elseBlock(), true));
+      groupingRegions.push_back(&ifOp.getThenRegion());
+      groupingRegions.push_back(&ifOp.getElseRegion());
     }
 
     bool changed = false;
-    for (auto [block, hasTerminator]: groupingBlocks) {
+    for (auto *region: groupingRegions) {
       llvm::MapVector<mlir::Value, SmallVector<StateWriteOp>> enableMap;
-      auto writeOps = block->getOps<StateWriteOp>();
+      auto writeOps = region->getOps<StateWriteOp>();
       for (auto writeOp : writeOps) {
         if (writeOp.getCondition())
           enableMap[writeOp.getCondition()].push_back(writeOp);
@@ -96,10 +97,10 @@ public:
       for (auto [enable, writeOps] : enableMap) {
         // Only group if multiple writes share a reset
         if (writeOps.size() > 1) {
-            if (hasTerminator) {
-              rewriter.setInsertionPoint(block->getTerminator());
+            if (isa<scf::IfOp>(region->getParentOp())) {
+              rewriter.setInsertionPoint(region->back().getTerminator());
             } else {
-              rewriter.setInsertionPointToEnd(block);
+              rewriter.setInsertionPointToEnd(&region->back());
             }
           scf::IfOp ifOp = rewriter.create<scf::IfOp>(rewriter.getUnknownLoc(),
                                                       enable, false);
