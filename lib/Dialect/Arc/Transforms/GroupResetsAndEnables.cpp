@@ -45,18 +45,18 @@ public:
     bool changed = false;
     for (auto [cond, oldOps] : resetMap) {
       if (oldOps.size() > 1) {
-        auto *iteratorStart = oldOps.begin();
-        scf::IfOp firstOp = *(iteratorStart++);
-        for (auto *thisOp = iteratorStart; thisOp != oldOps.end(); thisOp++) {
+        auto iteratorStart = oldOps.rbegin();
+        scf::IfOp lastIfOp = *(iteratorStart++);
+        for (auto thisOp = iteratorStart; thisOp != oldOps.rend(); thisOp++) {
           // Inline the before and after region inside the original If
           rewriter.eraseOp(thisOp->thenBlock()->getTerminator());
           rewriter.inlineBlockBefore(thisOp->thenBlock(),
-                                     firstOp.thenBlock()->getTerminator());
+                                     &lastIfOp.thenBlock()->front());
           // Check we're not inlining an empty block
           if (!thisOp->elseBlock()->empty()) {
             rewriter.eraseOp(thisOp->elseBlock()->getTerminator());
             rewriter.inlineBlockBefore(thisOp->elseBlock(),
-                                       firstOp.elseBlock()->getTerminator());
+                                       &lastIfOp.elseBlock()->front());
           }
           rewriter.eraseOp(*thisOp);
           changed = true;

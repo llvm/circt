@@ -299,3 +299,59 @@ arc.model "GroupEnablesAndResets" {
   %1 = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
   %2 = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
 }
+
+// CHECK-LABEL: arc.model "GroupSeparatedResets"
+arc.model "GroupSeparatedResets" {
+^bb0(%arg0: !arc.storage):
+  %c0_i4 = hw.constant 0 : i4
+  %true = hw.constant true
+  %in_clock = arc.root_input "clock", %arg0 : (!arc.storage) -> !arc.state<i1>
+  %in_i0 = arc.root_input "i0", %arg0 : (!arc.storage) -> !arc.state<i4>
+  %in_i1 = arc.root_input "i1", %arg0 : (!arc.storage) -> !arc.state<i4>
+  %in_reset = arc.root_input "reset", %arg0 : (!arc.storage) -> !arc.state<i1>
+  %in_en0 = arc.root_input "en0", %arg0 : (!arc.storage) -> !arc.state<i1>
+  %in_en1 = arc.root_input "en1", %arg0 : (!arc.storage) -> !arc.state<i1>
+  arc.passthrough {
+    %3 = arc.state_read %1 : <i4>
+    arc.state_write %out_out0 = %3 : <i4>
+    %4 = arc.state_read %2 : <i4>
+    arc.state_write %out_out1 = %4 : <i4>
+  }
+  %out_out0 = arc.root_output "out0", %arg0 : (!arc.storage) -> !arc.state<i4>
+  %out_out1 = arc.root_output "out1", %arg0 : (!arc.storage) -> !arc.state<i4>
+  %0 = arc.state_read %in_clock : <i1>
+  arc.clock_tree %0 {
+    //  CHECK: [[IN_RESET:%.+]] = arc.state_read %in_reset
+    %3 = arc.state_read %in_reset : <i1>
+    //  CHECK: [[IN_EN0:%.+]] = arc.state_read %in_en0
+    %4 = arc.state_read %in_en0 : <i1>
+    //  CHECK: [[IN_EN1:%.+]] = arc.state_read %in_en1
+    //  CHECK-NEXT: scf.if [[IN_RESET]] {
+    scf.if %3 {
+      //   CHECK-NEXT:  arc.state_write [[FOO_ALLOC:%.+]] = %c0_i4
+      //   CHECK-NEXT:  arc.state_write [[BAR_ALLOC:%.+]] = %c0_i4
+      arc.state_write %1 = %c0_i4 : <i4>
+      //   CHECK-NEXT: } else {
+    } else {
+      // CHECK-NEXT:  [[IN_I0:%.+]] = arc.state_read %in_i0
+      // CHECK-NEXT:  arc.state_write [[FOO_ALLOC]] = [[IN_I0]] if [[IN_EN0]]
+      // CHECK-NEXT:  [[IN_I1:%.+]] = arc.state_read %in_i1
+      // CHECK-NEXT:  arc.state_write [[BAR_ALLOC]] = [[IN_I1]] if [[IN_EN1]]
+      %5 = arc.state_read %in_i0 : <i4>
+      arc.state_write %1 = %5 if %4 : <i4>
+      // CHECK-NEXT: }
+    }
+    %6 = arc.state_read %in_en1 : <i1>
+    scf.if %3 {
+      arc.state_write %2 = %c0_i4 : <i4>
+    } else {
+      %7 = arc.state_read %in_i1 : <i4>
+      arc.state_write %2 = %7 if %6 : <i4>
+    }
+    // CHECK-NEXT: }
+  }
+  // CHECK-NEXT: [[FOO_ALLOC]] = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
+  // CHECK-NEXT: [[BAR_ALLOC]] = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
+  %1 = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
+  %2 = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
+}
