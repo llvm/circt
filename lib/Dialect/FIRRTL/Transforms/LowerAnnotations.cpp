@@ -355,7 +355,6 @@ static LogicalResult applyConventionAnno(const AnnoPathValue &target,
   return error() << "can only target to a module or extmodule";
 }
 
-template <bool isComment = false>
 static LogicalResult applyAttributeAnnotation(const AnnoPathValue &target,
                                               DictionaryAttr anno,
                                               ApplyState &state) {
@@ -380,7 +379,7 @@ static LogicalResult applyAttributeAnnotation(const AnnoPathValue &target,
               "register";
 
   auto name = anno.getAs<StringAttr>("description");
-  auto svAttr = sv::SVAttributeAttr::get(name.getContext(), name, isComment);
+  auto svAttr = sv::SVAttributeAttr::get(name.getContext(), name);
   sv::addSVAttributes(op, {svAttr});
   return success();
 }
@@ -565,8 +564,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
      {stdResolve, applyLoadMemoryAnno<true>}},
     {wiringSinkAnnoClass, {stdResolve, applyWiring}},
     {wiringSourceAnnoClass, {stdResolve, applyWiring}},
-    {attributeAnnoClass, {stdResolve, applyAttributeAnnotation<false>}},
-    {docStringAnnoClass, {stdResolve, applyAttributeAnnotation<true>}}}};
+    {attributeAnnoClass, {stdResolve, applyAttributeAnnotation}}}};
 
 /// Lookup a record for a given annotation class.  Optionally, returns the
 /// record for "circuit.missing" if the record doesn't exist.

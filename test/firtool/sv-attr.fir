@@ -15,9 +15,6 @@ circuit Foo: %[[{"class": "firrtl.AttributeAnnotation",
                  "target": "~Foo|Foo>n"},
                 {"class": "firrtl.AttributeAnnotation",
                  "description": "keep = \"true\"",
-                 "target": "~Foo|Foo>r"},
-                {"class": "firrtl.DocStringAnnotation",
-                 "description": "comment",
                  "target": "~Foo|Foo>r"}]]
   ; CHECK: (* keep_hierarchy = "true" *)
   ; CHECK-NEXT: module Foo
@@ -33,7 +30,6 @@ circuit Foo: %[[{"class": "firrtl.AttributeAnnotation",
     ; CHECK-NEXT: wire n
     node n = w;
     ; CHECK:      (* keep = "true" *) 
-    ; CHECK-SAME: /* comment */
     ; CHECK-NEXT: reg r
     reg r: UInt<1>, clock
     w <= a
