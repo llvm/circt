@@ -37,6 +37,12 @@ def ESIEmitCollateral: Pass<"esi-emit-collateral", "mlir::ModuleOp"> {
   ];
 }
 
+def ESICleanMetadata : Pass<"esi-clean-metadata", "mlir::ModuleOp"> {
+  let summary = "Clean up ESI service metadata";
+  let constructor = "circt::esi::createESICleanMetadataPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
+}
+
 def LowerESIToPhysical: Pass<"lower-esi-to-physical", "mlir::ModuleOp"> {
   let summary = "Lower ESI abstract Ops to ESI physical ops.";
   let constructor = "circt::esi::createESIPhysicalLoweringPass()";

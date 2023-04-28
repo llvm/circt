@@ -19,6 +19,8 @@ set(srcs
   Passes/ESILowerPorts.cpp
   Passes/ESILowerToHW.cpp
   Passes/ESILowerTypes.cpp
+  Passes/ESICleanMetadata.cpp
+
   cosim/APIUtilities.cpp
 
 )
