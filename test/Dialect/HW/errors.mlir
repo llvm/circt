@@ -377,3 +377,13 @@ hw.module @foo() {
   %0 = "hw.enum.constant"() {field = #hw.enum.field<A, !hw.enum<A>>} : () -> !hw.enum<A, B>
   hw.output
 }
+
+// -----
+
+hw.module @foo() {
+  %0 = hw.enum.constant A : !hw.enum<A>
+  %1 = hw.enum.constant B : !hw.enum<B>
+  // expected-error @+1 {{types do not match}}
+  %2 = hw.enum.cmp %0, %1 : !hw.enum<A>, !hw.enum<B>
+  hw.output
+}
