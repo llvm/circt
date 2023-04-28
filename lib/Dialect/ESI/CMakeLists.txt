@@ -108,6 +108,7 @@ endif()
 
 copy_esi_runtime(ESIPrimitives.sv)
 copy_esi_runtime(runtime/cpp/include/esi/esi.h OUTDIR cpp/include/esi)
+copy_esi_runtime(runtime/cpp/include/esi/backends/capnp.h OUTDIR cpp/include/esi/backends)
 
 # Create a package of ESI collateral for any compiler to include with its
 # distribution.
