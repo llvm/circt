@@ -154,7 +154,7 @@ def AnyResetType : FIRRTLDialectType<
 def AnyRegisterType : FIRRTLDialectType<
     CPred<"$_self.isa<FIRRTLBaseType>() && "
           "$_self.cast<FIRRTLBaseType>().isRegisterType()">,
-    "a passive base type that does not contain analog",
+    "a passive non-'const' base type that does not contain analog",
     "::circt::firrtl::FIRRTLBaseType">;
 
 def UIntSIntClockType : AnyTypeOf<[SIntType, UIntType, ClockType],

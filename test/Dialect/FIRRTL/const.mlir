@@ -128,4 +128,9 @@ firrtl.module @MixedConstSubtag(in %in : !firrtl.enum<a: uint<1>, b: const.uint<
   firrtl.connect %b, %1 : !firrtl.const.uint<2>, !firrtl.const.uint<2>
 }
 
+// CHECK-LABEL: firrtl.module @ConstRegResetValue
+firrtl.module @ConstRegResetValue(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetValue: !firrtl.const.sint<1>) {
+  %0 = firrtl.regreset %clock, %reset, %resetValue : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.sint<1>, !firrtl.sint<1>
+}
+
 }

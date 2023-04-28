@@ -438,17 +438,17 @@ bool FIRRTLBaseType::isConst() { return getImpl()->isConst; }
 /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
 RecursiveTypeProperties FIRRTLBaseType::getRecursiveTypeProperties() const {
   return TypeSwitch<FIRRTLBaseType, RecursiveTypeProperties>(*this)
-      .Case<ClockType, ResetType, AsyncResetType>([](Type type) {
-        return RecursiveTypeProperties{true, false, false, false,
-                                       type.isa<ResetType>()};
+      .Case<ClockType, ResetType, AsyncResetType>([](FIRRTLBaseType type) {
+        return RecursiveTypeProperties{
+            true, false, false, type.isConst(), false, type.isa<ResetType>()};
       })
       .Case<SIntType, UIntType>([](auto type) {
-        return RecursiveTypeProperties{true, false, false, !type.hasWidth(),
-                                       false};
+        return RecursiveTypeProperties{
+            true, false, false, type.isConst(), !type.hasWidth(), false};
       })
       .Case<AnalogType>([](auto type) {
-        return RecursiveTypeProperties{true, false, true, !type.hasWidth(),
-                                       false};
+        return RecursiveTypeProperties{
+            true, false, true, type.isConst(), !type.hasWidth(), false};
       })
       .Case<BundleType>([](BundleType bundleType) {
         return bundleType.getRecursiveTypeProperties();
@@ -484,7 +484,7 @@ FIRRTLBaseType FIRRTLBaseType::getPassiveType() {
 FIRRTLBaseType FIRRTLBaseType::getConstType(bool isConst) {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
       .Case<ClockType, ResetType, AsyncResetType, AnalogType, SIntType,
-            UIntType, BundleType, FVectorType>(
+            UIntType, BundleType, FVectorType, FEnumType>(
           [&](auto type) { return type.getConstType(isConst); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
@@ -938,7 +938,8 @@ struct circt::firrtl::detail::BundleTypeStorage
 
   BundleTypeStorage(ArrayRef<BundleType::BundleElement> elements, bool isConst)
       : detail::FIRRTLBaseTypeStorage(isConst),
-        elements(elements.begin(), elements.end()), props{true, false, false,
+        elements(elements.begin(), elements.end()), props{true,  false,
+                                                          false, isConst,
                                                           false, false} {
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
@@ -948,6 +949,7 @@ struct circt::firrtl::detail::BundleTypeStorage
       props.isPassive &= eltInfo.isPassive & !element.isFlip;
       props.containsAnalog |= eltInfo.containsAnalog;
       props.containsReference |= eltInfo.containsReference;
+      props.containsConst |= eltInfo.containsConst;
       props.hasUninferredWidth |= eltInfo.hasUninferredWidth;
       props.hasUninferredReset |= eltInfo.hasUninferredReset;
       fieldID += 1;
@@ -1144,7 +1146,10 @@ struct circt::firrtl::detail::FVectorTypeStorage
   FVectorTypeStorage(FIRRTLBaseType elementType, size_t numElements,
                      bool isConst)
       : detail::FIRRTLBaseTypeStorage(isConst), elementType(elementType),
-        numElements(numElements) {}
+        numElements(numElements),
+        props(elementType.getRecursiveTypeProperties()) {
+    props.containsConst |= isConst;
+  }
 
   bool operator==(const KeyTy &key) const {
     return key == std::make_tuple(elementType, numElements, isConst);
@@ -1162,6 +1167,7 @@ struct circt::firrtl::detail::FVectorTypeStorage
 
   /// This holds the bits for the type's recursive properties, and can hold a
   /// pointer to a passive version of the type.
+  RecursiveTypeProperties props;
   FIRRTLBaseType passiveType;
 };
 
@@ -1178,7 +1184,7 @@ size_t FVectorType::getNumElements() const { return getImpl()->numElements; }
 
 /// Return the recursive properties of the type.
 RecursiveTypeProperties FVectorType::getRecursiveTypeProperties() const {
-  return getElementType().getRecursiveTypeProperties();
+  return getImpl()->props;
 }
 
 /// Return this type with any flip types recursively removed from itself.
@@ -1254,7 +1260,7 @@ struct circt::firrtl::detail::FEnumTypeStorage : detail::FIRRTLBaseTypeStorage {
   FEnumTypeStorage(ArrayRef<FEnumType::EnumElement> elements, bool isConst)
       : detail::FIRRTLBaseTypeStorage(isConst),
         elements(elements.begin(), elements.end()) {
-    RecursiveTypeProperties props{true, false, false, false, false};
+    RecursiveTypeProperties props{true, false, false, isConst, false, false};
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
@@ -1262,6 +1268,7 @@ struct circt::firrtl::detail::FEnumTypeStorage : detail::FIRRTLBaseTypeStorage {
       auto eltInfo = type.getRecursiveTypeProperties();
       props.isPassive &= eltInfo.isPassive;
       props.containsAnalog |= eltInfo.containsAnalog;
+      props.containsConst |= eltInfo.containsConst;
       props.hasUninferredWidth |= eltInfo.hasUninferredWidth;
       fieldID += 1;
       fieldIDs.push_back(fieldID);
