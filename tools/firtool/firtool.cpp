@@ -538,6 +538,11 @@ static LogicalResult processBuffer(
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLowerCHIRRTLPass());
 
+  // Run LowerMatches before InferWidths, as the latter does not support the
+  // match statement, but it does support what they lower to.
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      firrtl::createLowerMatchesPass());
+
   // Width inference creates canonicalization opportunities.
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
 
@@ -576,7 +581,6 @@ static LogicalResult processBuffer(
       preserveAggregate, firrtl::PreserveAggregate::None));
   // Only enable expand whens if lower types is also enabled.
   auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-  modulePM.addPass(firrtl::createLowerMatchesPass());
   modulePM.addPass(firrtl::createExpandWhensPass());
   modulePM.addPass(firrtl::createSFCCompatPass());
 
