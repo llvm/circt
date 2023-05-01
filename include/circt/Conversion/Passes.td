@@ -399,24 +399,6 @@ def HandshakeToHW : Pass<"lower-handshake-to-hw", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// HandshakeToFIRRTL
-//===----------------------------------------------------------------------===//
-
-def HandshakeToFIRRTL : Pass<"lower-handshake-to-firrtl", "mlir::ModuleOp"> {
-  let summary = "Lower Handshake to FIRRTL";
-  let description = [{
-    Lower Handshake to FIRRTL.
-  }];
-  let constructor = "circt::createHandshakeToFIRRTLPass()";
-  let dependentDialects = ["firrtl::FIRRTLDialect"];
-  let options = [
-    Option<"enableFlattening", "flatten", "bool", "false",
-    "Flattens the generated FIRRTL component by inlining all dataflow component"
-    " instantiations into the top module.">,
-  ];
-}
-
-//===----------------------------------------------------------------------===//
 // Moore to Comb/HW/LLHD
 //===----------------------------------------------------------------------===//
 
