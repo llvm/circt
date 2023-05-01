@@ -889,6 +889,38 @@ static LogicalResult legalizeHWModule(Block &block,
       continue;
     }
 
+    if (auto structCreateOp = dyn_cast<hw::StructCreateOp>(op);
+        options.disallowPackedStructAssignments && structCreateOp) {
+      // Force packed struct assignment to be a wire + assignments to each
+      // field.
+      Value wireOp;
+      ImplicitLocOpBuilder builder(op.getLoc(), &op);
+      hw::StructType structType =
+          structCreateOp.getResult().getType().cast<hw::StructType>();
+      bool procedural = op.getParentOp()->hasTrait<ProceduralRegion>();
+      if (procedural)
+        wireOp = builder.create<LogicOp>(structType);
+      else
+        wireOp = builder.create<sv::WireOp>(structType);
+
+      for (auto [input, field] :
+           llvm::zip(structCreateOp.getInput(), structType.getElements())) {
+        auto target =
+            builder.create<sv::StructFieldInOutOp>(wireOp, field.name);
+        if (procedural)
+          builder.create<BPAssignOp>(target, input);
+        else
+          builder.create<AssignOp>(target, input);
+      }
+      // Have to create a separate read for each use to keep things legal.
+      for (auto &use :
+           llvm::make_early_inc_range(structCreateOp.getResult().getUses()))
+        use.set(builder.create<ReadInOutOp>(wireOp));
+
+      structCreateOp.erase();
+      continue;
+    }
+
     // Force array index expressions to be a simple name when the
     // `mitigateVivadoArrayIndexConstPropBug` option is set.
     if (options.mitigateVivadoArrayIndexConstPropBug &&

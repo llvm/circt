@@ -63,6 +63,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       allowExprInEventControl = true;
     } else if (option == "disallowPackedArrays") {
       disallowPackedArrays = true;
+    } else if (option == "disallowPackedStructAssignments") {
+      disallowPackedStructAssignments = true;
     } else if (option == "disallowLocalVariables") {
       disallowLocalVariables = true;
     } else if (option == "verifLabels") {
