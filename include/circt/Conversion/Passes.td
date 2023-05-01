@@ -581,4 +581,29 @@ def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "mlir::ModuleOp"> {
   ];
 }
 
+//===----------------------------------------------------------------------===//
+// ConvertSeqToSV
+//===----------------------------------------------------------------------===//
+
+def LowerSeqToSV: Pass<"lower-NEW-seq-to-sv", "mlir::ModuleOp"> {
+  let summary = "Lower sequential operations to SystemVerilog";
+  let constructor = "circt::createLowerSeqToSVPass()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+  let options = [
+    Option<"lowerToAlwaysFF", "lower-to-always-ff", "bool", "true",
+      "Place assignments to registers into `always_ff` processes instead of "
+      "`always`">,
+    Option<"disableRegRandomization", "disable-reg-randomization", "bool",
+      "false", "Disable emission of register randomization code">,
+    Option<"addVivadoRAMAddressConflictSynthesisBugWorkaround",
+      "add-vivado-ram-address-conflict-synthesis-bug-workaround", "bool",
+      "false",
+      "Add a vivado attribute to specify a ram style of array registers">
+  ];
+  let statistics = [
+    Statistic<"numSubaccessRestored", "num-subaccess-restored",
+      "Number of lhs subaccess operations restored ">
+  ];
+}
+
 #endif // CIRCT_CONVERSION_PASSES_TD

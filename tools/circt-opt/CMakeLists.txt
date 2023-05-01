@@ -61,6 +61,7 @@ target_link_libraries(circt-opt
   CIRCTPipelineOps
   CIRCTPipelineToHW
   CIRCTPipelineTransforms
+  CIRCTSeqToSV
   CIRCTSV
   CIRCTSVTransforms
   CIRCTHWArith

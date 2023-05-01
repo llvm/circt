@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This fle contains the declarations to register conversion passes.
+// This file contains the declarations to register conversion passes.
 //
 //===----------------------------------------------------------------------===//
 
@@ -34,6 +34,7 @@
 #include "circt/Conversion/MooreToCore.h"
 #include "circt/Conversion/PipelineToHW.h"
 #include "circt/Conversion/SCFToCalyx.h"
+#include "circt/Conversion/SeqToSV.h"
 #include "circt/Conversion/StandardToHandshake.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Pass/Pass.h"

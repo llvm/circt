@@ -10,6 +10,7 @@
 #ifndef CONVERSION_PASSDETAIL_H
 #define CONVERSION_PASSDETAIL_H
 
+#include "circt/Conversion/Passes.h"
 #include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectRegistry.h"
@@ -123,6 +124,7 @@ class SystemCDialect;
 
 // Generate the classes which represent the passes
 #define GEN_PASS_CLASSES
+#define GEN_PASS_DEF_LOWERSEQTOSV
 #include "circt/Conversion/Passes.h.inc"
 
 } // namespace circt
