@@ -132,7 +132,6 @@ private:
   FIRToken lexInlineAnnotation(const char *tokStart);
   FIRToken lexIdentifierOrKeyword(const char *tokStart);
   FIRToken lexNumber(const char *tokStart);
-  FIRToken lexFloatingPoint(const char *tokStart);
   void skipComment();
   FIRToken lexString(const char *tokStart, bool isRaw);
 
