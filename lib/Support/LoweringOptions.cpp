@@ -133,6 +133,8 @@ std::string LoweringOptions::toString() const {
     options += "exprInEventControl,";
   if (disallowPackedArrays)
     options += "disallowPackedArrays,";
+  if (disallowPackedStructAssignments)
+    options += "disallowPackedStructAssignments,";
   if (disallowLocalVariables)
     options += "disallowLocalVariables,";
   if (enforceVerifLabels)
