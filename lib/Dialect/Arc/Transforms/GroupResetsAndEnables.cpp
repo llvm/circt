@@ -23,15 +23,15 @@ using namespace mlir;
 // Rewrite Patterns
 //===----------------------------------------------------------------------===//
 
-class ResetGroupingPattern : public RewritePattern {
-public:
-  using RewritePattern::RewritePattern;
-  ResetGroupingPattern(PatternBenefit benefit, MLIRContext *context)
-      : RewritePattern(ClockTreeOp::getOperationName(), benefit, context) {}
-  LogicalResult matchAndRewrite(Operation *op,
-                                PatternRewriter &rewriter) const override {
-    ClockTreeOp clockTreeOp = dyn_cast<ClockTreeOp>(*op);
+// struct RemoveHandshakeBuffers : public OpRewritePattern<handshake::BufferOp>
+// {
+//   using OpRewritePattern::OpRewritePattern;
 
+struct ResetGroupingPattern : public OpRewritePattern<ClockTreeOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(ClockTreeOp clockTreeOp,
+                                PatternRewriter &rewriter) const override {
     // Group similar resets into single IfOps
     // Create a list of reset values and map from them to the states they reset
     llvm::MapVector<mlir::Value, SmallVector<scf::IfOp>> resetMap;
@@ -41,7 +41,7 @@ public:
 
     // Combine IfOps
     bool changed = false;
-    for (auto [cond, oldOps] : resetMap) {
+    for (auto &[cond, oldOps] : resetMap) {
       if (oldOps.size() <= 1)
         continue;
       scf::IfOp lastIfOp = oldOps.pop_back_val();
@@ -63,15 +63,11 @@ public:
   }
 };
 
-class EnableGroupingPattern : public RewritePattern {
+struct EnableGroupingPattern : public OpRewritePattern<ClockTreeOp> {
 public:
-  using RewritePattern::RewritePattern;
-  EnableGroupingPattern(PatternBenefit benefit, MLIRContext *context)
-      : RewritePattern(ClockTreeOp::getOperationName(), benefit, context) {}
-  LogicalResult matchAndRewrite(Operation *op,
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(ClockTreeOp clockTreeOp,
                                 PatternRewriter &rewriter) const override {
-    ClockTreeOp clockTreeOp = dyn_cast<ClockTreeOp>(*op);
-
     // Amass regions that we want to group enables in
     SmallVector<Region *> groupingRegions;
     groupingRegions.push_back(&clockTreeOp.getBody());
@@ -88,7 +84,7 @@ public:
         if (writeOp.getCondition())
           enableMap[writeOp.getCondition()].push_back(writeOp);
       }
-      for (auto [enable, writeOps] : enableMap) {
+      for (auto &[enable, writeOps] : enableMap) {
         // Only group if multiple writes share an enable
         if (writeOps.size() <= 1)
           continue;
@@ -118,9 +114,6 @@ public:
 namespace {
 struct GroupResetsAndEnablesPass
     : public GroupResetsAndEnablesBase<GroupResetsAndEnablesPass> {
-  GroupResetsAndEnablesPass() = default;
-  GroupResetsAndEnablesPass(const GroupResetsAndEnablesPass &pass)
-      : GroupResetsAndEnablesPass() {}
 
   void runOnOperation() override;
   LogicalResult runOnModel(ModelOp modelOp);
@@ -139,11 +132,14 @@ LogicalResult GroupResetsAndEnablesPass::runOnModel(ModelOp modelOp) {
 
   MLIRContext &context = getContext();
   RewritePatternSet patterns(&context);
-  patterns.insert<ResetGroupingPattern>(1, &context);
-  patterns.insert<EnableGroupingPattern>(1, &context);
+  patterns.insert<ResetGroupingPattern>(&context);
+  patterns.insert<EnableGroupingPattern>(&context);
   GreedyRewriteConfig config;
   config.strictMode = GreedyRewriteStrictness::ExistingOps;
-  (void)applyPatternsAndFoldGreedily(modelOp, std::move(patterns), config);
+  if (failed(
+          applyPatternsAndFoldGreedily(modelOp, std::move(patterns), config))) {
+    signalPassFailure();
+  }
   return success();
 }
 
