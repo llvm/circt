@@ -35,9 +35,8 @@ public:
     // Group similar resets into single IfOps
     // Create a list of reset values and map from them to the states they reset
     llvm::MapVector<mlir::Value, SmallVector<scf::IfOp>> resetMap;
-    auto ifOps = clockTreeOp.getBody().getOps<scf::IfOp>();
 
-    for (auto ifOp : ifOps)
+    for (auto ifOp : clockTreeOp.getBody().getOps<scf::IfOp>())
       resetMap[ifOp.getCondition()].push_back(ifOp);
 
     // Combine IfOps
@@ -75,7 +74,7 @@ public:
 
     // Amass regions that we want to group enables in
     SmallVector<Region *> groupingRegions;
-    groupingRegions.push_back(&(clockTreeOp.getBody()));
+    groupingRegions.push_back(&clockTreeOp.getBody());
     for (auto ifOp : clockTreeOp.getBody().getOps<scf::IfOp>()) {
       groupingRegions.push_back(&ifOp.getThenRegion());
       groupingRegions.push_back(&ifOp.getElseRegion());
@@ -91,22 +90,21 @@ public:
       }
       for (auto [enable, writeOps] : enableMap) {
         // Only group if multiple writes share an enable
-        if (writeOps.size() > 1) {
-          if (isa<scf::IfOp>(region->getParentOp())) {
-            rewriter.setInsertionPoint(region->back().getTerminator());
-          } else {
-            rewriter.setInsertionPointToEnd(&region->back());
-          }
-          scf::IfOp ifOp =
-              rewriter.create<scf::IfOp>(writeOps[0].getLoc(), enable, false);
-          for (auto writeOp : writeOps) {
-            rewriter.updateRootInPlace(writeOp, [&]() {
-              writeOp->moveBefore(ifOp.thenBlock()->getTerminator());
-              writeOp.getConditionMutable().erase(0);
-            });
-          }
-          changed = true;
+        if (writeOps.size() <= 1)
+          continue;
+        if (isa<scf::IfOp>(region->getParentOp()))
+          rewriter.setInsertionPoint(region->back().getTerminator());
+        else
+          rewriter.setInsertionPointToEnd(&region->back());
+        scf::IfOp ifOp =
+            rewriter.create<scf::IfOp>(writeOps[0].getLoc(), enable, false);
+        for (auto writeOp : writeOps) {
+          rewriter.updateRootInPlace(writeOp, [&]() {
+            writeOp->moveBefore(ifOp.thenBlock()->getTerminator());
+            writeOp.getConditionMutable().erase(0);
+          });
         }
+        changed = true;
       }
     }
     return success(changed);
@@ -130,7 +128,7 @@ struct GroupResetsAndEnablesPass
 } // namespace
 
 void GroupResetsAndEnablesPass::runOnOperation() {
-  for (auto op : llvm::make_early_inc_range(getOperation().getOps<ModelOp>()))
+  for (auto op : getOperation().getOps<ModelOp>())
     if (failed(runOnModel(op)))
       return signalPassFailure();
 }
