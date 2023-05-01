@@ -331,8 +331,8 @@ enabled.
 
 ## Symbols and Inner Symbols
 
-Symbols and Inner Symbols are documented in the former symbol
-rationale.  This section documents how symbols are used,
+Symbols and Inner Symbols are documented in [Symbol
+Rationale](https://circt.llvm.org/docs/RationaleSymbols/).  This documents how symbols are used,
 their interaction with "Don't Touch", and the semantics imposed by them.
 
 Public Symbols indicate there are uses of an entity outside the analysis scope
