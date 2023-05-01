@@ -37,7 +37,8 @@ public:
     llvm::MapVector<mlir::Value, SmallVector<scf::IfOp>> resetMap;
 
     for (auto ifOp : clockTreeOp.getBody().getOps<scf::IfOp>())
-      resetMap[ifOp.getCondition()].push_back(ifOp);
+      if (ifOp.getResults().empty())
+        resetMap[ifOp.getCondition()].push_back(ifOp);
 
     // Combine IfOps
     bool changed = false;

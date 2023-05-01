@@ -292,3 +292,51 @@ arc.model "GroupSeparatedResets" {
   %1 = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
   %2 = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
 }
+
+// CHECK-LABEL: arc.model "DontGroupIfsWithResults"
+arc.model "DontGroupIfsWithResults" {
+^bb0(%arg0: !arc.storage):
+  %c0_i4 = hw.constant 0 : i4
+  %in_clock = arc.root_input "clock", %arg0 : (!arc.storage) -> !arc.state<i1>
+  %in_i0 = arc.root_input "i0", %arg0 : (!arc.storage) -> !arc.state<i4>
+  %in_i1 = arc.root_input "i1", %arg0 : (!arc.storage) -> !arc.state<i4>
+  %in_reset0 = arc.root_input "reset0", %arg0 : (!arc.storage) -> !arc.state<i1>
+  %0 = arc.state_read %in_clock : <i1>
+  arc.clock_tree %0 {
+    //  CHECK: [[IN_RESET0:%.+]] = arc.state_read %in_reset0
+    %3 = arc.state_read %in_reset0 : <i1>
+    //  CHECK-NEXT: scf.if [[IN_RESET0]] {
+    scf.if %3 {
+      //   CHECK-NEXT:  arc.state_write [[FOO_ALLOC:%.+]] = %c0_i4
+      arc.state_write %1 = %c0_i4 : <i4>
+      //   CHECK-NEXT: } else {
+    } else {
+      // CHECK-NEXT:  [[IN_I0:%.+]] = arc.state_read %in_i0
+      // CHECK-NEXT:  arc.state_write [[FOO_ALLOC]] = [[IN_I0]]
+      %4 = arc.state_read %in_i0 : <i4>
+      arc.state_write %1 = %4 : <i4>
+      // CHECK-NEXT: }
+    }
+    //  CHECK-NEXT: [[IF_RESULT:%.+]] scf.if [[IN_RESET0]] -> (i4) {
+    %res = scf.if %3 -> (i4) {
+      //   CHECK-NEXT:  arc.state_write [[BAR_ALLOC:%.+]] = %c0_i4
+      //   CHECK-NEXT:  scf.yield %c0_i4 : i4
+      arc.state_write %2 = %c0_i4 : <i4>
+      scf.yield %c0_i4 : i4
+      //   CHECK-NEXT: } else {
+    } else {
+      // CHECK-NEXT:  [[IN_I1:%.+]] = arc.state_read %in_i1
+      // CHECK-NEXT:  arc.state_write [[BAR_ALLOC]] = [[IN_I1]]
+      //   CHECK-NEXT:  scf.yield %c0_i4 : i4
+      %5 = arc.state_read %in_i1 : <i4>
+      arc.state_write %2 = %5 : <i4>
+      scf.yield %c0_i4 : i4
+    }
+    // CHECK-NEXT: }
+  // CHECK-NEXT: }
+  }
+  // CHECK-NEXT: [[FOO_ALLOC]] = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
+  // CHECK-NEXT: [[BAR_ALLOC]] = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
+  %1 = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
+  %2 = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
+}
