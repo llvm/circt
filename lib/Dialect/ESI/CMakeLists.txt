@@ -23,10 +23,10 @@ set(srcs
 
   cosim/APIUtilities.cpp
 
-  # C++ cosimulation API
-  cosim/CPP/ESIAddCPPCosimAPI.cpp
-  cosim/CPP/ESIEmitCPPCosimAPI.cpp
-  cosim/CPP/CPPCosimAPI.cpp
+  # C++ API
+  cosim/CPP/ESIAddCPPAPI.cpp
+  cosim/CPP/ESIEmitCPPAPI.cpp
+  cosim/CPP/CPPAPI.cpp
 )
 
 set(ESI_RUNTIME_DIR ${CIRCT_BINARY_DIR}/include/circt/Dialect/ESI)

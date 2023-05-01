@@ -28,7 +28,7 @@ std::unique_ptr<OperationPass<ModuleOp>> createESIPortLoweringPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESITypeLoweringPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESItoHWPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESIConnectServicesPass();
-std::unique_ptr<OperationPass<ModuleOp>> createESIAddCPPCosimAPIPass();
+std::unique_ptr<OperationPass<ModuleOp>> createESIAddCPPAPIPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESICleanMetadataPass();
 
 /// Generate the code for registering passes.

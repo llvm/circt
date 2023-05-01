@@ -1,6 +1,6 @@
 // REQUIRES: esi-cosim
 // RUN: rm -rf %t && mkdir %t && cd %t
-// RUN: circt-opt %s --esi-connect-services --esi-emit-cpp-cosim-api="output-file=ESISystem.h" --esi-emit-collateral=schema-file=%t/schema.capnp --esi-clean-metadata > %t/4.mlir
+// RUN: circt-opt %s --esi-connect-services --esi-emit-cpp-api="output-file=ESISystem.h" --esi-emit-collateral=schema-file=%t/schema.capnp --esi-clean-metadata > %t/4.mlir
 // RUN: circt-opt %t/4.mlir --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw --export-split-verilog -o %t/3.mlir
 // RUN: circt-translate %t/4.mlir -export-esi-capnp -verify-diagnostics > %t/schema.capnp
 
