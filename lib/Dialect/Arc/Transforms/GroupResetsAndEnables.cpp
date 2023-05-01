@@ -43,18 +43,18 @@ public:
     // Combine IfOps
     bool changed = false;
     for (auto [cond, oldOps] : resetMap) {
-      if (oldOps.size() > 1) {
-        auto iteratorStart = oldOps.rbegin();
-        scf::IfOp lastIfOp = *(iteratorStart++);
-        for (auto thisOp = iteratorStart; thisOp != oldOps.rend(); thisOp++) {
+      if (oldOps.size() <= 1)
+        continue;
+        scf::IfOp lastIfOp = oldOps.pop_back_val();
+        for (auto thisOp : oldOps) {
           // Inline the before and after region inside the original If
           rewriter.eraseOp(thisOp->thenBlock()->getTerminator());
           rewriter.inlineBlockBefore(thisOp->thenBlock(),
                                      &lastIfOp.thenBlock()->front());
           // Check we're not inlining an empty block
-          if (!thisOp->elseBlock()->empty()) {
-            rewriter.eraseOp(thisOp->elseBlock()->getTerminator());
-            rewriter.inlineBlockBefore(thisOp->elseBlock(),
+          if (auto *elseBlock = thisOp->elseBlock()) {
+            rewriter.eraseOp(elseBlock->getTerminator());
+            rewriter.inlineBlockBefore(elseBlock,
                                        &lastIfOp.elseBlock()->front());
           }
           rewriter.eraseOp(*thisOp);
@@ -62,9 +62,7 @@ public:
         }
       }
     }
-    if (!changed)
-      return failure();
-    return success();
+    return success(changed);
   }
 };
 
@@ -113,9 +111,7 @@ public:
         }
       }
     }
-    if (!changed)
-      return failure();
-    return success();
+    return success(changed);
   }
 };
 
