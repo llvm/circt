@@ -84,7 +84,7 @@ LogicExporter::Visitor::visitStmt(circt::hw::InstanceOp &op,
   LLVM_DEBUG(debugAttributes(op->getAttrs()));
   LLVM_DEBUG(debugOperands(op));
   LLVM_DEBUG(debugOpResults(&op));
-  llvm::StringRef instanceName = op.instanceName();
+  llvm::StringRef instanceName = op.getInstanceName();
   LLVM_DEBUG(lec::dbgs() << "Instance name: " << instanceName << "\n");
   llvm::StringRef targetModule = op.getModuleName();
   LLVM_DEBUG(lec::dbgs() << "Target module name: " << targetModule << "\n");
