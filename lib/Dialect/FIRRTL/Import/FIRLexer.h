@@ -104,7 +104,9 @@ public:
   const llvm::SourceMgr &getSourceMgr() const { return sourceMgr; }
 
   /// Move to the next valid token.
-  void lexToken() { curToken = lexTokenImpl(); }
+  void lexToken(bool stopAtPeriod = false) {
+    curToken = lexTokenImpl(stopAtPeriod);
+  }
 
   const FIRToken &getToken() const { return curToken; }
 
@@ -118,7 +120,7 @@ public:
   FIRLexerCursor getCursor() const;
 
 private:
-  FIRToken lexTokenImpl();
+  FIRToken lexTokenImpl(bool stopAtPeriod = false);
 
   // Helpers.
   FIRToken formToken(FIRToken::Kind kind, const char *tokStart) {
@@ -131,7 +133,7 @@ private:
   FIRToken lexFileInfo(const char *tokStart);
   FIRToken lexInlineAnnotation(const char *tokStart);
   FIRToken lexIdentifierOrKeyword(const char *tokStart);
-  FIRToken lexNumber(const char *tokStart);
+  FIRToken lexNumber(const char *tokStart, bool stopAtPeriod = false);
   FIRToken lexFloatingPoint(const char *tokStart);
   void skipComment();
   FIRToken lexString(const char *tokStart, bool isRaw);

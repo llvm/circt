@@ -209,7 +209,7 @@ std::optional<unsigned> FIRLexer::getIndentation(const FIRToken &tok) const {
 // Lexer Implementation Methods
 //===----------------------------------------------------------------------===//
 
-FIRToken FIRLexer::lexTokenImpl() {
+FIRToken FIRLexer::lexTokenImpl(bool stopAtPeriod) {
   while (true) {
     const char *tokStart = curPtr;
     switch (*curPtr++) {
@@ -302,7 +302,7 @@ FIRToken FIRLexer::lexTokenImpl() {
     case '7':
     case '8':
     case '9':
-      return lexNumber(tokStart);
+      return lexNumber(tokStart, stopAtPeriod);
     }
   }
 }
@@ -485,7 +485,7 @@ FIRToken FIRLexer::lexString(const char *tokStart, bool isRaw) {
 ///   TripleLit ::=
 ///       Digit+ '.' Digit+ '.' Digit+
 ///
-FIRToken FIRLexer::lexNumber(const char *tokStart) {
+FIRToken FIRLexer::lexNumber(const char *tokStart, bool stopAtPeriod) {
   assert(llvm::isDigit(curPtr[-1]) || curPtr[-1] == '+' || curPtr[-1] == '-');
 
   // There needs to be at least one digit.
@@ -495,9 +495,10 @@ FIRToken FIRLexer::lexNumber(const char *tokStart) {
   while (llvm::isDigit(*curPtr))
     ++curPtr;
 
-  // If we encounter a '.' followed by a digit, then this is a floating point
-  // literal, otherwise this is an integer or negative integer.
-  if (*curPtr != '.' || !llvm::isDigit(curPtr[1])) {
+  // If we are allowed to look past a period and we encounter a '.' followed by
+  // a digit, then this is a floating point literal or a version.  Go lex that.
+  // Otherwise this is an integer or negative integer.
+  if (stopAtPeriod || *curPtr != '.' || !llvm::isDigit(curPtr[1])) {
     if (*tokStart == '-' || *tokStart == '+')
       return formToken(FIRToken::signed_integer, tokStart);
     return formToken(FIRToken::integer, tokStart);

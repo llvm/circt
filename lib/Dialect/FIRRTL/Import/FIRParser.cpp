@@ -202,21 +202,21 @@ struct FIRParser {
 
   /// If the current token has the specified kind, consume it and return true.
   /// If not, return false.
-  bool consumeIf(FIRToken::Kind kind) {
+  bool consumeIf(FIRToken::Kind kind, bool stopAtPeriod = false) {
     if (getToken().isNot(kind))
       return false;
-    consumeToken(kind);
+    consumeToken(kind, stopAtPeriod);
     return true;
   }
 
   /// Advance the current lexer onto the next token.
   ///
   /// This returns the consumed token.
-  FIRToken consumeToken() {
+  FIRToken consumeToken(bool stopAtPeriod = false) {
     FIRToken consumedToken = getToken();
     assert(consumedToken.isNot(FIRToken::eof, FIRToken::error) &&
            "shouldn't advance past EOF or errors");
-    lexer.lexToken();
+    lexer.lexToken(stopAtPeriod);
     return consumedToken;
   }
 
@@ -225,10 +225,10 @@ struct FIRParser {
   /// to more self-documenting code with better checking.
   ///
   /// This returns the consumed token.
-  FIRToken consumeToken(FIRToken::Kind kind) {
+  FIRToken consumeToken(FIRToken::Kind kind, bool stopAtPeriod = false) {
     FIRToken consumedToken = getToken();
     assert(consumedToken.is(kind) && "consumed an unexpected token");
-    consumeToken();
+    consumeToken(stopAtPeriod);
     return consumedToken;
   }
 
@@ -241,7 +241,8 @@ struct FIRParser {
 
   /// Consume the specified token if present and return success.  On failure,
   /// output a diagnostic and return failure.
-  ParseResult parseToken(FIRToken::Kind expectedToken, const Twine &message);
+  ParseResult parseToken(FIRToken::Kind expectedToken, const Twine &message,
+                         bool stopAtPeriod = false);
 
   /// Parse a list of elements, terminated with an arbitrary token.
   ParseResult parseListUntil(FIRToken::Kind rightToken,
@@ -309,8 +310,8 @@ InFlightDiagnostic FIRParser::emitError(SMLoc loc, const Twine &message) {
 /// Consume the specified token if present and return success.  On failure,
 /// output a diagnostic and return failure.
 ParseResult FIRParser::parseToken(FIRToken::Kind expectedToken,
-                                  const Twine &message) {
-  if (consumeIf(expectedToken))
+                                  const Twine &message, bool stopAtPeriod) {
+  if (consumeIf(expectedToken, stopAtPeriod))
     return success();
   return emitError(message);
 }
@@ -1518,7 +1519,8 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
 
     // Handle the normal "instance.x" reference.
     StringRef fieldName;
-    if (parseToken(FIRToken::period, "expected '.' in field reference") ||
+    if (parseToken(FIRToken::period, "expected '.' in field reference",
+                   /*stopAtPeriod=*/true) ||
         parseFieldId(fieldName, "expected field name") ||
         moduleContext.resolveSymbolEntry(result, symtabEntry, fieldName, loc))
       return failure();
@@ -1542,7 +1544,7 @@ ParseResult FIRStmtParser::parseOptionalExpPostscript(Value &result,
   // Handle postfix expressions.
   while (true) {
     // Subfield: exp ::= exp '.' fieldId
-    if (consumeIf(FIRToken::period)) {
+    if (consumeIf(FIRToken::period, /*stopAtPeriod=*/true)) {
       if (parsePostFixFieldId(result))
         return failure();
 
@@ -1906,7 +1908,7 @@ FIRStmtParser::parseExpWithLeadingKeyword(FIRToken keyword) {
   if (moduleContext.resolveSymbolEntry(lhs, symtabEntry, loc, false)) {
     // Ok if the base name didn't resolve by itself, it might be part of an
     // expanded dot reference.  That doesn't work then we fail.
-    if (!consumeIf(FIRToken::period))
+    if (!consumeIf(FIRToken::period, /*stopAtPeriod=*/true))
       return ParseResult(failure());
 
     StringRef fieldName;
@@ -2409,7 +2411,8 @@ ParseResult FIRStmtParser::parseStaticRefExp(Value &result,
     // Handle the normal "instance.x" reference.
     StringRef fieldName;
     return failure(
-        parseToken(FIRToken::period, "expected '.' in field reference") ||
+        parseToken(FIRToken::period, "expected '.' in field reference",
+                   /*stopAtPeriod=*/true) ||
         parseFieldId(fieldName, "expected field name") ||
         moduleContext.resolveSymbolEntry(result, symtabEntry, fieldName, loc));
   };
