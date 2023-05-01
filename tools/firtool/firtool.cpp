@@ -667,6 +667,10 @@ static LogicalResult processBuffer(
       firrtl::createMergeConnectionsPass(
           !disableAggressiveMergeConnections.getValue()));
 
+  if (!disableOptimization)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createVectorizationPass());
+
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {
 

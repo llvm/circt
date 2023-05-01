@@ -391,6 +391,9 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitExpr(SubaccessOp op);
   bool visitExpr(VectorCreateOp op);
   bool visitExpr(BundleCreateOp op);
+  bool visitExpr(ElementwiseAndPrimOp op);
+  bool visitExpr(ElementwiseOrPrimOp op);
+  bool visitExpr(ElementwiseXorPrimOp op);
   bool visitExpr(MultibitMuxOp op);
   bool visitExpr(MuxPrimOp op);
   bool visitExpr(mlir::UnrealizedConversionCastOp op);
@@ -1397,6 +1400,48 @@ bool TypeLoweringVisitor::visitExpr(BundleCreateOp op) {
                    ArrayAttr attrs) -> Value {
     return op.getOperand(field.index);
   };
+  return lowerProducer(op, clone);
+}
+
+bool TypeLoweringVisitor::visitExpr(ElementwiseOrPrimOp op) {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Value {
+    Value operands[] = {getSubWhatever(op.getLhs(), field.index),
+                        getSubWhatever(op.getRhs(), field.index)};
+    return isa<BundleType, FVectorType>(field.type)
+               ? (Value)builder->create<ElementwiseOrPrimOp>(field.type,
+                                                             operands)
+               : (Value)builder->create<OrPrimOp>(operands);
+  };
+
+  return lowerProducer(op, clone);
+}
+
+bool TypeLoweringVisitor::visitExpr(ElementwiseAndPrimOp op) {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Value {
+    Value operands[] = {getSubWhatever(op.getLhs(), field.index),
+                        getSubWhatever(op.getRhs(), field.index)};
+    return isa<BundleType, FVectorType>(field.type)
+               ? (Value)builder->create<ElementwiseAndPrimOp>(field.type,
+                                                              operands)
+               : (Value)builder->create<AndPrimOp>(operands);
+  };
+
+  return lowerProducer(op, clone);
+}
+
+bool TypeLoweringVisitor::visitExpr(ElementwiseXorPrimOp op) {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Value {
+    Value operands[] = {getSubWhatever(op.getLhs(), field.index),
+                        getSubWhatever(op.getRhs(), field.index)};
+    return isa<BundleType, FVectorType>(field.type)
+               ? (Value)builder->create<ElementwiseXorPrimOp>(field.type,
+                                                              operands)
+               : (Value)builder->create<XorPrimOp>(operands);
+  };
+
   return lowerProducer(op, clone);
 }
 

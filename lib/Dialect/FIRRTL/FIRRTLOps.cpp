@@ -3421,6 +3421,25 @@ FIRRTLType impl::inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
   return UIntType::get(lhs.getContext(), resultWidth);
 }
 
+FIRRTLType impl::inferElementwiseResult(FIRRTLType lhs, FIRRTLType rhs,
+                                        std::optional<Location> loc) {
+  if (!lhs.isa<FVectorType>() || !rhs.isa<FVectorType>())
+    return {};
+
+  auto lhsVec = lhs.cast<FVectorType>();
+  auto rhsVec = rhs.cast<FVectorType>();
+
+  if (lhsVec.getNumElements() != rhsVec.getNumElements())
+    return {};
+
+  auto elemType = impl::inferBitwiseResult(lhsVec.getElementType(),
+                                           rhsVec.getElementType(), loc);
+  if (!elemType)
+    return {};
+  return FVectorType::get(elemType.cast<FIRRTLBaseType>(),
+                          lhsVec.getNumElements());
+}
+
 FIRRTLType impl::inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
                                        std::optional<Location> loc) {
   return UIntType::get(lhs.getContext(), 1);
@@ -4277,6 +4296,18 @@ void UninferredResetCastOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 void UninferredWidthCastOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void ElementwiseXorPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void ElementwiseOrPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void ElementwiseAndPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 

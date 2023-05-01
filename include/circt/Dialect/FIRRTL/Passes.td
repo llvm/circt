@@ -503,6 +503,11 @@ def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
   ];
 }
 
+def Vectorization : Pass<"vectorization", "firrtl::FModuleOp"> {
+  let summary = "Transform firrtl primitive operations into vector operations";
+  let constructor = "circt::firrtl::createVectorizationPass()";
+}
+
 def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
   let summary = "Infer the read-write memory port";
   let description = [{

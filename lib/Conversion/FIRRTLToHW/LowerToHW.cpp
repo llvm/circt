@@ -1576,6 +1576,10 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult lowerBinOp(Operation *op);
   template <typename ResultOpType>
   LogicalResult lowerBinOpToVariadic(Operation *op);
+
+  template <typename ResultOpType>
+  LogicalResult lowerElementwiseLogicalOp(Operation *op);
+
   LogicalResult lowerCmpOp(Operation *op, ICmpPredicate signedOp,
                            ICmpPredicate unsignedOp);
   template <typename SignedOp, typename UnsignedOp>
@@ -1591,6 +1595,15 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   }
   LogicalResult visitExpr(XorPrimOp op) {
     return lowerBinOpToVariadic<comb::XorOp>(op);
+  }
+  LogicalResult visitExpr(ElementwiseOrPrimOp op) {
+    return lowerElementwiseLogicalOp<comb::OrOp>(op);
+  }
+  LogicalResult visitExpr(ElementwiseAndPrimOp op) {
+    return lowerElementwiseLogicalOp<comb::AndOp>(op);
+  }
+  LogicalResult visitExpr(ElementwiseXorPrimOp op) {
+    return lowerElementwiseLogicalOp<comb::XorOp>(op);
   }
   LogicalResult visitExpr(AddPrimOp op) {
     return lowerBinOpToVariadic<comb::AddOp>(op);
@@ -3468,6 +3481,32 @@ LogicalResult FIRRTLLowering::lowerBinOpToVariadic(Operation *op) {
     return failure();
 
   return setLoweringTo<ResultOpType>(op, lhs, rhs, true);
+}
+
+/// Element-wise logical operations can be lowered into bitcast and normal comb
+/// operations. Eventually we might want to introduce elementwise operations
+/// into HW/SV level as well.
+template <typename ResultOpType>
+LogicalResult FIRRTLLowering::lowerElementwiseLogicalOp(Operation *op) {
+  auto resultType = op->getResult(0).getType();
+  auto lhs = getLoweredAndExtendedValue(op->getOperand(0), resultType);
+  auto rhs = getLoweredAndExtendedValue(op->getOperand(1), resultType);
+
+  if (!lhs || !rhs)
+    return failure();
+  auto bitwidth = firrtl::getBitWidth(resultType.cast<FIRRTLBaseType>());
+
+  if (!bitwidth)
+    return failure();
+
+  // TODO: Introduce elementwise operations to HW dialect instead of abusing
+  // bitcast operations.
+  auto intType = builder.getIntegerType(*bitwidth);
+  auto retType = lhs.getType();
+  lhs = builder.createOrFold<hw::BitcastOp>(intType, lhs);
+  rhs = builder.createOrFold<hw::BitcastOp>(intType, rhs);
+  return setLoweringTo<hw::BitcastOp>(
+      op, retType, builder.createOrFold<ResultOpType>(lhs, rhs));
 }
 
 /// lowerBinOp extends each operand to the destination type, then performs the

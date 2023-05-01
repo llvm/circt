@@ -149,6 +149,8 @@ FIRRTLType inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
                              std::optional<Location> loc);
 FIRRTLType inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
                               std::optional<Location> loc);
+FIRRTLType inferElementwiseResult(FIRRTLType lhs, FIRRTLType rhs,
+                                  std::optional<Location> loc);
 FIRRTLType inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
                                  std::optional<Location> loc);
 FIRRTLType inferReductionResult(FIRRTLType arg, std::optional<Location> loc);
