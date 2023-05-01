@@ -2910,7 +2910,7 @@ LogicalResult FEnumCreateOp::verify() {
 void FEnumCreateOp::print(OpAsmPrinter &printer) {
   printer << ' ';
   printer.printKeywordOrString(getFieldName());
-  printer << '(' << getFieldName() << ')';
+  printer << '(' << getInput() << ')';
   SmallVector<StringRef> elidedAttrs = {"fieldIndex"};
   printer.printOptionalAttrDictWithKeyword((*this)->getAttrs(), elidedAttrs);
   printer << " : " << getResult().getType();
