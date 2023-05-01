@@ -267,6 +267,8 @@ struct FIRParser {
   ParseResult parseId(StringRef &result, const Twine &message);
   ParseResult parseId(StringAttr &result, const Twine &message);
   ParseResult parseFieldId(StringRef &result, const Twine &message);
+  ParseResult parseFieldIdSeq(SmallVectorImpl<StringRef> &result,
+                              const Twine &message);
   ParseResult parseType(FIRRTLType &result, const Twine &message);
 
   ParseResult parseOptionalRUW(RUWAttr &result);
@@ -669,6 +671,49 @@ ParseResult FIRParser::parseFieldId(StringRef &result, const Twine &message) {
   if (parseId(result, message))
     return failure();
 
+  return success();
+}
+
+/// fieldId ::= Id
+///         ::= Float
+///         ::= version
+///         ::= UnsignedInt
+///         ::= keywordAsId
+///
+ParseResult FIRParser::parseFieldIdSeq(SmallVectorImpl<StringRef> &result,
+                                       const Twine &message) {
+  // Handle the UnsignedInt case.
+  StringRef tmp = getTokenSpelling();
+
+  if (consumeIf(FIRToken::integer)) {
+    result.push_back(tmp);
+    return success();
+  }
+
+  if (consumeIf(FIRToken::floatingpoint)) {
+    // form a.b
+    // Both a and b could have more floating point stuff, but just ignore that
+    // for now.
+    auto [a, b] = tmp.split(".");
+    result.push_back(a);
+    result.push_back(b);
+    return success();
+  }
+
+  if (consumeIf(FIRToken::version)) {
+    // form a.b.c
+    auto [a, d] = tmp.split(".");
+    auto [b, c] = d.split(".");
+    result.push_back(a);
+    result.push_back(b);
+    result.push_back(c);
+    return success();
+  }
+
+  // Otherwise, it must be Id or keywordAsId.
+  if (parseId(tmp, message))
+    return failure();
+  result.push_back(tmp);
   return success();
 }
 
@@ -1603,32 +1648,34 @@ FIRStmtParser::emitCachedSubAccess(Value base, ArrayRef<NamedAttribute> attrs,
 ///
 ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
   auto loc = getToken().getLoc();
-  StringRef fieldName;
-  if (parseFieldId(fieldName, "expected field name"))
+  SmallVector<StringRef, 3> fields;
+  if (parseFieldIdSeq(fields, "expected field name"))
     return failure();
-  auto bundle = getBaseOfType<BundleType>(result.getType());
-  if (!bundle)
-    return emitError(loc, "subfield requires bundle operand ");
-  auto indexV = bundle.getElementIndex(fieldName);
-  if (!indexV)
-    return emitError(loc, "unknown field '" + fieldName + "' in bundle type ")
-           << result.getType();
-  auto indexNo = *indexV;
+  for (auto fieldName : fields) {
+    auto bundle = getBaseOfType<BundleType>(result.getType());
+    if (!bundle)
+      return emitError(loc, "subfield requires bundle operand ");
+    auto indexV = bundle.getElementIndex(fieldName);
+    if (!indexV)
+      return emitError(loc, "unknown field '" + fieldName + "' in bundle type ")
+             << result.getType();
+    auto indexNo = *indexV;
 
-  FailureOr<Value> subResult;
-  if (isa<RefType>(result.getType())) {
-    NamedAttribute attrs = {getConstants().indexIdentifier,
-                            builder.getI32IntegerAttr(indexNo)};
-    subResult = emitCachedSubAccess<RefSubOp>(result, attrs, indexNo, loc);
-  } else {
-    NamedAttribute attrs = {getConstants().fieldIndexIdentifier,
-                            builder.getI32IntegerAttr(indexNo)};
-    subResult = emitCachedSubAccess<SubfieldOp>(result, attrs, indexNo, loc);
+    FailureOr<Value> subResult;
+    if (isa<RefType>(result.getType())) {
+      NamedAttribute attrs = {getConstants().indexIdentifier,
+                              builder.getI32IntegerAttr(indexNo)};
+      subResult = emitCachedSubAccess<RefSubOp>(result, attrs, indexNo, loc);
+    } else {
+      NamedAttribute attrs = {getConstants().fieldIndexIdentifier,
+                              builder.getI32IntegerAttr(indexNo)};
+      subResult = emitCachedSubAccess<SubfieldOp>(result, attrs, indexNo, loc);
+    }
+
+    if (failed(subResult))
+      return failure();
+    result = *subResult;
   }
-
-  if (failed(subResult))
-    return failure();
-  result = *subResult;
   return success();
 }
 
@@ -3552,6 +3599,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
 
     case FIRToken::integer:
     case FIRToken::signed_integer: {
+
       APInt result;
       if (parseIntLit(result, "invalid integer parameter"))
         return failure();

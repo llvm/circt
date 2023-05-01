@@ -1278,6 +1278,26 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output p : Probe<UInt<1>>
     p is invalid
 
+  ; CHECK-LABEL: module private @NumericFields
+  ; See: https://github.com/llvm/circt/issues/5110
+  module NumericFields:
+    input a: {0: {0: {bar: UInt<1>}}}
+    output b: UInt<1>
+    input c: {0: {0: {0: {bar: UInt<1>}}}}
+    output d: UInt<1>
+
+    ; CHECK:      %0 = firrtl.subfield %c["0"]
+    ; CHECK-NEXT: %1 = firrtl.subfield %0["0"]
+    ; CHECK-NEXT: %2 = firrtl.subfield %1["0"]
+    ; CHECK-NEXT: %3 = firrtl.subfield %2[bar]
+    ; CHECK-NEXT: %4 = firrtl.subfield %a["0"]
+    ; CHECK-NEXT: %5 = firrtl.subfield %4["0"]
+    ; CHECK-NEXT: %6 = firrtl.subfield %5[bar]
+    b <= a.0.0.bar
+    d <= c.0.0.0.bar
+    ; CHECK-NEXT: firrtl.strictconnect %b, %6
+    ; CHECK-NEXT: firrtl.strictconnect %d, %3
+
 ;// -----
 
 FIRRTL version 3.0.0
