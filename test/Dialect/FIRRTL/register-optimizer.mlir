@@ -36,7 +36,7 @@ firrtl.circuit "invalidReg"   {
   // CHECK-LABEL: @constantRegResetWrite
   firrtl.module @constantRegResetWrite(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %a: !firrtl.uint<1>) {
     %c = firrtl.constant 0 : !firrtl.uint<1>
-    %foobar = firrtl.regreset %clock, %reset, %c  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %foobar = firrtl.regreset %clock, %reset, %c  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.strictconnect %foobar, %c : !firrtl.uint<1>
     //CHECK-NOT: firrtl.connect %foobar, %c
     //CHECK: %[[const:.*]] = firrtl.constant
@@ -47,7 +47,7 @@ firrtl.circuit "invalidReg"   {
   // CHECK-LABEL: @constantRegResetWriteSelf
   firrtl.module @constantRegResetWriteSelf(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %a: !firrtl.uint<1>) {
     %c = firrtl.constant 0 : !firrtl.uint<1>
-    %foobar = firrtl.regreset %clock, %reset, %c  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %foobar = firrtl.regreset %clock, %reset, %c  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.strictconnect %foobar, %foobar : !firrtl.uint<1>
     //CHECK-NOT: firrtl.connect %foobar, %c
     //CHECK: %[[const:.*]] = firrtl.constant
@@ -67,7 +67,7 @@ firrtl.circuit "invalidReg"   {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
     // regreset
-    %regreset = firrtl.regreset %clock, %reset, %c0_ui2 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
+    %regreset = firrtl.regreset %clock, %reset, %c0_ui2 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>
 
     firrtl.strictconnect %regreset, %c0_ui2 : !firrtl.uint<2>
 
@@ -81,13 +81,4 @@ firrtl.circuit "invalidReg"   {
     firrtl.strictconnect %result7, %reg: !firrtl.uint<4>
   }
 
-  // CHECK-LABEL: RegResetImplicitExtOrTrunc
-  firrtl.module @RegResetImplicitExtOrTrunc(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %out: !firrtl.uint<4>) {
-    // CHECK: firrtl.regreset
-    %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
-    %r = firrtl.regreset %clock, %reset, %c0_ui3 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<2>
-    %0 = firrtl.cat %r, %r : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
-    firrtl.strictconnect %r, %r : !firrtl.uint<2>
-    firrtl.strictconnect %out, %0 : !firrtl.uint<4>
-  }
 }

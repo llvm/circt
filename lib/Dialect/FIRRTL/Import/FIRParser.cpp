@@ -3273,19 +3273,26 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   ArrayAttr annotations = getConstants().emptyArrayAttr;
   Value result;
   StringAttr sym = {};
+  auto firType = dyn_cast<FIRRTLBaseType>(type);
+  if (!firType)
+    return emitError("cannot have non-firrtl types");
+
   // TODO: isConst -> hasConst.
   bool forceable = !isConst(type);
-  if (resetSignal)
+  if (resetSignal) {
+    if (type != resetSignal.getType())
+      resetValue = expandPassiveType(builder, firType, resetValue);
     result = builder
                  .create<RegResetOp>(type, clock, resetSignal, resetValue, id,
                                      NameKindEnum::InterestingName, annotations,
                                      sym, forceable)
                  .getResult();
-  else
+  } else {
     result = builder
                  .create<RegOp>(type, clock, id, NameKindEnum::InterestingName,
                                 annotations, sym, forceable)
                  .getResult();
+  }
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 

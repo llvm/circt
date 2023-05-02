@@ -126,6 +126,71 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   builder.create<StrictConnectOp>(dst, src);
 }
 
+// This is usable any place an implicit extension might happen.  It will force
+// a disconnect of width inference corrosponding to allowing a lhs < rhs.
+Value firrtl::expandPassiveType(ImplicitLocOpBuilder &builder,
+                                FIRRTLBaseType dstType, Value rhs) {
+  auto srcFType = rhs.getType().cast<FIRRTLType>();
+  auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
+
+  assert(dstType.isPassive() && srcType.isPassive());
+
+  // If the types are the exact same we can just return them.
+  if (dstType == srcType && !dstType.hasUninferredWidth() &&
+      !srcType.hasUninferredWidth())
+    return rhs;
+
+  if (auto dstBundle = dstType.dyn_cast<BundleType>()) {
+    // Expand all the bundle elements pairwise.
+    auto numElements = dstBundle.getNumElements();
+    SmallVector<Value> fields;
+    for (size_t i = 0; i < numElements; ++i) {
+      auto srcField = builder.create<SubfieldOp>(rhs, i);
+      fields.push_back(
+          expandPassiveType(builder, dstBundle.getElementType(i), srcField));
+    }
+    return builder.create<BundleCreateOp>(dstBundle, fields);
+  }
+
+  if (auto dstVector = dstType.dyn_cast<FVectorType>()) {
+    // Connect all the vector elements pairwise.
+    auto numElements = dstVector.getNumElements();
+    SmallVector<Value> fields;
+    for (size_t i = 0; i < numElements; ++i) {
+      auto srcField = builder.create<SubindexOp>(rhs, i);
+      fields.push_back(
+          expandPassiveType(builder, dstVector.getElementType(), srcField));
+    }
+    return builder.create<VectorCreateOp>(dstVector, fields);
+  }
+
+  if (dstType != srcType &&
+      (dstType.hasUninferredReset() || srcType.hasUninferredReset())) {
+    rhs = builder.create<UninferredResetCastOp>(dstType, rhs);
+    srcType = dstType;
+  }
+
+  // We have to pad uint -> uint to disconnect the inference
+  if (dstType.hasUninferredWidth() || srcType.hasUninferredWidth()) {
+    rhs = builder.create<UninferredWidthCastOp>(dstType, rhs);
+    srcType = dstType;
+  }
+
+  // Handle ground types with possibly uninferred widths.
+  auto dstWidth = dstType.getBitWidthOrSentinel();
+  auto srcWidth = srcType.getBitWidthOrSentinel();
+
+  // The source must be extended.
+  if (dstWidth >= 0 && dstWidth < srcWidth) {
+    rhs = builder.create<PadPrimOp>(rhs, dstWidth);
+  }
+
+  // Strict connect requires the types to be completely equal, including
+  // connecting uint<1> to abstract reset types.
+  assert("Connect Types are equal" && dstType == rhs.getType());
+  return rhs;
+}
+
 IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {
   auto intType = type.cast<IntType>();
   assert((!intType.hasWidth() ||

@@ -524,7 +524,7 @@ firrtl.module @aggregate_register(in %clock: !firrtl.clock) {
 
 // CHECK-LABEL: @aggregate_regreset
 firrtl.module @aggregate_regreset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %resetval: !firrtl.vector<uint<1>, 2>) {
-  %0 = firrtl.regreset %clock, %reset, %resetval : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+  %0 = firrtl.regreset %clock, %reset, %resetval : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>
   // CHECK:      %1 = firrtl.subindex %0[0]
   // CHECK-NEXT: firrtl.connect %1, %1
   // CHECK-NEXT: %2 = firrtl.subindex %0[1]

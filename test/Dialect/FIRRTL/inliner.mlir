@@ -267,8 +267,8 @@ firrtl.module @declarations(in %clock : !firrtl.clock, in %u8 : !firrtl.uint<8>,
   %node = firrtl.node %u8 {name = "node"} : !firrtl.uint<8>
   // CHECK: %myinst_reg = firrtl.reg %myinst_clock : !firrtl.clock, !firrtl.uint<8>
   %reg = firrtl.reg %clock {name = "reg"} : !firrtl.clock, !firrtl.uint<8>
-  // CHECK: %myinst_regreset = firrtl.regreset %myinst_clock, %myinst_reset, %c0_ui8 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
-  %regreset = firrtl.regreset %clock, %reset, %c0_ui8 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
+  // CHECK: %myinst_regreset = firrtl.regreset %myinst_clock, %myinst_reset, %c0_ui8 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>
+  %regreset = firrtl.regreset %clock, %reset, %c0_ui8 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>
   // CHECK: %smem = chirrtl.seqmem Undefined : !chirrtl.cmemory<uint<8>, 8>
   %smem = chirrtl.seqmem Undefined : !chirrtl.cmemory<uint<8>, 8>
   // CHECK: %myinst_wire = firrtl.wire  : !firrtl.uint<1>

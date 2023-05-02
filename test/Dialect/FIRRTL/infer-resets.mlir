@@ -64,9 +64,9 @@ firrtl.module @CastingToOtherTypes(in %a: !firrtl.uint<1>, out %v: !firrtl.uint<
 // CHECK-LABEL: firrtl.module @ModuleBoundariesChild
 // CHECK-SAME: in %childReset: !firrtl.uint<1>
 firrtl.module @ModuleBoundariesChild(in %clock: !firrtl.clock, in %childReset: !firrtl.reset, in %x: !firrtl.uint<8>, out %z: !firrtl.uint<8>) {
-  %c123_ui = firrtl.constant 123 : !firrtl.uint
-  // CHECK: %r = firrtl.regreset %clock, %childReset, %c123_ui : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint, !firrtl.uint<8>
-  %r = firrtl.regreset %clock, %childReset, %c123_ui : !firrtl.clock, !firrtl.reset, !firrtl.uint, !firrtl.uint<8>
+  %c123_ui = firrtl.constant 123 : !firrtl.uint<8>
+  // CHECK: %r = firrtl.regreset %clock, %childReset, %c123_ui8 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>
+  %r = firrtl.regreset %clock, %childReset, %c123_ui : !firrtl.clock, !firrtl.reset, !firrtl.uint<8>
   firrtl.strictconnect %r, %x : !firrtl.uint<8>
   firrtl.strictconnect %z, %r : !firrtl.uint<8>
 }
@@ -92,9 +92,9 @@ firrtl.module @MultipleModuleBoundariesTop(in %clock: !firrtl.clock, in %reset: 
   // CHECK: {{.*}} = firrtl.instance c @MultipleModuleBoundariesChild(in resetIn: !firrtl.uint<1>, out resetOut: !firrtl.uint<1>)
   %c_resetIn, %c_resetOut = firrtl.instance c @MultipleModuleBoundariesChild(in resetIn: !firrtl.reset, out resetOut: !firrtl.reset)
   firrtl.connect %c_resetIn, %reset : !firrtl.reset, !firrtl.uint<1>
-  %c123_ui = firrtl.constant 123 : !firrtl.uint
-  // CHECK: %r = firrtl.regreset %clock, %c_resetOut, %c123_ui : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint, !firrtl.uint<8>
-  %r = firrtl.regreset %clock, %c_resetOut, %c123_ui : !firrtl.clock, !firrtl.reset, !firrtl.uint, !firrtl.uint<8>
+  %c123_ui = firrtl.constant 123 : !firrtl.uint<8>
+  // CHECK: %r = firrtl.regreset %clock, %c_resetOut, %c123_ui8 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>
+  %r = firrtl.regreset %clock, %c_resetOut, %c123_ui : !firrtl.clock, !firrtl.reset, !firrtl.uint<8>
   firrtl.strictconnect %r, %x : !firrtl.uint<8>
   firrtl.strictconnect %z, %r : !firrtl.uint<8>
 }
@@ -190,18 +190,18 @@ firrtl.module @ResetDrivesAsyncResetOrBool3(in %in: !firrtl.uint<1>, out %out: !
 // CHECK-LABEL: firrtl.module @DedupDifferentlyChild1
 // CHECK-SAME: in %childReset: !firrtl.uint<1>
 firrtl.module @DedupDifferentlyChild1(in %clock: !firrtl.clock, in %childReset: !firrtl.reset, in %x: !firrtl.uint<8>, out %z: !firrtl.uint<8>) {
-  %c123_ui = firrtl.constant 123 : !firrtl.uint
-  // CHECK: %r = firrtl.regreset %clock, %childReset, %c123_ui : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint, !firrtl.uint<8>
-  %r = firrtl.regreset %clock, %childReset, %c123_ui : !firrtl.clock, !firrtl.reset, !firrtl.uint, !firrtl.uint<8>
+  %c123_ui = firrtl.constant 123 : !firrtl.uint<8>
+  // CHECK: %r = firrtl.regreset %clock, %childReset, %c123_ui8 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>
+  %r = firrtl.regreset %clock, %childReset, %c123_ui : !firrtl.clock, !firrtl.reset, !firrtl.uint<8>
   firrtl.strictconnect %r, %x : !firrtl.uint<8>
   firrtl.strictconnect %z, %r : !firrtl.uint<8>
 }
 // CHECK-LABEL: firrtl.module @DedupDifferentlyChild2
 // CHECK-SAME: in %childReset: !firrtl.asyncreset
 firrtl.module @DedupDifferentlyChild2(in %clock: !firrtl.clock, in %childReset: !firrtl.reset, in %x: !firrtl.uint<8>, out %z: !firrtl.uint<8>) {
-  %c123_ui = firrtl.constant 123 : !firrtl.uint
-  // CHECK: %r = firrtl.regreset %clock, %childReset, %c123_ui : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint, !firrtl.uint<8>
-  %r = firrtl.regreset %clock, %childReset, %c123_ui : !firrtl.clock, !firrtl.reset, !firrtl.uint, !firrtl.uint<8>
+  %c123_ui = firrtl.constant 123 : !firrtl.uint<8>
+  // CHECK: %r = firrtl.regreset %clock, %childReset, %c123_ui8 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>
+  %r = firrtl.regreset %clock, %childReset, %c123_ui : !firrtl.clock, !firrtl.reset, !firrtl.uint<8>
   firrtl.strictconnect %r, %x : !firrtl.uint<8>
   firrtl.strictconnect %z, %r : !firrtl.uint<8>
 }
@@ -379,7 +379,7 @@ firrtl.circuit "Top" {
 
     // Existing async reset remains untouched.
     // CHECK: %reg2 = firrtl.regreset %clock, %reset, %c1_ui8
-    %reg2 = firrtl.regreset %clock, %reset, %c1_ui8 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
+    %reg2 = firrtl.regreset %clock, %reset, %c1_ui8 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>
     firrtl.strictconnect %reg2, %in : !firrtl.uint<8>
 
     // Existing sync reset is moved to mux.
@@ -387,7 +387,7 @@ firrtl.circuit "Top" {
     // CHECK: %0 = firrtl.mux(%init, %c1_ui8, %reg3)
     // CHECK: %1 = firrtl.mux(%init, %c1_ui8, %in)
     // CHECK: firrtl.strictconnect %reg3, %1
-    %reg3 = firrtl.regreset %clock, %init, %c1_ui8 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+    %reg3 = firrtl.regreset %clock, %init, %c1_ui8 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>
     firrtl.strictconnect %reg3, %in : !firrtl.uint<8>
 
     // Factoring of sync reset into mux works through subfield op.
@@ -398,7 +398,7 @@ firrtl.circuit "Top" {
     // CHECK: %7 = firrtl.mux(%init, %5, %in)
     // CHECK: firrtl.strictconnect %6, %7
     %reset4 = firrtl.wire : !firrtl.bundle<a: uint<8>>
-    %reg4 = firrtl.regreset %clock, %init, %reset4 : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint<8>>
+    %reg4 = firrtl.regreset %clock, %init, %reset4 : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<8>>
     %0 = firrtl.subfield %reg4[a] : !firrtl.bundle<a: uint<8>>
     firrtl.strictconnect %0, %in : !firrtl.uint<8>
 
@@ -411,7 +411,7 @@ firrtl.circuit "Top" {
     // CHECK: %13 = firrtl.mux(%init, %11, %in)
     // CHECK: firrtl.strictconnect %12, %13
     %reset5 = firrtl.wire : !firrtl.vector<uint<8>, 1>
-    %reg5 = firrtl.regreset %clock, %init, %reset5 : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<8>, 1>, !firrtl.vector<uint<8>, 1>
+    %reg5 = firrtl.regreset %clock, %init, %reset5 : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<8>, 1>
     %1 = firrtl.subindex %reg5[0] : !firrtl.vector<uint<8>, 1>
     firrtl.strictconnect %1, %in : !firrtl.uint<8>
 
@@ -424,7 +424,7 @@ firrtl.circuit "Top" {
     // CHECK: %19 = firrtl.mux(%init, %17, %in)
     // CHECK: firrtl.strictconnect %18, %19
     %reset6 = firrtl.wire : !firrtl.vector<uint<8>, 1>
-    %reg6 = firrtl.regreset %clock, %init, %reset6 : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<8>, 1>, !firrtl.vector<uint<8>, 1>
+    %reg6 = firrtl.regreset %clock, %init, %reset6 : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<8>, 1>
     %2 = firrtl.subaccess %reg6[%in] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<8>
     firrtl.strictconnect %2, %in : !firrtl.uint<8>
 
@@ -523,9 +523,9 @@ firrtl.circuit "ReusePorts" {
 firrtl.circuit "FullAsyncNested" {
   // CHECK-LABEL: firrtl.module @FullAsyncNestedDeeper
   firrtl.module @FullAsyncNestedDeeper(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %io_in: !firrtl.uint<8>, out %io_out: !firrtl.uint<8>) {
-    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    // CHECK: %io_out_REG = firrtl.regreset %clock, %reset, %c1_ui1
-    %io_out_REG = firrtl.regreset %clock, %reset, %c1_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<8>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<8>
+    // CHECK: %io_out_REG = firrtl.regreset %clock, %reset, %c1_ui8
+    %io_out_REG = firrtl.regreset %clock, %reset, %c1_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>
     firrtl.strictconnect %io_out_REG, %io_in : !firrtl.uint<8>
     firrtl.strictconnect %io_out, %io_out_REG : !firrtl.uint<8>
   }
@@ -749,10 +749,10 @@ firrtl.circuit "SubAccess" {
     portAnnotations = [[],[],[],[],[{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
     %c1_ui8 = firrtl.constant 1 : !firrtl.uint<2>
     %arr = firrtl.wire : !firrtl.vector<uint<8>, 1>
-    %reg6 = firrtl.regreset %clock, %init, %c1_ui8 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
+    %reg6 = firrtl.regreset %clock, %init, %c1_ui8 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>
     %2 = firrtl.subaccess %arr[%reg6] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<2>
     firrtl.strictconnect %2, %in : !firrtl.uint<8>
-    // CHECK:  %reg6 = firrtl.regreset %clock, %extraReset, %c0_ui2  : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<2>, !firrtl.uint<2>
+    // CHECK:  %reg6 = firrtl.regreset %clock, %extraReset, %c0_ui2  : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<2>
     // CHECK-NEXT: %0 = firrtl.mux(%init, %c1_ui2, %reg6)
     // CHECK: firrtl.strictconnect %reg6, %0
     // CHECK-NEXT:  %[[v0:.+]] = firrtl.subaccess %arr[%reg6] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<2>

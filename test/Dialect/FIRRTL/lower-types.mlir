@@ -393,7 +393,7 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     %1 = firrtl.subindex %init[1] : !firrtl.vector<uint<1>, 2>
     firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    %r = firrtl.regreset %clock, %reset, %init {name = "r"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+    %r = firrtl.regreset %clock, %reset, %init {name = "r"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>
     firrtl.connect %r, %a_d : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
     firrtl.connect %a_q, %r : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
@@ -402,8 +402,8 @@ firrtl.circuit "TopLevel" {
   // CHECK:   %init_1 = firrtl.wire  : !firrtl.uint<1>
   // CHECK:   firrtl.connect %init_0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:   firrtl.connect %init_1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK:   %r_0 = firrtl.regreset %clock, %reset, %init_0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK:   %r_1 = firrtl.regreset %clock, %reset, %init_1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:   %r_0 = firrtl.regreset %clock, %reset, %init_0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:   %r_1 = firrtl.regreset %clock, %reset, %init_1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:   firrtl.strictconnect %r_0, %a_d_0 : !firrtl.uint<1>
   // CHECK:   firrtl.strictconnect %r_1, %a_d_1 : !firrtl.uint<1>
   // CHECK:   firrtl.strictconnect %a_q_0, %r_0 : !firrtl.uint<1>
@@ -414,7 +414,7 @@ firrtl.circuit "TopLevel" {
   // AGGREGATE-NEXT:  firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   // AGGREGATE-NEXT:  %1 = firrtl.subindex %init[1] : !firrtl.vector<uint<1>, 2>
   // AGGREGATE-NEXT:  firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-  // AGGREGATE-NEXT:  %r = firrtl.regreset %clock, %reset, %init  : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+  // AGGREGATE-NEXT:  %r = firrtl.regreset %clock, %reset, %init  : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>
   // AGGREGATE-NEXT:  %2 = firrtl.subindex %a_d[0] : !firrtl.vector<uint<1>, 2>
   // AGGREGATE-NEXT:  %3 = firrtl.subindex %r[0] : !firrtl.vector<uint<1>, 2>
   // AGGREGATE-NEXT:  firrtl.strictconnect %3, %2 : !firrtl.uint<1>
@@ -438,7 +438,7 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     %1 = firrtl.subindex %init[1] : !firrtl.vector<uint<1>, 2>
     firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    %r = firrtl.regreset %clock, %reset, %init {name = ""} : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+    %r = firrtl.regreset %clock, %reset, %init {name = ""} : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>
     firrtl.connect %r, %a_d : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
     firrtl.connect %a_q, %r : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
@@ -447,8 +447,8 @@ firrtl.circuit "TopLevel" {
   // CHECK:   %init_1 = firrtl.wire  : !firrtl.uint<1>
   // CHECK:   firrtl.connect %init_0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:   firrtl.connect %init_1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK:   %0 = firrtl.regreset %clock, %reset, %init_0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK:   %1 = firrtl.regreset %clock, %reset, %init_1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:   %0 = firrtl.regreset %clock, %reset, %init_0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:   %1 = firrtl.regreset %clock, %reset, %init_1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:   firrtl.strictconnect %0, %a_d_0 : !firrtl.uint<1>
   // CHECK:   firrtl.strictconnect %1, %a_d_1 : !firrtl.uint<1>
   // CHECK:   firrtl.strictconnect %a_q_0, %0 : !firrtl.uint<1>
@@ -535,7 +535,7 @@ firrtl.circuit "TopLevel" {
     %1 = firrtl.subindex %bazInit[1] : !firrtl.vector<uint<1>, 2>
     firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     %bar = firrtl.reg %clock  {annotations = [{a = "a"}], name = "bar"} : !firrtl.clock, !firrtl.vector<uint<1>, 2>
-    %baz = firrtl.regreset %clock, %reset, %bazInit  {annotations = [{b = "b"}], name = "baz"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+    %baz = firrtl.regreset %clock, %reset, %bazInit  {annotations = [{b = "b"}], name = "baz"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>
   }
   // CHECK: firrtl.reg
   // CHECK-SAME: annotations = [{a = "a"}]

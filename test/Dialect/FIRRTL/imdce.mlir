@@ -14,7 +14,7 @@ firrtl.circuit "top" {
     %dead_reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
     firrtl.strictconnect %dead_reg, %dead_wire : !firrtl.uint<1>
 
-    %dead_reg_reset = firrtl.regreset %clock, %reset, %dead_reg  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %dead_reg_reset = firrtl.regreset %clock, %reset, %dead_reg  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.strictconnect %dead_reg_reset, %dead_reg : !firrtl.uint<1>
 
     %not = firrtl.not %dead_reg_reset : (!firrtl.uint<1>) -> !firrtl.uint<1>

@@ -924,13 +924,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %w, %0 : !firrtl.uint<0>, !firrtl.uint<0>
   }
 
-  // CHECK-LABEL: ASQ
-  // https://github.com/llvm/circt/issues/699
-  firrtl.module private @ASQ(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %widx_widx_bin = firrtl.regreset %clock, %reset, %c0_ui1 {name = "widx_widx_bin"} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<4>
-  }
-
   // CHECK-LABEL: hw.module private @Struct0bits(%source: !hw.struct<valid: i1, ready: i1, data: i0>) {
   // CHECK-NEXT:    hw.output
   // CHECK-NEXT:  }
@@ -1054,10 +1047,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c9_ui42 = firrtl.constant 9 : !firrtl.uint<42>
     %c-9_si42 = firrtl.constant -9 : !firrtl.sint<42>
     // The following should not error because the reset values are constant.
-    %r0 = firrtl.regreset %clock, %arst, %c9_ui42 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
-    %r1 = firrtl.regreset %clock, %srst, %c9_ui42 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
-    %r2 = firrtl.regreset %clock, %arst, %c-9_si42 : !firrtl.clock, !firrtl.asyncreset, !firrtl.sint<42>, !firrtl.sint<42>
-    %r3 = firrtl.regreset %clock, %srst, %c-9_si42 : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<42>, !firrtl.sint<42>
+    %r0 = firrtl.regreset %clock, %arst, %c9_ui42 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<42>
+    %r1 = firrtl.regreset %clock, %srst, %c9_ui42 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>
+    %r2 = firrtl.regreset %clock, %arst, %c-9_si42 : !firrtl.clock, !firrtl.asyncreset, !firrtl.sint<42>
+    %r3 = firrtl.regreset %clock, %srst, %c-9_si42 : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<42>
   }
 
   // CHECK-LABEL: hw.module private @BitCast1
@@ -1117,7 +1110,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: %wireName = hw.wire %z_i42 sym @wireSym : i42
     %regName = firrtl.reg sym @regSym %clock : !firrtl.clock, !firrtl.uint<42>
     // CHECK: %regName = seq.firreg %regName clock %clock sym @regSym : i42
-    %regResetName = firrtl.regreset sym @regResetSym %clock, %reset, %value : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
+    %regResetName = firrtl.regreset sym @regResetSym %clock, %reset, %value : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>
     // CHECK: %regResetName = seq.firreg %regResetName clock %clock sym @regResetSym reset sync %reset, %value : i42
     %memName_port = firrtl.mem sym @memSym Undefined {depth = 12 : i64, name = "memName", portNames = ["port"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     // CHECK: {{%.+}} = hw.instance "memName_ext" sym @memSym
@@ -1199,20 +1192,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %a, %c0_ui0 : !firrtl.uint<0>, !firrtl.uint<0>
   }
 
-  // CHECK-LABEL: hw.module private @RegResetStructWiden
-  firrtl.module private @RegResetStructWiden(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %init: !firrtl.bundle<a: uint<2>>) {
-    // CHECK:      [[FALSE:%.*]] = hw.constant false
-    // CHECK-NEXT: [[A:%.*]] = hw.struct_extract %init["a"] : !hw.struct<a: i2>
-    // CHECK-NEXT: [[PADDED:%.*]] = comb.concat [[FALSE]], [[A]] : i1, i2
-    // CHECK-NEXT: [[STRUCT:%.*]] = hw.struct_create ([[PADDED]]) : !hw.struct<a: i3>
-    // CHECK-NEXT: %reg = seq.firreg %reg clock %clock reset sync %reset, [[STRUCT]] : !hw.struct<a: i3>
-    %reg = firrtl.regreset %clock, %reset, %init  : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<2>>, !firrtl.bundle<a: uint<3>>
-  }
-
   // CHECK-LABEL: hw.module private @AggregateInvalidValue
   firrtl.module private @AggregateInvalidValue(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
     %invalid = firrtl.invalidvalue : !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>
-    %reg = firrtl.regreset %clock, %reset, %invalid : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>, !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>
+    %reg = firrtl.regreset %clock, %reset, %invalid : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>
     // CHECK:      %c0_i101 = hw.constant 0 : i101
     // CHECK-NEXT: %0 = hw.bitcast %c0_i101 : (i101) -> !hw.struct<a: i1, b: !hw.array<10xi10>>
     // CHECK-NEXT: %reg = seq.firreg %reg clock %clock reset sync %reset, %0 : !hw.struct<a: i1, b: !hw.array<10xi10>>
@@ -1375,7 +1358,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     in %value: !firrtl.uint<2>
   ) {
     %regA = firrtl.reg %clock: !firrtl.clock, !firrtl.uint<2>
-    %regB = firrtl.regreset %clock, %reset, %value: !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
+    %regB = firrtl.regreset %clock, %reset, %value: !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>
     firrtl.strictconnect %regA, %value : !firrtl.uint<2>
     firrtl.strictconnect %regB, %value : !firrtl.uint<2>
     // CHECK-NEXT: %regA = seq.firreg %value clock %clock : i2
@@ -1387,7 +1370,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                            in %reset: !firrtl.uint<1>,
                            in %value: !firrtl.uint<2>,
                            out %result: !firrtl.uint<2>) {
-    %count = firrtl.regreset %clock, %reset, %value : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
+    %count = firrtl.regreset %clock, %reset, %value : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>
 
     // CHECK: %count = seq.firreg %count clock %clock reset sync %reset, %value : i2
     // CHECK: hw.output %count : i2
@@ -1400,7 +1383,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                            in %reset: !firrtl.asyncreset,
                            in %value: !firrtl.uint<2>,
                            out %result: !firrtl.uint<2>) {
-    %count = firrtl.regreset %clock, %reset, %value : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<2>, !firrtl.uint<2>
+    %count = firrtl.regreset %clock, %reset, %value : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<2>
 
     // CHECK: %count = seq.firreg %value clock %clock reset async %reset, %value : i2
     // CHECK: hw.output %count : i2
