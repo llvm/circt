@@ -599,3 +599,13 @@ circuit PartialConnect_v2p0p0:
     output b: UInt<1>
 
     b <- a ; expected-error {{unexpected token '<-' in statement}}
+
+;// -----
+
+FIRRTL version 2.0.0
+circuit RegReset_v2p0p0:
+  module RegReset_v2p0p0:
+    input clock: Clock
+
+    ; expected-error @below {{use of unknown declaration 'regreset'}}
+    regreset a: UInt<1>, clock, UInt<1>(0), UInt<1>(0)

@@ -1303,6 +1303,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 FIRRTL version 3.0.0
 circuit Foo_v3p0p0:
   module Foo_v3p0p0:
+    input clock: Clock
+    input reset: UInt<1>
     input a: UInt<1>
     output b: UInt<1>
 
@@ -1312,6 +1314,10 @@ circuit Foo_v3p0p0:
     ; CHECK: [[INV:%.+]]  = firrtl.invalidvalue : !firrtl.uint<1>
     ; CHECK-NEXT: firrtl.strictconnect %b, [[INV]] : !firrtl.uint<1>
     invalidate b
+
+    ; CHECK:      %[[zero:[0-9A-Za-z_]+]] = firrtl.constant 0
+    ; CHECK-NEXT: %r = firrtl.regreset interesting_name %clock, %reset, %[[zero]]
+    regreset r: UInt<1>, clock, reset, UInt<1>(0)
 
 ;// -----
 
