@@ -259,13 +259,17 @@ static HWModuleLike checkSubModuleOp(mlir::ModuleOp parentModule,
 
 static HWModuleLike checkSubModuleOp(mlir::ModuleOp parentModule,
                                      Operation *oldOp) {
-  auto moduleOp = checkSubModuleOp(parentModule, getSubModuleName(oldOp));
+  HWModuleLike targetModule;
+  if (auto instanceOp = dyn_cast<handshake::InstanceOp>(oldOp))
+    targetModule = checkSubModuleOp(parentModule, instanceOp.getModule());
+  else
+    targetModule = checkSubModuleOp(parentModule, getSubModuleName(oldOp));
 
   if (isa<handshake::InstanceOp>(oldOp))
-    assert(moduleOp &&
+    assert(targetModule &&
            "handshake.instance target modules should always have been lowered "
            "before the modules that reference them!");
-  return moduleOp;
+  return targetModule;
 }
 
 /// Returns a vector of PortInfo's which defines the HW interface of the
@@ -728,6 +732,7 @@ public:
     if (!implModule) {
       auto portInfo = ModulePortInfo(getPortInfoForOp(op));
 
+      submoduleBuilder.setInsertionPoint(op->getParentOp());
       implModule = submoduleBuilder.create<hw::HWModuleOp>(
           op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
           portInfo, [&](OpBuilder &b, hw::HWModulePortAccessor &ports) {
@@ -1020,6 +1025,20 @@ public:
     unwrappedIO.inputs.erase(unwrappedIO.inputs.begin());
     buildMuxLogic(s, unwrappedIO, select);
   };
+};
+
+class InstanceConversionPattern
+    : public HandshakeConversionPattern<handshake::InstanceOp> {
+public:
+  using HandshakeConversionPattern<
+      handshake::InstanceOp>::HandshakeConversionPattern;
+  void buildModule(handshake::InstanceOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    assert(false &&
+           "If we indeed perform conversion in post-order, this "
+           "should never be called. The base HandshakeConversionPattern logic "
+           "will instantiate the external module.");
+  }
 };
 
 class ReturnConversionPattern
@@ -1874,6 +1893,7 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
       SourceConversionPattern, SinkConversionPattern, ConstantConversionPattern,
       MergeConversionPattern, ControlMergeConversionPattern,
       LoadConversionPattern, StoreConversionPattern, MemoryConversionPattern,
+      InstanceConversionPattern,
       // Arith operations.
       ExtendConversionPattern<arith::ExtUIOp, /*signExtend=*/false>,
       ExtendConversionPattern<arith::ExtSIOp, /*signExtend=*/true>,
@@ -1916,7 +1936,8 @@ public:
     ConversionTarget target(getContext());
     // All top-level logic of a handshake module will be the interconnectivity
     // between instantiated modules.
-    target.addLegalOp<hw::HWModuleOp, hw::OutputOp, hw::InstanceOp>();
+    target.addLegalOp<hw::HWModuleOp, hw::HWModuleExternOp, hw::OutputOp,
+                      hw::InstanceOp>();
     target
         .addIllegalDialect<handshake::HandshakeDialect, arith::ArithDialect>();
 

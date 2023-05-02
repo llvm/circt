@@ -117,6 +117,7 @@ def FuncOp : Op<Handshake_Dialect, "func", [
 // InstanceOp
 def InstanceOp : Handshake_Op<"instance", [
     CallOpInterface,
+    HasClock,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "module instantiate operation";
