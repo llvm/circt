@@ -1,4 +1,4 @@
-//===- ESIEmitCPPCosimAPI.cpp - ESI C++ cosim API emission ------*- C++ -*-===//
+//===- ESIEmitCPPAPI.cpp - ESI C++ API emission -----------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Emit the C++ ESI Capnp cosim API.
+// Emit the C++ ESI API.
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,7 +22,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
 
-#include "CPPCosimAPI.h"
+#include "CPPAPI.h"
 
 #include <iostream>
 #include <memory>
@@ -30,11 +30,11 @@
 using namespace mlir;
 using namespace circt;
 using namespace circt::esi;
-using namespace cppcosimapi;
+using namespace cppapi;
 
 namespace {
-struct CosimCPPAPI {
-  CosimCPPAPI(ModuleOp module, llvm::raw_ostream &os)
+struct CPPAPI {
+  CPPAPI(ModuleOp module, llvm::raw_ostream &os)
       : module(module), os(os), diag(module.getContext()->getDiagEngine()),
         unknown(UnknownLoc::get(module.getContext())) {
     diag.registerHandler([this](Diagnostic &diag) -> LogicalResult {
@@ -60,14 +60,12 @@ private:
   const Location unknown;
   size_t errorCount = 0;
 
-  // All the `esi.cosim` input and output types encountered during the IR walk.
-  // This is NOT in a deterministic order!
   llvm::MapVector<mlir::Type, CPPType> types;
   llvm::SmallVector<CPPService> cppServices;
 };
 } // anonymous namespace
 
-LogicalResult CosimCPPAPI::gatherTypes(Location loc) {
+LogicalResult CPPAPI::gatherTypes(Location loc) {
   auto storeType = [&](mlir::Type type) -> LogicalResult {
     auto dirType = esi::innerType(type);
     auto dirTypeSchemaIt = types.find(dirType);
@@ -95,7 +93,7 @@ LogicalResult CosimCPPAPI::gatherTypes(Location loc) {
   return success();
 }
 
-LogicalResult CosimCPPAPI::emit() {
+LogicalResult CPPAPI::emit() {
   // Walk and collect the type data.
   if (failed(gatherTypes(module.getLoc())))
     return failure();
@@ -133,7 +131,7 @@ LogicalResult CosimCPPAPI::emit() {
   return success();
 }
 
-LogicalResult CosimCPPAPI::emitServiceDeclarations() {
+LogicalResult CPPAPI::emitServiceDeclarations() {
   // Locate all of the service declarations which are needed by the
   // cosim-implemented services in the service hierarchy.
   for (auto serviceDeclOp : module.getOps<ServiceDeclOpInterface>()) {
@@ -146,7 +144,7 @@ LogicalResult CosimCPPAPI::emitServiceDeclarations() {
   return success();
 }
 
-LogicalResult CosimCPPAPI::emitGlobalNamespace() {
+LogicalResult CPPAPI::emitGlobalNamespace() {
   // Emit ESI type reflection classes.
   llvm::SmallVector<std::string> namespaces = {"esi", "runtime", "ESITypes"};
   for (auto &cppType : types)
@@ -155,7 +153,7 @@ LogicalResult CosimCPPAPI::emitGlobalNamespace() {
   return success();
 }
 
-LogicalResult CosimCPPAPI::emitTypes() {
+LogicalResult CPPAPI::emitTypes() {
   os << "class ESITypes {\n";
   os << "public:\n";
   os.indent();
@@ -174,7 +172,7 @@ LogicalResult CosimCPPAPI::emitTypes() {
   return success();
 }
 
-LogicalResult CosimCPPAPI::emitDesignModules() {
+LogicalResult CPPAPI::emitDesignModules() {
   // Get a list of metadata ops which originated in modules (path is empty).
   SmallVector<
       std::pair<hw::HWModuleLike, SmallVector<ServiceHierarchyMetadataOp, 0>>>
@@ -202,9 +200,8 @@ LogicalResult CosimCPPAPI::emitDesignModules() {
   return success();
 }
 
-LogicalResult
-circt::esi::cppcosimapi::exportCosimCPPAPI(ModuleOp module,
-                                           llvm::raw_ostream &os) {
-  CosimCPPAPI api(module, os);
+LogicalResult circt::esi::cppapi::exportCPPAPI(ModuleOp module,
+                                               llvm::raw_ostream &os) {
+  CPPAPI api(module, os);
   return api.emit();
 }
