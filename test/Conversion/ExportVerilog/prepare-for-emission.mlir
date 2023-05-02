@@ -209,3 +209,22 @@ module attributes {circt.loweringOptions = "maximumNumberOfTermsPerExpression=2"
     hw.output %1 : !hw.array<4xi4>
   }
 }
+
+// -----
+
+// CHECK-LABEL:   hw.module @packed_struct_assignment(
+// CHECK-SAME:                                        %[[VAL_0:.*]]: i32) -> (out: !hw.struct<a: i32>, out2: !hw.struct<a: i32>) {
+// CHECK:           %[[VAL_1:.*]] = sv.wire
+// CHECK:           %[[VAL_2:.*]] = sv.struct_field_inout %[[VAL_1]]["a"] : !hw.inout<struct<a: i32>>
+// CHECK:           sv.assign %[[VAL_2]], %[[VAL_0]] : i32
+// CHECK:           %[[VAL_3:.*]] = sv.read_inout %[[VAL_1]] : !hw.inout<struct<a: i32>>
+// CHECK:           %[[VAL_4:.*]] = sv.read_inout %[[VAL_1]] : !hw.inout<struct<a: i32>>
+// CHECK:           hw.output %[[VAL_4]], %[[VAL_3]] : !hw.struct<a: i32>, !hw.struct<a: i32>
+// CHECK:         }
+!T = !hw.struct<a: i32>
+module attributes { circt.loweringOptions = "disallowPackedStructAssignments"} {
+  hw.module @packed_struct_assignment(%in : i32) -> (out: !T, out2: !T)  {
+      %0 = hw.struct_create (%in) : !T
+      hw.output %0, %0 : !T, !T
+  }
+}

@@ -63,6 +63,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       allowExprInEventControl = true;
     } else if (option == "disallowPackedArrays") {
       disallowPackedArrays = true;
+    } else if (option == "disallowPackedStructAssignments") {
+      disallowPackedStructAssignments = true;
     } else if (option == "disallowLocalVariables") {
       disallowLocalVariables = true;
     } else if (option == "verifLabels") {
@@ -131,6 +133,8 @@ std::string LoweringOptions::toString() const {
     options += "exprInEventControl,";
   if (disallowPackedArrays)
     options += "disallowPackedArrays,";
+  if (disallowPackedStructAssignments)
+    options += "disallowPackedStructAssignments,";
   if (disallowLocalVariables)
     options += "disallowLocalVariables,";
   if (enforceVerifLabels)
