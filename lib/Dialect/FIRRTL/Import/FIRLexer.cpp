@@ -157,7 +157,7 @@ static StringAttr getMainBufferNameIdentifier(const llvm::SourceMgr &sourceMgr,
 }
 
 FIRLexer::FIRLexer(const llvm::SourceMgr &sourceMgr, MLIRContext *context)
-    : sourceMgr(sourceMgr), context(context),
+    : sourceMgr(sourceMgr),
       bufferNameIdentifier(getMainBufferNameIdentifier(sourceMgr, context)),
       curBuffer(
           sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID())->getBuffer()),
