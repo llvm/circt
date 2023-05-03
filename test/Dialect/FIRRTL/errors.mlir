@@ -362,6 +362,7 @@ firrtl.circuit "Foo" {
 firrtl.circuit "X" {
 
 firrtl.module @X(in %a : !firrtl.uint<4>) {
+  // expected-error @below {{failed to infer returned types}}
   // expected-error @+1 {{high must be equal or greater than low, but got high = 3, low = 4}}
   %0 = firrtl.bits %a 3 to 4 : (!firrtl.uint<4>) -> !firrtl.uint<2>
 }
@@ -373,6 +374,7 @@ firrtl.module @X(in %a : !firrtl.uint<4>) {
 firrtl.circuit "X" {
 
 firrtl.module @X(in %a : !firrtl.uint<4>) {
+  // expected-error @below {{failed to infer returned types}}
   // expected-error @+1 {{high must be smaller than the width of input, but got high = 4, width = 4}}
   %0 = firrtl.bits %a 4 to 3 : (!firrtl.uint<4>) -> !firrtl.uint<2>
 }
@@ -384,6 +386,7 @@ firrtl.module @X(in %a : !firrtl.uint<4>) {
 firrtl.circuit "X" {
 
 firrtl.module @X(in %a : !firrtl.uint<4>) {
+  // expected-error @below {{failed to infer returned types}}
   // expected-error @+1 {{'firrtl.bits' op inferred type(s) '!firrtl.uint<3>' are incompatible with return type(s) of operation '!firrtl.uint<2>'}}
   %0 = firrtl.bits %a 3 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
 }
@@ -403,6 +406,7 @@ firrtl.circuit "BadPort" {
 
 firrtl.circuit "BadAdd" {
   firrtl.module @BadAdd(in %a : !firrtl.uint<1>) {
+    // expected-error @below {{failed to infer returned types}}
     // expected-error @+1 {{'firrtl.add' op inferred type(s) '!firrtl.uint<2>' are incompatible with return type(s) of operation '!firrtl.uint<1>'}}
     firrtl.add %a, %a : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   }
@@ -500,6 +504,7 @@ firrtl.circuit "MemoryPortInvalidReturnType" {
 firrtl.circuit "MemoryPortInvalidReturnType" {
   firrtl.module @MemoryPortInvalidReturnType(in %sel : !firrtl.uint<8>, in %clock : !firrtl.clock) {
     %mem = chirrtl.combmem : !chirrtl.cmemory<uint<8>, 8>
+    // expected-error @below {{failed to infer returned types}}
     // expected-error @+1 {{'chirrtl.memoryport' op inferred type(s) '!firrtl.uint<8>', '!chirrtl.cmemoryport' are incompatible with return type(s) of operation '!firrtl.uint<9>', '!chirrtl.cmemoryport'}}
     %memoryport_data, %memoryport_port = chirrtl.memoryport Infer %mem {name = "memoryport"} : (!chirrtl.cmemory<uint<8>, 8>) -> (!firrtl.uint<9>, !chirrtl.cmemoryport)
     chirrtl.memoryport.access %memoryport_port[%sel], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
