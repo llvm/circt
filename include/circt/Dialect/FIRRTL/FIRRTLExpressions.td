@@ -66,10 +66,11 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
                                           std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
+                                          mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results) {
-      return impl::inferReturnTypes(context, loc, operands, attrs, regions,
-        results, &inferReturnType);
+      return impl::inferReturnTypes(context, loc, operands, attrs, properties,
+        regions, results, &inferReturnType);
     }
 
     /// Check that the parser has consumed the correct number of operands and
