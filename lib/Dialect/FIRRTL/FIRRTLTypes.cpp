@@ -1478,7 +1478,7 @@ std::pair<uint64_t, bool> RefType::rootChildFieldID(uint64_t fieldID,
 
 RecursiveTypeProperties RefType::getRecursiveTypeProperties() const {
   auto rtp = getType().getRecursiveTypeProperties();
-  rtp.containsReference |= true;
+  rtp.containsReference = true;
   // References are not "passive", per FIRRTL spec.
   rtp.isPassive = false;
   return rtp;

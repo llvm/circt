@@ -70,7 +70,9 @@ public:
   /// `containsAnalog`, and `hasUninferredWidth` bits, among others.
   RecursiveTypeProperties getRecursiveTypeProperties() const;
 
-  /// Convenience methods for accessing recursive type properties:
+  //===--------------------------------------------------------------------===//
+  // Convenience methods for accessing recursive type properties
+  //===--------------------------------------------------------------------===//
 
   /// Returns true if this is or contains a 'const' type.
   bool containsConst() { return getRecursiveTypeProperties().containsConst; }
@@ -93,7 +95,9 @@ public:
     return getRecursiveTypeProperties().hasUninferredReset;
   }
 
-  /// Type classifications:
+  //===--------------------------------------------------------------------===//
+  // Type classifications
+  //===--------------------------------------------------------------------===//
 
   /// Return true if this is a 'ground' type, aka a non-aggregate type.
   bool isGround();
@@ -155,7 +159,9 @@ public:
   /// Return true if this is a valid "reset" type.
   bool isResetType();
 
-  /// Hooks for hw::FieldIDTypeInterface methods.
+  //===--------------------------------------------------------------------===//
+  // hw::FieldIDTypeInterface
+  //===--------------------------------------------------------------------===//
 
   /// Get the maximum field ID of this type.  For integers and other ground
   /// types, there are no subfields and the maximum field ID is 0.  For bundle
