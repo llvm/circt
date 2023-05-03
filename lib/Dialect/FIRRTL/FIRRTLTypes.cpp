@@ -457,17 +457,8 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
         return RecursiveTypeProperties{
             true, false, true, type.isConst(), !type.hasWidth(), false};
       })
-      .Case<BundleType>([](BundleType bundleType) {
-        return bundleType.getRecursiveTypeProperties();
-      })
-      .Case<FVectorType>([](FVectorType vectorType) {
-        return vectorType.getRecursiveTypeProperties();
-      })
-      .Case<FEnumType>([](FEnumType enumType) {
-        return enumType.getRecursiveTypeProperties();
-      })
-      .Case<RefType>(
-          [](auto refType) { return refType.getRecursiveTypeProperties(); })
+      .Case<BundleType, FVectorType, FEnumType, RefType>(
+          [](auto type) { return type.getRecursiveTypeProperties(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return RecursiveTypeProperties{};
