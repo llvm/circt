@@ -74,7 +74,7 @@ static void lowerMatch(MatchOp match) {
 }
 
 void LowerMatchesPass::runOnOperation() {
-  getOperation()->walk<mlir::WalkOrder::PostOrder>(&lowerMatch);
+  getOperation()->walk(&lowerMatch);
   markAnalysesPreserved<InstanceGraph>();
 }
 
