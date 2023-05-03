@@ -173,11 +173,6 @@ public:
   /// subfield op. Returns the new id and whether the id is in the given
   /// child.
   std::pair<uint64_t, bool> rootChildFieldID(uint64_t fieldID, uint64_t index);
-
-  /// Get the number of ground (non-aggregate) fields in the type.  A field
-  /// which is a bundle or vector is not counted, but the recursive ground
-  /// fields of are.
-  uint64_t getGroundFields() const;
 };
 
 /// Returns whether the two types are equivalent.  This implements the exact
