@@ -470,10 +470,8 @@ FIRRTLBaseType FIRRTLBaseType::getPassiveType() {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType, FEnumType>([&](Type) { return *this; })
-      .Case<BundleType>(
-          [](BundleType bundleType) { return bundleType.getPassiveType(); })
-      .Case<FVectorType>(
-          [](FVectorType vectorType) { return vectorType.getPassiveType(); })
+      .Case<BundleType, FVectorType, FEnumType>(
+          [](auto type) { return type.getPassiveType(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return FIRRTLBaseType();
@@ -539,6 +537,13 @@ FIRRTLBaseType FIRRTLBaseType::getWidthlessType() {
         return FVectorType::get(a.getElementType().getWidthlessType(),
                                 a.getNumElements(), a.isConst());
       })
+      .Case<FEnumType>([&](FEnumType a) {
+        SmallVector<FEnumType::EnumElement, 4> newElements;
+        newElements.reserve(a.getNumElements());
+        for (auto elt : a)
+          newElements.push_back({elt.name, elt.type.getWidthlessType()});
+        return FEnumType::get(this->getContext(), newElements, a.isConst());
+      })
       .Default([](auto) {
         llvm_unreachable("unknown FIRRTL type");
         return FIRRTLBaseType();
@@ -578,7 +583,7 @@ uint64_t FIRRTLBaseType::getMaxFieldID() {
   return TypeSwitch<FIRRTLBaseType, uint64_t>(*this)
       .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
             UIntType>([](Type) { return 0; })
-      .Case<BundleType, FVectorType>(
+      .Case<BundleType, FVectorType, FEnumType>(
           [](auto type) { return type.getMaxFieldID(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
@@ -595,7 +600,7 @@ FIRRTLBaseType::getSubTypeByFieldID(uint64_t fieldID) {
         assert(!fieldID && "non-aggregate types must have a field id of 0");
         return std::pair(t, 0);
       })
-      .Case<BundleType, FVectorType>(
+      .Case<BundleType, FVectorType, FEnumType>(
           [&](auto type) { return type.getSubTypeByFieldID(fieldID); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
@@ -616,7 +621,7 @@ std::pair<uint64_t, bool> FIRRTLBaseType::rootChildFieldID(uint64_t fieldID,
   return TypeSwitch<FIRRTLBaseType, std::pair<uint64_t, bool>>(*this)
       .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
             UIntType>([&](Type) { return std::make_pair(0, fieldID == 0); })
-      .Case<BundleType, FVectorType>(
+      .Case<BundleType, FVectorType, FEnumType>(
           [&](auto type) { return type.rootChildFieldID(fieldID, index); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
