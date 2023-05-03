@@ -430,6 +430,11 @@ def RefImpl : FIRRTLImplType<"Ref",
     TypeBuilderWithInferredContext<(ins "::circt::firrtl::FIRRTLBaseType":$type,
                                         CArg<"bool", "false">:$forceable)>
   ];
+
+  let extraClassDeclaration = [{
+    /// Return the recursive properties of the type.
+    RecursiveTypeProperties getRecursiveTypeProperties() const;
+  }];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD
