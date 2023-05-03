@@ -262,8 +262,6 @@ class BaseSubfieldOp<string name, Type btype, Type rtype> : FIRRTLExprOp<name> {
 
   let arguments = (ins btype:$input, I32Attr:$fieldIndex);
   let results = (outs rtype:$result);
-  let hasFolder = 1;
-  let hasCanonicalizer = 1;
   let hasVerifier = 1;
   let hasCustomAssemblyFormat = 1;
 
@@ -295,7 +293,10 @@ class BaseSubfieldOp<string name, Type btype, Type rtype> : FIRRTLExprOp<name> {
   }];
 }
 
-def SubfieldOp : BaseSubfieldOp<"subfield", BundleType, FIRRTLBaseType>;
+def SubfieldOp : BaseSubfieldOp<"subfield", BundleType, FIRRTLBaseType> {
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
+}
 def OpenSubfieldOp : BaseSubfieldOp<"opensubfield", OpenBundleType, FIRRTLType>;
 
 def SubindexOp : FIRRTLExprOp<"subindex"> {
