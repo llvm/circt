@@ -1145,7 +1145,7 @@ uint64_t BundleType::getFieldID(uint64_t index) {
 }
 
 uint64_t BundleType::getIndexForFieldID(uint64_t fieldID) {
-  assert(getElements().size() && "Bundle must have >0 fields");
+  assert(!getElements().empty() && "Bundle must have >0 fields");
   auto fieldIDs = getImpl()->fieldIDs;
   auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
   return std::distance(fieldIDs.begin(), it);
@@ -1359,7 +1359,7 @@ uint64_t OpenBundleType::getFieldID(uint64_t index) {
 }
 
 uint64_t OpenBundleType::getIndexForFieldID(uint64_t fieldID) {
-  assert(getElements().size() && "Bundle must have >0 fields");
+  assert(!getElements().empty() && "Bundle must have >0 fields");
   auto fieldIDs = getImpl()->fieldIDs;
   auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
   return std::distance(fieldIDs.begin(), it);
