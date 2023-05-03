@@ -609,3 +609,9 @@ circuit RegReset_v2p0p0:
 
     ; expected-error @below {{use of unknown declaration 'regreset'}}
     regreset a: UInt<1>, clock, UInt<1>(0), UInt<1>(0)
+
+;// -----
+FIRRTL version 3.0.0
+circuit IllegalLiteral:
+  module IllegalLiteral:
+    input `b: UInt<1> ; expected-error {{unterminated literal identifier}}
