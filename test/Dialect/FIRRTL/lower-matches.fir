@@ -2,6 +2,24 @@
 
 firrtl.circuit "LowerMatches" {
 
+// CHECK-LABEL: firrtl.module @EmptyEnum
+firrtl.module @EmptyEnum(in %enum : !firrtl.enum<>) {
+  firrtl.match %enum : !firrtl.enum<> {
+  }
+// CHECK-NEXT: }
+}
+
+// CHECK-LABEL: firrtl.module @OneVariant
+firrtl.module @OneVariant(in %enum : !firrtl.enum<a: uint<8>>, out %out : !firrtl.uint<8>) {
+  // CHECK: %0 = firrtl.subtag %enum[a] : !firrtl.enum<a: uint<8>>
+  // CHECK: firrtl.strictconnect %out, %0 : !firrtl.uint<8>
+  firrtl.match %enum : !firrtl.enum<a: uint<8>> {
+    case a(%arg0) {
+      firrtl.strictconnect %out, %arg0 : !firrtl.uint<8>
+    }
+  }
+}
+
 // CHECK-LABEL: firrtl.module @LowerMatches
 firrtl.module @LowerMatches(in %enum : !firrtl.enum<a: uint<8>, b: uint<8>, c: uint<8>>, out %out : !firrtl.uint<8>) {
 
