@@ -13,9 +13,6 @@
 #ifndef CIRCT_REDUCE_TESTER_H
 #define CIRCT_REDUCE_TESTER_H
 
-#include <memory>
-#include <vector>
-
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/SmallString.h"

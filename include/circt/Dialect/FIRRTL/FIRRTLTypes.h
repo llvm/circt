@@ -66,36 +66,13 @@ public:
     return llvm::isa<FIRRTLDialect>(type.getDialect());
   }
 
-protected:
-  using Type::Type;
-};
+  /// Return the recursive properties of the type, containing the `isPassive`,
+  /// `containsAnalog`, and `hasUninferredWidth` bits, among others.
+  RecursiveTypeProperties getRecursiveTypeProperties() const;
 
-// Common base class for all base FIRRTL types.
-class FIRRTLBaseType
-    : public FIRRTLType::TypeBase<FIRRTLBaseType, FIRRTLType,
-                                  detail::FIRRTLBaseTypeStorage> {
-public:
-  using Base::Base;
-
-  /// Return true if this is a "passive" type - one that contains no "flip"
-  /// types recursively within itself.
-  bool isPassive() const { return getRecursiveTypeProperties().isPassive; }
-
-  /// Returns true if this is a non-const "passive" that which is not analog.
-  bool isRegisterType() {
-    return isPassive() && !containsAnalog() && !containsConst();
-  }
-
-  /// Return true if this is a 'ground' type, aka a non-aggregate type.
-  bool isGround();
-
-  /// Return true if this is a "passive" type - one that contains no "flip"
-  /// types recursively within itself.
-  bool isPassive() { return getRecursiveTypeProperties().isPassive; }
-
-  /// Returns true if this is a 'const' type that can only hold compile-time
-  /// constant values
-  bool isConst();
+  //===--------------------------------------------------------------------===//
+  // Convenience methods for accessing recursive type properties
+  //===--------------------------------------------------------------------===//
 
   /// Returns true if this is or contains a 'const' type.
   bool containsConst() { return getRecursiveTypeProperties().containsConst; }
@@ -118,9 +95,35 @@ public:
     return getRecursiveTypeProperties().hasUninferredReset;
   }
 
-  /// Return the recursive properties of the type, containing the `isPassive`,
-  /// `containsAnalog`, and `hasUninferredWidth` bits.
-  RecursiveTypeProperties getRecursiveTypeProperties() const;
+  //===--------------------------------------------------------------------===//
+  // Type classifications
+  //===--------------------------------------------------------------------===//
+
+  /// Return true if this is a 'ground' type, aka a non-aggregate type.
+  bool isGround();
+
+  /// Returns true if this is a 'const' type that can only hold compile-time
+  /// constant values
+  bool isConst();
+
+protected:
+  using Type::Type;
+};
+
+// Common base class for all base FIRRTL types.
+class FIRRTLBaseType
+    : public FIRRTLType::TypeBase<FIRRTLBaseType, FIRRTLType,
+                                  detail::FIRRTLBaseTypeStorage> {
+public:
+  using Base::Base;
+
+  /// Returns true if this is a 'const' type that can only hold compile-time
+  /// constant values
+  bool isConst();
+
+  /// Return true if this is a "passive" type - one that contains no "flip"
+  /// types recursively within itself.
+  bool isPassive() const { return getRecursiveTypeProperties().isPassive; }
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLBaseType getPassiveType();
@@ -148,8 +151,17 @@ public:
     return llvm::isa<FIRRTLDialect>(type.getDialect()) && !type.isa<RefType>();
   }
 
+  /// Returns true if this is a non-const "passive" that which is not analog.
+  bool isRegisterType() {
+    return isPassive() && !containsAnalog() && !containsConst();
+  }
+
   /// Return true if this is a valid "reset" type.
   bool isResetType();
+
+  //===--------------------------------------------------------------------===//
+  // hw::FieldIDTypeInterface
+  //===--------------------------------------------------------------------===//
 
   /// Get the maximum field ID of this type.  For integers and other ground
   /// types, there are no subfields and the maximum field ID is 0.  For bundle
@@ -173,11 +185,6 @@ public:
   /// subfield op. Returns the new id and whether the id is in the given
   /// child.
   std::pair<uint64_t, bool> rootChildFieldID(uint64_t fieldID, uint64_t index);
-
-  /// Get the number of ground (non-aggregate) fields in the type.  A field
-  /// which is a bundle or vector is not counted, but the recursive ground
-  /// fields of are.
-  uint64_t getGroundFields() const;
 };
 
 /// Returns whether the two types are equivalent.  This implements the exact

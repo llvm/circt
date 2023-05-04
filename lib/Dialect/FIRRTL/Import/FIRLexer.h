@@ -136,7 +136,6 @@ private:
   FIRToken lexString(const char *tokStart, bool isRaw);
 
   const llvm::SourceMgr &sourceMgr;
-  mlir::MLIRContext *const context;
   const mlir::StringAttr bufferNameIdentifier;
 
   StringRef curBuffer;

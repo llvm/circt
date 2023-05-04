@@ -1,4 +1,4 @@
-//===- CPPCosimAPI.h - ESI C++ cosim api ------------------------*- C++ -*-===//
+//===- CPPAPI.h - ESI C++ api -----------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,13 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Code for generating the ESI C++ cosimulation API.
+// Code for generating the ESI C++ API.
 //
 //===----------------------------------------------------------------------===//
 
 // NOLINTNEXTLINE(llvm-header-guard)
-#ifndef CIRCT_DIALECT_ESI_COSIM_CPPAPI_CPPCOSIMAPI_H
-#define CIRCT_DIALECT_ESI_COSIM_CPPAPI_CPPCOSIMAPI_H
+#ifndef CIRCT_DIALECT_ESI_CPPAPI_CPPAPI_H
+#define CIRCT_DIALECT_ESI_CPPAPI_CPPAPI_H
 
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/cosim/APIUtilities.h"
@@ -24,11 +24,10 @@
 
 namespace circt {
 namespace esi {
-namespace cppcosimapi {
+namespace cppapi {
 
-// Writes the C++ cosimulation API for the given module to the provided
-// output stream.
-LogicalResult exportCosimCPPAPI(ModuleOp module, llvm::raw_ostream &os);
+// Writes the C++ API for the given module to the provided output stream.
+LogicalResult exportCPPAPI(ModuleOp module, llvm::raw_ostream &os);
 
 // Generate and reason about a C++ type for a particular Cap'nProto and MLIR
 // type.
@@ -36,7 +35,7 @@ class CPPType : public ESICosimType {
 public:
   using ESICosimType::ESICosimType;
 
-  /// Returns true if the type is supported for cosimulation.
+  /// Returns true if the type is supported for the CPP API.
   bool isSupported() const override;
 
   /// Write out the C++ name of this type.
@@ -63,9 +62,9 @@ struct CPPEndpoint {
 
   esi::ServicePortInfo portInfo;
 
-  // A mapping of MLIR types to their CPPType counterparts. Ensures consistency
-  // between the emitted type signatures and those used in the service endpoint
-  // API.
+  // A mapping of MLIR types to their CPPType counterparts. Ensures
+  // consistency between the emitted type signatures and those used in the
+  // service endpoint API.
   const llvm::MapVector<mlir::Type, CPPType> &types;
 };
 
@@ -111,7 +110,7 @@ private:
   SmallVectorImpl<CPPService> &cppServices;
 };
 
-} // namespace cppcosimapi
+} // namespace cppapi
 } // namespace esi
 } // namespace circt
 

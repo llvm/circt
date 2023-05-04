@@ -1,4 +1,4 @@
-//===- CPPCosimAPI.cpp ------------------------------------------*- C++ -*-===//
+//===- CPPAPI.cpp -----------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,11 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 //
-//  Code for generating the ESI C++ cosimulation API.
+//  Code for generating the ESI C++ API.
 //
 //===----------------------------------------------------------------------===//
 
-#include "CPPCosimAPI.h"
+#include "CPPAPI.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/HW/HWDialect.h"
@@ -31,7 +31,7 @@
 
 using namespace circt;
 using namespace esi;
-using namespace cppcosimapi;
+using namespace cppapi;
 
 //===----------------------------------------------------------------------===//
 // CPPType class implementation.

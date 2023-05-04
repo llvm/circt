@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --esi-emit-cpp-cosim-api="to-stderr=true" -o %t 2>&1 | FileCheck %s
+// RUN: circt-opt %s --esi-emit-cpp-api="to-stderr=true" -o %t 2>&1 | FileCheck %s
 
 !TWrite = !esi.channel<!hw.struct<addr: i32, data: i8>>
 

@@ -1,35 +1,22 @@
-//===- Reduction.cpp - Reductions for circt-reduce ------------------------===//
+//===- FIRRTLReductions.cpp - Reduction patterns for the FIRRTL dialect ---===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-//
-// This file defines abstract reduction patterns for the 'circt-reduce' tool.
-//
-//===----------------------------------------------------------------------===//
 
-#include "Reduction.h"
+#include "circt/Dialect/FIRRTL/FIRRTLReductions.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/InitAllDialects.h"
-#include "mlir/IR/AsmState.h"
+#include "circt/Reduce/ReductionUtils.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "mlir/Parser/Parser.h"
-#include "mlir/Pass/PassManager.h"
-#include "mlir/Pass/PassRegistry.h"
-#include "mlir/Reducer/Tester.h"
-#include "mlir/Support/FileUtilities.h"
-#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-#include "mlir/Transforms/Passes.h"
-#include "llvm/ADT/BitVector.h"
+#include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/Debug.h"
 
-#define DEBUG_TYPE "circt-reduce"
+#define DEBUG_TYPE "firrtl-reductions"
 
-using namespace llvm;
 using namespace mlir;
 using namespace circt;
 
@@ -179,48 +166,11 @@ struct NLARemover {
 };
 
 //===----------------------------------------------------------------------===//
-// Reduction
-//===----------------------------------------------------------------------===//
-
-Reduction::~Reduction() = default;
-
-//===----------------------------------------------------------------------===//
-// Pass Reduction
-//===----------------------------------------------------------------------===//
-
-PassReduction::PassReduction(MLIRContext *context, std::unique_ptr<Pass> pass,
-                             bool canIncreaseSize, bool oneShot)
-    : context(context), canIncreaseSize(canIncreaseSize), oneShot(oneShot) {
-  passName = pass->getArgument();
-  if (passName.empty())
-    passName = pass->getName();
-
-  pm = std::make_unique<PassManager>(context, "builtin.module",
-                                     mlir::OpPassManager::Nesting::Explicit);
-  auto opName = pass->getOpName();
-  if (opName && opName->equals("firrtl.circuit"))
-    pm->nest<firrtl::CircuitOp>().addPass(std::move(pass));
-  else if (opName && opName->equals("firrtl.module"))
-    pm->nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        std::move(pass));
-  else
-    pm->nest<mlir::ModuleOp>().addPass(std::move(pass));
-}
-
-uint64_t PassReduction::match(Operation *op) {
-  return op->getName() == pm->getOpName(*context);
-}
-
-LogicalResult PassReduction::rewrite(Operation *op) { return pm->run(op); }
-
-std::string PassReduction::getName() const { return passName.str(); }
-
-//===----------------------------------------------------------------------===//
-// Concrete Sample Reductions (to later move into the dialects)
+// Reduction patterns
 //===----------------------------------------------------------------------===//
 
 /// A sample reduction pattern that maps `firrtl.module` to `firrtl.extmodule`.
-struct ModuleExternalizer : public Reduction {
+struct FIRRTLModuleExternalizer : public OpReduction<firrtl::FModuleOp> {
   void beforeReduction(mlir::ModuleOp op) override {
     nlaRemover.clear();
     symbols.clear();
@@ -228,15 +178,12 @@ struct ModuleExternalizer : public Reduction {
   }
   void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
 
-  uint64_t match(Operation *op) override {
-    if (isa<firrtl::FModuleOp>(op))
-      return moduleSizes.getModuleSize(op, symbols);
-    return 0;
+  uint64_t match(firrtl::FModuleOp module) override {
+    return moduleSizes.getModuleSize(module, symbols);
   }
 
-  LogicalResult rewrite(Operation *op) override {
-    auto module = cast<firrtl::FModuleOp>(op);
-    nlaRemover.markNLAsInOperation(op);
+  LogicalResult rewrite(firrtl::FModuleOp module) override {
+    nlaRemover.markNLAsInOperation(module);
     OpBuilder builder(module);
     builder.create<firrtl::FExtModuleOp>(
         module->getLoc(),
@@ -247,7 +194,7 @@ struct ModuleExternalizer : public Reduction {
     return success();
   }
 
-  std::string getName() const override { return "module-externalizer"; }
+  std::string getName() const override { return "firrtl-module-externalizer"; }
 
   SymbolCache symbols;
   NLARemover nlaRemover;
@@ -365,7 +312,7 @@ static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
 /// A sample reduction pattern that maps `firrtl.instance` to a set of
 /// invalidated wires. This often shortcuts a long iterative process of connect
 /// invalidation, module externalization, and wire stripping
-struct InstanceStubber : public Reduction {
+struct InstanceStubber : public OpReduction<firrtl::InstanceOp> {
   void beforeReduction(mlir::ModuleOp op) override {
     erasedInsts.clear();
     erasedModules.clear();
@@ -405,15 +352,13 @@ struct InstanceStubber : public Reduction {
     nlaRemover.remove(op);
   }
 
-  uint64_t match(Operation *op) override {
-    if (auto instOp = dyn_cast<firrtl::InstanceOp>(op))
-      if (auto fmoduleOp = findInstantiatedModule(instOp, symbols))
-        return moduleSizes.getModuleSize(*fmoduleOp, symbols);
+  uint64_t match(firrtl::InstanceOp instOp) override {
+    if (auto fmoduleOp = findInstantiatedModule(instOp, symbols))
+      return moduleSizes.getModuleSize(*fmoduleOp, symbols);
     return 0;
   }
 
-  LogicalResult rewrite(Operation *op) override {
-    auto instOp = cast<firrtl::InstanceOp>(op);
+  LogicalResult rewrite(firrtl::InstanceOp instOp) override {
     LLVM_DEBUG(llvm::dbgs()
                << "Stubbing instance `" << instOp.getName() << "`\n");
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
@@ -458,12 +403,10 @@ struct InstanceStubber : public Reduction {
 
 /// A sample reduction pattern that maps `firrtl.mem` to a set of invalidated
 /// wires.
-struct MemoryStubber : public Reduction {
+struct MemoryStubber : public OpReduction<firrtl::MemOp> {
   void beforeReduction(mlir::ModuleOp op) override { nlaRemover.clear(); }
   void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
-  uint64_t match(Operation *op) override { return isa<firrtl::MemOp>(op); }
-  LogicalResult rewrite(Operation *op) override {
-    auto memOp = cast<firrtl::MemOp>(op);
+  LogicalResult rewrite(firrtl::MemOp memOp) override {
     LLVM_DEBUG(llvm::dbgs() << "Stubbing memory `" << memOp.getName() << "`\n");
     ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
     SmallDenseMap<Type, Value, 8> invalidCache;
@@ -531,25 +474,6 @@ struct MemoryStubber : public Reduction {
   NLARemover nlaRemover;
 };
 
-/// Starting at the given `op`, traverse through it and its operands and erase
-/// operations that have no more uses.
-static void pruneUnusedOps(Operation *initialOp, Reduction &reduction) {
-  SmallVector<Operation *> worklist;
-  SmallSet<Operation *, 4> handled;
-  worklist.push_back(initialOp);
-  while (!worklist.empty()) {
-    auto *op = worklist.pop_back_val();
-    if (!op->use_empty())
-      continue;
-    for (auto arg : op->getOperands())
-      if (auto *argOp = arg.getDefiningOp())
-        if (handled.insert(argOp).second)
-          worklist.push_back(argOp);
-    reduction.notifyOpErased(op);
-    op->erase();
-  }
-}
-
 /// Check whether an operation interacts with flows in any way, which can make
 /// replacement and operand forwarding harder in some cases.
 static bool isFlowSensitiveOp(Operation *op) {
@@ -598,40 +522,11 @@ struct FIRRTLOperandForwarder : public Reduction {
       newOp = operand;
     LLVM_DEBUG(llvm::dbgs() << "Forwarding " << newOp << " in " << *op << "\n");
     result.replaceAllUsesWith(newOp);
-    pruneUnusedOps(op, *this);
+    reduce::pruneUnusedOps(op, *this);
     return success();
   }
   std::string getName() const override {
     return ("firrtl-operand" + Twine(OpNum) + "-forwarder").str();
-  }
-};
-
-/// A sample reduction pattern that replaces all uses of an operation with one
-/// of its operands. This can help pruning large parts of the expression tree
-/// rapidly.
-template <unsigned OpNum>
-struct HWOperandForwarder : public Reduction {
-  uint64_t match(Operation *op) override {
-    if (op->getNumResults() != 1 || op->getNumOperands() < 2 ||
-        OpNum >= op->getNumOperands())
-      return 0;
-    auto resultTy = op->getResult(0).getType().dyn_cast<IntegerType>();
-    auto opTy = op->getOperand(OpNum).getType().dyn_cast<IntegerType>();
-    return resultTy && opTy && resultTy == opTy;
-  }
-  LogicalResult rewrite(Operation *op) override {
-    assert(match(op));
-    ImplicitLocOpBuilder builder(op->getLoc(), op);
-    auto result = op->getResult(0);
-    auto operand = op->getOperand(OpNum);
-    LLVM_DEBUG(llvm::dbgs()
-               << "Forwarding " << operand << " in " << *op << "\n");
-    result.replaceAllUsesWith(operand);
-    pruneUnusedOps(op, *this);
-    return success();
-  }
-  std::string getName() const override {
-    return ("hw-operand" + Twine(OpNum) + "-forwarder").str();
   }
 };
 
@@ -656,34 +551,10 @@ struct FIRRTLConstantifier : public Reduction {
     auto newOp = builder.create<firrtl::ConstantOp>(
         op->getLoc(), type, APSInt(width, type.isa<firrtl::UIntType>()));
     op->replaceAllUsesWith(newOp);
-    pruneUnusedOps(op, *this);
+    reduce::pruneUnusedOps(op, *this);
     return success();
   }
   std::string getName() const override { return "firrtl-constantifier"; }
-};
-
-/// A sample reduction pattern that replaces integer operations with a constant
-/// zero of their type.
-struct HWConstantifier : public Reduction {
-  uint64_t match(Operation *op) override {
-    if (op->getNumResults() == 0 || op->getNumOperands() == 0)
-      return 0;
-    return llvm::any_of(op->getResults(), [](Value result) {
-      return result.getType().isa<IntegerType>();
-    });
-  }
-  LogicalResult rewrite(Operation *op) override {
-    assert(match(op));
-    OpBuilder builder(op);
-    for (auto result : op->getResults()) {
-      auto type = result.getType().cast<IntegerType>();
-      auto newOp = builder.create<hw::ConstantOp>(op->getLoc(), type, 0);
-      result.replaceAllUsesWith(newOp);
-    }
-    pruneUnusedOps(op, *this);
-    return success();
-  }
-  std::string getName() const override { return "hw-constantifier"; }
 };
 
 /// A sample reduction pattern that replaces the right-hand-side of
@@ -693,7 +564,7 @@ struct HWConstantifier : public Reduction {
 struct ConnectInvalidator : public Reduction {
   uint64_t match(Operation *op) override {
     if (!isa<firrtl::ConnectOp, firrtl::StrictConnectOp>(op))
-      return false;
+      return 0;
     auto type = op->getOperand(1).getType().dyn_cast<firrtl::FIRRTLBaseType>();
     return type && type.isPassive() &&
            !op->getOperand(1).getDefiningOp<firrtl::InvalidValueOp>();
@@ -707,31 +578,11 @@ struct ConnectInvalidator : public Reduction {
     auto *rhsOp = rhs.getDefiningOp();
     op->setOperand(1, invOp);
     if (rhsOp)
-      pruneUnusedOps(rhsOp, *this);
+      reduce::pruneUnusedOps(rhsOp, *this);
     return success();
   }
   std::string getName() const override { return "connect-invalidator"; }
   bool acceptSizeIncrease() const override { return true; }
-};
-
-/// A sample reduction pattern that removes operations which either produce no
-/// results or their results have no users.
-struct OperationPruner : public Reduction {
-  void beforeReduction(mlir::ModuleOp op) override { symbols.clear(); }
-  uint64_t match(Operation *op) override {
-    return !isa<ModuleOp>(op) &&
-           (op->getNumResults() == 0 || op->use_empty()) &&
-           (!op->hasAttr(SymbolTable::getSymbolAttrName()) ||
-            symbols.getNearestSymbolUserMap(op).useEmpty(op));
-  }
-  LogicalResult rewrite(Operation *op) override {
-    assert(match(op));
-    pruneUnusedOps(op, *this);
-    return success();
-  }
-  std::string getName() const override { return "operation-pruner"; }
-
-  SymbolCache symbols;
 };
 
 /// A sample reduction pattern that removes FIRRTL annotations from ports and
@@ -765,19 +616,15 @@ struct AnnotationRemover : public Reduction {
 
 /// A sample reduction pattern that removes ports from the root `firrtl.module`
 /// if the port is not used or just invalidated.
-struct RootPortPruner : public Reduction {
-  uint64_t match(Operation *op) override {
-    auto module = dyn_cast<firrtl::FModuleOp>(op);
-    if (!module)
-      return 0;
+struct RootPortPruner : public OpReduction<firrtl::FModuleOp> {
+  uint64_t match(firrtl::FModuleOp module) override {
     auto circuit = module->getParentOfType<firrtl::CircuitOp>();
     if (!circuit)
       return 0;
     return circuit.getNameAttr() == module.getNameAttr();
   }
-  LogicalResult rewrite(Operation *op) override {
-    assert(match(op));
-    auto module = cast<firrtl::FModuleOp>(op);
+  LogicalResult rewrite(firrtl::FModuleOp module) override {
+    assert(match(module));
     size_t numPorts = module.getNumPorts();
     llvm::BitVector dropPorts(numPorts);
     for (unsigned i = 0; i != numPorts; ++i) {
@@ -796,21 +643,18 @@ struct RootPortPruner : public Reduction {
 
 /// A sample reduction pattern that replaces instances of `firrtl.extmodule`
 /// with wires.
-struct ExtmoduleInstanceRemover : public Reduction {
+struct ExtmoduleInstanceRemover : public OpReduction<firrtl::InstanceOp> {
   void beforeReduction(mlir::ModuleOp op) override {
     symbols.clear();
     nlaRemover.clear();
   }
   void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
 
-  uint64_t match(Operation *op) override {
-    if (auto instOp = dyn_cast<firrtl::InstanceOp>(op))
-      return isa<firrtl::FExtModuleOp>(
-          instOp.getReferencedModule(symbols.getNearestSymbolTable(instOp)));
-    return 0;
+  uint64_t match(firrtl::InstanceOp instOp) override {
+    return isa<firrtl::FExtModuleOp>(
+        instOp.getReferencedModule(symbols.getNearestSymbolTable(instOp)));
   }
-  LogicalResult rewrite(Operation *op) override {
-    auto instOp = cast<firrtl::InstanceOp>(op);
+  LogicalResult rewrite(firrtl::InstanceOp instOp) override {
     auto portInfo =
         instOp.getReferencedModule(symbols.getNearestSymbolTable(instOp))
             .getPorts();
@@ -959,7 +803,7 @@ struct ConnectSourceOperandForwarder : public Reduction {
     // because destination has only one use.
     op->erase();
     destOp->erase();
-    pruneUnusedOps(srcOp, *this);
+    reduce::pruneUnusedOps(srcOp, *this);
 
     return success();
   }
@@ -1019,17 +863,14 @@ struct DetachSubaccesses : public Reduction {
 /// This reduction removes symbols on node ops. Name preservation creates a lot
 /// of nodes ops with symbols to keep name information but it also prevents
 /// normal canonicalizations.
-struct NodeSymbolRemover : public Reduction {
+struct NodeSymbolRemover : public OpReduction<firrtl::NodeOp> {
 
-  uint64_t match(Operation *op) override {
-    if (auto nodeOp = dyn_cast<firrtl::NodeOp>(op))
-      return nodeOp.getInnerSym() &&
-             !nodeOp.getInnerSym()->getSymName().getValue().empty();
-    return 0;
+  uint64_t match(firrtl::NodeOp nodeOp) override {
+    return nodeOp.getInnerSym() &&
+           !nodeOp.getInnerSym()->getSymName().getValue().empty();
   }
 
-  LogicalResult rewrite(Operation *op) override {
-    auto nodeOp = cast<firrtl::NodeOp>(op);
+  LogicalResult rewrite(firrtl::NodeOp nodeOp) override {
     nodeOp.removeInnerSymAttr();
     return success();
   }
@@ -1038,17 +879,14 @@ struct NodeSymbolRemover : public Reduction {
 };
 
 /// A sample reduction pattern that eagerly inlines instances.
-struct EagerInliner : public Reduction {
+struct EagerInliner : public OpReduction<firrtl::InstanceOp> {
   void beforeReduction(mlir::ModuleOp op) override {
     symbols.clear();
     nlaRemover.clear();
   }
   void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
 
-  uint64_t match(Operation *op) override {
-    auto instOp = dyn_cast<firrtl::InstanceOp>(op);
-    if (!instOp)
-      return 0;
+  uint64_t match(firrtl::InstanceOp instOp) override {
     auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
     if (!isa<firrtl::FModuleOp>(moduleOp.getOperation()))
@@ -1056,8 +894,7 @@ struct EagerInliner : public Reduction {
     return symbols.getSymbolUserMap(tableOp).getUsers(moduleOp).size() == 1;
   }
 
-  LogicalResult rewrite(Operation *op) override {
-    auto instOp = cast<firrtl::InstanceOp>(op);
+  LogicalResult rewrite(firrtl::InstanceOp instOp) override {
     LLVM_DEBUG(llvm::dbgs()
                << "Inlining instance `" << instOp.getName() << "`\n");
     SmallVector<Value> argReplacements;
@@ -1103,59 +940,52 @@ struct EagerInliner : public Reduction {
 // Reduction Registration
 //===----------------------------------------------------------------------===//
 
-static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
-  GreedyRewriteConfig config;
-  config.useTopDownTraversal = true;
-  config.enableRegionSimplification = false;
-  return createCanonicalizerPass(config);
+void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
+    circt::ReducePatternSet &patterns) const {
+  // Gather a list of reduction patterns that we should try. Ideally these are
+  // assigned reasonable benefit indicators (higher benefit patterns are
+  // prioritized). For example, things that can knock out entire modules while
+  // being cheap should be tried first (and thus have higher benefit), before
+  // trying to tweak operands of individual arithmetic ops.
+  patterns.add<PassReduction, 29>(getContext(),
+                                  firrtl::createLowerCHIRRTLPass(), true, true);
+  patterns.add<PassReduction, 28>(getContext(), firrtl::createInferWidthsPass(),
+                                  true, true);
+  patterns.add<PassReduction, 27>(getContext(), firrtl::createInferResetsPass(),
+                                  true, true);
+  patterns.add<FIRRTLModuleExternalizer, 26>();
+  patterns.add<InstanceStubber, 25>();
+  patterns.add<MemoryStubber, 24>();
+  patterns.add<EagerInliner, 23>();
+  patterns.add<PassReduction, 22>(
+      getContext(), firrtl::createLowerFIRRTLTypesPass(), true, true);
+  patterns.add<PassReduction, 21>(getContext(), firrtl::createExpandWhensPass(),
+                                  true, true);
+  patterns.add<PassReduction, 20>(getContext(), firrtl::createInlinerPass());
+  patterns.add<PassReduction, 18>(getContext(),
+                                  firrtl::createIMConstPropPass());
+  patterns.add<PassReduction, 17>(
+      getContext(),
+      firrtl::createRemoveUnusedPortsPass(/*ignoreDontTouch=*/true));
+  patterns.add<NodeSymbolRemover, 15>();
+  patterns.add<ConnectForwarder, 14>();
+  patterns.add<ConnectInvalidator, 13>();
+  patterns.add<FIRRTLConstantifier, 12>();
+  patterns.add<FIRRTLOperandForwarder<0>, 11>();
+  patterns.add<FIRRTLOperandForwarder<1>, 10>();
+  patterns.add<FIRRTLOperandForwarder<2>, 9>();
+  patterns.add<DetachSubaccesses, 7>();
+  patterns.add<AnnotationRemover, 6>();
+  patterns.add<RootPortPruner, 5>();
+  patterns.add<ExtmoduleInstanceRemover, 4>();
+  patterns.add<ConnectSourceOperandForwarder<0>, 3>();
+  patterns.add<ConnectSourceOperandForwarder<1>, 2>();
+  patterns.add<ConnectSourceOperandForwarder<2>, 1>();
 }
 
-void circt::createAllReductions(
-    MLIRContext *context,
-    llvm::function_ref<void(std::unique_ptr<Reduction>)> add) {
-  // Gather a list of reduction patterns that we should try. Ideally these are
-  // sorted by decreasing reduction potential/benefit. For example, things that
-  // can knock out entire modules while being cheap should be tried first,
-  // before trying to tweak operands of individual arithmetic ops.
-  add(std::make_unique<PassReduction>(context, firrtl::createLowerCHIRRTLPass(),
-                                      true, true));
-  add(std::make_unique<PassReduction>(context, firrtl::createInferWidthsPass(),
-                                      true, true));
-  add(std::make_unique<PassReduction>(context, firrtl::createInferResetsPass(),
-                                      true, true));
-  add(std::make_unique<ModuleExternalizer>());
-  add(std::make_unique<InstanceStubber>());
-  add(std::make_unique<MemoryStubber>());
-  add(std::make_unique<EagerInliner>());
-  add(std::make_unique<PassReduction>(
-      context, firrtl::createLowerFIRRTLTypesPass(), true, true));
-  add(std::make_unique<PassReduction>(context, firrtl::createExpandWhensPass(),
-                                      true, true));
-  add(std::make_unique<PassReduction>(context, firrtl::createInlinerPass()));
-  add(std::make_unique<PassReduction>(context,
-                                      createSimpleCanonicalizerPass()));
-  add(std::make_unique<PassReduction>(context,
-                                      firrtl::createIMConstPropPass()));
-  add(std::make_unique<PassReduction>(
-      context, firrtl::createRemoveUnusedPortsPass(/*ignoreDontTouch=*/true)));
-  add(std::make_unique<PassReduction>(context, createCSEPass()));
-  add(std::make_unique<NodeSymbolRemover>());
-  add(std::make_unique<ConnectForwarder>());
-  add(std::make_unique<ConnectInvalidator>());
-  add(std::make_unique<FIRRTLConstantifier>());
-  add(std::make_unique<HWConstantifier>());
-  add(std::make_unique<FIRRTLOperandForwarder<0>>());
-  add(std::make_unique<FIRRTLOperandForwarder<1>>());
-  add(std::make_unique<FIRRTLOperandForwarder<2>>());
-  add(std::make_unique<HWOperandForwarder<0>>());
-  add(std::make_unique<HWOperandForwarder<1>>());
-  add(std::make_unique<HWOperandForwarder<2>>());
-  add(std::make_unique<OperationPruner>());
-  add(std::make_unique<DetachSubaccesses>());
-  add(std::make_unique<AnnotationRemover>());
-  add(std::make_unique<RootPortPruner>());
-  add(std::make_unique<ExtmoduleInstanceRemover>());
-  add(std::make_unique<ConnectSourceOperandForwarder<0>>());
-  add(std::make_unique<ConnectSourceOperandForwarder<1>>());
-  add(std::make_unique<ConnectSourceOperandForwarder<2>>());
+void firrtl::registerReducePatternDialectInterface(
+    mlir::DialectRegistry &registry) {
+  registry.addExtension(+[](MLIRContext *ctx, FIRRTLDialect *dialect) {
+    dialect->addInterfaces<FIRRTLReducePatternDialectInterface>();
+  });
 }

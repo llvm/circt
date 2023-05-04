@@ -1,4 +1,4 @@
-//===- ESIAddCPPCosimAPI.cpp - ESI C++ cosim API addition -------*- C++ -*-===//
+//===- ESIAddCPPAPI.cpp - ESI C++ API addition ------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Add the C++ ESI Capnp cosim API into the current module.
+// Add the C++ ESI API into the current module.
 //
 //===----------------------------------------------------------------------===//
 
@@ -24,7 +24,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
 
-#include "CPPCosimAPI.h"
+#include "CPPAPI.h"
 
 #include <iostream>
 #include <memory>
@@ -32,38 +32,30 @@
 using namespace mlir;
 using namespace circt;
 using namespace circt::esi;
-using namespace cppcosimapi;
+using namespace cppapi;
 
 namespace {
-struct ESIAddCPPCosimAPIPass
-    : public ESIAddCPPCosimAPIBase<ESIAddCPPCosimAPIPass> {
+struct ESIAddCPPAPIPass : public ESIAddCPPAPIBase<ESIAddCPPAPIPass> {
   void runOnOperation() override;
 
   LogicalResult emitAPI(llvm::raw_ostream &os);
 };
 } // anonymous namespace
 
-LogicalResult ESIAddCPPCosimAPIPass::emitAPI(llvm::raw_ostream &os) {
+LogicalResult ESIAddCPPAPIPass::emitAPI(llvm::raw_ostream &os) {
   ModuleOp mod = getOperation();
-  return exportCosimCPPAPI(mod, os);
+  return exportCPPAPI(mod, os);
 }
 
-void ESIAddCPPCosimAPIPass::runOnOperation() {
+void ESIAddCPPAPIPass::runOnOperation() {
   ModuleOp mod = getOperation();
   auto *ctxt = &getContext();
-
-  // Check for cosim endpoints in the design. If the design doesn't have any
-  // we don't need a schema.
-  WalkResult cosimWalk =
-      mod.walk([](CosimEndpointOp _) { return WalkResult::interrupt(); });
-  if (!cosimWalk.wasInterrupted())
-    return;
 
   // Generate the API.
   std::string apiStrBuffer;
   llvm::raw_string_ostream os(apiStrBuffer);
   if (failed(emitAPI(os))) {
-    mod.emitError("Failed to emit ESI C++ cosim API");
+    mod.emitError("Failed to emit ESI C++ API");
     return;
   }
 
@@ -83,7 +75,6 @@ void ESIAddCPPCosimAPIPass::runOnOperation() {
   }
 }
 
-std::unique_ptr<OperationPass<ModuleOp>>
-circt::esi::createESIAddCPPCosimAPIPass() {
-  return std::make_unique<ESIAddCPPCosimAPIPass>();
+std::unique_ptr<OperationPass<ModuleOp>> circt::esi::createESIAddCPPAPIPass() {
+  return std::make_unique<ESIAddCPPAPIPass>();
 }

@@ -82,6 +82,8 @@ The current set of "tool capability" Lowering Options is:
    forced to be simple wires. Some EDA tools rely on these being simple wires.
  * `disallowPackedArrays` (default=`false`).  If true, eliminate packed arrays
    for tools that don't support them (e.g. Yosys).
+ * `disallowPackedStructAssignments` (default=`false`). If true, eliminate packed
+    struct assignments in favor of a wire + assignments to the individual fields.  
  * `disallowLocalVariables` (default=`false`).  If true, do not emit
    SystemVerilog locally scoped "automatic" or logic declarations - emit top
    level wire and reg's instead.

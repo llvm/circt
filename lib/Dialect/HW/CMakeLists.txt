@@ -1,5 +1,8 @@
-add_circt_dialect_library(
-  CIRCTHW
+set(LLVM_OPTIONAL_SOURCES
+  HWReductions.cpp
+)
+
+add_circt_dialect_library(CIRCTHW
   CustomDirectiveImpl.cpp
   HWAttributes.cpp
   HWDialect.cpp
@@ -28,6 +31,15 @@ add_circt_dialect_library(
   CIRCTSupport
   MLIRIR
   MLIRInferTypeOpInterface
+)
+
+add_circt_library(CIRCTHWReductions
+  HWReductions.cpp
+
+  LINK_LIBS PUBLIC
+  CIRCTReduceLib
+  CIRCTHW
+  MLIRIR
 )
 
 add_subdirectory(Transforms)

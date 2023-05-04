@@ -422,22 +422,29 @@ struct circt::firrtl::detail::FIRRTLBaseTypeStorage : mlir::TypeStorage {
 };
 
 /// Return true if this is a 'ground' type, aka a non-aggregate type.
-bool FIRRTLBaseType::isGround() {
-  return TypeSwitch<FIRRTLBaseType, bool>(*this)
+bool FIRRTLType::isGround() {
+  return TypeSwitch<FIRRTLType, bool>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType>([](Type) { return true; })
       .Case<BundleType, FVectorType, FEnumType>([](Type) { return false; })
+      // Not ground per spec, but leaf of aggregate.
+      .Case<RefType>([](Type) { return false; })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return false;
       });
 }
 
+bool FIRRTLType::isConst() {
+  return TypeSwitch<FIRRTLType, bool>(*this)
+      .Case<FIRRTLBaseType>([](auto type) { return type.isConst(); })
+      .Default(false);
+}
+
 bool FIRRTLBaseType::isConst() { return getImpl()->isConst; }
 
-/// Return a pair with the 'isPassive' and 'containsAnalog' bits.
-RecursiveTypeProperties FIRRTLBaseType::getRecursiveTypeProperties() const {
-  return TypeSwitch<FIRRTLBaseType, RecursiveTypeProperties>(*this)
+RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
+  return TypeSwitch<FIRRTLType, RecursiveTypeProperties>(*this)
       .Case<ClockType, ResetType, AsyncResetType>([](FIRRTLBaseType type) {
         return RecursiveTypeProperties{
             true, false, false, type.isConst(), false, type.isa<ResetType>()};
@@ -450,15 +457,8 @@ RecursiveTypeProperties FIRRTLBaseType::getRecursiveTypeProperties() const {
         return RecursiveTypeProperties{
             true, false, true, type.isConst(), !type.hasWidth(), false};
       })
-      .Case<BundleType>([](BundleType bundleType) {
-        return bundleType.getRecursiveTypeProperties();
-      })
-      .Case<FVectorType>([](FVectorType vectorType) {
-        return vectorType.getRecursiveTypeProperties();
-      })
-      .Case<FEnumType>([](FEnumType enumType) {
-        return enumType.getRecursiveTypeProperties();
-      })
+      .Case<BundleType, FVectorType, FEnumType, RefType>(
+          [](auto type) { return type.getRecursiveTypeProperties(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return RecursiveTypeProperties{};
@@ -470,10 +470,8 @@ FIRRTLBaseType FIRRTLBaseType::getPassiveType() {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType, FEnumType>([&](Type) { return *this; })
-      .Case<BundleType>(
-          [](BundleType bundleType) { return bundleType.getPassiveType(); })
-      .Case<FVectorType>(
-          [](FVectorType vectorType) { return vectorType.getPassiveType(); })
+      .Case<BundleType, FVectorType, FEnumType>(
+          [](auto type) { return type.getPassiveType(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return FIRRTLBaseType();
@@ -539,6 +537,13 @@ FIRRTLBaseType FIRRTLBaseType::getWidthlessType() {
         return FVectorType::get(a.getElementType().getWidthlessType(),
                                 a.getNumElements(), a.isConst());
       })
+      .Case<FEnumType>([&](FEnumType a) {
+        SmallVector<FEnumType::EnumElement, 4> newElements;
+        newElements.reserve(a.getNumElements());
+        for (auto elt : a)
+          newElements.push_back({elt.name, elt.type.getWidthlessType()});
+        return FEnumType::get(this->getContext(), newElements, a.isConst());
+      })
       .Default([](auto) {
         llvm_unreachable("unknown FIRRTL type");
         return FIRRTLBaseType();
@@ -578,7 +583,7 @@ uint64_t FIRRTLBaseType::getMaxFieldID() {
   return TypeSwitch<FIRRTLBaseType, uint64_t>(*this)
       .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
             UIntType>([](Type) { return 0; })
-      .Case<BundleType, FVectorType>(
+      .Case<BundleType, FVectorType, FEnumType>(
           [](auto type) { return type.getMaxFieldID(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
@@ -595,7 +600,7 @@ FIRRTLBaseType::getSubTypeByFieldID(uint64_t fieldID) {
         assert(!fieldID && "non-aggregate types must have a field id of 0");
         return std::pair(t, 0);
       })
-      .Case<BundleType, FVectorType>(
+      .Case<BundleType, FVectorType, FEnumType>(
           [&](auto type) { return type.getSubTypeByFieldID(fieldID); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
@@ -616,26 +621,12 @@ std::pair<uint64_t, bool> FIRRTLBaseType::rootChildFieldID(uint64_t fieldID,
   return TypeSwitch<FIRRTLBaseType, std::pair<uint64_t, bool>>(*this)
       .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
             UIntType>([&](Type) { return std::make_pair(0, fieldID == 0); })
-      .Case<BundleType, FVectorType>(
+      .Case<BundleType, FVectorType, FEnumType>(
           [&](auto type) { return type.rootChildFieldID(fieldID, index); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return std::make_pair(0, false);
       });
-}
-
-uint64_t FIRRTLBaseType::getGroundFields() const {
-  return TypeSwitch<FIRRTLBaseType, uint64_t>(*this)
-      .Case<BundleType>([](auto type) {
-        unsigned sum = 0;
-        for (auto &field : type.getElements())
-          sum += field.type.getGroundFields();
-        return sum;
-      })
-      .Case<FVectorType>([](auto type) {
-        return type.getNumElements() * type.getElementType().getGroundFields();
-      })
-      .Default([](Type) { return 1; });
 }
 
 /// Helper to implement the equivalence logic for a pair of bundle elements.
@@ -1476,7 +1467,13 @@ std::pair<uint64_t, bool> RefType::rootChildFieldID(uint64_t fieldID,
   return {0, fieldID == 0};
 }
 
-uint64_t RefType::getGroundFields() const { return 1; }
+RecursiveTypeProperties RefType::getRecursiveTypeProperties() const {
+  auto rtp = getType().getRecursiveTypeProperties();
+  rtp.containsReference = true;
+  // References are not "passive", per FIRRTL spec.
+  rtp.isPassive = false;
+  return rtp;
+}
 
 //===----------------------------------------------------------------------===//
 // AnalogType
