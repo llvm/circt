@@ -384,7 +384,8 @@ void MuxOp::getCanonicalizationPatterns(RewritePatternSet &results,
 LogicalResult
 MuxOp::inferReturnTypes(MLIRContext *context, std::optional<Location> location,
                         ValueRange operands, DictionaryAttr attributes,
-                        mlir::OpaqueProperties properties, mlir::RegionRange regions,
+                        mlir::OpaqueProperties properties,
+                        mlir::RegionRange regions,
                         SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
   // MuxOp must have at least one data operand (in addition to the select
   // operand)

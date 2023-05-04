@@ -265,8 +265,8 @@ LogicalResult llhd::PtrArraySliceOp::canonicalize(llhd::PtrArraySliceOp op,
 template <class SigPtrType>
 static LogicalResult inferReturnTypesOfStructExtractOp(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties, mlir::RegionRange regions,
-    SmallVectorImpl<Type> &results) {
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Type type = operands[0]
                   .getType()
                   .cast<SigPtrType>()
@@ -288,16 +288,16 @@ static LogicalResult inferReturnTypesOfStructExtractOp(
 
 LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties, mlir::RegionRange regions,
-    SmallVectorImpl<Type> &results) {
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   return inferReturnTypesOfStructExtractOp<llhd::SigType>(
       context, loc, operands, attrs, properties, regions, results);
 }
 
 LogicalResult llhd::PtrStructExtractOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties, mlir::RegionRange regions,
-    SmallVectorImpl<Type> &results) {
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   return inferReturnTypesOfStructExtractOp<llhd::PtrType>(
       context, loc, operands, attrs, properties, regions, results);
 }

@@ -648,11 +648,10 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
       else
         newAttrs.push_back(attr);
     }
-    auto *newHWInst = b.insert(
-        Operation::create(inst->getLoc(), inst->getName(), newResultTypes,
-                          newOperands, b.getDictionaryAttr(newAttrs),
-                          inst->getPropertiesStorage(), inst->getSuccessors(),
-                          inst->getRegions()));
+    auto *newHWInst = b.insert(Operation::create(
+        inst->getLoc(), inst->getName(), newResultTypes, newOperands,
+        b.getDictionaryAttr(newAttrs), inst->getPropertiesStorage(),
+        inst->getSuccessors(), inst->getRegions()));
     newModuleInstantiations.push_back(cast<hw::HWInstanceLike>(newHWInst));
 
     // Replace all uses of the instance being replaced.
