@@ -37,6 +37,7 @@ add_circt_library(CIRCTHWReductions
   HWReductions.cpp
 
   LINK_LIBS PUBLIC
+  CIRCTReduceLib
   CIRCTHW
   MLIRIR
 )

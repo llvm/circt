@@ -43,6 +43,7 @@ add_circt_library(CIRCTFIRRTLReductions
   FIRRTLReductions.cpp
 
   LINK_LIBS PUBLIC
+  CIRCTReduceLib
   CIRCTFIRRTL
   CIRCTFIRRTLTransforms
   MLIRIR

@@ -30,6 +30,7 @@ add_circt_library(CIRCTArcReductions
   ArcReductions.cpp
 
   LINK_LIBS PUBLIC
+  CIRCTReduceLib
   CIRCTArc
   CIRCTArcTransforms
   CIRCTConvertToArcs
