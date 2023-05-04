@@ -818,8 +818,8 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
                   .Case<BundleType>([&](auto type) {
                     return getFieldID(type, op.getIndex());
                   });
-          traceResets(op.getResult().getType().getType(), op.getResult(), 0,
-                      aggType, op.getInput(), fieldID, op.getLoc());
+          traceResets(op.getType(), op.getResult(), 0, op.getResult().getType(),
+                      op.getInput(), fieldID, op.getLoc());
         });
   });
 }
