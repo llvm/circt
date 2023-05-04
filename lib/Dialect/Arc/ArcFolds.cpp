@@ -129,17 +129,16 @@ LogicalResult MemoryWriteOp::canonicalize(MemoryWriteOp op,
 
 static bool removeUnusedClockDomainInputs(ClockDomainOp op,
                                           PatternRewriter &rewriter) {
-  bool changed = false;
-  for (auto arg :
-       llvm::make_early_inc_range(op.getBodyBlock().getArguments())) {
+  BitVector toDelete(op.getBodyBlock().getNumArguments());
+  for (auto arg : llvm::reverse(op.getBodyBlock().getArguments())) {
     if (arg.use_empty()) {
       auto i = arg.getArgNumber();
-      op.getBodyBlock().eraseArgument(i);
+      toDelete.set(i);
       op.getInputsMutable().erase(i);
-      changed = true;
     }
   }
-  return changed;
+  op.getBodyBlock().eraseArguments(toDelete);
+  return toDelete.any();
 }
 
 static bool removeUnusedClockDomainOutputs(ClockDomainOp op,
