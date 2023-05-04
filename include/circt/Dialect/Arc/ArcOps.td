@@ -374,6 +374,7 @@ def ClockDomainOp : ArcOp<"clock_domain", [
   }];
 
   let hasRegionVerifier = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 def ClockTreeOp : ArcOp<"clock_tree", [NoTerminator, NoRegionArguments]> {
