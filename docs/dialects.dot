@@ -66,6 +66,7 @@ digraph G {
       Interop [URL="https://circt.llvm.org/docs/Dialects/Interop/"]
     }
     LLHD [URL="https://circt.llvm.org/docs/Dialects/LLHD/"]
+    Arc [URL="https://circt.llvm.org/docs/Dialects/Arc/"]
 
     // Backend dialects
     SV [URL="https://circt.llvm.org/docs/Dialects/SV/"]
@@ -73,6 +74,7 @@ digraph G {
 
     subgraph backend_internal_tools{
       node [fillcolor="#fdc086"]
+      Arcilator
       llhd_sim [label="llhd-sim"]
       ExportSystemC
       ExportVerilog [URL="https://circt.llvm.org/docs/VerilogGeneration/"]
@@ -105,6 +107,7 @@ digraph G {
     ServiceDesc [label="ESI system description\n(JSON/Capnp)"]
     SoftwareAPI [label="Software API\n(e.g. py/c++/c#)" style=dashed]
     TCL [label="Placements (tcl)"]
+    SimBinary [label="Simulation Binary (obj)"]
   }
 
   // ===== Connections =====
@@ -125,10 +128,13 @@ digraph G {
   lower_to_sv_and_core -> Seq [lhead=cluster_RTL]
   Seq -> SV
   {HW MooreMIR} -> LLHD
+  Interop -> Arc [ltail=cluster_RTL]
   Comb -> SystemC [ltail=cluster_RTL]
   ExportVerilog -> SVFile
 
   // Tool flows
+  Arc -> Arcilator
+  Arcilator -> SimBinary
   Scheduling -> Pipeline [dir=both]
   Chisel -> FIRFile
   FIRFile -> FIRRTLParser
