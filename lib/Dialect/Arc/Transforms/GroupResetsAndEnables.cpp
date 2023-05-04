@@ -54,7 +54,16 @@ public:
         // Check we're not inlining an empty block
         if (auto *elseBlock = thisOp.elseBlock()) {
           rewriter.eraseOp(elseBlock->getTerminator());
-          rewriter.inlineBlockBefore(elseBlock, &lastIfOp.elseBlock()->front());
+          if (auto *lastElseBlock = lastIfOp.elseBlock())
+            rewriter.inlineBlockBefore(elseBlock,
+                                       &lastIfOp.elseBlock()->front());
+          else {
+            lastElseBlock = rewriter.createBlock(&lastIfOp.getElseRegion());
+            rewriter.setInsertionPointToEnd(lastElseBlock);
+            auto yieldOp =
+                rewriter.create<scf::YieldOp>(rewriter.getUnknownLoc());
+            rewriter.inlineBlockBefore(thisOp.elseBlock(), yieldOp);
+          }
         }
         rewriter.eraseOp(thisOp);
         changed = true;
