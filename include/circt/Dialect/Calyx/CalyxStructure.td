@@ -465,6 +465,81 @@ def CombGroupOp : CalyxOp<"comb_group", [
   ];
 }
 
+def StaticGroupOp : CalyxOp<"static_group", [
+    HasParent<"WiresOp">,
+    DeclareOpInterfaceMethods<GroupOpInterface>,
+    NoRegionArguments,
+    RegionKindInterface,
+    SingleBlock,
+    Symbol
+  ]> {
+  let summary = "Calyx Static Group";
+  let description = [{
+    Represents a Calyx static group, which is a collection
+    of assignments that are only active when the group
+    is run from the control execution schedule. A group
+    signifies its termination with a special port named
+    a "done" port.
+
+    ```mlir
+      calyx.static_group @MyStaticGroup {
+        calyx.assign %1 = %2 : i32
+        calyx.group_done %3 : i1
+      }
+    ```
+  }];
+
+  let arguments = (ins SymbolNameAttr: $sym_name,
+                   I64Attr: $latency);
+
+  let extraClassDeclaration = [{
+    // Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+
+    /// Returns the GroupGoOp for this group.
+    GroupGoOp getGoOp();
+
+    /// Returns the body of a Calyx component.
+    Block *getBodyBlock() {
+      Region* region = &getOperation()->getRegion(0);
+      assert(region->hasOneBlock() && "The body should have one Block.");
+      return &region->front();
+    }
+
+    /* static StringRef getLatencyAttrName() { */
+    /*   return "latency"; */
+    /* } */
+
+  }];
+
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "$sym_name $body attr-dict";
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins "StringRef":$sym_name, "uint64_t":$latency), [{
+      $_state.addAttribute(
+        mlir::SymbolTable::getSymbolAttrName(),
+        StringAttr::get($_state.getContext(), sym_name)
+      );
+      $_state.addAttribute(
+        this->getLatencyAttrName(),
+        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 64), latency)
+      );
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>,
+    OpBuilder<(ins "StringAttr":$sym_name, "uint64_t":$latency), [{
+      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), sym_name);
+      $_state.addAttribute(
+        this->getLatencyAttrName(),
+        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 64), latency)
+      );
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
+}
+
 def AssignOp : CalyxOp<"assign", [
     SameTypeConstraint<"dest", "src">,
     ParentOneOf<["GroupOp", "CombGroupOp", "WiresOp"]>
