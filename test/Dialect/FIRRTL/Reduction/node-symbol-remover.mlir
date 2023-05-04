@@ -1,6 +1,6 @@
 // UNSUPPORTED: system-windows
 //   See https://github.com/llvm/circt/issues/4129
-// RUN: circt-reduce %s --test %S.sh --test-arg cat --test-arg "%anotherWire = firrtl.node" --keep-best=0 --include node-symbol-remover --test-must-fail | FileCheck %s
+// RUN: circt-reduce %s --test /bin/grep --test-arg -q --test-arg "%anotherWire = firrtl.node" --keep-best=0 --include node-symbol-remover | FileCheck %s
 
 firrtl.circuit "Foo" {
   // CHECK: firrtl.module @Foo

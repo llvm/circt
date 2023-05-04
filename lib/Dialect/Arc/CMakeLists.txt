@@ -1,3 +1,7 @@
+set(LLVM_OPTIONAL_SOURCES
+  ArcReductions.cpp
+)
+
 add_circt_dialect_library(CIRCTArc
   ArcDialect.cpp
   ArcFolds.cpp
@@ -20,6 +24,17 @@ add_circt_dialect_library(CIRCTArc
   MLIRIR
   MLIRInferTypeOpInterface
   MLIRSideEffectInterfaces
+)
+
+add_circt_library(CIRCTArcReductions
+  ArcReductions.cpp
+
+  LINK_LIBS PUBLIC
+  CIRCTReduceLib
+  CIRCTArc
+  CIRCTArcTransforms
+  CIRCTConvertToArcs
+  MLIRIR
 )
 
 add_dependencies(circt-headers
