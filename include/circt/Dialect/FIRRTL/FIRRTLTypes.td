@@ -10,14 +10,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-include "mlir/IR/EnumAttr.td"
+#ifndef CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD
+#define CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD
+
+include "FIRRTLDialect.td"
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Definitions
 //===----------------------------------------------------------------------===//
 
 class FIRRTLDialectType<Pred pred, string summary, string cpp, string desc = "">
-  : DialectType<FIRRTLDialect,pred, summary, cpp> {
+  : DialectType<FIRRTLDialect, pred, summary, cpp> {
   let description = desc;
 }
 
@@ -41,9 +44,14 @@ def FIRRTLBaseType : FIRRTLDialectType<
 def ForeignType : FIRRTLDialectType<CPred<"!$_self.isa<FIRRTLType>()">,
                                     "foreign type", "::mlir::Type">;
 
-def ClockType : FIRRTLDialectType<CPred<"$_self.isa<ClockType>()">,
-    "clock", "::circt::firrtl::ClockType">,
-  BuildableType<"ClockType::get($_builder.getContext())">;
+def ClockType :
+  FIRRTLDialectType<CPred<"$_self.isa<ClockType>()">, "clock",
+                    "::circt::firrtl::ClockType">;
+
+def NonConstClockType :
+  FIRRTLDialectType<CPred<"$_self.isa<ClockType>()">, "clock",
+                    "::circt::firrtl::ClockType">,
+  BuildableType<"::circt::firrtl::ClockType::get($_builder.getContext())">;
 
 def IntType : FIRRTLDialectType<CPred<"$_self.isa<IntType>()">,
  "sint or uint type", "::circt::firrtl::IntType">;
@@ -63,67 +71,71 @@ def BundleType : FIRRTLDialectType<CPred<"$_self.isa<BundleType>()">,
 def FVectorType : FIRRTLDialectType<CPred<"$_self.isa<FVectorType>()">,
   "FVectorType", "::circt::firrtl::FVectorType">;
 
-def ConnectableType : FIRRTLDialectType<
-  Or<[
-    CPred<"$_self.isa<FIRRTLBaseType>()">,
-    CPred<"$_self.isa<RefType>()">,
-    ]>,
-    "a connectable type (base or ref type)", "::circt::firrtl::FIRRTLType", [{
-    Any type that is valid for use in connect statements.
-    Currently this is any base type or ref type.
-  }]>;
+def FEnumType : FIRRTLDialectType<CPred<"$_self.isa<FEnumType>()">,
+ "FEnumType", "::circt::firrtl::FEnumType">;
 
-def SizedBaseOrRefType : FIRRTLDialectType<
+def AggregateType : FIRRTLDialectType<
   Or<[
-    CPred<"$_self.isa<FIRRTLBaseType>() && "
-          "!$_self.cast<FIRRTLBaseType>().hasUninferredWidth()">,
-    CPred<"$_self.isa<RefType>() && "
-          "!$_self.cast<RefType>().getType().hasUninferredWidth()">,
-    ]>,
-  "a sized base or ref type (contains no uninferred widths)", "::circt::firrtl::FIRRTLType">;
+    CPred<"$_self.isa<FVectorType>()">,
+    CPred<"$_self.isa<BundleType>()">,
+    CPred<"$_self.isa<FEnumType>()">
+  ]>,
+  "a aggregate type", "::circt::firrtl::FIRRTLBaseType">;
 
 def SizedType : FIRRTLDialectType<CPred<"$_self.isa<FIRRTLBaseType>() && "
     "!$_self.cast<FIRRTLBaseType>().hasUninferredWidth()">,
-    "a sized type (contains no unifered widths)", "::circt::firrtl::FIRRTLType">;
+    "a sized type (contains no uninferred widths)", "::circt::firrtl::FIRRTLType">;
 def SizedOrForeignType : AnyTypeOf<[SizedType, ForeignType]>;
-def SizedBaseOrRefTypeOrForeignType : AnyTypeOf<[SizedBaseOrRefType, ForeignType]>;
-
-def UInt1Type : FIRRTLDialectType<
-    CPred<"$_self.isa<UIntType>() && "
-          "($_self.cast<UIntType>().getWidth() == 1 ||"
-          " $_self.cast<UIntType>().getWidth() == None)">,
-    "UInt<1> or UInt", "::circt::firrtl::UIntType">,
-  BuildableType<"UIntType::get($_builder.getContext(), 1)">;
 
 def AsyncResetType : FIRRTLDialectType<
     CPred<"$_self.isa<AsyncResetType>()">,
-    "AsyncReset", "::circt::firrtl::AsyncResetType">,
-  BuildableType<"AsyncResetType::get($_builder.getContext())">;
+    "AsyncReset", "::circt::firrtl::AsyncResetType">;
 
 def ResetType : FIRRTLDialectType<
     CPred<"$_self.isa<ResetType>()">,
-    "Reset", "::circt::firrtl::ResetType">,
-  BuildableType<"ResetType::get($_builder.getContext())">;
+    "Reset", "::circt::firrtl::ResetType">;
 
 def PassiveType : FIRRTLDialectType<
   CPred<"$_self.isa<FIRRTLBaseType>() && $_self.cast<FIRRTLBaseType>().isPassive()">,
   "a passive base type (contain no flips)", "::circt::firrtl::FIRRTLBaseType">;
 
 def RefType : FIRRTLDialectType<
-   CPred<"$_self.isa<RefType>()">,
-  "reference type", "::circt::firrtl::RefType", [{
-    A reference type, such as `firrtl.ref<uint<1>>`.
+  CPred<"$_self.isa<RefType>()">,
+   "reference type", "::circt::firrtl::RefType">;
 
-    Used for remote reads and writes of the wrapped base type.
+def RWProbe : FIRRTLDialectType<
+  CPred<"$_self.isa<RefType>() && $_self.cast<RefType>().getForceable()">,
+   "rwprobe type", "::circt::firrtl::RefType">;
 
-    Parameterized over the referenced base type,
-    which must be passive and for now must also be ground.
+// TODO: When Refs can appear within Base, need to disallow that too.
+def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;
+def StrictConnectableType : AnyTypeOf<[PassiveType, ForeignType]>;
 
-    Not a base type.
+//===----------------------------------------------------------------------===//
+// Sized and Unsized Integers
+//===----------------------------------------------------------------------===//
 
-    Values of this type are used to capture dataflow paths,
-    and do not represent a circuit element or entity.
-  }]>;
+def UnsizedUIntType :
+  FIRRTLDialectType<
+    CPred<"$_self.isa<UIntType>() && "
+          "$_self.cast<UIntType>().getWidth() == std::nullopt">,
+    "uint with uninferred width", "::circt::firrtl::UIntType">;
+
+class SizedUIntType<int width> : FIRRTLDialectType<
+    CPred<"$_self.isa<UIntType>() && "
+          "$_self.cast<UIntType>().getWidth() == " # width>,
+    width # "-bit uint", "::circt::firrtl::UIntType">;
+
+class NonConstSizedUIntType<int width> :
+  SizedUIntType<width>,
+  BuildableType<
+    "::circt::firrtl::UIntType::get($_builder.getContext(), " # width # ")">;
+
+def UInt1Type : SizedUIntType<1>;
+def UInt32Type : SizedUIntType<32>;
+def NonConstUInt1Type : NonConstSizedUIntType<1>;
+
+def UInt1OrUnsizedType : AnyTypeOf<[UInt1Type, UnsizedUIntType]>;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates
@@ -142,12 +154,20 @@ def AnyResetType : FIRRTLDialectType<
 def AnyRegisterType : FIRRTLDialectType<
     CPred<"$_self.isa<FIRRTLBaseType>() && "
           "$_self.cast<FIRRTLBaseType>().isRegisterType()">,
-    "a passive base type that does not contain analog",
+    "a passive non-'const' base type that does not contain analog",
     "::circt::firrtl::FIRRTLBaseType">;
 
 def UIntSIntClockType : AnyTypeOf<[SIntType, UIntType, ClockType],
                                   "sint, uint, or clock",
                                   "::circt::firrtl::FIRRTLBaseType">;
+
+def 1DVecUIntType : FIRRTLDialectType<
+  CPred<"isa<FVectorType>($_self) && isa<UIntType>(cast<FVectorType>($_self).getElementType())">,
+  "1d vector with UInt element type", "::circt::firrtl::FIRRTLBaseType">;
+
+def 1DVecIntType : FIRRTLDialectType<
+  CPred<"isa<FVectorType>($_self) && isa<IntType>(cast<FVectorType>($_self).getElementType())">,
+  "1d vector with Int element type", "::circt::firrtl::FIRRTLBaseType">;
 
 def OneBitCastableType : AnyTypeOf<
   [OneBitType, AnyResetType, AsyncResetType, ClockType],
@@ -155,22 +175,17 @@ def OneBitCastableType : AnyTypeOf<
                                   "::circt::firrtl::FIRRTLBaseType">;
 
 //===----------------------------------------------------------------------===//
-// FIRRTL Enum Definitions
+// Constraints on RefOps
 //===----------------------------------------------------------------------===//
 
-/// RUWAttr: Undefined/Old/New.
-def RUW_Undefined: I32EnumAttrCase<"Undefined", 0>;
-def RUW_Old: I32EnumAttrCase<"Old", 1>;
-def RUW_New: I32EnumAttrCase<"New", 2>;
+class RefTypeConstraint<string ref, string base>
+  : TypesMatchWith<"reference base type should match",
+                   ref, base,
+                   "$_self.cast<RefType>().getType()">;
 
-def RUWAttr: I32EnumAttr<"RUWAttr", "Read Under Write Enum",
-                         [RUW_Undefined, RUW_Old, RUW_New]>;
+class RefResultTypeConstraint<string base, string ref>
+  : TypesMatchWith<"reference base type should match",
+                   base, ref,
+                   "RefType::get($_self.cast<FIRRTLBaseType>().getPassiveType())">;
 
-def MemDir_Infer    : I32EnumAttrCase<"Infer", 0>;
-def MemDir_Read     : I32EnumAttrCase<"Read", 1>;
-def MemDir_Write    : I32EnumAttrCase<"Write", 2>;
-def MemDir_ReadWrite: I32EnumAttrCase<"ReadWrite", 3>;
-
-def MemDirAttr: I32EnumAttr<"MemDirAttr", "Memory Direction Enum",
-                            [MemDir_Infer, MemDir_Read, MemDir_Write,
-                              MemDir_ReadWrite]>;
+#endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD

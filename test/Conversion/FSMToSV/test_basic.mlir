@@ -32,11 +32,11 @@ hw.module @top(%arg0: i1, %arg1: i1, %clk : i1, %rst : i1) -> (out: i8) {
 
 // CHECK-LABEL:  hw.module @top(%a0: i1, %a1: i1, %clk: i1, %rst: i1) -> (r0: i8, r1: i8) {
 // CHECK-NEXT:    %A = hw.enum.constant A : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>
-// CHECK-NEXT:    %to_A = sv.wire sym @A  : !hw.inout<typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
+// CHECK-NEXT:    %to_A = sv.reg sym @A  : !hw.inout<typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
 // CHECK-NEXT:    sv.assign %to_A, %A : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>
 // CHECK-NEXT:    %0 = sv.read_inout %to_A : !hw.inout<typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
 // CHECK-NEXT:    %B = hw.enum.constant B : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>
-// CHECK-NEXT:    %to_B = sv.wire sym @B  : !hw.inout<typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
+// CHECK-NEXT:    %to_B = sv.reg sym @B  : !hw.inout<typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
 // CHECK-NEXT:    sv.assign %to_B, %B : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>
 // CHECK-NEXT:    %1 = sv.read_inout %to_B : !hw.inout<typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
 // CHECK-NEXT:    %state_next = sv.reg  : !hw.inout<typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
@@ -60,6 +60,8 @@ hw.module @top(%arg0: i1, %arg1: i1, %clk : i1, %rst : i1) -> (out: i8) {
 // CHECK-NEXT:        sv.bpassign %state_next, %4 : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>
 // CHECK-NEXT:        sv.bpassign %output_0, %c1_i8 : i8
 // CHECK-NEXT:        sv.bpassign %output_1, %c42_i8 : i8
+// CHECK-NEXT:      }
+// CHECK-NEXT:      default: {
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
 // CHECK-NEXT:    %5 = sv.read_inout %output_0 : !hw.inout<i8>
@@ -106,7 +108,11 @@ fsm.machine @top(%a0: i1, %arg1: i1) -> (i8, i8) attributes {initialState = "A",
 // CHECK-NEXT:      }
 // CHECK-NEXT:      case B: {
 // CHECK-NEXT:      }
+// CHECK-NEXT:      default: {
+// CHECK-NEXT:      }
 // CHECK-NEXT:      sv.bpassign %output_0, %cnt_reg : i16
+// CHECK-NEXT:    }
+// CHECK-NEXT:    default: {
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 

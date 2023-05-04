@@ -329,6 +329,36 @@ module {
 
 // -----
 
+// expected-note @+1 {{module declared here}}
+hw.module.extern @submodule () -> (out0: i32)
+
+hw.module @wrongResultLabel() {
+  // expected-error @+1 {{result label #0 must be "out0", but got "o"}}
+  %inst0.out0 = hw.instance "inst0" @submodule () -> (o: i32)
+}
+
+// -----
+
+// expected-note @+1 {{module declared here}}
+hw.module.extern @submodule () -> (out0: i32)
+
+hw.module @wrongNumberOfResultNames() {
+  // expected-error @+1 {{has a wrong number of results port labels; expected 1 but got 0}}
+  "hw.instance"() {instanceName="inst0", moduleName=@submodule, argNames=[], resultNames=[], parameters=[]} : () -> i32
+}
+
+// -----
+
+// expected-note @+1 {{module declared here}}
+hw.module.extern @submodule (%arg0: i32) -> ()
+
+hw.module @wrongNumberOfInputNames(%arg0: i32) {
+  // expected-error @+1 {{has a wrong number of input port names; expected 1 but got 0}}
+  "hw.instance"(%arg0) {instanceName="inst0", moduleName=@submodule, argNames=[], resultNames=[], parameters=[]} : (i32) -> ()
+}
+
+// -----
+
 // expected-error @+1 {{unsupported dimension kind in hw.array}}
 hw.module @bab<param: i32, N: i32> ( %array2d: !hw.array<i3 x i4>) {}
 
@@ -337,5 +367,23 @@ hw.module @bab<param: i32, N: i32> ( %array2d: !hw.array<i3 x i4>) {}
 hw.module @foo() {
   // expected-error @+1 {{enum value 'D' is not a member of enum type '!hw.enum<A, B, C>'}}
   %0 = hw.enum.constant D : !hw.enum<A, B, C>
+  hw.output
+}
+
+// -----
+
+hw.module @foo() {
+  // expected-error @+1 {{return type '!hw.enum<A, B>' does not match attribute type #hw.enum.field<A, !hw.enum<A>>}}
+  %0 = "hw.enum.constant"() {field = #hw.enum.field<A, !hw.enum<A>>} : () -> !hw.enum<A, B>
+  hw.output
+}
+
+// -----
+
+hw.module @foo() {
+  %0 = hw.enum.constant A : !hw.enum<A>
+  %1 = hw.enum.constant B : !hw.enum<B>
+  // expected-error @+1 {{types do not match}}
+  %2 = hw.enum.cmp %0, %1 : !hw.enum<A>, !hw.enum<B>
   hw.output
 }

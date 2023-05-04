@@ -1,3 +1,5 @@
+; UNSUPPORTED: system-windows
+;   See https://github.com/llvm/circt/issues/4128
 ; RUN: rm -rf %t
 ; RUN: firtool --repl-seq-mem --repl-seq-mem-file=mems.conf --split-verilog -o=%t %s
 ; RUN: FileCheck %s --check-prefix=TESTHARNESS < %t/TestHarness.sv
@@ -59,4 +61,4 @@ circuit TestHarness : %[[
   ; MEM-NOT: mem_ext mem_ext
 
   ; MEMS-CONF: name mem_ext depth 8 width 8 ports write,read
-  ; SEQMEMS-TXT: mem_wiring_0 -> DUTModule.mem.mem_ext
+  ; SEQMEMS-TXT: mem_wiring_0 -> DUTModule.mem

@@ -37,7 +37,7 @@ struct AddSeqMemPortsPass : public AddSeqMemPortsBase<AddSeqMemPortsPass> {
   void createOutputFile(hw::HWModuleLike module);
   InstanceGraphNode *findDUT();
   void processMemModule(FMemModuleOp mem);
-  LogicalResult processModule(FModuleOp module);
+  LogicalResult processModule(FModuleOp module, bool isDUT);
 
   /// Get the cached namespace for a module.
   ModuleNamespace &getModuleNamespace(FModuleLike module) {
@@ -101,7 +101,6 @@ LogicalResult AddSeqMemPortsPass::processAddPortAnno(Location loc,
     return emitError(
         loc, "AddSeqMemPortAnnotation requires field 'width' of integer type");
   auto type = UIntType::get(&getContext(), width.getInt());
-
   userPorts.push_back({name, type, direction});
   return success();
 }
@@ -179,7 +178,7 @@ void AddSeqMemPortsPass::processMemModule(FMemModuleOp mem) {
   mem.setExtraPortsAttr(extraPortsAttr);
 }
 
-LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module) {
+LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
   auto *context = &getContext();
   // Insert the new port connections at the end of the module.
   auto builder = OpBuilder::atBlockEnd(module.getBodyBlock());
@@ -195,13 +194,15 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module) {
   for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
     if (auto inst = dyn_cast<InstanceOp>(op)) {
       auto submodule = instanceGraph->getReferencedModule(inst);
-      auto &subMemInfo = memInfoMap[submodule];
+
+      auto subMemInfoIt = memInfoMap.find(submodule);
+      // If there are no extra ports, we don't have to do anything.
+      if (subMemInfoIt == memInfoMap.end() ||
+          subMemInfoIt->second.extraPorts.empty())
+        continue;
+      auto &subMemInfo = subMemInfoIt->second;
       // Find out how many memory ports we have to add.
       auto &subExtraPorts = subMemInfo.extraPorts;
-
-      // If there are no extra ports, we don't have to do anything.
-      if (subExtraPorts.size() == 0)
-        continue;
 
       // Add the extra ports to the instance operation.
       auto clone = inst.cloneAndInsertPorts(subExtraPorts);
@@ -228,6 +229,10 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module) {
         extraPorts.push_back(
             {firstPortIndex,
              {portName, portType.cast<FIRRTLType>(), portDirection}});
+        // If this is the DUT, then add a DontTouchAnnotation to any added ports
+        // to guarantee that it won't be removed.
+        if (isDUT)
+          extraPorts.back().second.annotations.addDontTouch();
         // Record the instance result for now, so that we can connect it to the
         // parent module port after we actually add the ports.
         values.push_back(inst.getResult(firstSubIndex + i));
@@ -300,7 +305,7 @@ void AddSeqMemPortsPass::createOutputFile(hw::HWModuleLike module) {
 
   // The current sram we are processing.
   unsigned sramIndex = 0;
-  auto dutSymbol = FlatSymbolRefAttr::get(module.moduleNameAttr());
+  auto dutSymbol = FlatSymbolRefAttr::get(module.getModuleNameAttr());
   auto &instancePaths = memInfoMap[module].instancePaths;
   for (auto instancePath : instancePaths) {
     os << sramIndex++ << " -> ";
@@ -369,7 +374,7 @@ void AddSeqMemPortsPass::runOnOperation() {
     for (auto *node : llvm::post_order(dutNode)) {
       auto op = node->getModule();
       if (auto module = dyn_cast<FModuleOp>(*op)) {
-        if (failed(processModule(module)))
+        if (failed(processModule(module, /*isDUT=*/node == dutNode)))
           return signalPassFailure();
       } else if (auto mem = dyn_cast<FMemModuleOp>(*op)) {
         processMemModule(mem);

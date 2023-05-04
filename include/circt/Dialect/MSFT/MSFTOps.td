@@ -10,7 +10,6 @@ include "circt/Dialect/HW/HWOpInterfaces.td"
 
 def InstanceOp : MSFTOp<"instance", [
         Symbol,
-        ParentOneOf<["MSFTModuleOp"]>,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>,
         DeclareOpInterfaceMethods<HWInstanceLike>
@@ -34,14 +33,6 @@ def InstanceOp : MSFTOp<"instance", [
     // determined.
     StringAttr getResultName(size_t i);
 
-    /// Instance name is the same as the symbol name. This may change in the
-    /// future.
-    StringRef instanceName() {
-      return getSymName();
-    }
-    StringAttr instanceNameAttr() {
-      return getSymNameAttr();
-    }
     /// Check that the operands and results match the module specified.
     LogicalResult verifySignatureMatch(const circt::hw::ModulePortInfo&);
 
@@ -86,11 +77,6 @@ class MSFTModuleOpBase<string mnemonic, list<Trait> traits = []> :
       return getNameAttr().getValue();
     }
 
-    /// Returns the type of this function.
-    FunctionType getFunctionType() {
-      return getFunctionTypeAttr().getValue().cast<FunctionType>();
-    }
-
     /// Returns the argument types of this function.
     ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
@@ -103,7 +89,7 @@ class MSFTModuleOpBase<string mnemonic, list<Trait> traits = []> :
       auto type = getFunctionTypeAttr().getValue();
       if (!type.isa<FunctionType>())
         return emitOpError(
-            "requires '" + mlir::function_interface_impl::getTypeAttrName() +
+            "requires '" + getFunctionTypeAttrName().getValue() +
             "' attribute of function type");
       return success();
     }
@@ -135,7 +121,13 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
       - Provides methods for mutation.
   }];
   let arguments = (ins
-      StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+      TypeAttrOf<FunctionType>:$function_type,
+      OptionalAttr<DictArrayAttr>:$arg_attrs,
+      OptionalAttr<DictArrayAttr>:$res_attrs,
+      StrArrayAttr:$argNames,
+      StrArrayAttr:$resultNames,
+      LocationArrayAttr:$argLocs,
+      LocationArrayAttr:$resultLocs,
       DictionaryAttr:$parameters,
       OptionalAttr<StrAttr>:$fileName,
       OptionalAttr<StrArrayAttr>:$childAppIDBases);
@@ -177,7 +169,23 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
     Block *getBodyBlock() { return &getFunctionBody().front(); }
   }];
 
+  let extraClassDefinition = [{
+    size_t $cppClass::getNumPorts() {
+      auto ports = getPorts();
+      return ports.inputs.size() + ports.outputs.size();
+    }
+
+    circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
+      for (NamedAttribute argAttr :
+           mlir::function_interface_impl::getArgAttrs(*this, portIndex))
+        if (auto sym = argAttr.getValue().dyn_cast<circt::hw::InnerSymAttr>())
+          return sym;
+      return circt::hw::InnerSymAttr();
+    }
+  }];
+
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 def MSFTModuleExternOp : MSFTOp<"module.extern",
@@ -188,7 +196,10 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
     exists so that we can use `msft.instance` to refer to both `msft.module` and
     `msft.module.extern`, rather than mixing `hw.instance` with `msft.instance`.
   }];
-  let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+  let arguments = (ins TypeAttrOf<FunctionType>:$function_type,
+                       OptionalAttr<DictArrayAttr>:$arg_attrs,
+                       OptionalAttr<DictArrayAttr>:$res_attrs,
+                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
   let regions = (region SizedRegion<0>:$body);
@@ -207,11 +218,6 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
   let extraClassDeclaration = [{
     /// Decode information about the input and output ports on this module.
     hw::ModulePortInfo getPorts();
-
-    /// Returns the type of this function.
-    FunctionType getFunctionType() {
-      return getFunctionTypeAttr().getValue().cast<FunctionType>();
-    }
 
     /// Returns the argument types of this function.
     ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }

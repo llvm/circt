@@ -28,6 +28,7 @@
 using namespace circt;
 using namespace handshake;
 using namespace mlir;
+using namespace mlir::affine;
 
 using BlockValues = DenseMap<Block *, std::vector<Value>>;
 
@@ -42,9 +43,7 @@ static void replaceFirstUse(Operation *op, Value oldVal, Value newVal) {
 
 static void insertSink(Value val, OpBuilder &rewriter) {
   rewriter.setInsertionPointAfterValue(val);
-  auto sinkOp = rewriter.create<SinkOp>(val.getLoc(), val);
-  if (val.getType().isa<NoneType>())
-    sinkOp->setAttr("control", rewriter.getBoolAttr(true));
+  rewriter.create<SinkOp>(val.getLoc(), val);
 }
 
 namespace circt {
@@ -58,18 +57,17 @@ void insertFork(Value result, bool isLazy, OpBuilder &rewriter) {
 
   // Insert fork after op
   rewriter.setInsertionPointAfterValue(result);
+  auto forkSize = opsToProcess.size();
   Operation *newOp;
   if (isLazy)
-    newOp = rewriter.create<LazyForkOp>(result.getLoc(), result,
-                                        opsToProcess.size());
+    newOp = rewriter.create<LazyForkOp>(result.getLoc(), result, forkSize);
   else
-    newOp =
-        rewriter.create<ForkOp>(result.getLoc(), result, opsToProcess.size());
+    newOp = rewriter.create<ForkOp>(result.getLoc(), result, forkSize);
 
   // Modify operands of successor
   // opsToProcess may have multiple instances of same operand
   // Replace uses one by one to assign different fork outputs to them
-  for (int i = 0, e = opsToProcess.size(); i < e; ++i)
+  for (int i = 0, e = forkSize; i < e; ++i)
     replaceFirstUse(opsToProcess[i], result, newOp->getResult(i));
 }
 
@@ -109,7 +107,7 @@ LogicalResult addSinkOps(Region &r, OpBuilder &rewriter) {
       // equivalents
       // TODO: should we use other indicator for op that has been erased?
       if (isa<mlir::cf::CondBranchOp, mlir::cf::BranchOp, memref::LoadOp,
-              mlir::AffineReadOpInterface, mlir::AffineForOp>(op))
+              AffineReadOpInterface, AffineForOp>(op))
         continue;
 
       if (op.getNumResults() == 0)

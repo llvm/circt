@@ -28,6 +28,11 @@ firrtl.module @Constants() {
   firrtl.specialconstant 1 : !firrtl.asyncreset
   // CHECK: firrtl.constant 4 : !firrtl.uint<8> {name = "test"}
   firrtl.constant 4 : !firrtl.uint<8> {name = "test"}
+
+  firrtl.aggregateconstant [1, 2, 3] : !firrtl.bundle<a: uint<8>, b: uint<5>, c: uint<4>>
+  firrtl.aggregateconstant [1, 2, 3] : !firrtl.vector<uint<8>, 3>
+  firrtl.aggregateconstant [[1, 2], [3, 4]] : !firrtl.vector<bundle<a: uint<8>, b: uint<5>>, 2>
+
 }
 
 //module MyModule :
@@ -125,7 +130,7 @@ firrtl.module @TestDshRL(in %in1 : !firrtl.uint<2>, in %in2: !firrtl.uint<3>) {
 // We allow implicit truncation of a register's reset value.
 // CHECK-LABEL: @RegResetTruncation
 firrtl.module @RegResetTruncation(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %value: !firrtl.bundle<a: uint<2>>, out %out: !firrtl.bundle<a: uint<1>>) {
-  %r2 = firrtl.regreset %clock, %reset, %value  : !firrtl.uint<1>, !firrtl.bundle<a: uint<2>>, !firrtl.bundle<a: uint<1>>
+  %r2 = firrtl.regreset %clock, %reset, %value  : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<2>>, !firrtl.bundle<a: uint<1>>
   firrtl.connect %out, %r2 : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
 }
 
@@ -138,24 +143,9 @@ firrtl.module @TestNodeName(in %in1 : !firrtl.uint<8>) {
   %n2 = firrtl.node %in1 {name = "n1"} : !firrtl.uint<8>
 }
 
-// CHECK-LABEL: @TestInvalidAttr
-firrtl.module @TestInvalidAttr() {
-  // This just shows we can parse and print the InvalidAttr.
-
-  // CHECK: firrtl.constant 42 : !firrtl.uint<8>
-  %x = firrtl.constant 42 : !firrtl.uint<8> {
-    // CHECK-SAME: {test.thing1 = #firrtl.invalidvalue : !firrtl.clock,
-    test.thing1 = #firrtl.invalidvalue : !firrtl.clock,
-    // CHECK-SAME: test.thing2 = #firrtl.invalidvalue : !firrtl.sint<3>,
-    test.thing2 = #firrtl.invalidvalue : !firrtl.sint<3>,
-    // CHECK-SAME: test.thing3 = #firrtl.invalidvalue : !firrtl.uint}
-    test.thing3 = #firrtl.invalidvalue : !firrtl.uint
-  }
-}
-
 // Basic test for NLA operations.
-// CHECK: firrtl.hierpath private @nla [@Parent::@child, @Child]
-firrtl.hierpath private @nla [@Parent::@child, @Child]
+// CHECK: hw.hierpath private @nla [@Parent::@child, @Child]
+hw.hierpath private @nla [@Parent::@child, @Child]
 firrtl.module @Child() {
   %w = firrtl.wire sym @w : !firrtl.uint<1>
 }
@@ -200,7 +190,45 @@ firrtl.module @InnerSymAttr() {
   // CHECK: %w1 = firrtl.wire sym @w1
   %w2 = firrtl.wire sym [<@w2,0,private>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
   // CHECK: %w2 = firrtl.wire sym [<@w2,0,private>]
-  %w3 = firrtl.wire sym [<@w3,2,public>,<@x2,1,private>,<@syh2,0,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
-  // CHECK: %w3 = firrtl.wire sym [<@syh2,0,public>, <@x2,1,private>, <@w3,2,public>]
+  %w3, %w3_ref = firrtl.wire sym [<@w3,2,public>,<@x2,1,private>,<@syh2,0,public>] forceable : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>, !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>>
+  // CHECK: %w3, %w3_ref = firrtl.wire sym [<@syh2,0,public>, <@x2,1,private>, <@w3,2,public>]
+}
+
+// CHECK-LABEL: firrtl.module @EnumTest
+firrtl.module @EnumTest(in %in : !firrtl.enum<a: uint<1>, b: uint<2>>,
+                        out %out : !firrtl.uint<2>, out %tag : !firrtl.uint<1>) {
+  %v = firrtl.subtag %in[b] : !firrtl.enum<a: uint<1>, b: uint<2>>
+  // CHECK: = firrtl.subtag %in[b] : !firrtl.enum<a: uint<1>, b: uint<2>>
+
+  %t = firrtl.tagextract %in : !firrtl.enum<a: uint<1>, b: uint<2>>
+  // CHECK: = firrtl.tagextract %in : !firrtl.enum<a: uint<1>, b: uint<2>>
+
+  firrtl.strictconnect %out, %v : !firrtl.uint<2>
+  firrtl.strictconnect %tag, %t : !firrtl.uint<1>
+
+  %p = firrtl.istag %in a : !firrtl.enum<a: uint<1>, b: uint<2>>
+  // CHECK: = firrtl.istag %in a : !firrtl.enum<a: uint<1>, b: uint<2>>
+
+  %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
+  %some = firrtl.enumcreate Some(%c1_ui8) : !firrtl.enum<None: uint<0>, Some: uint<8>>
+  // CHECK: = firrtl.enumcreate Some(%c1_ui8) : !firrtl.enum<None: uint<0>, Some: uint<8>>
+
+  firrtl.match %in : !firrtl.enum<a: uint<1>, b: uint<2>> {
+    case a(%arg0) {
+      %w = firrtl.wire : !firrtl.uint<1>
+    }
+    case b(%arg0) {
+      %x = firrtl.wire : !firrtl.uint<1>
+    }
+  }
+  // CHECK: firrtl.match %in : !firrtl.enum<a: uint<1>, b: uint<2>> {
+  // CHECK:   case a(%arg0) {
+  // CHECK:     %w = firrtl.wire : !firrtl.uint<1>
+  // CHECK:   }
+  // CHECK:   case b(%arg0) {
+  // CHECK:     %x = firrtl.wire : !firrtl.uint<1>
+  // CHECK:   }
+  // CHECK: }
+
 }
 }

@@ -58,8 +58,8 @@ StringRef moore::getKeywordFromSign(const Sign &sign) {
   llvm_unreachable("all signs should be handled");
 }
 
-Optional<Sign> moore::getSignFromKeyword(StringRef keyword) {
-  return StringSwitch<Optional<Sign>>(keyword)
+std::optional<Sign> moore::getSignFromKeyword(StringRef keyword) {
+  return StringSwitch<std::optional<Sign>>(keyword)
       .Case("unsigned", Sign::Unsigned)
       .Case("signed", Sign::Signed)
       .Default({});
@@ -72,7 +72,7 @@ Optional<Sign> moore::getSignFromKeyword(StringRef keyword) {
 PackedType SimpleBitVectorType::getType(MLIRContext *context) const {
   if (!*this)
     return {};
-  Optional<Sign> maybeSign;
+  std::optional<Sign> maybeSign;
   if (explicitSign)
     maybeSign = sign;
 
@@ -128,16 +128,16 @@ Sign UnpackedType::getSign() const {
       .Default([](auto) { return Sign::Unsigned; });
 }
 
-Optional<unsigned> UnpackedType::getBitSize() const {
-  return TypeSwitch<UnpackedType, Optional<unsigned>>(*this)
+std::optional<unsigned> UnpackedType::getBitSize() const {
+  return TypeSwitch<UnpackedType, std::optional<unsigned>>(*this)
       .Case<PackedType, RealType>([](auto type) { return type.getBitSize(); })
-      .Case<UnpackedUnsizedDim>([](auto) { return Optional<unsigned>{}; })
-      .Case<UnpackedArrayDim>([](auto type) -> Optional<unsigned> {
+      .Case<UnpackedUnsizedDim>([](auto) { return std::nullopt; })
+      .Case<UnpackedArrayDim>([](auto type) -> std::optional<unsigned> {
         if (auto size = type.getInner().getBitSize())
           return (*size) * type.getSize();
         return {};
       })
-      .Case<UnpackedRangeDim>([](auto type) -> Optional<unsigned> {
+      .Case<UnpackedRangeDim>([](auto type) -> std::optional<unsigned> {
         if (auto size = type.getInner().getBitSize())
           return (*size) * type.getRange().size;
         return {};
@@ -146,7 +146,7 @@ Optional<unsigned> UnpackedType::getBitSize() const {
           [](auto type) { return type.getInner().getBitSize(); })
       .Case<UnpackedStructType>(
           [](auto type) { return type.getStruct().bitSize; })
-      .Default([](auto) { return llvm::None; });
+      .Default([](auto) { return std::nullopt; });
 }
 
 /// Map an `IntType` to the corresponding SBVT. Never returns a null type.
@@ -273,12 +273,12 @@ Sign PackedType::getSign() const {
       .Case<EnumType>([](auto type) { return type.getBase().getSign(); });
 }
 
-Optional<unsigned> PackedType::getBitSize() const {
-  return TypeSwitch<PackedType, Optional<unsigned>>(*this)
+std::optional<unsigned> PackedType::getBitSize() const {
+  return TypeSwitch<PackedType, std::optional<unsigned>>(*this)
       .Case<VoidType>([](auto) { return 0; })
       .Case<IntType>([](auto type) { return type.getBitSize(); })
-      .Case<PackedUnsizedDim>([](auto) { return Optional<unsigned>{}; })
-      .Case<PackedRangeDim>([](auto type) -> Optional<unsigned> {
+      .Case<PackedUnsizedDim>([](auto) { return std::nullopt; })
+      .Case<PackedRangeDim>([](auto type) -> std::optional<unsigned> {
         if (auto size = type.getInner().getBitSize())
           return (*size) * type.getRange().size;
         return {};
@@ -350,8 +350,8 @@ struct IntTypeStorage : TypeStorage {
 } // namespace moore
 } // namespace circt
 
-Optional<IntType::Kind> IntType::getKindFromKeyword(StringRef keyword) {
-  return StringSwitch<Optional<Kind>>(keyword)
+std::optional<IntType::Kind> IntType::getKindFromKeyword(StringRef keyword) {
+  return StringSwitch<std::optional<Kind>>(keyword)
       .Case("bit", IntType::Bit)
       .Case("logic", IntType::Logic)
       .Case("reg", IntType::Reg)
@@ -444,8 +444,8 @@ unsigned IntType::getBitSize(Kind kind) {
   llvm_unreachable("all kinds should be handled");
 }
 
-Optional<IntType::Kind> IntType::getKindFromDomainAndSize(Domain domain,
-                                                          unsigned size) {
+std::optional<IntType::Kind> IntType::getKindFromDomainAndSize(Domain domain,
+                                                               unsigned size) {
   switch (domain) {
   case Domain::TwoValued:
     switch (size) {
@@ -475,7 +475,8 @@ Optional<IntType::Kind> IntType::getKindFromDomainAndSize(Domain domain,
   llvm_unreachable("all domains should be handled");
 }
 
-IntType IntType::get(MLIRContext *context, Kind kind, Optional<Sign> sign) {
+IntType IntType::get(MLIRContext *context, Kind kind,
+                     std::optional<Sign> sign) {
   return Base::get(context, detail::IntTypeStorage::pack(
                                 kind, sign.value_or(getDefaultSign(kind)),
                                 sign.has_value()));
@@ -520,8 +521,8 @@ struct RealTypeStorage : TypeStorage {
 } // namespace moore
 } // namespace circt
 
-Optional<RealType::Kind> RealType::getKindFromKeyword(StringRef keyword) {
-  return StringSwitch<Optional<Kind>>(keyword)
+std::optional<RealType::Kind> RealType::getKindFromKeyword(StringRef keyword) {
+  return StringSwitch<std::optional<Kind>>(keyword)
       .Case("shortreal", ShortReal)
       .Case("real", Real)
       .Case("realtime", RealTime)
@@ -763,14 +764,14 @@ PackedType PackedDim::fullyResolved() const {
   return getImpl()->fullyResolved.cast<PackedType>();
 }
 
-Optional<Range> PackedDim::getRange() const {
+std::optional<Range> PackedDim::getRange() const {
   if (auto dim = dyn_cast<PackedRangeDim>())
     return dim.getRange();
   return {};
 }
 
-Optional<unsigned> PackedDim::getSize() const {
-  return getRange().transform([](auto r) { return r.size; });
+std::optional<unsigned> PackedDim::getSize() const {
+  return llvm::transformOptional(getRange(), [](auto r) { return r.size; });
 }
 
 const detail::DimStorage *PackedDim::getImpl() const {
@@ -928,13 +929,13 @@ UnpackedType UnpackedAssocDim::getIndexType() const {
 }
 
 UnpackedQueueDim UnpackedQueueDim::get(UnpackedType inner,
-                                       Optional<unsigned> bound) {
+                                       std::optional<unsigned> bound) {
   auto type = Base::get(inner.getContext(), inner, bound.value_or(-1));
   type.getImpl()->finalize<UnpackedQueueDim>(type, bound);
   return type;
 }
 
-Optional<unsigned> UnpackedQueueDim::getBound() const {
+std::optional<unsigned> UnpackedQueueDim::getBound() const {
   unsigned bound = getImpl()->size;
   if (bound == static_cast<unsigned>(-1))
     return {};
@@ -1017,8 +1018,8 @@ StringRef moore::getMnemonicFromStructKind(StructKind kind) {
   llvm_unreachable("all struct kinds should be handled");
 }
 
-Optional<StructKind> moore::getStructKindFromMnemonic(StringRef mnemonic) {
-  return StringSwitch<Optional<StructKind>>(mnemonic)
+std::optional<StructKind> moore::getStructKindFromMnemonic(StringRef mnemonic) {
+  return StringSwitch<std::optional<StructKind>>(mnemonic)
       .Case("struct", StructKind::Struct)
       .Case("union", StructKind::Union)
       .Case("tagged_union", StructKind::TaggedUnion)
@@ -1045,14 +1046,14 @@ Struct::Struct(StructKind kind, ArrayRef<StructMember> members, StringAttr name,
     if (auto memberSize = member.type.getBitSize()) {
       *bitSize += *memberSize;
     } else {
-      bitSize = llvm::None;
+      bitSize = std::nullopt;
       break;
     }
   }
 }
 
 void Struct::format(llvm::raw_ostream &os, bool packed,
-                    Optional<Sign> signing) const {
+                    std::optional<Sign> signing) const {
   os << kind;
   if (packed)
     os << " packed";
@@ -1113,7 +1114,7 @@ struct StructTypeStorage : TypeStorage {
 PackedStructType PackedStructType::get(StructKind kind,
                                        ArrayRef<StructMember> members,
                                        StringAttr name, Location loc,
-                                       Optional<Sign> sign) {
+                                       std::optional<Sign> sign) {
   assert(llvm::all_of(members,
                       [](const StructMember &member) {
                         return member.type.isa<PackedType>();
@@ -1214,7 +1215,7 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
     return yieldPacked(VoidType::get(context));
 
   if (auto kind = IntType::getKindFromKeyword(mnemonic)) {
-    Optional<Sign> sign;
+    std::optional<Sign> sign;
     if (succeeded(parser.parseOptionalLess())) {
       StringRef signKeyword;
       if (parser.parseKeyword(&signKeyword) || parser.parseGreater())
@@ -1347,7 +1348,7 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
   }
   if (mnemonic == "queue") {
     UnpackedType inner;
-    Optional<unsigned> size;
+    std::optional<unsigned> size;
     if (parser.parseLess() || parseMooreType(parser, subset, inner))
       return failure();
     if (succeeded(parser.parseOptionalComma())) {
@@ -1372,7 +1373,7 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
       if (*result || parser.parseComma())
         return failure();
 
-    Optional<Sign> sign;
+    std::optional<Sign> sign;
     StringRef keyword;
     if (succeeded(parser.parseOptionalKeyword(&keyword))) {
       sign = getSignFromKeyword(keyword);
@@ -1440,10 +1441,22 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &printer,
 
   return TypeSwitch<Type, LogicalResult>(type)
       // Unit types
-      .Case<VoidType>([&](auto) { return printer << "void", success(); })
-      .Case<StringType>([&](auto) { return printer << "string", success(); })
-      .Case<ChandleType>([&](auto) { return printer << "chandle", success(); })
-      .Case<EventType>([&](auto) { return printer << "event", success(); })
+      .Case<VoidType>([&](auto) {
+        printer << "void";
+        return success();
+      })
+      .Case<StringType>([&](auto) {
+        printer << "string";
+        return success();
+      })
+      .Case<ChandleType>([&](auto) {
+        printer << "chandle";
+        return success();
+      })
+      .Case<EventType>([&](auto) {
+        printer << "event";
+        return success();
+      })
 
       // Integers and reals
       .Case<IntType>([&](auto type) {

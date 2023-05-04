@@ -109,19 +109,29 @@ LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
 LogicalResult verifyAllValuesHasOneUse(handshake::FuncOp funcOp) {
   if (funcOp.isExternal())
     return success();
+
+  auto checkUseFunc = [&](Operation *op, Value v, StringRef desc,
+                          unsigned idx) -> LogicalResult {
+    auto numUses = std::distance(v.getUses().begin(), v.getUses().end());
+    if (numUses == 0)
+      return op->emitOpError() << desc << " " << idx << " has no uses.";
+    if (numUses > 1)
+      return op->emitOpError() << desc << " " << idx << " has multiple uses.";
+    return success();
+  };
+
   for (auto &subOp : funcOp.getOps()) {
     for (auto res : llvm::enumerate(subOp.getResults())) {
-      if (!res.value().hasOneUse())
-        return subOp.emitOpError()
-               << "result " << res.index() << " has multiple uses.";
+      if (failed(checkUseFunc(&subOp, res.value(), "result", res.index())))
+        return failure();
     }
   }
 
   Block &entryBlock = funcOp.front();
   for (auto barg : enumerate(entryBlock.getArguments())) {
-    if (!barg.value().hasOneUse())
-      return funcOp.emitOpError()
-             << "argument " << barg.index() << " has multiple uses.";
+    if (failed(checkUseFunc(funcOp.getOperation(), barg.value(), "argument",
+                            barg.index())))
+      return failure();
   }
   return success();
 }
@@ -254,28 +264,28 @@ hw::ModulePortInfo getPortInfoForOpTypes(Operation *op, TypeRange inputs,
 
   // Add all inputs of funcOp.
   unsigned inIdx = 0;
-  for (auto &arg : llvm::enumerate(inputs)) {
+  for (auto arg : llvm::enumerate(inputs)) {
     ports.inputs.push_back({portNames.inputName(arg.index()),
                             hw::PortDirection::INPUT, esiWrapper(arg.value()),
-                            arg.index(), StringAttr{}});
+                            arg.index(), hw::InnerSymAttr{}});
     inIdx++;
   }
 
   // Add all outputs of funcOp.
-  for (auto &res : llvm::enumerate(outputs)) {
+  for (auto res : llvm::enumerate(outputs)) {
     ports.outputs.push_back({portNames.outputName(res.index()),
                              hw::PortDirection::OUTPUT, esiWrapper(res.value()),
-                             res.index(), StringAttr{}});
+                             res.index(), hw::InnerSymAttr{}});
   }
 
   // Add clock and reset signals.
   if (op->hasTrait<mlir::OpTrait::HasClock>()) {
     ports.inputs.push_back({StringAttr::get(ctx, "clock"),
                             hw::PortDirection::INPUT, i1Type, inIdx++,
-                            StringAttr{}});
+                            hw::InnerSymAttr{}});
     ports.inputs.push_back({StringAttr::get(ctx, "reset"),
                             hw::PortDirection::INPUT, i1Type, inIdx,
-                            StringAttr{}});
+                            hw::InnerSymAttr{}});
   }
 
   return ports;

@@ -28,7 +28,7 @@ def SignalReadOp : SystemCOp<"signal.read", [Pure,
   let extraClassDeclaration = [{
     /// Infer the return types of this operation.
     static LogicalResult inferReturnTypes(MLIRContext *context,
-                                          Optional<Location> loc,
+                                          std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
                                           mlir::RegionRange regions,
@@ -60,6 +60,8 @@ def ConvertOp : SystemCOp<"convert", [Pure]> {
                                  LogicType]>:$result);
 
   let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";
+
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//

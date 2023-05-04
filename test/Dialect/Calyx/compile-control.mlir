@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='calyx.component(calyx-compile-control)' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(calyx.component(calyx-compile-control))' %s | FileCheck %s
 
 module attributes {calyx.entrypoint = "main"} {
   calyx.component @Z(%go : i1 {go}, %reset : i1 {reset}, %clk : i1 {clk}) -> (%flag :i1, %done : i1 {done}) {

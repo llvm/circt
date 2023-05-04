@@ -9,10 +9,10 @@ Welcome to the CIRCT project!
 methodology to the domain of hardware design tools.
 
 Take a look at the following diagram, which gives a brief overview of the 
-current [dialects and how they interact](includes/img/dialects.svg):
+current [dialects and how they interact](/includes/img/dialects.svg):
 
-<p align="center"><img src="includes/img/dialectlegend.svg"/></p>
-<p align="center"><img src="includes/img/dialects.svg"/></p>
+<p align="center"><img src="/includes/img/dialectlegend.svg"/></p>
+<p align="center"><img src="/includes/img/dialects.svg"/></p>
 
 ## Setting this up
 
@@ -21,6 +21,10 @@ These commands can be used to setup CIRCT project:
 1) **Install Dependencies** of LLVM/MLIR according to [the
   instructions](https://mlir.llvm.org/getting_started/), including cmake and 
 ninja.
+
+*Note:* CIRCT is known to build with at least GCC 9.4 and Clang 13.0.1, but
+older versions may not be supported. It is recommended to use the same C++
+toolchain to compile both LLVM and CIRCT to avoid potential issues.
 
 If you plan to use the Python bindings, you should start by reading [the
  instructions](https://mlir.llvm.org/docs/Bindings/Python/#building) for building

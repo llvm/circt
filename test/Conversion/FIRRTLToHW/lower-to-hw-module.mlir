@@ -62,7 +62,7 @@ firrtl.circuit "Simple" {
 
     firrtl.connect %xyz#2, %s8 : !firrtl.sint<8>, !firrtl.sint<8>
 
-    firrtl.printf %clock, %reset, "%x"(%xyz#3) : !firrtl.uint<4>
+    firrtl.printf %clock, %reset, "%x"(%xyz#3) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>
 
     // Parameterized module reference.
     // hw.instance carries the parameters, unlike at the FIRRTL layer.
@@ -76,7 +76,7 @@ firrtl.circuit "Simple" {
 
     firrtl.connect %myext#0, %reset : !firrtl.uint<1>, !firrtl.uint<1>
 
-    firrtl.printf %clock, %reset, "Something interesting! %x"(%myext#1) : !firrtl.uint<8>
+    firrtl.printf %clock, %reset, "Something interesting! %x"(%myext#1) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>
   }
 
   // CHECK-LABEL: hw.module private @OutputFirst(%in1: i1, %in4: i4) -> (out4: i4) {
@@ -100,22 +100,20 @@ firrtl.circuit "Simple" {
                              out %outD: !firrtl.uint<4>,
                              in %inE: !firrtl.uint<3>,
                              out %outE: !firrtl.uint<4>) {
-    // CHECK: %.outB.output = sv.wire : !hw.inout<i4>
-    // CHECK: [[OUTBR:%.+]] = sv.read_inout %.outB.output
-    // CHECK: [[OUTC:%.+]] = sv.wire  : !hw.inout<i4>
-    // CHECK: [[OUTCR:%.+]] = sv.read_inout %.outC.output
-    // CHECK: [[OUTD:%.+]] = sv.wire : !hw.inout<i4>
-    // CHECK: [[OUTDR:%.+]] = sv.read_inout %.outD.output
-
     // Normal
     firrtl.connect %outA, %inA : !firrtl.uint<4>, !firrtl.uint<4>
 
     // Multi connect
     firrtl.connect %outB, %inA : !firrtl.uint<4>, !firrtl.uint<4>
-    // CHECK: sv.assign %.outB.output, %inA : i4
     firrtl.connect %outB, %inB : !firrtl.uint<4>, !firrtl.uint<4>
-    // CHECK: sv.assign %.outB.output, %inB : i4
 
+    // Unconnected port outC reads as sv.constantZ.
+    // CHECK:      [[OUTB:%.+]] = hw.wire %inB
+    // CHECK-NEXT: [[OUTC:%.+]] = hw.wire %z_i4
+    // CHECK-NEXT: [[OUTD:%.+]] = hw.wire %z_i4
+    // CHECK-NEXT: [[T0:%.+]] = comb.concat %false, %inA
+    // CHECK-NEXT: [[T1:%.+]] = comb.concat %false, [[OUTC]]
+    // CHECK-NEXT: comb.sub bin [[T0]], [[T1]]
     %0 = firrtl.sub %inA, %outC : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
     // No connections to outD.
@@ -124,7 +122,7 @@ firrtl.circuit "Simple" {
 
     // Extension for outE
     // CHECK: [[OUTE:%.+]] = comb.concat %false, %inE : i1, i3
-    // CHECK: hw.output %inA, [[OUTBR]], [[OUTCR]], [[OUTDR]], [[OUTE]]
+    // CHECK: hw.output %inA, [[OUTB]], [[OUTC]], [[OUTD]], [[OUTE]]
   }
 
   // CHECK-LABEL: hw.module private @Analog(%a1: !hw.inout<i1>) -> (outClock: i1) {
@@ -268,4 +266,14 @@ firrtl.circuit "Simple" {
   // The following operations should be passed through without an error.
   // CHECK: sv.interface @SVInterface
   sv.interface @SVInterface { }
+
+  // DontTouch on ports becomes symbol.
+  // CHECK-LABEL: hw.module.extern private @PortDT
+  // CHECK-SAME: (%a: i1 {hw.exportPort = #hw<innerSym@__PortDT__a>}, %hassym: i1 {hw.exportPort = #hw<innerSym@hassym>})
+  // CHECK-SAME: -> (b: i2 {hw.exportPort = #hw<innerSym@__PortDT__b>})
+  firrtl.extmodule private @PortDT(
+    in a: !firrtl.uint<1> [{class = "firrtl.transforms.DontTouchAnnotation"}],
+    in hassym: !firrtl.uint<1> sym @hassym [{class = "firrtl.transforms.DontTouchAnnotation"}],
+    out b: !firrtl.uint<2> [{class = "firrtl.transforms.DontTouchAnnotation"}]
+  )
 }

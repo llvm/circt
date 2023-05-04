@@ -94,13 +94,21 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
   let dependentDialects = ["circt::sv::SVDialect"];
 
   let options = [
+    Option<"disableMemRandomization", "disable-mem-randomization", "bool", "false",
+            "Disable emission of memory randomization code">,
+    Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
+            "Disable emission of register randomization code">,
     Option<"replSeqMem", "repl-seq-mem", "bool",
                 "false", "Prepare seq mems for macro replacement">,
-    Option<"ignoreReadEnableMem", "ignore-read-enable-mem", "bool",
+    Option<"ignoreReadEnable", "ignore-read-enable", "bool",
                 "false",
     "ignore the read enable signal, instead of assigning X on read disable">,
-    Option<"stripMuxPragmas", "strip-mux-pragmas", "bool", "false",
-            "Do not annotate mux pragmas to memory reads">
+    Option<"addMuxPragmas", "add-mux-pragmas", "bool", "false",
+            "Add mux pragmas to memory reads">,
+    Option<"addVivadoRAMAddressConflictSynthesisBugWorkaround",
+           "add-vivado-ram-address-conflict-synthesis-bug-workaround", "bool", "false",
+            "Add a vivado attribute to specify a ram style of an array register">
+
    ];
 }
 

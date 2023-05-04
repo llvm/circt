@@ -62,18 +62,18 @@ public:
     addTargetMaterialization(
         [&](mlir::OpBuilder &builder, mlir::Type resultType,
             mlir::ValueRange inputs,
-            mlir::Location loc) -> llvm::Optional<mlir::Value> {
+            mlir::Location loc) -> std::optional<mlir::Value> {
           if (inputs.size() != 1)
-            return llvm::None;
+            return std::nullopt;
           return inputs[0];
         });
 
     addSourceMaterialization(
         [&](mlir::OpBuilder &builder, mlir::Type resultType,
             mlir::ValueRange inputs,
-            mlir::Location loc) -> llvm::Optional<mlir::Value> {
+            mlir::Location loc) -> std::optional<mlir::Value> {
           if (inputs.size() != 1)
-            return llvm::None;
+            return std::nullopt;
           return inputs[0];
         });
   }
@@ -248,24 +248,28 @@ static std::string getSubModuleName(Operation *oldOp) {
 /// Check whether a submodule with the same name has been created elsewhere in
 /// the top level module. Return the matched module operation if true, otherwise
 /// return nullptr.
-static Operation *checkSubModuleOp(mlir::ModuleOp parentModule,
-                                   StringRef modName) {
+static HWModuleLike checkSubModuleOp(mlir::ModuleOp parentModule,
+                                     StringRef modName) {
   if (auto mod = parentModule.lookupSymbol<HWModuleOp>(modName))
     return mod;
   if (auto mod = parentModule.lookupSymbol<HWModuleExternOp>(modName))
     return mod;
-  return nullptr;
+  return {};
 }
 
-static Operation *checkSubModuleOp(mlir::ModuleOp parentModule,
-                                   Operation *oldOp) {
-  auto *moduleOp = checkSubModuleOp(parentModule, getSubModuleName(oldOp));
+static HWModuleLike checkSubModuleOp(mlir::ModuleOp parentModule,
+                                     Operation *oldOp) {
+  HWModuleLike targetModule;
+  if (auto instanceOp = dyn_cast<handshake::InstanceOp>(oldOp))
+    targetModule = checkSubModuleOp(parentModule, instanceOp.getModule());
+  else
+    targetModule = checkSubModuleOp(parentModule, getSubModuleName(oldOp));
 
   if (isa<handshake::InstanceOp>(oldOp))
-    assert(moduleOp &&
+    assert(targetModule &&
            "handshake.instance target modules should always have been lowered "
            "before the modules that reference them!");
-  return moduleOp;
+  return targetModule;
 }
 
 /// Returns a vector of PortInfo's which defines the HW interface of the
@@ -528,6 +532,16 @@ struct RTLBuilder {
   // Bitwise 'not'.
   Value bNot(Value value, std::optional<StringRef> name = {}) {
     auto allOnes = constant(value.getType().getIntOrFloatBitWidth(), -1);
+    std::string inferedName;
+    if (!name) {
+      // Try to create a name from the input value.
+      if (auto valueName =
+              value.getDefiningOp()->getAttrOfType<StringAttr>("sv.namehint")) {
+        inferedName = ("not_" + valueName.getValue()).str();
+        name = inferedName;
+      }
+    }
+
     return buildNamedOp(
         [&]() { return b.create<comb::XorOp>(loc, value, allOnes); }, name);
 
@@ -718,6 +732,7 @@ public:
     if (!implModule) {
       auto portInfo = ModulePortInfo(getPortInfoForOp(op));
 
+      submoduleBuilder.setInsertionPoint(op->getParentOp());
       implModule = submoduleBuilder.create<hw::HWModuleOp>(
           op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
           portInfo, [&](OpBuilder &b, hw::HWModulePortAccessor &ports) {
@@ -1012,41 +1027,18 @@ public:
   };
 };
 
-class SelectConversionPattern
-    : public HandshakeConversionPattern<handshake::SelectOp> {
+class InstanceConversionPattern
+    : public HandshakeConversionPattern<handshake::InstanceOp> {
 public:
   using HandshakeConversionPattern<
-      handshake::SelectOp>::HandshakeConversionPattern;
-  void buildModule(handshake::SelectOp op, BackedgeBuilder &bb, RTLBuilder &s,
+      handshake::InstanceOp>::HandshakeConversionPattern;
+  void buildModule(handshake::InstanceOp op, BackedgeBuilder &bb, RTLBuilder &s,
                    hw::HWModulePortAccessor &ports) const override {
-    auto unwrappedIO = unwrapIO(s, bb, ports);
-
-    // Extract select signal from the unwrapped IO.
-    auto select = unwrappedIO.inputs[0];
-    auto trueIn = unwrappedIO.inputs[1];
-    auto falseIn = unwrappedIO.inputs[2];
-    auto out = unwrappedIO.outputs[0];
-
-    // Mux the true and false data to the output.
-    auto muxedData = s.mux(select.data, {falseIn.data, trueIn.data});
-    out.data->setValue(muxedData);
-
-    // 'and' the arg valids and select valid
-    Value allValid = s.bAnd({select.valid, trueIn.valid, falseIn.valid});
-
-    // Connect that to the result valid.
-    out.valid->setValue(allValid);
-
-    // 'and' the result valid with the result ready.
-    auto resValidAndReady = s.bAnd({allValid, out.ready});
-
-    // Connect that to the 'ready' signal of all inputs. This implies that all
-    // inputs + select is transacted when all are valid (and the output is
-    // ready), but only the selected data is forwarded.
-    select.ready->setValue(resValidAndReady);
-    trueIn.ready->setValue(resValidAndReady);
-    falseIn.ready->setValue(resValidAndReady);
-  };
+    assert(false &&
+           "If we indeed perform conversion in post-order, this "
+           "should never be called. The base HandshakeConversionPattern logic "
+           "will instantiate the external module.");
+  }
 };
 
 class ReturnConversionPattern
@@ -1452,6 +1444,111 @@ public:
   };
 };
 
+class MemoryConversionPattern
+    : public HandshakeConversionPattern<handshake::MemoryOp> {
+public:
+  using HandshakeConversionPattern<
+      handshake::MemoryOp>::HandshakeConversionPattern;
+  void buildModule(handshake::MemoryOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto loc = op.getLoc();
+
+    // Gather up the load and store ports.
+    auto unwrappedIO = this->unwrapIO(s, bb, ports);
+    struct LoadPort {
+      InputHandshake &addr;
+      OutputHandshake &data;
+      OutputHandshake &done;
+    };
+    struct StorePort {
+      InputHandshake &addr;
+      InputHandshake &data;
+      OutputHandshake &done;
+    };
+    SmallVector<LoadPort, 4> loadPorts;
+    SmallVector<StorePort, 4> storePorts;
+
+    unsigned stCount = op.getStCount();
+    unsigned ldCount = op.getLdCount();
+    for (unsigned i = 0, e = ldCount; i != e; ++i) {
+      LoadPort port = {unwrappedIO.inputs[stCount * 2 + i],
+                       unwrappedIO.outputs[i],
+                       unwrappedIO.outputs[ldCount + stCount + i]};
+      loadPorts.push_back(port);
+    }
+
+    for (unsigned i = 0, e = stCount; i != e; ++i) {
+      StorePort port = {unwrappedIO.inputs[i * 2 + 1],
+                        unwrappedIO.inputs[i * 2],
+                        unwrappedIO.outputs[ldCount + i]};
+      storePorts.push_back(port);
+    }
+
+    // used to drive the data wire of the control-only channels.
+    auto c0I0 = s.constant(0, 0);
+
+    auto cl2dim = llvm::Log2_64_Ceil(op.getMemRefType().getShape()[0]);
+    auto hlmem = s.b.create<seq::HLMemOp>(
+        loc, s.clk, s.rst, "_handshake_memory_" + std::to_string(op.getId()),
+        op.getMemRefType().getShape(), op.getMemRefType().getElementType());
+
+    // Create load ports...
+    for (auto &ld : loadPorts) {
+      llvm::SmallVector<Value> addresses = {s.truncate(ld.addr.data, cl2dim)};
+      auto readData = s.b.create<seq::ReadPortOp>(loc, hlmem.getHandle(),
+                                                  addresses, ld.addr.valid,
+                                                  /*latency=*/0);
+      ld.data.data->setValue(readData);
+      ld.done.data->setValue(c0I0);
+      // Create control fork for the load address valid and ready signals.
+      buildForkLogic(s, bb, ld.addr, {ld.data, ld.done});
+    }
+
+    // Create store ports...
+    for (auto &st : storePorts) {
+      // Create a register to buffer the valid path by 1 cycle, to match the
+      // write latency of 1.
+      auto writeValidBufferMuxBE = bb.get(s.b.getI1Type());
+      auto writeValidBuffer =
+          s.reg("writeValidBuffer", writeValidBufferMuxBE, s.constant(1, 0));
+      st.done.valid->setValue(writeValidBuffer);
+      st.done.data->setValue(c0I0);
+
+      // Create the logic for when both the buffered write valid signal and the
+      // store complete ready signal are asserted.
+      auto storeCompleted =
+          s.bAnd({st.done.ready, writeValidBuffer}, "storeCompleted");
+
+      // Create a signal for when the write valid buffer is empty or the output
+      // is ready.
+      auto notWriteValidBuffer = s.bNot(writeValidBuffer);
+      auto emptyOrComplete =
+          s.bOr({notWriteValidBuffer, storeCompleted}, "emptyOrComplete");
+
+      // Connect the gate to both the store address ready and store data ready
+      st.addr.ready->setValue(emptyOrComplete);
+      st.data.ready->setValue(emptyOrComplete);
+
+      // Create a wire for when both the store address and data are valid.
+      auto writeValid = s.bAnd({st.addr.valid, st.data.valid}, "writeValid");
+
+      // Create a mux that drives the buffer input. If the emptyOrComplete
+      // signal is asserted, the mux selects the writeValid signal. Otherwise,
+      // it selects the buffer output, keeping the output registered until the
+      // emptyOrComplete signal is asserted.
+      writeValidBufferMuxBE.setValue(
+          s.mux(emptyOrComplete, {writeValidBuffer, writeValid}));
+
+      // Instantiate the write port operation - truncate address width to memory
+      // width.
+      llvm::SmallVector<Value> addresses = {s.truncate(st.addr.data, cl2dim)};
+      s.b.create<seq::WritePortOp>(loc, hlmem.getHandle(), addresses,
+                                   st.data.data, writeValid,
+                                   /*latency=*/1);
+    }
+  }
+}; // namespace
+
 class SinkConversionPattern : public HandshakeConversionPattern<SinkOp> {
 public:
   using HandshakeConversionPattern<SinkOp>::HandshakeConversionPattern;
@@ -1711,9 +1808,9 @@ public:
       auto hwModuleOp = rewriter.create<hw::HWModuleOp>(
           op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
       auto args = hwModuleOp.getArguments().drop_back(2);
-      rewriter.mergeBlockBefore(&op.getBody().front(),
-                                hwModuleOp.getBodyBlock()->getTerminator(),
-                                args);
+      rewriter.inlineBlockBefore(&op.getBody().front(),
+                                 hwModuleOp.getBodyBlock()->getTerminator(),
+                                 args);
       hwModule = hwModuleOp;
     }
 
@@ -1724,10 +1821,12 @@ public:
       auto *parentOp = op->getParentOp();
       auto *predeclModule =
           SymbolTable::lookupSymbolIn(parentOp, predecl.getValue());
-      if (failed(SymbolTable::replaceAllSymbolUses(
-              predeclModule, hwModule.moduleNameAttr(), parentOp)))
-        return failure();
-      rewriter.eraseOp(predeclModule);
+      if (predeclModule) {
+        if (failed(SymbolTable::replaceAllSymbolUses(
+                predeclModule, hwModule.getModuleNameAttr(), parentOp)))
+          return failure();
+        rewriter.eraseOp(predeclModule);
+      }
     }
 
     rewriter.eraseOp(op);
@@ -1784,15 +1883,17 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
       UnitRateConversionPattern<arith::ShLIOp, comb::OrOp>,
       UnitRateConversionPattern<arith::ShRUIOp, comb::ShrUOp>,
       UnitRateConversionPattern<arith::ShRSIOp, comb::ShrSOp>,
+      UnitRateConversionPattern<arith::SelectOp, comb::MuxOp>,
       // HW operations.
       StructCreateConversionPattern,
       // Handshake operations.
       ConditionalBranchConversionPattern, MuxConversionPattern,
-      SelectConversionPattern, PackConversionPattern, UnpackConversionPattern,
+      PackConversionPattern, UnpackConversionPattern,
       ComparisonConversionPattern, BufferConversionPattern,
       SourceConversionPattern, SinkConversionPattern, ConstantConversionPattern,
       MergeConversionPattern, ControlMergeConversionPattern,
-      LoadConversionPattern, StoreConversionPattern,
+      LoadConversionPattern, StoreConversionPattern, MemoryConversionPattern,
+      InstanceConversionPattern,
       // Arith operations.
       ExtendConversionPattern<arith::ExtUIOp, /*signExtend=*/false>,
       ExtendConversionPattern<arith::ExtSIOp, /*signExtend=*/true>,
@@ -1812,11 +1913,14 @@ public:
 
     // Lowering to HW requires that every value is used exactly once. Check
     // whether this precondition is met, and if not, exit.
-    if (llvm::any_of(mod.getOps<handshake::FuncOp>(), [](auto f) {
-          return failed(verifyAllValuesHasOneUse(f));
-        })) {
-      signalPassFailure();
-      return;
+    for (auto f : mod.getOps<handshake::FuncOp>()) {
+      if (failed(verifyAllValuesHasOneUse(f))) {
+        f.emitOpError() << "HandshakeToHW: failed to verify that all values "
+                           "are used exactly once. Remember to run the "
+                           "fork/sink materialization pass before HW lowering.";
+        signalPassFailure();
+        return;
+      }
     }
 
     // Resolve the instance graph to get a top-level module.
@@ -1832,8 +1936,10 @@ public:
     ConversionTarget target(getContext());
     // All top-level logic of a handshake module will be the interconnectivity
     // between instantiated modules.
-    target.addLegalOp<hw::HWModuleOp, hw::OutputOp, hw::InstanceOp>();
-    target.addIllegalDialect<handshake::HandshakeDialect>();
+    target.addLegalOp<hw::HWModuleOp, hw::HWModuleExternOp, hw::OutputOp,
+                      hw::InstanceOp>();
+    target
+        .addIllegalDialect<handshake::HandshakeDialect, arith::ArithDialect>();
 
     // Convert the handshake.func operations in post-order wrt. the instance
     // graph. This ensures that any referenced submodules (through

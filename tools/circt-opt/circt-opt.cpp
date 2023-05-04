@@ -14,6 +14,7 @@
 #include "circt/InitAllDialects.h"
 #include "circt/InitAllPasses.h"
 #include "circt/Support/LoweringOptions.h"
+#include "circt/Support/Version.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
@@ -25,20 +26,24 @@
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 #include "mlir/Transforms/Passes.h"
+#include "llvm/Support/PrettyStackTrace.h"
 
 // Defined in the test directory, no public header.
 namespace circt {
 namespace test {
 void registerAnalysisTestPasses();
-void registerSchedulingTestPasses();
 } // namespace test
 } // namespace circt
 
 int main(int argc, char **argv) {
+  // Set the bug report message to indicate users should file issues on
+  // llvm/circt and not llvm/llvm-project.
+  llvm::setBugReportMsg(circt::circtBugReportMsg);
+
   mlir::DialectRegistry registry;
 
   // Register MLIR stuff
-  registry.insert<mlir::AffineDialect>();
+  registry.insert<mlir::affine::AffineDialect>();
   registry.insert<mlir::LLVM::LLVMDialect>();
   registry.insert<mlir::memref::MemRefDialect>();
   registry.insert<mlir::func::FuncDialect>();
@@ -55,11 +60,13 @@ int main(int argc, char **argv) {
   mlir::registerSCCPPass();
   mlir::registerInlinerPass();
   mlir::registerCanonicalizerPass();
+  mlir::registerViewOpGraphPass();
   mlir::registerSymbolDCEPass();
+  llvm::cl::AddExtraVersionPrinter(
+      [](llvm::raw_ostream &os) { os << circt::getCirctVersion() << '\n'; });
 
   // Register test passes
   circt::test::registerAnalysisTestPasses();
-  circt::test::registerSchedulingTestPasses();
 
   return mlir::failed(mlir::MlirOptMain(
       argc, argv, "CIRCT modular optimizer driver", registry));

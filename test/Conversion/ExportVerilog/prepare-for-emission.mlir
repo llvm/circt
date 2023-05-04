@@ -25,6 +25,25 @@ hw.module @outOfOrderInoutOperations(%a: i4) -> (c: i4) {
   hw.output %0: i4
 }
 
+// CHECK-LABEL: @twoState_variadic
+hw.module @twoState_variadic(%a: i1, %b: i1, %c: i1) -> (d:i1){
+  // CHECK:      %0 = comb.or bin %b, %c : i1
+  // CHECK-NEXT: %1 = comb.or bin %a, %0 : i1
+  // CHECK-NEXT: hw.output %1 : i1
+  %0 = comb.or bin %a, %b, %c: i1
+  hw.output %0: i1
+}
+
+// CHECK-LABEL: @carryOverWireAttrs
+hw.module @carryOverWireAttrs(%a: i1) -> (b: i1){
+  // CHECK-NEXT: %foo = sv.wire {magic, sv.attributes = []} : !hw.inout<i1>
+  // CHECK-NEXT: sv.assign %foo, %a
+  // CHECK-NEXT: [[TMP:%.+]] = sv.read_inout %foo
+  // CHECK-NEXT: hw.output [[TMP]] : i1
+  %foo = hw.wire %a {magic, sv.attributes = []} : i1
+  hw.output %foo : i1
+}
+
 // -----
 
 module {
@@ -147,21 +166,28 @@ module attributes {circt.loweringOptions =
 
 // -----
 module attributes {circt.loweringOptions =
-                  "wireSpillingHeuristic=spillAllMux"} {
+                  "disallowMuxInlining"} {
   // CHECK-LABEL: mux
-  hw.module @mux(%c: i1, %b: i8, %a: i8) -> (d: i8) {
-    // CHECK: %mux = sv.wire
-    %0 = comb.mux %c, %a, %b {sv.namehint = "mux"} : i8
+  hw.module @mux(%c: i1, %b: i8, %a: i8) -> (d: i8, e: i8) {
+    // CHECK:      %use_for_mux = sv.wire
+    // CHECK-NEXT: sv.assign %use_for_mux, %0 : i8
+    // CHECK-NEXT: %[[read:.+]] = sv.read_inout %use_for_mux : !hw.inout<i8>
+    // CHECK-NEXT: %[[add:.+]] = comb.add %[[read]], %a : i8
+    %0 = comb.mux %c, %a, %b : i8
+    %use_for_mux = sv.wire : !hw.inout<i8>
+    sv.assign %use_for_mux, %0 : i8
     %1 = comb.add %0, %a : i8
-    hw.output %1 : i8
+    // CHECK: %[[mux2:.+]] = comb.mux
+    %2 = comb.mux %c, %a, %b : i8
+    // CHECK: hw.output %[[add]], %[[mux2]]
+    hw.output %1, %2 : i8, i8
   }
 }
 
 // -----
-// Check that multiple heuristics are applied.
-// CHECK: "wireSpillingHeuristic=spillLargeTermsWithNamehints,wireSpillingHeuristic=spillAllMux"
+// CHECK: "wireSpillingHeuristic=spillLargeTermsWithNamehints,disallowMuxInlining"
 module attributes {circt.loweringOptions =
-                  "wireSpillingHeuristic=spillLargeTermsWithNamehints,wireSpillingHeuristic=spillAllMux"} {
+                  "wireSpillingHeuristic=spillLargeTermsWithNamehints,disallowMuxInlining"} {
   hw.module @combine(%c: i1, %b: i8, %a: i8) -> (d: i8) {
     // Meaningful names should be spilled
     // CHECK: %foo = sv.wire
@@ -171,5 +197,34 @@ module attributes {circt.loweringOptions =
     %1 = comb.mux %c, %0, %b : i8
     %2 = comb.add %1, %a : i8
     hw.output %2 : i8
+  }
+}
+
+// -----
+module attributes {circt.loweringOptions = "maximumNumberOfTermsPerExpression=2"} {
+  // CHECK-NOT: sv.wire
+  hw.module @Foo(%in_0: i4, %in_1: i4, %in_2: i4, %in_3: i4) -> (out: !hw.array<4xi4>) {
+    %0 = comb.concat %in_0, %in_1, %in_2, %in_3 : i4, i4, i4, i4
+    %1 = hw.bitcast %0 : (i16) -> !hw.array<4xi4>
+    hw.output %1 : !hw.array<4xi4>
+  }
+}
+
+// -----
+
+// CHECK-LABEL:   hw.module @packed_struct_assignment(
+// CHECK-SAME:                                        %[[VAL_0:.*]]: i32) -> (out: !hw.struct<a: i32>, out2: !hw.struct<a: i32>) {
+// CHECK:           %[[VAL_1:.*]] = sv.wire
+// CHECK:           %[[VAL_2:.*]] = sv.struct_field_inout %[[VAL_1]]["a"] : !hw.inout<struct<a: i32>>
+// CHECK:           sv.assign %[[VAL_2]], %[[VAL_0]] : i32
+// CHECK:           %[[VAL_3:.*]] = sv.read_inout %[[VAL_1]] : !hw.inout<struct<a: i32>>
+// CHECK:           %[[VAL_4:.*]] = sv.read_inout %[[VAL_1]] : !hw.inout<struct<a: i32>>
+// CHECK:           hw.output %[[VAL_4]], %[[VAL_3]] : !hw.struct<a: i32>, !hw.struct<a: i32>
+// CHECK:         }
+!T = !hw.struct<a: i32>
+module attributes { circt.loweringOptions = "disallowPackedStructAssignments"} {
+  hw.module @packed_struct_assignment(%in : i32) -> (out: !T, out2: !T)  {
+      %0 = hw.struct_create (%in) : !T
+      hw.output %0, %0 : !T, !T
   }
 }

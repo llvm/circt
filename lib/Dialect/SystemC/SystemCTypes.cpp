@@ -26,6 +26,15 @@ Type systemc::getSignalBaseType(Type type) {
       .Default([](auto ty) { return Type(); });
 }
 
+std::optional<size_t> systemc::getBitWidth(Type type) {
+  return llvm::TypeSwitch<Type, std::optional<size_t>>(type)
+      .Case<IntegerType, IntType, UIntType, BigIntType, BigUIntType,
+            BitVectorType, LogicVectorType>(
+          [](auto ty) { return ty.getWidth(); })
+      .Case<LogicType>([](auto ty) { return 1; })
+      .Default([](auto ty) { return std::nullopt; });
+}
+
 namespace circt {
 namespace systemc {
 namespace detail {

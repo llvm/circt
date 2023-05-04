@@ -1,3 +1,5 @@
+// UNSUPPORTED: system-windows
+//   See https://github.com/llvm/circt/issues/4129
 // RUN: circt-reduce %s --test %S.sh --test-arg cat --test-arg "firrtl.module @Basic" --keep-best=0 --include memory-stubber --test-must-fail | FileCheck %s
 
 firrtl.circuit "Basic"   {
@@ -5,8 +7,8 @@ firrtl.circuit "Basic"   {
   firrtl.module @Basic() {
     %memory_r = firrtl.mem Undefined  {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
     // CHECK: %memory_r = firrtl.wire : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
-    // CHECK: [[MEM_ADDR:%.+]] = firrtl.subfield %memory_r(0)
-    // CHECK: [[MEM_EN:%.+]] = firrtl.subfield %memory_r(1)
+    // CHECK: [[MEM_ADDR:%.+]] = firrtl.subfield %memory_r[addr]
+    // CHECK: [[MEM_EN:%.+]] = firrtl.subfield %memory_r[en]
     // CHECK: [[XOR:%.+]] = firrtl.xor [[MEM_ADDR]], [[MEM_EN]]
     // CHECK: firrtl.connect {{%.+}}, [[XOR]]
   }

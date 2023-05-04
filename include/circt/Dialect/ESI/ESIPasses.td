@@ -24,6 +24,18 @@ def ESIConnectServices : Pass<"esi-connect-services", "mlir::ModuleOp"> {
     "circt::comb::CombDialect"];
 }
 
+def ESIAddCPPAPI: Pass<"esi-emit-cpp-api", "mlir::ModuleOp"> {
+  let summary = "Add C++ cosimulation API to the module";
+  let constructor = "circt::esi::createESIAddCPPAPIPass()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+    let options = [
+    Option<"outputFile", "output-file", "std::string",
+           "\"ESISystem.h\"", "File to output C++ API into">,
+    Option<"toStdErr", "to-stderr", "bool", "false",
+      "If true, will emit the generated API to stderr">
+  ];
+}
+
 def ESIEmitCollateral: Pass<"esi-emit-collateral", "mlir::ModuleOp"> {
   let summary = "Emit all the neccessary collateral";
   let constructor = "circt::esi::createESIEmitCollateralPass()";
@@ -37,15 +49,28 @@ def ESIEmitCollateral: Pass<"esi-emit-collateral", "mlir::ModuleOp"> {
   ];
 }
 
+def ESICleanMetadata : Pass<"esi-clean-metadata", "mlir::ModuleOp"> {
+  let summary = "Clean up ESI service metadata";
+  let constructor = "circt::esi::createESICleanMetadataPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
+}
+
 def LowerESIToPhysical: Pass<"lower-esi-to-physical", "mlir::ModuleOp"> {
   let summary = "Lower ESI abstract Ops to ESI physical ops.";
   let constructor = "circt::esi::createESIPhysicalLoweringPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
 }
 
 def LowerESIPorts: Pass<"lower-esi-ports", "mlir::ModuleOp"> {
   let summary = "Lower ESI input and/or output ports.";
   let constructor = "circt::esi::createESIPortLoweringPass()";
   let dependentDialects = ["circt::comb::CombDialect", "circt::sv::SVDialect"];
+}
+
+def LowerESITypes: Pass<"lower-esi-types", "mlir::ModuleOp"> {
+  let summary = "Lower ESI high level types.";
+  let constructor = "circt::esi::createESITypeLoweringPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
 }
 
 def LowerESItoHW: Pass<"lower-esi-to-hw", "mlir::ModuleOp"> {

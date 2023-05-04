@@ -53,7 +53,7 @@ intptr_t hwArrayTypeGetSize(MlirType type) {
 bool hwTypeIsAIntType(MlirType type) { return unwrap(type).isa<IntType>(); }
 
 MlirType hwParamIntTypeGet(MlirAttribute parameter) {
-  return wrap(IntType::get(unwrap(parameter)));
+  return wrap(IntType::get(unwrap(parameter).cast<TypedAttr>()));
 }
 
 MlirAttribute hwParamIntTypeGetWidthAttr(MlirType type) {

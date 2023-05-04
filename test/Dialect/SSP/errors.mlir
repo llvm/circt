@@ -1,19 +1,19 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
 // expected-error @+1 {{must contain exactly one 'library' op and one 'graph' op}}
-ssp.instance "containers_empty" of "Problem" {}
+ssp.instance @containers_empty of "Problem" {}
 
 // -----
 
 // expected-error @+1 {{must contain the 'library' op followed by the 'graph' op}}
-ssp.instance "containers_wrong_order" of "Problem" {
+ssp.instance @containers_wrong_order of "Problem" {
   graph {}
   library {}
 }
 
 // -----
 
-ssp.instance "deps_out_of_bounds" of "Problem" {
+ssp.instance @deps_out_of_bounds of "Problem" {
   library {}
   graph {
     // expected-error @+1 {{Operand index is out of bounds for def-use dependence attribute}}
@@ -23,7 +23,7 @@ ssp.instance "deps_out_of_bounds" of "Problem" {
 
 // -----
 
-ssp.instance "deps_defuse_not_increasing" of "Problem" {
+ssp.instance @deps_defuse_not_increasing of "Problem" {
   library {}
   graph {
     %0:2 = ssp.operation<>()
@@ -34,7 +34,7 @@ ssp.instance "deps_defuse_not_increasing" of "Problem" {
 
 // -----
 
-ssp.instance "deps_interleaved" of "Problem" {
+ssp.instance @deps_interleaved of "Problem" {
   library {}
   graph {
     %0 = operation<> @Op()
@@ -45,7 +45,7 @@ ssp.instance "deps_interleaved" of "Problem" {
 
 // -----
 
-ssp.instance "deps_aux_not_consecutive" of "Problem" {
+ssp.instance @deps_aux_not_consecutive of "Problem" {
   library {}
   graph {
     operation<> @Op()
@@ -56,7 +56,7 @@ ssp.instance "deps_aux_not_consecutive" of "Problem" {
 
 // -----
 
-ssp.instance "deps_aux_invalid" of "Problem" {
+ssp.instance @deps_aux_invalid of "Problem" {
   library {}
   graph {
     // expected-error @+1 {{Auxiliary dependence references invalid source operation: @InvalidOp}}
@@ -66,10 +66,21 @@ ssp.instance "deps_aux_invalid" of "Problem" {
 
 // -----
 
-ssp.instance "linked_opr_invalid" of "Problem" {
+ssp.instance @linked_opr_invalid of "Problem" {
   library {}
   graph {
     // expected-error @+1 {{Linked operator type property references invalid operator type: @InvalidOpr}}
     operation<@InvalidOpr>()
+  }
+}
+
+// -----
+
+ssp.library @standalone {}
+ssp.instance @standalone_opr_invalid of "Problem" {
+  library {}
+  graph {
+    // expected-error @+1 {{Linked operator type property references invalid operator type: @standalone::@InvalidOpr}}
+    operation<@standalone::@InvalidOpr>()
   }
 }

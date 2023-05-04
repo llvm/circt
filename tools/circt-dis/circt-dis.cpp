@@ -98,12 +98,17 @@ static LogicalResult execute(MLIRContext &context) {
 
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
+
+  // Set the bug report message to indicate users should file issues on
+  // llvm/circt and not llvm/llvm-project.
+  setBugReportMsg(circtBugReportMsg);
+
   mlir::DialectRegistry registry;
 
   circt::registerAllDialects(registry);
 
   // From circt-opt, register subset of MLIR dialects.
-  registry.insert<mlir::AffineDialect>();
+  registry.insert<mlir::affine::AffineDialect>();
   registry.insert<mlir::LLVM::LLVMDialect>();
   registry.insert<mlir::memref::MemRefDialect>();
   registry.insert<mlir::func::FuncDialect>();

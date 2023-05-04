@@ -13,10 +13,11 @@
 #ifndef CIRCT_DIALECT_ESI_ESIPASSES_H
 #define CIRCT_DIALECT_ESI_ESIPASSES_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
-#include "llvm/ADT/Optional.h"
 #include <memory>
+#include <optional>
 
 namespace circt {
 namespace esi {
@@ -24,8 +25,11 @@ namespace esi {
 std::unique_ptr<OperationPass<ModuleOp>> createESIEmitCollateralPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESIPhysicalLoweringPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESIPortLoweringPass();
+std::unique_ptr<OperationPass<ModuleOp>> createESITypeLoweringPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESItoHWPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESIConnectServicesPass();
+std::unique_ptr<OperationPass<ModuleOp>> createESIAddCPPAPIPass();
+std::unique_ptr<OperationPass<ModuleOp>> createESICleanMetadataPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

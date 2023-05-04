@@ -1,12 +1,12 @@
 // RUN:  circt-opt --sv-extract-test-code --split-input-file %s | FileCheck %s
-// CHECK-LABEL: module attributes {firrtl.extract.assert = #hw.output_file<"dir3/"
+// CHECK-LABEL: module attributes {firrtl.extract.assert = #hw.output_file<"dir3{{/|\\\\}}"
 // CHECK-NEXT: hw.module.extern @foo_cover
 // CHECK-NOT: attributes
 // CHECK-NEXT: hw.module.extern @foo_assume
 // CHECK-NOT: attributes
 // CHECK-NEXT: hw.module.extern @foo_assert
 // CHECK-NOT: attributes
-// CHECK: hw.module @issue1246_assert(%clock: i1) attributes {comment = "VCS coverage exclude_file", output_file = #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>}
+// CHECK: hw.module @issue1246_assert(%clock: i1) attributes {comment = "VCS coverage exclude_file", output_file = #hw.output_file<"dir3{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>}
 // CHECK: sv.assert
 // CHECK: sv.error "Assertion failed"
 // CHECK: sv.error "assert:"
@@ -134,6 +134,29 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 }
 
 // -----
+// Check extracted module ports take name of instance result when needed.
+
+// CHECK-LABEL: @InstResult(
+// CHECK: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover(mem.result_name: %{{[^ ]+}}: i1, mem.1: %{{[^ ]+}}: i1, clock: %clock: i1)
+module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
+  hw.module @Mem() -> (result_name: i1, "": i1) {
+    %reg = sv.reg : !hw.inout<i1>
+    %0 = sv.read_inout %reg : !hw.inout<i1>
+    hw.output %0, %0 : i1, i1
+  }
+  // Dummy is needed to prevent the instance itself being extracted
+  hw.module @Dummy(%in1: i1, %in2: i1) -> () {}
+  hw.module @InstResult(%clock: i1) -> () {
+    %0, %1 = hw.instance "mem" @Mem() -> (result_name: i1, "": i1)
+    hw.instance "dummy" sym @keep @Dummy(in1: %0 : i1, in2: %1 : i1) -> ()
+    %2 = comb.and bin %0, %1 : i1
+    sv.always posedge %clock  {
+      sv.cover %2, immediate
+    }
+  }
+}
+
+// -----
 // Check "empty" modules are inlined
 
 // CHECK-NOT: @InputOnly(
@@ -150,11 +173,15 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // CHECK: %0 = comb.and %1
 // CHECK: %1 = comb.and %0
 // CHECK: hw.instance "{{[^ ]+}}" {{.+}} @InputOnlyCycle_cover
+// CHECK: hw.instance {{.*}} sym @[[already_bound:[^ ]+]] @AlreadyBound
 // CHECK-NOT: sv.bind <@InputOnly::
 // CHECK-DAG: sv.bind <@Top::@[[input_only_assert]]>
 // CHECK-DAG: sv.bind <@Top::@[[input_only_cover]]>
 // CHECK-DAG: sv.bind <@InputOnlySym::@[[input_only_sym_cover]]>
+// CHECK-DAG: sv.bind <@Top::@[[already_bound]]>
 module {
+  hw.module private @AlreadyBound() -> () {}
+
   hw.module private @InputOnly(%clock: i1, %cond: i1) -> () {
     sv.always posedge %clock  {
       sv.cover %cond, immediate
@@ -178,20 +205,27 @@ module {
     }
   }
 
+  hw.module private @InputOnlyBind(%clock: i1, %cond: i1) -> () {
+    hw.instance "already_bound" sym @already_bound @AlreadyBound() -> () {doNotPrint = true}
+    sv.always posedge %clock  {
+      sv.cover %cond, immediate
+      sv.assert %cond, immediate
+    }
+  }
+
   hw.module @Top(%clock: i1, %cond: i1) -> (foo: i1) {
     hw.instance "input_only" @InputOnly(clock: %clock: i1, cond: %cond: i1) -> ()
     hw.instance "input_only_sym" sym @foo @InputOnlySym(clock: %clock: i1, cond: %cond: i1) -> ()
     hw.instance "input_only_cycle" @InputOnlyCycle(clock: %clock: i1, cond: %cond: i1) -> ()
+    hw.instance "input_only_bind" @InputOnlyBind(clock: %clock: i1, cond: %cond: i1) -> ()
     hw.output %cond : i1
   }
+
+  sv.bind <@InputOnlyBind::@already_bound>
 }
 
 // -----
 // Check instance extraction
-
-// All instances of Baz are extracted, so it should be output to the testbench.
-// CHECK-LABEL: @Baz
-// CHECK-SAME: output_file = #hw.output_file<"testbench/", excludeFromFileList, includeReplicatedOps>
 
 // In AllExtracted, instances foo, bar, and baz should be extracted.
 // CHECK-LABEL: @AllExtracted_cover
@@ -217,6 +251,10 @@ module {
 // CHECK-NOT: hw.instance "child"
 // CHECK: hw.instance {{.+}} @ShouldBeInlined_cover
 
+// In ChildShouldInline2, instance bozo should not be inlined, since it was also extracted.
+// CHECK-LABEL: hw.module @ChildShouldInline2
+// CHECK-NOT: hw.instance "bozo"
+
 // In MultiResultExtracted, instance qux should be extracted without leaving null operands to the extracted instance
 // CHECK-LABEL: @MultiResultExtracted_cover
 // CHECK: hw.instance "qux"
@@ -224,9 +262,31 @@ module {
 // CHECK-SAME: (%[[clock:.+]]: i1, %[[in:.+]]: i1)
 // CHECK: hw.instance {{.+}} @MultiResultExtracted_cover([[clock]]: %[[clock]]: i1, [[in]]: %[[in]]: i1)
 
-module attributes {
-  firrtl.extract.testbench = #hw.output_file<"testbench/", excludeFromFileList, includeReplicatedOps>
-} {
+// In SymNotExtracted, instance foo should not be extracted because it has a sym.
+// CHECK-LABEL: @SymNotExtracted_cover
+// CHECK-NOT: hw.instance "foo"
+// CHECK-LABEL: @SymNotExtracted
+// CHECK: hw.instance "foo"
+
+// In NoExtraInput, instance foo should be extracted, and no extra input should be added for %0
+// CHECK-LABEL: @NoExtraInput_cover
+// CHECK: %[[or0:.+]] = comb.or
+// CHECK: hw.instance "foo" @Foo(a: %[[or0]]: i1)
+// CHECK-LABEL: @NoExtraInput
+// CHECK: %[[or1:.+]] = comb.or
+// CHECK-NOT: %[[or1]]
+
+// In InstancesWithCycles, the only_testcode instances should be extracted, but the non_testcode instances should not
+// CHECK-LABEL: @InstancesWithCycles_cover
+// CHECK: hw.instance "only_testcode_and_instance0"
+// CHECK: hw.instance "only_testcode_and_instance1"
+// CHECK-LABEL: @InstancesWithCycles
+// CHECK-NOT: hw.instance "only_testcode_and_instance0"
+// CHECK-NOT: hw.instance "only_testcode_and_instance1"
+// CHECK: hw.instance "non_testcode_and_instance0"
+// CHECK: hw.instance "non_testcode_and_instance1"
+
+module {
   hw.module private @Foo(%a: i1) -> (b: i1) {
     hw.output %a : i1
   }
@@ -236,6 +296,8 @@ module attributes {
   hw.module.extern private @Baz(%a: i1) -> (b: i1)
 
   hw.module.extern private @Qux(%a: i1) -> (b: i1, c: i1)
+
+  hw.module.extern private @Bozo(%a: i1) -> (b: i1)
 
   hw.module @AllExtracted(%clock: i1, %in: i1) {
     %foo.b = hw.instance "foo" @Foo(a: %in: i1) -> (b: i1)
@@ -279,8 +341,24 @@ module attributes {
     }
   }
 
+  hw.module private @ShouldBeInlined2(%clock: i1, %in: i1) {
+    %bozo.b = hw.instance "bozo" @Bozo(a: %in: i1) -> (b: i1)
+    sv.ifdef "SYNTHESIS" {
+    } else {
+      sv.always posedge %clock {
+        sv.if %bozo.b {
+          sv.cover %bozo.b, immediate
+        }
+      }
+    }
+  }
+
   hw.module @ChildShouldInline(%clock: i1, %in: i1) {
     hw.instance "child" @ShouldBeInlined(clock: %clock: i1, in: %in: i1) -> ()
+  }
+
+  hw.module @ChildShouldInline2(%clock: i1, %in: i1) {
+    hw.instance "child" @ShouldBeInlined2(clock: %clock: i1, in: %in: i1) -> ()
   }
 
   hw.module @MultiResultExtracted(%clock: i1, %in: i1) {
@@ -289,5 +367,42 @@ module attributes {
       sv.cover %qux.b, immediate
       sv.cover %qux.c, immediate
     }
+  }
+
+  hw.module @SymNotExtracted(%clock: i1, %in: i1) {
+    %foo.b = hw.instance "foo" sym @foo @Foo(a: %in: i1) -> (b: i1)
+    sv.always posedge %clock {
+      sv.cover %foo.b, immediate
+    }
+  }
+
+  hw.module @NoExtraInput(%clock: i1, %in: i1) {
+    %0 = comb.or %in, %in : i1
+    %foo.b = hw.instance "foo" @Foo(a: %0: i1) -> (b: i1)
+    sv.always posedge %clock {
+      sv.cover %0, immediate
+      sv.cover %foo.b, immediate
+    }
+  }
+
+  hw.module private @Passthrough(%in: i1) -> (out: i1) {
+    hw.output %in : i1
+  }
+
+  hw.module @InstancesWithCycles(%clock: i1, %in: i1) -> (out: i1) {
+    %0 = hw.instance "non_testcode_and_instance0" @Passthrough(in: %1: i1) -> (out: i1)
+    %1 = hw.instance "non_testcode_and_instance1" @Passthrough(in: %0: i1) -> (out: i1)
+
+    %2 = hw.instance "only_testcode_and_instance0" @Passthrough(in: %3: i1) -> (out: i1)
+    %3 = hw.instance "only_testcode_and_instance1" @Passthrough(in: %2: i1) -> (out: i1)
+    %4 = comb.or %2, %3 : i1
+
+    sv.always posedge %clock {
+      sv.cover %1, immediate
+      sv.cover %2, immediate
+      sv.cover %4, immediate
+    }
+
+    hw.output %0 : i1
   }
 }

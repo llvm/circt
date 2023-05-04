@@ -2,7 +2,7 @@
 
 If you are mainly interested in using CIRCT from Python scripts, you need to compile both LLVM/MLIR and CIRCT with Python bindings enabled. Furthermore, you must use a unified build, where LLVM/MLIR and CIRCT are compiled together in one step. 
 
-CIRCT also includes an experimental, opinionated frontend for CIRCT's Python bindings, called [PyCDE](/PyCDE).
+CIRCT also includes an experimental, opinionated frontend for CIRCT's Python bindings, called [PyCDE](PyCDE).
 
 ## Installing and Building with Wheels
 
@@ -83,8 +83,7 @@ Now you are able to use the CIRCT dialects and infrastructure from a Python inte
 ```python
 # silicon.py
 import circt
-import mlir
-from mlir.ir import *
+from circt.ir import Context, InsertionPoint, IntegerType, Location, Module
 from circt.dialects import hw, comb
 
 with Context() as ctx, Location.unknown():
@@ -92,17 +91,23 @@ with Context() as ctx, Location.unknown():
   i42 = IntegerType.get_signless(42)
   m = Module.create()
   with InsertionPoint(m.body):
-    def magic(a, b):
-      return comb.XorOp(i42, [a, b]).result
-    hw.HWModuleOp(name="magic", body_builder=magic)
+
+    def magic(module):
+      xor = comb.XorOp.create(module.a, module.b)
+      return {"c": xor}
+
+    hw.HWModuleOp(name="magic",
+                  input_ports=[("a", i42), ("b", i42)],
+                  output_ports=[("c", i42)],
+                  body_builder=magic)
   print(m)
 ```
 
 Running this script through `python3 silicon.py` should print the following MLIR:
 
 ```mlir
-module  {
-  hw.module @magic(%a: i42, %b: i42) -> (%result0: i42) {
+module {
+  hw.module @magic(%a: i42, %b: i42) -> (c: i42) {
     %0 = comb.xor %a, %b : i42
     hw.output %0 : i42
   }

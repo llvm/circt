@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 include "mlir/IR/EnumAttr.td"
+include "mlir/IR/OpAsmInterface.td"
 
 /// Ensure symbol is one of the hw module.* types
 def isModuleSymbol : AttrConstraint<
@@ -413,6 +414,7 @@ def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
     occur in initial, always, task, and function blocks.  The statement is
     executed before any following statements are. See SV Spec 10.4.1.
   }];
+  let hasCanonicalizeMethod = true;
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
   let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
@@ -427,6 +429,7 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
     These occur in initial, always, task, and function blocks.  The statement
     can be scheduled without blocking procedural flow.  See SV Spec 10.4.2.
   }];
+  let hasCanonicalizeMethod = true;
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
   let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
@@ -719,4 +722,77 @@ def DepositOp : SVOp<"nonstandard.deposit",
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
   let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
+}
+
+
+//===----------------------------------------------------------------------===//
+// Memory loading system tasks
+//===----------------------------------------------------------------------===//
+
+def MemBaseBin: I32EnumAttrCase<"MemBaseBin", 0>;
+def MemBaseHex: I32EnumAttrCase<"MemBaseHex", 1>;
+def MemBaseTypeAttr :
+    I32EnumAttr<"MemBaseTypeAttr", "the numeric base of a memory file",
+                [MemBaseBin, MemBaseHex]>;
+
+def ReadMemOp : SVOp<"readmem", [ProceduralOp]> {
+  let summary = "load a memory from a file in either binary or hex format";
+  let description = [{
+    Load a memory from a file using either `$readmemh` or `$readmemb` based on
+    an attribute.
+
+    See Section 21.4 of IEEE 1800-2017 for more information.
+  }];
+  let arguments =
+    (ins InOutType:$dest, StrAttr:$filename, MemBaseTypeAttr:$base);
+  let results = (outs);
+  let assemblyFormat =
+    "$dest `,` $filename `,` $base attr-dict `:` qualified(type($dest))";
+}
+
+def ForOp : SVOp<"for", [SingleBlock, NoTerminator, ProceduralOp,
+                         ProceduralRegion, OpAsmOpInterface,
+                         AllTypesMatch<["lowerBound", "upperBound", "step"]>]> {
+  let summary = "System verilog for loop";
+
+  let description = [{
+    The `sv.for` operation in System Verilog defines a for statement that requires
+    three SSA operands: `lowerBounds`, `upperBound`, and `step`. It functions
+    similarly to `scf.for`, where the loop iterates the induction variable from
+    `lowerBound` to `upperBound` with a step size of `step`, i.e:
+
+    ```
+     for (logic ... indVar = lowerBound; indVar < upperBound; indVar += step) begin
+     end
+    ```
+
+    It's important to note that since we are using a bit precise type instead of a Verilog
+    `integer` type, users must be cautious about potential overflow. For example, if
+    you wish to iterate over all 2-bit values, you must use a 3-bit value as the
+    induction variable type.
+  }];
+
+  let regions = (region SizedRegion<1>:$body);
+  let arguments = (ins HWIntegerType:$lowerBound,
+                       HWIntegerType:$upperBound,
+                       HWIntegerType:$step,
+                       DefaultValuedAttr<StrAttr, "{}">:$inductionVarName);
+  let results = (outs);
+  let builders = [
+      OpBuilder<(ins "Value":$lowerBound, "Value":$upperBound,
+                     "Value":$step, "StringRef":$inductionVarName,
+                     "llvm::function_ref<void(BlockArgument)>": $thenCtor)>,
+      OpBuilder<(ins "int64_t":$lowerBound, "int64_t":$upperBound,
+                     "int64_t":$step, "IntegerType": $type,
+                     "StringRef":$inductionVarName,
+                     "llvm::function_ref<void(BlockArgument)>": $thenCtor)>
+  ];
+  let hasCustomAssemblyFormat = 1;
+  let hasCanonicalizeMethod = 1;
+  let extraClassDeclaration = [{
+    Block* getBodyBlock() { return &getBody().front(); }
+    Value getInductionVar() { return getBodyBlock()->getArgument(0); }
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
+  }];
 }

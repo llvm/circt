@@ -9,6 +9,7 @@
 ##
 ##===----------------------------------------------------------------------===//
 
+add_subdirectory(Arc)
 add_subdirectory(Calyx)
 add_subdirectory(Comb)
 add_subdirectory(ESI)
@@ -17,9 +18,12 @@ add_subdirectory(FSM)
 add_subdirectory(Handshake)
 add_subdirectory(HW)
 add_subdirectory(HWArith)
+add_subdirectory(Interop)
 add_subdirectory(LLHD)
+add_subdirectory(LoopSchedule)
 add_subdirectory(Moore)
 add_subdirectory(MSFT)
+add_subdirectory(OM)
 add_subdirectory(Pipeline)
 add_subdirectory(Seq)
 add_subdirectory(SSP)

@@ -59,7 +59,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
       // implies a memtap and we cannot transform the datatype for a memory that
       // is tapped.
       for (auto res : memOp.getResults())
-        if (res.getType().cast<FIRRTLType>().isa<RefType>())
+        if (res.getType().isa<RefType>())
           return;
       // If subannotations present on aggregate fields, we cannot flatten the
       // memory. It must be split into one memory per aggregate field.
@@ -73,7 +73,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
       // Get the width of individual aggregate leaf elements.
       for (auto f : flatMemType) {
         LLVM_DEBUG(llvm::dbgs() << "\n field type:" << f);
-        auto w = f.getWidth().value();
+        auto w = *f.getWidth();
         memWidths.push_back(w);
         memFlatWidth += w;
       }
@@ -113,16 +113,18 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
           memOp.getDepth(), memOp.getRuw(), builder.getArrayAttr(portNames),
           memOp.getNameAttr(), memOp.getNameKind(), memOp.getAnnotations(),
           memOp.getPortAnnotations(), memOp.getInnerSymAttr(),
-          memOp.getGroupIDAttr());
+          memOp.getInitAttr(), memOp.getPrefixAttr());
       // Hook up the new memory to the wires the old memory was replaced with.
       for (size_t index = 0, rend = memOp.getNumResults(); index < rend;
            ++index) {
         auto result = memOp.getResult(index);
-        auto wire = builder.create<WireOp>(
-            result.getType(),
-            (memOp.getName() + "_" + memOp.getPortName(index).getValue())
-                .str());
-        result.replaceAllUsesWith(wire.getResult());
+        auto wire = builder
+                        .create<WireOp>(result.getType(),
+                                        (memOp.getName() + "_" +
+                                         memOp.getPortName(index).getValue())
+                                            .str())
+                        .getResult();
+        result.replaceAllUsesWith(wire);
         result = wire;
         auto newResult = flatMem.getResult(index);
         auto rType = result.getType().cast<BundleType>();
@@ -130,7 +132,8 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
              fieldIndex != fend; ++fieldIndex) {
           auto name = rType.getElement(fieldIndex).name.getValue();
           auto oldField = builder.create<SubfieldOp>(result, fieldIndex);
-          Value newField = builder.create<SubfieldOp>(newResult, fieldIndex);
+          FIRRTLBaseValue newField =
+              builder.create<SubfieldOp>(newResult, fieldIndex);
           // data and mask depend on the memory type which was split.  They can
           // also go both directions, depending on the port direction.
           if (!(name == "data" || name == "mask" || name == "wdata" ||
@@ -141,19 +144,19 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
           Value realOldField = oldField;
           if (rType.getElement(fieldIndex).isFlip) {
             // Cast the memory read data from flat type to aggregate.
-            newField = builder.createOrFold<BitCastOp>(
-                oldField.getType().cast<FIRRTLType>(), newField);
+            auto castField =
+                builder.createOrFold<BitCastOp>(oldField.getType(), newField);
             // Write the aggregate read data.
-            emitConnect(builder, realOldField, newField);
+            emitConnect(builder, realOldField, castField);
           } else {
             // Cast the input aggregate write data to flat type.
             // Cast the input aggregate write data to flat type.
-            auto newFieldType = newField.getType().cast<FIRRTLBaseType>();
+            auto newFieldType = newField.getType();
             auto oldFieldBitWidth = getBitWidth(oldField.getType());
             // Following condition is true, if a data field is 0 bits. Then
             // newFieldType is of smaller bits than old.
-            if (getBitWidth(newFieldType) != oldFieldBitWidth.value())
-              newFieldType = UIntType::get(context, oldFieldBitWidth.value());
+            if (getBitWidth(newFieldType) != *oldFieldBitWidth)
+              newFieldType = UIntType::get(context, *oldFieldBitWidth);
             realOldField = builder.create<BitCastOp>(newFieldType, oldField);
             // Mask bits require special handling, since some of the mask bits
             // need to be repeated, direct bitcasting wouldn't work. Depending
@@ -176,10 +179,9 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
             }
             // Now set the mask or write data.
             // Ensure that the types match.
-            emitConnect(
-                builder, newField,
-                builder.createOrFold<BitCastOp>(
-                    newField.getType().cast<FIRRTLType>(), realOldField));
+            emitConnect(builder, newField,
+                        builder.createOrFold<BitCastOp>(newField.getType(),
+                                                        realOldField));
           }
         }
       }

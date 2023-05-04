@@ -30,6 +30,9 @@ IntegerAttr getIntAttr(Type type, const APInt &value);
 /// Utility for generating a constant zero attribute.
 IntegerAttr getIntZerosAttr(Type type);
 
+/// Utility for generating a constant all ones attribute.
+IntegerAttr getIntOnesAttr(Type type);
+
 /// Return the module-scoped driver of a value only looking through one connect.
 Value getDriverFromConnect(Value val);
 
@@ -69,8 +72,8 @@ static bool isModuleScopedDrivenBy(Value val, bool lookThroughWires,
 /// if walking was broken, and true otherwise.
 using WalkDriverCallback =
     llvm::function_ref<bool(const FieldRef &dst, const FieldRef &src)>;
-bool walkDrivers(Value value, bool lookThroughWires,
-                 bool lookTWalkDriverCallbackhroughNodes, bool lookThroughCasts,
+bool walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
+                 bool lookThroughNodes, bool lookThroughCasts,
                  WalkDriverCallback callback);
 
 /// Get the FieldRef from a value.  This will travel backwards to through the
@@ -78,13 +81,28 @@ bool walkDrivers(Value value, bool lookThroughWires,
 /// location.
 FieldRef getFieldRefFromValue(Value value);
 
-/// Get a string identifier representing the FieldRef.
-std::string getFieldName(const FieldRef &fieldRef);
-std::string getFieldName(const FieldRef &fieldRef, bool &rootKnown);
+/// Get a string identifier representing the FieldRef.  Return this string and a
+/// boolean indicating if a valid "root" for the identifier was found.  If
+/// nameSafe is true, this will generate a string that is better suited for
+/// naming something in the IR.  E.g., if the fieldRef is a subfield of a
+/// subindex, without name safe the output would be:
+///
+///   foo[42].bar
+///
+/// With nameSafe, this would be:
+///
+///   foo_42_bar
+std::pair<std::string, bool> getFieldName(const FieldRef &fieldRef,
+                                          bool nameSafe = false);
 
 Value getValueByFieldID(ImplicitLocOpBuilder builder, Value value,
                         unsigned fieldID);
 
+/// Walk leaf ground types in the `firrtlType` and apply the function `fn`.
+/// The first argument of `fn` is field ID, and the second argument is a
+/// leaf ground type.
+void walkGroundTypes(FIRRTLType firrtlType,
+                     llvm::function_ref<void(uint64_t, FIRRTLBaseType)> fn);
 //===----------------------------------------------------------------------===//
 // Inner symbol and InnerRef helpers.
 //===----------------------------------------------------------------------===//
@@ -112,7 +130,7 @@ getInnerRefTo(FModuleLike mod, size_t portIdx, StringRef nameHint,
               std::function<ModuleNamespace &(FModuleLike)> getNamespace);
 
 //===----------------------------------------------------------------------===//
-// RefType and BaseType utilities.
+// Type utilities
 //===----------------------------------------------------------------------===//
 
 /// If reftype, return wrapped base type.  Otherwise (if base), return as-is.
@@ -122,14 +140,35 @@ inline FIRRTLBaseType getBaseType(FIRRTLType type) {
       .Case<RefType>([](auto ref) { return ref.getType(); });
 }
 
+/// Return base type or passthrough if FIRRTLType, else null.
+inline FIRRTLBaseType getBaseTypeOrNull(Type type) {
+  auto ftype = dyn_cast_or_null<FIRRTLType>(type);
+  if (!ftype)
+    return {};
+  return getBaseType(ftype);
+}
+
+/// Get base type if isa<> the requested type, else null.
+template <typename T>
+inline T getBaseOfType(Type type) {
+  return dyn_cast_or_null<T>(getBaseTypeOrNull(type));
+}
+
 /// Return a FIRRTLType with its base type component mutated by the given
 /// function. (i.e., ref<T> -> ref<f(T)> and T -> f(T)).
 inline FIRRTLType mapBaseType(FIRRTLType type,
                               function_ref<FIRRTLBaseType(FIRRTLBaseType)> fn) {
   return TypeSwitch<FIRRTLType, FIRRTLType>(type)
       .Case<FIRRTLBaseType>([&](auto base) { return fn(base); })
-      .Case<RefType>([&](auto ref) { return RefType::get(fn(ref.getType())); });
+      .Case<RefType>([&](auto ref) {
+        return RefType::get(fn(ref.getType()), ref.getForceable());
+      });
 }
+
+/// Given a type, return the corresponding lowered type for the HW dialect.
+/// Non-FIRRTL types are simply passed through. This returns a null type if it
+/// cannot be lowered.
+Type lowerType(Type type);
 
 //===----------------------------------------------------------------------===//
 // Parser-related utilities
@@ -140,7 +179,7 @@ inline FIRRTLType mapBaseType(FIRRTLType type,
 //===----------------------------------------------------------------------===//
 
 /// Parse a string that may encode a FIRRTL location into a LocationAttr.
-std::pair<bool, Optional<mlir::LocationAttr>> maybeStringToLocation(
+std::pair<bool, std::optional<mlir::LocationAttr>> maybeStringToLocation(
     StringRef spelling, bool skipParsing, StringAttr &locatorFilenameCache,
     FileLineColLoc &fileLineColLocCache, MLIRContext *context);
 

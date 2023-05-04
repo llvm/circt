@@ -55,7 +55,12 @@ LogicalResult scheduling::handleOperationsInTopologicalOrder(Problem &prob,
 void scheduling::dumpAsDOT(Problem &prob, StringRef fileName) {
   std::error_code ec;
   llvm::raw_fd_ostream out(fileName, ec);
-  mlir::raw_indented_ostream os(out);
+  scheduling::dumpAsDOT(prob, out);
+  out.close();
+}
+
+void scheduling::dumpAsDOT(Problem &prob, raw_ostream &stream) {
+  mlir::raw_indented_ostream os(stream);
 
   os << "digraph G {\n";
   os.indent();
@@ -154,5 +159,4 @@ void scheduling::dumpAsDOT(Problem &prob, StringRef fileName) {
 
   os.unindent();
   os << "}\n";
-  out.close();
 }

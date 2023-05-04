@@ -123,12 +123,13 @@ int64_t circt::hw::getBitWidth(mlir::Type type) {
       .Case<UnionType>([](UnionType u) {
         int64_t maxSize = 0;
         for (auto field : u.getElements()) {
-          int64_t fieldSize = getBitWidth(field.type);
+          int64_t fieldSize = getBitWidth(field.type) + field.offset;
           if (fieldSize > maxSize)
             maxSize = fieldSize;
         }
         return maxSize;
       })
+      .Case<EnumType>([](EnumType e) { return e.getBitWidth(); })
       .Case<TypeAliasType>(
           [](TypeAliasType t) { return getBitWidth(t.getCanonicalType()); })
       .Default([](Type) { return -1; });
@@ -168,7 +169,8 @@ static ParseResult parseHWElementType(Type &result, AsmParser &p) {
 
   if (typeString.startswith("array<") || typeString.startswith("inout<") ||
       typeString.startswith("uarray<") || typeString.startswith("struct<") ||
-      typeString.startswith("typealias<") || typeString.startswith("int<")) {
+      typeString.startswith("typealias<") || typeString.startswith("int<") ||
+      typeString.startswith("enum<")) {
     llvm::StringRef mnemonic;
     auto parseResult = generatedTypeParser(p, &mnemonic, result);
     return parseResult.has_value() ? success() : failure();
@@ -275,7 +277,7 @@ Type StructType::getFieldType(mlir::StringRef fieldName) {
   return Type();
 }
 
-Optional<unsigned> StructType::getFieldIndex(mlir::StringRef fieldName) {
+std::optional<unsigned> StructType::getFieldIndex(mlir::StringRef fieldName) {
   ArrayRef<hw::StructType::FieldInfo> elems = getElements();
   for (size_t idx = 0, numElems = elems.size(); idx < numElems; ++idx)
     if (elems[idx].name == fieldName)
@@ -283,7 +285,7 @@ Optional<unsigned> StructType::getFieldIndex(mlir::StringRef fieldName) {
   return {};
 }
 
-Optional<unsigned> StructType::getFieldIndex(mlir::StringAttr fieldName) {
+std::optional<unsigned> StructType::getFieldIndex(mlir::StringAttr fieldName) {
   ArrayRef<hw::StructType::FieldInfo> elems = getElements();
   for (size_t idx = 0, numElems = elems.size(); idx < numElems; ++idx)
     if (elems[idx].name == fieldName)
@@ -300,20 +302,60 @@ void StructType::getInnerTypes(SmallVectorImpl<Type> &types) {
 // Union Type
 //===----------------------------------------------------------------------===//
 
+namespace circt {
+namespace hw {
+namespace detail {
+bool operator==(const OffsetFieldInfo &a, const OffsetFieldInfo &b) {
+  return a.name == b.name && a.type == b.type && a.offset == b.offset;
+}
+// NOLINTNEXTLINE
+llvm::hash_code hash_value(const OffsetFieldInfo &fi) {
+  return llvm::hash_combine(fi.name, fi.type, fi.offset);
+}
+} // namespace detail
+} // namespace hw
+} // namespace circt
+
 Type UnionType::parse(AsmParser &p) {
   llvm::SmallVector<FieldInfo, 4> parameters;
-  if (parseFields(p, parameters))
+  if (p.parseCommaSeparatedList(
+          mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
+            StringRef name;
+            Type type;
+            if (p.parseKeyword(&name) || p.parseColon() || p.parseType(type))
+              return failure();
+            size_t offset = 0;
+            if (succeeded(p.parseOptionalKeyword("offset")))
+              if (p.parseInteger(offset))
+                return failure();
+            parameters.push_back(UnionType::FieldInfo{
+                StringAttr::get(p.getContext(), name), type, offset});
+            return success();
+          }))
     return Type();
   return get(p.getContext(), parameters);
 }
 
-void UnionType::print(AsmPrinter &p) const { printFields(p, getElements()); }
+void UnionType::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << '<';
+  llvm::interleaveComma(
+      getElements(), odsPrinter, [&](const UnionType::FieldInfo &field) {
+        odsPrinter << field.name.getValue() << ": " << field.type;
+        if (field.offset)
+          odsPrinter << " offset " << field.offset;
+      });
+  odsPrinter << ">";
+}
 
-Type UnionType::getFieldType(mlir::StringRef fieldName) {
+UnionType::FieldInfo UnionType::getFieldInfo(::mlir::StringRef fieldName) {
   for (const auto &field : getElements())
     if (field.name == fieldName)
-      return field.type;
-  return Type();
+      return field;
+  return FieldInfo();
+}
+
+Type UnionType::getFieldType(mlir::StringRef fieldName) {
+  return getFieldInfo(fieldName).type;
 }
 
 //===----------------------------------------------------------------------===//
@@ -323,14 +365,13 @@ Type UnionType::getFieldType(mlir::StringRef fieldName) {
 Type EnumType::parse(AsmParser &p) {
   llvm::SmallVector<Attribute> fields;
 
-  if (p.parseLess() || p.parseCommaSeparatedList([&]() {
+  if (p.parseCommaSeparatedList(AsmParser::Delimiter::LessGreater, [&]() {
         StringRef name;
         if (p.parseKeyword(&name))
           return failure();
         fields.push_back(StringAttr::get(p.getContext(), name));
         return success();
-      }) ||
-      p.parseGreater())
+      }))
     return Type();
 
   return get(p.getContext(), ArrayAttr::get(p.getContext(), fields));
@@ -348,11 +389,18 @@ bool EnumType::contains(mlir::StringRef field) {
   return indexOf(field).has_value();
 }
 
-Optional<size_t> EnumType::indexOf(mlir::StringRef field) {
+std::optional<size_t> EnumType::indexOf(mlir::StringRef field) {
   for (auto it : llvm::enumerate(getFields()))
     if (it.value().cast<StringAttr>().getValue() == field)
       return it.index();
   return {};
+}
+
+size_t EnumType::getBitWidth() {
+  auto w = getFields().size();
+  if (w > 1)
+    return llvm::Log2_64_Ceil(getFields().size());
+  return 1;
 }
 
 //===----------------------------------------------------------------------===//

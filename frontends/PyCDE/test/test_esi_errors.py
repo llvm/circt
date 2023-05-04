@@ -1,7 +1,7 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% py-split-input-file.py %s 2>&1 | FileCheck %s
 
-from pycde import (Clock, Input, InputChannel, OutputChannel, module, generator,
+from pycde import (Clock, Input, InputChannel, OutputChannel, Module, generator,
                    types)
 from pycde import esi
 from pycde.testing import unittestmodule
@@ -13,8 +13,7 @@ class HostComms:
   from_host = esi.FromServer(types.any)
 
 
-@module
-class Producer:
+class Producer(Module):
   clk = Input(types.i1)
   int_out = OutputChannel(types.i32)
 
@@ -24,8 +23,7 @@ class Producer:
     ports.int_out = chan
 
 
-@module
-class Consumer:
+class Consumer(Module):
   clk = Input(types.i1)
   int_in = InputChannel(types.i32)
 
@@ -35,7 +33,7 @@ class Consumer:
 
 
 @unittestmodule(print=True)
-class LoopbackTop:
+class LoopbackTop(Module):
   clk = Clock(types.i1)
   rst = Input(types.i1)
 
@@ -47,10 +45,12 @@ class LoopbackTop:
     esi.Cosim(HostComms, ports.clk, ports.rst)
 
 
-@esi.ServiceImplementation(HostComms)
-class MultiplexerService:
+class MultiplexerService(esi.ServiceImplementation):
   clk = Clock()
   rst = Input(types.i1)
+
+  def __init__(self, **inputs):
+    super().__init__(HostComms, **inputs)
 
   @generator
   def generate(ports, channels):
@@ -59,7 +59,7 @@ class MultiplexerService:
     v = types.i1(0)
     chan, rdy = types.channel(types.i128).wrap(c, v)
     try:
-      # CHECK: ChannelType mismatch. Expected channel<i32>, got channel<i128>.
+      # CHECK: Channel type mismatch. Expected Channel<Bits<32>, ValidReady>, got Channel<Bits<128>, ValidReady>.
       channels.to_client_reqs[0].assign(chan)
     except Exception as e:
       print(e)
@@ -74,7 +74,7 @@ class MultiplexerService:
 
 
 @unittestmodule(run_passes=True, print_after_passes=True)
-class MultiplexerTop:
+class MultiplexerTop(Module):
   clk = Clock(types.i1)
   rst = Input(types.i1)
 
@@ -90,10 +90,12 @@ class MultiplexerTop:
 # -----
 
 
-@esi.ServiceImplementation(HostComms)
-class BrokenService:
+class BrokenService(esi.ServiceImplementation):
   clk = Clock()
   rst = Input(types.i1)
+
+  def __init__(self, **inputs):
+    super().__init__(HostComms, **inputs)
 
   @generator
   def generate(ports, channels):
@@ -102,7 +104,7 @@ class BrokenService:
 
 
 @unittestmodule(run_passes=True, print_after_passes=True)
-class BrokenTop:
+class BrokenTop(Module):
   clk = Clock(types.i1)
   rst = Input(types.i1)
 

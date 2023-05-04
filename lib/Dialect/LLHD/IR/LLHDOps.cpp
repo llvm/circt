@@ -123,7 +123,7 @@ struct constant_int_all_ones_matcher {
   bool match(Operation *op) {
     APInt value;
     return mlir::detail::constant_int_op_binder(&value).match(op) &&
-           value.isAllOnesValue();
+           value.isAllOnes();
   }
 };
 
@@ -159,8 +159,8 @@ Type circt::llhd::getLLHDElementType(Type type) {
 // ConstantTimeOp
 //===----------------------------------------------------------------------===//
 
-OpFoldResult llhd::ConstantTimeOp::fold(ArrayRef<Attribute> operands) {
-  assert(operands.empty() && "const has no operands");
+OpFoldResult llhd::ConstantTimeOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "const has no operands");
   return getValueAttr();
 }
 
@@ -190,12 +190,12 @@ static OpFoldResult foldSigPtrExtractOp(Op op, ArrayRef<Attribute> operands) {
   return nullptr;
 }
 
-OpFoldResult llhd::SigExtractOp::fold(ArrayRef<Attribute> operands) {
-  return foldSigPtrExtractOp(*this, operands);
+OpFoldResult llhd::SigExtractOp::fold(FoldAdaptor adaptor) {
+  return foldSigPtrExtractOp(*this, adaptor.getOperands());
 }
 
-OpFoldResult llhd::PtrExtractOp::fold(ArrayRef<Attribute> operands) {
-  return foldSigPtrExtractOp(*this, operands);
+OpFoldResult llhd::PtrExtractOp::fold(FoldAdaptor adaptor) {
+  return foldSigPtrExtractOp(*this, adaptor.getOperands());
 }
 
 //===----------------------------------------------------------------------===//
@@ -216,12 +216,12 @@ static OpFoldResult foldSigPtrArraySliceOp(Op op,
   return nullptr;
 }
 
-OpFoldResult llhd::SigArraySliceOp::fold(ArrayRef<Attribute> operands) {
-  return foldSigPtrArraySliceOp(*this, operands);
+OpFoldResult llhd::SigArraySliceOp::fold(FoldAdaptor adaptor) {
+  return foldSigPtrArraySliceOp(*this, adaptor.getOperands());
 }
 
-OpFoldResult llhd::PtrArraySliceOp::fold(ArrayRef<Attribute> operands) {
-  return foldSigPtrArraySliceOp(*this, operands);
+OpFoldResult llhd::PtrArraySliceOp::fold(FoldAdaptor adaptor) {
+  return foldSigPtrArraySliceOp(*this, adaptor.getOperands());
 }
 
 template <class Op>
@@ -263,11 +263,10 @@ LogicalResult llhd::PtrArraySliceOp::canonicalize(llhd::PtrArraySliceOp op,
 //===----------------------------------------------------------------------===//
 
 template <class SigPtrType>
-static LogicalResult
-inferReturnTypesOfStructExtractOp(MLIRContext *context, Optional<Location> loc,
-                                  ValueRange operands, DictionaryAttr attrs,
-                                  mlir::RegionRange regions,
-                                  SmallVectorImpl<Type> &results) {
+static LogicalResult inferReturnTypesOfStructExtractOp(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::RegionRange regions,
+    SmallVectorImpl<Type> &results) {
   Type type = operands[0]
                   .getType()
                   .cast<SigPtrType>()
@@ -288,7 +287,7 @@ inferReturnTypesOfStructExtractOp(MLIRContext *context, Optional<Location> loc,
 }
 
 LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
     SmallVectorImpl<Type> &results) {
   return inferReturnTypesOfStructExtractOp<llhd::SigType>(
@@ -296,7 +295,7 @@ LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
 }
 
 LogicalResult llhd::PtrStructExtractOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
     SmallVectorImpl<Type> &results) {
   return inferReturnTypesOfStructExtractOp<llhd::PtrType>(
@@ -307,7 +306,7 @@ LogicalResult llhd::PtrStructExtractOp::inferReturnTypes(
 // DrvOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult llhd::DrvOp::fold(ArrayRef<Attribute> operands,
+LogicalResult llhd::DrvOp::fold(FoldAdaptor adaptor,
                                 SmallVectorImpl<OpFoldResult> &result) {
   if (!getEnable())
     return failure();
@@ -408,9 +407,10 @@ ParseResult llhd::EntityOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
 
-  auto type = parser.getBuilder().getFunctionType(argTypes, llvm::None);
-  result.addAttribute(circt::llhd::EntityOp::getTypeAttrName(),
-                      TypeAttr::get(type));
+  auto type = parser.getBuilder().getFunctionType(argTypes, std::nullopt);
+  result.addAttribute(
+      circt::llhd::EntityOp::getFunctionTypeAttrName(result.name),
+      TypeAttr::get(type));
 
   auto &body = *result.addRegion();
   if (parser.parseRegion(body, args))
@@ -455,7 +455,7 @@ void llhd::EntityOp::print(OpAsmPrinter &printer) {
   printer.printOptionalAttrDictWithKeyword(
       (*this)->getAttrs(),
       /*elidedAttrs =*/{SymbolTable::getSymbolAttrName(),
-                        llhd::EntityOp::getTypeAttrName(), "ins"});
+                        getFunctionTypeAttrName(), "ins"});
   printer << " ";
   printer.printRegion(getBody(), false, false);
 }
@@ -498,8 +498,8 @@ LogicalResult circt::llhd::EntityOp::verifyType() {
 
 LogicalResult circt::llhd::EntityOp::verifyBody() {
   // check signal names are unique
-  llvm::StringSet sigSet;
-  llvm::StringSet instSet;
+  llvm::StringSet<> sigSet;
+  llvm::StringSet<> instSet;
   auto walkResult = walk([&sigSet, &instSet](Operation *op) -> WalkResult {
     return TypeSwitch<Operation *, WalkResult>(op)
         .Case<SigOp>([&](auto sigOp) -> WalkResult {
@@ -535,6 +535,14 @@ Region *llhd::EntityOp::getCallableRegion() {
 
 ArrayRef<Type> llhd::EntityOp::getCallableResults() {
   return getFunctionType().getResults();
+}
+
+ArrayAttr llhd::EntityOp::getCallableArgAttrs() {
+  return getArgAttrs().value_or(nullptr);
+}
+
+ArrayAttr llhd::EntityOp::getCallableResAttrs() {
+  return getResAttrs().value_or(nullptr);
 }
 
 //===----------------------------------------------------------------------===//
@@ -654,8 +662,8 @@ ParseResult llhd::ProcOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parseProcArgumentList(parser, argTypes, argNames))
     return failure();
 
-  auto type = builder.getFunctionType(argTypes, llvm::None);
-  result.addAttribute(circt::llhd::ProcOp::getTypeAttrName(),
+  auto type = builder.getFunctionType(argTypes, std::nullopt);
+  result.addAttribute(circt::llhd::ProcOp::getFunctionTypeAttrName(result.name),
                       TypeAttr::get(type));
 
   auto *body = result.addRegion();
@@ -673,8 +681,8 @@ static void printProcArguments(OpAsmPrinter &p, Operation *op,
   auto printList = [&](unsigned i, unsigned max) -> void {
     for (; i < max; ++i) {
       p << body.front().getArgument(i) << " : " << types[i];
-      p.printOptionalAttrDict(
-          ::mlir::function_interface_impl::getArgAttrs(op, i));
+      p.printOptionalAttrDict(::mlir::function_interface_impl::getArgAttrs(
+          cast<mlir::FunctionOpInterface>(op), i));
 
       if (i < max - 1)
         p << ", ";
@@ -704,6 +712,14 @@ Region *llhd::ProcOp::getCallableRegion() {
 
 ArrayRef<Type> llhd::ProcOp::getCallableResults() {
   return getFunctionType().getResults();
+}
+
+ArrayAttr llhd::ProcOp::getCallableArgAttrs() {
+  return getArgAttrs().value_or(nullptr);
+}
+
+ArrayAttr llhd::ProcOp::getCallableResAttrs() {
+  return getResAttrs().value_or(nullptr);
 }
 
 //===----------------------------------------------------------------------===//
@@ -908,7 +924,7 @@ ParseResult llhd::RegOp::parse(OpAsmParser &parser, OperationState &result) {
 void llhd::RegOp::print(OpAsmPrinter &printer) {
   printer << " " << getSignal();
   for (size_t i = 0, e = getValues().size(); i < e; ++i) {
-    Optional<llhd::RegMode> mode = llhd::symbolizeRegMode(
+    std::optional<llhd::RegMode> mode = llhd::symbolizeRegMode(
         getModes().getValue()[i].cast<IntegerAttr>().getInt());
     if (!mode) {
       emitError("invalid RegMode");

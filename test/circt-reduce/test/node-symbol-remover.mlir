@@ -1,3 +1,5 @@
+// UNSUPPORTED: system-windows
+//   See https://github.com/llvm/circt/issues/4129
 // RUN: circt-reduce %s --test %S.sh --test-arg cat --test-arg "%anotherWire = firrtl.node" --keep-best=0 --include node-symbol-remover --test-must-fail | FileCheck %s
 
 firrtl.circuit "Foo" {

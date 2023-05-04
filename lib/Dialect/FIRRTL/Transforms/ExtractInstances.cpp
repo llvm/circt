@@ -84,8 +84,8 @@ struct ExtractInstancesPass
   }
 
   /// Create a clone of a `HierPathOp` with a new uniquified name.
-  HierPathOp cloneWithNewNameAndPath(HierPathOp pathOp,
-                                     ArrayRef<Attribute> newPath) {
+  hw::HierPathOp cloneWithNewNameAndPath(hw::HierPathOp pathOp,
+                                         ArrayRef<Attribute> newPath) {
     OpBuilder builder(pathOp);
     auto newPathOp = builder.cloneWithoutRegions(pathOp);
     newPathOp.setSymNameAttr(builder.getStringAttr(
@@ -111,6 +111,9 @@ struct ExtractInstancesPass
   DenseSet<Operation *> dutModules;
   /// All DUT module names.
   DenseSet<Attribute> dutModuleNames;
+  /// The prefix of the DUT module.  This is used when creating new modules
+  /// under the DUT.
+  StringRef dutPrefix = "";
 
   /// A worklist of instances that need to be moved.
   SmallVector<std::pair<InstanceOp, ExtractionInfo>> extractionWorklist;
@@ -262,6 +265,8 @@ void ExtractInstancesPass::collectAnnos() {
                    << "Marking DUT `" << module.moduleName() << "`\n");
         dutRootModules.insert(module);
         dutModules.insert(module);
+        if (auto prefix = anno.getMember<StringAttr>("prefix"))
+          dutPrefix = prefix;
         return false; // other passes may rely on this anno; keep it
       }
       if (!isAnnoInteresting(anno))
@@ -320,9 +325,9 @@ void ExtractInstancesPass::collectAnnos() {
     worklist.push_back(instanceGraph->lookup(cast<hw::HWModuleLike>(op)));
   while (!worklist.empty()) {
     auto *module = worklist.pop_back_val();
-    dutModuleNames.insert(module->getModule().moduleNameAttr());
+    dutModuleNames.insert(module->getModule().getModuleNameAttr());
     LLVM_DEBUG(llvm::dbgs()
-               << "- " << module->getModule().moduleName() << "\n");
+               << "- " << module->getModule().getModuleName() << "\n");
     for (auto *instRecord : *module) {
       auto *target = instRecord->getTarget();
       if (dutModules.insert(target->getModule()).second)
@@ -340,7 +345,7 @@ void ExtractInstancesPass::collectAnnos() {
       if (module.getDefnameAttr() != clkgateDefNameAttr)
         continue;
       LLVM_DEBUG(llvm::dbgs()
-                 << "Clock gate `" << module.moduleName() << "`\n");
+                 << "Clock gate `" << module.getModuleName() << "`\n");
       if (!dutModules.contains(module)) {
         LLVM_DEBUG(llvm::dbgs() << "- Ignored (outside DUT)\n");
         continue;
@@ -368,8 +373,20 @@ void ExtractInstancesPass::collectAnnos() {
   // mark them as to be extracted.
   // somewhat configurable.
   if (!memoryFileName.empty()) {
+    // Create an empty verbatim to guarantee that this file will exist even if
+    // no memories are found.  This is done to align with the SFC implementation
+    // of this pass where the file is always created.  This does introduce an
+    // additional leading newline in the file.
+    auto *context = circuit.getContext();
+    auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
+                                                    circuit.getBodyBlock());
+    builder.create<sv::VerbatimOp>("")->setAttr(
+        "output_file",
+        hw::OutputFileAttr::getFromFilename(context, memoryFileName,
+                                            /*excludeFromFilelist=*/true));
+
     for (auto module : circuit.getOps<FMemModuleOp>()) {
-      LLVM_DEBUG(llvm::dbgs() << "Memory `" << module.moduleName() << "`\n");
+      LLVM_DEBUG(llvm::dbgs() << "Memory `" << module.getModuleName() << "`\n");
       if (!dutModules.contains(module)) {
         LLVM_DEBUG(llvm::dbgs() << "- Ignored (outside DUT)\n");
         continue;
@@ -436,10 +453,10 @@ void ExtractInstancesPass::collectAnno(InstanceOp inst, Annotation anno) {
 /// mentioning exactly the instance, or the instance's parent module). Returns a
 /// position within the NLA's path, or the length of the path if the instances
 /// was not found.
-static unsigned findInstanceInNLA(InstanceOp inst, HierPathOp nla) {
+static unsigned findInstanceInNLA(InstanceOp inst, hw::HierPathOp nla) {
   unsigned nlaLen = nla.getNamepath().size();
   auto instName = getInnerSymName(inst);
-  auto parentName = cast<FModuleOp>(inst->getParentOp()).moduleNameAttr();
+  auto parentName = cast<FModuleOp>(inst->getParentOp()).getModuleNameAttr();
   for (unsigned nlaIdx = 0; nlaIdx < nlaLen; ++nlaIdx) {
     auto refPart = nla.refPart(nlaIdx);
     if (nla.modPart(nlaIdx) == parentName && (!refPart || refPart == instName))
@@ -539,20 +556,20 @@ void ExtractInstancesPass::extractInstances() {
           parent.getArgument(numParentPorts + portIdx));
     }
     assert(inst.use_empty() && "instance ports should have been detached");
-    DenseSet<HierPathOp> instanceNLAs;
+    DenseSet<hw::HierPathOp> instanceNLAs;
     // Get the NLAs that pass through the InstanceOp `inst`.
     // This does not returns NLAs that have the `inst` as the leaf.
     nlaTable.getInstanceNLAs(inst, instanceNLAs);
     // Map of the NLAs, that are applied to the InstanceOp. That is the NLA
     // terminates on the InstanceOp.
-    DenseMap<HierPathOp, SmallVector<Annotation>> instNonlocalAnnos;
+    DenseMap<hw::HierPathOp, SmallVector<Annotation>> instNonlocalAnnos;
     AnnotationSet::removeAnnotations(inst, [&](Annotation anno) {
       // Only consider annotations with a `circt.nonlocal` field.
       auto nlaName = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
       if (!nlaName)
         return false;
       // Track the NLA.
-      if (HierPathOp nla = nlaTable.getNLA(nlaName.getAttr())) {
+      if (hw::HierPathOp nla = nlaTable.getNLA(nlaName.getAttr())) {
         instNonlocalAnnos[nla].push_back(anno);
         instanceNLAs.insert(nla);
       }
@@ -561,8 +578,8 @@ void ExtractInstancesPass::extractInstances() {
 
     // Sort the instance NLAs we've collected by the NLA name to have a
     // deterministic output.
-    SmallVector<HierPathOp> sortedInstanceNLAs(instanceNLAs.begin(),
-                                               instanceNLAs.end());
+    SmallVector<hw::HierPathOp> sortedInstanceNLAs(instanceNLAs.begin(),
+                                                   instanceNLAs.end());
     llvm::sort(sortedInstanceNLAs,
                [](auto a, auto b) { return a.getSymName() < b.getSymName(); });
 
@@ -594,7 +611,7 @@ void ExtractInstancesPass::extractInstances() {
             getModuleNamespace(newParent).newName(instSym.getValue());
         if (newName != instSym.getValue())
           newInst.setInnerSymAttr(
-              InnerSymAttr::get(StringAttr::get(&getContext(), newName)));
+              hw::InnerSymAttr::get(StringAttr::get(&getContext(), newName)));
       }
 
       // Add the moved instance and hook it up to the added ports.
@@ -724,9 +741,9 @@ void ExtractInstancesPass::extractInstances() {
             // entire subhierarchy and go replicate all annotations with the old
             // names.
             inst.emitWarning("extraction of instance `")
-                << inst.instanceName()
+                << inst.getInstanceName()
                 << "` could break non-local annotations rooted at `"
-                << parent.moduleName() << "`";
+                << parent.getModuleName() << "`";
           }
           continue;
         }
@@ -828,7 +845,7 @@ void ExtractInstancesPass::groupInstances() {
   // module. Note that we cannot group instances that landed in different parent
   // modules into the same submodule, so we use that parent module as a grouping
   // key.
-  SmallDenseMap<std::pair<Operation *, StringRef>, SmallVector<InstanceOp>>
+  llvm::MapVector<std::pair<Operation *, StringRef>, SmallVector<InstanceOp>>
       instsByWrapper;
   for (auto &[inst, info] : extractedInstances) {
     if (!info.wrapperModule.empty())
@@ -847,8 +864,8 @@ void ExtractInstancesPass::groupInstances() {
     auto [parentOp, wrapperName] = parentAndWrapperName;
     auto parent = cast<FModuleOp>(parentOp);
     LLVM_DEBUG(llvm::dbgs() << "- Wrapper `" << wrapperName << "` in `"
-                            << parent.moduleName() << "` with " << insts.size()
-                            << " instances\n");
+                            << parent.getModuleName() << "` with "
+                            << insts.size() << " instances\n");
     OpBuilder builder(parentOp);
 
     // Uniquify the wrapper name.
@@ -877,7 +894,7 @@ void ExtractInstancesPass::groupInstances() {
       }
 
       // Set of NLAs that have a reference to this InstanceOp `inst`.
-      DenseSet<HierPathOp> instNlas;
+      DenseSet<hw::HierPathOp> instNlas;
       // Get the NLAs that pass through the `inst`, and not end at it.
       nlaTable.getInstanceNLAs(inst, instNlas);
       AnnotationSet instAnnos(inst);
@@ -887,7 +904,7 @@ void ExtractInstancesPass::groupInstances() {
         auto nlaName = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
         if (!nlaName)
           continue;
-        HierPathOp nla = nlaTable.getNLA(nlaName.getAttr());
+        hw::HierPathOp nla = nlaTable.getNLA(nlaName.getAttr());
         if (nla)
           instNlas.insert(nla);
       }
@@ -905,7 +922,8 @@ void ExtractInstancesPass::groupInstances() {
         // The relevant part of the NLA is of the form `Top::bb`, which we want
         // to expand to `Top::wrapperInst` and `Wrapper::bb`.
         auto wrapperNameAttr = builder.getStringAttr(wrapperName);
-        auto ref1 = InnerRefAttr::get(parent.moduleNameAttr(), wrapperInstName);
+        auto ref1 =
+            InnerRefAttr::get(parent.getModuleNameAttr(), wrapperInstName);
         Attribute ref2;
         if (auto innerRef = nlaPath[nlaIdx].dyn_cast<InnerRefAttr>())
           ref2 = InnerRefAttr::get(wrapperNameAttr, innerRef.getName());
@@ -927,7 +945,8 @@ void ExtractInstancesPass::groupInstances() {
 
     // Create the wrapper module.
     auto wrapper = builder.create<FModuleOp>(
-        builder.getUnknownLoc(), builder.getStringAttr(wrapperName), ports);
+        builder.getUnknownLoc(), builder.getStringAttr(dutPrefix + wrapperName),
+        ConventionAttr::get(builder.getContext(), Convention::Internal), ports);
     SymbolTable::setSymbolVisibility(wrapper, SymbolTable::Visibility::Private);
 
     // Instantiate the wrapper module in the parent and replace uses of the
@@ -1036,8 +1055,9 @@ void ExtractInstancesPass::createTraceFiles() {
         os << ".";
         addSymbol(sym);
       }
-      os << ".";
-      addSymbol(getInnerRefTo(inst));
+      // The final instance name is excluded as this does not provide useful
+      // additional information and could conflict with a name inside the final
+      // module.
       os << "\n";
     }
 

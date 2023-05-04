@@ -9,7 +9,7 @@ firrtl.circuit "NoMems" attributes {annotations = [
     filename = "sram.txt"
   }]} {
   firrtl.module @NoMems() {}
-  // CHECK: sv.verbatim "" {output_file = #hw.output_file<"metadata{{[/\]}}sram.txt", excludeFromFileList>, symbols = []}
+  // CHECK: sv.verbatim "" {output_file = #hw.output_file<"metadata{{/|\\\\}}sram.txt", excludeFromFileList>}
 }
 
 // Test for when there is a memory but no ports are added. The output file
@@ -25,7 +25,7 @@ firrtl.circuit "NoAddedPorts" attributes {annotations = [
   firrtl.module @NoAddedPorts() {
     %0:4 = firrtl.instance MWrite_ext  @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
   }
-  // CHECK: sv.verbatim "" {output_file = #hw.output_file<"metadata{{[/\]}}sram.txt", excludeFromFileList>, symbols = []}
+  // CHECK: sv.verbatim "" {output_file = #hw.output_file<"metadata{{/|\\\\}}sram.txt", excludeFromFileList>}
 }
 
 // Test for when there is no memory and we try to add ports. The output file
@@ -45,7 +45,7 @@ firrtl.circuit "NoMemory" attributes {annotations = [
   }]} {
   firrtl.module @NoMemory() {
   }
-  // CHECK: sv.verbatim "" {output_file = #hw.output_file<"metadata{{[/\]}}sram.txt", excludeFromFileList>, symbols = []}
+  // CHECK: sv.verbatim "" {output_file = #hw.output_file<"metadata{{/|\\\\}}sram.txt", excludeFromFileList>}
 }
 
 // Test for a single added port.
@@ -89,7 +89,7 @@ firrtl.circuit "Two" attributes {annotations = [
     // CHECK: firrtl.strictconnect %sram_0_user_output, %MWrite_ext_user_output : !firrtl.uint<4>
     // CHECK: firrtl.strictconnect %MWrite_ext_user_input, %sram_0_user_input : !firrtl.uint<3>
   }
-  // CHECK: firrtl.module @Two(out %sram_0_user_output: !firrtl.uint<4>, in %sram_0_user_input: !firrtl.uint<3>, out %sram_1_user_output: !firrtl.uint<4>, in %sram_1_user_input: !firrtl.uint<3>)
+  // CHECK: firrtl.module @Two(out %sram_0_user_output: !firrtl.uint<4> [{class = "firrtl.transforms.DontTouchAnnotation"}], in %sram_0_user_input: !firrtl.uint<3> [{class = "firrtl.transforms.DontTouchAnnotation"}], out %sram_1_user_output: !firrtl.uint<4> [{class = "firrtl.transforms.DontTouchAnnotation"}], in %sram_1_user_input: !firrtl.uint<3> [{class = "firrtl.transforms.DontTouchAnnotation"}])
   firrtl.module @Two() {
     firrtl.instance child0 @Child()
     firrtl.instance child1 @Child()
@@ -120,13 +120,13 @@ firrtl.circuit "TestHarness" attributes {annotations = [
     width = 4
   }]} {
   firrtl.memmodule @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
-  // CHECK: firrtl.module @DUT(out %sram_0_user_output: !firrtl.uint<4>, in %sram_0_user_input: !firrtl.uint<3>)
+  // CHECK: firrtl.module @DUT(out %sram_0_user_output: !firrtl.uint<4> [{class = "firrtl.transforms.DontTouchAnnotation"}], in %sram_0_user_input: !firrtl.uint<3> [{class = "firrtl.transforms.DontTouchAnnotation"}])
   firrtl.module @DUT() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     %0:4 = firrtl.instance MWrite_ext  @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
   }
   firrtl.module @TestHarness() {
     firrtl.instance dut @DUT()
-    // CHECK: %dut_sram_0_user_output, %dut_sram_0_user_input = firrtl.instance dut @DUT(out sram_0_user_output: !firrtl.uint<4>, in sram_0_user_input: !firrtl.uint<3>)
+    // CHECK: %dut_sram_0_user_output, %dut_sram_0_user_input = firrtl.instance dut @DUT(out sram_0_user_output: !firrtl.uint<4> [{class = "firrtl.transforms.DontTouchAnnotation"}], in sram_0_user_input: !firrtl.uint<3> [{class = "firrtl.transforms.DontTouchAnnotation"}])
     // CHECK: %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
     // CHECK: firrtl.strictconnect %dut_sram_0_user_input, %c0_ui3 : !firrtl.uint<3>
   }
@@ -170,6 +170,6 @@ firrtl.circuit "Complex" attributes {annotations = [
   // CHECK-SAME{LITERAL}: 0 -> {{0}}.{{1}}
   // CHECK-SAME{LITERAL}: 1 -> {{0}}.{{2}}.{{3}}
   // CHECK-SAME{LITERAL}: 2 -> {{0}}.{{4}}
-  // CHECK-SAME: {output_file = #hw.output_file<"metadata{{[/\]}}sram.txt", excludeFromFileList>,
+  // CHECK-SAME: {output_file = #hw.output_file<"metadata{{/|\\\\}}sram.txt", excludeFromFileList>,
   // CHECK-SAME: symbols = [@DUT, #hw.innerNameRef<@DUT::@MWrite_ext>, #hw.innerNameRef<@DUT::@child>, #hw.innerNameRef<@Child::@MWrite_ext>, #hw.innerNameRef<@DUT::@MWrite_ext_0>]
 }

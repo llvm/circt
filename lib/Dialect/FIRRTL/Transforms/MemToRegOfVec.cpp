@@ -48,10 +48,13 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
     });
     if (it != body->end()) {
       auto &instanceGraph = getAnalysis<InstanceGraph>();
-      auto *node = instanceGraph.lookup(&(*it));
+      auto *node = instanceGraph.lookup(cast<hw::HWModuleLike>(*it));
       llvm::for_each(llvm::depth_first(node), [&](hw::InstanceGraphNode *node) {
         dutModuleSet.insert(node->getModule());
       });
+    } else {
+      auto mods = circtOp.getOps<FModuleOp>();
+      dutModuleSet.insert(mods.begin(), mods.end());
     }
 
     mlir::parallelForEach(circtOp.getContext(), dutModuleSet,
@@ -92,8 +95,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
       return pipeInput;
 
     while (stages--) {
-      auto reg = b.create<RegOp>(pipeInput.getType(), clock,
-                                 moduleNamespace.newName(name));
+      auto reg = b.create<RegOp>(pipeInput.getType(), clock, name).getResult();
       if (gate) {
         b.create<WhenOp>(gate, /*withElseRegion*/ false,
                          [&]() { b.create<StrictConnectOp>(reg, pipeInput); });
@@ -123,7 +125,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
   }
 
   Value getMask(ImplicitLocOpBuilder &builder, Value bundle) {
-    auto bType = bundle.getType().cast<FIRRTLType>().cast<BundleType>();
+    auto bType = cast<BundleType>(bundle.getType());
     if (bType.getElement("mask"))
       return builder.create<SubfieldOp>(bundle, "mask");
     return builder.create<SubfieldOp>(bundle, "wmask");
@@ -131,7 +133,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
 
   Value getData(ImplicitLocOpBuilder &builder, Value bundle,
                 bool getWdata = false) {
-    auto bType = bundle.getType().cast<FIRRTLType>().cast<BundleType>();
+    auto bType = cast<BundleType>(bundle.getType());
     if (bType.getElement("data"))
       return builder.create<SubfieldOp>(bundle, "data");
     if (bType.getElement("rdata") && !getWdata)
@@ -188,7 +190,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
     wdataIn = addPipelineStages(builder, numStages, clock, wdataIn, "wdata");
     maskBits = addPipelineStages(builder, numStages, clock, maskBits, "wmask");
     // Create the register access.
-    auto rdata = builder.create<SubaccessOp>(regOfVec, addr);
+    FIRRTLBaseValue rdata = builder.create<SubaccessOp>(regOfVec, addr);
 
     // The tuple for the access to individual fields of an aggregate data type.
     // Tuple::<register, data, mask>
@@ -348,11 +350,13 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
                          ImplicitLocOpBuilder &builder) {
     AnnotationSet annos(attr);
     SmallVector<Attribute> regAnnotations;
-    auto vecType = op.getType().cast<FVectorType>();
+    auto vecType = op.getResult().getType().cast<FVectorType>();
     for (auto anno : annos) {
       if (anno.isClass(memTapSourceClass)) {
-        for (size_t i = 0,
-                    e = op.getType().cast<FVectorType>().getNumElements();
+        for (size_t i = 0, e = op.getResult()
+                                   .getType()
+                                   .cast<FVectorType>()
+                                   .getNumElements();
              i != e; ++i) {
           NamedAttrList newAnno;
           newAnno.append("class", anno.getMember("class"));
@@ -376,7 +380,6 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
   /// Generate the logic for implementing the memory using Registers.
   void generateMemory(MemOp memOp, FirMemory &firMem) {
     ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
-    moduleNamespace.add(memOp->getParentOfType<FModuleOp>());
     auto dataType = memOp.getDataType();
 
     auto innerSym = memOp.getInnerSym();
@@ -386,7 +389,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
     for (size_t index = 0, rend = memOp.getNumResults(); index < rend;
          ++index) {
       auto result = memOp.getResult(index);
-      if (result.getType().cast<FIRRTLType>().isa<RefType>()) {
+      if (isa<RefType>(result.getType())) {
         debugPorts.push_back(result);
         continue;
       }
@@ -397,7 +400,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
           (memOp.getName() + "_" + memOp.getPortName(index).getValue()).str(),
           memOp.getNameKind());
       result.replaceAllUsesWith(wire.getResult());
-      result = wire;
+      result = wire.getResult();
       // Create an access to all the common subfields.
       auto adr = getAddr(builder, result);
       auto enb = getEnable(builder, result);
@@ -417,16 +420,17 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
       }
       auto portKind = memOp.getPortKind(index);
       if (portKind == MemOp::PortKind::Read) {
-        generateRead(firMem, clk, adr, enb, dta, regOfVec, builder);
+        generateRead(firMem, clk, adr, enb, dta, regOfVec.getResult(), builder);
       } else if (portKind == MemOp::PortKind::Write) {
         auto mask = getMask(builder, result);
-        generateWrite(firMem, clk, adr, enb, mask, dta, regOfVec, builder);
+        generateWrite(firMem, clk, adr, enb, mask, dta, regOfVec.getResult(),
+                      builder);
       } else {
         auto wmode = getWmode(builder, result);
         auto wDta = getData(builder, result, true);
         auto mask = getMask(builder, result);
         generateReadWrite(firMem, clk, adr, enb, mask, wDta, dta, wmode,
-                          regOfVec, builder);
+                          regOfVec.getResult(), builder);
       }
     }
     // If a valid register is created, then replace all the debug port users
@@ -434,13 +438,12 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
     // RefSend on the register.
     if (regOfVec)
       for (auto r : debugPorts)
-        r.replaceAllUsesWith(builder.create<RefSendOp>(regOfVec));
+        r.replaceAllUsesWith(builder.create<RefSendOp>(regOfVec.getResult()));
   }
 
 private:
   bool replSeqMem;
   bool ignoreReadEnable;
-  ModuleNamespace moduleNamespace;
 };
 } // end anonymous namespace
 

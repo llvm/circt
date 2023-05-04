@@ -10,8 +10,18 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_FIRRTL_FIRRTLSTRUCTURE_TD
+#define CIRCT_DIALECT_FIRRTL_FIRRTLSTRUCTURE_TD
+
+include "FIRRTLAttributes.td"
+include "FIRRTLDialect.td"
+include "FIRRTLEnums.td"
+include "FIRRTLOpInterfaces.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Types.td"
+include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/SymbolInterfaces.td"
 
 def CircuitOp : FIRRTLOp<"circuit",
       [IsolatedFromAbove, SymbolTable, SingleBlock, NoTerminator,
@@ -47,15 +57,38 @@ def CircuitOp : FIRRTLOp<"circuit",
     FModuleLike getMainModule(mlir::SymbolTable* symtbl = nullptr);
   }];
 
-  let assemblyFormat = "$name custom<CircuitOpAttrs>(attr-dict) $body";
-  let hasVerifier = 1;
+  let assemblyFormat = "$name `` custom<CircuitOpAttrs>(attr-dict) $body";
+  let hasRegionVerifier = 1;
 }
 
-def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
-                                    NoTerminator, HasParent<"CircuitOp">,
-                                    DeclareOpInterfaceMethods<FModuleLike>,
-                                    DeclareOpInterfaceMethods<HWModuleLike>,
-                                    OpAsmOpInterface, InnerSymbolTable]> {
+class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
+  FIRRTLOp<mnemonic, traits # [
+    IsolatedFromAbove, Symbol, HasParent<"CircuitOp">,
+    DeclareOpInterfaceMethods<FModuleLike>,
+    DeclareOpInterfaceMethods<HWModuleLike>,
+    OpAsmOpInterface, InnerSymbolTable]> {
+
+  /// Additional class definitions inside the module op.
+  code extraModuleClassDefinition = [{}];
+
+  let extraClassDefinition = extraModuleClassDefinition # [{
+    size_t $cppClass::getNumPorts() {
+      return getPortTypesAttr().size();
+    }
+
+    circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
+      auto syms = getPortSymbols();
+      if (syms.empty() ||
+          syms[portIndex].template cast<hw::InnerSymAttr>().empty())
+        return hw::InnerSymAttr();
+      return syms[portIndex].template cast<hw::InnerSymAttr>();
+    }
+  }];
+
+}
+
+
+def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
   let summary = "FIRRTL Module";
   let description = [{
     The "firrtl.module" operation represents a Verilog module, including a given
@@ -63,16 +96,19 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
     the module.
   }];
   let arguments =
-            (ins DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+            (ins ConventionAttr:$convention,
+                 DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
 
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
   let skipDefaultBuilders = 1;
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
-               CArg<"ArrayAttr","ArrayAttr()">:$annotations)>
+    OpBuilder<(ins "StringAttr":$name, "ConventionAttr":$convention,
+               "ArrayRef<PortInfo>":$ports,
+               CArg<"ArrayAttr", "ArrayAttr()">:$annotations)>,
   ];
 
   let extraClassDeclaration = [{
@@ -95,31 +131,31 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
       return OpBuilder::atBlockEnd(&bodyBlock);
     }
 
-    /// Inserts the given ports.
-    void insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
-
-    /// Erases the ports that have their corresponding bit set in `portIndices`.
-    void erasePorts(const llvm::BitVector &portIndices);
-
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
+    ArrayAttr getParameters();
   }];
 
 }
 
-def FExtModuleOp : FIRRTLOp<"extmodule",
-      [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">, OpAsmOpInterface,
-       DeclareOpInterfaceMethods<FModuleLike>, InnerSymbolTable,
-       DeclareOpInterfaceMethods<HWModuleLike>]> {
-  let summary = "FIRRTL extmodule";
+def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
+  let summary = "FIRRTL external module";
   let description = [{
     The "firrtl.extmodule" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
+    LowerAnnotations can add RefType ports to it. Each RefType port
+    must have a corresponding entry in the internalPaths attribute.
+    The internalPaths attribute is used to represent opaque internal paths
+    into the external module, to be used for generating XMRs. Each RefType
+    port must be removed by LowerXMR pass.
   }];
   let arguments = (ins
                    OptionalAttr<StrAttr>:$defname,
+                   ConventionAttr:$convention,
                    ParamDeclArrayAttr:$parameters,
-                   DefaultValuedAttr<AnnotationArrayAttr, "ArrayAttr()">:$annotations
+                   DefaultValuedAttr<AnnotationArrayAttr,
+                   "ArrayAttr()">:$annotations,
+                   DefaultValuedAttr<ArrayAttr, "{}">:$internalPaths
                   );
   let results = (outs);
   let regions = (region AnyRegion:$body);
@@ -127,10 +163,12 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "StringAttr":$name,
+                      "ConventionAttr":$convention,
                       "ArrayRef<PortInfo>":$ports,
                       CArg<"StringRef", "StringRef()">:$defnamAttr,
                       CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
-                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters)>
+                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$internalPaths)>
   ];
 
   let extraClassDeclaration = [{
@@ -142,11 +180,42 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let hasVerifier = 1;
 }
 
-def FMemModuleOp : FIRRTLOp<"memmodule",
-      [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">, OpAsmOpInterface,
-       DeclareOpInterfaceMethods<FModuleLike>, InnerSymbolTable,
-       DeclareOpInterfaceMethods<HWModuleLike>]> {
-  let summary = "FIRRTL Generated Module";
+def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
+  let summary = "FIRRTL intrinsic module";
+  let description = [{
+    The "firrtl.intmodule" operation represents a compiler intrinsic.
+  }];
+  let arguments = (ins
+                   OptionalAttr<StrAttr>:$intrinsic,
+                   ParamDeclArrayAttr:$parameters,
+                   DefaultValuedAttr<AnnotationArrayAttr,
+                   "ArrayAttr()">:$annotations,
+                   DefaultValuedAttr<ArrayAttr, "{}">:$internalPaths
+                  );
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name,
+                      "ArrayRef<PortInfo>":$ports,
+                      CArg<"StringRef", "StringRef()">:$intrinsicNameAttr,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$internalPaths)>
+  ];
+
+  let extraClassDeclaration = [{
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
+  }];
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
+def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
+  let summary = "FIRRTL Generated Memory Module";
   let description = [{
     The "firrtl.memmodule" operation represents an external reference to a
     memory module. See the "firrtl.mem" op for a deeper explantation of the
@@ -176,89 +245,12 @@ def FMemModuleOp : FIRRTLOp<"memmodule",
   let extraClassDeclaration = [{
     /// Return true if this memory has a mask.
     bool isMasked() { return getMaskBits() > 1; }
-
-    /// Inserts the given ports.
-    void insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
-
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
+    ArrayAttr getParameters();
   }];
 
   let hasCustomAssemblyFormat = 1;
 }
 
-def HierPathOp : FIRRTLOp<"hierpath",
-      [IsolatedFromAbove, Symbol,
-       DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
-       HasParent<"CircuitOp">]> {
-  let summary = "Hierarchical path specification";
-  let description = [{
-    The "firrtl.hierpath" operation represents a path through the hierarchy.
-    This is used to specify namable things for use in other operations, for 
-    example in verbatim substitution. Non-local annotations also use these.
-  }];
-  let arguments = (ins SymbolNameAttr:$sym_name, NameRefArrayAttr:$namepath);
-  let results = (outs);
-  let hasCustomAssemblyFormat = 1;
-  let extraClassDeclaration = [{
-    /// Drop the module from the namepath. If its a InnerNameRef, then drop
-    /// the Module-Instance pair, else drop the final module from the namepath.
-    /// Return true if any update is made.
-    bool dropModule(StringAttr moduleToDrop);
-
-    /// Inline the module in the namepath.
-    /// Update the symbol name for the inlined module instance, by prepending
-    /// the symbol name of the instance at which the inling was done.
-    /// Return true if any update is made.
-    bool inlineModule(StringAttr moduleToDrop);
-
-    /// Replace the oldMod module with newMod module in the namepath of the NLA.
-    /// Return true if any update is made.
-    bool updateModule(StringAttr oldMod, StringAttr newMod);
-
-    /// Replace the oldMod module with newMod module in the namepath of the NLA.
-    /// Since the module is being updated, the symbols inside the module should
-    /// also be renamed. Use the rename Map to update the corresponding
-    /// inner_sym names in the namepath. Return true if any update is made.
-    bool updateModuleAndInnerRef(StringAttr oldMod, StringAttr newMod,
-         const llvm::DenseMap<StringAttr, StringAttr> &innerSymRenameMap);
-
-    /// Truncate the namepath for this NLA, at atMod module.
-    /// If includeMod is false, drop atMod and beyond, else include it and drop
-    /// everything after it.
-    /// Return true if any update is made.
-    bool truncateAtModule(StringAttr atMod, bool includeMod = true);
-
-    /// Return just the module part of the namepath at a specific index.
-    StringAttr modPart(unsigned i);
-
-    /// Return the root module.
-    StringAttr root();
-
-    /// Return just the reference part of the namepath at a specific index.
-    /// This will return an empty attribute if this is the leaf and the leaf is
-    /// a module.
-    StringAttr refPart(unsigned i);
-
-    /// Return the leaf reference.  This returns an empty attribute if the leaf
-    /// reference is a module.
-    StringAttr ref();
-
-    /// Return the leaf Module.
-    StringAttr leafMod();
-
-    /// Returns true, if the NLA path contains the module.
-    bool hasModule(StringAttr modName);
-
-    /// Returns true, if the NLA path contains the InnerSym {modName, symName}.
-    bool hasInnerSym(StringAttr modName, StringAttr symName) const;
-
-    /// Returns true if this NLA targets a module or instance of a module (as
-    /// opposed to an instance's port or something inside an instance).
-    bool isModule();
-
-    /// Returns true if this NLA targets something inside a module (as opposed
-    /// to a module or an instance of a module);
-    bool isComponent();
-    }];
-}
+#endif // CIRCT_DIALECT_FIRRTL_FIRRTLSTRUCTURE_TD

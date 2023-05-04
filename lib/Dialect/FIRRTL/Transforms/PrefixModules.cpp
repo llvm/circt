@@ -107,10 +107,6 @@ class PrefixModulesPass : public PrefixModulesBase<PrefixModulesPass> {
   /// This is a map from a module name to new prefixes to be applied.
   PrefixMap prefixMap;
 
-  /// Map prefix to group ID.
-  /// Store strings in the map, they may not stay alive.
-  llvm::StringMap<uint32_t> prefixIdMap;
-
   /// A map of Grand Central interface ID to prefix.
   DenseMap<Attribute, std::string> interfacePrefixMap;
 
@@ -164,13 +160,6 @@ void PrefixModulesPass::removeDeadAnnotations(StringAttr moduleName,
 /// any referenced module in the prefix map.
 void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
   auto *context = module.getContext();
-  uint32_t groupID = 0;
-  auto iter = prefixIdMap.find(prefix);
-  if (iter == prefixIdMap.end()) {
-    groupID = prefixIdMap.size() + 1;
-    prefixIdMap[prefix] = groupID;
-  } else
-    groupID = iter->second;
 
   // If we are renaming the body of this module, we need to mark that we have
   // changed the IR. If we are prefixing with the empty string, then nothing has
@@ -189,10 +178,12 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
     removeDeadAnnotations(thisMod, op);
 
     if (auto memOp = dyn_cast<MemOp>(op)) {
-      // Memories will be turned into modules and should be prefixed.
-      memOp.setNameAttr(StringAttr::get(context, prefix + memOp.getName()));
-      memOp.setGroupIDAttr(IntegerAttr::get(
-          IntegerType::get(context, 32, IntegerType::Unsigned), groupID));
+      StringAttr newPrefix;
+      if (auto oldPrefix = memOp->getAttrOfType<StringAttr>("prefix"))
+        newPrefix = StringAttr::get(context, prefix + oldPrefix.getValue());
+      else
+        newPrefix = StringAttr::get(context, prefix);
+      memOp->setAttr("prefix", newPrefix);
     } else if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
       auto target = dyn_cast<FModuleLike>(
           *instanceGraph->getReferencedModule(instanceOp));
@@ -230,7 +221,7 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
         }
       }
       // Now get the NLAs that pass through the InstanceOp and update them also.
-      DenseSet<HierPathOp> instNLAs;
+      DenseSet<hw::HierPathOp> instNLAs;
       nlaTable->getInstanceNLAs(instanceOp, instNLAs);
       for (auto nla : instNLAs)
         nlaTable->updateModuleInNLA(nla, oldModName, newTarget);
@@ -268,7 +259,7 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
   auto &firstPrefix = prefixes.front();
 
   auto fixNLAsRootedAt = [&](StringAttr oldModName, StringAttr newModuleName) {
-    DenseSet<HierPathOp> nlas;
+    DenseSet<hw::HierPathOp> nlas;
     nlaTable->getNLAsInModule(oldModName, nlas);
     for (auto n : nlas)
       if (n.root() == oldModName)
@@ -302,10 +293,27 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
                   StringAttr::get(module.getContext(), newModuleName));
   renameModuleBody(prefixFull, module);
 
-  // If this module contains a Grand Central interface, then also apply renames
-  // to that, but only if there are prefixes to apply.
-  if (auto anno = AnnotationSet(module).getAnnotation(parentAnnoClass))
-    interfacePrefixMap[anno.getMember<IntegerAttr>("id")] = prefixFull;
+  AnnotationSet annotations(module);
+  SmallVector<Annotation, 1> newAnnotations;
+  annotations.removeAnnotations([&](Annotation anno) {
+    if (anno.getClass() == dutAnnoClass) {
+      anno.setMember("prefix", builder.getStringAttr(prefixFull));
+      newAnnotations.push_back(anno);
+      return true;
+    }
+
+    // If this module contains a Grand Central interface, then also apply
+    // renames to that, but only if there are prefixes to apply.
+    if (anno.getClass() == companionAnnoClass)
+      interfacePrefixMap[anno.getMember<IntegerAttr>("id")] = prefixFull;
+    return false;
+  });
+
+  // If any annotations were updated, then update the annotations on the module.
+  if (!newAnnotations.empty()) {
+    annotations.addAnnotations(newAnnotations);
+    annotations.applyToOperation(module);
+  }
 }
 
 /// Apply prefixes from the `prefixMap` to an external module.  No modifications
@@ -451,7 +459,6 @@ void PrefixModulesPass::runOnOperation() {
   prefixGrandCentralInterfaces();
 
   prefixMap.clear();
-  prefixIdMap.clear();
   interfacePrefixMap.clear();
   if (!anythingChanged)
     markAllAnalysesPreserved();

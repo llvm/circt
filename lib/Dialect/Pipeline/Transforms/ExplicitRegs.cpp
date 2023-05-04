@@ -62,15 +62,16 @@ Value ExplicitRegsPass::routeThroughStage(OpOperand &v, PipelineStageOp stage) {
   }
 
   auto *definingOp = retVal.getDefiningOp();
-  if (!definingOp || definingOp->isBeforeInBlock(stage)) {
-    // Value is defined before the provided stage - route it through the stage.
-    auto regBackedge = bb->get(retVal.getType());
-    stageRegMap[stage].insert({retVal, regBackedge});
-    retVal = regBackedge;
-  } else {
-    // Value is defined after the provided stage - early exit here.
+  // Value is a block arg, a constant or defined after the provided stage
+  // - early exit here.
+  if (definingOp && (definingOp->hasTrait<OpTrait::ConstantLike>() ||
+                     !definingOp->isBeforeInBlock(stage)))
     return retVal;
-  }
+
+  // Value is defined before the provided stage - route it through the stage.
+  auto regBackedge = bb->get(retVal.getType());
+  stageRegMap[stage].insert({retVal, regBackedge});
+  retVal = regBackedge;
 
   // Recurse - recursion will only create a new backedge if necessary.
   auto predStageIt = stagePredecessor.find(stage);
@@ -136,7 +137,7 @@ void ExplicitRegsPass::runOnOperation() {
     stageOp.getValid().replaceAllUsesWith(newStageOp.getValid());
 
     // Replace backedges with the outputs of the new stage.
-    for (auto &it : llvm::enumerate(regMap)) {
+    for (auto it : llvm::enumerate(regMap)) {
       auto index = it.index();
       auto &[value, backedge] = it.value();
       backedge.setValue(newStageOp.getRegOuts()[index]);

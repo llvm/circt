@@ -1,9 +1,10 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
+# XFAIL: *
 
-from pycde import System, Input, Output, generator
+from pycde import System, Input, Output, generator, Module
 from pycde.dialects import comb
 from pycde import fsm
-from pycde.pycde_types import types
+from pycde.types import types
 from pycde.testing import unittestmodule
 
 # FSM instantiation example
@@ -35,7 +36,7 @@ class FSM:
 
 
 @unittestmodule()
-class FSMUser:
+class FSMUser(Module):
   a = Input(types.i1)
   b = Input(types.i1)
   c = Input(types.i1)
@@ -77,18 +78,18 @@ class FSMUser:
 # CHECK-NEXT:      fsm.output %false, %true, %false_0, %false_1 : i1, i1, i1, i1
 # CHECK-NEXT:    } transitions {
 # CHECK-NEXT:      fsm.transition @C guard {
-# CHECK-NEXT:        %0 = comb.and %arg0, %arg1 : i1
+# CHECK-NEXT:        %0 = comb.and bin %arg0, %arg1 : i1
 # CHECK-NEXT:        %true = hw.constant true
-# CHECK-NEXT:        %1 = comb.xor %0, %true : i1
-# CHECK-NEXT:        %2 = comb.and %arg1, %arg2 : i1
+# CHECK-NEXT:        %1 = comb.xor bin %0, %true : i1
+# CHECK-NEXT:        %2 = comb.and bin %arg1, %arg2 : i1
 # CHECK-NEXT:        %true_0 = hw.constant true
-# CHECK-NEXT:        %3 = comb.xor %2, %true_0 : i1
-# CHECK-NEXT:        %4 = comb.and %arg0, %arg2 : i1
+# CHECK-NEXT:        %3 = comb.xor bin %2, %true_0 : i1
+# CHECK-NEXT:        %4 = comb.and bin %arg0, %arg2 : i1
 # CHECK-NEXT:        %true_1 = hw.constant true
-# CHECK-NEXT:        %5 = comb.xor %4, %true_1 : i1
-# CHECK-NEXT:        %6 = comb.and %1, %3, %5 : i1
+# CHECK-NEXT:        %5 = comb.xor bin %4, %true_1 : i1
+# CHECK-NEXT:        %6 = comb.and bin %1, %3, %5 : i1
 # CHECK-NEXT:        %true_2 = hw.constant true
-# CHECK-NEXT:        %7 = comb.xor %6, %true_2 : i1
+# CHECK-NEXT:        %7 = comb.xor bin %6, %true_2 : i1
 # CHECK-NEXT:        fsm.return %7
 # CHECK-NEXT:      }
 # CHECK-NEXT:    }
@@ -104,7 +105,7 @@ class FSMUser:
 # CHECK-NEXT:      }
 # CHECK-NEXT:      fsm.transition @A guard {
 # CHECK-NEXT:        %true = hw.constant true
-# CHECK-NEXT:        %0 = comb.xor %arg1, %true : i1
+# CHECK-NEXT:        %0 = comb.xor bin %arg1, %true : i1
 # CHECK-NEXT:        fsm.return %0
 # CHECK-NEXT:      }
 # CHECK-NEXT:    }
@@ -184,7 +185,7 @@ system.print()
 
 
 @unittestmodule()
-class FSMUser:
+class FSMUser(Module):
   go = Input(types.i1)
   clk = Input(types.i1)
   rst = Input(types.i1)

@@ -35,13 +35,17 @@ def SignalOp : SystemCOp<"signal", [HasCustomSSAName,
   let summary = "Declares a SystemC `sc_signal<T>`.";
   let description = [{
     Represents the `sc_signal` template as described in IEEE 1666-2011 §6.4.
+    Adding the 'named' attribute will lead to the signal being emitted with the
+    `SC_NAMED` convenience macro. Note that this macro is not part of
+    IEEE 1666-2011, but was added in version 2.3.3.
   }];
 
-  let arguments = (ins StrAttr:$name);
+  let arguments = (ins StrAttr:$name, UnitAttr:$named);
   let results = (outs SignalType:$signal);
 
   let assemblyFormat = [{
-    custom<ImplicitSSAName>($name) attr-dict `:` qualified(type($signal))
+    custom<ImplicitSSAName>($name) ( `named` $named^ )? attr-dict
+    `:` qualified(type($signal))
   }];
 }
 
@@ -63,6 +67,28 @@ def ThreadOp : SystemCOp<"thread", []> {
 
   let arguments = (ins NullaryVoidFunctionType:$funcHandle);
   let assemblyFormat = "$funcHandle attr-dict";
+}
+
+def SensitiveOp : SystemCOp<"sensitive", [HasParent<"CtorOp">]> {
+  let summary = "Describes the static sensitivity of an unspawned process.";
+  let description = [{
+    This operation allows to specify the static sensitivity of unspawned
+    processes. An unspawned process is one created by the `SC_METHOD`,
+    `SC_THREAD`, or `SC_CTHREAD` macro. The operands to this operation are
+    registered as sensitivities to the process last created (in control-flow
+    order).
+    Each `SC_MODULE` contains an instance of the `sc_sensitive` class to do the
+    registration. For a description of the `sc_sensitive` class refer to
+    IEEE 1666-2011 §5.4. For a description of the `sensitive` data member of
+    `SC_MODULE` refer to IEEE 1666-2011 §5.2.14.
+  }];
+
+  let arguments = (ins Variadic<ChannelType>:$sensitivities);
+  let assemblyFormat = [{
+    $sensitivities attr-dict ( `:` qualified(type($sensitivities))^ )?
+  }];
+
+  let hasCanonicalizeMethod = 1;
 }
 
 def InstanceDeclOp : SystemCOp<"instance.decl", [
@@ -103,9 +129,6 @@ def InstanceDeclOp : SystemCOp<"instance.decl", [
     systemc::ModuleType getInstanceType() {
       return getInstanceHandle().getType().cast<systemc::ModuleType>();
     }
-
-    StringRef getInstanceName() { return getName(); }
-    StringAttr getInstanceNameAttr() { return getNameAttr(); }
 
     /// Lookup the module for the symbol. This returns null on invalid IR.
     Operation *getReferencedModule(const hw::HWSymbolCache *cache);
@@ -191,5 +214,128 @@ def VariableOp : SystemCOp<"cpp.variable", [HasCustomSSAName,
   let results = (outs AnyType:$variable);
 
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
+def CallIndirectOp : SystemCOp<"cpp.call_indirect", [
+      CallOpInterface,
+      TypesMatchWith<"callee input types match argument types",
+                     "callee", "callee_operands",
+                     "$_self.cast<FunctionType>().getInputs()">,
+      TypesMatchWith<"callee result types match result types",
+                     "callee", "results",
+                     "$_self.cast<FunctionType>().getResults()">
+    ]> {
+  let summary = "indirect call operation";
+  let description = [{
+    The `systemc.cpp.call_indirect` operation represents an indirect call to a
+    value of function type. The operands and result types of the call must match
+    the specified function type.
+
+    Example:
+
+    ```mlir
+    %func = systemc.cpp.member_access %object dot "func" : () -> i32
+    %result = systemc.cpp.call_indirect %func() : () -> i32
+    ```
+  }];
+
+  let arguments = (ins FunctionType:$callee,
+                       Variadic<AnyType>:$callee_operands);
+  let results = (outs Variadic<AnyType>:$results);
+
+  let builders = [
+    OpBuilder<(ins "Value":$callee, CArg<"ValueRange", "{}">:$operands), [{
+      $_state.operands.push_back(callee);
+      $_state.addOperands(operands);
+      $_state.addTypes(callee.getType().cast<FunctionType>().getResults());
+    }]>];
+
+  let extraClassDeclaration = [{
+    /// Get the argument operands to the called function.
+    operand_range getArgOperands() {
+      return {arg_operand_begin(), arg_operand_end()};
+    }
+
+    operand_iterator arg_operand_begin() { return ++operand_begin(); }
+    operand_iterator arg_operand_end() { return operand_end(); }
+
+    /// Return the callee of this operation.
+    CallInterfaceCallable getCallableForCallee() { return getCallee(); }
+  }];
+
+  let assemblyFormat = [{
+    $callee `(` $callee_operands `)` attr-dict `:` type($callee)
+  }];
+
+  let hasVerifier = 1;
+}
+
+def CallOp : SystemCOp<"cpp.call", [
+  CallOpInterface,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "call operation";
+  let description = [{
+    The `systemc.cpp.call` operation represents a direct call to a function that
+    is within the same symbol scope as the call. The operands and result types
+    of the call must match the specified function type. The callee is encoded as
+    a symbol reference attribute named "callee".
+
+    Example:
+
+    ```mlir
+    %2 = systemc.cpp.call @my_add(%0, %1) : (i32, i32) -> i32
+    ```
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$callee,
+                       Variadic<AnyType>:$callee_operands);
+  let results = (outs Variadic<AnyType>:$results);
+
+  let builders = [
+    OpBuilder<(ins "FuncOp":$callee, CArg<"ValueRange", "{}">:$operands), [{
+      $_state.addOperands(operands);
+      $_state.addAttribute("callee", SymbolRefAttr::get(callee));
+      $_state.addTypes(callee.getFunctionType().getResults());
+    }]>,
+    OpBuilder<(ins "SymbolRefAttr":$callee, "Type":$result,
+      CArg<"ValueRange", "{}">:$operands), [{
+      $_state.addOperands(operands);
+      $_state.addAttribute("callee", callee);
+      $_state.addTypes(result);
+    }]>,
+    OpBuilder<(ins "StringAttr":$callee, "Type":$result,
+      CArg<"ValueRange", "{}">:$operands), [{
+      build($_builder, $_state, SymbolRefAttr::get(callee), result, operands);
+    }]>,
+    OpBuilder<(ins "StringRef":$callee, "Type":$result,
+      CArg<"ValueRange", "{}">:$operands), [{
+      build($_builder, $_state, StringAttr::get($_builder.getContext(), callee),
+            result, operands);
+    }]>];
+
+  let extraClassDeclaration = [{
+    FunctionType getCalleeType();
+
+    /// Get the argument operands to the called function.
+    operand_range getArgOperands() {
+      return {arg_operand_begin(), arg_operand_end()};
+    }
+
+    operand_iterator arg_operand_begin() { return operand_begin(); }
+    operand_iterator arg_operand_end() { return operand_end(); }
+
+    /// Return the callee of this operation.
+    CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<SymbolRefAttr>("callee");
+    }
+  }];
+
+  let assemblyFormat = [{
+    $callee `(` $callee_operands `)` attr-dict `:`
+    functional-type($callee_operands, $results)
+  }];
+
   let hasVerifier = 1;
 }

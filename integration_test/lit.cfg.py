@@ -36,6 +36,8 @@ config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
 config.substitutions.append(('%shlibdir', config.circt_shlib_dir))
 config.substitutions.append(('%INC%', config.circt_include_dir))
 config.substitutions.append(
+    ('%BININC%', os.path.join(config.circt_obj_root, "include")))
+config.substitutions.append(
     ('%TCL_PATH%', config.circt_src_root + '/build/lib/Bindings/Tcl/'))
 config.substitutions.append(('%CIRCT_SOURCE%', config.circt_src_root))
 
@@ -85,7 +87,7 @@ tools = [
 if config.python_executable != "":
   tool_dirs.append(os.path.dirname(config.python_executable))
   config.available_features.add('python')
-  config.substitutions.append(('%PYTHON%', config.python_executable))
+  config.substitutions.append(('%PYTHON%', f'"{config.python_executable}"'))
 
 # Enable yosys if it has been detected.
 if config.yosys_path != "":
@@ -191,6 +193,11 @@ if config.clang_tidy_path != "":
 # Enable systemc if it has been detected.
 if config.have_systemc != "":
   config.available_features.add('systemc')
+
+# Enable circt-lec tests if it is built.
+if config.lec_enabled != "":
+  config.available_features.add('circt-lec')
+  tools.append('circt-lec')
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
 

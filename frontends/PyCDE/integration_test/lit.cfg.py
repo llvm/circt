@@ -35,7 +35,7 @@ config.substitutions.append(('%PATH%', config.environment['PATH']))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
 config.substitutions.append(('%shlibdir', config.circt_shlib_dir))
 config.substitutions.append(('%INC%', config.circt_include_dir))
-config.substitutions.append(('%PYTHON%', config.python_executable))
+config.substitutions.append(('%PYTHON%', f'"{config.python_executable}"'))
 config.substitutions.append(('%CIRCT_SOURCE%', config.circt_src_root))
 
 llvm_config.with_system_environment(['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
@@ -67,11 +67,9 @@ llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 
 # Tweak the PYTHONPATH to include the binary dir.
 if config.bindings_python_enabled:
-  llvm_config.with_environment('PYTHONPATH', [
-      os.path.join(config.circt_python_packages_dir, 'circt_core'),
-      os.path.join(config.circt_python_packages_dir, 'pycde')
-  ],
-                               append_path=True)
+  llvm_config.with_environment(
+      'PYTHONPATH', [os.path.join(config.circt_python_packages_dir, 'pycde')],
+      append_path=True)
 
 tool_dirs = [
     config.circt_tools_dir, config.mlir_tools_dir, config.llvm_tools_dir
@@ -156,5 +154,6 @@ if config.esi_cosim_path != "":
 # Enable ESI's Capnp tests if they're supported.
 if config.esi_capnp != "":
   config.available_features.add('capnp')
+  config.substitutions.append(('%CAPNP_CMAKE_DIR%', config.capnp_path))
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)

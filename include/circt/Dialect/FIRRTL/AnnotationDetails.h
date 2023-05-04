@@ -28,6 +28,7 @@ constexpr const char *rawAnnotations = "rawAnnotations";
 // Annotation Class Names
 //===----------------------------------------------------------------------===//
 
+constexpr const char *conventionAnnoClass = "circt.ConventionAnnotation";
 constexpr const char *dontTouchAnnoClass =
     "firrtl.transforms.DontTouchAnnotation";
 constexpr const char *enumComponentAnnoClass =
@@ -99,8 +100,6 @@ constexpr const char *viewAnnoClass =
     "sifive.enterprise.grandcentral.ViewAnnotation";
 constexpr const char *companionAnnoClass =
     "sifive.enterprise.grandcentral.ViewAnnotation.companion"; // not in SFC
-constexpr const char *parentAnnoClass =
-    "sifive.enterprise.grandcentral.ViewAnnotation.parent"; // not in SFC
 constexpr const char *prefixInterfacesAnnoClass =
     "sifive.enterprise.grandcentral.PrefixInterfacesAnnotation";
 constexpr const char *augmentedGroundTypeClass =
@@ -198,6 +197,21 @@ constexpr const char *addSeqMemPortAnnoClass =
     "sifive.enterprise.firrtl.AddSeqMemPortAnnotation";
 constexpr const char *addSeqMemPortsFileAnnoClass =
     "sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation";
+
+// Memory file loading annotations.
+constexpr const char *loadMemoryFromFileAnnoClass =
+    "firrtl.annotations.LoadMemoryAnnotation";
+constexpr const char *loadMemoryFromFileInlineAnnoClass =
+    "firrtl.annotations.MemoryFileInlineAnnotation";
+
+// WiringTransform Annotations
+constexpr const char *wiringSinkAnnoClass =
+    "firrtl.passes.wiring.SinkAnnotation";
+constexpr const char *wiringSourceAnnoClass =
+    "firrtl.passes.wiring.SourceAnnotation";
+
+// Attribute annotations.
+constexpr const char *attributeAnnoClass = "firrtl.AttributeAnnotation";
 
 } // namespace firrtl
 } // namespace circt

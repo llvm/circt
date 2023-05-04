@@ -6,7 +6,7 @@ hw.module @Sender() -> (x: !esi.channel<i1>) {
   %ch, %rcvrRdy = esi.wrap.vr %0, %0 : i1
   hw.output %ch : !esi.channel<i1>
 }
-hw.module @Reciever(%a: !esi.channel<i1>) {
+hw.module @Reciever(%a: !esi.channel<i1, ValidReady>) {
   %rdy = arith.constant 1 : i1
   // Recieve bits.
   %data, %valid = esi.unwrap.vr %a, %rdy : i1
@@ -64,11 +64,11 @@ hw.module @testIfaceWrap() {
   %idataChanOut = esi.wrap.iface %ifaceOutSink: !sv.modport<@IData::@Sink> -> !esi.channel<i32>
 
   // CHECK-LABEL:  hw.module @testIfaceWrap() {
-  // CHECK-NEXT:     %0 = sv.interface.instance {name = "ifaceOut"} : !sv.interface<@IData>
-  // CHECK-NEXT:     %1 = sv.modport.get %0 @Source : !sv.interface<@IData> -> !sv.modport<@IData::@Source>
-  // CHECK-NEXT:     hw.instance "ifaceSender" @IFaceSender(x: %1: !sv.modport<@IData::@Source>) -> ()
-  // CHECK-NEXT:     %2 = sv.modport.get %0 @Sink : !sv.interface<@IData> -> !sv.modport<@IData::@Sink>
-  // CHECK-NEXT:     %3 = esi.wrap.iface %2 : !sv.modport<@IData::@Sink> -> !esi.channel<i32>
+  // CHECK-NEXT:     %ifaceOut = sv.interface.instance : !sv.interface<@IData>
+  // CHECK-NEXT:     %[[#modport0:]] = sv.modport.get %ifaceOut @Source : !sv.interface<@IData> -> !sv.modport<@IData::@Source>
+  // CHECK-NEXT:     hw.instance "ifaceSender" @IFaceSender(x: %[[#modport0:]]: !sv.modport<@IData::@Source>) -> ()
+  // CHECK-NEXT:     %[[#modport1:]] = sv.modport.get %ifaceOut @Sink : !sv.interface<@IData> -> !sv.modport<@IData::@Sink>
+  // CHECK-NEXT:     %[[#esiport0:]] = esi.wrap.iface %[[#modport1:]] : !sv.modport<@IData::@Sink> -> !esi.channel<i32>
 
   %ifaceIn = sv.interface.instance : !sv.interface<@IData>
   %ifaceInSink = sv.modport.get %ifaceIn @Sink : !sv.interface<@IData> -> !sv.modport<@IData::@Sink>
@@ -76,11 +76,11 @@ hw.module @testIfaceWrap() {
   %ifaceInSource = sv.modport.get %ifaceIn @Sink : !sv.interface<@IData> -> !sv.modport<@IData::@Source>
   esi.unwrap.iface %idataChanOut into %ifaceInSource : (!esi.channel<i32>, !sv.modport<@IData::@Source>)
 
-  // CHECK-NEXT:     %4 = sv.interface.instance {name = "ifaceIn"} : !sv.interface<@IData>
-  // CHECK-NEXT:     %5 = sv.modport.get %4 @Sink : !sv.interface<@IData> -> !sv.modport<@IData::@Sink>
-  // CHECK-NEXT:     hw.instance "ifaceRcvr" @IFaceRcvr(x: %5: !sv.modport<@IData::@Sink>) -> ()
-  // CHECK-NEXT:     %6 = sv.modport.get %4 @Sink : !sv.interface<@IData> -> !sv.modport<@IData::@Source>
-  // CHECK-NEXT:     esi.unwrap.iface %3 into %6 : (!esi.channel<i32>, !sv.modport<@IData::@Source>)
+  // CHECK-NEXT:     %ifaceIn = sv.interface.instance : !sv.interface<@IData>
+  // CHECK-NEXT:     %[[#modport2:]] = sv.modport.get %ifaceIn @Sink : !sv.interface<@IData> -> !sv.modport<@IData::@Sink>
+  // CHECK-NEXT:     hw.instance "ifaceRcvr" @IFaceRcvr(x: %[[#modport2]]: !sv.modport<@IData::@Sink>) -> ()
+  // CHECK-NEXT:     %[[#modport3:]] = sv.modport.get %ifaceIn @Sink : !sv.interface<@IData> -> !sv.modport<@IData::@Source>
+  // CHECK-NEXT:     esi.unwrap.iface %2 into %4 : (!esi.channel<i32>, !sv.modport<@IData::@Source>)
 }
 
 // CHECK-LABEL: hw.module @i0Typed(%a: !esi.channel<i0>, %clk: i1, %rst: i1) -> (x: !esi.channel<i0>) {
@@ -97,4 +97,16 @@ hw.module @i0Typed(%a: !esi.channel<i0>, %clk : i1, %rst : i1) -> (x: !esi.chann
   %rawOutput, %valid = esi.unwrap.vr %stagedA, %rcvrRdy : i0
   %ch, %rcvrRdy = esi.wrap.vr %rawOutput, %valid : i0
   hw.output %ch : !esi.channel<i0>
+}
+
+hw.module.extern @i1Fifo0(%in: !esi.channel<i1, FIFO0>) -> (out: !esi.channel<i1, FIFO0>)
+
+// CHECK-LABEL:  hw.module @fifo0WrapUnwrap()
+// CHECK-NEXT:     %chanOutput, %rden = esi.wrap.fifo %data, %empty : !esi.channel<i1, FIFO0>
+// CHECK-NEXT:     %foo.out = hw.instance "foo" @i1Fifo0(in: %chanOutput: !esi.channel<i1, FIFO0>) -> (out: !esi.channel<i1, FIFO0>)
+// CHECK-NEXT:     %data, %empty = esi.unwrap.fifo %foo.out, %rden : !esi.channel<i1, FIFO0>
+hw.module @fifo0WrapUnwrap() -> () {
+  %in, %rden = esi.wrap.fifo %data, %empty : !esi.channel<i1, FIFO0>
+  %out = hw.instance "foo" @i1Fifo0(in: %in: !esi.channel<i1, FIFO0>) -> (out: !esi.channel<i1, FIFO0>)
+  %data, %empty = esi.unwrap.fifo %out, %rden : !esi.channel<i1, FIFO0>
 }

@@ -209,7 +209,7 @@ def ModportType : SVType<"Modport"> {
 // Other operations
 //===----------------------------------------------------------------------===//
 
-def InterfaceInstanceOp : SVOp<"interface.instance"> {
+def InterfaceInstanceOp : SVOp<"interface.instance", [HasCustomSSAName]> {
   let summary = "Instantiate an interface";
   let description = [{
     Use this to declare an instance of an interface:
@@ -223,13 +223,13 @@ def InterfaceInstanceOp : SVOp<"interface.instance"> {
   let results = (outs InterfaceType : $result);
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict)
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
     `:` qualified(type($result))
   }];
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$result), [{
-      return build($_builder, $_state, result, None);
+      return build($_builder, $_state, result, std::nullopt);
     }]>
   ];
 

@@ -62,6 +62,10 @@ circuit Foo : %[[
         ]
       }
     ]
+  },
+  {
+    "class": "firrtl.transforms.DontTouchAnnotation",
+    "target": "~Foo|Bar>shortint"
   }
 ]]
   extmodule MySRAM:
@@ -124,21 +128,21 @@ circuit Foo : %[[
 ; CHECK:       "name": "f"
 ; CHECK-NEXT:  "value": "OMReferenceTarget:~Foo|Bar"
 ; CHECK:       "name": "g",
-; CHECK-NEXT:  "value": "OMReferenceTarget:~Foo|Foo>signed_1"
+; CHECK-NEXT:  "value": "OMReferenceTarget:~Foo|Foo>signed_0"
 
 ; CHECK:       "id": "OMID:2"
 ; CHECK:       "name": "finalPath"
-; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/parameter_2:Bar/longint_0:MySRAM"
+; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/parameter_0:Bar/longint_0:MySRAM"
 
 ; CHECK:       "id": "OMID:3"
 ; CHECK:       "name": "finalPath"
-; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/parameter_2:Bar/shortint_1:shortint_0/shortint_ext:{{[^"]+}}"
+; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/parameter_0:Bar/shortint_0:shortint_0/shortint_ext:{{[^"]+}}"
 
 ; CHECK:       "id": "OMID:4"
 ; CHECK:       "name": "containingModule"
 ; CHECK-NEXT:  "value": "OMInstanceTarget:~Foo|Foo"
 ; CHECK:        "name": "portField",
-; CHECK-NEXT        "value": "OMReferenceTarget:~Foo|Foo/parameter_2:Bar>b_signed"
+; CHECK-NEXT        "value": "OMReferenceTarget:~Foo|Foo/parameter_0:Bar>b_signed"
 ; CHECK:       "name": "ports"
 ; CHECK-NEXT:  "value": [
 ; CHECK-NEXT:    {
@@ -147,7 +151,7 @@ circuit Foo : %[[
 ; CHECK-NEXT:      "width": "OMBigInt:1d"
 ; CHECK-NEXT:    }
 ; CHECK-NEXT:    {
-; CHECK-NEXT:      "ref": "OMDontTouchedReferenceTarget:~Foo|Foo>signed_1",
+; CHECK-NEXT:      "ref": "OMDontTouchedReferenceTarget:~Foo|Foo>signed_0",
 ; CHECK-NEXT:      "direction": "OMString:Output",
 ; CHECK-NEXT:      "width": "OMBigInt:1f"
 ; CHECK-NEXT:    }

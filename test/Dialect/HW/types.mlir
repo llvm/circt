@@ -22,8 +22,8 @@ module {
     return
   }
 
-  // CHECK-LABEL: func @unionType(%arg0: !hw.union<foo: i32, bar: i4, baz: !hw.struct<foo: i7>>) {
-  func.func @unionType(%SF: !hw.union<foo: i32, bar: i4, baz: !hw.struct<foo: i7>>) {
+  // CHECK-LABEL: func @unionType(%arg0: !hw.union<foo: i32, bar: i4 offset 8, baz: !hw.struct<foo: i7>>) {
+  func.func @unionType(%SF: !hw.union<foo: i32, bar: i4 offset 8, baz: !hw.struct<foo: i7>>) {
     return
   }
 

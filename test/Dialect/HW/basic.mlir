@@ -64,18 +64,32 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i5
   %w = sv.wire : !hw.inout<i4>
 
   // CHECK-NEXT: %after1 = sv.wire : !hw.inout<i4>
-  %before1 = sv.wire {name = "after1"} : !hw.inout<i4>
+  %before1 = sv.wire name "after1" : !hw.inout<i4>
 
   // CHECK-NEXT: sv.read_inout %after1 : !hw.inout<i4>
   %read_before1 = sv.read_inout %before1 : !hw.inout<i4>
 
   // CHECK-NEXT: %after2_conflict = sv.wire : !hw.inout<i4>
-  // CHECK-NEXT: %after2_conflict_0 = sv.wire {name = "after2_conflict"} : !hw.inout<i4>
-  %before2_0 = sv.wire {name = "after2_conflict"} : !hw.inout<i4>
-  %before2_1 = sv.wire {name = "after2_conflict"} : !hw.inout<i4>
+  // CHECK-NEXT: %after2_conflict_0 = sv.wire name "after2_conflict" : !hw.inout<i4>
+  %before2_0 = sv.wire name "after2_conflict" : !hw.inout<i4>
+  %before2_1 = sv.wire name "after2_conflict" : !hw.inout<i4>
 
   // CHECK-NEXT: %after3 = sv.wire {someAttr = "foo"} : !hw.inout<i4>
-  %before3 = sv.wire {name = "after3", someAttr = "foo"} : !hw.inout<i4>
+  %before3 = sv.wire name "after3" {someAttr = "foo"} : !hw.inout<i4>
+
+  // CHECK-NEXT: %w2 = hw.wire [[RES2]] : i7
+  %w2 = hw.wire %d : i7
+
+  // CHECK-NEXT: %after4 = hw.wire [[RES2]] : i7
+  %before4 = hw.wire %d name "after4" : i7
+
+  // CHECK-NEXT: %after5_conflict = hw.wire [[RES2]] : i7
+  // CHECK-NEXT: %after5_conflict_1 = hw.wire [[RES2]] name "after5_conflict" : i7
+  %before5_0 = hw.wire %d name "after5_conflict" : i7
+  %before5_1 = hw.wire %d name "after5_conflict" : i7
+
+  // CHECK-NEXT: %after6 = hw.wire [[RES2]] {someAttr = "foo"} : i7
+  %before6 = hw.wire %d name "after6" {someAttr = "foo"} : i7
 
   // CHECK-NEXT: = comb.mux %arg1, [[RES2]], [[RES2]] : i7
   %mux = comb.mux %arg1, %d, %d : i7
@@ -89,8 +103,8 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i5
   // CHECK-NEXT: = hw.struct_inject [[STR]]["foo"], {{.*}} : !hw.struct<foo: i19, bar: i7>
   %s1 = hw.struct_inject %s0["foo"], %foo : !hw.struct<foo: i19, bar: i7>
 
-  // CHECK-NEXT:  %foo_1, %bar = hw.struct_explode [[STR]] : !hw.struct<foo: i19, bar: i7>
-  %foo_1, %bar = hw.struct_explode %s0 : !hw.struct<foo: i19, bar: i7>
+  // CHECK-NEXT:  %foo_2, %bar = hw.struct_explode [[STR]] : !hw.struct<foo: i19, bar: i7>
+  %foo_2, %bar = hw.struct_explode %s0 : !hw.struct<foo: i19, bar: i7>
 
   // CHECK-NEXT: hw.bitcast [[STR]] : (!hw.struct<foo: i19, bar: i7>)
   %structBits = hw.bitcast %s0 : (!hw.struct<foo: i19, bar: i7>) -> i26
@@ -107,6 +121,24 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i5
   %bigArray = hw.array_concat %arrCreated, %arr2 : !hw.array<2 x i19>, !hw.array<3 x i19>
   // CHECK-NEXT: %A = hw.enum.constant A : !hw.enum<A, B, C>
   %A_enum = hw.enum.constant A : !hw.enum<A, B, C>
+  // CHECK-NEXT: %B = hw.enum.constant B : !hw.enum<A, B, C>
+  %B_enum = hw.enum.constant B : !hw.enum<A, B, C>
+  // CHECK-NEXT: = hw.enum.cmp %A, %B : !hw.enum<A, B, C>, !hw.enum<A, B, C>
+  %enumcmp = hw.enum.cmp %A_enum, %B_enum : !hw.enum<A, B, C>, !hw.enum<A, B, C>
+
+  // CHECK-NEXT: hw.aggregate_constant [false, true] : !hw.struct<a: i1, b: i1>
+  hw.aggregate_constant [false, true] : !hw.struct<a: i1, b: i1>
+  //hw.enum.constant A : !hw.enum<A, B>
+  // CHECK-NEXT: hw.aggregate_constant [0 : i2, 1 : i2, -2 : i2, -1 : i2] : !hw.array<4xi2>
+  hw.aggregate_constant [0 : i2, 1 : i2, -2 : i2, -1 : i2] : !hw.array<4xi2>
+  // CHECK-NEXT: hw.aggregate_constant [false] : !hw.uarray<1xi1>
+  hw.aggregate_constant [false] : !hw.uarray<1xi1>
+  // CHECK-NEXT{LITERAL}: hw.aggregate_constant [[false]] : !hw.struct<a: !hw.array<1xi1>>
+  hw.aggregate_constant [[false]] : !hw.struct<a: !hw.array<1xi1>>
+  // CHECK-NEXT: hw.aggregate_constant ["A"] : !hw.struct<a: !hw.enum<A, B, C>>
+  hw.aggregate_constant ["A"] : !hw.struct<a: !hw.enum<A, B, C>>
+  // CHECK-NEXT: hw.aggregate_constant ["A"] : !hw.array<1xenum<A, B, C>>
+  hw.aggregate_constant ["A"] : !hw.array<1 x!hw.enum<A, B, C>>
 
   // CHECK-NEXT:    hw.output [[RES8]] : i50
   hw.output %result : i50
@@ -139,6 +171,11 @@ hw.module @signed_arrays(%arg0: si8) -> (out: !hw.array<2xsi8>) {
   hw.output %result : !hw.array<2xsi8>
 }
 
+// Check that we pass the verifier that the module's function type matches
+// the block argument types when using InOutTypes.
+// CHECK: hw.module @InOutPort(%arg0: !hw.inout<i1>)
+hw.module @InOutPort(%arg0: !hw.inout<i1>) -> () { }
+
 /// Port names that aren't valid MLIR identifiers are handled with `argNames`
 /// attribute being explicitly printed.
 // https://github.com/llvm/circt/issues/1822
@@ -167,9 +204,9 @@ module {
   // CHECK:  hw.globalRef @glbl_D_M2 [#hw.innerNameRef<@A::@inst_0>, #hw.innerNameRef<@C::@inst>, #hw.innerNameRef<@D::@SF>, #hw.innerNameRef<@F::@symA>]
   // CHECK:  hw.globalRef @glbl_D_M3 [#hw.innerNameRef<@A::@inst_0>, #hw.innerNameRef<@C::@inst>, #hw.innerNameRef<@D::@SF>, #hw.innerNameRef<@F::@symB>]
 
-  // hw.module.extern @F(%in: i1 {hw.exportPort = @symA}) -> (out: i1 {hw.exportPort = @symB}) attributes {circt.globalRef = [[#hw.globalNameRef<@glbl_D_M2>], [#hw.globalNameRef<@glbl_D_M3>]]}
-  hw.module.extern  @F(%in: i1 {hw.exportPort = @symA, circt.globalRef = [#hw.globalNameRef<@glbl_D_M2>]}) -> (out: i1 {hw.exportPort = @symB, circt.globalRef = [#hw.globalNameRef<@glbl_D_M3>]}) attributes {}
-  hw.module @F1(%in: i1 {hw.exportPort = @symA, circt.globalRef = [#hw.globalNameRef<@glbl_D_M2>]}) -> (out: i1 {hw.exportPort = @symB, circt.globalRef = [#hw.globalNameRef<@glbl_D_M3>]}) attributes {} {
+  // hw.module.extern @F(%in: i1 {hw.exportPort = #hw<innerSym@symA>}) -> (out: i1 {hw.exportPort = #hw<innerSym@symB>}) attributes {circt.globalRef = [[#hw.globalNameRef<@glbl_D_M2>], [#hw.globalNameRef<@glbl_D_M3>]]}
+  hw.module.extern  @F(%in: i1 {hw.exportPort = #hw<innerSym@symA>, circt.globalRef = [#hw.globalNameRef<@glbl_D_M2>]}) -> (out: i1 {hw.exportPort = #hw<innerSym@symB>, circt.globalRef = [#hw.globalNameRef<@glbl_D_M3>]}) attributes {}
+  hw.module @F1(%in: i1 {hw.exportPort = #hw<innerSym@symA>, circt.globalRef = [#hw.globalNameRef<@glbl_D_M2>]}) -> (out: i1 {hw.exportPort = #hw<innerSym@symB>, circt.globalRef = [#hw.globalNameRef<@glbl_D_M3>]}) attributes {} {
    hw.output %in : i1
   }
   hw.module @FIRRTLMem() -> () {

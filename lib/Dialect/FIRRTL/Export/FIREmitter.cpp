@@ -171,7 +171,7 @@ private:
 
   /// Return the name used during emission of a `Value`, or none if the value
   /// has not yet been emitted or it was emitted inline.
-  Optional<StringRef> lookupEmittedName(Value value) {
+  std::optional<StringRef> lookupEmittedName(Value value) {
     auto it = valueNames.find(value);
     if (it != valueNames.end())
       return {it->second};
@@ -360,25 +360,25 @@ void Emitter::emitStatement(WhenOp op, bool noIndent) {
 }
 
 void Emitter::emitStatement(WireOp op) {
-  addValueName(op, op.getNameAttr());
+  addValueName(op.getResult(), op.getNameAttr());
   indent() << "wire " << op.getName() << " : ";
-  emitType(op.getType());
+  emitType(op.getResult().getType());
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(RegOp op) {
-  addValueName(op, op.getNameAttr());
+  addValueName(op.getResult(), op.getNameAttr());
   indent() << "reg " << op.getName() << " : ";
-  emitType(op.getType());
+  emitType(op.getResult().getType());
   os << ", ";
   emitExpression(op.getClockVal());
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(RegResetOp op) {
-  addValueName(op, op.getNameAttr());
+  addValueName(op.getResult(), op.getNameAttr());
   indent() << "reg " << op.getName() << " : ";
-  emitType(op.getType());
+  emitType(op.getResult().getType());
   os << ", ";
   emitExpression(op.getClockVal());
   os << " with :\n";
@@ -391,7 +391,7 @@ void Emitter::emitStatement(RegResetOp op) {
 }
 
 void Emitter::emitStatement(NodeOp op) {
-  addValueName(op, op.getNameAttr());
+  addValueName(op.getResult(), op.getNameAttr());
   indent() << "node " << op.getName() << " = ";
   emitExpression(op.getInput());
   emitLocationAndNewLine(op);
@@ -676,17 +676,20 @@ void Emitter::emitExpression(SpecialConstantOp op) {
       });
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 void Emitter::emitExpression(SubfieldOp op) {
-  auto type = op.getInput().getType().cast<BundleType>();
+  auto type = op.getInput().getType();
   emitExpression(op.getInput());
   os << "." << type.getElementName(op.getFieldIndex());
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 void Emitter::emitExpression(SubindexOp op) {
   emitExpression(op.getInput());
   os << "[" << op.getIndex() << "]";
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 void Emitter::emitExpression(SubaccessOp op) {
   emitExpression(op.getInput());
   os << "[";
@@ -737,7 +740,7 @@ void Emitter::emitAttribute(RUWAttr attr) {
 
 /// Emit a FIRRTL type into the output.
 void Emitter::emitType(Type type) {
-  auto emitWidth = [&](Optional<int32_t> width) {
+  auto emitWidth = [&](std::optional<int32_t> width) {
     if (width)
       os << "<" << *width << ">";
   };

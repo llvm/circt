@@ -92,39 +92,6 @@ lowestCommonAncestor(InstanceGraphNode *top,
   return currentLCA;
 }
 
-/// Compute if specified nodes are instantiated only under 'top'.
-static bool allUnder(ArrayRef<InstanceRecord *> nodes, InstanceGraphNode *top) {
-  DenseSet<InstanceGraphNode *> seen;
-  SmallVector<InstanceGraphNode *> worklist;
-  worklist.reserve(nodes.size());
-  seen.reserve(nodes.size());
-  seen.insert(top);
-  for (auto *n : nodes) {
-    auto *mod = n->getParent();
-    if (seen.insert(mod).second)
-      worklist.push_back(mod);
-  }
-
-  while (!worklist.empty()) {
-    auto *node = worklist.back();
-    worklist.pop_back();
-
-    assert(node != top);
-
-    // If reach top-level node we're not covered by 'top', return.
-    if (node->noUses())
-      return false;
-
-    // Otherwise, walk upwards.
-    for (auto *use : node->uses()) {
-      auto *mod = use->getParent();
-      if (seen.insert(mod).second)
-        worklist.push_back(mod);
-    }
-  }
-  return true;
-}
-
 namespace {
 class WireDFTPass : public WireDFTBase<WireDFTPass> {
   void runOnOperation() override;
@@ -239,7 +206,7 @@ void WireDFTPass::runOnOperation() {
       instanceGraph.lookup(dut), [&](InstanceRecord *node) {
         auto module = node->getTarget()->getModule();
         // If this is a clock gate, record the module and return true.
-        if (module.moduleName().startswith("EICG_wrapper")) {
+        if (module.getModuleName().startswith("EICG_wrapper")) {
           clockGates.insert(node);
           return true;
         }
@@ -248,8 +215,47 @@ void WireDFTPass::runOnOperation() {
       });
 
   // If there are no clock gates under the DUT, we can stop now.
-  if (!clockGates.size())
+  if (clockGates.empty())
     return;
+
+  // Stash UInt<1> type for use throughout.
+  auto uint1Type = enableSignal.getType().cast<FIRRTLType>();
+
+  // Hard coded port result number; the clock gate test_en port is 1.
+  // Language below reflects this as well.
+  const unsigned testEnPortNo = 1;
+
+  // Scan gathered clock gates and check for basic compatibility.
+  for (auto *cgnode : clockGates) {
+    auto module = cgnode->getTarget()->getModule();
+    auto genErr = [&]() { return module.emitError("clock gate module "); };
+    FExtModuleOp ext = dyn_cast<FExtModuleOp>(module.getOperation());
+    if (!ext) {
+      genErr() << "must be an extmodule";
+      return signalPassFailure();
+    }
+    static_assert(testEnPortNo == 1, "update this code");
+    if (ext.getNumPorts() <= testEnPortNo) {
+      genErr() << "must have at least two ports";
+      return signalPassFailure();
+    }
+    if (ext.getPortType(testEnPortNo) != uint1Type) {
+      genErr()
+          .append("must have second port with type UInt<1>")
+          .attachNote() // Use port location once available.
+          .append("Second port (\"")
+          .append(ext.getPortName(testEnPortNo))
+          .append("\") has type ")
+          .append(ext.getPortType(testEnPortNo))
+          .append(", expected ")
+          .append(uint1Type);
+      return signalPassFailure();
+    }
+    if (ext.getPortDirection(testEnPortNo) != Direction::In) {
+      genErr() << "must have second port with input direction";
+      return signalPassFailure();
+    }
+  }
 
   // Handle enable signal (only) outside DUT.
   if (!instanceGraph.isAncestor(enableModule, lca->getModule())) {
@@ -282,10 +288,8 @@ void WireDFTPass::runOnOperation() {
   }
 
   // Stash some useful things.
-  auto *context = &getContext();
-  auto uint1Type = enableSignal.getType().cast<FIRRTLType>();
   auto loc = lca->getModule().getLoc();
-  auto portName = StringAttr::get(context, "test_en");
+  auto portName = StringAttr::get(&getContext(), "test_en");
 
   // This maps an enable signal to each module.
   DenseMap<InstanceGraphNode *, Value> signals;
@@ -334,7 +338,7 @@ void WireDFTPass::runOnOperation() {
     module.insertPorts({{portNo, portInfo}});
     auto builder = ImplicitLocOpBuilder::atBlockEnd(module.getLoc(),
                                                     module.getBodyBlock());
-    builder.create<ConnectOp>(module.getArgument(portNo), signal);
+    emitConnect(builder, module.getArgument(portNo), signal);
 
     // Add an output port to the instance of this module.
     auto *instanceNode = (*node->usesBegin());
@@ -381,7 +385,7 @@ void WireDFTPass::runOnOperation() {
       auto signal = getSignal(parent);
       auto builder = ImplicitLocOpBuilder::atBlockEnd(module->getLoc(),
                                                       module.getBodyBlock());
-      builder.create<ConnectOp>(clone.getResult(portNo), signal);
+      emitConnect(builder, clone.getResult(portNo), signal);
     }
 
     return arg;
@@ -393,9 +397,8 @@ void WireDFTPass::runOnOperation() {
     auto module = cast<FModuleOp>(*parent->getModule());
     auto builder = ImplicitLocOpBuilder::atBlockEnd(module->getLoc(),
                                                     module.getBodyBlock());
-    // Hard coded port result number; the clock gate test_en port is 1.
-    auto testEnPortNo = 1;
-    builder.create<ConnectOp>(
+    emitConnect(
+        builder,
         cast<InstanceOp>(*instance->getInstance()).getResult(testEnPortNo),
         getSignal(parent));
   }

@@ -89,7 +89,7 @@ static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
           location, "Expected width to be inferred for exported port"));
     }
     return emitTypeWithArguments(name, [&](bool) {
-      os << width.value() << ".W";
+      os << *width << ".W";
       return success();
     });
   };

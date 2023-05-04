@@ -6,8 +6,8 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK: [[FD:%.*]] = hw.constant -2147483646 : i32
   %fd = hw.constant 0x80000002 : i32
 
-  // CHECK: %param_x = sv.localparam : i42 {value = 11 : i42}
-  %param_x = sv.localparam : i42 {value = 11 : i42}
+  // CHECK: %param_x = sv.localparam {value = 11 : i42} : i42
+  %param_x = sv.localparam {value = 11 : i42} : i42
 
 
   // This corresponds to this block of system verilog code:
@@ -267,6 +267,18 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
     sv.info "hello %d"(%arg0) : i1
   }
 
+  // Tests for ReadMemOp ($readmemb/$readmemh)
+  // CHECK-NEXT: sv.initial {
+  // CHECK-NEXT:   %memForReadMem = sv.reg
+  // CHECK-NEXT:   sv.readmem %memForReadMem, "file1.txt", MemBaseBin
+  // CHECK-NEXT:   sv.readmem %memForReadMem, "file2.txt", MemBaseHex
+  // CHECK-NEXT: }
+  sv.initial {
+    %memForReadMem = sv.reg sym @MemForReadMem : !hw.inout<uarray<8xi32>>
+    sv.readmem %memForReadMem, "file1.txt", MemBaseBin : !hw.inout<uarray<8xi32>>
+    sv.readmem %memForReadMem, "file2.txt", MemBaseHex : !hw.inout<uarray<8xi32>>
+  }
+
   // CHECK-NEXT: hw.output
   hw.output
 }
@@ -335,7 +347,7 @@ hw.module @nested_wire(%a: i1) {
 
 // CHECK-LABEL: hw.module @ordered_region
 hw.module @ordered_region(%a: i1) {
-  // CHECK: sv.ordered 
+  // CHECK: sv.ordered
   sv.ordered {
     // CHECK: sv.ifdef "foo"
     sv.ifdef "foo" {
@@ -351,4 +363,20 @@ hw.module @ordered_region(%a: i1) {
       sv.assign %wire, %a : i1
     }
   }
+}
+
+// CHECK-LABEL: hw.module @XMRRefOp
+hw.hierpath private @ref [@XMRRefOp::@foo, @XMRRefFoo::@a]
+hw.hierpath @ref2 [@XMRRefOp::@bar]
+hw.module.extern @XMRRefBar()
+hw.module @XMRRefFoo() {
+  %a = sv.wire sym @a : !hw.inout<i2>
+}
+hw.module @XMRRefOp() {
+  hw.instance "foo" sym @foo @XMRRefFoo() -> ()
+  hw.instance "bar" sym @bar @XMRRefBar() -> ()
+  // CHECK: %0 = sv.xmr.ref @ref : !hw.inout<i2>
+  %0 = sv.xmr.ref @ref : !hw.inout<i2>
+  // CHECK: %1 = sv.xmr.ref @ref2 ".x.y.z[42]" : !hw.inout<i8>
+  %1 = sv.xmr.ref @ref2 ".x.y.z[42]" : !hw.inout<i8>
 }

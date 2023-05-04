@@ -13,7 +13,7 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-integration-test:v11
+      image: ghcr.io/circt/images/circt-integration-test:v11.3
     strategy:
       fail-fast: false
       matrix:
@@ -84,7 +84,7 @@ jobs:
             -DLLVM_USE_LINKER=lld \
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
-            -DLLVM_LIT_ARGS='-sv --show-unsupported'
+            -DLLVM_LIT_ARGS="-v --show-unsupported"
       - name: Test CIRCT
         run: |
           ninja -C build check-circt -j$(nproc)

@@ -32,13 +32,19 @@ bool circtESITypeIsAChannelType(MlirType type) {
   return unwrap(type).isa<ChannelType>();
 }
 
-MlirType circtESIChannelTypeGet(MlirType inner) {
+MlirType circtESIChannelTypeGet(MlirType inner, uint32_t signaling) {
+  auto signalEnum = symbolizeChannelSignaling(signaling);
+  if (!signalEnum)
+    return {};
   auto cppInner = unwrap(inner);
-  return wrap(ChannelType::get(cppInner.getContext(), cppInner));
+  return wrap(ChannelType::get(cppInner.getContext(), cppInner, *signalEnum));
 }
 
 MlirType circtESIChannelGetInner(MlirType channelType) {
   return wrap(unwrap(channelType).cast<ChannelType>().getInner());
+}
+uint32_t circtESIChannelGetSignaling(MlirType channelType) {
+  return (uint32_t)unwrap(channelType).cast<ChannelType>().getSignaling();
 }
 
 bool circtESITypeIsAnAnyType(MlirType type) {
@@ -46,6 +52,19 @@ bool circtESITypeIsAnAnyType(MlirType type) {
 }
 MlirType circtESIAnyTypeGet(MlirContext ctxt) {
   return wrap(AnyType::get(unwrap(ctxt)));
+}
+
+bool circtESITypeIsAListType(MlirType type) {
+  return unwrap(type).isa<ListType>();
+}
+
+MlirType circtESIListTypeGet(MlirType inner) {
+  auto cppInner = unwrap(inner);
+  return wrap(ListType::get(cppInner.getContext(), cppInner));
+}
+
+MlirType circtESIListTypeGetElementType(MlirType list) {
+  return wrap(unwrap(list).cast<ListType>().getElementType());
 }
 
 MlirOperation circtESIWrapModule(MlirOperation cModOp, long numPorts,

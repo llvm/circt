@@ -104,7 +104,7 @@ static void printNameKind(OpAsmPrinter &p, Operation *op,
                           firrtl::NameKindEnumAttr attr,
                           ArrayRef<StringRef> extraElides = {}) {
   if (attr.getValue() != NameKindEnum::DroppableName)
-    p << stringifyNameKindEnum(attr.getValue());
+    p << " " << stringifyNameKindEnum(attr.getValue());
 }
 
 //===----------------------------------------------------------------------===//
@@ -119,7 +119,7 @@ void MemoryPortOp::build(OpBuilder &builder, OperationState &result,
 }
 
 LogicalResult MemoryPortOp::inferReturnTypes(MLIRContext *context,
-                                             Optional<Location> loc,
+                                             std::optional<Location> loc,
                                              ValueRange operands,
                                              DictionaryAttr attrs,
                                              mlir::RegionRange regions,
@@ -193,7 +193,7 @@ void MemoryDebugPortOp::build(OpBuilder &builder, OperationState &result,
 }
 
 LogicalResult MemoryDebugPortOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
     SmallVectorImpl<Type> &results) {
   auto inType = operands[0].getType();
@@ -253,11 +253,12 @@ static void printCombMemOp(OpAsmPrinter &p, Operation *op,
 void CombMemOp::build(OpBuilder &builder, OperationState &result,
                       FIRRTLBaseType elementType, uint64_t numElements,
                       StringRef name, NameKindEnum nameKind,
-                      ArrayAttr annotations, StringAttr innerSym) {
+                      ArrayAttr annotations, StringAttr innerSym,
+                      MemoryInitAttr init) {
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), name,
         nameKind, annotations,
-        innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
+        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(), init);
 }
 
 void CombMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -281,11 +282,12 @@ static void printSeqMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
 void SeqMemOp::build(OpBuilder &builder, OperationState &result,
                      FIRRTLBaseType elementType, uint64_t numElements,
                      RUWAttr ruw, StringRef name, NameKindEnum nameKind,
-                     ArrayAttr annotations, StringAttr innerSym) {
+                     ArrayAttr annotations, StringAttr innerSym,
+                     MemoryInitAttr init) {
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), ruw,
         name, nameKind, annotations,
-        innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
+        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(), init);
 }
 
 void SeqMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

@@ -23,6 +23,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 
 #include <memory>
+#include <utility>
 
 using namespace circt;
 using namespace circt::esi;
@@ -44,7 +45,7 @@ ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req,
 
 /// The generator for the "cosim" impl_type.
 static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req,
-                                                 ServiceDeclOpInterface decl) {
+                                                 ServiceDeclOpInterface) {
   auto *ctxt = req.getContext();
   OpBuilder b(req);
   Value clk = req.getOperand(0);
@@ -118,6 +119,10 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req,
 static LogicalResult
 instantiateSystemVerilogMemory(ServiceImplementReqOp req,
                                ServiceDeclOpInterface decl) {
+  if (!decl)
+    return req.emitOpError(
+        "Must specify a service declaration to use 'sv_mem'.");
+
   ImplicitLocOpBuilder b(req.getLoc(), req);
   BackedgeBuilder bb(b, req.getLoc());
 
@@ -248,7 +253,7 @@ ServiceGeneratorDispatcher &ServiceGeneratorDispatcher::globalDispatcher() {
 
 void ServiceGeneratorDispatcher::registerGenerator(StringRef implType,
                                                    ServiceGeneratorFunc gen) {
-  genLookupTable[implType] = gen;
+  genLookupTable[implType] = std::move(gen);
 }
 
 //===----------------------------------------------------------------------===//
@@ -263,7 +268,8 @@ struct ESIConnectServicesPass
     : public ESIConnectServicesBase<ESIConnectServicesPass>,
       msft::PassCommon {
 
-  ESIConnectServicesPass(ServiceGeneratorDispatcher gen) : genDispatcher(gen) {}
+  ESIConnectServicesPass(const ServiceGeneratorDispatcher &gen)
+      : genDispatcher(gen) {}
   ESIConnectServicesPass()
       : genDispatcher(ServiceGeneratorDispatcher::globalDispatcher()) {}
 
@@ -278,7 +284,7 @@ struct ESIConnectServicesPass
 
   /// Copy all service metadata up the instance hierarchy. Modify the service
   /// name path while copying.
-  void copyMetadata(hw::HWMutableModuleLike);
+  void copyMetadata(hw::HWModuleLike);
 
   /// For any service which is "local" (provides the requested service) in a
   /// module, replace it with a ServiceImplementOp. Said op is to be replaced
@@ -287,7 +293,7 @@ struct ESIConnectServicesPass
 
   /// Figure out which requests are "local" vs need to be surfaced. Call
   /// 'surfaceReqs' and/or 'replaceInst' as appropriate.
-  LogicalResult process(hw::HWMutableModuleLike);
+  LogicalResult process(hw::HWModuleLike);
 
 private:
   ServiceGeneratorDispatcher genDispatcher;
@@ -311,8 +317,7 @@ void ESIConnectServicesPass::runOnOperation() {
 
   // Process each module.
   for (auto mod : sortedMods) {
-    hw::HWMutableModuleLike mutableMod =
-        dyn_cast<hw::HWMutableModuleLike>(*mod);
+    hw::HWModuleLike mutableMod = dyn_cast<hw::HWModuleLike>(*mod);
     if (mutableMod && failed(process(mutableMod))) {
       signalPassFailure();
       return;
@@ -320,13 +325,18 @@ void ESIConnectServicesPass::runOnOperation() {
   }
 }
 
-LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
+LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
   Block &modBlock = mod->getRegion(0).front();
 
   // Index the local services and create blocks in which to put the requests.
   DenseMap<SymbolRefAttr, Block *> localImplReqs;
-  for (auto instOp : modBlock.getOps<ServiceInstanceOp>())
-    localImplReqs[instOp.getServiceSymbolAttr()] = new Block();
+  Block *anyServiceInst = nullptr;
+  for (auto instOp : modBlock.getOps<ServiceInstanceOp>()) {
+    auto *b = new Block();
+    localImplReqs[instOp.getServiceSymbolAttr()] = b;
+    if (!instOp.getServiceSymbol().has_value())
+      anyServiceInst = b;
+  }
 
   // Decompose the 'inout' requests int to 'in' and 'out' requests.
   mod.walk([&](RequestInOutChannelOp reqInOut) {
@@ -348,11 +358,15 @@ LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
       auto implOpF = localImplReqs.find(service);
       if (implOpF != localImplReqs.end())
         req->moveBefore(implOpF->second, implOpF->second->end());
+      else if (anyServiceInst)
+        req->moveBefore(anyServiceInst, anyServiceInst->end());
     } else if (auto req = dyn_cast<RequestToServerConnectionOp>(op)) {
       auto service = req.getServicePortAttr().getModuleRef();
       auto implOpF = localImplReqs.find(service);
       if (implOpF != localImplReqs.end())
         req->moveBefore(implOpF->second, implOpF->second->end());
+      else if (anyServiceInst)
+        req->moveBefore(anyServiceInst, anyServiceInst->end());
     }
   });
 
@@ -388,21 +402,23 @@ LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
   // Surface all of the requests which cannot be fulfilled locally.
   if (nonLocalToClientReqs.empty() && nonLocalToServerReqs.empty())
     return success();
-  return surfaceReqs(mod, nonLocalToClientReqs, nonLocalToServerReqs);
+
+  if (auto mutableMod = dyn_cast<hw::HWMutableModuleLike>(mod.getOperation()))
+    return surfaceReqs(mutableMod, nonLocalToClientReqs, nonLocalToServerReqs);
+  return mod.emitOpError(
+      "Cannot surface requests through module without mutable ports");
 }
 
-void ESIConnectServicesPass::copyMetadata(hw::HWMutableModuleLike mod) {
+void ESIConnectServicesPass::copyMetadata(hw::HWModuleLike mod) {
   SmallVector<ServiceHierarchyMetadataOp, 8> metadataOps;
   mod.walk([&](ServiceHierarchyMetadataOp op) { metadataOps.push_back(op); });
 
   for (auto inst : moduleInstantiations[mod]) {
     OpBuilder b(inst);
-    auto instName = b.getStringAttr(inst.instanceName());
+    auto instName = inst.getInstanceNameAttr();
     for (auto metadata : metadataOps) {
       SmallVector<Attribute, 4> path;
-      path.push_back(hw::InnerRefAttr::get(
-          cast<hw::HWModuleLike>(mod.getOperation()).moduleNameAttr(),
-          instName));
+      path.push_back(hw::InnerRefAttr::get(mod.getModuleNameAttr(), instName));
       for (auto attr : metadata.getServerNamePathAttr())
         path.push_back(attr);
 
@@ -417,6 +433,14 @@ void ESIConnectServicesPass::copyMetadata(hw::HWMutableModuleLike mod) {
 /// automated software API creation).
 static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
   ImplicitLocOpBuilder b(implReqOp.getLoc(), implReqOp);
+
+  // Check if there are any "BSP" service providers -- ones which implement any
+  // service -- and create an implicit service declaration for them.
+  std::unique_ptr<Block> bspPorts = nullptr;
+  if (!implReqOp.getServiceSymbol().has_value()) {
+    bspPorts = std::make_unique<Block>();
+    b.setInsertionPointToStart(bspPorts.get());
+  }
 
   llvm::SmallVector<
       std::pair<RequestToServerConnectionOp, RequestToClientConnectionOp>, 8>
@@ -444,10 +468,35 @@ static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
     clientAttrs.push_back(b.getNamedAttr("client_name", clientNamePath));
 
     clients.push_back(b.getDictionaryAttr(clientAttrs));
+
+    if (!bspPorts)
+      continue;
+
+    if (toServer && toClient)
+      b.create<ServiceDeclInOutOp>(
+          toServer.getServicePort().getName(),
+          TypeAttr::get(toServer.getToServer().getType()),
+          TypeAttr::get(toClient.getToClient().getType()));
+    else if (toClient)
+      b.create<ToClientOp>(toClient.getServicePort().getName(),
+                           TypeAttr::get(toClient.getToClient().getType()));
+    else
+      b.create<ToServerOp>(toServer.getServicePort().getName(),
+                           TypeAttr::get(toServer.getToServer().getType()));
+  }
+
+  if (bspPorts && !bspPorts->empty()) {
+    b.setInsertionPointToEnd(
+        implReqOp->getParentOfType<mlir::ModuleOp>().getBody());
+    // TODO: we currently only support one BSP. Should we support more?
+    auto decl = b.create<CustomServiceDeclOp>("BSP");
+    decl.getPorts().push_back(bspPorts.release());
+    implReqOp.setServiceSymbol(decl.getSymNameAttr().getValue());
   }
 
   auto clientsAttr = b.getArrayAttr(clients);
   auto nameAttr = b.getArrayAttr(ArrayRef<Attribute>{});
+  b.setInsertionPointAfter(implReqOp);
   b.create<ServiceHierarchyMetadataOp>(
       implReqOp.getServiceSymbolAttr(), nameAttr, implReqOp.getImplTypeAttr(),
       implReqOp.getImplOptsAttr(), clientsAttr);
@@ -456,12 +505,15 @@ static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
 LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
                                                   Block *portReqs) {
   assert(portReqs);
-
-  auto decl = dyn_cast_or_null<ServiceDeclOpInterface>(
-      topLevelSyms.getDefinition(instOp.getServiceSymbolAttr()));
-  if (!decl)
-    return instOp.emitOpError("Could not find service declaration ")
-           << instOp.getServiceSymbolAttr();
+  auto declSym = instOp.getServiceSymbolAttr();
+  ServiceDeclOpInterface decl;
+  if (declSym) {
+    decl = dyn_cast_or_null<ServiceDeclOpInterface>(
+        topLevelSyms.getDefinition(declSym));
+    if (!decl)
+      return instOp.emitOpError("Could not find service declaration ")
+             << declSym;
+  }
 
   // Compute the result types for the new op -- the instance op's output types
   // + the to_client types.
@@ -501,9 +553,8 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
     hw::HWMutableModuleLike mod,
     ArrayRef<RequestToClientConnectionOp> toClientReqs,
     ArrayRef<RequestToServerConnectionOp> toServerReqs) {
-  auto ctxt = mod.getContext();
-  Block &modBlock = mod->getRegion(0).front();
-  Operation *modTerminator = modBlock.getTerminator();
+  auto *ctxt = mod.getContext();
+  Block *body = &mod->getRegion(0).front();
 
   // Track initial operand/result counts and the new IO.
   unsigned origNumInputs = mod.getNumInputs();
@@ -525,12 +576,13 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
   // Insert new module input ESI ports.
   for (auto toClient : toClientReqs) {
     newInputs.push_back(std::make_pair(
-        origNumInputs, hw::PortInfo{getPortName(toClient.getClientNamePath()),
-                                    hw::PortDirection::INPUT,
-                                    toClient.getType(), origNumInputs}));
+        origNumInputs,
+        hw::PortInfo{getPortName(toClient.getClientNamePath()),
+                     hw::PortDirection::INPUT, toClient.getType(),
+                     origNumInputs, nullptr, toClient.getLoc()}));
+    body->addArgument(toClient.getType(), toClient.getLoc());
   }
   mod.insertPorts(newInputs, {});
-  Block *body = &mod->getRegion(0).front();
 
   // Replace uses with new block args which will correspond to said ports.
   // Note: no zip or enumerate here because we need mutable access to
@@ -577,7 +629,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
     for (auto [toClient, newPort] : llvm::zip(toClientReqs, newInputs)) {
       auto instToClient = cast<RequestToClientConnectionOp>(b.clone(*toClient));
       instToClient.setClientNamePathAttr(prependNamePart(
-          instToClient.getClientNamePath(), inst.instanceName()));
+          instToClient.getClientNamePath(), inst.getInstanceName()));
       newOperands.push_back(instToClient.getToClient());
     }
 
@@ -596,11 +648,11 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
       else
         newAttrs.push_back(attr);
     }
-    auto newHWInst = b.insert(
+    auto *newHWInst = b.insert(
         Operation::create(inst->getLoc(), inst->getName(), newResultTypes,
                           newOperands, b.getDictionaryAttr(newAttrs),
                           inst->getSuccessors(), inst->getRegions()));
-    newModuleInstantiations.push_back(newHWInst);
+    newModuleInstantiations.push_back(cast<hw::HWInstanceLike>(newHWInst));
 
     // Replace all uses of the instance being replaced.
     for (auto [newV, oldV] :
@@ -612,7 +664,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
     for (auto [toServer, newPort] : llvm::zip(toServerReqs, newOutputs)) {
       auto instToServer = cast<RequestToServerConnectionOp>(b.clone(*toServer));
       instToServer.setClientNamePathAttr(prependNamePart(
-          instToServer.getClientNamePath(), inst.instanceName()));
+          instToServer.getClientNamePath(), inst.getInstanceName()));
       instToServer->setOperand(0, newHWInst->getResult(outputCounter++));
     }
   }

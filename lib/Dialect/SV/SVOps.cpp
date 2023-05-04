@@ -17,12 +17,16 @@
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVAttributes.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+#include <optional>
 
 using namespace circt;
 using namespace sv;
@@ -43,8 +47,8 @@ bool sv::is2StateExpression(Value v) {
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
   return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
-             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, MacroRefExprOp,
-             MacroRefExprSEOp>(op);
+             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, ConstantStrOp,
+             MacroRefExprOp, MacroRefExprSEOp>(op);
 }
 
 LogicalResult sv::verifyInProceduralRegion(Operation *op) {
@@ -85,68 +89,6 @@ static Operation *lookupSymbolInNested(Operation *symbolTableOp,
       }
     }
   return nullptr;
-}
-
-//===----------------------------------------------------------------------===//
-// ImplicitSSAName Custom Directive
-//===----------------------------------------------------------------------===//
-
-static ParseResult parseImplicitSSAName(OpAsmParser &parser,
-                                        NamedAttrList &resultAttrs) {
-
-  if (parser.parseOptionalAttrDict(resultAttrs))
-    return failure();
-
-  // If the attribute dictionary contains no 'name' attribute, infer it from
-  // the SSA name (if specified).
-  bool hadName = llvm::any_of(resultAttrs, [](NamedAttribute attr) {
-    return attr.getName() == "name";
-  });
-
-  // If there was no name specified, check to see if there was a useful name
-  // specified in the asm file.
-  if (hadName)
-    return success();
-
-  // If there is no explicit name attribute, get it from the SSA result name.
-  // If numeric, just use an empty name.
-  auto resultName = parser.getResultName(0).first;
-  if (!resultName.empty() && isdigit(resultName[0]))
-    resultName = "";
-  auto nameAttr = parser.getBuilder().getStringAttr(resultName);
-  auto *context = parser.getBuilder().getContext();
-  resultAttrs.push_back({StringAttr::get(context, "name"), nameAttr});
-  return success();
-}
-
-static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
-                                 DictionaryAttr attr) {
-  // Note that we only need to print the "name" attribute if the asmprinter
-  // result name disagrees with it.  This can happen in strange cases, e.g.
-  // when there are conflicts.
-  bool namesDisagree = false;
-
-  SmallString<32> resultNameStr;
-  llvm::raw_svector_ostream tmpStream(resultNameStr);
-  p.printOperand(op->getResult(0), tmpStream);
-  auto expectedName = op->getAttrOfType<StringAttr>("name").getValue();
-  auto actualName = tmpStream.str().drop_front();
-  if (actualName != expectedName) {
-    // Anonymous names are printed as digits, which is fine.
-    if (!expectedName.empty() || !isdigit(actualName[0]))
-      namesDisagree = true;
-  }
-
-  if (namesDisagree)
-    p.printOptionalAttrDict(op->getAttrs(),
-                            {SymbolTable::getSymbolAttrName(),
-                             hw::InnerName::getInnerNameAttrName(),
-                             "svAttributes"});
-  else
-    p.printOptionalAttrDict(op->getAttrs(),
-                            {"name", SymbolTable::getSymbolAttrName(),
-                             hw::InnerName::getInnerNameAttrName(),
-                             "svAttributes"});
 }
 
 //===----------------------------------------------------------------------===//
@@ -456,7 +398,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
 
   if (auto constant = op.getCond().getDefiningOp<hw::ConstantOp>()) {
 
-    if (constant.getValue().isAllOnesValue())
+    if (constant.getValue().isAllOnes())
       replaceOpWithRegion(rewriter, op, op.getThenRegion());
     else if (!op.getElseRegion().empty())
       replaceOpWithRegion(rewriter, op, op.getElseRegion());
@@ -513,7 +455,7 @@ AlwaysOp::Condition AlwaysOp::getCondition(size_t idx) {
 }
 
 void AlwaysOp::build(OpBuilder &builder, OperationState &result,
-                     ArrayRef<EventControl> events, ArrayRef<Value> clocks,
+                     ArrayRef<sv::EventControl> events, ArrayRef<Value> clocks,
                      std::function<void()> bodyCtor) {
   assert(events.size() == clocks.size() &&
          "mismatch between event and clock list");
@@ -552,7 +494,7 @@ static ParseResult parseEventList(
   StringRef keyword;
   if (!p.parseOptionalKeyword(&keyword)) {
     while (1) {
-      auto kind = symbolizeEventControl(keyword);
+      auto kind = sv::symbolizeEventControl(keyword);
       if (!kind.has_value())
         return p.emitError(loc, "expected 'posedge', 'negedge', or 'edge'");
       auto eventEnum = static_cast<int32_t>(*kind);
@@ -1036,6 +978,111 @@ void OrderedOutputOp::build(OpBuilder &builder, OperationState &result,
 }
 
 //===----------------------------------------------------------------------===//
+// ForOp
+//===----------------------------------------------------------------------===//
+
+void ForOp::build(OpBuilder &builder, OperationState &result,
+                  int64_t lowerBound, int64_t upperBound, int64_t step,
+                  IntegerType type, StringRef name,
+                  llvm::function_ref<void(BlockArgument)> body) {
+  auto lb = builder.create<hw::ConstantOp>(result.location, type, lowerBound);
+  auto ub = builder.create<hw::ConstantOp>(result.location, type, upperBound);
+  auto st = builder.create<hw::ConstantOp>(result.location, type, step);
+  build(builder, result, lb, ub, st, name, body);
+}
+void ForOp::build(OpBuilder &builder, OperationState &result, Value lowerBound,
+                  Value upperBound, Value step, StringRef name,
+                  llvm::function_ref<void(BlockArgument)> body) {
+  OpBuilder::InsertionGuard guard(builder);
+  build(builder, result, lowerBound, upperBound, step, name);
+  auto *region = result.regions.front().get();
+  builder.createBlock(region);
+  BlockArgument blockArgument =
+      region->addArgument(lowerBound.getType(), result.location);
+
+  if (body)
+    body(blockArgument);
+}
+
+void ForOp::getAsmBlockArgumentNames(mlir::Region &region,
+                                     mlir::OpAsmSetValueNameFn setNameFn) {
+  auto *block = &region.front();
+  setNameFn(block->getArgument(0), getInductionVarNameAttr());
+}
+
+ParseResult ForOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto &builder = parser.getBuilder();
+  Type type;
+
+  OpAsmParser::Argument inductionVariable;
+  OpAsmParser::UnresolvedOperand lb, ub, step;
+  // Parse the optional initial iteration arguments.
+  SmallVector<OpAsmParser::Argument, 4> regionArgs;
+
+  // Parse the induction variable followed by '='.
+  if (parser.parseOperand(inductionVariable.ssaName) || parser.parseEqual() ||
+      // Parse loop bounds.
+      parser.parseOperand(lb) || parser.parseKeyword("to") ||
+      parser.parseOperand(ub) || parser.parseKeyword("step") ||
+      parser.parseOperand(step) || parser.parseColon() ||
+      parser.parseType(type))
+    return failure();
+
+  regionArgs.push_back(inductionVariable);
+
+  // Resolve input operands.
+  regionArgs.front().type = type;
+  if (parser.resolveOperand(lb, type, result.operands) ||
+      parser.resolveOperand(ub, type, result.operands) ||
+      parser.resolveOperand(step, type, result.operands))
+    return failure();
+
+  // Parse the body region.
+  Region *body = result.addRegion();
+  if (parser.parseRegion(*body, regionArgs))
+    return failure();
+
+  // Parse the optional attribute list.
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  if (!inductionVariable.ssaName.name.empty()) {
+    if (!isdigit(inductionVariable.ssaName.name[1]))
+      // Retrive from its SSA name.
+      result.attributes.append(
+          {builder.getStringAttr("inductionVarName"),
+           builder.getStringAttr(inductionVariable.ssaName.name.drop_front())});
+  }
+
+  return success();
+}
+
+void ForOp::print(OpAsmPrinter &p) {
+  p << " " << getInductionVar() << " = " << getLowerBound() << " to "
+    << getUpperBound() << " step " << getStep();
+  p << " : " << getInductionVar().getType() << ' ';
+  p.printRegion(getRegion(),
+                /*printEntryBlockArgs=*/false,
+                /*printBlockTerminators=*/false);
+  p.printOptionalAttrDict((*this)->getAttrs(), {"inductionVarName"});
+}
+
+LogicalResult ForOp::canonicalize(ForOp op, PatternRewriter &rewriter) {
+  APInt lb, ub, step;
+  if (matchPattern(op.getLowerBound(), mlir::m_ConstantInt(&lb)) &&
+      matchPattern(op.getUpperBound(), mlir::m_ConstantInt(&ub)) &&
+      matchPattern(op.getStep(), mlir::m_ConstantInt(&step)) &&
+      lb + step == ub) {
+    // Unroll the loop if it's executed only once.
+    op.getInductionVar().replaceAllUsesWith(op.getLowerBound());
+    replaceOpWithRegion(rewriter, op, op.getBodyRegion());
+    rewriter.eraseOp(op);
+    return success();
+  }
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
 // Assignment statements
 //===----------------------------------------------------------------------===//
 
@@ -1053,6 +1100,133 @@ LogicalResult PAssignOp::verify() {
         "Verilog disallows procedural assignment to a net type (did you intend "
         "to use a variable type, e.g., sv.reg?)");
   return success();
+}
+
+namespace {
+// This represents a slice of an array.
+struct ArraySlice {
+  Value array;
+  Value start;
+  size_t size; // Represent a range array[start, start + size).
+
+  // Get a struct from the value. Return std::nullopt if the value doesn't
+  // represent an array slice.
+  static std::optional<ArraySlice> getArraySlice(Value v) {
+    auto *op = v.getDefiningOp();
+    if (!op)
+      return std::nullopt;
+    return TypeSwitch<Operation *, std::optional<ArraySlice>>(op)
+        .Case<hw::ArrayGetOp, ArrayIndexInOutOp>(
+            [](auto arrayIndex) -> std::optional<ArraySlice> {
+              hw::ConstantOp constant =
+                  arrayIndex.getIndex()
+                      .template getDefiningOp<hw::ConstantOp>();
+              if (!constant)
+                return std::nullopt;
+              return ArraySlice{/*array=*/arrayIndex.getInput(),
+                                /*start=*/constant,
+                                /*end=*/1};
+            })
+        .Case<hw::ArraySliceOp>([](hw::ArraySliceOp slice)
+                                    -> std::optional<ArraySlice> {
+          auto constant = slice.getLowIndex().getDefiningOp<hw::ConstantOp>();
+          if (!constant)
+            return std::nullopt;
+          return ArraySlice{
+              /*array=*/slice.getInput(), /*start=*/constant,
+              /*end=*/hw::type_cast<hw::ArrayType>(slice.getType()).getSize()};
+        })
+        .Case<sv::IndexedPartSelectInOutOp>(
+            [](sv::IndexedPartSelectInOutOp index)
+                -> std::optional<ArraySlice> {
+              auto constant = index.getBase().getDefiningOp<hw::ConstantOp>();
+              if (!constant || index.getDecrement())
+                return std::nullopt;
+              return ArraySlice{/*array=*/index.getInput(),
+                                /*start=*/constant,
+                                /*end=*/index.getWidth()};
+            })
+        .Default([](auto) { return std::nullopt; });
+  }
+
+  // Create a pair of ArraySlice from source and destination of assignments.
+  static std::optional<std::pair<ArraySlice, ArraySlice>>
+  getAssignedRange(Operation *op) {
+    assert((isa<PAssignOp, BPAssignOp>(op) && "assignments are expected"));
+    auto srcRange = ArraySlice::getArraySlice(op->getOperand(1));
+    if (!srcRange)
+      return std::nullopt;
+    auto destRange = ArraySlice::getArraySlice(op->getOperand(0));
+    if (!destRange)
+      return std::nullopt;
+
+    return std::make_pair(*destRange, *srcRange);
+  }
+};
+} // namespace
+
+// This canonicalization merges neiboring assignments of array elements into
+// array slice assignments. e.g.
+// a[0] <= b[1]
+// a[1] <= b[2]
+// ->
+// a[1:0] <= b[2:1]
+template <typename AssignTy>
+static LogicalResult mergeNeiboringAssignments(AssignTy op,
+                                               PatternRewriter &rewriter) {
+  // Get assigned ranges of each assignment.
+  auto assignedRangeOpt = ArraySlice::getAssignedRange(op);
+  if (!assignedRangeOpt)
+    return failure();
+
+  auto [dest, src] = *assignedRangeOpt;
+  AssignTy nextAssign = dyn_cast_or_null<AssignTy>(op->getNextNode());
+  bool changed = false;
+  SmallVector<Location> loc{op.getLoc()};
+  // Check that a next operation is a same kind of the assignment.
+  while (nextAssign) {
+    auto nextAssignedRange = ArraySlice::getAssignedRange(nextAssign);
+    if (!nextAssignedRange)
+      break;
+    auto [nextDest, nextSrc] = *nextAssignedRange;
+    // Check that these assignments are mergaable.
+    if (dest.array != nextDest.array || src.array != nextSrc.array ||
+        !hw::isOffset(dest.start, nextDest.start, dest.size) ||
+        !hw::isOffset(src.start, nextSrc.start, src.size))
+      break;
+
+    dest.size += nextDest.size;
+    src.size += nextSrc.size;
+    changed = true;
+    loc.push_back(nextAssign.getLoc());
+    rewriter.eraseOp(nextAssign);
+    nextAssign = dyn_cast_or_null<AssignTy>(op->getNextNode());
+  }
+
+  if (!changed)
+    return failure();
+
+  // From here, construct assignments of array slices.
+  auto resultType = hw::ArrayType::get(
+      hw::type_cast<hw::ArrayType>(src.array.getType()).getElementType(),
+      src.size);
+  auto newDest = rewriter.create<sv::IndexedPartSelectInOutOp>(
+      op.getLoc(), dest.array, dest.start, dest.size);
+  auto newSrc = rewriter.create<hw::ArraySliceOp>(op.getLoc(), resultType,
+                                                  src.array, src.start);
+  auto newLoc = rewriter.getFusedLoc(loc);
+  auto newOp = rewriter.replaceOpWithNewOp<AssignTy>(op, newDest, newSrc);
+  newOp->setLoc(newLoc);
+  return success();
+}
+
+LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
+  return mergeNeiboringAssignments(op, rewriter);
+}
+
+LogicalResult BPAssignOp::canonicalize(BPAssignOp op,
+                                       PatternRewriter &rewriter) {
+  return mergeNeiboringAssignments(op, rewriter);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1149,8 +1323,17 @@ void InterfaceModportOp::build(OpBuilder &builder, OperationState &state,
   build(builder, state, name, ArrayAttr::get(ctxt, directions));
 }
 
+/// Suggest a name for each result value based on the saved result names
+/// attribute.
+void InterfaceInstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), getName());
+}
+
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 LogicalResult InterfaceInstanceOp::verify() {
+  if (getName().empty())
+    return emitOpError("requires non-empty name");
+
   auto *symtable = SymbolTable::getNearestSymbolTable(*this);
   if (!symtable)
     return emitError("sv.interface.instance must exist within a region "
@@ -1343,8 +1526,10 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
   Value connected;
   if (!write) {
-    // If no write and only reads, then replace with XOp.
-    connected = rewriter.create<ConstantXOp>(
+    // If no write and only reads, then replace with ZOp.
+    // SV 6.6: "If no driver is connected to a net, its
+    // value shall be high-impedance (z) unless the net is a trireg"
+    connected = rewriter.create<ConstantZOp>(
         wire.getLoc(),
         wire.getResult().getType().cast<InOutType>().getElementType());
   } else if (isa<hw::HWModuleOp>(write->getParentOp()))
@@ -1353,6 +1538,13 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
     // If the write is happening at the module level then we don't have any
     // use-before-def checking to do, so we only handle that for now.
     return failure();
+
+  // If the wire has a name attribute, propagate the name to the expression.
+  if (auto *connectedOp = connected.getDefiningOp())
+    if (!wire.getName().empty())
+      rewriter.updateRootInPlace(connectedOp, [&] {
+        connectedOp->setAttr("sv.namehint", wire.getNameAttr());
+      });
 
   // Ok, we can do this.  Replace all the reads with the connected value.
   for (auto read : reads)
@@ -1363,28 +1555,6 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
     rewriter.eraseOp(write);
   rewriter.eraseOp(wire);
   return success();
-}
-
-//===----------------------------------------------------------------------===//
-// ReadInOutOp
-//===----------------------------------------------------------------------===//
-
-void ReadInOutOp::build(OpBuilder &builder, OperationState &result,
-                        Value input) {
-  auto resultType = input.getType().cast<InOutType>().getElementType();
-  build(builder, result, resultType, input);
-}
-
-//===----------------------------------------------------------------------===//
-// ArrayIndexInOutOp
-//===----------------------------------------------------------------------===//
-
-void ArrayIndexInOutOp::build(OpBuilder &builder, OperationState &result,
-                              Value input, Value index) {
-  auto resultType = input.getType().cast<InOutType>().getElementType();
-  resultType = getAnyHWArrayElementType(resultType);
-  assert(resultType && "input should have 'inout of an array' type");
-  build(builder, result, InOutType::get(resultType), input, index);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1403,7 +1573,7 @@ static Type getElementTypeOfWidth(Type type, int32_t width) {
 }
 
 LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
     SmallVectorImpl<Type> &results) {
   auto width = attrs.get("width");
@@ -1445,7 +1615,7 @@ LogicalResult IndexedPartSelectInOutOp::verify() {
   return success();
 }
 
-OpFoldResult IndexedPartSelectInOutOp::fold(ArrayRef<Attribute> constants) {
+OpFoldResult IndexedPartSelectInOutOp::fold(FoldAdaptor) {
   if (getType() == getInput().getType())
     return getInput();
   return {};
@@ -1456,7 +1626,7 @@ OpFoldResult IndexedPartSelectInOutOp::fold(ArrayRef<Attribute> constants) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult IndexedPartSelectOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
     SmallVectorImpl<Type> &results) {
   auto width = attrs.get("width");
@@ -1486,7 +1656,7 @@ LogicalResult IndexedPartSelectOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult StructFieldInOutOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
     SmallVectorImpl<Type> &results) {
   auto field = attrs.get("field");

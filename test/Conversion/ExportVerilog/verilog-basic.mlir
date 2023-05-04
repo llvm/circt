@@ -1,8 +1,9 @@
-// RUN: circt-opt %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s -test-apply-lowering-options='options=emitBindComments' -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: module inputs_only(
-// CHECK-NEXT: input a,
-// CHECK-NEXT:       b);
+// CHECK-NEXT:   input a,{{.*}}
+// CHECK-NEXT:         b
+// CHECK-NEXT:  );
 hw.module @inputs_only(%a: i1, %b: i1) {
   hw.output
 }
@@ -27,7 +28,8 @@ hw.module @no_ports() {
 // CHECK-NEXT:    output [15:0] out16,
 // CHECK-NEXT:                  out16s,
 // CHECK-NEXT:    output [16:0] sext17,
-// CHECK-NEXT:    output [1:0]  orvout);
+// CHECK-NEXT:    output [1:0]  orvout
+// CHECK-NEXT:  );
 
 hw.module @Expressions(%in4: i4, %clock: i1) ->
   (out1a: i1, out1b: i1, out1c: i1, out1d: i1, out1e: i1, out1f: i1, out1g: i1,
@@ -284,6 +286,43 @@ hw.module @CmpSign(%a: i4, %b: i4, %c: i4, %d: i4) ->
   hw.output %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15 : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
 }
 
+// CHECK-LABEL: module Wires(
+hw.hierpath @myWirePath [@Wires::@myWire]
+hw.module @Wires(%a: i4) -> (x: i4, y: i4) {
+  // CHECK-DAG: wire [3:0] wire1 = a;
+  // CHECK-DAG: assign x = wire1;
+  %wire1 = hw.wire %a : i4
+
+  // Use before def
+  // CHECK-DAG: wire [3:0] wire2 = wire1;
+  // CHECK-DAG: assign y = wire2 * wire2;
+  %0 = comb.mul %wire2, %wire2 : i4
+  %wire2 = hw.wire %wire1 : i4
+
+  // Nested use before def
+  // CHECK-DAG: wire [3:0] wire4 = a;
+  sv.always {
+    // CHECK-DAG: logic [3:0] wire3 = a;
+    %wire3 = hw.wire %a : i4
+    // CHECK-DAG: assert(wire3 == wire4);
+    %1 = comb.icmp eq %wire3, %wire4 : i4
+    sv.assert %1, immediate
+  }
+  %wire4 = hw.wire %a : i4
+
+  // Inner symbol references
+  // CHECK-DAG: wire [3:0] wire5 = a;
+  // CHECK-DAG: symRef1(wire5);
+  // CHECK-DAG: symRef2(Wires.wire5);
+  %wire5 = hw.wire %a sym @myWire : i4
+  sv.verbatim "symRef1({{0}});" {symbols = [#hw.innerNameRef<@Wires::@myWire>]}
+  %2 = sv.xmr.ref @myWirePath : !hw.inout<i4>
+  %3 = sv.read_inout %2 : !hw.inout<i4>
+  sv.verbatim "symRef2({{0}});"(%3) : i4
+
+  hw.output %wire1, %0 : i4, i4
+}
+
 // CHECK-LABEL: module MultiUseExpr
 hw.module @MultiUseExpr(%a: i4) -> (b0: i1, b1: i1, b2: i1, b3: i1, b4: i2) {
   %false = hw.constant false
@@ -313,7 +352,8 @@ hw.module @MultiUseExpr(%a: i4) -> (b0: i1, b1: i1, b2: i1, b3: i1, b4: i2) {
 
 // CHECK-LABEL: module SimpleConstPrint(
 // CHECK-NEXT:    input  [3:0] in4,
-// CHECK-NEXT:    output [3:0] out4);
+// CHECK-NEXT:    output [3:0] out4
+// CHECK-NEXT: );
 // CHECK:  wire [3:0] w = 4'h1;
 // CHECK:  assign out4 = in4 + 4'h1;
 // CHECK-NEXT: endmodule
@@ -344,9 +384,21 @@ hw.module @SimpleConstPrintReset(%clock: i1, %reset: i1, %in4: i4) -> () {
 
 }
 
+// CHECK-LABEL: module InlineDeclAssignment
+hw.module @InlineDeclAssignment(%a: i1) {
+  // CHECK: wire b = a;
+  %b = sv.wire : !hw.inout<i1>
+  sv.assign %b, %a : i1
+
+  // CHECK: wire c = a + a;
+  %0 = comb.add %a, %a : i1
+  %c = sv.wire : !hw.inout<i1>
+  sv.assign %c, %0 : i1
+}
 
 // CHECK-LABEL: module ordered_region
 // CHECK-NEXT: input a
+// CHECK-NEXT: );
 // CHECK-EMPTY:
 hw.module @ordered_region(%a: i1) {
   sv.ordered {
@@ -417,7 +469,8 @@ hw.module @NestedParameterUsage<param: i32>(
   %in: !hw.int<#hw.param.decl.ref<"param">>) -> (out: !hw.int<#hw.param.decl.ref<"param">>) {
   // CHECK: #(parameter /*integer*/ param) (
   // CHECK: input  [param - 1:0] in,
-  // CHECK: output [param - 1:0] out);
+  // CHECK: output [param - 1:0] out
+  // CHECK: );
   // CHECK: ExternParametricWidth #(
   // CHECK:   .width(param)
   // CHECK: ) externWidth (
@@ -474,6 +527,44 @@ hw.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
   hw.output
 }
 
+// CHECK-LABEL: module ReadMem()
+hw.module @ReadMem() {
+  // CHECK:      reg [31:0] mem[0:7];
+  %mem = sv.reg sym @mem : !hw.inout<uarray<8xi32>>
+  // CHECK-NEXT: initial begin
+  // CHECK-NEXT:   $readmemb("file1.txt", mem);
+  // CHECK-NEXT:   $readmemh("file2.txt", mem);
+  // CHECK-NEXT: end
+  sv.initial {
+    sv.readmem %mem, "file1.txt", MemBaseBin : !hw.inout<uarray<8xi32>>
+    sv.readmem %mem, "file2.txt", MemBaseHex : !hw.inout<uarray<8xi32>>
+  }
+
+}
+
+// CHECK: module ReadMemXMR()
+hw.module @ReadMemXMR() {
+  hw.instance "ReadMem" sym @ReadMem_sym @ReadMem() -> ()
+  // CHECK:      initial
+  // CHECK-NEXT:   $readmemb("file3.txt", ReadMem.mem)
+  sv.initial {
+    %xmr = sv.xmr.ref #hw.innerNameRef<@ReadMem::@mem> {} : !hw.inout<uarray<8xi32>>
+    sv.readmem %xmr, "file3.txt", MemBaseBin : !hw.inout<uarray<8xi32>>
+  }
+}
+
+hw.hierpath @ReadMem_path [@ReadMemXMRHierPath::@ReadMemXMR_sym, @ReadMemXMR::@ReadMem_sym, @ReadMem::@mem]
+// CHECK: module ReadMemXMRHierPath()
+hw.module @ReadMemXMRHierPath() {
+  hw.instance "ReadMemXMR" sym @ReadMemXMR_sym @ReadMemXMR() -> ()
+  // CHECK:      initial
+  // CHECK-NEXT:   $readmemb("file4.txt", ReadMemXMRHierPath.ReadMemXMR.ReadMem.mem)
+  sv.initial {
+    %xmr = sv.xmr.ref @ReadMem_path : !hw.inout<uarray<8xi32>>
+    sv.readmem %xmr, "file4.txt", MemBaseBin : !hw.inout<uarray<8xi32>>
+  }
+}
+
 // CHECK-LABEL: module UninitReg1(
 hw.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   %c-1_i2 = hw.constant -1 : i2
@@ -517,16 +608,16 @@ hw.module @UnaryParensIssue755(%a: i8) -> (b: i1) {
 
 // Inner name references to ports which are renamed to avoid collisions with
 // reserved Verilog keywords.
-hw.module.extern @VerbatimModuleExtern(%foo: i1 {hw.exportPort = @symA}) -> (bar: i1 {hw.exportPort = @symB})
+hw.module.extern @VerbatimModuleExtern(%foo: i1 {hw.exportPort = #hw<innerSym@symA>}) -> (bar: i1 {hw.exportPort = #hw<innerSym@symB>})
 // CHECK-LABEL: module VerbatimModule(
 // CHECK-NEXT:    input  signed_0
-// CHECK-NEXT:    output unsigned_1
-hw.module @VerbatimModule(%signed: i1 {hw.exportPort = @symA}) -> (unsigned: i1 {hw.exportPort = @symB}) {
+// CHECK-NEXT:    output unsigned_0
+hw.module @VerbatimModule(%signed: i1 {hw.exportPort = #hw<innerSym@symA>}) -> (unsigned: i1 {hw.exportPort = #hw<innerSym@symB>}) {
   %parameter = sv.wire sym @symC : !hw.inout<i4>
   %localparam = sv.reg sym @symD : !hw.inout<i4>
   %shortint = sv.interface.instance sym @symE : !sv.interface<@Interface>
-  // CHECK: wire [3:0] parameter_2;
-  // CHECK: reg  [3:0] localparam_3;
+  // CHECK: wire [3:0] parameter_0;
+  // CHECK: reg  [3:0] localparam_0;
   // CHECK: Interface shortint();
   hw.output %signed : i1
 }
@@ -538,10 +629,10 @@ sv.verbatim "VERB: module symE `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimMo
 sv.verbatim "VERB: module.extern symA `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModuleExtern::@symA>]}
 sv.verbatim "VERB: module.extern symB `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModuleExtern::@symB>]}
 // CHECK: VERB: module symA `signed_0`
-// CHECK: VERB: module symB `unsigned_1`
-// CHECK: VERB: module symC `parameter_2`
-// CHECK: VERB: module symD `localparam_3`
-// CHECK: VERB: module symE `shortint_4`
+// CHECK: VERB: module symB `unsigned_0`
+// CHECK: VERB: module symC `parameter_0`
+// CHECK: VERB: module symD `localparam_0`
+// CHECK: VERB: module symE `shortint_0`
 // CHECK: VERB: module.extern symA `foo`
 // CHECK: VERB: module.extern symB `bar`
 
@@ -579,19 +670,25 @@ hw.module @BindEmission2() -> () {
 }
 
 
-hw.module @bind_rename_port(%.io_req_ready.output: i1, %reset: i1, %clock: i1) {
+hw.module @bind_rename_port(%.io_req_ready.output: i1, %reset: i1 { hw.verilogName = "resetSignalName" }, %clock: i1) {
   // CHECK-LABEL: module bind_rename_port
   // CHECK-NEXT: input _io_req_ready_output,
-  // CHECK-NEXT:       reset,
+  // CHECK-NEXT:       resetSignalName,
   // CHECK-NEXT:       clock
   hw.output
 }
 
+// CHECK-LABEL: module SiFive_MulDiv
 hw.module @SiFive_MulDiv(%clock: i1, %reset: i1) -> (io_req_ready: i1) {
   %false = hw.constant false
   hw.instance "InvisibleBind_assert" sym @__ETC_SiFive_MulDiv_assert @bind_rename_port(".io_req_ready.output": %false: i1, reset: %reset: i1, clock: %clock: i1) -> () {doNotPrint = true}
-  hw.probe @__ETC_SiFive_MulDiv_assert, %false, %reset, %clock: i1,i1,i1
+  hw.probe @unused, %false, %reset, %clock: i1,i1,i1
   hw.output %false : i1
+  //      CHECK: bind_rename_port InvisibleBind_assert (
+  // CHECK-NEXT:   ._io_req_ready_output (1'h0),
+  // CHECK-NEXT:   .resetSignalName      (reset),
+  // CHECK-NEXT:   .clock                (clock)
+  // CHECK-NEXT: );
 }
 
 sv.bind.interface <@BindInterface::@__Interface__> {output_file = #hw.output_file<"BindTest/BindInterface.sv", excludeFromFileList>}
@@ -624,15 +721,14 @@ hw.module @BindInterface() -> () {
   hw.output
 }
 
-// CHECK-LABEL: FILE "BindTest{{.}}BindEmissionInstance.sv"
+// CHECK-LABEL: FILE "BindTest{{[/\]}}BindEmissionInstance.sv"
 // CHECK: bind BindEmission BindEmissionInstance BindEmissionInstance ();
 
-// CHECK-LABEL: FILE "BindTest{{.}}BindInterface.sv"
+// CHECK-LABEL: FILE "BindTest{{[/\]}}BindInterface.sv"
 // CHECK: bind BindInterface Interface bar (.*);
 
 sv.bind #hw.innerNameRef<@SiFive_MulDiv::@__ETC_SiFive_MulDiv_assert>
 // CHECK-LABEL: bind SiFive_MulDiv bind_rename_port InvisibleBind_assert
-// CHECK-NEXT:  ._io_req_ready_output (_InvisibleBind_assert__io_req_ready_output)
-// CHECK-NEXT:  .reset                (reset),
+// CHECK-NEXT:  ._io_req_ready_output (1'h0)
+// CHECK-NEXT:  .resetSignalName      (reset),
 // CHECK-NEXT:  .clock                (clock)
-

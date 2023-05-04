@@ -14,7 +14,22 @@ set(srcs
   ESIStdServices.cpp
   ESITranslations.cpp
   ESITypes.cpp
+  Passes/ESIEmitCollateral.cpp
+  Passes/ESILowerPhysical.cpp
+  Passes/ESILowerPorts.cpp
+  Passes/ESILowerToHW.cpp
+  Passes/ESILowerTypes.cpp
+  Passes/ESICleanMetadata.cpp
+
+  cosim/APIUtilities.cpp
+
+  # C++ API
+  cosim/CPP/ESIAddCPPAPI.cpp
+  cosim/CPP/ESIEmitCPPAPI.cpp
+  cosim/CPP/CPPAPI.cpp
 )
+
+set(ESI_RUNTIME_DIR ${CIRCT_BINARY_DIR}/include/circt/Dialect/ESI)
 
 set(ESI_LinkLibs
   CIRCTSupport
@@ -39,14 +54,8 @@ set(ESI_Deps
 
 if(CapnProto_FOUND)
   option(ESI_CAPNP "Enable ESI Capnp features" ON)
-endif()
-
-if (ESI_CAPNP)
   list(APPEND srcs capnp/Schema.cpp)
   list(APPEND ESI_LinkLibs CapnProto::capnp CapnProto::capnpc)
-  install(FILES ${CapnProto_capnp_IMPORTED_LOCATION} DESTINATION lib)
-  install(FILES ${CapnProto_capnpc_IMPORTED_LOCATION} DESTINATION lib)
-  install(FILES ${CapnProto_kj_IMPORTED_LOCATION} DESTINATION lib)
 endif()
 
 add_circt_dialect_library(CIRCTESI
@@ -54,6 +63,7 @@ add_circt_dialect_library(CIRCTESI
 
   DEPENDS
   MLIRESITransformsIncGen
+  MLIRESIEnumsIncGen
   ${ESI_Deps}
 
   LINK_COMPONENTS
@@ -63,6 +73,47 @@ add_circt_dialect_library(CIRCTESI
   LINK_LIBS PUBLIC
   ${ESI_LinkLibs}
   )
+
+# A function which copies a file from the source tree to the build tree.
+# This is an alternative to configure_file to ensure that the file is copied
+# on every build (not just during CMake configure).
+function(copy_esi_runtime FILENAME)
+  # An optional "OUTDIR" argument can be passed to specify the relative location
+  # within the ESI_RUNTIME_DIR. If not specified, the file will be copied to the
+  # root of the ESI_RUNTIME_DIR.
+  cmake_parse_arguments(ARG "" "OUTDIR" "" ${ARGN})
+  if (NOT ARG_OUTDIR)
+    set(ARG_OUTDIR "")
+  else()
+    set(ARG_OUTDIR "${ARG_OUTDIR}/")
+  endif()
+
+  get_filename_component(DST ${FILENAME} NAME)
+  get_filename_component(SRC ${FILENAME} REALPATH)
+  list(APPEND ABS_CFILES ${SRC})
+  add_custom_command(TARGET CIRCTESI PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E
+    copy ${SRC} ${ESI_RUNTIME_DIR}/${ARG_OUTDIR}${DST})
+endfunction()
+
+
+if (ESI_CAPNP)
+  copy_esi_runtime(${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/ESI/cosim/CosimDpi.capnp OUTDIR cosim)
+  copy_esi_runtime(cosim/Cosim_DpiPkg.sv OUTDIR cosim)
+  copy_esi_runtime(cosim/Cosim_Endpoint.sv OUTDIR cosim)
+  install(FILES ${CapnProto_capnp_IMPORTED_LOCATION} DESTINATION lib)
+  install(FILES ${CapnProto_capnpc_IMPORTED_LOCATION} DESTINATION lib)
+  install(FILES ${CapnProto_kj_IMPORTED_LOCATION} DESTINATION lib)
+endif()
+
+copy_esi_runtime(ESIPrimitives.sv)
+copy_esi_runtime(runtime/cpp/include/esi/esi.h OUTDIR cpp/include/esi)
+copy_esi_runtime(runtime/cpp/include/esi/backends/capnp.h OUTDIR cpp/include/esi/backends)
+
+# Create a package of ESI collateral for any compiler to include with its
+# distribution.
+add_library(esi-collateral INTERFACE)
+set_target_properties(esi-collateral PROPERTIES PUBLIC_HEADER "${ABS_CFILES}")
 
 if (ESI_CAPNP)
   target_compile_definitions(obj.CIRCTESI PRIVATE CAPNP)

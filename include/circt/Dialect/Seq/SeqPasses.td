@@ -19,11 +19,32 @@ def LowerSeqToSV: Pass<"lower-seq-to-sv", "mlir::ModuleOp"> {
   let summary = "Lower sequential ops to SV.";
   let constructor = "circt::seq::createSeqLowerToSVPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
+  let options = [
+    Option<"lowerToAlwaysFF", "lower-to-always-ff", "bool", "true",
+           "Place assignments to registers into `always_ff` blocks">
+  ];
 }
 
 def LowerSeqFIRRTLToSV: Pass<"lower-seq-firrtl-to-sv", "hw::HWModuleOp"> {
   let summary = "Lower sequential firrtl ops to SV.";
   let constructor = "circt::seq::createSeqFIRRTLLowerToSVPass()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+  let options = [
+    Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
+            "Disable emission of register randomization code">,
+    Option<"addVivadoRAMAddressConflictSynthesisBugWorkaround",
+           "add-vivado-ram-address-conflict-synthesis-bug-workaround", "bool", "false",
+            "Add a vivado attribute to specify a ram style of array registers">
+  ];
+  let statistics = [
+    Statistic<"numSubaccessRestored", "num-subaccess-restored",
+      "Number of lhs subaccess operations restored ">
+  ];
+}
+
+def LowerSeqHLMem: Pass<"lower-seq-hlmem", "hw::HWModuleOp"> {
+  let summary = "Lowers seq.hlmem operations.";
+  let constructor = "circt::seq::createLowerSeqHLMemPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
 }
 

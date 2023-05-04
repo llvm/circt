@@ -180,6 +180,26 @@ struct MethodEmitter : OpEmissionPattern<MethodOp> {
   }
 };
 
+/// Emit a systemc.sensitive operation by using the 'sensitive' data member;
+struct SensitiveEmitter : OpEmissionPattern<SensitiveOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  void emitStatement(SensitiveOp op, EmissionPrinter &p) override {
+    if (op.getSensitivities().empty())
+      return;
+
+    p << "sensitive << ";
+    llvm::interleave(
+        op.getSensitivities(), p,
+        [&](Value sensitive) {
+          p.getInlinable(sensitive).emitWithParensOnLowerPrecedence(
+              Precedence::SHL);
+        },
+        " << ");
+    p << ";\n";
+  }
+};
+
 /// Emit a systemc.thread operation by using the SC_THREAD macro.
 struct ThreadEmitter : OpEmissionPattern<ThreadOp> {
   using OpEmissionPattern::OpEmissionPattern;
@@ -219,7 +239,16 @@ struct SignalEmitter : OpEmissionPattern<SignalOp> {
 
   void emitStatement(SignalOp op, EmissionPrinter &p) override {
     p.emitType(op.getSignal().getType());
-    p << " " << op.getName() << ";\n";
+    p << " ";
+
+    if (op.getNamed()) {
+      // This style of emitting SC_NAMED requires the printed code to be
+      // compiled with at least C++11.
+      p << "SC_NAMED(" << op.getName() << ");\n";
+      return;
+    }
+
+    p << op.getName() << ";\n";
   }
 };
 
@@ -327,6 +356,176 @@ struct VariableEmitter : OpEmissionPattern<VariableOp> {
   }
 };
 
+/// Emit a systemc.cpp.func function. Users of the function arguments request an
+/// expression to be inlined and we simply return the name of the argument. This
+/// name has to be passed to this emission pattern via an array of strings
+/// attribute called 'argNames' because the emitter cannot do any name uniquing
+/// as it just emits the IR statement by statement. However, relying on an
+/// attribute for the argument names also has the advantage that the names
+/// can be preserved 1-1 during a lowering pipeline and upstream passes have
+/// more control on how the arguments should be named (e.g. when they create a
+/// function and have some context to assign better names).
+struct FuncEmitter : OpEmissionPattern<FuncOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+  MatchResult matchInlinable(Value value) override {
+    // Note that the verifier of systemc::FuncOp guarantees that whenever the
+    // function has a body, argNames is present and of the correct length
+    if (value.isa<BlockArgument>() &&
+        value.getParentRegion()->getParentOfType<FuncOp>())
+      return Precedence::VAR;
+
+    return {};
+  }
+
+  void emitInlined(Value value, EmissionPrinter &p) override {
+    auto func = value.getParentRegion()->getParentOfType<FuncOp>();
+    for (auto [arg, name] :
+         llvm::zip(func.getArguments(), func.getArgNames())) {
+      if (arg == value) {
+        p << name.cast<StringAttr>().getValue();
+        return;
+      }
+    }
+  }
+
+  void emitStatement(FuncOp func, EmissionPrinter &p) override {
+    // Emit a newline at the start to ensure an empty line before the function
+    // for better readability.
+    p << "\n";
+
+    if (func.getExternC())
+      p << "extern \"C\" ";
+
+    // Emit return type.
+    if (func.getFunctionType().getNumResults() == 0)
+      p << "void";
+    else
+      p.emitType(func.getFunctionType().getResult(0));
+
+    p << " " << func.getSymName() << "(";
+
+    // Emit the argument list. When the function is a declaration, it is not
+    // required to have argument names, in that case just print the types.
+    if (func.isDeclaration() && func.getArgNames().empty())
+      llvm::interleaveComma(func.getFunctionType().getInputs(), p,
+                            [&](Type ty) { p.emitType(ty); });
+    else
+      llvm::interleaveComma(
+          llvm::zip(func.getFunctionType().getInputs(), func.getArgNames()), p,
+          [&](std::tuple<Type, Attribute> arg) {
+            p.emitType(std::get<0>(arg));
+            p << " " << std::get<1>(arg).cast<StringAttr>().getValue();
+          });
+
+    p << ")";
+
+    // Emit body when present.
+    if (func.isDeclaration()) {
+      p << ";\n";
+    } else {
+      p << " ";
+      p.emitRegion(func.getRegion());
+    }
+  }
+};
+
+/// Emit a systemc.cpp.call operation. If it has no result, it is treated as a
+/// statement, otherwise as an expression that will always be inlined. That
+/// means, an emission preparation pass has to insert a VariableOp to bind the
+/// call result to such that reordering of the call cannot lead to incorrectness
+/// due to interference of side-effects.
+class CallEmitter : public OpEmissionPattern<CallOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  MatchResult matchInlinable(Value value) override {
+    if (value.getDefiningOp<CallOp>())
+      return Precedence::FUNCTION_CALL;
+    return {};
+  }
+
+  void emitInlined(Value value, EmissionPrinter &p) override {
+    printCall(value.getDefiningOp<CallOp>(), p);
+  }
+
+  void emitStatement(CallOp op, EmissionPrinter &p) override {
+    // If the call returns values, then it is treated as an expression rather
+    // than a statement.
+    if (op.getNumResults() > 0)
+      return;
+
+    printCall(op, p);
+    p << ";\n";
+  }
+
+private:
+  void printCall(CallOp op, EmissionPrinter &p) {
+    p << op.getCallee() << "(";
+    llvm::interleaveComma(op.getOperands(), p, [&](auto arg) {
+      p.getInlinable(arg).emitWithParensOnLowerPrecedence(Precedence::COMMA);
+    });
+    p << ")";
+  }
+};
+
+/// Emit a systemc.cpp.call_indirect operation. If it has no result, it is
+/// treated as a statement, otherwise as an expression that will always be
+/// inlined. That means, an emission preparation pass has to insert a VariableOp
+/// to bind the call result to such that reordering of the call cannot lead to
+/// incorrectness due to interference of side-effects.
+class CallIndirectEmitter : public OpEmissionPattern<CallIndirectOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  MatchResult matchInlinable(Value value) override {
+    if (value.getDefiningOp<CallIndirectOp>())
+      return Precedence::FUNCTION_CALL;
+
+    return {};
+  }
+
+  void emitInlined(Value value, EmissionPrinter &p) override {
+    printCall(value.getDefiningOp<CallIndirectOp>(), p);
+  }
+
+  void emitStatement(CallIndirectOp op, EmissionPrinter &p) override {
+    // If the call returns values, then it is treated as an expression rather
+    // than a statement.
+    if (op.getNumResults() > 0)
+      return;
+
+    printCall(op, p);
+    p << ";\n";
+  }
+
+private:
+  void printCall(CallIndirectOp op, EmissionPrinter &p) {
+    p.getInlinable(op.getCallee())
+        .emitWithParensOnLowerPrecedence(Precedence::FUNCTION_CALL);
+    p << "(";
+    llvm::interleaveComma(op.getCalleeOperands(), p, [&](auto arg) {
+      p.getInlinable(arg).emitWithParensOnLowerPrecedence(Precedence::COMMA);
+    });
+    p << ")";
+  }
+};
+
+/// Emit a systemc.cpp.return operation.
+struct ReturnEmitter : OpEmissionPattern<ReturnOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  bool matchStatement(Operation *op) override {
+    return isa<ReturnOp>(op) && cast<ReturnOp>(op)->getNumOperands() <= 1;
+  }
+
+  void emitStatement(ReturnOp op, EmissionPrinter &p) override {
+    p << "return";
+    if (!op.getReturnValues().empty()) {
+      p << " ";
+      p.getInlinable(op.getReturnValues()[0]).emit();
+    }
+    p << ";\n";
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Type emission patterns.
 //===----------------------------------------------------------------------===//
@@ -376,15 +575,17 @@ struct DynIntegerTypeEmitter : public TypeEmissionPattern<Ty> {
 
 void circt::ExportSystemC::populateSystemCOpEmitters(
     OpEmissionPatternSet &patterns, MLIRContext *context) {
-  patterns.add<SCModuleEmitter, CtorEmitter, SCFuncEmitter, MethodEmitter,
-               ThreadEmitter,
-               // Signal and port related emitters
-               SignalWriteEmitter, SignalReadEmitter, SignalEmitter,
-               // Instance-related emitters
-               InstanceDeclEmitter, BindPortEmitter,
-               // CPP-level operation emitters
-               AssignEmitter, VariableEmitter, NewEmitter, DestructorEmitter,
-               DeleteEmitter, MemberAccessEmitter>(context);
+  patterns.add<
+      SCModuleEmitter, CtorEmitter, SCFuncEmitter, MethodEmitter, ThreadEmitter,
+      // Signal and port related emitters
+      SignalWriteEmitter, SignalReadEmitter, SignalEmitter, SensitiveEmitter,
+      // Instance-related emitters
+      InstanceDeclEmitter, BindPortEmitter,
+      // CPP-level operation emitters
+      AssignEmitter, VariableEmitter, NewEmitter, DestructorEmitter,
+      DeleteEmitter, MemberAccessEmitter,
+      // Function related emitters
+      FuncEmitter, ReturnEmitter, CallEmitter, CallIndirectEmitter>(context);
 }
 
 void circt::ExportSystemC::populateSystemCTypeEmitters(

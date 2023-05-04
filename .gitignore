@@ -2,6 +2,7 @@
 /install*
 /docker_build
 tags
+TAGS
 .vscode
 .idea
 compile_commands.json

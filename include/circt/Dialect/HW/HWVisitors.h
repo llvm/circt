@@ -27,15 +27,17 @@ public:
   ResultType dispatchTypeOpVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<ConstantOp,
+        .template Case<ConstantOp, AggregateConstantOp,
                        // Array operations
                        ArraySliceOp, ArrayCreateOp, ArrayConcatOp, ArrayGetOp,
                        // Struct operations
                        StructCreateOp, StructExtractOp, StructInjectOp,
+                       // Union operations
+                       UnionCreateOp, UnionExtractOp,
                        // Cast operation
                        BitcastOp, ParamValueOp,
                        // Enum operations
-                       EnumConstantOp>([&](auto expr) -> ResultType {
+                       EnumConstantOp, EnumCmpOp>([&](auto expr) -> ResultType {
           return thisCast->visitTypeOp(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -62,15 +64,19 @@ public:
   }
 
   HANDLE(ConstantOp, Unhandled);
+  HANDLE(AggregateConstantOp, Unhandled);
   HANDLE(BitcastOp, Unhandled);
   HANDLE(ParamValueOp, Unhandled);
   HANDLE(StructCreateOp, Unhandled);
   HANDLE(StructExtractOp, Unhandled);
   HANDLE(StructInjectOp, Unhandled);
+  HANDLE(UnionCreateOp, Unhandled);
+  HANDLE(UnionExtractOp, Unhandled);
   HANDLE(ArraySliceOp, Unhandled);
   HANDLE(ArrayGetOp, Unhandled);
   HANDLE(ArrayCreateOp, Unhandled);
   HANDLE(ArrayConcatOp, Unhandled);
+  HANDLE(EnumCmpOp, Unhandled);
   HANDLE(EnumConstantOp, Unhandled);
 #undef HANDLE
 };

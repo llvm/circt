@@ -29,7 +29,8 @@ void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
                       ArrayRef<DictionaryAttr> argAttrs) {
   state.addAttribute(mlir::SymbolTable::getSymbolAttrName(),
                      builder.getStringAttr(name));
-  state.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+  state.addAttribute(MachineOp::getFunctionTypeAttrName(state.name),
+                     TypeAttr::get(type));
   state.addAttribute("initialState",
                      StringAttr::get(state.getContext(), initialStateName));
   state.attributes.append(attrs.begin(), attrs.end());
@@ -43,8 +44,10 @@ void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
   if (argAttrs.empty())
     return;
   assert(type.getNumInputs() == argAttrs.size());
-  function_interface_impl::addArgAndResultAttrs(builder, state, argAttrs,
-                                                /*resultAttrs=*/llvm::None);
+  function_interface_impl::addArgAndResultAttrs(
+      builder, state, argAttrs,
+      /*resultAttrs=*/std::nullopt, MachineOp::getArgAttrsAttrName(state.name),
+      MachineOp::getResAttrsAttrName(state.name));
 }
 
 /// Get the initial state of the machine.
@@ -96,20 +99,33 @@ ParseResult MachineOp::parse(OpAsmParser &parser, OperationState &result) {
          std::string &) { return builder.getFunctionType(argTypes, results); };
 
   return function_interface_impl::parseFunctionOp(
-      parser, result, /*allowVariadic=*/false, buildFuncType);
+      parser, result, /*allowVariadic=*/false,
+      MachineOp::getFunctionTypeAttrName(result.name), buildFuncType,
+      MachineOp::getArgAttrsAttrName(result.name),
+      MachineOp::getResAttrsAttrName(result.name));
 }
 
 void MachineOp::print(OpAsmPrinter &p) {
-  function_interface_impl::printFunctionOp(p, *this, /*isVariadic=*/false);
+  function_interface_impl::printFunctionOp(
+      p, *this, /*isVariadic=*/false, getFunctionTypeAttrName(),
+      getArgAttrsAttrName(), getResAttrsAttrName());
 }
 
-static LogicalResult compareTypes(TypeRange rangeA, TypeRange rangeB) {
+static LogicalResult compareTypes(Location loc, TypeRange rangeA,
+                                  TypeRange rangeB) {
   if (rangeA.size() != rangeB.size())
-    return failure();
+    return emitError(loc) << "mismatch in number of types compared ("
+                          << rangeA.size() << " != " << rangeB.size() << ")";
 
-  for (auto zip : llvm::zip(rangeA, rangeB))
-    if (std::get<0>(zip) != std::get<1>(zip))
-      return failure();
+  size_t index = 0;
+  for (auto zip : llvm::zip(rangeA, rangeB)) {
+    auto typeA = std::get<0>(zip);
+    auto typeB = std::get<1>(zip);
+    if (typeA != typeB)
+      return emitError(loc) << "type mismatch at index " << index << " ("
+                            << typeA << " != " << typeB << ")";
+    ++index;
+  }
 
   return success();
 }
@@ -122,7 +138,8 @@ LogicalResult MachineOp::verify() {
   // Verify that the argument list of the function and the arg list of the entry
   // block line up.  The trait already verified that the number of arguments is
   // the same between the signature and the block.
-  if (failed(compareTypes(getArgumentTypes(), front().getArgumentTypes())))
+  if (failed(compareTypes(getLoc(), getArgumentTypes(),
+                          front().getArgumentTypes())))
     return emitOpError(
         "entry block argument types must match the machine input types");
 
@@ -188,7 +205,7 @@ static LogicalResult verifyCallerTypes(OpType op) {
     return op.emitError("cannot find machine definition");
 
   // Check operand types first.
-  if (failed(compareTypes(machine.getArgumentTypes(),
+  if (failed(compareTypes(op.getLoc(), machine.getArgumentTypes(),
                           op.getInputs().getTypes()))) {
     auto diag =
         op.emitOpError("operand types must match the machine input types");
@@ -197,8 +214,8 @@ static LogicalResult verifyCallerTypes(OpType op) {
   }
 
   // Check result types.
-  if (failed(
-          compareTypes(machine.getResultTypes(), op.getOutputs().getTypes()))) {
+  if (failed(compareTypes(op.getLoc(), machine.getResultTypes(),
+                          op.getOutputs().getTypes()))) {
     auto diag =
         op.emitOpError("result types must match the machine output types");
     diag.attachNote(machine->getLoc()) << "original machine declared here";
@@ -222,6 +239,11 @@ LogicalResult TriggerOp::verify() { return verifyCallerTypes(*this); }
 //===----------------------------------------------------------------------===//
 // HWInstanceOp
 //===----------------------------------------------------------------------===//
+
+// HWInstanceLike interface
+StringRef HWInstanceOp::getInstanceName() { return getSymName(); }
+
+StringAttr HWInstanceOp::getInstanceNameAttr() { return getSymNameAttr(); }
 
 Operation *HWInstanceOp::getReferencedModule() { return getMachineOp(); }
 
@@ -318,7 +340,8 @@ LogicalResult OutputOp::verify() {
   // Verify that the result list of the machine and the operand list of the
   // OutputOp line up.
   auto machine = (*this)->getParentOfType<MachineOp>();
-  if (failed(compareTypes(machine.getResultTypes(), getOperandTypes())))
+  if (failed(
+          compareTypes(getLoc(), machine.getResultTypes(), getOperandTypes())))
     return emitOpError("operand types must match the machine output types");
 
   return success();

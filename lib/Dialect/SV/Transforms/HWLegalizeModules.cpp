@@ -56,33 +56,46 @@ private:
 /// This returns a replacement operation if lowering was successful, null
 /// otherwise.
 Operation *HWLegalizeModulesPass::tryLoweringArrayGet(hw::ArrayGetOp getOp) {
-  // If the operand is an array_create, then we can lower this into a casez.
-  auto createOp = getOp.getInput().getDefiningOp<hw::ArrayCreateOp>();
-  if (!createOp)
+  SmallVector<Value> caseValues;
+  OpBuilder builder(&thisHWModule.getBodyBlock()->front());
+  // If the operand is an array_create or aggregate constant, then we can lower
+  // this into a casez.
+  if (auto createOp = getOp.getInput().getDefiningOp<hw::ArrayCreateOp>())
+    caseValues = SmallVector<Value>(llvm::reverse(createOp.getOperands()));
+  else if (auto aggregateConstant =
+               getOp.getInput().getDefiningOp<hw::AggregateConstantOp>()) {
+    for (auto elem : llvm::reverse(aggregateConstant.getFields())) {
+      if (auto intAttr = dyn_cast<IntegerAttr>(elem))
+        caseValues.push_back(builder.create<hw::ConstantOp>(
+            aggregateConstant.getLoc(), intAttr));
+      else
+        caseValues.push_back(builder.create<hw::AggregateConstantOp>(
+            aggregateConstant.getLoc(), getOp.getType(),
+            elem.cast<ArrayAttr>()));
+    }
+  } else {
     return nullptr;
+  }
 
   // array_get(idx, array_create(a,b,c,d)) ==> casez(idx).
   Value index = getOp.getIndex();
 
   // Create the wire for the result of the casez in the hw.module.
-  OpBuilder builder(&thisHWModule.getBodyBlock()->front());
-
   auto theWire = builder.create<sv::RegOp>(getOp.getLoc(), getOp.getType(),
                                            builder.getStringAttr("casez_tmp"));
   builder.setInsertionPoint(getOp);
 
+  auto loc = getOp.getInput().getDefiningOp()->getLoc();
   // A casez is a procedural operation, so if we're in a non-procedural region
   // we need to inject an always_comb block.
   if (!getOp->getParentOp()->hasTrait<sv::ProceduralRegion>()) {
-    auto alwaysComb = builder.create<sv::AlwaysCombOp>(createOp.getLoc());
+    auto alwaysComb = builder.create<sv::AlwaysCombOp>(loc);
     builder.setInsertionPointToEnd(alwaysComb.getBodyBlock());
   }
 
   // If we are missing elements in the array (it is non-power of two), then
   // add a default 'X' value.
-  SmallVector<Value> caseValues(llvm::reverse(createOp.getOperands()));
-  if (1ULL << index.getType().getIntOrFloatBitWidth() !=
-      createOp.getNumOperands()) {
+  if (1ULL << index.getType().getIntOrFloatBitWidth() != caseValues.size()) {
     caseValues.push_back(
         builder.create<sv::ConstantXOp>(getOp.getLoc(), getOp.getType()));
   }
@@ -92,7 +105,7 @@ Operation *HWLegalizeModulesPass::tryLoweringArrayGet(hw::ArrayGetOp getOp) {
 
   // Create the casez itself.
   builder.create<sv::CaseOp>(
-      createOp.getLoc(), CaseStmtType::CaseZStmt, index, caseValues.size(),
+      loc, CaseStmtType::CaseZStmt, index, caseValues.size(),
       [&](size_t caseIdx) -> std::unique_ptr<sv::CasePattern> {
         // Use a default pattern for the last value, even if we are complete.
         // This avoids tools thinking they need to insert a latch due to
@@ -106,7 +119,7 @@ Operation *HWLegalizeModulesPass::tryLoweringArrayGet(hw::ArrayGetOp getOp) {
         else
           thePattern = std::make_unique<sv::CaseBitPattern>(caseValue, context);
         ++caseValue;
-        builder.create<sv::BPAssignOp>(createOp.getLoc(), theWire, theValue);
+        builder.create<sv::BPAssignOp>(loc, theWire, theValue);
         return thePattern;
       });
 
@@ -149,9 +162,10 @@ void HWLegalizeModulesPass::processPostOrder(Block &body) {
           continue;
         }
 
-      // If this is a dead array_create, then we can just delete it.  This is
+      // If this is a dead array, then we can just delete it.  This is
       // probably left over from get/create lowering.
-      if (isa<hw::ArrayCreateOp>(op) && op.use_empty()) {
+      if (isa<hw::ArrayCreateOp, hw::AggregateConstantOp>(op) &&
+          op.use_empty()) {
         op.erase();
         continue;
       }
@@ -163,6 +177,7 @@ void HWLegalizeModulesPass::processPostOrder(Block &body) {
       for (auto value : op.getResults()) {
         if (value.getType().isa<hw::ArrayType>()) {
           op.emitError("unsupported packed array expression");
+          signalPassFailure();
         }
       }
     }

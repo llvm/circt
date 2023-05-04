@@ -48,6 +48,10 @@ class EmitCDialect;
 
 namespace circt {
 
+namespace arc {
+class ArcDialect;
+} // namespace arc
+
 namespace fsm {
 class FSMDialect;
 } // namespace fsm
@@ -79,6 +83,10 @@ class MooreDialect;
 namespace llhd {
 class LLHDDialect;
 } // namespace llhd
+
+namespace loopschedule {
+class LoopScheduleDialect;
+} // namespace loopschedule
 
 namespace comb {
 class CombDialect;

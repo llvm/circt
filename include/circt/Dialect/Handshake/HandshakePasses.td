@@ -113,4 +113,14 @@ def HandshakeLockFunctions : Pass<"handshake-lock-functions", "handshake::FuncOp
   let constructor = "circt::handshake::createHandshakeLockFunctionsPass()";
 }
 
+def HandshakeLegalizeMemrefs : Pass<"handshake-legalize-memrefs", "mlir::func::FuncOp"> {
+  let summary = "Memref legalization and lowering pass.";
+  let description = [{
+    Lowers various memref operations to a state suitable for passing to the
+    StandardToHandshake lowering.
+  }];
+  let constructor = "circt::handshake::createHandshakeLegalizeMemrefsPass()";
+  let dependentDialects = ["mlir::scf::SCFDialect"];
+}
+
 #endif // CIRCT_DIALECT_HANDSHAKE_HANDSHAKEPASSES_TD

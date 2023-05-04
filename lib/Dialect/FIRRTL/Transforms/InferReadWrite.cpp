@@ -82,8 +82,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
           if (auto sf = dyn_cast<SubfieldOp>(u)) {
             // Get the field name.
             auto fName =
-                sf.getInput().getType().cast<BundleType>().getElementName(
-                    sf.getFieldIndex());
+                sf.getInput().getType().getElementName(sf.getFieldIndex());
             // If this is the enable field, record the product terms(the And
             // expression tree).
             if (fName.equals("en"))
@@ -137,7 +136,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
           builder.getArrayAttr(resultNames), memOp.getNameAttr(),
           memOp.getNameKind(), memOp.getAnnotations(),
           builder.getArrayAttr(portAnnotations), memOp.getInnerSymAttr(),
-          memOp.getGroupIDAttr());
+          memOp.getInitAttr(), memOp.getPrefixAttr());
       ++numRWPortMemoriesInferred;
       auto rwPort = rwMem->getResult(nDbgs);
       // Create the subfield access to all fields of the port.
@@ -155,12 +154,16 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       auto writeData = builder.create<SubfieldOp>(rwPort, "wdata");
       auto mask = builder.create<SubfieldOp>(rwPort, "wmask");
       // Temp wires to replace the original memory connects.
-      auto rAddr = builder.create<WireOp>(addr.getType(), "readAddr");
-      auto wAddr = builder.create<WireOp>(addr.getType(), "writeAddr");
-      auto wEnWire = builder.create<WireOp>(enb.getType(), "writeEnable");
-      auto rEnWire = builder.create<WireOp>(enb.getType(), "readEnable");
+      auto rAddr =
+          builder.create<WireOp>(addr.getType(), "readAddr").getResult();
+      auto wAddr =
+          builder.create<WireOp>(addr.getType(), "writeAddr").getResult();
+      auto wEnWire =
+          builder.create<WireOp>(enb.getType(), "writeEnable").getResult();
+      auto rEnWire =
+          builder.create<WireOp>(enb.getType(), "readEnable").getResult();
       auto writeClock =
-          builder.create<WireOp>(ClockType::get(enb.getContext()));
+          builder.create<WireOp>(ClockType::get(enb.getContext())).getResult();
       // addr = Mux(WriteEnable, WriteAddress, ReadAddress).
       builder.create<StrictConnectOp>(
           addr, builder.create<MuxPrimOp>(wEnWire, wAddr, rAddr));
@@ -188,8 +191,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
         for (Operation *u : portVal.getUsers())
           if (auto sf = dyn_cast<SubfieldOp>(u)) {
             StringRef fName =
-                sf.getInput().getType().cast<BundleType>().getElementName(
-                    sf.getFieldIndex());
+                sf.getInput().getType().getElementName(sf.getFieldIndex());
             Value repl;
             if (isReadPort)
               repl = llvm::StringSwitch<Value>(fName)
@@ -328,15 +330,11 @@ private:
         if (auto sf = dyn_cast<SubfieldOp>(u)) {
           // Get the field name.
           auto fName =
-              sf.getInput().getType().cast<BundleType>().getElementName(
-                  sf.getFieldIndex());
+              sf.getInput().getType().getElementName(sf.getFieldIndex());
           // Check if this is the mask field.
           if (fName.contains("mask")) {
             // Already 1 bit, nothing to do.
-            if (sf.getResult()
-                    .getType()
-                    .cast<FIRRTLBaseType>()
-                    .getBitWidthOrSentinel() == 1)
+            if (sf.getResult().getType().getBitWidthOrSentinel() == 1)
               continue;
             // Check what is the mask field directly connected to.
             // If, a constant 1, then we can replace with unMasked memory.
@@ -383,8 +381,7 @@ private:
           auto sf =
               builder.create<SubfieldOp>(newPortVal, oldRes.getFieldIndex());
           auto fName =
-              sf.getInput().getType().cast<BundleType>().getElementName(
-                  sf.getFieldIndex());
+              sf.getInput().getType().getElementName(sf.getFieldIndex());
           // Replace all mask fields with a one bit constant 1.
           // Replace all other fields with the new port.
           if (fName.contains("mask")) {

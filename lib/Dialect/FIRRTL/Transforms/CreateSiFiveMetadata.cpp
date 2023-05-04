@@ -26,6 +26,7 @@
 
 using namespace circt;
 using namespace firrtl;
+using circt::hw::InstancePath;
 
 namespace {
 class CreateSiFiveMetadataPass
@@ -62,6 +63,12 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   // of the memory.
   auto instancePathCache = InstancePathCache(getAnalysis<InstanceGraph>());
 
+  // Everything goes in the DUT if (1) there is no DUT specified or (2) if the
+  // DUT is the top module.
+  bool everythingInDUT =
+      !dutMod ||
+      instancePathCache.instanceGraph.getTopLevelNode()->getModule() == dutMod;
+
   // This lambda, writes to the given Json stream all the relevant memory
   // attributes. Also adds the memory attrbutes to the string for creating the
   // memmory conf file.
@@ -73,12 +80,9 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     // Metadata needs to be printed for memories which are candidates for
     // macro replacement. The requirements for macro replacement::
     // 1. read latency and write latency of one.
-    // 2. only one readwrite port or write port.
-    // 3. zero or one read port.
-    // 4. undefined read-under-write behavior.
+    // 2. undefined read-under-write behavior.
     if (!((mem.getReadLatency() == 1 && mem.getWriteLatency() == 1) &&
-          (mem.getNumWritePorts() + mem.getNumReadWritePorts() == 1) &&
-          (mem.getNumReadPorts() <= 1) && width > 0))
+          width > 0))
       return;
 
     // Compute the mask granularity.
@@ -86,19 +90,22 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     auto maskGran = width / mem.getMaskBits();
     // Now create the config string for the memory.
     std::string portStr;
-    if (mem.getNumWritePorts() && isMasked)
-      portStr += "mwrite";
-    else if (mem.getNumWritePorts())
-      portStr += "write";
-    if (mem.getNumReadPorts()) {
+    for (uint32_t i = 0; i < mem.getNumWritePorts(); ++i) {
+      if (!portStr.empty())
+        portStr += ",";
+      portStr += isMasked ? "mwrite" : "write";
+    }
+    for (uint32_t i = 0; i < mem.getNumReadPorts(); ++i) {
       if (!portStr.empty())
         portStr += ",";
       portStr += "read";
     }
-    if (mem.getNumReadWritePorts() && isMasked)
-      portStr = "mrw";
-    else if (mem.getNumReadWritePorts())
-      portStr = "rw";
+    for (uint32_t i = 0; i < mem.getNumReadWritePorts(); ++i) {
+      if (!portStr.empty())
+        portStr += ",";
+      portStr += isMasked ? "mrw" : "rw";
+    }
+
     auto memExtName = mem.getName();
     auto maskGranStr =
         !isMasked ? "" : " mask_gran " + std::to_string(maskGran);
@@ -106,15 +113,19 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
                      " depth " + Twine(mem.getDepth()) + " width " +
                      Twine(width) + " ports " + portStr + maskGranStr + "\n")
                         .str();
+
+    // Do not emit any JSON for memories which are not in the DUT.
+    if (!everythingInDUT && !dutModuleSet.contains(mem))
+      return;
     // This adds a Json array element entry corresponding to this memory.
     jsonStream.object([&] {
       jsonStream.attribute("module_name", memExtName);
       jsonStream.attribute("depth", (int64_t)mem.getDepth());
       jsonStream.attribute("width", (int64_t)width);
       jsonStream.attribute("masked", isMasked);
-      jsonStream.attribute("read", mem.getNumReadPorts() > 0);
-      jsonStream.attribute("write", mem.getNumWritePorts() > 0);
-      jsonStream.attribute("readwrite", mem.getNumReadWritePorts() > 0);
+      jsonStream.attribute("read", mem.getNumReadPorts());
+      jsonStream.attribute("write", mem.getNumWritePorts());
+      jsonStream.attribute("readwrite", mem.getNumReadWritePorts());
       if (isMasked)
         jsonStream.attribute("mask_granularity", (int64_t)maskGran);
       jsonStream.attributeArray("extra_ports", [&] {
@@ -139,48 +150,37 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
         for (auto p : paths) {
           if (p.empty())
             continue;
-          const InstanceOp &inst = p.front();
+          auto top = p.front();
           std::string hierName =
-              inst->getParentOfType<FModuleOp>().getName().str();
-          for (InstanceOp inst : p) {
+              top->getParentOfType<FModuleOp>().getName().str();
+          for (auto inst : p) {
             auto parentModule = inst->getParentOfType<FModuleOp>();
             if (dutMod == parentModule)
               hierName = parentModule.getName().str();
-            hierName = (Twine(hierName) + "." + inst.getName()).str();
+            hierName = (Twine(hierName) + "." + inst.getInstanceName()).str();
           }
           hierNames.push_back(hierName);
-          jsonStream.value(hierName);
+          // Only include the memory path if it is under the DUT or we are in a
+          // situation where everything is deemed to be "in the DUT", i.e., when
+          // the DUT is the top module or when no DUT is specified.
+          if (everythingInDUT ||
+              llvm::any_of(p, [&](circt::hw::HWInstanceLike inst) {
+                return inst.getReferencedModule() == dutMod;
+              }))
+            jsonStream.value(hierName);
         }
       });
     });
   };
 
-  SmallVector<FMemModuleOp> dutMems;
-  SmallVector<FMemModuleOp> tbMems;
-  for (auto mod : circuitOp.getOps<FMemModuleOp>()) {
-    if (dutModuleSet.contains(mod))
-      dutMems.push_back(mod);
-    else
-      tbMems.push_back(mod);
-  }
-
-  std::string testBenchJsonBuffer;
-  llvm::raw_string_ostream testBenchOs(testBenchJsonBuffer);
-  llvm::json::OStream testBenchJson(testBenchOs, 2);
   std::string dutJsonBuffer;
   llvm::raw_string_ostream dutOs(dutJsonBuffer);
   llvm::json::OStream dutJson(dutOs, 2);
 
   std::string seqMemConfStr;
   dutJson.array([&] {
-    for (auto &dutM : dutMems)
-      createMemMetadata(dutM, dutJson, seqMemConfStr);
-  });
-  testBenchJson.array([&] {
-    // The tbConfStr is populated here, but unused, it will not be printed to
-    // file.
-    for (auto &tbM : tbMems)
-      createMemMetadata(tbM, testBenchJson, seqMemConfStr);
+    for (auto mem : circuitOp.getOps<FMemModuleOp>())
+      createMemMetadata(mem, dutJson, seqMemConfStr);
   });
 
   auto *context = &getContext();
@@ -193,23 +193,19 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
       metadataDir = dir.getValue();
 
   // Use unknown loc to avoid printing the location in the metadata files.
-  auto tbVerbatimOp = builder.create<sv::VerbatimOp>(builder.getUnknownLoc(),
-                                                     testBenchJsonBuffer);
-  auto fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
-      context, metadataDir, "tb_seq_mems.json", /*excludeFromFilelist=*/true);
-  tbVerbatimOp->setAttr("output_file", fileAttr);
   auto dutVerbatimOp =
       builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), dutJsonBuffer);
-  fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
+  auto fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
       context, metadataDir, "seq_mems.json", /*excludeFromFilelist=*/true);
   dutVerbatimOp->setAttr("output_file", fileAttr);
 
   auto confVerbatimOp =
       builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), seqMemConfStr);
   if (replSeqMemFile.empty()) {
-    circuitOp->emitError("metadata emission failed, the option "
-                         "`-repl-seq-mem-file=<filename>` is mandatory for "
-                         "specifying a valid seq mem metadata file");
+    emitError(circuitOp->getLoc())
+        << "metadata emission failed, the option "
+           "`-repl-seq-mem-file=<filename>` is mandatory for specifying a "
+           "valid seq mem metadata file";
     return failure();
   }
 
@@ -324,12 +320,8 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
       "freechips.rocketchip.util.BlackBoxedROM",
       "sifive.enterprise.grandcentral.MemTap"};
   std::array<StringRef, 6> blackListedAnnos = {
-      blackBoxAnnoClass,
-      blackBoxInlineAnnoClass,
-      blackBoxPathAnnoClass,
-      dataTapsBlackboxClass,
-      memTapBlackboxClass,
-      "sifive.enterprise.grandcentral.transforms.SignalMappingAnnotation"};
+      blackBoxAnnoClass, blackBoxInlineAnnoClass, blackBoxPathAnnoClass,
+      dataTapsBlackboxClass, memTapBlackboxClass};
 
   auto *context = &getContext();
   auto circuitOp = getOperation();
@@ -373,7 +365,7 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
     }
 
     // Record the defname of the module.
-    if (dutModuleSet.contains(extModule)) {
+    if (!dutMod || dutModuleSet.contains(extModule)) {
       dutModules.push_back(*extModule.getDefname());
     } else {
       testModules.push_back(*extModule.getDefname());
@@ -412,6 +404,11 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
 
   createOutput(testModules, testFilename);
   createOutput(dutModules, dutFilename);
+
+  // Clean up all ScalaClassAnnotations, which are no longer needed.
+  for (auto op : circuitOp.getOps<FModuleLike>())
+    AnnotationSet::removeAnnotations(op, scalaClassAnnoClass);
+
   return success();
 }
 
@@ -432,7 +429,7 @@ void CreateSiFiveMetadataPass::runOnOperation() {
   if (it != body->end()) {
     dutMod = dyn_cast<FModuleOp>(*it);
     auto &instanceGraph = getAnalysis<InstanceGraph>();
-    auto *node = instanceGraph.lookup(&(*it));
+    auto *node = instanceGraph.lookup(cast<hw::HWModuleLike>(*it));
     llvm::for_each(llvm::depth_first(node), [&](hw::InstanceGraphNode *node) {
       dutModuleSet.insert(node->getModule());
     });
@@ -444,6 +441,10 @@ void CreateSiFiveMetadataPass::runOnOperation() {
 
   // This pass does not modify the hierarchy.
   markAnalysesPreserved<InstanceGraph>();
+
+  // Clear pass-global state as required by MLIR pass infrastructure.
+  dutMod = {};
+  dutModuleSet.empty();
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createCreateSiFiveMetadataPass(

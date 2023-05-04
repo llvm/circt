@@ -16,7 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/Seq/SeqAttributes.h"
 #include "mlir/IR/Dominance.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/STLExtras.h"
@@ -72,14 +72,22 @@ FirMemory getSummary(MemOp op) {
     op.emitError("'firrtl.mem' should have simple type and known width");
     width = 0;
   }
-  uint32_t groupID = 0;
-  if (auto gID = op.getGroupIDAttr())
-    groupID = gID.getUInt();
-  return {numReadPorts,         numWritePorts,    numReadWritePorts,
-          (size_t)width,        op.getDepth(),    op.getReadLatency(),
-          op.getWriteLatency(), op.getMaskBits(), (size_t)op.getRuw(),
-          hw::WUW::PortOrder,   writeClockIDs,    op.getNameAttr(),
-          op.getMaskBits() > 1, groupID,          op.getLoc()};
+  return {numReadPorts,
+          numWritePorts,
+          numReadWritePorts,
+          (size_t)width,
+          op.getDepth(),
+          op.getReadLatency(),
+          op.getWriteLatency(),
+          op.getMaskBits(),
+          *seq::symbolizeRUW(unsigned(op.getRuw())),
+          seq::WUW::PortOrder,
+          writeClockIDs,
+          op.getNameAttr(),
+          op.getMaskBits() > 1,
+          op.getInitAttr(),
+          op.getPrefixAttr(),
+          op.getLoc()};
 }
 
 namespace {
@@ -134,7 +142,7 @@ LowerMemoryPass::getMemoryModulePorts(const FirMemory &mem) {
   auto addPort = [&](const Twine &name, FIRRTLType type, Direction direction) {
     auto nameAttr = StringAttr::get(context, name);
     ports.push_back(
-        {nameAttr, type, direction, InnerSymAttr{}, loc, annotations});
+        {nameAttr, type, direction, hw::InnerSymAttr{}, loc, annotations});
   };
 
   auto makePortCommon = [&](StringRef prefix, size_t idx, FIRRTLType addrType) {
@@ -221,7 +229,9 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
 
   // Create the wrapper module, inserting it into the bottom of the circuit.
   auto b = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
-  auto wrapper = b.create<FModuleOp>(mem->getLoc(), wrapperName, ports);
+  auto wrapper = b.create<FModuleOp>(
+      mem->getLoc(), wrapperName,
+      ConventionAttr::get(context, Convention::Internal), ports);
   SymbolTable::setSymbolVisibility(wrapper, SymbolTable::Visibility::Private);
 
   // Create an instance of the external memory module. The instance has the
@@ -230,7 +240,7 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
   b.setInsertionPointToStart(wrapper.getBodyBlock());
 
   auto memInst =
-      b.create<InstanceOp>(mem->getLoc(), memModule, memModule.moduleName(),
+      b.create<InstanceOp>(mem->getLoc(), memModule, memModule.getModuleName(),
                            mem.getNameKind(), mem.getAnnotations().getValue());
 
   // Wire all the ports together.
@@ -250,8 +260,8 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
   // module op, so we have to fix up the NLA to have the module as the leaf
   // element.
 
-  auto leafSym = memModule.moduleNameAttr();
-  auto leafAttr = FlatSymbolRefAttr::get(wrapper.moduleNameAttr());
+  auto leafSym = memModule.getModuleNameAttr();
+  auto leafAttr = FlatSymbolRefAttr::get(wrapper.getModuleNameAttr());
 
   // NLAs that we have already processed.
   llvm::SmallDenseMap<StringAttr, StringAttr> processedNLAs;
@@ -271,7 +281,8 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
     if (newNLAIter == processedNLAs.end()) {
 
       // Update the NLA path to have the additional wrapper module.
-      auto nla = dyn_cast<HierPathOp>(symbolTable->lookup(nlaSym.getAttr()));
+      auto nla =
+          dyn_cast<hw::HierPathOp>(symbolTable->lookup(nlaSym.getAttr()));
       auto namepath = nla.getNamepath().getValue();
       SmallVector<Attribute> newNamepath(namepath.begin(), namepath.end());
       if (!nla.isComponent())
@@ -282,7 +293,7 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
       newNamepath.push_back(leafAttr);
 
       nlaBuilder.setInsertionPointAfter(nla);
-      auto newNLA = cast<HierPathOp>(nlaBuilder.clone(*nla));
+      auto newNLA = cast<hw::HierPathOp>(nlaBuilder.clone(*nla));
       newNLA.setSymNameAttr(StringAttr::get(
           context, circuitNamespace.newName(nla.getNameAttr().getValue())));
       newNLA.setNamepathAttr(ArrayAttr::get(context, newNamepath));
@@ -296,7 +307,7 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
     return true;
   });
   if (nlaUpdated) {
-    memInst.setInnerSymAttr(InnerSymAttr::get(leafSym));
+    memInst.setInnerSymAttr(hw::InnerSymAttr::get(leafSym));
     AnnotationSet newAnnos(memInst);
     newAnnos.addAnnotations(newMemModAnnos);
     newAnnos.applyToOperation(memInst);
@@ -311,9 +322,7 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
   for (auto *op : structValue.getUsers()) {
     assert(isa<SubfieldOp>(op));
     auto fieldAccess = cast<SubfieldOp>(op);
-    auto elemIndex =
-        fieldAccess.getInput().getType().cast<BundleType>().getElementIndex(
-            field);
+    auto elemIndex = fieldAccess.getInput().getType().getElementIndex(field);
     if (elemIndex && *elemIndex == fieldAccess.getFieldIndex())
       accesses.push_back(fieldAccess);
   }
@@ -387,12 +396,10 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
       auto getDriver = [&](StringRef field) -> Operation * {
         auto accesses = getAllFieldAccesses(op.getResult(i), field);
         for (auto a : accesses) {
-          for (auto *connect : a->getUsers()) {
-            // If this is some use that isn't a connect, move on.
-            if (!isa<ConnectOp, StrictConnectOp>(connect))
-              continue;
-            // If this connect is driving a value to the field, return it.
-            if (connect->getOperand(0) == a)
+          for (auto *user : a->getUsers()) {
+            // If this is a connect driving a value to the field, return it.
+            if (auto connect = dyn_cast<FConnectLike>(user);
+                connect && connect.getDest() == a)
               return connect;
           }
         }
@@ -488,15 +495,7 @@ LogicalResult LowerMemoryPass::runOnModule(FModuleOp module, bool shouldDedup) {
           "memories should be flattened before running LowerMemory");
 
     auto summary = getSummary(op);
-
-    // The only remaining memory kind should be seq mems.
-    // 1. read latency and write latency of one.
-    // 2. only one readwrite port or write port.
-    // 3. zero or one read port.
-    // 4. undefined read-under-write behavior.
-    if (!((summary.readLatency == 1 && summary.writeLatency == 1) &&
-          (summary.numWritePorts + summary.numReadWritePorts == 1) &&
-          (summary.numReadPorts <= 1) && summary.dataWidth > 0))
+    if (!summary.isSeqMem())
       continue;
 
     lowerMemory(op, summary, shouldDedup);
@@ -518,7 +517,7 @@ void LowerMemoryPass::runOnOperation() {
     return AnnotationSet(&op).hasAnnotation(dutAnnoClass);
   });
   if (it != body->end())
-    dut = instanceGraph.lookup(&(*it));
+    dut = instanceGraph.lookup(cast<hw::HWModuleLike>(*it));
 
   // The set of all modules underneath the design under test module.
   DenseSet<Operation *> dutModuleSet;

@@ -9,8 +9,8 @@
 // PY: rpc.testVectorSum(25)
 // PY: rpc.testCrypto(25)
 
-hw.module.extern @IntAccNoBP(%clk: i1, %rst: i1, %ints: !esi.channel<i32>) -> (totalOut: !esi.channel<i32>)
-hw.module.extern @IntArrSum(%clk: i1, %rst: i1, %arr: !esi.channel<!hw.array<4 x si13>>) -> (totalOut: !esi.channel<!hw.array<2 x ui24>>)
+hw.module.extern @IntAccNoBP(%clk: i1, %rst: i1, %ints: !esi.channel<i32>) -> (totalOut: !esi.channel<i32>) attributes {esi.bundle}
+hw.module.extern @IntArrSum(%clk: i1, %rst: i1, %arr: !esi.channel<!hw.array<4 x si13>>) -> (totalOut: !esi.channel<!hw.array<2 x ui24>>) attributes {esi.bundle}
 
 hw.module @ints(%clk: i1, %rst: i1) {
   %intsIn = esi.cosim %clk, %rst, %intsTotalBuffered, "TestEP" : !esi.channel<i32> -> !esi.channel<i32>
@@ -31,7 +31,7 @@ hw.module @array(%clk: i1, %rst: i1) {
 !Config  = !hw.struct<encrypt:   i1, otp:  !hw.array<32 x i8>>
 !cfgChan = !esi.channel<!Config>
 
-hw.module.extern @Encryptor(%clk: i1, %rst: i1, %in: !pktChan, %cfg: !cfgChan) -> (x: !pktChan)
+hw.module.extern @Encryptor(%clk: i1, %rst: i1, %in: !pktChan, %cfg: !cfgChan) -> (x: !pktChan) attributes {esi.bundle}
 
 hw.module @structs(%clk:i1, %rst:i1) -> () {
   %compressedData = hw.instance "otpCryptor" @Encryptor(clk: %clk: i1, rst: %rst: i1, in: %inputData: !pktChan, cfg: %cfg: !cfgChan) -> (x: !pktChan)

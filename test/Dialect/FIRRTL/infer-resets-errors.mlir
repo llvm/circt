@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-infer-resets)' --verify-diagnostics --split-input-file %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-resets))' --verify-diagnostics --split-input-file %s
 
 // Tests extracted from:
 // - github.com/chipsalliance/firrtl:
@@ -41,7 +41,7 @@ firrtl.circuit "top" {
     // expected-note @+1 {{sync drive here:}}
     firrtl.connect %w2, %reset2 : !firrtl.reset, !firrtl.uint<1>
     firrtl.connect %out, %w2 : !firrtl.reset, !firrtl.reset
-    firrtl.when %en  {
+    firrtl.when %en : !firrtl.uint<1>  {
       firrtl.connect %out, %w0 : !firrtl.reset, !firrtl.reset
     } else  {
       firrtl.connect %out, %w1 : !firrtl.reset, !firrtl.reset
@@ -61,7 +61,7 @@ firrtl.circuit "top" {
     // expected-note @+1 {{sync drive here:}}
     firrtl.connect %w2, %reset1 : !firrtl.reset, !firrtl.uint<1>
     firrtl.connect %out, %w1 : !firrtl.reset, !firrtl.reset
-    firrtl.when %en  {
+    firrtl.when %en : !firrtl.uint<1>  {
       firrtl.connect %out, %w2 : !firrtl.reset, !firrtl.reset
     }
   }
@@ -96,9 +96,11 @@ firrtl.circuit "top"   {
 // -----
 // Should not allow ResetType as an Input
 firrtl.circuit "top" {
-  // expected-error @+1 {{reset network never driven with concrete type}}
+  // expected-error @+2 {{reset network never driven with concrete type}}
+  // expected-note @+1 {{here: }}
   firrtl.module @top(in %in: !firrtl.bundle<foo: reset>, out %out: !firrtl.reset) {
-    %0 = firrtl.subfield %in(0) : (!firrtl.bundle<foo: reset>) -> !firrtl.reset
+    // expected-note @+1 {{here: }}
+    %0 = firrtl.subfield %in[foo] : !firrtl.bundle<foo: reset>
     firrtl.connect %out, %0 : !firrtl.reset, !firrtl.reset
   }
 }
@@ -107,10 +109,13 @@ firrtl.circuit "top" {
 // Should not allow ResetType as an ExtModule output
 firrtl.circuit "top" {
   firrtl.extmodule @ext(out out: !firrtl.bundle<foo: reset>)
+  // expected-note @+1 {{here: }}
   firrtl.module @top(out %out: !firrtl.reset) {
-    // expected-error @+1 {{reset network never driven with concrete type}}
+    // expected-error @+2 {{reset network never driven with concrete type}}
+    // expected-note @+1 {{here: }}
     %e_out = firrtl.instance e @ext(out out: !firrtl.bundle<foo: reset>)
-    %0 = firrtl.subfield %e_out(0) : (!firrtl.bundle<foo: reset>) -> !firrtl.reset
+    // expected-note @+1 {{here: }}
+    %0 = firrtl.subfield %e_out[foo] : !firrtl.bundle<foo: reset>
     firrtl.connect %out, %0 : !firrtl.reset, !firrtl.reset
   }
 }
@@ -199,7 +204,7 @@ firrtl.circuit "top" {
 firrtl.circuit "Top" {
   // expected-error @+1 {{module 'Foo' instantiated in different reset domains}}
   firrtl.module @Foo(in %clock: !firrtl.clock) {
-    %reg = firrtl.reg %clock : !firrtl.uint<8>
+    %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8>
   }
   // expected-note @+1 {{reset domain 'otherReset' of module 'Child' declared here:}}
   firrtl.module @Child(in %clock: !firrtl.clock, in %otherReset: !firrtl.asyncreset) attributes {portAnnotations = [[],[{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
@@ -227,13 +232,15 @@ firrtl.circuit "Top" {
 // -----
 
 firrtl.circuit "UninferredReset" {
-  // expected-error @+1 {{contains an abstract reset type after InferResets}}
+  // expected-error @+2 {{a port "reset" with abstract reset type was unable to be inferred by InferResets}}
+  // expected-note @+1 {{the module with this uninferred reset port was defined here}}
   firrtl.module @UninferredReset(in %reset: !firrtl.reset) {}
 }
 
 // -----
 
 firrtl.circuit "UninferredRefReset" {
-  // expected-error @+1 {{contains an abstract reset type after InferResets}}
-  firrtl.module @UninferredRefReset(in %reset: !firrtl.ref<reset>) {}
+  // expected-error @+2 {{a port "reset" with abstract reset type was unable to be inferred by InferResets}}
+  // expected-note @+1 {{the module with this uninferred reset port was defined here}}
+  firrtl.module @UninferredRefReset(in %reset: !firrtl.probe<reset>) {}
 }

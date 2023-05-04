@@ -5,8 +5,8 @@ import circt
 from circt.support import connect
 from circt.dialects import hw
 
-from mlir.ir import *
-from mlir.passmanager import PassManager
+from circt.ir import *
+from circt.passmanager import PassManager
 
 import sys
 
@@ -113,8 +113,8 @@ with Context() as ctx, Location.unknown():
   # CHECK-LABEL: === Verilog ===
   print("=== Verilog ===")
 
-  pm = PassManager.parse("hw.module(hw-cleanup)")
-  pm.run(m)
+  pm = PassManager.parse("builtin.module(hw.module(hw-cleanup))")
+  pm.run(m.operation)
   # CHECK: module MyWidget
   # CHECK: external module FancyThing
   circt.export_verilog(m, sys.stdout)

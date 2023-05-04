@@ -238,7 +238,7 @@ void HWCleanupPass::runOnProceduralRegion(Region &region) {
     }
 
     // Keep track of the last side effecting operation we've seen.
-    if (!mlir::MemoryEffectOpInterface::hasNoEffect(&op))
+    if (!mlir::isMemoryEffectFree(&op))
       lastSideEffectingOp = &op;
   }
 

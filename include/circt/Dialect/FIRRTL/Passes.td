@@ -27,7 +27,9 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
     Option<"ignoreAnnotationClassless", "disable-annotation-classless", "bool", "false",
       "Ignore classless annotations.">,
     Option<"ignoreAnnotationUnknown", "disable-annotation-unknown", "bool", "true",
-      "Ignore unknown annotations.">
+      "Ignore unknown annotations.">,
+    Option<"noRefTypePorts", "no-ref-type-ports", "bool", "false",
+      "Create normal ports, not ref type ports.">,
   ];
   let dependentDialects = ["hw::HWDialect"];
   let statistics = [
@@ -58,12 +60,18 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
   let options = [
     Option<"flattenAggregateMemData", "flatten-mem", "bool", "false",
            "Concat all elements of the aggregate data into a single element.">,
-    Option<"preservePublicTypes", "preserve-public-types", "bool",
-           "true", "Force to lower ports of toplevel and external modules even"
-           "when aggregate preservation mode.">,
     Option<"preserveAggregate", "preserve-aggregate", "PreserveAggregate::PreserveMode",
           "PreserveAggregate::None",
           "Specify aggregate preservation mode",
+          [{::llvm::cl::values(
+            clEnumValN(PreserveAggregate::None, "none", "Preserve no aggregate"),
+            clEnumValN(PreserveAggregate::OneDimVec, "1d-vec", "Preserve 1d vectors"),
+            clEnumValN(PreserveAggregate::Vec, "vec", "Preserve vectors"),
+            clEnumValN(PreserveAggregate::All, "all", "Preserve vectors and bundles")
+          )}]>,
+    Option<"preserveMemories", "preserve-memories", "PreserveAggregate::PreserveMode",
+          "PreserveAggregate::None",
+          "Specify memory preservation mode",
           [{::llvm::cl::values(
             clEnumValN(PreserveAggregate::None, "none", "Preserve no aggregate"),
             clEnumValN(PreserveAggregate::OneDimVec, "1d-vec", "Preserve 1d vectors"),
@@ -84,6 +92,16 @@ def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
     Statistic<"numFoldedOp", "num-folded-op", "Number of operations folded">,
     Statistic<"numErasedOp", "num-erased-op", "Number of operations erased">
   ];
+}
+
+def RegisterOptimizer : Pass<"firrtl-register-optimizer", "firrtl::FModuleOp"> {
+  let summary = "Optimizer Registers";
+  let description = [{
+    This pass applies classic FIRRTL register optimizations.  These 
+    optimizations are isolated to this pass as they can change the visible 
+    behavior of the register, especially before reset.
+  }];
+  let constructor = "circt::firrtl::createRegisterOptimizerPass()";
 }
 
 def RemoveUnusedPorts : Pass<"firrtl-remove-unused-ports", "firrtl::CircuitOp"> {
@@ -237,6 +255,15 @@ def EmitOMIR : Pass<"firrtl-emit-omir", "firrtl::CircuitOp"> {
   let options = [Option<"outputFilename", "file", "std::string", "",
       "Output file for the JSON-serialized OMIR data">];
   let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
+}
+
+def LowerMatches : Pass<"firrtl-lower-matches", "firrtl::FModuleOp"> {
+  let summary = "Remove all matchs conditional blocks";
+  let description = [{
+    Lowers FIRRTL match statements in to when statements, which can later be
+    lowered with ExpandWhens.
+  }];
+  let constructor = "circt::firrtl::createLowerMatchesPass()";
 }
 
 def ExpandWhens : Pass<"firrtl-expand-whens", "firrtl::FModuleOp"> {
@@ -400,6 +427,12 @@ def PrefixModules : Pass<"firrtl-prefix-modules", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createPrefixModulesPass()";
 }
 
+def PrintFIRRTLFieldSourcePass
+    : Pass<"firrtl-print-field-source", "firrtl::FModuleOp"> {
+  let summary = "Print field source information.";
+  let constructor =  "circt::firrtl::createFIRRTLFieldSourcePass()";
+}
+
 def PrintInstanceGraph
     : Pass<"firrtl-print-instance-graph", "firrtl::CircuitOp"> {
   let summary = "Print a DOT graph of the module hierarchy.";
@@ -420,6 +453,10 @@ def GrandCentral : Pass<"firrtl-grand-central", "CircuitOp"> {
 
   let constructor = "circt::firrtl::createGrandCentralPass()";
   let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
+  let options = [
+    Option<"instantiateCompanionOnly", "instantiate-companion-only", "bool", "false",
+      "Instantiate the companion without a bind and drop the interface">
+  ];
   let statistics = [
     Statistic<"numViews", "num-views-created",
       "Number of top-level SystemVerilog interfaces that were created">,
@@ -429,35 +466,6 @@ def GrandCentral : Pass<"firrtl-grand-central", "CircuitOp"> {
       "Number of SystemVerilog XMRs added">,
     Statistic<"numAnnosRemoved", "num-annotations-removed",
       "Number of annotations removed">
-  ];
-}
-
-def GrandCentralTaps : Pass<"firrtl-grand-central-taps", "firrtl::CircuitOp"> {
-  let summary = "Generate code for grand central data and memory taps";
-  let constructor = "circt::firrtl::createGrandCentralTapsPass()";
-  let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
-}
-
-def GrandCentralSignalMappings : Pass<"firrtl-grand-central-signal-mappings",
-                                      "firrtl::CircuitOp"> {
-  let summary = "Generate signal mappings that force/probe remote signals";
-  let constructor = "circt::firrtl::createGrandCentralSignalMappingsPass()";
-  let options = [Option<"outputFilename", "file", "std::string", "",
-      "Output file for the JSON-serialized OMIR data">];
-  let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
-  let statistics = [
-    Statistic<"numBufferWirePairsAdded", "num-buffer-wire-pairs-added",
-      "Number of buffer wire pairs added to break nets around forced ports">,
-    Statistic<"numForcedInputPorts", "num-forced-input-ports",
-      "Number of input ports that will be forced (sinks)">,
-    Statistic<"numForcedOutputPorts", "num-forced-output-ports",
-      "Number of output ports that will be forced (sinks)">,
-    Statistic<"numModules", "num-modules",
-      "Number of modules with at least one source or sink">,
-    Statistic<"numSinks", "num-sinks",
-      "Number of sinks">,
-    Statistic<"numSources", "num-sources",
-      "Number of sources">
   ];
 }
 
@@ -473,6 +481,14 @@ def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createCheckCombCyclesPass()";
 }
 
+def CheckCombLoops : Pass<"firrtl-check-comb-loops", "firrtl::CircuitOp"> {
+  let summary = "Check combinational cycles and emit errors";
+  let description = [{
+    This pass checks combinational cycles in the IR and emit errors.
+  }];
+  let constructor = "circt::firrtl::createCheckCombLoopsPass()";
+}
+
 def SFCCompat : Pass<"firrtl-sfc-compat", "firrtl::FModuleOp"> {
   let summary = "Perform SFC Compatibility fixes";
   let constructor = "circt::firrtl::createSFCCompatPass()";
@@ -485,6 +501,11 @@ def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
     Option<"enableAggressiveMerging", "aggressive-merging", "bool", "false",
       "Merge connections even when source values won't be simplified.">
   ];
+}
+
+def Vectorization : Pass<"vectorization", "firrtl::FModuleOp"> {
+  let summary = "Transform firrtl primitive operations into vector operations";
+  let constructor = "circt::firrtl::createVectorizationPass()";
 }
 
 def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
@@ -607,6 +628,16 @@ def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
     This pass lowers RefType ops and ports to verbatim encoded XMRs.
   }];
   let constructor = "circt::firrtl::createLowerXMRPass()";
+  let dependentDialects = ["sv::SVDialect"];
+}
+
+def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::CircuitOp"> {
+  let summary = "Lower intrinsics";
+  let description = [{
+    This pass lowers intrinsics encoded as extmodule with annotation and
+    intmodule to their implementation or op.
+  }];
+  let constructor = "circt::firrtl::createLowerIntrinsicsPass()";
 }
 
 def ResolveTraces : Pass<"firrtl-resolve-traces", "firrtl::CircuitOp"> {
@@ -625,6 +656,30 @@ def ResolveTraces : Pass<"firrtl-resolve-traces", "firrtl::CircuitOp"> {
   let options = [Option<"outputAnnotationFilename", "file", "std::string", "",
       "Output file for the JSON-serialized Trace Annotations">];
   let dependentDialects = ["sv::SVDialect"];
+}
+
+def InnerSymbolDCE : Pass<"firrtl-inner-symbol-dce", "mlir::ModuleOp"> {
+  let summary = "Eliminate dead inner symbols";
+  let description = [{
+    This pass deletes all inner symbols which have no uses. This is necessary to
+    unblock optimizations and removal of the operations which have these unused
+    inner symbols.
+  }];
+  let constructor = "circt::firrtl::createInnerSymbolDCEPass()";
+  let statistics = [
+    Statistic<"numInnerRefsFound", "num-inner-refs-found", "Number of inner-refs found">,
+    Statistic<"numInnerSymbolsFound", "num-inner-sym-found", "Number of inner symbols found">,
+    Statistic<"numInnerSymbolsRemoved", "num-inner-sym-removed", "Number of inner symbols removed">
+  ];
+}
+
+def VBToBV : Pass<"firrtl-vb-to-bv", "firrtl::CircuitOp"> {
+  let summary = "Transform vector-of-bundles to bundle-of-vectors";
+  let description = [{
+    This pass converts vectors containing bundles, into bundles containing
+    vectors.
+  }];
+  let constructor = "circt::firrtl::createVBToBVPass()";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

@@ -11,26 +11,89 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/SystemC/SystemCOps.h"
+#include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "mlir/IR/IRMapping.h"
+#include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace circt::systemc;
 
 //===----------------------------------------------------------------------===//
-// ImplicitSSAName Custom Directive
+// Helpers
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseImplicitSSAName(OpAsmParser &parser,
-                                        StringAttr &nameAttr) {
-  nameAttr = parser.getBuilder().getStringAttr(parser.getResultName(0).first);
+static LogicalResult verifyUniqueNamesInRegion(
+    Operation *operation, ArrayAttr argNames,
+    std::function<void(mlir::InFlightDiagnostic &)> attachNote) {
+  DenseMap<StringRef, BlockArgument> portNames;
+  DenseMap<StringRef, Operation *> memberNames;
+  DenseMap<StringRef, Operation *> localNames;
+
+  if (operation->getNumRegions() != 1)
+    return operation->emitError("required to have exactly one region");
+
+  bool portsVerified = true;
+
+  for (auto arg : llvm::zip(argNames, operation->getRegion(0).getArguments())) {
+    StringRef argName = std::get<0>(arg).cast<StringAttr>().getValue();
+    BlockArgument argValue = std::get<1>(arg);
+
+    if (portNames.count(argName)) {
+      auto diag = mlir::emitError(argValue.getLoc(), "redefines name '")
+                  << argName << "'";
+      diag.attachNote(portNames[argName].getLoc())
+          << "'" << argName << "' first defined here";
+      attachNote(diag);
+      portsVerified = false;
+      continue;
+    }
+
+    portNames.insert({argName, argValue});
+  }
+
+  WalkResult result =
+      operation->walk<mlir::WalkOrder::PreOrder>([&](Operation *op) {
+        if (isa<SCModuleOp>(op->getParentOp()))
+          localNames.clear();
+
+        if (auto nameDeclOp = dyn_cast<SystemCNameDeclOpInterface>(op)) {
+          StringRef name = nameDeclOp.getName();
+
+          auto reportNameRedefinition = [&](Location firstLoc) -> WalkResult {
+            auto diag = mlir::emitError(op->getLoc(), "redefines name '")
+                        << name << "'";
+            diag.attachNote(firstLoc) << "'" << name << "' first defined here";
+            attachNote(diag);
+            return WalkResult::interrupt();
+          };
+
+          if (portNames.count(name))
+            return reportNameRedefinition(portNames[name].getLoc());
+          if (memberNames.count(name))
+            return reportNameRedefinition(memberNames[name]->getLoc());
+          if (localNames.count(name))
+            return reportNameRedefinition(localNames[name]->getLoc());
+
+          if (isa<SCModuleOp>(op->getParentOp()))
+            memberNames.insert({name, op});
+          else
+            localNames.insert({name, op});
+        }
+
+        return WalkResult::advance();
+      });
+
+  if (result.wasInterrupted() || !portsVerified)
+    return failure();
+
   return success();
 }
-
-static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
-                                 StringAttr nameAttr) {}
 
 //===----------------------------------------------------------------------===//
 // SCModuleOp
@@ -68,6 +131,14 @@ ArrayRef<mlir::Type> SCModuleOp::getCallableResults() {
   return getResultTypes();
 }
 
+ArrayAttr SCModuleOp::getCallableArgAttrs() {
+  return getArgAttrs().value_or(nullptr);
+}
+
+ArrayAttr SCModuleOp::getCallableResAttrs() {
+  return getResAttrs().value_or(nullptr);
+}
+
 StringRef SCModuleOp::getModuleName() {
   return (*this)
       ->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
@@ -75,45 +146,47 @@ StringRef SCModuleOp::getModuleName() {
 }
 
 ParseResult SCModuleOp::parse(OpAsmParser &parser, OperationState &result) {
-  StringAttr moduleName;
-  SmallVector<OpAsmParser::Argument, 4> args;
-  SmallVector<Type, 4> argTypes;
-  SmallVector<Type, 4> resultTypes;
-  SmallVector<Attribute> argNames;
-  SmallVector<DictionaryAttr> resultAttrs;
 
   // Parse the visibility attribute.
   (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
+  // Parse the name as a symbol.
+  StringAttr moduleName;
   if (parser.parseSymbolName(moduleName, SymbolTable::getSymbolAttrName(),
                              result.attributes))
     return failure();
 
+  // Parse the function signature.
   bool isVariadic = false;
-  if (hw::module_like_impl::parseModuleFunctionSignature(
-          parser, args, isVariadic, resultTypes, resultAttrs, argNames))
+  SmallVector<OpAsmParser::Argument, 4> entryArgs;
+  SmallVector<Attribute> argNames;
+  SmallVector<Attribute> argLocs;
+  SmallVector<Attribute> resultNames;
+  SmallVector<DictionaryAttr> resultAttrs;
+  SmallVector<Attribute> resultLocs;
+  TypeAttr functionType;
+  if (failed(hw::module_like_impl::parseModuleFunctionSignature(
+          parser, isVariadic, entryArgs, argNames, argLocs, resultNames,
+          resultAttrs, resultLocs, functionType)))
     return failure();
 
+  // Parse the attribute dict.
   if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
-
-  for (auto &arg : args) {
-    argNames.push_back(
-        StringAttr::get(parser.getContext(), arg.ssaName.name.drop_front()));
-    argTypes.push_back(arg.type);
-  }
 
   result.addAttribute("portNames",
                       ArrayAttr::get(parser.getContext(), argNames));
 
-  auto type = parser.getBuilder().getFunctionType(argTypes, resultTypes);
-  result.addAttribute(SCModuleOp::getTypeAttrName(), TypeAttr::get(type));
+  result.addAttribute(SCModuleOp::getFunctionTypeAttrName(result.name),
+                      functionType);
 
   mlir::function_interface_impl::addArgAndResultAttrs(
-      parser.getBuilder(), result, args, resultAttrs);
+      parser.getBuilder(), result, entryArgs, resultAttrs,
+      SCModuleOp::getArgAttrsAttrName(result.name),
+      SCModuleOp::getResAttrsAttrName(result.name));
 
   auto &body = *result.addRegion();
-  if (parser.parseRegion(body, args))
+  if (parser.parseRegion(body, entryArgs))
     return failure();
   if (body.empty())
     body.push_back(std::make_unique<Block>().release());
@@ -137,7 +210,9 @@ void SCModuleOp::print(OpAsmPrinter &p) {
   hw::module_like_impl::printModuleSignature(
       p, *this, getFunctionType().getInputs(), false, {}, needArgNamesAttr);
   mlir::function_interface_impl::printFunctionAttributes(
-      p, *this, getFunctionType().getInputs().size(), 0, {"portNames"});
+      p, *this,
+      {"portNames", getFunctionTypeAttrName(), getArgAttrsAttrName(),
+       getResAttrsAttrName()});
 
   p << ' ';
   p.printRegion(getBody(), false, false);
@@ -166,7 +241,8 @@ void SCModuleOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   Region *region = odsState.addRegion();
 
   auto moduleType = odsBuilder.getFunctionType(portTypes, {});
-  odsState.addAttribute(getTypeAttrName(), TypeAttr::get(moduleType));
+  odsState.addAttribute(getFunctionTypeAttrName(odsState.name),
+                        TypeAttr::get(moduleType));
 
   odsState.addAttribute(SymbolTable::getSymbolAttrName(), name);
   region->push_back(new Block);
@@ -232,64 +308,10 @@ LogicalResult SCModuleOp::verify() {
 }
 
 LogicalResult SCModuleOp::verifyRegions() {
-  DenseMap<StringRef, BlockArgument> portNames;
-  DenseMap<StringRef, Operation *> memberNames;
-  DenseMap<StringRef, Operation *> localNames;
-
-  bool portsVerified = true;
-
-  for (auto arg : llvm::zip(getPortNames(), getArguments())) {
-    StringRef argName = std::get<0>(arg).cast<StringAttr>().getValue();
-    BlockArgument argValue = std::get<1>(arg);
-
-    if (portNames.count(argName)) {
-      auto diag = mlir::emitError(argValue.getLoc(), "redefines port name '")
-                  << argName << "'";
-      diag.attachNote(portNames[argName].getLoc())
-          << "'" << argName << "' first defined here";
-      diag.attachNote(getLoc()) << "in module '@" << getModuleName() << "'";
-      portsVerified = false;
-      continue;
-    }
-
-    portNames.insert({argName, argValue});
-  }
-
-  WalkResult result = walk<mlir::WalkOrder::PreOrder>([&](Operation *op) {
-    if (isa<SCModuleOp>(op->getParentOp()))
-      localNames.clear();
-
-    if (auto nameDeclOp = dyn_cast<SystemCNameDeclOpInterface>(op)) {
-      StringRef name = nameDeclOp.getName();
-
-      auto reportNameRedefinition = [&](Location firstLoc) -> WalkResult {
-        auto diag = mlir::emitError(op->getLoc(), "redefines name '")
-                    << name << "'";
-        diag.attachNote(firstLoc) << "'" << name << "' first defined here";
-        diag.attachNote(getLoc()) << "in module '@" << getModuleName() << "'";
-        return WalkResult::interrupt();
-      };
-
-      if (portNames.count(name))
-        return reportNameRedefinition(portNames[name].getLoc());
-      if (memberNames.count(name))
-        return reportNameRedefinition(memberNames[name]->getLoc());
-      if (localNames.count(name))
-        return reportNameRedefinition(localNames[name]->getLoc());
-
-      if (isa<SCModuleOp>(op->getParentOp()))
-        memberNames.insert({name, op});
-      else
-        localNames.insert({name, op});
-    }
-
-    return WalkResult::advance();
-  });
-
-  if (result.wasInterrupted() || !portsVerified)
-    return failure();
-
-  return success();
+  auto attachNote = [&](mlir::InFlightDiagnostic &diag) {
+    diag.attachNote(getLoc()) << "in module '@" << getModuleName() << "'";
+  };
+  return verifyUniqueNamesInRegion(getOperation(), getPortNames(), attachNote);
 }
 
 CtorOp SCModuleOp::getOrCreateCtor() {
@@ -331,6 +353,68 @@ void SignalOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 //===----------------------------------------------------------------------===//
+// ConvertOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ConvertOp::fold(FoldAdaptor) {
+  if (getInput().getType() == getResult().getType())
+    return getInput();
+
+  if (auto other = getInput().getDefiningOp<ConvertOp>()) {
+    Type inputType = other.getInput().getType();
+    Type intermediateType = getInput().getType();
+
+    if (inputType != getResult().getType())
+      return {};
+
+    // Either both the input and intermediate types are signed or both are
+    // unsigned.
+    bool inputSigned = inputType.isa<SignedType, IntBaseType>();
+    bool intermediateSigned = intermediateType.isa<SignedType, IntBaseType>();
+    if (inputSigned ^ intermediateSigned)
+      return {};
+
+    // Converting 4-valued to 2-valued and back may lose information.
+    if (inputType.isa<LogicVectorBaseType, LogicType>() &&
+        !intermediateType.isa<LogicVectorBaseType, LogicType>())
+      return {};
+
+    auto inputBw = getBitWidth(inputType);
+    auto intermediateBw = getBitWidth(intermediateType);
+
+    if (!inputBw && intermediateBw) {
+      if (inputType.isa<IntBaseType, UIntBaseType>() && *intermediateBw >= 64)
+        return other.getInput();
+      // We cannot support input types of signed, unsigned, and vector types
+      // since they have no upper bound for the bit-width.
+    }
+
+    if (!intermediateBw) {
+      if (intermediateType.isa<BitVectorBaseType, LogicVectorBaseType>())
+        return other.getInput();
+
+      if (!inputBw && inputType.isa<IntBaseType, UIntBaseType>() &&
+          intermediateType.isa<SignedType, UnsignedType>())
+        return other.getInput();
+
+      if (inputBw && *inputBw <= 64 &&
+          intermediateType
+              .isa<IntBaseType, UIntBaseType, SignedType, UnsignedType>())
+        return other.getInput();
+
+      // We have to be careful with the signed and unsigned types as they often
+      // have a max bit-width defined (that can be customized) and thus folding
+      // here could change the behavior.
+    }
+
+    if (inputBw && intermediateBw && *inputBw <= *intermediateBw)
+      return other.getInput();
+  }
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // CtorOp
 //===----------------------------------------------------------------------===//
 
@@ -363,6 +447,9 @@ LogicalResult SCFuncOp::verify() {
 void InstanceDeclOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getInstanceHandle(), getName());
 }
+
+StringRef InstanceDeclOp::getInstanceName() { return getName(); }
+StringAttr InstanceDeclOp::getInstanceNameAttr() { return getNameAttr(); }
 
 Operation *InstanceDeclOp::getReferencedModule(const hw::HWSymbolCache *cache) {
   if (cache)
@@ -551,6 +638,20 @@ StringRef BindPortOp::getPortName() {
 }
 
 //===----------------------------------------------------------------------===//
+// SensitiveOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SensitiveOp::canonicalize(SensitiveOp op,
+                                        PatternRewriter &rewriter) {
+  if (op.getSensitivities().empty()) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
 // VariableOp
 //===----------------------------------------------------------------------===//
 
@@ -598,6 +699,441 @@ LogicalResult VariableOp::verify() {
     return emitOpError(
                "'init' and 'variable' must have the same type, but got ")
            << getInit().getType() << " and " << getVariable().getType();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// InteropVerilatedOp
+//===----------------------------------------------------------------------===//
+
+/// Create a instance that refers to a known module.
+void InteropVerilatedOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                               Operation *module, StringAttr name,
+                               ArrayRef<Value> inputs) {
+  auto [argNames, resultNames] =
+      hw::instance_like_impl::getHWModuleArgAndResultNames(module);
+  build(odsBuilder, odsState, hw::getModuleType(module).getResults(), name,
+        FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), argNames,
+        resultNames, inputs);
+}
+
+LogicalResult
+InteropVerilatedOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return hw::instance_like_impl::verifyInstanceOfHWModule(
+      *this, getModuleNameAttr(), getInputs(), getResultTypes(),
+      getInputNames(), getResultNames(), ArrayAttr(), symbolTable);
+}
+
+/// Suggest a name for each result value based on the saved result names
+/// attribute.
+void InteropVerilatedOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  hw::instance_like_impl::getAsmResultNames(setNameFn, getInstanceName(),
+                                            getResultNames(), getResults());
+}
+
+//===----------------------------------------------------------------------===//
+// CallOp
+//
+// TODO: The implementation for this operation was copy-pasted from the
+// 'func' dialect. Ideally, this upstream dialect refactored such that we can
+// re-use the implementation here.
+//===----------------------------------------------------------------------===//
+
+// FIXME: This is an exact copy from upstream
+LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Check that the callee attribute was specified.
+  auto fnAttr = (*this)->getAttrOfType<FlatSymbolRefAttr>("callee");
+  if (!fnAttr)
+    return emitOpError("requires a 'callee' symbol reference attribute");
+  FuncOp fn = symbolTable.lookupNearestSymbolFrom<FuncOp>(*this, fnAttr);
+  if (!fn)
+    return emitOpError() << "'" << fnAttr.getValue()
+                         << "' does not reference a valid function";
+
+  // Verify that the operand and result types match the callee.
+  auto fnType = fn.getFunctionType();
+  if (fnType.getNumInputs() != getNumOperands())
+    return emitOpError("incorrect number of operands for callee");
+
+  for (unsigned i = 0, e = fnType.getNumInputs(); i != e; ++i)
+    if (getOperand(i).getType() != fnType.getInput(i))
+      return emitOpError("operand type mismatch: expected operand type ")
+             << fnType.getInput(i) << ", but provided "
+             << getOperand(i).getType() << " for operand number " << i;
+
+  if (fnType.getNumResults() != getNumResults())
+    return emitOpError("incorrect number of results for callee");
+
+  for (unsigned i = 0, e = fnType.getNumResults(); i != e; ++i)
+    if (getResult(i).getType() != fnType.getResult(i)) {
+      auto diag = emitOpError("result type mismatch at index ") << i;
+      diag.attachNote() << "      op result types: " << getResultTypes();
+      diag.attachNote() << "function result types: " << fnType.getResults();
+      return diag;
+    }
+
+  return success();
+}
+
+FunctionType CallOp::getCalleeType() {
+  return FunctionType::get(getContext(), getOperandTypes(), getResultTypes());
+}
+
+// This verifier was added compared to the upstream implementation.
+LogicalResult CallOp::verify() {
+  if (getNumResults() > 1)
+    return emitOpError(
+        "incorrect number of function results (always has to be 0 or 1)");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// CallIndirectOp
+//===----------------------------------------------------------------------===//
+
+// This verifier was added compared to the upstream implementation.
+LogicalResult CallIndirectOp::verify() {
+  if (getNumResults() > 1)
+    return emitOpError(
+        "incorrect number of function results (always has to be 0 or 1)");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// FuncOp
+//
+// TODO: Most of the implementation for this operation was copy-pasted from the
+// 'func' dialect. Ideally, this upstream dialect refactored such that we can
+// re-use the implementation here.
+//===----------------------------------------------------------------------===//
+
+// Note that the create and build operations are taken from upstream, but the
+// argNames argument was added.
+FuncOp FuncOp::create(Location location, StringRef name, ArrayAttr argNames,
+                      FunctionType type, ArrayRef<NamedAttribute> attrs) {
+  OpBuilder builder(location->getContext());
+  OperationState state(location, getOperationName());
+  FuncOp::build(builder, state, name, argNames, type, attrs);
+  return cast<FuncOp>(Operation::create(state));
+}
+
+FuncOp FuncOp::create(Location location, StringRef name, ArrayAttr argNames,
+                      FunctionType type, Operation::dialect_attr_range attrs) {
+  SmallVector<NamedAttribute, 8> attrRef(attrs);
+  return create(location, name, argNames, type, ArrayRef(attrRef));
+}
+
+FuncOp FuncOp::create(Location location, StringRef name, ArrayAttr argNames,
+                      FunctionType type, ArrayRef<NamedAttribute> attrs,
+                      ArrayRef<DictionaryAttr> argAttrs) {
+  FuncOp func = create(location, name, argNames, type, attrs);
+  func.setAllArgAttrs(argAttrs);
+  return func;
+}
+
+void FuncOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                   StringRef name, ArrayAttr argNames, FunctionType type,
+                   ArrayRef<NamedAttribute> attrs,
+                   ArrayRef<DictionaryAttr> argAttrs) {
+  odsState.addAttribute(getArgNamesAttrName(odsState.name), argNames);
+  odsState.addAttribute(SymbolTable::getSymbolAttrName(),
+                        odsBuilder.getStringAttr(name));
+  odsState.addAttribute(FuncOp::getFunctionTypeAttrName(odsState.name),
+                        TypeAttr::get(type));
+  odsState.attributes.append(attrs.begin(), attrs.end());
+  odsState.addRegion();
+
+  if (argAttrs.empty())
+    return;
+  assert(type.getNumInputs() == argAttrs.size());
+  mlir::function_interface_impl::addArgAndResultAttrs(
+      odsBuilder, odsState, argAttrs,
+      /*resultAttrs=*/std::nullopt, FuncOp::getArgAttrsAttrName(odsState.name),
+      FuncOp::getResAttrsAttrName(odsState.name));
+}
+
+ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto buildFuncType =
+      [](Builder &builder, ArrayRef<Type> argTypes, ArrayRef<Type> results,
+         mlir::function_interface_impl::VariadicFlag,
+         std::string &) { return builder.getFunctionType(argTypes, results); };
+
+  // This was added specifically for our implementation, upstream does not have
+  // this feature.
+  if (succeeded(parser.parseOptionalKeyword("externC")))
+    result.addAttribute(getExternCAttrName(result.name),
+                        UnitAttr::get(result.getContext()));
+
+  // FIXME: below is an exact copy of the
+  // mlir::function_interface_impl::parseFunctionOp implementation, this was
+  // needed because we need to access the SSA names of the arguments.
+  SmallVector<OpAsmParser::Argument> entryArgs;
+  SmallVector<DictionaryAttr> resultAttrs;
+  SmallVector<Type> resultTypes;
+  auto &builder = parser.getBuilder();
+
+  // Parse visibility.
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
+  // Parse the name as a symbol.
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  // Parse the function signature.
+  mlir::SMLoc signatureLocation = parser.getCurrentLocation();
+  bool isVariadic = false;
+  if (mlir::function_interface_impl::parseFunctionSignature(
+          parser, false, entryArgs, isVariadic, resultTypes, resultAttrs))
+    return failure();
+
+  std::string errorMessage;
+  SmallVector<Type> argTypes;
+  argTypes.reserve(entryArgs.size());
+  for (auto &arg : entryArgs)
+    argTypes.push_back(arg.type);
+
+  Type type = buildFuncType(
+      builder, argTypes, resultTypes,
+      mlir::function_interface_impl::VariadicFlag(isVariadic), errorMessage);
+  if (!type) {
+    return parser.emitError(signatureLocation)
+           << "failed to construct function type"
+           << (errorMessage.empty() ? "" : ": ") << errorMessage;
+  }
+  result.addAttribute(FuncOp::getFunctionTypeAttrName(result.name),
+                      TypeAttr::get(type));
+
+  // If function attributes are present, parse them.
+  NamedAttrList parsedAttributes;
+  mlir::SMLoc attributeDictLocation = parser.getCurrentLocation();
+  if (parser.parseOptionalAttrDictWithKeyword(parsedAttributes))
+    return failure();
+
+  // Disallow attributes that are inferred from elsewhere in the attribute
+  // dictionary.
+  for (StringRef disallowed :
+       {SymbolTable::getVisibilityAttrName(), SymbolTable::getSymbolAttrName(),
+        FuncOp::getFunctionTypeAttrName(result.name).getValue()}) {
+    if (parsedAttributes.get(disallowed))
+      return parser.emitError(attributeDictLocation, "'")
+             << disallowed
+             << "' is an inferred attribute and should not be specified in the "
+                "explicit attribute dictionary";
+  }
+  result.attributes.append(parsedAttributes);
+
+  // Add the attributes to the function arguments.
+  assert(resultAttrs.size() == resultTypes.size());
+  mlir::function_interface_impl::addArgAndResultAttrs(
+      builder, result, entryArgs, resultAttrs,
+      FuncOp::getArgAttrsAttrName(result.name),
+      FuncOp::getResAttrsAttrName(result.name));
+
+  // Parse the optional function body. The printer will not print the body if
+  // its empty, so disallow parsing of empty body in the parser.
+  auto *body = result.addRegion();
+  mlir::SMLoc loc = parser.getCurrentLocation();
+  mlir::OptionalParseResult parseResult =
+      parser.parseOptionalRegion(*body, entryArgs,
+                                 /*enableNameShadowing=*/false);
+  if (parseResult.has_value()) {
+    if (failed(*parseResult))
+      return failure();
+    // Function body was parsed, make sure its not empty.
+    if (body->empty())
+      return parser.emitError(loc, "expected non-empty function body");
+  }
+
+  // Everythink below is added compared to the upstream implemenation to handle
+  // argument names.
+  SmallVector<Attribute> argNames;
+  if (!entryArgs.empty() && !entryArgs.front().ssaName.name.empty()) {
+    for (auto &arg : entryArgs)
+      argNames.push_back(
+          StringAttr::get(parser.getContext(), arg.ssaName.name.drop_front()));
+  }
+
+  result.addAttribute(getArgNamesAttrName(result.name),
+                      ArrayAttr::get(parser.getContext(), argNames));
+
+  return success();
+}
+
+void FuncOp::print(OpAsmPrinter &p) {
+  if (getExternC())
+    p << " externC";
+
+  mlir::FunctionOpInterface op = *this;
+
+  // FIXME: inlined mlir::function_interface_impl::printFunctionOp because we
+  // need to elide more attributes
+
+  // Print the operation and the function name.
+  auto funcName =
+      op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
+          .getValue();
+  p << ' ';
+
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+  p.printSymbolName(funcName);
+
+  ArrayRef<Type> argTypes = op.getArgumentTypes();
+  ArrayRef<Type> resultTypes = op.getResultTypes();
+  mlir::function_interface_impl::printFunctionSignature(p, op, argTypes, false,
+                                                        resultTypes);
+  mlir::function_interface_impl::printFunctionAttributes(
+      p, op,
+      {visibilityAttrName, "externC", "argNames", getFunctionTypeAttrName(),
+       getArgAttrsAttrName(), getResAttrsAttrName()});
+  // Print the body if this is not an external function.
+  Region &body = op->getRegion(0);
+  if (!body.empty()) {
+    p << ' ';
+    p.printRegion(body, /*printEntryBlockArgs=*/false,
+                  /*printBlockTerminators=*/true);
+  }
+}
+
+// FIXME: the below clone operation are exact copies from upstream.
+
+/// Clone the internal blocks from this function into dest and all attributes
+/// from this function to dest.
+void FuncOp::cloneInto(FuncOp dest, IRMapping &mapper) {
+  // Add the attributes of this function to dest.
+  llvm::MapVector<StringAttr, Attribute> newAttrMap;
+  for (const auto &attr : dest->getAttrs())
+    newAttrMap.insert({attr.getName(), attr.getValue()});
+  for (const auto &attr : (*this)->getAttrs())
+    newAttrMap.insert({attr.getName(), attr.getValue()});
+
+  auto newAttrs = llvm::to_vector(llvm::map_range(
+      newAttrMap, [](std::pair<StringAttr, Attribute> attrPair) {
+        return NamedAttribute(attrPair.first, attrPair.second);
+      }));
+  dest->setAttrs(DictionaryAttr::get(getContext(), newAttrs));
+
+  // Clone the body.
+  getBody().cloneInto(&dest.getBody(), mapper);
+}
+
+/// Create a deep copy of this function and all of its blocks, remapping
+/// any operands that use values outside of the function using the map that is
+/// provided (leaving them alone if no entry is present). Replaces references
+/// to cloned sub-values with the corresponding value that is copied, and adds
+/// those mappings to the mapper.
+FuncOp FuncOp::clone(IRMapping &mapper) {
+  // Create the new function.
+  FuncOp newFunc = cast<FuncOp>(getOperation()->cloneWithoutRegions());
+
+  // If the function has a body, then the user might be deleting arguments to
+  // the function by specifying them in the mapper. If so, we don't add the
+  // argument to the input type vector.
+  if (!isExternal()) {
+    FunctionType oldType = getFunctionType();
+
+    unsigned oldNumArgs = oldType.getNumInputs();
+    SmallVector<Type, 4> newInputs;
+    newInputs.reserve(oldNumArgs);
+    for (unsigned i = 0; i != oldNumArgs; ++i)
+      if (!mapper.contains(getArgument(i)))
+        newInputs.push_back(oldType.getInput(i));
+
+    /// If any of the arguments were dropped, update the type and drop any
+    /// necessary argument attributes.
+    if (newInputs.size() != oldNumArgs) {
+      newFunc.setType(FunctionType::get(oldType.getContext(), newInputs,
+                                        oldType.getResults()));
+
+      if (ArrayAttr argAttrs = getAllArgAttrs()) {
+        SmallVector<Attribute> newArgAttrs;
+        newArgAttrs.reserve(newInputs.size());
+        for (unsigned i = 0; i != oldNumArgs; ++i)
+          if (!mapper.contains(getArgument(i)))
+            newArgAttrs.push_back(argAttrs[i]);
+        newFunc.setAllArgAttrs(newArgAttrs);
+      }
+    }
+  }
+
+  /// Clone the current function into the new one and return it.
+  cloneInto(newFunc, mapper);
+  return newFunc;
+}
+
+FuncOp FuncOp::clone() {
+  IRMapping mapper;
+  return clone(mapper);
+}
+
+// The following functions are entirely new additions compared to upstream.
+
+void FuncOp::getAsmBlockArgumentNames(mlir::Region &region,
+                                      mlir::OpAsmSetValueNameFn setNameFn) {
+  if (region.empty())
+    return;
+
+  for (auto [arg, name] : llvm::zip(getArguments(), getArgNames()))
+    setNameFn(arg, name.cast<StringAttr>().getValue());
+}
+
+LogicalResult FuncOp::verify() {
+  if (getFunctionType().getNumResults() > 1)
+    return emitOpError(
+        "incorrect number of function results (always has to be 0 or 1)");
+
+  if (getBody().empty())
+    return success();
+
+  if (getArgNames().size() != getFunctionType().getNumInputs())
+    return emitOpError("incorrect number of argument names");
+
+  for (auto portName : getArgNames()) {
+    if (portName.cast<StringAttr>().getValue().empty())
+      return emitOpError("arg name must not be empty");
+  }
+
+  return success();
+}
+
+LogicalResult FuncOp::verifyRegions() {
+  auto attachNote = [&](mlir::InFlightDiagnostic &diag) {
+    diag.attachNote(getLoc()) << "in function '@" << getName() << "'";
+  };
+  return verifyUniqueNamesInRegion(getOperation(), getArgNames(), attachNote);
+}
+
+//===----------------------------------------------------------------------===//
+// ReturnOp
+//
+// TODO: The implementation for this operation was copy-pasted from the
+// 'func' dialect. Ideally, this upstream dialect refactored such that we can
+// re-use the implementation here.
+//===----------------------------------------------------------------------===//
+
+LogicalResult ReturnOp::verify() {
+  auto function = cast<FuncOp>((*this)->getParentOp());
+
+  // The operand number and types must match the function signature.
+  const auto &results = function.getFunctionType().getResults();
+  if (getNumOperands() != results.size())
+    return emitOpError("has ")
+           << getNumOperands() << " operands, but enclosing function (@"
+           << function.getName() << ") returns " << results.size();
+
+  for (unsigned i = 0, e = results.size(); i != e; ++i)
+    if (getOperand(i).getType() != results[i])
+      return emitError() << "type of return operand " << i << " ("
+                         << getOperand(i).getType()
+                         << ") doesn't match function result type ("
+                         << results[i] << ")"
+                         << " in function @" << function.getName();
 
   return success();
 }

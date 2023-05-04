@@ -157,7 +157,7 @@ static StringAttr getMainBufferNameIdentifier(const llvm::SourceMgr &sourceMgr,
 }
 
 FIRLexer::FIRLexer(const llvm::SourceMgr &sourceMgr, MLIRContext *context)
-    : sourceMgr(sourceMgr), context(context),
+    : sourceMgr(sourceMgr),
       bufferNameIdentifier(getMainBufferNameIdentifier(sourceMgr, context)),
       curBuffer(
           sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID())->getBuffer()),
@@ -168,6 +168,7 @@ FIRLexer::FIRLexer(const llvm::SourceMgr &sourceMgr, MLIRContext *context)
 /// Encode the specified source location information into a Location object
 /// for attachment to the IR or error reporting.
 Location FIRLexer::translateLocation(llvm::SMLoc loc) {
+  assert(loc.isValid());
   unsigned mainFileID = sourceMgr.getMainFileID();
   auto lineAndColumn = sourceMgr.getLineAndColumn(loc, mainFileID);
   return FileLineColLoc::get(bufferNameIdentifier, lineAndColumn.first,
@@ -181,7 +182,7 @@ FIRToken FIRLexer::emitError(const char *loc, const Twine &message) {
 }
 
 /// Return the indentation level of the specified token.
-Optional<unsigned> FIRLexer::getIndentation(const FIRToken &tok) const {
+std::optional<unsigned> FIRLexer::getIndentation(const FIRToken &tok) const {
   // Count the number of horizontal whitespace characters before the token.
   auto *bufStart = curBuffer.begin();
 
@@ -199,7 +200,7 @@ Optional<unsigned> FIRLexer::getIndentation(const FIRToken &tok) const {
 
   // If the character we stopped at isn't the start of line, then return none.
   if (ptr != bufStart && !isVerticalWS(ptr[-1]))
-    return None;
+    return std::nullopt;
 
   return indent;
 }
@@ -236,6 +237,7 @@ FIRToken FIRLexer::lexTokenImpl() {
       // Handle whitespace.
       continue;
 
+    case '`':
     case '_':
       // Handle identifiers.
       return lexIdentifierOrKeyword(tokStart);
@@ -378,14 +380,25 @@ FIRToken FIRLexer::lexInlineAnnotation(const char *tokStart) {
 ///
 ///   LegalStartChar ::= [a-zA-Z_]
 ///   LegalIdChar    ::= LegalStartChar | [0-9] | '$'
-//
+///
 ///   Id ::= LegalStartChar (LegalIdChar)*
+///   LiteralId ::= [a-zA-Z0-9$_]+
 ///
 FIRToken FIRLexer::lexIdentifierOrKeyword(const char *tokStart) {
+  // Remember that this is a literalID
+  bool isLiteralId = *tokStart == '`';
+
   // Match the rest of the identifier regex: [0-9a-zA-Z_$-]*
   while (llvm::isAlpha(*curPtr) || llvm::isDigit(*curPtr) || *curPtr == '_' ||
          *curPtr == '$' || *curPtr == '-')
     ++curPtr;
+
+  // Consume the trailing '`' in a literal identifier.
+  if (isLiteralId) {
+    if (*curPtr != '`')
+      return emitError(tokStart, "unterminated literal identifier");
+    ++curPtr;
+  }
 
   StringRef spelling(tokStart, curPtr - tokStart);
 
@@ -402,11 +415,17 @@ FIRToken FIRLexer::lexIdentifierOrKeyword(const char *tokStart) {
     }
   }
 
-  // Check to see if this identifier is a keyword.
+  // See if the identifier is a keyword.  By default, it is an identifier.
   FIRToken::Kind kind = llvm::StringSwitch<FIRToken::Kind>(spelling)
 #define TOK_KEYWORD(SPELLING) .Case(#SPELLING, FIRToken::kw_##SPELLING)
 #include "FIRTokenKinds.def"
                             .Default(FIRToken::identifier);
+
+  // If this has the backticks of a literal identifier and it fell through the
+  // above switch, indicating that it was not found to e a keyword, then change
+  // its kind from identifier to literal identifier.
+  if (isLiteralId && kind == FIRToken::identifier)
+    kind = FIRToken::literal_identifier;
 
   return FIRToken(kind, spelling);
 }
@@ -452,6 +471,8 @@ FIRToken FIRLexer::lexString(const char *tokStart, bool isRaw) {
       // Ignore escaped '\'' or '"'
       if (*curPtr == '\'' || *curPtr == '"')
         ++curPtr;
+      else if (*curPtr == 'u' || *curPtr == 'U')
+        return emitError(tokStart, "unicode escape not supported in string");
       break;
     case 0:
       // This could be the end of file in the middle of the string.  If so
@@ -465,6 +486,8 @@ FIRToken FIRLexer::lexString(const char *tokStart, bool isRaw) {
     case '\f':
       return emitError(tokStart, "unterminated string");
     default:
+      if (curPtr[-1] & ~0x7F)
+        return emitError(tokStart, "string characters must be 7-bit ASCII");
       // Skip over other characters.
       break;
     }

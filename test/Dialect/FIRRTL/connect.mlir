@@ -119,7 +119,7 @@ firrtl.module @wires3(out %out : !firrtl.uint<1>) {
 
 firrtl.module @wires4(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
   %w = firrtl.wire : !firrtl.bundle<a: uint<1>>
-  %0 = firrtl.subfield %w(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
+  %0 = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<1>>
   // CHECK: firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK: firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
@@ -127,7 +127,7 @@ firrtl.module @wires4(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
 }
 
 firrtl.module @registers0(in %clock : !firrtl.clock, in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
-  %0 = firrtl.reg %clock : !firrtl.uint<1>
+  %0 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
   // CHECK: firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK: firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
@@ -135,10 +135,95 @@ firrtl.module @registers0(in %clock : !firrtl.clock, in %in : !firrtl.uint<1>, o
 }
 
 firrtl.module @registers1(in %clock : !firrtl.clock) {
-  %0 = firrtl.reg %clock : !firrtl.uint<1>
-  %1 = firrtl.reg %clock : !firrtl.uint<1>
+  %0 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
+  %1 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
   // CHECK: firrtl.connect %0, %1
   firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+}
+
+firrtl.module @ConstClock(in %in : !firrtl.const.clock, out %out : !firrtl.const.clock) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.const.clock, !firrtl.const.clock
+  firrtl.connect %out, %in : !firrtl.const.clock, !firrtl.const.clock
+}
+
+firrtl.module @ConstReset(in %in : !firrtl.const.reset, out %out : !firrtl.const.reset) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.const.reset, !firrtl.const.reset
+  firrtl.connect %out, %in : !firrtl.const.reset, !firrtl.const.reset
+}
+
+firrtl.module @ConstAsyncReset(in %in : !firrtl.const.asyncreset, out %out : !firrtl.const.asyncreset) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.const.asyncreset, !firrtl.const.asyncreset
+  firrtl.connect %out, %in : !firrtl.const.asyncreset, !firrtl.const.asyncreset
+}
+
+firrtl.module @ConstUInt(in %in : !firrtl.const.uint<2>, out %out : !firrtl.const.uint<2>) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.const.uint<2>, !firrtl.const.uint<2>
+  firrtl.connect %out, %in : !firrtl.const.uint<2>, !firrtl.const.uint<2>
+}
+
+firrtl.module @ConstSInt(in %in : !firrtl.const.sint<2>, out %out : !firrtl.const.sint<2>) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.const.sint<2>, !firrtl.const.sint<2>
+  firrtl.connect %out, %in : !firrtl.const.sint<2>, !firrtl.const.sint<2>
+}
+
+firrtl.module @ConstVec(in %in : !firrtl.const.vector<uint<1>, 3>, out %out : !firrtl.const.vector<uint<1>, 3>) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.const.vector<uint<1>, 3>, !firrtl.const.vector<uint<1>, 3>
+  firrtl.connect %out, %in : !firrtl.const.vector<uint<1>, 3>, !firrtl.const.vector<uint<1>, 3>
+}
+
+firrtl.module @ConstBundle(in %in : !firrtl.const.bundle<a: uint<1>, b: sint<2>>, out %out : !firrtl.const.bundle<a: uint<1>, b: sint<2>>) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.const.bundle<a: uint<1>, b: sint<2>>, !firrtl.const.bundle<a: uint<1>, b: sint<2>>
+  firrtl.connect %out, %in : !firrtl.const.bundle<a: uint<1>, b: sint<2>>, !firrtl.const.bundle<a: uint<1>, b: sint<2>>
+}
+
+firrtl.module @MixedConstBundle(in %in : !firrtl.bundle<a: uint<1>, b: const.sint<2>>, out %out : !firrtl.bundle<a: uint<1>, b: const.sint<2>>) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: const.sint<2>>, !firrtl.bundle<a: uint<1>, b: const.sint<2>>
+  firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: const.sint<2>>, !firrtl.bundle<a: uint<1>, b: const.sint<2>>
+}
+
+firrtl.module @ConstToExplicitConstElementsBundle(in %in : !firrtl.const.bundle<a: uint<1>, b: sint<2>>, out %out : !firrtl.const.bundle<a: const.uint<1>, b: const.sint<2>>) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.const.bundle<a: const.uint<1>, b: const.sint<2>>, !firrtl.const.bundle<a: uint<1>, b: sint<2>>
+  firrtl.connect %out, %in : !firrtl.const.bundle<a: const.uint<1>, b: const.sint<2>>, !firrtl.const.bundle<a: uint<1>, b: sint<2>>
+}
+
+firrtl.module @ConstToNonConstClock(in %in : !firrtl.const.clock, out %out : !firrtl.clock) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.clock, !firrtl.const.clock
+  firrtl.connect %out, %in : !firrtl.clock, !firrtl.const.clock
+}
+
+firrtl.module @ConstToNonConstReset(in %in : !firrtl.const.reset, out %out : !firrtl.reset) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.reset, !firrtl.const.reset
+  firrtl.connect %out, %in : !firrtl.reset, !firrtl.const.reset
+}
+
+firrtl.module @ConstToNonConstAsyncReset(in %in : !firrtl.const.asyncreset, out %out : !firrtl.asyncreset) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.asyncreset, !firrtl.const.asyncreset
+  firrtl.connect %out, %in : !firrtl.asyncreset, !firrtl.const.asyncreset
+}
+
+firrtl.module @ConstToNonConstUInt(in %in : !firrtl.const.uint<2>, out %out : !firrtl.uint<2>) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.uint<2>, !firrtl.const.uint<2>
+  firrtl.connect %out, %in : !firrtl.uint<2>, !firrtl.const.uint<2>
+}
+
+firrtl.module @ConstToNonConstBundle(in %in : !firrtl.const.bundle<a: uint<1>, b: sint<2>>, out %out : !firrtl.bundle<a: uint<1>, b: sint<2>>) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: sint<2>>, !firrtl.const.bundle<a: uint<1>, b: sint<2>>
+  firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: sint<2>>, !firrtl.const.bundle<a: uint<1>, b: sint<2>>
+}
+
+firrtl.module @MixedConstToNonConstBundle(in %in : !firrtl.bundle<a: uint<1>, b: const.sint<2>>, out %out : !firrtl.bundle<a: uint<1>, b: sint<2>>) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: sint<2>>, !firrtl.bundle<a: uint<1>, b: const.sint<2>>
+  firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: sint<2>>, !firrtl.bundle<a: uint<1>, b: const.sint<2>>
+}
+
+firrtl.module @ConstToExplicitConstElementsVec(in %in : !firrtl.const.vector<uint<1>, 3>, out %out : !firrtl.vector<const.uint<1>, 3>) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.vector<const.uint<1>, 3>, !firrtl.const.vector<uint<1>, 3>
+  firrtl.connect %out, %in : !firrtl.vector<const.uint<1>, 3>, !firrtl.const.vector<uint<1>, 3>
+}
+
+firrtl.module @ConstToNonConstVec(in %in : !firrtl.const.vector<uint<1>, 3>, out %out : !firrtl.vector<uint<1>, 3>) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.vector<uint<1>, 3>, !firrtl.const.vector<uint<1>, 3>
+  firrtl.connect %out, %in : !firrtl.vector<uint<1>, 3>, !firrtl.const.vector<uint<1>, 3>
 }
 
 }

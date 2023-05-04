@@ -48,7 +48,7 @@ TEST(HWModuleOpTest, AddOutputs) {
   top.insertOutputs(1, insertPorts);
 
   auto ports = top.getAllPorts();
-  ASSERT_EQ(ports.size(), 4);
+  ASSERT_EQ(ports.size(), 4u);
 
   EXPECT_EQ(ports[0].name, builder.getStringAttr("a"));
   EXPECT_EQ(ports[0].direction, PortDirection::OUTPUT);
@@ -67,7 +67,7 @@ TEST(HWModuleOpTest, AddOutputs) {
   EXPECT_EQ(ports[3].type, wireTy);
 
   auto output = cast<OutputOp>(top.getBodyBlock()->getTerminator());
-  ASSERT_EQ(output->getNumOperands(), 4);
+  ASSERT_EQ(output->getNumOperands(), 4u);
 
   EXPECT_EQ(output->getOperand(0), wireA.getResult());
   EXPECT_EQ(output->getOperand(1), wireB.getResult());

@@ -5,8 +5,8 @@ import circt
 from circt.support import connect
 from circt.dialects import hw
 
-from mlir.ir import *
-from mlir.passmanager import PassManager
+from circt.ir import *
+from circt.passmanager import PassManager
 
 import sys
 

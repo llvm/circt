@@ -197,7 +197,7 @@ void StateEncoding::setEncoding(StateOp state, Value v, bool wire) {
   if (wire) {
     auto loc = machine.getLoc();
     auto stateType = getStateType();
-    auto stateEncodingWire = b.create<sv::WireOp>(
+    auto stateEncodingWire = b.create<sv::RegOp>(
         loc, stateType, b.getStringAttr("to_" + state.getName()),
         /*inner_sym=*/state.getNameAttr());
     b.create<sv::AssignOp>(loc, stateEncodingWire, v);
@@ -282,7 +282,7 @@ private:
 
     // An optional default value to be assigned before the case statement, if
     // the case is not fully specified for all states.
-    Optional<Value> defaultValue = {};
+    std::optional<Value> defaultValue = {};
   };
 
   // Build an SV-based case mux for the given assignments. Assignments are
@@ -365,8 +365,13 @@ void MachineOpConverter::buildStateCaseMux(
 
   // Case assignments.
   caseMux = b.create<sv::CaseOp>(
-      machineOp.getLoc(), CaseStmtType::CaseStmt, select,
-      /*numCases=*/machineOp.getNumStates(), [&](size_t caseIdx) {
+      machineOp.getLoc(), CaseStmtType::CaseStmt,
+      /*sv::ValidationQualifierTypeEnum::ValidationQualifierUnique, */ select,
+      /*numCases=*/machineOp.getNumStates() + 1, [&](size_t caseIdx) {
+        // Make Verilator happy for sized enums.
+        if (caseIdx == machineOp.getNumStates())
+          return std::unique_ptr<sv::CasePattern>(
+              new sv::CaseDefaultPattern(b.getContext()));
         StateOp state = orderedStates[caseIdx];
         return encoding->getCasePattern(state);
       });
@@ -614,7 +619,9 @@ MachineOpConverter::convertTransitions( // NOLINT(misc-no-recursion)
       if (failed(guardOpRes))
         return failure();
 
-      auto guard = cast<ReturnOp>(*guardOpRes).getOperand();
+      auto guardOp = cast<ReturnOp>(*guardOpRes);
+      assert(guardOp && "guard should be defined");
+      auto guard = guardOp.getOperand();
       auto otherNextState =
           convertTransitions(currentState, transitions.drop_front());
       if (failed(otherNextState))
@@ -667,13 +674,14 @@ void FSMToSVPass::runOnOperation() {
   // Create a typescope shared by all of the FSMs. This typescope will be
   // emitted in a single separate file to avoid polluting each output file with
   // typedefs.
+  StringAttr typeScopeFilename = b.getStringAttr("fsm_enum_typedefs.sv");
   b.setInsertionPointToStart(module.getBody());
   auto typeScope = b.create<hw::TypeScopeOp>(
       module.getLoc(), b.getStringAttr("fsm_enum_typedecls"));
   typeScope.getBodyRegion().push_back(new Block());
   typeScope->setAttr(
       "output_file",
-      hw::OutputFileAttr::get(b.getStringAttr("fsm_enum_typedefs.sv"),
+      hw::OutputFileAttr::get(typeScopeFilename,
                               /*excludeFromFileList*/ b.getBoolAttr(false),
                               /*includeReplicatedOps*/ b.getBoolAttr(false)));
 
@@ -707,9 +715,16 @@ void FSMToSVPass::runOnOperation() {
     instance.erase();
   }
 
-  // If the typescope is empty (no FSMs were converted), erase it.
-  if (typeScope.getBodyBlock()->empty())
+  if (typeScope.getBodyBlock()->empty()) {
+    // If the typescope is empty (no FSMs were converted), erase it.
     typeScope.erase();
+  } else {
+    // Else, add an include file to the top-level (will include typescope
+    // in all files).
+    b.setInsertionPointToStart(module.getBody());
+    b.create<sv::VerbatimOp>(
+        module.getLoc(), "`include \"" + typeScopeFilename.getValue() + "\"");
+  }
 }
 
 } // end anonymous namespace

@@ -1,6 +1,6 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(firrtl-drop-names{preserve-values=all}))' %s   | FileCheck %s --check-prefix=ALL
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(firrtl-drop-names{preserve-values=named}))' %s | FileCheck %s --check-prefix=NAMED
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(firrtl-drop-names{preserve-values=none}))' %s  | FileCheck %s --check-prefix=NONE
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-drop-names{preserve-values=all})))' %s   | FileCheck %s --check-prefix=ALL
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-drop-names{preserve-values=named})))' %s | FileCheck %s --check-prefix=NAMED
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-drop-names{preserve-values=none})))' %s  | FileCheck %s --check-prefix=NONE
 
 firrtl.circuit "Foo" {
   firrtl.module @Foo() {

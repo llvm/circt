@@ -38,6 +38,7 @@
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
@@ -127,12 +128,20 @@ static bool containsBundleType(FIRRTLType type) {
 /// Return true if we can preserve the type.
 static bool isPreservableAggregateType(Type type,
                                        PreserveAggregate::PreserveMode mode) {
+  if (auto refType = dyn_cast<RefType>(type)) {
+    // Always preserve rwprobe's.
+    if (refType.getForceable())
+      return true;
+    // FIXME: Don't preserve read-only RefType for now. This is workaround for
+    // MemTap which causes type mismatches (issue 4479).
+    return false;
+  }
+
   // Return false if no aggregate value is preserved.
   if (mode == PreserveAggregate::None)
     return false;
 
-  auto firrtlType = type.isa<RefType>() ? type.cast<RefType>().getType()
-                                        : type.dyn_cast<FIRRTLBaseType>();
+  auto firrtlType = type.dyn_cast<FIRRTLBaseType>();
   if (!firrtlType)
     return false;
 
@@ -198,9 +207,7 @@ static bool isNotSubAccess(Operation *op) {
   if (!sao)
     return true;
   ConstantOp arg = dyn_cast_or_null<ConstantOp>(sao.getIndex().getDefiningOp());
-  if (arg && sao.getInput().getType().cast<FVectorType>().getNumElements() != 0)
-    return true;
-  return false;
+  return arg && sao.getInput().getType().getNumElements() != 0;
 }
 
 /// Look through and collect subfields leading to a subaccess.
@@ -252,6 +259,7 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
                                  FlatBundleFieldEntry field) {
   SmallVector<Type, 8> ports;
   SmallVector<Attribute, 8> portNames;
+  SmallVector<Attribute, 8> portLocations;
 
   auto oldPorts = op.getPorts();
   for (size_t portIdx = 0, e = oldPorts.size(); portIdx < e; ++portIdx) {
@@ -268,7 +276,7 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
       op.getNameKind(), op.getAnnotations().getValue(),
       op.getPortAnnotations().getValue(), op.getInnerSymAttr());
   if (auto oldName = getInnerSymName(op))
-    newMem.setInnerSymAttr(InnerSymAttr::get(StringAttr::get(
+    newMem.setInnerSymAttr(hw::InnerSymAttr::get(StringAttr::get(
         b->getContext(), oldName.getValue() + (op.getName() + field.suffix))));
 
   SmallVector<Attribute> newAnnotations;
@@ -331,6 +339,7 @@ struct AttrCache {
     sPortNames = StringAttr::get(context, "portNames");
     sPortTypes = StringAttr::get(context, "portTypes");
     sPortSyms = StringAttr::get(context, "portSyms");
+    sPortLocations = StringAttr::get(context, "portLocations");
     sPortAnnotations = StringAttr::get(context, "portAnnotations");
     sEmpty = StringAttr::get(context, "");
   }
@@ -338,20 +347,21 @@ struct AttrCache {
 
   Type i64ty;
   StringAttr innerSymAttr, nameAttr, nameKindAttr, sPortDirections, sPortNames,
-      sPortTypes, sPortSyms, sPortAnnotations, sEmpty;
+      sPortTypes, sPortSyms, sPortLocations, sPortAnnotations, sEmpty;
 };
 
 // The visitors all return true if the operation should be deleted, false if
 // not.
 struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
-  TypeLoweringVisitor(MLIRContext *context,
-                      PreserveAggregate::PreserveMode preserveAggregate,
-                      bool preservePublicTypes, SymbolTable &symTbl,
-                      const AttrCache &cache)
+  TypeLoweringVisitor(
+      MLIRContext *context, PreserveAggregate::PreserveMode preserveAggregate,
+      PreserveAggregate::PreserveMode memoryPreservationMode,
+      SymbolTable &symTbl, const AttrCache &cache,
+      const llvm::DenseMap<FModuleLike, Convention> &conventionTable)
       : context(context), aggregatePreservationMode(preserveAggregate),
-        preservePublicTypes(preservePublicTypes), symTbl(symTbl), cache(cache) {
-  }
+        memoryPreservationMode(memoryPreservationMode), symTbl(symTbl),
+        cache(cache), conventionTable(conventionTable) {}
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitStmt;
@@ -379,6 +389,11 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitDecl(RegResetOp op);
   bool visitExpr(InvalidValueOp op);
   bool visitExpr(SubaccessOp op);
+  bool visitExpr(VectorCreateOp op);
+  bool visitExpr(BundleCreateOp op);
+  bool visitExpr(ElementwiseAndPrimOp op);
+  bool visitExpr(ElementwiseOrPrimOp op);
+  bool visitExpr(ElementwiseXorPrimOp op);
   bool visitExpr(MultibitMuxOp op);
   bool visitExpr(MuxPrimOp op);
   bool visitExpr(mlir::UnrealizedConversionCastOp op);
@@ -387,6 +402,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitExpr(RefResolveOp op);
   bool visitStmt(ConnectOp op);
   bool visitStmt(StrictConnectOp op);
+  bool visitStmt(RefDefineOp op);
   bool visitStmt(WhenOp op);
 
   bool isFailed() const { return encounteredError; }
@@ -396,17 +412,25 @@ private:
   bool processSAPath(Operation *);
   void lowerBlock(Block *);
   void lowerSAWritePath(Operation *, ArrayRef<Operation *> writePath);
+
+  /// Lower a "producer" operation one layer based on policy.
+  /// Use the provided \p clone function to generate individual ops for
+  /// the expanded subelements/fields.  The type used to determine if lowering
+  /// is needed is either \p srcType if provided or from the assumed-to-exist
+  /// first result of the operation.  When lowering, the clone callback will be
+  /// invoked with each subelement/field of this type.
   bool lowerProducer(
       Operation *op,
-      llvm::function_ref<Operation *(const FlatBundleFieldEntry &, ArrayAttr)>
-          clone);
+      llvm::function_ref<Value(const FlatBundleFieldEntry &, ArrayAttr)> clone,
+      Type srcType = {});
+
   /// Copy annotations from \p annotations to \p loweredAttrs, except
   /// annotations with "target" key, that do not match the field suffix.
   ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
                               FIRRTLType srcType, FlatBundleFieldEntry field);
 
   PreserveAggregate::PreserveMode
-  getPreservatinoModeForModule(FModuleLike moduleLike);
+  getPreservationModeForModule(FModuleLike moduleLike);
   Value getSubWhatever(Value val, size_t index);
 
   size_t uniqueIdx = 0;
@@ -419,10 +443,7 @@ private:
 
   /// Aggregate preservation mode.
   PreserveAggregate::PreserveMode aggregatePreservationMode;
-
-  /// Exteranal modules and toplevel modules should have lowered types if this
-  /// flag is enabled.
-  bool preservePublicTypes;
+  PreserveAggregate::PreserveMode memoryPreservationMode;
 
   /// The builder is set and maintained in the main loop.
   ImplicitLocOpBuilder *builder;
@@ -433,22 +454,27 @@ private:
   // Cache some attributes
   const AttrCache &cache;
 
+  const llvm::DenseMap<FModuleLike, Convention> &conventionTable;
+
   // Set true if the lowering failed.
   bool encounteredError = false;
 };
 } // namespace
 
 /// Return aggregate preservation mode for the module. If the module has a
-/// public linkage, then it is not allowed to preserve aggregate values on ports
-/// unless `preservePublicTypes` flag is disabled.
+/// scalarized linkage, then we may not preserve it's aggregate ports.
 PreserveAggregate::PreserveMode
-TypeLoweringVisitor::getPreservatinoModeForModule(FModuleLike module) {
-  // We cannot preserve external module ports.
-  if (!isa<FModuleOp>(module))
+TypeLoweringVisitor::getPreservationModeForModule(FModuleLike module) {
+  auto lookup = conventionTable.find(module);
+  if (lookup == conventionTable.end())
+    return aggregatePreservationMode;
+  switch (lookup->second) {
+  case Convention::Scalarized:
     return PreserveAggregate::None;
-  if (aggregatePreservationMode != PreserveAggregate::None &&
-      preservePublicTypes && cast<hw::HWModuleLike>(*module).isPublic())
-    return PreserveAggregate::None;
+  case Convention::Internal:
+    return aggregatePreservationMode;
+  }
+  llvm_unreachable("Unknown convention");
   return aggregatePreservationMode;
 }
 
@@ -509,7 +535,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
   if (!annotations || annotations.empty())
     return ArrayAttr::get(ctxt, retval);
   for (auto opAttr : annotations) {
-    Optional<int64_t> maybeFieldID = None;
+    std::optional<uint64_t> maybeFieldID;
     DictionaryAttr annotation;
     annotation = opAttr.dyn_cast<DictionaryAttr>();
     if (annotations)
@@ -525,7 +551,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
           updateAnnotationFieldID(ctxt, opAttr, field.fieldID, cache.i64ty));
       continue;
     }
-    auto fieldID = maybeFieldID.value();
+    auto fieldID = *maybeFieldID;
     // Check whether the annotation falls into the range of the current field.
     if (fieldID != 0 &&
         !(fieldID >= field.fieldID &&
@@ -555,15 +581,17 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
 
 bool TypeLoweringVisitor::lowerProducer(
     Operation *op,
-    llvm::function_ref<Operation *(const FlatBundleFieldEntry &, ArrayAttr)>
-        clone) {
-  // If this is not a bundle, there is nothing to do.
-  auto srcType = op->getResult(0).getType().dyn_cast<FIRRTLType>();
+    llvm::function_ref<Value(const FlatBundleFieldEntry &, ArrayAttr)> clone,
+    Type srcType) {
+
   if (!srcType)
+    srcType = op->getResult(0).getType();
+  auto srcFType = dyn_cast<FIRRTLType>(srcType);
+  if (!srcFType)
     return false;
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
 
-  if (!peelType(srcType, fieldTypes, aggregatePreservationMode))
+  if (!peelType(srcFType, fieldTypes, aggregatePreservationMode))
     return false;
 
   // If an aggregate value has a symbol, emit errors.
@@ -577,7 +605,6 @@ bool TypeLoweringVisitor::lowerProducer(
   SmallVector<Value> lowered;
   // Loop over the leaf aggregates.
   SmallString<16> loweredName;
-  SmallString<16> loweredSymName;
   auto nameKindAttr = op->getAttrOfType<NameKindEnumAttr>(cache.nameKindAttr);
 
   if (auto nameAttr = op->getAttrOfType<StringAttr>(cache.nameAttr))
@@ -594,16 +621,17 @@ bool TypeLoweringVisitor::lowerProducer(
     // For all annotations on the parent op, filter them based on the target
     // attribute.
     ArrayAttr loweredAttrs =
-        filterAnnotations(context, oldAnno, srcType, field);
-    auto *newOp = clone(field, loweredAttrs);
+        filterAnnotations(context, oldAnno, srcFType, field);
+    auto newVal = clone(field, loweredAttrs);
 
     // Carry over the name, if present.
-    if (!loweredName.empty())
-      newOp->setAttr(cache.nameAttr, StringAttr::get(context, loweredName));
-    if (nameKindAttr)
-      newOp->setAttr(cache.nameKindAttr, nameKindAttr);
-
-    lowered.push_back(newOp->getResult(0));
+    if (auto *newOp = newVal.getDefiningOp()) {
+      if (!loweredName.empty())
+        newOp->setAttr(cache.nameAttr, StringAttr::get(context, loweredName));
+      if (nameKindAttr)
+        newOp->setAttr(cache.nameKindAttr, nameKindAttr);
+    }
+    lowered.push_back(newVal);
   }
 
   processUsers(op->getResult(0), lowered);
@@ -611,53 +639,60 @@ bool TypeLoweringVisitor::lowerProducer(
 }
 
 void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
-  for (auto user : llvm::make_early_inc_range(val.getUsers())) {
-    if (SubindexOp sio = dyn_cast<SubindexOp>(user)) {
-      Value repl = mapping[sio.getIndex()];
-      sio.replaceAllUsesWith(repl);
-      sio.erase();
-    } else if (SubfieldOp sfo = dyn_cast<SubfieldOp>(user)) {
-      // Get the input bundle type.
-      Value repl = mapping[sfo.getFieldIndex()];
-      sfo.replaceAllUsesWith(repl);
-      sfo.erase();
-    } else if (auto refSub = dyn_cast<RefSubOp>(user)) {
-      Value repl = mapping[refSub.getIndex()];
-      refSub.replaceAllUsesWith(repl);
-      refSub.erase();
-    } else {
-      // This means, we have already processed the user, and it didn't lower its
-      // inputs. This is an opaque user, which will continue to have aggregate
-      // type as input, even after LowerTypes. So, construct the vector/bundle
-      // back from the lowered elements to ensure a valid input into the opaque
-      // op. This only supports Bundle or vector of ground type elements.
-      // Recursive aggregate types are not yet supported.
+  for (auto *user : llvm::make_early_inc_range(val.getUsers())) {
+    TypeSwitch<Operation *, void>(user)
+        .Case<SubindexOp>([mapping](SubindexOp sio) {
+          Value repl = mapping[sio.getIndex()];
+          sio.replaceAllUsesWith(repl);
+          sio.erase();
+        })
+        .Case<SubfieldOp>([mapping](SubfieldOp sfo) {
+          // Get the input bundle type.
+          Value repl = mapping[sfo.getFieldIndex()];
+          sfo.replaceAllUsesWith(repl);
+          sfo.erase();
+        })
+        .Case<RefSubOp>([mapping](RefSubOp refSub) {
+          Value repl = mapping[refSub.getIndex()];
+          refSub.replaceAllUsesWith(repl);
+          refSub.erase();
+        })
+        .Default([&](auto op) {
+          // This means we have already processed the user, and it didn't lower
+          // its inputs. This is an opaque user, which will continue to have
+          // aggregate type as input, even after LowerTypes. So, construct the
+          // vector/bundle back from the lowered elements to ensure a valid
+          // input into the opaque op. This only supports Bundles and Vectors.
 
-      // This builder ensures that the aggregate construction happens at the
-      // user location, and the LowerTypes algorithm will not touch them any
-      // more, because LowerTypes was reverse iterating on the block and the
-      // user has already been processed.
-      ImplicitLocOpBuilder b(user->getLoc(), user);
-      // Cat all the field elements.
-      Value accumulate;
-      for (auto v : mapping) {
-        if (!v.getType().cast<FIRRTLBaseType>().isGround()) {
-          user->emitError("cannot handle an opaque user of aggregate types "
-                          "with non-ground type elements");
-          return;
-        }
-        if (val.getType().cast<FIRRTLType>().isa<FVectorType>())
-          accumulate =
-              (accumulate ? b.createOrFold<CatPrimOp>(v, accumulate) : v);
-        else
-          // Bundle subfields are filled from MSB to LSB.
-          accumulate =
-              (accumulate ? b.createOrFold<CatPrimOp>(accumulate, v) : v);
-      }
-      // Cast it back to the original aggregate type.
-      auto input = b.createOrFold<BitCastOp>(val.getType(), accumulate);
-      user->replaceUsesOfWith(val, input);
-    }
+          // This builder ensures that the aggregate construction happens at the
+          // user location, and the LowerTypes algorithm will not touch them any
+          // more, because LowerTypes was reverse iterating on the block and the
+          // user has already been processed.
+          ImplicitLocOpBuilder b(user->getLoc(), user);
+
+          // This shouldn't happen (non-FIRRTLBaseType's in lowered types, or
+          // refs), check explicitly here for clarity/early detection.
+          assert(llvm::none_of(mapping, [](auto v) {
+            auto fbasetype = dyn_cast<FIRRTLBaseType>(v.getType());
+            return !fbasetype || fbasetype.containsReference();
+          }));
+
+          Value input =
+              TypeSwitch<Type, Value>(val.getType())
+                  .template Case<FVectorType>([&](auto vecType) {
+                    return b.createOrFold<VectorCreateOp>(vecType, mapping);
+                  })
+                  .template Case<BundleType>([&](auto bundleType) {
+                    return b.createOrFold<BundleCreateOp>(bundleType, mapping);
+                  })
+                  .Default([&](auto _) -> Value { return {}; });
+          if (!input) {
+            user->emitError("unable to reconstruct source of type ")
+                << val.getType();
+            return;
+          }
+          user->replaceUsesOfWith(val, input);
+        });
   }
 }
 
@@ -676,9 +711,7 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
                             unsigned insertPtOffset, FIRRTLType srcType,
                             FlatBundleFieldEntry field, PortInfo &oldArg) {
   Value newValue;
-  FIRRTLType fieldType = srcType.isa<RefType>()
-                             ? FIRRTLType(RefType::get(field.type))
-                             : field.type;
+  FIRRTLType fieldType = mapBaseType(srcType, [&](auto) { return field.type; });
   if (auto mod = dyn_cast<FModuleOp>(module)) {
     Block *body = mod.getBodyBlock();
     // Append the new argument.
@@ -718,7 +751,7 @@ bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry> fieldTypes;
   auto srcType = newArgs[argIndex].type.cast<FIRRTLType>();
-  if (!peelType(srcType, fieldTypes, getPreservatinoModeForModule(module)))
+  if (!peelType(srcType, fieldTypes, getPreservationModeForModule(module)))
     return false;
 
   for (const auto &field : llvm::enumerate(fieldTypes)) {
@@ -747,7 +780,7 @@ static Value cloneAccess(ImplicitLocOpBuilder *builder, Operation *op,
 void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
                                            ArrayRef<Operation *> writePath) {
   SubaccessOp sao = cast<SubaccessOp>(writePath.back());
-  auto saoType = sao.getInput().getType().cast<FVectorType>();
+  auto saoType = sao.getInput().getType();
   auto selectWidth = llvm::Log2_64_Ceil(saoType.getNumElements());
 
   for (size_t index = 0, e = saoType.getNumElements(); index < e; ++index) {
@@ -766,18 +799,8 @@ void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
   }
 }
 
-static bool
-canLowerConnect(FConnectLike op,
-                PreserveAggregate::PreserveMode aggregatePreservationMode) {
-  auto destType = op.getDest().getType();
-  return !(destType.isa<RefType>() &&
-           isPreservableAggregateType(destType, aggregatePreservationMode));
-}
-
 // Expand connects of aggregates
 bool TypeLoweringVisitor::visitStmt(ConnectOp op) {
-  if (!canLowerConnect(op, aggregatePreservationMode))
-    return false;
   if (processSAPath(op))
     return true;
 
@@ -801,8 +824,6 @@ bool TypeLoweringVisitor::visitStmt(ConnectOp op) {
 
 // Expand connects of aggregates
 bool TypeLoweringVisitor::visitStmt(StrictConnectOp op) {
-  if (!canLowerConnect(op, aggregatePreservationMode))
-    return false;
   if (processSAPath(op))
     return true;
 
@@ -817,9 +838,27 @@ bool TypeLoweringVisitor::visitStmt(StrictConnectOp op) {
   for (const auto &field : llvm::enumerate(fields)) {
     Value src = getSubWhatever(op.getSrc(), field.index());
     Value dest = getSubWhatever(op.getDest(), field.index());
-    if (field.value().isOutput && !op.getDest().getType().isa<RefType>())
+    if (field.value().isOutput)
       std::swap(src, dest);
     builder->create<StrictConnectOp>(dest, src);
+  }
+  return true;
+}
+
+// Expand connects of references-of-aggregates
+bool TypeLoweringVisitor::visitStmt(RefDefineOp op) {
+  // Attempt to get the bundle types.
+  SmallVector<FlatBundleFieldEntry> fields;
+
+  if (!peelType(op.getDest().getType(), fields, aggregatePreservationMode))
+    return false;
+
+  // Loop over the leaf aggregates.
+  for (const auto &field : llvm::enumerate(fields)) {
+    Value src = getSubWhatever(op.getSrc(), field.index());
+    Value dest = getSubWhatever(op.getDest(), field.index());
+    assert(!field.value().isOutput && "unexpected flip in reftype destination");
+    builder->create<RefDefineOp>(dest, src);
   }
   return true;
 }
@@ -845,7 +884,7 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
   SmallVector<FlatBundleFieldEntry> fields;
 
   // MemOp should have ground types so we can't preserve aggregates.
-  if (!peelType(op.getDataType(), fields, PreserveAggregate::None))
+  if (!peelType(op.getDataType(), fields, memoryPreservationMode))
     return false;
 
   SmallVector<MemOp> newMemories;
@@ -873,7 +912,7 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
     newMemories.push_back(cloneMemWithNewType(builder, op, field));
   // Hook up the new memories to the wires the old memory was replaced with.
   for (size_t index = 0, rend = op.getNumResults(); index < rend; ++index) {
-    auto result = oldPorts[index];
+    auto result = oldPorts[index].getResult();
     auto rType = result.getType().cast<BundleType>();
     for (size_t fieldIndex = 0, fend = rType.getNumElements();
          fieldIndex != fend; ++fieldIndex) {
@@ -936,20 +975,22 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     // handled differently below.
     if (attr.getName() != "portDirections" && attr.getName() != "portNames" &&
         attr.getName() != "portTypes" && attr.getName() != "portAnnotations" &&
-        attr.getName() != "portSyms")
+        attr.getName() != "portSyms" && attr.getName() != "portLocations")
       newModuleAttrs.push_back(attr);
 
   SmallVector<Direction> newArgDirections;
   SmallVector<Attribute> newArgNames;
-  SmallVector<Attribute, 8> newPortTypes;
+  SmallVector<Attribute, 8> newArgTypes;
   SmallVector<Attribute, 8> newArgSyms;
+  SmallVector<Attribute, 8> newArgLocations;
   SmallVector<Attribute, 8> newArgAnnotations;
 
   for (auto &port : newArgs) {
     newArgDirections.push_back(port.direction);
     newArgNames.push_back(port.name);
-    newPortTypes.push_back(TypeAttr::get(port.type));
+    newArgTypes.push_back(TypeAttr::get(port.type));
     newArgSyms.push_back(port.sym);
+    newArgLocations.push_back(port.loc);
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
   }
 
@@ -961,7 +1002,10 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
       NamedAttribute(cache.sPortNames, builder.getArrayAttr(newArgNames)));
 
   newModuleAttrs.push_back(
-      NamedAttribute(cache.sPortTypes, builder.getArrayAttr(newPortTypes)));
+      NamedAttribute(cache.sPortTypes, builder.getArrayAttr(newArgTypes)));
+
+  newModuleAttrs.push_back(NamedAttribute(
+      cache.sPortLocations, builder.getArrayAttr(newArgLocations)));
 
   newModuleAttrs.push_back(NamedAttribute(
       cache.sPortAnnotations, builder.getArrayAttr(newArgAnnotations)));
@@ -1011,19 +1055,21 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
     // handled differently below.
     if (attr.getName() != "portNames" && attr.getName() != "portDirections" &&
         attr.getName() != "portTypes" && attr.getName() != "portAnnotations" &&
-        attr.getName() != "portSyms")
+        attr.getName() != "portSyms" && attr.getName() != "portLocations")
       newModuleAttrs.push_back(attr);
 
   SmallVector<Direction> newArgDirections;
   SmallVector<Attribute> newArgNames;
   SmallVector<Attribute> newArgTypes;
   SmallVector<Attribute> newArgSyms;
+  SmallVector<Attribute> newArgLocations;
   SmallVector<Attribute, 8> newArgAnnotations;
   for (auto &port : newArgs) {
     newArgDirections.push_back(port.direction);
     newArgNames.push_back(port.name);
     newArgTypes.push_back(TypeAttr::get(port.type));
     newArgSyms.push_back(port.sym);
+    newArgLocations.push_back(port.loc);
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
   }
 
@@ -1036,6 +1082,10 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
   newModuleAttrs.push_back(
       NamedAttribute(cache.sPortTypes, builder->getArrayAttr(newArgTypes)));
+
+  newModuleAttrs.push_back(NamedAttribute(
+      cache.sPortLocations, builder->getArrayAttr(newArgLocations)));
+
   newModuleAttrs.push_back(NamedAttribute(
       cache.sPortAnnotations, builder->getArrayAttr(newArgAnnotations)));
 
@@ -1047,45 +1097,62 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
 /// Lower a wire op with a bundle to multiple non-bundled wires.
 bool TypeLoweringVisitor::visitDecl(WireOp op) {
+  if (op.isForceable())
+    return false;
+
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
-    return builder->create<WireOp>(field.type, "", NameKindEnum::DroppableName,
-                                   attrs, StringAttr{});
+                   ArrayAttr attrs) -> Value {
+    return builder
+        ->create<WireOp>(field.type, "", NameKindEnum::DroppableName, attrs,
+                         StringAttr{})
+        .getResult();
   };
   return lowerProducer(op, clone);
 }
 
 /// Lower a reg op with a bundle to multiple non-bundled regs.
 bool TypeLoweringVisitor::visitDecl(RegOp op) {
+  if (op.isForceable())
+    return false;
+
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
-    return builder->create<RegOp>(field.type, op.getClockVal(), "",
-                                  NameKindEnum::DroppableName, attrs,
-                                  StringAttr{});
+                   ArrayAttr attrs) -> Value {
+    return builder
+        ->create<RegOp>(field.type, op.getClockVal(), "",
+                        NameKindEnum::DroppableName, attrs, StringAttr{})
+        .getResult();
   };
   return lowerProducer(op, clone);
 }
 
 /// Lower a reg op with a bundle to multiple non-bundled regs.
 bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
+  if (op.isForceable())
+    return false;
+
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
+                   ArrayAttr attrs) -> Value {
     auto resetVal = getSubWhatever(op.getResetValue(), field.index);
-    return builder->create<RegResetOp>(
-        field.type, op.getClockVal(), op.getResetSignal(), resetVal, "",
-        NameKindEnum::DroppableName, attrs, StringAttr{});
+    return builder
+        ->create<RegResetOp>(field.type, op.getClockVal(), op.getResetSignal(),
+                             resetVal, "", NameKindEnum::DroppableName, attrs,
+                             StringAttr{})
+        .getResult();
   };
   return lowerProducer(op, clone);
 }
 
 /// Lower a wire op with a bundle to multiple non-bundled wires.
 bool TypeLoweringVisitor::visitDecl(NodeOp op) {
+  if (op.isForceable())
+    return false;
+
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
+                   ArrayAttr attrs) -> Value {
     auto input = getSubWhatever(op.getInput(), field.index);
-    return builder->create<NodeOp>(field.type, input, "",
-                                   NameKindEnum::DroppableName, attrs,
-                                   StringAttr{});
+    return builder
+        ->create<NodeOp>(input, "", NameKindEnum::DroppableName, attrs)
+        .getResult();
   };
   return lowerProducer(op, clone);
 }
@@ -1093,7 +1160,7 @@ bool TypeLoweringVisitor::visitDecl(NodeOp op) {
 /// Lower an InvalidValue op with a bundle to multiple non-bundled InvalidOps.
 bool TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
+                   ArrayAttr attrs) -> Value {
     return builder->create<InvalidValueOp>(field.type);
   };
   return lowerProducer(op, clone);
@@ -1102,7 +1169,7 @@ bool TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
 // Expand muxes of aggregates
 bool TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
+                   ArrayAttr attrs) -> Value {
     auto high = getSubWhatever(op.getHigh(), field.index);
     auto low = getSubWhatever(op.getLow(), field.index);
     return builder->create<MuxPrimOp>(op.getSel(), high, low);
@@ -1113,9 +1180,10 @@ bool TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
 // Expand UnrealizedConversionCastOp of aggregates
 bool TypeLoweringVisitor::visitExpr(mlir::UnrealizedConversionCastOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
+                   ArrayAttr attrs) -> Value {
     auto input = getSubWhatever(op.getOperand(0), field.index);
-    return builder->create<mlir::UnrealizedConversionCastOp>(field.type, input);
+    return builder->create<mlir::UnrealizedConversionCastOp>(field.type, input)
+        .getResult(0);
   };
   return lowerProducer(op, clone);
 }
@@ -1132,7 +1200,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
     // Loop over the leaf aggregates and concat each of them to get a UInt.
     // Bitcast the fields to handle nested aggregate types.
     for (const auto &field : llvm::enumerate(fields)) {
-      auto fieldBitwidth = getBitWidth(field.value().type).value();
+      auto fieldBitwidth = *getBitWidth(field.value().type);
       // Ignore zero width fields, like empty bundles.
       if (fieldBitwidth == 0)
         continue;
@@ -1157,9 +1225,9 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
     // uptoBits is used to keep track of the bits that have been extracted.
     size_t uptoBits = 0;
     auto clone = [&](const FlatBundleFieldEntry &field,
-                     ArrayAttr attrs) -> Operation * {
+                     ArrayAttr attrs) -> Value {
       // All the fields must have valid bitwidth, a requirement for BitCastOp.
-      auto fieldBits = getBitWidth(field.type).value();
+      auto fieldBits = *getBitWidth(field.type);
       // If empty field, then it doesnot have any use, so replace it with an
       // invalid op, which should be trivially removed.
       if (fieldBits == 0)
@@ -1184,20 +1252,25 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
 
 bool TypeLoweringVisitor::visitExpr(RefSendOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
+                   ArrayAttr attrs) -> Value {
     return builder->create<RefSendOp>(
         getSubWhatever(op.getBase(), field.index));
   };
+  // Be careful re:what gets lowered, consider ref.send of non-passive
+  // and whether we're using the ref or the base type to choose
+  // whether this should be lowered.
   return lowerProducer(op, clone);
 }
 
 bool TypeLoweringVisitor::visitExpr(RefResolveOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
+                   ArrayAttr attrs) -> Value {
     Value src = getSubWhatever(op.getRef(), field.index);
     return builder->create<RefResolveOp>(src);
   };
-  return lowerProducer(op, clone);
+  // Lower according to lowering of the reference.
+  // Particularly, preserve if rwprobe.
+  return lowerProducer(op, clone, op.getRef().getType());
 }
 
 bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
@@ -1209,7 +1282,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
   PreserveAggregate::PreserveMode mode =
-      getPreservatinoModeForModule(op.getReferencedModule(symTbl));
+      getPreservationModeForModule(op.getReferencedModule(symTbl));
 
   endFields.push_back(0);
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
@@ -1230,9 +1303,8 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       for (const auto &field : fieldTypes) {
         newDirs.push_back(direction::get((unsigned)oldDir ^ field.isOutput));
         newNames.push_back(builder->getStringAttr(oldName + field.suffix));
-        resultTypes.push_back(srcType.isa<RefType>()
-                                  ? FIRRTLType(RefType::get(field.type))
-                                  : FIRRTLType(field.type));
+        resultTypes.push_back(
+            mapBaseType(srcType, [&](auto base) { return field.type; }));
         auto annos = filterAnnotations(
             context, oldPortAnno[i].dyn_cast_or_null<ArrayAttr>(), srcType,
             field);
@@ -1254,7 +1326,18 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       op.getNameKindAttr(), direction::packAttribute(context, newDirs),
       builder->getArrayAttr(newNames), op.getAnnotations(),
       builder->getArrayAttr(newPortAnno), op.getLowerToBindAttr(),
-      sym ? InnerSymAttr::get(sym) : InnerSymAttr());
+      sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
+
+  // Copy over any attributes which have not already been copied over by
+  // arguments to the builder.
+  auto attrNames = InstanceOp::getAttributeNames();
+  DenseSet<StringRef> attrSet(attrNames.begin(), attrNames.end());
+  SmallVector<NamedAttribute> newAttrs(newInstance->getAttrs());
+  for (auto i : llvm::make_filter_range(op->getAttrs(), [&](auto namedAttr) {
+         return !attrSet.count(namedAttr.getName());
+       }))
+    newAttrs.push_back(i);
+  newInstance->setAttrs(newAttrs);
 
   SmallVector<Value> lowered;
   for (size_t aggIndex = 0, eAgg = op.getNumResults(); aggIndex != eAgg;
@@ -1275,7 +1358,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
 bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   auto input = op.getInput();
-  auto vType = input.getType().cast<FVectorType>();
+  auto vType = input.getType();
 
   // Check for empty vectors
   if (vType.getNumElements() == 0) {
@@ -1304,9 +1387,67 @@ bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   return true;
 }
 
+bool TypeLoweringVisitor::visitExpr(VectorCreateOp op) {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Value {
+    return op.getOperand(field.index);
+  };
+  return lowerProducer(op, clone);
+}
+
+bool TypeLoweringVisitor::visitExpr(BundleCreateOp op) {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Value {
+    return op.getOperand(field.index);
+  };
+  return lowerProducer(op, clone);
+}
+
+bool TypeLoweringVisitor::visitExpr(ElementwiseOrPrimOp op) {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Value {
+    Value operands[] = {getSubWhatever(op.getLhs(), field.index),
+                        getSubWhatever(op.getRhs(), field.index)};
+    return isa<BundleType, FVectorType>(field.type)
+               ? (Value)builder->create<ElementwiseOrPrimOp>(field.type,
+                                                             operands)
+               : (Value)builder->create<OrPrimOp>(operands);
+  };
+
+  return lowerProducer(op, clone);
+}
+
+bool TypeLoweringVisitor::visitExpr(ElementwiseAndPrimOp op) {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Value {
+    Value operands[] = {getSubWhatever(op.getLhs(), field.index),
+                        getSubWhatever(op.getRhs(), field.index)};
+    return isa<BundleType, FVectorType>(field.type)
+               ? (Value)builder->create<ElementwiseAndPrimOp>(field.type,
+                                                              operands)
+               : (Value)builder->create<AndPrimOp>(operands);
+  };
+
+  return lowerProducer(op, clone);
+}
+
+bool TypeLoweringVisitor::visitExpr(ElementwiseXorPrimOp op) {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Value {
+    Value operands[] = {getSubWhatever(op.getLhs(), field.index),
+                        getSubWhatever(op.getRhs(), field.index)};
+    return isa<BundleType, FVectorType>(field.type)
+               ? (Value)builder->create<ElementwiseXorPrimOp>(field.type,
+                                                              operands)
+               : (Value)builder->create<XorPrimOp>(operands);
+  };
+
+  return lowerProducer(op, clone);
+}
+
 bool TypeLoweringVisitor::visitExpr(MultibitMuxOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
+                   ArrayAttr attrs) -> Value {
     SmallVector<Value> newInputs;
     newInputs.reserve(op.getInputs().size());
     for (auto input : op.getInputs()) {
@@ -1326,9 +1467,9 @@ namespace {
 struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
   LowerTypesPass(
       circt::firrtl::PreserveAggregate::PreserveMode preserveAggregateFlag,
-      bool preservePublicTypesFlag) {
+      circt::firrtl::PreserveAggregate::PreserveMode preserveMemoriesFlag) {
     preserveAggregate = preserveAggregateFlag;
-    preservePublicTypes = preservePublicTypesFlag;
+    preserveMemories = preserveMemoriesFlag;
   }
   void runOnOperation() override;
 };
@@ -1345,36 +1486,32 @@ void LowerTypesPass::runOnOperation() {
   // Cached attr
   AttrCache cache(&getContext());
 
-  // Record all operations in the circuit.
-  llvm::for_each(getOperation().getBodyBlock()->getOperations(),
-                 [&](Operation &op) {
-                   // Creating a map of all ops in the circt, but only modules
-                   // are relevant.
-                   if (auto module = dyn_cast<FModuleLike>(op))
-                     ops.push_back(module);
-                 });
-
-  LLVM_DEBUG(llvm::dbgs() << "Recording Inner Symbol Renames:\n");
+  DenseMap<FModuleLike, Convention> conventionTable;
+  auto circuit = getOperation();
+  for (auto module : circuit.getOps<FModuleLike>()) {
+    conventionTable.insert({module, module.getConvention()});
+    ops.push_back(module);
+  }
 
   // This lambda, executes in parallel for each Op within the circt.
   auto lowerModules = [&](FModuleLike op) -> LogicalResult {
-    auto tl = TypeLoweringVisitor(&getContext(), preserveAggregate,
-                                  preservePublicTypes, symTbl, cache);
+    auto tl =
+        TypeLoweringVisitor(&getContext(), preserveAggregate, preserveMemories,
+                            symTbl, cache, conventionTable);
     tl.lowerModule(op);
 
     return LogicalResult::failure(tl.isFailed());
   };
 
-  auto result = failableParallelForEach(&getContext(), ops.begin(), ops.end(),
-                                        lowerModules);
+  auto result = failableParallelForEach(&getContext(), ops, lowerModules);
+
   if (failed(result))
     signalPassFailure();
 }
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createLowerFIRRTLTypesPass(PreserveAggregate::PreserveMode mode,
-                                          bool preservePublicTypes) {
-
-  return std::make_unique<LowerTypesPass>(mode, preservePublicTypes);
+std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLTypesPass(
+    PreserveAggregate::PreserveMode mode,
+    PreserveAggregate::PreserveMode memoryMode) {
+  return std::make_unique<LowerTypesPass>(mode, memoryMode);
 }

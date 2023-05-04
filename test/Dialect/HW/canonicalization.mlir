@@ -1054,6 +1054,25 @@ hw.module @bitcast_canonicalization(%arg0: i4) -> (r1: i4, r2: !hw.array<2xi2>) 
   hw.output %id, %b : i4, !hw.array<2xi2>
 }
 
+// CHECK-LABEL: hw.module @array_create() -> (r0: !hw.array<3xi2>)
+// CHECK-NEXT:    %0 = hw.aggregate_constant [0 : i2, 1 : i2, 0 : i2] : !hw.array<3xi2>
+// CHECK-NEXT:    hw.output %0 : !hw.array<3xi2
+hw.module @array_create() -> (r0: !hw.array<3xi2>) {
+  %false = hw.constant 0 : i2
+  %true = hw.constant 1 : i2
+  %arr = hw.array_create %false, %true, %false : i2
+  hw.output %arr : !hw.array<3xi2>
+}
+
+// CHECK-LABEL: hw.module @array_get0(%index: i2) -> (r0: i2)
+// CHECK-NEXT:    %c-1_i2 = hw.constant -1 : i2
+// CHECK-NEXT:    hw.output %c-1_i2 : i2
+hw.module @array_get0(%index : i2) -> (r0: i2) {
+  %array = hw.aggregate_constant [3 : i2, 3 : i2, 3 : i2, 3 : i2] : !hw.array<4xi2>
+  %result = hw.array_get %array[%index] : !hw.array<4xi2>, i2
+  hw.output %result : i2
+}
+
 // CHECK-LABEL: hw.module @array_get1(%a0: i3, %a1: i3, %a2: i3) -> (r0: i3)
 // CHECK-NEXT:    hw.output %a0 : i3
 hw.module @array_get1(%a0: i3, %a1: i3, %a2: i3) -> (r0: i3) {
@@ -1061,6 +1080,16 @@ hw.module @array_get1(%a0: i3, %a1: i3, %a2: i3) -> (r0: i3) {
   %arr = hw.array_create %a2, %a1, %a0 : i3
   %r0 = hw.array_get %arr[%c0] : !hw.array<3xi3>, i2
   hw.output %r0 : i3
+}
+
+// CHECK-LABEL: hw.module @struct_create() -> (r0: !hw.struct<a: i2, b: i2, c: i2>)
+// CHECK-NEXT:    %0 = hw.aggregate_constant [0 : i2, 1 : i2, 0 : i2] : !hw.struct<a: i2, b: i2, c: i2>
+// CHECK-NEXT:    hw.output %0 : !hw.struct<a: i2, b: i2, c: i2>
+hw.module @struct_create() -> (r0: !hw.struct<a: i2, b: i2, c : i2>) {
+  %false = hw.constant 0 : i2
+  %true = hw.constant 1 : i2
+  %arr = hw.struct_create (%false, %true, %false) : !hw.struct<a: i2, b: i2, c : i2>
+  hw.output %arr : !hw.struct<a: i2, b: i2, c : i2>
 }
 
 // CHECK-LABEL: hw.module @struct_extract1(%a0: i3, %a1: i5) -> (r0: i3)
@@ -1071,9 +1100,18 @@ hw.module @struct_extract1(%a0: i3, %a1: i5) -> (r0: i3) {
   hw.output %r0 : i3
 }
 
-// CHECK-LABEL: hw.module @struct_explode(%a0: i3, %a1: i5) -> (r0: i3)
+// CHECK-LABEL: hw.module @struct_explode0(%a0: i3, %a1: i5) -> (r0: i2)
+// CHECK-NEXT:    %c0_i2 = hw.constant 0 : i2
+// CHECK-NEXT:    hw.output %c0_i2 : i2
+hw.module @struct_explode0(%a0: i3, %a1: i5) -> (r0: i2) {
+  %struct = hw.aggregate_constant [0 : i2, 1 : i2] : !hw.struct<a: i2, b: i2>
+  %r0:2 = hw.struct_explode %struct : !hw.struct<a: i2, b: i2>
+  hw.output %r0#0 : i2
+}
+
+// CHECK-LABEL: hw.module @struct_explode1(%a0: i3, %a1: i5) -> (r0: i3)
 // CHECK-NEXT:    hw.output %a0 : i3
-hw.module @struct_explode(%a0: i3, %a1: i5) -> (r0: i3) {
+hw.module @struct_explode1(%a0: i3, %a1: i5) -> (r0: i3) {
   %s = hw.struct_create (%a0, %a1) : !hw.struct<foo: i3, bar: i5>
   %r0:2 = hw.struct_explode %s : !hw.struct<foo: i3, bar: i5>
   hw.output %r0#0 : i3
@@ -1094,7 +1132,7 @@ hw.module @enum_constant() -> () {
 // CHECK-NEXT:    %0 = comb.concat %false, %arg0 : i1, i2
 // CHECK-NEXT:    %1 = comb.concat %false, %arg0 : i1, i2
 // CHECK-NEXT:    %2 = comb.add %0, %1 : i3
-// CHECK-NEXT:    %3 = comb.icmp eq %2, %arg2 : i3
+// CHECK-NEXT:    %3 = comb.icmp eq %2, %arg2 {sv.namehint = ".in.wire"} : i3
 // CHECK-NEXT:    hw.output %myext.out : i8
 
 hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (out0: i8) {
@@ -1113,7 +1151,7 @@ hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (out0: i8) {
 // CHECK-LABEL: hw.module @TestInstance(%u2: i2, %s8: i8, %clock: i1, %reset: i1) {
 // CHECK-NEXT:   %c0_i2 = hw.constant 0 : i2
 // CHECK-NEXT:   hw.instance "xyz" @Simple(in1: %0: i4, in2: %u2: i2, in3: %s8: i8)
-// CHECK-NEXT:   %0 = comb.concat %c0_i2, %u2 : i2, i2
+// CHECK-NEXT:   %0 = comb.concat %c0_i2, %u2 {sv.namehint = ".in1.wire"} : i2, i2
 // CHECK-NEXT:   %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %reset: i1) -> (out: i8)  {oldParameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
 // CHECK-NEXT:   hw.output
 hw.module.extern @MyParameterizedExtModule(%in: i1) -> (out: i8) attributes {verilogName = "name_thing"}
@@ -1140,7 +1178,7 @@ hw.module @TestInstance(%u2: i2, %s8: i8, %clock: i1, %reset: i1) {
 
 // CHECK-LABEL:  hw.module @instance_cyclic(%arg0: i2, %arg1: i2) {
 // CHECK-NEXT:    %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %0: i1)
-// CHECK-NEXT:    %0 = comb.extract %myext.out from 2 : (i8) -> i1
+// CHECK-NEXT:    %0 = comb.extract %myext.out from 2
 // CHECK-NEXT:    hw.output
 // CHECK-NEXT:  }
 hw.module @instance_cyclic(%arg0: i2, %arg1: i2) {
@@ -1249,9 +1287,9 @@ hw.module @uninitializedWireAggregate() -> (result1: !hw.struct<a: i1, b: i1>,
   %3 = sv.read_inout %2 :  !hw.inout<!hw.struct<a: i1, b: !hw.array<10x!hw.struct<a: i1, b: i1>>>>
 
   hw.output %1, %3 : !hw.struct<a: i1, b: i1>, !hw.struct<a: i1, b: !hw.array<10x!hw.struct<a: i1, b: i1>>>
-  // CHECK-NEXT: %x_i2 = sv.constantX : !hw.struct<a: i1, b: i1>
-  // CHECK-NEXT: %x_i21 = sv.constantX : !hw.struct<a: i1, b: !hw.array<10xstruct<a: i1, b: i1>>>
-  // CHECK-NEXT: hw.output %x_i2, %x_i21
+  // CHECK-NEXT: %[[Z1:.*]] = sv.constantZ : !hw.struct<a: i1, b: i1>
+  // CHECK-NEXT: %[[Z2:.*]] = sv.constantZ : !hw.struct<a: i1, b: !hw.array<10xstruct<a: i1, b: i1>>>
+  // CHECK-NEXT: hw.output %[[Z1]], %[[Z2]]
 }
 
 // CHECK-LABEL:  hw.module @IncompleteRead(%clock1: i1) {
@@ -1285,7 +1323,7 @@ hw.module @IncompleteRead(%clock1: i1) {
 // CHECK-LABEL:  hw.module @foo() {
 // CHECK-NEXT:    %io_cpu_flush.wire = sv.wire sym @io_cpu_flush.wire  : !hw.inout<i1>
 // CHECK-NEXT:    hw.instance "fetch" @bar(io_cpu_flush: %0: i1) -> ()
-// CHECK-NEXT:    %0 = sv.read_inout %io_cpu_flush.wire : !hw.inout<i1>
+// CHECK-NEXT:    %0 = sv.read_inout %io_cpu_flush.wire {sv.namehint = ".io_cpu_flush.wire"}
 // CHECK-NEXT:    hw.output
 hw.module.extern @bar(%io_cpu_flush: i1)
 hw.module @foo() {
@@ -1350,6 +1388,16 @@ hw.module @ExtractOfUnrelatedInject(%a: !hw.struct<a: i1, b: i1>, %v: i1) -> (re
   hw.output %c : i1
 }
 
+// CHECK-LABEL: hw.module @InjectOnConstant
+hw.module @InjectOnConstant() -> (result: !hw.struct<a: i2>) {
+  %struct = hw.aggregate_constant [0 : i2] : !hw.struct<a: i2>
+  %c1_i2 = hw.constant 1 : i2
+  %result = hw.struct_inject %struct["a"], %c1_i2 : !hw.struct<a: i2>
+  // CHECK: [[STRUCT:%.+]] = hw.aggregate_constant [1 : i2] : !hw.struct<a: i2>
+  // CHECK-NEXT: hw.output [[STRUCT]]
+  hw.output %result : !hw.struct<a: i2>
+}
+
 // CHECK-LABEL: hw.module @InjectOnInject
 hw.module @InjectOnInject(%a: !hw.struct<a: i1>, %p: i1, %q: i1) -> (result: !hw.struct<a: i1>) {
   %b = hw.struct_inject %a["a"], %p : !hw.struct<a: i1>
@@ -1392,6 +1440,14 @@ hw.module @GetOfConcat(%a: !hw.array<5xi1>, %b: !hw.array<2xi1>) -> (out0: i1, o
   hw.output %out0, %out1 : i1, i1
 }
 
+// CHECK-LABEL: hw.module @zeroLenArrSlice(%arg0: !hw.array<4xi8>) -> ("": !hw.array<0xi8>) {
+// CHECK: = hw.array_slice %arg0[%c0_i2] : (!hw.array<4xi8>) -> !hw.array<0xi8>
+hw.module @zeroLenArrSlice(%arg0: !hw.array<4xi8>) -> ("": !hw.array<0xi8>) {
+  %c0_i2 = hw.constant 0 : i2
+  %x = hw.array_slice %arg0[%c0_i2] : (!hw.array<4xi8>) -> !hw.array<0xi8>
+  hw.output %x : !hw.array<0xi8>
+}
+
 // CHECK-LABEL: hw.module @GetOfSliceStatic
 hw.module @GetOfSliceStatic(%a: !hw.array<5xi1>) -> (out0: i1) {
   %c1_i3 = hw.constant 1 : i3
@@ -1402,6 +1458,16 @@ hw.module @GetOfSliceStatic(%a: !hw.array<5xi1>) -> (out0: i1) {
   // CHECK: [[OUT:%.+]] = hw.array_get %a[%c2_i3] : !hw.array<5xi1>
   // CHECK: hw.output [[OUT]] : i1
   hw.output %get : i1
+}
+
+// CHECK-LABEL: hw.module @ConcatOfConstants(%index: i2) -> (r0: !hw.array<2xi2>)
+hw.module @ConcatOfConstants(%index: i2) -> (r0: !hw.array<2xi2>) {
+  %lhs = hw.aggregate_constant [3 : i2] : !hw.array<1xi2>
+  %rhs = hw.aggregate_constant [3 : i2] : !hw.array<1xi2>
+  %concat = hw.array_concat %lhs, %rhs : !hw.array<1xi2>, !hw.array<1xi2>
+  // CHECK: [[OUT:%.+]] = hw.aggregate_constant [-1 : i2, -1 : i2] : !hw.array<2xi2>
+  // CHECK: hw.output [[OUT]] : !hw.array<2xi2>
+  hw.output %concat : !hw.array<2xi2>
 }
 
 // CHECK-LABEL: hw.module @ConcatOfCreate
@@ -1560,3 +1626,108 @@ hw.module @CreateOfSlices(%arr0: !hw.array<3xi1>, %arr1: !hw.array<5xi1>) -> (re
   hw.output %6 : !hw.array<6xi1>
 }
 
+// CHECK-LABEL: @MuxOfArrays
+hw.module @MuxOfArrays(%cond: i1, %a0: i1, %a1: i1, %a2: i1, %b0: i1, %b1: i1, %b2: i1) -> (res: !hw.array<3xi1>) {
+  %mux0 = comb.mux %cond, %a0, %b0 : i1
+  %mux1 = comb.mux %cond, %a1, %b1 : i1
+  %mux2 = comb.mux %cond, %a2, %b2 : i1
+  %array = hw.array_create %mux2, %mux1, %mux0 : i1
+
+  // CHECK:      [[TRUE:%.+]] = hw.array_create %a2, %a1, %a0 : i1
+  // CHECK-NEXT: [[FALSE:%.+]] = hw.array_create %b2, %b1, %b0 : i1
+  // CHECK-NEXT: [[RESULT:%.+]] = comb.mux %cond, [[TRUE]], [[FALSE]] : !hw.array<3xi1>
+  // CHECK-NEXT: hw.output [[RESULT]] : !hw.array<3xi1>
+
+  hw.output %array : !hw.array<3xi1>
+}
+
+// CHECK-LABEL: @MuxOfUniformArray
+hw.module @MuxOfUniformArray(%cond: i1, %a: i1, %b: i1) -> (res: !hw.array<3xi1>) {
+  %array_a = hw.array_create %a, %a, %a : i1
+  %array_b = hw.array_create %b, %b, %b : i1
+  %mux = comb.mux %cond, %array_a, %array_b : !hw.array<3xi1>
+
+  // CHECK:      [[MUX:%.+]] = comb.mux %cond, %a, %b : i1
+  // CHECK-NEXT: [[ARRAY:%.+]] = hw.array_create [[MUX]], [[MUX]], [[MUX]] : i1
+  // CHECK-NEXT: hw.output [[ARRAY]] : !hw.array<3xi1>
+
+  hw.output %mux : !hw.array<3xi1>
+}
+
+// CHECK-LABEL: @ConcatOfSlicesAndGets
+hw.module @ConcatOfSlicesAndGets(%a: !hw.array<5xi1>, %b: !hw.array<5xi1>, %c: !hw.array<5xi1>) -> (res: !hw.array<13xi1>) {
+  %c1_i3 = hw.constant 1 : i3
+  %c3_i3 = hw.constant 3 : i3
+  %c4_i3 = hw.constant 4 : i3
+
+  %slice_a0 = hw.array_slice %a[%c1_i3] : (!hw.array<5xi1>) -> !hw.array<2xi1>
+  %slice_a1 = hw.array_slice %a[%c3_i3] : (!hw.array<5xi1>) -> !hw.array<1xi1>
+  %get_a = hw.array_get %a[%c4_i3] : !hw.array<5xi1>, i3
+  %wrap_a = hw.array_create %get_a : i1
+
+  %slice_b = hw.array_slice %b[%c1_i3] : (!hw.array<5xi1>) -> !hw.array<3xi1>
+  %get_b = hw.array_get %b[%c4_i3] : !hw.array<5xi1>, i3
+  %wrap_b = hw.array_create %get_b : i1
+
+  // CHECK-DAG: [[SLICE_A:%.+]] = hw.array_slice %a[%c1_i3] : (!hw.array<5xi1>) -> !hw.array<4xi1>
+  // CHECK-DAG: [[SLICE_B:%.+]] = hw.array_slice %b[%c1_i3] : (!hw.array<5xi1>) -> !hw.array<4xi1>
+  // CHECK-DAG: [[CONCAT:%.+]] = hw.array_concat %c, [[SLICE_B]], [[SLICE_A]] : !hw.array<5xi1>, !hw.array<4xi1>, !hw.array<4xi1>
+  // CHECK-DAG: hw.output [[CONCAT]] : !hw.array<13xi1>
+  %result = hw.array_concat %c, %wrap_b, %slice_b, %wrap_a, %slice_a1, %slice_a0 :
+      !hw.array<5xi1>, !hw.array<1xi1>, !hw.array<3xi1>, !hw.array<1xi1>, !hw.array<1xi1>, !hw.array<2xi1>
+
+  hw.output %result : !hw.array<13xi1>
+}
+
+// CHECK-LABEL: SwapConstantIndex
+hw.module @SwapConstantIndex(%a_0: !hw.array<4xi1>, %a_1: !hw.array<4xi1>, %a_2: !hw.array<4xi1>, %a_3: !hw.array<4xi1>, %sel: i2) -> (b: i1) {
+  %c0_i2 = hw.constant 0 : i2
+  %0 = hw.array_create %a_3, %a_2, %a_1, %a_0 : !hw.array<4xi1>
+  %1 = hw.array_get %0[%sel] : !hw.array<4xarray<4xi1>>, i2
+  %2 = hw.array_get %1[%c0_i2] : !hw.array<4xi1>, i2
+  hw.output %2 : i1
+  // CHECK-NEXT: %c0_i2 = hw.constant 0 : i2
+  // CHECK-NEXT: %0 = hw.array_get %a_3[%c0_i2] : !hw.array<4xi1>, i2
+  // CHECK-NEXT: %1 = hw.array_get %a_2[%c0_i2] : !hw.array<4xi1>, i2
+  // CHECK-NEXT: %2 = hw.array_get %a_1[%c0_i2] : !hw.array<4xi1>, i2
+  // CHECK-NEXT: %3 = hw.array_get %a_0[%c0_i2] : !hw.array<4xi1>, i2
+  // CHECK-NEXT: %4 = hw.array_create %0, %1, %2, %3 : i1
+  // CHECK-NEXT: %5 = hw.array_get %4[%sel] : !hw.array<4xi1>, i2
+  // CHECK-NEXT: hw.output %5 : i1
+}
+
+// CHECK-LABEL: @Wires
+hw.module @Wires(%a: i42) {
+  // Trivial wires should fold to their input.
+  %0 = hw.wire %a : i42
+  %1 = hw.wire %a {sv.namehint = "foo"} : i42
+  hw.instance "fold1" @WiresKeep(keep: %0: i42) -> ()
+  hw.instance "fold2" @WiresKeep(keep: %1: i42) -> ()
+  // CHECK-NOT: hw.wire
+  // CHECK-NEXT: hw.instance "fold1" @WiresKeep(keep: %a: i42)
+  // CHECK-NEXT: hw.instance "fold2" @WiresKeep(keep: %a: i42)
+
+  // Wires shouldn't fold if they have a symbol or other attributes.
+  hw.wire %a sym @someSym : i42
+  hw.wire %a {someAttr} : i42
+  // CHECK-NEXT: hw.wire %a sym @someSym
+  // CHECK-NEXT: hw.wire %a {someAttr}
+
+  // Wires should push their name or name hint onto their input when folding.
+  %2 = comb.mul %a, %a : i42
+  %3 = comb.mul %a, %a : i42
+  %4 = comb.mul %a, %a : i42
+  %someName1 = hw.wire %2 : i42
+  %5 = hw.wire %3 {sv.namehint = "someName2"} : i42
+  %someName3 = hw.wire %4 {sv.namehint = "ignoredName"} : i42
+  hw.instance "names1" @WiresKeep(keep: %someName1: i42) -> ()
+  hw.instance "names2" @WiresKeep(keep: %5: i42) -> ()
+  hw.instance "names3" @WiresKeep(keep: %someName3: i42) -> ()
+  // CHECK-NEXT: %2 = comb.mul %a, %a {sv.namehint = "someName1"}
+  // CHECK-NEXT: %3 = comb.mul %a, %a {sv.namehint = "someName2"}
+  // CHECK-NEXT: %4 = comb.mul %a, %a {sv.namehint = "someName3"}
+  // CHECK-NEXT: hw.instance "names1" @WiresKeep(keep: %2: i42)
+  // CHECK-NEXT: hw.instance "names2" @WiresKeep(keep: %3: i42)
+  // CHECK-NEXT: hw.instance "names3" @WiresKeep(keep: %4: i42)
+}
+hw.module.extern @WiresKeep(%keep: i42)

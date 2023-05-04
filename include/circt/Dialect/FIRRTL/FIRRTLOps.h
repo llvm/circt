@@ -15,9 +15,10 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
-#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/HW/InnerSymbolTable.h"
+#include "circt/Dialect/Seq/SeqAttributes.h"
 #include "circt/Support/FieldRef.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionInterfaces.h"
@@ -49,6 +50,10 @@ size_t getNumPorts(Operation *op);
 /// and correctly handles wires driven with only constant values.
 bool isConstant(Operation *op);
 bool isConstant(Value value);
+
+/// Returns true if this is a 'const' type that can only hold compile-time
+/// constant values
+bool isConst(Type type);
 
 /// Returns true if the value results from an expression with duplex flow.
 /// Duplex values have special treatment in bundle connect operations, and
@@ -97,8 +102,8 @@ inline MemDirAttr &operator|=(MemDirAttr &lhs, MemDirAttr rhs) {
 
 /// Return the StringAttr for the inner_sym name, if it exists.
 inline StringAttr getInnerSymName(Operation *op) {
-  InnerSymAttr s = op->getAttrOfType<InnerSymAttr>(
-      InnerSymbolTable::getInnerSymbolAttrName());
+  auto s = op->getAttrOfType<hw::InnerSymAttr>(
+      hw::InnerSymbolTable::getInnerSymbolAttrName());
   if (s)
     return s.getSymName();
   return StringAttr();
@@ -132,21 +137,23 @@ LogicalResult verifySameOperandsIntTypeKind(Operation *op);
 
 // Type inference adaptor for FIRRTL operations.
 LogicalResult inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
     SmallVectorImpl<Type> &results,
     llvm::function_ref<FIRRTLType(ValueRange, ArrayRef<NamedAttribute>,
-                                  Optional<Location>)>
+                                  std::optional<Location>)>
         callback);
 
 // Common type inference functions.
 FIRRTLType inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
-                             Optional<Location> loc);
+                             std::optional<Location> loc);
 FIRRTLType inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
-                              Optional<Location> loc);
+                              std::optional<Location> loc);
+FIRRTLType inferElementwiseResult(FIRRTLType lhs, FIRRTLType rhs,
+                                  std::optional<Location> loc);
 FIRRTLType inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
-                                 Optional<Location> loc);
-FIRRTLType inferReductionResult(FIRRTLType arg, Optional<Location> loc);
+                                 std::optional<Location> loc);
+FIRRTLType inferReductionResult(FIRRTLType arg, std::optional<Location> loc);
 
 // Common parsed argument validation functions.
 LogicalResult validateBinaryOpArguments(ValueRange operands,
@@ -181,12 +188,13 @@ struct FirMemory {
   size_t readLatency;
   size_t writeLatency;
   size_t maskBits;
-  size_t readUnderWrite;
-  hw::WUW writeUnderWrite;
+  seq::RUW readUnderWrite;
+  seq::WUW writeUnderWrite;
   SmallVector<int32_t> writeClockIDs;
   StringAttr modName;
   bool isMasked;
-  uint32_t groupID;
+  MemoryInitAttr init;
+  StringAttr prefix;
 
   // Location is carried along but not considered part of the identity of this.
   Location loc;
@@ -196,12 +204,13 @@ struct FirMemory {
   // The original MemOp, only used in LowerToHW.  Also not part of the identity.
   Operation *op = nullptr;
 
-  std::tuple<size_t, size_t, size_t, size_t, size_t, size_t, size_t, size_t,
-             size_t, hw::WUW, SmallVector<int32_t>, uint32_t>
-  getTuple() const {
-    return std::tie(numReadPorts, numWritePorts, numReadWritePorts, dataWidth,
-                    depth, readLatency, writeLatency, maskBits, readUnderWrite,
-                    writeUnderWrite, writeClockIDs, groupID);
+  auto getTuple() const {
+    return std::make_tuple(
+        numReadPorts, numWritePorts, numReadWritePorts, dataWidth, depth,
+        readLatency, writeLatency, maskBits, readUnderWrite, writeUnderWrite,
+        writeClockIDs, init ? init.getFilename().getValue() : "",
+        init ? init.getIsBinary() : false, init ? init.getIsInline() : false,
+        prefix ? prefix.getValue() : "");
   }
   bool operator<(const FirMemory &rhs) const {
     return getTuple() < rhs.getTuple();
@@ -210,108 +219,21 @@ struct FirMemory {
     return getTuple() == rhs.getTuple();
   }
   StringAttr getFirMemoryName() const;
-};
 
-// Record of the inner sym name, the module name and the corresponding
-// operation. Also the port index, if the symbol is on a module port.
-// This is used to record the operations or ports, that have an inner sym.
-// The operation and portIdx, can be null, when we have an InnerRefAttr, that is
-// the module name and sym name, but we don't yet have a handle to the operation
-// which has the Reference. So, InnerRefRecord can be used to construct illegal
-// InnerRefAttr, which do not exist in the circt. That is the reason, the
-// comparison operators here, only care for module name and symbol name.
-struct InnerRefRecord {
-  mlir::StringAttr mod, innerSym;
-  mlir::Operation *op = nullptr;
-  unsigned portIdx = 0;
-  InnerRefRecord(StringAttr mod, StringAttr innerSym, Operation *op)
-      : mod(mod), innerSym(innerSym), op(op) {}
-  InnerRefRecord(StringAttr mod, StringAttr innerSym, Operation *op,
-                 unsigned portIdx)
-      : mod(mod), innerSym(innerSym), op(op), portIdx(portIdx) {}
-  InnerRefRecord(hw::InnerRefAttr ref)
-      : mod(ref.getModule()), innerSym(ref.getName()) {}
-  bool operator<(const InnerRefRecord &rhs) const {
-    return (innerSym.getValue() < rhs.innerSym.getValue() ||
-            (innerSym == rhs.innerSym && mod.getValue() < rhs.mod));
-  }
-  bool operator==(const InnerRefRecord &rhs) const {
-    return (innerSym == rhs.innerSym && mod == rhs.mod);
-  }
-  bool operator!=(const InnerRefRecord &rhs) const { return !(*this == rhs); }
-};
-
-// A data structure to record and lookup an InnerSym and the corresponding
-// operation. Can be used when the list is populated first, then sorted and then
-// only used for lookup. This does not handle duplicate entries explicitly. The
-// list must be sorted, before any lookup. This is based on an observation that
-// Dense arrays can be efficient lookup structures. Especially when we have
-// insert-phase and lookup-phase based code.
-// TODO: Generalize this data structure.
-struct InnerRefList {
-  InnerRefList(MLIRContext *context)
-      : InnerSymAttr(StringAttr::get(context, "inner_sym")) {}
-
-  void sort() {
-    llvm::sort(list);
-    sorted = true;
-  }
-  int search(const InnerRefRecord &key) const {
-    assert(sorted && "Sort the list before search");
-    if (!sorted || list.empty())
-      return -1;
-    const auto *iter = std::lower_bound(list.begin(), list.end(), key);
-    if (iter == list.end())
-      return -1;
-    return (iter - list.begin());
-  }
-  bool exists(const InnerRefRecord &key) const { return search(key) != -1; }
-  Operation *getOpIfExists(const hw::InnerRefAttr ref) const {
-    auto index = search(InnerRefRecord(ref));
-    if (index != -1 && list[index].op != nullptr)
-      return list[index].op;
-    return nullptr;
-  }
-  const InnerRefRecord *getRecordIfExists(const hw::InnerRefAttr ref) const {
-    auto index = search(InnerRefRecord(ref));
-    if (index != -1)
-      return &list[index];
-    return nullptr;
-  }
-  void pushBack(InnerRefRecord &key) {
-    list.push_back(key);
-    sorted = false;
-  }
-  // Inesrt the op with the module modName, if it has an inner sym.
-  bool insert(Operation *op, StringAttr modName) {
-    if (op == nullptr)
+  /**
+   * Check whether the memory is a seq mem.
+   *
+   * The following conditions must hold:
+   *   1. read latency and write latency of one.
+   *   2. undefined read-under-write behavior.
+   */
+  bool isSeqMem() const {
+    if (readLatency != 1 || writeLatency != 1)
       return false;
-    auto innerSym = op->getAttrOfType<StringAttr>(InnerSymAttr);
-    if (!innerSym)
-      return false;
-    list.emplace_back(modName, innerSym, op);
-    sorted = false;
-    return true;
+    return dataWidth > 0;
   }
-  // Insert all the ports for the op, if they have the inner sym.
-  bool insert(FModuleLike op) {
-    StringAttr modName = op.moduleNameAttr();
-    bool inserted = false;
-    for (auto sym : llvm::enumerate(op.getPortSymbols()))
-      if (sym.value()) {
-        list.emplace_back(modName, sym.value().cast<StringAttr>(), op,
-                          sym.index());
-        inserted = true;
-      }
-    sorted = !inserted;
-    return inserted;
-  }
-
-private:
-  StringAttr InnerSymAttr;
-  SmallVector<InnerRefRecord> list;
-  bool sorted = false;
 };
+
 } // namespace firrtl
 } // namespace circt
 

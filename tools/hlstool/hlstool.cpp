@@ -48,13 +48,12 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/LoweringOptionsParser.h"
+#include "circt/Support/Version.h"
 #include "circt/Transforms/Passes.h"
-
-#include "circt/InitAllDialects.h"
-#include "circt/InitAllPasses.h"
 
 #include <iostream>
 
@@ -174,6 +173,10 @@ static cl::opt<unsigned> bufferSize("buffer-size",
                                     cl::desc("Number of slots in each buffer"),
                                     cl::init(2), cl::cat(mainCategory));
 
+static cl::opt<bool> withESI("with-esi",
+                             cl::desc("Create ESI compatible modules"),
+                             cl::init(false), cl::cat(mainCategory));
+
 static LoweringOptionsOption loweringOptions(mainCategory);
 
 // --------------------------------------------------------------------------
@@ -192,13 +195,21 @@ static void loadDHLSPipeline(OpPassManager &pm) {
   // Software lowering
   pm.addPass(mlir::createLowerAffinePass());
   pm.addPass(mlir::createConvertSCFToCFPass());
+
+  // Memref legalization.
   pm.addPass(circt::createFlattenMemRefPass());
+  pm.nest<func::FuncOp>().addPass(
+      circt::handshake::createHandshakeLegalizeMemrefsPass());
+  pm.addPass(mlir::createConvertSCFToCFPass());
+  pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
 
   // DHLS conversion
   pm.addPass(circt::createStandardToHandshakePass(
       /*sourceConstants=*/false,
       /*disableTaskPipelining=*/dynParallelism !=
           DynamicParallelismPipelining));
+  pm.addPass(circt::handshake::createHandshakeLowerExtmemToHWPass(withESI));
+
   if (dynParallelism == DynamicParallelismLocking) {
     pm.nest<handshake::FuncOp>().addPass(
         circt::handshake::createHandshakeLockFunctionsPass());
@@ -231,7 +242,7 @@ static void loadFIRRTLLoweringPipeline(OpPassManager &pm) {
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
       /*preserveAggregate=*/firrtl::PreserveAggregate::PreserveMode::None,
-      /*preservePublicTypes=*/false));
+      /*preserveMemories=*/firrtl::PreserveAggregate::PreserveMode::None));
   auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
   modulePM.addPass(firrtl::createExpandWhensPass());
   // a bit of cleanup.
@@ -255,6 +266,7 @@ static void loadFIRRTLLoweringPipeline(OpPassManager &pm) {
 
 static void loadHWLoweringPipeline(OpPassManager &pm) {
   pm.addPass(createSimpleCanonicalizerPass());
+  pm.nest<hw::HWModuleOp>().addPass(circt::seq::createLowerSeqHLMemPass());
   pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass());
   pm.addPass(sv::createHWMemSimImplPass(false, false));
   pm.addPass(seq::createSeqLowerToSVPass());
@@ -290,9 +302,9 @@ static void printHLSFlowDynamic() {
   llvm::errs() << HLSFlowDynamicIRLevel::Sv << ": 'hw/comb/sv' IR\n";
 }
 
-static LogicalResult
-doHLSFlowDynamic(PassManager &pm, ModuleOp module,
-                 Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+static LogicalResult doHLSFlowDynamic(
+    PassManager &pm, ModuleOp module,
+    std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
 
   if (irInputLevel < 0)
     irInputLevel = HLSFlowDynamicIRLevel::High; // Default to highest level
@@ -350,7 +362,6 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
   } else {
     // HW path.
     addIRLevel(HLSFlowDynamicIRLevel::Firrtl, [&]() {
-      pm.addPass(circt::handshake::createHandshakeLowerExtmemToHWPass());
       pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
       pm.addPass(circt::createHandshakeToHWPass());
       pm.addPass(createSimpleCanonicalizerPass());
@@ -367,7 +378,7 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
   if (outputFormat == OutputVerilog) {
     if (loweringOptions.getNumOccurrences())
       loweringOptions.setAsAttribute(module);
-    pm.addPass(createExportVerilogPass(outputFile.value()->os()));
+    pm.addPass(createExportVerilogPass((*outputFile)->os()));
   }
 
   // Go execute!
@@ -375,15 +386,15 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
     return failure();
 
   if (outputFormat == OutputIR)
-    module->print(outputFile.value()->os());
+    module->print((*outputFile)->os());
 
   return success();
 }
 
 /// Process a single buffer of the input.
-static LogicalResult
-processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
-              Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+static LogicalResult processBuffer(
+    MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
+    std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   // Parse the input.
   mlir::OwningOpRef<mlir::ModuleOp> module;
   llvm::sys::TimePoint<> parseStartTime;
@@ -409,7 +420,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   PassManager pm(&context);
   pm.enableVerifier(verifyPasses);
   pm.enableTiming(ts);
-  applyPassManagerCLOptions(pm);
+  if (failed(applyPassManagerCLOptions(pm)))
+    return failure();
 
   if (hlsFlow == HLSFlow::HLSFlowDynamicFIRRTL ||
       hlsFlow == HLSFlow::HLSFlowDynamicHW) {
@@ -427,10 +439,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 /// Process a single split of the input. This allocates a source manager and
 /// creates a regular or verifying diagnostic handler, depending on whether
 /// the user set the verifyDiagnostics option.
-static LogicalResult
-processInputSplit(MLIRContext &context, TimingScope &ts,
-                  std::unique_ptr<llvm::MemoryBuffer> buffer,
-                  Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+static LogicalResult processInputSplit(
+    MLIRContext &context, TimingScope &ts,
+    std::unique_ptr<llvm::MemoryBuffer> buffer,
+    std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(buffer), llvm::SMLoc());
   if (!verifyDiagnostics) {
@@ -449,7 +461,7 @@ processInputSplit(MLIRContext &context, TimingScope &ts,
 static LogicalResult
 processInput(MLIRContext &context, TimingScope &ts,
              std::unique_ptr<llvm::MemoryBuffer> input,
-             Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+             std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   if (!splitInputFile)
     return processInputSplit(context, ts, std::move(input), outputFile);
 
@@ -478,9 +490,9 @@ static LogicalResult executeHlstool(MLIRContext &context) {
     return failure();
   }
 
-  Optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
+  std::optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
   outputFile.emplace(openOutputFile(outputFilename, &errorMessage));
-  if (!outputFile.value()) {
+  if (!*outputFile) {
     llvm::errs() << errorMessage << "\n";
     return failure();
   }
@@ -491,7 +503,7 @@ static LogicalResult executeHlstool(MLIRContext &context) {
 
   // If the result succeeded and we're emitting a file, close it.
   if (outputFile.has_value())
-    outputFile.value()->keep();
+    (*outputFile)->keep();
 
   return success();
 }
@@ -502,6 +514,10 @@ static LogicalResult executeHlstool(MLIRContext &context) {
 /// MLIRContext and modules inside of it (reducing compile time).
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
+
+  // Set the bug report message to indicate users should file issues on
+  // llvm/circt and not llvm/llvm-project.
+  setBugReportMsg(circtBugReportMsg);
 
   // Hide default LLVM options, other than for this tool.
   // MLIR options are added below.
@@ -518,7 +534,7 @@ int main(int argc, char **argv) {
 
   DialectRegistry registry;
   // Register MLIR dialects.
-  registry.insert<mlir::AffineDialect>();
+  registry.insert<mlir::affine::AffineDialect>();
   registry.insert<mlir::memref::MemRefDialect>();
   registry.insert<mlir::func::FuncDialect>();
   registry.insert<mlir::arith::ArithDialect>();

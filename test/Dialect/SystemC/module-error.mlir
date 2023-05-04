@@ -30,7 +30,7 @@
 
 // expected-note @+1 {{in module '@verifierTest'}}
 "systemc.module"() ({
-  // expected-error @+2 {{redefines port name 'port2'}}
+  // expected-error @+2 {{redefines name 'port2'}}
   // expected-note @+1 {{'port2' first defined here}}
   ^bb0(%arg0: !systemc.out<i4>, %arg1: !systemc.in<i32>, %arg2: !systemc.out<i4>, %arg3: !systemc.inout<i8>):
   }) {function_type = (!systemc.out<i4>, !systemc.in<i32>, !systemc.out<i4>, !systemc.inout<i8>) -> (), portNames = ["port0", "port1", "port2", "port2"], sym_name = "verifierTest"} : () -> ()
@@ -382,3 +382,31 @@ systemc.module @variableNameCollision () {
 
 // expected-error @+1 {{unknown type `value_base` in dialect `systemc`}}
 func.func @invalidType (%arg0: !systemc.value_base>) {}
+
+// -----
+
+// Check that the verifySymbolUses function calls the instance impl library
+
+systemc.module @submodule () { }
+
+hw.module @verilatedCannotReferenceNonHWModule() {
+  // expected-error @+1 {{symbol reference 'submodule' isn't a module}}
+  systemc.interop.verilated "verilated" @submodule () -> ()
+}
+
+// -----
+
+systemc.module @sensitivityNotInCtor() {
+  // expected-error @+1 {{expects parent op 'systemc.ctor'}}
+  systemc.sensitive
+}
+
+// -----
+
+systemc.module @sensitivityNoChannelType() {
+  systemc.ctor {
+    %var = systemc.cpp.variable : i1
+    // expected-error @+1 {{operand #0 must be a SystemC sc_in<T> type or a SystemC sc_inout<T> type or a SystemC sc_out<T> type or a SystemC sc_signal<T> type, but got 'i1'}}
+    systemc.sensitive %var : i1
+  }
+}

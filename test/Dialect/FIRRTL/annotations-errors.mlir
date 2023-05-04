@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-lower-annotations)' -split-input-file %s -verify-diagnostics
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-annotations))' -split-input-file %s -verify-diagnostics
 
 // An unknown annotation should error.
 //
@@ -114,7 +114,7 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     // expected-error @+3 {{index access '42' into non-vector type}}
     // expected-error @+2 {{cannot resolve field 'qnx' in subtype}}
     // expected-error @+1 {{index access '1337' into non-vector type}}
-    %bar = firrtl.reg %clock : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    %bar = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
   }
 }
 
@@ -197,4 +197,119 @@ firrtl.circuit "DontTouchOnNonReferenceTarget" attributes {
   firrtl.module @DontTouchOnNonReferenceTarget() {
     firrtl.instance submodule @Submodule()
   }
+}
+
+// -----
+
+// expected-error @+3 {{unknown/unimplemented DataTapKey class 'sifive.enterprise.grandcentral.DeletedDataTapKey'}}
+// expected-note  @+2 {{full Annotation is reproduced here}}
+// expected-error @+1 {{Unable to apply annotation}}
+firrtl.circuit "GCTDataTapUnsupportedDeleted" attributes {rawAnnotations = [{
+  blackBox = "~GCTDataTap|DataTap",
+  class = "sifive.enterprise.grandcentral.DataTapsAnnotation",
+  keys = [
+    {
+      class = "sifive.enterprise.grandcentral.DeletedDataTapKey",
+      sink = "~GCTDataTap|GCTDataTap>tap_1"
+    }
+  ]
+}]} {
+  firrtl.module @GCTDataTapUnsupportedDeleted() {
+    %tap = firrtl.wire : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// expected-error @+3 {{unknown/unimplemented DataTapKey class 'sifive.enterprise.grandcentral.LiteralDataTapKey'}}
+// expected-note  @+2 {{full Annotation is reproduced here}}
+// expected-error @+1 {{Unable to apply annotation}}
+firrtl.circuit "GCTDataTapUnsupportedLiteral" attributes {rawAnnotations = [{
+  blackBox = "~GCTDataTap|DataTap",
+  class = "sifive.enterprise.grandcentral.DataTapsAnnotation",
+  keys = [
+    {
+      class = "sifive.enterprise.grandcentral.LiteralDataTapKey",
+      literal = "UInt<16>(\22h2a\22)",
+      sink = "~GCTDataTap|GCTDataTap>tap"
+    }
+  ]
+}]} {
+  firrtl.module @GCTDataTapUnsupportedLiteral() {
+    %tap = firrtl.wire : !firrtl.uint<1>
+  }
+}
+
+// -----
+// Check instance port target that doesn't exist.
+
+// expected-error @below {{cannot find port 'a' in module Ext}}
+// expected-error @below {{Unable to resolve target of annotation}}
+firrtl.circuit "InstancePortNotFound" attributes {rawAnnotations = [{
+  class = "circt.test",
+  target = "~InstancePortNotFound|InstancePortNotFound>inst.a"
+}]} {
+  firrtl.extmodule @Ext()
+  firrtl.module @InstancePortNotFound() {
+    firrtl.instance inst @Ext()
+  }
+}
+
+// -----
+// Check ref-type instance port is rejected.
+
+// expected-error @below {{annotation cannot target reference-type port 'ref' in module Ext}}
+// expected-error @below {{Unable to resolve target of annotation}}
+firrtl.circuit "InstancePortRef" attributes {rawAnnotations = [{
+  class = "circt.test",
+  target = "~InstancePortRef|InstancePortRef>inst.ref"
+}]} {
+  firrtl.extmodule @Ext(out ref : !firrtl.ref<uint<1>>)
+  firrtl.module @InstancePortRef() {
+    %ref = firrtl.instance inst @Ext(out ref : !firrtl.ref<uint<1>>)
+  }
+}
+
+// -----
+// Reject annotations on references.
+
+// expected-error @below {{cannot target reference-type 'out' in RefAnno}}
+// expected-error @below {{Unable to resolve target of annotation}}
+firrtl.circuit "RefAnno" attributes {rawAnnotations = [{
+  class = "circt.test",
+  target = "~RefAnno|RefAnno>out"
+}]} {
+  firrtl.module @RefAnno(in %in : !firrtl.uint<1>, out %out : !firrtl.ref<uint<1>>) {
+    %ref = firrtl.ref.send %in : !firrtl.uint<1>
+    firrtl.ref.define %out, %ref : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Reject AttributeAnnotations on ports.
+
+
+
+// expected-error @+1 {{Unable to apply annotation:}}
+firrtl.circuit "Anno" attributes {rawAnnotations = [{
+  class = "firrtl.AttributeAnnotation",
+  target = "~Anno|Anno>in",
+  description = "attr"
+}]} {
+  // expected-error @+1 {{firrtl.AttributeAnnotation must target an operation. Currently ports are not supported}}
+  firrtl.module @Anno(in %in : !firrtl.uint<1>) {}
+}
+
+// -----
+// Reject AttributeAnnotations on external modules.
+
+// expected-error @+1 {{Unable to apply annotation:}}
+firrtl.circuit "Anno" attributes {rawAnnotations = [{
+  class = "firrtl.AttributeAnnotation",
+  target = "~Anno|Ext",
+  description = "ext"
+}]} {
+  // expected-error @+1 {{firrtl.AttributeAnnotation unhandled operation. The target must be a module, wire, node or register}}
+  firrtl.extmodule @Ext()
+  firrtl.module @Anno(in %in : !firrtl.uint<1>) {}
 }

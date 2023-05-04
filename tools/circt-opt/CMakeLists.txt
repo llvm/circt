@@ -8,12 +8,16 @@ add_llvm_tool(circt-opt
 llvm_update_compile_flags(circt-opt)
 target_link_libraries(circt-opt
   PRIVATE
-  CIRCTAffineToPipeline
+  CIRCTAffineToLoopSchedule
   CIRCTAnalysisTestPasses
+  CIRCTArc
+  CIRCTArcToLLVM
+  CIRCTArcTransforms
   CIRCTCalyx
   CIRCTCalyxToHW
   CIRCTCalyxToFSM
   CIRCTCalyxTransforms
+  CIRCTConvertToArcs
   CIRCTESI
   CIRCTExportChiselInterface
   CIRCTExportVerilog
@@ -30,6 +34,7 @@ target_link_libraries(circt-opt
   CIRCTLLHD
   CIRCTLLHDToLLVM
   CIRCTHWToLLVM
+  CIRCTCombToArith
   CIRCTCombToLLVM
   CIRCTLLHDTransforms
   CIRCTMoore
@@ -39,24 +44,28 @@ target_link_libraries(circt-opt
   CIRCTHW
   CIRCTHWArith
   CIRCTHWArithToHW
+  CIRCTInteropDialect
   CIRCTHWToLLHD
   CIRCTHWToSystemC
   CIRCTHWTransforms
+  CIRCTLoopSchedule
+  CIRCTLoopScheduleToCalyx
   CIRCTSCFToCalyx
   CIRCTScheduling
-  CIRCTSchedulingTestPasses
   CIRCTSeq
   CIRCTSeqTransforms
   CIRCTSSP
+  CIRCTSSPTransforms
   CIRCTStandardToHandshake
+  CIRCTOM
   CIRCTPipelineOps
   CIRCTPipelineToHW
   CIRCTPipelineTransforms
-  CIRCTPipelineToCalyx
   CIRCTSV
   CIRCTSVTransforms
   CIRCTHWArith
   CIRCTSystemC
+  CIRCTSystemCTransforms
   CIRCTTransforms
 
   MLIRIR

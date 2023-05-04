@@ -91,13 +91,13 @@ struct PortInfo {
 
   /// Returns the attribute associated with the given name if it exists,
   /// otherwise std::nullopt.
-  llvm::Optional<Attribute> getAttribute(StringRef identifier) const {
+  std::optional<Attribute> getAttribute(StringRef identifier) const {
     assert(attributes && "PortInfo::attributes should be instantiated.");
     auto it = llvm::find_if(attributes, [&](auto idToAttribute) {
       return identifier == idToAttribute.getName();
     });
     if (it == attributes.end())
-      return None;
+      return std::nullopt;
     return it->getValue();
   }
 
@@ -110,6 +110,9 @@ struct PortInfo {
     return identifiers;
   }
 };
+
+/// A helper function to verify each operation with the Ccomponent trait.
+LogicalResult verifyComponent(Operation *op);
 
 /// A helper function to verify each operation with the Cell trait.
 LogicalResult verifyCell(Operation *op);

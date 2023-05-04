@@ -1,3 +1,5 @@
+// UNSUPPORTED: system-windows
+//   See https://github.com/llvm/circt/issues/4129
 // RUN: circt-reduce %s --test %S.sh --test-arg firtool --test-arg "error: sink \"x1.x\" not fully initialized" --keep-best=0 --test-must-fail | FileCheck %s
 
 firrtl.circuit "Foo" {

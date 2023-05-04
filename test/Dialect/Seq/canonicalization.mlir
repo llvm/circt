@@ -65,12 +65,58 @@ hw.module @FirRegReset(%clk: i1, %in: i32, %r : i1, %v : i32) {
   // CHECK: hw.instance "reg3b" @Observe(x: %v: i32) -> ()
 }
 
-// This should not optimize anything until we have constant aggregate attribute
-// support.
 // CHECK-LABEL: @FirRegAggregate
 hw.module @FirRegAggregate(%clk: i1) -> (out : !hw.struct<foo: i32>) {
-  // CHECK: %reg = seq.firreg %reg clock %clk : !hw.struct<foo: i32>
-  // CHECK: hw.output %reg : !hw.struct<foo: i32>
+  // TODO: Use constant aggregate attribute once supported.
+  // CHECK:      %c0_i32 = hw.constant 0 : i32
+  // CHECK-NEXT: %0 = hw.bitcast %c0_i32 : (i32) -> !hw.struct<foo: i32>
+  // CHECK-NEXT: hw.output %0
   %reg = seq.firreg %reg clock %clk : !hw.struct<foo: i32>
   hw.output %reg : !hw.struct<foo: i32>
+}
+
+// CHECK-LABEL: @UninitializedArrayElement
+hw.module @UninitializedArrayElement(%a: i1, %clock: i1) -> (b: !hw.array<2xi1>) {
+  // CHECK:      %false = hw.constant false
+  // CHECK-NEXT: %0 = hw.array_create %false, %a : i1
+  // CHECK-NEXT: %r = seq.firreg %0 clock %clock : !hw.array<2xi1>
+  // CHECK-NEXT: hw.output %r : !hw.array<2xi1>
+  %true = hw.constant true
+  %r = seq.firreg %1 clock %clock : !hw.array<2xi1>
+  %0 = hw.array_get %r[%true] : !hw.array<2xi1>, i1
+  %1 = hw.array_create %0, %a : i1
+  hw.output %r : !hw.array<2xi1>
+}
+
+// CHECK-LABEL: hw.module @ClockGate
+hw.module @ClockGate(%clock: i1, %enable: i1, %testEnable: i1) {
+  // CHECK-NEXT: hw.constant false
+  %false = hw.constant false
+  %true = hw.constant true
+
+  // CHECK-NEXT: %zeroClock = hw.wire %false sym @zeroClock
+  %0 = seq.clock_gate %false, %enable
+  %zeroClock = hw.wire %0 sym @zeroClock : i1
+
+  // CHECK-NEXT: %alwaysOff1 = hw.wire %false sym @alwaysOff1
+  // CHECK-NEXT: %alwaysOff2 = hw.wire %false sym @alwaysOff2
+  %1 = seq.clock_gate %clock, %false
+  %2 = seq.clock_gate %clock, %false, %false
+  %alwaysOff1 = hw.wire %1 sym @alwaysOff1 : i1
+  %alwaysOff2 = hw.wire %2 sym @alwaysOff2 : i1
+
+  // CHECK-NEXT: %alwaysOn1 = hw.wire %clock sym @alwaysOn1
+  // CHECK-NEXT: %alwaysOn2 = hw.wire %clock sym @alwaysOn2
+  // CHECK-NEXT: %alwaysOn3 = hw.wire %clock sym @alwaysOn3
+  %3 = seq.clock_gate %clock, %true
+  %4 = seq.clock_gate %clock, %true, %testEnable
+  %5 = seq.clock_gate %clock, %enable, %true
+  %alwaysOn1 = hw.wire %3 sym @alwaysOn1 : i1
+  %alwaysOn2 = hw.wire %4 sym @alwaysOn2 : i1
+  %alwaysOn3 = hw.wire %5 sym @alwaysOn3 : i1
+
+  // CHECK-NEXT: [[TMP:%.+]] = seq.clock_gate %clock, %enable
+  // CHECK-NEXT: %dropTestEnable = hw.wire [[TMP]] sym @dropTestEnable
+  %6 = seq.clock_gate %clock, %enable, %false
+  %dropTestEnable = hw.wire %6 sym @dropTestEnable : i1
 }

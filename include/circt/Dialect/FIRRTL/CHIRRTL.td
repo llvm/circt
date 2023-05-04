@@ -17,9 +17,11 @@ include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/OpAsmInterface.td"
 include "circt/Dialect/FIRRTL/FIRRTLDialect.td"
-include "circt/Dialect/FIRRTL/FIRRTLAttributes.td"
 include "circt/Dialect/FIRRTL/FIRRTLTypes.td"
 include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.td"
+include "circt/Dialect/FIRRTL/FIRRTLAttributes.td"
+include "circt/Dialect/FIRRTL/FIRRTLEnums.td"
+include "circt/Dialect/HW/HWTypes.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
@@ -96,9 +98,6 @@ def CMemoryPortType : TypeDef<CHIRRTLDialect, "CMemoryPort"> {
 // CHIRRTL Operations
 //===----------------------------------------------------------------------===//
 
-def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
-                         ["getAsmResultNames"]>;
-
 // Base class for the operation in this dialect.
 class CHIRRTLOp<string mnemonic, list<Trait> traits = []> :
     Op<CHIRRTLDialect, mnemonic, traits>;
@@ -110,14 +109,18 @@ def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName, FNamableOp]> {
     write latency of 1 and a read latency of 0.
   }];
   let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
-                       AnnotationArrayAttr:$annotations, OptionalAttr<InnerSymAttr>:$inner_sym);
+                       AnnotationArrayAttr:$annotations,
+                       OptionalAttr<InnerSymAttr>:$inner_sym,
+                       OptionalAttr<MemoryInitAttr>:$init);
   let results = (outs CMemoryType:$result);
-  let assemblyFormat = [{(`sym` $inner_sym^)? custom<NameKind>($nameKind)
-                         custom<CombMemOp>(attr-dict) `:` qualified(type($result))}];
+  let assemblyFormat = [{(`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
+                         `` custom<CombMemOp>(attr-dict) `:` qualified(type($result))}];
   let builders = [
     OpBuilder<(ins "firrtl::FIRRTLBaseType":$elementType, "uint64_t":$numElements,
                    "mlir::StringRef":$name, "firrtl::NameKindEnum":$nameKind,
-                   "ArrayAttr":$annotations, CArg<"StringAttr", "StringAttr()">:$inner_sym)>
+                   "ArrayAttr":$annotations,
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                   CArg<"firrtl::MemoryInitAttr", "firrtl::MemoryInitAttr{}">:$init)>
   ];
 }
 
@@ -129,15 +132,17 @@ def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName, FNamableOp]> {
   }];
   let arguments = (ins RUWAttr:$ruw, StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
-                       OptionalAttr<InnerSymAttr>:$inner_sym);
+                       OptionalAttr<InnerSymAttr>:$inner_sym,
+                       OptionalAttr<MemoryInitAttr>:$init);
   let results = (outs CMemoryType:$result);
-  let assemblyFormat = [{(`sym` $inner_sym^)? custom<NameKind>($nameKind) $ruw
+  let assemblyFormat = [{(`sym` $inner_sym^)? `` custom<NameKind>($nameKind) $ruw
                          custom<SeqMemOp>(attr-dict) `:` qualified(type($result))}];
   let builders = [
     OpBuilder<(ins "firrtl::FIRRTLBaseType":$elementType, "uint64_t":$numElements,
                    "RUWAttr":$ruw, "mlir::StringRef":$name,
                    "firrtl::NameKindEnum":$nameKind, "ArrayAttr":$annotations,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym)>
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                   CArg<"firrtl::MemoryInitAttr", "firrtl::MemoryInitAttr{}">:$init)>
   ];
 }
 
@@ -162,7 +167,7 @@ def MemoryPortOp : CHIRRTLOp<"memoryport", [InferTypeOpInterface,
   let results = (outs FIRRTLBaseType:$data, CMemoryPortType:$port);
 
   let assemblyFormat = [{
-    $direction $memory custom<MemoryPortOp>(attr-dict) `:`
+    $direction $memory `` custom<MemoryPortOp>(attr-dict) `:`
        functional-type(operands, results)
   }];
 
@@ -180,7 +185,7 @@ def MemoryPortOp : CHIRRTLOp<"memoryport", [InferTypeOpInterface,
 
     /// Infer the return types of this operation.
     static LogicalResult inferReturnTypes(MLIRContext *context,
-                                          Optional<Location> loc,
+                                          std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
                                           mlir::RegionRange regions,
@@ -236,7 +241,7 @@ def MemoryDebugPortOp : CHIRRTLOp<"debugport", [InferTypeOpInterface,
   let extraClassDeclaration = [{
     /// Infer the return types of this operation.
     static LogicalResult inferReturnTypes(MLIRContext *context,
-                                          Optional<Location> loc,
+                                          std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
                                           mlir::RegionRange regions,

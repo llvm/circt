@@ -14,10 +14,12 @@
 #include "PassDetails.h"
 
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-inject-dut-hier"
@@ -39,7 +41,7 @@ struct InjectDUTHierarchy : public InjectDUTHierarchyBase<InjectDUTHierarchy> {
 /// Int:
 ///
 ///   firrtl.hierpath [@Top::@dut, @DUT::@wrapper, @Wrapper]
-static void addHierarchy(HierPathOp path, FModuleOp dut,
+static void addHierarchy(hw::HierPathOp path, FModuleOp dut,
                          InstanceOp wrapperInst) {
   auto namepath = path.getNamepath().getValue();
 
@@ -48,7 +50,7 @@ static void addHierarchy(HierPathOp path, FModuleOp dut,
   newNamepath.reserve(namepath.size() + 1);
   while (path.modPart(nlaIdx) != dut.getNameAttr())
     newNamepath.push_back(namepath[nlaIdx++]);
-  newNamepath.push_back(hw::InnerRefAttr::get(dut.moduleNameAttr(),
+  newNamepath.push_back(hw::InnerRefAttr::get(dut.getModuleNameAttr(),
                                               getInnerSymName(wrapperInst)));
 
   // Add the extra level of hierarchy.
@@ -130,7 +132,7 @@ void InjectDUTHierarchy::runOnOperation() {
     if (dut) {
       auto diag = emitError(mod.getLoc())
                   << "is marked with a '" << dutAnnoClass << "', but '"
-                  << dut.moduleName()
+                  << dut.getModuleName()
                   << "' also had such an annotation (this should "
                      "be impossible!)";
       diag.attachNote(dut.getLoc()) << "the first DUT was found here";
@@ -168,7 +170,8 @@ void InjectDUTHierarchy::runOnOperation() {
   {
     b.setInsertionPointAfter(dut);
     auto newDUT = b.create<FModuleOp>(dut.getLoc(), dut.getNameAttr(),
-                                      dut.getPorts(), dut.getAnnotations());
+                                      dut.getConventionAttr(), dut.getPorts(),
+                                      dut.getAnnotations());
 
     SymbolTable::setSymbolVisibility(newDUT, dut.getVisibility());
     dut.setName(b.getStringAttr(circuitNS.newName(wrapperName.getValue())));
@@ -188,15 +191,15 @@ void InjectDUTHierarchy::runOnOperation() {
   b.setInsertionPointToStart(dut.getBodyBlock());
   ModuleNamespace dutNS(dut);
   auto wrapperInst = b.create<InstanceOp>(
-      b.getUnknownLoc(), wrapper, wrapper.moduleName(),
+      b.getUnknownLoc(), wrapper, wrapper.getModuleName(),
       NameKindEnum::DroppableName, ArrayRef<Attribute>{}, ArrayRef<Attribute>{},
-      false, b.getStringAttr(dutNS.newName(wrapper.moduleName())));
+      false, b.getStringAttr(dutNS.newName(wrapper.getModuleName())));
   for (const auto &pair : llvm::enumerate(wrapperInst.getResults())) {
     Value lhs = dut.getArgument(pair.index());
     Value rhs = pair.value();
     if (dut.getPortDirection(pair.index()) == Direction::In)
       std::swap(lhs, rhs);
-    b.create<ConnectOp>(b.getUnknownLoc(), lhs, rhs);
+    emitConnect(b, b.getUnknownLoc(), lhs, rhs);
   }
 
   // Compute a set of paths that are used _inside_ the wrapper.
@@ -238,7 +241,7 @@ void InjectDUTHierarchy::runOnOperation() {
   //      replace it with two InnerRefs: (1) on the DUT and (2) one the wrapper.
   LLVM_DEBUG(llvm::dbgs() << "Processing hierarchical paths:\n");
   auto &nlaTable = getAnalysis<NLATable>();
-  DenseMap<StringAttr, HierPathOp> dutRenames;
+  DenseMap<StringAttr, hw::HierPathOp> dutRenames;
   for (auto nla : llvm::make_early_inc_range(nlaTable.lookup(dut))) {
     LLVM_DEBUG(llvm::dbgs() << "  - " << nla << "\n");
     auto namepath = nla.getNamepath().getValue();
@@ -279,7 +282,7 @@ void InjectDUTHierarchy::runOnOperation() {
       if (nla.isModule() && dutPaths.contains(nla.getSymNameAttr())) {
         OpBuilder::InsertionGuard guard(b);
         b.setInsertionPoint(nla);
-        auto clone = cast<HierPathOp>(b.clone(*nla));
+        auto clone = cast<hw::HierPathOp>(b.clone(*nla));
         clone.setSymNameAttr(b.getStringAttr(
             circuitNS.newName(clone.getSymNameAttr().getValue())));
         dutRenames.insert({nla.getSymNameAttr(), clone});

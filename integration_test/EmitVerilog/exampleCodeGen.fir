@@ -560,7 +560,7 @@ circuit top :
     node _T_8 = eq(_T_7, UInt<1>("h0")) @[main.scala 74:9]
     node _T_9 = add(i, UInt<1>("h1")) @[main.scala 76:10]
     node _T_10 = tail(_T_9, 1) @[main.scala 76:10]
-    node _GEN_0 = validif(eq(UInt<1>("h0"), i), golden_0) @[main.scala 77:32 main.scala 77:32]
+    node _GEN_0 = golden_0 @[main.scala 77:32 main.scala 77:32]
     node _GEN_1 = mux(eq(UInt<1>("h1"), i), golden_1, _GEN_0) @[main.scala 77:32 main.scala 77:32]
     node _GEN_2 = mux(eq(UInt<2>("h2"), i), golden_2, _GEN_1) @[main.scala 77:32 main.scala 77:32]
     node _GEN_3 = mux(eq(UInt<2>("h3"), i), golden_3, _GEN_2) @[main.scala 77:32 main.scala 77:32]

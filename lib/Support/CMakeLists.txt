@@ -6,19 +6,25 @@ set(VERSION_CPP "${CMAKE_CURRENT_BINARY_DIR}/Version.cpp")
 set_source_files_properties("${VERSION_CPP}" PROPERTIES GENERATED TRUE)
 
 add_circt_library(CIRCTSupport
+  APInt.cpp
   BackedgeBuilder.cpp
+  ConversionPatterns.cpp
+  CustomDirectiveImpl.cpp
   FieldRef.cpp
+  JSON.cpp
   LoweringOptions.cpp
   Path.cpp
-  APInt.cpp
-  ValueMapper.cpp
+  PrettyPrinter.cpp
+  PrettyPrinterHelpers.cpp
   SymCache.cpp
+  ValueMapper.cpp
   "${VERSION_CPP}"
 
   ADDITIONAL_HEADER_DIRS
 
   LINK_LIBS PUBLIC
   MLIRIR
+  MLIRTransformUtils
   )
 
 #-------------------------------------------------------------------------------

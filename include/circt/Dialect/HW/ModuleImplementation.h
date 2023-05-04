@@ -30,16 +30,12 @@ StringAttr getPortNameAttr(MLIRContext *context, StringRef name);
 /// This is a variant of mlir::parseFunctionSignature that allows names on
 /// result arguments.
 ParseResult parseModuleFunctionSignature(
-    OpAsmParser &parser, SmallVectorImpl<OpAsmParser::Argument> &args,
-    bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
+    OpAsmParser &parser, bool &isVariadic,
+    SmallVectorImpl<OpAsmParser::Argument> &args,
+    SmallVectorImpl<Attribute> &argNames, SmallVectorImpl<Attribute> &argLocs,
+    SmallVectorImpl<Attribute> &resultNames,
     SmallVectorImpl<DictionaryAttr> &resultAttrs,
-    SmallVectorImpl<Attribute> &resultNames);
-
-/// Parse a function result list with named results.
-ParseResult
-parseFunctionResultList(OpAsmParser &parser, SmallVectorImpl<Type> &resultTypes,
-                        SmallVectorImpl<DictionaryAttr> &resultAttrs,
-                        SmallVectorImpl<Attribute> &resultNames);
+    SmallVectorImpl<Attribute> &resultLocs, TypeAttr &type);
 
 /// Print a module signature with named results.
 void printModuleSignature(OpAsmPrinter &p, Operation *op,

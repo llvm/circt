@@ -22,7 +22,8 @@
 #include "mlir-c/Bindings/Python/Interop.h"
 #include "mlir-c/IR.h"
 #include "mlir-c/Pass.h"
-#include "llvm/ADT/Optional.h"
+
+#include <optional>
 
 namespace py = pybind11;
 
