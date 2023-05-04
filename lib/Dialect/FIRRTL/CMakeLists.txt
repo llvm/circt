@@ -1,3 +1,7 @@
+set(LLVM_OPTIONAL_SOURCES
+  FIRRTLReductions.cpp
+)
+
 include_directories(.)
 add_circt_dialect_library(CIRCTFIRRTL
   CHIRRTLDialect.cpp
@@ -34,6 +38,15 @@ add_circt_dialect_library(CIRCTFIRRTL
   MLIRIR
   MLIRPass
   )
+
+add_circt_library(CIRCTFIRRTLReductions
+  FIRRTLReductions.cpp
+
+  LINK_LIBS PUBLIC
+  CIRCTFIRRTL
+  CIRCTFIRRTLTransforms
+  MLIRIR
+)
 
 add_dependencies(circt-headers
   MLIRFIRRTLIncGen

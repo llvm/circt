@@ -1,4 +1,4 @@
-//===- Reduction.h - Reductions for circt-reduce --------------------------===//
+//===- Reduction.h - Reduction datastructure decl. for circt-reduce -------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,31 +6,17 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines abstract reduction patterns for the 'circt-reduce' tool.
+// This file defines datastructures to handle reduction patterns.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef CIRCT_REDUCE_REDUCTION_H
 #define CIRCT_REDUCE_REDUCTION_H
 
-#include <memory>
-#include <string>
-
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "llvm/ADT/StringRef.h"
-
-namespace llvm {
-template <typename T>
-class function_ref;
-} // namespace llvm
-
-namespace mlir {
-struct LogicalResult;
-class MLIRContext;
-class Operation;
-class Pass;
-class PassManager;
-} // namespace mlir
+#include "mlir/Pass/PassManager.h"
+#include "llvm/ADT/SmallVector.h"
 
 namespace circt {
 
@@ -52,12 +38,12 @@ struct Reduction {
   /// benefit measure where a higher number means that applying the pattern
   /// leads to a bigger reduction and zero means that the patten does not
   /// match and thus cannot be applied at all.
-  virtual uint64_t match(mlir::Operation *op) = 0;
+  virtual uint64_t match(Operation *op) = 0;
 
   /// Apply the reduction to a specific operation. If the returned result
   /// indicates that the application failed, the resulting module is treated the
   /// same as if the tester marked it as uninteresting.
-  virtual mlir::LogicalResult rewrite(mlir::Operation *op) = 0;
+  virtual LogicalResult rewrite(Operation *op) = 0;
 
   /// Return a human-readable name for this reduction pattern.
   virtual std::string getName() const = 0;
@@ -86,37 +72,81 @@ struct Reduction {
   virtual bool isOneShot() const { return false; }
 
   /// An optional callback for reductions to communicate removal of operations.
-  std::function<void(mlir::Operation *)> notifyOpErasedCallback = nullptr;
+  std::function<void(Operation *)> notifyOpErasedCallback = nullptr;
 
-  void notifyOpErased(mlir::Operation *op) {
+  void notifyOpErased(Operation *op) {
     if (notifyOpErasedCallback)
       notifyOpErasedCallback(op);
   }
 };
 
+template <typename OpTy>
+struct OpReduction : public Reduction {
+  uint64_t match(Operation *op) override {
+    if (auto concreteOp = dyn_cast<OpTy>(op))
+      return match(concreteOp);
+    return 0;
+  }
+  LogicalResult rewrite(Operation *op) override {
+    return rewrite(cast<OpTy>(op));
+  }
+
+  virtual uint64_t match(OpTy op) { return 1; }
+  virtual LogicalResult rewrite(OpTy op) = 0;
+};
+
 /// A reduction pattern that applies an `mlir::Pass`.
 struct PassReduction : public Reduction {
-  PassReduction(mlir::MLIRContext *context, std::unique_ptr<mlir::Pass> pass,
+  PassReduction(MLIRContext *context, std::unique_ptr<Pass> pass,
                 bool canIncreaseSize = false, bool oneShot = false);
-  uint64_t match(mlir::Operation *op) override;
-  mlir::LogicalResult rewrite(mlir::Operation *op) override;
+  uint64_t match(Operation *op) override;
+  LogicalResult rewrite(Operation *op) override;
   std::string getName() const override;
   bool acceptSizeIncrease() const override { return canIncreaseSize; }
   bool isOneShot() const override { return oneShot; }
 
 protected:
-  mlir::MLIRContext *const context;
+  MLIRContext *const context;
   std::unique_ptr<mlir::PassManager> pm;
-  llvm::StringRef passName;
+  StringRef passName;
   bool canIncreaseSize;
   bool oneShot;
 };
 
-/// Calls the function `add` with each available reduction, in the order they
-/// should be applied.
-void createAllReductions(
-    mlir::MLIRContext *context,
-    llvm::function_ref<void(std::unique_ptr<Reduction>)> add);
+class ReducePatternSet {
+public:
+  template <typename R, unsigned Benefit, typename... Args>
+  void add(Args &&...args) {
+    reducePatternsWithBenefit.push_back(
+        {std::make_unique<R>(std::forward<Args>(args)...), Benefit});
+  }
+
+  void filter(const std::function<bool(const Reduction &)> &pred);
+  void sortByBenefit();
+  size_t size() const;
+
+  Reduction &operator[](size_t idx) const;
+
+private:
+  SmallVector<std::pair<std::unique_ptr<Reduction>, unsigned>>
+      reducePatternsWithBenefit;
+};
+
+/// A dialect interface to provide reduction patterns to a reducer tool.
+struct ReducePatternDialectInterface
+    : public mlir::DialectInterface::Base<ReducePatternDialectInterface> {
+  ReducePatternDialectInterface(Dialect *dialect) : Base(dialect) {}
+
+  virtual void populateReducePatterns(ReducePatternSet &patterns) const = 0;
+};
+
+struct ReducePatternInterfaceCollection
+    : public mlir::DialectInterfaceCollection<ReducePatternDialectInterface> {
+  using Base::Base;
+
+  // Collect the reduce patterns defined by each dialect.
+  void populateReducePatterns(ReducePatternSet &patterns) const;
+};
 
 } // namespace circt
 

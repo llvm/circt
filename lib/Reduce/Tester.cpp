@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "Tester.h"
+#include "circt/Reduce/Tester.h"
 #include "mlir/IR/Verifier.h"
 #include "llvm/Support/ToolOutputFile.h"
 
@@ -123,8 +123,8 @@ void TestCase::ensureFileOnDisk() {
 
     // Pick a temporary output file path.
     int fd;
-    std::error_code ec =
-        llvm::sys::fs::createTemporaryFile("mlir-reduce", "mlir", fd, filepath);
+    std::error_code ec = llvm::sys::fs::createTemporaryFile(
+        "circt-reduce", "mlir", fd, filepath);
     if (ec)
       llvm::report_fatal_error(
           Twine("Error making unique filename: ") + ec.message(), false);
