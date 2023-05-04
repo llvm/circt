@@ -165,17 +165,6 @@ inline FIRRTLType mapBaseType(FIRRTLType type,
       });
 }
 
-/// Return a FIRRTLType of appropriate "const"-ness, based on its existing
-/// const status and the provided update function.
-inline FIRRTLType mapConstType(FIRRTLType type,
-                               function_ref<bool(FIRRTLType, bool)> fn) {
-  return TypeSwitch<FIRRTLType, FIRRTLType>(type)
-      .Case<FIRRTLBaseType, OpenVectorType, OpenBundleType>([&](auto base) {
-        return base.getConstType(fn(base, base.isConst()));
-      })
-      .Case<RefType>([&](auto ref) { return ref; });
-}
-
 /// Given a type, return the corresponding lowered type for the HW dialect.
 /// Non-FIRRTL types are simply passed through. This returns a null type if it
 /// cannot be lowered.

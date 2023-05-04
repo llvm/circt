@@ -3212,10 +3212,7 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
 
   // SubfieldOp verifier checks that the field index is valid with number of
   // subelements.
-  auto elementType = inType.getElement(fieldIndex).type;
-  return mapConstType(elementType, [&](auto _, bool isConst) {
-    return isConst || inType.isConst();
-  });
+  return inType.getElementTypePreservingConst(fieldIndex);
 }
 
 FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
@@ -3232,10 +3229,7 @@ FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
 
   // OpenSubfieldOp verifier checks that the field index is valid with number of
   // subelements.
-  auto elementType = inType.getElement(fieldIndex).type;
-  return mapConstType(elementType, [&](auto _, bool isConst) {
-    return isConst || inType.isConst();
-  });
+  return inType.getElementTypePreservingConst(fieldIndex);
 }
 
 bool SubfieldOp::isFieldFlipped() {
@@ -3255,12 +3249,8 @@ FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
 
   if (auto vectorType = inType.dyn_cast<FVectorType>()) {
-    if (fieldIdx < vectorType.getNumElements()) {
-      auto elementType = vectorType.getElementType();
-      return mapConstType(elementType, [&](auto _, bool isConst) {
-        return isConst || vectorType.isConst();
-      });
-    }
+    if (fieldIdx < vectorType.getNumElements())
+      return vectorType.getElementTypePreservingConst();
     return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
                                  "' in vector type ", inType);
   }
@@ -3276,12 +3266,8 @@ FIRRTLType OpenSubindexOp::inferReturnType(ValueRange operands,
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
 
   if (auto vectorType = inType.dyn_cast<OpenVectorType>()) {
-    if (fieldIdx < vectorType.getNumElements()) {
-      auto elementType = vectorType.getElementType();
-      return mapConstType(elementType, [&](auto _, bool isConst) {
-        return isConst || vectorType.isConst();
-      });
-    }
+    if (fieldIdx < vectorType.getNumElements())
+      return vectorType.getElementTypePreservingConst();
     return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
                                  "' in vector type ", inType);
   }

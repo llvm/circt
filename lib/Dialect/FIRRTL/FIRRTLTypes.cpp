@@ -1182,6 +1182,12 @@ std::pair<uint64_t, bool> BundleType::rootChildFieldID(uint64_t fieldID,
 
 bool BundleType::isConst() { return getImpl()->isConst; }
 
+BundleType::ElementType
+BundleType::getElementTypePreservingConst(size_t index) {
+  auto type = getElementType(index);
+  return type.getConstType(type.isConst() || isConst());
+}
+
 //===----------------------------------------------------------------------===//
 // OpenBundle Type
 //===----------------------------------------------------------------------===//
@@ -1404,6 +1410,17 @@ OpenBundleType::getFinalTypeByFieldID(uint64_t fieldID) const {
 
 bool OpenBundleType::isConst() { return getImpl()->isConst; }
 
+OpenBundleType::ElementType
+OpenBundleType::getElementTypePreservingConst(size_t index) {
+  auto type = getElementType(index);
+  // TODO: ConstTypeInterface / Trait ?
+  return TypeSwitch<FIRRTLType, ElementType>(type)
+      .Case<FIRRTLBaseType, OpenBundleType, OpenVectorType>([&](auto type) {
+        return type.getConstType(type.isConst() || isConst());
+      })
+      .Default(type);
+}
+
 //===----------------------------------------------------------------------===//
 // FVectorType
 //===----------------------------------------------------------------------===//
@@ -1520,6 +1537,11 @@ std::pair<uint64_t, bool> FVectorType::rootChildFieldID(uint64_t fieldID,
 }
 
 bool FVectorType::isConst() { return getImpl()->isConst; }
+
+FVectorType::ElementType FVectorType::getElementTypePreservingConst() {
+  auto type = getElementType();
+  return type.getConstType(type.isConst() || isConst());
+}
 
 //===----------------------------------------------------------------------===//
 // OpenVectorType
@@ -1655,6 +1677,16 @@ OpenVectorType::getFinalTypeByFieldID(uint64_t fieldID) const {
 }
 
 bool OpenVectorType::isConst() { return getImpl()->isConst; }
+
+OpenVectorType::ElementType OpenVectorType::getElementTypePreservingConst() {
+  auto type = getElementType();
+  // TODO: ConstTypeInterface / Trait ?
+  return TypeSwitch<FIRRTLType, ElementType>(type)
+      .Case<FIRRTLBaseType, OpenBundleType, OpenVectorType>([&](auto type) {
+        return type.getConstType(type.isConst() || isConst());
+      })
+      .Default(type);
+}
 
 //===----------------------------------------------------------------------===//
 // FEnum Type

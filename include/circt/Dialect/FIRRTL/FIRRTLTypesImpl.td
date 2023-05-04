@@ -199,7 +199,9 @@ class BaseVectorTypeImpl<string name, string ElementType, list<Trait> traits = [
     /// op. Returns the new id and whether the id is in the given child.
     std::pair<uint64_t, bool> rootChildFieldID(uint64_t fieldID, uint64_t index);
 
+    /// Const support.
     bool isConst();
+    ElementType getElementTypePreservingConst();
   }];
 }
 
@@ -309,7 +311,9 @@ class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [
     iterator begin() const { return getElements().begin(); }
     iterator end() const { return getElements().end(); }
 
+    /// Const support.
     bool isConst();
+    ElementType getElementTypePreservingConst(size_t index);
   }];
 }
 
