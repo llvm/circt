@@ -117,7 +117,7 @@ HWModuleLike InstanceGraphBase::getReferencedModule(HWInstanceLike op) {
   return lookup(op.getReferencedModuleNameAttr())->getModule();
 }
 
-InstanceGraphBase::~InstanceGraphBase() {}
+InstanceGraphBase::~InstanceGraphBase() = default;
 
 void InstanceGraphBase::replaceInstance(HWInstanceLike inst,
                                         HWInstanceLike newInst) {
@@ -182,7 +182,7 @@ InstanceGraphBase::getInferredTopLevelNodes() {
               return true;
             }
             marked.insert(node);
-            for (auto use : *node) {
+            for (auto *use : *node) {
               InstanceGraphNode *targetModule = use->getTarget();
               candidateTopLevels.remove(targetModule);
               if (cycleUtil(targetModule, trace))
@@ -194,7 +194,7 @@ InstanceGraphBase::getInferredTopLevelNodes() {
           };
 
   bool cyclic = false;
-  for (auto moduleIt : *this) {
+  for (auto *moduleIt : *this) {
     if (visited.contains(moduleIt))
       continue;
 
