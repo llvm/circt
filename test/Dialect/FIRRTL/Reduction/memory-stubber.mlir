@@ -1,6 +1,6 @@
 // UNSUPPORTED: system-windows
 //   See https://github.com/llvm/circt/issues/4129
-// RUN: circt-reduce %s --test /bin/grep --test-arg -q --test-arg "firrtl.module @Basic" --keep-best=0 --include memory-stubber | FileCheck %s
+// RUN: circt-reduce %s --test /usr/bin/env --test-arg grep --test-arg -q --test-arg "firrtl.module @Basic" --keep-best=0 --include memory-stubber | FileCheck %s
 
 firrtl.circuit "Basic"   {
   // CHECK-LABEL: @Basic

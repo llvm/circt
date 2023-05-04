@@ -4,7 +4,7 @@
 // This test checks that only the reduction patterns of dialects that occur in
 // the input file are registered
 
-// RUN: circt-reduce %s --test /bin/cat --list | FileCheck %s
+// RUN: circt-reduce %s --test /usr/bin/env --test-arg cat --list | FileCheck %s
 
 // CHECK:      hw-module-externalizer
 // CHECK-NEXT: hw-constantifier

@@ -1,6 +1,6 @@
 // UNSUPPORTED: system-windows
 //   See https://github.com/llvm/circt/issues/4129
-// RUN: circt-reduce %s --test /bin/grep --test-arg -q --test-arg "DummyArc(%arg0)" --keep-best=0 --include arc-state-elimination | FileCheck %s
+// RUN: circt-reduce %s --test /usr/bin/env --test-arg grep --test-arg -q --test-arg "DummyArc(%arg0)" --keep-best=0 --include arc-state-elimination | FileCheck %s
 
 // CHECK-LABEL: hw.module @Foo
 hw.module @Foo(%clk: i1, %en: i1, %rst: i1, %arg0: i32) -> (out: i32) {

@@ -1,6 +1,6 @@
 // UNSUPPORTED: system-windows
 //   See https://github.com/llvm/circt/issues/4129
-// RUN: circt-reduce %s --test /bin/grep --test-arg -q --test-arg "hw.module @Foo" --keep-best=0 --include hw-constantifier | FileCheck %s
+// RUN: circt-reduce %s --test /usr/bin/env --test-arg grep --test-arg -q --test-arg "hw.module @Foo" --keep-best=0 --include hw-constantifier | FileCheck %s
 
 // CHECK-LABEL: hw.module @Foo
 hw.module @Foo(%arg0: i32, %arg1: i32) -> (out0: i32, out1: i32) {
