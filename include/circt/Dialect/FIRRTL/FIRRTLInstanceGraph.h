@@ -41,7 +41,7 @@ public:
   /// Get the node corresponding to the top-level module of a circuit.
   InstanceGraphNode *getTopLevelNode() override { return topLevelNode; }
 
-  /// Get the module corresponding to the top-lebel module of a circuit.
+  /// Get the module corresponding to the top-level module of a circuit.
   FModuleLike getTopLevelModule() {
     return cast<FModuleLike>(*getTopLevelNode()->getModule());
   }
