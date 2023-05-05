@@ -430,11 +430,12 @@ static bool checkBytecodeOutputToConsole(raw_ostream &os) {
 
 /// Print the operation to the specified stream, emitting bytecode when
 /// requested and politely avoiding dumping to terminal unless forced.
-static void printOp(Operation *op, raw_ostream &os) {
+static LogicalResult printOp(Operation *op, raw_ostream &os) {
   if (emitBytecode && (force || !checkBytecodeOutputToConsole(os)))
-    writeBytecodeToFile(op, os, mlir::BytecodeWriterConfig(getCirctVersion()));
-  else
-    op->print(os);
+    return writeBytecodeToFile(op, os,
+                               mlir::BytecodeWriterConfig(getCirctVersion()));
+  op->print(os);
+  return success();
 }
 
 /// Process a single buffer of the input.
@@ -520,8 +521,7 @@ static LogicalResult processBuffer(
     if (failed(pm.run(module.get())))
       return failure();
     auto outputTimer = ts.nest("Print .mlir output");
-    printOp(*module, (*outputFile)->os());
-    return success();
+    return printOp(*module, (*outputFile)->os());
   }
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerIntrinsicsPass());
@@ -802,7 +802,8 @@ static LogicalResult processBuffer(
   if (outputFormat == OutputIRFir || outputFormat == OutputIRHW ||
       outputFormat == OutputIRSV || outputFormat == OutputIRVerilog) {
     auto outputTimer = ts.nest("Print .mlir output");
-    printOp(*module, (*outputFile)->os());
+    if (failed(printOp(*module, (*outputFile)->os())))
+      return failure();
   }
 
   // If requested, print the final MLIR into mlirOutFile.
@@ -814,7 +815,8 @@ static LogicalResult processBuffer(
       return failure();
     }
 
-    printOp(*module, mlirFile->os());
+    if (failed(printOp(*module, mlirFile->os())))
+      return failure();
     mlirFile->keep();
   }
 
