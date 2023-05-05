@@ -704,7 +704,7 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   // Pick a name for the NLA that doesn't collide with anything.
   StringAttr opName;
   if (auto module = dyn_cast<FModuleLike>(tracker.op))
-    opName = module.moduleNameAttr();
+    opName = module.getModuleNameAttr();
   else
     opName = tracker.op->getAttrOfType<StringAttr>("name");
   auto nlaName = circuitNamespace->newName("omir_nla_" + opName.getValue());
@@ -768,7 +768,7 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
 
   // Add the op itself.
   if (auto module = dyn_cast<FModuleLike>(tracker.op))
-    namepath.push_back(FlatSymbolRefAttr::get(module.moduleNameAttr()));
+    namepath.push_back(FlatSymbolRefAttr::get(module.getModuleNameAttr()));
   else
     namepath.push_back(getInnerRefTo(tracker.op));
 
@@ -922,7 +922,7 @@ void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
     return;
   }
   LLVM_DEBUG(llvm::dbgs() << "Emitting RTL ports for module `"
-                          << module.moduleName() << "`\n");
+                          << module.getModuleName() << "`\n");
 
   // Emit the JSON.
   SmallString<64> buf;
@@ -939,9 +939,9 @@ void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
         jsonStream.object([&] {
           // Emit the `ref` field.
           buf.assign("OMDontTouchedReferenceTarget:~");
-          if (module.moduleNameAttr() == dutModuleName) {
+          if (module.getModuleNameAttr() == dutModuleName) {
             // If module is DUT, then root the target relative to the DUT.
-            buf.append(module.moduleName());
+            buf.append(module.getModuleName());
           } else {
             buf.append(getOperation().getName());
           }
