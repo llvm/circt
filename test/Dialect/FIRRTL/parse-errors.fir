@@ -470,6 +470,13 @@ circuit RefNotString:
 
 ;// -----
 
+circuit RefForAggElement:
+  extmodule RefForAggElement:
+    output p : { x: Probe<UInt<2>> }
+    ref p.x is a.b ; expected-error {{ref statements for aggregate elements not yet supported}}
+
+;// -----
+
 circuit ConnectWrongType:
   module ConnectWrongType:
     input a: UInt<1>

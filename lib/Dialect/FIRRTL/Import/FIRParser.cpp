@@ -3724,8 +3724,12 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     // ref x is "a.b.c"
     // Support "ref x.y is " once aggregate-of-ref supported.
     StringAttr refName, resolved;
-    if (parseId(refName, "expected ref name") ||
-        parseToken(FIRToken::kw_is, "expected 'is' in ref statement"))
+    if (parseId(refName, "expected ref name"))
+      return failure();
+    if (consumeIf(FIRToken::period) || consumeIf(FIRToken::l_square))
+      return emitError(
+          loc, "ref statements for aggregate elements not yet supported");
+    if (parseToken(FIRToken::kw_is, "expected 'is' in ref statement"))
       return failure();
 
     if (!seenRefs.insert(refName).second)
