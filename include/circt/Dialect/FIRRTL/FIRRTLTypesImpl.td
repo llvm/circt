@@ -155,6 +155,10 @@ class BaseVectorTypeImpl<string name, string ElementType, list<Trait> traits = [
        CArg<"bool", "false">:$isConst)
     >
   ];
+
+  // Additional class declarations to emit.
+  code firrtlExtraClassDeclaration = "";
+
   let extraClassDeclaration = [{
     using ElementType = }] # ElementType # [{;
 
@@ -163,12 +167,6 @@ class BaseVectorTypeImpl<string name, string ElementType, list<Trait> traits = [
 
     /// Return the recursive properties of the type.
     RecursiveTypeProperties getRecursiveTypeProperties() const;
-
-    /// Return this type with any flip types recursively removed from itself.
-    }] # BaseType # [{ getPassiveType();
-
-    /// Return a 'const' or non-'const' version of this type.
-    }] # name # [{Type getConstType(bool isConst);
 
     /// Get an integer ID for the field. Field IDs start at 1, and are assigned
     /// to each field in a vector in a recursive depth-first walk of all
@@ -202,10 +200,19 @@ class BaseVectorTypeImpl<string name, string ElementType, list<Trait> traits = [
     /// Const support.
     bool isConst();
     ElementType getElementTypePreservingConst();
-  }];
+
+    /// Return a 'const' or non-'const' version of this type.
+    }] # name # [{Type getConstType(bool isConst);
+
+  }] # firrtlExtraClassDeclaration;
 }
 
-def FVectorImpl : BaseVectorTypeImpl<"FVector","::circt::firrtl::FIRRTLBaseType", [FieldIDTypeInterface]>;
+def FVectorImpl : BaseVectorTypeImpl<"FVector","::circt::firrtl::FIRRTLBaseType", [FieldIDTypeInterface]> {
+  let firrtlExtraClassDeclaration = [{
+    /// Return this type with any flip types recursively removed from itself.
+    FIRRTLBaseType getPassiveType();
+  }];
+}
 
 def OpenVectorImpl : BaseVectorTypeImpl<"OpenVector","::circt::firrtl::FIRRTLType", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]>;
 
@@ -217,6 +224,10 @@ class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [
   let builders = [
     TypeBuilder<(ins "ArrayRef<BundleElement>":$elements, CArg<"bool", "false">:$isConst)>
   ];
+
+  // Additional class declarations to emit.
+  code firrtlExtraClassDeclaration = "";
+
   let extraClassDeclaration = [{
     using ElementType = }] # ElementType # [{;
 
@@ -269,12 +280,6 @@ class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [
     /// Return the recursive properties of the type.
     RecursiveTypeProperties getRecursiveTypeProperties() const;
 
-    /// Return this type with any flip types recursively removed from itself.
-    }] # BaseType # [{ getPassiveType();
-
-    /// Return a 'const' or non-'const' version of this type.
-    }] # name # [{Type getConstType(bool isConst);
-
     /// Get an integer ID for the field. Field IDs start at 1, and are assigned
     /// to each field in a bundle in a recursive pre-order walk of all fields,
     /// visiting all nested bundle fields.  A field ID of 0 is used to reference
@@ -314,10 +319,20 @@ class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [
     /// Const support.
     bool isConst();
     ElementType getElementTypePreservingConst(size_t index);
+
+    /// Return a 'const' or non-'const' version of this type.
+    }] # name # [{Type getConstType(bool isConst);
+
+  }] # firrtlExtraClassDeclaration;
+}
+
+def BundleImpl : BaseBundleTypeImpl<"Bundle","::circt::firrtl::FIRRTLBaseType", [FieldIDTypeInterface]> {
+  let firrtlExtraClassDeclaration = [{
+    /// Return this type with any flip types recursively removed from itself.
+    FIRRTLBaseType getPassiveType();
   }];
 }
 
-def BundleImpl : BaseBundleTypeImpl<"Bundle","::circt::firrtl::FIRRTLBaseType", [FieldIDTypeInterface]>;
 def OpenBundleImpl : BaseBundleTypeImpl<"OpenBundle","::circt::firrtl::FIRRTLType", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]>;
 
 def FEnumImpl : FIRRTLImplType<"FEnum", [FieldIDTypeInterface]> {

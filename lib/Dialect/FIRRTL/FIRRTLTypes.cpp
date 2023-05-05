@@ -1192,16 +1192,15 @@ BundleType::getElementTypePreservingConst(size_t index) {
 // OpenBundle Type
 //===----------------------------------------------------------------------===//
 
-struct circt::firrtl::detail::OpenBundleTypeStorage
-    : detail::FIRRTLBaseTypeStorage {
+struct circt::firrtl::detail::OpenBundleTypeStorage : mlir::TypeStorage {
   using KeyTy = std::pair<ArrayRef<OpenBundleType::BundleElement>, char>;
 
   OpenBundleTypeStorage(ArrayRef<OpenBundleType::BundleElement> elements,
                         bool isConst)
-      : detail::FIRRTLBaseTypeStorage(isConst),
-        elements(elements.begin(), elements.end()), props{true,  false,
+      : elements(elements.begin(), elements.end()), props{true,  false,
                                                           false, isConst,
-                                                          false, false} {
+                                                          false, false},
+        isConst(static_cast<char>(isConst)) {
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
@@ -1245,7 +1244,9 @@ struct circt::firrtl::detail::OpenBundleTypeStorage
   /// This holds the bits for the type's recursive properties, and can hold a
   /// pointer to a passive version of the type.
   RecursiveTypeProperties props;
-  OpenBundleType passiveType;
+
+  // Whether this is 'const'.
+  char isConst;
 };
 
 OpenBundleType OpenBundleType::get(MLIRContext *context,
@@ -1261,34 +1262,6 @@ auto OpenBundleType::getElements() const -> ArrayRef<BundleElement> {
 /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
 RecursiveTypeProperties OpenBundleType::getRecursiveTypeProperties() const {
   return getImpl()->props;
-}
-
-/// Return this type with any flip types recursively removed from itself.
-FIRRTLType OpenBundleType::getPassiveType() {
-  auto *impl = getImpl();
-
-  // If we've already determined and cached the passive type, use it.
-  if (impl->passiveType)
-    return impl->passiveType;
-
-  // If this type is already passive, use it and remember for next time.
-  if (impl->props.isPassive) {
-    impl->passiveType = *this;
-    return *this;
-  }
-
-  // Otherwise at least one element is non-passive, rebuild a passive version.
-  SmallVector<OpenBundleType::BundleElement, 16> newElements;
-  newElements.reserve(impl->elements.size());
-  for (auto &elt : impl->elements) {
-    newElements.push_back({elt.name, false, mapBaseType(elt.type, [&](auto t) {
-                             return t.getPassiveType();
-                           })});
-  }
-
-  auto passiveType = OpenBundleType::get(getContext(), newElements, isConst());
-  impl->passiveType = passiveType;
-  return passiveType;
 }
 
 OpenBundleType OpenBundleType::getConstType(bool isConst) {
@@ -1547,14 +1520,13 @@ FVectorType::ElementType FVectorType::getElementTypePreservingConst() {
 // OpenVectorType
 //===----------------------------------------------------------------------===//
 
-struct circt::firrtl::detail::OpenVectorTypeStorage
-    : detail::FIRRTLBaseTypeStorage {
+struct circt::firrtl::detail::OpenVectorTypeStorage : mlir::TypeStorage {
   using KeyTy = std::tuple<FIRRTLType, size_t, char>;
 
   OpenVectorTypeStorage(FIRRTLType elementType, size_t numElements,
                         bool isConst)
-      : detail::FIRRTLBaseTypeStorage(isConst), elementType(elementType),
-        numElements(numElements) {
+      : elementType(elementType), numElements(numElements),
+        isConst(static_cast<char>(isConst)) {
     props = elementType.getRecursiveTypeProperties();
     props.containsConst |= isConst;
   }
@@ -1573,10 +1545,8 @@ struct circt::firrtl::detail::OpenVectorTypeStorage
   FIRRTLType elementType;
   size_t numElements;
 
-  /// This holds the bits for the type's recursive properties, and can hold a
-  /// pointer to a passive version of the type.
   RecursiveTypeProperties props;
-  FIRRTLType passiveType;
+  char isConst;
 };
 
 OpenVectorType OpenVectorType::get(FIRRTLType elementType, size_t numElements,
@@ -1593,27 +1563,6 @@ size_t OpenVectorType::getNumElements() const { return getImpl()->numElements; }
 /// Return the recursive properties of the type.
 RecursiveTypeProperties OpenVectorType::getRecursiveTypeProperties() const {
   return getImpl()->props;
-}
-
-/// Return this type with any flip types recursively removed from itself.
-FIRRTLType OpenVectorType::getPassiveType() {
-  auto *impl = getImpl();
-
-  // If we've already determined and cached the passive type, use it.
-  if (impl->passiveType)
-    return impl->passiveType;
-
-  // If this type is already passive, return it and remember for next time.
-  if (impl->elementType.getRecursiveTypeProperties().isPassive)
-    return impl->passiveType = *this;
-
-  // Otherwise, rebuild a passive version.
-  auto basePassive = mapBaseType(
-      getElementType(), [&](auto type) { return type.getPassiveType(); });
-  auto passiveType =
-      OpenVectorType::get(basePassive, getNumElements(), isConst());
-  impl->passiveType = passiveType;
-  return passiveType;
 }
 
 OpenVectorType OpenVectorType::getConstType(bool isConst) {
