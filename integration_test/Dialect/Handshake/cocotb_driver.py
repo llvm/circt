@@ -100,7 +100,7 @@ def main():
     if args.simulator == "icarus":
       simhandler = _IVerilogHandler()
     else:
-      raise Exception(f"Unknown simulator: {simulator}")
+      raise Exception(f"Unknown simulator: {args.simulator}")
   except Exception as e:
     raise Exception(f"Failed to initialize simulator handler: {e}")
 
@@ -109,7 +109,6 @@ def main():
   if simhandler:
     compileArgs += simhandler.extra_compile_args(objDir)
 
-  testmodule = "test_" + args.topLevel
   run(simulator=args.simulator,
       module=args.pythonModule,
       toplevel=args.topLevel,

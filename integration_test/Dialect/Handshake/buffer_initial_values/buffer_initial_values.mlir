@@ -1,19 +1,10 @@
 // REQUIRES: iverilog,cocotb
 
-// This test is executed with all different buffering strategies
-
-// RUN: hlstool %s --dynamic-firrtl --ir-input-level 1 --buffering-strategy=all --verilog --lowering-options=disallowLocalVariables > %t.sv && \
-// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=buffer_initial_values --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
-
-// RUN: hlstool %s --dynamic-firrtl --ir-input-level 1 --buffering-strategy=allFIFO --verilog --lowering-options=disallowLocalVariables > %t.sv && \
-// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=buffer_initial_values --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
-
-// RUN: hlstool %s --dynamic-firrtl --ir-input-level 1 --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables > %t.sv && \
-// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=buffer_initial_values --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
-
 // RUN: hlstool %s --dynamic-hw --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables > %t.sv && \
 // RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=buffer_initial_values --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
 
+// RUN: hlstool %s --dynamic-hw --buffering-strategy=all --verilog --lowering-options=disallowLocalVariables > %t.sv && \
+// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=buffer_initial_values --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
 
 // CHECK: ** TEST
 // CHECK: ** TESTS=[[N:.*]] PASS=[[N]] FAIL=0 SKIP=0
