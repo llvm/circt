@@ -3,6 +3,9 @@
 // RUN: hlstool %s --dynamic-hw --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables > %t.sv && \
 // RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=task_pipelining --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
 
+// RUN: hlstool %s --dynamic-hw --buffering-strategy=all --verilog --lowering-options=disallowLocalVariables > %t.sv && \
+// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=task_pipelining --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
+
 // Locking the circt should yield the same result
 // RUN: hlstool %s --dynamic-hw --buffering-strategy=all --dynamic-parallelism=locking --verilog --lowering-options=disallowLocalVariables > %t.sv && \
 // RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=task_pipelining --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
