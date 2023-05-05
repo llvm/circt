@@ -2221,7 +2221,7 @@ void NodeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 LogicalResult NodeOp::inferReturnTypes(
     mlir::MLIRContext *context, std::optional<mlir::Location> location,
     ::mlir::ValueRange operands, ::mlir::DictionaryAttr attributes,
-    ::mlir::RegionRange regions,
+    ::mlir::OpaqueProperties properties, ::mlir::RegionRange regions,
     ::llvm::SmallVectorImpl<::mlir::Type> &inferredReturnTypes) {
   if (operands.empty())
     return failure();
@@ -2572,7 +2572,8 @@ void MatchOp::build(OpBuilder &builder, OperationState &result, Value input,
 /// inferred type rather than pushing into the `results` vector.
 LogicalResult impl::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, RegionRange regions, SmallVectorImpl<Type> &results,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    RegionRange regions, SmallVectorImpl<Type> &results,
     llvm::function_ref<FIRRTLType(ValueRange, ArrayRef<NamedAttribute>,
                                   std::optional<Location>)>
         callback) {
@@ -3043,8 +3044,8 @@ ParseResult SubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<Type> inferredReturnTypes;
   if (failed(SubfieldOp::inferReturnTypes(
           context, result.location, result.operands,
-          result.attributes.getDictionary(context), result.regions,
-          inferredReturnTypes)))
+          result.attributes.getDictionary(context), result.getRawProperties(),
+          result.regions, inferredReturnTypes)))
     return failure();
   result.addTypes(inferredReturnTypes);
 
@@ -3082,10 +3083,10 @@ ParseResult SubtagOp::parse(OpAsmParser &parser, OperationState &result) {
       IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
 
   SmallVector<Type> inferredReturnTypes;
-  if (failed(
-          SubtagOp::inferReturnTypes(context, result.location, result.operands,
-                                     result.attributes.getDictionary(context),
-                                     result.regions, inferredReturnTypes)))
+  if (failed(SubtagOp::inferReturnTypes(
+          context, result.location, result.operands,
+          result.attributes.getDictionary(context), result.getRawProperties(),
+          result.regions, inferredReturnTypes)))
     return failure();
   result.addTypes(inferredReturnTypes);
 

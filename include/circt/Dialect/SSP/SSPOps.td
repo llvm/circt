@@ -49,10 +49,10 @@ def InstanceOp : SSPOp<"instance",
   }];
 
   let arguments = (ins OptionalAttr<SymbolNameAttr>:$sym_name, StrAttr:$problemName,
-                       OptionalAttr<ArrayAttr>:$properties);
+                       OptionalAttr<ArrayAttr>:$sspProperties);
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
-    ($sym_name^)? `of` $problemName custom<Properties>($properties) $body attr-dict
+    ($sym_name^)? `of` $problemName custom<SSPProperties>($sspProperties) $body attr-dict
   }];
   
   let hasVerifier = true;
@@ -77,10 +77,10 @@ def InstanceOp : SSPOp<"instance",
   let skipDefaultBuilders = true;
   let builders = [
     OpBuilder<(ins "::mlir::StringAttr":$problemName,
-                   CArg<"::mlir::ArrayAttr", "::mlir::ArrayAttr()">:$properties), [{
+                   CArg<"::mlir::ArrayAttr", "::mlir::ArrayAttr()">:$sspProperties), [{
       $_state.addAttribute($_builder.getStringAttr("problemName"), problemName);
-      if (properties)
-        $_state.addAttribute($_builder.getStringAttr("properties"), properties);
+      if (sspProperties)
+        $_state.addAttribute($_builder.getStringAttr("sspProperties"), sspProperties);
       ::mlir::Region* region = $_state.addRegion();
       region->push_back(new ::mlir::Block());
     }]>
@@ -169,8 +169,8 @@ def OperatorTypeOp : SSPOp<"operator_type",
     ```
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name, OptionalAttr<ArrayAttr>:$properties);
-  let assemblyFormat = "$sym_name custom<Properties>($properties) attr-dict";
+  let arguments = (ins SymbolNameAttr:$sym_name, OptionalAttr<ArrayAttr>:$sspProperties);
+  let assemblyFormat = "$sym_name custom<SSPProperties>($sspProperties) attr-dict";
 }
 
 def OperationOp : SSPOp<"operation",
@@ -218,7 +218,7 @@ def OperationOp : SSPOp<"operation",
   let arguments = (ins Variadic<NoneType>:$operands,
                        OptionalAttr<SymbolNameAttr>:$sym_name,
                        OptionalAttr<DependenceArrayAttr>:$dependences,
-                       OptionalAttr<ArrayAttr>:$properties);
+                       OptionalAttr<ArrayAttr>:$sspProperties);
   let results = (outs Variadic<NoneType>:$results);
 
   let hasCustomAssemblyFormat = true;
@@ -238,15 +238,15 @@ def OperationOp : SSPOp<"operation",
                    "::mlir::ValueRange":$operands,
                    CArg<"::mlir::StringAttr", "::mlir::StringAttr()">:$sym_name,
                    CArg<"::mlir::ArrayAttr", "::mlir::ArrayAttr()">:$dependences,
-                   CArg<"::mlir::ArrayAttr", "::mlir::ArrayAttr()">:$properties), [{
+                   CArg<"::mlir::ArrayAttr", "::mlir::ArrayAttr()">:$sspProperties), [{
       $_state.addTypes(::llvm::SmallVector<::mlir::Type>(numResults, $_builder.getNoneType()));
       $_state.addOperands(operands);
       if (sym_name)
         $_state.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), sym_name);
       if (dependences)
         $_state.addAttribute($_builder.getStringAttr("dependences"), dependences);
-      if (properties)
-        $_state.addAttribute($_builder.getStringAttr("properties"), properties);
+      if (sspProperties)
+        $_state.addAttribute($_builder.getStringAttr("sspProperties"), sspProperties);
     }]>
   ];
 }

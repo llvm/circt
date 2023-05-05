@@ -1102,6 +1102,7 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
       SmallVector<Type, 2> types;
       if (failed(op.inferReturnTypes(op->getContext(), op->getLoc(),
                                      op->getOperands(), op->getAttrDictionary(),
+                                     op->getPropertiesStorage(),
                                      op->getRegions(), types)))
         return failure();
 
