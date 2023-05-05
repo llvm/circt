@@ -67,9 +67,13 @@ def AnalogType : FIRRTLDialectType<CPred<"$_self.isa<AnalogType>()">,
 
 def BundleType : FIRRTLDialectType<CPred<"$_self.isa<BundleType>()">,
  "BundleType", "::circt::firrtl::BundleType">;
+def OpenBundleType : FIRRTLDialectType<CPred<"$_self.isa<OpenBundleType>()">,
+ "OpenBundleType", "::circt::firrtl::OpenBundleType">;
 
 def FVectorType : FIRRTLDialectType<CPred<"$_self.isa<FVectorType>()">,
   "FVectorType", "::circt::firrtl::FVectorType">;
+def OpenVectorType : FIRRTLDialectType<CPred<"$_self.isa<OpenVectorType>()">,
+  "OpenVectorType", "::circt::firrtl::OpenVectorType">;
 
 def FEnumType : FIRRTLDialectType<CPred<"$_self.isa<FEnumType>()">,
  "FEnumType", "::circt::firrtl::FEnumType">;
