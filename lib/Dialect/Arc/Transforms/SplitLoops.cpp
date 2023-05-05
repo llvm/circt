@@ -19,7 +19,6 @@ using namespace circt;
 using namespace arc;
 using namespace hw;
 
-using llvm::SetVector;
 using llvm::SmallSetVector;
 
 //===----------------------------------------------------------------------===//

@@ -35,36 +35,37 @@
 // classes here should be imported from the `mlir` namespace, not the `llvm`
 // namespace.
 namespace circt {
-using mlir::APFloat;
-using mlir::APInt;
-using mlir::APSInt;
-using mlir::ArrayRef;
-using mlir::BitVector;
-using mlir::cast;
-using mlir::cast_or_null;
-using mlir::DenseMap;
-using mlir::DenseMapInfo;
-using mlir::DenseSet;
-using mlir::dyn_cast;
-using mlir::dyn_cast_or_null;
-using mlir::function_ref;
-using mlir::isa;
-using mlir::isa_and_nonnull;
-using mlir::iterator_range;
-using mlir::MutableArrayRef;
-using mlir::PointerUnion;
-using mlir::raw_ostream;
-using mlir::SmallPtrSet;
-using mlir::SmallPtrSetImpl;
-using mlir::SmallString;
-using mlir::SmallVector;
-using mlir::SmallVectorImpl;
-using mlir::StringLiteral;
-using mlir::StringRef;
-using mlir::StringSet;
-using mlir::TinyPtrVector;
-using mlir::Twine;
-using mlir::TypeSwitch;
+using mlir::APFloat;          // NOLINT(misc-unused-using-decls)
+using mlir::APInt;            // NOLINT(misc-unused-using-decls)
+using mlir::APSInt;           // NOLINT(misc-unused-using-decls)
+using mlir::ArrayRef;         // NOLINT(misc-unused-using-decls)
+using mlir::BitVector;        // NOLINT(misc-unused-using-decls)
+using mlir::cast;             // NOLINT(misc-unused-using-decls)
+using mlir::cast_or_null;     // NOLINT(misc-unused-using-decls)
+using mlir::DenseMap;         // NOLINT(misc-unused-using-decls)
+using mlir::DenseMapInfo;     // NOLINT(misc-unused-using-decls)
+using mlir::DenseSet;         // NOLINT(misc-unused-using-decls)
+using mlir::dyn_cast;         // NOLINT(misc-unused-using-decls)
+using mlir::dyn_cast_or_null; // NOLINT(misc-unused-using-decls)
+using mlir::function_ref;     // NOLINT(misc-unused-using-decls)
+using mlir::isa;              // NOLINT(misc-unused-using-decls)
+using mlir::isa_and_nonnull;  // NOLINT(misc-unused-using-decls)
+using mlir::iterator_range;   // NOLINT(misc-unused-using-decls)
+using mlir::MutableArrayRef;  // NOLINT(misc-unused-using-decls)
+using mlir::PointerUnion;     // NOLINT(misc-unused-using-decls)
+using mlir::raw_ostream;      // NOLINT(misc-unused-using-decls)
+using mlir::SetVector;        // NOLINT(misc-unused-using-decls)
+using mlir::SmallPtrSet;      // NOLINT(misc-unused-using-decls)
+using mlir::SmallPtrSetImpl;  // NOLINT(misc-unused-using-decls)
+using mlir::SmallString;      // NOLINT(misc-unused-using-decls)
+using mlir::SmallVector;      // NOLINT(misc-unused-using-decls)
+using mlir::SmallVectorImpl;  // NOLINT(misc-unused-using-decls)
+using mlir::StringLiteral;    // NOLINT(misc-unused-using-decls)
+using mlir::StringRef;        // NOLINT(misc-unused-using-decls)
+using mlir::StringSet;        // NOLINT(misc-unused-using-decls)
+using mlir::TinyPtrVector;    // NOLINT(misc-unused-using-decls)
+using mlir::Twine;            // NOLINT(misc-unused-using-decls)
+using mlir::TypeSwitch;       // NOLINT(misc-unused-using-decls)
 } // namespace circt
 
 // Forward declarations of LLVM classes to be imported in to the circt
@@ -79,8 +80,8 @@ class SmallSet;
 
 // Import things we want into our namespace.
 namespace circt {
-using llvm::SmallDenseMap;
-using llvm::SmallSet;
+using llvm::SmallDenseMap; // NOLINT(misc-unused-using-decls)
+using llvm::SmallSet;      // NOLINT(misc-unused-using-decls)
 } // namespace circt
 
 // Forward declarations of classes to be imported in to the circt namespace.

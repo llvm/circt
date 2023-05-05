@@ -78,6 +78,19 @@ def InferStateProperties : Pass<"arc-infer-state-properties",
   let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
 }
 
+def LatencyRetiming : Pass<"arc-latency-retiming", "mlir::ModuleOp"> {
+  let summary = "Push latencies through the design";
+  let constructor = "circt::arc::createLatencyRetimingPass()";
+  let dependentDialects = ["arc::ArcDialect"];
+
+  let statistics = [
+    Statistic<"numOpsRemoved", "num-ops-removed",
+      "Number of zero-latency passthrough states removed">,
+    Statistic<"latencyUnitsSaved", "latency-units-saved",
+      "Number of latency units saved by merging them in a successor state">
+  ];
+}
+
 def LegalizeStateUpdate : Pass<"arc-legalize-state-update", "mlir::ModuleOp"> {
   let summary = "Insert temporaries such that state reads don't see writes";
   let constructor = "circt::arc::createLegalizeStateUpdatePass()";
