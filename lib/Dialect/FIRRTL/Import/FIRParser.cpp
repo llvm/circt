@@ -3157,8 +3157,9 @@ ParseResult FIRStmtParser::parseNode() {
 
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
-  // TODO: isConst -> hasConst.
-  bool forceable = !isConst(initializer.getType());
+
+  bool forceable =
+      !!firrtl::detail::getForceableResultType(true, initializer.getType());
   auto result =
       builder.create<NodeOp>(initializer, id, NameKindEnum::InterestingName,
                              annotations, sym, forceable);
@@ -3187,8 +3188,7 @@ ParseResult FIRStmtParser::parseWire() {
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
 
-  // TODO: isConst -> hasConst.
-  bool forceable = !isConst(type);
+  bool forceable = !!firrtl::detail::getForceableResultType(true, type);
   auto result = builder.create<WireOp>(type, id, NameKindEnum::InterestingName,
                                        annotations, sym, forceable);
   return moduleContext.addSymbolEntry(id, result.getResult(),
@@ -3280,8 +3280,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   ArrayAttr annotations = getConstants().emptyArrayAttr;
   Value result;
   StringAttr sym = {};
-  // TODO: isConst -> hasConst.
-  bool forceable = !isConst(type);
+  bool forceable = !!firrtl::detail::getForceableResultType(true, type);
   if (resetSignal)
     result = builder
                  .create<RegResetOp>(type, clock, resetSignal, resetValue, id,
