@@ -1,8 +1,4 @@
-set(LLVM_OPTIONAL_SOURCES
-  HWReductions.cpp
-)
-
-add_circt_dialect_library(CIRCTHW
+set(srcs
   CustomDirectiveImpl.cpp
   HWAttributes.cpp
   HWDialect.cpp
@@ -15,6 +11,15 @@ add_circt_dialect_library(CIRCTHW
   InstanceImplementation.cpp
   ModuleImplementation.cpp
   InnerSymbolTable.cpp
+)
+
+set(LLVM_OPTIONAL_SOURCES
+  ${srcs}
+  HWReductions.cpp
+)
+
+add_circt_dialect_library(CIRCTHW
+  ${srcs}
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/HW

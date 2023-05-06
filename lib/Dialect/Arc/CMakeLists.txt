@@ -1,12 +1,17 @@
-set(LLVM_OPTIONAL_SOURCES
-  ArcReductions.cpp
-)
-
-add_circt_dialect_library(CIRCTArc
+set(srcs
   ArcDialect.cpp
   ArcFolds.cpp
   ArcOps.cpp
   ArcTypes.cpp
+)
+
+set(LLVM_OPTIONAL_SOURCES
+  ${srcs}
+  ArcReductions.cpp
+)
+
+add_circt_dialect_library(CIRCTArc
+  ${srcs}
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Arc
