@@ -40,6 +40,8 @@ public:
       if (ifOp.getResults().empty())
         resetMap[ifOp.getCondition()].push_back(ifOp);
 
+    // TODO: Check that conflicting memory effects aren't being reordered
+
     // Combine IfOps
     bool changed = false;
     for (auto &[cond, oldOps] : resetMap) {
