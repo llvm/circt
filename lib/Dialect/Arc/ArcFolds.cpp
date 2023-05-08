@@ -124,6 +124,20 @@ LogicalResult MemoryWriteOp::canonicalize(MemoryWriteOp op,
 }
 
 //===----------------------------------------------------------------------===//
+// StorageGetOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StorageGetOp::canonicalize(StorageGetOp op,
+                                         PatternRewriter &rewriter) {
+  if (auto pred = op.getStorage().getDefiningOp<StorageGetOp>()) {
+    op.getStorageMutable().assign(pred.getStorage());
+    op.setOffset(op.getOffset() + pred.getOffset());
+    return success();
+  }
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
 // ClockDomainOp
 //===----------------------------------------------------------------------===//
 
