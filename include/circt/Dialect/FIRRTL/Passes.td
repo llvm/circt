@@ -97,8 +97,8 @@ def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
 def RegisterOptimizer : Pass<"firrtl-register-optimizer", "firrtl::FModuleOp"> {
   let summary = "Optimizer Registers";
   let description = [{
-    This pass applies classic FIRRTL register optimizations.  These 
-    optimizations are isolated to this pass as they can change the visible 
+    This pass applies classic FIRRTL register optimizations.  These
+    optimizations are isolated to this pass as they can change the visible
     behavior of the register, especially before reset.
   }];
   let constructor = "circt::firrtl::createRegisterOptimizerPass()";
@@ -689,6 +689,19 @@ def VBToBV : Pass<"firrtl-vb-to-bv", "firrtl::CircuitOp"> {
     vectors.
   }];
   let constructor = "circt::firrtl::createVBToBVPass()";
+}
+
+def DropConst : InterfacePass<"firrtl-drop-const", "firrtl::FModuleLike"> {
+  let summary = "Check usage of and drop 'const' modifier from types";
+  let description = [{
+    This pass checks assignments of 'const' values, ensuring that 'const'
+    assignment is not dependent on non-'const' when conditions.
+
+    Once 'const' usage is checked, all 'const' types are replaced with their 
+    non-'const' versions, simplifying downstream passes so that they do not 
+    need to take 'const' into account.
+  }];
+  let constructor = "circt::firrtl::createDropConstPass()";
 }
 
 def FinalizeIR : Pass<"firrtl-finalize-ir", "mlir::ModuleOp"> {

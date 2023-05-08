@@ -22,12 +22,12 @@ class FIRRTLImplType<string name,
                      list<Trait> traits = [],
                      string baseCppClass = "::circt::firrtl::FIRRTLBaseType">
     : TypeDef<FIRRTLDialect, name, traits, baseCppClass> {
-  // Storage classes must be defined in C++ and 
+  // Storage classes must be defined in C++ and
   // inherit from FIRRTLBaseTypeStorage
   let genStorageClass = false;
-  
-  // MLIR generates awkward accessor "getIsConst" for the "isConst" parameter, 
-  // which is common on FIRRTLBaseType anyway, so we generate the other 
+
+  // MLIR generates awkward accessor "getIsConst" for the "isConst" parameter,
+  // which is common on FIRRTLBaseType anyway, so we generate the other
   // accessors manually
   let genAccessors = false;
 }
@@ -212,6 +212,9 @@ def FVectorImpl : BaseVectorTypeImpl<"FVector","::circt::firrtl::FIRRTLBaseType"
   let firrtlExtraClassDeclaration = [{
     /// Return this type with any flip types recursively removed from itself.
     FIRRTLBaseType getPassiveType();
+
+    /// Return this type with a 'const' modifiers dropped
+    FVectorType getAllConstDroppedType();
   }];
 }
 
@@ -331,6 +334,9 @@ def BundleImpl : BaseBundleTypeImpl<"Bundle","::circt::firrtl::FIRRTLBaseType", 
   let firrtlExtraClassDeclaration = [{
     /// Return this type with any flip types recursively removed from itself.
     FIRRTLBaseType getPassiveType();
+
+    /// Return this type with a 'const' modifiers dropped
+    BundleType getAllConstDroppedType();
   }];
 }
 
@@ -371,6 +377,9 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [FieldIDTypeInterface]> {
     size_t getNumElements() { return getElements().size(); }
 
     FEnumType getConstType(bool isConst);
+
+    /// Return this type with a 'const' modifiers dropped
+    FEnumType getAllConstDroppedType();
 
     /// Look up an element's index by name.  This returns None on failure.
     std::optional<unsigned> getElementIndex(StringAttr name);
@@ -450,7 +459,7 @@ def RefImpl : FIRRTLImplType<"Ref",
 
     Values of this type are used to capture dataflow paths,
     and do not represent a circuit element or entity.
-    
+
     Generally read-only (probe), optionally forceable (rwprobe).
   }];
   let parameters = (ins TypeParameter<"::circt::firrtl::FIRRTLBaseType",

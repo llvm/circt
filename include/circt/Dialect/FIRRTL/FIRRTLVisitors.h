@@ -54,7 +54,7 @@ public:
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
             RefResolveOp, RefSubOp,
             // Casts to deal with weird stuff
-            UninferredResetCastOp, UninferredWidthCastOp,
+            UninferredResetCastOp, UninferredWidthCastOp, ConstCastOp,
             mlir::UnrealizedConversionCastOp>([&](auto expr) -> ResultType {
           return thisCast->visitExpr(expr, args...);
         })
@@ -174,6 +174,7 @@ public:
   HANDLE(HWStructCastOp, Unhandled);
   HANDLE(UninferredResetCastOp, Unhandled);
   HANDLE(UninferredWidthCastOp, Unhandled);
+  HANDLE(ConstCastOp, Unhandled);
   HANDLE(mlir::UnrealizedConversionCastOp, Unhandled);
   HANDLE(BitCastOp, Unhandled);
 #undef HANDLE
