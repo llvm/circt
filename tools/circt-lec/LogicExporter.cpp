@@ -225,9 +225,9 @@ LogicExporter::Visitor::visitInvalidTypeOp(mlir::Operation *op,
     return mlir::success();                                                    \
   }
 
-visitVariadicCombOp(Add, comb.add, circt::comb::AddOp &);
+visitVariadicCombOp(Add, comb.add, circt::comb::AddOp &)
 
-visitVariadicCombOp(And, comb.and, circt::comb::AndOp &);
+visitVariadicCombOp(And, comb.and, circt::comb::AndOp &)
 
 mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::ConcatOp &op,
@@ -241,9 +241,9 @@ LogicExporter::Visitor::visitComb(circt::comb::ConcatOp &op,
   return mlir::success();
 }
 
-visitBinaryCombOp(DivS, comb.divs, circt::comb::DivSOp &);
+visitBinaryCombOp(DivS, comb.divs, circt::comb::DivSOp &)
 
-visitBinaryCombOp(DivU, comb.divu, circt::comb::DivUOp &);
+visitBinaryCombOp(DivU, comb.divu, circt::comb::DivUOp &)
 
 mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::ExtractOp &op,
@@ -278,11 +278,11 @@ LogicExporter::Visitor::visitComb(circt::comb::ICmpOp &op,
   return comparisonResult;
 }
 
-visitBinaryCombOp(ModS, comb.mods, circt::comb::ModSOp &);
+visitBinaryCombOp(ModS, comb.mods, circt::comb::ModSOp &)
 
-visitBinaryCombOp(ModU, comb.modu, circt::comb::ModUOp &);
+visitBinaryCombOp(ModU, comb.modu, circt::comb::ModUOp &)
 
-visitVariadicCombOp(Mul, comb.mul, circt::comb::MulOp &);
+visitVariadicCombOp(Mul, comb.mul, circt::comb::MulOp &)
 
 mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::MuxOp &op,
@@ -301,9 +301,9 @@ LogicExporter::Visitor::visitComb(circt::comb::MuxOp &op,
   return mlir::success();
 }
 
-visitVariadicCombOp(Or, comb.or, circt::comb::OrOp &);
+visitVariadicCombOp(Or, comb.or, circt::comb::OrOp &)
 
-visitUnaryCombOp(Parity, comb.parity, circt::comb::ParityOp &);
+visitUnaryCombOp(Parity, comb.parity, circt::comb::ParityOp &)
 
 mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::ReplicateOp &op,
@@ -318,15 +318,15 @@ LogicExporter::Visitor::visitComb(circt::comb::ReplicateOp &op,
   return mlir::success();
 }
 
-visitBinaryCombOp(Shl, comb.shl, circt::comb::ShlOp &);
+visitBinaryCombOp(Shl, comb.shl, circt::comb::ShlOp &)
 
-visitBinaryCombOp(ShrS, comb.shrs, circt::comb::ShrSOp &);
+visitBinaryCombOp(ShrS, comb.shrs, circt::comb::ShrSOp &)
 
-visitBinaryCombOp(ShrU, comb.shru, circt::comb::ShrUOp &);
+visitBinaryCombOp(ShrU, comb.shru, circt::comb::ShrUOp &)
 
-visitVariadicCombOp(Sub, comb.sub, circt::comb::SubOp &);
+visitVariadicCombOp(Sub, comb.sub, circt::comb::SubOp &)
 
-visitVariadicCombOp(Xor, comb.xor, circt::comb::XorOp &);
+visitVariadicCombOp(Xor, comb.xor, circt::comb::XorOp &)
 
 //===----------------------------------------------------------------------===//
 // Additional Visitor implementations

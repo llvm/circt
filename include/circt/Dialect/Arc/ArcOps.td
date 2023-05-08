@@ -222,6 +222,12 @@ def StateOp : ArcOp<"state", [
     mlir::CallInterfaceCallable getCallableForCallee() {
       return (*this)->getAttrOfType<mlir::SymbolRefAttr>("arc");
     }
+
+    /// Set the callee for this operation.
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getArcAttrName(), callee.get<mlir::SymbolRefAttr>());
+    }
+
   }];
 }
 
@@ -250,6 +256,12 @@ def CallOp : ArcOp<"call", [
     mlir::CallInterfaceCallable getCallableForCallee() {
       return (*this)->getAttrOfType<mlir::SymbolRefAttr>("arc");
     }
+
+    /// Set the callee for this operation.
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getArcAttrName(), callee.get<mlir::SymbolRefAttr>());
+    }
+
   }];
 }
 

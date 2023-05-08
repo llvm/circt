@@ -33,7 +33,7 @@
 class LogicExporter {
 public:
   LogicExporter(llvm::StringRef moduleName, Solver::Circuit *circuit)
-      : moduleName(moduleName), circuit(circuit){};
+      : moduleName(moduleName), circuit(circuit){}
 
   /// Initializes the exporting by visiting the builtin module.
   mlir::LogicalResult run(mlir::ModuleOp &module);
