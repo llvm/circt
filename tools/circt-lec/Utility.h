@@ -28,17 +28,17 @@ namespace lec {
 inline mlir::raw_indented_ostream &dbgs() {
   static auto stream = mlir::raw_indented_ostream(llvm::dbgs());
   return stream;
-};
+}
 
 inline mlir::raw_indented_ostream &errs() {
   static auto stream = mlir::raw_indented_ostream(llvm::errs());
   return stream;
-};
+}
 
 inline mlir::raw_indented_ostream &outs() {
   static auto stream = mlir::raw_indented_ostream(llvm::outs());
   return stream;
-};
+}
 
 /// RAII struct to indent the output streams.
 struct Scope {
