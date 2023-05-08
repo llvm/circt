@@ -137,8 +137,7 @@ public:
 
   LogicalResult visitUnhandledOp(Operation *op) {
     auto notOpenAggType = [](auto type) {
-      auto ftype = dyn_cast<FIRRTLType>(type);
-      return !ftype || isa<RefType>(type) || !ftype.containsReference();
+      return !isa<OpenBundleType, OpenVectorType>(type);
     };
     if (!llvm::all_of(op->getOperandTypes(), notOpenAggType) ||
         !llvm::all_of(op->getResultTypes(), notOpenAggType))
