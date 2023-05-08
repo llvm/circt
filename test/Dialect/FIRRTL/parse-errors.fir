@@ -615,3 +615,18 @@ FIRRTL version 3.0.0
 circuit IllegalLiteral:
   module IllegalLiteral:
     input `b: UInt<1> ; expected-error {{unterminated literal identifier}}
+
+;// -----
+
+circuit WireProbe:
+  module WireProbe:
+    wire x : Probe<UInt<1>> ; expected-error {{wire must have base type}}
+
+;// -----
+
+circuit NodeProbe:
+  extmodule Ref:
+    output x : Probe<UInt<1>>
+  module NodeProbe:
+    inst r of Ref
+    node n = r.x ; expected-error {{Node cannot be analog and must be passive or passive under a flip}}
