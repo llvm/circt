@@ -463,7 +463,7 @@ def RootOutputOp : ArcOp<"root_output", [
 
 def AllocatableType : AnyTypeOf<[StateType, MemoryType, StorageType]>;
 
-def StorageGetOp : ArcOp<"storage.get", [MemoryEffects<[MemRead]>]> {
+def StorageGetOp : ArcOp<"storage.get", [Pure]> {
   let summary = "Access an allocated state, memory, or storage slice";
   let arguments = (ins StorageType:$storage, I32Attr:$offset);
   let results = (outs AllocatableType:$result);
@@ -471,6 +471,7 @@ def StorageGetOp : ArcOp<"storage.get", [MemoryEffects<[MemRead]>]> {
     $storage `[` $offset `]` attr-dict
     `:` qualified(type($storage)) `->` type($result)
   }];
+  let hasCanonicalizeMethod = 1;
 }
 
 //===----------------------------------------------------------------------===//

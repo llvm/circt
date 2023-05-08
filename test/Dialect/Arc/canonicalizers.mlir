@@ -142,3 +142,18 @@ hw.module @clockDomainCanonicalizer(%clk: i1, %data: i32) -> (out0: i32, out1: i
 arc.define @identityi1(%arg0: i1) -> i1 {
   arc.output %arg0 : i1
 }
+
+// CHECK-LABEL: arc.model "StorageGetCanonicalizers"
+arc.model "StorageGetCanonicalizers" {
+// CHECK-NEXT: ^bb
+^bb0(%arg0: !arc.storage<512>):
+  %0 = arc.storage.get %arg0[16] : !arc.storage<512> -> !arc.storage<16>
+  %1 = arc.storage.get %0[0] : !arc.storage<16> -> !arc.state<i64>
+  %2 = arc.storage.get %0[8] : !arc.storage<16> -> !arc.state<i64>
+  %3 = arc.state_read %1 : <i64>
+  arc.state_write %2 = %3 : <i64>
+  // CHECK-NEXT: [[V0:%.+]] = arc.storage.get %arg0[16] : !arc.storage<512> -> !arc.state<i64>
+  // CHECK-NEXT: [[V1:%.+]] = arc.storage.get %arg0[24] : !arc.storage<512> -> !arc.state<i64>
+  // CHECK-NEXT: [[V2:%.+]] = arc.state_read [[V0]] : <i64>
+  // CHECK-NEXT: arc.state_write [[V1]] = [[V2]] : <i64>
+}
