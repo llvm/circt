@@ -100,4 +100,10 @@ firrtl.circuit "Bundle" {
     firrtl.strictconnect %1, %3 : !firrtl.uint<1>
     firrtl.strictconnect %0, %2 : !firrtl.vector<uint<1>, 2>
   }
+
+// CHECK-LABEL: extmodule @ExtProbes
+  firrtl.extmodule @ExtProbes(
+    out r: !firrtl.openbundle<a: probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>, b: probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>>,
+    out mixed: !firrtl.openbundle<a: uint<1>, x flip: openvector<openbundle<p flip: probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>, data flip: uint<1>>, 2>, b: vector<uint<1>, 2>>,
+    out nohw: !firrtl.openbundle<x: openvector<openbundle<p: probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>>, 2>>) attributes {convention = #firrtl<convention scalarized>}
 }
