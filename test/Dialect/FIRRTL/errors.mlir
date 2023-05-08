@@ -1549,3 +1549,24 @@ firrtl.circuit "UninferredWidthCastNonConstToConst" {
   }
 }
 
+// -----
+
+// Primitive ops with all 'const' operands must have a 'const' result type
+firrtl.circuit "PrimOpConstOperandsNonConstConstResult" {
+firrtl.module @PrimOpConstOperandsNonConstConstResult(in %a: !firrtl.const.uint<4>, in %b: !firrtl.const.uint<4>) {
+  // expected-error @below {{failed to infer returned types}}
+  // expected-error @+1 {{'firrtl.and' op inferred type(s) '!firrtl.const.uint<4>' are incompatible with return type(s) of operation '!firrtl.uint<4>'}}
+  %0 = firrtl.and %a, %b : (!firrtl.const.uint<4>, !firrtl.const.uint<4>) -> !firrtl.uint<4>
+}
+}
+
+// -----
+
+// Primitive ops with mixed 'const' operands must have a non-'const' result type
+firrtl.circuit "PrimOpMixedConstOperandsConstResult" {
+firrtl.module @PrimOpMixedConstOperandsConstResult(in %a: !firrtl.const.uint<4>, in %b: !firrtl.uint<4>) {
+  // expected-error @below {{failed to infer returned types}}
+  // expected-error @+1 {{'firrtl.and' op inferred type(s) '!firrtl.uint<4>' are incompatible with return type(s) of operation '!firrtl.const.uint<4>'}}
+  %0 = firrtl.and %a, %b : (!firrtl.const.uint<4>, !firrtl.uint<4>) -> !firrtl.const.uint<4>
+}
+}

@@ -442,4 +442,39 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:    parameter DEPTH = 32.42
   // CHECK-NEXT:    parameter FORMAT = "xyz_timeout=%d\n"
   // CHECK-NEXT:    parameter WIDTH = 32
+
+  // CHECK-LABEL: module ConstTypes :
+  firrtl.module @ConstTypes(
+    // CHECK-NEXT: input a00 : const Clock
+    // CHECK-NEXT: input a01 : const Reset
+    // CHECK-NEXT: input a02 : const AsyncReset
+    // CHECK-NEXT: input a03 : const UInt
+    // CHECK-NEXT: input a04 : const SInt
+    // CHECK-NEXT: input a05 : const Analog
+    // CHECK-NEXT: input a06 : const UInt<42>
+    // CHECK-NEXT: input a07 : const SInt<42>
+    // CHECK-NEXT: input a08 : const Analog<42>
+    // CHECK-NEXT: input a09 : const { a : UInt, flip b : UInt }
+    // CHECK-NEXT: input a10 : { a : const UInt, flip b : UInt }
+    // CHECK-NEXT: input a11 : const UInt[42]
+    // CHECK-NEXT: output b0 : const UInt<42>
+    in %a00: !firrtl.const.clock,
+    in %a01: !firrtl.const.reset,
+    in %a02: !firrtl.const.asyncreset,
+    in %a03: !firrtl.const.uint,
+    in %a04: !firrtl.const.sint,
+    in %a05: !firrtl.const.analog,
+    in %a06: !firrtl.const.uint<42>,
+    in %a07: !firrtl.const.sint<42>,
+    in %a08: !firrtl.const.analog<42>,
+    in %a09: !firrtl.const.bundle<a: uint, b flip: uint>,
+    in %a10: !firrtl.bundle<a: const.uint, b flip: uint>,
+    in %a11: !firrtl.const.vector<uint, 42>,
+    out %b0: !firrtl.const.uint<42>
+  ) {
+    // Make sure literals strip the 'const' prefix
+    // CHECK: b0 <= UInt<42>(1)
+    %c = firrtl.constant 1 : !firrtl.const.uint<42>
+    firrtl.strictconnect %b0, %c : !firrtl.const.uint<42>
+  }
 }

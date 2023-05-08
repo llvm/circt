@@ -58,6 +58,10 @@ static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
       }
     }
 
+    bool emitConst = type.isConst();
+    if (emitConst)
+      os << "Const(";
+
     os << name;
 
     if (emitParentheses)
@@ -67,6 +71,9 @@ static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
       return failure();
 
     if (emitParentheses)
+      os << ')';
+
+    if (emitConst)
       os << ')';
 
     if (emitDirection)

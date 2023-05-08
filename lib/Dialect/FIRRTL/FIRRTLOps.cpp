@@ -3495,11 +3495,14 @@ FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,
 
 /// If LHS and RHS are both UInt or SInt types, the return true and fill in the
 /// width of them if known.  If unknown, return -1 for the widths.
+/// The constness of the result is also returned, where if both lhs and rhs are
+/// const, then the result is const.
 ///
 /// On failure, this reports and error and returns false.  This function should
 /// not be used if you don't want an error reported.
 static bool isSameIntTypeKind(Type lhs, Type rhs, int32_t &lhsWidth,
-                              int32_t &rhsWidth, std::optional<Location> loc) {
+                              int32_t &rhsWidth, bool &isConstResult,
+                              std::optional<Location> loc) {
   // Must have two integer types with the same signedness.
   auto lhsi = lhs.dyn_cast<IntType>();
   auto rhsi = rhs.dyn_cast<IntType>();
@@ -3522,6 +3525,7 @@ static bool isSameIntTypeKind(Type lhs, Type rhs, int32_t &lhsWidth,
 
   lhsWidth = lhsi.getWidthOrSentinel();
   rhsWidth = rhsi.getWidthOrSentinel();
+  isConstResult = lhsi.isConst() && rhsi.isConst();
   return true;
 }
 
@@ -3529,9 +3533,10 @@ LogicalResult impl::verifySameOperandsIntTypeKind(Operation *op) {
   assert(op->getNumOperands() == 2 &&
          "SameOperandsIntTypeKind on non-binary op");
   int32_t lhsWidth, rhsWidth;
+  bool isConstResult;
   return success(isSameIntTypeKind(op->getOperand(0).getType(),
                                    op->getOperand(1).getType(), lhsWidth,
-                                   rhsWidth, op->getLoc()));
+                                   rhsWidth, isConstResult, op->getLoc()));
 }
 
 LogicalResult impl::validateBinaryOpArguments(ValueRange operands,
@@ -3547,61 +3552,69 @@ LogicalResult impl::validateBinaryOpArguments(ValueRange operands,
 FIRRTLType impl::inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
                                    std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
-  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, loc))
+  bool isConstResult = false;
+  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, isConstResult, loc))
     return {};
 
   if (lhsWidth != -1 && rhsWidth != -1)
     resultWidth = std::max(lhsWidth, rhsWidth) + 1;
-  return IntType::get(lhs.getContext(), lhs.isa<SIntType>(), resultWidth);
+  return IntType::get(lhs.getContext(), lhs.isa<SIntType>(), resultWidth,
+                      isConstResult);
 }
 
 FIRRTLType MulPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
                                             std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
-  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, loc))
+  bool isConstResult = false;
+  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, isConstResult, loc))
     return {};
 
   if (lhsWidth != -1 && rhsWidth != -1)
     resultWidth = lhsWidth + rhsWidth;
 
-  return IntType::get(lhs.getContext(), lhs.isa<SIntType>(), resultWidth);
+  return IntType::get(lhs.getContext(), lhs.isa<SIntType>(), resultWidth,
+                      isConstResult);
 }
 
 FIRRTLType DivPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
                                             std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth;
-  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, loc))
+  bool isConstResult = false;
+  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, isConstResult, loc))
     return {};
 
   // For unsigned, the width is the width of the numerator on the LHS.
   if (lhs.isa<UIntType>())
-    return UIntType::get(lhs.getContext(), lhsWidth);
+    return UIntType::get(lhs.getContext(), lhsWidth, isConstResult);
 
   // For signed, the width is the width of the numerator on the LHS, plus 1.
   int32_t resultWidth = lhsWidth != -1 ? lhsWidth + 1 : -1;
-  return SIntType::get(lhs.getContext(), resultWidth);
+  return SIntType::get(lhs.getContext(), resultWidth, isConstResult);
 }
 
 FIRRTLType RemPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
                                             std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
-  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, loc))
+  bool isConstResult = false;
+  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, isConstResult, loc))
     return {};
 
   if (lhsWidth != -1 && rhsWidth != -1)
     resultWidth = std::min(lhsWidth, rhsWidth);
-  return IntType::get(lhs.getContext(), lhs.isa<SIntType>(), resultWidth);
+  return IntType::get(lhs.getContext(), lhs.isa<SIntType>(), resultWidth,
+                      isConstResult);
 }
 
 FIRRTLType impl::inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
                                     std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
-  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, loc))
+  bool isConstResult = false;
+  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, isConstResult, loc))
     return {};
 
   if (lhsWidth != -1 && rhsWidth != -1)
     resultWidth = std::max(lhsWidth, rhsWidth);
-  return UIntType::get(lhs.getContext(), resultWidth);
+  return UIntType::get(lhs.getContext(), resultWidth, isConstResult);
 }
 
 FIRRTLType impl::inferElementwiseResult(FIRRTLType lhs, FIRRTLType rhs,
@@ -3619,24 +3632,27 @@ FIRRTLType impl::inferElementwiseResult(FIRRTLType lhs, FIRRTLType rhs,
                                            rhsVec.getElementType(), loc);
   if (!elemType)
     return {};
-  return FVectorType::get(elemType.cast<FIRRTLBaseType>(),
-                          lhsVec.getNumElements());
+  auto elemBaseType = elemType.cast<FIRRTLBaseType>();
+  return FVectorType::get(elemBaseType, lhsVec.getNumElements(),
+                          lhsVec.isConst() && rhsVec.isConst() &&
+                              elemBaseType.isConst());
 }
 
 FIRRTLType impl::inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
                                        std::optional<Location> loc) {
-  return UIntType::get(lhs.getContext(), 1);
+  return UIntType::get(lhs.getContext(), 1, isConst(lhs) && isConst(rhs));
 }
 
 FIRRTLType CatPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
                                             std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
-  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, loc))
+  bool isConstResult = false;
+  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, isConstResult, loc))
     return {};
 
   if (lhsWidth != -1 && rhsWidth != -1)
     resultWidth = lhsWidth + rhsWidth;
-  return UIntType::get(lhs.getContext(), resultWidth);
+  return UIntType::get(lhs.getContext(), resultWidth, isConstResult);
 }
 
 FIRRTLType DShlPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
@@ -3665,23 +3681,28 @@ FIRRTLType DShlPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
                "amount exceeds maximum width");
     width = newWidth;
   }
-  return IntType::get(lhs.getContext(), lhsi.isSigned(), width);
+  return IntType::get(lhs.getContext(), lhsi.isSigned(), width,
+                      lhsi.isConst() && rhsui.isConst());
 }
 
 FIRRTLType DShlwPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
                                               std::optional<Location> loc) {
-  if (!lhs.isa<IntType>() || !rhs.isa<UIntType>())
+  auto lhsi = lhs.dyn_cast<IntType>();
+  auto rhsu = rhs.dyn_cast<UIntType>();
+  if (!lhsi || !rhsu)
     return emitInferRetTypeError(
         loc, "first operand should be integer, second unsigned int");
-  return lhs;
+  return lhsi.getConstType(lhsi.isConst() && rhsu.isConst());
 }
 
 FIRRTLType DShrPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
                                              std::optional<Location> loc) {
-  if (!lhs.isa<IntType>() || !rhs.isa<UIntType>())
+  auto lhsi = lhs.dyn_cast<IntType>();
+  auto rhsu = rhs.dyn_cast<UIntType>();
+  if (!lhsi || !rhsu)
     return emitInferRetTypeError(
         loc, "first operand should be integer, second unsigned int");
-  return lhs;
+  return lhsi.getConstType(lhsi.isConst() && rhsu.isConst());
 }
 
 //===----------------------------------------------------------------------===//
@@ -3712,7 +3733,7 @@ FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
   int32_t width = base.getBitWidthOrSentinel();
   if (width == -2)
     return emitInferRetTypeError(loc, "operand must be a scalar type");
-  return SIntType::get(input.getContext(), width);
+  return SIntType::get(input.getContext(), width, base.isConst());
 }
 
 FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
@@ -3723,7 +3744,7 @@ FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
   int32_t width = base.getBitWidthOrSentinel();
   if (width == -2)
     return emitInferRetTypeError(loc, "operand must be a scalar type");
-  return UIntType::get(input.getContext(), width);
+  return UIntType::get(input.getContext(), width, base.isConst());
 }
 
 FIRRTLType
@@ -3736,12 +3757,12 @@ AsAsyncResetPrimOp::inferUnaryReturnType(FIRRTLType input,
   int32_t width = base.getBitWidthOrSentinel();
   if (width == -2 || width == 0 || width > 1)
     return emitInferRetTypeError(loc, "operand must be single bit scalar type");
-  return AsyncResetType::get(input.getContext());
+  return AsyncResetType::get(input.getContext(), base.isConst());
 }
 
 FIRRTLType AsClockPrimOp::inferUnaryReturnType(FIRRTLType input,
                                                std::optional<Location> loc) {
-  return ClockType::get(input.getContext());
+  return ClockType::get(input.getContext(), isConst(input));
 }
 
 FIRRTLType CvtPrimOp::inferUnaryReturnType(FIRRTLType input,
@@ -3750,7 +3771,7 @@ FIRRTLType CvtPrimOp::inferUnaryReturnType(FIRRTLType input,
     auto width = uiType.getWidthOrSentinel();
     if (width != -1)
       ++width;
-    return SIntType::get(input.getContext(), width);
+    return SIntType::get(input.getContext(), width, uiType.isConst());
   }
 
   if (input.isa<SIntType>())
@@ -3767,7 +3788,7 @@ FIRRTLType NegPrimOp::inferUnaryReturnType(FIRRTLType input,
   int32_t width = inputi.getWidthOrSentinel();
   if (width != -1)
     ++width;
-  return SIntType::get(input.getContext(), width);
+  return SIntType::get(input.getContext(), width, inputi.isConst());
 }
 
 FIRRTLType NotPrimOp::inferUnaryReturnType(FIRRTLType input,
@@ -3775,12 +3796,13 @@ FIRRTLType NotPrimOp::inferUnaryReturnType(FIRRTLType input,
   auto inputi = input.dyn_cast<IntType>();
   if (!inputi)
     return emitInferRetTypeError(loc, "operand must have integer type");
-  return UIntType::get(input.getContext(), inputi.getWidthOrSentinel());
+  return UIntType::get(input.getContext(), inputi.getWidthOrSentinel(),
+                       inputi.isConst());
 }
 
 FIRRTLType impl::inferReductionResult(FIRRTLType input,
                                       std::optional<Location> loc) {
-  return UIntType::get(input.getContext(), 1);
+  return UIntType::get(input.getContext(), 1, isConst(input));
 }
 
 //===----------------------------------------------------------------------===//
@@ -3827,7 +3849,7 @@ FIRRTLType BitsPrimOp::inferReturnType(ValueRange operands,
         "high must be smaller than the width of input, but got high = ", high,
         ", width = ", width);
 
-  return UIntType::get(input.getContext(), high - low + 1);
+  return UIntType::get(input.getContext(), high - low + 1, inputi.isConst());
 }
 
 LogicalResult impl::validateOneOperandOneConst(ValueRange operands,
@@ -3855,7 +3877,7 @@ FIRRTLType HeadPrimOp::inferReturnType(ValueRange operands,
   if (width != -1 && amount > width)
     return emitInferRetTypeError(loc, "amount larger than input width");
 
-  return UIntType::get(input.getContext(), amount);
+  return UIntType::get(input.getContext(), amount, inputi.isConst());
 }
 
 LogicalResult MuxPrimOp::validateArguments(ValueRange operands,
@@ -3879,11 +3901,11 @@ LogicalResult MuxPrimOp::validateArguments(ValueRange operands,
 /// - Vectors inferred based on the element type.
 /// - Bundles inferred in a pairwise fashion based on the field types.
 static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
-                                         FIRRTLBaseType low,
+                                         FIRRTLBaseType low, bool isConst,
                                          std::optional<Location> loc) {
   // If the types are identical we're done.
   if (high == low)
-    return low;
+    return low.getConstType(isConst);
 
   // The base types need to be equivalent.
   if (high.getTypeID() != low.getTypeID())
@@ -3898,10 +3920,10 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
     int32_t highWidth = high.getBitWidthOrSentinel();
     int32_t lowWidth = low.getBitWidthOrSentinel();
     if (lowWidth == -1)
-      return low;
+      return low.getConstType(isConst);
     if (highWidth == -1)
-      return high;
-    return lowWidth > highWidth ? low : high;
+      return high.getConstType(isConst);
+    return (lowWidth > highWidth ? low : high).getConstType(isConst);
   }
 
   // Infer vector types by comparing the element types.
@@ -3910,7 +3932,7 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
   if (highVector && lowVector &&
       highVector.getNumElements() == lowVector.getNumElements()) {
     auto inner = inferMuxReturnType(highVector.getElementType(),
-                                    lowVector.getElementType(), loc);
+                                    lowVector.getElementType(), isConst, loc);
     if (!inner)
       return {};
     return FVectorType::get(inner, lowVector.getNumElements());
@@ -3934,8 +3956,8 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
           break;
         }
         auto element = highElements[i];
-        element.type =
-            inferMuxReturnType(highElements[i].type, lowElements[i].type, loc);
+        element.type = inferMuxReturnType(highElements[i].type,
+                                          lowElements[i].type, isConst, loc);
         if (!element.type)
           return {};
         newElements.push_back(element);
@@ -3962,7 +3984,11 @@ FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
   auto lowType = operands[2].getType().dyn_cast<FIRRTLBaseType>();
   if (!highType || !lowType)
     return emitInferRetTypeError(loc, "operands must be base type");
-  return inferMuxReturnType(highType, lowType, loc);
+
+  // Determine constness of the result type
+  bool isConst = firrtl::isConst(operands[0].getType()) && highType.isConst() &&
+                 lowType.isConst();
+  return inferMuxReturnType(highType, lowType, isConst, loc);
 }
 
 FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
@@ -3981,7 +4007,8 @@ FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
     return inputi;
 
   width = std::max<int32_t>(width, amount);
-  return IntType::get(input.getContext(), inputi.isSigned(), width);
+  return IntType::get(input.getContext(), inputi.isSigned(), width,
+                      inputi.isConst());
 }
 
 FIRRTLType ShlPrimOp::inferReturnType(ValueRange operands,
@@ -3999,7 +4026,8 @@ FIRRTLType ShlPrimOp::inferReturnType(ValueRange operands,
   if (width != -1)
     width += amount;
 
-  return IntType::get(input.getContext(), inputi.isSigned(), width);
+  return IntType::get(input.getContext(), inputi.isSigned(), width,
+                      inputi.isConst());
 }
 
 FIRRTLType ShrPrimOp::inferReturnType(ValueRange operands,
@@ -4017,7 +4045,8 @@ FIRRTLType ShrPrimOp::inferReturnType(ValueRange operands,
   if (width != -1)
     width = std::max<int32_t>(1, width - amount);
 
-  return IntType::get(input.getContext(), inputi.isSigned(), width);
+  return IntType::get(input.getContext(), inputi.isSigned(), width,
+                      inputi.isConst());
 }
 
 FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
@@ -4039,7 +4068,7 @@ FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
     width -= amount;
   }
 
-  return IntType::get(input.getContext(), false, width);
+  return IntType::get(input.getContext(), false, width, inputi.isConst());
 }
 
 //===----------------------------------------------------------------------===//
@@ -4565,7 +4594,10 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
   // Allow for now, as need to LowerTypes things generally.
   if (auto vectorType = inType.dyn_cast<FVectorType>()) {
     if (fieldIdx < vectorType.getNumElements())
-      return RefType::get(vectorType.getElementType(), refType.getForceable());
+      return RefType::get(
+          vectorType.getElementType().getConstType(
+              vectorType.isConst() || vectorType.getElementType().isConst()),
+          refType.getForceable());
     return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
                                  "' in RefType of vector type ", refType);
   }
@@ -4575,7 +4607,9 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
                                    "subfield element index is greater than "
                                    "the number of fields in the bundle type");
     }
-    return RefType::get(bundleType.getElement(fieldIdx).type,
+    return RefType::get(bundleType.getElement(fieldIdx).type.getConstType(
+                            bundleType.isConst() ||
+                            bundleType.getElement(fieldIdx).type.isConst()),
                         refType.getForceable());
   }
 
