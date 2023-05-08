@@ -1599,7 +1599,7 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
 /// exactly one connect that has the value as its destination. This returns the
 /// operation if found and if all the other users are "reads" from the value.
 /// Returns null if there are no connects, or multiple connects to the value, or
-/// if the value is involved in an `AttachOp`.
+/// if the value is involved in an `AttachOp`, or if the connect isn't strict.
 ///
 /// Note that this will simply return the connect, which is located *anywhere*
 /// after the definition of the value. Users of this function are likely
@@ -1612,12 +1612,14 @@ StrictConnectOp firrtl::getSingleConnectUserOf(Value value) {
     if (isa<AttachOp>(user))
       return {};
 
-    if (auto aConnect = dyn_cast<StrictConnectOp>(user))
+    if (auto aConnect = dyn_cast<FConnectLike>(user))
       if (aConnect.getDest() == value) {
-        if (!connect || connect == aConnect)
-          connect = aConnect;
-        else
+        auto strictConnect = dyn_cast<StrictConnectOp>(aConnect);
+        // If this is not a strict connect, or a second strict connect, fail.
+        if (!strictConnect || (connect && connect != strictConnect))
           return {};
+        else
+          connect = strictConnect;
       }
   }
   return connect;
