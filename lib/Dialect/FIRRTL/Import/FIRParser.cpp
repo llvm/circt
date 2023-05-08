@@ -770,6 +770,7 @@ ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
 ///      ::= type '[' intLit ']'
 ///      ::= 'Probe' '<' type '>'
 ///      ::= 'RWProbe' '<' type '>'
+///      ::= 'const' type
 ///
 /// field: 'flip'? fieldId ':' type
 ///
@@ -880,6 +881,19 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     if (parseEnumType(result))
       return failure();
     break;
+
+  case FIRToken::kw_const: {
+    consumeToken(FIRToken::kw_const);
+    if (failed(parseType(result, message)))
+      return failure();
+
+    auto baseType = result.dyn_cast<FIRRTLBaseType>();
+    if (!baseType)
+      return emitError("only hardware types can be 'const'");
+
+    result = baseType.getConstType(true);
+    return success();
+  }
   }
 
   // Handle postfix vector sizes.
@@ -1967,7 +1981,8 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
     return failure();
 
   // Construct an integer attribute of the right width.
-  auto type = IntType::get(builder.getContext(), isSigned, width);
+  // Literals are parsed as 'const' types.
+  auto type = IntType::get(builder.getContext(), isSigned, width, true);
 
   IntegerType::SignednessSemantics signedness =
       isSigned ? IntegerType::Signed : IntegerType::Unsigned;
@@ -2837,7 +2852,8 @@ ParseResult FIRStmtParser::parseRefForce() {
     return failure();
 
   // Check reference expression is of reference type.
-  if (auto ref = dyn_cast<RefType>(dest.getType()); !ref || !ref.getForceable())
+  auto ref = dyn_cast<RefType>(dest.getType());
+  if (!ref || !ref.getForceable())
     return emitError(
                startTok.getLoc(),
                "expected rwprobe-type expression for force destination, got ")
@@ -2848,6 +2864,10 @@ ParseResult FIRStmtParser::parseRefForce() {
            << src.getType();
 
   locationProcessor.setLoc(startTok.getLoc());
+
+  // Add a const cast if needed
+  if (src.getType() != ref.getType() && containsConst(src.getType()))
+    src = builder.create<ConstCastOp>(ref.getType(), src).getResult();
 
   builder.create<RefForceOp>(clock, pred, dest, src);
 
@@ -2867,7 +2887,8 @@ ParseResult FIRStmtParser::parseRefForceInitial() {
     return failure();
 
   // Check reference expression is of reference type.
-  if (auto ref = dyn_cast<RefType>(dest.getType()); !ref || !ref.getForceable())
+  auto ref = dyn_cast<RefType>(dest.getType());
+  if (!ref || !ref.getForceable())
     return emitError(startTok.getLoc(), "expected rwprobe-type expression for "
                                         "force_initial destination, got ")
            << dest.getType();
@@ -2878,6 +2899,10 @@ ParseResult FIRStmtParser::parseRefForceInitial() {
            << src.getType();
 
   locationProcessor.setLoc(startTok.getLoc());
+
+  // Add a const cast if needed
+  if (src.getType() != ref.getType() && containsConst(src.getType()))
+    src = builder.create<ConstCastOp>(ref.getType(), src).getResult();
 
   auto value = APInt::getAllOnes(1);
   auto type = UIntType::get(builder.getContext(), 1);

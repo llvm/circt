@@ -401,6 +401,7 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [FieldIDTypeInterface]> {
 
     /// Look up an element type by index.
     FIRRTLBaseType getElementType(size_t index);
+    FIRRTLBaseType getElementTypePreservingConst(size_t index);
 
     /// Return the recursive properties of the type.
     RecursiveTypeProperties getRecursiveTypeProperties() const;

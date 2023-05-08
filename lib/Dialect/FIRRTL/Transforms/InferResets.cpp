@@ -758,7 +758,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
             traceResets(op.getDataType(), op.getData(), 0, op.getDataType(),
                         op.getDataRef(), 0, op.getLoc());
         })
-        .Case<UninferredResetCastOp>([&](auto op) {
+        .Case<UninferredResetCastOp, ConstCastOp>([&](auto op) {
           traceResets(op.getResult(), op.getInput(), op.getLoc());
         })
         .Case<InvalidValueOp>([&](auto op) {
@@ -1125,6 +1125,16 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
       uop.replaceAllUsesWith(uop.getInput());
       LLVM_DEBUG(llvm::dbgs() << "- Inferred " << uop << "\n");
       uop.erase();
+    } else if (auto constCastOp = dyn_cast<ConstCastOp>(wop);
+               constCastOp &&
+               !areTypesConstCastable(constCastOp.getResult().getType(),
+                                      constCastOp.getInput().getType())) {
+      // Update const cast results
+      auto result = constCastOp.getResult();
+      result.setType(constCastOp.getInput().getType().getConstType(false));
+      for (auto *user : result.getUsers())
+        worklist.insert(user);
+      LLVM_DEBUG(llvm::dbgs() << "- Inferred " << constCastOp << "\n");
     }
   }
 

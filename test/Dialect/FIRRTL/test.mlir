@@ -210,8 +210,8 @@ firrtl.module @EnumTest(in %in : !firrtl.enum<a: uint<1>, b: uint<2>>,
   // CHECK: = firrtl.istag %in a : !firrtl.enum<a: uint<1>, b: uint<2>>
 
   %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
-  %some = firrtl.enumcreate Some(%c1_ui8) : !firrtl.enum<None: uint<0>, Some: uint<8>>
-  // CHECK: = firrtl.enumcreate Some(%c1_ui8) : !firrtl.enum<None: uint<0>, Some: uint<8>>
+  %some = firrtl.enumcreate Some(%c1_ui8) : (!firrtl.uint<8>) -> !firrtl.enum<None: uint<0>, Some: uint<8>>
+  // CHECK: = firrtl.enumcreate Some(%c1_ui8) : (!firrtl.uint<8>) -> !firrtl.enum<None: uint<0>, Some: uint<8>>
 
   firrtl.match %in : !firrtl.enum<a: uint<1>, b: uint<2>> {
     case a(%arg0) {
