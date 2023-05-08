@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
@@ -128,12 +129,62 @@ void VerbatimExprSEOp::getAsmResultNames(
 
 void MacroRefExprOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  setNameFn(getResult(), getIdent().getName());
+  setNameFn(getResult(), getMacroName());
 }
 
 void MacroRefExprSEOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  setNameFn(getResult(), getIdent().getName());
+  setNameFn(getResult(), getMacroName());
+}
+
+static MacroDeclOp getReferencedMacro(const hw::HWSymbolCache* cache, 
+Operation* op, FlatSymbolRefAttr macroName) {
+  if (cache)
+    if (auto *result = cache->getDefinition(macroName.getAttr()))
+      return cast<MacroDeclOp>(result);
+
+  auto topLevelModuleOp = op->getParentOfType<ModuleOp>();
+  return topLevelModuleOp.lookupSymbol<MacroDeclOp>(macroName.getValue());
+}
+
+/// Lookup the module or extmodule for the symbol.  This returns null on
+/// invalid IR.
+MacroDeclOp MacroRefExprOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
+  return ::getReferencedMacro(cache, *this, getMacroNameAttr());
+}
+
+MacroDeclOp MacroRefExprSEOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
+  return ::getReferencedMacro(cache, *this, getMacroNameAttr());
+}
+
+MacroDeclOp MacroDefOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
+  return ::getReferencedMacro(cache, *this, getMacroNameAttr());
+}
+
+/// Ensure that the symbol being instantiated exists and is a MacroDeclOp.
+static LogicalResult verifyMacroSymbolUse(Operation* op, StringAttr name, SymbolTableCollection &symbolTable) {
+  auto module = op->getParentOfType<mlir::ModuleOp>();
+  auto macro = dyn_cast_or_null<MacroDeclOp>(
+      symbolTable.lookupSymbolIn(module, name));
+  if (!macro)
+    return op->emitError("Referenced macro doesn't exist ") << name;
+
+  return success();
+}
+
+/// Ensure that the symbol being instantiated exists and is a MacroDefOp.
+LogicalResult MacroRefExprOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyMacroSymbolUse(*this, getMacroNameAttr().getAttr(), symbolTable);
+}
+
+/// Ensure that the symbol being instantiated exists and is a MacroDefOp.
+LogicalResult MacroRefExprSEOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyMacroSymbolUse(*this, getMacroNameAttr().getAttr(), symbolTable);
+}
+
+/// Ensure that the symbol being instantiated exists and is a MacroDefOp.
+LogicalResult MacroDefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyMacroSymbolUse(*this, getMacroNameAttr().getAttr(), symbolTable);
 }
 
 //===----------------------------------------------------------------------===//

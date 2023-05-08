@@ -2456,7 +2456,11 @@ SubExprInfo ExprEmitter::visitSV(MacroRefExprOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  ps << "`" << PPExtString(op.getIdent().getName());
+  // Use the specified name or the symbol name as appropriate.
+  auto macroOp = op.getReferencedMacro(&state.symbolCache);
+  assert(macroOp && "Invalid IR");
+  StringRef name = macroOp.getVerilogName() ? *macroOp.getVerilogName() : macroOp.getName();
+  ps << "`" << PPExtString(name);
   return {LowestPrecedence, IsUnsigned};
 }
 
@@ -2464,7 +2468,11 @@ SubExprInfo ExprEmitter::visitSV(MacroRefExprSEOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  ps << "`" << PPExtString(op.getIdent().getName());
+  // Use the specified name or the symbol name as appropriate.
+  auto macroOp = op.getReferencedMacro(&state.symbolCache);
+  assert(macroOp && "Invalid IR");
+  StringRef name = macroOp.getVerilogName() ? *macroOp.getVerilogName() : macroOp.getName();
+  ps << "`" << PPExtString(name);
   return {LowestPrecedence, IsUnsigned};
 }
 
@@ -3139,6 +3147,7 @@ private:
   LogicalResult visitSV(InterfaceSignalOp op);
   LogicalResult visitSV(InterfaceModportOp op);
   LogicalResult visitSV(AssignInterfaceSignalOp op);
+  LogicalResult visitSV(MacroDefOp op);
 
   void emitBlockAsStatement(Block *block,
                             const SmallPtrSetImpl<Operation *> &locationOps,
@@ -4432,6 +4441,24 @@ LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
   return success();
 }
 
+LogicalResult StmtEmitter::visitSV(MacroDefOp op) {
+  auto decl = op.getReferencedMacro(&state.symbolCache);
+  // TODO: source info!
+  startStatement();
+  ps << "`define " << PPExtString(getSymOpName(decl));
+  if (decl.getArgs()) {
+    ps << "(";
+    llvm::interleaveComma(*decl.getArgs(), ps, [&](const Attribute & name) {
+      ps << name.cast<StringAttr>();
+    });
+    ps << ")";
+  }
+  if (!op.getFormatString().empty())
+    ps << op.getFormatStringAttr();
+  ps << PP::newline;
+  return success();
+}
+
 void StmtEmitter::emitStatement(Operation *op) {
   // Expressions may either be ignored or emitted as an expression statements.
   if (isVerilogExpression(op))
@@ -5322,8 +5349,14 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
             separateFile(op);
           }
         })
+        .Case<MacroDefOp>([&](auto op) {
+          replicatedOps.push_back(op);
+        })
+        .Case<MacroDeclOp>([&](auto op) {
+          symbolCache.addDefinition(op.getSymNameAttr(), op);
+        })
         .Default([&](auto *) {
-          op.emitError("unknown operation");
+          op.emitError("unknown operation (SharedEmitterState::gatherFiles)");
           encounteredError = true;
         });
   }
@@ -5392,9 +5425,12 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
       .Case<TypeScopeOp>([&](auto typedecls) {
         ModuleEmitter(state).emitStatement(typedecls);
       })
+      .Case<MacroDefOp>([&](auto op) {
+                ModuleEmitter(state).emitStatement(op);
+      }      )
       .Default([&](auto *op) {
         state.encounteredError = true;
-        op->emitError("unknown operation");
+        op->emitError("unknown operation (ExportVerilog::emitOperation)");
       });
 }
 

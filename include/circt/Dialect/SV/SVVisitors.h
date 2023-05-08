@@ -33,7 +33,7 @@ public:
             ConstantXOp, ConstantZOp, ConstantStrOp, MacroRefExprOp,
             MacroRefExprSEOp,
             // Declarations.
-            RegOp, WireOp, LogicOp, LocalParamOp, XMROp, XMRRefOp,
+            RegOp, WireOp, LogicOp, LocalParamOp, XMROp, XMRRefOp, 
             // Control flow.
             OrderedOutputOp, IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp,
             AlwaysCombOp, AlwaysFFOp, InitialOp, CaseOp,
@@ -43,7 +43,7 @@ public:
             // Type declarations.
             InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
             InterfaceInstanceOp, GetModportOp, AssignInterfaceSignalOp,
-            ReadInterfaceSignalOp,
+            ReadInterfaceSignalOp, MacroDeclOp, MacroDefOp,
             // Verification statements.
             AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
             CoverConcurrentOp,
@@ -137,6 +137,8 @@ public:
   HANDLE(GetModportOp, Unhandled);
   HANDLE(AssignInterfaceSignalOp, Unhandled);
   HANDLE(ReadInterfaceSignalOp, Unhandled);
+  HANDLE(MacroDefOp, Unhandled);
+  HANDLE(MacroDeclOp, Unhandled);
 
   // Verification statements.
   HANDLE(AssertOp, Unhandled);

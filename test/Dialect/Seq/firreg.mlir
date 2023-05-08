@@ -1,6 +1,6 @@
-// RUN: circt-opt %s -verify-diagnostics --lower-seq-firrtl-to-sv | FileCheck %s --check-prefixes=CHECK,COMMON
-// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(hw.module(lower-seq-firrtl-to-sv{disable-reg-randomization}))" | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
-// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(hw.module(lower-seq-firrtl-to-sv{add-vivado-ram-address-conflict-synthesis-bug-workaround}))" | FileCheck %s --check-prefixes=CHECK,VIVADO
+// RUN: circt-opt %s -verify-diagnostics --lower-seq-firrtl-init-to-sv --lower-seq-firrtl-to-sv | FileCheck %s --check-prefixes=CHECK,COMMON
+// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-firrtl-init-to-sv, hw.module(lower-seq-firrtl-to-sv{disable-reg-randomization}))" | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
+// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-firrtl-init-to-sv, hw.module(lower-seq-firrtl-to-sv{add-vivado-ram-address-conflict-synthesis-bug-workaround}))" | FileCheck %s --check-prefixes=CHECK,VIVADO
 
 // COMMON-LABEL: hw.module @lowering
 hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d: i32, e: i32, f: i32) {
@@ -74,7 +74,7 @@ hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d:
   // CHECK-NEXT:       sv.ifdef.procedural  "RANDOMIZE_REG_INIT" {
   // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<8xi32>>
   // CHECK-NEXT:         sv.for %i = %c0_i4 to %c-8_i4 step %c1_i4 : i4 {
-  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %24 = comb.extract %i from 0 : (i4) -> i3
   // CHECK-NEXT:           %25 = sv.array_index_inout %_RANDOM[%24] : !hw.inout<uarray<8xi32>>, i3
   // CHECK-NEXT:           sv.bpassign %25, %RANDOM : i32
@@ -155,7 +155,7 @@ hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<1xi32>>
   // CHECK:              sv.for %i = %{{false.*}} to %{{true.*}} step %{{true.*}} : i1 {
-  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %6 = comb.extract %i from 0 : (i1) -> i0
   // CHECK-NEXT:           %7 = sv.array_index_inout %_RANDOM[%6] : !hw.inout<uarray<1xi32>>, i0
   // CHECK-NEXT:           sv.bpassign %7, %RANDOM : i32
@@ -265,7 +265,7 @@ hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK-NEXT:          %_RANDOM = sv.logic : !hw.inout<uarray<3xi32>>
   // CHECK-NEXT:          sv.for %i = %c0_i2 to %c-1_i2 step %c1_i2 : i2 {
-  // CHECK-NEXT:            %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:            %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
   // CHECK-NEXT:            %14 = sv.array_index_inout %_RANDOM[%i] : !hw.inout<uarray<3xi32>>, i2
   // CHECK-NEXT:            sv.bpassign %14, %RANDOM : i32
   // CHECK-NEXT:          }
@@ -314,7 +314,7 @@ hw.module private @UninitReg42(%clock: i1, %reset: i1, %cond: i1, %value: i42) {
   // CHECK-NEXT:       sv.ifdef.procedural  "RANDOMIZE_REG_INIT" {
   // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<2xi32>>
   // CHECK-NEXT:         sv.for %i = %c0_i2 to %c-2_i2 step %c1_i2 : i2 {
-  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %9 = comb.extract %i from 0 : (i2) -> i1
   // CHECK-NEXT:           %10 = sv.array_index_inout %_RANDOM[%9] : !hw.inout<uarray<2xi32>>, i1
   // CHECK-NEXT:           sv.bpassign %10, %RANDOM : i32
@@ -361,7 +361,7 @@ hw.module private @init1DVector(%clock: i1, %a: !hw.array<2xi1>) -> (b: !hw.arra
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK-NEXT:       %_RANDOM = sv.logic : !hw.inout<uarray<1xi32>>
   // CHECK-NEXT:       sv.for %i = %false to %true step %true : i1 {
-  // CHECK-NEXT:         %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:         %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
   // CHECK-NEXT:         %8 = comb.extract %i from 0 : (i1) -> i0
   // CHECK-NEXT:         %9 = sv.array_index_inout %_RANDOM[%8] : !hw.inout<uarray<1xi32>>, i0
   // CHECK-NEXT:         sv.bpassign %9, %RANDOM : i32
@@ -408,7 +408,7 @@ hw.module private @init2DVector(%clock: i1, %a: !hw.array<1xarray<1xi1>>) -> (b:
   // CHECK-NEXT:       sv.ifdef.procedural  "RANDOMIZE_REG_INIT" {
   // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<1xi32>>
   // CHECK-NEXT:         sv.for %i = %false to %true step %true : i1 {
-  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %6 = comb.extract %i from 0 : (i1) -> i0
   // CHECK-NEXT:           %7 = sv.array_index_inout %_RANDOM[%6] : !hw.inout<uarray<1xi32>>, i0
   // CHECK-NEXT:           sv.bpassign %7, %RANDOM : i32

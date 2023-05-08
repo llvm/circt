@@ -70,6 +70,7 @@
 
     "xnor", "xor",
 
+// This is nonsense.  Macro.decl should fix this.
     "INIT_RANDOM", "INIT_RANDOM_PROLOG_", "PRINTF_COND", "PRINTF_COND_",
     "STOP_COND", "STOP_COND_", "RANDOM", "RANDOMIZE", "RANDOMIZE_DELAY",
     "RANDOMIZE_GARBAGE_ASSIGN", "RANDOMIZE_INVALID_ASSIGN",

@@ -27,6 +27,14 @@
 #include "llvm/ADT/IntervalMap.h"
 #include "llvm/ADT/TypeSwitch.h"
 
+namespace circt {
+  namespace seq {
+#define GEN_PASS_DEF_LOWERSEQFIRRTLINITTOSV
+#include "circt/Dialect/Seq/SeqPasses.h.inc"
+  }
+}
+
+
 using namespace circt;
 using namespace seq;
 
@@ -43,6 +51,10 @@ struct SeqFIRRTLToSVPass
       SeqFIRRTLToSVPass>::addVivadoRAMAddressConflictSynthesisBugWorkaround;
   using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::LowerSeqFIRRTLToSVBase;
   using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::numSubaccessRestored;
+};
+struct SeqFIRRTLInitToSVPass
+    : public impl::LowerSeqFIRRTLInitToSVBase<SeqFIRRTLInitToSVPass> {
+  void runOnOperation() override;
 };
 } // anonymous namespace
 
@@ -761,12 +773,24 @@ void SeqFIRRTLToSVPass::runOnOperation() {
   numSubaccessRestored += firRegLower.numSubaccessRestored;
 }
 
+void SeqFIRRTLInitToSVPass::runOnOperation() {
+  ModuleOp top = getOperation();
+  OpBuilder builder(top.getBody(), top.getBody()->begin());
+  //FIXME: getOrCreate
+  builder.create<sv::MacroDeclOp>(top.getLoc(), "RANDOM", nullptr, nullptr);
+}
+
+
 std::unique_ptr<Pass>
 circt::seq::createSeqLowerToSVPass(std::optional<bool> lowerToAlwaysFF) {
   auto pass = std::make_unique<SeqToSVPass>();
   if (lowerToAlwaysFF)
     pass->lowerToAlwaysFF = *lowerToAlwaysFF;
   return pass;
+}
+
+std::unique_ptr<Pass> circt::seq::createLowerSeqFIRRTLInitToSV() {
+  return std::make_unique<SeqFIRRTLInitToSVPass>();
 }
 
 std::unique_ptr<Pass> circt::seq::createSeqFIRRTLLowerToSVPass(
