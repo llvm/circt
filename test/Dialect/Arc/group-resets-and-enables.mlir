@@ -69,7 +69,7 @@ arc.model "BasicResetGrouping" {
     // CHECK-NEXT: }
   // CHECK-NEXT: }
   }
-  // Don't group IfOps with return values
+  // Don't group IfOps with return values:
   arc.clock_tree %0 {
     //  CHECK: [[IN_RESET0:%.+]] = arc.state_read %in_reset0
     %10 = arc.state_read %in_reset0 : <i1>
@@ -220,7 +220,7 @@ arc.model "ResetAndEnableGrouping" {
   %in_en0 = arc.root_input "en0", %arg0 : (!arc.storage) -> !arc.state<i1>
   %in_en1 = arc.root_input "en1", %arg0 : (!arc.storage) -> !arc.state<i1>
   %0 = arc.state_read %in_clock : <i1>
-  // Group resets inside enables
+  // Group enables inside resets:
   arc.clock_tree %0 {
     //  CHECK: [[IN_EN:%.+]] = arc.state_read %in_en1
     %3 = arc.state_read %in_en1 : <i1>
@@ -248,7 +248,7 @@ arc.model "ResetAndEnableGrouping" {
     }
   // CHECK-NEXT: }
   }
-  // Group both resets and enables
+  // Group both resets and enables:
   arc.clock_tree %0 {
     //  CHECK: [[IN_RESET:%.+]] = arc.state_read %in_reset
     %7 = arc.state_read %in_reset : <i1>
@@ -279,7 +279,7 @@ arc.model "ResetAndEnableGrouping" {
     }
     // CHECK-NEXT: }
   }
-  // Group resets that are separated by an enable read
+  // Group resets that are separated by an enable read:
   arc.clock_tree %0 {
     //  CHECK: [[IN_RESET:%.+]] = arc.state_read %in_reset
     %11 = arc.state_read %in_reset : <i1>
