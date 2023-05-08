@@ -512,9 +512,6 @@ static LogicalResult processBuffer(
   if (failed(applyPassManagerCLOptions(pm)))
     return failure();
 
-  // Legalize away "open" aggregates to hw-only versions.
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerOpenAggsPass());
-
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
       disableAnnotationsUnknown, disableAnnotationsClassless,
       lowerAnnotationsNoRefTypePorts));
