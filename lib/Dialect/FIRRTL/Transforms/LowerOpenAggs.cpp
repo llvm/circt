@@ -312,16 +312,16 @@ LogicalResult Visitor::visitExpr(OpenSubfieldOp op) {
   // (This case falls under "this selects only non-hw", which means
   // that this operation is now dead).
 
+  // In all cases, this operation will be dead and should be removed.
+  opsToErase.push_back(op);
+
   // Chase this to its original root.
   // If the FieldRef for this selection has a new home,
   // RAUW to that value and this op is dead.
   auto resultRef = getFieldRefFromValue(op.getResult());
-
-  // In all cases, this operation will be dead and should be removed.
-  opsToErase.push_back(op);
-
-  if (nonHWValues.contains(resultRef)) {
-    auto newResult = nonHWValues[resultRef];
+  auto nonHWForResult = nonHWValues.find(resultRef);
+  if (nonHWForResult != nonHWValues.end()) {
+    auto newResult = nonHWForResult->second;
     assert(op.getResult().getType() == newResult.getType());
     assert(!isa<FIRRTLBaseType>(newResult.getType()));
     op.getResult().replaceAllUsesWith(newResult);
@@ -358,12 +358,17 @@ LogicalResult Visitor::visitExpr(OpenSubfieldOp op) {
 }
 
 LogicalResult Visitor::visitExpr(OpenSubindexOp op) {
-  auto resultRef = getFieldRefFromValue(op.getResult());
 
   // In all cases, this operation will be dead and should be removed.
   opsToErase.push_back(op);
-  if (nonHWValues.contains(resultRef)) {
-    auto newResult = nonHWValues[resultRef];
+
+  // Chase this to its original root.
+  // If the FieldRef for this selection has a new home,
+  // RAUW to that value and this op is dead.
+  auto resultRef = getFieldRefFromValue(op.getResult());
+  auto nonHWForResult = nonHWValues.find(resultRef);
+  if (nonHWForResult != nonHWValues.end()) {
+    auto newResult = nonHWForResult->second;
     assert(op.getResult().getType() == newResult.getType());
     assert(!isa<FIRRTLBaseType>(newResult.getType()));
     op.getResult().replaceAllUsesWith(newResult);
