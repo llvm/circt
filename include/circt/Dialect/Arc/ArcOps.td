@@ -124,7 +124,8 @@ def StateOp : ArcOp<"state", [
   CallOpInterface, MemRefsNormalizable,
   CallOpMutableInterface,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-  AttrSizedOperandSegments
+  AttrSizedOperandSegments,
+  DeclareOpInterfaceMethods<ClockedOpInterface, ["isClocked"]>,
 ]> {
   let summary = "State transfer arc";
 
@@ -266,7 +267,8 @@ class MemoryAndDataTypesMatch<string mem, string data> : TypesMatchWith<
 def MemoryReadPortOp : ArcOp<"memory_read_port", [
   MemoryEffects<[MemRead]>,
   MemoryAndDataTypesMatch<"memory", "data">,
-  AttrSizedOperandSegments
+  AttrSizedOperandSegments,
+  ClockedOpInterface
 ]> {
   let summary = "Read port from a memory";
   let arguments = (ins
@@ -289,7 +291,8 @@ def MemoryReadPortOp : ArcOp<"memory_read_port", [
 def MemoryWritePortOp : ArcOp<"memory_write_port", [
   MemoryEffects<[MemWrite]>,
   MemoryAndDataTypesMatch<"memory", "data">,
-  AttrSizedOperandSegments
+  AttrSizedOperandSegments,
+  ClockedOpInterface
 ]> {
   let summary = "Write port to a memory";
   let arguments = (ins
