@@ -135,9 +135,19 @@ public:
   LogicalResult visitExpr(OpenSubfieldOp op);
   LogicalResult visitExpr(OpenSubindexOp op);
 
-  LogicalResult visitUnhandledOp(Operation *op) { return success(); }
+  LogicalResult visitUnhandledOp(Operation *op) {
+    auto notOpenAggType = [](auto type) {
+      auto ftype = dyn_cast<FIRRTLType>(type);
+      return !ftype || isa<RefType>(type) || !ftype.containsReference();
+    };
+    if (!llvm::all_of(op->getOperandTypes(), notOpenAggType) ||
+        !llvm::all_of(op->getResultTypes(), notOpenAggType))
+      return op->emitOpError(
+          "unhandled use or producer of types containing references");
+    return success();
+  }
 
-  LogicalResult visitInvalidOp(Operation *op) { return success(); }
+  LogicalResult visitInvalidOp(Operation *op) { return visitUnhandledOp(op); }
 
 private:
   /// Convert a type to its HW-only projection.,
