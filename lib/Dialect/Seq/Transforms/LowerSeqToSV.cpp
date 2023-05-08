@@ -28,12 +28,11 @@
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
-  namespace seq {
+namespace seq {
 #define GEN_PASS_DEF_LOWERSEQFIRRTLINITTOSV
 #include "circt/Dialect/Seq/SeqPasses.h.inc"
-  }
-}
-
+} // namespace seq
+} // namespace circt
 
 using namespace circt;
 using namespace seq;
@@ -776,10 +775,9 @@ void SeqFIRRTLToSVPass::runOnOperation() {
 void SeqFIRRTLInitToSVPass::runOnOperation() {
   ModuleOp top = getOperation();
   OpBuilder builder(top.getBody(), top.getBody()->begin());
-  //FIXME: getOrCreate
+  // FIXME: getOrCreate
   builder.create<sv::MacroDeclOp>(top.getLoc(), "RANDOM", nullptr, nullptr);
 }
-
 
 std::unique_ptr<Pass>
 circt::seq::createSeqLowerToSVPass(std::optional<bool> lowerToAlwaysFF) {

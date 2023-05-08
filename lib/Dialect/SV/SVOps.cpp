@@ -16,7 +16,6 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
-#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
@@ -137,8 +136,9 @@ void MacroRefExprSEOp::getAsmResultNames(
   setNameFn(getResult(), getMacroName());
 }
 
-static MacroDeclOp getReferencedMacro(const hw::HWSymbolCache* cache, 
-Operation* op, FlatSymbolRefAttr macroName) {
+static MacroDeclOp getReferencedMacro(const hw::HWSymbolCache *cache,
+                                      Operation *op,
+                                      FlatSymbolRefAttr macroName) {
   if (cache)
     if (auto *result = cache->getDefinition(macroName.getAttr()))
       return cast<MacroDeclOp>(result);
@@ -153,7 +153,8 @@ MacroDeclOp MacroRefExprOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
   return ::getReferencedMacro(cache, *this, getMacroNameAttr());
 }
 
-MacroDeclOp MacroRefExprSEOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
+MacroDeclOp
+MacroRefExprSEOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
   return ::getReferencedMacro(cache, *this, getMacroNameAttr());
 }
 
@@ -162,10 +163,11 @@ MacroDeclOp MacroDefOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
 }
 
 /// Ensure that the symbol being instantiated exists and is a MacroDeclOp.
-static LogicalResult verifyMacroSymbolUse(Operation* op, StringAttr name, SymbolTableCollection &symbolTable) {
+static LogicalResult verifyMacroSymbolUse(Operation *op, StringAttr name,
+                                          SymbolTableCollection &symbolTable) {
   auto module = op->getParentOfType<mlir::ModuleOp>();
-  auto macro = dyn_cast_or_null<MacroDeclOp>(
-      symbolTable.lookupSymbolIn(module, name));
+  auto macro =
+      dyn_cast_or_null<MacroDeclOp>(symbolTable.lookupSymbolIn(module, name));
   if (!macro)
     return op->emitError("Referenced macro doesn't exist ") << name;
 
@@ -173,12 +175,14 @@ static LogicalResult verifyMacroSymbolUse(Operation* op, StringAttr name, Symbol
 }
 
 /// Ensure that the symbol being instantiated exists and is a MacroDefOp.
-LogicalResult MacroRefExprOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+LogicalResult
+MacroRefExprOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return verifyMacroSymbolUse(*this, getMacroNameAttr().getAttr(), symbolTable);
 }
 
 /// Ensure that the symbol being instantiated exists and is a MacroDefOp.
-LogicalResult MacroRefExprSEOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+LogicalResult
+MacroRefExprSEOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return verifyMacroSymbolUse(*this, getMacroNameAttr().getAttr(), symbolTable);
 }
 
