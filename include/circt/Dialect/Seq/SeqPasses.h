@@ -18,7 +18,7 @@
 
 namespace circt {
 namespace seq {
-    
+
 #define GEN_PASS_DECL_LOWERSEQTOSV
 #define GEN_PASS_DECL_LOWERSEQFIRRTLTOSV
 #include "circt/Dialect/Seq/SeqPasses.h.inc"

@@ -2459,7 +2459,8 @@ SubExprInfo ExprEmitter::visitSV(MacroRefExprOp op) {
   // Use the specified name or the symbol name as appropriate.
   auto macroOp = op.getReferencedMacro(&state.symbolCache);
   assert(macroOp && "Invalid IR");
-  StringRef name = macroOp.getVerilogName() ? *macroOp.getVerilogName() : macroOp.getName();
+  StringRef name =
+      macroOp.getVerilogName() ? *macroOp.getVerilogName() : macroOp.getName();
   ps << "`" << PPExtString(name);
   return {LowestPrecedence, IsUnsigned};
 }
@@ -2471,7 +2472,8 @@ SubExprInfo ExprEmitter::visitSV(MacroRefExprSEOp op) {
   // Use the specified name or the symbol name as appropriate.
   auto macroOp = op.getReferencedMacro(&state.symbolCache);
   assert(macroOp && "Invalid IR");
-  StringRef name = macroOp.getVerilogName() ? *macroOp.getVerilogName() : macroOp.getName();
+  StringRef name =
+      macroOp.getVerilogName() ? *macroOp.getVerilogName() : macroOp.getName();
   ps << "`" << PPExtString(name);
   return {LowestPrecedence, IsUnsigned};
 }
@@ -4448,7 +4450,7 @@ LogicalResult StmtEmitter::visitSV(MacroDefOp op) {
   ps << "`define " << PPExtString(getSymOpName(decl));
   if (decl.getArgs()) {
     ps << "(";
-    llvm::interleaveComma(*decl.getArgs(), ps, [&](const Attribute & name) {
+    llvm::interleaveComma(*decl.getArgs(), ps, [&](const Attribute &name) {
       ps << name.cast<StringAttr>();
     });
     ps << ")";
@@ -5349,9 +5351,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
             separateFile(op);
           }
         })
-        .Case<MacroDefOp>([&](auto op) {
-          replicatedOps.push_back(op);
-        })
+        .Case<MacroDefOp>([&](auto op) { replicatedOps.push_back(op); })
         .Case<MacroDeclOp>([&](auto op) {
           symbolCache.addDefinition(op.getSymNameAttr(), op);
         })
@@ -5425,9 +5425,8 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
       .Case<TypeScopeOp>([&](auto typedecls) {
         ModuleEmitter(state).emitStatement(typedecls);
       })
-      .Case<MacroDefOp>([&](auto op) {
-                ModuleEmitter(state).emitStatement(op);
-      }      )
+      .Case<MacroDefOp>(
+          [&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Default([&](auto *op) {
         state.encounteredError = true;
         op->emitError("unknown operation (ExportVerilog::emitOperation)");
