@@ -568,9 +568,16 @@ PortMappingInfo Visitor::mapPortType(Type type) {
         .template Case<OpenVectorType>(
             [&](OpenVectorType ovTy) -> FIRRTLBaseType {
               FIRRTLBaseType convert;
-              for (auto idx : llvm::seq<size_t>(0U, ovTy.getNumElements()))
-                convert = f(f, ovTy.getElementType(), suffix + "_" + Twine(idx),
-                            flip, fieldID + ovTy.getFieldID(idx));
+              // Walk for each index to extract each leaf separately, but expect
+              // same hw-only type for all.
+              for (auto idx : llvm::seq<size_t>(0U, ovTy.getNumElements())) {
+                auto hwElementType =
+                    f(f, ovTy.getElementType(), suffix + "_" + Twine(idx), flip,
+                      fieldID + ovTy.getFieldID(idx));
+                assert((!convert || convert == hwElementType) &&
+                       "expected same hw type for all elements");
+                convert = hwElementType;
+              }
 
               if (!convert)
                 return FIRRTLBaseType{};
