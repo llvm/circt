@@ -202,6 +202,11 @@ LogicalResult Visitor::visit(FModuleLike mod) {
           auto newPort = port;
           newPort.type = pmi.hwType;
           newPorts.emplace_back(idxOfInsertPoint, newPort);
+
+          // If want to run this pass later, need to fixup annotations.
+          if (!port.annotations.empty())
+            return mlir::emitError(port.loc)
+                   << "annotations on open aggregates not handled yet";
         } else {
           if (port.sym)
             return mlir::emitError(port.loc)
@@ -440,6 +445,11 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
                           /*symName=*/StringAttr{}, loc,
                           AnnotationSet(op.getPortAnnotation(index)));
           newPorts.emplace_back(idxOfInsertPoint, hwPort);
+
+          // If want to run this pass later, need to fixup annotations.
+          if (!op.getPortAnnotation(index).empty())
+            return mlir::emitError(op.getLoc())
+                   << "annotations on open aggregates not handled yet";
         } else {
           if (!op.getPortAnnotation(index).empty())
             return mlir::emitError(op.getLoc())
