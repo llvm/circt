@@ -3225,6 +3225,9 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
       parseExp(clock, "expected expression for register clock"))
     return failure();
 
+  if (!isa<FIRRTLBaseType>(type))
+    return emitError(startTok.getLoc(), "register must have base type");
+
   // Parse the 'with' specifier if present.
   Value resetSignal, resetValue;
   if (consumeIf(FIRToken::kw_with)) {
@@ -3316,11 +3319,17 @@ ParseResult FIRStmtParser::parseRegisterWithReset() {
       parseOptionalInfo())
     return failure();
 
+  if (!isa<FIRRTLBaseType>(type))
+    return emitError(startTok.getLoc(), "register must have base type");
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  bool forceable = !!firrtl::detail::getForceableResultType(true, type);
   auto result = builder
                     .create<RegResetOp>(type, clock, resetSignal, resetValue,
                                         id, NameKindEnum::InterestingName,
                                         getConstants().emptyArrayAttr,
-                                        StringAttr{}, !isConst(type))
+                                        StringAttr{}, forceable)
                     .getResult();
 
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
