@@ -176,56 +176,65 @@ LogicExporter::Visitor::visitInvalidTypeOp(mlir::Operation *op,
 
 // This macro implements the visiting function for a `comb` operation accepting
 // a variadic number of operands.
-#define visitVariadicCombOp(OP_NAME)                                           \
-  LLVM_DEBUG(lec::dbgs() << "Visiting " << op->getName() << "\n");             \
-  lec::Scope indent;                                                           \
-  LLVM_DEBUG(debugOperands(op));                                               \
-  bool twoState = op.getTwoState();                                            \
-  REJECT_N_STATE_LOGIC();                                                      \
-  mlir::Value result = op.getResult();                                         \
-  LLVM_DEBUG(debugOpResult(result));                                           \
-  circuit->perform##OP_NAME(result, op.getOperands());                         \
-  return mlir::success()
+template <typename OpTy, typename FnTy>
+static mlir::LogicalResult visitVariadicCombOp(Solver::Circuit *circuit,
+                                               OpTy op, FnTy fn) {
+  LLVM_DEBUG(lec::dbgs() << "Visiting " << op->getName() << "\n");
+  lec::Scope indent;
+  LLVM_DEBUG(debugOperands(op));
+  bool twoState = op.getTwoState();
+  REJECT_N_STATE_LOGIC();
+  mlir::Value result = op.getResult();
+  LLVM_DEBUG(debugOpResult(result));
+  (circuit->*fn)(result, op.getOperands());
+  return mlir::success();
+}
 
 // This macro implements the visiting function for a `comb` operation accepting
 // two operands.
-#define visitBinaryCombOp(OP_NAME)                                             \
-  LLVM_DEBUG(lec::dbgs() << "Visiting " << op->getName() << "\n");             \
-  lec::Scope indent;                                                           \
-  LLVM_DEBUG(debugOperands(op));                                               \
-  bool twoState = op.getTwoState();                                            \
-  REJECT_N_STATE_LOGIC();                                                      \
-  auto lhs = op.getLhs();                                                      \
-  auto rhs = op.getRhs();                                                      \
-  auto result = op.getResult();                                                \
-  LLVM_DEBUG(debugOpResult(result));                                           \
-  circuit->perform##OP_NAME(result, lhs, rhs);                                 \
-  return mlir::success()
+template <typename OpTy, typename FnTy>
+static mlir::LogicalResult visitBinaryCombOp(Solver::Circuit *circuit, OpTy op,
+                                             FnTy fn) {
+  LLVM_DEBUG(lec::dbgs() << "Visiting " << op->getName() << "\n");
+  lec::Scope indent;
+  LLVM_DEBUG(debugOperands(op));
+  bool twoState = op.getTwoState();
+  REJECT_N_STATE_LOGIC();
+  auto lhs = op.getLhs();
+  auto rhs = op.getRhs();
+  auto result = op.getResult();
+  LLVM_DEBUG(debugOpResult(result));
+  (circuit->*fn)(result, lhs, rhs);
+  return mlir::success();
+}
 
 // This macro implements the visiting function for a `comb` operation accepting
 // one operand.
-#define visitUnaryCombOp(OP_NAME)                                              \
-  LLVM_DEBUG(lec::dbgs() << "Visiting " << op->getName() << "\n");             \
-  lec::Scope indent;                                                           \
-  LLVM_DEBUG(debugOperands(op));                                               \
-  bool twoState = op.getTwoState();                                            \
-  REJECT_N_STATE_LOGIC();                                                      \
-  auto input = op.getInput();                                                  \
-  auto result = op.getResult();                                                \
-  LLVM_DEBUG(debugOpResult(result));                                           \
-  circuit->perform##OP_NAME(result, input);                                    \
-  return mlir::success()
+template <typename OpTy, typename FnTy>
+static mlir::LogicalResult visitUnaryCombOp(Solver::Circuit *circuit, OpTy op,
+                                            FnTy fn) {
+  LLVM_DEBUG(lec::dbgs() << "Visiting " << op->getName() << "\n");
+  lec::Scope indent;
+  LLVM_DEBUG(debugOperands(op));
+  bool twoState = op.getTwoState();
+  REJECT_N_STATE_LOGIC();
+  auto input = op.getInput();
+  auto result = op.getResult();
+  LLVM_DEBUG(debugOpResult(result));
+  (circuit->*fn)(result, input);
+  return mlir::success();
+}
 
 mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::AddOp &op,
                                   Solver::Circuit *circuit) {
-  visitVariadicCombOp(Add);
+  return visitVariadicCombOp(circuit, op, &Solver::Circuit::performAdd);
 }
 
 mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::AndOp &op,
                                   Solver::Circuit *circuit) {
-  visitVariadicCombOp(And);
+  return visitVariadicCombOp(circuit, op, &Solver::Circuit::performAnd);
 }
 
 mlir::LogicalResult
@@ -243,13 +252,13 @@ LogicExporter::Visitor::visitComb(circt::comb::ConcatOp &op,
 mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::DivSOp &op,
                                   Solver::Circuit *circuit) {
-  visitBinaryCombOp(DivS);
+  return visitBinaryCombOp(circuit, op, &Solver::Circuit::performDivS);
 }
 
 mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::DivUOp &op,
                                   Solver::Circuit *circuit) {
-  visitBinaryCombOp(DivU);
+  return visitBinaryCombOp(circuit, op, &Solver::Circuit::performDivU);
 }
 
 mlir::LogicalResult
@@ -288,19 +297,19 @@ LogicExporter::Visitor::visitComb(circt::comb::ICmpOp &op,
 mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::ModSOp &op,
                                   Solver::Circuit *circuit) {
-  visitBinaryCombOp(ModS);
+  return visitBinaryCombOp(circuit, op, &Solver::Circuit::performModS);
 }
 
 mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::ModUOp &op,
                                   Solver::Circuit *circuit) {
-  visitBinaryCombOp(ModU);
+  return visitBinaryCombOp(circuit, op, &Solver::Circuit::performModU);
 }
 
 mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::MulOp &op,
                                   Solver::Circuit *circuit) {
-  visitVariadicCombOp(Mul);
+  return visitVariadicCombOp(circuit, op, &Solver::Circuit::performMul);
 }
 
 mlir::LogicalResult
@@ -323,13 +332,13 @@ LogicExporter::Visitor::visitComb(circt::comb::MuxOp &op,
 mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::OrOp &op,
                                   Solver::Circuit *circuit) {
-  visitVariadicCombOp(Or);
+  return visitVariadicCombOp(circuit, op, &Solver::Circuit::performOr);
 }
 
 mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::ParityOp &op,
                                   Solver::Circuit *circuit) {
-  visitUnaryCombOp(Parity);
+  return visitUnaryCombOp(circuit, op, &Solver::Circuit::performParity);
 }
 
 mlir::LogicalResult
@@ -348,31 +357,31 @@ LogicExporter::Visitor::visitComb(circt::comb::ReplicateOp &op,
 mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::ShlOp &op,
                                   Solver::Circuit *circuit) {
-  visitBinaryCombOp(Shl);
+  return visitBinaryCombOp(circuit, op, &Solver::Circuit::performShl);
 }
 
 mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::ShrSOp &op,
                                   Solver::Circuit *circuit) {
-  visitBinaryCombOp(ShrS);
+  return visitBinaryCombOp(circuit, op, &Solver::Circuit::performShrS);
 }
 
 mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::ShrUOp &op,
                                   Solver::Circuit *circuit) {
-  visitBinaryCombOp(ShrU);
+  return visitBinaryCombOp(circuit, op, &Solver::Circuit::performShrU);
 }
 
 mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::SubOp &op,
                                   Solver::Circuit *circuit) {
-  visitVariadicCombOp(Sub);
+  return visitVariadicCombOp(circuit, op, &Solver::Circuit::performSub);
 }
 
 mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::XorOp &op,
                                   Solver::Circuit *circuit) {
-  visitVariadicCombOp(Xor);
+  return visitVariadicCombOp(circuit, op, &Solver::Circuit::performXor);
 }
 
 //===----------------------------------------------------------------------===//
