@@ -1614,7 +1614,7 @@ StrictConnectOp firrtl::getSingleConnectUserOf(Value value) {
 
     if (auto aConnect = dyn_cast<FConnectLike>(user))
       if (aConnect.getDest() == value) {
-        auto strictConnect = dyn_cast<StrictConnectOp>(aConnect);
+        auto strictConnect = dyn_cast<StrictConnectOp>(*aConnect);
         // If this is not a strict connect, or a second strict connect, fail.
         if (!strictConnect || (connect && connect != strictConnect))
           return {};
