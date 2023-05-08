@@ -210,6 +210,10 @@ bool areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
                               bool destOuterTypeIsConst = false,
                               bool srcOuterTypeIsConst = false);
 
+/// Returns whether the srcType can be const-casted to the destType.
+bool areTypesConstCastable(FIRRTLType destType, FIRRTLType srcType,
+                           bool srcOuterTypeIsConst = false);
+
 /// Returns true if the destination is at least as wide as a source.  The source
 /// and destination types must be equivalent non-analog types.  The types are
 /// recursively connected to ensure that the destination is larger than the

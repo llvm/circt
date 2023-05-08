@@ -904,6 +904,65 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
          widthlessSrcType.getConstType(false);
 }
 
+/// Returns whether the srcType can be const-casted to the destType.
+bool firrtl::areTypesConstCastable(FIRRTLType destFType, FIRRTLType srcFType,
+                                   bool srcOuterTypeIsConst) {
+  // Identical types are always castable
+  if (destFType == srcFType)
+    return true;
+
+  auto destType = destFType.dyn_cast<FIRRTLBaseType>();
+  auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
+
+  // For non-base types, only castable if identical.
+  if (!destType || !srcType)
+    return false;
+
+  // Cannot cast non-'const' src to 'const' dest
+  if (destType.isConst() && !srcType.isConst() && !srcOuterTypeIsConst)
+    return false;
+
+  // Vector types can be casted if they have the same size and castable element
+  // type.
+  auto destVectorType = destType.dyn_cast<FVectorType>();
+  auto srcVectorType = srcType.dyn_cast<FVectorType>();
+  if (destVectorType && srcVectorType)
+    return destVectorType.getNumElements() == srcVectorType.getNumElements() &&
+           areTypesConstCastable(
+               destVectorType.getElementType(), srcVectorType.getElementType(),
+               srcOuterTypeIsConst || srcVectorType.isConst());
+
+  // Bundle types can be casted if they have the same size, element names,
+  // and castable element types.
+  auto destBundleType = destType.dyn_cast<BundleType>();
+  auto srcBundleType = srcType.dyn_cast<BundleType>();
+  if (destBundleType && srcBundleType) {
+    auto destElements = destBundleType.getElements();
+    auto srcElements = srcBundleType.getElements();
+    size_t numDestElements = destElements.size();
+    if (numDestElements != srcElements.size())
+      return false;
+
+    for (size_t i = 0; i < numDestElements; ++i) {
+      auto destElement = destElements[i];
+      auto srcElement = srcElements[i];
+      if (destElement.name != srcElement.name ||
+          destElement.isFlip != srcElement.isFlip ||
+          !areTypesConstCastable(destElement.type, srcElement.type,
+                                 srcOuterTypeIsConst ||
+                                     srcBundleType.isConst()))
+        return false;
+    }
+    return true;
+  }
+
+  // Ground types can be casted if the source type is a const
+  // version of the destination type
+  return destType == srcType.getConstType(false) ||
+         (destType.isConst() && srcOuterTypeIsConst &&
+          destType == srcType.getConstType(true));
+}
+
 /// Returns true if the destination is at least as wide as an equivalent source.
 bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
   return TypeSwitch<FIRRTLBaseType, bool>(dstType)
