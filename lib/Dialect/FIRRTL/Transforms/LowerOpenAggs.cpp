@@ -541,8 +541,6 @@ PortMappingInfo Visitor::mapPortType(Type type) {
     return pi;
   }
 
-  // TODO: Manage SmallString for suffix instead of Twine of pieces (since will
-  // conv to vector anyway).
   // NOLINTBEGIN(misc-no-recursion)
   auto recurse = [&](auto &&f, FIRRTLType type, const Twine &suffix = "",
                      bool flip = false,
