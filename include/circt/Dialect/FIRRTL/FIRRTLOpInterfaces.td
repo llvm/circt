@@ -14,24 +14,12 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLOPINTERFACES_TD
 
 include "mlir/IR/OpBase.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 
-def FModuleLike : OpInterface<"FModuleLike"> {
+def FModuleLike : OpInterface<"FModuleLike", [HWModuleLike]> {
   let cppNamespace = "circt::firrtl";
   let description = "Provide common module information.";
   let methods = [
-
-    //===------------------------------------------------------------------===//
-    // Module Name
-    //===------------------------------------------------------------------===//
-
-    InterfaceMethod<"Get the module name",
-    "StringRef", "moduleName", (ins),
-    /*methodBody=*/[{ return $_op.getName(); }]>,
-
-    InterfaceMethod<"Get the module name",
-    "StringAttr", "moduleNameAttr", (ins),
-    /*methodBody=*/[{ return $_op.getNameAttr(); }]>,
-
     //===------------------------------------------------------------------===//
     // Parameters
     //===------------------------------------------------------------------===//

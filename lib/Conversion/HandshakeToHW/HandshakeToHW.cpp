@@ -1632,7 +1632,7 @@ public:
         initValueCs = s.constant(dataType.getIntOrFloatBitWidth(), *initValue);
 
       // This could/should be revised but needs a larger rethinking to avoid
-      // introducing new bugs. Implement similarly to HandshakeToFIRRTL.
+      // introducing new bugs.
       Value dataReg =
           buildDataBufferLogic(validReg, initValueCs, validBE, readyBE);
       buildControlBufferLogic(validReg, readyBE, dataReg);

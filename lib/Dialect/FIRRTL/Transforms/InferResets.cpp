@@ -818,8 +818,8 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
                   .Case<BundleType>([&](auto type) {
                     return getFieldID(type, op.getIndex());
                   });
-          traceResets(op.getResult().getType().getType(), op.getResult(), 0,
-                      aggType, op.getInput(), fieldID, op.getLoc());
+          traceResets(op.getType(), op.getResult(), 0, op.getResult().getType(),
+                      op.getInput(), fieldID, op.getLoc());
         });
   });
 }
@@ -1102,6 +1102,7 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
       SmallVector<Type, 2> types;
       if (failed(op.inferReturnTypes(op->getContext(), op->getLoc(),
                                      op->getOperands(), op->getAttrDictionary(),
+                                     op->getPropertiesStorage(),
                                      op->getRegions(), types)))
         return failure();
 

@@ -28,6 +28,7 @@ class ArcOp<string mnemonic, list<Trait> traits = []> :
 def DefineOp : ArcOp<"define", [
   IsolatedFromAbove,
   FunctionOpInterface,
+  CallableOpInterface,
   Symbol,
   RegionKindInterface,
   SingleBlockImplicitTerminator<"arc::OutputOp">,
@@ -96,6 +97,19 @@ def DefineOp : ArcOp<"define", [
                            "' attribute of function type";
       return mlir::success();
     }
+
+    /// Returns true if the arc returns the inputs directly and in the same
+    /// order, otherwise false.
+    bool isPassthrough();
+
+    //===------------------------------------------------------------------===//
+    // CallableOpInterface
+    //===------------------------------------------------------------------===//
+
+    mlir::Region *getCallableRegion() { return &getBody(); }
+    ArrayRef<mlir::Type> getCallableResults() { return getResultTypes(); }
+    mlir::ArrayAttr getCallableArgAttrs() { return nullptr; }
+    mlir::ArrayAttr getCallableResAttrs() { return nullptr; }
   }];
 }
 
@@ -120,7 +134,8 @@ def StateOp : ArcOp<"state", [
   CallOpInterface, MemRefsNormalizable,
   CallOpMutableInterface,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-  AttrSizedOperandSegments
+  AttrSizedOperandSegments,
+  DeclareOpInterfaceMethods<ClockedOpInterface, ["isClocked"]>,
 ]> {
   let summary = "State transfer arc";
 
@@ -207,6 +222,12 @@ def StateOp : ArcOp<"state", [
     mlir::CallInterfaceCallable getCallableForCallee() {
       return (*this)->getAttrOfType<mlir::SymbolRefAttr>("arc");
     }
+
+    /// Set the callee for this operation.
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getArcAttrName(), callee.get<mlir::SymbolRefAttr>());
+    }
+
   }];
 }
 
@@ -235,6 +256,12 @@ def CallOp : ArcOp<"call", [
     mlir::CallInterfaceCallable getCallableForCallee() {
       return (*this)->getAttrOfType<mlir::SymbolRefAttr>("arc");
     }
+
+    /// Set the callee for this operation.
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getArcAttrName(), callee.get<mlir::SymbolRefAttr>());
+    }
+
   }];
 }
 
@@ -262,7 +289,8 @@ class MemoryAndDataTypesMatch<string mem, string data> : TypesMatchWith<
 def MemoryReadPortOp : ArcOp<"memory_read_port", [
   MemoryEffects<[MemRead]>,
   MemoryAndDataTypesMatch<"memory", "data">,
-  AttrSizedOperandSegments
+  AttrSizedOperandSegments,
+  ClockedOpInterface
 ]> {
   let summary = "Read port from a memory";
   let arguments = (ins
@@ -285,7 +313,8 @@ def MemoryReadPortOp : ArcOp<"memory_read_port", [
 def MemoryWritePortOp : ArcOp<"memory_write_port", [
   MemoryEffects<[MemWrite]>,
   MemoryAndDataTypesMatch<"memory", "data">,
-  AttrSizedOperandSegments
+  AttrSizedOperandSegments,
+  ClockedOpInterface
 ]> {
   let summary = "Write port to a memory";
   let arguments = (ins
@@ -374,6 +403,7 @@ def ClockDomainOp : ArcOp<"clock_domain", [
   }];
 
   let hasRegionVerifier = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 def ClockTreeOp : ArcOp<"clock_tree", [NoTerminator, NoRegionArguments]> {
@@ -458,7 +488,7 @@ def RootOutputOp : ArcOp<"root_output", [
 
 def AllocatableType : AnyTypeOf<[StateType, MemoryType, StorageType]>;
 
-def StorageGetOp : ArcOp<"storage.get", [MemoryEffects<[MemRead]>]> {
+def StorageGetOp : ArcOp<"storage.get", [Pure]> {
   let summary = "Access an allocated state, memory, or storage slice";
   let arguments = (ins StorageType:$storage, I32Attr:$offset);
   let results = (outs AllocatableType:$result);
@@ -466,6 +496,7 @@ def StorageGetOp : ArcOp<"storage.get", [MemoryEffects<[MemRead]>]> {
     $storage `[` $offset `]` attr-dict
     `:` qualified(type($storage)) `->` type($result)
   }];
+  let hasCanonicalizeMethod = 1;
 }
 
 //===----------------------------------------------------------------------===//

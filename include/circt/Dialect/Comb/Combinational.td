@@ -231,6 +231,7 @@ def ConcatOp : CombOp<"concat", [InferTypeOpInterface, Pure]> {
                                           std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
+                                          mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
   }];

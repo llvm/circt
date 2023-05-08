@@ -114,6 +114,17 @@ LogicalResult DefineOp::verifyRegions() {
   return success();
 }
 
+bool DefineOp::isPassthrough() {
+  if (getNumArguments() != getNumResults())
+    return false;
+
+  return llvm::all_of(
+      llvm::zip(getArguments(), getBodyBlock().getTerminator()->getOperands()),
+      [](const auto &argAndRes) {
+        return std::get<0>(argAndRes) == std::get<1>(argAndRes);
+      });
+}
+
 //===----------------------------------------------------------------------===//
 // OutputOp
 //===----------------------------------------------------------------------===//
@@ -169,6 +180,8 @@ LogicalResult StateOp::verify() {
 
   return success();
 }
+
+bool StateOp::isClocked() { return getLatency() > 0; }
 
 //===----------------------------------------------------------------------===//
 // CallOp

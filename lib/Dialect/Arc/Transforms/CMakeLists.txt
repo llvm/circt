@@ -6,6 +6,8 @@ add_circt_dialect_library(CIRCTArcTransforms
   InferStateProperties.cpp
   InlineArcs.cpp
   InlineModules.cpp
+  IsolateClocks.cpp
+  LatencyRetiming.cpp
   LegalizeStateUpdate.cpp
   LowerClocksToFuncs.cpp
   LowerLUT.cpp

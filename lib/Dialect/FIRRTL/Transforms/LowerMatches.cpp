@@ -26,10 +26,16 @@ class LowerMatchesPass : public LowerMatchesBase<LowerMatchesPass> {
 } // end anonymous namespace
 
 static void lowerMatch(MatchOp match) {
-  ImplicitLocOpBuilder b(match.getLoc(), match);
 
-  auto input = match.getInput();
+  // If this is an empty enumeration statement, just delete the match.
   auto numCases = match->getNumRegions();
+  if (!numCases) {
+    match->erase();
+    return;
+  }
+
+  ImplicitLocOpBuilder b(match.getLoc(), match);
+  auto input = match.getInput();
   for (size_t i = 0; i < numCases - 1; ++i) {
     // Create a WhenOp which tests the enum's tag.
     auto condition = b.create<IsTagOp>(input, match.getFieldIndexAttr(i));
@@ -51,20 +57,19 @@ static void lowerMatch(MatchOp match) {
     b.setInsertionPointToStart(&when.getElseBlock());
   }
 
-  // The final else is not handled with a conditional, move the case block to
-  // the default block.
-  auto *defaultBlock = b.getInsertionBlock();
-  auto *caseBlock = &match->getRegions().back().front();
-  caseBlock->moveBefore(defaultBlock);
-  defaultBlock->erase();
+  // At this point, the insertion point is either in the final else-block, or
+  // if there was only 1 variant, right before the match operation.
 
   // Replace the block argument with a subtag op.
-  b.setInsertionPointToStart(caseBlock);
   auto data = b.create<SubtagOp>(input, match.getFieldIndexAttr(numCases - 1));
-  caseBlock->getArgument(0).replaceAllUsesWith(data);
-  caseBlock->eraseArgument(0);
 
-  // Erase the match op.
+  // Get the final block from the match statement, and splice it into the
+  // current insertion point.
+  auto *caseBlock = &match->getRegions().back().front();
+  caseBlock->getArgument(0).replaceAllUsesWith(data);
+  auto *defaultBlock = b.getInsertionBlock();
+  defaultBlock->getOperations().splice(b.getInsertionPoint(),
+                                       caseBlock->getOperations());
   match->erase();
 }
 

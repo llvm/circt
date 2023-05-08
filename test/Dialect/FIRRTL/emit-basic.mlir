@@ -21,6 +21,8 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: input a09 : { a : UInt, flip b : UInt }
     // CHECK-NEXT: input a10 : UInt[42]
     // CHECK-NEXT: output b0 : UInt
+    // CHECK-NEXT: output b1 : Probe<UInt<1>>
+    // CHECK-NEXT: output b2 : RWProbe<UInt<1>>
     in %a00: !firrtl.clock,
     in %a01: !firrtl.reset,
     in %a02: !firrtl.asyncreset,
@@ -32,7 +34,9 @@ firrtl.circuit "Foo" {
     in %a08: !firrtl.analog<42>,
     in %a09: !firrtl.bundle<a: uint, b flip: uint>,
     in %a10: !firrtl.vector<uint, 42>,
-    out %b0: !firrtl.uint
+    out %b0: !firrtl.uint,
+    out %b1: !firrtl.probe<uint<1>>,
+    out %b2: !firrtl.rwprobe<uint<1>>
   ) {}
 
   // CHECK-LABEL: module Simple :
@@ -43,7 +47,7 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: module Statements :
-  firrtl.module @Statements(in %ui1: !firrtl.uint<1>, in %someAddr: !firrtl.uint<8>, in %someClock: !firrtl.clock, in %someReset: !firrtl.reset, out %someOut: !firrtl.uint<1>) {
+  firrtl.module @Statements(in %ui1: !firrtl.uint<1>, in %someAddr: !firrtl.uint<8>, in %someClock: !firrtl.clock, in %someReset: !firrtl.reset, out %someOut: !firrtl.uint<1>, out %ref: !firrtl.probe<uint<1>>) {
     // CHECK: when ui1 :
     // CHECK:   skip
     firrtl.when %ui1 : !firrtl.uint<1> {
@@ -305,6 +309,22 @@ firrtl.circuit "Foo" {
     // CHECK: wire [[INV:_invalid.*]] : Clock
     // CHECK-NEXT: [[INV]] is invalid
     // CHECK-NEXT: reg dummyReg : UInt<42>, [[INV]]
+  }
+
+  // CHECK-LABEL: module RefSource
+  firrtl.module @RefSource(out %a_ref: !firrtl.probe<uint<1>>) {
+    %a = firrtl.wire : !firrtl.uint<1>
+    // CHECK: define a_ref = probe(a)
+    %a_ref_send = firrtl.ref.send %a : !firrtl.uint<1>
+    firrtl.ref.define %a_ref, %a_ref_send : !firrtl.probe<uint<1>>
+  }
+
+  // CHECK-LABEL: module RefSink
+  firrtl.module @RefSink() {
+    // CHECK: node b = read(refSource.a_ref)
+    %refSource_a_ref = firrtl.instance refSource @RefSource(out a_ref: !firrtl.probe<uint<1>>)
+    %a_ref_resolve = firrtl.ref.resolve %refSource_a_ref : !firrtl.probe<uint<1>>
+    %b = firrtl.node %a_ref_resolve : !firrtl.uint<1>
   }
 
   firrtl.extmodule @MyParameterizedExtModule<DEFAULT: i64 = 0, DEPTH: f64 = 3.242000e+01, FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32>(in in: !firrtl.uint, out out: !firrtl.uint<8>) attributes {defname = "name_thing"}

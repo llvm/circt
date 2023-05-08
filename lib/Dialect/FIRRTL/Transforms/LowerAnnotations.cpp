@@ -114,7 +114,7 @@ static FlatSymbolRefAttr buildNLA(const AnnoPathValue &target,
   }
 
   insts.push_back(
-      FlatSymbolRefAttr::get(target.ref.getModule().moduleNameAttr()));
+      FlatSymbolRefAttr::get(target.ref.getModule().getModuleNameAttr()));
 
   auto instAttr = ArrayAttr::get(state.circuit.getContext(), insts);
 
@@ -807,10 +807,10 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     LLVM_DEBUG({
       llvm::dbgs() << "  - index: " << index << "\n"
                    << "    source:\n"
-                   << "      module: " << sourceModule.moduleName() << "\n"
+                   << "      module: " << sourceModule.getModuleName() << "\n"
                    << "      value: " << source << "\n"
                    << "    sink:\n"
-                   << "      module: " << sinkModule.moduleName() << "\n"
+                   << "      module: " << sinkModule.getModuleName() << "\n"
                    << "      value: " << sink << "\n"
                    << "    newNameHint: " << problem.newNameHint << "\n";
     });
@@ -828,17 +828,15 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     // connecting.
     if (sourceModule == sinkModule) {
       LLVM_DEBUG(llvm::dbgs()
-                 << "    LCA: " << sourceModule.moduleName() << "\n");
+                 << "    LCA: " << sourceModule.getModuleName() << "\n");
       moduleModifications[sourceModule].connectionMap[index] = source;
       moduleModifications[sourceModule].uturns.push_back({index, sink});
       continue;
     }
 
     // Otherwise, get instance paths for source/sink, and compute LCA.
-    auto sourcePaths = state.instancePathCache.getAbsolutePaths(
-        cast<hw::HWModuleLike>(*sourceModule));
-    auto sinkPaths = state.instancePathCache.getAbsolutePaths(
-        cast<hw::HWModuleLike>(*sinkModule));
+    auto sourcePaths = state.instancePathCache.getAbsolutePaths(sourceModule);
+    auto sinkPaths = state.instancePathCache.getAbsolutePaths(sinkModule);
 
     if (sourcePaths.size() != 1 || sinkPaths.size() != 1) {
       auto diag =
