@@ -9,6 +9,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/OpDefinition.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/Support/Debug.h"
@@ -23,12 +24,7 @@ using namespace mlir;
 // Rewrite Patterns
 //===----------------------------------------------------------------------===//
 
-// struct RemoveHandshakeBuffers : public OpRewritePattern<handshake::BufferOp>
-// {
-//   using OpRewritePattern::OpRewritePattern;
-
 struct ResetGroupingPattern : public OpRewritePattern<ClockTreeOp> {
-public:
   using OpRewritePattern::OpRewritePattern;
   LogicalResult matchAndRewrite(ClockTreeOp clockTreeOp,
                                 PatternRewriter &rewriter) const override {
@@ -56,14 +52,14 @@ public:
         // Check we're not inlining an empty block
         if (auto *elseBlock = thisOp.elseBlock()) {
           rewriter.eraseOp(elseBlock->getTerminator());
-          if (auto *lastElseBlock = lastIfOp.elseBlock())
+          if (auto *lastElseBlock = lastIfOp.elseBlock()) {
             rewriter.inlineBlockBefore(elseBlock,
                                        &lastIfOp.elseBlock()->front());
-          else {
+          } else {
             lastElseBlock = rewriter.createBlock(&lastIfOp.getElseRegion());
             rewriter.setInsertionPointToEnd(lastElseBlock);
-            auto yieldOp =
-                rewriter.create<scf::YieldOp>(rewriter.getUnknownLoc());
+            auto yieldOp = rewriter.create<scf::YieldOp>(
+                lastElseBlock->getParentOp()->getLoc());
             rewriter.inlineBlockBefore(thisOp.elseBlock(), yieldOp);
           }
         }
@@ -76,7 +72,6 @@ public:
 };
 
 struct EnableGroupingPattern : public OpRewritePattern<ClockTreeOp> {
-public:
   using OpRewritePattern::OpRewritePattern;
   LogicalResult matchAndRewrite(ClockTreeOp clockTreeOp,
                                 PatternRewriter &rewriter) const override {
@@ -91,8 +86,7 @@ public:
     bool changed = false;
     for (auto *region : groupingRegions) {
       llvm::MapVector<mlir::Value, SmallVector<StateWriteOp>> enableMap;
-      auto writeOps = region->getOps<StateWriteOp>();
-      for (auto writeOp : writeOps) {
+      for (auto writeOp : region->getOps<StateWriteOp>()) {
         if (writeOp.getCondition())
           enableMap[writeOp.getCondition()].push_back(writeOp);
       }
@@ -100,10 +94,10 @@ public:
         // Only group if multiple writes share an enable
         if (writeOps.size() <= 1)
           continue;
-        if (isa<scf::IfOp>(region->getParentOp()))
-          rewriter.setInsertionPoint(region->back().getTerminator());
-        else
+        if (region->getParentOp()->hasTrait<OpTrait::NoTerminator>())
           rewriter.setInsertionPointToEnd(&region->back());
+        else
+          rewriter.setInsertionPoint(region->back().getTerminator());
         scf::IfOp ifOp =
             rewriter.create<scf::IfOp>(writeOps[0].getLoc(), enable, false);
         for (auto writeOp : writeOps) {
