@@ -18,6 +18,7 @@
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Calyx/CalyxPasses.h"
+#include "circt/Dialect/DC/DCPasses.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/FSM/FSMPasses.h"
@@ -44,6 +45,7 @@ inline void registerAllPasses() {
   // Standard Passes
   arc::registerPasses();
   calyx::registerPasses();
+  dc::registerPasses();
   esi::registerESIPasses();
   firrtl::registerPasses();
   fsm::registerPasses();
