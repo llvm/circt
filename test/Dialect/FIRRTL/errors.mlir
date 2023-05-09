@@ -509,6 +509,17 @@ firrtl.circuit "SeqMemPerFieldSym" {
 
 // -----
 
+firrtl.circuit "SeqCombMemDupSym" {
+  firrtl.module @SeqCombMemDupSym() {
+    // expected-note @below {{see existing inner symbol definition here}}
+    %smem = chirrtl.seqmem sym @x Undefined : !chirrtl.cmemory<bundle<a: uint<1>>, 1>
+    // expected-error @below {{redefinition of inner symbol named 'x'}}
+    %cmem = chirrtl.combmem sym @x : !chirrtl.cmemory<bundle<a: uint<1>>, 1>
+  }
+}
+
+// -----
+
 firrtl.circuit "MemoryPortInvalidReturnType" {
   firrtl.module @MemoryPortInvalidReturnType(in %sel : !firrtl.uint<8>, in %clock : !firrtl.clock) {
     %mem = chirrtl.combmem : !chirrtl.cmemory<uint<8>, 8>
