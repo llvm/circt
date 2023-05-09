@@ -779,10 +779,9 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     if (emittedDecls.count(name))
       return;
     emittedDecls.insert(name);
-    auto ip = b.saveInsertionPoint();
+    OpBuilder::InsertionGuard guard(b);
     b.setInsertionPointAfter(op);
     b.create<sv::MacroDeclOp>(name, args, StringAttr());
-    b.restoreInsertionPoint(ip);
   };
 
   // TODO: We could have an operation for macros and uses of them, and
