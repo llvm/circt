@@ -1937,6 +1937,9 @@ private:
   }
   SubExprInfo visitSV(MacroRefExprOp op);
   SubExprInfo visitSV(MacroRefExprSEOp op);
+  template <typename MacroTy>
+  SubExprInfo emitMacroCall(MacroTy op);
+
   SubExprInfo visitSV(ConstantXOp op);
   SubExprInfo visitSV(ConstantZOp op);
   SubExprInfo visitSV(ConstantStrOp op);
@@ -2452,7 +2455,8 @@ SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op, ArrayAttr symbols) {
   return {Unary, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitSV(MacroRefExprOp op) {
+template <typename MacroTy>
+SubExprInfo ExprEmitter::emitMacroCall(MacroTy op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
@@ -2462,20 +2466,22 @@ SubExprInfo ExprEmitter::visitSV(MacroRefExprOp op) {
   StringRef name =
       macroOp.getVerilogName() ? *macroOp.getVerilogName() : macroOp.getName();
   ps << "`" << PPExtString(name);
+  if (!op.getInputs().empty()) {
+    ps << "(";
+    llvm::interleaveComma(op.getInputs(), ps, [&](Value val) {
+      emitExpression(val, LowestPrecedence);
+    });
+    ps << ")";
+  }
   return {LowestPrecedence, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitSV(MacroRefExprSEOp op) {
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
+SubExprInfo ExprEmitter::visitSV(MacroRefExprOp op) {
+  return emitMacroCall(op);
+}
 
-  // Use the specified name or the symbol name as appropriate.
-  auto macroOp = op.getReferencedMacro(&state.symbolCache);
-  assert(macroOp && "Invalid IR");
-  StringRef name =
-      macroOp.getVerilogName() ? *macroOp.getVerilogName() : macroOp.getName();
-  ps << "`" << PPExtString(name);
-  return {LowestPrecedence, IsUnsigned};
+SubExprInfo ExprEmitter::visitSV(MacroRefExprSEOp op) {
+  return emitMacroCall(op);
 }
 
 SubExprInfo ExprEmitter::visitSV(ConstantXOp op) {
