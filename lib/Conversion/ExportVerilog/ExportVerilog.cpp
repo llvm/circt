@@ -4462,7 +4462,7 @@ LogicalResult StmtEmitter::visitSV(MacroDefOp op) {
     ps << ")";
   }
   if (!op.getFormatString().empty())
-    ps << op.getFormatStringAttr();
+    ps << " " << op.getFormatStringAttr();
   ps << PP::newline;
   return success();
 }
