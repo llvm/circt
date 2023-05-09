@@ -10,8 +10,9 @@
 #define CIRCT_DIALECT_ARC_ARCINTERFACES_TD
 
 include "mlir/IR/OpBase.td"
+include "mlir/Interfaces/CallInterfaces.td"
 
-def CallOpMutableInterface : OpInterface<"CallOpMutableInterface"> {
+def CallOpMutableInterface : OpInterface<"CallOpMutableInterface", [CallOpInterface]> {
   let description = [{
     Can be implemented in addition to `CallOpInterface` to allow mutation of the
     call operation.
@@ -23,8 +24,7 @@ def CallOpMutableInterface : OpInterface<"CallOpMutableInterface"> {
         Returns the operands within this call that are used as arguments to the
         callee as a mutable range.
       }],
-      "::mlir::MutableOperandRange", "getArgOperandsMutable"
-    >,
+      "::mlir::MutableOperandRange", "getArgOperandsMutable">,
   ];
 }
 
