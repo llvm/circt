@@ -8,7 +8,6 @@ add_circt_dialect_library(CIRCTDC
 
   DEPENDS
   MLIRDCIncGen
-  CIRCTDCCanonicalizationIncGen
 
   LINK_COMPONENTS
   Support
