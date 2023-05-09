@@ -473,11 +473,10 @@ firrtl.circuit "CombMemNonPassiveReturnType" {
 
 // -----
 
-firrtl.circuit "CombMemDupSym" {
-  firrtl.module @CombMemDupSym() {
-    // expected-note @below {{see existing inner symbol definition here}}
-    // expected-error @below {{redefinition of inner symbol named 'x'}}
-    %mem = chirrtl.combmem sym [<@x,0,public>,<@x,0,public>] : !chirrtl.cmemory<bundle<a: uint<1>>, 1>
+firrtl.circuit "CombMemPerFieldSym" {
+  firrtl.module @CombMemPerFieldSym() {
+    // expected-error @below {{op does not support per-field inner symbols}}
+    %mem = chirrtl.combmem sym [<@x,1,public>] : !chirrtl.cmemory<bundle<a: uint<1>>, 1>
   }
 }
 
@@ -501,11 +500,10 @@ firrtl.circuit "SeqMemNonPassiveReturnType" {
 
 // -----
 
-firrtl.circuit "SeqMemDupSym" {
-  firrtl.module @SeqMemDupSym() {
-    // expected-note @below {{see existing inner symbol definition here}}
-    // expected-error @below {{redefinition of inner symbol named 'x'}}
-    %mem = chirrtl.seqmem sym [<@x,0,public>,<@x,0,public>] Undefined : !chirrtl.cmemory<bundle<a: uint<1>>, 1>
+firrtl.circuit "SeqMemPerFieldSym" {
+  firrtl.module @SeqMemPerFieldSym() {
+    // expected-error @below {{op does not support per-field inner symbols}}
+    %mem = chirrtl.seqmem sym [<@x,1,public>] Undefined : !chirrtl.cmemory<bundle<a: uint<1>>, 1>
   }
 }
 
