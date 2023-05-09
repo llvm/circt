@@ -808,6 +808,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     consumeToken(FIRToken::l_brace);
 
     SmallVector<OpenBundleType::BundleElement, 4> elements;
+    bool bundleCompatible = true;
     if (parseListUntil(FIRToken::r_brace, [&]() -> ParseResult {
           bool isFlipped = consumeIf(FIRToken::kw_flip);
 
@@ -820,21 +821,20 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
 
           elements.push_back(
               {StringAttr::get(getContext(), fieldName), isFlipped, type});
+          bundleCompatible &= isa<BundleType::ElementType>(type);
           return success();
         }))
       return failure();
 
     // Try to emit base-only bundle.
-    SmallVector<BundleType::BundleElement, 4> baseElements;
-    for (auto element : elements)
-      if (auto baseType = dyn_cast<BundleType::ElementType>(element.type)) {
-        baseElements.push_back({element.name, element.isFlip, baseType});
-      } else
-        break;
-
-    if (baseElements.size() == elements.size())
-      result = BundleType::get(getContext(), baseElements);
-    else
+    if (bundleCompatible) {
+      auto bundleElements = llvm::map_range(elements, [](auto element) {
+        return BundleType::BundleElement{
+            element.name, element.isFlip,
+            cast<BundleType::ElementType>(element.type)};
+      });
+      result = BundleType::get(getContext(), llvm::to_vector(bundleElements));
+    } else
       result = OpenBundleType::get(getContext(), elements);
     break;
   }
