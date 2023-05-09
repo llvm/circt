@@ -7,9 +7,9 @@ hw.module @basics(%clk0: i1, %clk1: i1, %clk2: i1, %c0: i1, %c1: i1, %in: i32) -
   %0 = comb.and %c0, %c1 : i1
   %1 = arc.state @DummyArc(%in) clock %clk0 enable %0 reset %c1 lat 1 : (i32) -> i32
   %mem = arc.memory <2 x i32>
-  arc.memory_write_port %mem[%c0], %2 clock %clk0 : <2 x i32>, i1
+  arc.memory_write_port %mem, @identity(%c0, %2) clock %clk0 : <2 x i32>, i1, i1, i32
   %2 = arc.memory_read_port %mem[%c0] clock %clk0 : <2 x i32>, i1
-  arc.memory_write_port %mem[%c1], %1 clock %clk0 : <2 x i32>, i1
+  arc.memory_write_port %mem, @identity(%c1, %1) clock %clk0 : <2 x i32>, i1, i1, i32
   %3 = arc.state @DummyArc(%4) clock %clk1 enable %0 reset %c1  lat 1 : (i32) -> i32
   %4 = arc.state @DummyArc(%2) lat 0 : (i32) -> i32
   %5 = arc.state @DummyArc(%4) clock %clk2 lat 1 : (i32) -> i32
@@ -20,9 +20,9 @@ hw.module @basics(%clk0: i1, %clk1: i1, %clk2: i1, %c0: i1, %c1: i1, %in: i32) -
   // CHECK-NEXT: [[V2]] = arc.clock_domain (%c1, %c0, [[V0]], %in) clock %clk0 : (i1, i1, i1, i32) -> i32 {
   // CHECK-NEXT: ^bb0(%arg0: i1, %arg1: i1, %arg2: i1, %arg3: i32):
   // CHECK-NEXT:   [[MEM:%.+]] = arc.memory <2 x i32>
-  // CHECK-NEXT:   arc.memory_write_port [[MEM]][%arg0], [[V7:%.+]] : <2 x i32>, i1
+  // CHECK-NEXT:   arc.memory_write_port [[MEM]], @identity(%arg0, [[V7:%.+]]) :
   // CHECK-NEXT:   [[V6:%.+]] = arc.memory_read_port [[MEM]][%arg1] : <2 x i32>, i1
-  // CHECK-NEXT:   arc.memory_write_port [[MEM]][%arg1], [[V6]] : <2 x i32>, i1
+  // CHECK-NEXT:   arc.memory_write_port [[MEM]], @identity(%arg1, [[V6]]) :
   // CHECK-NEXT:   [[V7]] = arc.state @DummyArc(%arg3) enable %arg2 reset %arg0 lat 1 : (i32) -> i32
   // CHECK-NEXT:   arc.output [[V6]] : i32
   // CHECK-NEXT: }
@@ -40,6 +40,9 @@ hw.module @basics(%clk0: i1, %clk1: i1, %clk2: i1, %c0: i1, %c1: i1, %in: i32) -
 }
 arc.define @DummyArc(%arg0: i32) -> i32 {
   arc.output %arg0 : i32
+}
+arc.define @identity(%arg0: i1, %arg1: i32) -> (i1, i32) {
+  arc.output %arg0, %arg1 : i1, i32
 }
 
 // CHECK-LABEL: hw.module @preexistingClockDomain

@@ -310,29 +310,53 @@ def MemoryReadPortOp : ArcOp<"memory_read_port", [
 
 def MemoryWritePortOp : ArcOp<"memory_write_port", [
   MemoryEffects<[MemWrite]>,
-  MemoryAndDataTypesMatch<"memory", "data">,
+  CallOpMutableInterface,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
   AttrSizedOperandSegments,
   ClockedOpInterface
 ]> {
   let summary = "Write port to a memory";
   let arguments = (ins
     MemoryType:$memory,
-    AnyInteger:$address,
+    FlatSymbolRefAttr:$arc,
+    Variadic<AnyType>:$inputs,
+    TypeAttrOf<AnySignlessInteger>:$addressType,
     Optional<I1>:$clock,
-    Optional<I1>:$enable,
-    AnyInteger:$data,
-    Optional<AnyInteger>:$mask
+    UnitAttr:$enable,
+    UnitAttr:$mask
   );
 
   let assemblyFormat = [{
-    $memory `[` $address `]` `,` $data (`mask` `(` $mask^ `:` type($mask) `)`)?
-    (`if` $enable^)? (`clock` $clock^)?
-    attr-dict `:` type($memory) `,` type($address)
+    $memory `,` $arc  `(` $inputs `)` (`clock` $clock^)?
+    (`enable` $enable^)? (`mask` $mask^)?
+    attr-dict `:` type($memory) `,` $addressType `,` type($inputs)
   }];
 
   let hasVerifier = 1;
-  let hasFolder = 1;
-  let hasCanonicalizeMethod = 1;
+
+  let extraClassDeclaration = [{
+    SmallVector<Type> getArcResultTypes();
+    static unsigned getAddressIdx() { return 0; }
+    static unsigned getDataIdx() { return 1; }
+    static unsigned getEnableIdx() { return 2; }
+    static unsigned getMaskIdx() { return 3; }
+
+    operand_range getArgOperands() {
+      return getInputs();
+    }
+    MutableOperandRange getArgOperandsMutable() {
+      return getInputsMutable();
+    }
+
+    mlir::CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<mlir::SymbolRefAttr>("arc");
+    }
+
+    /// Set the callee for this operation.
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getArcAttrName(), callee.get<mlir::SymbolRefAttr>());
+    }
+  }];
 }
 
 def MemoryReadOp : ArcOp<"memory_read", [

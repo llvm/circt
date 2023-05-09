@@ -7,7 +7,7 @@ hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numW
 hw.module @TestWOMemory(%clock: i1, %addr: i10, %enable: i1, %data: i8) {
   // CHECK-NOT: hw.instance
   // CHECK-NEXT: [[FOO:%.+]] = arc.memory <1024 x i8> {name = "foo"}
-  // CHECK-NEXT: arc.memory_write_port [[FOO]][%addr], %data if %enable clock %clock : <1024 x i8>, i10
+  // CHECK-NEXT: arc.memory_write_port [[FOO]], @mem_write{{.*}}(%addr, %data, %enable) clock %clock enable : <1024 x i8>, i10, i10, i8, i1
   // CHECK-NEXT: hw.output
   hw.instance "foo" @WOMemory(W0_addr: %addr: i10, W0_en: %enable: i1, W0_clk: %clock: i1, W0_data: %data: i8) -> ()
 }
@@ -25,7 +25,7 @@ hw.module @TestWOMemoryWithMask(%clock: i1, %addr: i10, %enable: i1, %data: i16,
   // CHECK-NEXT: [[MASK_BIT1:%.+]] = comb.extract %mask from 1 : (i2) -> i1
   // CHECK-NEXT: [[MASK_BYTE1:%.+]] = comb.replicate [[MASK_BIT1]] : (i1) -> i8
   // CHECK-NEXT: [[MASK:%.+]] = comb.concat [[MASK_BYTE0]], [[MASK_BYTE1]]
-  // CHECK-NEXT: arc.memory_write_port [[FOO]][%addr], %data mask([[MASK]] : i16) if %enable clock %clock : <1024 x i16>, i10
+  // CHECK-NEXT: arc.memory_write_port [[FOO]], @mem_write{{.*}}(%addr, %data, %enable, [[MASK]]) clock %clock enable mask : <1024 x i16>, i10, i10, i16, i1, i16
   // CHECK-NEXT: hw.output
   hw.instance "foo" @WOMemoryWithMask(W0_addr: %addr: i10, W0_en: %enable: i1, W0_clk: %clock: i1, W0_data: %data: i16, W0_mask: %mask: i2) -> ()
 }
@@ -74,7 +74,7 @@ hw.module @TestRWMemory(%clock: i1, %addr: i10, %enable: i1, %wmode: i1, %wdata:
   // CHECK-NEXT: [[RENABLE:%.+]] = comb.and %enable, [[WMODE_INV]]
   // CHECK-NEXT: [[RDATA:%.+]] = arc.memory_read_port [[FOO]][%addr] if [[RENABLE]] clock %clock : <1024 x i8>, i10
   // CHECK-NEXT: [[WENABLE:%.+]] = comb.and %enable, %wmode
-  // CHECK-NEXT: arc.memory_write_port [[FOO]][%addr], %wdata if [[WENABLE]] clock %clock : <1024 x i8>, i10
+  // CHECK-NEXT: arc.memory_write_port [[FOO]], @mem_write{{.*}}(%addr, %wdata, [[WENABLE]]) clock %clock enable : <1024 x i8>, i10, i10, i8, i1
   // CHECK-NEXT: hw.output [[RDATA]]
   %0 = hw.instance "foo" @RWMemory(RW0_addr: %addr: i10, RW0_en: %enable: i1, RW0_clk: %clock: i1, RW0_wmode: %wmode: i1, RW0_wdata: %wdata: i8) -> (RW0_rdata: i8)
   hw.output %0 : i8

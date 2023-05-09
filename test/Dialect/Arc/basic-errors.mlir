@@ -279,9 +279,12 @@ hw.module @memoryWritePortOpInsideClockDomain(%clk: i1) {
     %mem = arc.memory <4 x i32>
     %c0_i32 = hw.constant 0 : i32
     // expected-error @+1 {{inside a clock domain cannot have a clock}}
-    arc.memory_write_port %mem[%c0_i32], %c0_i32 if %arg0 clock %arg0 : !arc.memory<4 x i32>, i32
+    arc.memory_write_port %mem, @identity(%c0_i32, %c0_i32, %arg0) clock %arg0 enable : !arc.memory<4 x i32>, i32, i32, i32, i1
     arc.output
   }
+}
+arc.define @identity(%addr: i32, %data: i32, %enable: i1) -> (i32, i32, i1) {
+  arc.output %addr, %data, %enable : i32, i32, i1
 }
 
 // -----
@@ -299,5 +302,8 @@ hw.module @memoryWritePortOpOutsideClockDomain(%en: i1) {
   %mem = arc.memory <4 x i32>
   %c0_i32 = hw.constant 0 : i32
   // expected-error @+1 {{outside a clock domain requires a clock}}
-  arc.memory_write_port %mem[%c0_i32], %c0_i32 if %en : !arc.memory<4 x i32>, i32
+  arc.memory_write_port %mem, @identity(%c0_i32, %c0_i32, %en) : !arc.memory<4 x i32>, i32, i32, i32, i1
+}
+arc.define @identity(%addr: i32, %data: i32, %enable: i1) -> (i32, i32, i1) {
+  arc.output %addr, %data, %enable : i32, i32, i1
 }

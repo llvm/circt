@@ -44,8 +44,8 @@ static LogicalResult verifyTypeListEquivalence(Operation *op,
   return success();
 }
 
-static LogicalResult verifyArcSymbolUse(Operation *op, ValueRange inputs,
-                                        ValueRange results,
+static LogicalResult verifyArcSymbolUse(Operation *op, TypeRange inputs,
+                                        TypeRange results,
                                         SymbolTableCollection &symbolTable) {
   // Check that the arc attribute was specified.
   auto arcName = op->getAttrOfType<FlatSymbolRefAttr>("arc");
@@ -59,12 +59,12 @@ static LogicalResult verifyArcSymbolUse(Operation *op, ValueRange inputs,
 
   // Verify that the operand and result types match the arc.
   auto type = arc.getFunctionType();
-  if (failed(verifyTypeListEquivalence(op, type.getInputs(), inputs.getTypes(),
-                                       "operand")))
+  if (failed(
+          verifyTypeListEquivalence(op, type.getInputs(), inputs, "operand")))
     return failure();
 
-  if (failed(verifyTypeListEquivalence(op, type.getResults(),
-                                       results.getTypes(), "result")))
+  if (failed(
+          verifyTypeListEquivalence(op, type.getResults(), results, "result")))
     return failure();
 
   return success();
@@ -158,7 +158,8 @@ LogicalResult OutputOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult StateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyArcSymbolUse(*this, getInputs(), getResults(), symbolTable);
+  return verifyArcSymbolUse(*this, getInputs().getTypes(),
+                            getResults().getTypes(), symbolTable);
 }
 
 LogicalResult StateOp::verify() {
@@ -189,7 +190,8 @@ bool StateOp::isClocked() { return getLatency() > 0; }
 //===----------------------------------------------------------------------===//
 
 LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyArcSymbolUse(*this, getInputs(), getResults(), symbolTable);
+  return verifyArcSymbolUse(*this, getInputs().getTypes(),
+                            getResults().getTypes(), symbolTable);
 }
 
 //===----------------------------------------------------------------------===//
@@ -210,10 +212,23 @@ LogicalResult MemoryReadPortOp::verify() {
 // MemoryWritePortOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult MemoryWritePortOp::verify() {
-  if (getMask() && getMask().getType() != getData().getType())
-    return emitOpError("mask and data operand types do not match");
+SmallVector<Type> MemoryWritePortOp::getArcResultTypes() {
+  auto dataType = cast<MemoryType>(getMemory().getType()).getWordType();
+  SmallVector<Type> resultTypes{getAddressType(), dataType};
+  if (getEnable())
+    resultTypes.push_back(IntegerType::get(getContext(), 1));
+  if (getMask())
+    resultTypes.push_back(dataType);
+  return resultTypes;
+}
 
+LogicalResult
+MemoryWritePortOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyArcSymbolUse(*this, getInputs().getTypes(), getArcResultTypes(),
+                            symbolTable);
+}
+
+LogicalResult MemoryWritePortOp::verify() {
   if (!getOperation()->getParentOfType<ClockDomainOp>() && !getClock())
     return emitOpError("outside a clock domain requires a clock");
 
