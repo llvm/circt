@@ -242,4 +242,10 @@ firrtl.module @OpenAggTest(in %in: !firrtl.openbundle<a: bundle<data: uint<1>>, 
   %b_1 = firrtl.opensubindex %b[1] : !firrtl.openvector<openbundle<x: uint<2>, y: probe<uint<2>>>, 2>
   %b_0_y = firrtl.opensubfield %b_0[y] : !firrtl.openbundle<x : uint<2>, y: probe<uint<2>>>
 }
+
+// CHECK-LABEL: TypeAlias
+// CHECK-SAME: !firrtl.alias<foo, uint<1>>
+firrtl.module @TypeAlias(in %in: !firrtl.alias<foo, uint<1>>) {
+}
+
 }

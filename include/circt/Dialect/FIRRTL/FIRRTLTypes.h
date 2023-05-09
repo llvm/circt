@@ -43,6 +43,7 @@ class OpenVectorType;
 class FVectorType;
 class FEnumType;
 class RefType;
+class FTypeAliasType;
 
 /// A collection of bits indicating the recursive properties of a type.
 struct RecursiveTypeProperties {
@@ -54,6 +55,8 @@ struct RecursiveTypeProperties {
   bool containsAnalog : 1;
   /// Whether the type contains a const type.
   bool containsConst : 1;
+  /// Whether the type contains a type alias.
+  bool isAnonymous : 1;
   /// Whether the type has any uninferred bit widths.
   bool hasUninferredWidth : 1;
   /// Whether the type has any uninferred reset.
@@ -72,6 +75,9 @@ public:
   /// `containsAnalog`, and `hasUninferredWidth` bits, among others.
   RecursiveTypeProperties getRecursiveTypeProperties() const;
 
+  /// Return an anonymous version of this type.
+  FIRRTLType getAnonymousType();
+
   //===--------------------------------------------------------------------===//
   // Convenience methods for accessing recursive type properties
   //===--------------------------------------------------------------------===//
@@ -86,6 +92,9 @@ public:
   bool containsReference() {
     return getRecursiveTypeProperties().containsReference;
   }
+
+  /// Return true if this is an anonymous type (no type alias).
+  bool isAnonymousType() { return getRecursiveTypeProperties().isAnonymous; }
 
   /// Return true if this type contains an uninferred bit width.
   bool hasUninferredWidth() {
@@ -133,6 +142,9 @@ public:
   /// Return a 'const' or non-'const' version of this type.
   FIRRTLBaseType getConstType(bool isConst);
 
+  /// Return an anonymous version of this type.
+  FIRRTLBaseType getAnonymousType();
+
   /// Return this type with all ground types replaced with UInt<1>.  This is
   /// used for `mem` operations.
   FIRRTLBaseType getMaskType();
@@ -151,7 +163,7 @@ public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
     return llvm::isa<FIRRTLDialect>(type.getDialect()) &&
-           !type.isa<RefType, OpenBundleType, OpenVectorType>();
+           !type.isa<RefType, OpenBundleType, OpenVectorType, FTypeAliasType>();
   }
 
   /// Returns true if this is a non-const "passive" that which is not analog.

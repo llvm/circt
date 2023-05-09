@@ -137,7 +137,9 @@ getInnerRefTo(FModuleLike mod, size_t portIdx, StringRef nameHint,
 inline FIRRTLBaseType getBaseType(FIRRTLType type) {
   return TypeSwitch<FIRRTLType, FIRRTLBaseType>(type)
       .Case<FIRRTLBaseType>([](auto base) { return base; })
-      .Case<RefType>([](auto ref) { return ref.getType(); });
+      .Case<RefType>([](auto ref) { return ref.getType(); })
+      .Case<FTypeAliasType>(
+          [](auto alias) { return getBaseType(alias.getInnerType()); });
 }
 
 /// Return base type or passthrough if FIRRTLType, else null.
