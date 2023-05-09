@@ -1017,7 +1017,7 @@ def BitCastOp: FIRRTLOp<"bitcast", [Pure]> {
 def RefCastOp : FIRRTLOp<"ref.cast",
     [HasCustomSSAName,
      Pure,
-     SameTypeOrUninferredConstraint<"result","input">]> {
+     CompatibleRefTypes<"result","input">]> {
   let summary = "Cast between compatible reference types";
   let description = [{
     Losslessly cast between compatible reference types.

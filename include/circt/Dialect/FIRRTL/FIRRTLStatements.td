@@ -70,7 +70,7 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]
     "$dest `,` $src  attr-dict `:` qualified(type($dest))";
 }
 
-def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOrUninferredConstraint<"dest", "src">, FConnectLike]> {
+def RefDefineOp : FIRRTLOp<"ref.define", [CompatibleRefTypes<"dest", "src">, FConnectLike]> {
   let summary = "FIRRTL Define References";
   let description = [{
     Define a target reference to the source reference:

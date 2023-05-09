@@ -236,6 +236,10 @@ bool isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType);
 /// uninferred of the source type.
 bool isTypeSameOrUninferred(FIRRTLBaseType dstType, FIRRTLBaseType srcType);
 
+/// Return true if destination can be set using source ref type,
+/// e.g., in a ref.define or ref.cast.  Rejects if not ref types.
+bool isCompatibleRefType(Type dstType, Type srcType);
+
 mlir::Type getPassiveType(mlir::Type anyBaseFIRRTLType);
 
 //===----------------------------------------------------------------------===//

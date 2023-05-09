@@ -1043,6 +1043,18 @@ bool firrtl::isTypeSameOrUninferred(FIRRTLBaseType dstType,
       });
 }
 
+bool firrtl::isCompatibleRefType(Type dstType, Type srcType) {
+  auto dstRefType = dyn_cast<RefType>(dstType);
+  auto srcRefType = dyn_cast<RefType>(srcType);
+  if (!dstRefType || !srcRefType)
+    return false;
+  if (dstRefType == srcRefType)
+    return true;
+  if (dstRefType.getForceable() && !srcRefType.getForceable())
+    return false;
+  return isTypeSameOrUninferred(dstRefType.getType(), srcRefType.getType());
+}
+
 /// Return the passive version of a firrtl type
 /// top level for ODS constraint usage
 Type firrtl::getPassiveType(Type anyBaseFIRRTLType) {
