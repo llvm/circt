@@ -448,6 +448,28 @@ circuit InProbeExt:
     inst e of BadExtMod
 
 ;// -----
+; Input probes not allowed anywhere for now.
+
+circuit InProbe:
+  module Child:
+    input p : Probe<UInt<1>> ; expected-error {{input probes not yet supported}}
+  module InProbe:
+    input x : UInt<1>
+    inst c of Child
+    define c.p = probe(x)
+
+;// -----
+; Input probes not allowed anywhere for now.
+
+circuit InProbeBundle:
+  module Child:
+    output out : { flip p: Probe<UInt<1>>} ; expected-error {{input probes not yet supported}}
+  module InProbeBundle:
+    input x : UInt<1>
+    inst c of Child
+    define c.out.p = probe(x)
+
+;// -----
 
 circuit RefDupe:
   extmodule RefDupe:
