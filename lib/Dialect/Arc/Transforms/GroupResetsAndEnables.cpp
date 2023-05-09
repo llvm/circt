@@ -24,6 +24,8 @@ using namespace mlir;
 // Rewrite Patterns
 //===----------------------------------------------------------------------===//
 
+namespace {
+
 struct ResetGroupingPattern : public OpRewritePattern<ClockTreeOp> {
   using OpRewritePattern::OpRewritePattern;
   LogicalResult matchAndRewrite(ClockTreeOp clockTreeOp,
@@ -112,6 +114,7 @@ struct EnableGroupingPattern : public OpRewritePattern<ClockTreeOp> {
     return success(changed);
   }
 };
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
