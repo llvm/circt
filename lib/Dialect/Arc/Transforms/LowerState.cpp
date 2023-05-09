@@ -438,21 +438,34 @@ LogicalResult ModuleLowering::lowerState(MemoryOp memOp) {
 }
 
 LogicalResult ModuleLowering::lowerState(MemoryWritePortOp memWriteOp) {
+  if (memWriteOp.getLatency() > 1)
+    return memWriteOp->emitOpError("latencies > 1 not supported yet");
+
   // Get the clock tree and enable condition for this write port's clock. If the
   // port carries an explicit enable condition, fold that into the enable
   // provided by the clock gates in the port's clock tree.
   auto info = getOrCreateClockLowering(memWriteOp.getClock());
-  auto enable = info.clock.materializeValue(memWriteOp.getEnable());
+
+  SmallVector<Value> materializedInputs;
+  for (auto input : memWriteOp.getInputs())
+    materializedInputs.push_back(info.clock.materializeValue(input));
+  ValueRange results =
+      info.clock.builder
+          .create<CallOp>(memWriteOp.getLoc(), memWriteOp.getArcResultTypes(),
+                          memWriteOp.getArc(), materializedInputs)
+          ->getResults();
+
+  auto enable =
+      memWriteOp.getEnable() ? results[memWriteOp.getEnableIdx()] : Value();
   info.enable =
       info.clock.getOrCreateAnd(info.enable, enable, memWriteOp.getLoc());
 
   // Materialize the operands for the write op within the surrounding clock
   // tree.
-  auto address = info.clock.materializeValue(memWriteOp.getAddress());
-  auto data = info.clock.materializeValue(memWriteOp.getData());
-  Value mask = memWriteOp.getMask();
-  if (mask) {
-    mask = info.clock.materializeValue(mask);
+  auto address = results[memWriteOp.getAddressIdx()];
+  auto data = results[memWriteOp.getDataIdx()];
+  if (memWriteOp.getMask()) {
+    Value mask = results[memWriteOp.getMaskIdx(static_cast<bool>(enable))];
     Value oldData = info.clock.builder.create<arc::MemoryReadOp>(
         mask.getLoc(), data.getType(), memWriteOp.getMemory(), address);
     Value allOnes = info.clock.builder.create<hw::ConstantOp>(
