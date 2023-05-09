@@ -69,13 +69,10 @@ hw.module @clockDomainDCE(%clk: i1) {
 // CHECK-LABEL: hw.module @memoryOps
 hw.module @memoryOps(%clk: i1, %mem: !arc.memory<4 x i32, i32>, %addr: i32, %data: i32) {
   %true = hw.constant true
-  // CHECK: arc.memory_write_port %mem[%addr], %data clock %clk : <4 x i32, i32>
-  arc.memory_write_port %mem[%addr], %data if %true clock %clk : <4 x i32, i32>
   // CHECK-NEXT: arc.memory_write %mem[%addr], %data : <4 x i32, i32>
   arc.memory_write %mem[%addr], %data if %true : <4 x i32, i32>
 
   %false = hw.constant false
-  arc.memory_write_port %mem[%addr], %data if %false clock %clk : <4 x i32, i32>
   arc.memory_write %mem[%addr], %data if %false : <4 x i32, i32>
 }
 
@@ -86,13 +83,14 @@ hw.module @clockDomainCanonicalizer(%clk: i1, %data: i32) -> (out0: i32, out1: i
   %mem = arc.memory <4 x i32, i32>
   // COM: check that memories only used in one clock domain are pulled in and
   // COM: constants are cloned when used in multiple clock domains.
-  // CHECK:      arc.clock_domain ()
+  // CHECK: arc.clock_domain ()
   // CHECK-NEXT: [[C0:%.+]] = hw.constant 0
+  // CHECK-NEXT: [[T:%.+]] = hw.constant true
   // CHECK-NEXT: [[MEM:%.+]] = arc.memory
-  // CHECK-NEXT: arc.memory_write_port [[MEM]][[[C0]]], [[C0]] :
+  // CHECK-NEXT: arc.memory_write_port [[MEM]], @memWrite([[C0]], [[C0]], [[T]]) enable lat 1 :
   %0 = arc.clock_domain (%c0_i32, %mem, %true) clock %clk : (i32, !arc.memory<4 x i32, i32>, i1) -> i32 {
   ^bb0(%arg0: i32, %arg1: !arc.memory<4 x i32, i32>, %arg2: i1):
-    arc.memory_write_port %arg1[%arg0], %arg0 if %arg2 : !arc.memory<4 x i32, i32>
+    arc.memory_write_port %arg1, @memWrite(%arg0, %arg0, %arg2) enable lat 1 : !arc.memory<4 x i32, i32>, i32, i32, i1
     arc.output %arg0 : i32
   }
   // COM: check that unused inputs are removed, and constants are cloned into it
@@ -133,6 +131,9 @@ hw.module @clockDomainCanonicalizer(%clk: i1, %data: i32) -> (out0: i32, out1: i
 }
 arc.define @identityi1(%arg0: i1) -> i1 {
   arc.output %arg0 : i1
+}
+arc.define @memWrite(%arg0: i32, %arg1: i32, %arg2: i1) -> (i32, i32, i1) {
+  arc.output %arg0, %arg1, %arg2 : i32, i32, i1
 }
 
 // CHECK-LABEL: arc.model "StorageGetCanonicalizers"

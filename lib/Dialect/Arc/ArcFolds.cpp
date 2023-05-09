@@ -74,24 +74,6 @@ LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
-// MemoryWritePortOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult MemoryWritePortOp::fold(FoldAdaptor adaptor,
-                                      SmallVectorImpl<OpFoldResult> &results) {
-  if (isAlways(adaptor.getEnable(), true))
-    return getEnableMutable().clear(), success();
-  return failure();
-}
-
-LogicalResult MemoryWritePortOp::canonicalize(MemoryWritePortOp op,
-                                              PatternRewriter &rewriter) {
-  if (isAlways(op.getEnable(), false))
-    return rewriter.eraseOp(op), success();
-  return failure();
-}
-
-//===----------------------------------------------------------------------===//
 // MemoryWriteOp
 //===----------------------------------------------------------------------===//
 
