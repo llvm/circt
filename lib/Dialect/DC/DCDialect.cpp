@@ -7,12 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/DC/DCDialect.h"
-#include "mlir/Transforms/InliningUtils.h"
+#include "circt/Dialect/DC/DCOps.h"
+#include "circt/Dialect/DC/DCTypes.h"
 
 using namespace circt;
 using namespace dc;
 
 void DCDialect::initialize() {
+  registerTypes();
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/DC/DC.cpp.inc"
