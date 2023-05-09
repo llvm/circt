@@ -264,7 +264,7 @@ void CombMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 std::optional<size_t> CombMemOp::getTargetResultIndex() {
-  // Inner symbols on seq memory operations target the op not any result.
+  // Inner symbols on comb memory operations target the op not any result.
   return std::nullopt;
 }
 
