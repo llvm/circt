@@ -1224,6 +1224,31 @@ firrtl.circuit "CastAwayRefWidth" {
 }
 
 // -----
+// Can't promote to rwprobe.
+
+firrtl.circuit "CastPromoteToRWProbe" {
+  firrtl.module @CastPromoteToRWProbe(out %r: !firrtl.rwprobe<uint>) {
+    %zero = firrtl.constant 0 : !firrtl.uint
+    %xref = firrtl.ref.send %zero : !firrtl.uint
+    // expected-error @below {{reference result must be compatible with reference input: recursively same or uninferred of same}}
+    %source = firrtl.ref.cast %xref : (!firrtl.probe<uint>) -> !firrtl.rwprobe<uint>
+    firrtl.ref.define %r, %source : !firrtl.rwprobe<uint>, !firrtl.rwprobe<uint>
+  }
+}
+
+// -----
+// Can't define-promote to rwprobe.
+
+firrtl.circuit "DefinePromoteToRWProbe" {
+  firrtl.module @DefinePromoteToRWProbe(out %r: !firrtl.rwprobe<uint>) {
+    %zero = firrtl.constant 0 : !firrtl.uint
+    %xref = firrtl.ref.send %zero : !firrtl.uint
+    // expected-error @below {{reference dest must be compatible with reference src: recursively same or uninferred of same}}
+    firrtl.ref.define %r, %xref : !firrtl.rwprobe<uint>, !firrtl.probe<uint>
+  }
+}
+
+// -----
 // Issue 4174-- handle duplicate module names.
 
 firrtl.circuit "hi" {
