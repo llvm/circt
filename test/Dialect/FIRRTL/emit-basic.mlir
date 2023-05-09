@@ -345,8 +345,9 @@ firrtl.circuit "Foo" {
     // CHECK: define a_ref = probe(a)
     // CHECK: define a_rwref = rwprobe(a)
     %a_ref_send = firrtl.ref.send %a : !firrtl.uint<1>
-    firrtl.ref.define %a_ref, %a_ref_send : !firrtl.probe<uint<1>>
-    firrtl.ref.define %a_rwref, %_a_rwref : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %a_ref, %a_ref_send : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
+    firrtl.ref.define %a_rwref, %_a_rwref : !firrtl.rwprobe<uint<1>>, !firrtl.rwprobe<uint<1>>
+
   }
 
   // CHECK-LABEL: module RefSink

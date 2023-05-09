@@ -281,7 +281,7 @@ firrtl.circuit "RefAnno" attributes {rawAnnotations = [{
 }]} {
   firrtl.module @RefAnno(in %in : !firrtl.uint<1>, out %out : !firrtl.ref<uint<1>>) {
     %ref = firrtl.ref.send %in : !firrtl.uint<1>
-    firrtl.ref.define %out, %ref : !firrtl.ref<uint<1>>
+    firrtl.ref.define %out, %ref : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
   }
 }
 

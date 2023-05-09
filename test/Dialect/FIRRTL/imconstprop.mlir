@@ -540,7 +540,7 @@ firrtl.circuit "SendThroughRWProbe" {
     // CHECK: firrtl.node %[[N]]
     %user = firrtl.node %n : !firrtl.uint<1>
     firrtl.strictconnect %out, %user : !firrtl.uint<1>
-    firrtl.ref.define %rw, %n_ref : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %rw, %n_ref : !firrtl.rwprobe<uint<1>>, !firrtl.rwprobe<uint<1>>
   }
   // CHECK:  firrtl.strictconnect %a, %0 : !firrtl.uint<1>
   firrtl.module @SendThroughRWProbe(out %a: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {

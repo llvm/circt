@@ -665,7 +665,7 @@ firrtl.circuit "ForceRelease" {
     // CHECK-NEXT: %x, %x_ref = firrtl.wire sym @[[TARGET_SYM]] forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
     %x, %x_ref = firrtl.wire forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
     // CHECK-NEXT: }
-    firrtl.ref.define %p, %x_ref : !firrtl.rwprobe<uint<4>>
+    firrtl.ref.define %p, %x_ref : !firrtl.rwprobe<uint<4>>, !firrtl.rwprobe<uint<4>>
   }
   // CHECK-LABEL: firrtl.module @ForceRelease
   firrtl.module @ForceRelease(in %c: !firrtl.uint<1>, in %clock: !firrtl.clock, in %x: !firrtl.uint<4>) {

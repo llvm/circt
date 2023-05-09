@@ -835,7 +835,7 @@ firrtl.circuit "Foo" {
     // CHECK: firrtl.wire forceable : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
     %w, %w_rw = firrtl.wire forceable : !firrtl.uint, !firrtl.rwprobe<uint>
     %bov, %bov_rw = firrtl.wire forceable : !firrtl.bundle<a: vector<uint, 2>, b flip: uint>, !firrtl.rwprobe<bundle<a: vector<uint, 2>, b : uint>>
-    firrtl.ref.define %bov_ref, %bov_rw : !firrtl.rwprobe<bundle<a: vector<uint, 2>, b : uint>>
+    firrtl.ref.define %bov_ref, %bov_rw : !firrtl.rwprobe<bundle<a: vector<uint, 2>, b : uint>>, !firrtl.rwprobe<bundle<a: vector<uint, 2>, b : uint>>
 
     %ref_w = firrtl.ref.send %w : !firrtl.uint
     %cast_ref_w = firrtl.ref.cast %ref_w : (!firrtl.probe<uint>) -> !firrtl.probe<uint>

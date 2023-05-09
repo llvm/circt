@@ -2062,7 +2062,7 @@ firrtl.module @ForceableRegResetToNode(in %clock: !firrtl.clock, in %dummy : !fi
   %one_asyncreset = firrtl.asAsyncReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
   // CHECK: %reg, %reg_ref = firrtl.node %dummy forceable : !firrtl.uint<1>
   %reg, %reg_f = firrtl.regreset %clock, %one_asyncreset, %dummy forceable : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
-  firrtl.ref.define %ref, %reg_f: !firrtl.rwprobe<uint<1>>
+  firrtl.ref.define %ref, %reg_f: !firrtl.rwprobe<uint<1>>, !firrtl.rwprobe<uint<1>>
 
   firrtl.connect %reg, %dummy: !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %foo, %reg: !firrtl.uint<1>, !firrtl.uint<1>

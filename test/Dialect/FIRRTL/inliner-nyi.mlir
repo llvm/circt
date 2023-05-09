@@ -13,7 +13,7 @@ module {
       %0 = firrtl.subfield %in[a] : !firrtl.bundle<a: uint<1>, b: uint<2>>
       firrtl.when %0 : !firrtl.uint<1> {
         %1 = firrtl.ref.send %in : !firrtl.bundle<a: uint<1>, b: uint<2>>
-        firrtl.ref.define %out, %1 : !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>
+        firrtl.ref.define %out, %1 : !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>, !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>
       }
     }
     firrtl.module @InlinerRefs(in %in: !firrtl.bundle<a: uint<1>, b: uint<2>>, out %out: !firrtl.uint<1>) {

@@ -6,7 +6,8 @@ firrtl.circuit "Bundle" {
   firrtl.module private @Child(in %in: !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>,
                                out %r: !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>) {
     %0 = firrtl.ref.send %in : !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>
-    firrtl.ref.define %r, %0 : !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>
+    firrtl.ref.define %r, %0 : !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>, !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>
+
   }
 // CHECK-LABEL: module private @Probe
 // CHECK-SAME: in %in
@@ -50,20 +51,22 @@ firrtl.circuit "Bundle" {
     %18 = firrtl.ref.sub %c2_r[0] : !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>
     firrtl.strictconnect %c1_in, %in : !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>
     firrtl.strictconnect %c2_in, %in : !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>
-    firrtl.ref.define %15, %c1_r : !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>
-    firrtl.ref.define %14, %c2_r : !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>
+    firrtl.ref.define %15, %c1_r : !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>, !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>
+
+    firrtl.ref.define %14, %c2_r : !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>, !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>
+
     %19 = firrtl.ref.resolve %17 : !firrtl.probe<uint<1>>
     firrtl.strictconnect %13, %19 : !firrtl.uint<1>
     %20 = firrtl.ref.resolve %16 : !firrtl.probe<vector<uint<1>, 2>>
     firrtl.strictconnect %12, %20 : !firrtl.vector<uint<1>, 2>
-    firrtl.ref.define %11, %c1_r : !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>
-    firrtl.ref.define %8, %c2_r : !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>
+    firrtl.ref.define %11, %c1_r : !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>, !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>
+    firrtl.ref.define %8, %c2_r : !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>, !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>
     %21 = firrtl.ref.resolve %17 : !firrtl.probe<uint<1>>
     firrtl.strictconnect %10, %21 : !firrtl.uint<1>
     %22 = firrtl.ref.resolve %18 : !firrtl.probe<uint<1>>
     firrtl.strictconnect %7, %22 : !firrtl.uint<1>
-    firrtl.ref.define %4, %c1_r : !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>
-    firrtl.ref.define %2, %c2_r : !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>
+    firrtl.ref.define %4, %c1_r : !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>, !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>
+    firrtl.ref.define %2, %c2_r : !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>, !firrtl.probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>
   }
 // CHECK-LABEL: module @Bundle
   firrtl.module @Bundle(in %in: !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>, out %out1: !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>, out %out2: !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>, out %out3: !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>, out %out4: !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>, out %out5: !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>, out %out6: !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>, out %out7: !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>) attributes {convention = #firrtl<convention scalarized>} {

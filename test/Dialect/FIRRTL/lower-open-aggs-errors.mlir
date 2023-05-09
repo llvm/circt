@@ -6,7 +6,7 @@ firrtl.circuit "Symbol" {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %ref = firrtl.ref.send %zero : !firrtl.uint<1>
     %r_p = firrtl.opensubfield %r[p] : !firrtl.openbundle<p: probe<uint<1>>>
-    firrtl.ref.define %r_p, %ref : !firrtl.probe<uint<1>>
+    firrtl.ref.define %r_p, %ref : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
 }
 
@@ -18,7 +18,7 @@ firrtl.circuit "Annotation" {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %ref = firrtl.ref.send %zero : !firrtl.uint<1>
     %r_p = firrtl.opensubfield %r[p] : !firrtl.openbundle<p: probe<uint<1>>>
-    firrtl.ref.define %r_p, %ref : !firrtl.probe<uint<1>>
+    firrtl.ref.define %r_p, %ref : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
 }
 
@@ -32,7 +32,7 @@ firrtl.circuit "MixedAnnotation" {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %ref = firrtl.ref.send %zero : !firrtl.uint<1>
     %r_p = firrtl.opensubfield %r[p] : !firrtl.openbundle<a: uint<1>, p: probe<uint<1>>>
-    firrtl.ref.define %r_p, %ref : !firrtl.probe<uint<1>>
+    firrtl.ref.define %r_p, %ref : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
     %r_a = firrtl.opensubfield %r[a] : !firrtl.openbundle<a: uint<1>, p: probe<uint<1>>>
     firrtl.strictconnect %r_a, %zero : !firrtl.uint<1>
   }
@@ -46,7 +46,7 @@ firrtl.circuit "UnhandledOp" {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %ref = firrtl.ref.send %zero : !firrtl.uint<1>
     %r_p = firrtl.opensubfield %r[p] : !firrtl.openbundle<p: probe<uint<1>>>
-    firrtl.ref.define %r_p, %ref : !firrtl.probe<uint<1>>
+    firrtl.ref.define %r_p, %ref : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
 
     // expected-error @below {{unhandled use or producer of types containing references}}
     %x = firrtl.wire : !firrtl.openbundle<p : probe<uint<1>>>
