@@ -103,7 +103,7 @@ def CMemoryPortType : TypeDef<CHIRRTLDialect, "CMemoryPort"> {
 class CHIRRTLOp<string mnemonic, list<Trait> traits = []> :
     Op<CHIRRTLDialect, mnemonic, traits>;
 
-def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName, InnerSymbol, FNamableOp]> {
+def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName, DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>, FNamableOp]> {
   let summary = "Define a new combinational memory";
   let description = [{
     Define a new behavioral combinational memory. Combinational memories have a
@@ -125,7 +125,7 @@ def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName, InnerSymbol, FNamableOp]
   ];
 }
 
-def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName, InnerSymbol, FNamableOp]> {
+def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName, DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>, FNamableOp]> {
   let summary = "Define a new sequential memory";
   let description = [{
     Define a new behavioral sequential memory.  Sequential memories have a
