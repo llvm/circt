@@ -3786,7 +3786,7 @@ ParseResult FIRCircuitParser::parseTypeDecl() {
   FIRRTLType type;
   consumeToken();
   auto loc = getToken().getLoc();
-  if (parseId(id, "expected type name") ||
+  if (parseId(id, "expected alias name") ||
       parseToken(FIRToken::equal, "expected '=' in type decl") ||
       parseType(type, "expected a type"))
     return failure();
