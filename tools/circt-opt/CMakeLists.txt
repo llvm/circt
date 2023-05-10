@@ -18,6 +18,7 @@ target_link_libraries(circt-opt
   CIRCTCalyxToFSM
   CIRCTCalyxTransforms
   CIRCTConvertToArcs
+  CIRCTDC
   CIRCTESI
   CIRCTExportChiselInterface
   CIRCTExportVerilog
