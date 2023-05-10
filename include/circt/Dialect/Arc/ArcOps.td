@@ -131,7 +131,7 @@ def OutputOp : ArcOp<"output", [
 }
 
 def StateOp : ArcOp<"state", [
-  CallOpInterface, MemRefsNormalizable,
+  MemRefsNormalizable,
   CallOpMutableInterface,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
   AttrSizedOperandSegments,
@@ -213,7 +213,7 @@ def StateOp : ArcOp<"state", [
 
   let extraClassDeclaration = [{
     operand_range getArgOperands() {
-      return {operand_begin(), operand_end()};
+      return getInputs();
     }
     MutableOperandRange getArgOperandsMutable() {
       return getInputsMutable();
@@ -227,12 +227,11 @@ def StateOp : ArcOp<"state", [
     void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
       (*this)->setAttr(getArcAttrName(), callee.get<mlir::SymbolRefAttr>());
     }
-
   }];
 }
 
 def CallOp : ArcOp<"call", [
-  CallOpInterface, MemRefsNormalizable, Pure,
+  MemRefsNormalizable, Pure,
   CallOpMutableInterface,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
@@ -261,7 +260,6 @@ def CallOp : ArcOp<"call", [
     void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
       (*this)->setAttr(getArcAttrName(), callee.get<mlir::SymbolRefAttr>());
     }
-
   }];
 }
 
