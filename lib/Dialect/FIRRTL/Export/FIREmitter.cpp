@@ -614,7 +614,15 @@ void Emitter::emitStatement(RefDefineOp op) {
   os << "define ";
   emitExpression(op.getDest());
   os << " = ";
-  emitExpression(op.getSrc());
+  auto src = op.getSrc();
+  auto *srcDefiningOp = src.getDefiningOp();
+  if (srcDefiningOp && srcDefiningOp->getNumResults() > 1 &&
+      srcDefiningOp->getResult(1) == src) {
+    os << "rwprobe(";
+    emitExpression(srcDefiningOp->getResult(0));
+    os << ")";
+  } else
+    emitExpression(src);
   emitLocationAndNewLine(op);
 }
 

@@ -312,18 +312,27 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: module RefSource
-  firrtl.module @RefSource(out %a_ref: !firrtl.probe<uint<1>>) {
-    %a = firrtl.wire : !firrtl.uint<1>
+  firrtl.module @RefSource(out %a_ref: !firrtl.probe<uint<1>>,
+                           out %a_rwref: !firrtl.rwprobe<uint<1>>) {
+    %a, %_a_rwref = firrtl.wire forceable : !firrtl.uint<1>,
+      !firrtl.rwprobe<uint<1>>
     // CHECK: define a_ref = probe(a)
+    // CHECK: define a_rwref = rwprobe(a)
     %a_ref_send = firrtl.ref.send %a : !firrtl.uint<1>
     firrtl.ref.define %a_ref, %a_ref_send : !firrtl.probe<uint<1>>
+    firrtl.ref.define %a_rwref, %_a_rwref : !firrtl.rwprobe<uint<1>>
   }
 
   // CHECK-LABEL: module RefSink
   firrtl.module @RefSink() {
     // CHECK: node b = read(refSource.a_ref)
-    %refSource_a_ref = firrtl.instance refSource @RefSource(out a_ref: !firrtl.probe<uint<1>>)
-    %a_ref_resolve = firrtl.ref.resolve %refSource_a_ref : !firrtl.probe<uint<1>>
+    %refSource_a_ref, %refSource_a_rwref =
+      firrtl.instance refSource @RefSource(
+        out a_ref: !firrtl.probe<uint<1>>,
+        out a_rwref: !firrtl.rwprobe<uint<1>>
+      )
+    %a_ref_resolve =
+      firrtl.ref.resolve %refSource_a_ref : !firrtl.probe<uint<1>>
     %b = firrtl.node %a_ref_resolve : !firrtl.uint<1>
   }
 
