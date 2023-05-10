@@ -424,6 +424,7 @@ private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
   LogicalResult lowerPorts(ArrayRef<PortInfo> firrtlPorts,
                            SmallVectorImpl<hw::PortInfo> &ports,
+                           SmallVectorImpl<PortInfo>& refPorts,
                            Operation *moduleOp, StringRef moduleName,
                            CircuitLoweringState &loweringState);
   bool handleForceNameAnnos(FModuleLike oldModule, AnnotationSet &annos,
@@ -940,12 +941,14 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 LogicalResult
 FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
                                  SmallVectorImpl<hw::PortInfo> &ports,
+                                 SmallVectorImpl<PortInfo> &refPorts,
                                  Operation *moduleOp, StringRef moduleName,
                                  CircuitLoweringState &loweringState) {
   ports.reserve(firrtlPorts.size());
   size_t numArgs = 0;
   size_t numResults = 0;
   for (auto firrtlPort : firrtlPorts) {
+    firrtlPort.type.dump();
     hw::PortInfo hwPort;
     hwPort.name = firrtlPort.name;
     hwPort.type = lowerType(firrtlPort.type);
@@ -968,6 +971,11 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
       hwPort.sym = hw::InnerSymAttr::get(StringAttr::get(
           moduleOp->getContext(),
           Twine("__") + moduleName + Twine("__") + firrtlPort.name.strref()));
+    }
+
+    if (firrtlPort.type.isa<RefType>()) {
+      refPorts.push_back(firrtlPort);
+      continue;
     }
 
     // We can't lower all types, so make sure to cleanly reject them.
@@ -1108,8 +1116,9 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
                                      CircuitLoweringState &loweringState) {
   // Map the ports over, lowering their types as we go.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
+  SmallVector<PortInfo> refPorts;
   SmallVector<hw::PortInfo, 8> ports;
-  if (failed(lowerPorts(firrtlPorts, ports, oldModule, oldModule.getName(),
+  if (failed(lowerPorts(firrtlPorts, ports, refPorts, oldModule, oldModule.getName(),
                         loweringState)))
     return {};
 
@@ -1151,7 +1160,8 @@ FIRRTLModuleLowering::lowerMemModule(FMemModuleOp oldModule,
   // Map the ports over, lowering their types as we go.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<hw::PortInfo, 8> ports;
-  if (failed(lowerPorts(firrtlPorts, ports, oldModule, oldModule.getName(),
+  SmallVector<PortInfo> refPorts;
+  if (failed(lowerPorts(firrtlPorts, ports, refPorts, oldModule, oldModule.getName(),
                         loweringState)))
     return {};
 
@@ -1172,9 +1182,10 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
                                   CircuitLoweringState &loweringState) {
   // Map the ports over, lowering their types as we go.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
+  SmallVector<PortInfo> firrtlRefs;
   SmallVector<hw::PortInfo, 8> ports;
-  if (failed(lowerPorts(firrtlPorts, ports, oldModule, oldModule.getName(),
-                        loweringState)))
+  if (failed(lowerPorts(firrtlPorts, ports, firrtlRefs,
+                        oldModule, oldModule.getName(), loweringState)))
     return {};
 
   // Build the new hw.module op.
@@ -1418,6 +1429,9 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
       oldArg.replaceAllUsesWith(newArg);
       continue;
     }
+
+    if (port.type.isa<RefType>())
+      continue;
 
     if (auto value = tryEliminatingConnectsToValue(oldArg, outputOp)) {
       // If we were able to find the value being connected to the output,
@@ -1707,6 +1721,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(RefForceInitialOp op);
   LogicalResult visitStmt(RefReleaseOp op);
   LogicalResult visitStmt(RefReleaseInitialOp op);
+  LogicalResult visitStmt(RefDefineOp op);
 
   FailureOr<Value> lowerSubindex(SubindexOp op, Value input);
   FailureOr<Value> lowerSubaccess(SubaccessOp op, Value input);
@@ -2798,6 +2813,7 @@ LogicalResult FIRRTLLowering::visitExpr(SubtagOp op) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
+  llvm::errs() << "VISITING Wire: "; op.dump();
   // Foreign types lower to a backedge that needs to be resolved by a later
   // connect op.
   auto origResultType = op.getResult().getType();
@@ -2838,6 +2854,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   if (auto svAttrs = sv::getSVAttributes(op))
     sv::setSVAttributes(wire, svAttrs);
 
+  op.dump();
   return setLowering(op.getResult(), wire);
 }
 
@@ -4024,6 +4041,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceOp op) {
   });
   return success();
 }
+
 LogicalResult FIRRTLLowering::visitStmt(RefForceInitialOp op) {
   auto src = getLoweredValue(op.getSrc());
   auto pred = getLoweredValue(op.getPredicate());
@@ -4043,6 +4061,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceInitialOp op) {
   });
   return success();
 }
+
 LogicalResult FIRRTLLowering::visitStmt(RefReleaseOp op) {
   auto clock = getLoweredValue(op.getClock());
   auto pred = getLoweredValue(op.getPredicate());
@@ -4062,6 +4081,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseOp op) {
   });
   return success();
 }
+
 LogicalResult FIRRTLLowering::visitStmt(RefReleaseInitialOp op) {
   auto destVal = getPossiblyInoutLoweredValue(op.getDest());
   auto pred = getLoweredValue(op.getPredicate());
@@ -4075,6 +4095,11 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseInitialOp op) {
                            [&]() { builder.create<sv::ReleaseOp>(destVal); });
     });
   });
+  return success();
+}
+
+// Nothing to do.  Defines will have been handled durring port lowering.
+LogicalResult FIRRTLLowering::visitStmt(RefDefineOp op) {
   return success();
 }
 

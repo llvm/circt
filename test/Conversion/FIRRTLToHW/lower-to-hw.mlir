@@ -1639,6 +1639,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:    }
   // CHECK-NEXT:  }
 
+  // Check ref become xmr in macro.
+  // CHECK-LABEL: hw.module public @RefToMacro(
+  firrtl.module public @RefToMacro(out %out: !firrtl.rwprobe<uint<4>>) {
+    // CHECK-NEXT: %n = hw.wire %in sym @__ForceableToSym__n : i4
+    // CHECK-NEXT: %w = hw.wire %n sym @__ForceableToSym__w : i4
+    // CHECK-NEXT: %r = seq.firreg %w clock %clk sym @r : i4
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
+    firrtl.ref.define %out, %w_ref : !firrtl.rwprobe<uint<4>>
+  }
+
   // CHECK-LABEL: @SVAttr
   // CHECK-SAME:  attributes {sv.attributes = [#sv.attribute<"keep_hierarchy = \22true\22">]}
   // CHECK-NEXT: %w = hw.wire %a {sv.attributes = [#sv.attribute<"mark_debug = \22yes\22">]}
