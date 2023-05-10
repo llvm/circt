@@ -25,7 +25,13 @@ def LowerSeqToSV: Pass<"lower-seq-to-sv", "mlir::ModuleOp"> {
   ];
 }
 
-def LowerSeqFIRRTLToSV: Pass<"lower-seq-firrtl-to-sv", "hw::HWModuleOp"> {
+def LowerSeqFIRRTLInitToSV: Pass<"lower-seq-firrtl-init-to-sv", "mlir::ModuleOp"> {
+  let summary = "Prep the module with macro definitions for firrtl registers.";
+  let constructor = "circt::seq::createLowerSeqFIRRTLInitToSV()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+}
+
+def LowerSeqFIRRTLToSV: Pass<"lower-seq-firrtl-to-sv",  "hw::HWModuleOp"> {
   let summary = "Lower sequential firrtl ops to SV.";
   let constructor = "circt::seq::createSeqFIRRTLLowerToSVPass()";
   let dependentDialects = ["circt::sv::SVDialect"];

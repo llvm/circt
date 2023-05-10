@@ -38,7 +38,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
     sv.ifdef.procedural "SYNTHESIS" {
     } else {
   // CHECK-NEXT:     if ((`PRINTF_COND_) & 1'bx & 1'bz & 1'bz & cond & forceWire)
-      %tmp = sv.macro.ref< "PRINTF_COND_"> : i1
+      %tmp = sv.macro.ref @PRINTF_COND_() : () -> i1
       %verb_tmp = sv.verbatim.expr "{{0}}" : () -> i1 {symbols = [#hw.innerNameRef<@M1::@wire1>] }
       %tmp1 = sv.constantX : i1
       %tmp2 = sv.constantZ : i1
@@ -1660,6 +1660,9 @@ hw.module @ConditionalComments() {
   }                             // CHECK-NEXT: `endif // not def BAR
 }
 
+sv.macro.decl @RANDOM
+sv.macro.decl @PRINTF_COND_
+
 // CHECK-LABEL: module ForStatement
 hw.module @ForStatement(%a: i5) -> () {
   %_RANDOM = sv.logic : !hw.inout<uarray<3xi32>>
@@ -1672,7 +1675,7 @@ hw.module @ForStatement(%a: i5) -> () {
     // CHECK-NEXT:   _RANDOM[i] = `RANDOM;
     // CHECK-NEXT: end
     sv.for %i = %c0_i2 to %c-1_i2 step %c1_i2 : i2 {
-      %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+      %RANDOM = sv.macro.ref.se @RANDOM() : ()->i32
       %index = sv.array_index_inout %_RANDOM[%i] : !hw.inout<uarray<3xi32>>, i2
       sv.bpassign %index, %RANDOM : i32
     }
