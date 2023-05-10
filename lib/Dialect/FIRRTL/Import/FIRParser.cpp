@@ -807,28 +807,35 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   case FIRToken::l_brace: {
     consumeToken(FIRToken::l_brace);
 
-    SmallVector<BundleType::BundleElement, 4> elements;
+    SmallVector<OpenBundleType::BundleElement, 4> elements;
+    bool bundleCompatible = true;
     if (parseListUntil(FIRToken::r_brace, [&]() -> ParseResult {
           bool isFlipped = consumeIf(FIRToken::kw_flip);
 
           StringRef fieldName;
           FIRRTLType type;
-          auto fieldLoc = getToken().getLoc();
           if (parseFieldId(fieldName, "expected bundle field name") ||
               parseToken(FIRToken::colon, "expected ':' in bundle") ||
               parseType(type, "expected bundle field type"))
             return failure();
 
-          auto baseType = type.dyn_cast<FIRRTLBaseType>();
-          if (!baseType)
-            return emitError(fieldLoc, "field must be base type");
-
           elements.push_back(
-              {StringAttr::get(getContext(), fieldName), isFlipped, baseType});
+              {StringAttr::get(getContext(), fieldName), isFlipped, type});
+          bundleCompatible &= isa<BundleType::ElementType>(type);
           return success();
         }))
       return failure();
-    result = BundleType::get(getContext(), elements);
+
+    // Try to emit base-only bundle.
+    if (bundleCompatible) {
+      auto bundleElements = llvm::map_range(elements, [](auto element) {
+        return BundleType::BundleElement{
+            element.name, element.isFlip,
+            cast<BundleType::ElementType>(element.type)};
+      });
+      result = BundleType::get(getContext(), llvm::to_vector(bundleElements));
+    } else
+      result = OpenBundleType::get(getContext(), elements);
     break;
   }
   }
@@ -845,10 +852,10 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
       return emitError(sizeLoc, "invalid size specifier"), failure();
 
     auto baseType = result.dyn_cast<FIRRTLBaseType>();
-    if (!baseType)
-      return emitError(sizeLoc, "vector element must be base type");
-
-    result = FVectorType::get(baseType, size);
+    if (baseType)
+      result = FVectorType::get(baseType, size);
+    else
+      result = OpenVectorType::get(result, size);
   }
 
   return success();
@@ -1660,10 +1667,16 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
   if (parseFieldIdSeq(fields, "expected field name"))
     return failure();
   for (auto fieldName : fields) {
-    auto bundle = getBaseOfType<BundleType>(result.getType());
-    if (!bundle)
+    std::optional<unsigned> indexV;
+    auto type = result.getType();
+    if (auto refTy = dyn_cast<RefType>(type))
+      type = refTy.getType();
+    if (auto bundle = dyn_cast<BundleType>(type))
+      indexV = bundle.getElementIndex(fieldName);
+    else if (auto bundle = dyn_cast<OpenBundleType>(type))
+      indexV = bundle.getElementIndex(fieldName);
+    else
       return emitError(loc, "subfield requires bundle operand ");
-    auto indexV = bundle.getElementIndex(fieldName);
     if (!indexV)
       return emitError(loc, "unknown field '" + fieldName + "' in bundle type ")
              << result.getType();
@@ -1677,7 +1690,12 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
     } else {
       NamedAttribute attrs = {getConstants().fieldIndexIdentifier,
                               builder.getI32IntegerAttr(indexNo)};
-      subResult = emitCachedSubAccess<SubfieldOp>(result, attrs, indexNo, loc);
+      if (isa<BundleType>(type))
+        subResult =
+            emitCachedSubAccess<SubfieldOp>(result, attrs, indexNo, loc);
+      else
+        subResult =
+            emitCachedSubAccess<OpenSubfieldOp>(result, attrs, indexNo, loc);
     }
 
     if (failed(subResult))
@@ -1711,8 +1729,11 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
   FailureOr<Value> subResult;
   if (isa<RefType>(result.getType()))
     subResult = emitCachedSubAccess<RefSubOp>(result, attrs, indexNo, loc);
-  else
+  else if (isa<FVectorType>(result.getType()))
     subResult = emitCachedSubAccess<SubindexOp>(result, attrs, indexNo, loc);
+  else
+    subResult =
+        emitCachedSubAccess<OpenSubindexOp>(result, attrs, indexNo, loc);
 
   if (failed(subResult))
     return failure();
@@ -3540,13 +3561,32 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
 
   auto builder = circuit.getBodyBuilder();
 
+  // Helper for the temporary check rejecting input-oriented refs.
+  std::function<bool(Type, bool)> hasInputRef = [&](Type type,
+                                                    bool output) -> bool {
+    auto ftype = dyn_cast<FIRRTLType>(type);
+    if (!ftype || !ftype.containsReference())
+      return false;
+    return TypeSwitch<FIRRTLType, bool>(ftype)
+        .Case<RefType>([&](auto reftype) { return !output; })
+        .Case<OpenVectorType>([&](OpenVectorType ovt) {
+          return hasInputRef(ovt.getElementType(), output);
+        })
+        .Case<OpenBundleType>([&](OpenBundleType obt) {
+          for (auto field : obt.getElements())
+            if (hasInputRef(field.type, field.isFlip ^ output))
+              return true;
+          return false;
+        });
+  };
+
   // Check for port name collisions.
   SmallDenseMap<Attribute, SMLoc> portIds;
   for (auto portAndLoc : llvm::zip(portList, portLocs)) {
     PortInfo &port = std::get<0>(portAndLoc);
     // See #4812 and look through the reference input test collection
     // and ensure they work before allowing them from user input.
-    if (!port.isOutput() && isa<RefType>(port.type))
+    if (hasInputRef(port.type, port.isOutput()))
       return emitError(std::get<1>(portAndLoc),
                        "input probes not yet supported");
     auto &entry = portIds[port.name];
@@ -3703,8 +3743,12 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     // ref x is "a.b.c"
     // Support "ref x.y is " once aggregate-of-ref supported.
     StringAttr refName, resolved;
-    if (parseId(refName, "expected ref name") ||
-        parseToken(FIRToken::kw_is, "expected 'is' in ref statement"))
+    if (parseId(refName, "expected ref name"))
+      return failure();
+    if (consumeIf(FIRToken::period) || consumeIf(FIRToken::l_square))
+      return emitError(
+          loc, "ref statements for aggregate elements not yet supported");
+    if (parseToken(FIRToken::kw_is, "expected 'is' in ref statement"))
       return failure();
 
     if (!seenRefs.insert(refName).second)
