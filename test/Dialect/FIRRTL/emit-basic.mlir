@@ -336,6 +336,20 @@ firrtl.circuit "Foo" {
     %b = firrtl.node %a_ref_resolve : !firrtl.uint<1>
   }
 
+  // CHECK-LABEL: module RefExport
+  firrtl.module @RefExport(out %a_ref: !firrtl.probe<uint<1>>,
+                           out %a_rwref: !firrtl.rwprobe<uint<1>>) {
+    // CHECK: define a_ref = refSource.a_ref
+    // CHECK: define a_rwref = refSource.a_rwref
+    %refSource_a_ref, %refSource_a_rwref =
+      firrtl.instance refSource @RefSource(
+        out a_ref: !firrtl.probe<uint<1>>,
+        out a_rwref: !firrtl.rwprobe<uint<1>>
+      )
+    firrtl.ref.define %a_ref, %refSource_a_ref : !firrtl.probe<uint<1>>
+    firrtl.ref.define %a_rwref, %refSource_a_rwref : !firrtl.rwprobe<uint<1>>
+  }
+
   firrtl.extmodule @MyParameterizedExtModule<DEFAULT: i64 = 0, DEPTH: f64 = 3.242000e+01, FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32>(in in: !firrtl.uint, out out: !firrtl.uint<8>) attributes {defname = "name_thing"}
   // CHECK-LABEL: extmodule MyParameterizedExtModule :
   // CHECK-NEXT:    input in : UInt

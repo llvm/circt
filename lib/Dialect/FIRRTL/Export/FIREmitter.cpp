@@ -615,11 +615,10 @@ void Emitter::emitStatement(RefDefineOp op) {
   emitExpression(op.getDest());
   os << " = ";
   auto src = op.getSrc();
-  auto *srcDefiningOp = src.getDefiningOp();
-  if (srcDefiningOp && srcDefiningOp->getNumResults() > 1 &&
-      srcDefiningOp->getResult(1) == src) {
+  if (auto forceable = src.getDefiningOp<Forceable>();
+      forceable && forceable.isForceable() && forceable.getDataRef() == src) {
     os << "rwprobe(";
-    emitExpression(srcDefiningOp->getResult(0));
+    emitExpression(forceable.getData());
     os << ")";
   } else
     emitExpression(src);
