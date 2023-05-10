@@ -16,6 +16,8 @@ jobs:
           - os: ubuntu-20.04
             cibw_build: cp37-manylinux_x86_64
           - os: ubuntu-20.04
+            cibw_build: cp38-manylinux_x86_64
+          - os: ubuntu-20.04
             cibw_build: cp310-manylinux_x86_64
 
     steps:
