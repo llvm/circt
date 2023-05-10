@@ -3087,3 +3087,12 @@ LogicalResult ClockGateIntrinsicOp::canonicalize(ClockGateIntrinsicOp op,
 
   return failure();
 }
+
+//===----------------------------------------------------------------------===//
+// RefOps
+//===----------------------------------------------------------------------===//
+
+void RefResolveOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                               MLIRContext *context) {
+  results.insert<patterns::RefResolveOfRefSend>(context);
+}

@@ -2925,4 +2925,16 @@ firrtl.module @ClockGateIntrinsic(in %clock: !firrtl.clock, in %enable: !firrtl.
   %dropTestEnable = firrtl.node interesting_name %6 : !firrtl.clock
 }
 
+// CHECK-LABEL: firrtl.module @RefTypes
+firrtl.module @RefTypes() {
+
+  %a = firrtl.wire : !firrtl.uint<1>
+  %b = firrtl.wire : !firrtl.uint<1>
+  %a_ref = firrtl.ref.send  %a : !firrtl.uint<1>
+  %a_read_ref = firrtl.ref.resolve %a_ref : !firrtl.probe<uint<1>>
+  // CHECK: firrtl.strictconnect %b, %a
+  firrtl.strictconnect %b, %a_read_ref : !firrtl.uint<1>
+
+}
+
 }

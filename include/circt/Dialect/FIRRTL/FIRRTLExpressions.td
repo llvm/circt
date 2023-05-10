@@ -1006,6 +1006,8 @@ def RefResolveOp: FIRRTLExprOp<"ref.resolve",
   let arguments = (ins RefType:$ref);
   let results = (outs FIRRTLBaseType:$result);
 
+  let hasCanonicalizer = true;
+
   let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
 }
 
