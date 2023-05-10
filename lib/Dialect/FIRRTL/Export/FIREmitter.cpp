@@ -76,6 +76,10 @@ struct Emitter {
   void emitStatement(MemoryDebugPortOp op);
   void emitStatement(MemoryPortAccessOp op);
   void emitStatement(RefDefineOp op);
+  void emitStatement(RefForceOp op);
+  void emitStatement(RefForceInitialOp op);
+  void emitStatement(RefReleaseOp op);
+  void emitStatement(RefReleaseInitialOp op);
 
   template <class T>
   void emitVerifStatement(T op, StringRef mnemonic);
@@ -325,7 +329,8 @@ void Emitter::emitStatementsInBlock(Block &block) {
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
               PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp, StrictConnectOp,
               InstanceOp, AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
-              MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp>(
+              MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp,
+              RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           indent() << "// operation " << op->getName() << "\n";
@@ -623,6 +628,74 @@ void Emitter::emitStatement(RefDefineOp op) {
   } else
     emitExpression(src);
   emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(RefForceOp op) {
+  indent();
+  os << "force(";
+  emitExpression(op.getClock());
+  os << ", ";
+  emitExpression(op.getPredicate());
+  os << ", ";
+  emitExpression(op.getDest());
+  os << ", ";
+  emitExpression(op.getSrc());
+  os << ")";
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(RefForceInitialOp op) {
+  indent();
+  auto constantPredicate =
+      dyn_cast_or_null<ConstantOp>(op.getPredicate().getDefiningOp());
+  bool hasEnable = !constantPredicate || constantPredicate.getValue() == 0;
+  if (hasEnable) {
+    os << "when ";
+    emitExpression(op.getPredicate());
+    os << ":\n";
+    addIndent();
+    indent();
+  }
+  os << "force_initial(";
+  emitExpression(op.getDest());
+  os << ", ";
+  emitExpression(op.getSrc());
+  os << ")";
+  emitLocationAndNewLine(op);
+  if (hasEnable)
+    reduceIndent();
+}
+
+void Emitter::emitStatement(RefReleaseOp op) {
+  indent();
+  os << "release(";
+  emitExpression(op.getClock());
+  os << ", ";
+  emitExpression(op.getPredicate());
+  os << ", ";
+  emitExpression(op.getDest());
+  os << ")";
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(RefReleaseInitialOp op) {
+  indent();
+  auto constantPredicate =
+      dyn_cast_or_null<ConstantOp>(op.getPredicate().getDefiningOp());
+  bool hasEnable = !constantPredicate || constantPredicate.getValue() == 0;
+  if (hasEnable) {
+    os << "when ";
+    emitExpression(op.getPredicate());
+    os << ":\n";
+    addIndent();
+    indent();
+  }
+  os << "release_initial(";
+  emitExpression(op.getDest());
+  os << ")";
+  emitLocationAndNewLine(op);
+  if (hasEnable)
+    reduceIndent();
 }
 
 void Emitter::emitStatement(InvalidValueOp op) {

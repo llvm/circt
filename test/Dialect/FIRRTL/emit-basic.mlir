@@ -324,7 +324,12 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: module RefSink
-  firrtl.module @RefSink() {
+  firrtl.module @RefSink(
+    in %clock: !firrtl.clock,
+    in %enable: !firrtl.uint<1>
+  ) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     // CHECK: node b = read(refSource.a_ref)
     %refSource_a_ref, %refSource_a_rwref =
       firrtl.instance refSource @RefSource(
@@ -334,6 +339,30 @@ firrtl.circuit "Foo" {
     %a_ref_resolve =
       firrtl.ref.resolve %refSource_a_ref : !firrtl.probe<uint<1>>
     %b = firrtl.node %a_ref_resolve : !firrtl.uint<1>
+    // CHECK-NEXT: force_initial(refSource.a_rwref, UInt<1>(0))
+    firrtl.ref.force_initial %c1_ui1, %refSource_a_rwref, %c0_ui1 :
+      !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK-NEXT: release_initial(refSource.a_rwref)
+    firrtl.ref.release_initial %c1_ui1, %refSource_a_rwref :
+      !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+    // CHECK-NEXT: when enable :
+    // CHECK-NEXT:   force_initial(refSource.a_rwref, UInt<1>(0))
+    firrtl.when %enable : !firrtl.uint<1> {
+      firrtl.ref.force_initial %c1_ui1, %refSource_a_rwref, %c0_ui1 :
+        !firrtl.uint<1>, !firrtl.uint<1>
+    }
+    // CHECK-NEXT: when enable :
+    // CHECK-NEXT:   release_initial(refSource.a_rwref)
+    firrtl.when %enable : !firrtl.uint<1> {
+      firrtl.ref.release_initial %c1_ui1, %refSource_a_rwref :
+        !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+    }
+    // CHECK-NEXT: force(clock, enable, refSource.a_rwref, UInt<1>(1))
+    firrtl.ref.force %clock, %enable, %refSource_a_rwref, %c1_ui1 :
+      !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK-NEXT: release(clock, enable, refSource.a_rwref)
+    firrtl.ref.release %clock, %enable, %refSource_a_rwref :
+      !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
   }
 
   // CHECK-LABEL: module RefExport
