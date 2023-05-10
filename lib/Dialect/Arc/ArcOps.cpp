@@ -302,7 +302,7 @@ LogicalResult LutOp::verify() {
 
 Operation *
 CallOpMutableInterface::resolveCallable(SymbolTableCollection *symbolTable) {
-  return static_cast<CallOpInterface>(*this).resolveCallable(symbolTable);
+  return cast<CallOpInterface>(**this).resolveCallable(symbolTable);
 }
 
 #include "circt/Dialect/Arc/ArcInterfaces.cpp.inc"
