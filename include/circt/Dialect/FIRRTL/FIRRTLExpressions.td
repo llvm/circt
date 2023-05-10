@@ -913,11 +913,12 @@ def VerbatimWireOp : FIRRTLOp<"verbatim.wire",
 // Special inference Operations
 //===----------------------------------------------------------------------===//
 
-class SameOperandConstness<string a, string b> 
+// This assumes operands are ground types without explicitly checking
+class SameGroundTypeOperandConstness<string a, string b> 
   : PredOpTrait<"operand constness must match",
                  CPred<"isConst($" # a # ".getType()) == isConst($" # b # ".getType())">>;
 
-def UninferredResetCastOp : FIRRTLOp<"resetCast", [HasCustomSSAName, Pure, SameOperandConstness<"input", "result">]> {
+def UninferredResetCastOp : FIRRTLOp<"resetCast", [HasCustomSSAName, Pure, SameGroundTypeOperandConstness<"input", "result">]> {
   let description = [{
     Cast between reset types.  This is used to enable strictconnects early in
     the pipeline by isolating all uninferred reset connections to a single op.
@@ -929,7 +930,7 @@ def UninferredResetCastOp : FIRRTLOp<"resetCast", [HasCustomSSAName, Pure, SameO
     "$input attr-dict `:` functional-type($input, $result)";
 }
 
-def UninferredWidthCastOp : FIRRTLOp<"widthCast", [HasCustomSSAName, Pure, SameOperandConstness<"input", "result">]> {
+def UninferredWidthCastOp : FIRRTLOp<"widthCast", [HasCustomSSAName, Pure, SameGroundTypeOperandConstness<"input", "result">]> {
   let description = [{
     Cast between sized and unsized integer types.  This is used to enable
     strictconnects early in the pipeline by isolating all uninferred width

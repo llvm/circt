@@ -918,8 +918,10 @@ bool firrtl::areTypesConstCastable(FIRRTLType destFType, FIRRTLType srcFType,
   if (!destType || !srcType)
     return false;
 
+  bool srcIsConst = srcType.isConst() || srcOuterTypeIsConst;
+
   // Cannot cast non-'const' src to 'const' dest
-  if (destType.isConst() && !srcType.isConst() && !srcOuterTypeIsConst)
+  if (destType.isConst() && !srcIsConst)
     return false;
 
   // Vector types can be casted if they have the same size and castable element
@@ -928,9 +930,10 @@ bool firrtl::areTypesConstCastable(FIRRTLType destFType, FIRRTLType srcFType,
   auto srcVectorType = srcType.dyn_cast<FVectorType>();
   if (destVectorType && srcVectorType)
     return destVectorType.getNumElements() == srcVectorType.getNumElements() &&
-           areTypesConstCastable(
-               destVectorType.getElementType(), srcVectorType.getElementType(),
-               srcOuterTypeIsConst || srcVectorType.isConst());
+           areTypesConstCastable(destVectorType.getElementType(),
+                                 srcVectorType.getElementType(), srcIsConst);
+  if (destVectorType != srcVectorType)
+    return false;
 
   // Bundle types can be casted if they have the same size, element names,
   // and castable element types.
@@ -943,24 +946,22 @@ bool firrtl::areTypesConstCastable(FIRRTLType destFType, FIRRTLType srcFType,
     if (numDestElements != srcElements.size())
       return false;
 
-    for (size_t i = 0; i < numDestElements; ++i) {
-      auto destElement = destElements[i];
-      auto srcElement = srcElements[i];
-      if (destElement.name != srcElement.name ||
-          destElement.isFlip != srcElement.isFlip ||
-          !areTypesConstCastable(destElement.type, srcElement.type,
-                                 srcOuterTypeIsConst ||
-                                     srcBundleType.isConst()))
-        return false;
-    }
-    return true;
+    return llvm::all_of_zip(destElements, srcElements,
+                            [&](const BundleType::BundleElement &destElement,
+                                const BundleType::BundleElement &srcElement) {
+                              return destElement.name == srcElement.name &&
+                                     destElement.isFlip == srcElement.isFlip &&
+                                     areTypesConstCastable(destElement.type,
+                                                           srcElement.type,
+                                                           srcIsConst);
+                            });
   }
+  if (destBundleType != srcBundleType)
+    return false;
 
   // Ground types can be casted if the source type is a const
   // version of the destination type
-  return destType == srcType.getConstType(false) ||
-         (destType.isConst() && srcOuterTypeIsConst &&
-          destType == srcType.getConstType(true));
+  return destType == srcType.getConstType(destType.isConst());
 }
 
 /// Returns true if the destination is at least as wide as an equivalent source.
