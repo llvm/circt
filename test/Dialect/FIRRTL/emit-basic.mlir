@@ -110,6 +110,21 @@ firrtl.circuit "Foo" {
     // CHECK: someOut is invalid
     %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<1>
     firrtl.strictconnect %someOut, %invalid_ui2 : !firrtl.uint<1>
+
+    // CHECK: unknownWidth <= knownWidth
+    %knownWidth = firrtl.wire : !firrtl.uint<1>
+    %unknownWidth = firrtl.wire : !firrtl.uint
+    %widthCast = firrtl.widthCast %knownWidth :
+      (!firrtl.uint<1>) -> !firrtl.uint
+    firrtl.strictconnect %unknownWidth, %widthCast : !firrtl.uint
+
+    // CHECK: unknownReset <= knownReset
+    %knownReset = firrtl.wire : !firrtl.asyncreset
+    %unknownReset = firrtl.wire : !firrtl.reset
+    %resetCast = firrtl.resetCast %knownReset :
+      (!firrtl.asyncreset) -> !firrtl.reset
+    firrtl.strictconnect %unknownReset, %resetCast : !firrtl.reset
+
     // CHECK: attach(an0, an1)
     %an0 = firrtl.wire : !firrtl.analog<1>
     %an1 = firrtl.wire : !firrtl.analog<1>

@@ -96,6 +96,8 @@ struct Emitter {
   void emitExpression(SubaccessOp op);
   void emitExpression(RefSendOp op);
   void emitExpression(RefResolveOp op);
+  void emitExpression(UninferredResetCastOp op);
+  void emitExpression(UninferredWidthCastOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -739,7 +741,7 @@ void Emitter::emitExpression(Value value) {
           CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
-          ShrPrimOp,
+          ShrPrimOp, UninferredResetCastOp, UninferredWidthCastOp,
           // Reference expressions
           RefSendOp, RefResolveOp>([&](auto op) { emitExpression(op); })
       .Default([&](auto op) {
@@ -801,6 +803,14 @@ void Emitter::emitExpression(RefResolveOp op) {
   os << "read(";
   emitExpression(op.getRef());
   os << ")";
+}
+
+void Emitter::emitExpression(UninferredResetCastOp op) {
+  emitExpression(op.getInput());
+}
+
+void Emitter::emitExpression(UninferredWidthCastOp op) {
+  emitExpression(op.getInput());
 }
 
 void Emitter::emitPrimExpr(StringRef mnemonic, Operation *op,
