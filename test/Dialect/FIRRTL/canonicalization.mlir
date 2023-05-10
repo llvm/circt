@@ -2926,7 +2926,9 @@ firrtl.module @ClockGateIntrinsic(in %clock: !firrtl.clock, in %enable: !firrtl.
 }
 
 // CHECK-LABEL: firrtl.module @RefTypes
-firrtl.module @RefTypes() {
+firrtl.module @RefTypes(
+    out %x: !firrtl.bundle<a flip: uint<1>>,
+    out %y: !firrtl.bundle<a: uint<1>>) {
 
   %a = firrtl.wire : !firrtl.uint<1>
   %b = firrtl.wire : !firrtl.uint<1>
@@ -2935,6 +2937,11 @@ firrtl.module @RefTypes() {
   // CHECK: firrtl.strictconnect %b, %a
   firrtl.strictconnect %b, %a_read_ref : !firrtl.uint<1>
 
+  // Don't collapse if types don't match.
+  // CHECK: ref.resolve
+  %x_ref = firrtl.ref.send %x : !firrtl.bundle<a flip: uint<1>>
+  %x_read = firrtl.ref.resolve %x_ref : !firrtl.probe<bundle<a: uint<1>>>
+  firrtl.strictconnect %y, %x_read : !firrtl.bundle<a: uint<1>>
 }
 
 }

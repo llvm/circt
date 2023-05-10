@@ -385,8 +385,8 @@ def RegResetWithZeroReset : Pat<
 
 // ref.resolve(ref.send(a)) -> a
 def RefResolveOfRefSend : Pat<
-  (RefResolveOp (RefSendOp $base)),
-  (replaceWithValue $base), []
+  (RefResolveOp:$resolve (RefSendOp $base)),
+  (replaceWithValue $base), [(EqualTypes $base, $resolve)]
 >;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD
