@@ -3092,7 +3092,20 @@ LogicalResult ClockGateIntrinsicOp::canonicalize(ClockGateIntrinsicOp op,
 // RefOps
 //===----------------------------------------------------------------------===//
 
+// refresolve(forceable.ref) -> forceable.data
+static LogicalResult
+canonicalizeRefResolveOfForceable(RefResolveOp op, PatternRewriter &rewriter) {
+  auto forceable = op.getRef().getDefiningOp<Forceable>();
+  if (!forceable || !forceable.isForceable() ||
+      op.getRef() != forceable.getDataRef() ||
+      op.getType() != forceable.getDataType())
+    return failure();
+  rewriter.replaceAllUsesWith(op, forceable.getData());
+  return success();
+}
+
 void RefResolveOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                MLIRContext *context) {
   results.insert<patterns::RefResolveOfRefSend>(context);
+  results.insert(canonicalizeRefResolveOfForceable);
 }
