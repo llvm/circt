@@ -338,18 +338,17 @@ def BundleImpl : BaseBundleTypeImpl<"Bundle","::circt::firrtl::FIRRTLBaseType", 
 
 def OpenBundleImpl : BaseBundleTypeImpl<"OpenBundle","::circt::firrtl::FIRRTLType", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]>;
 
-def FTypeAliasImpl : FIRRTLImplType<"FTypeAlias", [], "::circt::firrtl::FIRRTLType"> {
-  let summary = "type alias";
+def BaseTypeAliasImpl : FIRRTLImplType<"BaseTypeAlias", [], "::circt::firrtl::FIRRTLBaseType"> {
+  let summary = "type alias for firrtl base types";
   let parameters =
-    (ins  "StringAttr":$name, TypeParameter<"::circt::firrtl::FIRRTLType",
+    (ins  "StringAttr":$name, TypeParameter<"::circt::firrtl::FIRRTLBaseType",
                             "An inner type">:$innerType);
-  let storageClass = "FTypeAliasStorage";
+  let storageClass = "BaseTypeAliasStorage";
   let genAccessors = true;
   let skipDefaultBuilders = true;
   let extraClassDeclaration = [{
-      FIRRTLType getAnonymousType();
+      FIRRTLBaseType getAnonymousType();
       FIRRTLBaseType getPassiveType();
-      bool isConst();
       /// Return the recursive properties of the type.
       RecursiveTypeProperties getRecursiveTypeProperties() const;
   }];
@@ -357,7 +356,7 @@ def FTypeAliasImpl : FIRRTLImplType<"FTypeAlias", [], "::circt::firrtl::FIRRTLTy
   let builders = [
     TypeBuilderWithInferredContext<(ins
     "::mlir::StringAttr":$name,
-    "::circt::firrtl::FIRRTLType":$innerType)>
+    "::circt::firrtl::FIRRTLBaseType":$innerType)>
   ];
 }
 

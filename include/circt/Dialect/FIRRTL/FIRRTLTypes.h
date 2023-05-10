@@ -43,7 +43,7 @@ class OpenVectorType;
 class FVectorType;
 class FEnumType;
 class RefType;
-class FTypeAliasType;
+class BaseTypeAliasType;
 
 /// A collection of bits indicating the recursive properties of a type.
 struct RecursiveTypeProperties {
@@ -163,7 +163,7 @@ public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
     return llvm::isa<FIRRTLDialect>(type.getDialect()) &&
-           !type.isa<RefType, OpenBundleType, OpenVectorType, FTypeAliasType>();
+           !type.isa<RefType, OpenBundleType, OpenVectorType>();
   }
 
   /// Returns true if this is a non-const "passive" that which is not analog.

@@ -245,7 +245,8 @@ firrtl.module @OpenAggTest(in %in: !firrtl.openbundle<a: bundle<data: uint<1>>, 
 
 // CHECK-LABEL: TypeAlias
 // CHECK-SAME: !firrtl.alias<foo, uint<1>>
-firrtl.module @TypeAlias(in %in: !firrtl.alias<foo, uint<1>>) {
+firrtl.module @TypeAlias(in %in: !firrtl.alias<foo, uint<1>>, out %out: !firrtl.alias<foo, uint<1>>) {
+  firrtl.strictconnect %out, %in: !firrtl.alias<foo, uint<1>>
 }
 
 }

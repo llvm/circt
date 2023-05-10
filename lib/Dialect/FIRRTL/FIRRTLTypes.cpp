@@ -104,7 +104,7 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         printNestedType(refType.getType(), os);
         os << '>';
       })
-      .Case<FTypeAliasType>([&](FTypeAliasType alias) {
+      .Case<BaseTypeAliasType>([&](BaseTypeAliasType alias) {
         os << "alias<" << alias.getName().getValue() << ", ";
         printNestedType(alias.getInnerType(), os);
         os << '>';
@@ -355,14 +355,15 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     return result = RefType::get(type, true), success();
   }
   if (name.equals("alias")) {
-    FIRRTLType type;
+    FIRRTLBaseType type;
     StringRef name;
     if (parser.parseLess() || parser.parseKeyword(&name) ||
-        parser.parseComma() || parseNestedType(type, parser) ||
+        parser.parseComma() || parseNestedBaseType(type, parser) ||
         parser.parseGreater())
       return failure();
 
-    return result = FTypeAliasType::get(StringAttr::get(context, name), type),
+    return result =
+               BaseTypeAliasType::get(StringAttr::get(context, name), type),
            success();
   }
 
@@ -496,7 +497,7 @@ bool FIRRTLType::isGround() {
             AnalogType>([](Type) { return true; })
       .Case<BundleType, FVectorType, FEnumType, OpenBundleType, OpenVectorType>(
           [](Type) { return false; })
-      .Case<FTypeAliasType>([](FTypeAliasType alias) {
+      .Case<BaseTypeAliasType>([](BaseTypeAliasType alias) {
         return alias.getAnonymousType().isGround();
       })
       // Not ground per spec, but leaf of aggregate.
@@ -509,7 +510,7 @@ bool FIRRTLType::isGround() {
 
 bool FIRRTLType::isConst() {
   return TypeSwitch<FIRRTLType, bool>(*this)
-      .Case<FIRRTLBaseType, OpenBundleType, OpenVectorType, FTypeAliasType>(
+      .Case<FIRRTLBaseType, OpenBundleType, OpenVectorType>(
           [](auto type) { return type.isConst(); })
       .Default(false);
 }
@@ -536,7 +537,7 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
             true, false, true, type.isConst(), true, !type.hasWidth(), false};
       })
       .Case<BundleType, FVectorType, FEnumType, OpenBundleType, OpenVectorType,
-            RefType, FTypeAliasType>(
+            RefType, BaseTypeAliasType>(
           [](auto type) { return type.getRecursiveTypeProperties(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
@@ -549,26 +550,11 @@ FIRRTLBaseType FIRRTLBaseType::getAnonymousType() {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType>([&](Type) { return *this; })
-      .Case<BundleType, FVectorType, FEnumType>(
+      .Case<BundleType, FVectorType, FEnumType, BaseTypeAliasType>(
           [](auto type) { return type.getAnonymousType(); })
-      .Case<FTypeAliasType>([](auto type) {
-        return type.getAnonymousType().template cast<FIRRTLBaseType>();
-      })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return FIRRTLBaseType();
-      });
-}
-
-/// Return this type with any type aliases recursively removed from itself.
-FIRRTLType FIRRTLType::getAnonymousType() {
-  return TypeSwitch<FIRRTLType, FIRRTLType>(*this)
-      .Case<FIRRTLBaseType, FTypeAliasType>(
-          [&](auto type) { return type.getAnonymousType(); })
-      .Default([](Type) {
-        // TODO: Handle ref types.
-        llvm_unreachable("unknown FIRRTL type");
-        return FIRRTLType();
       });
 }
 
@@ -577,7 +563,7 @@ FIRRTLBaseType FIRRTLBaseType::getPassiveType() {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType, FEnumType>([&](Type) { return *this; })
-      .Case<BundleType, FVectorType, FEnumType, FTypeAliasType>(
+      .Case<BundleType, FVectorType, FEnumType, BaseTypeAliasType>(
           [](auto type) { return type.getPassiveType(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
@@ -591,6 +577,8 @@ FIRRTLBaseType FIRRTLBaseType::getConstType(bool isConst) {
       .Case<ClockType, ResetType, AsyncResetType, AnalogType, SIntType,
             UIntType, BundleType, FVectorType, FEnumType>(
           [&](auto type) { return type.getConstType(isConst); })
+      .Case<BaseTypeAliasType>(
+          [&](auto type) { return type.getInnerType().getConstType(isConst); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return FIRRTLBaseType();
@@ -618,6 +606,10 @@ FIRRTLBaseType FIRRTLBaseType::getMaskType() {
         return FVectorType::get(vectorType.getElementType().getMaskType(),
                                 vectorType.getNumElements(),
                                 vectorType.isConst());
+      })
+      .Case<BaseTypeAliasType>([](BaseTypeAliasType base) {
+        return BaseTypeAliasType::get(base.getName(),
+                                      base.getInnerType().getMaskType());
       })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
@@ -651,11 +643,9 @@ FIRRTLBaseType FIRRTLBaseType::getWidthlessType() {
           newElements.push_back({elt.name, elt.type.getWidthlessType()});
         return FEnumType::get(this->getContext(), newElements, a.isConst());
       })
-      .Case<FTypeAliasType>([&](FTypeAliasType a) {
-        return FTypeAliasType::get(
-                   a.getName(),
-                   a.getInnerType().cast<FIRRTLBaseType>().getWidthlessType())
-            .cast<FIRRTLBaseType>();
+      .Case<BaseTypeAliasType>([&](BaseTypeAliasType a) {
+        return BaseTypeAliasType::get(a.getName(),
+                                      a.getInnerType().getWidthlessType());
       })
       .Default([](auto) {
         llvm_unreachable("unknown FIRRTL type");
@@ -675,10 +665,8 @@ int32_t FIRRTLBaseType::getBitWidthOrSentinel() {
       .Case<AnalogType>(
           [](AnalogType analogType) { return analogType.getWidthOrSentinel(); })
       .Case<BundleType, FVectorType, FEnumType>([](Type) { return -2; })
-      .Case<FTypeAliasType>([](FTypeAliasType type) {
-        return type.getAnonymousType()
-            .cast<FIRRTLBaseType>()
-            .getBitWidthOrSentinel();
+      .Case<BaseTypeAliasType>([](BaseTypeAliasType type) {
+        return type.getAnonymousType().getBitWidthOrSentinel();
       })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
@@ -694,6 +682,8 @@ bool FIRRTLBaseType::isResetType() {
       .Case<ResetType, AsyncResetType>([](Type) { return true; })
       .Case<UIntType>(
           [](UIntType a) { return !a.hasWidth() || a.getWidth() == 1; })
+      .Case<BaseTypeAliasType>(
+          [](auto type) { return type.getInnerType().isResetType(); })
       .Default([](Type) { return false; });
 }
 
@@ -703,6 +693,8 @@ uint64_t FIRRTLBaseType::getMaxFieldID() {
             UIntType>([](Type) { return 0; })
       .Case<BundleType, FVectorType, FEnumType>(
           [](auto type) { return type.getMaxFieldID(); })
+      .Case<BaseTypeAliasType>(
+          [](auto type) { return type.getAnonymousType().getMaxFieldID(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return -1;
@@ -717,6 +709,9 @@ FIRRTLBaseType::getSubTypeByFieldID(uint64_t fieldID) {
             UIntType>([&](FIRRTLBaseType t) {
         assert(!fieldID && "non-aggregate types must have a field id of 0");
         return std::pair(t, 0);
+      })
+      .Case<BaseTypeAliasType>([&](BaseTypeAliasType type) {
+        return type.getInnerType().getSubTypeByFieldID(fieldID);
       })
       .Case<BundleType, FVectorType, FEnumType>(
           [&](auto type) { return type.getSubTypeByFieldID(fieldID); })
@@ -739,6 +734,9 @@ std::pair<uint64_t, bool> FIRRTLBaseType::rootChildFieldID(uint64_t fieldID,
   return TypeSwitch<FIRRTLBaseType, std::pair<uint64_t, bool>>(*this)
       .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
             UIntType>([&](Type) { return std::make_pair(0, fieldID == 0); })
+      .Case<BaseTypeAliasType>([&](BaseTypeAliasType type) {
+        return type.getInnerType().rootChildFieldID(fieldID, index);
+      })
       .Case<BundleType, FVectorType, FEnumType>(
           [&](auto type) { return type.rootChildFieldID(fieldID, index); })
       .Default([](Type) {
@@ -1947,15 +1945,16 @@ FIRRTLBaseType FEnumType::getAnonymousType() {
 }
 
 //===----------------------------------------------------------------------===//
-// FTypeAliasType
+// BaseTypeAliasType
 //===----------------------------------------------------------------------===//
 
-struct circt::firrtl::detail::FTypeAliasStorage : mlir::TypeStorage {
-  using KeyTy = std::tuple<StringAttr, FIRRTLType>;
+struct circt::firrtl::detail::BaseTypeAliasStorage
+    : circt::firrtl::detail::FIRRTLBaseTypeStorage {
+  using KeyTy = std::tuple<StringAttr, FIRRTLBaseType>;
 
-  FTypeAliasStorage(StringAttr name, FIRRTLType innerType)
-      : name(name), innerType(innerType),
-        anonymousType(innerType.getAnonymousType()) {}
+  BaseTypeAliasStorage(StringAttr name, FIRRTLBaseType innerType)
+      : detail::FIRRTLBaseTypeStorage(innerType.isConst()), name(name),
+        innerType(innerType), anonymousType(innerType.getAnonymousType()) {}
 
   bool operator==(const KeyTy &key) const {
     return key == KeyTy(name, innerType);
@@ -1965,53 +1964,44 @@ struct circt::firrtl::detail::FTypeAliasStorage : mlir::TypeStorage {
     return llvm::hash_combine(key);
   }
 
-  static FTypeAliasStorage *construct(TypeStorageAllocator &allocator,
-                                      KeyTy key) {
-    return new (allocator.allocate<FTypeAliasStorage>())
-        FTypeAliasStorage(std::get<0>(key), std::get<1>(key));
+  static BaseTypeAliasStorage *construct(TypeStorageAllocator &allocator,
+                                         KeyTy key) {
+    return new (allocator.allocate<BaseTypeAliasStorage>())
+        BaseTypeAliasStorage(std::get<0>(key), std::get<1>(key));
   }
   StringAttr name;
-  FIRRTLType innerType;
-  FIRRTLType anonymousType;
-  FIRRTLBaseType passiveType;
+  FIRRTLBaseType innerType;
+  FIRRTLBaseType anonymousType;
 };
 
-auto FTypeAliasType::get(StringAttr name, FIRRTLType innerType)
-    -> FTypeAliasType {
+auto BaseTypeAliasType::get(StringAttr name, FIRRTLBaseType innerType)
+    -> BaseTypeAliasType {
   return Base::get(name.getContext(), name, innerType);
 }
 
-auto FTypeAliasType::getName() const -> StringAttr { return getImpl()->name; }
+auto BaseTypeAliasType::getName() const -> StringAttr {
+  return getImpl()->name;
+}
 
-auto FTypeAliasType::getInnerType() const -> FIRRTLType {
+auto BaseTypeAliasType::getInnerType() const -> FIRRTLBaseType {
   return getImpl()->innerType;
 }
 
-FIRRTLBaseType FTypeAliasType::getPassiveType() {
-  auto *impl = getImpl();
-  if (impl->passiveType)
-    return impl->passiveType;
+FIRRTLBaseType BaseTypeAliasType::getPassiveType() {
   if (getRecursiveTypeProperties().isPassive)
-    return impl->passiveType = this->cast<FIRRTLBaseType>();
-  auto innerType = getInnerType().cast<FIRRTLBaseType>().getPassiveType();
-  return impl->passiveType =
-             FTypeAliasType::get(getName(), innerType).cast<FIRRTLBaseType>();
+    return *this;
+  return getInnerType().getPassiveType();
 }
 
 /// Return this type with any type aliases recursively removed from itself.
-FIRRTLType FTypeAliasType::getAnonymousType() {
+FIRRTLBaseType BaseTypeAliasType::getAnonymousType() {
   return getImpl()->anonymousType;
 }
 
-RecursiveTypeProperties FTypeAliasType::getRecursiveTypeProperties() const {
+RecursiveTypeProperties BaseTypeAliasType::getRecursiveTypeProperties() const {
   auto rtp = getInnerType().getRecursiveTypeProperties();
   rtp.isAnonymous = false;
   return rtp;
-}
-
-bool FTypeAliasType::isConst() {
-  llvm::dbgs() << *this;
-  return getAnonymousType().isConst();
 }
 
 //===----------------------------------------------------------------------===//
@@ -2128,7 +2118,7 @@ void FIRRTLDialect::registerTypes() {
   addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
            // Derived Types
            BundleType, FVectorType, FEnumType, RefType, OpenBundleType,
-           OpenVectorType, FTypeAliasType>();
+           OpenVectorType, BaseTypeAliasType>();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike
