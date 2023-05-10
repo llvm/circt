@@ -75,41 +75,40 @@ arc.define @DummyArc(%arg0: i42) -> i42 {
   arc.output %arg0 : i42
 }
 
-// CHECK-LABEL: arc.model "MemoryReadAndNonMaskedWrite"
-hw.module @MemoryReadAndNonMaskedWrite(%clk0: i1) {
+// CHECK-LABEL: arc.model "NonMaskedMemoryWrite"
+hw.module @NonMaskedMemoryWrite(%clk0: i1) {
   %c0_i2 = hw.constant 0 : i2
   %c9001_i42 = hw.constant 9001 : i42
   %mem = arc.memory <4 x i42>
   arc.memory_write_port %mem[%c0_i2], %c9001_i42 clock %clk0 : <4 x i42>, i2
-  // COM: also checks that the read is properly reordered to be before the write
-  %read0 = arc.memory_read_port %mem[%c0_i2] clock %clk0 : <4 x i42>, i2
 
   // CHECK-NEXT: ([[PTR:%.+]]: !arc.storage):
   // CHECK-NEXT: [[INCLK0:%.+]] = arc.root_input "clk0", [[PTR]] : (!arc.storage) -> !arc.state<i1>
+  // CHECK-NEXT: [[MEM:%.+]] = arc.alloc_memory [[PTR]] : (!arc.storage) -> !arc.memory<4 x i42>
   // CHECK-NEXT: [[CLK0:%.+]] = arc.state_read [[INCLK0]] : <i1>
   // CHECK-NEXT: arc.clock_tree [[CLK0]] {
-  // CHECK:        [[TMP:%.+]] = arc.memory_read [[MEM:%.+]][%c0_i2] : <4 x i42>, i2
   // CHECK:        arc.memory_write [[MEM]][%c0_i2], %c9001_i42 : <4 x i42>, i2
   // CHECK-NEXT: }
-  // CHECK-NEXT: [[MEM]] = arc.alloc_memory [[PTR]] : (!arc.storage) -> !arc.memory<4 x i42>
 }
 
-// CHECK-LABEL: arc.model "MemoryReadWithEnable"
-hw.module @MemoryReadWithEnable(%clk0: i1, %en: i1) {
+// CHECK-LABEL: arc.model "lowerMemoryReadPorts"
+hw.module @lowerMemoryReadPorts() -> (out0: i42, out1: i42) {
   %c0_i2 = hw.constant 0 : i2
   %mem = arc.memory <4 x i42>
-  %read0 = arc.memory_read_port %mem[%c0_i2] if %en clock %clk0 : <4 x i42>, i2
+  // CHECK: arc.memory_read {{%.+}}[%c0_i2] : <4 x i42>, i2
+  %0 = arc.memory_read_port %mem[%c0_i2] : <4 x i42>, i2
+  // CHECK: func.call @arcWithMemoryReadsIsLowered
+  %1 = arc.call @arcWithMemoryReadsIsLowered(%mem) : (!arc.memory<4 x i42>) -> i42
+  hw.output %0, %1 : i42, i42
+}
 
-  // CHECK-NEXT: ([[PTR:%.+]]: !arc.storage):
-  // CHECK-NEXT: [[INCLK0:%.+]] = arc.root_input "clk0", [[PTR]] : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NEXT: [[INEN:%.+]] = arc.root_input "en", [[PTR]] : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NEXT: [[CLK0:%.+]] = arc.state_read [[INCLK0]] : <i1>
-  // CHECK-NEXT: arc.clock_tree [[CLK0]] {
-  // CHECK:        [[TMP:%.+]] = arc.memory_read [[MEM:%.+]][%c0_i2] : <4 x i42>, i2
-  // CHECK-NEXT:   [[EN:%.+]] = arc.state_read [[INEN]] : <i1>
-  // CHECK-NEXT:   %{{.+}} = comb.mux bin [[EN]], [[TMP]], %c0_i42 : i42
-  // CHECK-NEXT: }
-  // CHECK-NEXT: [[MEM]] = arc.alloc_memory [[PTR]] : (!arc.storage) -> !arc.memory<4 x i42>
+// CHECK-LABEL: func.func @arcWithMemoryReadsIsLowered(%arg0: !arc.memory<4 x i42>) -> i42 attributes {llvm.linkage = #llvm.linkage<internal>}
+arc.define @arcWithMemoryReadsIsLowered(%mem: !arc.memory<4 x i42>) -> i42 {
+  %c0_i2 = hw.constant 0 : i2
+  // CHECK: arc.memory_read {{%.+}}[%c0_i2] : <4 x i42>, i2
+  %0 = arc.memory_read_port %mem[%c0_i2] : <4 x i42>, i2
+  // CHECK-NEXT: return
+  arc.output %0 : i42
 }
 
 // CHECK-LABEL:  arc.model "maskedMemoryWrite"
@@ -275,7 +274,7 @@ arc.define @CombLoopRegressionArc2(%arg0: i1) -> (i1, i1) {
 // CHECK-LABEL: arc.model "MemoryPortRegression"
 hw.module private @MemoryPortRegression(%clock: i1, %reset: i1, %in: i3) -> (x: i3) {
   %0 = arc.memory <2 x i3> {name = "ram_ext"}
-  %1 = arc.memory_read_port %0[%3] clock %clock : <2 x i3>, i1
+  %1 = arc.memory_read_port %0[%3] : <2 x i3>, i1
   arc.memory_write_port %0[%3], %in clock %clock : <2 x i3>, i1
   %3 = arc.state @Queue_arc_0(%reset) clock %clock lat 1 {names = ["value"]} : (i1) -> i1
   %4 = arc.state @Queue_arc_1(%1) lat 0 : (i3) -> i3

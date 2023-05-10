@@ -27,9 +27,12 @@ def StateType : ArcTypeDef<"State"> {
 
 def MemoryType : ArcTypeDef<"Memory"> {
   let mnemonic = "memory";
-  let parameters = (ins "unsigned":$numWords, "::mlir::IntegerType":$wordType,
-    OptionalParameter<"unsigned">:$stride);
-  let assemblyFormat = "`<` $numWords `x` $wordType (`,` $stride^)? `>`";
+  let parameters = (ins "unsigned":$numWords, "::mlir::IntegerType":$wordType);
+  let assemblyFormat = "`<` $numWords `x` $wordType `>`";
+
+  let extraClassDeclaration = [{
+    unsigned getStride();
+  }];
 }
 
 def StorageType : ArcTypeDef<"Storage"> {

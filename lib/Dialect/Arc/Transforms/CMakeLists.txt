@@ -34,6 +34,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   CIRCTSeq
   CIRCTSupport
   MLIRFuncDialect
+  MLIRLLVMDialect
   MLIRIR
   MLIRPass
   MLIRTransformUtils

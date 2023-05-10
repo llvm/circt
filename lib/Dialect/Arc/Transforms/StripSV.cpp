@@ -94,6 +94,8 @@ void StripSVPass::runOnOperation() {
     opsToDelete.push_back(verb);
   for (auto verb : mlirModule.getOps<sv::IfDefOp>())
     opsToDelete.push_back(verb);
+  for (auto verb : mlirModule.getOps<sv::MacroDeclOp>())
+    opsToDelete.push_back(verb);
 
   for (auto module : mlirModule.getOps<hw::HWModuleOp>()) {
     for (Operation &op : *module.getBodyBlock()) {

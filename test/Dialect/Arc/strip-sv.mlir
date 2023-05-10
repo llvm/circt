@@ -49,3 +49,6 @@ hw.module @Top() {
   // CHECK: %int_rtc_tick_value = seq.compreg [[RST]], %subsystem_pbus.clock : i7
   %int_rtc_tick_value = seq.firreg %int_rtc_tick_value clock %subsystem_pbus.clock reset sync %subsystem_pbus.reset, %c0_i7 : i7
 }
+
+// CHECK-NOT: sv.macro.decl
+sv.macro.decl @RANDOM

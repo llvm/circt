@@ -77,7 +77,7 @@ void InferMemoriesPass::runOnOperation() {
 
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
     auto wordType = builder.getIntegerType(width);
-    auto memType = MemoryType::get(&getContext(), depth, wordType, {});
+    auto memType = MemoryType::get(&getContext(), depth, wordType);
     auto memOp = builder.create<MemoryOp>(memType);
     if (!instOp.getInstanceName().empty())
       memOp->setAttr("name", instOp.getInstanceNameAttr());
@@ -98,11 +98,15 @@ void InferMemoriesPass::runOnOperation() {
         params.getAs<IntegerAttr>("numReadPorts").getValue().getZExtValue();
     for (unsigned portIdx = 0; portIdx != numReadPorts; ++portIdx) {
       auto address = instOp.getOperand(argIdx++);
-      auto enable = instOp.getOperand(argIdx++);
+      ++argIdx; // skip enable argument
       auto clock = instOp.getOperand(argIdx++);
       auto data = instOp.getResult(resultIdx++);
-      Value readOp = builder.create<MemoryReadPortOp>(wordType, memOp, address,
-                                                      clock, enable);
+      // NOTE: the result of a disabled read port is undefined, currently we
+      // define it to be the same as if it was enabled, but we could also set it
+      // to any constant (e.g., by inserting a mux).
+      Value readOp = builder.create<MemoryReadPortOp>(wordType, memOp, address);
+      // NOTE: if the read-latency is 0, the memory read is combinatorial
+      // without any buffer
       readOp = applyReadLatency(clock, readOp);
       data.replaceAllUsesWith(readOp);
     }
@@ -120,11 +124,10 @@ void InferMemoriesPass::runOnOperation() {
       auto writeMask = maskBits > 1 ? instOp.getOperand(argIdx++) : Value{};
       auto readData = instOp.getResult(resultIdx++);
 
-      auto constOne = builder.create<hw::ConstantOp>(builder.getI1Type(), 1);
-      auto readMode = builder.create<comb::XorOp>(writeMode, constOne);
-      auto readEnable = builder.create<comb::AndOp>(enable, readMode);
-      Value readOp = builder.create<MemoryReadPortOp>(wordType, memOp, address,
-                                                      clock, readEnable);
+      // NOTE: the result of a disabled read port is undefined, currently we
+      // define it to be the same as if it was enabled, but we could also set it
+      // to any constant (e.g., by inserting a mux).
+      Value readOp = builder.create<MemoryReadPortOp>(wordType, memOp, address);
 
       if (writeMask) {
         unsigned maskWidth = writeMask.getType().cast<IntegerType>().getWidth();
@@ -138,6 +141,8 @@ void InferMemoriesPass::runOnOperation() {
             builder.create<comb::ConcatOp>(writeData.getType(), toConcat);
       }
 
+      // NOTE: if the read-latency is 0, the memory read is combinatorial
+      // without any buffer
       readOp = applyReadLatency(clock, readOp);
       readData.replaceAllUsesWith(readOp);
 

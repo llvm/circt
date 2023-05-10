@@ -275,9 +275,7 @@ def ClockGateOp : ArcOp<"clock_gate", [Pure]> {
 def MemoryOp : ArcOp<"memory", [MemoryEffects<[MemAlloc]>]> {
   let summary = "Memory";
   let results = (outs MemoryType:$memory);
-  let assemblyFormat = [{
-    type($memory) attr-dict
-  }];
+  let assemblyFormat = "type($memory) attr-dict";
 }
 
 class MemoryAndDataTypesMatch<string mem, string data> : TypesMatchWith<
@@ -285,27 +283,26 @@ class MemoryAndDataTypesMatch<string mem, string data> : TypesMatchWith<
   "$_self.cast<MemoryType>().getWordType()">;
 
 def MemoryReadPortOp : ArcOp<"memory_read_port", [
-  MemoryEffects<[MemRead]>,
-  MemoryAndDataTypesMatch<"memory", "data">,
-  AttrSizedOperandSegments,
-  ClockedOpInterface
+  Pure, MemoryAndDataTypesMatch<"memory", "data">
 ]> {
   let summary = "Read port from a memory";
+  let description = [{
+    Represents a combinatorial memory read port. No memory read side-effect
+    trait is necessary because at the stage of the Arc lowering where this
+    operation is legal to be present, it is guaranteed that all reads from the
+    same address produce the same output. This is because all writes are
+    reordered to happen at the end of the cycle in LegalizeStateUpdates (or
+    alternatively produce the necessary temporaries).
+  }];
   let arguments = (ins
     MemoryType:$memory,
-    AnyInteger:$address,
-    Optional<I1>:$clock,
-    Optional<I1>:$enable
+    AnyInteger:$address
   );
   let results = (outs AnyInteger:$data);
 
   let assemblyFormat = [{
-    $memory `[` $address `]` (`if` $enable^)? (`clock` $clock^)?
-    attr-dict `:` type($memory) `,` type($address)
+    $memory `[` $address `]` attr-dict `:` type($memory) `,` type($address)
   }];
-
-  let hasVerifier = 1;
-  let hasFolder = 1;
 }
 
 def MemoryWritePortOp : ArcOp<"memory_write_port", [
