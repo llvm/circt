@@ -380,7 +380,7 @@ def IsTagOp : FIRRTLExprOp<"istag"> {
     tag tested for must be one of the possible variants of the input type.  If
     the tag is the currently active variant the result will be 1, otherwise the
     result will be 0.
-    
+
     Example:
     ```mlir
       %0 = firrtl.istag A %v : !firrtl.enum<A: UInt<0>, B: UInt<0>>
@@ -398,7 +398,7 @@ def IsTagOp : FIRRTLExprOp<"istag"> {
       return build($_builder, $_state, input, *fieldIndex);
     }]>
   ];
-  
+
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
@@ -927,8 +927,8 @@ def UninferredResetCastOp : FIRRTLOp<"resetCast", [HasCustomSSAName, Pure]> {
 
 def UninferredWidthCastOp : FIRRTLOp<"widthCast", [HasCustomSSAName, Pure]> {
   let description = [{
-    Cast between sized and unsized integer types.  This is used to enable 
-    strictconnects early in the pipeline by isolating all uninferred width 
+    Cast between sized and unsized integer types.  This is used to enable
+    strictconnects early in the pipeline by isolating all uninferred width
     connections to a single op.
   }];
   let arguments = (ins IntType:$input);
