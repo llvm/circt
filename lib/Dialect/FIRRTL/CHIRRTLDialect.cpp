@@ -263,6 +263,11 @@ void CombMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), getName());
 }
 
+std::optional<size_t> CombMemOp::getTargetResultIndex() {
+  // Inner symbols on comb memory operations target the op not any result.
+  return std::nullopt;
+}
+
 //===----------------------------------------------------------------------===//
 // SeqMemOp
 //===----------------------------------------------------------------------===//
@@ -290,6 +295,11 @@ void SeqMemOp::build(OpBuilder &builder, OperationState &result,
 
 void SeqMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), getName());
+}
+
+std::optional<size_t> SeqMemOp::getTargetResultIndex() {
+  // Inner symbols on seq memory operations target the op not any result.
+  return std::nullopt;
 }
 
 //===----------------------------------------------------------------------===//
