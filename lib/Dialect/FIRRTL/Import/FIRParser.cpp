@@ -79,6 +79,9 @@ struct SharedParserConstants {
   /// this.  Do not use `annotationMap[key]`, use `aM.lookup(key)` instead.
   llvm::StringMap<ArrayAttr> annotationMap;
 
+  /// A map from identifiers to type aliases.
+  llvm::StringMap<FIRRTLType> aliasMap;
+
   /// An empty array attribute.
   const ArrayAttr emptyArrayAttr;
 
@@ -733,6 +736,7 @@ ParseResult FIRParser::parseFieldIdSeq(SmallVectorImpl<StringRef> &result,
 ///      ::= type '[' intLit ']'
 ///      ::= 'Probe' '<' type '>'
 ///      ::= 'RWProbe' '<' type '>'
+///      ::= id
 ///
 /// field: 'flip'? fieldId ':' type
 ///
@@ -831,6 +835,16 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     result = BundleType::get(getContext(), elements);
     break;
   }
+
+  case FIRToken::identifier:
+    StringRef id;
+    if (parseId(id, "expected a type alias name"))
+      return failure();
+    auto it = constants.aliasMap.find(id);
+    if (it == constants.aliasMap.end())
+      return failure();
+    result = it->second;
+    break;
   }
 
   // Handle postfix vector sizes.
@@ -3374,6 +3388,8 @@ private:
                             SmallVectorImpl<SMLoc> &resultPortLocs,
                             unsigned indent);
 
+  ParseResult parseTypeDecl();
+
   struct DeferredModuleToParse {
     FModuleOp moduleOp;
     SmallVector<SMLoc> portLocs;
@@ -3764,6 +3780,26 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   return success();
 }
 
+// Parse a type declaration.
+ParseResult FIRCircuitParser::parseTypeDecl() {
+  StringRef id;
+  FIRRTLType type;
+  consumeToken();
+  auto loc = getToken().getLoc();
+  if (parseId(id, "expected type name") ||
+      parseToken(FIRToken::equal, "expected '=' in type decl") ||
+      parseType(type, "expected a type"))
+    return failure();
+  auto name = StringAttr::get(type.getContext(), id);
+  // Create type alias only for base types. Otherwise just pass through the
+  // type.
+  if (auto base = type.dyn_cast<FIRRTLBaseType>())
+    type = BaseTypeAliasType::get(name, base);
+  if (!getConstants().aliasMap.insert({id, type}).second)
+    return emitError(loc) << "type alias " << name << " is already defined";
+  return success();
+}
+
 // Parse the body of this module.
 ParseResult
 FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
@@ -3930,6 +3966,14 @@ ParseResult FIRCircuitParser::parseCircuit(
     default:
       emitError("unexpected token in circuit");
       return failure();
+
+    case FIRToken::kw_type: {
+      if (FIRVersion::compare(version, FIRVersion({3, 0, 0})) < 0)
+        return emitError() << "type alias is not supported in this version";
+      if (parseTypeDecl())
+        return failure();
+      break;
+    }
 
     case FIRToken::kw_module:
     case FIRToken::kw_extmodule:

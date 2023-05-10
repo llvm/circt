@@ -1364,3 +1364,19 @@ circuit Foo_v1p9p9:
     ; CHECK: firrtl.strictconnect %auto, [[C]] : !firrtl.uint<1>
     wire out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
     auto <- out_0.member.0.reset @[Field 173:49]
+
+;// -----
+
+FIRRTL version 3.0.0
+circuit Top:
+  type WordType = UInt<32>
+  type ValidType = UInt<1>
+  type Data = {w: WordType, valid: ValidType, flip ready: UInt<1>}
+  type Complex = { real: SInt<10>, imag: SInt<10> }
+  type ProbeComplex = Probe<Complex>
+  ; CHECK: @Top
+  ; CHECK-SAME: in %in: !firrtl.alias<Data, bundle<w: alias<WordType, uint<32>>, valid: alias<ValidType, uint<1>>, ready flip: uint<1>>>
+  ; CHECK-SAME: out %out: !firrtl.probe<alias<Complex, bundle<real: sint<10>, imag: sint<10>>>>
+  module Top:
+    input in: Data
+    output out: ProbeComplex
