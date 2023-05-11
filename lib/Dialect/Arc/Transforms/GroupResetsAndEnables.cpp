@@ -127,14 +127,17 @@ struct GroupAssignmentsInIfPattern : public OpRewritePattern<ClockTreeOp> {
       groupingRegions.push_back(&resetIfOp.getThenRegion());
       groupingRegions.push_back(&resetIfOp.getElseRegion());
     }
-    // Gather then/else regions of all higher-level IfOps (e.g. enables within
+    // Gather then/else regions of all second-level IfOps (e.g. enables within
     // resets)
+    SmallVector<Region *> secondLevelRegions;
     for (auto *resetRegion : groupingRegions) {
       for (auto enableIfOp : resetRegion->getOps<scf::IfOp>()) {
-        groupingRegions.push_back(&enableIfOp.getThenRegion());
-        groupingRegions.push_back(&enableIfOp.getElseRegion());
+        secondLevelRegions.push_back(&enableIfOp.getThenRegion());
+        secondLevelRegions.push_back(&enableIfOp.getElseRegion());
       }
     }
+    groupingRegions.insert(groupingRegions.end(), secondLevelRegions.begin(),
+                           secondLevelRegions.end());
 
     bool changed = false;
     for (auto *region : groupingRegions) {
