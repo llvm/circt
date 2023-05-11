@@ -96,8 +96,11 @@ struct Emitter {
   void emitExpression(SubfieldOp op);
   void emitExpression(SubindexOp op);
   void emitExpression(SubaccessOp op);
-  void emitExpression(RefSendOp op);
+  void emitExpression(OpenSubfieldOp op);
+  void emitExpression(OpenSubindexOp op);
   void emitExpression(RefResolveOp op);
+  void emitExpression(RefSendOp op);
+  void emitExpression(RefSubOp op);
   void emitExpression(UninferredResetCastOp op);
   void emitExpression(UninferredWidthCastOp op);
 
@@ -847,6 +850,7 @@ void Emitter::emitExpression(Value value) {
       .Case<
           // Basic expressions
           ConstantOp, SpecialConstantOp, SubfieldOp, SubindexOp, SubaccessOp,
+          OpenSubfieldOp, OpenSubindexOp,
           // Binary
           AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
           OrPrimOp, XorPrimOp, LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp,
@@ -858,7 +862,7 @@ void Emitter::emitExpression(Value value) {
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
           ShrPrimOp, UninferredResetCastOp, UninferredWidthCastOp,
           // Reference expressions
-          RefSendOp, RefResolveOp>([&](auto op) {
+          RefSendOp, RefResolveOp, RefSubOp>([&](auto op) {
         ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
       })
       .Default([&](auto op) {
@@ -919,6 +923,19 @@ void Emitter::emitExpression(SubaccessOp op) {
   ps << "]";
 }
 
+void Emitter::emitExpression(OpenSubfieldOp op) {
+  auto type = op.getInput().getType();
+  emitExpression(op.getInput());
+  ps << "." << type.getElementName(op.getFieldIndex());
+}
+
+void Emitter::emitExpression(OpenSubindexOp op) {
+  emitExpression(op.getInput());
+  ps << "[";
+  ps.addAsString(op.getIndex());
+  ps << "]";
+}
+
 void Emitter::emitExpression(RefSendOp op) {
   ps << "probe(";
   emitExpression(op.getBase());
@@ -929,6 +946,18 @@ void Emitter::emitExpression(RefResolveOp op) {
   ps << "read(";
   emitExpression(op.getRef());
   ps << ")";
+}
+
+void Emitter::emitExpression(RefSubOp op) {
+  emitExpression(op.getInput());
+  TypeSwitch<FIRRTLBaseType, void>(op.getInput().getType().getType())
+      .Case<FVectorType>([&](auto type) {
+        ps << "[";
+        ps.addAsString(op.getIndex());
+        ps << "]";
+      })
+      .Case<BundleType>(
+          [&](auto type) { ps << "." << type.getElementName(op.getIndex()); });
 }
 
 void Emitter::emitExpression(UninferredResetCastOp op) {
