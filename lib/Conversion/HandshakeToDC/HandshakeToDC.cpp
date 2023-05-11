@@ -157,10 +157,16 @@ public:
 
     // Pack the branch output tokens with the input data, and replace the uses.
     llvm::SmallVector<Value, 4> packed;
-    packed.push_back(rewriter.create<dc::PackOp>(
-        op.getLoc(), branch.getTrueToken(), ValueRange{data.data}));
-    packed.push_back(rewriter.create<dc::PackOp>(
-        op.getLoc(), branch.getFalseToken(), ValueRange{data.data}));
+
+    if (!data.data.empty()) {
+      packed.push_back(rewriter.create<dc::PackOp>(
+          op.getLoc(), branch.getTrueToken(), data.data));
+      packed.push_back(rewriter.create<dc::PackOp>(
+          op.getLoc(), branch.getFalseToken(), data.data));
+    } else {
+      packed.push_back(branch.getTrueToken());
+      packed.push_back(branch.getFalseToken());
+    }
 
     rewriter.replaceOp(op, packed);
     return success();
