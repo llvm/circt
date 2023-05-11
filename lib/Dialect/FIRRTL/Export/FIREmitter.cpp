@@ -189,6 +189,24 @@ struct Emitter {
     });
   }
 
+  /// Emit the specified value as a subexpression, wrapping in an ibox2.
+  void emitSubExprIBox2(Value v) {
+    ps.scopedBox(PP::ibox2, [&]() { emitExpression(v); });
+  }
+
+  /// Emit a range of values separated by commas and a breakable space.
+  /// Each value is emitted by invoking `eachFn`.
+  template <typename Container, typename EachFn>
+  void interleaveComma(const Container &c, EachFn eachFn) {
+    llvm::interleave(c, eachFn, [&]() { ps << "," << PP::space; });
+  }
+
+  /// Emit a range of values separated by commas and a breakable space.
+  /// Each value is emitted in an ibox2.
+  void interleaveComma(ValueRange ops) {
+    return interleaveComma(ops, [&](Value v) { emitSubExprIBox2(v); });
+  }
+
 private:
   /// Emit an error and remark that emission failed.
   InFlightDiagnostic emitError(Operation *op, const Twine &message) {
@@ -934,14 +952,12 @@ void Emitter::emitExpression(UninferredWidthCastOp op) {
 
 void Emitter::emitPrimExpr(StringRef mnemonic, Operation *op,
                            ArrayRef<uint32_t> attrs) {
-  ps << mnemonic << "(";
-  llvm::interleaveComma(op->getOperands(), ps,
-                        [&](Value arg) { emitExpression(arg); });
-  for (auto attr : attrs) {
-    ps << ", ";
-    ps.addAsString(attr);
-  }
-  ps << ")";
+  ps << mnemonic << "(" << PP::ibox0;
+  interleaveComma(op->getOperands());
+  if (!op->getOperands().empty() && !attrs.empty())
+   ps << "," << PP::space;
+  interleaveComma(attrs, [&](auto attr) { ps.addAsString(attr); });
+  ps << ")" << PP::end;
 }
 
 void Emitter::emitAttribute(MemDirAttr attr) {
