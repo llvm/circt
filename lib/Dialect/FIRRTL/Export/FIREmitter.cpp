@@ -207,6 +207,16 @@ struct Emitter {
     return interleaveComma(ops, [&](Value v) { emitSubExprIBox2(v); });
   }
 
+  void emitStatementFunctionOp(PPExtString name, Operation *op) {
+    startStatement();
+    ps << name << "(";
+    ps.scopedBox(PP::ibox0, [&]() {
+      interleaveComma(op->getOperands());
+      ps << ")";
+    });
+    emitLocationAndNewLine(op);
+  }
+
 private:
   /// Emit an error and remark that emission failed.
   InFlightDiagnostic emitError(Operation *op, const Twine &message) {
@@ -609,12 +619,7 @@ void Emitter::emitStatement(InstanceOp op) {
 }
 
 void Emitter::emitStatement(AttachOp op) {
-  startStatement();
-  ps << "attach(";
-  llvm::interleaveComma(op.getOperands(), ps,
-                        [&](auto operand) { emitExpression(operand); });
-  ps << ")";
-  emitLocationAndNewLine(op);
+  emitStatementFunctionOp(PPExtString("attach"), op);
 }
 
 void Emitter::emitStatement(MemOp op) {
@@ -759,17 +764,7 @@ void Emitter::emitStatement(RefDefineOp op) {
 }
 
 void Emitter::emitStatement(RefForceOp op) {
-  startStatement();
-  ps << "force(";
-  emitExpression(op.getClock());
-  ps << ", ";
-  emitExpression(op.getPredicate());
-  ps << ", ";
-  emitExpression(op.getDest());
-  ps << ", ";
-  emitExpression(op.getSrc());
-  ps << ")";
-  emitLocationAndNewLine(op);
+  emitStatementFunctionOp(PPExtString("force"), op);
 }
 
 void Emitter::emitStatement(RefForceInitialOp op) {
@@ -793,15 +788,7 @@ void Emitter::emitStatement(RefForceInitialOp op) {
 }
 
 void Emitter::emitStatement(RefReleaseOp op) {
-  startStatement();
-  ps << "release(";
-  emitExpression(op.getClock());
-  ps << ", ";
-  emitExpression(op.getPredicate());
-  ps << ", ";
-  emitExpression(op.getDest());
-  ps << ")";
-  emitLocationAndNewLine(op);
+  emitStatementFunctionOp(PPExtString("release"), op);
 }
 
 void Emitter::emitStatement(RefReleaseInitialOp op) {
