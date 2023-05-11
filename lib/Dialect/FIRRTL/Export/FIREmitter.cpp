@@ -35,14 +35,15 @@ using namespace pretty;
 // Emitter
 //===----------------------------------------------------------------------===//
 
+// NOLINTBEGIN(misc-no-recursion)
 namespace {
 
 /// Target line length when pretty-printing.
-constexpr size_t TARGET_LINE_LENGTH = 80;
+constexpr size_t targetLineLength = 80;
 
 /// An emitter for FIRRTL dialect operations to .fir output.
 struct Emitter {
-  Emitter(llvm::raw_ostream &os) : pp(os, TARGET_LINE_LENGTH), ps(pp, saver) {
+  Emitter(llvm::raw_ostream &os) : pp(os, targetLineLength), ps(pp, saver) {
     pp.setListener(&saver);
   }
   LogicalResult finalize();
@@ -1060,6 +1061,7 @@ void Emitter::emitLocation(Location loc) {
     ps << "]";
   }
 }
+// NOLINTEND(misc-no-recursion)
 
 //===----------------------------------------------------------------------===//
 // Driver
