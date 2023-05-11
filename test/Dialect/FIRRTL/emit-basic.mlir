@@ -2,6 +2,10 @@
 // RUN: cat %t | FileCheck %s --strict-whitespace
 // RUN: circt-translate --import-firrtl %t --mlir-print-debuginfo | circt-translate --export-firrtl | diff - %t
 
+// Check emission at various widths, ensuring still parses and round-trips back to same FIRRTL as default width (inc debug info).
+// RUN: circt-translate --export-firrtl %s --target-line-length=10 | circt-translate --import-firrtl --mlir-print-debuginfo | circt-translate --export-firrtl | diff - %t
+// RUN: circt-translate --export-firrtl %s --target-line-length=1000 | circt-translate --import-firrtl --mlir-print-debuginfo | circt-translate --export-firrtl | diff - %t
+
 // CHECK-LABEL: circuit Foo :
 firrtl.circuit "Foo" {
   // CHECK-LABEL: module Foo :
