@@ -199,10 +199,10 @@ arc.model "Memory" {
     // CHECK-NEXT: arc.memory_read [[MEM2:%.+]][%false]
     // CHECK-NEXT: arc.memory_write [[MEM2]]
     %r1 = arc.state_read %s1 : <i32>
-    arc.memory_write %mem2[%false], %r1 : <2 x i32>, i1
-    arc.memory_write %mem1[%false], %r1 : <2 x i32>, i1
-    %mr1 = arc.memory_read %mem1[%false] : <2 x i32>, i1
-    %mr2 = arc.memory_read %mem2[%false] : <2 x i32>, i1
+    arc.memory_write %mem2[%false], %r1 : <2 x i32, i1>
+    arc.memory_write %mem1[%false], %r1 : <2 x i32, i1>
+    %mr1 = arc.memory_read %mem1[%false] : <2 x i32, i1>
+    %mr2 = arc.memory_read %mem2[%false] : <2 x i32, i1>
   // CHECK-NEXT: }
   }
   // CHECK: arc.clock_tree %false attributes {ct2}
@@ -214,10 +214,10 @@ arc.model "Memory" {
     // CHECK-NEXT: }
     // CHECK-NEXT: arc.memory_write
     %r1 = arc.state_read %s1 : <i32>
-    arc.memory_write %mem1[%false], %r1 : <2 x i32>, i1
-    %mr1 = arc.memory_read %mem1[%false] : <2 x i32>, i1
+    arc.memory_write %mem1[%false], %r1 : <2 x i32, i1>
+    %mr1 = arc.memory_read %mem1[%false] : <2 x i32, i1>
     scf.if %false {
-      %mr2 = arc.memory_read %mem1[%false] : <2 x i32>, i1
+      %mr2 = arc.memory_read %mem1[%false] : <2 x i32, i1>
     }
   // CHECK-NEXT: }
   }
@@ -235,19 +235,19 @@ arc.model "Memory" {
     // CHECK-NEXT: }
     scf.if %false {
       %r1 = arc.state_read %s1 : <i32>
-      arc.memory_write %mem1[%false], %r1 : <2 x i32>, i1
+      arc.memory_write %mem1[%false], %r1 : <2 x i32, i1>
       scf.if %false {
-        arc.memory_write %mem2[%false], %r1 : <2 x i32>, i1
-        %mr3 = arc.memory_read %mem1[%false] : <2 x i32>, i1
+        arc.memory_write %mem2[%false], %r1 : <2 x i32, i1>
+        %mr3 = arc.memory_read %mem1[%false] : <2 x i32, i1>
       }
     }
-    %mr1 = arc.memory_read %mem1[%false] : <2 x i32>, i1
-    %mr2 = arc.memory_read %mem2[%false] : <2 x i32>, i1
+    %mr1 = arc.memory_read %mem1[%false] : <2 x i32, i1>
+    %mr2 = arc.memory_read %mem2[%false] : <2 x i32, i1>
   // CHECK-NEXT: }
   }
-  // CHECK: [[MEM1]] = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32>
-  // CHECK: [[MEM2]] = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32>
-  %mem1 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32>
-  %mem2 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32>
+  // CHECK: [[MEM1]] = arc.alloc_memory %arg0 :
+  // CHECK: [[MEM2]] = arc.alloc_memory %arg0 :
+  %mem1 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
+  %mem2 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
   %s1 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i32>
 }

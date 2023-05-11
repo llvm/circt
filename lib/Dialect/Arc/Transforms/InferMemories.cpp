@@ -77,7 +77,13 @@ void InferMemoriesPass::runOnOperation() {
 
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
     auto wordType = builder.getIntegerType(width);
-    auto memType = MemoryType::get(&getContext(), depth, wordType);
+    auto addressTy = dyn_cast<IntegerType>(instOp.getOperand(0).getType());
+    if (!addressTy) {
+      instOp.emitError("expected integer type for memory addressing, got ")
+          << addressTy;
+      return signalPassFailure();
+    }
+    auto memType = MemoryType::get(&getContext(), depth, wordType, addressTy);
     auto memOp = builder.create<MemoryOp>(memType);
     if (!instOp.getInstanceName().empty())
       memOp->setAttr("name", instOp.getInstanceNameAttr());
@@ -101,6 +107,13 @@ void InferMemoriesPass::runOnOperation() {
       ++argIdx; // skip enable argument
       auto clock = instOp.getOperand(argIdx++);
       auto data = instOp.getResult(resultIdx++);
+
+      if (address.getType() != addressTy) {
+        instOp.emitOpError("expected ")
+            << addressTy << ", but got " << address.getType();
+        return signalPassFailure();
+      }
+
       // NOTE: the result of a disabled read port is undefined, currently we
       // define it to be the same as if it was enabled, but we could also set it
       // to any constant (e.g., by inserting a mux).
@@ -123,6 +136,12 @@ void InferMemoriesPass::runOnOperation() {
       auto writeData = instOp.getOperand(argIdx++);
       auto writeMask = maskBits > 1 ? instOp.getOperand(argIdx++) : Value{};
       auto readData = instOp.getResult(resultIdx++);
+
+      if (address.getType() != addressTy) {
+        instOp.emitOpError("expected ")
+            << addressTy << ", but got " << address.getType();
+        return signalPassFailure();
+      }
 
       // NOTE: the result of a disabled read port is undefined, currently we
       // define it to be the same as if it was enabled, but we could also set it
@@ -160,6 +179,12 @@ void InferMemoriesPass::runOnOperation() {
       auto clock = instOp.getOperand(argIdx++);
       auto data = instOp.getOperand(argIdx++);
       auto mask = maskBits > 1 ? instOp.getOperand(argIdx++) : Value{};
+
+      if (address.getType() != addressTy) {
+        instOp.emitOpError("expected ")
+            << addressTy << ", but got " << address.getType();
+        return signalPassFailure();
+      }
 
       if (mask) {
         unsigned maskWidth = mask.getType().cast<IntegerType>().getWidth();
