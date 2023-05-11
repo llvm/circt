@@ -46,7 +46,7 @@ public:
     // Coarse-grain find candidates which have a single similar input.
     llvm::SetVector<JoinOp> similarCandidates;
     for (auto input : inputs) {
-      for (auto user : input.getUsers()) {
+      for (auto *user : input.getUsers()) {
         auto userJoin = dyn_cast<JoinOp>(user);
         if (!userJoin || userJoin == join)
           continue;
@@ -238,7 +238,7 @@ public:
   LogicalResult matchAndRewrite(ForkOp fork,
                                 PatternRewriter &rewriter) const override {
     for (auto output : fork.getOutputs()) {
-      for (auto user : output.getUsers()) {
+      for (auto *user : output.getUsers()) {
         auto userFork = dyn_cast<ForkOp>(user);
         if (!userFork)
           return failure();
@@ -321,7 +321,7 @@ struct EliminateMultipleUnpackPattern : public OpRewritePattern<UnpackOp> {
     auto unpackedValue = unpack.getInput();
     // Find other unpacks of the same value.
     llvm::SmallVector<UnpackOp> users;
-    for (auto user : unpackedValue.getUsers()) {
+    for (auto *user : unpackedValue.getUsers()) {
       auto unpack = dyn_cast<UnpackOp>(user);
       if (!unpack)
         return failure();
@@ -410,7 +410,7 @@ public:
     auto token = pack.getToken();
     auto inputs = pack.getInputs();
     llvm::SmallVector<PackOp> otherPacks;
-    for (auto user : token.getUsers()) {
+    for (auto *user : token.getUsers()) {
       auto otherPack = dyn_cast<PackOp>(user);
       if (!otherPack)
         continue;

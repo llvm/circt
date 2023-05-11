@@ -20,6 +20,7 @@ The DC dialect has been heavily influenced by the Handshake dialect, and can eit
 abstraction. As of writing, DC is _fully deterministic_. This means that non-deterministic operators such as the ones found in Handshake - `handshake.merge, handshake.control_merge` - do **not** have a lowering to DC. Handshake programs must therefore be converted or by construction not contain any of these non-deterministic operators. Apart from that, **all** handshake operations can be lowered to a combination of DC
 and e.g. `arith` operations (to represent the data side semantics of any given operation).
 
+In DC IR, all values have implicit fork and sink semantics. That is, a DC-typed value may be referenced multiple times, as well as it being legal that said value is not referenced at all. This has been chosen to facilitate canonicalization, thus removing the need for all canonicalization patterns to view forks as opaque/a special case. If a given DC lowering requires explcit fork/sink semantics, forks and sinks can be _materialized_ throuh use of the `--dc-materialize-forks-sinks` pass. Conversely, if one wishes to optimize DC IR which already contains fork and sink operations, one may use the `--dc-dematerialize-forks-sinks` pass, run canonicalization, and then re-apply the `--dc-materialize-forks-sinks` pass.
 
 ## Operations
 In DC, there are two main classes of operations:
