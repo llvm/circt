@@ -829,7 +829,8 @@ void Emitter::emitExpression(Value value) {
   // Handle the trivial case where we already have a name for this value which
   // we can use.
   if (auto name = lookupEmittedName(value)) {
-    ps << PPExtString(*name);
+    // Don't use PPExtString here, can't trust valueNames storage, cleared.
+    ps << *name;
     return;
   }
 
