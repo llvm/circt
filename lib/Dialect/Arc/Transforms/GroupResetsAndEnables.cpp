@@ -114,6 +114,54 @@ struct EnableGroupingPattern : public OpRewritePattern<ClockTreeOp> {
     return success(changed);
   }
 };
+
+struct GroupAssignmentsInIfPattern : public OpRewritePattern<ClockTreeOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(ClockTreeOp clockTreeOp,
+                                PatternRewriter &rewriter) const override {
+    // Pull values only used in certain reset/enable cases into the appropriate
+    // IfOps
+    SmallVector<Region *> groupingRegions;
+    // Gather then/else regions of all top-level IfOps
+    for (auto resetIfOp : clockTreeOp.getBody().getOps<scf::IfOp>()) {
+      groupingRegions.push_back(&resetIfOp.getThenRegion());
+      groupingRegions.push_back(&resetIfOp.getElseRegion());
+    }
+    // Gather then/else regions of all higher-level IfOps (e.g. enables within
+    // resets)
+    for (auto *resetRegion : groupingRegions) {
+      for (auto enableIfOp : resetRegion->getOps<scf::IfOp>()) {
+        groupingRegions.push_back(&enableIfOp.getThenRegion());
+        groupingRegions.push_back(&enableIfOp.getElseRegion());
+      }
+    }
+
+    bool changed = false;
+    for (auto *region : groupingRegions) {
+      if (region->empty())
+        continue;
+      // Since we only work with IfOp then/else regions, we have at most 1 block
+      Block &block = region->front();
+      for (auto &op : block) {
+        for (auto operand : op.getOperands()) {
+          if (operand.hasOneUse()) {
+            Operation *definition = operand.getDefiningOp();
+            // Confirm that the operand isn't already in the right region and
+            // that it's inside the clock tree
+            if (definition->getParentRegion() != region &&
+                clockTreeOp->isAncestor(definition)) {
+              rewriter.updateRootInPlace(
+                  definition, [&]() { definition->moveBefore(&op); });
+              changed = true;
+            }
+          }
+        }
+      }
+    }
+    return success(changed);
+  };
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -143,6 +191,7 @@ LogicalResult GroupResetsAndEnablesPass::runOnModel(ModelOp modelOp) {
   RewritePatternSet patterns(&context);
   patterns.insert<ResetGroupingPattern>(&context);
   patterns.insert<EnableGroupingPattern>(&context);
+  patterns.insert<GroupAssignmentsInIfPattern>(&context);
   GreedyRewriteConfig config;
   config.strictMode = GreedyRewriteStrictness::ExistingOps;
   if (failed(
