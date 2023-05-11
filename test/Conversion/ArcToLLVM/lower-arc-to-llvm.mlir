@@ -18,31 +18,31 @@ arc.define @EmptyArc() {
 func.func @Types(
   %arg0: !arc.storage,
   %arg1: !arc.state<i1>,
-  %arg2: !arc.memory<4 x i7>
+  %arg2: !arc.memory<4 x i7, i2>
 ) -> (
   !arc.storage,
   !arc.state<i1>,
-  !arc.memory<4 x i7>
+  !arc.memory<4 x i7, i2>
 ) {
-  return %arg0, %arg1, %arg2 : !arc.storage, !arc.state<i1>, !arc.memory<4 x i7>
+  return %arg0, %arg1, %arg2 : !arc.storage, !arc.state<i1>, !arc.memory<4 x i7, i2>
   // CHECK: llvm.return
   // CHECK-SAME: !llvm.struct<(ptr<i8>, ptr<i1>, ptr<i8>)>
 }
 // CHECK-NEXT: }
 
 // CHECK-LABEL: llvm.func @StorageTypes(%arg0: !llvm.ptr<i8>) -> !llvm.struct<(ptr<i1>, ptr<i8>, ptr<i8>)> {
-func.func @StorageTypes(%arg0: !arc.storage) -> (!arc.state<i1>, !arc.memory<4 x i1>, !arc.storage) {
+func.func @StorageTypes(%arg0: !arc.storage) -> (!arc.state<i1>, !arc.memory<4 x i1, i2>, !arc.storage) {
   %0 = arc.storage.get %arg0[42] : !arc.storage -> !arc.state<i1>
   // CHECK-NEXT: [[OFFSET:%.+]] = llvm.mlir.constant(42 :
   // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[[[OFFSET]]]
   // CHECK-NEXT: llvm.bitcast [[PTR]] : !llvm.ptr<i8> to !llvm.ptr<i1>
-  %1 = arc.storage.get %arg0[43] : !arc.storage -> !arc.memory<4 x i1>
+  %1 = arc.storage.get %arg0[43] : !arc.storage -> !arc.memory<4 x i1, i2>
   // CHECK-NEXT: [[OFFSET:%.+]] = llvm.mlir.constant(43 :
   // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[[[OFFSET]]]
   %2 = arc.storage.get %arg0[44] : !arc.storage -> !arc.storage
   // CHECK-NEXT: [[OFFSET:%.+]] = llvm.mlir.constant(44 :
   // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[[[OFFSET]]]
-  return %0, %1, %2 : !arc.state<i1>, !arc.memory<4 x i1>, !arc.storage
+  return %0, %1, %2 : !arc.state<i1>, !arc.memory<4 x i1, i2>, !arc.storage
   // CHECK: llvm.return
 }
 // CHECK-NEXT: }
@@ -58,7 +58,7 @@ func.func @StateAllocation(%arg0: !arc.storage<10>) {
   arc.alloc_state %arg0 {offset = 2} : (!arc.storage<10>) -> !arc.state<i3>
   // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[2]
   // CHECK-NEXT: llvm.bitcast [[PTR]] : !llvm.ptr<i8> to !llvm.ptr<i3>
-  arc.alloc_memory %arg0 {offset = 3, stride = 1} : (!arc.storage<10>) -> !arc.memory<4 x i1>
+  arc.alloc_memory %arg0 {offset = 3, stride = 1} : (!arc.storage<10>) -> !arc.memory<4 x i1, i2>
   // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[3]
   arc.alloc_storage %arg0[7] : (!arc.storage<10>) -> !arc.storage<3>
   // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[7]
@@ -91,7 +91,7 @@ func.func @StateUpdates(%arg0: !arc.storage<1>) {
 
 // CHECK-LABEL: llvm.func @MemoryUpdates(%arg0: !llvm.ptr<i8>, %arg1: i1) {
 func.func @MemoryUpdates(%arg0: !arc.storage<24>, %enable: i1) {
-  %0 = arc.alloc_memory %arg0 {offset = 0, stride = 6} : (!arc.storage<24>) -> !arc.memory<4 x i42>
+  %0 = arc.alloc_memory %arg0 {offset = 0, stride = 6} : (!arc.storage<24>) -> !arc.memory<4 x i42, i19>
   // CHECK-NEXT: [[RAW_PTR:%.+]] = llvm.getelementptr %arg0[0]
   // CHECK-NEXT: [[PTR:%.+]] = llvm.bitcast [[RAW_PTR]] : !llvm.ptr<i8> to !llvm.ptr<i64>
 
@@ -100,7 +100,7 @@ func.func @MemoryUpdates(%arg0: !arc.storage<24>, %enable: i1) {
   // CHECK-NEXT: llvm.mlir.constant(true
   // CHECK-NEXT: [[THREE:%.+]] = llvm.mlir.constant(3
 
-  %1 = arc.memory_read %0[%c3_i19] : <4 x i42>, i19
+  %1 = arc.memory_read %0[%c3_i19] : <4 x i42, i19>
   %2 = arith.addi %1, %1 : i42
   // CHECK-NEXT:   [[ADDR:%.+]] = llvm.zext [[THREE]] : i19 to i20
   // CHECK-NEXT:   [[FOUR:%.+]] = llvm.mlir.constant(4
@@ -116,7 +116,7 @@ func.func @MemoryUpdates(%arg0: !arc.storage<24>, %enable: i1) {
   // CHECK-NEXT: [[BB_RESUME]]([[LOADED:%.+]]: i42):
   // CHECK:        [[ADDED:%.+]] = llvm.add [[LOADED]], [[LOADED]]
 
-  arc.memory_write %0[%c3_i19], %2 if %enable : <4 x i42>, i19
+  arc.memory_write %0[%c3_i19], %2 if %enable : <4 x i42, i19>
   // CHECK-NEXT:   [[ADDR:%.+]] = llvm.zext [[THREE]] : i19 to i20
   // CHECK-NEXT:   [[FOUR:%.+]] = llvm.mlir.constant(4
   // CHECK-NEXT:   [[INBOUNDS:%.+]] = llvm.icmp "ult" [[ADDR]], [[FOUR]]
@@ -128,7 +128,7 @@ func.func @MemoryUpdates(%arg0: !arc.storage<24>, %enable: i1) {
   // CHECK-NEXT:   llvm.br [[BB_RESUME]]
   // CHECK-NEXT: [[BB_RESUME]]:
 
-  arc.memory_write %0[%c3_i19], %2 : <4 x i42>, i19
+  arc.memory_write %0[%c3_i19], %2 : <4 x i42, i19>
   // CHECK-NEXT:   [[ADDR:%.+]] = llvm.zext [[THREE]] : i19 to i20
   // CHECK-NEXT:   [[FOUR:%.+]] = llvm.mlir.constant(4
   // CHECK-NEXT:   [[INBOUNDS:%.+]] = llvm.icmp "ult" [[ADDR]], [[FOUR]]

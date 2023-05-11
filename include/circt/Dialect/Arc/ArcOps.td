@@ -281,9 +281,14 @@ def MemoryOp : ArcOp<"memory", [MemoryEffects<[MemAlloc]>]> {
 class MemoryAndDataTypesMatch<string mem, string data> : TypesMatchWith<
   "memory and data types must match", mem, data,
   "$_self.cast<MemoryType>().getWordType()">;
+class MemoryAndAddressTypesMatch<string mem, string address> : TypesMatchWith<
+  "memory and address types must match", mem, address,
+  "$_self.cast<MemoryType>().getAddressType()">;
 
 def MemoryReadPortOp : ArcOp<"memory_read_port", [
-  Pure, MemoryAndDataTypesMatch<"memory", "data">
+  Pure,
+  MemoryAndDataTypesMatch<"memory", "data">,
+  MemoryAndAddressTypesMatch<"memory", "address">
 ]> {
   let summary = "Read port from a memory";
   let description = [{
@@ -301,13 +306,14 @@ def MemoryReadPortOp : ArcOp<"memory_read_port", [
   let results = (outs AnyInteger:$data);
 
   let assemblyFormat = [{
-    $memory `[` $address `]` attr-dict `:` type($memory) `,` type($address)
+    $memory `[` $address `]` attr-dict `:` type($memory)
   }];
 }
 
 def MemoryWritePortOp : ArcOp<"memory_write_port", [
   MemoryEffects<[MemWrite]>,
   MemoryAndDataTypesMatch<"memory", "data">,
+  MemoryAndAddressTypesMatch<"memory", "address">,
   AttrSizedOperandSegments,
   ClockedOpInterface
 ]> {
@@ -323,8 +329,7 @@ def MemoryWritePortOp : ArcOp<"memory_write_port", [
 
   let assemblyFormat = [{
     $memory `[` $address `]` `,` $data (`mask` `(` $mask^ `:` type($mask) `)`)?
-    (`if` $enable^)? (`clock` $clock^)?
-    attr-dict `:` type($memory) `,` type($address)
+    (`if` $enable^)? (`clock` $clock^)? attr-dict `:` type($memory)
   }];
 
   let hasVerifier = 1;
@@ -334,7 +339,8 @@ def MemoryWritePortOp : ArcOp<"memory_write_port", [
 
 def MemoryReadOp : ArcOp<"memory_read", [
   MemoryEffects<[MemRead]>,
-  MemoryAndDataTypesMatch<"memory", "data">
+  MemoryAndDataTypesMatch<"memory", "data">,
+  MemoryAndAddressTypesMatch<"memory", "address">
 ]> {
   let summary = "Read word from memory";
   let arguments = (ins
@@ -344,13 +350,14 @@ def MemoryReadOp : ArcOp<"memory_read", [
   let results = (outs AnyInteger:$data);
 
   let assemblyFormat = [{
-    $memory `[` $address `]` attr-dict `:` type($memory) `,` type($address)
+    $memory `[` $address `]` attr-dict `:` type($memory)
   }];
 }
 
 def MemoryWriteOp : ArcOp<"memory_write", [
   MemoryEffects<[MemWrite]>,
-  MemoryAndDataTypesMatch<"memory", "data">
+  MemoryAndDataTypesMatch<"memory", "data">,
+  MemoryAndAddressTypesMatch<"memory", "address">
 ]> {
   let summary = "Write word to memory";
   let arguments = (ins
@@ -362,7 +369,7 @@ def MemoryWriteOp : ArcOp<"memory_write", [
 
   let assemblyFormat = [{
     $memory `[` $address `]` `,` $data (`if` $enable^)?
-    attr-dict `:` type($memory) `,` type($address)
+    attr-dict `:` type($memory)
   }];
 
   let hasFolder = 1;

@@ -67,32 +67,32 @@ hw.module @clockDomainDCE(%clk: i1) {
 }
 
 // CHECK-LABEL: hw.module @memoryOps
-hw.module @memoryOps(%clk: i1, %mem: !arc.memory<4 x i32>, %addr: i32, %data: i32) {
+hw.module @memoryOps(%clk: i1, %mem: !arc.memory<4 x i32, i32>, %addr: i32, %data: i32) {
   %true = hw.constant true
-  // CHECK: arc.memory_write_port %mem[%addr], %data clock %clk : <4 x i32>, i32
-  arc.memory_write_port %mem[%addr], %data if %true clock %clk : <4 x i32>, i32
-  // CHECK-NEXT: arc.memory_write %mem[%addr], %data : <4 x i32>, i32
-  arc.memory_write %mem[%addr], %data if %true : <4 x i32>, i32
+  // CHECK: arc.memory_write_port %mem[%addr], %data clock %clk : <4 x i32, i32>
+  arc.memory_write_port %mem[%addr], %data if %true clock %clk : <4 x i32, i32>
+  // CHECK-NEXT: arc.memory_write %mem[%addr], %data : <4 x i32, i32>
+  arc.memory_write %mem[%addr], %data if %true : <4 x i32, i32>
 
   %false = hw.constant false
-  arc.memory_write_port %mem[%addr], %data if %false clock %clk : <4 x i32>, i32
-  arc.memory_write %mem[%addr], %data if %false : <4 x i32>, i32
+  arc.memory_write_port %mem[%addr], %data if %false clock %clk : <4 x i32, i32>
+  arc.memory_write %mem[%addr], %data if %false : <4 x i32, i32>
 }
 
 // CHECK-LABEL: hw.module @clockDomainCanonicalizer
 hw.module @clockDomainCanonicalizer(%clk: i1, %data: i32) -> (out0: i32, out1: i1, out2: i32, out3: i32, out4: i32) { 
   %c0_i32 = hw.constant 0 : i32
   %true = hw.constant true
-  %mem = arc.memory <4 x i32>
+  %mem = arc.memory <4 x i32, i32>
   // COM: check that memories only used in one clock domain are pulled in and
   // COM: constants are cloned when used in multiple clock domains.
   // CHECK:      arc.clock_domain ()
   // CHECK-NEXT: [[C0:%.+]] = hw.constant 0
   // CHECK-NEXT: [[MEM:%.+]] = arc.memory
   // CHECK-NEXT: arc.memory_write_port [[MEM]][[[C0]]], [[C0]] :
-  %0 = arc.clock_domain (%c0_i32, %mem, %true) clock %clk : (i32, !arc.memory<4 x i32>, i1) -> i32 {
-  ^bb0(%arg0: i32, %arg1: !arc.memory<4 x i32>, %arg2: i1):
-    arc.memory_write_port %arg1[%arg0], %arg0 if %arg2 : !arc.memory<4 x i32>, i32
+  %0 = arc.clock_domain (%c0_i32, %mem, %true) clock %clk : (i32, !arc.memory<4 x i32, i32>, i1) -> i32 {
+  ^bb0(%arg0: i32, %arg1: !arc.memory<4 x i32, i32>, %arg2: i1):
+    arc.memory_write_port %arg1[%arg0], %arg0 if %arg2 : !arc.memory<4 x i32, i32>
     arc.output %arg0 : i32
   }
   // COM: check that unused inputs are removed, and constants are cloned into it

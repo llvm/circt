@@ -176,8 +176,8 @@ arc.define @lutSideEffects () -> i32 {
   %0 = arc.lut () : () -> i32 {
     %true = hw.constant true
     // expected-note @+1 {{first operation with side-effects here}}
-    %1 = arc.memory !arc.memory<20 x i32>
-    %2 = arc.memory_read_port %1[%true] : !arc.memory<20 x i32>, i1
+    %1 = arc.memory !arc.memory<20 x i32, i1>
+    %2 = arc.memory_read_port %1[%true] : !arc.memory<20 x i32, i1>
     arc.output %2 : i32
   }
   arc.output %0 : i32
@@ -263,10 +263,10 @@ arc.define @dummyArc() {
 hw.module @memoryWritePortOpInsideClockDomain(%clk: i1) {
   arc.clock_domain (%clk) clock %clk : (i1) -> () {
   ^bb0(%arg0: i1):
-    %mem = arc.memory <4 x i32>
+    %mem = arc.memory <4 x i32, i32>
     %c0_i32 = hw.constant 0 : i32
     // expected-error @+1 {{inside a clock domain cannot have a clock}}
-    arc.memory_write_port %mem[%c0_i32], %c0_i32 if %arg0 clock %arg0 : !arc.memory<4 x i32>, i32
+    arc.memory_write_port %mem[%c0_i32], %c0_i32 if %arg0 clock %arg0 : !arc.memory<4 x i32, i32>
     arc.output
   }
 }
@@ -274,8 +274,8 @@ hw.module @memoryWritePortOpInsideClockDomain(%clk: i1) {
 // -----
 
 hw.module @memoryWritePortOpOutsideClockDomain(%en: i1) {
-  %mem = arc.memory <4 x i32>
+  %mem = arc.memory <4 x i32, i32>
   %c0_i32 = hw.constant 0 : i32
   // expected-error @+1 {{outside a clock domain requires a clock}}
-  arc.memory_write_port %mem[%c0_i32], %c0_i32 if %en : !arc.memory<4 x i32>, i32
+  arc.memory_write_port %mem[%c0_i32], %c0_i32 if %en : !arc.memory<4 x i32, i32>
 }
