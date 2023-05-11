@@ -32,12 +32,11 @@
 #include "llvm/Support/MathExtras.h"
 #include <optional>
 
-#include "llvm/Support/Debug.h"
-
 using namespace mlir;
 using namespace circt;
-using namespace circt::handshake;
-using namespace circt::dc;
+using namespace handshake;
+using namespace dc;
+using namespace hw;
 
 namespace {
 
@@ -52,6 +51,8 @@ public:
       else
         return dc::ValueType::get(type.getContext(), type);
     });
+    addConversion([](ValueType type) { return type; });
+    addConversion([](TokenType type) { return type; });
 
     addTargetMaterialization(
         [&](mlir::OpBuilder &builder, mlir::Type resultType,
@@ -62,7 +63,7 @@ public:
 
           // Materialize !dc.value<> -> !dc.token
           if (resultType.isa<dc::TokenType>() &&
-              inputs.front().getType().cast<dc::ValueType>())
+              inputs.front().getType().isa<dc::ValueType>())
             return builder.create<dc::UnpackOp>(loc, inputs.front()).getToken();
 
           // Materialize !dc.token -> !dc.value<>
@@ -83,7 +84,7 @@ public:
 
           // Materialize !dc.value<> -> !dc.token
           if (resultType.isa<dc::TokenType>() &&
-              inputs.front().getType().cast<dc::ValueType>())
+              inputs.front().getType().isa<dc::ValueType>())
             return builder.create<dc::UnpackOp>(loc, inputs.front()).getToken();
 
           // Materialize !dc.token -> !dc.value<>
@@ -223,16 +224,43 @@ public:
     if (op.getDataOperands().size() != 2)
       return op.emitOpError("expected two data operands");
 
-    llvm::SmallVector<Value, 4> inputTokens;
-    for (auto input : adaptor.getDataOperands())
-      inputTokens.push_back(unpack(rewriter, input).token);
+    llvm::SmallVector<Value> tokens, data;
+    for (auto input : adaptor.getDataOperands()) {
+      auto up = unpack(rewriter, input);
+      tokens.push_back(up.token);
+      if (!up.data.empty())
+        data.push_back(up.data.front());
+    }
 
-    auto mergeOp = rewriter.create<dc::MergeOp>(op.getLoc(), inputTokens);
+    // control-side
+    Value selectedIndex = rewriter.create<dc::MergeOp>(op.getLoc(), tokens);
+    auto mergeOpUnpacked = unpack(rewriter, selectedIndex);
+    auto selValue = mergeOpUnpacked.data.front();
 
-    // Handshake control has two outputs - we generate both from the single
-    // output of the merge by unpacking.
-    auto unpacked = rewriter.create<dc::UnpackOp>(op.getLoc(), mergeOp);
-    rewriter.replaceOp(op, {unpacked.getToken(), mergeOp.getOutput()});
+    Value dataSide = selectedIndex;
+    if (!data.empty()) {
+      // Data side mux using the selected input.
+      auto dataMux = rewriter.create<arith::SelectOp>(op.getLoc(), selValue,
+                                                      data[0], data[1]);
+      convertedOps->insert(dataMux);
+      // Pack the data mux with the control token.
+      auto packed = rewriter.create<dc::PackOp>(
+          op.getLoc(), mergeOpUnpacked.token, ValueRange{dataMux});
+
+      dataSide = packed;
+    }
+
+    // if the original op used `index` as the select operand type, we need to
+    // index-cast the unpacked select operand
+    if (op.getIndex().getType().isa<IndexType>()) {
+      selValue = rewriter.create<arith::IndexCastOp>(
+          op.getLoc(), rewriter.getIndexType(), selValue);
+      convertedOps->insert(selValue.getDefiningOp());
+      selectedIndex = rewriter.create<dc::PackOp>(
+          op.getLoc(), mergeOpUnpacked.token, ValueRange{selValue});
+    }
+
+    rewriter.replaceOp(op, {dataSide, selectedIndex});
     return success();
   }
 };
@@ -396,7 +424,13 @@ public:
   LogicalResult
   matchAndRewrite(handshake::ReturnOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<dc::ReturnOp>(op, adaptor.getOpOperands());
+    // Locate existing output op, Append operands to output op, and move to
+    // the end of the block.
+    auto hwModule = cast<hw::HWModuleOp>(op->getParentOp());
+    auto outputOp = *hwModule.getBodyBlock()->getOps<hw::OutputOp>().begin();
+    outputOp->setOperands(adaptor.getOperands());
+    outputOp->moveAfter(&hwModule.getBodyBlock()->back());
+    rewriter.eraseOp(op);
     return success();
   }
 };
@@ -470,41 +504,67 @@ public:
   }
 };
 
+static hw::ModulePortInfo getModulePortInfo(TypeConverter &tc,
+                                            handshake::FuncOp funcOp) {
+  hw::ModulePortInfo ports({}, {});
+  auto *ctx = funcOp->getContext();
+  auto ft = funcOp.getFunctionType();
+
+  // Add all inputs of funcOp.
+  unsigned inIdx = 0;
+  for (auto [index, type] : llvm::enumerate(ft.getInputs())) {
+    ports.inputs.push_back({StringAttr::get(ctx, "in" + std::to_string(index)),
+                            hw::PortDirection::INPUT, tc.convertType(type),
+                            index, hw::InnerSymAttr{}});
+    inIdx++;
+  }
+
+  // Add all outputs of funcOp.
+  for (auto [index, type] : llvm::enumerate(ft.getResults())) {
+    ports.outputs.push_back({StringAttr::get(ctx, "in" + std::to_string(index)),
+                             hw::PortDirection::OUTPUT, tc.convertType(type),
+                             index, hw::InnerSymAttr{}});
+  }
+
+  return ports;
+}
+
 class FuncOpConversion : public DCOpConversionPattern<handshake::FuncOp> {
 public:
   using DCOpConversionPattern<handshake::FuncOp>::DCOpConversionPattern;
   using OpAdaptor =
       typename DCOpConversionPattern<handshake::FuncOp>::OpAdaptor;
 
-  // Replaces a handshake.func with a func.func, converting the argument and
+  // Replaces a handshake.func with a hw.module, converting the argument and
   // result types using the provided type converter.
+  // @mortbopet: Not a fan of converting to hw here seeing as we don't
+  // necessarily have hardware semantics here. But, DC doesn't define a function
+  // operation, and there is no "func.graph_func" or any other generic function
+  // operation which is a graph region...
   LogicalResult
   matchAndRewrite(handshake::FuncOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // Convert the function signature.
-    auto funcType = op.getFunctionType();
-    llvm::SmallVector<Type, 4> argTypes, resTypes;
-    if (failed(typeConverter->convertTypes(funcType.getInputs(), argTypes)) ||
-        failed(typeConverter->convertTypes(funcType.getResults(), resTypes)))
-      return failure();
+    ModulePortInfo ports = getModulePortInfo(*getTypeConverter(), op);
 
-    auto newFuncType =
-        FunctionType::get(funcType.getContext(), argTypes, resTypes);
+    if (op.isExternal()) {
+      rewriter.create<hw::HWModuleExternOp>(
+          op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
+    } else {
+      auto hwModule = rewriter.create<hw::HWModuleOp>(
+          op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
 
-    // Create the new function.
-    auto newFuncOp =
-        rewriter.create<dc::FuncOp>(op.getLoc(), op.getName(), newFuncType);
+      auto &region = op->getRegions().front();
 
-    // Convert the function body.
-    rewriter.inlineRegionBefore(op.getBody(), newFuncOp.getBody(),
-                                newFuncOp.end());
-    DCTypeConverter::SignatureConversion result(funcType.getNumInputs());
-    (void)typeConverter->convertSignatureArgs(
-        newFuncOp.getBody().getArgumentTypes(), result);
-    rewriter.applySignatureConversion(&newFuncOp.getBody(), result);
+      Region &moduleRegion = hwModule->getRegions().front();
+      rewriter.mergeBlocks(&region.getBlocks().front(), hwModule.getBodyBlock(),
+                           hwModule.getBodyBlock()->getArguments());
+      TypeConverter::SignatureConversion result(moduleRegion.getNumArguments());
+      (void)getTypeConverter()->convertSignatureArgs(
+          TypeRange(moduleRegion.getArgumentTypes()), result);
+      rewriter.applySignatureConversion(&moduleRegion, result);
+    }
 
-    // Replace the old function.
-    rewriter.replaceOp(op, newFuncOp.getOperation()->getResults());
+    rewriter.eraseOp(op);
     return success();
   }
 };
@@ -520,7 +580,7 @@ public:
 
     ConversionTarget target(getContext());
     target.addIllegalDialect<handshake::HandshakeDialect>();
-    target.addLegalDialect<dc::DCDialect, func::FuncDialect>();
+    target.addLegalDialect<dc::DCDialect, func::FuncDialect, hw::HWDialect>();
     target.addLegalOp<mlir::ModuleOp>();
 
     // The various patterns will insert new operations into the module to

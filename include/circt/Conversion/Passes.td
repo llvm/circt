@@ -406,9 +406,16 @@ def HandshakeToDC : Pass<"lower-handshake-to-dc", "mlir::ModuleOp"> {
   let summary = "Lower Handshake to DC";
   let description = [{
     Lower Handshake to DC operations.
+    Currently, a `handshake.func` will be converted into a `hw.module`. This
+    is principally an incorrect jump of abstraction - DC does not imply any
+    RTL/hardware semantics. However, DC does not define a container operation,
+    and there does not exist an e.g. `func.graph_func` which would be a generic
+    function with graph region behaviour. Thus, for now, we just use `hw.module`
+    as a container operation.
   }];
   let constructor = "circt::createHandshakeToDCPass()";
-  let dependentDialects = ["dc::DCDialect", "esi::ESIDialect", "mlir::func::FuncDialect"];
+  let dependentDialects = ["dc::DCDialect", "esi::ESIDialect",
+    "mlir::func::FuncDialect", "hw::HWDialect"];
 }
 
 //===----------------------------------------------------------------------===//

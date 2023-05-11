@@ -102,12 +102,12 @@ namespace {
 struct DCMaterializeForksSinksPass
     : public DCMaterializeForksSinksBase<DCMaterializeForksSinksPass> {
   void runOnOperation() override {
-    dc::FuncOp op = getOperation();
-    if (op.isExternal())
+    auto funcOp = getOperation();
+    if (funcOp.isExternal())
       return;
-    OpBuilder builder(op);
-    if (addForkOps(op.getRegion(), builder).failed() ||
-        addSinkOps(op.getRegion(), builder).failed())
+    OpBuilder builder(funcOp);
+    if (addForkOps(funcOp.getFunctionBody(), builder).failed() ||
+        addSinkOps(funcOp.getFunctionBody(), builder).failed())
       return signalPassFailure();
   };
 };
@@ -115,13 +115,15 @@ struct DCMaterializeForksSinksPass
 struct DCDematerializeForksSinksPass
     : public DCDematerializeForksSinksBase<DCDematerializeForksSinksPass> {
   void runOnOperation() override {
-    dc::FuncOp op = getOperation();
-    if (op.isExternal())
+    auto funcOp = getOperation();
+    if (funcOp.isExternal())
       return;
-    for (auto sinkOp : llvm::make_early_inc_range(op.getOps<dc::SinkOp>()))
+    for (auto sinkOp : llvm::make_early_inc_range(
+             funcOp.getFunctionBody().getOps<dc::SinkOp>()))
       sinkOp.erase();
 
-    for (auto forkOp : llvm::make_early_inc_range(op.getOps<dc::ForkOp>())) {
+    for (auto forkOp : llvm::make_early_inc_range(
+             funcOp.getFunctionBody().getOps<dc::ForkOp>())) {
       for (auto res : forkOp->getResults())
         res.replaceAllUsesWith(forkOp.getOperand());
       forkOp.erase();

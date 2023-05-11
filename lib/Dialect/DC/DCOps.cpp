@@ -174,16 +174,10 @@ public:
 
 void JoinOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.insert<circt::dc::EliminateSimpleJoinPattern,
-                 TransitiveJoinCanonicalizationPattern,
+  results.insert<TransitiveJoinCanonicalizationPattern,
                  IdenticalJoinCanonicalizationPattern,
                  RedundantJoinOperandsPattern, JoinOnSourcePattern>(context);
 }
-// JoinOp
-// =============================================================================
-
-void JoinOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                         MLIRContext *context) {}
 
 // =============================================================================
 // ForkOp
@@ -207,11 +201,21 @@ ParseResult ForkOp::parse(OpAsmParser &parser, OperationState &result) {
                             "fork size must be greater than 0");
 
   if (parser.parseOperand(operand) ||
+      parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
   auto tt = dc::TokenType::get(parser.getContext());
+  llvm::SmallVector<Type> operandTypes{tt};
+  SmallVector<Type> resultTypes{size, tt};
+  result.addTypes(resultTypes);
+  if (parser.resolveOperand(operand, tt, result.operands))
+    return failure();
+  return success();
 }
 
 void ForkOp::print(OpAsmPrinter &p) {
   p << "[" << getNumResults() << "] ";
+  p << getOperand() << " ";
   auto attrs = (*this)->getAttrs();
   if (!attrs.empty()) {
     p << " ";
@@ -277,8 +281,7 @@ public:
 
 void ForkOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.insert<circt::dc::EliminateSimpleForkPattern,
-                 EliminateForkToForkPattern, EliminateForkOfSourcePattern>(
+  results.insert<EliminateForkToForkPattern, EliminateForkOfSourcePattern>(
       context);
 }
 
@@ -445,6 +448,7 @@ LogicalResult PackOp::inferReturnTypes(
   llvm::SmallVector<Type> inputTypes;
   for (auto t : operands.drop_front().getTypes())
     inputTypes.push_back(t);
+  results.push_back(ValueType::get(context, inputTypes));
   return success();
 }
 

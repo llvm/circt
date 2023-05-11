@@ -17,6 +17,7 @@
 #define DIALECT_DC_TRANSFORMS_PASSDETAILS_H
 
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/DC/DCDialect.h"
 #include "circt/Dialect/DC/DCOps.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"

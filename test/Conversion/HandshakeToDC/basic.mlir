@@ -60,7 +60,28 @@ handshake.func @test_conditional_branch(%arg0: i1, %arg1: index, %arg2: none, ..
   return %0#0, %0#1, %arg2 : index, index, none
 }
 
+handshake.func @test_conditional_branch_none(%arg0: i1, %arg1: none) -> (none, none) {
+  %0:2 = cond_br %arg0, %arg1 : none
+  return %0#0, %0#1 : none, none
+}
+
 handshake.func @test_constant(%arg0: none) -> (i32) {
   %1 = constant %arg0 {value = 42 : i32} : i32
   return %1: i32
+}
+
+handshake.func @test_control_merge(%arg0 : none, %arg1 : none) -> (none, index) {
+  %out, %idx = control_merge %arg0, %arg1 : none, index
+  return %out, %idx : none, index
+}
+
+handshake.func @test_control_merge_data(%arg0 : i2, %arg1 : i2) -> (i2, index) {
+  %out, %idx = control_merge %arg0, %arg1 : i2, index
+  return %out, %idx : i2, index
+}
+
+handshake.func @branch_and_merge(%0 : i1, %1 : none) -> (none, index) {
+  %out, %idx = control_merge %true, %false : none, index
+  %true, %false = cond_br %0, %1 : none
+  return %out, %idx : none, index
 }

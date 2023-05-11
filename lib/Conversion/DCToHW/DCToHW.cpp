@@ -13,6 +13,7 @@
 #include "circt/Conversion/DCToHW.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/DC/DCDialect.h"
 #include "circt/Dialect/DC/DCOps.h"
 #include "circt/Dialect/DC/DCPasses.h"
 #include "circt/Dialect/ESI/ESIOps.h"
@@ -686,23 +687,6 @@ public:
   }
 };
 
-class ReturnConversionPattern : public OpConversionPattern<dc::ReturnOp> {
-public:
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(dc::ReturnOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    // Locate existing output op, Append operands to output op, and move to
-    // the end of the block.
-    auto hwModule = cast<hw::HWModuleOp>(op->getParentOp());
-    auto outputOp = *hwModule.getBodyBlock()->getOps<hw::OutputOp>().begin();
-    outputOp->setOperands(adaptor.getOperands());
-    outputOp->moveAfter(&hwModule.getBodyBlock()->back());
-    rewriter.eraseOp(op);
-    return success();
-  }
-};
-
 class BranchConversionPattern : public OpConversionPattern<BranchOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
@@ -997,92 +981,26 @@ public:
   };
 };
 
-static hw::ModulePortInfo getModulePortInfo(dc::FuncOp funcOp) {
-  hw::ModulePortInfo ports({}, {});
-  auto *ctx = funcOp->getContext();
-  auto ft = funcOp.getFunctionType();
-
-  // Add all inputs of funcOp.
-  unsigned inIdx = 0;
-  for (auto [index, type] : llvm::enumerate(ft.getInputs())) {
-    ports.inputs.push_back({StringAttr::get(ctx, "in" + std::to_string(index)),
-                            hw::PortDirection::INPUT, toESIHWType(type), index,
-                            hw::InnerSymAttr{}});
-    inIdx++;
-  }
-
-  // Add all outputs of funcOp.
-  for (auto [index, type] : llvm::enumerate(ft.getResults())) {
-    ports.outputs.push_back({StringAttr::get(ctx, "in" + std::to_string(index)),
-                             hw::PortDirection::OUTPUT, toESIHWType(type),
-                             index, hw::InnerSymAttr{}});
-  }
-
-  // Add clock and reset signals.
-  Type i1Type = IntegerType::get(ctx, 1);
-  ports.inputs.push_back({StringAttr::get(ctx, "clock"),
-                          hw::PortDirection::INPUT, i1Type, inIdx++,
-                          hw::InnerSymAttr{}});
-  ports.inputs.push_back({StringAttr::get(ctx, "reset"),
-                          hw::PortDirection::INPUT, i1Type, inIdx,
-                          hw::InnerSymAttr{}});
-
-  return ports;
-}
-
-class FuncOpConversionPattern : public OpConversionPattern<dc::FuncOp> {
-public:
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(dc::FuncOp op, OpAdaptor operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    ModulePortInfo ports = getModulePortInfo(op);
-
-    if (op.isExternal()) {
-      rewriter.create<hw::HWModuleExternOp>(
-          op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
-    } else {
-      auto hwModule = rewriter.create<hw::HWModuleOp>(
-          op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
-
-      auto &region = op->getRegions().front();
-
-      Region &moduleRegion = hwModule->getRegions().front();
-      rewriter.mergeBlocks(
-          &region.getBlocks().front(), hwModule.getBodyBlock(),
-          hwModule.getBodyBlock()->getArguments().drop_back(2));
-      TypeConverter::SignatureConversion result(moduleRegion.getNumArguments());
-      (void)getTypeConverter()->convertSignatureArgs(
-          moduleRegion.getArgumentTypes(), result);
-      rewriter.applySignatureConversion(&moduleRegion, result);
-    }
-
-    rewriter.eraseOp(op);
-    return success();
-  }
-};
-
 } // namespace
 
 //===----------------------------------------------------------------------===//
 // HW Top-module Related Functions
 //===----------------------------------------------------------------------===//
 
-static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
-                                   ConversionTarget &target, dc::FuncOp op,
-                                   OpBuilder &moduleBuilder) {
+static LogicalResult convertModuleOp(ESITypeConverter &typeConverter,
+                                     ConversionTarget &target,
+                                     hw::HWModuleOp op,
+                                     OpBuilder &moduleBuilder) {
 
   std::map<std::string, unsigned> instanceNameCntr;
 
   RewritePatternSet patterns(op.getContext());
 
   patterns.insert<
-      FuncOpConversionPattern, ReturnConversionPattern, ForkConversionPattern,
-      JoinConversionPattern, SelectConversionPattern, BranchConversionPattern,
-      PackConversionPattern, UnpackConversionPattern, BufferConversionPattern,
-      SourceConversionPattern, SinkConversionPattern>(typeConverter,
-                                                      op.getContext());
+      ForkConversionPattern, JoinConversionPattern, SelectConversionPattern,
+      BranchConversionPattern, PackConversionPattern, UnpackConversionPattern,
+      BufferConversionPattern, SourceConversionPattern, SinkConversionPattern>(
+      typeConverter, op.getContext());
 
   if (failed(applyPartialConversion(op, target, std::move(patterns))))
     return op->emitOpError() << "error during conversion";
@@ -1134,14 +1052,30 @@ public:
 
     // Lowering to HW requires that every DC-typed value is used exactly once.
     // Check whether this precondition is met, and if not, exit.
-    for (auto f : mod.getOps<dc::FuncOp>()) {
-      if (auto res = allDCValuesHasOneUse(f); failed(res)) {
-        f.emitOpError() << "DCToHW: failed to verify that all values "
-                           "are used exactly once. Remember to run the "
-                           "fork/sink materialization pass before HW lowering.";
-        signalPassFailure();
-        return;
+    auto walkRes = mod.walk([&](Operation *op) {
+      for (auto res : op->getResults()) {
+        if (res.getType().isa<dc::TokenType, dc::ValueType>()) {
+          if (res.use_empty()) {
+            op->emitOpError() << "DCToHW: value " << res << " is unused.";
+            return WalkResult::interrupt();
+          }
+          if (!res.hasOneUse()) {
+            op->emitOpError()
+                << "DCToHW: value " << res << " has multiple uses.";
+            return WalkResult::interrupt();
+          }
+        }
       }
+      return WalkResult::advance();
+    });
+
+    if (walkRes.wasInterrupted()) {
+      mod->emitOpError()
+          << "DCToHW: failed to verify that all values "
+             "are used exactly once. Remember to run the "
+             "fork/sink materialization pass before HW lowering.";
+      signalPassFailure();
+      return;
     }
 
     ESITypeConverter typeConverter;
@@ -1154,8 +1088,12 @@ public:
 
     OpBuilder submoduleBuilder(mod.getContext());
     submoduleBuilder.setInsertionPointToStart(mod.getBody());
-    for (auto f : llvm::make_early_inc_range(mod.getOps<dc::FuncOp>())) {
-      if (failed(convertFuncOp(typeConverter, target, f, submoduleBuilder))) {
+
+    // TODO: use the generic type conversion pattern to convert the top-level
+    // I/O into ESI channels. This should allow us to convert any container
+    // operation, and not just hw.module.
+    for (auto f : llvm::make_early_inc_range(mod.getOps<hw::HWModuleOp>())) {
+      if (failed(convertModuleOp(typeConverter, target, f, submoduleBuilder))) {
         signalPassFailure();
         return;
       }

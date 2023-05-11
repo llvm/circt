@@ -22,7 +22,7 @@ namespace circt {
 namespace dc {
 
 // Returns true if 't'is a `dc.value<i1>` type.
-bool isI1ValueType(Type t);
+bool isI1ValueType(mlir::Type t);
 
 } // namespace dc
 } // namespace circt

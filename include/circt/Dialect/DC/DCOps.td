@@ -55,20 +55,20 @@ def BufferOp : DCOp<"buffer",
   let assemblyFormat = "`[` $size `]` $input ($initValues^)? attr-dict `:` type($input)";
   let hasVerifier = 1;
   let builders = [OpBuilder<(
-    ins "Value":$input, "size_t":$size), [{
+    ins "mlir::Value":$input, "size_t":$size), [{
         build($_builder, $_state, input.getType(), input, $_builder.getI64IntegerAttr(size), {});
     }]>];
 
   let extraClassDeclaration = [{
     // Returns the data type of this buffer, if any.
-    std::optional<TypeRange> getInnerTypes() {
+    std::optional<mlir::TypeRange> getInnerTypes() {
       if(auto type = getInput().getType().dyn_cast<ValueType>())
         return type.getInnerTypes();
       return std::nullopt;
     }
 
     // Returns the initial values of this buffer as a vector of int64's.
-    FailureOr<SmallVector<int64_t>> getInitValueArray();
+    mlir::FailureOr<llvm::SmallVector<int64_t>> getInitValueArray();
   }];
 }
 
@@ -89,10 +89,6 @@ def JoinOp : DCOp<"join"> {
 
   let assemblyFormat = "$tokens attr-dict";
   let hasCanonicalizer = 1;
-  let builders = [OpBuilder<(
-    ins "ValueRange":$tokens), [{
-        build($_builder, $_state, $_builder.getType<dc::TokenType>(), tokens);
-    }]>];
 }
 
 def ForkOp : DCOp<"fork"> {
@@ -110,7 +106,7 @@ def ForkOp : DCOp<"fork"> {
     let hasCanonicalizer = 1;
 
     let builders = [OpBuilder<(
-        ins "Value":$token, "size_t":$numOutputs), [{
+        ins "mlir::Value":$token, "size_t":$numOutputs), [{
             llvm::SmallVector<mlir::Type, 4> outputTypes(numOutputs, $_builder.getType<dc::TokenType>());
             build($_builder, $_state, outputTypes, token);
         }]>];
@@ -184,13 +180,13 @@ def PackOp : DCOp<"pack", [InferTypeOpInterface]> {
 
     let extraClassDeclaration = [{
       /// Infer the return types of this operation.
-      static LogicalResult inferReturnTypes(MLIRContext *context,
-                                            std::optional<Location> loc,
-                                            ValueRange operands,
-                                            DictionaryAttr attrs,
+      static mlir::LogicalResult inferReturnTypes(mlir::MLIRContext *context,
+                                            std::optional<mlir::Location> loc,
+                                            mlir::ValueRange operands,
+                                            mlir::DictionaryAttr attrs,
                                             mlir::OpaqueProperties properties,
                                             mlir::RegionRange regions,
-                                            SmallVectorImpl<Type> &results);
+                                            llvm::SmallVectorImpl<mlir::Type> &results);
     }];
 }
 
@@ -209,13 +205,13 @@ def UnpackOp : DCOp<"unpack", [InferTypeOpInterface]> {
   
     let extraClassDeclaration = [{
       /// Infer the return types of this operation.
-      static LogicalResult inferReturnTypes(MLIRContext *context,
-                                            std::optional<Location> loc,
-                                            ValueRange operands,
-                                            DictionaryAttr attrs,
+      static mlir::LogicalResult inferReturnTypes(mlir::MLIRContext *context,
+                                            std::optional<mlir::Location> loc,
+                                            mlir::ValueRange operands,
+                                            mlir::DictionaryAttr attrs,
                                             mlir::OpaqueProperties properties,
                                             mlir::RegionRange regions,
-                                            SmallVectorImpl<Type> &results);
+                                            llvm::SmallVectorImpl<mlir::Type> &results);
     }];
 }
 
