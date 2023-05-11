@@ -780,10 +780,10 @@ void Emitter::emitStatement(RefForceInitialOp op) {
     ps << ":" << PP::bbox2 << PP::neverbreak << PP::newline;
   }
   ps << "force_initial(";
-  emitExpression(op.getDest());
-  ps << ", ";
-  emitExpression(op.getSrc());
-  ps << ")";
+  ps.scopedBox(PP::ibox0, [&]() {
+    interleaveComma({op.getDest(), op.getSrc()});
+    ps << ")";
+  });
   if (hasEnable)
     ps << PP::end;
   emitLocationAndNewLine(op);
