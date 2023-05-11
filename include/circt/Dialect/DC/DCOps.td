@@ -392,49 +392,18 @@ def UnpackOp : DCOp<"unpack"> {
         }]>];
 }
 
-/*
-def SymbolOp : DCOp<"symbol", [
-        Symbol
-    ]> {
-    let summary = "Indicates a symbol in the control and dataflow graph";
-    let description = [{
-        This operator indicates a symbol in the control and dataflow graph.
-        A symbol can be referenced from within `dc.node` operations.
-    
-        Example:
-        ```mlir
-        dc.node @foo
-        ```
-    }];
+def MergeOp : DCOp<"merge"> {
+  let summary = "Merge operation";
+  let description = [{
+    Non-deterministically selects one of the incoming tokens and emits an output
+    stating which token was selected.
 
-    let arguments = (ins SymbolNameAttr:$sym_name);
-    let results = (outs);
+    For now, just two inputs are supported.
+  }];
 
-    let assemblyFormat = "$sym_name attr-dict";
+  let arguments = (ins TokenType:$first, TokenType:$second);
+  let results = (outs I1ValueType:$output);
+  let assemblyFormat = "$first `,` $second attr-dict";
 }
-
-class SameTypeConstraint<string lhs, string rhs>
- : TypesMatchWith<"lhs and rhs types should be equivalent",
-                   lhs, rhs, [{ $_self }]>;
-
-// Define `dc.node` which is an operation that contains a list of references to
-// `dc.symbol` ops.
-class NodeOp<string mnemonic, list<Trait> traits = []> : DCOp<mnemonic,
-    !listconcat(traits,[
-        SingleBlock,
-        SameTypeConstraint<"out", "in">
-    ])> {
-    let arguments = (ins
-        AnyType:$in,
-        FlatSymbolRefArrayAttr:$symbols
-    );
-    let results = (outs AnyType:$out);
-    let assemblyFormat = "$in `[` $symbols `]` attr-dict `:` type($out)";
-}
-
-def ControlNode : NodeOp<"control"> {}
-def DataNode : NodeOp<"data"> {}
-
-*/
 
 #endif // CIRCT_DIALECT_DC_OPS_TD

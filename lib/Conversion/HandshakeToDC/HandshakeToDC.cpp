@@ -209,6 +209,34 @@ public:
   }
 };
 
+class ControlMergeOpConversion
+    : public DCOpConversionPattern<handshake::ControlMergeOp> {
+public:
+  using DCOpConversionPattern<handshake::ControlMergeOp>::DCOpConversionPattern;
+
+  using OpAdaptor =
+      typename DCOpConversionPattern<handshake::ControlMergeOp>::OpAdaptor;
+
+  LogicalResult
+  matchAndRewrite(handshake::ControlMergeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (op.getDataOperands().size() != 2)
+      return op.emitOpError("expected two data operands");
+
+    llvm::SmallVector<Value, 4> inputTokens;
+    for (auto input : adaptor.getDataOperands())
+      inputTokens.push_back(unpack(rewriter, input).token);
+
+    auto mergeOp = rewriter.create<dc::MergeOp>(op.getLoc(), inputTokens);
+
+    // Handshake control has two outputs - we generate both from the single
+    // output of the merge by unpacking.
+    auto unpacked = rewriter.create<dc::UnpackOp>(op.getLoc(), mergeOp);
+    rewriter.replaceOp(op, {unpacked.getToken(), mergeOp.getOutput()});
+    return success();
+  }
+};
+
 class SyncOpConversion : public DCOpConversionPattern<handshake::SyncOp> {
 public:
   using DCOpConversionPattern<handshake::SyncOp>::DCOpConversionPattern;
@@ -510,12 +538,13 @@ public:
     // Add handshake conversion patterns.
     // Note: merge/control merge are not supported - these are non-deterministic
     // operators and we do not care for them.
-    patterns.add<FuncOpConversion, BufferOpConversion,
-                 CondBranchConversionPattern, SinkOpConversionPattern,
-                 SourceOpConversionPattern, MuxOpConversionPattern,
-                 ReturnOpConversion, ForkOpConversionPattern, JoinOpConversion,
-                 ConstantOpConversion, SyncOpConversion>(
-        &getContext(), typeConverter, &convertedOps);
+    patterns
+        .add<FuncOpConversion, BufferOpConversion, CondBranchConversionPattern,
+             SinkOpConversionPattern, SourceOpConversionPattern,
+             MuxOpConversionPattern, ReturnOpConversion,
+             ForkOpConversionPattern, JoinOpConversion,
+             ControlMergeOpConversion, ConstantOpConversion, SyncOpConversion>(
+            &getContext(), typeConverter, &convertedOps);
 
     // ALL other single-result operations are converted via the
     // UnitRateConversionPattern.
