@@ -38,12 +38,13 @@ using namespace pretty;
 // NOLINTBEGIN(misc-no-recursion)
 namespace {
 
-/// Target line length when pretty-printing.
-constexpr size_t targetLineLength = 80;
+constexpr size_t defaultTargetLineLength = 80;
 
 /// An emitter for FIRRTL dialect operations to .fir output.
 struct Emitter {
-  Emitter(llvm::raw_ostream &os) : pp(os, targetLineLength), ps(pp, saver) {
+  Emitter(llvm::raw_ostream &os,
+          size_t targetLineLength = defaultTargetLineLength)
+      : pp(os, targetLineLength), ps(pp, saver) {
     pp.setListener(&saver);
   }
   LogicalResult finalize();
@@ -1068,9 +1069,10 @@ void Emitter::emitLocation(Location loc) {
 //===----------------------------------------------------------------------===//
 
 // Emit the specified FIRRTL circuit into the given output stream.
-mlir::LogicalResult circt::firrtl::exportFIRFile(mlir::ModuleOp module,
-                                                 llvm::raw_ostream &os) {
-  Emitter emitter(os);
+mlir::LogicalResult
+circt::firrtl::exportFIRFile(mlir::ModuleOp module, llvm::raw_ostream &os,
+                             std::optional<size_t> targetLineLength) {
+  Emitter emitter(os, targetLineLength.value_or(defaultTargetLineLength));
   for (auto &op : *module.getBody()) {
     if (auto circuitOp = dyn_cast<CircuitOp>(op))
       emitter.emitCircuit(circuitOp);
@@ -1079,10 +1081,15 @@ mlir::LogicalResult circt::firrtl::exportFIRFile(mlir::ModuleOp module,
 }
 
 void circt::firrtl::registerToFIRFileTranslation() {
+  static llvm::cl::opt<size_t> targetLineLength(
+      "target-line-length",
+      llvm::cl::desc("Target line length for emitted .fir"),
+      llvm::cl::value_desc("number of chars"),
+      llvm::cl::init(defaultTargetLineLength));
   static mlir::TranslateFromMLIRRegistration toFIR(
       "export-firrtl", "emit FIRRTL dialect operations to .fir output",
       [](ModuleOp module, llvm::raw_ostream &os) {
-        return exportFIRFile(module, os);
+        return exportFIRFile(module, os, targetLineLength);
       },
       [](mlir::DialectRegistry &registry) {
         registry.insert<chirrtl::CHIRRTLDialect>();
