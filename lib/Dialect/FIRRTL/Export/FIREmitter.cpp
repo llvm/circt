@@ -942,7 +942,7 @@ void Emitter::emitPrimExpr(StringRef mnemonic, Operation *op,
   ps << mnemonic << "(" << PP::ibox0;
   interleaveComma(op->getOperands());
   if (!op->getOperands().empty() && !attrs.empty())
-   ps << "," << PP::space;
+    ps << "," << PP::space;
   interleaveComma(attrs, [&](auto attr) { ps.addAsString(attr); });
   ps << ")" << PP::end;
 }
