@@ -1005,7 +1005,7 @@ void Emitter::emitType(Type type) {
         ps << "Analog";
         emitWidth(type.getWidth());
       })
-      .Case<BundleType>([&](auto type) {
+      .Case<OpenBundleType, BundleType>([&](auto type) {
         ps << "{";
         if (!type.getElements().empty())
           ps << PP::nbsp;
@@ -1027,7 +1027,7 @@ void Emitter::emitType(Type type) {
           ps << "}";
         });
       })
-      .Case<FVectorType, CMemoryType>([&](auto type) {
+      .Case<OpenVectorType, FVectorType, CMemoryType>([&](auto type) {
         emitType(type.getElementType());
         ps << "[";
         ps.addAsString(type.getNumElements());
