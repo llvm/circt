@@ -1,6 +1,7 @@
 add_subdirectory(arcilator)
 add_subdirectory(circt-as)
 add_subdirectory(circt-dis)
+add_subdirectory(circt-lec)
 add_subdirectory(circt-lsp-server)
 add_subdirectory(circt-opt)
 add_subdirectory(circt-reduce)

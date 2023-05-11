@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_DC_DIALECT_H
-#define CIRCT_DIALECT_DC_DIALECT_H
+#ifndef CIRCT_DIALECT_DC_DCDIALECT_H
+#define CIRCT_DIALECT_DC_DCDIALECT_H
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -16,4 +16,4 @@
 // Pull in the dialect definition.
 #include "circt/Dialect/DC/DCDialect.h.inc"
 
-#endif // CIRCT_DIALECT_DC_DIALECT_H
+#endif // CIRCT_DIALECT_DC_DCDIALECT_H

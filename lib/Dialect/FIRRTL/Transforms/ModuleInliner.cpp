@@ -330,8 +330,8 @@ public:
 
   /// Return true if this NLA has a root that originates from a specific module.
   bool hasRoot(FModuleLike mod) {
-    return (isDead() && nla.root() == mod.moduleNameAttr()) ||
-           rootSet.contains(mod.moduleNameAttr());
+    return (isDead() && nla.root() == mod.getModuleNameAttr()) ||
+           rootSet.contains(mod.getModuleNameAttr());
   }
 
   /// Return true if either this NLA is rooted at modName, or is retoped to it.
@@ -670,7 +670,8 @@ bool Inliner::rename(StringRef prefix, Operation *op,
         auto &mnla = nlaMap[sym.getAttr()];
         if (!doesNLAMatchCurrentPath(mnla.getNLA()))
           continue;
-        mnla.setInnerSym(moduleNamespace.module.moduleNameAttr(), newSymAttr);
+        mnla.setInnerSym(moduleNamespace.module.getModuleNameAttr(),
+                         newSymAttr);
       }
       // Indicate symbol was changed.
       return true;
@@ -740,8 +741,8 @@ bool Inliner::renameInstance(
         continue;
       auto &mnla = nlaMap[nla];
       assert(newInnerRef.getModule() ==
-             moduleNamespace.module.moduleNameAttr());
-      mnla.setInnerSym(moduleNamespace.module.moduleNameAttr(), newSymAttr);
+             moduleNamespace.module.getModuleNameAttr());
+      mnla.setInnerSym(moduleNamespace.module.getModuleNameAttr(), newSymAttr);
     }
   }
 
@@ -797,7 +798,7 @@ void Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b, IRMapping &mapper,
           continue;
         // Update any NLAs with the new symbol name.
         if (oldSym != newSym)
-          mnla.setInnerSym(moduleNamespace.module.moduleNameAttr(), newSym);
+          mnla.setInnerSym(moduleNamespace.module.getModuleNameAttr(), newSym);
         // If all paths of the NLA have been inlined, make it local.
         if (mnla.isLocal() || localSymbols.count(sym.getAttr()))
           anno.removeMember("circt.nonlocal");
@@ -1318,7 +1319,7 @@ void Inliner::run() {
 
   // Mark the top module as live, so it doesn't get deleted.
   for (auto module : circuit.getOps<FModuleLike>()) {
-    if (!cast<hw::HWModuleLike>(*module).isPublic())
+    if (!module.isPublic())
       continue;
     liveModules.insert(module);
     if (isa<FModuleOp>(module))
@@ -1346,7 +1347,7 @@ void Inliner::run() {
            circuit.getBodyBlock()->getOps<FModuleLike>())) {
     if (liveModules.count(mod))
       continue;
-    for (auto nla : rootMap[mod.moduleNameAttr()])
+    for (auto nla : rootMap[mod.getModuleNameAttr()])
       nlaMap[nla].markDead();
     mod.erase();
   }
@@ -1355,7 +1356,7 @@ void Inliner::run() {
   // remain as they should have been processed and removed.
   for (auto mod : circuit.getBodyBlock()->getOps<FModuleLike>()) {
     if (shouldInline(mod)) {
-      assert(cast<hw::HWModuleLike>(*mod).isPublic() &&
+      assert(mod.isPublic() &&
              "non-public module with inline annotation still present");
       AnnotationSet::removeAnnotations(mod, inlineAnnoClass);
     }

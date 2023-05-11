@@ -9,6 +9,7 @@
 #ifndef CIRCT_DIALECT_DC_OPS_TD
 #define CIRCT_DIALECT_DC_OPS_TD
 
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "circt/Dialect/DC/DCDialect.td"
 include "circt/Dialect/DC/DCTypes.td"
 include "mlir/IR/FunctionInterfaces.td"
@@ -30,198 +31,34 @@ class SameTypeConstraint<string lhs, string rhs>
  : TypesMatchWith<"lhs and rhs types should be equivalent",
                    lhs, rhs, [{ $_self }]>;
 
-def FuncOp : Op<DCDialect, "func", [
-      IsolatedFromAbove,
-      Symbol,
-      FunctionOpInterface,
-      RegionKindInterface,
-      CallableOpInterface,
-  ]> {
-  // I really don't want to have to add yet another container operation. However,
-  // where else do we place DC ops?
-  // We have to place them in a graph region operation, so func.func isn't
-  // applicable. We're not committed to being in `hw` yet, so hw.module doesn't
-  // apply either...
-  let summary = "DC function";
-  let description = [{
-      The `dc.func` operation represents a function in the DC dialect. It has
-      a single block that contains the body of the function. The body is a 
-      graph region
-  }];
-
-  let arguments = (ins
-      SymbolNameAttr:$sym_name,
-      TypeAttrOf<FunctionType>:$function_type,
-      OptionalAttr<DictArrayAttr>:$arg_attrs,
-      OptionalAttr<DictArrayAttr>:$res_attrs
-  );
-  let regions = (region SizedRegion<1>:$body);
-  let hasCustomAssemblyFormat = 1;
-
-  let builders = [OpBuilder<(ins
-    "StringRef":$name, "FunctionType":$type,
-    CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs,
-    CArg<"ArrayRef<DictionaryAttr>", "{}">:$argAttrs,
-    CArg<"ArrayRef<DictionaryAttr>", "{}">:$resAttrs)
-  >];
-
-  let extraClassDeclaration = [{
-    // Use FunctionOpInterface traits's getFunctionBody method.
-    using mlir::detail::FunctionOpInterfaceTrait<dc::FuncOp>::getFunctionBody;
-
-    /// Return the block corresponding to the region.
-    Block *getBodyBlock() { return &getFunctionBody().front(); }
-
-    //===------------------------------------------------------------------===//
-    // RegionKindInterface
-    //===------------------------------------------------------------------===//
-    static RegionKind getRegionKind(unsigned index) {
-      return RegionKind::Graph;
-    }
-
-    /// Returns the argument types of this function.
-    ArrayRef<mlir::Type> getArgumentTypes() {
-      return getFunctionType().getInputs();
-    }
-
-    /// Returns the result types of this function.
-    ArrayRef<mlir::Type> getResultTypes() {
-      return getFunctionType().getResults();
-    }
-
-    //===------------------------------------------------------------------===//
-    // CallableOpInterface
-    //===------------------------------------------------------------------===//
-
-    /// Returns the region on the current operation that is callable. This may
-    /// return null in the case of an external callable object, e.g. an external
-    /// function.
-    ::mlir::Region *getCallableRegion() {
-      return isExternal() ? nullptr : &getBody();
-    }
-
-    /// Returns the results types that the callable region produces when
-    /// executed.
-    ArrayRef<Type> getCallableResults() {
-      return getFunctionType().getResults();
-    }
-
-    /// Returns the argument attributes for all callable region arguments or
-    /// null if there are none.
-    ArrayAttr getCallableArgAttrs() {
-      return getArgAttrs().value_or(nullptr);
-    }
-
-    /// Returns the result attributes for all callable region results or
-    /// null if there are none.
-    ArrayAttr getCallableResAttrs() {
-      return getResAttrs().value_or(nullptr);
-    }
-  }];
-}
-
-def CallOp : Op<DCDialect, "call",
-    [CallOpInterface, MemRefsNormalizable,
-     DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
-  let summary = "call operation";
-  let description = [{
-    The `dc.call` operation represents a direct call to a function that is
-    within the same symbol scope as the call. The operands and result types of
-    the call must match the specified function type. The callee is encoded as a
-    symbol reference attribute named "callee".
-
-    Example:
-
-    ```mlir
-    %2 = dc.call @my_add(%0, %1) : (f32, f32) -> f32
-    ```
-  }];
-
-  let arguments = (ins FlatSymbolRefAttr:$callee, Variadic<AnyType>:$operands);
-  let results = (outs Variadic<AnyType>);
-
-  let builders = [
-    OpBuilder<(ins "FuncOp":$callee, CArg<"ValueRange", "{}">:$operands), [{
-      $_state.addOperands(operands);
-      $_state.addAttribute("callee", SymbolRefAttr::get(callee));
-      $_state.addTypes(callee.getFunctionType().getResults());
-    }]>,
-    OpBuilder<(ins "SymbolRefAttr":$callee, "TypeRange":$results,
-      CArg<"ValueRange", "{}">:$operands), [{
-      $_state.addOperands(operands);
-      $_state.addAttribute("callee", callee);
-      $_state.addTypes(results);
-    }]>,
-    OpBuilder<(ins "StringAttr":$callee, "TypeRange":$results,
-      CArg<"ValueRange", "{}">:$operands), [{
-      build($_builder, $_state, SymbolRefAttr::get(callee), results, operands);
-    }]>,
-    OpBuilder<(ins "StringRef":$callee, "TypeRange":$results,
-      CArg<"ValueRange", "{}">:$operands), [{
-      build($_builder, $_state, StringAttr::get($_builder.getContext(), callee),
-            results, operands);
-    }]>];
-
-  let extraClassDeclaration = [{
-    FunctionType getCalleeType();
-
-    /// Get the argument operands to the called function.
-    operand_range getArgOperands() {
-      return {arg_operand_begin(), arg_operand_end()};
-    }
-
-    operand_iterator arg_operand_begin() { return operand_begin(); }
-    operand_iterator arg_operand_end() { return operand_end(); }
-
-    /// Return the callee of this operation.
-    CallInterfaceCallable getCallableForCallee() {
-      return (*this)->getAttrOfType<SymbolRefAttr>("callee");
-    }
-  }];
-
-  let assemblyFormat = [{
-    $callee `(` $operands `)` attr-dict `:` functional-type($operands, results)
-  }];
-}
-
-def ReturnOp : DCOp<"return", [Terminator, ReturnLike, HasParent<"dc::FuncOp">]> {
-  let summary = "Return operation";
-  let description = [{
-    The `dc.return` operation returns from a function. It takes a list of
-    values to return. The number of values must match the number of results
-    of the function.
-  }];
-
-  let arguments = (ins Variadic<AnyType>:$operands);
-  let assemblyFormat = "($operands^ `:` type($operands))? attr-dict";
-}
-
 def BufferOp : DCOp<"buffer",
     [SameTypeConstraint<"input", "output">]> {
   let summary = "Buffer operation";
   let description = [{
-    The buffer operation may buffer a control-side token against an arbitrary amount
-    of data-side values. In practice, this is realized by buffering a !dc.value<...>.
+    The buffer operation may buffer a `dc.value` or `dc.token` typed SSA value.
+    In practice, this provides a mechanism to buffer data-side values in a
+    control-sensitive manner.
 
     Example:
     ```mlir
-    %value_out = dc.buffer %value [2] : !dc.value<i32, i1, i4>
+    %value_out = dc.buffer [2] %value : !dc.value<i32, i1, i4>
     ```
   }];
 
   let arguments = (ins
     ValueOrTokenType:$input,
     ConfinedAttr<I64Attr, [IntMinValue<1>]>:$size,
-    OptionalAttr<AnyAttr>:$initValues
+    OptionalAttr<ArrayAttr>:$initValues
   );
   let results = (outs ValueOrTokenType:$output);
 
-  let assemblyFormat = "$input `[` $size `]` attr-dict `:` type($input)";
+  let assemblyFormat = "`[` $size `]` $input ($initValues^)? attr-dict `:` type($input)";
+  let hasVerifier = 1;
   let builders = [OpBuilder<(
     ins "Value":$input, "size_t":$size), [{
-        build(odsBuilder, odsState, input.getType(), input, odsBuilder.getI64IntegerAttr(size), {});
+        build($_builder, $_state, input.getType(), input, $_builder.getI64IntegerAttr(size), {});
     }]>];
-  
+
   let extraClassDeclaration = [{
     // Returns the data type of this buffer, if any.
     std::optional<TypeRange> getInnerTypes() {
@@ -231,13 +68,7 @@ def BufferOp : DCOp<"buffer",
     }
 
     // Returns the initial values of this buffer as a vector of int64's.
-    SmallVector<int64_t> getInitValueArray() {
-      assert(getInitValues() && "initValues attribute not set");
-      SmallVector<int64_t> values;
-      for (auto value : (*this)->getAttrOfType<ArrayAttr>("initValues"))
-        values.push_back(value.cast<IntegerAttr>().getValue().getSExtValue());
-      return values;
-    }
+    FailureOr<SmallVector<int64_t>> getInitValueArray();
   }];
 }
 
@@ -260,7 +91,7 @@ def JoinOp : DCOp<"join"> {
   let hasCanonicalizer = 1;
   let builders = [OpBuilder<(
     ins "ValueRange":$tokens), [{
-        build(odsBuilder, odsState, odsBuilder.getType<dc::TokenType>(), tokens);
+        build($_builder, $_state, $_builder.getType<dc::TokenType>(), tokens);
     }]>];
 }
 
@@ -268,13 +99,11 @@ def ForkOp : DCOp<"fork"> {
     let summary = "Splits the incoming token into multiple outgoing tokens";
     let description = [{
         This operator splits the incoming token into multiple outgoing tokens.
-    
         Example:
         ```mlir
         %0, %1 = dc.fork [2] %a : !dc.token, !dc.token
         ```
     }];
-    
     let arguments = (ins TokenType:$token);
     let results = (outs Variadic<TokenType>:$outputs);
     let hasCustomAssemblyFormat = 1;
@@ -282,8 +111,8 @@ def ForkOp : DCOp<"fork"> {
 
     let builders = [OpBuilder<(
         ins "Value":$token, "size_t":$numOutputs), [{
-            llvm::SmallVector<mlir::Type, 4> outputTypes(numOutputs, odsBuilder.getType<dc::TokenType>());
-            build(odsBuilder, odsState, outputTypes, token);
+            llvm::SmallVector<mlir::Type, 4> outputTypes(numOutputs, $_builder.getType<dc::TokenType>());
+            build($_builder, $_state, outputTypes, token);
         }]>];
 }
 
@@ -298,11 +127,6 @@ def BranchOp : DCOp<"branch"> {
     let results = (outs TokenType:$trueToken, TokenType:$falseToken);
 
     let assemblyFormat = "$condition attr-dict";
-    let builders = [OpBuilder<(
-        ins "Value":$condition), [{
-            auto tt = odsBuilder.getType<dc::TokenType>();
-            build(odsBuilder, odsState, tt, tt, condition);
-        }]>];
 }
 
 def SelectOp : DCOp<"select"> {
@@ -317,12 +141,6 @@ def SelectOp : DCOp<"select"> {
     let results = (outs TokenType:$output);
     let assemblyFormat = "$condition `,` $trueToken `,` $falseToken attr-dict";
     let hasCanonicalizer = 1;
-    let builders = [OpBuilder<(
-      ins "Value":$condition, "Value":$trueToken, "Value":$falseToken), [{
-          auto tt = odsBuilder.getType<dc::TokenType>();
-          build(odsBuilder, odsState, tt, condition, trueToken, falseToken);
-      }]>];
-
 }
 
 def SinkOp : DCOp<"sink"> {
@@ -347,49 +165,58 @@ def SourceOp : DCOp<"source"> {
     let results = (outs TokenType:$output);
     let assemblyFormat = "attr-dict";
     let builders = [OpBuilder<(ins), [{
-            build(odsBuilder, odsState, odsBuilder.getType<dc::TokenType>());
+            build($_builder, $_state, $_builder.getType<dc::TokenType>());
         }]>];
 }
 
-def PackOp : DCOp<"pack"> {
+def PackOp : DCOp<"pack", [InferTypeOpInterface]> {
     let summary = "Pack operation";
     let description = [{
         An operation which packs together a !dc.token value with some other
-        value - mostly used to facilitate conversion, given the lack of
-        1:N value replacement in MLIRs pattern rewrite infrastructure.
+        value.
     }];
 
     let arguments = (ins TokenType:$token, Variadic<AnyType>:$inputs);
     let results = (outs ValueType:$output);
-    let assemblyFormat = "$token `[` $inputs `]` attr-dict `:` functional-type($inputs, $output)";
-    let builders = [OpBuilder<(
-        ins "Value":$token, "ValueRange":$inputs)>];
+    let assemblyFormat = "$token `[` $inputs `]` attr-dict `:` type($inputs)";
     let hasCanonicalizer = 1;
     let hasFolder = 1;
+
+    let extraClassDeclaration = [{
+      /// Infer the return types of this operation.
+      static LogicalResult inferReturnTypes(MLIRContext *context,
+                                            std::optional<Location> loc,
+                                            ValueRange operands,
+                                            DictionaryAttr attrs,
+                                            mlir::OpaqueProperties properties,
+                                            mlir::RegionRange regions,
+                                            SmallVectorImpl<Type> &results);
+    }];
 }
 
-def UnpackOp : DCOp<"unpack"> {
+def UnpackOp : DCOp<"unpack", [InferTypeOpInterface]> {
     let summary = "Unpack operation";
     let description = [{
         An operation which unpacks a !dc.value value into a !dc.token value
-        and its constituent values - mostly used to facilitate conversion, given the
-        lack of 1:N value replacement in MLIRs pattern rewrite infrastructure.
+        and its constituent values.
     }];
 
     let arguments = (ins ValueType:$input);
     let results = (outs TokenType:$token, Variadic<AnyType>:$outputs);
-    let assemblyFormat = "$input attr-dict `:` functional-type($input, $outputs)";
+    let assemblyFormat = "$input attr-dict `:` type($input)";
     let hasCanonicalizer = 1;
     let hasFolder = 1;
-
-    let builders = [OpBuilder<(
-        ins "Value":$input), [{
-            llvm::SmallVector<mlir::Type, 4> outputTypes;
-            outputTypes.push_back(odsBuilder.getType<dc::TokenType>());
-            dc::ValueType vt = input.getType().cast<dc::ValueType>();
-            llvm::append_range(outputTypes, vt.getInnerTypes());
-            build(odsBuilder, odsState, outputTypes, input);
-        }]>];
+  
+    let extraClassDeclaration = [{
+      /// Infer the return types of this operation.
+      static LogicalResult inferReturnTypes(MLIRContext *context,
+                                            std::optional<Location> loc,
+                                            ValueRange operands,
+                                            DictionaryAttr attrs,
+                                            mlir::OpaqueProperties properties,
+                                            mlir::RegionRange regions,
+                                            SmallVectorImpl<Type> &results);
+    }];
 }
 
 def MergeOp : DCOp<"merge"> {
@@ -405,5 +232,6 @@ def MergeOp : DCOp<"merge"> {
   let results = (outs I1ValueType:$output);
   let assemblyFormat = "$first `,` $second attr-dict";
 }
+
 
 #endif // CIRCT_DIALECT_DC_OPS_TD

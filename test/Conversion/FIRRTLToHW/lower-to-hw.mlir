@@ -13,37 +13,37 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK:      sv.ifdef  "PRINTF_COND_" {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ifdef  "PRINTF_COND" {
-  // CHECK-NEXT:     sv.verbatim "`define PRINTF_COND_ (`PRINTF_COND)"
+  // CHECK-NEXT:     sv.macro.def @PRINTF_COND_ "(`PRINTF_COND)"
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.verbatim "`define PRINTF_COND_ 1"
+  // CHECK-NEXT:     sv.macro.def @PRINTF_COND_ "1"
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
   // CHECK:      sv.ifdef  "ASSERT_VERBOSE_COND_" {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ifdef  "ASSERT_VERBOSE_COND" {
-  // CHECK-NEXT:     sv.verbatim "`define ASSERT_VERBOSE_COND_ (`ASSERT_VERBOSE_COND)"
+  // CHECK-NEXT:     sv.macro.def @ASSERT_VERBOSE_COND_ "(`ASSERT_VERBOSE_COND)"
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.verbatim "`define ASSERT_VERBOSE_COND_ 1"
+  // CHECK-NEXT:     sv.macro.def @ASSERT_VERBOSE_COND_ "1"
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
   // CHECK:      sv.ifdef  "STOP_COND_" {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ifdef  "STOP_COND" {
-  // CHECK-NEXT:     sv.verbatim "`define STOP_COND_ (`STOP_COND)"
+  // CHECK-NEXT:     sv.macro.def @STOP_COND_ "(`STOP_COND)"
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.verbatim "`define STOP_COND_ 1"
+  // CHECK-NEXT:     sv.macro.def @STOP_COND_ "1"
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
   // CHECK:      sv.ifdef  "INIT_RANDOM_PROLOG_" {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ifdef  "RANDOMIZE" {
   // CHECK-NEXT:     sv.ifdef  "VERILATOR" {
-  // CHECK-NEXT:       sv.verbatim "`define INIT_RANDOM_PROLOG_ `INIT_RANDOM"
+  // CHECK-NEXT:       sv.macro.def @INIT_RANDOM_PROLOG_ "`INIT_RANDOM"
   // CHECK-NEXT:     } else {
-  // CHECK-NEXT:       sv.verbatim "`define INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end"
+  // CHECK-NEXT:       sv.macro.def @INIT_RANDOM_PROLOG_ "`INIT_RANDOM #`RANDOMIZE_DELAY begin end"
   // CHECK-NEXT:     }
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.verbatim "`define INIT_RANDOM_PROLOG_"
+  // CHECK-NEXT:     sv.macro.def @INIT_RANDOM_PROLOG_ ""
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
 
@@ -349,13 +349,13 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK:      sv.ifdef "SYNTHESIS" {
     // CHECK-NEXT: } else  {
     // CHECK-NEXT:   sv.always posedge %clock {
-    // CHECK-NEXT:     %PRINTF_COND_ = sv.macro.ref< "PRINTF_COND_"> : i1
+    // CHECK-NEXT:     %PRINTF_COND_ = sv.macro.ref @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND_, %reset
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
     // CHECK-NEXT:       sv.fwrite [[FD]], "No operands!\0A"
     // CHECK-NEXT:     }
-    // CHECK-NEXT:     %PRINTF_COND__0 = sv.macro.ref< "PRINTF_COND_"> : i1
+    // CHECK-NEXT:     %PRINTF_COND__0 = sv.macro.ref @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__0, %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
@@ -389,7 +389,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: sv.ifdef "SYNTHESIS" {
     // CHECK-NEXT: } else {
     // CHECK-NEXT:   sv.always posedge %clock1 {
-    // CHECK-NEXT:     %STOP_COND_ = sv.macro.ref< "STOP_COND_"> : i1
+    // CHECK-NEXT:     %STOP_COND_ = sv.macro.ref @STOP_COND_
     // CHECK-NEXT:     %0 = comb.and bin %STOP_COND_, %reset : i1
     // CHECK-NEXT:     sv.if %0 {
     // CHECK-NEXT:       sv.fatal
@@ -398,7 +398,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.stop %clock1, %reset, 42 : !firrtl.clock, !firrtl.uint<1>
 
     // CHECK-NEXT:   sv.always posedge %clock2 {
-    // CHECK-NEXT:     %STOP_COND_ = sv.macro.ref< "STOP_COND_"> : i1
+    // CHECK-NEXT:     %STOP_COND_ = sv.macro.ref @STOP_COND_
     // CHECK-NEXT:     %0 = comb.and bin %STOP_COND_, %reset : i1
     // CHECK-NEXT:     sv.if %0 {
     // CHECK-NEXT:       sv.finish
@@ -566,11 +566,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: } else {
     // CHECK-NEXT:   sv.always posedge %clock {
     // CHECK-NEXT:     sv.if [[TMP2]] {
-    // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.macro.ref< "ASSERT_VERBOSE_COND_"> : i1
+    // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.macro.ref @ASSERT_VERBOSE_COND_
     // CHECK-NEXT:       sv.if [[ASSERT_VERBOSE_COND]] {
     // CHECK-NEXT:         sv.error "assert1 %d, %d"(%value, %false) : i42, i1
     // CHECK-NEXT:       }
-    // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.macro.ref< "STOP_COND_"> : i1
+    // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.macro.ref @STOP_COND_
     // CHECK-NEXT:       sv.if [[STOP_COND]] {
     // CHECK-NEXT:         sv.fatal
     // CHECK-NEXT:       }
@@ -1638,4 +1638,46 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:      }
   // CHECK-NEXT:    }
   // CHECK-NEXT:  }
+
+  // CHECK-LABEL: @SVAttr
+  // CHECK-SAME:  attributes {sv.attributes = [#sv.attribute<"keep_hierarchy = \22true\22">]}
+  // CHECK-NEXT: %w = hw.wire %a {sv.attributes = [#sv.attribute<"mark_debug = \22yes\22">]}
+  // CHECK-NEXT: %n = hw.wire %w {sv.attributes = [#sv.attribute<"mark_debug = \22yes\22">]}
+  // CHECK-NEXT: %r = seq.firreg %a clock %clock {firrtl.random_init_start = 0 : ui64, sv.attributes = [#sv.attribute<"keep = \22true\22", emitAsComment>]}
+  firrtl.module @SVAttr(in %a: !firrtl.uint<1>, in %clock: !firrtl.clock, out %b1: !firrtl.uint<1>, out %b2: !firrtl.uint<1>) attributes {convention = #firrtl<convention scalarized>, sv.attributes = [#sv.attribute<"keep_hierarchy = \22true\22">]} {
+    %w = firrtl.wire {sv.attributes = [#sv.attribute<"mark_debug = \22yes\22">]} : !firrtl.uint<1>
+    %n = firrtl.node %w {sv.attributes = [#sv.attribute<"mark_debug = \22yes\22">]} : !firrtl.uint<1>
+    %r = firrtl.reg %clock {firrtl.random_init_start = 0 : ui64, sv.attributes = [#sv.attribute<"keep = \22true\22", emitAsComment>]} : !firrtl.clock, !firrtl.uint<1>
+    firrtl.strictconnect %w, %a : !firrtl.uint<1>
+    firrtl.strictconnect %b1, %n : !firrtl.uint<1>
+    firrtl.strictconnect %r, %a : !firrtl.uint<1>
+    firrtl.strictconnect %b2, %r : !firrtl.uint<1>
+  }
+
+  // CHECK-LABEL: Elementwise
+  firrtl.module @Elementwise(in %a: !firrtl.vector<uint<1>, 2>, in %b: !firrtl.vector<uint<1>, 2>, out %c_0: !firrtl.vector<uint<1>, 2>, out %c_1: !firrtl.vector<uint<1>, 2>, out %c_2: !firrtl.vector<uint<1>, 2>) {
+    %0 = firrtl.elementwise_or %a, %b : (!firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>) -> !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %c_0, %0 : !firrtl.vector<uint<1>, 2>
+    %1 = firrtl.elementwise_and %a, %b : (!firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>) -> !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %c_1, %1 : !firrtl.vector<uint<1>, 2>
+    %2 = firrtl.elementwise_xor %a, %b : (!firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>) -> !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %c_2, %2 : !firrtl.vector<uint<1>, 2>
+
+    // CHECK-NEXT: %0 = hw.bitcast %a : (!hw.array<2xi1>) -> i2
+    // CHECK-NEXT: %1 = hw.bitcast %b : (!hw.array<2xi1>) -> i2
+    // CHECK-NEXT: %2 = comb.or %0, %1 : i2
+    // CHECK-NEXT: %[[OR:.+]] = hw.bitcast %2 : (i2) -> !hw.array<2xi1>
+
+    // CHECK-NEXT: %4 = hw.bitcast %a : (!hw.array<2xi1>) -> i2
+    // CHECK-NEXT: %5 = hw.bitcast %b : (!hw.array<2xi1>) -> i2
+    // CHECK-NEXT: %6 = comb.and %4, %5 : i2
+    // CHECK-NEXT: %[[AND:.+]] = hw.bitcast %6 : (i2) -> !hw.array<2xi1>
+
+    // CHECK-NEXT: %8 = hw.bitcast %a : (!hw.array<2xi1>) -> i2
+    // CHECK-NEXT: %9 = hw.bitcast %b : (!hw.array<2xi1>) -> i2
+    // CHECK-NEXT: %10 = comb.xor %8, %9 : i2
+    // CHECK-NEXT: %[[XOR:.+]] = hw.bitcast %10 : (i2) -> !hw.array<2xi1>
+
+    // CHECK-NEXT: hw.output %[[OR]], %[[AND]], %[[XOR]] : !hw.array<2xi1>, !hw.array<2xi1>, !hw.array<2xi1>
+  }
 }

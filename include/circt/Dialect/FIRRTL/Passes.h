@@ -30,6 +30,8 @@ createLowerFIRRTLAnnotationsPass(bool ignoreUnhandledAnnotations = false,
                                  bool ignoreClasslessAnnotations = false,
                                  bool noRefTypePorts = false);
 
+std::unique_ptr<mlir::Pass> createLowerOpenAggsPass();
+
 /// Configure which aggregate values will be preserved by the LowerTypes pass.
 namespace PreserveAggregate {
 enum PreserveMode {
@@ -120,6 +122,8 @@ std::unique_ptr<mlir::Pass> createSFCCompatPass();
 
 std::unique_ptr<mlir::Pass>
 createMergeConnectionsPass(bool enableAggressiveMerging = false);
+
+std::unique_ptr<mlir::Pass> createVectorizationPass();
 
 std::unique_ptr<mlir::Pass> createInjectDUTHierarchyPass();
 

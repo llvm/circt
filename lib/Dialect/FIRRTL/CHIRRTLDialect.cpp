@@ -118,12 +118,10 @@ void MemoryPortOp::build(OpBuilder &builder, OperationState &result,
         memory, direction, name, builder.getArrayAttr(annotations));
 }
 
-LogicalResult MemoryPortOp::inferReturnTypes(MLIRContext *context,
-                                             std::optional<Location> loc,
-                                             ValueRange operands,
-                                             DictionaryAttr attrs,
-                                             mlir::RegionRange regions,
-                                             SmallVectorImpl<Type> &results) {
+LogicalResult MemoryPortOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto inType = operands[0].getType();
   auto memType = inType.dyn_cast<CMemoryType>();
   if (!memType) {
@@ -194,8 +192,8 @@ void MemoryDebugPortOp::build(OpBuilder &builder, OperationState &result,
 
 LogicalResult MemoryDebugPortOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::RegionRange regions,
-    SmallVectorImpl<Type> &results) {
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto inType = operands[0].getType();
   auto memType = inType.dyn_cast<CMemoryType>();
   if (!memType) {
@@ -265,6 +263,11 @@ void CombMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), getName());
 }
 
+std::optional<size_t> CombMemOp::getTargetResultIndex() {
+  // Inner symbols on comb memory operations target the op not any result.
+  return std::nullopt;
+}
+
 //===----------------------------------------------------------------------===//
 // SeqMemOp
 //===----------------------------------------------------------------------===//
@@ -292,6 +295,11 @@ void SeqMemOp::build(OpBuilder &builder, OperationState &result,
 
 void SeqMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), getName());
+}
+
+std::optional<size_t> SeqMemOp::getTargetResultIndex() {
+  // Inner symbols on seq memory operations target the op not any result.
+  return std::nullopt;
 }
 
 //===----------------------------------------------------------------------===//

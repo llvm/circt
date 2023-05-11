@@ -28,94 +28,6 @@ bool circt::dc::isI1ValueType(Type t) {
 
 namespace circt {
 namespace dc {
-#include "circt/Dialect/DC/DCCanonicalization.h.inc"
-
-// =============================================================================
-// FuncOp
-// =============================================================================
-
-ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
-  auto buildFuncType =
-      [](Builder &builder, ArrayRef<Type> argTypes, ArrayRef<Type> results,
-         function_interface_impl::VariadicFlag,
-         std::string &) { return builder.getFunctionType(argTypes, results); };
-
-  return function_interface_impl::parseFunctionOp(
-      parser, result, /*allowVariadic=*/false,
-      dc::FuncOp::getFunctionTypeAttrName(result.name), buildFuncType,
-      dc::FuncOp::getArgAttrsAttrName(result.name),
-      dc::FuncOp::getResAttrsAttrName(result.name));
-}
-
-void FuncOp::print(OpAsmPrinter &p) {
-  mlir::function_interface_impl::printFunctionOp(
-      p, *this, /*isVariadic=*/false, getFunctionTypeAttrName(),
-      getArgAttrsAttrName(), getResAttrsAttrName());
-}
-
-void FuncOp::build(OpBuilder &builder, OperationState &state, StringRef name,
-                   FunctionType type, ArrayRef<NamedAttribute> attrs,
-                   ArrayRef<DictionaryAttr> argAttrs,
-                   ArrayRef<DictionaryAttr> resAttrs) {
-  state.addAttribute(SymbolTable::getSymbolAttrName(),
-                     builder.getStringAttr(name));
-  state.addAttribute(getFunctionTypeAttrName(state.name), TypeAttr::get(type));
-  state.attributes.append(attrs.begin(), attrs.end());
-  state.addRegion();
-
-  if (!argAttrs.empty())
-    assert(type.getNumInputs() == argAttrs.size());
-
-  if (!resAttrs.empty())
-    assert(type.getNumResults() == resAttrs.size());
-
-  function_interface_impl::addArgAndResultAttrs(
-      builder, state, argAttrs, /*resultAttrs=*/resAttrs,
-      getArgAttrsAttrName(state.name), getResAttrsAttrName(state.name));
-}
-
-// =============================================================================
-// CallOp
-// =============================================================================
-
-LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  // Check that the callee attribute was specified.
-  auto fnAttr = (*this)->getAttrOfType<FlatSymbolRefAttr>("callee");
-  if (!fnAttr)
-    return emitOpError("requires a 'callee' symbol reference attribute");
-  FuncOp fn = symbolTable.lookupNearestSymbolFrom<FuncOp>(*this, fnAttr);
-  if (!fn)
-    return emitOpError() << "'" << fnAttr.getValue()
-                         << "' does not reference a valid function";
-
-  // Verify that the operand and result types match the callee.
-  auto fnType = fn.getFunctionType();
-  if (fnType.getNumInputs() != getNumOperands())
-    return emitOpError("incorrect number of operands for callee");
-
-  for (unsigned i = 0, e = fnType.getNumInputs(); i != e; ++i)
-    if (getOperand(i).getType() != fnType.getInput(i))
-      return emitOpError("operand type mismatch: expected operand type ")
-             << fnType.getInput(i) << ", but provided "
-             << getOperand(i).getType() << " for operand number " << i;
-
-  if (fnType.getNumResults() != getNumResults())
-    return emitOpError("incorrect number of results for callee");
-
-  for (unsigned i = 0, e = fnType.getNumResults(); i != e; ++i)
-    if (getResult(i).getType() != fnType.getResult(i)) {
-      auto diag = emitOpError("result type mismatch at index ") << i;
-      diag.attachNote() << "      op result types: " << getResultTypes();
-      diag.attachNote() << "function result types: " << fnType.getResults();
-      return diag;
-    }
-
-  return success();
-}
-
-FunctionType CallOp::getCalleeType() {
-  return FunctionType::get(getContext(), getOperandTypes(), getResultTypes());
-}
 
 // =============================================================================
 // JoinOp
@@ -267,6 +179,11 @@ void JoinOp::getCanonicalizationPatterns(RewritePatternSet &results,
                  IdenticalJoinCanonicalizationPattern,
                  RedundantJoinOperandsPattern, JoinOnSourcePattern>(context);
 }
+// JoinOp
+// =============================================================================
+
+void JoinOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                         MLIRContext *context) {}
 
 // =============================================================================
 // ForkOp
@@ -280,8 +197,7 @@ static ParseResult parseIntInSquareBrackets(OpAsmParser &parser, TInt &v) {
 }
 
 ParseResult ForkOp::parse(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::UnresolvedOperand, 4> operands;
-  llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
+  OpAsmParser::UnresolvedOperand operand;
   size_t size = 0;
   if (parseIntInSquareBrackets(parser, size))
     return failure();
@@ -290,23 +206,12 @@ ParseResult ForkOp::parse(OpAsmParser &parser, OperationState &result) {
     return parser.emitError(parser.getNameLoc(),
                             "fork size must be greater than 0");
 
-  if (parser.parseOperandList(operands) ||
-      parser.parseOptionalAttrDict(result.attributes))
-    return failure();
-
+  if (parser.parseOperand(operand) ||
   auto tt = dc::TokenType::get(parser.getContext());
-  llvm::SmallVector<Type> operandTypes{tt};
-  SmallVector<Type, 1> resultTypes{size, tt};
-  result.addTypes(resultTypes);
-  if (parser.resolveOperands(operands, operandTypes, allOperandLoc,
-                             result.operands))
-    return failure();
-  return success();
 }
 
 void ForkOp::print(OpAsmPrinter &p) {
   p << "[" << getNumResults() << "] ";
-  p << getOperand() << " ";
   auto attrs = (*this)->getAttrs();
   if (!attrs.empty()) {
     p << " ";
@@ -453,6 +358,17 @@ LogicalResult UnpackOp::fold(FoldAdaptor adaptor,
   return failure();
 }
 
+LogicalResult UnpackOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  auto inputType = operands.front().getType().cast<ValueType>();
+  results.push_back(TokenType::get(context));
+  results.append(inputType.getInnerTypes().begin(),
+                 inputType.getInnerTypes().end());
+  return success();
+}
+
 // =============================================================================
 // PackOp
 // =============================================================================
@@ -499,15 +415,6 @@ public:
   }
 };
 
-void PackOp::build(OpBuilder &builder, OperationState &result, Value token,
-                   ValueRange data) {
-  llvm::SmallVector<Type> types;
-  llvm::transform(data, std::back_inserter(types),
-                  [](Value v) { return v.getType(); });
-  Type valueType = builder.getType<ValueType>(types);
-  build(builder, result, valueType, token, data);
-}
-
 void PackOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
   results.insert<EliminateMultiplePackPattern>(context);
@@ -531,6 +438,16 @@ OpFoldResult PackOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+LogicalResult PackOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  llvm::SmallVector<Type> inputTypes;
+  for (auto t : operands.drop_front().getTypes())
+    inputTypes.push_back(t);
+  return success();
+}
+
 // =============================================================================
 // SelectOp
 // =============================================================================
@@ -538,7 +455,6 @@ OpFoldResult PackOp::fold(FoldAdaptor adaptor) {
 class EliminateBranchToSelectPattern : public OpRewritePattern<SelectOp> {
   // Canonicalize away a select that is fed only by a single branch
   // example:
-  //   %true, %false = dc.branch %sel1 %token
   //   %0 = dc.select %sel2, %true, %false
   // ->
   //   %0 = dc.join %sel1, %sel2, %token
@@ -578,6 +494,36 @@ public:
 void SelectOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   results.insert<EliminateBranchToSelectPattern>(context);
+}
+
+// =============================================================================
+// BufferOp
+// =============================================================================
+
+FailureOr<SmallVector<int64_t>> BufferOp::getInitValueArray() {
+  assert(getInitValues() && "initValues attribute not set");
+  SmallVector<int64_t> values;
+  for (auto value : getInitValuesAttr()) {
+    if (auto iValue = value.dyn_cast<IntegerAttr>()) {
+      values.push_back(iValue.getValue().getSExtValue());
+    } else {
+      return emitError() << "initValues attribute must be an array of integers";
+    }
+  }
+  return values;
+}
+
+LogicalResult BufferOp::verify() {
+  // Verify that exactly 'size' number of initial values have been provided, if
+  // an initializer list have been provided.
+  if (auto initVals = getInitValuesAttr()) {
+    auto nInits = initVals.size();
+    if (nInits != getSize())
+      return emitOpError() << "expected " << getSize()
+                           << " init values but got " << nInits << ".";
+  }
+
+  return success();
 }
 
 } // namespace dc

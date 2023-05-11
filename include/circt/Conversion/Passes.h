@@ -28,7 +28,6 @@
 #include "circt/Conversion/DCToHW.h"
 #include "circt/Conversion/HWToLLVM.h"
 #include "circt/Conversion/HWToSystemC.h"
-#include "circt/Conversion/HandshakeToFIRRTL.h"
 #include "circt/Conversion/HandshakeToHW.h"
 #include "circt/Conversion/HandshakeToDC.h"
 #include "circt/Conversion/LLHDToLLVM.h"

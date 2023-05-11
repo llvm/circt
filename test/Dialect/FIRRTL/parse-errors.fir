@@ -448,6 +448,28 @@ circuit InProbeExt:
     inst e of BadExtMod
 
 ;// -----
+; Input probes not allowed anywhere for now.
+
+circuit InProbe:
+  module Child:
+    input p : Probe<UInt<1>> ; expected-error {{input probes not yet supported}}
+  module InProbe:
+    input x : UInt<1>
+    inst c of Child
+    define c.p = probe(x)
+
+;// -----
+; Input probes not allowed anywhere for now.
+
+circuit InProbeBundle:
+  module Child:
+    output out : { flip p: Probe<UInt<1>>} ; expected-error {{input probes not yet supported}}
+  module InProbeBundle:
+    input x : UInt<1>
+    inst c of Child
+    define c.out.p = probe(x)
+
+;// -----
 
 circuit RefDupe:
   extmodule RefDupe:
@@ -467,6 +489,13 @@ circuit RefNotString:
   extmodule RefNotString:
     output p : Probe<UInt<2>>
     ref p is a.b ; expected-error {{expected string in ref statement}}
+
+;// -----
+
+circuit RefForAggElement:
+  extmodule RefForAggElement:
+    output p : { x: Probe<UInt<2>> }
+    ref p.x is a.b ; expected-error {{ref statements for aggregate elements not yet supported}}
 
 ;// -----
 
@@ -599,3 +628,34 @@ circuit PartialConnect_v2p0p0:
     output b: UInt<1>
 
     b <- a ; expected-error {{unexpected token '<-' in statement}}
+
+;// -----
+
+FIRRTL version 2.0.0
+circuit RegReset_v2p0p0:
+  module RegReset_v2p0p0:
+    input clock: Clock
+
+    ; expected-error @below {{use of unknown declaration 'regreset'}}
+    regreset a: UInt<1>, clock, UInt<1>(0), UInt<1>(0)
+
+;// -----
+FIRRTL version 3.0.0
+circuit IllegalLiteral:
+  module IllegalLiteral:
+    input `b: UInt<1> ; expected-error {{unterminated literal identifier}}
+
+;// -----
+
+circuit WireProbe:
+  module WireProbe:
+    wire x : Probe<UInt<1>> ; expected-error {{wire must have base type}}
+
+;// -----
+
+circuit NodeProbe:
+  extmodule Ref:
+    output x : Probe<UInt<1>>
+  module NodeProbe:
+    inst r of Ref
+    node n = r.x ; expected-error {{Node cannot be analog and must be passive or passive under a flip}}

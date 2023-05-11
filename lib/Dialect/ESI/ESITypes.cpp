@@ -147,3 +147,12 @@ void ESIDialect::registerTypes() {
 #include "circt/Dialect/ESI/ESITypes.cpp.inc"
       >();
 }
+
+mlir::Type circt::esi::innerType(mlir::Type type) {
+  circt::esi::ChannelType chan =
+      type.dyn_cast_or_null<circt::esi::ChannelType>();
+  if (chan) // Unwrap the channel if it's a channel.
+    type = chan.getInner();
+
+  return type;
+}

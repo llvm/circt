@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_DC_TYPES_H
-#define CIRCT_DIALECT_DC_TYPES_H
+#ifndef CIRCT_DIALECT_DC_DCTYPES_H
+#define CIRCT_DIALECT_DC_DCTYPES_H
 
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Types.h"
@@ -15,4 +15,4 @@
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/DC/DCTypes.h.inc"
 
-#endif // CIRCT_DIALECT_DC_TYPES_H
+#endif // CIRCT_DIALECT_DC_DCTYPES_H

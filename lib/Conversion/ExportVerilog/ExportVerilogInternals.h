@@ -28,11 +28,6 @@ class GlobalNameResolver;
 /// Check if the value is from read of a wire or reg or is a port.
 bool isSimpleReadOrPort(Value v);
 
-/// If the given `op` is a declaration, return the attribute that dictates its
-/// name. For things like wires and registers this will be the `name` attribute,
-/// for instances this is `instanceName`, etc.
-StringAttr getDeclarationName(Operation *op);
-
 /// Given an expression that is spilled into a temporary wire, try to
 /// synthesize a better name than "_T_42" based on the structure of the
 /// expression.

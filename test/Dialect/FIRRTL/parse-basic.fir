@@ -1278,11 +1278,34 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output p : Probe<UInt<1>>
     p is invalid
 
+  ; CHECK-LABEL: module private @NumericFields
+  ; See: https://github.com/llvm/circt/issues/5110
+  module NumericFields:
+    input a: {0: {0: {bar: UInt<1>}}}
+    output b: UInt<1>
+    input c: {0: {0: {0: {bar: UInt<1>}}}}
+    output d: UInt<1>
+
+    ; CHECK:      %0 = firrtl.subfield %c["0"]
+    ; CHECK-NEXT: %1 = firrtl.subfield %0["0"]
+    ; CHECK-NEXT: %2 = firrtl.subfield %1["0"]
+    ; CHECK-NEXT: %3 = firrtl.subfield %2[bar]
+    ; CHECK-NEXT: %4 = firrtl.subfield %a["0"]
+    ; CHECK-NEXT: %5 = firrtl.subfield %4["0"]
+    ; CHECK-NEXT: %6 = firrtl.subfield %5[bar]
+    b <= a.0.0.bar
+    d <= c.0.0.0.bar
+    ; CHECK-NEXT: firrtl.strictconnect %b, %6
+    ; CHECK-NEXT: firrtl.strictconnect %d, %3
+
 ;// -----
 
+; CHECK-LABEL: firrtl.circuit "Foo_v3p0p0"
 FIRRTL version 3.0.0
 circuit Foo_v3p0p0:
   module Foo_v3p0p0:
+    input clock: Clock
+    input reset: UInt<1>
     input a: UInt<1>
     output b: UInt<1>
 
@@ -1292,6 +1315,29 @@ circuit Foo_v3p0p0:
     ; CHECK: [[INV:%.+]]  = firrtl.invalidvalue : !firrtl.uint<1>
     ; CHECK-NEXT: firrtl.strictconnect %b, [[INV]] : !firrtl.uint<1>
     invalidate b
+
+    ; CHECK:      %[[zero:[0-9A-Za-z_]+]] = firrtl.constant 0
+    ; CHECK-NEXT: %r = firrtl.regreset interesting_name %clock, %reset, %[[zero]]
+    regreset r: UInt<1>, clock, reset, UInt<1>(0)
+
+  ; CHECK: module private @LiteralIdentifiers
+  ; CHECK-SAME: in %_0: !firrtl.bundle<1: uint<1>>
+  ; CHECK-SAME: out %_2: !firrtl.bundle<3: uint<1>>
+  ; CHECK-SAME: portNames = ["0", "2"]
+  module LiteralIdentifiers:
+    input `0`: {`1`: UInt<1>}
+    output `2`: {`3`: UInt<1>}
+
+    ; CHECK-NEXT: %0 = firrtl.subfield %_0["1"] : !firrtl.bundle<1: uint<1>>
+    ; CHECK-NEXT: %1 = firrtl.subfield %_2["3"] : !firrtl.bundle<3: uint<1>>
+    ; CHECK-NEXT: firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+    `2`.`3` <= `0`.`1`
+
+    ; Ensure that `a` is equivalent to a.
+    ; CHECK-NEXT: %a = firrtl.node {{.+}}%_0
+    node `a` = `0`
+    ; CHECK-NEXT %b = firrtl.node {{.+}}%a
+    node b = a
 
 ;// -----
 

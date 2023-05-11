@@ -49,6 +49,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     chirrtl::CHIRRTLDialect,
     dc::DCDialect,
     comb::CombDialect,
+    dc::DCDialect,
     esi::ESIDialect,
     firrtl::FIRRTLDialect,
     fsm::FSMDialect,

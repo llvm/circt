@@ -390,7 +390,7 @@ else()
 
     string(REGEX MATCH "Icarus Verilog version (([0-9]+)\.([0-9]+)) \.*"
       MATCH ${IVERILOG_VERSION})
-    
+
     if (${CMAKE_MATCH_1} LESS 11.0)
       message(FATAL_ERROR "CIRCT only supports Icarus Verilog version 11.0 and up. \
                            Found version: ${CMAKE_MATCH_1}. You can disable \
@@ -471,6 +471,46 @@ else()
 endif()
 
 llvm_canonicalize_cmake_booleans(CIRCT_LLHD_SIM_ENABLED)
+
+#-------------------------------------------------------------------------------
+# circt-lec Configuration
+#-------------------------------------------------------------------------------
+# If circt-lec hasn't been explicitly disabled, find it.
+option(CIRCT_LEC_DISABLE "Disable the Logical Equivalence Checker" OFF)
+if(CIRCT_LEC_DISABLE)
+  message(STATUS "Disabling circt-lec")
+else()
+  if(Z3_DIR)
+    # Search and load the package configuration file in the specified directory.
+    find_package(Z3 CONFIG REQUIRED PATHS ${Z3_DIR} NO_DEFAULT_PATH)
+    if(Z3_FOUND)
+      # Report the found library location and version
+      # similarly to LLVM's `FindZ3` CMake module.
+      get_target_property(Z3_LIB_LOCATION z3::libz3 IMPORTED_LOCATION_DEBUG)
+      message(STATUS "Found Z3: ${Z3_LIB_LOCATION} (found version \"${Z3_VERSION_STRING}\")")
+    endif()
+    # Link against the reported library and include locations.
+    list(APPEND CIRCT_LEC_LIBS ${Z3_LIBRARIES})
+    list(APPEND CIRCT_LEC_INCLUDES ${Z3_CXX_INCLUDE_DIRS})
+  else()
+    # Attempt initialising Z3 according to LLVM's `FindZ3` CMake module.
+    find_package(Z3)
+    # Link against the reported library and include locations.
+    list(APPEND CIRCT_LEC_LIBS ${Z3_LIBRARIES})
+    list(APPEND CIRCT_LEC_INCLUDES ${Z3_INCLUDE_DIR})
+  endif()
+  
+  if(Z3_FOUND)
+    SET(CIRCT_LEC_Z3_VER 4.8.11)
+    if(Z3_VERSION_STRING VERSION_LESS ${CIRCT_LEC_Z3_VER})
+      message(WARNING "Cannot build circt-lec with outdated Z3 version ${Z3_VERSION_STRING}, requires ${CIRCT_LEC_Z3_VER}.")
+    else()
+      message(STATUS "Z3 identified as a logical backend.")
+      # Signal to proceed building circt-lec.
+      set(CIRCT_LEC_ENABLED ON)
+    endif()
+  endif()
+endif()
 
 #-------------------------------------------------------------------------------
 # Python Configuration

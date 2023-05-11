@@ -125,7 +125,7 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parsePropertiesResult.has_value()) {
     if (failed(*parsePropertiesResult))
       return failure();
-    result.addAttribute(builder.getStringAttr("properties"), properties);
+    result.addAttribute(builder.getStringAttr("sspProperties"), properties);
   }
 
   // Parse default attr-dict
@@ -199,7 +199,7 @@ void OperationOp::print(OpAsmPrinter &p) {
   p << ')';
 
   // Properties
-  if (ArrayAttr properties = getPropertiesAttr()) {
+  if (ArrayAttr properties = getSspPropertiesAttr()) {
     p << ' ';
     printPropertyArray(properties, p, alreadyPrinted);
   }
@@ -208,7 +208,7 @@ void OperationOp::print(OpAsmPrinter &p) {
   SmallVector<StringRef> elidedAttrs = {
       SymbolTable::getSymbolAttrName(),
       OperationOp::getDependencesAttrName().getValue(),
-      OperationOp::getPropertiesAttrName().getValue()};
+      OperationOp::getSspPropertiesAttrName().getValue()};
   p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
 }
 
@@ -298,7 +298,7 @@ OperationOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 LinkedOperatorTypeAttr OperationOp::getLinkedOperatorTypeAttr() {
-  if (ArrayAttr properties = getPropertiesAttr()) {
+  if (ArrayAttr properties = getSspPropertiesAttr()) {
     const auto *it = llvm::find_if(properties, [](Attribute a) {
       return a.isa<LinkedOperatorTypeAttr>();
     });
@@ -312,14 +312,14 @@ LinkedOperatorTypeAttr OperationOp::getLinkedOperatorTypeAttr() {
 // Wrappers for the `custom<Properties>` ODS directive.
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseProperties(OpAsmParser &parser, ArrayAttr &attr) {
+static ParseResult parseSSPProperties(OpAsmParser &parser, ArrayAttr &attr) {
   auto result = parseOptionalPropertyArray(attr, parser);
   if (!result.has_value() || succeeded(*result))
     return success();
   return failure();
 }
 
-static void printProperties(OpAsmPrinter &p, Operation *op, ArrayAttr attr) {
+static void printSSPProperties(OpAsmPrinter &p, Operation *op, ArrayAttr attr) {
   if (!attr)
     return;
   printPropertyArray(attr, p);

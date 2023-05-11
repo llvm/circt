@@ -6,20 +6,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_DC_OPS_H
-#define CIRCT_DIALECT_DC_OPS_H
+#ifndef CIRCT_DIALECT_DC_DCOPS_H
+#define CIRCT_DIALECT_DC_DCOPS_H
 
+#include "circt/Dialect/DC/DCTypes.h"
 #include "mlir/IR/FunctionInterfaces.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
+#include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
-
-#include "circt/Dialect/DC/DCDialect.h"
-#include "circt/Dialect/DC/DCTypes.h"
-
 namespace circt {
 namespace dc {
 
@@ -32,4 +30,4 @@ bool isI1ValueType(Type t);
 #define GET_OP_CLASSES
 #include "circt/Dialect/DC/DC.h.inc"
 
-#endif // CIRCT_DIALECT_DC_OPS_H
+#endif // CIRCT_DIALECT_DC_DCOPS_H

@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/DC/DCDialect.h"
 #include "circt/Dialect/DC/DCTypes.h"
+#include "circt/Dialect/DC/DCDialect.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"

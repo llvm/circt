@@ -262,6 +262,13 @@ def CallIndirectOp : SystemCOp<"cpp.call_indirect", [
 
     /// Return the callee of this operation.
     CallInterfaceCallable getCallableForCallee() { return getCallee(); }
+
+    /// Set the callee for this operation.
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      assert(0 && "setCallee not possible");
+      abort();
+    }
+
   }];
 
   let assemblyFormat = [{
@@ -330,6 +337,12 @@ def CallOp : SystemCOp<"cpp.call", [
     CallInterfaceCallable getCallableForCallee() {
       return (*this)->getAttrOfType<SymbolRefAttr>("callee");
     }
+
+    /// Set the callee for this operation.
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getCalleeAttrName(), callee.get<mlir::SymbolRefAttr>());
+    }
+
   }];
 
   let assemblyFormat = [{

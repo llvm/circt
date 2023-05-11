@@ -773,28 +773,40 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   // comments on the output of this boilerplate in generated Verilog.
   ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op);
 
+  StringSet<> emittedDecls;
+
+  auto emitDecl = [&](StringRef name, ArrayAttr args) {
+    if (emittedDecls.count(name))
+      return;
+    emittedDecls.insert(name);
+    OpBuilder::InsertionGuard guard(b);
+    b.setInsertionPointAfter(op);
+    b.create<sv::MacroDeclOp>(name, args, StringAttr());
+  };
+
   // TODO: We could have an operation for macros and uses of them, and
   // even turn them into symbols so we can DCE unused macro definitions.
-  auto emitString = [&](StringRef verilogString) {
-    b.create<sv::VerbatimOp>(verilogString);
+  auto emitDefine = [&](StringRef name, StringRef body, ArrayAttr args = {}) {
+    emitDecl(name, args);
+    b.create<sv::MacroDefOp>(name, body);
   };
 
   // Helper function to emit a "#ifdef guard" with a `define in the then and
   // optionally in the else branch.
-  auto emitGuardedDefine = [&](const char *guard, const char *defineTrue,
-                               const char *defineFalse = nullptr) {
-    std::string define = "`define ";
-    if (!defineFalse) {
-      assert(defineTrue && "didn't define anything");
-      b.create<sv::IfDefOp>(guard, [&]() { emitString(define + defineTrue); });
+  auto emitGuardedDefine = [&](StringRef guard, StringRef defName,
+                               StringRef defineTrue = "",
+                               StringRef defineFalse = StringRef()) {
+    if (!defineFalse.data()) {
+      assert(defineTrue.data() && "didn't define anything");
+      b.create<sv::IfDefOp>(guard, [&]() { emitDefine(defName, defineTrue); });
     } else {
       b.create<sv::IfDefOp>(
           guard,
           [&]() {
-            if (defineTrue)
-              emitString(define + defineTrue);
+            if (defineTrue.data())
+              emitDefine(defName, defineTrue);
           },
-          [&]() { emitString(define + defineFalse); });
+          [&]() { emitDefine(defName, defineFalse); });
     }
   };
 
@@ -816,7 +828,8 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
       !state.used_ASSERT_VERBOSE_COND && !state.used_STOP_COND)
     return;
 
-  emitString("// Standard header to adapt well known macros to our needs.");
+  b.create<sv::VerbatimOp>(
+      "// Standard header to adapt well known macros to our needs.");
 
   bool needRandom = false;
   if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
@@ -837,84 +850,91 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   }
 
   if (needRandom) {
-    emitString("\n// RANDOM may be set to an expression that produces a 32-bit "
-               "random unsigned value.");
-    emitGuardedDefine("RANDOM", nullptr, "RANDOM $random");
+    b.create<sv::VerbatimOp>(
+        "\n// RANDOM may be set to an expression that produces a 32-bit "
+        "random unsigned value.");
+    emitGuardedDefine("RANDOM", "RANDOM", StringRef(), "$random");
   }
 
   if (state.used_PRINTF_COND) {
-    emitString("\n// Users can define 'PRINTF_COND' to add an extra gate to "
-               "prints.");
+    b.create<sv::VerbatimOp>(
+        "\n// Users can define 'PRINTF_COND' to add an extra gate to "
+        "prints.");
     emitGuard("PRINTF_COND_", [&]() {
-      emitGuardedDefine("PRINTF_COND", "PRINTF_COND_ (`PRINTF_COND)",
-                        "PRINTF_COND_ 1");
+      emitGuardedDefine("PRINTF_COND", "PRINTF_COND_", "(`PRINTF_COND)", "1");
     });
   }
 
   if (state.used_ASSERT_VERBOSE_COND) {
-    emitString("\n// Users can define 'ASSERT_VERBOSE_COND' to add an extra "
-               "gate to assert error printing.");
+    b.create<sv::VerbatimOp>(
+        "\n// Users can define 'ASSERT_VERBOSE_COND' to add an extra "
+        "gate to assert error printing.");
     emitGuard("ASSERT_VERBOSE_COND_", [&]() {
-      emitGuardedDefine("ASSERT_VERBOSE_COND",
-                        "ASSERT_VERBOSE_COND_ (`ASSERT_VERBOSE_COND)",
-                        "ASSERT_VERBOSE_COND_ 1");
+      emitGuardedDefine("ASSERT_VERBOSE_COND", "ASSERT_VERBOSE_COND_",
+                        "(`ASSERT_VERBOSE_COND)", "1");
     });
   }
 
   if (state.used_STOP_COND) {
-    emitString("\n// Users can define 'STOP_COND' to add an extra gate "
-               "to stop conditions.");
+    b.create<sv::VerbatimOp>(
+        "\n// Users can define 'STOP_COND' to add an extra gate "
+        "to stop conditions.");
     emitGuard("STOP_COND_", [&]() {
-      emitGuardedDefine("STOP_COND", "STOP_COND_ (`STOP_COND)", "STOP_COND_ 1");
+      emitGuardedDefine("STOP_COND", "STOP_COND_", "(`STOP_COND)", "1");
     });
   }
 
   if (needRandom) {
-    emitString("\n// Users can define INIT_RANDOM as general code that gets "
-               "injected "
-               "into the\n// initializer block for modules with registers.");
-    emitGuardedDefine("INIT_RANDOM", nullptr, "INIT_RANDOM");
+    b.create<sv::VerbatimOp>(
+        "\n// Users can define INIT_RANDOM as general code that gets "
+        "injected "
+        "into the\n// initializer block for modules with registers.");
+    emitGuardedDefine("INIT_RANDOM", "INIT_RANDOM", StringRef(), "");
 
-    emitString(
+    b.create<sv::VerbatimOp>(
         "\n// If using random initialization, you can also define "
         "RANDOMIZE_DELAY to\n// customize the delay used, otherwise 0.002 "
         "is used.");
-    emitGuardedDefine("RANDOMIZE_DELAY", nullptr, "RANDOMIZE_DELAY 0.002");
+    emitGuardedDefine("RANDOMIZE_DELAY", "RANDOMIZE_DELAY", StringRef(),
+                      "0.002");
 
-    emitString("\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
+    b.create<sv::VerbatimOp>(
+        "\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
     emitGuard("INIT_RANDOM_PROLOG_", [&]() {
       b.create<sv::IfDefOp>(
           "RANDOMIZE",
           [&]() {
-            emitGuardedDefine(
-                "VERILATOR", "INIT_RANDOM_PROLOG_ `INIT_RANDOM",
-                "INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end");
+            emitGuardedDefine("VERILATOR", "INIT_RANDOM_PROLOG_",
+                              "`INIT_RANDOM",
+                              "`INIT_RANDOM #`RANDOMIZE_DELAY begin end");
           },
-          [&]() { emitString("`define INIT_RANDOM_PROLOG_"); });
+          [&]() { emitDefine("INIT_RANDOM_PROLOG_", ""); });
     });
   }
 
   if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
-    emitString("\n// RANDOMIZE_GARBAGE_ASSIGN enable range checks for mem "
-               "assignments.");
+    b.create<sv::VerbatimOp>(
+        "\n// RANDOMIZE_GARBAGE_ASSIGN enable range checks for mem "
+        "assignments.");
     emitGuard("RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK", [&]() {
       b.create<sv::IfDefOp>(
           "RANDOMIZE_GARBAGE_ASSIGN",
           [&]() {
-            emitString(
-                "`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, VALUE, "
-                "SIZE) \\");
-            emitString("  ((INDEX) < (SIZE) ? (VALUE) : {`RANDOM})");
+            StringRef args[] = {"INDEX", "VALUE", "SIZE"};
+            emitDefine("RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK",
+                       "  ((INDEX) < (SIZE) ? (VALUE) : {`RANDOM})",
+                       b.getStrArrayAttr(ArrayRef(args)));
           },
           [&]() {
-            emitString("`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, "
-                       "VALUE, SIZE) (VALUE)");
+            StringRef args[] = {"INDEX", "VALUE", "SIZE"};
+            emitDefine("RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK", "(VALUE)",
+                       b.getStrArrayAttr(args));
           });
     });
   }
 
   // Blank line to separate the header from the modules.
-  emitString("");
+  b.create<sv::VerbatimOp>("");
 }
 
 LogicalResult
@@ -1166,6 +1186,10 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
     newModule->setAttr("output_file", outputFile);
   if (auto comment = oldModule->getAttrOfType<StringAttr>("comment"))
     newModule.setCommentAttr(comment);
+
+  // Move SV attributes.
+  if (auto svAttrs = sv::getSVAttributes(oldModule))
+    sv::setSVAttributes(newModule, svAttrs);
 
   // Pass along the number of random initialization bits needed for this module.
   if (auto randomWidth = oldModule->getAttr("firrtl.random_init_width"))
@@ -1572,6 +1596,10 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult lowerBinOp(Operation *op);
   template <typename ResultOpType>
   LogicalResult lowerBinOpToVariadic(Operation *op);
+
+  template <typename ResultOpType>
+  LogicalResult lowerElementwiseLogicalOp(Operation *op);
+
   LogicalResult lowerCmpOp(Operation *op, ICmpPredicate signedOp,
                            ICmpPredicate unsignedOp);
   template <typename SignedOp, typename UnsignedOp>
@@ -1587,6 +1615,15 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   }
   LogicalResult visitExpr(XorPrimOp op) {
     return lowerBinOpToVariadic<comb::XorOp>(op);
+  }
+  LogicalResult visitExpr(ElementwiseOrPrimOp op) {
+    return lowerElementwiseLogicalOp<comb::OrOp>(op);
+  }
+  LogicalResult visitExpr(ElementwiseAndPrimOp op) {
+    return lowerElementwiseLogicalOp<comb::AndOp>(op);
+  }
+  LogicalResult visitExpr(ElementwiseXorPrimOp op) {
+    return lowerElementwiseLogicalOp<comb::XorOp>(op);
   }
   LogicalResult visitExpr(AddPrimOp op) {
     return lowerBinOpToVariadic<comb::AddOp>(op);
@@ -2795,8 +2832,13 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   }
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
-  return setLoweringTo<hw::WireOp>(op, getOrCreateZConstant(resultType), name,
-                                   symName);
+  auto wire = builder.create<hw::WireOp>(
+      op.getLoc(), getOrCreateZConstant(resultType), name, symName);
+
+  if (auto svAttrs = sv::getSVAttributes(op))
+    sv::setSVAttributes(wire, svAttrs);
+
+  return setLowering(op.getResult(), wire);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
@@ -2851,6 +2893,13 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   if (symName)
     operand = builder.create<hw::WireOp>(operand, name, symName);
 
+  // Move SV attributes.
+  if (auto svAttrs = sv::getSVAttributes(op)) {
+    if (!symName)
+      operand = builder.create<hw::WireOp>(operand, name);
+    sv::setSVAttributes(operand.getDefiningOp(), svAttrs);
+  }
+
   return setLowering(op.getResult(), operand);
 }
 
@@ -2885,6 +2934,10 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
     reg->setAttr("firrtl.random_init_start", randomStart);
   if (auto randomEnd = op->getAttr("firrtl.random_init_end"))
     reg->setAttr("firrtl.random_init_end", randomEnd);
+
+  // Move SV attributes.
+  if (auto svAttrs = sv::getSVAttributes(op))
+    sv::setSVAttributes(reg, svAttrs);
 
   inputEdge.setValue(reg);
   circuitState.used_RANDOMIZE_REG_INIT = 1;
@@ -2930,6 +2983,10 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
     reg->setAttr("firrtl.random_init_start", randomStart);
   if (auto randomEnd = op->getAttr("firrtl.random_init_end"))
     reg->setAttr("firrtl.random_init_end", randomEnd);
+
+  // Move SV attributes.
+  if (auto svAttrs = sv::getSVAttributes(op))
+    sv::setSVAttributes(reg, svAttrs);
 
   inputEdge.setValue(reg);
   circuitState.used_RANDOMIZE_REG_INIT = 1;
@@ -3444,6 +3501,32 @@ LogicalResult FIRRTLLowering::lowerBinOpToVariadic(Operation *op) {
     return failure();
 
   return setLoweringTo<ResultOpType>(op, lhs, rhs, true);
+}
+
+/// Element-wise logical operations can be lowered into bitcast and normal comb
+/// operations. Eventually we might want to introduce elementwise operations
+/// into HW/SV level as well.
+template <typename ResultOpType>
+LogicalResult FIRRTLLowering::lowerElementwiseLogicalOp(Operation *op) {
+  auto resultType = op->getResult(0).getType();
+  auto lhs = getLoweredAndExtendedValue(op->getOperand(0), resultType);
+  auto rhs = getLoweredAndExtendedValue(op->getOperand(1), resultType);
+
+  if (!lhs || !rhs)
+    return failure();
+  auto bitwidth = firrtl::getBitWidth(resultType.cast<FIRRTLBaseType>());
+
+  if (!bitwidth)
+    return failure();
+
+  // TODO: Introduce elementwise operations to HW dialect instead of abusing
+  // bitcast operations.
+  auto intType = builder.getIntegerType(*bitwidth);
+  auto retType = lhs.getType();
+  lhs = builder.createOrFold<hw::BitcastOp>(intType, lhs);
+  rhs = builder.createOrFold<hw::BitcastOp>(intType, rhs);
+  return setLoweringTo<hw::BitcastOp>(
+      op, retType, builder.createOrFold<ResultOpType>(lhs, rhs));
 }
 
 /// lowerBinOp extends each operand to the destination type, then performs the

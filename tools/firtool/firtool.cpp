@@ -430,11 +430,12 @@ static bool checkBytecodeOutputToConsole(raw_ostream &os) {
 
 /// Print the operation to the specified stream, emitting bytecode when
 /// requested and politely avoiding dumping to terminal unless forced.
-static void printOp(Operation *op, raw_ostream &os) {
+static LogicalResult printOp(Operation *op, raw_ostream &os) {
   if (emitBytecode && (force || !checkBytecodeOutputToConsole(os)))
-    writeBytecodeToFile(op, os, mlir::BytecodeWriterConfig(getCirctVersion()));
-  else
-    op->print(os);
+    return writeBytecodeToFile(op, os,
+                               mlir::BytecodeWriterConfig(getCirctVersion()));
+  op->print(os);
+  return success();
 }
 
 /// Process a single buffer of the input.
@@ -511,6 +512,9 @@ static LogicalResult processBuffer(
   if (failed(applyPassManagerCLOptions(pm)))
     return failure();
 
+  // Legalize away "open" aggregates to hw-only versions.
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerOpenAggsPass());
+
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
       disableAnnotationsUnknown, disableAnnotationsClassless,
       lowerAnnotationsNoRefTypePorts));
@@ -520,8 +524,7 @@ static LogicalResult processBuffer(
     if (failed(pm.run(module.get())))
       return failure();
     auto outputTimer = ts.nest("Print .mlir output");
-    printOp(*module, (*outputFile)->os());
-    return success();
+    return printOp(*module, (*outputFile)->os());
   }
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerIntrinsicsPass());
@@ -537,6 +540,11 @@ static LogicalResult processBuffer(
 
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLowerCHIRRTLPass());
+
+  // Run LowerMatches before InferWidths, as the latter does not support the
+  // match statement, but it does support what they lower to.
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      firrtl::createLowerMatchesPass());
 
   // Width inference creates canonicalization opportunities.
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
@@ -576,7 +584,6 @@ static LogicalResult processBuffer(
       preserveAggregate, firrtl::PreserveAggregate::None));
   // Only enable expand whens if lower types is also enabled.
   auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-  modulePM.addPass(firrtl::createLowerMatchesPass());
   modulePM.addPass(firrtl::createExpandWhensPass());
   modulePM.addPass(firrtl::createSFCCompatPass());
 
@@ -666,6 +673,10 @@ static LogicalResult processBuffer(
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createMergeConnectionsPass(
           !disableAggressiveMergeConnections.getValue()));
+
+  if (!disableOptimization)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createVectorizationPass());
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {
@@ -794,7 +805,8 @@ static LogicalResult processBuffer(
   if (outputFormat == OutputIRFir || outputFormat == OutputIRHW ||
       outputFormat == OutputIRSV || outputFormat == OutputIRVerilog) {
     auto outputTimer = ts.nest("Print .mlir output");
-    printOp(*module, (*outputFile)->os());
+    if (failed(printOp(*module, (*outputFile)->os())))
+      return failure();
   }
 
   // If requested, print the final MLIR into mlirOutFile.
@@ -806,7 +818,8 @@ static LogicalResult processBuffer(
       return failure();
     }
 
-    printOp(*module, mlirFile->os());
+    if (failed(printOp(*module, mlirFile->os())))
+      return failure();
     mlirFile->keep();
   }
 

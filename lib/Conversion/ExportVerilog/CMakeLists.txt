@@ -2,6 +2,7 @@
 add_circt_translation_library(CIRCTExportVerilog
   ApplyLoweringOptions.cpp
   ExportVerilog.cpp
+  LegalizeAnonEnums.cpp
   LegalizeNames.cpp
   PrepareForEmission.cpp
   PruneZeroValuedLogic.cpp
@@ -23,4 +24,4 @@ add_circt_translation_library(CIRCTExportVerilog
   MLIRPass
   MLIRSideEffectInterfaces
   MLIRTransforms
-  )
+)

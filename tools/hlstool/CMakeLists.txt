@@ -12,11 +12,7 @@ target_link_libraries(hlstool
   CIRCTESI
   CIRCTExportChiselInterface
   CIRCTExportVerilog
-  CIRCTFIRRTL
-  CIRCTFIRRTLToHW
-  CIRCTFIRRTLTransforms
   CIRCTHandshake
-  CIRCTHandshakeToFIRRTL
   CIRCTHandshakeToHW
   CIRCTHandshakeTransforms
   CIRCTHW

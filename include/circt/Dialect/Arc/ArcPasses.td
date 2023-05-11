@@ -37,6 +37,13 @@ def Dedup : Pass<"arc-dedup", "mlir::ModuleOp"> {
   let dependentDialects = ["arc::ArcDialect"];
 }
 
+def GroupResetsAndEnables : Pass<"arc-group-resets-and-enables",
+                                 "mlir::ModuleOp"> {
+  let summary = "Group reset and enable conditions of lowered states";
+  let constructor = "circt::arc::createGroupResetsAndEnablesPass()";
+  let dependentDialects = ["arc::ArcDialect", "mlir::scf::SCFDialect"];
+}
+
 def InferMemories : Pass<"arc-infer-memories", "mlir::ModuleOp"> {
   let summary = "Convert `FIRRTL_Memory` instances to dedicated memory ops";
   let constructor = "circt::arc::createInferMemoriesPass()";
@@ -54,6 +61,12 @@ def InlineArcs : Pass<"arc-inline" , "mlir::ModuleOp"> {
       "Arcs removed after full inlining">,
     Statistic<"numTrivialArcs", "trivial-arcs", "Arcs with very few ops">,
     Statistic<"numSingleUseArcs", "single-use-arcs", "Arcs with a single use">,
+  ];
+  let options = [
+    Option<"intoArcsOnly", "into-arcs-only", "bool", "false",
+           "Call operations to inline">,
+    Option<"maxNonTrivialOpsInBody", "max-body-ops", "unsigned", "3",
+           "Max number of non-trivial ops in the region to be inlined">,
   ];
 }
 
@@ -76,6 +89,25 @@ def InferStateProperties : Pass<"arc-infer-state-properties",
   let summary = "Add resets and enables explicitly to the state operations";
   let constructor = "circt::arc::createInferStatePropertiesPass()";
   let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
+}
+
+def IsolateClocks : Pass<"arc-isolate-clocks", "mlir::ModuleOp"> {
+  let summary = "Group clocked operations into clock domains";
+  let constructor = "circt::arc::createIsolateClocksPass()";
+  let dependentDialects = ["arc::ArcDialect"];
+}
+
+def LatencyRetiming : Pass<"arc-latency-retiming", "mlir::ModuleOp"> {
+  let summary = "Push latencies through the design";
+  let constructor = "circt::arc::createLatencyRetimingPass()";
+  let dependentDialects = ["arc::ArcDialect"];
+
+  let statistics = [
+    Statistic<"numOpsRemoved", "num-ops-removed",
+      "Number of zero-latency passthrough states removed">,
+    Statistic<"latencyUnitsSaved", "latency-units-saved",
+      "Number of latency units saved by merging them in a successor state">
+  ];
 }
 
 def LegalizeStateUpdate : Pass<"arc-legalize-state-update", "mlir::ModuleOp"> {

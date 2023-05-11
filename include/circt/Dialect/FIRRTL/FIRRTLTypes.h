@@ -38,6 +38,8 @@ class SIntType;
 class UIntType;
 class AnalogType;
 class BundleType;
+class OpenBundleType;
+class OpenVectorType;
 class FVectorType;
 class FEnumType;
 class RefType;
@@ -50,6 +52,8 @@ struct RecursiveTypeProperties {
   bool containsReference : 1;
   /// Whether the type contains an analog type.
   bool containsAnalog : 1;
+  /// Whether the type contains a const type.
+  bool containsConst : 1;
   /// Whether the type has any uninferred bit widths.
   bool hasUninferredWidth : 1;
   /// Whether the type has any uninferred reset.
@@ -64,34 +68,16 @@ public:
     return llvm::isa<FIRRTLDialect>(type.getDialect());
   }
 
-protected:
-  using Type::Type;
-};
+  /// Return the recursive properties of the type, containing the `isPassive`,
+  /// `containsAnalog`, and `hasUninferredWidth` bits, among others.
+  RecursiveTypeProperties getRecursiveTypeProperties() const;
 
-// Common base class for all base FIRRTL types.
-class FIRRTLBaseType
-    : public FIRRTLType::TypeBase<FIRRTLBaseType, FIRRTLType,
-                                  detail::FIRRTLBaseTypeStorage> {
-public:
-  using Base::Base;
+  //===--------------------------------------------------------------------===//
+  // Convenience methods for accessing recursive type properties
+  //===--------------------------------------------------------------------===//
 
-  /// Return true if this is a "passive" type - one that contains no "flip"
-  /// types recursively within itself.
-  bool isPassive() const { return getRecursiveTypeProperties().isPassive; }
-
-  /// Returns true if this is a "passive" that which is not analog.
-  bool isRegisterType() { return isPassive() && !containsAnalog(); }
-
-  /// Return true if this is a 'ground' type, aka a non-aggregate type.
-  bool isGround();
-
-  /// Return true if this is a "passive" type - one that contains no "flip"
-  /// types recursively within itself.
-  bool isPassive() { return getRecursiveTypeProperties().isPassive; }
-
-  /// Returns true if this is a 'const' type that can only hold compile-time
-  /// constant values
-  bool isConst();
+  /// Returns true if this is or contains a 'const' type.
+  bool containsConst() { return getRecursiveTypeProperties().containsConst; }
 
   /// Return true if this is or contains an Analog type.
   bool containsAnalog() { return getRecursiveTypeProperties().containsAnalog; }
@@ -111,9 +97,35 @@ public:
     return getRecursiveTypeProperties().hasUninferredReset;
   }
 
-  /// Return the recursive properties of the type, containing the `isPassive`,
-  /// `containsAnalog`, and `hasUninferredWidth` bits.
-  RecursiveTypeProperties getRecursiveTypeProperties() const;
+  //===--------------------------------------------------------------------===//
+  // Type classifications
+  //===--------------------------------------------------------------------===//
+
+  /// Return true if this is a 'ground' type, aka a non-aggregate type.
+  bool isGround();
+
+  /// Returns true if this is a 'const' type that can only hold compile-time
+  /// constant values
+  bool isConst();
+
+protected:
+  using Type::Type;
+};
+
+// Common base class for all base FIRRTL types.
+class FIRRTLBaseType
+    : public FIRRTLType::TypeBase<FIRRTLBaseType, FIRRTLType,
+                                  detail::FIRRTLBaseTypeStorage> {
+public:
+  using Base::Base;
+
+  /// Returns true if this is a 'const' type that can only hold compile-time
+  /// constant values
+  bool isConst();
+
+  /// Return true if this is a "passive" type - one that contains no "flip"
+  /// types recursively within itself.
+  bool isPassive() const { return getRecursiveTypeProperties().isPassive; }
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLBaseType getPassiveType();
@@ -138,11 +150,21 @@ public:
 
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
-    return llvm::isa<FIRRTLDialect>(type.getDialect()) && !type.isa<RefType>();
+    return llvm::isa<FIRRTLDialect>(type.getDialect()) &&
+           !type.isa<RefType, OpenBundleType, OpenVectorType>();
+  }
+
+  /// Returns true if this is a non-const "passive" that which is not analog.
+  bool isRegisterType() {
+    return isPassive() && !containsAnalog() && !containsConst();
   }
 
   /// Return true if this is a valid "reset" type.
   bool isResetType();
+
+  //===--------------------------------------------------------------------===//
+  // hw::FieldIDTypeInterface
+  //===--------------------------------------------------------------------===//
 
   /// Get the maximum field ID of this type.  For integers and other ground
   /// types, there are no subfields and the maximum field ID is 0.  For bundle
@@ -166,11 +188,6 @@ public:
   /// subfield op. Returns the new id and whether the id is in the given
   /// child.
   std::pair<uint64_t, bool> rootChildFieldID(uint64_t fieldID, uint64_t index);
-
-  /// Get the number of ground (non-aggregate) fields in the type.  A field
-  /// which is a bundle or vector is not counted, but the recursive ground
-  /// fields of are.
-  uint64_t getGroundFields() const;
 };
 
 /// Returns whether the two types are equivalent.  This implements the exact

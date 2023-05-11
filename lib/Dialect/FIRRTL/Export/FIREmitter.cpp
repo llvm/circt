@@ -75,6 +75,11 @@ struct Emitter {
   void emitStatement(MemoryPortOp op);
   void emitStatement(MemoryDebugPortOp op);
   void emitStatement(MemoryPortAccessOp op);
+  void emitStatement(RefDefineOp op);
+  void emitStatement(RefForceOp op);
+  void emitStatement(RefForceInitialOp op);
+  void emitStatement(RefReleaseOp op);
+  void emitStatement(RefReleaseInitialOp op);
 
   template <class T>
   void emitVerifStatement(T op, StringRef mnemonic);
@@ -89,6 +94,10 @@ struct Emitter {
   void emitExpression(SubfieldOp op);
   void emitExpression(SubindexOp op);
   void emitExpression(SubaccessOp op);
+  void emitExpression(RefSendOp op);
+  void emitExpression(RefResolveOp op);
+  void emitExpression(UninferredResetCastOp op);
+  void emitExpression(UninferredWidthCastOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -322,7 +331,8 @@ void Emitter::emitStatementsInBlock(Block &block) {
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
               PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp, StrictConnectOp,
               InstanceOp, AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
-              MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp>(
+              MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp,
+              RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           indent() << "// operation " << op->getName() << "\n";
@@ -606,6 +616,90 @@ void Emitter::emitStatement(MemoryPortAccessOp op) {
   emitLocationAndNewLine(op);
 }
 
+void Emitter::emitStatement(RefDefineOp op) {
+  indent();
+  os << "define ";
+  emitExpression(op.getDest());
+  os << " = ";
+  auto src = op.getSrc();
+  if (auto forceable = src.getDefiningOp<Forceable>();
+      forceable && forceable.isForceable() && forceable.getDataRef() == src) {
+    os << "rwprobe(";
+    emitExpression(forceable.getData());
+    os << ")";
+  } else
+    emitExpression(src);
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(RefForceOp op) {
+  indent();
+  os << "force(";
+  emitExpression(op.getClock());
+  os << ", ";
+  emitExpression(op.getPredicate());
+  os << ", ";
+  emitExpression(op.getDest());
+  os << ", ";
+  emitExpression(op.getSrc());
+  os << ")";
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(RefForceInitialOp op) {
+  indent();
+  auto constantPredicate =
+      dyn_cast_or_null<ConstantOp>(op.getPredicate().getDefiningOp());
+  bool hasEnable = !constantPredicate || constantPredicate.getValue() == 0;
+  if (hasEnable) {
+    os << "when ";
+    emitExpression(op.getPredicate());
+    os << ":\n";
+    addIndent();
+    indent();
+  }
+  os << "force_initial(";
+  emitExpression(op.getDest());
+  os << ", ";
+  emitExpression(op.getSrc());
+  os << ")";
+  emitLocationAndNewLine(op);
+  if (hasEnable)
+    reduceIndent();
+}
+
+void Emitter::emitStatement(RefReleaseOp op) {
+  indent();
+  os << "release(";
+  emitExpression(op.getClock());
+  os << ", ";
+  emitExpression(op.getPredicate());
+  os << ", ";
+  emitExpression(op.getDest());
+  os << ")";
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(RefReleaseInitialOp op) {
+  indent();
+  auto constantPredicate =
+      dyn_cast_or_null<ConstantOp>(op.getPredicate().getDefiningOp());
+  bool hasEnable = !constantPredicate || constantPredicate.getValue() == 0;
+  if (hasEnable) {
+    os << "when ";
+    emitExpression(op.getPredicate());
+    os << ":\n";
+    addIndent();
+    indent();
+  }
+  os << "release_initial(";
+  emitExpression(op.getDest());
+  os << ")";
+  emitLocationAndNewLine(op);
+  if (hasEnable)
+    reduceIndent();
+}
+
 void Emitter::emitStatement(InvalidValueOp op) {
   // Only emit this invalid value if it is used somewhere else than the RHS of
   // a connect.
@@ -647,7 +741,9 @@ void Emitter::emitExpression(Value value) {
           CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
-          ShrPrimOp>([&](auto op) { emitExpression(op); })
+          ShrPrimOp, UninferredResetCastOp, UninferredWidthCastOp,
+          // Reference expressions
+          RefSendOp, RefResolveOp>([&](auto op) { emitExpression(op); })
       .Default([&](auto op) {
         emitOpError(op, "not supported as expression");
         os << "<unsupported-expr-" << op->getName().stripDialect() << ">";
@@ -695,6 +791,26 @@ void Emitter::emitExpression(SubaccessOp op) {
   os << "[";
   emitExpression(op.getIndex());
   os << "]";
+}
+
+void Emitter::emitExpression(RefSendOp op) {
+  os << "probe(";
+  emitExpression(op.getBase());
+  os << ")";
+}
+
+void Emitter::emitExpression(RefResolveOp op) {
+  os << "read(";
+  emitExpression(op.getRef());
+  os << ")";
+}
+
+void Emitter::emitExpression(UninferredResetCastOp op) {
+  emitExpression(op.getInput());
+}
+
+void Emitter::emitExpression(UninferredWidthCastOp op) {
+  emitExpression(op.getInput());
 }
 
 void Emitter::emitPrimExpr(StringRef mnemonic, Operation *op,
@@ -782,6 +898,13 @@ void Emitter::emitType(Type type) {
       .Case<CMemoryType>([&](auto type) {
         emitType(type.getElementType());
         os << "[" << type.getNumElements() << "]";
+      })
+      .Case<RefType>([&](RefType type) {
+        if (type.getForceable())
+          os << "RW";
+        os << "Probe<";
+        emitType(type.getType());
+        os << ">";
       })
       .Default([&](auto type) {
         llvm_unreachable("all types should be implemented");

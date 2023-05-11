@@ -25,6 +25,11 @@ if (TARGET EsiCosimDpiServer)
   set(ESI_COSIM_PATH ${ESI_COSIM_LIB_DIR}/libEsiCosimDpiServer.so)
 endif()
 
+# Enable circt-lec tests if it is built.
+if(CIRCT_LEC_ENABLED)
+  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS circt-lec)
+endif()
+
 set(CIRCT_INTEGRATION_TIMEOUT 60) # Set a 60s timeout on individual tests.
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in

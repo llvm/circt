@@ -362,6 +362,7 @@ firrtl.circuit "Foo" {
 firrtl.circuit "X" {
 
 firrtl.module @X(in %a : !firrtl.uint<4>) {
+  // expected-error @below {{failed to infer returned types}}
   // expected-error @+1 {{high must be equal or greater than low, but got high = 3, low = 4}}
   %0 = firrtl.bits %a 3 to 4 : (!firrtl.uint<4>) -> !firrtl.uint<2>
 }
@@ -373,6 +374,7 @@ firrtl.module @X(in %a : !firrtl.uint<4>) {
 firrtl.circuit "X" {
 
 firrtl.module @X(in %a : !firrtl.uint<4>) {
+  // expected-error @below {{failed to infer returned types}}
   // expected-error @+1 {{high must be smaller than the width of input, but got high = 4, width = 4}}
   %0 = firrtl.bits %a 4 to 3 : (!firrtl.uint<4>) -> !firrtl.uint<2>
 }
@@ -384,6 +386,7 @@ firrtl.module @X(in %a : !firrtl.uint<4>) {
 firrtl.circuit "X" {
 
 firrtl.module @X(in %a : !firrtl.uint<4>) {
+  // expected-error @below {{failed to infer returned types}}
   // expected-error @+1 {{'firrtl.bits' op inferred type(s) '!firrtl.uint<3>' are incompatible with return type(s) of operation '!firrtl.uint<2>'}}
   %0 = firrtl.bits %a 3 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
 }
@@ -403,6 +406,7 @@ firrtl.circuit "BadPort" {
 
 firrtl.circuit "BadAdd" {
   firrtl.module @BadAdd(in %a : !firrtl.uint<1>) {
+    // expected-error @below {{failed to infer returned types}}
     // expected-error @+1 {{'firrtl.add' op inferred type(s) '!firrtl.uint<2>' are incompatible with return type(s) of operation '!firrtl.uint<1>'}}
     firrtl.add %a, %a : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   }
@@ -469,6 +473,15 @@ firrtl.circuit "CombMemNonPassiveReturnType" {
 
 // -----
 
+firrtl.circuit "CombMemPerFieldSym" {
+  firrtl.module @CombMemPerFieldSym() {
+    // expected-error @below {{op does not support per-field inner symbols}}
+    %mem = chirrtl.combmem sym [<@x,1,public>] : !chirrtl.cmemory<bundle<a: uint<1>>, 1>
+  }
+}
+
+// -----
+
 firrtl.circuit "SeqMemInvalidReturnType" {
   firrtl.module @SeqMemInvalidReturnType() {
     // expected-error @+1 {{'chirrtl.seqmem' op result #0 must be a behavioral memory, but got '!firrtl.uint<1>'}}
@@ -487,6 +500,26 @@ firrtl.circuit "SeqMemNonPassiveReturnType" {
 
 // -----
 
+firrtl.circuit "SeqMemPerFieldSym" {
+  firrtl.module @SeqMemPerFieldSym() {
+    // expected-error @below {{op does not support per-field inner symbols}}
+    %mem = chirrtl.seqmem sym [<@x,1,public>] Undefined : !chirrtl.cmemory<bundle<a: uint<1>>, 1>
+  }
+}
+
+// -----
+
+firrtl.circuit "SeqCombMemDupSym" {
+  firrtl.module @SeqCombMemDupSym() {
+    // expected-note @below {{see existing inner symbol definition here}}
+    %smem = chirrtl.seqmem sym @x Undefined : !chirrtl.cmemory<bundle<a: uint<1>>, 1>
+    // expected-error @below {{redefinition of inner symbol named 'x'}}
+    %cmem = chirrtl.combmem sym @x : !chirrtl.cmemory<bundle<a: uint<1>>, 1>
+  }
+}
+
+// -----
+
 firrtl.circuit "MemoryPortInvalidReturnType" {
   firrtl.module @MemoryPortInvalidReturnType(in %sel : !firrtl.uint<8>, in %clock : !firrtl.clock) {
     %mem = chirrtl.combmem : !chirrtl.cmemory<uint<8>, 8>
@@ -500,6 +533,7 @@ firrtl.circuit "MemoryPortInvalidReturnType" {
 firrtl.circuit "MemoryPortInvalidReturnType" {
   firrtl.module @MemoryPortInvalidReturnType(in %sel : !firrtl.uint<8>, in %clock : !firrtl.clock) {
     %mem = chirrtl.combmem : !chirrtl.cmemory<uint<8>, 8>
+    // expected-error @below {{failed to infer returned types}}
     // expected-error @+1 {{'chirrtl.memoryport' op inferred type(s) '!firrtl.uint<8>', '!chirrtl.cmemoryport' are incompatible with return type(s) of operation '!firrtl.uint<9>', '!chirrtl.cmemoryport'}}
     %memoryport_data, %memoryport_port = chirrtl.memoryport Infer %mem {name = "memoryport"} : (!chirrtl.cmemory<uint<8>, 8>) -> (!firrtl.uint<9>, !chirrtl.cmemoryport)
     chirrtl.memoryport.access %memoryport_port[%sel], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
@@ -844,7 +878,7 @@ firrtl.circuit "Top"   {
 
 firrtl.circuit "AnalogRegister" {
   firrtl.module @AnalogRegister(in %clock: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog, but got '!firrtl.analog'}}
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.analog'}}
     %r = firrtl.reg %clock : !firrtl.clock, !firrtl.analog
   }
 }
@@ -853,7 +887,7 @@ firrtl.circuit "AnalogRegister" {
 
 firrtl.circuit "AnalogVectorRegister" {
   firrtl.module @AnalogVectorRegister(in %clock: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog, but got '!firrtl.vector<analog, 2>'}}
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.vector<analog, 2>'}}
     %r = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<analog, 2>
   }
 }
@@ -1005,7 +1039,7 @@ firrtl.module @NonRefNode(in %in1 : !firrtl.probe<uint<8>>) {
 
 firrtl.circuit "NonRefRegister" {
   firrtl.module @NonRefRegister(in %clock: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog}}
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog}}
     %r = firrtl.reg %clock : !firrtl.clock, !firrtl.probe<uint<8>>
   }
 }
@@ -1200,6 +1234,38 @@ firrtl.circuit "ForceableTypeMismatch" {
 
 // -----
 
+// Check rwprobe<const T> is rejected.
+firrtl.circuit "ForceableConstWire" {
+  firrtl.module @ForceableConstWire() {
+    // expected-error @below {{forceable reference base type cannot contain const}}
+    %w, %w_f = firrtl.wire forceable : !firrtl.const.uint, !firrtl.rwprobe<const.uint>
+  }
+}
+
+// -----
+
+// Check forceable declarations of const-type w/o explicit ref type are rejected.
+firrtl.circuit "ForceableConstNode" {
+  firrtl.module @ForceableConstNode() {
+    %w = firrtl.wire : !firrtl.const.uint
+    // expected-error @below {{cannot force a node of type}}
+    %n, %n_ref = firrtl.node %w forceable : !firrtl.const.uint
+  }
+}
+
+// -----
+
+// Check forceable declarations of const-type w/o explicit ref type are rejected.
+firrtl.circuit "ForceableBundleConstNode" {
+  firrtl.module @ForceableBundleConstNode() {
+    %w = firrtl.wire : !firrtl.bundle<a: const.uint>
+    // expected-error @below {{cannot force a node of type}}
+    %n, %n_ref = firrtl.node %w forceable : !firrtl.bundle<a: const.uint>
+  }
+}
+
+// -----
+
 firrtl.circuit "RefForceProbe" {
   firrtl.module @RefForceProbe() {
     %a = firrtl.wire : !firrtl.uint<1>
@@ -1245,4 +1311,154 @@ firrtl.circuit "SubtagNoCase" {
 firrtl.module @SubtagNoCase(in %in : !firrtl.enum<None: uint<0>, Some: uint<8>>) {
   // expected-error @below {{unknown field SomeOther in enum type}}
   %some = firrtl.subtag %in[SomeOther] : !firrtl.enum<None: uint<0>, Some: uint<8>>
+}
+
+// -----
+// 'const' firrtl.reg is invalid
+
+firrtl.circuit "ConstReg" {
+firrtl.module @ConstReg(in %clock: !firrtl.clock) {
+  // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.uint<1>'}}
+  %r = firrtl.reg %clock : !firrtl.clock, !firrtl.const.uint<1>
+}
+}
+
+// -----
+// 'const' firrtl.reg is invalid
+
+firrtl.circuit "ConstBundleReg" {
+firrtl.module @ConstBundleReg(in %clock: !firrtl.clock) {
+  // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.bundle<a: uint<1>>'}}
+  %r = firrtl.reg %clock : !firrtl.clock, !firrtl.const.bundle<a: uint<1>>
+}
+}
+
+// -----
+// 'const' firrtl.reg is invalid
+
+firrtl.circuit "ConstVectorReg" {
+firrtl.module @ConstVectorReg(in %clock: !firrtl.clock) {
+  // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.vector<uint<1>, 3>'}}
+  %r = firrtl.reg %clock : !firrtl.clock, !firrtl.const.vector<uint<1>, 3>
+}
+}
+
+// -----
+// 'const' firrtl.reg is invalid
+
+firrtl.circuit "ConstEnumReg" {
+firrtl.module @ConstEnumReg(in %clock: !firrtl.clock) {
+  // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.enum<a: uint<1>>'}}
+  %r = firrtl.reg %clock : !firrtl.clock, !firrtl.const.enum<a: uint<1>>
+}
+}
+
+// -----
+// 'const' firrtl.regreset is invalid
+
+firrtl.circuit "ConstRegReset" {
+firrtl.module @ConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.const.uint<1>) {
+  // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.uint<1>'}}
+  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.uint<1>, !firrtl.const.uint<1>
+}
+}
+
+// -----
+// 'const' firrtl.regreset is invalid
+
+firrtl.circuit "ConstRegReset" {
+firrtl.module @ConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.const.uint<1>) {
+  // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.uint<1>'}}
+  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.uint<1>, !firrtl.const.uint<1>
+}
+}
+
+// -----
+// 'const' firrtl.regreset is invalid
+
+firrtl.circuit "ConstBundleRegReset" {
+firrtl.module @ConstBundleRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.const.bundle<a: uint<1>>) {
+  // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.bundle<a: uint<1>>'}}
+  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.bundle<a: uint<1>>, !firrtl.const.bundle<a: uint<1>>
+}
+}
+
+// -----
+// 'const' firrtl.regreset is invalid
+
+firrtl.circuit "ConstVectorRegReset" {
+firrtl.module @ConstVectorRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.const.vector<uint<1>, 3>) {
+  // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.vector<uint<1>, 3>'}}
+  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.vector<uint<1>, 3>, !firrtl.const.vector<uint<1>, 3>
+}
+}
+
+// -----
+// 'const' firrtl.regreset is invalid
+
+firrtl.circuit "ConstEnumRegReset" {
+firrtl.module @ConstEnumRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.const.enum<a: uint<1>>) {
+  // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.enum<a: uint<1>>'}}
+  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.enum<a: uint<1>>, !firrtl.const.enum<a: uint<1>>
+}
+}
+
+// -----
+// nested 'const' firrtl.reg is invalid
+
+firrtl.circuit "BundleNestedConstReg" {
+firrtl.module @BundleNestedConstReg(in %clock: !firrtl.clock) {
+  // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.bundle<a: const.uint<1>>'}}
+  %r = firrtl.reg %clock : !firrtl.clock, !firrtl.bundle<a: const.uint<1>>
+}
+}
+
+// -----
+// nested 'const' firrtl.reg is invalid
+
+firrtl.circuit "VectorNestedConstReg" {
+firrtl.module @VectorNestedConstReg(in %clock: !firrtl.clock) {
+  // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.vector<const.uint<1>, 3>'}}
+  %r = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<const.uint<1>, 3>
+}
+}
+
+// -----
+// nested 'const' firrtl.reg is invalid
+
+firrtl.circuit "EnumNestedConstReg" {
+firrtl.module @EnumNestedConstReg(in %clock: !firrtl.clock) {
+  // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.enum<a: const.uint<1>>'}}
+  %r = firrtl.reg %clock : !firrtl.clock, !firrtl.enum<a: const.uint<1>>
+}
+}
+
+// -----
+// nested 'const' firrtl.regreset is invalid
+
+firrtl.circuit "BundleNestedConstRegReset" {
+firrtl.module @BundleNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.const.bundle<a: uint<1>>) {
+  // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.bundle<a: const.uint<1>>'}}
+  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.bundle<a: uint<1>>, !firrtl.bundle<a: const.uint<1>>
+}
+}
+
+// -----
+// 'const' firrtl.regreset is invalid
+
+firrtl.circuit "VectorNestedConstRegReset" {
+firrtl.module @VectorNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.vector<const.uint<1>, 3>) {
+  // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.vector<const.uint<1>, 3>'}}
+  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.vector<const.uint<1>, 3>, !firrtl.vector<const.uint<1>, 3>
+}
+}
+
+// -----
+// 'const' firrtl.regreset is invalid
+
+firrtl.circuit "EnumNestedConstRegReset" {
+firrtl.module @EnumNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.enum<a: const.uint<1>>) {
+  // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.enum<a: const.uint<1>>'}}
+  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.enum<a: const.uint<1>>, !firrtl.enum<a: const.uint<1>>
+}
 }
