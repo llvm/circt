@@ -2,7 +2,18 @@
 // RUN: cat %t | FileCheck %s --strict-whitespace
 // RUN: circt-translate --import-firrtl %t --mlir-print-debuginfo | circt-translate --export-firrtl | diff - %t
 
+// Check emission at various widths, ensuring still parses and round-trips back to same FIRRTL as default width (inc debug info).
+// RUN: circt-translate --export-firrtl %s --target-line-length=10 | circt-translate --import-firrtl --mlir-print-debuginfo | circt-translate --export-firrtl | diff - %t
+// RUN: circt-translate --export-firrtl %s --target-line-length=1000 | circt-translate --import-firrtl --mlir-print-debuginfo | circt-translate --export-firrtl | diff - %t
+
+// Sanity-check line length control:
+// Check if printing with very long line length, no line ends with a comma.
+// RUN: circt-translate --export-firrtl %s --target-line-length=1000 | FileCheck %s --implicit-check-not "{{,$}}" --check-prefix PRETTY
+// Check if printing with very short line length, removing info locators (@[...]), no line is longer than 5x line length.
+// RUN: circt-translate --export-firrtl %s --target-line-length=10 | sed -e 's/ @\[.*\]//' | FileCheck %s --implicit-check-not "{{^(.{50})}}" --check-prefix PRETTY
+
 // CHECK-LABEL: circuit Foo :
+// PRETTY-LABEL: circuit Foo :
 firrtl.circuit "Foo" {
   // CHECK-LABEL: module Foo :
   firrtl.module @Foo() {}
