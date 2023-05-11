@@ -19,6 +19,12 @@ def DCDialect : Dialect {
     handshaking semantics.
   }];
   let cppNamespace = "circt::dc";
+
+  let useDefaultTypePrinterParser = 1;
+
+  let extraClassDeclaration = [{
+    void registerTypes();
+  }];
 }
 
 #endif // CIRCT_DIALECT_DC_DIALECT_TD

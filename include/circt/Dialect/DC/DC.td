@@ -12,5 +12,7 @@
 include "mlir/IR/OpBase.td"
 
 include "circt/Dialect/DC/DCDialect.td"
+include "circt/Dialect/DC/DCTypes.td"
+include "circt/Dialect/DC/DCOps.td"
 
 #endif // CIRCT_DIALECT_DC_DC_TD
