@@ -147,17 +147,25 @@ struct GroupAssignmentsInIfPattern : public OpRewritePattern<ClockTreeOp> {
       Block &block = region->front();
       for (auto &op : block) {
         for (auto operand : op.getOperands()) {
-          if (operand.hasOneUse()) {
-            Operation *definition = operand.getDefiningOp();
-            // Confirm that the operand isn't already in the right region and
-            // that it's inside the clock tree
-            if (definition->getParentRegion() != region &&
-                clockTreeOp->isAncestor(definition)) {
-              rewriter.updateRootInPlace(
-                  definition, [&]() { definition->moveBefore(&op); });
-              changed = true;
+          // If the op is already in the region or the definition is outside the clock tree, skip
+          Operation *definition = operand.getDefiningOp();
+          if (definition->getParentRegion() == region || !clockTreeOp->isAncestor(definition))
+            continue;
+          // If the operand is used more than once, check moving the assignment wouldn't cause non-domination
+          if (!operand.hasOneUse()) {
+            bool safeToMove = true;
+            for (auto *user: operand.getUsers()) {
+              if (region->isAncestor(user->getParentRegion())) {
+                safeToMove = false;
+                break;
+              }
             }
+            if (!safeToMove)
+              break;
           }
+          rewriter.updateRootInPlace(
+              definition, [&]() { definition->moveBefore(&op); });
+          changed = true;
         }
       }
     }

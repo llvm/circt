@@ -264,7 +264,7 @@ arc.model "ResetAndEnableGrouping" {
   %in_en0 = arc.root_input "en0", %arg0 : (!arc.storage) -> !arc.state<i1>
   %in_en1 = arc.root_input "en1", %arg0 : (!arc.storage) -> !arc.state<i1>
   %0 = arc.state_read %in_clock : <i1>
-  // Group enables inside resets:
+  // Group enables inside resets (and pull in reads):
   arc.clock_tree %0 {
     //  CHECK: [[IN_RESET:%.+]] = arc.state_read %in_reset
     %3 = arc.state_read %in_reset : <i1>
@@ -292,7 +292,7 @@ arc.model "ResetAndEnableGrouping" {
     }
   // CHECK-NEXT: }
   }
-  // Group both resets and enables:
+  // Group both resets and enables (and pull in reads):
   arc.clock_tree %0 {
     //  CHECK: [[IN_RESET:%.+]] = arc.state_read %in_reset
     %7 = arc.state_read %in_reset : <i1>
@@ -324,7 +324,7 @@ arc.model "ResetAndEnableGrouping" {
     }
     // CHECK-NEXT: }
   }
-  // Group resets that are separated by an enable read:
+  // Group resets that are separated by an enable read (and pull in reads):
   arc.clock_tree %0 {
     //  CHECK: [[IN_RESET:%.+]] = arc.state_read %in_reset
     %11 = arc.state_read %in_reset : <i1>
@@ -340,7 +340,7 @@ arc.model "ResetAndEnableGrouping" {
       %12 = arc.state_read %in_en0 : <i1>
       // CHECK-NEXT:  arc.state_write [[FOO_ALLOC]] = [[IN_I0]] if [[IN_EN0]]
       // CHECK-NEXT:  [[IN_I1:%.+]] = arc.state_read %in_i1
-      // CHECK-NEXT: [[IN_EN1:%.+]] = arc.state_read %in_en1
+      // CHECK-NEXT:  [[IN_EN1:%.+]] = arc.state_read %in_en1
       // CHECK-NEXT:  arc.state_write [[BAR_ALLOC]] = [[IN_I1]] if [[IN_EN1]]
       %13 = arc.state_read %in_i0 : <i4>
       arc.state_write %1 = %13 if %12 : <i4>
