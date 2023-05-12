@@ -1420,8 +1420,8 @@ static bool printPackedTypeImpl(Type type, PPS &ps, Location loc,
           return true;
         }
         ps.scopedBox(PP::cbox2, [&]() {
-        ps << "struct packed {" << PP::space;
-          for (const auto & [idx, element] :
+          ps << "struct packed {" << PP::space;
+          for (const auto &[idx, element] :
                llvm::enumerate(structType.getElements())) {
             if (idx > 0)
               ps << PP::space;
@@ -1471,8 +1471,8 @@ static bool printPackedTypeImpl(Type type, PPS &ps, Location loc,
             if (element.offset) {
               ps << "logic [";
               ps.addAsString(element.offset - 1);
-              ps << ":0] " <<
-                 "__pre_padding_" << element.name.getValue() << "; ";
+              ps << ":0] "
+                 << "__pre_padding_" << element.name.getValue() << "; ";
             }
           }
 
@@ -4577,10 +4577,10 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     //                          op->getLoc());
     //}
     //// Emit the type.
-    //if (!typeString.empty())
-    //  ps << typeString;
-    //if (typeString.size() < maxTypeWidth)
-    //  ps.spaces(maxTypeWidth - typeString.size());
+    // if (!typeString.empty())
+    //   ps << typeString;
+    // if (typeString.size() < maxTypeWidth)
+    //   ps.spaces(maxTypeWidth - typeString.size());
 
     // Emit the name.
     ps << PPExtString(getSymOpName(op));
@@ -4660,7 +4660,7 @@ void StmtEmitter::emitStatementBlock(Block &body) {
     // Build up the symbol table for all of the values that need names in the
     // module.  #ifdef's in procedural regions are special because local
     // variables are all emitted at the top of their enclosing blocks.
-    //if (!isa<IfDefProceduralOp>(body.getParentOp()))
+    // if (!isa<IfDefProceduralOp>(body.getParentOp()))
     //  collectNamesAndCalculateDeclarationWidths(body);
 
     // Emit the body.
@@ -4881,17 +4881,17 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     };
 
     // Determine the max width of the parameter types so things are lined up.
-    //size_t maxTypeWidth = 0;
-    //SmallString<8> scratch;
-    //for (auto param : module.getParameters()) {
+    // size_t maxTypeWidth = 0;
+    // SmallString<8> scratch;
+    // for (auto param : module.getParameters()) {
     //  auto paramAttr = param.cast<ParamDeclAttr>();
     //  // Measure the type length by printing it to a temporary string.
     //  printParamType(paramAttr.getType(), paramAttr.getValue(), scratch);
     //  maxTypeWidth = std::max(scratch.size(), maxTypeWidth);
     //}
 
-    //if (maxTypeWidth > 0) // add a space if any type exists.
-    //  maxTypeWidth += 1;
+    // if (maxTypeWidth > 0) // add a space if any type exists.
+    //   maxTypeWidth += 1;
 
     ps.scopedBox(PP::bbox2, [&]() {
       ps << PP::newline << "#(";
@@ -4904,10 +4904,10 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
                   paramAttr.getValue(); // may be null if absent.
               ps << "parameter ";
               printParamType(paramAttr.getType(), defaultValue);
-              //if (!scratch.empty())
-              //  ps << scratch;
-              //if (scratch.size() < maxTypeWidth)
-              //  ps.nbsp(maxTypeWidth - scratch.size());
+              // if (!scratch.empty())
+              //   ps << scratch;
+              // if (scratch.size() < maxTypeWidth)
+              //   ps.nbsp(maxTypeWidth - scratch.size());
 
               ps << PPExtString(state.globalNames.getParameterVerilogName(
                   module, paramAttr.getName()));
@@ -4937,7 +4937,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   // lines up nicely.
   bool hasOutputs = false, hasZeroWidth = false;
   size_t lastNonZeroPort = -1;
-  //SmallVector<SmallString<8>, 16> portTypeStrings;
+  // SmallVector<SmallString<8>, 16> portTypeStrings;
 
   for (size_t i = 0, e = portInfo.size(); i < e; ++i) {
     auto port = portInfo[i];
@@ -4947,18 +4947,18 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       lastNonZeroPort = i;
 
     // Convert the port's type to a string and measure it.
-    //portTypeStrings.push_back({});
+    // portTypeStrings.push_back({});
     //{
     //  llvm::raw_svector_ostream stringStream(portTypeStrings.back());
     //  printPackedType(stripUnpackedTypes(port.type), stringStream,
     //                  module->getLoc());
     //}
 
-    //maxTypeWidth = std::max(portTypeStrings.back().size(), maxTypeWidth);
+    // maxTypeWidth = std::max(portTypeStrings.back().size(), maxTypeWidth);
   }
 
-  //if (maxTypeWidth > 0) // add a space if any type exists
-  //  maxTypeWidth += 1;
+  // if (maxTypeWidth > 0) // add a space if any type exists
+  //   maxTypeWidth += 1;
 
   // Emit the port list.
   ps.scopedBox(PP::bbox2, [&]() {
@@ -5000,13 +5000,13 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       // TODO: space if type printed? :(
       ps << PP::nbsp;
 
-      //if (!portTypeStrings[portIdx].empty())
-      //  ps << portTypeStrings[portIdx];
-      //if (portTypeStrings[portIdx].size() < maxTypeWidth)
-      //  ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
+      // if (!portTypeStrings[portIdx].empty())
+      //   ps << portTypeStrings[portIdx];
+      // if (portTypeStrings[portIdx].size() < maxTypeWidth)
+      //   ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
 
-      //size_t startOfNamePos =
-      //    (hasOutputs ? 7 : 6) + (emitWireInPorts ? 5 : 0) + maxTypeWidth;
+      // size_t startOfNamePos =
+      //     (hasOutputs ? 7 : 6) + (emitWireInPorts ? 5 : 0) + maxTypeWidth;
 
       // Emit the name.
       ps << PPExtString(getPortVerilogName(module, portInfo[portIdx]));
@@ -5054,7 +5054,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
             ps << (isZeroWidth ? "// " : "   ");
           }
 
-          //ps.nbsp(startOfNamePos);
+          // ps.nbsp(startOfNamePos);
           ps.nbsp();
 
           // Emit the name.
