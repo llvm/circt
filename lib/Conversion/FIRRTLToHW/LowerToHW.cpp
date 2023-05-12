@@ -206,7 +206,10 @@ static void tryCopyName(Operation *dst, Operation *src) {
 }
 
 static ArrayAttr computePathForRef(size_t portIdx, PortInfo port, FModuleOp mod) {
-  return ArrayAttr();
+  SmallVector<Attribute> namepath;
+  //FIXME
+  namepath.push_back(hw::InnerRefAttr::get(mod.getContext(), FlatSymbolRefAttr::get(mod.getContext(), mod.getName()), StringAttr::get(mod.getContext(), "dummy")));
+  return ArrayAttr::get(mod.getContext(), namepath);
 }
 
 //===----------------------------------------------------------------------===//
