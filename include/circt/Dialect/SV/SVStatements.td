@@ -862,7 +862,7 @@ def MacroDefOp : SVOp<"macro.def",
   ];
 
   let assemblyFormat = [{
-    $macroName $format_string attr-dict
+    $macroName $format_string (`(` $symbols^ `)`)? attr-dict
   }];
 
   let extraClassDeclaration = [{

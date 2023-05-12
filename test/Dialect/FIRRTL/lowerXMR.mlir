@@ -697,32 +697,52 @@ firrtl.circuit "ForceRelease" {
 // Check tracking of public output refs as sv.macro.decl and sv.macro.def
 
 // CHECK-LABEL: sv.macro.decl @ref_Top_Top_a
-// CHECK-LABEL: sv.macro.def @ref_Top_Top_a "{{[{][{]0[}][}]}}" {output_file = #hw.output_file<"ref_Top_Top.sv">, symbols = [#hw.innerNameRef<@Top::@w>]}
+// CHECK-LABEL: sv.macro.def @ref_Top_Top_a "{{[{][{]0[}][}]}}"([#hw.innerNameRef<@Top::@w>]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
+
 // CHECK-LABEL: sv.macro.decl @ref_Top_Top_b
-// CHECK-LABEL: sv.macro.def @ref_Top_Top_b "{{[{][{]0[}][}]}}.{{[{][{]1[}][}]}}" {output_file = #hw.output_file<"ref_Top_Top.sv">, symbols = [#hw.innerNameRef<@Top::@foo>, #hw.innerNameRef<@Foo::@x>]}
+// CHECK-LABEL: sv.macro.def @ref_Top_Top_b "{{[{][{]0[}][}]}}.{{[{][{]1[}][}]}}"([#hw.innerNameRef<@Top::@foo>, #hw.innerNameRef<@Foo::@x>]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
 // CHECK-LABEL: sv.macro.decl @ref_Top_Top_c
-// CHECK-LABEL: sv.macro.def @ref_Top_Top_c "{{[{][{]0[}][}]}}" {output_file = #hw.output_file<"ref_Top_Top.sv">, symbols = [#hw.innerNameRef<@Top::@xmr_sym>]}
-// CHECK-NOT:   sv.macro.decl @ref_Top_Top_d
-// CHECK-NOT:   sv.macro.def @ref_Top_Top_d
+// CHECK-LABEL: sv.macro.def @ref_Top_Top_c "{{[{][{]0[}][}]}}.internal.path"([#hw.innerNameRef<@Top::@foo>]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
+
+// CHECK-LABEL: sv.macro.decl @ref_Top_Top_d
+// CHECK-LABEL: sv.macro.def @ref_Top_Top_d "{{[{][{]0[}][}]}}"([#hw.innerNameRef<@Top::@xmr_sym>]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
+// CHECK-NOT:   sv.macro.decl @ref_Top_Top_e
+// CHECK-NOT:   sv.macro.def @ref_Top_Top_e
+
+// CHECK-LABEL: sv.macro.decl @ref_Top_Foo_x
+// CHECK-LABEL: sv.macro.def @ref_Top_Foo_x "{{[{][{]0[}][}]}}"([#hw.innerNameRef<@Foo::@x>]) {output_file = #hw.output_file<"ref_Top_Foo.sv">}
+// CHECK-LABEL: sv.macro.decl @ref_Top_Foo_y
+// CHECK-LABEL: sv.macro.def @ref_Top_Foo_y "internal.path" {output_file = #hw.output_file<"ref_Top_Foo.sv">}
 
 // CHECK-LABEL: firrtl.circuit "Top"
 firrtl.circuit "Top" {
   // CHECK-LABEL: firrtl.module @Top()
-  firrtl.module @Top(out %a: !firrtl.probe<uint<1>>, out %b: !firrtl.probe<uint<1>>, out %c: !firrtl.probe<uint<1>>, in %d: !firrtl.probe<uint<1>>) {
+  firrtl.module @Top(out %a: !firrtl.probe<uint<1>>, 
+                     out %b: !firrtl.probe<uint<1>>, 
+                     out %c: !firrtl.probe<uint<1>>, 
+                     out %d: !firrtl.probe<uint<1>>,
+                     in %e: !firrtl.probe<uint<1>>) {
     %w = firrtl.wire sym @w : !firrtl.uint<1>
     %0 = firrtl.ref.send %w : !firrtl.uint<1>
     firrtl.ref.define %a, %0 : !firrtl.probe<uint<1>>
-    %x = firrtl.instance foo sym @foo @Foo(out x: !firrtl.probe<uint<1>>)
+    
+    %x, %y = firrtl.instance foo sym @foo @Foo(out x: !firrtl.probe<uint<1>>, out y: !firrtl.probe<uint<1>>)
     firrtl.ref.define %b, %x : !firrtl.probe<uint<1>>
+    firrtl.ref.define %c, %y : !firrtl.probe<uint<1>>
+    
     %constant = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %constant : !firrtl.uint<1>
-    firrtl.ref.define %c, %1 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %d, %1 : !firrtl.probe<uint<1>>
   }
 
   // CHECK-LABEL: firrtl.module @Foo()
-  firrtl.module @Foo(out %x: !firrtl.probe<uint<1>>) {
+  firrtl.module @Foo(out %x: !firrtl.probe<uint<1>>, out %y: !firrtl.probe<uint<1>>) {
     %w = firrtl.wire sym @x : !firrtl.uint<1>
     %0 = firrtl.ref.send %w : !firrtl.uint<1>
     firrtl.ref.define %x, %0 : !firrtl.probe<uint<1>>
+
+    %z = firrtl.verbatim.expr "internal.path" : () -> !firrtl.uint<1>
+    %1 = firrtl.ref.send %z : !firrtl.uint<1>
+    firrtl.ref.define %y, %1 : !firrtl.probe<uint<1>>
   }
 }
