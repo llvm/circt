@@ -2833,7 +2833,6 @@ LogicalResult FIRRTLLowering::visitExpr(SubtagOp op) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
-  llvm::errs() << "VISITING Wire: "; op.dump();
   // Foreign types lower to a backedge that needs to be resolved by a later
   // connect op.
   auto origResultType = op.getResult().getType();
@@ -2874,7 +2873,6 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   if (auto svAttrs = sv::getSVAttributes(op))
     sv::setSVAttributes(wire, svAttrs);
 
-  op.dump();
   return setLowering(op.getResult(), wire);
 }
 
