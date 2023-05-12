@@ -375,6 +375,28 @@ firrtl.module @test(out %a: !firrtl.bundle<a flip: bundle<a flip: uint<1>>>) {
 
 // -----
 
+// Check that different labels cause the enumeration to not match.
+
+firrtl.circuit "test"  {
+firrtl.module @test(in %a: !firrtl.enum<a: uint<1>>, out %b: !firrtl.enum<a: uint<2>>) {
+  // expected-error @below {{type mismatch between destination '!firrtl.enum<a: uint<2>>' and source '!firrtl.enum<a: uint<1>>'}}
+  firrtl.connect %b, %a : !firrtl.enum<a: uint<2>>, !firrtl.enum<a: uint<1>>
+}
+}
+
+// -----
+
+// Check that different data types causes the enumeration to not match.
+
+firrtl.circuit "test"  {
+firrtl.module @test(in %a: !firrtl.enum<a: uint<0>>, out %b: !firrtl.enum<b: uint<0>>) {
+  // expected-error @below {{type mismatch between destination '!firrtl.enum<b: uint<0>>' and source '!firrtl.enum<a: uint<0>>'}}
+  firrtl.connect %b, %a : !firrtl.enum<b: uint<0>>, !firrtl.enum<a: uint<0>>
+}
+}
+
+// -----
+
 /// Check that the following is an invalid sink flow source.  This has to use a
 /// memory because all other sinks (module outputs or instance inputs) can
 /// legally be used as sources.
