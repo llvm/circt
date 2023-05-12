@@ -848,12 +848,12 @@ def MacroDefOp : SVOp<"macro.def",
     `sym_name`.  Argument lists are picked up from that operation.
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$macroName, 
-                       StrAttr:$format_string);
+  let arguments = (ins FlatSymbolRefAttr:$macroName, StrAttr:$format_string, 
+                       OptionalAttr<FlatSymbolRefArrayAttr>:$symbols);
   let results = (outs);
 
   let assemblyFormat = [{
-    $macroName $format_string attr-dict
+    $macroName $format_string (`(` $symbols^ `)`)? attr-dict
   }];
 
   let extraClassDeclaration = [{

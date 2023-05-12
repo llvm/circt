@@ -205,10 +205,13 @@ static void tryCopyName(Operation *dst, Operation *src) {
       dst->setAttr("sv.namehint", attr);
 }
 
-static ArrayAttr computePathForRef(size_t portIdx, PortInfo port, FModuleOp mod) {
+static ArrayAttr computePathForRef(size_t portIdx, PortInfo port,
+                                   FModuleOp mod) {
   SmallVector<Attribute> namepath;
-  //FIXME
-  namepath.push_back(hw::InnerRefAttr::get(mod.getContext(), FlatSymbolRefAttr::get(mod.getContext(), mod.getName()), StringAttr::get(mod.getContext(), "dummy")));
+  // FIXME
+  namepath.push_back(hw::InnerRefAttr::get(
+      mod.getContext(), FlatSymbolRefAttr::get(mod.getContext(), mod.getName()),
+      StringAttr::get(mod.getContext(), "dummy")));
   return ArrayAttr::get(mod.getContext(), namepath);
 }
 
@@ -429,11 +432,12 @@ struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
 
 private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
-  LogicalResult lowerPorts(ArrayRef<PortInfo> firrtlPorts,
-                           SmallVectorImpl<hw::PortInfo> &ports,
-                           SmallVectorImpl<std::pair<size_t, PortInfo>>& refPorts,
-                           Operation *moduleOp, StringRef moduleName,
-                           CircuitLoweringState &loweringState);
+  LogicalResult
+  lowerPorts(ArrayRef<PortInfo> firrtlPorts,
+             SmallVectorImpl<hw::PortInfo> &ports,
+             SmallVectorImpl<std::pair<size_t, PortInfo>> &refPorts,
+             Operation *moduleOp, StringRef moduleName,
+             CircuitLoweringState &loweringState);
   bool handleForceNameAnnos(FModuleLike oldModule, AnnotationSet &annos,
                             CircuitLoweringState &loweringState);
   hw::HWModuleOp lowerModule(FModuleOp oldModule, Block *topLevelModule,
@@ -796,7 +800,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   // even turn them into symbols so we can DCE unused macro definitions.
   auto emitDefine = [&](StringRef name, StringRef body, ArrayAttr args = {}) {
     emitDecl(name, args);
-    b.create<sv::MacroDefOp>(name, body);
+    b.create<sv::MacroDefOp>(name, body, nullptr);
   };
 
   // Helper function to emit a "#ifdef guard" with a `define in the then and
@@ -945,16 +949,14 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   b.create<sv::VerbatimOp>("");
 }
 
-LogicalResult
-FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
-                                 SmallVectorImpl<hw::PortInfo> &ports,
-                                 SmallVectorImpl<std::pair<size_t, PortInfo>> &refPorts,
-                                 Operation *moduleOp, StringRef moduleName,
-                                 CircuitLoweringState &loweringState) {
+LogicalResult FIRRTLModuleLowering::lowerPorts(
+    ArrayRef<PortInfo> firrtlPorts, SmallVectorImpl<hw::PortInfo> &ports,
+    SmallVectorImpl<std::pair<size_t, PortInfo>> &refPorts, Operation *moduleOp,
+    StringRef moduleName, CircuitLoweringState &loweringState) {
   ports.reserve(firrtlPorts.size());
   size_t numArgs = 0;
   size_t numResults = 0;
-  //not using structured bindings for const issues.
+  // not using structured bindings for const issues.
   for (auto it : llvm::enumerate(firrtlPorts)) {
     PortInfo firrtlPort = it.value();
     size_t index = it.index();
@@ -1127,8 +1129,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<std::pair<size_t, PortInfo>> refPorts;
   SmallVector<hw::PortInfo, 8> ports;
-  if (failed(lowerPorts(firrtlPorts, ports, refPorts, oldModule, oldModule.getName(),
-                        loweringState)))
+  if (failed(lowerPorts(firrtlPorts, ports, refPorts, oldModule,
+                        oldModule.getName(), loweringState)))
     return {};
 
   StringRef verilogName;
@@ -1170,8 +1172,8 @@ FIRRTLModuleLowering::lowerMemModule(FMemModuleOp oldModule,
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<hw::PortInfo, 8> ports;
   SmallVector<std::pair<size_t, PortInfo>> refPorts;
-  if (failed(lowerPorts(firrtlPorts, ports, refPorts, oldModule, oldModule.getName(),
-                        loweringState)))
+  if (failed(lowerPorts(firrtlPorts, ports, refPorts, oldModule,
+                        oldModule.getName(), loweringState)))
     return {};
 
   // Build the new hw.module op.
@@ -1193,8 +1195,8 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<std::pair<size_t, PortInfo>> firrtlRefs;
   SmallVector<hw::PortInfo, 8> ports;
-  if (failed(lowerPorts(firrtlPorts, ports, firrtlRefs,
-                        oldModule, oldModule.getName(), loweringState)))
+  if (failed(lowerPorts(firrtlPorts, ports, firrtlRefs, oldModule,
+                        oldModule.getName(), loweringState)))
     return {};
 
   // Build the new hw.module op.
@@ -1245,11 +1247,21 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
 
   // Lower the output ref ports
   for (auto ref : firrtlRefs) {
-    auto pathsym = builder.getStringAttr("path_" + circuitName + "_" + oldModule.getName() + ref.second.getName());
-    auto refsym = builder.getStringAttr("ref_" + circuitName + "_" + oldModule.getName() + ref.second.getName());
-    auto hierpath = builder.create<hw::HierPathOp>(oldModule.getLoc(), pathsym, computePathForRef(ref.first, ref.second, oldModule));
-    builder.create<sv::MacroDeclOp>(oldModule.getLoc(), refsym, nullptr, nullptr);
-    builder.create<sv::MacroDefOp>(oldModule.getLoc(), refsym, "{{substitution passed hierpath}}");// hierpath);
+    auto pathsym =
+        builder.getStringAttr("path_" + circuitName + "_" +
+                              oldModule.getName() + ref.second.getName());
+    auto refsym =
+        builder.getStringAttr("ref_" + circuitName + "_" + oldModule.getName() +
+                              ref.second.getName());
+    auto hierpath = builder.create<hw::HierPathOp>(
+        oldModule.getLoc(), pathsym,
+        computePathForRef(ref.first, ref.second, oldModule));
+    builder.create<sv::MacroDeclOp>(oldModule.getLoc(), refsym, nullptr,
+                                    nullptr);
+    builder.create<sv::MacroDefOp>(
+        oldModule.getLoc(), refsym, "{{0}}",
+        builder.getArrayAttr(ArrayRef<Attribute>(
+            FlatSymbolRefAttr::get(hierpath.getSymNameAttr()))));
   }
   return newModule;
 }
@@ -4117,9 +4129,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseInitialOp op) {
 }
 
 // Nothing to do.  Defines will have been handled durring port lowering.
-LogicalResult FIRRTLLowering::visitStmt(RefDefineOp op) {
-  return success();
-}
+LogicalResult FIRRTLLowering::visitStmt(RefDefineOp op) { return success(); }
 
 // Printf is a macro op that lowers to an sv.ifdef.procedural, an sv.if,
 // and an sv.fwrite all nested together.
