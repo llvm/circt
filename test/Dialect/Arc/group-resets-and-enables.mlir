@@ -215,29 +215,38 @@ arc.model "GroupAssignmentsInIfTesting" {
 ^bb0(%arg0: !arc.storage):
   %in_clock = arc.root_input "clock", %arg0 : (!arc.storage) -> !arc.state<i1>
   %in_i1 = arc.root_input "i1", %arg0 : (!arc.storage) -> !arc.state<i4>
-  %in_cond = arc.root_input "cond", %arg0 : (!arc.storage) -> !arc.state<i1>
+  %in_cond0 = arc.root_input "cond0", %arg0 : (!arc.storage) -> !arc.state<i1>
+  %in_cond1 = arc.root_input "cond1", %arg0 : (!arc.storage) -> !arc.state<i1>
   %0 = arc.state_read %in_clock : <i1>
-  // Do pull value in
+  // Do pull value in (1st and 2nd layer)
   arc.clock_tree %0 {
-    // CHECK: [[IN_COND:%.+]] = arc.state_read %in_cond
-    %3 = arc.state_read %in_cond : <i1>
+    // CHECK: [[IN_COND0:%.+]] = arc.state_read %in_cond0
+    %3 = arc.state_read %in_cond0 : <i1>
     %4 = arc.state_read %in_i1 : <i4>
-    // CHECK-NEXT: scf.if [[IN_COND]] {
+    // CHECK-NEXT: scf.if [[IN_COND0]] {
     scf.if %3 {
       // CHECK-NEXT: [[IN_I1:%.+]] = arc.state_read %in_i1
       // CHECK-NEXT: arc.state_write [[FOO_ALLOC:%.+]] = [[IN_I1]]
       arc.state_write %1 = %4 : <i4>
+      // CHECK: [[IN_COND1:%.+]] = arc.state_read %in_cond1
+      %5 = arc.state_read %in_cond1 : <i1>
+      // CHECK-NEXT: scf.if [[IN_COND1]] {
+      scf.if %5 {
+        // CHECK-NEXT: arc.state_write [[BAR_ALLOC:%.+]] = [[IN_I1]]
+        arc.state_write %2 = %4 : <i4>
+        // CHECK-NEXT: }
+      }
       // CHECK-NEXT: }
     }
   }
   // CHECK-NEXT: }
   // Don't pull value in
   arc.clock_tree %0 {
-    // CHECK: [[IN_COND:%.+]] = arc.state_read %in_cond
-    %5 = arc.state_read %in_cond : <i1>
+    // CHECK: [[IN_COND0:%.+]] = arc.state_read %in_cond0
+    %5 = arc.state_read %in_cond0 : <i1>
     // CHECK-NEXT: [[IN_I1:%.+]] = arc.state_read %in_i1
     %6 = arc.state_read %in_i1 : <i4>
-    // CHECK-NEXT: scf.if [[IN_COND]] {
+    // CHECK-NEXT: scf.if [[IN_COND0]] {
     scf.if %5 {
       // CHECK-NEXT: arc.state_write [[FOO_ALLOC:%.+]] = [[IN_I1]]
       arc.state_write %1 = %6 : <i4>
@@ -245,6 +254,28 @@ arc.model "GroupAssignmentsInIfTesting" {
     }
     // CHECK-NEXT: arc.state_write [[BAR_ALLOC:%.+]] = [[IN_I1]]
     arc.state_write %2 = %6 : <i4>
+  // CHECK-NEXT: }
+  }
+  // Pull multi-use value into first if only
+  arc.clock_tree %0 {
+    // CHECK: [[IN_COND0:%.+]] = arc.state_read %in_cond0
+    %5 = arc.state_read %in_cond0 : <i1>
+    %6 = arc.state_read %in_cond1 : <i1>
+    %7 = arc.state_read %in_i1 : <i4>
+    // CHECK-NEXT: scf.if [[IN_COND0]] {
+    scf.if %5 {
+      // CHECK-NEXT: [[IN_I1:%.+]] = arc.state_read %in_i1
+      // CHECK-NEXT: arc.state_write [[FOO_ALLOC:%.+]] = [[IN_I1]]
+      arc.state_write %1 = %7 : <i4>
+      // CHECK-NEXT: [[IN_COND1:%.+]] = arc.state_read %in_cond1
+      // CHECK-NEXT: scf.if [[IN_COND1]] {
+      scf.if %6 {
+        // CHECK-NEXT: arc.state_write [[BAR_ALLOC:%.+]] = [[IN_I1]]
+        arc.state_write %2 = %7 : <i4>
+        // CHECK-NEXT: }
+      }
+      // CHECK-NEXT: }
+    }
   // CHECK-NEXT: }
   }
   // CHECK-NEXT: [[FOO_ALLOC]] = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
