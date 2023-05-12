@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --canonicalize | FileCheck %s
+// RUN: circt-opt %s --canonicalize --cse --canonicalize | FileCheck %s
 
 // CHECK-LABEL:   func.func @join(
 // CHECK-SAME:                    %[[VAL_0:.*]]: !dc.token,
@@ -93,8 +93,7 @@ func.func @joinOnSource(%a : !dc.token, %b : !dc.token) -> (!dc.token) {
 
 // CHECK-LABEL:   func.func @forkOfSource() -> (!dc.token, !dc.token) {
 // CHECK:           %[[VAL_0:.*]] = dc.source
-// CHECK:           %[[VAL_1:.*]] = dc.source
-// CHECK:           return %[[VAL_0]], %[[VAL_1]] : !dc.token, !dc.token
+// CHECK:           return %[[VAL_0]], %[[VAL_0]] : !dc.token, !dc.token
 // CHECK:         }
 func.func @forkOfSource() -> (!dc.token, !dc.token) {
     %0 = dc.source

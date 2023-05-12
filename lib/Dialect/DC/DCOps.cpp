@@ -33,62 +33,6 @@ namespace dc {
 // JoinOp
 // =============================================================================
 
-class IdenticalJoinCanonicalizationPattern : public OpRewritePattern<JoinOp> {
-  // Canonicalization of joins where all of the inputs are the same.
-public:
-  using OpRewritePattern<JoinOp>::OpRewritePattern;
-  LogicalResult matchAndRewrite(JoinOp join,
-                                PatternRewriter &rewriter) const override {
-    auto inputs = join.getTokens();
-    if (inputs.size() < 2)
-      return failure();
-
-    // Coarse-grain find candidates which have a single similar input.
-    llvm::SetVector<JoinOp> similarCandidates;
-    for (auto input : inputs) {
-      for (auto *user : input.getUsers()) {
-        auto userJoin = dyn_cast<JoinOp>(user);
-        if (!userJoin || userJoin == join)
-          continue;
-        similarCandidates.insert(userJoin);
-      }
-    }
-
-    if (similarCandidates.empty())
-      return failure();
-
-    // Now filter that set based on whether all of the inputs are the same.
-    llvm::SetVector<JoinOp> identicalCandidates;
-    for (auto candidate : similarCandidates) {
-      auto candidateInputs = candidate.getTokens();
-      if (candidateInputs.size() != inputs.size())
-        continue;
-
-      bool allInputsIdentical = true;
-      for (auto input : inputs) {
-        if (!llvm::is_contained(candidateInputs, input)) {
-          allInputsIdentical = false;
-          break;
-        }
-      }
-
-      if (allInputsIdentical)
-        identicalCandidates.insert(candidate);
-    }
-
-    if (identicalCandidates.empty())
-      return failure();
-
-    // Replace all of the identical candidates with the original join.
-    rewriter.updateRootInPlace(join, [&] {
-      for (auto candidate : identicalCandidates) {
-        rewriter.replaceOp(candidate, join.getResult());
-      }
-    });
-    return success();
-  }
-};
-
 class TransitiveJoinCanonicalizationPattern : public OpRewritePattern<JoinOp> {
   // Canonicalization staggered joins where the sink join contains inputs also
   // found in the source join.
@@ -175,7 +119,6 @@ public:
 void JoinOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
   results.insert<TransitiveJoinCanonicalizationPattern,
-                 IdenticalJoinCanonicalizationPattern,
                  RedundantJoinOperandsPattern, JoinOnSourcePattern>(context);
 }
 
@@ -308,38 +251,6 @@ LogicalResult ForkOp::fold(FoldAdaptor adaptor,
 // UnpackOp
 // =============================================================================
 
-struct EliminateMultipleUnpackPattern : public OpRewritePattern<UnpackOp> {
-  // Example:
-  // %0, %1 = !dc.unpack %v : ...
-  // %2, %3 = !dc.unpack %v : ...
-  // ->
-  // %0, %1 = !dc.unpack %v : ...
-  // %2 -> %0, %3 -> %1
-  using OpRewritePattern<UnpackOp>::OpRewritePattern;
-  LogicalResult matchAndRewrite(UnpackOp unpack,
-                                PatternRewriter &rewriter) const override {
-    auto unpackedValue = unpack.getInput();
-    // Find other unpacks of the same value.
-    llvm::SmallVector<UnpackOp> users;
-    for (auto *user : unpackedValue.getUsers()) {
-      auto unpack = dyn_cast<UnpackOp>(user);
-      if (!unpack)
-        return failure();
-      users.push_back(unpack);
-    }
-
-    if (users.size() == 1)
-      return failure();
-
-    // Replace all unpacks with a single unpack - just create a new one.
-    auto newUnpack = rewriter.create<UnpackOp>(unpack.getLoc(), unpackedValue);
-    for (auto user : users)
-      rewriter.replaceOp(user, newUnpack.getResults());
-
-    return success();
-  }
-};
-
 struct EliminateRedundantUnpackPattern : public OpRewritePattern<UnpackOp> {
   // Eliminates unpacks where only the token is used.
   using OpRewritePattern<UnpackOp>::OpRewritePattern;
@@ -363,9 +274,7 @@ struct EliminateRedundantUnpackPattern : public OpRewritePattern<UnpackOp> {
 
 void UnpackOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
-  results
-      .insert<EliminateMultipleUnpackPattern, EliminateRedundantUnpackPattern>(
-          context);
+  results.insert<EliminateRedundantUnpackPattern>(context);
 }
 
 LogicalResult UnpackOp::fold(FoldAdaptor adaptor,

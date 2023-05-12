@@ -72,7 +72,7 @@ def BufferOp : DCOp<"buffer",
   }];
 }
 
-def JoinOp : DCOp<"join"> {
+def JoinOp : DCOp<"join", [Commutative]> {
   let summary = "Synchronizes the incoming tokens with the outgoing token";
   let description = [{
     This operator synchronizes all incoming tokens. Synchronization implies applying
