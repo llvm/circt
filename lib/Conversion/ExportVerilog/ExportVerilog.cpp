@@ -1443,7 +1443,7 @@ static bool printPackedTypeImpl(Type type, PPS &ps, Location loc,
             ps << ";";
           }
           if (!structType.getElements().empty())
-            ps << PP::nbsp;
+            ps << BreakToken(1, -2);
           ps << "}";
           emitDims(dims, ps, loc, emitter);
           // ps << PP::zerobreak;
