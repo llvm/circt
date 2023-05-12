@@ -700,18 +700,23 @@ firrtl.circuit "ForceRelease" {
 // CHECK-LABEL: sv.macro.def @ref_Top_Top_a "{{[{][{]0[}][}]}}" {output_file = #hw.output_file<"ref_Top_Top.sv">, symbols = [#hw.innerNameRef<@Top::@w>]}
 // CHECK-LABEL: sv.macro.decl @ref_Top_Top_b
 // CHECK-LABEL: sv.macro.def @ref_Top_Top_b "{{[{][{]0[}][}]}}.{{[{][{]1[}][}]}}" {output_file = #hw.output_file<"ref_Top_Top.sv">, symbols = [#hw.innerNameRef<@Top::@foo>, #hw.innerNameRef<@Foo::@x>]}
-// CHECK-NOT:   sv.macro.decl @ref_Top_Top_c
-// CHECK-NOT:   sv.macro.def @ref_Top_Top_c
+// CHECK-LABEL: sv.macro.decl @ref_Top_Top_c
+// CHECK-LABEL: sv.macro.def @ref_Top_Top_c "{{[{][{]0[}][}]}}" {output_file = #hw.output_file<"ref_Top_Top.sv">, symbols = [#hw.innerNameRef<@Top::@xmr_sym>]}
+// CHECK-NOT:   sv.macro.decl @ref_Top_Top_d
+// CHECK-NOT:   sv.macro.def @ref_Top_Top_d
 
 // CHECK-LABEL: firrtl.circuit "Top"
 firrtl.circuit "Top" {
   // CHECK-LABEL: firrtl.module @Top()
-  firrtl.module @Top(out %a: !firrtl.probe<uint<1>>, out %b: !firrtl.probe<uint<1>>, in %c: !firrtl.probe<uint<1>>) {
+  firrtl.module @Top(out %a: !firrtl.probe<uint<1>>, out %b: !firrtl.probe<uint<1>>, out %c: !firrtl.probe<uint<1>>, in %d: !firrtl.probe<uint<1>>) {
     %w = firrtl.wire sym @w : !firrtl.uint<1>
     %0 = firrtl.ref.send %w : !firrtl.uint<1>
     firrtl.ref.define %a, %0 : !firrtl.probe<uint<1>>
     %x = firrtl.instance foo sym @foo @Foo(out x: !firrtl.probe<uint<1>>)
     firrtl.ref.define %b, %x : !firrtl.probe<uint<1>>
+    %constant = firrtl.constant 0 : !firrtl.uint<1>
+    %1 = firrtl.ref.send %constant : !firrtl.uint<1>
+    firrtl.ref.define %c, %1 : !firrtl.probe<uint<1>>
   }
 
   // CHECK-LABEL: firrtl.module @Foo()
