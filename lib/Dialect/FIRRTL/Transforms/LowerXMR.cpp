@@ -50,9 +50,14 @@ using hw::InnerRefAttr;
 class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   void runOnOperation() override {
+    auto circuits = getOperation().getOps<CircuitOp>();
+    if (circuits.empty())
+      return;
+    circuitOp = *circuits.begin();
+
     // Populate a CircuitNamespace that can be used to generate unique
     // circuit-level symbols.
-    auto ns = CircuitNamespace(getOperation());
+    auto ns = CircuitNamespace(circuitOp);
     circuitNamespace = &ns;
 
     dataFlowClasses = llvm::EquivalenceClasses<Value, ValueComparator>();
@@ -253,6 +258,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     for (auto *op : forceAndReleaseOps)
       if (failed(handleForceReleaseOp(op)))
         return signalPassFailure();
+    if (failed(handleTopModuleRefPorts()))
+      return signalPassFailure();
     garbageCollect();
   }
 
@@ -415,6 +422,62 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             dataFlowClasses.getOrInsertLeaderValue(instanceResult));
       }
     }
+    return success();
+  }
+
+  LogicalResult handleTopModuleRefPorts() {
+    auto topModule = dyn_cast<FModuleOp>(*circuitOp.getMainModule());
+    if (!topModule)
+      return success();
+
+    auto builder = ImplicitLocOpBuilder::atBlockBegin(topModule.getLoc(),
+                                                      getOperation().getBody());
+
+    for (size_t portIndex = 0, numPorts = topModule.getNumPorts();
+         portIndex != numPorts; ++portIndex) {
+      auto refType = topModule.getPortType(portIndex).dyn_cast<RefType>();
+      if (!refType || isZeroWidth(refType.getType()) ||
+          topModule.getPortDirection(portIndex) != Direction::Out)
+        continue;
+      auto portValue = topModule.getArgument(portIndex);
+      auto remoteOpPath = getRemoteRefSend(portValue);
+      if (!remoteOpPath)
+        return failure();
+      SmallVector<Attribute> refSendPath;
+      SmallString<128> formatString;
+      size_t formatIndex = 0;
+      while (remoteOpPath) {
+        auto entr = refSendPathList[*remoteOpPath];
+        refSendPath.push_back(entr.first);
+        remoteOpPath = entr.second;
+
+        if (formatIndex > 0)
+          formatString.append(".");
+        formatString.append("{{");
+        formatString.append(std::to_string(formatIndex));
+        formatString.append("}}");
+        ++formatIndex;
+      }
+
+      // Insert a macro with the format:
+      // ref_<circuit name>_<module name>_<ref name> <internal path from module>
+      auto macroName = builder.getStringAttr("ref_" + circuitOp.getName() +
+                                             "_" + topModule.getName() + "_" +
+                                             topModule.getPortName(portIndex));
+      builder.create<sv::MacroDeclOp>(macroName, ArrayAttr(), StringAttr());
+      auto macroDefOp =
+          builder.create<sv::MacroDefOp>(FlatSymbolRefAttr::get(macroName),
+                                         builder.getStringAttr(formatString),
+                                         builder.getArrayAttr(refSendPath));
+
+      // The macro will be exported to a file with the format:
+      // ref_<circuit name>_<module name>.sv
+      macroDefOp->setAttr(
+          "output_file", hw::OutputFileAttr::getFromFilename(
+                             &getContext(), "ref_" + circuitOp.getName() + "_" +
+                                                topModule.getName() + ".sv"));
+    }
+
     return success();
   }
 
@@ -607,7 +670,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     if (pathInsertPoint.isSet())
       builder.restoreInsertionPoint(pathInsertPoint);
     else
-      builder.setInsertionPointToStart(getOperation().getBodyBlock());
+      builder.setInsertionPointToStart(circuitOp.getBodyBlock());
 
     // Create the new HierPathOp and insert it into the pathCache.
     hw::HierPathOp path =
@@ -625,6 +688,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     // Return the new path.
     return path;
   }
+
+  CircuitOp circuitOp;
 };
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createLowerXMRPass() {

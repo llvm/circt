@@ -692,3 +692,32 @@ firrtl.circuit "ForceRelease" {
       firrtl.ref.release_initial %c, %r_p : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
     }
   }
+
+// -----
+// Check tracking of public output refs as sv.macro.decl and sv.macro.def
+
+// CHECK-LABEL: sv.macro.decl @ref_Top_Top_a
+// CHECK-LABEL: sv.macro.def @ref_Top_Top_a "{{[{][{]0[}][}]}}" {output_file = #hw.output_file<"ref_Top_Top.sv">, symbols = [#hw.innerNameRef<@Top::@w>]}
+// CHECK-LABEL: sv.macro.decl @ref_Top_Top_b
+// CHECK-LABEL: sv.macro.def @ref_Top_Top_b "{{[{][{]0[}][}]}}.{{[{][{]1[}][}]}}" {output_file = #hw.output_file<"ref_Top_Top.sv">, symbols = [#hw.innerNameRef<@Top::@foo>, #hw.innerNameRef<@Foo::@x>]}
+// CHECK-NOT:   sv.macro.decl @ref_Top_Top_c
+// CHECK-NOT:   sv.macro.def @ref_Top_Top_c
+
+// CHECK-LABEL: firrtl.circuit "Top"
+firrtl.circuit "Top" {
+  // CHECK-LABEL: firrtl.module @Top()
+  firrtl.module @Top(out %a: !firrtl.probe<uint<1>>, out %b: !firrtl.probe<uint<1>>, in %c: !firrtl.probe<uint<1>>) {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+    %0 = firrtl.ref.send %w : !firrtl.uint<1>
+    firrtl.ref.define %a, %0 : !firrtl.probe<uint<1>>
+    %x = firrtl.instance foo sym @foo @Foo(out x: !firrtl.probe<uint<1>>)
+    firrtl.ref.define %b, %x : !firrtl.probe<uint<1>>
+  }
+
+  // CHECK-LABEL: firrtl.module @Foo()
+  firrtl.module @Foo(out %x: !firrtl.probe<uint<1>>) {
+    %w = firrtl.wire sym @x : !firrtl.uint<1>
+    %0 = firrtl.ref.send %w : !firrtl.uint<1>
+    firrtl.ref.define %x, %0 : !firrtl.probe<uint<1>>
+  }
+}

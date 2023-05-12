@@ -844,13 +844,22 @@ def MacroDefOp : SVOp<"macro.def",
     opaque (plain string).  Given the general power of macros, this op does not
     try to capture a return type.
   
-    This operation produces a definition for the macro declaration referened by 
+    This operation produces a definition for the macro declaration referenced by 
     `sym_name`.  Argument lists are picked up from that operation.
+
+    sv.macro.def allows operand substitutions with {{0}} syntax.
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$macroName, 
-                       StrAttr:$format_string);
+                       StrAttr:$format_string,
+                       DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
   let results = (outs);
+
+  let builders = [
+    OpBuilder<(ins "StringRef":$macroName, "StringRef":$format_string),
+                "build(odsBuilder, odsState, macroName, format_string,"
+                "odsBuilder.getArrayAttr({}));">
+  ];
 
   let assemblyFormat = [{
     $macroName $format_string attr-dict
