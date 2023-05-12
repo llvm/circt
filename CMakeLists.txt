@@ -475,6 +475,7 @@ llvm_canonicalize_cmake_booleans(CIRCT_LLHD_SIM_ENABLED)
 #-------------------------------------------------------------------------------
 # circt-lec Configuration
 #-------------------------------------------------------------------------------
+
 # If circt-lec hasn't been explicitly disabled, find it.
 option(CIRCT_LEC_DISABLE "Disable the Logical Equivalence Checker" OFF)
 if(CIRCT_LEC_DISABLE)
@@ -489,15 +490,9 @@ else()
       get_target_property(Z3_LIB_LOCATION z3::libz3 IMPORTED_LOCATION_DEBUG)
       message(STATUS "Found Z3: ${Z3_LIB_LOCATION} (found version \"${Z3_VERSION_STRING}\")")
     endif()
-    # Link against the reported library and include locations.
-    list(APPEND CIRCT_LEC_LIBS ${Z3_LIBRARIES})
-    list(APPEND CIRCT_LEC_INCLUDES ${Z3_CXX_INCLUDE_DIRS})
   else()
     # Attempt initialising Z3 according to LLVM's `FindZ3` CMake module.
     find_package(Z3)
-    # Link against the reported library and include locations.
-    list(APPEND CIRCT_LEC_LIBS ${Z3_LIBRARIES})
-    list(APPEND CIRCT_LEC_INCLUDES ${Z3_INCLUDE_DIR})
   endif()
   
   if(Z3_FOUND)
