@@ -22,7 +22,6 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVDialect.h"
-#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
@@ -439,37 +438,6 @@ static LogicalResult printOp(Operation *op, raw_ostream &os) {
   return success();
 }
 
-// If requested, finalize and print the MLIR into mlirOutFile. The final MLIR
-// will erase any sv.verbatim ops that represented contents for sideband files,
-// so this should always be called after ExportVerilog.
-static LogicalResult finalizeAndPrintMlir(ModuleOp moduleOp) {
-  if (mlirOutFile.empty())
-    return success();
-
-  std::string mlirOutError;
-  auto mlirFile = openOutputFile(mlirOutFile, &mlirOutError);
-  if (!mlirFile) {
-    llvm::errs() << mlirOutError;
-    return failure();
-  }
-
-  // Finalize the MLIR by erasing any sv.verbatim ops for sideband files.
-  for (auto verbatim : llvm::make_early_inc_range(
-           moduleOp.getBodyRegion().getOps<sv::VerbatimOp>()))
-    if (auto outputFile = verbatim->getAttrOfType<hw::OutputFileAttr>(
-            hw::OutputFileAttr::getMnemonic()))
-      if (!outputFile.isDirectory() &&
-          outputFile.getExcludeFromFilelist().getValue())
-        verbatim.erase();
-
-  // Print the final MLIR.
-  if (failed(printOp(moduleOp, mlirFile->os())))
-    return failure();
-  mlirFile->keep();
-
-  return success();
-}
-
 /// Process a single buffer of the input.
 static LogicalResult processBuffer(
     MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
@@ -830,6 +798,11 @@ static LogicalResult processBuffer(
     if (exportModuleHierarchy)
       exportPm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
 
+    // Run final IR mutations to clean it up after ExportVerilog and before
+    // emitting the final MLIR.
+    if (!mlirOutFile.empty())
+      exportPm.addPass(firrtl::createFinalizeIRPass());
+
     if (failed(exportPm.run(module.get())))
       return failure();
   }
@@ -841,9 +814,19 @@ static LogicalResult processBuffer(
       return failure();
   }
 
-  // If requested, finalize and print the MLIR into mlirOutFile.
-  if (failed(finalizeAndPrintMlir(*module)))
-    return failure();
+  // If requested, print the final MLIR into mlirOutFile.
+  if (!mlirOutFile.empty()) {
+    std::string mlirOutError;
+    auto mlirFile = openOutputFile(mlirOutFile, &mlirOutError);
+    if (!mlirFile) {
+      llvm::errs() << mlirOutError;
+      return failure();
+    }
+
+    if (failed(printOp(*module, mlirFile->os())))
+      return failure();
+    mlirFile->keep();
+  }
 
   // We intentionally "leak" the Module into the MLIRContext instead of
   // deallocating it.  There is no need to deallocate it right before process
