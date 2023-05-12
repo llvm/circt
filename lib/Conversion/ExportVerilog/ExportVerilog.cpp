@@ -1243,7 +1243,8 @@ public:
   // Methods for formatting types.
 
   /// Emit a type's packed dimensions.
-  void emitTypeDims(Type type, Location loc, raw_ostream &os);
+  template <typename PPS>
+  void emitTypeDims(Type type, Location loc, PPS &os);
 
   /// Print the specified packed portion of the type to the specified stream,
   ///
@@ -1255,7 +1256,8 @@ public:
   ///       `[0:0]`.  This is used in parameter lists.
   ///
   /// This returns true if anything was printed.
-  bool printPackedType(Type type, raw_ostream &os, Location loc,
+  template <typename PPS>
+  bool printPackedType(Type type, PPS &os, Location loc,
                        Type optionalAliasType = {}, bool implicitIntType = true,
                        bool singleBitDefaultType = true);
 
@@ -1300,18 +1302,22 @@ public:
 // Methods for formatting types.
 
 /// Emit a list of dimensions.
-static void emitDims(ArrayRef<Attribute> dims, raw_ostream &os, Location loc,
+template <typename PPS>
+static void emitDims(ArrayRef<Attribute> dims, PPS &ps, Location loc,
                      ModuleEmitter &emitter) {
   for (Attribute width : dims) {
     if (!width) {
-      os << "<<invalid type>>";
+      ps << "<<invalid type>>";
       continue;
     }
     if (auto intAttr = width.dyn_cast<IntegerAttr>()) {
       if (intAttr.getValue().isZero())
-        os << "/*Zero Width*/";
-      else
-        os << '[' << (intAttr.getValue().getZExtValue() - 1) << ":0]";
+        ps << "/*Zero Width*/";
+      else {
+        ps << "[";
+        ps.addAsString(intAttr.getValue().getZExtValue() - 1);
+        ps << ":0]";
+      }
       continue;
     }
 
@@ -1326,16 +1332,19 @@ static void emitDims(ArrayRef<Attribute> dims, raw_ostream &os, Location loc,
         loc.getContext(), typedAttr.getType(),
         APInt(typedAttr.getType().getIntOrFloatBitWidth(), -1L, true));
     width = ParamExprAttr::get(PEO::Add, typedAttr, negOne);
-    os << '[';
-    emitter.printParamValue(width, os, [loc]() {
-      return mlir::emitError(loc, "invalid parameter in type");
+    ps << "[";
+    ps.invokeWithStringOS([&](auto &os) {
+      emitter.printParamValue(width, os, [loc]() {
+        return mlir::emitError(loc, "invalid parameter in type");
+      });
     });
-    os << ":0]";
+    ps << ":0]";
   }
 }
 
 /// Emit a type's packed dimensions.
-void ModuleEmitter::emitTypeDims(Type type, Location loc, raw_ostream &os) {
+template <typename PPS>
+void ModuleEmitter::emitTypeDims(Type type, Location loc, PPS &os) {
   SmallVector<Attribute, 4> dims;
   getTypeDims(dims, type, loc);
   emitDims(dims, os, loc, *this);
@@ -1350,138 +1359,159 @@ void ModuleEmitter::emitTypeDims(Type type, Location loc, raw_ostream &os) {
 ///
 /// Returns true when anything was printed out.
 // NOLINTBEGIN(misc-no-recursion)
-static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
+template <typename PPS>
+static bool printPackedTypeImpl(Type type, PPS &ps, Location loc,
                                 SmallVectorImpl<Attribute> &dims,
                                 bool implicitIntType, bool singleBitDefaultType,
                                 ModuleEmitter &emitter,
                                 Type optionalAliasType = {}) {
   return TypeSwitch<Type, bool>(type)
-      .Case<IntegerType>([&](IntegerType integerType) {
+      .template Case<IntegerType>([&](IntegerType integerType) {
         if (!implicitIntType)
-          os << "logic";
+          ps << "logic";
         if (integerType.getWidth() != 1 || !singleBitDefaultType)
           dims.push_back(
               getInt32Attr(type.getContext(), integerType.getWidth()));
         if (!dims.empty() && !implicitIntType)
-          os << ' ';
+          ps << PP::nbsp;
 
-        emitDims(dims, os, loc, emitter);
+        emitDims(dims, ps, loc, emitter);
         return !dims.empty() || !implicitIntType;
       })
-      .Case<IntType>([&](IntType intType) {
+      .template Case<IntType>([&](IntType intType) {
         if (!implicitIntType)
-          os << "logic ";
+          ps << "logic ";
         dims.push_back(intType.getWidth());
-        emitDims(dims, os, loc, emitter);
+        emitDims(dims, ps, loc, emitter);
         return true;
       })
-      .Case<ArrayType>([&](ArrayType arrayType) {
+      .template Case<ArrayType>([&](ArrayType arrayType) {
         dims.push_back(arrayType.getSizeAttr());
-        return printPackedTypeImpl(arrayType.getElementType(), os, loc, dims,
+        return printPackedTypeImpl(arrayType.getElementType(), ps, loc, dims,
                                    implicitIntType, singleBitDefaultType,
                                    emitter);
       })
-      .Case<InOutType>([&](InOutType inoutType) {
-        return printPackedTypeImpl(inoutType.getElementType(), os, loc, dims,
+      .template Case<InOutType>([&](InOutType inoutType) {
+        return printPackedTypeImpl(inoutType.getElementType(), ps, loc, dims,
                                    implicitIntType, singleBitDefaultType,
                                    emitter);
       })
-      .Case<EnumType>([&](EnumType enumType) {
-        os << "enum ";
-        if (enumType.getBitWidth() != 32)
-          os << "bit [" << enumType.getBitWidth() - 1 << ":0] ";
-        os << "{";
+      .template Case<EnumType>([&](EnumType enumType) {
+        ps << "enum ";
+        if (enumType.getBitWidth() != 32) {
+          ps << "bit [";
+          ps.addAsString(enumType.getBitWidth() - 1);
+          ps << ":0] ";
+        }
+        ps << "{";
         Type enumPrefixType = optionalAliasType ? optionalAliasType : enumType;
         llvm::interleaveComma(
-            enumType.getFields().getAsRange<StringAttr>(), os,
+            enumType.getFields().getAsRange<StringAttr>(), ps,
             [&](auto enumerator) {
-              os << emitter.fieldNameResolver.getEnumFieldName(
+              ps << emitter.fieldNameResolver.getEnumFieldName(
                   hw::EnumFieldAttr::get(loc, enumerator, enumPrefixType));
             });
-        os << "}";
+        ps << "}";
         return true;
       })
-      .Case<StructType>([&](StructType structType) {
+      .template Case<StructType>([&](StructType structType) {
         if (structType.getElements().empty() || isZeroBitType(structType)) {
-          os << "/*Zero Width*/";
+          ps << "/*Zero Width*/";
           return true;
         }
-        os << "struct packed {";
-        for (auto &element : structType.getElements()) {
-          if (isZeroBitType(element.type)) {
-            os << "/*" << emitter.getVerilogStructFieldName(element.name)
-               << ": Zero Width;*/ ";
-            continue;
+        ps.scopedBox(PP::cbox2, [&]() {
+        ps << "struct packed {" << PP::space;
+          for (const auto & [idx, element] :
+               llvm::enumerate(structType.getElements())) {
+            if (idx > 0)
+              ps << PP::space;
+            if (isZeroBitType(element.type)) {
+              ps << "/*" << emitter.getVerilogStructFieldName(element.name)
+                 << ": Zero Width;*/ ";
+              continue;
+            }
+            SmallVector<Attribute, 8> structDims;
+            printPackedTypeImpl(stripUnpackedTypes(element.type), ps, loc,
+                                structDims,
+                                /*implicitIntType=*/false,
+                                /*singleBitDefaultType=*/true, emitter);
+            ps << PP::nbsp << emitter.getVerilogStructFieldName(element.name);
+            auto elementType = element.type;
+            ps.invokeWithStringOS([&](auto &os) {
+              emitter.printUnpackedTypePostfix(elementType, os);
+            });
+            ps << ";";
           }
-          SmallVector<Attribute, 8> structDims;
-          printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
-                              structDims,
-                              /*implicitIntType=*/false,
-                              /*singleBitDefaultType=*/true, emitter);
-          os << ' ' << emitter.getVerilogStructFieldName(element.name);
-          emitter.printUnpackedTypePostfix(element.type, os);
-          os << "; ";
-        }
-        os << '}';
-        emitDims(dims, os, loc, emitter);
+          if (!structType.getElements().empty())
+            ps << PP::nbsp;
+          ps << "}";
+          emitDims(dims, ps, loc, emitter);
+          // ps << PP::zerobreak;
+        });
         return true;
       })
-      .Case<UnionType>([&](UnionType unionType) {
+      .template Case<UnionType>([&](UnionType unionType) {
         if (unionType.getElements().empty() || isZeroBitType(unionType)) {
-          os << "/*Zero Width*/";
+          ps << "/*Zero Width*/";
           return true;
         }
 
         int64_t unionWidth = hw::getBitWidth(unionType);
-        os << "union packed {";
+        ps << "union packed {";
         for (auto &element : unionType.getElements()) {
           if (isZeroBitType(element.type)) {
-            os << "/*" << emitter.getVerilogStructFieldName(element.name)
+            ps << "/*" << emitter.getVerilogStructFieldName(element.name)
                << ": Zero Width;*/ ";
             continue;
           }
           int64_t elementWidth = hw::getBitWidth(element.type);
           bool needsPadding = elementWidth < unionWidth || element.offset > 0;
           if (needsPadding) {
-            os << " struct packed {";
+            ps << " struct packed {";
             if (element.offset) {
-              os << "logic [" << element.offset - 1 << ":0] "
-                 << "__pre_padding_" << element.name.getValue() << "; ";
+              ps << "logic [";
+              ps.addAsString(element.offset - 1);
+              ps << ":0] " <<
+                 "__pre_padding_" << element.name.getValue() << "; ";
             }
           }
 
           SmallVector<Attribute, 8> structDims;
-          printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
+          printPackedTypeImpl(stripUnpackedTypes(element.type), ps, loc,
                               structDims,
                               /*implicitIntType=*/false,
                               /*singleBitDefaultType=*/true, emitter);
-          os << ' ' << emitter.getVerilogStructFieldName(element.name);
-          emitter.printUnpackedTypePostfix(element.type, os);
-          os << ";";
+          ps << PP::nbsp << emitter.getVerilogStructFieldName(element.name);
+          ps.invokeWithStringOS([&](auto &os) {
+            emitter.printUnpackedTypePostfix(element.type, os);
+          });
+          ps << ";";
 
           if (needsPadding) {
             if (elementWidth + (int64_t)element.offset < unionWidth) {
-              os << " logic ["
-                 << unionWidth - (elementWidth + element.offset) - 1 << ":0] "
+              ps << " logic [";
+              ps.addAsString(unionWidth - (elementWidth + element.offset) - 1);
+              ps << ":0] "
                  << "__post_padding_" << element.name.getValue() << ";";
             }
-            os << "} " << emitter.getVerilogStructFieldName(element.name)
+            ps << "} " << emitter.getVerilogStructFieldName(element.name)
                << ";";
           }
         }
-        os << '}';
-        emitDims(dims, os, loc, emitter);
+        ps << "}";
+        emitDims(dims, ps, loc, emitter);
         return true;
       })
 
-      .Case<InterfaceType>([](InterfaceType ifaceType) { return false; })
-      .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
-        os << "<<unexpected unpacked array>>";
+      .template Case<InterfaceType>(
+          [](InterfaceType ifaceType) { return false; })
+      .template Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
+        ps << "<<unexpected unpacked array>>";
         mlir::emitError(loc, "Unexpected unpacked array in packed type ")
             << arrayType;
         return true;
       })
-      .Case<TypeAliasType>([&](TypeAliasType typeRef) {
+      .template Case<TypeAliasType>([&](TypeAliasType typeRef) {
         auto typedecl = typeRef.getTypeDecl(emitter.state.symbolCache);
         if (!typedecl) {
           mlir::emitError(loc, "unresolvable type reference");
@@ -1492,12 +1522,14 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           return false;
         }
 
-        os << typedecl.getPreferredName();
-        emitDims(dims, os, typedecl->getLoc(), emitter);
+        ps << typedecl.getPreferredName();
+        emitDims(dims, ps, typedecl->getLoc(), emitter);
         return true;
       })
       .Default([&](Type type) {
-        os << "<<invalid type '" << type << "'>>";
+        ps << "<<invalid type '";
+        ps.addAsString(type);
+        ps << "'>>";
         mlir::emitError(loc, "value has an unsupported verilog type ") << type;
         return true;
       });
@@ -1512,7 +1544,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
 ///       `[0:0]`.  This is used in parameter lists.
 ///
 /// This returns true if anything was printed.
-bool ModuleEmitter::printPackedType(Type type, raw_ostream &os, Location loc,
+template <typename PPS>
+bool ModuleEmitter::printPackedType(Type type, PPS &os, Location loc,
                                     Type optionalAliasType,
                                     bool implicitIntType,
                                     bool singleBitDefaultType) {
@@ -2285,8 +2318,7 @@ SubExprInfo ExprEmitter::visitTypeOp(BitcastOp op) {
   Type toType = op.getType();
   if (!haveMatchingDims(toType, op.getInput().getType(), op.getLoc())) {
     ps << "/*cast(bit";
-    ps.invokeWithStringOS(
-        [&](auto &os) { emitter.emitTypeDims(toType, op.getLoc(), os); });
+    emitter.emitTypeDims(toType, op.getLoc(), ps);
     ps << ")*/";
   }
   return emitSubExpr(op.getInput(), LowestPrecedence);
@@ -2956,83 +2988,6 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
 // NOLINTEND(misc-no-recursion)
 
 //===----------------------------------------------------------------------===//
-// NameCollector
-//===----------------------------------------------------------------------===//
-
-namespace {
-class NameCollector {
-public:
-  NameCollector(ModuleEmitter &moduleEmitter) : moduleEmitter(moduleEmitter) {}
-
-  // Scan operations in the specified block, collecting information about
-  // those that need to be emitted as declarations.
-  void collectNames(Block &block);
-
-  size_t getMaxDeclNameWidth() const { return maxDeclNameWidth; }
-  size_t getMaxTypeWidth() const { return maxTypeWidth; }
-
-private:
-  size_t maxDeclNameWidth = 0, maxTypeWidth = 0;
-  ModuleEmitter &moduleEmitter;
-};
-} // namespace
-
-// NOLINTNEXTLINE(misc-no-recursion)
-void NameCollector::collectNames(Block &block) {
-  // Loop over all of the results of all of the ops. Anything that defines a
-  // value needs to be noticed.
-  for (auto &op : block) {
-    // Instances have an instance name to recognize but we don't need to look
-    // at the result values since wires used by instances should be traversed
-    // anyway.
-    if (isa<InstanceOp, InterfaceInstanceOp>(op))
-      continue;
-
-    bool isExpr = isVerilogExpression(&op);
-    assert((!isExpr ||
-            isExpressionEmittedInline(&op, moduleEmitter.state.options)) &&
-           "If 'op' is a verilog expression, the expression must be inlinable. "
-           "Otherwise, it is a bug of PrepareForEmission");
-
-    if (!isExpr) {
-      for (auto result : op.getResults()) {
-        StringRef declName =
-            getVerilogDeclWord(&op, moduleEmitter.state.options);
-        maxDeclNameWidth = std::max(declName.size(), maxDeclNameWidth);
-        SmallString<16> typeString;
-
-        // Convert the port's type to a string and measure it.
-        {
-          llvm::raw_svector_ostream stringStream(typeString);
-          moduleEmitter.printPackedType(stripUnpackedTypes(result.getType()),
-                                        stringStream, op.getLoc());
-        }
-        maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
-      }
-    }
-
-    // Recursively process any regions under the op iff this is a procedural
-    // #ifdef region: we need to emit automatic logic values at the top of the
-    // enclosing region.
-    if (isa<IfDefProceduralOp, OrderedOutputOp>(op)) {
-      for (auto &region : op.getRegions()) {
-        if (!region.empty())
-          collectNames(region.front());
-      }
-      continue;
-    }
-
-    // Recursively process any expressions in else blocks that can be emitted
-    // as `else if`.
-    if (auto ifOp = dyn_cast<IfOp>(op)) {
-      if (ifOp.hasElse() && findNestedElseIf(ifOp.getElseBlock()))
-        collectNames(*ifOp.getElseBlock());
-      continue;
-    }
-  }
-}
-
-//===----------------------------------------------------------------------===//
 // StmtEmitter
 //===----------------------------------------------------------------------===//
 
@@ -3055,8 +3010,6 @@ public:
   LogicalResult emitDeclaration(Operation *op);
 
 private:
-  void collectNamesAndCalculateDeclarationWidths(Block &block);
-
   void
   emitExpression(Value exp, SmallPtrSetImpl<Operation *> &emittedExprs,
                  VerilogPrecedence parenthesizeIfLooserThan = LowestPrecedence);
@@ -3163,12 +3116,6 @@ private:
 
 public:
   ModuleEmitter &emitter;
-
-private:
-  /// These keep track of the maximum length of name width and type width in the
-  /// current statement scope.
-  size_t maxDeclNameWidth = 0;
-  size_t maxTypeWidth = 0;
 };
 
 } // end anonymous namespace
@@ -3208,7 +3155,7 @@ void StmtEmitter::emitAssignLike(llvm::function_ref<void()> emitLHS,
     }
     emitLHS();
     // Allow breaking before 'syntax' (e.g., '=') if long assignment.
-    ps << PP::space << syntax << PP::space;
+    ps << PP::space << syntax << PP::nbsp;
     // RHS is boxed to right of the syntax.
     ps.scopedBox(PP::ibox0, [&]() {
       emitRHS();
@@ -3418,10 +3365,8 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
   ops.insert(op);
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "typedef" << PP::space;
-    ps.invokeWithStringOS([&](auto &os) {
-      emitter.printPackedType(stripUnpackedTypes(op.getType()), os, op.getLoc(),
-                              op.getAliasType(), false);
-    });
+    emitter.printPackedType(stripUnpackedTypes(op.getType()), ps, op.getLoc(),
+                            op.getAliasType(), false);
     ps << PP::space << PPExtString(op.getPreferredName());
     ps.invokeWithStringOS(
         [&](auto &os) { emitter.printUnpackedTypePostfix(op.getType(), os); });
@@ -3715,10 +3660,7 @@ LogicalResult StmtEmitter::visitSV(ForOp op) {
     emitAssignLike(
         [&]() {
           ps << "logic" << PP::nbsp;
-          ps.invokeWithStringOS([&](auto &os) {
-            emitter.emitTypeDims(op.getInductionVar().getType(), op.getLoc(),
-                                 os);
-          });
+          emitter.emitTypeDims(op.getInductionVar().getType(), op.getLoc(), ps);
           ps << PP::nbsp << PPExtString(inductionVarName);
         },
         [&]() { emitExpression(op.getLowerBound(), ops); }, PPExtString("="));
@@ -4405,10 +4347,8 @@ LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   startStatement();
   if (isZeroBitType(op.getType()))
     ps << PP::neverbox << "// ";
-  ps.invokeWithStringOS([&](auto &os) {
-    emitter.printPackedType(stripUnpackedTypes(op.getType()), os, op->getLoc(),
-                            Type(), false);
-  });
+  emitter.printPackedType(stripUnpackedTypes(op.getType()), ps, op->getLoc(),
+                          Type(), false);
   ps << PP::nbsp << PPExtString(getSymOpName(op));
   ps.invokeWithStringOS(
       [&](auto &os) { emitter.printUnpackedTypePostfix(op.getType(), os); });
@@ -4621,23 +4561,26 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
       if (!word.empty())
         ps << PPExtString(word);
       auto extraIndent = word.empty() ? 0 : 1;
-      ps.spaces(maxDeclNameWidth - word.size() + extraIndent);
+      ps.spaces(extraIndent);
     } else {
       ps << "// Zero width: " << PPExtString(word) << PP::space;
     }
 
     SmallString<8> typeString;
+    emitter.printPackedType(stripUnpackedTypes(type), ps, op->getLoc());
+    // TODO: space only if needed!
+    ps.space();
     // Convert the port's type to a string and measure it.
-    {
-      llvm::raw_svector_ostream stringStream(typeString);
-      emitter.printPackedType(stripUnpackedTypes(type), stringStream,
-                              op->getLoc());
-    }
-    // Emit the type.
-    if (!typeString.empty())
-      ps << typeString;
-    if (typeString.size() < maxTypeWidth)
-      ps.spaces(maxTypeWidth - typeString.size());
+    //{
+    //  llvm::raw_svector_ostream stringStream(typeString);
+    //  emitter.printPackedType(stripUnpackedTypes(type), stringStream,
+    //                          op->getLoc());
+    //}
+    //// Emit the type.
+    //if (!typeString.empty())
+    //  ps << typeString;
+    //if (typeString.size() < maxTypeWidth)
+    //  ps.spaces(maxTypeWidth - typeString.size());
 
     // Emit the name.
     ps << PPExtString(getSymOpName(op));
@@ -4673,7 +4616,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
         // next to the operation.
         if (!source || isa<ConstantOp>(source) ||
             op->getNextNode() == singleAssign) {
-          ps << PP::space << "=" << PP::space;
+          ps << PP::space << "=" << PP::nbsp;
           ps.scopedBox(PP::ibox0, [&]() {
             emitExpression(singleAssign.getSrc(), opsForLocation);
           });
@@ -4695,7 +4638,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
           if (!source || isa<ConstantOp>(source) ||
               isExpressionEmittedInlineIntoProceduralDeclaration(source,
                                                                  *this)) {
-            ps << PP::space << "=" << PP::space;
+            ps << PP::space << "=" << PP::nbsp;
             ps.scopedBox(PP::ibox0, [&]() {
               emitExpression(singleAssign.getSrc(), opsForLocation);
             });
@@ -4712,34 +4655,13 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
   return success();
 }
 
-void StmtEmitter::collectNamesAndCalculateDeclarationWidths(Block &block) {
-  // In the first pass, we fill in the symbol table, calculate the max width
-  // of the declaration words and the max type width.
-  NameCollector collector(emitter);
-  collector.collectNames(block);
-
-  // Record maxDeclNameWidth and maxTypeWidth in the current scope.
-  maxDeclNameWidth = collector.getMaxDeclNameWidth();
-  maxTypeWidth = collector.getMaxTypeWidth();
-
-  if (maxTypeWidth > 0) // add a space if any type exists
-    maxTypeWidth += 1;
-}
-
 void StmtEmitter::emitStatementBlock(Block &body) {
   ps.scopedBox(PP::bbox2, [&]() {
-    // Ensure decl alignment values are preserved after the block is emitted.
-    // These values were computed for and from all declarations in the current
-    // block (before/after this nested block), so be sure they're restored
-    // and not overwritten by the declaration alignment within the block.
-    llvm::SaveAndRestore<size_t> x(maxDeclNameWidth);
-    llvm::SaveAndRestore<size_t> x2(maxTypeWidth);
-
     // Build up the symbol table for all of the values that need names in the
     // module.  #ifdef's in procedural regions are special because local
     // variables are all emitted at the top of their enclosing blocks.
-    if (!isa<IfDefProceduralOp>(body.getParentOp()))
-      collectNamesAndCalculateDeclarationWidths(body);
+    //if (!isa<IfDefProceduralOp>(body.getParentOp()))
+    //  collectNamesAndCalculateDeclarationWidths(body);
 
     // Emit the body.
     for (auto &op : body) {
@@ -4926,11 +4848,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
 
   // If we have any parameters, print them on their own line.
   if (!module.getParameters().empty()) {
-    auto printParamType = [&](Type type, Attribute defaultValue,
-                              SmallString<8> &result) {
-      result.clear();
-      llvm::raw_svector_ostream sstream(result);
-
+    auto printParamType = [&](Type type, Attribute defaultValue) {
       // If there is a default value like "32" then just print without type at
       // all.
       if (defaultValue) {
@@ -4950,29 +4868,30 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       // a 32-bit "integer" parameter.
       if (auto intType = type_dyn_cast<IntegerType>(type))
         if (intType.getWidth() == 32) {
-          sstream << "/*integer*/";
+          ps << "/*integer*/" << PP::nbsp;
           return;
         }
 
-      printPackedType(type, sstream, module->getLoc(),
+      printPackedType(type, ps, module->getLoc(),
                       /*optionalAliasType=*/Type(),
                       /*implicitIntType=*/true,
                       // Print single-bit values as explicit `[0:0]` type.
                       /*singleBitDefaultType=*/false);
+      ps << PP::nbsp;
     };
 
     // Determine the max width of the parameter types so things are lined up.
-    size_t maxTypeWidth = 0;
-    SmallString<8> scratch;
-    for (auto param : module.getParameters()) {
-      auto paramAttr = param.cast<ParamDeclAttr>();
-      // Measure the type length by printing it to a temporary string.
-      printParamType(paramAttr.getType(), paramAttr.getValue(), scratch);
-      maxTypeWidth = std::max(scratch.size(), maxTypeWidth);
-    }
+    //size_t maxTypeWidth = 0;
+    //SmallString<8> scratch;
+    //for (auto param : module.getParameters()) {
+    //  auto paramAttr = param.cast<ParamDeclAttr>();
+    //  // Measure the type length by printing it to a temporary string.
+    //  printParamType(paramAttr.getType(), paramAttr.getValue(), scratch);
+    //  maxTypeWidth = std::max(scratch.size(), maxTypeWidth);
+    //}
 
-    if (maxTypeWidth > 0) // add a space if any type exists.
-      maxTypeWidth += 1;
+    //if (maxTypeWidth > 0) // add a space if any type exists.
+    //  maxTypeWidth += 1;
 
     ps.scopedBox(PP::bbox2, [&]() {
       ps << PP::newline << "#(";
@@ -4984,11 +4903,11 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
               auto defaultValue =
                   paramAttr.getValue(); // may be null if absent.
               ps << "parameter ";
-              printParamType(paramAttr.getType(), defaultValue, scratch);
-              if (!scratch.empty())
-                ps << scratch;
-              if (scratch.size() < maxTypeWidth)
-                ps.nbsp(maxTypeWidth - scratch.size());
+              printParamType(paramAttr.getType(), defaultValue);
+              //if (!scratch.empty())
+              //  ps << scratch;
+              //if (scratch.size() < maxTypeWidth)
+              //  ps.nbsp(maxTypeWidth - scratch.size());
 
               ps << PPExtString(state.globalNames.getParameterVerilogName(
                   module, paramAttr.getName()));
@@ -5017,8 +4936,8 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   // Determine the width of the widest type we have to print so everything
   // lines up nicely.
   bool hasOutputs = false, hasZeroWidth = false;
-  size_t maxTypeWidth = 0, lastNonZeroPort = -1;
-  SmallVector<SmallString<8>, 16> portTypeStrings;
+  size_t lastNonZeroPort = -1;
+  //SmallVector<SmallString<8>, 16> portTypeStrings;
 
   for (size_t i = 0, e = portInfo.size(); i < e; ++i) {
     auto port = portInfo[i];
@@ -5028,18 +4947,18 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       lastNonZeroPort = i;
 
     // Convert the port's type to a string and measure it.
-    portTypeStrings.push_back({});
-    {
-      llvm::raw_svector_ostream stringStream(portTypeStrings.back());
-      printPackedType(stripUnpackedTypes(port.type), stringStream,
-                      module->getLoc());
-    }
+    //portTypeStrings.push_back({});
+    //{
+    //  llvm::raw_svector_ostream stringStream(portTypeStrings.back());
+    //  printPackedType(stripUnpackedTypes(port.type), stringStream,
+    //                  module->getLoc());
+    //}
 
-    maxTypeWidth = std::max(portTypeStrings.back().size(), maxTypeWidth);
+    //maxTypeWidth = std::max(portTypeStrings.back().size(), maxTypeWidth);
   }
 
-  if (maxTypeWidth > 0) // add a space if any type exists
-    maxTypeWidth += 1;
+  //if (maxTypeWidth > 0) // add a space if any type exists
+  //  maxTypeWidth += 1;
 
   // Emit the port list.
   ps.scopedBox(PP::bbox2, [&]() {
@@ -5077,13 +4996,17 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
         ps << "wire ";
 
       // Emit the type.
-      if (!portTypeStrings[portIdx].empty())
-        ps << portTypeStrings[portIdx];
-      if (portTypeStrings[portIdx].size() < maxTypeWidth)
-        ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
+      printPackedType(stripUnpackedTypes(portType), ps, module->getLoc());
+      // TODO: space if type printed? :(
+      ps << PP::nbsp;
 
-      size_t startOfNamePos =
-          (hasOutputs ? 7 : 6) + (emitWireInPorts ? 5 : 0) + maxTypeWidth;
+      //if (!portTypeStrings[portIdx].empty())
+      //  ps << portTypeStrings[portIdx];
+      //if (portTypeStrings[portIdx].size() < maxTypeWidth)
+      //  ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
+
+      //size_t startOfNamePos =
+      //    (hasOutputs ? 7 : 6) + (emitWireInPorts ? 5 : 0) + maxTypeWidth;
 
       // Emit the name.
       ps << PPExtString(getPortVerilogName(module, portInfo[portIdx]));
@@ -5131,7 +5054,8 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
             ps << (isZeroWidth ? "// " : "   ");
           }
 
-          ps.nbsp(startOfNamePos);
+          //ps.nbsp(startOfNamePos);
+          ps.nbsp();
 
           // Emit the name.
           StringRef name = getPortVerilogName(module, portInfo[portIdx]);
