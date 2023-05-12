@@ -205,6 +205,10 @@ static void tryCopyName(Operation *dst, Operation *src) {
       dst->setAttr("sv.namehint", attr);
 }
 
+static ArrayAttr computePathForRef(size_t portIdx, PortInfo port, FModuleOp mod) {
+  return ArrayAttr();
+}
+
 //===----------------------------------------------------------------------===//
 // firrtl.module Lowering Pass
 //===----------------------------------------------------------------------===//
@@ -424,7 +428,7 @@ private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
   LogicalResult lowerPorts(ArrayRef<PortInfo> firrtlPorts,
                            SmallVectorImpl<hw::PortInfo> &ports,
-                           SmallVectorImpl<PortInfo>& refPorts,
+                           SmallVectorImpl<std::pair<size_t, PortInfo>>& refPorts,
                            Operation *moduleOp, StringRef moduleName,
                            CircuitLoweringState &loweringState);
   bool handleForceNameAnnos(FModuleLike oldModule, AnnotationSet &annos,
@@ -941,14 +945,16 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 LogicalResult
 FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
                                  SmallVectorImpl<hw::PortInfo> &ports,
-                                 SmallVectorImpl<PortInfo> &refPorts,
+                                 SmallVectorImpl<std::pair<size_t, PortInfo>> &refPorts,
                                  Operation *moduleOp, StringRef moduleName,
                                  CircuitLoweringState &loweringState) {
   ports.reserve(firrtlPorts.size());
   size_t numArgs = 0;
   size_t numResults = 0;
-  for (auto firrtlPort : firrtlPorts) {
-    firrtlPort.type.dump();
+  //not using structured bindings for const issues.
+  for (auto it : llvm::enumerate(firrtlPorts)) {
+    PortInfo firrtlPort = it.value();
+    size_t index = it.index();
     hw::PortInfo hwPort;
     hwPort.name = firrtlPort.name;
     hwPort.type = lowerType(firrtlPort.type);
@@ -974,7 +980,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
     }
 
     if (firrtlPort.type.isa<RefType>()) {
-      refPorts.push_back(firrtlPort);
+      refPorts.push_back(std::make_pair(index, firrtlPort));
       continue;
     }
 
@@ -1116,7 +1122,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
                                      CircuitLoweringState &loweringState) {
   // Map the ports over, lowering their types as we go.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
-  SmallVector<PortInfo> refPorts;
+  SmallVector<std::pair<size_t, PortInfo>> refPorts;
   SmallVector<hw::PortInfo, 8> ports;
   if (failed(lowerPorts(firrtlPorts, ports, refPorts, oldModule, oldModule.getName(),
                         loweringState)))
@@ -1160,7 +1166,7 @@ FIRRTLModuleLowering::lowerMemModule(FMemModuleOp oldModule,
   // Map the ports over, lowering their types as we go.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<hw::PortInfo, 8> ports;
-  SmallVector<PortInfo> refPorts;
+  SmallVector<std::pair<size_t, PortInfo>> refPorts;
   if (failed(lowerPorts(firrtlPorts, ports, refPorts, oldModule, oldModule.getName(),
                         loweringState)))
     return {};
@@ -1182,7 +1188,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
                                   CircuitLoweringState &loweringState) {
   // Map the ports over, lowering their types as we go.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
-  SmallVector<PortInfo> firrtlRefs;
+  SmallVector<std::pair<size_t, PortInfo>> firrtlRefs;
   SmallVector<hw::PortInfo, 8> ports;
   if (failed(lowerPorts(firrtlPorts, ports, firrtlRefs,
                         oldModule, oldModule.getName(), loweringState)))
@@ -1231,6 +1237,17 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
     return {};
 
   loweringState.processRemainingAnnotations(oldModule, annos);
+
+  auto circuitName = oldModule.getParentOp<CircuitOp>().getName();
+
+  // Lower the output ref ports
+  for (auto ref : firrtlRefs) {
+    auto pathsym = builder.getStringAttr("path_" + circuitName + "_" + oldModule.getName() + ref.second.getName());
+    auto refsym = builder.getStringAttr("ref_" + circuitName + "_" + oldModule.getName() + ref.second.getName());
+    auto hierpath = builder.create<hw::HierPathOp>(oldModule.getLoc(), pathsym, computePathForRef(ref.first, ref.second, oldModule));
+    builder.create<sv::MacroDeclOp>(oldModule.getLoc(), refsym, nullptr, nullptr);
+    builder.create<sv::MacroDefOp>(oldModule.getLoc(), refsym, "{{substitution passed hierpath}}");// hierpath);
+  }
   return newModule;
 }
 
