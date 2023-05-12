@@ -383,4 +383,10 @@ def RegResetWithZeroReset : Pat<
   (RegResetOp $clock, $reset, $_, $name, $nameKind, $annotations, $inner_sym, $forceable),
   (RegOp $clock, $name, $nameKind, $annotations, $inner_sym, $forceable), [(ZeroConstantOp $reset)]>;
 
+// ref.resolve(ref.send(a)) -> a
+def RefResolveOfRefSend : Pat<
+  (RefResolveOp:$resolve (RefSendOp $base)),
+  (replaceWithValue $base), [(EqualTypes $base, $resolve)]
+>;
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD

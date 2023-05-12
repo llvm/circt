@@ -11,6 +11,7 @@
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 using namespace circt;
@@ -297,6 +298,11 @@ LogicalResult LutOp::verify() {
            << "first operation with side-effects here";
 
   return success();
+}
+
+Operation *
+CallOpMutableInterface::resolveCallable(SymbolTableCollection *symbolTable) {
+  return cast<CallOpInterface>(**this).resolveCallable(symbolTable);
 }
 
 #include "circt/Dialect/Arc/ArcInterfaces.cpp.inc"

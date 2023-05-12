@@ -21,6 +21,7 @@ include "circt/Dialect/FIRRTL/FIRRTLTypes.td"
 include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.td"
 include "circt/Dialect/FIRRTL/FIRRTLAttributes.td"
 include "circt/Dialect/FIRRTL/FIRRTLEnums.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
@@ -102,7 +103,7 @@ def CMemoryPortType : TypeDef<CHIRRTLDialect, "CMemoryPort"> {
 class CHIRRTLOp<string mnemonic, list<Trait> traits = []> :
     Op<CHIRRTLDialect, mnemonic, traits>;
 
-def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName, FNamableOp]> {
+def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName, DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>, FNamableOp]> {
   let summary = "Define a new combinational memory";
   let description = [{
     Define a new behavioral combinational memory. Combinational memories have a
@@ -124,7 +125,7 @@ def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName, FNamableOp]> {
   ];
 }
 
-def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName, FNamableOp]> {
+def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName, DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>, FNamableOp]> {
   let summary = "Define a new sequential memory";
   let description = [{
     Define a new behavioral sequential memory.  Sequential memories have a

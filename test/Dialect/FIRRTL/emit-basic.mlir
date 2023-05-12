@@ -2,7 +2,18 @@
 // RUN: cat %t | FileCheck %s --strict-whitespace
 // RUN: circt-translate --import-firrtl %t --mlir-print-debuginfo | circt-translate --export-firrtl | diff - %t
 
+// Check emission at various widths, ensuring still parses and round-trips back to same FIRRTL as default width (inc debug info).
+// RUN: circt-translate --export-firrtl %s --target-line-length=10 | circt-translate --import-firrtl --mlir-print-debuginfo | circt-translate --export-firrtl | diff - %t
+// RUN: circt-translate --export-firrtl %s --target-line-length=1000 | circt-translate --import-firrtl --mlir-print-debuginfo | circt-translate --export-firrtl | diff - %t
+
+// Sanity-check line length control:
+// Check if printing with very long line length, no line ends with a comma.
+// RUN: circt-translate --export-firrtl %s --target-line-length=1000 | FileCheck %s --implicit-check-not "{{,$}}" --check-prefix PRETTY
+// Check if printing with very short line length, removing info locators (@[...]), no line is longer than 5x line length.
+// RUN: circt-translate --export-firrtl %s --target-line-length=10 | sed -e 's/ @\[.*\]//' | FileCheck %s --implicit-check-not "{{^(.{50})}}" --check-prefix PRETTY
+
 // CHECK-LABEL: circuit Foo :
+// PRETTY-LABEL: circuit Foo :
 firrtl.circuit "Foo" {
   // CHECK-LABEL: module Foo :
   firrtl.module @Foo() {}
@@ -110,6 +121,21 @@ firrtl.circuit "Foo" {
     // CHECK: someOut is invalid
     %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<1>
     firrtl.strictconnect %someOut, %invalid_ui2 : !firrtl.uint<1>
+
+    // CHECK: unknownWidth <= knownWidth
+    %knownWidth = firrtl.wire : !firrtl.uint<1>
+    %unknownWidth = firrtl.wire : !firrtl.uint
+    %widthCast = firrtl.widthCast %knownWidth :
+      (!firrtl.uint<1>) -> !firrtl.uint
+    firrtl.strictconnect %unknownWidth, %widthCast : !firrtl.uint
+
+    // CHECK: unknownReset <= knownReset
+    %knownReset = firrtl.wire : !firrtl.asyncreset
+    %unknownReset = firrtl.wire : !firrtl.reset
+    %resetCast = firrtl.resetCast %knownReset :
+      (!firrtl.asyncreset) -> !firrtl.reset
+    firrtl.strictconnect %unknownReset, %resetCast : !firrtl.reset
+
     // CHECK: attach(an0, an1)
     %an0 = firrtl.wire : !firrtl.analog<1>
     %an1 = firrtl.wire : !firrtl.analog<1>
@@ -312,19 +338,71 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: module RefSource
-  firrtl.module @RefSource(out %a_ref: !firrtl.probe<uint<1>>) {
-    %a = firrtl.wire : !firrtl.uint<1>
+  firrtl.module @RefSource(out %a_ref: !firrtl.probe<uint<1>>,
+                           out %a_rwref: !firrtl.rwprobe<uint<1>>) {
+    %a, %_a_rwref = firrtl.wire forceable : !firrtl.uint<1>,
+      !firrtl.rwprobe<uint<1>>
     // CHECK: define a_ref = probe(a)
+    // CHECK: define a_rwref = rwprobe(a)
     %a_ref_send = firrtl.ref.send %a : !firrtl.uint<1>
     firrtl.ref.define %a_ref, %a_ref_send : !firrtl.probe<uint<1>>
+    firrtl.ref.define %a_rwref, %_a_rwref : !firrtl.rwprobe<uint<1>>
   }
 
   // CHECK-LABEL: module RefSink
-  firrtl.module @RefSink() {
+  firrtl.module @RefSink(
+    in %clock: !firrtl.clock,
+    in %enable: !firrtl.uint<1>
+  ) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     // CHECK: node b = read(refSource.a_ref)
-    %refSource_a_ref = firrtl.instance refSource @RefSource(out a_ref: !firrtl.probe<uint<1>>)
-    %a_ref_resolve = firrtl.ref.resolve %refSource_a_ref : !firrtl.probe<uint<1>>
+    %refSource_a_ref, %refSource_a_rwref =
+      firrtl.instance refSource @RefSource(
+        out a_ref: !firrtl.probe<uint<1>>,
+        out a_rwref: !firrtl.rwprobe<uint<1>>
+      )
+    %a_ref_resolve =
+      firrtl.ref.resolve %refSource_a_ref : !firrtl.probe<uint<1>>
     %b = firrtl.node %a_ref_resolve : !firrtl.uint<1>
+    // CHECK-NEXT: force_initial(refSource.a_rwref, UInt<1>(0))
+    firrtl.ref.force_initial %c1_ui1, %refSource_a_rwref, %c0_ui1 :
+      !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK-NEXT: release_initial(refSource.a_rwref)
+    firrtl.ref.release_initial %c1_ui1, %refSource_a_rwref :
+      !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+    // CHECK-NEXT: when enable :
+    // CHECK-NEXT:   force_initial(refSource.a_rwref, UInt<1>(0))
+    firrtl.when %enable : !firrtl.uint<1> {
+      firrtl.ref.force_initial %c1_ui1, %refSource_a_rwref, %c0_ui1 :
+        !firrtl.uint<1>, !firrtl.uint<1>
+    }
+    // CHECK-NEXT: when enable :
+    // CHECK-NEXT:   release_initial(refSource.a_rwref)
+    firrtl.when %enable : !firrtl.uint<1> {
+      firrtl.ref.release_initial %c1_ui1, %refSource_a_rwref :
+        !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+    }
+    // CHECK-NEXT: force(clock, enable, refSource.a_rwref, UInt<1>(1))
+    firrtl.ref.force %clock, %enable, %refSource_a_rwref, %c1_ui1 :
+      !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK-NEXT: release(clock, enable, refSource.a_rwref)
+    firrtl.ref.release %clock, %enable, %refSource_a_rwref :
+      !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+  }
+
+  // CHECK-LABEL: module RefExport
+  firrtl.module @RefExport(out %a_ref: !firrtl.probe<uint<1>>,
+                           out %a_rwref: !firrtl.rwprobe<uint<1>>) {
+    // CHECK: define a_ref = refSource.a_ref
+    // CHECK: define a_rwref = refSource.a_rwref
+    %refSource_a_ref, %refSource_a_rwref =
+      firrtl.instance refSource @RefSource(
+        out a_ref: !firrtl.probe<uint<1>>,
+        out a_rwref: !firrtl.rwprobe<uint<1>>
+      )
+    firrtl.ref.define %a_ref, %refSource_a_ref : !firrtl.probe<uint<1>>
+    firrtl.ref.define %a_rwref, %refSource_a_rwref : !firrtl.rwprobe<uint<1>>
   }
 
   firrtl.extmodule @MyParameterizedExtModule<DEFAULT: i64 = 0, DEPTH: f64 = 3.242000e+01, FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32>(in in: !firrtl.uint, out out: !firrtl.uint<8>) attributes {defname = "name_thing"}

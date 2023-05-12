@@ -400,6 +400,15 @@ HWArithToHWTypeConverter::HWArithToHWTypeConverter() {
 // Pass driver
 //===----------------------------------------------------------------------===//
 
+void circt::populateHWArithToHWConversionPatterns(
+    HWArithToHWTypeConverter &typeConverter, RewritePatternSet &patterns) {
+  patterns.add<ConstantOpLowering, CastOpLowering, ICmpOpLowering,
+               BinaryOpLowering<AddOp, comb::AddOp>,
+               BinaryOpLowering<SubOp, comb::SubOp>,
+               BinaryOpLowering<MulOp, comb::MulOp>, DivOpLowering>(
+      typeConverter, patterns.getContext());
+}
+
 namespace {
 
 class HWArithToHWPass : public HWArithToHWBase<HWArithToHWPass> {
@@ -414,11 +423,7 @@ public:
     target.addIllegalDialect<HWArithDialect>();
 
     // Add HWArith-specific conversion patterns.
-    patterns.add<ConstantOpLowering, CastOpLowering, ICmpOpLowering,
-                 BinaryOpLowering<hwarith::AddOp, comb::AddOp>,
-                 BinaryOpLowering<hwarith::SubOp, comb::SubOp>,
-                 BinaryOpLowering<hwarith::MulOp, comb::MulOp>, DivOpLowering>(
-        typeConverter, patterns.getContext());
+    populateHWArithToHWConversionPatterns(typeConverter, patterns);
 
     // ALL other operations are converted via the TypeConversionPattern which
     // will replace an operation to an identical operation with replaced

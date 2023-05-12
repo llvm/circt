@@ -1614,6 +1614,16 @@ hw.module private @InlineReadInout() -> () {
   }
 }
 
+// CHECK-LABEL: module Dollar
+hw.module private @Dollar(%cond: i1) -> () {
+  sv.initial {
+    // CHECK:      _$a:
+    // CHECK-NEXT: a$:
+    sv.cover %cond, immediate label "$a"
+    sv.cover %cond, immediate label "a$"
+  }
+}
+
 // CHECK-LABEL: IndexPartSelectInoutArray
 hw.module @IndexPartSelectInoutArray(%a: !hw.array<2xi1>, %c: i1, %d: i1) {
   %c0_i2 = hw.constant 0 : i2
@@ -1741,7 +1751,7 @@ hw.module @NastyPort(%.lots$of.dots: i1) -> (".more.dots": i1) {
 }
 sv.bind #hw.innerNameRef<@NastyPortParent::@foo>
 // CHECK-LABEL: bind NastyPortParent NastyPort foo (
-// CHECK-NEXT:    ._lots24of_dots (1'h0)
+// CHECK-NEXT:    ._lots$of_dots (1'h0)
 // CHECK-NEXT:    ._more_dots     (/* unused */)
 // CHECK-NEXT:  );
 

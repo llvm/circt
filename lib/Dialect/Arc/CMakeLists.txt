@@ -35,6 +35,7 @@ add_circt_library(CIRCTArcReductions
   CIRCTArcTransforms
   CIRCTConvertToArcs
   MLIRIR
+  MLIRCallInterfaces
 )
 
 add_dependencies(circt-headers
