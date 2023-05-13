@@ -691,4 +691,15 @@ def VBToBV : Pass<"firrtl-vb-to-bv", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createVBToBVPass()";
 }
 
+def FinalizeIR : Pass<"firrtl-finalize-ir", "mlir::ModuleOp"> {
+  let summary = "Perform final IR mutations after ExportVerilog";
+  let description = [{
+    This pass finalizes the IR after it has been exported with ExportVerilog,
+    and before firtool emits the final IR. This includes mutations like dropping
+    verbatim ops that represent sideband files and are not required in the IR.
+  }];
+  let constructor = "circt::firrtl::createFinalizeIRPass()";
+  let dependentDialects = ["hw::HWDialect", "sv::SVDialect"];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

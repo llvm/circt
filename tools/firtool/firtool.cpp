@@ -798,6 +798,11 @@ static LogicalResult processBuffer(
     if (exportModuleHierarchy)
       exportPm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
 
+    // Run final IR mutations to clean it up after ExportVerilog and before
+    // emitting the final MLIR.
+    if (!mlirOutFile.empty())
+      exportPm.addPass(firrtl::createFinalizeIRPass());
+
     if (failed(exportPm.run(module.get())))
       return failure();
   }
