@@ -195,7 +195,8 @@ public:
 /// compared have any outer flips that encode FIRRTL module directions (input or
 /// output), these should be stripped before using this method.
 bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType,
-                        bool srcOuterTypeIsConst = false);
+                        bool srcOuterTypeIsConst = false,
+                        bool requireSameWidths = false);
 
 /// Returns true if two types are weakly equivalent.  See the FIRRTL spec,
 /// Section 4.6, for a full definition of this.  Roughly, the oriented types
