@@ -697,25 +697,23 @@ firrtl.circuit "ForceRelease" {
 // Check tracking of public output refs as sv.macro.decl and sv.macro.def
 
 // CHECK-LABEL: sv.macro.decl @ref_Top_Top_a
-// CHECK-LABEL: sv.macro.def @ref_Top_Top_a "{{[{][{]0[}][}]}}"([#hw.innerNameRef<@Top::@w>]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
-
-// CHECK-LABEL: sv.macro.decl @ref_Top_Top_b
-// CHECK-LABEL: sv.macro.def @ref_Top_Top_b "{{[{][{]0[}][}]}}.{{[{][{]1[}][}]}}"([#hw.innerNameRef<@Top::@foo>, #hw.innerNameRef<@Foo::@x>]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
-// CHECK-LABEL: sv.macro.decl @ref_Top_Top_c
-// CHECK-LABEL: sv.macro.def @ref_Top_Top_c "{{[{][{]0[}][}]}}.internal.path"([#hw.innerNameRef<@Top::@foo>]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
-
-// CHECK-LABEL: sv.macro.decl @ref_Top_Top_d
-// CHECK-LABEL: sv.macro.def @ref_Top_Top_d "{{[{][{]0[}][}]}}"([#hw.innerNameRef<@Top::@xmr_sym>]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
+// CHECK-NEXT:  sv.macro.decl @ref_Top_Top_b
+// CHECK-NEXT:  sv.macro.decl @ref_Top_Top_c
+// CHECK-NEXT:  sv.macro.decl @ref_Top_Top_d
 // CHECK-NOT:   sv.macro.decl @ref_Top_Top_e
-// CHECK-NOT:   sv.macro.def @ref_Top_Top_e
-
-// CHECK-LABEL: sv.macro.decl @ref_Top_Foo_x
-// CHECK-LABEL: sv.macro.def @ref_Top_Foo_x "{{[{][{]0[}][}]}}"([#hw.innerNameRef<@Foo::@x>]) {output_file = #hw.output_file<"ref_Top_Foo.sv">}
-// CHECK-LABEL: sv.macro.decl @ref_Top_Foo_y
-// CHECK-LABEL: sv.macro.def @ref_Top_Foo_y "internal.path" {output_file = #hw.output_file<"ref_Top_Foo.sv">}
+// CHECK-NEXT:  sv.macro.decl @ref_Top_Foo_x
+// CHECK-NEXT:  sv.macro.decl @ref_Top_Foo_y
 
 // CHECK-LABEL: firrtl.circuit "Top"
 firrtl.circuit "Top" {
+  // CHECK-LABEL: hw.hierpath private @xmrPath [@Top::@foo, @Foo::@x]
+  // CHECK-NEXT:  sv.macro.def @ref_Top_Top_a "{{[{][{]0[}][}]}}"([#hw.innerNameRef<@Top::@w>]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
+  // CHECK-NEXT:  sv.macro.def @ref_Top_Top_b "{{[{][{]0[}][}]}}"([@xmrPath]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
+  // CHECK-NEXT:  sv.macro.def @ref_Top_Top_c "{{[{][{]0[}][}]}}.internal.path"([#hw.innerNameRef<@Top::@foo>]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
+  // CHECK-NEXT:  sv.macro.def @ref_Top_Top_d "{{[{][{]0[}][}]}}"([#hw.innerNameRef<@Top::@xmr_sym>]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
+  // CHECK-NEXT:  sv.macro.def @ref_Top_Foo_x "{{[{][{]0[}][}]}}"([#hw.innerNameRef<@Foo::@x>]) {output_file = #hw.output_file<"ref_Top_Foo.sv">}
+  // CHECK-NEXT:  sv.macro.def @ref_Top_Foo_y "internal.path" {output_file = #hw.output_file<"ref_Top_Foo.sv">}
+
   // CHECK-LABEL: firrtl.module @Top()
   firrtl.module @Top(out %a: !firrtl.probe<uint<1>>, 
                      out %b: !firrtl.probe<uint<1>>, 
