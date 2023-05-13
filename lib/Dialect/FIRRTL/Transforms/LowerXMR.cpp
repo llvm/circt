@@ -480,8 +480,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       formatString += stringLeaf;
 
       // Insert a macro with the format:
-      // ref_<circuit name>_<module name>_<ref name> <internal path
-      // from module>
+      // ref_<circuit-name>_<module-name>_<ref-name> <path>
       auto macroName = builder.getStringAttr("ref_" + circuitOp.getName() +
                                              "_" + module.getName() + "_" +
                                              module.getPortName(portIndex));
@@ -493,7 +492,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
           builder.getArrayAttr(ref ? ref : ArrayRef<Attribute>{}));
 
       // The macro will be exported to a file with the format:
-      // ref_<circuit name>_<module name>.sv
+      // ref_<circuit-name>_<module-name>.sv
       macroDefOp->setAttr(
           "output_file", hw::OutputFileAttr::getFromFilename(
                              &getContext(), "ref_" + circuitOp.getName() + "_" +
