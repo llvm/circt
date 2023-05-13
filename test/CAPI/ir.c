@@ -11,6 +11,7 @@
  */
 
 #include "mlir-c/IR.h"
+#include "circt-c/Dialect/FIRRTL.h"
 #include "circt-c/Dialect/HW.h"
 #include "circt-c/Dialect/Seq.h"
 #include "mlir-c/AffineExpr.h"
@@ -123,6 +124,64 @@ int testHWTypes() {
   return 0;
 }
 
+MlirOperation parseFirrtlOp(MlirContext ctx, const char *str) {
+  MlirStringRef srcName = mlirStringRefCreateFromCString("none");
+  MlirStringRef srcStr = mlirStringRefCreateFromCString(str);
+  return mlirOperationCreateParse(ctx, srcStr, srcName);
+}
+
+bool testFIRRTLUInt(MlirContext ctx) {
+  MlirOperation op =
+      parseFirrtlOp(ctx, "%res = firrtl.wire : !firrtl.uint<32>");
+  MlirValue val = mlirOperationGetResult(op, 0);
+  MlirType ty = mlirValueGetType(val);
+  bool isUInt = firrtlTypeIsUInt(ty);
+  int width = firrtlTypeGetBitWidth(ty, false);
+  mlirOperationDestroy(op);
+  return (isUInt && (width == 32));
+}
+
+bool testFIRRTLBundle(MlirContext ctx) {
+  MlirOperation op = parseFirrtlOp(
+      ctx,
+      "%res = firrtl.wire : !firrtl.bundle<foo: uint<32>, bar flip: sint<32>>");
+  MlirValue val = mlirOperationGetResult(op, 0);
+  MlirType ty = mlirValueGetType(val);
+  bool isBundle = firrtlTypeIsBundle(ty);
+  int numFields = firrtlTypeBundleGetNumFields(ty);
+
+  FirrtlBundleElement foo = firrtlTypeBundleGetElementByName(
+      ty, mlirStringRefCreateFromCString("foo"));
+  FirrtlBundleElement bar = firrtlTypeBundleGetElementByName(
+      ty, mlirStringRefCreateFromCString("bar"));
+
+  bool fooIsUInt = firrtlTypeIsUInt(foo.type);
+  int fooWidth = firrtlTypeGetBitWidth(foo.type, false);
+  bool barIsSInt = firrtlTypeIsSInt(bar.type);
+  int barWidth = firrtlTypeGetBitWidth(bar.type, false);
+
+  mlirOperationDestroy(op);
+
+  return (fooIsUInt && (fooWidth == 32) && barIsSInt && (barWidth == 32) &&
+          bar.isFlip && isBundle && (numFields == 2));
+}
+
+int testFIRRTLTypes() {
+  MlirContext ctx = mlirContextCreate();
+  MlirDialectHandle firrtlHandle = mlirGetDialectHandle__firrtl__();
+  mlirDialectHandleRegisterDialect(firrtlHandle, ctx);
+  mlirDialectHandleLoadDialect(firrtlHandle, ctx);
+
+  if (!testFIRRTLUInt(ctx))
+    return 1;
+  if (!testFIRRTLBundle(ctx))
+    return 2;
+
+  mlirContextDestroy(ctx);
+
+  return 0;
+}
+
 int main() {
   fprintf(stderr, "@registration\n");
   int errcode = registerOnlyHW();
@@ -130,6 +189,10 @@ int main() {
 
   fprintf(stderr, "@hwtypes\n");
   errcode = testHWTypes();
+  fprintf(stderr, "%d\n", errcode);
+
+  fprintf(stderr, "@firrtltypes\n");
+  errcode = testFIRRTLTypes();
   fprintf(stderr, "%d\n", errcode);
 
   // clang-format off
