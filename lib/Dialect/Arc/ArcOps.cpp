@@ -131,26 +131,13 @@ bool DefineOp::isPassthrough() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult OutputOp::verify() {
-  return success();
+  auto *parent = (*this)->getParentOp();
+  TypeRange expectedTypes = parent->getResultTypes();
+  if (auto defOp = dyn_cast<DefineOp>(parent))
+    expectedTypes = defOp.getResultTypes();
 
-  auto parent = cast<DefineOp>((*this)->getParentOp());
-  ArrayRef<Type> types = parent.getResultTypes();
-  OperandRange values = getOperands();
-  if (types.size() != values.size()) {
-    emitOpError("must have same number of operands as parent arc has results");
-    return failure();
-  }
-
-  for (size_t i = 0, e = types.size(); i < e; ++i) {
-    if (types[i] != values[i].getType()) {
-      emitOpError("output operand ")
-          << i << " type mismatch: arc requires " << types[i] << ", operand is "
-          << values[i].getType();
-      return failure();
-    }
-  }
-
-  return success();
+  TypeRange actualTypes = getOperands().getTypes();
+  return verifyTypeListEquivalence(*this, expectedTypes, actualTypes, "output");
 }
 
 //===----------------------------------------------------------------------===//
@@ -214,15 +201,8 @@ LogicalResult MemoryWritePortOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult ClockDomainOp::verifyRegions() {
-  if (failed(verifyTypeListEquivalence(*this, getBodyBlock().getArgumentTypes(),
-                                       getInputs().getTypes(), "input")))
-    return failure();
-  if (failed(verifyTypeListEquivalence(
-          *this, getOutputs().getTypes(),
-          getBodyBlock().getTerminator()->getOperandTypes(), "output")))
-    return failure();
-
-  return success();
+  return verifyTypeListEquivalence(*this, getBodyBlock().getArgumentTypes(),
+                                   getInputs().getTypes(), "input");
 }
 
 //===----------------------------------------------------------------------===//

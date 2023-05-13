@@ -159,6 +159,29 @@ arc.define @lut () -> () {
 
 // -----
 
+arc.define @lut () -> () {
+  %0 = arc.lut () : () -> i32 {
+    // expected-error @+1 {{incorrect number of outputs: expected 1, but got 0}}
+    arc.output
+  }
+  arc.output
+}
+
+// -----
+
+arc.define @lut () -> () {
+  %0 = arc.lut () : () -> i32 {
+    %1 = hw.constant 0 : i16
+    // expected-error @+3 {{output type mismatch: output #0}}
+    // expected-note @+2 {{expected type: 'i32'}}
+    // expected-note @+1 {{actual type: 'i16'}}
+    arc.output %1 : i16
+  }
+  arc.output
+}
+
+// -----
+
 arc.define @lut (%arg0: i32, %arg1: i8) -> () {
   // expected-note @+1 {{required by region isolation constraints}}
   %1 = arc.lut (%arg1, %arg0) : (i8, i32) -> i32 {
@@ -186,9 +209,9 @@ arc.define @lutSideEffects () -> i32 {
 // -----
 
 hw.module @clockDomainNumOutputs(%clk: i1) {
-  // expected-error @+1 {{incorrect number of outputs: expected 1, but got 0}}
   %0 = arc.clock_domain () clock %clk : () -> (i32) {
   ^bb0:
+    // expected-error @+1 {{incorrect number of outputs: expected 1, but got 0}}
     arc.output
   }
   hw.output
@@ -221,12 +244,12 @@ hw.module @clockDomainInputTypes(%clk: i1, %arg0: i16) {
 // -----
 
 hw.module @clockDomainOutputTypes(%clk: i1) {
-  // expected-error @+3 {{output type mismatch: output #0}}
-  // expected-note @+2 {{expected type: 'i32'}}
-  // expected-note @+1 {{actual type: 'i16'}}
   %0 = arc.clock_domain () clock %clk : () -> (i32) {
   ^bb0:
     %c0_i16 = hw.constant 0 : i16
+    // expected-error @+3 {{output type mismatch: output #0}}
+    // expected-note @+2 {{expected type: 'i32'}}
+    // expected-note @+1 {{actual type: 'i16'}}
     arc.output %c0_i16 : i16
   }
   hw.output
@@ -278,4 +301,21 @@ hw.module @memoryWritePortOpOutsideClockDomain(%en: i1) {
   %c0_i32 = hw.constant 0 : i32
   // expected-error @+1 {{outside a clock domain requires a clock}}
   arc.memory_write_port %mem[%c0_i32], %c0_i32 if %en : !arc.memory<4 x i32>, i32
+}
+
+// -----
+
+arc.define @outputOpVerifier () -> i32 {
+  // expected-error @+1 {{incorrect number of outputs: expected 1, but got 0}}
+  arc.output
+}
+
+// -----
+
+arc.define @outputOpVerifier () -> i32 {
+  %0 = hw.constant 0 : i16
+  // expected-error @+3 {{output type mismatch: output #0}}
+  // expected-note @+2 {{expected type: 'i32'}}
+  // expected-note @+1 {{actual type: 'i16'}}
+  arc.output %0 : i16
 }
