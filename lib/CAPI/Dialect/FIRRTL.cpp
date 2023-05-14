@@ -23,7 +23,9 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(FIRRTL, firrtl,
 // Type API.
 //===----------------------------------------------------------------------===//
 
-bool firrtlTypeIs(MlirType type) { return unwrap(type).isa<FIRRTLType>(); }
+bool firrtlTypeIsFIRRTLType(MlirType type) {
+  return unwrap(type).isa<FIRRTLType>();
+}
 
 bool firrtlTypeIsGround(MlirType type) {
   return unwrap(type).cast<FIRRTLType>().isGround();
@@ -86,24 +88,13 @@ bool firrtlTypeIsLarger(MlirType dst, MlirType src) {
                                      unwrap(src).cast<FIRRTLBaseType>());
 }
 
-int32_t firrtlTypeBundleGetNumFields(MlirType type) {
-  return unwrap(type).cast<BundleType>().getNumElements();
-}
+//===----------------------------------------------------------------------===//
+// Aggregate Types
+//===----------------------------------------------------------------------===//
 
-int32_t firrtlTypeBundleGetElementIndex(MlirType type, MlirStringRef name) {
-  return unwrap(type)
-      .cast<BundleType>()
-      .getElementIndex(unwrap(name))
-      .value_or(-1);
-}
-
-MlirStringRef firrtlTypeBundleGetElementName(MlirType type, int32_t index) {
-  return wrap(unwrap(type).cast<BundleType>().getElementName(index));
-}
-
-FirrtlBundleElement firrtlTypeBundleGetElementByIndex(MlirType type,
-                                                      int32_t index) {
-  FirrtlBundleElement ret;
+FirrtlBundleField firrtlTypeBundleGetFieldByIndex(MlirType type,
+                                                  int32_t index) {
+  FirrtlBundleField ret;
   auto bundle = unwrap(type).cast<BundleType>();
   auto field = bundle.getElement(index);
   ret.name = wrap(field.name);
@@ -112,19 +103,36 @@ FirrtlBundleElement firrtlTypeBundleGetElementByIndex(MlirType type,
   return ret;
 }
 
-FirrtlBundleElement firrtlTypeBundleGetElementByName(MlirType type,
-                                                     MlirStringRef name) {
-  FirrtlBundleElement ret;
+FirrtlBundleField firrtlTypeBundleGetFieldByName(MlirType type,
+                                                 MlirStringRef name) {
+  FirrtlBundleField ret;
   auto bundle = unwrap(type).cast<BundleType>();
-  if (auto field = bundle.getElement(unwrap(name))) {
-    ret.name = wrap(field->name);
-    ret.type = wrap(field->type);
-    ret.isFlip = field->isFlip;
-  } else {
-    ret.name = {nullptr};
-    ret.type = {nullptr};
-  }
+  auto field = bundle.getElement(unwrap(name)).value();
+  ret.name = wrap(field.name);
+  ret.type = wrap(field.type);
+  ret.isFlip = field.isFlip;
   return ret;
+}
+
+int32_t firrtlTypeBundleGetNumFields(MlirType type) {
+  return unwrap(type).cast<BundleType>().getNumElements();
+}
+
+int32_t firrtlTypeBundleGetFieldIndex(MlirType type, MlirStringRef name) {
+  return unwrap(type)
+      .cast<BundleType>()
+      .getElementIndex(unwrap(name))
+      .value_or(-1);
+}
+
+bool firrtlTypeBundleHasFieldName(MlirType type, MlirStringRef name) {
+  auto bundle = unwrap(type).cast<BundleType>();
+  auto field = bundle.getElement(unwrap(name));
+  return field ? true : false;
+}
+
+MlirStringRef firrtlTypeBundleGetFieldName(MlirType type, int32_t index) {
+  return wrap(unwrap(type).cast<BundleType>().getElementName(index));
 }
 
 int32_t firrtlTypeVectorGetNumFields(MlirType type) {

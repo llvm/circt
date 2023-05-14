@@ -150,20 +150,29 @@ bool testFIRRTLBundle(MlirContext ctx) {
   bool isBundle = firrtlTypeIsBundle(ty);
   int numFields = firrtlTypeBundleGetNumFields(ty);
 
-  FirrtlBundleElement foo = firrtlTypeBundleGetElementByName(
-      ty, mlirStringRefCreateFromCString("foo"));
-  FirrtlBundleElement bar = firrtlTypeBundleGetElementByName(
-      ty, mlirStringRefCreateFromCString("bar"));
+  bool fieldFooExists =
+      firrtlTypeBundleHasFieldName(ty, mlirStringRefCreateFromCString("foo"));
+  bool fieldBarExists =
+      firrtlTypeBundleHasFieldName(ty, mlirStringRefCreateFromCString("bar"));
+  bool fieldBazExists =
+      firrtlTypeBundleHasFieldName(ty, mlirStringRefCreateFromCString("baz"));
+  bool namesOk = (fieldFooExists && fieldBarExists && !fieldBazExists);
 
-  bool fooIsUInt = firrtlTypeIsUInt(foo.type);
-  int fooWidth = firrtlTypeGetBitWidth(foo.type, false);
-  bool barIsSInt = firrtlTypeIsSInt(bar.type);
-  int barWidth = firrtlTypeGetBitWidth(bar.type, false);
+  FirrtlBundleField fieldFoo = firrtlTypeBundleGetFieldByIndex(ty, 0);
+  FirrtlBundleField fieldBar =
+      firrtlTypeBundleGetFieldByName(ty, mlirStringRefCreateFromCString("bar"));
+
+  bool fooIsUInt = firrtlTypeIsUInt(fieldFoo.type);
+  int fooWidth = firrtlTypeGetBitWidth(fieldFoo.type, false);
+  bool fooOk = (fooIsUInt && (fooWidth == 32) && (!fieldFoo.isFlip));
+
+  bool barIsSInt = firrtlTypeIsSInt(fieldBar.type);
+  int barWidth = firrtlTypeGetBitWidth(fieldBar.type, false);
+  bool barOk = (barIsSInt && (barWidth == 32) && fieldBar.isFlip);
 
   mlirOperationDestroy(op);
 
-  return (fooIsUInt && (fooWidth == 32) && barIsSInt && (barWidth == 32) &&
-          bar.isFlip && isBundle && (numFields == 2));
+  return (isBundle && (numFields == 2) && namesOk && fooOk && barOk);
 }
 
 int testFIRRTLTypes() {

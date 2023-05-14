@@ -12,18 +12,11 @@
 #define CIRCT_C_DIALECT_FIRRTL_H
 
 #include "mlir-c/IR.h"
+#include "mlir-c/Support.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/// Wraps a FIRRTL BundleType element.
-struct FirrtlBundleElement {
-  MlirIdentifier name;
-  bool isFlip;
-  MlirType type;
-};
-typedef struct FirrtlBundleElement FirrtlBundleElement;
 
 //===----------------------------------------------------------------------===//
 // Dialect API.
@@ -36,7 +29,7 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(FIRRTL, firrtl);
 //===----------------------------------------------------------------------===//
 
 /// Return 'true' if this is any FIRRTL type.
-bool firrtlTypeIs(MlirType type);
+bool firrtlTypeIsFIRRTLType(MlirType type);
 
 /// Return 'true' if this is a FIRRTL ground type.
 bool firrtlTypeIsGround(MlirType type);
@@ -71,9 +64,14 @@ bool firrtlTypeIsFVector(MlirType type);
 /// Return 'true' if this is a FIRRTL Reference type.
 bool firrtlTypeIsRef(MlirType type);
 
-// bool firrtlTypeIsOpenBundle(MlirType type);
-// bool firrtlTypeIsOpenVector(MlirType type);
-// bool firrtlTypeIsFEnum(MlirType type);
+/// Return 'true' if this is a FIRRTL OpenBundle type.
+bool firrtlTypeIsOpenBundle(MlirType type);
+
+/// Return 'true' if this is a FIRRTL OpenVector type.
+bool firrtlTypeIsOpenVector(MlirType type);
+
+/// Return 'true' if this is a FIRRTL Enum type.
+bool firrtlTypeIsFEnum(MlirType type);
 
 /// Return the bit-width of a type.
 int32_t firrtlTypeGetBitWidth(MlirType type, bool ignoreFlip);
@@ -85,24 +83,38 @@ bool firrtlTypeIsLarger(MlirType dst, MlirType src);
 bool firrtlTypesAreEquivalent(MlirType dest, MlirType src,
                               bool srcOuterTypeIsConst);
 
-/// Return the number of fields for the given bundle type.
+//===----------------------------------------------------------------------===//
+// Aggregate Types
+//===----------------------------------------------------------------------===//
+
+/// Wrapped version of BundleType::BundleElement
+typedef struct {
+  MlirIdentifier name;
+  bool isFlip;
+  MlirType type;
+} FirrtlBundleField;
+
+/// Return the bundle field at the provided index.
+FirrtlBundleField firrtlTypeBundleGetFieldByIndex(MlirType type, int32_t index);
+
+/// Return the bundle field with the provided name.
+FirrtlBundleField firrtlTypeBundleGetFieldByName(MlirType type,
+                                                 MlirStringRef name);
+
+/// Return the number of fields for the provided bundle type.
 int32_t firrtlTypeBundleGetNumFields(MlirType type);
 
-/// Return the index of a named bundle field.
-int32_t firrtlTypeBundleGetElementIndex(MlirType type, MlirStringRef name);
+/// Return the index of the bundle field with the provided name.
+/// Returns (-1) if the field does not exist.
+int32_t firrtlTypeBundleGetFieldIndex(MlirType type, MlirStringRef name);
 
-/// Return the name of the bundle field at the given index.
-MlirStringRef firrtlTypeBundleGetElementName(MlirType type, int32_t index);
+/// Returns 'true' if a bundle field exists with the provided name.
+bool firrtlTypeBundleHasFieldName(MlirType type, MlirStringRef name);
 
-/// Return the bundle field at the given index.
-FirrtlBundleElement firrtlTypeBundleGetElementByIndex(MlirType type,
-                                                      int32_t index);
+/// Return the name of the bundle field at the provided index.
+MlirStringRef firrtlTypeBundleGetFieldName(MlirType type, int32_t index);
 
-/// Return the bundle field with the given name.
-FirrtlBundleElement firrtlTypeBundleGetElementByName(MlirType type,
-                                                     MlirStringRef name);
-
-/// Return the number of fields for this vector type.
+/// Return the number of fields for the provided vector type.
 int32_t firrtlTypeVectorGetNumFields(MlirType type);
 
 #ifdef __cplusplus
