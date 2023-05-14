@@ -38,7 +38,7 @@ hw.module.generated @WOMemoryWithMask, @FIRRTLMem(%W0_addr: i10, %W0_en: i1, %W0
 hw.module @TestROMemory(%clock: i1, %addr: i10, %enable: i1) -> (data: i8) {
   // CHECK-NOT: hw.instance
   // CHECK-NEXT: [[FOO:%.+]] = arc.memory <1024 x i8> {name = "foo"}
-  // CHECK-NEXT: [[RDATA:%.+]] = arc.memory_read_port [[FOO]][%addr] if %enable clock %clock : <1024 x i8>, i10
+  // CHECK-NEXT: [[RDATA:%.+]] = arc.memory_read_port [[FOO]][%addr] : <1024 x i8>, i10
   // CHECK-NEXT: hw.output [[RDATA]]
   %0 = hw.instance "foo" @ROMemory(R0_addr: %addr: i10, R0_en: %enable: i1, R0_clk: %clock: i1) -> (R0_data: i8)
   hw.output %0 : i8
@@ -52,7 +52,7 @@ hw.module.generated @ROMemory, @FIRRTLMem(%R0_addr: i10, %R0_en: i1, %R0_clk: i1
 hw.module @TestROMemoryWithLatency(%clock: i1, %addr: i10, %enable: i1) -> (data: i8) {
   // CHECK-NOT: hw.instance
   // CHECK-NEXT: [[FOO:%.+]] = arc.memory <1024 x i8> {name = "foo"}
-  // CHECK-NEXT: [[D0:%.+]] = arc.memory_read_port [[FOO]][%addr] if %enable clock %clock : <1024 x i8>, i10
+  // CHECK-NEXT: [[D0:%.+]] = arc.memory_read_port [[FOO]][%addr] : <1024 x i8>, i10
   // CHECK-NEXT: [[D1:%.+]] = seq.compreg {{.+}} [[D0]], %clock
   // CHECK-NEXT: [[D2:%.+]] = seq.compreg {{.+}} [[D1]], %clock
   // CHECK-NEXT: [[D3:%.+]] = seq.compreg {{.+}} [[D2]], %clock
@@ -69,10 +69,7 @@ hw.module.generated @ROMemoryWithLatency, @FIRRTLMem(%R0_addr: i10, %R0_en: i1, 
 hw.module @TestRWMemory(%clock: i1, %addr: i10, %enable: i1, %wmode: i1, %wdata: i8) -> (rdata: i8) {
   // CHECK-NOT: hw.instance
   // CHECK-NEXT: [[FOO:%.+]] = arc.memory <1024 x i8> {name = "foo"}
-  // CHECK-NEXT: hw.constant true
-  // CHECK-NEXT: [[WMODE_INV:%.+]] = comb.xor %wmode, %true
-  // CHECK-NEXT: [[RENABLE:%.+]] = comb.and %enable, [[WMODE_INV]]
-  // CHECK-NEXT: [[RDATA:%.+]] = arc.memory_read_port [[FOO]][%addr] if [[RENABLE]] clock %clock : <1024 x i8>, i10
+  // CHECK-NEXT: [[RDATA:%.+]] = arc.memory_read_port [[FOO]][%addr] : <1024 x i8>, i10
   // CHECK-NEXT: [[WENABLE:%.+]] = comb.and %enable, %wmode
   // CHECK-NEXT: arc.memory_write_port [[FOO]][%addr], %wdata if [[WENABLE]] clock %clock : <1024 x i8>, i10
   // CHECK-NEXT: hw.output [[RDATA]]

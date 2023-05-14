@@ -193,20 +193,6 @@ LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
-// MemoryReadPortOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult MemoryReadPortOp::verify() {
-  if (!getOperation()->getParentOfType<ClockDomainOp>() && !getClock())
-    return emitOpError("outside a clock domain requires a clock");
-
-  if (getOperation()->getParentOfType<ClockDomainOp>() && getClock())
-    return emitOpError("inside a clock domain cannot have a clock");
-
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // MemoryWritePortOp
 //===----------------------------------------------------------------------===//
 
