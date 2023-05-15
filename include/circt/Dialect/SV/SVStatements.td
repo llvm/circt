@@ -857,7 +857,7 @@ def MacroDefOp : SVOp<"macro.def",
 
   let builders = [
     OpBuilder<(ins "StringRef":$macroName, "StringRef":$format_string),
-                "build(odsBuilder, odsState, macroName, format_string,"
+                "build($_builder, $_state, macroName, format_string,"
                 "odsBuilder.getArrayAttr({}));">
   ];
 
