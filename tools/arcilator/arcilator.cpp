@@ -237,7 +237,8 @@ static void populatePipeline(PassManager &pm) {
   pm.nest<arc::ModelOp>().addPass(arc::createAllocateStatePass());
   if (!stateFile.empty())
     pm.addPass(arc::createPrintStateInfoPass(stateFile));
-  pm.addPass(arc::createRemoveUnusedArcArgumentsPass());
+  pm.addPass(createCSEPass());
+  pm.addPass(arc::createArcCanonicalizerPass());
 
   // Lower the arcs and update functions to LLVM.
   if (untilReached(UntilLLVMLowering))

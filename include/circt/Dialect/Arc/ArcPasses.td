@@ -33,6 +33,10 @@ def ArcCanonicalizer : Pass<"arc-canonicalizer", "mlir::ModuleOp"> {
   let dependentDialects = ["hw::HWDialect",
                            "comb::CombDialect",
                            "arc::ArcDialect"];
+  let statistics = [
+    Statistic<"numArcArgsRemoved", "num-arc-args-removed",
+      "Number of arguments removed from DefineOps">,
+  ];
 }
 
 def Dedup : Pass<"arc-dedup", "mlir::ModuleOp"> {
@@ -163,24 +167,6 @@ def PrintStateInfo : Pass<"arc-print-state-info", "mlir::ModuleOp"> {
   let options = [
     Option<"stateFile", "state-file", "std::string", "",
       "Emit file with state description">
-  ];
-}
-
-def RemoveUnusedArcArguments : Pass<"arc-remove-unused-arc-arguments",
-    "mlir::ModuleOp"> {
-  let summary =
-    "Remove unused arc args from the arc itself and the referencing states";
-  let constructor = "circt::arc::createRemoveUnusedArcArgumentsPass()";
-
-  let statistics = [
-    Statistic<"numArcArgsRemoved", "num-arc-args-removed",
-      "Number of arguments removed from DefineOps">,
-    Statistic<"numArcsTouched", "num-arcs-touched",
-      "Number of arcs that got modified, if an arc had to be modified multiple "
-      "times, it is counted multiple times">,
-    Statistic<"numArcArgsMissed", "num-arc-args-missed",
-      "Number of arguments that could not be removed from DefineOps because "
-      "at least one user did not implement support for argument removal">,
   ];
 }
 

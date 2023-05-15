@@ -40,7 +40,6 @@ std::unique_ptr<mlir::Pass> createMakeTablesPass();
 std::unique_ptr<mlir::Pass> createMuxToControlFlowPass();
 std::unique_ptr<mlir::Pass>
 createPrintStateInfoPass(llvm::StringRef stateFile = "");
-std::unique_ptr<mlir::Pass> createRemoveUnusedArcArgumentsPass();
 std::unique_ptr<mlir::Pass> createSimplifyVariadicOpsPass();
 std::unique_ptr<mlir::Pass> createSinkInputsPass();
 std::unique_ptr<mlir::Pass> createSplitLoopsPass();

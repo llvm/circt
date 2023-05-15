@@ -97,6 +97,10 @@ private:
   DenseMap<Operation *, SetVector<Operation *>> userMap;
 };
 
+struct PatternStatistics {
+  unsigned removeUnusedArcArgumentsPatternNumArgsRemoved = 0;
+};
+
 //===----------------------------------------------------------------------===//
 // Canonicalization patterns
 //===----------------------------------------------------------------------===//
@@ -110,14 +114,16 @@ template <typename SourceOp>
 class SymOpRewritePattern : public OpRewritePattern<SourceOp> {
 public:
   SymOpRewritePattern(MLIRContext *ctxt, SymbolHandler &symbolCache,
-                      Namespace &names, mlir::PatternBenefit benefit = 1,
+                      Namespace &names, PatternStatistics &stats,
+                      mlir::PatternBenefit benefit = 1,
                       ArrayRef<StringRef> generatedNames = {})
       : OpRewritePattern<SourceOp>(ctxt, benefit, generatedNames), names(names),
-        symbolCache(symbolCache) {}
+        symbolCache(symbolCache), statistics(stats) {}
 
 protected:
   Namespace &names;
   SymbolHandler &symbolCache;
+  PatternStatistics &statistics;
 };
 
 class MemWritePortEnableAndMaskCanonicalizer
@@ -125,8 +131,8 @@ class MemWritePortEnableAndMaskCanonicalizer
 public:
   MemWritePortEnableAndMaskCanonicalizer(
       MLIRContext *ctxt, SymbolHandler &symbolCache, Namespace &names,
-      DenseMap<StringAttr, StringAttr> &arcMapping)
-      : SymOpRewritePattern<MemoryWritePortOp>(ctxt, symbolCache, names),
+      PatternStatistics &stats, DenseMap<StringAttr, StringAttr> &arcMapping)
+      : SymOpRewritePattern<MemoryWritePortOp>(ctxt, symbolCache, names, stats),
         arcMapping(arcMapping) {}
   LogicalResult matchAndRewrite(MemoryWritePortOp op,
                                 PatternRewriter &rewriter) const final;
@@ -156,6 +162,12 @@ struct RemoveUnusedArcs : public SymOpRewritePattern<DefineOp> {
 struct ICMPCanonicalizer : public OpRewritePattern<comb::ICmpOp> {
   using OpRewritePattern::OpRewritePattern;
   LogicalResult matchAndRewrite(comb::ICmpOp op,
+                                PatternRewriter &rewriter) const final;
+};
+
+struct RemoveUnusedArcArgumentsPattern : public SymOpRewritePattern<DefineOp> {
+  using SymOpRewritePattern::SymOpRewritePattern;
+  LogicalResult matchAndRewrite(DefineOp op,
                                 PatternRewriter &rewriter) const final;
 };
 
@@ -339,6 +351,41 @@ ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
   return failure();
 }
 
+LogicalResult RemoveUnusedArcArgumentsPattern::matchAndRewrite(
+    DefineOp op, PatternRewriter &rewriter) const {
+  BitVector toDelete(op.getNumArguments());
+  for (auto [i, arg] : llvm::enumerate(op.getArguments()))
+    if (arg.use_empty())
+      toDelete.set(i);
+
+  if (toDelete.none())
+    return failure();
+
+  // Collect the mutable callers in a first iteration. If there is a user that
+  // does not implement the interface, we have to abort the rewrite and have to
+  // make sure that we didn't change anything so far.
+  SmallVector<CallOpMutableInterface> mutableUsers;
+  for (auto *user : symbolCache.getUsers(op)) {
+    auto callOpMutable = dyn_cast<CallOpMutableInterface>(user);
+    if (!callOpMutable)
+      return failure();
+    mutableUsers.push_back(callOpMutable);
+  }
+
+  // Do the actual rewrites.
+  for (auto user : mutableUsers)
+    for (int i = toDelete.size() - 1; i >= 0; --i)
+      if (toDelete[i])
+        user.getArgOperandsMutable().erase(i);
+
+  op.eraseArguments(toDelete);
+  op.setFunctionType(
+      rewriter.getFunctionType(op.getArgumentTypes(), op.getResultTypes()));
+
+  statistics.removeUnusedArcArgumentsPatternNumArgsRemoved += toDelete.count();
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // ArcCanonicalizerPass implementation
 //===----------------------------------------------------------------------===//
@@ -365,15 +412,19 @@ void ArcCanonicalizerPass::runOnOperation() {
   config.maxIterations = 10;
   config.useTopDownTraversal = true;
 
+  PatternStatistics statistics;
   RewritePatternSet symbolPatterns(&getContext());
-  symbolPatterns.add<CallPassthroughArc, StatePassthroughArc, RemoveUnusedArcs>(
-      &getContext(), cache, names);
+  symbolPatterns.add<CallPassthroughArc, StatePassthroughArc, RemoveUnusedArcs,
+                     RemoveUnusedArcArgumentsPattern>(&getContext(), cache,
+                                                      names, statistics);
   symbolPatterns.add<MemWritePortEnableAndMaskCanonicalizer>(
-      &getContext(), cache, names, arcMapping);
+      &getContext(), cache, names, statistics, arcMapping);
 
   if (failed(mlir::applyPatternsAndFoldGreedily(
           getOperation(), std::move(symbolPatterns), config)))
     return signalPassFailure();
+
+  numArcArgsRemoved = statistics.removeUnusedArcArgumentsPatternNumArgsRemoved;
 
   RewritePatternSet patterns(&ctxt);
   for (auto *dialect : ctxt.getLoadedDialects())

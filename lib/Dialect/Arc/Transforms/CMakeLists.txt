@@ -17,7 +17,6 @@ add_circt_dialect_library(CIRCTArcTransforms
   MakeTables.cpp
   MuxToControlFlow.cpp
   PrintStateInfo.cpp
-  RemoveUnusedArcArguments.cpp
   SimplifyVariadicOps.cpp
   SinkInputs.cpp
   SplitLoops.cpp
