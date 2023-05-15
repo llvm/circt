@@ -72,7 +72,7 @@ def BufferOp : DCOp<"buffer",
   }];
 }
 
-def JoinOp : DCOp<"join"> {
+def JoinOp : DCOp<"join", [Commutative]> {
   let summary = "Synchronizes the incoming tokens with the outgoing token";
   let description = [{
     This operator synchronizes all incoming tokens. Synchronization implies applying
@@ -89,10 +89,7 @@ def JoinOp : DCOp<"join"> {
 
   let assemblyFormat = "$tokens attr-dict";
   let hasCanonicalizer = 1;
-  let builders = [OpBuilder<(
-    ins "ValueRange":$tokens), [{
-        build($_builder, $_state, $_builder.getType<dc::TokenType>(), tokens);
-    }]>];
+  let hasFolder = 1;
 }
 
 def ForkOp : DCOp<"fork"> {
@@ -110,6 +107,7 @@ def ForkOp : DCOp<"fork"> {
     let results = (outs Variadic<TokenType>:$outputs);
     let hasCustomAssemblyFormat = 1;
     let hasCanonicalizer = 1;
+    let hasFolder = 1;
 
     let builders = [OpBuilder<(
         ins "Value":$token, "size_t":$numOutputs), [{
@@ -205,7 +203,7 @@ def UnpackOp : DCOp<"unpack", [InferTypeOpInterface]> {
 
     let arguments = (ins ValueType:$input);
     let results = (outs TokenType:$token, Variadic<AnyType>:$outputs);
-    let assemblyFormat = "$input attr-dict `:` type($input)";
+    let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
     let hasCanonicalizer = 1;
     let hasFolder = 1;
   

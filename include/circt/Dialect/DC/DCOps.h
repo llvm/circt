@@ -9,7 +9,6 @@
 #ifndef CIRCT_DIALECT_DC_DCOPS_H
 #define CIRCT_DIALECT_DC_DCOPS_H
 
-#include "mlir/IR/FunctionInterfaces.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"
