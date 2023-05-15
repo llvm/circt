@@ -149,14 +149,6 @@ static cl::opt<OutputFormat> outputFormat(
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
 
-/// Create a simple canonicalizer pass.
-static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
-  mlir::GreedyRewriteConfig config;
-  config.useTopDownTraversal = true;
-  config.enableRegionSimplification = false;
-  return mlir::createCanonicalizerPass(config);
-}
-
 /// Populate a pass manager with the arc simulator pipeline for the given
 /// command line options.
 static void populatePipeline(PassManager &pm) {
@@ -173,7 +165,7 @@ static void populatePipeline(PassManager &pm) {
   pm.addPass(arc::createStripSVPass());
   pm.addPass(arc::createInferMemoriesPass());
   pm.addPass(createCSEPass());
-  pm.addPass(createSimpleCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizerPass());
 
   // Restructure the input from a `hw.module` hierarchy to a collection of arcs.
   if (untilReached(UntilArcConversion))
@@ -182,7 +174,7 @@ static void populatePipeline(PassManager &pm) {
   pm.addPass(arc::createDedupPass());
   pm.addPass(arc::createInlineModulesPass());
   pm.addPass(createCSEPass());
-  pm.addPass(createSimpleCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizerPass());
 
   // Perform arc-level optimizations that are not specific to software
   // simulation.
@@ -192,10 +184,10 @@ static void populatePipeline(PassManager &pm) {
   pm.addPass(arc::createDedupPass());
   pm.addPass(arc::createSinkInputsPass());
   pm.addPass(createCSEPass());
-  pm.addPass(createSimpleCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizerPass());
   pm.addPass(arc::createMakeTablesPass());
   pm.addPass(createCSEPass());
-  pm.addPass(createSimpleCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizerPass());
 
   // TODO: the following is commented out because the backend does not support
   // StateOp resets yet.
@@ -219,7 +211,7 @@ static void populatePipeline(PassManager &pm) {
     return;
   pm.addPass(arc::createLowerStatePass());
   pm.addPass(createCSEPass());
-  pm.addPass(createSimpleCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizerPass());
 
   // TODO: LowerClocksToFuncsPass might not properly consider scf.if operations
   // (or nested regions in general) and thus errors out when muxes are also
@@ -230,13 +222,13 @@ static void populatePipeline(PassManager &pm) {
 
   if (shouldInline) {
     pm.addPass(arc::createInlineArcsPass());
-    pm.addPass(createSimpleCanonicalizerPass());
+    pm.addPass(arc::createArcCanonicalizerPass());
     pm.addPass(createCSEPass());
   }
 
   pm.addPass(arc::createGroupResetsAndEnablesPass());
   pm.addPass(createCSEPass());
-  pm.addPass(createSimpleCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizerPass());
 
   // Allocate states.
   if (untilReached(UntilStateAlloc))
@@ -254,7 +246,7 @@ static void populatePipeline(PassManager &pm) {
   pm.addPass(createConvertCombToArithPass());
   pm.addPass(createLowerArcToLLVMPass());
   pm.addPass(createCSEPass());
-  pm.addPass(createSimpleCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizerPass());
 }
 
 static LogicalResult

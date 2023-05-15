@@ -12,6 +12,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/SymCache.h"
@@ -152,6 +153,12 @@ struct RemoveUnusedArcs : public SymOpRewritePattern<DefineOp> {
                                 PatternRewriter &rewriter) const final;
 };
 
+struct ICMPCanonicalizer : public OpRewritePattern<comb::ICmpOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(comb::ICmpOp op,
+                                PatternRewriter &rewriter) const final;
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -287,6 +294,51 @@ RemoveUnusedArcs::matchAndRewrite(DefineOp op,
   return failure();
 }
 
+LogicalResult
+ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
+                                   PatternRewriter &rewriter) const {
+  auto getConstant = [&](const APInt &constant) -> Value {
+    return rewriter.create<hw::ConstantOp>(op.getLoc(), constant);
+  };
+  auto sameWidthIntegers = [](TypeRange types) -> std::optional<unsigned> {
+    if (llvm::all_equal(types) && !types.empty())
+      if (auto intType = dyn_cast<IntegerType>(*types.begin()))
+        return intType.getWidth();
+    return std::nullopt;
+  };
+
+  APInt rhs;
+  if (matchPattern(op.getRhs(), mlir::m_ConstantInt(&rhs))) {
+    if (auto concatOp = op.getLhs().getDefiningOp<comb::ConcatOp>()) {
+      if (auto optionalWidth =
+              sameWidthIntegers(concatOp->getOperands().getTypes())) {
+        if (op.getPredicate() == comb::ICmpPredicate::eq && rhs.isAllOnes()) {
+          auto andOp = rewriter.create<comb::AndOp>(
+              op.getLoc(), concatOp.getInputs(), op.getTwoState());
+          if (*optionalWidth == 1)
+            return rewriter.replaceOp(op, andOp->getResults()), success();
+          rewriter.replaceOpWithNewOp<comb::ICmpOp>(
+              op, comb::ICmpPredicate::eq, andOp,
+              getConstant(APInt::getAllOnes(*optionalWidth)), op.getTwoState());
+          return success();
+        }
+
+        if (op.getPredicate() == comb::ICmpPredicate::ne && rhs.isZero()) {
+          auto orOp = rewriter.create<comb::OrOp>(
+              op.getLoc(), concatOp.getInputs(), op.getTwoState());
+          if (*optionalWidth == 1)
+            return rewriter.replaceOp(op, orOp->getResults()), success();
+          rewriter.replaceOpWithNewOp<comb::ICmpOp>(
+              op, comb::ICmpPredicate::ne, orOp,
+              getConstant(APInt::getZero(*optionalWidth)), op.getTwoState());
+          return success();
+        }
+      }
+    }
+  }
+  return failure();
+}
+
 //===----------------------------------------------------------------------===//
 // ArcCanonicalizerPass implementation
 //===----------------------------------------------------------------------===//
@@ -299,6 +351,7 @@ struct ArcCanonicalizerPass
 } // namespace
 
 void ArcCanonicalizerPass::runOnOperation() {
+  MLIRContext &ctxt = getContext();
   SymbolTableCollection symbolTable;
   SymbolHandler cache;
   cache.addDefinitions(getOperation());
@@ -307,15 +360,31 @@ void ArcCanonicalizerPass::runOnOperation() {
   names.add(cache);
   DenseMap<StringAttr, StringAttr> arcMapping;
 
+  mlir::GreedyRewriteConfig config;
+  config.enableRegionSimplification = false;
+  config.maxIterations = 10;
+  config.useTopDownTraversal = true;
+
   RewritePatternSet symbolPatterns(&getContext());
   symbolPatterns.add<CallPassthroughArc, StatePassthroughArc, RemoveUnusedArcs>(
       &getContext(), cache, names);
   symbolPatterns.add<MemWritePortEnableAndMaskCanonicalizer>(
       &getContext(), cache, names, arcMapping);
 
-  if (failed(mlir::applyPatternsAndFoldGreedily(getOperation(),
-                                                std::move(symbolPatterns))))
+  if (failed(mlir::applyPatternsAndFoldGreedily(
+          getOperation(), std::move(symbolPatterns), config)))
     return signalPassFailure();
+
+  RewritePatternSet patterns(&ctxt);
+  for (auto *dialect : ctxt.getLoadedDialects())
+    dialect->getCanonicalizationPatterns(patterns);
+  for (mlir::RegisteredOperationName op : ctxt.getRegisteredOperations())
+    op.getCanonicalizationPatterns(patterns, &ctxt);
+  patterns.add<ICMPCanonicalizer>(&getContext());
+
+  // Don't test for convergence since it is often not reached.
+  (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns),
+                                           config);
 }
 
 std::unique_ptr<mlir::Pass> arc::createArcCanonicalizerPass() {
