@@ -56,7 +56,8 @@ void ArcReducePatternDialectInterface::populateReducePatterns(
                                  true);
   patterns.add<PassReduction, 3>(getContext(), arc::createDedupPass());
   patterns.add<StateElimination, 2>();
-  patterns.add<PassReduction, 1>(getContext(), arc::createSinkInputsPass());
+  patterns.add<PassReduction, 1>(getContext(),
+                                 arc::createArcCanonicalizerPass());
 }
 
 void arc::registerReducePatternDialectInterface(

@@ -182,7 +182,6 @@ static void populatePipeline(PassManager &pm) {
     return;
   pm.addPass(arc::createSplitLoopsPass());
   pm.addPass(arc::createDedupPass());
-  pm.addPass(arc::createSinkInputsPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
   pm.addPass(arc::createMakeTablesPass());

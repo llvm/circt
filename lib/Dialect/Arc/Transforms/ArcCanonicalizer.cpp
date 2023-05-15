@@ -171,6 +171,12 @@ struct RemoveUnusedArcArgumentsPattern : public SymOpRewritePattern<DefineOp> {
                                 PatternRewriter &rewriter) const final;
 };
 
+struct SinkArcInputsPattern : public SymOpRewritePattern<DefineOp> {
+  using SymOpRewritePattern::SymOpRewritePattern;
+  LogicalResult matchAndRewrite(DefineOp op,
+                                PatternRewriter &rewriter) const final;
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -386,6 +392,75 @@ LogicalResult RemoveUnusedArcArgumentsPattern::matchAndRewrite(
   return success();
 }
 
+LogicalResult
+SinkArcInputsPattern::matchAndRewrite(DefineOp op,
+                                      PatternRewriter &rewriter) const {
+  // First check that all users implement the interface we need to be able to
+  // modify the users.
+  auto users = symbolCache.getUsers(op);
+  if (llvm::any_of(
+          users, [](auto *user) { return !isa<CallOpMutableInterface>(user); }))
+    return failure();
+
+  // Find all arguments that use constant operands only.
+  SmallVector<Operation *> stateConsts(op.getNumArguments());
+  bool first = true;
+  for (auto *user : users) {
+    auto callOp = cast<CallOpMutableInterface>(user);
+    for (auto [constArg, input] :
+         llvm::zip(stateConsts, callOp.getArgOperands())) {
+      if (auto *constOp = input.getDefiningOp();
+          constOp && constOp->template hasTrait<OpTrait::ConstantLike>()) {
+        if (first) {
+          constArg = constOp;
+          continue;
+        }
+        if (constArg &&
+            constArg->getName() == input.getDefiningOp()->getName() &&
+            constArg->getAttrDictionary() ==
+                input.getDefiningOp()->getAttrDictionary())
+          continue;
+      }
+      constArg = nullptr;
+    }
+    first = false;
+  }
+
+  // Move the constants into the arc and erase the block arguments.
+  rewriter.setInsertionPointToStart(&op.getBodyBlock());
+  llvm::BitVector toDelete(op.getBodyBlock().getNumArguments());
+  for (auto [constArg, arg] : llvm::zip(stateConsts, op.getArguments())) {
+    if (!constArg)
+      continue;
+    auto *inlinedConst = rewriter.clone(*constArg);
+    rewriter.replaceAllUsesWith(arg, inlinedConst->getResult(0));
+    toDelete.set(arg.getArgNumber());
+  }
+  op.getBodyBlock().eraseArguments(toDelete);
+  op.setType(rewriter.getFunctionType(op.getBodyBlock().getArgumentTypes(),
+                                      op.getResultTypes()));
+
+  // Rewrite all arc uses to not pass in the constant anymore.
+  for (auto *user : users) {
+    auto callOp = cast<CallOpMutableInterface>(user);
+    SmallPtrSet<Value, 4> maybeUnusedValues;
+    SmallVector<Value> newInputs;
+    for (auto [index, value] : llvm::enumerate(callOp.getArgOperands())) {
+      if (toDelete[index])
+        maybeUnusedValues.insert(value);
+      else
+        newInputs.push_back(value);
+    }
+    rewriter.updateRootInPlace(
+        callOp, [&]() { callOp.getArgOperandsMutable().assign(newInputs); });
+    for (auto value : maybeUnusedValues)
+      if (value.use_empty())
+        rewriter.eraseOp(value.getDefiningOp());
+  }
+
+  return success(toDelete.any());
+}
+
 //===----------------------------------------------------------------------===//
 // ArcCanonicalizerPass implementation
 //===----------------------------------------------------------------------===//
@@ -415,8 +490,8 @@ void ArcCanonicalizerPass::runOnOperation() {
   PatternStatistics statistics;
   RewritePatternSet symbolPatterns(&getContext());
   symbolPatterns.add<CallPassthroughArc, StatePassthroughArc, RemoveUnusedArcs,
-                     RemoveUnusedArcArgumentsPattern>(&getContext(), cache,
-                                                      names, statistics);
+                     RemoveUnusedArcArgumentsPattern, SinkArcInputsPattern>(
+      &getContext(), cache, names, statistics);
   symbolPatterns.add<MemWritePortEnableAndMaskCanonicalizer>(
       &getContext(), cache, names, statistics, arcMapping);
 
