@@ -1,23 +1,27 @@
 # circt-lec builds if a logic backend is found
 if(CIRCT_LEC_ENABLED)
-  list(APPEND CIRCT_LEC_SOURCES
+  add_llvm_tool(circt-lec
     circt-lec.cpp
     Circuit.cpp
     LogicExporter.cpp
     Solver.cpp
   )
 
-  list(APPEND CIRCT_LEC_LIBS
+  target_link_libraries(circt-lec
+    PRIVATE
     MLIRTransforms
     MLIRTranslateLib
     CIRCTComb
     CIRCTHW
     CIRCTSupport
+    ${Z3_LIBRARIES}
   )
 
-  add_llvm_tool(circt-lec ${CIRCT_LEC_SOURCES})
-  target_link_libraries(circt-lec PRIVATE ${CIRCT_LEC_LIBS})
-  target_include_directories(circt-lec PRIVATE ${CIRCT_LEC_INCLUDES})
+  target_include_directories(circt-lec SYSTEM
+    PRIVATE
+    ${Z3_INCLUDE_DIR}
+    ${Z3_CXX_INCLUDE_DIRS}
+  )
 
   # Correct the runpath when linking shared libraries.
   if(BUILD_SHARED_LIBS)
