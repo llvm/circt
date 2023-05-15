@@ -62,7 +62,7 @@ TEST(EvaluatorTests, InstantiateInvalidParamSize) {
   auto mod = builder.create<ModuleOp>(loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  ArrayAttr params = builder.getArrayAttr({builder.getStringAttr("param")});
+  ArrayAttr params = builder.getStrArrayAttr({"param"});
   auto cls = builder.create<ClassOp>("MyClass", params);
   cls.getBody().emplaceBlock().addArgument(builder.getIntegerType(32),
                                            cls.getLoc());
@@ -81,6 +81,37 @@ TEST(EvaluatorTests, InstantiateInvalidParamSize) {
   ASSERT_FALSE(succeeded(result));
 }
 
+TEST(EvaluatorTests, InstantiateNullParam) {
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  Location loc(UnknownLoc::get(&context));
+
+  ImplicitLocOpBuilder builder(loc, &context);
+
+  auto mod = builder.create<ModuleOp>(loc);
+
+  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
+  ArrayAttr params = builder.getStrArrayAttr({"param"});
+  auto cls = builder.create<ClassOp>("MyClass", params);
+  cls.getBody().emplaceBlock().addArgument(builder.getIntegerType(32),
+                                           cls.getLoc());
+
+  Evaluator evaluator(mod);
+
+  context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
+    ASSERT_EQ(diag.str(), "actual parameter for \"param\" is null");
+  });
+
+  auto result =
+      evaluator.instantiate(builder.getStringAttr("MyClass"), {IntegerAttr()});
+
+  ASSERT_FALSE(succeeded(result));
+}
+
 TEST(EvaluatorTests, InstantiateInvalidParamType) {
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -95,7 +126,7 @@ TEST(EvaluatorTests, InstantiateInvalidParamType) {
   auto mod = builder.create<ModuleOp>(loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  ArrayAttr params = builder.getArrayAttr({builder.getStringAttr("param")});
+  ArrayAttr params = builder.getStrArrayAttr({"param"});
   auto cls = builder.create<ClassOp>("MyClass", params);
   cls.getBody().emplaceBlock().addArgument(builder.getIntegerType(32),
                                            cls.getLoc());
@@ -160,7 +191,7 @@ TEST(EvaluatorTests, InstantiateObjectWithParamField) {
   auto mod = builder.create<ModuleOp>(loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  ArrayAttr params = builder.getArrayAttr({builder.getStringAttr("param")});
+  ArrayAttr params = builder.getStrArrayAttr({"param"});
   auto cls = builder.create<ClassOp>("MyClass", params);
   auto &body = cls.getBody().emplaceBlock();
   body.addArgument(builder.getIntegerType(32), cls.getLoc());
@@ -231,7 +262,7 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
   auto mod = builder.create<ModuleOp>(loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  ArrayAttr params = builder.getArrayAttr({builder.getStringAttr("param")});
+  ArrayAttr params = builder.getStrArrayAttr({"param"});
   auto innerCls = builder.create<ClassOp>("MyInnerClass", params);
   auto &innerBody = innerCls.getBody().emplaceBlock();
   innerBody.addArgument(builder.getIntegerType(32), innerCls.getLoc());
@@ -285,7 +316,7 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
   auto mod = builder.create<ModuleOp>(loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  ArrayAttr params = builder.getArrayAttr({builder.getStringAttr("param")});
+  ArrayAttr params = builder.getStrArrayAttr({"param"});
   auto innerCls = builder.create<ClassOp>("MyInnerClass", params);
   auto &innerBody = innerCls.getBody().emplaceBlock();
   innerBody.addArgument(builder.getIntegerType(32), innerCls.getLoc());

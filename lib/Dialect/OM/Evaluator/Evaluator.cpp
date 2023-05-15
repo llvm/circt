@@ -19,7 +19,7 @@ using namespace mlir;
 using namespace circt::om;
 
 /// Construct an Evaluator with an IR module.
-circt::om::Evaluator::Evaluator(ModuleOp mod) : symbolTable(SymbolTable(mod)) {}
+circt::om::Evaluator::Evaluator(ModuleOp mod) : symbolTable(mod) {}
 
 /// Instantiate an Object with its class name and actual parameters.
 FailureOr<std::shared_ptr<Object>>
@@ -52,7 +52,11 @@ circt::om::Evaluator::instantiate(StringAttr className,
     if (auto *object = std::get_if<std::shared_ptr<Object>>(&actualParam))
       actualParamType = object->get()->getType();
 
-    if (!actualParamType || actualParamType != formalParamType) {
+    if (!actualParamType)
+      return cls.emitError("actual parameter for ")
+             << formalParamName << " is null";
+
+    if (actualParamType != formalParamType) {
       auto error = cls.emitError("actual parameter for ")
                    << formalParamName << " has invalid type";
       error.attachNote() << "actual parameter: " << actualParam;
