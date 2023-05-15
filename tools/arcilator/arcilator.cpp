@@ -25,9 +25,11 @@
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/Transforms/Passes.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/OperationSupport.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassInstrumentation.h"
@@ -49,6 +51,7 @@
 #include "llvm/Support/ToolOutputFile.h"
 
 #include <iostream>
+#include <optional>
 
 using namespace llvm;
 using namespace mlir;
@@ -83,6 +86,10 @@ static cl::opt<std::string> stateFile("state-file", cl::desc("State file"),
 
 static cl::opt<bool> shouldInline("inline", cl::desc("Inline arcs"),
                                   cl::init(true), cl::cat(mainCategory));
+
+static cl::opt<bool> printDebugInfo("print-debug-info",
+                                    cl::desc("Print debug information"),
+                                    cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
     verifyPasses("verify-each",
@@ -268,14 +275,22 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     return failure();
   populatePipeline(pm);
 
+  if (printDebugInfo && outputFormat == OutputLLVM)
+    pm.nest<LLVM::LLVMFuncOp>().addPass(LLVM::createDIScopeForLLVMFuncOpPass());
+
   if (failed(pm.run(module.get())))
     return failure();
 
   // Handle MLIR output.
   if (runUntilBefore != UntilEnd || runUntilAfter != UntilEnd ||
       outputFormat == OutputMLIR) {
+    OpPrintingFlags printingFlags;
+    // Only set the debug info flag to true in order to not overwrite MLIR
+    // printer CLI flags when the custom debug info option is not set.
+    if (printDebugInfo)
+      printingFlags.enableDebugInfo(printDebugInfo);
     auto outputTimer = ts.nest("Print MLIR output");
-    module->print(outputFile.value()->os());
+    module->print(outputFile.value()->os(), printingFlags);
     return success();
   }
 
