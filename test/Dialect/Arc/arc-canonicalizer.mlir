@@ -1,5 +1,9 @@
 // RUN: circt-opt %s --arc-canonicalizer | FileCheck %s
 
+//===----------------------------------------------------------------------===//
+// Remove Passthrough calls
+//===----------------------------------------------------------------------===//
+
 // CHECK-LABEL: hw.module @passthoughChecks
 hw.module @passthoughChecks(%in0: i1, %in1: i1) -> (out0: i1, out1: i1, out2: i1, out3: i1, out4: i1, out5: i1, out6: i1, out7: i1, out8: i1, out9: i1) {
   %0:2 = arc.call @passthrough(%in0, %in1) : (i1, i1) -> (i1, i1)
@@ -19,6 +23,10 @@ arc.define @passthrough(%arg0: i1, %arg1: i1) -> (i1, i1) {
 arc.define @noPassthrough(%arg0: i1, %arg1: i1) -> (i1, i1) {
   arc.output %arg1, %arg0 : i1, i1
 }
+
+//===----------------------------------------------------------------------===//
+// MemoryWritePortOp canonicalizer
+//===----------------------------------------------------------------------===//
 
 arc.define @memArcFalse(%arg0: i1, %arg1: i32) -> (i1, i32, i1) {
   %false = hw.constant false
@@ -43,6 +51,10 @@ hw.module @memoryWritePortCanonicalizations(%clk: i1, %addr: i1, %data: i32) {
   hw.output
 }
 
+//===----------------------------------------------------------------------===//
+// RemoveUnusedArcs
+//===----------------------------------------------------------------------===//
+
 // CHECK-NOT: arc.define @unusedArcIsDeleted
 arc.define @unusedArcIsDeleted(%arg0: i32, %arg1: i32) -> i32 {
   %0 = arc.call @nestedUnused(%arg0, %arg1) : (i32, i32) -> i32
@@ -53,6 +65,10 @@ arc.define @nestedUnused(%arg0: i32, %arg1: i32) -> i32 {
   %0 = comb.add %arg0, %arg1 : i32
   arc.output %0 : i32
 }
+
+//===----------------------------------------------------------------------===//
+// ICMPCanonicalizer
+//===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: hw.module @icmpEqCanonicalizer
 hw.module @icmpEqCanonicalizer(%arg0: i1, %arg1: i1, %arg2: i1, %arg3: i1, %arg4: i4, %arg5: i4, %arg6: i4, %arg7: i4) -> (out0: i1, out1: i1) {
@@ -88,4 +104,47 @@ hw.module @icmpNeCanonicalizer(%arg0: i1, %arg1: i1, %arg2: i1, %arg3: i1, %arg4
 
   // CHECK-NEXT: hw.output [[V0]], [[V2]] :
   hw.output %1, %3 : i1, i1
+}
+
+//===----------------------------------------------------------------------===//
+// RemoveUnusedArcArguments
+//===----------------------------------------------------------------------===//
+
+// COM: this has to be before @OneOfThreeUsed to check that arguments that
+// COM: become unused during the process are removed as well.
+// CHECK: arc.define @NestedCall(%arg0: i1) -> i1 {
+arc.define @NestedCall(%arg0: i1, %arg1: i1, %arg2: i1) -> i1 {
+  // CHECK: arc.call @OneOfThreeUsed(%arg0) : (i1) -> i1
+  %0 = arc.call @OneOfThreeUsed(%arg0, %arg1, %arg2) : (i1, i1, i1) -> i1
+  arc.output %0 : i1
+}
+
+// CHECK-LABEL: arc.define @OneOfThreeUsed(%arg0: i1)
+arc.define @OneOfThreeUsed(%arg0: i1, %arg1: i1, %arg2: i1) -> i1 {
+  %true = hw.constant true
+  %0 = comb.xor %arg1, %true : i1
+  // CHECK: arc.output {{%[0-9]+}} :
+  arc.output %0 : i1
+}
+
+// CHECK: @test1
+hw.module @test1 (%arg0: i1, %arg1: i1, %arg2: i1, %clock: i1) -> (out0: i1, out1: i1) {
+  // CHECK-NEXT: arc.state @OneOfThreeUsed(%arg1) clock %clock lat 1 : (i1) -> i1
+  %0 = arc.state @OneOfThreeUsed(%arg0, %arg1, %arg2) clock %clock lat 1 : (i1, i1, i1) -> i1
+  // CHECK-NEXT: arc.state @NestedCall(%arg1)
+  %1 = arc.state @NestedCall(%arg0, %arg1, %arg2) clock %clock lat 1 : (i1, i1, i1) -> i1
+  hw.output %0, %1 : i1, i1
+}
+
+// CHECK-LABEL: arc.define @NoArgsToRemove()
+arc.define @NoArgsToRemove() -> i1 {
+  %0 = hw.constant 0 : i1
+  arc.output %0 : i1
+}
+
+// CHECK: @test2
+hw.module @test2 () -> (out: i1) {
+  // CHECK-NEXT: arc.state @NoArgsToRemove() lat 0 : () -> i1
+  %0 = arc.state @NoArgsToRemove() lat 0 : () -> i1
+  hw.output %0 : i1
 }
