@@ -379,6 +379,8 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
             "Disable emission of memory randomization code">,
     Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
             "Disable emission of register randomization code">,
+    Option<"initializeMemSynthesis", "initialize-mem-synthesis", "bool", "false",
+            "Enable memory initialization when SYNTHESIS flag is defined by synthesizer (Eg. FPGAs)">,
     Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations",
            "bool", "false",
     "Emit warnings on unprocessed annotations during lower-to-hw pass">,

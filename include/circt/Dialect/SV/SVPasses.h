@@ -28,7 +28,7 @@ std::unique_ptr<mlir::Pass> createHWGeneratorCalloutPass();
 std::unique_ptr<mlir::Pass> createHWMemSimImplPass(
     bool replSeqMem = false, bool ignoreReadEnable = false,
     bool addMuxPragmas = false, bool disableMemRandomization = false,
-    bool disableRegRandomization = false,
+    bool disableRegRandomization = false, bool initializeMemSynthesis = false,
     bool addVivadoRAMAddressConflictSynthesisBugWorkaround = false);
 std::unique_ptr<mlir::Pass>
 createSVExtractTestCodePass(bool disableInstanceExtraction = false,
