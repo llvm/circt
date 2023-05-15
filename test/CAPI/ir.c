@@ -175,6 +175,22 @@ bool testFIRRTLBundle(MlirContext ctx) {
   return (isBundle && (numFields == 2) && namesOk && fooOk && barOk);
 }
 
+bool testFIRRTLVector(MlirContext ctx) {
+  MlirOperation op =
+      parseFirrtlOp(ctx, "%res = firrtl.wire : !firrtl.vector<uint<32>, 16>");
+  MlirValue val = mlirOperationGetResult(op, 0);
+  MlirType ty = mlirValueGetType(val);
+  bool isVector = firrtlTypeIsFVector(ty);
+  int numElements = firrtlTypeVectorGetNumElements(ty);
+  MlirType elementType = firrtlTypeVectorGetElementType(ty);
+  bool elementIsUInt = firrtlTypeIsUInt(elementType);
+  int elementWidth = firrtlTypeGetBitWidth(elementType, false);
+  mlirOperationDestroy(op);
+
+  return (isVector && (numElements == 16) && elementIsUInt &&
+          (elementWidth == 32));
+}
+
 int testFIRRTLTypes() {
   MlirContext ctx = mlirContextCreate();
   MlirDialectHandle firrtlHandle = mlirGetDialectHandle__firrtl__();
@@ -185,6 +201,8 @@ int testFIRRTLTypes() {
     return 1;
   if (!testFIRRTLBundle(ctx))
     return 2;
+  if (!testFIRRTLVector(ctx))
+    return 3;
 
   mlirContextDestroy(ctx);
 

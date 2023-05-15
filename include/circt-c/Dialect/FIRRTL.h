@@ -119,8 +119,11 @@ MLIR_CAPI_EXPORTED bool firrtlTypeBundleHasFieldName(MlirType type,
 MLIR_CAPI_EXPORTED MlirStringRef firrtlTypeBundleGetFieldName(MlirType type,
                                                               int32_t index);
 
-/// Return the number of fields for the provided vector type.
-MLIR_CAPI_EXPORTED int32_t firrtlTypeVectorGetNumFields(MlirType type);
+/// Return the number of elements for the provided vector type.
+MLIR_CAPI_EXPORTED int32_t firrtlTypeVectorGetNumElements(MlirType type);
+
+/// Return the type of all elements in the provided vector type.
+MLIR_CAPI_EXPORTED MlirType firrtlTypeVectorGetElementType(MlirType type);
 
 #ifdef __cplusplus
 }

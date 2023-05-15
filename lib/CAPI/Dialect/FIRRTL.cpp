@@ -151,6 +151,11 @@ MLIR_CAPI_EXPORTED MlirStringRef firrtlTypeBundleGetFieldName(MlirType type,
   return wrap(unwrap(type).cast<BundleType>().getElementName(index));
 }
 
-MLIR_CAPI_EXPORTED int32_t firrtlTypeVectorGetNumFields(MlirType type) {
+MLIR_CAPI_EXPORTED int32_t firrtlTypeVectorGetNumElements(MlirType type) {
   return unwrap(type).cast<FVectorType>().getNumElements();
+}
+
+MLIR_CAPI_EXPORTED MlirType firrtlTypeVectorGetElementType(MlirType type) {
+  auto vector = unwrap(type).cast<FVectorType>();
+  return wrap(vector.getElementType());
 }
