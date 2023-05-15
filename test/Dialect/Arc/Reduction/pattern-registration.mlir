@@ -12,7 +12,7 @@
 // CHECK-NEXT: canonicalize
 // CHECK-NEXT: arc-state-elimination
 // CHECK-NEXT: operation-pruner
-// CHECK-NEXT: arc-sink-inputs
+// CHECK-NEXT: arc-canonicalizer
 // CHECK-EMPTY:
 arc.define @DummyArc(%arg0: i32) -> i32 {
   arc.output %arg0 : i32
