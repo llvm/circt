@@ -481,8 +481,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
       // Insert a macro with the format:
       // ref_<circuit-name>_<module-name>_<ref-name> <path>
-      auto macroName = builder.getStringAttr("ref_" + circuitOp.getName() +
-                                             "_" + module.getName() + "_" +
+      SmallString<128> refCircuitModulePrefix{"ref_", circuitOp.getName(), "_",
+                                              module.getName()};
+      auto macroName = builder.getStringAttr(refCircuitModulePrefix + "_" +
                                              module.getPortName(portIndex));
       declBuilder.create<sv::MacroDeclOp>(macroName, ArrayAttr(), StringAttr());
 
@@ -493,10 +494,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
       // The macro will be exported to a file with the format:
       // ref_<circuit-name>_<module-name>.sv
-      macroDefOp->setAttr(
-          "output_file", hw::OutputFileAttr::getFromFilename(
-                             &getContext(), "ref_" + circuitOp.getName() + "_" +
-                                                module.getName() + ".sv"));
+      macroDefOp->setAttr("output_file",
+                          hw::OutputFileAttr::getFromFilename(
+                              &getContext(), refCircuitModulePrefix + ".sv"));
     }
 
     return success();
