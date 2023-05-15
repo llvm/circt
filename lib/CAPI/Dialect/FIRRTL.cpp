@@ -23,67 +23,80 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(FIRRTL, firrtl,
 // Type API.
 //===----------------------------------------------------------------------===//
 
-bool firrtlTypeIsFIRRTLType(MlirType type) {
+MLIR_CAPI_EXPORTED bool firrtlTypeIsFIRRTLType(MlirType type) {
   return unwrap(type).isa<FIRRTLType>();
 }
 
-bool firrtlTypeIsGround(MlirType type) {
+MLIR_CAPI_EXPORTED bool firrtlTypeIsGround(MlirType type) {
   return unwrap(type).cast<FIRRTLType>().isGround();
 }
 
-bool firrtlTypeIsConst(MlirType type) {
+MLIR_CAPI_EXPORTED bool firrtlTypeIsConst(MlirType type) {
   return unwrap(type).cast<FIRRTLType>().isConst();
 }
 
-bool firrtlTypeIsClock(MlirType type) { return unwrap(type).isa<ClockType>(); }
+MLIR_CAPI_EXPORTED bool firrtlTypeIsClock(MlirType type) {
+  return unwrap(type).isa<ClockType>();
+}
 
-bool firrtlTypeIsReset(MlirType type) { return unwrap(type).isa<ResetType>(); }
+MLIR_CAPI_EXPORTED bool firrtlTypeIsReset(MlirType type) {
+  return unwrap(type).isa<ResetType>();
+}
 
-bool firrtlTypeIsAsyncReset(MlirType type) {
+MLIR_CAPI_EXPORTED bool firrtlTypeIsAsyncReset(MlirType type) {
   return unwrap(type).isa<AsyncResetType>();
 }
 
-bool firrtlTypeIsSInt(MlirType type) { return unwrap(type).isa<SIntType>(); }
+MLIR_CAPI_EXPORTED bool firrtlTypeIsSInt(MlirType type) {
+  return unwrap(type).isa<SIntType>();
+}
 
-bool firrtlTypeIsUInt(MlirType type) { return unwrap(type).isa<UIntType>(); }
+MLIR_CAPI_EXPORTED bool firrtlTypeIsUInt(MlirType type) {
+  return unwrap(type).isa<UIntType>();
+}
 
-bool firrtlTypeIsAnalog(MlirType type) {
+MLIR_CAPI_EXPORTED bool firrtlTypeIsAnalog(MlirType type) {
   return unwrap(type).isa<AnalogType>();
 }
 
-bool firrtlTypeIsBundle(MlirType type) {
+MLIR_CAPI_EXPORTED bool firrtlTypeIsBundle(MlirType type) {
   return unwrap(type).isa<BundleType>();
 }
 
-bool firrtlTypeIsFVector(MlirType type) {
+MLIR_CAPI_EXPORTED bool firrtlTypeIsFVector(MlirType type) {
   return unwrap(type).isa<FVectorType>();
 }
 
-bool firrtlTypeIsOpenBundle(MlirType type) {
+MLIR_CAPI_EXPORTED bool firrtlTypeIsOpenBundle(MlirType type) {
   return unwrap(type).isa<OpenBundleType>();
 }
 
-bool firrtlTypeIsOpenVector(MlirType type) {
+MLIR_CAPI_EXPORTED bool firrtlTypeIsOpenVector(MlirType type) {
   return unwrap(type).isa<OpenVectorType>();
 }
 
-bool firrtlTypeIsFEnum(MlirType type) { return unwrap(type).isa<FEnumType>(); }
+MLIR_CAPI_EXPORTED bool firrtlTypeIsFEnum(MlirType type) {
+  return unwrap(type).isa<FEnumType>();
+}
 
-bool firrtlTypeIsRef(MlirType type) { return unwrap(type).isa<RefType>(); }
+MLIR_CAPI_EXPORTED bool firrtlTypeIsRef(MlirType type) {
+  return unwrap(type).isa<RefType>();
+}
 
-bool firrtlTypesAreEquivalent(MlirType dest, MlirType src,
-                              bool srcOuterTypeIsConst) {
+MLIR_CAPI_EXPORTED bool firrtlTypesAreEquivalent(MlirType dest, MlirType src,
+                                                 bool srcOuterTypeIsConst) {
   return circt::firrtl::areTypesEquivalent(unwrap(dest).cast<FIRRTLType>(),
                                            unwrap(src).cast<FIRRTLType>(),
                                            srcOuterTypeIsConst);
 }
 
-int32_t firrtlTypeGetBitWidth(MlirType type, bool ignoreFlip) {
+MLIR_CAPI_EXPORTED int32_t firrtlTypeGetBitWidth(MlirType type,
+                                                 bool ignoreFlip) {
   return getBitWidth(unwrap(type).cast<FIRRTLBaseType>(), ignoreFlip)
       .value_or(0);
 }
 
-bool firrtlTypeIsLarger(MlirType dst, MlirType src) {
+MLIR_CAPI_EXPORTED bool firrtlTypeIsLarger(MlirType dst, MlirType src) {
   return circt::firrtl::isTypeLarger(unwrap(dst).cast<FIRRTLBaseType>(),
                                      unwrap(src).cast<FIRRTLBaseType>());
 }
@@ -92,8 +105,8 @@ bool firrtlTypeIsLarger(MlirType dst, MlirType src) {
 // Aggregate Types
 //===----------------------------------------------------------------------===//
 
-FirrtlBundleField firrtlTypeBundleGetFieldByIndex(MlirType type,
-                                                  int32_t index) {
+MLIR_CAPI_EXPORTED FirrtlBundleField
+firrtlTypeBundleGetFieldByIndex(MlirType type, int32_t index) {
   FirrtlBundleField ret;
   auto bundle = unwrap(type).cast<BundleType>();
   auto field = bundle.getElement(index);
@@ -103,8 +116,8 @@ FirrtlBundleField firrtlTypeBundleGetFieldByIndex(MlirType type,
   return ret;
 }
 
-FirrtlBundleField firrtlTypeBundleGetFieldByName(MlirType type,
-                                                 MlirStringRef name) {
+MLIR_CAPI_EXPORTED FirrtlBundleField
+firrtlTypeBundleGetFieldByName(MlirType type, MlirStringRef name) {
   FirrtlBundleField ret;
   auto bundle = unwrap(type).cast<BundleType>();
   auto field = bundle.getElement(unwrap(name)).value();
@@ -114,27 +127,30 @@ FirrtlBundleField firrtlTypeBundleGetFieldByName(MlirType type,
   return ret;
 }
 
-int32_t firrtlTypeBundleGetNumFields(MlirType type) {
+MLIR_CAPI_EXPORTED int32_t firrtlTypeBundleGetNumFields(MlirType type) {
   return unwrap(type).cast<BundleType>().getNumElements();
 }
 
-int32_t firrtlTypeBundleGetFieldIndex(MlirType type, MlirStringRef name) {
+MLIR_CAPI_EXPORTED int32_t firrtlTypeBundleGetFieldIndex(MlirType type,
+                                                         MlirStringRef name) {
   return unwrap(type)
       .cast<BundleType>()
       .getElementIndex(unwrap(name))
       .value_or(-1);
 }
 
-bool firrtlTypeBundleHasFieldName(MlirType type, MlirStringRef name) {
+MLIR_CAPI_EXPORTED bool firrtlTypeBundleHasFieldName(MlirType type,
+                                                     MlirStringRef name) {
   auto bundle = unwrap(type).cast<BundleType>();
   auto field = bundle.getElement(unwrap(name));
   return field ? true : false;
 }
 
-MlirStringRef firrtlTypeBundleGetFieldName(MlirType type, int32_t index) {
+MLIR_CAPI_EXPORTED MlirStringRef firrtlTypeBundleGetFieldName(MlirType type,
+                                                              int32_t index) {
   return wrap(unwrap(type).cast<BundleType>().getElementName(index));
 }
 
-int32_t firrtlTypeVectorGetNumFields(MlirType type) {
+MLIR_CAPI_EXPORTED int32_t firrtlTypeVectorGetNumFields(MlirType type) {
   return unwrap(type).cast<FVectorType>().getNumElements();
 }
