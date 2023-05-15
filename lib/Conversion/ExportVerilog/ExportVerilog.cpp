@@ -1039,8 +1039,22 @@ void EmitterBase::emitTextWithSubstitutions(
         auto sym = symAttrs[symOpNum];
         StringRef symVerilogName;
         if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>()) {
-          if (auto *symOp = state.symbolCache.getDefinition(fsym))
-            symVerilogName = namify(sym, symOp);
+          if (auto *symOp = state.symbolCache.getDefinition(fsym)) {
+            if (auto globalRef = dyn_cast<HierPathOp>(symOp)) {
+              auto namepath = globalRef.getNamepathAttr().getValue();
+              for (auto [index, sym] : llvm::enumerate(namepath)) {
+                if (index > 0)
+                  ps << ".";
+
+                auto innerRef = cast<InnerRefAttr>(sym);
+                auto ref = state.symbolCache.getInnerDefinition(
+                    innerRef.getModule(), innerRef.getName());
+                ps << namify(innerRef, ref);
+              }
+            } else {
+              symVerilogName = namify(sym, symOp);
+            }
+          }
         } else if (auto isym = sym.dyn_cast<InnerRefAttr>()) {
           auto symOp = state.symbolCache.getInnerDefinition(isym.getModule(),
                                                             isym.getName());
@@ -4461,8 +4475,11 @@ LogicalResult StmtEmitter::visitSV(MacroDefOp op) {
     });
     ps << ")";
   }
-  if (!op.getFormatString().empty())
-    ps << " " << op.getFormatStringAttr();
+  if (!op.getFormatString().empty()) {
+    ps << " ";
+    emitTextWithSubstitutions(ps, op.getFormatString(), op, {},
+                              op.getSymbols());
+  }
   ps << PP::newline;
   return success();
 }
@@ -5325,7 +5342,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           else
             rootFile.ops.push_back(info);
         })
-        .Case<VerbatimOp, IfDefOp>([&](Operation *op) {
+        .Case<VerbatimOp, IfDefOp, MacroDefOp>([&](Operation *op) {
           // Emit into a separate file using the specified file name or
           // replicate the operation in each outputfile.
           if (!attr) {
@@ -5357,7 +5374,6 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
             separateFile(op);
           }
         })
-        .Case<MacroDefOp>([&](auto op) { replicatedOps.push_back(op); })
         .Case<MacroDeclOp>([&](auto op) {
           symbolCache.addDefinition(op.getSymNameAttr(), op);
         })
