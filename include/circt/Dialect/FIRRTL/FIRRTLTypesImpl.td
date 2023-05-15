@@ -15,6 +15,7 @@
 
 include "FIRRTLDialect.td"
 include "circt/Dialect/HW/HWTypeInterfaces.td"
+include "FIRRTLTypeInterfaces.td"
 
 // Base class for other typedefs. Provides dialact-specific defaults.
 class FIRRTLImplType<string name,
