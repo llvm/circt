@@ -1,5 +1,6 @@
 ; RUN: firtool %s -disable-all-randomization -lowering-options=emitBindComments | FileCheck %s --check-prefixes=CHECK,INIT_NONE
-; RUN: firtool %s -annotation-file %s.inline.anno.json -disable-all-randomization -lowering-options=emitBindComments | FileCheck %s --check-prefixes=CHECK,INIT_INLINE
+; RUN: firtool %s -annotation-file %s.inline.anno.json -disable-all-randomization -lowering-options=emitBindComments | FileCheck %s --check-prefixes=CHECK,INIT_INLINE,INIT_INLINE_SYN
+; RUN: firtool %s -annotation-file %s.inline.anno.json -disable-all-randomization -lowering-options=emitBindComments --initialize-mem-synthesis | FileCheck %s --check-prefixes=CHECK,INIT_INLINE
 ; RUN: firtool %s -annotation-file %s.outline.anno.json -disable-all-randomization -lowering-options=emitBindComments | FileCheck %s --check-prefixes=CHECK,INIT_OUTLINE
 
 circuit Foo :
@@ -23,8 +24,10 @@ circuit Foo :
 
       ; INIT_NONE-NOT:       readmem
 
-      ; INIT_INLINE:         initial
-      ; INIT_INLINE-NEXT:      $readmemh("mem1.txt", [[memory]]);
+      ; INIT_INLINE_SYN:     `ifndef SYNTHESIS
+      ; INIT_INLINE:           initial
+      ; INIT_INLINE-NEXT:        $readmemh("mem1.txt", [[memory]]);
+      ; INIT_INLINE_SYN:     `endif // not def SYNTHESIS
 
       ; INIT_OUTLINE:        /* This instance is elsewhere emitted as a bind statement.
       ; INIT_OUTLINE-NEXT:     [[bindModule:[a-zA-Z0-9_]+]] [[bindInstance:[a-zA-Z0-9_]+]] ();

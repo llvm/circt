@@ -343,13 +343,6 @@ static LogicalResult processBuffer(
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {
-<<<<<<< HEAD
-    if (failed(firtool::populateLowFIRRTLToHW(pm, firtoolOptions)))
-      return failure();
-    if (outputFormat != OutputIRHW)
-      if (failed(firtool::populateHWToSV(pm, firtoolOptions)))
-        return failure();
-=======
 
     // Remove TraceAnnotations and write their updated paths to an output
     // annotation file.
@@ -407,7 +400,6 @@ static LogicalResult processBuffer(
         modulePM.addPass(sv::createHWCleanupPass());
       }
     }
->>>>>>> cff2e2a06 (Add memory synthesis initialization flag to firtool. Fixes #4752)
   }
 
   // Load the emitter options from the command line. Command line options if
