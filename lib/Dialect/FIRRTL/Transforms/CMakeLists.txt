@@ -1,6 +1,7 @@
 add_circt_dialect_library(CIRCTFIRRTLTransforms
   AddSeqMemPorts.cpp
   BlackBoxReader.cpp
+  BuildOM.cpp
   CheckCombCycles.cpp
   CheckCombLoops.cpp
   CreateSiFiveMetadata.cpp
@@ -51,6 +52,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LINK_LIBS PUBLIC
   CIRCTFIRRTL
   CIRCTHW
+  CIRCTOM
   CIRCTSV
   CIRCTSupport
   MLIRIR

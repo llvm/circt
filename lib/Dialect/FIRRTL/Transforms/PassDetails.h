@@ -26,6 +26,10 @@ namespace hw {
 class HWDialect;
 }
 
+namespace om {
+class OMDialect;
+}
+
 namespace sv {
 class SVDialect;
 }

@@ -60,6 +60,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     }
   }
 
+  pm.addPass(firrtl::createBuildOMPass());
+
   pm.nest<firrtl::CircuitOp>().nestAny().addPass(firrtl::createDropConstPass());
 
   if (opt.dedup)

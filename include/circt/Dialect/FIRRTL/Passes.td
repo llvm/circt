@@ -691,6 +691,19 @@ def VBToBV : Pass<"firrtl-vb-to-bv", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createVBToBVPass()";
 }
 
+def BuildOM : Pass<"firrtl-build-om", "mlir::ModuleOp"> {
+  let summary = "Build OMIR from modules and properties";
+  let description = [{
+    This pass builds object model classes for each FIRRTL module with
+    fields for each output 'const' port annotated with
+    "circt.experimental.ConstPropertyAnnotation".
+  }];
+  let constructor = "circt::firrtl::createBuildOMPass()";
+  // let options = [Option<"outputFilename", "file", "std::string", "",
+  //     "Output file for the JSON-serialized OMIR data">];
+  let dependentDialects = ["om::OMDialect"];
+}
+
 def DropConst : InterfacePass<"firrtl-drop-const", "firrtl::FModuleLike"> {
   let summary = "Drop 'const' modifier from types";
   let description = [{
