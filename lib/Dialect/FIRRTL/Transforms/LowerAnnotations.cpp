@@ -502,6 +502,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
      {stdResolve, applyWithoutTarget<true, true, WireOp, NodeOp, RegOp,
                                      RegResetOp, InstanceOp, MemOp, CombMemOp,
                                      MemoryPortOp, SeqMemOp>}},
+    {constPropertyAnnoClass, {stdResolve, applyWithoutTarget<true>}},
     {prefixModulesAnnoClass,
      {stdResolve,
       applyWithoutTarget<true, FModuleOp, FExtModuleOp, InstanceOp>}},
