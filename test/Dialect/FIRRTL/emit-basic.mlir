@@ -405,6 +405,34 @@ firrtl.circuit "Foo" {
     firrtl.ref.define %a_rwref, %refSource_a_rwref : !firrtl.rwprobe<uint<1>>
   }
 
+  // CHECK-LABEL: extmodule ExtOpenAgg
+  // CHECK-NEXT:  output out : { a : { data : UInt<1> },
+  // CHECK-NEXT:                 b : { x : UInt<2>, y : Probe<UInt<2>[3]> }[2] }
+  firrtl.extmodule @ExtOpenAgg(
+      out out: !firrtl.openbundle<a: bundle<data: uint<1>>, b: openvector<openbundle<x: uint<2>, y: probe<vector<uint<2>, 3>>>, 2>>)
+
+  // CHECK-LABEL: module OpenAggTest
+  firrtl.module @OpenAggTest(
+  // CHECK-NEXT: output out_b_0_y_2 : Probe<UInt<2>>
+  // CHECK-EMPTY:
+      out %out_b_0_y_2 : !firrtl.probe<uint<2>>) {
+
+    // CHECK-NEXT: inst oa of ExtOpenAgg
+    %oa_out = firrtl.instance oa @ExtOpenAgg(out out: !firrtl.openbundle<a: bundle<data: uint<1>>, b: openvector<openbundle<x: uint<2>, y: probe<vector<uint<2>, 3>>>, 2>>)
+
+    %a = firrtl.opensubfield %oa_out[a] : !firrtl.openbundle<a: bundle<data: uint<1>>, b: openvector<openbundle<x: uint<2>, y: probe<vector<uint<2>, 3>>>, 2>>
+    %data = firrtl.subfield %a[data] : !firrtl.bundle<data: uint<1>>
+    // CHECK-NEXT:  node n_data = oa.out.a.data
+    %n_data = firrtl.node %data : !firrtl.uint<1>
+    %b = firrtl.opensubfield %oa_out[b] : !firrtl.openbundle<a: bundle<data: uint<1>>, b: openvector<openbundle<x: uint<2>, y: probe<vector<uint<2>, 3>>>, 2>>
+    %b_0 = firrtl.opensubindex %b[0] : !firrtl.openvector<openbundle<x: uint<2>, y: probe<vector<uint<2>, 3>>>, 2>
+    %b_0_y = firrtl.opensubfield %b_0[y] : !firrtl.openbundle<x : uint<2>, y: probe<vector<uint<2>, 3>>>
+    %b_0_y_2 = firrtl.ref.sub %b_0_y[2] : !firrtl.probe<vector<uint<2>, 3>>
+    // openagg indexing + ref.sub
+    // CHECK-NEXT: define out_b_0_y_2 = oa.out.b[0].y[2]
+    firrtl.ref.define %out_b_0_y_2, %b_0_y_2 : !firrtl.probe<uint<2>>
+  }
+
   firrtl.extmodule @MyParameterizedExtModule<DEFAULT: i64 = 0, DEPTH: f64 = 3.242000e+01, FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32>(in in: !firrtl.uint, out out: !firrtl.uint<8>) attributes {defname = "name_thing"}
   // CHECK-LABEL: extmodule MyParameterizedExtModule :
   // CHECK-NEXT:    input in : UInt
