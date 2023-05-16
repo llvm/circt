@@ -25,6 +25,7 @@ namespace firrtl {
 namespace detail {
 struct FIRRTLBaseTypeStorage;
 struct WidthTypeStorage;
+struct IntTypeStorage;
 struct BundleTypeStorage;
 struct VectorTypeStorage;
 struct FEnumTypeStorage;

@@ -1464,6 +1464,14 @@ firrtl.module @EnumNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !fir
 }
 
 // -----
+// uint property with uninferred width is invalid
+
+firrtl.circuit "PropertyUIntWithUninferredWidth" {
+// expected-error @+1 {{Width inference only supported in hardware}}
+firrtl.module @PropertyUIntWithUninferredWidth(in %string: !firrtl.property.uint) {}
+}
+
+// -----
 // hardware firrtl.string is invalid
 
 firrtl.circuit "HardwareString" {

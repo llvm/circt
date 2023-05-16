@@ -45,12 +45,15 @@ def WidthQualifiedTypeTrait : NativeTypeTrait<"WidthQualifiedTypeTrait"> {
 //===----------------------------------------------------------------------===//
 
 def SIntImpl : FIRRTLImplType<"SInt",
-                              [WidthQualifiedTypeTrait, FieldIDTypeInterface],
-                              "::circt::firrtl::IntType"> {
+  [PhasedTypeInterface, WidthQualifiedTypeTrait, FieldIDTypeInterface],
+  "::circt::firrtl::IntType"> {
   let summary = "A signed integer type, whose width may not be known.";
-  let parameters = (ins "int32_t":$widthOrSentinel, "bool":$isConst);
-  let storageClass = "WidthTypeStorage";
+  let parameters = (ins "Phase":$phase, "int32_t":$widthOrSentinel,
+                        "bool":$isConst);
+  let storageClass = "IntTypeStorage";
   let builders = [
+    TypeBuilder<(ins "Phase":$phase, "std::optional<int32_t>":$width,
+                     CArg<"bool", "false">:$isConst)>,
     TypeBuilder<(ins "std::optional<int32_t>":$width, CArg<"bool", "false">:$isConst)>,
     TypeBuilder<(ins)>,
   ];
@@ -59,17 +62,24 @@ def SIntImpl : FIRRTLImplType<"SInt",
     using WidthQualifiedTypeTrait<SIntType>::getWidth;
     using WidthQualifiedTypeTrait<SIntType>::hasWidth;
     int32_t getWidthOrSentinel() const;
+
     SIntType getConstType(bool isConst);
+
+    Phase getPhase() const;
+    bool isLegalInPhase(Phase phase) const { return getPhase() == phase; }
   }];
 }
 
 def UIntImpl : FIRRTLImplType<"UInt",
-                              [WidthQualifiedTypeTrait, FieldIDTypeInterface],
-                              "::circt::firrtl::IntType"> {
+  [PhasedTypeInterface, WidthQualifiedTypeTrait, FieldIDTypeInterface],
+  "::circt::firrtl::IntType"> {
   let summary = "An unsigned integer type, whose width may not be known.";
-  let parameters = (ins "int32_t":$widthOrSentinel, "bool":$isConst);
-  let storageClass = "WidthTypeStorage";
+  let parameters = (ins "Phase":$phase, "int32_t":$widthOrSentinel,
+                        "bool":$isConst);
+  let storageClass = "IntTypeStorage";
   let builders = [
+    TypeBuilder<(ins "Phase":$phase, "std::optional<int32_t>":$width,
+                     CArg<"bool", "false">:$isConst)>,
     TypeBuilder<(ins "std::optional<int32_t>":$width, CArg<"bool", "false">:$isConst)>,
     TypeBuilder<(ins)>,
   ];
@@ -78,7 +88,11 @@ def UIntImpl : FIRRTLImplType<"UInt",
     using WidthQualifiedTypeTrait<UIntType>::getWidth;
     using WidthQualifiedTypeTrait<UIntType>::hasWidth;
     int32_t getWidthOrSentinel() const;
+
     UIntType getConstType(bool isConst);
+
+    Phase getPhase() const;
+    bool isLegalInPhase(Phase phase) const { return getPhase() == phase; }
   }];
 }
 

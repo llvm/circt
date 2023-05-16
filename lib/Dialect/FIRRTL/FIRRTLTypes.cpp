@@ -46,26 +46,34 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
     os << "const.";
   }
 
-  auto printWidthQualifier = [&](std::optional<int32_t> width) {
-    if (width)
+  auto printPhaseQualifier = [&](auto type) {
+    if (auto phase = type.getPhase(); phase != Phase::Hardware)
+      os << stringifyPhase(phase) << ".";
+  };
+
+  auto printWidthQualifier = [&](auto type) {
+    if (auto width = type.getWidth(); width)
       os << '<' << *width << '>';
   };
+
   bool anyFailed = false;
   TypeSwitch<Type>(type)
       .Case<ClockType>([&](auto) { os << "clock"; })
       .Case<ResetType>([&](auto) { os << "reset"; })
       .Case<AsyncResetType>([&](auto) { os << "asyncreset"; })
       .Case<SIntType>([&](auto sIntType) {
+        printPhaseQualifier(sIntType);
         os << "sint";
-        printWidthQualifier(sIntType.getWidth());
+        printWidthQualifier(sIntType);
       })
       .Case<UIntType>([&](auto uIntType) {
+        printPhaseQualifier(uIntType);
         os << "uint";
-        printWidthQualifier(uIntType.getWidth());
+        printWidthQualifier(uIntType);
       })
       .Case<AnalogType>([&](auto analogType) {
         os << "analog";
-        printWidthQualifier(analogType.getWidth());
+        printWidthQualifier(analogType);
       })
       .Case<BundleType, OpenBundleType>([&](auto bundleType) {
         if (isa<OpenBundleType>(bundleType))
@@ -128,9 +136,48 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
 // Type Parsing
 //===----------------------------------------------------------------------===//
 
+/// Parse the width qualifier for a width-qualified type.
+/// optional-width ::= ( '<' integer '>' )?
+static OptionalParseResult parseOptionalWidthQualifier(AsmParser &parser,
+                                                       int32_t &result) {
+  if (failed(parser.parseOptionalLess()))
+    return {};
+
+  int32_t width;
+  if (parser.parseInteger(width) || parser.parseGreater())
+    return failure();
+
+  if (width < 0) {
+    parser.emitError(parser.getNameLoc(), "invalid width");
+    return failure();
+  }
+
+  result = width;
+  return success();
+}
+
+/// Parse an optional width argument and construct a width-qualified type.
+template <typename T>
+ParseResult parseIntType(AsmParser &parser, Phase phase, bool isConst,
+                         Type &result) {
+  int32_t width = -1;
+  if (auto parseResult = parseOptionalWidthQualifier(parser, width);
+      parseResult.has_value() && failed(*parseResult))
+    return failure();
+
+  auto type = parser.getChecked<T>(parser.getContext(), phase, width, isConst);
+  if (!type)
+    return failure();
+  result = type;
+  return success();
+}
+
 /// Parse a type that has a phase qualifier.
 /// ```plain
-/// firrtl-phased-type ::= string
+/// firrtl-phased-type
+///   ::= sint ('<' int '>')?
+///   ::= uint ('<' int '>')?
+///   ::= string
 /// ```
 static OptionalParseResult parsePhaseQualifiedType(AsmParser &parser,
                                                    StringRef name, Phase phase,
@@ -140,6 +187,13 @@ static OptionalParseResult parsePhaseQualifiedType(AsmParser &parser,
     result = StringType::get(context, phase);
     return success();
   }
+  if (name.equals("sint")) {
+    return parseIntType<SIntType>(parser, phase, false, result);
+  }
+  if (name.equals("uint")) {
+    return parseIntType<UIntType>(parser, phase, false, result);
+  }
+
   parser.emitError(parser.getNameLoc(), "expected phase-qualified type");
   return failure();
 }
@@ -190,26 +244,20 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
   if (name.equals("asyncreset"))
     return result = AsyncResetType::get(context, isConst), success();
 
-  if (name.equals("sint") || name.equals("uint") || name.equals("analog")) {
+  if (name.equals("sint")) {
+    return parseIntType<SIntType>(parser, Phase::Hardware, isConst, result);
+  }
+  if (name.equals("uint")) {
+    return parseIntType<UIntType>(parser, Phase::Hardware, isConst, result);
+  }
+
+  if (name.equals("analog")) {
     // Parse the width specifier if it exists.
     int32_t width = -1;
-    if (!parser.parseOptionalLess()) {
-      if (parser.parseInteger(width) || parser.parseGreater())
-        return failure();
-
-      if (width < 0)
-        return parser.emitError(parser.getNameLoc(), "unknown width"),
-               failure();
-    }
-
-    if (name.equals("sint"))
-      result = SIntType::get(context, width, isConst);
-    else if (name.equals("uint"))
-      result = UIntType::get(context, width, isConst);
-    else {
-      assert(name.equals("analog"));
-      result = AnalogType::get(context, width, isConst);
-    }
+    if (auto parseResult = parseOptionalWidthQualifier(parser, width);
+        parseResult.has_value() && failed(*parseResult))
+      return failure();
+    result = AnalogType::get(context, width, isConst);
     return success();
   }
 
@@ -960,6 +1008,12 @@ int32_t IntType::getWidthOrSentinel() {
   return -1;
 }
 
+IntType IntType::getConstType(bool isConst) {
+  if (auto sIntType = dyn_cast<SIntType>())
+    return sIntType.getConstType(isConst);
+  return cast<UIntType>().getConstType(isConst);
+}
+
 //===----------------------------------------------------------------------===//
 // WidthTypeStorage
 //===----------------------------------------------------------------------===//
@@ -982,11 +1036,29 @@ struct circt::firrtl::detail::WidthTypeStorage : detail::FIRRTLBaseTypeStorage {
   int32_t width;
 };
 
-IntType IntType::getConstType(bool isConst) {
-  if (auto sIntType = dyn_cast<SIntType>())
-    return sIntType.getConstType(isConst);
-  return cast<UIntType>().getConstType(isConst);
-}
+//===----------------------------------------------------------------------===//
+// IntTypeStorage
+//===----------------------------------------------------------------------===//
+
+struct circt::firrtl::detail::IntTypeStorage : detail::FIRRTLBaseTypeStorage {
+  IntTypeStorage(Phase phase, int32_t width, bool isConst)
+      : FIRRTLBaseTypeStorage(isConst), width(width), phase(phase) {}
+  using KeyTy = std::tuple<Phase, int32_t, char>;
+
+  bool operator==(const KeyTy &key) const {
+    return std::get<Phase>(key) == phase && std::get<int32_t>(key) == width &&
+           std::get<char>(key) == isConst;
+  }
+
+  static IntTypeStorage *construct(TypeStorageAllocator &allocator,
+                                   const KeyTy &key) {
+    return new (allocator.allocate<IntTypeStorage>()) IntTypeStorage(
+        std::get<Phase>(key), std::get<int32_t>(key), std::get<char>(key));
+  }
+
+  int32_t width;
+  Phase phase;
+};
 
 //===----------------------------------------------------------------------===//
 // SIntType
@@ -996,11 +1068,24 @@ SIntType SIntType::get(MLIRContext *context) { return get(context, -1, false); }
 
 SIntType SIntType::get(MLIRContext *context, std::optional<int32_t> width,
                        bool isConst) {
-  return get(context, width ? *width : -1, isConst);
+  return get(context, Phase::Hardware, width, isConst);
+}
+
+SIntType SIntType::get(MLIRContext *context, Phase phase,
+                       std::optional<int32_t> width, bool isConst) {
+  return get(context, phase, width ? *width : -1, isConst);
 }
 
 LogicalResult SIntType::verify(function_ref<InFlightDiagnostic()> emitError,
-                               int32_t widthOrSentinel, bool isConst) {
+                               Phase phase, int32_t widthOrSentinel,
+                               bool isConst) {
+  if (phase != Phase::Hardware) {
+    if (isConst)
+      return emitError() << "const is only valid in hardware";
+    if (widthOrSentinel < 0)
+      return emitError() << "Width inference only supported in hardware";
+  }
+
   if (widthOrSentinel < -1)
     return emitError() << "invalid width";
   return success();
@@ -1014,6 +1099,8 @@ SIntType SIntType::getConstType(bool isConst) {
   return get(getContext(), getWidthOrSentinel(), isConst);
 }
 
+Phase SIntType::getPhase() const { return getImpl()->phase; }
+
 //===----------------------------------------------------------------------===//
 // UIntType
 //===----------------------------------------------------------------------===//
@@ -1022,11 +1109,23 @@ UIntType UIntType::get(MLIRContext *context) { return get(context, -1, false); }
 
 UIntType UIntType::get(MLIRContext *context, std::optional<int32_t> width,
                        bool isConst) {
-  return get(context, width ? *width : -1, isConst);
+  return get(context, Phase::Hardware, width, isConst);
+}
+
+UIntType UIntType::get(MLIRContext *context, Phase phase,
+                       std::optional<int32_t> width, bool isConst) {
+  return get(context, phase, width ? *width : -1, isConst);
 }
 
 LogicalResult UIntType::verify(function_ref<InFlightDiagnostic()> emitError,
-                               int32_t widthOrSentinel, bool isConst) {
+                               Phase phase, int32_t widthOrSentinel,
+                               bool isConst) {
+  if (phase != Phase::Hardware) {
+    if (isConst)
+      return emitError() << "const is only valid in hardware";
+    if (widthOrSentinel < 0)
+      return emitError() << "Width inference only supported in hardware";
+  }
   if (widthOrSentinel < -1)
     return emitError() << "invalid width";
   return success();
@@ -1039,6 +1138,8 @@ UIntType UIntType::getConstType(bool isConst) {
     return *this;
   return get(getContext(), getWidthOrSentinel(), isConst);
 }
+
+Phase UIntType::getPhase() const { return getImpl()->phase; }
 
 //===----------------------------------------------------------------------===//
 // Bundle Type
