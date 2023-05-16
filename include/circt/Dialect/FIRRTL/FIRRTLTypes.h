@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_TYPES_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLTypeInterfaces.h"
 #include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
@@ -43,6 +44,7 @@ class OpenVectorType;
 class FVectorType;
 class FEnumType;
 class RefType;
+class StringType;
 
 /// A collection of bits indicating the recursive properties of a type.
 struct RecursiveTypeProperties {
@@ -151,7 +153,7 @@ public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
     return llvm::isa<FIRRTLDialect>(type.getDialect()) &&
-           !type.isa<RefType, OpenBundleType, OpenVectorType>();
+           !type.isa<RefType, OpenBundleType, OpenVectorType, StringType>();
   }
 
   /// Returns true if this is a non-const "passive" that which is not analog.
