@@ -104,7 +104,7 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
     Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
             "Disable emission of register randomization code">,
     Option<"initializeMemSynthesis", "initialize-mem-synthesis", "bool", "false",
-            "Enable memory initialization when SYNTHESIS flag is defined by synthesizer (Eg. FPGAs)">,
+            "Enable unconditional memory initialization (Eg. when SYNTHESIS flag is defined by synthesis tool)">,
     Option<"replSeqMem", "repl-seq-mem", "bool",
                 "false", "Prepare seq mems for macro replacement">,
     Option<"ignoreReadEnable", "ignore-read-enable", "bool",

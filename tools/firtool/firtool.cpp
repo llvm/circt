@@ -143,8 +143,8 @@ static firtool::FirtoolOptions firtoolOptions(mainCategory);
 
 static cl::opt<bool> initializeMemSynthesis(
     "initialize-mem-synthesis",
-    cl::desc("Enable memory initialization when SYNTHESIS flag is defined by "
-             "synthesizer (Eg. FPGAs)"),
+    cl::desc("Enable unconditional memory initialization (Eg. when SYNTHESIS "
+             "flag is defined by synthesis tool)"),
     cl::init(false), cl::cat(mainCategory));
 
 static bool isRandomEnabled(RandomKind kind) {
@@ -391,6 +391,7 @@ static LogicalResult processBuffer(
       pm.addPass(sv::createHWMemSimImplPass(
           replSeqMem, ignoreReadEnableMem, addMuxPragmas,
           !isRandomEnabled(RandomKind::Mem), !isRandomEnabled(RandomKind::Reg),
+          initializeMemSynthesis,
           addVivadoRAMAddressConflictSynthesisBugWorkaround));
 
       if (extractTestCode)
