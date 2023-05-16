@@ -158,7 +158,9 @@ struct GroupAssignmentsInIfPattern : public OpRewritePattern<ClockTreeOp> {
           if (!operand.hasOneUse()) {
             bool safeToMove = true;
             for (auto *user : operand.getUsers()) {
-              if (!region->isAncestor(user->getParentRegion())) {
+              if (!region->isAncestor(user->getParentRegion()) ||
+                  ((user->getBlock() == &block) &&
+                   user->isBeforeInBlock(&op))) {
                 safeToMove = false;
                 break;
               }
