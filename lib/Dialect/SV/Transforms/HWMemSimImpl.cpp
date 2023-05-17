@@ -508,16 +508,17 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
             b.getContext(), boundModule.getName() + ".sv");
       }
 
-      //Build the hierpathop
-      auto path = b.create<hw::HierPathOp>(mlirModuleNamespace.newName(op.getName() + "_path"),
-            b.getArrayAttr(::InnerRefAttr::get(op.getNameAttr(), reg.getInnerSymAttr())));
+      // Build the hierpathop
+      auto path = b.create<hw::HierPathOp>(
+          mlirModuleNamespace.newName(op.getName() + "_path"),
+          b.getArrayAttr(
+              ::InnerRefAttr::get(op.getNameAttr(), reg.getInnerSymAttr())));
 
       boundModule->setAttr("output_file", filename);
       b.setInsertionPointToStart(op.getBodyBlock());
       b.setInsertionPointToStart(boundModule.getBodyBlock());
       b.create<sv::InitialOp>([&]() {
-        auto xmr = b.create<sv::XMRRefOp>(
-            reg.getType(), path.getSymNameAttr());
+        auto xmr = b.create<sv::XMRRefOp>(reg.getType(), path.getSymNameAttr());
         b.create<sv::ReadMemOp>(xmr, mem.initFilename,
                                 mem.initIsBinary ? MemBaseTypeAttr::MemBaseBin
                                                  : MemBaseTypeAttr::MemBaseHex);

@@ -296,15 +296,15 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       stringLeaf.append(iter->getSecond());
     }
 
-  if (refSendPath.empty()) {
-    if (refVal.getDefiningOp())
-      refVal.getDefiningOp()->getParentOp()->dump();
-    else
-      cast<BlockArgument>(refVal).getParentBlock()->dump();
-  }
+    if (refSendPath.empty()) {
+      if (refVal.getDefiningOp())
+        refVal.getDefiningOp()->getParentOp()->dump();
+      else
+        cast<BlockArgument>(refVal).getParentBlock()->dump();
+    }
 
-  if (!refSendPath.empty())
-    // Compute the HierPathOp that stores the path.
+    if (!refSendPath.empty())
+      // Compute the HierPathOp that stores the path.
       ref = FlatSymbolRefAttr::get(
           getOrCreatePath(builder.getArrayAttr(refSendPath), builder)
               .getSymNameAttr());
@@ -329,12 +329,15 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     auto referentType = refVal.getType().getType();
     Value xmrResult;
     auto xmrType = sv::InOutType::get(lowerType(referentType));
-    xmrResult = builder.create<sv::XMRRefOp>(
-        xmrType, ref, xmrString.empty() ? StringAttr{} : builder.getStringAttr(xmrString)).getResult();
-    out = builder
-              .create<mlir::UnrealizedConversionCastOp>(desiredType,
-                                                        xmrResult)
-              .getResult(0);
+    xmrResult = builder
+                    .create<sv::XMRRefOp>(
+                        xmrType, ref,
+                        xmrString.empty() ? StringAttr{}
+                                          : builder.getStringAttr(xmrString))
+                    .getResult();
+    out =
+        builder.create<mlir::UnrealizedConversionCastOp>(desiredType, xmrResult)
+            .getResult(0);
     return success();
   }
 
@@ -456,8 +459,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   }
 
   LogicalResult handlePublicModuleRefPorts(FModuleOp module) {
-    auto builder = ImplicitLocOpBuilder::atBlockBegin(module.getLoc(),
-                                                      getOperation().getBodyBlock());
+    auto builder = ImplicitLocOpBuilder::atBlockBegin(
+        module.getLoc(), getOperation().getBodyBlock());
 
     for (size_t portIndex = 0, numPorts = module.getNumPorts();
          portIndex != numPorts; ++portIndex) {
@@ -480,8 +483,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
       // Insert a macro with the format:
       // ref_<circuit-name>_<module-name>_<ref-name> <path>
-      SmallString<128> refCircuitModulePrefix{"ref_", getOperation().getName(), "_",
-                                              module.getName()};
+      SmallString<128> refCircuitModulePrefix{"ref_", getOperation().getName(),
+                                              "_", module.getName()};
       auto macroName = builder.getStringAttr(refCircuitModulePrefix + "_" +
                                              module.getPortName(portIndex));
       builder.create<sv::MacroDeclOp>(macroName, ArrayAttr(), StringAttr());
@@ -677,8 +680,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   /// an existing HierPathOp or it will create and return a new one.
   hw::HierPathOp getOrCreatePath(ArrayAttr pathArray,
                                  ImplicitLocOpBuilder &builder) {
-                                  assert(pathArray);
-                                  assert(pathArray.size());
+    assert(pathArray);
+    assert(pathArray.size());
     // Return an existing HierPathOp if one exists with the same path.
     auto pathIter = pathCache.find(pathArray);
     if (pathIter != pathCache.end())
