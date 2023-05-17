@@ -332,10 +332,15 @@ void WireDFTPass::runOnOperation() {
     // bypass wiring. Check name against magic as well for now.
     if (clockDivBypassSignal && ext.getNumPorts() > clockDivBypassPortNo) {
       if (ext.getPortDirection(clockDivBypassPortNo) == Direction::In &&
-          ext.getPortType(clockDivBypassPortNo) == uint1Type &&
-          ext.getPortName(clockDivBypassPortNo) ==
-              requiredClockDivBypassPortName)
-        clockGatesWithBypass.insert(cgnode);
+          ext.getPortType(clockDivBypassPortNo) == uint1Type) {
+        if (ext.getPortName(clockDivBypassPortNo) ==
+            requiredClockDivBypassPortName)
+          clockGatesWithBypass.insert(cgnode);
+        else
+          mlir::emitWarning(
+              ext.getPortLocation(clockDivBypassPortNo),
+              "compatible port in bypass position has wrong name, skipping");
+      }
     }
   }
 

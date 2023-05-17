@@ -1,4 +1,4 @@
-// RUN: circt-opt -firrtl-dft %s | FileCheck %s
+// RUN: circt-opt -firrtl-dft %s --verify-diagnostics | FileCheck %s
 
 // The clock gate corresponds to this FIRRTL external module:
 // ```firrtl
@@ -211,6 +211,8 @@ firrtl.circuit "EnableOutsideDUT2" {
 
 // Test ignore bypass with wrong port name or at different direction/type.
 firrtl.circuit "BypassWrong" {
+  // Warning if port is compatible but name doesn't match, conservatively skipping.
+  // expected-warning @below {{compatible port in bypass position has wrong name, skipping}}
   firrtl.extmodule @EICG_wrapper_wrongName(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, in wrong_name: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper_name"}
   firrtl.extmodule @EICG_wrapper_wrongType(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, in dft_clk_div_bypass: !firrtl.uint<3>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper_type"}
   firrtl.extmodule @EICG_wrapper_wrongDirection(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out dft_clk_div_bypass: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper_dir"}
