@@ -209,3 +209,28 @@ firrtl.circuit "EnableOutsideDUT2" {
   }
 }
 
+// Test ignore bypass with wrong port name or at different direction/type.
+firrtl.circuit "BypassWrong" {
+  firrtl.extmodule @EICG_wrapper_wrongName(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, in wrong_name: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper_name"}
+  firrtl.extmodule @EICG_wrapper_wrongType(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, in dft_clk_div_bypass: !firrtl.uint<3>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper_type"}
+  firrtl.extmodule @EICG_wrapper_wrongDirection(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out dft_clk_div_bypass: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper_dir"}
+
+  firrtl.extmodule @EICG_wrapper_right(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, in dft_clk_div_bypass: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper_right"}
+
+  // No bypass wiring.
+  // CHECK-LABEL: @Gates(in %test_en: !firrtl.uint<1>)
+  firrtl.module private @Gates() {
+    %name_in, %name_test_en, %name_en, %name_wrong_name, %name_out = firrtl.instance name @EICG_wrapper_wrongName(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, in wrong_name: !firrtl.uint<1>, out out: !firrtl.clock)
+    %type_in, %type_test_en, %type_en, %type_dft_clk_div_bypass, %type_out = firrtl.instance type @EICG_wrapper_wrongType(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, in dft_clk_div_bypass: !firrtl.uint<3>, out out: !firrtl.clock)
+
+    %dir_in, %dir_test_en, %dir_en, %dir_dft_clk_div_bypass, %dir_out = firrtl.instance dir @EICG_wrapper_wrongDirection(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out dft_clk_div_bypass: !firrtl.uint<1>, out out: !firrtl.clock)
+  }
+
+  firrtl.module @BypassWrong() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    %test_en = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]} : !firrtl.uint<1>
+    %dft_clk_div_bypass = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.DFTClockDividerBypassAnnotation"}]} : !firrtl.uint<1>
+
+    firrtl.instance g @Gates()
+  }
+}
+
