@@ -3085,12 +3085,9 @@ bool HierPathOp::isComponent() { return (bool)ref(); }
 // module port or a declaration inside the module.
 // 7. The last element of the namepath can also be a module symbol.
 LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
-  if (getNamepath().size() <= 1)
-    return emitOpError()
-           << "the instance path cannot be empty/single element, it "
-              "must specify an instance path.";
-
   StringAttr expectedModuleName = {};
+  if (!getNamepath() || getNamepath().empty())
+    return emitOpError() << "the instance path cannot be empty";
   for (unsigned i = 0, s = getNamepath().size() - 1; i < s; ++i) {
     hw::InnerRefAttr innerRef = getNamepath()[i].dyn_cast<hw::InnerRefAttr>();
     if (!innerRef)

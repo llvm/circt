@@ -50,14 +50,10 @@ using hw::InnerRefAttr;
 class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   void runOnOperation() override {
-    auto circuits = getOperation().getOps<CircuitOp>();
-    if (circuits.empty())
-      return;
-    circuitOp = *circuits.begin();
 
     // Populate a CircuitNamespace that can be used to generate unique
     // circuit-level symbols.
-    auto ns = CircuitNamespace(circuitOp);
+    auto ns = CircuitNamespace(getOperation());
     circuitNamespace = &ns;
 
     dataFlowClasses = llvm::EquivalenceClasses<Value, ValueComparator>();
@@ -273,12 +269,13 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   LogicalResult resolveReferencePath(mlir::TypedValue<RefType> refVal,
                                      ImplicitLocOpBuilder builder,
-                                     Attribute &ref,
+                                     mlir::FlatSymbolRefAttr &ref,
                                      SmallString<128> &stringLeaf) {
     auto remoteOpPath = getRemoteRefSend(refVal);
     if (!remoteOpPath)
       return failure();
     SmallVector<Attribute> refSendPath;
+    SmallVector<Attribute> refSendSimplePath;
     size_t lastIndex;
     while (remoteOpPath) {
       lastIndex = *remoteOpPath;
@@ -299,12 +296,15 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       stringLeaf.append(iter->getSecond());
     }
 
-    // Compute the reference attribute.  If the path is size 1,
-    // then this is just an InnerRefAttr (module--component pair).  Otherwise,
-    // we need to use the symbol of a HierPathOp that stores the path.
-    if (refSendPath.size() == 1)
-      ref = refSendPath.front();
-    else if (!refSendPath.empty())
+  if (refSendPath.empty()) {
+    if (refVal.getDefiningOp())
+      refVal.getDefiningOp()->getParentOp()->dump();
+    else
+      cast<BlockArgument>(refVal).getParentBlock()->dump();
+  }
+
+  if (!refSendPath.empty())
+    // Compute the HierPathOp that stores the path.
       ref = FlatSymbolRefAttr::get(
           getOrCreatePath(builder.getArrayAttr(refSendPath), builder)
               .getSymNameAttr());
@@ -320,18 +320,20 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       return failure();
 
     ImplicitLocOpBuilder builder(loc, insertBefore);
-    Attribute ref;
+    mlir::FlatSymbolRefAttr ref;
     SmallString<128> xmrString;
     if (failed(resolveReferencePath(refVal, builder, ref, xmrString)))
       return failure();
 
     // Create the XMR op and convert it to the referenced FIRRTL type.
     auto referentType = refVal.getType().getType();
-    auto xmr = builder.create<sv::XMRRefOp>(
-        sv::InOutType::get(lowerType(referentType)), ref, xmrString);
+    Value xmrResult;
+    auto xmrType = sv::InOutType::get(lowerType(referentType));
+    xmrResult = builder.create<sv::XMRRefOp>(
+        xmrType, ref, xmrString.empty() ? StringAttr{} : builder.getStringAttr(xmrString)).getResult();
     out = builder
               .create<mlir::UnrealizedConversionCastOp>(desiredType,
-                                                        xmr.getResult())
+                                                        xmrResult)
               .getResult(0);
     return success();
   }
@@ -454,11 +456,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   }
 
   LogicalResult handlePublicModuleRefPorts(FModuleOp module) {
-    // Decls must be at the top mlir module scope
-    auto declBuilder = ImplicitLocOpBuilder::atBlockBegin(
-        module.getLoc(), getOperation().getBody());
     auto builder = ImplicitLocOpBuilder::atBlockBegin(module.getLoc(),
-                                                      circuitOp.getBodyBlock());
+                                                      getOperation().getBodyBlock());
 
     for (size_t portIndex = 0, numPorts = module.getNumPorts();
          portIndex != numPorts; ++portIndex) {
@@ -469,7 +468,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       auto portValue =
           module.getArgument(portIndex).cast<mlir::TypedValue<RefType>>();
 
-      Attribute ref;
+      mlir::FlatSymbolRefAttr ref;
       SmallString<128> stringLeaf;
       if (failed(resolveReferencePath(portValue, builder, ref, stringLeaf)))
         return failure();
@@ -481,11 +480,11 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
       // Insert a macro with the format:
       // ref_<circuit-name>_<module-name>_<ref-name> <path>
-      SmallString<128> refCircuitModulePrefix{"ref_", circuitOp.getName(), "_",
+      SmallString<128> refCircuitModulePrefix{"ref_", getOperation().getName(), "_",
                                               module.getName()};
       auto macroName = builder.getStringAttr(refCircuitModulePrefix + "_" +
                                              module.getPortName(portIndex));
-      declBuilder.create<sv::MacroDeclOp>(macroName, ArrayAttr(), StringAttr());
+      builder.create<sv::MacroDeclOp>(macroName, ArrayAttr(), StringAttr());
 
       auto macroDefOp = builder.create<sv::MacroDefOp>(
           FlatSymbolRefAttr::get(macroName),
@@ -627,8 +626,6 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   bool isZeroWidth(FIRRTLBaseType t) { return t.getBitWidthOrSentinel() == 0; }
 
-  CircuitOp circuitOp;
-
   /// Cached module namespaces.
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
 
@@ -680,6 +677,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   /// an existing HierPathOp or it will create and return a new one.
   hw::HierPathOp getOrCreatePath(ArrayAttr pathArray,
                                  ImplicitLocOpBuilder &builder) {
+                                  assert(pathArray);
+                                  assert(pathArray.size());
     // Return an existing HierPathOp if one exists with the same path.
     auto pathIter = pathCache.find(pathArray);
     if (pathIter != pathCache.end())
@@ -693,7 +692,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     if (pathInsertPoint.isSet())
       builder.restoreInsertionPoint(pathInsertPoint);
     else
-      builder.setInsertionPointToStart(circuitOp.getBodyBlock());
+      builder.setInsertionPointToStart(getOperation().getBodyBlock());
 
     // Create the new HierPathOp and insert it into the pathCache.
     hw::HierPathOp path =

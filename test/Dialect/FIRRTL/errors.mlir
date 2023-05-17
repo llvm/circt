@@ -767,7 +767,7 @@ hw.hierpath private @nla [@A::@B::@C]
 
 
 firrtl.circuit "LowerToBind" {
- // expected-error @+1 {{the instance path cannot be empty/single element}}
+ // expected-error @+1 {{the instance path cannot be empty}}
 hw.hierpath private @NLA1 []
 hw.hierpath private @NLA2 [@LowerToBind::@s1]
 firrtl.module @InstanceLowerToBind() {}

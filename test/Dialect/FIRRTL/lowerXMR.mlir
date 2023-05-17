@@ -3,6 +3,7 @@
 // Test for same module lowering
 // CHECK-LABEL: firrtl.circuit "xmr"
 firrtl.circuit "xmr" {
+  // CHECK : #hw.innerNameRef<@xmr::@[[wSym]]>
   // CHECK-LABEL: firrtl.module @xmr(out %o: !firrtl.uint<2>)
   firrtl.module @xmr(out %o: !firrtl.uint<2>, in %2: !firrtl.probe<uint<0>>) {
     %w = firrtl.wire : !firrtl.uint<2>
@@ -12,7 +13,7 @@ firrtl.circuit "xmr" {
     // CHECK-NOT: firrtl.ref.resolve
     firrtl.strictconnect %o, %x : !firrtl.uint<2>
     // CHECK:      %w = firrtl.wire sym @[[wSym:[a-zA-Z0-9_]+]] : !firrtl.uint<2>
-    // CHECK-NEXT: %[[#xmr:]] = sv.xmr.ref #hw.innerNameRef<@xmr::@[[wSym]]> : !hw.inout<i2>
+    // CHECK-NEXT: %[[#xmr:]] = sv.xmr.ref @xmrPath : !hw.inout<i2>
     // CHECK-NEXT: %[[#cast:]] = builtin.unrealized_conversion_cast %[[#xmr]] : !hw.inout<i2> to !firrtl.uint<2>
     // CHECK:      firrtl.strictconnect %o, %[[#cast]] : !firrtl.uint<2>
   }
@@ -623,14 +624,14 @@ firrtl.circuit "Top"  {
 // Test lowering of XMR to instance port (result).
 // https://github.com/llvm/circt/issues/4559
 
+// CHECK-LABEL: Issue4559
 firrtl.circuit "Issue4559" {
+// CHECK: hw.hierpath private @xmrPath [@Issue4559::@[[SYM:.+]]]
   firrtl.extmodule @Source(out sourceport: !firrtl.uint<1>)
-  // CHECK-LABEL: @Issue4559
   firrtl.module @Issue4559() {
-    // CHECK-NEXT: %[[PORT:.+]] = firrtl.instance source @Source
-    // CHECK-NEXT: %[[NODE:.+]] = firrtl.node sym @[[SYM:.+]] interesting_name %[[PORT]]
-    // CHECK-NEXT: = sv.xmr.ref
-    // CHECK-SAME: @Issue4559::@[[SYM]]
+    // CHECK: %[[PORT:.+]] = firrtl.instance source @Source
+    // CHECK-NEXT: %[[NODE:.+]] = firrtl.node sym @[[SYM]] interesting_name %[[PORT]]
+    // CHECK-NEXT: = sv.xmr.ref @xmrPath
     %port = firrtl.instance source @Source(out sourceport: !firrtl.uint<1>)
     %port_ref = firrtl.ref.send %port : !firrtl.uint<1>
     %port_val = firrtl.ref.resolve %port_ref : !firrtl.probe<uint<1>>
@@ -642,14 +643,15 @@ firrtl.circuit "Issue4559" {
 
 // CHECK-LABEL: firrtl.circuit "ReadForceable"
 firrtl.circuit "ReadForceable" {
-  // CHECK-LABEL: firrtl.module @ReadForceable(out %o: !firrtl.uint<2>)
+  // CHECK: hw.hierpath private @xmrPath [@ReadForceable::@[[wSym:.+]]]
+  // CHECK: firrtl.module @ReadForceable(out %o: !firrtl.uint<2>)
   firrtl.module @ReadForceable(out %o: !firrtl.uint<2>) {
     %w, %w_ref = firrtl.wire forceable : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
     %x = firrtl.ref.resolve %w_ref : !firrtl.rwprobe<uint<2>>
     // CHECK-NOT: firrtl.ref.resolve
     firrtl.strictconnect %o, %x : !firrtl.uint<2>
-    // CHECK:      %w, %w_ref = firrtl.wire sym @[[wSym:[a-zA-Z0-9_]+]] forceable : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
-    // CHECK-NEXT: %[[#xmr:]] = sv.xmr.ref #hw.innerNameRef<@ReadForceable::@[[wSym]]> : !hw.inout<i2>
+    // CHECK:      %w, %w_ref = firrtl.wire sym @[[wSym]] forceable : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
+    // CHECK-NEXT: %[[#xmr:]] = sv.xmr.ref @xmrPath : !hw.inout<i2>
     // CHECK-NEXT: %[[#cast:]] = builtin.unrealized_conversion_cast %[[#xmr]] : !hw.inout<i2> to !firrtl.uint<2>
     // CHECK:      firrtl.strictconnect %o, %[[#cast]] : !firrtl.uint<2>
   }
@@ -696,37 +698,40 @@ firrtl.circuit "ForceRelease" {
 // -----
 // Check tracking of public output refs as sv.macro.decl and sv.macro.def
 
-// CHECK-LABEL: sv.macro.decl @ref_Top_Top_a
-// CHECK-NEXT:  sv.macro.decl @ref_Top_Top_b
-// CHECK-NEXT:  sv.macro.decl @ref_Top_Top_c
-// CHECK-NEXT:  sv.macro.decl @ref_Top_Top_d
-// CHECK-NOT:   sv.macro.decl @ref_Top_Top_e
-// CHECK-NEXT:  sv.macro.decl @ref_Top_Foo_x
-// CHECK-NEXT:  sv.macro.decl @ref_Top_Foo_y
-
 // CHECK-LABEL: firrtl.circuit "Top"
 firrtl.circuit "Top" {
-  // CHECK-LABEL:        hw.hierpath private @xmrPath [@Top::@foo, @Foo::@x]
-
+  // CHECK: sv.macro.decl @ref_Top_Top_a
   // CHECK-NEXT{LITERAL}: sv.macro.def @ref_Top_Top_a "{{0}}"
-  // CHECK-SAME:          ([#hw.innerNameRef<@Top::@w>]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
+  // CHECK-SAME:          ([@[[XMR1:.*]]]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
 
+  // CHECK-NEXT:  sv.macro.decl @ref_Top_Top_b
   // CHECK-NEXT{LITERAL}: sv.macro.def @ref_Top_Top_b "{{0}}"
-  // CHECK-SAME:          ([@xmrPath]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
+  // CHECK-SAME:          ([@[[XMR2:.*]]]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
 
+  // CHECK-NEXT:  sv.macro.decl @ref_Top_Top_c
   // CHECK-NEXT{LITERAL}: sv.macro.def @ref_Top_Top_c "{{0}}.internal.path"
-  // CHECK-SAME:          ([#hw.innerNameRef<@Top::@foo>]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
+  // CHECK-SAME:          ([@[[XMR3:.*]]]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
 
+  // CHECK-NEXT:  sv.macro.decl @ref_Top_Top_d
   // CHECK-NEXT{LITERAL}: sv.macro.def @ref_Top_Top_d "{{0}}"
-  // CHECK-SAME:          ([#hw.innerNameRef<@Top::@xmr_sym>]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
+  // CHECK-SAME:          ([@[[XMR4:.+]]]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
 
+  // CHECK-NOT:   sv.macro.decl @ref_Top_Top_e
+  // CHECK:  hw.hierpath private @[[XMR5:.+]] [@Foo::@x]
+  // CHECK:  sv.macro.decl @ref_Top_Foo_x
   // CHECK-NEXT{LITERAL}: sv.macro.def @ref_Top_Foo_x "{{0}}"
-  // CHECK-SAME:          ([#hw.innerNameRef<@Foo::@x>]) {output_file = #hw.output_file<"ref_Top_Foo.sv">}
+  // CHECK-SAME:          ([@[[XMR5]]]) {output_file = #hw.output_file<"ref_Top_Foo.sv">}
 
+  // CHECK-NEXT:  sv.macro.decl @ref_Top_Foo_y
   // CHECK-NEXT:          sv.macro.def @ref_Top_Foo_y "internal.path" 
   // CHECK-NOT:           ([
   // CHECK-SAME:          {output_file = #hw.output_file<"ref_Top_Foo.sv">}
 
+  // CHECK:        hw.hierpath private @[[XMR1]] [@Top::@w]
+  // CHECK:        hw.hierpath private @[[XMR2]] [@Top::@foo, @Foo::@x]
+  // CHECK:        hw.hierpath private @[[XMR3]] [@Top::@foo]
+  // CHECK:        hw.hierpath private @[[XMR4]] [@Top::@xmr_sym]
+  
   // CHECK-LABEL: firrtl.module @Top()
   firrtl.module @Top(out %a: !firrtl.probe<uint<1>>, 
                      out %b: !firrtl.probe<uint<1>>, 

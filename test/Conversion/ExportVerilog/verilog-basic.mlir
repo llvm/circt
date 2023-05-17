@@ -545,12 +545,13 @@ hw.module @ReadMem() {
 }
 
 // CHECK: module ReadMemXMR()
+hw.hierpath @ReadMemXMRPath  [@ReadMem::@mem]
 hw.module @ReadMemXMR() {
   hw.instance "ReadMem" sym @ReadMem_sym @ReadMem() -> ()
   // CHECK:      initial
   // CHECK-NEXT:   $readmemb("file3.txt", ReadMem.mem)
   sv.initial {
-    %xmr = sv.xmr.ref #hw.innerNameRef<@ReadMem::@mem> {} : !hw.inout<uarray<8xi32>>
+    %xmr = sv.xmr.ref @ReadMemXMRPath {} : !hw.inout<uarray<8xi32>>
     sv.readmem %xmr, "file3.txt", MemBaseBin : !hw.inout<uarray<8xi32>>
   }
 }
