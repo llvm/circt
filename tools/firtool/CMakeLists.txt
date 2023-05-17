@@ -7,16 +7,14 @@ add_llvm_tool(firtool
 )
 llvm_update_compile_flags(firtool)
 target_link_libraries(firtool PRIVATE
-  CIRCTExportChiselInterface
   CIRCTExportVerilog
   CIRCTImportFIRFile
-  CIRCTFIRRTLToHW
   CIRCTFIRRTLTransforms
   CIRCTHWTransforms
   CIRCTSeq
-  CIRCTSeqTransforms
   CIRCTSVTransforms
   CIRCTTransforms
+  CIRCTFirtool
 
   MLIRBytecodeReader
   MLIRBytecodeWriter
