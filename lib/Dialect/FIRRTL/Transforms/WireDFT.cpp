@@ -139,6 +139,9 @@ void WireDFTPass::runOnOperation() {
     auto handleAnnotation = [&](Value value, Annotation anno,
                                 StringRef annoName, Value &signal,
                                 auto &signalModule) {
+      // Exit if already found error.
+      if (error)
+        return false;
       if (anno.isClass(annoName)) {
         if (signal) {
           auto diag =
@@ -163,18 +166,12 @@ void WireDFTPass::runOnOperation() {
     // See if this module has any port marked as the DFT enable.
     AnnotationSet::removePortAnnotations(
         module, [&](unsigned i, Annotation anno) {
-          if (!error && handleAnnotation(module.getArgument(i), anno,
-                                         dftTestModeEnableAnnoClass,
-                                         enableSignal, enableModule))
-            return true;
-
-          if (!error &&
-              handleAnnotation(module.getArgument(i), anno,
-                               dftClockDividerBypassAnnoClass,
-                               clockDivBypassSignal, clockDivBypassModule))
-            return true;
-
-          return false;
+          return handleAnnotation(module.getArgument(i), anno,
+                                  dftTestModeEnableAnnoClass, enableSignal,
+                                  enableModule) ||
+                 handleAnnotation(module.getArgument(i), anno,
+                                  dftClockDividerBypassAnnoClass,
+                                  clockDivBypassSignal, clockDivBypassModule);
         });
     if (error)
       return signalPassFailure();
@@ -182,21 +179,17 @@ void WireDFTPass::runOnOperation() {
     // Walk the module body looking for any operation marked as the
     // DFT enable.
     auto walkResult = module->walk([&](Operation *op) {
+      // Skip operations with no results.
+      if (op->getNumResults() == 0)
+        return WalkResult::advance();
+
       AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
-        if (op->getNumResults() == 0)
-          return false;
-        if (!error &&
-            handleAnnotation(op->getResult(0), anno, dftTestModeEnableAnnoClass,
-                             enableSignal, enableModule))
-          return true;
-
-        if (!error &&
-            handleAnnotation(op->getResult(0), anno,
-                             dftClockDividerBypassAnnoClass,
-                             clockDivBypassSignal, clockDivBypassModule))
-          return true;
-
-        return false;
+        return handleAnnotation(op->getResult(0), anno,
+                                dftTestModeEnableAnnoClass, enableSignal,
+                                enableModule) ||
+               handleAnnotation(op->getResult(0), anno,
+                                dftClockDividerBypassAnnoClass,
+                                clockDivBypassSignal, clockDivBypassModule);
       });
       if (error)
         return WalkResult::interrupt();
