@@ -199,7 +199,7 @@ def UnpackOp : DCOp<"unpack", [InferTypeOpInterface]> {
 
     let arguments = (ins ValueType:$input);
     let results = (outs TokenType:$token, Variadic<AnyType>:$outputs);
-    let assemblyFormat = "$input attr-dict `:` type($input)";
+    let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
     let hasCanonicalizer = 1;
     let hasFolder = 1;
   
@@ -220,8 +220,6 @@ def MergeOp : DCOp<"merge"> {
   let description = [{
     Non-deterministically selects one of the incoming tokens and emits an output
     stating which token was selected.
-
-    For now, just two inputs are supported.
   }];
 
   let arguments = (ins TokenType:$first, TokenType:$second);

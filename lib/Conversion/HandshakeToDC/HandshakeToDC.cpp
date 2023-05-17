@@ -42,6 +42,31 @@ namespace {
 
 using ConvertedOps = DenseSet<Operation *>;
 
+struct DCTuple {
+  DCTuple() {}
+  DCTuple(Value token, ValueRange data) : token(token), data(data) {}
+  DCTuple(dc::UnpackOp unpack)
+      : token(unpack.getToken()), data(unpack.getOutputs()) {}
+  Value token;
+  ValueRange data;
+};
+
+// Unpack a !dc.value<...> into a DCTuple.
+static DCTuple unpack(OpBuilder &b, Value v) {
+  if (v.getType().isa<dc::ValueType>())
+    return DCTuple(b.create<dc::UnpackOp>(v.getLoc(), v));
+  else {
+    assert(v.getType().isa<dc::TokenType>() && "Expected a dc::TokenType");
+    return DCTuple(v, ValueRange{});
+  }
+}
+
+static Value pack(OpBuilder &b, Value token, ValueRange data) {
+  if (data.empty())
+    return token;
+  return b.create<dc::PackOp>(token.getLoc(), token, data);
+}
+
 class DCTypeConverter : public TypeConverter {
 public:
   DCTypeConverter() {
@@ -64,13 +89,12 @@ public:
           // Materialize !dc.value<> -> !dc.token
           if (resultType.isa<dc::TokenType>() &&
               inputs.front().getType().isa<dc::ValueType>())
-            return builder.create<dc::UnpackOp>(loc, inputs.front()).getToken();
+            return unpack(builder, inputs.front()).token;
 
           // Materialize !dc.token -> !dc.value<>
           auto vt = resultType.dyn_cast<dc::ValueType>();
           if (vt && vt.getInnerTypes().empty())
-            return builder.create<dc::PackOp>(loc, vt, inputs.front(),
-                                              ValueRange{});
+            return pack(builder, inputs.front(), ValueRange{});
 
           return inputs[0];
         });
@@ -85,37 +109,17 @@ public:
           // Materialize !dc.value<> -> !dc.token
           if (resultType.isa<dc::TokenType>() &&
               inputs.front().getType().isa<dc::ValueType>())
-            return builder.create<dc::UnpackOp>(loc, inputs.front()).getToken();
+            return unpack(builder, inputs.front()).token;
 
           // Materialize !dc.token -> !dc.value<>
           auto vt = resultType.dyn_cast<dc::ValueType>();
           if (vt && vt.getInnerTypes().empty())
-            return builder.create<dc::PackOp>(loc, vt, inputs.front(),
-                                              ValueRange{});
+            return pack(builder, inputs.front(), ValueRange{});
 
           return inputs[0];
         });
   }
 };
-
-struct DCTuple {
-  DCTuple() {}
-  DCTuple(Value token, ValueRange data) : token(token), data(data) {}
-  DCTuple(dc::UnpackOp unpack)
-      : token(unpack.getToken()), data(unpack.getOutputs()) {}
-  Value token;
-  ValueRange data;
-};
-
-// Unpack a !dc.value<...> into a DCTuple.
-static DCTuple unpack(OpBuilder &b, Value v) {
-  if (v.getType().isa<dc::ValueType>())
-    return DCTuple(b.create<dc::UnpackOp>(v.getLoc(), v));
-  else {
-    assert(v.getType().isa<dc::TokenType>() && "Expected a dc::TokenType");
-    return DCTuple(v, ValueRange{});
-  }
-}
 
 template <typename OpTy>
 class DCOpConversionPattern : public OpConversionPattern<OpTy> {
@@ -149,24 +153,15 @@ public:
         op.getLoc(), ValueRange{condition.token, data.token});
 
     // Pack that together with the condition data.
-    auto packedCondition = rewriter.create<dc::PackOp>(
-        op.getLoc(), join, ValueRange{condition.data});
+    auto packedCondition = pack(rewriter, join, ValueRange{condition.data});
 
     // Branch on the input data and the joined control input.
     auto branch = rewriter.create<dc::BranchOp>(op.getLoc(), packedCondition);
 
     // Pack the branch output tokens with the input data, and replace the uses.
     llvm::SmallVector<Value, 4> packed;
-
-    if (!data.data.empty()) {
-      packed.push_back(rewriter.create<dc::PackOp>(
-          op.getLoc(), branch.getTrueToken(), data.data));
-      packed.push_back(rewriter.create<dc::PackOp>(
-          op.getLoc(), branch.getFalseToken(), data.data));
-    } else {
-      packed.push_back(branch.getTrueToken());
-      packed.push_back(branch.getFalseToken());
-    }
+    packed.push_back(pack(rewriter, branch.getTrueToken(), data.data));
+    packed.push_back(pack(rewriter, branch.getFalseToken(), data.data));
 
     rewriter.replaceOp(op, packed);
     return success();
@@ -190,8 +185,7 @@ public:
     // Pack the fork result tokens with the input data, and replace the uses.
     llvm::SmallVector<Value, 4> packed;
     for (auto res : forkOut.getResults())
-      packed.push_back(rewriter.create<dc::PackOp>(op.getLoc(), res,
-                                                   ValueRange{input.data}));
+      packed.push_back(pack(rewriter, res, ValueRange{input.data}));
 
     rewriter.replaceOp(op, packed);
     return success();
@@ -250,8 +244,7 @@ public:
                                                       data[0], data[1]);
       convertedOps->insert(dataMux);
       // Pack the data mux with the control token.
-      auto packed = rewriter.create<dc::PackOp>(
-          op.getLoc(), mergeOpUnpacked.token, ValueRange{dataMux});
+      auto packed = pack(rewriter, mergeOpUnpacked.token, ValueRange{dataMux});
 
       dataSide = packed;
     }
@@ -262,8 +255,8 @@ public:
       selValue = rewriter.create<arith::IndexCastOp>(
           op.getLoc(), rewriter.getIndexType(), selValue);
       convertedOps->insert(selValue.getDefiningOp());
-      selectedIndex = rewriter.create<dc::PackOp>(
-          op.getLoc(), mergeOpUnpacked.token, ValueRange{selValue});
+      selectedIndex =
+          pack(rewriter, mergeOpUnpacked.token, ValueRange{selValue});
     }
 
     rewriter.replaceOp(op, {dataSide, selectedIndex});
@@ -289,8 +282,7 @@ public:
     // Wrap all outputs with the synchronization token
     llvm::SmallVector<Value, 4> wrappedInputs;
     for (auto input : adaptor.getOperands())
-      wrappedInputs.push_back(rewriter.create<dc::PackOp>(
-          op.getLoc(), syncToken, ValueRange{input}));
+      wrappedInputs.push_back(pack(rewriter, syncToken, ValueRange{input}));
 
     rewriter.replaceOp(op, wrappedInputs);
 
@@ -313,8 +305,8 @@ public:
     auto cst =
         rewriter.create<arith::ConstantOp>(op.getLoc(), adaptor.getValue());
     convertedOps->insert(cst);
-    rewriter.replaceOpWithNewOp<dc::PackOp>(op, token,
-                                            llvm::SmallVector<Value>{cst});
+    rewriter.replaceOp(op,
+                       pack(rewriter, token, llvm::SmallVector<Value>{cst}));
     return success();
   }
 };
@@ -362,11 +354,8 @@ public:
     joinedOps->insert(newOp);
 
     // Pack the result token with the output data, and replace the use.
-    rewriter.replaceOp(op,
-                       rewriter
-                           .create<dc::PackOp>(op->getLoc(), join.getResult(),
-                                               newOp->getResults())
-                           ->getResults());
+    rewriter.replaceOp(
+        op, ValueRange{pack(rewriter, join.getResult(), newOp->getResults())});
 
     return success();
   }
@@ -495,8 +484,8 @@ public:
         // And similarly for the control mux, by muxing the input token with a
         // select value that has it's control from the original select token +
         // the inputSelected value.
-        auto inputSelectedControl = rewriter.create<dc::PackOp>(
-            op.getLoc(), selectToken, ValueRange{inputSelected});
+        auto inputSelectedControl =
+            pack(rewriter, selectToken, ValueRange{inputSelected});
         controlMux = rewriter.create<dc::SelectOp>(
             op.getLoc(), inputSelectedControl, inputControl, controlMux);
         convertedOps->insert(controlMux.getDefiningOp());
@@ -504,8 +493,8 @@ public:
     }
 
     // finally, pack the control and data side muxes into the output value.
-    rewriter.replaceOpWithNewOp<dc::PackOp>(
-        op, controlMux, withData ? ValueRange{dataMux} : ValueRange{});
+    rewriter.replaceOp(op, pack(rewriter, controlMux,
+                                withData ? ValueRange{dataMux} : ValueRange{}));
     return success();
   }
 };
