@@ -24,10 +24,6 @@ namespace cf {
 class ControlFlowDialect;
 } // namespace cf
 
-namespace dc {
-class DCDialect;
-} // namespace dc
-
 namespace memref {
 class MemRefDialect;
 } // namespace memref
@@ -55,6 +51,10 @@ namespace circt {
 namespace arc {
 class ArcDialect;
 } // namespace arc
+
+namespace dc {
+class DCDialect;
+} // namespace dc
 
 namespace fsm {
 class FSMDialect;
