@@ -513,8 +513,14 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
         addToIfBlock(
             builder, cond,
             [&]() {
-              auto nextReg = builder.create<sv::ArrayIndexInOutOp>(reg.getLoc(),
-                                                                   reg, index);
+              Value nextReg;
+              {
+                // Create an array index op just after `reg`.
+                OpBuilder::InsertionGuard guard(builder);
+                builder.setInsertionPointAfterValue(reg);
+                nextReg = builder.create<sv::ArrayIndexInOutOp>(reg.getLoc(),
+                                                                reg, index);
+              }
               auto termElement =
                   builder.create<hw::ArrayGetOp>(term.getLoc(), term, index);
               createTree(builder, nextReg, termElement, trueValue);

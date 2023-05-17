@@ -599,12 +599,12 @@ hw.module @Subaccess(%clock: i1, %en: i1, %addr: i2, %data: i32) -> (out: !hw.ar
   %11 = comb.mux bin %10, %data, %2 : i32
   %12 = hw.array_create %11, %8, %5 : i32
   hw.output %r : !hw.array<3xi32>
-  // CHECK:      sv.always posedge %clock {
-  // CHECK-NEXT:   sv.if %en {
-  // CHECK-NEXT:     %[[IDX:.+]] = sv.array_index_inout %r[%addr] : !hw.inout<array<3xi32>>, i2
-  // CHECK-NEXT:     sv.passign %[[IDX]], %data : i32
-  // CHECK-NEXT:   } else {
-  // CHECK-NEXT:   }
+  // CHECK:     %[[IDX:.+]] = sv.array_index_inout %r[%addr] : !hw.inout<array<3xi32>>, i2
+  // CHECK:        sv.always posedge %clock {
+  // CHECK-NEXT:     sv.if %en {
+  // CHECK-NEXT:       sv.passign %[[IDX]], %data : i32
+  // CHECK-NEXT:     } else {
+  // CHECK-NEXT:     }
   // CHECK-NEXT: }
 }
 
@@ -660,24 +660,25 @@ hw.module @NestedSubaccess(%clock: i1, %en_0: i1, %en_1: i1, %en_2: i1, %addr_0:
   %31 = comb.mux bin %en_1, %27, %30 : !hw.array<3xi32>
   %32 = hw.array_create %26, %24, %22 : i32
   %33 = comb.mux bin %en_0, %31, %32 : !hw.array<3xi32>
+  // CHECK:        %[[IDX4:.+]] = sv.array_index_inout %r[%addr_3] : !hw.inout<array<3xi32>>, i2
+  // CHECK:        %[[IDX3:.+]] = sv.array_index_inout %r[%addr_2] : !hw.inout<array<3xi32>>, i2
+  // CHECK:        %[[IDX2:.+]] = sv.array_index_inout %r[%addr_1] : !hw.inout<array<3xi32>>, i2
+  // CHECK:        %[[IDX1:.+]] = sv.array_index_inout %r[%addr_0] : !hw.inout<array<3xi32>>, i2
   // CHECK:        sv.always posedge %clock {
   // CHECK-NEXT:   sv.if %en_0 {
   // CHECK-NEXT:     sv.if %en_1 {
   // CHECK-NEXT:       sv.if %true {
-  // CHECK-NEXT:         %[[IDX1:.+]] = sv.array_index_inout %r[%addr_0] : !hw.inout<array<3xi32>>, i2
   // CHECK-NEXT:         sv.passign %[[IDX1]], %data_0 : i32
   // CHECK-NEXT:       } else {
   // CHECK-NEXT:       }
   // CHECK-NEXT:     } else {
   // CHECK-NEXT:       sv.if %en_2 {
   // CHECK-NEXT:         sv.if %true {
-  // CHECK-NEXT:           %[[IDX2:.+]] = sv.array_index_inout %r[%addr_1] : !hw.inout<array<3xi32>>, i2
   // CHECK-NEXT:           sv.passign %[[IDX2]], %data_1 : i32
   // CHECK-NEXT:         } else {
   // CHECK-NEXT:         }
   // CHECK-NEXT:       } else {
   // CHECK-NEXT:         sv.if %true {
-  // CHECK-NEXT:           %[[IDX3:.+]] = sv.array_index_inout %r[%addr_2] : !hw.inout<array<3xi32>>, i2
   // CHECK-NEXT:           sv.passign %[[IDX3]], %data_2 : i32
   // CHECK-NEXT:         } else {
   // CHECK-NEXT:         }
@@ -685,7 +686,6 @@ hw.module @NestedSubaccess(%clock: i1, %en_0: i1, %en_1: i1, %en_2: i1, %addr_0:
   // CHECK-NEXT:     }
   // CHECK-NEXT:   } else {
   // CHECK-NEXT:     sv.if %true {
-  // CHECK-NEXT:       %[[IDX4:.+]] = sv.array_index_inout %r[%addr_3] : !hw.inout<array<3xi32>>, i2
   // CHECK-NEXT:       sv.passign %[[IDX4]], %data_3 : i32
   // CHECK-NEXT:     } else {
   // CHECK-NEXT:     }
