@@ -52,13 +52,13 @@ static void insertFork(Value result, OpBuilder &rewriter) {
 
 // Insert Fork Operation for every operation and function argument with more
 // than one successor.
-static LogicalResult addForkOps(Region &r, OpBuilder &rewriter) {
-  for (Operation &op : r.getOps()) {
-    // Ignore terminators, and don't add Forks to Forks.
-    if (op.getNumSuccessors() == 0 && !isa<ForkOp>(op)) {
+static LogicalResult addForkOps(Block &block, OpBuilder &rewriter) {
+  for (Operation &op : block) {
+    // Ignore terminators.
+    if (!op.hasTrait<OpTrait::IsTerminator>()) {
       for (auto result : op.getResults()) {
-        // If there is a result, it is used more than once, and it is a DC type,
-        // fork it!
+        // If there is a result, it is used more than once, and it is a DC
+        // type, fork it!
         if (!result.use_empty() && !result.hasOneUse() &&
             result.getType().isa<dc::TokenType, dc::ValueType>())
           insertFork(result, rewriter);
@@ -66,7 +66,7 @@ static LogicalResult addForkOps(Region &r, OpBuilder &rewriter) {
     }
   }
 
-  for (auto barg : r.front().getArguments())
+  for (auto barg : block.getArguments())
     if (!barg.use_empty() && !barg.hasOneUse())
       insertFork(barg, rewriter);
 
@@ -77,21 +77,20 @@ namespace circt {
 namespace dc {
 
 // Create sink for every unused result
-LogicalResult addSinkOps(Region &r, OpBuilder &rewriter) {
-  for (Block &block : r) {
-    for (auto arg : block.getArguments()) {
-      if (arg.use_empty())
-        insertSink(arg, rewriter);
-    }
-    for (Operation &op : block) {
-      if (op.getNumResults() == 0)
-        continue;
-
-      for (auto result : op.getResults())
-        if (result.use_empty())
-          insertSink(result, rewriter);
-    }
+LogicalResult addSinkOps(Block &block, OpBuilder &rewriter) {
+  for (auto arg : block.getArguments()) {
+    if (arg.use_empty())
+      insertSink(arg, rewriter);
   }
+  for (Operation &op : block) {
+    if (op.getNumResults() == 0)
+      continue;
+
+    for (auto result : op.getResults())
+      if (result.use_empty())
+        insertSink(result, rewriter);
+  }
+
   return success();
 }
 
@@ -106,8 +105,16 @@ struct DCMaterializeForksSinksPass
     if (funcOp.isExternal())
       return;
     OpBuilder builder(funcOp);
-    if (addForkOps(funcOp.getFunctionBody(), builder).failed() ||
-        addSinkOps(funcOp.getFunctionBody(), builder).failed())
+
+    auto walkRes = funcOp.walk([&](mlir::Block *block) {
+      if (addForkOps(*block, builder).failed() ||
+          addSinkOps(*block, builder).failed())
+        return WalkResult::interrupt();
+
+      return WalkResult::advance();
+    });
+
+    if (walkRes.wasInterrupted())
       return signalPassFailure();
   };
 };
@@ -116,18 +123,15 @@ struct DCDematerializeForksSinksPass
     : public DCDematerializeForksSinksBase<DCDematerializeForksSinksPass> {
   void runOnOperation() override {
     auto funcOp = getOperation();
+
     if (funcOp.isExternal())
       return;
-    for (auto sinkOp : llvm::make_early_inc_range(
-             funcOp.getFunctionBody().getOps<dc::SinkOp>()))
-      sinkOp.erase();
-
-    for (auto forkOp : llvm::make_early_inc_range(
-             funcOp.getFunctionBody().getOps<dc::ForkOp>())) {
+    funcOp.walk([&](dc::SinkOp sinkOp) { sinkOp.erase(); });
+    funcOp.walk([&](dc::ForkOp forkOp) {
       for (auto res : forkOp->getResults())
         res.replaceAllUsesWith(forkOp.getOperand());
       forkOp.erase();
-    }
+    });
   };
 };
 

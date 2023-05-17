@@ -14,7 +14,7 @@ include "mlir/Pass/PassBase.td"
 def DCMaterializeForksSinks : InterfacePass<"dc-materialize-forks-sinks", "mlir::FunctionOpInterface"> {
   let summary = "Materialize fork and sink operations.";
   let description = [{
-    This pass analyses a dc.func operation and inserts fork and sink
+    This pass analyses a function-like operation and inserts fork and sink
     operations ensuring that all values have exactly one use.
   }];
   let constructor = "circt::dc::createDCMaterializeForksSinksPass()";
@@ -24,7 +24,7 @@ def DCMaterializeForksSinks : InterfacePass<"dc-materialize-forks-sinks", "mlir:
 def DCDematerializeForksSinks : InterfacePass<"dc-dematerialize-forks-sinks", "mlir::FunctionOpInterface"> {
   let summary = "Dematerialize fork and sink operations.";
   let description = [{
-    This pass analyses a dc.func operation and removes all fork and sink
+    This pass analyses a function-like operation and removes all fork and sink
     operations.
   }];
   let constructor = "circt::dc::createDCDematerializeForksSinksPass()";

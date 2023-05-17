@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_DC_PASSES_H
-#define CIRCT_DIALECT_DC_PASSES_H
+#ifndef CIRCT_DIALECT_DC_DCPASSES_H
+#define CIRCT_DIALECT_DC_DCPASSES_H
 
 #include "mlir/Pass/Pass.h"
 #include <memory>
@@ -28,4 +28,4 @@ std::unique_ptr<mlir::Pass> createDCDematerializeForksSinksPass();
 } // namespace dc
 } // namespace circt
 
-#endif // CIRCT_DIALECT_DC_PASSES_H
+#endif // CIRCT_DIALECT_DC_DCPASSES_H
