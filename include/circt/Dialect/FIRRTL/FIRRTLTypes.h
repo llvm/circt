@@ -205,6 +205,7 @@ bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType,
 /// types with flips in different positions to be equivalent.
 bool areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
                               bool destFlip = false, bool srcFlip = false,
+                              bool destOuterTypeIsConst = false,
                               bool srcOuterTypeIsConst = false);
 
 /// Returns true if the destination is at least as wide as a source.  The source

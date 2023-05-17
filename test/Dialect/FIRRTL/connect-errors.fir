@@ -30,6 +30,16 @@ circuit PartialConnectMismatch:
 
 ;// -----
 
+circuit PartialConnectResetFlipMismatch:
+  module PartialConnectResetFlipMismatch:
+    output a: { flip a: Reset }
+    output b: { a: Reset }
+
+; expected-error @+1 {{cannot partially connect non-weakly-equivalent}}
+    b <- a
+
+;// -----
+
 circuit Bar:
   module Bar:
 ; expected-note @+1 {{destination}}
