@@ -274,6 +274,12 @@ static cl::opt<bool> addVivadoRAMAddressConflictSynthesisBugWorkaround(
         "memories"),
     cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool> emitSeparateAlwaysBlocks(
+    "emit-separate-always-blocks",
+    cl::desc("Prevent always blocks from being merged and emit constructs into "
+             "separate always blocks whenever possible"),
+    cl::init(false), cl::cat(mainCategory));
+
 enum class RandomKind { None, Mem, Reg, All };
 
 static cl::opt<RandomKind> disableRandom(
@@ -717,7 +723,9 @@ static LogicalResult processBuffer(
       pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass(
           {/*disableRandomization=*/!isRandomEnabled(RandomKind::Reg),
            /*addVivadoRAMAddressConflictSynthesisBugWorkaround=*/
-           addVivadoRAMAddressConflictSynthesisBugWorkaround}));
+           addVivadoRAMAddressConflictSynthesisBugWorkaround,
+           /*emitSeparateAlwaysBlocks=*/
+           emitSeparateAlwaysBlocks}));
       pm.addPass(sv::createHWMemSimImplPass(
           replSeqMem, ignoreReadEnableMem, addMuxPragmas,
           !isRandomEnabled(RandomKind::Mem), !isRandomEnabled(RandomKind::Reg),
@@ -733,7 +741,8 @@ static LogicalResult processBuffer(
         modulePM.addPass(createCSEPass());
         modulePM.addPass(createSimpleCanonicalizerPass());
         modulePM.addPass(createCSEPass());
-        modulePM.addPass(sv::createHWCleanupPass());
+        modulePM.addPass(sv::createHWCleanupPass(
+            /*mergeAlwaysBlocks=*/!emitSeparateAlwaysBlocks));
       }
     }
   }
