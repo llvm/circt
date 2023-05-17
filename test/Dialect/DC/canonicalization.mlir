@@ -1,14 +1,25 @@
 // RUN: circt-opt %s --canonicalize --cse --canonicalize | FileCheck %s
 
-// CHECK-LABEL:   func.func @join(
+// CHECK-LABEL:   func.func @staggeredJoin1(
 // CHECK-SAME:                    %[[VAL_0:.*]]: !dc.token,
 // CHECK-SAME:                    %[[VAL_1:.*]]: !dc.token) -> !dc.token {
 // CHECK:           %[[VAL_2:.*]] = dc.join %[[VAL_0]], %[[VAL_1]]
 // CHECK:           return %[[VAL_2]] : !dc.token
 // CHECK:         }
-func.func @join(%a: !dc.token, %b : !dc.token) -> (!dc.token) {
+func.func @staggeredJoin1(%a: !dc.token, %b : !dc.token) -> (!dc.token) {
     %0 = dc.join %a, %b
     %1 = dc.join %0
+    return %1 : !dc.token
+}
+
+// CHECK-LABEL:   func.func @staggeredJoin2(
+// CHECK-SAME:           %[[VAL_0:.*]]: !dc.token, %[[VAL_1:.*]]: !dc.token, %[[VAL_2:.*]]: !dc.token, %[[VAL_3:.*]]: !dc.token) -> !dc.token {
+// CHECK:           %[[VAL_4:.*]] = dc.join %[[VAL_2]], %[[VAL_3]], %[[VAL_0]], %[[VAL_1]]
+// CHECK:           return %[[VAL_4]] : !dc.token
+// CHECK:         }
+func.func @staggeredJoin2(%a: !dc.token, %b : !dc.token, %c : !dc.token, %d : !dc.token) -> (!dc.token) {
+    %0 = dc.join %a, %b
+    %1 = dc.join %c, %0, %d
     return %1 : !dc.token
 }
 
@@ -55,6 +66,21 @@ func.func @redundantPack(%a: !dc.token, %b : i32, %c : i1) -> (!dc.token) {
     %1:3 = dc.unpack %0 : !dc.value<i32, i1>
     return %1#0 : !dc.token
 }
+
+// CHECK-LABEL:   func.func @csePack(
+// CHECK-SAME:                       %[[VAL_0:.*]]: !dc.token,
+// CHECK-SAME:                       %[[VAL_1:.*]]: i32,
+// CHECK-SAME:                       %[[VAL_2:.*]]: i1) -> (!dc.value<i32, i1>, !dc.value<i32, i1>) {
+// CHECK:           %[[VAL_3:.*]] = dc.pack %[[VAL_0]]{{\[}}%[[VAL_1]], %[[VAL_2]]] : i32, i1
+// CHECK:           return %[[VAL_3]], %[[VAL_3]] : !dc.value<i32, i1>, !dc.value<i32, i1>
+// CHECK:         }
+func.func @csePack(%a: !dc.token, %b : i32, %c : i1) -> (!dc.value<i32, i1>, !dc.value<i32, i1>) {
+    %0 = dc.pack %a [%b,%c] : i32, i1
+    %1 = dc.pack %a [%b,%c] : i32, i1
+    return %0, %1 : !dc.value<i32, i1>, !dc.value<i32, i1>
+}
+
+
 // CHECK-LABEL:   func.func @forkToFork(
 // CHECK-SAME:                          %[[VAL_0:.*]]: !dc.token) -> (!dc.token, !dc.token, !dc.token) {
 // CHECK:           %[[VAL_1:.*]]:3 = dc.fork [3] %[[VAL_0]]
@@ -64,6 +90,17 @@ func.func @forkToFork(%a: !dc.token) -> (!dc.token, !dc.token, !dc.token) {
     %0, %1 = dc.fork [2] %a
     %2, %3 = dc.fork [2] %0
     return %1, %2, %3 : !dc.token, !dc.token, !dc.token
+}
+
+// CHECK-LABEL:   func.func @forkToFork2(
+// CHECK-SAME:                           %[[VAL_0:.*]]: !dc.token) -> (!dc.token, !dc.token, !dc.token) {
+// CHECK:           %[[VAL_1:.*]]:3 = dc.fork [3] %[[VAL_0]]
+// CHECK:           return %[[VAL_1]]#0, %[[VAL_1]]#1, %[[VAL_1]]#2 : !dc.token, !dc.token, !dc.token
+// CHECK:         }
+func.func @forkToFork2(%a: !dc.token) -> (!dc.token, !dc.token, !dc.token) {
+    %0, %1 = dc.fork [2] %a
+    %2, %3 = dc.fork [2] %1
+    return %0, %2, %3 : !dc.token, !dc.token, !dc.token
 }
 
 // CHECK-LABEL:   func.func @merge(

@@ -33,99 +33,45 @@ namespace dc {
 // JoinOp
 // =============================================================================
 
-class TransitiveJoinCanonicalizationPattern : public OpRewritePattern<JoinOp> {
-  // Canonicalization staggered joins where the sink join contains inputs also
-  // found in the source join.
-public:
-  using OpRewritePattern<JoinOp>::OpRewritePattern;
-  LogicalResult matchAndRewrite(JoinOp join,
-                                PatternRewriter &rewriter) const override {
-    SetVector<mlir::Value> newInputs;
-    bool didSomething = false;
-    for (auto operand : join.getTokens()) {
-      auto inputJoin = operand.getDefiningOp<dc::JoinOp>();
-      if (!inputJoin) {
-        // Operand does not originate from a join, so just add it to the new
-        // set of inputs directly.
-        newInputs.insert(operand);
-        continue;
-      }
-
-      // Operand originates from a join, so add all of its inputs to the new
-      // set of inputs.
-      for (auto input : inputJoin.getTokens())
-        newInputs.insert(input);
-
-      didSomething = true;
-    }
-
-    if (!didSomething)
-      return failure();
-
-    // We've now transitively added all of the next-level-up inputs to the
-    // new set of inputs, and uniqued them via. the set.
-    rewriter.replaceOpWithNewOp<dc::JoinOp>(join, newInputs.getArrayRef());
-    return success();
-  }
-};
-
-class JoinOnSourcePattern : public OpRewritePattern<JoinOp> {
-  // Removes join operands which originate from source ops.
-public:
-  using OpRewritePattern<JoinOp>::OpRewritePattern;
-  LogicalResult matchAndRewrite(JoinOp join,
-                                PatternRewriter &rewriter) const override {
-    SetVector<mlir::Value> newInputs;
-    bool didSomething = false;
-    for (auto operand : join.getTokens()) {
-      auto inputSource = operand.getDefiningOp<dc::SourceOp>();
-      if (!inputSource) {
-        // Operand does not originate from a source, so just add it to the new
-        // set of inputs directly.
-        newInputs.insert(operand);
-        continue;
-      }
-
-      didSomething = true;
-    }
-
-    if (!didSomething)
-      return failure();
-
-    rewriter.replaceOpWithNewOp<dc::JoinOp>(join, newInputs.getArrayRef());
-    return success();
-  }
-};
-
-class RedundantJoinOperandsPattern : public OpRewritePattern<JoinOp> {
-  // Removes duplicate operands to joins.
-public:
-  using OpRewritePattern<JoinOp>::OpRewritePattern;
-  LogicalResult matchAndRewrite(JoinOp join,
-                                PatternRewriter &rewriter) const override {
-    llvm::SetVector<Value> uniqueInputs;
-
-    for (auto operand : join.getTokens())
-      uniqueInputs.insert(operand);
-
-    if (uniqueInputs.size() == join.getTokens().size())
-      return failure();
-
-    rewriter.replaceOpWithNewOp<dc::JoinOp>(join, uniqueInputs.getArrayRef());
-    return success();
-  }
-};
-
-void JoinOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                         MLIRContext *context) {
-  results.insert<TransitiveJoinCanonicalizationPattern,
-                 RedundantJoinOperandsPattern, JoinOnSourcePattern>(context);
-}
-
 OpFoldResult JoinOp::fold(FoldAdaptor adaptor) {
   // Fold simple joins (joins with 1 input).
   if (auto tokens = getTokens(); tokens.size() == 1)
     return tokens.front();
+
+  // Remove operands which originate from a dc.source op (redundant).
+  auto *op = getOperation();
+  for (OpOperand &operand : llvm::make_early_inc_range(op->getOpOperands())) {
+    if (auto source = operand.get().getDefiningOp<dc::SourceOp>()) {
+      op->eraseOperand(operand.getOperandNumber());
+      return getOutput();
+    }
+  }
+
+  // Remove duplicate operands.
+  llvm::DenseSet<Value> uniqueOperands;
+  for (OpOperand &operand : llvm::make_early_inc_range(op->getOpOperands())) {
+    if (!uniqueOperands.insert(operand.get()).second) {
+      op->eraseOperand(operand.getOperandNumber());
+      return getOutput();
+    }
+  }
+
+  // Canonicalization staggered joins where the sink join contains inputs also
+  // found in the source join.
+  for (OpOperand &operand : llvm::make_early_inc_range(op->getOpOperands())) {
+    auto otherJoin = operand.get().getDefiningOp<dc::JoinOp>();
+    if (!otherJoin) {
+      // Operand does not originate from a join so it's a valid join input.
+      continue;
+    }
+
+    // Operand originates from a join. Erase the current join operand and add
+    // all of the otherJoin op's inputs to this join.
+    // DCE will take care of otherJoin in case it's no longer used.
+    op->eraseOperand(operand.getOperandNumber());
+    op->insertOperands(getNumOperands(), otherJoin.getTokens());
+    return getOutput();
+  }
 
   return {};
 }
@@ -184,7 +130,7 @@ public:
       for (auto *user : output.getUsers()) {
         auto userFork = dyn_cast<ForkOp>(user);
         if (!userFork)
-          return failure();
+          continue;
 
         // We have a fork feeding into another fork. Replace the output fork by
         // adding more outputs to the current fork.
@@ -303,53 +249,6 @@ LogicalResult UnpackOp::inferReturnTypes(
 // =============================================================================
 // PackOp
 // =============================================================================
-
-class EliminateMultiplePackPattern : public OpRewritePattern<PackOp> {
-  // example:
-  // %0 = dc.pack %token, %a, %b : !dc.value<...>
-  // %1 = dc.pack %token, %a, %b : !dc.value<...>
-  // ->
-  // %0 = dc.pack %token, %a, %b : !dc.value<...>
-  // %1 -> %0
-public:
-  using OpRewritePattern<PackOp>::OpRewritePattern;
-  LogicalResult matchAndRewrite(PackOp pack,
-                                PatternRewriter &rewriter) const override {
-    // Find other packs of the token and the input values - order matters.
-    auto token = pack.getToken();
-    auto inputs = pack.getInputs();
-    llvm::SmallVector<PackOp> otherPacks;
-    for (auto *user : token.getUsers()) {
-      auto otherPack = dyn_cast<PackOp>(user);
-      if (!otherPack)
-        continue;
-
-      if (llvm::any_of(llvm::zip(inputs, otherPack.getInputs()), [](auto it) {
-            return std::get<0>(it) != std::get<1>(it);
-          }))
-        continue;
-
-      otherPacks.push_back(otherPack);
-    }
-
-    if (otherPacks.size() == 1)
-      return failure();
-
-    // Replace all packs with a single pack - just create a new one.
-    auto newPack = rewriter.create<PackOp>(pack.getLoc(), pack.getToken(),
-                                           pack.getInputs());
-    otherPacks.push_back(pack);
-    for (auto otherPack : otherPacks)
-      rewriter.replaceOp(otherPack, newPack.getResult());
-
-    return success();
-  }
-};
-
-void PackOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                         MLIRContext *context) {
-  results.insert<EliminateMultiplePackPattern>(context);
-}
 
 OpFoldResult PackOp::fold(FoldAdaptor adaptor) {
   auto token = getToken();

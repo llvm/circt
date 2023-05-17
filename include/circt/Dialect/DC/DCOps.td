@@ -88,7 +88,6 @@ def JoinOp : DCOp<"join", [Commutative]> {
   let results = (outs TokenType:$output);
 
   let assemblyFormat = "$tokens attr-dict";
-  let hasCanonicalizer = 1;
   let hasFolder = 1;
 }
 
@@ -179,7 +178,6 @@ def PackOp : DCOp<"pack", [InferTypeOpInterface]> {
     let arguments = (ins TokenType:$token, Variadic<AnyType>:$inputs);
     let results = (outs ValueType:$output);
     let assemblyFormat = "$token `[` $inputs `]` attr-dict `:` type($inputs)";
-    let hasCanonicalizer = 1;
     let hasFolder = 1;
 
     let extraClassDeclaration = [{
