@@ -964,14 +964,13 @@ bool firrtl::areTypesConstCastable(FIRRTLType destFType, FIRRTLType srcFType,
     if (numDestElements != srcElements.size())
       return false;
 
-    return llvm::all_of_zip(destElements, srcElements,
-                            [&](const BundleType::BundleElement &destElement,
-                                const BundleType::BundleElement &srcElement) {
-                              return destElement.name == srcElement.name &&
-                                     areTypesConstCastable(destElement.type,
-                                                           srcElement.type,
-                                                           srcIsConst);
-                            });
+    return llvm::all_of_zip(
+        destElements, srcElements,
+        [&](const auto &destElement, const auto &srcElement) {
+          return destElement.name == srcElement.name &&
+                 areTypesConstCastable(destElement.type, srcElement.type,
+                                       srcIsConst);
+        });
   }
   if (destBundleType != srcBundleType)
     return false;
