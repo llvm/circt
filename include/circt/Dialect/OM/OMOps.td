@@ -27,7 +27,6 @@ class OMOp<string mnemonic, list<Trait> traits = []> :
 
 def ClassOp : OMOp<"class",
     [SingleBlock, NoTerminator, Symbol, SymbolTable,
-     HasParent<"mlir::ModuleOp">,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>
     ]> {
   let arguments = (ins

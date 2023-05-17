@@ -163,8 +163,9 @@ void circt::om::ObjectOp::build(::mlir::OpBuilder &odsBuilder,
 
 LogicalResult
 circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  // Get the containing ModuleOp.
-  auto moduleOp = getOperation()->getParentOfType<ModuleOp>();
+  // Get the containing ModuleOp/CirctOp.
+  auto *parentOp =
+      getOperation()->getParentOfType<om::ClassOp>()->getParentOp();
 
   // Verify the result type is the same as the referred-to class.
   StringAttr resultClassName = getResult().getType().getClassName().getAttr();
@@ -176,7 +177,7 @@ circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
   // Verify the referred to ClassOp exists.
   auto classDef = dyn_cast_or_null<ClassOp>(
-      symbolTable.lookupSymbolIn(moduleOp, className));
+      symbolTable.lookupSymbolIn(parentOp, className));
   if (!classDef)
     return emitOpError("refers to non-existant class (") << className << ')';
 

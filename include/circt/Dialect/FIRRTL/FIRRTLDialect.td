@@ -35,7 +35,8 @@ def FIRRTLDialect : Dialect {
   let useDefaultAttributePrinterParser = 1;
 
   let dependentDialects = [
-    "circt::hw::HWDialect"
+    "circt::hw::HWDialect",
+    "circt::om::OMDialect"
   ];
 
   let extraClassDeclaration = [{
