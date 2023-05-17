@@ -24,7 +24,6 @@ static void replaceFirstUse(Operation *op, Value oldVal, Value newVal) {
       op->setOperand(i, newVal);
       break;
     }
-  return;
 }
 
 static void insertSink(Value val, OpBuilder &rewriter) {
