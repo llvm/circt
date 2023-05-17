@@ -718,3 +718,8 @@ LogicalResult circt::firrtl::extractDUT(const FModuleOp mod, FModuleOp &dut) {
   dut = mod;
   return success();
 }
+
+bool circt::firrtl::isDiscardableAnnotation(Annotation anno) {
+  auto discardable = anno.getMember<UnitAttr>("circt.discardable");
+  return !!discardable;
+}

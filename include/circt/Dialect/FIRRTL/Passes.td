@@ -117,7 +117,7 @@ def RemoveUnusedPorts : Pass<"firrtl-remove-unused-ports", "firrtl::CircuitOp"> 
   ];
 }
 
-def IMDeadCodeElim : Pass<"firrtl-imdeadcodeelim", "firrtl::CircuitOp"> {
+def IMDeadCodeElim : Pass<"firrtl-imdeadcodeelim", "mlir::ModuleOp"> {
   let summary = "Intermodule dead code elimination";
   let description = [{
     This pass performs inter-module liveness analysis and deletes dead code

@@ -272,17 +272,17 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
 // CHECK:       hw.hierpath private @[[Foo_cC_C:nla[_0-9]*]]
 // CHECK-NEXT:  hw.hierpath private @[[Foo_eE_E:nla[_0-9]*]]
 // CHECK:       firrtl.module private @C
-// CHECK-SAME:    {circt.nonlocal = @[[Foo_cC_C]], class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[cID]] : i64}
+// CHECK-SAME:    {circt.discardable, circt.nonlocal = @[[Foo_cC_C]], class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[cID]] : i64}
 // CHECK:       firrtl.module private @D
-// CHECK-SAME:    {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[dID]] : i64}
+// CHECK-SAME:    {circt.discardable, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[dID]] : i64}
 // CHECK:       firrtl.module private @E
 // CHECK-SAME:    {circt.nonlocal = @[[Foo_eE_E]], class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[eID]] : i64}
 // CHECK:       firrtl.module private @F
 // CHECK-SAME:    {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[fID]] : i64}
 // CHECK:       firrtl.module @Foo
 // CHECK-NEXT:  %a = firrtl.wire
-// CHECK-SAME:    {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[aID]] : i64}
+// CHECK-SAME:    {circt.discardable, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[aID]] : i64}
 // CHECK-NEXT:  %b = firrtl.wire
-// CHECK-SAME:    {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[bID]] : i64}
+// CHECK-SAME:    {circt.discardable, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[bID]] : i64}
 // CHECK-NEXT:  %g = firrtl.wire
 // CHECK-SAME:    {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[gID]] : i64}
