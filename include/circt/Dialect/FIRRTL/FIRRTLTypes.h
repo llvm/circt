@@ -192,6 +192,14 @@ public:
   std::pair<uint64_t, bool> rootChildFieldID(uint64_t fieldID, uint64_t index);
 };
 
+/// Returns true if this is a 'const' type whose value is guaranteed to be
+/// unchanging at circuit execution time
+bool isConst(Type type);
+
+/// Returns true if the type is or contains a 'const' type whose value is
+/// guaranteed to be unchanging at circuit execution time
+bool containsConst(Type type);
+
 /// Returns whether the two types are equivalent.  This implements the exact
 /// definition of type equivalence in the FIRRTL spec.  If the types being
 /// compared have any outer flips that encode FIRRTL module directions (input or

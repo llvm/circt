@@ -3199,20 +3199,6 @@ bool firrtl::isConstant(Value value) {
   return false;
 }
 
-bool firrtl::isConst(Type type) {
-  return TypeSwitch<Type, bool>(type)
-      .Case<FIRRTLBaseType, OpenBundleType, OpenVectorType>(
-          [](auto base) { return base.isConst(); })
-      .Default(false);
-}
-
-bool firrtl::containsConst(Type type) {
-  return TypeSwitch<Type, bool>(type)
-      .Case<FIRRTLBaseType, OpenBundleType, OpenVectorType>(
-          [](auto base) { return base.containsConst(); })
-      .Default(false);
-}
-
 LogicalResult ConstCastOp::verify() {
   if (!areTypesConstCastable(getResult().getType(), getInput().getType()))
     return emitOpError() << getInput().getType()

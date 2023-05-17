@@ -915,8 +915,9 @@ def VerbatimWireOp : FIRRTLOp<"verbatim.wire",
 
 // This assumes operands are ground types without explicitly checking
 class SameGroundTypeOperandConstness<string a, string b> 
-  : PredOpTrait<"operand constness must match",
-                 CPred<"isConst($" # a # ".getType()) == isConst($" # b # ".getType())">>;
+  : PredOpTrait<
+      "operand constness must match",
+      CPred<"isConst($" # a # ".getType()) == isConst($" # b # ".getType())">>;
 
 def UninferredResetCastOp : FIRRTLOp<"resetCast", [HasCustomSSAName, Pure, SameGroundTypeOperandConstness<"input", "result">]> {
   let description = [{
@@ -946,9 +947,12 @@ def UninferredWidthCastOp : FIRRTLOp<"widthCast", [HasCustomSSAName, Pure, SameG
 def ConstCastOp : FIRRTLOp<"constCast", [HasCustomSSAName, Pure]> {
   let description = [{
     Cast from a 'const' to a non-'const' type.
+    ```
+    %result = firrtl.constCast %in : (!firrtl.const.t1) -> !firrtl.t1
+    ```
   }];
-  let arguments = (ins FIRRTLBaseType:$input);
-  let results = (outs FIRRTLBaseType:$result);
+  let arguments = (ins PassiveType:$input);
+  let results = (outs PassiveType:$result);
   let hasVerifier = 1;
   let assemblyFormat =
     "$input attr-dict `:` functional-type($input, $result)";
