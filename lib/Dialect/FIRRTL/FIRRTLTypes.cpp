@@ -721,6 +721,20 @@ std::pair<uint64_t, bool> FIRRTLBaseType::rootChildFieldID(uint64_t fieldID,
       });
 }
 
+bool firrtl::isConst(Type type) {
+  return TypeSwitch<Type, bool>(type)
+      .Case<FIRRTLBaseType, OpenBundleType, OpenVectorType>(
+          [](auto base) { return base.isConst(); })
+      .Default(false);
+}
+
+bool firrtl::containsConst(Type type) {
+  return TypeSwitch<Type, bool>(type)
+      .Case<FIRRTLBaseType, OpenBundleType, OpenVectorType>(
+          [](auto base) { return base.containsConst(); })
+      .Default(false);
+}
+
 /// Helper to implement the equivalence logic for a pair of bundle elements.
 /// Note that the FIRRTL spec requires bundle elements to have the same
 /// orientation, but this only compares their passive types. The FIRRTL dialect
@@ -902,6 +916,68 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
   auto widthlessSrcType = srcType.getWidthlessType();
   return widthlessDestType.getConstType(false) ==
          widthlessSrcType.getConstType(false);
+}
+
+/// Returns whether the srcType can be const-casted to the destType.
+bool firrtl::areTypesConstCastable(FIRRTLType destFType, FIRRTLType srcFType,
+                                   bool srcOuterTypeIsConst) {
+  // Identical types are always castable
+  if (destFType == srcFType)
+    return true;
+
+  auto destType = destFType.dyn_cast<FIRRTLBaseType>();
+  auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
+
+  // For non-base types, only castable if identical.
+  if (!destType || !srcType)
+    return false;
+
+  // Types must be passive
+  if (!destType.isPassive() || !srcType.isPassive())
+    return false;
+
+  bool srcIsConst = srcType.isConst() || srcOuterTypeIsConst;
+
+  // Cannot cast non-'const' src to 'const' dest
+  if (destType.isConst() && !srcIsConst)
+    return false;
+
+  // Vector types can be casted if they have the same size and castable element
+  // type.
+  auto destVectorType = destType.dyn_cast<FVectorType>();
+  auto srcVectorType = srcType.dyn_cast<FVectorType>();
+  if (destVectorType && srcVectorType)
+    return destVectorType.getNumElements() == srcVectorType.getNumElements() &&
+           areTypesConstCastable(destVectorType.getElementType(),
+                                 srcVectorType.getElementType(), srcIsConst);
+  if (destVectorType != srcVectorType)
+    return false;
+
+  // Bundle types can be casted if they have the same size, element names,
+  // and castable element types.
+  auto destBundleType = destType.dyn_cast<BundleType>();
+  auto srcBundleType = srcType.dyn_cast<BundleType>();
+  if (destBundleType && srcBundleType) {
+    auto destElements = destBundleType.getElements();
+    auto srcElements = srcBundleType.getElements();
+    size_t numDestElements = destElements.size();
+    if (numDestElements != srcElements.size())
+      return false;
+
+    return llvm::all_of_zip(
+        destElements, srcElements,
+        [&](const auto &destElement, const auto &srcElement) {
+          return destElement.name == srcElement.name &&
+                 areTypesConstCastable(destElement.type, srcElement.type,
+                                       srcIsConst);
+        });
+  }
+  if (destBundleType != srcBundleType)
+    return false;
+
+  // Ground types can be casted if the source type is a const
+  // version of the destination type
+  return destType == srcType.getConstType(destType.isConst());
 }
 
 /// Returns true if the destination is at least as wide as an equivalent source.

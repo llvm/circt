@@ -3199,11 +3199,12 @@ bool firrtl::isConstant(Value value) {
   return false;
 }
 
-bool firrtl::isConst(Type type) {
-  return TypeSwitch<Type, bool>(type)
-      .Case<FIRRTLBaseType, OpenBundleType, OpenVectorType>(
-          [](auto base) { return base.isConst(); })
-      .Default(false);
+LogicalResult ConstCastOp::verify() {
+  if (!areTypesConstCastable(getResult().getType(), getInput().getType()))
+    return emitOpError() << getInput().getType()
+                         << " is not 'const'-castable to "
+                         << getResult().getType();
+  return success();
 }
 
 FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
@@ -4009,8 +4010,14 @@ LogicalResult BitCastOp::verify() {
   auto resTypeBits = getBitWidth(getType());
   if (inTypeBits.has_value() && resTypeBits.has_value()) {
     // Bitwidths must match for valid bit
-    if (*inTypeBits == *resTypeBits)
+    if (*inTypeBits == *resTypeBits) {
+      // non-'const' cannot be casted to 'const'
+      if (containsConst(getType()) && !isConst(getOperand().getType()))
+        return emitError("cannot cast non-'const' input type ")
+               << getOperand().getType() << " to 'const' result type "
+               << getType();
       return success();
+    }
     return emitError("the bitwidth of input (")
            << *inTypeBits << ") and result (" << *resTypeBits
            << ") don't match";
@@ -4368,6 +4375,10 @@ void UninferredResetCastOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 void UninferredWidthCastOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void ConstCastOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 

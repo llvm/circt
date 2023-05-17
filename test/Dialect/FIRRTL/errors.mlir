@@ -1478,3 +1478,74 @@ firrtl.circuit "ConstHardwareString" {
 // expected-error @+1 {{strings cannot be const}}
 firrtl.module @ConstHardwareString(in %string: !firrtl.const.string) {}
 }
+
+// -----
+
+// Constcast non-const to const
+firrtl.circuit "ConstcastNonConstToConst" {
+  firrtl.module @ConstcastNonConstToConst(in %a: !firrtl.uint<1>) {
+    // expected-error @+1 {{'!firrtl.uint<1>' is not 'const'-castable to '!firrtl.const.uint<1>'}}
+    %b = firrtl.constCast %a : (!firrtl.uint<1>) -> !firrtl.const.uint<1>
+  }
+}
+
+// -----
+
+// Constcast non-const to const-containing
+firrtl.circuit "ConstcastNonConstToConst" {
+  firrtl.module @ConstcastNonConstToConst(in %a: !firrtl.bundle<a: uint<1>>) {
+    // expected-error @+1 {{'!firrtl.bundle<a: uint<1>>' is not 'const'-castable to '!firrtl.bundle<a: const.uint<1>>'}}
+    %b = firrtl.constCast %a : (!firrtl.bundle<a: uint<1>>) -> !firrtl.bundle<a: const.uint<1>>
+  }
+}
+
+// -----
+
+// Constcast different types
+firrtl.circuit "ConstcastDifferentTypes" {
+  firrtl.module @ConstcastDifferentTypes(in %a: !firrtl.const.uint<1>) {
+    // expected-error @+1 {{'!firrtl.const.uint<1>' is not 'const'-castable to '!firrtl.sint<1>'}}
+    %b = firrtl.constCast %a : (!firrtl.const.uint<1>) -> !firrtl.sint<1>
+  }
+}
+
+// -----
+
+// Bitcast non-const to const
+firrtl.circuit "BitcastNonConstToConst" {
+  firrtl.module @BitcastNonConstToConst(in %a: !firrtl.uint<1>) {
+    // expected-error @+1 {{cannot cast non-'const' input type '!firrtl.uint<1>' to 'const' result type '!firrtl.const.sint<1>'}}
+    %b = firrtl.bitcast %a : (!firrtl.uint<1>) -> !firrtl.const.sint<1>
+  }
+}
+
+// -----
+
+// Bitcast non-const to const-containing
+firrtl.circuit "BitcastNonConstToConstContaining" {
+  firrtl.module @BitcastNonConstToConstContaining(in %a: !firrtl.bundle<a: uint<1>>) {
+    // expected-error @+1 {{cannot cast non-'const' input type '!firrtl.bundle<a: uint<1>>' to 'const' result type '!firrtl.bundle<a: const.sint<1>>'}}
+    %b = firrtl.bitcast %a : (!firrtl.bundle<a: uint<1>>) -> !firrtl.bundle<a: const.sint<1>>
+  }
+}
+
+// -----
+
+// Uninferred width cast non-const to const
+firrtl.circuit "UninferredWidthCastNonConstToConst" {
+  firrtl.module @UninferredWidthCastNonConstToConst(in %a: !firrtl.uint) {
+    // expected-error @+1 {{operand constness must match}}
+    %b = firrtl.widthCast %a : (!firrtl.uint) -> !firrtl.const.uint<1>
+  }
+}
+
+// -----
+
+// Uninferred reset cast non-const to const
+firrtl.circuit "UninferredWidthCastNonConstToConst" {
+  firrtl.module @UninferredWidthCastNonConstToConst(in %a: !firrtl.reset) {
+    // expected-error @+1 {{operand constness must match}}
+    %b = firrtl.resetCast %a : (!firrtl.reset) -> !firrtl.const.asyncreset
+  }
+}
+
