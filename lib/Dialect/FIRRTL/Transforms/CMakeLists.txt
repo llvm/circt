@@ -3,9 +3,9 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   BlackBoxReader.cpp
   CheckCombCycles.cpp
   CheckCombLoops.cpp
-  DropConst.cpp
   CreateSiFiveMetadata.cpp
   Dedup.cpp
+  DropConst.cpp
   DropName.cpp
   EmitOMIR.cpp
   ExpandWhens.cpp

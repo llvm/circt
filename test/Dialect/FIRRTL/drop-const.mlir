@@ -135,4 +135,16 @@ firrtl.module @NonConstWhenLocalConstNestedConstWhenAssign(in %cond: !firrtl.uin
     }
   }
 }
+
+firrtl.module @NonConstWhenConstFlipAssign(in %p: !firrtl.uint<1>, in %in: !firrtl.bundle<a flip: uint<2>>, out %out: !firrtl.const.bundle<a flip: uint<2>>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    firrtl.connect %out, %in : !firrtl.const.bundle<a flip: uint<2>>, !firrtl.bundle<a flip: uint<2>>
+  }
+}
+
+firrtl.module @NonConstWhenNestedConstFlipAssign(in %p: !firrtl.uint<1>, in %in: !firrtl.bundle<a flip: uint<2>>, out %out: !firrtl.bundle<a flip: const.uint<2>>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    firrtl.connect %out, %in : !firrtl.bundle<a flip: const.uint<2>>, !firrtl.bundle<a flip: uint<2>>
+  }
+}
 }

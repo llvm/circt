@@ -16,21 +16,42 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "llvm/Support/SaveAndRestore.h"
 
 #define DEBUG_TYPE "drop-const"
 
 using namespace circt;
 using namespace firrtl;
 
+// NOLINTBEGIN(misc-no-recursion)
+static bool typeHasConstLeaf(FIRRTLBaseType type, bool outerTypeIsConst = false,
+                             bool isFlip = false) {
+  auto typeIsConst = outerTypeIsConst || type.isConst();
+
+  if (typeIsConst && type.isPassive())
+    return !isFlip;
+
+  if (auto bundleType = type.dyn_cast<BundleType>())
+    return llvm::any_of(bundleType.getElements(), [&](auto &element) {
+      return typeHasConstLeaf(element.type, typeIsConst,
+                              isFlip ^ element.isFlip);
+    });
+
+  if (auto vectorType = type.dyn_cast<FVectorType>())
+    return typeHasConstLeaf(vectorType.getElementType(), typeIsConst, isFlip);
+
+  return typeIsConst && !isFlip;
+}
+// NOLINTEND(misc-no-recursion)
+
 namespace {
-
-class OpVisitor : public FIRRTLVisitor<OpVisitor> {
+class OpVisitor : public FIRRTLVisitor<OpVisitor, LogicalResult> {
 public:
-  using FIRRTLVisitor<OpVisitor>::visitExpr;
-  using FIRRTLVisitor<OpVisitor>::visitDecl;
-  using FIRRTLVisitor<OpVisitor>::visitStmt;
+  using FIRRTLVisitor<OpVisitor, LogicalResult>::visitExpr;
+  using FIRRTLVisitor<OpVisitor, LogicalResult>::visitDecl;
+  using FIRRTLVisitor<OpVisitor, LogicalResult>::visitStmt;
 
-  LogicalResult checkModule(FModuleLike module) {
+  LogicalResult handleModule(FModuleLike module) {
     auto fmodule = dyn_cast<FModuleOp>(*module);
     // Find 'const' ports
     auto portTypes = SmallVector<Attribute>(module.getPortTypes());
@@ -50,66 +71,79 @@ public:
                     ArrayAttr::get(module.getContext(), portTypes));
 
     if (!fmodule)
-      return result;
+      return success();
 
     // Check the module body
-    visitDecl(fmodule);
+    if (failed(visitDecl(fmodule)))
+      return failure();
 
     // Drop 'const' from all registered values
     for (auto [value, type] : constValuesToConvert)
       value.setType(type);
 
-    return result;
+    return success();
   }
 
-  void visitDecl(FModuleOp module) {
-    for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock()))
-      dispatchVisitor(&op);
+  LogicalResult visitDecl(FModuleOp module) {
+    for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
+      if (failed(dispatchVisitor(&op)))
+        return failure();
+    }
+    return success();
   }
 
-  void visitExpr(ConstCastOp constCast) {
+  LogicalResult visitExpr(ConstCastOp constCast) {
     // Remove any `ConstCastOp`, replacing results with inputs
     constCast.getResult().replaceAllUsesWith(constCast.getInput());
     constCast->erase();
+    return success();
   }
 
-  void visitStmt(WhenOp when) {
+  LogicalResult visitStmt(WhenOp when) {
     // Check that 'const' destinations are only connected to within
     // 'const'-conditioned when blocks, unless the destination is local to the
     // when block's scope
 
-    auto *previousNonConstConditionedBlock = nonConstConditionedBlock;
+    llvm::SaveAndRestore<Block *> blockSave(nonConstConditionedBlock);
     bool isWithinNonconstCondition = !when.getCondition().getType().isConst();
 
     if (isWithinNonconstCondition)
       nonConstConditionedBlock = &when.getThenBlock();
     for (auto &op : llvm::make_early_inc_range(when.getThenBlock()))
-      dispatchVisitor(&op);
+      if (failed(dispatchVisitor(&op)))
+        return failure();
 
     if (when.hasElseRegion()) {
       if (isWithinNonconstCondition)
         nonConstConditionedBlock = &when.getElseBlock();
       for (auto &op : llvm::make_early_inc_range(when.getElseBlock()))
-        dispatchVisitor(&op);
+        if (failed(dispatchVisitor(&op)))
+          return failure();
     }
 
-    nonConstConditionedBlock = previousNonConstConditionedBlock;
+    return success();
   }
 
-  void visitStmt(ConnectOp connect) { handleConnect(connect); }
+  LogicalResult visitStmt(ConnectOp connect) { return handleConnect(connect); }
 
-  void visitStmt(StrictConnectOp connect) { handleConnect(connect); }
+  LogicalResult visitStmt(StrictConnectOp connect) {
+    return handleConnect(connect);
+  }
 
-  void visitUnhandledOp(Operation *op) {
+  LogicalResult visitUnhandledOp(Operation *op) {
     // Register any 'const' results to drop 'const'
     for (auto [index, result] : llvm::enumerate(op->getResults())) {
       if (auto convertedType = convertType(result.getType()))
         constValuesToConvert.push_back({result, convertedType});
     }
+
+    return success();
   }
 
+  LogicalResult visitInvalidOp(Operation *op) { return success(); }
+
 private:
-  /// Returns null type if no conversion is needed
+  /// Returns null type if no conversion is needed.
   Type convertType(Type type) {
     if (auto base = type.dyn_cast<FIRRTLBaseType>()) {
       return convertType(base);
@@ -124,25 +158,25 @@ private:
     return {};
   }
 
-  /// Returns null type if no conversion is needed
+  /// Returns null type if no conversion is needed.
   FIRRTLBaseType convertType(FIRRTLBaseType type) {
     auto nonConstType = type.getAllConstDroppedType();
     return nonConstType != type ? nonConstType : FIRRTLBaseType{};
   }
 
-  void handleConnect(FConnectLike connect) {
+  LogicalResult handleConnect(FConnectLike connect) {
     auto dest = connect.getDest();
-    auto destType = dest.getType();
-    if (nonConstConditionedBlock && containsConst(destType)) {
+    auto destType = dest.getType().cast<FIRRTLBaseType>();
+    if (nonConstConditionedBlock && destType && destType.containsConst()) {
       // 'const' connects are allowed if `dest` is local to the non-'const' when
-      // block
+      // block.
       auto *destBlock = dest.getParentBlock();
       auto *block = connect->getBlock();
       while (block) {
         // The connect is local to the `dest` declaration, both local to the
-        // non-'const' block, so the connect is valid
+        // non-'const' block, so the connect is valid.
         if (block == destBlock)
-          return;
+          return success();
         // The connect is within the non-'const' condition, non-local to the
         // `dest` declaration, so the connect is invalid
         if (block == nonConstConditionedBlock)
@@ -154,26 +188,29 @@ private:
           break;
       }
 
-      result = failure();
-      if (isConst(destType))
-        connect.emitOpError() << "assignment to 'const' type " << destType
-                              << " is dependent on a non-'const' condition";
-      else
-        connect->emitOpError()
-            << "assignment to nested 'const' member of type " << destType
-            << " is dependent on a non-'const' condition";
+      // A const dest is allowed if leaf elements are effectively non-const due
+      // to flips.
+      if (typeHasConstLeaf(destType)) {
+        if (destType.isConst())
+          return connect.emitOpError()
+                 << "assignment to 'const' type " << destType
+                 << " is dependent on a non-'const' condition";
+        return connect->emitOpError()
+               << "assignment to nested 'const' member of type " << destType
+               << " is dependent on a non-'const' condition";
+      }
     }
+
+    return success();
   }
 
   SmallVector<std::pair<Value, Type>> constValuesToConvert;
   Block *nonConstConditionedBlock = nullptr;
-  LogicalResult result = success();
 };
 
 class DropConstPass : public DropConstBase<DropConstPass> {
   void runOnOperation() override {
-    OpVisitor visitor;
-    if (failed(visitor.checkModule(getOperation())))
+    if (failed(OpVisitor().handleModule(getOperation())))
       signalPassFailure();
   }
 };
