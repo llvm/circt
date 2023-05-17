@@ -53,6 +53,13 @@ public:
 
   LogicalResult handleModule(FModuleLike module) {
     auto fmodule = dyn_cast<FModuleOp>(*module);
+
+    // Check the module body
+    if (fmodule) {
+      if (failed(visitDecl(fmodule)))
+        return failure();
+    }
+
     // Find 'const' ports
     auto portTypes = SmallVector<Attribute>(module.getPortTypes());
     for (size_t portIndex = 0, numPorts = module.getPortTypes().size();
@@ -60,8 +67,7 @@ public:
       if (auto convertedType = convertType(module.getPortType(portIndex))) {
         // If this is an FModuleOp, register the block argument to drop 'const'
         if (fmodule)
-          constValuesToConvert.push_back(
-              {fmodule.getArgument(portIndex), convertedType});
+          fmodule.getArgument(portIndex).setType(convertedType);
         portTypes[portIndex] = TypeAttr::get(convertedType);
       }
     }
@@ -70,22 +76,12 @@ public:
     module->setAttr(FModuleLike::getPortTypesAttrName(),
                     ArrayAttr::get(module.getContext(), portTypes));
 
-    if (!fmodule)
-      return success();
-
-    // Check the module body
-    if (failed(visitDecl(fmodule)))
-      return failure();
-
-    // Drop 'const' from all registered values
-    for (auto [value, type] : constValuesToConvert)
-      value.setType(type);
-
     return success();
   }
 
   LogicalResult visitDecl(FModuleOp module) {
-    for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
+    for (auto &op :
+         llvm::make_early_inc_range(llvm::reverse(*module.getBodyBlock()))) {
       if (failed(dispatchVisitor(&op)))
         return failure();
     }
@@ -109,14 +105,16 @@ public:
 
     if (isWithinNonconstCondition)
       nonConstConditionedBlock = &when.getThenBlock();
-    for (auto &op : llvm::make_early_inc_range(when.getThenBlock()))
+    for (auto &op :
+         llvm::make_early_inc_range(llvm::reverse(when.getThenBlock())))
       if (failed(dispatchVisitor(&op)))
         return failure();
 
     if (when.hasElseRegion()) {
       if (isWithinNonconstCondition)
         nonConstConditionedBlock = &when.getElseBlock();
-      for (auto &op : llvm::make_early_inc_range(when.getElseBlock()))
+      for (auto &op :
+           llvm::make_early_inc_range(llvm::reverse(when.getElseBlock())))
         if (failed(dispatchVisitor(&op)))
           return failure();
     }
@@ -134,7 +132,7 @@ public:
     // Register any 'const' results to drop 'const'
     for (auto [index, result] : llvm::enumerate(op->getResults())) {
       if (auto convertedType = convertType(result.getType()))
-        constValuesToConvert.push_back({result, convertedType});
+        result.setType(convertedType);
     }
 
     return success();
@@ -204,7 +202,6 @@ private:
     return success();
   }
 
-  SmallVector<std::pair<Value, Type>> constValuesToConvert;
   Block *nonConstConditionedBlock = nullptr;
 };
 

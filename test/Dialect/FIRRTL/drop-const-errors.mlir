@@ -23,6 +23,20 @@ firrtl.module @CheckConstAssignInNonConstConditionElse(in %p: !firrtl.uint<1>, i
 
 // -----
 
+// This tests that values aren't being set to non-const before their usage is checked.
+firrtl.circuit "CheckIntermediateValueConstAssignInNonConstCondition" {
+firrtl.extmodule @Inner(in a : !firrtl.const.uint<2>)
+firrtl.module @CheckIntermediateValueConstAssignInNonConstCondition(in %p: !firrtl.uint<1>, in %in: !firrtl.const.uint<2>, out %out: !firrtl.const.uint<2>) {
+  %a = firrtl.instance inner @Inner(in a : !firrtl.const.uint<2>)
+  firrtl.when %p : !firrtl.uint<1> {
+    // expected-error @+1 {{assignment to 'const' type '!firrtl.const.uint<2>' is dependent on a non-'const' condition}}
+    firrtl.connect %a, %in : !firrtl.const.uint<2>, !firrtl.const.uint<2>
+  }
+}
+}
+
+// -----
+
 firrtl.circuit "CheckNestedConstAssignInNonConstCondition" {
 firrtl.module @CheckNestedConstAssignInNonConstCondition(in %constP: !firrtl.const.uint<1>, in %p: !firrtl.uint<1>, in %in: !firrtl.const.uint<2>, out %out: !firrtl.const.uint<2>) {
   firrtl.when %p : !firrtl.uint<1> {
