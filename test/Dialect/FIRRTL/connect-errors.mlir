@@ -551,11 +551,60 @@ firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.sint<1>) {
 
 // -----
 
-/// Non-const types cannot be connected to const types
+/// Non-const types cannot be connected to const types.
 
 firrtl.circuit "test" {
 firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.const.uint<1>) {
   // expected-error @+1 {{type mismatch}}
   firrtl.connect %b, %a : !firrtl.const.uint<1>, !firrtl.uint<1>
+}
+}
+
+// -----
+
+// Non-const aggregates cannot be connected to const types.
+
+firrtl.circuit "test" {
+firrtl.module @test(in %in   : !firrtl.bundle<a: uint<1>>,
+                    out %out : !firrtl.const.bundle<a: uint<1>>) {
+  // expected-error @+1 {{type mismatch}}
+  firrtl.connect %out, %in : !firrtl.const.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
+}
+}
+
+// -----
+
+/// Const flip types cannot be connected to non-const flip types.
+
+firrtl.circuit "test" {
+firrtl.module @test(in %in   : !firrtl.const.bundle<a flip: uint<1>>,
+                    out %out : !firrtl.bundle<a flip: uint<1>>) {
+  // expected-error @+1 {{type mismatch}}
+  firrtl.connect %out, %in : !firrtl.bundle<a flip: uint<1>>, !firrtl.const.bundle<a flip: uint<1>>
+}
+}
+
+// -----
+
+/// Nested const flip types cannot be connected to non-const flip types.
+
+firrtl.circuit "test" {
+firrtl.module @test(in %in   : !firrtl.bundle<a flip: const.uint<1>>,
+                    out %out : !firrtl.bundle<a flip: uint<1>>) {
+  // expected-error @+1 {{type mismatch}}
+  firrtl.connect %out, %in : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: const.uint<1>>
+}
+}
+
+// -----
+
+/// Non-const double flip types cannot be connected to const.
+
+firrtl.circuit "test" {
+firrtl.module @test(in %in   : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>,
+                    out %out : !firrtl.const.bundle<a flip: bundle<a flip: uint<1>>>) {
+  // expected-error @+1 {{type mismatch}}
+  firrtl.connect %out, %in : !firrtl.const.bundle<a flip: bundle<a flip: uint<1>>>, 
+                             !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
 }
 }

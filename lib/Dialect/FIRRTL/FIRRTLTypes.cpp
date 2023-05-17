@@ -690,6 +690,7 @@ std::pair<uint64_t, bool> FIRRTLBaseType::rootChildFieldID(uint64_t fieldID,
 /// canonicalizes flips in bundles, so only passive types can be compared here.
 static bool areBundleElementsEquivalent(BundleType::BundleElement destElement,
                                         BundleType::BundleElement srcElement,
+                                        bool destOuterTypeIsConst,
                                         bool srcOuterTypeIsConst,
                                         bool requiresSameWidth) {
   if (destElement.name != srcElement.name)
@@ -697,8 +698,14 @@ static bool areBundleElementsEquivalent(BundleType::BundleElement destElement,
   if (destElement.isFlip != srcElement.isFlip)
     return false;
 
+  if (destElement.isFlip) {
+    std::swap(destElement, srcElement);
+    std::swap(destOuterTypeIsConst, srcOuterTypeIsConst);
+  }
+
   return areTypesEquivalent(destElement.type, srcElement.type,
-                            srcOuterTypeIsConst, requiresSameWidth);
+                            destOuterTypeIsConst, srcOuterTypeIsConst,
+                            requiresSameWidth);
 }
 
 /// Returns whether the two types are equivalent.  This implements the exact
@@ -706,13 +713,9 @@ static bool areBundleElementsEquivalent(BundleType::BundleElement destElement,
 /// compared have any outer flips that encode FIRRTL module directions (input or
 /// output), these should be stripped before using this method.
 bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
+                                bool destOuterTypeIsConst,
                                 bool srcOuterTypeIsConst,
                                 bool requireSameWidths) {
-
-  // If the types are trivially equal, return true.
-  if (destFType == srcFType)
-    return true;
-
   auto destType = destFType.dyn_cast<FIRRTLBaseType>();
   auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
 
@@ -720,17 +723,8 @@ bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
   if (!destType || !srcType)
     return destFType == srcFType;
 
-  // Type constness must match for equivalence
-  if (destType.isConst() && !srcType.isConst() && !srcOuterTypeIsConst)
-    return false;
-
-  // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
-  if (destType.isa<ResetType>())
-    return srcType.isResetType();
-
-  // Reset types can drive UInt<1>, AsyncReset, or Reset types.
-  if (srcType.isa<ResetType>())
-    return destType.isResetType();
+  bool srcIsConst = srcOuterTypeIsConst || srcFType.isConst();
+  bool destIsConst = destOuterTypeIsConst || destFType.isConst();
 
   // Vector types can be connected if they have the same size and element type.
   auto destVectorType = destType.dyn_cast<FVectorType>();
@@ -738,8 +732,8 @@ bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
   if (destVectorType && srcVectorType)
     return destVectorType.getNumElements() == srcVectorType.getNumElements() &&
            areTypesEquivalent(destVectorType.getElementType(),
-                              srcVectorType.getElementType(),
-                              srcVectorType.isConst(), requireSameWidths);
+                              srcVectorType.getElementType(), destIsConst,
+                              srcIsConst, requireSameWidths);
 
   // Bundle types can be connected if they have the same size, element names,
   // and element types.
@@ -755,9 +749,8 @@ bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
     for (size_t i = 0; i < numDestElements; ++i) {
       auto destElement = destElements[i];
       auto srcElement = srcElements[i];
-      if (!areBundleElementsEquivalent(destElement, srcElement,
-                                       srcBundleType.isConst(),
-                                       requireSameWidths))
+      if (!areBundleElementsEquivalent(destElement, srcElement, destIsConst,
+                                       srcIsConst, requireSameWidths))
         return false;
     }
     return true;
@@ -777,37 +770,15 @@ bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
         return false;
       // Enumeration types can only be connected if the inner types have the
       // same width.
-      if (!areTypesEquivalent(dst.type, src.type, srcEnumType.isConst(), true))
+      if (!areTypesEquivalent(dst.type, src.type, destIsConst, srcIsConst,
+                              true))
         return false;
     }
     return true;
   }
 
-  // If we can implicitly truncate or extend the bitwidth, or either width is
-  // currently uninferred, then compare the widthless version of these types.
-  if (!requireSameWidths || destType.getBitWidthOrSentinel() == -1)
-    srcType = srcType.getWidthlessType();
-  if (!requireSameWidths || srcType.getBitWidthOrSentinel() == -1)
-    destType = destType.getWidthlessType();
-
-  // Ground types can be connected if they are the same, or the source type is
-  // a const version of the destination type.
-  return destType == srcType || destType == srcType.getConstType(false);
-}
-
-/// Returns whether the two types are weakly equivalent.
-bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
-                                      bool destFlip, bool srcFlip,
-                                      bool srcOuterTypeIsConst) {
-  auto destType = destFType.dyn_cast<FIRRTLBaseType>();
-  auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
-
-  // For non-base types, only equivalent if identical.
-  if (!destType || !srcType)
-    return destFType == srcFType;
-
-  // Type constness must match for equivalence
-  if (destType.isConst() && !srcType.isConst() && !srcOuterTypeIsConst)
+  // Ground type connections must be const compatible.
+  if (destIsConst && !srcIsConst)
     return false;
 
   // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
@@ -818,6 +789,32 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
   if (srcType.isa<ResetType>())
     return destType.isResetType();
 
+  // If we can implicitly truncate or extend the bitwidth, or either width is
+  // currently uninferred, then compare the widthless version of these types.
+  if (!requireSameWidths || destType.getBitWidthOrSentinel() == -1)
+    srcType = srcType.getWidthlessType();
+  if (!requireSameWidths || srcType.getBitWidthOrSentinel() == -1)
+    destType = destType.getWidthlessType();
+
+  // Ground types can be connected if their constless types are the same
+  return destType.getConstType(false) == srcType.getConstType(false);
+}
+
+/// Returns whether the two types are weakly equivalent.
+bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
+                                      bool destFlip, bool srcFlip,
+                                      bool destOuterTypeIsConst,
+                                      bool srcOuterTypeIsConst) {
+  auto destType = destFType.dyn_cast<FIRRTLBaseType>();
+  auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
+
+  // For non-base types, only equivalent if identical.
+  if (!destType || !srcType)
+    return destFType == srcFType;
+
+  bool srcIsConst = srcOuterTypeIsConst || srcFType.isConst();
+  bool destIsConst = destOuterTypeIsConst || destFType.isConst();
+
   // Vector types can be connected if their element types are weakly equivalent.
   // Size doesn't matter.
   auto destVectorType = destType.dyn_cast<FVectorType>();
@@ -825,7 +822,7 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
   if (destVectorType && srcVectorType)
     return areTypesWeaklyEquivalent(destVectorType.getElementType(),
                                     srcVectorType.getElementType(), destFlip,
-                                    srcFlip, srcVectorType.isConst());
+                                    srcFlip, destIsConst, srcIsConst);
 
   // Bundle types are weakly equivalent if all common elements are weakly
   // equivalent.  Non-matching fields are ignored.  Flips are "pushed" into
@@ -839,19 +836,34 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
       // If the src doesn't contain the destination's field, that's okay.
       if (!srcElt)
         return true;
+
       return areTypesWeaklyEquivalent(
           destElt.type, srcElt->type, destFlip ^ destElt.isFlip,
-          srcFlip ^ srcElt->isFlip, srcBundleType.isConst());
+          srcFlip ^ srcElt->isFlip, destOuterTypeIsConst, srcOuterTypeIsConst);
     });
 
+  // Ground types require leaf flippedness and const compatibility
+  if (destFlip != srcFlip)
+    return false;
+  if (destFlip && srcIsConst && !destIsConst)
+    return false;
+  if (srcFlip && destIsConst && !srcIsConst)
+    return false;
+
+  // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
+  if (destType.isa<ResetType>())
+    return srcType.isResetType();
+
+  // Reset types can drive UInt<1>, AsyncReset, or Reset types.
+  if (srcType.isa<ResetType>())
+    return destType.isResetType();
+
   // Ground types can be connected if their passive, widthless versions
-  // are equal or the widthless source type is a const version of the widthless
-  // destination type and leaf flippedness matches.
+  // are equal and are const and flip compatible
   auto widthlessDestType = destType.getWidthlessType();
   auto widthlessSrcType = srcType.getWidthlessType();
-  return (widthlessDestType == widthlessSrcType ||
-          widthlessDestType == widthlessSrcType.getConstType(false)) &&
-         destFlip == srcFlip;
+  return widthlessDestType.getConstType(false) ==
+         widthlessSrcType.getConstType(false);
 }
 
 /// Returns true if the destination is at least as wide as an equivalent source.
