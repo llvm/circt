@@ -195,6 +195,7 @@ public:
 /// compared have any outer flips that encode FIRRTL module directions (input or
 /// output), these should be stripped before using this method.
 bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType,
+                        bool destOuterTypeIsConst = false,
                         bool srcOuterTypeIsConst = false,
                         bool requireSameWidths = false);
 
