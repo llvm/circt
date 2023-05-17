@@ -20,7 +20,7 @@ firrtl.circuit "TwoDuts" {
 
 firrtl.circuit "TwoSignals" {
   firrtl.module @TwoSignals(in %test_en0: !firrtl.uint<1>) attributes {portAnnotations = [[{class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]]} {
-    // expected-error @+2 {{more than one thing marked as a DFT enable}}
+    // expected-error @+2 {{more than one thing marked as sifive.enterprise.firrtl.DFTTestModeEnableAnnotation}}
     // expected-note  @-2 {{first thing defined here}}
     %test_en1 = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]}: !firrtl.uint<1>
   }

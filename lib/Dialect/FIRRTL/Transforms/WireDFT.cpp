@@ -134,105 +134,68 @@ void WireDFTPass::runOnOperation() {
       }
       dut = module;
     }
+    bool error = false;
+
+    auto handleAnnotation = [&](Value value, Annotation anno,
+                                StringRef annoName, Value &signal,
+                                auto &signalModule) {
+      if (anno.isClass(annoName)) {
+        if (signal) {
+          auto diag =
+              emitError(value.getLoc(), "more than one thing marked as ")
+              << annoName;
+          diag.attachNote(signal.getLoc()) << "first thing defined here";
+          error = true;
+          return false;
+        }
+
+        // Grab the enable value and remove the annotation.
+        auto builder = ImplicitLocOpBuilder::atBlockEnd(value.getLoc(),
+                                                        value.getParentBlock());
+        builder.setInsertionPointAfterValue(value);
+        signal = getValueByFieldID(builder, value, anno.getFieldID());
+        signalModule = module;
+        return true;
+      }
+      return false;
+    };
 
     // See if this module has any port marked as the DFT enable.
-    bool error = false;
-    AnnotationSet::removePortAnnotations(module, [&](unsigned i,
-                                                     Annotation anno) {
-      // If we have already encountered an error, continue.
-      if (error)
-        return false;
+    AnnotationSet::removePortAnnotations(
+        module, [&](unsigned i, Annotation anno) {
+          if (!error && handleAnnotation(module.getArgument(i), anno,
+                                         dftTestModeEnableAnnoClass,
+                                         enableSignal, enableModule))
+            return true;
 
-      // Check for enable signal annotation.
-      if (anno.isClass(dftTestModeEnableAnnoClass)) {
-        // If we have already found a DFT enable, emit an error.
-        if (enableSignal) {
-          auto diag =
-              module->emitError("more than one thing marked as a DFT enable");
-          diag.attachNote(enableSignal.getLoc()) << "first thing defined here";
-          error = true;
+          if (!error &&
+              handleAnnotation(module.getArgument(i), anno,
+                               dftClockDividerBypassAnnoClass,
+                               clockDivBypassSignal, clockDivBypassModule))
+            return true;
+
           return false;
-        }
-        // Grab the enable value and remove the annotation.
-        enableSignal =
-            getValueByFieldID(ImplicitLocOpBuilder::atBlockBegin(
-                                  module->getLoc(), module.getBodyBlock()),
-                              module.getArgument(i), anno.getFieldID());
-        enableModule = module;
-        return true;
-      }
-
-      // Check for clock div bypass signal.
-      if (anno.isClass(dftClockDividerBypassAnnoClass)) {
-        // If we have already found a DFT clock div bypass signal, emit an
-        // error.
-        if (clockDivBypassSignal) {
-          module->emitError(
-                    "more than one thing marked as a DFT clock div bypass")
-                  .attachNote(clockDivBypassSignal.getLoc())
-              << "first thing defined here";
-          error = true;
-          return false;
-        }
-        clockDivBypassSignal =
-            getValueByFieldID(ImplicitLocOpBuilder::atBlockBegin(
-                                  module->getLoc(), module.getBodyBlock()),
-                              module.getArgument(i), anno.getFieldID());
-        clockDivBypassModule = module;
-        return true;
-      }
-
-      return false;
-    });
+        });
     if (error)
       return signalPassFailure();
 
-    // Walk the module body looking for any operation marked as the DFT enable.
+    // Walk the module body looking for any operation marked as the
+    // DFT enable.
     auto walkResult = module->walk([&](Operation *op) {
       AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
-        // If we have already encountered an error, continue.
-        if (error)
+        if (op->getNumResults() == 0)
           return false;
-
-        // Check for enable signal annotation.
-        if (anno.isClass(dftTestModeEnableAnnoClass)) {
-          if (enableSignal) {
-            auto diag =
-                op->emitError("more than one thing marked as a DFT enable");
-            diag.attachNote(enableSignal.getLoc())
-                << "first thing defined here";
-            error = true;
-            return false;
-          }
-          // Grab the enable value and remove the annotation.
-          enableSignal = getValueByFieldID(
-              ImplicitLocOpBuilder::atBlockEnd(op->getLoc(), op->getBlock()),
-              op->getResult(0), anno.getFieldID());
-          enableModule = module;
+        if (!error &&
+            handleAnnotation(op->getResult(0), anno, dftTestModeEnableAnnoClass,
+                             enableSignal, enableModule))
           return true;
-        }
 
-        // Check for clock div bypass signal.
-        if (anno.isClass(dftClockDividerBypassAnnoClass)) {
-          // If we have already found a DFT clock div bypass signal, emit an
-          // error.
-          if (clockDivBypassSignal) {
-            op->emitError(
-                  "more than one thing marked as a DFT clock div bypass")
-                    .attachNote(clockDivBypassSignal.getLoc())
-                << "first thing defined here";
-            error = true;
-            return false;
-          }
-
-          // Grab the signal value and remove the annotation.
-          clockDivBypassSignal = getValueByFieldID(
-              ImplicitLocOpBuilder::atBlockEnd(op->getLoc(), op->getBlock()),
-              op->getResult(0), anno.getFieldID());
-          clockDivBypassModule = module;
+        if (!error &&
+            handleAnnotation(op->getResult(0), anno,
+                             dftClockDividerBypassAnnoClass,
+                             clockDivBypassSignal, clockDivBypassModule))
           return true;
-        }
-        // Not an annotation we're looking for.
+
         return false;
       });
       if (error)
@@ -293,7 +256,10 @@ void WireDFTPass::runOnOperation() {
 
   const unsigned clockDivBypassPortNo = 3;
 
-  // Magic name for optional bypass signal.
+  // Name used for wiring enable signal.
+  StringRef testEnPortName = "test_en";
+
+  // Magic name for optional bypass signal, port on gate must match.
   StringRef requiredClockDivBypassPortName = "dft_clk_div_bypass";
 
   // Scan gathered clock gates and check for basic compatibility.
@@ -525,7 +491,7 @@ void WireDFTPass::runOnOperation() {
     return success();
   };
 
-  auto enablePortName = StringAttr::get(&getContext(), "test_en");
+  auto enablePortName = StringAttr::get(&getContext(), testEnPortName);
   auto bypassPortName =
       StringAttr::get(&getContext(), requiredClockDivBypassPortName);
   if (failed(wireUp(enableSignal, enableModule, enablePortName, "enable",
