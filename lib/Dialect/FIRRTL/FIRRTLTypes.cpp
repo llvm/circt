@@ -104,6 +104,12 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         printNestedType(refType.getType(), os);
         os << '>';
       })
+      .Case<StringType>([&](auto stringType) {
+        auto phase = stringType.getPhase();
+        if (phase != Phase::Hardware)
+          os << stringifyPhase(phase) << ".";
+        os << "string";
+      })
       .Default([&](auto) { anyFailed = true; });
   return failure(anyFailed);
 }
@@ -121,6 +127,22 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
 //===----------------------------------------------------------------------===//
 // Type Parsing
 //===----------------------------------------------------------------------===//
+
+/// Parse a type that has a phase qualifier.
+/// ```plain
+/// firrtl-phased-type ::= string
+/// ```
+static OptionalParseResult parsePhaseQualifiedType(AsmParser &parser,
+                                                   StringRef name, Phase phase,
+                                                   Type &result) {
+  auto *context = parser.getContext();
+  if (name.equals("string")) {
+    result = StringType::get(context, phase);
+    return success();
+  }
+  parser.emitError(parser.getNameLoc(), "expected phase-qualified type");
+  return failure();
+}
 
 /// Parse a type with a custom parser implementation.
 ///
@@ -143,12 +165,16 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
 ///   ::= enum '<' (enum-elt (',' enum-elt)*)? '>'
 ///   ::= vector '<' type ',' int '>'
 ///   ::= const '.' type
-///
+///   ::= 'property.' firrtl-phased-type
 /// bundle-elt ::= identifier flip? ':' type
 /// enum-elt ::= identifier ':' type
 /// ```
 static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
                                             Type &result) {
+  if (name.consume_front("property.")) {
+    return parsePhaseQualifiedType(parser, name, Phase::Property, result);
+  }
+
   bool isConst = false;
   const char constPrefix[] = "const.";
   if (name.starts_with(constPrefix)) {
@@ -347,6 +373,18 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       return failure();
 
     return result = RefType::get(type, true), success();
+  }
+  if (name.equals("string")) {
+    if (isConst) {
+      parser.emitError(parser.getNameLoc(), "strings cannot be const");
+      return failure();
+    }
+    auto type =
+        parser.getChecked<StringType>(parser.getContext(), Phase::Hardware);
+    if (!type)
+      return failure();
+    result = type;
+    return success();
   }
 
   return {};
@@ -1962,6 +2000,17 @@ AsyncResetType AsyncResetType::getConstType(bool isConst) {
 }
 
 //===----------------------------------------------------------------------===//
+// StringType
+//===----------------------------------------------------------------------===//
+
+LogicalResult StringType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                 Phase phase) {
+  if (phase == Phase::Hardware)
+    return emitError() << "strings are not representable in hardware";
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTLDialect
 //===----------------------------------------------------------------------===//
 
@@ -1969,7 +2018,7 @@ void FIRRTLDialect::registerTypes() {
   addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
            // Derived Types
            BundleType, FVectorType, FEnumType, RefType, OpenBundleType,
-           OpenVectorType>();
+           OpenVectorType, StringType>();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike

@@ -242,4 +242,10 @@ firrtl.module @OpenAggTest(in %in: !firrtl.openbundle<a: bundle<data: uint<1>>, 
   %b_1 = firrtl.opensubindex %b[1] : !firrtl.openvector<openbundle<x: uint<2>, y: probe<uint<2>>>, 2>
   %b_0_y = firrtl.opensubfield %b_0[y] : !firrtl.openbundle<x : uint<2>, y: probe<uint<2>>>
 }
+
+// CHECK-LABEL: StringTest
+// CHECK-SAME:  (in %in: !firrtl.property.string, out %out: !firrtl.property.string)
+firrtl.module @StringTest(in %in: !firrtl.property.string, out %out: !firrtl.property.string) {
+  firrtl.connect %out, %in : !firrtl.property.string, !firrtl.property.string
+}
 }
