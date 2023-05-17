@@ -932,6 +932,10 @@ bool firrtl::areTypesConstCastable(FIRRTLType destFType, FIRRTLType srcFType,
   if (!destType || !srcType)
     return false;
 
+  // Types must be passive
+  if (!destType.isPassive() || !srcType.isPassive())
+    return false;
+
   bool srcIsConst = srcType.isConst() || srcOuterTypeIsConst;
 
   // Cannot cast non-'const' src to 'const' dest
@@ -964,7 +968,6 @@ bool firrtl::areTypesConstCastable(FIRRTLType destFType, FIRRTLType srcFType,
                             [&](const BundleType::BundleElement &destElement,
                                 const BundleType::BundleElement &srcElement) {
                               return destElement.name == srcElement.name &&
-                                     destElement.isFlip == srcElement.isFlip &&
                                      areTypesConstCastable(destElement.type,
                                                            srcElement.type,
                                                            srcIsConst);
