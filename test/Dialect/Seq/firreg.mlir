@@ -1,8 +1,10 @@
 // RUN: circt-opt %s -verify-diagnostics --lower-seq-firrtl-init-to-sv --lower-seq-firrtl-to-sv | FileCheck %s --check-prefixes=CHECK,COMMON
 // RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-firrtl-init-to-sv, hw.module(lower-seq-firrtl-to-sv{disable-reg-randomization}))" | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
 // RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-firrtl-init-to-sv, hw.module(lower-seq-firrtl-to-sv{add-vivado-ram-address-conflict-synthesis-bug-workaround}))" | FileCheck %s --check-prefixes=CHECK,VIVADO
+// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-firrtl-init-to-sv, hw.module(lower-seq-firrtl-to-sv{emit-separate-always-blocks}))" | FileCheck %s --check-prefixes SEPARATE
 
 // COMMON-LABEL: hw.module @lowering
+// SEPARATE-LABEL: hw.module @lowering
 hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d: i32, e: i32, f: i32) {
   %cst0 = hw.constant 0 : i32
 
@@ -60,6 +62,47 @@ hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d:
   // CHECK-NEXT:     sv.passign %rF, %in : i32
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
+
+  // SEPARATE:      sv.always posedge %clk {
+  // SEPARATE-NEXT:   sv.passign %rA, %in : i32
+  // SEPARATE-NEXT: }
+  // SEPARATE-NEXT: sv.always posedge %clk {
+  // SEPARATE-NEXT:   sv.if %rst {
+  // SEPARATE-NEXT:     sv.passign %rB, %c0_i32 : i32
+  // SEPARATE-NEXT:   } else {
+  // SEPARATE-NEXT:     sv.passign %rB, %in : i32
+  // SEPARATE-NEXT:   }
+  // SEPARATE-NEXT: }
+  // SEPARATE-NEXT: sv.always posedge %clk, posedge %rst {
+  // SEPARATE-NEXT:   sv.if %rst {
+  // SEPARATE-NEXT:     sv.passign %rC, %c0_i32 : i32
+  // SEPARATE-NEXT:   } else {
+  // SEPARATE-NEXT:     sv.passign %rC, %in : i32
+  // SEPARATE-NEXT:   }
+  // SEPARATE-NEXT: }
+  // SEPARATE-NEXT: sv.always posedge %clk {
+  // SEPARATE-NEXT:   sv.passign %rD, %in : i32
+  // SEPARATE-NEXT: }
+  // SEPARATE-NEXT: sv.always posedge %clk {
+  // SEPARATE-NEXT:   sv.if %rst {
+  // SEPARATE-NEXT:     sv.passign %rE, %c0_i32 : i32
+  // SEPARATE-NEXT:   } else {
+  // SEPARATE-NEXT:     sv.passign %rE, %in : i32
+  // SEPARATE-NEXT:   }
+  // SEPARATE-NEXT: }
+  // SEPARATE-NEXT: sv.always posedge %clk, posedge %rst {
+  // SEPARATE-NEXT:   sv.if %rst {
+  // SEPARATE-NEXT:     sv.passign %rF, %c0_i32 : i32
+  // SEPARATE-NEXT:   } else {
+  // SEPARATE-NEXT:     sv.passign %rF, %in : i32
+  // SEPARATE-NEXT:   }
+  // SEPARATE-NEXT: }
+  // SEPARATE-NEXT: sv.always posedge %clk {
+  // SEPARATE-NEXT:   sv.passign %rAnamed, %in : i32
+  // SEPARATE-NEXT: }
+  // SEPARATE-NEXT: sv.always posedge %clk {
+  // SEPARATE-NEXT:   sv.passign %rNoSym, %in : i32
+  // SEPARATE-NEXT: }
 
   // CHECK:      sv.ifdef  "SYNTHESIS" {
   // CHECK-NEXT: } else {
