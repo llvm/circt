@@ -162,16 +162,17 @@ void WireDFTPass::runOnOperation() {
       }
       return false;
     };
+    auto handleAnnotationChecks = [&](Value value, Annotation anno) {
+      return handleAnnotation(value, anno, dftTestModeEnableAnnoClass,
+                              enableSignal, enableModule) ||
+             handleAnnotation(value, anno, dftClockDividerBypassAnnoClass,
+                              clockDivBypassSignal, clockDivBypassModule);
+    };
 
     // See if this module has any port marked as the DFT enable.
     AnnotationSet::removePortAnnotations(
         module, [&](unsigned i, Annotation anno) {
-          return handleAnnotation(module.getArgument(i), anno,
-                                  dftTestModeEnableAnnoClass, enableSignal,
-                                  enableModule) ||
-                 handleAnnotation(module.getArgument(i), anno,
-                                  dftClockDividerBypassAnnoClass,
-                                  clockDivBypassSignal, clockDivBypassModule);
+          return handleAnnotationChecks(module.getArgument(i), anno);
         });
     if (error)
       return signalPassFailure();
@@ -184,12 +185,7 @@ void WireDFTPass::runOnOperation() {
         return WalkResult::advance();
 
       AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
-        return handleAnnotation(op->getResult(0), anno,
-                                dftTestModeEnableAnnoClass, enableSignal,
-                                enableModule) ||
-               handleAnnotation(op->getResult(0), anno,
-                                dftClockDividerBypassAnnoClass,
-                                clockDivBypassSignal, clockDivBypassModule);
+        return handleAnnotationChecks(op->getResult(0), anno);
       });
       if (error)
         return WalkResult::interrupt();
