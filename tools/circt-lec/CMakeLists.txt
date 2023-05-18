@@ -10,12 +10,6 @@ if(CIRCT_LEC_ENABLED)
     ${Z3_LIBRARIES}
   )
 
-  target_include_directories(circt-lec SYSTEM
-    PRIVATE
-    ${Z3_INCLUDE_DIR}
-    ${Z3_CXX_INCLUDE_DIRS}
-  )
-
   # Correct the runpath when linking shared libraries.
   if(BUILD_SHARED_LIBS)
     set_target_properties(circt-lec PROPERTIES
