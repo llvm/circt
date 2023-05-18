@@ -56,6 +56,7 @@ void ESIAddCPPAPIPass::runOnOperation() {
   llvm::raw_string_ostream os(apiStrBuffer);
   if (failed(emitAPI(os))) {
     mod.emitError("Failed to emit ESI C++ API");
+    signalPassFailure();
     return;
   }
 
