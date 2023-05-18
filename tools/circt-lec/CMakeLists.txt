@@ -7,7 +7,7 @@ if(CIRCT_LEC_ENABLED)
   target_link_libraries(circt-lec
     PRIVATE
     CIRCTSMT
-    ${CIRCT_Z3_LIBS}
+    ${Z3_LIBRARIES}
   )
 
   target_include_directories(circt-lec SYSTEM

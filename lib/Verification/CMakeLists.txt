@@ -8,7 +8,7 @@ if(CIRCT_LEC_ENABLED)
     Core
 
     LINK_LIBS
-    ${CIRCT_Z3_LIBS}
+    ${Z3_LIBRARIES}
     
     LINK_LIBS PUBLIC
     MLIRTransforms
