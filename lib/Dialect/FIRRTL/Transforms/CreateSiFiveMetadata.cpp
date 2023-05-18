@@ -78,6 +78,8 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   auto builderOM = OpBuilder::atBlockEnd(circuitOp.getBodyBlock());
 
   using NameTypePair = std::pair<StringAttr, mlir::Type>;
+  // Add all the properties of a memory as fields of the class.
+  // The types must match exactly with the FMemModuleOp attribute type.
   SmallVector<NameTypePair> classFields;
   classFields.push_back({StringAttr::get(context, "name"),
                          om::StringOMType::get(builderOM.getContext())});
@@ -107,12 +109,16 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
        mlir::IntegerType::get(context, 32, IntegerType::Unsigned)});
 
   auto unknownLoc = builderOM.getUnknownLoc();
+  // Get only the attribute names for parameter names.
   auto paramNames = builderOM.getArrayAttr(llvm::to_vector(llvm::map_range(
       classFields, [&](NameTypePair e) -> Attribute { return e.first; })));
 
+  // Memory metadata class.
   auto memMetadataClass = builderOM.create<circt::om::ClassOp>(
       builderOM.getUnknownLoc(),
-      StringAttr::get(builderOM.getContext(), "MemoryConfModules"), paramNames);
+      StringAttr::get(builderOM.getContext(), "MemoryConf"), paramNames);
+
+  // Now add all the properties of the memory as a ClassFieldOp.
   Block *body = new Block();
   memMetadataClass.getRegion().push_back(body);
   builderOM.setInsertionPointToEnd(body);
@@ -120,6 +126,8 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     builderOM.create<om::ClassFieldOp>(
         unknownLoc, field.first, body->addArgument(field.second, unknownLoc));
 
+  // Now create the class that will instantiate metadata class with all the
+  // memories of the circt.
   builderOM.setInsertionPointToEnd(circuitOp.getBodyBlock());
   auto metadataClass = builderOM.create<circt::om::ClassOp>(
       builderOM.getUnknownLoc(),
@@ -129,6 +137,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   metadataClass.getRegion().push_back(memMetadataBlock);
   builderOM.setInsertionPointToEnd(memMetadataBlock);
 
+  // index will be used to name unique symbols corresponding to each memory.
   unsigned index = 0;
   // This lambda, writes to the given Json stream all the relevant memory
   // attributes. Also adds the memory attrbutes to the string for creating the
