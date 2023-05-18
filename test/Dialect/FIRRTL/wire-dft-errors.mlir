@@ -20,7 +20,7 @@ firrtl.circuit "TwoDuts" {
 
 firrtl.circuit "TwoSignals" {
   firrtl.module @TwoSignals(in %test_en0: !firrtl.uint<1>) attributes {portAnnotations = [[{class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]]} {
-    // expected-error @+2 {{more than one thing marked as a DFT enable}}
+    // expected-error @+2 {{more than one thing marked as sifive.enterprise.firrtl.DFTTestModeEnableAnnotation}}
     // expected-note  @-2 {{first thing defined here}}
     %test_en1 = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]}: !firrtl.uint<1>
   }
@@ -33,7 +33,7 @@ firrtl.circuit "TwoEnables" {
   firrtl.extmodule @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
 
   firrtl.module @TestEn() {
-    // expected-error @+1 {{mutliple instantiations of the DFT enable signal}}
+    // expected-error @+1 {{multiple instantiations of the DFT enable signal}}
     %test_en = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]} : !firrtl.uint<1>
   }
   
@@ -62,6 +62,39 @@ firrtl.circuit "EnableNotReachable" {
   // expected-note @below {{top-level module here}}
   firrtl.module @EnableNotReachable() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     %eicg_in, %eicg_test_en, %eicg_en, %eicg_out = firrtl.instance eicg @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+  }
+}
+
+// -----
+
+// Test bypass signal without enable.
+firrtl.circuit "BypassWithoutEnable" {
+  firrtl.extmodule @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, in dft_clk_div_bypass: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+
+  firrtl.module @BypassWithoutEnable() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    // expected-error @below {{bypass signal specified without enable signal}}
+    %dft_clk_div_bypass = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.DFTClockDividerBypassAnnotation"}]} : !firrtl.uint<1>
+    %eicg_in, %eicg_test_en, %eicg_en, %eicg_dft_clk_div_bypass, %eicg_out = firrtl.instance eicg @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, in dft_clk_div_bypass: !firrtl.uint<1>, out out: !firrtl.clock)
+  }
+}
+
+// -----
+
+// Test bypass signal unreachable.
+// expected-error @below {{unable to connect bypass signal and DUT (and enable), may not be reachable from top-level module}}
+firrtl.circuit "BypassNotReachable" {
+  firrtl.extmodule @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, in dft_clk_div_bypass: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+
+  firrtl.module @Bypass() {
+    // expected-note @below {{bypass signal here}}
+    %dft_clk_div_bypass = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.DFTClockDividerBypassAnnotation"}]} : !firrtl.uint<1>
+  }
+  // expected-note @below {{DUT here}}
+  // expected-note @below {{top-level module here}}
+  firrtl.module @BypassNotReachable() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    // expected-note @below {{enable signal here}}
+    %test_en = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]} : !firrtl.uint<1>
+    %eicg_in, %eicg_test_en, %eicg_en, %eicg_dft_clk_div_bypass, %eicg_out = firrtl.instance eicg @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, in dft_clk_div_bypass: !firrtl.uint<1>, out out: !firrtl.clock)
   }
 }
 

@@ -109,6 +109,10 @@ void WireDFTPass::runOnOperation() {
   Value enableSignal;
   FModuleOp enableModule;
 
+  // Optional extra signal: clockDivBypassSignal.
+  Value clockDivBypassSignal;
+  FModuleOp clockDivBypassModule;
+
   // Walk all modules looking for the DUT module and the annotated enable
   // signal.
   for (auto &op : *circuit.getBodyBlock()) {
@@ -130,54 +134,58 @@ void WireDFTPass::runOnOperation() {
       }
       dut = module;
     }
-
-    // See if this module has any port marked as the DFT enable.
     bool error = false;
-    AnnotationSet::removePortAnnotations(module, [&](unsigned i,
-                                                     Annotation anno) {
-      // If we have already encountered an error or this is not the right
-      // annotation kind, continue.
-      if (error || !anno.isClass(dftTestModeEnableAnnoClass))
-        return false;
-      // If we have already found a DFT enable, emit an error.
-      if (enableSignal) {
-        auto diag =
-            module->emitError("more than one thing marked as a DFT enable");
-        diag.attachNote(enableSignal.getLoc()) << "first thing defined here";
-        error = true;
-        return false;
-      }
-      // Grab the enable value and remove the annotation.
-      enableSignal =
-          getValueByFieldID(ImplicitLocOpBuilder::atBlockBegin(
-                                module->getLoc(), module.getBodyBlock()),
-                            module.getArgument(i), anno.getFieldID());
-      enableModule = module;
-      return true;
-    });
-    if (error)
-      return signalPassFailure();
 
-    // Walk the module body looking for any operation marked as the DFT enable.
-    auto walkResult = module->walk([&](Operation *op) {
-      AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
-        // If we have already encountered an error or this is not the right
-        // annotation kind, continue.
-        if (error || !anno.isClass(dftTestModeEnableAnnoClass))
-          return false;
-        if (enableSignal) {
+    auto handleAnnotation = [&](Value value, Annotation anno,
+                                StringRef annoName, Value &signal,
+                                auto &signalModule) {
+      // Exit if already found error.
+      if (error)
+        return false;
+      if (anno.isClass(annoName)) {
+        if (signal) {
           auto diag =
-              op->emitError("more than one thing marked as a DFT enable");
-          diag.attachNote(enableSignal.getLoc()) << "first thing defined here";
+              emitError(value.getLoc(), "more than one thing marked as ")
+              << annoName;
+          diag.attachNote(signal.getLoc()) << "first thing defined here";
           error = true;
           return false;
         }
+
         // Grab the enable value and remove the annotation.
-        enableSignal = getValueByFieldID(
-            ImplicitLocOpBuilder::atBlockEnd(op->getLoc(), op->getBlock()),
-            op->getResult(0), anno.getFieldID());
-        enableModule = module;
+        auto builder = ImplicitLocOpBuilder::atBlockEnd(value.getLoc(),
+                                                        value.getParentBlock());
+        builder.setInsertionPointAfterValue(value);
+        signal = getValueByFieldID(builder, value, anno.getFieldID());
+        signalModule = module;
         return true;
+      }
+      return false;
+    };
+    auto handleAnnotationChecks = [&](Value value, Annotation anno) {
+      return handleAnnotation(value, anno, dftTestModeEnableAnnoClass,
+                              enableSignal, enableModule) ||
+             handleAnnotation(value, anno, dftClockDividerBypassAnnoClass,
+                              clockDivBypassSignal, clockDivBypassModule);
+    };
+
+    // See if this module has any port marked as the DFT enable.
+    AnnotationSet::removePortAnnotations(
+        module, [&](unsigned i, Annotation anno) {
+          return handleAnnotationChecks(module.getArgument(i), anno);
+        });
+    if (error)
+      return signalPassFailure();
+
+    // Walk the module body looking for any operation marked as the
+    // DFT enable.
+    auto walkResult = module->walk([&](Operation *op) {
+      // Skip operations with no results.
+      if (op->getNumResults() == 0)
+        return WalkResult::advance();
+
+      AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
+        return handleAnnotationChecks(op->getResult(0), anno);
       });
       if (error)
         return WalkResult::interrupt();
@@ -188,8 +196,15 @@ void WireDFTPass::runOnOperation() {
   }
 
   // No enable signal means we have no work to do.
-  if (!enableSignal)
+  if (!enableSignal) {
+    // Error if bypass is specified without enable.
+    if (clockDivBypassSignal) {
+      mlir::emitError(clockDivBypassSignal.getLoc(),
+                      "bypass signal specified without enable signal");
+      return signalPassFailure();
+    }
     return markAllAnalysesPreserved();
+  }
 
   // This pass requires a DUT.
   if (!dut) {
@@ -200,8 +215,9 @@ void WireDFTPass::runOnOperation() {
   auto &instanceGraph = getAnalysis<InstanceGraph>();
 
   // Find the LowestCommonAncestor node of all the nodes to be wired together,
-  // and collect all the ClockGate modules.
+  // and collect all the ClockGate modules.  Search under DUT.
   llvm::SetVector<InstanceRecord *> clockGates;
+  llvm::SetVector<InstanceRecord *> clockGatesWithBypass;
   auto *lca = lowestCommonAncestor(
       instanceGraph.lookup(dut), [&](InstanceRecord *node) {
         auto module = node->getTarget()->getModule();
@@ -210,8 +226,10 @@ void WireDFTPass::runOnOperation() {
           clockGates.insert(node);
           return true;
         }
-        // Return true if this is the module with the enable signal.
-        return node->getParent()->getModule() == enableModule;
+        // Return true if this is the module with the enable signal or the
+        // bypass signal.
+        return node->getParent()->getModule() == enableModule ||
+               node->getParent()->getModule() == clockDivBypassModule;
       });
 
   // If there are no clock gates under the DUT, we can stop now.
@@ -225,7 +243,16 @@ void WireDFTPass::runOnOperation() {
   // Language below reflects this as well.
   const unsigned testEnPortNo = 1;
 
+  const unsigned clockDivBypassPortNo = 3;
+
+  // Name used for wiring enable signal.
+  StringRef testEnPortName = "test_en";
+
+  // Magic name for optional bypass signal, port on gate must match.
+  StringRef requiredClockDivBypassPortName = "dft_clk_div_bypass";
+
   // Scan gathered clock gates and check for basic compatibility.
+  // Detect clock gates with bypass port while visiting each.
   for (auto *cgnode : clockGates) {
     auto module = cgnode->getTarget()->getModule();
     auto genErr = [&]() { return module.emitError("clock gate module "); };
@@ -255,6 +282,21 @@ void WireDFTPass::runOnOperation() {
       genErr() << "must have second port with input direction";
       return signalPassFailure();
     }
+
+    // If find expected port name + direction + type, this needs clock div
+    // bypass wiring. Check name against magic as well for now.
+    if (clockDivBypassSignal && ext.getNumPorts() > clockDivBypassPortNo) {
+      if (ext.getPortDirection(clockDivBypassPortNo) == Direction::In &&
+          ext.getPortType(clockDivBypassPortNo) == uint1Type) {
+        if (ext.getPortName(clockDivBypassPortNo) ==
+            requiredClockDivBypassPortName)
+          clockGatesWithBypass.insert(cgnode);
+        else
+          mlir::emitWarning(
+              ext.getPortLocation(clockDivBypassPortNo),
+              "compatible port in bypass position has wrong name, skipping");
+      }
+    }
   }
 
   // Handle enable signal (only) outside DUT.
@@ -280,6 +322,35 @@ void WireDFTPass::runOnOperation() {
     }
   }
 
+  bool needsClockDivBypassWiring = !clockGatesWithBypass.empty();
+
+  // Handle bypass signal outside DUT (or the DUT+enable LCA).
+  // Compute separately for more specific diagnostic if unreachable,
+  // and use same LCA for wiring all signals.
+  if (needsClockDivBypassWiring &&
+      !instanceGraph.isAncestor(clockDivBypassModule, lca->getModule())) {
+    // Current LCA covers the clock gates we care about.
+    // Compute new LCA from bypass to that node.
+    lca = lowestCommonAncestor(
+        instanceGraph.getTopLevelNode(), [&](InstanceRecord *node) {
+          return node->getTarget() == lca ||
+                 node->getParent()->getModule() == clockDivBypassModule;
+        });
+    // Handle unreachable case.
+    if (!lca) {
+      auto diag = circuit.emitError(
+          "unable to connect bypass signal and DUT (and enable), may not "
+          "be reachable from top-level module");
+      diag.attachNote(clockDivBypassSignal.getLoc()) << "bypass signal here";
+      diag.attachNote(enableSignal.getLoc()) << "enable signal here";
+      diag.attachNote(dut.getLoc()) << "DUT here";
+      diag.attachNote(instanceGraph.getTopLevelModule().getLoc())
+          << "top-level module here";
+
+      return signalPassFailure();
+    }
+  }
+
   // Check all gates we're wiring are only within the DUT.
   if (!allUnder(clockGates.getArrayRef(), instanceGraph.lookup(dut))) {
     dut->emitError()
@@ -289,10 +360,6 @@ void WireDFTPass::runOnOperation() {
 
   // Stash some useful things.
   auto loc = lca->getModule().getLoc();
-  auto portName = StringAttr::get(&getContext(), "test_en");
-
-  // This maps an enable signal to each module.
-  DenseMap<InstanceGraphNode *, Value> signals;
 
   // Helper to insert a port into an instance op. We have to replace the whole
   // op and then keep the instance graph updated.
@@ -307,100 +374,123 @@ void WireDFTPass::runOnOperation() {
     return clone;
   };
 
-  // At this point we have found the enable signal, all important clock gates,
-  // and the ancestor of these. From here we need wire the enable signal
-  // upward to the LCA, and then wire the enable signal down to all clock
-  // gates.
+  // At this point we have found the enable and bypass signals, all important
+  // clock gates, and the ancestor of these. From here we need wire the
+  // enable/bypass signals upward to the LCA, and then wire those signals down
+  // to all clock gates.
 
-  // This first part wires the enable signal up ward to the LCA module.
-  auto *node = instanceGraph.lookup(enableModule);
-  auto signal = enableSignal;
-  PortInfo portInfo = {portName, uint1Type, Direction::Out, {}, loc};
-  while (node != lca) {
-    // If there is more than one parent the we are in trouble. We can't handle
-    // more than one enable signal to wire everywhere else.
-    if (!node->hasOneUse()) {
-      auto diag = emitError(enableSignal.getLoc(),
-                            "mutliple instantiations of the DFT enable signal");
-      auto it = node->usesBegin();
-      diag.attachNote((*it++)->getInstance()->getLoc())
-          << "first instance here";
-      diag.attachNote((*it)->getInstance()->getLoc()) << "second instance here";
-      return signalPassFailure();
-    }
+  auto wireUp = [&](Value startSignal, FModuleOp signalModule,
+                    StringAttr portName, StringRef portNameFriendly,
+                    unsigned targetPortNo, auto &targets) -> LogicalResult {
+    // This maps each module to its signal.
+    DenseMap<InstanceGraphNode *, Value> signals;
 
-    // Record the signal for this module.
-    signals[node] = signal;
+    // This first part wires the signal upward to the LCA module.
+    auto *node = instanceGraph.lookup(signalModule);
+    Value signal = startSignal;
+    PortInfo portInfo = {portName, uint1Type, Direction::Out, {}, loc};
+    while (node != lca) {
+      // If there is more than one parent the we are in trouble. We can't handle
+      // more than one enable signal to wire everywhere else.
+      if (!node->hasOneUse()) {
+        auto diag = emitError(startSignal.getLoc(),
+                              "multiple instantiations of the DFT ")
+                    << portNameFriendly << " signal";
+        auto it = node->usesBegin();
+        diag.attachNote((*it++)->getInstance()->getLoc())
+            << "first instance here";
+        diag.attachNote((*it)->getInstance()->getLoc())
+            << "second instance here";
+        return diag;
+      }
 
-    // Create an output port to this module.
-    auto module = cast<FModuleOp>(*node->getModule());
-    unsigned portNo = module.getNumPorts();
-    module.insertPorts({{portNo, portInfo}});
-    auto builder = ImplicitLocOpBuilder::atBlockEnd(module.getLoc(),
-                                                    module.getBodyBlock());
-    builder.create<ConnectOp>(module.getArgument(portNo), signal);
+      // Record the signal for this module.
+      signals[node] = signal;
 
-    // Add an output port to the instance of this module.
-    auto *instanceNode = (*node->usesBegin());
-    auto clone = insertPortIntoInstance(instanceNode, {portNo, portInfo});
+      // Create an output port to this module.
+      auto module = cast<FModuleOp>(*node->getModule());
+      unsigned portNo = module.getNumPorts();
+      module.insertPorts({{portNo, portInfo}});
+      auto builder = ImplicitLocOpBuilder::atBlockEnd(module.getLoc(),
+                                                      module.getBodyBlock());
+      emitConnect(builder, module.getArgument(portNo), signal);
 
-    // Set up for the next iteration.
-    signal = clone.getResult(portNo);
-    node = instanceNode->getParent();
-  }
-
-  // Record the enable signal in the LCA.
-  signals[node] = signal;
-
-  // Drill the enable signal to each of the leaf clock gates. We do this
-  // searching upward in the hiearchy until we find a module with the signal.
-  // This is a recursive function due to lazyness.
-  portInfo = {portName, uint1Type, Direction::In, {}, loc};
-  std::function<Value(InstanceGraphNode *)> getSignal =
-      [&](InstanceGraphNode *node) -> Value {
-    // Mutable signal reference.
-    auto &signal = signals[node];
-
-    // Early break if this module has already been wired.
-    if (signal)
-      return signal;
-
-    // Add an input signal to this module.
-    auto module = cast<FModuleOp>(*node->getModule());
-    unsigned portNo = module.getNumPorts();
-    module.insertPorts({{portNo, portInfo}});
-    auto arg = module.getArgument(portNo);
-
-    // Record the new signal.
-    signal = arg;
-
-    // Attach the input signal to each instance of this module.
-    for (auto *instanceNode : node->uses()) {
-      // Add an input signal to this instance op.
+      // Add an output port to the instance of this module.
+      auto *instanceNode = (*node->usesBegin());
       auto clone = insertPortIntoInstance(instanceNode, {portNo, portInfo});
 
-      // Wire the parent signal to the instance op.
-      auto *parent = instanceNode->getParent();
-      auto module = cast<FModuleOp>(*parent->getModule());
-      auto signal = getSignal(parent);
-      auto builder = ImplicitLocOpBuilder::atBlockEnd(module->getLoc(),
-                                                      module.getBodyBlock());
-      builder.create<ConnectOp>(clone.getResult(portNo), signal);
+      // Set up for the next iteration.
+      signal = clone.getResult(portNo);
+      node = instanceNode->getParent();
     }
 
-    return arg;
+    // Record the signal in the LCA.
+    signals[node] = signal;
+
+    // Drill the enable signal to each of the leaf clock gates. We do this
+    // searching upward in the hiearchy until we find a module with the signal.
+    // This is a recursive function due to lazyness.
+    portInfo = {portName, uint1Type, Direction::In, {}, loc};
+    std::function<Value(InstanceGraphNode *)> getSignal =
+        [&](InstanceGraphNode *node) -> Value {
+      // Mutable signal reference.
+      auto &signal = signals[node];
+
+      // Early break if this module has already been wired.
+      if (signal)
+        return signal;
+
+      // Add an input signal to this module.
+      auto module = cast<FModuleOp>(*node->getModule());
+      unsigned portNo = module.getNumPorts();
+      module.insertPorts({{portNo, portInfo}});
+      auto arg = module.getArgument(portNo);
+
+      // Record the new signal.
+      signal = arg;
+
+      // Attach the input signal to each instance of this module.
+      for (auto *instanceNode : node->uses()) {
+        // Add an input signal to this instance op.
+        auto clone = insertPortIntoInstance(instanceNode, {portNo, portInfo});
+
+        // Wire the parent signal to the instance op.
+        auto *parent = instanceNode->getParent();
+        auto module = cast<FModuleOp>(*parent->getModule());
+        auto signal = getSignal(parent);
+        auto builder = ImplicitLocOpBuilder::atBlockEnd(module->getLoc(),
+                                                        module.getBodyBlock());
+        emitConnect(builder, clone.getResult(portNo), signal);
+      }
+
+      return arg;
+    };
+
+    // Wire the signal to each clock gate using the helper above.
+    for (auto *instance : targets) {
+      auto *parent = instance->getParent();
+      auto module = cast<FModuleOp>(*parent->getModule());
+      auto builder = ImplicitLocOpBuilder::atBlockEnd(module->getLoc(),
+                                                      module.getBodyBlock());
+      emitConnect(
+          builder,
+          cast<InstanceOp>(*instance->getInstance()).getResult(targetPortNo),
+          getSignal(parent));
+    }
+    return success();
   };
 
-  // Wire the signal to each clock gate using the helper above.
-  for (auto *instance : clockGates) {
-    auto *parent = instance->getParent();
-    auto module = cast<FModuleOp>(*parent->getModule());
-    auto builder = ImplicitLocOpBuilder::atBlockEnd(module->getLoc(),
-                                                    module.getBodyBlock());
-    builder.create<ConnectOp>(
-        cast<InstanceOp>(*instance->getInstance()).getResult(testEnPortNo),
-        getSignal(parent));
-  }
+  auto enablePortName = StringAttr::get(&getContext(), testEnPortName);
+  auto bypassPortName =
+      StringAttr::get(&getContext(), requiredClockDivBypassPortName);
+  if (failed(wireUp(enableSignal, enableModule, enablePortName, "enable",
+                    testEnPortNo, clockGates)))
+    return signalPassFailure();
+  if (needsClockDivBypassWiring &&
+      failed(wireUp(clockDivBypassSignal, clockDivBypassModule, bypassPortName,
+                    "clock divider bypass", clockDivBypassPortNo,
+                    clockGatesWithBypass)))
+    return signalPassFailure();
 
   // And we're done!
   markAnalysesPreserved<InstanceGraph>();
