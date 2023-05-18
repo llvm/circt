@@ -17,5 +17,9 @@ if(CIRCT_LEC_ENABLED)
     CIRCTHW
     CIRCTSupport
   )
-  target_include_directories(CIRCTSMT PRIVATE ${CIRCT_Z3_INCLUDES})
+  target_include_directories(CIRCTSMT
+    PRIVATE
+    ${Z3_INCLUDE_DIR}
+    ${Z3_CXX_INCLUDE_DIRS}
+  )
 endif()
