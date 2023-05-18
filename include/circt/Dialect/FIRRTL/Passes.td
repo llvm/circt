@@ -692,14 +692,13 @@ def VBToBV : Pass<"firrtl-vb-to-bv", "firrtl::CircuitOp"> {
 }
 
 def DropConst : InterfacePass<"firrtl-drop-const", "firrtl::FModuleLike"> {
-  let summary = "Check usage of and drop 'const' modifier from types";
+  let summary = "Drop 'const' modifier from types";
   let description = [{
-    This pass checks assignments of 'const' values, ensuring that 'const'
-    assignment is not dependent on non-'const' when conditions.
-
-    Once 'const' usage is checked, all 'const' types are replaced with their 
-    non-'const' versions, simplifying downstream passes so that they do not 
-    need to take 'const' into account.
+    This pass drops the 'const' modifier from all types and removes all 
+    const-cast ops. 
+    
+    This simplifies downstream passes and folds so that they do not need to 
+    take 'const' into account.
   }];
   let constructor = "circt::firrtl::createDropConstPass()";
 }

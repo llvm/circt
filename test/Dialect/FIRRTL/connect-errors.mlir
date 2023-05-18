@@ -608,3 +608,87 @@ firrtl.module @test(in %in   : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>,
                              !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
 }
 }
+
+// -----
+firrtl.circuit "test" {
+firrtl.module @test(in %p: !firrtl.uint<1>, in %in: !firrtl.const.uint<2>, out %out: !firrtl.const.uint<2>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    // expected-error @+1 {{assignment to 'const' type '!firrtl.const.uint<2>' is dependent on a non-'const' condition}}
+    firrtl.connect %out, %in : !firrtl.const.uint<2>, !firrtl.const.uint<2>
+  }
+}
+}
+
+// -----
+
+firrtl.circuit "test" {
+firrtl.module @test(in %p: !firrtl.uint<1>, in %in: !firrtl.const.uint<2>, out %out: !firrtl.const.uint<2>) {
+  firrtl.when %p : !firrtl.uint<1> {
+  } else {
+    // expected-error @+1 {{assignment to 'const' type '!firrtl.const.uint<2>' is dependent on a non-'const' condition}}
+    firrtl.connect %out, %in : !firrtl.const.uint<2>, !firrtl.const.uint<2>
+  }
+}
+}
+
+// -----
+
+// This tests that values aren't being set to non-const before their usage is checked.
+firrtl.circuit "test" {
+firrtl.extmodule @Inner(in a : !firrtl.const.uint<2>)
+firrtl.module @test(in %p: !firrtl.uint<1>, in %in: !firrtl.const.uint<2>, out %out: !firrtl.const.uint<2>) {
+  %a = firrtl.instance inner @Inner(in a : !firrtl.const.uint<2>)
+  firrtl.when %p : !firrtl.uint<1> {
+    // expected-error @+1 {{assignment to 'const' type '!firrtl.const.uint<2>' is dependent on a non-'const' condition}}
+    firrtl.connect %a, %in : !firrtl.const.uint<2>, !firrtl.const.uint<2>
+  }
+}
+}
+
+// -----
+
+firrtl.circuit "test" {
+firrtl.module @test(in %constP: !firrtl.const.uint<1>, in %p: !firrtl.uint<1>, in %in: !firrtl.const.uint<2>, out %out: !firrtl.const.uint<2>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    firrtl.when %constP : !firrtl.const.uint<1> {
+      // expected-error @+1 {{assignment to 'const' type '!firrtl.const.uint<2>' is dependent on a non-'const' condition}}
+      firrtl.connect %out, %in : !firrtl.const.uint<2>, !firrtl.const.uint<2>
+    }
+  }
+}
+}
+
+// -----
+
+firrtl.circuit "test" {
+firrtl.module @test(in %p: !firrtl.uint<1>, in %in: !firrtl.bundle<a: const.uint<2>>, out %out: !firrtl.bundle<a: const.uint<2>>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    // expected-error @+1 {{assignment to nested 'const' member of type '!firrtl.bundle<a: const.uint<2>>' is dependent on a non-'const' condition}}
+    firrtl.connect %out, %in : !firrtl.bundle<a: const.uint<2>>, !firrtl.bundle<a: const.uint<2>>
+  }
+}
+}
+
+// -----
+
+firrtl.circuit "test" {
+firrtl.module @test(in %p: !firrtl.uint<1>, in %in: !firrtl.const.bundle<a flip: uint<2>>, out %out: !firrtl.const.bundle<a flip: uint<2>>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    // expected-error @+1 {{assignment to 'const' type '!firrtl.const.bundle<a flip: uint<2>>' is dependent on a non-'const' condition}}
+    firrtl.connect %out, %in : !firrtl.const.bundle<a flip: uint<2>>, !firrtl.const.bundle<a flip: uint<2>>
+  }
+}
+}
+
+// -----
+
+// Connections to flip const destinations are allowed within non-const when blocks 
+// when the flow is to a non-const source
+firrtl.circuit "test" {
+firrtl.module @test(in %p: !firrtl.uint<1>, in %in: !firrtl.bundle<a flip: const.uint<2>>, out %out: !firrtl.bundle<a flip: const.uint<2>>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    // expected-error @+1 {{assignment to nested 'const' member of type '!firrtl.bundle<a flip: const.uint<2>>' is dependent on a non-'const' condition}}
+    firrtl.connect %out, %in : !firrtl.bundle<a flip: const.uint<2>>, !firrtl.bundle<a flip: const.uint<2>>
+  }
+}
+}

@@ -2331,6 +2331,90 @@ static LogicalResult checkConnectFlow(Operation *connect) {
   return success();
 }
 
+namespace {
+enum class ConstLeafKind : uint8_t { None = 0, Normal = 1 << 0, Flip = 1 << 1 };
+} // end anonymous namespace
+
+// NOLINTBEGIN(misc-no-recursion)
+/// Checks if the type has any 'const' leaf elements that are normal or flip
+static ConstLeafKind typeConstLeafKinds(FIRRTLBaseType type,
+                                        bool outerTypeIsConst = false,
+                                        bool isFlip = false) {
+  auto typeIsConst = outerTypeIsConst || type.isConst();
+
+  if (typeIsConst && type.isPassive())
+    return isFlip ? ConstLeafKind::Flip : ConstLeafKind::Normal;
+
+  if (auto bundleType = type.dyn_cast<BundleType>()) {
+    auto kinds = ConstLeafKind::None;
+    for (auto &element : bundleType.getElements()) {
+      auto elementKinds = typeConstLeafKinds(element.type, typeIsConst,
+                                             isFlip ^ element.isFlip);
+      kinds = static_cast<ConstLeafKind>(static_cast<uint8_t>(kinds) |
+                                         static_cast<uint8_t>(elementKinds));
+    }
+    return kinds;
+  }
+
+  if (auto vectorType = type.dyn_cast<FVectorType>())
+    return typeConstLeafKinds(vectorType.getElementType(), typeIsConst, isFlip);
+
+  if (typeIsConst)
+    return isFlip ? ConstLeafKind::Normal : ConstLeafKind::Flip;
+  return ConstLeafKind::None;
+}
+// NOLINTEND(misc-no-recursion)
+
+/// Checks that connections to 'const' destinations are not dependent on
+/// non-'const' conditions in when blocks.
+static LogicalResult checkConnectConditionality(FConnectLike connect) {
+  auto dest = connect.getDest();
+  auto destType = dest.getType().dyn_cast<FIRRTLBaseType>();
+  auto src = connect.getSrc();
+  auto srcType = src.getType().dyn_cast<FIRRTLBaseType>();
+  if (!destType || !srcType)
+    return success();
+
+  auto checkConstConditionality = [&](Value value,
+                                      FIRRTLBaseType type) -> LogicalResult {
+    auto *definingBlock = value.getParentBlock();
+    auto *block = connect->getBlock();
+    while (block && block != definingBlock) {
+      auto *parentOp = block->getParentOp();
+
+      if (auto whenOp = dyn_cast<WhenOp>(parentOp);
+          whenOp && !whenOp.getCondition().getType().isConst()) {
+        if (type.isConst())
+          return connect.emitOpError()
+                 << "assignment to 'const' type " << type
+                 << " is dependent on a non-'const' condition";
+        return connect->emitOpError()
+               << "assignment to nested 'const' member of type " << type
+               << " is dependent on a non-'const' condition";
+      }
+
+      block = parentOp->getBlock();
+    }
+    return success();
+  };
+
+  // Check destination if it contains 'const' leaves
+  if (destType.containsConst() &&
+      static_cast<uint8_t>(typeConstLeafKinds(destType)) &
+          static_cast<uint8_t>(ConstLeafKind::Normal) &&
+      failed(checkConstConditionality(dest, destType)))
+    return failure();
+
+  // Check source if it contains 'const' 'flip' leaves
+  if (srcType.containsConst() &&
+      static_cast<uint8_t>(typeConstLeafKinds(srcType)) &
+          static_cast<uint8_t>(ConstLeafKind::Flip) &&
+      failed(checkConstConditionality(src, srcType)))
+    return failure();
+
+  return success();
+}
+
 LogicalResult ConnectOp::verify() {
   auto dstType = getDest().getType();
   auto srcType = getSrc().getType();
@@ -2360,6 +2444,9 @@ LogicalResult ConnectOp::verify() {
   if (failed(checkConnectFlow(*this)))
     return failure();
 
+  if (failed(checkConnectConditionality(*this)))
+    return failure();
+
   return success();
 }
 
@@ -2374,6 +2461,9 @@ LogicalResult StrictConnectOp::verify() {
 
   // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))
+    return failure();
+
+  if (failed(checkConnectConditionality(*this)))
     return failure();
 
   return success();

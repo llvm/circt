@@ -82,9 +82,9 @@ firrtl.module @ConstCastErase(in %in: !firrtl.const.uint<1>, out %out: !firrtl.u
   firrtl.strictconnect %out, %0 : !firrtl.uint<1> 
 }
 
-// Const connections can occur within const-conditioned whens
-// CHECK-LABEL: firrtl.module @ConstConditionConstAssign
-firrtl.module @ConstConditionConstAssign(in %cond: !firrtl.const.uint<1>, in %in1: !firrtl.const.sint<2>, in %in2: !firrtl.const.sint<2>, out %out: !firrtl.const.sint<2>) {
+// Const is dropped within when blocks
+// CHECK-LABEL: firrtl.module @ConstDropInWhenBlock
+firrtl.module @ConstDropInWhenBlock(in %cond: !firrtl.const.uint<1>, in %in1: !firrtl.const.sint<2>, in %in2: !firrtl.const.sint<2>, out %out: !firrtl.const.sint<2>) {
   // CHECK: firrtl.when %cond : !firrtl.uint<1>
   firrtl.when %cond : !firrtl.const.uint<1> {
     // CHECK: firrtl.strictconnect %out, %in1 : !firrtl.sint<2>
@@ -92,59 +92,6 @@ firrtl.module @ConstConditionConstAssign(in %cond: !firrtl.const.uint<1>, in %in
   } else {
     // CHECK: firrtl.strictconnect %out, %in2 : !firrtl.sint<2>
     firrtl.strictconnect %out, %in2 : !firrtl.const.sint<2>
-  }
-}
-
-// Non-const connections can occur within const-conditioned whens
-// CHECK-LABEL: firrtl.module @ConstConditionNonConstAssign
-firrtl.module @ConstConditionNonConstAssign(in %cond: !firrtl.const.uint<1>, in %in1: !firrtl.sint<2>, in %in2: !firrtl.sint<2>, out %out: !firrtl.sint<2>) {
-  // CHECK: firrtl.when %cond : !firrtl.uint<1>
-  firrtl.when %cond : !firrtl.const.uint<1> {
-    firrtl.strictconnect %out, %in1 : !firrtl.sint<2>
-  } else {
-    firrtl.strictconnect %out, %in2 : !firrtl.sint<2>
-  }
-}
-
-// Const connections can occur when the destination is local to a non-const conditioned when block
-// CHECK-LABEL: firrtl.module @NonConstWhenLocalConstAssign
-firrtl.module @NonConstWhenLocalConstAssign(in %cond: !firrtl.uint<1>) {
-  firrtl.when %cond : !firrtl.uint<1> {
-    // CHECK:      firrtl.wire : !firrtl.uint<9>
-    // CHECK-NEXT: firrtl.constant 0 : !firrtl.uint<9>
-    %w = firrtl.wire : !firrtl.const.uint<9>
-    %c = firrtl.constant 0 : !firrtl.const.uint<9>
-    firrtl.strictconnect %w, %c : !firrtl.const.uint<9>
-  }
-}
-
-// Const connections can occur when the destination is local to a non-const 
-// conditioned when block and the connection is inside a const conditioned when block
-// CHECK-LABEL: firrtl.module @NonConstWhenLocalConstNestedConstWhenAssign
-firrtl.module @NonConstWhenLocalConstNestedConstWhenAssign(in %cond: !firrtl.uint<1>, in %constCond: !firrtl.const.uint<1>) {
-  firrtl.when %cond : !firrtl.uint<1> {
-    // CHECK: firrtl.wire : !firrtl.uint<9>
-    %w = firrtl.wire : !firrtl.const.uint<9>
-    // CHECK-NEXT: firrtl.when %constCond : !firrtl.uint<1>
-    firrtl.when %constCond : !firrtl.const.uint<1> {
-      %c = firrtl.constant 0 : !firrtl.const.uint<9>
-      firrtl.strictconnect %w, %c : !firrtl.const.uint<9>
-    } else {
-      %c = firrtl.constant 1 : !firrtl.const.uint<9>
-      firrtl.strictconnect %w, %c : !firrtl.const.uint<9>
-    }
-  }
-}
-
-firrtl.module @NonConstWhenConstFlipAssign(in %p: !firrtl.uint<1>, in %in: !firrtl.bundle<a flip: uint<2>>, out %out: !firrtl.const.bundle<a flip: uint<2>>) {
-  firrtl.when %p : !firrtl.uint<1> {
-    firrtl.connect %out, %in : !firrtl.const.bundle<a flip: uint<2>>, !firrtl.bundle<a flip: uint<2>>
-  }
-}
-
-firrtl.module @NonConstWhenNestedConstFlipAssign(in %p: !firrtl.uint<1>, in %in: !firrtl.bundle<a flip: uint<2>>, out %out: !firrtl.bundle<a flip: const.uint<2>>) {
-  firrtl.when %p : !firrtl.uint<1> {
-    firrtl.connect %out, %in : !firrtl.bundle<a flip: const.uint<2>>, !firrtl.bundle<a flip: uint<2>>
   }
 }
 }
