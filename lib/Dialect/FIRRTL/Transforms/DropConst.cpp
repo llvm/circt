@@ -164,7 +164,7 @@ private:
 
   LogicalResult handleConnect(FConnectLike connect) {
     auto dest = connect.getDest();
-    auto destType = dest.getType().cast<FIRRTLBaseType>();
+    auto destType = dest.getType().dyn_cast<FIRRTLBaseType>();
     if (nonConstConditionedBlock && destType && destType.containsConst()) {
       // 'const' connects are allowed if `dest` is local to the non-'const' when
       // block.
