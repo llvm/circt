@@ -38,7 +38,7 @@ namespace {
 using ConvertedOps = DenseSet<Operation *>;
 
 struct DCTuple {
-  DCTuple() {}
+  DCTuple() = default;
   DCTuple(Value token, ValueRange data) : token(token), data(data) {}
   DCTuple(dc::UnpackOp unpack)
       : token(unpack.getToken()), data(unpack.getOutputs()) {}
@@ -66,8 +66,7 @@ public:
     addConversion([](Type type) -> Type {
       if (type.isa<NoneType>())
         return dc::TokenType::get(type.getContext());
-      else
-        return dc::ValueType::get(type.getContext(), type);
+      return dc::ValueType::get(type.getContext(), type);
     });
     addConversion([](ValueType type) { return type; });
     addConversion([](TokenType type) { return type; });
