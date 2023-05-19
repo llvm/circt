@@ -582,19 +582,6 @@ FIRRTLBaseType FIRRTLBaseType::getConstType(bool isConst) {
       });
 }
 
-/// Return this type with a 'const' modifiers dropped
-FIRRTLBaseType FIRRTLBaseType::getAllConstDroppedType() {
-  return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
-      .Case<ClockType, ResetType, AsyncResetType, AnalogType, SIntType,
-            UIntType>([&](auto type) { return type.getConstType(false); })
-      .Case<BundleType, FVectorType, FEnumType>(
-          [&](auto type) { return type.getAllConstDroppedType(); })
-      .Default([](Type) {
-        llvm_unreachable("unknown FIRRTL type");
-        return FIRRTLBaseType();
-      });
-}
-
 /// Return this type with all ground types replaced with UInt<1>.  This is
 /// used for `mem` operations.
 FIRRTLBaseType FIRRTLBaseType::getMaskType() {
@@ -1233,18 +1220,6 @@ BundleType BundleType::getConstType(bool isConst) {
   return get(getContext(), getElements(), isConst);
 }
 
-BundleType BundleType::getAllConstDroppedType() {
-  if (!containsConst())
-    return *this;
-
-  SmallVector<BundleElement> constDroppedElements(
-      llvm::map_range(getElements(), [](BundleElement element) {
-        element.type = element.type.getAllConstDroppedType();
-        return element;
-      }));
-  return get(getContext(), constDroppedElements, false);
-}
-
 std::optional<unsigned> BundleType::getElementIndex(StringAttr name) {
   for (const auto &it : llvm::enumerate(getElements())) {
     auto element = it.value();
@@ -1639,13 +1614,6 @@ FVectorType FVectorType::getConstType(bool isConst) {
   return get(getElementType(), getNumElements(), isConst);
 }
 
-FVectorType FVectorType::getAllConstDroppedType() {
-  if (!containsConst())
-    return *this;
-  return get(getElementType().getAllConstDroppedType(), getNumElements(),
-             false);
-}
-
 uint64_t FVectorType::getFieldID(uint64_t index) {
   return 1 + index * (getElementType().getMaxFieldID() + 1);
 }
@@ -1875,18 +1843,6 @@ ArrayRef<FEnumType::EnumElement> FEnumType::getElements() const {
 
 FEnumType FEnumType::getConstType(bool isConst) {
   return get(getContext(), getElements(), isConst);
-}
-
-FEnumType FEnumType::getAllConstDroppedType() {
-  if (!containsConst())
-    return *this;
-
-  SmallVector<EnumElement> constDroppedElements(
-      llvm::map_range(getElements(), [](EnumElement element) {
-        element.type = element.type.getAllConstDroppedType();
-        return element;
-      }));
-  return get(getContext(), constDroppedElements, false);
 }
 
 /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
