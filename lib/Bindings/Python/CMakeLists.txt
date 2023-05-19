@@ -17,6 +17,7 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension
     CIRCTModule.cpp
     ESIModule.cpp
     HWModule.cpp
+    OMModule.cpp
     MSFTModule.cpp
     SVModule.cpp
   EMBED_CAPI_LINK_LIBS
@@ -25,6 +26,7 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension
     CIRCTCAPIMSFT
     CIRCTCAPIHW
     CIRCTCAPIHWArith
+    CIRCTCAPIOM
     CIRCTCAPISeq
     CIRCTCAPISV
     CIRCTCAPIExportVerilog
@@ -92,6 +94,14 @@ declare_mlir_dialect_python_bindings(
     dialects/msft.py
     dialects/_msft_ops_ext.py
   DIALECT_NAME msft)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/OMOps.td
+  SOURCES
+    dialects/om.py
+  DIALECT_NAME om)
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects

@@ -15,6 +15,7 @@
 #include "circt-c/Dialect/HWArith.h"
 #include "circt-c/Dialect/Handshake.h"
 #include "circt-c/Dialect/MSFT.h"
+#include "circt-c/Dialect/OM.h"
 #include "circt-c/Dialect/SV.h"
 #include "circt-c/Dialect/Seq.h"
 #include "circt-c/ExportVerilog.h"
@@ -73,6 +74,10 @@ PYBIND11_MODULE(_circt, m) {
         mlirDialectHandleRegisterDialect(hwarith, context);
         mlirDialectHandleLoadDialect(hwarith, context);
 
+        MlirDialectHandle om = mlirGetDialectHandle__om__();
+        mlirDialectHandleRegisterDialect(om, context);
+        mlirDialectHandleLoadDialect(om, context);
+
         MlirDialectHandle seq = mlirGetDialectHandle__seq__();
         mlirDialectHandleRegisterDialect(seq, context);
         mlirDialectHandleLoadDialect(seq, context);
@@ -108,6 +113,8 @@ PYBIND11_MODULE(_circt, m) {
   circt::python::populateDialectMSFTSubmodule(msft);
   py::module hw = m.def_submodule("_hw", "HW API");
   circt::python::populateDialectHWSubmodule(hw);
+  py::module om = m.def_submodule("_om", "OM API");
+  circt::python::populateDialectOMSubmodule(om);
   py::module sv = m.def_submodule("_sv", "SV API");
   circt::python::populateDialectSVSubmodule(sv);
 }
