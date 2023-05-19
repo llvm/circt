@@ -123,57 +123,61 @@ struct GroupAssignmentsInIfPattern : public OpRewritePattern<scf::IfOp> {
     // Pull values only used in certain reset/enable cases into the appropriate
     // IfOps
     Region *groupingRegions[2] = {&ifOp.getThenRegion(), &ifOp.getElseRegion()};
-    auto clockTreeOp = ifOp->getParentOfType<ClockTreeOp>();
-    bool changed = false;
-    for (auto *region : groupingRegions) {
-      if (region->empty())
-        continue;
+    // Skip anything not in a ClockTreeOp
+    if (auto clockTreeOp = ifOp->getParentOfType<ClockTreeOp>()) {
+      bool changed = false;
+      for (auto *region : groupingRegions) {
+        if (region->empty())
+          continue;
 
-      // Since we only work with IfOp then/else regions, we have at most 1 block
+        // Since we only work with IfOp then/else regions, we have at most 1
+        // block
 
-      Block &block = region->front();
-      SmallVector<Operation *> worklist;
-      // Don't walk as we don't want nested ops in order to restrict to IfOps
-      for (auto &op : block.getOperations()) {
-        worklist.push_back(&op);
-      }
-      while (!worklist.empty()) {
-        SmallVector<Operation *> theseOperands;
-        Operation *op = worklist.back();
-        for (auto operand : op->getOperands()) {
-          if (Operation *definition = operand.getDefiningOp()) {
-            if (definition->getBlock() == op->getBlock() ||
-                !clockTreeOp->isAncestor(definition))
-              continue;
-            if (!operand.hasOneUse()) {
-              bool safeToMove = true;
-              for (auto *user : operand.getUsers()) {
-                if (!op->getParentRegion()->isAncestor(
-                        user->getParentRegion()) ||
-                    (user->getBlock() == op->getBlock() &&
-                     user->isBeforeInBlock(op))) {
-                  safeToMove = false;
-                  break;
-                }
-              }
-              if (!safeToMove)
-                break;
-            }
-            // For some unknown reason, just calling moveBefore has the same
-            // output but is much slower
-            rewriter.updateRootInPlace(definition,
-                                       [&]() { definition->moveBefore(op); });
-            changed = true;
-            theseOperands.push_back(definition);
-          }
+        Block &block = region->front();
+        SmallVector<Operation *> worklist;
+        // Don't walk as we don't want nested ops in order to restrict to IfOps
+        for (auto &op : block.getOperations()) {
+          worklist.push_back(&op);
         }
-        worklist.pop_back();
-        worklist.insert(worklist.end(), theseOperands.begin(),
-                        theseOperands.end());
+        while (!worklist.empty()) {
+          SmallVector<Operation *> theseOperands;
+          Operation *op = worklist.back();
+          for (auto operand : op->getOperands()) {
+            if (Operation *definition = operand.getDefiningOp()) {
+              if (definition->getBlock() == op->getBlock() ||
+                  !clockTreeOp->isAncestor(definition))
+                continue;
+              if (!operand.hasOneUse()) {
+                bool safeToMove = true;
+                for (auto *user : operand.getUsers()) {
+                  if (!op->getParentRegion()->isAncestor(
+                          user->getParentRegion()) ||
+                      (user->getBlock() == op->getBlock() &&
+                       user->isBeforeInBlock(op))) {
+                    safeToMove = false;
+                    break;
+                  }
+                }
+                if (!safeToMove)
+                  break;
+              }
+              // For some unknown reason, just calling moveBefore has the same
+              // output but is much slower
+              rewriter.updateRootInPlace(definition,
+                                         [&]() { definition->moveBefore(op); });
+              changed = true;
+              theseOperands.push_back(definition);
+            }
+          }
+          worklist.pop_back();
+          worklist.insert(worklist.end(), theseOperands.begin(),
+                          theseOperands.end());
+        }
       }
+      return success(changed);
     }
-    return success(changed);
-  };
+    return failure();
+  }
 };
 
 } // namespace
