@@ -3778,14 +3778,20 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
           "references in ports must be output on extmodule and intmodule");
     auto *refStmtIt = llvm::find_if(
         refStatements, [&](const auto &r) { return r.refName == port.name; });
-    // Deviate from FIRRTL 2.0 requirement, allow missing ref.
-    // If used/needed, will error later in pipeline.
-    if (refStmtIt == refStatements.end())
+    // Error if ref statements are present but none found for this port.
+    if (refStmtIt == refStatements.end()) {
+      if (!refStatements.empty())
+        return mlir::emitError(port.loc, "no ref statement found for ref port ")
+            .append(port.name);
       continue;
+    }
+
     usedRefs.set(std::distance(refStatements.begin(), refStmtIt));
     internalPathAttrs.push_back(refStmtIt->resolvedPath);
   }
-  if (internalPathAttrs.size() < refStatements.size()) {
+  if (!refStatements.empty() &&
+      internalPathAttrs.size() != refStatements.size()) {
+    assert(internalPathAttrs.size() < refStatements.size());
     assert(!usedRefs.all());
     auto idx = usedRefs.find_first_unset();
     assert(idx != -1);
