@@ -150,7 +150,7 @@ struct GroupAssignmentsInIfPattern : public OpRewritePattern<ClockTreeOp> {
       Block &block = region->front();
       SmallVector<Operation *> worklist;
       // Don't walk as we don't want nested ops in order to restrict to IfOps
-      for (auto &op: block.getOperations()) {
+      for (auto &op : block.getOperations()) {
         worklist.push_back(&op);
       }
       while (!worklist.empty()) {
@@ -175,7 +175,8 @@ struct GroupAssignmentsInIfPattern : public OpRewritePattern<ClockTreeOp> {
               if (!safeToMove)
                 break;
             }
-            // For some unknown reason, just calling moveBefore has the same output but is much slower
+            // For some unknown reason, just calling moveBefore has the same
+            // output but is much slower
             rewriter.updateRootInPlace(definition,
                                        [&]() { definition->moveBefore(op); });
             changed = true;
