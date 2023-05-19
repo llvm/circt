@@ -251,10 +251,11 @@ class System:
       # After all of the pycde code has been executed, we have all the types
       # defined so we can go through and output the typedefs delcarations.
       lambda sys: TypeAlias.declare_aliases(sys.mod),
-      "builtin.module(msft-lower-constructs, msft-lower-instances)",
+      "builtin.module(lower-hwarith-to-hw, msft-lower-constructs, msft-lower-instances)",
+      "builtin.module(esi-emit-cpp-api{{output-file=ESISystem.h}})",
       "builtin.module(esi-emit-collateral{{tops={tops} schema-file=schema.capnp}})",
+      "builtin.module(esi-clean-metadata)",
       "builtin.module(lower-msft-to-hw{{verilog-file={verilog_file}}})",
-      "builtin.module(lower-hwarith-to-hw)",
       "builtin.module(hw.module(lower-seq-hlmem))",
       "builtin.module(lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw)",
       "builtin.module(convert-fsm-to-sv)",

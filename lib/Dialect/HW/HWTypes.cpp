@@ -129,6 +129,7 @@ int64_t circt::hw::getBitWidth(mlir::Type type) {
         }
         return maxSize;
       })
+      .Case<EnumType>([](EnumType e) { return e.getBitWidth(); })
       .Case<TypeAliasType>(
           [](TypeAliasType t) { return getBitWidth(t.getCanonicalType()); })
       .Default([](Type) { return -1; });

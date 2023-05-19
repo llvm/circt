@@ -27,6 +27,13 @@
 #include "llvm/ADT/IntervalMap.h"
 #include "llvm/ADT/TypeSwitch.h"
 
+namespace circt {
+namespace seq {
+#define GEN_PASS_DEF_LOWERSEQFIRRTLINITTOSV
+#include "circt/Dialect/Seq/SeqPasses.h.inc"
+} // namespace seq
+} // namespace circt
+
 using namespace circt;
 using namespace seq;
 
@@ -41,8 +48,13 @@ struct SeqFIRRTLToSVPass
   using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::disableRegRandomization;
   using LowerSeqFIRRTLToSVBase<
       SeqFIRRTLToSVPass>::addVivadoRAMAddressConflictSynthesisBugWorkaround;
+  using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::emitSeparateAlwaysBlocks;
   using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::LowerSeqFIRRTLToSVBase;
   using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::numSubaccessRestored;
+};
+struct SeqFIRRTLInitToSVPass
+    : public impl::LowerSeqFIRRTLInitToSVBase<SeqFIRRTLInitToSVPass> {
+  void runOnOperation() override;
 };
 } // anonymous namespace
 
@@ -132,10 +144,12 @@ namespace {
 class FirRegLower {
 public:
   FirRegLower(hw::HWModuleOp module, bool disableRegRandomization = false,
-              bool addVivadoRAMAddressConflictSynthesisBugWorkaround = false)
+              bool addVivadoRAMAddressConflictSynthesisBugWorkaround = false,
+              bool emitSeparateAlwaysBlocks = false)
       : module(module), disableRegRandomization(disableRegRandomization),
         addVivadoRAMAddressConflictSynthesisBugWorkaround(
-            addVivadoRAMAddressConflictSynthesisBugWorkaround){};
+            addVivadoRAMAddressConflictSynthesisBugWorkaround),
+        emitSeparateAlwaysBlocks(emitSeparateAlwaysBlocks){};
 
   void lower();
 
@@ -198,6 +212,7 @@ private:
 
   bool disableRegRandomization;
   bool addVivadoRAMAddressConflictSynthesisBugWorkaround;
+  bool emitSeparateAlwaysBlocks;
 };
 } // namespace
 
@@ -502,8 +517,14 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
         addToIfBlock(
             builder, cond,
             [&]() {
-              auto nextReg = builder.create<sv::ArrayIndexInOutOp>(reg.getLoc(),
-                                                                   reg, index);
+              Value nextReg;
+              {
+                // Create an array index op just after `reg`.
+                OpBuilder::InsertionGuard guard(builder);
+                builder.setInsertionPointAfterValue(reg);
+                nextReg = builder.create<sv::ArrayIndexInOutOp>(reg.getLoc(),
+                                                                reg, index);
+              }
               auto termElement =
                   builder.create<hw::ArrayGetOp>(term.getLoc(), term, index);
               createTree(builder, nextReg, termElement, trueValue);
@@ -676,11 +697,14 @@ void FirRegLower::addToAlwaysBlock(Block *block, sv::EventControl clockEdge,
                                    std::function<void(OpBuilder &)> resetBody) {
   auto loc = clock.getLoc();
   auto builder = ImplicitLocOpBuilder::atBlockTerminator(loc, block);
+  AlwaysKeyType key{builder.getBlock(), clockEdge, clock,
+                    resetStyle,         resetEdge, reset};
 
-  auto &op = alwaysBlocks[{builder.getBlock(), clockEdge, clock, resetStyle,
-                           resetEdge, reset}];
-  auto &alwaysOp = op.first;
-  auto &insideIfOp = op.second;
+  sv::AlwaysOp alwaysOp;
+  sv::IfOp insideIfOp;
+  if (!emitSeparateAlwaysBlocks) {
+    std::tie(alwaysOp, insideIfOp) = alwaysBlocks[key];
+  }
 
   if (!alwaysOp) {
     if (reset) {
@@ -736,6 +760,10 @@ void FirRegLower::addToAlwaysBlock(Block *block, sv::EventControl clockEdge,
         ImplicitLocOpBuilder::atBlockEnd(loc, alwaysOp.getBodyBlock());
     body(bodyBuilder);
   }
+
+  if (!emitSeparateAlwaysBlocks) {
+    alwaysBlocks[key] = {alwaysOp, insideIfOp};
+  }
 }
 
 void SeqToSVPass::runOnOperation() {
@@ -756,9 +784,17 @@ void SeqToSVPass::runOnOperation() {
 void SeqFIRRTLToSVPass::runOnOperation() {
   hw::HWModuleOp module = getOperation();
   FirRegLower firRegLower(module, disableRegRandomization,
-                          addVivadoRAMAddressConflictSynthesisBugWorkaround);
+                          addVivadoRAMAddressConflictSynthesisBugWorkaround,
+                          emitSeparateAlwaysBlocks);
   firRegLower.lower();
   numSubaccessRestored += firRegLower.numSubaccessRestored;
+}
+
+void SeqFIRRTLInitToSVPass::runOnOperation() {
+  ModuleOp top = getOperation();
+  OpBuilder builder(top.getBody(), top.getBody()->begin());
+  // FIXME: getOrCreate
+  builder.create<sv::MacroDeclOp>(top.getLoc(), "RANDOM", nullptr, nullptr);
 }
 
 std::unique_ptr<Pass>
@@ -767,6 +803,10 @@ circt::seq::createSeqLowerToSVPass(std::optional<bool> lowerToAlwaysFF) {
   if (lowerToAlwaysFF)
     pass->lowerToAlwaysFF = *lowerToAlwaysFF;
   return pass;
+}
+
+std::unique_ptr<Pass> circt::seq::createLowerSeqFIRRTLInitToSV() {
+  return std::make_unique<SeqFIRRTLInitToSVPass>();
 }
 
 std::unique_ptr<Pass> circt::seq::createSeqFIRRTLLowerToSVPass(

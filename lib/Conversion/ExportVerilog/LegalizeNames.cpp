@@ -23,17 +23,6 @@ using namespace sv;
 using namespace hw;
 using namespace ExportVerilog;
 
-StringAttr ExportVerilog::getDeclarationName(Operation *op) {
-  if (auto attr = op->getAttrOfType<StringAttr>("name"))
-    return attr;
-  if (auto attr = op->getAttrOfType<StringAttr>("instanceName"))
-    return attr;
-  if (auto attr =
-          op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
-    return attr;
-  return {};
-}
-
 //===----------------------------------------------------------------------===//
 // NameCollisionResolver
 //===----------------------------------------------------------------------===//

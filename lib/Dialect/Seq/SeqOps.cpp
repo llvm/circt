@@ -24,6 +24,29 @@ using namespace mlir;
 using namespace circt;
 using namespace seq;
 
+/// Determine the integer value of a constant operand.
+static std::optional<APInt> getConstantInt(Attribute operand) {
+  if (!operand)
+    return {};
+  if (auto attr = dyn_cast<IntegerAttr>(operand))
+    return attr.getValue();
+  return {};
+}
+
+/// Determine whether a constant operand is a zero value.
+static bool isConstantZero(Attribute operand) {
+  if (auto cst = getConstantInt(operand))
+    return cst->isZero();
+  return false;
+}
+
+/// Determine whether a constant operand is a one value.
+static bool isConstantOne(Attribute operand) {
+  if (auto cst = getConstantInt(operand))
+    return cst->isOne();
+  return false;
+}
+
 bool circt::seq::isValidIndexValues(Value hlmemHandle, ValueRange addresses) {
   auto memType = hlmemHandle.getType().cast<seq::HLMemType>();
   auto shape = memType.getShape();
@@ -595,6 +618,44 @@ OpFoldResult FirRegOp::fold(FoldAdaptor adaptor) {
   if (!intType)
     return {};
   return IntegerAttr::get(intType, 0);
+}
+
+//===----------------------------------------------------------------------===//
+// ClockGateOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ClockGateOp::fold(FoldAdaptor adaptor) {
+  // Forward the clock if one of the enables is always true.
+  if (isConstantOne(adaptor.getEnable()) ||
+      isConstantOne(adaptor.getTestEnable()))
+    return getInput();
+
+  // Fold to a constant zero clock if the enables are always false.
+  if (isConstantZero(adaptor.getEnable()) &&
+      (!getTestEnable() || isConstantZero(adaptor.getTestEnable())))
+    return IntegerAttr::get(IntegerType::get(getContext(), 1), 0);
+
+  // Forward constant zero clocks.
+  if (isConstantZero(adaptor.getInput()))
+    return IntegerAttr::get(IntegerType::get(getContext(), 1), 0);
+
+  return {};
+}
+
+LogicalResult ClockGateOp::canonicalize(ClockGateOp op,
+                                        PatternRewriter &rewriter) {
+  // Remove constant false test enable.
+  if (auto testEnable = op.getTestEnable()) {
+    if (auto constOp = testEnable.getDefiningOp<hw::ConstantOp>()) {
+      if (constOp.getValue().isZero()) {
+        rewriter.updateRootInPlace(op,
+                                   [&] { op.getTestEnableMutable().clear(); });
+        return success();
+      }
+    }
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//

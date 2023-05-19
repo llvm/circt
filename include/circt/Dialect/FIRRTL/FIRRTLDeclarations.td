@@ -316,7 +316,8 @@ def RegOp : ReferableDeclOp<"reg", [Forceable]> {
       $_state.addTypes(elementType);
       if (forceable) {
         $_state.addAttribute(getForceableAttrName($_state.name), forceable);
-        $_state.addTypes(detail::getForceableResultType(true, elementType));
+        if (auto type = detail::getForceableResultType(true, elementType))
+          $_state.addTypes(type);
       }
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType,
@@ -374,7 +375,7 @@ def RegResetOp : ReferableDeclOp<"regreset", [Forceable]> {
 
   let arguments = (
     ins ClockType:$clockVal, AnyResetType:$resetSignal,
-        AnyRegisterType:$resetValue,
+        FIRRTLBaseType:$resetValue,
         StrAttr:$name, NameKindAttr:$nameKind,
         AnnotationArrayAttr:$annotations,
         OptionalAttr<InnerSymAttr>:$inner_sym,
@@ -411,7 +412,8 @@ def RegResetOp : ReferableDeclOp<"regreset", [Forceable]> {
       $_state.addTypes(elementType);
       if (forceable) {
         $_state.addAttribute(getForceableAttrName($_state.name), forceable);
-        $_state.addTypes(detail::getForceableResultType(true, elementType));
+        if (auto type = detail::getForceableResultType(true, elementType))
+          $_state.addTypes(type);
       }
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
@@ -497,7 +499,8 @@ def WireOp : ReferableDeclOp<"wire", [Forceable]> {
       $_state.addTypes(elementType);
       if (forceable) {
         $_state.addAttribute(getForceableAttrName($_state.name), forceable);
-        $_state.addTypes(detail::getForceableResultType(true, elementType));
+        if (auto type = detail::getForceableResultType(true, elementType))
+          $_state.addTypes(type);
       }
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType,

@@ -117,6 +117,7 @@ def FuncOp : Op<Handshake_Dialect, "func", [
 // InstanceOp
 def InstanceOp : Handshake_Op<"instance", [
     CallOpInterface,
+    HasClock,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "module instantiate operation";
@@ -171,6 +172,11 @@ def InstanceOp : Handshake_Op<"instance", [
     /// Return the module of this operation.
     CallInterfaceCallable getCallableForCallee() {
       return (*this)->getAttrOfType<SymbolRefAttr>("module");
+    }
+
+    /// Set the callee for this operation.
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getModuleAttrName(), callee.get<mlir::SymbolRefAttr>());
     }
 
     /// Get the control operand of this instance op

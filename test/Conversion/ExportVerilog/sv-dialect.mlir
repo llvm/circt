@@ -38,7 +38,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
     sv.ifdef.procedural "SYNTHESIS" {
     } else {
   // CHECK-NEXT:     if ((`PRINTF_COND_) & 1'bx & 1'bz & 1'bz & cond & forceWire)
-      %tmp = sv.macro.ref< "PRINTF_COND_"> : i1
+      %tmp = sv.macro.ref @PRINTF_COND_() : () -> i1
       %verb_tmp = sv.verbatim.expr "{{0}}" : () -> i1 {symbols = [#hw.innerNameRef<@M1::@wire1>] }
       %tmp1 = sv.constantX : i1
       %tmp2 = sv.constantZ : i1
@@ -984,88 +984,6 @@ hw.module @ConstantDefBeforeUse() {
   }
 }
 
-// Mixing !hw.enum types which alias in their fields - one anonymous enum
-// and two aliasing named enums.
-
-// CHECK: `ifndef _TYPESCOPE___AnFSMTypedecl
-// CHECK: `define _TYPESCOPE___AnFSMTypedecl
-// CHECK: typedef enum bit [0:0] {_state1_A, _state1_B} _state1;
-// CHECK: typedef enum bit [0:0] {_state2_A, _state2_B} _state2;
-// CHECK: `endif // _TYPESCOPE___AnFSMTypedecl
-// CHECK-LABEL: module AnFSM
-// CHECK:   enum bit [0:0] {A, B} reg_0;
-// OLD:   _state1     reg_state1;
-// OLD:   _state2     reg_state2;
-// CHECK:   always @(posedge clock) begin
-// CHECK:     case (reg_0)
-// CHECK:       A:
-// CHECK:         reg_0 <= B;
-// CHECK:       default:
-// CHECK:         reg_0 <= A;
-// CHECK:     endcase
-// CHECK:   end
-// NEW:   _state1     reg_state1;
-// CHECK:   always @(posedge clock) begin
-// CHECK:     case (reg_state1)
-// CHECK:       _state1_A:
-// CHECK:         reg_state1 <= _state1_B;
-// CHECK:       default:
-// CHECK:         reg_state1 <= _state1_A;
-// CHECK:     endcase
-// CHECK:   end
-// NEW:   _state2     reg_state2;
-// CHECK:   always @(posedge clock) begin
-// CHECK:     case (reg_state2)
-// CHECK:       _state2_A:
-// CHECK:         reg_state2 <= _state2_B;
-// CHECK:       default:
-// CHECK:         reg_state2 <= _state2_A;
-// CHECK:     endcase
-// CHECK:   end
-// CHECK: endmodule
-
-hw.type_scope @__AnFSMTypedecl {
-  hw.typedecl @_state1 : !hw.enum<A, B>
-  hw.typedecl @_state2 : !hw.enum<A, B>
-}
-
-hw.module @AnFSM(%clock : i1) {
-  // Anonymous enum
-  %reg = sv.reg : !hw.inout<!hw.enum<A, B>>
-  %reg_read = sv.read_inout %reg : !hw.inout<!hw.enum<A, B>>
-  %A = hw.enum.constant A : !hw.enum<A, B>
-  %B = hw.enum.constant B : !hw.enum<A, B>
-  sv.always posedge %clock {
-    sv.case case %reg_read : !hw.enum<A, B>
-      case A : { sv.passign %reg, %B : !hw.enum<A, B> }
-      default : { sv.passign %reg, %A : !hw.enum<A, B> }
-  }
-
-  // typedecl'd # 1
-  %reg_state1 = sv.reg : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>>
-  %reg_read_state1 = sv.read_inout %reg_state1 : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>>
-
-  %A_state1 = hw.enum.constant A : !hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>
-  %B_state1 = hw.enum.constant B : !hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>
-  sv.always posedge %clock {
-    sv.case case %reg_read_state1 : !hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>
-      case A : { sv.passign %reg_state1, %B_state1 : !hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>> }
-      default : { sv.passign %reg_state1, %A_state1 : !hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>> }
-  }
-
-  // typedecl'd # 2
-  %reg_state2 = sv.reg : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>>
-  %reg_read_state2 = sv.read_inout %reg_state2 : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>>
-
-  %A_state2 = hw.enum.constant A : !hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>
-  %B_state2 = hw.enum.constant B : !hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>
-  sv.always posedge %clock {
-    sv.case case %reg_read_state2 : !hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>
-      case A : { sv.passign %reg_state2, %B_state2 : !hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>> }
-      default : { sv.passign %reg_state2, %A_state2 : !hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>> }
-  }
-}
-
 // Constants defined after use in non-procedural regions should be moved to the
 // top of the block.
 // CHECK-LABEL: module ConstantDefAfterUse
@@ -1696,6 +1614,16 @@ hw.module private @InlineReadInout() -> () {
   }
 }
 
+// CHECK-LABEL: module Dollar
+hw.module private @Dollar(%cond: i1) -> () {
+  sv.initial {
+    // CHECK:      _$a:
+    // CHECK-NEXT: a$:
+    sv.cover %cond, immediate label "$a"
+    sv.cover %cond, immediate label "a$"
+  }
+}
+
 // CHECK-LABEL: IndexPartSelectInoutArray
 hw.module @IndexPartSelectInoutArray(%a: !hw.array<2xi1>, %c: i1, %d: i1) {
   %c0_i2 = hw.constant 0 : i2
@@ -1732,6 +1660,9 @@ hw.module @ConditionalComments() {
   }                             // CHECK-NEXT: `endif // not def BAR
 }
 
+sv.macro.decl @RANDOM
+sv.macro.decl @PRINTF_COND_
+
 // CHECK-LABEL: module ForStatement
 hw.module @ForStatement(%a: i5) -> () {
   %_RANDOM = sv.logic : !hw.inout<uarray<3xi32>>
@@ -1744,19 +1675,11 @@ hw.module @ForStatement(%a: i5) -> () {
     // CHECK-NEXT:   _RANDOM[i] = `RANDOM;
     // CHECK-NEXT: end
     sv.for %i = %c0_i2 to %c-1_i2 step %c1_i2 : i2 {
-      %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+      %RANDOM = sv.macro.ref.se @RANDOM() : ()->i32
       %index = sv.array_index_inout %_RANDOM[%i] : !hw.inout<uarray<3xi32>>, i2
       sv.bpassign %index, %RANDOM : i32
     }
   }
-}
-
-// CHECK-LABEL: module EnumCheck
-hw.module @EnumCheck(%a : !hw.enum<T>, %b: !hw.enum<>)
-                 -> (c: !hw.enum<T>, d: !hw.enum<>) {
-  // CHECK: input enum bit [0:0] {T} a
-  // CHECK: // input enum bit [0:0] {} b
-  hw.output %a, %b : !hw.enum<T>, !hw.enum<>
 }
 
 // CHECK-LABEL: module intrinsic
@@ -1828,7 +1751,7 @@ hw.module @NastyPort(%.lots$of.dots: i1) -> (".more.dots": i1) {
 }
 sv.bind #hw.innerNameRef<@NastyPortParent::@foo>
 // CHECK-LABEL: bind NastyPortParent NastyPort foo (
-// CHECK-NEXT:    ._lots24of_dots (1'h0)
+// CHECK-NEXT:    ._lots$of_dots (1'h0)
 // CHECK-NEXT:    ._more_dots     (/* unused */)
 // CHECK-NEXT:  );
 

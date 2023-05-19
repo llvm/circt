@@ -80,12 +80,9 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     // Metadata needs to be printed for memories which are candidates for
     // macro replacement. The requirements for macro replacement::
     // 1. read latency and write latency of one.
-    // 2. only one readwrite port or write port.
-    // 3. zero or one read port.
-    // 4. undefined read-under-write behavior.
+    // 2. undefined read-under-write behavior.
     if (!((mem.getReadLatency() == 1 && mem.getWriteLatency() == 1) &&
-          (mem.getNumWritePorts() + mem.getNumReadWritePorts() == 1) &&
-          (mem.getNumReadPorts() <= 1) && width > 0))
+          width > 0))
       return;
 
     // Compute the mask granularity.
@@ -93,19 +90,22 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     auto maskGran = width / mem.getMaskBits();
     // Now create the config string for the memory.
     std::string portStr;
-    if (mem.getNumWritePorts() && isMasked)
-      portStr += "mwrite";
-    else if (mem.getNumWritePorts())
-      portStr += "write";
-    if (mem.getNumReadPorts()) {
+    for (uint32_t i = 0; i < mem.getNumWritePorts(); ++i) {
+      if (!portStr.empty())
+        portStr += ",";
+      portStr += isMasked ? "mwrite" : "write";
+    }
+    for (uint32_t i = 0; i < mem.getNumReadPorts(); ++i) {
       if (!portStr.empty())
         portStr += ",";
       portStr += "read";
     }
-    if (mem.getNumReadWritePorts() && isMasked)
-      portStr = "mrw";
-    else if (mem.getNumReadWritePorts())
-      portStr = "rw";
+    for (uint32_t i = 0; i < mem.getNumReadWritePorts(); ++i) {
+      if (!portStr.empty())
+        portStr += ",";
+      portStr += isMasked ? "mrw" : "rw";
+    }
+
     auto memExtName = mem.getName();
     auto maskGranStr =
         !isMasked ? "" : " mask_gran " + std::to_string(maskGran);
@@ -123,9 +123,9 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
       jsonStream.attribute("depth", (int64_t)mem.getDepth());
       jsonStream.attribute("width", (int64_t)width);
       jsonStream.attribute("masked", isMasked);
-      jsonStream.attribute("read", mem.getNumReadPorts() > 0);
-      jsonStream.attribute("write", mem.getNumWritePorts() > 0);
-      jsonStream.attribute("readwrite", mem.getNumReadWritePorts() > 0);
+      jsonStream.attribute("read", mem.getNumReadPorts());
+      jsonStream.attribute("write", mem.getNumWritePorts());
+      jsonStream.attribute("readwrite", mem.getNumReadWritePorts());
       if (isMasked)
         jsonStream.attribute("mask_granularity", (int64_t)maskGran);
       jsonStream.attributeArray("extra_ports", [&] {
@@ -295,7 +295,7 @@ LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
       // We use symbol substitution to make sure we output the correct thing
       // when the module goes through renaming.
       j.value(("{{" + Twine(index++) + "}}").str());
-      symbols.push_back(SymbolRefAttr::get(module.moduleNameAttr()));
+      symbols.push_back(SymbolRefAttr::get(module.getModuleNameAttr()));
     }
   });
 

@@ -11,6 +11,7 @@
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 using namespace circt;
@@ -43,8 +44,8 @@ static LogicalResult verifyTypeListEquivalence(Operation *op,
   return success();
 }
 
-static LogicalResult verifyArcSymbolUse(Operation *op, ValueRange inputs,
-                                        ValueRange results,
+static LogicalResult verifyArcSymbolUse(Operation *op, TypeRange inputs,
+                                        TypeRange results,
                                         SymbolTableCollection &symbolTable) {
   // Check that the arc attribute was specified.
   auto arcName = op->getAttrOfType<FlatSymbolRefAttr>("arc");
@@ -58,12 +59,12 @@ static LogicalResult verifyArcSymbolUse(Operation *op, ValueRange inputs,
 
   // Verify that the operand and result types match the arc.
   auto type = arc.getFunctionType();
-  if (failed(verifyTypeListEquivalence(op, type.getInputs(), inputs.getTypes(),
-                                       "operand")))
+  if (failed(
+          verifyTypeListEquivalence(op, type.getInputs(), inputs, "operand")))
     return failure();
 
-  if (failed(verifyTypeListEquivalence(op, type.getResults(),
-                                       results.getTypes(), "result")))
+  if (failed(
+          verifyTypeListEquivalence(op, type.getResults(), results, "result")))
     return failure();
 
   return success();
@@ -114,31 +115,29 @@ LogicalResult DefineOp::verifyRegions() {
   return success();
 }
 
+bool DefineOp::isPassthrough() {
+  if (getNumArguments() != getNumResults())
+    return false;
+
+  return llvm::all_of(
+      llvm::zip(getArguments(), getBodyBlock().getTerminator()->getOperands()),
+      [](const auto &argAndRes) {
+        return std::get<0>(argAndRes) == std::get<1>(argAndRes);
+      });
+}
+
 //===----------------------------------------------------------------------===//
 // OutputOp
 //===----------------------------------------------------------------------===//
 
 LogicalResult OutputOp::verify() {
-  return success();
+  auto *parent = (*this)->getParentOp();
+  TypeRange expectedTypes = parent->getResultTypes();
+  if (auto defOp = dyn_cast<DefineOp>(parent))
+    expectedTypes = defOp.getResultTypes();
 
-  auto parent = cast<DefineOp>((*this)->getParentOp());
-  ArrayRef<Type> types = parent.getResultTypes();
-  OperandRange values = getOperands();
-  if (types.size() != values.size()) {
-    emitOpError("must have same number of operands as parent arc has results");
-    return failure();
-  }
-
-  for (size_t i = 0, e = types.size(); i < e; ++i) {
-    if (types[i] != values[i].getType()) {
-      emitOpError("output operand ")
-          << i << " type mismatch: arc requires " << types[i] << ", operand is "
-          << values[i].getType();
-      return failure();
-    }
-  }
-
-  return success();
+  TypeRange actualTypes = getOperands().getTypes();
+  return verifyTypeListEquivalence(*this, expectedTypes, actualTypes, "output");
 }
 
 //===----------------------------------------------------------------------===//
@@ -146,7 +145,8 @@ LogicalResult OutputOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult StateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyArcSymbolUse(*this, getInputs(), getResults(), symbolTable);
+  return verifyArcSymbolUse(*this, getInputs().getTypes(),
+                            getResults().getTypes(), symbolTable);
 }
 
 LogicalResult StateOp::verify() {
@@ -170,35 +170,41 @@ LogicalResult StateOp::verify() {
   return success();
 }
 
+bool StateOp::isClocked() { return getLatency() > 0; }
+
 //===----------------------------------------------------------------------===//
 // CallOp
 //===----------------------------------------------------------------------===//
 
 LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyArcSymbolUse(*this, getInputs(), getResults(), symbolTable);
-}
-
-//===----------------------------------------------------------------------===//
-// MemoryReadPortOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult MemoryReadPortOp::verify() {
-  if (!getOperation()->getParentOfType<ClockDomainOp>() && !getClock())
-    return emitOpError("outside a clock domain requires a clock");
-
-  if (getOperation()->getParentOfType<ClockDomainOp>() && getClock())
-    return emitOpError("inside a clock domain cannot have a clock");
-
-  return success();
+  return verifyArcSymbolUse(*this, getInputs().getTypes(),
+                            getResults().getTypes(), symbolTable);
 }
 
 //===----------------------------------------------------------------------===//
 // MemoryWritePortOp
 //===----------------------------------------------------------------------===//
 
+SmallVector<Type> MemoryWritePortOp::getArcResultTypes() {
+  auto memType = cast<MemoryType>(getMemory().getType());
+  SmallVector<Type> resultTypes{memType.getAddressType(),
+                                memType.getWordType()};
+  if (getEnable())
+    resultTypes.push_back(IntegerType::get(getContext(), 1));
+  if (getMask())
+    resultTypes.push_back(memType.getWordType());
+  return resultTypes;
+}
+
+LogicalResult
+MemoryWritePortOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyArcSymbolUse(*this, getInputs().getTypes(), getArcResultTypes(),
+                            symbolTable);
+}
+
 LogicalResult MemoryWritePortOp::verify() {
-  if (getMask() && getMask().getType() != getData().getType())
-    return emitOpError("mask and data operand types do not match");
+  if (getLatency() < 1)
+    return emitOpError("latency must be at least 1");
 
   if (!getOperation()->getParentOfType<ClockDomainOp>() && !getClock())
     return emitOpError("outside a clock domain requires a clock");
@@ -214,15 +220,8 @@ LogicalResult MemoryWritePortOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult ClockDomainOp::verifyRegions() {
-  if (failed(verifyTypeListEquivalence(*this, getBodyBlock().getArgumentTypes(),
-                                       getInputs().getTypes(), "input")))
-    return failure();
-  if (failed(verifyTypeListEquivalence(
-          *this, getOutputs().getTypes(),
-          getBodyBlock().getTerminator()->getOperandTypes(), "output")))
-    return failure();
-
-  return success();
+  return verifyTypeListEquivalence(*this, getBodyBlock().getArgumentTypes(),
+                                   getInputs().getTypes(), "input");
 }
 
 //===----------------------------------------------------------------------===//
@@ -284,6 +283,11 @@ LogicalResult LutOp::verify() {
            << "first operation with side-effects here";
 
   return success();
+}
+
+Operation *
+CallOpMutableInterface::resolveCallable(SymbolTableCollection *symbolTable) {
+  return cast<CallOpInterface>(**this).resolveCallable(symbolTable);
 }
 
 #include "circt/Dialect/Arc/ArcInterfaces.cpp.inc"

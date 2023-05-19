@@ -24,6 +24,18 @@ def ESIConnectServices : Pass<"esi-connect-services", "mlir::ModuleOp"> {
     "circt::comb::CombDialect"];
 }
 
+def ESIAddCPPAPI: Pass<"esi-emit-cpp-api", "mlir::ModuleOp"> {
+  let summary = "Add C++ cosimulation API to the module";
+  let constructor = "circt::esi::createESIAddCPPAPIPass()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+    let options = [
+    Option<"outputFile", "output-file", "std::string",
+           "\"ESISystem.h\"", "File to output C++ API into">,
+    Option<"toStdErr", "to-stderr", "bool", "false",
+      "If true, will emit the generated API to stderr">
+  ];
+}
+
 def ESIEmitCollateral: Pass<"esi-emit-collateral", "mlir::ModuleOp"> {
   let summary = "Emit all the neccessary collateral";
   let constructor = "circt::esi::createESIEmitCollateralPass()";
@@ -35,6 +47,12 @@ def ESIEmitCollateral: Pass<"esi-emit-collateral", "mlir::ModuleOp"> {
                "List of top modules to export Tcl for",
                "llvm::cl::ZeroOrMore,">
   ];
+}
+
+def ESICleanMetadata : Pass<"esi-clean-metadata", "mlir::ModuleOp"> {
+  let summary = "Clean up ESI service metadata";
+  let constructor = "circt::esi::createESICleanMetadataPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
 }
 
 def LowerESIToPhysical: Pass<"lower-esi-to-physical", "mlir::ModuleOp"> {

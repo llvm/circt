@@ -678,17 +678,17 @@ LogicalResult ModuleVisitor::checkInitialization() {
 
     // Get the op which defines the sink, and emit an error.
     FieldRef dest = std::get<0>(destAndConnect);
+    auto loc = dest.getValue().getLoc();
     auto *definingOp = dest.getDefiningOp();
     if (auto mod = dyn_cast<FModuleLike>(definingOp))
-      mlir::emitError(definingOp->getLoc())
-          << "port \"" + getFieldName(dest).first +
-                 "\" not fully initialized in module \""
-          << mod.moduleName() << "\"";
+      mlir::emitError(loc) << "port \"" << getFieldName(dest).first
+                           << "\" not fully initialized in module \""
+                           << mod.getModuleName() << "\"";
     else
-      definingOp->emitError(
-          "sink \"" + getFieldName(dest).first +
-          "\" not fully initialized in module \"" +
-          definingOp->getParentOfType<FModuleLike>().moduleName() + "\"");
+      mlir::emitError(loc)
+          << "sink \"" << getFieldName(dest).first
+          << "\" not fully initialized in module \""
+          << definingOp->getParentOfType<FModuleLike>().getModuleName() << "\"";
     failed = true;
   }
   if (failed)

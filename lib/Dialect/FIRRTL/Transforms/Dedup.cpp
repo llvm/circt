@@ -696,8 +696,8 @@ struct Deduper {
     if (auto to = dyn_cast<FModuleOp>(*toModule))
       rewriteModuleNLAs(renameMap, to, cast<FModuleOp>(*fromModule));
     else
-      rewriteExtModuleNLAs(renameMap, toModule.moduleNameAttr(),
-                           fromModule.moduleNameAttr());
+      rewriteExtModuleNLAs(renameMap, toModule.getModuleNameAttr(),
+                           fromModule.getModuleNameAttr());
 
     replaceInstances(toModule, fromModule);
   }
@@ -750,8 +750,8 @@ private:
   void replaceInstances(FModuleLike toModule, Operation *fromModule) {
     // Replace all instances of the other module.
     auto *fromNode = instanceGraph[::cast<hw::HWModuleLike>(fromModule)];
-    auto *toNode = instanceGraph[::cast<hw::HWModuleLike>(*toModule)];
-    auto toModuleRef = FlatSymbolRefAttr::get(toModule.moduleNameAttr());
+    auto *toNode = instanceGraph[toModule];
+    auto toModuleRef = FlatSymbolRefAttr::get(toModule.getModuleNameAttr());
     for (auto *oldInstRec : llvm::make_early_inc_range(fromNode->uses())) {
       auto inst = ::cast<InstanceOp>(*oldInstRec->getInstance());
       inst.setModuleNameAttr(toModuleRef);
@@ -984,7 +984,7 @@ private:
         continue;
       }
       // Otherwise make the annotation non-local and add it to the set.
-      makeAnnotationNonLocal(toModule.moduleNameAttr(), to, fromModule, anno,
+      makeAnnotationNonLocal(toModule.getModuleNameAttr(), to, fromModule, anno,
                              newAnnotations);
     }
   }
@@ -1295,7 +1295,7 @@ class DedupPass : public DedupBase<DedupPass> {
         }));
 
     for (auto module : modules) {
-      auto moduleName = module.moduleNameAttr();
+      auto moduleName = module.getModuleNameAttr();
       // If the module is marked with NoDedup, just skip it.
       if (AnnotationSet(module).hasAnnotation(noDedupClass)) {
         // We record it in the dedup map to help detect errors when the user
@@ -1319,7 +1319,7 @@ class DedupPass : public DedupBase<DedupPass> {
       if (it != moduleHashes.end()) {
         auto original = cast<FModuleLike>(it->second);
         // Record the group ID of the other module.
-        dedupMap[moduleName] = original.moduleNameAttr();
+        dedupMap[moduleName] = original.getModuleNameAttr();
         deduper.dedup(original, module);
         ++erasedModules;
         anythingChanged = true;

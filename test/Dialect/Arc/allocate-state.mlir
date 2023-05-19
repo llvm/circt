@@ -43,25 +43,25 @@ arc.model "test" {
   // CHECK-NEXT: arc.passthrough {
   arc.passthrough {
     // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][1144] : !arc.storage<5724> -> !arc.storage<4577>
-    arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i1>
-    arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i8>
-    arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i16>
-    arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i32>
-    arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i64>
-    arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i9001>
+    arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i1, i1>
+    arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i8, i1>
+    arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i16, i1>
+    arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i32, i1>
+    arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i64, i1>
+    arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i9001, i1>
     arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i1>
     // CHECK-NEXT: arc.alloc_memory [[SUBPTR]] {offset = 0 : i32, stride = 1 : i32}
-    // CHECK-SAME: -> !arc.memory<4 x i1, 1>
+    // CHECK-SAME: -> !arc.memory<4 x i1, i1>
     // CHECK-NEXT: arc.alloc_memory [[SUBPTR]] {offset = 4 : i32, stride = 1 : i32}
-    // CHECK-SAME: -> !arc.memory<4 x i8, 1>
+    // CHECK-SAME: -> !arc.memory<4 x i8, i1>
     // CHECK-NEXT: arc.alloc_memory [[SUBPTR]] {offset = 8 : i32, stride = 2 : i32}
-    // CHECK-SAME: -> !arc.memory<4 x i16, 2>
+    // CHECK-SAME: -> !arc.memory<4 x i16, i1>
     // CHECK-NEXT: arc.alloc_memory [[SUBPTR]] {offset = 16 : i32, stride = 4 : i32}
-    // CHECK-SAME: -> !arc.memory<4 x i32, 4>
+    // CHECK-SAME: -> !arc.memory<4 x i32, i1>
     // CHECK-NEXT: arc.alloc_memory [[SUBPTR]] {offset = 32 : i32, stride = 8 : i32}
-    // CHECK-SAME: -> !arc.memory<4 x i64, 8>
+    // CHECK-SAME: -> !arc.memory<4 x i64, i1>
     // CHECK-NEXT: arc.alloc_memory [[SUBPTR]] {offset = 64 : i32, stride = 1128 : i32}
-    // CHECK-SAME: -> !arc.memory<4 x i9001, 1128>
+    // CHECK-SAME: -> !arc.memory<4 x i9001, i1>
     // CHECK-NEXT: arc.alloc_state [[SUBPTR]] {offset = 4576 : i32}
   }
   // CHECK-NEXT: }

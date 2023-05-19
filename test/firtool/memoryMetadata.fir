@@ -182,9 +182,9 @@ circuit test:
 ; CHECK-NEXT:     "depth": 32,
 ; CHECK-NEXT:     "width": 8,
 ; CHECK-NEXT:     "masked": false,
-; CHECK-NEXT:     "read": true,
-; CHECK-NEXT:     "write": true,
-; CHECK-NEXT:     "readwrite": false,
+; CHECK-NEXT:     "read": 1,
+; CHECK-NEXT:     "write": 1,
+; CHECK-NEXT:     "readwrite": 0,
 ; CHECK-NEXT:     "extra_ports": [],
 ; CHECK-NEXT:     "hierarchy": [
 ; CHECK-NEXT:       "dutModule.m.dutMemory.dutMemory_ext"

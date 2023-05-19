@@ -43,6 +43,9 @@ struct TestESIModWrap
   StringRef getDescription() const override {
     return "Test the ESI find and wrap functionality";
   }
+  void getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<esi::ESIDialect>();
+  }
 };
 
 int main(int argc, char **argv) {
@@ -53,7 +56,6 @@ int main(int argc, char **argv) {
     return std::make_unique<TestESIModWrap>();
   });
 
-  return mlir::failed(
-      mlir::MlirOptMain(argc, argv, "CIRCT modular optimizer driver", registry,
-                        /*preloadDialectsInContext=*/true));
+  return mlir::failed(mlir::MlirOptMain(
+      argc, argv, "CIRCT modular optimizer driver", registry));
 }

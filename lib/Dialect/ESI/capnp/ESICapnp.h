@@ -14,7 +14,12 @@
 #ifndef CIRCT_DIALECT_ESI_CAPNP_ESICAPNP_H
 #define CIRCT_DIALECT_ESI_CAPNP_ESICAPNP_H
 
+#include "circt/Dialect/ESI/APIUtilities.h"
+#include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "mlir/Support/IndentedOstream.h"
+#include "llvm/ADT/MapVector.h"
+#include "llvm/Support/Format.h"
 
 #include <memory>
 
@@ -33,37 +38,24 @@ namespace circt {
 namespace esi {
 namespace capnp {
 
-/// Every time we implement a breaking change in the schema generation,
-/// increment this number. It is a seed for all the schema hashes.
-constexpr uint64_t esiCosimSchemaVersion = 1;
+/// Emit an ID in capnp format.
+inline llvm::raw_ostream &emitCapnpID(llvm::raw_ostream &os, int64_t id) {
+  return os << "@" << llvm::format_hex(id, /*width=*/16 + 2);
+}
 
 namespace detail {
-struct TypeSchemaImpl;
+struct CapnpTypeSchemaImpl;
 } // namespace detail
 
 /// Generate and reason about a Cap'nProto schema for a particular MLIR type.
-class TypeSchema {
+class CapnpTypeSchema : public ESIAPIType {
 public:
-  TypeSchema(mlir::Type);
-  bool operator==(const TypeSchema &) const;
+  CapnpTypeSchema(mlir::Type);
 
-  /// Get the type back.
-  mlir::Type getType() const;
-
-  /// Get the Cap'nProto schema ID for a type.
-  uint64_t capnpTypeID() const;
-
-  /// Returns true if the type is currently supported.
-  bool isSupported() const;
+  using ESIAPIType::operator==;
 
   /// Size in bits of the capnp message.
   size_t size() const;
-
-  /// Get the capnp struct name.
-  llvm::StringRef name() const;
-
-  /// Write out the name and ID in capnp schema format.
-  void writeMetadata(llvm::raw_ostream &os) const;
 
   /// Write out the schema in its entirety.
   mlir::LogicalResult write(llvm::raw_ostream &os) const;
@@ -75,10 +67,13 @@ public:
   mlir::Value buildDecoder(mlir::OpBuilder &, mlir::Value clk,
                            mlir::Value valid, mlir::Value capnpData) const;
 
+  /// Write out the name and ID in capnp schema format.
+  void writeMetadata(llvm::raw_ostream &os) const;
+
 private:
   /// The implementation of this. Separate to hide the details and avoid having
   /// to include the capnp headers in this header.
-  std::shared_ptr<detail::TypeSchemaImpl> s;
+  std::shared_ptr<detail::CapnpTypeSchemaImpl> s;
 
   /// Cache of the decode/encode modules;
   static llvm::SmallDenseMap<Type, hw::HWModuleOp> decImplMods;

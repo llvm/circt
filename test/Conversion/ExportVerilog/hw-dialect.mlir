@@ -1022,8 +1022,9 @@ hw.module @structExtractFromTemporary(%cond: i1, %a: !hw.struct<c: i1>, %b: !hw.
 // CHECK-NEXT:    input [1:0] in,
 // CHECK-NEXT:    output union packed { struct packed {logic a; logic [0:0] __post_padding_a;} a;logic [1:0] b;} out
 hw.module @unionCreateNoPadding(%in: i2) -> (out: !hw.union<a: i1, b: i2>) {
-  // CHECK: assign out = in;
-  %0 = hw.union_create "b", %in : !hw.union<a: i1, b: i2>
+  // CHECK: assign out = in + in;
+  %add = comb.add %in, %in : i2
+  %0 = hw.union_create "b", %add : !hw.union<a: i1, b: i2>
   hw.output %0 : !hw.union<a: i1, b: i2>
 }
 
@@ -1424,19 +1425,6 @@ hw.module @inline_bitcast_in_concat(%in1: i7, %in2: !hw.array<8xi4>) -> (out: i3
 hw.module @DontInlineAggregateConstantIntoPorts() -> () {
   %0 = hw.aggregate_constant [0 : i4, 1 : i4] : !hw.array<2xi4>
   hw.instance "i0" @Array(a: %0: !hw.array<2xi4>) -> ()
-}
-
-// CHECK-LABEL: module EnumCmp(
-// CHECK-NEXT:   input enum bit [0:0] {A, B} test,
-// CHECK-NEXT:   output result
-// CHECK-NEXT:  )
-// CHECK-EMPTY:
-// CHECK-NEXT:   assign result = test == A;
-// CHECK-NEXT: endmodule
-hw.module @EnumCmp(%test: !hw.enum<A, B>) -> (result: i1) {
-  %A = hw.enum.constant A : !hw.enum<A, B>
-  %0 = hw.enum.cmp %test, %A : !hw.enum<A, B>, !hw.enum<A, B>
-  hw.output %0 : i1
 }
 
 // CHECK-LABEL: module FooA(

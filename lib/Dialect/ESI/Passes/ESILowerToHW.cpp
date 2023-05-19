@@ -340,10 +340,10 @@ CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
   circt::BackedgeBuilder bb(rewriter, loc);
   Type ui64Type =
       IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
-  capnp::TypeSchema sendTypeSchema(send.getType());
+  capnp::CapnpTypeSchema sendTypeSchema(send.getType());
   if (!sendTypeSchema.isSupported())
     return rewriter.notifyMatchFailure(ep, "Send type not supported yet");
-  capnp::TypeSchema recvTypeSchema(ep.getRecv().getType());
+  capnp::CapnpTypeSchema recvTypeSchema(ep.getRecv().getType());
   if (!recvTypeSchema.isSupported())
     return rewriter.notifyMatchFailure(ep, "Recv type not supported yet");
 
@@ -355,14 +355,12 @@ CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
     params.push_back(
         ParamDeclAttr::get("ENDPOINT_ID_EXT", StringAttr::get(ctxt, "")));
   params.push_back(ParamDeclAttr::get(
-      "SEND_TYPE_ID",
-      IntegerAttr::get(ui64Type, sendTypeSchema.capnpTypeID())));
+      "SEND_TYPE_ID", IntegerAttr::get(ui64Type, sendTypeSchema.typeID())));
   params.push_back(
       ParamDeclAttr::get("SEND_TYPE_SIZE_BITS",
                          rewriter.getI32IntegerAttr(sendTypeSchema.size())));
   params.push_back(ParamDeclAttr::get(
-      "RECV_TYPE_ID",
-      IntegerAttr::get(ui64Type, recvTypeSchema.capnpTypeID())));
+      "RECV_TYPE_ID", IntegerAttr::get(ui64Type, recvTypeSchema.typeID())));
   params.push_back(
       ParamDeclAttr::get("RECV_TYPE_SIZE_BITS",
                          rewriter.getI32IntegerAttr(recvTypeSchema.size())));
@@ -430,7 +428,7 @@ public:
                                        "encode.capnp lowering requires the ESI "
                                        "capnp plugin, which was disabled.");
 #else
-    capnp::TypeSchema encodeType(enc.getDataToEncode().getType());
+    capnp::CapnpTypeSchema encodeType(enc.getDataToEncode().getType());
     if (!encodeType.isSupported())
       return rewriter.notifyMatchFailure(enc, "Type not supported yet");
     auto operands = adaptor.getOperands();
@@ -458,7 +456,7 @@ public:
                                        "decode.capnp lowering requires the ESI "
                                        "capnp plugin, which was disabled.");
 #else
-    capnp::TypeSchema decodeType(dec.getDecodedData().getType());
+    capnp::CapnpTypeSchema decodeType(dec.getDecodedData().getType());
     if (!decodeType.isSupported())
       return rewriter.notifyMatchFailure(dec, "Type not supported yet");
     auto operands = adaptor.getOperands();

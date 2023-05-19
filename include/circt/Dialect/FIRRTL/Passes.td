@@ -503,6 +503,11 @@ def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
   ];
 }
 
+def Vectorization : Pass<"vectorization", "firrtl::FModuleOp"> {
+  let summary = "Transform firrtl primitive operations into vector operations";
+  let constructor = "circt::firrtl::createVectorizationPass()";
+}
+
 def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
   let summary = "Infer the read-write memory port";
   let description = [{
@@ -617,7 +622,7 @@ def RandomizeRegisterInit :
   let constructor = "circt::firrtl::createRandomizeRegisterInitPass()";
 }
 
-def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
+def LowerXMR : Pass<"firrtl-lower-xmr", "mlir::ModuleOp"> {
   let summary = "Lower ref ports to XMR";
   let description = [{
     This pass lowers RefType ops and ports to verbatim encoded XMRs.
@@ -633,6 +638,15 @@ def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::CircuitOp"> {
     intmodule to their implementation or op.
   }];
   let constructor = "circt::firrtl::createLowerIntrinsicsPass()";
+}
+
+def LowerOpenAggs : Pass<"firrtl-lower-open-aggs", "firrtl::CircuitOp"> {
+  let summary = "Lower 'Open' aggregates by splitting out non-hardware elements";
+  let description = [{
+     This pass lowers aggregates of the more open varieties into their equivalents
+     using only hardware types, by pulling out non-hardware to other locations.
+  }];
+  let constructor = "circt::firrtl::createLowerOpenAggsPass()";
 }
 
 def ResolveTraces : Pass<"firrtl-resolve-traces", "firrtl::CircuitOp"> {
@@ -675,6 +689,17 @@ def VBToBV : Pass<"firrtl-vb-to-bv", "firrtl::CircuitOp"> {
     vectors.
   }];
   let constructor = "circt::firrtl::createVBToBVPass()";
+}
+
+def FinalizeIR : Pass<"firrtl-finalize-ir", "mlir::ModuleOp"> {
+  let summary = "Perform final IR mutations after ExportVerilog";
+  let description = [{
+    This pass finalizes the IR after it has been exported with ExportVerilog,
+    and before firtool emits the final IR. This includes mutations like dropping
+    verbatim ops that represent sideband files and are not required in the IR.
+  }];
+  let constructor = "circt::firrtl::createFinalizeIRPass()";
+  let dependentDialects = ["hw::HWDialect", "sv::SVDialect"];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

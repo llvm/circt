@@ -72,6 +72,10 @@ struct LoweringOptions {
   /// Yosys).
   bool disallowPackedArrays = false;
 
+  /// If true, eliminate packed struct assignments in favor of a wire +
+  /// assignments to the individual fields.
+  bool disallowPackedStructAssignments = false;
+
   /// If true, do not emit SystemVerilog locally scoped "automatic" or logic
   /// declarations - emit top level wire and reg's instead.
   bool disallowLocalVariables = false;

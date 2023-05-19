@@ -68,19 +68,14 @@ struct PortInfo {
 
   /// Return true if this is an inout port.  This will be true if the port
   /// contains either bi-directional signals or analog types.
+  /// Non-HW types (e.g., ref types) are never considered InOut.
   bool isInOut() {
-    auto flags = TypeSwitch<Type, RecursiveTypeProperties>(type)
-                     .Case<FIRRTLBaseType>([](auto base) {
-                       return base.getRecursiveTypeProperties();
-                     })
-                     .Case<RefType>([](auto ref) {
-                       return ref.getType().getRecursiveTypeProperties();
-                     })
-                     .Default([](auto) {
-                       llvm_unreachable("unsupported type");
-                       return RecursiveTypeProperties{};
-                     });
-    return !flags.isPassive || flags.containsAnalog;
+    return TypeSwitch<Type, bool>(type)
+        .Case<FIRRTLBaseType>([](auto type) {
+          return !type.containsReference() &&
+                 (!type.isPassive() || type.containsAnalog());
+        })
+        .Default(false);
   }
 
   /// Default constructors

@@ -9,6 +9,8 @@
 #include "PassDetails.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Support/Namespace.h"
+#include "circt/Support/SymCache.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/Support/Debug.h"
 
@@ -31,6 +33,11 @@ void InferMemoriesPass::runOnOperation() {
   opsToDelete.clear();
   schemaNames.clear();
   memoryParams.clear();
+
+  SymbolCache cache;
+  cache.addDefinitions(module);
+  Namespace names;
+  names.add(cache);
 
   // Find the matching generator schemas.
   for (auto schemaOp : module.getOps<hw::HWGeneratorSchemaOp>()) {
@@ -77,7 +84,13 @@ void InferMemoriesPass::runOnOperation() {
 
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
     auto wordType = builder.getIntegerType(width);
-    auto memType = MemoryType::get(&getContext(), depth, wordType, {});
+    auto addressTy = dyn_cast<IntegerType>(instOp.getOperand(0).getType());
+    if (!addressTy) {
+      instOp.emitError("expected integer type for memory addressing, got ")
+          << addressTy;
+      return signalPassFailure();
+    }
+    auto memType = MemoryType::get(&getContext(), depth, wordType, addressTy);
     auto memOp = builder.create<MemoryOp>(memType);
     if (!instOp.getInstanceName().empty())
       memOp->setAttr("name", instOp.getInstanceNameAttr());
@@ -91,18 +104,30 @@ void InferMemoriesPass::runOnOperation() {
       return data;
     };
 
-    SmallVector<std::array<Value, 6>> writePorts;
+    SmallVector<std::tuple<Value, Value, SmallVector<Value>, bool, bool>>
+        writePorts;
 
     // Handle read ports.
     auto numReadPorts =
         params.getAs<IntegerAttr>("numReadPorts").getValue().getZExtValue();
     for (unsigned portIdx = 0; portIdx != numReadPorts; ++portIdx) {
       auto address = instOp.getOperand(argIdx++);
-      auto enable = instOp.getOperand(argIdx++);
+      ++argIdx; // skip enable argument
       auto clock = instOp.getOperand(argIdx++);
       auto data = instOp.getResult(resultIdx++);
-      Value readOp = builder.create<MemoryReadPortOp>(wordType, memOp, address,
-                                                      clock, enable);
+
+      if (address.getType() != addressTy) {
+        instOp.emitOpError("expected ")
+            << addressTy << ", but got " << address.getType();
+        return signalPassFailure();
+      }
+
+      // NOTE: the result of a disabled read port is undefined, currently we
+      // define it to be the same as if it was enabled, but we could also set it
+      // to any constant (e.g., by inserting a mux).
+      Value readOp = builder.create<MemoryReadPortOp>(wordType, memOp, address);
+      // NOTE: if the read-latency is 0, the memory read is combinatorial
+      // without any buffer
       readOp = applyReadLatency(clock, readOp);
       data.replaceAllUsesWith(readOp);
     }
@@ -120,11 +145,16 @@ void InferMemoriesPass::runOnOperation() {
       auto writeMask = maskBits > 1 ? instOp.getOperand(argIdx++) : Value{};
       auto readData = instOp.getResult(resultIdx++);
 
-      auto constOne = builder.create<hw::ConstantOp>(builder.getI1Type(), 1);
-      auto readMode = builder.create<comb::XorOp>(writeMode, constOne);
-      auto readEnable = builder.create<comb::AndOp>(enable, readMode);
-      Value readOp = builder.create<MemoryReadPortOp>(wordType, memOp, address,
-                                                      clock, readEnable);
+      if (address.getType() != addressTy) {
+        instOp.emitOpError("expected ")
+            << addressTy << ", but got " << address.getType();
+        return signalPassFailure();
+      }
+
+      // NOTE: the result of a disabled read port is undefined, currently we
+      // define it to be the same as if it was enabled, but we could also set it
+      // to any constant (e.g., by inserting a mux).
+      Value readOp = builder.create<MemoryReadPortOp>(wordType, memOp, address);
 
       if (writeMask) {
         unsigned maskWidth = writeMask.getType().cast<IntegerType>().getWidth();
@@ -138,12 +168,16 @@ void InferMemoriesPass::runOnOperation() {
             builder.create<comb::ConcatOp>(writeData.getType(), toConcat);
       }
 
+      // NOTE: if the read-latency is 0, the memory read is combinatorial
+      // without any buffer
       readOp = applyReadLatency(clock, readOp);
       readData.replaceAllUsesWith(readOp);
 
       auto writeEnable = builder.create<comb::AndOp>(enable, writeMode);
-      writePorts.push_back(
-          {memOp, address, clock, writeEnable, writeData, writeMask});
+      SmallVector<Value> inputs({address, writeData, writeEnable});
+      if (writeMask)
+        inputs.push_back(writeMask);
+      writePorts.push_back({memOp, clock, inputs, true, !!writeMask});
     }
 
     // Handle write ports.
@@ -156,6 +190,12 @@ void InferMemoriesPass::runOnOperation() {
       auto data = instOp.getOperand(argIdx++);
       auto mask = maskBits > 1 ? instOp.getOperand(argIdx++) : Value{};
 
+      if (address.getType() != addressTy) {
+        instOp.emitOpError("expected ")
+            << addressTy << ", but got " << address.getType();
+        return signalPassFailure();
+      }
+
       if (mask) {
         unsigned maskWidth = mask.getType().cast<IntegerType>().getWidth();
         SmallVector<Value> toConcat;
@@ -166,15 +206,30 @@ void InferMemoriesPass::runOnOperation() {
         }
         mask = builder.create<comb::ConcatOp>(data.getType(), toConcat);
       }
-
-      writePorts.push_back({memOp, address, clock, enable, data, mask});
+      SmallVector<Value> inputs({address, data});
+      if (enable)
+        inputs.push_back(enable);
+      if (mask)
+        inputs.push_back(mask);
+      writePorts.push_back({memOp, clock, inputs, !!enable, !!mask});
     }
 
     // Create the actual write ports with a dependency arc to all read
     // ports.
-    for (auto [memOp, address, clock, enable, data, mask] : writePorts) {
-      builder.create<MemoryWritePortOp>(memOp, address, clock, enable, data,
-                                        mask);
+    for (auto [memOp, clock, inputs, hasEnable, hasMask] : writePorts) {
+      auto ipSave = builder.saveInsertionPoint();
+      TypeRange types = ValueRange(inputs).getTypes();
+      builder.setInsertionPointToStart(module.getBody());
+      auto defOp = builder.create<DefineOp>(
+          names.newName("mem_write"), builder.getFunctionType(types, types));
+      auto &block = defOp.getBody().emplaceBlock();
+      auto args = block.addArguments(
+          types, SmallVector<Location>(types.size(), builder.getLoc()));
+      builder.setInsertionPointToEnd(&block);
+      builder.create<arc::OutputOp>(SmallVector<Value>(args));
+      builder.restoreInsertionPoint(ipSave);
+      builder.create<MemoryWritePortOp>(memOp, defOp.getName(), inputs, clock,
+                                        hasEnable, hasMask);
     }
 
     opsToDelete.push_back(instOp);

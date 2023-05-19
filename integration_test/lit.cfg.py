@@ -194,6 +194,11 @@ if config.clang_tidy_path != "":
 if config.have_systemc != "":
   config.available_features.add('systemc')
 
+# Enable circt-lec tests if it is built.
+if config.lec_enabled != "":
+  config.available_features.add('circt-lec')
+  tools.append('circt-lec')
+
 llvm_config.add_tool_substitutions(tools, tool_dirs)
 
 # cocotb availability

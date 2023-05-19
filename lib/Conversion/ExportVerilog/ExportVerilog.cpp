@@ -309,6 +309,7 @@ static bool haveMatchingDims(Type a, Type b, Location loc) {
 
 // NOLINTBEGIN(misc-no-recursion)
 bool ExportVerilog::isZeroBitType(Type type) {
+  type = getCanonicalType(type);
   if (auto intType = type.dyn_cast<IntegerType>())
     return intType.getWidth() == 0;
   if (auto inout = type.dyn_cast<hw::InOutType>())
@@ -1038,8 +1039,22 @@ void EmitterBase::emitTextWithSubstitutions(
         auto sym = symAttrs[symOpNum];
         StringRef symVerilogName;
         if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>()) {
-          if (auto *symOp = state.symbolCache.getDefinition(fsym))
-            symVerilogName = namify(sym, symOp);
+          if (auto *symOp = state.symbolCache.getDefinition(fsym)) {
+            if (auto globalRef = dyn_cast<HierPathOp>(symOp)) {
+              auto namepath = globalRef.getNamepathAttr().getValue();
+              for (auto [index, sym] : llvm::enumerate(namepath)) {
+                if (index > 0)
+                  ps << ".";
+
+                auto innerRef = cast<InnerRefAttr>(sym);
+                auto ref = state.symbolCache.getInnerDefinition(
+                    innerRef.getModule(), innerRef.getName());
+                ps << namify(innerRef, ref);
+              }
+            } else {
+              symVerilogName = namify(sym, symOp);
+            }
+          }
         } else if (auto isym = sym.dyn_cast<InnerRefAttr>()) {
           auto symOp = state.symbolCache.getInnerDefinition(isym.getModule(),
                                                             isym.getName());
@@ -1936,6 +1951,9 @@ private:
   }
   SubExprInfo visitSV(MacroRefExprOp op);
   SubExprInfo visitSV(MacroRefExprSEOp op);
+  template <typename MacroTy>
+  SubExprInfo emitMacroCall(MacroTy op);
+
   SubExprInfo visitSV(ConstantXOp op);
   SubExprInfo visitSV(ConstantZOp op);
   SubExprInfo visitSV(ConstantStrOp op);
@@ -2451,20 +2469,33 @@ SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op, ArrayAttr symbols) {
   return {Unary, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitSV(MacroRefExprOp op) {
+template <typename MacroTy>
+SubExprInfo ExprEmitter::emitMacroCall(MacroTy op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  ps << "`" << PPExtString(op.getIdent().getName());
+  // Use the specified name or the symbol name as appropriate.
+  auto macroOp = op.getReferencedMacro(&state.symbolCache);
+  assert(macroOp && "Invalid IR");
+  StringRef name =
+      macroOp.getVerilogName() ? *macroOp.getVerilogName() : macroOp.getName();
+  ps << "`" << PPExtString(name);
+  if (!op.getInputs().empty()) {
+    ps << "(";
+    llvm::interleaveComma(op.getInputs(), ps, [&](Value val) {
+      emitExpression(val, LowestPrecedence);
+    });
+    ps << ")";
+  }
   return {LowestPrecedence, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitSV(MacroRefExprSEOp op) {
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
+SubExprInfo ExprEmitter::visitSV(MacroRefExprOp op) {
+  return emitMacroCall(op);
+}
 
-  ps << "`" << PPExtString(op.getIdent().getName());
-  return {LowestPrecedence, IsUnsigned};
+SubExprInfo ExprEmitter::visitSV(MacroRefExprSEOp op) {
+  return emitMacroCall(op);
 }
 
 SubExprInfo ExprEmitter::visitSV(ConstantXOp op) {
@@ -2883,7 +2914,7 @@ SubExprInfo ExprEmitter::visitTypeOp(UnionCreateOp op) {
 
   // If the element has no padding, emit it directly.
   if (elementWidth == unionWidth) {
-    emitSubExpr(op.getInput(), Selection);
+    emitSubExpr(op.getInput(), LowestPrecedence);
     return {Unary, IsUnsigned};
   }
 
@@ -3138,6 +3169,7 @@ private:
   LogicalResult visitSV(InterfaceSignalOp op);
   LogicalResult visitSV(InterfaceModportOp op);
   LogicalResult visitSV(AssignInterfaceSignalOp op);
+  LogicalResult visitSV(MacroDefOp op);
 
   void emitBlockAsStatement(Block *block,
                             const SmallPtrSetImpl<Operation *> &locationOps,
@@ -3392,6 +3424,10 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   startStatement();
+  auto zeroBitType = isZeroBitType(op.getType());
+  if (zeroBitType)
+    ps << PP::neverbox << "// ";
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   ps.scopedBox(PP::ibox2, [&]() {
@@ -3405,6 +3441,8 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
         [&](auto &os) { emitter.printUnpackedTypePostfix(op.getType(), os); });
     ps << ";";
   });
+  if (zeroBitType)
+    ps << PP::end;
   emitLocationInfoAndNewLine(ops);
   return success();
 }
@@ -4425,6 +4463,27 @@ LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
   return success();
 }
 
+LogicalResult StmtEmitter::visitSV(MacroDefOp op) {
+  auto decl = op.getReferencedMacro(&state.symbolCache);
+  // TODO: source info!
+  startStatement();
+  ps << "`define " << PPExtString(getSymOpName(decl));
+  if (decl.getArgs()) {
+    ps << "(";
+    llvm::interleaveComma(*decl.getArgs(), ps, [&](const Attribute &name) {
+      ps << name.cast<StringAttr>();
+    });
+    ps << ")";
+  }
+  if (!op.getFormatString().empty()) {
+    ps << " ";
+    emitTextWithSubstitutions(ps, op.getFormatString(), op, {},
+                              op.getSymbols());
+  }
+  ps << PP::newline;
+  return success();
+}
+
 void StmtEmitter::emitStatement(Operation *op) {
   // Expressions may either be ignored or emitted as an expression statements.
   if (isVerilogExpression(op))
@@ -5283,7 +5342,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           else
             rootFile.ops.push_back(info);
         })
-        .Case<VerbatimOp, IfDefOp>([&](Operation *op) {
+        .Case<VerbatimOp, IfDefOp, MacroDefOp>([&](Operation *op) {
           // Emit into a separate file using the specified file name or
           // replicate the operation in each outputfile.
           if (!attr) {
@@ -5315,8 +5374,11 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
             separateFile(op);
           }
         })
+        .Case<MacroDeclOp>([&](auto op) {
+          symbolCache.addDefinition(op.getSymNameAttr(), op);
+        })
         .Default([&](auto *) {
-          op.emitError("unknown operation");
+          op.emitError("unknown operation (SharedEmitterState::gatherFiles)");
           encounteredError = true;
         });
   }
@@ -5385,9 +5447,11 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
       .Case<TypeScopeOp>([&](auto typedecls) {
         ModuleEmitter(state).emitStatement(typedecls);
       })
+      .Case<MacroDefOp>(
+          [&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Default([&](auto *op) {
         state.encounteredError = true;
-        op->emitError("unknown operation");
+        op->emitError("unknown operation (ExportVerilog::emitOperation)");
       });
 }
 
@@ -5517,6 +5581,7 @@ struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
   void runOnOperation() override {
     // Prepare the ops in the module for emission.
     mlir::OpPassManager preparePM("builtin.module");
+    preparePM.addPass(createLegalizeAnonEnumsPass());
     auto &modulePM = preparePM.nest<hw::HWModuleOp>();
     modulePM.addPass(createPrepareForEmissionPass());
     if (failed(runPipeline(preparePM, getOperation())))

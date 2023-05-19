@@ -16,12 +16,16 @@ add_circt_dialect_library(
 
   DEPENDS
   MLIROMIncGen
+  MLIROMAttrIncGen
 
   LINK_COMPONENTS
   Support
 
   LINK_LIBS PRIVATE
+  CIRCTHW
   MLIRIR
 )
 
 add_dependencies(circt-headers MLIROMIncGen)
+
+add_subdirectory(Evaluator)

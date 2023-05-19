@@ -67,12 +67,19 @@ def AnalogType : FIRRTLDialectType<CPred<"$_self.isa<AnalogType>()">,
 
 def BundleType : FIRRTLDialectType<CPred<"$_self.isa<BundleType>()">,
  "BundleType", "::circt::firrtl::BundleType">;
+def OpenBundleType : FIRRTLDialectType<CPred<"$_self.isa<OpenBundleType>()">,
+ "OpenBundleType", "::circt::firrtl::OpenBundleType">;
 
 def FVectorType : FIRRTLDialectType<CPred<"$_self.isa<FVectorType>()">,
   "FVectorType", "::circt::firrtl::FVectorType">;
+def OpenVectorType : FIRRTLDialectType<CPred<"$_self.isa<OpenVectorType>()">,
+  "OpenVectorType", "::circt::firrtl::OpenVectorType">;
 
 def FEnumType : FIRRTLDialectType<CPred<"$_self.isa<FEnumType>()">,
  "FEnumType", "::circt::firrtl::FEnumType">;
+
+def StringType : FIRRTLDialectType<CPred<"$_self.isa<StringType>()">,
+  "StringType", "::circt::firrtl::StringType">;
 
 def AggregateType : FIRRTLDialectType<
   Or<[
@@ -108,7 +115,7 @@ def RWProbe : FIRRTLDialectType<
    "rwprobe type", "::circt::firrtl::RefType">;
 
 // TODO: When Refs can appear within Base, need to disallow that too.
-def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;
+def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType, StringType]>;
 def StrictConnectableType : AnyTypeOf<[PassiveType, ForeignType]>;
 
 //===----------------------------------------------------------------------===//
@@ -154,12 +161,20 @@ def AnyResetType : FIRRTLDialectType<
 def AnyRegisterType : FIRRTLDialectType<
     CPred<"$_self.isa<FIRRTLBaseType>() && "
           "$_self.cast<FIRRTLBaseType>().isRegisterType()">,
-    "a passive base type that does not contain analog",
+    "a passive non-'const' base type that does not contain analog",
     "::circt::firrtl::FIRRTLBaseType">;
 
 def UIntSIntClockType : AnyTypeOf<[SIntType, UIntType, ClockType],
                                   "sint, uint, or clock",
                                   "::circt::firrtl::FIRRTLBaseType">;
+
+def 1DVecUIntType : FIRRTLDialectType<
+  CPred<"isa<FVectorType>($_self) && isa<UIntType>(cast<FVectorType>($_self).getElementType())">,
+  "1d vector with UInt element type", "::circt::firrtl::FIRRTLBaseType">;
+
+def 1DVecIntType : FIRRTLDialectType<
+  CPred<"isa<FVectorType>($_self) && isa<IntType>(cast<FVectorType>($_self).getElementType())">,
+  "1d vector with Int element type", "::circt::firrtl::FIRRTLBaseType">;
 
 def OneBitCastableType : AnyTypeOf<
   [OneBitType, AnyResetType, AsyncResetType, ClockType],

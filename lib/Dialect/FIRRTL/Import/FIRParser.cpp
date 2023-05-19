@@ -267,6 +267,8 @@ struct FIRParser {
   ParseResult parseId(StringRef &result, const Twine &message);
   ParseResult parseId(StringAttr &result, const Twine &message);
   ParseResult parseFieldId(StringRef &result, const Twine &message);
+  ParseResult parseFieldIdSeq(SmallVectorImpl<StringRef> &result,
+                              const Twine &message);
   ParseResult parseType(FIRRTLType &result, const Twine &message);
 
   ParseResult parseOptionalRUW(RUWAttr &result);
@@ -628,12 +630,18 @@ ParseResult FIRParser::parseId(StringRef &result, const Twine &message) {
   switch (getToken().getKind()) {
   // The most common case is an identifier.
   case FIRToken::identifier:
+  case FIRToken::literal_identifier:
 // Otherwise it may be a keyword that we're allowing in an id position.
 #define TOK_KEYWORD(spelling) case FIRToken::kw_##spelling:
 #include "FIRTokenKinds.def"
 
-    // Yep, this is a valid 'id'.  Turn it into an attribute.
-    result = getTokenSpelling();
+    // Yep, this is a valid identifier or literal identifier.  Turn it into an
+    // attribute.  If it is a literal identifier, then drop the leading and
+    // trailing '`' (backticks).
+    if (getToken().getKind() == FIRToken::literal_identifier)
+      result = getTokenSpelling().drop_front().drop_back();
+    else
+      result = getTokenSpelling();
     consumeToken();
     return success();
 
@@ -669,6 +677,49 @@ ParseResult FIRParser::parseFieldId(StringRef &result, const Twine &message) {
   if (parseId(result, message))
     return failure();
 
+  return success();
+}
+
+/// fieldId ::= Id
+///         ::= Float
+///         ::= version
+///         ::= UnsignedInt
+///         ::= keywordAsId
+///
+ParseResult FIRParser::parseFieldIdSeq(SmallVectorImpl<StringRef> &result,
+                                       const Twine &message) {
+  // Handle the UnsignedInt case.
+  StringRef tmp = getTokenSpelling();
+
+  if (consumeIf(FIRToken::integer)) {
+    result.push_back(tmp);
+    return success();
+  }
+
+  if (consumeIf(FIRToken::floatingpoint)) {
+    // form a.b
+    // Both a and b could have more floating point stuff, but just ignore that
+    // for now.
+    auto [a, b] = tmp.split(".");
+    result.push_back(a);
+    result.push_back(b);
+    return success();
+  }
+
+  if (consumeIf(FIRToken::version)) {
+    // form a.b.c
+    auto [a, d] = tmp.split(".");
+    auto [b, c] = d.split(".");
+    result.push_back(a);
+    result.push_back(b);
+    result.push_back(c);
+    return success();
+  }
+
+  // Otherwise, it must be Id or keywordAsId.
+  if (parseId(tmp, message))
+    return failure();
+  result.push_back(tmp);
   return success();
 }
 
@@ -756,28 +807,35 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   case FIRToken::l_brace: {
     consumeToken(FIRToken::l_brace);
 
-    SmallVector<BundleType::BundleElement, 4> elements;
+    SmallVector<OpenBundleType::BundleElement, 4> elements;
+    bool bundleCompatible = true;
     if (parseListUntil(FIRToken::r_brace, [&]() -> ParseResult {
           bool isFlipped = consumeIf(FIRToken::kw_flip);
 
           StringRef fieldName;
           FIRRTLType type;
-          auto fieldLoc = getToken().getLoc();
           if (parseFieldId(fieldName, "expected bundle field name") ||
               parseToken(FIRToken::colon, "expected ':' in bundle") ||
               parseType(type, "expected bundle field type"))
             return failure();
 
-          auto baseType = type.dyn_cast<FIRRTLBaseType>();
-          if (!baseType)
-            return emitError(fieldLoc, "field must be base type");
-
           elements.push_back(
-              {StringAttr::get(getContext(), fieldName), isFlipped, baseType});
+              {StringAttr::get(getContext(), fieldName), isFlipped, type});
+          bundleCompatible &= isa<BundleType::ElementType>(type);
           return success();
         }))
       return failure();
-    result = BundleType::get(getContext(), elements);
+
+    // Try to emit base-only bundle.
+    if (bundleCompatible) {
+      auto bundleElements = llvm::map_range(elements, [](auto element) {
+        return BundleType::BundleElement{
+            element.name, element.isFlip,
+            cast<BundleType::ElementType>(element.type)};
+      });
+      result = BundleType::get(getContext(), llvm::to_vector(bundleElements));
+    } else
+      result = OpenBundleType::get(getContext(), elements);
     break;
   }
   }
@@ -794,10 +852,10 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
       return emitError(sizeLoc, "invalid size specifier"), failure();
 
     auto baseType = result.dyn_cast<FIRRTLBaseType>();
-    if (!baseType)
-      return emitError(sizeLoc, "vector element must be base type");
-
-    result = FVectorType::get(baseType, size);
+    if (baseType)
+      result = FVectorType::get(baseType, size);
+    else
+      result = OpenVectorType::get(result, size);
   }
 
   return success();
@@ -1283,6 +1341,7 @@ private:
   ParseResult parseNode();
   ParseResult parseWire();
   ParseResult parseRegister(unsigned regIndent);
+  ParseResult parseRegisterWithReset();
 
   // The builder to build into.
   ImplicitLocOpBuilder builder;
@@ -1481,6 +1540,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     // Otherwise there are a bunch of keywords that are treated as identifiers
     // try them.
   case FIRToken::identifier: // exp ::= id
+  case FIRToken::literal_identifier:
   default: {
     StringRef name;
     auto loc = getToken().getLoc();
@@ -1603,32 +1663,45 @@ FIRStmtParser::emitCachedSubAccess(Value base, ArrayRef<NamedAttribute> attrs,
 ///
 ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
   auto loc = getToken().getLoc();
-  StringRef fieldName;
-  if (parseFieldId(fieldName, "expected field name"))
+  SmallVector<StringRef, 3> fields;
+  if (parseFieldIdSeq(fields, "expected field name"))
     return failure();
-  auto bundle = getBaseOfType<BundleType>(result.getType());
-  if (!bundle)
-    return emitError(loc, "subfield requires bundle operand ");
-  auto indexV = bundle.getElementIndex(fieldName);
-  if (!indexV)
-    return emitError(loc, "unknown field '" + fieldName + "' in bundle type ")
-           << result.getType();
-  auto indexNo = *indexV;
+  for (auto fieldName : fields) {
+    std::optional<unsigned> indexV;
+    auto type = result.getType();
+    if (auto refTy = dyn_cast<RefType>(type))
+      type = refTy.getType();
+    if (auto bundle = dyn_cast<BundleType>(type))
+      indexV = bundle.getElementIndex(fieldName);
+    else if (auto bundle = dyn_cast<OpenBundleType>(type))
+      indexV = bundle.getElementIndex(fieldName);
+    else
+      return emitError(loc, "subfield requires bundle operand ");
+    if (!indexV)
+      return emitError(loc, "unknown field '" + fieldName + "' in bundle type ")
+             << result.getType();
+    auto indexNo = *indexV;
 
-  FailureOr<Value> subResult;
-  if (isa<RefType>(result.getType())) {
-    NamedAttribute attrs = {getConstants().indexIdentifier,
-                            builder.getI32IntegerAttr(indexNo)};
-    subResult = emitCachedSubAccess<RefSubOp>(result, attrs, indexNo, loc);
-  } else {
-    NamedAttribute attrs = {getConstants().fieldIndexIdentifier,
-                            builder.getI32IntegerAttr(indexNo)};
-    subResult = emitCachedSubAccess<SubfieldOp>(result, attrs, indexNo, loc);
+    FailureOr<Value> subResult;
+    if (isa<RefType>(result.getType())) {
+      NamedAttribute attrs = {getConstants().indexIdentifier,
+                              builder.getI32IntegerAttr(indexNo)};
+      subResult = emitCachedSubAccess<RefSubOp>(result, attrs, indexNo, loc);
+    } else {
+      NamedAttribute attrs = {getConstants().fieldIndexIdentifier,
+                              builder.getI32IntegerAttr(indexNo)};
+      if (isa<BundleType>(type))
+        subResult =
+            emitCachedSubAccess<SubfieldOp>(result, attrs, indexNo, loc);
+      else
+        subResult =
+            emitCachedSubAccess<OpenSubfieldOp>(result, attrs, indexNo, loc);
+    }
+
+    if (failed(subResult))
+      return failure();
+    result = *subResult;
   }
-
-  if (failed(subResult))
-    return failure();
-  result = *subResult;
   return success();
 }
 
@@ -1656,8 +1729,11 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
   FailureOr<Value> subResult;
   if (isa<RefType>(result.getType()))
     subResult = emitCachedSubAccess<RefSubOp>(result, attrs, indexNo, loc);
-  else
+  else if (isa<FVectorType>(result.getType()))
     subResult = emitCachedSubAccess<SubindexOp>(result, attrs, indexNo, loc);
+  else
+    subResult =
+        emitCachedSubAccess<OpenSubindexOp>(result, attrs, indexNo, loc);
 
   if (failed(subResult))
     return failure();
@@ -1973,7 +2049,9 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   switch (kind) {
   case FIRToken::kw_invalidate:
   case FIRToken::kw_connect:
-    /// The "invalidate" and "connect" keywords were added in 3.0.0.
+  case FIRToken::kw_regreset:
+    /// The "invalidate", "connect", and "regreset" keywords were added
+    /// in 3.0.0.
     if (FIRVersion::compare(version, FIRVersion({3, 0, 0})) < 0)
       kind = FIRToken::identifier;
     break;
@@ -2049,6 +2127,8 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseWire();
   case FIRToken::kw_reg:
     return parseRegister(stmtIndent);
+  case FIRToken::kw_regreset:
+    return parseRegisterWithReset();
   }
 }
 
@@ -2737,8 +2817,19 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
   }
 
   auto kind = getToken().getKind();
-  if (getToken().isNot(FIRToken::less_equal, FIRToken::less_minus))
-    return emitError("expected '<=', '<-', or 'is' in statement"), failure();
+  switch (kind) {
+  case FIRToken::less_equal:
+    break;
+  case FIRToken::less_minus:
+    // Partial connect ("<-") was removed in FIRRTL version 2.0.0.
+    if (FIRVersion::compare(version, FIRVersion({2, 0, 0})) < 0)
+      break;
+    [[fallthrough]];
+  default:
+    return emitError() << "unexpected token '" << getToken().getSpelling()
+                       << "' in statement",
+           failure();
+  }
   consumeToken();
 
   Value rhs;
@@ -3087,8 +3178,9 @@ ParseResult FIRStmtParser::parseNode() {
 
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
-  // TODO: isConst -> hasConst.
-  bool forceable = !isConst(initializer.getType());
+
+  bool forceable =
+      !!firrtl::detail::getForceableResultType(true, initializer.getType());
   auto result =
       builder.create<NodeOp>(initializer, id, NameKindEnum::InterestingName,
                              annotations, sym, forceable);
@@ -3112,13 +3204,15 @@ ParseResult FIRStmtParser::parseWire() {
       parseType(type, "expected wire type") || parseOptionalInfo())
     return failure();
 
+  if (!isa<FIRRTLBaseType>(type))
+    return emitError(startTok.getLoc(), "wire must have base type");
+
   locationProcessor.setLoc(startTok.getLoc());
 
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
 
-  // TODO: isConst -> hasConst.
-  bool forceable = !isConst(type);
+  bool forceable = !!firrtl::detail::getForceableResultType(true, type);
   auto result = builder.create<WireOp>(type, id, NameKindEnum::InterestingName,
                                        annotations, sym, forceable);
   return moduleContext.addSymbolEntry(id, result.getResult(),
@@ -3154,6 +3248,9 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
       parseType(type, "expected reg type") ||
       parseExp(clock, "expected expression for register clock"))
     return failure();
+
+  if (!isa<FIRRTLBaseType>(type))
+    return emitError(startTok.getLoc(), "register must have base type");
 
   // Parse the 'with' specifier if present.
   Value resetSignal, resetValue;
@@ -3210,8 +3307,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   ArrayAttr annotations = getConstants().emptyArrayAttr;
   Value result;
   StringAttr sym = {};
-  // TODO: isConst -> hasConst.
-  bool forceable = !isConst(type);
+  bool forceable = !!firrtl::detail::getForceableResultType(true, type);
   if (resetSignal)
     result = builder
                  .create<RegResetOp>(type, clock, resetSignal, resetValue, id,
@@ -3223,6 +3319,43 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
                  .create<RegOp>(type, clock, id, NameKindEnum::InterestingName,
                                 annotations, sym, forceable)
                  .getResult();
+  return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
+}
+
+/// registerWithReset ::= 'regreset' id ':' type exp exp exp
+///
+/// This syntax is only supported in FIRRTL versions >= 3.0.0.  Because this
+/// syntax is only valid for >= 3.0.0, there is no need to check if the leading
+/// "regreset" is part of an expression with a leading keyword.
+ParseResult FIRStmtParser::parseRegisterWithReset() {
+  auto startTok = consumeToken(FIRToken::kw_regreset);
+
+  StringRef id;
+  FIRRTLType type;
+  Value clock, resetSignal, resetValue;
+
+  if (parseId(id, "expected reg name") ||
+      parseToken(FIRToken::colon, "expected ':' in reg") ||
+      parseType(type, "expected reg type") ||
+      parseExp(clock, "expected expression for register clock") ||
+      parseExp(resetSignal, "expected expression for register reset") ||
+      parseExp(resetValue, "expected expression for register reset value") ||
+      parseOptionalInfo())
+    return failure();
+
+  if (!isa<FIRRTLBaseType>(type))
+    return emitError(startTok.getLoc(), "register must have base type");
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  bool forceable = !!firrtl::detail::getForceableResultType(true, type);
+  auto result = builder
+                    .create<RegResetOp>(type, clock, resetSignal, resetValue,
+                                        id, NameKindEnum::InterestingName,
+                                        getConstants().emptyArrayAttr,
+                                        StringAttr{}, forceable)
+                    .getResult();
+
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3363,7 +3496,8 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
 
     // If we have something that isn't a keyword then this must be an
     // identifier, not an input/output marker.
-    if (!getToken().is(FIRToken::identifier) && !getToken().isKeyword()) {
+    if (!getToken().isAny(FIRToken::identifier, FIRToken::literal_identifier) &&
+        !getToken().isKeyword()) {
       backtrackState.restore(getLexer());
       break;
     }
@@ -3427,13 +3561,32 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
 
   auto builder = circuit.getBodyBuilder();
 
+  // Helper for the temporary check rejecting input-oriented refs.
+  std::function<bool(Type, bool)> hasInputRef = [&](Type type,
+                                                    bool output) -> bool {
+    auto ftype = dyn_cast<FIRRTLType>(type);
+    if (!ftype || !ftype.containsReference())
+      return false;
+    return TypeSwitch<FIRRTLType, bool>(ftype)
+        .Case<RefType>([&](auto reftype) { return !output; })
+        .Case<OpenVectorType>([&](OpenVectorType ovt) {
+          return hasInputRef(ovt.getElementType(), output);
+        })
+        .Case<OpenBundleType>([&](OpenBundleType obt) {
+          for (auto field : obt.getElements())
+            if (hasInputRef(field.type, field.isFlip ^ output))
+              return true;
+          return false;
+        });
+  };
+
   // Check for port name collisions.
   SmallDenseMap<Attribute, SMLoc> portIds;
   for (auto portAndLoc : llvm::zip(portList, portLocs)) {
     PortInfo &port = std::get<0>(portAndLoc);
     // See #4812 and look through the reference input test collection
     // and ensure they work before allowing them from user input.
-    if (!port.isOutput() && isa<RefType>(port.type))
+    if (hasInputRef(port.type, port.isOutput()))
       return emitError(std::get<1>(portAndLoc),
                        "input probes not yet supported");
     auto &entry = portIds[port.name];
@@ -3541,6 +3694,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
 
     case FIRToken::integer:
     case FIRToken::signed_integer: {
+
       APInt result;
       if (parseIntLit(result, "invalid integer parameter"))
         return failure();
@@ -3589,8 +3743,12 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     // ref x is "a.b.c"
     // Support "ref x.y is " once aggregate-of-ref supported.
     StringAttr refName, resolved;
-    if (parseId(refName, "expected ref name") ||
-        parseToken(FIRToken::kw_is, "expected 'is' in ref statement"))
+    if (parseId(refName, "expected ref name"))
+      return failure();
+    if (consumeIf(FIRToken::period) || consumeIf(FIRToken::l_square))
+      return emitError(
+          loc, "ref statements for aggregate elements not yet supported");
+    if (parseToken(FIRToken::kw_is, "expected 'is' in ref statement"))
       return failure();
 
     if (!seenRefs.insert(refName).second)

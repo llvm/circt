@@ -10,6 +10,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   ExpandWhens.cpp
   ExtractInstances.cpp
   FlattenMemory.cpp
+  FinalizeIR.cpp
   GrandCentral.cpp
   IMConstProp.cpp
   IMDeadCodeElim.cpp
@@ -24,6 +25,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LowerIntrinsics.cpp
   LowerMatches.cpp
   LowerMemory.cpp
+  LowerOpenAggs.cpp
   LowerTypes.cpp
   LowerXMR.cpp
   MergeConnections.cpp
@@ -39,6 +41,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   RemoveUnusedPorts.cpp
   SFCCompat.cpp
   VBToBV.cpp
+  Vectorization.cpp
   WireDFT.cpp
 
   DEPENDS

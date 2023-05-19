@@ -163,7 +163,7 @@ def EnumConstantOp : HWOp<"enum.constant", [Pure, ConstantLike,
   let results = (outs EnumType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasFolder = true;
-
+  let hasVerifier = true;
   let builders = [
     OpBuilder<(ins "hw::EnumFieldAttr":$field)>,
   ];
@@ -172,8 +172,8 @@ def EnumConstantOp : HWOp<"enum.constant", [Pure, ConstantLike,
 def EnumCmpOp : HWOp<"enum.cmp", [Pure]> {
   let summary = "Compare two values of an enumeration";
   let description = [{
-    This operation compares two values with the same enumeration type, returning
-    0 if they are different, and 1 if they are the same.
+    This operation compares two values with the same canonical enumeration
+    type, returning 0 if they are different, and 1 if they are the same.
 
     Example:
     ```mlir
@@ -182,6 +182,7 @@ def EnumCmpOp : HWOp<"enum.cmp", [Pure]> {
   }];
   let arguments = (ins EnumType:$lhs, EnumType:$rhs);
   let results = (outs I1:$result);
+  let hasVerifier = true;
   let assemblyFormat = [{
     $lhs `,` $rhs attr-dict `:` qualified(type($lhs)) `,` qualified(type($rhs))
   }];

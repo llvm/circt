@@ -1,22 +1,8 @@
 // REQUIRES: iverilog,cocotb
 
-// This test is executed with all different buffering strategies
-
-// RUN: hlstool %s --dynamic-firrtl --buffering-strategy=all --ir | firtool -format=mlir -o %T --split-verilog --lowering-options=disallowLocalVariables && \
-// RUN: hlstool %S/kernel.mlir --dynamic-firrtl --buffering-strategy=all --ir | firtool -format=mlir -o %T --split-verilog --lowering-options=disallowLocalVariables && \
-// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=mix_std_hs --pythonFolder=%S %T/*.sv 2>&1 | FileCheck %s
-
-// RUN: hlstool %s --dynamic-firrtl --buffering-strategy=allFIFO --ir | firtool -format=mlir -o %T --split-verilog --lowering-options=disallowLocalVariables && \
-// RUN: hlstool %S/kernel.mlir --dynamic-firrtl --buffering-strategy=allFIFO --ir | firtool -format=mlir -o %T --split-verilog --lowering-options=disallowLocalVariables && \
-// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=mix_std_hs --pythonFolder=%S %T/*.sv 2>&1 | FileCheck %s
-
-// RUN: hlstool %s --dynamic-firrtl --buffering-strategy=cycles --ir | firtool -format=mlir -o %T --split-verilog --lowering-options=disallowLocalVariables && \
-// RUN: hlstool %S/kernel.mlir --dynamic-firrtl --buffering-strategy=cycles --ir | firtool -format=mlir -o %T --split-verilog --lowering-options=disallowLocalVariables && \
-// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=mix_std_hs --pythonFolder=%S %T/*.sv 2>&1 | FileCheck %s
-
-// RUN: hlstool %s --dynamic-firrtl --buffering-strategy=all --dynamic-parallelism=locking --ir | firtool -format=mlir -o %T --split-verilog --lowering-options=disallowLocalVariables && \
-// RUN: hlstool %S/kernel.mlir --dynamic-firrtl --buffering-strategy=all --dynamic-parallelism=locking --ir | firtool -format=mlir -o %T --split-verilog --lowering-options=disallowLocalVariables && \
-// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=mix_std_hs --pythonFolder=%S %T/*.sv 2>&1 | FileCheck %s
+// RUN: hlstool %s --dynamic-hw --buffering-strategy=cycles --split-verilog --lowering-options=disallowLocalVariables,disallowPackedStructAssignments -o %T-cycles
+// RUN: hlstool %S/kernel.mlir --dynamic-hw --buffering-strategy=cycles --split-verilog --lowering-options=disallowLocalVariables,disallowPackedStructAssignments -o %T-cycles
+// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=mix_std_hs --pythonFolder=%S %T-cycles/*.sv 2>&1 | FileCheck %s
 
 // CHECK: ** TEST
 // CHECK: ** TESTS=[[N:.*]] PASS=[[N]] FAIL=0 SKIP=0

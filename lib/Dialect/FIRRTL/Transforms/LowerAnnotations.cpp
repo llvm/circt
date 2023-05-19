@@ -26,6 +26,7 @@
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -113,7 +114,7 @@ static FlatSymbolRefAttr buildNLA(const AnnoPathValue &target,
   }
 
   insts.push_back(
-      FlatSymbolRefAttr::get(target.ref.getModule().moduleNameAttr()));
+      FlatSymbolRefAttr::get(target.ref.getModule().getModuleNameAttr()));
 
   auto instAttr = ArrayAttr::get(state.circuit.getContext(), insts);
 
@@ -354,6 +355,35 @@ static LogicalResult applyConventionAnno(const AnnoPathValue &target,
   return error() << "can only target to a module or extmodule";
 }
 
+static LogicalResult applyAttributeAnnotation(const AnnoPathValue &target,
+                                              DictionaryAttr anno,
+                                              ApplyState &state) {
+  auto *op = target.ref.getOp();
+
+  auto error = [&]() {
+    auto diag = mlir::emitError(op->getLoc());
+    diag << anno.getAs<StringAttr>("class").getValue() << " ";
+    return diag;
+  };
+
+  if (!target.ref.isa<OpAnnoTarget>())
+    return error()
+           << "must target an operation. Currently ports are not supported";
+
+  if (!target.isLocal())
+    return error() << "must be local";
+
+  if (!isa<FModuleOp, WireOp, NodeOp, RegOp, RegResetOp>(op))
+    return error()
+           << "unhandled operation. The target must be a module, wire, node or "
+              "register";
+
+  auto name = anno.getAs<StringAttr>("description");
+  auto svAttr = sv::SVAttributeAttr::get(name.getContext(), name);
+  sv::addSVAttributes(op, {svAttr});
+  return success();
+}
+
 /// Update a memory op with attributes about memory file loading.
 template <bool isInline>
 static LogicalResult applyLoadMemoryAnno(const AnnoPathValue &target,
@@ -516,6 +546,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {extractAssumeAnnoClass, NoTargetAnnotation},
     {extractCoverageAnnoClass, NoTargetAnnotation},
     {dftTestModeEnableAnnoClass, {stdResolve, applyWithoutTarget<true>}},
+    {dftClockDividerBypassAnnoClass, {stdResolve, applyWithoutTarget<true>}},
     {runFIRRTLTransformAnnoClass, {noResolve, drop}},
     {mustDedupAnnoClass, NoTargetAnnotation},
     {addSeqMemPortAnnoClass, NoTargetAnnotation},
@@ -534,8 +565,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
      {stdResolve, applyLoadMemoryAnno<true>}},
     {wiringSinkAnnoClass, {stdResolve, applyWiring}},
     {wiringSourceAnnoClass, {stdResolve, applyWiring}},
-
-}};
+    {attributeAnnoClass, {stdResolve, applyAttributeAnnotation}}}};
 
 /// Lookup a record for a given annotation class.  Optionally, returns the
 /// record for "circuit.missing" if the record doesn't exist.
@@ -778,10 +808,10 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     LLVM_DEBUG({
       llvm::dbgs() << "  - index: " << index << "\n"
                    << "    source:\n"
-                   << "      module: " << sourceModule.moduleName() << "\n"
+                   << "      module: " << sourceModule.getModuleName() << "\n"
                    << "      value: " << source << "\n"
                    << "    sink:\n"
-                   << "      module: " << sinkModule.moduleName() << "\n"
+                   << "      module: " << sinkModule.getModuleName() << "\n"
                    << "      value: " << sink << "\n"
                    << "    newNameHint: " << problem.newNameHint << "\n";
     });
@@ -799,17 +829,15 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     // connecting.
     if (sourceModule == sinkModule) {
       LLVM_DEBUG(llvm::dbgs()
-                 << "    LCA: " << sourceModule.moduleName() << "\n");
+                 << "    LCA: " << sourceModule.getModuleName() << "\n");
       moduleModifications[sourceModule].connectionMap[index] = source;
       moduleModifications[sourceModule].uturns.push_back({index, sink});
       continue;
     }
 
     // Otherwise, get instance paths for source/sink, and compute LCA.
-    auto sourcePaths = state.instancePathCache.getAbsolutePaths(
-        cast<hw::HWModuleLike>(*sourceModule));
-    auto sinkPaths = state.instancePathCache.getAbsolutePaths(
-        cast<hw::HWModuleLike>(*sinkModule));
+    auto sourcePaths = state.instancePathCache.getAbsolutePaths(sourceModule);
+    auto sinkPaths = state.instancePathCache.getAbsolutePaths(sinkModule);
 
     if (sourcePaths.size() != 1 || sinkPaths.size() != 1) {
       auto diag =

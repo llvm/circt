@@ -13,6 +13,9 @@
 #ifndef CIRCT_DIALECT_OM_OMATTRIBUTES_H
 #define CIRCT_DIALECT_OM_OMATTRIBUTES_H
 
+#include "circt/Dialect/HW/HWAttributes.h"
+#include "mlir/IR/Attributes.h"
+
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/OM/OMAttributes.h.inc"
 
