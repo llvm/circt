@@ -244,6 +244,13 @@ def CallOp : ArcOp<"call", [
     $arc `(` $inputs `)` attr-dict `:` functional-type(operands, results)
   }];
 
+  let builders = [
+    OpBuilder<(ins "DefineOp":$arc, CArg<"mlir::ValueRange", "{}">:$inputs), [{
+      build($_builder, $_state, arc.getFunctionType().getResults(),
+            mlir::SymbolRefAttr::get(arc), inputs);
+    }]>,
+  ];
+
   let extraClassDeclaration = [{
     operand_range getArgOperands() {
       return {operand_begin(), operand_end()};

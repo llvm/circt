@@ -10,6 +10,8 @@
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Visitors.h"
+#include "mlir/Interfaces/CallInterfaces.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Support/Debug.h"
 
@@ -18,6 +20,7 @@
 using namespace circt;
 using namespace arc;
 using namespace hw;
+using mlir::CallOpInterface;
 
 using llvm::SmallSetVector;
 
@@ -175,12 +178,12 @@ namespace {
 struct SplitLoopsPass : public SplitLoopsBase<SplitLoopsPass> {
   void runOnOperation() override;
   void splitArc(Namespace &arcNamespace, DefineOp defOp,
-                ArrayRef<StateOp> arcUses);
-  void replaceArcUse(StateOp arcUse, ArrayRef<DefineOp> splitDefs,
+                ArrayRef<CallOpInterface> arcUses);
+  void replaceArcUse(CallOpInterface arcUse, ArrayRef<DefineOp> splitDefs,
                      ArrayRef<Split *> splits, ArrayRef<ImportedValue> outputs);
   LogicalResult ensureNoLoops();
 
-  DenseSet<StateOp> allArcUses;
+  DenseSet<mlir::CallOpInterface> allArcUses;
 };
 } // namespace
 
@@ -198,17 +201,28 @@ void SplitLoopsPass::runOnOperation() {
 
   // Collect all arc uses and determine which arcs we should split.
   SetVector<DefineOp> arcsToSplit;
-  DenseMap<DefineOp, SmallVector<StateOp>> arcUses;
-  SetVector<StateOp> allArcUses;
+  DenseMap<DefineOp, SmallVector<CallOpInterface>> arcUses;
+  SetVector<CallOpInterface> allArcUses;
 
-  module.walk([&](StateOp stateOp) {
-    auto sym = stateOp.getArcAttr().getAttr();
-    auto defOp = arcDefs.lookup(sym);
-    arcUses[defOp].push_back(stateOp);
-    allArcUses.insert(stateOp);
-    if (stateOp.getLatency() == 0 && stateOp.getNumResults() > 1)
+  CallOpInterface invalidArcCall;
+  auto result = module.walk([&](CallOpInterface callOp) {
+    auto refSym = callOp.getCallableForCallee().dyn_cast<SymbolRefAttr>();
+    if (!refSym) {
+      invalidArcCall = callOp;
+      return WalkResult::interrupt();
+    }
+    auto defOp = arcDefs.lookup(refSym.getLeafReference());
+    arcUses[defOp].push_back(callOp);
+    allArcUses.insert(callOp);
+    if (auto stateOp = dyn_cast<StateOp>(*callOp);
+        (!stateOp || stateOp.getLatency() == 0) && callOp->getNumResults() > 1)
       arcsToSplit.insert(defOp);
+    return WalkResult::advance();
   });
+  if (result.wasInterrupted()) {
+    invalidArcCall->emitOpError("Found unsupported call to an arc");
+    return signalPassFailure();
+  }
 
   // Split all arcs with more than one result.
   // TODO: This is ugly and we should only split arcs that are truly involved in
@@ -224,7 +238,7 @@ void SplitLoopsPass::runOnOperation() {
 
 /// Split a single arc into a separate arc for each result.
 void SplitLoopsPass::splitArc(Namespace &arcNamespace, DefineOp defOp,
-                              ArrayRef<StateOp> arcUses) {
+                              ArrayRef<CallOpInterface> arcUses) {
   LLVM_DEBUG(llvm::dbgs() << "Splitting arc " << defOp.getSymNameAttr()
                           << "\n");
 
@@ -280,17 +294,18 @@ void SplitLoopsPass::splitArc(Namespace &arcNamespace, DefineOp defOp,
 }
 
 /// Replace a use of the original arc with new uses for the splits.
-void SplitLoopsPass::replaceArcUse(StateOp arcUse, ArrayRef<DefineOp> splitDefs,
+void SplitLoopsPass::replaceArcUse(CallOpInterface arcUse,
+                                   ArrayRef<DefineOp> splitDefs,
                                    ArrayRef<Split *> splits,
                                    ArrayRef<ImportedValue> outputs) {
   ImplicitLocOpBuilder builder(arcUse.getLoc(), arcUse);
-  SmallVector<StateOp> newUses(splits.size());
+  SmallVector<CallOp> newUses(splits.size());
 
   // Resolve an `ImportedValue` to either an operand of the original arc or the
   // result of another split.
   auto getMappedValue = [&](ImportedValue value) {
     if (value.isInput)
-      return arcUse.getInputs()[value.index];
+      return arcUse.getArgOperands()[value.index];
     return newUses[value.split].getResult(value.index);
   };
 
@@ -336,8 +351,7 @@ void SplitLoopsPass::replaceArcUse(StateOp arcUse, ArrayRef<DefineOp> splitDefs,
     if (!getMappedValuesOrSchedule(split->importedValues, operands))
       continue;
 
-    auto newUse =
-        builder.create<StateOp>(splitDef, Value{}, Value{}, 0, operands);
+    auto newUse = builder.create<CallOp>(splitDef, operands);
     allArcUses.insert(newUse);
     newUses[split->index] = newUse;
 
@@ -346,7 +360,7 @@ void SplitLoopsPass::replaceArcUse(StateOp arcUse, ArrayRef<DefineOp> splitDefs,
   }
 
   // Update the users of the original arc results.
-  for (auto [result, importedValue] : llvm::zip(arcUse.getResults(), outputs))
+  for (auto [result, importedValue] : llvm::zip(arcUse->getResults(), outputs))
     result.replaceAllUsesWith(getMappedValue(importedValue));
   allArcUses.erase(arcUse);
   arcUse.erase();

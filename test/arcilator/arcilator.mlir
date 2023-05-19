@@ -33,7 +33,7 @@ hw.module @Top(%clock: i1, %i0: i4, %i1: i4) -> (out: i4) {
   // CHECK-DAG:   [[READ_FOO:%.+]] = arc.state_read [[FOO]]
   // CHECK-DAG:   [[BAR:%.+]] = arc.storage.get %arg0[5]
   // CHECK-DAG:   [[READ_BAR:%.+]] = arc.state_read [[BAR]]
-  // CHECK-DAG:   [[MUL:%.+]] = arc.state @[[MUL_ARC]]([[READ_FOO]], [[READ_BAR]]) lat 0
+  // CHECK-DAG:   [[MUL:%.+]] = arc.call @[[MUL_ARC]]([[READ_FOO]], [[READ_BAR]])
   // CHECK-DAG:   [[PTR_OUT:%.+]] = arc.storage.get %arg0[3]
   // CHECK-DAG:   arc.state_write [[PTR_OUT]] = [[MUL]]
   // CHECK-DAG: }
@@ -45,9 +45,9 @@ hw.module @Top(%clock: i1, %i0: i4, %i1: i4) -> (out: i4) {
   // CHECK-DAG:   [[READ_I0:%.+]] = arc.state_read [[I0]]
   // CHECK-DAG:   [[I1:%.+]] = arc.storage.get %arg0[2]
   // CHECK-DAG:   [[READ_I1:%.+]] = arc.state_read [[I1]]
-  // CHECK-DAG:   [[ADD:%.+]] = arc.state @[[ADD_ARC]]([[READ_I0]], [[READ_I1]]) lat 0
-  // CHECK-DAG:   [[XOR1:%.+]] = arc.state @[[XOR_ARC]]([[ADD]], [[READ_I0]]) lat 0
-  // CHECK-DAG:   [[XOR2:%.+]] = arc.state @[[XOR_ARC]]([[ADD]], [[READ_I1]]) lat 0
+  // CHECK-DAG:   [[ADD:%.+]] = arc.call @[[ADD_ARC]]([[READ_I0]], [[READ_I1]])
+  // CHECK-DAG:   [[XOR1:%.+]] = arc.call @[[XOR_ARC]]([[ADD]], [[READ_I0]])
+  // CHECK-DAG:   [[XOR2:%.+]] = arc.call @[[XOR_ARC]]([[ADD]], [[READ_I1]])
   // CHECK-DAG:   [[FOO:%.+]] = arc.storage.get %arg0[4]
   // CHECK-DAG:   arc.state_write [[FOO]] = [[XOR1]]
   // CHECK-DAG:   [[BAR:%.+]] = arc.storage.get %arg0[5]

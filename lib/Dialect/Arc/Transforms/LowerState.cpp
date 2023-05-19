@@ -411,9 +411,9 @@ LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
 
   stateOp->dropAllReferences();
 
-  auto newStateOp = nonResetBuilder.create<StateOp>(
-      stateOp.getLoc(), stateOp.getArcAttr(), stateOp.getResultTypes(), Value{},
-      Value{}, 0, materializedOperands);
+  auto newStateOp = nonResetBuilder.create<CallOp>(
+      stateOp.getLoc(), stateOp.getResultTypes(), stateOp.getArcAttr(),
+      materializedOperands);
 
   // Create the write ops that write the result of the transfer function to the
   // allocated state storage.
