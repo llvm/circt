@@ -80,12 +80,12 @@ om.class @NestedField4() {
 
 // CHECK-LABEL: @ReferenceParameter
 // CHECK-SAME: !om.ref
-// CHECK-SAME: !om.symRef
-om.class @ReferenceParameter(%arg0: !om.ref, %arg1: !om.symRef) {
+// CHECK-SAME: !om.sym_ref
+om.class @ReferenceParameter(%arg0: !om.ref, %arg1: !om.sym_ref) {
   // CHECK: om.class.field @myref
   om.class.field @myref, %arg0 : !om.ref
   // CHECK: om.class.field @sym
-  om.class.field @sym, %arg1 : !om.symRef
+  om.class.field @sym, %arg1 : !om.sym_ref
 }
 
 // CHECK-LABEL: @ReferenceConstant
@@ -95,8 +95,8 @@ om.class @ReferenceConstant() {
   // CHECK: om.class.field @myref, %[[const1]] : !om.ref
   om.class.field @myref, %0 : !om.ref
 
-  // CHECK: %[[const2:.+]] = om.constant #om.symRef<@A> : !om.symRef
-  %1 = om.constant #om.symRef<@A> : !om.symRef
-  // CHECK: om.class.field @sym, %[[const2]] : !om.symRef
-  om.class.field @sym, %1 : !om.symRef
+  // CHECK: %[[const2:.+]] = om.constant #om.sym_ref<@A> : !om.sym_ref
+  %1 = om.constant #om.sym_ref<@A> : !om.sym_ref
+  // CHECK: om.class.field @sym, %[[const2]] : !om.sym_ref
+  om.class.field @sym, %1 : !om.sym_ref
 }

@@ -34,10 +34,10 @@ def ReferenceAttr : AttrDef<OMDialect, "Reference", [TypedAttrInterface]> {
   }];
 }
 
-def SymRefAttr : AttrDef<OMDialect, "SymRef", [TypedAttrInterface]> {
+def OMSymbolRefAttr : AttrDef<OMDialect, "SymbolRef", [TypedAttrInterface]> {
   let summary = "An attribute that wraps a FlatSymbolRefAttr type";
 
-  let mnemonic = "symRef";
+  let mnemonic = "sym_ref";
 
   let parameters = (ins
     "mlir::FlatSymbolRefAttr":$ref
