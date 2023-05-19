@@ -13,10 +13,10 @@
 
 #include "../PassDetails.h"
 
+#include "circt/Dialect/ESI/APIUtilities.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/ESIPasses.h"
 #include "circt/Dialect/ESI/ESIServices.h"
-#include "circt/Dialect/ESI/cosim/APIUtilities.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/LLVM.h"
@@ -86,7 +86,7 @@ static llvm::json::Value toJSON(Attribute attr) {
         if (auto chanType = t.dyn_cast<ChannelType>()) {
           Type inner = chanType.getInner();
           typeMD["hw_bitwidth"] = hw::getBitWidth(inner);
-          ESICosimType cosimSchema(inner);
+          ESIAPIType cosimSchema(inner);
           typeMD["capnp_type_id"] = cosimSchema.typeID();
           typeMD["capnp_name"] = cosimSchema.name().str();
         } else {

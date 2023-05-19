@@ -11,11 +11,11 @@
 //===----------------------------------------------------------------------===//
 
 // NOLINTNEXTLINE(llvm-header-guard)
-#ifndef CIRCT_DIALECT_ESI_CPPAPI_CPPAPI_H
-#define CIRCT_DIALECT_ESI_CPPAPI_CPPAPI_H
+#ifndef CIRCT_DIALECT_ESI_PASSES_CPPAPI_CPPAPI_H
+#define CIRCT_DIALECT_ESI_PASSES_CPPAPI_CPPAPI_H
 
+#include "circt/Dialect/ESI/APIUtilities.h"
 #include "circt/Dialect/ESI/ESIOps.h"
-#include "circt/Dialect/ESI/cosim/APIUtilities.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Support/IndentedOstream.h"
 #include "llvm/ADT/MapVector.h"
@@ -31,9 +31,9 @@ LogicalResult exportCPPAPI(ModuleOp module, llvm::raw_ostream &os);
 
 // Generate and reason about a C++ type for a particular Cap'nProto and MLIR
 // type.
-class CPPType : public ESICosimType {
+class CPPType : public ESIAPIType {
 public:
-  using ESICosimType::ESICosimType;
+  using ESIAPIType::ESIAPIType;
 
   /// Returns true if the type is supported for the CPP API.
   bool isSupported() const override;
@@ -114,4 +114,4 @@ private:
 } // namespace esi
 } // namespace circt
 
-#endif
+#endif // CIRCT_DIALECT_ESI_PASSES_CPPAPI_CPPAPI_H

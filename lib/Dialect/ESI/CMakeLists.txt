@@ -21,12 +21,12 @@ set(srcs
   Passes/ESILowerTypes.cpp
   Passes/ESICleanMetadata.cpp
 
-  cosim/APIUtilities.cpp
+  APIUtilities.cpp
 
   # C++ API
-  cosim/CPP/ESIAddCPPAPI.cpp
-  cosim/CPP/ESIEmitCPPAPI.cpp
-  cosim/CPP/CPPAPI.cpp
+  Passes/CPPAPI/ESIAddCPPAPI.cpp
+  Passes/CPPAPI/ESIEmitCPPAPI.cpp
+  Passes/CPPAPI/CPPAPI.cpp
 )
 
 set(ESI_RUNTIME_DIR ${CIRCT_BINARY_DIR}/include/circt/Dialect/ESI)
