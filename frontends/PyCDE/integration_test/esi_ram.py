@@ -12,6 +12,7 @@ import pycde
 from pycde import (Clock, Input, Module, generator, types)
 from pycde.constructs import Wire
 from pycde import esi
+from pycde.bsp import cosim
 
 import sys
 
@@ -93,7 +94,7 @@ def run_cosim(tmpdir=".", schema_path="schema.capnp", rpchostport=None):
 
 
 if __name__ == "__main__":
-  s = pycde.System([esi.CosimBSP(Top)],
+  s = pycde.System([cosim.CosimBSP(Top)],
                    name="ESIMem",
                    output_directory=sys.argv[1])
   s.compile()
