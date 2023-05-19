@@ -136,15 +136,10 @@ static bool shouldMaterialize(Operation *op) {
   // Don't materialize arc uses with latency >0, since we handle these in a
   // second pass once all other operations have been moved to their respective
   // clock trees.
-  if (auto stateOp = dyn_cast<StateOp>(op); stateOp && stateOp.getLatency() > 0)
-    return false;
-
-  if (isa<MemoryOp, AllocStateOp, AllocMemoryOp, AllocStorageOp, ClockTreeOp,
-          PassThroughOp, RootInputOp, RootOutputOp, StateWriteOp,
-          MemoryWritePortOp, igraph::InstanceOpInterface>(op))
-    return false;
-
-  return true;
+  return !isa<MemoryOp, AllocStateOp, AllocMemoryOp, AllocStorageOp,
+              ClockTreeOp, PassThroughOp, RootInputOp, RootOutputOp,
+              StateWriteOp, MemoryWritePortOp, igraph::InstanceOpInterface,
+              StateOp>(op);
 }
 
 static bool shouldMaterialize(Value value) {
@@ -394,12 +389,9 @@ LogicalResult ModuleLowering::lowerPrimaryOutputs() {
 
 LogicalResult ModuleLowering::lowerStates() {
   SmallVector<Operation *> opsToLower;
-  for (auto &op : *moduleOp.getBodyBlock()) {
-    auto stateOp = dyn_cast<StateOp>(&op);
-    if ((stateOp && stateOp.getLatency() > 0) ||
-        isa<MemoryOp, MemoryWritePortOp, TapOp>(&op))
+  for (auto &op : *moduleOp.getBodyBlock())
+    if (isa<StateOp, MemoryOp, MemoryWritePortOp, TapOp>(&op))
       opsToLower.push_back(&op);
-  }
 
   for (auto *op : opsToLower) {
     LLVM_DEBUG(llvm::dbgs() << "- Lowering " << *op << "\n");
@@ -414,10 +406,6 @@ LogicalResult ModuleLowering::lowerStates() {
 }
 
 LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
-  // Latency zero arcs incur no state and remain in the IR unmodified.
-  if (stateOp.getLatency() == 0)
-    return success();
-
   // We don't support arcs beyond latency 1 yet. These should be easy to add in
   // the future though.
   if (stateOp.getLatency() > 1)
@@ -430,7 +418,6 @@ LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
   auto stateEnable = stateOp.getEnable();
   auto stateReset = stateOp.getReset();
   auto stateInputs = SmallVector<Value>(stateOp.getInputs());
-  stateOp->dropAllReferences();
 
   // Get the clock tree and enable condition for this state's clock. If this arc
   // carries an explicit enable condition, fold that into the enable provided by
@@ -486,9 +473,11 @@ LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
     nonResetBuilder = ifOp.getElseBodyBuilder();
   }
 
-  auto newStateOp = nonResetBuilder.create<StateOp>(
-      stateOp.getLoc(), stateOp.getArcAttr(), stateOp.getResultTypes(), Value{},
-      Value{}, 0, materializedOperands);
+  stateOp->dropAllReferences();
+
+  auto newStateOp = nonResetBuilder.create<CallOp>(
+      stateOp.getLoc(), stateOp.getResultTypes(), stateOp.getArcAttr(),
+      materializedOperands);
 
   // Create the write ops that write the result of the transfer function to the
   // allocated state storage.
@@ -664,8 +653,6 @@ LogicalResult ModuleLowering::cleanup() {
       return true;
     if (!op->use_empty())
       return false;
-    if (auto stateOp = dyn_cast<StateOp>(op))
-      return stateOp.getLatency() == 0;
     return false;
   };
   for (auto &op : *moduleOp.getBodyBlock())

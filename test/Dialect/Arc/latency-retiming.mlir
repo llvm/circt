@@ -13,21 +13,22 @@ hw.module @Foo(in %clk: !seq.clock, in %clk2: !seq.clock, in %en: i1, in %rst: i
   // COM: TODO: a canonicalization pattern could reorder the outputs such that
   // COM:       this also folds to just one state, but inlining will get rid of
   // COM:       them anyways.
-  // CHECK-NEXT: [[V1:%.+]]:2 = arc.state @Baz(%arg0, %arg1) lat 0 :
+  // CHECK-NEXT: [[V1:%.+]]:2 = arc.call @Baz(%arg0, %arg1) :
   %3:2 = arc.state @Baz(%arg0, %arg1) clock %clk lat 1 : (i32, i32) -> (i32, i32)
-  // CHECK-NEXT: [[V2:%.+]]:2 = arc.state @Baz([[V1]]#0, [[V1]]#1) lat 0 :
+  // CHECK-NEXT: [[V2:%.+]]:2 = arc.call @Baz([[V1]]#0, [[V1]]#1) :
   %4:2 = arc.state @Baz(%3#0, %3#1) clock %clk lat 2 : (i32, i32) -> (i32, i32)
   // CHECK-NEXT: [[V3:%.+]]:2 = arc.state @Baz([[V2]]#0, [[V2]]#1) clock %clk lat 6 :
   %5:2 = arc.state @Baz(%4#0, %4#1) clock %clk lat 3 : (i32, i32) -> (i32, i32)
 
-  // COM: a fan-in tree, op that gets the latencies starts with lat 0
+  // COM: a fan-in tree, op that gets the latencies is initially a call and
+  // becomes a state op
   %6 = arc.state @Bar(%arg0) clock %clk lat 1 : (i32) -> i32
   %7 = arc.state @Bar(%arg1) clock %clk lat 1 : (i32) -> i32
-  // CHECK-NEXT: [[V4:%.+]]:2 = arc.state @Baz(%arg0, %arg1) lat 0 :
+  // CHECK-NEXT: [[V4:%.+]]:2 = arc.call @Baz(%arg0, %arg1) :
   %8:2 = arc.state @Baz(%6, %7) clock %clk lat 1 : (i32, i32) -> (i32, i32)
   %9 = arc.state @Bar(%arg1) clock %clk lat 2 : (i32) -> i32
   // CHECK-NEXT: [[V5:%.+]]:2 = arc.state @Baz([[V4]]#0, %arg1) clock %clk lat 2 :
-  %10:2 = arc.state @Baz(%8#0, %9) lat 0 : (i32, i32) -> (i32, i32)
+  %10:2 = arc.call @Baz(%8#0, %9) : (i32, i32) -> (i32, i32)
 
   // COM: fan-out tree
   // CHECK-NEXT: [[V6:%.+]] = arc.state @Bar(%arg0) clock %clk lat 1 :

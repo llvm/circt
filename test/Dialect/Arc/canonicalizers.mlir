@@ -9,7 +9,6 @@ hw.module @stateOpCanonicalizer(in %clk: !seq.clock, in %in: i32, in %en: i1, in
   %false = hw.constant false
 
   arc.state @Foo(%in) clock %clk lat 1 : (i32) -> ()
-  %0 = arc.state @Bar(%in) lat 0 : (i32) -> (i32)
   // CHECK-NEXT: {{%.+}} = arc.state @Bar(%in) clock %clk lat 1 {name = "stateName"} : (i32) -> i32
   %1 = arc.state @Bar(%in) clock %clk lat 1 {name = "stateName"} : (i32) -> i32
   // CHECK-NEXT: {{%.+}} = arc.state @Bar(%in) clock %clk lat 1 {names = ["stateName"]} : (i32) -> i32
