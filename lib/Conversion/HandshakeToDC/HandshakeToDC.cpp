@@ -552,6 +552,14 @@ public:
 
     // Maintain the set of operations which has been converted either through
     // unit rate conversion, or as part of other conversions.
+    // Rationale:
+    // This is needed for all of the arith ops that get created as part of the
+    // handshake ops (e.g. arith.select for handshake.mux). There's a bit of a
+    // dilemma here seeing as all operations need to be converted/touched in a
+    // handshake.func - which is done so by UnitRateConversionPattern (when no
+    // other pattern applies). However, we obviously don't want to run said
+    // pattern on these newly created ops since they do not have handshake
+    // semantics.
     ConvertedOps convertedOps;
 
     ConversionTarget target(getContext());
