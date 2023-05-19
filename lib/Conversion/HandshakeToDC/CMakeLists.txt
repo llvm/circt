@@ -8,6 +8,7 @@ add_circt_library(CIRCTHandshakeToDC
     CIRCTHW
     CIRCTHandshake
     CIRCTHandshakeTransforms
+    CIRCTDC
     MLIRIR
     MLIRPass
     MLIRArithDialect
