@@ -27,6 +27,8 @@ Type circt::om::ReferenceAttr::getType() {
   return ReferenceType::get(getContext());
 }
 
+Type circt::om::SymRefAttr::getType() { return SymRefType::get(getContext()); }
+
 void circt::om::OMDialect::registerAttributes() {
   addAttributes<
 #define GET_ATTRDEF_LIST
