@@ -209,6 +209,10 @@ def PipelineToHW : Pass<"lower-pipeline-to-hw", "hw::HWModuleOp"> {
   let dependentDialects = [
     "hw::HWDialect", "comb::CombDialect", "seq::SeqDialect"
   ];
+  let options = [
+    Option<"outlineStages", "outline-stages", "bool", "false",
+      "Outline each stage to a separate `hw.module`.">
+  ];
 }
 
 //===----------------------------------------------------------------------===//
