@@ -4480,7 +4480,7 @@ LogicalResult StmtEmitter::visitSV(MacroDefOp op) {
     emitTextWithSubstitutions(ps, op.getFormatString(), op, {},
                               op.getSymbols());
   }
-  ps << PP::newline;
+  setPendingNewline();
   return success();
 }
 

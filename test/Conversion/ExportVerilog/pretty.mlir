@@ -262,3 +262,22 @@ hw.module @ForStatement(%aaaaaaaaaaa: i5, %xxxxxxxxxxxxxxx : i2, %yyyyyyyyyyyyyy
     }
   }
 }
+
+// -----
+
+sv.macro.decl @TEST_COND
+
+// CHECK-LABEL:module TestCond{{.*}}
+// CHECK-NEXT:  `ifdef TEST_COND_{{.*}}
+// CHECK-NEXT:    `define TEST_COND TEST_COND_
+// CHECK-NEXT:  `else  // TEST_COND_
+// CHECK-NEXT:    `define TEST_COND 1
+// CHECK-NEXT:  `endif // TEST_COND_
+hw.module @TestCond() {
+  sv.ifdef "TEST_COND_" {
+   sv.macro.def @TEST_COND "TEST_COND_"
+  } else {
+   sv.macro.def @TEST_COND "1"
+  }
+  hw.output
+}
