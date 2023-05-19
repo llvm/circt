@@ -229,18 +229,19 @@ def CosimBSP(user_module):
         shutil.copy(f, hw_src)
       for f in lib_dir.glob("*.dll"):
         shutil.copy(f, hw_src)
-      shutil.copy(bin_dir / "driver.cpp", hw_src)
-      shutil.copy(bin_dir / "driver.sv", hw_src)
-      shutil.copy(esi_inc_dir / "ESIPrimitives.sv", hw_src)
-      shutil.copy(esi_inc_dir / "Cosim_DpiPkg.sv", hw_src)
-      shutil.copy(esi_inc_dir / "Cosim_Endpoint.sv", hw_src)
+
+      if not collateral_dir.exists():
+        shutil.copy(bin_dir / "driver.cpp", hw_src)
+        shutil.copy(bin_dir / "driver.sv", hw_src)
+        shutil.copy(esi_inc_dir / "ESIPrimitives.sv", hw_src)
+        shutil.copy(esi_inc_dir / "cosim" / "Cosim_DpiPkg.sv", hw_src)
+        shutil.copy(esi_inc_dir / "cosim" / "Cosim_Endpoint.sv", hw_src)
+
       shutil.copy(__dir__ / "Makefile.cosim", sys.output_directory)
       shutil.copy(sys.hw_output_dir / "schema.capnp", sys.runtime_output_dir)
 
       # Copy everything from the 'runtime' directory
-      shutil.copytree(esi_inc_dir / "runtime",
-                      sys.runtime_output_dir,
-                      dirs_exist_ok=True)
+      shutil.copytree(esi_inc_dir, sys.runtime_output_dir, dirs_exist_ok=True)
 
   return top
 

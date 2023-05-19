@@ -110,7 +110,8 @@ install(RUNTIME_DEPENDENCY_SET PyCDE_RUNTIME_DEPS
 
 # Add necessary ESI collateral to the package.
 install(TARGETS esi-collateral
-  PUBLIC_HEADER DESTINATION python_packages/pycde/collateral
+  FILE_SET HEADERS
+  DESTINATION python_packages/pycde/collateral
   COMPONENT PyCDE
 )
 install(TARGETS circt-std-sim-drivers
