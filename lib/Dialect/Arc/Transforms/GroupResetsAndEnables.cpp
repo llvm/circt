@@ -12,6 +12,7 @@
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "arc-group-resets-and-enables"
@@ -143,35 +144,47 @@ struct GroupAssignmentsInIfPattern : public OpRewritePattern<ClockTreeOp> {
     for (auto *region : groupingRegions) {
       if (region->empty())
         continue;
+
       // Since we only work with IfOp then/else regions, we have at most 1 block
+
       Block &block = region->front();
-      for (auto &op : block) {
-        for (auto operand : op.getOperands()) {
-          // If the op is already in the region or the definition is outside the
-          // clock tree, skip
-          Operation *definition = operand.getDefiningOp();
-          if (definition->getParentRegion() == region ||
-              !clockTreeOp->isAncestor(definition))
-            continue;
-          // If the operand is used more than once, check moving the assignment
-          // wouldn't cause non-domination
-          if (!operand.hasOneUse()) {
-            bool safeToMove = true;
-            for (auto *user : operand.getUsers()) {
-              if (!region->isAncestor(user->getParentRegion()) ||
-                  ((user->getBlock() == &block) &&
-                   user->isBeforeInBlock(&op))) {
-                safeToMove = false;
-                break;
+      SmallVector<Operation *> worklist;
+      // Don't walk as we don't want nested ops in order to restrict to IfOps
+      for (auto &op: block.getOperations()) {
+        worklist.push_back(&op);
+      }
+      while (!worklist.empty()) {
+        SmallVector<Operation *> theseOperands;
+        Operation *op = worklist.back();
+        for (auto operand : op->getOperands()) {
+          if (Operation *definition = operand.getDefiningOp()) {
+            if (definition->getBlock() == op->getBlock() ||
+                !clockTreeOp->isAncestor(definition))
+              continue;
+            if (!operand.hasOneUse()) {
+              bool safeToMove = true;
+              for (auto *user : operand.getUsers()) {
+                if (!op->getParentRegion()->isAncestor(
+                        user->getParentRegion()) ||
+                    (user->getBlock() == op->getBlock() &&
+                     user->isBeforeInBlock(op))) {
+                  safeToMove = false;
+                  break;
+                }
               }
+              if (!safeToMove)
+                break;
             }
-            if (!safeToMove)
-              break;
+            // For some unknown reason, just calling moveBefore has the same output but is much slower
+            rewriter.updateRootInPlace(definition,
+                                       [&]() { definition->moveBefore(op); });
+            changed = true;
+            theseOperands.push_back(definition);
           }
-          rewriter.updateRootInPlace(definition,
-                                     [&]() { definition->moveBefore(&op); });
-          changed = true;
         }
+        worklist.pop_back();
+        worklist.insert(worklist.end(), theseOperands.begin(),
+                        theseOperands.end());
       }
     }
     return success(changed);
