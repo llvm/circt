@@ -217,4 +217,18 @@ def UnpackOp : DCOp<"unpack", [InferTypeOpInterface]> {
     }];
 }
 
+def MergeOp : DCOp<"merge"> {
+  let summary = "Merge operation";
+  let description = [{
+    Select one of the incoming tokens and emits an output stating which token
+    was selected. If multiple tokens are ready to transact at the same time,
+    the tokens are selected with priority, from first to last (i.e. left to right
+    in the IR). This property ensures deterministic behavior.
+  }];
+
+  let arguments = (ins TokenType:$first, TokenType:$second);
+  let results = (outs I1ValueType:$output);
+  let assemblyFormat = "$first `,` $second attr-dict";
+}
+
 #endif // CIRCT_DIALECT_DC_OPS_TD
