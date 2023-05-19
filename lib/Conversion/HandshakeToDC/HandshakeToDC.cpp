@@ -50,10 +50,8 @@ struct DCTuple {
 static DCTuple unpack(OpBuilder &b, Value v) {
   if (v.getType().isa<dc::ValueType>())
     return DCTuple(b.create<dc::UnpackOp>(v.getLoc(), v));
-  else {
-    assert(v.getType().isa<dc::TokenType>() && "Expected a dc::TokenType");
-    return DCTuple(v, ValueRange{});
-  }
+  assert(v.getType().isa<dc::TokenType>() && "Expected a dc::TokenType");
+  return DCTuple(v, ValueRange{});
 }
 
 static Value pack(OpBuilder &b, Value token, ValueRange data) {
@@ -75,9 +73,9 @@ public:
     addConversion([](TokenType type) { return type; });
 
     addTargetMaterialization(
-        [&](mlir::OpBuilder &builder, mlir::Type resultType,
-            mlir::ValueRange inputs,
-            mlir::Location loc) -> std::optional<mlir::Value> {
+        [](mlir::OpBuilder &builder, mlir::Type resultType,
+           mlir::ValueRange inputs,
+           mlir::Location loc) -> std::optional<mlir::Value> {
           if (inputs.size() != 1)
             return std::nullopt;
 
@@ -95,9 +93,9 @@ public:
         });
 
     addSourceMaterialization(
-        [&](mlir::OpBuilder &builder, mlir::Type resultType,
-            mlir::ValueRange inputs,
-            mlir::Location loc) -> std::optional<mlir::Value> {
+        [](mlir::OpBuilder &builder, mlir::Type resultType,
+           mlir::ValueRange inputs,
+           mlir::Location loc) -> std::optional<mlir::Value> {
           if (inputs.size() != 1)
             return std::nullopt;
 
@@ -120,7 +118,7 @@ template <typename OpTy>
 class DCOpConversionPattern : public OpConversionPattern<OpTy> {
 public:
   using OpConversionPattern<OpTy>::OpConversionPattern;
-  using OpAdaptor = typename OpConversionPattern<OpTy>::OpAdaptor;
+  using OpAdaptor = typename OpTy::Adaptor;
 
   DCOpConversionPattern(MLIRContext *context, TypeConverter &typeConverter,
                         ConvertedOps *convertedOps)
@@ -134,8 +132,7 @@ class CondBranchConversionPattern
 public:
   using DCOpConversionPattern<
       handshake::ConditionalBranchOp>::DCOpConversionPattern;
-  using OpAdaptor =
-      typename DCOpConversionPattern<handshake::ConditionalBranchOp>::OpAdaptor;
+  using OpAdaptor = typename handshake::ConditionalBranchOp::Adaptor;
 
   LogicalResult
   matchAndRewrite(handshake::ConditionalBranchOp op, OpAdaptor adaptor,
@@ -167,8 +164,7 @@ class ForkOpConversionPattern
     : public DCOpConversionPattern<handshake::ForkOp> {
 public:
   using DCOpConversionPattern<handshake::ForkOp>::DCOpConversionPattern;
-  using OpAdaptor =
-      typename DCOpConversionPattern<handshake::ForkOp>::OpAdaptor;
+  using OpAdaptor = typename handshake::ForkOp::Adaptor;
 
   LogicalResult
   matchAndRewrite(handshake::ForkOp op, OpAdaptor adaptor,
@@ -190,8 +186,7 @@ public:
 class JoinOpConversion : public DCOpConversionPattern<handshake::JoinOp> {
 public:
   using DCOpConversionPattern<handshake::JoinOp>::DCOpConversionPattern;
-  using OpAdaptor =
-      typename DCOpConversionPattern<handshake::JoinOp>::OpAdaptor;
+  using OpAdaptor = typename handshake::JoinOp::Adaptor;
 
   LogicalResult
   matchAndRewrite(handshake::JoinOp op, OpAdaptor adaptor,
@@ -210,8 +205,7 @@ class ControlMergeOpConversion
 public:
   using DCOpConversionPattern<handshake::ControlMergeOp>::DCOpConversionPattern;
 
-  using OpAdaptor =
-      typename DCOpConversionPattern<handshake::ControlMergeOp>::OpAdaptor;
+  using OpAdaptor = typename handshake::ControlMergeOp::Adaptor;
 
   LogicalResult
   matchAndRewrite(handshake::ControlMergeOp op, OpAdaptor adaptor,
@@ -262,8 +256,7 @@ public:
 class SyncOpConversion : public DCOpConversionPattern<handshake::SyncOp> {
 public:
   using DCOpConversionPattern<handshake::SyncOp>::DCOpConversionPattern;
-  using OpAdaptor =
-      typename DCOpConversionPattern<handshake::SyncOp>::OpAdaptor;
+  using OpAdaptor = typename handshake::SyncOp::Adaptor;
 
   LogicalResult
   matchAndRewrite(handshake::SyncOp op, OpAdaptor adaptor,
@@ -289,8 +282,7 @@ class ConstantOpConversion
     : public DCOpConversionPattern<handshake::ConstantOp> {
 public:
   using DCOpConversionPattern<handshake::ConstantOp>::DCOpConversionPattern;
-  using OpAdaptor =
-      typename DCOpConversionPattern<handshake::ConstantOp>::OpAdaptor;
+  using OpAdaptor = typename handshake::ConstantOp::Adaptor;
 
   LogicalResult
   matchAndRewrite(handshake::ConstantOp op, OpAdaptor adaptor,
@@ -362,8 +354,7 @@ class SinkOpConversionPattern
     : public DCOpConversionPattern<handshake::SinkOp> {
 public:
   using DCOpConversionPattern<handshake::SinkOp>::DCOpConversionPattern;
-  using OpAdaptor =
-      typename DCOpConversionPattern<handshake::SinkOp>::OpAdaptor;
+  using OpAdaptor = typename handshake::SinkOp::Adaptor;
 
   LogicalResult
   matchAndRewrite(handshake::SinkOp op, OpAdaptor adaptor,
@@ -378,8 +369,7 @@ class SourceOpConversionPattern
     : public DCOpConversionPattern<handshake::SourceOp> {
 public:
   using DCOpConversionPattern<handshake::SourceOp>::DCOpConversionPattern;
-  using OpAdaptor =
-      typename DCOpConversionPattern<handshake::SourceOp>::OpAdaptor;
+  using OpAdaptor = typename handshake::SourceOp::Adaptor;
 
   LogicalResult
   matchAndRewrite(handshake::SourceOp op, OpAdaptor adaptor,
@@ -392,8 +382,7 @@ public:
 class BufferOpConversion : public DCOpConversionPattern<handshake::BufferOp> {
 public:
   using DCOpConversionPattern<handshake::BufferOp>::DCOpConversionPattern;
-  using OpAdaptor =
-      typename DCOpConversionPattern<handshake::BufferOp>::OpAdaptor;
+  using OpAdaptor = typename handshake::BufferOp::Adaptor;
 
   LogicalResult
   matchAndRewrite(handshake::BufferOp op, OpAdaptor adaptor,
@@ -408,15 +397,14 @@ public:
 class ReturnOpConversion : public DCOpConversionPattern<handshake::ReturnOp> {
 public:
   using DCOpConversionPattern<handshake::ReturnOp>::DCOpConversionPattern;
-  using OpAdaptor =
-      typename DCOpConversionPattern<handshake::ReturnOp>::OpAdaptor;
+  using OpAdaptor = typename handshake::ReturnOp::Adaptor;
 
   LogicalResult
   matchAndRewrite(handshake::ReturnOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Locate existing output op, Append operands to output op, and move to
     // the end of the block.
-    auto hwModule = cast<hw::HWModuleOp>(op->getParentOp());
+    auto hwModule = op->getParentOfType<hw::HWModuleOp>();
     auto outputOp = *hwModule.getBodyBlock()->getOps<hw::OutputOp>().begin();
     outputOp->setOperands(adaptor.getOperands());
     outputOp->moveAfter(&hwModule.getBodyBlock()->back());
@@ -428,7 +416,7 @@ public:
 class MuxOpConversionPattern : public DCOpConversionPattern<handshake::MuxOp> {
 public:
   using DCOpConversionPattern<handshake::MuxOp>::DCOpConversionPattern;
-  using OpAdaptor = typename DCOpConversionPattern<handshake::MuxOp>::OpAdaptor;
+  using OpAdaptor = typename handshake::MuxOp::Adaptor;
 
   LogicalResult
   matchAndRewrite(handshake::MuxOp op, OpAdaptor adaptor,
@@ -455,36 +443,36 @@ public:
     llvm::SmallVector<Value> controlMuxInputs = {inputs.front().token};
     for (auto [i, input] :
          llvm::enumerate(llvm::make_range(inputs.begin() + 1, inputs.end()))) {
-      if (withData) {
-        Value cmpIndex;
-        Value inputData = input.data.front();
-        Value inputControl = input.token;
-        if (isIndexType) {
-          cmpIndex = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), i);
-        } else {
-          size_t width = selectData.getType().cast<IntegerType>().getWidth();
-          cmpIndex =
-              rewriter.create<arith::ConstantIntOp>(op.getLoc(), i, width);
-        }
-        auto inputSelected = rewriter.create<arith::CmpIOp>(
-            op.getLoc(), arith::CmpIPredicate::eq, selectData, cmpIndex);
-        dataMux = rewriter.create<arith::SelectOp>(op.getLoc(), inputSelected,
-                                                   inputData, dataMux);
+      if (!withData)
+        continue;
 
-        // Legalize the newly created operations.
-        convertedOps->insert(cmpIndex.getDefiningOp());
-        convertedOps->insert(dataMux.getDefiningOp());
-        convertedOps->insert(inputSelected);
-
-        // And similarly for the control mux, by muxing the input token with a
-        // select value that has it's control from the original select token +
-        // the inputSelected value.
-        auto inputSelectedControl =
-            pack(rewriter, selectToken, ValueRange{inputSelected});
-        controlMux = rewriter.create<dc::SelectOp>(
-            op.getLoc(), inputSelectedControl, inputControl, controlMux);
-        convertedOps->insert(controlMux.getDefiningOp());
+      Value cmpIndex;
+      Value inputData = input.data.front();
+      Value inputControl = input.token;
+      if (isIndexType) {
+        cmpIndex = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), i);
+      } else {
+        size_t width = selectData.getType().cast<IntegerType>().getWidth();
+        cmpIndex = rewriter.create<arith::ConstantIntOp>(op.getLoc(), i, width);
       }
+      auto inputSelected = rewriter.create<arith::CmpIOp>(
+          op.getLoc(), arith::CmpIPredicate::eq, selectData, cmpIndex);
+      dataMux = rewriter.create<arith::SelectOp>(op.getLoc(), inputSelected,
+                                                 inputData, dataMux);
+
+      // Legalize the newly created operations.
+      convertedOps->insert(cmpIndex.getDefiningOp());
+      convertedOps->insert(dataMux.getDefiningOp());
+      convertedOps->insert(inputSelected);
+
+      // And similarly for the control mux, by muxing the input token with a
+      // select value that has it's control from the original select token +
+      // the inputSelected value.
+      auto inputSelectedControl =
+          pack(rewriter, selectToken, ValueRange{inputSelected});
+      controlMux = rewriter.create<dc::SelectOp>(
+          op.getLoc(), inputSelectedControl, inputControl, controlMux);
+      convertedOps->insert(controlMux.getDefiningOp());
     }
 
     // finally, pack the control and data side muxes into the output value.
@@ -501,19 +489,18 @@ static hw::ModulePortInfo getModulePortInfo(TypeConverter &tc,
   auto ft = funcOp.getFunctionType();
 
   // Add all inputs of funcOp.
-  unsigned inIdx = 0;
   for (auto [index, type] : llvm::enumerate(ft.getInputs())) {
     ports.inputs.push_back({StringAttr::get(ctx, "in" + std::to_string(index)),
                             hw::PortDirection::INPUT, tc.convertType(type),
                             index, hw::InnerSymAttr{}});
-    inIdx++;
   }
 
   // Add all outputs of funcOp.
   for (auto [index, type] : llvm::enumerate(ft.getResults())) {
-    ports.outputs.push_back({StringAttr::get(ctx, "in" + std::to_string(index)),
-                             hw::PortDirection::OUTPUT, tc.convertType(type),
-                             index, hw::InnerSymAttr{}});
+    ports.outputs.push_back(
+        {StringAttr::get(ctx, "out" + std::to_string(index)),
+         hw::PortDirection::OUTPUT, tc.convertType(type), index,
+         hw::InnerSymAttr{}});
   }
 
   return ports;
@@ -522,8 +509,7 @@ static hw::ModulePortInfo getModulePortInfo(TypeConverter &tc,
 class FuncOpConversion : public DCOpConversionPattern<handshake::FuncOp> {
 public:
   using DCOpConversionPattern<handshake::FuncOp>::DCOpConversionPattern;
-  using OpAdaptor =
-      typename DCOpConversionPattern<handshake::FuncOp>::OpAdaptor;
+  using OpAdaptor = typename handshake::FuncOp::Adaptor;
 
   // Replaces a handshake.func with a hw.module, converting the argument and
   // result types using the provided type converter.

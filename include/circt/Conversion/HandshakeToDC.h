@@ -24,10 +24,6 @@ class Pass;
 
 namespace circt {
 
-namespace esi {
-class ChannelType;
-} // namespace esi
-
 std::unique_ptr<mlir::Pass> createHandshakeToDCPass();
 
 namespace handshake {
