@@ -24,6 +24,8 @@
 #include "circt/Dialect/OM/OMOps.h"
 #include "circt/Dialect/OM/OMTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/LLVM.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -82,7 +84,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   // The types must match exactly with the FMemModuleOp attribute type.
   SmallVector<NameTypePair> classFields;
   classFields.push_back({StringAttr::get(context, "name"),
-                         om::StringOMType::get(builderOM.getContext())});
+                         om::SymRefType::get(builderOM.getContext())});
   classFields.push_back(
       {StringAttr::get(context, "depth"),
        mlir::IntegerType::get(context, 64, IntegerType::Unsigned)});
@@ -164,7 +166,8 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
       memFields.push_back(createConstField(
           field.second,
           llvm::StringSwitch<TypedAttr>(field.first.getValue())
-              .Case("name", om::StringOMAttr::get(context, mem.getNameAttr()))
+              .Case("name", om::SymRefAttr::get(
+                                context, mlir::FlatSymbolRefAttr::get(mem)))
               .Case("depth", mem.getDepthAttr())
               .Case("width", mem.getDataWidthAttr())
               .Case("maskBits", mem.getMaskBitsAttr())
@@ -511,7 +514,7 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
       builderOM.getArrayAttr({StringAttr::get(context, "moduleName")}));
   Block *body = new Block();
   sitestBBClass.getRegion().push_back(body);
-  auto arg = body->addArgument(om::StringOMType::get(builderOM.getContext()),
+  auto arg = body->addArgument(om::SymRefType::get(builderOM.getContext()),
                                builderOM.getUnknownLoc());
   builderOM.setInsertionPointToEnd(body);
   builderOM.create<om::ClassFieldOp>(
@@ -551,8 +554,9 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
       for (auto &name : names) {
         j.value(name);
         auto modEntry = builderOM.create<om::ConstantOp>(
-            unknownLoc, om::StringOMType::get(context),
-            om::StringOMAttr::get(context, StringAttr::get(context, name)));
+            unknownLoc, om::SymRefType::get(context),
+            om::SymRefAttr::get(context,
+                                FlatSymbolRefAttr::get(context, name)));
         auto object = builderOM.create<om::ObjectOp>(
             unknownLoc,
             om::ClassType::get(context, FlatSymbolRefAttr::get(sitestBBClass)),
