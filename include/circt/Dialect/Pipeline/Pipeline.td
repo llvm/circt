@@ -127,7 +127,7 @@ def PipelineOp : Op<Pipeline_Dialect, "pipeline", [
     }
 
     // Returns the internal inputs of this pipeline.
-    ValueRange getInnerInputs() { return getBodyBlock()->getArguments().drop_back(1); }
+    ValueRange getInnerInputs() { return getBodyBlock()->getArguments(); }
 
     // Returns the internal enable signal of this pipeline.
     Value getInnerEnable() {
