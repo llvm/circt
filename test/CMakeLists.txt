@@ -20,6 +20,7 @@ set(CIRCT_TEST_DEPENDS
   split-file
   arcilator
   circt-capi-ir-test
+  circt-capi-om-test
   circt-as
   circt-dis
   circt-opt
