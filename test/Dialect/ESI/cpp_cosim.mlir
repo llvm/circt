@@ -3,7 +3,7 @@
 !TWrite = !esi.channel<!hw.struct<addr: i32, data: i8>>
 
 esi.service.decl @BSP {
-  esi.service.to_client @Recv : !esi.channel<!TWrite>
+  esi.service.to_client @Recv : !esi.channel<!esi.any>
   esi.service.to_server @Send : !esi.channel<i8>
 }
 

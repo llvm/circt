@@ -42,6 +42,10 @@ struct CPPAPI {
         ++errorCount;
       return failure();
     });
+
+    auto *ctxt = module.getContext();
+    toServerTypeString = StringAttr::get(ctxt, "to_server_type");
+    toClientTypeString = StringAttr::get(ctxt, "to_client_type");
   }
 
   /// Emit the whole API.
@@ -60,14 +64,23 @@ private:
   const Location unknown;
   size_t errorCount = 0;
 
+  // StringAttr constants
+  StringAttr toServerTypeString, toClientTypeString;
+
   llvm::MapVector<mlir::Type, CPPType> types;
   llvm::SmallVector<CPPService> cppServices;
 };
 } // anonymous namespace
 
 LogicalResult CPPAPI::gatherTypes() {
-  auto storeType = [&](mlir::Type type) -> LogicalResult {
-    auto dirType = esi::innerType(type);
+  auto storeType = [&](DictionaryAttr client, StringAttr key) -> LogicalResult {
+    auto keyAttr = client.getNamed(key);
+    if (!keyAttr)
+      return success();
+    TypeAttr type = dyn_cast<TypeAttr>(keyAttr->getValue());
+    if (!type)
+      return success();
+    Type dirType = esi::innerType(type.getValue());
     auto dirTypeSchemaIt = types.find(dirType);
     if (dirTypeSchemaIt == types.end()) {
       CPPType dirTypeSchema(dirType);
@@ -79,18 +92,18 @@ LogicalResult CPPAPI::gatherTypes() {
     return success();
   };
 
-  for (auto serviceDeclOp : module.getOps<ServiceDeclOpInterface>()) {
-    llvm::SmallVector<ServicePortInfo> ports;
-    serviceDeclOp.getPortList(ports);
-    for (auto portInfo : ports) {
-      if (portInfo.toClientType)
-        if (failed(storeType(portInfo.toClientType)))
-          return failure();
-      if (portInfo.toServerType)
-        if (failed(storeType(portInfo.toServerType)))
-          return failure();
+  WalkResult walkFailed = module.walk([&](ServiceHierarchyMetadataOp md) {
+    for (auto client : md.getClients().getAsRange<DictionaryAttr>()) {
+      if (failed(storeType(client, toServerTypeString)))
+        return WalkResult::interrupt();
+      if (failed(storeType(client, toClientTypeString)))
+        return WalkResult::interrupt();
     }
-  }
+    return WalkResult::advance();
+  });
+  if (walkFailed.wasInterrupted())
+    return failure();
+
   return success();
 }
 

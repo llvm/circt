@@ -252,12 +252,8 @@ LogicalResult CPPEndpoint::writeType(Location loc,
   auto emitType = [&](llvm::StringRef dir, mlir::Type type) -> LogicalResult {
     type = esi::innerType(type);
     auto cppTypeIt = types.find(type);
-    if (cppTypeIt == types.end()) {
-
-      emitError(loc) << "Type " << type
-                     << " not found in set of CPP API types!";
-      return failure();
-    }
+    assert(cppTypeIt != types.end() &&
+           "Type not found in set of CPP API types!");
 
     os << "/*" << dir << "Type=*/ ESITypes::" << cppTypeIt->second.name();
     return success();
