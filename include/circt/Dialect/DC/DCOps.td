@@ -222,8 +222,10 @@ def UnpackOp : DCOp<"unpack", [InferTypeOpInterface]> {
 def MergeOp : DCOp<"merge"> {
   let summary = "Merge operation";
   let description = [{
-    Non-deterministically selects one of the incoming tokens and emits an output
-    stating which token was selected.
+    Select one of the incoming tokens and emits an output stating which token
+    was selected. If multiple tokens are ready to transact at the same time,
+    the tokens are selected with priority, from first to last (i.e. left to right
+    in the IR). This property ensures deterministic behavior.
   }];
 
   let arguments = (ins TokenType:$first, TokenType:$second);
