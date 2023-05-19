@@ -790,3 +790,35 @@ firrtl.circuit "InternalPaths" {
    %node_r2 = firrtl.node %read_r2 : !firrtl.vector<bundle<a: uint<3>>, 3>
   }
 }
+
+// -----
+// Check resolving XMR's to use macro ABI.
+
+// CHECK-LABEL: firrtl.circuit "RefABI"
+firrtl.circuit "RefABI" {
+  firrtl.extmodule private @RefExtMore(in in: !firrtl.uint<1>,
+                                       out r: !firrtl.probe<uint<1>>,
+                                       out data: !firrtl.uint<3>,
+                                       out r2: !firrtl.probe<vector<bundle<a: uint<3>>, 3>>) attributes {convention = #firrtl<convention scalarized>}
+
+  // CHECK-LABEL: module public @RefABI(
+  firrtl.module public @RefABI(in %in: !firrtl.uint<1>) {
+    %ext_in, %ext_r, %ext_data, %ext_r2 =
+      firrtl.instance ext @RefExtMore(in in: !firrtl.uint<1>,
+                                      out r: !firrtl.probe<uint<1>>,
+                                      out data: !firrtl.uint<3>,
+                                      out r2: !firrtl.probe<vector<bundle<a: uint<3>>, 3>>)
+   firrtl.strictconnect %ext_in, %in : !firrtl.uint<1>
+
+   // CHECK: %[[XMR_R:.+]] = sv.xmr.ref #hw.innerNameRef<@RefABI::@[[EXT_SYM]]> ".`ref_RefExtMore_RefExtMore_r" : !hw.inout<i1>
+   // CHECK: %[[XMR_R_CAST:.+]] = builtin.unrealized_conversion_cast %[[XMR_R]] : !hw.inout<i1> to !firrtl.uint<1>
+   // CHECK: %node_r = firrtl.node %[[XMR_R_CAST]]
+   %read_r  = firrtl.ref.resolve %ext_r : !firrtl.probe<uint<1>>
+   %node_r = firrtl.node %read_r : !firrtl.uint<1>
+   // CHECK: %[[XMR_R2:.+]] = sv.xmr.ref #hw.innerNameRef<@RefABI::@[[EXT_SYM]]> ".`ref_RefExtMore_RefExtMore_r2" : !hw.inout<array<3xstruct<a: i3>>>
+   // CHECK: %[[XMR_R2_CAST:.+]] = builtin.unrealized_conversion_cast %[[XMR_R2]] : !hw.inout<array<3xstruct<a: i3>>> to !firrtl.vector<bundle<a: uint<3>>, 3>
+   // CHECK: %node_r2 = firrtl.node %[[XMR_R2_CAST]]
+   %read_r2  = firrtl.ref.resolve %ext_r2 : !firrtl.probe<vector<bundle<a: uint<3>>, 3>>
+   %node_r2 = firrtl.node %read_r2 : !firrtl.vector<bundle<a: uint<3>>, 3>
+  }
+}
