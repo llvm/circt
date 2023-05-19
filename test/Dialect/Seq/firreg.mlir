@@ -104,8 +104,7 @@ hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d:
   // SEPARATE-NEXT:   sv.passign %rNoSym, %in : i32
   // SEPARATE-NEXT: }
 
-  // CHECK:      sv.ifdef  "SYNTHESIS" {
-  // CHECK-NEXT: } else {
+  // CHECK:      sv.ifdef  "ENABLE_INITIAL_REG_" {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
@@ -185,8 +184,7 @@ hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   %1 = comb.mux bin %cond, %value, %count : i2
   %2 = comb.mux bin %reset, %c0_i2, %1 : i2
 
-  // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
-  // CHECK-NEXT: } else {
+  // CHECK-NEXT: sv.ifdef "ENABLE_INITIAL_REG_"  {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
@@ -295,8 +293,7 @@ hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (
   // COMMON-NEXT:    } else  {
   // COMMON-NEXT:    }
   // COMMON-NEXT:  }
-  // COMMON-NEXT:  sv.ifdef "SYNTHESIS"  {
-  // COMMON-NEXT:  } else {
+  // COMMON-NEXT:  sv.ifdef "ENABLE_INITIAL_REG_"  {
   // COMMON-NEXT:    sv.ordered {
   // COMMON-NEXT:      sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
   // COMMON-NEXT:        sv.verbatim "`FIRRTL_BEFORE_INITIAL"
@@ -344,8 +341,7 @@ hw.module private @UninitReg42(%clock: i1, %reset: i1, %cond: i1, %value: i42) {
   %1 = comb.mux %reset, %c0_i42, %0 : i42
 
   // CHECK:      %count = sv.reg sym @count : !hw.inout<i42>
-  // CHECK:      sv.ifdef "SYNTHESIS"  {
-  // CHECK-NEXT: } else {
+  // CHECK:      sv.ifdef "ENABLE_INITIAL_REG_"  {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
@@ -391,8 +387,7 @@ hw.module private @init1DVector(%clock: i1, %a: !hw.array<2xi1>) -> (b: !hw.arra
   // CHECK-NEXT:   sv.passign %r, %a : !hw.array<2xi1>
   // CHECK-NEXT: }
 
-  // CHECK:      sv.ifdef "SYNTHESIS" {
-  // CHECK-NEXT: } else {
+  // CHECK:      sv.ifdef "ENABLE_INITIAL_REG_" {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
@@ -438,8 +433,7 @@ hw.module private @init2DVector(%clock: i1, %a: !hw.array<1xarray<1xi1>>) -> (b:
   // CHECK:      sv.always posedge %clock  {
   // CHECK-NEXT:   sv.passign %r, %a : !hw.array<1xarray<1xi1>>
   // CHECK-NEXT: }
-  // CHECK-NEXT: sv.ifdef  "SYNTHESIS" {
-  // CHECK-NEXT: } else {
+  // CHECK-NEXT: sv.ifdef  "ENABLE_INITIAL_REG_" {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
@@ -479,8 +473,7 @@ hw.module private @initStruct(%clock: i1) {
   %r = seq.firreg %r clock %clock sym @__r__ : !hw.struct<a: i1>
 
   // CHECK:      %r = sv.reg sym @[[r_sym:[_A-Za-z0-9]+]]
-  // CHECK:      sv.ifdef "SYNTHESIS" {
-  // CHECK-NEXT: } else {
+  // CHECK:      sv.ifdef "ENABLE_INITIAL_REG_" {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
