@@ -215,7 +215,7 @@ LogicalResult CPPType::write(mlir::raw_indented_ostream &os) const {
 
 bool CPPType::isSupported() const {
   // C++ doesn't support esi.any (yet)
-  return !type.isa<esi::AnyType>() && ESICosimType::isSupported();
+  return !type.isa<esi::AnyType>() && ESIAPIType::isSupported();
 }
 
 void CPPType::writeReflection(mlir::raw_indented_ostream &os,
