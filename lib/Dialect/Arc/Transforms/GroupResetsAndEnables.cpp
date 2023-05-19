@@ -116,30 +116,14 @@ struct EnableGroupingPattern : public OpRewritePattern<ClockTreeOp> {
   }
 };
 
-struct GroupAssignmentsInIfPattern : public OpRewritePattern<ClockTreeOp> {
+struct GroupAssignmentsInIfPattern : public OpRewritePattern<scf::IfOp> {
   using OpRewritePattern::OpRewritePattern;
-  LogicalResult matchAndRewrite(ClockTreeOp clockTreeOp,
+  LogicalResult matchAndRewrite(scf::IfOp ifOp,
                                 PatternRewriter &rewriter) const override {
     // Pull values only used in certain reset/enable cases into the appropriate
     // IfOps
-    SmallVector<Region *> groupingRegions;
-    // Gather then/else regions of all top-level IfOps
-    for (auto resetIfOp : clockTreeOp.getBody().getOps<scf::IfOp>()) {
-      groupingRegions.push_back(&resetIfOp.getThenRegion());
-      groupingRegions.push_back(&resetIfOp.getElseRegion());
-    }
-    // Gather then/else regions of all second-level IfOps (e.g. enables within
-    // resets)
-    SmallVector<Region *> secondLevelRegions;
-    for (auto *resetRegion : groupingRegions) {
-      for (auto enableIfOp : resetRegion->getOps<scf::IfOp>()) {
-        secondLevelRegions.push_back(&enableIfOp.getThenRegion());
-        secondLevelRegions.push_back(&enableIfOp.getElseRegion());
-      }
-    }
-    groupingRegions.insert(groupingRegions.end(), secondLevelRegions.begin(),
-                           secondLevelRegions.end());
-
+    Region *groupingRegions[2] = {&ifOp.getThenRegion(), &ifOp.getElseRegion()};
+    auto clockTreeOp = ifOp->getParentOfType<ClockTreeOp>();
     bool changed = false;
     for (auto *region : groupingRegions) {
       if (region->empty())
@@ -222,10 +206,7 @@ LogicalResult GroupResetsAndEnablesPass::runOnModel(ModelOp modelOp) {
   patterns.insert<ResetGroupingPattern>(&context);
   patterns.insert<EnableGroupingPattern>(&context);
   patterns.insert<GroupAssignmentsInIfPattern>(&context);
-  GreedyRewriteConfig config;
-  config.strictMode = GreedyRewriteStrictness::ExistingOps;
-  if (failed(
-          applyPatternsAndFoldGreedily(modelOp, std::move(patterns), config))) {
+  if (failed(applyPatternsAndFoldGreedily(modelOp, std::move(patterns)))) {
     signalPassFailure();
   }
   return success();
