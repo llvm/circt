@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from ._om_ops_gen import *
-from .._mlir_libs._circt._om import Evaluator as BaseEvaluator, Object
+from .._mlir_libs._circt._om import Evaluator as BaseEvaluator, Object, ClassType
 
 from circt.ir import Attribute, Diagnostic, DiagnosticSeverity, Module, StringAttr
 from circt.support import attribute_to_var, var_to_attribute
@@ -13,7 +13,7 @@ from circt.support import attribute_to_var, var_to_attribute
 import sys
 import logging
 from dataclasses import fields
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Sequence, TypeVar
 
 if TYPE_CHECKING:
   from _typeshed.stdlib.dataclass import DataclassInstance
@@ -58,21 +58,34 @@ class Evaluator(BaseEvaluator):
     # Call the base instantiate method.
     obj = super().instantiate(class_name, actual_params)
 
+    # Wrap the Object in the provided dataclass.
+    return self._instantiate_dataclass(cls, obj)
+
+  def _instantiate_dataclass(self, cls: type["DataclassInstance"],
+                             obj: Object) -> "DataclassInstance":
     # Convert the field names of the class we are instantiating to StringAttrs
     # within the Evaluator's context.
     with self.module.context:
-      field_names = [StringAttr.get(field.name) for field in fields(cls)]
+      class_fields = [
+          (StringAttr.get(field.name), field.type) for field in fields(cls)
+      ]
 
-    # Convert the instantiated Object fields from Attributes to Python objects.
-    # This will be generalized to support Objects in fields soon.
+    # Convert the instantiated Object fields to Python objects.
     object_fields = {}
-    for field_name in field_names:
+
+    for field_name, field_type in class_fields:
       # Get the field from the object.
       field = obj.get_field(field_name)
 
-      # Convert the field value to a Python object. This relies on the
-      # circt.support helpers to convert from Attribute to Python objects.
-      field_value = attribute_to_var(field)
+      # Handle primitives represented as Attributes and nested Objects.
+      if isinstance(field, Attribute):
+        # Convert the field value to a Python object. This relies on the
+        # circt.support helpers to convert from Attribute to Python objects.
+        field_value = attribute_to_var(field)
+      else:
+        # Convert the field value to a Python dataclass for the Object.
+        assert isinstance(field, Object)
+        field_value = self._instantiate_dataclass(field_type, field)
 
       # Save this field in the keyword argument dictionary that will be passed
       # to the dataclass constructor.
