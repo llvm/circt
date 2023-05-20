@@ -24,6 +24,9 @@ struct Object {
   // Instantiate an Object with a reference to the underlying OMObject.
   Object(OMObject object) : object(object) {}
 
+  /// Get the Type from an Object, which will be a ClassType.
+  MlirType getType() { return omEvaluatorObjectGetType(object); }
+
   // Get a field from the Object, using pybind's support for variant to return a
   // Python object that is either an Object or Attribute.
   std::variant<Object, MlirAttribute> getField(MlirAttribute name) {
@@ -96,5 +99,10 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
   // Add the Object class definition.
   py::class_<Object>(m, "Object")
       .def("get_field", &Object::getField, "Get a field from an Object",
-           py::arg("name"));
+           py::arg("name"))
+      .def_property_readonly("type", &Object::getType,
+                             "The Type of the Object");
+
+  // Add the ClassType class definition.
+  mlir_type_subclass(m, "ClassType", omTypeIsAClassType);
 }
