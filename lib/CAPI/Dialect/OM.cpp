@@ -26,6 +26,13 @@ using namespace circt::om;
 MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(OM, om, OMDialect)
 
 //===----------------------------------------------------------------------===//
+// Type API.
+//===----------------------------------------------------------------------===//
+
+/// Is the Type a ClassType.
+bool omTypeIsAClassType(MlirType type) { return unwrap(type).isa<ClassType>(); }
+
+//===----------------------------------------------------------------------===//
 // Evaluator data structures.
 //===----------------------------------------------------------------------===//
 
@@ -86,6 +93,11 @@ MlirModule omEvaluatorGetModule(OMEvaluator evaluator) {
 bool omEvaluatorObjectIsNull(OMObject object) {
   // Just check if the Object shared pointer is null.
   return !object.ptr;
+}
+
+/// Get the Type from an Object, which will be a ClassType.
+MlirType omEvaluatorObjectGetType(OMObject object) {
+  return wrap((*unwrap(object))->getType());
 }
 
 /// Get a field from an Object, which must contain a field of that name.

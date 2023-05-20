@@ -49,6 +49,18 @@ void testEvaluator(MlirContext ctx) {
   OMObject object =
       omEvaluatorInstantiate(evaluator, className, 1, &actualParam);
 
+  // Test Object type.
+
+  MlirType objectType = omEvaluatorObjectGetType(object);
+
+  // CHECK: !om.class.type<@Test>
+  mlirTypeDump(objectType);
+
+  bool isClassType = omTypeIsAClassType(objectType);
+
+  // CHECK: object type is class type: 1
+  fprintf(stderr, "object type is class type: %d\n", isClassType);
+
   // Test get field failure.
 
   MlirAttribute missingFieldName =
