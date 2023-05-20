@@ -66,7 +66,7 @@ add_circt_dialect_library(CIRCTESI
   MLIRESIEnumsIncGen
   ${ESI_Deps}
 
-LINK_COMPONENTS
+  LINK_COMPONENTS
   Core
   Support
 
