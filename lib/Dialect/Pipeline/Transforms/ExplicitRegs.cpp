@@ -27,20 +27,20 @@ private:
   // Recursively routes value v backwards through the pipeline, adding new
   // registers to 'stage' if the value was not already registered in the stage.
   // Returns the registerred version of 'v' through 'stage'.
-  Value routeThroughStage(OpOperand &v, PipelineStageOp stage);
+  Value routeThroughStage(OpOperand &v, StageSeparatingOp stage);
 
   // A mapping storing whether a given stage register constains a registerred
   // version of a given value. The registered version will be a backedge during
   // pipeline body analysis. Once the entire body has been analyzed, the
-  // pipeline.stage operations will be replaced with pipeline.stage.register
+  // pipeline.stage operations will be replaced with pipeline.ss.reg
   // operations containing the requested regs, and the backedge will be
   // replaced. MapVector ensures deterministic iteration order, which in turn
   // ensures determinism during stage op IR emission.
-  DenseMap<PipelineStageOp, llvm::MapVector<Value, Backedge>> stageRegMap;
+  DenseMap<StageSeparatingOp, llvm::MapVector<Value, Backedge>> stageRegMap;
 
   // A linked list of stages in the pipeline. Allows for easily looking up the
   // predecessor stage of a given stage.
-  DenseMap<PipelineStageOp, PipelineStageOp> stagePredecessor;
+  DenseMap<StageSeparatingOp, StageSeparatingOp> stagePredecessor;
 
   std::shared_ptr<BackedgeBuilder> bb;
 };
@@ -48,7 +48,8 @@ private:
 } // end anonymous namespace
 
 // NOLINTNEXTLINE(misc-no-recursion)
-Value ExplicitRegsPass::routeThroughStage(OpOperand &v, PipelineStageOp stage) {
+Value ExplicitRegsPass::routeThroughStage(OpOperand &v,
+                                          StageSeparatingOp stage) {
   Value retVal = v.get();
   if (!stage) {
     // Recursive base case - nothing to route (v is a block operand).
@@ -77,7 +78,7 @@ Value ExplicitRegsPass::routeThroughStage(OpOperand &v, PipelineStageOp stage) {
   auto predStageIt = stagePredecessor.find(stage);
   assert(predStageIt != stagePredecessor.end() &&
          "stage should have been registered before calling this function");
-  PipelineStageOp predecessorStage = predStageIt->second;
+  StageSeparatingOp predecessorStage = predStageIt->second;
   if (predecessorStage)
     routeThroughStage(v, predecessorStage);
 
@@ -90,11 +91,11 @@ void ExplicitRegsPass::runOnOperation() {
   bb = std::make_shared<BackedgeBuilder>(b, getOperation().getLoc());
 
   // A list of stages in the pipeline in the order which they appear.
-  SmallVector<PipelineStageOp> stageList;
-  PipelineStageOp currStage = nullptr;
+  SmallVector<StageSeparatingOp> stageList;
+  StageSeparatingOp currStage = nullptr;
   // Iterate over the pipeline body in-order (!).
   for (auto &op : *pipeline.getBodyBlock()) {
-    if (auto stageOp = dyn_cast<PipelineStageOp>(&op)) {
+    if (auto stageOp = dyn_cast<StageSeparatingOp>(&op)) {
       stagePredecessor[stageOp] = currStage;
       currStage = stageOp;
       continue;
@@ -132,15 +133,15 @@ void ExplicitRegsPass::runOnOperation() {
       regIns.push_back(value);
     }
 
-    auto newStageOp = b.create<PipelineStageRegisterOp>(
-        stageOp.getLoc(), stageOp.getWhen(), regIns);
+    auto newStageOp = b.create<StageSeparatingRegOp>(
+        stageOp.getLoc(), stageOp.getEnable(), regIns);
     stageOp.getValid().replaceAllUsesWith(newStageOp.getValid());
 
     // Replace backedges with the outputs of the new stage.
     for (auto it : llvm::enumerate(regMap)) {
       auto index = it.index();
       auto &[value, backedge] = it.value();
-      backedge.setValue(newStageOp.getRegOuts()[index]);
+      backedge.setValue(newStageOp.getOutputs()[index]);
     }
     stageOp.erase();
   }

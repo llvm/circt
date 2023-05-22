@@ -31,6 +31,8 @@
 
 #include "circt/Dialect/Pipeline/PipelineDialect.h.inc"
 
+#include "circt/Dialect/Pipeline/PipelineInterfaces.h.inc"
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/Pipeline/Pipeline.h.inc"
 

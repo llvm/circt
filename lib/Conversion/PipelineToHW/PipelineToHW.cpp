@@ -42,16 +42,16 @@ static LogicalResult lowerPipeline(PipelineOp pipeline, OpBuilder &builder) {
   for (auto &op : llvm::make_early_inc_range(*pipeline.getBodyBlock())) {
     auto loc = op.getLoc();
     llvm::TypeSwitch<Operation *, void>(&op)
-        .Case<PipelineStageRegisterOp>([&](auto stage) {
+        .Case<StageSeparatingRegOp>([&](auto stage) {
           unsigned stageIdx = stage.index();
           auto validRegName =
               builder.getStringAttr("s" + std::to_string(stageIdx) + "_valid");
           auto validReg = builder.create<seq::CompRegOp>(
-              loc, builder.getI1Type(), stage.getWhen(), clk, validRegName, rst,
-              Value(), StringAttr());
+              loc, builder.getI1Type(), stage.getEnable(), clk, validRegName,
+              rst, Value(), StringAttr());
           stage.getValid().replaceAllUsesWith(validReg);
 
-          for (auto it : llvm::enumerate(stage.getRegIns())) {
+          for (auto it : llvm::enumerate(stage.getInputs())) {
             auto regIdx = it.index();
             auto regIn = it.value();
             auto regName =
@@ -60,10 +60,10 @@ static LogicalResult lowerPipeline(PipelineOp pipeline, OpBuilder &builder) {
             auto reg = builder.create<seq::CompRegOp>(loc, regIn.getType(),
                                                       regIn, clk, regName, rst,
                                                       Value(), StringAttr());
-            stage.getRegOuts()[regIdx].replaceAllUsesWith(reg);
+            stage.getOutputs()[regIdx].replaceAllUsesWith(reg);
           }
         })
-        .Case<pipeline::ReturnOp>([&](auto ret) { retVals = ret.getOutputs(); })
+        .Case<pipeline::ReturnOp>([&](auto ret) { retVals = ret.getInputs(); })
         .Default([&](auto op) { op->moveBefore(pipeline); });
   }
 
