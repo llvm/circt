@@ -122,9 +122,10 @@ struct GroupAssignmentsInIfPattern : public OpRewritePattern<scf::IfOp> {
                                 PatternRewriter &rewriter) const override {
     // Pull values only used in certain reset/enable cases into the appropriate
     // IfOps
-    Region *groupingRegions[2] = {&ifOp.getThenRegion(), &ifOp.getElseRegion()};
     // Skip anything not in a ClockTreeOp
     if (auto clockTreeOp = ifOp->getParentOfType<ClockTreeOp>()) {
+      Region *groupingRegions[2] = {&ifOp.getThenRegion(),
+                                    &ifOp.getElseRegion()};
       bool changed = false;
       for (auto *region : groupingRegions) {
         if (region->empty())
@@ -144,6 +145,8 @@ struct GroupAssignmentsInIfPattern : public OpRewritePattern<scf::IfOp> {
           Operation *op = worklist.back();
           for (auto operand : op->getOperands()) {
             if (Operation *definition = operand.getDefiningOp()) {
+              // Skip if the operand is already defined in this block or is
+              // defined out of the clock tree
               if (definition->getBlock() == op->getBlock() ||
                   !clockTreeOp->isAncestor(definition))
                 continue;
@@ -161,10 +164,7 @@ struct GroupAssignmentsInIfPattern : public OpRewritePattern<scf::IfOp> {
                 if (!safeToMove)
                   break;
               }
-              // For some unknown reason, just calling moveBefore has the same
-              // output but is much slower
-              rewriter.updateRootInPlace(definition,
-                                         [&]() { definition->moveBefore(op); });
+              definition->moveBefore(op);
               changed = true;
               theseOperands.push_back(definition);
             }
@@ -207,9 +207,8 @@ LogicalResult GroupResetsAndEnablesPass::runOnModel(ModelOp modelOp) {
 
   MLIRContext &context = getContext();
   RewritePatternSet patterns(&context);
-  patterns.insert<ResetGroupingPattern>(&context);
-  patterns.insert<EnableGroupingPattern>(&context);
-  patterns.insert<GroupAssignmentsInIfPattern>(&context);
+  patterns.add<ResetGroupingPattern, EnableGroupingPattern,
+               GroupAssignmentsInIfPattern>(&context);
   if (failed(applyPatternsAndFoldGreedily(modelOp, std::move(patterns)))) {
     signalPassFailure();
   }
