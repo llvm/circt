@@ -478,7 +478,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
           b.getStringAttr(moduleNamespace.newName(reg.getName())));
 
     if (mem.initIsInline) {
-      b.create<sv::IfDefOp>("SYNTHESIS", std::function<void()>(), [&]() {
+      b.create<sv::IfDefOp>("ENABLE_INITIAL_MEM_", [&]() {
         b.create<sv::InitialOp>([&]() {
           b.create<sv::ReadMemOp>(reg, mem.initFilename,
                                   mem.initIsBinary
@@ -543,7 +543,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     return;
 
   constexpr unsigned randomWidth = 32;
-  b.create<sv::IfDefOp>("SYNTHESIS", std::function<void()>(), [&]() {
+  b.create<sv::IfDefOp>("ENABLE_INITIAL_MEM_", [&]() {
     sv::RegOp randReg;
     SmallVector<sv::RegOp> randRegs;
     if (!disableRegRandomization) {
