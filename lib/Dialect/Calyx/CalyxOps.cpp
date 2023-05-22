@@ -985,7 +985,7 @@ LogicalResult CombGroupOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
-// GroupOp
+// GroupGoOp
 //===----------------------------------------------------------------------===//
 GroupGoOp GroupOp::getGoOp() {
   auto goOps = getBodyBlock()->getOps<GroupGoOp>();
@@ -996,6 +996,83 @@ GroupGoOp GroupOp::getGoOp() {
 GroupDoneOp GroupOp::getDoneOp() {
   auto body = this->getBodyBlock();
   return cast<GroupDoneOp>(body->getTerminator());
+}
+
+//===----------------------------------------------------------------------===//
+// CycleOp
+//===----------------------------------------------------------------------===//
+void CycleOp::print(OpAsmPrinter &p) {
+  p << " ";
+  // The guard is optional.
+  auto start = this->getStart();
+  auto end = this->getEnd();
+  if (end.has_value()) {
+    p << "[" << start << ":" << end.value() << "]";
+  } else {
+    p << start;
+  }
+}
+
+ParseResult CycleOp::parse(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::UnresolvedOperand, 2> operandInfos;
+  
+  uint32_t startLiteral;
+  uint32_t endLiteral;
+
+  auto hasEnd = succeeded(parser.parseOptionalLSquare());
+  
+  if (parser.parseInteger(startLiteral)) {
+    parser.emitError(parser.getNameLoc(), "Could not parse start cycle");
+    return failure();
+  }
+
+  auto start = parser.getBuilder().getI32IntegerAttr(startLiteral);
+  result.addAttribute(getStartAttrName(result.name), start);
+
+  if (hasEnd) {
+    if (parser.parseColon())
+      return failure();
+
+    if (auto res = parser.parseOptionalInteger(endLiteral); res.has_value()) {
+      auto end = parser.getBuilder().getI32IntegerAttr(endLiteral);
+      result.addAttribute(getEndAttrName(result.name), end);
+    }
+
+    if (parser.parseRSquare())
+      return failure();
+  }
+
+  result.addTypes(parser.getBuilder().getI1Type());
+
+  return success();
+}
+
+LogicalResult CycleOp::verify() {
+  uint32_t latency = this->getGroupLatency();
+
+  if (this->getStart() >= latency) {
+    emitOpError("start cycle must be less than the group latency");
+    return failure();
+  }
+
+  if (this->getEnd().has_value()) {
+    if (this->getStart() >= this->getEnd().value()) {
+      emitOpError("start cycle must be less than end cycle");
+      return failure();
+    }
+
+    if (this->getEnd() >= latency) {
+      emitOpError("end cycle must be less than the group latency");
+      return failure();
+    }
+  }
+
+  return success();
+}
+
+uint32_t CycleOp::getGroupLatency() {
+  auto group = (*this)->getParentOfType<StaticGroupOp>();
+  return group.getLatency();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1049,6 +1126,10 @@ LogicalResult CombGroupOp::drivesPort(Value port) {
   return portDrivenByGroup(*this, port);
 }
 
+LogicalResult StaticGroupOp::drivesPort(Value port) {
+  return portDrivenByGroup(*this, port);
+}
+
 /// Checks whether all ports are driven within the group.
 static LogicalResult allPortsDrivenByGroup(GroupInterface group,
                                            ValueRange ports) {
@@ -1062,6 +1143,10 @@ LogicalResult GroupOp::drivesAllPorts(ValueRange ports) {
 }
 
 LogicalResult CombGroupOp::drivesAllPorts(ValueRange ports) {
+  return allPortsDrivenByGroup(*this, ports);
+}
+
+LogicalResult StaticGroupOp::drivesAllPorts(ValueRange ports) {
   return allPortsDrivenByGroup(*this, ports);
 }
 
@@ -1081,6 +1166,10 @@ LogicalResult CombGroupOp::drivesAnyPort(ValueRange ports) {
   return anyPortsDrivenByGroup(*this, ports);
 }
 
+LogicalResult StaticGroupOp::drivesAnyPort(ValueRange ports) {
+  return anyPortsDrivenByGroup(*this, ports);
+}
+
 /// Checks whether any ports are read within the group.
 static LogicalResult anyPortsReadByGroup(GroupInterface group,
                                          ValueRange ports) {
@@ -1094,6 +1183,10 @@ LogicalResult GroupOp::readsAnyPort(ValueRange ports) {
 }
 
 LogicalResult CombGroupOp::readsAnyPort(ValueRange ports) {
+  return anyPortsReadByGroup(*this, ports);
+}
+
+LogicalResult StaticGroupOp::readsAnyPort(ValueRange ports) {
   return anyPortsReadByGroup(*this, ports);
 }
 

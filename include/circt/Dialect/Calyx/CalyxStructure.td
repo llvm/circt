@@ -471,7 +471,8 @@ def StaticGroupOp : CalyxOp<"static_group", [
     NoRegionArguments,
     RegionKindInterface,
     SingleBlock,
-    Symbol
+    Symbol,
+    NoTerminator
   ]> {
   let summary = "Calyx Static Group";
   let description = [{
@@ -505,15 +506,10 @@ def StaticGroupOp : CalyxOp<"static_group", [
       assert(region->hasOneBlock() && "The body should have one Block.");
       return &region->front();
     }
-
-    /* static StringRef getLatencyAttrName() { */
-    /*   return "latency"; */
-    /* } */
-
   }];
 
   let regions = (region SizedRegion<1>:$body);
-  let assemblyFormat = "$sym_name $body attr-dict";
+  let assemblyFormat = "`latency` `<` $latency `>` $sym_name $body attr-dict";
   let skipDefaultBuilders = true;
   let builders = [
     OpBuilder<(ins "StringRef":$sym_name, "uint64_t":$latency), [{
@@ -522,7 +518,7 @@ def StaticGroupOp : CalyxOp<"static_group", [
         StringAttr::get($_state.getContext(), sym_name)
       );
       $_state.addAttribute(
-        this->getLatencyAttrName(),
+        getLatencyAttrName($_state.name),
         mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 64), latency)
       );
       Region* region = $_state.addRegion();
@@ -531,7 +527,7 @@ def StaticGroupOp : CalyxOp<"static_group", [
     OpBuilder<(ins "StringAttr":$sym_name, "uint64_t":$latency), [{
       $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), sym_name);
       $_state.addAttribute(
-        this->getLatencyAttrName(),
+        getLatencyAttrName($_state.name),
         mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 64), latency)
       );
       Region* region = $_state.addRegion();
@@ -542,7 +538,7 @@ def StaticGroupOp : CalyxOp<"static_group", [
 
 def AssignOp : CalyxOp<"assign", [
     SameTypeConstraint<"dest", "src">,
-    ParentOneOf<["GroupOp", "CombGroupOp", "WiresOp"]>
+    ParentOneOf<["GroupOp", "CombGroupOp", "StaticGroupOp","WiresOp"]>
   ]> {
   let summary = "Calyx Assignment";
   let description = [{
@@ -621,4 +617,43 @@ def GroupGoOp : CalyxGroupPort<"group_go", [
       $_state.addOperands(src);
     }]>
   ];
+}
+
+def CycleOp : CalyxOp<"cycle", [
+  HasParent<"StaticGroupOp">,
+]> {
+  let summary = "Calyx Static Cycle Op";
+  let description = [{
+  }];
+  let arguments = (ins
+    I32Attr:$start,
+    OptionalAttr<I32Attr>:$end
+  );
+  let results = (outs 
+    I1:$active
+  );
+  let extraClassDeclaration = [{
+    /// Returns the latency of the parent static group.
+    uint32_t getGroupLatency();
+  }];
+  let builders = [
+    OpBuilder<(ins "uint32_t":$start), [{
+      $_state.addAttribute(
+        getStartAttrName($_state.name),
+        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 32), start)
+      );
+    }]>,
+    OpBuilder<(ins "uint32_t":$start, "uint32_t":$end), [{
+      $_state.addAttribute(
+        getStartAttrName($_state.name),
+        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 32), start)
+      );
+      $_state.addAttribute(
+        getEndAttrName($_state.name),
+        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 32), end)
+      );
+    }]>
+  ];
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
