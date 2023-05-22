@@ -413,6 +413,11 @@ option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation).")
 if (CAPNP_DISABLE)
   message (STATUS "Disabling Cap'nProto.")
 else()
+  # Some of our CMake code which is only used in Capnp builds uses newer CMake
+  # features. Since most compilations are not capnp builds, only require the new
+  # version for those builds.
+  cmake_minimum_required(VERSION 3.23)
+
   if(DEFINED CAPNP_PATH)
     set(ENV{PKG_CONFIG_PATH}
       "${CAPNP_PATH}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
