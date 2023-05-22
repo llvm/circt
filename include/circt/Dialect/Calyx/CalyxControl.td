@@ -258,3 +258,29 @@ def WhileOp : CalyxContainer<"while", [
   ];
 
 }
+
+def StaticRepeatOp : CalyxContainer<"static_repeat", [
+    ControlLike
+  ]> {
+  let summary = "Calyx Static Repeat";
+  let arguments = (ins
+    I32Attr:$count
+  );
+  let description = [{
+  }];
+  let hasCanonicalizer = true;
+  let assemblyFormat = "$count $body attr-dict";
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins
+      "uint32_t":$count), [{
+        $_state.addAttribute("count", 
+        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 32), count)
+        );
+
+        Region *body = $_state.addRegion();
+        body->push_back(new Block());
+    }]>
+  ];
+
+}

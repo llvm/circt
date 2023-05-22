@@ -134,7 +134,7 @@ PortInfo calyx::getPortInfo(BlockArgument arg) {
 
 /// Returns whether the given operation has a control region.
 static bool hasControlRegion(Operation *op) {
-  return isa<ControlOp, SeqOp, IfOp, WhileOp, ParOp>(op);
+  return isa<ControlOp, SeqOp, IfOp, WhileOp, ParOp, StaticRepeatOp>(op);
 }
 
 /// Verifies the body of a ControlLikeOp.
@@ -211,7 +211,7 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto &region = op->getRegion(0);
   // Operations that are allowed in the body of a ControlLike op.
   auto isValidBodyOp = [](Operation *operation) {
-    return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp>(operation);
+    return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp, StaticRepeatOp>(operation);
   };
   for (auto &&bodyOp : region.front()) {
     if (isValidBodyOp(&bodyOp))
@@ -2226,6 +2226,30 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
   }
 
   return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// StaticRepeatOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult zeroRepeat(StaticRepeatOp op,
+                                     PatternRewriter &rewriter) {
+  if (op.getCount() == 0) {
+    Block *controlBody = op.getBodyBlock();
+    for (auto &op : make_early_inc_range(*controlBody))
+      op.erase();
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  return failure();
+}
+
+void StaticRepeatOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                        MLIRContext *context) {
+  patterns.add(emptyControl<StaticRepeatOp>);
+  patterns.add(zeroRepeat);
 }
 
 //===----------------------------------------------------------------------===//
