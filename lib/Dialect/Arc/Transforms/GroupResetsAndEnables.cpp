@@ -164,7 +164,10 @@ struct GroupAssignmentsInIfPattern : public OpRewritePattern<scf::IfOp> {
                 if (!safeToMove)
                   break;
               }
-              definition->moveBefore(op);
+              // For some currently unknown reason, just calling moveBefore
+              // directly has the same output but is much slower
+              rewriter.updateRootInPlace(definition,
+                                         [&]() { definition->moveBefore(op); });
               changed = true;
               theseOperands.push_back(definition);
             }
