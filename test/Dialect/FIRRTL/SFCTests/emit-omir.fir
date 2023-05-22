@@ -32,7 +32,7 @@ circuit Foo : %[[
           {"info": "", "name": "b", "value": "OMInstanceTarget:~Foo|Foo"},
           {"info": "", "name": "c", "value": "OMMemberReferenceTarget:~Foo|Foo"},
           {"info": "", "name": "d", "value": "OMMemberInstanceTarget:~Foo|Foo"},
-          {"info": "", "name": "e", "value": "OMDontTouchedReferenceTarget:~Foo|Foo"},
+          {"info": "", "name": "e", "value": "OMDontTouchedReferenceTarget:~Foo|Foo>unsigned"},
           {"info": "", "name": "f", "value": "OMReferenceTarget:~Foo|Bar"},
           {"info": "", "name": "g", "value": "OMReferenceTarget:~Foo|Foo>signed"}
         ]
@@ -124,7 +124,7 @@ circuit Foo : %[[
 ; CHECK:       "name": "d"
 ; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo"
 ; CHECK:       "name": "e"
-; CHECK-NEXT:  "value": "OMDontTouchedReferenceTarget:~Foo|Foo"
+; CHECK-NEXT:  "value": "OMDontTouchedReferenceTarget:~Foo|Foo>unsigned_0"
 ; CHECK:       "name": "f"
 ; CHECK-NEXT:  "value": "OMReferenceTarget:~Foo|Bar"
 ; CHECK:       "name": "g",

@@ -253,6 +253,16 @@ static std::optional<Attribute> scatterOMIR(Attribute original,
           tracker.append("id", idAttr);
           tracker.append("target", StringAttr::get(ctx, value));
 
+          // Add the dontTouch annotation to the target for
+          // OMDontTouchedReferenceTarget.
+          if (tpe == "OMDontTouchedReferenceTarget") {
+            NamedAttrList dontTouchAnno;
+            dontTouchAnno.append("class",
+                                 StringAttr::get(ctx, dontTouchAnnoClass));
+            dontTouchAnno.append("target", StringAttr::get(ctx, value));
+            state.addToWorklistFn(DictionaryAttr::get(ctx, dontTouchAnno));
+          }
+
           state.addToWorklistFn(DictionaryAttr::get(ctx, tracker));
 
           return addID(tpe, value, idAttr);

@@ -286,3 +286,4 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
 // CHECK-SAME:    {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[bID]] : i64}
 // CHECK-NEXT:  %g = firrtl.wire
 // CHECK-SAME:    {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[gID]] : i64}
+// CHECK-SAME:    {class = "firrtl.transforms.DontTouchAnnotation"}
