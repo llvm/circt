@@ -1495,6 +1495,14 @@ Example:
 }
 ```
 
+## Discardable Annotaions
+
+By default, annotations in the FIRRTL dialect prevent dead code elimination (DCE).
+However, certain annotations, like OMTracker, are considered to have a "weak"
+reference to their target. This means that the compiler has the option to delete
+the target if it is determined to be dead. To indicate this property, we consider
+an annotation with `circt.discardable` field as discardable.
+
 ## Attributes in SV
 
 Some annotations transform into attributes consumed by non-FIRRTL passes.  This

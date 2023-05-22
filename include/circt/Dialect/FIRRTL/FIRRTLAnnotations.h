@@ -493,6 +493,10 @@ struct PortAnnoTarget : public AnnoTarget {
 /// This function generates an error message in the failure case.
 LogicalResult extractDUT(FModuleOp mod, FModuleOp &dut);
 
+/// Return true if the given annotation is fine to drop when an annotation
+/// target is dead.
+bool isDiscardableAnnotation(Annotation anno);
+
 } // namespace firrtl
 } // namespace circt
 
