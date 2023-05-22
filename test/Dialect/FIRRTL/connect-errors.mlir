@@ -375,6 +375,28 @@ firrtl.module @test(out %a: !firrtl.bundle<a flip: bundle<a flip: uint<1>>>) {
 
 // -----
 
+// Check that different labels cause the enumeration to not match.
+
+firrtl.circuit "test"  {
+firrtl.module @test(in %a: !firrtl.enum<a: uint<1>>, out %b: !firrtl.enum<a: uint<2>>) {
+  // expected-error @below {{type mismatch between destination '!firrtl.enum<a: uint<2>>' and source '!firrtl.enum<a: uint<1>>'}}
+  firrtl.connect %b, %a : !firrtl.enum<a: uint<2>>, !firrtl.enum<a: uint<1>>
+}
+}
+
+// -----
+
+// Check that different data types causes the enumeration to not match.
+
+firrtl.circuit "test"  {
+firrtl.module @test(in %a: !firrtl.enum<a: uint<0>>, out %b: !firrtl.enum<b: uint<0>>) {
+  // expected-error @below {{type mismatch between destination '!firrtl.enum<b: uint<0>>' and source '!firrtl.enum<a: uint<0>>'}}
+  firrtl.connect %b, %a : !firrtl.enum<b: uint<0>>, !firrtl.enum<a: uint<0>>
+}
+}
+
+// -----
+
 /// Check that the following is an invalid sink flow source.  This has to use a
 /// memory because all other sinks (module outputs or instance inputs) can
 /// legally be used as sources.
@@ -529,11 +551,60 @@ firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.sint<1>) {
 
 // -----
 
-/// Non-const types cannot be connected to const types
+/// Non-const types cannot be connected to const types.
 
 firrtl.circuit "test" {
 firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.const.uint<1>) {
   // expected-error @+1 {{type mismatch}}
   firrtl.connect %b, %a : !firrtl.const.uint<1>, !firrtl.uint<1>
+}
+}
+
+// -----
+
+// Non-const aggregates cannot be connected to const types.
+
+firrtl.circuit "test" {
+firrtl.module @test(in %in   : !firrtl.bundle<a: uint<1>>,
+                    out %out : !firrtl.const.bundle<a: uint<1>>) {
+  // expected-error @+1 {{type mismatch}}
+  firrtl.connect %out, %in : !firrtl.const.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
+}
+}
+
+// -----
+
+/// Const flip types cannot be connected to non-const flip types.
+
+firrtl.circuit "test" {
+firrtl.module @test(in %in   : !firrtl.const.bundle<a flip: uint<1>>,
+                    out %out : !firrtl.bundle<a flip: uint<1>>) {
+  // expected-error @+1 {{type mismatch}}
+  firrtl.connect %out, %in : !firrtl.bundle<a flip: uint<1>>, !firrtl.const.bundle<a flip: uint<1>>
+}
+}
+
+// -----
+
+/// Nested const flip types cannot be connected to non-const flip types.
+
+firrtl.circuit "test" {
+firrtl.module @test(in %in   : !firrtl.bundle<a flip: const.uint<1>>,
+                    out %out : !firrtl.bundle<a flip: uint<1>>) {
+  // expected-error @+1 {{type mismatch}}
+  firrtl.connect %out, %in : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: const.uint<1>>
+}
+}
+
+// -----
+
+/// Non-const double flip types cannot be connected to const.
+
+firrtl.circuit "test" {
+firrtl.module @test(in %in   : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>,
+                    out %out : !firrtl.const.bundle<a flip: bundle<a flip: uint<1>>>) {
+  // expected-error @+1 {{type mismatch}}
+  firrtl.connect %out, %in : !firrtl.const.bundle<a flip: bundle<a flip: uint<1>>>, 
+                             !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
 }
 }

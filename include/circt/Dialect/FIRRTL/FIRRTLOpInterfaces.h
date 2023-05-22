@@ -70,11 +70,12 @@ struct PortInfo {
   /// contains either bi-directional signals or analog types.
   /// Non-HW types (e.g., ref types) are never considered InOut.
   bool isInOut() {
-    auto baseType = dyn_cast<FIRRTLBaseType>(type);
-    if (!baseType)
-      return false;
-
-    return !baseType.isPassive() || baseType.containsAnalog();
+    return TypeSwitch<Type, bool>(type)
+        .Case<FIRRTLBaseType>([](auto type) {
+          return !type.containsReference() &&
+                 (!type.isPassive() || type.containsAnalog());
+        })
+        .Default(false);
   }
 
   /// Default constructors

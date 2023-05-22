@@ -274,6 +274,12 @@ static cl::opt<bool> addVivadoRAMAddressConflictSynthesisBugWorkaround(
         "memories"),
     cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool> emitSeparateAlwaysBlocks(
+    "emit-separate-always-blocks",
+    cl::desc("Prevent always blocks from being merged and emit constructs into "
+             "separate always blocks whenever possible"),
+    cl::init(false), cl::cat(mainCategory));
+
 enum class RandomKind { None, Mem, Reg, All };
 
 static cl::opt<RandomKind> disableRandom(
@@ -430,11 +436,12 @@ static bool checkBytecodeOutputToConsole(raw_ostream &os) {
 
 /// Print the operation to the specified stream, emitting bytecode when
 /// requested and politely avoiding dumping to terminal unless forced.
-static void printOp(Operation *op, raw_ostream &os) {
+static LogicalResult printOp(Operation *op, raw_ostream &os) {
   if (emitBytecode && (force || !checkBytecodeOutputToConsole(os)))
-    writeBytecodeToFile(op, os, mlir::BytecodeWriterConfig(getCirctVersion()));
-  else
-    op->print(os);
+    return writeBytecodeToFile(op, os,
+                               mlir::BytecodeWriterConfig(getCirctVersion()));
+  op->print(os);
+  return success();
 }
 
 /// Process a single buffer of the input.
@@ -511,6 +518,9 @@ static LogicalResult processBuffer(
   if (failed(applyPassManagerCLOptions(pm)))
     return failure();
 
+  // Legalize away "open" aggregates to hw-only versions.
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerOpenAggsPass());
+
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
       disableAnnotationsUnknown, disableAnnotationsClassless,
       lowerAnnotationsNoRefTypePorts));
@@ -520,8 +530,7 @@ static LogicalResult processBuffer(
     if (failed(pm.run(module.get())))
       return failure();
     auto outputTimer = ts.nest("Print .mlir output");
-    printOp(*module, (*outputFile)->os());
-    return success();
+    return printOp(*module, (*outputFile)->os());
   }
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerIntrinsicsPass());
@@ -689,7 +698,7 @@ static LogicalResult processBuffer(
     // Lower the ref.resolve and ref.send ops and remove the RefType ports.
     // LowerToHW cannot handle RefType so, this pass must be run to remove all
     // RefType ports and ops.
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerXMRPass());
+    pm.addPass(firrtl::createLowerXMRPass());
 
     pm.addPass(createLowerFIRRTLToHWPass(
         enableAnnotationWarning.getValue(), emitChiselAssertsAsSVA.getValue(),
@@ -714,7 +723,9 @@ static LogicalResult processBuffer(
       pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass(
           {/*disableRandomization=*/!isRandomEnabled(RandomKind::Reg),
            /*addVivadoRAMAddressConflictSynthesisBugWorkaround=*/
-           addVivadoRAMAddressConflictSynthesisBugWorkaround}));
+           addVivadoRAMAddressConflictSynthesisBugWorkaround,
+           /*emitSeparateAlwaysBlocks=*/
+           emitSeparateAlwaysBlocks}));
       pm.addPass(sv::createHWMemSimImplPass(
           replSeqMem, ignoreReadEnableMem, addMuxPragmas,
           !isRandomEnabled(RandomKind::Mem), !isRandomEnabled(RandomKind::Reg),
@@ -730,7 +741,8 @@ static LogicalResult processBuffer(
         modulePM.addPass(createCSEPass());
         modulePM.addPass(createSimpleCanonicalizerPass());
         modulePM.addPass(createCSEPass());
-        modulePM.addPass(sv::createHWCleanupPass());
+        modulePM.addPass(sv::createHWCleanupPass(
+            /*mergeAlwaysBlocks=*/!emitSeparateAlwaysBlocks));
       }
     }
   }
@@ -795,6 +807,11 @@ static LogicalResult processBuffer(
     if (exportModuleHierarchy)
       exportPm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
 
+    // Run final IR mutations to clean it up after ExportVerilog and before
+    // emitting the final MLIR.
+    if (!mlirOutFile.empty())
+      exportPm.addPass(firrtl::createFinalizeIRPass());
+
     if (failed(exportPm.run(module.get())))
       return failure();
   }
@@ -802,7 +819,8 @@ static LogicalResult processBuffer(
   if (outputFormat == OutputIRFir || outputFormat == OutputIRHW ||
       outputFormat == OutputIRSV || outputFormat == OutputIRVerilog) {
     auto outputTimer = ts.nest("Print .mlir output");
-    printOp(*module, (*outputFile)->os());
+    if (failed(printOp(*module, (*outputFile)->os())))
+      return failure();
   }
 
   // If requested, print the final MLIR into mlirOutFile.
@@ -814,7 +832,8 @@ static LogicalResult processBuffer(
       return failure();
     }
 
-    printOp(*module, mlirFile->os());
+    if (failed(printOp(*module, mlirFile->os())))
+      return failure();
     mlirFile->keep();
   }
 

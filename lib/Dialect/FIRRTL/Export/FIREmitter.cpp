@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Support/LLVM.h"
+#include "circt/Support/PrettyPrinterHelpers.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/ADT/APSInt.h"
@@ -28,24 +29,25 @@
 using namespace circt;
 using namespace firrtl;
 using namespace chirrtl;
+using namespace pretty;
 
 //===----------------------------------------------------------------------===//
 // Emitter
 //===----------------------------------------------------------------------===//
 
+// NOLINTBEGIN(misc-no-recursion)
 namespace {
+
+constexpr size_t defaultTargetLineLength = 80;
+
 /// An emitter for FIRRTL dialect operations to .fir output.
 struct Emitter {
-  Emitter(llvm::raw_ostream &os) : os(os) {}
-  LogicalResult finalize();
-
-  // Indentation
-  raw_ostream &indent() { return os.indent(currentIndent); }
-  void addIndent() { currentIndent += 2; }
-  void reduceIndent() {
-    assert(currentIndent >= 2);
-    currentIndent -= 2;
+  Emitter(llvm::raw_ostream &os,
+          size_t targetLineLength = defaultTargetLineLength)
+      : pp(os, targetLineLength), ps(pp, saver) {
+    pp.setListener(&saver);
   }
+  LogicalResult finalize();
 
   // Circuit/module emission
   void emitCircuit(CircuitOp op);
@@ -56,7 +58,7 @@ struct Emitter {
 
   // Statement emission
   void emitStatementsInBlock(Block &block);
-  void emitStatement(WhenOp op, bool noIndent = false);
+  void emitStatement(WhenOp op);
   void emitStatement(WireOp op);
   void emitStatement(RegOp op);
   void emitStatement(RegResetOp op);
@@ -75,6 +77,11 @@ struct Emitter {
   void emitStatement(MemoryPortOp op);
   void emitStatement(MemoryDebugPortOp op);
   void emitStatement(MemoryPortAccessOp op);
+  void emitStatement(RefDefineOp op);
+  void emitStatement(RefForceOp op);
+  void emitStatement(RefForceInitialOp op);
+  void emitStatement(RefReleaseOp op);
+  void emitStatement(RefReleaseInitialOp op);
 
   template <class T>
   void emitVerifStatement(T op, StringRef mnemonic);
@@ -89,6 +96,13 @@ struct Emitter {
   void emitExpression(SubfieldOp op);
   void emitExpression(SubindexOp op);
   void emitExpression(SubaccessOp op);
+  void emitExpression(OpenSubfieldOp op);
+  void emitExpression(OpenSubindexOp op);
+  void emitExpression(RefResolveOp op);
+  void emitExpression(RefSendOp op);
+  void emitExpression(RefSubOp op);
+  void emitExpression(UninferredResetCastOp op);
+  void emitExpression(UninferredWidthCastOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -146,14 +160,66 @@ struct Emitter {
 
   // Types
   void emitType(Type type);
+  void emitTypeWithColon(Type type) {
+    ps << PP::space << ":" << PP::nbsp;
+    emitType(type);
+  }
 
   // Locations
   void emitLocation(Location loc);
   void emitLocation(Operation *op) { emitLocation(op->getLoc()); }
   template <typename... Args>
   void emitLocationAndNewLine(Args... args) {
+    // Break so previous content is not impacted by following,
+    // but use a 'neverbreak' so it always fits.
+    ps << PP::neverbreak;
     emitLocation(args...);
-    os << "\n";
+    setPendingNewline();
+  }
+
+  void emitAssignLike(llvm::function_ref<void()> emitLHS,
+                      llvm::function_ref<void()> emitRHS,
+                      PPExtString syntax = PPExtString("="),
+                      std::optional<PPExtString> wordBeforeLHS = std::nullopt) {
+    // If wraps, indent.
+    ps.scopedBox(PP::ibox2, [&]() {
+      if (wordBeforeLHS) {
+        ps << *wordBeforeLHS << PP::space;
+      }
+      emitLHS();
+      // Allow breaking before 'syntax' (e.g., '=') if long assignment.
+      ps << PP::space << syntax << PP::nbsp; /* PP::space; */
+      // RHS is boxed to right of the syntax.
+      ps.scopedBox(PP::ibox0, [&]() { emitRHS(); });
+    });
+  }
+
+  /// Emit the specified value as a subexpression, wrapping in an ibox2.
+  void emitSubExprIBox2(Value v) {
+    ps.scopedBox(PP::ibox2, [&]() { emitExpression(v); });
+  }
+
+  /// Emit a range of values separated by commas and a breakable space.
+  /// Each value is emitted by invoking `eachFn`.
+  template <typename Container, typename EachFn>
+  void interleaveComma(const Container &c, EachFn eachFn) {
+    llvm::interleave(c, eachFn, [&]() { ps << "," << PP::space; });
+  }
+
+  /// Emit a range of values separated by commas and a breakable space.
+  /// Each value is emitted in an ibox2.
+  void interleaveComma(ValueRange ops) {
+    return interleaveComma(ops, [&](Value v) { emitSubExprIBox2(v); });
+  }
+
+  void emitStatementFunctionOp(PPExtString name, Operation *op) {
+    startStatement();
+    ps << name << "(";
+    ps.scopedBox(PP::ibox0, [&]() {
+      interleaveComma(op->getOperands());
+      ps << ")";
+    });
+    emitLocationAndNewLine(op);
   }
 
 private:
@@ -178,16 +244,41 @@ private:
     return {};
   }
 
+  /// If previous emission requires a newline, emit it now.
+  /// This gives us opportunity to open/close boxes before linebreak.
+  void emitPendingNewlineIfNeeded() {
+    if (pendingNewline) {
+      pendingNewline = false;
+      ps << PP::newline;
+    }
+  }
+  void setPendingNewline() {
+    assert(!pendingNewline);
+    pendingNewline = true;
+  }
+
+  void startStatement() { emitPendingNewlineIfNeeded(); }
+
 private:
-  /// The stream we are emitting into.
-  llvm::raw_ostream &os;
+  /// String storage backing Tokens built from temporary strings.
+  /// PrettyPrinter will clear this as appropriate.
+  TokenStringSaver saver;
+
+  /// Pretty printer.
+  PrettyPrinter pp;
+
+  /// Stream helper (pp, saver).
+  TokenStream<> ps;
+
+  /// Whether a newline is expected, emitted late to provide opportunity to
+  /// open/close boxes we don't know we need at level of individual statement.
+  /// Every statement should set this instead of directly emitting (last)
+  /// newline. Most statements end with emitLocationInfoAndNewLine which handles
+  /// this.
+  bool pendingNewline = false;
 
   /// Whether we have encountered any errors during emission.
   bool encounteredError = false;
-
-  /// Current level of indentation. See `indent()` and
-  /// `addIndent()`/`reduceIndent()`.
-  unsigned currentIndent = 0;
 
   /// The names used to emit values already encountered. Anything that gets a
   /// name in the output FIR is listed here, such that future expressions can
@@ -213,81 +304,90 @@ LogicalResult Emitter::finalize() { return failure(encounteredError); }
 /// Emit an entire circuit.
 void Emitter::emitCircuit(CircuitOp op) {
   circuitNamespace.add(op);
-  indent() << "circuit " << op.getName() << " :\n";
-  addIndent();
-  for (auto &bodyOp : *op.getBodyBlock()) {
-    if (encounteredError)
-      break;
-    TypeSwitch<Operation *>(&bodyOp)
-        .Case<FModuleOp, FExtModuleOp>([&](auto op) {
-          emitModule(op);
-          os << "\n";
-        })
-        .Default([&](auto op) {
-          emitOpError(op, "not supported for emission inside circuit");
-        });
-  }
-  reduceIndent();
+  startStatement();
+  ps << "circuit " << PPExtString(op.getName()) << " :";
+  setPendingNewline();
+  ps.scopedBox(PP::bbox2, [&]() {
+    for (auto &bodyOp : *op.getBodyBlock()) {
+      if (encounteredError)
+        break;
+      TypeSwitch<Operation *>(&bodyOp)
+          .Case<FModuleOp, FExtModuleOp>([&](auto op) {
+            emitModule(op);
+            ps << PP::newline;
+          })
+          .Default([&](auto op) {
+            emitOpError(op, "not supported for emission inside circuit");
+          });
+    }
+  });
   circuitNamespace.clear();
 }
 
 /// Emit an entire module.
 void Emitter::emitModule(FModuleOp op) {
-  indent() << "module " << op.getName() << " :\n";
-  addIndent();
+  startStatement();
+  ps << "module " << PPExtString(op.getName()) << " :";
+  ps.scopedBox(PP::bbox2, [&]() {
+    setPendingNewline();
 
-  // Emit the ports.
-  auto ports = op.getPorts();
-  emitModulePorts(ports, op.getArguments());
-  if (!ports.empty() && !op.getBodyBlock()->empty())
-    os << "\n";
+    // Emit the ports.
+    auto ports = op.getPorts();
+    emitModulePorts(ports, op.getArguments());
+    if (!ports.empty() && !op.getBodyBlock()->empty())
+      ps << PP::newline;
 
-  // Emit the module body.
-  emitStatementsInBlock(*op.getBodyBlock());
-
-  reduceIndent();
+    // Emit the module body.
+    emitStatementsInBlock(*op.getBodyBlock());
+  });
   valueNames.clear();
   valueNamesStorage.clear();
 }
 
 /// Emit an external module.
 void Emitter::emitModule(FExtModuleOp op) {
-  indent() << "extmodule " << op.getName() << " :\n";
-  addIndent();
+  startStatement();
+  ps << "extmodule " << PPExtString(op.getName()) << " :";
+  ps.scopedBox(PP::bbox2, [&]() {
+    setPendingNewline();
 
-  // Emit the ports.
-  auto ports = op.getPorts();
-  emitModulePorts(ports);
+    // Emit the ports.
+    auto ports = op.getPorts();
+    emitModulePorts(ports);
 
-  // Emit the optional `defname`.
-  if (op.getDefname() && !op.getDefname()->empty())
-    indent() << "defname = " << op.getDefname() << "\n";
+    // Emit the optional `defname`.
+    if (op.getDefname() && !op.getDefname()->empty()) {
+      startStatement();
+      ps << "defname = " << PPExtString(*op.getDefname());
+      setPendingNewline();
+    }
 
-  // Emit the parameters.
-  for (auto param : llvm::map_range(op.getParameters(), [](Attribute attr) {
-         return attr.cast<ParamDeclAttr>();
-       })) {
-    indent() << "parameter " << param.getName().getValue() << " = ";
-    TypeSwitch<Attribute>(param.getValue())
-        .Case<IntegerAttr>([&](auto attr) { os << attr.getValue(); })
-        .Case<FloatAttr>([&](auto attr) {
-          SmallString<16> str;
-          attr.getValue().toString(str);
-          os << str;
-        })
-        .Case<StringAttr>([&](auto attr) {
-          os << "\"";
-          os.write_escaped(attr.getValue());
-          os << "\"";
-        })
-        .Default([&](auto attr) {
-          emitOpError(op, "with unsupported parameter attribute: ") << attr;
-          os << "<unsupported-attr " << attr << ">";
-        });
-    os << "\n";
-  }
-
-  reduceIndent();
+    // Emit the parameters.
+    for (auto param : llvm::map_range(op.getParameters(), [](Attribute attr) {
+           return attr.cast<ParamDeclAttr>();
+         })) {
+      startStatement();
+      // TODO: AssignLike ?
+      ps << "parameter " << PPExtString(param.getName().getValue()) << " = ";
+      TypeSwitch<Attribute>(param.getValue())
+          .Case<IntegerAttr>(
+              [&](auto attr) { ps.addAsString(attr.getValue()); })
+          .Case<FloatAttr>([&](auto attr) {
+            SmallString<16> str;
+            attr.getValue().toString(str);
+            ps << str;
+          })
+          .Case<StringAttr>(
+              [&](auto attr) { ps.writeQuotedEscaped(attr.getValue()); })
+          .Default([&](auto attr) {
+            emitOpError(op, "with unsupported parameter attribute: ") << attr;
+            ps << "<unsupported-attr ";
+            ps.addAsString(attr);
+            ps << ">";
+          });
+      setPendingNewline();
+    }
+  });
 }
 
 /// Emit the ports of a module or extmodule. If the `arguments` array is
@@ -296,13 +396,14 @@ void Emitter::emitModule(FExtModuleOp op) {
 void Emitter::emitModulePorts(ArrayRef<PortInfo> ports,
                               Block::BlockArgListType arguments) {
   for (unsigned i = 0, e = ports.size(); i < e; ++i) {
+    startStatement();
     const auto &port = ports[i];
-    indent() << (port.direction == Direction::In ? "input " : "output ");
+    ps << (port.direction == Direction::In ? "input " : "output ");
     if (!arguments.empty())
       addValueName(arguments[i], port.name);
-    os << port.name.getValue() << " : ";
+    ps << PPExtString(port.name.getValue()) << " : ";
     emitType(port.type);
-    os << "\n";
+    setPendingNewline();
   }
 }
 
@@ -322,161 +423,192 @@ void Emitter::emitStatementsInBlock(Block &block) {
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
               PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp, StrictConnectOp,
               InstanceOp, AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
-              MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp>(
+              MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp,
+              RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
-          indent() << "// operation " << op->getName() << "\n";
+          startStatement();
+          ps << "// operation " << PPExtString(op->getName().getStringRef());
+          setPendingNewline();
           emitOpError(op, "not supported as statement");
         });
   }
 }
 
-void Emitter::emitStatement(WhenOp op, bool noIndent) {
-  (noIndent ? os : indent()) << "when ";
+void Emitter::emitStatement(WhenOp op) {
+  startStatement();
+  ps << "when ";
   emitExpression(op.getCondition());
-  os << " :";
+  ps << " :";
   emitLocationAndNewLine(op);
-  addIndent();
-  emitStatementsInBlock(op.getThenBlock());
-  reduceIndent();
+  ps.scopedBox(PP::bbox2, [&]() { emitStatementsInBlock(op.getThenBlock()); });
+  // emitStatementsInBlock(op.getThenBlock());
   if (!op.hasElseRegion())
     return;
 
-  indent() << "else ";
+  startStatement();
+  ps << "else ";
   // Sugar to `else when ...` if there's only a single when statement in the
   // else block.
   auto &elseBlock = op.getElseBlock();
   if (!elseBlock.empty() && &elseBlock.front() == &elseBlock.back()) {
     if (auto whenOp = dyn_cast<WhenOp>(&elseBlock.front())) {
-      emitStatement(whenOp, true);
+      emitStatement(whenOp);
       return;
     }
   }
   // Otherwise print the block as `else :`.
-  os << ":\n";
-  addIndent();
-  emitStatementsInBlock(elseBlock);
-  reduceIndent();
+  ps << ":";
+  setPendingNewline();
+  ps.scopedBox(PP::bbox2, [&]() { emitStatementsInBlock(elseBlock); });
 }
 
 void Emitter::emitStatement(WireOp op) {
   addValueName(op.getResult(), op.getNameAttr());
-  indent() << "wire " << op.getName() << " : ";
-  emitType(op.getResult().getType());
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "wire " << PPExtString(op.getName());
+    emitTypeWithColon(op.getResult().getType());
+  });
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(RegOp op) {
   addValueName(op.getResult(), op.getNameAttr());
-  indent() << "reg " << op.getName() << " : ";
-  emitType(op.getResult().getType());
-  os << ", ";
-  emitExpression(op.getClockVal());
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "reg " << PPExtString(op.getName());
+    emitTypeWithColon(op.getResult().getType());
+    ps << "," << PP::space;
+    emitExpression(op.getClockVal());
+  });
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(RegResetOp op) {
   addValueName(op.getResult(), op.getNameAttr());
-  indent() << "reg " << op.getName() << " : ";
-  emitType(op.getResult().getType());
-  os << ", ";
-  emitExpression(op.getClockVal());
-  os << " with :\n";
-  indent() << "  reset => (";
-  emitExpression(op.getResetSignal());
-  os << ", ";
-  emitExpression(op.getResetValue());
-  os << ")";
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "reg " << op.getName();
+    emitTypeWithColon(op.getResult().getType());
+    ps << "," << PP::space;
+    emitExpression(op.getClockVal());
+    ps << PP::space << "with :";
+    // Don't break this because of the newline.
+    ps << PP::neverbreak;
+    // No-paren version must be newline + indent.
+    ps << PP::newline; // ibox2 will indent.
+    ps << "reset => (" << PP::ibox0;
+    emitExpression(op.getResetSignal());
+    ps << "," << PP::space;
+    emitExpression(op.getResetValue());
+    ps << ")" << PP::end;
+  });
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(NodeOp op) {
   addValueName(op.getResult(), op.getNameAttr());
-  indent() << "node " << op.getName() << " = ";
-  emitExpression(op.getInput());
+  startStatement();
+  emitAssignLike([&]() { ps << "node " << PPExtString(op.getName()); },
+                 [&]() { emitExpression(op.getInput()); });
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(StopOp op) {
-  indent() << "stop(";
-  emitExpression(op.getClock());
-  os << ", ";
-  emitExpression(op.getCond());
-  os << ", " << op.getExitCode() << ")";
-  if (!op.getName().empty()) {
-    os << " : " << op.getName();
-  }
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "stop(" << PP::ibox0;
+    emitExpression(op.getClock());
+    ps << "," << PP::space;
+    emitExpression(op.getCond());
+    ps << "," << PP::space;
+    ps.addAsString(op.getExitCode());
+    ps << ")" << PP::end;
+    if (!op.getName().empty()) {
+      ps << PP::space << ": " << PPExtString(op.getName());
+    }
+  });
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(SkipOp op) {
-  indent() << "skip";
+  startStatement();
+  ps << "skip";
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(PrintFOp op) {
-  indent() << "printf(";
-  emitExpression(op.getClock());
-  os << ", ";
-  emitExpression(op.getCond());
-  os << ", \"";
-  os.write_escaped(op.getFormatString());
-  os << "\"";
-  for (auto operand : op.getSubstitutions()) {
-    os << ", ";
-    emitExpression(operand);
-  }
-  os << ")";
-  if (!op.getName().empty()) {
-    os << " : " << op.getName();
-  }
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "printf(" << PP::ibox0;
+    emitExpression(op.getClock());
+    ps << "," << PP::space;
+    emitExpression(op.getCond());
+    ps << "," << PP::space;
+    ps.writeQuotedEscaped(op.getFormatString());
+    for (auto operand : op.getSubstitutions()) {
+      ps << "," << PP::space;
+      emitExpression(operand);
+    }
+    ps << ")" << PP::end;
+    if (!op.getName().empty()) {
+      ps << PP::space << ": " << PPExtString(op.getName());
+    }
+  });
   emitLocationAndNewLine(op);
 }
 
 template <class T>
 void Emitter::emitVerifStatement(T op, StringRef mnemonic) {
-  indent() << mnemonic << "(";
-  emitExpression(op.getClock());
-  os << ", ";
-  emitExpression(op.getPredicate());
-  os << ", ";
-  emitExpression(op.getEnable());
-  os << ", \"";
-  os.write_escaped(op.getMessage());
-  os << "\"";
-  os << ")";
-  if (!op.getName().empty()) {
-    os << " : " << op.getName();
-  }
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << mnemonic << "(" << PP::ibox0;
+    emitExpression(op.getClock());
+    ps << "," << PP::space;
+    emitExpression(op.getPredicate());
+    ps << "," << PP::space;
+    emitExpression(op.getEnable());
+    ps << "," << PP::space;
+    ps.writeQuotedEscaped(op.getMessage());
+    ps << ")" << PP::end;
+    if (!op.getName().empty()) {
+      ps << PP::space << ": " << PPExtString(op.getName());
+    }
+  });
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(ConnectOp op) {
-  indent();
-  emitExpression(op.getDest());
+  startStatement();
+  auto emitLHS = [&]() { emitExpression(op.getDest()); };
   if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
-    os << " is invalid";
+    emitAssignLike(
+        emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
   } else {
-    os << " <= ";
-    emitExpression(op.getSrc());
+    emitAssignLike(
+        emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
   }
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(StrictConnectOp op) {
-  indent();
-  emitExpression(op.getDest());
+  startStatement();
+  auto emitLHS = [&]() { emitExpression(op.getDest()); };
   if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
-    os << " is invalid";
+    emitAssignLike(
+        emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
   } else {
-    os << " <= ";
-    emitExpression(op.getSrc());
+    emitAssignLike(
+        emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
   }
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(InstanceOp op) {
-  indent() << "inst " << op.getName() << " of " << op.getModuleName();
+  startStatement();
+  ps << "inst " << PPExtString(op.getName()) << " of "
+     << PPExtString(op.getModuleName());
   emitLocationAndNewLine(op);
 
   // Make sure we have a name like `<inst>.<port>` for each of the instance
@@ -492,11 +624,7 @@ void Emitter::emitStatement(InstanceOp op) {
 }
 
 void Emitter::emitStatement(AttachOp op) {
-  indent() << "attach(";
-  llvm::interleaveComma(op.getOperands(), os,
-                        [&](auto operand) { emitExpression(operand); });
-  os << ")";
-  emitLocationAndNewLine(op);
+  emitStatementFunctionOp(PPExtString("attach"), op);
 }
 
 void Emitter::emitStatement(MemOp op) {
@@ -509,64 +637,76 @@ void Emitter::emitStatement(MemOp op) {
     addValueName(std::get<0>(result), portName);
   }
 
-  indent() << "mem " << op.getName() << " :";
+  startStatement();
+  ps << "mem " << PPExtString(op.getName()) << " :";
   emitLocationAndNewLine(op);
-  addIndent();
+  ps.scopedBox(PP::bbox2, [&]() {
+    startStatement();
+    ps << "data-type => ";
+    emitType(op.getDataType());
+    ps << PP::newline;
+    ps << "depth => ";
+    ps.addAsString(op.getDepth());
+    ps << PP::newline;
+    ps << "read-latency => ";
+    ps.addAsString(op.getReadLatency());
+    ps << PP::newline;
+    ps << "write-latency => ";
+    ps.addAsString(op.getWriteLatency());
+    ps << PP::newline;
 
-  indent() << "data-type => ";
-  emitType(op.getDataType());
-  os << "\n";
-  indent() << "depth => " << op.getDepth() << "\n";
-  indent() << "read-latency => " << op.getReadLatency() << "\n";
-  indent() << "write-latency => " << op.getWriteLatency() << "\n";
-
-  SmallString<16> reader, writer, readwriter;
-  for (std::pair<StringAttr, MemOp::PortKind> port : op.getPorts()) {
-    auto add = [&](SmallString<16> &to, StringAttr name) {
-      if (!to.empty())
-        to.push_back(' ');
-      to.append(name.getValue());
-    };
-    switch (port.second) {
-    case MemOp::PortKind::Read:
-      add(reader, port.first);
-      break;
-    case MemOp::PortKind::Write:
-      add(writer, port.first);
-      break;
-    case MemOp::PortKind::ReadWrite:
-      add(readwriter, port.first);
-      break;
-    case MemOp::PortKind::Debug:
-      emitOpError(op, "has unsupported 'debug' port");
-      return;
+    SmallString<16> reader, writer, readwriter;
+    for (std::pair<StringAttr, MemOp::PortKind> port : op.getPorts()) {
+      auto add = [&](SmallString<16> &to, StringAttr name) {
+        if (!to.empty())
+          to.push_back(' ');
+        to.append(name.getValue());
+      };
+      switch (port.second) {
+      case MemOp::PortKind::Read:
+        add(reader, port.first);
+        break;
+      case MemOp::PortKind::Write:
+        add(writer, port.first);
+        break;
+      case MemOp::PortKind::ReadWrite:
+        add(readwriter, port.first);
+        break;
+      case MemOp::PortKind::Debug:
+        emitOpError(op, "has unsupported 'debug' port");
+        return;
+      }
     }
-  }
-  if (!reader.empty())
-    indent() << "reader => " << reader << "\n";
-  if (!writer.empty())
-    indent() << "writer => " << writer << "\n";
-  if (!readwriter.empty())
-    indent() << "readwriter => " << readwriter << "\n";
+    if (!reader.empty())
+      ps << "reader => " << reader << PP::newline;
+    if (!writer.empty())
+      ps << "writer => " << writer << PP::newline;
+    if (!readwriter.empty())
+      ps << "readwriter => " << readwriter << PP::newline;
 
-  indent() << "read-under-write => ";
-  emitAttribute(op.getRuw());
-  os << "\n";
-
-  reduceIndent();
+    ps << "read-under-write => ";
+    emitAttribute(op.getRuw());
+    setPendingNewline();
+  });
 }
 
 void Emitter::emitStatement(SeqMemOp op) {
-  indent() << "smem " << op.getName() << " : ";
-  emitType(op.getType());
-  os << " ";
-  emitAttribute(op.getRuw());
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "smem " << PPExtString(op.getName());
+    emitTypeWithColon(op.getType());
+    ps << PP::space;
+    emitAttribute(op.getRuw());
+  });
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(CombMemOp op) {
-  indent() << "cmem " << op.getName() << " : ";
-  emitType(op.getType());
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "cmem " << PPExtString(op.getName());
+    emitTypeWithColon(op.getType());
+  });
   emitLocationAndNewLine(op);
 }
 
@@ -581,28 +721,96 @@ void Emitter::emitStatement(MemoryDebugPortOp op) {
 }
 
 void Emitter::emitStatement(MemoryPortAccessOp op) {
-  indent();
+  startStatement();
 
   // Print the port direction and name.
   auto port = cast<MemoryPortOp>(op.getPort().getDefiningOp());
   emitAttribute(port.getDirection());
-  os << " mport " << port.getName() << " = ";
+  // TODO: emitAssignLike
+  ps << " mport " << PPExtString(port.getName()) << " = ";
 
   // Print the memory name.
   auto *mem = port.getMemory().getDefiningOp();
   if (auto seqMem = dyn_cast<SeqMemOp>(mem))
-    os << seqMem.getName();
+    ps << seqMem.getName();
   else
-    os << cast<CombMemOp>(mem).getName();
+    ps << cast<CombMemOp>(mem).getName();
 
   // Print the address.
-  os << "[";
+  ps << "[";
   emitExpression(op.getIndex());
-  os << "], ";
+  ps << "], ";
 
   // Print the clock.
   emitExpression(op.getClock());
 
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(RefDefineOp op) {
+  startStatement();
+  emitAssignLike(
+      [&]() {
+        ps << "define ";
+        emitExpression(op.getDest());
+      },
+      [&]() {
+        auto src = op.getSrc();
+        if (auto forceable = src.getDefiningOp<Forceable>();
+            forceable && forceable.isForceable() &&
+            forceable.getDataRef() == src) {
+          ps << "rwprobe(";
+          emitExpression(forceable.getData());
+          ps << ")";
+        } else
+          emitExpression(src);
+      });
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(RefForceOp op) {
+  emitStatementFunctionOp(PPExtString("force"), op);
+}
+
+void Emitter::emitStatement(RefForceInitialOp op) {
+  startStatement();
+  auto constantPredicate =
+      dyn_cast_or_null<ConstantOp>(op.getPredicate().getDefiningOp());
+  bool hasEnable = !constantPredicate || constantPredicate.getValue() == 0;
+  if (hasEnable) {
+    ps << "when ";
+    emitExpression(op.getPredicate());
+    ps << ":" << PP::bbox2 << PP::neverbreak << PP::newline;
+  }
+  ps << "force_initial(";
+  ps.scopedBox(PP::ibox0, [&]() {
+    interleaveComma({op.getDest(), op.getSrc()});
+    ps << ")";
+  });
+  if (hasEnable)
+    ps << PP::end;
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(RefReleaseOp op) {
+  emitStatementFunctionOp(PPExtString("release"), op);
+}
+
+void Emitter::emitStatement(RefReleaseInitialOp op) {
+  startStatement();
+  auto constantPredicate =
+      dyn_cast_or_null<ConstantOp>(op.getPredicate().getDefiningOp());
+  bool hasEnable = !constantPredicate || constantPredicate.getValue() == 0;
+  if (hasEnable) {
+    ps << "when ";
+    emitExpression(op.getPredicate());
+    ps << ":" << PP::bbox2 << PP::neverbreak << PP::newline;
+  }
+  ps << "release_initial(";
+  emitExpression(op.getDest());
+  ps << ")";
+  if (hasEnable)
+    ps << PP::end;
   emitLocationAndNewLine(op);
 }
 
@@ -615,12 +823,15 @@ void Emitter::emitStatement(InvalidValueOp op) {
       }))
     return;
 
+  // TODO: emitAssignLike ?
+  startStatement();
   auto name = circuitNamespace.newName("_invalid");
   addValueName(op, name);
-  indent() << "wire " << name << " : ";
+  ps << "wire " << PPExtString(name) << " : ";
   emitType(op.getType());
   emitLocationAndNewLine(op);
-  indent() << name << " is invalid";
+  startStatement();
+  ps << PPExtString(name) << " is invalid";
   emitLocationAndNewLine(op);
 }
 
@@ -628,7 +839,8 @@ void Emitter::emitExpression(Value value) {
   // Handle the trivial case where we already have a name for this value which
   // we can use.
   if (auto name = lookupEmittedName(value)) {
-    os << name;
+    // Don't use PPExtString here, can't trust valueNames storage, cleared.
+    ps << *name;
     return;
   }
 
@@ -638,6 +850,7 @@ void Emitter::emitExpression(Value value) {
       .Case<
           // Basic expressions
           ConstantOp, SpecialConstantOp, SubfieldOp, SubindexOp, SubaccessOp,
+          OpenSubfieldOp, OpenSubindexOp,
           // Binary
           AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
           OrPrimOp, XorPrimOp, LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp,
@@ -647,32 +860,43 @@ void Emitter::emitExpression(Value value) {
           CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
-          ShrPrimOp>([&](auto op) { emitExpression(op); })
+          ShrPrimOp, UninferredResetCastOp, UninferredWidthCastOp,
+          // Reference expressions
+          RefSendOp, RefResolveOp, RefSubOp>([&](auto op) {
+        ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
+      })
       .Default([&](auto op) {
         emitOpError(op, "not supported as expression");
-        os << "<unsupported-expr-" << op->getName().stripDialect() << ">";
+        ps << "<unsupported-expr-" << PPExtString(op->getName().stripDialect())
+           << ">";
       });
 }
 
 void Emitter::emitExpression(ConstantOp op) {
   emitType(op.getType());
   // TODO: Add option to control base-2/8/10/16 output here.
-  os << "(" << op.getValue() << ")";
+  ps << "(";
+  ps.addAsString(op.getValue());
+  ps << ")";
 }
 
 void Emitter::emitExpression(SpecialConstantOp op) {
-  auto emitInner = [&]() { os << "UInt<1>(" << op.getValue() << ")"; };
+  auto emitInner = [&]() {
+    ps << "UInt<1>(";
+    ps.addAsString(op.getValue());
+    ps << ")";
+  };
   TypeSwitch<FIRRTLType>(op.getType().cast<FIRRTLType>())
       .Case<ClockType>([&](auto type) {
-        os << "asClock(";
+        ps << "asClock(";
         emitInner();
-        os << ")";
+        ps << ")";
       })
       .Case<ResetType>([&](auto type) { emitInner(); })
       .Case<AsyncResetType>([&](auto type) {
-        os << "asAsyncReset(";
+        ps << "asAsyncReset(";
         emitInner();
-        os << ")";
+        ps << ")";
       });
 }
 
@@ -680,46 +904,93 @@ void Emitter::emitExpression(SpecialConstantOp op) {
 void Emitter::emitExpression(SubfieldOp op) {
   auto type = op.getInput().getType();
   emitExpression(op.getInput());
-  os << "." << type.getElementName(op.getFieldIndex());
+  ps << "." << type.getElementName(op.getFieldIndex());
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
 void Emitter::emitExpression(SubindexOp op) {
   emitExpression(op.getInput());
-  os << "[" << op.getIndex() << "]";
+  ps << "[";
+  ps.addAsString(op.getIndex());
+  ps << "]";
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
 void Emitter::emitExpression(SubaccessOp op) {
   emitExpression(op.getInput());
-  os << "[";
+  ps << "[";
   emitExpression(op.getIndex());
-  os << "]";
+  ps << "]";
+}
+
+void Emitter::emitExpression(OpenSubfieldOp op) {
+  auto type = op.getInput().getType();
+  emitExpression(op.getInput());
+  ps << "." << type.getElementName(op.getFieldIndex());
+}
+
+void Emitter::emitExpression(OpenSubindexOp op) {
+  emitExpression(op.getInput());
+  ps << "[";
+  ps.addAsString(op.getIndex());
+  ps << "]";
+}
+
+void Emitter::emitExpression(RefSendOp op) {
+  ps << "probe(";
+  emitExpression(op.getBase());
+  ps << ")";
+}
+
+void Emitter::emitExpression(RefResolveOp op) {
+  ps << "read(";
+  emitExpression(op.getRef());
+  ps << ")";
+}
+
+void Emitter::emitExpression(RefSubOp op) {
+  emitExpression(op.getInput());
+  TypeSwitch<FIRRTLBaseType, void>(op.getInput().getType().getType())
+      .Case<FVectorType>([&](auto type) {
+        ps << "[";
+        ps.addAsString(op.getIndex());
+        ps << "]";
+      })
+      .Case<BundleType>(
+          [&](auto type) { ps << "." << type.getElementName(op.getIndex()); });
+}
+
+void Emitter::emitExpression(UninferredResetCastOp op) {
+  emitExpression(op.getInput());
+}
+
+void Emitter::emitExpression(UninferredWidthCastOp op) {
+  emitExpression(op.getInput());
 }
 
 void Emitter::emitPrimExpr(StringRef mnemonic, Operation *op,
                            ArrayRef<uint32_t> attrs) {
-  os << mnemonic << "(";
-  llvm::interleaveComma(op->getOperands(), os,
-                        [&](Value arg) { emitExpression(arg); });
-  for (auto attr : attrs)
-    os << ", " << attr;
-  os << ")";
+  ps << mnemonic << "(" << PP::ibox0;
+  interleaveComma(op->getOperands());
+  if (!op->getOperands().empty() && !attrs.empty())
+    ps << "," << PP::space;
+  interleaveComma(attrs, [&](auto attr) { ps.addAsString(attr); });
+  ps << ")" << PP::end;
 }
 
 void Emitter::emitAttribute(MemDirAttr attr) {
   switch (attr) {
   case MemDirAttr::Infer:
-    os << "infer";
+    ps << "infer";
     break;
   case MemDirAttr::Read:
-    os << "read";
+    ps << "read";
     break;
   case MemDirAttr::Write:
-    os << "write";
+    ps << "write";
     break;
   case MemDirAttr::ReadWrite:
-    os << "rdwr";
+    ps << "rdwr";
     break;
   }
 }
@@ -727,13 +998,13 @@ void Emitter::emitAttribute(MemDirAttr attr) {
 void Emitter::emitAttribute(RUWAttr attr) {
   switch (attr) {
   case RUWAttr::Undefined:
-    os << "undefined";
+    ps << "undefined";
     break;
   case RUWAttr::Old:
-    os << "old";
+    ps << "old";
     break;
   case RUWAttr::New:
-    os << "new";
+    ps << "new";
     break;
   }
 }
@@ -741,47 +1012,62 @@ void Emitter::emitAttribute(RUWAttr attr) {
 /// Emit a FIRRTL type into the output.
 void Emitter::emitType(Type type) {
   auto emitWidth = [&](std::optional<int32_t> width) {
-    if (width)
-      os << "<" << *width << ">";
+    if (width) {
+      ps << "<";
+      ps.addAsString(*width);
+      ps << ">";
+    }
   };
   TypeSwitch<Type>(type)
-      .Case<ClockType>([&](auto) { os << "Clock"; })
-      .Case<ResetType>([&](auto) { os << "Reset"; })
-      .Case<AsyncResetType>([&](auto) { os << "AsyncReset"; })
+      .Case<ClockType>([&](auto) { ps << "Clock"; })
+      .Case<ResetType>([&](auto) { ps << "Reset"; })
+      .Case<AsyncResetType>([&](auto) { ps << "AsyncReset"; })
       .Case<UIntType>([&](auto type) {
-        os << "UInt";
+        ps << "UInt";
         emitWidth(type.getWidth());
       })
       .Case<SIntType>([&](auto type) {
-        os << "SInt";
+        ps << "SInt";
         emitWidth(type.getWidth());
       })
       .Case<AnalogType>([&](auto type) {
-        os << "Analog";
+        ps << "Analog";
         emitWidth(type.getWidth());
       })
-      .Case<BundleType>([&](auto type) {
-        os << "{";
+      .Case<OpenBundleType, BundleType>([&](auto type) {
+        ps << "{";
+        if (!type.getElements().empty())
+          ps << PP::nbsp;
         bool anyEmitted = false;
-        for (auto &element : type.getElements()) {
-          os << (anyEmitted ? ", " : " ");
-          if (element.isFlip)
-            os << "flip ";
-          os << element.name.getValue() << " : ";
-          emitType(element.type);
-          anyEmitted = true;
-        }
-        if (anyEmitted)
-          os << " ";
-        os << "}";
+        ps.scopedBox(PP::cbox0, [&]() {
+          for (auto &element : type.getElements()) {
+            if (anyEmitted)
+              ps << "," << PP::space;
+            ps.scopedBox(PP::ibox2, [&]() {
+              if (element.isFlip)
+                ps << "flip ";
+              ps << element.name.getValue();
+              emitTypeWithColon(element.type);
+              anyEmitted = true;
+            });
+          }
+          if (anyEmitted)
+            ps << PP::nbsp;
+          ps << "}";
+        });
       })
-      .Case<FVectorType>([&](auto type) {
+      .Case<OpenVectorType, FVectorType, CMemoryType>([&](auto type) {
         emitType(type.getElementType());
-        os << "[" << type.getNumElements() << "]";
+        ps << "[";
+        ps.addAsString(type.getNumElements());
+        ps << "]";
       })
-      .Case<CMemoryType>([&](auto type) {
-        emitType(type.getElementType());
-        os << "[" << type.getNumElements() << "]";
+      .Case<RefType>([&](RefType type) {
+        if (type.getForceable())
+          ps << "RW";
+        ps << "Probe<";
+        emitType(type.getType());
+        ps << ">";
       })
       .Default([&](auto type) {
         llvm_unreachable("all types should be implemented");
@@ -793,24 +1079,29 @@ void Emitter::emitType(Type type) {
 void Emitter::emitLocation(Location loc) {
   // TODO: Handle FusedLoc and uniquify locations, avoid repeated file names.
   if (auto fileLoc = loc->dyn_cast_or_null<FileLineColLoc>()) {
-    os << " @[" << fileLoc.getFilename().getValue();
+    ps << " @[" << fileLoc.getFilename().getValue();
     if (auto line = fileLoc.getLine()) {
-      os << " " << line;
-      if (auto col = fileLoc.getColumn())
-        os << ":" << col;
+      ps << " ";
+      ps.addAsString(line);
+      if (auto col = fileLoc.getColumn()) {
+        ps << ":";
+        ps.addAsString(col);
+      }
     }
-    os << "]";
+    ps << "]";
   }
 }
+// NOLINTEND(misc-no-recursion)
 
 //===----------------------------------------------------------------------===//
 // Driver
 //===----------------------------------------------------------------------===//
 
 // Emit the specified FIRRTL circuit into the given output stream.
-mlir::LogicalResult circt::firrtl::exportFIRFile(mlir::ModuleOp module,
-                                                 llvm::raw_ostream &os) {
-  Emitter emitter(os);
+mlir::LogicalResult
+circt::firrtl::exportFIRFile(mlir::ModuleOp module, llvm::raw_ostream &os,
+                             std::optional<size_t> targetLineLength) {
+  Emitter emitter(os, targetLineLength.value_or(defaultTargetLineLength));
   for (auto &op : *module.getBody()) {
     if (auto circuitOp = dyn_cast<CircuitOp>(op))
       emitter.emitCircuit(circuitOp);
@@ -819,10 +1110,15 @@ mlir::LogicalResult circt::firrtl::exportFIRFile(mlir::ModuleOp module,
 }
 
 void circt::firrtl::registerToFIRFileTranslation() {
+  static llvm::cl::opt<size_t> targetLineLength(
+      "target-line-length",
+      llvm::cl::desc("Target line length for emitted .fir"),
+      llvm::cl::value_desc("number of chars"),
+      llvm::cl::init(defaultTargetLineLength));
   static mlir::TranslateFromMLIRRegistration toFIR(
       "export-firrtl", "emit FIRRTL dialect operations to .fir output",
       [](ModuleOp module, llvm::raw_ostream &os) {
-        return exportFIRFile(module, os);
+        return exportFIRFile(module, os, targetLineLength);
       },
       [](mlir::DialectRegistry &registry) {
         registry.insert<chirrtl::CHIRRTLDialect>();

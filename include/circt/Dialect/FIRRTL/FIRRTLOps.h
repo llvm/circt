@@ -51,10 +51,6 @@ size_t getNumPorts(Operation *op);
 bool isConstant(Operation *op);
 bool isConstant(Value value);
 
-/// Returns true if this is a 'const' type that can only hold compile-time
-/// constant values
-bool isConst(Type type);
-
 /// Returns true if the value results from an expression with duplex flow.
 /// Duplex values have special treatment in bundle connect operations, and
 /// their flip orientation is not used to determine the direction of each
@@ -138,8 +134,8 @@ LogicalResult verifySameOperandsIntTypeKind(Operation *op);
 // Type inference adaptor for FIRRTL operations.
 LogicalResult inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::RegionRange regions,
-    SmallVectorImpl<Type> &results,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results,
     llvm::function_ref<FIRRTLType(ValueRange, ArrayRef<NamedAttribute>,
                                   std::optional<Location>)>
         callback);

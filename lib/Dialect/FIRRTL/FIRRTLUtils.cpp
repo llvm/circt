@@ -446,19 +446,27 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
     if (!op)
       break;
 
-    if (auto subfieldOp = dyn_cast<SubfieldOp>(op)) {
-      value = subfieldOp.getInput();
-      auto bundleType = subfieldOp.getInput().getType();
-      // Rebase the current index on the parent field's index.
-      id += bundleType.getFieldID(subfieldOp.getFieldIndex());
-    } else if (auto subindexOp = dyn_cast<SubindexOp>(op)) {
-      value = subindexOp.getInput();
-      auto vecType = subindexOp.getInput().getType();
-      // Rebase the current index on the parent field's index.
-      id += vecType.getFieldID(subindexOp.getIndex());
-    } else {
+    auto handled = TypeSwitch<Operation *, bool>(op)
+                       .Case<SubfieldOp, OpenSubfieldOp>([&](auto subfieldOp) {
+                         value = subfieldOp.getInput();
+                         auto bundleType = subfieldOp.getInput().getType();
+                         // Rebase the current index on the parent field's
+                         // index.
+                         id +=
+                             bundleType.getFieldID(subfieldOp.getFieldIndex());
+                         return true;
+                       })
+                       .Case<SubindexOp, OpenSubindexOp>([&](auto subindexOp) {
+                         value = subindexOp.getInput();
+                         auto vecType = subindexOp.getInput().getType();
+                         // Rebase the current index on the parent field's
+                         // index.
+                         id += vecType.getFieldID(subindexOp.getIndex());
+                         return true;
+                       })
+                       .Default(false);
+    if (!handled)
       break;
-    }
   }
   return {value, id};
 }

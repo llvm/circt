@@ -15,6 +15,7 @@
 
 include "FIRRTLDialect.td"
 include "circt/Dialect/HW/HWTypeInterfaces.td"
+include "FIRRTLTypeInterfaces.td"
 
 // Base class for other typedefs. Provides dialact-specific defaults.
 class FIRRTLImplType<string name,
@@ -139,34 +140,34 @@ def AnalogTypeImpl : FIRRTLImplType<"Analog",
   let genVerifyDecl = true;
 }
 
-def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
+class BaseVectorTypeImpl<string name, string ElementType, list<Trait> traits = [], string BaseType = ElementType> : FIRRTLImplType<name, traits, BaseType> {
   let summary = "a fixed size collection of elements, like an array.";
   let parameters = (ins
-      TypeParameter<"::circt::firrtl::FIRRTLBaseType", "Type of vector elements">:$elementType,
+      TypeParameter<ElementType, "Type of vector elements">:$lementType,
      "size_t":$numElements,
      "bool":$isConst
   );
-  let storageClass = "FVectorTypeStorage";
+  let storageClass = name # "TypeStorage";
   let skipDefaultBuilders = true;
   let builders = [
     TypeBuilderWithInferredContext<(ins
-      "FIRRTLBaseType":$elementType,
+      ElementType:$elementType,
       "size_t":$numElements,
        CArg<"bool", "false">:$isConst)
     >
   ];
+
+  // Additional class declarations to emit.
+  code firrtlExtraClassDeclaration = "";
+
   let extraClassDeclaration = [{
-    FIRRTLBaseType getElementType() const;
+    using ElementType = }] # ElementType # [{;
+
+    ElementType getElementType() const;
     size_t getNumElements() const;
 
     /// Return the recursive properties of the type.
     RecursiveTypeProperties getRecursiveTypeProperties() const;
-
-    /// Return this type with any flip types recursively removed from itself.
-    FIRRTLBaseType getPassiveType();
-
-    /// Return a 'const' or non-'const' version of this type.
-    FVectorType getConstType(bool isConst);
 
     /// Get an integer ID for the field. Field IDs start at 1, and are assigned
     /// to each field in a vector in a recursive depth-first walk of all
@@ -196,25 +197,48 @@ def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
     /// of the type.  Essentially maps a fieldID to a fieldID after a subfield
     /// op. Returns the new id and whether the id is in the given child.
     std::pair<uint64_t, bool> rootChildFieldID(uint64_t fieldID, uint64_t index);
+
+    /// Const support.
+    bool isConst();
+    ElementType getElementTypePreservingConst();
+
+    /// Return a 'const' or non-'const' version of this type.
+    }] # name # [{Type getConstType(bool isConst);
+
+  }] # firrtlExtraClassDeclaration;
+}
+
+def FVectorImpl : BaseVectorTypeImpl<"FVector","::circt::firrtl::FIRRTLBaseType", [FieldIDTypeInterface]> {
+  let firrtlExtraClassDeclaration = [{
+    /// Return this type with any flip types recursively removed from itself.
+    FIRRTLBaseType getPassiveType();
   }];
 }
 
-def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
+def OpenVectorImpl : BaseVectorTypeImpl<"OpenVector","::circt::firrtl::FIRRTLType", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]>;
+
+class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [], string BaseType = ElementType> : FIRRTLImplType<name, traits, BaseType> {
   let summary = "an aggregate of named elements. This is effectively a struct.";
   let parameters = (ins "ArrayRef<BundleElement>":$elements, "bool":$isConst);
-  let storageClass = "BundleTypeStorage";
+  let storageClass = name # "TypeStorage";
   let skipDefaultBuilders = true;
   let builders = [
     TypeBuilder<(ins "ArrayRef<BundleElement>":$elements, CArg<"bool", "false">:$isConst)>
   ];
+
+  // Additional class declarations to emit.
+  code firrtlExtraClassDeclaration = "";
+
   let extraClassDeclaration = [{
+    using ElementType = }] # ElementType # [{;
+
     /// Each element of a bundle, which is a name and type.
     struct BundleElement {
       StringAttr name;
       bool isFlip;
-      FIRRTLBaseType type;
+      ElementType type;
 
-      BundleElement(StringAttr name, bool isFlip, FIRRTLBaseType type)
+      BundleElement(StringAttr name, bool isFlip, ElementType type)
           : name(name), isFlip(isFlip), type(type) {}
 
       bool operator==(const BundleElement &rhs) const {
@@ -224,7 +248,7 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
         return !operator==(rhs);
       }
 
-      friend llvm::hash_code hash_value(const BundleType::BundleElement &arg) {
+      friend llvm::hash_code hash_value(const BundleElement &arg) {
         return llvm::hash_combine(arg.name, arg.isFlip, arg.type);
       }
     };
@@ -248,20 +272,14 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
     BundleElement getElement(size_t index);
 
     /// Look up an element type by name.
-    FIRRTLBaseType getElementType(StringAttr name);
-    FIRRTLBaseType getElementType(StringRef name);
+    ElementType getElementType(StringAttr name);
+    ElementType getElementType(StringRef name);
 
     /// Look up an element type by index.
-    FIRRTLBaseType getElementType(size_t index);
+    ElementType getElementType(size_t index);
 
     /// Return the recursive properties of the type.
     RecursiveTypeProperties getRecursiveTypeProperties() const;
-
-    /// Return this type with any flip types recursively removed from itself.
-    FIRRTLBaseType getPassiveType();
-
-    /// Return a 'const' or non-'const' version of this type.
-    BundleType getConstType(bool isConst);
 
     /// Get an integer ID for the field. Field IDs start at 1, and are assigned
     /// to each field in a bundle in a recursive pre-order walk of all fields,
@@ -298,8 +316,25 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
     using iterator = ArrayRef<BundleElement>::iterator;
     iterator begin() const { return getElements().begin(); }
     iterator end() const { return getElements().end(); }
+
+    /// Const support.
+    bool isConst();
+    ElementType getElementTypePreservingConst(size_t index);
+
+    /// Return a 'const' or non-'const' version of this type.
+    }] # name # [{Type getConstType(bool isConst);
+
+  }] # firrtlExtraClassDeclaration;
+}
+
+def BundleImpl : BaseBundleTypeImpl<"Bundle","::circt::firrtl::FIRRTLBaseType", [FieldIDTypeInterface]> {
+  let firrtlExtraClassDeclaration = [{
+    /// Return this type with any flip types recursively removed from itself.
+    FIRRTLBaseType getPassiveType();
   }];
 }
+
+def OpenBundleImpl : BaseBundleTypeImpl<"OpenBundle","::circt::firrtl::FIRRTLType", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]>;
 
 def FEnumImpl : FIRRTLImplType<"FEnum", [FieldIDTypeInterface]> {
   let summary = "a sum type of named elements.";
@@ -434,6 +469,25 @@ def RefImpl : FIRRTLImplType<"Ref",
   let extraClassDeclaration = [{
     /// Return the recursive properties of the type.
     RecursiveTypeProperties getRecursiveTypeProperties() const;
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Non-Hardware Type Definitions
+//===----------------------------------------------------------------------===//
+
+def StringImpl : FIRRTLImplType<
+  "String", [PhasedTypeInterface], "circt::firrtl::FIRRTLType"> {
+  let summary = [{
+    An unlimited length string type. Not representable in hardware.
+    Commonly used as omir properties.
+  }];
+  let parameters = (ins "Phase":$phase);
+  let genVerifyDecl = true;
+  let genStorageClass = true;
+  let genAccessors = true;
+  let extraClassDeclaration = [{
+    bool isLegalInPhase(Phase phase) const { return getPhase() == phase; }
   }];
 }
 

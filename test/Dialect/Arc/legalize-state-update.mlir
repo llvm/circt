@@ -186,3 +186,68 @@ arc.model "DontLeakThroughClockTreeOrPassthrough" {
     arc.state_write %out_b = %1 : <i1>
   }
 }
+
+// CHECK-LABEL: arc.model "Memory"
+arc.model "Memory" {
+^bb0(%arg0: !arc.storage):
+  %false = hw.constant false
+  // CHECK: arc.clock_tree %false attributes {ct1}
+  arc.clock_tree %false attributes {ct1} {
+    // CHECK-NEXT: arc.state_read
+    // CHECK-NEXT: arc.memory_read [[MEM1:%.+]][%false]
+    // CHECK-NEXT: arc.memory_write [[MEM1]]
+    // CHECK-NEXT: arc.memory_read [[MEM2:%.+]][%false]
+    // CHECK-NEXT: arc.memory_write [[MEM2]]
+    %r1 = arc.state_read %s1 : <i32>
+    arc.memory_write %mem2[%false], %r1 : <2 x i32, i1>
+    arc.memory_write %mem1[%false], %r1 : <2 x i32, i1>
+    %mr1 = arc.memory_read %mem1[%false] : <2 x i32, i1>
+    %mr2 = arc.memory_read %mem2[%false] : <2 x i32, i1>
+  // CHECK-NEXT: }
+  }
+  // CHECK: arc.clock_tree %false attributes {ct2}
+  arc.clock_tree %false attributes {ct2} {
+    // CHECK-NEXT: arc.state_read
+    // CHECK-NEXT: arc.memory_read
+    // CHECK-NEXT: scf.if %false {
+    // CHECK-NEXT:   arc.memory_read
+    // CHECK-NEXT: }
+    // CHECK-NEXT: arc.memory_write
+    %r1 = arc.state_read %s1 : <i32>
+    arc.memory_write %mem1[%false], %r1 : <2 x i32, i1>
+    %mr1 = arc.memory_read %mem1[%false] : <2 x i32, i1>
+    scf.if %false {
+      %mr2 = arc.memory_read %mem1[%false] : <2 x i32, i1>
+    }
+  // CHECK-NEXT: }
+  }
+  // CHECK: arc.clock_tree %false attributes {ct3}
+  arc.clock_tree %false attributes {ct3} {
+    // CHECK-NEXT: arc.memory_read [[MEM1]]
+    // CHECK-NEXT: arc.memory_read [[MEM2]]
+    // CHECK-NEXT: scf.if %false {
+    // CHECK-NEXT:   arc.state_read
+    // CHECK-NEXT:   scf.if %false {
+    // CHECK-NEXT:     arc.memory_write [[MEM2]]
+    // CHECK-NEXT:     arc.memory_read [[MEM1]]
+    // CHECK-NEXT:   }
+    // CHECK-NEXT:   arc.memory_write [[MEM1]]
+    // CHECK-NEXT: }
+    scf.if %false {
+      %r1 = arc.state_read %s1 : <i32>
+      arc.memory_write %mem1[%false], %r1 : <2 x i32, i1>
+      scf.if %false {
+        arc.memory_write %mem2[%false], %r1 : <2 x i32, i1>
+        %mr3 = arc.memory_read %mem1[%false] : <2 x i32, i1>
+      }
+    }
+    %mr1 = arc.memory_read %mem1[%false] : <2 x i32, i1>
+    %mr2 = arc.memory_read %mem2[%false] : <2 x i32, i1>
+  // CHECK-NEXT: }
+  }
+  // CHECK: [[MEM1]] = arc.alloc_memory %arg0 :
+  // CHECK: [[MEM2]] = arc.alloc_memory %arg0 :
+  %mem1 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
+  %mem2 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
+  %s1 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i32>
+}

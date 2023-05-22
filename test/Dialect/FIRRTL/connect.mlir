@@ -226,4 +226,23 @@ firrtl.module @ConstToNonConstVec(in %in : !firrtl.const.vector<uint<1>, 3>, out
   firrtl.connect %out, %in : !firrtl.vector<uint<1>, 3>, !firrtl.const.vector<uint<1>, 3>
 }
 
+firrtl.module @NonConstToConstFlip(in %in   : !firrtl.bundle<a flip: uint<1>>,
+                                   out %out : !firrtl.const.bundle<a flip: uint<1>>) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.const.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
+  firrtl.connect %out, %in : !firrtl.const.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
+}
+
+firrtl.module @NonConstToNestedConstFlip(in %in   : !firrtl.bundle<a flip: uint<1>>,
+                                         out %out : !firrtl.bundle<a flip: const.uint<1>>) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.bundle<a flip: const.uint<1>>, !firrtl.bundle<a flip: uint<1>>
+  firrtl.connect %out, %in : !firrtl.bundle<a flip: const.uint<1>>, !firrtl.bundle<a flip: uint<1>>
+}
+
+firrtl.module @ConstToNonConstDoubleFlipp(in %in : !firrtl.const.bundle<a flip: bundle<a flip: uint<1>>>, 
+                                          out %out : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>) {
+  // CHECK: firrtl.connect %out, %in :
+  // CHECK-SAME: !firrtl.bundle<a flip: bundle<a flip: uint<1>>>, !firrtl.const.bundle<a flip: bundle<a flip: uint<1>>>
+  firrtl.connect %out, %in : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>, 
+                             !firrtl.const.bundle<a flip: bundle<a flip: uint<1>>>
+}
 }

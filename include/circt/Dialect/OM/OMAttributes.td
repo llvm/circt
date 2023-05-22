@@ -34,4 +34,22 @@ def ReferenceAttr : AttrDef<OMDialect, "Reference", [TypedAttrInterface]> {
   }];
 }
 
+def OMSymbolRefAttr : AttrDef<OMDialect, "SymbolRef", [TypedAttrInterface]> {
+  let summary = "An attribute that wraps a FlatSymbolRefAttr type";
+
+  let mnemonic = "sym_ref";
+
+  let parameters = (ins
+    "mlir::FlatSymbolRefAttr":$ref
+  );
+
+  let assemblyFormat = [{
+    `<` $ref `>`
+  }];
+
+  let extraClassDeclaration = [{
+    mlir::Type getType();
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMATTRIBUTES_TD

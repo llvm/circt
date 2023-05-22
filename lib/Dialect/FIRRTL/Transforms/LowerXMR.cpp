@@ -50,9 +50,14 @@ using hw::InnerRefAttr;
 class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   void runOnOperation() override {
+    auto circuits = getOperation().getOps<CircuitOp>();
+    if (circuits.empty())
+      return;
+    circuitOp = *circuits.begin();
+
     // Populate a CircuitNamespace that can be used to generate unique
     // circuit-level symbols.
-    auto ns = CircuitNamespace(getOperation());
+    auto ns = CircuitNamespace(circuitOp);
     circuitNamespace = &ns;
 
     dataFlowClasses = llvm::EquivalenceClasses<Value, ValueComparator>();
@@ -209,6 +214,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
           .Default([&](auto) { return success(); });
     };
 
+    SmallVector<FModuleOp> publicModules;
+
     // Traverse the modules in post order.
     for (auto node : llvm::post_order(&instanceGraph)) {
       auto module = dyn_cast<FModuleOp>(*node->getModule());
@@ -216,6 +223,10 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         continue;
       LLVM_DEBUG(llvm::dbgs()
                  << "Traversing module:" << module.getModuleNameAttr() << "\n");
+
+      if (module.isPublic())
+        publicModules.push_back(module);
+
       for (Operation &op : module.getBodyBlock()->getOperations())
         if (transferFunc(op).failed())
           return signalPassFailure();
@@ -253,7 +264,68 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     for (auto *op : forceAndReleaseOps)
       if (failed(handleForceReleaseOp(op)))
         return signalPassFailure();
+    for (auto module : publicModules) {
+      if (failed(handlePublicModuleRefPorts(module)))
+        return signalPassFailure();
+    }
     garbageCollect();
+  }
+
+  /// Generate the ABI ref_<circuit>_<module> prefix string into `prefix`.
+  void getRefABIPrefix(FModuleLike mod, SmallVectorImpl<char> &prefix) {
+    (Twine("ref_") +
+     (isa<FExtModuleOp>(mod) ? mod.getModuleName() : circuitOp.getName()) +
+     "_" + mod.getModuleName())
+        .toVector(prefix);
+  }
+
+  /// Get full macro name as StringAttr for the specified ref port.
+  /// Uses existing 'prefix', optionally preprends the backtick character.
+  StringAttr getRefABIMacroForPort(FModuleLike mod, size_t portIndex,
+                                   const Twine &prefix, bool backTick = false) {
+    return StringAttr::get(&getContext(), Twine(backTick ? "`" : "") + prefix +
+                                              "_" + mod.getPortName(portIndex));
+  }
+
+  LogicalResult resolveReferencePath(mlir::TypedValue<RefType> refVal,
+                                     ImplicitLocOpBuilder builder,
+                                     Attribute &ref,
+                                     SmallString<128> &stringLeaf) {
+    auto remoteOpPath = getRemoteRefSend(refVal);
+    if (!remoteOpPath)
+      return failure();
+    SmallVector<Attribute> refSendPath;
+    size_t lastIndex;
+    while (remoteOpPath) {
+      lastIndex = *remoteOpPath;
+      auto entr = refSendPathList[*remoteOpPath];
+      // If the path is a singular verbatim expression, the attribute of the
+      // send path list entry will be null
+      if (entr.first)
+        refSendPath.push_back(entr.first);
+      remoteOpPath = entr.second;
+    }
+    auto iter = xmrPathSuffix.find(lastIndex);
+
+    // If this xmr has a suffix string (internal path into a module, that is not
+    // yet generated).
+    if (iter != xmrPathSuffix.end()) {
+      if (!refSendPath.empty())
+        stringLeaf.append(".");
+      stringLeaf.append(iter->getSecond());
+    }
+
+    // Compute the reference attribute.  If the path is size 1,
+    // then this is just an InnerRefAttr (module--component pair).  Otherwise,
+    // we need to use the symbol of a HierPathOp that stores the path.
+    if (refSendPath.size() == 1)
+      ref = refSendPath.front();
+    else if (!refSendPath.empty())
+      ref = FlatSymbolRefAttr::get(
+          getOrCreatePath(builder.getArrayAttr(refSendPath), builder)
+              .getSymNameAttr());
+
+    return success();
   }
 
   LogicalResult resolveReference(mlir::TypedValue<RefType> refVal,
@@ -262,33 +334,12 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     auto remoteOpPath = getRemoteRefSend(refVal);
     if (!remoteOpPath)
       return failure();
-    SmallVector<Attribute> refSendPath;
-    SmallString<128> xmrString;
-    size_t lastIndex;
-    while (remoteOpPath) {
-      lastIndex = *remoteOpPath;
-      auto entr = refSendPathList[*remoteOpPath];
-      refSendPath.push_back(entr.first);
-      remoteOpPath = entr.second;
-    }
-    auto iter = xmrPathSuffix.find(lastIndex);
 
-    // If this xmr has a suffix string (internal path into a module, that is not
-    // yet generated).
-    if (iter != xmrPathSuffix.end())
-      xmrString += ("." + iter->getSecond()).str();
-
-    // Compute the reference given to the SVXMRRefOp.  If the path is size 1,
-    // then this is just an InnerRefAttr (module--component pair).  Otehrwise,
-    // we need to use the symbol of a HierPathOp that stores the path.
     ImplicitLocOpBuilder builder(loc, insertBefore);
     Attribute ref;
-    if (refSendPath.size() == 1)
-      ref = refSendPath.front();
-    else
-      ref = FlatSymbolRefAttr::get(
-          getOrCreatePath(builder.getArrayAttr(refSendPath), builder)
-              .getSymNameAttr());
+    SmallString<128> xmrString;
+    if (failed(resolveReferencePath(refVal, builder, ref, xmrString)))
+      return failure();
 
     // Create the XMR op and convert it to the referenced FIRRTL type.
     auto referentType = refVal.getType().getType();
@@ -354,11 +405,24 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       // attribute which specifies the internal path into the extern module.
       // This string attribute will be used to generate the final xmr.
       auto internalPaths = extRefMod.getInternalPaths();
-      // No internalPaths implies no RefType ports.
-      if (internalPaths.empty())
-        return success();
       size_t pathsIndex = 0;
       auto numPorts = inst.getNumResults();
+      SmallString<128> circuitRefPrefix;
+
+      /// Get the resolution string for this ref-type port.
+      auto getPath = [&](size_t portNo) {
+        // If there's an internalPaths array, grab the next element.
+        if (!internalPaths.empty())
+          return internalPaths[pathsIndex++].cast<StringAttr>();
+
+        // Otherwise, we're using the ref ABI.  Generate the prefix string
+        // and return the macro for the specified port.
+        if (circuitRefPrefix.empty())
+          getRefABIPrefix(extRefMod, circuitRefPrefix);
+
+        return getRefABIMacroForPort(extRefMod, portNo, circuitRefPrefix, true);
+      };
+
       for (const auto &res : llvm::enumerate(inst.getResults())) {
         if (!isa<RefType>(inst.getResult(res.index()).getType()))
           continue;
@@ -366,8 +430,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         auto inRef = getInnerRefTo(inst);
         auto ind = addReachingSendsEntry(res.value(), inRef);
 
-        xmrPathSuffix[ind] = internalPaths[pathsIndex].cast<StringAttr>().str();
-        ++pathsIndex;
+        xmrPathSuffix[ind] = getPath(res.index());
         // The instance result and module port must be marked for removal.
         setPortToRemove(inst, res.index(), numPorts);
         setPortToRemove(extRefMod, res.index(), numPorts);
@@ -415,6 +478,56 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             dataFlowClasses.getOrInsertLeaderValue(instanceResult));
       }
     }
+    return success();
+  }
+
+  LogicalResult handlePublicModuleRefPorts(FModuleOp module) {
+    // Decls must be at the top mlir module scope
+    auto declBuilder = ImplicitLocOpBuilder::atBlockBegin(
+        module.getLoc(), getOperation().getBody());
+    auto builder = ImplicitLocOpBuilder::atBlockBegin(module.getLoc(),
+                                                      circuitOp.getBodyBlock());
+
+    SmallString<128> circuitRefPrefix;
+    for (size_t portIndex = 0, numPorts = module.getNumPorts();
+         portIndex != numPorts; ++portIndex) {
+      auto refType = module.getPortType(portIndex).dyn_cast<RefType>();
+      if (!refType || isZeroWidth(refType.getType()) ||
+          module.getPortDirection(portIndex) != Direction::Out)
+        continue;
+      auto portValue =
+          module.getArgument(portIndex).cast<mlir::TypedValue<RefType>>();
+
+      Attribute ref;
+      SmallString<128> stringLeaf;
+      if (failed(resolveReferencePath(portValue, builder, ref, stringLeaf)))
+        return failure();
+
+      SmallString<128> formatString;
+      if (ref)
+        formatString += "{{0}}";
+      formatString += stringLeaf;
+
+      // Insert a macro with the format:
+      // ref_<circuit-name>_<module-name>_<ref-name> <path>
+      if (circuitRefPrefix.empty())
+        getRefABIPrefix(module, circuitRefPrefix);
+      auto macroName =
+          getRefABIMacroForPort(module, portIndex, circuitRefPrefix);
+      declBuilder.create<sv::MacroDeclOp>(macroName, ArrayAttr(), StringAttr());
+
+      auto macroDefOp = builder.create<sv::MacroDefOp>(
+          FlatSymbolRefAttr::get(macroName),
+          builder.getStringAttr(formatString),
+          builder.getArrayAttr(ref ? ref : ArrayRef<Attribute>{}));
+
+      // The macro will be exported to a file with the format:
+      // ref_<circuit-name>_<module-name>.sv
+      macroDefOp->setAttr("output_file",
+                          hw::OutputFileAttr::getFromFilename(
+                              &getContext(), circuitRefPrefix + ".sv"));
+    }
+
     return success();
   }
 
@@ -543,6 +656,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   bool isZeroWidth(FIRRTLBaseType t) { return t.getBitWidthOrSentinel() == 0; }
 
+  CircuitOp circuitOp;
+
   /// Cached module namespaces.
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
 
@@ -607,7 +722,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     if (pathInsertPoint.isSet())
       builder.restoreInsertionPoint(pathInsertPoint);
     else
-      builder.setInsertionPointToStart(getOperation().getBodyBlock());
+      builder.setInsertionPointToStart(circuitOp.getBodyBlock());
 
     // Create the new HierPathOp and insert it into the pathCache.
     hw::HierPathOp path =

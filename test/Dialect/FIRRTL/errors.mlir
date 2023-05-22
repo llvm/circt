@@ -362,6 +362,7 @@ firrtl.circuit "Foo" {
 firrtl.circuit "X" {
 
 firrtl.module @X(in %a : !firrtl.uint<4>) {
+  // expected-error @below {{failed to infer returned types}}
   // expected-error @+1 {{high must be equal or greater than low, but got high = 3, low = 4}}
   %0 = firrtl.bits %a 3 to 4 : (!firrtl.uint<4>) -> !firrtl.uint<2>
 }
@@ -373,6 +374,7 @@ firrtl.module @X(in %a : !firrtl.uint<4>) {
 firrtl.circuit "X" {
 
 firrtl.module @X(in %a : !firrtl.uint<4>) {
+  // expected-error @below {{failed to infer returned types}}
   // expected-error @+1 {{high must be smaller than the width of input, but got high = 4, width = 4}}
   %0 = firrtl.bits %a 4 to 3 : (!firrtl.uint<4>) -> !firrtl.uint<2>
 }
@@ -384,6 +386,7 @@ firrtl.module @X(in %a : !firrtl.uint<4>) {
 firrtl.circuit "X" {
 
 firrtl.module @X(in %a : !firrtl.uint<4>) {
+  // expected-error @below {{failed to infer returned types}}
   // expected-error @+1 {{'firrtl.bits' op inferred type(s) '!firrtl.uint<3>' are incompatible with return type(s) of operation '!firrtl.uint<2>'}}
   %0 = firrtl.bits %a 3 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
 }
@@ -403,6 +406,7 @@ firrtl.circuit "BadPort" {
 
 firrtl.circuit "BadAdd" {
   firrtl.module @BadAdd(in %a : !firrtl.uint<1>) {
+    // expected-error @below {{failed to infer returned types}}
     // expected-error @+1 {{'firrtl.add' op inferred type(s) '!firrtl.uint<2>' are incompatible with return type(s) of operation '!firrtl.uint<1>'}}
     firrtl.add %a, %a : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   }
@@ -469,6 +473,15 @@ firrtl.circuit "CombMemNonPassiveReturnType" {
 
 // -----
 
+firrtl.circuit "CombMemPerFieldSym" {
+  firrtl.module @CombMemPerFieldSym() {
+    // expected-error @below {{op does not support per-field inner symbols}}
+    %mem = chirrtl.combmem sym [<@x,1,public>] : !chirrtl.cmemory<bundle<a: uint<1>>, 1>
+  }
+}
+
+// -----
+
 firrtl.circuit "SeqMemInvalidReturnType" {
   firrtl.module @SeqMemInvalidReturnType() {
     // expected-error @+1 {{'chirrtl.seqmem' op result #0 must be a behavioral memory, but got '!firrtl.uint<1>'}}
@@ -487,6 +500,26 @@ firrtl.circuit "SeqMemNonPassiveReturnType" {
 
 // -----
 
+firrtl.circuit "SeqMemPerFieldSym" {
+  firrtl.module @SeqMemPerFieldSym() {
+    // expected-error @below {{op does not support per-field inner symbols}}
+    %mem = chirrtl.seqmem sym [<@x,1,public>] Undefined : !chirrtl.cmemory<bundle<a: uint<1>>, 1>
+  }
+}
+
+// -----
+
+firrtl.circuit "SeqCombMemDupSym" {
+  firrtl.module @SeqCombMemDupSym() {
+    // expected-note @below {{see existing inner symbol definition here}}
+    %smem = chirrtl.seqmem sym @x Undefined : !chirrtl.cmemory<bundle<a: uint<1>>, 1>
+    // expected-error @below {{redefinition of inner symbol named 'x'}}
+    %cmem = chirrtl.combmem sym @x : !chirrtl.cmemory<bundle<a: uint<1>>, 1>
+  }
+}
+
+// -----
+
 firrtl.circuit "MemoryPortInvalidReturnType" {
   firrtl.module @MemoryPortInvalidReturnType(in %sel : !firrtl.uint<8>, in %clock : !firrtl.clock) {
     %mem = chirrtl.combmem : !chirrtl.cmemory<uint<8>, 8>
@@ -500,6 +533,7 @@ firrtl.circuit "MemoryPortInvalidReturnType" {
 firrtl.circuit "MemoryPortInvalidReturnType" {
   firrtl.module @MemoryPortInvalidReturnType(in %sel : !firrtl.uint<8>, in %clock : !firrtl.clock) {
     %mem = chirrtl.combmem : !chirrtl.cmemory<uint<8>, 8>
+    // expected-error @below {{failed to infer returned types}}
     // expected-error @+1 {{'chirrtl.memoryport' op inferred type(s) '!firrtl.uint<8>', '!chirrtl.cmemoryport' are incompatible with return type(s) of operation '!firrtl.uint<9>', '!chirrtl.cmemoryport'}}
     %memoryport_data, %memoryport_port = chirrtl.memoryport Infer %mem {name = "memoryport"} : (!chirrtl.cmemory<uint<8>, 8>) -> (!firrtl.uint<9>, !chirrtl.cmemoryport)
     chirrtl.memoryport.access %memoryport_port[%sel], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
@@ -1200,6 +1234,38 @@ firrtl.circuit "ForceableTypeMismatch" {
 
 // -----
 
+// Check rwprobe<const T> is rejected.
+firrtl.circuit "ForceableConstWire" {
+  firrtl.module @ForceableConstWire() {
+    // expected-error @below {{forceable reference base type cannot contain const}}
+    %w, %w_f = firrtl.wire forceable : !firrtl.const.uint, !firrtl.rwprobe<const.uint>
+  }
+}
+
+// -----
+
+// Check forceable declarations of const-type w/o explicit ref type are rejected.
+firrtl.circuit "ForceableConstNode" {
+  firrtl.module @ForceableConstNode() {
+    %w = firrtl.wire : !firrtl.const.uint
+    // expected-error @below {{cannot force a node of type}}
+    %n, %n_ref = firrtl.node %w forceable : !firrtl.const.uint
+  }
+}
+
+// -----
+
+// Check forceable declarations of const-type w/o explicit ref type are rejected.
+firrtl.circuit "ForceableBundleConstNode" {
+  firrtl.module @ForceableBundleConstNode() {
+    %w = firrtl.wire : !firrtl.bundle<a: const.uint>
+    // expected-error @below {{cannot force a node of type}}
+    %n, %n_ref = firrtl.node %w forceable : !firrtl.bundle<a: const.uint>
+  }
+}
+
+// -----
+
 firrtl.circuit "RefForceProbe" {
   firrtl.module @RefForceProbe() {
     %a = firrtl.wire : !firrtl.uint<1>
@@ -1396,3 +1462,90 @@ firrtl.module @EnumNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !fir
   %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.enum<a: const.uint<1>>, !firrtl.enum<a: const.uint<1>>
 }
 }
+
+// -----
+// hardware firrtl.string is invalid
+
+firrtl.circuit "HardwareString" {
+// expected-error @+1 {{strings are not representable in hardware}}
+firrtl.module @HardwareString(in %string: !firrtl.string) {}
+}
+
+// -----
+// const hardware firrtl.string is invalid
+
+firrtl.circuit "ConstHardwareString" {
+// expected-error @+1 {{strings cannot be const}}
+firrtl.module @ConstHardwareString(in %string: !firrtl.const.string) {}
+}
+
+// -----
+
+// Constcast non-const to const
+firrtl.circuit "ConstcastNonConstToConst" {
+  firrtl.module @ConstcastNonConstToConst(in %a: !firrtl.uint<1>) {
+    // expected-error @+1 {{'!firrtl.uint<1>' is not 'const'-castable to '!firrtl.const.uint<1>'}}
+    %b = firrtl.constCast %a : (!firrtl.uint<1>) -> !firrtl.const.uint<1>
+  }
+}
+
+// -----
+
+// Constcast non-const to const-containing
+firrtl.circuit "ConstcastNonConstToConst" {
+  firrtl.module @ConstcastNonConstToConst(in %a: !firrtl.bundle<a: uint<1>>) {
+    // expected-error @+1 {{'!firrtl.bundle<a: uint<1>>' is not 'const'-castable to '!firrtl.bundle<a: const.uint<1>>'}}
+    %b = firrtl.constCast %a : (!firrtl.bundle<a: uint<1>>) -> !firrtl.bundle<a: const.uint<1>>
+  }
+}
+
+// -----
+
+// Constcast different types
+firrtl.circuit "ConstcastDifferentTypes" {
+  firrtl.module @ConstcastDifferentTypes(in %a: !firrtl.const.uint<1>) {
+    // expected-error @+1 {{'!firrtl.const.uint<1>' is not 'const'-castable to '!firrtl.sint<1>'}}
+    %b = firrtl.constCast %a : (!firrtl.const.uint<1>) -> !firrtl.sint<1>
+  }
+}
+
+// -----
+
+// Bitcast non-const to const
+firrtl.circuit "BitcastNonConstToConst" {
+  firrtl.module @BitcastNonConstToConst(in %a: !firrtl.uint<1>) {
+    // expected-error @+1 {{cannot cast non-'const' input type '!firrtl.uint<1>' to 'const' result type '!firrtl.const.sint<1>'}}
+    %b = firrtl.bitcast %a : (!firrtl.uint<1>) -> !firrtl.const.sint<1>
+  }
+}
+
+// -----
+
+// Bitcast non-const to const-containing
+firrtl.circuit "BitcastNonConstToConstContaining" {
+  firrtl.module @BitcastNonConstToConstContaining(in %a: !firrtl.bundle<a: uint<1>>) {
+    // expected-error @+1 {{cannot cast non-'const' input type '!firrtl.bundle<a: uint<1>>' to 'const' result type '!firrtl.bundle<a: const.sint<1>>'}}
+    %b = firrtl.bitcast %a : (!firrtl.bundle<a: uint<1>>) -> !firrtl.bundle<a: const.sint<1>>
+  }
+}
+
+// -----
+
+// Uninferred width cast non-const to const
+firrtl.circuit "UninferredWidthCastNonConstToConst" {
+  firrtl.module @UninferredWidthCastNonConstToConst(in %a: !firrtl.uint) {
+    // expected-error @+1 {{operand constness must match}}
+    %b = firrtl.widthCast %a : (!firrtl.uint) -> !firrtl.const.uint<1>
+  }
+}
+
+// -----
+
+// Uninferred reset cast non-const to const
+firrtl.circuit "UninferredWidthCastNonConstToConst" {
+  firrtl.module @UninferredWidthCastNonConstToConst(in %a: !firrtl.reset) {
+    // expected-error @+1 {{operand constness must match}}
+    %b = firrtl.resetCast %a : (!firrtl.reset) -> !firrtl.const.asyncreset
+  }
+}
+

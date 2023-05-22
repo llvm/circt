@@ -1,4 +1,4 @@
-//===- esi.h - ESI C++ cosimulation API -------------------------*- C++ -*-===//
+//===- esi.h - ESI system C++ API -------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the ESI C++ cosimulation API which all cosimulation
-// backends must adhere to.
+// This file defines the ESI system C++ API which all backends must implement.
 //
 // DO NOT EDIT!
 // This file is distributed as part of an ESI package. The source for this file

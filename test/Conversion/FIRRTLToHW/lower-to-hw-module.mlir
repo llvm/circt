@@ -5,7 +5,7 @@
 
 // We should get a large header boilerplate.
 // CHECK:   sv.ifdef "PRINTF_COND" {
-// CHECK-NEXT:   sv.verbatim "`define PRINTF_COND_ (`PRINTF_COND)"
+// CHECK-NEXT:   sv.macro.def @PRINTF_COND_ "(`PRINTF_COND)"
 // CHECK-NEXT:  } else  {
 firrtl.circuit "Simple" {
 

@@ -1,4 +1,7 @@
-// RUN: circt-opt %s --arc-inline | FileCheck %s
+// RUN: split-file %s %t
+
+//--- default
+// RUN: circt-opt %t/default --arc-inline | FileCheck %t/default
 
 // CHECK-LABEL: func.func @Simple
 func.func @Simple(%arg0: i4, %arg1: i1) -> (i4, i4) {
@@ -96,3 +99,87 @@ arc.define @sub5(%arg0: index, %arg1: i4) -> i4 {
 // CHECK-NEXT:   scf.yield [[SUM]] : i4
 // CHECK-NEXT: }
 // CHECK-NEXT: hw.output [[RES]] : i4
+
+// CHECK-LABEL: hw.module @TopLevel
+hw.module @TopLevel(%clk: i1, %arg0: i32, %arg1: i32) -> (out0: i32, out1: i32, out2: i32, out3: i32) {
+  %0:2 = arc.state @inlineIntoArc(%arg0, %arg1) clock %clk lat 1 : (i32, i32) -> (i32, i32)
+  %1:2 = arc.state @inlineIntoArc2(%arg0, %arg1) clock %clk lat 1 : (i32, i32) -> (i32, i32)
+  hw.output %0#0, %0#1, %1#0, %1#1 : i32, i32, i32, i32
+}
+
+// CHECK-LABEL: arc.define @inlineIntoArc
+arc.define @inlineIntoArc(%arg0: i32, %arg1: i32) -> (i32, i32) {
+  // CHECK-NEXT: %0 = comb.add %arg0, %arg1 : i32
+  %0 = arc.call @sub6(%arg0, %arg1) : (i32, i32) -> i32
+  // CHECK-NEXT: %1 = comb.add %arg0, %arg1 : i32
+  %1 = arc.call @sub6(%arg0, %arg1) : (i32, i32) -> i32
+  // CHECK-NEXT: arc.output %0, %1 : i32, i32
+  arc.output %0, %1 : i32, i32
+}
+
+// CHECK-NOT: arc.define @sub6
+arc.define @sub6(%arg0: i32, %arg1: i32) -> i32 {
+  %0 = comb.add %arg0, %arg1 : i32
+  arc.output %0 : i32
+}
+
+
+// CHECK-LABEL: arc.define @inlineIntoArc
+arc.define @inlineIntoArc2(%arg0: i32, %arg1: i32) -> (i32, i32) {
+  // CHECK-NEXT: %0 = comb.add %arg0, %arg1 : i32
+  %0 = arc.call @sub7(%arg0, %arg1) : (i32, i32) -> i32
+  // CHECK-NEXT: %1 = comb.add %arg0, %arg1 : i32
+  %1 = arc.call @sub7(%arg0, %arg1) : (i32, i32) -> i32
+  // CHECK-NEXT: arc.output %0, %1 : i32, i32
+  arc.output %0, %1 : i32, i32
+}
+
+// CHECK-NOT: arc.define @sub6
+arc.define @sub7(%arg0: i32, %arg1: i32) -> i32 {
+  %0 = arc.call @sub8(%arg0, %arg1) : (i32, i32) -> i32
+  arc.output %0 : i32
+}
+
+// CHECK-NOT: arc.define @sub6
+arc.define @sub8(%arg0: i32, %arg1: i32) -> i32 {
+  %0 = comb.add %arg0, %arg1 : i32
+  arc.output %0 : i32
+}
+
+// CHECK-NOT: arc.define @ToBeRemoved1
+arc.define @ToBeRemoved1(%arg0: i32) -> i32 {
+  %0 = arc.call @ToBeRemoved2(%arg0) : (i32) -> i32
+  %1 = arc.call @ToBeRemoved3(%0) : (i32) -> i32
+  arc.output %1 : i32
+}
+
+// CHECK-NOT: arc.define @ToBeRemoved2
+arc.define @ToBeRemoved2(%arg0: i32) -> i32 {
+  %0 = arc.call @ToBeRemoved3(%arg0) : (i32) -> i32
+  arc.output %0 : i32
+}
+
+// CHECK-NOT: arc.define @ToBeRemoved3
+arc.define @ToBeRemoved3(%arg0: i32) -> i32 {
+  arc.output %arg0 : i32
+}
+
+//--- onlyIntoArcs
+// RUN: circt-opt %t/onlyIntoArcs --arc-inline=into-arcs-only=1 | FileCheck %t/onlyIntoArcs
+
+// CHECK-LABEL: hw.module @onlyIntoArcs
+hw.module @onlyIntoArcs(%arg0: i4, %arg1: i4) -> (out0: i4) {
+  %0 = arc.state @sub1(%arg0, %arg1) lat 0 : (i4, i4) -> i4
+  hw.output %0 : i4
+}
+// CHECK-LABEL: arc.define @sub1
+arc.define @sub1(%arg0: i4, %arg1: i4) -> i4 {
+  // CHECK-NEXT: comb.add
+  %0 = arc.call @sub2(%arg0, %arg1) : (i4, i4) -> i4
+  arc.output %0 : i4
+}
+// CHECK-NOT: arc.define @sub2
+arc.define @sub2(%arg0: i4, %arg1: i4) -> i4 {
+  %0 = comb.add %arg0, %arg1 : i4
+  arc.output %0 : i4
+}

@@ -20,6 +20,7 @@
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinDialect.h"
@@ -46,6 +47,9 @@ struct DefineOpLowering : public OpConversionPattern<arc::DefineOp> {
                   ConversionPatternRewriter &rewriter) const final {
     auto func = rewriter.create<mlir::func::FuncOp>(op.getLoc(), op.getName(),
                                                     op.getFunctionType());
+    func->setAttr(
+        "llvm.linkage",
+        LLVM::LinkageAttr::get(getContext(), LLVM::linkage::Linkage::Internal));
     rewriter.inlineRegionBefore(op.getRegion(), func.getBody(), func.end());
     rewriter.eraseOp(op);
     return success();
@@ -297,6 +301,21 @@ struct ReturnOpLowering : public OpConversionPattern<func::ReturnOp> {
   }
 };
 
+struct FuncCallOpLowering : public OpConversionPattern<func::CallOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(func::CallOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    SmallVector<Type> newResultTypes;
+    if (failed(
+            typeConverter->convertTypes(op->getResultTypes(), newResultTypes)))
+      return failure();
+    rewriter.replaceOpWithNewOp<func::CallOp>(
+        op, op.getCalleeAttr(), newResultTypes, adaptor.getOperands());
+    return success();
+  }
+};
+
 struct ZeroCountOpLowering : public OpConversionPattern<arc::ZeroCountOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -362,6 +381,7 @@ static void populateLegality(ConversionTarget &target) {
     return argsConverted && resultsConverted;
   });
   addGenericLegality<func::ReturnOp>(target);
+  addGenericLegality<func::CallOp>(target);
 }
 
 static void populateTypeConversion(TypeConverter &typeConverter) {
@@ -396,6 +416,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     MemoryReadOpLowering,
     MemoryWriteOpLowering,
     OutputOpLowering,
+    FuncCallOpLowering,
     ReturnOpLowering,
     StateOpLowering,
     StateReadOpLowering,

@@ -75,41 +75,44 @@ arc.define @DummyArc(%arg0: i42) -> i42 {
   arc.output %arg0 : i42
 }
 
-// CHECK-LABEL: arc.model "MemoryReadAndNonMaskedWrite"
-hw.module @MemoryReadAndNonMaskedWrite(%clk0: i1) {
+// CHECK-LABEL: arc.model "NonMaskedMemoryWrite"
+hw.module @NonMaskedMemoryWrite(%clk0: i1) {
   %c0_i2 = hw.constant 0 : i2
   %c9001_i42 = hw.constant 9001 : i42
-  %mem = arc.memory <4 x i42>
-  arc.memory_write_port %mem[%c0_i2], %c9001_i42 clock %clk0 : <4 x i42>, i2
-  // COM: also checks that the read is properly reordered to be before the write
-  %read0 = arc.memory_read_port %mem[%c0_i2] clock %clk0 : <4 x i42>, i2
+  %mem = arc.memory <4 x i42, i2>
+  arc.memory_write_port %mem, @identity(%c0_i2, %c9001_i42) clock %clk0 lat 1 : <4 x i42, i2>, i2, i42
 
   // CHECK-NEXT: ([[PTR:%.+]]: !arc.storage):
   // CHECK-NEXT: [[INCLK0:%.+]] = arc.root_input "clk0", [[PTR]] : (!arc.storage) -> !arc.state<i1>
+  // CHECK-NEXT: [[MEM:%.+]] = arc.alloc_memory [[PTR]] : (!arc.storage) -> !arc.memory<4 x i42, i2>
   // CHECK-NEXT: [[CLK0:%.+]] = arc.state_read [[INCLK0]] : <i1>
   // CHECK-NEXT: arc.clock_tree [[CLK0]] {
-  // CHECK:        [[TMP:%.+]] = arc.memory_read [[MEM:%.+]][%c0_i2] : <4 x i42>, i2
-  // CHECK:        arc.memory_write [[MEM]][%c0_i2], %c9001_i42 : <4 x i42>, i2
+  // CHECK:        [[RES:%.+]]:2 = arc.call @identity(%c0_i2, %c9001_i42) : (i2, i42) -> (i2, i42)
+  // CHECK:        arc.memory_write [[MEM]][[[RES]]#0], [[RES]]#1 : <4 x i42, i2>
   // CHECK-NEXT: }
-  // CHECK-NEXT: [[MEM]] = arc.alloc_memory [[PTR]] : (!arc.storage) -> !arc.memory<4 x i42>
+}
+arc.define @identity(%arg0: i2, %arg1: i42) -> (i2, i42) {
+  arc.output %arg0, %arg1 : i2, i42
 }
 
-// CHECK-LABEL: arc.model "MemoryReadWithEnable"
-hw.module @MemoryReadWithEnable(%clk0: i1, %en: i1) {
+// CHECK-LABEL: arc.model "lowerMemoryReadPorts"
+hw.module @lowerMemoryReadPorts() -> (out0: i42, out1: i42) {
   %c0_i2 = hw.constant 0 : i2
-  %mem = arc.memory <4 x i42>
-  %read0 = arc.memory_read_port %mem[%c0_i2] if %en clock %clk0 : <4 x i42>, i2
+  %mem = arc.memory <4 x i42, i2>
+  // CHECK: arc.memory_read {{%.+}}[%c0_i2] : <4 x i42, i2>
+  %0 = arc.memory_read_port %mem[%c0_i2] : <4 x i42, i2>
+  // CHECK: func.call @arcWithMemoryReadsIsLowered
+  %1 = arc.call @arcWithMemoryReadsIsLowered(%mem) : (!arc.memory<4 x i42, i2>) -> i42
+  hw.output %0, %1 : i42, i42
+}
 
-  // CHECK-NEXT: ([[PTR:%.+]]: !arc.storage):
-  // CHECK-NEXT: [[INCLK0:%.+]] = arc.root_input "clk0", [[PTR]] : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NEXT: [[INEN:%.+]] = arc.root_input "en", [[PTR]] : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NEXT: [[CLK0:%.+]] = arc.state_read [[INCLK0]] : <i1>
-  // CHECK-NEXT: arc.clock_tree [[CLK0]] {
-  // CHECK:        [[TMP:%.+]] = arc.memory_read [[MEM:%.+]][%c0_i2] : <4 x i42>, i2
-  // CHECK-NEXT:   [[EN:%.+]] = arc.state_read [[INEN]] : <i1>
-  // CHECK-NEXT:   %{{.+}} = comb.mux bin [[EN]], [[TMP]], %c0_i42 : i42
-  // CHECK-NEXT: }
-  // CHECK-NEXT: [[MEM]] = arc.alloc_memory [[PTR]] : (!arc.storage) -> !arc.memory<4 x i42>
+// CHECK-LABEL: func.func @arcWithMemoryReadsIsLowered(%arg0: !arc.memory<4 x i42, i2>) -> i42 attributes {llvm.linkage = #llvm.linkage<internal>}
+arc.define @arcWithMemoryReadsIsLowered(%mem: !arc.memory<4 x i42, i2>) -> i42 {
+  %c0_i2 = hw.constant 0 : i2
+  // CHECK: arc.memory_read {{%.+}}[%c0_i2] : <4 x i42, i2>
+  %0 = arc.memory_read_port %mem[%c0_i2] : <4 x i42, i2>
+  // CHECK-NEXT: return
+  arc.output %0 : i42
 }
 
 // CHECK-LABEL:  arc.model "maskedMemoryWrite"
@@ -118,18 +121,22 @@ hw.module @maskedMemoryWrite(%clk: i1) {
   %c0_i2 = hw.constant 0 : i2
   %c9001_i42 = hw.constant 9001 : i42
   %c1010_i42 = hw.constant 1010 : i42
-  %mem = arc.memory <4 x i42>
-  arc.memory_write_port %mem[%c0_i2], %c9001_i42 mask (%c1010_i42 : i42) if %true clock %clk : <4 x i42>, i2
+  %mem = arc.memory <4 x i42, i2>
+  arc.memory_write_port %mem, @identity2(%c0_i2, %c9001_i42, %true, %c1010_i42) clock %clk enable mask lat 1 : <4 x i42, i2>, i2, i42, i1, i42
+}
+arc.define @identity2(%arg0: i2, %arg1: i42, %arg2: i1, %arg3: i42) -> (i2, i42, i1, i42) {
+  arc.output %arg0, %arg1, %arg2, %arg3 : i2, i42, i1, i42
 }
 // CHECK:      %c9001_i42 = hw.constant 9001 : i42
 // CHECK:      %c1010_i42 = hw.constant 1010 : i42
-// CHECK:      [[RD:%.+]] = arc.memory_read [[MEM:%.+]][%c0_i2] : <4 x i42>, i2
+// CHECK:      [[RES:%.+]]:4 = arc.call @identity2(%c0_i2, %c9001_i42, %true, %c1010_i42) : (i2, i42, i1, i42) -> (i2, i42, i1, i42)
+// CHECK:      [[RD:%.+]] = arc.memory_read [[MEM:%.+]][[[RES]]#0] : <4 x i42, i2>
 // CHECK:      %c-1_i42 = hw.constant -1 : i42
-// CHECK:      [[NEG_MASK:%.+]] = comb.xor bin %c1010_i42, %c-1_i42 : i42
+// CHECK:      [[NEG_MASK:%.+]] = comb.xor bin [[RES]]#3, %c-1_i42 : i42
 // CHECK:      [[OLD_MASKED:%.+]] = comb.and bin [[NEG_MASK]], [[RD]] : i42
-// CHECK:      [[NEW_MASKED:%.+]] = comb.and bin %c1010_i42, %c9001_i42 : i42
+// CHECK:      [[NEW_MASKED:%.+]] = comb.and bin [[RES]]#3, [[RES]]#1 : i42
 // CHECK:      [[DATA:%.+]] = comb.or bin [[OLD_MASKED]], [[NEW_MASKED]] : i42
-// CHECK:      arc.memory_write [[MEM]][%c0_i2], [[DATA]] if %true : <4 x i42>, i2
+// CHECK:      arc.memory_write [[MEM]][[[RES]]#0], [[DATA]] if [[RES]]#2 : <4 x i42, i2>
 
 // CHECK-LABEL: arc.model "Taps"
 hw.module @Taps() {
@@ -274,12 +281,15 @@ arc.define @CombLoopRegressionArc2(%arg0: i1) -> (i1, i1) {
 // Regression check for invalid memory port lowering errors.
 // CHECK-LABEL: arc.model "MemoryPortRegression"
 hw.module private @MemoryPortRegression(%clock: i1, %reset: i1, %in: i3) -> (x: i3) {
-  %0 = arc.memory <2 x i3> {name = "ram_ext"}
-  %1 = arc.memory_read_port %0[%3] clock %clock : <2 x i3>, i1
-  arc.memory_write_port %0[%3], %in clock %clock : <2 x i3>, i1
-  %3 = arc.state @Queue_arc_0(%reset) clock %clock lat 1 {names = ["value"]} : (i1) -> i1
+  %0 = arc.memory <2 x i3, i1> {name = "ram_ext"}
+  %1 = arc.memory_read_port %0[%3] : <2 x i3, i1>
+  arc.memory_write_port %0, @identity3(%3, %in) clock %clock lat 1 : <2 x i3, i1>, i1, i3
+  %3 = arc.state @Queue_arc_0(%reset) clock %clock lat 1 : (i1) -> i1
   %4 = arc.state @Queue_arc_1(%1) lat 0 : (i3) -> i3
   hw.output %4 : i3
+}
+arc.define @identity3(%arg0: i1, %arg1: i3) -> (i1, i3) {
+  arc.output %arg0, %arg1 : i1, i3
 }
 arc.define @Queue_arc_0(%arg0: i1) -> i1 {
   arc.output %arg0 : i1
