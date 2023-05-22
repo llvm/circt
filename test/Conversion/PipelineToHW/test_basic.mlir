@@ -17,9 +17,9 @@ hw.module @test0(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out: i
   %0 = pipeline.pipeline(%arg0, %arg1, %go) clock %clk reset %rst : (i32, i32, i1) -> i32 {
   ^bb0(%arg0_0: i32, %arg1_1: i32, %arg2: i1):
     %1 = comb.add %arg0_0, %arg1_1 : i32
-    %regOuts:2, %valid = pipeline.stage.register when %arg2 regs %1, %arg0_0 : i32, i32
+    %regOuts:2, %valid = pipeline.ss.reg enable %arg2 regs %1, %arg0_0 : i32, i32
     %2 = comb.add %regOuts#0, %regOuts#1 : i32
-    %regOuts_2:2, %valid_3 = pipeline.stage.register when %valid regs %2, %regOuts#0 : i32, i32
+    %regOuts_2:2, %valid_3 = pipeline.ss.reg enable %valid regs %2, %regOuts#0 : i32, i32
     %3 = comb.add %regOuts_2#0, %regOuts_2#1 : i32
     pipeline.return %3 valid %valid_3 : i32
   }
