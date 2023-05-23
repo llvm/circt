@@ -41,14 +41,8 @@ def ClassOp : OMOp<"class",
 
   let builders = [
     OpBuilder<(ins "::mlir::Twine":$name,
-                    "::mlir::ArrayRef<::mlir::Attribute>":$params), [{
-      return build($_builder, $_state, $_builder.getStringAttr(name),
-                   $_builder.getArrayAttr(params));
-    }]>,
-    OpBuilder<(ins "::mlir::Twine":$name), [{
-      return build($_builder, $_state, $_builder.getStringAttr(name),
-                   $_builder.getArrayAttr({}));
-    }]>
+                    "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames)>,
+    OpBuilder<(ins "::mlir::Twine":$name)>
   ];
 
   let hasCustomAssemblyFormat = 1;
@@ -88,12 +82,7 @@ def ObjectOp : OMOp<"object",
   );
 
   let builders = [
-    OpBuilder<(ins "om::ClassOp":$classOp, "::mlir::ValueRange":$params),
-    [{ return build($_builder, $_state,
-                   om::ClassType::get($_builder.getContext(),
-                   mlir::FlatSymbolRefAttr::get(classOp)),
-                   classOp.getNameAttr(), params);
-    }]>
+    OpBuilder<(ins "om::ClassOp":$classOp, "::mlir::ValueRange":$actualParams)>
   ];
 
   let assemblyFormat = [{
@@ -133,9 +122,7 @@ def ConstantOp : OMOp<"constant",
   );
 
   let builders = [
-    OpBuilder<(ins "::mlir::TypedAttr":$constVal), [{
-      return build($_builder, $_state, constVal.getType(), constVal);
-    }]>
+    OpBuilder<(ins "::mlir::TypedAttr":$constVal)>
   ];
 
   let assemblyFormat = [{
