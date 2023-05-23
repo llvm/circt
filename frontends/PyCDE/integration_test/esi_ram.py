@@ -12,6 +12,7 @@ import pycde
 from pycde import (Clock, Input, Module, generator, types)
 from pycde.constructs import Wire
 from pycde import esi
+from pycde.bsp import cosim
 
 import sys
 
@@ -73,26 +74,27 @@ def run_cosim(tmpdir=".", schema_path="schema.capnp", rpchostport=None):
 
   cosim = Cosim(schema_path, rpchostport)
   print(cosim.list())
-  top = esi_sys.top(cosim)
+  top = esi_sys.top(cosim).bsp
+  print(dir(top))
 
   write_cmd = {"address": 2, "data": 42}
-  loopback_result = top.mem_comms.loopback[0](write_cmd)
+  loopback_result = top.loopback[0](write_cmd)
   assert loopback_result == write_cmd
 
-  read_result = top.mem_comms.read[0](2)
+  read_result = top.read[0](2)
   assert read_result == 0
-  read_result = top.mem_comms.read[0](3)
+  read_result = top.read[0](3)
   assert read_result == 0
 
-  top.mem_comms.write[0].write(write_cmd)
-  read_result = top.mem_comms.read[0](2)
+  top.write[0].write(write_cmd)
+  read_result = top.read[0](2)
   assert read_result == 42
-  read_result = top.mem_comms.read[0](3)
+  read_result = top.read[0](3)
   assert read_result == 42
 
 
 if __name__ == "__main__":
-  s = pycde.System([esi.CosimBSP(Top)],
+  s = pycde.System([cosim.CosimBSP(Top)],
                    name="ESIMem",
                    output_directory=sys.argv[1])
   s.compile()

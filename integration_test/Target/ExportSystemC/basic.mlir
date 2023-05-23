@@ -1,6 +1,6 @@
 // REQUIRES: clang-tidy, systemc
 // RUN: circt-translate %s --export-systemc > %t.cpp
-// RUN: clang-tidy --extra-arg=-frtti %t.cpp
+// RUN: clang-tidy --extra-arg=-frtti %t.cpp --
 
 emitc.include <"systemc.h">
 emitc.include <"tuple">
