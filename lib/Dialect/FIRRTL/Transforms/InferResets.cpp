@@ -44,14 +44,16 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 
 /// An absolute instance path.
-using InstancePathRef = ArrayRef<InstanceOp>;
-using InstancePathVec = SmallVector<InstanceOp>;
+using InstanceLike = circt::hw::HWInstanceLike;
+using InstancePathRef = ArrayRef<InstanceLike>;
+using InstancePathVec = SmallVector<InstanceLike>;
 
 template <typename T>
 static T &operator<<(T &os, InstancePathRef path) {
   os << "$root";
-  for (InstanceOp inst : path)
-    os << "/" << inst.getName() << ":" << inst.getModuleName();
+  for (InstanceLike inst : path)
+    os << "/" << inst.getInstanceName() << ":"
+       << inst.getReferencedModuleName();
   return os;
 }
 
@@ -60,7 +62,7 @@ static StringRef getTail(InstancePathRef path) {
   if (path.empty())
     return "$root";
   auto last = path.back();
-  return last.getName();
+  return last.getInstanceName();
 }
 #endif
 
@@ -1398,7 +1400,7 @@ LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
       else {
         note << "instance '";
         llvm::interleave(
-            path, [&](InstanceOp inst) { note << inst.getName(); },
+            path, [&](InstanceLike inst) { note << inst.getInstanceName(); },
             [&]() { note << "/"; });
         note << "'";
       }
@@ -1454,7 +1456,7 @@ void InferResetsPass::buildDomains(FModuleOp module,
     auto submodule = dyn_cast<FModuleOp>(*record->getTarget()->getModule());
     if (!submodule)
       continue;
-    childPath.push_back(cast<InstanceOp>(*record->getInstance()));
+    childPath.push_back(cast<InstanceLike>(*record->getInstance()));
     buildDomains(submodule, childPath, domain.reset, instGraph, indent + 1);
     childPath.pop_back();
   }
