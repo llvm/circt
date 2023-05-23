@@ -25,6 +25,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/LTL/LTLVisitors.h"
+#include "circt/Dialect/OM/OMOps.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVVisitors.h"
@@ -5729,6 +5730,9 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           }
         })
         .Case<MacroDeclOp>([&](auto op) {
+          symbolCache.addDefinition(op.getSymNameAttr(), op);
+        })
+        .Case<om::ClassOp>([&](auto op) {
           symbolCache.addDefinition(op.getSymNameAttr(), op);
         })
         .Default([&](auto *) {
