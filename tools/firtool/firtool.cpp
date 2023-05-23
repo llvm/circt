@@ -431,7 +431,7 @@ static LogicalResult processBuffer(
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
 
-  pm.nest<mlir::ModuleOp>().addPass(firrtl::createCreateSiFiveMetadataPass(
+  pm.addPass(firrtl::createCreateSiFiveMetadataPass(
       replSeqMem, replSeqMemCircuit, replSeqMemFile));
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
