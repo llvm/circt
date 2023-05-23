@@ -82,40 +82,22 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   auto builderOM =
       mlir::ImplicitLocOpBuilder::atBlockEnd(unknownLoc, moduleOp.getBody());
 
-  using NameTypePair = std::pair<StringAttr, mlir::Type>;
   // Add all the properties of a memory as fields of the class.
   // The types must match exactly with the FMemModuleOp attribute type.
-  SmallVector<NameTypePair> classFields;
-  classFields.push_back(
-      {StringAttr::get(context, "name"), om::SymbolRefType::get(context)});
-  classFields.push_back(
-      {StringAttr::get(context, "depth"),
-       mlir::IntegerType::get(context, 64, IntegerType::Unsigned)});
-  classFields.push_back(
-      {StringAttr::get(context, "width"),
-       mlir::IntegerType::get(context, 32, IntegerType::Unsigned)});
-  classFields.push_back(
-      {StringAttr::get(context, "maskBits"),
-       mlir::IntegerType::get(context, 32, IntegerType::Unsigned)});
-  classFields.push_back(
-      {StringAttr::get(context, "readPorts"),
-       mlir::IntegerType::get(context, 32, IntegerType::Unsigned)});
-  classFields.push_back(
-      {StringAttr::get(context, "writePorts"),
-       mlir::IntegerType::get(context, 32, IntegerType::Unsigned)});
-  classFields.push_back(
-      {StringAttr::get(context, "readwritePorts"),
-       mlir::IntegerType::get(context, 32, IntegerType::Unsigned)});
-  classFields.push_back(
-      {StringAttr::get(context, "writeLatency"),
-       mlir::IntegerType::get(context, 32, IntegerType::Unsigned)});
-  classFields.push_back(
-      {StringAttr::get(context, "readLatency"),
-       mlir::IntegerType::get(context, 32, IntegerType::Unsigned)});
 
-  // Get only the attribute names for parameter names.
-  auto paramNames = llvm::to_vector(llvm::map_range(
-      classFields, [&](NameTypePair e) -> Attribute { return e.first; }));
+  StringRef paramNames[] = {"name",           "depth",        "width",
+                            "maskBits",       "readPorts",    "writePorts",
+                            "readwritePorts", "writeLatency", "readLatency"};
+  mlir::Type classFieldTypes[] = {
+      om::SymbolRefType::get(context),
+      mlir::IntegerType::get(context, 64, IntegerType::Unsigned),
+      mlir::IntegerType::get(context, 32, IntegerType::Unsigned),
+      mlir::IntegerType::get(context, 32, IntegerType::Unsigned),
+      mlir::IntegerType::get(context, 32, IntegerType::Unsigned),
+      mlir::IntegerType::get(context, 32, IntegerType::Unsigned),
+      mlir::IntegerType::get(context, 32, IntegerType::Unsigned),
+      mlir::IntegerType::get(context, 32, IntegerType::Unsigned),
+      mlir::IntegerType::get(context, 32, IntegerType::Unsigned)};
 
   // Memory metadata class.
   auto memorySchemaClass =
@@ -125,9 +107,9 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   Block *body = new Block();
   memorySchemaClass.getRegion().push_back(body);
   builderOM.setInsertionPointToEnd(body);
-  for (auto field : classFields)
+  for (auto [fieldName, fieldType] : llvm::zip(paramNames, classFieldTypes))
     builderOM.create<om::ClassFieldOp>(
-        field.first, body->addArgument(field.second, unknownLoc));
+        fieldName, body->addArgument(fieldType, unknownLoc));
 
   // Now create the class that will instantiate metadata class with all the
   // memories of the circt.
@@ -159,9 +141,9 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     };
 
     SmallVector<Value> memFields;
-    for (auto field : classFields)
+    for (auto field : paramNames)
       memFields.push_back(createConstField(
-          llvm::StringSwitch<TypedAttr>(field.first.getValue())
+          llvm::StringSwitch<TypedAttr>(field)
               .Case("name", om::SymbolRefAttr::get(mem))
               .Case("depth", mem.getDepthAttr())
               .Case("width", mem.getDataWidthAttr())
