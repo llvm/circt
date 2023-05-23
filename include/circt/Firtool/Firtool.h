@@ -206,10 +206,11 @@ struct FirtoolOptions {
 
   llvm::cl::opt<bool> addVivadoRAMAddressConflictSynthesisBugWorkaround{
       "add-vivado-ram-address-conflict-synthesis-bug-workaround",
-      llvm::cl::desc("Add a vivado specific SV attribute (* ram_style = "
-                     "\"distributed\" *) to array registers as a workaronud "
-                     "for a vivado synthesis bug that incorrectly modifies "
-                     "address conflict behavivor of combinational memories"),
+      llvm::cl::desc(
+          "Add a vivado specific SV attribute (* ram_style = "
+          "\"distributed\" *) to unpacked array registers as a workaronud "
+          "for a vivado synthesis bug that incorrectly modifies "
+          "address conflict behavivor of combinational memories"),
       llvm::cl::init(false), llvm::cl::cat(category)};
 
   bool isRandomEnabled(RandomKind kind) const {
