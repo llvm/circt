@@ -6,7 +6,7 @@ if(CIRCT_LEC_ENABLED)
 
   target_link_libraries(circt-lec
     PRIVATE
-    CIRCTSMT
+    CIRCTLogicalEquivalence
     ${Z3_LIBRARIES}
   )
 

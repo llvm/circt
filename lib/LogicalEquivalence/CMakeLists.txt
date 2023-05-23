@@ -1,5 +1,5 @@
 if(CIRCT_LEC_ENABLED)
-  add_circt_verification_library(CIRCTSMT
+  add_circt_verification_library(CIRCTLogicalEquivalence
     Solver.cpp
     Circuit.cpp
     LogicExporter.cpp
@@ -17,7 +17,7 @@ if(CIRCT_LEC_ENABLED)
     CIRCTHW
     CIRCTSupport
   )
-  target_include_directories(CIRCTSMT
+  target_include_directories(CIRCTLogicalEquivalence
     PRIVATE
     ${Z3_INCLUDE_DIR}
     ${Z3_CXX_INCLUDE_DIRS}
