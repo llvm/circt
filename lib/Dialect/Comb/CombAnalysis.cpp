@@ -75,7 +75,7 @@ static KnownBits computeKnownBits(Value v, unsigned depth) {
   if (auto muxOp = dyn_cast<MuxOp>(op)) {
     auto lhs = computeKnownBits(muxOp.getTrueValue(), depth + 1);
     auto rhs = computeKnownBits(muxOp.getFalseValue(), depth + 1);
-    return KnownBits::commonBits(lhs, rhs);
+    return lhs.intersectWith(rhs);
   }
 
   return KnownBits(v.getType().getIntOrFloatBitWidth());
