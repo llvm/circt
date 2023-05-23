@@ -56,6 +56,9 @@ def OMSymbolRefAttr : AttrDef<OMDialect, "SymbolRef", [TypedAttrInterface]> {
 
   let extraClassDeclaration = [{
     mlir::Type getType();
+
+    static om::SymbolRefAttr get(mlir::Operation *op);
+    static om::SymbolRefAttr get(mlir::StringAttr symName);
   }];
 }
 
