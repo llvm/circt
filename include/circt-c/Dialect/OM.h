@@ -38,6 +38,9 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(OM, om);
 struct OMEvaluator {
   void *ptr;
 };
+
+// For some reason clang-tidy thinks this is C++ and wants to use `using`.
+// NOLINTNEXTLINE(modernize-use-using)
 typedef struct OMEvaluator OMEvaluator;
 
 /// A value type for use in C APIs that just wraps a pointer to an Object.
@@ -45,6 +48,9 @@ typedef struct OMEvaluator OMEvaluator;
 struct OMObject {
   void *ptr;
 };
+
+// For some reason clang-tidy thinks this is C++ and wants to use `using`.
+// NOLINTNEXTLINE(modernize-use-using)
 typedef struct OMObject OMObject;
 
 /// A value type for use in C APIs that represents an ObjectValue.
@@ -54,6 +60,9 @@ struct OMObjectValue {
   MlirAttribute primitive;
   OMObject object;
 };
+
+// For some reason clang-tidy thinks this is C++ and wants to use `using`.
+// NOLINTNEXTLINE(modernize-use-using)
 typedef struct OMObjectValue OMObjectValue;
 
 //===----------------------------------------------------------------------===//
