@@ -58,6 +58,19 @@ ParseResult circt::om::ClassOp::parse(OpAsmParser &parser,
   return success();
 }
 
+void circt::om::ClassOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                               Twine name,
+                               ArrayRef<StringRef> formalParamNames) {
+  return build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+               odsBuilder.getStrArrayAttr(formalParamNames));
+}
+
+void circt::om::ClassOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                               Twine name) {
+  return build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+               odsBuilder.getStrArrayAttr({}));
+}
+
 void circt::om::ClassOp::print(OpAsmPrinter &printer) {
   // Print the Class symbol name.
   printer << " @";
@@ -118,6 +131,16 @@ void circt::om::ClassOp::getAsmBlockArgumentNames(
 //===----------------------------------------------------------------------===//
 // ObjectOp
 //===----------------------------------------------------------------------===//
+
+void circt::om::ObjectOp::build(::mlir::OpBuilder &odsBuilder,
+                                ::mlir::OperationState &odsState,
+                                om::ClassOp classOp,
+                                ::mlir::ValueRange actualParams) {
+  return build(odsBuilder, odsState,
+               om::ClassType::get(odsBuilder.getContext(),
+                                  mlir::FlatSymbolRefAttr::get(classOp)),
+               classOp.getNameAttr(), actualParams);
+}
 
 LogicalResult
 circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
@@ -221,6 +244,16 @@ circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
            << finalField.getType();
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ConstantOp
+//===----------------------------------------------------------------------===//
+
+void circt::om::ConstantOp::build(::mlir::OpBuilder &odsBuilder,
+                                  ::mlir::OperationState &odsState,
+                                  ::mlir::TypedAttr constVal) {
+  return build(odsBuilder, odsState, constVal.getType(), constVal);
 }
 
 //===----------------------------------------------------------------------===//
