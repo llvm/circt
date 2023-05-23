@@ -722,8 +722,6 @@ static LogicalResult processBuffer(
 
       pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass(
           {/*disableRandomization=*/!isRandomEnabled(RandomKind::Reg),
-           /*addVivadoRAMAddressConflictSynthesisBugWorkaround=*/
-           addVivadoRAMAddressConflictSynthesisBugWorkaround,
            /*emitSeparateAlwaysBlocks=*/
            emitSeparateAlwaysBlocks}));
       pm.addPass(sv::createHWMemSimImplPass(
