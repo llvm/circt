@@ -26,6 +26,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -49,6 +50,7 @@ class CreateSiFiveMetadataPass
   // The design under test module.
   FModuleOp dutMod;
   CircuitOp circuitOp;
+  mlir::ModuleOp moduleOp;
 
 public:
   CreateSiFiveMetadataPass(bool _replSeqMem, StringRef _replSeqMemCircuit,
@@ -77,14 +79,14 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
       instancePathCache.instanceGraph.getTopLevelNode()->getModule() == dutMod;
 
   auto *context = circuitOp.getContext();
-  auto builderOM = OpBuilder::atBlockEnd(circuitOp.getBodyBlock());
+  auto builderOM = OpBuilder::atBlockEnd(moduleOp.getBody());
 
   using NameTypePair = std::pair<StringAttr, mlir::Type>;
   // Add all the properties of a memory as fields of the class.
   // The types must match exactly with the FMemModuleOp attribute type.
   SmallVector<NameTypePair> classFields;
-  classFields.push_back({StringAttr::get(context, "name"),
-                         om::SymRefType::get(builderOM.getContext())});
+  classFields.push_back(
+      {StringAttr::get(context, "name"), om::SymbolRefType::get(context)});
   classFields.push_back(
       {StringAttr::get(context, "depth"),
        mlir::IntegerType::get(context, 64, IntegerType::Unsigned)});
@@ -112,13 +114,12 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
 
   auto unknownLoc = builderOM.getUnknownLoc();
   // Get only the attribute names for parameter names.
-  auto paramNames = builderOM.getArrayAttr(llvm::to_vector(llvm::map_range(
-      classFields, [&](NameTypePair e) -> Attribute { return e.first; })));
+  auto paramNames = llvm::to_vector(llvm::map_range(
+      classFields, [&](NameTypePair e) -> Attribute { return e.first; }));
 
   // Memory metadata class.
   auto memMetadataClass = builderOM.create<circt::om::ClassOp>(
-      builderOM.getUnknownLoc(),
-      StringAttr::get(builderOM.getContext(), "MemoryConf"), paramNames);
+      builderOM.getUnknownLoc(), "MemoryConf", paramNames);
 
   // Now add all the properties of the memory as a ClassFieldOp.
   Block *body = new Block();
@@ -130,11 +131,9 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
 
   // Now create the class that will instantiate metadata class with all the
   // memories of the circt.
-  builderOM.setInsertionPointToEnd(circuitOp.getBodyBlock());
+  builderOM.setInsertionPointToEnd(moduleOp.getBody());
   auto metadataClass = builderOM.create<circt::om::ClassOp>(
-      builderOM.getUnknownLoc(),
-      StringAttr::get(builderOM.getContext(), "MemoryMetadata"),
-      builderOM.getArrayAttr({}));
+      builderOM.getUnknownLoc(), "MemoryMetadata");
   auto *memMetadataBlock = new Block();
   metadataClass.getRegion().push_back(memMetadataBlock);
   builderOM.setInsertionPointToEnd(memMetadataBlock);
@@ -156,18 +155,16 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     if (!((mem.getReadLatency() == 1 && mem.getWriteLatency() == 1) &&
           width > 0))
       return;
-    auto createConstField = [&](Type type, Attribute constVal) {
-      return builderOM.create<om::ConstantOp>(unknownLoc, type,
+    auto createConstField = [&](Attribute constVal) {
+      return builderOM.create<om::ConstantOp>(unknownLoc,
                                               constVal.cast<mlir::TypedAttr>());
     };
 
     SmallVector<Value> memFields;
     for (auto field : classFields)
       memFields.push_back(createConstField(
-          field.second,
           llvm::StringSwitch<TypedAttr>(field.first.getValue())
-              .Case("name", om::SymRefAttr::get(
-                                context, mlir::FlatSymbolRefAttr::get(mem)))
+              .Case("name", om::SymbolRefAttr::get(mem))
               .Case("depth", mem.getDepthAttr())
               .Case("width", mem.getDataWidthAttr())
               .Case("maskBits", mem.getMaskBitsAttr())
@@ -177,11 +174,8 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
               .Case("readLatency", mem.getReadLatencyAttr())
               .Case("writeLatency", mem.getWriteLatencyAttr())));
 
-    auto object = builderOM.create<om::ObjectOp>(
-        unknownLoc,
-        om::ClassType::get(context,
-                           mlir::FlatSymbolRefAttr::get(memMetadataClass)),
-        memMetadataClass.getNameAttr(), memFields);
+    auto object =
+        builderOM.create<om::ObjectOp>(unknownLoc, memMetadataClass, memFields);
     builderOM.create<om::ClassFieldOp>(
         unknownLoc, StringAttr::get(context, "m" + Twine(index++)), object);
 
@@ -375,27 +369,21 @@ LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
   if (filename.empty())
     return success();
 
-  auto builder = OpBuilder::atBlockEnd(circuitOp.getBodyBlock());
+  auto builder = OpBuilder::atBlockEnd(moduleOp.getBody());
 
   auto retimeModuleOMClass = builder.create<circt::om::ClassOp>(
-      builder.getUnknownLoc(),
-      StringAttr::get(builder.getContext(), "RetimeModules"),
+      builder.getUnknownLoc(), "RetimeModules",
       builder.getArrayAttr({StringAttr::get(context, "moduleName")}));
   Block *body = new Block();
   retimeModuleOMClass.getRegion().push_back(body);
-  auto arg = body->addArgument(om::ReferenceType::get(builder.getContext()),
+  auto arg = body->addArgument(om::SymbolRefType::get(builder.getContext()),
                                builder.getUnknownLoc());
   builder.setInsertionPointToEnd(body);
-  builder.create<om::ClassFieldOp>(
-      builder.getUnknownLoc(),
-      StringAttr::get(builder.getContext(), "moduleName"), arg);
+  builder.create<om::ClassFieldOp>(builder.getUnknownLoc(), "moduleName", arg);
 
-  builder.setInsertionPointToEnd(circuitOp.getBodyBlock());
+  builder.setInsertionPointToEnd(moduleOp.getBody());
   auto metadataClass = builder.create<circt::om::ClassOp>(
-      builder.getUnknownLoc(),
-      StringAttr::get(builder.getContext(),
-                      "RetimeModulesMetadata_" + filename),
-      builder.getArrayAttr({}));
+      builder.getUnknownLoc(), ("RetimeModulesMetadata_" + filename).str());
   auto *mBody = new Block();
   metadataClass.getRegion().push_back(mBody);
   builder.setInsertionPointToEnd(mBody);
@@ -419,18 +407,12 @@ LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
       j.value(("{{" + Twine(index++) + "}}").str());
       symbols.push_back(SymbolRefAttr::get(module.getModuleNameAttr()));
       auto modEntry = builder.create<om::ConstantOp>(
-          builder.getUnknownLoc(), om::ReferenceType::get(context),
-          om::ReferenceAttr::get(
-              context, hw::InnerRefAttr::get(module.getModuleNameAttr(),
-                                             module.getModuleNameAttr())));
+          builder.getUnknownLoc(), om::SymbolRefAttr::get(module));
       auto object = builder.create<om::ObjectOp>(
-          builder.getUnknownLoc(),
-          om::ClassType::get(context,
-                             FlatSymbolRefAttr::get(retimeModuleOMClass)),
-          retimeModuleOMClass.getNameAttr(), ValueRange({modEntry}));
+          builder.getUnknownLoc(), retimeModuleOMClass, ValueRange({modEntry}));
       builder.create<om::ClassFieldOp>(
-          builder.getUnknownLoc(),
-          StringAttr::get(builder.getContext(), "m" + Twine(index)), object);
+          builder.getUnknownLoc(), builder.getStringAttr("m" + Twine(index)),
+          object);
     }
   });
 
@@ -506,27 +488,22 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
     }
   }
 
-  auto builderOM = OpBuilder::atBlockEnd(circuitOp.getBodyBlock());
+  auto builderOM = OpBuilder::atBlockEnd(moduleOp.getBody());
 
   auto sitestBBClass = builderOM.create<circt::om::ClassOp>(
-      builderOM.getUnknownLoc(),
-      StringAttr::get(builderOM.getContext(), "SitestBlackBoxModules"),
+      builderOM.getUnknownLoc(), "SitestBlackBoxModules",
       builderOM.getArrayAttr({StringAttr::get(context, "moduleName")}));
   Block *body = new Block();
   sitestBBClass.getRegion().push_back(body);
-  auto arg = body->addArgument(om::SymRefType::get(builderOM.getContext()),
+  auto arg = body->addArgument(om::SymbolRefType::get(context),
                                builderOM.getUnknownLoc());
   builderOM.setInsertionPointToEnd(body);
-  builderOM.create<om::ClassFieldOp>(
-      builderOM.getUnknownLoc(),
-      StringAttr::get(builderOM.getContext(), "moduleName"), arg);
+  builderOM.create<om::ClassFieldOp>(builderOM.getUnknownLoc(), "moduleName",
+                                     arg);
   auto buildOMClass = [&](StringRef className) {
-    builderOM.setInsertionPointToEnd(circuitOp.getBodyBlock());
+    builderOM.setInsertionPointToEnd(moduleOp.getBody());
     auto metadataClass = builderOM.create<circt::om::ClassOp>(
-        builderOM.getUnknownLoc(),
-        StringAttr::get(builderOM.getContext(),
-                        "SitestBlackBoxMetadata_" + className),
-        builderOM.getArrayAttr({}));
+        builderOM.getUnknownLoc(), ("SitestBlackBoxMetadata_" + className));
     metadataClass.getRegion().push_back(new Block());
     return metadataClass;
   };
@@ -554,15 +531,12 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
       for (auto &name : names) {
         j.value(name);
         auto modEntry = builderOM.create<om::ConstantOp>(
-            unknownLoc, om::SymRefType::get(context),
-            om::SymRefAttr::get(context,
-                                FlatSymbolRefAttr::get(context, name)));
-        auto object = builderOM.create<om::ObjectOp>(
-            unknownLoc,
-            om::ClassType::get(context, FlatSymbolRefAttr::get(sitestBBClass)),
-            sitestBBClass.getNameAttr(), ValueRange({modEntry}));
+            unknownLoc, om::SymbolRefType::get(context),
+            om::SymbolRefAttr::get(builderOM.getStringAttr(name)));
+        auto object = builderOM.create<om::ObjectOp>(unknownLoc, sitestBBClass,
+                                                     ValueRange({modEntry}));
         builderOM.create<om::ClassFieldOp>(
-            unknownLoc, StringAttr::get(context, "m" + Twine(index++)), object);
+            unknownLoc, builderOM.getStringAttr("m" + Twine(index++)), object);
       }
     });
 
@@ -596,7 +570,7 @@ void CreateSiFiveMetadataPass::getDependentDialects(
 
 void CreateSiFiveMetadataPass::runOnOperation() {
 
-  auto moduleOp = getOperation();
+  moduleOp = getOperation();
   auto circuits = moduleOp.getOps<CircuitOp>();
   if (circuits.empty())
     return;
@@ -631,6 +605,7 @@ void CreateSiFiveMetadataPass::runOnOperation() {
   // Clear pass-global state as required by MLIR pass infrastructure.
   dutMod = {};
   circuitOp = {};
+  moduleOp = {};
   dutModuleSet.empty();
 }
 
