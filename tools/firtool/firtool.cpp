@@ -330,6 +330,157 @@ static LogicalResult processBuffer(
   if (failed(firtool::populateCHIRRTLToLowFIRRTL(pm, firtoolOptions, *module,
                                                  inputFilename)))
     return failure();
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerIntrinsicsPass());
+
+  if (!disableOptimization)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        createCSEPass());
+
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      firrtl::createDropNamesPass(preserveMode));
+
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
+
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      firrtl::createLowerCHIRRTLPass());
+
+  // Run LowerMatches before InferWidths, as the latter does not support the
+  // match statement, but it does support what they lower to.
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      firrtl::createLowerMatchesPass());
+
+  // Width inference creates canonicalization opportunities.
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
+
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createMemToRegOfVecPass(replSeqMem, ignoreReadEnableMem));
+
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
+
+  if (exportChiselInterface) {
+    if (chiselInterfaceOutDirectory.empty()) {
+      pm.nest<firrtl::CircuitOp>().addPass(createExportChiselInterfacePass());
+    } else {
+      pm.nest<firrtl::CircuitOp>().addPass(
+          createExportSplitChiselInterfacePass(chiselInterfaceOutDirectory));
+    }
+  }
+
+  if (dedup)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
+
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createWireDFTPass());
+
+  if (vbToBV) {
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
+        firrtl::PreserveAggregate::All, firrtl::PreserveAggregate::All));
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createVBToBVPass());
+  }
+
+  if (!lowerMemories)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createFlattenMemoryPass());
+
+  // The input mlir file could be firrtl dialect so we might need to clean
+  // things up.
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
+      preserveAggregate, firrtl::PreserveAggregate::None));
+  // Only enable expand whens if lower types is also enabled.
+  auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+  modulePM.addPass(firrtl::createExpandWhensPass());
+  modulePM.addPass(firrtl::createSFCCompatPass());
+
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
+
+  // Preset the random initialization parameters for each module. The current
+  // implementation assumes it can run at a time where every register is
+  // currently in the final module it will be emitted in, all registers have
+  // been created, and no registers have yet been removed.
+  if (isRandomEnabled(RandomKind::Reg))
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createRandomizeRegisterInitPass());
+
+  if (useOldCheckCombCycles) {
+    if (preserveAggregate == firrtl::PreserveAggregate::None)
+      pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombCyclesPass());
+    else
+      emitWarning(module->getLoc())
+          << "CheckCombCyclesPass doens't support aggregate "
+             "values yet so it is skipped\n";
+  } else
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombLoopsPass());
+
+  // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
+  if (!disableOptimization)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        createSimpleCanonicalizerPass());
+
+  // Run the infer-rw pass, which merges read and write ports of a memory with
+  // mutually exclusive enables.
+  if (!disableOptimization)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createInferReadWritePass());
+
+  if (replSeqMem)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerMemoryPass());
+
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
+
+  if (!disableOptimization)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
+
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
+
+  pm.nest<mlir::ModuleOp>().addPass(firrtl::createCreateSiFiveMetadataPass(
+      replSeqMem, replSeqMemCircuit, replSeqMemFile));
+
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
+
+  // Run passes to resolve Grand Central features.  This should run before
+  // BlackBoxReader because Grand Central needs to inform BlackBoxReader where
+  // certain black boxes should be placed.  Note: all Grand Central Taps related
+  // collateral is resolved entirely by LowerAnnotations.
+  pm.addNestedPass<firrtl::CircuitOp>(
+      firrtl::createGrandCentralPass(grandCentralInstantiateCompanionOnly));
+
+  // Read black box source files into the IR.
+  StringRef blackBoxRoot = blackBoxRootPath.empty()
+                               ? llvm::sys::path::parent_path(inputFilename)
+                               : blackBoxRootPath;
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createBlackBoxReaderPass(blackBoxRoot));
+
+  // Run SymbolDCE as late as possible, but before InnerSymbolDCE. This is for
+  // hierpathop's and just for general cleanup.
+  pm.addNestedPass<firrtl::CircuitOp>(mlir::createSymbolDCEPass());
+
+  // Run InnerSymbolDCE as late as possible, but before IMDCE.
+  pm.addPass(firrtl::createInnerSymbolDCEPass());
+
+  // The above passes, IMConstProp in particular, introduce additional
+  // canonicalization opportunities that we should pick up here before we
+  // proceed to output-specific pipelines.
+  if (!disableOptimization) {
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        createSimpleCanonicalizerPass());
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        circt::firrtl::createRegisterOptimizerPass());
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMDeadCodeElimPass());
+  }
+
+  if (emitOMIR)
+    pm.nest<firrtl::CircuitOp>().addPass(
+        firrtl::createEmitOMIRPass(omirOutFile));
+
+  // Always run this, required for legalization.
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      firrtl::createMergeConnectionsPass(
+          !disableAggressiveMergeConnections.getValue()));
+
+  if (!disableOptimization)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createVectorizationPass());
+>>>>>>> 2fde8c1c5 (emit metadata pass runs on moduleop)
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {
