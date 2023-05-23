@@ -4,6 +4,9 @@ add_circt_library(CIRCTHandshakeToHW
   ADDITIONAL_HEADER_DIRS
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/Conversion/HandshakeToHW
 
+  DEPENDS
+  CIRCTConversionPassIncGen
+
   LINK_LIBS PUBLIC
   CIRCTHW
   CIRCTESI
