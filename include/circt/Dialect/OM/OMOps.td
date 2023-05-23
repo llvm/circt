@@ -39,6 +39,18 @@ def ClassOp : OMOp<"class",
     SizedRegion<1>:$body
   );
 
+  let builders = [
+    OpBuilder<(ins "::mlir::Twine":$name,
+                    "::mlir::ArrayRef<::mlir::Attribute>":$params), [{
+      return build($_builder, $_state, $_builder.getStringAttr(name),
+                   $_builder.getArrayAttr(params));
+    }]>,
+    OpBuilder<(ins "::mlir::Twine":$name), [{
+      return build($_builder, $_state, $_builder.getStringAttr(name),
+                   $_builder.getArrayAttr({}));
+    }]>
+  ];
+
   let hasCustomAssemblyFormat = 1;
 
   let hasVerifier = 1;
@@ -75,6 +87,15 @@ def ObjectOp : OMOp<"object",
     ClassType:$result
   );
 
+  let builders = [
+    OpBuilder<(ins "om::ClassOp":$classOp, "::mlir::ValueRange":$params),
+    [{ return build($_builder, $_state,
+                   om::ClassType::get($_builder.getContext(),
+                   mlir::FlatSymbolRefAttr::get(classOp)),
+                   classOp.getNameAttr(), params);
+    }]>
+  ];
+
   let assemblyFormat = [{
     $className `(` $actualParams `)` `:`
       functional-type($actualParams, $result) attr-dict
@@ -110,6 +131,12 @@ def ConstantOp : OMOp<"constant",
   let results = (outs
     AnyType:$result
   );
+
+  let builders = [
+    OpBuilder<(ins "::mlir::TypedAttr":$constVal), [{
+      return build($_builder, $_state, constVal.getType(), constVal);
+    }]>
+  ];
 
   let assemblyFormat = [{
     $value attr-dict
