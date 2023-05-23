@@ -41,6 +41,8 @@ class CreateSiFiveMetadataPass
   DenseSet<Operation *> dutModuleSet;
   // The design under test module.
   FModuleOp dutMod;
+  CircuitOp circuitOp;
+  mlir::ModuleOp moduleOp;
 
 public:
   CreateSiFiveMetadataPass(bool _replSeqMem, StringRef _replSeqMemCircuit,
@@ -58,7 +60,6 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   if (!replSeqMem)
     return success();
 
-  CircuitOp circuitOp = getOperation();
   // The instance graph analysis will be required to print the hierarchy names
   // of the memory.
   auto instancePathCache = InstancePathCache(getAnalysis<InstanceGraph>());
@@ -266,7 +267,6 @@ static LogicalResult removeAnnotationWithFilename(Operation *op,
 LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
 
   auto *context = &getContext();
-  auto circuitOp = getOperation();
 
   // Get the filename, removing the annotation from the circuit.
   StringRef filename;
@@ -324,7 +324,6 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
       dataTapsBlackboxClass, memTapBlackboxClass};
 
   auto *context = &getContext();
-  auto circuitOp = getOperation();
 
   // Get the filenames from the annotations.
   StringRef dutFilename, testFilename;
@@ -419,7 +418,12 @@ void CreateSiFiveMetadataPass::getDependentDialects(
 }
 
 void CreateSiFiveMetadataPass::runOnOperation() {
-  auto circuitOp = getOperation();
+
+  moduleOp = getOperation();
+  auto circuits = moduleOp.getOps<CircuitOp>();
+  if (circuits.empty())
+    return;
+  circuitOp = *circuits.begin();
   auto *body = circuitOp.getBodyBlock();
 
   // Find the device under test and create a set of all modules underneath it.
