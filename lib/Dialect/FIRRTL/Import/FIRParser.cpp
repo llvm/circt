@@ -2461,9 +2461,11 @@ ParseResult FIRStmtParser::parseRefExp(Value &result, const Twine &message) {
     return parseProbe(result);
   if (token == FIRToken::lp_rwprobe)
     return parseRWProbe(result);
-  if (token == FIRToken::identifier)
-    return parseStaticRefExp(result, message);
-  return emitError(getToken().getLoc(), message);
+
+  // Default to parsing as static reference expression.
+  // Don't check token kind, we need to support literal_identifier and keywords,
+  // let parseId handle this.
+  return parseStaticRefExp(result, message);
 }
 
 /// static_reference ::= id
