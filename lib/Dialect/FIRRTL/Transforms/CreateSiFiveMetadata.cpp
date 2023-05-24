@@ -42,7 +42,6 @@ class CreateSiFiveMetadataPass
   // The design under test module.
   FModuleOp dutMod;
   CircuitOp circuitOp;
-  mlir::ModuleOp moduleOp;
 
 public:
   CreateSiFiveMetadataPass(bool _replSeqMem, StringRef _replSeqMemCircuit,
@@ -419,11 +418,16 @@ void CreateSiFiveMetadataPass::getDependentDialects(
 
 void CreateSiFiveMetadataPass::runOnOperation() {
 
-  moduleOp = getOperation();
+  auto moduleOp = getOperation();
   auto circuits = moduleOp.getOps<CircuitOp>();
   if (circuits.empty())
     return;
-  circuitOp = *circuits.begin();
+  auto cIter = circuits.begin();
+  circuitOp = *cIter++;
+
+  assert(cIter == circuits.end() &&
+         "cannot handle more than one CircuitOp in a mlir::ModuleOp");
+
   auto *body = circuitOp.getBodyBlock();
 
   // Find the device under test and create a set of all modules underneath it.
@@ -448,6 +452,7 @@ void CreateSiFiveMetadataPass::runOnOperation() {
 
   // Clear pass-global state as required by MLIR pass infrastructure.
   dutMod = {};
+  circuitOp = {};
   dutModuleSet.empty();
 }
 
