@@ -8,6 +8,7 @@ set(LLVM_OPTIONAL_SOURCES
   HWArith.cpp
   LLHD.cpp
   Moore.cpp
+  OM.cpp
   Seq.cpp
   SV.cpp
   FSM.cpp
@@ -73,6 +74,15 @@ add_mlir_public_c_api_library(CIRCTCAPIMoore
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTMoore
+)
+
+add_mlir_public_c_api_library(CIRCTCAPIOM
+  OM.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRCAPIIR
+  CIRCTOM
+  CIRCTOMEvaluator
 )
 
 add_mlir_public_c_api_library(CIRCTCAPISeq
