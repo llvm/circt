@@ -2331,37 +2331,52 @@ static LogicalResult checkConnectFlow(Operation *connect) {
   return success();
 }
 
-namespace {
-enum class ConstLeafKind : uint8_t { None = 0, Normal = 1 << 0, Flip = 1 << 1 };
-} // end anonymous namespace
-
 // NOLINTBEGIN(misc-no-recursion)
-/// Checks if the type has any 'const' leaf elements that are normal or flip
-static ConstLeafKind typeConstLeafKinds(FIRRTLBaseType type,
-                                        bool outerTypeIsConst = false,
-                                        bool isFlip = false) {
+/// Checks if the type has any 'const' leaf elements . If `isFlip` is `true`,
+/// the `const` leaf is not considered to be driven.
+static bool isConstFieldDriven(FIRRTLBaseType type, bool isFlip = false,
+                               bool outerTypeIsConst = false) {
   auto typeIsConst = outerTypeIsConst || type.isConst();
 
   if (typeIsConst && type.isPassive())
-    return isFlip ? ConstLeafKind::Flip : ConstLeafKind::Normal;
+    return !isFlip;
 
-  if (auto bundleType = type.dyn_cast<BundleType>()) {
-    auto kinds = ConstLeafKind::None;
-    for (auto &element : bundleType.getElements()) {
-      auto elementKinds = typeConstLeafKinds(element.type, typeIsConst,
-                                             isFlip ^ element.isFlip);
-      kinds = static_cast<ConstLeafKind>(static_cast<uint8_t>(kinds) |
-                                         static_cast<uint8_t>(elementKinds));
-    }
-    return kinds;
-  }
+  if (auto bundleType = dyn_cast<BundleType>(type))
+    return llvm::any_of(bundleType.getElements(), [&](auto &element) {
+      return isConstFieldDriven(element.type, isFlip ^ element.isFlip,
+                                typeIsConst);
+    });
 
   if (auto vectorType = type.dyn_cast<FVectorType>())
-    return typeConstLeafKinds(vectorType.getElementType(), typeIsConst, isFlip);
+    return isConstFieldDriven(vectorType.getElementType(), isFlip, typeIsConst);
 
   if (typeIsConst)
-    return isFlip ? ConstLeafKind::Normal : ConstLeafKind::Flip;
-  return ConstLeafKind::None;
+    return !isFlip;
+  return false;
+}
+
+/// Looks up the value's defining op until the defining op is null or a
+/// declaration of the value. If a SubAccessOp is encountered with a 'const'
+/// input, `originalFieldType` is made 'const'.
+static Value
+findFieldDeclarationRefiningFieldType(Value value,
+                                      FIRRTLBaseType &originalFieldType) {
+  auto *definingOp = value.getDefiningOp();
+  if (!definingOp)
+    return value;
+
+  return TypeSwitch<Operation *, Value>(definingOp)
+      .Case<SubfieldOp, SubindexOp>([&](auto op) {
+        return findFieldDeclarationRefiningFieldType(op.getInput(),
+                                                     originalFieldType);
+      })
+      .Case<SubaccessOp>([&](SubaccessOp op) {
+        if (op.getInput().getType().getElementTypePreservingConst().isConst())
+          originalFieldType = originalFieldType.getConstType(true);
+        return findFieldDeclarationRefiningFieldType(op.getInput(),
+                                                     originalFieldType);
+      })
+      .Default([&](Operation *) { return value; });
 }
 // NOLINTEND(misc-no-recursion)
 
@@ -2375,11 +2390,26 @@ static LogicalResult checkConnectConditionality(FConnectLike connect) {
   if (!destType || !srcType)
     return success();
 
-  auto checkConstConditionality = [&](Value value,
-                                      FIRRTLBaseType type) -> LogicalResult {
-    auto *definingBlock = value.getParentBlock();
+  auto destRefinedType = destType;
+  auto srcRefinedType = srcType;
+
+  auto destDeclaration =
+      findFieldDeclarationRefiningFieldType(dest, destRefinedType);
+  auto srcDeclaration =
+      findFieldDeclarationRefiningFieldType(src, srcRefinedType);
+
+  // Make sure subaccesses don't allow for a non-'const' to 'const' connection
+  if ((destType != destRefinedType || srcType != srcRefinedType) &&
+      !areTypesEquivalent(destRefinedType, srcRefinedType)) {
+    return connect.emitError("type mismatch between destination ")
+           << destRefinedType << " and source " << srcRefinedType;
+  }
+
+  auto checkConstConditionality = [&](Value value, FIRRTLBaseType type,
+                                      Value declaration) -> LogicalResult {
+    auto *declarationBlock = declaration.getParentBlock();
     auto *block = connect->getBlock();
-    while (block && block != definingBlock) {
+    while (block && block != declarationBlock) {
       auto *parentOp = block->getParentOp();
 
       if (auto whenOp = dyn_cast<WhenOp>(parentOp);
@@ -2399,17 +2429,14 @@ static LogicalResult checkConnectConditionality(FConnectLike connect) {
   };
 
   // Check destination if it contains 'const' leaves
-  if (destType.containsConst() &&
-      static_cast<uint8_t>(typeConstLeafKinds(destType)) &
-          static_cast<uint8_t>(ConstLeafKind::Normal) &&
-      failed(checkConstConditionality(dest, destType)))
+  if (destRefinedType.containsConst() && isConstFieldDriven(destRefinedType) &&
+      failed(checkConstConditionality(dest, destType, destDeclaration)))
     return failure();
 
   // Check source if it contains 'const' 'flip' leaves
-  if (srcType.containsConst() &&
-      static_cast<uint8_t>(typeConstLeafKinds(srcType)) &
-          static_cast<uint8_t>(ConstLeafKind::Flip) &&
-      failed(checkConstConditionality(src, srcType)))
+  if (srcRefinedType.containsConst() &&
+      isConstFieldDriven(srcRefinedType, /*isFlip=*/true) &&
+      failed(checkConstConditionality(src, srcType, srcDeclaration)))
     return failure();
 
   return success();

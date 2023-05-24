@@ -238,12 +238,20 @@ firrtl.module @NonConstToNestedConstFlip(in %in   : !firrtl.bundle<a flip: uint<
   firrtl.connect %out, %in : !firrtl.bundle<a flip: const.uint<1>>, !firrtl.bundle<a flip: uint<1>>
 }
 
-firrtl.module @ConstToNonConstDoubleFlipp(in %in : !firrtl.const.bundle<a flip: bundle<a flip: uint<1>>>, 
-                                          out %out : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>) {
+firrtl.module @ConstToNonConstDoubleFlip(in %in   : !firrtl.const.bundle<a flip: bundle<a flip: uint<1>>>, 
+                                         out %out : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>) {
   // CHECK: firrtl.connect %out, %in :
   // CHECK-SAME: !firrtl.bundle<a flip: bundle<a flip: uint<1>>>, !firrtl.const.bundle<a flip: bundle<a flip: uint<1>>>
   firrtl.connect %out, %in : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>, 
                              !firrtl.const.bundle<a flip: bundle<a flip: uint<1>>>
+}
+
+firrtl.module @NonConstToNonConstFlipFromConstSubaccess(in %in    : !firrtl.bundle<a flip: uint<1>>,
+                                                        out %out  : !firrtl.const.vector<bundle<a flip: uint<1>>, 1>,
+                                                        in %index : !firrtl.uint<1>) {
+  %0 = firrtl.subaccess %out[%index] : !firrtl.const.vector<bundle<a flip: uint<1>>, 1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect %0, %in : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
+  firrtl.connect %0, %in : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
 }
 
 // Const connections can occur within const-conditioned whens

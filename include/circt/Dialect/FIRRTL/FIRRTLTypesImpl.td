@@ -22,12 +22,12 @@ class FIRRTLImplType<string name,
                      list<Trait> traits = [],
                      string baseCppClass = "::circt::firrtl::FIRRTLBaseType">
     : TypeDef<FIRRTLDialect, name, traits, baseCppClass> {
-  // Storage classes must be defined in C++ and
+  // Storage classes must be defined in C++ and 
   // inherit from FIRRTLBaseTypeStorage
   let genStorageClass = false;
-
-  // MLIR generates awkward accessor "getIsConst" for the "isConst" parameter,
-  // which is common on FIRRTLBaseType anyway, so we generate the other
+  
+  // MLIR generates awkward accessor "getIsConst" for the "isConst" parameter, 
+  // which is common on FIRRTLBaseType anyway, so we generate the other 
   // accessors manually
   let genAccessors = false;
 }
@@ -450,7 +450,7 @@ def RefImpl : FIRRTLImplType<"Ref",
 
     Values of this type are used to capture dataflow paths,
     and do not represent a circuit element or entity.
-
+    
     Generally read-only (probe), optionally forceable (rwprobe).
   }];
   let parameters = (ins TypeParameter<"::circt::firrtl::FIRRTLBaseType",
