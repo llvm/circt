@@ -44,6 +44,16 @@ static bool isDeletableDeclaration(Operation *op) {
   return !hasDontTouch(op);
 }
 
+/// Return true if the annotation is ok to drop when the target is dead.
+static bool isWeakReferencingAnnotation(Annotation anno) {
+  if (!anno.isClass(omirTrackerAnnoClass))
+    return false;
+
+  auto tpe = anno.getMember<StringAttr>("type");
+  return tpe &&
+         (tpe == "OMReferenceTarget" || tpe == "OMMemberReferenceTarget" ||
+          tpe == "OMMemberInstanceTarget");
+}
 namespace {
 struct IMDeadCodeElimPass : public IMDeadCodeElimBase<IMDeadCodeElimPass> {
   void runOnOperation() override;
@@ -392,7 +402,7 @@ void IMDeadCodeElimPass::runOnOperation() {
         hierPathOp =
             symbolTable->template lookup<hw::HierPathOp>(hierPathSym.getAttr());
 
-      if (isDiscardableAnnotation(anno)) {
+      if (isWeakReferencingAnnotation(anno)) {
         if (hierPathOp && portId >= 0)
           hierPathToElements[hierPathOp].insert(module.getArgument(portId));
         return false;
@@ -532,7 +542,7 @@ void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
     auto hierPathSym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
     // We only clean up non-local annotations here as local annotations will
     // be deleted afterwards.
-    if (!isDiscardableAnnotation(anno) || !hierPathSym)
+    if (!isWeakReferencingAnnotation(anno) || !hierPathSym)
       return false;
     auto hierPathOp =
         symbolTable->template lookup<hw::HierPathOp>(hierPathSym.getAttr());
