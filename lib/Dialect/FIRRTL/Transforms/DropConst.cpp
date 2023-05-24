@@ -19,46 +19,9 @@
 using namespace circt;
 using namespace firrtl;
 
-// NOLINTBEGIN(misc-no-recursion)
-/// Return this type with a 'const' modifiers dropped
-static FIRRTLBaseType getAllConstDroppedType(FIRRTLBaseType type) {
-  if (!type.containsConst())
-    return type;
-  return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(type)
-      .Case<ClockType, ResetType, AsyncResetType, AnalogType, SIntType,
-            UIntType>([](auto type) { return type.getConstType(false); })
-      .Case<BundleType>([](BundleType type) {
-        SmallVector<BundleType::BundleElement> constDroppedElements(
-            llvm::map_range(
-                type.getElements(), [](BundleType::BundleElement element) {
-                  element.type = getAllConstDroppedType(element.type);
-                  return element;
-                }));
-        return BundleType::get(type.getContext(), constDroppedElements, false);
-      })
-      .Case<FVectorType>([](FVectorType type) {
-        return FVectorType::get(getAllConstDroppedType(type.getElementType()),
-                                type.getNumElements(), false);
-      })
-      .Case<FEnumType>([](FEnumType type) {
-        SmallVector<FEnumType::EnumElement> constDroppedElements(
-            llvm::map_range(
-                type.getElements(), [](FEnumType::EnumElement element) {
-                  element.type = getAllConstDroppedType(element.type);
-                  return element;
-                }));
-        return FEnumType::get(type.getContext(), constDroppedElements, false);
-      })
-      .Default([](Type) {
-        llvm_unreachable("unknown FIRRTL type");
-        return FIRRTLBaseType();
-      });
-}
-// NOLINTEND(misc-no-recursion)
-
 /// Returns null type if no conversion is needed.
 static FIRRTLBaseType convertType(FIRRTLBaseType type) {
-  auto nonConstType = getAllConstDroppedType(type);
+  auto nonConstType = type.getAllConstDroppedType();
   return nonConstType != type ? nonConstType : FIRRTLBaseType{};
 }
 
