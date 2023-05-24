@@ -27,6 +27,7 @@
 #include "circt/Dialect/Handshake/HandshakeDialect.h"
 #include "circt/Dialect/Interop/InteropDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
+#include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/LoopSchedule/LoopScheduleDialect.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/Moore/MooreDialect.h"
@@ -36,6 +37,7 @@
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/SystemC/SystemCDialect.h"
+#include "circt/Dialect/Verif/VerifDialect.h"
 #include "mlir/IR/Dialect.h"
 
 namespace circt {
@@ -53,19 +55,21 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     firrtl::FIRRTLDialect,
     fsm::FSMDialect,
     handshake::HandshakeDialect,
+    hw::HWDialect,
+    hwarith::HWArithDialect,
     interop::InteropDialect,
     llhd::LLHDDialect,
     loopschedule::LoopScheduleDialect,
-    msft::MSFTDialect,
+    ltl::LTLDialect,
     moore::MooreDialect,
-    hw::HWDialect,
-    seq::SeqDialect,
-    ssp::SSPDialect,
+    msft::MSFTDialect,
     om::OMDialect,
     pipeline::PipelineDialect,
+    seq::SeqDialect,
+    ssp::SSPDialect,
     sv::SVDialect,
-    hwarith::HWArithDialect,
-    systemc::SystemCDialect
+    systemc::SystemCDialect,
+    verif::VerifDialect
   >();
   // clang-format on
 }
