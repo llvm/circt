@@ -2959,8 +2959,6 @@ firrtl.module @RefTypes(
   firrtl.strictconnect %flipbundle_wire, %flipbundle_read : !firrtl.bundle<a: uint<1>>
 }
 
-}
-
 // CHECK-LABEL: @RefCastSame
 firrtl.module @RefCastSame(in %in: !firrtl.probe<uint<1>>, out %out: !firrtl.probe<uint<1>>) {
   // Drop no-op ref.cast's.
