@@ -3430,9 +3430,9 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
                                  indexType);
 
   if (auto vectorType = inType.dyn_cast<FVectorType>()) {
-    auto elementType = vectorType.getElementType();
-    return elementType.getConstType(
-        (elementType.isConst() || vectorType.isConst()) && isConst(indexType));
+    if (isConst(indexType))
+      return vectorType.getElementTypePreservingConst();
+    return vectorType.getElementType().getAllConstDroppedType();
   }
 
   return emitInferRetTypeError(loc, "subaccess requires vector operand, not ",
