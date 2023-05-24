@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-emit-metadata))' --verify-diagnostics --split-input-file %s
+// RUN: circt-opt --firrtl-emit-metadata="repl-seq-mem=true repl-seq-mem-file='dut.conf'" --verify-diagnostics -split-input-file %s
 
 //===----------------------------------------------------------------------===//
 // RetimeModules

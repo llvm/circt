@@ -169,7 +169,7 @@ def AddSeqMemPorts : Pass<"firrtl-add-seqmem-ports", "firrtl::CircuitOp"> {
   ];
 }
 
-def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "firrtl::CircuitOp"> {
+def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "mlir::ModuleOp"> {
   let summary = "Emit metadata of the FIRRTL modules";
   let description = [{
     This pass handles the emission of several different kinds of metadata.
