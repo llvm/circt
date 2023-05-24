@@ -735,26 +735,26 @@ firrtl.circuit "Top" {
                      in %e: !firrtl.probe<uint<1>>) {
     %w = firrtl.wire sym @w : !firrtl.uint<1>
     %0 = firrtl.ref.send %w : !firrtl.uint<1>
-    firrtl.ref.define %a, %0 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %a, %0 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
     
     %x, %y = firrtl.instance foo sym @foo @Foo(out x: !firrtl.probe<uint<1>>, out y: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %b, %x : !firrtl.probe<uint<1>>
-    firrtl.ref.define %c, %y : !firrtl.probe<uint<1>>
+    firrtl.ref.define %b, %x : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
+    firrtl.ref.define %c, %y : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
     
     %constant = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %constant : !firrtl.uint<1>
-    firrtl.ref.define %d, %1 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %d, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
 
   // CHECK-LABEL: firrtl.module @Foo()
   firrtl.module @Foo(out %x: !firrtl.probe<uint<1>>, out %y: !firrtl.probe<uint<1>>) {
     %w = firrtl.wire sym @x : !firrtl.uint<1>
     %0 = firrtl.ref.send %w : !firrtl.uint<1>
-    firrtl.ref.define %x, %0 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %x, %0 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
 
     %z = firrtl.verbatim.expr "internal.path" : () -> !firrtl.uint<1>
     %1 = firrtl.ref.send %z : !firrtl.uint<1>
-    firrtl.ref.define %y, %1 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %y, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
 }
 

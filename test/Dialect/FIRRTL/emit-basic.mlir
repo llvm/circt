@@ -402,8 +402,8 @@ firrtl.circuit "Foo" {
         out a_ref: !firrtl.probe<uint<1>>,
         out a_rwref: !firrtl.rwprobe<uint<1>>
       )
-    firrtl.ref.define %a_ref, %refSource_a_ref : !firrtl.probe<uint<1>>
-    firrtl.ref.define %a_rwref, %refSource_a_rwref : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %a_ref, %refSource_a_ref : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
+    firrtl.ref.define %a_rwref, %refSource_a_rwref : !firrtl.rwprobe<uint<1>>, !firrtl.rwprobe<uint<1>>
   }
 
   // CHECK-LABEL: extmodule ExtOpenAgg
@@ -431,7 +431,7 @@ firrtl.circuit "Foo" {
     %b_0_y_2 = firrtl.ref.sub %b_0_y[2] : !firrtl.probe<vector<uint<2>, 3>>
     // openagg indexing + ref.sub
     // CHECK-NEXT: define out_b_0_y_2 = oa.out.b[0].y[2]
-    firrtl.ref.define %out_b_0_y_2, %b_0_y_2 : !firrtl.probe<uint<2>>
+    firrtl.ref.define %out_b_0_y_2, %b_0_y_2 : !firrtl.probe<uint<2>>, !firrtl.probe<uint<2>>
   }
 
   firrtl.extmodule @MyParameterizedExtModule<DEFAULT: i64 = 0, DEPTH: f64 = 3.242000e+01, FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32>(in in: !firrtl.uint, out out: !firrtl.uint<8>) attributes {defname = "name_thing"}
