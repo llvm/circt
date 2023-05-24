@@ -10,10 +10,10 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "Solver.h"
-#include "Circuit.h"
-#include "LogicExporter.h"
-#include "Utility.h"
+#include "circt/LogicalEquivalence/Solver.h"
+#include "circt/LogicalEquivalence/Circuit.h"
+#include "circt/LogicalEquivalence/LogicExporter.h"
+#include "circt/LogicalEquivalence/Utility.h"
 #include "mlir/IR/Builders.h"
 #include <string>
 #include <z3++.h>

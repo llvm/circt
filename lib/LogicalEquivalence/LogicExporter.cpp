@@ -10,10 +10,10 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "LogicExporter.h"
-#include "Circuit.h"
-#include "Solver.h"
-#include "Utility.h"
+#include "circt/LogicalEquivalence/LogicExporter.h"
+#include "circt/LogicalEquivalence/Circuit.h"
+#include "circt/LogicalEquivalence/Solver.h"
+#include "circt/LogicalEquivalence/Utility.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 #define DEBUG_TYPE "lec-exporter"
