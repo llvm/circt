@@ -416,7 +416,13 @@ else()
   # Some of our CMake code which is only used in Capnp builds uses newer CMake
   # features. Since most compilations are not capnp builds, only require the new
   # version for those builds.
-  cmake_minimum_required(VERSION 3.23)
+  if(CMAKE_VERSION VERSION_LESS "3.23.0")
+    message(SEND_ERROR
+        "Building CIRCT with Cap'nProto features enabled is CMake features "
+        "that require at least version 3.23. Recommend upgrading to 3.23+ "
+        "for full support. Detected current version: ${CMAKE_VERSION}.If you "
+        "do not need ESI cosim features, you can use the CAPNP_DISABLE option.")
+  endif()
 
   if(DEFINED CAPNP_PATH)
     set(ENV{PKG_CONFIG_PATH}
