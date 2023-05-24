@@ -101,8 +101,8 @@ unsigned StageSeparatingRegOp::index() {
 }
 
 void StageSeparatingRegOp::build(OpBuilder &builder, OperationState &state,
-                                 Value enable, ValueRange regIns) {
-  StageSeparatingRegOp::build(builder, state, regIns.getTypes(), regIns,
+                                 Value enable, ValueRange inputs) {
+  StageSeparatingRegOp::build(builder, state, inputs.getTypes(), inputs,
                               enable);
   state.addTypes({enable.getType()});
 }

@@ -104,7 +104,7 @@ void StageSeparatorToStagePass::runOnOperation() {
     // they will reside.
     auto stageReturn =
         cast<StageReturnOp>(currentStage.getBodyBlock()->getTerminator());
-    for (auto op : stageOps[stageLikeOp]) {
+    for (auto *op : stageOps[stageLikeOp]) {
       if (op->hasTrait<OpTrait::ConstantLike>())
         constants.push_back(op);
       else
@@ -114,7 +114,7 @@ void StageSeparatorToStagePass::runOnOperation() {
     // Finalize the current stage by adjusting the stage return value.
     stageReturn.setOperands(currentStage.getInnerEnable(),
                             stageLikeOp.getInputs(),
-                            /*passthrough=*/{});
+                            /*passthroughs=*/{});
 
     // Replace usages of the stage inputs inside the stage with the stage
     // inner inputs.
@@ -129,7 +129,7 @@ void StageSeparatorToStagePass::runOnOperation() {
 
   // Constant sinking - copy constant ops into each stage that references
   // them.
-  for (auto op : constants) {
+  for (auto *op : constants) {
     llvm::DenseMap<StageOp, llvm::SmallVector<OpOperand *>> stageUsers;
     for (auto &use : op->getUses()) {
       auto parentStage = dyn_cast<StageOp>(use.getOwner()->getParentOp());
@@ -142,7 +142,7 @@ void StageSeparatorToStagePass::runOnOperation() {
     for (auto [stage, uses] : stageUsers) {
       auto *copiedConstant = op->clone();
       copiedConstant->moveBefore(&stage.getBodyBlock()->front());
-      for (auto use : uses)
+      for (auto *use : uses)
         use->set(copiedConstant->getResult(0));
     }
   }
