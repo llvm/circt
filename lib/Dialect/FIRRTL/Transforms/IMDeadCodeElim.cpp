@@ -162,7 +162,7 @@ void IMDeadCodeElimPass::visitHierPathOp(hw::HierPathOp hierPathOp) {
   for (auto path : hierPathOp.getNamepathAttr())
     if (auto innerRef = path.dyn_cast<hw::InnerRefAttr>()) {
       auto *op = innerRefNamespace->lookupOp(innerRef);
-      if (auto instance = dyn_cast<InstanceOp>(op))
+      if (auto instance = dyn_cast_or_null<InstanceOp>(op))
         markAlive(instance);
     }
 
@@ -399,6 +399,8 @@ void IMDeadCodeElimPass::runOnOperation() {
       }
       if (hierPathOp)
         markAlive(hierPathOp);
+      if (portId >= 0)
+        markAlive(module.getArgument(portId));
       markAlive(module);
       return false;
     };
@@ -438,6 +440,14 @@ void IMDeadCodeElimPass::runOnOperation() {
 
   for (auto module : modules)
     eraseEmptyModule(module);
+
+  // Clean up data structures.
+  executableBlocks.clear();
+  resultPortToInstanceResultMapping.clear();
+  liveElements.clear();
+  lazyLiveInputPorts.clear();
+  instanceToHierPaths.clear();
+  hierPathToElements.clear();
 }
 
 void IMDeadCodeElimPass::visitValue(Value value) {
@@ -796,7 +806,7 @@ void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
   // If there is an instance with a symbol, we don't delete the module itself.
   if (!instancesWithSymbols.empty()) {
     auto diag = module.emitWarning()
-                << "module  `" << module.getName()
+                << "module `" << module.getName()
                 << "` is empty but cannot be removed because an instance is "
                    "referenced by name";
     diag.attachNote(FusedLoc::get(&getContext(), instancesWithSymbols))
