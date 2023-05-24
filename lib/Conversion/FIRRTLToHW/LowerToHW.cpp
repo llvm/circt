@@ -3467,7 +3467,8 @@ LogicalResult FIRRTLLowering::visitExpr(XorRPrimOp op) {
     return failure();
   }
 
-  return setLoweringTo<comb::ParityOp>(op, builder.getIntegerType(1), operand);
+  return setLoweringTo<comb::ParityOp>(op, builder.getIntegerType(1), operand,
+                                       true);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(AndRPrimOp op) {
@@ -3539,8 +3540,10 @@ LogicalResult FIRRTLLowering::lowerElementwiseLogicalOp(Operation *op) {
   auto retType = lhs.getType();
   lhs = builder.createOrFold<hw::BitcastOp>(intType, lhs);
   rhs = builder.createOrFold<hw::BitcastOp>(intType, rhs);
-  return setLoweringTo<hw::BitcastOp>(
-      op, retType, builder.createOrFold<ResultOpType>(lhs, rhs));
+  auto result = builder.createOrFold<ResultOpType>(lhs, rhs);
+  if (auto *newOp = result.getDefiningOp())
+    newOp->setAttr("twoState", builder.getUnitAttr());
+  return setLoweringTo<hw::BitcastOp>(op, retType, result);
 }
 
 /// lowerBinOp extends each operand to the destination type, then performs the
@@ -4282,7 +4285,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     auto format = op->template getAttrOfType<StringAttr>("format");
     if (format && (format.getValue() == "ifElseFatal" &&
                    !circuitState.emitChiselAssertsAsSVA)) {
-      predicate = comb::createOrFoldNot(predicate, builder);
+      predicate = comb::createOrFoldNot(predicate, builder, /*twoState=*/true);
       predicate = builder.createOrFold<comb::AndOp>(enable, predicate, true);
       addToIfDefBlock("SYNTHESIS", {}, [&]() {
         addToAlwaysBlock(clock, [&]() {
@@ -4305,7 +4308,8 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     // Formulate the `enable -> predicate` as `!enable | predicate`.
     // Except for covers, combine them: enable & predicate
     if (!isCover) {
-      auto notEnable = comb::createOrFoldNot(enable, builder);
+      auto notEnable =
+          comb::createOrFoldNot(enable, builder, /*twoState=*/true);
       predicate = builder.createOrFold<comb::OrOp>(notEnable, predicate, true);
     } else {
       predicate = builder.createOrFold<comb::AndOp>(enable, predicate, true);
