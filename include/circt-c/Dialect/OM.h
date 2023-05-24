@@ -39,7 +39,8 @@ struct OMEvaluator {
   void *ptr;
 };
 
-// For some reason clang-tidy thinks this is C++ and wants to use `using`.
+// clang-tidy doesn't respect extern "C".
+// see https://github.com/llvm/llvm-project/issues/35272.
 // NOLINTNEXTLINE(modernize-use-using)
 typedef struct OMEvaluator OMEvaluator;
 
@@ -49,7 +50,8 @@ struct OMObject {
   void *ptr;
 };
 
-// For some reason clang-tidy thinks this is C++ and wants to use `using`.
+// clang-tidy doesn't respect extern "C".
+// see https://github.com/llvm/llvm-project/issues/35272.
 // NOLINTNEXTLINE(modernize-use-using)
 typedef struct OMObject OMObject;
 
@@ -61,7 +63,8 @@ struct OMObjectValue {
   OMObject object;
 };
 
-// For some reason clang-tidy thinks this is C++ and wants to use `using`.
+// clang-tidy doesn't respect extern "C".
+// see https://github.com/llvm/llvm-project/issues/35272.
 // NOLINTNEXTLINE(modernize-use-using)
 typedef struct OMObjectValue OMObjectValue;
 
