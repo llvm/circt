@@ -99,26 +99,28 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
       mlir::IntegerType::get(context, 32, IntegerType::Unsigned),
       mlir::IntegerType::get(context, 32, IntegerType::Unsigned)};
 
-  // Memory metadata class.
-  auto memorySchemaClass =
-      builderOM.create<circt::om::ClassOp>("MemorySchema", paramNames);
+  om::ClassOp memorySchemaClass;
+  auto createMemoryOMSchema = [&]() {
+    // Memory metadata class.
+    memorySchemaClass =
+        builderOM.create<circt::om::ClassOp>("MemorySchema", paramNames);
 
-  // Now add all the properties of the memory as a ClassFieldOp.
-  Block *body = new Block();
-  memorySchemaClass.getRegion().push_back(body);
-  builderOM.setInsertionPointToEnd(body);
-  for (auto [fieldName, fieldType] : llvm::zip(paramNames, classFieldTypes))
-    builderOM.create<om::ClassFieldOp>(
-        fieldName, body->addArgument(fieldType, unknownLoc));
+    // Now add all the properties of the memory as a ClassFieldOp.
+    Block *body = new Block();
+    memorySchemaClass.getRegion().push_back(body);
+    builderOM.setInsertionPointToEnd(body);
+    for (auto [fieldName, fieldType] : llvm::zip(paramNames, classFieldTypes))
+      builderOM.create<om::ClassFieldOp>(
+          fieldName, body->addArgument(fieldType, unknownLoc));
 
-  // Now create the class that will instantiate metadata class with all the
-  // memories of the circt.
-  builderOM.setInsertionPointToEnd(moduleOp.getBody());
-  auto metadataClass = builderOM.create<circt::om::ClassOp>("MemoryMetadata");
-  auto *memMetadataBlock = new Block();
-  metadataClass.getRegion().push_back(memMetadataBlock);
-  builderOM.setInsertionPointToEnd(memMetadataBlock);
-
+    // Now create the class that will instantiate metadata class with all the
+    // memories of the circt.
+    builderOM.setInsertionPointToEnd(moduleOp.getBody());
+    auto metadataClass = builderOM.create<circt::om::ClassOp>("MemoryMetadata");
+    auto *memMetadataBlock = new Block();
+    metadataClass.getRegion().push_back(memMetadataBlock);
+    builderOM.setInsertionPointToEnd(memMetadataBlock);
+  };
   // index will be used to name unique symbols corresponding to each memory.
   unsigned index = 0;
   // This lambda, writes to the given Json stream all the relevant memory
@@ -127,6 +129,8 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   auto createMemMetadata = [&](FMemModuleOp mem,
                                llvm::json::OStream &jsonStream,
                                std::string &seqMemConfStr) {
+    if (!memorySchemaClass)
+      createMemoryOMSchema();
     // Get the memory data width.
     auto width = mem.getDataWidth();
     // Metadata needs to be printed for memories which are candidates for
