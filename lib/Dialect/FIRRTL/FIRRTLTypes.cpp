@@ -1009,7 +1009,7 @@ bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
       });
 }
 
-/// Returns true if destination and source types are the same (was widthless)
+/// Returns true if destination and source types are the same (as widthless)
 /// AND recursively checks that types are identical or the destination is
 /// uninferred of the source type.
 bool firrtl::isTypeSameOrUninferred(FIRRTLBaseType dstType,
