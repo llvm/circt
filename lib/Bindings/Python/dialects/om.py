@@ -2,6 +2,8 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+from __future__ import annotations
+
 from ._om_ops_gen import *
 from .._mlir_libs._circt._om import Evaluator as BaseEvaluator, Object
 
@@ -45,8 +47,13 @@ class Evaluator(BaseEvaluator):
     # Convert the class name and actual parameters to Attributes within the
     # Evaluator's context.
     with self.module.context:
+      # Get the class name from the provided dataclass name.
       class_name = StringAttr.get(cls.__name__)
-      actual_params = var_to_attribute(*args)
+
+      # Get the actual parameter Attributes from the supplied variadic
+      # arguments. This relies on the circt.support helpers to convert from
+      # Python objects to Attributes.
+      actual_params = var_to_attribute(list(args))
 
     # Call the base instantiate method.
     obj = super().instantiate(class_name, actual_params)
@@ -60,8 +67,15 @@ class Evaluator(BaseEvaluator):
     # This will be generalized to support Objects in fields soon.
     object_fields = {}
     for field_name in field_names:
+      # Get the field from the object.
       field = obj.get_field(field_name)
+
+      # Convert the field value to a Python object. This relies on the
+      # circt.support helpers to convert from Attribute to Python objects.
       field_value = attribute_to_var(field)
+
+      # Save this field in the keyword argument dictionary that will be passed
+      # to the dataclass constructor.
       object_fields[field_name.value] = field_value
 
     # Instantiate a Python object of the requested class.
@@ -73,7 +87,7 @@ class Evaluator(BaseEvaluator):
     # Log the diagnostic message at the appropriate level.
     if diagnostic.severity == DiagnosticSeverity.ERROR:
       self._logger.error(diagnostic.message)
-    elif diagnostic.severity == DiagnosticSeverity.ERROR:
+    elif diagnostic.severity == DiagnosticSeverity.WARNING:
       self._logger.warning(diagnostic.message)
     else:
       self._logger.info(diagnostic.message)
@@ -82,7 +96,7 @@ class Evaluator(BaseEvaluator):
     for note in diagnostic.notes:
       self._logger.info(str(note))
 
-    # Flush the stderr stream to ensure logs appear when expected.
+    # Flush the stdout stream to ensure logs appear when expected.
     sys.stdout.flush()
 
     # Return True, indicating this diagnostic has been fully handled.

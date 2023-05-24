@@ -30,7 +30,7 @@ class Test:
 
 
 try:
-  obj = evaluator.instantiate(Test, [])
+  obj = evaluator.instantiate(Test)
 except ValueError as e:
   # CHECK: actual parameter list length (0) does not match
   # CHECK: actual parameters:
@@ -47,7 +47,7 @@ class Test:
 
 
 try:
-  obj = evaluator.instantiate(Test, [42])
+  obj = evaluator.instantiate(Test, 42)
 except ValueError as e:
   # CHECK: field "foo" does not exist
   # CHECK: see current operation:
@@ -62,7 +62,7 @@ class Test:
   field: int
 
 
-obj = evaluator.instantiate(Test, [42])
+obj = evaluator.instantiate(Test, 42)
 
 # CHECK: Test(field=42)
 print(obj)
