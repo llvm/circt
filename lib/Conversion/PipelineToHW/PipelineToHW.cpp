@@ -16,7 +16,6 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Pipeline/Pipeline.h"
 #include "circt/Dialect/Seq/SeqOps.h"
-#include "circt/Support/ValueMapper.h"
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -24,218 +23,253 @@ using namespace mlir;
 using namespace circt;
 using namespace pipeline;
 
-// A class for generalizing pipeline lowering for both inline and outlined
-// implementation. This revolves around usage of a ValueMapper (replacing the
-// more traditional Value::replaceAllUsesWith(...)) approach, to allow for
-// maintaining temporary value mappings across module/scope boundaries.
+// A class for generalizing pipeline lowering for both the inline and outlined
+// implementation.
 class PipelineLowering {
 public:
   PipelineLowering(size_t pipelineID, PipelineOp pipeline, OpBuilder &builder)
-      : pipelineID(pipelineID), pipeline(pipeline), builder(builder) {}
+      : pipelineID(pipelineID), pipeline(pipeline), builder(builder) {
+    parentClk = pipeline.getClock();
+    parentRst = pipeline.getReset();
+    parentModule = pipeline->getParentOfType<hw::HWModuleOp>();
+  }
   virtual ~PipelineLowering() = default;
 
-  LogicalResult run() {
-    clk = pipeline.getClock();
-    rst = pipeline.getReset();
+  virtual LogicalResult run() = 0;
 
-    // Handle the entry stage;
-    currentStage = getNextStage();
-    currentStageIndex = 0;
-    createCurrentStage(pipeline.getInnerInputs(), pipeline.getGo());
-
-    // Iterate over the pipeline operations,
+  LogicalResult runInner() {
     for (auto &op : llvm::make_early_inc_range(*pipeline.getBodyBlock())) {
-      auto loc = op.getLoc();
       llvm::TypeSwitch<Operation *, void>(&op)
-          .Case<PipelineStageRegisterOp>([&](auto stage) {
-            assert(currentStage == stage && "Unexpected stage order");
-
-            auto [currClk, currRst] = getCurrentClockAndReset();
-
-            unsigned stageIdx = stage.index();
-            auto validRegName = builder.getStringAttr(
-                "s" + std::to_string(stageIdx) + "_valid");
-            auto validReg = builder.create<seq::CompRegOp>(
-                loc, builder.getI1Type(), stage.getWhen(), currClk,
-                validRegName, currRst, Value(), StringAttr());
-            stage.getValid().replaceAllUsesWith(validReg);
-
-            for (auto it : llvm::enumerate(stage.getRegIns())) {
-              auto regIdx = it.index();
-              auto regIn = it.value();
-              auto regName =
-                  builder.getStringAttr("s" + std::to_string(stageIdx) +
-                                        "_reg" + std::to_string(regIdx));
-              auto reg = builder.create<seq::CompRegOp>(
-                  loc, regIn.getType(), regIn, currClk, regName, currRst,
-                  Value(), StringAttr());
-              stage.getRegOuts()[regIdx].replaceAllUsesWith(reg);
-            }
-
-            // Finalize the current stage and create the next stage.
-            finalizeCurrentStage(stage.getOperands());
-            currentStage = getNextStage();
-            ++currentStageIndex;
-            createCurrentStage(stage.getRegOuts(), stage.getValid());
-          })
-          .Case<pipeline::ReturnOp>([&](auto ret) {
-            finalizeCurrentStage(ret.getOperands());
-            handle(ret);
-          })
+          .Case<StageOp>([&](auto stage) { lowerStage(stage); })
+          .Case<pipeline::ReturnOp>(
+              [&](auto ret) { pipeline->replaceAllUsesWith(ret.getInputs()); })
           .Default([&](auto op) {
-            // Move the operation into the current insertion point.
+            // Free-standing operations are moved to the current insertion
+            // point. It is the responsability of the implementation to maintain
+            // the insertion point.
             op->moveBefore(builder.getInsertionBlock(),
                            builder.getInsertionPoint());
           });
     }
 
-    pipeline->getParentOfType<mlir::ModuleOp>().dump();
-    pipeline->replaceAllUsesWith(getReturnValues());
-
-    pipeline.erase();
     return success();
   }
 
-  // A dispatch function for handling the conversion state transfer to the next
-  // state op.
-  virtual void finalizeCurrentStage(ValueRange stageOperands) = 0;
+  struct StageReturns {
+    llvm::SmallVector<Value> regs;
+    llvm::SmallVector<Value> passthroughs;
+    Value valid;
+  };
 
-  // A dispatch function for handling the creation of the current stage.
-  // valueIns: The inputs to the stage.
-  // validIn:  The valid signal to the stage.
-  virtual void createCurrentStage(ValueRange valueIns, Value validIn) = 0;
+  virtual void lowerStage(StageOp stage) = 0;
+  StageReturns emitStageBody(StageOp stage, Value clock, Value reset) {
+    auto stageRetOp =
+        cast<StageReturnOp>(stage.getBodyBlock()->getTerminator());
 
-  // Returns a reference to the clock and reset values of the current scope.
-  virtual std::pair<Value, Value> getCurrentClockAndReset() {
-    return {clk, rst};
+    // Move the stage operations into the current insertion point.
+    for (auto &op : llvm::make_early_inc_range(*stage.getBodyBlock())) {
+      if (&op == stageRetOp)
+        continue;
+      op.moveBefore(builder.getInsertionBlock(), builder.getInsertionPoint());
+    }
+
+    StageReturns rets;
+
+    // Build data registers
+    auto stageRegPrefix = getStageRegPrefix(stage.index());
+    for (auto it : llvm::enumerate(stageRetOp.getRegs())) {
+      auto regIdx = it.index();
+      auto regIn = it.value();
+      auto regName = builder.getStringAttr(stageRegPrefix.strref() + "_reg" +
+                                           std::to_string(regIdx));
+      auto reg = builder.create<seq::CompRegOp>(
+          stageRetOp->getLoc(), regIn.getType(), regIn, clock, regName, reset,
+          Value(), StringAttr());
+      rets.regs.push_back(reg);
+    }
+
+    // Build valid register
+    auto validRegName =
+        builder.getStringAttr(stageRegPrefix.strref() + "_valid");
+    auto validReg = builder.create<seq::CompRegOp>(
+        stageRetOp->getLoc(), builder.getI1Type(), stageRetOp.getValid(), clock,
+        validRegName, reset, Value(), StringAttr());
+    rets.valid = validReg;
+    return rets;
   }
 
-  // Returns the next stage wrt. the current stage, if any.
-  PipelineStageRegisterOp getNextStage() {
-    auto stageOps = pipeline.getOps<PipelineStageRegisterOp>();
-    // Edge case - no stages
-    if (stageOps.empty())
-      return nullptr;
-
-    if (!currentStage)
-      return *stageOps.begin();
-
-    auto it = llvm::find(stageOps, currentStage);
-    assert(it != stageOps.end() && "Could not find current stage in pipeline");
-    // Is it the last stage?
-    if (std::next(it) == stageOps.end())
-      return nullptr;
-
-    return *std::next(it);
-  }
-
-  // Dispatch function for handling the return op - this is
-  // implementation-specific.
-  virtual void handle(pipeline::ReturnOp) = 0;
-
-  // Function to retrieve the return values of the pipeline, which will replace
-  // the original pipeline returns.
-  virtual ValueRange getReturnValues() = 0;
+  // Returns a string to be used as a prefix for all stage registers.
+  virtual StringAttr getStageRegPrefix(size_t stageIdx) = 0;
 
 protected:
-  // A handle to the current stage op being converted.
-  PipelineStageRegisterOp currentStage;
-
-  // Pipeline clock.
-  Value clk;
-  // Pipeline reset.
-  Value rst;
+  // Parent module clock.
+  Value parentClk;
+  // Parent module reset.
+  Value parentRst;
   // ID of the current pipeline, used for naming.
   size_t pipelineID;
   // The current pipeline to be converted.
   PipelineOp pipeline;
 
+  // The module wherein the pipeline resides.
+  hw::HWModuleOp parentModule;
+
   OpBuilder &builder;
 
-  // A value mapper to maintain mappings of values from within the
-  // pipeline to the lowered pipeline.
-  ValueMapper mapper;
-
-  // The index of the current stage.
-  size_t currentStageIndex = 0;
+  // Name of this pipeline - used for naming stages and registers.
+  // Implementation defined.
+  std::string pipelineName;
 };
 
 class PipelineInlineLowering : public PipelineLowering {
 public:
   using PipelineLowering::PipelineLowering;
-  void handle(pipeline::ReturnOp ret) override { retOp = ret; }
 
-  ValueRange getReturnValues() override {
-    // Return the operands of the return op.
-    return retOp.getOutputs();
+  StringAttr getStageRegPrefix(size_t stageIdx) override {
+    return builder.getStringAttr(pipelineName + "_s" +
+                                 std::to_string(stageIdx));
   }
 
-  void finalizeCurrentStage(ValueRange stageOperands) override {}
+  LogicalResult run() override {
+    pipelineName = "p" + std::to_string(pipelineID);
 
-  void createCurrentStage(ValueRange inputs, Value valid) override {}
+    // Replace uses of the pipeline internal inputs with the pipeline inputs.
+    for (auto [outer, inner] :
+         llvm::zip(pipeline.getInputs(), pipeline.getInnerInputs()))
+      inner.replaceAllUsesWith(outer);
 
-private:
-  // Store a reference to the return op, so that we have a shorthand way of
-  // accessing the return values of the pipeline.
-  pipeline::ReturnOp retOp;
+    // All operations should go directly before the pipeline op, into the
+    // parent module.
+    builder.setInsertionPoint(pipeline);
+    if (failed(runInner()))
+      return failure();
+
+    // Replace the pipeline with the arguments of the pipeline return op.
+    auto returnOp = cast<pipeline::ReturnOp>(pipeline.getBodyBlock()->back());
+    pipeline.replaceAllUsesWith(returnOp.getInputs());
+    pipeline.erase();
+    return success();
+  }
+
+  void lowerStage(StageOp stage) override {
+    OpBuilder::InsertionGuard guard(builder);
+    // Replace the internal stage inputs with the external stage inputs.
+    for (auto [vInput, vBarg] :
+         llvm::zip(stage.getInnerInputs(), stage.getInputs()))
+      vInput.replaceAllUsesWith(vBarg);
+
+    // Replace the internal stage enable with the external stage enable.
+    stage.getInnerEnable().replaceAllUsesWith(stage.getEnable());
+
+    // Move stage operations into the current module.
+    builder.setInsertionPoint(pipeline);
+    auto stageRets = emitStageBody(stage, parentClk, parentRst);
+
+    for (auto [vOutput, vResult] :
+         llvm::zip(stage.getOutputs(), stageRets.regs))
+      vOutput.replaceAllUsesWith(vResult);
+
+    // and the valid...
+    stage.getValid().replaceAllUsesWith(stageRets.valid);
+  }
 };
 
 class PipelineOutlineLowering : public PipelineLowering {
 public:
   using PipelineLowering::PipelineLowering;
-  void handle(pipeline::ReturnOp ret) override {}
 
-  ValueRange getReturnValues() override {
-    // Return the outputs of the final stage instantiation.
-    return currentStageInst.getResults().drop_back(1);
+  StringAttr getStageRegPrefix(size_t stageIdx) override {
+    return builder.getStringAttr("s" + std::to_string(stageIdx));
   }
 
-  void finalizeCurrentStage(ValueRange inputs) override {
-    // Set the current module output operands to the inputs of the stage op.
-    auto outputOp =
-        cast<hw::OutputOp>(currentStageMod.getBody().front().getTerminator());
-    outputOp->insertOperands(0, inputs);
+  LogicalResult run() override {
+    pipelineName =
+        (parentModule.getName() + "_p" + std::to_string(pipelineID)).str();
 
-    if (currentStage) {
-      // Remap the return values of the stage op to map to the return values of
-      // the stage instance. These will later be remapped (again) to map
-      // internally in the next stage module.
-      for (auto [resStage, resInst] :
-           llvm::zip(currentStage.getResults(), currentStageInst.getResults()))
-        resStage.replaceAllUsesWith(resInst);
-    }
+    // Build the top-level pipeline module.
+    pipelineMod = buildPipelineLike(
+        pipelineName, pipeline.getInputs().getTypes(),
+        pipeline.getResults().getTypes(), /*withEnableValid=*/false);
+    pipelineClk = pipelineMod.getBody().front().getArgument(
+        pipelineMod.getBody().front().getNumArguments() - 2);
+    pipelineRst = pipelineMod.getBody().front().getArgument(
+        pipelineMod.getBody().front().getNumArguments() - 1);
+
+    // Instantiate the pipeline in the parent module.
+    builder.setInsertionPoint(pipeline);
+    llvm::SmallVector<Value, 4> pipelineOperands;
+    llvm::append_range(pipelineOperands, pipeline.getOperands());
+    auto pipelineInst = builder.create<hw::InstanceOp>(
+        pipeline.getLoc(), pipelineMod,
+        builder.getStringAttr(pipelineMod.getName()), pipelineOperands);
+
+    // Replace the top-level pipeline results with the pipeline instance
+    // results.
+    pipeline.replaceAllUsesWith(pipelineInst.getResults());
+
+    // Remap the internal inputs of the pipeline to the pipeline module block
+    // arguments.
+    for (auto [vInput, vBarg] :
+         llvm::zip(pipeline.getInnerInputs(),
+                   pipelineMod.getBody().front().getArguments().drop_back(2)))
+      vInput.replaceAllUsesWith(vBarg);
+
+    // From now on, insertion point must point to the pipeline module body.
+    // This ensures that pipeline stage instantiations and free-standing
+    // operations are inserted into the pipeline module.
+    builder.setInsertionPointToStart(pipelineMod.getBodyBlock());
+
+    if (failed(runInner()))
+      return failure();
+
+    // Assign the pipeline module output op.
+    auto pipelineOutputOp =
+        cast<hw::OutputOp>(pipelineMod.getBodyBlock()->getTerminator());
+    auto pipelineReturnOp =
+        cast<pipeline::ReturnOp>(pipeline.getBodyBlock()->getTerminator());
+    pipelineOutputOp->insertOperands(0, pipelineReturnOp.getInputs());
+
+    pipeline.erase();
+    return success();
   }
 
-  void createCurrentStage(ValueRange inputs, Value valid) override {
-    auto parent = pipeline->getParentOfType<hw::HWModuleOp>();
-    builder.setInsertionPoint(parent);
-    auto name = builder.getStringAttr(parent.getName() + "_p" +
-                                      std::to_string(pipelineID) + "_s" +
-                                      std::to_string(currentStageIndex));
+  void lowerStage(StageOp stage) override {
+    OpBuilder::InsertionGuard guard(builder);
+    auto [mod, inst] = buildStage(stage);
+
+    // Move stage operations into the module.
+    builder.setInsertionPointToStart(&mod.getBody().front());
+    Value modClock = mod.getBody().front().getArgument(
+        mod.getBody().front().getNumArguments() - 2);
+    Value modReset = mod.getBody().front().getArgument(
+        mod.getBody().front().getNumArguments() - 1);
+    auto stageRets = emitStageBody(stage, modClock, modReset);
+
+    // Assign the output operation to the stage return values.
+    auto hwOutput = cast<hw::OutputOp>(mod.getBody().front().getTerminator());
+    hwOutput->insertOperands(0, stageRets.regs);
+    hwOutput->insertOperands(hwOutput.getNumOperands(), stageRets.passthroughs);
+    hwOutput->insertOperands(hwOutput.getNumOperands(), {stageRets.valid});
+  }
+
+private:
+  hw::HWModuleOp buildPipelineLike(Twine name, TypeRange inputs,
+                                   TypeRange outputs, bool withEnableValid) {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPoint(parentModule);
     llvm::SmallVector<hw::PortInfo> ports;
 
     // Data inputs
-    for (auto [idx, in] : llvm::enumerate(inputs.getTypes()))
+    for (auto [idx, in] : llvm::enumerate(inputs))
       ports.push_back(
           hw::PortInfo{builder.getStringAttr("in" + std::to_string(idx)),
                        hw::PortDirection::INPUT, in});
 
-    // Enable input
-    ports.push_back(hw::PortInfo{builder.getStringAttr("enable"),
-                                 hw::PortDirection::INPUT,
-                                 builder.getI1Type()});
-
-    // The output types of the current stage will be the input types to the next
-    // stage.
-    for (auto [idx, out] : llvm::enumerate(getNextStageInputTypes()))
-      ports.push_back(
-          hw::PortInfo{builder.getStringAttr("out" + std::to_string(idx)),
-                       hw::PortDirection::OUTPUT, out});
-
-    // Valid output
-    ports.push_back(hw::PortInfo{builder.getStringAttr("valid"),
-                                 hw::PortDirection::OUTPUT,
-                                 builder.getI1Type()});
+    if (withEnableValid) {
+      ports.push_back(hw::PortInfo{builder.getStringAttr("enable"),
+                                   hw::PortDirection::INPUT,
+                                   builder.getI1Type()});
+    }
 
     // clock and reset
     ports.push_back(hw::PortInfo{builder.getStringAttr("clk"),
@@ -245,107 +279,64 @@ public:
                                  hw::PortDirection::INPUT,
                                  builder.getI1Type()});
 
-    currentStageMod =
-        builder.create<hw::HWModuleOp>(pipeline.getLoc(), name, ports);
+    for (auto [idx, out] : llvm::enumerate(outputs))
+      ports.push_back(
+          hw::PortInfo{builder.getStringAttr("out" + std::to_string(idx)),
+                       hw::PortDirection::OUTPUT, out});
+
+    if (withEnableValid) {
+      ports.push_back(hw::PortInfo{builder.getStringAttr("valid"),
+                                   hw::PortDirection::OUTPUT,
+                                   builder.getI1Type()});
+    }
+
+    return builder.create<hw::HWModuleOp>(pipeline.getLoc(),
+                                          builder.getStringAttr(name), ports);
+  }
+
+  std::tuple<hw::HWModuleOp, hw::InstanceOp> buildStage(StageOp stage) {
+    builder.setInsertionPoint(parentModule);
+    auto name = pipelineName + "_s" + std::to_string(stage.index());
+    auto mod = buildPipelineLike(name, stage.getInputs().getTypes(),
+                                 stage.getOutputs().getTypes(),
+                                 /*withEnableValid=*/true);
 
     // instantiate...
-    builder.setInsertionPoint(pipeline);
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPoint(pipelineMod.getBodyBlock()->getTerminator());
     llvm::SmallVector<Value, 4> stageOperands;
-    llvm::append_range(stageOperands, inputs);
-    stageOperands.push_back(clk);
-    stageOperands.push_back(rst);
-    currentStageInst = builder.create<hw::InstanceOp>(
-        pipeline.getLoc(), currentStageMod, currentStageMod.getName(),
-        stageOperands);
+    llvm::append_range(stageOperands, stage.getOperands());
+    stageOperands.push_back(pipelineClk);
+    stageOperands.push_back(pipelineRst);
+    auto inst = builder.create<hw::InstanceOp>(pipeline.getLoc(), mod,
+                                               mod.getName(), stageOperands);
 
-    // Set insertion point to the stage module, making all operations go into
-    // it.
-    builder.setInsertionPoint(&currentStageMod.getBody().front().front());
-
-    // Remap the inputs to the stage instantiation to map to the block arguments
-    // within the stage.
-    for (auto [vInput, vBarg] : llvm::zip(
-             inputs,
-             currentStageMod.getBody().front().getArguments().drop_back(3)))
+    // Remap the internal inputs of the stage to the module block arguments.
+    for (auto [vInput, vBarg] :
+         llvm::zip(stage.getInnerInputs(),
+                   mod.getBody().front().getArguments().drop_back(3)))
       vInput.replaceAllUsesWith(vBarg);
 
     // And the valid...
-    valid.replaceAllUsesWith(currentStageMod.getBody().front().getArgument(
-        currentStageMod.getBody().front().getNumArguments() - 3));
+    size_t validArgIdx = mod.getBody().front().getNumArguments() - 3;
+    stage.getInnerEnable().replaceAllUsesWith(
+        mod.getBody().front().getArgument(validArgIdx));
+
+    // Replace the stage outputs with the instance results.
+    for (auto [vOutput, vResult] :
+         llvm::zip(stage.getResults(), inst.getResults()))
+      vOutput.replaceAllUsesWith(vResult);
+
+    return {mod, inst};
   }
 
-  std::pair<Value, Value> getCurrentClockAndReset() override {
-    auto &entryBlock = currentStageMod.getBody().front();
-    Value modClk = entryBlock.getArgument(entryBlock.getNumArguments() - 2);
-    Value modRst = entryBlock.getArgument(entryBlock.getNumArguments() - 1);
-    return {modClk, modRst};
-  }
-
-  // Returns the input values to the next stage (or return) op.
-  TypeRange getNextStageInputTypes() {
-    if (auto nextStage = getNextStage())
-      return nextStage.getOperands().drop_back(1).getTypes();
-
-    auto *terminator = pipeline.getBodyBlock()->getTerminator();
-    return terminator->getOperands().drop_back(1).getTypes();
-  }
-
-private:
-  // A reference to the module corresponding to the current stage under
-  // conversion.
-  hw::HWModuleOp currentStageMod;
-  // A reference to the instantiation of the current stage module.
-  hw::InstanceOp currentStageInst;
+  // Pipeline module clock.
+  Value pipelineClk;
+  // Pipeline module reset.
+  Value pipelineRst;
+  // Pipeline module, containing stage instantiations.
+  hw::HWModuleOp pipelineMod;
 };
-
-static LogicalResult lowerPipeline(PipelineOp pipeline, OpBuilder &builder) {
-  if (pipeline.isLatencyInsensitive())
-    return pipeline.emitOpError() << "Only latency-sensitive pipelines are "
-                                     "supported at the moment";
-
-  // Simply move the ops from the pipeline to the enclosing hw.module scope,
-  // converting any stage ops to seq registers.
-  Value clk = pipeline.getClock();
-  Value rst = pipeline.getReset();
-  llvm::SmallVector<Value, 4> retVals;
-  builder.setInsertionPoint(pipeline);
-
-  for (auto [arg, barg] : llvm::zip(pipeline.getOperands(),
-                                    pipeline.getBodyBlock()->getArguments()))
-    barg.replaceAllUsesWith(arg);
-
-  for (auto &op : llvm::make_early_inc_range(*pipeline.getBodyBlock())) {
-    auto loc = op.getLoc();
-    llvm::TypeSwitch<Operation *, void>(&op)
-        .Case<PipelineStageRegisterOp>([&](auto stage) {
-          unsigned stageIdx = stage.index();
-          auto validRegName =
-              builder.getStringAttr("s" + std::to_string(stageIdx) + "_valid");
-          auto validReg = builder.create<seq::CompRegOp>(
-              loc, builder.getI1Type(), stage.getWhen(), clk, validRegName, rst,
-              Value(), StringAttr());
-          stage.getValid().replaceAllUsesWith(validReg);
-
-          for (auto it : llvm::enumerate(stage.getRegIns())) {
-            auto regIdx = it.index();
-            auto regIn = it.value();
-            auto regName =
-                builder.getStringAttr("s" + std::to_string(stageIdx) + "_reg" +
-                                      std::to_string(regIdx));
-            auto reg = builder.create<seq::CompRegOp>(loc, regIn.getType(),
-                                                      regIn, clk, regName, rst,
-                                                      Value(), StringAttr());
-            stage.getRegOuts()[regIdx].replaceAllUsesWith(reg);
-          }
-        })
-        .Case<pipeline::ReturnOp>([&](auto ret) { retVals = ret.getOutputs(); })
-        .Default([&](auto op) { op->moveBefore(pipeline); });
-  }
-
-  pipeline->replaceAllUsesWith(retVals);
-  pipeline.erase();
-  return success();
-}
 
 //===----------------------------------------------------------------------===//
 // Pipeline to HW Conversion Pass
@@ -361,18 +352,21 @@ void PipelineToHWPass::runOnOperation() {
   // Iterate over each pipeline op in the module and convert.
   // Note: This pass matches on `hw::ModuleOp`s and not directly on the
   // `PipelineOp` due to the `PipelineOp` being erased during this pass.
-  size_t count = 0;
+  size_t pipelinesSeen = 0;
   for (auto pipeline :
        llvm::make_early_inc_range(getOperation().getOps<PipelineOp>())) {
-    if (outlineStages &&
-        failed(PipelineOutlineLowering(count, pipeline, builder).run())) {
-      signalPassFailure();
-      return;
-    } else if (failed(PipelineInlineLowering(count, pipeline, builder).run())) {
+    if (outlineStages) {
+      if (failed(PipelineOutlineLowering(pipelinesSeen, pipeline, builder)
+                     .run())) {
+        signalPassFailure();
+        return;
+      }
+    } else if (failed(PipelineInlineLowering(pipelinesSeen, pipeline, builder)
+                          .run())) {
       signalPassFailure();
       return;
     }
-    count++;
+    ++pipelinesSeen;
   }
 }
 
