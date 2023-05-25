@@ -5,7 +5,6 @@ add_circt_dialect_library(CIRCTPipelineTransforms
 
   DEPENDS
   CIRCTPipelineTransformsIncGen
-  CIRCTPipelineInterfacesIncGen
 
   LINK_LIBS PUBLIC
   CIRCTScheduling

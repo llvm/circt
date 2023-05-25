@@ -231,5 +231,3 @@ void PipelineDialect::initialize() {
 #include "circt/Dialect/Pipeline/Pipeline.cpp.inc"
       >();
 }
-
-#include "circt/Dialect/Pipeline/PipelineInterfaces.cpp.inc"

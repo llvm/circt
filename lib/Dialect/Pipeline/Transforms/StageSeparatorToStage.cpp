@@ -29,11 +29,9 @@ public:
   void runOnOperation() override;
 
 private:
-  // Returns the operations which resides within each stage-like operation.
-  llvm::DenseMap<StageLike, llvm::SmallVector<Operation *>> gatherStageOps();
-
-  // Returns the next stage-like operation wrt. the `fromOp`.
-  StageLike getNextStageLike(StageLike fromOp = nullptr);
+  // Returns the operations which resides within each stage.
+  llvm::DenseMap<StageSeparatingRegOp, llvm::SmallVector<Operation *>>
+  gatherStageOps();
 
   // The pipeline operation to be converted.
   PipelineOp pipeline;
@@ -41,40 +39,45 @@ private:
 
 } // end anonymous namespace
 
-llvm::DenseMap<StageLike, llvm::SmallVector<Operation *>>
+llvm::DenseMap<StageSeparatingRegOp, llvm::SmallVector<Operation *>>
 StageSeparatorToStagePass::gatherStageOps() {
-  llvm::DenseMap<StageLike, llvm::SmallVector<Operation *>> stageOps;
-  StageLike currentStageLike = getNextStageLike();
+  auto stageSeparators = pipeline.getOps<StageSeparatingRegOp>();
+  StageSeparatingRegOp currentSeparator = *stageSeparators.begin();
+  auto setNextSeparator = [&]() {
+    auto next =
+        std::next(llvm::find_if(stageSeparators, [&](StageSeparatingRegOp op) {
+          return op == currentSeparator;
+        }));
+    if (next == stageSeparators.end()) {
+      currentSeparator = nullptr;
+      return;
+    }
+    currentSeparator = *next;
+  };
+
+  llvm::DenseMap<StageSeparatingRegOp, llvm::SmallVector<Operation *>> stageOps;
   for (auto &op : pipeline.getBodyBlock()->getOperations()) {
-    if (auto stageLike = dyn_cast<StageLike>(&op)) {
-      assert(currentStageLike == stageLike &&
+    if (!currentSeparator) {
+      // End of pipeline stages - 'op' is either a return value or
+      // operations residing in the output stage of the pipeline, which are
+      // not to be registered/placed in an explicit stage.
+      break;
+    }
+    if (auto separator = dyn_cast<StageSeparatingRegOp>(&op)) {
+      assert(currentSeparator == separator &&
              "Expected to encounter the current stage like operation");
-      currentStageLike = getNextStageLike(stageLike);
+      setNextSeparator();
     } else
-      stageOps[currentStageLike].push_back(&op);
+      stageOps[currentSeparator].push_back(&op);
   };
   return stageOps;
-}
-
-StageLike StageSeparatorToStagePass::getNextStageLike(StageLike fromOp) {
-  auto stageLikes = pipeline.getBodyBlock()->getOps<StageLike>();
-  if (!fromOp)
-    return *stageLikes.begin();
-
-  auto it = llvm::find(stageLikes, fromOp);
-  assert(it != stageLikes.end() && "stage not found");
-  if (std::next(it) == stageLikes.end())
-    return nullptr;
-  return *std::next(it);
 }
 
 void StageSeparatorToStagePass::runOnOperation() {
   pipeline = getOperation();
   OpBuilder b(getOperation().getContext());
-  StageLike nextStageLike = nullptr;
 
   auto stageOps = gatherStageOps();
-  nextStageLike = getNextStageLike();
 
   // Maintain the set of constant operations in the pipeline - these
   // eventually will need to be sunk into the stages which reference them.
@@ -86,25 +89,22 @@ void StageSeparatorToStagePass::runOnOperation() {
   // 1. iterate over stage delimiter operations
   // 2. build stages
   // 3. move operations in between stages into the new stage ops.
-  for (auto stageLikeOp :
+  for (auto stageSep :
        llvm::make_early_inc_range(pipeline.getOps<StageSeparatingRegOp>())) {
-    b.setInsertionPoint(stageLikeOp);
+    b.setInsertionPoint(stageSep);
     StageOp currentStage =
-        b.create<StageOp>(stageLikeOp->getLoc(), currentStageEnable,
-                          currentStageInputs, stageLikeOp.getInputTypes());
+        b.create<StageOp>(stageSep->getLoc(), currentStageEnable,
+                          currentStageInputs, stageSep.getInputs().getTypes());
 
-    // Replace the stage-like op with the new stage op.
-    bool isReturn = isa<ReturnOp>(stageLikeOp);
-    if (!isReturn) {
-      stageLikeOp->replaceAllUsesWith(currentStage);
-      stageLikeOp.erase();
-    }
+    // Replace the stage separator with the new stage op.
+    stageSep->replaceAllUsesWith(currentStage);
+    stageSep.erase();
 
     // Move non-constant ops from the stageOps map into the StageOp wherein
     // they will reside.
     auto stageReturn =
         cast<StageReturnOp>(currentStage.getBodyBlock()->getTerminator());
-    for (auto *op : stageOps[stageLikeOp]) {
+    for (auto *op : stageOps[stageSep]) {
       if (op->hasTrait<OpTrait::ConstantLike>())
         constants.push_back(op);
       else
@@ -112,8 +112,7 @@ void StageSeparatorToStagePass::runOnOperation() {
     }
 
     // Finalize the current stage by adjusting the stage return value.
-    stageReturn.setOperands(currentStage.getInnerEnable(),
-                            stageLikeOp.getInputs(),
+    stageReturn.setOperands(currentStage.getInnerEnable(), stageSep.getInputs(),
                             /*passthroughs=*/{});
 
     // Replace usages of the stage inputs inside the stage with the stage

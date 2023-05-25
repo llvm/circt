@@ -22,7 +22,6 @@ include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/EnumAttr.td"
-include "circt/Dialect/Pipeline/PipelineInterfaces.td"
 
 def Pipeline_Dialect : Dialect {
   let name = "pipeline";
@@ -139,8 +138,7 @@ def PipelineOp : Op<Pipeline_Dialect, "pipeline", [
 
 
 def StageSeparatingOp : Op<Pipeline_Dialect, "ss", [
-    HasParent<"PipelineOp">,
-    StageLike
+    HasParent<"PipelineOp">
   ]> {
   let summary = "Pipeline **s**tage **s**eparating operation.";
   let description = [{
@@ -171,8 +169,7 @@ def StageSeparatingOp : Op<Pipeline_Dialect, "ss", [
 def StageSeparatingRegOp : Op<Pipeline_Dialect, "ss.reg", [
     HasParent<"PipelineOp">,
     RangedTypesMatchWith<"result type matches operand", "inputs", "outputs",
-                         "llvm::make_range($_self.begin(), $_self.end())">,
-    StageLike
+                         "llvm::make_range($_self.begin(), $_self.end())">
   ]> {
   let summary = "Pipeline pipeline stage.";
   let description = [{
@@ -205,8 +202,7 @@ def StageOp : Op<Pipeline_Dialect, "stage", [
     SingleBlockImplicitTerminator<"StageReturnOp">,
     RegionKindInterface,
     HasOnlyGraphRegion,
-    IsolatedFromAbove,
-    StageLike
+    IsolatedFromAbove
   ]> {
   let summary = "Pipeline pipeline stage.";
   let description = [{
@@ -283,8 +279,7 @@ def StageReturnOp : Op<Pipeline_Dialect, "stage.return", [
 
 def ReturnOp : Op<Pipeline_Dialect, "return", [
     Terminator,
-    HasParent<"PipelineOp">,
-    StageLike
+    HasParent<"PipelineOp">
   ]> {
   let summary = "Pipeline dialect return.";
   let description = [{
@@ -295,13 +290,6 @@ def ReturnOp : Op<Pipeline_Dialect, "return", [
   let arguments = (ins Variadic<AnyType>:$inputs, I1:$valid);
   let builders = [OpBuilder<(ins), [{ return; }]>];
   let assemblyFormat = [{ ($inputs^)? `valid` $valid attr-dict (`:` type($inputs)^)? }];
-
-  let extraClassDeclaration = [{
-    // StageLike interface
-    Value getEnable() { return getValid(); }
-
-    ValueRange getOutputs() { assert(false && "not available for `pipeline.return`."); }
-  }];
 }
 
 #endif // PIPELINE_OPS
