@@ -2354,30 +2354,6 @@ static bool isConstFieldDriven(FIRRTLBaseType type, bool isFlip = false,
     return !isFlip;
   return false;
 }
-
-/// Looks up the value's defining op until the defining op is null or a
-/// declaration of the value. If a SubAccessOp is encountered with a 'const'
-/// input, `originalFieldType` is made 'const'.
-static Value
-findFieldDeclarationRefiningFieldType(Value value,
-                                      FIRRTLBaseType &originalFieldType) {
-  auto *definingOp = value.getDefiningOp();
-  if (!definingOp)
-    return value;
-
-  return TypeSwitch<Operation *, Value>(definingOp)
-      .Case<SubfieldOp, SubindexOp>([&](auto op) {
-        return findFieldDeclarationRefiningFieldType(op.getInput(),
-                                                     originalFieldType);
-      })
-      .Case<SubaccessOp>([&](SubaccessOp op) {
-        if (op.getInput().getType().getElementTypePreservingConst().isConst())
-          originalFieldType = originalFieldType.getConstType(true);
-        return findFieldDeclarationRefiningFieldType(op.getInput(),
-                                                     originalFieldType);
-      })
-      .Default([&](Operation *) { return value; });
-}
 // NOLINTEND(misc-no-recursion)
 
 /// Checks that connections to 'const' destinations are not dependent on
@@ -2392,6 +2368,30 @@ static LogicalResult checkConnectConditionality(FConnectLike connect) {
 
   auto destRefinedType = destType;
   auto srcRefinedType = srcType;
+
+  /// Looks up the value's defining op until the defining op is null or a
+  /// declaration of the value. If a SubAccessOp is encountered with a 'const'
+  /// input, `originalFieldType` is made 'const'.
+  auto findFieldDeclarationRefiningFieldType =
+      [](Value value, FIRRTLBaseType &originalFieldType) -> Value {
+    while (auto *definingOp = value.getDefiningOp()) {
+      bool shouldContinue = true;
+      TypeSwitch<Operation *>(definingOp)
+          .Case<SubfieldOp, SubindexOp>([&](auto op) { value = op.getInput(); })
+          .Case<SubaccessOp>([&](SubaccessOp op) {
+            if (op.getInput()
+                    .getType()
+                    .getElementTypePreservingConst()
+                    .isConst())
+              originalFieldType = originalFieldType.getConstType(true);
+            value = op.getInput();
+          })
+          .Default([&](Operation *) { shouldContinue = false; });
+      if (!shouldContinue)
+        break;
+    }
+    return value;
+  };
 
   auto destDeclaration =
       findFieldDeclarationRefiningFieldType(dest, destRefinedType);
