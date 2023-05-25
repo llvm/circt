@@ -238,11 +238,99 @@ firrtl.module @NonConstToNestedConstFlip(in %in   : !firrtl.bundle<a flip: uint<
   firrtl.connect %out, %in : !firrtl.bundle<a flip: const.uint<1>>, !firrtl.bundle<a flip: uint<1>>
 }
 
-firrtl.module @ConstToNonConstDoubleFlipp(in %in : !firrtl.const.bundle<a flip: bundle<a flip: uint<1>>>, 
-                                          out %out : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>) {
+firrtl.module @ConstToNonConstDoubleFlip(in %in   : !firrtl.const.bundle<a flip: bundle<a flip: uint<1>>>, 
+                                         out %out : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>) {
   // CHECK: firrtl.connect %out, %in :
   // CHECK-SAME: !firrtl.bundle<a flip: bundle<a flip: uint<1>>>, !firrtl.const.bundle<a flip: bundle<a flip: uint<1>>>
   firrtl.connect %out, %in : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>, 
                              !firrtl.const.bundle<a flip: bundle<a flip: uint<1>>>
+}
+
+firrtl.module @NonConstToNonConstFlipFromConstSubaccess(in %in    : !firrtl.bundle<a flip: uint<1>>,
+                                                        out %out  : !firrtl.const.vector<bundle<a flip: uint<1>>, 1>,
+                                                        in %index : !firrtl.uint<1>) {
+  %0 = firrtl.subaccess %out[%index] : !firrtl.const.vector<bundle<a flip: uint<1>>, 1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect %0, %in : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
+  firrtl.connect %0, %in : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
+}
+
+// Const connections can occur within const-conditioned whens
+// CHECK-LABEL: firrtl.module @ConstConditionConstAssign
+firrtl.module @ConstConditionConstAssign(in %cond: !firrtl.const.uint<1>, in %in1: !firrtl.const.sint<2>, in %in2: !firrtl.const.sint<2>, out %out: !firrtl.const.sint<2>) {
+  firrtl.when %cond : !firrtl.const.uint<1> {
+    firrtl.strictconnect %out, %in1 : !firrtl.const.sint<2>
+  } else {
+    firrtl.strictconnect %out, %in2 : !firrtl.const.sint<2>
+  }
+}
+
+// Non-const connections can occur within const-conditioned whens
+// CHECK-LABEL: firrtl.module @ConstConditionNonConstAssign
+firrtl.module @ConstConditionNonConstAssign(in %cond: !firrtl.const.uint<1>, in %in1: !firrtl.sint<2>, in %in2: !firrtl.sint<2>, out %out: !firrtl.sint<2>) {
+  firrtl.when %cond : !firrtl.const.uint<1> {
+    firrtl.strictconnect %out, %in1 : !firrtl.sint<2>
+  } else {
+    firrtl.strictconnect %out, %in2 : !firrtl.sint<2>
+  }
+}
+
+// Const connections can occur when the destination is local to a non-const conditioned when block
+// CHECK-LABEL: firrtl.module @NonConstWhenLocalConstAssign
+firrtl.module @NonConstWhenLocalConstAssign(in %cond: !firrtl.uint<1>) {
+  firrtl.when %cond : !firrtl.uint<1> {
+    %w = firrtl.wire : !firrtl.const.uint<9>
+    %c = firrtl.constant 0 : !firrtl.const.uint<9>
+    firrtl.strictconnect %w, %c : !firrtl.const.uint<9>
+  }
+}
+
+// Const connections can occur when the destination is local to a non-const 
+// conditioned when block and the connection is inside a const conditioned when block
+// CHECK-LABEL: firrtl.module @NonConstWhenLocalConstNestedConstWhenAssign
+firrtl.module @NonConstWhenLocalConstNestedConstWhenAssign(in %cond: !firrtl.uint<1>, in %constCond: !firrtl.const.uint<1>) {
+  firrtl.when %cond : !firrtl.uint<1> {
+    %w = firrtl.wire : !firrtl.const.uint<9>
+    firrtl.when %constCond : !firrtl.const.uint<1> {
+      %c = firrtl.constant 0 : !firrtl.const.uint<9>
+      firrtl.strictconnect %w, %c : !firrtl.const.uint<9>
+    } else {
+      %c = firrtl.constant 1 : !firrtl.const.uint<9>
+      firrtl.strictconnect %w, %c : !firrtl.const.uint<9>
+    }
+  }
+}
+
+// Connections to flip const destinations are allowed within non-const when blocks 
+// when the flow is to a non-const source
+firrtl.module @NonConstWhenConstFlipAssign(in %p: !firrtl.uint<1>, in %in: !firrtl.bundle<a flip: uint<2>>, out %out: !firrtl.const.bundle<a flip: uint<2>>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    firrtl.connect %out, %in : !firrtl.const.bundle<a flip: uint<2>>, !firrtl.bundle<a flip: uint<2>>
+  }
+}
+
+// Connections to flip const destinations are allowed within non-const when blocks 
+// when the flow is to a non-const source
+firrtl.module @NonConstWhenNestedConstFlipAssign(in %p: !firrtl.uint<1>, in %in: !firrtl.bundle<a flip: uint<2>>, out %out: !firrtl.bundle<a flip: const.uint<2>>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    firrtl.connect %out, %in : !firrtl.bundle<a flip: const.uint<2>>, !firrtl.bundle<a flip: uint<2>>
+  }
+}
+
+// Connections to const flip sources can occur when the source is local to a non-const conditioned when block
+// CHECK-LABEL: firrtl.module @NonConstWhenLocalConstFlipAssign
+firrtl.module @NonConstWhenLocalConstFlipAssign(in %cond: !firrtl.uint<1>, out %out : !firrtl.const.bundle<a flip: uint<2>>) {
+  firrtl.when %cond : !firrtl.uint<1> {
+    %w = firrtl.wire : !firrtl.const.bundle<a flip: uint<2>>
+    firrtl.connect %out, %w : !firrtl.const.bundle<a flip: uint<2>>, !firrtl.const.bundle<a flip: uint<2>>
+  }
+}
+
+// Connections to nested const flip sources can occur when the source is local to a non-const conditioned when block
+// CHECK-LABEL: firrtl.module @NonConstWhenLocalNestedConstFlipAssign
+firrtl.module @NonConstWhenLocalNestedConstFlipAssign(in %cond: !firrtl.uint<1>, out %out : !firrtl.bundle<a flip: const.uint<2>>) {
+  firrtl.when %cond : !firrtl.uint<1> {
+    %w = firrtl.wire : !firrtl.bundle<a flip: const.uint<2>>
+    firrtl.connect %out, %w : !firrtl.bundle<a flip: const.uint<2>>, !firrtl.bundle<a flip: const.uint<2>>
+  }
 }
 }

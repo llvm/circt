@@ -691,6 +691,18 @@ def VBToBV : Pass<"firrtl-vb-to-bv", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createVBToBVPass()";
 }
 
+def DropConst : InterfacePass<"firrtl-drop-const", "firrtl::FModuleLike"> {
+  let summary = "Drop 'const' modifier from types";
+  let description = [{
+    This pass drops the 'const' modifier from all types and removes all 
+    const-cast ops. 
+    
+    This simplifies downstream passes and folds so that they do not need to 
+    take 'const' into account.
+  }];
+  let constructor = "circt::firrtl::createDropConstPass()";
+}
+
 def FinalizeIR : Pass<"firrtl-finalize-ir", "mlir::ModuleOp"> {
   let summary = "Perform final IR mutations after ExportVerilog";
   let description = [{
