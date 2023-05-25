@@ -265,6 +265,19 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         return signalPassFailure();
     }
     garbageCollect();
+
+    // Clean up
+    moduleNamespaces.clear();
+    visitedModules.clear();
+    dataflowAt.clear();
+    refSendPathList.clear();
+    dataFlowClasses.clear();
+    refPortsToRemoveMap.clear();
+    opsToRemove.clear();
+    xmrPathSuffix.clear();
+    circuitNamespace = nullptr;
+    pathCache.clear();
+    pathInsertPoint = {};
   }
 
   /// Generate the ABI ref_<circuit>_<module> prefix string into `prefix`.
@@ -658,6 +671,44 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   bool isZeroWidth(FIRRTLBaseType t) { return t.getBitWidthOrSentinel() == 0; }
 
+  /// Return a HierPathOp for the provided pathArray.  This will either return
+  /// an existing HierPathOp or it will create and return a new one.
+  hw::HierPathOp getOrCreatePath(ArrayAttr pathArray,
+                                 ImplicitLocOpBuilder &builder) {
+    assert(pathArray && !pathArray.empty());
+    // Return an existing HierPathOp if one exists with the same path.
+    auto pathIter = pathCache.find(pathArray);
+    if (pathIter != pathCache.end())
+      return pathIter->second;
+
+    // Reset the insertion point after this function returns.
+    OpBuilder::InsertionGuard guard(builder);
+
+    // Set the insertion point to either the known location where the pass
+    // inserts HierPathOps or to the start of the circuit.
+    if (pathInsertPoint.isSet())
+      builder.restoreInsertionPoint(pathInsertPoint);
+    else
+      builder.setInsertionPointToStart(getOperation().getBodyBlock());
+
+    // Create the new HierPathOp and insert it into the pathCache.
+    hw::HierPathOp path =
+        pathCache
+            .insert({pathArray,
+                     builder.create<hw::HierPathOp>(
+                         circuitNamespace->newName("xmrPath"), pathArray)})
+            .first->second;
+    path.setVisibility(SymbolTable::Visibility::Private);
+
+    // Save the insertion point so other unique HierPathOps will be created
+    // after this one.
+    pathInsertPoint = builder.saveInsertionPoint();
+
+    // Return the new path.
+    return path;
+  }
+
+private:
   /// Cached module namespaces.
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
 
@@ -704,43 +755,6 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   /// The insertion point where the pass inserts HierPathOps.
   OpBuilder::InsertPoint pathInsertPoint = {};
-
-  /// Return a HierPathOp for the provided pathArray.  This will either return
-  /// an existing HierPathOp or it will create and return a new one.
-  hw::HierPathOp getOrCreatePath(ArrayAttr pathArray,
-                                 ImplicitLocOpBuilder &builder) {
-    assert(pathArray && !pathArray.empty());
-    // Return an existing HierPathOp if one exists with the same path.
-    auto pathIter = pathCache.find(pathArray);
-    if (pathIter != pathCache.end())
-      return pathIter->second;
-
-    // Reset the insertion point after this function returns.
-    OpBuilder::InsertionGuard guard(builder);
-
-    // Set the insertion point to either the known location where the pass
-    // inserts HierPathOps or to the start of the circuit.
-    if (pathInsertPoint.isSet())
-      builder.restoreInsertionPoint(pathInsertPoint);
-    else
-      builder.setInsertionPointToStart(getOperation().getBodyBlock());
-
-    // Create the new HierPathOp and insert it into the pathCache.
-    hw::HierPathOp path =
-        pathCache
-            .insert({pathArray,
-                     builder.create<hw::HierPathOp>(
-                         circuitNamespace->newName("xmrPath"), pathArray)})
-            .first->second;
-    path.setVisibility(SymbolTable::Visibility::Private);
-
-    // Save the insertion point so other unique HierPathOps will be created
-    // after this one.
-    pathInsertPoint = builder.saveInsertionPoint();
-
-    // Return the new path.
-    return path;
-  }
 };
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createLowerXMRPass() {
