@@ -238,8 +238,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     }
 
     LLVM_DEBUG({
-      for (auto I = dataFlowClasses->begin(), E = dataFlowClasses->end(); I != E;
-           ++I) { // Iterate over all of the equivalence sets.
+      for (auto I = dataFlowClasses->begin(), E = dataFlowClasses->end();
+           I != E; ++I) { // Iterate over all of the equivalence sets.
         if (!I->isLeader())
           continue; // Ignore non-leader sets.
         // Print members in this set.
@@ -739,7 +739,7 @@ private:
     }
   };
 
-  llvm::EquivalenceClasses<Value, ValueComparator>* dataFlowClasses;
+  llvm::EquivalenceClasses<Value, ValueComparator> *dataFlowClasses;
   // Instance and module ref ports that needs to be removed.
   DenseMap<Operation *, llvm::BitVector> refPortsToRemoveMap;
 
