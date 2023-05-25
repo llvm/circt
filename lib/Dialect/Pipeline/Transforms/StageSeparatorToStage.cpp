@@ -13,10 +13,6 @@
 #include "PassDetails.h"
 #include "circt/Support/BackedgeBuilder.h"
 
-#include "llvm/Support/Debug.h"
-
-#include <memory>
-
 using namespace mlir;
 using namespace circt;
 using namespace pipeline;
