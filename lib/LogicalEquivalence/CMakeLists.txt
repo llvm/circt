@@ -7,9 +7,6 @@ if(CIRCT_LEC_ENABLED)
     LINK_COMPONENTS
     Core
 
-    LINK_LIBS
-    ${Z3_LIBRARIES}
-    
     LINK_LIBS PUBLIC
     MLIRTransforms
     MLIRTranslateLib
@@ -17,8 +14,14 @@ if(CIRCT_LEC_ENABLED)
     CIRCTHW
     CIRCTSupport
   )
-  target_include_directories(CIRCTLogicalEquivalence
-    PRIVATE
+
+  target_link_libraries(CIRCTLogicalEquivalence
+    PUBLIC
+    ${Z3_LIBRARIES}
+  )
+
+  target_include_directories(CIRCTLogicalEquivalence SYSTEM
+    PUBLIC
     ${Z3_INCLUDE_DIR}
     ${Z3_CXX_INCLUDE_DIRS}
   )
