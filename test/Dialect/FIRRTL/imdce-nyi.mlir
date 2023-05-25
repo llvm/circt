@@ -1,7 +1,7 @@
 // This test is expected to crash.  Use "not --crash" instead of XFAIL to work
 // around llvm-symbolizer being slow.  For more information, see:
 //   https://discourse.llvm.org/t/llvm-symbolizer-has-gotten-extremely-slow/67262
-// RUN: not --crash circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-imdeadcodeelim))' -verify-diagnostics %s
+// RUN: not --crash circt-opt -pass-pipeline='builtin.module(firrtl-imdeadcodeelim)' -verify-diagnostics %s
 
 // IMDCE does wrong thing trying to create temporary for a reference in some situations.
 // This case can be fixed, but if run before expand.when's this is not solvable without
