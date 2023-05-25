@@ -653,7 +653,7 @@ static LogicalResult processBuffer(
         createSimpleCanonicalizerPass());
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         circt::firrtl::createRegisterOptimizerPass());
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMDeadCodeElimPass());
+    pm.addPass(firrtl::createIMDeadCodeElimPass());
   }
 
   if (emitOMIR)

@@ -252,6 +252,7 @@ static std::optional<Attribute> scatterOMIR(Attribute original,
           tracker.append("class", StringAttr::get(ctx, omirTrackerAnnoClass));
           tracker.append("id", idAttr);
           tracker.append("target", StringAttr::get(ctx, value));
+          tracker.append("type", StringAttr::get(ctx, tpe));
 
           state.addToWorklistFn(DictionaryAttr::get(ctx, tracker));
 
