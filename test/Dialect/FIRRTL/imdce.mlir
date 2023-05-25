@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-imdeadcodeelim))' --split-input-file -verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl-imdeadcodeelim)' --split-input-file -verify-diagnostics %s | FileCheck %s
 firrtl.circuit "top" {
   // In `dead_module`, %source is connected to %dest through several dead operations such as
   // node, wire, reg or rgereset. %dest is also dead at any instantiation, so check that
@@ -156,14 +156,11 @@ firrtl.circuit "DeleteEmptyModule" {
   // CHECK: firrtl.module private @empty
   // expected-warning @+1{{module `empty` is empty but cannot be removed because the module has annotations [{class = "foo"}]}}
   firrtl.module private @empty() attributes {annotations = [{class = "foo"}]}  {}
-  // Don't delete @Sub because instance `sub1` has a symbol.
-  // CHECK: firrtl.module private @Sub
-  // expected-warning @+1{{module  `Sub` is empty but cannot be removed because an instance is referenced by name}}
+  // CHECK-NOT: firrtl.module private @Sub
   firrtl.module private @Sub(in %a: !firrtl.uint<1>)  {}
   // CHECK: firrtl.module @DeleteEmptyModule
   firrtl.module @DeleteEmptyModule() {
-    // CHECK-NEXT: firrtl.instance sub1 sym @Foo @Sub()
-    // expected-note @+1{{these are instances with symbols}}
+    // CHECK-NOT: firrtl.instance sub1
     firrtl.instance sub1 sym @Foo @Sub(in a: !firrtl.uint<1>)
     // CHECK-NOT: sub2
     firrtl.instance sub2 @Sub(in a: !firrtl.uint<1>)
@@ -355,5 +352,79 @@ firrtl.circuit "DeleteInstance" {
     firrtl.strictconnect %p1_a, %a : !firrtl.uint<1>
     firrtl.strictconnect %p2_a, %a : !firrtl.uint<1>
     firrtl.strictconnect %b, %p2_b : !firrtl.uint<1>
+  }
+}
+
+// -----
+firrtl.circuit "Top" {
+  // CHECK-NOT: @nla_1
+  // CHECK: @nla_2
+  hw.hierpath private @nla_1 [@Foo1::@dead, @EncodingModule]
+  hw.hierpath private @nla_2 [@Foo2::@live, @EncodingModule]
+  // CHECK-LABEL private @EncodingModule
+  // CHECK-NOT: @nla_1
+  // CHECK-SAME @nla_2
+  firrtl.module private @EncodingModule(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1> [{circt.nonlocal = @nla_1, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64, type = "OMReferenceTarget"}, {circt.nonlocal = @nla_2, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64, type = "OMReferenceTarget"}]) {
+    firrtl.strictconnect %a, %in : !firrtl.uint<1>
+  }
+  // CHECK-NOT: @Foo1
+  firrtl.module private @Foo1(in %in: !firrtl.uint<1>) {
+    %c_in, %c_a = firrtl.instance c sym @dead @EncodingModule(in in: !firrtl.uint<1>, out a: !firrtl.uint<1>)
+    firrtl.strictconnect %c_in, %in : !firrtl.uint<1>
+  }
+  // CHECK-LABEL: @Foo2
+  firrtl.module private @Foo2(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1>) {
+    %c_in, %c_a = firrtl.instance c sym @live @EncodingModule(in in: !firrtl.uint<1>, out a: !firrtl.uint<1>)
+    firrtl.strictconnect %a, %c_a : !firrtl.uint<1>
+    firrtl.strictconnect %c_in, %in : !firrtl.uint<1>
+  }
+  // CHECK-LABEL: @Top
+  // CHECK-NOT: @Foo1
+  // CHECK-NOT: firrtl.strictconnect %foo1_in, %in
+  // CHECK: @Foo2
+  firrtl.module @Top(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1>) {
+    %foo1_in = firrtl.instance foo1 @Foo1(in in: !firrtl.uint<1>)
+    firrtl.strictconnect %foo1_in, %in : !firrtl.uint<1>
+    %foo2_in, %foo2_a = firrtl.instance foo2 @Foo2(in in: !firrtl.uint<1>, out a: !firrtl.uint<1>)
+    firrtl.strictconnect %a, %foo2_a : !firrtl.uint<1>
+    firrtl.strictconnect %foo2_in, %in : !firrtl.uint<1>
+
+  }
+}
+
+// -----
+
+firrtl.circuit "Top" {
+  // CHECK: hw.hierpath private @nla_1
+  hw.hierpath private @nla_1 [@Top::@foo1, @Bar::@w]
+  // CHECK-NEXT: hw.hierpath private @nla_2
+  hw.hierpath private @nla_2 [@Top::@foo1, @Bar]
+  // CHECK-NEXT: sv.verbatim "foo" {some = [@nla_2]}
+  sv.verbatim "foo" {some = [@nla_2]}
+  // CHECK-LABEL: firrtl.module private @Bar
+  // CHECK: %in1{{.*}}sym @w
+  // CHECK-SAME: %in2
+  // CHECK-NOT: %in3
+  // expected-warning @+1 {{module `Bar` is empty but cannot be removed because the module has ports "in1", "in2" are referenced by name or dontTouched}}
+  firrtl.module private @Bar(in %in1 : !firrtl.uint<1> sym @w, in %in2: !firrtl.uint<1> [{class = "foo"}], in %in3: !firrtl.uint<1>) {}
+  // CHECK-LABEL: firrtl.module private @Baz
+  // expected-warning @+1 {{module `Baz` is empty but cannot be removed because an instance is referenced by nam}}
+  firrtl.module private @Baz() {}
+
+  // CHECK-LABEL: firrtl.module @Top
+  firrtl.module @Top(in %in: !firrtl.uint<1>) {
+    %c_in1, %c_in2, %c_in3 = firrtl.instance c sym @foo1 @Bar(in in1: !firrtl.uint<1>, in in2: !firrtl.uint<1>, in in3: !firrtl.uint<1>)
+    firrtl.strictconnect %c_in1, %in : !firrtl.uint<1>
+    firrtl.strictconnect %c_in2, %in : !firrtl.uint<1>
+    firrtl.strictconnect %c_in3, %in : !firrtl.uint<1>
+    // CHECK: sv.verbatim "foo" {some = #hw.innerNameRef<@Top::@baz1>}
+    sv.verbatim "foo" {some = #hw.innerNameRef<@Top::@baz1>}
+    // Don't remove the instance if there is an unknown use of inner reference.
+    // CHECK: baz1
+    // expected-note @+1 {{these are instances with symbols}}
+    firrtl.instance baz1 sym @baz1 @Baz()
+    // Remove a dead instance otherwise.
+    // CHECK-NOT: baz2
+    firrtl.instance baz2 sym @baz2 @Baz()
   }
 }
