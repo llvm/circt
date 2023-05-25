@@ -2398,13 +2398,6 @@ static LogicalResult checkConnectConditionality(FConnectLike connect) {
   auto srcDeclaration =
       findFieldDeclarationRefiningFieldType(src, srcRefinedType);
 
-  // Make sure subaccesses don't allow for a non-'const' to 'const' connection
-  if ((destType != destRefinedType || srcType != srcRefinedType) &&
-      !areTypesEquivalent(destRefinedType, srcRefinedType)) {
-    return connect.emitError("type mismatch between destination ")
-           << destRefinedType << " and source " << srcRefinedType;
-  }
-
   auto checkConstConditionality = [&](Value value, FIRRTLBaseType type,
                                       Value declaration) -> LogicalResult {
     auto *declarationBlock = declaration.getParentBlock();
@@ -2428,16 +2421,30 @@ static LogicalResult checkConnectConditionality(FConnectLike connect) {
     return success();
   };
 
+  auto emitSubaccessError = [&] {
+    return connect.emitError(
+        "assignment to non-'const' subaccess of 'const' type is disallowed");
+  };
+
   // Check destination if it contains 'const' leaves
-  if (destRefinedType.containsConst() && isConstFieldDriven(destRefinedType) &&
-      failed(checkConstConditionality(dest, destType, destDeclaration)))
-    return failure();
+  if (destRefinedType.containsConst() && isConstFieldDriven(destRefinedType)) {
+    // Disallow assignment to non-'const' subaccesses of 'const' types
+    if (destType != destRefinedType)
+      return emitSubaccessError();
+
+    if (failed(checkConstConditionality(dest, destType, destDeclaration)))
+      return failure();
+  }
 
   // Check source if it contains 'const' 'flip' leaves
   if (srcRefinedType.containsConst() &&
-      isConstFieldDriven(srcRefinedType, /*isFlip=*/true) &&
-      failed(checkConstConditionality(src, srcType, srcDeclaration)))
-    return failure();
+      isConstFieldDriven(srcRefinedType, /*isFlip=*/true)) {
+    // Disallow assignment to non-'const' subaccesses of 'const' types
+    if (srcType != srcRefinedType)
+      return emitSubaccessError();
+    if (failed(checkConstConditionality(src, srcType, srcDeclaration)))
+      return failure();
+  }
 
   return success();
 }
@@ -2797,8 +2804,8 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
       // top bits if it is a positive number.
       value = value.sext(width);
     } else if (width < value.getBitWidth()) {
-      // The parser can return an unnecessarily wide result with leading zeros.
-      // This isn't a problem, but truncating off bits is bad.
+      // The parser can return an unnecessarily wide result with leading
+      // zeros. This isn't a problem, but truncating off bits is bad.
       if (value.getNumSignBits() < value.getBitWidth() - width)
         return parser.emitError(loc, "constant too large for result type ")
                << resultType;

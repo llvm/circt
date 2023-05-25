@@ -611,24 +611,47 @@ firrtl.module @test(in %in   : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>,
 
 // -----
 
-// Test that subaccess of a const vector is checked as if the field is const.
+// Test that non-const subaccess of a const vector disallows assignment.
 firrtl.circuit "test" {
 firrtl.module @test(in %index: !firrtl.uint<1>, out %out: !firrtl.const.vector<uint<1>, 1>) {
   %c = firrtl.constant 0 : !firrtl.uint<1>
   %d = firrtl.subaccess %out[%index] : !firrtl.const.vector<uint<1>, 1>, !firrtl.uint<1>
-  // expected-error @+1 {{type mismatch}}
+  // expected-error @+1 {{assignment to non-'const' subaccess of 'const' type is disallowed}}
   firrtl.strictconnect %d, %c : !firrtl.uint<1>
 }
 }
 
 // -----
 
-// Test that subaccess of a flipped const vector is checked as if the field is const.
+// Test that non-const subaccess of a const vector disallows assignment, even if the source is const.
+firrtl.circuit "test" {
+firrtl.module @test(in %index: !firrtl.uint<1>, out %out: !firrtl.const.vector<uint<1>, 1>) {
+  %c = firrtl.constant 0 : !firrtl.const.uint<1>
+  %d = firrtl.subaccess %out[%index] : !firrtl.const.vector<uint<1>, 1>, !firrtl.uint<1>
+  // expected-error @+1 {{assignment to non-'const' subaccess of 'const' type is disallowed}}
+  firrtl.connect %d, %c : !firrtl.uint<1>, !firrtl.const.uint<1>
+}
+}
+
+// -----
+
+// Test that non-const subaccess of a flipped const vector disallows assignment.
 firrtl.circuit "test" {
 firrtl.module @test(in %index: !firrtl.uint<1>, in %in: !firrtl.const.vector<bundle<a flip: uint<1>>, 1>, out %out: !firrtl.bundle<a flip: uint<1>>) {
   %element = firrtl.subaccess %in[%index] : !firrtl.const.vector<bundle<a flip: uint<1>>, 1>, !firrtl.uint<1>
-  // expected-error @+1 {{type mismatch}}
+  // expected-error @+1 {{assignment to non-'const' subaccess of 'const' type is disallowed}}
   firrtl.connect %out, %element : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
+}
+}
+
+// -----
+
+// Test that non-const subaccess of a flipped const vector disallows assignment, even if the source is const.
+firrtl.circuit "test" {
+firrtl.module @test(in %index: !firrtl.uint<1>, in %in: !firrtl.const.vector<bundle<a flip: uint<1>>, 1>, out %out: !firrtl.bundle<a flip: const.uint<1>>) {
+  %element = firrtl.subaccess %in[%index] : !firrtl.const.vector<bundle<a flip: uint<1>>, 1>, !firrtl.uint<1>
+  // expected-error @+1 {{assignment to non-'const' subaccess of 'const' type is disallowed}}
+  firrtl.connect %out, %element : !firrtl.bundle<a flip: const.uint<1>>, !firrtl.bundle<a flip: uint<1>>
 }
 }
 
