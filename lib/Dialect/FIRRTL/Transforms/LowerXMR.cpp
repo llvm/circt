@@ -56,7 +56,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     CircuitNamespace ns(getOperation());
     circuitNamespace = &ns;
 
-    dataFlowClasses = llvm::EquivalenceClasses<Value, ValueComparator>();
+    llvm::EquivalenceClasses<Value, ValueComparator> eq;
+    dataFlowClasses = &eq;
+
     InstanceGraph &instanceGraph = getAnalysis<InstanceGraph>();
     SmallVector<RefResolveOp> resolveOps;
     SmallVector<Operation *> forceAndReleaseOps;
@@ -158,7 +160,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             // leader of the dataflowClass, then we automatically infer the
             // dataflow at this connect and every value reachable from the
             // destination.
-            dataFlowClasses.unionSets(connect.getSrc(), connect.getDest());
+            dataFlowClasses->unionSets(connect.getSrc(), connect.getDest());
             return success();
           })
           .Case<RefSubOp>([&](RefSubOp op) {
@@ -192,7 +194,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
             markForRemoval(resolve);
             if (!isZeroWidth(resolve.getType()))
-              dataFlowClasses.unionSets(resolve.getRef(), resolve.getResult());
+              dataFlowClasses->unionSets(resolve.getRef(), resolve.getResult());
             resolveOps.push_back(resolve);
             return success();
           })
@@ -236,13 +238,13 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     }
 
     LLVM_DEBUG({
-      for (auto I = dataFlowClasses.begin(), E = dataFlowClasses.end(); I != E;
+      for (auto I = dataFlowClasses->begin(), E = dataFlowClasses->end(); I != E;
            ++I) { // Iterate over all of the equivalence sets.
         if (!I->isLeader())
           continue; // Ignore non-leader sets.
         // Print members in this set.
-        llvm::interleave(llvm::make_range(dataFlowClasses.member_begin(I),
-                                          dataFlowClasses.member_end()),
+        llvm::interleave(llvm::make_range(dataFlowClasses->member_begin(I),
+                                          dataFlowClasses->member_end()),
                          llvm::dbgs(), "\n");
         llvm::dbgs() << "\n dataflow at leader::" << I->getData() << "\n =>";
         auto iter = dataflowAt.find(I->getData());
@@ -271,7 +273,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     visitedModules.clear();
     dataflowAt.clear();
     refSendPathList.clear();
-    dataFlowClasses.clear();
+    dataFlowClasses = nullptr;
     refPortsToRemoveMap.clear();
     opsToRemove.clear();
     xmrPathSuffix.clear();
@@ -491,9 +493,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
           return refMod.emitOpError(
                      "multiply instantiated module with input RefType port '")
                  << refMod.getPortName(portNum) << "'";
-        dataFlowClasses.unionSets(
-            dataFlowClasses.getOrInsertLeaderValue(refModuleArg),
-            dataFlowClasses.getOrInsertLeaderValue(instanceResult));
+        dataFlowClasses->unionSets(
+            dataFlowClasses->getOrInsertLeaderValue(refModuleArg),
+            dataFlowClasses->getOrInsertLeaderValue(instanceResult));
       }
     }
     return success();
@@ -577,7 +579,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   void markForRemoval(Operation *op) { opsToRemove.push_back(op); }
 
   std::optional<size_t> getRemoteRefSend(Value val) {
-    auto iter = dataflowAt.find(dataFlowClasses.getOrInsertLeaderValue(val));
+    auto iter = dataflowAt.find(dataFlowClasses->getOrInsertLeaderValue(val));
     if (iter != dataflowAt.end())
       return iter->getSecond();
     // The referenced module must have already been analyzed, error out if the
@@ -599,7 +601,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   size_t
   addReachingSendsEntry(Value atRefVal, Attribute newRef,
                         std::optional<size_t> continueFrom = std::nullopt) {
-    auto leader = dataFlowClasses.getOrInsertLeaderValue(atRefVal);
+    auto leader = dataFlowClasses->getOrInsertLeaderValue(atRefVal);
     auto indx = refSendPathList.size();
     dataflowAt[leader] = indx;
     if (continueFrom.has_value()) {
@@ -737,7 +739,7 @@ private:
     }
   };
 
-  llvm::EquivalenceClasses<Value, ValueComparator> dataFlowClasses;
+  llvm::EquivalenceClasses<Value, ValueComparator>* dataFlowClasses;
   // Instance and module ref ports that needs to be removed.
   DenseMap<Operation *, llvm::BitVector> refPortsToRemoveMap;
 
