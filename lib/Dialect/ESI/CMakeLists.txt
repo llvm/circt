@@ -109,13 +109,14 @@ if (ESI_CAPNP)
   install(FILES ${CapnProto_capnp_IMPORTED_LOCATION} DESTINATION lib)
   install(FILES ${CapnProto_capnpc_IMPORTED_LOCATION} DESTINATION lib)
   install(FILES ${CapnProto_kj_IMPORTED_LOCATION} DESTINATION lib)
-endif()
 
-copy_esi_runtime(ESIPrimitives.sv OUTDIR)
-copy_esi_runtime(runtime/cpp/include/esi/esi.h OUTDIR cpp/include/esi)
-copy_esi_runtime(runtime/cpp/include/esi/backends/capnp.h OUTDIR cpp/include/esi/backends)
+  # These are not Capnp files, but they use a feature from a newer version of
+  # CMake. Adding them here as a mitigation.
+  # TODO: Figure out what to do longer term.
+  copy_esi_runtime(ESIPrimitives.sv OUTDIR)
+  copy_esi_runtime(runtime/cpp/include/esi/esi.h OUTDIR cpp/include/esi)
+  copy_esi_runtime(runtime/cpp/include/esi/backends/capnp.h OUTDIR cpp/include/esi/backends)
 
-if (ESI_CAPNP)
   target_compile_definitions(obj.CIRCTESI PRIVATE CAPNP)
   target_link_libraries(obj.CIRCTESI CapnProto::capnp CapnProto::capnpc)
 endif()
