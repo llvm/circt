@@ -75,6 +75,7 @@ class CMakeBuild(build_py):
         "-DMLIR_ENABLE_BINDINGS_PYTHON=ON",
         "-DCIRCT_BINDINGS_PYTHON_ENABLED=ON",
         "-DCIRCT_RELEASE_TAG_ENABLED=ON",
+        "-DCIRCT_RELEASE_TAG=firtool",
     ]
 
     # HACK: CMake fails to auto-detect static linked Python installations, which
