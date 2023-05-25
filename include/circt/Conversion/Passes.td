@@ -409,6 +409,24 @@ def HandshakeToDC : Pass<"lower-handshake-to-dc", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// DCToHW
+//===----------------------------------------------------------------------===//
+
+def DCToHW : Pass<"lower-dc-to-hw", "mlir::ModuleOp"> {
+  let summary = "Lower DC to HW";
+  let description = [{
+    Lower DC to ESI/hw/comb/seq operations.
+    In case the IR contains DC operations that need to be clocked (fork, buffer),
+    there must exist a clock and reset signal in the parent `FunctionLike`
+    operation. These arguments are to be marked with a `dc.clock` and `dc.reset`
+    attribute, respectively.
+  }];
+  let constructor = "circt::createDCToHWPass()";
+  let dependentDialects = ["dc::DCDialect", "esi::ESIDialect", "hw::HWDialect",
+      "comb::CombDialect", "seq::SeqDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // HandshakeToHW
 //===----------------------------------------------------------------------===//
 
