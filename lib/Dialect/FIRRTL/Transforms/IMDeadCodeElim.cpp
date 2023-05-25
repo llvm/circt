@@ -316,8 +316,9 @@ void IMDeadCodeElimPass::forwardConstantOutputPort(FModuleOp module) {
 }
 
 void IMDeadCodeElimPass::runOnOperation() {
-  LLVM_DEBUG(llvm::dbgs() << "===----- Remove unused ports -----==="
-                          << "\n");
+  LLVM_DEBUG(
+      llvm::dbgs() << "===----- Inter-module Dead Code Elimination -----==="
+                   << "\n");
   auto circuits = getOperation().getOps<CircuitOp>();
   if (circuits.empty())
     return;
@@ -329,7 +330,7 @@ void IMDeadCodeElimPass::runOnOperation() {
   mlir::SymbolTable theSymbolTable(circuit);
   circt::hw::InnerSymbolTableCollection innerSymTables;
   if (failed(innerSymTables.populateAndVerifyTables(circuit)))
-    return;
+    return signalPassFailure();
 
   circt::hw::InnerRefNamespace theInnerRefNamespace{theSymbolTable,
                                                     innerSymTables};
@@ -338,7 +339,7 @@ void IMDeadCodeElimPass::runOnOperation() {
 
   // Walk attributes and find unknown uses of inner symbols or hierpaths.
   getOperation().walk([&](Operation *op) {
-    if (isa<FModuleOp>(op)) // Port or module annoations are ok.
+    if (isa<FModuleOp>(op)) // Port or module annotations are ok to ignore.
       return;
 
     if (auto hierPath = dyn_cast<hw::HierPathOp>(op)) {
@@ -395,6 +396,8 @@ void IMDeadCodeElimPass::runOnOperation() {
         markAlive(port);
     }
 
+    // Walk annotations and populate a map from hierpath to attached annotation
+    // targets. `portId` is `-1` for module annotations.
     auto visitAnnotation = [&](int portId, Annotation anno) -> bool {
       auto hierPathSym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
       hw::HierPathOp hierPathOp;
