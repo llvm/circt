@@ -1142,6 +1142,32 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.instance module interesting_name @SomeModule
     module.in <= UInt(1)
 
+  ; CHECK-LABEL: firrtl.module private @EnumTypes
+circuit EnumTypes:
+  module EnumTypes:
+    ; CHECK-SAME: in %i: !firrtl.enum<Some: uint<8>, None: uint<0>>
+    input i : {| Some : UInt<8>, None |}
+    output o : UInt<8>
+
+    ; CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
+    ; CHECK: %0 = firrtl.enumcreate Some(%c0_ui8) : !firrtl.enum<Some: uint<8>, None: uint<0>>
+    ; CHECK: %n = firrtl.node interesting_name %0 : !firrtl.enum<Some: uint<8>, None: uint<0>>
+    node n = {|Some : UInt<8>, None|}(Some, UInt<8>(0))
+
+    ; CHECK: firrtl.match %i : !firrtl.enum<Some: uint<8>, None: uint<0>> {
+    match i:
+      ; CHECK: case Some(%arg0) {
+      ; CHECK:   firrtl.strictconnect %o, %arg0 : !firrtl.uint<8>
+      ; CHECK: }
+      Some(x):
+        o <= x
+      ; CHECK: case None(%arg0) {
+      ; CHECK:   %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8> 
+      ; CHECK:   firrtl.strictconnect %o, %invalid_ui8 : !firrtl.uint<8>
+      ; CHECK: }
+      None:
+        o is invalid
+
   ; CHECK-LABEL: module private @RefsChild(
   ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>
   ; CHECK-SAME: out %rw: !firrtl.rwprobe<uint<1>>

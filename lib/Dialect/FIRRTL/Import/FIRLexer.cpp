@@ -251,6 +251,8 @@ FIRToken FIRLexer::lexTokenImpl() {
     case ')':
       return formToken(FIRToken::r_paren, tokStart);
     case '{':
+      if (*curPtr == '|')
+        return ++curPtr, formToken(FIRToken::l_brace_bar, tokStart);
       return formToken(FIRToken::l_brace, tokStart);
     case '}':
       return formToken(FIRToken::r_brace, tokStart);
@@ -281,6 +283,11 @@ FIRToken FIRLexer::lexTokenImpl() {
       if (*curPtr == '[')
         return lexInlineAnnotation(tokStart);
       return emitError(tokStart, "unexpected character following '%'");
+    case '|':
+      if (*curPtr == '}')
+        return ++curPtr, formToken(FIRToken::r_brace_bar, tokStart);
+      // Unknown character, emit an error.
+      return emitError(tokStart, "unexpected character");
 
     case ';':
       skipComment();
