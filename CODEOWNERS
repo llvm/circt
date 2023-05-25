@@ -1,0 +1,39 @@
+## Dialects, Conversions, Tools
+
+# Arc
+**/Dialect/Arc @fabianschuiki @maerhart
+tools/arcilator @fabianschuiki @maerhart
+
+# ESI
+**/Dialect/ESI @teqdruid
+
+# FIRRTL
+**/FIRRTL* @darthscsi @dtzSiFive @seldridge
+*/firtool @dtzSiFive
+libs/Firtool @dtzSiFive
+
+# LLHD
+**/LLHD* @fabianschuiki @maerhart
+tools/llhd-sim @fabianschuiki @maerhart
+
+# Handshake
+**/Handshake* @Dinistro @mortbopet @RamirezLucas
+
+# HW
+# **/Dialect/HW
+
+# SV
+# **/Dialect/SV
+
+## Conversions
+
+lib/Conversion/ExportVerilog @dtzSiFive
+
+
+## Infra
+
+# CI
+.github @teqdruid @dtzSiFive
+
+# PrettyPrinter
+**/Support/Pretty* @dtzSiFive
