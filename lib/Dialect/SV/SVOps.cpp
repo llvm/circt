@@ -1894,7 +1894,7 @@ void printXMRPath(OpAsmPrinter &p, XMROp op, ArrayAttr pathAttr,
 
 /// Ensure that the symbol being instantiated exists and is a HierPathOp.
 LogicalResult XMRRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto table = SymbolTable::getNearestSymbolTable(*this);
+  auto* table = SymbolTable::getNearestSymbolTable(*this);
   auto path = dyn_cast_or_null<hw::HierPathOp>(
       symbolTable.lookupSymbolIn(table, getRefAttr()));
   if (!path)

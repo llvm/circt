@@ -53,7 +53,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
     // Populate a CircuitNamespace that can be used to generate unique
     // circuit-level symbols.
-    auto ns = CircuitNamespace(getOperation());
+    CircuitNamespace ns(getOperation());
     circuitNamespace = &ns;
 
     dataFlowClasses = llvm::EquivalenceClasses<Value, ValueComparator>();
@@ -270,7 +270,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   /// Generate the ABI ref_<circuit>_<module> prefix string into `prefix`.
   void getRefABIPrefix(FModuleLike mod, SmallVectorImpl<char> &prefix) {
     (Twine("ref_") +
-     (isa<FExtModuleOp>(mod) ? mod.getModuleName() : circuitOp.getName()) +
+     (isa<FExtModuleOp>(mod) ? mod.getModuleName() : getOperation().getName()) +
      "_" + mod.getModuleName())
         .toVector(prefix);
   }
@@ -516,7 +516,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         getRefABIPrefix(module, circuitRefPrefix);
       auto macroName =
           getRefABIMacroForPort(module, portIndex, circuitRefPrefix);
-      declBuilder.create<sv::MacroDeclOp>(macroName, ArrayAttr(), StringAttr());
+      builder.create<sv::MacroDeclOp>(macroName, ArrayAttr(), StringAttr());
 
       auto macroDefOp = builder.create<sv::MacroDefOp>(
           FlatSymbolRefAttr::get(macroName),
@@ -709,8 +709,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   /// an existing HierPathOp or it will create and return a new one.
   hw::HierPathOp getOrCreatePath(ArrayAttr pathArray,
                                  ImplicitLocOpBuilder &builder) {
-    assert(pathArray);
-    assert(pathArray.size());
+    assert(pathArray && !pathArray.empty());
     // Return an existing HierPathOp if one exists with the same path.
     auto pathIter = pathCache.find(pathArray);
     if (pathIter != pathCache.end())
