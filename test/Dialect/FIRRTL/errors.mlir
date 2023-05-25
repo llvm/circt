@@ -1464,14 +1464,6 @@ firrtl.module @EnumNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !fir
 }
 
 // -----
-// hardware firrtl.string is invalid
-
-firrtl.circuit "HardwareString" {
-// expected-error @+1 {{strings are not representable in hardware}}
-firrtl.module @HardwareString(in %string: !firrtl.string) {}
-}
-
-// -----
 // const hardware firrtl.string is invalid
 
 firrtl.circuit "ConstHardwareString" {

@@ -105,9 +105,6 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         os << '>';
       })
       .Case<StringType>([&](auto stringType) {
-        auto phase = stringType.getPhase();
-        if (phase != Phase::Hardware)
-          os << stringifyPhase(phase) << ".";
         os << "string";
       })
       .Default([&](auto) { anyFailed = true; });
@@ -127,22 +124,6 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
 //===----------------------------------------------------------------------===//
 // Type Parsing
 //===----------------------------------------------------------------------===//
-
-/// Parse a type that has a phase qualifier.
-/// ```plain
-/// firrtl-phased-type ::= string
-/// ```
-static OptionalParseResult parsePhaseQualifiedType(AsmParser &parser,
-                                                   StringRef name, Phase phase,
-                                                   Type &result) {
-  auto *context = parser.getContext();
-  if (name.equals("string")) {
-    result = StringType::get(context, phase);
-    return success();
-  }
-  parser.emitError(parser.getNameLoc(), "expected phase-qualified type");
-  return failure();
-}
 
 /// Parse a type with a custom parser implementation.
 ///
@@ -171,10 +152,6 @@ static OptionalParseResult parsePhaseQualifiedType(AsmParser &parser,
 /// ```
 static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
                                             Type &result) {
-  if (name.consume_front("property.")) {
-    return parsePhaseQualifiedType(parser, name, Phase::Property, result);
-  }
-
   bool isConst = false;
   const char constPrefix[] = "const.";
   if (name.starts_with(constPrefix)) {
@@ -379,11 +356,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       parser.emitError(parser.getNameLoc(), "strings cannot be const");
       return failure();
     }
-    auto type =
-        parser.getChecked<StringType>(parser.getContext(), Phase::Hardware);
-    if (!type)
-      return failure();
-    result = type;
+    result = StringType::get(parser.getContext());
     return success();
   }
 
@@ -2117,17 +2090,6 @@ AsyncResetType AsyncResetType::getConstType(bool isConst) {
   if (isConst == this->isConst())
     return *this;
   return get(getContext(), isConst);
-}
-
-//===----------------------------------------------------------------------===//
-// StringType
-//===----------------------------------------------------------------------===//
-
-LogicalResult StringType::verify(function_ref<InFlightDiagnostic()> emitError,
-                                 Phase phase) {
-  if (phase == Phase::Hardware)
-    return emitError() << "strings are not representable in hardware";
-  return success();
 }
 
 //===----------------------------------------------------------------------===//

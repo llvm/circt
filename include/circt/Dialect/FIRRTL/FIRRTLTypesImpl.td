@@ -15,7 +15,6 @@
 
 include "FIRRTLDialect.td"
 include "circt/Dialect/HW/HWTypeInterfaces.td"
-include "FIRRTLTypeInterfaces.td"
 
 // Base class for other typedefs. Provides dialact-specific defaults.
 class FIRRTLImplType<string name,
@@ -485,19 +484,12 @@ def RefImpl : FIRRTLImplType<"Ref",
 // Non-Hardware Type Definitions
 //===----------------------------------------------------------------------===//
 
-def StringImpl : FIRRTLImplType<
-  "String", [PhasedTypeInterface], "circt::firrtl::FIRRTLType"> {
+def StringImpl : FIRRTLImplType<"String", [], "circt::firrtl::FIRRTLType"> {
   let summary = [{
     An unlimited length string type. Not representable in hardware.
-    Commonly used as omir properties.
   }];
-  let parameters = (ins "Phase":$phase);
-  let genVerifyDecl = true;
+  let parameters = (ins);
   let genStorageClass = true;
-  let genAccessors = true;
-  let extraClassDeclaration = [{
-    bool isLegalInPhase(Phase phase) const { return getPhase() == phase; }
-  }];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD

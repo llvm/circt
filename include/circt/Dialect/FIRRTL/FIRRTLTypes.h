@@ -14,7 +14,6 @@
 #define CIRCT_DIALECT_FIRRTL_TYPES_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
-#include "circt/Dialect/FIRRTL/FIRRTLTypeInterfaces.h"
 #include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
