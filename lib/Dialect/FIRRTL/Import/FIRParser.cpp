@@ -724,6 +724,8 @@ ParseResult FIRParser::parseFieldIdSeq(SmallVectorImpl<StringRef> &result,
   return success();
 }
 
+/// enum-field ::= Id ( ':' type )? ;
+/// enum-type  ::= '{|' enum-field* '|}'
 ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
   if (parseToken(FIRToken::l_brace_bar,
                  "expected leading '{|' in enumeration type"))
@@ -739,9 +741,8 @@ ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
 
         // Parse an optional type ascription.
         FIRRTLBaseType type;
-        if (getToken().getKind() == FIRToken::colon) {
+        if (consumeIf(FIRToken::colon)) {
           FIRRTLType parsedType;
-          consumeToken(FIRToken::colon);
           if (parseType(parsedType, "expected enumeration type"))
             return failure();
           type = parsedType.dyn_cast<FIRRTLBaseType>();
@@ -942,6 +943,18 @@ using ModuleSymbolTableEntry =
 
 using UnbundledValueEntry = SmallVector<std::pair<Attribute, Value>>;
 using UnbundledValuesList = std::vector<UnbundledValueEntry>;
+namespace {
+/// This structure is used to track which entries are added while inside a scope
+/// and remove them upon exiting the scope.
+struct UnbundledValueRestorer {
+  UnbundledValuesList &list;
+  size_t startingSize;
+  UnbundledValueRestorer(UnbundledValuesList &list) : list(list) {
+    startingSize = list.size();
+  }
+  ~UnbundledValueRestorer() { list.resize(startingSize); }
+};
+} // namespace
 
 using SubaccessCache = llvm::DenseMap<std::pair<Value, unsigned>, Value>;
 
@@ -1533,6 +1546,7 @@ void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
 ///  exp ::= id    // Ref
 ///      ::= prim
 ///      ::= integer-literal-exp
+///      ::= enum-exp
 ///      ::= exp '.' fieldId
 ///      ::= exp '[' intLit ']'
 /// XX   ::= exp '.' DoubleLit // TODO Workaround for #470
@@ -2435,14 +2449,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
     // After parsing the when region, we can release any new entries in
     // unbundledValues since the symbol table entries that refer to them will be
     // gone.
-    struct UnbundledValueRestorer {
-      UnbundledValuesList &list;
-      size_t startingSize;
-      UnbundledValueRestorer(UnbundledValuesList &list) : list(list) {
-        startingSize = list.size();
-      }
-      ~UnbundledValueRestorer() { list.resize(startingSize); }
-    } x(moduleContext.unbundledValues);
+    UnbundledValueRestorer x(moduleContext.unbundledValues);
 
     // We parse the substatements into their own parser, so they get inserted
     // into the specified 'when' region.
@@ -2505,6 +2512,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   return success();
 }
 
+/// enum-exp ::= enum-type '(' Id ( ',' exp )? ')'
 ParseResult FIRStmtParser::parseEnumExp(Value &value) {
   auto startLoc = getToken().getLoc();
   FIRRTLType type;
@@ -2542,6 +2550,10 @@ ParseResult FIRStmtParser::parseEnumExp(Value &value) {
   return success();
 }
 
+/// match ::= 'match' exp ':' info?
+///             (INDENT ( Id ( '(' Id ')' )? ':'
+///               (INDENT simple_stmt* DEDENT )?
+///             )* DEDENT)?
 ParseResult FIRStmtParser::parseMatch(unsigned matchIndent) {
   auto startTok = consumeToken(FIRToken::kw_match);
 
@@ -2593,14 +2605,7 @@ ParseResult FIRStmtParser::parseMatch(unsigned matchIndent) {
     // After parsing the region, we can release any new entries in
     // unbundledValues since the symbol table entries that refer to them will be
     // gone.
-    struct UnbundledValueRestorer {
-      UnbundledValuesList &list;
-      size_t startingSize;
-      UnbundledValueRestorer(UnbundledValuesList &list) : list(list) {
-        startingSize = list.size();
-      }
-      ~UnbundledValueRestorer() { list.resize(startingSize); }
-    } x(moduleContext.unbundledValues);
+    UnbundledValueRestorer x(moduleContext.unbundledValues);
 
     // Parse the argument.
     if (consumeIf(FIRToken::l_paren)) {
@@ -2627,7 +2632,7 @@ ParseResult FIRStmtParser::parseMatch(unsigned matchIndent) {
     if (parseToken(FIRToken::colon, "expected ':' in match statement case"))
       return failure();
 
-    // Parse a block of statements that are indented more than the when.
+    // Parse a block of statements that are indented more than the case.
     FIRStmtParser subParser(*caseBlock, moduleContext, modNameSpace, version);
     if (subParser.parseSimpleStmtBlock(*caseIndent))
       return failure();
