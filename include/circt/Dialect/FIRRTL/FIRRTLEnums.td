@@ -17,16 +17,6 @@ include "FIRRTLDialect.td"
 include "mlir/IR/EnumAttr.td"
 
 //===----------------------------------------------------------------------===//
-// Value Phase Tracking
-//===----------------------------------------------------------------------===//
-
-def Phase : I32EnumAttr<"Phase", "value phase", [
-                        I32EnumAttrCase<"Hardware",  0, "hardware">,
-                        I32EnumAttrCase<"Property",  1, "property">]> {
-  let genSpecializedAttr = 0;
-}
-
-//===----------------------------------------------------------------------===//
 // Name Kinds
 //===----------------------------------------------------------------------===//
 

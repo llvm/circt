@@ -244,8 +244,8 @@ firrtl.module @OpenAggTest(in %in: !firrtl.openbundle<a: bundle<data: uint<1>>, 
 }
 
 // CHECK-LABEL: StringTest
-// CHECK-SAME:  (in %in: !firrtl.property.string, out %out: !firrtl.property.string)
-firrtl.module @StringTest(in %in: !firrtl.property.string, out %out: !firrtl.property.string) {
-  firrtl.connect %out, %in : !firrtl.property.string, !firrtl.property.string
+// CHECK-SAME:  (in %in: !firrtl.string, out %out: !firrtl.string)
+firrtl.module @StringTest(in %in: !firrtl.string, out %out: !firrtl.string) {
+  firrtl.connect %out, %in : !firrtl.string, !firrtl.string
 }
 }
