@@ -31,7 +31,7 @@ jobs:
       # Extract the LLVM submodule hash for use in the cache key.
       - name: Get LLVM Hash
         id: get-llvm-hash
-        run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
+        run: echo "hash=$(git rev-parse @:./llvm)" >> $GITHUB_OUTPUT
         shell: bash
 
       # Try to fetch LLVM from the cache.

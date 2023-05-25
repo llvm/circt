@@ -195,11 +195,11 @@ jobs:
       # Extract the LLVM submodule hash for use in the cache key.
       - name: Get LLVM Hash
         id: get-llvm-hash
-        run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
+        run: echo "hash=$(git rev-parse @:./llvm)" >> $GITHUB_OUTPUT
 
       - name: Get workflow spec hash
         id: get-workflow-hash
-        run: echo "::set-output name=hash::$(md5sum $GITHUB_WORKSPACE/.github/workflows/buildAndTest.yml | awk '{print $1}')"
+        run: echo "hash=$(md5sum $GITHUB_WORKSPACE/.github/workflows/buildAndTest.yml | awk '{print $1}')" >> $GITHUB_OUTPUT
 
       # Try to fetch LLVM from the cache.
       - name: Cache LLVM
