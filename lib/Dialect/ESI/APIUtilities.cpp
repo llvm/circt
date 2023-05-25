@@ -1,4 +1,4 @@
-//===- APIUtilities.cpp - ESI general-purpose cosim API utilities - C++ -*-===//
+//===- APIUtilities.cpp - ESI general-purpose API utilities ------- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,11 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Utilities and classes applicable to all cosim API generators.
+// Utilities and classes applicable to all ESI API generators.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/ESI/cosim/APIUtilities.h"
+#include "circt/Dialect/ESI/APIUtilities.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/HW/HWDialect.h"
@@ -50,11 +50,11 @@ static bool isSupported(Type type, bool outer = false) {
       .Default([](Type) { return false; });
 }
 
-bool ESICosimType::isSupported() const {
+bool ESIAPIType::isSupported() const {
   return circt::esi::isSupported(type, true);
 }
 
-ESICosimType::ESICosimType(Type typeArg) : type(innerType(typeArg)) {
+ESIAPIType::ESIAPIType(Type typeArg) : type(innerType(typeArg)) {
   TypeSwitch<Type>(type)
       .Case([this](IntegerType t) {
         fieldTypes.push_back(
@@ -70,7 +70,7 @@ ESICosimType::ESICosimType(Type typeArg) : type(innerType(typeArg)) {
       .Default([](Type) {});
 }
 
-bool ESICosimType::operator==(const ESICosimType &that) const {
+bool ESIAPIType::operator==(const ESIAPIType &that) const {
   return type == that.type;
 }
 
@@ -99,7 +99,7 @@ static void emitName(Type type, uint64_t id, llvm::raw_ostream &os) {
 
 /// For now, the name is just the type serialized. This works only because we
 /// only support ints.
-StringRef ESICosimType::name() const {
+StringRef ESIAPIType::name() const {
   if (cachedName.empty()) {
     llvm::raw_string_ostream os(cachedName);
     emitName(type, typeID(), os);
@@ -110,7 +110,7 @@ StringRef ESICosimType::name() const {
 
 // We compute a deterministic hash based on the type. Since llvm::hash_value
 // changes from execution to execution, we don't use it.
-uint64_t ESICosimType::typeID() const {
+uint64_t ESIAPIType::typeID() const {
   if (cachedID)
     return *cachedID;
 
@@ -124,7 +124,7 @@ uint64_t ESICosimType::typeID() const {
   osName.flush();
   const char *typeNameC = typeName.c_str();
 
-  uint64_t hash = esiCosimSchemaVersion;
+  uint64_t hash = esiApiVersion;
   for (size_t i = 0, e = typeName.length() / 64; i < e; ++i)
     hash =
         llvm::hashing::detail::hash_33to64_bytes(&typeNameC[i * 64], 64, hash);

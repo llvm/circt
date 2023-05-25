@@ -12,10 +12,10 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "LogicExporter.h"
-#include "Solver.h"
-#include "Utility.h"
 #include "circt/InitAllDialects.h"
+#include "circt/LogicalEquivalence/LogicExporter.h"
+#include "circt/LogicalEquivalence/Solver.h"
+#include "circt/LogicalEquivalence/Utility.h"
 #include "circt/Support/Version.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OwningOpRef.h"

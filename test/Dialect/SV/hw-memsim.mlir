@@ -112,8 +112,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:      sv.passign %[[wslot]], %wo_data_0
 //CHECK-NEXT:    }
 //CHECK-NEXT:  }
-//CHECK-NEXT:  sv.ifdef "SYNTHESIS" {
-//CHECK-NEXT:  } else {
+//CHECK-NEXT:  sv.ifdef "ENABLE_INITIAL_MEM_" {
 //CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT" {
 //CHECK-NEXT:    }
 //CHECK-NEXT:    %_RANDOM_MEM = sv.reg : !hw.inout<i32>

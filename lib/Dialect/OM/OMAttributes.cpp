@@ -27,6 +27,21 @@ Type circt::om::ReferenceAttr::getType() {
   return ReferenceType::get(getContext());
 }
 
+Type circt::om::SymbolRefAttr::getType() {
+  return SymbolRefType::get(getContext());
+}
+
+circt::om::SymbolRefAttr circt::om::SymbolRefAttr::get(mlir::Operation *op) {
+  return om::SymbolRefAttr::get(op->getContext(),
+                                mlir::FlatSymbolRefAttr::get(op));
+}
+
+circt::om::SymbolRefAttr
+circt::om::SymbolRefAttr::get(mlir::StringAttr symName) {
+  return om::SymbolRefAttr::get(symName.getContext(),
+                                mlir::FlatSymbolRefAttr::get(symName));
+}
+
 void circt::om::OMDialect::registerAttributes() {
   addAttributes<
 #define GET_ATTRDEF_LIST

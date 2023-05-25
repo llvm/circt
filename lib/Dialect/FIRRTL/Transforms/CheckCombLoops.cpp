@@ -263,7 +263,8 @@ public:
           // Wire is added to the worklist
           .Case<WireOp>([&](WireOp wire) {
             worklist.push_back(wire.getResult());
-            if (!wire.getResult().getType().cast<FIRRTLBaseType>().isGround())
+            auto ty = wire.getResult().getType().dyn_cast<FIRRTLBaseType>();
+            if (ty && !ty.isGround())
               setValRefsTo(wire.getResult(), FieldRef(wire.getResult(), 0));
           })
           // All sub elements are added to the worklist.

@@ -62,7 +62,7 @@ TEST(EvaluatorTests, InstantiateInvalidParamSize) {
   auto mod = builder.create<ModuleOp>(loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  ArrayAttr params = builder.getStrArrayAttr({"param"});
+  StringRef params[] = {"param"};
   auto cls = builder.create<ClassOp>("MyClass", params);
   cls.getBody().emplaceBlock().addArgument(builder.getIntegerType(32),
                                            cls.getLoc());
@@ -95,7 +95,7 @@ TEST(EvaluatorTests, InstantiateNullParam) {
   auto mod = builder.create<ModuleOp>(loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  ArrayAttr params = builder.getStrArrayAttr({"param"});
+  StringRef params[] = {"param"};
   auto cls = builder.create<ClassOp>("MyClass", params);
   cls.getBody().emplaceBlock().addArgument(builder.getIntegerType(32),
                                            cls.getLoc());
@@ -126,7 +126,7 @@ TEST(EvaluatorTests, InstantiateInvalidParamType) {
   auto mod = builder.create<ModuleOp>(loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  ArrayAttr params = builder.getStrArrayAttr({"param"});
+  StringRef params[] = {"param"};
   auto cls = builder.create<ClassOp>("MyClass", params);
   cls.getBody().emplaceBlock().addArgument(builder.getIntegerType(32),
                                            cls.getLoc());
@@ -157,7 +157,7 @@ TEST(EvaluatorTests, GetFieldInvalidName) {
   auto mod = builder.create<ModuleOp>(loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto cls = builder.create<ClassOp>("MyClass", builder.getArrayAttr({}));
+  auto cls = builder.create<ClassOp>("MyClass");
   cls.getBody().emplaceBlock();
 
   Evaluator evaluator(mod);
@@ -191,7 +191,7 @@ TEST(EvaluatorTests, InstantiateObjectWithParamField) {
   auto mod = builder.create<ModuleOp>(loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  ArrayAttr params = builder.getStrArrayAttr({"param"});
+  StringRef params[] = {"param"};
   auto cls = builder.create<ClassOp>("MyClass", params);
   auto &body = cls.getBody().emplaceBlock();
   body.addArgument(builder.getIntegerType(32), cls.getLoc());
@@ -227,11 +227,10 @@ TEST(EvaluatorTests, InstantiateObjectWithConstantField) {
   auto mod = builder.create<ModuleOp>(loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto cls = builder.create<ClassOp>("MyClass", builder.getArrayAttr({}));
+  auto cls = builder.create<ClassOp>("MyClass");
   auto &body = cls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&body);
-  auto constant = builder.create<ConstantOp>(builder.getIntegerType(32),
-                                             builder.getI32IntegerAttr(42));
+  auto constant = builder.create<ConstantOp>(builder.getI32IntegerAttr(42));
   builder.create<ClassFieldOp>("field", constant);
 
   Evaluator evaluator(mod);
@@ -262,7 +261,7 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
   auto mod = builder.create<ModuleOp>(loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  ArrayAttr params = builder.getStrArrayAttr({"param"});
+  StringRef params[] = {"param"};
   auto innerCls = builder.create<ClassOp>("MyInnerClass", params);
   auto &innerBody = innerCls.getBody().emplaceBlock();
   innerBody.addArgument(builder.getIntegerType(32), innerCls.getLoc());
@@ -274,12 +273,7 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
   auto &body = cls.getBody().emplaceBlock();
   body.addArgument(builder.getIntegerType(32), cls.getLoc());
   builder.setInsertionPointToStart(&body);
-  auto innerClsType = ClassType::get(
-      builder.getContext(),
-      FlatSymbolRefAttr::get(builder.getStringAttr("MyInnerClass")));
-  auto innerClsName = builder.getStringAttr("MyInnerClass");
-  auto object =
-      builder.create<ObjectOp>(innerClsType, innerClsName, body.getArguments());
+  auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
   builder.create<ClassFieldOp>("field", object);
 
   Evaluator evaluator(mod);
@@ -316,7 +310,7 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
   auto mod = builder.create<ModuleOp>(loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  ArrayAttr params = builder.getStrArrayAttr({"param"});
+  StringRef params[] = {"param"};
   auto innerCls = builder.create<ClassOp>("MyInnerClass", params);
   auto &innerBody = innerCls.getBody().emplaceBlock();
   innerBody.addArgument(builder.getIntegerType(32), innerCls.getLoc());
@@ -328,12 +322,7 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
   auto &body = cls.getBody().emplaceBlock();
   body.addArgument(builder.getIntegerType(32), cls.getLoc());
   builder.setInsertionPointToStart(&body);
-  auto innerClsType = ClassType::get(
-      builder.getContext(),
-      FlatSymbolRefAttr::get(builder.getStringAttr("MyInnerClass")));
-  auto innerClsName = builder.getStringAttr("MyInnerClass");
-  auto object =
-      builder.create<ObjectOp>(innerClsType, innerClsName, body.getArguments());
+  auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
   auto field =
       builder.create<ObjectFieldOp>(builder.getI32Type(), object,
                                     builder.getArrayAttr(FlatSymbolRefAttr::get(
@@ -370,20 +359,14 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
   auto mod = builder.create<ModuleOp>(loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto innerCls =
-      builder.create<ClassOp>("MyInnerClass", builder.getArrayAttr({}));
+  auto innerCls = builder.create<ClassOp>("MyInnerClass");
   innerCls.getBody().emplaceBlock();
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto cls = builder.create<ClassOp>("MyClass", builder.getArrayAttr({}));
+  auto cls = builder.create<ClassOp>("MyClass");
   auto &body = cls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&body);
-  auto innerClsType = ClassType::get(
-      builder.getContext(),
-      FlatSymbolRefAttr::get(builder.getStringAttr("MyInnerClass")));
-  auto innerClsName = builder.getStringAttr("MyInnerClass");
-  auto object =
-      builder.create<ObjectOp>(innerClsType, innerClsName, body.getArguments());
+  auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
   builder.create<ClassFieldOp>("field1", object);
   builder.create<ClassFieldOp>("field2", object);
 

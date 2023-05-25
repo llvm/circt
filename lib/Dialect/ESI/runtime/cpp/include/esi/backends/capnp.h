@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This is a specialization of the ESI C++ cosimulation API for the Cap'n'proto
+// This is a specialization of the ESI C++ API for the Cap'n'proto cosimulation
 // backend.
 //
 // DO NOT EDIT!

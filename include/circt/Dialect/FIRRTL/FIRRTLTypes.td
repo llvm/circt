@@ -78,6 +78,9 @@ def OpenVectorType : FIRRTLDialectType<CPred<"$_self.isa<OpenVectorType>()">,
 def FEnumType : FIRRTLDialectType<CPred<"$_self.isa<FEnumType>()">,
  "FEnumType", "::circt::firrtl::FEnumType">;
 
+def StringType : FIRRTLDialectType<CPred<"$_self.isa<StringType>()">,
+  "StringType", "::circt::firrtl::StringType">;
+
 def AggregateType : FIRRTLDialectType<
   Or<[
     CPred<"$_self.isa<FVectorType>()">,
@@ -112,7 +115,7 @@ def RWProbe : FIRRTLDialectType<
    "rwprobe type", "::circt::firrtl::RefType">;
 
 // TODO: When Refs can appear within Base, need to disallow that too.
-def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;
+def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType, StringType]>;
 def StrictConnectableType : AnyTypeOf<[PassiveType, ForeignType]>;
 
 //===----------------------------------------------------------------------===//

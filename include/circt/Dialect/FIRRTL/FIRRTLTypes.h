@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_TYPES_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLTypeInterfaces.h"
 #include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
@@ -43,6 +44,7 @@ class OpenVectorType;
 class FVectorType;
 class FEnumType;
 class RefType;
+class StringType;
 
 /// A collection of bits indicating the recursive properties of a type.
 struct RecursiveTypeProperties {
@@ -133,6 +135,9 @@ public:
   /// Return a 'const' or non-'const' version of this type.
   FIRRTLBaseType getConstType(bool isConst);
 
+  /// Return this type with a 'const' modifiers dropped
+  FIRRTLBaseType getAllConstDroppedType();
+
   /// Return this type with all ground types replaced with UInt<1>.  This is
   /// used for `mem` operations.
   FIRRTLBaseType getMaskType();
@@ -151,7 +156,7 @@ public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
     return llvm::isa<FIRRTLDialect>(type.getDialect()) &&
-           !type.isa<RefType, OpenBundleType, OpenVectorType>();
+           !type.isa<RefType, OpenBundleType, OpenVectorType, StringType>();
   }
 
   /// Returns true if this is a non-const "passive" that which is not analog.
@@ -190,11 +195,20 @@ public:
   std::pair<uint64_t, bool> rootChildFieldID(uint64_t fieldID, uint64_t index);
 };
 
+/// Returns true if this is a 'const' type whose value is guaranteed to be
+/// unchanging at circuit execution time
+bool isConst(Type type);
+
+/// Returns true if the type is or contains a 'const' type whose value is
+/// guaranteed to be unchanging at circuit execution time
+bool containsConst(Type type);
+
 /// Returns whether the two types are equivalent.  This implements the exact
 /// definition of type equivalence in the FIRRTL spec.  If the types being
 /// compared have any outer flips that encode FIRRTL module directions (input or
 /// output), these should be stripped before using this method.
 bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType,
+                        bool destOuterTypeIsConst = false,
                         bool srcOuterTypeIsConst = false,
                         bool requireSameWidths = false);
 
@@ -204,7 +218,12 @@ bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType,
 /// types with flips in different positions to be equivalent.
 bool areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
                               bool destFlip = false, bool srcFlip = false,
+                              bool destOuterTypeIsConst = false,
                               bool srcOuterTypeIsConst = false);
+
+/// Returns whether the srcType can be const-casted to the destType.
+bool areTypesConstCastable(FIRRTLType destType, FIRRTLType srcType,
+                           bool srcOuterTypeIsConst = false);
 
 /// Returns true if the destination is at least as wide as a source.  The source
 /// and destination types must be equivalent non-analog types.  The types are

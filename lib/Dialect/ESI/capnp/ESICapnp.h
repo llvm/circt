@@ -14,8 +14,8 @@
 #ifndef CIRCT_DIALECT_ESI_CAPNP_ESICAPNP_H
 #define CIRCT_DIALECT_ESI_CAPNP_ESICAPNP_H
 
+#include "circt/Dialect/ESI/APIUtilities.h"
 #include "circt/Dialect/ESI/ESIOps.h"
-#include "circt/Dialect/ESI/cosim/APIUtilities.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Support/IndentedOstream.h"
 #include "llvm/ADT/MapVector.h"
@@ -48,11 +48,11 @@ struct CapnpTypeSchemaImpl;
 } // namespace detail
 
 /// Generate and reason about a Cap'nProto schema for a particular MLIR type.
-class CapnpTypeSchema : public ESICosimType {
+class CapnpTypeSchema : public ESIAPIType {
 public:
   CapnpTypeSchema(mlir::Type);
 
-  using ESICosimType::operator==;
+  using ESIAPIType::operator==;
 
   /// Size in bits of the capnp message.
   size_t size() const;

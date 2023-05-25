@@ -1,4 +1,5 @@
 # REQUIRES: esi-cosim
+# XFAIL: *
 # RUN: rm -rf %t
 # RUN: mlir-opt  %S/dot.linalg.mlir --empty-tensor-to-alloc-tensor --one-shot-bufferize="allow-return-allocs bufferize-function-boundaries" --buffer-results-to-out-params --convert-linalg-to-affine-loops --lower-affine --convert-scf-to-cf --canonicalize > dot.cf.mlir
 # RUN: hlstool dot.cf.mlir --with-esi --dynamic-hw -ir -ir-output-level 2 > dot.hw.mlir

@@ -478,6 +478,15 @@ circuit RefDupe:
     ref p is "a.z" ; expected-error {{duplicate ref statement for 'p'}}
 
 ;// -----
+; Either use ref statements or ABI, can't partially use ref statements.
+
+circuit MissingRef:
+  extmodule MissingRef:
+    output p : Probe<UInt<2>> ; expected-error {{no ref statement found for ref port "p"}}
+    output q : Probe<UInt<2>>
+    ref q is "foo.bar"
+
+;// -----
 
 circuit UnusedRef:
   extmodule UnusedRef:

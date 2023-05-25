@@ -41,6 +41,9 @@ struct Evaluator {
   FailureOr<std::shared_ptr<Object>>
   instantiate(StringAttr className, ArrayRef<ObjectValue> actualParams);
 
+  /// Get the Module this Evaluator is built from.
+  mlir::ModuleOp getModule();
+
 private:
   /// Evaluate a Value in a Class body according to the small expression grammar
   /// described in the rationale document. The actual parameters are the values

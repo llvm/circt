@@ -2461,9 +2461,11 @@ ParseResult FIRStmtParser::parseRefExp(Value &result, const Twine &message) {
     return parseProbe(result);
   if (token == FIRToken::lp_rwprobe)
     return parseRWProbe(result);
-  if (token == FIRToken::identifier)
-    return parseStaticRefExp(result, message);
-  return emitError(getToken().getLoc(), message);
+
+  // Default to parsing as static reference expression.
+  // Don't check token kind, we need to support literal_identifier and keywords,
+  // let parseId handle this.
+  return parseStaticRefExp(result, message);
 }
 
 /// static_reference ::= id
@@ -3778,14 +3780,20 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
           "references in ports must be output on extmodule and intmodule");
     auto *refStmtIt = llvm::find_if(
         refStatements, [&](const auto &r) { return r.refName == port.name; });
-    // Deviate from FIRRTL 2.0 requirement, allow missing ref.
-    // If used/needed, will error later in pipeline.
-    if (refStmtIt == refStatements.end())
+    // Error if ref statements are present but none found for this port.
+    if (refStmtIt == refStatements.end()) {
+      if (!refStatements.empty())
+        return mlir::emitError(port.loc, "no ref statement found for ref port ")
+            .append(port.name);
       continue;
+    }
+
     usedRefs.set(std::distance(refStatements.begin(), refStmtIt));
     internalPathAttrs.push_back(refStmtIt->resolvedPath);
   }
-  if (internalPathAttrs.size() < refStatements.size()) {
+  if (!refStatements.empty() &&
+      internalPathAttrs.size() != refStatements.size()) {
+    assert(internalPathAttrs.size() < refStatements.size());
     assert(!usedRefs.all());
     auto idx = usedRefs.find_first_unset();
     assert(idx != -1);

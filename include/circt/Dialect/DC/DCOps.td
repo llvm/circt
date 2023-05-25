@@ -43,6 +43,11 @@ def BufferOp : DCOp<"buffer",
     ```mlir
     %value_out = dc.buffer [2] %value : !dc.value<i32, i1, i4>
     ```
+
+    **Hardware/CIRCT context note**: buffers have no dialect-side notion of
+    cycles/stages/implementation. It is up to the generating pass to interpret
+    buffer semantics - some may want to add attributes to a single buffer, some
+    may want to stagger `dc.buffer`s sequentially.
   }];
 
   let arguments = (ins
@@ -88,7 +93,6 @@ def JoinOp : DCOp<"join", [Commutative]> {
   let results = (outs TokenType:$output);
 
   let assemblyFormat = "$tokens attr-dict";
-  let hasCanonicalizer = 1;
   let hasFolder = 1;
 }
 
@@ -174,12 +178,15 @@ def PackOp : DCOp<"pack", [InferTypeOpInterface]> {
     let description = [{
         An operation which packs together a !dc.token value with some other
         value.
+
+        Typically, a `dc.pack` op will be used to facilitate data-dependent
+        control flow, wherein a `dc.value<i1>` is to be generated as a select
+        signal for either a `dc.branch` or `dc.select` operation.
     }];
 
     let arguments = (ins TokenType:$token, Variadic<AnyType>:$inputs);
     let results = (outs ValueType:$output);
     let assemblyFormat = "$token `[` $inputs `]` attr-dict `:` type($inputs)";
-    let hasCanonicalizer = 1;
     let hasFolder = 1;
 
     let extraClassDeclaration = [{
@@ -217,6 +224,20 @@ def UnpackOp : DCOp<"unpack", [InferTypeOpInterface]> {
                                             mlir::RegionRange regions,
                                             SmallVectorImpl<Type> &results);
     }];
+}
+
+def MergeOp : DCOp<"merge"> {
+  let summary = "Merge operation";
+  let description = [{
+    Select one of the incoming tokens and emits an output stating which token
+    was selected. If multiple tokens are ready to transact at the same time,
+    the tokens are selected with priority, from first to last (i.e. left to right
+    in the IR). This property ensures deterministic behavior.
+  }];
+
+  let arguments = (ins TokenType:$first, TokenType:$second);
+  let results = (outs I1ValueType:$output);
+  let assemblyFormat = "$first `,` $second attr-dict";
 }
 
 #endif // CIRCT_DIALECT_DC_OPS_TD

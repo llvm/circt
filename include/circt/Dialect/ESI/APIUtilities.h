@@ -1,4 +1,4 @@
-//===- APIUtilities.h - ESI general-purpose cosim API utilities -*- C++ -*-===//
+//===- APIUtilities.h - ESI general-purpose API utilities -------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,13 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Utilities and classes applicable to all cosim API generators.
+// Utilities and classes applicable to all ESI API generators.
 //
 //===----------------------------------------------------------------------===//
 
-// NOLINTNEXTLINE(llvm-header-guard)
-#ifndef CIRCT_DIALECT_ESI_COSIM_ESICOSIM_H
-#define CIRCT_DIALECT_ESI_COSIM_ESICOSIM_H
+#ifndef CIRCT_DIALECT_ESI_APIUTILITIES_H
+#define CIRCT_DIALECT_ESI_APIUTILITIES_H
 
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -26,16 +25,16 @@ namespace esi {
 
 /// Every time we implement a breaking change in the schema generation,
 /// increment this number. It is a seed for all the schema hashes.
-constexpr uint64_t esiCosimSchemaVersion = 1;
+constexpr uint64_t esiApiVersion = 1;
 
 // Base type for all Cosim-implementing type emitters.
-class ESICosimType {
+class ESIAPIType {
 public:
   using FieldInfo = hw::StructType::FieldInfo;
 
-  ESICosimType(mlir::Type);
-  virtual ~ESICosimType() = default;
-  bool operator==(const ESICosimType &) const;
+  ESIAPIType(mlir::Type);
+  virtual ~ESIAPIType() = default;
+  bool operator==(const ESIAPIType &) const;
 
   /// Get the type back.
   mlir::Type getType() const { return type; }
@@ -64,4 +63,4 @@ protected:
 } // namespace esi
 } // namespace circt
 
-#endif // CIRCT_DIALECT_ESI_COSIM_ESICOSIM_H
+#endif // CIRCT_DIALECT_ESI_APIUTILITIES_H

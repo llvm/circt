@@ -1089,7 +1089,7 @@ llvm::SmallDenseMap<Type, hw::HWModuleOp>
 size_t circt::esi::capnp::CapnpTypeSchema::size() const { return s->size(); }
 
 circt::esi::capnp::CapnpTypeSchema::CapnpTypeSchema(Type outerType)
-    : circt::esi::ESICosimType(outerType) {
+    : circt::esi::ESIAPIType(outerType) {
   s = std::make_shared<detail::CapnpTypeSchemaImpl>(*this);
 }
 

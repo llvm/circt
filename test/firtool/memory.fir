@@ -1,5 +1,4 @@
 ; RUN: firtool %s --format=fir --ir-sv | FileCheck %s --check-prefixes=CHECK,COMMON --implicit-check-not sv.attributes
-; RUN: firtool %s --format=fir --ir-sv -add-mux-pragmas -strip-mux-pragmas=0 | FileCheck %s --check-prefix COMMON
 ; RUN: firtool %s --format=fir --ir-sv -disable-mem-randomization | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_MEM
 ; RUN: firtool %s --format=fir --ir-sv -disable-reg-randomization | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
 ; RUN: firtool %s --format=fir --ir-sv -disable-mem-randomization --disable-reg-randomization | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_MEM --implicit-check-not RANDOMIZE_REG

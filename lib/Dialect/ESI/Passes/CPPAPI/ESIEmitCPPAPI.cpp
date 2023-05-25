@@ -48,7 +48,7 @@ struct CPPAPI {
   LogicalResult emit();
 
 private:
-  LogicalResult gatherTypes(Location loc);
+  LogicalResult gatherTypes();
   LogicalResult emitTypes();
   LogicalResult emitServiceDeclarations();
   LogicalResult emitDesignModules();
@@ -65,14 +65,15 @@ private:
 };
 } // anonymous namespace
 
-LogicalResult CPPAPI::gatherTypes(Location loc) {
+LogicalResult CPPAPI::gatherTypes() {
   auto storeType = [&](mlir::Type type) -> LogicalResult {
     auto dirType = esi::innerType(type);
     auto dirTypeSchemaIt = types.find(dirType);
     if (dirTypeSchemaIt == types.end()) {
       CPPType dirTypeSchema(dirType);
       if (!dirTypeSchema.isSupported())
-        return emitError(loc) << "Type " << dirType << " not supported.";
+        return emitError(module.getLoc())
+               << "Type " << dirType << " not supported.";
       dirTypeSchemaIt = types.insert({dirType, dirTypeSchema}).first;
     }
     return success();
@@ -95,22 +96,20 @@ LogicalResult CPPAPI::gatherTypes(Location loc) {
 
 LogicalResult CPPAPI::emit() {
   // Walk and collect the type data.
-  if (failed(gatherTypes(module.getLoc())))
+  if (failed(gatherTypes()))
     return failure();
 
   os << "#pragma once\n\n";
 
   os << "// The ESI C++ API relies on the refl-cpp library for type "
-        "introspection. "
-        "This must be provided by the user.\n";
+        "introspection. This must be provided by the user.\n";
   os << "// See https://github.com/veselink1/refl-cpp \n";
   os << "#include \"refl.hpp\"\n\n";
 
   os << "#include <cstdint>\n";
   os << "#include \"esi/backends/capnp.h\"\n";
   os << "\n// Include the generated Cap'nProto schema header. This must "
-        "defined "
-        "by the build system.\n";
+        "defined by the build system.\n";
   os << "#include ESI_COSIM_CAPNP_H\n";
   os << "\n\n";
 
@@ -133,7 +132,7 @@ LogicalResult CPPAPI::emit() {
 
 LogicalResult CPPAPI::emitServiceDeclarations() {
   // Locate all of the service declarations which are needed by the
-  // cosim-implemented services in the service hierarchy.
+  // services in the service hierarchy.
   for (auto serviceDeclOp : module.getOps<ServiceDeclOpInterface>()) {
     auto cppService = CPPService(serviceDeclOp, types);
     if (failed(cppService.write(os)))
