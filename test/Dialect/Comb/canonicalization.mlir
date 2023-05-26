@@ -777,6 +777,27 @@ hw.module @fold_mux_tree1(%sel: i2, %a: i8, %b: i8, %c: i8, %d: i8) -> (y: i8) {
   hw.output %5 : i8
 }
 
+// CHECK-LABEL: hw.module @fold_mux_tree1r
+hw.module @fold_mux_tree1r(%sel: i2, %a: i8, %b: i8, %c: i8, %d: i8) -> (y: i8) {
+  // CHECK-NEXT: %0 = hw.array_create %d, %c, %b, %a : i8
+  // CHECK-NEXT: %1 = hw.array_get %0[%sel]
+  // CHECK-NEXT: hw.output %1
+  %c2_i2 = hw.constant 2 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %c3_i2 = hw.constant 3 : i2
+
+  %0 = comb.icmp eq %sel, %c1_i2 : i2
+  %1 = comb.mux %0, %b, %a : i8
+
+  %2 = comb.icmp eq %sel, %c2_i2 : i2
+  %3 = comb.mux %2, %c, %1 : i8
+
+  %4 = comb.icmp eq %sel, %c3_i2 : i2
+  %5 = comb.mux %4, %d, %3 : i8
+  hw.output %5 : i8
+}
+
+
 // CHECK-LABEL: hw.module @fold_mux_tree2
 // This is a sparse tree with 5/8ths load.
 hw.module @fold_mux_tree2(%sel: i3, %a: i8, %b: i8, %c: i8, %d: i8) -> (y: i8) {
