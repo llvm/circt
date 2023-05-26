@@ -24,6 +24,11 @@ def HWCleanup : Pass<"hw-cleanup", "hw::HWModuleOp"> {
       opportunities for other simpler passes (like canonicalize).
   }];
 
+  let options = [
+    Option<"mergeAlwaysBlocks", "merge-always-blocks", "bool",
+           "true", "Allow always and always_ff blocks to be merged">
+  ];
+
   let constructor = "circt::sv::createHWCleanupPass()";
 }
 

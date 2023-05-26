@@ -21,6 +21,11 @@ using namespace circt::om;
 /// Construct an Evaluator with an IR module.
 circt::om::Evaluator::Evaluator(ModuleOp mod) : symbolTable(mod) {}
 
+/// Get the Module this Evaluator is built from.
+ModuleOp circt::om::Evaluator::getModule() {
+  return cast<ModuleOp>(symbolTable.getOp());
+}
+
 /// Instantiate an Object with its class name and actual parameters.
 FailureOr<std::shared_ptr<Object>>
 circt::om::Evaluator::instantiate(StringAttr className,

@@ -19,6 +19,7 @@ target_link_libraries(circt-opt
   CIRCTCalyxTransforms
   CIRCTConvertToArcs
   CIRCTDC
+  CIRCTDCTransforms
   CIRCTESI
   CIRCTExportChiselInterface
   CIRCTExportVerilog
@@ -29,6 +30,7 @@ target_link_libraries(circt-opt
   CIRCTFSMTransforms
   CIRCTFSMToSV
   CIRCTHandshake
+  CIRCTHandshakeToDC
   CIRCTHandshakeToHW
   CIRCTHandshakeTransforms
   CIRCTLLHD

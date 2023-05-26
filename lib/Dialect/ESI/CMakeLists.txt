@@ -21,12 +21,12 @@ set(srcs
   Passes/ESILowerTypes.cpp
   Passes/ESICleanMetadata.cpp
 
-  cosim/APIUtilities.cpp
+  APIUtilities.cpp
 
   # C++ API
-  cosim/CPP/ESIAddCPPAPI.cpp
-  cosim/CPP/ESIEmitCPPAPI.cpp
-  cosim/CPP/CPPAPI.cpp
+  Passes/CPPAPI/ESIAddCPPAPI.cpp
+  Passes/CPPAPI/ESIEmitCPPAPI.cpp
+  Passes/CPPAPI/CPPAPI.cpp
 )
 
 set(ESI_RUNTIME_DIR ${CIRCT_BINARY_DIR}/include/circt/Dialect/ESI)
@@ -74,6 +74,10 @@ add_circt_dialect_library(CIRCTESI
   ${ESI_LinkLibs}
   )
 
+# Create a package of ESI collateral for any compiler to include with its
+# distribution.
+add_library(esi-collateral INTERFACE)
+
 # A function which copies a file from the source tree to the build tree.
 # This is an alternative to configure_file to ensure that the file is copied
 # on every build (not just during CMake configure).
@@ -90,32 +94,29 @@ function(copy_esi_runtime FILENAME)
 
   get_filename_component(DST ${FILENAME} NAME)
   get_filename_component(SRC ${FILENAME} REALPATH)
-  list(APPEND ABS_CFILES ${SRC})
   add_custom_command(TARGET CIRCTESI PRE_BUILD
     COMMAND ${CMAKE_COMMAND} -E
     copy ${SRC} ${ESI_RUNTIME_DIR}/${ARG_OUTDIR}${DST})
+  target_sources(esi-collateral PUBLIC FILE_SET HEADERS
+    BASE_DIRS "."
+    FILES "${FILENAME}")
 endfunction()
 
 
 if (ESI_CAPNP)
-  copy_esi_runtime(${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/ESI/cosim/CosimDpi.capnp OUTDIR cosim)
   copy_esi_runtime(cosim/Cosim_DpiPkg.sv OUTDIR cosim)
   copy_esi_runtime(cosim/Cosim_Endpoint.sv OUTDIR cosim)
   install(FILES ${CapnProto_capnp_IMPORTED_LOCATION} DESTINATION lib)
   install(FILES ${CapnProto_capnpc_IMPORTED_LOCATION} DESTINATION lib)
   install(FILES ${CapnProto_kj_IMPORTED_LOCATION} DESTINATION lib)
-endif()
 
-copy_esi_runtime(ESIPrimitives.sv)
-copy_esi_runtime(runtime/cpp/include/esi/esi.h OUTDIR cpp/include/esi)
-copy_esi_runtime(runtime/cpp/include/esi/backends/capnp.h OUTDIR cpp/include/esi/backends)
+  # These are not Capnp files, but they use a feature from a newer version of
+  # CMake. Adding them here as a mitigation.
+  # TODO: Figure out what to do longer term.
+  copy_esi_runtime(ESIPrimitives.sv OUTDIR)
+  copy_esi_runtime(runtime/cpp/include/esi/esi.h OUTDIR cpp/include/esi)
+  copy_esi_runtime(runtime/cpp/include/esi/backends/capnp.h OUTDIR cpp/include/esi/backends)
 
-# Create a package of ESI collateral for any compiler to include with its
-# distribution.
-add_library(esi-collateral INTERFACE)
-set_target_properties(esi-collateral PROPERTIES PUBLIC_HEADER "${ABS_CFILES}")
-
-if (ESI_CAPNP)
   target_compile_definitions(obj.CIRCTESI PRIVATE CAPNP)
   target_link_libraries(obj.CIRCTESI CapnProto::capnp CapnProto::capnpc)
 endif()

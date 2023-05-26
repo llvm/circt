@@ -39,7 +39,7 @@ jobs:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
       - name: Get CIRCT
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 1
           submodules: true

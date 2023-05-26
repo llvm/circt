@@ -104,6 +104,9 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         printNestedType(refType.getType(), os);
         os << '>';
       })
+      .Case<StringType>([&](auto stringType) {
+        os << "string";
+      })
       .Default([&](auto) { anyFailed = true; });
   return failure(anyFailed);
 }
@@ -143,7 +146,7 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
 ///   ::= enum '<' (enum-elt (',' enum-elt)*)? '>'
 ///   ::= vector '<' type ',' int '>'
 ///   ::= const '.' type
-///
+///   ::= 'property.' firrtl-phased-type
 /// bundle-elt ::= identifier flip? ':' type
 /// enum-elt ::= identifier ':' type
 /// ```
@@ -348,6 +351,14 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
 
     return result = RefType::get(type, true), success();
   }
+  if (name.equals("string")) {
+    if (isConst) {
+      parser.emitError(parser.getNameLoc(), "strings cannot be const");
+      return failure();
+    }
+    result = StringType::get(parser.getContext());
+    return success();
+  }
 
   return {};
 }
@@ -544,6 +555,19 @@ FIRRTLBaseType FIRRTLBaseType::getConstType(bool isConst) {
       });
 }
 
+/// Return this type with a 'const' modifiers dropped
+FIRRTLBaseType FIRRTLBaseType::getAllConstDroppedType() {
+  return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
+      .Case<ClockType, ResetType, AsyncResetType, AnalogType, SIntType,
+            UIntType>([&](auto type) { return type.getConstType(false); })
+      .Case<BundleType, FVectorType, FEnumType>(
+          [&](auto type) { return type.getAllConstDroppedType(); })
+      .Default([](Type) {
+        llvm_unreachable("unknown FIRRTL type");
+        return FIRRTLBaseType();
+      });
+}
+
 /// Return this type with all ground types replaced with UInt<1>.  This is
 /// used for `mem` operations.
 FIRRTLBaseType FIRRTLBaseType::getMaskType() {
@@ -681,6 +705,20 @@ std::pair<uint64_t, bool> FIRRTLBaseType::rootChildFieldID(uint64_t fieldID,
         llvm_unreachable("unknown FIRRTL type");
         return std::make_pair(0, false);
       });
+}
+
+bool firrtl::isConst(Type type) {
+  return TypeSwitch<Type, bool>(type)
+      .Case<FIRRTLBaseType, OpenBundleType, OpenVectorType>(
+          [](auto base) { return base.isConst(); })
+      .Default(false);
+}
+
+bool firrtl::containsConst(Type type) {
+  return TypeSwitch<Type, bool>(type)
+      .Case<FIRRTLBaseType, OpenBundleType, OpenVectorType>(
+          [](auto base) { return base.containsConst(); })
+      .Default(false);
 }
 
 /// Helper to implement the equivalence logic for a pair of bundle elements.
@@ -864,6 +902,68 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
   auto widthlessSrcType = srcType.getWidthlessType();
   return widthlessDestType.getConstType(false) ==
          widthlessSrcType.getConstType(false);
+}
+
+/// Returns whether the srcType can be const-casted to the destType.
+bool firrtl::areTypesConstCastable(FIRRTLType destFType, FIRRTLType srcFType,
+                                   bool srcOuterTypeIsConst) {
+  // Identical types are always castable
+  if (destFType == srcFType)
+    return true;
+
+  auto destType = destFType.dyn_cast<FIRRTLBaseType>();
+  auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
+
+  // For non-base types, only castable if identical.
+  if (!destType || !srcType)
+    return false;
+
+  // Types must be passive
+  if (!destType.isPassive() || !srcType.isPassive())
+    return false;
+
+  bool srcIsConst = srcType.isConst() || srcOuterTypeIsConst;
+
+  // Cannot cast non-'const' src to 'const' dest
+  if (destType.isConst() && !srcIsConst)
+    return false;
+
+  // Vector types can be casted if they have the same size and castable element
+  // type.
+  auto destVectorType = destType.dyn_cast<FVectorType>();
+  auto srcVectorType = srcType.dyn_cast<FVectorType>();
+  if (destVectorType && srcVectorType)
+    return destVectorType.getNumElements() == srcVectorType.getNumElements() &&
+           areTypesConstCastable(destVectorType.getElementType(),
+                                 srcVectorType.getElementType(), srcIsConst);
+  if (destVectorType != srcVectorType)
+    return false;
+
+  // Bundle types can be casted if they have the same size, element names,
+  // and castable element types.
+  auto destBundleType = destType.dyn_cast<BundleType>();
+  auto srcBundleType = srcType.dyn_cast<BundleType>();
+  if (destBundleType && srcBundleType) {
+    auto destElements = destBundleType.getElements();
+    auto srcElements = srcBundleType.getElements();
+    size_t numDestElements = destElements.size();
+    if (numDestElements != srcElements.size())
+      return false;
+
+    return llvm::all_of_zip(
+        destElements, srcElements,
+        [&](const auto &destElement, const auto &srcElement) {
+          return destElement.name == srcElement.name &&
+                 areTypesConstCastable(destElement.type, srcElement.type,
+                                       srcIsConst);
+        });
+  }
+  if (destBundleType != srcBundleType)
+    return false;
+
+  // Ground types can be casted if the source type is a const
+  // version of the destination type
+  return destType == srcType.getConstType(destType.isConst());
 }
 
 /// Returns true if the destination is at least as wide as an equivalent source.
@@ -1104,6 +1204,18 @@ BundleType BundleType::getConstType(bool isConst) {
   if (isConst == this->isConst())
     return *this;
   return get(getContext(), getElements(), isConst);
+}
+
+BundleType BundleType::getAllConstDroppedType() {
+  if (!containsConst())
+    return *this;
+
+  SmallVector<BundleElement> constDroppedElements(
+      llvm::map_range(getElements(), [](BundleElement element) {
+        element.type = element.type.getAllConstDroppedType();
+        return element;
+      }));
+  return get(getContext(), constDroppedElements, false);
 }
 
 std::optional<unsigned> BundleType::getElementIndex(StringAttr name) {
@@ -1500,6 +1612,13 @@ FVectorType FVectorType::getConstType(bool isConst) {
   return get(getElementType(), getNumElements(), isConst);
 }
 
+FVectorType FVectorType::getAllConstDroppedType() {
+  if (!containsConst())
+    return *this;
+  return get(getElementType().getAllConstDroppedType(), getNumElements(),
+             false);
+}
+
 uint64_t FVectorType::getFieldID(uint64_t index) {
   return 1 + index * (getElementType().getMaxFieldID() + 1);
 }
@@ -1729,6 +1848,18 @@ ArrayRef<FEnumType::EnumElement> FEnumType::getElements() const {
 
 FEnumType FEnumType::getConstType(bool isConst) {
   return get(getContext(), getElements(), isConst);
+}
+
+FEnumType FEnumType::getAllConstDroppedType() {
+  if (!containsConst())
+    return *this;
+
+  SmallVector<EnumElement> constDroppedElements(
+      llvm::map_range(getElements(), [](EnumElement element) {
+        element.type = element.type.getAllConstDroppedType();
+        return element;
+      }));
+  return get(getContext(), constDroppedElements, false);
 }
 
 /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
@@ -1969,7 +2100,7 @@ void FIRRTLDialect::registerTypes() {
   addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
            // Derived Types
            BundleType, FVectorType, FEnumType, RefType, OpenBundleType,
-           OpenVectorType>();
+           OpenVectorType, StringType>();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike

@@ -35,4 +35,11 @@ def ReferenceType : TypeDef<OMDialect, "Reference", []> {
   let mnemonic = "ref";
 }
 
+
+def SymbolRefType : TypeDef<OMDialect, "SymbolRef", []> {
+  let summary = "A type that represents a reference to a flat symbol reference.";
+
+  let mnemonic = "sym_ref";
+}
+
 #endif // CIRCT_DIALECT_OM_OMTYPES_TD

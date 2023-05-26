@@ -913,7 +913,13 @@ def VerbatimWireOp : FIRRTLOp<"verbatim.wire",
 // Special inference Operations
 //===----------------------------------------------------------------------===//
 
-def UninferredResetCastOp : FIRRTLOp<"resetCast", [HasCustomSSAName, Pure]> {
+// This assumes operands are ground types without explicitly checking
+class SameGroundTypeOperandConstness<string a, string b> 
+  : PredOpTrait<
+      "operand constness must match",
+      CPred<"isConst($" # a # ".getType()) == isConst($" # b # ".getType())">>;
+
+def UninferredResetCastOp : FIRRTLOp<"resetCast", [HasCustomSSAName, Pure, SameGroundTypeOperandConstness<"input", "result">]> {
   let description = [{
     Cast between reset types.  This is used to enable strictconnects early in
     the pipeline by isolating all uninferred reset connections to a single op.
@@ -925,7 +931,7 @@ def UninferredResetCastOp : FIRRTLOp<"resetCast", [HasCustomSSAName, Pure]> {
     "$input attr-dict `:` functional-type($input, $result)";
 }
 
-def UninferredWidthCastOp : FIRRTLOp<"widthCast", [HasCustomSSAName, Pure]> {
+def UninferredWidthCastOp : FIRRTLOp<"widthCast", [HasCustomSSAName, Pure, SameGroundTypeOperandConstness<"input", "result">]> {
   let description = [{
     Cast between sized and unsized integer types.  This is used to enable
     strictconnects early in the pipeline by isolating all uninferred width
@@ -934,6 +940,20 @@ def UninferredWidthCastOp : FIRRTLOp<"widthCast", [HasCustomSSAName, Pure]> {
   let arguments = (ins IntType:$input);
   let results = (outs IntType:$result);
   let hasFolder = 1;
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
+}
+
+def ConstCastOp : FIRRTLOp<"constCast", [HasCustomSSAName, Pure]> {
+  let description = [{
+    Cast from a 'const' to a non-'const' type.
+    ```
+    %result = firrtl.constCast %in : (!firrtl.const.t1) -> !firrtl.t1
+    ```
+  }];
+  let arguments = (ins PassiveType:$input);
+  let results = (outs PassiveType:$result);
+  let hasVerifier = 1;
   let assemblyFormat =
     "$input attr-dict `:` functional-type($input, $result)";
 }

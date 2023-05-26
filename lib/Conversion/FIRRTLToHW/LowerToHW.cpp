@@ -910,6 +910,20 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
           },
           [&]() { emitDefine("INIT_RANDOM_PROLOG_", ""); });
     });
+
+    b.create<sv::VerbatimOp>("\n// Include register initializers in init "
+                             "blocks unless synthesis is set");
+    emitGuard("SYNTHESIS", [&] {
+      emitGuardedDefine("ENABLE_INITIAL_REG_", "ENABLE_INITIAL_REG_",
+                        StringRef(), "");
+    });
+
+    b.create<sv::VerbatimOp>("\n// Include rmemory initializers in init "
+                             "blocks unless synthesis is set");
+    emitGuard("SYNTHESIS", [&] {
+      emitGuardedDefine("ENABLE_INITIAL_MEM_", "ENABLE_INITIAL_MEM_",
+                        StringRef(), "");
+    });
   }
 
   if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {

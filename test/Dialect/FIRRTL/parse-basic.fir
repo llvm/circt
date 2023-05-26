@@ -1142,6 +1142,32 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.instance module interesting_name @SomeModule
     module.in <= UInt(1)
 
+  ; CHECK-LABEL: firrtl.module private @EnumTypes
+circuit EnumTypes:
+  module EnumTypes:
+    ; CHECK-SAME: in %i: !firrtl.enum<Some: uint<8>, None: uint<0>>
+    input i : {| Some : UInt<8>, None |}
+    output o : UInt<8>
+
+    ; CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
+    ; CHECK: %0 = firrtl.enumcreate Some(%c0_ui8) : !firrtl.enum<Some: uint<8>, None: uint<0>>
+    ; CHECK: %n = firrtl.node interesting_name %0 : !firrtl.enum<Some: uint<8>, None: uint<0>>
+    node n = {|Some : UInt<8>, None|}(Some, UInt<8>(0))
+
+    ; CHECK: firrtl.match %i : !firrtl.enum<Some: uint<8>, None: uint<0>> {
+    match i:
+      ; CHECK: case Some(%arg0) {
+      ; CHECK:   firrtl.strictconnect %o, %arg0 : !firrtl.uint<8>
+      ; CHECK: }
+      Some(x):
+        o <= x
+      ; CHECK: case None(%arg0) {
+      ; CHECK:   %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8> 
+      ; CHECK:   firrtl.strictconnect %o, %invalid_ui8 : !firrtl.uint<8>
+      ; CHECK: }
+      None:
+        o is invalid
+
   ; CHECK-LABEL: module private @RefsChild(
   ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>
   ; CHECK-SAME: out %rw: !firrtl.rwprobe<uint<1>>
@@ -1211,7 +1237,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: ref.define %agg_out, %[[AGG3_PROBE]]
     define agg_out = probe(agg3)
 
-    ; CHECK: %{{.+}}, %[[REM_R:.+]], %{{.+}}, %[[REM_R2:.+]], %[[REM_UNUSED_REF:.+]] = firrtl.instance rem
+    ; CHECK: %{{.+}}, %[[REM_R:.+]], %{{.+}}, %[[REM_R2:.+]] = firrtl.instance rem
     ; CHECK-NEXT: %[[REM_R2_1:.+]] = firrtl.ref.sub %[[REM_R2]][1]
     ; CHECK-NEXT: %[[REM_R2_1_A:.+]] = firrtl.ref.sub %[[REM_R2_1]][0]
     ; CHECK-NEXT: %[[READ_REM_R2_1_A:.+]] = firrtl.ref.resolve %[[REM_R2_1_A]]
@@ -1268,9 +1294,18 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output r : Probe<UInt<1>>
     output data : UInt<3>
     output r2 : Probe<{a : UInt<3>}[3]>
-    output no_ref_for_this : Probe<UInt<1>>
     ref r2 is "in"
     ref r is "path.to.internal.signal"
+
+
+  ; CHECK-LABEL: extmodule private @RefExtABI
+  ; CHECK-NOT: internalPaths
+  extmodule RefExtABI :
+    input in : UInt<1>
+    output r : Probe<UInt<1>>
+    output data : UInt<3>
+    output r2 : Probe<{a : UInt<3>}[3]>
+
 
   ; CHECK-LABEL: module private @ProbeInvalidate
   ; CHECK-NEXT: }
@@ -1364,3 +1399,41 @@ circuit Foo_v1p9p9:
     ; CHECK: firrtl.strictconnect %auto, [[C]] : !firrtl.uint<1>
     wire out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
     auto <- out_0.member.0.reset @[Field 173:49]
+
+;// -----
+; Check reference expressions using literal identifiers or keywords.
+
+; CHECK-LABEL: firrtl.circuit "Probes_refexprs"
+FIRRTL version 3.0.0
+circuit Probes_refexprs:
+  extmodule refs:
+    output `0`: {`1`: Probe<{`2`: UInt<1>}>, rwprobe: RWProbe<UInt<1>>}
+    output ref: {module: Probe<{when: UInt<1>}>}
+
+  module Probes_refexprs:
+    output `0`: {`1`: Probe<{`2`: UInt<1>}>}
+    output out: UInt<1>
+
+    inst `9` of refs
+    inst ref of refs
+
+    ; CHECK: firrtl.ref.define
+    define `0`.`1` = `9`.`0`.`1`
+
+    ; CHECK-COUNT-4: firrtl.ref.resolve
+    node a = read(`9`.`0`.`1`).`2`
+    node b = read(`9`.`0`.`1`.`2`)
+    node c = read(`9`.ref.module).when
+    ; Keyword as leading part of static ref expression:
+    node d = read(ref.`0`.`1`.`2`)
+
+    out <= and(and(a, b), and(c, d))
+
+    ; CHECK: %[[TEST:.+]], %[[TEST_REF:.+]] = firrtl.wire
+    wire `test`: {`0`: UInt<1>, `b`: UInt<1>}
+    `test`.`0` <= a
+    `test`.`b` <= b
+     ; CHECK: force_initial %{{.+}}, %[[TEST_REF]], %[[TEST]]
+    force_initial(rwprobe(`test`), `test`)
+    ; CHECK: force_initial
+    force_initial(`9`.`0`.rwprobe, `test`.`0`)

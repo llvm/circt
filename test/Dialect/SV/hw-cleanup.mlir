@@ -1,4 +1,6 @@
 // RUN: circt-opt -hw-cleanup %s | FileCheck %s
+// RUN: circt-opt -hw-cleanup %s | FileCheck %s
+// RUN: circt-opt -hw-cleanup="merge-always-blocks=false" %s | FileCheck %s --check-prefix=SEPARATE
 
 //CHECK-LABEL: hw.module @alwaysff_basic(%arg0: i1, %arg1: i1) {
 //CHECK-NEXT:   [[FD:%.*]] = hw.constant -2147483646 : i32
@@ -15,6 +17,26 @@
 //CHECK-NEXT:   }
 //CHECK-NEXT:   hw.output
 //CHECK-NEXT: }
+
+//SEPARATE-LABEL: hw.module @alwaysff_basic(%arg0: i1, %arg1: i1) {
+//SEPARATE-NEXT:   [[FD:%.*]] = hw.constant -2147483646 : i32
+//SEPARATE-NEXT:   sv.alwaysff(posedge %arg0)  {
+//SEPARATE-NEXT:     sv.fwrite [[FD]], "A1"
+//SEPARATE-NEXT:   }
+//SEPARATE-NEXT:   sv.alwaysff(posedge %arg1)  {
+//SEPARATE-NEXT:     sv.fwrite [[FD]], "B1"
+//SEPARATE-NEXT:   }
+//SEPARATE-NEXT:   sv.initial {
+//SEPARATE-NEXT:     sv.fwrite [[FD]], "Middle\0A"
+//SEPARATE-NEXT:   }
+//SEPARATE-NEXT:   sv.alwaysff(posedge %arg0)  {
+//SEPARATE-NEXT:     sv.fwrite [[FD]], "A2"
+//SEPARATE-NEXT:   }
+//SEPARATE-NEXT:   sv.alwaysff(posedge %arg1)  {
+//SEPARATE-NEXT:     sv.fwrite [[FD]], "B2"
+//SEPARATE-NEXT:   }
+//SEPARATE-NEXT:   hw.output
+//SEPARATE-NEXT: }
 
 hw.module @alwaysff_basic(%arg0: i1, %arg1: i1) {
   %fd = hw.constant 0x80000002 : i32
@@ -258,6 +280,27 @@ hw.module @initial_merge(%arg0: i1) {
 //CHECK-NEXT:   }
 //CHECK-NEXT:   hw.output
 //CHECK-NEXT: }
+
+//SEPARATE-LABEL: hw.module @always_basic(%arg0: i1, %arg1: i1) {
+//SEPARATE-NEXT:   [[FD:%.*]] = hw.constant -2147483646 : i32
+//SEPARATE-NEXT:   sv.always   posedge %arg0   {
+//SEPARATE-NEXT:     sv.fwrite [[FD]], "A1"
+//SEPARATE-NEXT:   }
+//SEPARATE-NEXT:   sv.always   posedge %arg1   {
+//SEPARATE-NEXT:     sv.fwrite [[FD]], "B1"
+//SEPARATE-NEXT:   }
+//SEPARATE-NEXT:   sv.initial {
+//SEPARATE-NEXT:     sv.fwrite [[FD]], "Middle\0A"
+//SEPARATE-NEXT:   }
+//SEPARATE-NEXT:   sv.always   posedge %arg0   {
+//SEPARATE-NEXT:     sv.fwrite [[FD]], "A2"
+//SEPARATE-NEXT:   }
+//SEPARATE-NEXT:   sv.always   posedge %arg1   {
+//SEPARATE-NEXT:     sv.fwrite [[FD]], "B2"
+//SEPARATE-NEXT:   }
+//SEPARATE-NEXT:   hw.output
+//SEPARATE-NEXT: }
+
 hw.module @always_basic(%arg0: i1, %arg1: i1) {
   %fd = hw.constant 0x80000002 : i32
 
@@ -279,28 +322,6 @@ hw.module @always_basic(%arg0: i1, %arg1: i1) {
   hw.output
 }
 
-
-// CHECK-LABEL: hw.module @alwayscomb_basic(
-hw.module @alwayscomb_basic(%a: i1, %b: i1) -> (x: i1, y: i1) {
-  %w1 = sv.reg : !hw.inout<i1>
-  %w2 = sv.reg : !hw.inout<i1>
-  // CHECK: sv.alwayscomb {
-  sv.alwayscomb {
-    // CHECK-NEXT: sv.bpassign %w1, %a : i1
-    sv.bpassign %w1, %a : i1
-  }
-
-  %out1 = sv.read_inout %w1 : !hw.inout<i1>
-
-  sv.alwayscomb {
-    // CHECK-NEXT: sv.bpassign %w2, %b : i1
-    sv.bpassign %w2, %b : i1
-  } // CHECK-NEXT: }
-
-  %out2 = sv.read_inout %w1 : !hw.inout<i1>
-
-  hw.output %out1, %out2 : i1, i1
-}
 
 // CHECK-LABEL: hw.module @nested_regions(
 // CHECK-NEXT:  [[FD:%.*]] = hw.constant -2147483646 : i32
