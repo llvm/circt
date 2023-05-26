@@ -364,7 +364,7 @@ firrtl.circuit "Top" {
   // CHECK-LABEL private @EncodingModule
   // CHECK-NOT: @nla_1
   // CHECK-SAME @nla_2
-  firrtl.module private @EncodingModule(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1> [{circt.nonlocal = @nla_1, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64, type = "OMReferenceTarget"}, {circt.nonlocal = @nla_2, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64, type = "OMReferenceTarget"}]) {
+  firrtl.module private @EncodingModule(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1> [{circt.nonlocal = @nla_1, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64, circt.discardable}, {circt.nonlocal = @nla_2, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64, circt.discardable}]) {
     firrtl.strictconnect %a, %in : !firrtl.uint<1>
   }
   // CHECK-NOT: @Foo1
