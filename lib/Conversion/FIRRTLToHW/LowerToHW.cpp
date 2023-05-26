@@ -3540,9 +3540,7 @@ LogicalResult FIRRTLLowering::lowerElementwiseLogicalOp(Operation *op) {
   auto retType = lhs.getType();
   lhs = builder.createOrFold<hw::BitcastOp>(intType, lhs);
   rhs = builder.createOrFold<hw::BitcastOp>(intType, rhs);
-  auto result = builder.createOrFold<ResultOpType>(lhs, rhs);
-  if (auto *newOp = result.getDefiningOp())
-    newOp->setAttr("twoState", builder.getUnitAttr());
+  auto result = builder.createOrFold<ResultOpType>(lhs, rhs, /*twoState=*/true);
   return setLoweringTo<hw::BitcastOp>(op, retType, result);
 }
 
