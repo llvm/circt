@@ -47,8 +47,8 @@ def PipelineOp : Op<Pipeline_Dialect, "pipeline", [
     (feedback, statically scheduled case) or in conjunction with handshake signals
     for dynamically scheduled pipelines.
     A pipelines' latency sensitivity is based on the I/O of the pipeline - if
-    any in- or output port is an ESI channel, all ports are expected to be ESI
-    channels, and the pipeline is considered latency sensitive.
+    any in- or output port is DC typed, all ports are expected to be DC
+    typed, and the pipeline is considered latency sensitive.
     The internal representation of the pipeline is agnostic to the latency
     insensitivity of the I/O. This is by design - allowing us a single source
     of truth for lowering either latency sensitive or latency insensitive pipelines.
@@ -115,7 +115,7 @@ def PipelineOp : Op<Pipeline_Dialect, "pipeline", [
   let extraClassDeclaration = [{
     // Returns true if this pipeline has a latency-insensitive interface.
     // Latency sensitivity is defined based on whether _any_ `$input` is an 
-    // ESI channel.
+    // DC channel.
     bool isLatencyInsensitive(); 
     bool isLatencySensitive() { return !isLatencyInsensitive(); }
 

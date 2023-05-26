@@ -12,7 +12,7 @@ add_circt_dialect_library(CIRCTPipelineOps
   ${PROJECT_BINARY_DIR}/include
 
   LINK_LIBS PUBLIC
-  CIRCTESI
+  CIRCTDC
   MLIRArithDialect
   MLIRFuncDialect
   MLIRIR

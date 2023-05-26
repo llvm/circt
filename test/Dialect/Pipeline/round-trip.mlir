@@ -14,15 +14,15 @@ hw.module @retimeable1(%arg0 : i32, %arg1 : i32, %clk : i1, %rst : i1) -> (out: 
 
 
 // CHECK-LABEL: hw.module @retimeable3
-hw.module @retimeable3(%arg0 : !esi.channel<i32>, %arg1 : !esi.channel<i32>, %clk : i1, %rst: i1) -> (out: !esi.channel<i32>) {
-  %0 = pipeline.pipeline(%arg0, %arg1) clock %clk reset %rst : (!esi.channel<i32>, !esi.channel<i32>) -> (!esi.channel<i32>) {
+hw.module @retimeable3(%arg0 : !dc.value<i32>, %arg1 : !dc.value<i32>, %clk : i1, %rst: i1) -> (out: !dc.value<i32>) {
+  %0 = pipeline.pipeline(%arg0, %arg1) clock %clk reset %rst : (!dc.value<i32>, !dc.value<i32>) -> (!dc.value<i32>) {
    ^bb0(%a0 : i32, %a1: i32):
     %0 = comb.add %a0, %a1 : i32
     %c1_i1 = hw.constant 1 : i1
     %s0_valid = pipeline.ss enable %c1_i1
     pipeline.return %0 valid %s0_valid : i32
   }
-  hw.output %0 : !esi.channel<i32>
+  hw.output %0 : !dc.value<i32>
 }
 
 // CHECK-LABEL: hw.module @stage

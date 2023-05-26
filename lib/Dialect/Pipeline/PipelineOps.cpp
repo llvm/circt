@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/ESI/ESITypes.h"
+#include "circt/Dialect/DC/DCTypes.h"
 #include "circt/Dialect/Pipeline/Pipeline.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -29,14 +29,15 @@ using namespace circt::pipeline;
 
 LogicalResult PipelineOp::verify() {
   bool anyInputIsAChannel = llvm::any_of(getInputs(), [](Value operand) {
-    return operand.getType().isa<esi::ChannelType>();
+    return operand.getType().isa<dc::ValueType>();
   });
   bool anyOutputIsAChannel = llvm::any_of(
-      getResultTypes(), [](Type type) { return type.isa<esi::ChannelType>(); });
+      getResultTypes(), [](Type type) { return type.isa<dc::ValueType>(); });
 
   if ((anyInputIsAChannel || anyOutputIsAChannel) && !isLatencyInsensitive()) {
-    return emitOpError("if any port of this pipeline is an ESI channel, all "
-                       "ports must be ESI channels.");
+    return emitOpError(
+        "if any port of this pipeline is !dc.value<...>-typed, all "
+        "ports must be !dc.value<...>-typed.");
   }
 
   if (getBodyBlock()->getNumArguments() != getInputs().size())
@@ -49,8 +50,13 @@ LogicalResult PipelineOp::verify() {
     Type expectedInArg = getInputs()[i].getType();
     Type bodyArg = getBodyBlock()->getArgument(i).getType();
 
-    if (isLatencyInsensitive())
-      expectedInArg = expectedInArg.cast<esi::ChannelType>().getInner();
+    if (isLatencyInsensitive()) {
+      auto innerTypes = expectedInArg.cast<dc::ValueType>().getInnerTypes();
+      if (innerTypes.size() != 1)
+        return emitOpError("`dc.value<...>-typed values with multiple "
+                           "inner types not yet supported.");
+      expectedInArg = innerTypes.front();
+    }
 
     if (expectedInArg != bodyArg)
       return emitOpError("expected body block argument ")
@@ -71,10 +77,10 @@ LogicalResult PipelineOp::verify() {
 
 bool PipelineOp::isLatencyInsensitive() {
   bool allInputsAreChannels = llvm::all_of(getInputs(), [](Value operand) {
-    return operand.getType().isa<esi::ChannelType>();
+    return operand.getType().isa<dc::ValueType>();
   });
   bool allOutputsAreChannels = llvm::all_of(
-      getResultTypes(), [](Type type) { return type.isa<esi::ChannelType>(); });
+      getResultTypes(), [](Type type) { return type.isa<dc::ValueType>(); });
   return allInputsAreChannels && allOutputsAreChannels;
 }
 
@@ -123,9 +129,13 @@ LogicalResult ReturnOp::verify() {
     Type expectedType = parent.getResultTypes()[i];
     Type actualType = getOperandTypes()[i];
     if (isLatencyInsensitive) {
-      expectedType = expectedType.dyn_cast<esi::ChannelType>().getInner();
+      auto innerTypes = expectedType.cast<dc::ValueType>().getInnerTypes();
+      if (innerTypes.size() != 1)
+        return emitOpError("`dc.value<...>-typed values with multiple "
+                           "inner types not yet supported.");
+      expectedType = innerTypes.front();
       if (!expectedType)
-        return emitOpError("expected ESI channel type, got ")
+        return emitOpError("expected !dc.value<...> type, got ")
                << parent.getResultTypes()[i] << ".";
     }
     if (expectedType != actualType)
