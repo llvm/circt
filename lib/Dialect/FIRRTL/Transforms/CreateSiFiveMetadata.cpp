@@ -102,24 +102,14 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   om::ClassOp memorySchemaClass;
   auto createMemoryOMSchema = [&]() {
     // Memory metadata class.
-    memorySchemaClass =
-        builderOM.create<circt::om::ClassOp>("MemorySchema", paramNames);
-
-    // Now add all the properties of the memory as a ClassFieldOp.
-    Block *body = new Block();
-    memorySchemaClass.getRegion().push_back(body);
-    builderOM.setInsertionPointToEnd(body);
-    for (auto [fieldName, fieldType] : llvm::zip(paramNames, classFieldTypes))
-      builderOM.create<om::ClassFieldOp>(
-          fieldName, body->addArgument(fieldType, unknownLoc));
+    memorySchemaClass = builderOM.create<circt::om::ClassOp>(
+        "MemorySchema", paramNames, classFieldTypes);
 
     // Now create the class that will instantiate metadata class with all the
     // memories of the circt.
     builderOM.setInsertionPointToEnd(moduleOp.getBody());
     auto metadataClass = builderOM.create<circt::om::ClassOp>("MemoryMetadata");
-    auto *memMetadataBlock = new Block();
-    metadataClass.getRegion().push_back(memMetadataBlock);
-    builderOM.setInsertionPointToEnd(memMetadataBlock);
+    builderOM.setInsertionPointToEnd(&metadataClass.getRegion().emplaceBlock());
   };
   // index will be used to name unique symbols corresponding to each memory.
   unsigned index = 0;
@@ -355,21 +345,16 @@ LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
   auto unknownLoc = mlir::UnknownLoc::get(context);
   auto builderOM =
       mlir::ImplicitLocOpBuilder::atBlockEnd(unknownLoc, moduleOp.getBody());
+  StringRef paramNames[] = {"moduleName"};
+  Type paramTypes[] = {om::SymbolRefType::get(context)};
 
   auto retimeModuleOMClass = builderOM.create<circt::om::ClassOp>(
-      "RetimeModulesSchema",
-      builderOM.getArrayAttr({builderOM.getStringAttr("moduleName")}));
-  Block *body = new Block();
-  retimeModuleOMClass.getRegion().push_back(body);
-  auto arg = body->addArgument(om::SymbolRefType::get(context), unknownLoc);
-  builderOM.setInsertionPointToEnd(body);
-  builderOM.create<om::ClassFieldOp>("moduleName", arg);
+      "RetimeModulesSchema", paramNames, paramTypes);
   builderOM.setInsertionPointToEnd(moduleOp.getBody());
   auto metadataClass =
       builderOM.create<circt::om::ClassOp>("RetimeModulesMetadata_" + filename);
-  auto *mBody = new Block();
-  metadataClass.getRegion().push_back(mBody);
-  builderOM.setInsertionPointToEnd(mBody);
+  auto &mBody = metadataClass.getRegion().emplaceBlock();
+  builderOM.setInsertionPointToEnd(&mBody);
   // Create a string buffer for the json data.
   std::string buffer;
   llvm::raw_string_ostream os(buffer);
@@ -474,14 +459,10 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
   auto builderOM =
       mlir::ImplicitLocOpBuilder::atBlockEnd(unknownLoc, moduleOp.getBody());
 
+  StringRef paramNames[] = {"moduleName"};
+  Type paramTypes[] = {om::SymbolRefType::get(context)};
   auto sitestBBClass = builderOM.create<circt::om::ClassOp>(
-      "SitestBlackBoxModulesSchema",
-      builderOM.getArrayAttr({builderOM.getStringAttr("moduleName")}));
-  Block *body = new Block();
-  sitestBBClass.getRegion().push_back(body);
-  auto arg = body->addArgument(om::SymbolRefType::get(context), unknownLoc);
-  builderOM.setInsertionPointToEnd(body);
-  builderOM.create<om::ClassFieldOp>("moduleName", arg);
+      "SitestBlackBoxModulesSchema", paramNames, paramTypes);
   auto buildOMClass = [&](StringRef className) {
     builderOM.setInsertionPointToEnd(moduleOp.getBody());
     auto metadataClass = builderOM.create<circt::om::ClassOp>(
