@@ -18,11 +18,18 @@
 #include <stdio.h>
 
 void testEvaluator(MlirContext ctx) {
-  const char *testIR = "module {"
-                       "  om.class @Test(%param: i8) {"
-                       "    om.class.field @field, %param : i8"
-                       "  }"
-                       "}";
+  const char *testIR =
+      "module {"
+      "  om.class @Test(%param: i8) {"
+      "    om.class.field @field, %param : i8"
+      "    %0 = om.object @Child() : () -> !om.class.type<@Child>"
+      "    om.class.field @child, %0 : !om.class.type<@Child>"
+      "  }"
+      "  om.class @Child() {"
+      "    %0 = om.constant 14 : i64"
+      "    om.class.field @foo, %0 : i64"
+      "  }"
+      "}";
 
   // Set up the Evaluator.
   MlirModule testModule =
@@ -92,6 +99,30 @@ void testEvaluator(MlirContext ctx) {
 
   // CHECK: 42 : i8
   mlirAttributeDump(fieldValue);
+
+  // Test get field success for child object.
+
+  MlirAttribute childFieldName =
+      mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("child"));
+
+  OMObjectValue childField = omEvaluatorObjectGetField(object, childFieldName);
+
+  OMObject child = omEvaluatorObjectValueGetObject(childField);
+
+  // CHECK: 0
+  fprintf(stderr, "child object is null: %d\n", omEvaluatorObjectIsNull(child));
+
+  OMObjectValue foo = omEvaluatorObjectGetField(
+      child, mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("foo")));
+
+  // CHECK: child object field  is primitive: 1
+  fprintf(stderr, "child object field is primitive: %d\n",
+          omEvaluatorObjectValueIsAPrimitive(foo));
+
+  MlirAttribute fooValue = omEvaluatorObjectValueGetPrimitive(foo);
+
+  // CHECK: 14 : i64
+  mlirAttributeDump(fooValue);
 }
 
 int main() {
