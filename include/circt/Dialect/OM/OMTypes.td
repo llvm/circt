@@ -35,6 +35,15 @@ def ReferenceType : TypeDef<OMDialect, "Reference", []> {
   let mnemonic = "ref";
 }
 
+def ListType : TypeDef<OMDialect, "List", []> {
+  let summary = "A type that represents a list.";
+
+  let mnemonic = "list";
+  let parameters = (ins "mlir::Type":$elementType);
+  let assemblyFormat = [{
+    `<` $elementType `>`
+  }];
+}
 
 def SymbolRefType : TypeDef<OMDialect, "SymbolRef", []> {
   let summary = "A type that represents a reference to a flat symbol reference.";

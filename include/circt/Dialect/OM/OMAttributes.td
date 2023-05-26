@@ -59,4 +59,40 @@ def OMSymbolRefAttr : AttrDef<OMDialect, "SymbolRef", [TypedAttrInterface]> {
   }];
 }
 
+def OMNilAttr : AttrDef<OMDialect, "ListNil", [TypedAttrInterface]> {
+  let summary = "An attribute that represents a nil element of a list";
+
+  let mnemonic = "list.nil";
+
+  let parameters = (ins
+    "mlir::Type":$elementType
+  );
+
+  let assemblyFormat = [{
+    `<` $elementType `>`
+  }];
+
+  let extraClassDeclaration = [{
+    mlir::Type getType();
+  }];
+}
+
+def OMConsAttr : AttrDef<OMDialect, "ListCons", [TypedAttrInterface]> {
+  let summary = "An attribute that represents `cons` constructor of a list";
+
+  let mnemonic = "list.cons";
+
+  let parameters = (ins
+    "mlir::TypedAttr":$head, "mlir::TypedAttr":$tail
+  );
+
+  let assemblyFormat = [{
+    `<` $head `,` $tail `>`
+  }];
+
+  let extraClassDeclaration = [{
+    mlir::Type getType();
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMATTRIBUTES_TD

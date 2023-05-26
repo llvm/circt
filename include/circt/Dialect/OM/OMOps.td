@@ -130,4 +130,20 @@ def ConstantOp : OMOp<"constant",
   }];
 }
 
+class ListElementTypeConstraint<string result, string input>
+  : TypesMatchWith<"Result must be a list element type",
+                   input, result,
+                   "cast<om::ListType>($_self).getElementType()">;
+
+def ConsOp : OMOp<"list.cons", [Pure, AllTypesMatch<["tail", "result"]>,
+                                ListElementTypeConstraint<"head", "tail">]> {
+  let arguments = (ins AnyType:$head, ListType:$tail);
+
+  let results = (outs ListType:$result);
+
+  let assemblyFormat = [{
+    $head `,` $tail attr-dict `:` qualified(type($tail))
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMOPS_TD
