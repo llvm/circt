@@ -109,9 +109,9 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
   // If it is the first time to visit the parent op, then allocate the vector
   // for subconnections.
   if (count == 0) {
-    if (auto bundle = parent.getType().dyn_cast<BundleType>())
+    if (auto bundle = firrtl::type_dyn_cast<BundleType>(parent.getType()))
       subConnections.resize(bundle.getNumElements());
-    if (auto vector = parent.getType().dyn_cast<FVectorType>())
+    if (auto vector = firrtl::type_dyn_cast<FVectorType>(parent.getType()))
       subConnections.resize(vector.getNumElements());
   }
   ++count;
@@ -212,7 +212,7 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
         subConnections[idx].erase();
     }
 
-    return parentType.isa<FVectorType>()
+    return type_isa<FVectorType>(parentType)
                ? builder->createOrFold<VectorCreateOp>(
                      builder->getFusedLoc(locs), parentType, operands)
                : builder->createOrFold<BundleCreateOp>(
@@ -220,9 +220,9 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
   };
 
   Value merged;
-  if (auto bundle = parentType.dyn_cast_or_null<BundleType>())
+  if (auto bundle = firrtl::type_dyn_cast<BundleType>(parentType))
     merged = getMergedValue(bundle);
-  if (auto vector = parentType.dyn_cast_or_null<FVectorType>())
+  if (auto vector = firrtl::type_dyn_cast<FVectorType>(parentType))
     merged = getMergedValue(vector);
   if (!merged)
     return false;

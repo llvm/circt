@@ -226,7 +226,10 @@ public:
       if (flow != Flow::Source)
         driverMap[{value, id}] = nullptr;
     };
-    declare(type, flow);
+    declare(isa<FIRRTLBaseType>(type)
+                ? cast<FIRRTLBaseType>(type).getAnonymousType()
+                : type,
+            flow);
   }
 
   /// Take two connection operations and merge them into a new connect under a

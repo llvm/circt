@@ -145,6 +145,8 @@ static bool isPreservableAggregateType(Type type,
   if (!firrtlType)
     return false;
 
+  firrtlType = firrtlType.getAnonymousType();
+
   // We can a preserve the type iff (i) the type is not passive, (ii) the type
   // doesn't contain analog and (iii) type don't contain zero bitwidth.
   if (!firrtlType.isPassive() || firrtlType.containsAnalog() ||
@@ -171,10 +173,13 @@ static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry> &fields,
   // then just return.
   if (isPreservableAggregateType(type, mode))
     return false;
-
+  FIRRTLBaseType base;
   if (auto refType = type.dyn_cast<RefType>())
-    type = refType.getType();
-  return TypeSwitch<Type, bool>(type)
+    base = refType.getType();
+  else
+    base = type.cast<FIRRTLBaseType>();
+
+  return TypeSwitch<Type, bool>(base.getAnonymousType())
       .Case<BundleType>([&](auto bundle) {
         SmallString<16> tmpSuffix;
         // Otherwise, we have a bundle type.  Break it down.
@@ -207,7 +212,7 @@ static bool isNotSubAccess(Operation *op) {
   if (!sao)
     return true;
   ConstantOp arg = dyn_cast_or_null<ConstantOp>(sao.getIndex().getDefiningOp());
-  return arg && sao.getInput().getType().getNumElements() != 0;
+  return arg && sao.getInput().getType().get().getNumElements() != 0;
 }
 
 /// Look through and collect subfields leading to a subaccess.
@@ -780,7 +785,7 @@ static Value cloneAccess(ImplicitLocOpBuilder *builder, Operation *op,
 void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
                                            ArrayRef<Operation *> writePath) {
   SubaccessOp sao = cast<SubaccessOp>(writePath.back());
-  auto saoType = sao.getInput().getType();
+  auto saoType = sao.getInput().getType().get();
   auto selectWidth = llvm::Log2_64_Ceil(saoType.getNumElements());
 
   for (size_t index = 0, e = saoType.getNumElements(); index < e; ++index) {
@@ -1358,7 +1363,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
 bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   auto input = op.getInput();
-  auto vType = input.getType();
+  auto vType = input.getType().get();
 
   // Check for empty vectors
   if (vType.getNumElements() == 0) {

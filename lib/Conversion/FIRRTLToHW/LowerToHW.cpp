@@ -1360,7 +1360,8 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
   for (auto *op : structValue.getUsers()) {
     assert(isa<SubfieldOp>(op));
     auto fieldAccess = cast<SubfieldOp>(op);
-    auto elemIndex = fieldAccess.getInput().getType().getElementIndex(field);
+    auto elemIndex =
+        fieldAccess.getInput().getType().get().getElementIndex(field);
     if (elemIndex && *elemIndex == fieldAccess.getFieldIndex())
       accesses.push_back(fieldAccess);
   }
@@ -2113,7 +2114,7 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
   std::function<LogicalResult(Value, FIRRTLBaseType, FIRRTLBaseType)> recurse =
       [&](Value src, FIRRTLBaseType srcType,
           FIRRTLBaseType destType) -> LogicalResult {
-    return TypeSwitch<FIRRTLBaseType, LogicalResult>(srcType)
+    return TypeSwitch<FIRRTLBaseType, LogicalResult>(srcType.getAnonymousType())
         .Case<FVectorType>([&](auto srcVectorType) {
           auto destVectorType = destType.cast<FVectorType>();
           unsigned size = resultBuffer.size();
@@ -2671,8 +2672,7 @@ FailureOr<Value> FIRRTLLowering::lowerSubfield(SubfieldOp op, Value input) {
 
   // If the input has an inout type, we need to lower to StructFieldInOutOp;
   // otherwise, StructExtractOp.
-  auto field = op.getInput().getType().cast<BundleType>().getElementName(
-      op.getFieldIndex());
+  auto field = op.getInput().getType().get().getElementName(op.getFieldIndex());
   Value result;
   if (input.getType().isa<sv::InOutType>())
     result = builder.createOrFold<sv::StructFieldInOutOp>(input, field);
@@ -3019,6 +3019,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   if (op.getDataType()
           .cast<FIRRTLBaseType>()
           .getPassiveType()
+          .getAnonymousType()
           .isa<BundleType>())
     return op.emitOpError(
         "should have already been lowered from a ground type to an aggregate "

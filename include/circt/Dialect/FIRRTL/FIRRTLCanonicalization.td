@@ -45,13 +45,13 @@ def NullAttr : Constraint<CPred<"!$0">>;
 def EqualTypes : Constraint<CPred<"$0.getType() == $1.getType()">>;
 
 // Constraint that enforces int types
-def IntTypes : Constraint<CPred<"$0.isa<IntType>()">>;
+def IntTypes : Constraint<CPred<"firrtl::type_isa<IntType>($0)">>;
 
 // Constraint that enforces sint types
-def SIntTypes : Constraint<CPred<"$0.isa<SIntType>()">>;
+def SIntTypes : Constraint<CPred<"firrtl::type_isa<SIntType>($0)">>;
 
 // Constraint that enforces uint types
-def UIntTypes : Constraint<CPred<"$0.isa<UIntType>()">>;
+def UIntTypes : Constraint<CPred<"firrtl::type_isa<UIntType>($0)">>;
 
 // Constraint that enforces types mismatches
 def mismatchTypes : Constraint<CPred<"$0.getType() != $1.getType()">>;

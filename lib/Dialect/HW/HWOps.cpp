@@ -1849,7 +1849,6 @@ static LogicalResult foldCreateToSlice(ArrayCreateOp op,
     auto get = value.getDefiningOp<ArrayGetOp>();
     if (!get)
       return failure();
-
     Value input = get.getInput();
     Value index = get.getIndex();
     if (!chunks.empty()) {

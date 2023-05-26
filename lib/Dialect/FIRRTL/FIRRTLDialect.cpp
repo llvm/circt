@@ -53,8 +53,9 @@ Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
   // like ClockType and ResetType.  Since BoolAttrs are also IntegerAttrs, its
   // important that this goes first.
   if (auto attrValue = value.dyn_cast<BoolAttr>()) {
-    assert((type.isa<ClockType>() || type.isa<AsyncResetType>() ||
-            type.isa<ResetType>()) &&
+    assert((firrtl::type_isa<ClockType>(type) ||
+            firrtl::type_isa<AsyncResetType>(type) ||
+            firrtl::type_isa<ResetType>(type)) &&
            "BoolAttrs can only be materialized for special constant types.");
     return builder.create<SpecialConstantOp>(loc, type, attrValue);
   }
@@ -63,13 +64,14 @@ Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
   if (auto attrValue = value.dyn_cast<IntegerAttr>()) {
     // Integer attributes (ui1) might still be special constant types.
     if (attrValue.getValue().getBitWidth() == 1 &&
-        (type.isa<ClockType>() || type.isa<AsyncResetType>() ||
-         type.isa<ResetType>()))
+        (firrtl::type_isa<ClockType>(type) ||
+         firrtl::type_isa<AsyncResetType>(type) ||
+         firrtl::type_isa<ResetType>(type)))
       return builder.create<SpecialConstantOp>(
           loc, type, builder.getBoolAttr(attrValue.getValue().isAllOnes()));
 
-    assert((!type.cast<IntType>().hasWidth() ||
-            (unsigned)type.cast<IntType>().getWidthOrSentinel() ==
+    assert((!firrtl::type_cast<IntType>(type).hasWidth() ||
+            (unsigned)firrtl::type_cast<IntType>(type).getWidthOrSentinel() ==
                 attrValue.getValue().getBitWidth()) &&
            "type/value width mismatch materializing constant");
     return builder.create<ConstantOp>(loc, type, attrValue);

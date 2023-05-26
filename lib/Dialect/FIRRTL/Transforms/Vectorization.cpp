@@ -43,7 +43,7 @@ public:
   matchAndRewrite(Operation *op,
                   mlir::PatternRewriter &rewriter) const override {
     auto vectorCreateOp = cast<VectorCreateOp>(op);
-    auto type = vectorCreateOp.getType();
+    auto type = vectorCreateOp.getType().get();
     if (type.hasUninferredWidth() || !isa<UIntType>(type.getElementType()))
       return failure();
 

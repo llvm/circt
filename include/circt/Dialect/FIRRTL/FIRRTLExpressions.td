@@ -218,7 +218,7 @@ def FEnumCreateOp : FIRRTLOp<"enumcreate"> {
   let extraClassDeclaration = [{
     /// Return the name attribute of the accessed field.
     StringAttr getFieldNameAttr() {
-      return getResult().getType().getElementNameAttr(getFieldIndex());
+      return getResult().getType().get().getElementNameAttr(getFieldIndex());
     }
 
     /// Return the name of the accessed field.
@@ -282,13 +282,13 @@ class BaseSubfieldOp<string name, Type btype, Type rtype> : FIRRTLExprOp<name> {
 
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType()
+      return FieldRef(getInput(), firrtl::type_cast<InputType>(getInput().getType())
                                             .getFieldID(getFieldIndex()));
     }
 
     /// Return the name of the accessed field.
     StringRef getFieldName() {
-      return getInput().getType().getElementName(getFieldIndex());
+      return firrtl::type_cast<InputType>(getInput().getType()).getElementName(getFieldIndex());
     }
   }];
 }
@@ -322,7 +322,7 @@ def SubindexOp : FIRRTLExprOp<"subindex"> {
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType().getFieldID(getIndex()));
+      return FieldRef(getInput(), getInput().getType().get().getFieldID(getIndex()));
     }
   }];
 }
@@ -402,7 +402,7 @@ def IsTagOp : FIRRTLExprOp<"istag"> {
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType().cast<FEnumType>()
+      return FieldRef(getInput(), getInput().getType().get()
                                             .getFieldID(getFieldIndex()));
     }
 
@@ -446,13 +446,13 @@ def SubtagOp : FIRRTLExprOp<"subtag"> {
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType()
+      return FieldRef(getInput(), getInput().getType().get()
                                             .getFieldID(getFieldIndex()));
     }
 
     /// Return the name of the accessed field.
     StringAttr getFieldNameAttr() {
-      return getInput().getType().getElementNameAttr(getFieldIndex());
+      return getInput().getType().get().getElementNameAttr(getFieldIndex());
     }
 
     /// Return the name of the accessed field.

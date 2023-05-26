@@ -811,7 +811,7 @@ Value Visitor::sinkVecDimIntoOperands(ImplicitLocOpBuilder &builder,
 LogicalResult Visitor::visitExpr(VectorCreateOp op) {
   ImplicitLocOpBuilder builder(op.getLoc(), op);
 
-  auto oldType = op.getType();
+  auto oldType = op.getType().get();
   auto newType = convertType(oldType);
 
   if (oldType == newType) {

@@ -44,6 +44,7 @@ class FVectorType;
 class FEnumType;
 class RefType;
 class StringType;
+class BaseTypeAliasType;
 
 /// A collection of bits indicating the recursive properties of a type.
 struct RecursiveTypeProperties {
@@ -55,6 +56,8 @@ struct RecursiveTypeProperties {
   bool containsAnalog : 1;
   /// Whether the type contains a const type.
   bool containsConst : 1;
+  /// Whether the type contains a type alias.
+  bool isAnonymous : 1;
   /// Whether the type has any uninferred bit widths.
   bool hasUninferredWidth : 1;
   /// Whether the type has any uninferred reset.
@@ -73,6 +76,9 @@ public:
   /// `containsAnalog`, and `hasUninferredWidth` bits, among others.
   RecursiveTypeProperties getRecursiveTypeProperties() const;
 
+  /// Return an anonymous version of this type.
+  FIRRTLType getAnonymousType();
+
   //===--------------------------------------------------------------------===//
   // Convenience methods for accessing recursive type properties
   //===--------------------------------------------------------------------===//
@@ -87,6 +93,9 @@ public:
   bool containsReference() {
     return getRecursiveTypeProperties().containsReference;
   }
+
+  /// Return true if this is an anonymous type (no type alias).
+  bool isAnonymousType() { return getRecursiveTypeProperties().isAnonymous; }
 
   /// Return true if this type contains an uninferred bit width.
   bool hasUninferredWidth() {
@@ -136,6 +145,9 @@ public:
 
   /// Return this type with a 'const' modifiers dropped
   FIRRTLBaseType getAllConstDroppedType();
+
+  /// Return an anonymous version of this type.
+  FIRRTLBaseType getAnonymousType();
 
   /// Return this type with all ground types replaced with UInt<1>.  This is
   /// used for `mem` operations.
@@ -315,9 +327,6 @@ ParseResult parseNestedBaseType(FIRRTLBaseType &result, AsmParser &parser);
 // Print a FIRRTL type without a leading `!firrtl.` dialect tag.
 void printNestedType(Type type, AsmPrinter &os);
 
-using FIRRTLValue = mlir::TypedValue<FIRRTLType>;
-using FIRRTLBaseValue = mlir::TypedValue<FIRRTLBaseType>;
-
 } // namespace firrtl
 } // namespace circt
 
@@ -344,5 +353,70 @@ struct DenseMapInfo<circt::firrtl::FIRRTLType> {
 };
 
 } // namespace llvm
+namespace circt {
+namespace firrtl {
+template <typename... BaseTy>
+bool type_isa(Type type) { // NOLINT(readability-identifier-naming)
+  // First check if the type is the requested type.
+  if (type.isa<BaseTy...>())
+    return true;
+
+  // Then check if it is a type alias wrapping the requested type.
+  if (auto alias = type.dyn_cast<BaseTypeAliasType>())
+    return alias.getInnerType().isa<BaseTy...>();
+
+  return false;
+}
+
+// type_isa for a nullable argument.
+template <typename... BaseTy>
+bool type_isa_and_nonnull(Type type) { // NOLINT(readability-identifier-naming)
+  if (!type)
+    return false;
+  return type_isa<BaseTy...>(type);
+}
+
+template <typename BaseTy>
+BaseTy type_cast(Type type) { // NOLINT(readability-identifier-naming)
+  assert(type_isa<BaseTy>(type) && "type must convert to requested type");
+
+  // If the type is the requested type, return it.
+  if (type.isa<BaseTy>())
+    return type.cast<BaseTy>();
+
+  // Otherwise, it must be a type alias wrapping the requested type.
+  return type.cast<BaseTypeAliasType>().getInnerType().cast<BaseTy>();
+}
+
+template <typename BaseTy>
+BaseTy type_dyn_cast(Type type) { // NOLINT(readability-identifier-naming)
+  if (!type_isa<BaseTy>(type))
+    return BaseTy();
+
+  return type_cast<BaseTy>(type);
+}
+
+template <typename BaseTy>
+class BaseTypeAliasOr
+    : public ::mlir::Type::TypeBase<BaseTypeAliasOr<BaseTy>,
+                                    firrtl::FIRRTLBaseType,
+                                    detail::FIRRTLBaseTypeStorage> {
+
+public:
+  using mlir::Type::TypeBase<BaseTypeAliasOr<BaseTy>, firrtl::FIRRTLBaseType,
+                             detail::FIRRTLBaseTypeStorage>::Base::Base;
+  // Support LLVM isa/cast/dyn_cast to BaseTy.
+  static bool classof(Type other) { return type_isa<BaseTy>(other); }
+
+  // Support C++ implicit conversions to BaseTy.
+  operator BaseTy() const { return type_cast<BaseTy>(*this); }
+
+  BaseTy get() const { return circt::firrtl::type_cast<BaseTy>(*this); }
+};
+
+using FIRRTLValue = mlir::TypedValue<FIRRTLType>;
+using FIRRTLBaseValue = mlir::TypedValue<firrtl::FIRRTLBaseType>;
+} // namespace firrtl
+} // namespace circt
 
 #endif // CIRCT_DIALECT_FIRRTL_TYPES_H
