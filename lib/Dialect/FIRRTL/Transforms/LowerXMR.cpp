@@ -327,13 +327,6 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       stringLeaf.append(iter->getSecond());
     }
 
-    if (refSendPath.empty()) {
-      if (refVal.getDefiningOp())
-        refVal.getDefiningOp()->getParentOp()->dump();
-      else
-        cast<BlockArgument>(refVal).getParentBlock()->dump();
-    }
-
     if (!refSendPath.empty())
       // Compute the HierPathOp that stores the path.
       ref = FlatSymbolRefAttr::get(
