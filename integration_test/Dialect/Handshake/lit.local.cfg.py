@@ -6,5 +6,4 @@ for pyfile in glob.glob(os.path.join(dir_path, "**", "*.py")):
   # remove dir from pyfile
   config.excludes.add(os.path.basename(pyfile))
 
-config.excludes.add('cocotb_driver.py')
 config.excludes.add('helper.py')

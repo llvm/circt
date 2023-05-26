@@ -1,7 +1,7 @@
 // REQUIRES: iverilog,cocotb
 
 // RUN: hlstool %s --dynamic-hw --ir-input-level 1 --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables,disallowPackedStructAssignments > %t.sv
-// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=tuple_packing --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
+// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=tuple_packing --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 // CHECK: ** TEST
 // CHECK: ** TESTS=[[N:.*]] PASS=[[N]] FAIL=0 SKIP=0
