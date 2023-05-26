@@ -131,17 +131,35 @@ circt::analysis::MemoryDependenceAnalysis::MemoryDependenceAnalysis(
   // Collect affine loops grouped by nesting depth.
   std::vector<SmallVector<AffineForOp, 2>> depthToLoops;
   mlir::affine::gatherLoops(funcOp, depthToLoops);
+  depthToLoops.erase(depthToLoops.begin());
 
   // Collect load and store operations to check.
-  SmallVector<Operation *> memoryOps;
-  funcOp.walk([&](Operation *op) {
-    if (isa<AffineReadOpInterface, AffineWriteOpInterface>(op))
-      memoryOps.push_back(op);
-  });
+  auto rootReads = funcOp.getOps<AffineReadOpInterface>();
+  auto rootWrites = funcOp.getOps<AffineWriteOpInterface>();
+  SmallVector<Operation *> rootMemoryOps(rootReads.begin(), rootReads.end());
+  rootMemoryOps.append(rootWrites.begin(), rootWrites.end());
 
-  // For each depth, check memref accesses.
-  for (unsigned depth = 1, e = depthToLoops.size(); depth <= e; ++depth)
-    checkMemrefDependence(memoryOps, depth, results);
+  // Need to loop over each root loop to preserve loop nest structure
+  for (auto forOp : funcOp.getOps<AffineForOp>()) {
+    SmallVector<Operation *> memoryOps = rootMemoryOps;
+    forOp.walk([&](Operation *op) {
+      if (isa<AffineReadOpInterface, AffineWriteOpInterface>(op))
+        memoryOps.push_back(op);
+    });
+    std::size_t maxLoopDepth = 1;
+    // Find out max depth for this loop nest <= depthToLoops().size() - 1
+    for (auto loops : enumerate(depthToLoops))
+      for (auto innerLoop : loops.value())
+        if (forOp->isAncestor(innerLoop)) {
+          // Add plus 2 since we popped the front
+          maxLoopDepth = std::max(maxLoopDepth, loops.index() + 2);
+          break;
+        }
+
+    // For each depth, check memref accesses.
+    for (unsigned depth = 1; depth <= maxLoopDepth; ++depth)
+      checkMemrefDependence(memoryOps, depth, results);
+  }
 }
 
 /// Returns the dependences, if any, that the given Operation depends on.
