@@ -2331,6 +2331,124 @@ static LogicalResult checkConnectFlow(Operation *connect) {
   return success();
 }
 
+// NOLINTBEGIN(misc-no-recursion)
+/// Checks if the type has any 'const' leaf elements . If `isFlip` is `true`,
+/// the `const` leaf is not considered to be driven.
+static bool isConstFieldDriven(FIRRTLBaseType type, bool isFlip = false,
+                               bool outerTypeIsConst = false) {
+  auto typeIsConst = outerTypeIsConst || type.isConst();
+
+  if (typeIsConst && type.isPassive())
+    return !isFlip;
+
+  if (auto bundleType = dyn_cast<BundleType>(type))
+    return llvm::any_of(bundleType.getElements(), [&](auto &element) {
+      return isConstFieldDriven(element.type, isFlip ^ element.isFlip,
+                                typeIsConst);
+    });
+
+  if (auto vectorType = type.dyn_cast<FVectorType>())
+    return isConstFieldDriven(vectorType.getElementType(), isFlip, typeIsConst);
+
+  if (typeIsConst)
+    return !isFlip;
+  return false;
+}
+// NOLINTEND(misc-no-recursion)
+
+/// Checks that connections to 'const' destinations are not dependent on
+/// non-'const' conditions in when blocks.
+static LogicalResult checkConnectConditionality(FConnectLike connect) {
+  auto dest = connect.getDest();
+  auto destType = dest.getType().dyn_cast<FIRRTLBaseType>();
+  auto src = connect.getSrc();
+  auto srcType = src.getType().dyn_cast<FIRRTLBaseType>();
+  if (!destType || !srcType)
+    return success();
+
+  auto destRefinedType = destType;
+  auto srcRefinedType = srcType;
+
+  /// Looks up the value's defining op until the defining op is null or a
+  /// declaration of the value. If a SubAccessOp is encountered with a 'const'
+  /// input, `originalFieldType` is made 'const'.
+  auto findFieldDeclarationRefiningFieldType =
+      [](Value value, FIRRTLBaseType &originalFieldType) -> Value {
+    while (auto *definingOp = value.getDefiningOp()) {
+      bool shouldContinue = true;
+      TypeSwitch<Operation *>(definingOp)
+          .Case<SubfieldOp, SubindexOp>([&](auto op) { value = op.getInput(); })
+          .Case<SubaccessOp>([&](SubaccessOp op) {
+            if (op.getInput()
+                    .getType()
+                    .getElementTypePreservingConst()
+                    .isConst())
+              originalFieldType = originalFieldType.getConstType(true);
+            value = op.getInput();
+          })
+          .Default([&](Operation *) { shouldContinue = false; });
+      if (!shouldContinue)
+        break;
+    }
+    return value;
+  };
+
+  auto destDeclaration =
+      findFieldDeclarationRefiningFieldType(dest, destRefinedType);
+  auto srcDeclaration =
+      findFieldDeclarationRefiningFieldType(src, srcRefinedType);
+
+  auto checkConstConditionality = [&](Value value, FIRRTLBaseType type,
+                                      Value declaration) -> LogicalResult {
+    auto *declarationBlock = declaration.getParentBlock();
+    auto *block = connect->getBlock();
+    while (block && block != declarationBlock) {
+      auto *parentOp = block->getParentOp();
+
+      if (auto whenOp = dyn_cast<WhenOp>(parentOp);
+          whenOp && !whenOp.getCondition().getType().isConst()) {
+        if (type.isConst())
+          return connect.emitOpError()
+                 << "assignment to 'const' type " << type
+                 << " is dependent on a non-'const' condition";
+        return connect->emitOpError()
+               << "assignment to nested 'const' member of type " << type
+               << " is dependent on a non-'const' condition";
+      }
+
+      block = parentOp->getBlock();
+    }
+    return success();
+  };
+
+  auto emitSubaccessError = [&] {
+    return connect.emitError(
+        "assignment to non-'const' subaccess of 'const' type is disallowed");
+  };
+
+  // Check destination if it contains 'const' leaves
+  if (destRefinedType.containsConst() && isConstFieldDriven(destRefinedType)) {
+    // Disallow assignment to non-'const' subaccesses of 'const' types
+    if (destType != destRefinedType)
+      return emitSubaccessError();
+
+    if (failed(checkConstConditionality(dest, destType, destDeclaration)))
+      return failure();
+  }
+
+  // Check source if it contains 'const' 'flip' leaves
+  if (srcRefinedType.containsConst() &&
+      isConstFieldDriven(srcRefinedType, /*isFlip=*/true)) {
+    // Disallow assignment to non-'const' subaccesses of 'const' types
+    if (srcType != srcRefinedType)
+      return emitSubaccessError();
+    if (failed(checkConstConditionality(src, srcType, srcDeclaration)))
+      return failure();
+  }
+
+  return success();
+}
+
 LogicalResult ConnectOp::verify() {
   auto dstType = getDest().getType();
   auto srcType = getSrc().getType();
@@ -2360,6 +2478,9 @@ LogicalResult ConnectOp::verify() {
   if (failed(checkConnectFlow(*this)))
     return failure();
 
+  if (failed(checkConnectConditionality(*this)))
+    return failure();
+
   return success();
 }
 
@@ -2374,6 +2495,9 @@ LogicalResult StrictConnectOp::verify() {
 
   // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))
+    return failure();
+
+  if (failed(checkConnectConditionality(*this)))
     return failure();
 
   return success();
@@ -2680,8 +2804,8 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
       // top bits if it is a positive number.
       value = value.sext(width);
     } else if (width < value.getBitWidth()) {
-      // The parser can return an unnecessarily wide result with leading zeros.
-      // This isn't a problem, but truncating off bits is bad.
+      // The parser can return an unnecessarily wide result with leading
+      // zeros. This isn't a problem, but truncating off bits is bad.
       if (value.getNumSignBits() < value.getBitWidth() - width)
         return parser.emitError(loc, "constant too large for result type ")
                << resultType;
@@ -3313,9 +3437,9 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
                                  indexType);
 
   if (auto vectorType = inType.dyn_cast<FVectorType>()) {
-    auto elementType = vectorType.getElementType();
-    return elementType.getConstType(
-        (elementType.isConst() || vectorType.isConst()) && isConst(indexType));
+    if (isConst(indexType))
+      return vectorType.getElementTypePreservingConst();
+    return vectorType.getElementType().getAllConstDroppedType();
   }
 
   return emitInferRetTypeError(loc, "subaccess requires vector operand, not ",

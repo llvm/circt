@@ -2,25 +2,12 @@
 if(CIRCT_LEC_ENABLED)
   add_llvm_tool(circt-lec
     circt-lec.cpp
-    Circuit.cpp
-    LogicExporter.cpp
-    Solver.cpp
   )
 
   target_link_libraries(circt-lec
     PRIVATE
-    MLIRTransforms
-    MLIRTranslateLib
-    CIRCTComb
-    CIRCTHW
-    CIRCTSupport
+    CIRCTLogicalEquivalence
     ${Z3_LIBRARIES}
-  )
-
-  target_include_directories(circt-lec SYSTEM
-    PRIVATE
-    ${Z3_INCLUDE_DIR}
-    ${Z3_CXX_INCLUDE_DIRS}
   )
 
   # Correct the runpath when linking shared libraries.

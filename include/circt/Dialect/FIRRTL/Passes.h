@@ -127,6 +127,8 @@ std::unique_ptr<mlir::Pass> createVectorizationPass();
 
 std::unique_ptr<mlir::Pass> createInjectDUTHierarchyPass();
 
+std::unique_ptr<mlir::Pass> createDropConstPass();
+
 /// Configure which values will be explicitly preserved by the DropNames pass.
 namespace PreserveValues {
 enum PreserveMode {

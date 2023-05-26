@@ -2419,40 +2419,24 @@ SubExprInfo ExprEmitter::visitSV(XMRRefOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  auto refAttr = op.getRefAttr();
-
-  // The XMR is pointing at an InnerRefAttr.
-  if (auto innerRef = dyn_cast<InnerRefAttr>(refAttr)) {
+  // The XMR is pointing at a GlobalRef.
+  auto globalRef = op.getReferencedPath(&state.symbolCache);
+  auto namepath = globalRef.getNamepathAttr().getValue();
+  auto *module = state.symbolCache.getDefinition(
+      cast<InnerRefAttr>(namepath.front()).getModule());
+  ps << PPExtString(getSymOpName(module));
+  for (auto sym : namepath) {
+    ps << ".";
+    auto innerRef = cast<InnerRefAttr>(sym);
     auto ref = state.symbolCache.getInnerDefinition(innerRef.getModule(),
                                                     innerRef.getName());
-    ps << PPExtString(getSymOpName(
-              state.symbolCache.getDefinition(innerRef.getModule())))
-       << ".";
-    if (ref.hasPort())
+    if (ref.hasPort()) {
       ps << PPExtString(getPortVerilogName(ref.getOp(), ref.getPort()));
-    else
-      ps << PPExtString(getSymOpName(ref.getOp()));
-  } else {
-    // The XMR is pointing at a GlobalRef.
-    auto globalRef = cast<hw::HierPathOp>(state.symbolCache.getDefinition(
-        cast<FlatSymbolRefAttr>(refAttr).getAttr()));
-    auto namepath = globalRef.getNamepathAttr().getValue();
-    auto *module = state.symbolCache.getDefinition(
-        cast<InnerRefAttr>(namepath.front()).getModule());
-    ps << PPExtString(getSymOpName(module));
-    for (auto sym : namepath) {
-      ps << ".";
-      auto innerRef = cast<InnerRefAttr>(sym);
-      auto ref = state.symbolCache.getInnerDefinition(innerRef.getModule(),
-                                                      innerRef.getName());
-      if (ref.hasPort()) {
-        ps << PPExtString(getPortVerilogName(ref.getOp(), ref.getPort()));
-        continue;
-      }
-      ps << PPExtString(getSymOpName(ref.getOp()));
+      continue;
     }
+    ps << PPExtString(getSymOpName(ref.getOp()));
   }
-  auto leaf = op.getStringLeafAttr();
+  auto leaf = op.getVerbatimSuffixAttr();
   if (leaf && leaf.size())
     ps << PPExtString(leaf);
   return {Selection, IsUnsigned};

@@ -46,8 +46,6 @@ struct SeqFIRRTLToSVPass
     : public impl::LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass> {
   void runOnOperation() override;
   using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::disableRegRandomization;
-  using LowerSeqFIRRTLToSVBase<
-      SeqFIRRTLToSVPass>::addVivadoRAMAddressConflictSynthesisBugWorkaround;
   using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::emitSeparateAlwaysBlocks;
   using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::LowerSeqFIRRTLToSVBase;
   using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::numSubaccessRestored;
@@ -144,11 +142,8 @@ namespace {
 class FirRegLower {
 public:
   FirRegLower(hw::HWModuleOp module, bool disableRegRandomization = false,
-              bool addVivadoRAMAddressConflictSynthesisBugWorkaround = false,
               bool emitSeparateAlwaysBlocks = false)
       : module(module), disableRegRandomization(disableRegRandomization),
-        addVivadoRAMAddressConflictSynthesisBugWorkaround(
-            addVivadoRAMAddressConflictSynthesisBugWorkaround),
         emitSeparateAlwaysBlocks(emitSeparateAlwaysBlocks){};
 
   void lower();
@@ -211,7 +206,6 @@ private:
   hw::HWModuleOp module;
 
   bool disableRegRandomization;
-  bool addVivadoRAMAddressConflictSynthesisBugWorkaround;
   bool emitSeparateAlwaysBlocks;
 };
 } // namespace
@@ -581,17 +575,6 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
   // Move Attributes
   svReg.reg->setDialectAttrs(reg->getDialectAttrs());
 
-  // For array registers, we annotate ram_style attributes if
-  // `addVivadoRAMAddressConflictSynthesisBugWorkaround` is enabled so that we
-  // can workaround incorrect optimizations of vivado. See "RAM address conflict
-  // and Vivado synthesis bug" issue in the vivado forum for the more detail.
-  if (addVivadoRAMAddressConflictSynthesisBugWorkaround &&
-      hw::type_isa<hw::ArrayType, hw::UnpackedArrayType>(reg.getType()))
-    circt::sv::setSVAttributes(
-        svReg.reg,
-        sv::SVAttributeAttr::get(builder.getContext(), "ram_style",
-                                 R"("distributed")", /*emitAsComment=*/false));
-
   if (auto innerSymAttr = reg.getInnerSymAttr())
     svReg.reg.setInnerSymAttr(innerSymAttr);
 
@@ -781,7 +764,6 @@ void SeqToSVPass::runOnOperation() {
 void SeqFIRRTLToSVPass::runOnOperation() {
   hw::HWModuleOp module = getOperation();
   FirRegLower firRegLower(module, disableRegRandomization,
-                          addVivadoRAMAddressConflictSynthesisBugWorkaround,
                           emitSeparateAlwaysBlocks);
   firRegLower.lower();
   numSubaccessRestored += firRegLower.numSubaccessRestored;

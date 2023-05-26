@@ -14,7 +14,6 @@
 #define CIRCT_DIALECT_FIRRTL_TYPES_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
-#include "circt/Dialect/FIRRTL/FIRRTLTypeInterfaces.h"
 #include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
@@ -134,6 +133,9 @@ public:
 
   /// Return a 'const' or non-'const' version of this type.
   FIRRTLBaseType getConstType(bool isConst);
+
+  /// Return this type with a 'const' modifiers dropped
+  FIRRTLBaseType getAllConstDroppedType();
 
   /// Return this type with all ground types replaced with UInt<1>.  This is
   /// used for `mem` operations.

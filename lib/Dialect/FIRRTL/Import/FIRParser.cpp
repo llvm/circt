@@ -269,6 +269,7 @@ struct FIRParser {
   ParseResult parseFieldId(StringRef &result, const Twine &message);
   ParseResult parseFieldIdSeq(SmallVectorImpl<StringRef> &result,
                               const Twine &message);
+  ParseResult parseEnumType(FIRRTLType &result);
   ParseResult parseType(FIRRTLType &result, const Twine &message);
 
   ParseResult parseOptionalRUW(RUWAttr &result);
@@ -723,6 +724,42 @@ ParseResult FIRParser::parseFieldIdSeq(SmallVectorImpl<StringRef> &result,
   return success();
 }
 
+/// enum-field ::= Id ( ':' type )? ;
+/// enum-type  ::= '{|' enum-field* '|}'
+ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
+  if (parseToken(FIRToken::l_brace_bar,
+                 "expected leading '{|' in enumeration type"))
+    return failure();
+  SmallVector<FEnumType::EnumElement> elements;
+  if (parseListUntil(FIRToken::r_brace_bar, [&]() -> ParseResult {
+        auto fieldLoc = getToken().getLoc();
+
+        // Parse the name of the tag.
+        StringRef name;
+        if (parseId(name, "expected valid identifier for enumeration tag"))
+          return failure();
+
+        // Parse an optional type ascription.
+        FIRRTLBaseType type;
+        if (consumeIf(FIRToken::colon)) {
+          FIRRTLType parsedType;
+          if (parseType(parsedType, "expected enumeration type"))
+            return failure();
+          type = parsedType.dyn_cast<FIRRTLBaseType>();
+          if (!type)
+            return emitError(fieldLoc, "field must be a base type");
+        } else {
+          // If there is no type specified, default to UInt<0>.
+          type = UIntType::get(getContext(), 0);
+        }
+        elements.emplace_back(StringAttr::get(getContext(), name), type);
+        return success();
+      }))
+    return failure();
+  result = FEnumType::get(getContext(), elements);
+  return success();
+}
+
 /// type ::= 'Clock'
 ///      ::= 'Reset'
 ///      ::= 'AsyncReset'
@@ -838,6 +875,11 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
       result = OpenBundleType::get(getContext(), elements);
     break;
   }
+
+  case FIRToken::l_brace_bar:
+    if (parseEnumType(result))
+      return failure();
+    break;
   }
 
   // Handle postfix vector sizes.
@@ -901,6 +943,18 @@ using ModuleSymbolTableEntry =
 
 using UnbundledValueEntry = SmallVector<std::pair<Attribute, Value>>;
 using UnbundledValuesList = std::vector<UnbundledValueEntry>;
+namespace {
+/// This structure is used to track which entries are added while inside a scope
+/// and remove them upon exiting the scope.
+struct UnbundledValueRestorer {
+  UnbundledValuesList &list;
+  size_t startingSize;
+  UnbundledValueRestorer(UnbundledValuesList &list) : list(list) {
+    startingSize = list.size();
+  }
+  ~UnbundledValueRestorer() { list.resize(startingSize); }
+};
+} // namespace
 
 using SubaccessCache = llvm::DenseMap<std::pair<Value, unsigned>, Value>;
 
@@ -1250,10 +1304,11 @@ struct FIRStmtParser : public FIRParser {
                          FIRModuleContext &moduleContext,
                          Namespace &modNameSpace, const FIRVersion &version)
       : FIRParser(moduleContext.getConstants(), moduleContext.getLexer()),
-        builder(mlir::ImplicitLocOpBuilder::atBlockEnd(
-            UnknownLoc::get(getContext()), &blockToInsertInto)),
+        builder(UnknownLoc::get(getContext()), getContext()),
         locationProcessor(this->builder), moduleContext(moduleContext),
-        modNameSpace(modNameSpace), version(version) {}
+        modNameSpace(modNameSpace), version(version) {
+    builder.setInsertionPointToEnd(&blockToInsertInto);
+  }
 
   ParseResult parseSimpleStmt(unsigned stmtIndent);
   ParseResult parseSimpleStmtBlock(unsigned indent);
@@ -1294,6 +1349,7 @@ private:
   ParseResult parseExpLeadingStmt(Value &result, const Twine &message) {
     return parseExpImpl(result, message, /*isLeadingStmt:*/ true);
   }
+  ParseResult parseEnumExp(Value &result);
   ParseResult parseRefExp(Value &result, const Twine &message);
   ParseResult parseStaticRefExp(Value &result, const Twine &message);
 
@@ -1321,6 +1377,7 @@ private:
   ParseResult parseAssume();
   ParseResult parseCover();
   ParseResult parseWhen(unsigned whenIndent);
+  ParseResult parseMatch(unsigned matchIndent);
   ParseResult parseRefDefine();
   ParseResult parseRefForce();
   ParseResult parseRefForceInitial();
@@ -1489,6 +1546,7 @@ void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
 ///  exp ::= id    // Ref
 ///      ::= prim
 ///      ::= integer-literal-exp
+///      ::= enum-exp
 ///      ::= exp '.' fieldId
 ///      ::= exp '[' intLit ']'
 /// XX   ::= exp '.' DoubleLit // TODO Workaround for #470
@@ -1512,6 +1570,12 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     break;
 
+  case FIRToken::l_brace_bar:
+    if (isLeadingStmt)
+      return emitError("unexpected enumeration as start of statement");
+    if (parseEnumExp(result))
+      return failure();
+    break;
   case FIRToken::lp_read:
     if (isLeadingStmt)
       return emitError("unexpected read() as start of statement");
@@ -2088,6 +2152,8 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseCover();
   case FIRToken::kw_when:
     return parseWhen(stmtIndent);
+  case FIRToken::kw_match:
+    return parseMatch(stmtIndent);
   case FIRToken::kw_define:
     return parseRefDefine();
   case FIRToken::lp_force:
@@ -2383,14 +2449,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
     // After parsing the when region, we can release any new entries in
     // unbundledValues since the symbol table entries that refer to them will be
     // gone.
-    struct UnbundledValueRestorer {
-      UnbundledValuesList &list;
-      size_t startingSize;
-      UnbundledValueRestorer(UnbundledValuesList &list) : list(list) {
-        startingSize = list.size();
-      }
-      ~UnbundledValueRestorer() { list.resize(startingSize); }
-    } x(moduleContext.unbundledValues);
+    UnbundledValueRestorer x(moduleContext.unbundledValues);
 
     // We parse the substatements into their own parser, so they get inserted
     // into the specified 'when' region.
@@ -2453,6 +2512,136 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   return success();
 }
 
+/// enum-exp ::= enum-type '(' Id ( ',' exp )? ')'
+ParseResult FIRStmtParser::parseEnumExp(Value &value) {
+  auto startLoc = getToken().getLoc();
+  FIRRTLType type;
+  if (parseEnumType(type))
+    return failure();
+
+  // Check that the input type is a legal enumeration.
+  auto enumType = dyn_cast<FEnumType>(type);
+  if (!enumType)
+    return emitError(startLoc,
+                     "expected enumeration type in enumeration expression");
+
+  StringRef tag;
+  if (parseToken(FIRToken::l_paren, "expected '(' in enumeration expression") ||
+      parseId(tag, "expected enumeration tag"))
+    return failure();
+
+  Value input;
+  if (consumeIf(FIRToken::r_paren)) {
+    // If the payload is not specified, we create a 0 bit unsigned integer
+    // constant.
+    auto type = IntType::get(builder.getContext(), false, 0);
+    Type attrType = IntegerType::get(getContext(), 0, IntegerType::Unsigned);
+    auto attr = builder.getIntegerAttr(attrType, APInt(0, 0, false));
+    input = builder.create<ConstantOp>(type, attr);
+  } else {
+    // Otherwise we parse an expression.
+    if (parseExp(input, "expected expression in enumeration value") ||
+        parseToken(FIRToken::r_paren, "expected closing ')'"))
+      return failure();
+  }
+
+  locationProcessor.setLoc(startLoc);
+  value = builder.create<FEnumCreateOp>(enumType, tag, input);
+  return success();
+}
+
+/// match ::= 'match' exp ':' info?
+///             (INDENT ( Id ( '(' Id ')' )? ':'
+///               (INDENT simple_stmt* DEDENT )?
+///             )* DEDENT)?
+ParseResult FIRStmtParser::parseMatch(unsigned matchIndent) {
+  auto startTok = consumeToken(FIRToken::kw_match);
+
+  if (auto isExpr = parseExpWithLeadingKeyword(startTok))
+    return *isExpr;
+
+  Value input;
+  if (parseExp(input, "expected expression in 'match'") ||
+      parseToken(FIRToken::colon, "expected ':' in 'match'") ||
+      parseOptionalInfo())
+    return failure();
+
+  auto enumType = dyn_cast<FEnumType>(input.getType());
+  if (!enumType)
+    return mlir::emitError(
+               input.getLoc(),
+               "expected enumeration type for 'match' statement, but got ")
+           << input.getType();
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  SmallVector<Attribute> tags;
+  SmallVector<std::unique_ptr<Region>> regions;
+  while (true) {
+    auto tagLoc = getToken().getLoc();
+
+    // Only consume the keyword if the indentation is correct.
+    auto caseIndent = getIndentation();
+    if (!caseIndent || *caseIndent <= matchIndent)
+      break;
+
+    // Parse the tag.
+    StringRef tagSpelling;
+    if (parseId(tagSpelling, "expected enumeration tag in match statement"))
+      return failure();
+    auto tagIndex = enumType.getElementIndex(tagSpelling);
+    if (!tagIndex)
+      return emitError(tagLoc, "tag ")
+             << tagSpelling << " not a member of enumeration " << enumType;
+    auto tag = IntegerAttr::get(IntegerType::get(getContext(), 32), *tagIndex);
+    tags.push_back(tag);
+
+    // Add a new case to the match operation.
+    auto *caseBlock = &regions.emplace_back(new Region)->emplaceBlock();
+
+    // Declarations are scoped to the case.
+    FIRModuleContext::ContextScope scope(moduleContext, caseBlock);
+
+    // After parsing the region, we can release any new entries in
+    // unbundledValues since the symbol table entries that refer to them will be
+    // gone.
+    UnbundledValueRestorer x(moduleContext.unbundledValues);
+
+    // Parse the argument.
+    if (consumeIf(FIRToken::l_paren)) {
+      StringAttr identifier;
+      if (parseId(identifier, "expected identifier for 'case' binding"))
+        return failure();
+
+      // Add an argument to the block.
+      auto dataType = enumType.getElementType(*tagIndex);
+      caseBlock->addArgument(dataType, LocWithInfo(tagLoc, this).getLoc());
+
+      if (moduleContext.addSymbolEntry(identifier, caseBlock->getArgument(0),
+                                       startTok.getLoc()))
+        return failure();
+
+      if (parseToken(FIRToken::r_paren, "expected ')' in match statement case"))
+        return failure();
+
+    } else {
+      auto dataType = IntType::get(builder.getContext(), false, 0);
+      caseBlock->addArgument(dataType, LocWithInfo(tagLoc, this).getLoc());
+    }
+
+    if (parseToken(FIRToken::colon, "expected ':' in match statement case"))
+      return failure();
+
+    // Parse a block of statements that are indented more than the case.
+    FIRStmtParser subParser(*caseBlock, moduleContext, modNameSpace, version);
+    if (subParser.parseSimpleStmtBlock(*caseIndent))
+      return failure();
+  }
+
+  builder.create<MatchOp>(input, ArrayAttr::get(getContext(), tags), regions);
+  return success();
+}
+
 /// ref_expr ::= probe | rwprobe | static_reference
 // NOLINTNEXTLINE(misc-no-recursion)
 ParseResult FIRStmtParser::parseRefExp(Value &result, const Twine &message) {
@@ -2461,9 +2650,11 @@ ParseResult FIRStmtParser::parseRefExp(Value &result, const Twine &message) {
     return parseProbe(result);
   if (token == FIRToken::lp_rwprobe)
     return parseRWProbe(result);
-  if (token == FIRToken::identifier)
-    return parseStaticRefExp(result, message);
-  return emitError(getToken().getLoc(), message);
+
+  // Default to parsing as static reference expression.
+  // Don't check token kind, we need to support literal_identifier and keywords,
+  // let parseId handle this.
+  return parseStaticRefExp(result, message);
 }
 
 /// static_reference ::= id

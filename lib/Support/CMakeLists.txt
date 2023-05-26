@@ -13,6 +13,7 @@ add_circt_library(CIRCTSupport
   FieldRef.cpp
   JSON.cpp
   LoweringOptions.cpp
+  Passes.cpp
   Path.cpp
   PrettyPrinter.cpp
   PrettyPrinterHelpers.cpp
@@ -24,6 +25,7 @@ add_circt_library(CIRCTSupport
 
   LINK_LIBS PUBLIC
   MLIRIR
+  MLIRTransforms
   MLIRTransformUtils
   )
 

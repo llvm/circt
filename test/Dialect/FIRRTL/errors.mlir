@@ -767,7 +767,7 @@ hw.hierpath private @nla [@A::@B::@C]
 
 
 firrtl.circuit "LowerToBind" {
- // expected-error @+1 {{the instance path cannot be empty/single element}}
+ // expected-error @+1 {{the instance path cannot be empty}}
 hw.hierpath private @NLA1 []
 hw.hierpath private @NLA2 [@LowerToBind::@s1]
 firrtl.module @InstanceLowerToBind() {}
@@ -1461,14 +1461,6 @@ firrtl.module @EnumNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !fir
   // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.enum<a: const.uint<1>>'}}
   %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.enum<a: const.uint<1>>, !firrtl.enum<a: const.uint<1>>
 }
-}
-
-// -----
-// hardware firrtl.string is invalid
-
-firrtl.circuit "HardwareString" {
-// expected-error @+1 {{strings are not representable in hardware}}
-firrtl.module @HardwareString(in %string: !firrtl.string) {}
 }
 
 // -----

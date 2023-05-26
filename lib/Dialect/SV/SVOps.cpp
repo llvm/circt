@@ -165,9 +165,7 @@ MacroDeclOp MacroDefOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
 /// Ensure that the symbol being instantiated exists and is a MacroDeclOp.
 static LogicalResult verifyMacroSymbolUse(Operation *op, StringAttr name,
                                           SymbolTableCollection &symbolTable) {
-  auto module = op->getParentOfType<mlir::ModuleOp>();
-  auto macro =
-      dyn_cast_or_null<MacroDeclOp>(symbolTable.lookupSymbolIn(module, name));
+  auto macro = symbolTable.lookupNearestSymbolFrom<MacroDeclOp>(op, name);
   if (!macro)
     return op->emitError("Referenced macro doesn't exist ") << name;
 
@@ -1892,6 +1890,26 @@ void printXMRPath(OpAsmPrinter &p, XMROp op, ArrayAttr pathAttr,
                   StringAttr terminalAttr) {
   llvm::interleaveComma(pathAttr, p);
   p << ", " << terminalAttr;
+}
+
+/// Ensure that the symbol being instantiated exists and is a HierPathOp.
+LogicalResult XMRRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *table = SymbolTable::getNearestSymbolTable(*this);
+  auto path = dyn_cast_or_null<hw::HierPathOp>(
+      symbolTable.lookupSymbolIn(table, getRefAttr()));
+  if (!path)
+    return emitError("Referenced path doesn't exist ") << getRefAttr();
+
+  return success();
+}
+
+hw::HierPathOp XMRRefOp::getReferencedPath(const hw::HWSymbolCache *cache) {
+  if (cache)
+    if (auto *result = cache->getDefinition(getRefAttr().getAttr()))
+      return cast<hw::HierPathOp>(result);
+
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  return topLevelModuleOp.lookupSymbol<hw::HierPathOp>(getRefAttr().getValue());
 }
 
 //===----------------------------------------------------------------------===//

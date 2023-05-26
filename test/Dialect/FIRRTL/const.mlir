@@ -105,6 +105,21 @@ firrtl.module @ConstElementSubaccess(in %a: !firrtl.vector<const.uint<1>, 3>, in
   firrtl.connect %dynamicOut, %1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
+// Subaccess of a non-const vector with a nested const element type should preserve the subelement constness
+// only if the index is const
+// CHECK-LABEL: firrtl.module @ConstNestedElementSubaccess
+firrtl.module @ConstNestedElementSubaccess(in %a: !firrtl.vector<bundle<a: const.uint<1>>, 3>, in %constIndex: !firrtl.const.uint<4>, in %dynamicIndex: !firrtl.uint<4>) {
+  // CHECK-NEXT: [[VAL0:%.+]] = firrtl.subaccess %a[%constIndex] : !firrtl.vector<bundle<a: const.uint<1>>, 3>, !firrtl.const.uint<4>
+  // CHECK-NEXT: [[VAL1:%.+]] = firrtl.subfield [[VAL0]][a] : !firrtl.bundle<a: const.uint<1>>
+  %0 = firrtl.subaccess %a[%constIndex] : !firrtl.vector<bundle<a: const.uint<1>>, 3>, !firrtl.const.uint<4>
+  %1 = firrtl.subfield %0[a] : !firrtl.bundle<a: const.uint<1>>
+
+  // CHECK-NEXT: [[VAL2:%.+]] = firrtl.subaccess %a[%dynamicIndex] : !firrtl.vector<bundle<a: const.uint<1>>, 3>, !firrtl.uint<4>
+  // CHECK-NEXT: [[VAL3:%.+]] = firrtl.subfield [[VAL2]][a] : !firrtl.bundle<a: uint<1>>
+  %2 = firrtl.subaccess %a[%dynamicIndex] : !firrtl.vector<bundle<a: const.uint<1>>, 3>, !firrtl.uint<4>
+  %3 = firrtl.subfield %2[a] : !firrtl.bundle<a: uint<1>>
+}
+
 // CHECK-LABEL: firrtl.module @ConstSubtag
 firrtl.module @ConstSubtag(in %in : !firrtl.const.enum<a: uint<1>, b: uint<2>>,
                            out %out : !firrtl.const.uint<2>) {

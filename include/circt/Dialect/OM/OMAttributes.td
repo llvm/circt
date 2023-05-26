@@ -43,6 +43,13 @@ def OMSymbolRefAttr : AttrDef<OMDialect, "SymbolRef", [TypedAttrInterface]> {
     "mlir::FlatSymbolRefAttr":$ref
   );
 
+  let builders = [
+    // Get the SymbolRefAttr to the symbol represented by this operation.
+    AttrBuilderWithInferredContext<(ins "::mlir::Operation *":$op)>,
+    // Get the SymbolRefAttr to this symbol name.
+    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$symName)>
+  ];
+
   let assemblyFormat = [{
     `<` $ref `>`
   }];
