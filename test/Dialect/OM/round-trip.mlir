@@ -100,3 +100,11 @@ om.class @ReferenceConstant() {
   // CHECK: om.class.field @sym, %[[const2]] : !om.sym_ref
   om.class.field @sym, %1 : !om.sym_ref
 }
+
+// CHECK-LABEL: @String
+om.class @StringConstant() {
+  // CHECK: %[[const1:.+]] = om.constant #om.string<"foo"> : !om.string
+  %0 = om.constant #om.string<"foo"> : !om.string
+  // CHECK: om.class.field @string, %[[const1]] : !om.string
+  om.class.field @string, %0 : !om.string
+}

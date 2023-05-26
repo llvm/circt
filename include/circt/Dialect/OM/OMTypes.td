@@ -42,4 +42,11 @@ def SymbolRefType : TypeDef<OMDialect, "SymbolRef", []> {
   let mnemonic = "sym_ref";
 }
 
+
+def StringType : TypeDef<OMDialect, "String", []> {
+  let summary = "A type that represents a reference to a string.";
+
+  let mnemonic = "string";
+}
+
 #endif // CIRCT_DIALECT_OM_OMTYPES_TD

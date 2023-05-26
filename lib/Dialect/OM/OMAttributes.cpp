@@ -31,6 +31,10 @@ Type circt::om::SymbolRefAttr::getType() {
   return SymbolRefType::get(getContext());
 }
 
+Type circt::om::OMStringAttr::getType() {
+  return StringType::get(getContext());
+}
+
 circt::om::SymbolRefAttr circt::om::SymbolRefAttr::get(mlir::Operation *op) {
   return om::SymbolRefAttr::get(op->getContext(),
                                 mlir::FlatSymbolRefAttr::get(op));
