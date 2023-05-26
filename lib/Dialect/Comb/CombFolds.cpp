@@ -2507,12 +2507,12 @@ struct ArrayRewriter : public mlir::OpRewritePattern<hw::ArrayCreateOp> {
     return failure();
   }
 };
+
 } // namespace
 
 void MuxOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                         MLIRContext *context) {
-  results.insert<MuxRewriter>(context);
-  results.insert<ArrayRewriter>(context);
+  results.insert<MuxRewriter, ArrayRewriter>(context);
 }
 
 //===----------------------------------------------------------------------===//
