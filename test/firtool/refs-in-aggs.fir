@@ -6,13 +6,15 @@
 ; RUN: circt-translate -import-firrtl -verify-diagnostics -split-input-file %s | circt-opt | FileCheck %s
 
 ; CHECK-LABEL: circuit "Bundle"
+FIRRTL version 3.0.0
 circuit Bundle :
+  type Data = {a : UInt<1>, b : UInt<1>[2]}
 ; CHECK-LABEL: module private @Child
 ; CHECK-SAME: in %in: !firrtl.bundle
 ; CHECK-SAME: out %r: !firrtl.probe<
   module Child :
-    input in : {a : UInt<1>, b : UInt<1>[2]}
-    output r : Probe<{a : UInt<1>, b : UInt<1>[2]}> ; probe of bundle (of UInt, vec)
+    input in : Data
+    output r : Probe<Data> ; probe of bundle (of UInt, vec)
     define r = probe(in)
 
 ; CHECK-LABEL: module private @Probe
@@ -23,10 +25,10 @@ circuit Bundle :
 ; CHECK: opensubfield
 ; CHECK: opensubindex
   module Probe :
-    input in : {a : UInt<1>, b : UInt<1>[2]}
-    output r : {a : Probe<{a : UInt<1>, b : UInt<1>[2]}>, b : Probe<{a : UInt<1>, b : UInt<1>[2]}>} ; bundle of probes of bundles (of UInt, vec)
-    output mixed : {a : UInt<1>, flip x : {flip p: Probe<{a : UInt<1>, b : UInt<1>[2]}>, flip data: UInt<1>}[2], b : UInt<1>[2]} ; mixed
-    output nohw : {x : {p: Probe<{a : UInt<1>, b : UInt<1>[2]}>}[2]} ; non-hw-only
+    input in : Data
+    output r : {a : Probe<Data>, b : Probe<Data>} ; bundle of probes of bundles (of UInt, vec)
+    output mixed : {a : UInt<1>, flip x : {flip p: Probe<Data>, flip data: UInt<1>}[2], b : UInt<1>[2]} ; mixed
+    output nohw : {x : {p: Probe<Data>}[2]} ; non-hw-only
 
     inst c1 of Child
     inst c2 of Child
@@ -49,14 +51,14 @@ circuit Bundle :
 ; CHECK: opensubfield
 ; CHECK: opensubindex
   module Bundle:
-    input in : {a : UInt<1>, b : UInt<1>[2]}
-    output out1 : {a : UInt<1>, b : UInt<1>[2]}
-    output out2 : {a : UInt<1>, b : UInt<1>[2]}
-    output out3 : {a : UInt<1>, b : UInt<1>[2]}
-    output out4 : {a : UInt<1>, b : UInt<1>[2]}
-    output out5 : {a : UInt<1>, b : UInt<1>[2]}
-    output out6 : {a : UInt<1>, b : UInt<1>[2]}
-    output out7 : {a : UInt<1>, b : UInt<1>[2]}
+    input in : Data
+    output out1 : Data
+    output out2 : Data
+    output out3 : Data
+    output out4 : Data
+    output out5 : Data
+    output out6 : Data
+    output out7 : Data
 
     inst p of Probe
     p.in <= in
