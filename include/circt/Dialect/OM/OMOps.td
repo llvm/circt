@@ -40,9 +40,16 @@ def ClassOp : OMOp<"class",
   );
 
   let builders = [
+    OpBuilder<(ins "::mlir::Twine":$name)>,
     OpBuilder<(ins "::mlir::Twine":$name,
-                    "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames)>,
-    OpBuilder<(ins "::mlir::Twine":$name)>
+                   "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames)>,
+    OpBuilder<(ins "::mlir::Twine":$name,
+                   "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames,
+                   "::mlir::ArrayRef<::mlir::Type>":$fieldTypes)>,
+    OpBuilder<(ins "::mlir::Twine":$name,
+                   "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames,
+                   "::mlir::ArrayRef<::mlir::StringRef>":$fieldNames,
+                   "::mlir::ArrayRef<::mlir::Type>":$fieldTypes)>,
   ];
 
   let hasCustomAssemblyFormat = 1;
