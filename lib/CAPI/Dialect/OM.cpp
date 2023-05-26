@@ -46,8 +46,8 @@ DEFINE_C_API_PTR_METHODS(OMEvaluator, circt::om::Evaluator)
 /// count.
 
 static inline OMObject wrap(std::shared_ptr<Object> object) {
-  return OMObject{
-      static_cast<void *>((new std::shared_ptr<Object>(object))->get())};
+  return OMObject{static_cast<void *>(
+      (new std::shared_ptr<Object>(std::move(object)))->get())};
 }
 
 static inline std::shared_ptr<Object> unwrap(OMObject c) {
