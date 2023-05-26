@@ -53,3 +53,12 @@ hw.module @scheduledWithPassthrough(%arg0 : i32, %arg1 : i32, %clk : i1, %rst : 
   }
   hw.output %0 : i32
 }
+
+// CHECK-LABEL: hw.module @withStall
+hw.module @withStall(%arg0 : i32, %go : i1, %stall : i1, %clk : i1, %rst : i1) -> (out: i32) {
+  %0 = pipeline.pipeline(%arg0, %go) stall %stall clock %clk reset %rst : (i32, i1) -> (i32) {
+   ^bb0(%a0 : i32, %gogo: i1):
+    pipeline.return %a0 valid %gogo : i32
+  }
+  hw.output %0 : i32
+}

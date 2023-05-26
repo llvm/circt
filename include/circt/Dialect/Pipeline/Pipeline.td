@@ -44,17 +44,23 @@ def UnscheduledPipelineOp : Op<Pipeline_Dialect, "unscheduled", [
     been scheduled. It contains a single block representing a graph region of
     operations to-be-scheduled into a pipeline.
     Mainly serves as a container and entrypoint for scheduling.
+
+    A `pipeline.pipeline` supports a `stall` input. This signal is intended to
+    connect to all stages within the pipeline, and is used to stall the entirety
+    of the pipeline. It is lowering defined how stages choose to use this signal,
+    although in the common case, a `stall` signal would typically connect to
+    the clock-enable input of the stage-separating registers.
   }];
 
   let arguments = (ins
-    Variadic<AnyType>:$inputs, I1:$clock, I1:$reset
+    Variadic<AnyType>:$inputs, I1:$clock, I1:$reset, Optional<I1>:$stall
   );
   let results = (outs Variadic<AnyType>:$results);
   let regions = (region SizedRegion<1>: $body);
   let hasVerifier = 1;
 
   let assemblyFormat = [{
-    `(` $inputs `)` `clock` $clock `reset` $reset attr-dict `:` functional-type($inputs, results) $body
+    `(` $inputs `)` (`stall` $stall^)? `clock` $clock `reset` $reset attr-dict `:` functional-type($inputs, results) $body
   }];
 
   let extraClassDeclaration = [{
@@ -95,6 +101,13 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
     The internal representation of the pipeline is agnostic to the latency
     insensitivity of the I/O. This is by design - allowing us a single source
     of truth for lowering either latency sensitive or latency insensitive pipelines.
+
+
+    A `pipeline.pipeline` supports a `stall` input. This signal is intended to
+    connect to all stages within the pipeline, and is used to stall the entirety
+    of the pipeline. It is lowering defined how stages choose to use this signal,
+    although in the common case, a `stall` signal would typically connect to
+    the clock-enable input of the stage-separating registers.
   }];
 
   let arguments = (ins
@@ -106,11 +119,12 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
   let hasVerifier = 1;
 
   let builders = [
-    OpBuilder<(ins "TypeRange":$results, "ValueRange":$inputs, "Value":$clock, "Value":$reset)>
+    OpBuilder<(ins "TypeRange":$results, "ValueRange":$inputs, "Value":$clock,
+      "Value":$reset, Optional<I1>:$stall)>
   ];
 
   let assemblyFormat = [{
-    `(` $inputs `)` `clock` $clock `reset` $reset attr-dict `:` functional-type($inputs, results) $body
+    `(` $inputs `)` (`stall` $stall^)? `clock` $clock `reset` $reset attr-dict `:` functional-type($inputs, results) $body
   }];
 
   let extraClassDeclaration = [{
