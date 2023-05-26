@@ -3453,7 +3453,7 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
     return emitInferRetTypeError(loc, "subaccess index must be UInt type, not ",
                                  indexType);
 
-  if (auto vectorType = firrtl::type_dyn_cast<FVectorType>(indexType)) {
+  if (auto vectorType = firrtl::type_dyn_cast<FVectorType>(inType)) {
     if (isConst(indexType))
       return vectorType.getElementTypePreservingConst();
     return vectorType.getElementType().getAllConstDroppedType();
