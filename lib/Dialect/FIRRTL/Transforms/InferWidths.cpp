@@ -821,6 +821,160 @@ computeBinary(ExprSolution lhs, ExprSolution rhs,
 /// and a boolean indicating whether a recursion was detected. This may be used
 /// to memoize the result of expressions in case they were not involved in a
 /// cycle (which may alter their value from the perspective of a variable).
+static ExprSolution solveExprNew(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
+                                 unsigned indent = 1) {
+
+  struct Frame {
+    Expr *expr;
+    ExprSolution &solution;
+    unsigned indent;
+    ExprSolution result0 = {};
+    ExprSolution result1 = {};
+    bool continuation = false;
+  };
+
+  ExprSolution solution;
+  std::vector<Frame> worklist({{expr, solution, indent}});
+
+  while (!worklist.empty()) {
+    auto &frame = worklist.back();
+
+    auto setSolution = [&](ExprSolution solution) {
+      // Memoize the result.
+      if (solution.first && !solution.second)
+        frame.expr->solution = *solution.first;
+      frame.solution = solution;
+
+      // Produce some useful debug prints.
+      LLVM_DEBUG({
+        if (!isa<KnownExpr>(frame.expr)) {
+          if (solution.first)
+            llvm::dbgs().indent(frame.indent * 2)
+                << "= Solved " << *frame.expr << " = " << *solution.first;
+          else
+            llvm::dbgs().indent(frame.indent * 2)
+                << "= Skipped " << *frame.expr;
+          llvm::dbgs() << " (" << (solution.second ? "cycle broken" : "unique")
+                       << ")\n";
+        }
+      });
+
+      worklist.pop_back();
+    };
+
+    // See if we have a memoized result we can return.
+    if (frame.expr->solution) {
+      LLVM_DEBUG({
+        if (!isa<KnownExpr>(frame.expr))
+          llvm::dbgs().indent(indent * 2) << "- Cached " << *frame.expr << " = "
+                                          << *frame.expr->solution << "\n";
+      });
+      setSolution(ExprSolution{*frame.expr->solution, false});
+      continue;
+    }
+
+    // Otherwise compute the value of the expression.
+    LLVM_DEBUG({
+      if (!isa<KnownExpr>(frame.expr))
+        llvm::dbgs().indent(frame.indent * 2)
+            << "- Solving " << *frame.expr << "\n";
+    });
+
+    TypeSwitch<Expr *>(frame.expr)
+        .Case<KnownExpr>([&](auto *expr) {
+          setSolution(ExprSolution{*expr->solution, false});
+        })
+        .Case<VarExpr>([&](auto *expr) {
+          if (frame.continuation) {
+            auto &solution = frame.result0;
+            if (expr->upperBound)
+              expr->upperBoundSolution = frame.result1.first;
+            seenVars.erase(expr);
+            // Constrain variables >= 0.
+            if (solution.first && *solution.first < 0)
+              solution.first = 0;
+            return setSolution(solution);
+          }
+
+          // Unconstrained variables produce no solution.
+          if (!expr->constraint)
+            return setSolution(ExprSolution{std::nullopt, false});
+          // Return no solution for recursions in the variables. This is sane
+          // and will cause the expression to be ignored when computing the
+          // parent, e.g. `a >= max(a, 1)` will become just `a >= 1`.
+          if (!seenVars.insert(expr).second)
+            return setSolution(ExprSolution{std::nullopt, true});
+
+          worklist.push_back({expr->constraint, frame.result0, indent + 1});
+          if (expr->upperBound)
+            worklist.push_back({expr->upperBound, frame.result1, indent + 1});
+          frame.continuation = true;
+        })
+        .Case<IdExpr>([&](auto *expr) {
+          if (frame.continuation)
+            return setSolution(frame.result0);
+          worklist.push_back({expr->arg, frame.result0, indent + 1});
+          frame.continuation = true;
+        })
+        .Case<PowExpr>([&](auto *expr) {
+          if (frame.continuation) {
+            auto arg = frame.result0;
+            return setSolution(
+                computeUnary(arg, [](int32_t arg) { return 1 << arg; }));
+          }
+          worklist.push_back({expr->arg, frame.result0, indent + 1});
+          frame.continuation = true;
+        })
+        .Case<AddExpr>([&](auto *expr) {
+          if (frame.continuation) {
+            auto lhs = frame.result0;
+            auto rhs = frame.result1;
+            return setSolution(computeBinary(
+                lhs, rhs, [](int32_t lhs, int32_t rhs) { return lhs + rhs; }));
+          }
+          worklist.push_back({expr->lhs(), frame.result0, indent + 1});
+          worklist.push_back({expr->rhs(), frame.result1, indent + 1});
+          frame.continuation = true;
+        })
+        .Case<MaxExpr>([&](auto *expr) {
+          if (frame.continuation) {
+            auto lhs = frame.result0;
+            auto rhs = frame.result1;
+            return setSolution(
+                computeBinary(lhs, rhs, [](int32_t lhs, int32_t rhs) {
+                  return std::max(lhs, rhs);
+                }));
+          }
+          worklist.push_back({expr->lhs(), frame.result0, indent + 1});
+          worklist.push_back({expr->rhs(), frame.result1, indent + 1});
+          frame.continuation = true;
+        })
+        .Case<MinExpr>([&](auto *expr) {
+          if (frame.continuation) {
+            auto lhs = frame.result0;
+            auto rhs = frame.result1;
+            return setSolution(
+                computeBinary(lhs, rhs, [](int32_t lhs, int32_t rhs) {
+                  return std::min(lhs, rhs);
+                }));
+          }
+          worklist.push_back({expr->lhs(), frame.result0, indent + 1});
+          worklist.push_back({expr->rhs(), frame.result1, indent + 1});
+          frame.continuation = true;
+        })
+        .Default([&](auto) {
+          setSolution(ExprSolution{std::nullopt, false});
+        });
+  }
+
+  return solution;
+}
+
+/// Compute the value of a constraint `expr`. `seenVars` is used as a recursion
+/// breaker. Recursive variables are treated as zero. Returns the computed value
+/// and a boolean indicating whether a recursion was detected. This may be used
+/// to memoize the result of expressions in case they were not involved in a
+/// cycle (which may alter their value from the perspective of a variable).
 static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
                               unsigned indent = 1) {
   // See if we have a memoized result we can return.
@@ -1002,9 +1156,9 @@ LogicalResult ConstraintSolver::solve() {
     LLVM_DEBUG(llvm::dbgs()
                << "- Solving " << *var << " >= " << *var->constraint << "\n");
     seenVars.insert(var);
-    auto solution = solveExpr(var->constraint, seenVars);
+    auto solution = solveExprNew(var->constraint, seenVars);
     if (var->upperBound)
-      var->upperBoundSolution = solveExpr(var->upperBound, seenVars).first;
+      var->upperBoundSolution = solveExprNew(var->upperBound, seenVars).first;
     seenVars.clear();
 
     // Constrain variables >= 0.
