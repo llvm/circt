@@ -125,7 +125,25 @@ bool circt::firrtl::isUselessName(StringRef name) {
   if (name.empty())
     return true;
   // Ignore _.*
-  return name.startswith("_");
+  return name.startswith("_T") || name.startswith("_WIRE");
+}
+
+static StringRef chooseName(StringRef a, StringRef b) {
+  if (a.empty())
+    return b;
+  if (b.empty())
+    return a;
+  if (isUselessName(a))
+    return b;
+  if (isUselessName(b))
+    return a;
+  if (a.starts_with("_"))
+    return b;
+  if (b.starts_with("_"))
+    return a;
+  if (a.size() < b.size())
+    return b;
+  return a;
 }
 
 /// Return true if the name is droppable. Note that this is different from
@@ -1797,9 +1815,13 @@ struct FoldNodeName : public mlir::RewritePattern {
     // Best effort
     if (name && !name.getValue().empty() && newOp) {
       auto newOpName = newOp->getAttrOfType<StringAttr>("name");
-      if (!newOpName || isUselessName(newOpName))
-        rewriter.updateRootInPlace(newOp,
-                                   [&] { newOp->setAttr("name", name); });
+      auto newName = name.getValue();
+      if (newOpName)
+        newName = chooseName(newOpName.getValue(), name.getValue());
+      if (!newOpName || newOpName.getValue() != newName)
+        rewriter.updateRootInPlace(newOp, [&] {
+          newOp->setAttr("name", rewriter.getStringAttr(newName));
+        });
     }
     rewriter.replaceOp(node, node.getInput());
     return success();
