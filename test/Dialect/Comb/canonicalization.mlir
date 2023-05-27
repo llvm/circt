@@ -1165,6 +1165,23 @@ hw.module @xorICmpConstant2(%value: i9, %value2: i9) -> (a: i1, b: i9) {
   // CHECK: hw.output %2, %1 : i1, i9
 }
 
+// CHECK-LABEL: func.func @xorICmpConstant3
+// Regression check for a dominance issue in icmp(xor) refactoring.
+func.func @xorICmpConstant3(%arg0: i9, %arg1: i9) -> i1 {
+  %c2_i9 = hw.constant 2 : i9
+  %c0_i9 = hw.constant 0 : i9
+  %1 = comb.xor %arg0, %arg1, %c2_i9 : i9
+  call @xorICmpConstant3Keep(%1) : (i9) -> ()
+  %2 = comb.icmp eq %1, %c0_i9 : i9
+  return %2 : i1
+  // CHECK: %0 = comb.xor %arg0, %arg1 : i9
+  // CHECK: %1 = comb.xor %0, %c2_i9 : i9
+  // CHECK: call @xorICmpConstant3Keep(%1)
+  // CHECK: %2 = comb.icmp eq %0, %c2_i9 : i9
+  // CHECK: return %2 : i1
+}
+
+func.func private @xorICmpConstant3Keep(%arg0: i9)
 
 // CHECK-LABEL: hw.module @test1560
 // This is an integration test for the testcase in Issue #1560.
