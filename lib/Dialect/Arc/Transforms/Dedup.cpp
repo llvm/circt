@@ -558,6 +558,9 @@ void DedupPass::runOnOperation() {
     LLVM_DEBUG({
       llvm::dbgs() << "- Outlining " << outlineOperands.size()
                    << " operands from " << defineOp.getSymNameAttr() << "\n";
+      for (auto entry : outlineOperands)
+        llvm::dbgs() << "  - Operand #" << entry.first->getOperandNumber()
+                     << " of " << *entry.first->getOwner() << "\n";
       for (auto name : candidateNames)
         llvm::dbgs() << "  - Candidate " << name << "\n";
     });
@@ -639,7 +642,8 @@ void DedupPass::runOnOperation() {
         &getContext(), newInputTypes, defineOp.getFunctionType().getResults()));
     addCallSiteOperands(callSites[defineOp], newOperands);
     for (auto *op : outlinedOps)
-      op->erase();
+      if (op->use_empty())
+        op->erase();
 
     // Perform the actual deduplication with other arcs.
     for (unsigned otherIdx = arcIdx + 1; otherIdx != arcEnd; ++otherIdx) {
