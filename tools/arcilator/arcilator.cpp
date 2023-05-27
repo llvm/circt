@@ -87,6 +87,11 @@ static cl::opt<std::string> stateFile("state-file", cl::desc("State file"),
 static cl::opt<bool> shouldInline("inline", cl::desc("Inline arcs"),
                                   cl::init(true), cl::cat(mainCategory));
 
+static cl::opt<bool>
+    shouldMakeLUTs("lookup-tables",
+                   cl::desc("Optimize arcs into lookup tables"), cl::init(true),
+                   cl::cat(mainCategory));
+
 static cl::opt<bool> printDebugInfo("print-debug-info",
                                     cl::desc("Print debug information"),
                                     cl::init(false), cl::cat(mainCategory));
@@ -184,7 +189,8 @@ static void populatePipeline(PassManager &pm) {
   pm.addPass(arc::createDedupPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
-  pm.addPass(arc::createMakeTablesPass());
+  if (shouldMakeLUTs)
+    pm.addPass(arc::createMakeTablesPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 
