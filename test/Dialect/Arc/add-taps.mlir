@@ -18,20 +18,20 @@ hw.module @ObservePorts(%x: i4, %y: i4) -> (u: i4, v: i4) {
 
 // CHECK-LABEL: hw.module @ObserveWires
 hw.module @ObserveWires() {
+  // CHECK-NEXT: arc.tap [[RD:%.+]] {name = "x"} : i4
   // CHECK-NEXT: %x = sv.wire
-  // CHECK-NEXT: [[RD:%.+]] = sv.read_inout %x
-  // CHECK-NEXT: arc.tap [[RD]] {name = "x"} : i4
+  // CHECK-NEXT: [[RD]] = sv.read_inout %x
   %x = sv.wire : !hw.inout<i4>
   %0 = sv.read_inout %x : !hw.inout<i4>
 
-  // CHECK-NEXT: %y = sv.wire
   // CHECK-NEXT: [[RD:%.+]] = sv.read_inout %y
   // CHECK-NEXT: arc.tap [[RD]] {name = "y"} : i4
+  // CHECK-NEXT: %y = sv.wire
   %y = sv.wire : !hw.inout<i4>
 
   // CHECK-NEXT: hw.constant
-  // CHECK-NEXT: %z = hw.wire
   // CHECK-NEXT: arc.tap %z {name = "z"} : i4
+  // CHECK-NEXT: %z = hw.wire
   %c0_i4 = hw.constant 0 : i4
   %z = hw.wire %c0_i4 : i4
 

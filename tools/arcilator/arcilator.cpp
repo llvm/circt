@@ -80,6 +80,11 @@ static cl::opt<bool> observeWires("observe-wires",
                                   cl::desc("Make all wires observable"),
                                   cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool>
+    observeNamedValues("observe-named-values",
+                       cl::desc("Make values with `sv.namehint` observable"),
+                       cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<std::string> stateFile("state-file", cl::desc("State file"),
                                       cl::value_desc("filename"), cl::init(""),
                                       cl::cat(mainCategory));
@@ -166,7 +171,8 @@ static void populatePipeline(PassManager &pm) {
   // represented as intrinsic ops.
   if (untilReached(UntilPreprocessing))
     return;
-  pm.addPass(arc::createAddTapsPass(observePorts, observeWires));
+  pm.addPass(
+      arc::createAddTapsPass(observePorts, observeWires, observeNamedValues));
   pm.addPass(arc::createStripSVPass());
   pm.addPass(arc::createInferMemoriesPass());
   pm.addPass(createCSEPass());
