@@ -121,7 +121,7 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
                            cache);
   };
   auto value =
-      TypeSwitch<FIRRTLBaseType, Value>(type)
+      TypeSwitch<FIRRTLBaseType, Value>(type.getAnonymousType())
           .Case<ClockType>([&](auto type) {
             return builder.create<AsClockPrimOp>(nullBit());
           })
@@ -582,7 +582,7 @@ ResetSignal InferResetsPass::guessRoot(ResetNetwork net) {
 // the element type is uniform across all elements.
 
 static unsigned getMaxFieldID(FIRRTLBaseType type) {
-  return TypeSwitch<FIRRTLBaseType, unsigned>(type)
+  return TypeSwitch<FIRRTLBaseType, unsigned>(type.getAnonymousType())
       .Case<BundleType>([](auto type) {
         unsigned id = 0;
         for (auto e : type.getElements())
@@ -619,6 +619,7 @@ static unsigned getIndexForFieldID(BundleType type, unsigned fieldID) {
 
 // If a field is pointing to a child of a zero-length vector, it is useless.
 static bool isUselessVec(FIRRTLBaseType oldType, unsigned fieldID) {
+  oldType = oldType.getAnonymousType();
   if (oldType.isGround()) {
     assert(fieldID == 0);
     return false;
@@ -815,7 +816,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
           // Trace through ref.sub.
           auto aggType = op.getInput().getType().getType();
           uint64_t fieldID =
-              TypeSwitch<FIRRTLBaseType, uint64_t>(aggType)
+              TypeSwitch<FIRRTLBaseType, uint64_t>(aggType.getAnonymousType())
                   .Case<FVectorType>([](auto type) { return getFieldID(type); })
                   .Case<BundleType>([&](auto type) {
                     return getFieldID(type, op.getIndex());

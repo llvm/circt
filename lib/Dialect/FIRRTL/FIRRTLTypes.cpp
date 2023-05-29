@@ -602,6 +602,11 @@ FIRRTLBaseType FIRRTLBaseType::getAllConstDroppedType() {
             UIntType>([&](auto type) { return type.getConstType(false); })
       .Case<BundleType, FVectorType, FEnumType>(
           [&](auto type) { return type.getAllConstDroppedType(); })
+      .Case<BaseTypeAliasType>([&](BaseTypeAliasType type) {
+        return type.containsConst()
+                   ? type.getInnerType().getAllConstDroppedType()
+                   : type;
+      })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return FIRRTLBaseType();

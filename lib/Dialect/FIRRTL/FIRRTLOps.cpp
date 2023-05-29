@@ -3176,7 +3176,7 @@ ParseResult parseSubfieldLikeOp(OpAsmParser &parser, OperationState &result) {
   if (parser.resolveOperand(input, inputType, result.operands))
     return failure();
 
-  auto bundleType = inputType.dyn_cast<typename OpTy::InputType>();
+  auto bundleType = type_dyn_cast<typename OpTy::InputType>(inputType);
   if (!bundleType)
     return parser.emitError(parser.getNameLoc(),
                             "input must be bundle type, got ")

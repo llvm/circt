@@ -10,7 +10,7 @@ FIRRTL version 3.0.0
 circuit Bundle :
   type Data = {a : UInt<1>, b : UInt<1>[2]}
 ; CHECK-LABEL: module private @Child
-; CHECK-SAME: in %in: !firrtl.bundle
+; CHECK-SAME: in %in: !firrtl.alias<Data, bundle
 ; CHECK-SAME: out %r: !firrtl.probe<
   module Child :
     input in : Data
@@ -18,10 +18,10 @@ circuit Bundle :
     define r = probe(in)
 
 ; CHECK-LABEL: module private @Probe
-; CHECK-SAME: in %in: !firrtl.bundle<
-; CHECK-SAME: out %r: !firrtl.openbundle<a: probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>, b: probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>>,
-; CHECK-SAME: out %mixed: !firrtl.openbundle<a: uint<1>, x flip: openvector<openbundle<p flip: probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>, data flip: uint<1>>, 2>, b: vector<uint<1>, 2>>,
-; CHECK-SAME: out %nohw: !firrtl.openbundle<x: openvector<openbundle<p: probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>>, 2>>) {
+; CHECK-SAME: in %in: !firrtl.alias<Data, bundle<
+; CHECK-SAME: out %r: !firrtl.openbundle<a: probe<alias<Data, bundle<a: uint<1>, b: vector<uint<1>, 2>>>>, b: probe<alias<Data, bundle<a: uint<1>, b: vector<uint<1>, 2>>>>>
+; CHECK-SAME: out %mixed: !firrtl.openbundle<a: uint<1>, x flip: openvector<openbundle<p flip: probe<alias<Data, bundle<a: uint<1>, b: vector<uint<1>, 2>>>>, data flip: uint<1>>, 2>, b: vector<uint<1>, 2>>
+; CHECK-SAME: out %nohw: !firrtl.openbundle<x: openvector<openbundle<p: probe<alias<Data, bundle<a: uint<1>, b: vector<uint<1>, 2>>>>>, 2>>
 ; CHECK: opensubfield
 ; CHECK: opensubindex
   module Probe :
