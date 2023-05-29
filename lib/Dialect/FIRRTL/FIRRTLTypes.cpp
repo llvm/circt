@@ -826,6 +826,10 @@ bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
   if (!destType || !srcType)
     return destFType == srcFType;
 
+  // Equivalence is checked by their anonymous types.
+  destType = destType.getAnonymousType();
+  srcType = srcType.getAnonymousType();
+
   bool srcIsConst = srcOuterTypeIsConst || srcFType.isConst();
   bool destIsConst = destOuterTypeIsConst || destFType.isConst();
 
@@ -887,11 +891,11 @@ bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
     return false;
 
   // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
-  if (destType.isa<ResetType>())
+  if (firrtl::type_isa<ResetType>(destType))
     return srcType.isResetType();
 
   // Reset types can drive UInt<1>, AsyncReset, or Reset types.
-  if (srcType.isa<ResetType>())
+  if (firrtl::type_isa<ResetType>(srcType))
     return destType.isResetType();
 
   // If we can implicitly truncate or extend the bitwidth, or either width is
@@ -901,7 +905,8 @@ bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
   if (!requireSameWidths || srcType.getBitWidthOrSentinel() == -1)
     destType = destType.getWidthlessType();
 
-  // Ground types can be connected if their constless types are the same
+  // Ground types can be connected if their constless and anonymous types are
+  // the same
   return destType.getConstType(false) == srcType.getConstType(false);
 }
 
@@ -910,12 +915,16 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
                                       bool destFlip, bool srcFlip,
                                       bool destOuterTypeIsConst,
                                       bool srcOuterTypeIsConst) {
-  auto destType = dyn_cast<FIRRTLBaseType>(destFType);
-  auto srcType = dyn_cast<FIRRTLBaseType>(srcFType);
+  auto destType = firrtl::type_dyn_cast<FIRRTLBaseType>(destFType);
+  auto srcType = firrtl::type_dyn_cast<FIRRTLBaseType>(srcFType);
 
   // For non-base types, only equivalent if identical.
   if (!destType || !srcType)
     return destFType == srcFType;
+
+  // Equivalence is checked by their anonymous types.
+  destType = destType.getAnonymousType();
+  srcType = srcType.getAnonymousType();
 
   bool srcIsConst = srcOuterTypeIsConst || srcFType.isConst();
   bool destIsConst = destOuterTypeIsConst || destFType.isConst();
@@ -956,11 +965,11 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
     return false;
 
   // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
-  if (destType.isa<ResetType>())
+  if (firrtl::type_isa<ResetType>(destType))
     return srcType.isResetType();
 
   // Reset types can drive UInt<1>, AsyncReset, or Reset types.
-  if (srcType.isa<ResetType>())
+  if (firrtl::type_isa<ResetType>(srcType))
     return destType.isResetType();
 
   // Ground types can be connected if their passive, widthless versions
@@ -978,12 +987,18 @@ bool firrtl::areTypesConstCastable(FIRRTLType destFType, FIRRTLType srcFType,
   if (destFType == srcFType)
     return true;
 
-  auto destType = destFType.dyn_cast<FIRRTLBaseType>();
-  auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
+  auto destType =
+      firrtl::type_dyn_cast<FIRRTLBaseType>(destFType).getAnonymousType();
+  auto srcType =
+      firrtl::type_dyn_cast<FIRRTLBaseType>(srcFType).getAnonymousType();
 
   // For non-base types, only castable if identical.
   if (!destType || !srcType)
     return false;
+
+  // Equivalence is checked by their anonymous types.
+  destType = destType.getAnonymousType();
+  srcType = srcType.getAnonymousType();
 
   // Types must be passive
   if (!destType.isPassive() || !srcType.isPassive())
@@ -997,8 +1012,8 @@ bool firrtl::areTypesConstCastable(FIRRTLType destFType, FIRRTLType srcFType,
 
   // Vector types can be casted if they have the same size and castable
   // element type.
-  auto destVectorType = destType.dyn_cast<FVectorType>();
-  auto srcVectorType = srcType.dyn_cast<FVectorType>();
+  auto destVectorType = firrtl::type_dyn_cast<FVectorType>(destType);
+  auto srcVectorType = firrtl::type_dyn_cast<FVectorType>(srcType);
   if (destVectorType && srcVectorType)
     return destVectorType.getNumElements() == srcVectorType.getNumElements() &&
            areTypesConstCastable(destVectorType.getElementType(),
@@ -1008,8 +1023,8 @@ bool firrtl::areTypesConstCastable(FIRRTLType destFType, FIRRTLType srcFType,
 
   // Bundle types can be casted if they have the same size, element names,
   // and castable element types.
-  auto destBundleType = destType.dyn_cast<BundleType>();
-  auto srcBundleType = srcType.dyn_cast<BundleType>();
+  auto destBundleType = firrtl::type_dyn_cast<BundleType>(destType);
+  auto srcBundleType = firrtl::type_dyn_cast<BundleType>(srcType);
   if (destBundleType && srcBundleType) {
     auto destElements = destBundleType.getElements();
     auto srcElements = srcBundleType.getElements();

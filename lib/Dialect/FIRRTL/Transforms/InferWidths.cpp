@@ -2029,7 +2029,7 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
       OpBuilder builder(op);
       auto trunc = builder.createOrFold<TailPrimOp>(con.getLoc(), con.getSrc(),
                                                     rhsWidth - lhsWidth);
-      if (rhsType.isa<SIntType>())
+      if (type_isa<SIntType>(rhsType))
         trunc =
             builder.createOrFold<AsSIntPrimOp>(con.getLoc(), lhsType, trunc);
 
@@ -2052,7 +2052,7 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
       OpBuilder builder(op);
       auto trunc = builder.createOrFold<TailPrimOp>(cast.getLoc(), rhs,
                                                     rhsWidth - lhsWidth);
-      if (rhsType.isa<SIntType>())
+      if (type_isa<SIntType>(rhsType))
         trunc =
             builder.createOrFold<AsSIntPrimOp>(cast.getLoc(), lhsType, trunc);
 
@@ -2099,7 +2099,7 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
 /// Resize a `uint`, `sint`, or `analog` type to a specific width.
 static FIRRTLBaseType resizeType(FIRRTLBaseType type, uint32_t newWidth) {
   auto *context = type.getContext();
-  return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(type)
+  return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(type.getAnonymousType())
       .Case<UIntType>([&](auto type) {
         return UIntType::get(context, newWidth, type.isConst());
       })
@@ -2160,7 +2160,7 @@ bool InferenceTypeUpdate::updateValue(Value value) {
       auto newType = updateType(FieldRef(value, fieldID), type);
       fieldID++;
       return newType;
-    } else if (auto bundleType = type.dyn_cast<BundleType>()) {
+    } else if (auto bundleType = type_dyn_cast<BundleType>(type)) {
       // Bundle types recursively update all bundle elements.
       fieldID++;
       llvm::SmallVector<BundleType::BundleElement, 3> elements;
@@ -2169,7 +2169,7 @@ bool InferenceTypeUpdate::updateValue(Value value) {
                               updateBase(element.type));
       }
       return BundleType::get(context, elements, bundleType.isConst());
-    } else if (auto vecType = type.dyn_cast<FVectorType>()) {
+    } else if (auto vecType = type_dyn_cast<FVectorType>(type)) {
       fieldID++;
       auto save = fieldID;
       // TODO: this should recurse into the element type of 0 length vectors and
@@ -2183,7 +2183,7 @@ bool InferenceTypeUpdate::updateValue(Value value) {
       }
       // If this is a 0 length vector return the original type.
       return type;
-    } else if (auto enumType = type.dyn_cast<FEnumType>()) {
+    } else if (auto enumType = type_dyn_cast<FEnumType>(type)) {
       fieldID++;
       llvm::SmallVector<FEnumType::EnumElement> elements;
       for (auto &element : enumType.getElements())

@@ -1509,7 +1509,7 @@ void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
   if (!dstType || !srcType)
     return emitConnect(builder, dst, src);
 
-  if (dstType.isa<AnalogType>()) {
+  if (type_isa<AnalogType>(dstType)) {
     builder.create<AttachOp>(ArrayRef<Value>{dst, src});
   } else if (dstType == srcType && !dstType.containsAnalog()) {
     emitConnect(builder, dst, src);
@@ -3406,7 +3406,7 @@ ParseResult FIRStmtParser::parseNode() {
   // weird like a module output or an instance input.
   auto initializerType = initializer.getType().cast<FIRRTLType>();
   auto initializerBaseType = initializer.getType().dyn_cast<FIRRTLBaseType>();
-  if (initializerType.isa<AnalogType>() ||
+  if (type_isa<AnalogType>(initializerType) ||
       !(initializerBaseType && initializerBaseType.isPassive())) {
     emitError(startTok.getLoc())
         << "Node cannot be analog and must be passive or passive under a flip "

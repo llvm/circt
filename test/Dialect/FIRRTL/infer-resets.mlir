@@ -967,3 +967,15 @@ firrtl.circuit "InferToRWProbe" {
    firrtl.connect %r_b, %driver : !firrtl.reset, !firrtl.asyncreset
   }
 }
+
+// -----
+
+firrtl.circuit "Top" {
+  // FIXME: We should preserve type alias for aynscreset.
+  // CHECK:      firrtl.module @Top(in %a: !firrtl.asyncreset, out %b: !firrtl.asyncreset) attributes {convention = #firrtl<convention scalarized>} {
+  // CHECK-NEXT: firrtl.strictconnect %b, %a : !firrtl.asyncreset
+  firrtl.module @Top(in %a: !firrtl.alias<AsyncResetType, asyncreset>, out %b: !firrtl.alias<ResetType, reset>) attributes {convention = #firrtl<convention scalarized>} {
+    %0 = firrtl.resetCast %a : (!firrtl.alias<AsyncResetType, asyncreset>) -> !firrtl.alias<ResetType, reset>
+    firrtl.strictconnect %b, %0 : !firrtl.alias<ResetType, reset>
+  }
+}

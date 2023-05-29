@@ -265,9 +265,9 @@ struct Equivalence {
                       Operation *a, Type aType, Operation *b, Type bType) {
     if (aType == bType)
       return success();
-    if (aType.isa<BundleType>() && bType.isa<BundleType>())
-      return check(diag, message, a, aType.cast<BundleType>(), b,
-                   bType.cast<BundleType>());
+    if (type_isa<BundleType>(aType) && type_isa<BundleType>(bType))
+      return check(diag, message, a, type_cast<BundleType>(aType), b,
+                   type_cast<BundleType>(bType));
     if (aType.isa<RefType>() && bType.isa<RefType>() && aType != bType) {
       diag.attachNote(a->getLoc())
           << message << ", has a RefType with a different base type "

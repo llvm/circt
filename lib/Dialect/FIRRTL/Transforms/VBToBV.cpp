@@ -255,7 +255,7 @@ void Visitor::fixAnnotation(Type oldType, Type newType, DictionaryAttr annoAttr,
   }
 
   SmallVector<std::pair<Type, uint64_t>> fields;
-  if (newType.isa<BundleType>() && !vectorAccesses.empty()) {
+  if (type_isa<BundleType>(newType) && !vectorAccesses.empty()) {
     explodeFieldID(newType, newID, fields);
   } else {
     fields.emplace_back(newType, newID);
@@ -356,9 +356,9 @@ std::pair<SmallVector<Value>, bool> Visitor::fixRefOperand(Value value) {
     if (auto refSubOp = dyn_cast<RefSubOp>(op)) {
       value = refSubOp.getInput();
       auto type = value.getType().cast<RefType>().getType();
-      if (type.isa<BundleType>())
+      if (type_isa<BundleType>(type))
         bundleAccesses.push_back(refSubOp.getIndex());
-      else if (type.isa<FVectorType>())
+      else if (type_isa<FVectorType>(type))
         vectorAccesses.push_back(refSubOp.getIndex());
       else
         refSubOp->emitError("unknown aggregate type");

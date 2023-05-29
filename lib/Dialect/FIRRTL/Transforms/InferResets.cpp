@@ -860,8 +860,8 @@ void InferResetsPass::traceResets(Value dst, Value src, Location loc) {
 void InferResetsPass::traceResets(Type dstType, Value dst, unsigned dstID,
                                   Type srcType, Value src, unsigned srcID,
                                   Location loc) {
-  if (auto dstBundle = dstType.dyn_cast<BundleType>()) {
-    auto srcBundle = srcType.cast<BundleType>();
+  if (auto dstBundle = type_dyn_cast<BundleType>(dstType)) {
+    auto srcBundle = type_cast<BundleType>(srcType);
     for (unsigned dstIdx = 0, e = dstBundle.getNumElements(); dstIdx < e;
          ++dstIdx) {
       auto dstField = dstBundle.getElements()[dstIdx].name;
@@ -883,8 +883,8 @@ void InferResetsPass::traceResets(Type dstType, Value dst, unsigned dstID,
     return;
   }
 
-  if (auto dstVector = dstType.dyn_cast<FVectorType>()) {
-    auto srcVector = srcType.cast<FVectorType>();
+  if (auto dstVector = type_dyn_cast<FVectorType>(dstType)) {
+    auto srcVector = type_cast<FVectorType>(srcType);
     auto srcElType = srcVector.getElementType();
     auto dstElType = dstVector.getElementType();
     // Collapse all elements into one shared element. See comment in traceResets
@@ -916,7 +916,7 @@ void InferResetsPass::traceResets(Type dstType, Value dst, unsigned dstID,
   auto srcBase = srcType.dyn_cast<FIRRTLBaseType>();
   if (!dstBase || !srcBase)
     return;
-  if (!dstBase.isa<ResetType>() && !srcBase.isa<ResetType>())
+  if (!type_isa<ResetType>(dstBase) && !type_isa<ResetType>(srcBase))
     return;
 
   FieldRef dstField(dst, dstID);
@@ -992,9 +992,9 @@ FailureOr<ResetKind> InferResetsPass::inferReset(ResetNetwork net) {
   unsigned invalidDrives = 0;
   for (ResetSignal signal : net) {
     // Keep track of whether this signal contributes a vote for async or sync.
-    if (signal.type.isa<AsyncResetType>())
+    if (firrtl::type_isa<AsyncResetType>(signal.type))
       ++asyncDrives;
-    else if (signal.type.isa<UIntType>())
+    else if (firrtl::type_isa<UIntType>(signal.type))
       ++syncDrives;
     else if (isUselessVec(signal.field) ||
              isa_and_nonnull<InvalidValueOp>(
@@ -1029,10 +1029,10 @@ FailureOr<ResetKind> InferResetsPass::inferReset(ResetNetwork net) {
         << "majority of connections to this reset are "
         << (majorityAsync ? "async" : "sync");
     for (auto &drive : getResetDrives(net)) {
-      if ((drive.dst.type.isa<AsyncResetType>() && !majorityAsync) ||
-          (drive.src.type.isa<AsyncResetType>() && !majorityAsync) ||
-          (drive.dst.type.isa<UIntType>() && majorityAsync) ||
-          (drive.src.type.isa<UIntType>() && majorityAsync))
+      if ((type_isa<AsyncResetType>(drive.dst.type) && !majorityAsync) ||
+          (type_isa<AsyncResetType>(drive.src.type) && !majorityAsync) ||
+          (type_isa<UIntType>(drive.dst.type) && majorityAsync) ||
+          (type_isa<UIntType>(drive.src.type) && majorityAsync))
         diag.attachNote(drive.loc)
             << (drive.src.type.isa<AsyncResetType>() ? "async" : "sync")
             << " drive here:";
@@ -1781,7 +1781,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
   // Handle registers with reset.
   if (auto regOp = dyn_cast<RegResetOp>(op)) {
     // If the register already has an async reset, leave it untouched.
-    if (regOp.getResetSignal().getType().isa<AsyncResetType>()) {
+    if (firrtl::type_isa<AsyncResetType>(regOp.getResetSignal().getType())) {
       LLVM_DEBUG(llvm::dbgs()
                  << "- Skipping (has async reset) " << regOp << "\n");
       // The following performs the logic of `CheckResets` in the original
