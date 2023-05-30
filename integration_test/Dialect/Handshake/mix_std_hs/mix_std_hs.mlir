@@ -2,7 +2,7 @@
 
 // RUN: hlstool %s --dynamic-hw --buffering-strategy=cycles --split-verilog --lowering-options=disallowLocalVariables,disallowPackedStructAssignments -o %T-cycles
 // RUN: hlstool %S/kernel.mlir --dynamic-hw --buffering-strategy=cycles --split-verilog --lowering-options=disallowLocalVariables,disallowPackedStructAssignments -o %T-cycles
-// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=mix_std_hs --pythonFolder=%S %T-cycles/*.sv 2>&1 | FileCheck %s
+// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=mix_std_hs --pythonFolder="%S,%S/.." %T-cycles/*.sv 2>&1 | FileCheck %s
 
 // CHECK: ** TEST
 // CHECK: ** TESTS=[[N:.*]] PASS=[[N]] FAIL=0 SKIP=0
