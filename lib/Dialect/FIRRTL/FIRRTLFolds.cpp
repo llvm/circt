@@ -85,49 +85,10 @@ static bool isUInt1(Type type) {
   return true;
 }
 
-/// A wrapper of `PatternRewriter::replaceOp` to propagate "name" attribute.
-/// If a replaced op has a "name" attribute, this function propagates the name
-/// to the new value.
-static void replaceOpAndCopyName(PatternRewriter &rewriter, Operation *op,
-                                 Value newValue) {
-  if (auto *newOp = newValue.getDefiningOp()) {
-    auto name = op->getAttrOfType<StringAttr>("name");
-    if (name && !name.getValue().empty()) {
-      auto newOpName = newOp->getAttrOfType<StringAttr>("name");
-      if (!newOpName || isUselessName(newOpName))
-        rewriter.updateRootInPlace(newOp,
-                                   [&] { newOp->setAttr("name", name); });
-    }
-  }
-  rewriter.replaceOp(op, newValue);
-}
-
-/// A wrapper of `PatternRewriter::replaceOpWithNewOp` to propagate "name"
-/// attribute. If a replaced op has a "name" attribute, this function propagates
-/// the name to the new value.
-template <typename OpTy, typename... Args>
-static OpTy replaceOpWithNewOpAndCopyName(PatternRewriter &rewriter,
-                                          Operation *op, Args &&...args) {
-  auto name = op->getAttrOfType<StringAttr>("name");
-  auto newOp =
-      rewriter.replaceOpWithNewOp<OpTy>(op, std::forward<Args>(args)...);
-  if (name && !name.getValue().empty()) {
-    auto newOpName = newOp->template getAttrOfType<StringAttr>("name");
-    if (!newOpName || isUselessName(newOpName))
-      rewriter.updateRootInPlace(newOp, [&] { newOp->setAttr("name", name); });
-  }
-  return newOp;
-}
-
-/// Return true if this is a useless temporary name produced by FIRRTL.  We
-/// drop these as they don't convey semantic meaning.
-bool circt::firrtl::isUselessName(StringRef name) {
-  if (name.empty())
-    return true;
-  // Ignore _.*
-  return name.startswith("_T") || name.startswith("_WIRE");
-}
-
+// Heuristic to pick the best name.  Always pick a name over no name.  Always
+// pick a good name over a useless name.  Always pick a good name over one which
+// starts with underscore.  Define the best name as the longest name.
+// This deterministically favors the second name on ties.
 static StringRef chooseName(StringRef a, StringRef b) {
   if (a.empty())
     return b;
@@ -144,6 +105,57 @@ static StringRef chooseName(StringRef a, StringRef b) {
   if (a.size() < b.size())
     return b;
   return a;
+}
+
+/// Set the name of an op based on the best of two names:  The current name, and
+/// the name passed in.
+static void updateName(PatternRewriter &rewriter, Operation *op,
+                       StringAttr name) {
+  if (!name || name.getValue().empty() || name.getValue() == "")
+    return;
+  auto newName = name.getValue(); // old name is interesting
+  auto newOpName = op->getAttrOfType<StringAttr>("name");
+  // new name might not be interesting
+  if (newOpName && !newOpName.getValue().empty() && newOpName.getValue() != "")
+    newName = chooseName(newOpName.getValue(), name.getValue());
+  // Only update if needed
+  if (!newOpName || newOpName.getValue() != newName)
+    rewriter.updateRootInPlace(
+        op, [&] { op->setAttr("name", rewriter.getStringAttr(newName)); });
+}
+
+/// A wrapper of `PatternRewriter::replaceOp` to propagate "name" attribute.
+/// If a replaced op has a "name" attribute, this function propagates the name
+/// to the new value.
+static void replaceOpAndCopyName(PatternRewriter &rewriter, Operation *op,
+                                 Value newValue) {
+  if (auto *newOp = newValue.getDefiningOp()) {
+    auto name = op->getAttrOfType<StringAttr>("name");
+    updateName(rewriter, newOp, name);
+  }
+  rewriter.replaceOp(op, newValue);
+}
+
+/// A wrapper of `PatternRewriter::replaceOpWithNewOp` to propagate "name"
+/// attribute. If a replaced op has a "name" attribute, this function propagates
+/// the name to the new value.
+template <typename OpTy, typename... Args>
+static OpTy replaceOpWithNewOpAndCopyName(PatternRewriter &rewriter,
+                                          Operation *op, Args &&...args) {
+  auto name = op->getAttrOfType<StringAttr>("name");
+  auto newOp =
+      rewriter.replaceOpWithNewOp<OpTy>(op, std::forward<Args>(args)...);
+  updateName(rewriter, newOp, name);
+  return newOp;
+}
+
+/// Return true if this is a useless temporary name produced by FIRRTL.  We
+/// drop these as they don't convey semantic meaning.
+bool circt::firrtl::isUselessName(StringRef name) {
+  if (name.empty())
+    return true;
+  // Ignore _.*
+  return name.startswith("_T") || name.startswith("_WIRE");
 }
 
 /// Return true if the name is droppable. Note that this is different from
@@ -1813,16 +1825,8 @@ struct FoldNodeName : public mlir::RewritePattern {
       return failure();
     auto *newOp = node.getInput().getDefiningOp();
     // Best effort
-    if (name && !name.getValue().empty() && newOp) {
-      auto newOpName = newOp->getAttrOfType<StringAttr>("name");
-      auto newName = name.getValue();
-      if (newOpName)
-        newName = chooseName(newOpName.getValue(), name.getValue());
-      if (!newOpName || newOpName.getValue() != newName)
-        rewriter.updateRootInPlace(newOp, [&] {
-          newOp->setAttr("name", rewriter.getStringAttr(newName));
-        });
-    }
+    if (newOp)
+      updateName(rewriter, newOp, name);
     rewriter.replaceOp(node, node.getInput());
     return success();
   }

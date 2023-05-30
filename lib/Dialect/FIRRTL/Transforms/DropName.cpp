@@ -54,9 +54,9 @@ struct DropNamesPass : public DropNameBase<DropNamesPass> {
           return ModAction::Demote;
         return ModAction::Keep;
       });
-      numNamesConverted += namesChanged;
-      numNamesDropped += namesDropped;
     }
+    numNamesConverted += namesChanged;
+    numNamesDropped += namesDropped;
   }
 
 private:
