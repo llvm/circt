@@ -609,7 +609,6 @@ void Solver::Circuit::loadStateConstraints() {
   }
   // Combinatorial values are handled by the constraints we already have, so we
   // do not need their state
-  return;
 }
 
 /// Execute a clock posedge (i.e. update registers and combinatorial logic)
@@ -653,7 +652,6 @@ void Solver::Circuit::runClockPosedge() {
   }
   // Update combinational updates so register outputs can propagate
   applyCombUpdates();
-  return;
 }
 
 /// Execute a clock negedge (i.e. update combinatorial logic)
@@ -665,7 +663,6 @@ void Solver::Circuit::runClockNegedge() {
   }
   // Update combinational updates so changes in inputs can propagate
   applyCombUpdates();
-  return;
 }
 
 /// Assign a new set of symbolic values to all inputs
@@ -691,7 +688,6 @@ void Solver::Circuit::updateInputs(int count, bool posedge) {
       assert(symInsertion.second && "Value not inserted in symbol table");
     }
   }
-  return;
 }
 
 /// Check that the properties hold for the current state
@@ -723,10 +719,7 @@ bool Solver::Circuit::checkCycle(int count) {
   }
   updateInputs(count, false);
   runClockNegedge();
-  if (!checkState()) {
-    return false;
-  }
-  return true;
+  return checkState();
 }
 
 /// Update combinatorial logic states (to propagate new inputs/reg outputs)
@@ -832,7 +825,7 @@ void Solver::Circuit::performCompReg(mlir::Value input, mlir::Value clk,
   reg.data = data;
   reg.reset = reset;
   reg.resetValue = resetValue;
-  regs.insert(regs.end(), reg);
+  regs.push_back(reg);
   addClk(clk);
   // TODO THIS IS TEMPORARY FOR TESTING
   z3::expr inExpr = exprTable.find(input)->second;
@@ -856,8 +849,8 @@ void Solver::Circuit::performFirReg(mlir::Value next, mlir::Value clk,
   reg.data = data;
   reg.reset = reset;
   reg.resetValue = resetValue;
-  regs.insert(regs.end(), reg);
-  clks.insert(clks.end(), clk);
+  regs.push_back(reg);
+  addClk(clk);
   // TODO THIS IS TEMPORARY FOR TESTING
   z3::expr inExpr = exprTable.find(next)->second;
   z3::expr outExpr = exprTable.find(data)->second;
