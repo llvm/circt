@@ -203,7 +203,7 @@ struct MappingContextTraits<DescribedSignal, Context> {
       // The final non-array type must be an integer.  Leave this as an assert
       // with a blind cast because we generated this type in this pass (and we
       // therefore cannot fail this cast).
-      assert(tpe.isa<IntegerType>());
+      assert(type_isa<IntegerType>(tpe));
       width = tpe.cast<IntegerType>().getWidth();
     }
 

@@ -952,7 +952,8 @@ void Emitter::emitExpression(RefResolveOp op) {
 
 void Emitter::emitExpression(RefSubOp op) {
   emitExpression(op.getInput());
-  TypeSwitch<FIRRTLBaseType, void>(op.getInput().getType().getType())
+  TypeSwitch<FIRRTLBaseType, void>(
+      op.getInput().getType().getType().getAnonymousType())
       .Case<FVectorType>([&](auto type) {
         ps << "[";
         ps.addAsString(op.getIndex());
@@ -1040,6 +1041,8 @@ void Emitter::emitType(Type type, bool includeConst) {
         ps << "Analog";
         emitWidth(type.getWidth());
       })
+      .Case<BaseTypeAliasType>(
+          [&](auto type) { emitType(type.getInnerType()); })
       .Case<OpenBundleType, BundleType>([&](auto type) {
         ps << "{";
         if (!type.getElements().empty())

@@ -1829,7 +1829,7 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
   FailureOr<Value> subResult;
   if (isa<RefType>(result.getType()))
     subResult = emitCachedSubAccess<RefSubOp>(result, attrs, indexNo, loc);
-  else if (isa<FVectorType>(result.getType()))
+  else if (firrtl::type_isa<FVectorType>(result.getType()))
     subResult = emitCachedSubAccess<SubindexOp>(result, attrs, indexNo, loc);
   else
     subResult =

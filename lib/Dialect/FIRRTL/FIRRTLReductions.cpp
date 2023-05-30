@@ -273,8 +273,8 @@ static void connectToLeafs(ImplicitLocOpBuilder &builder, Value dest,
   auto valueWidth = valueType ? valueType.getBitWidthOrSentinel() : -1;
   if (destWidth >= 0 && valueWidth >= 0 && destWidth < valueWidth)
     value = builder.create<firrtl::HeadPrimOp>(value, destWidth);
-  if (!type.isa<firrtl::UIntType>()) {
-    if (type.isa<firrtl::SIntType>())
+  if (!firrtl::type_isa<firrtl::UIntType>(type)) {
+    if (firrtl::type_isa<firrtl::SIntType>(type))
       value = builder.create<firrtl::AsSIntPrimOp>(value);
     else
       return;
@@ -300,8 +300,8 @@ static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
                 builder.createOrFold<firrtl::SubindexOp>(value, i));
     return;
   }
-  if (!type.isa<firrtl::UIntType>()) {
-    if (type.isa<firrtl::SIntType>())
+  if (!firrtl::type_isa<firrtl::UIntType>(type)) {
+    if (firrtl::type_isa<firrtl::SIntType>(type))
       value = builder.create<firrtl::AsUIntPrimOp>(value);
     else
       return;
@@ -501,7 +501,7 @@ struct FIRRTLOperandForwarder : public Reduction {
            resultTy.getWidthlessType() == opTy.getWidthlessType() &&
            (resultTy.getBitWidthOrSentinel() == -1) ==
                (opTy.getBitWidthOrSentinel() == -1) &&
-           resultTy.isa<firrtl::UIntType, firrtl::SIntType>();
+           firrtl::type_isa<firrtl::UIntType, firrtl::SIntType>(resultTy);
   }
   LogicalResult rewrite(Operation *op) override {
     assert(match(op));
@@ -539,7 +539,7 @@ struct FIRRTLConstantifier : public Reduction {
     if (isFlowSensitiveOp(op))
       return 0;
     auto type = op->getResult(0).getType().dyn_cast<firrtl::FIRRTLBaseType>();
-    return type && type.isa<firrtl::UIntType, firrtl::SIntType>();
+    return type && firrtl::type_isa<firrtl::UIntType, firrtl::SIntType>(type);
   }
   LogicalResult rewrite(Operation *op) override {
     assert(match(op));
@@ -549,7 +549,8 @@ struct FIRRTLConstantifier : public Reduction {
     if (width == -1)
       width = 64;
     auto newOp = builder.create<firrtl::ConstantOp>(
-        op->getLoc(), type, APSInt(width, type.isa<firrtl::UIntType>()));
+        op->getLoc(), type,
+        APSInt(width, firrtl::type_isa<firrtl::UIntType>(type)));
     op->replaceAllUsesWith(newOp);
     reduce::pruneUnusedOps(op, *this);
     return success();
@@ -767,7 +768,7 @@ struct ConnectSourceOperandForwarder : public Reduction {
            resultTy.getWidthlessType() == opTy.getWidthlessType() &&
            ((resultTy.getBitWidthOrSentinel() == -1) ==
             (opTy.getBitWidthOrSentinel() == -1)) &&
-           resultTy.isa<firrtl::UIntType, firrtl::SIntType>();
+           firrtl::type_isa<firrtl::UIntType, firrtl::SIntType>(resultTy);
   }
 
   LogicalResult rewrite(Operation *op) override {
