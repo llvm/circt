@@ -20,22 +20,25 @@
 
 #define DEBUG_TYPE "lec-solver"
 
-Solver::Solver(mlir::MLIRContext *mlirCtx, bool statisticsOpt)
+using namespace circt;
+using namespace mlir;
+
+Solver::Solver(MLIRContext *mlirCtx, bool statisticsOpt)
     : circuits{}, mlirCtx(mlirCtx), context(), solver(context),
       statisticsOpt(statisticsOpt) {}
 
 /// Solve the equivalence problem between the two circuits, then present the
 /// results to the user.
-mlir::LogicalResult Solver::solve() {
+LogicalResult Solver::solve() {
   // Constrain the circuits for equivalence checking to be made:
   // require them to produce different outputs starting from the same inputs.
   if (constrainCircuits().failed())
-    return mlir::failure();
+    return failure();
 
   // Instruct the logical engine to solve the constraints:
   // if they can't be satisfied it must mean the two circuits are functionally
   // equivalent. Otherwise, print a model to act as a counterexample.
-  mlir::LogicalResult outcome = mlir::success();
+  LogicalResult outcome = success();
   switch (solver.check()) {
   case z3::unsat:
     lec::outs() << "c1 == c2\n";
@@ -43,10 +46,10 @@ mlir::LogicalResult Solver::solve() {
   case z3::sat:
     lec::outs() << "c1 != c2\n";
     printModel();
-    outcome = mlir::failure();
+    outcome = failure();
     break;
   case z3::unknown:
-    outcome = mlir::failure();
+    outcome = failure();
     lec::errs() << "circt-lec error: solver ran out of time\n";
   }
 
@@ -78,20 +81,20 @@ void Solver::printModel() {
   lec::Scope indent;
   z3::model model = solver.get_model();
   for (unsigned int i = 0; i < model.size(); i++) {
-    // Recover the corresponding mlir::Value for the z3::expression
+    // Recover the corresponding Value for the z3::expression
     // then emit a remark for its location.
     z3::func_decl f = model.get_const_decl(i);
-    mlir::Builder builder(mlirCtx);
+    Builder builder(mlirCtx);
     std::string symbolStr = f.name().str();
-    mlir::StringAttr symbol = builder.getStringAttr(symbolStr);
-    mlir::Value value = symbolTable.find(symbol)->second;
+    StringAttr symbol = builder.getStringAttr(symbolStr);
+    Value value = symbolTable.find(symbol)->second;
     z3::expr e = model.get_const_interp(f);
-    mlir::emitRemark(value.getLoc(), "");
-    // Explicitly unfolded asm printing for `mlir::Value`.
-    if (auto arg = value.dyn_cast<mlir::BlockArgument>()) {
+    emitRemark(value.getLoc(), "");
+    // Explicitly unfolded asm printing for `Value`.
+    if (auto arg = value.dyn_cast<BlockArgument>()) {
       // Value is an argument rather than a SSA'ed value of an operation.
-      mlir::Operation *parentOp = value.getParentRegion()->getParentOp();
-      if (auto op = llvm::dyn_cast<circt::hw::HWModuleOp>(parentOp)) {
+      Operation *parentOp = value.getParentRegion()->getParentOp();
+      if (auto op = llvm::dyn_cast<hw::HWModuleOp>(parentOp)) {
         // Argument of a `hw.module`.
         lec::outs() << "argument name: " << op.getArgNames()[arg.getArgNumber()]
                     << "\n";
@@ -133,7 +136,7 @@ void Solver::printStatistics() {
 /// there would be a model acting as a counterexample.
 /// The procedure fails when detecting a mismatch of arity or type between
 /// the inputs and outputs of the circuits.
-mlir::LogicalResult Solver::constrainCircuits() {
+LogicalResult Solver::constrainCircuits() {
   // TODO: Perform these failure checks before nalyzing the whole IR of the
   // modules during the pass.
   auto c1Inputs = circuits[0]->getInputs();
@@ -144,7 +147,7 @@ mlir::LogicalResult Solver::constrainCircuits() {
   // Can't compare two circuits with different number of inputs.
   if (nc1Inputs != nc2Inputs) {
     lec::errs() << "circt-lec error: different input arity\n";
-    return mlir::failure();
+    return failure();
   }
 
   const auto *c1inIt = c1Inputs.begin();
@@ -153,7 +156,7 @@ mlir::LogicalResult Solver::constrainCircuits() {
     // Can't compare two circuits when their ith inputs differ in type.
     if (c1inIt->get_sort().bv_size() != c2inIt->get_sort().bv_size()) {
       lec::errs() << "circt-lec error: input #" << i + 1 << " type mismatch\n";
-      return mlir::failure();
+      return failure();
     }
     // Their ith inputs have to be equivalent.
     solver.add(*c1inIt++ == *c2inIt++);
@@ -167,7 +170,7 @@ mlir::LogicalResult Solver::constrainCircuits() {
   // Can't compare two circuits with different number of outputs.
   if (nc1Outputs != nc2Outputs) {
     lec::errs() << "circt-lec error: different output arity\n";
-    return mlir::failure();
+    return failure();
   }
 
   const auto *c1outIt = c1Outputs.begin();
@@ -176,11 +179,11 @@ mlir::LogicalResult Solver::constrainCircuits() {
     // Can't compare two circuits when their ith outputs differ in type.
     if (c1outIt->get_sort().bv_size() != c2outIt->get_sort().bv_size()) {
       lec::errs() << "circt-lec error: output #" << i + 1 << " type mismatch\n";
-      return mlir::failure();
+      return failure();
     }
     // Their ith outputs have to be equivalent.
     solver.add(*c1outIt++ != *c2outIt++);
   }
 
-  return mlir::success();
+  return success();
 }

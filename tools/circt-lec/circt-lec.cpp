@@ -27,6 +27,9 @@
 
 namespace cl = llvm::cl;
 
+using namespace mlir;
+using namespace circt;
+
 //===----------------------------------------------------------------------===//
 // Command-line options declaration
 //===----------------------------------------------------------------------===//
@@ -72,22 +75,21 @@ static cl::opt<bool, true> statistics(
 /// traverses their IR to export the logical constraints from the given circuit
 /// description to an internal circuit representation, lastly, these will be
 /// compared and solved for equivalence.
-static mlir::LogicalResult executeLEC(mlir::MLIRContext &context) {
+static LogicalResult executeLEC(MLIRContext &context) {
   // Parse the provided input files.
   if (verbose)
     lec::outs() << "Parsing input file\n";
-  mlir::OwningOpRef<mlir::ModuleOp> file1 =
-      mlir::parseSourceFile<mlir::ModuleOp>(fileName1, &context);
+  OwningOpRef<ModuleOp> file1 = parseSourceFile<ModuleOp>(fileName1, &context);
   if (!file1)
-    return mlir::failure();
+    return failure();
 
-  mlir::OwningOpRef<mlir::ModuleOp> file2;
+  OwningOpRef<ModuleOp> file2;
   if (!fileName2.empty()) {
     if (verbose)
       lec::outs() << "Parsing second input file\n";
-    file2 = mlir::parseSourceFile<mlir::ModuleOp>(fileName2, &context);
+    file2 = parseSourceFile<ModuleOp>(fileName2, &context);
     if (!file2)
-      return mlir::failure();
+      return failure();
   } else if (verbose)
     lec::outs() << "Second input file not specified\n";
 
@@ -101,9 +103,9 @@ static mlir::LogicalResult executeLEC(mlir::MLIRContext &context) {
   if (verbose)
     lec::outs() << "Analyzing the first circuit\n";
   auto exporter = std::make_unique<LogicExporter>(moduleName1, c1);
-  mlir::ModuleOp m = file1.get();
+  ModuleOp m = file1.get();
   if (failed(exporter->run(m)))
-    return mlir::failure();
+    return failure();
 
   // Repeat the same procedure for the second circuit.
   if (verbose)
@@ -111,9 +113,9 @@ static mlir::LogicalResult executeLEC(mlir::MLIRContext &context) {
   auto exporter2 = std::make_unique<LogicExporter>(moduleName2, c2);
   // In case a second input file was not specified, the first input file will
   // be used instead.
-  mlir::ModuleOp m2 = fileName2.empty() ? m : file2.get();
+  ModuleOp m2 = fileName2.empty() ? m : file2.get();
   if (failed(exporter2->run(m2)))
-    return mlir::failure();
+    return failure();
 
   // The logical constraints have been exported to their respective circuit
   // representations and can now be solved for equivalence.
@@ -129,7 +131,7 @@ static mlir::LogicalResult executeLEC(mlir::MLIRContext &context) {
 int main(int argc, char **argv) {
   // Configure the relevant command-line options.
   cl::HideUnrelatedOptions(mainCategory);
-  mlir::registerMLIRContextCLOptions();
+  registerMLIRContextCLOptions();
   cl::AddExtraVersionPrinter(
       [](llvm::raw_ostream &os) { os << circt::getCirctVersion() << '\n'; });
 
@@ -145,13 +147,13 @@ int main(int argc, char **argv) {
   llvm::setBugReportMsg(circt::circtBugReportMsg);
 
   // Register the supported CIRCT dialects and create a context to work with.
-  mlir::DialectRegistry registry;
+  DialectRegistry registry;
   registry.insert<circt::comb::CombDialect, circt::hw::HWDialect>();
-  mlir::MLIRContext context(registry);
+  MLIRContext context(registry);
 
   // Setup of diagnostic handling.
   llvm::SourceMgr sourceMgr;
-  mlir::SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
+  SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
   // Avoid printing a superfluous note on diagnostic emission.
   context.printOpOnDiagnostic(false);
 

@@ -18,7 +18,7 @@ jobs:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
       - name: Get CIRCT
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 2
           submodules: "true"
@@ -49,7 +49,7 @@ jobs:
         id: build-current-llvm-commit
         run: |
           cd llvm
-          echo "::set-output name=sha::$(git rev-parse HEAD)"
+          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
           cmake --build ../build --config Debug --target check-circt --target check-circt-unit -- -j$(nproc)
 
       - name: Build latest LLVM commit
@@ -59,7 +59,7 @@ jobs:
           cd llvm
           git fetch origin main
           git checkout --detach origin/main
-          echo "::set-output name=sha::$(git rev-parse HEAD)"
+          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
           cmake --build ../build --config Debug --target check-circt --target check-circt-unit -- -j$(nproc)
 
       - name: Bisect commits

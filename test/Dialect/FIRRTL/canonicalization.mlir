@@ -2733,7 +2733,7 @@ firrtl.module @MultibitMux(in %a: !firrtl.vector<uint<1>, 3>, in %sel: !firrtl.u
 firrtl.module @NameProp(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
   %0 = firrtl.or %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   %_useless_name_1 = firrtl.node  %0  : !firrtl.uint<1>
-  %useful_name = firrtl.node  %_useless_name_1  : !firrtl.uint<1>
+  %useful_name = firrtl.node %_useless_name_1  : !firrtl.uint<1>
   %_useless_name_2 = firrtl.node  %useful_name  : !firrtl.uint<1>
   // CHECK-NEXT: %useful_name = firrtl.or %in0, %in1
   // CHECK-NEXT: firrtl.strictconnect %out, %useful_name

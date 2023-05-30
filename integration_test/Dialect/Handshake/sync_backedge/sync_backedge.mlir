@@ -1,10 +1,10 @@
 // REQUIRES: iverilog,cocotb
 
 // RUN: hlstool %s --dynamic-hw --ir-input-level 1 --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables > %t.sv && \
-// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=sync_backedge --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
+// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=sync_backedge --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 // RUN: hlstool %s --dynamic-hw --ir-input-level 1 --buffering-strategy=all --verilog --lowering-options=disallowLocalVariables > %t.sv && \
-// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=sync_backedge --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
+// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=sync_backedge --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 // CHECK: ** TEST
 // CHECK: ** TESTS=[[N:.*]] PASS=[[N]] FAIL=0 SKIP=0

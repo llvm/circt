@@ -19,7 +19,7 @@ jobs:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
       - name: Get CIRCT
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 2
           submodules: "true"
@@ -31,13 +31,13 @@ jobs:
       # Extract the LLVM submodule hash for use in the cache key.
       - name: Get LLVM Hash
         id: get-llvm-hash
-        run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
+        run: echo "hash=$(git rev-parse @:./llvm)" >> $GITHUB_OUTPUT
         shell: bash
 
       # Try to fetch LLVM from the cache.
       - name: Cache LLVM
         id: cache-llvm
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: |
             llvm/build/bin/llvm-lit.py

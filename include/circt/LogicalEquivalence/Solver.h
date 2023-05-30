@@ -19,6 +19,8 @@
 #include "mlir/IR/Value.h"
 #include <z3++.h>
 
+namespace circt {
+
 /// A satisfiability checker for circuit equivalence
 ///
 /// This class interfaces with an external SMT solver acting as a logical
@@ -71,5 +73,7 @@ private:
   /// The value of the `statistics` command-line option.
   bool statisticsOpt;
 };
+
+} // namespace circt
 
 #endif // TOOLS_CIRCT_LEC_SOLVER_H

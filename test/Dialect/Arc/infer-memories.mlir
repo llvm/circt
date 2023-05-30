@@ -39,7 +39,9 @@ hw.module @TestROMemory(%clock: i1, %addr: i10, %enable: i1) -> (data: i8) {
   // CHECK-NOT: hw.instance
   // CHECK-NEXT: [[FOO:%.+]] = arc.memory <1024 x i8, i10> {name = "foo"}
   // CHECK-NEXT: [[RDATA:%.+]] = arc.memory_read_port [[FOO]][%addr] : <1024 x i8, i10>
-  // CHECK-NEXT: hw.output [[RDATA]]
+  // CHECK-NEXT: [[ZERO:%.+]] = hw.constant 0 : i8
+  // CHECK-NEXT: [[MUX:%.+]] = comb.mux %enable, [[RDATA]], [[ZERO]] : i8
+  // CHECK-NEXT: hw.output [[MUX]]
   %0 = hw.instance "foo" @ROMemory(R0_addr: %addr: i10, R0_en: %enable: i1, R0_clk: %clock: i1) -> (R0_data: i8)
   hw.output %0 : i8
 }
@@ -53,7 +55,9 @@ hw.module @TestROMemoryWithLatency(%clock: i1, %addr: i10, %enable: i1) -> (data
   // CHECK-NOT: hw.instance
   // CHECK-NEXT: [[FOO:%.+]] = arc.memory <1024 x i8, i10> {name = "foo"}
   // CHECK-NEXT: [[D0:%.+]] = arc.memory_read_port [[FOO]][%addr] : <1024 x i8, i10>
-  // CHECK-NEXT: [[D1:%.+]] = seq.compreg {{.+}} [[D0]], %clock
+  // CHECK-NEXT: [[ZERO:%.+]] = hw.constant 0 : i8
+  // CHECK-NEXT: [[D0MUX:%.+]] = comb.mux %enable, [[D0]], [[ZERO]] : i8
+  // CHECK-NEXT: [[D1:%.+]] = seq.compreg {{.+}} [[D0MUX]], %clock
   // CHECK-NEXT: [[D2:%.+]] = seq.compreg {{.+}} [[D1]], %clock
   // CHECK-NEXT: [[D3:%.+]] = seq.compreg {{.+}} [[D2]], %clock
   // CHECK-NEXT: hw.output [[D3]]
@@ -70,9 +74,11 @@ hw.module @TestRWMemory(%clock: i1, %addr: i10, %enable: i1, %wmode: i1, %wdata:
   // CHECK-NOT: hw.instance
   // CHECK-NEXT: [[FOO:%.+]] = arc.memory <1024 x i8, i10> {name = "foo"}
   // CHECK-NEXT: [[RDATA:%.+]] = arc.memory_read_port [[FOO]][%addr] : <1024 x i8, i10>
+  // CHECK-NEXT: [[ZERO:%.+]] = hw.constant 0 : i8
+  // CHECK-NEXT: [[MUX:%.+]] = comb.mux %enable, [[RDATA]], [[ZERO]] : i8
   // CHECK-NEXT: [[WENABLE:%.+]] = comb.and %enable, %wmode
   // CHECK-NEXT: arc.memory_write_port [[FOO]], @mem_write{{.*}}(%addr, %wdata, [[WENABLE]]) clock %clock enable lat 1 : <1024 x i8, i10>, i10, i8, i1
-  // CHECK-NEXT: hw.output [[RDATA]]
+  // CHECK-NEXT: hw.output [[MUX]]
   %0 = hw.instance "foo" @RWMemory(RW0_addr: %addr: i10, RW0_en: %enable: i1, RW0_clk: %clock: i1, RW0_wmode: %wmode: i1, RW0_wdata: %wdata: i8) -> (RW0_rdata: i8)
   hw.output %0 : i8
 }

@@ -2,6 +2,7 @@
 import argparse
 import sys
 import json
+import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import *
@@ -20,6 +21,11 @@ parser = argparse.ArgumentParser(
 parser.add_argument("state_json",
                     metavar="STATE_JSON",
                     help="state description file to process")
+parser.add_argument("--view-depth",
+                    metavar="DEPTH",
+                    type=int,
+                    default=-1,
+                    help="hierarchy levels to expose as C++ structs")
 args = parser.parse_args()
 
 
@@ -163,12 +169,36 @@ def state_cpp_type(state: StateInfo) -> str:
   return state_cpp_type_nonmemory(state)
 
 
-def format_view_hierarchy(hierarchy: StateHierarchy) -> str:
+C_KEYWORDS = """
+alignas alignof and and_eq asm auto bitand bitor bool break case catch char
+char16_t char32_t class compl const const_cast constexpr continue decltype
+default delete do double dynamic_cast else enum explicit export extern false
+float for friend goto if inline int long mutable namespace new noexcept not
+not_eq nullptr operator or or_eq private protected public register
+reinterpret_cast return short signed sizeof static static_assert static_cast
+struct switch template this thread_local throw true try typedef typeid typename
+union unsigned using virtual void volatile wchar_t while xor xor_eq
+""".split()
+
+
+def clean_name(name: str) -> str:
+  name = re.sub(r'[^a-zA-Z_0-9]', "_", name)
+  if not re.match(r'^[a-zA-Z_]', name):
+    name = "_" + name
+  if name in C_KEYWORDS:
+    name = "_" + name
+  return name
+
+
+def format_view_hierarchy(hierarchy: StateHierarchy, depth: int) -> str:
   lines = []
   for state in hierarchy.states:
-    lines.append(f"{state_cpp_type(state)} &{state.name};")
-  for child in hierarchy.children:
-    lines.append(f"{indent(format_view_hierarchy(child))} {child.name};")
+    lines.append(f"{state_cpp_type(state)} &{clean_name(state.name)};")
+  if depth > 0:
+    for child in hierarchy.children:
+      lines.append(
+          f"{indent(format_view_hierarchy(child, depth-1))} {clean_name(child.name)};"
+      )
   lines = "\n  ".join(lines)
   if lines:
     lines = "\n  " + lines + "\n"
@@ -179,12 +209,15 @@ def state_cpp_ref(state: StateInfo) -> str:
   return f"*({state_cpp_type(state)}*)(state+{state.offset})"
 
 
-def format_view_constructor(hierarchy: StateHierarchy) -> str:
+def format_view_constructor(hierarchy: StateHierarchy, depth: int) -> str:
   lines = []
   for state in hierarchy.states:
-    lines.append(f".{state.name} = {state_cpp_ref(state)}")
-  for child in hierarchy.children:
-    lines.append(f".{child.name} = {indent(format_view_constructor(child))}")
+    lines.append(f".{clean_name(state.name)} = {state_cpp_ref(state)}")
+  if depth > 0:
+    for child in hierarchy.children:
+      lines.append(
+          f".{clean_name(child.name)} = {indent(format_view_constructor(child, depth-1))}"
+      )
   lines = ",\n  ".join(lines)
   if lines:
     lines = "\n  " + lines + "\n"
@@ -244,7 +277,7 @@ for model in models:
   for io in model.io:
     print(f"  {state_cpp_type(io)} &{io.name};")
   print(
-      f"  {indent(format_view_hierarchy(model.hierarchy[0]))} {model.hierarchy[0].name};"
+      f"  {indent(format_view_hierarchy(model.hierarchy[0], args.view_depth))} {model.hierarchy[0].name};"
   )
   print("  uint8_t *state;")
   print()
@@ -252,7 +285,7 @@ for model in models:
   for io in model.io:
     print(f"    {io.name}({state_cpp_ref(io)}),")
   print(
-      f"    {model.hierarchy[0].name}({indent(format_view_constructor(model.hierarchy[0]), 2)}),"
+      f"    {model.hierarchy[0].name}({indent(format_view_constructor(model.hierarchy[0], args.view_depth), 2)}),"
   )
   print("    state(state) {}")
   print("};")

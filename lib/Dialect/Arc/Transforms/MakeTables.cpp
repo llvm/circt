@@ -107,7 +107,7 @@ void MakeTablesPass::runOnArc(DefineOp defineOp) {
   auto builder = ImplicitLocOpBuilder::atBlockBegin(defineOp.getLoc(),
                                                     &defineOp.getBodyBlock());
   SmallVector<Value> inputsToConcat(defineOp.getArguments());
-  llvm::reverse(inputsToConcat);
+  std::reverse(inputsToConcat.begin(), inputsToConcat.end());
   auto concatInputs = inputsToConcat.size() > 1
                           ? builder.create<comb::ConcatOp>(inputsToConcat)
                           : inputsToConcat[0];

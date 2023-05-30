@@ -25,6 +25,8 @@
 #include <string>
 #include <z3++.h>
 
+namespace circt {
+
 /// The representation of a circuit within a logical engine.
 ///
 /// This class defines a circuit as an abstraction of its underlying
@@ -112,5 +114,7 @@ private:
   /// A map from IR values to their corresponding logical representation.
   llvm::DenseMap<mlir::Value, z3::expr> exprTable;
 };
+
+} // namespace circt
 
 #endif // TOOLS_CIRCT_LEC_CIRCUIT_H

@@ -1,9 +1,10 @@
+#!@Python3_EXECUTABLE@
+
 import argparse
 import os
 import subprocess
 import sys
 import re
-from pathlib import Path
 from cocotb_test.simulator import run
 
 
@@ -30,10 +31,10 @@ def parseArgs(args):
                          required=True,
                          help="Name of the python module.")
 
-  argparser.add_argument("--pythonFolder",
-                         type=str,
-                         default=os.getcwd(),
-                         help="The folder where the cocotb test file is.")
+  argparser.add_argument("--pythonFolders",
+                            type=str,
+                         default="",
+                         help="The folders where cocotb should include from, separated by commas.")
 
   argparser.add_argument(
       "sources",
@@ -114,7 +115,7 @@ def main():
       toplevel=args.topLevel,
       toplevel_lang="verilog",
       verilog_sources=sources,
-      python_search=[args.pythonFolder],
+      python_search=[f.strip() for f in args.pythonFolders.split(",")],
       work_dir=objDir,
       compile_args=compileArgs)
 
