@@ -216,6 +216,47 @@ struct Visitor : public hw::StmtVisitor<Visitor, LogicalResult>,
   LogicalResult visitUnhandledComb(Operation *op) {
     return visitUnhandledOp(op);
   }
+
+  //===----------------------------------------------------------------------===//
+  // Sequential Visitor implementation
+  //===----------------------------------------------------------------------===//
+
+  /// Visits seq dialect operations
+  mlir::LogicalResult visitSeq(mlir::Operation *op, Solver::Circuit *circuit) {
+    mlir::LogicalResult outcome =
+        llvm::TypeSwitch<mlir::Operation *, mlir::LogicalResult>(op)
+            .Case<circt::seq::CompRegOp>([&](circt::seq::CompRegOp &op) {
+              return visitSeqOp(op, circuit);
+            })
+            .Case<circt::seq::FirRegOp>([&](circt::seq::FirRegOp &op) {
+              return visitSeqOp(op, circuit);
+            })
+            .Default([&](mlir::Operation *op) { return visitUnhandledOp(op); });
+    return outcome;
+  }
+
+  mlir::LogicalResult visitSeqOp(circt::seq::CompRegOp &op,
+                                 Solver::Circuit *circuit) {
+    mlir::Value input = op.getInput();
+    mlir::Value clk = op.getClk();
+    mlir::Value data = op.getData();
+    mlir::Value reset = op.getReset();
+    mlir::Value resetValue = op.getResetValue();
+    circuit->performCompReg(input, clk, data, reset, resetValue);
+    return mlir::success();
+  }
+
+  mlir::LogicalResult visitSeqOp(circt::seq::FirRegOp &op,
+                                 Solver::Circuit *circuit) {
+    assert(!op.getIsAsync() && "Async resets not supported.");
+    mlir::Value next = op.getNext();
+    mlir::Value clk = op.getClk();
+    mlir::Value data = op.getData();
+    mlir::Value reset = op.getReset();
+    mlir::Value resetValue = op.getResetValue();
+    circuit->performCompReg(next, clk, data, reset, resetValue);
+    return mlir::success();
+  }
 };
 } // namespace
 
