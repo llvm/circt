@@ -213,6 +213,8 @@ struct Visitor : public hw::StmtVisitor<Visitor, LogicalResult>,
     return visitVariadicCombOp(op, &Solver::Circuit::performXor);
   }
 
+  LogicalResult visitInvalidComb(Operation *op) { return visitSeq(op); }
+
   LogicalResult visitUnhandledComb(Operation *op) {
     return visitUnhandledOp(op);
   }
@@ -222,7 +224,7 @@ struct Visitor : public hw::StmtVisitor<Visitor, LogicalResult>,
   //===----------------------------------------------------------------------===//
 
   /// Visits seq dialect operations
-  mlir::LogicalResult visitSeq(mlir::Operation *op, Solver::Circuit *circuit) {
+  mlir::LogicalResult visitSeq(mlir::Operation *op) {
     mlir::LogicalResult outcome =
         llvm::TypeSwitch<mlir::Operation *, mlir::LogicalResult>(op)
             .Case<circt::seq::CompRegOp>([&](circt::seq::CompRegOp &op) {
