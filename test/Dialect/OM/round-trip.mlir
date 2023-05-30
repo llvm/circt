@@ -103,8 +103,8 @@ om.class @ReferenceConstant() {
 
 // CHECK-LABEL: @String
 om.class @StringConstant() {
-  // CHECK: %[[const1:.+]] = om.constant #om.string<"foo"> : !om.string
-  %0 = om.constant #om.string<"foo"> : !om.string
+  // CHECK: %[[const1:.+]] = om.constant "foo" : !om.string
+  %0 = om.constant "foo" : !om.string
   // CHECK: om.class.field @string, %[[const1]] : !om.string
   om.class.field @string, %0 : !om.string
 }

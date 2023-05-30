@@ -59,22 +59,4 @@ def OMSymbolRefAttr : AttrDef<OMDialect, "SymbolRef", [TypedAttrInterface]> {
   }];
 }
 
-def OMStringAttr : AttrDef<OMDialect, "OMString", [TypedAttrInterface]> {
-  let summary = "An attribute that wraps a StringAttr with !om.string type";
-
-  let mnemonic = "string";
-
-  let parameters = (ins
-    "mlir::StringAttr":$str
-  );
-
-  let assemblyFormat = [{
-    `<` $str `>`
-  }];
-
-  let extraClassDeclaration = [{
-    mlir::Type getType();
-  }];
-}
-
 #endif // CIRCT_DIALECT_OM_OMATTRIBUTES_TD

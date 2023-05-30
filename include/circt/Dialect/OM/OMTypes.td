@@ -44,7 +44,7 @@ def SymbolRefType : TypeDef<OMDialect, "SymbolRef", []> {
 
 
 def StringType : TypeDef<OMDialect, "String", []> {
-  let summary = "A type that represents a reference to a string.";
+  let summary = "A type that represents a string.";
 
   let mnemonic = "string";
 }
