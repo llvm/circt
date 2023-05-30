@@ -115,12 +115,12 @@ static StringRef chooseName(StringRef a, StringRef b) {
 /// the name passed in.
 static void updateName(PatternRewriter &rewriter, Operation *op,
                        StringAttr name) {
-  if (!name || name.getValue().empty() || name.getValue() == "")
+  if (!name || name.getValue().empty())
     return;
   auto newName = name.getValue(); // old name is interesting
   auto newOpName = op->getAttrOfType<StringAttr>("name");
   // new name might not be interesting
-  if (newOpName && !newOpName.getValue().empty() && newOpName.getValue() != "")
+  if (newOpName)
     newName = chooseName(newOpName.getValue(), name.getValue());
   // Only update if needed
   if (!newOpName || newOpName.getValue() != newName)
