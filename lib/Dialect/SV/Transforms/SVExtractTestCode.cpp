@@ -234,7 +234,7 @@ static void addOperationsToCloneSet(SetVector<Value> &inputs,
   }
 
   // Find operations we can extract and add them to the clone set.
-  for (auto operation : operationsToExtract) {
+  for (auto *operation : operationsToExtract) {
     // We know the forward dataflow for this operation ends in either
     // extractable test code or other operations that are handled speciall.
     // Check if all of the other operations are also marked for extraction.
@@ -251,7 +251,7 @@ static void addOperationsToCloneSet(SetVector<Value> &inputs,
   }
 
   // Perform the necessary IR mutations for extracted operations.
-  for (auto operation : operationsToExtract) {
+  for (auto *operation : operationsToExtract) {
     // Ensure this is one of the operations we actually want to clone.
     if (!opsToClone.contains(operation))
       continue;
