@@ -199,6 +199,11 @@ struct FirtoolOptions {
       llvm::cl::desc("Disable extracting instances only that feed test code"),
       llvm::cl::init(false), llvm::cl::cat(category)};
 
+  llvm::cl::opt<bool> etcDisableRegisterExtraction{
+      "etc-disable-register-extraction",
+      llvm::cl::desc("Disable extracting registers that only feed test code"),
+      llvm::cl::init(false), llvm::cl::cat(category)};
+
   llvm::cl::opt<bool> etcDisableModuleInlining{
       "etc-disable-module-inlining",
       llvm::cl::desc("Disable inlining modules that only feed test code"),

@@ -19,6 +19,8 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
 
@@ -30,13 +32,15 @@ using namespace sv;
 
 using BindTable = DenseMap<Attribute, SmallDenseMap<Attribute, sv::BindOp>>;
 
-/// Track information about an InstanceOp that might be extracted.
-struct InstanceInfo {
-  // A set vector of this instance's forward dataflow slice.
+/// Track information about an Operation that might be extracted.
+struct OperationInfo {
+  // A set vector of this operation's forward dataflow slice.
   SetVector<Operation *> forwardSlice;
 
-  // A vector of other instances that are dataflow sinks from this instance.
-  SmallVector<hw::InstanceOp> instanceSinks;
+  // A vector of other operations that are dataflow sinks from this operation.
+  // This specifically tracks dataflow sinks that are handled specially, like
+  // instances and registers.
+  SmallVector<Operation *> operationSinks;
 };
 
 //===----------------------------------------------------------------------===//
@@ -99,7 +103,7 @@ static void getBackwardSliceSimple(Operation *rootOp,
 // in the backward slice, and return true.
 static bool getForwardSliceSimple(Operation *rootOp,
                                   SetVector<Operation *> &opsToClone,
-                                  InstanceInfo &instanceInfo) {
+                                  OperationInfo &operationInfo) {
   SmallPtrSet<Operation *, 32> visited;
   SmallVector<Operation *> worklist;
   worklist.push_back(rootOp);
@@ -107,14 +111,22 @@ static bool getForwardSliceSimple(Operation *rootOp,
 
   while (!worklist.empty()) {
     Operation *op = worklist.pop_back_val();
-    instanceInfo.forwardSlice.insert(op);
+    operationInfo.forwardSlice.insert(op);
 
     for (auto *user : op->getUsers()) {
       // If the dataflow is into an instance, mark it and move along.
       if (auto sinkInstance = dyn_cast<hw::InstanceOp>(user)) {
         assert(!opsToClone.contains(sinkInstance) &&
                "expected instances to not be present in opsToClone");
-        instanceInfo.instanceSinks.push_back(sinkInstance);
+        operationInfo.operationSinks.push_back(sinkInstance);
+        continue;
+      }
+
+      // If the dataflow is into a register, mark it and move along.
+      if (auto sinkRegister = dyn_cast<seq::FirRegOp>(user)) {
+        assert(!opsToClone.contains(sinkRegister) &&
+               "expected instances to not be present in opsToClone");
+        operationInfo.operationSinks.push_back(sinkRegister);
         continue;
       }
 
@@ -136,7 +148,8 @@ static void dataflowSlice(SetVector<Operation *> &ops,
                           SetVector<Operation *> &results) {
   for (auto op : ops) {
     getBackwardSliceSimple(op, results, [](Operation *testOp) -> bool {
-      return !isa<sv::ReadInOutOp>(testOp) && !isa<hw::InstanceOp>(testOp) &&
+      return !isa<seq::SeqDialect>(testOp->getDialect()) &&
+             !isa<sv::ReadInOutOp>(testOp) && !isa<hw::InstanceOp>(testOp) &&
              !isa<sv::PAssignOp>(testOp) && !isa<sv::BPAssignOp>(testOp);
     });
   }
@@ -176,71 +189,75 @@ static SetVector<Operation *> computeCloneSet(SetVector<Operation *> &roots) {
   return results;
 }
 
-// Find instances that directly feed the clone set, and add them if possible.
-// This also returns a list of ops that should be erased, which includes such
-// instances and their forward dataflow slices.
-static void addInstancesToCloneSet(SetVector<Value> &inputs,
-                                   SetVector<Operation *> &opsToClone,
-                                   SmallPtrSetImpl<Operation *> &opsToErase) {
-  // Track inputs to add, which are used by the instance that will be extracted.
+// Find operations that need special handling, like instances and registers,
+// that directly feed the clone set, and add them if possible. This also returns
+// a list of ops that should be erased, which includes such operations and their
+// forward dataflow slices. The template type is the concrete Operation subclass
+// to try to extract.
+template <typename T>
+static void addOperationsToCloneSet(SetVector<Value> &inputs,
+                                    SetVector<Operation *> &opsToClone,
+                                    SmallPtrSetImpl<Operation *> &opsToErase) {
+  // Track inputs to add, which are used by the operation that will be
+  // extracted.
   SmallVector<Value> inputsToAdd;
 
-  // Track inputs to remove, which come from instances that will be extracted.
+  // Track inputs to remove, which come from operations that will be extracted.
   SmallVector<Value> inputsToRemove;
 
-  // Track instances to potentially extract.
-  llvm::SmallDenseSet<hw::InstanceOp> instancesToExtract;
+  // Track operations to potentially extract.
+  llvm::SmallDenseSet<Operation *> operationsToExtract;
 
-  // Track info about instances to potentially extract.
-  SmallDenseMap<hw::InstanceOp, InstanceInfo> instanceInfo;
+  // Track info about operations to potentially extract.
+  SmallDenseMap<Operation *, OperationInfo> operationInfo;
 
   // Check each input into the clone set.
   for (auto value : inputs) {
-    // Check if the input comes from an instance, and it isn't already added to
-    // the clone set.
-    auto instance = value.getDefiningOp<hw::InstanceOp>();
-    if (!instance)
+    // Check if the input comes from an operation of the requested type, and it
+    // isn't already added to the clone set.
+    auto operation = value.getDefiningOp<T>();
+    if (!operation)
       continue;
-    if (opsToClone.contains(instance))
-      continue;
-
-    // If the instance had a symbol, we can't extract it without more work.
-    if (instance.getInnerSym().has_value())
+    if (opsToClone.contains(operation))
       continue;
 
-    // Compute the instance's forward slice. If it wasn't fully contained in
+    // If the operation had a symbol, we can't extract it without more work.
+    if (operation.getInnerSym().has_value())
+      continue;
+
+    // Compute the operation's forward slice. If it wasn't fully contained in
     // the clone set, move along.
-    if (!getForwardSliceSimple(instance, opsToClone, instanceInfo[instance]))
+    if (!getForwardSliceSimple(operation, opsToClone, operationInfo[operation]))
       continue;
 
-    instancesToExtract.insert(instance);
+    operationsToExtract.insert(operation);
   }
 
-  // Find instances we can extract and add them to the clone set.
-  for (auto instance : instancesToExtract) {
-    // We know the forward dataflow for this instance ends in either extractable
-    // test code or other instances. Check if all of the other instances are
-    // also marked for extraction.
-    bool allInstanceSinksExtractable = llvm::all_of(
-        instanceInfo[instance].instanceSinks, [&](hw::InstanceOp sinkInstance) {
-          return instancesToExtract.contains(sinkInstance);
+  // Find operations we can extract and add them to the clone set.
+  for (auto operation : operationsToExtract) {
+    // We know the forward dataflow for this operation ends in either
+    // extractable test code or other operations that are handled speciall.
+    // Check if all of the other operations are also marked for extraction.
+    bool allOperationSinksExtractable = llvm::all_of(
+        operationInfo[operation].operationSinks, [&](Operation *sinkOperation) {
+          return operationsToExtract.contains(sinkOperation);
         });
 
-    if (!allInstanceSinksExtractable)
+    if (!allOperationSinksExtractable)
       continue;
 
-    // Add the instance to the clone set.
-    opsToClone.insert(instance);
+    // Add the operation to the clone set.
+    opsToClone.insert(operation);
   }
 
-  // Perform the necessary IR mutations for extracted instances.
-  for (auto instance : instancesToExtract) {
-    // Ensure this is one of the instances we actually want to clone.
-    if (!opsToClone.contains(instance))
+  // Perform the necessary IR mutations for extracted operations.
+  for (auto operation : operationsToExtract) {
+    // Ensure this is one of the operations we actually want to clone.
+    if (!opsToClone.contains(operation))
       continue;
 
-    // Add any instance inputs to the input set.
-    for (auto operand : instance.getOperands()) {
+    // Add any operation inputs to the input set.
+    for (auto operand : operation->getOperands()) {
       // Don't add values to the input set if they are the result of an op we
       // are already going to clone.
       if (operand.getDefiningOp() &&
@@ -250,19 +267,19 @@ static void addInstancesToCloneSet(SetVector<Value> &inputs,
       inputsToAdd.push_back(operand);
     }
 
-    // Mark the instance results to be removed from the input set.
-    for (auto result : instance.getResults())
+    // Mark the operation results to be removed from the input set.
+    for (auto result : operation->getResults())
       inputsToRemove.push_back(result);
 
-    // Mark the instance and its forward dataflow to be erased from the pass.
+    // Mark the operation and its forward dataflow to be erased from the pass.
     // Normally, ops in the clone set are canonicalized away later, but for
-    // this case, we have to proactively erase them. The instances must be
-    // erased because we can't canonicalize away instances with unused results
-    // in general. The forward dataflow must be erased because the instance is
+    // this case, we have to proactively erase them. The operations must be
+    // erased because we can't canonicalize away operations with unused results
+    // in general. The forward dataflow must be erased because the operation is
     // being erased, and we can't leave null operands after this pass. Also
     // erase any intermediate parents of the forward slice.
-    SetVector<Operation *> forwardSlice = instanceInfo[instance].forwardSlice;
-    opsToErase.insert(instance);
+    SetVector<Operation *> forwardSlice = operationInfo[operation].forwardSlice;
+    opsToErase.insert(operation);
     for (auto *forwardOp : forwardSlice)
       opsToErase.insert(forwardOp);
 
@@ -581,8 +598,10 @@ namespace {
 struct SVExtractTestCodeImplPass
     : public SVExtractTestCodeBase<SVExtractTestCodeImplPass> {
   SVExtractTestCodeImplPass(bool disableInstanceExtraction,
+                            bool disableRegisterExtraction,
                             bool disableModuleInlining) {
     this->disableInstanceExtraction = disableInstanceExtraction;
+    this->disableRegisterExtraction = disableRegisterExtraction;
     this->disableModuleInlining = disableModuleInlining;
   }
   void runOnOperation() override;
@@ -628,7 +647,13 @@ private:
     // Find instances that directly feed the clone set, and add them if
     // possible.
     if (!disableInstanceExtraction)
-      addInstancesToCloneSet(inputs, opsToClone, opsToErase);
+      addOperationsToCloneSet<hw::InstanceOp>(inputs, opsToClone, opsToErase);
+
+    // Find registers that directly feed the clone set, and add them if
+    // possible.
+    if (!disableRegisterExtraction)
+      addOperationsToCloneSet<seq::FirRegOp>(inputs, opsToClone, opsToErase);
+
     numOpsExtracted += opsToClone.size();
     numOpsErased += opsToErase.size();
 
@@ -782,7 +807,9 @@ void SVExtractTestCodeImplPass::runOnOperation() {
 
 std::unique_ptr<Pass>
 circt::sv::createSVExtractTestCodePass(bool disableInstanceExtraction,
+                                       bool disableRegisterExtraction,
                                        bool disableModuleInlining) {
   return std::make_unique<SVExtractTestCodeImplPass>(disableInstanceExtraction,
+                                                     disableRegisterExtraction,
                                                      disableModuleInlining);
 }

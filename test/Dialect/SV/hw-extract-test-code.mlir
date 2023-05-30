@@ -406,3 +406,30 @@ module {
     hw.output %0 : i1
   }
 }
+
+// -----
+// Check instance extraction
+
+module {
+  // CHECK-LABEL: @RegExtracted_cover
+  // CHECK: %testCode1 = seq.firreg
+  // CHECK: %testCode2 = seq.firreg
+  // CHECK-NOT: seq.firreg
+
+  // CHECK-LABEL: @RegExtracted
+  // CHECK: %designAndTestCode = seq.firreg
+  // CHECK-NOT: seq.firreg
+  hw.module @RegExtracted(%clock: i1, %in: i1) -> (out: i1) {
+    %testCode1 = seq.firreg %in clock %clock : i1
+    %testCode2 = seq.firreg %testCode1 clock %clock : i1
+    %designAndTestCode = seq.firreg %in clock %clock : i1
+
+    sv.always posedge %clock {
+      sv.cover %testCode1, immediate
+      sv.cover %testCode2, immediate
+      sv.cover %designAndTestCode, immediate
+    }
+
+    hw.output %designAndTestCode : i1
+  }
+}

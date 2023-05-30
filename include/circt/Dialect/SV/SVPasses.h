@@ -32,6 +32,7 @@ std::unique_ptr<mlir::Pass> createHWMemSimImplPass(
     bool addVivadoRAMAddressConflictSynthesisBugWorkaround = false);
 std::unique_ptr<mlir::Pass>
 createSVExtractTestCodePass(bool disableInstanceExtraction = false,
+                            bool disableRegisterExtraction = false,
                             bool disableModuleInlining = false);
 std::unique_ptr<mlir::Pass>
 createHWExportModuleHierarchyPass(std::optional<std::string> directory = {});
