@@ -88,7 +88,7 @@ static bool isUInt1(Type type) {
 // Heuristic to pick the best name.  Always pick a name over no name.  Always
 // pick a good name over a useless name.  Always pick a good name over one which
 // starts with underscore.  Define the best name as the longest name.
-// This deterministically favors the second name on ties.
+// This function deterministically favors the second name on ties.
 static StringRef chooseName(StringRef a, StringRef b) {
   if (a.empty())
     return b;
