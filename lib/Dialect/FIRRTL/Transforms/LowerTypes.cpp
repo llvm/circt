@@ -484,13 +484,12 @@ TypeLoweringVisitor::getPreservationModeForModule(FModuleLike module) {
 }
 
 Value TypeLoweringVisitor::getSubWhatever(Value val, size_t index) {
-  if (type_isa<BundleType>(val.getType())) {
+  if (type_isa<BundleType>(val.getType()))
     return builder->create<SubfieldOp>(val, index);
-  } else if (type_isa<FVectorType>(val.getType())) {
+  if (type_isa<FVectorType>(val.getType()))
     return builder->create<SubindexOp>(val, index);
-  } else if (val.getType().isa<RefType>()) {
+  if (val.getType().isa<RefType>())
     return builder->create<RefSubOp>(val, index);
-  }
   llvm_unreachable("Unknown aggregate type");
   return nullptr;
 }
