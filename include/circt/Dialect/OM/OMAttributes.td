@@ -59,36 +59,23 @@ def OMSymbolRefAttr : AttrDef<OMDialect, "SymbolRef", [TypedAttrInterface]> {
   }];
 }
 
-def OMNilAttr : AttrDef<OMDialect, "ListNil", [TypedAttrInterface]> {
-  let summary = "An attribute that represents a nil element of a list";
+def OMListAttr : AttrDef<OMDialect, "List", [TypedAttrInterface]> {
+  let summary = "An attribute that represents a list";
 
-  let mnemonic = "list.nil";
-
-  let parameters = (ins
-    "mlir::Type":$elementType
-  );
-
-  let assemblyFormat = [{
-    `<` $elementType `>`
-  }];
-
-  let extraClassDeclaration = [{
-    mlir::Type getType();
-  }];
-}
-
-def OMConsAttr : AttrDef<OMDialect, "ListCons", [TypedAttrInterface]> {
-  let summary = "An attribute that represents `cons` constructor of a list";
-
-  let mnemonic = "list.cons";
+  let mnemonic = "list";
 
   let parameters = (ins
-    "mlir::TypedAttr":$head, "mlir::TypedAttr":$tail
+    "mlir::Type": $elementType,
+    "mlir::ArrayAttr":$elements
   );
 
+  // TODO: Use custom assembly format to infer an element type from elements.
   let assemblyFormat = [{
-    `<` $head `,` $tail `>`
+    `<` $elementType `,` $elements `>`
   }];
+
+  let genVerifyDecl = 1;
+  let skipDefaultBuilders = 1;
 
   let extraClassDeclaration = [{
     mlir::Type getType();
