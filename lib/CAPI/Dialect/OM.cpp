@@ -37,7 +37,22 @@ bool omTypeIsAClassType(MlirType type) { return unwrap(type).isa<ClassType>(); }
 //===----------------------------------------------------------------------===//
 
 DEFINE_C_API_PTR_METHODS(OMEvaluator, circt::om::Evaluator)
-DEFINE_C_API_PTR_METHODS(OMObject, std::shared_ptr<circt::om::Object>)
+
+/// Define our own wrap and unwrap instead of using the usual macro. This is To
+/// handle the std::shared_ptr reference counts appropriately. We want to always
+/// create *new* shared pointers to the Object when we wrap it for C, to
+/// increment the reference count. We want to use the shared_from_this
+/// functionality to ensure it is unwrapped into C++ with the correct reference
+/// count.
+
+static inline OMObject wrap(std::shared_ptr<Object> object) {
+  return OMObject{static_cast<void *>(
+      (new std::shared_ptr<Object>(std::move(object)))->get())};
+}
+
+static inline std::shared_ptr<Object> unwrap(OMObject c) {
+  return static_cast<Object *>(c.ptr)->shared_from_this();
+}
 
 //===----------------------------------------------------------------------===//
 // Evaluator API.
@@ -74,9 +89,8 @@ OMObject omEvaluatorInstantiate(OMEvaluator evaluator, MlirAttribute className,
   if (failed(result))
     return OMObject();
 
-  // Wrap and return a *new* shared pointer to the Object, to ensure the
-  // reference count is kept up to date.
-  return wrap(new std::shared_ptr<Object>(result.value()));
+  // Wrap and return the Object.
+  return wrap(result.value());
 }
 
 /// Get the Module the Evaluator is built from.
@@ -97,7 +111,7 @@ bool omEvaluatorObjectIsNull(OMObject object) {
 
 /// Get the Type from an Object, which will be a ClassType.
 MlirType omEvaluatorObjectGetType(OMObject object) {
-  return wrap((*unwrap(object))->getType());
+  return wrap(unwrap(object)->getType());
 }
 
 /// Get a field from an Object, which must contain a field of that name.
@@ -105,7 +119,7 @@ OMObjectValue omEvaluatorObjectGetField(OMObject object, MlirAttribute name) {
   // Unwrap the Object and get the field of the name, which the client must
   // supply as a StringAttr.
   FailureOr<ObjectValue> result =
-      (*unwrap(object))->getField(unwrap(name).cast<StringAttr>());
+      unwrap(object)->getField(unwrap(name).cast<StringAttr>());
 
   // If getField failed, return a null ObjectValue. A Diagnostic will be emitted
   // in this case.
@@ -114,7 +128,7 @@ OMObjectValue omEvaluatorObjectGetField(OMObject object, MlirAttribute name) {
 
   // If the field is an Object, return an ObjectValue with the Object set.
   if (auto *object = std::get_if<std::shared_ptr<Object>>(&result.value()))
-    return OMObjectValue{MlirAttribute(), wrap(object)};
+    return OMObjectValue{MlirAttribute(), wrap(*object)};
 
   // If the field is an Attribute, return an ObjectValue with the Primitive set.
   if (auto *primitive = std::get_if<Attribute>(&result.value()))
