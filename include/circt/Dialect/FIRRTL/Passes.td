@@ -602,6 +602,8 @@ def DropName : Pass<"firrtl-drop-names", "firrtl::FModuleOp"> {
            }]>
   ];
   let statistics = [
+    Statistic<"numNamesDropped", "num-names-dropped",
+      "Number of names dropped">,
     Statistic<"numNamesConverted", "num-names-converted",
       "Number of interesting names made droppable">,
   ];

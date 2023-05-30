@@ -85,6 +85,49 @@ static bool isUInt1(Type type) {
   return true;
 }
 
+// Heuristic to pick the best name.
+// Good names are not useless, don't start with an underscore, minimize
+// underscores in them, and are short. This function deterministically favors
+// the second name on ties.
+static StringRef chooseName(StringRef a, StringRef b) {
+  if (a.empty())
+    return b;
+  if (b.empty())
+    return a;
+  if (isUselessName(a))
+    return b;
+  if (isUselessName(b))
+    return a;
+  if (a.starts_with("_"))
+    return b;
+  if (b.starts_with("_"))
+    return a;
+  if (b.count('_') < a.count('_'))
+    return b;
+  if (b.count('_') > a.count('_'))
+    return a;
+  if (a.size() > b.size())
+    return b;
+  return a;
+}
+
+/// Set the name of an op based on the best of two names:  The current name, and
+/// the name passed in.
+static void updateName(PatternRewriter &rewriter, Operation *op,
+                       StringAttr name) {
+  if (!name || name.getValue().empty())
+    return;
+  auto newName = name.getValue(); // old name is interesting
+  auto newOpName = op->getAttrOfType<StringAttr>("name");
+  // new name might not be interesting
+  if (newOpName)
+    newName = chooseName(newOpName.getValue(), name.getValue());
+  // Only update if needed
+  if (!newOpName || newOpName.getValue() != newName)
+    rewriter.updateRootInPlace(
+        op, [&] { op->setAttr("name", rewriter.getStringAttr(newName)); });
+}
+
 /// A wrapper of `PatternRewriter::replaceOp` to propagate "name" attribute.
 /// If a replaced op has a "name" attribute, this function propagates the name
 /// to the new value.
@@ -92,12 +135,7 @@ static void replaceOpAndCopyName(PatternRewriter &rewriter, Operation *op,
                                  Value newValue) {
   if (auto *newOp = newValue.getDefiningOp()) {
     auto name = op->getAttrOfType<StringAttr>("name");
-    if (name && !name.getValue().empty()) {
-      auto newOpName = newOp->getAttrOfType<StringAttr>("name");
-      if (!newOpName || isUselessName(newOpName))
-        rewriter.updateRootInPlace(newOp,
-                                   [&] { newOp->setAttr("name", name); });
-    }
+    updateName(rewriter, newOp, name);
   }
   rewriter.replaceOp(op, newValue);
 }
@@ -111,11 +149,7 @@ static OpTy replaceOpWithNewOpAndCopyName(PatternRewriter &rewriter,
   auto name = op->getAttrOfType<StringAttr>("name");
   auto newOp =
       rewriter.replaceOpWithNewOp<OpTy>(op, std::forward<Args>(args)...);
-  if (name && !name.getValue().empty()) {
-    auto newOpName = newOp->template getAttrOfType<StringAttr>("name");
-    if (!newOpName || isUselessName(newOpName))
-      rewriter.updateRootInPlace(newOp, [&] { newOp->setAttr("name", name); });
-  }
+  updateName(rewriter, newOp, name);
   return newOp;
 }
 
@@ -125,7 +159,7 @@ bool circt::firrtl::isUselessName(StringRef name) {
   if (name.empty())
     return true;
   // Ignore _.*
-  return name.startswith("_");
+  return name.startswith("_T") || name.startswith("_WIRE");
 }
 
 /// Return true if the name is droppable. Note that this is different from
@@ -1795,12 +1829,8 @@ struct FoldNodeName : public mlir::RewritePattern {
       return failure();
     auto *newOp = node.getInput().getDefiningOp();
     // Best effort
-    if (name && !name.getValue().empty() && newOp) {
-      auto newOpName = newOp->getAttrOfType<StringAttr>("name");
-      if (!newOpName || isUselessName(newOpName))
-        rewriter.updateRootInPlace(newOp,
-                                   [&] { newOp->setAttr("name", name); });
-    }
+    if (newOp)
+      updateName(rewriter, newOp, name);
     rewriter.replaceOp(node, node.getInput());
     return success();
   }
