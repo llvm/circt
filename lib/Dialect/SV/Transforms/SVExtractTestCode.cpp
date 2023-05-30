@@ -179,10 +179,9 @@ static SetVector<Operation *> computeCloneSet(SetVector<Operation *> &roots) {
 // Find instances that directly feed the clone set, and add them if possible.
 // This also returns a list of ops that should be erased, which includes such
 // instances and their forward dataflow slices.
-static void addInstancesToCloneSet(
-    SetVector<Value> &inputs, SetVector<Operation *> &opsToClone,
-    SmallPtrSetImpl<Operation *> &opsToErase,
-    DenseMap<StringAttr, SmallPtrSet<Operation *, 32>> &extractedInstances) {
+static void addInstancesToCloneSet(SetVector<Value> &inputs,
+                                   SetVector<Operation *> &opsToClone,
+                                   SmallPtrSetImpl<Operation *> &opsToErase) {
   // Track inputs to add, which are used by the instance that will be extracted.
   SmallVector<Value> inputsToAdd;
 
@@ -254,9 +253,6 @@ static void addInstancesToCloneSet(
     // Mark the instance results to be removed from the input set.
     for (auto result : instance.getResults())
       inputsToRemove.push_back(result);
-
-    // Add the instance to the map of extracted instances by module.
-    extractedInstances[instance.getModuleNameAttr().getAttr()].insert(instance);
 
     // Mark the instance and its forward dataflow to be erased from the pass.
     // Normally, ops in the clone set are canonicalized away later, but for
@@ -632,8 +628,7 @@ private:
     // Find instances that directly feed the clone set, and add them if
     // possible.
     if (!disableInstanceExtraction)
-      addInstancesToCloneSet(inputs, opsToClone, opsToErase,
-                             extractedInstances);
+      addInstancesToCloneSet(inputs, opsToClone, opsToErase);
     numOpsExtracted += opsToClone.size();
     numOpsErased += opsToErase.size();
 
@@ -656,9 +651,6 @@ private:
 
     return true;
   }
-
-  // Map from module name to set of extracted instances for that module.
-  DenseMap<StringAttr, SmallPtrSet<Operation *, 32>> extractedInstances;
 
   // Instance graph we are using and maintaining.
   hw::InstanceGraph *instanceGraph = nullptr;
