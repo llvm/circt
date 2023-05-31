@@ -19,8 +19,6 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
-#include "llvm/Support/Debug.h"
-
 using namespace mlir;
 using namespace circt;
 
@@ -67,8 +65,6 @@ public:
     auto loc = op.getLoc();
     size_t outWidth = op.getOut().getType().getIntOrFloatBitWidth();
     size_t inWidth = adaptor.getIn().getType().getIntOrFloatBitWidth();
-
-    llvm::dbgs() << "out: " << outWidth << " in: " << inWidth << "\n";
 
     rewriter.replaceOp(
         op,
