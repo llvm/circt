@@ -69,6 +69,10 @@ LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
     rewriter.eraseOp(op);
     return success();
   }
+  if (op.getLatency() == 0 && !op.getReset() && !op.getEnable() && !op->hasAttr("name") && !op->hasAttr("names")) {
+    rewriter.replaceOpWithNewOp<CallOp>(op, op->getResultTypes(), op.getArcAttr(), op.getInputs());
+    return success();
+  }
 
   return failure();
 }

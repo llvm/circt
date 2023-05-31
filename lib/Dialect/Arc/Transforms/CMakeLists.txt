@@ -1,3 +1,7 @@
+set(LLVM_OPTIONAL_SOURCES
+  SinkArcCalls.cpp
+)
+
 add_circt_dialect_library(CIRCTArcTransforms
   AddTaps.cpp
   AllocateState.cpp

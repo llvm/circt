@@ -9,6 +9,7 @@
 #include "circt/Dialect/Arc/ArcReductions.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Debug.h"
@@ -41,6 +42,27 @@ struct StateElimination : public OpReduction<StateOp> {
   std::string getName() const override { return "arc-state-elimination"; }
 };
 
+struct ArcStubber : public OpReduction<DefineOp> {
+  uint64_t match(DefineOp defOp) override {
+    if (llvm::all_of(defOp.getResultTypes() , [](Type ty) { return isa<IntegerType>(ty); }))
+      return defOp.getBodyBlock().getOperations().size();
+    return 0;
+  }
+  LogicalResult rewrite(DefineOp defOp) override {
+    defOp.getBodyBlock().clear();
+
+    OpBuilder builder = OpBuilder::atBlockBegin(&defOp.getBodyBlock());
+    SmallVector<Value> outputs;
+    for (auto ty : defOp.getResultTypes())
+      outputs.push_back(builder.create<hw::ConstantOp>(defOp.getLoc(), ty, 0));
+
+    builder.create<arc::OutputOp>(defOp.getLoc(), outputs);
+    return success();
+  }
+
+  std::string getName() const override { return "arc-stubber"; }
+};
+
 //===----------------------------------------------------------------------===//
 // Reduction Registration
 //===----------------------------------------------------------------------===//
@@ -52,9 +74,10 @@ void ArcReducePatternDialectInterface::populateReducePatterns(
   // prioritized). For example, things that can knock out entire modules while
   // being cheap should be tried first (and thus have higher benefit), before
   // trying to tweak operands of individual arithmetic ops.
+  patterns.add<PassReduction, 5>(getContext(), arc::createDedupPass());
   patterns.add<PassReduction, 4>(getContext(), arc::createStripSVPass(), true,
                                  true);
-  patterns.add<PassReduction, 3>(getContext(), arc::createDedupPass());
+  patterns.add<ArcStubber, 3>();
   patterns.add<StateElimination, 2>();
   patterns.add<PassReduction, 1>(getContext(),
                                  arc::createArcCanonicalizerPass());

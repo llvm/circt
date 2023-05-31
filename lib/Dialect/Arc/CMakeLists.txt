@@ -37,6 +37,7 @@ add_circt_library(CIRCTArcReductions
   LINK_LIBS PUBLIC
   CIRCTReduceLib
   CIRCTArc
+  CIRCTHW
   CIRCTArcTransforms
   CIRCTConvertToArcs
   MLIRIR
