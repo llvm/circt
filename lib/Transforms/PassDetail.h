@@ -23,7 +23,7 @@ void registerDialect(DialectRegistry &registry);
 
 namespace arith {
 class ArithDialect;
-}
+} // namespace arith
 
 namespace memref {
 class MemRefDialect;
