@@ -15,6 +15,13 @@ with Context() as ctx, Location.unknown():
   module {
     om.class @Test(%param: i64) {
       om.class.field @field, %param : i64
+
+      %0 = om.object @Child() : () -> !om.class.type<@Child>
+      om.class.field @child, %0 : !om.class.type<@Child>
+    }
+    om.class @Child() {
+      %0 = om.constant 14 : i64
+      om.class.field @foo, %0 : i64
     }
   }
   """)
@@ -58,11 +65,17 @@ except ValueError as e:
 
 
 @dataclass
+class Child:
+  foo: int
+
+
+@dataclass
 class Test:
   field: int
+  child: Child
 
 
 obj = evaluator.instantiate(Test, 42)
 
-# CHECK: Test(field=42)
+# CHECK: Test(field=42, child=Child(foo=14))
 print(obj)

@@ -26,14 +26,14 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
                                                   StringRef inputFilename) {
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerIntrinsicsPass());
 
-  if (!opt.disableOptimization)
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        mlir::createCSEPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
 
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createDropNamesPass(opt.getPreserveMode()));
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
+  if (!opt.disableOptimization)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        mlir::createCSEPass());
 
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLowerCHIRRTLPass());
@@ -193,7 +193,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   // Lower the ref.resolve and ref.send ops and remove the RefType ports.
   // LowerToHW cannot handle RefType so, this pass must be run to remove all
   // RefType ports and ops.
-  pm.addPass(firrtl::createLowerXMRPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerXMRPass());
 
   pm.addPass(createLowerFIRRTLToHWPass(
       opt.enableAnnotationWarning.getValue(),

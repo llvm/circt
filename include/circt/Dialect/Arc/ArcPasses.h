@@ -21,7 +21,8 @@ namespace arc {
 
 std::unique_ptr<mlir::Pass>
 createAddTapsPass(llvm::Optional<bool> tapPorts = {},
-                  llvm::Optional<bool> tapWires = {});
+                  llvm::Optional<bool> tapWires = {},
+                  llvm::Optional<bool> tapNamedValues = {});
 std::unique_ptr<mlir::Pass> createAllocateStatePass();
 std::unique_ptr<mlir::Pass> createArcCanonicalizerPass();
 std::unique_ptr<mlir::Pass> createDedupPass();

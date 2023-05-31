@@ -602,6 +602,8 @@ def DropName : Pass<"firrtl-drop-names", "firrtl::FModuleOp"> {
            }]>
   ];
   let statistics = [
+    Statistic<"numNamesDropped", "num-names-dropped",
+      "Number of names dropped">,
     Statistic<"numNamesConverted", "num-names-converted",
       "Number of interesting names made droppable">,
   ];
@@ -622,7 +624,7 @@ def RandomizeRegisterInit :
   let constructor = "circt::firrtl::createRandomizeRegisterInitPass()";
 }
 
-def LowerXMR : Pass<"firrtl-lower-xmr", "mlir::ModuleOp"> {
+def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
   let summary = "Lower ref ports to XMR";
   let description = [{
     This pass lowers RefType ops and ports to verbatim encoded XMRs.

@@ -707,6 +707,14 @@ void IMConstPropPass::visitOperation(Operation *op) {
   if (llvm::all_of(op->getResults(), isOverdefinedFn))
     return;
 
+  // To prevent regressions, mark values as overdefined when they are defined
+  // by operations with a large number of operands.
+  if (op->getNumOperands() > 128) {
+    for (auto value : op->getResults())
+      markOverdefined(value);
+    return;
+  }
+
   // Collect all of the constant operands feeding into this operation. If any
   // are not ready to be resolved, bail out and wait for them to resolve.
   SmallVector<Attribute, 8> operandConstants;

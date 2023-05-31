@@ -21,6 +21,8 @@
 #include "ExportVerilogInternals.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/LTL/LTLDialect.h"
+#include "circt/Dialect/Verif/VerifDialect.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -816,9 +818,11 @@ static LogicalResult legalizeHWModule(Block &block,
        opIterator != e;) {
     auto &op = *opIterator++;
 
-    if (!isa<CombDialect, SVDialect, HWDialect>(op.getDialect())) {
-      op.emitError() << "this is an instance of unknown dialect detecetd. "
-                        "ExportVerilog cannot emit this operation so it needs "
+    if (!isa<CombDialect, SVDialect, HWDialect, ltl::LTLDialect,
+             verif::VerifDialect>(op.getDialect())) {
+      auto d = op.emitError() << "dialect \"" << op.getDialect()->getNamespace()
+                              << "\" not supported for direct Verilog emission";
+      d.attachNote() << "ExportVerilog cannot emit this operation; it needs "
                         "to be lowered before running ExportVerilog";
       return failure();
     }

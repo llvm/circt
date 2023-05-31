@@ -371,3 +371,29 @@ arc.define @RootCallArc(%arg0: i4, %arg1: i4) -> i4 {
   %2 = comb.and %0, %1 {RootCallArc} : i4
   arc.output %2 : i4
 }
+
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: arc.define @OutlineRegressionA
+arc.define @OutlineRegressionA(%arg0: i1, %arg1: i3) -> (i3, i3) {
+  %c0_i3 = hw.constant 0 : i3
+  %0 = comb.mux bin %arg0, %arg1, %c0_i3 {OutlineRegression} : i3
+  arc.output %0, %c0_i3 : i3, i3
+}
+
+// CHECK-NOT: arc.define @OutlineRegressionB
+arc.define @OutlineRegressionB(%arg0: i1, %arg1: i3) -> (i3, i3) {
+  %c0_i3 = hw.constant 0 : i3
+  %0 = comb.mux bin %arg0, %c0_i3, %arg1 {OutlineRegression} : i3
+  arc.output %0, %c0_i3 : i3, i3
+}
+
+// CHECK-LABEL: hw.module @OutlineRegression
+hw.module @OutlineRegression(%a: i1, %b: i3) {
+  // CHECK-NEXT: [[K0:%.+]] = hw.constant 0 : i3
+  // CHECK-NEXT: arc.call @OutlineRegressionA(%a, %b, [[K0]]) :
+  // CHECK-NEXT: [[K1:%.+]] = hw.constant 0 : i3
+  // CHECK-NEXT: arc.call @OutlineRegressionA(%a, [[K1]], %b) :
+  arc.call @OutlineRegressionA(%a, %b) : (i1, i3) -> (i3, i3)
+  arc.call @OutlineRegressionB(%a, %b) : (i1, i3) -> (i3, i3)
+}

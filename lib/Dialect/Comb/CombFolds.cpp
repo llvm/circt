@@ -2507,12 +2507,12 @@ struct ArrayRewriter : public mlir::OpRewritePattern<hw::ArrayCreateOp> {
     return failure();
   }
 };
+
 } // namespace
 
 void MuxOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                         MLIRContext *context) {
-  results.insert<MuxRewriter>(context);
-  results.insert<ArrayRewriter>(context);
+  results.insert<MuxRewriter, ArrayRewriter>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2816,6 +2816,9 @@ static void combineEqualityICmpWithKnownBitsAndConstant(
 static void combineEqualityICmpWithXorOfConstant(ICmpOp cmpOp, XorOp xorOp,
                                                  const APInt &rhs,
                                                  PatternRewriter &rewriter) {
+  auto ip = rewriter.saveInsertionPoint();
+  rewriter.setInsertionPoint(xorOp);
+
   auto xorRHS = xorOp.getOperands().back().getDefiningOp<hw::ConstantOp>();
   auto newRHS = rewriter.create<hw::ConstantOp>(xorRHS->getLoc(),
                                                 xorRHS.getValue() ^ rhs);
@@ -2842,12 +2845,12 @@ static void combineEqualityICmpWithXorOfConstant(ICmpOp cmpOp, XorOp xorOp,
 
   // If the xor has multiple uses (not just the compare, then we need/want to
   // replace them as well.
-  if (xorMultipleUses) {
-    auto newXor = rewriter.create<XorOp>(xorOp.getLoc(), newLHS, xorRHS, false);
-    replaceOpAndCopyName(rewriter, xorOp, newXor->getResult(0));
-  }
+  if (xorMultipleUses)
+    replaceOpWithNewOpAndCopyName<XorOp>(rewriter, xorOp, newLHS, xorRHS,
+                                         false);
 
   // Replace the comparison.
+  rewriter.restoreInsertionPoint(ip);
   replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, cmpOp, cmpOp.getPredicate(),
                                         newLHS, newRHS, false);
 }
