@@ -23,6 +23,7 @@ namespace circt {
 // Passes
 //===----------------------------------------------------------------------===//
 
+std::unique_ptr<mlir::Pass> createMapArithToCombPass();
 std::unique_ptr<mlir::Pass> createFlattenMemRefPass();
 std::unique_ptr<mlir::Pass> createFlattenMemRefCallsPass();
 std::unique_ptr<mlir::Pass> createStripDebugInfoWithPredPass(
