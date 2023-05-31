@@ -31,6 +31,10 @@ Type circt::om::SymbolRefAttr::getType() {
   return SymbolRefType::get(getContext());
 }
 
+Type circt::om::ListAttr::getType() {
+  return ListType::get(getContext(), getElementType());
+}
+
 circt::om::SymbolRefAttr circt::om::SymbolRefAttr::get(mlir::Operation *op) {
   return om::SymbolRefAttr::get(op->getContext(),
                                 mlir::FlatSymbolRefAttr::get(op));
@@ -40,6 +44,27 @@ circt::om::SymbolRefAttr
 circt::om::SymbolRefAttr::get(mlir::StringAttr symName) {
   return om::SymbolRefAttr::get(symName.getContext(),
                                 mlir::FlatSymbolRefAttr::get(symName));
+}
+
+LogicalResult
+circt::om::ListAttr::verify(function_ref<InFlightDiagnostic()> emitError,
+                            mlir::Type elementType, mlir::ArrayAttr elements) {
+  return success(llvm::all_of(elements, [&](mlir::Attribute attr) {
+    auto typedAttr = attr.dyn_cast<mlir::TypedAttr>();
+    if (!typedAttr) {
+      emitError()
+          << "an element of a list attribute must be a typed attr but got "
+          << attr;
+      return false;
+    }
+    if (typedAttr.getType() != elementType) {
+      emitError() << "an element of a list attribute must have a type "
+                  << elementType << " but got " << typedAttr.getType();
+      return false;
+    }
+
+    return true;
+  }));
 }
 
 void circt::om::OMDialect::registerAttributes() {

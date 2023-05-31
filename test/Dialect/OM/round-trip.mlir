@@ -101,6 +101,19 @@ om.class @ReferenceConstant() {
   om.class.field @sym, %1 : !om.sym_ref
 }
 
+// CHECK-LABEL: @ListConstant
+om.class @ListConstant() {
+  // CHECK: %[[const1:.+]] = om.constant #om.list<i64, [42]> : !om.list<i64>
+  %0 = om.constant #om.list<i64, [42]> : !om.list<i64>
+  // CHECK: om.class.field @list_i64, %[[const1]] : !om.list<i64>
+  om.class.field @list_i64, %0 : !om.list<i64>
+
+  // CHECK: %[[const2:.+]] = om.constant #om.list<i32, []> : !om.list<i32>
+  %1 = om.constant #om.list<i32, []> : !om.list<i32>
+  // CHECK: om.class.field @list_i32, %[[const2]] : !om.list<i32>
+  om.class.field @list_i32, %1 : !om.list<i32>
+}
+
 // CHECK-LABEL: @String
 om.class @StringConstant() {
   // CHECK: %[[const1:.+]] = om.constant "foo" : !om.string
