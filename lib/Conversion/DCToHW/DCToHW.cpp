@@ -60,6 +60,7 @@ static Type tupleToStruct(TupleType tuple) {
 
 // Converts the range of 'types' into a `hw`-dialect type. The range will be
 // converted to a `hw.struct` type.
+// NOLINTNEXTLINE(misc-no-recursion)
 static Type toHWType(Type t);
 static Type toHWType(TypeRange types) {
   if (types.size() == 1)
@@ -71,6 +72,7 @@ static Type toHWType(TypeRange types) {
 // tuple -> hw.struct
 // none -> i0
 // (tuple[...] | hw.struct)[...] -> (tuple | hw.struct)[toHwType(...)]
+// NOLINTNEXTLINE(misc-no-recursion)
 static Type toHWType(Type t) {
   return TypeSwitch<Type, Type>(t)
       .Case<TupleType>(
@@ -481,6 +483,7 @@ struct RTLBuilder {
 
 /// Creates a Value that has an assigned zero value. For structs, this
 /// corresponds to assigning zero to each element recursively.
+// NOLINTNEXTLINE(misc-no-recursion)
 static Value createZeroDataConst(RTLBuilder &s, Location loc, Type type) {
   return TypeSwitch<Type, Value>(type)
       .Case<NoneType>([&](NoneType) { return s.constant(0, 0); })
@@ -503,10 +506,7 @@ static Value createZeroDataConst(RTLBuilder &s, Location loc, Type type) {
 static bool isZeroWidthType(Type type) {
   if (auto intType = type.dyn_cast<IntegerType>())
     return intType.getWidth() == 0;
-  if (type.isa<NoneType>())
-    return true;
-
-  return false;
+  return type.isa<NoneType>();
 }
 
 static UnwrappedIO unwrapIO(Location loc, ValueRange operands,
