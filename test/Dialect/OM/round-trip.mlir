@@ -112,6 +112,7 @@ om.class @ListConstant() {
   %1 = om.constant #om.list<i32, []> : !om.list<i32>
   // CHECK: om.class.field @list_i32, %[[const2]] : !om.list<i32>
   om.class.field @list_i32, %1 : !om.list<i32>
+}
 
 // CHECK-LABEL: @String
 om.class @StringConstant() {
