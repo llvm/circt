@@ -635,7 +635,8 @@ StringAttr circt::firrtl::getOrAddInnerSym(
   if (nameHint.empty()) {
     if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
       nameHint = nameAttr.getValue();
-    else
+    // Ensure if the op name is also empty, nameHint is initialized.
+    if (nameHint.empty())
       nameHint = "sym";
   }
   auto name = getNamespace(mod).newName(nameHint);
