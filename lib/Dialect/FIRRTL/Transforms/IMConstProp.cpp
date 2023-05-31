@@ -709,7 +709,7 @@ void IMConstPropPass::visitOperation(Operation *op) {
 
   // To prevent regressions, mark values as overdefined when they are defined
   // by operations with a large number of operands.
-  if (op->getNumOperands() >= 128) {
+  if (op->getNumOperands() > 128) {
     for (auto value : op->getResults())
       markOverdefined(value);
     return;
