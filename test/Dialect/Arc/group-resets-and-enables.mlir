@@ -215,6 +215,7 @@ arc.model "GroupAssignmentsInIfTesting" {
 ^bb0(%arg0: !arc.storage):
   %in_clock = arc.root_input "clock", %arg0 : (!arc.storage) -> !arc.state<i1>
   %in_i1 = arc.root_input "i1", %arg0 : (!arc.storage) -> !arc.state<i4>
+  %in_i2 = arc.root_input "i2", %arg0 : (!arc.storage) -> !arc.state<i4>
   %in_cond0 = arc.root_input "cond0", %arg0 : (!arc.storage) -> !arc.state<i1>
   %in_cond1 = arc.root_input "cond1", %arg0 : (!arc.storage) -> !arc.state<i1>
   %0 = arc.state_read %in_clock : <i1>
@@ -223,17 +224,19 @@ arc.model "GroupAssignmentsInIfTesting" {
     // CHECK: [[IN_COND0:%.+]] = arc.state_read %in_cond0
     %3 = arc.state_read %in_cond0 : <i1>
     %4 = arc.state_read %in_i1 : <i4>
+    %5 = arc.state_read %in_i2 : <i4>
     // CHECK-NEXT: scf.if [[IN_COND0]] {
     scf.if %3 {
       // CHECK-NEXT: [[IN_I1:%.+]] = arc.state_read %in_i1
       // CHECK-NEXT: arc.state_write [[FOO_ALLOC:%.+]] = [[IN_I1]]
       arc.state_write %1 = %4 : <i4>
       // CHECK: [[IN_COND1:%.+]] = arc.state_read %in_cond1
-      %5 = arc.state_read %in_cond1 : <i1>
+      %6 = arc.state_read %in_cond1 : <i1>
       // CHECK-NEXT: scf.if [[IN_COND1]] {
-      scf.if %5 {
-        // CHECK-NEXT: arc.state_write [[BAR_ALLOC:%.+]] = [[IN_I1]]
-        arc.state_write %2 = %4 : <i4>
+      scf.if %6 {
+        // CHECK-NEXT: [[IN_I2:%.+]] = arc.state_read %in_i2
+        // CHECK-NEXT: arc.state_write [[BAR_ALLOC:%.+]] = [[IN_I2]]
+        arc.state_write %2 = %5 : <i4>
         // CHECK-NEXT: }
       }
       // CHECK-NEXT: }

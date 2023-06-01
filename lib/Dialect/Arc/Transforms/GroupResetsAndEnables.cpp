@@ -9,6 +9,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/Dominance.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -134,6 +135,7 @@ bool groupInRegion(Region *region, Operation *clockTreeOp,
   }
   while (!worklist.empty()) {
     Operation *op = worklist.pop_back_val();
+    mlir::DominanceInfo dom(op);
     for (auto operand : op->getOperands()) {
       Operation *definition = operand.getDefiningOp();
       if (definition == nullptr)
@@ -146,9 +148,7 @@ bool groupInRegion(Region *region, Operation *clockTreeOp,
       if (!operand.hasOneUse()) {
         bool safeToMove = true;
         for (auto *user : operand.getUsers()) {
-          if (!op->getParentRegion()->isAncestor(user->getParentRegion()) ||
-              (user->getBlock() == op->getBlock() &&
-               user->isBeforeInBlock(op))) {
+          if (!dom.dominates(op, user)) {
             safeToMove = false;
             break;
           }
