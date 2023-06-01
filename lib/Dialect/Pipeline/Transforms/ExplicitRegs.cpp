@@ -27,7 +27,7 @@ private:
   // Recursively routes value v backwards through the pipeline, adding new
   // registers to 'stage' if the value was not already registered in the stage.
   // Returns the registerred version of 'v' through 'stage'.
-  Value routeThroughStage(OpOperand &v, StageSeparatingOp stage);
+  Value routeThroughStage(OpOperand &v, Block *stage);
 
   // A mapping storing whether a given stage register constains a registerred
   // version of a given value. The registered version will be a backedge during
@@ -36,11 +36,11 @@ private:
   // operations containing the requested regs, and the backedge will be
   // replaced. MapVector ensures deterministic iteration order, which in turn
   // ensures determinism during stage op IR emission.
-  DenseMap<StageSeparatingOp, llvm::MapVector<Value, Backedge>> stageRegMap;
+  DenseMap<Block *, llvm::MapVector<Value, Backedge>> stageRegMap;
 
   // A linked list of stages in the pipeline. Allows for easily looking up the
   // predecessor stage of a given stage.
-  DenseMap<StageSeparatingOp, StageSeparatingOp> stagePredecessor;
+  DenseMap<Block *, Block *> stagePredecessor;
 
   std::shared_ptr<BackedgeBuilder> bb;
 };
@@ -48,13 +48,8 @@ private:
 } // end anonymous namespace
 
 // NOLINTNEXTLINE(misc-no-recursion)
-Value ExplicitRegsPass::routeThroughStage(OpOperand &v,
-                                          StageSeparatingOp stage) {
+Value ExplicitRegsPass::routeThroughStage(OpOperand &v, Block *stage) {
   Value retVal = v.get();
-  if (!stage) {
-    // Recursive base case - nothing to route (v is a block operand).
-    return retVal;
-  }
 
   auto regIt = stageRegMap[stage].find(retVal);
   if (regIt != stageRegMap[stage].end()) {
@@ -63,13 +58,22 @@ Value ExplicitRegsPass::routeThroughStage(OpOperand &v,
   }
 
   auto *definingOp = retVal.getDefiningOp();
-  // Value is a block arg, a constant or defined after the provided stage
-  // - early exit here.
-  if (definingOp && (definingOp->hasTrait<OpTrait::ConstantLike>() ||
-                     !definingOp->isBeforeInBlock(stage)))
+
+  // Is the value defined by an op in the current stage?
+  if (definingOp && (definingOp->getBlock() == stage))
     return retVal;
 
-  // Value is defined before the provided stage - route it through the stage.
+  // Is the value a block argument of the current stage?
+  if (llvm::is_contained(stage->getArguments(), retVal))
+    return retVal;
+
+  // Is the value a constant? If so, we allow it; constants are special cases
+  // which are allowed to be used in any stage.
+  if (definingOp && definingOp->hasTrait<OpTrait::ConstantLike>())
+    return retVal;
+
+  // Value is defined somewhere before the provided stage - route it through the
+  // stage, and recurse to the predecessor stage.
   auto regBackedge = bb->get(retVal.getType());
   stageRegMap[stage].insert({retVal, regBackedge});
   retVal = regBackedge;
@@ -78,7 +82,7 @@ Value ExplicitRegsPass::routeThroughStage(OpOperand &v,
   auto predStageIt = stagePredecessor.find(stage);
   assert(predStageIt != stagePredecessor.end() &&
          "stage should have been registered before calling this function");
-  StageSeparatingOp predecessorStage = predStageIt->second;
+  Block *predecessorStage = predStageIt->second;
   if (predecessorStage)
     routeThroughStage(v, predecessorStage);
 
@@ -91,40 +95,40 @@ void ExplicitRegsPass::runOnOperation() {
   bb = std::make_shared<BackedgeBuilder>(b, getOperation().getLoc());
 
   // A list of stages in the pipeline in the order which they appear.
-  SmallVector<StageSeparatingOp> stageList;
-  StageSeparatingOp currStage = nullptr;
+  SmallVector<Block *> stageList;
+  Block *currStage = nullptr;
   // Iterate over the pipeline body in-order (!).
-  for (auto &op : *pipeline.getBodyBlock()) {
-    if (auto stageOp = dyn_cast<StageSeparatingOp>(&op)) {
-      stagePredecessor[stageOp] = currStage;
-      currStage = stageOp;
-      continue;
-    }
+  for (auto *stage : pipeline.getOrderedStages()) {
+    stagePredecessor[stage] = currStage;
+    currStage = stage;
 
-    // Check the operands of this operation to see if any of them cross a
-    // stage boundary.
-    for (OpOperand &operand : op.getOpOperands()) {
-      Value reroutedValue = routeThroughStage(operand, currStage);
-      if (reroutedValue != operand.get())
-        op.setOperand(operand.getOperandNumber(), reroutedValue);
+    for (auto &op : *stage) {
+      // Check the operands of this operation to see if any of them cross a
+      // stage boundary.
+      for (OpOperand &operand : op.getOpOperands()) {
+        Value reroutedValue = routeThroughStage(operand, currStage);
+        if (reroutedValue != operand.get())
+          op.setOperand(operand.getOperandNumber(), reroutedValue);
+      }
     }
   }
 
-  // All values have been recorded through the stages. Now, replace the
-  // stages with new stage operations containing the required registers.
-  for (auto &[stageOp, regMap] : stageRegMap) {
-    b.setInsertionPoint(stageOp);
-    auto predStageOp = stagePredecessor[stageOp];
+  auto *ctx = &getContext();
+
+  // All values have been recorded through the stages. Now, add registers to the
+  // stage blocks.
+  for (auto &[stage, regMap] : stageRegMap) {
+    auto predStage = stagePredecessor[stage];
 
     // Gather register inputs to this stage, either from a predecessor stage
     // or from the original op.
     llvm::SmallVector<Value> regIns;
     for (auto &[value, backedge] : regMap) {
-      if (predStageOp) {
+      if (predStage) {
         // Grab the value if registerred through the predecessor op, else,
         // use the raw value.
-        auto predRegIt = stageRegMap[predStageOp].find(value);
-        if (predRegIt != stageRegMap[predStageOp].end()) {
+        auto predRegIt = stageRegMap[predStage].find(value);
+        if (predRegIt != stageRegMap[predStage].end()) {
           regIns.push_back(predRegIt->second);
           continue;
         }
@@ -133,17 +137,23 @@ void ExplicitRegsPass::runOnOperation() {
       regIns.push_back(value);
     }
 
-    auto newStageOp = b.create<StageSeparatingRegOp>(
-        stageOp.getLoc(), stageOp.getEnable(), regIns);
-    stageOp.getValid().replaceAllUsesWith(newStageOp.getValid());
+    // ... add arguments to the stage
+    stage->addArguments(
+        ValueRange(regIns).getTypes(),
+        llvm::SmallVector<Location>(regIns.size(), UnknownLoc::get(ctx)));
 
-    // Replace backedges with the outputs of the new stage.
+    // Replace backedges with the stage arguments.
     for (auto it : llvm::enumerate(regMap)) {
       auto index = it.index();
       auto &[value, backedge] = it.value();
-      backedge.setValue(newStageOp.getOutputs()[index]);
+      backedge.setValue(stage->getArgument(index));
     }
-    stageOp.erase();
+
+    // And append arguments to the predecessor stage terminator, if necessary.
+    if (predStage) {
+      StageOp predTerminator = cast<StageOp>(predStage->getTerminator());
+      predTerminator.getRegistersMutable().append(regIns);
+    }
   }
 
   // Clear internal state. See https://github.com/llvm/circt/issues/3235

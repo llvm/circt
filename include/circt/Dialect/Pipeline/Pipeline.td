@@ -21,84 +21,29 @@ include "mlir/IR/RegionKindInterface.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/IR/EnumAttr.td"
+include "circt/Dialect/Pipeline/PipelineInterfaces.td"
 
 def Pipeline_Dialect : Dialect {
   let name = "pipeline";
   let cppNamespace = "::circt::pipeline";
 }
-
-def PipelineOp : Op<Pipeline_Dialect, "pipeline", [
+def UnscheduledPipelineOp : Op<Pipeline_Dialect, "unscheduled", [
     IsolatedFromAbove,
     Pure,
     SingleBlockImplicitTerminator<"ReturnOp">,
     RegionKindInterface,
-    HasOnlyGraphRegion 
+    HasOnlyGraphRegion,
+    PipelineLike
   ]> {
-  let summary = "pipeline operation";
+  
+  let summary = "unscheduled pipeline operation";
   let description = [{
-    The "pipeline.pipeline" operation represents a retimeable pipeline.
-    The pipeline contains a single block representing a graph region. Pipeline
-    stages are represented by `pipeline.rt.register` operations. Semantics
-    of values crossing register boundaries are defined by lowering passes.
-    The pipeline representation is centered around providing latency insensitive
-    values (valid signals between stages). Such signals can either be removed
-    (in the feedforward, statically scheduled case), used to control stalling
-    (feedback, statically scheduled case) or in conjunction with handshake signals
-    for dynamically scheduled pipelines.
-    A pipelines' latency sensitivity is based on the I/O of the pipeline - if
-    any in- or output port is an ESI channel, all ports are expected to be ESI
-    channels, and the pipeline is considered latency sensitive.
-    The internal representation of the pipeline is agnostic to the latency
-    insensitivity of the I/O. This is by design - allowing us a single source
-    of truth for lowering either latency sensitive or latency insensitive pipelines.
-
-    A typical flow would go like this:
-
-    An untimed datapath is defined:
-    ```
-    pipeline.pipeline(%in0 : i32, %in1 : i32) -> (i32) {
-      ^bb0:(%arg0 : i32, %arg1: i32):
-        %add0 = comb.add %arg0, %arg1 : i32
-        %add1 = comb.add %add0, %arg0 : i32
-        %add2 = comb.add %add1, %arg1 : i32
-        pipeline.return %add2 : i32
-    }
-    ```
-    The datapath is scheduled:
-    ```
-    pipeline.pipeline(%in0 : i32, %in1 : i32) -> (i32) {
-      ^bb0:(%arg0 : i32, %arg1: i32, %go : i1):
-        %add0 = comb.add %arg0, %arg1 : i32
-
-        %s0_valid = pipeline.stage when %go
-        %add1 = comb.add %add0, %arg0 : i32
-  
-        %s1_valid = pipeline.stage when %g1
-        %add2 = comb.add %add1, %arg1 : i32
-
-        pipeline.return %add2 valid %s1_valid : i32
-    }
-    ```
-
-    Stage-crossing dependencies are made explicit through registers.
-    ```
-    pipeline.pipeline(%in0 : i32, %in1 : i32) -> (i32) {
-      ^bb0:(%arg0 : i32, %arg1: i32):
-        %add0 = comb.add %arg0, %arg1 : i32
-
-        %s0_valid, %add0_r = pipeline.stagesep.reg enable %go regs (%add0: i32)
-        %add1 = comb.add %add0_r, %arg0 : i32
-  
-        %s1_valid, %add1_r = pipeline.stagesep.reg enable %g1 regs (%add1: i32)
-        %add2 = comb.add %add1_r, %arg1 : i32
-
-        pipeline.return %add2 valid %s1_valid : i32
-    }
-    ```
-
-    This representation can then be lowered to statically or dynamically scheduled
-    pipelines.
+    The "pipeline.unscheduled" operation represents a pipeline that has not yet
+    been scheduled. It contains a single block representing a graph region of
+    operations to-be-scheduled into a pipeline.
+    Mainly serves as a container and entrypoint for scheduling.
   }];
 
   let arguments = (ins
@@ -119,166 +64,146 @@ def PipelineOp : Op<Pipeline_Dialect, "pipeline", [
     bool isLatencyInsensitive(); 
     bool isLatencySensitive() { return !isLatencyInsensitive(); }
 
+
     /// Returns the body of a Pipeline component.
     Block *getBodyBlock() {
       Region* region = &getOperation()->getRegion(0);
       assert(region->hasOneBlock() && "The body should have one Block.");
       return &region->front();
     }
+  }];
+}
+
+def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
+    IsolatedFromAbove,
+    Pure,
+    RegionKindInterface,
+    PipelineLike
+  ]> {
+  let summary = "Scheduled pipeline operation";
+  let description = [{
+    The `pipeline.scheduled` operation represents a scheduled pipeline.
+    The pipeline contains a single block representing a graph region.
+
+    A `pipeline.scheduled` operation can exist in multiple phases, mainly
+    pertaining to when registers have been materialized (made explicit).
+    For an in-depth explanation, please refer to the Pipeline dialect rationale.
+
+    A pipelines' latency sensitivity is based on the I/O of the pipeline - if
+    any in- or output port is an ESI channel, all ports are expected to be ESI
+    channels, and the pipeline is considered latency sensitive.
+    The internal representation of the pipeline is agnostic to the latency
+    insensitivity of the I/O. This is by design - allowing us a single source
+    of truth for lowering either latency sensitive or latency insensitive pipelines.
+  }];
+
+  let arguments = (ins
+    Variadic<AnyType>:$inputs, I1:$clock, I1:$reset
+  );
+  let results = (outs Variadic<AnyType>:$results);
+  let regions = (region AnyRegion:$body);
+  let skipDefaultBuilders = 1;
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins "TypeRange":$results, "ValueRange":$inputs, "Value":$clock, "Value":$reset)>
+  ];
+
+  let assemblyFormat = [{
+    `(` $inputs `)` `clock` $clock `reset` $reset attr-dict `:` functional-type($inputs, results) $body
+  }];
+
+  let extraClassDeclaration = [{
+    static mlir::RegionKind getRegionKind(unsigned index) {
+      return mlir::RegionKind::SSACFG;
+    }
 
     // Returns the internal inputs of this pipeline.
-    ValueRange getInnerInputs() { return getBodyBlock()->getArguments(); }
-
-    // Returns the internal enable signal of this pipeline.
-    Value getInnerEnable() {
-      return getBodyBlock()->getArguments().back();
+    FailureOr<ValueRange> getInnerInputs() {
+      auto* firstStage = getStage(0);
+      if(!firstStage)
+        return emitOpError() << "Pipeline has no stages";
+      
+      return {firstStage->getArguments()};
     }
-  }];
-}
 
+    // Returns all of the stages in this pipeline.
+    llvm::iplist<mlir::Block>& getStages() {
+      return getRegion().getBlocks();
+    }
 
-def StageSeparatingOp : Op<Pipeline_Dialect, "stagesep", [
-    HasParent<"PipelineOp">
-  ]> {
-  let summary = "Pipeline **s**tage **s**eparating operation.";
-  let description = [{
-    The `pipeline.stagesep` operation represents a stage separation in a pipeline.
-    The delimiter does not define any explicit registers, but solely
-    defines a cut of a dataflow graph based on its lexical position in the
-    pipeline. Pipeline registers are made explicit through the register
-    materialization pass, wherein this op is replaced by `pipeline.stage`
-    operations.
-  }];
+    // Returns all of the stages in this pipeline. The stages are ordered
+    // with respect to their position in the pipeline as determined by the
+    // control flow of `pipeline.stage` operations.
+    // Stages are ordered from first (entry) to last (exit).
+    llvm::SmallVector<Block*> getOrderedStages();
 
-  let arguments = (ins I1:$enable);
-  let results = (outs I1:$valid);
+    // Gets the n'th stage of this pipeline
+    Block* getStage(unsigned n) {
+      auto& blocks = getRegion().getBlocks();
+      if(n >= blocks.size())
+        return nullptr;
+      return &*std::next(blocks.begin(), n);
+    }
 
-  let assemblyFormat = [{
-    `enable` $enable attr-dict
-  }];
+    // Returns the entry stage of this pipeline.
+    Block* getEntryStage() {
+      return getStage(0);
+    }
 
-  let extraClassDeclaration = [{
-    // Returns the index of this stage in the pipeline.
-    unsigned index();
-  }];
-}
+    // Returns the last stage in the pipeline.
+    Block* getLastStage();
 
-def StageSeparatingRegOp : Op<Pipeline_Dialect, "stagesep.reg", [
-    HasParent<"PipelineOp">,
-    RangedTypesMatchWith<"result type matches operand", "inputs", "outputs",
-                         "llvm::make_range($_self.begin(), $_self.end())">
-  ]> {
-  let summary = "Pipeline pipeline stage.";
-  let description = [{
-    The `pipeline.stagesep.reg` operation represents a stage separating register
-    in a pipeline with materialized register values. `pipeline.stagesep` and
-    `pipeline.stagesep.reg` operations are not allowed to co-exist in the
-    same pipeline body. This is because, once register values are materialized,
-    all delays as well as knowledge about multicycle paths have been lowered
-    away.
-  }];
+    // Adds a new stage to this pipeline. It is the users responsibility to
+    // modify other stages to point to this new stage.
+    Block* addStage(Location loc);
 
-  let arguments = (ins Variadic<AnyType>:$inputs, I1:$enable);
-  let results = (outs Variadic<AnyType>:$outputs, I1:$valid);
-
-  let builders = [OpBuilder<(ins "mlir::Value":$enable, "mlir::ValueRange":$inputs)>];
-
-  let assemblyFormat = [{
-    `enable` $enable (`regs` $inputs^)? attr-dict (`:` type($inputs)^)?
-  }];
-
-  let extraClassDeclaration = [{
-    // Returns the index of this stage in the pipeline.
-    unsigned index();
+    // Returns true if the pipeline has entered the register materialized phase.
+    // This enables certain invariants such as "all values used within a stage
+    // must be defined within a stage".
+    bool isMaterialized();
   }];
 }
 
 
 def StageOp : Op<Pipeline_Dialect, "stage", [
-    HasParent<"PipelineOp">,
-    SingleBlockImplicitTerminator<"StageReturnOp">,
-    RegionKindInterface,
-    HasOnlyGraphRegion,
-    IsolatedFromAbove
+    AttrSizedOperandSegments,
+    HasParent<"ScheduledPipelineOp">,
+    DeclareOpInterfaceMethods<BranchOpInterface, ["getSuccessorForOperands"]>,
+    Pure,
+    Terminator
   ]> {
-  let summary = "Pipeline pipeline stage.";
+  let summary = "Pipeline stage terminating operation.";
   let description = [{
-    The `pipeline.stage` operation represents a stage separating register
-    in a pipeline with materialized register values. `pipeline.stagesep` and
-    `pipeline.stage` operations are not allowed to co-exist in the
-    same pipeline body. This is because, once register values are materialized,
-    all delays as well as knowledge about multicycle paths have been lowered
-    away.
+    The `pipeline.stage` operation represents a stage terminator. It is used
+    to communicate
+    1. which stage (block) to transition to next
+    2. which registers to build at this stage boundary
+    3. which values to pass through to the next stage without registering
   }];
 
-  let arguments = (ins Variadic<AnyType>:$inputs, I1:$enable);
-  let results = (outs Variadic<AnyType>:$outputs, I1:$valid);
-  let regions = (region SizedRegion<1>: $body);
+  let arguments = (ins Variadic<AnyType>:$registers, Variadic<AnyType>:$passthroughs, I1:$enable);
+  let successors = (successor AnySuccessor:$nextStage);
+  let results = (outs);
   let hasVerifier = 1;
-
-
-  let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins 
-    "mlir::Value":$enable,
-    "mlir::ValueRange":$inputs,
-    "mlir::TypeRange":$outputs
-  )>];
 
   let assemblyFormat = [{
-    `ins` ($inputs^)? `enable` $enable attr-dict `:` functional-type($inputs, $outputs) $body
+    $nextStage (`regs` `(` $registers^ `:` type($registers) `)`)?
+      (`pass` `(` $passthroughs^ `:` type($passthroughs) `)` )? `enable` $enable attr-dict
   }];
 
   let extraClassDeclaration = [{
-    // Returns the index of this stage in the pipeline.
-    unsigned index() {
-      auto stageOps = getOperation()->getParentOfType<PipelineOp>().getOps<StageOp>();
-      return std::distance(stageOps.begin(), llvm::find(stageOps, *this));
-    }
-
-    /// Returns the body of a Pipeline stage.
-    Block *getBodyBlock() {
-      return &getOperation()->getRegion(0).front();
-    }
-
-    // Returns the internal `enable` signal.
-    Value getInnerEnable() {
-      return getBodyBlock()->getArguments().back();
-    }
-
-    // Returns the internal inputs of this stage.
-    ValueRange getInnerInputs() {
-      return getBodyBlock()->getArguments().drop_back(1);
+    // Set the destination stage.
+    void setNextStage(Block *block) {
+      setSuccessor(block);
     }
   }];
 }
 
-def StageReturnOp : Op<Pipeline_Dialect, "stage.return", [
-    Terminator,
-    AttrSizedOperandSegments,
-    HasParent<"StageOp">
-  ]> {
-  let summary = "Pipeline stage return.";
-  let description = [{
-    The "stage.return" operation represents a terminator of a `pipeline.stage`.
-  }];
-
-  let hasVerifier = 1;
-  let arguments = (ins Variadic<AnyType>:$regs, Variadic<AnyType>:$passthroughs, I1:$valid);
-  let builders = [OpBuilder<(ins), [{ return; }]>];
-  let assemblyFormat = [{ (`regs` $regs^)? (`passthroughs` $passthroughs^)?
-      `valid` $valid attr-dict (`:` `(` type($regs)^ `)`)?
-      (`,` `(` type($passthroughs)^ `)` )? }];
-
-  let extraClassDeclaration = [{
-    // Assigns the operands of this stage return, as well as the required
-    // `operand_segment_sizes` attribute.
-    void setOperands(Value valid, ValueRange regs, ValueRange passthroughs);
-  }];
-}
 
 def ReturnOp : Op<Pipeline_Dialect, "return", [
     Terminator,
-    HasParent<"PipelineOp">
+    ParentOneOf<["UnscheduledPipelineOp", "ScheduledPipelineOp"]>
   ]> {
   let summary = "Pipeline dialect return.";
   let description = [{
@@ -286,9 +211,9 @@ def ReturnOp : Op<Pipeline_Dialect, "return", [
   }];
 
   let hasVerifier = 1;
-  let arguments = (ins Variadic<AnyType>:$inputs, I1:$valid);
+  let arguments = (ins Variadic<AnyType>:$inputs);
   let builders = [OpBuilder<(ins), [{ return; }]>];
-  let assemblyFormat = [{ ($inputs^)? `valid` $valid attr-dict (`:` type($inputs)^)? }];
+  let assemblyFormat = [{ ($inputs^)? attr-dict (`:` type($inputs)^)? }];
 }
 
 #endif // PIPELINE_OPS

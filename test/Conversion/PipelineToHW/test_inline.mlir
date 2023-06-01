@@ -1,63 +1,87 @@
 // RUN: circt-opt --lower-pipeline-to-hw %s | FileCheck %s
 
-// CHECK:        hw.module @test0(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out: i32) {
-// CHECK-NEXT:     %0 = comb.add %arg0, %arg1 : i32
-// CHECK-NEXT:     %p0_s0_reg0 = seq.compreg %0, %clk : i32
-// CHECK-NEXT:     %p0_s0_reg1 = seq.compreg %arg0, %clk : i32
-// CHECK-NEXT:     %p0_s0_valid = seq.compreg %go, %clk : i1
-// CHECK-NEXT:     %1 = comb.add %p0_s0_reg0, %p0_s0_reg1 : i32
-// CHECK-NEXT:     %p0_s1_reg0 = seq.compreg %1, %clk : i32
-// CHECK-NEXT:     %p0_s1_reg1 = seq.compreg %p0_s0_reg0, %clk : i32
-// CHECK-NEXT:     %p0_s1_valid = seq.compreg %p0_s0_valid, %clk : i1
-// CHECK-NEXT:     %2 = comb.add %p0_s1_reg0, %p0_s1_reg1 : i32
-// CHECK-NEXT:     hw.output %2 : i32
-// CHECK-NEXT:   }
-hw.module @test0(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out: i32) {
-  %0 = pipeline.pipeline(%arg0, %arg1, %go) clock %clk reset %rst : (i32, i32, i1) -> i32 {
-  ^bb0(%arg0_0: i32, %arg1_1: i32, %arg2: i1):
-    %outputs:2, %valid = pipeline.stage ins %arg0_0, %arg1_1 enable %arg2 : (i32, i32) -> (i32, i32) {
-    ^bb0(%arg3: i32, %arg4: i32, %arg5: i1):
-      %2 = comb.add %arg3, %arg4 : i32
-      pipeline.stage.return regs %2, %arg3 valid %arg5 : (i32, i32)
-    }
-    %outputs_2:2, %valid_3 = pipeline.stage ins %outputs#0, %outputs#1 enable %valid : (i32, i32) -> (i32, i32) {
-    ^bb0(%arg3: i32, %arg4: i32, %arg5: i1):
-      %2 = comb.add %arg3, %arg4 : i32
-      pipeline.stage.return regs %2, %arg3 valid %arg5 : (i32, i32)
-    }
-    %1 = comb.add %outputs_2#0, %outputs_2#1 : i32
-    pipeline.return %1 valid %valid_3 : i32
+// CHECK-LABEL:   hw.module @testBasic(
+// CHECK-SAME:           %[[VAL_0:.*]]: i1, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1) -> (out: i1) {
+// CHECK:           hw.output %[[VAL_0]] : i1
+// CHECK:         }
+hw.module @testBasic(%arg0: i1, %clk: i1, %rst: i1) -> (out: i1) {
+  %0 = pipeline.scheduled(%arg0) clock %clk reset %rst : (i1) -> (i1) {
+  ^bb0(%a0: i1):
+    pipeline.return %a0 : i1
   }
-  hw.output %0 : i32
+  hw.output %0 : i1
 }
 
-// CHECK:       hw.module @testMultiple(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out: i32) {
-// CHECK-NEXT:    %0 = comb.add %arg0, %arg1 : i32
-// CHECK-NEXT:    %p0_s0_reg0 = seq.compreg %0, %clk : i32
-// CHECK-NEXT:    %p0_s0_valid = seq.compreg %go, %clk : i1
-// CHECK-NEXT:    %1 = comb.add %p0_s0_reg0, %p0_s0_reg0 : i32
-// CHECK-NEXT:    %p1_s0_reg0 = seq.compreg %1, %clk : i32
-// CHECK-NEXT:    %p1_s0_valid = seq.compreg %go, %clk : i1
-// CHECK-NEXT:    hw.output %p1_s0_reg0 : i32
-// CHECK-NEXT:  }
-hw.module @testMultiple(%arg0 : i32, %arg1 : i32, %go : i1, %clk : i1, %rst : i1) -> (out: i32) {
-  %0 = pipeline.pipeline(%arg0, %arg1, %go) clock %clk reset %rst : (i32, i32, i1) -> i32 {
+// CHECK-LABEL:   hw.module @testSingle(
+// CHECK-SAME:          %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, out1: i1) {
+// CHECK:           %[[VAL_5:.*]] = hw.constant true
+// CHECK:           %[[VAL_6:.*]] = comb.sub %[[VAL_0]], %[[VAL_1]] : i32
+// CHECK:           %[[VAL_7:.*]] = seq.compreg %[[VAL_6]], %[[VAL_3]] : i32
+// CHECK:           %[[VAL_8:.*]] = seq.compreg %[[VAL_0]], %[[VAL_3]] : i32
+// CHECK:           %[[VAL_9:.*]] = comb.add %[[VAL_7]], %[[VAL_8]] : i32
+// CHECK:           hw.output %[[VAL_9]], %[[VAL_5]] : i32, i1
+// CHECK:         }
+hw.module @testSingle(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out0: i32, out1: i1) {
+  %0:2 = pipeline.scheduled(%arg0, %arg1, %go) clock %clk reset %rst : (i32, i32, i1) -> (i32, i1) {
   ^bb0(%arg0_0: i32, %arg1_1: i32, %arg2: i1):
-    %output, %valid = pipeline.stage ins %arg0_0, %arg1_1 enable %arg2 : (i32, i32) -> (i32) {
-    ^bb0(%arg3: i32, %arg4: i32, %arg5: i1):
-      %2 = comb.add %arg3, %arg4 : i32
-      pipeline.stage.return regs %2 valid %arg5 : (i32)
-    }
-    pipeline.return %output valid %valid : i32
+    %true = hw.constant true
+    %1 = comb.sub %arg0_0, %arg1_1 : i32
+    pipeline.stage ^bb1 regs(%1, %arg0_0 : i32, i32) enable %arg2
+  ^bb1(%6: i32, %7: i32):  // pred: ^bb1
+    %8 = comb.add %6, %7 : i32
+    pipeline.return %8, %true : i32, i1
   }
-  %1 = pipeline.pipeline(%0, %0, %go) clock %clk reset %rst : (i32, i32, i1) -> i32 {
+  hw.output %0#0, %0#1 : i32, i1
+}
+
+// CHECK-LABEL:   hw.module @testMultiple(
+// CHECK-SAME:          %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, out1: i1) {
+// CHECK:           %[[VAL_5:.*]] = hw.constant true
+// CHECK:           %[[VAL_6:.*]] = comb.sub %[[VAL_0]], %[[VAL_1]] : i32
+// CHECK:           %[[VAL_7:.*]] = seq.compreg %[[VAL_6]], %[[VAL_3]] : i32
+// CHECK:           %[[VAL_8:.*]] = seq.compreg %[[VAL_0]], %[[VAL_3]] : i32
+// CHECK:           %[[VAL_9:.*]] = seq.compreg %[[VAL_2]], %[[VAL_3]] : i1
+// CHECK:           %[[VAL_10:.*]] = comb.add %[[VAL_7]], %[[VAL_8]] : i32
+// CHECK:           %[[VAL_11:.*]] = seq.compreg %[[VAL_10]], %[[VAL_3]] : i32
+// CHECK:           %[[VAL_12:.*]] = seq.compreg %[[VAL_7]], %[[VAL_3]] : i32
+// CHECK:           %[[VAL_13:.*]] = comb.mul %[[VAL_11]], %[[VAL_12]] : i32
+// CHECK:           %[[VAL_14:.*]] = hw.constant true
+// CHECK:           %[[VAL_15:.*]] = comb.sub %[[VAL_13]], %[[VAL_1]] : i32
+// CHECK:           %[[VAL_16:.*]] = seq.compreg %[[VAL_15]], %[[VAL_3]] : i32
+// CHECK:           %[[VAL_17:.*]] = seq.compreg %[[VAL_13]], %[[VAL_3]] : i32
+// CHECK:           %[[VAL_18:.*]] = seq.compreg %[[VAL_2]], %[[VAL_3]] : i1
+// CHECK:           %[[VAL_19:.*]] = comb.add %[[VAL_16]], %[[VAL_17]] : i32
+// CHECK:           %[[VAL_20:.*]] = seq.compreg %[[VAL_19]], %[[VAL_3]] : i32
+// CHECK:           %[[VAL_21:.*]] = seq.compreg %[[VAL_16]], %[[VAL_3]] : i32
+// CHECK:           %[[VAL_22:.*]] = comb.mul %[[VAL_20]], %[[VAL_21]] : i32
+// CHECK:           hw.output %[[VAL_13]], %[[VAL_5]] : i32, i1
+// CHECK:         }
+hw.module @testMultiple(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out0: i32, out1: i1) {
+  %0:2 = pipeline.scheduled(%arg0, %arg1, %go) clock %clk reset %rst : (i32, i32, i1) -> (i32, i1) {
   ^bb0(%arg0_0: i32, %arg1_1: i32, %arg2: i1):
-    %output, %valid = pipeline.stage ins %arg0_0, %arg1_1 enable %arg2 : (i32, i32) -> (i32) {
-    ^bb0(%arg3: i32, %arg4: i32, %arg5: i1):
-      %2 = comb.add %arg3, %arg4 : i32
-      pipeline.stage.return regs %2 valid %arg5 : (i32)
-    }
-    pipeline.return %output valid %valid : i32
+    %true = hw.constant true
+    %1 = comb.sub %arg0_0, %arg1_1 : i32
+    pipeline.stage ^bb1 regs(%1, %arg0_0, %arg2 : i32, i32, i1) enable %arg2
+  ^bb1(%2: i32, %3: i32, %4: i1):  // pred: ^bb0
+    %5 = comb.add %2, %3 : i32
+    pipeline.stage ^bb2 regs(%5, %2 : i32, i32) enable %4
+  ^bb2(%6: i32, %7: i32):  // pred: ^bb1
+    %8 = comb.mul %6, %7 : i32
+    pipeline.return %8, %true : i32, i1
   }
-  hw.output %1 : i32    
+
+  %1:2 = pipeline.scheduled(%0#0, %arg1, %go) clock %clk reset %rst : (i32, i32, i1) -> (i32, i1) {
+  ^bb0(%arg0_0: i32, %arg1_1: i32, %arg2: i1):
+    %true = hw.constant true
+    %1 = comb.sub %arg0_0, %arg1_1 : i32
+    pipeline.stage ^bb1 regs(%1, %arg0_0, %arg2 : i32, i32, i1) enable %arg2
+  ^bb1(%2: i32, %3: i32, %4: i1):  // pred: ^bb0
+    %5 = comb.add %2, %3 : i32
+    pipeline.stage ^bb2 regs(%5, %2 : i32, i32) enable %4
+  ^bb2(%6: i32, %7: i32):  // pred: ^bb1
+    %8 = comb.mul %6, %7 : i32
+    pipeline.return %8, %true : i32, i1
+  }
+
+  hw.output %0#0, %0#1 : i32, i1
 }
