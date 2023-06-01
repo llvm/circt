@@ -884,7 +884,13 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
 
   case FIRToken::kw_const: {
     consumeToken(FIRToken::kw_const);
-    auto loc = getToken().getLoc();
+    auto nextToken = getToken();
+    auto loc = nextToken.getLoc();
+
+    // Guard against multiple 'const' specifications
+    if (nextToken.is(FIRToken::kw_const))
+      return emitError(loc, "'const' can only be specified once on a type");
+
     if (failed(parseType(result, message)))
       return failure();
 
