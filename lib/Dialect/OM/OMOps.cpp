@@ -256,6 +256,11 @@ void circt::om::ConstantOp::build(::mlir::OpBuilder &odsBuilder,
   return build(odsBuilder, odsState, constVal.getType(), constVal);
 }
 
+OpFoldResult circt::om::ConstantOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "constant has no operands");
+  return getValueAttr();
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//

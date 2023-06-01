@@ -128,6 +128,8 @@ def ConstantOp : OMOp<"constant",
   let assemblyFormat = [{
     $value attr-dict
   }];
+
+  let hasFolder = true;
 }
 
 #endif // CIRCT_DIALECT_OM_OMOPS_TD
