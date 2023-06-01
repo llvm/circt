@@ -530,6 +530,9 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
             builder, cond,
             [&]() {
               Value nextReg = getArrayIndex(reg, index);
+              // Create a value to use for equivalence checking in the
+              // recursive calls. Add the value to `opsToDelete` so that it can
+              // be deleted afterwards.
               auto termElement =
                   builder.create<hw::ArrayGetOp>(term.getLoc(), term, index);
               opsToDelete.push_back(termElement);
@@ -554,6 +557,9 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
         if (!index)
           index = getArrayIndex(reg, idxVal);
 
+        // Create a value to use for equivalence checking in the
+        // recursive calls. Add the value to `opsToDelete` so that it can
+        // be deleted afterwards.
         auto termElement =
             builder.create<hw::ArrayGetOp>(term.getLoc(), term, idxVal);
         opsToDelete.push_back(termElement);
