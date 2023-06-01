@@ -105,3 +105,4 @@ hw.module @testMultiple(%arg0 : i32, %arg1 : i32, %go : i1, %clk : i1, %rst : i1
   }
   hw.output %1 : i32    
 }
+
