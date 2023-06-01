@@ -79,7 +79,7 @@ bool PipelineOp::isLatencyInsensitive() {
 }
 
 // ===----------------------------------------------------------------------===//
-// DelimiterOp
+// StageSeparatingOp
 // ===----------------------------------------------------------------------===//
 
 // Returns the index of this stage in the pipeline.
@@ -90,7 +90,7 @@ unsigned StageSeparatingOp::index() {
 }
 
 // ===----------------------------------------------------------------------===//
-// DelimiterRegisterOp
+// StageSeparatingRegOp
 // ===----------------------------------------------------------------------===//
 
 unsigned StageSeparatingRegOp::index() {

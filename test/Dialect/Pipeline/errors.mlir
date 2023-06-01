@@ -67,8 +67,8 @@ hw.module @mixed_stages(%arg0 : i32, %arg1 : i32, %clk : i1, %rst : i1) -> (out:
    ^bb0(%a0 : i32, %a1: i32):
     %0 = comb.add %a0, %a1 : i32
     %c1_i1 = hw.constant true
-    %r_0, %s0_valid = pipeline.ss.reg enable %c1_i1 regs %0 : i32
-    %s1_valid = pipeline.ss enable %s0_valid
+    %r_0, %s0_valid = pipeline.stagesep.reg enable %c1_i1 regs %0 : i32
+    %s1_valid = pipeline.stagesep enable %s0_valid
     pipeline.return %0 valid %s0_valid : i32
   }
   hw.output %0 : i32

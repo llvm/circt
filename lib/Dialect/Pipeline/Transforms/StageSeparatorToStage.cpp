@@ -63,8 +63,9 @@ StageSeparatorToStagePass::gatherStageOps() {
       assert(currentSeparator == separator &&
              "Expected to encounter the current stage like operation");
       setNextSeparator();
-    } else
+    } else {
       stageOps[currentSeparator].push_back(&op);
+    }
   };
   return stageOps;
 }

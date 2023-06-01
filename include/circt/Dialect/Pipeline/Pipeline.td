@@ -87,10 +87,10 @@ def PipelineOp : Op<Pipeline_Dialect, "pipeline", [
       ^bb0:(%arg0 : i32, %arg1: i32):
         %add0 = comb.add %arg0, %arg1 : i32
 
-        %s0_valid, %add0_r = pipeline.ss.reg enable %go regs (%add0: i32)
+        %s0_valid, %add0_r = pipeline.stagesep.reg enable %go regs (%add0: i32)
         %add1 = comb.add %add0_r, %arg0 : i32
   
-        %s1_valid, %add1_r = pipeline.ss.reg enable %g1 regs (%add1: i32)
+        %s1_valid, %add1_r = pipeline.stagesep.reg enable %g1 regs (%add1: i32)
         %add2 = comb.add %add1_r, %arg1 : i32
 
         pipeline.return %add2 valid %s1_valid : i32
@@ -137,12 +137,12 @@ def PipelineOp : Op<Pipeline_Dialect, "pipeline", [
 }
 
 
-def StageSeparatingOp : Op<Pipeline_Dialect, "ss", [
+def StageSeparatingOp : Op<Pipeline_Dialect, "stagesep", [
     HasParent<"PipelineOp">
   ]> {
   let summary = "Pipeline **s**tage **s**eparating operation.";
   let description = [{
-    The `pipeline.ss` operation represents a stage separation in a pipeline.
+    The `pipeline.stagesep` operation represents a stage separation in a pipeline.
     The delimiter does not define any explicit registers, but solely
     defines a cut of a dataflow graph based on its lexical position in the
     pipeline. Pipeline registers are made explicit through the register
@@ -160,22 +160,19 @@ def StageSeparatingOp : Op<Pipeline_Dialect, "ss", [
   let extraClassDeclaration = [{
     // Returns the index of this stage in the pipeline.
     unsigned index();
-
-    ValueRange getInputs() { assert(false && "Unimplemented for `pipeline.ss`"); }
-    ValueRange getOutputs() { assert(false && "Unimplemented for `pipeline.ss`"); }
   }];
 }
 
-def StageSeparatingRegOp : Op<Pipeline_Dialect, "ss.reg", [
+def StageSeparatingRegOp : Op<Pipeline_Dialect, "stagesep.reg", [
     HasParent<"PipelineOp">,
     RangedTypesMatchWith<"result type matches operand", "inputs", "outputs",
                          "llvm::make_range($_self.begin(), $_self.end())">
   ]> {
   let summary = "Pipeline pipeline stage.";
   let description = [{
-    The `pipeline.ss.reg` operation represents a stage separating register
-    in a pipeline with materialized register values. `pipeline.ss` and
-    `pipeline.ss.reg` operations are not allowed to co-exist in the
+    The `pipeline.stagesep.reg` operation represents a stage separating register
+    in a pipeline with materialized register values. `pipeline.stagesep` and
+    `pipeline.stagesep.reg` operations are not allowed to co-exist in the
     same pipeline body. This is because, once register values are materialized,
     all delays as well as knowledge about multicycle paths have been lowered
     away.
@@ -207,7 +204,7 @@ def StageOp : Op<Pipeline_Dialect, "stage", [
   let summary = "Pipeline pipeline stage.";
   let description = [{
     The `pipeline.stage` operation represents a stage separating register
-    in a pipeline with materialized register values. `pipeline.ss` and
+    in a pipeline with materialized register values. `pipeline.stagesep` and
     `pipeline.stage` operations are not allowed to co-exist in the
     same pipeline body. This is because, once register values are materialized,
     all delays as well as knowledge about multicycle paths have been lowered
@@ -268,7 +265,9 @@ def StageReturnOp : Op<Pipeline_Dialect, "stage.return", [
   let hasVerifier = 1;
   let arguments = (ins Variadic<AnyType>:$regs, Variadic<AnyType>:$passthroughs, I1:$valid);
   let builders = [OpBuilder<(ins), [{ return; }]>];
-  let assemblyFormat = [{ (`regs` $regs^)? (`passthroughs` $passthroughs^)? `valid` $valid attr-dict (`:` `(` type($regs)^ `)`)? (`,` `(` type($passthroughs)^ `)` )? }];
+  let assemblyFormat = [{ (`regs` $regs^)? (`passthroughs` $passthroughs^)?
+      `valid` $valid attr-dict (`:` `(` type($regs)^ `)`)?
+      (`,` `(` type($passthroughs)^ `)` )? }];
 
   let extraClassDeclaration = [{
     // Assigns the operands of this stage return, as well as the required

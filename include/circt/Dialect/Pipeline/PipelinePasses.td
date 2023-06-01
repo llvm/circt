@@ -26,9 +26,9 @@ def ExplicitRegs : Pass<"pipeline-explicit-regs", "pipeline::PipelineOp"> {
 }
 
 def StageSeparatorToStage : Pass<"pipeline-ss-to-stage", "pipeline::PipelineOp"> {
-  let summary = "Lowers pipeline stage separations (`pipeline.ss`) into explicit stages.";
+  let summary = "Lowers pipeline stage separations (`pipeline.stagesep`) into explicit stages.";
   let description = [{
-    Lowers pipeline stage separations (`pipeline.ss`) into explicit stages.
+    Lowers pipeline stage separations (`pipeline.stagesep`) into explicit stages.
   }];
   let dependentDialects = ["hw::HWDialect"];
   let constructor = "circt::pipeline::createStageSeparatorToStagePass()";
