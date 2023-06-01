@@ -25,8 +25,10 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/Namespace.h"
+#include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -36,8 +38,11 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TinyPtrVector.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/Parallel.h"
+
+#define DEBUG_TYPE "lower-to-hw"
 
 using namespace circt;
 using namespace firrtl;
@@ -1509,6 +1514,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult setPossiblyFoldedLowering(Value orig, Value result);
   template <typename ResultOpType, typename... CtorArgTypes>
   LogicalResult setLoweringTo(Operation *orig, CtorArgTypes... args);
+  template <typename ResultOpType, typename... CtorArgTypes>
+  LogicalResult setLoweringToLTL(Operation *orig, CtorArgTypes... args);
   Backedge createBackedge(Value orig, Type type);
   bool updateIfBackedge(Value dest, Value src);
 
@@ -1677,6 +1684,18 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(PlusArgsTestIntrinsicOp op);
   LogicalResult visitExpr(PlusArgsValueIntrinsicOp op);
   LogicalResult visitExpr(SizeOfIntrinsicOp op);
+  LogicalResult visitExpr(LTLAndIntrinsicOp op);
+  LogicalResult visitExpr(LTLOrIntrinsicOp op);
+  LogicalResult visitExpr(LTLDelayIntrinsicOp op);
+  LogicalResult visitExpr(LTLConcatIntrinsicOp op);
+  LogicalResult visitExpr(LTLNotIntrinsicOp op);
+  LogicalResult visitExpr(LTLImplicationIntrinsicOp op);
+  LogicalResult visitExpr(LTLEventuallyIntrinsicOp op);
+  LogicalResult visitExpr(LTLClockIntrinsicOp op);
+  LogicalResult visitExpr(LTLDisableIntrinsicOp op);
+  LogicalResult visitStmt(VerifAssertIntrinsicOp op);
+  LogicalResult visitStmt(VerifAssumeIntrinsicOp op);
+  LogicalResult visitStmt(VerifCoverIntrinsicOp op);
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
@@ -1725,6 +1744,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   FailureOr<Value> lowerSubindex(SubindexOp op, Value input);
   FailureOr<Value> lowerSubaccess(SubaccessOp op, Value input);
   FailureOr<Value> lowerSubfield(SubfieldOp op, Value input);
+
+  LogicalResult fixupLTLOps();
 
 private:
   /// The module we're lowering into.
@@ -1801,6 +1822,16 @@ private:
     if (auto *op = value.getDefiningOp())
       maybeUnused(op);
   }
+
+  /// A worklist of LTL operations that don't have their final type yet. The
+  /// FIRRTL intrinsics for LTL ops all use `uint<1>` types, but the actual LTL
+  /// ops themselves have more precise `!ltl.sequence` and `!ltl.property`
+  /// types. After all LTL ops have been lowered, this worklist is used to
+  /// compute their actual types (re-inferring return types) and push the
+  /// updated types to their users. This also drops any `hw.wire`s in between
+  /// the LTL ops, which were necessary to go from the def-before-use FIRRTL
+  /// dialect to the graph-like HW dialect.
+  SetVector<Operation *> ltlOpFixupWorklist;
 };
 } // end anonymous namespace
 
@@ -1909,6 +1940,11 @@ LogicalResult FIRRTLLowering::run() {
     wire.replaceAllUsesWith(wire.getInput());
     wire.erase();
   }
+
+  // Determine the actual types of lowered LTL operations and remove any
+  // intermediate wires among them.
+  if (failed(fixupLTLOps()))
+    return failure();
 
   return backedgeBuilder.clearOrEmitError();
 }
@@ -2219,7 +2255,14 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
                                        /* allowTruncate */ false);
   }
 
-  auto srcWidth = result.getType().cast<IntegerType>().getWidth();
+  auto intResultType = dyn_cast<IntegerType>(result.getType());
+  if (!intResultType) {
+    builder.emitError("operand of type ")
+        << result.getType() << " cannot be used as an integer";
+    return {};
+  }
+
+  auto srcWidth = intResultType.getWidth();
   if (srcWidth == unsigned(destWidth))
     return result;
 
@@ -2372,6 +2415,19 @@ LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
   auto result = builder.createOrFold<ResultOpType>(args...);
   if (auto *op = result.getDefiningOp())
     tryCopyName(op, orig);
+  return setPossiblyFoldedLowering(orig->getResult(0), result);
+}
+
+/// Create a new LTL operation with type ResultOpType and arguments
+/// CtorArgTypes, then call setLowering with its result. Also add the operation
+/// to the worklist of LTL ops that need to have their types fixed-up after the
+/// lowering.
+template <typename ResultOpType, typename... CtorArgTypes>
+LogicalResult FIRRTLLowering::setLoweringToLTL(Operation *orig,
+                                               CtorArgTypes... args) {
+  auto result = builder.createOrFold<ResultOpType>(args...);
+  if (auto *op = result.getDefiningOp())
+    ltlOpFixupWorklist.insert(op);
   return setPossiblyFoldedLowering(orig->getResult(0), result);
 }
 
@@ -3690,6 +3746,74 @@ LogicalResult FIRRTLLowering::visitExpr(SizeOfIntrinsicOp op) {
   return failure();
 }
 
+LogicalResult FIRRTLLowering::visitExpr(LTLAndIntrinsicOp op) {
+  return setLoweringToLTL<ltl::AndOp>(
+      op,
+      ValueRange{getLoweredValue(op.getLhs()), getLoweredValue(op.getRhs())});
+}
+
+LogicalResult FIRRTLLowering::visitExpr(LTLOrIntrinsicOp op) {
+  return setLoweringToLTL<ltl::OrOp>(
+      op,
+      ValueRange{getLoweredValue(op.getLhs()), getLoweredValue(op.getRhs())});
+}
+
+LogicalResult FIRRTLLowering::visitExpr(LTLDelayIntrinsicOp op) {
+  return setLoweringToLTL<ltl::DelayOp>(op, getLoweredValue(op.getInput()),
+                                        op.getDelayAttr(), op.getLengthAttr());
+}
+
+LogicalResult FIRRTLLowering::visitExpr(LTLConcatIntrinsicOp op) {
+  return setLoweringToLTL<ltl::ConcatOp>(
+      op,
+      ValueRange{getLoweredValue(op.getLhs()), getLoweredValue(op.getRhs())});
+}
+
+LogicalResult FIRRTLLowering::visitExpr(LTLNotIntrinsicOp op) {
+  return setLoweringToLTL<ltl::NotOp>(op, getLoweredValue(op.getInput()));
+}
+
+LogicalResult FIRRTLLowering::visitExpr(LTLImplicationIntrinsicOp op) {
+  return setLoweringToLTL<ltl::ImplicationOp>(
+      op,
+      ValueRange{getLoweredValue(op.getLhs()), getLoweredValue(op.getRhs())});
+}
+
+LogicalResult FIRRTLLowering::visitExpr(LTLEventuallyIntrinsicOp op) {
+  return setLoweringToLTL<ltl::EventuallyOp>(op,
+                                             getLoweredValue(op.getInput()));
+}
+
+LogicalResult FIRRTLLowering::visitExpr(LTLClockIntrinsicOp op) {
+  return setLoweringToLTL<ltl::ClockOp>(op, getLoweredValue(op.getInput()),
+                                        ltl::ClockEdge::Pos,
+                                        getLoweredValue(op.getClock()));
+}
+
+LogicalResult FIRRTLLowering::visitExpr(LTLDisableIntrinsicOp op) {
+  return setLoweringToLTL<ltl::DisableOp>(
+      op,
+      ValueRange{getLoweredValue(op.getLhs()), getLoweredValue(op.getRhs())});
+}
+
+LogicalResult FIRRTLLowering::visitStmt(VerifAssertIntrinsicOp op) {
+  builder.create<verif::AssertOp>(getLoweredValue(op.getProperty()),
+                                  op.getLabelAttr());
+  return success();
+}
+
+LogicalResult FIRRTLLowering::visitStmt(VerifAssumeIntrinsicOp op) {
+  builder.create<verif::AssumeOp>(getLoweredValue(op.getProperty()),
+                                  op.getLabelAttr());
+  return success();
+}
+
+LogicalResult FIRRTLLowering::visitStmt(VerifCoverIntrinsicOp op) {
+  builder.create<verif::CoverOp>(getLoweredValue(op.getProperty()),
+                                 op.getLabelAttr());
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
@@ -4488,6 +4612,80 @@ LogicalResult FIRRTLLowering::visitStmt(ProbeOp op) {
   }
 
   builder.create<hw::ProbeOp>(op.getInnerSym(), operands);
+
+  return success();
+}
+
+LogicalResult FIRRTLLowering::fixupLTLOps() {
+  if (ltlOpFixupWorklist.empty())
+    return success();
+  LLVM_DEBUG(llvm::dbgs() << "Fixing up " << ltlOpFixupWorklist.size()
+                          << " LTL ops\n");
+
+  // Add wire users into the worklist.
+  for (unsigned i = 0, e = ltlOpFixupWorklist.size(); i != e; ++i)
+    for (auto *user : ltlOpFixupWorklist[i]->getUsers())
+      if (isa<hw::WireOp>(user))
+        ltlOpFixupWorklist.insert(user);
+
+  // Re-infer LTL op types and remove wires.
+  while (!ltlOpFixupWorklist.empty()) {
+    auto *op = ltlOpFixupWorklist.pop_back_val();
+
+    // Update the operation's return type by re-running type inference.
+    if (auto opIntf = dyn_cast_or_null<mlir::InferTypeOpInterface>(op)) {
+      LLVM_DEBUG(llvm::dbgs() << "- Update " << *op << "\n");
+      SmallVector<Type, 2> types;
+      auto result = opIntf.inferReturnTypes(
+          op->getContext(), op->getLoc(), op->getOperands(),
+          op->getAttrDictionary(), op->getPropertiesStorage(), op->getRegions(),
+          types);
+      if (failed(result))
+        return failure();
+      assert(types.size() == op->getNumResults());
+
+      // Update the result types and add the dependent ops into the worklist if
+      // the type changed.
+      for (auto [result, type] : llvm::zip(op->getResults(), types)) {
+        if (result.getType() == type)
+          continue;
+        LLVM_DEBUG(llvm::dbgs()
+                   << "  - Result #" << result.getResultNumber() << " from "
+                   << result.getType() << " to " << type << "\n");
+        result.setType(type);
+        for (auto *user : result.getUsers())
+          if (user != op)
+            ltlOpFixupWorklist.insert(user);
+      }
+    }
+
+    // Remove LTL-typed wires.
+    if (auto wireOp = dyn_cast<hw::WireOp>(op)) {
+      if (isa<ltl::SequenceType, ltl::PropertyType>(wireOp.getType())) {
+        wireOp.replaceAllUsesWith(wireOp.getInput());
+        LLVM_DEBUG(llvm::dbgs() << "- Remove " << wireOp << "\n");
+        if (wireOp.use_empty())
+          wireOp.erase();
+      }
+      continue;
+    }
+
+    // Ensure that the operation has no users outside of LTL operations.
+    SmallPtrSet<Operation *, 4> usersReported;
+    for (auto *user : op->getUsers()) {
+      if (!usersReported.insert(user).second)
+        continue;
+      if (isa<ltl::LTLDialect, verif::VerifDialect>(user->getDialect()))
+        continue;
+      if (isa<hw::WireOp>(user))
+        continue;
+      auto d = op->emitError(
+          "verification operation used in a non-verification context");
+      d.attachNote(user->getLoc())
+          << "leaking outside verification context here";
+      return d;
+    }
+  }
 
   return success();
 }
