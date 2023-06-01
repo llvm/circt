@@ -884,12 +884,13 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
 
   case FIRToken::kw_const: {
     consumeToken(FIRToken::kw_const);
+    auto loc = getToken().getLoc();
     if (failed(parseType(result, message)))
       return failure();
 
     auto baseType = result.dyn_cast<FIRRTLBaseType>();
     if (!baseType)
-      return emitError("only hardware types can be 'const'");
+      return emitError(loc, "only hardware types can be 'const'");
 
     result = baseType.getConstType(true);
     return success();

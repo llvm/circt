@@ -668,3 +668,9 @@ circuit NodeProbe:
   module NodeProbe:
     inst r of Ref
     node n = r.x ; expected-error {{Node cannot be analog and must be passive or passive under a flip}}
+
+;// -----
+
+circuit ConstProbe:
+  module ConstProbe:
+    output x : const Probe<UInt<1>> ; expected-error {{only hardware types can be 'const'}}
