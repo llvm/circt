@@ -1125,16 +1125,17 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
       uop.replaceAllUsesWith(uop.getInput());
       LLVM_DEBUG(llvm::dbgs() << "- Inferred " << uop << "\n");
       uop.erase();
-    } else if (auto constCastOp = dyn_cast<ConstCastOp>(wop);
-               constCastOp &&
-               !areTypesConstCastable(constCastOp.getResult().getType(),
-                                      constCastOp.getInput().getType())) {
-      // Update const cast results
-      auto result = constCastOp.getResult();
-      result.setType(constCastOp.getInput().getType().getConstType(false));
-      for (auto *user : result.getUsers())
-        worklist.insert(user);
-      LLVM_DEBUG(llvm::dbgs() << "- Inferred " << constCastOp << "\n");
+    } else if (auto constCastOp = dyn_cast<ConstCastOp>(wop)) {
+      // Propagate inferred reset types across const-casts of what was
+      // originally ResetType
+      if (constCastOp.getResult().getType().isa<ResetType>() &&
+          !constCastOp.getInput().getType().isa<ResetType>()) {
+        auto result = constCastOp.getResult();
+        result.setType(constCastOp.getInput().getType().getConstType(false));
+        for (auto *user : result.getUsers())
+          worklist.insert(user);
+        LLVM_DEBUG(llvm::dbgs() << "- Inferred " << constCastOp << "\n");
+      }
     }
   }
 
