@@ -119,18 +119,15 @@ struct EnableGroupingPattern : public OpRewritePattern<ClockTreeOp> {
 
 /// Where possible without domination issues, group assignments inside IfOps and
 /// return true if any operations were moved.
-bool groupInRegion(Region *region, Operation *clockTreeOp,
+bool groupInRegion(Block *block, Operation *clockTreeOp,
                    PatternRewriter *rewriter) {
   bool changed = false;
-  if (region->empty())
-    return changed;
+  if (!block)
+    return false;
 
-  // We assume this function is given only IfOp then/else regions, so we have at
-  // most 1 block
-  Block &block = region->front();
   SmallVector<Operation *> worklist;
   // Don't walk as we don't want nested ops in order to restrict to IfOps
-  for (auto &op : block.getOperations()) {
+  for (auto &op : block->getOperations()) {
     worklist.push_back(&op);
   }
   while (!worklist.empty()) {
@@ -145,17 +142,10 @@ bool groupInRegion(Region *region, Operation *clockTreeOp,
       if (definition->getBlock() == op->getBlock() ||
           !clockTreeOp->isAncestor(definition))
         continue;
-      if (!operand.hasOneUse()) {
-        bool safeToMove = true;
-        for (auto *user : operand.getUsers()) {
-          if (!dom.dominates(op, user)) {
-            safeToMove = false;
-            break;
-          }
-        }
-        if (!safeToMove)
-          continue;
-      }
+      if (!operand.hasOneUse() &&
+          llvm::any_of(operand.getUsers(),
+                       [&](auto *user) { return !dom.dominates(op, user); }))
+        continue;
       // For some currently unknown reason, just calling moveBefore
       // directly has the same output but is much slower
       rewriter->updateRootInPlace(definition,
@@ -179,9 +169,8 @@ struct GroupAssignmentsInIfPattern : public OpRewritePattern<scf::IfOp> {
       return failure();
     // Group assignments in each region and keep track of whether either
     // grouping made changes
-    bool changed =
-        groupInRegion(&ifOp.getThenRegion(), clockTreeOp, &rewriter) ||
-        groupInRegion(&ifOp.getElseRegion(), clockTreeOp, &rewriter);
+    bool changed = groupInRegion(ifOp.thenBlock(), clockTreeOp, &rewriter) ||
+                   groupInRegion(ifOp.elseBlock(), clockTreeOp, &rewriter);
     return success(changed);
   }
 };
