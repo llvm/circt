@@ -68,7 +68,7 @@ struct CollapseUnaryControl : mlir::OpRewritePattern<CtrlOp> {
                                 PatternRewriter &rewriter) const override {
     auto &ops = ctrlOp.getBodyBlock()->getOperations();
     bool isUnaryControl = (ops.size() == 1) && isa<EnableOp>(ops.front()) &&
-                          isa<SeqOp, ParOp>(ctrlOp->getParentOp());
+                          isa<SeqOp, ParOp, StaticParOp>(ctrlOp->getParentOp());
     if (!isUnaryControl)
       return failure();
 
@@ -134,12 +134,13 @@ PortInfo calyx::getPortInfo(BlockArgument arg) {
 
 /// Returns whether the given operation has a control region.
 static bool hasControlRegion(Operation *op) {
-  return isa<ControlOp, SeqOp, IfOp, WhileOp, ParOp, StaticRepeatOp>(op);
+  return isa<ControlOp, SeqOp, IfOp, WhileOp, ParOp, StaticRepeatOp,
+             StaticParOp>(op);
 }
 
 /// Verifies the body of a ControlLikeOp.
 static LogicalResult verifyControlBody(Operation *op) {
-  if (isa<SeqOp, ParOp>(op))
+  if (isa<SeqOp, ParOp, StaticParOp>(op))
     // This does not apply to sequential and parallel regions.
     return success();
 
@@ -211,7 +212,8 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto &region = op->getRegion(0);
   // Operations that are allowed in the body of a ControlLike op.
   auto isValidBodyOp = [](Operation *operation) {
-    return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp, StaticRepeatOp>(operation);
+    return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp, StaticRepeatOp>(
+        operation);
   };
   for (auto &&bodyOp : region.front()) {
     if (isValidBodyOp(&bodyOp))
@@ -274,8 +276,9 @@ static void printGroupPort(OpAsmPrinter &p, GroupPortType op) {
 template <typename OpTy>
 static LogicalResult collapseControl(OpTy controlOp,
                                      PatternRewriter &rewriter) {
-  static_assert(std::is_same<SeqOp, OpTy>() || std::is_same<ParOp, OpTy>(),
-                "Should be a SeqOp or ParOp.");
+  static_assert(std::is_same<SeqOp, OpTy>() || std::is_same<ParOp, OpTy>() ||
+                    std::is_same<StaticParOp, OpTy>(),
+                "Should be a SeqOp, ParOp or StaticParOp.");
 
   if (isa<OpTy>(controlOp->getParentOp())) {
     Block *controlBody = controlOp.getBodyBlock();
@@ -878,6 +881,39 @@ void ParOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 }
 
 //===----------------------------------------------------------------------===//
+// StaticParOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StaticParOp::verify() {
+  llvm::SmallSet<StringRef, 8> groupNames;
+  auto component = (*this)->getParentOfType<ComponentOp>();
+
+  // Add loose requirement that the body of a ParOp may not enable the same
+  // Group more than once, e.g. calyx.par { calyx.enable @G calyx.enable @G }
+  for (EnableOp op : getBodyBlock()->getOps<EnableOp>()) {
+    StringRef groupName = op.getGroupName();
+    if (groupNames.count(groupName))
+      return emitOpError() << "cannot enable the same group: \"" << groupName
+                           << "\" more than once.";
+    groupNames.insert(groupName);
+    auto group = component.getWiresOp().lookupSymbol<GroupInterface>(groupName);
+    if (!isa<StaticGroupOp>(group)) {
+      return emitOpError() << "cannot enable non-static group: \"" << groupName
+                           << "\" in static par.";
+    }
+  }
+
+  return success();
+}
+
+void StaticParOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                              MLIRContext *context) {
+  patterns.add(collapseControl<StaticParOp>);
+  patterns.add(emptyControl<StaticParOp>);
+  patterns.insert<CollapseUnaryControl<StaticParOp>>(context);
+}
+
+//===----------------------------------------------------------------------===//
 // WiresOp
 //===----------------------------------------------------------------------===//
 LogicalResult WiresOp::verify() {
@@ -1015,12 +1051,12 @@ void CycleOp::print(OpAsmPrinter &p) {
 
 ParseResult CycleOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::UnresolvedOperand, 2> operandInfos;
-  
+
   uint32_t startLiteral;
   uint32_t endLiteral;
 
   auto hasEnd = succeeded(parser.parseOptionalLSquare());
-  
+
   if (parser.parseInteger(startLiteral)) {
     parser.emitError(parser.getNameLoc(), "Could not parse start cycle");
     return failure();
@@ -2232,8 +2268,7 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
 // StaticRepeatOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult zeroRepeat(StaticRepeatOp op,
-                                     PatternRewriter &rewriter) {
+static LogicalResult zeroRepeat(StaticRepeatOp op, PatternRewriter &rewriter) {
   if (op.getCount() == 0) {
     Block *controlBody = op.getBodyBlock();
     for (auto &op : make_early_inc_range(*controlBody))
@@ -2247,7 +2282,7 @@ static LogicalResult zeroRepeat(StaticRepeatOp op,
 }
 
 void StaticRepeatOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
-                                        MLIRContext *context) {
+                                                 MLIRContext *context) {
   patterns.add(emptyControl<StaticRepeatOp>);
   patterns.add(zeroRepeat);
 }

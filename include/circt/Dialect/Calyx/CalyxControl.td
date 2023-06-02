@@ -180,6 +180,36 @@ def ParOp : CalyxContainer<"par", [
   let hasVerifier = 1;
 }
 
+def StaticParOp : CalyxContainer<"static_par", [
+    ControlLike
+  ]> {
+  let summary = "Calyx Static Parallel";
+  let description = [{
+    The "calyx.static_par" operation executes the
+    control within its region in parallel.
+
+    ```mlir
+      calyx.static_par {
+        // G1 and G2 will execute in parallel.
+        // The region is complete when both
+        // G1 and G2 are done.
+        calyx.enable @G1
+        calyx.enable @G2
+      }
+    ```
+  }];
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins), [{
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
+  let hasCanonicalizer = true;
+  let hasVerifier = 1;
+}
+
+
 def EnableOp : CalyxOp<"enable", [
     ControlLike
   ]> {
@@ -284,3 +314,4 @@ def StaticRepeatOp : CalyxContainer<"static_repeat", [
   ];
 
 }
+
