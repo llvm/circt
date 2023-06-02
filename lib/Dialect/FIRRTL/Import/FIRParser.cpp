@@ -890,7 +890,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
       return failure();
     result = it->second;
     break;
-
+  }
   case FIRToken::kw_const: {
     consumeToken(FIRToken::kw_const);
     auto nextToken = getToken();
@@ -909,7 +909,6 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
 
     result = baseType.getConstType(true);
     return success();
-  }
   }
 
   case FIRToken::l_brace_bar:

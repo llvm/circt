@@ -3009,7 +3009,7 @@ Attribute AggregateConstantOp::getAttributeFromFieldID(uint64_t fieldID) {
 LogicalResult BundleCreateOp::verify() {
   if (getType().get().getNumElements() != getFields().size())
     return emitOpError("number of fields doesn't match type");
-  for (size_t i = 0; i < getType().getNumElements(); ++i)
+  for (size_t i = 0; i < getType().get().getNumElements(); ++i)
     if (!areTypesConstCastable(getType().get().getElementTypePreservingConst(i),
                                getOperand(i).getType().cast<FIRRTLBaseType>()))
       return emitOpError("type of element doesn't match bundle for field ")
@@ -3022,9 +3022,9 @@ LogicalResult VectorCreateOp::verify() {
   if (getType().get().getNumElements() != getFields().size())
     return emitOpError("number of fields doesn't match type");
   auto elemTy = getType().get().getElementTypePreservingConst();
-  for (size_t i = 0; i < getType().getNumElements(); ++i)
-    if (!areTypesConstCastable(
-            elemTy, getOperand(i).getType().get().cast<FIRRTLBaseType>()))
+  for (size_t i = 0; i < getType().get().getNumElements(); ++i)
+    if (!areTypesConstCastable(elemTy,
+                               getOperand(i).getType().cast<FIRRTLBaseType>()))
       return emitOpError("type of element doesn't match vector element");
   // TODO: check flow
   return success();
@@ -3042,7 +3042,8 @@ LogicalResult FEnumCreateOp::verify() {
            << getFieldName() << " is not a member of the enumeration type "
            << getResult().getType();
   if (!areTypesConstCastable(
-          getResult().getType().getElementTypePreservingConst(*elementIndex),
+          getResult().getType().get().getElementTypePreservingConst(
+              *elementIndex),
           getInput().getType()))
     return emitOpError("type of element doesn't match enum element");
   return success();

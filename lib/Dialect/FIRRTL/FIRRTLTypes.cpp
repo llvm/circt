@@ -1128,9 +1128,10 @@ struct circt::firrtl::detail::WidthTypeStorage : detail::FIRRTLBaseTypeStorage {
 };
 
 IntType IntType::getConstType(bool isConst) {
+
   if (auto sIntType = firrtl::type_dyn_cast<SIntType>(*this))
     return sIntType.getConstType(isConst);
-  return firrtl::type_cast<UIntType>(getConstType(isConst));
+  return firrtl::type_cast<UIntType>(*this).getConstType(isConst);
 }
 
 //===----------------------------------------------------------------------===//
