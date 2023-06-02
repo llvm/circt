@@ -21,9 +21,10 @@ class VerifOp<string mnemonic, list<Trait> traits = []> :
 
 class AssertLikeOp<string mnemonic, list<Trait> traits = []> :
   VerifOp<mnemonic, traits> {
-  let arguments = (ins LTLAnyPropertyType:$property);
+  let arguments = (ins LTLAnyPropertyType:$property,
+                       OptionalAttr<StrAttr>:$label);
   let assemblyFormat = [{
-    $property attr-dict `:` type($property)
+    $property (`label` $label^)? attr-dict `:` type($property)
   }];
 }
 
