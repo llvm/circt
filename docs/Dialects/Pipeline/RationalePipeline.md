@@ -87,7 +87,7 @@ The result of this is the change of `pipeline.ss` to `pipeline.ss.reg` operation
 
 The final phase of a pipeline is the staged phase. In this stage, we break with the notion
 of a dataflow graph, and instead make each pipeline stage explicit, performed by the
-`pipeline-ss-to-stage` pass.
+`pipeline-stagesep-to-stage` pass.
 A `pipeline.stage` is an operation with an explicit enable signal, a set of
 inputs and outputs.  The internal of a `pipeline.stage` is isolated from above, 
 ensuring that stage internals can exclusively access values that have been fed

@@ -137,7 +137,8 @@ void StageSeparatorToStagePass::runOnOperation() {
 
     for (auto [stage, uses] : stageUsers) {
       auto *copiedConstant = op->clone();
-      copiedConstant->moveBefore(&stage.getBodyBlock()->front());
+      b.setInsertionPointToStart(stage.getBodyBlock());
+      b.insert(copiedConstant);
       for (auto *use : uses)
         use->set(copiedConstant->getResult(0));
     }
