@@ -63,9 +63,9 @@ TEST(EvaluatorTests, InstantiateInvalidParamSize) {
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
-  StringRef fields[] = {"field"};
-  Type types[] = {builder.getIntegerType(32)};
-  builder.create<ClassOp>("MyClass", params, fields, types);
+  auto cls = builder.create<ClassOp>("MyClass", params);
+  cls.getBody().emplaceBlock().addArgument(builder.getIntegerType(32),
+                                           cls.getLoc());
 
   Evaluator evaluator(mod);
 
@@ -194,7 +194,7 @@ TEST(EvaluatorTests, InstantiateObjectWithParamField) {
   StringRef params[] = {"param"};
   StringRef fields[] = {"field"};
   Type types[] = {builder.getIntegerType(32)};
-  builder.create<ClassOp>("MyClass", params, fields, types);
+  ClassOp::buildSimpleClassOp(builder, loc, "MyClass", params, fields, types);
 
   Evaluator evaluator(mod);
 
@@ -262,8 +262,8 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
   StringRef params[] = {"param"};
   StringRef fields[] = {"field"};
   Type types[] = {builder.getIntegerType(32)};
-  auto innerCls =
-      builder.create<ClassOp>("MyInnerClass", params, fields, types);
+  auto innerCls = ClassOp::buildSimpleClassOp(builder, loc, "MyInnerClass",
+                                              params, fields, types);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto cls = builder.create<ClassOp>("MyClass", params);
@@ -310,8 +310,8 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
   StringRef params[] = {"param"};
   StringRef fields[] = {"field"};
   Type types[] = {builder.getIntegerType(32)};
-  auto innerCls =
-      builder.create<ClassOp>("MyInnerClass", params, fields, types);
+  auto innerCls = ClassOp::buildSimpleClassOp(builder, loc, "MyInnerClass",
+                                              params, fields, types);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto cls = builder.create<ClassOp>("MyClass", params);

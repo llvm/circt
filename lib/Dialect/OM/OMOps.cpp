@@ -13,6 +13,7 @@
 #include "circt/Dialect/OM/OMOps.h"
 
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 
 using namespace mlir;
 
@@ -65,28 +66,22 @@ void circt::om::ClassOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                odsBuilder.getStrArrayAttr(formalParamNames));
 }
 
-void circt::om::ClassOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                               Twine name, ArrayRef<StringRef> formalParamNames,
-                               ArrayRef<Type> fieldTypes) {
+circt::om::ClassOp circt::om::ClassOp::buildSimpleClassOp(
+    OpBuilder &odsBuilder, Location loc, Twine name,
+    ArrayRef<StringRef> formalParamNames, ArrayRef<StringRef> fieldNames,
+    ArrayRef<Type> fieldTypes) {
+  circt::om::ClassOp classOp = odsBuilder.create<circt::om::ClassOp>(
+      loc, odsBuilder.getStringAttr(name),
+      odsBuilder.getStrArrayAttr(formalParamNames));
+  Block *body = &classOp.getRegion().emplaceBlock();
+  auto prevLoc = odsBuilder.saveInsertionPoint();
+  odsBuilder.setInsertionPointToEnd(body);
+  for (auto [name, type] : llvm::zip(fieldNames, fieldTypes))
+    odsBuilder.create<circt::om::ClassFieldOp>(loc, name,
+                                               body->addArgument(type, loc));
+  odsBuilder.restoreInsertionPoint(prevLoc);
 
-  return build(odsBuilder, odsState, name, formalParamNames, formalParamNames,
-               fieldTypes);
-}
-
-void circt::om::ClassOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                               Twine name, ArrayRef<StringRef> formalParamNames,
-                               ArrayRef<StringRef> fieldNames,
-                               ArrayRef<Type> fieldTypes) {
-  build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
-        odsBuilder.getStrArrayAttr(formalParamNames));
-  Block *body = &odsState.regions[0]->emplaceBlock();
-  auto loc = odsState.location;
-  OpBuilder bodyBuilder(odsState.getContext());
-  bodyBuilder.setInsertionPointToEnd(body);
-  for (auto [name, type] : llvm::zip(fieldNames, fieldTypes)) {
-    bodyBuilder.create<om::ClassFieldOp>(loc, name,
-                                         body->addArgument(type, loc));
-  }
+  return classOp;
 }
 
 void circt::om::ClassOp::build(OpBuilder &odsBuilder, OperationState &odsState,
