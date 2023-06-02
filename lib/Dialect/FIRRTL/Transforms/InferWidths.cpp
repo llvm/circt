@@ -923,7 +923,8 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
           worklist.push_back({expr->arg, indent + 1});
         })
         .Case<AddExpr>([&](auto *expr) {
-          if (solvedExprs.contains(expr->lhs()))
+          if (solvedExprs.contains(expr->lhs()) &&
+              solvedExprs.contains(expr->rhs()))
             return setSolution(computeBinary(
                 solvedExprs[expr->lhs()], solvedExprs[expr->rhs()],
                 [](int32_t lhs, int32_t rhs) { return lhs + rhs; }));
@@ -932,7 +933,8 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
           worklist.push_back({expr->rhs(), indent + 1});
         })
         .Case<MaxExpr>([&](auto *expr) {
-          if (solvedExprs.contains(expr->lhs()))
+          if (solvedExprs.contains(expr->lhs()) &&
+              solvedExprs.contains(expr->rhs()))
             return setSolution(computeBinary(
                 solvedExprs[expr->lhs()], solvedExprs[expr->rhs()],
                 [](int32_t lhs, int32_t rhs) { return std::max(lhs, rhs); }));
@@ -941,7 +943,8 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
           worklist.push_back({expr->rhs(), indent + 1});
         })
         .Case<MinExpr>([&](auto *expr) {
-          if (solvedExprs.contains(expr->lhs()))
+          if (solvedExprs.contains(expr->lhs()) &&
+              solvedExprs.contains(expr->rhs()))
             return setSolution(computeBinary(
                 solvedExprs[expr->lhs()], solvedExprs[expr->rhs()],
                 [](int32_t lhs, int32_t rhs) { return std::min(lhs, rhs); }));
