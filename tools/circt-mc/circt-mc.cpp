@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/InitAllDialects.h"
 #include "circt/LogicalEquivalence/Circuit.h"
 #include "circt/LogicalEquivalence/LogicExporter.h"
@@ -60,8 +61,7 @@ static mlir::LogicalResult checkProperty(mlir::MLIRContext &context,
   Solver::Circuit *circuitModel = s.addCircuit(inputFileName);
 
   auto exporter = std::make_unique<LogicExporter>(moduleName1, circuitModel);
-  mlir::ModuleOp m =
-      mlir::parseSourceFile<mlir::ModuleOp>(inputFileName, &context).get();
+  mlir::ModuleOp m = inputFile.get();
   if (failed(exporter->run(m)))
     return mlir::failure();
 
@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
   // Register the supported CIRCT dialects and create a context to work with.
   mlir::DialectRegistry registry;
   registry.insert<circt::comb::CombDialect, circt::hw::HWDialect,
-                  circt::seq::SeqDialect>();
+                  circt::seq::SeqDialect, circt::verif::VerifDialect>();
   mlir::MLIRContext context(registry);
 
   // Setup of diagnostic handling.

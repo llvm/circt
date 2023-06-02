@@ -47,10 +47,11 @@ void Solver::Circuit::addClk(mlir::Value value) {
     assert(clks[0] == value && "More than one clock detected - currently "
                                "circt-mc only supports one clock in designs.");
   } else {
-    assert(clks.size() == 0 && "Too many clocks added to circuit model.");
+    assert(clks.empty() && "Too many clocks added to circuit model.");
     // Check that value is in inputs (i.e. is an external signal and won't be
     // affected by design components)
-    auto inputSearch = std::find(inputsByVal.begin(), inputsByVal.end(), value);
+    auto *inputSearch =
+        std::find(inputsByVal.begin(), inputsByVal.end(), value);
     assert(inputSearch != inputsByVal.end() &&
            "Clock is not an input signal - circt-mc currently only supports "
            "external clocks.");
@@ -827,16 +828,6 @@ void Solver::Circuit::performCompReg(mlir::Value input, mlir::Value clk,
   reg.resetValue = resetValue;
   regs.push_back(reg);
   addClk(clk);
-  // TODO THIS IS TEMPORARY FOR TESTING
-  z3::expr inExpr = exprTable.find(input)->second;
-  z3::expr outExpr = exprTable.find(data)->second;
-  auto rstPair = exprTable.find(reset);
-  z3::expr clkExpr = exprTable.find(clk)->second;
-  LLVM_DEBUG(lec::dbgs() << "Input: " << nameTable.find(input)->second << "\n");
-  LLVM_DEBUG(lec::dbgs() << "Output: " << nameTable.find(data)->second << "\n");
-  if (rstPair != exprTable.end())
-    solver.solver.add(!z3::implies(
-        bvToBool(clkExpr) && !bvToBool(rstPair->second), inExpr == outExpr));
 }
 
 void Solver::Circuit::performFirReg(mlir::Value next, mlir::Value clk,
@@ -851,16 +842,19 @@ void Solver::Circuit::performFirReg(mlir::Value next, mlir::Value clk,
   reg.resetValue = resetValue;
   regs.push_back(reg);
   addClk(clk);
-  // TODO THIS IS TEMPORARY FOR TESTING
-  z3::expr inExpr = exprTable.find(next)->second;
-  z3::expr outExpr = exprTable.find(data)->second;
-  auto rstPair = exprTable.find(reset);
-  z3::expr clkExpr = exprTable.find(clk)->second;
-  LLVM_DEBUG(lec::dbgs() << "Input: " << nameTable.find(next)->second << "\n");
-  LLVM_DEBUG(lec::dbgs() << "Output: " << nameTable.find(data)->second << "\n");
-  if (rstPair != exprTable.end())
-    solver.solver.add(!z3::implies(
-        bvToBool(clkExpr) && !bvToBool(rstPair->second), inExpr == outExpr));
+}
+
+//===----------------------------------------------------------------------===//
+// `seq` dialect operations
+//===----------------------------------------------------------------------===//
+void Solver::Circuit::performAssert(mlir::Value property) {
+  z3::expr propExpr = exprTable.find(property)->second;
+  solver.solver.add(!bvToBool(propExpr));
+}
+
+void Solver::Circuit::performAssume(mlir::Value property) {
+  z3::expr propExpr = exprTable.find(property)->second;
+  solver.solver.add(bvToBool(propExpr));
 }
 
 #undef DEBUG_TYPE

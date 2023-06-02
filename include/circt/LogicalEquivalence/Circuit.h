@@ -86,6 +86,11 @@ public:
   void performFirReg(mlir::Value next, mlir::Value clk, mlir::Value data,
                      mlir::Value reset, mlir::Value resetValue);
 
+  // `verif` dialect operations.
+  void performAssert(mlir::Value property);
+  void performAssume(mlir::Value property);
+  void performCover(mlir::Value property);
+
 private:
   /// Struct to represent computational registers
   struct CompRegStruct {

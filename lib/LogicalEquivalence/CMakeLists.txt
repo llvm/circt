@@ -14,6 +14,7 @@ if(CIRCTSMT_ENABLED)
     CIRCTHW
     CIRCTSeq
     CIRCTSupport
+    CIRCTVerif
   )
 
   target_link_libraries(CIRCTLogicalEquivalence

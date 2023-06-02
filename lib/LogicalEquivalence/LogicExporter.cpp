@@ -11,9 +11,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/LogicalEquivalence/LogicExporter.h"
+#include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Dialect/Verif/VerifVisitors.h"
 #include "circt/LogicalEquivalence/Circuit.h"
 #include "circt/LogicalEquivalence/Solver.h"
 #include "circt/LogicalEquivalence/Utility.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 #define DEBUG_TYPE "lec-exporter"
@@ -27,7 +30,8 @@ namespace {
 /// operations, along with a dispatcher to visit the correct handler.
 struct Visitor : public hw::StmtVisitor<Visitor, LogicalResult>,
                  public hw::TypeOpVisitor<Visitor, LogicalResult>,
-                 public comb::CombinationalVisitor<Visitor, LogicalResult> {
+                 public comb::CombinationalVisitor<Visitor, LogicalResult>,
+                 public verif::Visitor<Visitor, LogicalResult> {
   using hw::StmtVisitor<Visitor, LogicalResult>::visitStmt;
   using hw::TypeOpVisitor<Visitor, LogicalResult>::visitTypeOp;
   using comb::CombinationalVisitor<Visitor, LogicalResult>::visitComb;
@@ -213,9 +217,42 @@ struct Visitor : public hw::StmtVisitor<Visitor, LogicalResult>,
     return visitVariadicCombOp(op, &Solver::Circuit::performXor);
   }
 
-  LogicalResult visitInvalidComb(Operation *op) { return visitSeq(op); }
+  LogicalResult visitInvalidComb(Operation *op) {
+    return dispatchVerifVisitor(op);
+  }
 
   LogicalResult visitUnhandledComb(Operation *op) {
+    return visitUnhandledOp(op);
+  }
+
+  //===--------------------------------------------------------------------===//
+  // verif::VerifVisitor
+  //===--------------------------------------------------------------------===//
+
+  LogicalResult visitVerif(verif::AssertOp op) {
+    if (op.getProperty().getType().isSignlessInteger(1)) {
+      circuit->performAssert(op.getProperty());
+      return success();
+    }
+    return op->emitError("LTL properties not yet handled");
+  }
+
+  LogicalResult visitVerif(verif::AssumeOp op) {
+    if (op.getProperty().getType().isSignlessInteger(1)) {
+      circuit->performAssume(op.getProperty());
+      return success();
+    }
+    return op->emitError("LTL properties not yet handled");
+  }
+
+  LogicalResult visitVerif(verif::CoverOp op) {
+    return op->emitError(
+        "Coverage checks not currently supported for model checking.");
+  }
+
+  LogicalResult visitInvalidVerif(Operation *op) { return visitSeq(op); }
+
+  LogicalResult visitUnhandledVerif(Operation *op) {
     return visitUnhandledOp(op);
   }
 
