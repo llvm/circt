@@ -19,9 +19,13 @@
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/OM/OMAttributes.h"
+#include "circt/Dialect/OM/OMDialect.h"
+#include "circt/Dialect/OM/OMOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/JSON.h"
 
 using namespace circt;
@@ -29,11 +33,139 @@ using namespace firrtl;
 using circt::hw::InstancePath;
 
 namespace {
+
+struct ObjectModelIR {
+  ObjectModelIR(mlir::ModuleOp moduleOp) : moduleOp(moduleOp) {}
+  void createMemorySchema() {
+    auto *context = moduleOp.getContext();
+    auto unknownLoc = mlir::UnknownLoc::get(context);
+    auto builderOM =
+        mlir::ImplicitLocOpBuilder::atBlockEnd(unknownLoc, moduleOp.getBody());
+
+    // Add all the properties of a memory as fields of the class.
+    // The types must match exactly with the FMemModuleOp attribute type.
+
+    mlir::Type classFieldTypes[] = {
+        om::SymbolRefType::get(context),
+        mlir::IntegerType::get(context, 64, IntegerType::Unsigned),
+        mlir::IntegerType::get(context, 32, IntegerType::Unsigned),
+        mlir::IntegerType::get(context, 32, IntegerType::Unsigned),
+        mlir::IntegerType::get(context, 32, IntegerType::Unsigned),
+        mlir::IntegerType::get(context, 32, IntegerType::Unsigned),
+        mlir::IntegerType::get(context, 32, IntegerType::Unsigned),
+        mlir::IntegerType::get(context, 32, IntegerType::Unsigned),
+        mlir::IntegerType::get(context, 32, IntegerType::Unsigned)};
+
+    memorySchemaClass = om::ClassOp::buildSimpleClassOp(
+        builderOM, unknownLoc, "MemorySchema", memoryParamNames,
+        memoryParamNames, classFieldTypes);
+
+    // Now create the class that will instantiate metadata class with all the
+    // memories of the circt.
+    memoryMetadataClass =
+        builderOM.create<circt::om::ClassOp>("MemoryMetadata");
+    memoryMetadataClass.getRegion().emplaceBlock();
+  }
+
+  void createRetimeModulesSchema() {
+    auto *context = moduleOp.getContext();
+    auto unknownLoc = mlir::UnknownLoc::get(context);
+    auto builderOM =
+        mlir::ImplicitLocOpBuilder::atBlockEnd(unknownLoc, moduleOp.getBody());
+    Type classFieldTypes[] = {om::SymbolRefType::get(context)};
+    retimeModulesSchemaClass = om::ClassOp::buildSimpleClassOp(
+        builderOM, unknownLoc, "RetimeModulesSchema", retimeModulesParamNames,
+        retimeModulesParamNames, classFieldTypes);
+
+    retimeModulesMetadataClass =
+        builderOM.create<circt::om::ClassOp>("RetimeModulesMetadata");
+    retimeModulesMetadataClass.getRegion().emplaceBlock();
+  }
+
+  void addRetimeModule(FModuleLike module) {
+    if (!retimeModulesSchemaClass)
+      createRetimeModulesSchema();
+    auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
+        module->getLoc(), retimeModulesMetadataClass.getBodyBlock());
+    auto modEntry =
+        builderOM.create<om::ConstantOp>(om::SymbolRefAttr::get(module));
+    auto object = builderOM.create<om::ObjectOp>(retimeModulesSchemaClass,
+                                                 ValueRange({modEntry}));
+    builderOM.create<om::ClassFieldOp>(
+        builderOM.getStringAttr("mod_" + module.getModuleName()), object);
+  }
+
+  void addBlackBoxModulesSchema() {
+    auto *context = moduleOp.getContext();
+    auto unknownLoc = mlir::UnknownLoc::get(context);
+    auto builderOM =
+        mlir::ImplicitLocOpBuilder::atBlockEnd(unknownLoc, moduleOp.getBody());
+    Type classFieldTypes[] = {om::SymbolRefType::get(context)};
+    blackBoxModulesSchemaClass = om::ClassOp::buildSimpleClassOp(
+        builderOM, unknownLoc, "SitestBlackBoxModulesSchema",
+        blackBoxModulesParamNames, blackBoxModulesParamNames, classFieldTypes);
+    blackBoxMetadataClass =
+        builderOM.create<circt::om::ClassOp>("SitestBlackBoxMetadata");
+    blackBoxMetadataClass.getRegion().emplaceBlock();
+  }
+
+  void addBlackBoxModule(FExtModuleOp module) {
+    if (!blackBoxModulesSchemaClass)
+      addBlackBoxModulesSchema();
+    auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
+        module.getLoc(), blackBoxMetadataClass.getBodyBlock());
+    auto modEntry =
+        builderOM.create<om::ConstantOp>(om::SymbolRefAttr::get(module));
+    auto object = builderOM.create<om::ObjectOp>(blackBoxModulesSchemaClass,
+                                                 ValueRange({modEntry}));
+    builderOM.create<om::ClassFieldOp>(
+        builderOM.getStringAttr("exterMod_" + module.getName()), object);
+  }
+
+  void addMemory(FMemModuleOp mem) {
+    if (!memorySchemaClass)
+      createMemorySchema();
+    auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
+        mem.getLoc(), memoryMetadataClass.getBodyBlock());
+    auto createConstField = [&](Attribute constVal) {
+      return builderOM.create<om::ConstantOp>(constVal.cast<mlir::TypedAttr>());
+    };
+
+    SmallVector<Value> memFields;
+    for (auto field : memoryParamNames)
+      memFields.push_back(createConstField(
+          llvm::StringSwitch<TypedAttr>(field)
+              .Case("name", om::SymbolRefAttr::get(mem))
+              .Case("depth", mem.getDepthAttr())
+              .Case("width", mem.getDataWidthAttr())
+              .Case("maskBits", mem.getMaskBitsAttr())
+              .Case("readPorts", mem.getNumReadPortsAttr())
+              .Case("writePorts", mem.getNumWritePortsAttr())
+              .Case("readwritePorts", mem.getNumReadWritePortsAttr())
+              .Case("readLatency", mem.getReadLatencyAttr())
+              .Case("writeLatency", mem.getWriteLatencyAttr())));
+
+    auto object = builderOM.create<om::ObjectOp>(memorySchemaClass, memFields);
+    builderOM.create<om::ClassFieldOp>(
+        builderOM.getStringAttr("mem_" + mem.getName()), object);
+  }
+  mlir::ModuleOp moduleOp;
+  om::ClassOp memorySchemaClass;
+  om::ClassOp memoryMetadataClass;
+  om::ClassOp retimeModulesMetadataClass, retimeModulesSchemaClass;
+  om::ClassOp blackBoxModulesSchemaClass, blackBoxMetadataClass;
+  StringRef memoryParamNames[9] = {
+      "name",       "depth",          "width",        "maskBits",   "readPorts",
+      "writePorts", "readwritePorts", "writeLatency", "readLatency"};
+  StringRef retimeModulesParamNames[1] = {"moduleName"};
+  StringRef blackBoxModulesParamNames[1] = {"moduleName"};
+};
+
 class CreateSiFiveMetadataPass
     : public CreateSiFiveMetadataBase<CreateSiFiveMetadataPass> {
-  LogicalResult emitRetimeModulesMetadata();
-  LogicalResult emitSitestBlackboxMetadata();
-  LogicalResult emitMemoryMetadata();
+  LogicalResult emitRetimeModulesMetadata(ObjectModelIR &omir);
+  LogicalResult emitSitestBlackboxMetadata(ObjectModelIR &omir);
+  LogicalResult emitMemoryMetadata(ObjectModelIR &omir);
   void getDependentDialects(mlir::DialectRegistry &registry) const override;
   void runOnOperation() override;
 
@@ -55,7 +187,8 @@ public:
 
 /// This function collects all the firrtl.mem ops and creates a verbatim op with
 /// the relevant memory attributes.
-LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
+LogicalResult
+CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
   if (!replSeqMem)
     return success();
 
@@ -75,6 +208,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   auto createMemMetadata = [&](FMemModuleOp mem,
                                llvm::json::OStream &jsonStream,
                                std::string &seqMemConfStr) {
+    omir.addMemory(mem);
     // Get the memory data width.
     auto width = mem.getDataWidth();
     // Metadata needs to be printed for memories which are candidates for
@@ -263,7 +397,8 @@ static LogicalResult removeAnnotationWithFilename(Operation *op,
 
 /// This function collects the name of each module annotated and prints them
 /// all as a JSON array.
-LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
+LogicalResult
+CreateSiFiveMetadataPass::emitRetimeModulesMetadata(ObjectModelIR &omir) {
 
   auto *context = &getContext();
 
@@ -295,6 +430,7 @@ LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
       // when the module goes through renaming.
       j.value(("{{" + Twine(index++) + "}}").str());
       symbols.push_back(SymbolRefAttr::get(module.getModuleNameAttr()));
+      omir.addRetimeModule(module);
     }
   });
 
@@ -311,7 +447,8 @@ LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
 
 /// This function finds all external modules which will need to be generated for
 /// the test harness to run.
-LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
+LogicalResult
+CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
 
   // Any extmodule with these annotations or one of these ScalaClass classes
   // should be excluded from the blackbox list.
@@ -337,8 +474,8 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
     return success();
 
   // Find all extmodules in the circuit. Check if they are black-listed from
-  // being included in the list. If they are not, separate them into two groups
-  // depending on if theyre in the DUT or the test harness.
+  // being included in the list. If they are not, separate them into two
+  // groups depending on if theyre in the DUT or the test harness.
   SmallVector<StringRef> dutModules;
   SmallVector<StringRef> testModules;
   for (auto extModule : circuitOp.getBodyBlock()->getOps<FExtModuleOp>()) {
@@ -368,6 +505,7 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
     } else {
       testModules.push_back(*extModule.getDefname());
     }
+    omir.addBlackBoxModule(extModule);
   }
 
   // This is a helper to create the verbatim output operation.
@@ -413,7 +551,7 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
 void CreateSiFiveMetadataPass::getDependentDialects(
     mlir::DialectRegistry &registry) const {
   // We need this for SV verbatim and HW attributes.
-  registry.insert<hw::HWDialect, sv::SVDialect>();
+  registry.insert<hw::HWDialect, sv::SVDialect, om::OMDialect>();
 }
 
 void CreateSiFiveMetadataPass::runOnOperation() {
@@ -442,9 +580,11 @@ void CreateSiFiveMetadataPass::runOnOperation() {
       dutModuleSet.insert(node->getModule());
     });
   }
+  ObjectModelIR omir(moduleOp);
 
-  if (failed(emitRetimeModulesMetadata()) ||
-      failed(emitSitestBlackboxMetadata()) || failed(emitMemoryMetadata()))
+  if (failed(emitRetimeModulesMetadata(omir)) ||
+      failed(emitSitestBlackboxMetadata(omir)) ||
+      failed(emitMemoryMetadata(omir)))
     return signalPassFailure();
 
   // This pass does not modify the hierarchy.

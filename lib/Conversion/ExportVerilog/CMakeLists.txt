@@ -19,6 +19,8 @@ add_circt_translation_library(CIRCTExportVerilog
   CIRCTComb
   CIRCTHW
   CIRCTLTL
+  CIRCTOM
+  CIRCTSupport
   CIRCTSV
   CIRCTSupport
   CIRCTVerif
