@@ -103,6 +103,7 @@ struct Emitter {
   void emitExpression(RefSubOp op);
   void emitExpression(UninferredResetCastOp op);
   void emitExpression(UninferredWidthCastOp op);
+  void emitExpression(ConstCastOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -159,7 +160,7 @@ struct Emitter {
   void emitAttribute(RUWAttr attr);
 
   // Types
-  void emitType(Type type);
+  void emitType(Type type, bool includeConst = true);
   void emitTypeWithColon(Type type) {
     ps << PP::space << ":" << PP::nbsp;
     emitType(type);
@@ -860,7 +861,7 @@ void Emitter::emitExpression(Value value) {
           CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
-          ShrPrimOp, UninferredResetCastOp, UninferredWidthCastOp,
+          ShrPrimOp, UninferredResetCastOp, UninferredWidthCastOp, ConstCastOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp>([&](auto op) {
         ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
@@ -873,7 +874,8 @@ void Emitter::emitExpression(Value value) {
 }
 
 void Emitter::emitExpression(ConstantOp op) {
-  emitType(op.getType());
+  // Don't include 'const' on the type in a literal expression
+  emitType(op.getType(), false);
   // TODO: Add option to control base-2/8/10/16 output here.
   ps << "(";
   ps.addAsString(op.getValue());
@@ -968,6 +970,8 @@ void Emitter::emitExpression(UninferredWidthCastOp op) {
   emitExpression(op.getInput());
 }
 
+void Emitter::emitExpression(ConstCastOp op) { emitExpression(op.getInput()); }
+
 void Emitter::emitPrimExpr(StringRef mnemonic, Operation *op,
                            ArrayRef<uint32_t> attrs) {
   ps << mnemonic << "(" << PP::ibox0;
@@ -1010,7 +1014,9 @@ void Emitter::emitAttribute(RUWAttr attr) {
 }
 
 /// Emit a FIRRTL type into the output.
-void Emitter::emitType(Type type) {
+void Emitter::emitType(Type type, bool includeConst) {
+  if (includeConst && isConst(type))
+    ps << "const ";
   auto emitWidth = [&](std::optional<int32_t> width) {
     if (width) {
       ps << "<";

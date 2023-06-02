@@ -60,6 +60,16 @@ firrtl.module @CastingToOtherTypes(in %a: !firrtl.uint<1>, out %v: !firrtl.uint<
   firrtl.strictconnect %y, %3 : !firrtl.asyncreset
 }
 
+// Should support const-casts
+// CHECK-LABEL: firrtl.module @ConstCast
+firrtl.module @ConstCast(in %a: !firrtl.const.uint<1>) {
+  // CHECK: %r = firrtl.wire : !firrtl.uint<1>
+  %r = firrtl.wire : !firrtl.reset
+  %0 = firrtl.resetCast %a : (!firrtl.const.uint<1>) -> !firrtl.const.reset
+  %1 = firrtl.constCast %0 : (!firrtl.const.reset) -> !firrtl.reset
+  firrtl.strictconnect %r, %1 : !firrtl.reset
+}
+
 // Should work across Module boundaries
 // CHECK-LABEL: firrtl.module @ModuleBoundariesChild
 // CHECK-SAME: in %childReset: !firrtl.uint<1>

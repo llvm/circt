@@ -104,9 +104,7 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         printNestedType(refType.getType(), os);
         os << '>';
       })
-      .Case<StringType>([&](auto stringType) {
-        os << "string";
-      })
+      .Case<StringType>([&](auto stringType) { os << "string"; })
       .Default([&](auto) { anyFailed = true; });
   return failure(anyFailed);
 }
@@ -1930,6 +1928,11 @@ FIRRTLBaseType FEnumType::getElementType(size_t index) {
   assert(index < getNumElements() &&
          "index must be less than number of fields in enum");
   return getElements()[index].type;
+}
+
+FIRRTLBaseType FEnumType::getElementTypePreservingConst(size_t index) {
+  auto type = getElementType(index);
+  return type.getConstType(type.isConst() || isConst());
 }
 
 uint64_t FEnumType::getFieldID(uint64_t index) {

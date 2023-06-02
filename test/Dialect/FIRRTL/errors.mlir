@@ -1293,7 +1293,7 @@ firrtl.circuit "RefReleaseProbe" {
 firrtl.circuit "EnumCreateNoCase" {
 firrtl.module @EnumCreateNoCase(in %in : !firrtl.uint<8>) {
   // expected-error @below {{unknown field SomeOther in enum type}}
-  %some = firrtl.enumcreate SomeOther(%in) : !firrtl.enum<None: uint<0>, Some: uint<8>>
+  %some = firrtl.enumcreate SomeOther(%in) : (!firrtl.uint<8>) -> !firrtl.enum<None: uint<0>, Some: uint<8>>
 }
 
 // -----
@@ -1302,7 +1302,7 @@ firrtl.circuit "EnumCreateWrongType" {
   // expected-note @below {{prior use here}}
 firrtl.module @EnumCreateWrongType(in %in : !firrtl.uint<7>) {
   // expected-error @below {{expects different type than prior uses}}
-  %some = firrtl.enumcreate Some(%in) : !firrtl.enum<None: uint<0>, Some: uint<8>>
+  %some = firrtl.enumcreate Some(%in) : (!firrtl.uint<8>) -> !firrtl.enum<None: uint<0>, Some: uint<8>>
 }
 
 // -----
@@ -1541,3 +1541,54 @@ firrtl.circuit "UninferredWidthCastNonConstToConst" {
   }
 }
 
+// -----
+
+// Primitive ops with all 'const' operands must have a 'const' result type
+firrtl.circuit "PrimOpConstOperandsNonConstResult" {
+firrtl.module @PrimOpConstOperandsNonConstResult(in %a: !firrtl.const.uint<4>, in %b: !firrtl.const.uint<4>) {
+  // expected-error @below {{failed to infer returned types}}
+  // expected-error @+1 {{'firrtl.and' op inferred type(s) '!firrtl.const.uint<4>' are incompatible with return type(s) of operation '!firrtl.uint<4>'}}
+  %0 = firrtl.and %a, %b : (!firrtl.const.uint<4>, !firrtl.const.uint<4>) -> !firrtl.uint<4>
+}
+}
+
+// -----
+
+// Primitive ops with mixed 'const' operands must have a non-'const' result type
+firrtl.circuit "PrimOpMixedConstOperandsConstResult" {
+firrtl.module @PrimOpMixedConstOperandsConstResult(in %a: !firrtl.const.uint<4>, in %b: !firrtl.uint<4>) {
+  // expected-error @below {{failed to infer returned types}}
+  // expected-error @+1 {{'firrtl.and' op inferred type(s) '!firrtl.uint<4>' are incompatible with return type(s) of operation '!firrtl.const.uint<4>'}}
+  %0 = firrtl.and %a, %b : (!firrtl.const.uint<4>, !firrtl.uint<4>) -> !firrtl.const.uint<4>
+}
+}
+
+// -----
+
+// A 'const' bundle can only be created with 'const' operands
+firrtl.circuit "ConstBundleCreateNonConstOperands" {
+firrtl.module @ConstBundleCreateNonConstOperands(in %a: !firrtl.uint<1>) {
+  // expected-error @+1 {{type of element doesn't match bundle for field "a"}}
+  %0 = firrtl.bundlecreate %a : (!firrtl.uint<1>) -> !firrtl.const.bundle<a: uint<1>>
+}
+}
+
+// -----
+
+// A 'const' vector can only be created with 'const' operands
+firrtl.circuit "ConstVectorCreateNonConstOperands" {
+firrtl.module @ConstVectorCreateNonConstOperands(in %a: !firrtl.uint<1>) {
+  // expected-error @+1 {{type of element doesn't match vector element}}
+  %0 = firrtl.vectorcreate %a : (!firrtl.uint<1>) -> !firrtl.const.vector<uint<1>, 1>
+}
+}
+
+// -----
+
+// A 'const' enum can only be created with 'const' operands
+firrtl.circuit "ConstEnumCreateNonConstOperands" {
+firrtl.module @ConstEnumCreateNonConstOperands(in %a: !firrtl.uint<1>) {
+  // expected-error @+1 {{type of element doesn't match enum element}}
+  %0 = firrtl.enumcreate Some(%a) : (!firrtl.uint<1>) -> !firrtl.const.enum<None: uint<0>, Some: uint<1>>
+}
+}
