@@ -85,23 +85,6 @@ circt::om::ClassOp circt::om::ClassOp::buildSimpleClassOp(
 }
 
 void circt::om::ClassOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                               Twine name, ArrayRef<StringRef> formalParamNames,
-                               ArrayRef<Type> paramTypes) {
-  build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
-        odsBuilder.getStrArrayAttr(formalParamNames));
-  auto *bodyRegion = odsState.regions[0].get();
-  Block *body = new Block();
-  bodyRegion->push_back(body);
-  auto loc = odsState.location;
-  OpBuilder bodyBuilder(odsState.getContext());
-  bodyBuilder.setInsertionPointToEnd(body);
-  for (auto [name, type] : llvm::zip(formalParamNames, paramTypes)) {
-    bodyBuilder.create<om::ClassFieldOp>(loc, name,
-                                         body->addArgument(type, loc));
-  }
-}
-
-void circt::om::ClassOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                                Twine name) {
   return build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
                odsBuilder.getStrArrayAttr({}));
