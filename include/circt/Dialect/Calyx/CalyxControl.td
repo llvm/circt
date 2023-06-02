@@ -151,6 +151,34 @@ def SeqOp : CalyxContainer<"seq", [
   let hasCanonicalizer = true;
 }
 
+
+def StaticSeqOp : CalyxContainer<"static_seq", [
+    ControlLike
+  ]> {
+  let summary = "Calyx Static Seq";
+  let description = [{
+    The "calyx.static_seq" operation executes the
+    control within its region sequentially.
+
+    ```mlir
+      calyx.static_seq {
+        // G2 will not begin execution until G1 is done.
+        calyx.enable @G1
+        calyx.enable @G2
+      }
+    ```
+  }];
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins), [{
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
+  let hasCanonicalizer = true;
+  let hasVerifier = 1;
+}
+
 def ParOp : CalyxContainer<"par", [
     ControlLike
   ]> {
@@ -268,6 +296,7 @@ def StaticRepeatOp : CalyxContainer<"static_repeat", [
   );
   let description = [{
   }];
+  let hasVerifier = 1;
   let hasCanonicalizer = true;
   let assemblyFormat = "$count $body attr-dict";
   let skipDefaultBuilders = true;
