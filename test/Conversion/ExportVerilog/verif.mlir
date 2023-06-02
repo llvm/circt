@@ -1,4 +1,19 @@
-// RUN: circt-opt %s --test-apply-lowering-options="options=emittedLineLength=9001" --export-verilog --verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s --test-apply-lowering-options="options=emittedLineLength=9001,verifLabels" --export-verilog --verify-diagnostics | FileCheck %s
+
+// CHECK-LABEL: module Labels
+hw.module @Labels(%a: i1) {
+  // CHECK: foo1: assert property (a);
+  // CHECK: foo2: assume property (a);
+  // CHECK: foo3: cover property (a);
+  verif.assert %a {label = "foo1"} : i1
+  verif.assume %a {label = "foo2"} : i1
+  verif.cover %a {label = "foo3"} : i1
+
+  // CHECK: bar: assert property (a);
+  // CHECK: bar_0: assert property (a);
+  verif.assert %a {label = "bar"} : i1
+  verif.assert %a {label = "bar"} : i1
+}
 
 // CHECK-LABEL: module BasicEmissionNonTemporal
 hw.module @BasicEmissionNonTemporal(%a: i1, %b: i1) {
@@ -22,7 +37,6 @@ hw.module @BasicEmissionNonTemporal(%a: i1, %b: i1) {
     verif.assume %2 : i1
     verif.cover %3 : i1
   }
-  // CHECK: end
 }
 
 // CHECK-LABEL: module BasicEmissionTemporal
@@ -44,7 +58,6 @@ hw.module @BasicEmissionTemporal(%a: i1) {
     verif.assume %p : !ltl.property
     verif.cover %p : !ltl.property
   }
-  // CHECK: end
 }
 
 // CHECK-LABEL: module Sequences
