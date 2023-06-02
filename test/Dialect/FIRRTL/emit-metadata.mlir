@@ -44,13 +44,13 @@ firrtl.circuit "retime0" attributes { annotations = [{
 // CHECK-NEXT:     om.class.field @moduleName, %moduleName : !om.sym_ref
 // CHECK-NEXT:   }
 
-// CHECK:   om.class @RetimeModulesMetadata_retime_modules.json() {
+// CHECK:   om.class @RetimeModulesMetadata() {
 // CHECK-NEXT:     %0 = om.constant #om.sym_ref<@retime0> : !om.sym_ref
 // CHECK-NEXT:     %1 = om.object @RetimeModulesSchema(%0) : (!om.sym_ref) -> !om.class.type<@RetimeModulesSchema>
-// CHECK-NEXT:     om.class.field @m1, %1 : !om.class.type<@RetimeModulesSchema>
+// CHECK-NEXT:     om.class.field @[[m1:.+]], %1 : !om.class.type<@RetimeModulesSchema>
 // CHECK-NEXT:     %2 = om.constant #om.sym_ref<@retime2> : !om.sym_ref
 // CHECK-NEXT:     %3 = om.object @RetimeModulesSchema(%2) : (!om.sym_ref) -> !om.class.type<@RetimeModulesSchema>
-// CHECK-NEXT:     om.class.field @m2, %3 : !om.class.type<@RetimeModulesSchema>
+// CHECK-NEXT:     om.class.field @[[m2:.+]], %3 : !om.class.type<@RetimeModulesSchema>
 // CHECK-NEXT:   }
 
 // -----
@@ -71,14 +71,6 @@ firrtl.circuit "DUTBlackboxes" attributes { annotations = [{
 // CHECK:     sv.verbatim "[]" {output_file = #hw.output_file<"dut_blackboxes.json", excludeFromFileList>}
 // CHECK-NOT: sv.verbatim "[]" {output_file = #hw.output_file<"", excludeFromFileList>}
 }
-// CHECK:  om.class @SitestBlackBoxModulesSchema(%moduleName: !om.sym_ref) {
-// CHECK-NEXT:    om.class.field @moduleName, %moduleName : !om.sym_ref
-// CHECK-NEXT:  }
-
-// CHECK:  om.class @SitestBlackBoxMetadata_dut_blackboxes.json() {
-// CHECK-NEXT:  }
-// CHECK:  om.class @SitestBlackBoxMetadata_() {
-// CHECK-NEXT:  }
 
 // -----
 
@@ -94,15 +86,6 @@ firrtl.circuit "TestBlackboxes" attributes { annotations = [{
 // CHECK:     sv.verbatim "[]" {output_file = #hw.output_file<"test_blackboxes.json", excludeFromFileList>}
 // CHECK-NOT: sv.verbatim "[]" {output_file = #hw.output_file<"", excludeFromFileList>}
 }
-
-// CHECK:  om.class @SitestBlackBoxModulesSchema(%moduleName: !om.sym_ref) {
-// CHECK-NEXT:    om.class.field @moduleName, %moduleName : !om.sym_ref
-// CHECK-NEXT:  }
-
-// CHECK:  om.class @SitestBlackBoxMetadata_() {
-// CHECK-NEXT:  }
-// CHECK:  om.class @SitestBlackBoxMetadata_test_blackboxes.json() {
-// CHECK-NEXT:  }
 
 // -----
 
@@ -150,19 +133,20 @@ firrtl.circuit "BasicBlackboxes" attributes { annotations = [{
 // CHECK-NEXT:    om.class.field @moduleName, %moduleName : !om.sym_ref
 // CHECK-NEXT:  }
 
-// CHECK:  om.class @SitestBlackBoxMetadata_dut_blackboxes.json() {
-// CHECK-NEXT:    %0 = om.constant #om.sym_ref<@DUTBlackbox1> : !om.sym_ref
-// CHECK-NEXT:    %1 = om.object @SitestBlackBoxModulesSchema(%0)
-// CHECK-NEXT:    om.class.field @m1, %1 : !om.class.type<@SitestBlackBoxModulesSchema>
-// CHECK-NEXT:    %2 = om.constant #om.sym_ref<@DUTBlackbox2> : !om.sym_ref
-// CHECK-NEXT:    %3 = om.object @SitestBlackBoxModulesSchema(%2)
-// CHECK-NEXT:    om.class.field @m2, %3 : !om.class.type<@SitestBlackBoxModulesSchema>
-// CHECK-NEXT:  }
-// CHECK:  om.class @SitestBlackBoxMetadata_test_blackboxes.json() {
-// CHECK-NEXT:    %0 = om.constant #om.sym_ref<@TestBlackbox> : !om.sym_ref
-// CHECK-NEXT:    %1 = om.object @SitestBlackBoxModulesSchema(%0)
-// CHECK-NEXT:    om.class.field @m0, %1 : !om.class.type<@SitestBlackBoxModulesSchema>
-// CHECK-NEXT:  }
+// CHECK:   om.class @SitestBlackBoxMetadata() {
+// CHECK:     %0 = om.constant #om.sym_ref<@TestBlackbox> : !om.sym_ref
+// CHECK:     %1 = om.object @SitestBlackBoxModulesSchema(%0)
+// CHECK:     om.class.field @exterMod_TestBlackbox, %1
+// CHECK:     %2 = om.constant #om.sym_ref<@DUTBlackbox_0> : !om.sym_ref
+// CHECK:     %3 = om.object @SitestBlackBoxModulesSchema(%2)
+// CHECK:     om.class.field @exterMod_DUTBlackbox_0, %3
+// CHECK:     %4 = om.constant #om.sym_ref<@DUTBlackbox_1> : !om.sym_ref
+// CHECK:     %5 = om.object @SitestBlackBoxModulesSchema(%4)
+// CHECK:     om.class.field @exterMod_DUTBlackbox_1, %5
+// CHECK:     %6 = om.constant #om.sym_ref<@DUTBlackbox_2> : !om.sym_ref
+// CHECK:     %7 = om.object @SitestBlackBoxModulesSchema(%6)
+// CHECK:     om.class.field @exterMod_DUTBlackbox_2, %7
+// CHECK:   }
 
 // -----
 
@@ -260,7 +244,7 @@ firrtl.circuit "top" {
 // CHECK-NEXT:    %[[v7:.+]] = om.constant 1 : ui32
 // CHECK-NEXT:    %[[v8:.+]] = om.constant 1 : ui32
 // CHECK-NEXT:    %[[v9:.+]] = om.object @MemorySchema(%[[v0]], %[[v1]], %[[v2]], %[[v3]], %[[v4]], %[[v5]], %[[v6]], %[[v7]], %[[v8]])
-// CHECK-NEXT:    om.class.field @m0, %[[v9]] : !om.class.type<@MemorySchema>
+// CHECK-NEXT:    om.class.field @[[m0:.+]], %[[v9]] : !om.class.type<@MemorySchema>
 // CHECK-NEXT:    %[[v10:.+]] = om.constant #om.sym_ref<@head_0_ext> : !om.sym_ref
 // CHECK-NEXT:    %[[v11:.+]] = om.constant 20 : ui64
 // CHECK-NEXT:    %[[v12:.+]] = om.constant 5 : ui32
@@ -271,7 +255,7 @@ firrtl.circuit "top" {
 // CHECK-NEXT:    %[[v17:.+]] = om.constant 1 : ui32
 // CHECK-NEXT:    %[[v18:.+]] = om.constant 1 : ui32
 // CHECK-NEXT:    %[[v19:.+]] = om.object @MemorySchema(%[[v10]], %[[v11]], %[[v12]], %[[v13]], %[[v14]], %[[v15]], %[[v16]], %[[v17]], %[[v18]])
-// CHECK-NEXT:    om.class.field @m1, %[[v19]] : !om.class.type<@MemorySchema>
+// CHECK-NEXT:    om.class.field @[[m1:.+]], %[[v19]] : !om.class.type<@MemorySchema>
 // CHECK-NEXT:    %[[v20:.+]] = om.constant #om.sym_ref<@memory_ext> : !om.sym_ref
 // CHECK-NEXT:    %[[v21:.+]] = om.constant 16 : ui64
 // CHECK-NEXT:    %[[v22:.+]] = om.constant 8 : ui32
@@ -282,7 +266,7 @@ firrtl.circuit "top" {
 // CHECK-NEXT:    %[[v27:.+]] = om.constant 1 : ui32
 // CHECK-NEXT:    %[[v28:.+]] = om.constant 1 : ui32
 // CHECK-NEXT:    %[[v29:.+]] = om.object @MemorySchema(%[[v20]], %[[v21]], %[[v22]], %[[v23]], %[[v24]], %[[v25]], %[[v26]], %[[v27]], %[[v28]])
-// CHECK-NEXT:    om.class.field @m2, %[[v29]] : !om.class.type<@MemorySchema>
+// CHECK-NEXT:    om.class.field @[[m2:.+]], %[[v29]] : !om.class.type<@MemorySchema>
 // CHECK-NEXT:    %[[v30:.+]] = om.constant #om.sym_ref<@dumm_ext> : !om.sym_ref
 // CHECK-NEXT:    %[[v31:.+]] = om.constant 20 : ui64
 // CHECK-NEXT:    %[[v32:.+]] = om.constant 5 : ui32
@@ -293,5 +277,5 @@ firrtl.circuit "top" {
 // CHECK-NEXT:    %[[v37:.+]] = om.constant 1 : ui32
 // CHECK-NEXT:    %[[v38:.+]] = om.constant 1 : ui32
 // CHECK-NEXT:    %[[v39:.+]] = om.object @MemorySchema(%[[v30]], %[[v31]], %[[v32]], %[[v33]], %[[v34]], %[[v35]], %[[v36]], %[[v37]], %[[v38]]) : (!om.sym_ref, ui64, ui32, ui32, ui32, ui32, ui32, ui32, ui32) -> !om.class.type<@MemorySchema>
-// CHECK-NEXT:    om.class.field @m3, %[[v39]] : !om.class.type<@MemorySchema>
+// CHECK-NEXT:    om.class.field @[[m3:.+]], %[[v39]] : !om.class.type<@MemorySchema>
 // CHECK-NEXT:  }
