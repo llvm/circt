@@ -21,26 +21,25 @@ using namespace circt;
 /// A sample reduction pattern that removes operations which either produce no
 /// results or their results have no users.
 struct OperationPruner : public Reduction {
+  void beforeReduction(mlir::ModuleOp module) override {
+    userMap = std::make_unique<SymbolUserMap>(table, module);
+  }
   uint64_t match(Operation *op) override {
-    if (!isa<ModuleOp>(op) && (op->getNumResults() == 0 || op->use_empty()) &&
-        !op->hasAttr(SymbolTable::getSymbolAttrName()))
-      return true;
-
-    auto *symbolTableOp = SymbolTable::getNearestSymbolTable(op);
-    SymbolUserMap userMap(table, symbolTableOp);
+    if (op->hasTrait<OpTrait::IsTerminator>())
+      return false;
 
     return !isa<ModuleOp>(op) &&
            (op->getNumResults() == 0 || op->use_empty()) &&
-           userMap.useEmpty(op);
+           userMap->useEmpty(op);
   }
   LogicalResult rewrite(Operation *op) override {
-    assert(match(op));
     reduce::pruneUnusedOps(op, *this);
     return success();
   }
   std::string getName() const override { return "operation-pruner"; }
 
   SymbolTableCollection table;
+  std::unique_ptr<SymbolUserMap> userMap;
 };
 
 //===----------------------------------------------------------------------===//
