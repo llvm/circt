@@ -34,9 +34,9 @@ using namespace circt;
 static cl::OptionCategory mainCategory("circt-mc Options");
 
 static cl::opt<std::string>
-    moduleName1("c1",
-                cl::desc("Specify a named module to verify properties over."),
-                cl::value_desc("module name"), cl::cat(mainCategory));
+    moduleName("module",
+               cl::desc("Specify a named module to verify properties over."),
+               cl::value_desc("module name"), cl::cat(mainCategory));
 
 static cl::opt<int> clockBound(
     "b", cl::Required,
@@ -60,13 +60,10 @@ static mlir::LogicalResult checkProperty(mlir::MLIRContext &context,
   Solver s(&context, false);
   Solver::Circuit *circuitModel = s.addCircuit(inputFileName);
 
-  auto exporter = std::make_unique<LogicExporter>(moduleName1, circuitModel);
+  auto exporter = std::make_unique<LogicExporter>(moduleName, circuitModel);
   mlir::ModuleOp m = inputFile.get();
   if (failed(exporter->run(m)))
     return mlir::failure();
-
-  // TODO: load property constraints
-  // circuitModel->loadProperty();
 
   for (int i = 0; i < bound; i++) {
     if (!circuitModel->checkCycle(i)) {
