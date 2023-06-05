@@ -260,7 +260,7 @@ module {
 // CHECK: hw.instance "qux"
 // CHECK-LABEL: @MultiResultExtracted
 // CHECK-SAME: (%[[clock:.+]]: i1, %[[in:.+]]: i1)
-// CHECK: hw.instance {{.+}} @MultiResultExtracted_cover([[clock]]: %[[clock]]: i1, [[in]]: %[[in]]: i1)
+// CHECK: hw.instance {{.+}} @MultiResultExtracted_cover([[in]]: %[[in]]: i1, [[clock]]: %[[clock]]: i1)
 
 // In SymNotExtracted, instance foo should not be extracted because it has a sym.
 // CHECK-LABEL: @SymNotExtracted_cover
@@ -273,8 +273,7 @@ module {
 // CHECK: %[[or0:.+]] = comb.or
 // CHECK: hw.instance "foo" @Foo(a: %[[or0]]: i1)
 // CHECK-LABEL: @NoExtraInput
-// CHECK: %[[or1:.+]] = comb.or
-// CHECK-NOT: %[[or1]]
+// CHECK-NOT: %{{.+}} = comb.or
 
 // In InstancesWithCycles, the only_testcode instances should be extracted, but the non_testcode instances should not
 // CHECK-LABEL: @InstancesWithCycles_cover
@@ -408,7 +407,7 @@ module {
 }
 
 // -----
-// Check instance extraction
+// Check register extraction
 
 module {
   // CHECK-LABEL: @RegExtracted_cover
@@ -417,12 +416,16 @@ module {
   // CHECK-NOT: seq.firreg
 
   // CHECK-LABEL: @RegExtracted
+  // CHECK: %symbol = seq.firreg
   // CHECK: %designAndTestCode = seq.firreg
   // CHECK-NOT: seq.firreg
-  hw.module @RegExtracted(%clock: i1, %in: i1) -> (out: i1) {
-    %testCode1 = seq.firreg %in clock %clock : i1
+  hw.module @RegExtracted(%clock: i1, %reset: i1, %in: i1) -> (out: i1) {
+    %muxed = comb.mux bin %reset, %in, %testCode1 : i1
+    %testCode1 = seq.firreg %muxed clock %clock : i1
     %testCode2 = seq.firreg %testCode1 clock %clock : i1
+    %symbol = seq.firreg %in clock %clock sym @foo : i1
     %designAndTestCode = seq.firreg %in clock %clock : i1
+    %deadReg = seq.firreg %testCode1 clock %clock : i1
 
     sv.always posedge %clock {
       sv.cover %testCode1, immediate
