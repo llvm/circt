@@ -174,6 +174,11 @@ def InstanceOp : Handshake_Op<"instance", [
       return (*this)->getAttrOfType<SymbolRefAttr>("module");
     }
 
+    /// Set the callee for this operation.
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getModuleAttrName(), callee.get<mlir::SymbolRefAttr>());
+    }
+
     /// Get the control operand of this instance op
     Value getControl() {
       return getOperands().back();

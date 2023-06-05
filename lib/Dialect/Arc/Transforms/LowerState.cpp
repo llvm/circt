@@ -10,9 +10,12 @@
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
@@ -101,7 +104,6 @@ struct ModuleLowering {
   LogicalResult lowerStates();
   LogicalResult lowerState(StateOp stateOp);
   LogicalResult lowerState(MemoryOp memOp);
-  LogicalResult lowerState(MemoryReadPortOp memReadOp);
   LogicalResult lowerState(MemoryWritePortOp memWriteOp);
   LogicalResult lowerState(TapOp tapOp);
 
@@ -328,14 +330,6 @@ LogicalResult ModuleLowering::lowerPrimaryOutputs() {
 }
 
 LogicalResult ModuleLowering::lowerStates() {
-  // Handle all memory read operations first such that all of them occur before
-  // the memory write operations. This is not ideal and should be changed once
-  // LegalizeStateUpdate has proper support for memory operations.
-  for (auto &op : llvm::make_early_inc_range(*moduleOp.getBodyBlock()))
-    if (auto memReadOp = dyn_cast<MemoryReadPortOp>(op))
-      if (failed(lowerState(memReadOp)))
-        return failure();
-
   for (auto &op : llvm::make_early_inc_range(*moduleOp.getBodyBlock())) {
     auto result = TypeSwitch<Operation *, LogicalResult>(&op)
                       .Case<StateOp, MemoryOp, MemoryWritePortOp, TapOp>(
@@ -443,54 +437,35 @@ LogicalResult ModuleLowering::lowerState(MemoryOp memOp) {
   return success();
 }
 
-static Value lowerMemoryReadPortOp(MemoryReadPortOp memReadOp,
-                                   OpBuilder &builder) {
-  // Lowering MemoryReadOp to LLVM inserts a conditional branch to only perform
-  // the read when the address is within bounds. Ideally, LLVM will be able to
-  // merge that check with the mux/condition here.
-  Value newRead;
-  if (memReadOp.getEnable()) {
-    Value read = builder.create<MemoryReadOp>(
-        memReadOp.getLoc(), memReadOp.getMemory(), memReadOp.getAddress());
-    Value zero = builder.create<hw::ConstantOp>(
-        memReadOp.getLoc(), memReadOp.getResult().getType(), 0);
-    newRead = builder.create<comb::MuxOp>(
-        memReadOp.getLoc(), memReadOp.getEnable(), read, zero, true);
-  } else {
-    newRead = builder.create<MemoryReadOp>(
-        memReadOp.getLoc(), memReadOp.getMemory(), memReadOp.getAddress());
-  }
-  memReadOp.replaceAllUsesWith(newRead);
-  builder.setInsertionPointAfter(memReadOp);
-  memReadOp.erase();
-  return newRead;
-}
-
-LogicalResult ModuleLowering::lowerState(MemoryReadPortOp memReadOp) {
-  auto info = getOrCreateClockLowering(memReadOp.getClock());
-
-  auto newRead = lowerMemoryReadPortOp(memReadOp, builder);
-  info.clock.materializeValue(newRead);
-
-  return success();
-}
-
 LogicalResult ModuleLowering::lowerState(MemoryWritePortOp memWriteOp) {
+  if (memWriteOp.getLatency() > 1)
+    return memWriteOp->emitOpError("latencies > 1 not supported yet");
+
   // Get the clock tree and enable condition for this write port's clock. If the
   // port carries an explicit enable condition, fold that into the enable
   // provided by the clock gates in the port's clock tree.
   auto info = getOrCreateClockLowering(memWriteOp.getClock());
-  auto enable = info.clock.materializeValue(memWriteOp.getEnable());
+
+  SmallVector<Value> materializedInputs;
+  for (auto input : memWriteOp.getInputs())
+    materializedInputs.push_back(info.clock.materializeValue(input));
+  ValueRange results =
+      info.clock.builder
+          .create<CallOp>(memWriteOp.getLoc(), memWriteOp.getArcResultTypes(),
+                          memWriteOp.getArc(), materializedInputs)
+          ->getResults();
+
+  auto enable =
+      memWriteOp.getEnable() ? results[memWriteOp.getEnableIdx()] : Value();
   info.enable =
       info.clock.getOrCreateAnd(info.enable, enable, memWriteOp.getLoc());
 
   // Materialize the operands for the write op within the surrounding clock
   // tree.
-  auto address = info.clock.materializeValue(memWriteOp.getAddress());
-  auto data = info.clock.materializeValue(memWriteOp.getData());
-  Value mask = memWriteOp.getMask();
-  if (mask) {
-    mask = info.clock.materializeValue(mask);
+  auto address = results[memWriteOp.getAddressIdx()];
+  auto data = results[memWriteOp.getDataIdx()];
+  if (memWriteOp.getMask()) {
+    Value mask = results[memWriteOp.getMaskIdx(static_cast<bool>(enable))];
     Value oldData = info.clock.builder.create<arc::MemoryReadOp>(
         mask.getLoc(), data.getType(), memWriteOp.getMemory(), address);
     Value allOnes = info.clock.builder.create<hw::ConstantOp>(
@@ -558,16 +533,6 @@ LogicalResult ModuleLowering::lowerState(TapOp tapOp) {
 }
 
 LogicalResult ModuleLowering::cleanup() {
-  // Lower remaining MemoryReadPort ops to MemoryRead ops. This can occur when
-  // the fan-in of a MemoryReadPortOp contains another such operation and is
-  // materialized before the one in the fan-in as the MemoryReadPortOp is not
-  // marked as a fan-in blocking/termination operation in `shouldMaterialize`.
-  // Adding it there can lead to dominance issues which would then have to be
-  // resolved instead.
-  moduleOp->walk([this](MemoryReadPortOp memReadOp) {
-    builder.setInsertionPoint(memReadOp);
-    lowerMemoryReadPortOp(memReadOp, builder);
-  });
 
   // Establish an order among all operations (to avoid an O(n²) pathological
   // pattern with `moveBefore`) and replicate read operations into the blocks
@@ -644,6 +609,55 @@ void LowerStatePass::runOnOperation() {
        llvm::make_early_inc_range(getOperation().getOps<HWModuleOp>()))
     if (failed(runOnModule(op)))
       return signalPassFailure();
+
+  // Lower remaining MemoryReadPort ops to MemoryRead ops. This can occur when
+  // the fan-in of a MemoryReadPortOp contains another such operation and is
+  // materialized before the one in the fan-in as the MemoryReadPortOp is not
+  // marked as a fan-in blocking/termination operation in `shouldMaterialize`.
+  // Adding it there can lead to dominance issues which would then have to be
+  // resolved instead.
+  SetVector<DefineOp> arcsToLower;
+  OpBuilder builder(getOperation());
+  getOperation()->walk([&](MemoryReadPortOp memReadOp) {
+    if (auto defOp = memReadOp->getParentOfType<DefineOp>())
+      arcsToLower.insert(defOp);
+
+    builder.setInsertionPoint(memReadOp);
+    Value newRead = builder.create<MemoryReadOp>(
+        memReadOp.getLoc(), memReadOp.getMemory(), memReadOp.getAddress());
+    memReadOp.replaceAllUsesWith(newRead);
+    memReadOp.erase();
+  });
+
+  SymbolTableCollection symbolTable;
+  mlir::SymbolUserMap userMap(symbolTable, getOperation());
+  for (auto defOp : arcsToLower) {
+    auto *terminator = defOp.getBodyBlock().getTerminator();
+    builder.setInsertionPoint(terminator);
+    builder.create<func::ReturnOp>(terminator->getLoc(),
+                                   terminator->getOperands());
+    terminator->erase();
+    builder.setInsertionPoint(defOp);
+    auto funcOp = builder.create<func::FuncOp>(defOp.getLoc(), defOp.getName(),
+                                               defOp.getFunctionType());
+    funcOp->setAttr("llvm.linkage",
+                    LLVM::LinkageAttr::get(builder.getContext(),
+                                           LLVM::linkage::Linkage::Internal));
+    funcOp.getBody().takeBody(defOp.getBody());
+
+    for (auto *user : userMap.getUsers(defOp)) {
+      builder.setInsertionPoint(user);
+      ValueRange results = builder
+                               .create<func::CallOp>(
+                                   user->getLoc(), funcOp,
+                                   cast<CallOpInterface>(user).getArgOperands())
+                               ->getResults();
+      user->replaceAllUsesWith(results);
+      user->erase();
+    }
+
+    defOp.erase();
+  }
 }
 
 LogicalResult LowerStatePass::runOnModule(HWModuleOp moduleOp) {

@@ -19,6 +19,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/AttrTypeSubElements.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/StringMap.h"
@@ -92,7 +93,8 @@ static StringRef getPrefix(Operation *module) {
 namespace {
 class PrefixModulesPass : public PrefixModulesBase<PrefixModulesPass> {
   void removeDeadAnnotations(StringAttr moduleName, Operation *op);
-  void renameModuleBody(std::string prefix, FModuleOp module);
+  void renameModuleBody(std::string prefix, StringRef oldName,
+                        FModuleOp module);
   void renameModule(FModuleOp module);
   void renameExtModule(FExtModuleOp extModule);
   void renameMemModule(FMemModuleOp memModule);
@@ -158,7 +160,8 @@ void PrefixModulesPass::removeDeadAnnotations(StringAttr moduleName,
 
 /// Applies the prefix to the module.  This will update the required prefixes of
 /// any referenced module in the prefix map.
-void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
+void PrefixModulesPass::renameModuleBody(std::string prefix, StringRef oldName,
+                                         FModuleOp module) {
   auto *context = module.getContext();
 
   // If we are renaming the body of this module, we need to mark that we have
@@ -172,6 +175,23 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
   // Some of the NLA references become invalid after a module is cloned, based
   // on the instance.
   removeDeadAnnotations(thisMod, module);
+
+  mlir::AttrTypeReplacer replacer;
+  replacer.addReplacement(
+      [&](hw::InnerRefAttr innerRef) -> std::pair<Attribute, WalkResult> {
+        StringAttr moduleName = innerRef.getModule();
+        StringAttr symName = innerRef.getName();
+
+        StringAttr newTarget;
+        if (moduleName == oldName) {
+          newTarget = module.getNameAttr();
+        } else {
+          auto target = instanceGraph->lookup(moduleName)->getModule();
+          newTarget = StringAttr::get(context, prefix + getPrefix(target) +
+                                                   target.getModuleName());
+        }
+        return {hw::InnerRefAttr::get(newTarget, symName), WalkResult::skip()};
+      });
 
   module.getBody().walk([&](Operation *op) {
     // Remove spurious NLA references either on a leaf op, or the InstanceOp.
@@ -202,12 +222,12 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
       }
 
       // Record that we must prefix the target module with the current prefix.
-      recordPrefix(prefixMap, target.moduleName(), prefix);
+      recordPrefix(prefixMap, target.getModuleName(), prefix);
 
       // Fixup this instance op to use the prefixed module name.  Note that the
       // referenced FModuleOp will be renamed later.
       auto newTarget = StringAttr::get(context, prefix + getPrefix(target) +
-                                                    target.moduleName());
+                                                    target.getModuleName());
       AnnotationSet instAnnos(instanceOp);
       // If the instance has HierPathOp, then update its module name also.
       // There can be multiple HierPathOps attached to the instance op.
@@ -227,6 +247,8 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
         nlaTable->updateModuleInNLA(nla, oldModName, newTarget);
 
       instanceOp.setModuleNameAttr(FlatSymbolRefAttr::get(context, newTarget));
+    } else {
+      replacer.replaceElementsIn(op);
     }
   });
 }
@@ -243,9 +265,9 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
   AnnotationSet::removeAnnotations(module, prefixModulesAnnoClass);
 
   // We only add the annotated prefix to the module name if it is inclusive.
-  auto moduleName = module.getName().str();
-  if (prefixInfo.inclusive)
-    moduleName = (innerPrefix + moduleName).str();
+  auto oldName = module.getName().str();
+  std::string moduleName =
+      (prefixInfo.inclusive ? innerPrefix + oldName : oldName).str();
 
   auto &prefixes = prefixMap[module.getName()];
 
@@ -272,26 +294,27 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
   auto oldModName = module.getNameAttr();
   for (auto &outerPrefix : llvm::drop_begin(prefixes)) {
     auto moduleClone = cast<FModuleOp>(builder.clone(*module));
-    auto newModuleName = (outerPrefix + moduleName);
-    auto newModNameAttr = StringAttr::get(module.getContext(), newModuleName);
-    moduleClone.setName(newModuleName);
+    std::string newModName = outerPrefix + moduleName;
+    auto newModNameAttr = StringAttr::get(module.getContext(), newModName);
+    moduleClone.setName(newModNameAttr);
     // It is critical to add the new module to the NLATable, otherwise the
     // rename operation would fail.
     nlaTable->addModule(moduleClone);
     fixNLAsRootedAt(oldModName, newModNameAttr);
     // Each call to this function could invalidate the `prefixes` reference.
-    renameModuleBody((outerPrefix + innerPrefix).str(), moduleClone);
+    renameModuleBody((outerPrefix + innerPrefix).str(), oldName, moduleClone);
   }
 
   auto prefixFull = (firstPrefix + innerPrefix).str();
   auto newModuleName = firstPrefix + moduleName;
+  auto newModuleNameAttr = StringAttr::get(module.getContext(), newModuleName);
+
   // The first prefix renames the module in place. There is always at least 1
   // prefix.
-  module.setName(newModuleName);
+  module.setName(newModuleNameAttr);
   nlaTable->addModule(module);
-  fixNLAsRootedAt(oldModName,
-                  StringAttr::get(module.getContext(), newModuleName));
-  renameModuleBody(prefixFull, module);
+  fixNLAsRootedAt(oldModName, newModuleNameAttr);
+  renameModuleBody(prefixFull, oldName, module);
 
   AnnotationSet annotations(module);
   SmallVector<Annotation, 1> newAnnotations;
@@ -429,7 +452,7 @@ void PrefixModulesPass::runOnOperation() {
   auto mainModule = instanceGraph->getTopLevelModule();
   auto prefix = getPrefix(mainModule);
   if (!prefix.empty()) {
-    auto oldModName = mainModule.moduleNameAttr();
+    auto oldModName = mainModule.getModuleNameAttr();
     auto newMainModuleName =
         StringAttr::get(context, (prefix + circuitOp.getName()).str());
     circuitOp.setNameAttr(newMainModuleName);

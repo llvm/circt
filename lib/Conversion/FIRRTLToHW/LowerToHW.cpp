@@ -773,28 +773,40 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   // comments on the output of this boilerplate in generated Verilog.
   ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op);
 
+  StringSet<> emittedDecls;
+
+  auto emitDecl = [&](StringRef name, ArrayAttr args) {
+    if (emittedDecls.count(name))
+      return;
+    emittedDecls.insert(name);
+    OpBuilder::InsertionGuard guard(b);
+    b.setInsertionPointAfter(op);
+    b.create<sv::MacroDeclOp>(name, args, StringAttr());
+  };
+
   // TODO: We could have an operation for macros and uses of them, and
   // even turn them into symbols so we can DCE unused macro definitions.
-  auto emitString = [&](StringRef verilogString) {
-    b.create<sv::VerbatimOp>(verilogString);
+  auto emitDefine = [&](StringRef name, StringRef body, ArrayAttr args = {}) {
+    emitDecl(name, args);
+    b.create<sv::MacroDefOp>(name, body);
   };
 
   // Helper function to emit a "#ifdef guard" with a `define in the then and
   // optionally in the else branch.
-  auto emitGuardedDefine = [&](const char *guard, const char *defineTrue,
-                               const char *defineFalse = nullptr) {
-    std::string define = "`define ";
-    if (!defineFalse) {
-      assert(defineTrue && "didn't define anything");
-      b.create<sv::IfDefOp>(guard, [&]() { emitString(define + defineTrue); });
+  auto emitGuardedDefine = [&](StringRef guard, StringRef defName,
+                               StringRef defineTrue = "",
+                               StringRef defineFalse = StringRef()) {
+    if (!defineFalse.data()) {
+      assert(defineTrue.data() && "didn't define anything");
+      b.create<sv::IfDefOp>(guard, [&]() { emitDefine(defName, defineTrue); });
     } else {
       b.create<sv::IfDefOp>(
           guard,
           [&]() {
-            if (defineTrue)
-              emitString(define + defineTrue);
+            if (defineTrue.data())
+              emitDefine(defName, defineTrue);
           },
-          [&]() { emitString(define + defineFalse); });
+          [&]() { emitDefine(defName, defineFalse); });
     }
   };
 
@@ -816,7 +828,8 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
       !state.used_ASSERT_VERBOSE_COND && !state.used_STOP_COND)
     return;
 
-  emitString("// Standard header to adapt well known macros to our needs.");
+  b.create<sv::VerbatimOp>(
+      "// Standard header to adapt well known macros to our needs.");
 
   bool needRandom = false;
   if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
@@ -837,84 +850,105 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   }
 
   if (needRandom) {
-    emitString("\n// RANDOM may be set to an expression that produces a 32-bit "
-               "random unsigned value.");
-    emitGuardedDefine("RANDOM", nullptr, "RANDOM $random");
+    b.create<sv::VerbatimOp>(
+        "\n// RANDOM may be set to an expression that produces a 32-bit "
+        "random unsigned value.");
+    emitGuardedDefine("RANDOM", "RANDOM", StringRef(), "$random");
   }
 
   if (state.used_PRINTF_COND) {
-    emitString("\n// Users can define 'PRINTF_COND' to add an extra gate to "
-               "prints.");
+    b.create<sv::VerbatimOp>(
+        "\n// Users can define 'PRINTF_COND' to add an extra gate to "
+        "prints.");
     emitGuard("PRINTF_COND_", [&]() {
-      emitGuardedDefine("PRINTF_COND", "PRINTF_COND_ (`PRINTF_COND)",
-                        "PRINTF_COND_ 1");
+      emitGuardedDefine("PRINTF_COND", "PRINTF_COND_", "(`PRINTF_COND)", "1");
     });
   }
 
   if (state.used_ASSERT_VERBOSE_COND) {
-    emitString("\n// Users can define 'ASSERT_VERBOSE_COND' to add an extra "
-               "gate to assert error printing.");
+    b.create<sv::VerbatimOp>(
+        "\n// Users can define 'ASSERT_VERBOSE_COND' to add an extra "
+        "gate to assert error printing.");
     emitGuard("ASSERT_VERBOSE_COND_", [&]() {
-      emitGuardedDefine("ASSERT_VERBOSE_COND",
-                        "ASSERT_VERBOSE_COND_ (`ASSERT_VERBOSE_COND)",
-                        "ASSERT_VERBOSE_COND_ 1");
+      emitGuardedDefine("ASSERT_VERBOSE_COND", "ASSERT_VERBOSE_COND_",
+                        "(`ASSERT_VERBOSE_COND)", "1");
     });
   }
 
   if (state.used_STOP_COND) {
-    emitString("\n// Users can define 'STOP_COND' to add an extra gate "
-               "to stop conditions.");
+    b.create<sv::VerbatimOp>(
+        "\n// Users can define 'STOP_COND' to add an extra gate "
+        "to stop conditions.");
     emitGuard("STOP_COND_", [&]() {
-      emitGuardedDefine("STOP_COND", "STOP_COND_ (`STOP_COND)", "STOP_COND_ 1");
+      emitGuardedDefine("STOP_COND", "STOP_COND_", "(`STOP_COND)", "1");
     });
   }
 
   if (needRandom) {
-    emitString("\n// Users can define INIT_RANDOM as general code that gets "
-               "injected "
-               "into the\n// initializer block for modules with registers.");
-    emitGuardedDefine("INIT_RANDOM", nullptr, "INIT_RANDOM");
+    b.create<sv::VerbatimOp>(
+        "\n// Users can define INIT_RANDOM as general code that gets "
+        "injected "
+        "into the\n// initializer block for modules with registers.");
+    emitGuardedDefine("INIT_RANDOM", "INIT_RANDOM", StringRef(), "");
 
-    emitString(
+    b.create<sv::VerbatimOp>(
         "\n// If using random initialization, you can also define "
         "RANDOMIZE_DELAY to\n// customize the delay used, otherwise 0.002 "
         "is used.");
-    emitGuardedDefine("RANDOMIZE_DELAY", nullptr, "RANDOMIZE_DELAY 0.002");
+    emitGuardedDefine("RANDOMIZE_DELAY", "RANDOMIZE_DELAY", StringRef(),
+                      "0.002");
 
-    emitString("\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
+    b.create<sv::VerbatimOp>(
+        "\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
     emitGuard("INIT_RANDOM_PROLOG_", [&]() {
       b.create<sv::IfDefOp>(
           "RANDOMIZE",
           [&]() {
-            emitGuardedDefine(
-                "VERILATOR", "INIT_RANDOM_PROLOG_ `INIT_RANDOM",
-                "INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end");
+            emitGuardedDefine("VERILATOR", "INIT_RANDOM_PROLOG_",
+                              "`INIT_RANDOM",
+                              "`INIT_RANDOM #`RANDOMIZE_DELAY begin end");
           },
-          [&]() { emitString("`define INIT_RANDOM_PROLOG_"); });
+          [&]() { emitDefine("INIT_RANDOM_PROLOG_", ""); });
+    });
+
+    b.create<sv::VerbatimOp>("\n// Include register initializers in init "
+                             "blocks unless synthesis is set");
+    emitGuard("SYNTHESIS", [&] {
+      emitGuardedDefine("ENABLE_INITIAL_REG_", "ENABLE_INITIAL_REG_",
+                        StringRef(), "");
+    });
+
+    b.create<sv::VerbatimOp>("\n// Include rmemory initializers in init "
+                             "blocks unless synthesis is set");
+    emitGuard("SYNTHESIS", [&] {
+      emitGuardedDefine("ENABLE_INITIAL_MEM_", "ENABLE_INITIAL_MEM_",
+                        StringRef(), "");
     });
   }
 
   if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
-    emitString("\n// RANDOMIZE_GARBAGE_ASSIGN enable range checks for mem "
-               "assignments.");
+    b.create<sv::VerbatimOp>(
+        "\n// RANDOMIZE_GARBAGE_ASSIGN enable range checks for mem "
+        "assignments.");
     emitGuard("RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK", [&]() {
       b.create<sv::IfDefOp>(
           "RANDOMIZE_GARBAGE_ASSIGN",
           [&]() {
-            emitString(
-                "`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, VALUE, "
-                "SIZE) \\");
-            emitString("  ((INDEX) < (SIZE) ? (VALUE) : {`RANDOM})");
+            StringRef args[] = {"INDEX", "VALUE", "SIZE"};
+            emitDefine("RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK",
+                       "  ((INDEX) < (SIZE) ? (VALUE) : {`RANDOM})",
+                       b.getStrArrayAttr(ArrayRef(args)));
           },
           [&]() {
-            emitString("`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, "
-                       "VALUE, SIZE) (VALUE)");
+            StringRef args[] = {"INDEX", "VALUE", "SIZE"};
+            emitDefine("RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK", "(VALUE)",
+                       b.getStrArrayAttr(args));
           });
     });
   }
 
   // Blank line to separate the header from the modules.
-  emitString("");
+  b.create<sv::VerbatimOp>("");
 }
 
 LogicalResult

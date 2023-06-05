@@ -1,5 +1,5 @@
 // REQUIRES: verilator
-// RUN: circt-opt %s -lower-seq-firrtl-to-sv -export-verilog -verify-diagnostics -o %t2.mlir > %t1.sv
+// RUN: circt-opt %s -lower-seq-firrtl-init-to-sv -lower-seq-firrtl-to-sv -export-verilog -verify-diagnostics -o %t2.mlir > %t1.sv
 // RUN: verilator --lint-only +1364-1995ext+v %t1.sv
 // RUN: verilator --lint-only +1364-2001ext+v %t1.sv
 // RUN: verilator --lint-only +1364-2005ext+v %t1.sv
@@ -8,7 +8,8 @@
 // RUN: verilator --lint-only +1800-2012ext+sv %t1.sv
 // RUN: verilator --lint-only +1800-2017ext+sv %t1.sv
 
-sv.verbatim "`define INIT_RANDOM_PROLOG_"
+sv.macro.decl @INIT_RANDOM_PROLOG_
+sv.macro.def @INIT_RANDOM_PROLOG_ ""
 
 hw.module @top(%clk: i1, %rst: i1) {
   %cst0 = hw.constant 0 : i32

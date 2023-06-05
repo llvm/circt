@@ -57,10 +57,10 @@ arc.define @LookupTable(%arg0: i32, %arg1: i8) -> () {
 // CHECK-LABEL: func.func @StorageAccess
 func.func @StorageAccess(%arg0: !arc.storage<10000>) {
   // CHECK-NEXT: arc.storage.get %arg0[42] : !arc.storage<10000> -> !arc.state<i9>
-  // CHECK-NEXT: arc.storage.get %arg0[1337] : !arc.storage<10000> -> !arc.memory<4 x i19, 4>
+  // CHECK-NEXT: arc.storage.get %arg0[1337] : !arc.storage<10000> -> !arc.memory<4 x i19, i32>
   // CHECK-NEXT: arc.storage.get %arg0[9001] : !arc.storage<10000> -> !arc.storage<123>
   %0 = arc.storage.get %arg0[42] : !arc.storage<10000> -> !arc.state<i9>
-  %1 = arc.storage.get %arg0[1337] : !arc.storage<10000> -> !arc.memory<4 x i19, 4>
+  %1 = arc.storage.get %arg0[1337] : !arc.storage<10000> -> !arc.memory<4 x i19, i32>
   %2 = arc.storage.get %arg0[9001] : !arc.storage<10000> -> !arc.storage<123>
   return
 }
@@ -108,43 +108,53 @@ hw.module @clockDomainTest(%clk: i1, %in0: i32, %in1: i16) {
 }
 
 // CHECK-LABEL: hw.module @memoryOps
-hw.module @memoryOps(%clk: i1, %en: i1) {
+hw.module @memoryOps(%clk: i1, %en: i1, %mask: i32) {
   %c0_i32 = hw.constant 0 : i32
-  // CHECK: [[MEM:%.+]] = arc.memory <4 x i32>
-  %mem = arc.memory <4 x i32>
+  // CHECK: [[MEM:%.+]] = arc.memory <4 x i32, i32>
+  %mem = arc.memory <4 x i32, i32>
 
-  // CHECK-NEXT: %{{.+}} = arc.memory_read_port [[MEM]][%c0_i32] if %en clock %clk : <4 x i32>, i32
-  %0 = arc.memory_read_port %mem[%c0_i32] if %en clock %clk : <4 x i32>, i32
-  // CHECK-NEXT: arc.memory_write_port [[MEM]][%c0_i32], %c0_i32 if %en clock %clk : <4 x i32>, i32
-  arc.memory_write_port %mem[%c0_i32], %c0_i32 if %en clock %clk : <4 x i32>, i32
-
-  // CHECK-NEXT: %{{.+}} = arc.memory_read_port [[MEM]][%c0_i32] clock %clk : <4 x i32>, i32
-  %1 = arc.memory_read_port %mem[%c0_i32] clock %clk : <4 x i32>, i32
-  // CHECK-NEXT: arc.memory_write_port [[MEM]][%c0_i32], %c0_i32 clock %clk : <4 x i32>, i32
-  arc.memory_write_port %mem[%c0_i32], %c0_i32 clock %clk : <4 x i32>, i32
+  // CHECK-NEXT: %{{.+}} = arc.memory_read_port [[MEM]][%c0_i32] : <4 x i32, i32>
+  %0 = arc.memory_read_port %mem[%c0_i32] : <4 x i32, i32>
+  // CHECK-NEXT: arc.memory_write_port [[MEM]], @identity1(%c0_i32, %c0_i32, %en) clock %clk enable lat 1 : <4 x i32, i32>, i32, i32, i1
+  arc.memory_write_port %mem, @identity1(%c0_i32, %c0_i32, %en) clock %clk enable lat 1 : <4 x i32, i32>, i32, i32, i1
+  // CHECK-NEXT: arc.memory_write_port [[MEM]], @identity2(%c0_i32, %c0_i32, %en, %mask) clock %clk enable mask lat 2 : <4 x i32, i32>, i32, i32, i1, i32
+  arc.memory_write_port %mem, @identity2(%c0_i32, %c0_i32, %en, %mask) clock %clk enable mask lat 2 : <4 x i32, i32>, i32, i32, i1, i32
+  // CHECK-NEXT: arc.memory_write_port [[MEM]], @identity3(%c0_i32, %c0_i32, %mask) clock %clk mask lat 3 : <4 x i32, i32>, i32, i32, i32
+  arc.memory_write_port %mem, @identity3(%c0_i32, %c0_i32, %mask) clock %clk mask lat 3 : <4 x i32, i32>, i32, i32, i32
+  // CHECK-NEXT: arc.memory_write_port [[MEM]], @identity(%c0_i32, %c0_i32) clock %clk lat 4 : <4 x i32, i32>, i32, i32
+  arc.memory_write_port %mem, @identity(%c0_i32, %c0_i32) clock %clk lat 4 : <4 x i32, i32>, i32, i32
 
   // CHECK-NEXT: arc.clock_domain
   arc.clock_domain (%clk) clock %clk : (i1) -> () {
   ^bb0(%arg0: i1):
     %c1_i32 = hw.constant 1 : i32
-    // CHECK: [[MEM2:%.+]] = arc.memory <4 x i32>
-    %mem2 = arc.memory <4 x i32>
-    // CHECK-NEXT: %{{.+}} = arc.memory_read_port [[MEM2]][%c1_i32] if %arg0 : <4 x i32>, i32
-    %2 = arc.memory_read_port %mem2[%c1_i32] if %arg0 : <4 x i32>, i32
-    // CHECK-NEXT: arc.memory_write_port [[MEM2]][%c1_i32], %c1_i32 if %arg0 : <4 x i32>, i32
-    arc.memory_write_port %mem2[%c1_i32], %c1_i32 if %arg0 : <4 x i32>, i32
-
-    // CHECK-NEXT: %{{.+}} = arc.memory_read_port [[MEM2]][%c1_i32] : <4 x i32>, i32
-    %3 = arc.memory_read_port %mem2[%c1_i32] : <4 x i32>, i32
-    // CHECK-NEXT: arc.memory_write_port [[MEM2]][%c1_i32], %c1_i32 : <4 x i32>, i32
-    arc.memory_write_port %mem2[%c1_i32], %c1_i32 : <4 x i32>, i32
+    // CHECK: [[MEM2:%.+]] = arc.memory <4 x i32, i32>
+    %mem2 = arc.memory <4 x i32, i32>
+    // CHECK-NEXT: %{{.+}} = arc.memory_read_port [[MEM2]][%c1_i32] : <4 x i32, i32>
+    %2 = arc.memory_read_port %mem2[%c1_i32] : <4 x i32, i32>
+    // CHECK-NEXT: arc.memory_write_port [[MEM2]], @identity1(%c1_i32, %c1_i32, %arg0) enable lat 1 : <4 x i32, i32>, i32, i32, i1
+    arc.memory_write_port %mem2, @identity1(%c1_i32, %c1_i32, %arg0) enable lat 1 : <4 x i32, i32>, i32, i32, i1
+    // CHECK-NEXT: arc.memory_write_port [[MEM2]], @identity(%c1_i32, %c1_i32) lat 1 : <4 x i32, i32>, i32, i32
+    arc.memory_write_port %mem2, @identity(%c1_i32, %c1_i32) lat 1 : <4 x i32, i32>, i32, i32
   }
 
-  // CHECK: %{{.+}} = arc.memory_read [[MEM]][%c0_i32] : <4 x i32>, i32
-  %2 = arc.memory_read %mem[%c0_i32] : <4 x i32>, i32
-  // CHECK-NEXT: arc.memory_write [[MEM]][%c0_i32], %c0_i32 if %en : <4 x i32>, i32
-  arc.memory_write %mem[%c0_i32], %c0_i32 if %en : <4 x i32>, i32
+  // CHECK: %{{.+}} = arc.memory_read [[MEM]][%c0_i32] : <4 x i32, i32>
+  %2 = arc.memory_read %mem[%c0_i32] : <4 x i32, i32>
+  // CHECK-NEXT: arc.memory_write [[MEM]][%c0_i32], %c0_i32 if %en : <4 x i32, i32>
+  arc.memory_write %mem[%c0_i32], %c0_i32 if %en : <4 x i32, i32>
 
-  // CHECK-NEXT: arc.memory_write [[MEM]][%c0_i32], %c0_i32 : <4 x i32>, i32
-  arc.memory_write %mem[%c0_i32], %c0_i32 : <4 x i32>, i32
+  // CHECK-NEXT: arc.memory_write [[MEM]][%c0_i32], %c0_i32 : <4 x i32, i32>
+  arc.memory_write %mem[%c0_i32], %c0_i32 : <4 x i32, i32>
+}
+arc.define @identity(%arg0: i32, %arg1: i32) -> (i32, i32) {
+  arc.output %arg0, %arg1 : i32, i32
+}
+arc.define @identity1(%arg0: i32, %arg1: i32, %arg2: i1) -> (i32, i32, i1) {
+  arc.output %arg0, %arg1, %arg2 : i32, i32, i1
+}
+arc.define @identity2(%arg0: i32, %arg1: i32, %arg2: i1, %arg3: i32) -> (i32, i32, i1, i32) {
+  arc.output %arg0, %arg1, %arg2, %arg3 : i32, i32, i1, i32
+}
+arc.define @identity3(%arg0: i32, %arg1: i32, %arg2: i32) -> (i32, i32, i32) {
+  arc.output %arg0, %arg1, %arg2 : i32, i32, i32
 }

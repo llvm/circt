@@ -84,7 +84,7 @@ void InnerSymbolDCEPass::insertInnerRef(InnerRefAttr innerRef) {
 
 /// Remove all dead inner symbols from the specified module.
 void InnerSymbolDCEPass::removeInnerSyms(FModuleLike mod) {
-  auto moduleName = mod.moduleNameAttr();
+  auto moduleName = mod.getModuleNameAttr();
 
   // Walk inner symbols, removing any not referenced.
   InnerSymbolTable::walkSymbols(

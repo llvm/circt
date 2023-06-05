@@ -39,6 +39,12 @@ def ClassOp : OMOp<"class",
     SizedRegion<1>:$body
   );
 
+  let builders = [
+    OpBuilder<(ins "::mlir::Twine":$name,
+                    "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames)>,
+    OpBuilder<(ins "::mlir::Twine":$name)>
+  ];
+
   let hasCustomAssemblyFormat = 1;
 
   let hasVerifier = 1;
@@ -75,6 +81,10 @@ def ObjectOp : OMOp<"object",
     ClassType:$result
   );
 
+  let builders = [
+    OpBuilder<(ins "om::ClassOp":$classOp, "::mlir::ValueRange":$actualParams)>
+  ];
+
   let assemblyFormat = [{
     $className `(` $actualParams `)` `:`
       functional-type($actualParams, $result) attr-dict
@@ -110,6 +120,10 @@ def ConstantOp : OMOp<"constant",
   let results = (outs
     AnyType:$result
   );
+
+  let builders = [
+    OpBuilder<(ins "::mlir::TypedAttr":$constVal)>
+  ];
 
   let assemblyFormat = [{
     $value attr-dict

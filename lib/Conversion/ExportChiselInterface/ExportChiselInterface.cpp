@@ -161,7 +161,7 @@ static LogicalResult emitPort(const PortInfo &port, llvm::raw_ostream &os) {
 
 /// Emits an `ExtModule` class with port declarations for `module`.
 static LogicalResult emitModule(FModuleLike module, llvm::raw_ostream &os) {
-  os << "class " << module.moduleName() << " extends ExtModule {\n";
+  os << "class " << module.getModuleName() << " extends ExtModule {\n";
 
   for (const auto &port : module.getPorts()) {
     if (failed(emitPort(port, os)))

@@ -122,7 +122,7 @@ public:
 
   /// Record a new FModuleLike operation. This updates the Module name to Module
   /// operation map.
-  void addModule(FModuleLike mod) { symToOp[mod.moduleNameAttr()] = mod; }
+  void addModule(FModuleLike mod) { symToOp[mod.getModuleNameAttr()] = mod; }
 
   /// Stop tracking a module. Remove the module from two internal records,
   /// 1. Module name to Module op map.

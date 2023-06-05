@@ -17,6 +17,7 @@
 #include "circt/Dialect/Arc/ArcDialect.h"
 #include "circt/Dialect/Calyx/CalyxDialect.h"
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/DC/DCDialect.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
@@ -47,6 +48,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     calyx::CalyxDialect,
     chirrtl::CHIRRTLDialect,
     comb::CombDialect,
+    dc::DCDialect,
     esi::ESIDialect,
     firrtl::FIRRTLDialect,
     fsm::FSMDialect,

@@ -29,4 +29,7 @@ if(CapnProto_FOUND)
     PRIVATE
     CapnProto::capnp
     CapnProto::capnp-rpc)
+  target_sources(EsiCosimCapnp PUBLIC FILE_SET HEADERS
+    BASE_DIRS "."
+    FILES "CosimDpi.capnp")
 endif()

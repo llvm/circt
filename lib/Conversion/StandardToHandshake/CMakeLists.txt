@@ -6,6 +6,9 @@ add_circt_library(CIRCTStandardToHandshake
   ADDITIONAL_HEADER_DIRS
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/Conversion/StandardToHandshake
 
+  DEPENDS
+  CIRCTConversionPassIncGen
+
   LINK_LIBS PUBLIC
   CIRCTHandshake
   CIRCTHandshakeTransforms

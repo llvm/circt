@@ -315,3 +315,59 @@ hw.module @DiffTypesBlockDedup(%x: i4) {
   // CHECK-NEXT: hw.output
 }
 // CHECK-NEXT: }
+
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: arc.define @StateAndCallA
+arc.define @StateAndCallA(%arg0: i4, %arg1: i4) -> i4 {
+  %0 = arc.call @NestedArc(%arg0, %arg1) {NestedArc} : (i4, i4) -> i4
+  arc.output %0 : i4
+}
+
+// CHECK-NOT: arc.define @StateAndCallB
+arc.define @StateAndCallB(%arg0: i4, %arg1: i4) -> i4 {
+  %0 = arc.call @NestedArc(%arg0, %arg1) {NestedArc} : (i4, i4) -> i4
+  arc.output %0 : i4
+}
+
+// CHECK-LABEL: arc.define @NestedArc
+arc.define @NestedArc(%arg0: i4, %arg1: i4) -> i4 {
+  %0 = comb.and %arg0, %arg1 {NestedArc} : i4
+  arc.output %0 : i4
+}
+
+// CHECK-LABEL: hw.module @StateAndCall
+hw.module @StateAndCall(%x: i4, %y: i4) {
+  // CHECK-NEXT: arc.state @StateAndCallA(%x, %y)
+  // CHECK-NEXT: arc.call @StateAndCallA(%y, %x)
+  // CHECK-NEXT: arc.call @StateAndCallA(%y, %x)
+  %0 = arc.state @StateAndCallB(%x, %y) lat 0 : (i4, i4) -> i4
+  %1 = arc.call @StateAndCallA(%y, %x) : (i4, i4) -> i4
+  %2 = arc.call @StateAndCallB(%y, %x) : (i4, i4) -> i4
+  // CHECK-NEXT: hw.output
+}
+// CHECK-NEXT: }
+
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: arc.define @CallA
+arc.define @CallA(%arg0: i4, %arg1: i4) -> i4 {
+  %0 = comb.and %arg0, %arg1 {RootCallArc} : i4
+  arc.output %0 : i4
+}
+
+// CHECK-NOT: arc.define @CallB
+arc.define @CallB(%arg0: i4, %arg1: i4) -> i4 {
+  %0 = comb.and %arg0, %arg1 {RootCallArc} : i4
+  arc.output %0 : i4
+}
+
+// CHECK-LABEL: arc.define @RootCallArc
+arc.define @RootCallArc(%arg0: i4, %arg1: i4) -> i4 {
+  // CHECK-NEXT: arc.call @CallA(%arg1, %arg0)
+  %0 = arc.call @CallA(%arg1, %arg0) {RootCallArc} : (i4, i4) -> i4
+  // CHECK-NEXT: arc.call @CallA(%arg0, %arg1)
+  %1 = arc.call @CallB(%arg0, %arg1) {RootCallArc} : (i4, i4) -> i4
+  %2 = comb.and %0, %1 {RootCallArc} : i4
+  arc.output %2 : i4
+}

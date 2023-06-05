@@ -1904,8 +1904,7 @@ void GrandCentralPass::runOnOperation() {
 
               // If the companion is instantiated above the DUT, then don't
               // extract it.
-              if (dut && !instancePaths->instanceGraph.isAncestor(
-                             op, cast<hw::HWModuleLike>(*dut))) {
+              if (dut && !instancePaths->instanceGraph.isAncestor(op, dut)) {
                 ++numAnnosRemoved;
                 return true;
               }
@@ -1949,8 +1948,8 @@ void GrandCentralPass::runOnOperation() {
                   continue;
 
                 LLVM_DEBUG({
-                  llvm::dbgs() << "    - module: "
-                               << cast<FModuleLike>(*mod).moduleName() << "\n";
+                  llvm::dbgs()
+                      << "    - module: " << mod.getModuleName() << "\n";
                 });
 
                 if (auto extmodule = dyn_cast<FExtModuleOp>(*mod)) {
@@ -2162,8 +2161,7 @@ void GrandCentralPass::runOnOperation() {
       ++numInterfaces;
       if (dut &&
           !instancePaths->instanceGraph.isAncestor(
-              companionIDMap[ifaceBuilder.id].companion,
-              cast<hw::HWModuleLike>(*dut)) &&
+              companionIDMap[ifaceBuilder.id].companion, dut) &&
           testbenchDir)
         iface->setAttr("output_file",
                        hw::OutputFileAttr::getAsDirectory(
@@ -2244,8 +2242,7 @@ void GrandCentralPass::runOnOperation() {
     // If the interface is associated with a companion that is instantiated
     // above the DUT (e.g.., in the test harness), then don't extract it.
     if (dut && !instancePaths->instanceGraph.isAncestor(
-                   companionIDMap[bundle.getID()].companion,
-                   cast<hw::HWModuleLike>(*dut)))
+                   companionIDMap[bundle.getID()].companion, dut))
       continue;
   }
 

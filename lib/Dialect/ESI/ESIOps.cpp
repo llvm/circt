@@ -231,7 +231,7 @@ LogicalResult UnwrapFIFOOp::verify() {
 LogicalResult
 UnwrapFIFOOp::inferReturnTypes(MLIRContext *context, std::optional<Location>,
                                ValueRange operands, DictionaryAttr,
-                               mlir::RegionRange,
+                               mlir::OpaqueProperties, mlir::RegionRange,
                                SmallVectorImpl<Type> &inferredResulTypes) {
   inferredResulTypes.push_back(
       operands[0].getType().cast<ChannelType>().getInner());
@@ -305,9 +305,11 @@ LogicalResult WrapWindow::verify() {
   return emitOpError("Expected input type is ") << expectedInput;
 }
 
-LogicalResult UnwrapWindow::inferReturnTypes(
-    MLIRContext *, std::optional<Location>, ValueRange operands, DictionaryAttr,
-    mlir::RegionRange, SmallVectorImpl<Type> &inferredReturnTypes) {
+LogicalResult
+UnwrapWindow::inferReturnTypes(MLIRContext *, std::optional<Location>,
+                               ValueRange operands, DictionaryAttr,
+                               mlir::OpaqueProperties, mlir::RegionRange,
+                               SmallVectorImpl<Type> &inferredReturnTypes) {
   auto windowType = operands.front().getType().cast<WindowType>();
   inferredReturnTypes.push_back(windowType.getLoweredType());
   return success();

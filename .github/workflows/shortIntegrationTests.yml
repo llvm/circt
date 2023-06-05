@@ -23,7 +23,7 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-integration-test:v11.3
+      image: ghcr.io/circt/images/circt-integration-test:v12.2
     strategy:
       # Keep the 'matrix' strategy with one data point to make it obvious that
       # this is one point in the overall matrix.
@@ -39,7 +39,7 @@ jobs:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
       - name: Get CIRCT
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 1
           submodules: true

@@ -19,7 +19,8 @@
 namespace circt {
 namespace firrtl {
 
-mlir::LogicalResult exportFIRFile(mlir::ModuleOp module, llvm::raw_ostream &os);
+mlir::LogicalResult exportFIRFile(mlir::ModuleOp module, llvm::raw_ostream &os,
+                                  std::optional<size_t> targetLineLength);
 
 void registerToFIRFileTranslation();
 

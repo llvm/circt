@@ -413,6 +413,17 @@ option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation).")
 if (CAPNP_DISABLE)
   message (STATUS "Disabling Cap'nProto.")
 else()
+  # Some of our CMake code which is only used in Capnp builds uses newer CMake
+  # features. Since most compilations are not capnp builds, only require the new
+  # version for those builds.
+  if(CMAKE_VERSION VERSION_LESS "3.23.0")
+    message(SEND_ERROR
+        "Building CIRCT with Cap'nProto features enabled uses CMake features "
+        "that require at least version 3.23. Recommend upgrading to 3.23+ "
+        "for full support. Detected current version: ${CMAKE_VERSION}. If you "
+        "do not need ESI cosim features, you can use the CAPNP_DISABLE option.")
+  endif()
+
   if(DEFINED CAPNP_PATH)
     set(ENV{PKG_CONFIG_PATH}
       "${CAPNP_PATH}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
@@ -475,6 +486,7 @@ llvm_canonicalize_cmake_booleans(CIRCT_LLHD_SIM_ENABLED)
 #-------------------------------------------------------------------------------
 # circt-lec Configuration
 #-------------------------------------------------------------------------------
+
 # If circt-lec hasn't been explicitly disabled, find it.
 option(CIRCT_LEC_DISABLE "Disable the Logical Equivalence Checker" OFF)
 if(CIRCT_LEC_DISABLE)
@@ -489,15 +501,9 @@ else()
       get_target_property(Z3_LIB_LOCATION z3::libz3 IMPORTED_LOCATION_DEBUG)
       message(STATUS "Found Z3: ${Z3_LIB_LOCATION} (found version \"${Z3_VERSION_STRING}\")")
     endif()
-    # Link against the reported library and include locations.
-    list(APPEND CIRCT_LEC_LIBS ${Z3_LIBRARIES})
-    list(APPEND CIRCT_LEC_INCLUDES ${Z3_CXX_INCLUDE_DIRS})
   else()
     # Attempt initialising Z3 according to LLVM's `FindZ3` CMake module.
     find_package(Z3)
-    # Link against the reported library and include locations.
-    list(APPEND CIRCT_LEC_LIBS ${Z3_LIBRARIES})
-    list(APPEND CIRCT_LEC_INCLUDES ${Z3_INCLUDE_DIR})
   endif()
   
   if(Z3_FOUND)

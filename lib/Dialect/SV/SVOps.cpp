@@ -128,12 +128,65 @@ void VerbatimExprSEOp::getAsmResultNames(
 
 void MacroRefExprOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  setNameFn(getResult(), getIdent().getName());
+  setNameFn(getResult(), getMacroName());
 }
 
 void MacroRefExprSEOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  setNameFn(getResult(), getIdent().getName());
+  setNameFn(getResult(), getMacroName());
+}
+
+static MacroDeclOp getReferencedMacro(const hw::HWSymbolCache *cache,
+                                      Operation *op,
+                                      FlatSymbolRefAttr macroName) {
+  if (cache)
+    if (auto *result = cache->getDefinition(macroName.getAttr()))
+      return cast<MacroDeclOp>(result);
+
+  auto topLevelModuleOp = op->getParentOfType<ModuleOp>();
+  return topLevelModuleOp.lookupSymbol<MacroDeclOp>(macroName.getValue());
+}
+
+/// Lookup the module or extmodule for the symbol.  This returns null on
+/// invalid IR.
+MacroDeclOp MacroRefExprOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
+  return ::getReferencedMacro(cache, *this, getMacroNameAttr());
+}
+
+MacroDeclOp
+MacroRefExprSEOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
+  return ::getReferencedMacro(cache, *this, getMacroNameAttr());
+}
+
+MacroDeclOp MacroDefOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
+  return ::getReferencedMacro(cache, *this, getMacroNameAttr());
+}
+
+/// Ensure that the symbol being instantiated exists and is a MacroDeclOp.
+static LogicalResult verifyMacroSymbolUse(Operation *op, StringAttr name,
+                                          SymbolTableCollection &symbolTable) {
+  auto macro = symbolTable.lookupNearestSymbolFrom<MacroDeclOp>(op, name);
+  if (!macro)
+    return op->emitError("Referenced macro doesn't exist ") << name;
+
+  return success();
+}
+
+/// Ensure that the symbol being instantiated exists and is a MacroDefOp.
+LogicalResult
+MacroRefExprOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyMacroSymbolUse(*this, getMacroNameAttr().getAttr(), symbolTable);
+}
+
+/// Ensure that the symbol being instantiated exists and is a MacroDefOp.
+LogicalResult
+MacroRefExprSEOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyMacroSymbolUse(*this, getMacroNameAttr().getAttr(), symbolTable);
+}
+
+/// Ensure that the symbol being instantiated exists and is a MacroDefOp.
+LogicalResult MacroDefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyMacroSymbolUse(*this, getMacroNameAttr().getAttr(), symbolTable);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1574,8 +1627,8 @@ static Type getElementTypeOfWidth(Type type, int32_t width) {
 
 LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::RegionRange regions,
-    SmallVectorImpl<Type> &results) {
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto width = attrs.get("width");
   if (!width)
     return failure();
@@ -1627,8 +1680,8 @@ OpFoldResult IndexedPartSelectInOutOp::fold(FoldAdaptor) {
 
 LogicalResult IndexedPartSelectOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::RegionRange regions,
-    SmallVectorImpl<Type> &results) {
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto width = attrs.get("width");
   if (!width)
     return failure();
@@ -1657,8 +1710,8 @@ LogicalResult IndexedPartSelectOp::verify() {
 
 LogicalResult StructFieldInOutOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::RegionRange regions,
-    SmallVectorImpl<Type> &results) {
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto field = attrs.get("field");
   if (!field)
     return failure();
@@ -1837,6 +1890,26 @@ void printXMRPath(OpAsmPrinter &p, XMROp op, ArrayAttr pathAttr,
                   StringAttr terminalAttr) {
   llvm::interleaveComma(pathAttr, p);
   p << ", " << terminalAttr;
+}
+
+/// Ensure that the symbol being instantiated exists and is a HierPathOp.
+LogicalResult XMRRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *table = SymbolTable::getNearestSymbolTable(*this);
+  auto path = dyn_cast_or_null<hw::HierPathOp>(
+      symbolTable.lookupSymbolIn(table, getRefAttr()));
+  if (!path)
+    return emitError("Referenced path doesn't exist ") << getRefAttr();
+
+  return success();
+}
+
+hw::HierPathOp XMRRefOp::getReferencedPath(const hw::HWSymbolCache *cache) {
+  if (cache)
+    if (auto *result = cache->getDefinition(getRefAttr().getAttr()))
+      return cast<hw::HierPathOp>(result);
+
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  return topLevelModuleOp.lookupSymbol<hw::HierPathOp>(getRefAttr().getValue());
 }
 
 //===----------------------------------------------------------------------===//

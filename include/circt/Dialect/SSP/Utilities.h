@@ -109,7 +109,7 @@ OperatorType loadOperatorType(ProblemT &prob, OperatorTypeOp oprOp,
   assert(!prob.hasOperatorType(opr));
   prob.insertOperatorType(opr);
   loadOperatorTypeProperties<ProblemT, OperatorTypePropertyTs...>(
-      prob, opr, oprOp.getPropertiesAttr());
+      prob, opr, oprOp.getSspPropertiesAttr());
   return opr;
 }
 
@@ -145,7 +145,7 @@ ProblemT loadProblem(InstanceOp instOp,
   auto prob = ProblemT::get(instOp);
 
   loadInstanceProperties<ProblemT, InstancePropertyTs...>(
-      prob, instOp.getPropertiesAttr());
+      prob, instOp.getSspPropertiesAttr());
   if (auto instName = instOp.getSymNameAttr())
     prob.setInstanceName(instName);
 
@@ -171,7 +171,7 @@ ProblemT loadProblem(InstanceOp instOp,
   graphOp.walk([&](OperationOp opOp) {
     prob.insertOperation(opOp);
     loadOperationProperties<ProblemT, OperationPropertyTs...>(
-        prob, opOp, opOp.getPropertiesAttr());
+        prob, opOp, opOp.getSspPropertiesAttr());
     if (auto opName = opOp.getSymNameAttr())
       prob.setOperationName(opOp, opName);
 

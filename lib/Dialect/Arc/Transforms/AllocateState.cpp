@@ -88,17 +88,11 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
 
     if (auto memOp = dyn_cast<AllocMemoryOp>(op)) {
       auto memType = memOp.getType();
-      auto intType = memType.getWordType();
-      unsigned stride = (intType.getWidth() + 7) / 8;
-      stride =
-          llvm::alignToPowerOf2(stride, llvm::bit_ceil(std::min(stride, 8U)));
+      unsigned stride = memType.getStride();
       unsigned numBytes = memType.getNumWords() * stride;
       auto offset = builder.getI32IntegerAttr(allocBytes(numBytes));
       op->setAttr("offset", offset);
       op->setAttr("stride", builder.getI32IntegerAttr(stride));
-      memOp.getResult().setType(MemoryType::get(memOp.getContext(),
-                                                memType.getNumWords(),
-                                                memType.getWordType(), stride));
       gettersToCreate.emplace_back(memOp, memOp.getStorage(), offset);
       continue;
     }

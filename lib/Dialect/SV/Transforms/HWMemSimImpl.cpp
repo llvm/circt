@@ -478,7 +478,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
           b.getStringAttr(moduleNamespace.newName(reg.getName())));
 
     if (mem.initIsInline) {
-      b.create<sv::IfDefOp>("SYNTHESIS", std::function<void()>(), [&]() {
+      b.create<sv::IfDefOp>("ENABLE_INITIAL_MEM_", [&]() {
         b.create<sv::InitialOp>([&]() {
           b.create<sv::ReadMemOp>(reg, mem.initFilename,
                                   mem.initIsBinary
@@ -508,13 +508,17 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
             b.getContext(), boundModule.getName() + ".sv");
       }
 
+      // Build the hierpathop
+      auto path = b.create<hw::HierPathOp>(
+          mlirModuleNamespace.newName(op.getName() + "_path"),
+          b.getArrayAttr(
+              ::InnerRefAttr::get(op.getNameAttr(), reg.getInnerSymAttr())));
+
       boundModule->setAttr("output_file", filename);
       b.setInsertionPointToStart(op.getBodyBlock());
       b.setInsertionPointToStart(boundModule.getBodyBlock());
       b.create<sv::InitialOp>([&]() {
-        auto xmr = b.create<sv::XMRRefOp>(
-            reg.getType(),
-            hw::InnerRefAttr::get(op.getNameAttr(), reg.getInnerSymAttr()));
+        auto xmr = b.create<sv::XMRRefOp>(reg.getType(), path.getSymNameAttr());
         b.create<sv::ReadMemOp>(xmr, mem.initFilename,
                                 mem.initIsBinary ? MemBaseTypeAttr::MemBaseBin
                                                  : MemBaseTypeAttr::MemBaseHex);
@@ -543,7 +547,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     return;
 
   constexpr unsigned randomWidth = 32;
-  b.create<sv::IfDefOp>("SYNTHESIS", std::function<void()>(), [&]() {
+  b.create<sv::IfDefOp>("ENABLE_INITIAL_MEM_", [&]() {
     sv::RegOp randReg;
     SmallVector<sv::RegOp> randRegs;
     if (!disableRegRandomization) {

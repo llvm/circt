@@ -7,8 +7,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/Arc/ArcOps.h"
 #include "mlir/Analysis/DataFlow/DenseAnalysis.h"
+#include "mlir/IR/Dominance.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Visitors.h"
 #include "mlir/Support/IndentedOstream.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -412,6 +415,119 @@ LogicalResult Legalizer::visitBlock(Block *block) {
   return success();
 }
 
+static LogicalResult getAncestorOpsInCommonDominatorBlock(
+    Operation *write, Operation **writeAncestor, Operation *read,
+    Operation **readAncestor, DominanceInfo *domInfo) {
+  Block *commonDominator =
+      domInfo->findNearestCommonDominator(write->getBlock(), read->getBlock());
+  if (!commonDominator)
+    return write->emitOpError(
+        "cannot find a common dominator block with all read operations");
+
+  // Path from writeOp to commmon dominator must only contain IfOps with no
+  // return values
+  Operation *writeParent = write;
+  while (writeParent->getBlock() != commonDominator) {
+    if (!isa<scf::IfOp, ClockTreeOp>(writeParent->getParentOp()))
+      return write->emitOpError("memory write operations in arbitrarily nested "
+                                "regions not supported");
+    writeParent = writeParent->getParentOp();
+  }
+  Operation *readParent = read;
+  while (readParent->getBlock() != commonDominator)
+    readParent = readParent->getParentOp();
+
+  *writeAncestor = writeParent;
+  *readAncestor = readParent;
+  return success();
+}
+
+static LogicalResult
+moveMemoryWritesAfterLastRead(Region &region, const DenseSet<Value> &memories,
+                              DominanceInfo *domInfo) {
+  // Collect memory values and their reads
+  DenseMap<Value, SetVector<Operation *>> readOps;
+  auto result = region.walk([&](Operation *op) {
+    if (isa<MemoryWriteOp>(op))
+      return WalkResult::advance();
+    SmallVector<Value> memoriesReadFrom;
+    if (auto readOp = dyn_cast<MemoryReadOp>(op)) {
+      memoriesReadFrom.push_back(readOp.getMemory());
+    } else {
+      for (auto operand : op->getOperands())
+        if (isa<MemoryType>(operand.getType()))
+          memoriesReadFrom.push_back(operand);
+    }
+    for (auto memVal : memoriesReadFrom) {
+      if (!memories.contains(memVal))
+        return op->emitOpError("uses memory value not directly defined by a "
+                               "arc.alloc_memory operation"),
+               WalkResult::interrupt();
+      readOps[memVal].insert(op);
+    }
+
+    return WalkResult::advance();
+  });
+
+  if (result.wasInterrupted())
+    return failure();
+
+  // Collect all writes
+  SmallVector<MemoryWriteOp> writes;
+  region.walk([&](MemoryWriteOp writeOp) { writes.push_back(writeOp); });
+
+  // Move the writes
+  for (auto writeOp : writes) {
+    if (!memories.contains(writeOp.getMemory()))
+      return writeOp->emitOpError("uses memory value not directly defined by a "
+                                  "arc.alloc_memory operation");
+    for (auto *readOp : readOps[writeOp.getMemory()]) {
+      // (1) If the last read and the write are in the same block, just move the
+      // write after the read.
+      // (2) If the write is directly in the clock tree region and the last read
+      // in some nested region, move the write after the operation with the
+      // nested region. (3) If the write is nested in if-statements (arbitrarily
+      // deep) without return value, move the whole if operation after the last
+      // read or the operation that defines the region if the read is inside a
+      // nested region. (4) Number (3) may move more memory operations with the
+      // write op, thus messing up the order of previously moved memory writes,
+      // we check in a second walk-through if that is the case and just emit an
+      // error for now. We could instead move reads in a parent region, split if
+      // operations such that the memory write has its own, etc. Alternatively,
+      // rewrite this to insert temporaries which is more difficult for memories
+      // than simple states because the memory addresses have to be considered
+      // (we cannot just copy the whole memory each time).
+      Operation *readAncestor, *writeAncestor;
+      if (failed(getAncestorOpsInCommonDominatorBlock(
+              writeOp, &writeAncestor, readOp, &readAncestor, domInfo)))
+        return failure();
+      // FIXME: the 'isBeforeInBlock` + 'moveAfter' compination can be
+      // computationally very expensive.
+      if (writeAncestor->isBeforeInBlock(readAncestor))
+        writeAncestor->moveAfter(readAncestor);
+    }
+  }
+
+  // Double check that all writes happen after all reads to the same memory.
+  for (auto writeOp : writes) {
+    for (auto *readOp : readOps[writeOp.getMemory()]) {
+      Operation *readAncestor, *writeAncestor;
+      if (failed(getAncestorOpsInCommonDominatorBlock(
+              writeOp, &writeAncestor, readOp, &readAncestor, domInfo)))
+        return failure();
+
+      if (writeAncestor->isBeforeInBlock(readAncestor))
+        return writeOp
+                   ->emitOpError("could not be moved to be after all reads to "
+                                 "the same memory")
+                   .attachNote(readOp->getLoc())
+               << "could not be moved after this read";
+    }
+  }
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
@@ -434,6 +550,18 @@ struct LegalizeStateUpdatePass
 
 void LegalizeStateUpdatePass::runOnOperation() {
   auto module = getOperation();
+  auto *domInfo = &getAnalysis<DominanceInfo>();
+
+  for (auto model : module.getOps<ModelOp>()) {
+    DenseSet<Value> memories;
+    for (auto memOp : model.getOps<AllocMemoryOp>())
+      memories.insert(memOp.getResult());
+    for (auto ct : model.getOps<ClockTreeOp>())
+      if (failed(
+              moveMemoryWritesAfterLastRead(ct.getBody(), memories, domInfo)))
+        return signalPassFailure();
+  }
+
   DataFlowSolver solver;
   auto &analysis = *solver.load<AccessAnalysis>();
   if (failed(solver.initializeAndRun(module)))

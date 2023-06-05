@@ -10,9 +10,42 @@
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcTypes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "mlir/Transforms/InliningUtils.h"
 
 using namespace circt;
 using namespace arc;
+
+namespace {
+/// This class defines the interface for handling inlining with Arc operations.
+struct ArcInlinerInterface : public mlir::DialectInlinerInterface {
+  using mlir::DialectInlinerInterface::DialectInlinerInterface;
+
+  bool isLegalToInline(Operation *call, Operation *callable,
+                       bool wouldBeCloned) const override {
+    if (auto stateOp = dyn_cast<StateOp>(call);
+        stateOp && stateOp.getLatency() == 0)
+      return true;
+
+    return isa<CallOp>(call);
+  }
+  bool isLegalToInline(Region *dest, Region *src, bool wouldBeCloned,
+                       IRMapping &valueMapping) const override {
+    // TODO
+    return false;
+  }
+  bool isLegalToInline(Operation *op, Region *dest, bool wouldBeCloned,
+                       IRMapping &valueMapping) const override {
+    // TODO
+    return false;
+  }
+  void handleTerminator(Operation *op,
+                        ArrayRef<Value> valuesToRepl) const override {
+    assert(isa<arc::OutputOp>(op)); // arc does not have another terminator op
+    for (auto [from, to] : llvm::zip(valuesToRepl, op->getOperands()))
+      from.replaceAllUsesWith(to);
+  }
+};
+} // end anonymous namespace
 
 void ArcDialect::initialize() {
   registerTypes();
@@ -20,6 +53,9 @@ void ArcDialect::initialize() {
 #define GET_OP_LIST
 #include "circt/Dialect/Arc/Arc.cpp.inc"
       >();
+
+  // Register interface implementations.
+  addInterfaces<ArcInlinerInterface>();
 }
 
 /// Registered hook to materialize a single constant operation from a given

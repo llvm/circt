@@ -505,6 +505,8 @@ hw.module @Stop(%clock: i1, %reset: i1) {
   hw.output
 }
 
+sv.macro.decl @PRINTF_COND_
+
 // CHECK-LABEL: module Print
 hw.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
   %fd = hw.constant 0x80000002 : i32
@@ -518,7 +520,7 @@ hw.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
   %0 = comb.concat %false, %a : i1, i4
   %1 = comb.shl %0, %c1_i5 : i5
   sv.always posedge %clock  {
-    %2 = sv.macro.ref< "PRINTF_COND_" > : i1
+    %2 = sv.macro.ref @PRINTF_COND_() : () -> i1
     %3 = comb.and %2, %reset : i1
     sv.if %3  {
       sv.fwrite %fd, "Hi %x %x\0A"(%1, %b) : i5, i4
@@ -543,12 +545,13 @@ hw.module @ReadMem() {
 }
 
 // CHECK: module ReadMemXMR()
+hw.hierpath @ReadMemXMRPath  [@ReadMem::@mem]
 hw.module @ReadMemXMR() {
   hw.instance "ReadMem" sym @ReadMem_sym @ReadMem() -> ()
   // CHECK:      initial
   // CHECK-NEXT:   $readmemb("file3.txt", ReadMem.mem)
   sv.initial {
-    %xmr = sv.xmr.ref #hw.innerNameRef<@ReadMem::@mem> {} : !hw.inout<uarray<8xi32>>
+    %xmr = sv.xmr.ref @ReadMemXMRPath {} : !hw.inout<uarray<8xi32>>
     sv.readmem %xmr, "file3.txt", MemBaseBin : !hw.inout<uarray<8xi32>>
   }
 }

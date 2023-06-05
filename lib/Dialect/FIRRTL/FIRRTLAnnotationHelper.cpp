@@ -206,8 +206,8 @@ firrtl::resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
   } else {
     ref = cache.lookup(mod, path.name);
     if (!ref) {
-      mlir::emitError(circuit.getLoc())
-          << "cannot find name '" << path.name << "' in " << mod.moduleName();
+      mlir::emitError(circuit.getLoc()) << "cannot find name '" << path.name
+                                        << "' in " << mod.getModuleName();
       return {};
     }
     // AnnoTarget::getType() is not safe (CHIRRTL ops crash, null if instance),
@@ -216,7 +216,7 @@ firrtl::resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
     if (ref.isa<PortAnnoTarget>() && isa<RefType>(ref.getType())) {
       mlir::emitError(circuit.getLoc())
           << "cannot target reference-type '" << path.name << "' in "
-          << mod.moduleName();
+          << mod.getModuleName();
       return {};
     }
   }
@@ -250,14 +250,14 @@ firrtl::resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
       if (!ref) {
         mlir::emitError(circuit.getLoc())
             << "cannot find port '" << field << "' in module "
-            << target.moduleName();
+            << target.getModuleName();
         return {};
       }
       // TODO: containsReference().
       if (isa<RefType>(ref.getType())) {
         mlir::emitError(circuit.getLoc())
             << "annotation cannot target reference-type port '" << field
-            << "' in module " << target.moduleName();
+            << "' in module " << target.getModuleName();
         return {};
       }
       component = component.drop_front();
@@ -352,9 +352,7 @@ InstanceOp firrtl::addPortsToModule(
   if (targetCaches)
     targetCaches->insertPort(mod, portNo);
   // Now update all the instances of `mod`.
-  for (auto *use : instancePathcache.instanceGraph
-                       .lookup(cast<hw::HWModuleLike>((Operation *)mod))
-                       ->uses()) {
+  for (auto *use : instancePathcache.instanceGraph.lookup(mod)->uses()) {
     InstanceOp useInst = cast<InstanceOp>(use->getInstance());
     auto clonedInst = useInst.cloneAndInsertPorts({{portNo, portInfo}});
     if (useInst == instOnPath)
@@ -398,8 +396,7 @@ static Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
   if (!moduleTarget.instances.empty()) {
     modInstance = moduleTarget.instances.back();
   } else {
-    auto *node = state.instancePathCache.instanceGraph.lookup(
-        cast<hw::HWModuleLike>((Operation *)mod));
+    auto *node = state.instancePathCache.instanceGraph.lookup(mod);
     if (!node->hasOneUse()) {
       mod->emitOpError(
           "cannot be used for DataTaps, it is instantiated multiple times");

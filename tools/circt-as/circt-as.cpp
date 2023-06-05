@@ -111,7 +111,8 @@ static LogicalResult execute(MLIRContext &context) {
     return failure();
 
   // Write bytecode.
-  writeBytecodeToFile(*module, output->os());
+  if (failed(writeBytecodeToFile(*module, output->os())))
+    return failure();
   output->keep();
 
   return success();

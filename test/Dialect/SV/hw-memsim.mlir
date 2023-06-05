@@ -7,6 +7,8 @@
 
 hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "readUnderWrite", "writeUnderWrite", "writeClockIDs", "initFilename", "initIsBinary", "initIsInline"]
 
+sv.macro.decl @RANDOM
+
 // COMMON-LABEL: @complex
 hw.module @complex(%clock: i1, %reset: i1, %r0en: i1, %mode: i1, %data0: i16) -> (data1: i16, data2: i16) {
   %true = hw.constant true
@@ -110,8 +112,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:      sv.passign %[[wslot]], %wo_data_0
 //CHECK-NEXT:    }
 //CHECK-NEXT:  }
-//CHECK-NEXT:  sv.ifdef "SYNTHESIS" {
-//CHECK-NEXT:  } else {
+//CHECK-NEXT:  sv.ifdef "ENABLE_INITIAL_MEM_" {
 //CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT" {
 //CHECK-NEXT:    }
 //CHECK-NEXT:    %_RANDOM_MEM = sv.reg : !hw.inout<i32>
@@ -120,7 +121,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_MEM_INIT" {
 //CHECK:             sv.for %i = %c0_i4 to %c-6_i4 step %c1_i4 : i4 {
 //CHECK:               sv.for %j = %c0_i6 to %c-32_i6 step %c-32_i6_2 : i6 {
-//CHECK:                 %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+//CHECK:                 %RANDOM = sv.macro.ref.se @RANDOM
 //CHECK:                 %[[PART_SELECT:.+]] = sv.indexed_part_select_inout %_RANDOM_MEM[%j : 32] : !hw.inout<i32>, i6
 //CHECK:                 sv.bpassign %[[PART_SELECT]], %RANDOM : i32
 //CHECK:               }

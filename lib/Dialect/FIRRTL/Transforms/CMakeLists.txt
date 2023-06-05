@@ -5,11 +5,13 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   CheckCombLoops.cpp
   CreateSiFiveMetadata.cpp
   Dedup.cpp
+  DropConst.cpp
   DropName.cpp
   EmitOMIR.cpp
   ExpandWhens.cpp
   ExtractInstances.cpp
   FlattenMemory.cpp
+  FinalizeIR.cpp
   GrandCentral.cpp
   IMConstProp.cpp
   IMDeadCodeElim.cpp
@@ -24,6 +26,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LowerIntrinsics.cpp
   LowerMatches.cpp
   LowerMemory.cpp
+  LowerOpenAggs.cpp
   LowerTypes.cpp
   LowerXMR.cpp
   MergeConnections.cpp

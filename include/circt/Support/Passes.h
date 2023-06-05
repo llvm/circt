@@ -55,6 +55,10 @@ public:
     }
   }
 };
+
+/// Create a simple canonicalizer pass.
+std::unique_ptr<Pass> createSimpleCanonicalizerPass();
+
 } // namespace circt
 
 #endif // CIRCT_SUPPORT_PASSES_H

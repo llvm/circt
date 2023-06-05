@@ -45,7 +45,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; OMIROUT-NEXT:       }
 
 ; VERILOG-IR: sv.verbatim{{.*}}Standard header to adapt well known macros to our needs
-; VERILOG-IR: sv.verbatim "`define INIT_RANDOM_PROLOG_
+; VERILOG-IR: sv.macro.def @INIT_RANDOM_PROLOG_
 
   module test_mod :
     input clock : Clock

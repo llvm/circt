@@ -10,6 +10,7 @@ target_link_libraries(arcilator
   CIRCTConvertToArcs
   CIRCTSupport
   MLIRParser
+  MLIRLLVMIRTransforms
   MLIRTargetLLVMIRExport
   MLIRBuiltinToLLVMIRTranslation
   MLIRLLVMToLLVMIRTranslation

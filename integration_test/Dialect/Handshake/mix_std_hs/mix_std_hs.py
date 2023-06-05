@@ -1,6 +1,7 @@
 import cocotb
-from helper import initDut
+from helper import initDut, to_struct, from_struct
 import random
+import ctypes
 
 random.seed(0)
 
@@ -23,10 +24,16 @@ async def oneInput(dut):
                                                  ["out0", "outCtrl"])
 
   inputs = [(8, 8, 4, 8, 5, 3, 1, 0)]
-  outputs = [getOutput(i) for i in inputs]
-  resCheck = cocotb.start_soon(out0.checkOutputs(outputs))
+  outputs = [to_struct(getOutput(i), ctypes.c_uint64) for i in inputs]
 
-  in0Send = cocotb.start_soon(in0.send(inputs[0]))
+  # Run checkOutputs using a converter that decodes the long binary value into
+  # the expected struct.
+  resCheck = cocotb.start_soon(
+      out0.checkOutputs(
+          outputs,
+          converter=lambda x: from_struct(x, len(inputs[0]), ctypes.c_uint64)))
+
+  in0Send = cocotb.start_soon(in0.send(to_struct(inputs[0], ctypes.c_uint64)))
   inCtrlSend = cocotb.start_soon(inCtrl.send())
 
   await in0Send
@@ -47,12 +54,14 @@ async def multipleInputs(dut):
   N = 10
   inputs = [randomTuple() for _ in range(N)]
 
-  outputs = [getOutput(i) for i in inputs]
-  resCheck = cocotb.start_soon(out0.checkOutputs(outputs))
+  outputs = [to_struct(getOutput(i), ctypes.c_uint64) for i in inputs]
+  resCheck = cocotb.start_soon(
+      out0.checkOutputs(
+          outputs,
+          converter=lambda x: from_struct(x, len(inputs[0]), ctypes.c_uint64)))
 
   for i in inputs:
-    print("in: ", i)
-    in0Send = cocotb.start_soon(in0.send(i))
+    in0Send = cocotb.start_soon(in0.send(to_struct(i, ctypes.c_uint64)))
     inCtrlSend = cocotb.start_soon(inCtrl.send())
 
     await in0Send

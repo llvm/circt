@@ -9,6 +9,7 @@ import pycde
 from pycde import (Clock, Input, InputChannel, OutputChannel, Module, generator,
                    types)
 from pycde import esi
+from pycde.bsp import cosim
 from pycde.constructs import Wire
 
 import sys
@@ -77,7 +78,7 @@ class Top(Module):
 
 
 if __name__ == "__main__":
-  s = pycde.System(esi.CosimBSP(Top),
+  s = pycde.System(cosim.CosimBSP(Top),
                    name="ESILoopback",
                    output_directory=sys.argv[1],
                    sw_api_langs=["python"])

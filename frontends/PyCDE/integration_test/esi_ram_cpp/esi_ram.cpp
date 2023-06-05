@@ -1,4 +1,5 @@
 // REQUIRES: esi-cosim
+// XFAIL: *
 
 // clang-format off
 

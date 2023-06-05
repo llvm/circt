@@ -7,7 +7,7 @@ requires = [
     
     # MLIR build depends.
     "numpy",
-    "pybind11>=2.7.1",
+    "pybind11>=2.9",
     "PyYAML",
 
     # PyCDE depends

@@ -262,7 +262,7 @@ void ExtractInstancesPass::collectAnnos() {
     AnnotationSet::removeAnnotations(module, [&](Annotation anno) {
       if (anno.isClass(dutAnnoClass)) {
         LLVM_DEBUG(llvm::dbgs()
-                   << "Marking DUT `" << module.moduleName() << "`\n");
+                   << "Marking DUT `" << module.getModuleName() << "`\n");
         dutRootModules.insert(module);
         dutModules.insert(module);
         if (auto prefix = anno.getMember<StringAttr>("prefix"))
@@ -271,7 +271,7 @@ void ExtractInstancesPass::collectAnnos() {
       }
       if (!isAnnoInteresting(anno))
         return false;
-      LLVM_DEBUG(llvm::dbgs() << "Annotated module `" << module.moduleName()
+      LLVM_DEBUG(llvm::dbgs() << "Annotated module `" << module.getModuleName()
                               << "`:\n  " << anno.getDict() << "\n");
       annotatedModules[module].push_back(anno);
       return true;
@@ -356,13 +356,12 @@ void ExtractInstancesPass::collectAnnos() {
       info.prefix = "clock_gate"; // TODO: Don't hardcode this
       info.wrapperModule = clkgateWrapperModule;
       info.stopAtDUT = !info.wrapperModule.empty();
-      for (auto *instRecord :
-           instanceGraph->lookup(cast<hw::HWModuleLike>(*module))->uses()) {
+      for (auto *instRecord : instanceGraph->lookup(module)->uses()) {
         if (auto inst = dyn_cast<InstanceOp>(*instRecord->getInstance())) {
           LLVM_DEBUG(llvm::dbgs()
                      << "- Marking `"
-                     << inst->getParentOfType<FModuleLike>().moduleName() << "."
-                     << inst.getName() << "`\n");
+                     << inst->getParentOfType<FModuleLike>().getModuleName()
+                     << "." << inst.getName() << "`\n");
           extractionWorklist.push_back({inst, info});
         }
       }
@@ -397,13 +396,12 @@ void ExtractInstancesPass::collectAnnos() {
       info.prefix = "mem_wiring"; // TODO: Don't hardcode this
       info.wrapperModule = memoryWrapperModule;
       info.stopAtDUT = !info.wrapperModule.empty();
-      for (auto *instRecord :
-           instanceGraph->lookup(cast<hw::HWModuleLike>(*module))->uses()) {
+      for (auto *instRecord : instanceGraph->lookup(module)->uses()) {
         if (auto inst = dyn_cast<InstanceOp>(*instRecord->getInstance())) {
           LLVM_DEBUG(llvm::dbgs()
                      << "- Marking `"
-                     << inst->getParentOfType<FModuleLike>().moduleName() << "."
-                     << inst.getName() << "`\n");
+                     << inst->getParentOfType<FModuleLike>().getModuleName()
+                     << "." << inst.getName() << "`\n");
           extractionWorklist.push_back({inst, info});
         }
       }
@@ -482,7 +480,7 @@ void ExtractInstancesPass::extractInstances() {
   // Keep track of where the instance was originally.
   for (auto &[inst, info] : extractionWorklist)
     originalInstanceParents[inst] =
-        inst->getParentOfType<FModuleLike>().moduleNameAttr();
+        inst->getParentOfType<FModuleLike>().getModuleNameAttr();
 
   while (!extractionWorklist.empty()) {
     InstanceOp inst;
@@ -680,7 +678,7 @@ void ExtractInstancesPass::extractInstances() {
         if (nlaIdx > 0) {
           auto innerRef = nlaPath[nlaIdx - 1].dyn_cast<InnerRefAttr>();
           if (innerRef &&
-              !(innerRef.getModule() == newParent.moduleNameAttr() &&
+              !(innerRef.getModule() == newParent.getModuleNameAttr() &&
                 innerRef.getName() == getInnerSymName(newParentInst))) {
             LLVM_DEBUG(llvm::dbgs()
                        << "    - Ignored since NLA parent " << innerRef
@@ -706,7 +704,7 @@ void ExtractInstancesPass::extractInstances() {
           assert(nlaPath[0].isa<InnerRefAttr>() &&
                  "head of hierpath must be an InnerRefAttr");
           nlaPath[0] =
-              InnerRefAttr::get(newParent.moduleNameAttr(),
+              InnerRefAttr::get(newParent.getModuleNameAttr(),
                                 nlaPath[0].cast<InnerRefAttr>().getName());
 
           if (instParentNode->hasOneUse()) {

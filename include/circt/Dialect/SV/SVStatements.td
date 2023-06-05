@@ -20,6 +20,12 @@ def isModuleSymbol : AttrConstraint<
       "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>().getValue()))"
   >, "is module like">;
 
+/// Ensure symbol is one of the sv macro.* types
+def isMacroSymbol : AttrConstraint<
+  CPred<
+    "sv::isAnyMacro(::mlir::SymbolTable::lookupNearestSymbolFrom("
+      "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>().getValue()))"
+  >, "is macro like">;
 
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
@@ -794,5 +800,72 @@ def ForOp : SVOp<"for", [SingleBlock, NoTerminator, ProceduralOp,
     Value getInductionVar() { return getBodyBlock()->getArgument(0); }
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Macros
+//===----------------------------------------------------------------------===//
+
+
+def MacroDeclOp : SVOp<"macro.decl", [Symbol]> {
+  let summary = "System verilog macro declaration";
+
+  let description = [{
+    The `sv.macro.def` declares a macro in System Verilog.  This is a 
+    declaration; the body of the macro, which produces a verilog macro 
+    definition is created with a `macro.def` operation.
+   
+    Lacking args will be a macro without "()".  An empty args will be an empty "()".
+
+    The verilog name is the spelling of the macro when emitting verilog.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name, 
+                       OptionalAttr<StrArrayAttr>:$args,
+                       OptionalAttr<StrAttr>:$verilogName);
+  let results = (outs);
+
+  let assemblyFormat = [{
+    $sym_name (`[` $verilogName^ `]`)? (`(` $args^ `)`)?  attr-dict
+  }];
+}
+
+
+def MacroDefOp : SVOp<"macro.def", 
+    [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "System verilog macro definition";
+
+  let description = [{
+    The `sv.macro.def` defines a macro in System Verilog which optionally takes
+    a body.
+
+    This is modeled similarly to verbatim in that the contents of the macro are
+    opaque (plain string).  Given the general power of macros, this op does not
+    try to capture a return type.
+  
+    This operation produces a definition for the macro declaration referenced by 
+    `sym_name`.  Argument lists are picked up from that operation.
+
+    sv.macro.def allows operand substitutions with {{0}} syntax.
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$macroName, 
+                       StrAttr:$format_string,
+                       DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
+  let results = (outs);
+
+  let builders = [
+    OpBuilder<(ins "StringRef":$macroName, "StringRef":$format_string),
+                "build($_builder, $_state, macroName, format_string,"
+                "odsBuilder.getArrayAttr({}));">
+  ];
+
+  let assemblyFormat = [{
+    $macroName $format_string (`(` $symbols^ `)`)? attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    MacroDeclOp getReferencedMacro(const hw::HWSymbolCache *cache);
   }];
 }

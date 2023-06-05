@@ -1,8 +1,9 @@
-// RUN: circt-opt %s -verify-diagnostics --lower-seq-firrtl-to-sv | FileCheck %s --check-prefixes=CHECK,COMMON
-// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(hw.module(lower-seq-firrtl-to-sv{disable-reg-randomization}))" | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
-// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(hw.module(lower-seq-firrtl-to-sv{add-vivado-ram-address-conflict-synthesis-bug-workaround}))" | FileCheck %s --check-prefixes=CHECK,VIVADO
+// RUN: circt-opt %s -verify-diagnostics --lower-seq-firrtl-init-to-sv --lower-seq-firrtl-to-sv | FileCheck %s --check-prefixes=CHECK,COMMON
+// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-firrtl-init-to-sv, hw.module(lower-seq-firrtl-to-sv{disable-reg-randomization}))" | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
+// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-firrtl-init-to-sv, hw.module(lower-seq-firrtl-to-sv{emit-separate-always-blocks}))" | FileCheck %s --check-prefixes SEPARATE
 
 // COMMON-LABEL: hw.module @lowering
+// SEPARATE-LABEL: hw.module @lowering
 hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d: i32, e: i32, f: i32) {
   %cst0 = hw.constant 0 : i32
 
@@ -61,8 +62,48 @@ hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d:
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
 
-  // CHECK:      sv.ifdef  "SYNTHESIS" {
-  // CHECK-NEXT: } else {
+  // SEPARATE:      sv.always posedge %clk {
+  // SEPARATE-NEXT:   sv.passign %rA, %in : i32
+  // SEPARATE-NEXT: }
+  // SEPARATE-NEXT: sv.always posedge %clk {
+  // SEPARATE-NEXT:   sv.if %rst {
+  // SEPARATE-NEXT:     sv.passign %rB, %c0_i32 : i32
+  // SEPARATE-NEXT:   } else {
+  // SEPARATE-NEXT:     sv.passign %rB, %in : i32
+  // SEPARATE-NEXT:   }
+  // SEPARATE-NEXT: }
+  // SEPARATE-NEXT: sv.always posedge %clk, posedge %rst {
+  // SEPARATE-NEXT:   sv.if %rst {
+  // SEPARATE-NEXT:     sv.passign %rC, %c0_i32 : i32
+  // SEPARATE-NEXT:   } else {
+  // SEPARATE-NEXT:     sv.passign %rC, %in : i32
+  // SEPARATE-NEXT:   }
+  // SEPARATE-NEXT: }
+  // SEPARATE-NEXT: sv.always posedge %clk {
+  // SEPARATE-NEXT:   sv.passign %rD, %in : i32
+  // SEPARATE-NEXT: }
+  // SEPARATE-NEXT: sv.always posedge %clk {
+  // SEPARATE-NEXT:   sv.if %rst {
+  // SEPARATE-NEXT:     sv.passign %rE, %c0_i32 : i32
+  // SEPARATE-NEXT:   } else {
+  // SEPARATE-NEXT:     sv.passign %rE, %in : i32
+  // SEPARATE-NEXT:   }
+  // SEPARATE-NEXT: }
+  // SEPARATE-NEXT: sv.always posedge %clk, posedge %rst {
+  // SEPARATE-NEXT:   sv.if %rst {
+  // SEPARATE-NEXT:     sv.passign %rF, %c0_i32 : i32
+  // SEPARATE-NEXT:   } else {
+  // SEPARATE-NEXT:     sv.passign %rF, %in : i32
+  // SEPARATE-NEXT:   }
+  // SEPARATE-NEXT: }
+  // SEPARATE-NEXT: sv.always posedge %clk {
+  // SEPARATE-NEXT:   sv.passign %rAnamed, %in : i32
+  // SEPARATE-NEXT: }
+  // SEPARATE-NEXT: sv.always posedge %clk {
+  // SEPARATE-NEXT:   sv.passign %rNoSym, %in : i32
+  // SEPARATE-NEXT: }
+
+  // CHECK:      sv.ifdef  "ENABLE_INITIAL_REG_" {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
@@ -74,7 +115,7 @@ hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d:
   // CHECK-NEXT:       sv.ifdef.procedural  "RANDOMIZE_REG_INIT" {
   // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<8xi32>>
   // CHECK-NEXT:         sv.for %i = %c0_i4 to %c-8_i4 step %c1_i4 : i4 {
-  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %24 = comb.extract %i from 0 : (i4) -> i3
   // CHECK-NEXT:           %25 = sv.array_index_inout %_RANDOM[%24] : !hw.inout<uarray<8xi32>>, i3
   // CHECK-NEXT:           sv.bpassign %25, %RANDOM : i32
@@ -142,8 +183,7 @@ hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   %1 = comb.mux bin %cond, %value, %count : i2
   %2 = comb.mux bin %reset, %c0_i2, %1 : i2
 
-  // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
-  // CHECK-NEXT: } else {
+  // CHECK-NEXT: sv.ifdef "ENABLE_INITIAL_REG_"  {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
@@ -155,7 +195,7 @@ hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<1xi32>>
   // CHECK:              sv.for %i = %{{false.*}} to %{{true.*}} step %{{true.*}} : i1 {
-  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %6 = comb.extract %i from 0 : (i1) -> i0
   // CHECK-NEXT:           %7 = sv.array_index_inout %_RANDOM[%6] : !hw.inout<uarray<1xi32>>, i0
   // CHECK-NEXT:           sv.bpassign %7, %RANDOM : i32
@@ -252,8 +292,7 @@ hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (
   // COMMON-NEXT:    } else  {
   // COMMON-NEXT:    }
   // COMMON-NEXT:  }
-  // COMMON-NEXT:  sv.ifdef "SYNTHESIS"  {
-  // COMMON-NEXT:  } else {
+  // COMMON-NEXT:  sv.ifdef "ENABLE_INITIAL_REG_"  {
   // COMMON-NEXT:    sv.ordered {
   // COMMON-NEXT:      sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
   // COMMON-NEXT:        sv.verbatim "`FIRRTL_BEFORE_INITIAL"
@@ -265,7 +304,7 @@ hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK-NEXT:          %_RANDOM = sv.logic : !hw.inout<uarray<3xi32>>
   // CHECK-NEXT:          sv.for %i = %c0_i2 to %c-1_i2 step %c1_i2 : i2 {
-  // CHECK-NEXT:            %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:            %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
   // CHECK-NEXT:            %14 = sv.array_index_inout %_RANDOM[%i] : !hw.inout<uarray<3xi32>>, i2
   // CHECK-NEXT:            sv.bpassign %14, %RANDOM : i32
   // CHECK-NEXT:          }
@@ -301,8 +340,7 @@ hw.module private @UninitReg42(%clock: i1, %reset: i1, %cond: i1, %value: i42) {
   %1 = comb.mux %reset, %c0_i42, %0 : i42
 
   // CHECK:      %count = sv.reg sym @count : !hw.inout<i42>
-  // CHECK:      sv.ifdef "SYNTHESIS"  {
-  // CHECK-NEXT: } else {
+  // CHECK:      sv.ifdef "ENABLE_INITIAL_REG_"  {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
@@ -314,7 +352,7 @@ hw.module private @UninitReg42(%clock: i1, %reset: i1, %cond: i1, %value: i42) {
   // CHECK-NEXT:       sv.ifdef.procedural  "RANDOMIZE_REG_INIT" {
   // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<2xi32>>
   // CHECK-NEXT:         sv.for %i = %c0_i2 to %c-2_i2 step %c1_i2 : i2 {
-  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %9 = comb.extract %i from 0 : (i2) -> i1
   // CHECK-NEXT:           %10 = sv.array_index_inout %_RANDOM[%9] : !hw.inout<uarray<2xi32>>, i1
   // CHECK-NEXT:           sv.bpassign %10, %RANDOM : i32
@@ -342,14 +380,12 @@ hw.module private @init1DVector(%clock: i1, %a: !hw.array<2xi1>) -> (b: !hw.arra
   %r = seq.firreg %a clock %clock sym @__r__ : !hw.array<2xi1>
 
   // CHECK:      %r = sv.reg sym @[[r_sym:[_A-Za-z0-9]+]]
-  // VIVADO:     "ram_style" = "\22distributed\22"
 
   // CHECK:      sv.always posedge %clock  {
   // CHECK-NEXT:   sv.passign %r, %a : !hw.array<2xi1>
   // CHECK-NEXT: }
 
-  // CHECK:      sv.ifdef "SYNTHESIS" {
-  // CHECK-NEXT: } else {
+  // CHECK:      sv.ifdef "ENABLE_INITIAL_REG_" {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
@@ -361,7 +397,7 @@ hw.module private @init1DVector(%clock: i1, %a: !hw.array<2xi1>) -> (b: !hw.arra
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK-NEXT:       %_RANDOM = sv.logic : !hw.inout<uarray<1xi32>>
   // CHECK-NEXT:       sv.for %i = %false to %true step %true : i1 {
-  // CHECK-NEXT:         %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:         %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
   // CHECK-NEXT:         %8 = comb.extract %i from 0 : (i1) -> i0
   // CHECK-NEXT:         %9 = sv.array_index_inout %_RANDOM[%8] : !hw.inout<uarray<1xi32>>, i0
   // CHECK-NEXT:         sv.bpassign %9, %RANDOM : i32
@@ -395,8 +431,7 @@ hw.module private @init2DVector(%clock: i1, %a: !hw.array<1xarray<1xi1>>) -> (b:
   // CHECK:      sv.always posedge %clock  {
   // CHECK-NEXT:   sv.passign %r, %a : !hw.array<1xarray<1xi1>>
   // CHECK-NEXT: }
-  // CHECK-NEXT: sv.ifdef  "SYNTHESIS" {
-  // CHECK-NEXT: } else {
+  // CHECK-NEXT: sv.ifdef  "ENABLE_INITIAL_REG_" {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
@@ -408,7 +443,7 @@ hw.module private @init2DVector(%clock: i1, %a: !hw.array<1xarray<1xi1>>) -> (b:
   // CHECK-NEXT:       sv.ifdef.procedural  "RANDOMIZE_REG_INIT" {
   // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<1xi32>>
   // CHECK-NEXT:         sv.for %i = %false to %true step %true : i1 {
-  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %6 = comb.extract %i from 0 : (i1) -> i0
   // CHECK-NEXT:           %7 = sv.array_index_inout %_RANDOM[%6] : !hw.inout<uarray<1xi32>>, i0
   // CHECK-NEXT:           sv.bpassign %7, %RANDOM : i32
@@ -436,8 +471,7 @@ hw.module private @initStruct(%clock: i1) {
   %r = seq.firreg %r clock %clock sym @__r__ : !hw.struct<a: i1>
 
   // CHECK:      %r = sv.reg sym @[[r_sym:[_A-Za-z0-9]+]]
-  // CHECK:      sv.ifdef "SYNTHESIS" {
-  // CHECK-NEXT: } else {
+  // CHECK:      sv.ifdef "ENABLE_INITIAL_REG_" {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
   // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
@@ -599,12 +633,12 @@ hw.module @Subaccess(%clock: i1, %en: i1, %addr: i2, %data: i32) -> (out: !hw.ar
   %11 = comb.mux bin %10, %data, %2 : i32
   %12 = hw.array_create %11, %8, %5 : i32
   hw.output %r : !hw.array<3xi32>
-  // CHECK:      sv.always posedge %clock {
-  // CHECK-NEXT:   sv.if %en {
-  // CHECK-NEXT:     %[[IDX:.+]] = sv.array_index_inout %r[%addr] : !hw.inout<array<3xi32>>, i2
-  // CHECK-NEXT:     sv.passign %[[IDX]], %data : i32
-  // CHECK-NEXT:   } else {
-  // CHECK-NEXT:   }
+  // CHECK:     %[[IDX:.+]] = sv.array_index_inout %r[%addr] : !hw.inout<array<3xi32>>, i2
+  // CHECK:        sv.always posedge %clock {
+  // CHECK-NEXT:     sv.if %en {
+  // CHECK-NEXT:       sv.passign %[[IDX]], %data : i32
+  // CHECK-NEXT:     } else {
+  // CHECK-NEXT:     }
   // CHECK-NEXT: }
 }
 
@@ -660,24 +694,25 @@ hw.module @NestedSubaccess(%clock: i1, %en_0: i1, %en_1: i1, %en_2: i1, %addr_0:
   %31 = comb.mux bin %en_1, %27, %30 : !hw.array<3xi32>
   %32 = hw.array_create %26, %24, %22 : i32
   %33 = comb.mux bin %en_0, %31, %32 : !hw.array<3xi32>
+  // CHECK:        %[[IDX4:.+]] = sv.array_index_inout %r[%addr_3] : !hw.inout<array<3xi32>>, i2
+  // CHECK:        %[[IDX3:.+]] = sv.array_index_inout %r[%addr_2] : !hw.inout<array<3xi32>>, i2
+  // CHECK:        %[[IDX2:.+]] = sv.array_index_inout %r[%addr_1] : !hw.inout<array<3xi32>>, i2
+  // CHECK:        %[[IDX1:.+]] = sv.array_index_inout %r[%addr_0] : !hw.inout<array<3xi32>>, i2
   // CHECK:        sv.always posedge %clock {
   // CHECK-NEXT:   sv.if %en_0 {
   // CHECK-NEXT:     sv.if %en_1 {
   // CHECK-NEXT:       sv.if %true {
-  // CHECK-NEXT:         %[[IDX1:.+]] = sv.array_index_inout %r[%addr_0] : !hw.inout<array<3xi32>>, i2
   // CHECK-NEXT:         sv.passign %[[IDX1]], %data_0 : i32
   // CHECK-NEXT:       } else {
   // CHECK-NEXT:       }
   // CHECK-NEXT:     } else {
   // CHECK-NEXT:       sv.if %en_2 {
   // CHECK-NEXT:         sv.if %true {
-  // CHECK-NEXT:           %[[IDX2:.+]] = sv.array_index_inout %r[%addr_1] : !hw.inout<array<3xi32>>, i2
   // CHECK-NEXT:           sv.passign %[[IDX2]], %data_1 : i32
   // CHECK-NEXT:         } else {
   // CHECK-NEXT:         }
   // CHECK-NEXT:       } else {
   // CHECK-NEXT:         sv.if %true {
-  // CHECK-NEXT:           %[[IDX3:.+]] = sv.array_index_inout %r[%addr_2] : !hw.inout<array<3xi32>>, i2
   // CHECK-NEXT:           sv.passign %[[IDX3]], %data_2 : i32
   // CHECK-NEXT:         } else {
   // CHECK-NEXT:         }
@@ -685,7 +720,6 @@ hw.module @NestedSubaccess(%clock: i1, %en_0: i1, %en_1: i1, %en_2: i1, %addr_0:
   // CHECK-NEXT:     }
   // CHECK-NEXT:   } else {
   // CHECK-NEXT:     sv.if %true {
-  // CHECK-NEXT:       %[[IDX4:.+]] = sv.array_index_inout %r[%addr_3] : !hw.inout<array<3xi32>>, i2
   // CHECK-NEXT:       sv.passign %[[IDX4]], %data_3 : i32
   // CHECK-NEXT:     } else {
   // CHECK-NEXT:     }

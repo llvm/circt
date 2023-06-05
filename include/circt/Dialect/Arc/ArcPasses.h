@@ -23,11 +23,15 @@ std::unique_ptr<mlir::Pass>
 createAddTapsPass(llvm::Optional<bool> tapPorts = {},
                   llvm::Optional<bool> tapWires = {});
 std::unique_ptr<mlir::Pass> createAllocateStatePass();
+std::unique_ptr<mlir::Pass> createArcCanonicalizerPass();
 std::unique_ptr<mlir::Pass> createDedupPass();
+std::unique_ptr<mlir::Pass> createGroupResetsAndEnablesPass();
 std::unique_ptr<mlir::Pass> createInferMemoriesPass();
 std::unique_ptr<mlir::Pass> createInferStatePropertiesPass();
 std::unique_ptr<mlir::Pass> createInlineArcsPass();
 std::unique_ptr<mlir::Pass> createInlineModulesPass();
+std::unique_ptr<mlir::Pass> createIsolateClocksPass();
+std::unique_ptr<mlir::Pass> createLatencyRetimingPass();
 std::unique_ptr<mlir::Pass> createLegalizeStateUpdatePass();
 std::unique_ptr<mlir::Pass> createLowerClocksToFuncsPass();
 std::unique_ptr<mlir::Pass> createLowerLUTPass();
@@ -36,9 +40,7 @@ std::unique_ptr<mlir::Pass> createMakeTablesPass();
 std::unique_ptr<mlir::Pass> createMuxToControlFlowPass();
 std::unique_ptr<mlir::Pass>
 createPrintStateInfoPass(llvm::StringRef stateFile = "");
-std::unique_ptr<mlir::Pass> createRemoveUnusedArcArgumentsPass();
 std::unique_ptr<mlir::Pass> createSimplifyVariadicOpsPass();
-std::unique_ptr<mlir::Pass> createSinkInputsPass();
 std::unique_ptr<mlir::Pass> createSplitLoopsPass();
 std::unique_ptr<mlir::Pass> createStripSVPass();
 

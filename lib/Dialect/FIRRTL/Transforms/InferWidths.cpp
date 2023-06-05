@@ -2081,7 +2081,8 @@ bool InferenceTypeUpdate::updateValue(Value value) {
     SmallVector<Type, 2> types;
     auto res =
         op.inferReturnTypes(op->getContext(), op->getLoc(), op->getOperands(),
-                            op->getAttrDictionary(), op->getRegions(), types);
+                            op->getAttrDictionary(), op->getPropertiesStorage(),
+                            op->getRegions(), types);
     if (failed(res)) {
       anyFailed = true;
       return false;

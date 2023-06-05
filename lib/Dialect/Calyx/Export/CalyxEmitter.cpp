@@ -533,6 +533,10 @@ private:
 
             emitCalyxBody([&]() { emitCalyxControl(op.getBodyBlock()); });
           })
+          .Case<StaticParOp>([&](auto op) {
+            emitCalyxSection(prependAttributes(op, "static par"),
+                             [&]() { emitCalyxControl(op.getBodyBlock()); });
+          })
           .Case<EnableOp>([&](auto op) { emitEnable(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside control.");

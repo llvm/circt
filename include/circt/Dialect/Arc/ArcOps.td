@@ -28,6 +28,7 @@ class ArcOp<string mnemonic, list<Trait> traits = []> :
 def DefineOp : ArcOp<"define", [
   IsolatedFromAbove,
   FunctionOpInterface,
+  CallableOpInterface,
   Symbol,
   RegionKindInterface,
   SingleBlockImplicitTerminator<"arc::OutputOp">,
@@ -96,6 +97,19 @@ def DefineOp : ArcOp<"define", [
                            "' attribute of function type";
       return mlir::success();
     }
+
+    /// Returns true if the arc returns the inputs directly and in the same
+    /// order, otherwise false.
+    bool isPassthrough();
+
+    //===------------------------------------------------------------------===//
+    // CallableOpInterface
+    //===------------------------------------------------------------------===//
+
+    mlir::Region *getCallableRegion() { return &getBody(); }
+    ArrayRef<mlir::Type> getCallableResults() { return getResultTypes(); }
+    mlir::ArrayAttr getCallableArgAttrs() { return nullptr; }
+    mlir::ArrayAttr getCallableResAttrs() { return nullptr; }
   }];
 }
 
@@ -117,10 +131,11 @@ def OutputOp : ArcOp<"output", [
 }
 
 def StateOp : ArcOp<"state", [
-  CallOpInterface, MemRefsNormalizable,
+  MemRefsNormalizable,
   CallOpMutableInterface,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-  AttrSizedOperandSegments
+  AttrSizedOperandSegments,
+  DeclareOpInterfaceMethods<ClockedOpInterface, ["isClocked"]>,
 ]> {
   let summary = "State transfer arc";
 
@@ -198,7 +213,7 @@ def StateOp : ArcOp<"state", [
 
   let extraClassDeclaration = [{
     operand_range getArgOperands() {
-      return {operand_begin(), operand_end()};
+      return getInputs();
     }
     MutableOperandRange getArgOperandsMutable() {
       return getInputsMutable();
@@ -207,11 +222,16 @@ def StateOp : ArcOp<"state", [
     mlir::CallInterfaceCallable getCallableForCallee() {
       return (*this)->getAttrOfType<mlir::SymbolRefAttr>("arc");
     }
+
+    /// Set the callee for this operation.
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getArcAttrName(), callee.get<mlir::SymbolRefAttr>());
+    }
   }];
 }
 
 def CallOp : ArcOp<"call", [
-  CallOpInterface, MemRefsNormalizable, Pure,
+  MemRefsNormalizable, Pure,
   CallOpMutableInterface,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
@@ -235,6 +255,11 @@ def CallOp : ArcOp<"call", [
     mlir::CallInterfaceCallable getCallableForCallee() {
       return (*this)->getAttrOfType<mlir::SymbolRefAttr>("arc");
     }
+
+    /// Set the callee for this operation.
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getArcAttrName(), callee.get<mlir::SymbolRefAttr>());
+    }
   }];
 }
 
@@ -250,67 +275,96 @@ def ClockGateOp : ArcOp<"clock_gate", [Pure]> {
 def MemoryOp : ArcOp<"memory", [MemoryEffects<[MemAlloc]>]> {
   let summary = "Memory";
   let results = (outs MemoryType:$memory);
-  let assemblyFormat = [{
-    type($memory) attr-dict
-  }];
+  let assemblyFormat = "type($memory) attr-dict";
 }
 
 class MemoryAndDataTypesMatch<string mem, string data> : TypesMatchWith<
   "memory and data types must match", mem, data,
   "$_self.cast<MemoryType>().getWordType()">;
+class MemoryAndAddressTypesMatch<string mem, string address> : TypesMatchWith<
+  "memory and address types must match", mem, address,
+  "$_self.cast<MemoryType>().getAddressType()">;
 
 def MemoryReadPortOp : ArcOp<"memory_read_port", [
-  MemoryEffects<[MemRead]>,
+  Pure,
   MemoryAndDataTypesMatch<"memory", "data">,
-  AttrSizedOperandSegments
+  MemoryAndAddressTypesMatch<"memory", "address">
 ]> {
   let summary = "Read port from a memory";
+  let description = [{
+    Represents a combinatorial memory read port. No memory read side-effect
+    trait is necessary because at the stage of the Arc lowering where this
+    operation is legal to be present, it is guaranteed that all reads from the
+    same address produce the same output. This is because all writes are
+    reordered to happen at the end of the cycle in LegalizeStateUpdates (or
+    alternatively produce the necessary temporaries).
+  }];
   let arguments = (ins
     MemoryType:$memory,
-    AnyInteger:$address,
-    Optional<I1>:$clock,
-    Optional<I1>:$enable
+    AnyInteger:$address
   );
   let results = (outs AnyInteger:$data);
 
   let assemblyFormat = [{
-    $memory `[` $address `]` (`if` $enable^)? (`clock` $clock^)?
-    attr-dict `:` type($memory) `,` type($address)
+    $memory `[` $address `]` attr-dict `:` type($memory)
   }];
-
-  let hasVerifier = 1;
-  let hasFolder = 1;
 }
 
 def MemoryWritePortOp : ArcOp<"memory_write_port", [
   MemoryEffects<[MemWrite]>,
-  MemoryAndDataTypesMatch<"memory", "data">,
-  AttrSizedOperandSegments
+  CallOpMutableInterface,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  AttrSizedOperandSegments,
+  ClockedOpInterface
 ]> {
   let summary = "Write port to a memory";
   let arguments = (ins
     MemoryType:$memory,
-    AnyInteger:$address,
+    FlatSymbolRefAttr:$arc,
+    Variadic<AnyType>:$inputs,
     Optional<I1>:$clock,
-    Optional<I1>:$enable,
-    AnyInteger:$data,
-    Optional<AnyInteger>:$mask
+    UnitAttr:$enable,
+    UnitAttr:$mask,
+    DefaultValuedAttr<I32Attr, "1">:$latency
   );
 
   let assemblyFormat = [{
-    $memory `[` $address `]` `,` $data (`mask` `(` $mask^ `:` type($mask) `)`)?
-    (`if` $enable^)? (`clock` $clock^)?
-    attr-dict `:` type($memory) `,` type($address)
+    $memory `,` $arc  `(` $inputs `)` (`clock` $clock^)?  (`enable` $enable^)?
+    (`mask` $mask^)? `lat` $latency attr-dict `:`
+    type($memory) `,` type($inputs)
   }];
 
   let hasVerifier = 1;
-  let hasFolder = 1;
-  let hasCanonicalizeMethod = 1;
+
+  let extraClassDeclaration = [{
+    SmallVector<Type> getArcResultTypes();
+    static unsigned getAddressIdx() { return 0; }
+    static unsigned getDataIdx() { return 1; }
+    static unsigned getEnableIdx() { return 2; }
+    static unsigned getMaskIdx(bool hasEnable) { return hasEnable ? 3 : 2; }
+
+    operand_range getArgOperands() {
+      return getInputs();
+    }
+    MutableOperandRange getArgOperandsMutable() {
+      return getInputsMutable();
+    }
+
+    mlir::CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<mlir::SymbolRefAttr>("arc");
+    }
+
+    /// Set the callee for this operation.
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getArcAttrName(), callee.get<mlir::SymbolRefAttr>());
+    }
+  }];
 }
 
 def MemoryReadOp : ArcOp<"memory_read", [
   MemoryEffects<[MemRead]>,
-  MemoryAndDataTypesMatch<"memory", "data">
+  MemoryAndDataTypesMatch<"memory", "data">,
+  MemoryAndAddressTypesMatch<"memory", "address">
 ]> {
   let summary = "Read word from memory";
   let arguments = (ins
@@ -320,13 +374,14 @@ def MemoryReadOp : ArcOp<"memory_read", [
   let results = (outs AnyInteger:$data);
 
   let assemblyFormat = [{
-    $memory `[` $address `]` attr-dict `:` type($memory) `,` type($address)
+    $memory `[` $address `]` attr-dict `:` type($memory)
   }];
 }
 
 def MemoryWriteOp : ArcOp<"memory_write", [
   MemoryEffects<[MemWrite]>,
-  MemoryAndDataTypesMatch<"memory", "data">
+  MemoryAndDataTypesMatch<"memory", "data">,
+  MemoryAndAddressTypesMatch<"memory", "address">
 ]> {
   let summary = "Write word to memory";
   let arguments = (ins
@@ -338,7 +393,7 @@ def MemoryWriteOp : ArcOp<"memory_write", [
 
   let assemblyFormat = [{
     $memory `[` $address `]` `,` $data (`if` $enable^)?
-    attr-dict `:` type($memory) `,` type($address)
+    attr-dict `:` type($memory)
   }];
 
   let hasFolder = 1;
@@ -374,6 +429,7 @@ def ClockDomainOp : ArcOp<"clock_domain", [
   }];
 
   let hasRegionVerifier = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 def ClockTreeOp : ArcOp<"clock_tree", [NoTerminator, NoRegionArguments]> {
@@ -458,7 +514,7 @@ def RootOutputOp : ArcOp<"root_output", [
 
 def AllocatableType : AnyTypeOf<[StateType, MemoryType, StorageType]>;
 
-def StorageGetOp : ArcOp<"storage.get", [MemoryEffects<[MemRead]>]> {
+def StorageGetOp : ArcOp<"storage.get", [Pure]> {
   let summary = "Access an allocated state, memory, or storage slice";
   let arguments = (ins StorageType:$storage, I32Attr:$offset);
   let results = (outs AllocatableType:$result);
@@ -466,6 +522,7 @@ def StorageGetOp : ArcOp<"storage.get", [MemoryEffects<[MemRead]>]> {
     $storage `[` $offset `]` attr-dict
     `:` qualified(type($storage)) `->` type($result)
   }];
+  let hasCanonicalizeMethod = 1;
 }
 
 //===----------------------------------------------------------------------===//

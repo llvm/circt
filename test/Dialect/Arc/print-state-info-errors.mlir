@@ -37,14 +37,14 @@ arc.model "Foo" {
 arc.model "Foo" {
 ^bb0(%arg0: !arc.storage<42>):
   // ignore unnamed
-  arc.alloc_memory %arg0 : (!arc.storage<42>) -> !arc.memory<4 x i1>
+  arc.alloc_memory %arg0 : (!arc.storage<42>) -> !arc.memory<4 x i1, i2>
   // expected-error @below {{'arc.alloc_memory' op without allocated offset}}
-  arc.alloc_memory %arg0 {name = "foo"} : (!arc.storage<42>) -> !arc.memory<4 x i1>
+  arc.alloc_memory %arg0 {name = "foo"} : (!arc.storage<42>) -> !arc.memory<4 x i1, i2>
 }
 
 // -----
 arc.model "Foo" {
 ^bb0(%arg0: !arc.storage<42>):
   // expected-error @below {{'arc.alloc_memory' op without allocated stride}}
-  arc.alloc_memory %arg0 {name = "foo", offset = 8} : (!arc.storage<42>) -> !arc.memory<4 x i1>
+  arc.alloc_memory %arg0 {name = "foo", offset = 8} : (!arc.storage<42>) -> !arc.memory<4 x i1, i2>
 }

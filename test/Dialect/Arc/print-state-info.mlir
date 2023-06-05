@@ -37,7 +37,7 @@ arc.model "Bar" {
   // CHECK-NEXT: "type": "memory"
   // CHECK-NEXT: "stride": 3
   // CHECK-NEXT: "depth": 5
-  arc.alloc_memory %arg0 {name = "y", offset = 48, stride = 3} : (!arc.storage<9001>) -> !arc.memory<5 x i17, 3>
+  arc.alloc_memory %arg0 {name = "y", offset = 48, stride = 3} : (!arc.storage<9001>) -> !arc.memory<5 x i17, i3>
 
   // CHECK:      "name": "z"
   // CHECK-NEXT: "offset": 92

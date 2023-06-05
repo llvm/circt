@@ -43,7 +43,7 @@ public:
             // Type declarations.
             InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
             InterfaceInstanceOp, GetModportOp, AssignInterfaceSignalOp,
-            ReadInterfaceSignalOp,
+            ReadInterfaceSignalOp, MacroDeclOp, MacroDefOp,
             // Verification statements.
             AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
             CoverConcurrentOp,
@@ -137,6 +137,8 @@ public:
   HANDLE(GetModportOp, Unhandled);
   HANDLE(AssignInterfaceSignalOp, Unhandled);
   HANDLE(ReadInterfaceSignalOp, Unhandled);
+  HANDLE(MacroDefOp, Unhandled);
+  HANDLE(MacroDeclOp, Unhandled);
 
   // Verification statements.
   HANDLE(AssertOp, Unhandled);

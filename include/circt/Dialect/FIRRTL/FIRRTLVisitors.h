@@ -33,7 +33,7 @@ public:
             ConstantOp, SpecialConstantOp, AggregateConstantOp, InvalidValueOp,
             SubfieldOp, SubindexOp, SubaccessOp, IsTagOp, SubtagOp,
             BundleCreateOp, VectorCreateOp, FEnumCreateOp, MultibitMuxOp,
-            TagExtractOp,
+            TagExtractOp, OpenSubfieldOp, OpenSubindexOp,
             // Arithmetic and Logical Binary Primitives.
             AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
             OrPrimOp, XorPrimOp,
@@ -54,7 +54,7 @@ public:
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
             RefResolveOp, RefSubOp,
             // Casts to deal with weird stuff
-            UninferredResetCastOp, UninferredWidthCastOp,
+            UninferredResetCastOp, UninferredWidthCastOp, ConstCastOp,
             mlir::UnrealizedConversionCastOp>([&](auto expr) -> ResultType {
           return thisCast->visitExpr(expr, args...);
         })
@@ -107,6 +107,8 @@ public:
   HANDLE(SubtagOp, Unhandled);
   HANDLE(TagExtractOp, Unhandled);
   HANDLE(MultibitMuxOp, Unhandled);
+  HANDLE(OpenSubfieldOp, Unhandled);
+  HANDLE(OpenSubindexOp, Unhandled);
 
   // Arithmetic and Logical Binary Primitives.
   HANDLE(AddPrimOp, Binary);
@@ -172,6 +174,7 @@ public:
   HANDLE(HWStructCastOp, Unhandled);
   HANDLE(UninferredResetCastOp, Unhandled);
   HANDLE(UninferredWidthCastOp, Unhandled);
+  HANDLE(ConstCastOp, Unhandled);
   HANDLE(mlir::UnrealizedConversionCastOp, Unhandled);
   HANDLE(BitCastOp, Unhandled);
 #undef HANDLE

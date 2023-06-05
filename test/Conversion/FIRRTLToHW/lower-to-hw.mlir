@@ -13,37 +13,37 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK:      sv.ifdef  "PRINTF_COND_" {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ifdef  "PRINTF_COND" {
-  // CHECK-NEXT:     sv.verbatim "`define PRINTF_COND_ (`PRINTF_COND)"
+  // CHECK-NEXT:     sv.macro.def @PRINTF_COND_ "(`PRINTF_COND)"
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.verbatim "`define PRINTF_COND_ 1"
+  // CHECK-NEXT:     sv.macro.def @PRINTF_COND_ "1"
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
   // CHECK:      sv.ifdef  "ASSERT_VERBOSE_COND_" {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ifdef  "ASSERT_VERBOSE_COND" {
-  // CHECK-NEXT:     sv.verbatim "`define ASSERT_VERBOSE_COND_ (`ASSERT_VERBOSE_COND)"
+  // CHECK-NEXT:     sv.macro.def @ASSERT_VERBOSE_COND_ "(`ASSERT_VERBOSE_COND)"
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.verbatim "`define ASSERT_VERBOSE_COND_ 1"
+  // CHECK-NEXT:     sv.macro.def @ASSERT_VERBOSE_COND_ "1"
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
   // CHECK:      sv.ifdef  "STOP_COND_" {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ifdef  "STOP_COND" {
-  // CHECK-NEXT:     sv.verbatim "`define STOP_COND_ (`STOP_COND)"
+  // CHECK-NEXT:     sv.macro.def @STOP_COND_ "(`STOP_COND)"
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.verbatim "`define STOP_COND_ 1"
+  // CHECK-NEXT:     sv.macro.def @STOP_COND_ "1"
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
   // CHECK:      sv.ifdef  "INIT_RANDOM_PROLOG_" {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ifdef  "RANDOMIZE" {
   // CHECK-NEXT:     sv.ifdef  "VERILATOR" {
-  // CHECK-NEXT:       sv.verbatim "`define INIT_RANDOM_PROLOG_ `INIT_RANDOM"
+  // CHECK-NEXT:       sv.macro.def @INIT_RANDOM_PROLOG_ "`INIT_RANDOM"
   // CHECK-NEXT:     } else {
-  // CHECK-NEXT:       sv.verbatim "`define INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end"
+  // CHECK-NEXT:       sv.macro.def @INIT_RANDOM_PROLOG_ "`INIT_RANDOM #`RANDOMIZE_DELAY begin end"
   // CHECK-NEXT:     }
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.verbatim "`define INIT_RANDOM_PROLOG_"
+  // CHECK-NEXT:     sv.macro.def @INIT_RANDOM_PROLOG_ ""
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
 
@@ -349,13 +349,13 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK:      sv.ifdef "SYNTHESIS" {
     // CHECK-NEXT: } else  {
     // CHECK-NEXT:   sv.always posedge %clock {
-    // CHECK-NEXT:     %PRINTF_COND_ = sv.macro.ref< "PRINTF_COND_"> : i1
+    // CHECK-NEXT:     %PRINTF_COND_ = sv.macro.ref @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND_, %reset
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
     // CHECK-NEXT:       sv.fwrite [[FD]], "No operands!\0A"
     // CHECK-NEXT:     }
-    // CHECK-NEXT:     %PRINTF_COND__0 = sv.macro.ref< "PRINTF_COND_"> : i1
+    // CHECK-NEXT:     %PRINTF_COND__0 = sv.macro.ref @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__0, %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
@@ -389,7 +389,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: sv.ifdef "SYNTHESIS" {
     // CHECK-NEXT: } else {
     // CHECK-NEXT:   sv.always posedge %clock1 {
-    // CHECK-NEXT:     %STOP_COND_ = sv.macro.ref< "STOP_COND_"> : i1
+    // CHECK-NEXT:     %STOP_COND_ = sv.macro.ref @STOP_COND_
     // CHECK-NEXT:     %0 = comb.and bin %STOP_COND_, %reset : i1
     // CHECK-NEXT:     sv.if %0 {
     // CHECK-NEXT:       sv.fatal
@@ -398,7 +398,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.stop %clock1, %reset, 42 : !firrtl.clock, !firrtl.uint<1>
 
     // CHECK-NEXT:   sv.always posedge %clock2 {
-    // CHECK-NEXT:     %STOP_COND_ = sv.macro.ref< "STOP_COND_"> : i1
+    // CHECK-NEXT:     %STOP_COND_ = sv.macro.ref @STOP_COND_
     // CHECK-NEXT:     %0 = comb.and bin %STOP_COND_, %reset : i1
     // CHECK-NEXT:     sv.if %0 {
     // CHECK-NEXT:       sv.finish
@@ -566,11 +566,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: } else {
     // CHECK-NEXT:   sv.always posedge %clock {
     // CHECK-NEXT:     sv.if [[TMP2]] {
-    // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.macro.ref< "ASSERT_VERBOSE_COND_"> : i1
+    // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.macro.ref @ASSERT_VERBOSE_COND_
     // CHECK-NEXT:       sv.if [[ASSERT_VERBOSE_COND]] {
     // CHECK-NEXT:         sv.error "assert1 %d, %d"(%value, %false) : i42, i1
     // CHECK-NEXT:       }
-    // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.macro.ref< "STOP_COND_"> : i1
+    // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.macro.ref @STOP_COND_
     // CHECK-NEXT:       sv.if [[STOP_COND]] {
     // CHECK-NEXT:         sv.fatal
     // CHECK-NEXT:       }

@@ -140,8 +140,8 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
   // cannot be folded!
 
   // Narrows, then folds away
-  // CHECK: %0 = firrtl.bits %in 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2> 
-  // CHECK-NEXT: %1 = firrtl.pad %0, 4 : (!firrtl.uint<2>) -> !firrtl.uint<4> 
+  // CHECK: %0 = firrtl.bits %in 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+  // CHECK-NEXT: %1 = firrtl.pad %0, 4 : (!firrtl.uint<2>) -> !firrtl.uint<4>
   // CHECK-NEXT: firrtl.strictconnect %out, %1
   %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
   %4 = firrtl.and %in, %c3_ui2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<4>
@@ -1866,12 +1866,12 @@ firrtl.module @adds_narrow(out %out1: !firrtl.sint<7>, out %out2: !firrtl.sint<7
 }
 
 // CHECK-LABEL: @sub_narrow
-// CHECK-NEXT: %[[add1:.+]] = firrtl.sub %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<5> 
-// CHECK-NEXT: %[[pad1:.+]] = firrtl.pad %[[add1]], 7 : (!firrtl.uint<5>) -> !firrtl.uint<7> 
-// CHECK-NEXT: %[[add2:.+]] = firrtl.sub %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<5> 
-// CHECK-NEXT: %[[pad2:.+]] = firrtl.pad %[[add2]], 7 : (!firrtl.uint<5>) -> !firrtl.uint<7> 
-// CHECK-NEXT: %[[add3:.+]] = firrtl.sub %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<5> 
-// CHECK-NEXT: %[[pad3:.+]] = firrtl.pad %[[add3]], 7 : (!firrtl.uint<5>) -> !firrtl.uint<7> 
+// CHECK-NEXT: %[[add1:.+]] = firrtl.sub %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<5>
+// CHECK-NEXT: %[[pad1:.+]] = firrtl.pad %[[add1]], 7 : (!firrtl.uint<5>) -> !firrtl.uint<7>
+// CHECK-NEXT: %[[add2:.+]] = firrtl.sub %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<5>
+// CHECK-NEXT: %[[pad2:.+]] = firrtl.pad %[[add2]], 7 : (!firrtl.uint<5>) -> !firrtl.uint<7>
+// CHECK-NEXT: %[[add3:.+]] = firrtl.sub %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<5>
+// CHECK-NEXT: %[[pad3:.+]] = firrtl.pad %[[add3]], 7 : (!firrtl.uint<5>) -> !firrtl.uint<7>
 // CHECK-NEXT: firrtl.strictconnect %out1, %[[pad1]]
 // CHECK-NEXT: firrtl.strictconnect %out2, %[[pad2]]
 // CHECK-NEXT: firrtl.strictconnect %out3, %[[pad3]]
@@ -1887,12 +1887,12 @@ firrtl.module @sub_narrow(out %out1: !firrtl.uint<7>, out %out2: !firrtl.uint<7>
 }
 
 // CHECK-LABEL: @subs_narrow
-// CHECK-NEXT: %[[add1:.+]] = firrtl.sub %in1, %in2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.sint<5> 
-// CHECK-NEXT: %[[pad1:.+]] = firrtl.pad %[[add1]], 7 : (!firrtl.sint<5>) -> !firrtl.sint<7> 
-// CHECK-NEXT: %[[add2:.+]] = firrtl.sub %in1, %in2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.sint<5> 
-// CHECK-NEXT: %[[pad2:.+]] = firrtl.pad %[[add2]], 7 : (!firrtl.sint<5>) -> !firrtl.sint<7> 
-// CHECK-NEXT: %[[add3:.+]] = firrtl.sub %in1, %in2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.sint<5> 
-// CHECK-NEXT: %[[pad3:.+]] = firrtl.pad %[[add3]], 7 : (!firrtl.sint<5>) -> !firrtl.sint<7> 
+// CHECK-NEXT: %[[add1:.+]] = firrtl.sub %in1, %in2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.sint<5>
+// CHECK-NEXT: %[[pad1:.+]] = firrtl.pad %[[add1]], 7 : (!firrtl.sint<5>) -> !firrtl.sint<7>
+// CHECK-NEXT: %[[add2:.+]] = firrtl.sub %in1, %in2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.sint<5>
+// CHECK-NEXT: %[[pad2:.+]] = firrtl.pad %[[add2]], 7 : (!firrtl.sint<5>) -> !firrtl.sint<7>
+// CHECK-NEXT: %[[add3:.+]] = firrtl.sub %in1, %in2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.sint<5>
+// CHECK-NEXT: %[[pad3:.+]] = firrtl.pad %[[add3]], 7 : (!firrtl.sint<5>) -> !firrtl.sint<7>
 // CHECK-NEXT: firrtl.strictconnect %out1, %[[pad1]]
 // CHECK-NEXT: firrtl.strictconnect %out2, %[[pad2]]
 // CHECK-NEXT: firrtl.strictconnect %out3, %[[pad3]]
@@ -2014,10 +2014,10 @@ firrtl.module @MuxCanon(in %c1: !firrtl.uint<1>, in %c2: !firrtl.uint<1>, in %d1
 
 // CHECK-LABEL: firrtl.module @MuxShorten
 firrtl.module @MuxShorten(
-  in %c1: !firrtl.uint<1>, in %c2: !firrtl.uint<1>, 
-  in %d1: !firrtl.uint<5>, in %d2: !firrtl.uint<5>, 
-  in %d3: !firrtl.uint<5>, in %d4: !firrtl.uint<5>, 
-  in %d5: !firrtl.uint<5>, in %d6: !firrtl.uint<5>, 
+  in %c1: !firrtl.uint<1>, in %c2: !firrtl.uint<1>,
+  in %d1: !firrtl.uint<5>, in %d2: !firrtl.uint<5>,
+  in %d3: !firrtl.uint<5>, in %d4: !firrtl.uint<5>,
+  in %d5: !firrtl.uint<5>, in %d6: !firrtl.uint<5>,
   out %foo: !firrtl.uint<5>, out %foo2: !firrtl.uint<5>) {
 
   %0 = firrtl.mux(%c1, %d2, %d3) : (!firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5>
@@ -2923,6 +2923,40 @@ firrtl.module @ClockGateIntrinsic(in %clock: !firrtl.clock, in %enable: !firrtl.
   // CHECK-NEXT: %dropTestEnable = firrtl.node interesting_name [[TMP]]
   %6 = firrtl.int.clock_gate %clock, %enable, %c0_ui1
   %dropTestEnable = firrtl.node interesting_name %6 : !firrtl.clock
+}
+
+// CHECK-LABEL: firrtl.module @RefTypes
+firrtl.module @RefTypes(
+    out %x: !firrtl.bundle<a flip: uint<1>>,
+    out %y: !firrtl.bundle<a: uint<1>>) {
+
+  %a = firrtl.wire : !firrtl.uint<1>
+  %b = firrtl.wire : !firrtl.uint<1>
+  %a_ref = firrtl.ref.send  %a : !firrtl.uint<1>
+  %a_read_ref = firrtl.ref.resolve %a_ref : !firrtl.probe<uint<1>>
+  // CHECK: firrtl.strictconnect %b, %a
+  firrtl.strictconnect %b, %a_read_ref : !firrtl.uint<1>
+
+  // Don't collapse if types don't match.
+  // CHECK: ref.resolve
+  %x_ref = firrtl.ref.send %x : !firrtl.bundle<a flip: uint<1>>
+  %x_read = firrtl.ref.resolve %x_ref : !firrtl.probe<bundle<a: uint<1>>>
+  firrtl.strictconnect %y, %x_read : !firrtl.bundle<a: uint<1>>
+
+  // CHECK-NOT: forceable
+  // CHECK: firrtl.strictconnect %f_wire, %b
+  // CHECK-NOT: forceable
+  %f, %f_rw = firrtl.node %b forceable : !firrtl.uint<1>
+  %f_read = firrtl.ref.resolve %f_rw : !firrtl.rwprobe<uint<1>>
+  %f_wire = firrtl.wire : !firrtl.uint<1>
+  firrtl.strictconnect %f_wire, %f_read : !firrtl.uint<1>
+
+  // CHECK: firrtl.wire forceable
+  // CHECK: ref.resolve
+  %flipbundle, %flipbundle_rw = firrtl.wire forceable : !firrtl.bundle<a flip: uint<1>>, !firrtl.rwprobe<bundle<a: uint<1>>>
+  %flipbundle_read = firrtl.ref.resolve %flipbundle_rw : !firrtl.rwprobe<bundle<a: uint<1>>>
+  %flipbundle_wire = firrtl.wire : !firrtl.bundle<a : uint<1>>
+  firrtl.strictconnect %flipbundle_wire, %flipbundle_read : !firrtl.bundle<a: uint<1>>
 }
 
 }

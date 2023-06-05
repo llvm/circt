@@ -30,6 +30,8 @@ createLowerFIRRTLAnnotationsPass(bool ignoreUnhandledAnnotations = false,
                                  bool ignoreClasslessAnnotations = false,
                                  bool noRefTypePorts = false);
 
+std::unique_ptr<mlir::Pass> createLowerOpenAggsPass();
+
 /// Configure which aggregate values will be preserved by the LowerTypes pass.
 namespace PreserveAggregate {
 enum PreserveMode {
@@ -125,6 +127,8 @@ std::unique_ptr<mlir::Pass> createVectorizationPass();
 
 std::unique_ptr<mlir::Pass> createInjectDUTHierarchyPass();
 
+std::unique_ptr<mlir::Pass> createDropConstPass();
+
 /// Configure which values will be explicitly preserved by the DropNames pass.
 namespace PreserveValues {
 enum PreserveMode {
@@ -157,6 +161,8 @@ std::unique_ptr<mlir::Pass>
 createResolveTracesPass(mlir::StringRef outputAnnotationFilename = "");
 
 std::unique_ptr<mlir::Pass> createInnerSymbolDCEPass();
+
+std::unique_ptr<mlir::Pass> createFinalizeIRPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

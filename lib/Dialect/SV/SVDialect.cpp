@@ -110,7 +110,7 @@ static bool isValidVerilogCharacterFirst(char ch) {
 }
 
 static bool isValidVerilogCharacter(char ch) {
-  return isValidVerilogCharacterFirst(ch) || llvm::isDigit(ch);
+  return isValidVerilogCharacterFirst(ch) || llvm::isDigit(ch) || ch == '$';
 }
 
 /// Legalize the specified name for use in SV output. Auto-uniquifies the name

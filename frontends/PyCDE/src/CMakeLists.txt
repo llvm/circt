@@ -44,6 +44,7 @@ declare_mlir_python_sources(PyCDESources
   Makefile.cosim
 
   bsp/__init__.py
+  bsp/cosim.py
   bsp/xrt.py
   bsp/EsiXrtPython.cpp
   bsp/Makefile.xrt.j2
@@ -110,7 +111,8 @@ install(RUNTIME_DEPENDENCY_SET PyCDE_RUNTIME_DEPS
 
 # Add necessary ESI collateral to the package.
 install(TARGETS esi-collateral
-  PUBLIC_HEADER DESTINATION python_packages/pycde/collateral
+  FILE_SET HEADERS
+  DESTINATION python_packages/pycde/collateral
   COMPONENT PyCDE
 )
 install(TARGETS circt-std-sim-drivers
@@ -132,6 +134,11 @@ if(ESI_COSIM)
     COMPONENT PyCDE
   )
   install(TARGETS MtiPli
+    DESTINATION python_packages/pycde/collateral
+    COMPONENT PyCDE
+  )
+  install(TARGETS EsiCosimCapnp
+    FILE_SET HEADERS
     DESTINATION python_packages/pycde/collateral
     COMPONENT PyCDE
   )

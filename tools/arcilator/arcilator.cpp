@@ -25,9 +25,11 @@
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/Transforms/Passes.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/OperationSupport.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassInstrumentation.h"
@@ -49,6 +51,7 @@
 #include "llvm/Support/ToolOutputFile.h"
 
 #include <iostream>
+#include <optional>
 
 using namespace llvm;
 using namespace mlir;
@@ -83,6 +86,10 @@ static cl::opt<std::string> stateFile("state-file", cl::desc("State file"),
 
 static cl::opt<bool> shouldInline("inline", cl::desc("Inline arcs"),
                                   cl::init(true), cl::cat(mainCategory));
+
+static cl::opt<bool> printDebugInfo("print-debug-info",
+                                    cl::desc("Print debug information"),
+                                    cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
     verifyPasses("verify-each",
@@ -142,14 +149,6 @@ static cl::opt<OutputFormat> outputFormat(
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
 
-/// Create a simple canonicalizer pass.
-static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
-  mlir::GreedyRewriteConfig config;
-  config.useTopDownTraversal = true;
-  config.enableRegionSimplification = false;
-  return mlir::createCanonicalizerPass(config);
-}
-
 /// Populate a pass manager with the arc simulator pipeline for the given
 /// command line options.
 static void populatePipeline(PassManager &pm) {
@@ -166,7 +165,7 @@ static void populatePipeline(PassManager &pm) {
   pm.addPass(arc::createStripSVPass());
   pm.addPass(arc::createInferMemoriesPass());
   pm.addPass(createCSEPass());
-  pm.addPass(createSimpleCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizerPass());
 
   // Restructure the input from a `hw.module` hierarchy to a collection of arcs.
   if (untilReached(UntilArcConversion))
@@ -175,7 +174,7 @@ static void populatePipeline(PassManager &pm) {
   pm.addPass(arc::createDedupPass());
   pm.addPass(arc::createInlineModulesPass());
   pm.addPass(createCSEPass());
-  pm.addPass(createSimpleCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizerPass());
 
   // Perform arc-level optimizations that are not specific to software
   // simulation.
@@ -183,12 +182,11 @@ static void populatePipeline(PassManager &pm) {
     return;
   pm.addPass(arc::createSplitLoopsPass());
   pm.addPass(arc::createDedupPass());
-  pm.addPass(arc::createSinkInputsPass());
   pm.addPass(createCSEPass());
-  pm.addPass(createSimpleCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizerPass());
   pm.addPass(arc::createMakeTablesPass());
   pm.addPass(createCSEPass());
-  pm.addPass(createSimpleCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizerPass());
 
   // TODO: the following is commented out because the backend does not support
   // StateOp resets yet.
@@ -212,7 +210,7 @@ static void populatePipeline(PassManager &pm) {
     return;
   pm.addPass(arc::createLowerStatePass());
   pm.addPass(createCSEPass());
-  pm.addPass(createSimpleCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizerPass());
 
   // TODO: LowerClocksToFuncsPass might not properly consider scf.if operations
   // (or nested regions in general) and thus errors out when muxes are also
@@ -223,9 +221,13 @@ static void populatePipeline(PassManager &pm) {
 
   if (shouldInline) {
     pm.addPass(arc::createInlineArcsPass());
-    pm.addPass(createSimpleCanonicalizerPass());
+    pm.addPass(arc::createArcCanonicalizerPass());
     pm.addPass(createCSEPass());
   }
+
+  pm.addPass(arc::createGroupResetsAndEnablesPass());
+  pm.addPass(createCSEPass());
+  pm.addPass(arc::createArcCanonicalizerPass());
 
   // Allocate states.
   if (untilReached(UntilStateAlloc))
@@ -234,7 +236,8 @@ static void populatePipeline(PassManager &pm) {
   pm.nest<arc::ModelOp>().addPass(arc::createAllocateStatePass());
   if (!stateFile.empty())
     pm.addPass(arc::createPrintStateInfoPass(stateFile));
-  pm.addPass(arc::createRemoveUnusedArcArgumentsPass());
+  pm.addPass(createCSEPass());
+  pm.addPass(arc::createArcCanonicalizerPass());
 
   // Lower the arcs and update functions to LLVM.
   if (untilReached(UntilLLVMLowering))
@@ -243,7 +246,7 @@ static void populatePipeline(PassManager &pm) {
   pm.addPass(createConvertCombToArithPass());
   pm.addPass(createLowerArcToLLVMPass());
   pm.addPass(createCSEPass());
-  pm.addPass(createSimpleCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizerPass());
 }
 
 static LogicalResult
@@ -264,14 +267,22 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     return failure();
   populatePipeline(pm);
 
+  if (printDebugInfo && outputFormat == OutputLLVM)
+    pm.nest<LLVM::LLVMFuncOp>().addPass(LLVM::createDIScopeForLLVMFuncOpPass());
+
   if (failed(pm.run(module.get())))
     return failure();
 
   // Handle MLIR output.
   if (runUntilBefore != UntilEnd || runUntilAfter != UntilEnd ||
       outputFormat == OutputMLIR) {
+    OpPrintingFlags printingFlags;
+    // Only set the debug info flag to true in order to not overwrite MLIR
+    // printer CLI flags when the custom debug info option is not set.
+    if (printDebugInfo)
+      printingFlags.enableDebugInfo(printDebugInfo);
     auto outputTimer = ts.nest("Print MLIR output");
-    module->print(outputFile.value()->os());
+    module->print(outputFile.value()->os(), printingFlags);
     return success();
   }
 
