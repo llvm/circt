@@ -67,8 +67,9 @@ struct CollapseUnaryControl : mlir::OpRewritePattern<CtrlOp> {
   LogicalResult matchAndRewrite(CtrlOp ctrlOp,
                                 PatternRewriter &rewriter) const override {
     auto &ops = ctrlOp.getBodyBlock()->getOperations();
-    bool isUnaryControl = (ops.size() == 1) && isa<EnableOp>(ops.front()) &&
-                          isa<SeqOp, ParOp, StaticSeqOp, StaticParOp>(ctrlOp->getParentOp());
+    bool isUnaryControl =
+        (ops.size() == 1) && isa<EnableOp>(ops.front()) &&
+        isa<SeqOp, ParOp, StaticSeqOp, StaticParOp>(ctrlOp->getParentOp());
     if (!isUnaryControl)
       return failure();
 
@@ -135,7 +136,7 @@ PortInfo calyx::getPortInfo(BlockArgument arg) {
 /// Returns whether the given operation has a control region.
 static bool hasControlRegion(Operation *op) {
   return isa<ControlOp, SeqOp, IfOp, WhileOp, ParOp, StaticRepeatOp,
-             StaticSeqO, StaticParOp>(op);
+             StaticSeqOp, StaticParOp>(op);
 }
 
 /// Returns whether the given operation is a static control operator
@@ -290,7 +291,8 @@ template <typename OpTy>
 static LogicalResult collapseControl(OpTy controlOp,
                                      PatternRewriter &rewriter) {
   static_assert(std::is_same<SeqOp, OpTy>() || std::is_same<ParOp, OpTy>() ||
-                    std::is_same<StaticSeqOp, OpTy>() || std::is_same<StaticParOp, OpTy>(),
+                    std::is_same<StaticSeqOp, OpTy>() ||
+                    std::is_same<StaticParOp, OpTy>(),
                 "Should be a SeqOp, ParOp, StaticSeqOp, or StaticParOp");
 
   if (isa<OpTy>(controlOp->getParentOp())) {
