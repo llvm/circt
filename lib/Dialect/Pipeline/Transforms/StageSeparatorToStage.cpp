@@ -95,7 +95,6 @@ void StageSeparatorToStagePass::runOnOperation() {
 
     // Replace the stage separator with the new stage op.
     stageSep->replaceAllUsesWith(currentStage);
-    stageSep.erase();
 
     // Move non-constant ops from the stageOps map into the StageOp wherein
     // they will reside.
@@ -111,6 +110,9 @@ void StageSeparatorToStagePass::runOnOperation() {
     // Finalize the current stage by adjusting the stage return value.
     stageReturn.setOperands(currentStage.getInnerEnable(), stageSep.getInputs(),
                             /*passthroughs=*/{});
+
+    // Drop the stage seperator op, no longer needed.
+    stageSep.erase();
 
     // Replace usages of the stage inputs inside the stage with the stage
     // inner inputs.
