@@ -209,7 +209,6 @@ if config.circtsmt_enabled != "":
   config.available_features.add('circt-lec')
   tools.append('circt-lec')
 
-
 # Enable circt-mc tests if it is built.
 if config.circtsmt_enabled != "":
   config.available_features.add('circt-mc')
