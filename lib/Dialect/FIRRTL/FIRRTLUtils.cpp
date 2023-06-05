@@ -587,17 +587,35 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
                                        Value value, unsigned fieldID) {
   // When the fieldID hits 0, we've found the target value.
   while (fieldID != 0) {
-    auto type = value.getType();
-    if (auto bundle = type.dyn_cast<BundleType>()) {
-      auto index = bundle.getIndexForFieldID(fieldID);
-      value = builder.create<SubfieldOp>(value, index);
-      fieldID -= bundle.getFieldID(index);
-    } else {
-      auto vector = type.cast<FVectorType>();
-      auto index = vector.getIndexForFieldID(fieldID);
-      value = builder.create<SubindexOp>(value, index);
-      fieldID -= vector.getFieldID(index);
-    }
+    TypeSwitch<Type, void>(value.getType())
+        .Case<BundleType, OpenBundleType>([&](auto bundle) {
+          auto index = bundle.getIndexForFieldID(fieldID);
+          value = builder.create<SubfieldOp>(value, index);
+          fieldID -= bundle.getFieldID(index);
+        })
+        .Case<FVectorType, OpenVectorType>([&](auto vector) {
+          auto index = vector.getIndexForFieldID(fieldID);
+          value = builder.create<SubindexOp>(value, index);
+          fieldID -= vector.getFieldID(index);
+        })
+        .Case<RefType>([&](auto reftype) {
+          TypeSwitch<FIRRTLBaseType, void>(reftype.getType())
+              .template Case<BundleType, OpenBundleType, FVectorType,
+                             OpenVectorType>([&](auto type) {
+                auto index = type.getIndexForFieldID(fieldID);
+                value = builder.create<RefSubOp>(value, index);
+                fieldID -= type.getFieldID(index);
+              })
+              .Default([&](auto _) {
+                llvm::report_fatal_error(
+                    "unrecognized type for indexing through with fieldID");
+              });
+        })
+        // TODO: Plumb error case out and handle in callers.
+        .Default([&](auto _) {
+          llvm::report_fatal_error(
+              "unrecognized type for indexing through with fieldID");
+        });
   }
   return value;
 }
