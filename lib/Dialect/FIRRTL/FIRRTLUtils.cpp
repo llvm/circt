@@ -455,25 +455,34 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
     if (!op)
       break;
 
-    auto handled = TypeSwitch<Operation *, bool>(op)
-                       .Case<SubfieldOp, OpenSubfieldOp>([&](auto subfieldOp) {
-                         value = subfieldOp.getInput();
-                         auto bundleType = subfieldOp.getInput().getType();
-                         // Rebase the current index on the parent field's
-                         // index.
-                         id +=
-                             bundleType.getFieldID(subfieldOp.getFieldIndex());
-                         return true;
-                       })
-                       .Case<SubindexOp, OpenSubindexOp>([&](auto subindexOp) {
-                         value = subindexOp.getInput();
-                         auto vecType = subindexOp.getInput().getType();
-                         // Rebase the current index on the parent field's
-                         // index.
-                         id += vecType.getFieldID(subindexOp.getIndex());
-                         return true;
-                       })
-                       .Default(false);
+    auto handled =
+        TypeSwitch<Operation *, bool>(op)
+            .Case<SubfieldOp, OpenSubfieldOp>([&](auto subfieldOp) {
+              value = subfieldOp.getInput();
+              auto bundleType = subfieldOp.getInput().getType();
+              // Rebase the current index on the parent field's
+              // index.
+              id += bundleType.getFieldID(subfieldOp.getFieldIndex());
+              return true;
+            })
+            .Case<SubindexOp, OpenSubindexOp>([&](auto subindexOp) {
+              value = subindexOp.getInput();
+              auto vecType = subindexOp.getInput().getType();
+              // Rebase the current index on the parent field's
+              // index.
+              id += vecType.getFieldID(subindexOp.getIndex());
+              return true;
+            })
+            .Case<RefSubOp>([&](RefSubOp refSubOp) {
+              value = refSubOp.getInput();
+              auto refInputType = refSubOp.getInput().getType();
+              id += TypeSwitch<FIRRTLBaseType, size_t>(refInputType.getType())
+                        .Case<FVectorType, BundleType>([&](auto type) {
+                          return type.getFieldID(refSubOp.getIndex());
+                        });
+              return true;
+            })
+            .Default(false);
     if (!handled)
       break;
   }
