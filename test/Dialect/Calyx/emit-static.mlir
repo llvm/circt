@@ -107,6 +107,7 @@ module attributes {calyx.entrypoint = "main"} {
       }
     }
   }
+}
 
 // -----
 module attributes {calyx.entrypoint = "main"} {
