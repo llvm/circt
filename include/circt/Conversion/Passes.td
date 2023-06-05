@@ -372,7 +372,8 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::createLowerFIRRTLToHWPass()";
   let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
-                           "seq::SeqDialect", "sv::SVDialect"];
+                           "seq::SeqDialect", "sv::SVDialect",
+                           "ltl::LTLDialect", "verif::VerifDialect"];
   let options = [
     Option<"disableMemRandomization", "disable-mem-randomization", "bool", "false",
             "Disable emission of memory randomization code">,
