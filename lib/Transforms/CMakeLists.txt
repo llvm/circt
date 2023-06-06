@@ -7,11 +7,13 @@ add_circt_library(CIRCTTransforms
   PrintOpCount.cpp
   MemoryBanking.cpp
   IndexSwitchToIf.cpp
+  EggSynthesis.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Transforms
 
   LINK_LIBS PUBLIC
+  CIRCTArc
   CIRCTComb
   CIRCTHW
   CIRCTOpCountAnalysis
