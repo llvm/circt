@@ -104,37 +104,37 @@ public:
   }
 };
 
-static comb::ICmpPredicate
-arithToCombPredicate(arith::CmpIPredicate predicate) {
-  switch (predicate) {
-  case arith::CmpIPredicate::eq:
-    return comb::ICmpPredicate::eq;
-  case arith::CmpIPredicate::ne:
-    return comb::ICmpPredicate::ne;
-  case arith::CmpIPredicate::slt:
-    return comb::ICmpPredicate::slt;
-  case arith::CmpIPredicate::ult:
-    return comb::ICmpPredicate::ult;
-  case arith::CmpIPredicate::sle:
-    return comb::ICmpPredicate::sle;
-  case arith::CmpIPredicate::ule:
-    return comb::ICmpPredicate::ule;
-  case arith::CmpIPredicate::sgt:
-    return comb::ICmpPredicate::sgt;
-  case arith::CmpIPredicate::ugt:
-    return comb::ICmpPredicate::ugt;
-  case arith::CmpIPredicate::sge:
-    return comb::ICmpPredicate::sge;
-  case arith::CmpIPredicate::uge:
-    return comb::ICmpPredicate::uge;
-  }
-  llvm_unreachable("Unknown predicate");
-}
-
 class CompConversionPattern : public OpConversionPattern<arith::CmpIOp> {
 public:
   using OpConversionPattern<arith::CmpIOp>::OpConversionPattern;
   using OpAdaptor = typename arith::CmpIOp::Adaptor;
+
+  static comb::ICmpPredicate
+  arithToCombPredicate(arith::CmpIPredicate predicate) {
+    switch (predicate) {
+    case arith::CmpIPredicate::eq:
+      return comb::ICmpPredicate::eq;
+    case arith::CmpIPredicate::ne:
+      return comb::ICmpPredicate::ne;
+    case arith::CmpIPredicate::slt:
+      return comb::ICmpPredicate::slt;
+    case arith::CmpIPredicate::ult:
+      return comb::ICmpPredicate::ult;
+    case arith::CmpIPredicate::sle:
+      return comb::ICmpPredicate::sle;
+    case arith::CmpIPredicate::ule:
+      return comb::ICmpPredicate::ule;
+    case arith::CmpIPredicate::sgt:
+      return comb::ICmpPredicate::sgt;
+    case arith::CmpIPredicate::ugt:
+      return comb::ICmpPredicate::ugt;
+    case arith::CmpIPredicate::sge:
+      return comb::ICmpPredicate::sge;
+    case arith::CmpIPredicate::uge:
+      return comb::ICmpPredicate::uge;
+    }
+    llvm_unreachable("Unknown predicate");
+  }
 
   LogicalResult
   matchAndRewrite(arith::CmpIOp op, OpAdaptor adaptor,
