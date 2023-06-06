@@ -1,5 +1,5 @@
 
-// RUN: circt-opt --pass-pipeline='builtin.module(any(map-arith-to-comb))' %s | FileCheck %s
+// RUN: circt-opt -split-input-file -verify-diagnostics --pass-pipeline='builtin.module(any(map-arith-to-comb))' %s | FileCheck %s
 
 // CHECK-LABEL:   hw.module @foo(
 // CHECK-SAME:          %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1) {
@@ -43,4 +43,12 @@ hw.module @foo(%arg0 : i32, %arg1 : i32, %arg2 : i1) -> () {
     %14 = arith.extsi %arg1 : i32 to i33
     %15 = arith.extui %arg1 : i32 to i35
     %16 = arith.trunci %arg1 : i32 to i16
+    %17 = arith.cmpi slt, %arg0, %arg1 : i32
+}
+
+// -----
+
+hw.module @invalidVector(%arg0 : vector<4xi32>) -> () {
+  // expected-error @+1 {{failed to legalize operation 'arith.extsi' that was explicitly marked illegal}}
+    %0 = arith.extsi %arg0 : vector<4xi32> to vector<4xi33>
 }

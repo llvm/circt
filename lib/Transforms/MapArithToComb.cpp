@@ -15,17 +15,32 @@
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Transforms/Passes.h"
-#include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "mlir/Transforms/DialectConversion.h"
 
 using namespace mlir;
 using namespace circt;
 
+namespace {
+
+// A type converter which legalizes integer types, thus ensuring that vector
+// types are illegal.
+class MapArithTypeConverter : public mlir::TypeConverter {
+public:
+  MapArithTypeConverter() {
+    addConversion([](Type type) {
+      if (type.isa<mlir::IntegerType>())
+        return type;
+
+      return Type();
+    });
+  }
+};
+
 template <typename TFrom, typename TTo>
 class OneToOnePattern : public OpConversionPattern<TFrom> {
 public:
-  OneToOnePattern(MLIRContext *context) : OpConversionPattern<TFrom>(context) {}
+  using OpConversionPattern<TFrom>::OpConversionPattern;
   using OpAdaptor = typename TFrom::Adaptor;
 
   LogicalResult
@@ -36,10 +51,9 @@ public:
   }
 };
 
-class ExtSConvertionPattern : public OpConversionPattern<arith::ExtSIOp> {
+class ExtSConversionPattern : public OpConversionPattern<arith::ExtSIOp> {
 public:
-  ExtSConvertionPattern(MLIRContext *context)
-      : OpConversionPattern<arith::ExtSIOp>(context) {}
+  using OpConversionPattern<arith::ExtSIOp>::OpConversionPattern;
   using OpAdaptor = typename arith::ExtSIOp::Adaptor;
 
   LogicalResult
@@ -53,10 +67,9 @@ public:
   }
 };
 
-class ExtZConvertionPattern : public OpConversionPattern<arith::ExtUIOp> {
+class ExtZConversionPattern : public OpConversionPattern<arith::ExtUIOp> {
 public:
-  ExtZConvertionPattern(MLIRContext *context)
-      : OpConversionPattern<arith::ExtUIOp>(context) {}
+  using OpConversionPattern<arith::ExtUIOp>::OpConversionPattern;
   using OpAdaptor = typename arith::ExtUIOp::Adaptor;
 
   LogicalResult
@@ -78,8 +91,7 @@ public:
 
 class TruncateConversionPattern : public OpConversionPattern<arith::TruncIOp> {
 public:
-  TruncateConversionPattern(MLIRContext *context)
-      : OpConversionPattern<arith::TruncIOp>(context) {}
+  using OpConversionPattern<arith::TruncIOp>::OpConversionPattern;
   using OpAdaptor = typename arith::TruncIOp::Adaptor;
 
   LogicalResult
@@ -92,7 +104,48 @@ public:
   }
 };
 
-namespace {
+static comb::ICmpPredicate
+arithToCombPredicate(arith::CmpIPredicate predicate) {
+  switch (predicate) {
+  case arith::CmpIPredicate::eq:
+    return comb::ICmpPredicate::eq;
+  case arith::CmpIPredicate::ne:
+    return comb::ICmpPredicate::ne;
+  case arith::CmpIPredicate::slt:
+    return comb::ICmpPredicate::slt;
+  case arith::CmpIPredicate::ult:
+    return comb::ICmpPredicate::ult;
+  case arith::CmpIPredicate::sle:
+    return comb::ICmpPredicate::sle;
+  case arith::CmpIPredicate::ule:
+    return comb::ICmpPredicate::ule;
+  case arith::CmpIPredicate::sgt:
+    return comb::ICmpPredicate::sgt;
+  case arith::CmpIPredicate::ugt:
+    return comb::ICmpPredicate::ugt;
+  case arith::CmpIPredicate::sge:
+    return comb::ICmpPredicate::sge;
+  case arith::CmpIPredicate::uge:
+    return comb::ICmpPredicate::uge;
+  }
+  llvm_unreachable("Unknown predicate");
+}
+
+class CompConversionPattern : public OpConversionPattern<arith::CmpIOp> {
+public:
+  using OpConversionPattern<arith::CmpIOp>::OpConversionPattern;
+  using OpAdaptor = typename arith::CmpIOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(arith::CmpIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<comb::ICmpOp>(
+        op, arithToCombPredicate(op.getPredicate()), adaptor.getLhs(),
+        adaptor.getRhs());
+    return success();
+  }
+};
+
 struct MapArithToCombPass : public MapArithToCombPassBase<MapArithToCombPass> {
 public:
   void runOnOperation() override {
@@ -101,7 +154,7 @@ public:
     ConversionTarget target(*ctx);
     target.addLegalDialect<comb::CombDialect, hw::HWDialect>();
     target.addIllegalDialect<arith::ArithDialect>();
-
+    MapArithTypeConverter typeConverter;
     RewritePatternSet patterns(ctx);
 
     patterns.insert<OneToOnePattern<arith::AddIOp, comb::AddOp>,
@@ -117,10 +170,10 @@ public:
                     OneToOnePattern<arith::ShLIOp, comb::ShlOp>,
                     OneToOnePattern<arith::ShRSIOp, comb::ShrSOp>,
                     OneToOnePattern<arith::ShRUIOp, comb::ShrUOp>,
-                    OneToOnePattern<arith::CmpIOp, comb::ICmpOp>,
                     OneToOnePattern<arith::SelectOp, comb::MuxOp>,
-                    ExtSConvertionPattern, ExtZConvertionPattern,
-                    TruncateConversionPattern>(ctx);
+                    ExtSConversionPattern, ExtZConversionPattern,
+                    TruncateConversionPattern, CompConversionPattern>(
+        typeConverter, ctx);
 
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))
