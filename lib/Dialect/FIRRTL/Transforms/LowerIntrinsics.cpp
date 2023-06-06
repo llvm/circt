@@ -459,7 +459,7 @@ static bool lowerCirctLTLEventually(InstancePathCache &instancePathCache,
 static bool lowerCirctLTLClock(InstancePathCache &instancePathCache,
                                FModuleLike mod) {
   if (hasNPorts("circt.ltl.clock", mod, 3) ||
-      namedPort("circt.ltl.clock", mod, 0, "property") ||
+      namedPort("circt.ltl.clock", mod, 0, "in") ||
       namedPort("circt.ltl.clock", mod, 1, "clock") ||
       namedPort("circt.ltl.clock", mod, 2, "out") ||
       sizedPort<UIntType>("circt.ltl.clock", mod, 0, 1) ||
@@ -471,14 +471,12 @@ static bool lowerCirctLTLClock(InstancePathCache &instancePathCache,
   for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    auto property =
-        builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     auto clock =
         builder.create<WireOp>(inst.getResult(1).getType()).getResult();
-    inst.getResult(0).replaceAllUsesWith(property);
+    inst.getResult(0).replaceAllUsesWith(in);
     inst.getResult(1).replaceAllUsesWith(clock);
-    auto out = builder.create<LTLClockIntrinsicOp>(property.getType(), property,
-                                                   clock);
+    auto out = builder.create<LTLClockIntrinsicOp>(in.getType(), in, clock);
     inst.getResult(2).replaceAllUsesWith(out);
     inst.erase();
   }
@@ -488,7 +486,7 @@ static bool lowerCirctLTLClock(InstancePathCache &instancePathCache,
 static bool lowerCirctLTLDisable(InstancePathCache &instancePathCache,
                                  FModuleLike mod) {
   if (hasNPorts("circt.ltl.disable", mod, 3) ||
-      namedPort("circt.ltl.disable", mod, 0, "property") ||
+      namedPort("circt.ltl.disable", mod, 0, "in") ||
       namedPort("circt.ltl.disable", mod, 1, "condition") ||
       namedPort("circt.ltl.disable", mod, 2, "out") ||
       sizedPort<UIntType>("circt.ltl.disable", mod, 0, 1) ||
@@ -500,14 +498,13 @@ static bool lowerCirctLTLDisable(InstancePathCache &instancePathCache,
   for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    auto property =
-        builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     auto condition =
         builder.create<WireOp>(inst.getResult(1).getType()).getResult();
-    inst.getResult(0).replaceAllUsesWith(property);
+    inst.getResult(0).replaceAllUsesWith(in);
     inst.getResult(1).replaceAllUsesWith(condition);
-    auto out = builder.create<LTLDisableIntrinsicOp>(property.getType(),
-                                                     property, condition);
+    auto out =
+        builder.create<LTLDisableIntrinsicOp>(in.getType(), in, condition);
     inst.getResult(2).replaceAllUsesWith(out);
     inst.erase();
   }

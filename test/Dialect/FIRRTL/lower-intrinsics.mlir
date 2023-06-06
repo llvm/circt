@@ -118,8 +118,8 @@ firrtl.circuit "Foo" {
   firrtl.intmodule @LTLNot(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.not"}
   firrtl.intmodule @LTLImplication(in lhs: !firrtl.uint<1>, in rhs: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.implication"}
   firrtl.intmodule @LTLEventually(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.eventually"}
-  firrtl.intmodule @LTLClock(in property: !firrtl.uint<1>, in clock: !firrtl.clock, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.clock"}
-  firrtl.intmodule @LTLDisable(in property: !firrtl.uint<1>, in condition: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.disable"}
+  firrtl.intmodule @LTLClock(in in: !firrtl.uint<1>, in clock: !firrtl.clock, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.clock"}
+  firrtl.intmodule @LTLDisable(in in: !firrtl.uint<1>, in condition: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.disable"}
 
   // CHECK: firrtl.module @LTL()
   firrtl.module @LTL() {
@@ -152,11 +152,11 @@ firrtl.circuit "Foo" {
 
     // CHECK-NOT: LTLClock
     // CHECK: firrtl.int.ltl.clock {{%.+}}, {{%.+}} :
-    %clock.property, %clock.clock, %clock.out = firrtl.instance "clock" @LTLClock(in property: !firrtl.uint<1>, in clock: !firrtl.clock, out out: !firrtl.uint<1>)
+    %clock.in, %clock.clock, %clock.out = firrtl.instance "clock" @LTLClock(in in: !firrtl.uint<1>, in clock: !firrtl.clock, out out: !firrtl.uint<1>)
 
     // CHECK-NOT: LTLDisable
     // CHECK: firrtl.int.ltl.disable {{%.+}}, {{%.+}} :
-    %disable.property, %disable.condition, %disable.out = firrtl.instance "disable" @LTLDisable(in property: !firrtl.uint<1>, in condition: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    %disable.in, %disable.condition, %disable.out = firrtl.instance "disable" @LTLDisable(in in: !firrtl.uint<1>, in condition: !firrtl.uint<1>, out out: !firrtl.uint<1>)
   }
 
   // CHECK-NOT: VerifAssert1
