@@ -340,3 +340,46 @@ module attributes {calyx.entrypoint = "main"} {
     }
   }
 }
+
+
+// -----
+module attributes {calyx.entrypoint = "main"} {
+  // CHECK-LABEL: calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %d.in, %d.write_en, %d.clk, %d.reset, %d.out, %d.done = calyx.register @d : i2, i1, i1, i1, i2, i1
+    %r1.in, %r1.write_en, %r1.clk, %r1.reset, %r1.out, %r1.done = calyx.register @r1 : i1, i1, i1, i1, i1, i1
+    %c.in, %c.write_en, %c.clk, %c.reset, %c.out, %c.done = calyx.register @c : i2, i1, i1, i1, i2, i1
+
+    %c0_2 = hw.constant 0 : i2
+    %c1_2 = hw.constant 1 : i2
+    %c1_1 = hw.constant 1 : i1
+
+
+    calyx.wires {
+      // CHECK: calyx.static_group latency<1> @C {
+      calyx.static_group latency<1> @C {
+        calyx.assign %c.in = %c0_2 : i2
+        // CHECK: %0 = calyx.cycle 0
+        %0 = calyx.cycle 0
+        calyx.assign %c.write_en = %0 ? %c1_1 : i1
+      }
+
+      // CHECK: calyx.static_group latency<1> @D {
+      calyx.static_group latency<1> @D {
+        calyx.assign %d.in = %c1_2 : i2
+        // CHECK: %0 = calyx.cycle 0
+        %0 = calyx.cycle 0
+        calyx.assign %d.write_en = %0 ? %c1_1 : i1
+      }
+
+    }
+    calyx.control {
+      // CHECK: calyx.if %r1.out {
+      calyx.static_if %r1.out {
+        calyx.enable @C
+      } else {
+          calyx.enable @D
+      }
+    }
+  }
+}

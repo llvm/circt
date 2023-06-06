@@ -135,7 +135,20 @@ PortInfo calyx::getPortInfo(BlockArgument arg) {
 /// Returns whether the given operation has a control region.
 static bool hasControlRegion(Operation *op) {
   return isa<ControlOp, SeqOp, IfOp, WhileOp, ParOp, StaticRepeatOp,
-             StaticParOp>(op);
+             StaticParOp, StaticIfOp>(op);
+}
+
+/// Returns whether the given operation is a static control operator
+static bool isStaticControl(Operation *op) {
+  if (isa<EnableOp>(op)) {
+    // for enables, we need to check whether its corresponding group is static
+    auto component = op->template getParentOfType<ComponentOp>();
+    auto enableOp = llvm::cast<EnableOp>(op);
+    StringRef groupName = enableOp.getGroupName();
+    auto group = component.getWiresOp().lookupSymbol<GroupInterface>(groupName);
+    return isa<StaticGroupOp>(group);
+  }
+  return isa<StaticIfOp, StaticRepeatOp, StaticParOp>(op);
 }
 
 /// Verifies the body of a ControlLikeOp.
@@ -212,8 +225,8 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto &region = op->getRegion(0);
   // Operations that are allowed in the body of a ControlLike op.
   auto isValidBodyOp = [](Operation *operation) {
-    return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp, StaticRepeatOp>(
-        operation);
+    return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp, StaticRepeatOp,
+               StaticIfOp>(operation);
   };
   for (auto &&bodyOp : region.front()) {
     if (isValidBodyOp(&bodyOp))
@@ -2223,6 +2236,42 @@ void IfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
   patterns.add<CommonTailPatternWithSeq, CommonTailPatternWithPar, EmptyIfBody>(
       context);
 }
+
+//===----------------------------------------------------------------------===//
+// StaticIfOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StaticIfOp::verify() {
+  if (elseBodyExists() && getElseBody()->empty())
+    return emitError() << "empty 'else' region.";
+
+  if (elseBodyExists()) {
+    auto *elseBod = getElseBody();
+    auto &elseOps = elseBod->getOperations();
+    // should only have one Operation in the else branch
+    for (Operation &op : elseOps) {
+      if (!isStaticControl(&op)) {
+        return op.emitOpError(
+            "static if's else branch has non static control within it");
+      }
+    }
+  }
+
+  auto *thenBod = getThenBody();
+  auto &thenOps = thenBod->getOperations();
+  for (Operation &op : thenOps) {
+    // should only have one Operation in the then branch
+    if (!isStaticControl(&op)) {
+      return op.emitOpError(
+          "static if's then branch has non static control within it");
+    }
+  }
+
+  return success();
+}
+
+void StaticIfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                             MLIRContext *context) {}
 
 //===----------------------------------------------------------------------===//
 // WhileOp
