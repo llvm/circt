@@ -1424,16 +1424,6 @@ firrtl.module @VectorNestedConstReg(in %clock: !firrtl.clock) {
 }
 
 // -----
-// nested 'const' firrtl.reg is invalid
-
-firrtl.circuit "EnumNestedConstReg" {
-firrtl.module @EnumNestedConstReg(in %clock: !firrtl.clock) {
-  // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.enum<a: const.uint<1>>'}}
-  %r = firrtl.reg %clock : !firrtl.clock, !firrtl.enum<a: const.uint<1>>
-}
-}
-
-// -----
 // nested 'const' firrtl.regreset is invalid
 
 firrtl.circuit "BundleNestedConstRegReset" {
@@ -1457,9 +1447,9 @@ firrtl.module @VectorNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !f
 // 'const' firrtl.regreset is invalid
 
 firrtl.circuit "EnumNestedConstRegReset" {
-firrtl.module @EnumNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.enum<a: const.uint<1>>) {
-  // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.enum<a: const.uint<1>>'}}
-  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.enum<a: const.uint<1>>, !firrtl.enum<a: const.uint<1>>
+firrtl.module @EnumNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.const.enum<a: uint<1>>) {
+  // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.enum<a: uint<1>>'}}
+  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.enum<a: uint<1>>, !firrtl.const.enum<a: uint<1>>
 }
 }
 
@@ -1591,4 +1581,30 @@ firrtl.module @ConstEnumCreateNonConstOperands(in %a: !firrtl.uint<1>) {
   // expected-error @+1 {{type of element doesn't match enum element}}
   %0 = firrtl.enumcreate Some(%a) : (!firrtl.uint<1>) -> !firrtl.const.enum<None: uint<0>, Some: uint<1>>
 }
+}
+
+// -----
+
+// Enum types must be passive
+firrtl.circuit "EnumNonPassive" {
+  // expected-error @+1 {{enum field '"a"' not passive}}
+  firrtl.module @EnumNonPassive(in %a : !firrtl.enum<a: bundle<a flip: uint<1>>>) {
+  }
+}
+
+// -----
+
+// Enum types must not contain analog
+firrtl.circuit "EnumAnalog" {
+  // expected-error @+1 {{enum field '"a"' contains analog}}
+  firrtl.module @EnumAnalog(in %a : !firrtl.enum<a: analog<1>>) {
+  }
+}
+
+// -----
+
+// An enum that contains 'const' elements must be 'const'
+firrtl.circuit "NonConstEnumConstElements" {
+// expected-error @+1 {{enum with 'const' elements must be 'const'}}
+firrtl.module @NonConstEnumConstElements(in %a: !firrtl.enum<None: uint<0>, Some: const.uint<1>>) {}
 }

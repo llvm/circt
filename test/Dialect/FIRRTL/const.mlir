@@ -21,8 +21,8 @@ firrtl.module @ConstReset(in %a: !firrtl.const.reset) {}
 // CHECK-LABEL: firrtl.module @ConstAsyncReset(in %a: !firrtl.const.asyncreset) {
 firrtl.module @ConstAsyncReset(in %a: !firrtl.const.asyncreset) {}
 
-// CHECK-LABEL: firrtl.module @ConstEnum(in %a: !firrtl.enum<a: uint<1>, b: uint<2>>) {
-firrtl.module @ConstEnum(in %a: !firrtl.enum<a: uint<1>, b: uint<2>>) {}
+// CHECK-LABEL: firrtl.module @ConstEnum(in %a: !firrtl.const.enum<a: uint<1>, b: uint<2>>) {
+firrtl.module @ConstEnum(in %a: !firrtl.const.enum<a: uint<1>, b: uint<2>>) {}
 
 // CHECK-LABEL: firrtl.module @ConstVec(in %a: !firrtl.const.vector<uint<1>, 3>) {
 firrtl.module @ConstVec(in %a: !firrtl.const.vector<uint<1>, 3>) {}
@@ -127,20 +127,6 @@ firrtl.module @ConstSubtag(in %in : !firrtl.const.enum<a: uint<1>, b: uint<2>>,
   // CHECK-NEXT: firrtl.connect %out, [[VAL]] : !firrtl.const.uint<2>, !firrtl.const.uint<2>
   %0 = firrtl.subtag %in[b] : !firrtl.const.enum<a: uint<1>, b: uint<2>>
   firrtl.connect %out, %0 : !firrtl.const.uint<2>, !firrtl.const.uint<2>
-}
-
-// CHECK-LABEL: firrtl.module @MixedConstSubtag
-firrtl.module @MixedConstSubtag(in %in : !firrtl.enum<a: uint<1>, b: const.uint<2>>,
-                                out %a : !firrtl.uint<1>,
-                                out %b : !firrtl.const.uint<2>) {
-  // CHECK-NEXT: [[VAL0:%.+]] = firrtl.subtag %in[a] : !firrtl.enum<a: uint<1>, b: const.uint<2>>
-  // CHECK-NEXT: [[VAL1:%.+]] = firrtl.subtag %in[b] : !firrtl.enum<a: uint<1>, b: const.uint<2>>
-  // CHECK-NEXT: firrtl.connect %a, [[VAL0]] : !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK-NEXT: firrtl.connect %b, [[VAL1]] : !firrtl.const.uint<2>, !firrtl.const.uint<2>
-  %0 = firrtl.subtag %in[a] : !firrtl.enum<a: uint<1>, b: const.uint<2>>
-  %1 = firrtl.subtag %in[b] : !firrtl.enum<a: uint<1>, b: const.uint<2>>
-  firrtl.connect %a, %0 : !firrtl.uint<1>, !firrtl.uint<1>
-  firrtl.connect %b, %1 : !firrtl.const.uint<2>, !firrtl.const.uint<2>
 }
 
 // CHECK-LABEL: firrtl.module @ConstRegResetValue
