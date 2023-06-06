@@ -723,7 +723,6 @@ bool firrtl::containsConst(Type type) {
       .Default(false);
 }
 
-// NOLINTBEGIN(misc-no-recursion)
 /// Helper to implement the equivalence logic for a pair of bundle elements.
 /// Note that the FIRRTL spec requires bundle elements to have the same
 /// orientation, but this only compares their passive types. The FIRRTL dialect
@@ -733,22 +732,20 @@ static bool areBundleElementsEquivalent(BundleType::BundleElement destElement,
                                         BundleType::BundleElement srcElement,
                                         bool destOuterTypeIsConst,
                                         bool srcOuterTypeIsConst,
-                                        bool requiresSameWidth,
-                                        bool requireDestSameOrUninferred) {
+                                        bool requiresSameWidth) {
   if (destElement.name != srcElement.name)
     return false;
   if (destElement.isFlip != srcElement.isFlip)
     return false;
 
   if (destElement.isFlip) {
-    assert(!requireDestSameOrUninferred);
     std::swap(destElement, srcElement);
     std::swap(destOuterTypeIsConst, srcOuterTypeIsConst);
   }
 
   return areTypesEquivalent(destElement.type, srcElement.type,
                             destOuterTypeIsConst, srcOuterTypeIsConst,
-                            requiresSameWidth, requireDestSameOrUninferred);
+                            requiresSameWidth);
 }
 
 /// Returns whether the two types are equivalent.  This implements the exact
@@ -758,8 +755,7 @@ static bool areBundleElementsEquivalent(BundleType::BundleElement destElement,
 bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
                                 bool destOuterTypeIsConst,
                                 bool srcOuterTypeIsConst,
-                                bool requireSameWidths,
-                                bool requireDestSameOrUninferred) {
+                                bool requireSameWidths) {
   auto destType = destFType.dyn_cast<FIRRTLBaseType>();
   auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
 
@@ -777,8 +773,7 @@ bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
     return destVectorType.getNumElements() == srcVectorType.getNumElements() &&
            areTypesEquivalent(destVectorType.getElementType(),
                               srcVectorType.getElementType(), destIsConst,
-                              srcIsConst, requireSameWidths,
-                              requireDestSameOrUninferred);
+                              srcIsConst, requireSameWidths);
 
   // Bundle types can be connected if they have the same size, element names,
   // and element types.
@@ -795,8 +790,7 @@ bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
       auto destElement = destElements[i];
       auto srcElement = srcElements[i];
       if (!areBundleElementsEquivalent(destElement, srcElement, destIsConst,
-                                       srcIsConst, requireSameWidths,
-                                       requireDestSameOrUninferred))
+                                       srcIsConst, requireSameWidths))
         return false;
     }
     return true;
@@ -816,8 +810,8 @@ bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
         return false;
       // Enumeration types can only be connected if the inner types have the
       // same width.
-      if (!areTypesEquivalent(dst.type, src.type, destIsConst, srcIsConst, true,
-                              requireDestSameOrUninferred))
+      if (!areTypesEquivalent(dst.type, src.type, destIsConst, srcIsConst,
+                              true))
         return false;
     }
     return true;
@@ -832,16 +826,14 @@ bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
     return srcType.isResetType();
 
   // Reset types can drive UInt<1>, AsyncReset, or Reset types.
-  if (srcType.isa<ResetType>() && !requireDestSameOrUninferred)
+  if (srcType.isa<ResetType>())
     return destType.isResetType();
 
   // If we can implicitly truncate or extend the bitwidth, or either width is
   // currently uninferred, then compare the widthless version of these types.
-  if ((!requireSameWidths && !requireDestSameOrUninferred) ||
-      destType.getBitWidthOrSentinel() == -1)
+  if (!requireSameWidths || destType.getBitWidthOrSentinel() == -1)
     srcType = srcType.getWidthlessType();
-  if (!requireDestSameOrUninferred &&
-      (!requireSameWidths || srcType.getBitWidthOrSentinel() == -1))
+  if (!requireSameWidths || srcType.getBitWidthOrSentinel() == -1)
     destType = destType.getWidthlessType();
 
   // Ground types can be connected if their constless types are the same
@@ -1004,7 +996,6 @@ bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
         return destWidth <= -1 || srcWidth <= -1 || destWidth >= srcWidth;
       });
 }
-// NOLINTEND(misc-no-recursion)
 
 bool firrtl::isCompatibleRefType(Type dstType, Type srcType) {
   auto dstRefType = dyn_cast<RefType>(dstType);
@@ -1015,11 +1006,77 @@ bool firrtl::isCompatibleRefType(Type dstType, Type srcType) {
     return true;
   if (dstRefType.getForceable() && !srcRefType.getForceable())
     return false;
-  return areTypesEquivalent(dstRefType.getType(), srcRefType.getType(),
-                            /*destOuterTypeIsConst=*/false,
-                            /*srcOuterTypeIsConst=*/false,
-                            /*requireSameWidths=*/false,
-                            /*requireDestSameOrUninferred=*/true);
+
+  // Okay, duplicate majority of the type equivalence logic.
+  // Primary change is to require types are (recursively) the same OR
+  // destination is uninferred version of the source.  So along ref path width
+  // information can be lost but not added, similarly resets can become more
+  // general but not more specific.
+  auto recurse = [&](auto &&f, FIRRTLBaseType dest,
+                     FIRRTLBaseType src) -> bool {
+    // Fast-path for identical types.
+    if (dest == src)
+      return true;
+
+    // Always passive inside probes, but for sanity assert this.
+    assert(dest.isPassive() && src.isPassive());
+
+    // Recurse through aggregates to get the leaves, checking
+    // structural equivalence re:element count + names.
+
+    if (auto destVectorType = dest.dyn_cast<FVectorType>()) {
+      auto srcVectorType = src.dyn_cast<FVectorType>();
+      return srcVectorType &&
+             destVectorType.getNumElements() ==
+                 srcVectorType.getNumElements() &&
+             f(f, destVectorType.getElementType(),
+               srcVectorType.getElementType());
+    }
+
+    if (auto destBundleType = dest.dyn_cast<BundleType>()) {
+      auto srcBundleType = src.dyn_cast<BundleType>();
+      if (!srcBundleType)
+        return false;
+      // (no need to check orientation, these are always passive)
+      auto destElements = destBundleType.getElements();
+      auto srcElements = srcBundleType.getElements();
+
+      return destElements.size() == srcElements.size() &&
+             llvm::all_of_zip(
+                 destElements, srcElements,
+                 [&](const auto &destElement, const auto &srcElement) {
+                   return destElement.name == srcElement.name &&
+                          f(f, destElement.type, srcElement.type);
+                 });
+    }
+
+    if (auto destEnumType = dest.dyn_cast<FEnumType>()) {
+      auto srcEnumType = src.dyn_cast<FEnumType>();
+      if (!srcEnumType)
+        return false;
+      auto destElements = destEnumType.getElements();
+      auto srcElements = srcEnumType.getElements();
+
+      return destElements.size() == srcElements.size() &&
+             llvm::all_of_zip(
+                 destElements, srcElements,
+                 [&](const auto &destElement, const auto &srcElement) {
+                   return destElement.name == srcElement.name &&
+                          f(f, destElement.type, srcElement.type);
+                 });
+    }
+
+    // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
+    if (dest.isa<ResetType>())
+      return src.isResetType();
+    // (but don't allow the other direction, can only become more general)
+
+    // src != dst, so this is only valid if destination is widthless version of
+    // source:
+    return dest.getBitWidthOrSentinel() == -1 && dest == src.getWidthlessType();
+  };
+
+  return recurse(recurse, dstRefType.getType(), srcRefType.getType());
 }
 
 /// Return the passive version of a firrtl type

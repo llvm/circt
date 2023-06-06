@@ -206,11 +206,10 @@ bool containsConst(Type type);
 /// definition of type equivalence in the FIRRTL spec.  If the types being
 /// compared have any outer flips that encode FIRRTL module directions (input or
 /// output), these should be stripped before using this method.
-bool areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
+bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType,
                         bool destOuterTypeIsConst = false,
                         bool srcOuterTypeIsConst = false,
-                        bool requireSameWidths = false,
-                        bool requireDestSameOrUninferred = false);
+                        bool requireSameWidths = false);
 
 /// Returns true if two types are weakly equivalent.  See the FIRRTL spec,
 /// Section 4.6, for a full definition of this.  Roughly, the oriented types
