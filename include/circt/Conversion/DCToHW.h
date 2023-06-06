@@ -11,12 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_CONVERSION_DCTOHW_DCTOHW_H
-#define CIRCT_CONVERSION_DCTOHW_DCTOHW_H
+#ifndef CIRCT_CONVERSION_DCTOHW_H
+#define CIRCT_CONVERSION_DCTOHW_H
 
-#include "circt/Dialect/DC/DCOps.h"
-#include "circt/Dialect/HW/HWOps.h"
-#include "circt/Support/LLVM.h"
 #include <memory>
 
 namespace mlir {
@@ -28,4 +25,4 @@ std::unique_ptr<mlir::Pass> createDCToHWPass();
 
 } // namespace circt
 
-#endif // CIRCT_CONVERSION_DCTOHW_DCTOHW_H
+#endif // CIRCT_CONVERSION_DCTOHW_H
