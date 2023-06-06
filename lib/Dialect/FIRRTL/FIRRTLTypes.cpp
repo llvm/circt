@@ -1012,6 +1012,7 @@ bool firrtl::isCompatibleRefType(Type dstType, Type srcType) {
   // destination is uninferred version of the source.  So along ref path width
   // information can be lost but not added, similarly resets can become more
   // general but not more specific.
+  // NOLINTBEGIN(misc-no-recursion)
   auto recurse = [&](auto &&f, FIRRTLBaseType dest,
                      FIRRTLBaseType src) -> bool {
     // Fast-path for identical types.
@@ -1077,6 +1078,7 @@ bool firrtl::isCompatibleRefType(Type dstType, Type srcType) {
   };
 
   return recurse(recurse, dstRefType.getType(), srcRefType.getType());
+  // NOLINTEND(misc-no-recursion)
 }
 
 /// Return the passive version of a firrtl type
