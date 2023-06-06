@@ -968,36 +968,7 @@ bool firrtl::areTypesConstCastable(FIRRTLType destFType, FIRRTLType srcFType,
   return destType == srcType.getConstType(destType.isConst());
 }
 
-/// Returns true if the destination is at least as wide as an equivalent source.
-bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
-  return TypeSwitch<FIRRTLBaseType, bool>(dstType)
-      .Case<BundleType>([&](auto dstBundle) {
-        auto srcBundle = srcType.cast<BundleType>();
-        for (size_t i = 0, n = dstBundle.getNumElements(); i < n; ++i) {
-          auto srcElem = srcBundle.getElement(i);
-          auto dstElem = dstBundle.getElement(i);
-          if (dstElem.isFlip) {
-            if (!isTypeLarger(srcElem.type, dstElem.type))
-              return false;
-          } else {
-            if (!isTypeLarger(dstElem.type, srcElem.type))
-              return false;
-          }
-        }
-        return true;
-      })
-      .Case<FVectorType>([&](auto vector) {
-        return isTypeLarger(vector.getElementType(),
-                            srcType.cast<FVectorType>().getElementType());
-      })
-      .Default([&](auto dstGround) {
-        int32_t destWidth = dstType.getPassiveType().getBitWidthOrSentinel();
-        int32_t srcWidth = srcType.getPassiveType().getBitWidthOrSentinel();
-        return destWidth <= -1 || srcWidth <= -1 || destWidth >= srcWidth;
-      });
-}
-
-bool firrtl::isCompatibleRefType(Type dstType, Type srcType) {
+bool firrtl::areTypesRefCastable(Type dstType, Type srcType) {
   auto dstRefType = dyn_cast<RefType>(dstType);
   auto srcRefType = dyn_cast<RefType>(srcType);
   if (!dstRefType || !srcRefType)
@@ -1079,6 +1050,35 @@ bool firrtl::isCompatibleRefType(Type dstType, Type srcType) {
 
   return recurse(recurse, dstRefType.getType(), srcRefType.getType());
   // NOLINTEND(misc-no-recursion)
+}
+
+/// Returns true if the destination is at least as wide as an equivalent source.
+bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
+  return TypeSwitch<FIRRTLBaseType, bool>(dstType)
+      .Case<BundleType>([&](auto dstBundle) {
+        auto srcBundle = srcType.cast<BundleType>();
+        for (size_t i = 0, n = dstBundle.getNumElements(); i < n; ++i) {
+          auto srcElem = srcBundle.getElement(i);
+          auto dstElem = dstBundle.getElement(i);
+          if (dstElem.isFlip) {
+            if (!isTypeLarger(srcElem.type, dstElem.type))
+              return false;
+          } else {
+            if (!isTypeLarger(dstElem.type, srcElem.type))
+              return false;
+          }
+        }
+        return true;
+      })
+      .Case<FVectorType>([&](auto vector) {
+        return isTypeLarger(vector.getElementType(),
+                            srcType.cast<FVectorType>().getElementType());
+      })
+      .Default([&](auto dstGround) {
+        int32_t destWidth = dstType.getPassiveType().getBitWidthOrSentinel();
+        int32_t srcWidth = srcType.getPassiveType().getBitWidthOrSentinel();
+        return destWidth <= -1 || srcWidth <= -1 || destWidth >= srcWidth;
+      });
 }
 
 /// Return the passive version of a firrtl type

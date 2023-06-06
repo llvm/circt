@@ -224,6 +224,11 @@ bool areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
 bool areTypesConstCastable(FIRRTLType destType, FIRRTLType srcType,
                            bool srcOuterTypeIsConst = false);
 
+/// Return true if destination ref type can be cast from source ref type,
+/// per FIRRTL spec rules they must be identical or destination has
+/// more general versions of the corresponding type in the source.
+bool areTypesRefCastable(Type dstType, Type srcType);
+
 /// Returns true if the destination is at least as wide as a source.  The source
 /// and destination types must be equivalent non-analog types.  The types are
 /// recursively connected to ensure that the destination is larger than the
@@ -232,10 +237,6 @@ bool areTypesConstCastable(FIRRTLType destType, FIRRTLType srcType,
 /// field-by-field.  Types with unresolved widths are assumed to fit into or
 /// hold their counterparts.
 bool isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType);
-
-/// Return true if destination can be set using source ref type,
-/// e.g., in a ref.define or ref.cast.  Rejects if not ref types.
-bool isCompatibleRefType(Type dstType, Type srcType);
 
 mlir::Type getPassiveType(mlir::Type anyBaseFIRRTLType);
 
