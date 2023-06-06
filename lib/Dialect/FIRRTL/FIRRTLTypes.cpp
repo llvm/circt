@@ -1048,7 +1048,17 @@ bool firrtl::areTypesRefCastable(Type dstType, Type srcType) {
     return dest.getBitWidthOrSentinel() == -1 && dest == src.getWidthlessType();
   };
 
-  return recurse(recurse, dstRefType.getType(), srcRefType.getType());
+
+  // If source has const anywhere, check if const-cast-able as widthless.
+  // Accomodate const auto-propagating into probe expressions, where users may not
+  // have included it in their probe types as well.
+  if ((dstRefType.containsConst() || srcRefType.containsConst()) &&
+      !areTypesConstCastable(dstRefType.getType().getWidthlessType(),
+                             srcRefType.getType().getWidthlessType()))
+    return false;
+
+  return recurse(recurse, dstRefType.getType().getAllConstDroppedType(),
+                 srcRefType.getType().getAllConstDroppedType());
   // NOLINTEND(misc-no-recursion)
 }
 
