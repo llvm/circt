@@ -400,6 +400,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitExpr(BitCastOp op);
   bool visitExpr(RefSendOp op);
   bool visitExpr(RefResolveOp op);
+  bool visitExpr(RefCastOp op);
   bool visitStmt(ConnectOp op);
   bool visitStmt(StrictConnectOp op);
   bool visitStmt(RefDefineOp op);
@@ -1271,6 +1272,15 @@ bool TypeLoweringVisitor::visitExpr(RefResolveOp op) {
   // Lower according to lowering of the reference.
   // Particularly, preserve if rwprobe.
   return lowerProducer(op, clone, op.getRef().getType());
+}
+
+bool TypeLoweringVisitor::visitExpr(RefCastOp op) {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Value {
+    auto input = getSubWhatever(op.getInput(), field.index);
+    return builder->create<RefCastOp>(RefType::get(field.type), input);
+  };
+  return lowerProducer(op, clone);
 }
 
 bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
