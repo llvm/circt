@@ -723,6 +723,7 @@ bool firrtl::containsConst(Type type) {
       .Default(false);
 }
 
+// NOLINTBEGIN(misc-no-recursion)
 /// Helper to implement the equivalence logic for a pair of bundle elements.
 /// Note that the FIRRTL spec requires bundle elements to have the same
 /// orientation, but this only compares their passive types. The FIRRTL dialect
@@ -1003,6 +1004,7 @@ bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
         return destWidth <= -1 || srcWidth <= -1 || destWidth >= srcWidth;
       });
 }
+// NOLINTEND(misc-no-recursion)
 
 bool firrtl::isCompatibleRefType(Type dstType, Type srcType) {
   auto dstRefType = dyn_cast<RefType>(dstType);
