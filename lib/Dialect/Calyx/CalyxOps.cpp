@@ -2168,50 +2168,62 @@ struct CommonTailPatternWithSeq : mlir::OpRewritePattern<IfOp> {
 ///        calyx.enable @B
 ///      }
 ///    }
-struct CommonTailPatternWithPar : mlir::OpRewritePattern<IfOp> {
-  using mlir::OpRewritePattern<IfOp>::OpRewritePattern;
+template <typename OpTy>
+static LogicalResult commonTailPatternWithPar(OpTy controlOp,
+                                              PatternRewriter &rewriter) {
+  static_assert(std::is_same<StaticIfOp, OpTy>() || std::is_same<IfOp, OpTy>(),
+                "Should be an IfOp or StaticIfOp.");
+  auto thenControl = cast<ParOp>(controlOp.getThenBody()->front()),
+       elseControl = cast<ParOp>(controlOp.getElseBody()->front());
 
-  LogicalResult matchAndRewrite(IfOp ifOp,
-                                PatternRewriter &rewriter) const override {
-    if (!hasCommonTailPatternPreConditions<ParOp>(ifOp))
-      return failure();
-    auto thenControl = cast<ParOp>(ifOp.getThenBody()->front()),
-         elseControl = cast<ParOp>(ifOp.getElseBody()->front());
+  llvm::StringMap<EnableOp> A = getAllEnableOpsInImmediateBody(thenControl),
+                            B = getAllEnableOpsInImmediateBody(elseControl);
+  // Compute the intersection between `A` and `B`.
+  SmallVector<StringRef> groupNames;
+  for (auto a = A.begin(); a != A.end(); ++a) {
+    StringRef groupName = a->getKey();
+    auto b = B.find(groupName);
+    if (b == B.end())
+      continue;
+    // This is also an element in B.
+    groupNames.push_back(groupName);
+    // Since these are being pulled out, erase them.
+    rewriter.eraseOp(a->getValue());
+    rewriter.eraseOp(b->getValue());
+  }
 
-    llvm::StringMap<EnableOp> A = getAllEnableOpsInImmediateBody(thenControl),
-                              B = getAllEnableOpsInImmediateBody(elseControl);
+  // Place the IfOp and EnableOp(s) inside a parallel region, in case this
+  // IfOp is nested in a SeqOp. This avoids unintentionally sequentializing
+  // the pulled out EnableOps.
+  rewriter.setInsertionPointAfter(controlOp);
 
-    // Compute the intersection between `A` and `B`.
-    SmallVector<StringRef> groupNames;
-    for (auto a = A.begin(); a != A.end(); ++a) {
-      StringRef groupName = a->getKey();
-      auto b = B.find(groupName);
-      if (b == B.end())
-        continue;
-      // This is also an element in B.
-      groupNames.push_back(groupName);
-      // Since these are being pulled out, erase them.
-      rewriter.eraseOp(a->getValue());
-      rewriter.eraseOp(b->getValue());
-    }
-    // Place the IfOp and EnableOp(s) inside a parallel region, in case this
-    // IfOp is nested in a SeqOp. This avoids unintentionally sequentializing
-    // the pulled out EnableOps.
-    rewriter.setInsertionPointAfter(ifOp);
-    ParOp parOp = rewriter.create<ParOp>(ifOp.getLoc());
+  if (std::is_same<StaticIfOp, OpTy>()) {
+    StaticParOp parOp = rewriter.create<StaticParOp>(controlOp.getLoc());
     Block *body = parOp.getBodyBlock();
-    ifOp->remove();
-    body->push_back(ifOp);
-
+    controlOp->remove();
+    body->push_back(controlOp);
     // Pull out the intersection between these two sets, and erase their
     // counterparts in the Then and Else regions.
     rewriter.setInsertionPointToEnd(body);
     for (StringRef groupName : groupNames)
       rewriter.create<EnableOp>(parOp.getLoc(), groupName);
-
-    return success();
+  } else if (std::is_same<IfOp, OpTy>()) {
+    ParOp parOp = rewriter.create<ParOp>(controlOp.getLoc());
+    Block *body = parOp.getBodyBlock();
+    controlOp->remove();
+    body->push_back(controlOp);
+    // Pull out the intersection between these two sets, and erase their
+    // counterparts in the Then and Else regions.
+    rewriter.setInsertionPointToEnd(body);
+    for (StringRef groupName : groupNames)
+      rewriter.create<EnableOp>(parOp.getLoc(), groupName);
+  } else {
+    assert(!"commonTailPatternsWithPar should only be called for IfOps and "
+            "StaticIfOps ");
   }
-};
+
+  return success();
+}
 
 /// This pattern checks for one of two cases that will lead to IfOp deletion:
 /// (1) Then and Else bodies are both empty.
@@ -2233,8 +2245,8 @@ struct EmptyIfBody : mlir::OpRewritePattern<IfOp> {
 
 void IfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                        MLIRContext *context) {
-  patterns.add<CommonTailPatternWithSeq, CommonTailPatternWithPar, EmptyIfBody>(
-      context);
+  patterns.add<CommonTailPatternWithSeq, EmptyIfBody>(context);
+  patterns.add(commonTailPatternWithPar<IfOp>);
 }
 
 //===----------------------------------------------------------------------===//

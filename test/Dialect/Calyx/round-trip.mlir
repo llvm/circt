@@ -374,7 +374,7 @@ module attributes {calyx.entrypoint = "main"} {
 
     }
     calyx.control {
-      // CHECK: calyx.if %r1.out {
+      // CHECK: calyx.static_if %r1.out {
       calyx.static_if %r1.out {
         calyx.enable @C
       } else {
