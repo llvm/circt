@@ -263,7 +263,7 @@ static void populatePipeline(PassManager &pm) {
 
 static LogicalResult
 processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
-              Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+              std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   mlir::OwningOpRef<mlir::ModuleOp> module;
   {
     auto parserTimer = ts.nest("Parse MLIR input");
@@ -318,7 +318,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 static LogicalResult
 processInputSplit(MLIRContext &context, TimingScope &ts,
                   std::unique_ptr<llvm::MemoryBuffer> buffer,
-                  Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+                  std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(buffer), llvm::SMLoc());
   if (!verifyDiagnostics) {
@@ -337,7 +337,7 @@ processInputSplit(MLIRContext &context, TimingScope &ts,
 static LogicalResult
 processInput(MLIRContext &context, TimingScope &ts,
              std::unique_ptr<llvm::MemoryBuffer> input,
-             Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+             std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   if (!splitInputFile)
     return processInputSplit(context, ts, std::move(input), outputFile);
 
@@ -364,7 +364,7 @@ static LogicalResult executeArcilator(MLIRContext &context) {
   }
 
   // Create the output directory or output file depending on our mode.
-  Optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
+  std::optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
   // Create an output file.
   outputFile.emplace(openOutputFile(outputFilename, &errorMessage));
   if (!outputFile.value()) {
