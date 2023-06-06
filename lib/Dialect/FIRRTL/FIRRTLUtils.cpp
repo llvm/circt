@@ -600,8 +600,7 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
         })
         .Case<RefType>([&](auto reftype) {
           TypeSwitch<FIRRTLBaseType, void>(reftype.getType())
-              .template Case<BundleType, OpenBundleType, FVectorType,
-                             OpenVectorType>([&](auto type) {
+              .template Case<BundleType, FVectorType>([&](auto type) {
                 auto index = type.getIndexForFieldID(fieldID);
                 value = builder.create<RefSubOp>(value, index);
                 fieldID -= type.getFieldID(index);
