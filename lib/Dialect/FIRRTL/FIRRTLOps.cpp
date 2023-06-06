@@ -938,7 +938,7 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
     portAnnotations.push_back(annos);
 
     // Parse the optional port location.
-    llvm::Optional<Location> maybeLoc;
+    std::optional<Location> maybeLoc;
     if (failed(parser.parseOptionalLocationSpecifier(maybeLoc)))
       return failure();
     Location loc = maybeLoc ? *maybeLoc : parser.getEncodedSourceLoc(irLoc);
