@@ -1007,11 +1007,11 @@ bool firrtl::isCompatibleRefType(Type dstType, Type srcType) {
   if (dstRefType.getForceable() && !srcRefType.getForceable())
     return false;
 
-  // Okay, duplicate majority of the type equivalence logic.
-  // Primary change is to require types are (recursively) the same OR
-  // destination is uninferred version of the source.  So along ref path width
-  // information can be lost but not added, similarly resets can become more
-  // general but not more specific.
+  // Okay walk the types recursively.  They must be identical "structurally"
+  // with exception leaf (ground) types of destination can be uninferred
+  // versions of the corresponding source type. (can lose width information or
+  // become a more general reset type)
+
   // NOLINTBEGIN(misc-no-recursion)
   auto recurse = [&](auto &&f, FIRRTLBaseType dest,
                      FIRRTLBaseType src) -> bool {
