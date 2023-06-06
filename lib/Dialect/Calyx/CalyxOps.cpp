@@ -2306,7 +2306,7 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
 //===----------------------------------------------------------------------===//
 LogicalResult StaticRepeatOp::verify() {
   for (auto &&bodyOp : (*this).getRegion().front()) {
-    // there should only be one bodyOp for each staticrepeatop, right?
+    // there should only be one bodyOp for each StaticRepeatOp
     if (!isStaticControl(&bodyOp)) {
       return bodyOp.emitOpError(
           "static repeat has non static control within it");
