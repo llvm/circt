@@ -38,7 +38,7 @@ endif()
 
 # Enable circt-lec tests if it is built.
 if(CIRCTSMT_ENABLED)
-  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS circt-lec)
+  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS circt-lec circt-mc)
 endif()
 
 set(CIRCT_INTEGRATION_TIMEOUT 60) # Set a 60s timeout on individual tests.
