@@ -27,7 +27,7 @@ using namespace circt;
 void Solver::Circuit::addInput(Value value) {
   LLVM_DEBUG(lec::dbgs() << name << " addInput\n");
   lec::Scope indent;
-  z3::expr input = allocateValue(value);
+  z3::expr input = fetchOrAllocateExpr(value);
   inputs.insert(inputs.end(), input);
 }
 
@@ -35,7 +35,7 @@ void Solver::Circuit::addInput(Value value) {
 void Solver::Circuit::addOutput(Value value) {
   LLVM_DEBUG(lec::dbgs() << name << " addOutput\n");
   // Referenced value already assigned, fetching from expression table.
-  z3::expr output = fetchExpr(value);
+  z3::expr output = fetchOrAllocateExpr(value);
   outputs.insert(outputs.end(), output);
 }
 
@@ -80,7 +80,7 @@ void Solver::Circuit::addInstance(llvm::StringRef instanceName,
     auto *input = instance.inputs.begin();
     for (Value argument : arguments) {
       LLVM_DEBUG(lec::dbgs() << "input\n");
-      z3::expr argExpr = fetchExpr(argument);
+      z3::expr argExpr = fetchOrAllocateExpr(argument);
       solver.solver.add(argExpr == *input++);
     }
   }
@@ -89,7 +89,7 @@ void Solver::Circuit::addInstance(llvm::StringRef instanceName,
     lec::Scope indent;
     auto *output = instance.outputs.begin();
     for (circt::OpResult result : results) {
-      z3::expr resultExpr = allocateValue(result);
+      z3::expr resultExpr = fetchOrAllocateExpr(result);
       solver.solver.add(resultExpr == *output++);
     }
   }
@@ -122,26 +122,22 @@ void Solver::Circuit::performConcat(Value result, OperandRange operands) {
 
 void Solver::Circuit::performDivS(Value result, Value lhs, Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform DivS\n");
-  allocateValue(lhs);
-  allocateValue(rhs);
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
-  z3::expr lhsExpr = fetchExpr(lhs);
+  z3::expr lhsExpr = fetchOrAllocateExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
-  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr rhsExpr = fetchOrAllocateExpr(rhs);
   z3::expr op = z3::operator/(lhsExpr, rhsExpr);
   constrainResult(result, op);
 }
 
 void Solver::Circuit::performDivU(Value result, Value lhs, Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform DivU\n");
-  allocateValue(lhs);
-  allocateValue(rhs);
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
-  z3::expr lhsExpr = fetchExpr(lhs);
+  z3::expr lhsExpr = fetchOrAllocateExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
-  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr rhsExpr = fetchOrAllocateExpr(rhs);
   z3::expr op = z3::udiv(lhsExpr, rhsExpr);
   constrainResult(result, op);
 }
@@ -149,10 +145,9 @@ void Solver::Circuit::performDivU(Value result, Value lhs, Value rhs) {
 void Solver::Circuit::performExtract(Value result, Value input,
                                      uint32_t lowBit) {
   LLVM_DEBUG(lec::dbgs() << name << " performExtract\n");
-  allocateValue(input);
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "input:\n");
-  z3::expr inputExpr = fetchExpr(input);
+  z3::expr inputExpr = fetchOrAllocateExpr(input);
   unsigned width = result.getType().getIntOrFloatBitWidth();
   LLVM_DEBUG(lec::dbgs() << "width: " << width << "\n");
   z3::expr extract = inputExpr.extract(lowBit + width - 1, lowBit);
@@ -163,13 +158,11 @@ LogicalResult Solver::Circuit::performICmp(Value result,
                                            circt::comb::ICmpPredicate predicate,
                                            Value lhs, Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " performICmp\n");
-  allocateValue(lhs);
-  allocateValue(rhs);
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
-  z3::expr lhsExpr = fetchExpr(lhs);
+  z3::expr lhsExpr = fetchOrAllocateExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
-  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr rhsExpr = fetchOrAllocateExpr(rhs);
   z3::expr icmp(solver.context);
 
   switch (predicate) {
@@ -219,26 +212,22 @@ LogicalResult Solver::Circuit::performICmp(Value result,
 
 void Solver::Circuit::performModS(Value result, Value lhs, Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform ModS\n");
-  allocateValue(lhs);
-  allocateValue(rhs);
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
-  z3::expr lhsExpr = fetchExpr(lhs);
+  z3::expr lhsExpr = fetchOrAllocateExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
-  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr rhsExpr = fetchOrAllocateExpr(rhs);
   z3::expr op = z3::smod(lhsExpr, rhsExpr);
   constrainResult(result, op);
 }
 
 void Solver::Circuit::performModU(Value result, Value lhs, Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform ModU\n");
-  allocateValue(lhs);
-  allocateValue(rhs);
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
-  z3::expr lhsExpr = fetchExpr(lhs);
+  z3::expr lhsExpr = fetchOrAllocateExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
-  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr rhsExpr = fetchOrAllocateExpr(rhs);
   z3::expr op = z3::urem(lhsExpr, rhsExpr);
   constrainResult(result, op);
 }
@@ -253,15 +242,13 @@ void Solver::Circuit::performMul(Value result, OperandRange operands) {
 void Solver::Circuit::performMux(Value result, Value cond, Value trueValue,
                                  Value falseValue) {
   LLVM_DEBUG(lec::dbgs() << name << " performMux\n");
-  allocateValue(trueValue);
-  allocateValue(falseValue);
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "cond:\n");
-  z3::expr condExpr = fetchExpr(cond);
+  z3::expr condExpr = fetchOrAllocateExpr(cond);
   LLVM_DEBUG(lec::dbgs() << "trueValue:\n");
-  z3::expr tvalue = fetchExpr(trueValue);
+  z3::expr tvalue = fetchOrAllocateExpr(trueValue);
   LLVM_DEBUG(lec::dbgs() << "falseValue:\n");
-  z3::expr fvalue = fetchExpr(falseValue);
+  z3::expr fvalue = fetchOrAllocateExpr(falseValue);
   // Conversion due to z3::ite requiring a bool rather than a bitvector.
   z3::expr mux = z3::ite(bvToBool(condExpr), tvalue, fvalue);
   constrainResult(result, mux);
@@ -276,10 +263,9 @@ void Solver::Circuit::performOr(Value result, OperandRange operands) {
 
 void Solver::Circuit::performParity(Value result, Value input) {
   LLVM_DEBUG(lec::dbgs() << name << " performParity\n");
-  allocateValue(input);
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "input:\n");
-  z3::expr inputExpr = fetchExpr(input);
+  z3::expr inputExpr = fetchOrAllocateExpr(input);
 
   unsigned width = inputExpr.get_sort().bv_size();
 
@@ -295,10 +281,9 @@ void Solver::Circuit::performParity(Value result, Value input) {
 
 void Solver::Circuit::performReplicate(Value result, Value input) {
   LLVM_DEBUG(lec::dbgs() << name << " performReplicate\n");
-  allocateValue(input);
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "input:\n");
-  z3::expr inputExpr = fetchExpr(input);
+  z3::expr inputExpr = fetchOrAllocateExpr(input);
 
   unsigned int final = result.getType().getIntOrFloatBitWidth();
   unsigned int initial = input.getType().getIntOrFloatBitWidth();
@@ -315,13 +300,11 @@ void Solver::Circuit::performReplicate(Value result, Value input) {
 
 void Solver::Circuit::performShl(Value result, Value lhs, Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform Shl\n");
-  allocateValue(lhs);
-  allocateValue(rhs);
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
-  z3::expr lhsExpr = fetchExpr(lhs);
+  z3::expr lhsExpr = fetchOrAllocateExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
-  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr rhsExpr = fetchOrAllocateExpr(rhs);
   z3::expr op = z3::shl(lhsExpr, rhsExpr);
   constrainResult(result, op);
 }
@@ -329,13 +312,11 @@ void Solver::Circuit::performShl(Value result, Value lhs, Value rhs) {
 // Arithmetic shift right.
 void Solver::Circuit::performShrS(Value result, Value lhs, Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform ShrS\n");
-  allocateValue(lhs);
-  allocateValue(rhs);
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
-  z3::expr lhsExpr = fetchExpr(lhs);
+  z3::expr lhsExpr = fetchOrAllocateExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
-  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr rhsExpr = fetchOrAllocateExpr(rhs);
   z3::expr op = z3::ashr(lhsExpr, rhsExpr);
   constrainResult(result, op);
 }
@@ -343,13 +324,11 @@ void Solver::Circuit::performShrS(Value result, Value lhs, Value rhs) {
 // Logical shift right.
 void Solver::Circuit::performShrU(Value result, Value lhs, Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform ShrU\n");
-  allocateValue(lhs);
-  allocateValue(rhs);
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
-  z3::expr lhsExpr = fetchExpr(lhs);
+  z3::expr lhsExpr = fetchOrAllocateExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
-  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr rhsExpr = fetchOrAllocateExpr(rhs);
   z3::expr op = z3::lshr(lhsExpr, rhsExpr);
   constrainResult(result, op);
 }
@@ -375,13 +354,12 @@ void Solver::Circuit::variadicOperation(
     llvm::function_ref<z3::expr(const z3::expr &, const z3::expr &)>
         operation) {
   // Allocate operands if unallocated
-  llvm::for_each(operands, [&](mlir::Value value) { allocateValue(value); });
   LLVM_DEBUG(lec::dbgs() << "variadic operation\n");
   lec::Scope indent;
   // Vacuous base case.
   auto it = operands.begin();
   Value operand = *it;
-  z3::expr varOp = exprTable.find(operand)->second;
+  z3::expr varOp = fetchOrAllocateExpr(operand);
   {
     LLVM_DEBUG(lec::dbgs() << "first operand:\n");
     lec::Scope indent;
@@ -391,7 +369,7 @@ void Solver::Circuit::variadicOperation(
   // Inductive step.
   while (it != operands.end()) {
     operand = *it;
-    varOp = operation(varOp, exprTable.find(operand)->second);
+    varOp = operation(varOp, fetchOrAllocateExpr(operand));
     {
       LLVM_DEBUG(lec::dbgs() << "next operand:\n");
       lec::Scope indent;
@@ -404,7 +382,7 @@ void Solver::Circuit::variadicOperation(
 
 /// Allocates an IR value in the logical backend and returns its representing
 /// expression.
-z3::expr Solver::Circuit::allocateValue(Value value) {
+z3::expr Solver::Circuit::fetchOrAllocateExpr(Value value) {
   z3::expr expr(solver.context);
   auto exprPair = exprTable.find(value);
   if (exprPair != exprTable.end()) {
@@ -467,15 +445,6 @@ void Solver::Circuit::allocateConstant(Value result, const APInt &value) {
   }
 }
 
-/// Fetches the corresponding logical expression for a given IR value.
-z3::expr Solver::Circuit::fetchExpr(Value &value) {
-  z3::expr expr = exprTable.find(value)->second;
-  lec::Scope indent;
-  LLVM_DEBUG(lec::printExpr(expr));
-  LLVM_DEBUG(lec::printValue(value));
-  return expr;
-}
-
 /// Constrains the result of a MLIR operation to be equal a given logical
 /// express, simulating an assignment.
 void Solver::Circuit::constrainResult(Value &result, z3::expr &expr) {
@@ -486,7 +455,7 @@ void Solver::Circuit::constrainResult(Value &result, z3::expr &expr) {
     lec::Scope indent;
     LLVM_DEBUG(lec::printExpr(expr));
   }
-  z3::expr resExpr = allocateValue(result);
+  z3::expr resExpr = fetchOrAllocateExpr(result);
   z3::expr constraint = resExpr == expr;
   {
     LLVM_DEBUG(lec::dbgs() << "adding constraint:\n");

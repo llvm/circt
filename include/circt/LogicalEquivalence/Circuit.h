@@ -82,14 +82,13 @@ private:
       mlir::Value result, mlir::OperandRange operands,
       llvm::function_ref<z3::expr(const z3::expr &, const z3::expr &)>
           operation);
-  /// Allocates an IR value in the logical backend and returns its representing
-  /// expression.
-  z3::expr allocateValue(mlir::Value value);
+  /// Returns the expression allocated for the input value in the logical
+  /// backend if one has been allocated - otherwise allocates and returns a new
+  /// expression
+  z3::expr fetchOrAllocateExpr(mlir::Value value);
   /// Allocates a constant value in the logical backend and returns its
   /// representing expression.
   void allocateConstant(mlir::Value opResult, const mlir::APInt &opValue);
-  /// Fetches the corresponding logical expression for a given IR value.
-  z3::expr fetchExpr(mlir::Value &value);
   /// Constrains the result of a MLIR operation to be equal a given logical
   /// express, simulating an assignment.
   void constrainResult(mlir::Value &result, z3::expr &expr);
