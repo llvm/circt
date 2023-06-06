@@ -2592,7 +2592,7 @@ LogicalResult MatchOp::verify() {
                                      << " is matched more than once";
 
     // Check that the block argument type matches the tag's type.
-    auto expectedType = type.getElementType(tagIndex);
+    auto expectedType = type.getElementTypePreservingConst(tagIndex);
     auto regionType = region.getArgument(0).getType();
     if (regionType != expectedType)
       return emitOpError("region type ")
@@ -2676,7 +2676,7 @@ ParseResult MatchOp::parse(OpAsmParser &parser, OperationState &result) {
     tags.push_back(IntegerAttr::get(i32Type, *index));
 
     // Parse the region.
-    arg.type = enumType.getElementType(*index);
+    arg.type = enumType.getElementTypePreservingConst(*index);
     if (parser.parseRegion(*region, arg))
       return failure();
   }
@@ -3155,7 +3155,8 @@ ParseResult IsTagOp::parse(OpAsmParser &parser, OperationState &result) {
 FIRRTLType IsTagOp::inferReturnType(ValueRange operands,
                                     ArrayRef<NamedAttribute> attrs,
                                     std::optional<Location> loc) {
-  return UIntType::get(operands[0].getContext(), 1, /*isConst=*/false);
+  return UIntType::get(operands[0].getContext(), 1,
+                       isConst(operands[0].getType()));
 }
 
 template <typename OpTy>
