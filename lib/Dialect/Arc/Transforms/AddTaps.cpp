@@ -83,9 +83,10 @@ struct AddTapsPass : public AddTapsBase<AddTapsPass> {
 };
 } // namespace
 
-std::unique_ptr<Pass> arc::createAddTapsPass(std::optional<bool> tapPorts,
-                                             std::optional<bool> tapWires,
-                                             std::optional<bool> tapNamedValues) {
+std::unique_ptr<Pass>
+arc::createAddTapsPass(std::optional<bool> tapPorts,
+                       std::optional<bool> tapWires,
+                       std::optional<bool> tapNamedValues) {
   auto pass = std::make_unique<AddTapsPass>();
   if (tapPorts)
     pass->tapPorts = *tapPorts;
