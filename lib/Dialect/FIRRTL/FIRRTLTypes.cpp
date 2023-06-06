@@ -1639,7 +1639,7 @@ FVectorType::getSubTypeByFieldID(uint64_t fieldID) {
   if (fieldID == 0)
     return {*this, 0};
   return {getElementType().cast<circt::hw::FieldIDTypeInterface>(),
-          getIndexForFieldID(fieldID)};
+          getIndexAndSubfieldID(fieldID).second};
 }
 
 uint64_t FVectorType::getMaxFieldID() {
