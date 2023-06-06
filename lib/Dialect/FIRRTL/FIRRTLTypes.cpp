@@ -1052,6 +1052,7 @@ bool firrtl::areTypesRefCastable(Type dstType, Type srcType) {
   // NOLINTEND(misc-no-recursion)
 }
 
+// NOLINTBEGIN(misc-no-recursion)
 /// Returns true if the destination is at least as wide as an equivalent source.
 bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
   return TypeSwitch<FIRRTLBaseType, bool>(dstType)
@@ -1080,6 +1081,7 @@ bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
         return destWidth <= -1 || srcWidth <= -1 || destWidth >= srcWidth;
       });
 }
+// NOLINTEND(misc-no-recursion)
 
 /// Return the passive version of a firrtl type
 /// top level for ODS constraint usage
