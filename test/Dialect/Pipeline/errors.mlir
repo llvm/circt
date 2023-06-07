@@ -76,3 +76,42 @@ hw.module @mixed_stages(%arg0 : i32, %arg1 : i32, %clk : i1, %rst : i1) -> (out:
   }
   hw.output %0 : i32
 }
+
+// -----
+
+hw.module @earlyAccess(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out: i32) {
+  %0 = pipeline.scheduled(%arg0) clock %clk reset %rst : (i32) -> i32 {
+  ^bb0(%arg0_0: i32):
+    %true = hw.constant true
+    // expected-error @+1 {{'pipeline.latency' op result 0 is used before it is available.}}
+    %1 = pipeline.latency 2 -> (i32) {
+      %6 = comb.add %arg0_0, %arg0_0 : i32
+      pipeline.latency.return %6 : i32
+    }
+    pipeline.stage ^bb1 enable %true
+  ^bb1:
+    // expected-note@+1 {{use was operand 0. The result is available 1 stages later than this use.}}
+    pipeline.return %1 : i32
+  }
+  hw.output %0 : i32
+}
+
+// -----
+
+
+hw.module @registeredPass(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out: i32) {
+  %0 = pipeline.scheduled(%arg0) clock %clk reset %rst : (i32) -> i32 {
+  ^bb0(%arg0_0: i32):
+    %true = hw.constant true
+    // expected-error @+1 {{'pipeline.latency' op result 0 is used before it is available.}}
+    %1 = pipeline.latency 2 -> (i32) {
+      %6 = comb.add %arg0_0, %arg0_0 : i32
+      pipeline.latency.return %6 : i32
+    }
+    // expected-note@+1 {{use was operand 0. The result is available 2 stages later than this use.}}
+    pipeline.stage ^bb1 regs(%1 : i32) enable %true
+  ^bb1(%v : i32):
+    pipeline.return %v : i32
+  }
+  hw.output %0 : i32
+}

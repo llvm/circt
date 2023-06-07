@@ -215,4 +215,59 @@ def ReturnOp : Op<Pipeline_Dialect, "return", [
   let assemblyFormat = [{ ($inputs^)? attr-dict (`:` type($inputs)^)? }];
 }
 
+def LatencyOp : Op<Pipeline_Dialect, "latency", [
+    SingleBlockImplicitTerminator<"LatencyReturnOp">,
+    RegionKindInterface,
+    HasOnlyGraphRegion,
+  ]> {
+  
+  let summary = "Pipeline dialect latency operation.";
+  let description = [{
+    The `pipeline.latency` operation represents an operation for wrapping
+    multi-cycle operations. The operation declares a single block
+    wherein any operation may be placed within. The operation is not
+    `IsolatedFromAbove` meaning that the operation can reference values
+    defined outside of the operation (subject to the materialization
+    phase of the parent pipeline).
+  }];
+
+  let arguments = (ins ConfinedAttr<I32Attr, [IntMinValue<1>]>:$latency);
+  let results = (outs Variadic<AnyType>:$results);
+  let regions = (region AnyRegion:$body);
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins "unsigned":$latency)>
+  ];
+  let skipDefaultBuilders = 1;
+
+  let assemblyFormat = [{
+    attr-dict $latency `->` `(` type($results) `)` $body
+  }];
+
+  let extraClassDeclaration = [{
+    // Returns the body block of the latency operation.
+    Block* getBodyBlock() {
+      return &getBody().front();
+    }
+  }];
+}
+
+def LatencyReturnOp : Op<Pipeline_Dialect, "latency.return", [
+    Terminator,
+    HasParent<"LatencyOp">
+  ]> {
+  let summary = "Pipeline latency return operation.";
+  let description = [{
+    The `latency.return` operation represents a terminator of a `pipeline.latency`
+    operation.
+  }];
+
+  let hasVerifier = 1;
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let builders = [OpBuilder<(ins), [{ return; }]>];
+  let assemblyFormat = [{ ($inputs^)? attr-dict (`:` type($inputs)^)? }];
+}
+
+
 #endif // PIPELINE_OPS
