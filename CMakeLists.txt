@@ -409,7 +409,7 @@ endif()
 #-------------------------------------------------------------------------------
 
 # If capnp hasn't been explicitly disabled, find it.
-option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation).")
+option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation)." ON)
 if (CAPNP_DISABLE)
   message (STATUS "Disabling Cap'nProto.")
 else()
