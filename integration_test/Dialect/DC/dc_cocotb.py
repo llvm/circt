@@ -2,7 +2,7 @@ import cocotb.clock
 from cocotb.triggers import RisingEdge, ReadOnly
 import ctypes
 from ctypes import *
-from collections import dataclass
+from dataclasses import dataclass
 
 
 def struct_type(fieldTypes):
@@ -38,6 +38,9 @@ class DCPort:
   """
   Helper class that encapsulates a DC port from the DUT.
   """
+  dut: object
+  ready: object
+  valid: object
 
   def isReady(self):
     return self.ready.value.is_resolvable and self.ready.value == 1
@@ -83,14 +86,12 @@ class DCPort:
       await RisingEdge(self.dut.clock)
 
 
+@dataclass
 class DCDataPort(DCPort):
   """
   A !dc.value<...>-typed port.
   """
-
-  def __init__(self, dut, rdy, val, data):
-    super().__init__(dut, rdy, val)
-    self.data = data
+  data: object
 
   async def send(self, val):
     self.data.value = val
