@@ -12,7 +12,6 @@
 using namespace circt;
 using namespace arc;
 using namespace hw;
-using llvm::Optional;
 
 namespace {
 struct AddTapsPass : public AddTapsBase<AddTapsPass> {
@@ -84,9 +83,10 @@ struct AddTapsPass : public AddTapsBase<AddTapsPass> {
 };
 } // namespace
 
-std::unique_ptr<Pass> arc::createAddTapsPass(Optional<bool> tapPorts,
-                                             Optional<bool> tapWires,
-                                             Optional<bool> tapNamedValues) {
+std::unique_ptr<Pass>
+arc::createAddTapsPass(std::optional<bool> tapPorts,
+                       std::optional<bool> tapWires,
+                       std::optional<bool> tapNamedValues) {
   auto pass = std::make_unique<AddTapsPass>();
   if (tapPorts)
     pass->tapPorts = *tapPorts;

@@ -48,7 +48,10 @@ public:
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
             // Intrinsic Expressions.
             IsXIntrinsicOp, PlusArgsValueIntrinsicOp, PlusArgsTestIntrinsicOp,
-            SizeOfIntrinsicOp,
+            SizeOfIntrinsicOp, LTLAndIntrinsicOp, LTLOrIntrinsicOp,
+            LTLDelayIntrinsicOp, LTLConcatIntrinsicOp, LTLNotIntrinsicOp,
+            LTLImplicationIntrinsicOp, LTLEventuallyIntrinsicOp,
+            LTLClockIntrinsicOp, LTLDisableIntrinsicOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
@@ -155,6 +158,15 @@ public:
   HANDLE(PlusArgsValueIntrinsicOp, Unhandled);
   HANDLE(PlusArgsTestIntrinsicOp, Unhandled);
   HANDLE(SizeOfIntrinsicOp, Unhandled);
+  HANDLE(LTLAndIntrinsicOp, Unhandled);
+  HANDLE(LTLOrIntrinsicOp, Unhandled);
+  HANDLE(LTLDelayIntrinsicOp, Unhandled);
+  HANDLE(LTLConcatIntrinsicOp, Unhandled);
+  HANDLE(LTLNotIntrinsicOp, Unhandled);
+  HANDLE(LTLImplicationIntrinsicOp, Unhandled);
+  HANDLE(LTLEventuallyIntrinsicOp, Unhandled);
+  HANDLE(LTLClockIntrinsicOp, Unhandled);
+  HANDLE(LTLDisableIntrinsicOp, Unhandled);
 
   // Miscellaneous.
   HANDLE(BitsPrimOp, Unhandled);
@@ -191,10 +203,11 @@ public:
         .template Case<AttachOp, ConnectOp, StrictConnectOp, RefDefineOp,
                        ForceOp, PrintFOp, SkipOp, StopOp, WhenOp, AssertOp,
                        AssumeOp, CoverOp, ProbeOp, RefForceOp,
-                       RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp>(
-            [&](auto opNode) -> ResultType {
-              return thisCast->visitStmt(opNode, args...);
-            })
+                       RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
+                       VerifAssertIntrinsicOp, VerifAssumeIntrinsicOp,
+                       VerifCoverIntrinsicOp>([&](auto opNode) -> ResultType {
+          return thisCast->visitStmt(opNode, args...);
+        })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidStmt(op, args...);
         });
@@ -234,6 +247,9 @@ public:
   HANDLE(RefForceInitialOp);
   HANDLE(RefReleaseOp);
   HANDLE(RefReleaseInitialOp);
+  HANDLE(VerifAssertIntrinsicOp);
+  HANDLE(VerifAssumeIntrinsicOp);
+  HANDLE(VerifCoverIntrinsicOp);
 
 #undef HANDLE
 };

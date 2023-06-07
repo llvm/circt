@@ -5730,6 +5730,9 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         .Case<om::ClassOp>([&](auto op) {
           symbolCache.addDefinition(op.getSymNameAttr(), op);
         })
+        .Case<om::ConstantOp>([&](auto op) {
+          // Constant ops might reference symbols, skip them.
+        })
         .Default([&](auto *) {
           op.emitError("unknown operation (SharedEmitterState::gatherFiles)");
           encounteredError = true;

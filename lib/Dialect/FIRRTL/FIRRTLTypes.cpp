@@ -300,6 +300,10 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     if (parser.parseCommaSeparatedList(mlir::AsmParser::Delimiter::LessGreater,
                                        parseEnumElement))
       return failure();
+    if (failed(FEnumType::verify(
+            [&]() { return parser.emitError(parser.getNameLoc()); }, elements,
+            isConst)))
+      return failure();
 
     return result = FEnumType::get(context, elements, isConst), success();
   }
@@ -651,7 +655,7 @@ FIRRTLBaseType FIRRTLBaseType::getWidthlessType() {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
       .Case<ClockType, ResetType, AsyncResetType>([](auto a) { return a; })
       .Case<UIntType, SIntType, AnalogType>(
-          [&](auto a) { return a.get(this->getContext(), -1); })
+          [&](auto a) { return a.get(this->getContext(), -1, a.isConst()); })
       .Case<BundleType>([&](auto a) {
         SmallVector<BundleType::BundleElement, 4> newElements;
         newElements.reserve(a.getElements().size());
@@ -1773,7 +1777,7 @@ FVectorType::getSubTypeByFieldID(uint64_t fieldID) {
   if (fieldID == 0)
     return {*this, 0};
   return {getElementType().cast<circt::hw::FieldIDTypeInterface>(),
-          getIndexForFieldID(fieldID)};
+          getIndexAndSubfieldID(fieldID).second};
 }
 
 uint64_t FVectorType::getMaxFieldID() {
@@ -2119,6 +2123,8 @@ auto FEnumType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
       return emitErrorFn() << "enum field '" << elt.name << "' not passive";
     if (r.containsAnalog)
       return emitErrorFn() << "enum field '" << elt.name << "' contains analog";
+    if (r.containsConst && !isConst)
+      return emitErrorFn() << "enum with 'const' elements must be 'const'";
     // TODO: exclude reference containing
   }
   return success();

@@ -464,28 +464,41 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
       return true;
     };
 
-    auto handled = TypeSwitch<Operation *, bool>(op)
-                       .Case<SubfieldOp>([&](auto subfieldOp) {
-                         return handle(subfieldOp.getInput(),
-                                       subfieldOp.getInput().getType().get(),
-                                       subfieldOp.getFieldIndex());
-                       })
-                       .Case<OpenSubfieldOp>([&](auto subfieldOp) {
-                         return handle(subfieldOp.getInput(),
-                                       subfieldOp.getInput().getType(),
-                                       subfieldOp.getFieldIndex());
-                       })
-                       .Case<SubindexOp>([&](auto subindexOp) {
-                         return handle(subindexOp.getInput(),
-                                       subindexOp.getInput().getType().get(),
-                                       subindexOp.getIndex());
-                       })
-                       .Case<OpenSubindexOp>([&](auto subindexOp) {
-                         return handle(subindexOp.getInput(),
-                                       subindexOp.getInput().getType(),
-                                       subindexOp.getIndex());
-                       })
-                       .Default(false);
+    auto handled =
+        TypeSwitch<Operation *, bool>(op)
+            .Case<SubfieldOp>([&](auto subfieldOp) {
+              return handle(subfieldOp.getInput(),
+                            subfieldOp.getInput().getType().get(),
+                            subfieldOp.getFieldIndex());
+            })
+            .Case<OpenSubfieldOp>([&](auto subfieldOp) {
+              return handle(subfieldOp.getInput(),
+                            subfieldOp.getInput().getType(),
+                            subfieldOp.getFieldIndex());
+            })
+            .Case<SubindexOp>([&](auto subindexOp) {
+              return handle(subindexOp.getInput(),
+                            subindexOp.getInput().getType().get(),
+                            subindexOp.getIndex());
+            })
+            .Case<OpenSubindexOp>([&](auto subindexOp) {
+              return handle(subindexOp.getInput(),
+                            subindexOp.getInput().getType(),
+                            subindexOp.getIndex());
+            })
+            .Case<RefSubOp>([&](RefSubOp refSubOp) {
+              bool result =
+                  TypeSwitch<FIRRTLBaseType, bool>(refSubOp.getInput()
+                                                       .getType()
+                                                       .getType()
+                                                       .getAnonymousType())
+                      .Case<FVectorType, BundleType>([&](auto type) -> bool {
+                        return handle(refSubOp.getInput(), type,
+                                      refSubOp.getIndex());
+                      });
+              return result;
+            })
+            .Default(false);
     if (!handled)
       break;
   }
@@ -590,17 +603,34 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
                                        Value value, unsigned fieldID) {
   // When the fieldID hits 0, we've found the target value.
   while (fieldID != 0) {
-    auto type = value.getType();
-    if (auto bundle = firrtl::type_dyn_cast<BundleType>(type)) {
-      auto index = bundle.getIndexForFieldID(fieldID);
-      value = builder.create<SubfieldOp>(value, index);
-      fieldID -= bundle.getFieldID(index);
-    } else {
-      auto vector = firrtl::type_cast<FVectorType>(type);
-      auto index = vector.getIndexForFieldID(fieldID);
-      value = builder.create<SubindexOp>(value, index);
-      fieldID -= vector.getFieldID(index);
-    }
+    TypeSwitch<Type, void>(value.getType())
+        .Case<BundleType, OpenBundleType>([&](auto bundle) {
+          auto index = bundle.getIndexForFieldID(fieldID);
+          value = builder.create<SubfieldOp>(value, index);
+          fieldID -= bundle.getFieldID(index);
+        })
+        .Case<FVectorType, OpenVectorType>([&](auto vector) {
+          auto index = vector.getIndexForFieldID(fieldID);
+          value = builder.create<SubindexOp>(value, index);
+          fieldID -= vector.getFieldID(index);
+        })
+        .Case<RefType>([&](auto reftype) {
+          TypeSwitch<FIRRTLBaseType, void>(reftype.getType())
+              .template Case<BundleType, FVectorType>([&](auto type) {
+                auto index = type.getIndexForFieldID(fieldID);
+                value = builder.create<RefSubOp>(value, index);
+                fieldID -= type.getFieldID(index);
+              })
+              .Default([&](auto type) {
+                llvm::report_fatal_error(
+                    "unrecognized type for indexing through with fieldID");
+              });
+        })
+        // TODO: Plumb error case out and handle in callers.
+        .Default([&](auto _) {
+          llvm::report_fatal_error(
+              "unrecognized type for indexing through with fieldID");
+        });
   }
   return value;
 }

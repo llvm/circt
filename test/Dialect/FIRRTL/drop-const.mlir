@@ -10,8 +10,7 @@ firrtl.module @DropConst() {}
 // CHECK-SAME: in d: !firrtl.vector<uint<1>, 3>,
 // CHECK-SAME: in e: !firrtl.vector<uint<1>, 3>,
 // CHECK-SAME: in f: !firrtl.enum<a: uint<2>, b: uint<1>>,
-// CHECK-SAME: in g: !firrtl.enum<a: uint<2>, b: uint<1>>,
-// CHECK-SAME: out h: !firrtl.probe<uint<1>>)
+// CHECK-SAME: out g: !firrtl.probe<uint<1>>)
 firrtl.extmodule @ConstPortExtModule(
   in a: !firrtl.const.uint<1>, 
   in b: !firrtl.const.bundle<a: uint<1>>,
@@ -19,8 +18,7 @@ firrtl.extmodule @ConstPortExtModule(
   in d: !firrtl.const.vector<uint<1>, 3>,
   in e: !firrtl.vector<const.uint<1>, 3>,
   in f: !firrtl.const.enum<a: uint<2>, b: uint<1>>,
-  in g: !firrtl.enum<a: uint<2>, b: const.uint<1>>,
-  out h: !firrtl.probe<const.uint<1>>
+  out g: !firrtl.probe<const.uint<1>>
 )
 
 // Const is dropped from module signature and ops
@@ -31,8 +29,7 @@ firrtl.extmodule @ConstPortExtModule(
 // CHECK-SAME: in %d: !firrtl.vector<uint<1>, 3>,
 // CHECK-SAME: in %e: !firrtl.vector<uint<1>, 3>,
 // CHECK-SAME: in %f: !firrtl.enum<a: uint<2>, b: uint<1>>,
-// CHECK-SAME: in %g: !firrtl.enum<a: uint<2>, b: uint<1>>,
-// CHECK-SAME: out %h: !firrtl.probe<uint<1>>)
+// CHECK-SAME: out %g: !firrtl.probe<uint<1>>)
 firrtl.module @ConstPortModule(
   in %a: !firrtl.const.uint<1>, 
   in %b: !firrtl.const.bundle<a: uint<1>>,
@@ -40,8 +37,7 @@ firrtl.module @ConstPortModule(
   in %d: !firrtl.const.vector<uint<1>, 3>,
   in %e: !firrtl.vector<const.uint<1>, 3>,
   in %f: !firrtl.const.enum<a: uint<2>, b: uint<1>>,
-  in %g: !firrtl.enum<a: uint<2>, b: const.uint<1>>,
-  out %h: !firrtl.probe<const.uint<1>>
+  out %g: !firrtl.probe<const.uint<1>>
 ) {
   // CHECK-NEXT: firrtl.instance inst @ConstPortExtModule(
   // CHECK-SAME: in a: !firrtl.uint<1>
@@ -50,17 +46,15 @@ firrtl.module @ConstPortModule(
   // CHECK-SAME: in d: !firrtl.vector<uint<1>, 3>,
   // CHECK-SAME: in e: !firrtl.vector<uint<1>, 3>,
   // CHECK-SAME: in f: !firrtl.enum<a: uint<2>, b: uint<1>>,
-  // CHECK-SAME: in g: !firrtl.enum<a: uint<2>, b: uint<1>>,
-  // CHECK-SAME: out h: !firrtl.probe<uint<1>>)
-  %a2, %b2, %c2, %d2, %e2, %f2, %g2, %h2 = firrtl.instance inst @ConstPortExtModule(
+  // CHECK-SAME: out g: !firrtl.probe<uint<1>>)
+  %a2, %b2, %c2, %d2, %e2, %f2, %g2 = firrtl.instance inst @ConstPortExtModule(
     in a: !firrtl.const.uint<1>, 
     in b: !firrtl.const.bundle<a: uint<1>>,
     in c: !firrtl.bundle<a: const.uint<1>>,
     in d: !firrtl.const.vector<uint<1>, 3>,
     in e: !firrtl.vector<const.uint<1>, 3>,
     in f: !firrtl.const.enum<a: uint<2>, b: uint<1>>,
-    in g: !firrtl.enum<a: uint<2>, b: const.uint<1>>,
-    out h: !firrtl.probe<const.uint<1>>
+    out g: !firrtl.probe<const.uint<1>>
   )
 
   firrtl.strictconnect %a2, %a : !firrtl.const.uint<1>
@@ -69,8 +63,7 @@ firrtl.module @ConstPortModule(
   firrtl.strictconnect %d2, %d : !firrtl.const.vector<uint<1>, 3>
   firrtl.strictconnect %e2, %e : !firrtl.vector<const.uint<1>, 3>
   firrtl.strictconnect %f2, %f : !firrtl.const.enum<a: uint<2>, b: uint<1>>
-  firrtl.strictconnect %g2, %g : !firrtl.enum<a: uint<2>, b: const.uint<1>>
-  firrtl.ref.define %h, %h2 : !firrtl.probe<const.uint<1>>
+  firrtl.ref.define %g, %g2 : !firrtl.probe<const.uint<1>>
 }
 
 // Const-cast ops are erased
