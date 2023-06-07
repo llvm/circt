@@ -670,3 +670,14 @@ circuit ConstProbe:
 circuit MultiConst:
   module MultiConst:
     output x : const const UInt<1> ; expected-error {{'const' can only be specified once on a type}}
+
+;// -----
+
+circuit DefinePromoteToRW:
+  extmodule Ref:
+    output ro : Probe<UInt<1>>
+  module DefinePromoteToRW:
+    output rw : RWProbe<UInt<1>>
+    inst r of Ref
+    ; expected-error @below {{cannot define reference of type '!firrtl.rwprobe<uint<1>>' with incompatible reference of type '!firrtl.probe<uint<1>>'}}
+    define rw = r.ro
