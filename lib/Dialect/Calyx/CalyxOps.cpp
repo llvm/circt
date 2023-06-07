@@ -2120,10 +2120,12 @@ static llvm::StringMap<EnableOp> getAllEnableOpsInImmediateBody(OpTy parent) {
 /// (2) both regions are SeqOps. The case when these are different, e.g. ParOp
 /// and SeqOp, will only produce less optimal code, or even worse, change the
 /// behavior.
-template <typename OpTy>
-static bool hasCommonTailPatternPreConditions(IfOp op) {
-  static_assert(std::is_same<SeqOp, OpTy>() || std::is_same<ParOp, OpTy>(),
-                "Should be a SeqOp or ParOp.");
+template <typename IfOpTy, typename TailOpTy>
+static bool hasCommonTailPatternPreConditions(IfOpTy op) {
+  static_assert(std::is_same<SeqOp, TailOpTy>() || std::is_same<ParOp, TailOpTy>() || std::is_same<StaticParOp, TailOpTy>(),
+                "Should be a SeqOp or ParOp StaticParOp.");
+  static_assert(std::is_same<IfOp, IfOpTy>() || std::is_same<StaticIfOp, IfOpTy>(),
+                "Should be a IfOp or StaticIfOp.");
 
   if (!op.thenBodyExists() || !op.elseBodyExists())
     return false;
@@ -2131,7 +2133,7 @@ static bool hasCommonTailPatternPreConditions(IfOp op) {
     return false;
 
   Block *thenBody = op.getThenBody(), *elseBody = op.getElseBody();
-  return isa<OpTy>(thenBody->front()) && isa<OpTy>(elseBody->front());
+  return isa<TailOpTy>(thenBody->front()) && isa<TailOpTy>(elseBody->front());
 }
 
 ///                                         seq {
@@ -2199,8 +2201,10 @@ static LogicalResult commonTailPatternWithPar(OpTy controlOp,
   static_assert(std::is_same<StaticParOp, ParOpTy>() ||
                     std::is_same<ParOp, ParOpTy>(),
                 "Branches should be checking for an ParOp or StaticParOp");
-  auto thenControl = cast<ParOpTy>(controlOp.getThenBody()->front()),
-       elseControl = cast<ParOpTy>(controlOp.getElseBody()->front());
+  if (!hasCommonTailPatternPreConditions<ParOp>(ifOp))
+      return failure();
+  auto thenControl = cast<ParOp>(controlOp.getThenBody()->front()),
+       elseControl = cast<ParOp>(controlOp.getElseBody()->front());
 
   llvm::StringMap<EnableOp> A = getAllEnableOpsInImmediateBody(thenControl),
                             B = getAllEnableOpsInImmediateBody(elseControl);
@@ -2258,8 +2262,6 @@ void IfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                        MLIRContext *context) {
   patterns.add<CommonTailPatternWithSeq, EmptyIfBody>(context);
   patterns.add(commonTailPatternWithPar<IfOp, ParOp>);
-  // if ops can have static control in them (opposite is not true)
-  patterns.add(commonTailPatternWithPar<IfOp, StaticParOp>);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2316,7 +2318,7 @@ struct EmptyStaticIfBody : mlir::OpRewritePattern<StaticIfOp> {
 void StaticIfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                              MLIRContext *context) {
   patterns.add<EmptyStaticIfBody>(context);
-  patterns.add(commonTailPatternWithPar<StaticIfOp, StaticParOp>);
+  // patterns.add(commonTailPatternWithPar<StaticIfOp, StaticParOp>);
 }
 
 //===----------------------------------------------------------------------===//
