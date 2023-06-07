@@ -225,7 +225,7 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto &region = op->getRegion(0);
   // Operations that are allowed in the body of a ControlLike op.
   auto isValidBodyOp = [](Operation *operation) {
-    return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp, StaticRepeatOp,
+    return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp, StaticParOp, StaticRepeatOp,
                StaticIfOp>(operation);
   };
   for (auto &&bodyOp : region.front()) {
@@ -351,7 +351,6 @@ static void eraseControlWithConditional(OpTy op, PatternRewriter &rewriter) {
 
   // Save information about the operation, and erase it.
   Value cond = op.getCond();
-  auto component = op->template getParentOfType<ComponentOp>();
   rewriter.eraseOp(op);
 
   // Check if conditional is still needed, and remove if it isn't
@@ -2265,6 +2264,8 @@ void IfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                        MLIRContext *context) {
   patterns.add<CommonTailPatternWithSeq, EmptyIfBody>(context);
   patterns.add(commonTailPatternWithPar<IfOp, ParOp>);
+  // possible for dynamic if op to contain static par ops (other way around not true)
+  patterns.add(commonTailPatternWithPar<IfOp, StaticParOp>);
 }
 
 //===----------------------------------------------------------------------===//
