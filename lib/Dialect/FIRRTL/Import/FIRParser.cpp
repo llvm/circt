@@ -2899,16 +2899,22 @@ ParseResult FIRStmtParser::parseRefForce() {
                startTok.getLoc(),
                "expected rwprobe-type expression for force destination, got ")
            << dest.getType();
-  if (isa<RefType>(src.getType()))
+  auto srcBaseType = dyn_cast<FIRRTLBaseType>(src.getType());
+  if (!srcBaseType)
     return emitError(startTok.getLoc(),
                      "expected non-reference-type for force source, got ")
            << src.getType();
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  // Add a const cast if needed
-  if (src.getType() != ref.getType() && containsConst(src.getType()))
-    src = builder.create<ConstCastOp>(ref.getType(), src).getResult();
+  // Cast ref to accomodate uninferred sources.
+  auto noConstSrcType = srcBaseType.getAllConstDroppedType();
+  if (noConstSrcType != ref.getType()) {
+    // Try to cast destination to rwprobe of source type (dropping const).
+    auto compatibleRWProbe = RefType::get(noConstSrcType, true);
+    if (areTypesRefCastable(compatibleRWProbe, ref))
+      dest = builder.create<RefCastOp>(compatibleRWProbe, dest);
+  }
 
   builder.create<RefForceOp>(clock, pred, dest, src);
 
@@ -2933,7 +2939,8 @@ ParseResult FIRStmtParser::parseRefForceInitial() {
     return emitError(startTok.getLoc(), "expected rwprobe-type expression for "
                                         "force_initial destination, got ")
            << dest.getType();
-  if (isa<RefType>(src.getType()))
+  auto srcBaseType = dyn_cast<FIRRTLBaseType>(src.getType());
+  if (!srcBaseType)
     return emitError(startTok.getLoc(),
                      "expected non-reference-type expression for force_initial "
                      "source, got ")
@@ -2941,9 +2948,14 @@ ParseResult FIRStmtParser::parseRefForceInitial() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  // Add a const cast if needed
-  if (src.getType() != ref.getType() && containsConst(src.getType()))
-    src = builder.create<ConstCastOp>(ref.getType(), src).getResult();
+  // Cast ref to accomodate uninferred sources.
+  auto noConstSrcType = srcBaseType.getAllConstDroppedType();
+  if (noConstSrcType != ref.getType()) {
+    // Try to cast destination to rwprobe of source type (dropping const).
+    auto compatibleRWProbe = RefType::get(noConstSrcType, true);
+    if (areTypesRefCastable(compatibleRWProbe, ref))
+      dest = builder.create<RefCastOp>(compatibleRWProbe, dest);
+  }
 
   auto value = APInt::getAllOnes(1);
   auto type = UIntType::get(builder.getContext(), 1);
