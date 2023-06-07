@@ -93,7 +93,6 @@ jobs:
             -DLLVM_USE_LINKER=lld \
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
-            -DCAPNP_DISABLE=OFF \
             -DLLVM_LIT_ARGS="-v --show-unsupported ${{ matrix.lit-flags }}"
       - name: Test CIRCT
         run: |
