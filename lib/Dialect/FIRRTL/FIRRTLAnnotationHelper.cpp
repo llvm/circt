@@ -668,7 +668,8 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
       };
       if (isa<IntType>(wireType))
         addWireWithCast([&](auto v) {
-          return sinkBuilder.create<AsUIntPrimOp>(wireType, v);
+          return sinkBuilder.create<AsUIntPrimOp>(
+              wireType.getConstType(isConst(v.getType())), v);
         });
       else if (isa<AsyncResetType>(wireType))
         addWireWithCast(
