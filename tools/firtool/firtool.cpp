@@ -141,16 +141,6 @@ static cl::opt<bool>
 
 static firtool::FirtoolOptions firtoolOptions(mainCategory);
 
-static cl::opt<bool> initializeMemSynthesis(
-    "initialize-mem-synthesis",
-    cl::desc("Enable unconditional memory initialization (Eg. when SYNTHESIS "
-             "flag is defined by synthesis tool)"),
-    cl::init(false), cl::cat(mainCategory));
-
-static bool isRandomEnabled(RandomKind kind) {
-  return disableRandom != RandomKind::All && disableRandom != kind;
-}
-
 enum OutputFormatKind {
   OutputParseOnly,
   OutputIRFir,
@@ -343,63 +333,11 @@ static LogicalResult processBuffer(
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {
-
-    // Remove TraceAnnotations and write their updated paths to an output
-    // annotation file.
-    if (outputAnnotationFilename.empty())
-      pm.nest<firrtl::CircuitOp>().addPass(firrtl::createResolveTracesPass());
-    else
-      pm.nest<firrtl::CircuitOp>().addPass(
-          firrtl::createResolveTracesPass(outputAnnotationFilename.getValue()));
-
-    // Lower the ref.resolve and ref.send ops and remove the RefType ports.
-    // LowerToHW cannot handle RefType so, this pass must be run to remove all
-    // RefType ports and ops.
-    pm.addPass(firrtl::createLowerXMRPass());
-
-    pm.addPass(createLowerFIRRTLToHWPass(
-        enableAnnotationWarning.getValue(), emitChiselAssertsAsSVA.getValue(),
-        addMuxPragmas.getValue(), !isRandomEnabled(RandomKind::Mem),
-        !isRandomEnabled(RandomKind::Reg), initializeMemSynthesis.getValue()));
-
-    if (outputFormat == OutputIRHW) {
-      if (!disableOptimization) {
-        auto &modulePM = pm.nest<hw::HWModuleOp>();
-        modulePM.addPass(createCSEPass());
-        modulePM.addPass(createSimpleCanonicalizerPass());
-      }
-    } else {
-      // If enabled, run the optimizer.
-      if (!disableOptimization) {
-        auto &modulePM = pm.nest<hw::HWModuleOp>();
-        modulePM.addPass(createCSEPass());
-        modulePM.addPass(createSimpleCanonicalizerPass());
-        modulePM.addPass(createCSEPass());
-      }
-
-      pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass(
-          {/*disableRandomization=*/!isRandomEnabled(RandomKind::Reg),
-           /*addVivadoRAMAddressConflictSynthesisBugWorkaround=*/
-           addVivadoRAMAddressConflictSynthesisBugWorkaround}));
-      pm.addPass(sv::createHWMemSimImplPass(
-          replSeqMem, ignoreReadEnableMem, addMuxPragmas,
-          !isRandomEnabled(RandomKind::Mem), !isRandomEnabled(RandomKind::Reg),
-          initializeMemSynthesis,
-          addVivadoRAMAddressConflictSynthesisBugWorkaround));
-
-      if (extractTestCode)
-        pm.addPass(sv::createSVExtractTestCodePass(etcDisableInstanceExtraction,
-                                                   etcDisableModuleInlining));
-
-      // If enabled, run the optimizer.
-      if (!disableOptimization) {
-        auto &modulePM = pm.nest<hw::HWModuleOp>();
-        modulePM.addPass(createCSEPass());
-        modulePM.addPass(createSimpleCanonicalizerPass());
-        modulePM.addPass(createCSEPass());
-        modulePM.addPass(sv::createHWCleanupPass());
-      }
-    }
+    if (failed(firtool::populateLowFIRRTLToHW(pm, firtoolOptions)))
+      return failure();
+    if (outputFormat != OutputIRHW)
+      if (failed(firtool::populateHWToSV(pm, firtoolOptions)))
+        return failure();
   }
 
   // Load the emitter options from the command line. Command line options if

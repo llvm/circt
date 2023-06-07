@@ -166,6 +166,13 @@ struct FirtoolOptions {
                      "Disable emission of all randomization code")),
       llvm::cl::init(RandomKind::None), llvm::cl::cat(category)};
 
+  llvm::cl::opt<bool> initializeMemSynthesis{
+      "initialize-mem-synthesis",
+      llvm::cl::desc(
+          "Enable unconditional memory initialization (Eg. when SYNTHESIS "
+          "flag is defined by synthesis tool)"),
+      llvm::cl::init(false), llvm::cl::cat(category)};
+
   llvm::cl::opt<std::string> outputAnnotationFilename{
       "output-annotation-file",
       llvm::cl::desc("Optional output annotation file"),

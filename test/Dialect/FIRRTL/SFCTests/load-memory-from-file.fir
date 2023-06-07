@@ -24,10 +24,10 @@ circuit Foo :
 
       ; INIT_NONE-NOT:       readmem
 
-      ; INIT_INLINE_SYN:     `ifndef SYNTHESIS
+      ; INIT_INLINE_SYN:     `ifdef ENABLE_INITIAL_MEM_
       ; INIT_INLINE:           initial
       ; INIT_INLINE-NEXT:        $readmemh("mem1.txt", [[memory]]);
-      ; INIT_INLINE_SYN:     `endif // not def SYNTHESIS
+      ; INIT_INLINE_SYN:     `endif // ENABLE_INITIAL_MEM_
 
       ; INIT_OUTLINE:        /* This instance is elsewhere emitted as a bind statement.
       ; INIT_OUTLINE-NEXT:     [[bindModule:[a-zA-Z0-9_]+]] [[bindInstance:[a-zA-Z0-9_]+]] ();
