@@ -67,8 +67,9 @@ struct CollapseUnaryControl : mlir::OpRewritePattern<CtrlOp> {
   LogicalResult matchAndRewrite(CtrlOp ctrlOp,
                                 PatternRewriter &rewriter) const override {
     auto &ops = ctrlOp.getBodyBlock()->getOperations();
-    bool isUnaryControl = (ops.size() == 1) && isa<EnableOp>(ops.front()) &&
-                          isa<SeqOp, ParOp, StaticParOp>(ctrlOp->getParentOp());
+    bool isUnaryControl =
+        (ops.size() == 1) && isa<EnableOp>(ops.front()) &&
+        isa<SeqOp, ParOp, StaticSeqOp, StaticParOp>(ctrlOp->getParentOp());
     if (!isUnaryControl)
       return failure();
 
@@ -135,12 +136,25 @@ PortInfo calyx::getPortInfo(BlockArgument arg) {
 /// Returns whether the given operation has a control region.
 static bool hasControlRegion(Operation *op) {
   return isa<ControlOp, SeqOp, IfOp, WhileOp, ParOp, StaticRepeatOp,
-             StaticParOp>(op);
+             StaticSeqOp, StaticParOp>(op);
+}
+
+/// Returns whether the given operation is a static control operator
+static bool isStaticControl(Operation *op) {
+  if (isa<EnableOp>(op)) {
+    // for enables, we need to check whether its corresponding group is static
+    auto component = op->template getParentOfType<ComponentOp>();
+    auto enableOp = llvm::cast<EnableOp>(op);
+    StringRef groupName = enableOp.getGroupName();
+    auto group = component.getWiresOp().lookupSymbol<GroupInterface>(groupName);
+    return isa<StaticGroupOp>(group);
+  }
+  return isa<StaticSeqOp, StaticRepeatOp, StaticParOp>(op);
 }
 
 /// Verifies the body of a ControlLikeOp.
 static LogicalResult verifyControlBody(Operation *op) {
-  if (isa<SeqOp, ParOp, StaticParOp>(op))
+  if (isa<SeqOp, ParOp, StaticSeqOp, StaticParOp>(op))
     // This does not apply to sequential and parallel regions.
     return success();
 
@@ -212,8 +226,8 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto &region = op->getRegion(0);
   // Operations that are allowed in the body of a ControlLike op.
   auto isValidBodyOp = [](Operation *operation) {
-    return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp, StaticRepeatOp>(
-        operation);
+    return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp, StaticRepeatOp,
+               StaticSeqOp, StaticParOp>(operation);
   };
   for (auto &&bodyOp : region.front()) {
     if (isValidBodyOp(&bodyOp))
@@ -277,8 +291,9 @@ template <typename OpTy>
 static LogicalResult collapseControl(OpTy controlOp,
                                      PatternRewriter &rewriter) {
   static_assert(std::is_same<SeqOp, OpTy>() || std::is_same<ParOp, OpTy>() ||
+                    std::is_same<StaticSeqOp, OpTy>() ||
                     std::is_same<StaticParOp, OpTy>(),
-                "Should be a SeqOp, ParOp or StaticParOp.");
+                "Should be a SeqOp, ParOp, StaticSeqOp, or StaticParOp");
 
   if (isa<OpTy>(controlOp->getParentOp())) {
     Block *controlBody = controlOp.getBodyBlock();
@@ -851,6 +866,28 @@ void SeqOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
   patterns.add(collapseControl<SeqOp>);
   patterns.add(emptyControl<SeqOp>);
   patterns.insert<CollapseUnaryControl<SeqOp>>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// StaticSeqOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StaticSeqOp::verify() {
+  auto &ops = (*this).getBodyBlock()->getOperations();
+  for (Operation &op : ops) {
+    if (!isStaticControl(&op)) {
+      return op.emitOpError("static seq has non static control within it");
+    }
+  }
+
+  return success();
+}
+
+void StaticSeqOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                              MLIRContext *context) {
+  patterns.add(collapseControl<StaticSeqOp>);
+  patterns.add(emptyControl<StaticSeqOp>);
+  patterns.insert<CollapseUnaryControl<StaticSeqOp>>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2267,6 +2304,17 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
 //===----------------------------------------------------------------------===//
 // StaticRepeatOp
 //===----------------------------------------------------------------------===//
+LogicalResult StaticRepeatOp::verify() {
+  for (auto &&bodyOp : (*this).getRegion().front()) {
+    // there should only be one bodyOp for each StaticRepeatOp
+    if (!isStaticControl(&bodyOp)) {
+      return bodyOp.emitOpError(
+          "static repeat has non static control within it");
+    }
+  }
+
+  return success();
+}
 
 static LogicalResult zeroRepeat(StaticRepeatOp op, PatternRewriter &rewriter) {
   if (op.getCount() == 0) {

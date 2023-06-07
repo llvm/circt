@@ -498,6 +498,10 @@ private:
             emitCalyxSection(prependAttributes(op, "seq"),
                              [&]() { emitCalyxControl(op.getBodyBlock()); });
           })
+          .Case<StaticSeqOp>([&](auto op) {
+            emitCalyxSection(prependAttributes(op, "static seq"),
+                             [&]() { emitCalyxControl(op.getBodyBlock()); });
+          })
           .Case<ParOp>([&](auto op) {
             emitCalyxSection(prependAttributes(op, "par"),
                              [&]() { emitCalyxControl(op.getBodyBlock()); });
