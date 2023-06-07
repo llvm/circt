@@ -2208,20 +2208,20 @@ static LogicalResult commonTailPatternWithPar(OpTy controlOp,
   auto thenControl = cast<ParOpTy>(controlOp.getThenBody()->front()),
        elseControl = cast<ParOpTy>(controlOp.getElseBody()->front());
 
-  llvm::StringMap<EnableOp> A = getAllEnableOpsInImmediateBody(thenControl),
-                            B = getAllEnableOpsInImmediateBody(elseControl);
+  llvm::StringMap<EnableOp> a = getAllEnableOpsInImmediateBody(thenControl),
+                            b = getAllEnableOpsInImmediateBody(elseControl);
   // Compute the intersection between `A` and `B`.
   SmallVector<StringRef> groupNames;
-  for (auto a = A.begin(); a != A.end(); ++a) {
-    StringRef groupName = a->getKey();
-    auto b = B.find(groupName);
-    if (b == B.end())
+  for (auto aIndex = a.begin(); aIndex != a.end(); ++aIndex) {
+    StringRef groupName = aIndex->getKey();
+    auto bIndex = b.find(groupName);
+    if (bIndex == b.end())
       continue;
     // This is also an element in B.
     groupNames.push_back(groupName);
     // Since these are being pulled out, erase them.
-    rewriter.eraseOp(a->getValue());
-    rewriter.eraseOp(b->getValue());
+    rewriter.eraseOp(aIndex->getValue());
+    rewriter.eraseOp(bIndex->getValue());
   }
 
   // Place the IfOp and EnableOp(s) inside a parallel region, in case this
