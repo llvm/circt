@@ -198,6 +198,12 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             resolveOps.push_back(resolve);
             return success();
           })
+          .Case<RefCastOp>([&](RefCastOp op) {
+            markForRemoval(op);
+            if (!isZeroWidth(op.getType().getType()))
+              dataFlowClasses->unionSets(op.getInput(), op.getResult());
+            return success();
+          })
           .Case<Forceable>([&](Forceable op) {
             if (!op.isForceable() || op.getDataRef().use_empty())
               return success();
