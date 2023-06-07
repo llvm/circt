@@ -986,8 +986,8 @@ bool firrtl::areTypesRefCastable(Type dstType, Type srcType) {
   // to have const cast away, especially for probes of literals and expressions
   // derived from them.  Check const as with const cast.
   // NOLINTBEGIN(misc-no-recursion)
-  auto recurse = [&](auto &&f, FIRRTLBaseType dest,
-                     FIRRTLBaseType src, bool srcOuterTypeIsConst) -> bool {
+  auto recurse = [&](auto &&f, FIRRTLBaseType dest, FIRRTLBaseType src,
+                     bool srcOuterTypeIsConst) -> bool {
     // Fast-path for identical types.
     if (dest == src)
       return true;

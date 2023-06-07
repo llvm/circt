@@ -203,7 +203,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             if (!isZeroWidth(op.getType().getType()))
               dataFlowClasses->unionSets(op.getInput(), op.getResult());
             return success();
-           })
+          })
           .Case<Forceable>([&](Forceable op) {
             if (!op.isForceable() || op.getDataRef().use_empty())
               return success();
