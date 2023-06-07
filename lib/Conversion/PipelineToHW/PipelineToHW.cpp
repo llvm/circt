@@ -50,7 +50,7 @@ public:
 
   StageReturns emitStageBody(Block *stage, size_t stageIndex = -1,
                              Value clock = nullptr, Value reset = nullptr) {
-    auto terminator = stage->getTerminator();
+    auto *terminator = stage->getTerminator();
 
     // Move the stage operations into the current insertion point.
     for (auto &op : llvm::make_early_inc_range(*stage)) {
@@ -132,6 +132,7 @@ public:
     return success();
   }
 
+  /// NOLINTNEXTLINE(misc-no-recursion)
   LogicalResult lowerStage(Block *stage, ValueRange stageArguments,
                            size_t stageIndex) override {
     OpBuilder::InsertionGuard guard(builder);
@@ -145,7 +146,8 @@ public:
 
     // Move stage operations into the current module.
     builder.setInsertionPoint(pipeline);
-    auto stageRets = emitStageBody(stage, stageIndex, parentClk, parentRst);
+    StageReturns stageRets =
+        emitStageBody(stage, stageIndex, parentClk, parentRst);
 
     if (auto nextStage = dyn_cast<StageOp>(stage->getTerminator())) {
       // Lower the next stage.
@@ -212,6 +214,7 @@ public:
     return success();
   }
 
+  /// NOLINTNEXTLINE(misc-no-recursion)
   LogicalResult lowerStage(Block *stage, ValueRange stageArguments,
                            size_t stageIndex) override {
     Block *nextStage = nullptr;
@@ -248,7 +251,8 @@ public:
       builder.setInsertionPoint(stageOutputOp);
     }
 
-    auto stageRets = emitStageBody(stage, stageIndex, modClock, modReset);
+    StageReturns stageRets =
+        emitStageBody(stage, stageIndex, modClock, modReset);
 
     // Assign the output operation to the stage return values.
     stageOutputOp->insertOperands(0, stageRets.regs);
@@ -258,8 +262,8 @@ public:
     // Lower the next stage.
     if (nextStage)
       return lowerStage(nextStage, nextStageArgs, stageIndex + 1);
-    else
-      return success();
+
+    return success();
   }
 
 private:
@@ -284,13 +288,13 @@ private:
       // Clone the constant into each stage that uses it, and replace usages
       // within that stage.
       for (auto &[stage, uses] : stageUses) {
-        auto clonedConstant = constantOp.clone();
+        Operation *clonedConstant = constantOp.clone();
         builder.setInsertionPointToStart(stage);
         builder.insert(clonedConstant);
 
         clonedConstant->setLoc(constantOp.getLoc());
         clonedConstant->moveBefore(&stage->front());
-        for (auto use : uses)
+        for (OpOperand *use : uses)
           use->set(clonedConstant->getResult(0));
       }
     }
@@ -337,7 +341,8 @@ private:
     else
       llvm::append_range(outputTypes, pipeline.getResultTypes());
 
-    auto mod = buildPipelineLike(name, stageArguments.getTypes(), outputTypes);
+    hw::HWModuleOp mod =
+        buildPipelineLike(name, stageArguments.getTypes(), outputTypes);
 
     // instantiate...
     OpBuilder::InsertionGuard guard(builder);

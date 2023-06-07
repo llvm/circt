@@ -87,7 +87,7 @@ void ScheduledPipelineOp::build(mlir::OpBuilder &odsBuilder,
   odsState.addOperands(inputs);
   odsState.addOperands(clock);
   odsState.addOperands(reset);
-  auto region = odsState.addRegion();
+  auto *region = odsState.addRegion();
   odsState.addTypes(results);
 
   // Add the entry stage
@@ -141,7 +141,7 @@ LogicalResult ScheduledPipelineOp::verify() {
       for (auto &op : stage) {
         for (auto [index, operand] : llvm::enumerate(op.getOperands())) {
           bool err = false;
-          if (auto definingOp = operand.getDefiningOp()) {
+          if (auto *definingOp = operand.getDefiningOp()) {
             // Constants are allowed to be used across stages.
             if (definingOp->hasTrait<OpTrait::ConstantLike>())
               continue;

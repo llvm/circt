@@ -90,7 +90,7 @@ Value ExplicitRegsPass::routeThroughStage(OpOperand &v, Block *stage) {
 }
 
 void ExplicitRegsPass::runOnOperation() {
-  auto pipeline = getOperation();
+  ScheduledPipelineOp pipeline = getOperation();
   OpBuilder b(getOperation().getContext());
   bb = std::make_shared<BackedgeBuilder>(b, getOperation().getLoc());
 
@@ -98,7 +98,7 @@ void ExplicitRegsPass::runOnOperation() {
   SmallVector<Block *> stageList;
   Block *currStage = nullptr;
   // Iterate over the pipeline body in-order (!).
-  for (auto *stage : pipeline.getOrderedStages()) {
+  for (Block *stage : pipeline.getOrderedStages()) {
     stagePredecessor[stage] = currStage;
     currStage = stage;
 
@@ -118,7 +118,7 @@ void ExplicitRegsPass::runOnOperation() {
   // All values have been recorded through the stages. Now, add registers to the
   // stage blocks.
   for (auto &[stage, regMap] : stageRegMap) {
-    auto predStage = stagePredecessor[stage];
+    Block *predStage = stagePredecessor[stage];
 
     // Gather register inputs to this stage, either from a predecessor stage
     // or from the original op.
