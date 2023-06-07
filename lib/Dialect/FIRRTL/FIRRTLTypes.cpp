@@ -982,16 +982,24 @@ bool firrtl::areTypesRefCastable(Type dstType, Type srcType) {
   // with exception leaf (ground) types of destination can be uninferred
   // versions of the corresponding source type. (can lose width information or
   // become a more general reset type)
-
+  // In addition, while not explicitly in spec its useful to allow probes
+  // to have const cast away, especially for probes of literals and expressions
+  // derived from them.  Check const as with const cast.
   // NOLINTBEGIN(misc-no-recursion)
   auto recurse = [&](auto &&f, FIRRTLBaseType dest,
-                     FIRRTLBaseType src) -> bool {
+                     FIRRTLBaseType src, bool srcOuterTypeIsConst) -> bool {
     // Fast-path for identical types.
     if (dest == src)
       return true;
 
     // Always passive inside probes, but for sanity assert this.
     assert(dest.isPassive() && src.isPassive());
+
+    bool srcIsConst = src.isConst() || srcOuterTypeIsConst;
+
+    // Cannot cast non-'const' src to 'const' dest
+    if (dest.isConst() && !srcIsConst)
+      return false;
 
     // Recurse through aggregates to get the leaves, checking
     // structural equivalence re:element count + names.
@@ -1002,7 +1010,7 @@ bool firrtl::areTypesRefCastable(Type dstType, Type srcType) {
              destVectorType.getNumElements() ==
                  srcVectorType.getNumElements() &&
              f(f, destVectorType.getElementType(),
-               srcVectorType.getElementType());
+               srcVectorType.getElementType(), srcIsConst);
     }
 
     if (auto destBundleType = dest.dyn_cast<BundleType>()) {
@@ -1018,7 +1026,7 @@ bool firrtl::areTypesRefCastable(Type dstType, Type srcType) {
                  destElements, srcElements,
                  [&](const auto &destElement, const auto &srcElement) {
                    return destElement.name == srcElement.name &&
-                          f(f, destElement.type, srcElement.type);
+                          f(f, destElement.type, srcElement.type, srcIsConst);
                  });
     }
 
@@ -1034,7 +1042,7 @@ bool firrtl::areTypesRefCastable(Type dstType, Type srcType) {
                  destElements, srcElements,
                  [&](const auto &destElement, const auto &srcElement) {
                    return destElement.name == srcElement.name &&
-                          f(f, destElement.type, srcElement.type);
+                          f(f, destElement.type, srcElement.type, srcIsConst);
                  });
     }
 
@@ -1043,22 +1051,17 @@ bool firrtl::areTypesRefCastable(Type dstType, Type srcType) {
       return src.isResetType();
     // (but don't allow the other direction, can only become more general)
 
-    // src != dst, so this is only valid if destination is widthless version of
-    // source:
-    return dest.getBitWidthOrSentinel() == -1 && dest == src.getWidthlessType();
+    // Compare against const src if dest is const.
+    src = src.getConstType(dest.isConst());
+
+    // Compare against widthless src if dest is widthless.
+    if (dest.getBitWidthOrSentinel() == -1)
+      src = src.getWidthlessType();
+
+    return dest == src;
   };
 
-
-  // If source has const anywhere, check if const-cast-able as widthless.
-  // Accomodate const auto-propagating into probe expressions, where users may not
-  // have included it in their probe types as well.
-  if ((dstRefType.containsConst() || srcRefType.containsConst()) &&
-      !areTypesConstCastable(dstRefType.getType().getWidthlessType(),
-                             srcRefType.getType().getWidthlessType()))
-    return false;
-
-  return recurse(recurse, dstRefType.getType().getAllConstDroppedType(),
-                 srcRefType.getType().getAllConstDroppedType());
+  return recurse(recurse, dstRefType.getType(), srcRefType.getType(), false);
   // NOLINTEND(misc-no-recursion)
 }
 
