@@ -225,8 +225,8 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto &region = op->getRegion(0);
   // Operations that are allowed in the body of a ControlLike op.
   auto isValidBodyOp = [](Operation *operation) {
-    return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp, StaticParOp, StaticRepeatOp,
-               StaticIfOp>(operation);
+    return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp, StaticParOp,
+               StaticRepeatOp, StaticIfOp>(operation);
   };
   for (auto &&bodyOp : region.front()) {
     if (isValidBodyOp(&bodyOp))
@@ -2264,7 +2264,8 @@ void IfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                        MLIRContext *context) {
   patterns.add<CommonTailPatternWithSeq, EmptyIfBody>(context);
   patterns.add(commonTailPatternWithPar<IfOp, ParOp>);
-  // possible for dynamic if op to contain static par ops (other way around not true)
+  // possible for dynamic if op to contain static par ops (other way around not
+  // true)
   patterns.add(commonTailPatternWithPar<IfOp, StaticParOp>);
 }
 
