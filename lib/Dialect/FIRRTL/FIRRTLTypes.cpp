@@ -1046,9 +1046,10 @@ bool firrtl::areTypesRefCastable(Type dstType, Type srcType) {
                  });
     }
 
+    // XXX: Disable support for reset differences until InferResets support.
     // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
-    if (dest.isa<ResetType>())
-      return src.isResetType();
+    // if (dest.isa<ResetType>())
+    //   return src.isResetType();
     // (but don't allow the other direction, can only become more general)
 
     // Compare against const src if dest is const.
