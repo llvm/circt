@@ -341,6 +341,24 @@ static void eraseControlWithGroupAndConditional(OpTy op,
     rewriter.eraseOp(cond.getDefiningOp());
 }
 
+/// A helper function to check whether the conditional needs to be erased
+/// to maintain a valid state of a Calyx program. If these
+/// have no more uses, they will be erased.
+template <typename OpTy>
+static void eraseControlWithConditional(OpTy op, PatternRewriter &rewriter) {
+  static_assert(std::is_same<OpTy, StaticIfOp>(),
+                "This is only applicable to StatifIfOp.");
+
+  // Save information about the operation, and erase it.
+  Value cond = op.getCond();
+  auto component = op->template getParentOfType<ComponentOp>();
+  rewriter.eraseOp(op);
+
+  // Check if conditional is still needed, and remove if it isn't
+  if (!cond.isa<BlockArgument>() && cond.getDefiningOp()->use_empty())
+    rewriter.eraseOp(cond.getDefiningOp());
+}
+
 //===----------------------------------------------------------------------===//
 // ComponentInterface
 //===----------------------------------------------------------------------===//
@@ -2081,7 +2099,12 @@ static std::optional<EnableOp> getLastEnableOp(SeqOp parent) {
 
 /// Returns a mapping of {enabled Group name, EnableOp} for all EnableOps within
 /// the immediate ParOp's body.
-static llvm::StringMap<EnableOp> getAllEnableOpsInImmediateBody(ParOp parent) {
+template <typename OpTy>
+static llvm::StringMap<EnableOp> getAllEnableOpsInImmediateBody(OpTy parent) {
+  static_assert(std::is_same<ParOp, OpTy>() ||
+                    std::is_same<StaticParOp, OpTy>(),
+                "Should be a StaticParOp or ParOp.");
+
   llvm::StringMap<EnableOp> enables;
   Block *body = parent.getBodyBlock();
   for (EnableOp op : body->getOps<EnableOp>())
@@ -2168,13 +2191,16 @@ struct CommonTailPatternWithSeq : mlir::OpRewritePattern<IfOp> {
 ///        calyx.enable @B
 ///      }
 ///    }
-template <typename OpTy>
+template <typename OpTy, typename ParOpTy>
 static LogicalResult commonTailPatternWithPar(OpTy controlOp,
                                               PatternRewriter &rewriter) {
   static_assert(std::is_same<StaticIfOp, OpTy>() || std::is_same<IfOp, OpTy>(),
                 "Should be an IfOp or StaticIfOp.");
-  auto thenControl = cast<ParOp>(controlOp.getThenBody()->front()),
-       elseControl = cast<ParOp>(controlOp.getElseBody()->front());
+  static_assert(std::is_same<StaticParOp, ParOpTy>() ||
+                    std::is_same<ParOp, ParOpTy>(),
+                "Branches should be checking for an ParOp or StaticParOp");
+  auto thenControl = cast<ParOpTy>(controlOp.getThenBody()->front()),
+       elseControl = cast<ParOpTy>(controlOp.getElseBody()->front());
 
   llvm::StringMap<EnableOp> A = getAllEnableOpsInImmediateBody(thenControl),
                             B = getAllEnableOpsInImmediateBody(elseControl);
@@ -2197,30 +2223,15 @@ static LogicalResult commonTailPatternWithPar(OpTy controlOp,
   // the pulled out EnableOps.
   rewriter.setInsertionPointAfter(controlOp);
 
-  if (std::is_same<StaticIfOp, OpTy>()) {
-    StaticParOp parOp = rewriter.create<StaticParOp>(controlOp.getLoc());
-    Block *body = parOp.getBodyBlock();
-    controlOp->remove();
-    body->push_back(controlOp);
-    // Pull out the intersection between these two sets, and erase their
-    // counterparts in the Then and Else regions.
-    rewriter.setInsertionPointToEnd(body);
-    for (StringRef groupName : groupNames)
-      rewriter.create<EnableOp>(parOp.getLoc(), groupName);
-  } else if (std::is_same<IfOp, OpTy>()) {
-    ParOp parOp = rewriter.create<ParOp>(controlOp.getLoc());
-    Block *body = parOp.getBodyBlock();
-    controlOp->remove();
-    body->push_back(controlOp);
-    // Pull out the intersection between these two sets, and erase their
-    // counterparts in the Then and Else regions.
-    rewriter.setInsertionPointToEnd(body);
-    for (StringRef groupName : groupNames)
-      rewriter.create<EnableOp>(parOp.getLoc(), groupName);
-  } else {
-    assert(!"commonTailPatternsWithPar should only be called for IfOps and "
-            "StaticIfOps ");
-  }
+  ParOpTy parOp = rewriter.create<ParOpTy>(controlOp.getLoc());
+  Block *body = parOp.getBodyBlock();
+  controlOp->remove();
+  body->push_back(controlOp);
+  // Pull out the intersection between these two sets, and erase their
+  // counterparts in the Then and Else regions.
+  rewriter.setInsertionPointToEnd(body);
+  for (StringRef groupName : groupNames)
+    rewriter.create<EnableOp>(parOp.getLoc(), groupName);
 
   return success();
 }
@@ -2246,7 +2257,9 @@ struct EmptyIfBody : mlir::OpRewritePattern<IfOp> {
 void IfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                        MLIRContext *context) {
   patterns.add<CommonTailPatternWithSeq, EmptyIfBody>(context);
-  patterns.add(commonTailPatternWithPar<IfOp>);
+  patterns.add(commonTailPatternWithPar<IfOp, ParOp>);
+  // if ops can have static control in them (opposite is not true)
+  patterns.add(commonTailPatternWithPar<IfOp, StaticParOp>);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2282,8 +2295,29 @@ LogicalResult StaticIfOp::verify() {
   return success();
 }
 
+/// This pattern checks for one of two cases that will lead to StaticIfOp
+/// deletion: (1) Then and Else bodies are both empty. (2) Then body is empty
+/// and Else body does not exist.
+struct EmptyStaticIfBody : mlir::OpRewritePattern<StaticIfOp> {
+  using mlir::OpRewritePattern<StaticIfOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(StaticIfOp ifOp,
+                                PatternRewriter &rewriter) const override {
+    if (!ifOp.getThenBody()->empty())
+      return failure();
+    if (ifOp.elseBodyExists() && !ifOp.getElseBody()->empty())
+      return failure();
+
+    eraseControlWithConditional(ifOp, rewriter);
+
+    return success();
+  }
+};
+
 void StaticIfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
-                                             MLIRContext *context) {}
+                                             MLIRContext *context) {
+  patterns.add<EmptyStaticIfBody>(context);
+  patterns.add(commonTailPatternWithPar<StaticIfOp, StaticParOp>);
+}
 
 //===----------------------------------------------------------------------===//
 // WhileOp
