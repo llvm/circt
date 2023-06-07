@@ -14,10 +14,10 @@ hw.module @simple(%arg0 : i32, %arg1 : i32, %go : i1, %clock : i1, %reset : i1) 
     ^bb0(%a0 : i32, %a1: i32, %g : i1):
       %add0 = comb.add %a0, %a1 : i32
 
-      %s0_valid = pipeline.ss enable %g
+      %s0_valid = pipeline.stagesep enable %g
       %add1 = comb.add %add0, %a0 : i32
 
-      %s1_valid = pipeline.ss enable %s0_valid
+      %s1_valid = pipeline.stagesep enable %s0_valid
       %add2 = comb.add %add1, %add0 : i32
 
       pipeline.return %add2 valid %s1_valid : i32
