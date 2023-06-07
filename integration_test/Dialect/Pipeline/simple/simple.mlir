@@ -1,6 +1,6 @@
 // REQUIRES: iverilog,cocotb
 
-// RUN: circt-opt %s -pass-pipeline='builtin.module(hw.module(pipeline.pipeline(pipeline-explicit-regs, pipeline-ss-to-stage), lower-pipeline-to-hw{outline-stages}), lower-seq-to-sv, sv-trace-iverilog, export-verilog)' \
+// RUN: circt-opt %s -pass-pipeline='builtin.module(hw.module(pipeline.pipeline(pipeline-explicit-regs, pipeline-stagesep-to-stage), lower-pipeline-to-hw{outline-stages}), lower-seq-to-sv, sv-trace-iverilog, export-verilog)' \
 // RUN:     -o %t.mlir > %t.sv
 
 // RUN: circt-cocotb-driver.py --objdir=%T --topLevel=simple \
