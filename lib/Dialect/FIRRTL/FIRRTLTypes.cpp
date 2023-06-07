@@ -604,7 +604,7 @@ FIRRTLBaseType FIRRTLBaseType::getWidthlessType() {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
       .Case<ClockType, ResetType, AsyncResetType>([](auto a) { return a; })
       .Case<UIntType, SIntType, AnalogType>(
-          [&](auto a) { return a.get(this->getContext(), -1); })
+          [&](auto a) { return a.get(this->getContext(), -1, a.isConst()); })
       .Case<BundleType>([&](auto a) {
         SmallVector<BundleType::BundleElement, 4> newElements;
         newElements.reserve(a.getElements().size());
