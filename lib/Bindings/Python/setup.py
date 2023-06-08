@@ -67,6 +67,7 @@ class CMakeBuild(build_py):
     cmake_args = [
         "-DCMAKE_BUILD_TYPE=Release",  # not used on MSVC, but no harm
         "-DCMAKE_INSTALL_PREFIX={}".format(os.path.abspath(cmake_install_dir)),
+        "-DCMAKE_OSX_DEPLOYMENT_TARGET=10.14",  # on OSX, min target for C++17
         "-DPython3_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
         "-DLLVM_ENABLE_PROJECTS=mlir",
         "-DLLVM_EXTERNAL_PROJECTS=circt",
