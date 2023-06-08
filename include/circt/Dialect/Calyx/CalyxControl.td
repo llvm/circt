@@ -125,6 +125,84 @@ def IfOp : CalyxContainer<"if", [
   ];
 }
 
+def StaticIfOp : CalyxContainer<"static_if", [
+    ControlLike
+  ]> {
+  let summary = "Calyx Static If";
+  let arguments = (ins
+    I1:$cond
+    );
+  let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
+  let description = [{
+    The "calyx.static_if" operation represents an if-then-else construct for
+    conditionally executing two Calyx groups. The operands to an if operation is
+    a 1-bit port. 
+
+    ```mlir
+      calyx.static_if %1 {
+        calyx.enable @G2
+        ...
+      } else {
+        calyx.enable @G3
+        ...
+      }
+      calyx.if %1 {
+        calyx.enable @G2
+        ...
+      }
+    ```
+  }];
+
+  let assemblyFormat = "$cond $thenRegion (`else` $elseRegion^)? attr-dict";
+  let hasVerifier = 1;
+  let hasCanonicalizer = true;
+  let extraClassDeclaration = [{
+    /// Checks whether the `then` body exists.
+    bool thenBodyExists() {
+      Region* region = &getOperation()->getRegion(0);
+      if (region == nullptr)
+        return false;
+      return !region->empty();
+    }
+    /// Checks whether the `else` body exists.
+    bool elseBodyExists() {
+      Region* region = &getOperation()->getRegion(1);
+      if (region == nullptr)
+        return false;
+      return !region->empty();
+    }
+    /// Gets the single basic block representing the `then` region.
+    Block *getThenBody() {
+      assert(thenBodyExists() && "Then region does not exist.");
+      Region* region = &getOperation()->getRegion(0);
+      assert(region->hasOneBlock() && "The Then body should have one Block.");
+      return &region->front();
+    }
+    /// Gets the single basic block representing the `else` region.
+    Block *getElseBody() {
+      assert(elseBodyExists() && "Else region does not exist.");
+      Region* region = &getOperation()->getRegion(1);
+      assert(region->hasOneBlock() && "The Else body should have one Block.");
+      return &region->front();
+    }
+  }];
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins
+      "Value":$cond,
+      CArg<"bool", "false">:$initializeElseBody), [{
+        $_state.addOperands(cond);
+
+        Region *thenRegion = $_state.addRegion();
+        Region *elseRegion = $_state.addRegion();
+        thenRegion->push_back(new Block());
+        if (initializeElseBody)
+          elseRegion->push_back(new Block());
+    }]>
+  ];
+}
+
+
 def SeqOp : CalyxContainer<"seq", [
     ControlLike
   ]> {
