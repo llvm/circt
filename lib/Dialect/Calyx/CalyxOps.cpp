@@ -890,10 +890,11 @@ void SeqOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 //===----------------------------------------------------------------------===//
 
 LogicalResult StaticSeqOp::verify() {
+  // StaticSeqOp should only have static control in it
   auto &ops = (*this).getBodyBlock()->getOperations();
   for (Operation &op : ops) {
     if (!isStaticControl(&op)) {
-      return op.emitOpError("static seq has non static control within it");
+      return op.emitOpError("StaticSeqOp has non static control within it");
     }
   }
 
@@ -940,7 +941,6 @@ void ParOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 
 LogicalResult StaticParOp::verify() {
   llvm::SmallSet<StringRef, 8> groupNames;
-  auto component = (*this)->getParentOfType<ComponentOp>();
 
   // Add loose requirement that the body of a ParOp may not enable the same
   // Group more than once, e.g. calyx.par { calyx.enable @G calyx.enable @G }
@@ -950,10 +950,13 @@ LogicalResult StaticParOp::verify() {
       return emitOpError() << "cannot enable the same group: \"" << groupName
                            << "\" more than once.";
     groupNames.insert(groupName);
-    auto group = component.getWiresOp().lookupSymbol<GroupInterface>(groupName);
-    if (!isa<StaticGroupOp>(group)) {
-      return emitOpError() << "cannot enable non-static group: \"" << groupName
-                           << "\" in static par.";
+  }
+
+  // static par must only have static control in it
+  auto &ops = (*this).getBodyBlock()->getOperations();
+  for (Operation &op : ops) {
+    if (!isStaticControl(&op)) {
+      return op.emitOpError("StaticParOp has non static control within it");
     }
   }
 
