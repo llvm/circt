@@ -359,7 +359,7 @@ static LogicalResult canonicalizePrimOp(
       firrtl::type_isa<UIntType>(resultValue.getType()))
     resultValue = rewriter.create<AsSIntPrimOp>(op->getLoc(), resultValue);
   else if (firrtl::type_isa<UIntType>(type) &&
-           resultValue.getType().isa<SIntType>())
+           firrtl::type_isa<SIntType>(resultValue.getType()))
     resultValue = rewriter.create<AsUIntPrimOp>(op->getLoc(), resultValue);
 
   assert(type == resultValue.getType() && "canonicalization changed type");

@@ -171,6 +171,13 @@ struct FIRParser {
   }
   InFlightDiagnostic emitError(SMLoc loc, const Twine &message = {});
 
+  /// Emit a warning.
+  InFlightDiagnostic emitWarning(const Twine &message = {}) {
+    return emitWarning(getToken().getLoc(), message);
+  }
+
+  InFlightDiagnostic emitWarning(SMLoc loc, const Twine &message = {});
+
   //===--------------------------------------------------------------------===//
   // Location Handling
   //===--------------------------------------------------------------------===//
@@ -306,6 +313,10 @@ InFlightDiagnostic FIRParser::emitError(SMLoc loc, const Twine &message) {
   if (getToken().is(FIRToken::error))
     diag.abandon();
   return diag;
+}
+
+InFlightDiagnostic FIRParser::emitWarning(SMLoc loc, const Twine &message) {
+  return mlir::emitWarning(translateLocation(loc), message);
 }
 
 //===----------------------------------------------------------------------===//
@@ -910,7 +921,6 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     result = baseType.getConstType(true);
     return success();
   }
-
   case FIRToken::l_brace_bar:
     if (parseEnumType(result))
       return failure();
@@ -1789,7 +1799,7 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
     } else {
       NamedAttribute attrs = {getConstants().fieldIndexIdentifier,
                               builder.getI32IntegerAttr(indexNo)};
-      if (firrtl::type_isa<BundleType>(type))
+      if (type_isa<BundleType>(type))
         subResult =
             emitCachedSubAccess<SubfieldOp>(result, attrs, indexNo, loc);
       else
@@ -1828,7 +1838,7 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
   FailureOr<Value> subResult;
   if (isa<RefType>(result.getType()))
     subResult = emitCachedSubAccess<RefSubOp>(result, attrs, indexNo, loc);
-  else if (firrtl::type_isa<FVectorType>(result.getType()))
+  else if (type_isa<FVectorType>(result.getType()))
     subResult = emitCachedSubAccess<SubindexOp>(result, attrs, indexNo, loc);
   else
     subResult =
@@ -4068,6 +4078,11 @@ ParseResult FIRCircuitParser::parseTypeDecl() {
   // type.
   if (auto base = type.dyn_cast<FIRRTLBaseType>())
     type = BaseTypeAliasType::get(name, base);
+  else
+    emitWarning(loc)
+        << "type alias for non-based type " << type
+        << " is currently not supported. Type alias is stripped immediately";
+
   if (!getConstants().aliasMap.insert({id, type}).second)
     return emitError(loc) << "type alias " << name << " is already defined";
   return success();

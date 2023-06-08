@@ -1859,8 +1859,8 @@ LogicalResult MemOp::verify() {
     // found.
     FIRRTLBaseType dataType;
     if (portKind == MemOp::PortKind::Debug) {
-      auto resType = firrtl::type_dyn_cast<RefType>(getResult(i).getType());
-      if (!(resType && resType.getType().isa<FVectorType>()))
+      auto resType = cast<RefType>(getResult(i).getType());
+      if (!(resType && isa<FVectorType>(resType.getType())))
         return emitOpError() << "debug ports must be a RefType of FVectorType";
       dataType = type_cast<FVectorType>(resType.getType()).getElementType();
     } else {
@@ -2829,7 +2829,7 @@ LogicalResult ConstantOp::verify() {
         "firrtl.constant attribute bitwidth doesn't match return type");
 
   // The sign of the attribute's integer type must match our integer type sign.
-  auto attrType = firrtl::type_cast<IntegerType>(getValueAttr().getType());
+  auto attrType = cast<IntegerType>(getValueAttr().getType());
   if (attrType.isSignless() ||
       attrType.isSigned() != getType().get().isSigned())
     return emitError("firrtl.constant attribute has wrong sign");

@@ -72,7 +72,7 @@ def OpenBundleType : FIRRTLDialectType<CPred<"firrtl::type_isa<OpenBundleType>($
 
 def FVectorType : FIRRTLDialectType<CPred<"firrtl::type_isa<FVectorType>($_self)">,
   "FVectorType", "::circt::firrtl::BaseTypeAliasOr<::circt::firrtl::FVectorType>">;
-def OpenVectorType : FIRRTLDialectType<CPred<"firrtl::type_isa<OpenVectorType>($_self)">,
+def OpenVectorType : FIRRTLDialectType<CPred<"isa<OpenVectorType>($_self)">,
   "OpenVectorType", "::circt::firrtl::OpenVectorType">;
 
 def FEnumType : FIRRTLDialectType<CPred<"firrtl::type_isa<FEnumType>($_self)">,
@@ -82,11 +82,7 @@ def StringType : FIRRTLDialectType<CPred<"$_self.isa<StringType>()">,
   "StringType", "::circt::firrtl::StringType">;
 
 def AggregateType : FIRRTLDialectType<
-  Or<[
-    CPred<"firrtl::type_isa<FVectorType>($_self)">,
-    CPred<"firrtl::type_isa<BundleType>($_self)">,
-    CPred<"firrtl::type_isa<FEnumType>($_self)">
-  ]>,
+  CPred<"firrtl::type_isa<FVectorType, BundleType, FEnumType>($_self)">,
   "a aggregate type", "::circt::firrtl::FIRRTLBaseType">;
 
 def SizedType : FIRRTLDialectType<CPred<"isa<FIRRTLBaseType>($_self) && "
@@ -107,11 +103,11 @@ def PassiveType : FIRRTLDialectType<
   "a passive base type (contain no flips)", "::circt::firrtl::FIRRTLBaseType">;
 
 def RefType : FIRRTLDialectType<
-  CPred<"firrtl::type_isa<RefType>($_self)">,
+  CPred<"isa<RefType>($_self)">,
    "reference type", "::circt::firrtl::RefType">;
 
 def RWProbe : FIRRTLDialectType<
-  CPred<"firrtl::type_isa<RefType>($_self) && cast<RefType>($_self).getForceable()">,
+  CPred<"isa<RefType>($_self) && cast<RefType>($_self).getForceable()">,
    "rwprobe type", "::circt::firrtl::RefType">;
 
 // TODO: When Refs can appear within Base, need to disallow that too.
@@ -155,12 +151,12 @@ def OneBitType : FIRRTLDialectType<
 
 
 def AnyResetType : FIRRTLDialectType<
-    CPred<"firrtl::type_isa<FIRRTLBaseType>($_self) && firrtl::type_cast<FIRRTLBaseType>($_self).isResetType()">,
+    CPred<"isa<FIRRTLBaseType>($_self) && cast<FIRRTLBaseType>($_self).isResetType()">,
     "Reset", "::circt::firrtl::FIRRTLBaseType">;
 
 def AnyRegisterType : FIRRTLDialectType<
-    CPred<"firrtl::type_isa<FIRRTLBaseType>($_self) && "
-          "firrtl::type_cast<FIRRTLBaseType>($_self).isRegisterType()">,
+    CPred<"isa<FIRRTLBaseType>($_self) && "
+          "cast<FIRRTLBaseType>($_self).isRegisterType()">,
     "a passive non-'const' base type that does not contain analog",
     "::circt::firrtl::FIRRTLBaseType">;
 

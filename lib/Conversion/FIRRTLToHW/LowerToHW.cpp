@@ -3072,11 +3072,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
   // TODO: Remove this restriction and preserve aggregates in
   // memories.
-  if (op.getDataType()
-          .cast<FIRRTLBaseType>()
-          .getPassiveType()
-          .getAnonymousType()
-          .isa<BundleType>())
+  if (type_isa<BundleType>(op.getDataType()))
     return op.emitOpError(
         "should have already been lowered from a ground type to an aggregate "
         "type using the LowerTypes pass. Use "

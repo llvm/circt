@@ -57,7 +57,7 @@ struct RecursiveTypeProperties {
   /// Whether the type contains a const type.
   bool containsConst : 1;
   /// Whether the type contains a type alias.
-  bool isAnonymous : 1;
+  bool containsTypeAlias : 1;
   /// Whether the type has any uninferred bit widths.
   bool hasUninferredWidth : 1;
   /// Whether the type has any uninferred reset.
@@ -95,7 +95,9 @@ public:
   }
 
   /// Return true if this is an anonymous type (no type alias).
-  bool isAnonymousType() { return getRecursiveTypeProperties().isAnonymous; }
+  bool containsTypeAlias() {
+    return getRecursiveTypeProperties().containsTypeAlias;
+  }
 
   /// Return true if this type contains an uninferred bit width.
   bool hasUninferredWidth() {
@@ -355,6 +357,7 @@ struct DenseMapInfo<circt::firrtl::FIRRTLType> {
 } // namespace llvm
 namespace circt {
 namespace firrtl {
+
 template <typename... BaseTy>
 bool type_isa(Type type) { // NOLINT(readability-identifier-naming)
   // First check if the type is the requested type.
@@ -363,7 +366,7 @@ bool type_isa(Type type) { // NOLINT(readability-identifier-naming)
 
   // Then check if it is a type alias wrapping the requested type.
   if (auto alias = type.dyn_cast<BaseTypeAliasType>())
-    return alias.getInnerType().isa<BaseTy...>();
+    return type_isa<BaseTy...>(alias.getInnerType());
 
   return false;
 }
@@ -385,12 +388,21 @@ BaseTy type_cast(Type type) { // NOLINT(readability-identifier-naming)
     return type.cast<BaseTy>();
 
   // Otherwise, it must be a type alias wrapping the requested type.
-  return type.cast<BaseTypeAliasType>().getInnerType().cast<BaseTy>();
+  return type_cast<BaseTy>(type.cast<BaseTypeAliasType>().getInnerType());
 }
 
 template <typename BaseTy>
 BaseTy type_dyn_cast(Type type) { // NOLINT(readability-identifier-naming)
   if (!type_isa<BaseTy>(type))
+    return BaseTy();
+
+  return type_cast<BaseTy>(type);
+}
+
+template <typename BaseTy>
+BaseTy
+type_dyn_cast_or_null(Type type) { // NOLINT(readability-identifier-naming)
+  if (!type || !type_isa<BaseTy>(type))
     return BaseTy();
 
   return type_cast<BaseTy>(type);

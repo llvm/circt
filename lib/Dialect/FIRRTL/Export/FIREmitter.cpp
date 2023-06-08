@@ -1041,8 +1041,11 @@ void Emitter::emitType(Type type, bool includeConst) {
         ps << "Analog";
         emitWidth(type.getWidth());
       })
-      .Case<BaseTypeAliasType>(
-          [&](auto type) { emitType(type.getInnerType()); })
+      .Case<BaseTypeAliasType>([&](auto type) {
+        // TODO: Emit type alias declarations into type alias. Just strip alias
+        // for now.
+        emitType(type.getInnerType());
+      })
       .Case<OpenBundleType, BundleType>([&](auto type) {
         ps << "{";
         if (!type.getElements().empty())

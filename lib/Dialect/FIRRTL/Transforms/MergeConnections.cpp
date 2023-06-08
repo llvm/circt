@@ -220,9 +220,9 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
   };
 
   Value merged;
-  if (auto bundle = firrtl::type_dyn_cast<BundleType>(parentType))
+  if (auto bundle = firrtl::type_dyn_cast_or_null<BundleType>(parentType))
     merged = getMergedValue(bundle);
-  if (auto vector = firrtl::type_dyn_cast<FVectorType>(parentType))
+  if (auto vector = firrtl::type_dyn_cast_or_null<FVectorType>(parentType))
     merged = getMergedValue(vector);
   if (!merged)
     return false;

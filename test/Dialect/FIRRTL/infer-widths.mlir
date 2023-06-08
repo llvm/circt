@@ -928,4 +928,19 @@ firrtl.circuit "Foo" {
     firrtl.attach %2, %c : !firrtl.const.analog, !firrtl.const.analog<3>
     firrtl.connect %3, %d : !firrtl.const.vector<uint, 2>, !firrtl.const.vector<uint<4>, 2>
   }
+
+  // Make sure that type alias is stripped if its inner type was modified. Otherwise, type alias should be preserved.
+  // CHECK-LABEL: firrtl.module @TypeAlias(out %p: !firrtl.bundle<a: uint<1>, b: alias<V, uint<1>>>)
+  firrtl.module @TypeAlias(out %p: !firrtl.bundle<a: alias<U, uint>, b: alias<V, uint<1>>>)  {
+    %0 = firrtl.subfield %p[b] : !firrtl.bundle<a: alias<U, uint>, b: alias<V, uint<1>>>
+    %1 = firrtl.subfield %p[a] : !firrtl.bundle<a: alias<U, uint>, b: alias<V, uint<1>>>
+    // CHECK:      %0 = firrtl.subfield %p[b] : !firrtl.bundle<a: uint<1>, b: alias<V, uint<1>>>
+    // CHECK-NEXT: %1 = firrtl.subfield %p[a] : !firrtl.bundle<a: uint<1>, b: alias<V, uint<1>>>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.const.uint<1>
+    %2 = firrtl.widthCast %c1_ui1 : (!firrtl.const.uint<1>) -> !firrtl.const.uint
+    %3 = firrtl.constCast %2 : (!firrtl.const.uint) -> !firrtl.uint
+    firrtl.strictconnect %1, %3 : !firrtl.uint
+    %4 = firrtl.constCast %c1_ui1 : (!firrtl.const.uint<1>) -> !firrtl.uint<1>
+    firrtl.strictconnect %0, %4 : !firrtl.uint<1>
+  }
 }

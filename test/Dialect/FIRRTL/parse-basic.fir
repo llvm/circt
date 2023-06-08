@@ -1479,6 +1479,7 @@ circuit Top:
   type ValidType = UInt<1>
   type Data = {w: WordType, valid: ValidType, flip ready: UInt<1>}
   type Complex = { real: SInt<10>, imag: SInt<10> }
+  ; expected-warning @+1 {{type alias for non-based type '!firrtl.probe<alias<Complex, bundle<real: sint<10>, imag: sint<10>>>>' is currently not supported. Type alias is stripped immediately}}
   type ProbeComplex = Probe<Complex>
   ; CHECK: @Top
   ; CHECK-SAME: in %in: !firrtl.alias<Data, bundle<w: alias<WordType, uint<32>>, valid: alias<ValidType, uint<1>>, ready flip: uint<1>>>
