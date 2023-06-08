@@ -2311,7 +2311,7 @@ LogicalResult StaticIfOp::verify() {
   if (elseBodyExists()) {
     auto *elseBod = getElseBody();
     auto &elseOps = elseBod->getOperations();
-    // should only have one Operation in the else branch
+    // should only have one Operation, static, in the else branch
     for (Operation &op : elseOps) {
       if (!isStaticControl(&op)) {
         return op.emitOpError(
@@ -2323,7 +2323,7 @@ LogicalResult StaticIfOp::verify() {
   auto *thenBod = getThenBody();
   auto &thenOps = thenBod->getOperations();
   for (Operation &op : thenOps) {
-    // should only have one Operation in the then branch
+    // should only have one, static, Operation in the then branch
     if (!isStaticControl(&op)) {
       return op.emitOpError(
           "static if's then branch has non static control within it");

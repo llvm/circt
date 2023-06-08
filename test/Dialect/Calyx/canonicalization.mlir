@@ -539,7 +539,7 @@ module attributes {calyx.entrypoint = "main"} {
     calyx.control {
       calyx.seq {
         calyx.enable @A
-        calyx.if %eq.out {}
+        calyx.static_if %eq.out {}
       }
     }
   }
