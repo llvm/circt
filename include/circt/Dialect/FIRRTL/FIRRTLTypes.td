@@ -78,9 +78,6 @@ def OpenVectorType : FIRRTLDialectType<CPred<"$_self.isa<OpenVectorType>()">,
 def FEnumType : FIRRTLDialectType<CPred<"$_self.isa<FEnumType>()">,
  "FEnumType", "::circt::firrtl::FEnumType">;
 
-def StringType : FIRRTLDialectType<CPred<"$_self.isa<StringType>()">,
-  "StringType", "::circt::firrtl::StringType">;
-
 def AggregateType : FIRRTLDialectType<
   Or<[
     CPred<"$_self.isa<FVectorType>()">,
@@ -194,5 +191,13 @@ class RefResultTypeConstraint<string base, string ref>
   : TypesMatchWith<"reference base type should match",
                    base, ref,
                    "RefType::get($_self.cast<FIRRTLBaseType>().getPassiveType())">;
+
+//===----------------------------------------------------------------------===//
+// Property Types
+//===----------------------------------------------------------------------===//
+
+def StringType : FIRRTLDialectType<CPred<"$_self.isa<StringType>()">,
+  "StringType", "::circt::firrtl::StringType">,
+  BuildableType<"::circt::firrtl::StringType::get($_builder.getContext())">;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD
