@@ -130,6 +130,8 @@ def SVExtractTestCode : Pass<"sv-extract-test-code", "ModuleOp"> {
   let options = [
     Option<"disableInstanceExtraction", "disable-instance-extraction", "bool",
            "false", "Disable extracting instances only that feed test code">,
+    Option<"disableRegisterExtraction", "disable-register-extraction", "bool",
+           "false", "Disable extracting registers only that feed test code">,
     Option<"disableModuleInlining", "disable-module-inlining", "bool",
            "false", "Disable inlining modules that only feed test code">
   ];

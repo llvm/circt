@@ -212,6 +212,11 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 
 LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
                                       const FirtoolOptions &opt) {
+  if (opt.extractTestCode)
+    pm.addPass(sv::createSVExtractTestCodePass(opt.etcDisableInstanceExtraction,
+                                               opt.etcDisableRegisterExtraction,
+                                               opt.etcDisableModuleInlining));
+
   pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass(
       {/*disableRandomization=*/!opt.isRandomEnabled(
            FirtoolOptions::RandomKind::Reg),
@@ -222,10 +227,6 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),
       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg),
       opt.addVivadoRAMAddressConflictSynthesisBugWorkaround));
-
-  if (opt.extractTestCode)
-    pm.addPass(sv::createSVExtractTestCodePass(opt.etcDisableInstanceExtraction,
-                                               opt.etcDisableModuleInlining));
 
   // If enabled, run the optimizer.
   if (!opt.disableOptimization) {
