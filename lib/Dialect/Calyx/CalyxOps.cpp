@@ -2107,15 +2107,21 @@ LogicalResult IfOp::verify() {
   return success();
 }
 
-/// Returns the last EnableOp within the child tree of 'parentSeqOp'. If no
-/// EnableOp was found (e.g. a "calyx.par" operation is present), returns
-/// None.
-static std::optional<EnableOp> getLastEnableOp(SeqOp parent) {
+/// Returns the last EnableOp within the child tree of 'parentSeqOp' or
+/// `parentStaticSeqOp.` If no EnableOp was found (e.g. a "calyx.par" operation
+/// is present), returns None.
+template <typename OpTy>
+static std::optional<EnableOp> getLastEnableOp(OpTy parent) {
+  static_assert(std::is_same<SeqOp, OpTy>() ||
+                    std::is_same<StaticSeqOp, OpTy>(),
+                "Should be a StaticSeqOp or SeqOp.");
   auto &lastOp = parent.getBodyBlock()->back();
   if (auto enableOp = dyn_cast<EnableOp>(lastOp))
     return enableOp;
-  else if (auto seqOp = dyn_cast<SeqOp>(lastOp))
+  if (auto seqOp = dyn_cast<SeqOp>(lastOp))
     return getLastEnableOp(seqOp);
+  if (auto staticSeqOp = dyn_cast<StaticSeqOp>(lastOp))
+    return getLastEnableOp(staticSeqOp);
 
   return std::nullopt;
 }
@@ -2147,7 +2153,8 @@ template <typename IfOpTy, typename TailOpTy>
 static bool hasCommonTailPatternPreConditions(IfOpTy op) {
   static_assert(std::is_same<SeqOp, TailOpTy>() ||
                     std::is_same<ParOp, TailOpTy>() ||
-                    std::is_same<StaticParOp, TailOpTy>(),
+                    std::is_same<StaticParOp, TailOpTy>() ||
+                    std::is_same<StaticSeqOp, TailOpTy>(),
                 "Should be a SeqOp or ParOp StaticParOp.");
   static_assert(std::is_same<IfOp, IfOpTy>() ||
                     std::is_same<StaticIfOp, IfOpTy>(),
@@ -2170,41 +2177,44 @@ static bool hasCommonTailPatternPreConditions(IfOpTy op) {
 ///   }                                       }
 ///                                           calyx.enable @A
 ///                                         }
-struct CommonTailPatternWithSeq : mlir::OpRewritePattern<IfOp> {
-  using mlir::OpRewritePattern<IfOp>::OpRewritePattern;
+template <typename IfOpTy, typename SeqOpTy>
+static LogicalResult commonTailPatternWithSeq(IfOpTy ifOp,
+                                              PatternRewriter &rewriter) {
+  static_assert(std::is_same<StaticIfOp, IfOpTy>() ||
+                    std::is_same<IfOp, IfOpTy>(),
+                "Should be an IfOp or StaticIfOp.");
+  static_assert(std::is_same<StaticSeqOp, SeqOpTy>() ||
+                    std::is_same<SeqOp, SeqOpTy>(),
+                "Branches should be checking for an SeqOp or StaticSeqOp");
+  if (!hasCommonTailPatternPreConditions<IfOpTy, SeqOpTy>(ifOp))
+    return failure();
+  auto thenControl = cast<SeqOpTy>(ifOp.getThenBody()->front()),
+       elseControl = cast<SeqOpTy>(ifOp.getElseBody()->front());
 
-  LogicalResult matchAndRewrite(IfOp ifOp,
-                                PatternRewriter &rewriter) const override {
-    if (!hasCommonTailPatternPreConditions<IfOp, SeqOp>(ifOp))
-      return failure();
+  std::optional<EnableOp> lastThenEnableOp = getLastEnableOp(thenControl),
+                          lastElseEnableOp = getLastEnableOp(elseControl);
 
-    auto thenControl = cast<SeqOp>(ifOp.getThenBody()->front()),
-         elseControl = cast<SeqOp>(ifOp.getElseBody()->front());
-    std::optional<EnableOp> lastThenEnableOp = getLastEnableOp(thenControl),
-                            lastElseEnableOp = getLastEnableOp(elseControl);
+  if (!lastThenEnableOp || !lastElseEnableOp)
+    return failure();
+  if (lastThenEnableOp->getGroupName() != lastElseEnableOp->getGroupName())
+    return failure();
 
-    if (!lastThenEnableOp || !lastElseEnableOp)
-      return failure();
-    if (lastThenEnableOp->getGroupName() != lastElseEnableOp->getGroupName())
-      return failure();
+  // Place the IfOp and pulled EnableOp inside a sequential region, in case
+  // this IfOp is nested in a ParOp. This avoids unintentionally
+  // parallelizing the pulled out EnableOps.
+  rewriter.setInsertionPointAfter(ifOp);
+  SeqOpTy seqOp = rewriter.create<SeqOpTy>(ifOp.getLoc());
+  Block *body = seqOp.getBodyBlock();
+  ifOp->remove();
+  body->push_back(ifOp);
+  rewriter.setInsertionPointToEnd(body);
+  rewriter.create<EnableOp>(seqOp.getLoc(), lastThenEnableOp->getGroupName());
 
-    // Place the IfOp and pulled EnableOp inside a sequential region, in case
-    // this IfOp is nested in a ParOp. This avoids unintentionally
-    // parallelizing the pulled out EnableOps.
-    rewriter.setInsertionPointAfter(ifOp);
-    SeqOp seqOp = rewriter.create<SeqOp>(ifOp.getLoc());
-    Block *body = seqOp.getBodyBlock();
-    ifOp->remove();
-    body->push_back(ifOp);
-    rewriter.setInsertionPointToEnd(body);
-    rewriter.create<EnableOp>(seqOp.getLoc(), lastThenEnableOp->getGroupName());
-
-    // Erase the common EnableOp from the Then and Else regions.
-    rewriter.eraseOp(*lastThenEnableOp);
-    rewriter.eraseOp(*lastElseEnableOp);
-    return success();
-  }
-};
+  // Erase the common EnableOp from the Then and Else regions.
+  rewriter.eraseOp(*lastThenEnableOp);
+  rewriter.eraseOp(*lastElseEnableOp);
+  return success();
+}
 
 ///    if %a with @G {              par {
 ///      par {                        if %a with @G {
@@ -2286,17 +2296,14 @@ struct EmptyIfBody : mlir::OpRewritePattern<IfOp> {
 
 void IfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                        MLIRContext *context) {
-  patterns.add<CommonTailPatternWithSeq, EmptyIfBody>(context);
+  patterns.add<EmptyIfBody>(context);
   patterns.add(commonTailPatternWithPar<IfOp, ParOp>);
-  // possible for dynamic if op to contain static par ops (other way around not
-  // true)
-  patterns.add(commonTailPatternWithPar<IfOp, StaticParOp>);
+  patterns.add(commonTailPatternWithSeq<IfOp, SeqOp>);
 }
 
 //===----------------------------------------------------------------------===//
 // StaticIfOp
 //===----------------------------------------------------------------------===//
-
 LogicalResult StaticIfOp::verify() {
   if (elseBodyExists() && getElseBody()->empty())
     return emitError() << "empty 'else' region.";
@@ -2348,6 +2355,7 @@ void StaticIfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                              MLIRContext *context) {
   patterns.add<EmptyStaticIfBody>(context);
   patterns.add(commonTailPatternWithPar<StaticIfOp, StaticParOp>);
+  patterns.add(commonTailPatternWithSeq<StaticIfOp, StaticSeqOp>);
 }
 
 //===----------------------------------------------------------------------===//
