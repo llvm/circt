@@ -97,7 +97,6 @@ module attributes {calyx.entrypoint = "main"} {
         // CHECK: c.write_en = %0 ? 1'd1;
         calyx.assign %c.write_en = %0 ? %c1_1 : i1
       }
-
     }
     calyx.control {
       // CHECK: static par {
