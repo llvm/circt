@@ -498,6 +498,10 @@ private:
             emitCalyxSection(prependAttributes(op, "seq"),
                              [&]() { emitCalyxControl(op.getBodyBlock()); });
           })
+          .Case<StaticSeqOp>([&](auto op) {
+            emitCalyxSection(prependAttributes(op, "static seq"),
+                             [&]() { emitCalyxControl(op.getBodyBlock()); });
+          })
           .Case<ParOp>([&](auto op) {
             emitCalyxSection(prependAttributes(op, "par"),
                              [&]() { emitCalyxControl(op.getBodyBlock()); });
@@ -523,11 +527,24 @@ private:
               emitCalyxSection("else",
                                [&]() { emitCalyxControl(op.getElseBody()); });
           })
+          .Case<StaticIfOp>([&](auto op) {
+            indent() << prependAttributes(op, "static if ");
+            emitValue(op.getCond(), /*isIndented=*/false);
+
+            emitCalyxBody([&]() { emitCalyxControl(op.getThenBody()); });
+            if (op.elseBodyExists())
+              emitCalyxSection("else",
+                               [&]() { emitCalyxControl(op.getElseBody()); });
+          })
           .Case<StaticRepeatOp>([&](auto op) {
             indent() << prependAttributes(op, "static repeat ");
             os << op.getCount();
 
             emitCalyxBody([&]() { emitCalyxControl(op.getBodyBlock()); });
+          })
+          .Case<StaticParOp>([&](auto op) {
+            emitCalyxSection(prependAttributes(op, "static par"),
+                             [&]() { emitCalyxControl(op.getBodyBlock()); });
           })
           .Case<EnableOp>([&](auto op) { emitEnable(op); })
           .Default([&](auto op) {
@@ -809,8 +826,7 @@ void Emitter::emitWires(WiresOp op) {
       TypeSwitch<Operation *>(&bodyOp)
           .Case<GroupInterface>([&](auto op) { emitGroup(op); })
           .Case<AssignOp>([&](auto op) { emitAssignment(op); })
-          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp,
-                CycleOp>(
+          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp, CycleOp>(
               [&](auto op) { /* Do nothing. */ })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside wires section");
@@ -826,8 +842,7 @@ void Emitter::emitGroup(GroupInterface group) {
           .Case<AssignOp>([&](auto op) { emitAssignment(op); })
           .Case<GroupDoneOp>([&](auto op) { emitGroupPort(group, op, "done"); })
           .Case<GroupGoOp>([&](auto op) { emitGroupPort(group, op, "go"); })
-          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp,
-                CycleOp>(
+          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp, CycleOp>(
               [&](auto op) { /* Do nothing. */ })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside group.");
