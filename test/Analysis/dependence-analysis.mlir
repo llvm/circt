@@ -152,10 +152,10 @@ func.func @test8(%arg0: memref<?xi32>) {
 func.func @test9(%arg0: memref<?xi32>, %arg1 : memref<?xi32>, %arg2 : memref<?xi32>) {
   %alloc = memref.alloc() : memref<256xi32>
   %c1_i32 = arith.constant 1 : i32
-  // CHECK{LITERAL}: affine.store %c1_i32, %arg0[1] {dependences = [[]]} : memref<?xi32>
+  // CHECK: affine.store %c1_i32, %arg0[1] {dependences = []} : memref<?xi32>
   affine.store %c1_i32, %arg0[1] : memref<?xi32>
   affine.for %arg3 = 0 to 256 {
-    // CHECK{LITERAL}: affine.load %arg0[%arg3] {dependences = [[]]} : memref<?xi32>
+    // CHECK: affine.load %arg0[%arg3] {dependences = []} : memref<?xi32>
     %3 = affine.load %arg0[%arg3] : memref<?xi32>
     // CHECK: affine.store %0, %alloc[%arg3] {dependences = []} : memref<256xi32>
     affine.store %3, %alloc[%arg3] : memref<256xi32>

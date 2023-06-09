@@ -44,6 +44,13 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
       MemRefAccess dst(destination);
       FlatAffineValueConstraints dependenceConstraints;
       SmallVector<DependenceComponent, 2> depComps;
+
+      // Requested depth might not be a valid comparison if they do not belong
+      // to the same loop nest
+      if (depth >
+          getInnermostCommonLoopDepth(SmallVector({source, destination})))
+        continue;
+
       DependenceResult result = checkMemrefAccessDependence(
           src, dst, depth, &dependenceConstraints, &depComps, true);
 
@@ -132,33 +139,16 @@ circt::analysis::MemoryDependenceAnalysis::MemoryDependenceAnalysis(
   std::vector<SmallVector<AffineForOp, 2>> depthToLoops;
   mlir::affine::gatherLoops(funcOp, depthToLoops);
 
-  // Collect load and stores outside of loops
-  auto rootReads = funcOp.getOps<AffineReadOpInterface>();
-  auto rootWrites = funcOp.getOps<AffineWriteOpInterface>();
-  SmallVector<Operation *> rootMemoryOps(rootReads.begin(), rootReads.end());
-  rootMemoryOps.append(rootWrites.begin(), rootWrites.end());
+  // Collect load and store operations to check.
+  SmallVector<Operation *> memoryOps;
+  funcOp.walk([&](Operation *op) {
+    if (isa<AffineReadOpInterface, AffineWriteOpInterface>(op))
+      memoryOps.push_back(op);
+  });
 
-  // Need to loop over each root loop to preserve loop nest structure
-  for (auto forOp : funcOp.getOps<AffineForOp>()) {
-    // Additionally, collect load and stores inside this nest of ForOps
-    SmallVector<Operation *> memoryOps = rootMemoryOps;
-    forOp.walk([&](Operation *op) {
-      if (isa<AffineReadOpInterface, AffineWriteOpInterface>(op))
-        memoryOps.push_back(op);
-    });
-    std::size_t maxLoopDepth = 1;
-    // Find out max depth for this loop nest <= depthToLoops().size() - 1
-    for (auto loops : enumerate(depthToLoops))
-      for (auto innerLoop : loops.value())
-        if (forOp->isProperAncestor(innerLoop)) {
-          maxLoopDepth = std::max(maxLoopDepth, loops.index() + 1);
-          break;
-        }
-
-    // For each depth, check memref accesses.
-    for (unsigned depth = 1; depth <= maxLoopDepth; ++depth)
-      checkMemrefDependence(memoryOps, depth, results);
-  }
+  // For each depth, check memref accesses.
+  for (unsigned depth = 1, e = depthToLoops.size(); depth <= e; ++depth)
+    checkMemrefDependence(memoryOps, depth, results);
 }
 
 /// Returns the dependences, if any, that the given Operation depends on.
