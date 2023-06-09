@@ -141,8 +141,7 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
     // Gets the n'th stage of this pipeline
     Block* getStage(unsigned n) {
       auto& blocks = getRegion().getBlocks();
-      if(n >= blocks.size())
-        return nullptr;
+      assert(n < blocks.size() && "Stage index out of bounds");
       return &*std::next(blocks.begin(), n);
     }
 
@@ -173,10 +172,10 @@ def StageOp : Op<Pipeline_Dialect, "stage", [
     Pure,
     Terminator
   ]> {
-  let summary = "Pipeline stage terminating operation.";
+  let summary = "Pipeline stage terminator.";
   let description = [{
     The `pipeline.stage` operation represents a stage terminator. It is used
-    to communicate
+    to communicate:
     1. which stage (block) to transition to next
     2. which registers to build at this stage boundary
     3. which values to pass through to the next stage without registering

@@ -38,10 +38,6 @@ private:
   // ensures determinism during stage op IR emission.
   DenseMap<Block *, llvm::MapVector<Value, Backedge>> stageRegMap;
 
-  // A linked list of stages in the pipeline. Allows for easily looking up the
-  // predecessor stage of a given stage.
-  DenseMap<Block *, Block *> stagePredecessor;
-
   std::shared_ptr<BackedgeBuilder> bb;
 };
 
@@ -79,12 +75,9 @@ Value ExplicitRegsPass::routeThroughStage(OpOperand &v, Block *stage) {
   retVal = regBackedge;
 
   // Recurse - recursion will only create a new backedge if necessary.
-  auto predStageIt = stagePredecessor.find(stage);
-  assert(predStageIt != stagePredecessor.end() &&
-         "stage should have been registered before calling this function");
-  Block *predecessorStage = predStageIt->second;
-  if (predecessorStage)
-    routeThroughStage(v, predecessorStage);
+  Block *stagePred = stage->getSinglePredecessor();
+  assert(stagePred && "Expected stage to have a single predecessor");
+  routeThroughStage(v, stagePred);
 
   return retVal;
 }
@@ -94,19 +87,13 @@ void ExplicitRegsPass::runOnOperation() {
   OpBuilder b(getOperation().getContext());
   bb = std::make_shared<BackedgeBuilder>(b, getOperation().getLoc());
 
-  // A list of stages in the pipeline in the order which they appear.
-  SmallVector<Block *> stageList;
-  Block *currStage = nullptr;
   // Iterate over the pipeline body in-order (!).
   for (Block *stage : pipeline.getOrderedStages()) {
-    stagePredecessor[stage] = currStage;
-    currStage = stage;
-
     for (auto &op : *stage) {
       // Check the operands of this operation to see if any of them cross a
       // stage boundary.
       for (OpOperand &operand : op.getOpOperands()) {
-        Value reroutedValue = routeThroughStage(operand, currStage);
+        Value reroutedValue = routeThroughStage(operand, stage);
         if (reroutedValue != operand.get())
           op.setOperand(operand.getOperandNumber(), reroutedValue);
       }
@@ -118,7 +105,9 @@ void ExplicitRegsPass::runOnOperation() {
   // All values have been recorded through the stages. Now, add registers to the
   // stage blocks.
   for (auto &[stage, regMap] : stageRegMap) {
-    Block *predStage = stagePredecessor[stage];
+    // Get the single predecessor, if any ('stage' may be the entry block, which
+    // has no predecessors).
+    Block *predStage = stage->getSinglePredecessor();
 
     // Gather register inputs to this stage, either from a predecessor stage
     // or from the original op.
@@ -158,7 +147,6 @@ void ExplicitRegsPass::runOnOperation() {
 
   // Clear internal state. See https://github.com/llvm/circt/issues/3235
   stageRegMap.clear();
-  stagePredecessor.clear();
 }
 
 std::unique_ptr<mlir::Pass> circt::pipeline::createExplicitRegsPass() {
