@@ -2965,7 +2965,7 @@ firrtl.module private @System(in %in: !firrtl.uint<1>, out %foo: !firrtl.uint<1>
 }
 firrtl.module @DonotUpdateInstanceName(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1>) attributes {convention = #firrtl<convention scalarized>} {
   %system_in, %system_foo = firrtl.instance system @System(in in: !firrtl.uint<1>, out foo: !firrtl.uint<1>)
-  // CHECK: %system_in, %system_foo = firrtl.instance system @System(in in: !firrtl.uint<1>, out foo: !firrtl.uint<1>)
+  // CHECK: firrtl.instance system
   firrtl.strictconnect %system_in, %in : !firrtl.uint<1>
   %b = firrtl.node %system_foo : !firrtl.uint<1>
   firrtl.strictconnect %a, %b : !firrtl.uint<1>
