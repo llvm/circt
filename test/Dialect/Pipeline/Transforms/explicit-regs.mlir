@@ -35,7 +35,6 @@ hw.module @testRegsOnly(%arg0 : i32, %arg1 : i32, %go : i1, %clk : i1, %rst : i1
   hw.output %out#0, %out#1 : i32, i1
 }
 
-
 // CHECK-LABEL:   hw.module @testLatency1(
 // CHECK-SAME:             %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out: i32) {
 // CHECK:           %[[VAL_5:.*]] = pipeline.scheduled(%[[VAL_0]]) clock %[[VAL_3]] reset %[[VAL_4]] : (i32) -> i32 {
@@ -233,4 +232,27 @@ hw.module @test_arbitrary_nesting(%arg0 : i32, %arg1 : i32, %go : i1, %clk : i1,
     pipeline.return %a0 : i32
   }
   hw.output %out : i32
+// CHECK-LABEL:   hw.module @testExtInput(
+// CHECK-SAME:            %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1) -> (out0: i32, out1: i32) {
+// CHECK:           %[[VAL_4:.*]]:2 = pipeline.scheduled(%[[VAL_0]]) ext(%[[VAL_1]] : i32) clock %[[VAL_2]] reset %[[VAL_3]] : (i32) -> (i32, i32) {
+// CHECK:           ^bb0(%[[ARG_IN:.*]]: i32, %[[EXT_IN:.*]]: i32):
+// CHECK:             %[[VAL_7:.*]] = hw.constant true
+// CHECK:             %[[VAL_8:.*]] = comb.add %[[ARG_IN]], %[[EXT_IN]] : i32
+// CHECK:             pipeline.stage ^bb1 regs(%[[VAL_8]] : i32) enable %[[VAL_7]]
+// CHECK:           ^bb1(%[[VAL_9:.*]]: i32):
+// CHECK:             pipeline.return %[[VAL_9]], %[[EXT_IN]] : i32, i32
+// CHECK:           }
+// CHECK:           hw.output %[[VAL_10:.*]]#0, %[[VAL_10]]#1 : i32, i32
+// CHECK:         }
+hw.module @testExtInput(%arg0 : i32, %ext1 : i32, %clk : i1, %rst : i1) -> (out0: i32, out1: i32) {
+  %out:2 = pipeline.scheduled(%arg0) ext(%ext1 : i32) clock %clk reset %rst : (i32) -> (i32, i32) {
+    ^bb0(%a0 : i32, %e0: i32):
+      %true = hw.constant true
+      %add0 = comb.add %a0, %e0 : i32
+      pipeline.stage ^bb1 enable %true
+
+    ^bb1:
+      pipeline.return %add0, %e0 : i32, i32
+  }
+  hw.output %out#0, %out#1 : i32, i32
 }
