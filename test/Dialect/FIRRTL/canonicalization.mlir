@@ -2960,13 +2960,10 @@ firrtl.module @RefTypes(
 }
 
 // Do not rename InstanceOp: https://github.com/llvm/circt/issues/5351
-firrtl.module private @System(in %in: !firrtl.uint<1>, out %foo: !firrtl.uint<1>) {
-  firrtl.strictconnect %foo, %in : !firrtl.uint<1>
-}
+firrtl.extmodule @System(out foo: !firrtl.uint<1>)
 firrtl.module @DonotUpdateInstanceName(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1>) attributes {convention = #firrtl<convention scalarized>} {
-  %system_in, %system_foo = firrtl.instance system @System(in in: !firrtl.uint<1>, out foo: !firrtl.uint<1>)
+  %system_foo = firrtl.instance system @System(out foo: !firrtl.uint<1>)
   // CHECK: firrtl.instance system
-  firrtl.strictconnect %system_in, %in : !firrtl.uint<1>
   %b = firrtl.node %system_foo : !firrtl.uint<1>
   firrtl.strictconnect %a, %b : !firrtl.uint<1>
 }
