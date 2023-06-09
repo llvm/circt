@@ -1835,7 +1835,7 @@ struct FoldNodeName : public mlir::RewritePattern {
         !node.getAnnotations().empty() || node.isForceable())
       return failure();
     auto *newOp = node.getInput().getDefiningOp();
-    // Best effort, donot rename InstanceOp
+    // Best effort, do not rename InstanceOp
     if (newOp && !isa<InstanceOp>(newOp))
       updateName(rewriter, newOp, name);
     rewriter.replaceOp(node, node.getInput());
