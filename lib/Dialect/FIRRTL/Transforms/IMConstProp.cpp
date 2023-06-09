@@ -878,7 +878,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     if (constIt != constPool.end()) {
       auto *cst = constIt->second;
       // Add location to the constant
-      cst->setLoc(builder.getFusedLoc(cst->getLoc(), loc));
+      cst->setLoc(builder.getFusedLoc({cst->getLoc(), loc}));
       return cst->getResult(0);
     }
     auto savedIP = builder.saveInsertionPoint();
