@@ -990,6 +990,26 @@ def BitCastOp: FIRRTLOp<"bitcast", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Properties
+//===----------------------------------------------------------------------===//
+
+def StringConstantOp : FIRRTLOp<"string", [Pure, ConstantLike]> {
+  let summary = "Produce a constant string value";
+  let description = [{
+    Produces a constant value of string type.
+
+    Example:
+    ```mlir
+    %0 = firrtl.string "hello world"
+    ```
+  }];
+  let arguments = (ins StrAttr:$value);
+  let results = (outs StringType:$result);
+  let hasFolder = 1;
+  let assemblyFormat = "$value attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
 // RefOperations: Operations on the RefType.
 //
 // The RefType is used to capture dataflow paths.
