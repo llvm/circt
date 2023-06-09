@@ -22,6 +22,13 @@
 
 namespace circt {
 namespace hw {
+struct ModulePort {
+  enum Direction { Input, Output, InOut };
+  mlir::StringAttr name;
+  mlir::Type type;
+  Direction dir;
+};
+
 class HWSymbolCache;
 class ParamDeclAttr;
 class TypedeclOp;

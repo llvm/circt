@@ -76,6 +76,21 @@ def HWAggregateType : DialectType<HWDialect,
 // Type Definitions
 //===----------------------------------------------------------------------===//
 
+class HW_Type<string name, string typeMnemonic, list<Trait> traits = []>
+    : TypeDef<HWDialect, name, traits> {
+  let mnemonic = typeMnemonic;
+}
+
+def ModuleType : HW_Type<"Module", "module"> {
+  let summary = "Module Type";
+  let description = [{
+    Module types have ports.
+  }];
+  let parameters = (ins ArrayRefParameter<"::circt::hw::ModulePort", "port list">:$params);
+  let assemblyFormat = "`(` $params `)`";
+  let genVerifyDecl = 1;
+}
+
 /// Points to a name within a module.
 def HWInnerRefAttr : Attr<
   CPred<"$_self.isa<::circt::hw::InnerRefAttr>()">,
