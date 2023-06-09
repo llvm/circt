@@ -716,4 +716,18 @@ def FinalizeIR : Pass<"firrtl-finalize-ir", "mlir::ModuleOp"> {
   let dependentDialects = ["hw::HWDialect", "sv::SVDialect"];
 }
 
+def ExtractClasses : Pass<"firrtl-extract-classes", "mlir::ModuleOp"> {
+  let summary = "Extract OM classes from FIRRTL modules with properties";
+  let description = [{
+    This pass walks all FIRRTL modules and creates OM classes from their non-RTL
+    properties. OM classes are created with parameters corresponding to FIRRTL
+    input properties, and OM class fields corresponding to FIRRTL output
+    properties. FIRRTL operations are not converted to OM operations. A final
+    conversion pass is required, which can operate on the extracted OM classes
+    in parallel.
+  }];
+  let constructor = "circt::firrtl::createExtractClassesPass()";
+  let dependentDialects = ["om::OMDialect"];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

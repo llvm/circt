@@ -164,6 +164,8 @@ std::unique_ptr<mlir::Pass> createInnerSymbolDCEPass();
 
 std::unique_ptr<mlir::Pass> createFinalizeIRPass();
 
+std::unique_ptr<mlir::Pass> createExtractClassesPass();
+
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/FIRRTL/Passes.h.inc"
