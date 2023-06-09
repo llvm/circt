@@ -2386,8 +2386,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
       trueMux && falseMux && trueMux.getCond() == falseMux.getCond() &&
       trueMux.getTrueValue() == falseMux.getTrueValue()) {
     auto subMux = rewriter.create<MuxOp>(
-        rewriter.getFusedLoc(trueMux.getLoc(), falseMux.getLoc()), op.getCond(),
-        trueMux.getFalseValue(), falseMux.getFalseValue());
+        rewriter.getFusedLoc({trueMux.getLoc(), falseMux.getLoc()}),
+        op.getCond(), trueMux.getFalseValue(), falseMux.getFalseValue());
     replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, trueMux.getCond(),
                                          trueMux.getTrueValue(), subMux,
                                          op.getTwoStateAttr());
@@ -2400,8 +2400,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
       trueMux && falseMux && trueMux.getCond() == falseMux.getCond() &&
       trueMux.getFalseValue() == falseMux.getFalseValue()) {
     auto subMux = rewriter.create<MuxOp>(
-        rewriter.getFusedLoc(trueMux.getLoc(), falseMux.getLoc()), op.getCond(),
-        trueMux.getTrueValue(), falseMux.getTrueValue());
+        rewriter.getFusedLoc({trueMux.getLoc(), falseMux.getLoc()}),
+        op.getCond(), trueMux.getTrueValue(), falseMux.getTrueValue());
     replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, trueMux.getCond(),
                                          subMux, trueMux.getFalseValue(),
                                          op.getTwoStateAttr());
