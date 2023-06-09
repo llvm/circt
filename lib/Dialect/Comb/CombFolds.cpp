@@ -1445,6 +1445,19 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
   if (narrowOperationWidth(op, false, rewriter))
     return success();
 
+  // add(add(x, c1), c2) -> add(x, c1 + c2)
+  auto addOp = inputs[0].getDefiningOp<comb::AddOp>();
+  if (addOp && addOp.getInputs().size() == 2 &&
+      matchPattern(addOp.getInputs()[1], m_ConstantInt(&value2)) &&
+      inputs.size() == 2 && matchPattern(inputs[1], m_ConstantInt(&value))) {
+
+    auto rhs = rewriter.create<hw::ConstantOp>(op.getLoc(), value + value2);
+    replaceOpWithNewOpAndCopyName<AddOp>(
+        rewriter, op, op.getType(), ArrayRef<Value>{addOp.getInputs()[1], rhs},
+        /*twoState=*/op.getTwoState() && addOp.getTwoState());
+    return success();
+  }
+
   return failure();
 }
 
