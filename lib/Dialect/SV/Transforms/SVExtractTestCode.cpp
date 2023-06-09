@@ -79,10 +79,6 @@ getBackwardSliceSimple(Operation *rootOp, SetVector<Operation *> &backwardSlice,
 
     backwardSlice.insert(op);
   }
-
-  // Don't insert the top level operation, we just queried on it and don't
-  // want it in the results.
-  backwardSlice.remove(rootOp);
 }
 
 // Compute the ops defining the blocks a set of ops are in.
