@@ -115,6 +115,8 @@ static StringRef chooseName(StringRef a, StringRef b) {
 /// the name passed in.
 static void updateName(PatternRewriter &rewriter, Operation *op,
                        StringAttr name) {
+  // Should never rename InstanceOp
+  assert(!isa<InstanceOp>(op));
   if (!name || name.getValue().empty())
     return;
   auto newName = name.getValue(); // old name is interesting
@@ -1833,8 +1835,8 @@ struct FoldNodeName : public mlir::RewritePattern {
         !node.getAnnotations().empty() || node.isForceable())
       return failure();
     auto *newOp = node.getInput().getDefiningOp();
-    // Best effort
-    if (newOp)
+    // Best effort, donot rename InstanceOp
+    if (newOp && !isa<InstanceOp>(newOp))
       updateName(rewriter, newOp, name);
     rewriter.replaceOp(node, node.getInput());
     return success();
