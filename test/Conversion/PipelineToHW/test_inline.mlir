@@ -116,11 +116,11 @@ hw.module @testMultiple(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> 
 }
 
 // CHECK-LABEL:   hw.module @testSingleWithExt(
-// CHECK-SAME:            %[[ARG:.*]]: i32, %[[EXT:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1) -> (out0: i32, out1: i32) {
+// CHECK-SAME:             %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1) -> (out0: i32, out1: i32) {
 // CHECK:           %[[VAL_4:.*]] = hw.constant true
-// CHECK:           %[[VAL_5:.*]] = comb.sub %[[ARG]], %[[ARG]] : i32
+// CHECK:           %[[VAL_5:.*]] = comb.sub %[[VAL_0]], %[[VAL_0]] : i32
 // CHECK:           %[[VAL_6:.*]] = seq.compreg %[[VAL_5]], %[[VAL_2]] : i32
-// CHECK:           %[[VAL_7:.*]] = comb.add %[[VAL_6]], %[[EXT]] : i32
+// CHECK:           %[[VAL_7:.*]] = comb.add %[[VAL_6]], %[[VAL_1]] : i32
 // CHECK:           %[[VAL_8:.*]] = seq.compreg %[[VAL_7]], %[[VAL_2]] : i32
 // CHECK:           hw.output %[[VAL_8]], %[[VAL_1]] : i32, i32
 // CHECK:         }

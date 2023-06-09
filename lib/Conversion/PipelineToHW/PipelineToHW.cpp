@@ -221,7 +221,7 @@ public:
   // module signatures.
   void gatherExtInputsToStages() {
     for (auto extIn : pipeline.getInnerExtInputs()) {
-      for (auto user : extIn.getUsers())
+      for (auto *user : extIn.getUsers())
         stageExtInputs[user->getBlock()].insert(extIn);
     }
   }
