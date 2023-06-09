@@ -50,12 +50,13 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
   let hasCanonicalizer = true;
 }
 
-def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]> {
+def StrictConnectOp : FIRRTLOp<"strictconnect", [FConnectLike]> {
   let summary = "Connect two signals";
   let description =  [{
     Connect two values with strict constraints:
     ```
       firrtl.strictconnect %dest, %src : t1
+      firrtl.strictconnect %dest, %src : t1, !firrtl.alias<foo, t1>
     ```
     }];
 
@@ -66,8 +67,7 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]
 
   let hasVerifier = 1;
 
-  let assemblyFormat =
-    "$dest `,` $src  attr-dict `:` qualified(type($dest))";
+  let hasCustomAssemblyFormat = 1;
 }
 
 def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {

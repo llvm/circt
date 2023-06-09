@@ -30,9 +30,8 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
                                 Value src) {
   auto dstFType = dst.getType().cast<FIRRTLType>();
   auto srcFType = src.getType().cast<FIRRTLType>();
-  auto dstType = firrtl::type_dyn_cast<FIRRTLBaseType>(dstFType);
-  auto srcType = firrtl::type_dyn_cast<FIRRTLBaseType>(srcFType);
-
+  auto dstType = dyn_cast<FIRRTLBaseType>(dstFType);
+  auto srcType = dyn_cast<FIRRTLBaseType>(srcFType);
   // Special Connects (non-base, foreign):
   if (!dstType) {
     // References use ref.define.  Types should match, leave to verifier if not.
@@ -50,12 +49,12 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     return;
   }
 
-  if (auto dstBundle = firrtl::type_dyn_cast<BundleType>(dstType)) {
+  if (auto dstBundle = type_dyn_cast<BundleType>(dstType)) {
     // Connect all the bundle elements pairwise.
     auto numElements = dstBundle.getNumElements();
     // Check if we are trying to create an illegal connect - just create the
     // connect and let the verifier catch it.
-    auto srcBundle = firrtl::type_dyn_cast<BundleType>(srcType);
+    auto srcBundle = type_dyn_cast<BundleType>(srcType);
     if (!srcBundle || numElements != srcBundle.getNumElements()) {
       builder.create<ConnectOp>(dst, src);
       return;
@@ -70,12 +69,12 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     return;
   }
 
-  if (auto dstVector = firrtl::type_dyn_cast<FVectorType>(dstType)) {
+  if (auto dstVector = type_dyn_cast<FVectorType>(dstType)) {
     // Connect all the vector elements pairwise.
     auto numElements = dstVector.getNumElements();
     // Check if we are trying to create an illegal connect - just create the
     // connect and let the verifier catch it.
-    auto srcVector = firrtl::type_dyn_cast<FVectorType>(srcType);
+    auto srcVector = type_dyn_cast<FVectorType>(srcType);
     if (!srcVector || numElements != srcVector.getNumElements()) {
       builder.create<ConnectOp>(dst, src);
       return;
@@ -109,7 +108,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   if (dstWidth < srcWidth) {
     // firrtl.tail always returns uint even for sint operands.
     IntType tmpType =
-        firrtl::type_cast<IntType>(dstType).getConstType(srcType.isConst());
+        type_cast<IntType>(dstType).getConstType(srcType.isConst());
     bool isSignedDest = tmpType.isSigned();
     if (isSignedDest)
       tmpType =
@@ -128,6 +127,14 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
       srcType && dstType != srcType &&
       areTypesConstCastable(dstType, srcType)) {
     src = builder.create<ConstCastOp>(dstType, src);
+  }
+
+  if (src.getType().isa<BaseTypeAliasType>() ||
+      dstType.isa<BaseTypeAliasType>()) {
+    // TODO: Relax StrictConnect verifier to accept structually equivalent
+    // types.
+    builder.create<ConnectOp>(dst, src);
+    return;
   }
 
   // Strict connect requires the types to be completely equal, including
@@ -603,7 +610,7 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
                                        Value value, unsigned fieldID) {
   // When the fieldID hits 0, we've found the target value.
   while (fieldID != 0) {
-    TypeSwitch<Type, void>(value.getType())
+    FIRRTLTypeSwitch<Type, void>(value.getType())
         .Case<BundleType, OpenBundleType>([&](auto bundle) {
           auto index = bundle.getIndexForFieldID(fieldID);
           value = builder.create<SubfieldOp>(value, index);
@@ -615,7 +622,7 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
           fieldID -= vector.getFieldID(index);
         })
         .Case<RefType>([&](auto reftype) {
-          TypeSwitch<FIRRTLBaseType, void>(reftype.getType())
+          FIRRTLTypeSwitch<FIRRTLBaseType, void>(reftype.getType())
               .template Case<BundleType, FVectorType>([&](auto type) {
                 auto index = type.getIndexForFieldID(fieldID);
                 value = builder.create<RefSubOp>(value, index);
@@ -641,14 +648,14 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
 void circt::firrtl::walkGroundTypes(
     FIRRTLType firrtlType,
     llvm::function_ref<void(uint64_t, FIRRTLBaseType)> fn) {
-  auto type = getBaseType(firrtlType).getAnonymousType();
+  auto type = getBaseType(firrtlType);
   // If this is a ground type, don't call recursive functions.
   if (type.isGround())
     return fn(0, type);
 
   uint64_t fieldID = 0;
   auto recurse = [&](auto &&f, FIRRTLBaseType type) -> void {
-    TypeSwitch<FIRRTLBaseType>(type)
+    FIRRTLTypeSwitch<FIRRTLBaseType>(type)
         .Case<BundleType>([&](BundleType bundle) {
           for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
             fieldID++;

@@ -344,7 +344,7 @@ def BundleImpl : BaseBundleTypeImpl<"Bundle","::circt::firrtl::FIRRTLBaseType", 
 
 def OpenBundleImpl : BaseBundleTypeImpl<"OpenBundle","::circt::firrtl::FIRRTLType", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]>;
 
-def BaseTypeAliasImpl : FIRRTLImplType<"BaseTypeAlias", [], "::circt::firrtl::FIRRTLBaseType"> {
+def BaseTypeAliasImpl : FIRRTLImplType<"BaseTypeAlias", [FieldIDTypeInterface], "::circt::firrtl::FIRRTLBaseType"> {
   let summary = "type alias for firrtl base types";
   let parameters =
     (ins  "StringAttr":$name, TypeParameter<"::circt::firrtl::FIRRTLBaseType",

@@ -1722,19 +1722,19 @@ void InferenceMapping::declareVars(Value value, Location loc, bool isDerived) {
       else
         setExpr(field, solver.var());
       fieldID++;
-    } else if (auto bundleType = firrtl::type_dyn_cast<BundleType>(type)) {
+    } else if (auto bundleType = type_dyn_cast<BundleType>(type)) {
       // Bundle types recursively declare all bundle elements.
       fieldID++;
       for (auto &element : bundleType) {
         declare(element.type);
       }
-    } else if (auto vecType = firrtl::type_dyn_cast<FVectorType>(type)) {
+    } else if (auto vecType = type_dyn_cast<FVectorType>(type)) {
       fieldID++;
       auto save = fieldID;
       declare(vecType.getElementType());
       // Skip past the rest of the elements
       fieldID = save + vecType.getMaxFieldID();
-    } else if (auto enumType = firrtl::type_dyn_cast<FEnumType>(type)) {
+    } else if (auto enumType = type_dyn_cast<FEnumType>(type)) {
       fieldID++;
       for (auto &element : enumType.getElements())
         declare(element.type);
@@ -1752,18 +1752,18 @@ void InferenceMapping::maximumOfTypes(Value result, Value rhs, Value lhs) {
   // Recurse to every leaf element and set larger >= smaller.
   auto fieldID = 0;
   std::function<void(FIRRTLBaseType)> maximize = [&](FIRRTLBaseType type) {
-    if (auto bundleType = type.dyn_cast<BundleType>()) {
+    if (auto bundleType = dyn_cast<BundleType>(type)) {
       fieldID++;
       for (auto &element : bundleType.getElements())
         maximize(element.type);
-    } else if (auto vecType = type.dyn_cast<FVectorType>()) {
+    } else if (auto vecType = type_dyn_cast<FVectorType>(type)) {
       fieldID++;
       auto save = fieldID;
       // Skip 0 length vectors.
       if (vecType.getNumElements() > 0)
         maximize(vecType.getElementType());
       fieldID = save + vecType.getMaxFieldID();
-    } else if (auto enumType = type.dyn_cast<FEnumType>()) {
+    } else if (auto enumType = type_dyn_cast<FEnumType>(type)) {
       fieldID++;
       for (auto &element : enumType.getElements())
         maximize(element.type);
@@ -1796,7 +1796,7 @@ void InferenceMapping::constrainTypes(Value larger, Value smaller) {
   auto fieldID = 0;
   std::function<void(FIRRTLBaseType, Value, Value)> constrain =
       [&](FIRRTLBaseType type, Value larger, Value smaller) {
-        if (auto bundleType = type.dyn_cast<BundleType>()) {
+        if (auto bundleType = type_dyn_cast<BundleType>(type)) {
           fieldID++;
           for (auto &element : bundleType.getElements()) {
             if (element.isFlip)
@@ -1804,7 +1804,7 @@ void InferenceMapping::constrainTypes(Value larger, Value smaller) {
             else
               constrain(element.type, larger, smaller);
           }
-        } else if (auto vecType = type.dyn_cast<FVectorType>()) {
+        } else if (auto vecType = type_dyn_cast<FVectorType>(type)) {
           fieldID++;
           auto save = fieldID;
           // Skip 0 length vectors.
@@ -1812,7 +1812,7 @@ void InferenceMapping::constrainTypes(Value larger, Value smaller) {
             constrain(vecType.getElementType(), larger, smaller);
           }
           fieldID = save + vecType.getMaxFieldID();
-        } else if (auto enumType = type.dyn_cast<FEnumType>()) {
+        } else if (auto enumType = type_dyn_cast<FEnumType>(type)) {
           fieldID++;
           for (auto &element : enumType.getElements())
             constrain(element.type, larger, smaller);
@@ -1900,12 +1900,12 @@ void InferenceMapping::unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type) {
         solver.addGeqConstraint(var, solver.known(0));
       setExpr(lhsFieldRef, getExpr(rhsFieldRef));
       fieldID++;
-    } else if (auto bundleType = type.dyn_cast<BundleType>()) {
+    } else if (auto bundleType = type_dyn_cast<BundleType>(type)) {
       fieldID++;
       for (auto &element : bundleType) {
         unify(element.type);
       }
-    } else if (auto vecType = type.dyn_cast<FVectorType>()) {
+    } else if (auto vecType = type_dyn_cast<FVectorType>(type)) {
       fieldID++;
       auto save = fieldID;
       // Skip 0 length vectors.
@@ -1913,7 +1913,7 @@ void InferenceMapping::unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type) {
         unify(vecType.getElementType());
       }
       fieldID = save + vecType.getMaxFieldID();
-    } else if (auto enumType = type.dyn_cast<FEnumType>()) {
+    } else if (auto enumType = type_dyn_cast<FEnumType>(type)) {
       fieldID++;
       for (auto &element : enumType.getElements())
         unify(element.type);

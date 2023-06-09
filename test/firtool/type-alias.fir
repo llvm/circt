@@ -1,3 +1,6 @@
+; e2e test for type alias. Type alias must be preserved if its inner type is not modified.
+; In other words, type alias for a type that contains flip, const, uninferred width or abstract reset
+; will be stripped.
 ; RUN: firtool %s --preserve-aggregate=all --scalarize-top-module=false -ir-fir | FileCheck %s
 
 FIRRTL version 3.0.0

@@ -2150,7 +2150,7 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
   std::function<LogicalResult(Value, FIRRTLBaseType, FIRRTLBaseType)> recurse =
       [&](Value src, FIRRTLBaseType srcType,
           FIRRTLBaseType destType) -> LogicalResult {
-    return TypeSwitch<FIRRTLBaseType, LogicalResult>(srcType.getAnonymousType())
+    return FIRRTLTypeSwitch<FIRRTLBaseType, LogicalResult>(srcType)
         .Case<FVectorType>([&](auto srcVectorType) {
           auto destVectorType = destType.cast<FVectorType>();
           unsigned size = resultBuffer.size();
@@ -2276,7 +2276,7 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
 
   // Extension follows the sign of the source value, not the destination.
   auto valueFIRType = value.getType().cast<FIRRTLBaseType>().getPassiveType();
-  if (valueFIRType.cast<IntType>().isSigned())
+  if (type_cast<IntType>(valueFIRType).isSigned())
     return comb::createOrFoldSExt(result, resultType, builder);
 
   auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);

@@ -1398,7 +1398,7 @@ BundleType::getSubTypeByFieldID(uint64_t fieldID) {
   auto subfieldIndex = getIndexForFieldID(fieldID);
   auto subfieldType = getElementType(subfieldIndex);
   auto subfieldID = fieldID - getFieldID(subfieldIndex);
-  return {subfieldType.cast<circt::hw::FieldIDTypeInterface>(), subfieldID};
+  return {type_cast<circt::hw::FieldIDTypeInterface>(subfieldType), subfieldID};
 }
 
 uint64_t BundleType::getMaxFieldID() { return getImpl()->maxFieldID; }
@@ -1474,7 +1474,7 @@ struct circt::firrtl::detail::OpenBundleTypeStorage : mlir::TypeStorage {
       fieldIDs.push_back(fieldID);
       // Increment the field ID for the next field by the number of subfields.
       // TODO: Maybe just have elementType be FieldIDTypeInterface ?
-      fieldID += cast<hw::FieldIDTypeInterface>(type).getMaxFieldID();
+      fieldID += type_cast<hw::FieldIDTypeInterface>(type).getMaxFieldID();
     }
     maxFieldID = fieldID;
   }
@@ -1617,7 +1617,7 @@ OpenBundleType::getSubTypeByFieldID(uint64_t fieldID) {
   auto subfieldIndex = getIndexForFieldID(fieldID);
   auto subfieldType = getElementType(subfieldIndex);
   auto subfieldID = fieldID - getFieldID(subfieldIndex);
-  return {subfieldType.cast<circt::hw::FieldIDTypeInterface>(), subfieldID};
+  return {type_cast<circt::hw::FieldIDTypeInterface>(subfieldType), subfieldID};
 }
 
 uint64_t OpenBundleType::getMaxFieldID() { return getImpl()->maxFieldID; }
@@ -1776,7 +1776,7 @@ std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
 FVectorType::getSubTypeByFieldID(uint64_t fieldID) {
   if (fieldID == 0)
     return {*this, 0};
-  return {getElementType().cast<circt::hw::FieldIDTypeInterface>(),
+  return {type_cast<circt::hw::FieldIDTypeInterface>(getElementType()),
           getIndexAndSubfieldID(fieldID).second};
 }
 
@@ -1856,7 +1856,7 @@ OpenVectorType OpenVectorType::getConstType(bool isConst) {
 }
 
 uint64_t OpenVectorType::getFieldID(uint64_t index) {
-  return 1 + index * (llvm::cast<hw::FieldIDTypeInterface>(getElementType())
+  return 1 + index * (type_cast<hw::FieldIDTypeInterface>(getElementType())
                           .getMaxFieldID() +
                       1);
 }
@@ -1864,7 +1864,7 @@ uint64_t OpenVectorType::getFieldID(uint64_t index) {
 uint64_t OpenVectorType::getIndexForFieldID(uint64_t fieldID) {
   assert(fieldID && "fieldID must be at least 1");
   // Divide the field ID by the number of fieldID's per element.
-  return (fieldID - 1) / (llvm::cast<hw::FieldIDTypeInterface>(getElementType())
+  return (fieldID - 1) / (type_cast<hw::FieldIDTypeInterface>(getElementType())
                               .getMaxFieldID() +
                           1);
 }
@@ -1880,14 +1880,14 @@ std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
 OpenVectorType::getSubTypeByFieldID(uint64_t fieldID) {
   if (fieldID == 0)
     return {*this, 0};
-  return {getElementType().cast<circt::hw::FieldIDTypeInterface>(),
+  return {type_cast<circt::hw::FieldIDTypeInterface>(getElementType()),
           getIndexForFieldID(fieldID)};
 }
 
 uint64_t OpenVectorType::getMaxFieldID() {
   // If this is requirement, make ODS constraint or actual elementType.
   return getNumElements() *
-         (llvm::cast<hw::FieldIDTypeInterface>(getElementType())
+         (type_cast<hw::FieldIDTypeInterface>(getElementType())
               .getMaxFieldID() +
           1);
 }
@@ -2101,7 +2101,7 @@ FEnumType::getSubTypeByFieldID(uint64_t fieldID) {
   auto subfieldIndex = getIndexForFieldID(fieldID);
   auto subfieldType = getElementType(subfieldIndex);
   auto subfieldID = fieldID - getFieldID(subfieldIndex);
-  return {subfieldType.cast<circt::hw::FieldIDTypeInterface>(), subfieldID};
+  return {type_cast<circt::hw::FieldIDTypeInterface>(subfieldType), subfieldID};
 }
 
 uint64_t FEnumType::getMaxFieldID() { return getImpl()->maxFieldID; }
@@ -2329,7 +2329,7 @@ std::optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
                                            bool ignoreFlip) {
   std::function<std::optional<int64_t>(FIRRTLBaseType)> getWidth =
       [&](FIRRTLBaseType type) -> std::optional<int64_t> {
-    return TypeSwitch<FIRRTLBaseType, std::optional<int64_t>>(type)
+    return FIRRTLTypeSwitch<FIRRTLBaseType, std::optional<int64_t>>(type)
         .Case<BundleType>([&](BundleType bundle) -> std::optional<int64_t> {
           int64_t width = 0;
           for (auto &elt : bundle) {

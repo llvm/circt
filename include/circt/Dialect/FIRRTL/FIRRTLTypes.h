@@ -18,6 +18,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/Types.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
 namespace firrtl {
@@ -426,9 +427,100 @@ public:
   BaseTy get() const { return circt::firrtl::type_cast<BaseTy>(*this); }
 };
 
+
+
 using FIRRTLValue = mlir::TypedValue<FIRRTLType>;
 using FIRRTLBaseValue = mlir::TypedValue<firrtl::FIRRTLBaseType>;
 } // namespace firrtl
 } // namespace circt
+namespace circt {
+/// This class implements a switch-like dispatch statement for a value of 'T'
+/// using FIRRTL type cast functionality. Each `Case<T>` takes a callable to be invoked
+/// if the root value isa<T>, the callable is invoked with the result of
+/// dyn_cast<T>() as a parameter.
+///
+template <typename T, typename ResultT = void>
+class FIRRTLTypeSwitch
+    : public llvm::detail::TypeSwitchBase<FIRRTLTypeSwitch<T, ResultT>, T> {
+public:
+  using BaseT = llvm::detail::TypeSwitchBase<FIRRTLTypeSwitch<T, ResultT>, T>;
+  using BaseT::BaseT;
+  using BaseT::Case;
+  FIRRTLTypeSwitch(FIRRTLTypeSwitch &&other) = default;
+
+  /// Add a case on the given type.
+  template <typename CaseT, typename CallableT>
+  FIRRTLTypeSwitch<T, ResultT> &Case(CallableT &&caseFn) {
+    if (result)
+      return *this;
+
+    // Check to see if CaseT applies to 'value'.
+    if (auto caseValue = circt::firrtl::type_dyn_cast<CaseT>(this->value))
+      result.emplace(caseFn(caseValue));
+    return *this;
+  }
+
+  /// As a default, invoke the given callable within the root value.
+  template <typename CallableT>
+  [[nodiscard]] ResultT Default(CallableT &&defaultFn) {
+    if (result)
+      return std::move(*result);
+    return defaultFn(this->value);
+  }
+
+  /// As a default, return the given value.
+  [[nodiscard]] ResultT Default(ResultT defaultResult) {
+    if (result)
+      return std::move(*result);
+    return defaultResult;
+  }
+
+  [[nodiscard]] operator ResultT() {
+    assert(result && "Fell off the end of a type-switch");
+    return std::move(*result);
+  }
+
+private:
+  /// The pointer to the result of this switch statement, once known,
+  /// null before that.
+  std::optional<ResultT> result;
+};
+
+/// Specialization of FIRRTLTypeSwitch for void returning callables.
+template <typename T>
+class FIRRTLTypeSwitch<T, void>
+    : public llvm::detail::TypeSwitchBase<FIRRTLTypeSwitch<T, void>, T> {
+public:
+  using BaseT = llvm::detail::TypeSwitchBase<FIRRTLTypeSwitch<T, void>, T>;
+  using BaseT::BaseT;
+  using BaseT::Case;
+  FIRRTLTypeSwitch(FIRRTLTypeSwitch &&other) = default;
+
+  /// Add a case on the given type.
+  template <typename CaseT, typename CallableT>
+  FIRRTLTypeSwitch<T, void> &Case(CallableT &&caseFn) {
+    if (foundMatch)
+      return *this;
+
+    // Check to see if any of the types apply to 'value'.
+    if (auto caseValue = circt::firrtl::type_dyn_cast<CaseT>(this->value)) {
+      caseFn(caseValue);
+      foundMatch = true;
+    }
+    return *this;
+  }
+
+  /// As a default, invoke the given callable within the root value.
+  template <typename CallableT>
+  void Default(CallableT &&defaultFn) {
+    if (!foundMatch)
+      defaultFn(this->value);
+  }
+
+private:
+  /// A flag detailing if we have already found a match.
+  bool foundMatch = false;
+};
+}
 
 #endif // CIRCT_DIALECT_FIRRTL_TYPES_H

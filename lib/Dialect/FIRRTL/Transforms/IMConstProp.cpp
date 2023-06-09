@@ -467,7 +467,7 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
 
       for (auto result : op.getResults())
         if (hasAggregateOperand ||
-            result.getType().isa<FVectorType, BundleType>())
+            type_isa<FVectorType, BundleType>(result.getType()))
           markOverdefined(result);
     }
 

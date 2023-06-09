@@ -108,7 +108,7 @@ private:
 
   // NOLINTNEXTLINE(misc-no-recursion)
   void update(Type type) {
-    if (auto bundle = type.dyn_cast<BundleType>())
+    if (auto bundle = type_dyn_cast<BundleType>(type))
       return update(bundle);
     update(type.getAsOpaquePointer());
   }
@@ -1182,8 +1182,8 @@ void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
   }
   // It must be a bundle type and the field name has changed. We have to
   // manually decompose the bulk connect into a connect for each field.
-  auto dstBundle = dstType.cast<BundleType>();
-  auto srcBundle = srcType.cast<BundleType>();
+  auto dstBundle = type_cast<BundleType>(dstType);
+  auto srcBundle = type_cast<BundleType>(srcType);
   for (unsigned i = 0; i < dstBundle.getNumElements(); ++i) {
     auto dstField = builder.create<SubfieldOp>(dst, i);
     auto srcField = builder.create<SubfieldOp>(src, i);

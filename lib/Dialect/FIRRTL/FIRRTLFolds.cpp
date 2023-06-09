@@ -1713,9 +1713,9 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   if (srcValueOp) {
     // Replace with constant zero.
     if (isa<InvalidValueOp>(srcValueOp)) {
-      if (op.getDest().getType().isa<BundleType, FVectorType>())
+      if (type_isa<BundleType, FVectorType>(op.getDest().getType()))
         return failure();
-      if (op.getDest().getType().isa<ClockType, AsyncResetType, ResetType>())
+      if (type_isa<ClockType, AsyncResetType, ResetType>(op.getDest().getType()))
         replacement = rewriter.create<SpecialConstantOp>(
             op.getSrc().getLoc(), op.getDest().getType(),
             rewriter.getBoolAttr(false));
@@ -1963,7 +1963,7 @@ struct AggOneShot : public mlir::RewritePattern {
     if (values.empty())
       return failure();
     rewriter.setInsertionPointToEnd(op->getBlock());
-    Value newVal = op->getResult(0).getType().isa<BundleType>()
+    Value newVal = type_isa<BundleType>(op->getResult(0).getType())
                        ? rewriter.createOrFold<BundleCreateOp>(
                              op->getLoc(), op->getResult(0).getType(), values)
                        : rewriter.createOrFold<VectorCreateOp>(

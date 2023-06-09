@@ -101,7 +101,8 @@ static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
     });
   };
 
-  return TypeSwitch<FIRRTLBaseType, LogicalResult>(type)
+  // TODO: Consider emtting type alias information.
+  return FIRRTLTypeSwitch<FIRRTLBaseType, LogicalResult>(type)
       .Case<ClockType>([&](ClockType) { return emitType("Clock"); })
       .Case<AsyncResetType>(
           [&](AsyncResetType) { return emitType("AsyncReset"); })

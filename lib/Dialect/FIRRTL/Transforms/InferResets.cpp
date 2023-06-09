@@ -683,7 +683,7 @@ static bool getFieldName(const FieldRef &fieldRef, SmallString<32> &string) {
   auto type = value.getType();
   auto localID = fieldRef.getFieldID();
   while (localID) {
-    if (auto bundleType = type.dyn_cast<BundleType>()) {
+    if (auto bundleType = type_dyn_cast<BundleType>(type)) {
       auto index = getIndexForFieldID(bundleType, localID);
       // Add the current field string, and recurse into a subfield.
       auto &element = bundleType.getElements()[index];
@@ -693,7 +693,7 @@ static bool getFieldName(const FieldRef &fieldRef, SmallString<32> &string) {
       // Recurse in to the element type.
       type = element.type;
       localID = localID - getFieldID(bundleType, index);
-    } else if (auto vecType = type.dyn_cast<FVectorType>()) {
+    } else if (auto vecType = type_dyn_cast<FVectorType>(type)) {
       string += "[]";
       // Recurse in to the element type.
       type = vecType.getElementType();
@@ -992,9 +992,9 @@ FailureOr<ResetKind> InferResetsPass::inferReset(ResetNetwork net) {
   unsigned invalidDrives = 0;
   for (ResetSignal signal : net) {
     // Keep track of whether this signal contributes a vote for async or sync.
-    if (firrtl::type_isa<AsyncResetType>(signal.type))
+    if (type_isa<AsyncResetType>(signal.type))
       ++asyncDrives;
-    else if (firrtl::type_isa<UIntType>(signal.type))
+    else if (type_isa<UIntType>(signal.type))
       ++syncDrives;
     else if (isUselessVec(signal.field) ||
              isa_and_nonnull<InvalidValueOp>(
@@ -1034,7 +1034,7 @@ FailureOr<ResetKind> InferResetsPass::inferReset(ResetNetwork net) {
           (type_isa<UIntType>(drive.dst.type) && majorityAsync) ||
           (type_isa<UIntType>(drive.src.type) && majorityAsync))
         diag.attachNote(drive.loc)
-            << (drive.src.type.isa<AsyncResetType>() ? "async" : "sync")
+            << (type_isa<AsyncResetType>(drive.src.type) ? "async" : "sync")
             << " drive here:";
     }
     return failure();
@@ -1129,8 +1129,8 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
     } else if (auto constCastOp = dyn_cast<ConstCastOp>(wop)) {
       // Propagate inferred reset types across const-casts of what was
       // originally ResetType
-      if (constCastOp.getResult().getType().isa<ResetType>() &&
-          !constCastOp.getInput().getType().isa<ResetType>()) {
+      if (isa<ResetType>(constCastOp.getResult().getType()) &&
+          !isa<ResetType>(constCastOp.getInput().getType())) {
         auto result = constCastOp.getResult();
         result.setType(constCastOp.getInput().getType().getConstType(false));
         for (auto *user : result.getUsers())
@@ -1185,7 +1185,7 @@ static FIRRTLBaseType updateType(FIRRTLBaseType oldType, unsigned fieldID,
   }
 
   // If this is a bundle type, update the corresponding field.
-  if (auto bundleType = oldType.dyn_cast<BundleType>()) {
+  if (auto bundleType = type_dyn_cast<BundleType>(oldType)) {
     unsigned index = getIndexForFieldID(bundleType, fieldID);
     SmallVector<BundleType::BundleElement> fields(bundleType.begin(),
                                                   bundleType.end());
@@ -1195,7 +1195,7 @@ static FIRRTLBaseType updateType(FIRRTLBaseType oldType, unsigned fieldID,
   }
 
   // If this is a vector type, update the element type.
-  if (auto vectorType = oldType.dyn_cast<FVectorType>()) {
+  if (auto vectorType = type_dyn_cast<FVectorType>(oldType)) {
     auto newType = updateType(vectorType.getElementType(),
                               fieldID - getFieldID(vectorType), fieldType);
     return FVectorType::get(newType, vectorType.getNumElements(),
@@ -1781,7 +1781,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
   // Handle registers with reset.
   if (auto regOp = dyn_cast<RegResetOp>(op)) {
     // If the register already has an async reset, leave it untouched.
-    if (firrtl::type_isa<AsyncResetType>(regOp.getResetSignal().getType())) {
+    if (type_isa<AsyncResetType>(regOp.getResetSignal().getType())) {
       LLVM_DEBUG(llvm::dbgs()
                  << "- Skipping (has async reset) " << regOp << "\n");
       // The following performs the logic of `CheckResets` in the original

@@ -82,7 +82,7 @@ struct FlatBundleFieldEntry {
 
 /// Return true if the type has more than zero bitwidth.
 static bool hasZeroBitWidth(FIRRTLType type) {
-  return TypeSwitch<FIRRTLType, bool>(type)
+  return FIRRTLTypeSwitch<FIRRTLType, bool>(type)
       .Case<BundleType>([&](auto bundle) {
         for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
           auto elt = bundle.getElement(i);
@@ -105,7 +105,7 @@ static bool hasZeroBitWidth(FIRRTLType type) {
 
 /// Return true if the type is a 1d vector type or ground type.
 static bool isOneDimVectorType(FIRRTLType type) {
-  return TypeSwitch<FIRRTLType, bool>(type)
+  return FIRRTLTypeSwitch<FIRRTLType, bool>(type)
       .Case<BundleType>([&](auto bundle) { return false; })
       .Case<FVectorType>([&](FVectorType vector) {
         // When the size is 1, lower the vector into a scalar.
@@ -117,7 +117,7 @@ static bool isOneDimVectorType(FIRRTLType type) {
 
 /// Return true if the type has a bundle type as subtype.
 static bool containsBundleType(FIRRTLType type) {
-  return TypeSwitch<FIRRTLType, bool>(type)
+  return FIRRTLTypeSwitch<FIRRTLType, bool>(type)
       .Case<BundleType>([&](auto bundle) { return true; })
       .Case<FVectorType>([&](FVectorType vector) {
         return containsBundleType(vector.getElementType());
@@ -144,8 +144,6 @@ static bool isPreservableAggregateType(Type type,
   auto firrtlType = type.dyn_cast<FIRRTLBaseType>();
   if (!firrtlType)
     return false;
-
-  firrtlType = firrtlType.getAnonymousType();
 
   // We can a preserve the type iff (i) the type is not passive, (ii) the type
   // doesn't contain analog and (iii) type don't contain zero bitwidth.
@@ -179,7 +177,7 @@ static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry> &fields,
   else
     base = type.cast<FIRRTLBaseType>();
 
-  return TypeSwitch<Type, bool>(base.getAnonymousType())
+  return FIRRTLTypeSwitch<Type, bool>(base)
       .Case<BundleType>([&](auto bundle) {
         SmallString<16> tmpSuffix;
         // Otherwise, we have a bundle type.  Break it down.
@@ -305,7 +303,7 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
         }
 
         // Handle aggregate sub-fields, including `(r/w)data` and `(w)mask`.
-        if (oldPortType.getElement(targetIndex).type.isa<BundleType>()) {
+        if (type_isa<BundleType>(oldPortType.getElement(targetIndex).type)) {
           // Check whether the annotation falls into the range of the current
           // field. Note that the `field` here is peeled from the `data`
           // sub-field of the memory port, thus we need to add the fieldID of
@@ -681,15 +679,16 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
             return !fbasetype || fbasetype.containsReference();
           }));
 
-          Value input =
-              TypeSwitch<Type, Value>(val.getType())
-                  .template Case<FVectorType>([&](auto vecType) {
-                    return b.createOrFold<VectorCreateOp>(vecType, mapping);
-                  })
-                  .template Case<BundleType>([&](auto bundleType) {
-                    return b.createOrFold<BundleCreateOp>(bundleType, mapping);
-                  })
-                  .Default([&](auto _) -> Value { return {}; });
+          Value input = FIRRTLTypeSwitch<Type, Value>(val.getType())
+                            .template Case<FVectorType>([&](auto vecType) {
+                              return b.createOrFold<VectorCreateOp>(
+                                  val.getType(), mapping);
+                            })
+                            .template Case<BundleType>([&](auto bundleType) {
+                              return b.createOrFold<BundleCreateOp>(
+                                  val.getType(), mapping);
+                            })
+                            .Default([&](auto _) -> Value { return {}; });
           if (!input) {
             user->emitError("unable to reconstruct source of type ")
                 << val.getType();
@@ -1225,7 +1224,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
   }
   // Now the input has been cast to srcLoweredVal, which is of UInt type.
   // If the result is an aggregate type, then use lowerProducer.
-  if (op.getResult().getType().isa<BundleType, FVectorType>()) {
+  if (type_isa<BundleType, FVectorType>(op.getResult().getType())) {
     // uptoBits is used to keep track of the bits that have been extracted.
     size_t uptoBits = 0;
     auto clone = [&](const FlatBundleFieldEntry &field,
@@ -1248,7 +1247,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
   }
 
   // If ground type, then replace the result.
-  if (op.getType().dyn_cast<SIntType>())
+  if (isa<SIntType>(op.getType()))
     srcLoweredVal = builder->create<AsSIntPrimOp>(srcLoweredVal);
   op.getResult().replaceAllUsesWith(srcLoweredVal);
   return true;
@@ -1412,7 +1411,7 @@ bool TypeLoweringVisitor::visitExpr(ElementwiseOrPrimOp op) {
                    ArrayAttr attrs) -> Value {
     Value operands[] = {getSubWhatever(op.getLhs(), field.index),
                         getSubWhatever(op.getRhs(), field.index)};
-    return isa<BundleType, FVectorType>(field.type)
+    return type_isa<BundleType, FVectorType>(field.type)
                ? (Value)builder->create<ElementwiseOrPrimOp>(field.type,
                                                              operands)
                : (Value)builder->create<OrPrimOp>(operands);
@@ -1426,7 +1425,7 @@ bool TypeLoweringVisitor::visitExpr(ElementwiseAndPrimOp op) {
                    ArrayAttr attrs) -> Value {
     Value operands[] = {getSubWhatever(op.getLhs(), field.index),
                         getSubWhatever(op.getRhs(), field.index)};
-    return isa<BundleType, FVectorType>(field.type)
+    return type_isa<BundleType, FVectorType>(field.type)
                ? (Value)builder->create<ElementwiseAndPrimOp>(field.type,
                                                               operands)
                : (Value)builder->create<AndPrimOp>(operands);
@@ -1440,7 +1439,7 @@ bool TypeLoweringVisitor::visitExpr(ElementwiseXorPrimOp op) {
                    ArrayAttr attrs) -> Value {
     Value operands[] = {getSubWhatever(op.getLhs(), field.index),
                         getSubWhatever(op.getRhs(), field.index)};
-    return isa<BundleType, FVectorType>(field.type)
+    return type_isa<BundleType, FVectorType>(field.type)
                ? (Value)builder->create<ElementwiseXorPrimOp>(field.type,
                                                               operands)
                : (Value)builder->create<XorPrimOp>(operands);
