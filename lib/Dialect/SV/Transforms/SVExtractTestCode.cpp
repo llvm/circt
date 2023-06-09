@@ -686,10 +686,6 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       if (!anyThingExtracted)
         continue;
 
-      // Inline any modules that only have inputs for test code.
-      if (!disableModuleInlining && anyThingExtracted)
-        inlineInputOnly(rtlmod, *instanceGraph, bindTable, opsToErase);
-
       // Here, erase extracted operations as well as dead operations.
       // `opsToErase` includes extracted operations but doesn't contain all
       // dead operations. Even though it's not ideal to perform non-trivial DCE
@@ -712,9 +708,20 @@ void SVExtractTestCodeImplPass::runOnOperation() {
 
       // Walk the module and add dead operations to `opsToErase`.
       op.walk([&](Operation *operation) {
-        if (&op != operation && !opsAlive.count(operation))
+        // Skip the module itself.
+        if (&op == operation)
+          return;
+
+        // Update `opsToErase`.
+        if (opsAlive.count(operation))
+          opsToErase.erase(operation);
+        else
           opsToErase.insert(operation);
       });
+
+      // Inline any modules that only have inputs for test code.
+      if (!disableModuleInlining && anyThingExtracted)
+        inlineInputOnly(rtlmod, *instanceGraph, bindTable, opsToErase);
 
       numOpsErased += opsToErase.size();
       while (!opsToErase.empty()) {
