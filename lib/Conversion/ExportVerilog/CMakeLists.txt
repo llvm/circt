@@ -18,8 +18,12 @@ add_circt_translation_library(CIRCTExportVerilog
   LINK_LIBS PUBLIC
   CIRCTComb
   CIRCTHW
+  CIRCTLTL
+  CIRCTOM
   CIRCTSupport
   CIRCTSV
+  CIRCTSupport
+  CIRCTVerif
   MLIRIR
   MLIRPass
   MLIRSideEffectInterfaces

@@ -58,15 +58,13 @@ LogicalResult PipelineOp::verify() {
              << ".";
   }
 
-  // Check mixing of `pipeline.stage` and `pipeline.stage.register` ops.
-  // This verifier thus ensures a proper phase ordering between stage ops
-  // and their materialized stage register op counterparts.
-  bool hasStageOps = !getOps<PipelineStageOp>().empty();
-  bool hasStageRegOps = !getOps<PipelineStageRegisterOp>().empty();
-
-  if (hasStageOps && hasStageRegOps)
-    return emitOpError("mixing `pipeline.stage` and `pipeline.stage.register` "
-                       "ops is illegal.");
+  // Check mixing of stage-like operations. These are not allowed to coexist.
+  bool hasDelimiterOps = !getOps<StageSeparatingOp>().empty();
+  bool hasDelimiterRegsOps = !getOps<StageSeparatingRegOp>().empty();
+  bool hasStageOps = !getOps<StageOp>().empty();
+  size_t phaseKinds = hasDelimiterOps + hasDelimiterRegsOps + hasStageOps;
+  if (phaseKinds > 1)
+    return emitOpError("pipeline contains a mix of stage-like operations.");
 
   return success();
 }
@@ -80,23 +78,56 @@ bool PipelineOp::isLatencyInsensitive() {
   return allInputsAreChannels && allOutputsAreChannels;
 }
 
+// ===----------------------------------------------------------------------===//
+// StageSeparatingOp
+// ===----------------------------------------------------------------------===//
+
+// Returns the index of this stage in the pipeline.
+unsigned StageSeparatingOp::index() {
+  auto stageOps =
+      getOperation()->getParentOfType<PipelineOp>().getOps<StageSeparatingOp>();
+  return std::distance(stageOps.begin(), llvm::find(stageOps, *this));
+}
+
+// ===----------------------------------------------------------------------===//
+// StageSeparatingRegOp
+// ===----------------------------------------------------------------------===//
+
+unsigned StageSeparatingRegOp::index() {
+  auto stageOps = getOperation()
+                      ->getParentOfType<PipelineOp>()
+                      .getOps<StageSeparatingRegOp>();
+  return std::distance(stageOps.begin(), llvm::find(stageOps, *this));
+}
+
+void StageSeparatingRegOp::build(OpBuilder &builder, OperationState &state,
+                                 Value enable, ValueRange inputs) {
+  StageSeparatingRegOp::build(builder, state, inputs.getTypes(), inputs,
+                              enable);
+  state.addTypes({enable.getType()});
+}
+
 //===----------------------------------------------------------------------===//
 // ReturnOp
 //===----------------------------------------------------------------------===//
 
 LogicalResult ReturnOp::verify() {
   PipelineOp parent = getOperation()->getParentOfType<PipelineOp>();
-  if (getOutputs().size() != parent.getResults().size())
+  if (getInputs().size() != parent.getResults().size())
     return emitOpError("expected ")
            << parent.getResults().size() << " return values, got "
-           << getOutputs().size() << ".";
+           << getInputs().size() << ".";
 
   bool isLatencyInsensitive = parent.isLatencyInsensitive();
   for (size_t i = 0; i < parent.getResults().size(); i++) {
     Type expectedType = parent.getResultTypes()[i];
     Type actualType = getOperandTypes()[i];
-    if (isLatencyInsensitive)
-      expectedType = expectedType.cast<esi::ChannelType>().getInner();
+    if (isLatencyInsensitive) {
+      expectedType = expectedType.dyn_cast<esi::ChannelType>().getInner();
+      if (!expectedType)
+        return emitOpError("expected ESI channel type, got ")
+               << parent.getResultTypes()[i] << ".";
+    }
     if (expectedType != actualType)
       return emitOpError("expected argument ")
              << i << " to have type " << expectedType << ", got " << actualType
@@ -107,14 +138,88 @@ LogicalResult ReturnOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
-// PipelineStageRegisterOp
+// StageOp
 //===----------------------------------------------------------------------===//
 
-void PipelineStageRegisterOp::build(OpBuilder &builder, OperationState &state,
-                                    Value when, ValueRange regIns) {
-  PipelineStageRegisterOp::build(builder, state, regIns.getTypes(), regIns,
-                                 when);
-  state.addTypes({when.getType()});
+void StageOp::build(OpBuilder &builder, OperationState &odsState, Value enable,
+                    ValueRange inputs, TypeRange outputs) {
+  odsState.addOperands(inputs);
+  odsState.addOperands(enable);
+  odsState.addTypes(outputs);
+  // Valid output
+  odsState.addTypes(builder.getI1Type());
+
+  // Build inner region.
+  Region *region = odsState.addRegion();
+  Block *bodyBlock = new Block();
+  region->push_back(bodyBlock);
+  bodyBlock->addArguments(
+      inputs.getTypes(),
+      SmallVector<Location>(inputs.size(), odsState.location));
+  bodyBlock->addArguments({enable.getType()},
+                          SmallVector<Location>(1, odsState.location));
+  StageOp::ensureTerminator(*region, builder, odsState.location);
+}
+
+LogicalResult StageOp::verify() {
+  auto inputs = getInputs();
+  if (getBodyBlock()->getNumArguments() != (inputs.size() + /*valid*/ 1))
+    return emitOpError("expected ")
+           << inputs.size() + 1
+           << " arguments in the pipeline stage body block, got "
+           << getBodyBlock()->getNumArguments() << ".";
+
+  for (size_t i = 0; i < inputs.size(); i++) {
+    Type expectedInArg = inputs[i].getType();
+    Type bodyArg = getBodyBlock()->getArgument(i).getType();
+    if (expectedInArg != bodyArg)
+      return emitOpError("expected stage body block argument ")
+             << i << " to have type " << expectedInArg << ", got " << bodyArg
+             << ".";
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// StageReturnOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StageReturnOp::verify() {
+  StageOp parent = getOperation()->getParentOfType<StageOp>();
+  size_t nRetVals = getRegs().size() + getPassthroughs().size();
+  if (nRetVals != parent.getOutputs().size())
+    return emitOpError("expected ")
+           << parent.getOutputs().size() << " return values, got " << nRetVals
+           << ".";
+
+  llvm::SmallVector<Type> retTypes;
+  llvm::append_range(retTypes, getRegs().getTypes());
+  llvm::append_range(retTypes, getPassthroughs().getTypes());
+  for (size_t i = 0; i < parent.getOutputs().size(); i++) {
+    Type expectedType = parent.getOutputs().getTypes()[i];
+    Type actualType = retTypes[i];
+    if (expectedType != actualType)
+      return emitOpError("expected argument ")
+             << i << " to have type " << expectedType << ", got " << actualType
+             << ".";
+  }
+
+  return success();
+}
+
+void StageReturnOp::setOperands(Value valid, ValueRange regs,
+                                ValueRange passthroughs) {
+  getOperation()->insertOperands(0, regs);
+  getOperation()->insertOperands(regs.size(), passthroughs);
+  getOperation()->insertOperands(regs.size() + passthroughs.size(), {valid});
+  llvm::SmallVector<int32_t, 3> operandSizes;
+  operandSizes.push_back(regs.size());
+  operandSizes.push_back(passthroughs.size());
+  operandSizes.push_back(1);
+  getOperation()->setAttr(
+      "operand_segment_sizes",
+      mlir::DenseI32ArrayAttr::get(getContext(), operandSizes));
 }
 
 #define GET_OP_CLASSES

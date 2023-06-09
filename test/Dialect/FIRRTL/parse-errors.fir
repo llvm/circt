@@ -668,3 +668,15 @@ circuit NodeProbe:
   module NodeProbe:
     inst r of Ref
     node n = r.x ; expected-error {{Node cannot be analog and must be passive or passive under a flip}}
+
+;// -----
+
+circuit ConstProbe:
+  module ConstProbe:
+    output x : const Probe<UInt<1>> ; expected-error {{only hardware types can be 'const'}}
+
+;// -----
+
+circuit MultiConst:
+  module MultiConst:
+    output x : const const UInt<1> ; expected-error {{'const' can only be specified once on a type}}

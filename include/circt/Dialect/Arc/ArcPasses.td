@@ -17,7 +17,9 @@ def AddTaps : Pass<"arc-add-taps", "mlir::ModuleOp"> {
   let dependentDialects = ["arc::ArcDialect"];
   let options = [
     Option<"tapPorts", "ports", "bool", "true", "Make module ports observable">,
-    Option<"tapWires", "wires", "bool", "true", "Make wires observable">
+    Option<"tapWires", "wires", "bool", "true", "Make wires observable">,
+    Option<"tapNamedValues", "named-values", "bool", "false",
+           "Make values with `sv.namehint` observable">
   ];
 }
 

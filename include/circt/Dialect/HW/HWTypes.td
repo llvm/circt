@@ -133,6 +133,7 @@ def InnerSymAttr : AttrDef<HWDialect, "InnerSym"> {
   let parameters = (ins ArrayRefParameter<"InnerSymPropertiesAttr">:$props);
   let builders = [
     AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$sym),[{
+      assert(!sym.getValue().empty() && "symbol name must be non-empty");
       return get(sym.getContext(),
       {InnerSymPropertiesAttr::get(sym.getContext(), sym, 0,
                         mlir::StringAttr::get(sym.getContext(), "public"))});

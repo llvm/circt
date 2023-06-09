@@ -12,14 +12,14 @@
 using namespace circt;
 using namespace arc;
 using namespace hw;
-using llvm::Optional;
 
 namespace {
 struct AddTapsPass : public AddTapsBase<AddTapsPass> {
   void runOnOperation() override {
     getOperation().walk([&](Operation *op) {
-      TypeSwitch<Operation *>(op).Case<HWModuleOp, sv::WireOp, hw::WireOp>(
-          [&](auto op) { tap(op); });
+      TypeSwitch<Operation *>(op)
+          .Case<HWModuleOp, sv::WireOp, hw::WireOp>([&](auto op) { tap(op); })
+          .Default([&](auto) { tapIfNamed(op); });
     });
   }
 
@@ -52,12 +52,8 @@ struct AddTapsPass : public AddTapsBase<AddTapsPass> {
         readOp = op;
 
     OpBuilder builder(wireOp);
-    if (!readOp) {
-      builder.setInsertionPointAfter(wireOp);
+    if (!readOp)
       readOp = builder.create<sv::ReadInOutOp>(wireOp.getLoc(), wireOp);
-    }
-
-    builder.setInsertionPointAfter(readOp);
     builder.create<arc::TapOp>(readOp.getLoc(), readOp, wireOp.getName());
   }
 
@@ -67,22 +63,36 @@ struct AddTapsPass : public AddTapsBase<AddTapsPass> {
       return;
     if (auto name = wireOp.getName()) {
       OpBuilder builder(wireOp);
-      builder.setInsertionPointAfter(wireOp);
       builder.create<arc::TapOp>(wireOp.getLoc(), wireOp, *name);
     }
   }
 
+  // Add taps for named values.
+  void tapIfNamed(Operation *op) {
+    if (!tapNamedValues || op->getNumResults() != 1)
+      return;
+    if (auto name = op->getAttrOfType<StringAttr>("sv.namehint")) {
+      OpBuilder builder(op);
+      builder.create<arc::TapOp>(op->getLoc(), op->getResult(0), name);
+    }
+  }
+
+  using AddTapsBase::tapNamedValues;
   using AddTapsBase::tapPorts;
   using AddTapsBase::tapWires;
 };
 } // namespace
 
-std::unique_ptr<Pass> arc::createAddTapsPass(Optional<bool> tapPorts,
-                                             Optional<bool> tapWires) {
+std::unique_ptr<Pass>
+arc::createAddTapsPass(std::optional<bool> tapPorts,
+                       std::optional<bool> tapWires,
+                       std::optional<bool> tapNamedValues) {
   auto pass = std::make_unique<AddTapsPass>();
   if (tapPorts)
     pass->tapPorts = *tapPorts;
   if (tapWires)
     pass->tapWires = *tapWires;
+  if (tapNamedValues)
+    pass->tapNamedValues = *tapNamedValues;
   return pass;
 }

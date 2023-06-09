@@ -327,4 +327,22 @@ def RefReleaseInitialOp : FIRRTLOp<"ref.release_initial"> {
   let assemblyFormat = "$predicate `,` $dest attr-dict `:` type($predicate) `,` qualified(type($dest))";
 }
 
+//===----------------------------------------------------------------------===//
+// Verif Dialect Intrinsics
+//===----------------------------------------------------------------------===//
+
+class VerifIntrinsicOp<string mnemonic, list<Trait> traits = []> :
+    FIRRTLOp<"int.verif." # mnemonic, traits> {
+  let summary = "FIRRTL variant of `verif." # mnemonic # "`";
+  let description = "See `verif." # mnemonic # "` op in the Verif dialect.";
+  let arguments = (ins UInt1Type:$property, OptionalAttr<StrAttr>:$label);
+  let assemblyFormat = [{
+    operands attr-dict `:` type(operands)
+  }];
+}
+
+def VerifAssertIntrinsicOp : VerifIntrinsicOp<"assert">;
+def VerifAssumeIntrinsicOp : VerifIntrinsicOp<"assume">;
+def VerifCoverIntrinsicOp : VerifIntrinsicOp<"cover">;
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLSTATEMENTS_TD

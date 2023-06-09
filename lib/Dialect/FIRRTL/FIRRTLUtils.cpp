@@ -90,15 +90,15 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 
   if ((dstType.hasUninferredReset() || srcType.hasUninferredReset()) &&
       dstType != srcType) {
-    src = builder.create<UninferredResetCastOp>(dstType, src);
-    srcType = dstType;
+    srcType = dstType.getConstType(srcType.isConst());
+    src = builder.create<UninferredResetCastOp>(srcType, src);
   }
 
   // Be sure uint, uint -> uint, (uir uint) since we are changing extneding
   // connect to identity.
   if (dstType.hasUninferredWidth() || srcType.hasUninferredWidth()) {
-    src = builder.create<UninferredWidthCastOp>(dstType, src);
-    srcType = dstType;
+    srcType = dstType.getConstType(srcType.isConst());
+    src = builder.create<UninferredWidthCastOp>(srcType, src);
   }
 
   // Handle ground types with possibly uninferred widths.
@@ -108,16 +108,25 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   // The source must be extended or truncated.
   if (dstWidth < srcWidth) {
     // firrtl.tail always returns uint even for sint operands.
-    IntType tmpType = dstType.cast<IntType>();
-    if (tmpType.isSigned())
-      tmpType = UIntType::get(dstType.getContext(), dstWidth);
+    IntType tmpType = dstType.cast<IntType>().getConstType(srcType.isConst());
+    bool isSignedDest = tmpType.isSigned();
+    if (isSignedDest)
+      tmpType =
+          UIntType::get(dstType.getContext(), dstWidth, srcType.isConst());
     src = builder.create<TailPrimOp>(tmpType, src, srcWidth - dstWidth);
     // Insert the cast back to signed if needed.
-    if (tmpType != dstType)
-      src = builder.create<AsSIntPrimOp>(dstType, src);
+    if (isSignedDest)
+      src = builder.create<AsSIntPrimOp>(
+          dstType.getConstType(tmpType.isConst()), src);
   } else if (srcWidth < dstWidth) {
     // Need to extend arg.
     src = builder.create<PadPrimOp>(src, dstWidth);
+  }
+
+  if (auto srcType = src.getType().cast<FIRRTLBaseType>();
+      srcType && dstType != srcType &&
+      areTypesConstCastable(dstType, srcType)) {
+    src = builder.create<ConstCastOp>(dstType, src);
   }
 
   // Strict connect requires the types to be completely equal, including
@@ -446,25 +455,34 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
     if (!op)
       break;
 
-    auto handled = TypeSwitch<Operation *, bool>(op)
-                       .Case<SubfieldOp, OpenSubfieldOp>([&](auto subfieldOp) {
-                         value = subfieldOp.getInput();
-                         auto bundleType = subfieldOp.getInput().getType();
-                         // Rebase the current index on the parent field's
-                         // index.
-                         id +=
-                             bundleType.getFieldID(subfieldOp.getFieldIndex());
-                         return true;
-                       })
-                       .Case<SubindexOp, OpenSubindexOp>([&](auto subindexOp) {
-                         value = subindexOp.getInput();
-                         auto vecType = subindexOp.getInput().getType();
-                         // Rebase the current index on the parent field's
-                         // index.
-                         id += vecType.getFieldID(subindexOp.getIndex());
-                         return true;
-                       })
-                       .Default(false);
+    auto handled =
+        TypeSwitch<Operation *, bool>(op)
+            .Case<SubfieldOp, OpenSubfieldOp>([&](auto subfieldOp) {
+              value = subfieldOp.getInput();
+              auto bundleType = subfieldOp.getInput().getType();
+              // Rebase the current index on the parent field's
+              // index.
+              id += bundleType.getFieldID(subfieldOp.getFieldIndex());
+              return true;
+            })
+            .Case<SubindexOp, OpenSubindexOp>([&](auto subindexOp) {
+              value = subindexOp.getInput();
+              auto vecType = subindexOp.getInput().getType();
+              // Rebase the current index on the parent field's
+              // index.
+              id += vecType.getFieldID(subindexOp.getIndex());
+              return true;
+            })
+            .Case<RefSubOp>([&](RefSubOp refSubOp) {
+              value = refSubOp.getInput();
+              auto refInputType = refSubOp.getInput().getType();
+              id += TypeSwitch<FIRRTLBaseType, size_t>(refInputType.getType())
+                        .Case<FVectorType, BundleType>([&](auto type) {
+                          return type.getFieldID(refSubOp.getIndex());
+                        });
+              return true;
+            })
+            .Default(false);
     if (!handled)
       break;
   }
@@ -569,17 +587,34 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
                                        Value value, unsigned fieldID) {
   // When the fieldID hits 0, we've found the target value.
   while (fieldID != 0) {
-    auto type = value.getType();
-    if (auto bundle = type.dyn_cast<BundleType>()) {
-      auto index = bundle.getIndexForFieldID(fieldID);
-      value = builder.create<SubfieldOp>(value, index);
-      fieldID -= bundle.getFieldID(index);
-    } else {
-      auto vector = type.cast<FVectorType>();
-      auto index = vector.getIndexForFieldID(fieldID);
-      value = builder.create<SubindexOp>(value, index);
-      fieldID -= vector.getFieldID(index);
-    }
+    TypeSwitch<Type, void>(value.getType())
+        .Case<BundleType, OpenBundleType>([&](auto bundle) {
+          auto index = bundle.getIndexForFieldID(fieldID);
+          value = builder.create<SubfieldOp>(value, index);
+          fieldID -= bundle.getFieldID(index);
+        })
+        .Case<FVectorType, OpenVectorType>([&](auto vector) {
+          auto index = vector.getIndexForFieldID(fieldID);
+          value = builder.create<SubindexOp>(value, index);
+          fieldID -= vector.getFieldID(index);
+        })
+        .Case<RefType>([&](auto reftype) {
+          TypeSwitch<FIRRTLBaseType, void>(reftype.getType())
+              .template Case<BundleType, FVectorType>([&](auto type) {
+                auto index = type.getIndexForFieldID(fieldID);
+                value = builder.create<RefSubOp>(value, index);
+                fieldID -= type.getFieldID(index);
+              })
+              .Default([&](auto _) {
+                llvm::report_fatal_error(
+                    "unrecognized type for indexing through with fieldID");
+              });
+        })
+        // TODO: Plumb error case out and handle in callers.
+        .Default([&](auto _) {
+          llvm::report_fatal_error(
+              "unrecognized type for indexing through with fieldID");
+        });
   }
   return value;
 }
@@ -635,7 +670,8 @@ StringAttr circt::firrtl::getOrAddInnerSym(
   if (nameHint.empty()) {
     if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
       nameHint = nameAttr.getValue();
-    else
+    // Ensure if the op name is also empty, nameHint is initialized.
+    if (nameHint.empty())
       nameHint = "sym";
   }
   auto name = getNamespace(mod).newName(nameHint);

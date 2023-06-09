@@ -79,7 +79,8 @@ def FEnumType : FIRRTLDialectType<CPred<"$_self.isa<FEnumType>()">,
  "FEnumType", "::circt::firrtl::FEnumType">;
 
 def StringType : FIRRTLDialectType<CPred<"$_self.isa<StringType>()">,
-  "StringType", "::circt::firrtl::StringType">;
+  "StringType", "::circt::firrtl::StringType">,
+  BuildableType<"::circt::firrtl::StringType::get($_builder.getContext())">;
 
 def AggregateType : FIRRTLDialectType<
   Or<[

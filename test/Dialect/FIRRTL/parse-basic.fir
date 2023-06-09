@@ -223,13 +223,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.node interesting_name %auto : !firrtl.uint<1>
     node check_output = auto
 
-    ; CHECK: %c42_ui10 = firrtl.constant 42 : !firrtl.uint<10>
-    ; CHECK: %c171_ui8 = firrtl.constant 171 : !firrtl.uint<8>
+    ; CHECK: %c42_ui10 = firrtl.constant 42 : !firrtl.const.uint<10>
+    ; CHECK: %c171_ui8 = firrtl.constant 171 : !firrtl.const.uint<8>
     ; CHECK: firrtl.add %c42_ui10, %c171_ui8
+    ; CHECK: firrtl.constCast
     ; CHECK: firrtl.strictconnect %auto
     auto11 <= add(UInt<10>(42), UInt<8>("hAB"))
 
-    ; CHECK: %c-85_si8 = firrtl.constant -85 : !firrtl.sint<8>
+    ; CHECK: %c-85_si8 = firrtl.constant -85 : !firrtl.const.sint<8>
     sauto <= add(s8, SInt<8>(-85))
 
     ; CHECK: firrtl.when %reset : !firrtl.uint<1> {
@@ -311,26 +312,26 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.shr %i8, 8 : (!firrtl.uint<8>) -> !firrtl.uint<1>
     node n5 = or(shl(i8, 4), shr(i8, 8))
 
-    ; CHECK: firrtl.dshl %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<23>
+    ; CHECK: firrtl.dshl %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.const.uint<4>) -> !firrtl.uint<23>
     node n6 = dshl(i8, UInt<4>(7))
-    ; CHECK: firrtl.dshlw %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<8>
+    ; CHECK: firrtl.dshlw %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.const.uint<4>) -> !firrtl.uint<8>
     node n6s = dshlw(i8, UInt<4>(7))
 
     ; CHECK: firrtl.cat %{{.*}}, %{{.*}} : (!firrtl.uint<12>, !firrtl.uint<23>) -> !firrtl.uint<35>
     node n7 = cat(n5, n6)
 
-    ; CHECK: firrtl.mux(%reset, %i8, %{{.*}}) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint) -> !firrtl.uint
+    ; CHECK: firrtl.mux(%reset, %i8, %{{.*}}) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.const.uint) -> !firrtl.uint
     node n8 = mux(reset, i8, UInt(4))
 
-    ; CHECK: %_t_2621 = firrtl.regreset interesting_name %clock, %reset, %{{.*}} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>
+    ; CHECK: %_t_2621 = firrtl.regreset interesting_name %clock, %reset, %{{.*}} : !firrtl.clock, !firrtl.uint<1>, !firrtl.const.uint<4>, !firrtl.uint<4>
     reg _t_2621 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0")) @[Edges.scala 230:27]
 
-    ; CHECK: %_t_1601 = firrtl.regreset interesting_name %clock, %reset, %{{.*}} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
+    ; CHECK: %_t_1601 = firrtl.regreset interesting_name %clock, %reset, %{{.*}} : !firrtl.clock, !firrtl.uint<1>, !firrtl.const.uint<2>, !firrtl.uint<2>
     reg _t_1601 : UInt<2>, clock with :
       (reset => (reset, UInt<2>("h00"))) @[Edges.scala 230:27]
 
-    ; CHECK: firrtl.div %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<8>
+    ; CHECK: firrtl.div %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.const.uint<4>) -> !firrtl.uint<8>
     node n9 = div(i8, UInt<4>(4))
 
     ; CHECK: firrtl.tail %i8, 7 : (!firrtl.uint<8>) -> !firrtl.uint<1>
@@ -540,14 +541,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module constant_implicit_cse :
     input cond : UInt<1>
 
-    ; CHECK: [[CST15:%.+]] = firrtl.constant 15 : !firrtl.uint<4>
+    ; CHECK: [[CST15:%.+]] = firrtl.constant 15 : !firrtl.const.uint<4>
     ; CHECK: %a = firrtl.node interesting_name [[CST15]]
     node a = UInt<4>(15)
     ; CHECK: %b = firrtl.node interesting_name [[CST15]]
     node b = UInt<4>(15)
 
     ;; Constants always get emitted to the top level.
-    ; CHECK: [[CST7:%.+]] = firrtl.constant 7 : !firrtl.uint<4>
+    ; CHECK: [[CST7:%.+]] = firrtl.constant 7 : !firrtl.const.uint<4>
     ; CHECK: firrtl.when %cond : !firrtl.uint<1> {
     when cond :
       ; CHECK: %c = firrtl.node interesting_name [[CST15]]
@@ -634,14 +635,15 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module issue354 :
     output tmp5: SInt<19>
     tmp5 <= SInt<19>(8)
-     ; CHECK: %c8_si19 = firrtl.constant 8 : !firrtl.sint<19>
-     ; CHECK: firrtl.strictconnect %tmp5, %c8_si19 : !firrtl.sint<19>
+     ; CHECK: %c8_si19 = firrtl.constant 8 : !firrtl.const.sint<19>
+     ; CHECK: [[VAL:%.*]] = firrtl.constCast %c8_si19 : (!firrtl.const.sint<19>) -> !firrtl.sint<19>
+     ; CHECK: firrtl.strictconnect %tmp5, [[VAL]] : !firrtl.sint<19>
 
    ; CHECK-LABEL: firrtl.module private @issue347
   module issue347 :
     output tmp12: SInt<4>
     tmp12 <= SInt<4>(-4)
-    ; CHECK: %c-4_si4 = firrtl.constant -4 : !firrtl.sint<4>
+    ; CHECK: %c-4_si4 = firrtl.constant -4 : !firrtl.const.sint<4>
 
   ; CHECK-LABEL: firrtl.extmodule private @issue183<A: si32 = -1>()
   extmodule issue183:
@@ -822,7 +824,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module mutableSubIndex606 :
     output io : UInt<1>[8]
     ; CHECK:  %0 = firrtl.subindex %io[0] : !firrtl.vector<uint<1>, 8>
-    ; CHECK: firrtl.strictconnect %0, %c0_ui1 : !firrtl.uint<1>
+    ; CHECK: [[VAL:%.*]] = firrtl.constCast %c0_ui1 : (!firrtl.const.uint<1>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.strictconnect %0, [[VAL]] : !firrtl.uint<1>
     io[0] <= UInt<1>("h00")
 
 
@@ -911,9 +914,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module issue1303:
     output out: Reset
     out <= UInt(1)
-    ; CHECK: %[[c1:.*]] = firrtl.constant 1 : !firrtl.uint
+    ; CHECK: %[[c1:.*]] = firrtl.constant 1 : !firrtl.const.uint
     ; CHECK-NEXT: %[[c2:.*]] = firrtl.resetCast %[[c1]]
-    ; CHECK-NEXT: firrtl.strictconnect %out, %[[c2]] : !firrtl.reset
+    ; CHECK-NEXT: %[[c3:.*]] = firrtl.constCast %[[c2]]
+    ; CHECK-NEXT: firrtl.strictconnect %out, %[[c3]] : !firrtl.reset
 
 
   ; CHECK-LABEL: @resetBundle
@@ -1149,8 +1153,8 @@ circuit EnumTypes:
     input i : {| Some : UInt<8>, None |}
     output o : UInt<8>
 
-    ; CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
-    ; CHECK: %0 = firrtl.enumcreate Some(%c0_ui8) : !firrtl.enum<Some: uint<8>, None: uint<0>>
+    ; CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.const.uint<8>
+    ; CHECK: %0 = firrtl.enumcreate Some(%c0_ui8) : (!firrtl.const.uint<8>) -> !firrtl.enum<Some: uint<8>, None: uint<0>>
     ; CHECK: %n = firrtl.node interesting_name %0 : !firrtl.enum<Some: uint<8>, None: uint<0>>
     node n = {|Some : UInt<8>, None|}(Some, UInt<8>(0))
 
@@ -1332,6 +1336,36 @@ circuit EnumTypes:
     d <= c.0.0.0.bar
     ; CHECK-NEXT: firrtl.strictconnect %b, %6
     ; CHECK-NEXT: firrtl.strictconnect %d, %3
+
+  ; CHECK-LABEL: firrtl.module private @ConstTypes(
+  module ConstTypes:
+    input c: const Clock         ; CHECK: %c: !firrtl.const.clock,
+    input r: const Reset         ; CHECK: %r: !firrtl.const.reset,
+    input ar: const AsyncReset   ; CHECK: %ar: !firrtl.const.asyncreset,
+    input a: const Analog        ; CHECK: %a: !firrtl.const.analog,
+    input a8: const Analog<8>    ; CHECK: %a8: !firrtl.const.analog<8>,
+    input s: const SInt          ; CHECK: %s: !firrtl.const.sint,
+    input s4: const SInt<4>      ; CHECK: %s4: !firrtl.const.sint<4>,
+    input u: const UInt          ; CHECK: %u: !firrtl.const.uint,
+
+    ; CHECK: %b: !firrtl.const.bundle<int_1 flip: uint<1>, int_out: uint<2>>
+    input b: const {flip int_1 : UInt<1>, int_out : UInt<2>}
+    ; CHECK: %b_constfields: !firrtl.bundle<int_1 flip: const.uint<1>, int_out: const.uint<2>>
+    input b_constfields: {flip int_1 : const UInt<1>, int_out : const UInt<2>}
+    ; CHECK: %mixedb: !firrtl.bundle<a: sint<1>, b: const.uint<2>>
+    input mixedb: {a: SInt<1>, b: const UInt<2>}
+    ; CHECK: %vec: !firrtl.const.vector<uint<1>, 4>) {
+    input vec: const UInt<1>[4]
+
+    ; CHECK-NEXT: %w = firrtl.wire interesting_name : !firrtl.const.sint<4>
+    wire w: const SInt<4>
+    ; CHECK-NEXT: firrtl.strictconnect %w, %s4 : !firrtl.const.sint<4>
+    w <= s4
+    ; CHECK-NEXT: %nonconst_w = firrtl.wire interesting_name : !firrtl.sint<4>
+    wire nonconst_w: SInt<4>
+    ; CHECK-NEXT: [[CAST:%.+]] = firrtl.constCast %s4 : (!firrtl.const.sint<4>) -> !firrtl.sint<4>
+    ; CHECK-NEXT: firrtl.strictconnect %nonconst_w, [[CAST]] : !firrtl.sint<4>
+    nonconst_w <= s4
 
 ;// -----
 

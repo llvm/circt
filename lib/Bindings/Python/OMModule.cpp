@@ -63,7 +63,7 @@ struct Evaluator {
                      std::vector<MlirAttribute> actualParams) {
     // Instantiate the Object via the CAPI.
     OMObject result = omEvaluatorInstantiate(
-        evaluator, className, actualParams.size(), actualParams.begin().base());
+        evaluator, className, actualParams.size(), actualParams.data());
 
     // If the Object is null, something failed. Diagnostic handling is
     // implemented in pure Python, so nothing to do here besides throwing an

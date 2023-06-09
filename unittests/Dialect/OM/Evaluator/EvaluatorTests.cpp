@@ -192,11 +192,9 @@ TEST(EvaluatorTests, InstantiateObjectWithParamField) {
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
-  auto cls = builder.create<ClassOp>("MyClass", params);
-  auto &body = cls.getBody().emplaceBlock();
-  body.addArgument(builder.getIntegerType(32), cls.getLoc());
-  builder.setInsertionPointToStart(&body);
-  builder.create<ClassFieldOp>("field", body.getArgument(0));
+  StringRef fields[] = {"field"};
+  Type types[] = {builder.getIntegerType(32)};
+  ClassOp::buildSimpleClassOp(builder, loc, "MyClass", params, fields, types);
 
   Evaluator evaluator(mod);
 
@@ -262,11 +260,10 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
-  auto innerCls = builder.create<ClassOp>("MyInnerClass", params);
-  auto &innerBody = innerCls.getBody().emplaceBlock();
-  innerBody.addArgument(builder.getIntegerType(32), innerCls.getLoc());
-  builder.setInsertionPointToStart(&innerBody);
-  builder.create<ClassFieldOp>("field", innerBody.getArgument(0));
+  StringRef fields[] = {"field"};
+  Type types[] = {builder.getIntegerType(32)};
+  auto innerCls = ClassOp::buildSimpleClassOp(builder, loc, "MyInnerClass",
+                                              params, fields, types);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto cls = builder.create<ClassOp>("MyClass", params);
@@ -311,11 +308,10 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
-  auto innerCls = builder.create<ClassOp>("MyInnerClass", params);
-  auto &innerBody = innerCls.getBody().emplaceBlock();
-  innerBody.addArgument(builder.getIntegerType(32), innerCls.getLoc());
-  builder.setInsertionPointToStart(&innerBody);
-  builder.create<ClassFieldOp>("field", innerBody.getArgument(0));
+  StringRef fields[] = {"field"};
+  Type types[] = {builder.getIntegerType(32)};
+  auto innerCls = ClassOp::buildSimpleClassOp(builder, loc, "MyInnerClass",
+                                              params, fields, types);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto cls = builder.create<ClassOp>("MyClass", params);

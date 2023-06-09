@@ -87,10 +87,10 @@ def PipelineOp : Op<Pipeline_Dialect, "pipeline", [
       ^bb0:(%arg0 : i32, %arg1: i32):
         %add0 = comb.add %arg0, %arg1 : i32
 
-        %s0_valid, %add0_r = pipeline.stage.register when %go regs (%add0: i32)
+        %s0_valid, %add0_r = pipeline.stagesep.reg enable %go regs (%add0: i32)
         %add1 = comb.add %add0_r, %arg0 : i32
   
-        %s1_valid, %add1_r = pipeline.stage.register when %g1 regs (%add1: i32)
+        %s1_valid, %add1_r = pipeline.stagesep.reg enable %g1 regs (%add1: i32)
         %add2 = comb.add %add1_r, %arg1 : i32
 
         pipeline.return %add2 valid %s1_valid : i32
@@ -126,82 +126,169 @@ def PipelineOp : Op<Pipeline_Dialect, "pipeline", [
       return &region->front();
     }
 
-  }];
-}
+    // Returns the internal inputs of this pipeline.
+    ValueRange getInnerInputs() { return getBodyBlock()->getArguments(); }
 
-
-def PipelineStageOp : Op<Pipeline_Dialect, "stage", [
-    HasParent<"PipelineOp">
-  ]> {
-  let summary = "Pipeline pipeline stage.";
-  let description = [{
-    The `pipeline.stage` operation represents a stage separating register
-    in a pipeline. The stage does not define any explicit registers, but solely
-    defines a cut of a dataflow graph based on its lexical position in the
-    pipeline. Pipeline registers are made explicit through the register
-    materialization pass, wherein this op is replaced by
-    `pipeline.stage.register` operations.
-  }];
-
-  let arguments = (ins I1:$when);
-  let results = (outs I1:$valid);
-
-  let assemblyFormat = [{
-    `when` $when attr-dict
-  }];
-
-  let extraClassDeclaration = [{
-    // Returns the index of this stage in the pipeline.
-    unsigned index() {
-      auto stageOps = getOperation()->getParentOfType<PipelineOp>().getOps<PipelineStageOp>();
-      return std::distance(stageOps.begin(), llvm::find(stageOps, *this));
+    // Returns the internal enable signal of this pipeline.
+    Value getInnerEnable() {
+      return getBodyBlock()->getArguments().back();
     }
   }];
 }
 
-def PipelineStageRegisterOp : Op<Pipeline_Dialect, "stage.register", [
+
+def StageSeparatingOp : Op<Pipeline_Dialect, "stagesep", [
+    HasParent<"PipelineOp">
+  ]> {
+  let summary = "Pipeline **s**tage **s**eparating operation.";
+  let description = [{
+    The `pipeline.stagesep` operation represents a stage separation in a pipeline.
+    The delimiter does not define any explicit registers, but solely
+    defines a cut of a dataflow graph based on its lexical position in the
+    pipeline. Pipeline registers are made explicit through the register
+    materialization pass, wherein this op is replaced by `pipeline.stage`
+    operations.
+  }];
+
+  let arguments = (ins I1:$enable);
+  let results = (outs I1:$valid);
+
+  let assemblyFormat = [{
+    `enable` $enable attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    // Returns the index of this stage in the pipeline.
+    unsigned index();
+  }];
+}
+
+def StageSeparatingRegOp : Op<Pipeline_Dialect, "stagesep.reg", [
     HasParent<"PipelineOp">,
-    RangedTypesMatchWith<"result type matches operand", "regIns", "regOuts",
+    RangedTypesMatchWith<"result type matches operand", "inputs", "outputs",
                          "llvm::make_range($_self.begin(), $_self.end())">
   ]> {
   let summary = "Pipeline pipeline stage.";
   let description = [{
-    The `pipeline.stage` operation represents a stage separating register
-    in a pipeline with materialized register values. `pipeline.stage` and
-    `pipeline.stage.register` operations are not allowed to co-exist in the
+    The `pipeline.stagesep.reg` operation represents a stage separating register
+    in a pipeline with materialized register values. `pipeline.stagesep` and
+    `pipeline.stagesep.reg` operations are not allowed to co-exist in the
     same pipeline body. This is because, once register values are materialized,
     all delays as well as knowledge about multicycle paths have been lowered
     away.
   }];
 
-  let arguments = (ins Variadic<AnyType>:$regIns, I1:$when);
-  let results = (outs Variadic<AnyType>:$regOuts, I1:$valid);
+  let arguments = (ins Variadic<AnyType>:$inputs, I1:$enable);
+  let results = (outs Variadic<AnyType>:$outputs, I1:$valid);
 
-  let builders = [OpBuilder<(ins "mlir::Value":$when, "mlir::ValueRange":$regIns)>];
+  let builders = [OpBuilder<(ins "mlir::Value":$enable, "mlir::ValueRange":$inputs)>];
 
   let assemblyFormat = [{
-    `when` $when (`regs` $regIns^)? attr-dict (`:` type($regIns)^)?
+    `enable` $enable (`regs` $inputs^)? attr-dict (`:` type($inputs)^)?
+  }];
+
+  let extraClassDeclaration = [{
+    // Returns the index of this stage in the pipeline.
+    unsigned index();
+  }];
+}
+
+
+def StageOp : Op<Pipeline_Dialect, "stage", [
+    HasParent<"PipelineOp">,
+    SingleBlockImplicitTerminator<"StageReturnOp">,
+    RegionKindInterface,
+    HasOnlyGraphRegion,
+    IsolatedFromAbove
+  ]> {
+  let summary = "Pipeline pipeline stage.";
+  let description = [{
+    The `pipeline.stage` operation represents a stage separating register
+    in a pipeline with materialized register values. `pipeline.stagesep` and
+    `pipeline.stage` operations are not allowed to co-exist in the
+    same pipeline body. This is because, once register values are materialized,
+    all delays as well as knowledge about multicycle paths have been lowered
+    away.
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$inputs, I1:$enable);
+  let results = (outs Variadic<AnyType>:$outputs, I1:$valid);
+  let regions = (region SizedRegion<1>: $body);
+  let hasVerifier = 1;
+
+
+  let skipDefaultBuilders = 1;
+  let builders = [OpBuilder<(ins 
+    "mlir::Value":$enable,
+    "mlir::ValueRange":$inputs,
+    "mlir::TypeRange":$outputs
+  )>];
+
+  let assemblyFormat = [{
+    `ins` ($inputs^)? `enable` $enable attr-dict `:` functional-type($inputs, $outputs) $body
   }];
 
   let extraClassDeclaration = [{
     // Returns the index of this stage in the pipeline.
     unsigned index() {
-      auto stageOps = getOperation()->getParentOfType<PipelineOp>().getOps<PipelineStageRegisterOp>();
+      auto stageOps = getOperation()->getParentOfType<PipelineOp>().getOps<StageOp>();
       return std::distance(stageOps.begin(), llvm::find(stageOps, *this));
+    }
+
+    /// Returns the body of a Pipeline stage.
+    Block *getBodyBlock() {
+      return &getOperation()->getRegion(0).front();
+    }
+
+    // Returns the internal `enable` signal.
+    Value getInnerEnable() {
+      return getBodyBlock()->getArguments().back();
+    }
+
+    // Returns the internal inputs of this stage.
+    ValueRange getInnerInputs() {
+      return getBodyBlock()->getArguments().drop_back(1);
     }
   }];
 }
 
-def ReturnOp : Op<Pipeline_Dialect, "return", [Terminator]> {
+def StageReturnOp : Op<Pipeline_Dialect, "stage.return", [
+    Terminator,
+    AttrSizedOperandSegments,
+    HasParent<"StageOp">
+  ]> {
+  let summary = "Pipeline stage return.";
+  let description = [{
+    The "stage.return" operation represents a terminator of a `pipeline.stage`.
+  }];
+
+  let hasVerifier = 1;
+  let arguments = (ins Variadic<AnyType>:$regs, Variadic<AnyType>:$passthroughs, I1:$valid);
+  let builders = [OpBuilder<(ins), [{ return; }]>];
+  let assemblyFormat = [{ (`regs` $regs^)? (`passthroughs` $passthroughs^)?
+      `valid` $valid attr-dict (`:` `(` type($regs)^ `)`)?
+      (`,` `(` type($passthroughs)^ `)` )? }];
+
+  let extraClassDeclaration = [{
+    // Assigns the operands of this stage return, as well as the required
+    // `operand_segment_sizes` attribute.
+    void setOperands(Value valid, ValueRange regs, ValueRange passthroughs);
+  }];
+}
+
+def ReturnOp : Op<Pipeline_Dialect, "return", [
+    Terminator,
+    HasParent<"PipelineOp">
+  ]> {
   let summary = "Pipeline dialect return.";
   let description = [{
     The "return" operation represents a terminator of a `pipeline.pipeline`.
   }];
 
   let hasVerifier = 1;
-  let arguments = (ins Variadic<AnyType>:$outputs, I1:$valid);
+  let arguments = (ins Variadic<AnyType>:$inputs, I1:$valid);
   let builders = [OpBuilder<(ins), [{ return; }]>];
-  let assemblyFormat = [{ ($outputs^)? `valid` $valid attr-dict (`:` type($outputs)^)? }];
+  let assemblyFormat = [{ ($inputs^)? `valid` $valid attr-dict (`:` type($inputs)^)? }];
 }
 
 #endif // PIPELINE_OPS

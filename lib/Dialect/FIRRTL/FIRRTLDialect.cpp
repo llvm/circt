@@ -81,6 +81,12 @@ Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
       return builder.create<AggregateConstantOp>(loc, type, arrayAttr);
   }
 
+  // String constants.
+  if (auto stringAttr = value.dyn_cast<StringAttr>()) {
+    if (type.isa<StringType>())
+      return builder.create<StringConstantOp>(loc, type, stringAttr);
+  }
+
   return nullptr;
 }
 

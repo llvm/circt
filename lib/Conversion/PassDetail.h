@@ -88,6 +88,10 @@ namespace llhd {
 class LLHDDialect;
 } // namespace llhd
 
+namespace ltl {
+class LTLDialect;
+} // namespace ltl
+
 namespace loopschedule {
 class LoopScheduleDialect;
 } // namespace loopschedule
@@ -124,6 +128,10 @@ class FSMDialect;
 namespace systemc {
 class SystemCDialect;
 } // namespace systemc
+
+namespace verif {
+class VerifDialect;
+} // namespace verif
 
 // Generate the classes which represent the passes
 #define GEN_PASS_CLASSES

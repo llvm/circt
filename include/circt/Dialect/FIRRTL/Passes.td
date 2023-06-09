@@ -182,7 +182,7 @@ def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "mlir::ModuleOp"> {
     Option<"replSeqMemFile", "repl-seq-mem-file", "std::string", "",
       "File to which emit seq meme metadata">
   ];
-  let dependentDialects = ["hw::HWDialect"];
+  let dependentDialects = ["hw::HWDialect", "om::OMDialect"];
 }
 
 def FlattenMemory : Pass<"firrtl-flatten-memory", "firrtl::FModuleOp"> {
@@ -602,6 +602,8 @@ def DropName : Pass<"firrtl-drop-names", "firrtl::FModuleOp"> {
            }]>
   ];
   let statistics = [
+    Statistic<"numNamesDropped", "num-names-dropped",
+      "Number of names dropped">,
     Statistic<"numNamesConverted", "num-names-converted",
       "Number of interesting names made droppable">,
   ];

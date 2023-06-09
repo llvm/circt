@@ -57,8 +57,8 @@ void ScheduleLinearPipelinePass::runOnOperation() {
     return signalPassFailure();
   }
 
-  auto stageOpIt = pipeline.getOps<PipelineStageOp>();
-  auto stageRegOpIt = pipeline.getOps<PipelineStageRegisterOp>();
+  auto stageOpIt = pipeline.getOps<StageSeparatingOp>();
+  auto stageRegOpIt = pipeline.getOps<StageOp>();
 
   if (stageOpIt.begin() != stageOpIt.end() ||
       stageRegOpIt.begin() != stageRegOpIt.end()) {
@@ -147,7 +147,7 @@ void ScheduleLinearPipelinePass::runOnOperation() {
   // operations scheduled to a given start time. This is an ordered map, so that
   // we can iterate over the stages in order.
   std::map<StageIdx, llvm::SmallVector<Operation *>> stageMap;
-  DenseMap<StageIdx, PipelineStageOp> stages;
+  DenseMap<StageIdx, StageSeparatingOp> stages;
   llvm::SmallVector<Operation *, 4> otherOps;
 
   // Iterate over the ops in the pipeline, and add them to the stage map.
@@ -167,7 +167,7 @@ void ScheduleLinearPipelinePass::runOnOperation() {
     auto oldEndTime = currentEndTime;
     currentEndTime = std::max(currentEndTime, *problem.getEndTime(&op));
     for (unsigned i = oldEndTime; i < currentEndTime; ++i) {
-      auto nextStage = b.create<PipelineStageOp>(loc, stageValid);
+      auto nextStage = b.create<StageSeparatingOp>(loc, stageValid);
       stageValid = nextStage.getValid();
       stages[i] = nextStage;
     }
@@ -195,7 +195,7 @@ void ScheduleLinearPipelinePass::runOnOperation() {
   // Replace the pipeline return value with one that uses the last stage valid
   // signal.
   b.setInsertionPoint(returnOp);
-  b.create<pipeline::ReturnOp>(returnOp.getLoc(), returnOp.getOutputs(),
+  b.create<pipeline::ReturnOp>(returnOp.getLoc(), returnOp.getInputs(),
                                stageValid);
   returnOp.erase();
 }

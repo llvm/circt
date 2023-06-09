@@ -5,17 +5,18 @@
 // CHECK:           %[[VAL_4:.*]] = pipeline.pipeline(%[[VAL_0]], %[[VAL_1]]) clock %[[VAL_2]] reset %[[VAL_3]] {operator_lib = @lib} : (i32, i32) -> i32 {
 // CHECK:           ^bb0(%[[VAL_5:.*]]: i32, %[[VAL_6:.*]]: i32):
 // CHECK:             %[[VAL_7:.*]] = hw.constant true
+// CHECK:             %[[VAL_8:.*]] = hw.constant true
 // CHECK:             %[[VAL_9:.*]] = comb.add %[[VAL_5]], %[[VAL_6]] {ssp.operator_type = @add1} : i32
 // CHECK:             %[[VAL_10:.*]] = comb.add %[[VAL_6]], %[[VAL_5]] {ssp.operator_type = @add1} : i32
-// CHECK:             %[[VAL_11:.*]] = pipeline.stage when %[[VAL_7]]
-// CHECK:             %[[VAL_12:.*]] = pipeline.stage when %[[VAL_11]]
+// CHECK:             %[[VAL_11:.*]] = pipeline.stagesep enable %[[VAL_7]]
+// CHECK:             %[[VAL_12:.*]] = pipeline.stagesep enable %[[VAL_11]]
 // CHECK:             %[[VAL_13:.*]] = comb.mul %[[VAL_5]], %[[VAL_9]] {ssp.operator_type = @mul2} : i32
-// CHECK:             %[[VAL_14:.*]] = pipeline.stage when %[[VAL_12]]
-// CHECK:             %[[VAL_15:.*]] = pipeline.stage when %[[VAL_14]]
-// CHECK:             %[[VAL_16:.*]] = pipeline.stage when %[[VAL_15]]
+// CHECK:             %[[VAL_14:.*]] = pipeline.stagesep enable %[[VAL_12]]
+// CHECK:             %[[VAL_15:.*]] = pipeline.stagesep enable %[[VAL_14]]
+// CHECK:             %[[VAL_16:.*]] = pipeline.stagesep enable %[[VAL_15]]
 // CHECK:             %[[VAL_17:.*]] = comb.add %[[VAL_13]], %[[VAL_10]] {ssp.operator_type = @add1} : i32
-// CHECK:             %[[VAL_18:.*]] = pipeline.stage when %[[VAL_16]]
-// CHECK:             %[[VAL_19:.*]] = pipeline.stage when %[[VAL_18]]
+// CHECK:             %[[VAL_18:.*]] = pipeline.stagesep enable %[[VAL_16]]
+// CHECK:             %[[VAL_19:.*]] = pipeline.stagesep enable %[[VAL_18]]
 // CHECK:             pipeline.return %[[VAL_17]] valid %[[VAL_19]] : i32
 // CHECK:           }
 // CHECK:           hw.output %[[VAL_20:.*]] : i32

@@ -88,29 +88,56 @@ static ParseResult sizedPort(StringRef name, FModuleLike mod, unsigned n,
   return success();
 }
 
-static ParseResult hasNParam(StringRef name, FModuleLike mod, unsigned n) {
+static ParseResult hasNParam(StringRef name, FModuleLike mod, unsigned n,
+                             unsigned c = 0) {
   unsigned num = 0;
   if (mod.getParameters())
     num = mod.getParameters().size();
-  if (n != num) {
-    mod.emitError(name) << " has " << num << " parameters instead of " << n;
+  if (num < n || num > n + c) {
+    auto d = mod.emitError(name) << " has " << num << " parameters instead of ";
+    if (c == 0)
+      d << n;
+    else
+      d << " between " << n << " and " << (n + c);
     return failure();
   }
   return success();
 }
+
 static ParseResult namedParam(StringRef name, FModuleLike mod,
-                              StringRef paramName) {
+                              StringRef paramName, bool optional = false) {
   for (auto a : mod.getParameters()) {
     auto param = a.cast<ParamDeclAttr>();
     if (param.getName().getValue().equals(paramName)) {
       if (param.getValue().isa<StringAttr>())
         return success();
 
-      mod.emitError(name) << " test has parameter '" << param.getName()
+      mod.emitError(name) << " has parameter '" << param.getName()
                           << "' which should be a string but is not";
       return failure();
     }
   }
+  if (optional)
+    return success();
+  mod.emitError(name) << " is missing parameter " << paramName;
+  return failure();
+}
+
+static ParseResult namedIntParam(StringRef name, FModuleLike mod,
+                                 StringRef paramName, bool optional = false) {
+  for (auto a : mod.getParameters()) {
+    auto param = a.cast<ParamDeclAttr>();
+    if (param.getName().getValue().equals(paramName)) {
+      if (param.getValue().isa<IntegerAttr>())
+        return success();
+
+      mod.emitError(name) << " has parameter '" << param.getName()
+                          << "' which should be an integer but is not";
+      return failure();
+    }
+  }
+  if (optional)
+    return success();
   mod.emitError(name) << " is missing parameter " << paramName;
   return failure();
 }
@@ -237,6 +264,281 @@ static bool lowerCirctClockGate(InstancePathCache &instancePathCache,
   return true;
 }
 
+static bool lowerCirctLTLAnd(InstancePathCache &instancePathCache,
+                             FModuleLike mod) {
+  if (hasNPorts("circt.ltl.and", mod, 3) ||
+      namedPort("circt.ltl.and", mod, 0, "lhs") ||
+      namedPort("circt.ltl.and", mod, 1, "rhs") ||
+      namedPort("circt.ltl.and", mod, 2, "out") ||
+      sizedPort<UIntType>("circt.ltl.and", mod, 0, 1) ||
+      sizedPort<UIntType>("circt.ltl.and", mod, 1, 1) ||
+      sizedPort<UIntType>("circt.ltl.and", mod, 2, 1) ||
+      hasNParam("circt.ltl.and", mod, 0))
+    return false;
+
+  for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
+    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto lhs = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    auto rhs = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
+    inst.getResult(0).replaceAllUsesWith(lhs);
+    inst.getResult(1).replaceAllUsesWith(rhs);
+    auto out = builder.create<LTLAndIntrinsicOp>(lhs.getType(), lhs, rhs);
+    inst.getResult(2).replaceAllUsesWith(out);
+    inst.erase();
+  }
+  return true;
+}
+
+static bool lowerCirctLTLOr(InstancePathCache &instancePathCache,
+                            FModuleLike mod) {
+  if (hasNPorts("circt.ltl.or", mod, 3) ||
+      namedPort("circt.ltl.or", mod, 0, "lhs") ||
+      namedPort("circt.ltl.or", mod, 1, "rhs") ||
+      namedPort("circt.ltl.or", mod, 2, "out") ||
+      sizedPort<UIntType>("circt.ltl.or", mod, 0, 1) ||
+      sizedPort<UIntType>("circt.ltl.or", mod, 1, 1) ||
+      sizedPort<UIntType>("circt.ltl.or", mod, 2, 1) ||
+      hasNParam("circt.ltl.or", mod, 0))
+    return false;
+
+  for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
+    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto lhs = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    auto rhs = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
+    inst.getResult(0).replaceAllUsesWith(lhs);
+    inst.getResult(1).replaceAllUsesWith(rhs);
+    auto out = builder.create<LTLOrIntrinsicOp>(lhs.getType(), lhs, rhs);
+    inst.getResult(2).replaceAllUsesWith(out);
+    inst.erase();
+  }
+  return true;
+}
+
+static bool lowerCirctLTLDelay(InstancePathCache &instancePathCache,
+                               FModuleLike mod) {
+  if (hasNPorts("circt.ltl.delay", mod, 2) ||
+      namedPort("circt.ltl.delay", mod, 0, "in") ||
+      namedPort("circt.ltl.delay", mod, 1, "out") ||
+      sizedPort<UIntType>("circt.ltl.delay", mod, 0, 1) ||
+      sizedPort<UIntType>("circt.ltl.delay", mod, 1, 1) ||
+      hasNParam("circt.ltl.delay", mod, 1, 2) ||
+      namedIntParam("circt.ltl.delay", mod, "delay") ||
+      namedIntParam("circt.ltl.delay", mod, "length", true))
+    return false;
+
+  auto getI64Attr = [&](int64_t value) {
+    return IntegerAttr::get(IntegerType::get(mod.getContext(), 64), value);
+  };
+  auto params = mod.getParameters();
+  auto delay = getI64Attr(params[0]
+                              .cast<ParamDeclAttr>()
+                              .getValue()
+                              .cast<IntegerAttr>()
+                              .getValue()
+                              .getZExtValue());
+  IntegerAttr length;
+  if (params.size() >= 2)
+    if (auto lengthDecl = params[1].cast<ParamDeclAttr>())
+      length = getI64Attr(
+          lengthDecl.getValue().cast<IntegerAttr>().getValue().getZExtValue());
+
+  for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
+    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    inst.getResult(0).replaceAllUsesWith(in);
+    auto out =
+        builder.create<LTLDelayIntrinsicOp>(in.getType(), in, delay, length);
+    inst.getResult(1).replaceAllUsesWith(out);
+    inst.erase();
+  }
+  return true;
+}
+
+static bool lowerCirctLTLConcat(InstancePathCache &instancePathCache,
+                                FModuleLike mod) {
+  if (hasNPorts("circt.ltl.concat", mod, 3) ||
+      namedPort("circt.ltl.concat", mod, 0, "lhs") ||
+      namedPort("circt.ltl.concat", mod, 1, "rhs") ||
+      namedPort("circt.ltl.concat", mod, 2, "out") ||
+      sizedPort<UIntType>("circt.ltl.concat", mod, 0, 1) ||
+      sizedPort<UIntType>("circt.ltl.concat", mod, 1, 1) ||
+      sizedPort<UIntType>("circt.ltl.concat", mod, 2, 1) ||
+      hasNParam("circt.ltl.concat", mod, 0))
+    return false;
+
+  for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
+    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto lhs = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    auto rhs = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
+    inst.getResult(0).replaceAllUsesWith(lhs);
+    inst.getResult(1).replaceAllUsesWith(rhs);
+    auto out = builder.create<LTLConcatIntrinsicOp>(lhs.getType(), lhs, rhs);
+    inst.getResult(2).replaceAllUsesWith(out);
+    inst.erase();
+  }
+  return true;
+}
+
+static bool lowerCirctLTLNot(InstancePathCache &instancePathCache,
+                             FModuleLike mod) {
+  if (hasNPorts("circt.ltl.not", mod, 2) ||
+      namedPort("circt.ltl.not", mod, 0, "in") ||
+      namedPort("circt.ltl.not", mod, 1, "out") ||
+      sizedPort<UIntType>("circt.ltl.not", mod, 0, 1) ||
+      sizedPort<UIntType>("circt.ltl.not", mod, 1, 1) ||
+      hasNParam("circt.ltl.not", mod, 0))
+    return false;
+
+  for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
+    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto input =
+        builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    inst.getResult(0).replaceAllUsesWith(input);
+    auto out = builder.create<LTLNotIntrinsicOp>(input.getType(), input);
+    inst.getResult(1).replaceAllUsesWith(out);
+    inst.erase();
+  }
+  return true;
+}
+
+static bool lowerCirctLTLImplication(InstancePathCache &instancePathCache,
+                                     FModuleLike mod) {
+  if (hasNPorts("circt.ltl.implication", mod, 3) ||
+      namedPort("circt.ltl.implication", mod, 0, "lhs") ||
+      namedPort("circt.ltl.implication", mod, 1, "rhs") ||
+      namedPort("circt.ltl.implication", mod, 2, "out") ||
+      sizedPort<UIntType>("circt.ltl.implication", mod, 0, 1) ||
+      sizedPort<UIntType>("circt.ltl.implication", mod, 1, 1) ||
+      sizedPort<UIntType>("circt.ltl.implication", mod, 2, 1) ||
+      hasNParam("circt.ltl.implication", mod, 0))
+    return false;
+
+  for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
+    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto lhs = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    auto rhs = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
+    inst.getResult(0).replaceAllUsesWith(lhs);
+    inst.getResult(1).replaceAllUsesWith(rhs);
+    auto out =
+        builder.create<LTLImplicationIntrinsicOp>(lhs.getType(), lhs, rhs);
+    inst.getResult(2).replaceAllUsesWith(out);
+    inst.erase();
+  }
+  return true;
+}
+
+static bool lowerCirctLTLEventually(InstancePathCache &instancePathCache,
+                                    FModuleLike mod) {
+  if (hasNPorts("circt.ltl.eventually", mod, 2) ||
+      namedPort("circt.ltl.eventually", mod, 0, "in") ||
+      namedPort("circt.ltl.eventually", mod, 1, "out") ||
+      sizedPort<UIntType>("circt.ltl.eventually", mod, 0, 1) ||
+      sizedPort<UIntType>("circt.ltl.eventually", mod, 1, 1) ||
+      hasNParam("circt.ltl.eventually", mod, 0))
+    return false;
+
+  for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
+    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto input =
+        builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    inst.getResult(0).replaceAllUsesWith(input);
+    auto out = builder.create<LTLEventuallyIntrinsicOp>(input.getType(), input);
+    inst.getResult(1).replaceAllUsesWith(out);
+    inst.erase();
+  }
+  return true;
+}
+
+static bool lowerCirctLTLClock(InstancePathCache &instancePathCache,
+                               FModuleLike mod) {
+  if (hasNPorts("circt.ltl.clock", mod, 3) ||
+      namedPort("circt.ltl.clock", mod, 0, "in") ||
+      namedPort("circt.ltl.clock", mod, 1, "clock") ||
+      namedPort("circt.ltl.clock", mod, 2, "out") ||
+      sizedPort<UIntType>("circt.ltl.clock", mod, 0, 1) ||
+      typedPort<ClockType>("circt.ltl.clock", mod, 1) ||
+      sizedPort<UIntType>("circt.ltl.clock", mod, 2, 1) ||
+      hasNParam("circt.ltl.clock", mod, 0))
+    return false;
+
+  for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
+    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    auto clock =
+        builder.create<WireOp>(inst.getResult(1).getType()).getResult();
+    inst.getResult(0).replaceAllUsesWith(in);
+    inst.getResult(1).replaceAllUsesWith(clock);
+    auto out = builder.create<LTLClockIntrinsicOp>(in.getType(), in, clock);
+    inst.getResult(2).replaceAllUsesWith(out);
+    inst.erase();
+  }
+  return true;
+}
+
+static bool lowerCirctLTLDisable(InstancePathCache &instancePathCache,
+                                 FModuleLike mod) {
+  if (hasNPorts("circt.ltl.disable", mod, 3) ||
+      namedPort("circt.ltl.disable", mod, 0, "in") ||
+      namedPort("circt.ltl.disable", mod, 1, "condition") ||
+      namedPort("circt.ltl.disable", mod, 2, "out") ||
+      sizedPort<UIntType>("circt.ltl.disable", mod, 0, 1) ||
+      sizedPort<UIntType>("circt.ltl.disable", mod, 1, 1) ||
+      sizedPort<UIntType>("circt.ltl.disable", mod, 2, 1) ||
+      hasNParam("circt.ltl.disable", mod, 0))
+    return false;
+
+  for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
+    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    auto condition =
+        builder.create<WireOp>(inst.getResult(1).getType()).getResult();
+    inst.getResult(0).replaceAllUsesWith(in);
+    inst.getResult(1).replaceAllUsesWith(condition);
+    auto out =
+        builder.create<LTLDisableIntrinsicOp>(in.getType(), in, condition);
+    inst.getResult(2).replaceAllUsesWith(out);
+    inst.erase();
+  }
+  return true;
+}
+
+template <class Op>
+static bool lowerCirctVerif(InstancePathCache &instancePathCache,
+                            FModuleLike mod) {
+  if (hasNPorts("circt.verif.assert", mod, 1) ||
+      namedPort("circt.verif.assert", mod, 0, "property") ||
+      sizedPort<UIntType>("circt.verif.assert", mod, 0, 1) ||
+      hasNParam("circt.verif.assert", mod, 0, 1) ||
+      namedParam("circt.verif.assert", mod, "label", true))
+    return false;
+
+  auto params = mod.getParameters();
+  StringAttr label;
+  if (!params.empty())
+    if (auto labelDecl = params[0].cast<ParamDeclAttr>())
+      label = labelDecl.getValue().cast<StringAttr>();
+
+  for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
+    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto property =
+        builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    inst.getResult(0).replaceAllUsesWith(property);
+    builder.create<Op>(property, label);
+    inst.erase();
+  }
+  return true;
+}
+
 std::pair<const char *, std::function<bool(InstancePathCache &, FModuleLike)>>
     intrinsics[] = {
         {"circt.sizeof", lowerCirctSizeof},
@@ -249,6 +551,30 @@ std::pair<const char *, std::function<bool(InstancePathCache &, FModuleLike)>>
         {"circt_plusargs_value", lowerCirctPlusArgValue},
         {"circt.clock_gate", lowerCirctClockGate},
         {"circt_clock_gate", lowerCirctClockGate},
+        {"circt.ltl.and", lowerCirctLTLAnd},
+        {"circt_ltl_and", lowerCirctLTLAnd},
+        {"circt.ltl.or", lowerCirctLTLOr},
+        {"circt_ltl_or", lowerCirctLTLOr},
+        {"circt.ltl.delay", lowerCirctLTLDelay},
+        {"circt_ltl_delay", lowerCirctLTLDelay},
+        {"circt.ltl.concat", lowerCirctLTLConcat},
+        {"circt_ltl_concat", lowerCirctLTLConcat},
+        {"circt.ltl.not", lowerCirctLTLNot},
+        {"circt_ltl_not", lowerCirctLTLNot},
+        {"circt.ltl.implication", lowerCirctLTLImplication},
+        {"circt_ltl_implication", lowerCirctLTLImplication},
+        {"circt.ltl.eventually", lowerCirctLTLEventually},
+        {"circt_ltl_eventually", lowerCirctLTLEventually},
+        {"circt.ltl.clock", lowerCirctLTLClock},
+        {"circt_ltl_clock", lowerCirctLTLClock},
+        {"circt.ltl.disable", lowerCirctLTLDisable},
+        {"circt_ltl_disable", lowerCirctLTLDisable},
+        {"circt.verif.assert", lowerCirctVerif<VerifAssertIntrinsicOp>},
+        {"circt_verif_assert", lowerCirctVerif<VerifAssertIntrinsicOp>},
+        {"circt.verif.assume", lowerCirctVerif<VerifAssumeIntrinsicOp>},
+        {"circt_verif_assume", lowerCirctVerif<VerifAssumeIntrinsicOp>},
+        {"circt.verif.cover", lowerCirctVerif<VerifCoverIntrinsicOp>},
+        {"circt_verif_cover", lowerCirctVerif<VerifCoverIntrinsicOp>},
 };
 
 // This is the main entrypoint for the lowering pass.

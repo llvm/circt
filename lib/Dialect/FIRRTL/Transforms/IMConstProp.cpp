@@ -37,7 +37,8 @@ static bool isWireOrReg(Operation *op) {
 
 /// Return true if this is an aggregate indexer.
 static bool isAggregate(Operation *op) {
-  return isa<SubindexOp, SubaccessOp, SubfieldOp>(op);
+  return isa<SubindexOp, SubaccessOp, SubfieldOp, OpenSubfieldOp,
+             OpenSubindexOp>(op);
 }
 
 /// Return true if this is a wire or register we're allowed to delete.
@@ -291,11 +292,13 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void markSpecialConstantOp(SpecialConstantOp specialConstant);
   void markInstanceOp(InstanceOp instance);
 
-  void visitConnectLike(FConnectLike connect);
-  void visitRefSend(RefSendOp send);
-  void visitRefResolve(RefResolveOp resolve);
-  void visitNode(NodeOp node);
-  void visitOperation(Operation *op);
+  void visitConnectLike(FConnectLike connect, FieldRef changedFieldRef);
+  void visitRefSend(RefSendOp send, FieldRef changedFieldRef);
+  void visitRefResolve(RefResolveOp resolve, FieldRef changedFieldRef);
+  void mergeOnlyChangedLatticeValue(Value dest, Value src,
+                                    FieldRef changedFieldRef);
+  void visitNode(NodeOp node, FieldRef changedFieldRef);
+  void visitOperation(Operation *op, FieldRef changedFieldRef);
 
 private:
   /// This is the current instance graph for the Circuit.
@@ -352,7 +355,7 @@ void IMConstPropPass::runOnOperation() {
     FieldRef changedFieldRef = changedLatticeValueWorklist.pop_back_val();
     for (Operation *user : fieldRefToUsers[changedFieldRef]) {
       if (isBlockExecutable(user->getBlock()))
-        visitOperation(user);
+        visitOperation(user, changedFieldRef);
     }
   }
 
@@ -572,7 +575,48 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
   }
 }
 
-void IMConstPropPass::visitConnectLike(FConnectLike connect) {
+static std::optional<uint64_t>
+getFieldIDOffset(FieldRef changedFieldRef, FIRRTLBaseType connectionType,
+                 FieldRef connectedValueFieldRef) {
+  if (changedFieldRef.getValue() != connectedValueFieldRef.getValue())
+    return {};
+  if (changedFieldRef.getFieldID() >= connectedValueFieldRef.getFieldID() &&
+      changedFieldRef.getFieldID() <=
+          connectionType.getMaxFieldID() + connectedValueFieldRef.getFieldID())
+    return changedFieldRef.getFieldID() - connectedValueFieldRef.getFieldID();
+  return {};
+}
+
+void IMConstPropPass::mergeOnlyChangedLatticeValue(Value dest, Value src,
+                                                   FieldRef changedFieldRef) {
+
+  auto destTypeFIRRTL = dest.getType().dyn_cast<FIRRTLType>();
+  if (!destTypeFIRRTL) {
+    // If the dest is not FIRRTL type, mark all of them overdefined anyway.
+    markOverdefined(src);
+    return markOverdefined(dest);
+  }
+
+  FIRRTLBaseType baseType = getBaseType(destTypeFIRRTL);
+
+  auto fieldRefSrc = getOrCacheFieldRefFromValue(src);
+  auto fieldRefDest = getOrCacheFieldRefFromValue(dest);
+  // If a changed field ref is included the source value, find an offset in the
+  // connection.
+  if (auto srcOffset = getFieldIDOffset(changedFieldRef, baseType, fieldRefSrc))
+    mergeLatticeValue(fieldRefDest.getSubField(*srcOffset),
+                      fieldRefSrc.getSubField(*srcOffset));
+
+  // If a changed field ref is included the dest value, find an offset in the
+  // connection.
+  if (auto destOffset =
+          getFieldIDOffset(changedFieldRef, baseType, fieldRefDest))
+    mergeLatticeValue(fieldRefDest.getSubField(*destOffset),
+                      fieldRefSrc.getSubField(*destOffset));
+}
+
+void IMConstPropPass::visitConnectLike(FConnectLike connect,
+                                       FieldRef changedFieldRef) {
   // Mark foreign types as overdefined.
   auto destTypeFIRRTL = connect.getDest().getType().dyn_cast<FIRRTLType>();
   if (!destTypeFIRRTL) {
@@ -598,6 +642,7 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect) {
   auto propagateElementLattice = [&](uint64_t fieldID,
                                      FIRRTLBaseType destType) {
     auto fieldRefDestConnected = fieldRefDest.getSubField(fieldID);
+    assert(destType.isGround());
 
     // Handle implicit extensions.
     auto srcValue =
@@ -650,21 +695,34 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect) {
         << "connect destination is here";
   };
 
-  walkGroundTypes(baseType, propagateElementLattice);
+  if (auto srcOffset = getFieldIDOffset(changedFieldRef, baseType, fieldRefSrc))
+    propagateElementLattice(
+        *srcOffset,
+        baseType.getFinalTypeByFieldID(*srcOffset).cast<FIRRTLBaseType>());
+
+  if (auto relativeDest =
+          getFieldIDOffset(changedFieldRef, baseType, fieldRefDest))
+    propagateElementLattice(
+        *relativeDest,
+        baseType.getFinalTypeByFieldID(*relativeDest).cast<FIRRTLBaseType>());
 }
 
-void IMConstPropPass::visitRefSend(RefSendOp send) {
+void IMConstPropPass::visitRefSend(RefSendOp send, FieldRef changedFieldRef) {
   // Send connects the base value (source) to the result (dest).
-  return mergeLatticeValue(send.getResult(), send.getBase());
+  return mergeOnlyChangedLatticeValue(send.getResult(), send.getBase(),
+                                      changedFieldRef);
 }
 
-void IMConstPropPass::visitRefResolve(RefResolveOp resolve) {
+void IMConstPropPass::visitRefResolve(RefResolveOp resolve,
+                                      FieldRef changedFieldRef) {
   // Resolve connects the ref value (source) to result (dest).
   // If writes are ever supported, this will need to work differently!
-  return mergeLatticeValue(resolve.getResult(), resolve.getRef());
+  return mergeOnlyChangedLatticeValue(resolve.getResult(), resolve.getRef(),
+                                      changedFieldRef);
 }
 
-void IMConstPropPass::visitNode(NodeOp node) {
+void IMConstPropPass::visitNode(NodeOp node, FieldRef changedFieldRef) {
+
   // Nodes don't fold if they have interesting names, but they should still
   // propagate values.
   if (hasDontTouch(node.getResult()) ||
@@ -672,7 +730,8 @@ void IMConstPropPass::visitNode(NodeOp node) {
       node.isForceable())
     return markOverdefined(node.getResult());
 
-  return mergeLatticeValue(node.getResult(), node.getInput());
+  return mergeOnlyChangedLatticeValue(node.getResult(), node.getInput(),
+                                      changedFieldRef);
 }
 
 /// This method is invoked when an operand of the specified op changes its
@@ -681,16 +740,16 @@ void IMConstPropPass::visitNode(NodeOp node) {
 ///
 /// This should update the lattice value state for any result values.
 ///
-void IMConstPropPass::visitOperation(Operation *op) {
+void IMConstPropPass::visitOperation(Operation *op, FieldRef changedField) {
   // If this is a operation with special handling, handle it specially.
   if (auto connectLikeOp = dyn_cast<FConnectLike>(op))
-    return visitConnectLike(connectLikeOp);
+    return visitConnectLike(connectLikeOp, changedField);
   if (auto sendOp = dyn_cast<RefSendOp>(op))
-    return visitRefSend(sendOp);
+    return visitRefSend(sendOp, changedField);
   if (auto resolveOp = dyn_cast<RefResolveOp>(op))
-    return visitRefResolve(resolveOp);
+    return visitRefResolve(resolveOp, changedField);
   if (auto nodeOp = dyn_cast<NodeOp>(op))
-    return visitNode(nodeOp);
+    return visitNode(nodeOp, changedField);
 
   // The clock operand of regop changing doesn't change its result value.  All
   // other registers are over-defined. Aggregate operations also doesn't change
@@ -706,6 +765,14 @@ void IMConstPropPass::visitOperation(Operation *op) {
   };
   if (llvm::all_of(op->getResults(), isOverdefinedFn))
     return;
+
+  // To prevent regressions, mark values as overdefined when they are defined
+  // by operations with a large number of operands.
+  if (op->getNumOperands() > 128) {
+    for (auto value : op->getResults())
+      markOverdefined(value);
+    return;
+  }
 
   // Collect all of the constant operands feeding into this operation. If any
   // are not ready to be resolved, bail out and wait for them to resolve.
@@ -811,7 +878,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     if (constIt != constPool.end()) {
       auto *cst = constIt->second;
       // Add location to the constant
-      cst->setLoc(builder.getFusedLoc(cst->getLoc(), loc));
+      cst->setLoc(builder.getFusedLoc({cst->getLoc(), loc}));
       return cst->getResult(0);
     }
     auto savedIP = builder.saveInsertionPoint();

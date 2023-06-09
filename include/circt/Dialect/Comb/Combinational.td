@@ -122,7 +122,7 @@ def ICmpOp : CombOp<"icmp", [Pure, SameTypeOperands]> {
     bit wide result.
 
     ```
-        %r = hw.icmp eq %a, %b : i4
+        %r = comb.icmp eq %a, %b : i4
     ```
   }];
 

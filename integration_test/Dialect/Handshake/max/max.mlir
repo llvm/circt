@@ -1,10 +1,10 @@
 // REQUIRES: iverilog,cocotb
 
 // RUN: hlstool %s --dynamic-hw --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables > %t.sv && \
-// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=max --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
+// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=max --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 // RUN: hlstool %s --dynamic-hw --buffering-strategy=all --verilog --lowering-options=disallowLocalVariables > %t.sv && \
-// RUN: %PYTHON% %S/../cocotb_driver.py --objdir=%T --topLevel=top --pythonModule=max --pythonFolder=%S %t.sv 2>&1 | FileCheck %s
+// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=max --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 // CHECK:      ** TEST
 // CHECK-NEXT: ********************************

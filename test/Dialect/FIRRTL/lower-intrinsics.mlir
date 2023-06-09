@@ -99,4 +99,88 @@ firrtl.circuit "Foo" {
     firrtl.strictconnect %in2, %clk : !firrtl.clock
     firrtl.strictconnect %en2, %en : !firrtl.uint<1>
   }
+
+  // CHECK-NOT: LTLAnd
+  // CHECK-NOT: LTLOr
+  // CHECK-NOT: LTLDelay1
+  // CHECK-NOT: LTLDelay2
+  // CHECK-NOT: LTLConcat
+  // CHECK-NOT: LTLNot
+  // CHECK-NOT: LTLImplication
+  // CHECK-NOT: LTLEventually
+  // CHECK-NOT: LTLClock
+  // CHECK-NOT: LTLDisable
+  firrtl.intmodule @LTLAnd(in lhs: !firrtl.uint<1>, in rhs: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.and"}
+  firrtl.intmodule @LTLOr(in lhs: !firrtl.uint<1>, in rhs: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.or"}
+  firrtl.intmodule @LTLDelay1<delay: i64 = 42>(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.delay"}
+  firrtl.intmodule @LTLDelay2<delay: i64 = 42, length: i64 = 1337>(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.delay"}
+  firrtl.intmodule @LTLConcat(in lhs: !firrtl.uint<1>, in rhs: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.concat"}
+  firrtl.intmodule @LTLNot(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.not"}
+  firrtl.intmodule @LTLImplication(in lhs: !firrtl.uint<1>, in rhs: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.implication"}
+  firrtl.intmodule @LTLEventually(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.eventually"}
+  firrtl.intmodule @LTLClock(in in: !firrtl.uint<1>, in clock: !firrtl.clock, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.clock"}
+  firrtl.intmodule @LTLDisable(in in: !firrtl.uint<1>, in condition: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.disable"}
+
+  // CHECK: firrtl.module @LTL()
+  firrtl.module @LTL() {
+    // CHECK-NOT: LTLAnd
+    // CHECK-NOT: LTLOr
+    // CHECK: firrtl.int.ltl.and {{%.+}}, {{%.+}} :
+    // CHECK: firrtl.int.ltl.or {{%.+}}, {{%.+}} :
+    %and.lhs, %and.rhs, %and.out = firrtl.instance "and" @LTLAnd(in lhs: !firrtl.uint<1>, in rhs: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    %or.lhs, %or.rhs, %or.out = firrtl.instance "or" @LTLOr(in lhs: !firrtl.uint<1>, in rhs: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+
+    // CHECK-NOT: LTLDelay1
+    // CHECK-NOT: LTLDelay2
+    // CHECK: firrtl.int.ltl.delay {{%.+}}, 42 :
+    // CHECK: firrtl.int.ltl.delay {{%.+}}, 42, 1337 :
+    %delay1.in, %delay1.out = firrtl.instance "delay1" @LTLDelay1(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    %delay2.in, %delay2.out = firrtl.instance "delay2" @LTLDelay2(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+
+    // CHECK-NOT: LTLConcat
+    // CHECK-NOT: LTLNot
+    // CHECK-NOT: LTLImplication
+    // CHECK-NOT: LTLEventually
+    // CHECK: firrtl.int.ltl.concat {{%.+}}, {{%.+}} :
+    // CHECK: firrtl.int.ltl.not {{%.+}} :
+    // CHECK: firrtl.int.ltl.implication {{%.+}}, {{%.+}} :
+    // CHECK: firrtl.int.ltl.eventually {{%.+}} :
+    %concat.lhs, %concat.rhs, %concat.out = firrtl.instance "concat" @LTLConcat(in lhs: !firrtl.uint<1>, in rhs: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    %not.in, %not.out = firrtl.instance "not" @LTLNot(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    %implication.lhs, %implication.rhs, %implication.out = firrtl.instance "implication" @LTLImplication(in lhs: !firrtl.uint<1>, in rhs: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    %eventually.in, %eventually.out = firrtl.instance "eventually" @LTLEventually(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+
+    // CHECK-NOT: LTLClock
+    // CHECK: firrtl.int.ltl.clock {{%.+}}, {{%.+}} :
+    %clock.in, %clock.clock, %clock.out = firrtl.instance "clock" @LTLClock(in in: !firrtl.uint<1>, in clock: !firrtl.clock, out out: !firrtl.uint<1>)
+
+    // CHECK-NOT: LTLDisable
+    // CHECK: firrtl.int.ltl.disable {{%.+}}, {{%.+}} :
+    %disable.in, %disable.condition, %disable.out = firrtl.instance "disable" @LTLDisable(in in: !firrtl.uint<1>, in condition: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+  }
+
+  // CHECK-NOT: VerifAssert1
+  // CHECK-NOT: VerifAssert2
+  // CHECK-NOT: VerifAssume
+  // CHECK-NOT: VerifCover
+  firrtl.intmodule @VerifAssert1(in property: !firrtl.uint<1>) attributes {intrinsic = "circt.verif.assert"}
+  firrtl.intmodule @VerifAssert2<label: none = "hello">(in property: !firrtl.uint<1>) attributes {intrinsic = "circt.verif.assert"}
+  firrtl.intmodule @VerifAssume(in property: !firrtl.uint<1>) attributes {intrinsic = "circt.verif.assume"}
+  firrtl.intmodule @VerifCover(in property: !firrtl.uint<1>) attributes {intrinsic = "circt.verif.cover"}
+
+  // CHECK: firrtl.module @Verif()
+  firrtl.module @Verif() {
+    // CHECK-NOT: VerifAssert1
+    // CHECK-NOT: VerifAssert2
+    // CHECK-NOT: VerifAssume
+    // CHECK-NOT: VerifCover
+    // CHECK: firrtl.int.verif.assert {{%.+}} :
+    // CHECK: firrtl.int.verif.assert {{%.+}} {label = "hello"} :
+    // CHECK: firrtl.int.verif.assume {{%.+}} :
+    // CHECK: firrtl.int.verif.cover {{%.+}} :
+    %assert1.property = firrtl.instance "assert1" @VerifAssert1(in property: !firrtl.uint<1>)
+    %assert2.property = firrtl.instance "assert2" @VerifAssert2(in property: !firrtl.uint<1>)
+    %assume.property = firrtl.instance "assume" @VerifAssume(in property: !firrtl.uint<1>)
+    %cover.property = firrtl.instance "cover" @VerifCover(in property: !firrtl.uint<1>)
+  }
 }

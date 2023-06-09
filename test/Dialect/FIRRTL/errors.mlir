@@ -1293,7 +1293,7 @@ firrtl.circuit "RefReleaseProbe" {
 firrtl.circuit "EnumCreateNoCase" {
 firrtl.module @EnumCreateNoCase(in %in : !firrtl.uint<8>) {
   // expected-error @below {{unknown field SomeOther in enum type}}
-  %some = firrtl.enumcreate SomeOther(%in) : !firrtl.enum<None: uint<0>, Some: uint<8>>
+  %some = firrtl.enumcreate SomeOther(%in) : (!firrtl.uint<8>) -> !firrtl.enum<None: uint<0>, Some: uint<8>>
 }
 
 // -----
@@ -1302,7 +1302,7 @@ firrtl.circuit "EnumCreateWrongType" {
   // expected-note @below {{prior use here}}
 firrtl.module @EnumCreateWrongType(in %in : !firrtl.uint<7>) {
   // expected-error @below {{expects different type than prior uses}}
-  %some = firrtl.enumcreate Some(%in) : !firrtl.enum<None: uint<0>, Some: uint<8>>
+  %some = firrtl.enumcreate Some(%in) : (!firrtl.uint<8>) -> !firrtl.enum<None: uint<0>, Some: uint<8>>
 }
 
 // -----
@@ -1424,16 +1424,6 @@ firrtl.module @VectorNestedConstReg(in %clock: !firrtl.clock) {
 }
 
 // -----
-// nested 'const' firrtl.reg is invalid
-
-firrtl.circuit "EnumNestedConstReg" {
-firrtl.module @EnumNestedConstReg(in %clock: !firrtl.clock) {
-  // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.enum<a: const.uint<1>>'}}
-  %r = firrtl.reg %clock : !firrtl.clock, !firrtl.enum<a: const.uint<1>>
-}
-}
-
-// -----
 // nested 'const' firrtl.regreset is invalid
 
 firrtl.circuit "BundleNestedConstRegReset" {
@@ -1457,9 +1447,9 @@ firrtl.module @VectorNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !f
 // 'const' firrtl.regreset is invalid
 
 firrtl.circuit "EnumNestedConstRegReset" {
-firrtl.module @EnumNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.enum<a: const.uint<1>>) {
-  // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.enum<a: const.uint<1>>'}}
-  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.enum<a: const.uint<1>>, !firrtl.enum<a: const.uint<1>>
+firrtl.module @EnumNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.const.enum<a: uint<1>>) {
+  // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.enum<a: uint<1>>'}}
+  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.enum<a: uint<1>>, !firrtl.const.enum<a: uint<1>>
 }
 }
 
@@ -1541,3 +1531,80 @@ firrtl.circuit "UninferredWidthCastNonConstToConst" {
   }
 }
 
+// -----
+
+// Primitive ops with all 'const' operands must have a 'const' result type
+firrtl.circuit "PrimOpConstOperandsNonConstResult" {
+firrtl.module @PrimOpConstOperandsNonConstResult(in %a: !firrtl.const.uint<4>, in %b: !firrtl.const.uint<4>) {
+  // expected-error @below {{failed to infer returned types}}
+  // expected-error @+1 {{'firrtl.and' op inferred type(s) '!firrtl.const.uint<4>' are incompatible with return type(s) of operation '!firrtl.uint<4>'}}
+  %0 = firrtl.and %a, %b : (!firrtl.const.uint<4>, !firrtl.const.uint<4>) -> !firrtl.uint<4>
+}
+}
+
+// -----
+
+// Primitive ops with mixed 'const' operands must have a non-'const' result type
+firrtl.circuit "PrimOpMixedConstOperandsConstResult" {
+firrtl.module @PrimOpMixedConstOperandsConstResult(in %a: !firrtl.const.uint<4>, in %b: !firrtl.uint<4>) {
+  // expected-error @below {{failed to infer returned types}}
+  // expected-error @+1 {{'firrtl.and' op inferred type(s) '!firrtl.uint<4>' are incompatible with return type(s) of operation '!firrtl.const.uint<4>'}}
+  %0 = firrtl.and %a, %b : (!firrtl.const.uint<4>, !firrtl.uint<4>) -> !firrtl.const.uint<4>
+}
+}
+
+// -----
+
+// A 'const' bundle can only be created with 'const' operands
+firrtl.circuit "ConstBundleCreateNonConstOperands" {
+firrtl.module @ConstBundleCreateNonConstOperands(in %a: !firrtl.uint<1>) {
+  // expected-error @+1 {{type of element doesn't match bundle for field "a"}}
+  %0 = firrtl.bundlecreate %a : (!firrtl.uint<1>) -> !firrtl.const.bundle<a: uint<1>>
+}
+}
+
+// -----
+
+// A 'const' vector can only be created with 'const' operands
+firrtl.circuit "ConstVectorCreateNonConstOperands" {
+firrtl.module @ConstVectorCreateNonConstOperands(in %a: !firrtl.uint<1>) {
+  // expected-error @+1 {{type of element doesn't match vector element}}
+  %0 = firrtl.vectorcreate %a : (!firrtl.uint<1>) -> !firrtl.const.vector<uint<1>, 1>
+}
+}
+
+// -----
+
+// A 'const' enum can only be created with 'const' operands
+firrtl.circuit "ConstEnumCreateNonConstOperands" {
+firrtl.module @ConstEnumCreateNonConstOperands(in %a: !firrtl.uint<1>) {
+  // expected-error @+1 {{type of element doesn't match enum element}}
+  %0 = firrtl.enumcreate Some(%a) : (!firrtl.uint<1>) -> !firrtl.const.enum<None: uint<0>, Some: uint<1>>
+}
+}
+
+// -----
+
+// Enum types must be passive
+firrtl.circuit "EnumNonPassive" {
+  // expected-error @+1 {{enum field '"a"' not passive}}
+  firrtl.module @EnumNonPassive(in %a : !firrtl.enum<a: bundle<a flip: uint<1>>>) {
+  }
+}
+
+// -----
+
+// Enum types must not contain analog
+firrtl.circuit "EnumAnalog" {
+  // expected-error @+1 {{enum field '"a"' contains analog}}
+  firrtl.module @EnumAnalog(in %a : !firrtl.enum<a: analog<1>>) {
+  }
+}
+
+// -----
+
+// An enum that contains 'const' elements must be 'const'
+firrtl.circuit "NonConstEnumConstElements" {
+// expected-error @+1 {{enum with 'const' elements must be 'const'}}
+firrtl.module @NonConstEnumConstElements(in %a: !firrtl.enum<None: uint<0>, Some: const.uint<1>>) {}
+}

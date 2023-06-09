@@ -59,4 +59,27 @@ def OMSymbolRefAttr : AttrDef<OMDialect, "SymbolRef", [TypedAttrInterface]> {
   }];
 }
 
+def OMListAttr : AttrDef<OMDialect, "List", [TypedAttrInterface]> {
+  let summary = "An attribute that represents a list";
+
+  let mnemonic = "list";
+
+  let parameters = (ins
+    "mlir::Type": $elementType,
+    "mlir::ArrayAttr":$elements
+  );
+
+  // TODO: Use custom assembly format to infer an element type from elements.
+  let assemblyFormat = [{
+    `<` $elementType `,` $elements `>`
+  }];
+
+  let genVerifyDecl = 1;
+  let skipDefaultBuilders = 1;
+
+  let extraClassDeclaration = [{
+    mlir::Type getType();
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMATTRIBUTES_TD
