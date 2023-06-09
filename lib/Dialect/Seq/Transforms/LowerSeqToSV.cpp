@@ -184,7 +184,7 @@ private:
     OpBuilder builder(module.getBody());
     auto &constant = constantCache[value];
     if (constant) {
-      constant->setLoc(builder.getFusedLoc(constant->getLoc(), loc));
+      constant->setLoc(builder.getFusedLoc({constant->getLoc(), loc}));
       return constant;
     }
 
