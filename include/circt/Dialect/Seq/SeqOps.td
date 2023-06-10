@@ -15,6 +15,7 @@
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Seq/SeqAttributes.td"
 include "circt/Dialect/Seq/SeqOpInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 
 // Base class for the operation in this dialect.
 class SeqOp<string mnemonic, list<Trait> traits = []> :
