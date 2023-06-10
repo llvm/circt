@@ -85,6 +85,16 @@ void InferMemoriesPass::runOnOperation() {
       return signalPassFailure();
     }
 
+    // FIRRTL memories are currently underspecified. They have a single read
+    // latency, but it is unclear where within this latency the read of the
+    // underlying storage happens. The `HWMemSimImpl` pass implements memories
+    // such that the storage is probed at the very end of the latency, and that
+    // the probed value becomes available immediately. We keep the latencies
+    // configurable here, in the hopes that we'll improve our memory
+    // abstractions at some point.
+    unsigned readPreLatency = readLatency; // cycles before storage is read
+    unsigned readPostLatency = 0; // cycles to move read value to output
+
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
     auto wordType = builder.getIntegerType(width);
     auto addressTy = dyn_cast<IntegerType>(instOp.getOperand(0).getType());
@@ -101,9 +111,11 @@ void InferMemoriesPass::runOnOperation() {
     unsigned argIdx = 0;
     unsigned resultIdx = 0;
 
-    auto applyReadLatency = [&](Value clock, Value data) {
-      for (unsigned i = 0; i < readLatency; ++i)
-        data = builder.create<seq::CompRegOp>(data, clock, "mem_read_latency");
+    auto applyLatency = [&](Value clock, Value data, unsigned latency) {
+      for (unsigned i = 0; i < latency; ++i)
+        data = builder.create<seq::CompRegOp>(data, clock,
+                                              builder.getStringAttr(""),
+                                              Value{}, Value{}, StringAttr{});
       return data;
     };
 
@@ -145,15 +157,19 @@ void InferMemoriesPass::runOnOperation() {
         tap(data, "data");
       }
 
-      // NOTE: the result of a disabled read port is undefined, currently we
-      // define it to be zero.
+      // Apply the latency before the underlying storage is accessed.
+      address = applyLatency(clock, address, readPreLatency);
+      enable = applyLatency(clock, enable, readPreLatency);
+
+      // Read the underlying storage. (The result of a disabled read port is
+      // undefined, currently we define it to be zero.)
       Value readOp = builder.create<MemoryReadPortOp>(wordType, memOp, address);
       Value zero = builder.create<hw::ConstantOp>(wordType, 0);
       readOp = builder.create<comb::MuxOp>(enable, readOp, zero);
 
-      // NOTE: if the read-latency is 0, the memory read is combinatorial
-      // without any buffer
-      readOp = applyReadLatency(clock, readOp);
+      // Apply the latency after the underlying storage was accessed. (If the
+      // latency is 0, the memory read is combinatorial without any buffer.)
+      readOp = applyLatency(clock, readOp, readPostLatency);
       data.replaceAllUsesWith(readOp);
     }
 
@@ -189,11 +205,20 @@ void InferMemoriesPass::runOnOperation() {
         tap(readData, "rdata");
       }
 
-      // NOTE: the result of a disabled read port is undefined, currently we
-      // define it to be zero.
-      Value readOp = builder.create<MemoryReadPortOp>(wordType, memOp, address);
+      auto c1_i1 = builder.create<hw::ConstantOp>(builder.getI1Type(), 1);
+      auto notWriteMode = builder.create<comb::XorOp>(writeMode, c1_i1);
+      Value readEnable = builder.create<comb::AndOp>(enable, notWriteMode);
+
+      // Apply the latency before the underlying storage is accessed.
+      Value readAddress = applyLatency(clock, address, readPreLatency);
+      readEnable = applyLatency(clock, readEnable, readPreLatency);
+
+      // Read the underlying storage. (The result of a disabled read port is
+      // undefined, currently we define it to be zero.)
+      Value readOp =
+          builder.create<MemoryReadPortOp>(wordType, memOp, readAddress);
       Value zero = builder.create<hw::ConstantOp>(wordType, 0);
-      readOp = builder.create<comb::MuxOp>(enable, readOp, zero);
+      readOp = builder.create<comb::MuxOp>(readEnable, readOp, zero);
 
       if (writeMask) {
         unsigned maskWidth = writeMask.getType().cast<IntegerType>().getWidth();
@@ -207,9 +232,9 @@ void InferMemoriesPass::runOnOperation() {
             builder.create<comb::ConcatOp>(writeData.getType(), toConcat);
       }
 
-      // NOTE: if the read-latency is 0, the memory read is combinatorial
-      // without any buffer
-      readOp = applyReadLatency(clock, readOp);
+      // Apply the latency after the underlying storage was accessed. (If the
+      // latency is 0, the memory read is combinatorial without any buffer.)
+      readOp = applyLatency(clock, readOp, readPostLatency);
       readData.replaceAllUsesWith(readOp);
 
       auto writeEnable = builder.create<comb::AndOp>(enable, writeMode);
