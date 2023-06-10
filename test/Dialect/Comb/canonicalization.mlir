@@ -326,14 +326,15 @@ hw.module @subCst(%a: i4) -> (o1: i4) {
 }
 
 // CHECK-LABEL: @addConstAndConst
-hw.module @addConstAndConst(%a: i4) -> (o1: i4) {
-// CHECK-NEXT: %c3_i4 = hw.constant 3 : i4
-// CHECK-NEXT: %0 = comb.add %a, %c3_i4 : i4
+hw.module @addConstAndConst(%a: i4) -> (o1: i4, o2: i4) {
+// CHECK: %c3_i4 = hw.constant 3 : i4
+// CHECK: [[RESULT:%.+]] = comb.add %a, %c3_i4 : i4
+// CHECK: hw.output [[RESULT]]
   %c1 = hw.constant 1 : i4
   %c2 = hw.constant 2 : i4
   %b = comb.add %a, %c1 : i4
   %c = comb.add %b, %c2 : i4
-  hw.output %c : i4
+  hw.output %c, %b : i4, i4
 }
 
 // Validates that when there is a matching suffix, and prefix, both of them are removed
