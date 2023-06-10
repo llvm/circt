@@ -64,6 +64,10 @@ def InferMemories : Pass<"arc-infer-memories", "mlir::ModuleOp"> {
   let dependentDialects = [
     "arc::ArcDialect", "comb::CombDialect", "seq::SeqDialect"
   ];
+  let options = [
+    Option<"tapPorts", "tap-ports", "bool", "true",
+      "Make memory ports observable">,
+  ];
 }
 
 def InlineArcs : Pass<"arc-inline" , "mlir::ModuleOp"> {

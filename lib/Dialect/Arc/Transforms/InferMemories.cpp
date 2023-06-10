@@ -22,9 +22,12 @@ using namespace arc;
 namespace {
 struct InferMemoriesPass : public InferMemoriesBase<InferMemoriesPass> {
   void runOnOperation() override;
+
   SmallVector<Operation *> opsToDelete;
   SmallPtrSet<StringAttr, 2> schemaNames;
   DenseMap<StringAttr, DictionaryAttr> memoryParams;
+
+  using InferMemoriesBase::tapPorts;
 };
 } // namespace
 
@@ -107,6 +110,17 @@ void InferMemoriesPass::runOnOperation() {
     SmallVector<std::tuple<Value, Value, SmallVector<Value>, bool, bool>>
         writePorts;
 
+    // Use `<inst-name>/` as the prefix for all port taps.
+    SmallString<64> tapPrefix(instOp.getInstanceName());
+    if (!tapPrefix.empty())
+      tapPrefix.push_back('/');
+    auto tapPrefixBaseLen = tapPrefix.size();
+
+    auto tap = [&](Value value, const Twine &name) {
+      auto prefixedName = builder.getStringAttr(tapPrefix + "_" + name);
+      builder.create<arc::TapOp>(value, prefixedName);
+    };
+
     // Handle read ports.
     auto numReadPorts =
         params.getAs<IntegerAttr>("numReadPorts").getValue().getZExtValue();
@@ -120,6 +134,15 @@ void InferMemoriesPass::runOnOperation() {
         instOp.emitOpError("expected ")
             << addressTy << ", but got " << address.getType();
         return signalPassFailure();
+      }
+
+      // Add port taps.
+      if (tapPorts) {
+        tapPrefix.resize(tapPrefixBaseLen);
+        (Twine("R") + Twine(portIdx)).toVector(tapPrefix);
+        tap(address, "addr");
+        tap(enable, "en");
+        tap(data, "data");
       }
 
       // NOTE: the result of a disabled read port is undefined, currently we
@@ -151,6 +174,19 @@ void InferMemoriesPass::runOnOperation() {
         instOp.emitOpError("expected ")
             << addressTy << ", but got " << address.getType();
         return signalPassFailure();
+      }
+
+      // Add port taps.
+      if (tapPorts) {
+        tapPrefix.resize(tapPrefixBaseLen);
+        (Twine("RW") + Twine(portIdx)).toVector(tapPrefix);
+        tap(address, "addr");
+        tap(enable, "en");
+        tap(writeMode, "wmode");
+        tap(writeData, "wdata");
+        if (writeMask)
+          tap(writeMask, "wmask");
+        tap(readData, "rdata");
       }
 
       // NOTE: the result of a disabled read port is undefined, currently we
@@ -199,6 +235,17 @@ void InferMemoriesPass::runOnOperation() {
         return signalPassFailure();
       }
 
+      // Add port taps.
+      if (tapPorts) {
+        tapPrefix.resize(tapPrefixBaseLen);
+        (Twine("W") + Twine(portIdx)).toVector(tapPrefix);
+        tap(address, "addr");
+        tap(enable, "en");
+        tap(data, "data");
+        if (mask)
+          tap(mask, "mask");
+      }
+
       if (mask) {
         unsigned maskWidth = mask.getType().cast<IntegerType>().getWidth();
         SmallVector<Value> toConcat;
@@ -243,6 +290,10 @@ void InferMemoriesPass::runOnOperation() {
     op->erase();
 }
 
-std::unique_ptr<Pass> arc::createInferMemoriesPass() {
-  return std::make_unique<InferMemoriesPass>();
+std::unique_ptr<Pass>
+arc::createInferMemoriesPass(std::optional<bool> tapPorts) {
+  auto pass = std::make_unique<InferMemoriesPass>();
+  if (tapPorts)
+    pass->tapPorts = *tapPorts;
+  return pass;
 }

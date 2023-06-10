@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --arc-infer-memories | FileCheck %s
+// RUN: circt-opt %s --arc-infer-memories=tap-ports=0 | FileCheck %s
 
 hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "maskGran", "readUnderWrite", "writeUnderWrite", "writeClockIDs"]
 

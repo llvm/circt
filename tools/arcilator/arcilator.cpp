@@ -174,7 +174,7 @@ static void populatePipeline(PassManager &pm) {
   pm.addPass(
       arc::createAddTapsPass(observePorts, observeWires, observeNamedValues));
   pm.addPass(arc::createStripSVPass());
-  pm.addPass(arc::createInferMemoriesPass());
+  pm.addPass(arc::createInferMemoriesPass(observePorts));
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 

@@ -28,7 +28,8 @@ std::unique_ptr<mlir::Pass> createAllocateStatePass();
 std::unique_ptr<mlir::Pass> createArcCanonicalizerPass();
 std::unique_ptr<mlir::Pass> createDedupPass();
 std::unique_ptr<mlir::Pass> createGroupResetsAndEnablesPass();
-std::unique_ptr<mlir::Pass> createInferMemoriesPass();
+std::unique_ptr<mlir::Pass>
+createInferMemoriesPass(std::optional<bool> tapPorts = {});
 std::unique_ptr<mlir::Pass> createInferStatePropertiesPass();
 std::unique_ptr<mlir::Pass> createInlineArcsPass();
 std::unique_ptr<mlir::Pass> createInlineModulesPass();
