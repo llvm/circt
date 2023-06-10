@@ -24,7 +24,7 @@ hw.module @TestWOMemoryWithMask(%clock: i1, %addr: i10, %enable: i1, %data: i16,
   // CHECK-NEXT: [[MASK_BYTE0:%.+]] = comb.replicate [[MASK_BIT0]] : (i1) -> i8
   // CHECK-NEXT: [[MASK_BIT1:%.+]] = comb.extract %mask from 1 : (i2) -> i1
   // CHECK-NEXT: [[MASK_BYTE1:%.+]] = comb.replicate [[MASK_BIT1]] : (i1) -> i8
-  // CHECK-NEXT: [[MASK:%.+]] = comb.concat [[MASK_BYTE0]], [[MASK_BYTE1]]
+  // CHECK-NEXT: [[MASK:%.+]] = comb.concat [[MASK_BYTE1]], [[MASK_BYTE0]]
   // CHECK-NEXT: arc.memory_write_port [[FOO]], @mem_write{{.*}}(%addr, %data, %enable, [[MASK]]) clock %clock enable mask lat 1 : <1024 x i16, i10>, i10, i16, i1, i16
   // CHECK-NEXT: hw.output
   hw.instance "foo" @WOMemoryWithMask(W0_addr: %addr: i10, W0_en: %enable: i1, W0_clk: %clock: i1, W0_data: %data: i16, W0_mask: %mask: i2) -> ()

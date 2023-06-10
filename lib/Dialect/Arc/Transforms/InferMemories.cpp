@@ -228,6 +228,7 @@ void InferMemoriesPass::runOnOperation() {
           Value replicated = builder.create<comb::ReplicateOp>(bit, maskGran);
           toConcat.push_back(replicated);
         }
+        std::reverse(toConcat.begin(), toConcat.end()); // I hate concat
         writeMask =
             builder.create<comb::ConcatOp>(writeData.getType(), toConcat);
       }
@@ -279,6 +280,7 @@ void InferMemoriesPass::runOnOperation() {
           Value replicated = builder.create<comb::ReplicateOp>(bit, maskGran);
           toConcat.push_back(replicated);
         }
+        std::reverse(toConcat.begin(), toConcat.end()); // I hate concat
         mask = builder.create<comb::ConcatOp>(data.getType(), toConcat);
       }
       SmallVector<Value> inputs({address, data});
