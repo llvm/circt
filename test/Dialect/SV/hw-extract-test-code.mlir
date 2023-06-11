@@ -170,8 +170,8 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // CHECK: hw.instance "{{[^ ]+}}" sym @[[input_only_assert:[^ ]+]] @InputOnly_assert
 // CHECK: hw.instance "{{[^ ]+}}" sym @[[input_only_cover:[^ ]+]] @InputOnly_cover
 // CHECK: hw.instance "{{[^ ]+}}" {{.+}} @InputOnlySym
-// CHECK: %0 = comb.and %1
-// CHECK: %1 = comb.and %0
+// CHECK-NOT: %0 = comb.and %1
+// CHECK-NOT: %1 = comb.and %0
 // CHECK: hw.instance "{{[^ ]+}}" {{.+}} @InputOnlyCycle_cover
 // CHECK: hw.instance {{.*}} sym @[[already_bound:[^ ]+]] @AlreadyBound
 // CHECK-NOT: sv.bind <@InputOnly::
@@ -196,7 +196,8 @@ module {
   }
 
   hw.module private @InputOnlyCycle(%clock: i1, %cond: i1) -> () {
-    // Arbitrary code that won't be extracted, should be inlined, and has a cycle.
+    // Arbitrary code that won't be extracted, should be dead in the input only module.
+    // Make sure to delete them.
     %0 = comb.and %1 : i1
     %1 = comb.and %0 : i1
 
@@ -234,10 +235,15 @@ module {
 // CHECK: hw.instance "baz"
 
 // In SomeExtracted, only instance baz should be extracted.
+// Check that a dead external module bozo and its operand are still alive.
 // CHECK-LABEL: @SomeExtracted_cover
 // CHECK-NOT: hw.instance "foo"
 // CHECK-NOT: hw.instance "bar"
+// CHECK-NOT: hw.instance "bozo"
 // CHECK: hw.instance "baz"
+// CHECK-LABEL: @SomeExtracted
+// CHECK: comb.and
+// CHECK: hw.instance "bozo"
 
 // In CycleExtracted, instance foo should be extracted despite combinational cycle.
 // CHECK-LABEL: @CycleExtracted_cover
@@ -317,10 +323,13 @@ module {
     %foo.b = hw.instance "foo" @Foo(a: %in: i1) -> (b: i1)
     %bar.b = hw.instance "bar" @Bar(a: %in: i1) -> (b: i1)
     %baz.b = hw.instance "baz" @Baz(a: %in: i1) -> (b: i1)
+    %and = comb.and %in, %clock: i1
+    %bozo = hw.instance "bozo" @Bozo(a: %and: i1) -> (b: i1)
     sv.always posedge %clock {
       sv.cover %foo.b, immediate
       sv.cover %bar.b, immediate
       sv.cover %baz.b, immediate
+      sv.cover %and, immediate
     }
     hw.output %foo.b, %bar.b : i1, i1
   }
