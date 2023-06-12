@@ -272,6 +272,27 @@ def MatchOp : FIRRTLOp<"match", [SingleBlock, NoTerminator,
   }];
 }
 
+def PropAssignOp : FIRRTLOp<"passign", [FConnectLike, SameTypeOperands,
+                                        HasParent<"FModuleOp">]> {
+  let summary = "Assign to a sink property value.";
+  let description = [{
+    Assign an output property value. The types must match exactly.
+
+    Example:
+    ```mlir
+      firrtl.passign %dest, %src : !firrtl.string
+    ```
+    }];
+  let arguments = (ins PropertyType:$dest, PropertyType:$src);
+  let results = (outs);
+  let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($dest))";
+  let extraClassDeclaration = [{
+    static ConnectBehaviorKind getConnectBehaviorKind() {
+      return ConnectBehaviorKind::StaticSingleConnect;
+    }
+  }];
+}
+
 def ForceOp : FIRRTLOp<"force", [SameTypeOperands]> {
   let summary = "Force procedural statement";
   let description = "Maps to the corresponding `sv.force` operation.";

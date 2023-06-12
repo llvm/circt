@@ -78,10 +78,6 @@ def OpenVectorType : FIRRTLDialectType<CPred<"$_self.isa<OpenVectorType>()">,
 def FEnumType : FIRRTLDialectType<CPred<"$_self.isa<FEnumType>()">,
  "FEnumType", "::circt::firrtl::FEnumType">;
 
-def StringType : FIRRTLDialectType<CPred<"$_self.isa<StringType>()">,
-  "StringType", "::circt::firrtl::StringType">,
-  BuildableType<"::circt::firrtl::StringType::get($_builder.getContext())">;
-
 def AggregateType : FIRRTLDialectType<
   Or<[
     CPred<"$_self.isa<FVectorType>()">,
@@ -116,7 +112,7 @@ def RWProbe : FIRRTLDialectType<
    "rwprobe type", "::circt::firrtl::RefType">;
 
 // TODO: When Refs can appear within Base, need to disallow that too.
-def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType, StringType]>;
+def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;
 def StrictConnectableType : AnyTypeOf<[PassiveType, ForeignType]>;
 
 //===----------------------------------------------------------------------===//
@@ -195,5 +191,19 @@ class RefResultTypeConstraint<string base, string ref>
   : TypesMatchWith<"reference base type should match",
                    base, ref,
                    "RefType::get($_self.cast<FIRRTLBaseType>().getPassiveType())">;
+
+//===----------------------------------------------------------------------===//
+// Property Types
+//===----------------------------------------------------------------------===//
+
+def PropertyType : FIRRTLDialectType<
+  CPred<"$_self.isa<PropertyType>()">,
+  "a property type", "::circt::firrtl::PropertyType", [{
+    A FIRRTL property type, such as a string.
+  }]>;
+
+def StringType : FIRRTLDialectType<CPred<"$_self.isa<StringType>()">,
+  "StringType", "::circt::firrtl::StringType">,
+  BuildableType<"::circt::firrtl::StringType::get($_builder.getContext())">;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD
