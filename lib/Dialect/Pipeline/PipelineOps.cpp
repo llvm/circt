@@ -83,12 +83,20 @@ void ScheduledPipelineOp::build(mlir::OpBuilder &odsBuilder,
                                 mlir::OperationState &odsState,
                                 ::mlir::TypeRange results,
                                 mlir::ValueRange inputs, mlir::Value clock,
-                                mlir::Value reset) {
+                                mlir::Value reset, mlir::Value stall) {
   odsState.addOperands(inputs);
   odsState.addOperands(clock);
   odsState.addOperands(reset);
+  if (stall)
+    odsState.addOperands(stall);
   auto *region = odsState.addRegion();
   odsState.addTypes(results);
+
+  odsState.addAttribute(
+      "operand_segment_sizes",
+      odsBuilder.getDenseI32ArrayAttr(
+          {static_cast<int32_t>(inputs.size()), static_cast<int32_t>(1),
+           static_cast<int32_t>(1), static_cast<int32_t>(stall ? 1 : 0)}));
 
   // Add the entry stage
   auto &entryBlock = region->emplaceBlock();

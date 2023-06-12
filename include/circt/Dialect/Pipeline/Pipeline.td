@@ -35,7 +35,8 @@ def UnscheduledPipelineOp : Op<Pipeline_Dialect, "unscheduled", [
     SingleBlockImplicitTerminator<"ReturnOp">,
     RegionKindInterface,
     HasOnlyGraphRegion,
-    PipelineLike
+    PipelineLike,
+    AttrSizedOperandSegments
   ]> {
   
   let summary = "unscheduled pipeline operation";
@@ -84,7 +85,8 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
     IsolatedFromAbove,
     Pure,
     RegionKindInterface,
-    PipelineLike
+    PipelineLike,
+    AttrSizedOperandSegments
   ]> {
   let summary = "Scheduled pipeline operation";
   let description = [{
@@ -111,7 +113,7 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
   }];
 
   let arguments = (ins
-    Variadic<AnyType>:$inputs, I1:$clock, I1:$reset
+    Variadic<AnyType>:$inputs, I1:$clock, I1:$reset, Optional<I1>:$stall
   );
   let results = (outs Variadic<AnyType>:$results);
   let regions = (region AnyRegion:$body);
@@ -119,8 +121,8 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
   let hasVerifier = 1;
 
   let builders = [
-    OpBuilder<(ins "TypeRange":$results, "ValueRange":$inputs, "Value":$clock,
-      "Value":$reset, Optional<I1>:$stall)>
+    OpBuilder<(ins
+      "TypeRange":$results, "ValueRange":$inputs, "Value":$clock, "Value":$reset, CArg<"Value", "{}">:$stall)>
   ];
 
   let assemblyFormat = [{
