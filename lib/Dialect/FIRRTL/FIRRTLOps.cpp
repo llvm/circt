@@ -2484,13 +2484,57 @@ LogicalResult ConnectOp::verify() {
   return success();
 }
 
+// strictconnect %dest, %src attr-dict : type(%dest) ^(, type(%src))
+ParseResult StrictConnectOp::parse(OpAsmParser &parser,
+                                   OperationState &result) {
+  OpAsmParser::UnresolvedOperand dest, src;
+  Type destType, srcType;
+
+  if (parser.parseOperand(dest) || parser.parseComma() ||
+      parser.parseOperand(src) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(destType) ||
+      parser.resolveOperand(dest, destType, result.operands))
+    return failure();
+
+  if (parser.parseOptionalComma()) {
+    srcType = destType;
+  } else {
+    if (parser.parseType(srcType))
+      return failure();
+  }
+
+  if (parser.resolveOperand(src, srcType, result.operands))
+    return failure();
+
+  return success();
+}
+
+void StrictConnectOp::print(OpAsmPrinter &odsPrinter) {
+  odsPrinter << ' ';
+  odsPrinter << getDest();
+  odsPrinter << ", ";
+  odsPrinter << getSrc();
+  odsPrinter.printOptionalAttrDict((*this)->getAttrs(), {});
+  odsPrinter << " : ";
+  odsPrinter << getDest().getType();
+  // If operand types are not same, print a src type.
+  if (getDest().getType() != getSrc().getType())
+    odsPrinter << ", " << getSrc().getType();
+}
+
 LogicalResult StrictConnectOp::verify() {
   if (auto type = getDest().getType().dyn_cast<FIRRTLType>()) {
-    auto baseType = firrtl::type_dyn_cast<FIRRTLBaseType>(type);
+    auto baseType = cast<FIRRTLBaseType>(type);
 
     // Analog types cannot be connected and must be attached.
     if (baseType && baseType.containsAnalog())
       return emitError("analog types may not be connected");
+
+    // Operands must be structually equivalent.
+    if (getSrc().getType().cast<FIRRTLBaseType>().getAnonymousType() !=
+        getDest().getType().cast<FIRRTLBaseType>().getAnonymousType())
+      return failure();
   }
 
   // Check that the flows make sense.
