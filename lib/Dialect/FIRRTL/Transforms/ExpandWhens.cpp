@@ -197,7 +197,7 @@ public:
     // Recurse through a bundle and declare each leaf sink node.
     std::function<void(Type, Flow)> declare = [&](Type type, Flow flow) {
       // If this is a bundle type, recurse to each of the fields.
-      if (auto bundleType = type.dyn_cast<BundleType>()) {
+      if (auto bundleType = type_dyn_cast<BundleType>(type)) {
         for (auto &element : bundleType.getElements()) {
           id++;
           if (element.isFlip)
@@ -209,7 +209,7 @@ public:
       }
 
       // If this is a vector type, recurse to each of the elements.
-      if (auto vectorType = type.dyn_cast<FVectorType>()) {
+      if (auto vectorType = type_dyn_cast<FVectorType>(type)) {
         for (unsigned i = 0; i < vectorType.getNumElements(); ++i) {
           id++;
           declare(vectorType.getElementType(), flow);
@@ -218,7 +218,7 @@ public:
       }
 
       // If this is an analog type, it does not need to be tracked.
-      if (auto analogType = type.dyn_cast<AnalogType>())
+      if (auto analogType = type_dyn_cast<AnalogType>(type))
         return;
 
       // If it is a leaf node with Flow::Sink or Flow::Duplex, it must be
@@ -226,10 +226,7 @@ public:
       if (flow != Flow::Source)
         driverMap[{value, id}] = nullptr;
     };
-    declare(isa<FIRRTLBaseType>(type)
-                ? cast<FIRRTLBaseType>(type).getAnonymousType()
-                : type,
-            flow);
+    declare(type, flow);
   }
 
   /// Take two connection operations and merge them into a new connect under a
@@ -267,7 +264,7 @@ public:
   /// And then apply function `fn`.
   void foreachSubelement(OpBuilder &builder, Value value,
                          llvm::function_ref<void(Value)> fn) {
-    TypeSwitch<Type>(value.getType())
+    FIRRTLTypeSwitch<Type>(value.getType())
         .template Case<BundleType>([&](BundleType bundle) {
           for (auto i : llvm::seq(0u, (unsigned)bundle.getNumElements())) {
             auto subfield =

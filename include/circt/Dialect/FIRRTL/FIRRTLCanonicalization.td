@@ -42,7 +42,7 @@ def NonEmptyAttr : Constraint<CPred<"!$0.getValue().empty()">>;
 def NullAttr : Constraint<CPred<"!$0">>;
 
 // Constraint that enforces equal types
-def EqualTypes : Constraint<CPred<"$0.getType() == $1.getType()">>;
+def EqualTypes : Constraint<CPred<"areTypesStructuallyEquivalent($0.getType(), $1.getType())">>;
 
 // Constraint that enforces int types
 def IntTypes : Constraint<CPred<"firrtl::type_isa<IntType>($0)">>;
@@ -54,7 +54,7 @@ def SIntTypes : Constraint<CPred<"firrtl::type_isa<SIntType>($0)">>;
 def UIntTypes : Constraint<CPred<"firrtl::type_isa<UIntType>($0)">>;
 
 // Constraint that enforces types mismatches
-def mismatchTypes : Constraint<CPred<"$0.getType() != $1.getType()">>;
+def mismatchTypes : Constraint<CPred<"!areTypesStructuallyEquivalent($0.getType(), $1.getType())">>;
 
 // Constraint that enforces types of known width
 def KnownWidth : Constraint<CPred<[{

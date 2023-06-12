@@ -43,8 +43,8 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   }
 
   // If the types are the exact same we can just connect them.
-  if (dstType == srcType && dstType.isPassive() &&
-      !dstType.hasUninferredWidth()) {
+  if (dstType.getAnonymousType() == srcType.getAnonymousType() &&
+      dstType.isPassive() && !dstType.hasUninferredWidth()) {
     builder.create<StrictConnectOp>(dst, src);
     return;
   }
@@ -129,14 +129,6 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     src = builder.create<ConstCastOp>(dstType, src);
   }
 
-  if (src.getType().isa<BaseTypeAliasType>() ||
-      dstType.isa<BaseTypeAliasType>()) {
-    // TODO: Relax StrictConnect verifier to accept structually equivalent
-    // types.
-    builder.create<ConnectOp>(dst, src);
-    return;
-  }
-
   // Strict connect requires the types to be completely equal, including
   // connecting uint<1> to abstract reset types.
   assert("Connect Types are equal" && dstType == src.getType());
@@ -144,7 +136,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 }
 
 IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {
-  auto intType = firrtl::type_cast<IntType>(type);
+  auto intType = type_cast<IntType>(type);
   assert((!intType.hasWidth() ||
           (unsigned)intType.getWidthOrSentinel() == value.getBitWidth()) &&
          "value / type width mismatch");
@@ -158,14 +150,14 @@ IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {
 /// Return an IntegerAttr filled with zeros for the specified FIRRTL integer
 /// type. This handles both the known width and unknown width case.
 IntegerAttr circt::firrtl::getIntZerosAttr(Type type) {
-  int32_t width = abs(firrtl::type_cast<IntType>(type).getWidthOrSentinel());
+  int32_t width = abs(type_cast<IntType>(type).getWidthOrSentinel());
   return getIntAttr(type, APInt(width, 0));
 }
 
 /// Return an IntegerAttr filled with ones for the specified FIRRTL integer
 /// type. This handles both the known width and unknown width case.
 IntegerAttr circt::firrtl::getIntOnesAttr(Type type) {
-  int32_t width = abs(firrtl::type_cast<IntType>(type).getWidthOrSentinel());
+  int32_t width = abs(type_cast<IntType>(type).getWidthOrSentinel());
   return getIntAttr(type, APInt(width, -1));
 }
 
@@ -571,7 +563,7 @@ circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
     if (auto refTy = dyn_cast<RefType>(type))
       type = refTy.getType();
 
-    if (auto bundleType = firrtl::type_dyn_cast<BundleType>(type)) {
+    if (auto bundleType = type_dyn_cast<BundleType>(type)) {
       auto index = bundleType.getIndexForFieldID(localID);
       // Add the current field string, and recurse into a subfield.
       auto &element = bundleType.getElements()[index];
@@ -581,7 +573,7 @@ circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
       // Recurse in to the element type.
       type = element.type;
       localID = localID - bundleType.getFieldID(index);
-    } else if (auto vecType = firrtl::type_dyn_cast<FVectorType>(type)) {
+    } else if (auto vecType = type_dyn_cast<FVectorType>(type)) {
       auto index = vecType.getIndexForFieldID(localID);
       name += nameSafe ? "_" : "[";
       name += std::to_string(index);
@@ -871,14 +863,14 @@ circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
 /// Non-FIRRTL types are simply passed through. This returns a null type if it
 /// cannot be lowered.
 Type circt::firrtl::lowerType(Type type) {
-  auto firType = firrtl::type_dyn_cast<FIRRTLBaseType>(type);
+  auto firType = type_dyn_cast<FIRRTLBaseType>(type);
   if (!firType)
     return type;
 
   // Ignore flip types.
   firType = firType.getPassiveType();
 
-  if (auto bundle = firrtl::type_dyn_cast<BundleType>(firType)) {
+  if (auto bundle = type_dyn_cast<BundleType>(firType)) {
     mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
     for (auto element : bundle) {
       Type etype = lowerType(element.type);
@@ -888,13 +880,13 @@ Type circt::firrtl::lowerType(Type type) {
     }
     return hw::StructType::get(type.getContext(), hwfields);
   }
-  if (auto vec = firrtl::type_dyn_cast<FVectorType>(firType)) {
+  if (auto vec = type_dyn_cast<FVectorType>(firType)) {
     auto elemTy = lowerType(vec.getElementType());
     if (!elemTy)
       return {};
     return hw::ArrayType::get(elemTy, vec.getNumElements());
   }
-  if (auto fenum = firrtl::type_dyn_cast<FEnumType>(firType)) {
+  if (auto fenum = type_dyn_cast<FEnumType>(firType)) {
     mlir::SmallVector<hw::UnionType::FieldInfo, 8> hwfields;
     SmallVector<Attribute> names;
     bool simple = true;
@@ -904,7 +896,7 @@ Type circt::firrtl::lowerType(Type type) {
         return {};
       hwfields.push_back(hw::UnionType::FieldInfo{element.name, etype, 0});
       names.push_back(element.name);
-      if (!firrtl::type_isa<UIntType>(element.type) ||
+      if (!type_isa<UIntType>(element.type) ||
           element.type.getBitWidthOrSentinel() != 0)
         simple = false;
     }

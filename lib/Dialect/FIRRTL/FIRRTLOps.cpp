@@ -418,9 +418,9 @@ LogicalResult CircuitOp::verifyRegions() {
       if (!extModule.getParameters().empty() ||
           !collidingExtModule.getParameters().empty()) {
         // Compare base types as widthless, others must match.
-        if (auto base = firrtl::type_dyn_cast<FIRRTLBaseType>(aType))
+        if (auto base = type_dyn_cast<FIRRTLBaseType>(aType))
           aType = base.getWidthlessType();
-        if (auto base = firrtl::type_dyn_cast<FIRRTLBaseType>(bType))
+        if (auto base = type_dyn_cast<FIRRTLBaseType>(bType))
           bType = base.getWidthlessType();
       }
       if (aType != bType)
@@ -1825,8 +1825,8 @@ LogicalResult MemOp::verify() {
     // Get a bundle type representing this port, stripping an outer
     // flip if it exists.  If this is not a bundle<> or
     // flip<bundle<>>, then this is an error.
-    BundleType portBundleType = firrtl::type_dyn_cast<BundleType>(
-        getResult(i).getType().cast<FIRRTLType>());
+    BundleType portBundleType =
+        type_dyn_cast<BundleType>(getResult(i).getType().cast<FIRRTLType>());
 
     // Require that all port names are unique.
     if (!portNamesSet.insert(portName).second) {
@@ -1850,7 +1850,7 @@ LogicalResult MemOp::verify() {
         !getResult(i).getType().isa<RefType>())
       return emitOpError() << "has an invalid type on port " << portName
                            << " (expected Read/Write/ReadWrite/Debug)";
-    if (firrtl::type_isa<RefType>(firrtlType) && e == 1)
+    if (type_isa<RefType>(firrtlType) && e == 1)
       return emitOpError()
              << "cannot have only one port of debug type. Debug port can only "
                 "exist alongside other read/write/read-write port";
@@ -1904,7 +1904,7 @@ LogicalResult MemOp::verify() {
     // Compute the original port type as portBundleType may have
     // stripped outer flip information.
     auto originalType = getResult(i).getType();
-    if (originalType != expectedType) {
+    if (!areTypesStructuallyEquivalent(originalType, expectedType)) {
       StringRef portKindName;
       switch (portKind) {
       case MemOp::PortKind::Read:
@@ -1929,7 +1929,7 @@ LogicalResult MemOp::verify() {
 
     // Error if the type of the current port was not the same as the
     // last port, but skip checking the first port.
-    if (oldDataType && oldDataType != dataType) {
+    if (oldDataType && !areTypesStructuallyEquivalent(oldDataType, dataType)) {
       emitOpError() << "port " << getPortName(i)
                     << " has a different type than port " << getPortName(i - 1)
                     << " (expected " << oldDataType << ", but got " << dataType
@@ -2040,8 +2040,7 @@ size_t MemOp::getMaskBits() {
       continue;
 
     FIRRTLBaseType mType;
-    for (auto t :
-         type_cast<BundleType>(firstPortType.getPassiveType())) {
+    for (auto t : type_cast<BundleType>(firstPortType.getPassiveType())) {
       if (t.name.getValue().contains("mask"))
         mType = t.type;
     }
@@ -2281,8 +2280,7 @@ LogicalResult AttachOp::verify() {
   // All known widths must match.
   std::optional<int32_t> commonWidth;
   for (auto operand : getOperands()) {
-    auto thisWidth =
-        type_cast<AnalogType>(operand.getType()).getWidth();
+    auto thisWidth = type_cast<AnalogType>(operand.getType()).getWidth();
     if (!thisWidth)
       continue;
     if (!commonWidth) {
@@ -2832,11 +2830,16 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
     return parser.emitError(loc, "expected integer value");
 
   // Parse the result firrtl integer type.
-  IntType resultType;
-  if (failed(*valueResult) || parser.parseColonType(resultType) ||
-      parser.parseOptionalAttrDict(result.attributes))
+  FIRRTLBaseType resultBaseType;
+  if (failed(*valueResult))
     return failure();
-  result.addTypes(resultType);
+  if (parser.parseColonType(resultBaseType) ||
+      !type_isa<IntType>(resultBaseType))
+    return parser.emitError(loc, "expected an integer type");
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+  auto resultType = type_cast<IntType>(resultBaseType);
+  result.addTypes(resultBaseType);
 
   // Now that we know the width and sign of the result type, we can munge the
   // APInt as appropriate.
@@ -3628,8 +3631,8 @@ FIRRTLType impl::inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
 
   if (lhsWidth != -1 && rhsWidth != -1)
     resultWidth = std::max(lhsWidth, rhsWidth) + 1;
-  return IntType::get(lhs.getContext(), type_isa<SIntType>(lhs),
-                      resultWidth, isConstResult);
+  return IntType::get(lhs.getContext(), type_isa<SIntType>(lhs), resultWidth,
+                      isConstResult);
 }
 
 FIRRTLType MulPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
@@ -3642,8 +3645,8 @@ FIRRTLType MulPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
   if (lhsWidth != -1 && rhsWidth != -1)
     resultWidth = lhsWidth + rhsWidth;
 
-  return IntType::get(lhs.getContext(), type_isa<SIntType>(lhs),
-                      resultWidth, isConstResult);
+  return IntType::get(lhs.getContext(), type_isa<SIntType>(lhs), resultWidth,
+                      isConstResult);
 }
 
 FIRRTLType DivPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
@@ -3671,8 +3674,8 @@ FIRRTLType RemPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 
   if (lhsWidth != -1 && rhsWidth != -1)
     resultWidth = std::min(lhsWidth, rhsWidth);
-  return IntType::get(lhs.getContext(), type_isa<SIntType>(lhs),
-                      resultWidth, isConstResult);
+  return IntType::get(lhs.getContext(), type_isa<SIntType>(lhs), resultWidth,
+                      isConstResult);
 }
 
 FIRRTLType impl::inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
@@ -3689,8 +3692,7 @@ FIRRTLType impl::inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
 
 FIRRTLType impl::inferElementwiseResult(FIRRTLType lhs, FIRRTLType rhs,
                                         std::optional<Location> loc) {
-  if (!type_isa<FVectorType>(lhs) ||
-      !type_isa<FVectorType>(rhs))
+  if (!type_isa<FVectorType>(lhs) || !type_isa<FVectorType>(rhs))
     return {};
 
   auto lhsVec = type_cast<FVectorType>(lhs);
@@ -4192,8 +4194,7 @@ LogicalResult HWStructCastOp::verify() {
   // We must have a bundle and a struct, with matching pairwise fields
   BundleType bundleType;
   hw::StructType structType;
-  if ((bundleType =
-           type_dyn_cast<BundleType>(getOperand().getType()))) {
+  if ((bundleType = type_dyn_cast<BundleType>(getOperand().getType()))) {
     structType = getType().dyn_cast<hw::StructType>();
     if (!structType)
       return emitError("result type must be a struct");

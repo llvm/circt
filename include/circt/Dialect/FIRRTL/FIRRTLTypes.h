@@ -363,6 +363,13 @@ struct DenseMapInfo<circt::firrtl::FIRRTLType> {
 namespace circt {
 namespace firrtl {
 
+using FIRRTLValue = mlir::TypedValue<FIRRTLType>;
+using FIRRTLBaseValue = mlir::TypedValue<firrtl::FIRRTLBaseType>;
+
+//===--------------------------------------------------------------------===//
+// Convenience methods for dealing with type aliases
+//===--------------------------------------------------------------------===//
+
 template <typename... BaseTy>
 bool type_isa(Type type) { // NOLINT(readability-identifier-naming)
   // First check if the type is the requested type.
@@ -431,18 +438,13 @@ public:
   BaseTy get() const { return circt::firrtl::type_cast<BaseTy>(*this); }
 };
 
+//===--------------------------------------------------------------------===//
+// Type alias aware TypeSwitch.
+//===--------------------------------------------------------------------===//
 
-
-using FIRRTLValue = mlir::TypedValue<FIRRTLType>;
-using FIRRTLBaseValue = mlir::TypedValue<firrtl::FIRRTLBaseType>;
-} // namespace firrtl
-} // namespace circt
-namespace circt {
-/// This class implements a switch-like dispatch statement for a value of 'T'
-/// using FIRRTL type cast functionality. Each `Case<T>` takes a callable to be invoked
-/// if the root value isa<T>, the callable is invoked with the result of
-/// dyn_cast<T>() as a parameter.
-///
+/// This class implements the same functionality as TypeSwitch except that
+/// it uses firrtl::type_dyn_cast for dynamic cast. llvm::TypeSwitch is not
+/// customizable so this class currently duplicates the code.
 template <typename T, typename ResultT = void>
 class FIRRTLTypeSwitch
     : public llvm::detail::TypeSwitchBase<FIRRTLTypeSwitch<T, ResultT>, T> {
@@ -458,7 +460,7 @@ public:
     if (result)
       return *this;
 
-    // Check to see if CaseT applies to 'value'.
+    // Check to see if CaseT applies to 'value'. Use `type_dyn_cast` here.
     if (auto caseValue = circt::firrtl::type_dyn_cast<CaseT>(this->value))
       result.emplace(caseFn(caseValue));
     return *this;
@@ -525,6 +527,8 @@ private:
   /// A flag detailing if we have already found a match.
   bool foundMatch = false;
 };
-}
+
+} // namespace firrtl
+} // namespace circt
 
 #endif // CIRCT_DIALECT_FIRRTL_TYPES_H

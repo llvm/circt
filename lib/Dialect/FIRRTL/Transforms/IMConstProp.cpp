@@ -462,7 +462,7 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
 
       bool hasAggregateOperand =
           llvm::any_of(op.getOperandTypes(), [](Type type) {
-            return firrtl::type_isa<FVectorType, BundleType>(type);
+            return type_isa<FVectorType, BundleType>(type);
           });
 
       for (auto result : op.getResults())

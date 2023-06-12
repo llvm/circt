@@ -1247,7 +1247,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
   }
 
   // If ground type, then replace the result.
-  if (isa<SIntType>(op.getType()))
+  if (type_isa<SIntType>(op.getType()))
     srcLoweredVal = builder->create<AsSIntPrimOp>(srcLoweredVal);
   op.getResult().replaceAllUsesWith(srcLoweredVal);
   return true;

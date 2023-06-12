@@ -24,6 +24,10 @@ class FIRRTLDialectType<Pred pred, string summary, string cpp, string desc = "">
   let description = desc;
 }
 
+class FIRRTLBaseSubType<string typeName, string summary, string desc = "">
+  : FIRRTLDialectType<CPred<!strconcat("firrtl::type_isa<", typeName, ">($_self)")>, summary,
+                      !strconcat("::circt::firrtl::BaseTypeAliasOr<::circt::firrtl::", typeName, ">"), desc>;
+
 def FIRRTLType : FIRRTLDialectType<CPred<"$_self.isa<FIRRTLType>()">,
   "FIRRTLType", "::circt::firrtl::FIRRTLType", [{
     Any FIRRTL dialect type, represented by FIRRTLType.
@@ -43,14 +47,10 @@ def FIRRTLBaseType : FIRRTLDialectType<
 
 def ForeignType : FIRRTLDialectType<CPred<"!$_self.isa<FIRRTLType>()">,
                                     "foreign type", "::mlir::Type">;
-
-def ClockType :
-  FIRRTLDialectType<CPred<"firrtl::type_isa<ClockType>($_self)">, "clock",
-                    "::circt::firrtl::BaseTypeAliasOr<::circt::firrtl::ClockType>">;
+def ClockType : FIRRTLBaseSubType<"ClockType", "clock">;
 
 def NonConstClockType :
-  FIRRTLDialectType<CPred<"firrtl::type_isa<ClockType>($_self)">, "clock",
-                    "::circt::firrtl::ClockType">,
+  FIRRTLBaseSubType<"ClockType", "clock">,
   BuildableType<"::circt::firrtl::ClockType::get($_builder.getContext())">;
 
 def IntType : FIRRTLDialectType<CPred<"firrtl::type_isa<IntType>($_self)">,

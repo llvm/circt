@@ -139,13 +139,13 @@ Visitor::Visitor(MLIRContext *context) : context(context) {}
 // NOLINTNEXTLINE(misc-no-recursion)
 FIRRTLBaseType Visitor::convertType(FIRRTLBaseType type,
                                     SmallVector<unsigned> &dimensions) {
-  if (auto vectorType = type.dyn_cast<FVectorType>(); vectorType) {
+  if (auto vectorType = type_dyn_cast<FVectorType>(type); vectorType) {
     dimensions.push_back(vectorType.getNumElements());
     auto converted = convertType(vectorType.getElementType(), dimensions);
     dimensions.pop_back();
     return converted;
   }
-  if (auto bundleType = type.dyn_cast<BundleType>(); bundleType) {
+  if (auto bundleType = type_dyn_cast<BundleType>(type); bundleType) {
     SmallVector<BundleType::BundleElement> elements;
     for (auto element : bundleType.getElements()) {
       elements.push_back(BundleType::BundleElement(
@@ -204,7 +204,7 @@ Type Visitor::convertType(Type type) {
 void Visitor::explodeFieldID(
     Type type, uint64_t fieldID,
     SmallVectorImpl<std::pair<Type, uint64_t>> &fields) {
-  if (auto bundleType = type.dyn_cast<BundleType>()) {
+  if (auto bundleType = type_dyn_cast<BundleType>(type)) {
     for (size_t i = 0, e = bundleType.getNumElements(); i < e; ++i) {
       auto eltType = bundleType.getElementType(i);
       auto eltID = fieldID + bundleType.getFieldID(i);
@@ -230,14 +230,14 @@ void Visitor::fixAnnotation(Type oldType, Type newType, DictionaryAttr annoAttr,
   SmallVector<uint32_t> bundleAccesses;
   SmallVector<uint32_t> vectorAccesses;
   while (fieldID != 0) {
-    if (auto bundleType = oldType.dyn_cast<BundleType>()) {
+    if (auto bundleType = type_dyn_cast<BundleType>(oldType)) {
       auto [index, subID] = bundleType.getIndexAndSubfieldID(fieldID);
       bundleAccesses.push_back(index);
       oldType = bundleType.getElementType(index);
       fieldID = subID;
       continue;
     }
-    if (auto vectorType = oldType.dyn_cast<FVectorType>()) {
+    if (auto vectorType = type_dyn_cast<FVectorType>(oldType)) {
       auto [index, subID] = vectorType.getIndexAndSubfieldID(fieldID);
       vectorAccesses.push_back(index);
       oldType = vectorType.getElementType();
@@ -249,7 +249,7 @@ void Visitor::fixAnnotation(Type oldType, Type newType, DictionaryAttr annoAttr,
 
   uint64_t newID = 0;
   for (auto index : bundleAccesses) {
-    auto bundleType = newType.cast<BundleType>();
+    auto bundleType = type_cast<BundleType>(newType);
     newID += bundleType.getFieldID(index);
     newType = bundleType.getElementType(index);
   }
@@ -264,7 +264,7 @@ void Visitor::fixAnnotation(Type oldType, Type newType, DictionaryAttr annoAttr,
   auto i64Type = IntegerType::get(context, 64);
   for (auto [type, fieldID] : fields) {
     for (auto index : vectorAccesses) {
-      auto vectorType = type.cast<FVectorType>();
+      auto vectorType = type_cast<FVectorType>(type);
       type = vectorType.getElementType();
       fieldID += vectorType.getFieldID(index);
     }
@@ -332,7 +332,7 @@ Value Visitor::getRefSub(Value input, unsigned index) {
 // NOLINTNEXTLINE(misc-no-recursion)
 void Visitor::explodeRef(Value value, SmallVectorImpl<Value> &output) {
   auto underlyingType = value.getType().cast<RefType>().getType();
-  if (auto bundleType = underlyingType.dyn_cast<BundleType>()) {
+  if (auto bundleType = type_dyn_cast<BundleType>(underlyingType)) {
     for (size_t i = 0, e = bundleType.getNumElements(); i < e; ++i) {
       OpBuilder builder(context);
       builder.setInsertionPointAfterValue(value);
@@ -383,7 +383,7 @@ std::pair<SmallVector<Value>, bool> Visitor::fixRefOperand(Value value) {
   // an arm of the sunken vector.
   SmallVector<Value> values;
   bool exploded = false;
-  if (value.getType().cast<RefType>().getType().isa<BundleType>() &&
+  if (type_isa<BundleType>(value.getType().cast<RefType>().getType()) &&
       !vectorAccesses.empty()) {
     explodeRef(value, values);
     exploded = true;
@@ -409,7 +409,7 @@ std::pair<SmallVector<Value>, bool> Visitor::fixRefOperand(Value value) {
 // NOLINTNEXTLINE(misc-no-recursion)
 void Visitor::explode(Value value, SmallVectorImpl<Value> &output) {
   auto type = value.getType();
-  if (auto bundleType = type.dyn_cast<BundleType>()) {
+  if (auto bundleType = type_dyn_cast<BundleType>(type)) {
     for (size_t i = 0, e = bundleType.getNumElements(); i < e; ++i) {
       auto field = getSubfield(value, i);
       explode(field, output);
@@ -615,7 +615,7 @@ void Visitor::emitExplodedConnect(ImplicitLocOpBuilder &builder, Type type,
   const auto *rhsIt = rhs.begin();
 
   auto explodeConnect = [&](auto self, Type type, bool flip = false) -> void {
-    if (auto bundleType = dyn_cast<BundleType>(type)) {
+    if (auto bundleType = type_dyn_cast<BundleType>(type)) {
       for (auto &element : bundleType) {
         self(self, element.type, flip ^ element.isFlip);
       }
@@ -634,7 +634,7 @@ Value Visitor::emitBundleCreate(ImplicitLocOpBuilder &builder, Type type,
                                 ArrayRef<Value> values) {
   auto *it = values.begin();
   auto convert = [&](auto self, Type type) -> Value {
-    if (auto bundleType = type.dyn_cast<BundleType>()) {
+    if (auto bundleType = type_dyn_cast<BundleType>(type)) {
       SmallVector<Value> fields;
       for (auto element : bundleType.getElements()) {
         fields.push_back(self(self, element.type));
@@ -723,7 +723,7 @@ Attribute Visitor::convertVectorConstant(FVectorType oldType,
   auto newElementType = convertType(oldElementType);
 
   if (oldElementType == newElementType)
-    if (auto bundleElementType = oldElementType.dyn_cast<BundleType>())
+    if (auto bundleElementType = type_dyn_cast<BundleType>(oldElementType))
       return convertBundleInVectorConstant(bundleElementType,
                                            oldElements.getValue());
 
@@ -732,7 +732,7 @@ Attribute Visitor::convertVectorConstant(FVectorType oldType,
     newElements.push_back(convertConstant(oldElementType, oldElement));
   }
 
-  auto bundleType = newElementType.cast<BundleType>();
+  auto bundleType = type_dyn_cast<BundleType>(newElementType);
   return convertBundleInVectorConstant(bundleType, newElements);
 }
 
@@ -748,10 +748,10 @@ Attribute Visitor::convertBundleConstant(BundleType type, ArrayAttr fields) {
 
 // NOLINTNEXTLINE(misc-no-recursion)
 Attribute Visitor::convertConstant(Type type, Attribute value) {
-  if (auto bundleType = type.dyn_cast<BundleType>())
+  if (auto bundleType = type_dyn_cast<BundleType>(type))
     return convertBundleConstant(bundleType, value.cast<ArrayAttr>());
 
-  if (auto vectorType = type.dyn_cast<FVectorType>())
+  if (auto vectorType = type_dyn_cast<FVectorType>(type))
     return convertVectorConstant(vectorType, value.cast<ArrayAttr>());
 
   return value;
@@ -788,7 +788,7 @@ Value Visitor::sinkVecDimIntoOperands(ImplicitLocOpBuilder &builder,
                                       FIRRTLBaseType type,
                                       const SmallVectorImpl<Value> &values) {
   auto length = values.size();
-  if (auto bundleType = type.dyn_cast<BundleType>()) {
+  if (auto bundleType = type_dyn_cast<BundleType>(type)) {
     SmallVector<Value> newFields;
     SmallVector<BundleType::BundleElement> newElements;
     for (auto [i, elt] : llvm::enumerate(bundleType)) {

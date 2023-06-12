@@ -79,7 +79,7 @@ static bool hasKnownWidthIntTypes(Operation *op) {
 
 /// Return true if this value is 1 bit UInt.
 static bool isUInt1(Type type) {
-  auto t = firrtl::type_dyn_cast<UIntType>(type);
+  auto t = type_dyn_cast<UIntType>(type);
   if (!t || !t.hasWidth() || t.getWidth() != 1)
     return false;
   return true;
@@ -316,7 +316,7 @@ static LogicalResult canonicalizePrimOp(
   // Can only operate on FIRRTL primitive operations.
   if (op->getNumResults() != 1)
     return failure();
-  auto type = firrtl::type_dyn_cast<FIRRTLBaseType>(op->getResult(0).getType());
+  auto type = type_dyn_cast<FIRRTLBaseType>(op->getResult(0).getType());
   if (!type)
     return failure();
 
@@ -355,11 +355,10 @@ static LogicalResult canonicalizePrimOp(
     resultValue = rewriter.create<PadPrimOp>(op->getLoc(), resultValue, width);
 
   // Insert a cast if this is a uint vs. sint or vice versa.
-  if (firrtl::type_isa<SIntType>(type) &&
-      firrtl::type_isa<UIntType>(resultValue.getType()))
+  if (type_isa<SIntType>(type) && type_isa<UIntType>(resultValue.getType()))
     resultValue = rewriter.create<AsSIntPrimOp>(op->getLoc(), resultValue);
-  else if (firrtl::type_isa<UIntType>(type) &&
-           firrtl::type_isa<SIntType>(resultValue.getType()))
+  else if (type_isa<UIntType>(type) &&
+           type_isa<SIntType>(resultValue.getType()))
     resultValue = rewriter.create<AsUIntPrimOp>(op->getLoc(), resultValue);
 
   assert(type == resultValue.getType() && "canonicalization changed type");
@@ -1299,8 +1298,8 @@ public:
       return failure();
 
     auto pad = [&](Value input) -> Value {
-      auto inputWidth = firrtl::type_cast<FIRRTLBaseType>(input.getType())
-                            .getBitWidthOrSentinel();
+      auto inputWidth =
+          type_cast<FIRRTLBaseType>(input.getType()).getBitWidthOrSentinel();
       if (inputWidth < 0 || width == inputWidth)
         return input;
       return rewriter
@@ -1715,7 +1714,8 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
     if (isa<InvalidValueOp>(srcValueOp)) {
       if (type_isa<BundleType, FVectorType>(op.getDest().getType()))
         return failure();
-      if (type_isa<ClockType, AsyncResetType, ResetType>(op.getDest().getType()))
+      if (type_isa<ClockType, AsyncResetType, ResetType>(
+              op.getDest().getType()))
         replacement = rewriter.create<SpecialConstantOp>(
             op.getSrc().getLoc(), op.getDest().getType(),
             rewriter.getBoolAttr(false));
@@ -1904,8 +1904,7 @@ struct AggOneShot : public mlir::RewritePattern {
 
   SmallVector<Value> getCompleteWrite(Operation *lhs) const {
     auto lhsTy = lhs->getResult(0).getType();
-    if (!firrtl::type_isa<BundleType>(lhsTy) &&
-        !firrtl::type_isa<FVectorType>(lhsTy))
+    if (!type_isa<BundleType, FVectorType>(lhsTy))
       return {};
 
     DenseMap<uint32_t, Value> fields;
@@ -1945,10 +1944,9 @@ struct AggOneShot : public mlir::RewritePattern {
     }
 
     SmallVector<Value> values;
-    uint32_t total =
-        firrtl::type_isa<BundleType>(lhsTy)
-            ? firrtl::type_cast<BundleType>(lhsTy).getNumElements()
-            : firrtl::type_cast<FVectorType>(lhsTy).getNumElements();
+    uint32_t total = type_isa<BundleType>(lhsTy)
+                         ? type_cast<BundleType>(lhsTy).getNumElements()
+                         : type_cast<FVectorType>(lhsTy).getNumElements();
     for (uint32_t i = 0; i < total; ++i) {
       if (!fields.count(i))
         return {};
@@ -2547,7 +2545,7 @@ struct FoldUnusedBits : public mlir::RewritePattern {
     if (summary.isMasked || summary.isSeqMem())
       return failure();
 
-    auto type = firrtl::type_dyn_cast<IntType>(mem.getDataType());
+    auto type = type_dyn_cast<IntType>(mem.getDataType());
     if (!type)
       return failure();
     auto width = type.getBitWidthOrSentinel();

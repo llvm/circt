@@ -296,11 +296,11 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
 
     // Check if the number of fields of mask and input type match.
     auto isValidMask = [&](FIRRTLType inType, FIRRTLType maskType) -> bool {
-      if (auto bundle = inType.dyn_cast<BundleType>()) {
-        if (auto mBundle = maskType.dyn_cast<BundleType>())
+      if (auto bundle = type_dyn_cast<BundleType>(inType)) {
+        if (auto mBundle = type_dyn_cast<BundleType>(maskType))
           return mBundle.getNumElements() == bundle.getNumElements();
-      } else if (auto vec = inType.dyn_cast<FVectorType>()) {
-        if (auto mVec = maskType.dyn_cast<FVectorType>())
+      } else if (auto vec = type_dyn_cast<FVectorType>(inType)) {
+        if (auto mVec = type_dyn_cast<FVectorType>(maskType))
           return mVec.getNumElements() == vec.getNumElements();
       } else
         return true;

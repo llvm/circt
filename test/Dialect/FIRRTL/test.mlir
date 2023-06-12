@@ -251,7 +251,10 @@ firrtl.module @StringTest(in %in: !firrtl.string, out %out: !firrtl.string) {
 
 // CHECK-LABEL: TypeAlias
 // CHECK-SAME: !firrtl.alias<foo, uint<1>>
-firrtl.module @TypeAlias(in %c: !firrtl.uint<1>, in %in: !firrtl.alias<bar, uint<1>>, out %out: !firrtl.alias<foo, uint<1>>) {
+firrtl.module @TypeAlias(in %c: !firrtl.uint<1>,
+                         in %in: !firrtl.alias<bar, uint<1>>,
+                         out %r : !firrtl.openbundle<a: alias<baz, uint<1>>>,
+                         out %out: !firrtl.alias<foo, uint<1>>) {
   firrtl.strictconnect %out, %in: !firrtl.alias<foo, uint<1>>, !firrtl.alias<bar, uint<1>>
   // Check that inferReturn works with type alias.
   // TODO: Consider making the inference rule more strict, e.g. only allow intersection of type alias nasme.
@@ -261,5 +264,8 @@ firrtl.module @TypeAlias(in %c: !firrtl.uint<1>, in %in: !firrtl.alias<bar, uint
   %0 = firrtl.mux(%c, %out, %in) : (!firrtl.uint<1>, !firrtl.alias<foo, uint<1>>, !firrtl.alias<bar, uint<1>>) -> !firrtl.uint<1>
   %1 = firrtl.mux(%c, %out, %in) : (!firrtl.uint<1>, !firrtl.alias<foo, uint<1>>, !firrtl.alias<bar, uint<1>>) -> !firrtl.alias<foo, uint<1>>
   %2 = firrtl.mux(%c, %out, %in) : (!firrtl.uint<1>, !firrtl.alias<foo, uint<1>>, !firrtl.alias<bar, uint<1>>) -> !firrtl.alias<bar, uint<1>>
+
+  %r_a = firrtl.opensubfield %r[a] : !firrtl.openbundle<a: alias<baz, uint<1>>>
+  firrtl.strictconnect %r_a, %in : !firrtl.alias<baz, uint<1>>, !firrtl.alias<bar, uint<1>>
 }
 }

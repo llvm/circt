@@ -14,7 +14,7 @@ circuit Top :
   ; CHECK-LABEL: firrtl.module @Top(
   ; CHECK-SAME: in %in: !firrtl.alias<Passive, bundle<a: uint<1>>>
   ; CHECK-SAME: in %u2: !firrtl.alias<UInt2, uint<2>>
-  ; CHECK-SAME: out %out_a: !firrtl.bundle<a: uint<1>>
+  ; CHECK-SAME: out %out_a: !firrtl.alias<Passive, bundle<a: uint<1>>>
   ; CHECK-SAME: out %o1: !firrtl.uint<1>
   ; CHECK-SAME: out %o2: !firrtl.uint<3>
   ; CHECK-SAME: out %o3: !firrtl.uint<3>
@@ -22,9 +22,12 @@ circuit Top :
     input in: Passive
     input u2: UInt2
     input out : NonPassive
+    output mixed: {a: UInt2, b: Probe<UInt2>}
     output o1: UninferredWith
     output o2: UninferredWith
     output o3: UninferredWith
+    mixed.a <= u2
+    define mixed.b  = probe(u2)
     o1 <= UInt<1>(0)
     o2 <= add(u2, u2)
     o3 <= sub(u2, u2)

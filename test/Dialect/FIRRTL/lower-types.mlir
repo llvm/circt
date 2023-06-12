@@ -1296,3 +1296,10 @@ firrtl.circuit "Foo"  {
     firrtl.strictconnect %bar_a, %invalid : !firrtl.bundle<b: uint<1>>
   }
 }
+
+// COMMON-LABEL: firrtl.circuit "Alias"
+firrtl.circuit "Alias" {
+  // CHECK-LABEL: firrtl.module @Alias(in %a_a: !firrtl.alias<B, uint<1>>)
+  // AGGREGATE-LABEL: firrtl.module @Alias(in %a: !firrtl.alias<A, bundle<a: alias<B, uint<1>>>>)
+  firrtl.module @Alias(in %a: !firrtl.alias<A, bundle<a: alias<B, uint<1>>>>) {}
+}

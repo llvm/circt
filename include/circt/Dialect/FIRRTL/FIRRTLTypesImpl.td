@@ -355,6 +355,11 @@ def BaseTypeAliasImpl : FIRRTLImplType<"BaseTypeAlias", [FieldIDTypeInterface], 
   let extraClassDeclaration = [{
       FIRRTLBaseType getAnonymousType();
       FIRRTLBaseType getPassiveType();
+      FIRRTLBaseType getConstType(bool isConst);
+      FIRRTLBaseType getAllConstDroppedType();
+      // If a given `newInnerType` is identical to innerType, return *this
+      // since we can reuse the type alias. Otherwise return `newInnerType`.
+      FIRRTLBaseType getModifiedType(FIRRTLBaseType newInnerType);
       /// Return the recursive properties of the type.
       RecursiveTypeProperties getRecursiveTypeProperties() const;
   }];

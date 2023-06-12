@@ -1663,7 +1663,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
           }
 
           auto portType =
-              op.getPortType(i).getPassiveType().template cast<BundleType>();
+              type_cast<BundleType>(op.getPortType(i).getPassiveType());
           for (auto fieldIndex : dataFieldIndices(op.getPortKind(i)))
             unifyTypes(FieldRef(result, portType.getFieldID(fieldIndex)),
                        firstData, dataType);

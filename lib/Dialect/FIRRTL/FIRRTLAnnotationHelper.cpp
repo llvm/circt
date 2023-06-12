@@ -42,7 +42,7 @@ static LogicalResult updateExpandedPort(StringRef field, AnnoTarget &ref) {
 /// represent bundle returns as split into constituent parts.
 static FailureOr<unsigned> findBundleElement(Operation *op, Type type,
                                              StringRef field) {
-  auto bundle = firrtl::type_dyn_cast<BundleType>(type);
+  auto bundle = type_dyn_cast<BundleType>(type);
   if (!bundle) {
     op->emitError("field access '")
         << field << "' into non-bundle type '" << bundle << "'";
@@ -66,7 +66,7 @@ static FailureOr<unsigned> findVectorElement(Operation *op, Type type,
     op->emitError("Cannot convert '") << indexStr << "' to an integer";
     return failure();
   }
-  auto vec = firrtl::type_dyn_cast<FVectorType>(type);
+  auto vec = type_dyn_cast<FVectorType>(type);
   if (!vec) {
     op->emitError("index access '")
         << index << "' into non-vector type '" << type << "'";
@@ -95,14 +95,14 @@ static FailureOr<unsigned> findFieldID(AnnoTarget &ref,
       auto result = findVectorElement(op, type, token.name);
       if (failed(result))
         return failure();
-      auto vector = firrtl::type_cast<FVectorType>(type);
+      auto vector = type_cast<FVectorType>(type);
       type = vector.getElementType();
       fieldIdx += vector.getFieldID(*result);
     } else {
       auto result = findBundleElement(op, type, token.name);
       if (failed(result))
         return failure();
-      auto bundle = firrtl::type_cast<BundleType>(type);
+      auto bundle = type_cast<BundleType>(type);
       type = bundle.getElementType(*result);
       fieldIdx += bundle.getFieldID(*result);
     }

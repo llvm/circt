@@ -148,7 +148,7 @@ firrtl.circuit "foo" {
 
 firrtl.circuit "Foo" {
 firrtl.module @Foo() {
-  // expected-error @+1 {{invalid kind of type specified}}
+  // expected-error @+1 {{custom op 'firrtl.constant' expected an integer type}}
   firrtl.constant 100 : !firrtl.bundle<>
 }
 }
