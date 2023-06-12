@@ -1180,6 +1180,10 @@ circuit EnumTypes:
     ; CHECK: firrtl.propassign %a, %0 : !firrtl.string
     propassign a, String("hello")
 
+  module StringAppend:
+    output a : String
+    propassign a, strcat(String("hello "), String("world"))
+
   ; CHECK-LABEL: module private @RefsChild(
   ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>
   ; CHECK-SAME: out %rw: !firrtl.rwprobe<uint<1>>
