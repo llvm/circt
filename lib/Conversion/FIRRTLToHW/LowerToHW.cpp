@@ -1684,6 +1684,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(PlusArgsTestIntrinsicOp op);
   LogicalResult visitExpr(PlusArgsValueIntrinsicOp op);
   LogicalResult visitExpr(SizeOfIntrinsicOp op);
+  LogicalResult visitExpr(ClockGateIntrinsicOp op);
   LogicalResult visitExpr(LTLAndIntrinsicOp op);
   LogicalResult visitExpr(LTLOrIntrinsicOp op);
   LogicalResult visitExpr(LTLDelayIntrinsicOp op);
@@ -3744,6 +3745,15 @@ LogicalResult FIRRTLLowering::visitExpr(PlusArgsValueIntrinsicOp op) {
 LogicalResult FIRRTLLowering::visitExpr(SizeOfIntrinsicOp op) {
   op.emitError("SizeOf should have been resolved.");
   return failure();
+}
+
+LogicalResult FIRRTLLowering::visitExpr(ClockGateIntrinsicOp op) {
+  Value testEnable;
+  if (op.getTestEnable())
+    testEnable = getLoweredValue(op.getTestEnable());
+  return setLoweringTo<seq::ClockGateOp>(op, getLoweredValue(op.getInput()),
+                                         getLoweredValue(op.getEnable()),
+                                         testEnable);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(LTLAndIntrinsicOp op) {

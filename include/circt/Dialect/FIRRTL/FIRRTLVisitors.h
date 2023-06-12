@@ -48,10 +48,11 @@ public:
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
             // Intrinsic Expressions.
             IsXIntrinsicOp, PlusArgsValueIntrinsicOp, PlusArgsTestIntrinsicOp,
-            SizeOfIntrinsicOp, LTLAndIntrinsicOp, LTLOrIntrinsicOp,
-            LTLDelayIntrinsicOp, LTLConcatIntrinsicOp, LTLNotIntrinsicOp,
-            LTLImplicationIntrinsicOp, LTLEventuallyIntrinsicOp,
-            LTLClockIntrinsicOp, LTLDisableIntrinsicOp,
+            SizeOfIntrinsicOp, ClockGateIntrinsicOp, LTLAndIntrinsicOp,
+            LTLOrIntrinsicOp, LTLDelayIntrinsicOp, LTLConcatIntrinsicOp,
+            LTLNotIntrinsicOp, LTLImplicationIntrinsicOp,
+            LTLEventuallyIntrinsicOp, LTLClockIntrinsicOp,
+            LTLDisableIntrinsicOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
@@ -158,6 +159,7 @@ public:
   HANDLE(PlusArgsValueIntrinsicOp, Unhandled);
   HANDLE(PlusArgsTestIntrinsicOp, Unhandled);
   HANDLE(SizeOfIntrinsicOp, Unhandled);
+  HANDLE(ClockGateIntrinsicOp, Unhandled);
   HANDLE(LTLAndIntrinsicOp, Unhandled);
   HANDLE(LTLOrIntrinsicOp, Unhandled);
   HANDLE(LTLDelayIntrinsicOp, Unhandled);
