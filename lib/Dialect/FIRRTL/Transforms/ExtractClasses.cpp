@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/OM/OMOps.h"
@@ -30,6 +31,10 @@ struct ExtractClassesPass : public ExtractClassesBase<ExtractClassesPass> {
 
 private:
   void extractClass(FModuleOp moduleOp);
+  void updateInstances(FModuleOp moduleOp);
+
+  InstanceGraph *instanceGraph;
+  DenseMap<Operation *, llvm::BitVector> portsToErase;
 };
 } // namespace
 
@@ -48,7 +53,7 @@ void ExtractClassesPass::extractClass(FModuleOp moduleOp) {
   IRMapping mapping;
 
   // Remember ports and operations to clean up when done.
-  llvm::BitVector portsToErase(moduleOp.getNumPorts());
+  portsToErase[moduleOp] = llvm::BitVector(moduleOp.getNumPorts());
   SmallVector<Operation *> opsToErase;
 
   // Collect information about input and output properties. Mark property ports
@@ -59,7 +64,7 @@ void ExtractClassesPass::extractClass(FModuleOp moduleOp) {
     if (!isa<PropertyType>(port.type))
       continue;
 
-    portsToErase.set(index);
+    portsToErase[moduleOp].set(index);
 
     if (port.isInput())
       inputProperties.push_back({index, port.name, port.type, port.loc});
@@ -110,7 +115,11 @@ void ExtractClassesPass::extractClass(FModuleOp moduleOp) {
     // ops exist. Mark the property op to be erased.
     if (auto *op = originalValue.getDefiningOp()) {
       builder.clone(*op, mapping);
-      opsToErase.push_back(op);
+
+      // InstanceOps are handled specially, but any other property defining ops
+      // should be erased after being copied over.
+      if (!isa<InstanceOp>(op))
+        opsToErase.push_back(op);
     }
 
     // Create the ClassFieldOp using the mapping to find the appropriate Value.
@@ -124,7 +133,53 @@ void ExtractClassesPass::extractClass(FModuleOp moduleOp) {
   // assignments are erased before value defining ops. Then it erases ports.
   for (auto *op : opsToErase)
     op->erase();
-  moduleOp.erasePorts(portsToErase);
+  moduleOp.erasePorts(portsToErase[moduleOp]);
+}
+
+/// Clean up InstanceOps of any FModuleOps with properties.
+void ExtractClassesPass::updateInstances(FModuleOp moduleOp) {
+  OpBuilder builder(&getContext());
+  llvm::BitVector modulePortsToErase = portsToErase[moduleOp];
+  InstanceGraphNode *instanceGraphNode = instanceGraph->lookup(moduleOp);
+
+  // If there are no ports to erase, nothing to do.
+  if (!modulePortsToErase.empty() && !modulePortsToErase.any())
+    return;
+
+  // Clean up instances of the FModuleOp.
+  for (InstanceRecord *node : instanceGraphNode->uses()) {
+    // Get the original InstanceOp.
+    InstanceOp oldInstance = cast<InstanceOp>(node->getInstance());
+    builder.setInsertionPointAfter(oldInstance);
+
+    // If some but not all ports are properties, create a new instance without
+    // the property pins.
+    if (!modulePortsToErase.all()) {
+      InstanceOp newInstance =
+          oldInstance.erasePorts(builder, portsToErase[moduleOp]);
+      instanceGraph->replaceInstance(oldInstance, newInstance);
+    }
+
+    // Clean up uses of property pins. This amounts to erasing property
+    // assignments for now.
+    for (int propertyIndex : modulePortsToErase.set_bits()) {
+      for (Operation *user : oldInstance.getResult(propertyIndex).getUsers()) {
+        assert(isa<FConnectLike>(user) &&
+               "expected property pins to be used in property assignments");
+        user->erase();
+      }
+    }
+
+    // Erase the original instance.
+    oldInstance.erase();
+    node->erase();
+  }
+
+  // If all ports are properties, remove the FModuleOp completely.
+  if (!modulePortsToErase.empty() && modulePortsToErase.all()) {
+    moduleOp.erase();
+    instanceGraph->erase(instanceGraphNode);
+  }
 }
 
 /// Extract OM classes from FIRRTL modules with properties.
@@ -135,10 +190,25 @@ void ExtractClassesPass::runOnOperation() {
     return;
   CircuitOp circuit = *circuits.begin();
 
+  // Get the FIRRTL instance graph.
+  instanceGraph = &getAnalysis<InstanceGraph>();
+
   // Walk all FModuleOps to potentially extract an OM class if the FModuleOp
   // contains properties.
-  for (auto moduleOp : circuit.getOps<FModuleOp>())
+  for (auto moduleOp : llvm::make_early_inc_range(circuit.getOps<FModuleOp>()))
     extractClass(moduleOp);
+
+  // Clean up InstanceOps of any FModuleOps with properties. This is done after
+  // the classes are extracted to avoid extra bookeeping as InstanceOps are
+  // cleaned up.
+  for (auto moduleOp : llvm::make_early_inc_range(circuit.getOps<FModuleOp>()))
+    updateInstances(moduleOp);
+
+  // Mark analyses preserved, since we keep the instance graph up to date.
+  markAllAnalysesPreserved();
+
+  // Reset pass state.
+  instanceGraph = nullptr;
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createExtractClassesPass() {
