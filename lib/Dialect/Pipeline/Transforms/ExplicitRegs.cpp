@@ -67,7 +67,7 @@ size_t ExplicitRegsPass::stageDistance(Block *from, Block *to) {
 
 // NOLINTNEXTLINE(misc-no-recursion)
 Value ExplicitRegsPass::routeThroughStage(Value v, Block *stage) {
-  Value retVal = v.get();
+  Value retVal = v;
   Block *definingStage = retVal.getParentBlock();
 
   // Is the value defined in the current stage?
