@@ -155,3 +155,23 @@ firrtl.module @RefInitIn() {
   // expected-error @above {{sink "child.in" not fully initialized in module "RefInitIn"}}
 }
 }
+
+// -----
+
+// Check initialization error is produced for out-properties.
+firrtl.circuit "PropInitOut" {
+firrtl.module @PropInitOut(out %out : !firrtl.string) {
+  // expected-error @above {{port "out" not fully initialized in module "PropInitOut"}}
+}
+}
+
+// -----
+
+// Check initialization error is produced for in-properties.
+firrtl.circuit "PropInitIn" {
+firrtl.module @Child(in %in: !firrtl.string) { }
+firrtl.module @PropInitIn() {
+  %child_in = firrtl.instance child @Child(in in : !firrtl.string)
+  // expected-error @above {{sink "child.in" not fully initialized in module "PropInitIn"}}
+}
+}

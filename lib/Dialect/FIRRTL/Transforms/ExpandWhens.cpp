@@ -332,6 +332,10 @@ public:
   void visitStmt(RefDefineOp op) {
     recordConnect(getFieldRefFromValue(op.getDest()), op);
   }
+  
+  void visitStmt(PropAssignOp op) {
+    recordConnect(getFieldRefFromValue(op.getDest()), op);
+  }
 
   void processWhenOp(WhenOp whenOp, Value outerCondition);
 
