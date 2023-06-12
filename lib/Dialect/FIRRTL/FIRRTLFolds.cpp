@@ -946,6 +946,14 @@ LogicalResult NEQPrimOp::canonicalize(NEQPrimOp op, PatternRewriter &rewriter) {
       });
 }
 
+OpFoldResult StringConcatOp::fold(FoldAdaptor adaptor) {
+  auto lhs = dyn_cast_or_null<StringAttr>(adaptor.getLhs());
+  auto rhs = dyn_cast_or_null<StringAttr>(adaptor.getRhs());
+  if (!lhs || !rhs)
+    return {};
+  return StringAttr::get(getContext(), lhs.getValue() + rhs.getValue());
+}
+
 //===----------------------------------------------------------------------===//
 // Unary Operators
 //===----------------------------------------------------------------------===//

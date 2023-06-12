@@ -2968,4 +2968,13 @@ firrtl.module @DonotUpdateInstanceName(in %in: !firrtl.uint<1>, out %a: !firrtl.
   firrtl.strictconnect %a, %b : !firrtl.uint<1>
 }
 
+// CHECK-LABEL: @StringConcat
+firrtl.module @StringConcat(out %out : !firrtl.string) {
+  %0 = firrtl.string "hel"
+  %1 = firrtl.string "lo"
+  %2 = firrtl.string.concat %0, %1
+  firrtl.propassign %out, %2 : !firrtl.string
+  // CHECK: %0 = firrtl.string "hello"
+  // CHECK: firrtl.propassign %out, %0
+}
 }
