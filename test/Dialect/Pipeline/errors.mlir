@@ -1,16 +1,5 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
-hw.module @mixed_ports(%arg0 : !esi.channel<i32>, %arg1 : i32, %clk : i1, %rst : i1) -> (out: i32) {
-  // expected-error @+1 {{'pipeline.unscheduled' op if any port of this pipeline is an ESI channel, all ports must be ESI channels.}}
-  %0 = pipeline.unscheduled(%arg0, %arg1) clock %clk reset %rst : (!esi.channel<i32>, i32) -> (i32) {
-   ^bb0(%a0 : i32, %a1: i32):
-    %valid = hw.constant 1 : i1
-    pipeline.return %a0 : i32
-  }
-  hw.output %0 : i32
-}
-
-
 // -----
 
 hw.module @body_argn(%arg0 : i32, %arg1 : i32, %clk : i1, %rst : i1) -> (out: i32) {

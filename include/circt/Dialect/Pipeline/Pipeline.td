@@ -46,7 +46,7 @@ def UnscheduledPipelineOp : Op<Pipeline_Dialect, "unscheduled", [
     operations to-be-scheduled into a pipeline.
     Mainly serves as a container and entrypoint for scheduling.
 
-    A `pipeline.pipeline` supports a `stall` input. This signal is intended to
+    A `pipeline.unscheduled` supports a `stall` input. This signal is intended to
     connect to all stages within the pipeline, and is used to stall the entirety
     of the pipeline. It is lowering defined how stages choose to use this signal,
     although in the common case, a `stall` signal would typically connect to
@@ -65,13 +65,6 @@ def UnscheduledPipelineOp : Op<Pipeline_Dialect, "unscheduled", [
   }];
 
   let extraClassDeclaration = [{
-    // Returns true if this pipeline has a latency-insensitive interface.
-    // Latency sensitivity is defined based on whether _any_ `$input` is an 
-    // ESI channel.
-    bool isLatencyInsensitive(); 
-    bool isLatencySensitive() { return !isLatencyInsensitive(); }
-
-
     /// Returns the body of a Pipeline component.
     Block *getBodyBlock() {
       Region* region = &getOperation()->getRegion(0);
@@ -97,15 +90,7 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
     pertaining to when registers have been materialized (made explicit).
     For an in-depth explanation, please refer to the Pipeline dialect rationale.
 
-    A pipelines' latency sensitivity is based on the I/O of the pipeline - if
-    any in- or output port is an ESI channel, all ports are expected to be ESI
-    channels, and the pipeline is considered latency sensitive.
-    The internal representation of the pipeline is agnostic to the latency
-    insensitivity of the I/O. This is by design - allowing us a single source
-    of truth for lowering either latency sensitive or latency insensitive pipelines.
-
-
-    A `pipeline.pipeline` supports a `stall` input. This signal is intended to
+    A `pipeline.scheduled` supports a `stall` input. This signal is intended to
     connect to all stages within the pipeline, and is used to stall the entirety
     of the pipeline. It is lowering defined how stages choose to use this signal,
     although in the common case, a `stall` signal would typically connect to
