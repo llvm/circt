@@ -24,52 +24,49 @@ using namespace circt::pipeline;
 #include "circt/Dialect/Pipeline/PipelineDialect.cpp.inc"
 
 //===----------------------------------------------------------------------===//
-// PipelineOp
+// UnscheduledPipelineOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult PipelineOp::verify() {
-  bool anyInputIsAChannel = llvm::any_of(getInputs(), [](Value operand) {
+static LogicalResult verifyPipeline(PipelineLike op) {
+  bool anyInputIsAChannel = llvm::any_of(op.getInputs(), [](Value operand) {
     return operand.getType().isa<esi::ChannelType>();
   });
-  bool anyOutputIsAChannel = llvm::any_of(
-      getResultTypes(), [](Type type) { return type.isa<esi::ChannelType>(); });
+  bool anyOutputIsAChannel = llvm::any_of(op->getResultTypes(), [](Type type) {
+    return type.isa<esi::ChannelType>();
+  });
 
-  if ((anyInputIsAChannel || anyOutputIsAChannel) && !isLatencyInsensitive()) {
-    return emitOpError("if any port of this pipeline is an ESI channel, all "
-                       "ports must be ESI channels.");
+  if ((anyInputIsAChannel || anyOutputIsAChannel) &&
+      !op.isLatencyInsensitive()) {
+    return op.emitOpError("if any port of this pipeline is an ESI channel, all "
+                          "ports must be ESI channels.");
   }
 
-  if (getBodyBlock()->getNumArguments() != getInputs().size())
-    return emitOpError("expected ")
-           << getInputs().size()
+  Block *entryStage = op.getEntryStage();
+  if (entryStage->getNumArguments() != op.getInputs().size())
+    return op.emitOpError("expected ")
+           << op.getInputs().size()
            << " arguments in the pipeline body block, got "
-           << getBodyBlock()->getNumArguments() << ".";
+           << entryStage->getNumArguments() << ".";
 
-  for (size_t i = 0; i < getInputs().size(); i++) {
-    Type expectedInArg = getInputs()[i].getType();
-    Type bodyArg = getBodyBlock()->getArgument(i).getType();
+  for (size_t i = 0; i < op.getInputs().size(); i++) {
+    Type expectedInArg = op.getInputs()[i].getType();
+    Type bodyArg = entryStage->getArgument(i).getType();
 
-    if (isLatencyInsensitive())
+    if (op.isLatencyInsensitive())
       expectedInArg = expectedInArg.cast<esi::ChannelType>().getInner();
 
     if (expectedInArg != bodyArg)
-      return emitOpError("expected body block argument ")
+      return op.emitOpError("expected body block argument ")
              << i << " to have type " << expectedInArg << ", got " << bodyArg
              << ".";
   }
 
-  // Check mixing of stage-like operations. These are not allowed to coexist.
-  bool hasDelimiterOps = !getOps<StageSeparatingOp>().empty();
-  bool hasDelimiterRegsOps = !getOps<StageSeparatingRegOp>().empty();
-  bool hasStageOps = !getOps<StageOp>().empty();
-  size_t phaseKinds = hasDelimiterOps + hasDelimiterRegsOps + hasStageOps;
-  if (phaseKinds > 1)
-    return emitOpError("pipeline contains a mix of stage-like operations.");
-
   return success();
 }
 
-bool PipelineOp::isLatencyInsensitive() {
+LogicalResult UnscheduledPipelineOp::verify() { return verifyPipeline(*this); }
+
+bool UnscheduledPipelineOp::isLatencyInsensitive() {
   bool allInputsAreChannels = llvm::all_of(getInputs(), [](Value operand) {
     return operand.getType().isa<esi::ChannelType>();
   });
@@ -78,33 +75,93 @@ bool PipelineOp::isLatencyInsensitive() {
   return allInputsAreChannels && allOutputsAreChannels;
 }
 
-// ===----------------------------------------------------------------------===//
-// StageSeparatingOp
-// ===----------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
+// ScheduledPipelineOp
+//===----------------------------------------------------------------------===//
 
-// Returns the index of this stage in the pipeline.
-unsigned StageSeparatingOp::index() {
-  auto stageOps =
-      getOperation()->getParentOfType<PipelineOp>().getOps<StageSeparatingOp>();
-  return std::distance(stageOps.begin(), llvm::find(stageOps, *this));
+void ScheduledPipelineOp::build(mlir::OpBuilder &odsBuilder,
+                                mlir::OperationState &odsState,
+                                ::mlir::TypeRange results,
+                                mlir::ValueRange inputs, mlir::Value clock,
+                                mlir::Value reset) {
+  odsState.addOperands(inputs);
+  odsState.addOperands(clock);
+  odsState.addOperands(reset);
+  auto *region = odsState.addRegion();
+  odsState.addTypes(results);
+
+  // Add the entry stage
+  auto &entryBlock = region->emplaceBlock();
+  llvm::SmallVector<Location> entryArgLocs(inputs.size(), odsState.location);
+  entryBlock.addArguments(inputs.getTypes(), entryArgLocs);
 }
 
-// ===----------------------------------------------------------------------===//
-// StageSeparatingRegOp
-// ===----------------------------------------------------------------------===//
-
-unsigned StageSeparatingRegOp::index() {
-  auto stageOps = getOperation()
-                      ->getParentOfType<PipelineOp>()
-                      .getOps<StageSeparatingRegOp>();
-  return std::distance(stageOps.begin(), llvm::find(stageOps, *this));
+Block *ScheduledPipelineOp::addStage() {
+  OpBuilder builder(getContext());
+  Block *stage = builder.createBlock(&getRegion());
+  return stage;
 }
 
-void StageSeparatingRegOp::build(OpBuilder &builder, OperationState &state,
-                                 Value enable, ValueRange inputs) {
-  StageSeparatingRegOp::build(builder, state, inputs.getTypes(), inputs,
-                              enable);
-  state.addTypes({enable.getType()});
+llvm::SmallVector<Block *> ScheduledPipelineOp::getOrderedStages() {
+  Block *currentStage = getEntryStage();
+  llvm::SmallVector<Block *> orderedStages;
+  do {
+    orderedStages.push_back(currentStage);
+    if (auto stageOp = dyn_cast<StageOp>(currentStage->getTerminator()))
+      currentStage = stageOp.getNextStage();
+    else
+      currentStage = nullptr;
+  } while (currentStage);
+
+  return orderedStages;
+}
+
+Block *ScheduledPipelineOp::getLastStage() { return getOrderedStages().back(); }
+
+bool ScheduledPipelineOp::isMaterialized() {
+  // We determine materialization as if any pipeline stage has an explicit
+  // input.
+  return llvm::any_of(getStages(), [this](Block &block) {
+    // The entry stage doesn't count since it'll always have arguments.
+    if (&block == getEntryStage())
+      return false;
+    return block.getNumArguments() != 0;
+  });
+}
+
+LogicalResult ScheduledPipelineOp::verify() {
+  if (failed(verifyPipeline(*this)))
+    return failure();
+
+  // Phase invariant - if any block has arguments, we
+  bool materialized = isMaterialized();
+  if (materialized) {
+    // Check that all values used within a stage are defined within the stage.
+    for (auto &stage : getStages()) {
+      for (auto &op : stage) {
+        for (auto [index, operand] : llvm::enumerate(op.getOperands())) {
+          bool err = false;
+          if (auto *definingOp = operand.getDefiningOp()) {
+            // Constants are allowed to be used across stages.
+            if (definingOp->hasTrait<OpTrait::ConstantLike>())
+              continue;
+            err = definingOp->getBlock() != &stage;
+          } else {
+            // This is a block argument;
+            err = !llvm::is_contained(stage.getArguments(), operand);
+          }
+
+          if (err)
+            return op.emitOpError(
+                       "Pipeline is in register materialized mode - operand ")
+                   << index
+                   << " is defined in a different stage, which is illegal.";
+        }
+      }
+    }
+  }
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -112,26 +169,18 @@ void StageSeparatingRegOp::build(OpBuilder &builder, OperationState &state,
 //===----------------------------------------------------------------------===//
 
 LogicalResult ReturnOp::verify() {
-  PipelineOp parent = getOperation()->getParentOfType<PipelineOp>();
-  if (getInputs().size() != parent.getResults().size())
+  Operation *parent = getOperation()->getParentOp();
+  size_t nInputs = getInputs().size();
+  size_t nResults = parent->getNumResults();
+  if (nInputs != nResults)
     return emitOpError("expected ")
-           << parent.getResults().size() << " return values, got "
-           << getInputs().size() << ".";
+           << nResults << " return values, got " << nInputs << ".";
 
-  bool isLatencyInsensitive = parent.isLatencyInsensitive();
-  for (size_t i = 0; i < parent.getResults().size(); i++) {
-    Type expectedType = parent.getResultTypes()[i];
-    Type actualType = getOperandTypes()[i];
-    if (isLatencyInsensitive) {
-      expectedType = expectedType.dyn_cast<esi::ChannelType>().getInner();
-      if (!expectedType)
-        return emitOpError("expected ESI channel type, got ")
-               << parent.getResultTypes()[i] << ".";
-    }
-    if (expectedType != actualType)
-      return emitOpError("expected argument ")
-             << i << " to have type " << expectedType << ", got " << actualType
-             << ".";
+  for (auto [inType, reqType] :
+       llvm::zip(getInputs().getTypes(), parent->getResultTypes())) {
+    if (inType != reqType)
+      return emitOpError("expected return value of type ")
+             << reqType << ", got " << inType << ".";
   }
 
   return success();
@@ -141,86 +190,44 @@ LogicalResult ReturnOp::verify() {
 // StageOp
 //===----------------------------------------------------------------------===//
 
-void StageOp::build(OpBuilder &builder, OperationState &odsState, Value enable,
-                    ValueRange inputs, TypeRange outputs) {
-  odsState.addOperands(inputs);
-  odsState.addOperands(enable);
-  odsState.addTypes(outputs);
-  // Valid output
-  odsState.addTypes(builder.getI1Type());
+SuccessorOperands StageOp::getSuccessorOperands(unsigned index) {
+  assert(index == 0 && "invalid successor index");
+  // Successor operands are everything but the "valid" input to this stage op.
+  // Places a hard assumption on the regs and passthrough operands being next to
+  // each other in the operand list.
+  auto mutableRange =
+      mlir::MutableOperandRange(getOperation(), 0, getNumOperands() - 1);
+  return SuccessorOperands(mutableRange);
+}
 
-  // Build inner region.
-  Region *region = odsState.addRegion();
-  Block *bodyBlock = new Block();
-  region->push_back(bodyBlock);
-  bodyBlock->addArguments(
-      inputs.getTypes(),
-      SmallVector<Location>(inputs.size(), odsState.location));
-  bodyBlock->addArguments({enable.getType()},
-                          SmallVector<Location>(1, odsState.location));
-  StageOp::ensureTerminator(*region, builder, odsState.location);
+Block *StageOp::getSuccessorForOperands(ArrayRef<Attribute>) {
+  return getNextStage();
 }
 
 LogicalResult StageOp::verify() {
-  auto inputs = getInputs();
-  if (getBodyBlock()->getNumArguments() != (inputs.size() + /*valid*/ 1))
-    return emitOpError("expected ")
-           << inputs.size() + 1
-           << " arguments in the pipeline stage body block, got "
-           << getBodyBlock()->getNumArguments() << ".";
+  // Verify that the target block has the correct arguments as this stage op.
+  llvm::SmallVector<Type> expectedTargetArgTypes;
+  llvm::append_range(expectedTargetArgTypes, getRegisters().getTypes());
+  llvm::append_range(expectedTargetArgTypes, getPassthroughs().getTypes());
+  Block *targetStage = getNextStage();
 
-  for (size_t i = 0; i < inputs.size(); i++) {
-    Type expectedInArg = inputs[i].getType();
-    Type bodyArg = getBodyBlock()->getArgument(i).getType();
-    if (expectedInArg != bodyArg)
-      return emitOpError("expected stage body block argument ")
-             << i << " to have type " << expectedInArg << ", got " << bodyArg
-             << ".";
+  if (targetStage->getNumArguments() != expectedTargetArgTypes.size())
+    return emitOpError("expected ") << expectedTargetArgTypes.size()
+                                    << " arguments in the target stage, got "
+                                    << targetStage->getNumArguments() << ".";
+
+  for (auto [index, it] : llvm::enumerate(llvm::zip(
+           expectedTargetArgTypes, targetStage->getArgumentTypes()))) {
+    auto [arg, barg] = it;
+    if (arg != barg)
+      return emitOpError("expected target stage argument ")
+             << index << " to have type " << arg << ", got " << barg << ".";
   }
 
   return success();
 }
 
-//===----------------------------------------------------------------------===//
-// StageReturnOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult StageReturnOp::verify() {
-  StageOp parent = getOperation()->getParentOfType<StageOp>();
-  size_t nRetVals = getRegs().size() + getPassthroughs().size();
-  if (nRetVals != parent.getOutputs().size())
-    return emitOpError("expected ")
-           << parent.getOutputs().size() << " return values, got " << nRetVals
-           << ".";
-
-  llvm::SmallVector<Type> retTypes;
-  llvm::append_range(retTypes, getRegs().getTypes());
-  llvm::append_range(retTypes, getPassthroughs().getTypes());
-  for (size_t i = 0; i < parent.getOutputs().size(); i++) {
-    Type expectedType = parent.getOutputs().getTypes()[i];
-    Type actualType = retTypes[i];
-    if (expectedType != actualType)
-      return emitOpError("expected argument ")
-             << i << " to have type " << expectedType << ", got " << actualType
-             << ".";
-  }
-
-  return success();
-}
-
-void StageReturnOp::setOperands(Value valid, ValueRange regs,
-                                ValueRange passthroughs) {
-  getOperation()->insertOperands(0, regs);
-  getOperation()->insertOperands(regs.size(), passthroughs);
-  getOperation()->insertOperands(regs.size() + passthroughs.size(), {valid});
-  llvm::SmallVector<int32_t, 3> operandSizes;
-  operandSizes.push_back(regs.size());
-  operandSizes.push_back(passthroughs.size());
-  operandSizes.push_back(1);
-  getOperation()->setAttr(
-      "operand_segment_sizes",
-      mlir::DenseI32ArrayAttr::get(getContext(), operandSizes));
-}
+#include "circt/Dialect/Pipeline/PipelineInterfaces.cpp.inc"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Pipeline/Pipeline.cpp.inc"
