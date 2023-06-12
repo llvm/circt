@@ -1174,12 +1174,11 @@ circuit EnumTypes:
         
   ; CHECK-LABEL: module private @Properties
   module Properties :
-    ; CHECK-SAME: in %a: !firrtl.string
-    ; CHECK-SAME: out %b: !firrtl.string
-    input a : String
-    output b : String
-    ; CHECK: firrtl.propassign %a, %b : !firrtl.string
-    propassign a, b
+    ; CHECK-SAME: out %a: !firrtl.string
+    output a : String
+    ; CHECK: %0 = firrtl.string "hello"
+    ; CHECK: firrtl.propassign %a, %0 : !firrtl.string
+    propassign a, String("hello")
 
   ; CHECK-LABEL: module private @RefsChild(
   ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>

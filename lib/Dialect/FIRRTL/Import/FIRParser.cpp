@@ -1578,6 +1578,7 @@ void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
 ///      ::= prim
 ///      ::= integer-literal-exp
 ///      ::= enum-exp
+///      ::= 'String(' stringLit ')'
 ///      ::= exp '.' fieldId
 ///      ::= exp '[' intLit ']'
 /// XX   ::= exp '.' DoubleLit // TODO Workaround for #470
@@ -1631,6 +1632,20 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     if (parseIntegerLiteralExp(result))
       return failure();
     break;
+  case FIRToken::kw_String: {
+    locationProcessor.setLoc(getToken().getLoc());
+    consumeToken(FIRToken::kw_String);
+    StringRef spelling;
+    if (parseToken(FIRToken::l_paren, "expected '(' in String expression") ||
+        parseGetSpelling(spelling) ||
+        parseToken(FIRToken::string,
+                   "expected string literal in String expression") ||
+        parseToken(FIRToken::r_paren, "expected ')' in String expression"))
+      return failure();
+    result = builder.create<StringConstantOp>(
+        builder.getStringAttr(FIRToken::getStringValue(spelling)));
+    break;
+  }
 
     // Otherwise there are a bunch of keywords that are treated as identifiers
     // try them.
