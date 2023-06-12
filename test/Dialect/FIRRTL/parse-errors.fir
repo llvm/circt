@@ -630,6 +630,12 @@ circuit ForceWithLiteral:
 
 ;// -----
 
+circuit RWProbeConst:
+  extmodule RWProbeConst:
+    output p : RWProbe<{a: const UInt}> ; expected-error {{rwprobe cannot contain const}}
+
+;// -----
+
 FIRRTL version 2.0.0
 circuit PartialConnect_v2p0p0:
   module PartialConnect_v2p0p0:

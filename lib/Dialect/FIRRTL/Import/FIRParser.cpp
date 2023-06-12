@@ -839,6 +839,9 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     if (!innerType.isPassive())
       return emitError(loc, "probe inner type must be passive");
 
+    if (forceable && innerType.containsConst())
+      return emitError(loc, "rwprobe cannot contain const");
+
     result = RefType::get(innerType, forceable);
     break;
   }
