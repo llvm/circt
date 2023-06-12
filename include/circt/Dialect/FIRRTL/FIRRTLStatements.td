@@ -285,7 +285,7 @@ def PropAssignOp : FIRRTLOp<"passign", [FConnectLike, SameTypeOperands,
     }];
   let arguments = (ins PropertyType:$dest, PropertyType:$src);
   let results = (outs);
-  let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($dest))";
+  let assemblyFormat = "$dest `,` $src attr-dict `:` qualified(type($dest))";
   let extraClassDeclaration = [{
     static ConnectBehaviorKind getConnectBehaviorKind() {
       return ConnectBehaviorKind::StaticSingleConnect;
