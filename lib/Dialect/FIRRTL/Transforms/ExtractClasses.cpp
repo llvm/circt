@@ -12,6 +12,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/OM/OMOps.h"
@@ -30,11 +31,19 @@ struct ExtractClassesPass : public ExtractClassesBase<ExtractClassesPass> {
   void runOnOperation() override;
 
 private:
+  Value getOrCreateObjectValue(OpResult instanceOutput, InstanceOp instance,
+                               OpBuilder &builder, IRMapping &mapping,
+                               SmallVectorImpl<Operation *> &opsToErase);
+  ObjectOp getOrCreateObject(InstanceOp instance, OpBuilder &builder,
+                             IRMapping &mapping,
+                             SmallVectorImpl<Operation *> &opsToErase);
   void extractClass(FModuleOp moduleOp);
   void updateInstances(FModuleOp moduleOp);
 
   InstanceGraph *instanceGraph;
   DenseMap<Operation *, llvm::BitVector> portsToErase;
+  DenseMap<OpResult, Value> cachedObjectValues;
+  DenseMap<InstanceOp, ObjectOp> cachedObjects;
 };
 } // namespace
 
@@ -45,6 +54,105 @@ struct Property {
   Type type;
   Location loc;
 };
+
+/// Helper to get or create a Value from an ObjectFieldOp. This consults a cache
+/// to avoid re-creating ObjectFieldOps. An ObjectOp is looked up or created,
+/// and the field corresponding to the instance output is accessed. Note that
+/// this is able to work locally with just the instance and the OpResult, and
+/// the rest of the pass ensures the correct ClassOp is created.
+Value ExtractClassesPass::getOrCreateObjectValue(
+    OpResult instanceOutput, InstanceOp instance, OpBuilder &builder,
+    IRMapping &mapping, SmallVectorImpl<Operation *> &opsToErase) {
+  // Check if this ObjectField has already been created, and return it if so.
+  auto cachedObjectValue = cachedObjectValues.find(instanceOutput);
+  if (cachedObjectValue != cachedObjectValues.end())
+    return cachedObjectValue->getSecond();
+
+  // Get the result number for the InstanceOp output.
+  unsigned resultNum = instanceOutput.getResultNumber();
+
+  // Get the field type.
+  Type fieldType = instance.getResult(resultNum).getType();
+
+  // Get the ObjectOp to extract a field from.
+  ObjectOp object = getOrCreateObject(instance, builder, mapping, opsToErase);
+
+  // Get the field path.
+  StringAttr resultName = instance.getPortName(resultNum);
+  ArrayAttr fieldPath =
+      builder.getArrayAttr(FlatSymbolRefAttr::get(resultName));
+
+  // Construct the ObjectFieldOp.
+  auto fieldValue = builder.create<ObjectFieldOp>(instance.getLoc(), fieldType,
+                                                  object, fieldPath);
+
+  // Cache it for potential future lookups.
+  cachedObjectValues[instanceOutput] = fieldValue;
+
+  return fieldValue;
+}
+
+/// Helper to get or create an ObjectOp. This consults a cache to avoid
+/// re-creating ObjectOps. The actual parameters are computed by finding the
+/// assignments to the InstanceOp's inputs. The property ops involved are
+/// cloned, mapped, and marked for erasure as appropriate. The ObjectOp is then
+/// created with the appropriate type, class name, and the actual parameters.
+/// Note that this is able to work locally with just the instance, and the rest
+/// of the pass ensures the correct ClassOp is created.
+ObjectOp ExtractClassesPass::getOrCreateObject(
+    InstanceOp instance, OpBuilder &builder, IRMapping &mapping,
+    SmallVectorImpl<Operation *> &opsToErase) {
+  // Check if this ObjectField has already been created, and return it if so.
+  auto cachedObject = cachedObjects.find(instance);
+  if (cachedObject != cachedObjects.end())
+    return cachedObject->getSecond();
+
+  // Build up the ObjectOp's actual parameters.
+  SmallVector<Value> actualParams;
+  for (size_t i = 0; i < instance.getNumResults(); ++i) {
+    // Skip outputs and non-Property inputs.
+    if (instance.getPortDirection(i) == Direction::Out)
+      continue;
+    auto result = dyn_cast<FIRRTLPropertyValue>(instance.getResult(i));
+    if (!result)
+      continue;
+
+    // Get the assignment to the input property.
+    PropAssignOp propassign = getPropertyAssignment(result);
+
+    // The source value will be mapped into the actual parameter.
+    Value inputValue = propassign.getSrc();
+
+    // The property assignment must be deleted.
+    opsToErase.push_back(propassign);
+
+    // If the property was assigned from a property op, copy that over to the
+    // ClassOp as well. This may need to walk property ops, but for now only
+    // constant ops exist.
+    if (auto *definingOp = inputValue.getDefiningOp())
+      builder.clone(*definingOp, mapping);
+
+    // Lookup the mapping for the input value, and use this as an actual
+    // parameter.
+    actualParams.push_back(mapping.lookup(inputValue));
+  }
+
+  // Get the Object type.
+  auto objectType =
+      ClassType::get(instance.getContext(), instance.getModuleNameAttr());
+
+  // Get the Object's class name.
+  auto objectClass = instance.getModuleNameAttr().getAttr();
+
+  // Construct the ObjectOp.
+  auto object = builder.create<ObjectOp>(instance.getLoc(), objectType,
+                                         objectClass, actualParams);
+
+  // Cache it for potential future lookups.
+  cachedObjects[instance] = object;
+
+  return object;
+}
 
 /// Potentiall extract an OM class from a FIRRTL module which may contain
 /// properties.
@@ -109,17 +217,27 @@ void ExtractClassesPass::extractClass(FModuleOp moduleOp) {
     // Mark the property assign to be erased.
     opsToErase.push_back(getPropertyAssignment(outputValue));
 
-    // If the Value is defined by an Operation, copy that into the body, and
-    // map from the old Value to the new Value. This may need to walk property
-    // ops in order to copy them into the ClassOp, but for now only constant
-    // ops exist. Mark the property op to be erased.
+    // If the Value is defined by an Operation, copy it into the ClassOp.
     if (auto *op = originalValue.getDefiningOp()) {
-      builder.clone(*op, mapping);
+      // InstanceOps are handled specially, by creating ObjectOps and extracting
+      // an ObjectFieldOp. This will take care of re-using ObjectOps and
+      // ObjectFieldOps, updating the mapping, and keeping track of related ops
+      // that can be erased. The original value is mapped to the ObjectFieldOp.
+      if (auto instance = dyn_cast<InstanceOp>(op)) {
+        Value fieldValue =
+            getOrCreateObjectValue(cast<OpResult>(originalValue), instance,
+                                   builder, mapping, opsToErase);
+        mapping.map(originalValue, fieldValue);
+      } else {
+        // For all other ops, copy the defining op into the body, and
+        // map from the old Value to the new Value. This may need to walk
+        // property ops in order to copy them into the ClassOp, but for now only
+        // constant ops exist. Mark the property op to be erased.
+        builder.clone(*op, mapping);
 
-      // InstanceOps are handled specially, but any other property defining ops
-      // should be erased after being copied over.
-      if (!isa<InstanceOp>(op))
+        // Property defining ops should be erased after being copied over.
         opsToErase.push_back(op);
+      }
     }
 
     // Create the ClassFieldOp using the mapping to find the appropriate Value.
