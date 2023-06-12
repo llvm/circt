@@ -1412,6 +1412,7 @@ private:
   ParseResult parseRefReleaseInitial();
   ParseResult parseRefRead(Value &result);
   ParseResult parseProbe(Value &result);
+  ParseResult parsePropAssign();
   ParseResult parseRWProbe(Value &result);
   ParseResult parseLeadingExpStmt(Value lhs);
   ParseResult parseConnect();
@@ -2129,6 +2130,7 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
 ///      ::= when
 ///      ::= leading-exp-stmt
 ///      ::= define
+///      ::= propassign
 ///
 /// stmt ::= instance
 ///      ::= cmem | smem | mem
@@ -2164,6 +2166,8 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseMemPort(MemDirAttr::ReadWrite);
   case FIRToken::kw_connect:
     return parseConnect();
+  case FIRToken::kw_propassign:
+    return parsePropAssign();
   case FIRToken::kw_invalidate:
     return parseInvalidate();
   case FIRToken::lp_printf:
@@ -3012,6 +3016,28 @@ ParseResult FIRStmtParser::parseConnect() {
 
   locationProcessor.setLoc(loc);
   emitConnect(builder, lhs, rhs);
+  return success();
+}
+
+/// passign ::= 'propassign' expr expr
+ParseResult FIRStmtParser::parsePropAssign() {
+  auto startTok = consumeToken(FIRToken::kw_propassign);
+  auto loc = startTok.getLoc();
+
+  Value lhs, rhs;
+  if (parseExp(lhs, "expected propassign expression") ||
+      parseExp(rhs, "expected propassign expression") || parseOptionalInfo())
+    return failure();
+
+  auto lhsType = lhs.getType().dyn_cast<PropertyType>();
+  auto rhsType = rhs.getType().dyn_cast<PropertyType>();
+  if (!lhsType || !rhsType)
+    return emitError(loc, "can only propassign property types");
+  if (lhsType != rhsType)
+    return emitError(loc, "cannot propassign non-equivalent type ")
+           << rhsType << " to " << lhsType;
+  locationProcessor.setLoc(loc);
+  builder.create<PropAssignOp>(lhs, rhs);
   return success();
 }
 

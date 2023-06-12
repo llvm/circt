@@ -680,3 +680,11 @@ circuit ConstProbe:
 circuit MultiConst:
   module MultiConst:
     output x : const const UInt<1> ; expected-error {{'const' can only be specified once on a type}}
+
+;// -----
+
+circuit PropAssignNonProperty:
+  module PropAssignNonProperty:
+    input x : UInt<1>
+    output y : UInt<1>
+    propassign x, y ; expected-error {{can only propassign property types}}
