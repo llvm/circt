@@ -1479,11 +1479,25 @@ circuit Top:
   type ValidType = UInt<1>
   type Data = {w: WordType, valid: ValidType, flip ready: UInt<1>}
   type Complex = { real: SInt<10>, imag: SInt<10> }
+  type Complex_id = Complex
   ; expected-warning @+1 {{type alias for non-based type '!firrtl.probe<alias<Complex, bundle<real: sint<10>, imag: sint<10>>>>' is currently not supported. Type alias is stripped immediately}}
   type ProbeComplex = Probe<Complex>
   ; CHECK: @Top
-  ; CHECK-SAME: in %in: !firrtl.alias<Data, bundle<w: alias<WordType, uint<32>>, valid: alias<ValidType, uint<1>>, ready flip: uint<1>>>
+  ; CHECK-SAME: in %in_data: !firrtl.alias<Data, bundle<w: alias<WordType, uint<32>>, valid: alias<ValidType, uint<1>>, ready flip: uint<1>>>
+  ; CHECK-SAME: in %in_complex: !firrtl.alias<Complex, bundle<real: sint<10>, imag: sint<10>>>
   ; CHECK-SAME: out %out: !firrtl.probe<alias<Complex, bundle<real: sint<10>, imag: sint<10>>>>
+  ; CHECK-NEXT: %c = firrtl.wire interesting_name : !firrtl.alias<Complex_id, alias<Complex, bundle<real: sint<10>, imag: sint<10>>>>
+  ; Check that we directly emit strict connect op.
+  ; CHECK-NEXT: firrtl.strictconnect %c, %in_complex : !firrtl.alias<Complex_id, alias<Complex, bundle<real: sint<10>, imag: sint<10>>>>, !firrtl.alias<Complex, bundle<real: sint<10>, imag: sint<10>>>
   module Top:
-    input in: Data
+    input in_data: Data
+    input in_complex: Complex
     output out: ProbeComplex
+    wire c: Complex_id
+    connect c, in_complex
+
+  ; CHECK-LABEL: firrtl.module private @Const
+  ; CHECK-SAME: (in %a: !firrtl.const.alias<ConstI1, const.uint<1>>)
+  type ConstI1 = const UInt<1>
+  module Const :
+    input a: ConstI1

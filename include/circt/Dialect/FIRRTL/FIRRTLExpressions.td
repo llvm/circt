@@ -83,6 +83,12 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
         return {};
       return inferReturnType(operands, attrs, loc);
     }
+
+    // Returns when two result types are compatible for this op; method used by
+    // InferTypeOpInterface.
+    static bool isCompatibleReturnTypes(TypeRange l, TypeRange r) {
+      return areTypesStructuallyEquivalent(l, r);
+    }
   }];
 }
 
