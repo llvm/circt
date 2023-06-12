@@ -27,7 +27,7 @@ private:
   // Recursively routes value v backwards through the pipeline, adding new
   // registers to 'stage' if the value was not already registered in the stage.
   // Returns the registerred version of 'v' through 'stage'.
-  Value routeThroughStage(OpOperand &v, Block *stage);
+  Value routeThroughStage(Value v, Block *stage);
 
   // A mapping storing whether a given stage register constains a registerred
   // version of a given value. The registered version will be a backedge during
@@ -44,9 +44,8 @@ private:
 } // end anonymous namespace
 
 // NOLINTNEXTLINE(misc-no-recursion)
-Value ExplicitRegsPass::routeThroughStage(OpOperand &v, Block *stage) {
-  Value retVal = v.get();
-
+Value ExplicitRegsPass::routeThroughStage(Value v, Block *stage) {
+  Value retVal = v;
   auto regIt = stageRegMap[stage].find(retVal);
   if (regIt != stageRegMap[stage].end()) {
     // 'v' is already registered in 'stage'.
@@ -78,7 +77,6 @@ Value ExplicitRegsPass::routeThroughStage(OpOperand &v, Block *stage) {
   Block *stagePred = stage->getSinglePredecessor();
   assert(stagePred && "Expected stage to have a single predecessor");
   routeThroughStage(v, stagePred);
-
   return retVal;
 }
 
@@ -93,7 +91,7 @@ void ExplicitRegsPass::runOnOperation() {
       // Check the operands of this operation to see if any of them cross a
       // stage boundary.
       for (OpOperand &operand : op.getOpOperands()) {
-        Value reroutedValue = routeThroughStage(operand, stage);
+        Value reroutedValue = routeThroughStage(operand.get(), stage);
         if (reroutedValue != operand.get())
           op.setOperand(operand.getOperandNumber(), reroutedValue);
       }

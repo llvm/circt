@@ -62,6 +62,7 @@ public:
     StageReturns rets;
     auto stageTerminator = dyn_cast<StageOp>(terminator);
     if (!stageTerminator) {
+      assert(isa<ReturnOp>(terminator) && "expected ReturnOp");
       // This was the pipeline return op - we're done.
       rets.passthroughs = terminator->getOperands();
       return rets;

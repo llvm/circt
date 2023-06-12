@@ -96,7 +96,7 @@ void ScheduledPipelineOp::build(mlir::OpBuilder &odsBuilder,
   entryBlock.addArguments(inputs.getTypes(), entryArgLocs);
 }
 
-Block *ScheduledPipelineOp::addStage(Location loc) {
+Block *ScheduledPipelineOp::addStage() {
   OpBuilder builder(getContext());
   Block *stage = builder.createBlock(&getRegion());
   return stage;
@@ -145,7 +145,7 @@ LogicalResult ScheduledPipelineOp::verify() {
             // Constants are allowed to be used across stages.
             if (definingOp->hasTrait<OpTrait::ConstantLike>())
               continue;
-            err = operand.getDefiningOp()->getBlock() != &stage;
+            err = definingOp->getBlock() != &stage;
           } else {
             // This is a block argument;
             err = !llvm::is_contained(stage.getArguments(), operand);

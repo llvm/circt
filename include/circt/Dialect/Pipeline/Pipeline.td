@@ -155,7 +155,7 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
 
     // Adds a new stage to this pipeline. It is the users responsibility to
     // modify other stages to point to this new stage.
-    Block* addStage(Location loc);
+    Block* addStage();
 
     // Returns true if the pipeline has entered the register materialized phase.
     // This enables certain invariants such as "all values used within a stage

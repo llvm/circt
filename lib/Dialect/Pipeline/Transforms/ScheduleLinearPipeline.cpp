@@ -166,7 +166,7 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
     auto oldEndTime = currentEndTime;
     currentEndTime = std::max(currentEndTime, *problem.getEndTime(&op));
     for (unsigned i = oldEndTime; i < currentEndTime; ++i) {
-      Block *newStage = schedPipeline.addStage(b.getUnknownLoc());
+      Block *newStage = schedPipeline.addStage();
 
       // Create a StageOp in the new stage, and branch it to the newly created
       // stage.

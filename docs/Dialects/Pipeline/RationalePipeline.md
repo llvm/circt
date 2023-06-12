@@ -101,3 +101,14 @@ operation.
   pipeline.return %3 valid %go_s1 : i32 // and likewise with %go
 }
 ```
+
+## A note on constants
+Constants (defined as all operations which the `OpTrait::ConstantLike` trait) are
+special cases in the pipeline dialect. These are allowed to be used anywhere
+within the pipeline, and are not subject to the SSA def-use edge restrictions
+described above. By doing so, we allow for constant canonicalizers to run,
+which may apply regardless of where a constant is used within the pipeline.  
+The result of this is that constant-like operations will be moved to the
+entry stage of the pipeline.  
+In the `pipeline-to-hw` pass, in case the user selects to perform `outline`d
+lowering, constants will be **copied** into the stages which reference them.
