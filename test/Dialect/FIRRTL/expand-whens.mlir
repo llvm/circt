@@ -567,5 +567,4 @@ firrtl.module @PropInitOut(out %out : !firrtl.string) {
   firrtl.propassign %out, %0 : !firrtl.string
 }
 
-
 }
