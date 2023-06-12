@@ -272,15 +272,15 @@ def MatchOp : FIRRTLOp<"match", [SingleBlock, NoTerminator,
   }];
 }
 
-def PropAssignOp : FIRRTLOp<"passign", [FConnectLike, SameTypeOperands,
-                                        HasParent<"FModuleOp">]> {
+def PropAssignOp : FIRRTLOp<"propassign", [FConnectLike, SameTypeOperands,
+                                           HasParent<"FModuleOp">]> {
   let summary = "Assign to a sink property value.";
   let description = [{
     Assign an output property value. The types must match exactly.
 
     Example:
     ```mlir
-      firrtl.passign %dest, %src : !firrtl.string
+      firrtl.propassign %dest, %src : !firrtl.string
     ```
     }];
   let arguments = (ins PropertyType:$dest, PropertyType:$src);

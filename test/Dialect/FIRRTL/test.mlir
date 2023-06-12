@@ -246,7 +246,7 @@ firrtl.module @OpenAggTest(in %in: !firrtl.openbundle<a: bundle<data: uint<1>>, 
 // CHECK-LABEL: StringTest
 // CHECK-SAME:  (in %in: !firrtl.string, out %out: !firrtl.string)
 firrtl.module @StringTest(in %in: !firrtl.string, out %out: !firrtl.string) {
-  firrtl.passign %out, %in : !firrtl.string
+  firrtl.propassign %out, %in : !firrtl.string
   // CHECK: %0 = firrtl.string "hello"
   %0 = firrtl.string "hello"
 }
