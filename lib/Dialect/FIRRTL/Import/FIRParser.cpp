@@ -771,6 +771,7 @@ ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
 ///      ::= 'Probe' '<' type '>'
 ///      ::= 'RWProbe' '<' type '>'
 ///      ::= 'const' type
+///      ::= 'String'
 ///
 /// field: 'flip'? fieldId ':' type
 ///
@@ -901,6 +902,11 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     result = baseType.getConstType(true);
     return success();
   }
+
+  case FIRToken::kw_String:
+    consumeToken(FIRToken::kw_String);
+    result = StringType::get(getContext());
+    break;
   }
 
   // Handle postfix vector sizes.
@@ -2995,7 +3001,7 @@ ParseResult FIRStmtParser::parseConnect() {
   auto lhsType = lhs.getType().dyn_cast<FIRRTLBaseType>();
   auto rhsType = rhs.getType().dyn_cast<FIRRTLBaseType>();
   if (!lhsType || !rhsType)
-    return emitError(loc, "cannot connect reference types");
+    return emitError(loc, "cannot connect reference or property types");
   // TODO: Once support lands for agg-of-ref, add test for this check!
   if (lhsType.containsReference() || rhsType.containsReference())
     return emitError(loc, "cannot connect types containing references");
@@ -3064,7 +3070,7 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
   auto lhsType = lhs.getType().dyn_cast<FIRRTLBaseType>();
   auto rhsType = rhs.getType().dyn_cast<FIRRTLBaseType>();
   if (!lhsType || !rhsType)
-    return emitError(loc, "cannot connect reference types");
+    return emitError(loc, "cannot connect reference or property types");
   // TODO: Once support lands for agg-of-ref, add test for this check!
   if (lhsType.containsReference() || rhsType.containsReference())
     return emitError(loc, "cannot connect types containing references");
