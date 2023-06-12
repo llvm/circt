@@ -526,6 +526,9 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
       .Case<BundleType, FVectorType, FEnumType, OpenBundleType, OpenVectorType,
             RefType>(
           [](auto type) { return type.getRecursiveTypeProperties(); })
+      .Case<StringType>([](auto type) {
+        return RecursiveTypeProperties{true, false, false, false, false, false};
+      })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return RecursiveTypeProperties{};

@@ -532,7 +532,7 @@ circuit ProbeConnect:
     input in : UInt<1>
     output p : Probe<UInt<1>>
 
-    p <= probe(in) ; expected-error {{cannot connect reference types}}
+    p <= probe(in) ; expected-error {{cannot connect reference or property types}}
 
 ;// -----
 
@@ -542,7 +542,7 @@ circuit ProbeConnectAlternate:
     input in : UInt<1>
     output p : Probe<UInt<1>>
 
-    connect p, probe(in) ; expected-error {{cannot connect reference types}}
+    connect p, probe(in) ; expected-error {{cannot connect reference or property types}}
 
 ;// -----
 
@@ -552,7 +552,7 @@ circuit ProbePartialConnect:
     input in : UInt<1>
     output p : Probe<UInt<1>>
 
-    p <- probe(in) ; expected-error {{cannot connect reference types}}
+    p <- probe(in) ; expected-error {{cannot connect reference or property types}}
 
 ;// -----
 

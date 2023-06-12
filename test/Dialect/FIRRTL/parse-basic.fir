@@ -1171,6 +1171,11 @@ circuit EnumTypes:
       ; CHECK: }
       None:
         o is invalid
+        
+  ; CHECK-LABEL: module private @Properties
+  module Properties :
+    ; CHECK-SAME: in %a: !firrtl.string
+    input a : String
 
   ; CHECK-LABEL: module private @RefsChild(
   ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>
