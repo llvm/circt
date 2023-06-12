@@ -3019,7 +3019,7 @@ ParseResult FIRStmtParser::parseConnect() {
   return success();
 }
 
-/// passign ::= 'propassign' expr expr
+/// propassign ::= 'propassign' expr expr
 ParseResult FIRStmtParser::parsePropAssign() {
   auto startTok = consumeToken(FIRToken::kw_propassign);
   auto loc = startTok.getLoc();
