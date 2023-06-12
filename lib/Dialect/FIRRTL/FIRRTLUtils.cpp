@@ -161,6 +161,21 @@ IntegerAttr circt::firrtl::getIntOnesAttr(Type type) {
   return getIntAttr(type, APInt(width, -1));
 }
 
+/// Return the single assignment to a Property value. It is assumed that the
+/// single assigment invariant is enforced elsewhere.
+PropAssignOp circt::firrtl::getPropertyAssignment(Value value) {
+  assert(isa<PropertyType>(value.getType()) && "expected a PropertyType value");
+  for (auto *user : value.getUsers())
+    if (auto propassign = dyn_cast<PropAssignOp>(user))
+      if (propassign.getDest() == value)
+        return propassign;
+
+  // The invariant that there is a single assignment should be enforced
+  // elsewhere. If for some reason a user called this on a Property value that
+  // is not assigned (like a module input port), just return null.
+  return nullptr;
+}
+
 /// Return the value that drives another FIRRTL value within module scope.  Only
 /// look backwards through one connection.  This is intended to be used in
 /// situations where you only need to look at the most recent connect, e.g., to
