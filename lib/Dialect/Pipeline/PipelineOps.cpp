@@ -241,13 +241,22 @@ LogicalResult StageOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult LatencyOp::verify() {
+  ScheduledPipelineOp scheduledPipelineParent =
+      dyn_cast<ScheduledPipelineOp>(getOperation()->getParentOp());
+
+  if (!scheduledPipelineParent) {
+    // Nothing to verify, got to assume that anything goes in an unscheduled
+    // pipeline.
+    return success();
+  }
+
   // Verify that the resulting values aren't referenced before they are
   // accessible.
   size_t latency = getLatency();
   Block *definingStage = getOperation()->getBlock();
 
   llvm::DenseMap<Block *, unsigned> stageMap =
-      getOperation()->getParentOfType<ScheduledPipelineOp>().getStageMap();
+      scheduledPipelineParent.getStageMap();
 
   auto stageDistance = [&](Block *from, Block *to) {
     int64_t fromStage = stageMap[from];

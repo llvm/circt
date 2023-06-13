@@ -4,7 +4,10 @@
 hw.module @unscheduled1(%arg0 : i32, %arg1 : i32, %clk : i1, %rst : i1) -> (out: i32) {
   %0 = pipeline.unscheduled(%arg0, %arg1) clock %clk reset %rst : (i32, i32) -> (i32) {
    ^bb0(%a0 : i32, %a1: i32):
-    %0 = comb.add %a0, %a1 : i32
+    %0 = pipeline.latency 2 -> (i32) {
+      %1 = comb.add %a0, %a1 : i32
+      pipeline.latency.return %1 : i32
+    }
     %c1_i1 = hw.constant 1 : i1
     pipeline.return %0 : i32
   }

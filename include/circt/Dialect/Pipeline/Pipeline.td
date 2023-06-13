@@ -264,8 +264,8 @@ def LatencyReturnOp : Op<Pipeline_Dialect, "latency.return", [
   ]> {
   let summary = "Pipeline latency return operation.";
   let description = [{
-    The `latency.return` operation represents a terminator of a `pipeline.latency`
-    operation.
+    The `pipeline.latency.return` operation represents a terminator of a
+    `pipeline.latency` operation.
   }];
 
   let hasVerifier = 1;
