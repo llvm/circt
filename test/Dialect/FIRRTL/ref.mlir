@@ -229,3 +229,12 @@ firrtl.circuit "Forceable" {
   }
 }
 
+// -----
+
+firrtl.circuit "RefDefineAndCastWidths" {
+  firrtl.module @RefDefineAndCastWidths(in %x: !firrtl.uint<2>, out %p : !firrtl.probe<uint>) {
+    %ref = firrtl.ref.send %x : !firrtl.uint<2>
+    %cast = firrtl.ref.cast %ref : (!firrtl.probe<uint<2>>) -> !firrtl.probe<uint>
+    firrtl.ref.define %p, %cast : !firrtl.probe<uint>
+  }
+}
