@@ -1171,7 +1171,7 @@ circuit EnumTypes:
       ; CHECK: }
       None:
         o is invalid
-        
+
   ; CHECK-LABEL: module private @Properties
   module Properties :
     ; CHECK-SAME: out %a: !firrtl.string
