@@ -211,4 +211,8 @@ def StringType : FIRRTLDialectType<CPred<"$_self.isa<StringType>()">,
   "StringType", "::circt::firrtl::StringType">,
   BuildableType<"::circt::firrtl::StringType::get($_builder.getContext())">;
 
+def BigIntType : FIRRTLDialectType<CPred<"$_self.isa<BigIntType>()">,
+  "BigIntType", "::circt::firrtl::BigIntType">,
+  BuildableType<"::circt::firrtl::BigIntType::get($_builder.getContext())">;
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD
