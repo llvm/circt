@@ -640,6 +640,11 @@ void circt::firrtl::walkGroundTypes(
     FIRRTLType firrtlType,
     llvm::function_ref<void(uint64_t, FIRRTLBaseType)> fn) {
   auto type = getBaseType(firrtlType);
+
+  // If this is not a base type, return.
+  if (!type)
+    return;
+
   // If this is a ground type, don't call recursive functions.
   if (type.isGround())
     return fn(0, type);
