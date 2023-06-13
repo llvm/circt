@@ -112,3 +112,60 @@ The result of this is that constant-like operations will be moved to the
 entry stage of the pipeline.  
 In the `pipeline-to-hw` pass, in case the user selects to perform `outline`d
 lowering, constants will be **copied** into the stages which reference them.
+
+## Multicycle operations
+Oftentimes, we may have operations which take multiple cycles to complete within
+a pipeline. Support for this is provided by the `pipeline.latency` operation.
+The main purpose of this operation is to provide a way to inform the
+register materialization pass to pass values through stages _without_ registering them.
+
+Currently, all return values have an identical latency. This is an
+arbitrary restriction, and may be lifted in the future if needed.
+
+As an example pipeline:
+```mlir
+^bb1:
+...
+%out = pipeline.latency 2 -> (i32) {
+  %dl1 = seq.compreg %in : i32
+  %dl2 = seq.compreg %dl1 : i32
+  pipeline.latency.return %dl2 : i32
+}
+pipeline.stage ^bb2
+
+^bb2:
+// It is illegal to reference %out here
+pipeline.stage ^bb3
+
+
+^bb3:
+// It is legal to reference %out here
+pipeline.stage ^bb4
+
+^bb4:
+// It is legal to reference %out here. This will also imply a register
+// between stage bb3 and bb4.
+foo.bar %out : i32
+```
+
+which will register materialize to:
+```mlir
+^bb1:
+...
+%out = pipeline.latency 2 -> (i32) {
+  %dl1 = seq.compreg %in : i32
+  %dl2 = seq.compreg %dl1 : i32
+  pipeline.latency.return %dl2 : i32
+}
+pipeline.stage ^bb2 pass(%out : i32)
+
+^bb2(%out_s2 : i32):
+pipeline.stage ^bb3 pass(%out_s2 : i32)
+
+
+^bb3(%out_s3 : i32):
+pipeline.stage ^bb4 regs(%out_s3 : i32)
+
+^bb4(%out_s4 : i32):
+foo.bar %out_s4 : i32
+```

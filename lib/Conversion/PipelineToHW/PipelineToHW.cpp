@@ -56,7 +56,23 @@ public:
     for (auto &op : llvm::make_early_inc_range(*stage)) {
       if (&op == terminator)
         continue;
-      op.moveBefore(builder.getInsertionBlock(), builder.getInsertionPoint());
+
+      if (auto latencyOp = dyn_cast<LatencyOp>(op)) {
+        // For now, just directly emit the body of the latency op. The latency
+        // op is mainly used during register materialization. At a later stage,
+        // we may want to add some TCL-related things here to communicate
+        // multicycle paths.
+        Block *latencyOpBody = latencyOp.getBodyBlock();
+        for (auto &innerOp :
+             llvm::make_early_inc_range(latencyOpBody->without_terminator()))
+          innerOp.moveBefore(builder.getInsertionBlock(),
+                             builder.getInsertionPoint());
+        latencyOp.replaceAllUsesWith(
+            latencyOpBody->getTerminator()->getOperands());
+        latencyOp.erase();
+      } else {
+        op.moveBefore(builder.getInsertionBlock(), builder.getInsertionPoint());
+      }
     }
 
     StageReturns rets;
@@ -80,6 +96,8 @@ public:
           reset, Value(), StringAttr());
       rets.regs.push_back(reg);
     }
+
+    rets.passthroughs = stageTerminator.getPassthroughs();
     return rets;
   }
 

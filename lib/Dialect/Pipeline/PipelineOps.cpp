@@ -124,6 +124,15 @@ llvm::SmallVector<Block *> ScheduledPipelineOp::getOrderedStages() {
   return orderedStages;
 }
 
+llvm::DenseMap<Block *, unsigned> ScheduledPipelineOp::getStageMap() {
+  llvm::DenseMap<Block *, unsigned> stageMap;
+  auto orderedStages = getOrderedStages();
+  for (auto [index, stage] : llvm::enumerate(orderedStages))
+    stageMap[stage] = index;
+
+  return stageMap;
+}
+
 Block *ScheduledPipelineOp::getLastStage() { return getOrderedStages().back(); }
 
 bool ScheduledPipelineOp::isMaterialized() {
@@ -230,6 +239,87 @@ LogicalResult StageOp::verify() {
     if (arg != barg)
       return emitOpError("expected target stage argument ")
              << index << " to have type " << arg << ", got " << barg << ".";
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// LatencyOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult LatencyOp::verify() {
+  ScheduledPipelineOp scheduledPipelineParent =
+      dyn_cast<ScheduledPipelineOp>(getOperation()->getParentOp());
+
+  if (!scheduledPipelineParent) {
+    // Nothing to verify, got to assume that anything goes in an unscheduled
+    // pipeline.
+    return success();
+  }
+
+  // Verify that the resulting values aren't referenced before they are
+  // accessible.
+  size_t latency = getLatency();
+  Block *definingStage = getOperation()->getBlock();
+
+  llvm::DenseMap<Block *, unsigned> stageMap =
+      scheduledPipelineParent.getStageMap();
+
+  auto stageDistance = [&](Block *from, Block *to) {
+    int64_t fromStage = stageMap[from];
+    int64_t toStage = stageMap[to];
+    return toStage - fromStage;
+  };
+
+  for (auto [i, res] : llvm::enumerate(getResults())) {
+    for (auto &use : res.getUses()) {
+      auto *user = use.getOwner();
+      Block *userStage = user->getBlock();
+      unsigned useDistance = stageDistance(definingStage, userStage);
+
+      // Is this a stage op and is the value passed through? if so, this is a
+      // legal use.
+      StageOp stageOp = dyn_cast<StageOp>(user);
+      if (userStage == definingStage && stageOp) {
+        if (llvm::is_contained(stageOp.getPassthroughs(), res))
+          continue;
+      }
+
+      // The use is not a passthrough. Check that the distance between
+      // the defining stage and the user stage is at least the latency of the
+      // result.
+      if (useDistance < latency) {
+        auto diag = emitOpError("result ")
+                    << i << " is used before it is available.";
+        diag.attachNote(user->getLoc())
+            << "use was operand " << use.getOperandNumber()
+            << ". The result is available " << latency - useDistance
+            << " stages later than this use.";
+        return diag;
+      }
+    }
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// LatencyReturnOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult LatencyReturnOp::verify() {
+  LatencyOp parent = cast<LatencyOp>(getOperation()->getParentOp());
+  size_t nInputs = getInputs().size();
+  size_t nResults = parent->getNumResults();
+  if (nInputs != nResults)
+    return emitOpError("expected ")
+           << nResults << " return values, got " << nInputs << ".";
+
+  for (auto [inType, reqType] :
+       llvm::zip(getInputs().getTypes(), parent->getResultTypes())) {
+    if (inType != reqType)
+      return emitOpError("expected return value of type ")
+             << reqType << ", got " << inType << ".";
   }
 
   return success();

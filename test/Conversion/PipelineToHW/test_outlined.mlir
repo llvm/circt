@@ -19,6 +19,68 @@ hw.module @testBasic(%arg0: i1, %clk: i1, %rst: i1) -> (out: i1) {
   hw.output %0 : i1
 }
 
+// CHECK-LABEL:   hw.module @testLatency1_p0(
+// CHECK-SAME:            %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1) -> (out0: i32) {
+// CHECK:           %[[VAL_3:.*]] = hw.instance "testLatency1_p0_s0" @testLatency1_p0_s0(in0: %[[VAL_0]]: i32, clk: %[[VAL_1]]: i1, rst: %[[VAL_2]]: i1) -> (out0: i32)
+// CHECK:           %[[VAL_4:.*]] = hw.instance "testLatency1_p0_s1" @testLatency1_p0_s1(in0: %[[VAL_3]]: i32, clk: %[[VAL_1]]: i1, rst: %[[VAL_2]]: i1) -> (out0: i32)
+// CHECK:           %[[VAL_5:.*]] = hw.instance "testLatency1_p0_s2" @testLatency1_p0_s2(in0: %[[VAL_4]]: i32, clk: %[[VAL_1]]: i1, rst: %[[VAL_2]]: i1) -> (out0: i32)
+// CHECK:           %[[VAL_6:.*]] = hw.instance "testLatency1_p0_s3" @testLatency1_p0_s3(in0: %[[VAL_5]]: i32, clk: %[[VAL_1]]: i1, rst: %[[VAL_2]]: i1) -> (out0: i32)
+// CHECK:           hw.output %[[VAL_6]] : i32
+// CHECK:         }
+
+// CHECK-LABEL:   hw.module @testLatency1_p0_s0(
+// CHECK-SAME:             %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1) -> (out0: i32) {
+// CHECK:           %[[VAL_3:.*]] = hw.constant true
+// CHECK:           %[[VAL_4:.*]] = comb.add %[[VAL_0]], %[[VAL_0]] : i32
+// CHECK:           hw.output %[[VAL_4]] : i32
+// CHECK:         }
+
+// CHECK-LABEL:   hw.module @testLatency1_p0_s1(
+// CHECK-SAME:             %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1) -> (out0: i32) {
+// CHECK:           %[[VAL_3:.*]] = hw.constant true
+// CHECK:           hw.output %[[VAL_0]] : i32
+// CHECK:         }
+
+// CHECK-LABEL:   hw.module @testLatency1_p0_s2(
+// CHECK-SAME:              %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1) -> (out0: i32) {
+// CHECK:           %[[VAL_3:.*]] = hw.constant true
+// CHECK:           %[[VAL_4:.*]] = seq.compreg %[[VAL_0]], %[[VAL_1]] : i32
+// CHECK:           hw.output %[[VAL_4]] : i32
+// CHECK:         }
+
+// CHECK-LABEL:   hw.module @testLatency1_p0_s3(
+// CHECK-SAME:             %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1) -> (out0: i32) {
+// CHECK:           %[[VAL_3:.*]] = hw.constant true
+// CHECK:           %[[VAL_4:.*]] = seq.compreg %[[VAL_0]], %[[VAL_1]] : i32
+// CHECK:           hw.output %[[VAL_4]] : i32
+// CHECK:         }
+
+// CHECK-LABEL:   hw.module @testLatency1(
+// CHECK-SAME:             %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out: i32) {
+// CHECK:           %[[VAL_5:.*]] = hw.instance "testLatency1_p0" @testLatency1_p0(in0: %[[VAL_0]]: i32, clk: %[[VAL_3]]: i1, rst: %[[VAL_4]]: i1) -> (out0: i32)
+// CHECK:           hw.output %[[VAL_5]] : i32
+// CHECK:         }
+hw.module @testLatency1(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out: i32) {
+  %0 = pipeline.scheduled(%arg0) clock %clk reset %rst : (i32) -> i32 {
+  ^bb0(%arg0_0: i32):
+    %true = hw.constant true
+    %1 = pipeline.latency 2 -> (i32) {
+      %6 = comb.add %arg0_0, %arg0_0 : i32
+      pipeline.latency.return %6 : i32
+    }
+    pipeline.stage ^bb1 pass(%1 : i32) enable %true
+  ^bb1(%2: i32):  // pred: ^bb0
+    pipeline.stage ^bb2 pass(%2 : i32) enable %true
+  ^bb2(%3: i32):  // pred: ^bb1
+    pipeline.stage ^bb3 regs(%3 : i32) enable %true
+  ^bb3(%4: i32):  // pred: ^bb2
+    pipeline.stage ^bb4 regs(%4 : i32) enable %true
+  ^bb4(%5: i32):  // pred: ^bb3
+    pipeline.return %5 : i32
+  }
+  hw.output %0 : i32
+}
+
 // CHECK-LABEL:   hw.module @testSingle_p0(
 // CHECK-SAME:           %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, out1: i1) {
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = hw.instance "testSingle_p0_s0" @testSingle_p0_s0(in0: %[[VAL_0]]: i32, in1: %[[VAL_1]]: i32, in2: %[[VAL_2]]: i1, clk: %[[VAL_3]]: i1, rst: %[[VAL_4]]: i1) -> (out0: i32, out1: i32)
