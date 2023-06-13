@@ -1740,7 +1740,7 @@ void InferenceMapping::declareVars(Value value, Location loc, bool isDerived) {
       llvm_unreachable("Unknown type inside a bundle!");
     }
   };
-  if (auto type = getBaseType(value.getType().cast<FIRRTLType>()))
+  if (auto type = getBaseType(value.getType()))
     declare(type);
 }
 
@@ -1775,8 +1775,8 @@ void InferenceMapping::maximumOfTypes(Value result, Value rhs, Value lhs) {
       llvm_unreachable("Unknown type inside a bundle!");
     }
   };
-  if (auto type = getBaseType(result.getType().cast<FIRRTLType>()))
-    maximize(getBaseType(type));
+  if (auto type = getBaseType(result.getType()))
+    maximize(type);
 }
 
 /// Establishes constraints to ensure the sizes in the `larger` type are greater
@@ -1822,8 +1822,8 @@ void InferenceMapping::constrainTypes(Value larger, Value smaller) {
         }
       };
 
-  if (auto type = larger.getType().dyn_cast<FIRRTLType>())
-    constrain(getBaseType(type), larger, smaller);
+  if (auto type = getBaseType(larger.getType()))
+    constrain(type, larger, smaller);
 }
 
 /// Establishes constraints to ensure the sizes in the `larger` type are greater
