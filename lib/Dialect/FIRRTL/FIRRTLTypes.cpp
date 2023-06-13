@@ -971,6 +971,104 @@ bool firrtl::areTypesConstCastable(FIRRTLType destFType, FIRRTLType srcFType,
   return destType == srcType.getConstType(destType.isConst());
 }
 
+bool firrtl::areTypesRefCastable(Type dstType, Type srcType) {
+  auto dstRefType = dyn_cast<RefType>(dstType);
+  auto srcRefType = dyn_cast<RefType>(srcType);
+  if (!dstRefType || !srcRefType)
+    return false;
+  if (dstRefType == srcRefType)
+    return true;
+  if (dstRefType.getForceable() && !srcRefType.getForceable())
+    return false;
+
+  // Okay walk the types recursively.  They must be identical "structurally"
+  // with exception leaf (ground) types of destination can be uninferred
+  // versions of the corresponding source type. (can lose width information or
+  // become a more general reset type)
+  // In addition, while not explicitly in spec its useful to allow probes
+  // to have const cast away, especially for probes of literals and expressions
+  // derived from them.  Check const as with const cast.
+  // NOLINTBEGIN(misc-no-recursion)
+  auto recurse = [&](auto &&f, FIRRTLBaseType dest, FIRRTLBaseType src,
+                     bool srcOuterTypeIsConst) -> bool {
+    // Fast-path for identical types.
+    if (dest == src)
+      return true;
+
+    // Always passive inside probes, but for sanity assert this.
+    assert(dest.isPassive() && src.isPassive());
+
+    bool srcIsConst = src.isConst() || srcOuterTypeIsConst;
+
+    // Cannot cast non-'const' src to 'const' dest
+    if (dest.isConst() && !srcIsConst)
+      return false;
+
+    // Recurse through aggregates to get the leaves, checking
+    // structural equivalence re:element count + names.
+
+    if (auto destVectorType = dest.dyn_cast<FVectorType>()) {
+      auto srcVectorType = src.dyn_cast<FVectorType>();
+      return srcVectorType &&
+             destVectorType.getNumElements() ==
+                 srcVectorType.getNumElements() &&
+             f(f, destVectorType.getElementType(),
+               srcVectorType.getElementType(), srcIsConst);
+    }
+
+    if (auto destBundleType = dest.dyn_cast<BundleType>()) {
+      auto srcBundleType = src.dyn_cast<BundleType>();
+      if (!srcBundleType)
+        return false;
+      // (no need to check orientation, these are always passive)
+      auto destElements = destBundleType.getElements();
+      auto srcElements = srcBundleType.getElements();
+
+      return destElements.size() == srcElements.size() &&
+             llvm::all_of_zip(
+                 destElements, srcElements,
+                 [&](const auto &destElement, const auto &srcElement) {
+                   return destElement.name == srcElement.name &&
+                          f(f, destElement.type, srcElement.type, srcIsConst);
+                 });
+    }
+
+    if (auto destEnumType = dest.dyn_cast<FEnumType>()) {
+      auto srcEnumType = src.dyn_cast<FEnumType>();
+      if (!srcEnumType)
+        return false;
+      auto destElements = destEnumType.getElements();
+      auto srcElements = srcEnumType.getElements();
+
+      return destElements.size() == srcElements.size() &&
+             llvm::all_of_zip(
+                 destElements, srcElements,
+                 [&](const auto &destElement, const auto &srcElement) {
+                   return destElement.name == srcElement.name &&
+                          f(f, destElement.type, srcElement.type, srcIsConst);
+                 });
+    }
+
+    // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
+    if (dest.isa<ResetType>())
+      return src.isResetType();
+    // (but don't allow the other direction, can only become more general)
+
+    // Compare against const src if dest is const.
+    src = src.getConstType(dest.isConst());
+
+    // Compare against widthless src if dest is widthless.
+    if (dest.getBitWidthOrSentinel() == -1)
+      src = src.getWidthlessType();
+
+    return dest == src;
+  };
+
+  return recurse(recurse, dstRefType.getType(), srcRefType.getType(), false);
+  // NOLINTEND(misc-no-recursion)
+}
+
+// NOLINTBEGIN(misc-no-recursion)
 /// Returns true if the destination is at least as wide as an equivalent source.
 bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
   return TypeSwitch<FIRRTLBaseType, bool>(dstType)
@@ -999,6 +1097,7 @@ bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
         return destWidth <= -1 || srcWidth <= -1 || destWidth >= srcWidth;
       });
 }
+// NOLINTEND(misc-no-recursion)
 
 /// Return the passive version of a firrtl type
 /// top level for ODS constraint usage
