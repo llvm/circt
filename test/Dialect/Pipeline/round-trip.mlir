@@ -4,11 +4,14 @@
 // CHECK-SAME:         %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1) -> (out: i32) {
 // CHECK:           %[[VAL_4:.*]] = pipeline.unscheduled(%[[VAL_0]], %[[VAL_1]]) clock %[[VAL_2]] reset %[[VAL_3]] : (i32, i32) -> i32 {
 // CHECK:           ^bb0(%[[VAL_5:.*]]: i32, %[[VAL_6:.*]]: i32):
-// CHECK:             %[[VAL_7:.*]] = comb.add %[[VAL_5]], %[[VAL_6]] : i32
-// CHECK:             %[[VAL_8:.*]] = hw.constant true
-// CHECK:             pipeline.return %[[VAL_7]] : i32
+// CHECK:             %[[VAL_7:.*]] = pipeline.latency 2 -> (i32) {
+// CHECK:               %[[VAL_8:.*]] = comb.add %[[VAL_5]], %[[VAL_6]] : i32
+// CHECK:               pipeline.latency.return %[[VAL_8]] : i32
+// CHECK:             }
+// CHECK:             %[[VAL_9:.*]] = hw.constant true
+// CHECK:             pipeline.return %[[VAL_10:.*]] : i32
 // CHECK:           }
-// CHECK:           hw.output %[[VAL_9:.*]] : i32
+// CHECK:           hw.output %[[VAL_11:.*]] : i32
 // CHECK:         }
 hw.module @unscheduled1(%arg0 : i32, %arg1 : i32, %clk : i1, %rst : i1) -> (out: i32) {
   %0 = pipeline.unscheduled(%arg0, %arg1) clock %clk reset %rst : (i32, i32) -> (i32) {
