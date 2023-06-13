@@ -285,6 +285,7 @@ def PropAssignOp : FIRRTLOp<"propassign", [FConnectLike, SameTypeOperands,
     }];
   let arguments = (ins PropertyType:$dest, PropertyType:$src);
   let results = (outs);
+  let hasVerifier = 1;
   let assemblyFormat = "$dest `,` $src attr-dict `:` qualified(type($dest))";
   let extraClassDeclaration = [{
     static ConnectBehaviorKind getConnectBehaviorKind() {

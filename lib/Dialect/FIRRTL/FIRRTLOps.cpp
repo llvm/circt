@@ -2531,6 +2531,22 @@ LogicalResult RefDefineOp::verify() {
   return success();
 }
 
+LogicalResult PropAssignOp::verify() {
+  // Check that the flows make sense.
+  if (failed(checkConnectFlow(*this)))
+    return failure();
+
+  // Verify that there is a single value driving the destination.
+  for (auto *user : getDest().getUsers()) {
+    if (auto conn = dyn_cast<FConnectLike>(user);
+        conn && conn.getDest() == getDest() && conn != *this)
+      return emitError("destination property cannot be reused by multiple "
+                       "operations, it can only capture a unique dataflow");
+  }
+
+  return success();
+}
+
 void WhenOp::createElseRegion() {
   assert(!hasElseRegion() && "already has an else region");
   getElseRegion().push_back(new Block());
