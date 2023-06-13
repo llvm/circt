@@ -15,12 +15,52 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "llvm/Support/Debug.h"
 
 using namespace mlir;
 using namespace circt;
 using namespace circt::pipeline;
 
 #include "circt/Dialect/Pipeline/PipelineDialect.cpp.inc"
+
+#define DEBUG_TYPE "pipeline-ops"
+
+// NOLINTNEXTLINE(misc-no-recursion)
+Block *circt::pipeline::getParentStageInPipeline(ScheduledPipelineOp pipeline,
+                                                 Block *block) {
+  // Optional debug check - ensure that 'block' eventually leads to the
+  // pipeline.
+  LLVM_DEBUG({
+    Operation *directParent = block->getParentOp();
+    if (directParent != pipeline) {
+      auto indirectParent =
+          directParent->getParentOfType<ScheduledPipelineOp>();
+      assert(indirectParent == pipeline && "block is not in the pipeline");
+    }
+  });
+
+  if (block->getParent() == &pipeline.getRegion()) {
+    // This is a block within the pipeline region, so it must be a stage.
+    return block;
+  }
+
+  // Recurse by going one level up.
+  Block *parentBlock = block->getParent()->getParentOp()->getBlock();
+  return getParentStageInPipeline(pipeline, parentBlock);
+}
+
+Block *circt::pipeline::getParentStageInPipeline(ScheduledPipelineOp pipeline,
+                                                 Operation *op) {
+  return getParentStageInPipeline(pipeline, op->getBlock());
+}
+
+Block *circt::pipeline::getParentStageInPipeline(ScheduledPipelineOp pipeline,
+                                                 Value v) {
+  if (v.isa<BlockArgument>())
+    return getParentStageInPipeline(pipeline,
+                                    v.cast<BlockArgument>().getOwner());
+  return getParentStageInPipeline(pipeline, v.getDefiningOp());
+}
 
 //===----------------------------------------------------------------------===//
 // UnscheduledPipelineOp
@@ -83,10 +123,17 @@ Block *ScheduledPipelineOp::addStage() {
   return stage;
 }
 
-llvm::SmallVector<Block *> ScheduledPipelineOp::getOrderedStages() {
-  Block *currentStage = getEntryStage();
+// Implementation of getOrderedStages which also produces an error if
+// there are any cycles in the pipeline.
+static FailureOr<llvm::SmallVector<Block *>>
+getOrderedStagesFailable(ScheduledPipelineOp op) {
+  llvm::DenseSet<Block *> visited;
+  Block *currentStage = op.getEntryStage();
   llvm::SmallVector<Block *> orderedStages;
   do {
+    if (!visited.insert(currentStage).second)
+      return op.emitOpError("pipeline contains a cycle.");
+
     orderedStages.push_back(currentStage);
     if (auto stageOp = dyn_cast<StageOp>(currentStage->getTerminator()))
       currentStage = stageOp.getNextStage();
@@ -94,7 +141,13 @@ llvm::SmallVector<Block *> ScheduledPipelineOp::getOrderedStages() {
       currentStage = nullptr;
   } while (currentStage);
 
-  return orderedStages;
+  return {orderedStages};
+}
+
+llvm::SmallVector<Block *> ScheduledPipelineOp::getOrderedStages() {
+  // Should always be safe, seeing as the pipeline itself has already been
+  // verified.
+  return *getOrderedStagesFailable(*this);
 }
 
 llvm::DenseMap<Block *, unsigned> ScheduledPipelineOp::getStageMap() {
@@ -120,14 +173,27 @@ bool ScheduledPipelineOp::isMaterialized() {
 }
 
 LogicalResult ScheduledPipelineOp::verify() {
+  // Generic scheduled/unscheduled verification.
   if (failed(verifyPipeline(*this)))
     return failure();
 
-  // Phase invariant - if any block has arguments, we
+  // Verify that all block are terminated properly.
+  auto &stages = getStages();
+  for (Block &stage : stages) {
+    if (stage.empty() || !isa<ReturnOp, StageOp>(stage.back()))
+      return emitOpError("all blocks must be terminated with a "
+                         "`pipeline.stage` or `pipeline.return` op.");
+  }
+
+  if (failed(getOrderedStagesFailable(*this)))
+    return failure();
+
+  // Phase invariant - if any block has arguments, we are in register
+  // materialized mode.
+  // Check that all values used within a stage are defined within the stage.
   bool materialized = isMaterialized();
   if (materialized) {
-    // Check that all values used within a stage are defined within the stage.
-    for (auto &stage : getStages()) {
+    for (auto &stage : stages) {
       for (auto &op : stage) {
         for (auto [index, operand] : llvm::enumerate(op.getOperands())) {
           bool err = false;
@@ -240,6 +306,8 @@ LogicalResult LatencyOp::verify() {
       scheduledPipelineParent.getStageMap();
 
   auto stageDistance = [&](Block *from, Block *to) {
+    assert(stageMap.count(from) && "stage 'from' not contained in pipeline");
+    assert(stageMap.count(to) && "stage 'to' not contained in pipeline");
     int64_t fromStage = stageMap[from];
     int64_t toStage = stageMap[to];
     return toStage - fromStage;
@@ -248,7 +316,12 @@ LogicalResult LatencyOp::verify() {
   for (auto [i, res] : llvm::enumerate(getResults())) {
     for (auto &use : res.getUses()) {
       auto *user = use.getOwner();
-      Block *userStage = user->getBlock();
+
+      // The user may reside within a block which is not a stage (e.g. inside
+      // a pipeline.latency op). Determine the stage which this use resides
+      // within.
+      Block *userStage =
+          getParentStageInPipeline(scheduledPipelineParent, user);
       unsigned useDistance = stageDistance(definingStage, userStage);
 
       // Is this a stage op and is the value passed through? if so, this is a
