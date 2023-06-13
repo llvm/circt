@@ -32,10 +32,12 @@ private:
 
   // Returns the distance between two stages in the pipeline. The distance is
   // defined wrt. the ordered stages of the pipeline.
-  size_t stageDistance(Block *from, Block *to);
+  int64_t stageDistance(Block *from, Block *to);
 
   struct RoutedValue {
     Backedge v;
+    // If true, this value is routed through a stage as a register, else
+    // it is routed through a stage as a pass-through.e
     bool isReg;
   };
   // A mapping storing whether a given stage register constains a registerred
@@ -47,22 +49,18 @@ private:
   // ensures determinism during stage op IR emission.
   DenseMap<Block *, llvm::MapVector<Value, RoutedValue>> stageRegOrPassMap;
 
-  // A handle to the ordered stages in the pipeline.
-  llvm::SmallVector<Block *> orderedStages;
+  // A mapping between stages and their index in the pipeline.
+  llvm::DenseMap<Block *, unsigned> stageMap;
 
   std::shared_ptr<BackedgeBuilder> bb;
 };
 
 } // end anonymous namespace
 
-size_t ExplicitRegsPass::stageDistance(Block *from, Block *to) {
-  size_t fromIdx = std::distance(
-      orderedStages.begin(),
-      std::find(orderedStages.begin(), orderedStages.end(), from));
-  size_t toIdx =
-      std::distance(orderedStages.begin(),
-                    std::find(orderedStages.begin(), orderedStages.end(), to));
-  return toIdx - fromIdx;
+int64_t ExplicitRegsPass::stageDistance(Block *from, Block *to) {
+  int64_t fromStage = stageMap[from];
+  int64_t toStage = stageMap[to];
+  return toStage - fromStage;
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
@@ -89,7 +87,7 @@ Value ExplicitRegsPass::routeThroughStage(Value v, Block *stage) {
 
   // Value is defined somewhere before the provided stage - route it through the
   // stage, and recurse to the predecessor stage.
-  size_t valueLatency = 0;
+  int64_t valueLatency = 0;
   if (auto latencyOp = dyn_cast_or_null<LatencyOp>(definingOp))
     valueLatency = latencyOp.getLatency();
 
@@ -113,7 +111,7 @@ void ExplicitRegsPass::runOnOperation() {
   bb = std::make_shared<BackedgeBuilder>(b, getOperation().getLoc());
 
   // Iterate over the pipeline body in-order (!).
-  orderedStages = pipeline.getOrderedStages();
+  stageMap = pipeline.getStageMap();
   for (Block *stage : pipeline.getOrderedStages()) {
     for (auto &op : *stage) {
       // Check the operands of this operation to see if any of them cross a

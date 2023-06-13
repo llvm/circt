@@ -138,6 +138,10 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
     // Stages are ordered from first (entry) to last (exit).
     llvm::SmallVector<Block*> getOrderedStages();
 
+    // Returns a map of stages to their index in the pipeline - this is
+    // with respect to 'getOrderedStages'.
+    llvm::DenseMap<Block*, unsigned> getStageMap();
+
     // Gets the n'th stage of this pipeline
     Block* getStage(unsigned n) {
       auto& blocks = getRegion().getBlocks();
@@ -219,6 +223,7 @@ def LatencyOp : Op<Pipeline_Dialect, "latency", [
     SingleBlockImplicitTerminator<"LatencyReturnOp">,
     RegionKindInterface,
     HasOnlyGraphRegion,
+    ParentOneOf<["UnscheduledPipelineOp", "ScheduledPipelineOp"]>
   ]> {
   
   let summary = "Pipeline dialect latency operation.";
@@ -233,7 +238,7 @@ def LatencyOp : Op<Pipeline_Dialect, "latency", [
 
   let arguments = (ins ConfinedAttr<I32Attr, [IntMinValue<1>]>:$latency);
   let results = (outs Variadic<AnyType>:$results);
-  let regions = (region AnyRegion:$body);
+  let regions = (region SizedRegion<1>:$body);
   let hasVerifier = 1;
 
   let builders = [

@@ -116,6 +116,15 @@ llvm::SmallVector<Block *> ScheduledPipelineOp::getOrderedStages() {
   return orderedStages;
 }
 
+llvm::DenseMap<Block *, unsigned> ScheduledPipelineOp::getStageMap() {
+  llvm::DenseMap<Block *, unsigned> stageMap;
+  auto orderedStages = getOrderedStages();
+  for (auto [index, stage] : llvm::enumerate(orderedStages))
+    stageMap[stage] = index;
+
+  return stageMap;
+}
+
 Block *ScheduledPipelineOp::getLastStage() { return getOrderedStages().back(); }
 
 bool ScheduledPipelineOp::isMaterialized() {
@@ -237,16 +246,13 @@ LogicalResult LatencyOp::verify() {
   size_t latency = getLatency();
   Block *definingStage = getOperation()->getBlock();
 
-  llvm::SmallVector<Block *> orderedStages =
-      getOperation()->getParentOfType<ScheduledPipelineOp>().getOrderedStages();
+  llvm::DenseMap<Block *, unsigned> stageMap =
+      getOperation()->getParentOfType<ScheduledPipelineOp>().getStageMap();
+
   auto stageDistance = [&](Block *from, Block *to) {
-    size_t fromIdx = std::distance(
-        orderedStages.begin(),
-        std::find(orderedStages.begin(), orderedStages.end(), from));
-    size_t toIdx = std::distance(
-        orderedStages.begin(),
-        std::find(orderedStages.begin(), orderedStages.end(), to));
-    return toIdx - fromIdx;
+    int64_t fromStage = stageMap[from];
+    int64_t toStage = stageMap[to];
+    return toStage - fromStage;
   };
 
   for (auto [i, res] : llvm::enumerate(getResults())) {
