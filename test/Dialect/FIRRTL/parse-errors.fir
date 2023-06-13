@@ -694,3 +694,57 @@ circuit PropAssignNonProperty:
     input x : UInt<1>
     output y : UInt<1>
     propassign x, y ; expected-error {{can only propassign property types}}
+
+;// -----
+
+FIRRTL version 2.3.9
+circuit UnsupportedRadixSpecifiedIntegerLiterals:
+  module UnsupportedRadixSpecifiedIntegerLiterals:
+    output foo: UInt<8>
+    ; expected-error @below {{Radix-specified integer literals are a FIRRTL 2.4.0 feature, but the specified FIRRTL version was 2.3.9}}
+    foo <= UInt(0b101010)
+
+;// -----
+
+FIRRTL version 2.4.0
+circuit InvalidBinaryRadixSpecifiedIntegerLiteral:
+  module InvalidBinaryRadixSpecifiedIntegerLiteral:
+    output foo: UInt<8>
+    ; expected-error @below {{invalid character in integer literal}}
+    foo <= UInt(0b2)
+
+;// -----
+
+FIRRTL version 2.4.0
+circuit InvalidOctalRadixSpecifiedIntegerLiteral:
+  module InvalidOctalRadixSpecifiedIntegerLiteral:
+    output foo: UInt<8>
+    ; expected-error @below {{invalid character in integer literal}}
+    foo <= UInt(0o8)
+
+;// -----
+
+FIRRTL version 2.4.0
+circuit InvalidDecimalRadixSpecifiedIntegerLiteral:
+  module InvalidDecimalRadixSpecifiedIntegerLiteral:
+    output foo: UInt<8>
+    ; expected-error @below {{invalid character in integer literal}}
+    foo <= UInt(0da)
+
+;// -----
+
+FIRRTL version 2.4.0
+circuit InvalidHexadecimalRadixSpecifiedIntegerLiteral:
+  module InvalidHexadecimalRadixSpecifiedIntegerLiteral:
+    output foo: UInt<8>
+    ; expected-error @below {{invalid character in integer literal}}
+    foo <= UInt(0hg)
+
+;// -----
+
+FIRRTL version 3.0.0
+circuit UnsupportedStringEncodedIntegerLiterals:
+  module UnsupportedStringEncodedIntegerLiterals:
+    output foo: UInt<8>
+    ; expected-error @below {{String-encoded integer literals are unsupported after FIRRTL 3.0.0}}
+    connect foo, UInt("h2a")

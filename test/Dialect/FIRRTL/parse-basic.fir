@@ -1488,3 +1488,80 @@ circuit Probes_refexprs:
     force_initial(rwprobe(`test`), `test`)
     ; CHECK: force_initial
     force_initial(`9`.`0`.rwprobe, `test`.`0`)
+
+;// -----
+
+; CHECK-LABEL: firrtl.circuit "RadixEncodedIntegerLiterals"
+FIRRTL version 2.4.0
+circuit RadixEncodedIntegerLiterals:
+  module RadixEncodedIntegerLiterals:
+    output bu: UInt<8>
+    output ou: UInt<8>
+    output du0: UInt<8>
+    output du1: UInt<8>
+    output hu: UInt<8>
+    output bs: SInt<8>
+    output os: SInt<8>
+    output dus0: SInt<8>
+    output dus1: SInt<8>
+    output hs: SInt<8>
+
+    ; CHECK:      %[[c42_ui7:[-a-zA-Z_0-9]+]] = firrtl.constant 42
+    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[c42_ui7]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
+    ; CHECK-NEXT: firrtl.strictconnect %bu, %[[c_constCast]]
+    bu <= UInt(0b101010)
+
+    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[c42_ui7]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
+    ; CHECK-NEXT: firrtl.strictconnect %ou, %[[c_constCast]]
+    ou <= UInt(0o052)
+
+    ; Note: this creates a second constant because the width of a parsed
+    ; constant is dependent on the overestimation of LLVM::StringRef.
+    ;
+    ; CHECK:      %[[c42_ui8:[-a-zA-Z_0-9]+]] = firrtl.constant 42
+    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[c42_ui8]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
+    ; CHECK-NEXT: firrtl.strictconnect %du0, %[[c_constCast]]
+    du0 <= UInt(42)
+
+    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[c42_ui8]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
+    ; CHECK-NEXT: firrtl.strictconnect %du1, %[[c_constCast]]
+    du1 <= UInt(0d42)
+
+    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[c42_ui7]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
+    ; CHECK-NEXT: firrtl.strictconnect %hu, %[[c_constCast]]
+    hu <= UInt(0h2a)
+
+    ; CHECK:      %[[cn42_si7:[-a-zA-Z_0-9]+]] = firrtl.constant -42
+    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[cn42_si7]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
+    ; CHECK-NEXT: firrtl.strictconnect %bs, %[[c_constCast]]
+    bs <= SInt(-0b101010)
+
+    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[cn42_si7]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
+    ; CHECK-NEXT: firrtl.strictconnect %os, %[[c_constCast]]
+    os <= SInt(-0o52)
+
+    ; Note: this creates a second constant because the width of a parsed
+    ; constant is dependent on the overestimation of LLVM::StringRef.
+    ;
+    ; CHECK:      %[[cn42_si8:[-a-zA-Z_0-9]+]] = firrtl.constant -42
+    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[cn42_si8]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
+    ; CHECK-NEXT: firrtl.strictconnect %dus0, %[[c_constCast]]
+    dus0 <= SInt(-42)
+
+    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[cn42_si8]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
+    ; CHECK-NEXT: firrtl.strictconnect %dus1, %[[c_constCast]]
+    dus1 <= SInt(-0d42)
+
+    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[cn42_si7]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
+    ; CHECK-NEXT: firrtl.strictconnect %hs, %[[c_constCast]]
+    hs <= SInt(-0h2a)

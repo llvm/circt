@@ -34,6 +34,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSet.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/SourceMgr.h"
@@ -503,7 +504,35 @@ ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
 
     consumeToken();
     return success();
+  case FIRToken::radix_specified_integer: {
+    if (FIRVersion::compare(version, FIRVersion({2, 4, 0})) < 0)
+      return emitError("Radix-specified integer literals are a FIRRTL 2.4.0 "
+                       "feature, but the specified FIRRTL version was ")
+             << version;
+    if (spelling[0] == '-') {
+      isNegative = true;
+      spelling = spelling.drop_front();
+    }
+    unsigned base = llvm::StringSwitch<unsigned>(spelling.take_front(2))
+                        .Case("0b", 2)
+                        .Case("0o", 8)
+                        .Case("0d", 10)
+                        .Case("0h", 16);
+    spelling = spelling.drop_front(2);
+    if (spelling.getAsInteger(base, result))
+      return emitError("invalid character in integer literal"), failure();
+    if (result.isNegative())
+      result = result.zext(result.getBitWidth() + 1);
+    if (isNegative)
+      result = -result;
+    consumeToken();
+    return success();
+  }
   case FIRToken::string: {
+    if (FIRVersion::compare(version, FIRVersion({3, 0, 0})) >= 0)
+      return emitError(
+          "String-encoded integer literals are unsupported after FIRRTL 3.0.0");
+
     // Drop the quotes.
     assert(spelling.front() == '"' && spelling.back() == '"');
     spelling = spelling.drop_back().drop_front();

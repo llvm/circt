@@ -49,12 +49,13 @@ TOK_IDENTIFIER(identifier)         // foo
 TOK_IDENTIFIER(literal_identifier) // `42`
 
 // Literals
-TOK_LITERAL(integer)        // 42
-TOK_LITERAL(signed_integer) // -42 and +42
-TOK_LITERAL(floatingpoint)  // 42.0
-TOK_LITERAL(version)        // 1.2.3
-TOK_LITERAL(string)         // "foo"
-TOK_LITERAL(raw_string)     // 'foo'
+TOK_LITERAL(integer)                 // 42
+TOK_LITERAL(signed_integer)          // -42 and +42
+TOK_LITERAL(radix_specified_integer) // 0b101010, 0o52, 0d42, 0h2a and negations
+TOK_LITERAL(floatingpoint)           // 42.0
+TOK_LITERAL(version)                 // 1.2.3
+TOK_LITERAL(string)                  // "foo"
+TOK_LITERAL(raw_string)              // 'foo'
 
 TOK_LITERAL(fileinfo)
 TOK_LITERAL(inlineannotation) // %[{"foo":"bar"}]
