@@ -1185,6 +1185,30 @@ firrtl.circuit "NoDefineIntoRefSub" {
 }
 
 // -----
+// Check that you can't drive a source.
+
+firrtl.circuit "PropertyDriveSource" {
+  // @expected-note @below {{the destination was defined here}}
+  firrtl.module @PropertyDriveSource(in %in: !firrtl.string) {
+    %0 = firrtl.string "hello"
+    // expected-error @below {{connect has invalid flow: the destination expression "in" has source flow, expected sink or duplex flow}}
+    firrtl.propassign %in, %0 : !firrtl.string
+  }
+}
+
+// -----
+// Check that you can't drive a sink more than once.
+
+firrtl.circuit "PropertyDoubleDrive" {
+  firrtl.module @PropertyDriveSource(out %out: !firrtl.string) {
+    %0 = firrtl.string "hello"
+    // expected-error @below {{destination property cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    firrtl.propassign %out, %0 : !firrtl.string
+    firrtl.propassign %out, %0 : !firrtl.string
+  }
+}
+
+// -----
 // Issue 4174-- handle duplicate module names.
 
 firrtl.circuit "hi" {
