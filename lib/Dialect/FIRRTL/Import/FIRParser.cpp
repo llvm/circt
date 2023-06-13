@@ -2775,6 +2775,11 @@ ParseResult FIRStmtParser::parseRefDefine() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
+  if (!areTypesRefCastable(target.getType(), src.getType()))
+    return emitError(startTok.getLoc(), "cannot define reference of type ")
+           << target.getType() << " with incompatible reference of type "
+           << src.getType();
+
   emitConnect(builder, target, src);
 
   return success();

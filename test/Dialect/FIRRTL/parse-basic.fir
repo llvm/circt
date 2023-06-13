@@ -1200,24 +1200,33 @@ circuit EnumTypes:
 
   ; CHECK-LABEL: module private @Refs(
   module Refs :
-    input in : UInt<1>
-    output r : Probe<UInt<1>>
-    output rw : RWProbe<UInt<1>>
+    input in : const UInt<1>
+    output r : Probe<const UInt>
+    output rw : RWProbe<UInt>
+    output notrw : Probe<UInt>
     output out : UInt<1>
     output out2 : UInt<1>
     output out3 : UInt<3>
-    ; CHECK-SAME: out %agg_out: !firrtl.probe<bundle<a: uint<1>, b: uint>>
-    output agg_out : Probe<{a: UInt<1>, b: UInt}>
+    output outconst : const UInt<1>
+    ; CHECK-SAME: out %agg_out: !firrtl.probe<bundle<a: uint<1>, b: const.uint>>
+    output agg_out : Probe<{a: UInt<1>, b: const UInt}>
 
     ; CHECK-NEXT: %[[RC_IN:.+]], %[[RC_R:.+]], %[[RC_RW:.+]] = firrtl.instance rc
     inst rc of RefsChild
     rc.in <= in
-    ; CHECK: %[[OUTREF:.+]] = firrtl.ref.send %out
-    ; CHECK-NEXT: ref.define %r, %[[OUTREF]]
-    define r = probe(out)
-    ; CHECK-NEXT: ref.define %rw, %[[RC_RW]]
-    ; CHECK-SAME: rwprobe
+    ; CHECK: %[[OUTREF:.+]] = firrtl.ref.send %outconst
+    ; CHECK-NEXT: %[[OUTREF_CAST:.+]] = firrtl.ref.cast %[[OUTREF]] : (!firrtl.probe<const.uint<1>>) -> !firrtl.probe<const.uint>
+    ; CHECK-NEXT: ref.define %r, %[[OUTREF_CAST]]
+    define r = probe(outconst)
+    ; CHECK-NEXT: %[[RC_RW_CAST:.+]] = firrtl.ref.cast %[[RC_RW]] : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint>
+    ; CHECK-NEXT: ref.define %rw, %[[RC_RW_CAST]]
+    ; CHECK-SAME: rwprobe<uint>
     define rw = rc.rw
+
+    ; CHECK-NEXT: %[[RC_RW_CAST_PROBE:.+]] = firrtl.ref.cast %[[RC_RW]] : (!firrtl.rwprobe<uint<1>>) -> !firrtl.probe<uint>
+    ; CHECK-NEXT: ref.define %notrw, %[[RC_RW_CAST_PROBE]]
+    ; CHECK-SAME: firrtl.probe
+    define notrw = rc.rw
 
     ; CHECK-NEXT: %[[READ_RC_R:.+]] = firrtl.ref.resolve %[[RC_R]]
     ; CHECK-NEXT: connect %out, %[[READ_RC_R]]
@@ -1227,9 +1236,9 @@ circuit EnumTypes:
     out <= read(rc.rw)
 
     ; ref.sub parsing
-    ; CHECK-DAG: %[[AGG:.+]] = firrtl.wire interesting_name : !firrtl.bundle<a flip: uint<1>, b: uint>
+    ; CHECK-DAG: %[[AGG:.+]] = firrtl.wire interesting_name : !firrtl.bundle<a flip: const.uint<1>, b: uint>
     ; CHECK-DAG: %[[AGG2:.+]] = firrtl.wire interesting_name : !firrtl.bundle<a: uint, b flip: uint<1>>
-    wire agg : { flip a : UInt<1>, b : UInt }
+    wire agg : { flip a : const UInt<1>, b : UInt }
     wire agg2 : { a : UInt, flip b : UInt<1> }
     ; CHECK-DAG: %[[AGG_B:.+]] = firrtl.subfield %[[AGG]][b]
     ; CHECK-DAG: %[[AGG_B_PROBE:.+]] = firrtl.ref.send %[[AGG_B]]
@@ -1244,9 +1253,10 @@ circuit EnumTypes:
     out2 <= read(probe(agg2)).b
 
     ; CHECK: %[[AGG3:.+]] = firrtl.wire
-    wire agg3 : { a : UInt<1>, b : UInt }
+    wire agg3 : const { a : UInt<1>, b : UInt }
     ; CHECK-NEXT: %[[AGG3_PROBE:.+]] = firrtl.ref.send %[[AGG3]]
-    ; CHECK-NEXT: ref.define %agg_out, %[[AGG3_PROBE]]
+    ; CHECK-NEXT: %[[AGG3_PROBE_CAST:.+]] = firrtl.ref.cast %[[AGG3_PROBE]] : (!firrtl.probe<const.bundle<a: uint<1>, b: uint>>) -> !firrtl.probe<bundle<a: uint<1>, b: const.uint>> 
+    ; CHECK-NEXT: ref.define %agg_out, %[[AGG3_PROBE_CAST]]
     define agg_out = probe(agg3)
 
     ; CHECK: %{{.+}}, %[[REM_R:.+]], %{{.+}}, %[[REM_R2:.+]] = firrtl.instance rem
@@ -1260,7 +1270,7 @@ circuit EnumTypes:
     ; CHECK: %[[PROBE_IN:.+]] = firrtl.ref.send %in
     ; CHECK-DAG: %[[READ_PROBE_IN:.+]] = firrtl.ref.resolve %[[PROBE_IN]]
     ; CHECK-DAG: %[[SUM:.+]] = firrtl.and %[[READ_PROBE_IN]],
-    out <= and(read(probe(in)), UInt(1))
+    outconst <= and(read(probe(in)), UInt(1))
 
   ; CHECK-LABEL: module private @ForceRelease(
   module ForceRelease :
