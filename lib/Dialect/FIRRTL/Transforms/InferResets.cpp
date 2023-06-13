@@ -758,7 +758,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
             traceResets(op.getDataType(), op.getData(), 0, op.getDataType(),
                         op.getDataRef(), 0, op.getLoc());
         })
-        .Case<UninferredResetCastOp, ConstCastOp>([&](auto op) {
+        .Case<UninferredResetCastOp, ConstCastOp, RefCastOp>([&](auto op) {
           traceResets(op.getResult(), op.getInput(), op.getLoc());
         })
         .Case<InvalidValueOp>([&](auto op) {
@@ -1073,7 +1073,7 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
     Value value = signal.field.getValue();
     if (!value.isa<BlockArgument>() &&
         !isa_and_nonnull<WireOp, RegOp, RegResetOp, InstanceOp, InvalidValueOp,
-                         UninferredResetCastOp>(value.getDefiningOp()))
+                         RefCastOp, UninferredResetCastOp>(value.getDefiningOp()))
       continue;
     if (updateReset(signal.field, resetType)) {
       for (auto user : value.getUsers())
