@@ -133,11 +133,13 @@ getInnerRefTo(FModuleLike mod, size_t portIdx, StringRef nameHint,
 // Type utilities
 //===----------------------------------------------------------------------===//
 
-/// If reftype, return wrapped base type.  Otherwise (if base), return as-is.
+/// If it is a base type, return it as is. If reftype, return wrapped base type.
+/// Otherwise, return null.
 inline FIRRTLBaseType getBaseType(FIRRTLType type) {
   return TypeSwitch<FIRRTLType, FIRRTLBaseType>(type)
       .Case<FIRRTLBaseType>([](auto base) { return base; })
-      .Case<RefType>([](auto ref) { return ref.getType(); });
+      .Case<RefType>([](auto ref) { return ref.getType(); })
+      .Default([](FIRRTLType type) { return nullptr; });
 }
 
 /// Return base type or passthrough if FIRRTLType, else null.

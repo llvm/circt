@@ -928,4 +928,8 @@ firrtl.circuit "Foo" {
     firrtl.attach %2, %c : !firrtl.const.analog, !firrtl.const.analog<3>
     firrtl.connect %3, %d : !firrtl.const.vector<uint, 2>, !firrtl.const.vector<uint<4>, 2>
   }
+  
+  // Should not crash when encountering property types.
+  // CHECK: firrtl.module @Property(in %a: !firrtl.string)
+  firrtl.module @Property(in %a: !firrtl.string) { }
 }
