@@ -105,6 +105,7 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         os << '>';
       })
       .Case<StringType>([&](auto stringType) { os << "string"; })
+      .Case<BigIntType>([&](auto bigIntType) { os << "bigint"; })
       .Default([&](auto) { anyFailed = true; });
   return failure(anyFailed);
 }
@@ -361,6 +362,14 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     result = StringType::get(parser.getContext());
     return success();
   }
+  if (name.equals("bigint")) {
+    if (isConst) {
+      parser.emitError(parser.getNameLoc(), "bigints cannot be const");
+      return failure();
+    }
+    result = BigIntType::get(parser.getContext());
+    return success();
+  }
 
   return {};
 }
@@ -526,7 +535,7 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
       .Case<BundleType, FVectorType, FEnumType, OpenBundleType, OpenVectorType,
             RefType>(
           [](auto type) { return type.getRecursiveTypeProperties(); })
-      .Case<StringType>([](auto type) {
+      .Case<StringType, BigIntType>([](auto type) {
         return RecursiveTypeProperties{true, false, false, false, false, false};
       })
       .Default([](Type) {
@@ -2211,7 +2220,7 @@ void FIRRTLDialect::registerTypes() {
   addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
            // Derived Types
            BundleType, FVectorType, FEnumType, RefType, OpenBundleType,
-           OpenVectorType, StringType>();
+           OpenVectorType, StringType, BigIntType>();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike

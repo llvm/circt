@@ -250,4 +250,10 @@ firrtl.module @StringTest(in %in: !firrtl.string, out %out: !firrtl.string) {
   // CHECK: %0 = firrtl.string "hello"
   %0 = firrtl.string "hello"
 }
+
+// CHECK-LABEL: BigIntTest
+// CHECK-SAME:  (in %in: !firrtl.bigint, out %out: !firrtl.bigint)
+firrtl.module @BigIntTest(in %in: !firrtl.bigint, out %out: !firrtl.bigint) {
+  firrtl.propassign %out, %in : !firrtl.bigint
+}
 }
