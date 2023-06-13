@@ -83,6 +83,7 @@ TOK_PUNCTUATION(equal_greater, "=>")
 // NOTE: Please key these alphabetized to make it easier to find something in
 // this list and to cater to OCD.
 TOK_KEYWORD(Analog)
+TOK_KEYWORD(BigInt)
 TOK_KEYWORD(propassign)
 TOK_KEYWORD(AsyncReset)
 TOK_KEYWORD(Clock)

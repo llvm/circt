@@ -1171,14 +1171,23 @@ circuit EnumTypes:
       ; CHECK: }
       None:
         o is invalid
+  ; CHECK-LABEL: module private @String
 
-  ; CHECK-LABEL: module private @Properties
-  module Properties :
+  module String :
     ; CHECK-SAME: out %a: !firrtl.string
     output a : String
     ; CHECK: %0 = firrtl.string "hello"
     ; CHECK: firrtl.propassign %a, %0 : !firrtl.string
     propassign a, String("hello")
+
+  ; CHECK-LABEL: module private @BigInt
+  module BigInt :
+    ; CHECK-SAME: in %a: !firrtl.bigint
+    ; CHECK-SAME: out %b: !firrtl.bigint
+    input a : BigInt
+    output b : BigInt
+    ; CHECK: firrtl.propassign %b, %a : !firrtl.bigint
+    propassign b, a
 
   ; CHECK-LABEL: module private @RefsChild(
   ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>
