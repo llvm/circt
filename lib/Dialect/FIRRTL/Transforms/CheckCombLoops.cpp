@@ -202,7 +202,7 @@ public:
                           return op->getResult(0);
                         return {};
                       });
-              if (childVal && childVal.getType().isa<FIRRTLBaseType>())
+              if (childVal && childVal.getType().isa<FIRRTLType>())
                 children.push_back(childVal);
             }
           }
@@ -248,12 +248,12 @@ public:
   void preprocess(SmallVector<Value> &worklist) {
     // All the input ports are added to the worklist.
     for (BlockArgument arg : module.getArguments()) {
-      auto argType = arg.getType();
+      auto argType = cast<FIRRTLType>(arg.getType());
       if (argType.isa<RefType>())
         continue;
       if (module.getPortDirection(arg.getArgNumber()) == Direction::In)
         worklist.push_back(arg);
-      if (!argType.cast<FIRRTLBaseType>().isGround())
+      if (!argType.isGround())
         setValRefsTo(arg, FieldRef(arg, 0));
     }
     DenseSet<Value> memPorts;
@@ -365,6 +365,8 @@ public:
         worklist.push_back(port);
         if (!type.isGround())
           setValRefsTo(port, FieldRef(port, 0));
+      } else if (auto type = port.getType().dyn_cast<PropertyType>()) {
+        worklist.push_back(port);
       }
     }
   }

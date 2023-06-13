@@ -493,7 +493,7 @@ bool FIRRTLType::isGround() {
       .Case<BundleType, FVectorType, FEnumType, OpenBundleType, OpenVectorType>(
           [](Type) { return false; })
       // Not ground per spec, but leaf of aggregate.
-      .Case<RefType>([](Type) { return false; })
+      .Case<PropertyType, RefType>([](Type) { return false; })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return false;
