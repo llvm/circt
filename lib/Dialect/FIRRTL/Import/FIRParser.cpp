@@ -2815,10 +2815,10 @@ ParseResult FIRStmtParser::parseProbe(Value &result) {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  // Check probe expression is not a reference-type value.
-  if (isa<RefType>(staticRef.getType()))
+  // Check probe expression is base-type.
+  if (!isa<FIRRTLBaseType>(staticRef.getType()))
     return emitError(startTok.getLoc(),
-                     "expected non-reference-type expression in 'probe', got ")
+                     "expected base-type expression in 'probe', got ")
            << staticRef.getType();
 
   // Check for other unsupported reference sources.
@@ -2848,11 +2848,11 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
   // Checks:
   // Not public port (verifier)
 
-  // Check probe expression is not a reference-type value.
-  if (isa<RefType>(staticRef.getType()))
+  // Check probe expression is base-type.
+  if (!isa<FIRRTLBaseType>(staticRef.getType()))
     return emitError(
                startTok.getLoc(),
-               "expected non-reference-type expression in 'rwprobe', got ")
+               "expected base-type expression in 'rwprobe', got ")
            << staticRef.getType();
 
   // Check for other unsupported reference sources.
@@ -2902,7 +2902,7 @@ ParseResult FIRStmtParser::parseRefForce() {
   auto srcBaseType = dyn_cast<FIRRTLBaseType>(src.getType());
   if (!srcBaseType)
     return emitError(startTok.getLoc(),
-                     "expected non-reference-type for force source, got ")
+                     "expected base-type for force source, got ")
            << src.getType();
 
   locationProcessor.setLoc(startTok.getLoc());
@@ -2942,7 +2942,7 @@ ParseResult FIRStmtParser::parseRefForceInitial() {
   auto srcBaseType = dyn_cast<FIRRTLBaseType>(src.getType());
   if (!srcBaseType)
     return emitError(startTok.getLoc(),
-                     "expected non-reference-type expression for force_initial "
+                     "expected base-type expression for force_initial "
                      "source, got ")
            << src.getType();
 

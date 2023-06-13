@@ -358,7 +358,7 @@ circuit ProbeBase:
     output out : UInt
 
     inst pg of ProbeGen
-    out <= probe(pg.p) ; expected-error {{expected non-reference-type expression in 'probe', got}}
+    out <= probe(pg.p) ; expected-error {{expected base-type expression in 'probe', got}}
 
 ;// -----
 
