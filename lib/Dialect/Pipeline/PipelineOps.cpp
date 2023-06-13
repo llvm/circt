@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/Pipeline/Pipeline.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -28,19 +27,6 @@ using namespace circt::pipeline;
 //===----------------------------------------------------------------------===//
 
 static LogicalResult verifyPipeline(PipelineLike op) {
-  bool anyInputIsAChannel = llvm::any_of(op.getInputs(), [](Value operand) {
-    return operand.getType().isa<esi::ChannelType>();
-  });
-  bool anyOutputIsAChannel = llvm::any_of(op->getResultTypes(), [](Type type) {
-    return type.isa<esi::ChannelType>();
-  });
-
-  if ((anyInputIsAChannel || anyOutputIsAChannel) &&
-      !op.isLatencyInsensitive()) {
-    return op.emitOpError("if any port of this pipeline is an ESI channel, all "
-                          "ports must be ESI channels.");
-  }
-
   Block *entryStage = op.getEntryStage();
   if (entryStage->getNumArguments() != op.getInputs().size())
     return op.emitOpError("expected ")
@@ -51,10 +37,6 @@ static LogicalResult verifyPipeline(PipelineLike op) {
   for (size_t i = 0; i < op.getInputs().size(); i++) {
     Type expectedInArg = op.getInputs()[i].getType();
     Type bodyArg = entryStage->getArgument(i).getType();
-
-    if (op.isLatencyInsensitive())
-      expectedInArg = expectedInArg.cast<esi::ChannelType>().getInner();
-
     if (expectedInArg != bodyArg)
       return op.emitOpError("expected body block argument ")
              << i << " to have type " << expectedInArg << ", got " << bodyArg
@@ -65,15 +47,6 @@ static LogicalResult verifyPipeline(PipelineLike op) {
 }
 
 LogicalResult UnscheduledPipelineOp::verify() { return verifyPipeline(*this); }
-
-bool UnscheduledPipelineOp::isLatencyInsensitive() {
-  bool allInputsAreChannels = llvm::all_of(getInputs(), [](Value operand) {
-    return operand.getType().isa<esi::ChannelType>();
-  });
-  bool allOutputsAreChannels = llvm::all_of(
-      getResultTypes(), [](Type type) { return type.isa<esi::ChannelType>(); });
-  return allInputsAreChannels && allOutputsAreChannels;
-}
 
 //===----------------------------------------------------------------------===//
 // ScheduledPipelineOp
