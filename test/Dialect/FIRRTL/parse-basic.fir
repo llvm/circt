@@ -1166,7 +1166,7 @@ circuit EnumTypes:
       Some(x):
         o <= x
       ; CHECK: case None(%arg0) {
-      ; CHECK:   %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8> 
+      ; CHECK:   %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8>
       ; CHECK:   firrtl.strictconnect %o, %invalid_ui8 : !firrtl.uint<8>
       ; CHECK: }
       None:
