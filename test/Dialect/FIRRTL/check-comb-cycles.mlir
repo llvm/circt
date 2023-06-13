@@ -584,3 +584,16 @@ firrtl.circuit "CycleThroughForceable"   {
     firrtl.strictconnect %w, %n : !firrtl.uint<1>
   }
 }
+
+// -----
+
+firrtl.circuit "Properties"   {
+  firrtl.module @Child(in %in: !firrtl.string, out %out: !firrtl.string) {
+    firrtl.propassign %out, %in : !firrtl.string
+  }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: Properties.{child0.in <- child0.out <- child0.in}}}
+  firrtl.module @Properties() {
+    %in, %out = firrtl.instance child0 @Child(in in: !firrtl.string, out out: !firrtl.string)
+    firrtl.propassign %in, %out : !firrtl.string
+  }
+}
