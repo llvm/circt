@@ -203,3 +203,12 @@ FailureOr<ObjectValue> circt::om::Object::getField(StringAttr name) {
     return cls.emitError("field ") << name << " does not exist";
   return success(fields[name]);
 }
+
+/// Get an ArrayAttr with the names of the fields in the Object.
+ArrayAttr circt::om::Object::getFieldNames() {
+  SmallVector<Attribute> fieldNames;
+  for (auto &f : fields)
+    fieldNames.push_back(f.first);
+
+  return ArrayAttr::get(cls.getContext(), fieldNames);
+}

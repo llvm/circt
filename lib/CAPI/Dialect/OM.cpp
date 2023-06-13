@@ -114,6 +114,11 @@ MlirType omEvaluatorObjectGetType(OMObject object) {
   return wrap(unwrap(object)->getType());
 }
 
+/// Get an ArrayAttr with the names of the fields in an Object.
+MlirAttribute omEvaluatorObjectGetFieldNames(OMObject object) {
+  return wrap(unwrap(object)->getFieldNames());
+}
+
 /// Get a field from an Object, which must contain a field of that name.
 OMObjectValue omEvaluatorObjectGetField(OMObject object, MlirAttribute name) {
   // Unwrap the Object and get the field of the name, which the client must

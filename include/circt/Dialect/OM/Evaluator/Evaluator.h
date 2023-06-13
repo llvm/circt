@@ -81,6 +81,9 @@ struct Object : std::enable_shared_from_this<Object> {
   /// Get a field of the Object by name.
   FailureOr<ObjectValue> getField(StringAttr name);
 
+  /// Get all the field names of the Object.
+  ArrayAttr getFieldNames();
+
 private:
   /// Allow the instantiate method as a friend to construct Objects.
   friend FailureOr<std::shared_ptr<Object>>

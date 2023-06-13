@@ -55,6 +55,11 @@ struct Object {
     return omEvaluatorObjectValueGetPrimitive(result);
   }
 
+  // Get an ArrayAttr with the names of all the fields in the object.
+  MlirAttribute getFieldNames() {
+    return omEvaluatorObjectGetFieldNames(object);
+  }
+
 private:
   // The underlying CAPI OMObject.
   OMObject object;
@@ -108,6 +113,8 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
       .def(py::init<Object>(), py::arg("object"))
       .def("__getattr__", &Object::getField, "Get a field from an Object",
            py::arg("name"))
+      .def("getFieldNames", &Object::getFieldNames,
+           "Get field names from an Object")
       .def_property_readonly("type", &Object::getType,
                              "The Type of the Object");
 
