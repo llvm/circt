@@ -33,6 +33,9 @@ IntegerAttr getIntZerosAttr(Type type);
 /// Utility for generating a constant all ones attribute.
 IntegerAttr getIntOnesAttr(Type type);
 
+/// Return the single assignment to a Property value.
+PropAssignOp getPropertyAssignment(FIRRTLPropertyValue value);
+
 /// Return the module-scoped driver of a value only looking through one connect.
 Value getDriverFromConnect(Value val);
 

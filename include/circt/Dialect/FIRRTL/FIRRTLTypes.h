@@ -335,6 +335,7 @@ void printNestedType(Type type, AsmPrinter &os);
 
 using FIRRTLValue = mlir::TypedValue<FIRRTLType>;
 using FIRRTLBaseValue = mlir::TypedValue<FIRRTLBaseType>;
+using FIRRTLPropertyValue = mlir::TypedValue<PropertyType>;
 
 } // namespace firrtl
 } // namespace circt
