@@ -1009,6 +1009,21 @@ def StringConstantOp : FIRRTLOp<"string", [Pure, ConstantLike]> {
   let assemblyFormat = "$value attr-dict";
 }
 
+def BigIntConstantOp : FIRRTLOp<"bigint", [Pure, ConstantLike]> {
+  let summary = "Produce a constant bigint value";
+  let description = [{
+    Produces a constant value of bigint type.
+
+    Example:
+    ```mlir
+    %0 = firrtl.bigint 42
+    ```
+  }];
+  let arguments = (ins APSIntAttr:$value);
+  let results = (outs BigIntType:$result);
+  let hasCustomAssemblyFormat = true;
+}
+
 //===----------------------------------------------------------------------===//
 // RefOperations: Operations on the RefType.
 //

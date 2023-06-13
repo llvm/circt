@@ -3024,6 +3024,27 @@ Attribute AggregateConstantOp::getAttributeFromFieldID(uint64_t fieldID) {
   return value;
 }
 
+void BigIntConstantOp::print(OpAsmPrinter &p) {
+  p << " ";
+  p.printAttributeWithoutType(getValueAttr());
+  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
+}
+
+ParseResult BigIntConstantOp::parse(OpAsmParser &parser,
+                                    OperationState &result) {
+  auto *context = parser.getContext();
+  APInt value;
+  if (parser.parseInteger(value) ||
+      parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+  result.addTypes(BigIntType::get(context));
+  auto intType =
+      IntegerType::get(context, value.getBitWidth(), IntegerType::Signed);
+  auto valueAttr = parser.getBuilder().getIntegerAttr(intType, value);
+  result.addAttribute("value", valueAttr);
+  return success();
+}
+
 LogicalResult BundleCreateOp::verify() {
   if (getType().getNumElements() != getFields().size())
     return emitOpError("number of fields doesn't match type");
