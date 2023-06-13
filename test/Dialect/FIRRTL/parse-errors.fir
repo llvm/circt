@@ -605,16 +605,6 @@ circuit LeadingProbe:
 
 ;// -----
 
-; This should be supported, needs internal support to land first.
-circuit DefineWidths:
-  module DefineWidths:
-    input in : UInt<1>
-    output p : Probe<UInt>
-    define p = probe(in) ; expected-error {{'firrtl.ref.define' op requires all operands to have the same type}}
-
-
-;// -----
-
 circuit ForceProbe:
   module ForceProbe:
     input in : UInt<1>
@@ -686,6 +676,17 @@ circuit ConstProbe:
 circuit MultiConst:
   module MultiConst:
     output x : const const UInt<1> ; expected-error {{'const' can only be specified once on a type}}
+
+;// -----
+
+circuit DefinePromoteToRW:
+  extmodule Ref:
+    output ro : Probe<UInt<1>>
+  module DefinePromoteToRW:
+    output rw : RWProbe<UInt<1>>
+    inst r of Ref
+    ; expected-error @below {{cannot define reference of type '!firrtl.rwprobe<uint<1>>' with incompatible reference of type '!firrtl.probe<uint<1>>'}}
+    define rw = r.ro
 
 ;// -----
 
