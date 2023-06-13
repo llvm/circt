@@ -658,6 +658,25 @@ firrtl.circuit "ReadForceable" {
 }
 
 // -----
+// Check resolution through a ref cast.
+
+// CHECK-LABEL: firrtl.circuit "RefCast"
+firrtl.circuit "RefCast" {
+  // CHECK: hw.hierpath private @xmrPath [@RefCast::@[[wSym:.+]]]
+  // CHECK-LABEL: firrtl.module @RefCast(out %o: !firrtl.uint<2>)
+  firrtl.module @RefCast(out %o: !firrtl.uint<2>) {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
+    %w_ro = firrtl.ref.cast %w_ref : (!firrtl.rwprobe<uint<2>>) -> !firrtl.probe<uint<2>>
+    %x = firrtl.ref.resolve %w_ro : !firrtl.probe<uint<2>>
+    firrtl.strictconnect %o, %x : !firrtl.uint<2>
+    // CHECK-NEXT: %w, %w_ref = firrtl.wire sym @[[wSym]] forceable : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
+    // CHECK-NEXT: %[[#xmr:]] = sv.xmr.ref @xmrPath : !hw.inout<i2>
+    // CHECK-NEXT: %[[#cast:]] = builtin.unrealized_conversion_cast %[[#xmr]] : !hw.inout<i2> to !firrtl.uint<2>
+    // CHECK-NEXT: firrtl.strictconnect %o, %[[#cast]] : !firrtl.uint<2>
+  }
+}
+
+// -----
 
 // CHECK-LABEL: firrtl.circuit "ForceRelease"
 firrtl.circuit "ForceRelease" {
