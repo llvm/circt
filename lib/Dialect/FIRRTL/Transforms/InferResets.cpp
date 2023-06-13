@@ -1073,7 +1073,8 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
     Value value = signal.field.getValue();
     if (!value.isa<BlockArgument>() &&
         !isa_and_nonnull<WireOp, RegOp, RegResetOp, InstanceOp, InvalidValueOp,
-                         RefCastOp, UninferredResetCastOp>(value.getDefiningOp()))
+                         RefCastOp, UninferredResetCastOp>(
+            value.getDefiningOp()))
       continue;
     if (updateReset(signal.field, resetType)) {
       for (auto user : value.getUsers())
