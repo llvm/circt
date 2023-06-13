@@ -2850,9 +2850,8 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
 
   // Check probe expression is base-type.
   if (!isa<FIRRTLBaseType>(staticRef.getType()))
-    return emitError(
-               startTok.getLoc(),
-               "expected base-type expression in 'rwprobe', got ")
+    return emitError(startTok.getLoc(),
+                     "expected base-type expression in 'rwprobe', got ")
            << staticRef.getType();
 
   // Check for other unsupported reference sources.
