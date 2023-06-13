@@ -100,9 +100,7 @@ private:
 namespace {
 /// The FIRRTL specification version.
 struct FIRVersion {
-  uint32_t major = 1;
-  uint32_t minor = 0;
-  uint32_t patch = 0;
+  uint32_t major, minor, patch;
 
   /// Three way compare of one FIRRTL version with another FIRRTL version.
   /// Return 1 if the first version is greater than the second version, -1 if
@@ -132,14 +130,20 @@ static T &operator<<(T &os, const FIRVersion &version) {
   return os;
 }
 
-/// The minimum FIRRTL Version supported by this compiler.
+/// The minimum FIRRTL Version supported by this compiler.  If a version is seen
+/// less than this, the compiler should reject the circuit.
 FIRVersion minimumFIRVersion{0, 2, 0};
+
+/// The default FIRRTL Version that is assumed if no FIRRTL Version string is
+/// specified.
+FIRVersion defaultFIRVersion{1, 0, 0};
 
 /// This class implements logic common to all levels of the parser, including
 /// things like types and helper logic.
 struct FIRParser {
-  FIRParser(SharedParserConstants &constants, FIRLexer &lexer)
-      : constants(constants), lexer(lexer),
+  FIRParser(SharedParserConstants &constants, FIRLexer &lexer,
+            FIRVersion &version)
+      : version(version), constants(constants), lexer(lexer),
         locatorFilenameCache(constants.loIdentifier /*arbitrary non-null id*/) {
   }
 
@@ -257,7 +261,7 @@ struct FIRParser {
   ParseResult parseIntLit(int32_t &result, const Twine &message);
 
   // Parse 'verLit' into specified value
-  ParseResult parseVersionLit(FIRVersion &version, const Twine &message);
+  ParseResult parseVersionLit(const Twine &message);
 
   // Parse ('<' intLit '>')? setting result to -1 if not present.
   template <typename T>
@@ -273,6 +277,9 @@ struct FIRParser {
   ParseResult parseType(FIRRTLType &result, const Twine &message);
 
   ParseResult parseOptionalRUW(RUWAttr &result);
+
+  /// The version of FIRRTL to use for this parser.
+  FIRVersion &version;
 
 private:
   FIRParser(const FIRParser &) = delete;
@@ -579,8 +586,7 @@ ParseResult FIRParser::parseIntLit(int32_t &result, const Twine &message) {
 
 /// versionLit    ::= version
 /// deconstruct a version literal into parts and returns those.
-ParseResult FIRParser::parseVersionLit(FIRVersion &version,
-                                       const Twine &message) {
+ParseResult FIRParser::parseVersionLit(const Twine &message) {
   auto spelling = getTokenSpelling();
   if (getToken().getKind() != FIRToken::version)
     return emitError(message), failure();
@@ -993,8 +999,9 @@ namespace {
 /// currently parsing into.
 struct FIRModuleContext : public FIRParser {
   explicit FIRModuleContext(SharedParserConstants &constants, FIRLexer &lexer,
-                            std::string moduleTarget)
-      : FIRParser(constants, lexer), moduleTarget(std::move(moduleTarget)) {}
+                            std::string moduleTarget, FIRVersion &version)
+      : FIRParser(constants, lexer, version),
+        moduleTarget(std::move(moduleTarget)) {}
 
   /// This is the module target used by annotations referring to this module.
   std::string moduleTarget;
@@ -1332,11 +1339,12 @@ namespace {
 struct FIRStmtParser : public FIRParser {
   explicit FIRStmtParser(Block &blockToInsertInto,
                          FIRModuleContext &moduleContext,
-                         Namespace &modNameSpace, const FIRVersion &version)
-      : FIRParser(moduleContext.getConstants(), moduleContext.getLexer()),
+                         Namespace &modNameSpace, FIRVersion &version)
+      : FIRParser(moduleContext.getConstants(), moduleContext.getLexer(),
+                  version),
         builder(UnknownLoc::get(getContext()), getContext()),
         locationProcessor(this->builder), moduleContext(moduleContext),
-        modNameSpace(modNameSpace), version(version) {
+        modNameSpace(modNameSpace) {
     builder.setInsertionPointToEnd(&blockToInsertInto);
   }
 
@@ -1439,8 +1447,6 @@ private:
   FIRModuleContext &moduleContext;
 
   Namespace &modNameSpace;
-
-  const FIRVersion &version;
 };
 
 } // end anonymous namespace
@@ -3641,8 +3647,8 @@ namespace {
 /// like circuit and module.
 struct FIRCircuitParser : public FIRParser {
   explicit FIRCircuitParser(SharedParserConstants &state, FIRLexer &lexer,
-                            ModuleOp mlirModule)
-      : FIRParser(state, lexer), mlirModule(mlirModule) {}
+                            ModuleOp mlirModule, FIRVersion &version)
+      : FIRParser(state, lexer, version), mlirModule(mlirModule) {}
 
   ParseResult
   parseCircuit(SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBuf,
@@ -3680,10 +3686,6 @@ private:
 
   SmallVector<DeferredModuleToParse, 0> deferredModules;
   ModuleOp mlirModule;
-
-  /// Default Version to use when parsing.  Deviations from this version will
-  /// cause different behavior.
-  FIRVersion version;
 };
 
 } // end anonymous namespace
@@ -4102,7 +4104,7 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
   deferredModule.lexerCursor.restore(moduleBodyLexer);
 
   FIRModuleContext moduleContext(getConstants(), moduleBodyLexer,
-                                 std::move(moduleTarget));
+                                 std::move(moduleTarget), version);
 
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
@@ -4168,7 +4170,7 @@ ParseResult FIRCircuitParser::parseCircuit(
     if (!indent.has_value())
       return emitError("'FIRRTL' must be first token on its line"), failure();
     if (parseToken(FIRToken::kw_version, "expected version after 'FIRRTL'") ||
-        parseVersionLit(version, "expected version literal"))
+        parseVersionLit("expected version literal"))
       return failure();
     indent = getIndentation();
   }
@@ -4351,7 +4353,8 @@ circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
                           /*column=*/0)));
   SharedParserConstants state(context, options);
   FIRLexer lexer(sourceMgr, context);
-  if (FIRCircuitParser(state, lexer, *module)
+  FIRVersion version = defaultFIRVersion;
+  if (FIRCircuitParser(state, lexer, *module, version)
           .parseCircuit(annotationsBufs, omirBufs, ts))
     return nullptr;
 
