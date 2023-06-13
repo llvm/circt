@@ -163,8 +163,7 @@ IntegerAttr circt::firrtl::getIntOnesAttr(Type type) {
 
 /// Return the single assignment to a Property value. It is assumed that the
 /// single assigment invariant is enforced elsewhere.
-PropAssignOp circt::firrtl::getPropertyAssignment(Value value) {
-  assert(isa<PropertyType>(value.getType()) && "expected a PropertyType value");
+PropAssignOp circt::firrtl::getPropertyAssignment(FIRRTLPropertyValue value) {
   for (auto *user : value.getUsers())
     if (auto propassign = dyn_cast<PropAssignOp>(user))
       if (propassign.getDest() == value)
