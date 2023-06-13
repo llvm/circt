@@ -255,5 +255,10 @@ firrtl.module @StringTest(in %in: !firrtl.string, out %out: !firrtl.string) {
 // CHECK-SAME:  (in %in: !firrtl.bigint, out %out: !firrtl.bigint)
 firrtl.module @BigIntTest(in %in: !firrtl.bigint, out %out: !firrtl.bigint) {
   firrtl.propassign %out, %in : !firrtl.bigint
+
+  // CHECK: %0 = firrtl.bigint 4
+  %0 = firrtl.bigint 4
+  // CHECK: %1 = firrtl.bigint -4
+  %1 = firrtl.bigint -4
 }
 }
