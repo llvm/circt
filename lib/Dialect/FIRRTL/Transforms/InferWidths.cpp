@@ -1678,6 +1678,10 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         declareVars(op.getResult(), op.getLoc());
         constrainTypes(op.getResult(), op.getRef());
       })
+      .Case<RefCastOp>([&](auto op) {
+        declareVars(op.getResult(), op.getLoc());
+        constrainTypes(op.getResult(), op.getInput());
+      })
       .Case<mlir::UnrealizedConversionCastOp>([&](auto op) {
         for (Value result : op.getResults()) {
           auto ty = result.getType();
@@ -1702,8 +1706,6 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 /// Declare free variables for the type of a value, and associate the resulting
 /// set of variables with that value.
 void InferenceMapping::declareVars(Value value, Location loc, bool isDerived) {
-  auto ftype = value.getType().cast<FIRRTLType>();
-
   // Declare a variable for every unknown width in the type. If this is a Bundle
   // type or a FVector type, we will have to potentially create many variables.
   unsigned fieldID = 0;
@@ -1742,7 +1744,8 @@ void InferenceMapping::declareVars(Value value, Location loc, bool isDerived) {
       llvm_unreachable("Unknown type inside a bundle!");
     }
   };
-  declare(getBaseType(ftype));
+  if (auto type = getBaseType(value.getType()))
+    declare(type);
 }
 
 /// Assign the constraint expressions of the fields in the `result` argument as
@@ -1776,8 +1779,8 @@ void InferenceMapping::maximumOfTypes(Value result, Value rhs, Value lhs) {
       llvm_unreachable("Unknown type inside a bundle!");
     }
   };
-  auto type = result.getType().cast<FIRRTLType>();
-  maximize(getBaseType(type));
+  if (auto type = getBaseType(result.getType()))
+    maximize(type);
 }
 
 /// Establishes constraints to ensure the sizes in the `larger` type are greater
@@ -1789,9 +1792,6 @@ void InferenceMapping::maximumOfTypes(Value result, Value rhs, Value lhs) {
 void InferenceMapping::constrainTypes(Value larger, Value smaller) {
   // Recurse to every leaf element and set larger >= smaller. Ignore foreign
   // types as these do not participate in width inference.
-  auto type = larger.getType().dyn_cast<FIRRTLType>();
-  if (!type)
-    return;
 
   auto fieldID = 0;
   std::function<void(FIRRTLBaseType, Value, Value)> constrain =
@@ -1826,7 +1826,8 @@ void InferenceMapping::constrainTypes(Value larger, Value smaller) {
         }
       };
 
-  constrain(getBaseType(type), larger, smaller);
+  if (auto type = getBaseType(larger.getType()))
+    constrain(type, larger, smaller);
 }
 
 /// Establishes constraints to ensure the sizes in the `larger` type are greater
@@ -1921,7 +1922,8 @@ void InferenceMapping::unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type) {
       llvm_unreachable("Unknown type inside a bundle!");
     }
   };
-  unify(getBaseType(type));
+  if (auto ftype = getBaseType(type))
+    unify(ftype);
 }
 
 /// Get the constraint expression for a value.

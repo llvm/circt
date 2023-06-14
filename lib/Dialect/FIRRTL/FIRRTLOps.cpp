@@ -2526,6 +2526,25 @@ LogicalResult RefDefineOp::verify() {
     if (isa<RefSubOp>(op))
       return emitError(
           "destination reference cannot be a sub-element of a reference");
+    if (isa<RefCastOp>(op)) // Source flow, check anyway for now.
+      return emitError(
+          "destination reference cannot be a cast of another reference");
+  }
+
+  return success();
+}
+
+LogicalResult PropAssignOp::verify() {
+  // Check that the flows make sense.
+  if (failed(checkConnectFlow(*this)))
+    return failure();
+
+  // Verify that there is a single value driving the destination.
+  for (auto *user : getDest().getUsers()) {
+    if (auto conn = dyn_cast<FConnectLike>(user);
+        conn && conn.getDest() == getDest() && conn != *this)
+      return emitError("destination property cannot be reused by multiple "
+                       "operations, it can only capture a unique dataflow");
   }
 
   return success();
@@ -3003,6 +3022,27 @@ Attribute AggregateConstantOp::getAttributeFromFieldID(uint64_t fieldID) {
     }
   }
   return value;
+}
+
+void BigIntConstantOp::print(OpAsmPrinter &p) {
+  p << " ";
+  p.printAttributeWithoutType(getValueAttr());
+  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
+}
+
+ParseResult BigIntConstantOp::parse(OpAsmParser &parser,
+                                    OperationState &result) {
+  auto *context = parser.getContext();
+  APInt value;
+  if (parser.parseInteger(value) ||
+      parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+  result.addTypes(BigIntType::get(context));
+  auto intType =
+      IntegerType::get(context, value.getBitWidth(), IntegerType::Signed);
+  auto valueAttr = parser.getBuilder().getIntegerAttr(intType, value);
+  result.addAttribute("value", valueAttr);
+  return success();
 }
 
 LogicalResult BundleCreateOp::verify() {
@@ -4571,6 +4611,22 @@ void ElementwiseAndPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // RefOps
 //===----------------------------------------------------------------------===//
 
+void RefCastOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void RefResolveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void RefSendOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void RefSubOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
 FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
                                          ArrayRef<NamedAttribute> attrs,
                                          std::optional<Location> loc) {
@@ -4591,18 +4647,6 @@ FIRRTLType RefSendOp::inferReturnType(ValueRange operands,
     return emitInferRetTypeError(
         loc, "ref.send operand must be base type, not ", inType);
   return RefType::get(inBaseType.getPassiveType());
-}
-
-void RefResolveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
-}
-
-void RefSendOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
-}
-
-void RefSubOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
 }
 
 FIRRTLType RefSubOp::inferReturnType(ValueRange operands,

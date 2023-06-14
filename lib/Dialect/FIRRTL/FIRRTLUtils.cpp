@@ -35,10 +35,12 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 
   // Special Connects (non-base, foreign):
   if (!dstType) {
-    // References use ref.define.  Types should match, leave to verifier if not.
-    if (isa<RefType>(dstFType))
+    // References use ref.define.  Add cast if types don't match.
+    if (isa<RefType>(dstFType)) {
+      if (dstFType != srcFType)
+        src = builder.create<RefCastOp>(dstFType, src);
       builder.create<RefDefineOp>(dst, src);
-    else // Other types, give up and leave a connect
+    } else // Other types, give up and leave a connect
       builder.create<ConnectOp>(dst, src);
     return;
   }
@@ -159,6 +161,20 @@ IntegerAttr circt::firrtl::getIntZerosAttr(Type type) {
 IntegerAttr circt::firrtl::getIntOnesAttr(Type type) {
   int32_t width = abs(type.cast<IntType>().getWidthOrSentinel());
   return getIntAttr(type, APInt(width, -1));
+}
+
+/// Return the single assignment to a Property value. It is assumed that the
+/// single assigment invariant is enforced elsewhere.
+PropAssignOp circt::firrtl::getPropertyAssignment(FIRRTLPropertyValue value) {
+  for (auto *user : value.getUsers())
+    if (auto propassign = dyn_cast<PropAssignOp>(user))
+      if (propassign.getDest() == value)
+        return propassign;
+
+  // The invariant that there is a single assignment should be enforced
+  // elsewhere. If for some reason a user called this on a Property value that
+  // is not assigned (like a module input port), just return null.
+  return nullptr;
 }
 
 /// Return the value that drives another FIRRTL value within module scope.  Only
@@ -626,6 +642,11 @@ void circt::firrtl::walkGroundTypes(
     FIRRTLType firrtlType,
     llvm::function_ref<void(uint64_t, FIRRTLBaseType)> fn) {
   auto type = getBaseType(firrtlType);
+
+  // If this is not a base type, return.
+  if (!type)
+    return;
+
   // If this is a ground type, don't call recursive functions.
   if (type.isGround())
     return fn(0, type);

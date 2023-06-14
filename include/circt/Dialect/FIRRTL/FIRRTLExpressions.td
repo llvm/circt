@@ -1009,6 +1009,21 @@ def StringConstantOp : FIRRTLOp<"string", [Pure, ConstantLike]> {
   let assemblyFormat = "$value attr-dict";
 }
 
+def BigIntConstantOp : FIRRTLOp<"bigint", [Pure, ConstantLike]> {
+  let summary = "Produce a constant bigint value";
+  let description = [{
+    Produces a constant value of bigint type.
+
+    Example:
+    ```mlir
+    %0 = firrtl.bigint 42
+    ```
+  }];
+  let arguments = (ins APSIntAttr:$value);
+  let results = (outs BigIntType:$result);
+  let hasCustomAssemblyFormat = true;
+}
+
 //===----------------------------------------------------------------------===//
 // RefOperations: Operations on the RefType.
 //
@@ -1034,6 +1049,29 @@ def StringConstantOp : FIRRTLOp<"string", [Pure, ConstantLike]> {
 //===----------------------------------------------------------------------===//
 // RefOps
 //===----------------------------------------------------------------------===//
+
+def RefCastOp : FIRRTLOp<"ref.cast",
+    [HasCustomSSAName,
+     Pure,
+     CompatibleRefTypes<"result","input">]> {
+  let summary = "Cast between compatible reference types";
+  let description = [{
+    Losslessly cast between compatible reference types.
+    Source and destination must be recursively identical or destination
+    has uninferred variants of the corresponding element in source.
+    ```
+      %result = firrtl.ref.cast %ref : (t1) -> t2
+    ```
+    }];
+
+  let arguments = (ins RefType:$input);
+  let results = (outs RefType:$result);
+
+  let hasFolder = 1;
+
+  let assemblyFormat =
+     "$input attr-dict `:` functional-type($input, $result)";
+}
 
 def RefResolveOp: FIRRTLExprOp<"ref.resolve",
                               [RefTypeConstraint<"ref","result">]> {

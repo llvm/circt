@@ -1,16 +1,5 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
-hw.module @mixed_ports(%arg0 : !esi.channel<i32>, %arg1 : i32, %clk : i1, %rst : i1) -> (out: i32) {
-  // expected-error @+1 {{'pipeline.unscheduled' op if any port of this pipeline is an ESI channel, all ports must be ESI channels.}}
-  %0 = pipeline.unscheduled(%arg0, %arg1) clock %clk reset %rst : (!esi.channel<i32>, i32) -> (i32) {
-   ^bb0(%a0 : i32, %a1: i32):
-    %valid = hw.constant 1 : i1
-    pipeline.return %a0 : i32
-  }
-  hw.output %0 : i32
-}
-
-
 // -----
 
 hw.module @body_argn(%arg0 : i32, %arg1 : i32, %clk : i1, %rst : i1) -> (out: i32) {
@@ -73,6 +62,45 @@ hw.module @mixed_stages(%arg0 : i32, %arg1 : i32, %clk : i1, %rst : i1) -> (out:
   
   ^bb2(%s2_s0 : i32, %s2_valid : i1):
     pipeline.return %s2_s0 : i32
+  }
+  hw.output %0 : i32
+}
+
+// -----
+
+hw.module @earlyAccess(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out: i32) {
+  %0 = pipeline.scheduled(%arg0) clock %clk reset %rst : (i32) -> i32 {
+  ^bb0(%arg0_0: i32):
+    %true = hw.constant true
+    // expected-error @+1 {{'pipeline.latency' op result 0 is used before it is available.}}
+    %1 = pipeline.latency 2 -> (i32) {
+      %6 = comb.add %arg0_0, %arg0_0 : i32
+      pipeline.latency.return %6 : i32
+    }
+    pipeline.stage ^bb1 enable %true
+  ^bb1:
+    // expected-note@+1 {{use was operand 0. The result is available 1 stages later than this use.}}
+    pipeline.return %1 : i32
+  }
+  hw.output %0 : i32
+}
+
+// -----
+
+
+hw.module @registeredPass(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out: i32) {
+  %0 = pipeline.scheduled(%arg0) clock %clk reset %rst : (i32) -> i32 {
+  ^bb0(%arg0_0: i32):
+    %true = hw.constant true
+    // expected-error @+1 {{'pipeline.latency' op result 0 is used before it is available.}}
+    %1 = pipeline.latency 2 -> (i32) {
+      %6 = comb.add %arg0_0, %arg0_0 : i32
+      pipeline.latency.return %6 : i32
+    }
+    // expected-note@+1 {{use was operand 0. The result is available 2 stages later than this use.}}
+    pipeline.stage ^bb1 regs(%1 : i32) enable %true
+  ^bb1(%v : i32):
+    pipeline.return %v : i32
   }
   hw.output %0 : i32
 }

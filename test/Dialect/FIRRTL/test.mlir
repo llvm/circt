@@ -246,8 +246,19 @@ firrtl.module @OpenAggTest(in %in: !firrtl.openbundle<a: bundle<data: uint<1>>, 
 // CHECK-LABEL: StringTest
 // CHECK-SAME:  (in %in: !firrtl.string, out %out: !firrtl.string)
 firrtl.module @StringTest(in %in: !firrtl.string, out %out: !firrtl.string) {
-  firrtl.connect %out, %in : !firrtl.string, !firrtl.string
+  firrtl.propassign %out, %in : !firrtl.string
   // CHECK: %0 = firrtl.string "hello"
   %0 = firrtl.string "hello"
+}
+
+// CHECK-LABEL: BigIntTest
+// CHECK-SAME:  (in %in: !firrtl.bigint, out %out: !firrtl.bigint)
+firrtl.module @BigIntTest(in %in: !firrtl.bigint, out %out: !firrtl.bigint) {
+  firrtl.propassign %out, %in : !firrtl.bigint
+
+  // CHECK: %0 = firrtl.bigint 4
+  %0 = firrtl.bigint 4
+  // CHECK: %1 = firrtl.bigint -4
+  %1 = firrtl.bigint -4
 }
 }

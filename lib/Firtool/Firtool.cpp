@@ -217,6 +217,7 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
                                                opt.etcDisableRegisterExtraction,
                                                opt.etcDisableModuleInlining));
 
+  pm.addPass(seq::createExternalizeClockGatePass(opt.clockGateOpts));
   pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass(
       {/*disableRandomization=*/!opt.isRandomEnabled(
            FirtoolOptions::RandomKind::Reg),

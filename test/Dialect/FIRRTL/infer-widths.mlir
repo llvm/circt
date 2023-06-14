@@ -853,8 +853,11 @@ firrtl.circuit "Foo" {
     firrtl.ref.define %bov_ref, %bov_rw : !firrtl.rwprobe<bundle<a: vector<uint, 2>, b : uint>>
 
     %ref_w = firrtl.ref.send %w : !firrtl.uint
-    firrtl.ref.define %x, %ref_w : !firrtl.probe<uint>
+    %cast_ref_w = firrtl.ref.cast %ref_w : (!firrtl.probe<uint>) -> !firrtl.probe<uint>
+    firrtl.ref.define %x, %cast_ref_w : !firrtl.probe<uint>
     firrtl.ref.define %y, %w_rw : !firrtl.rwprobe<uint>
+    // CHECK: firrtl.ref.cast %w_ref : (!firrtl.rwprobe<uint<2>>) -> !firrtl.probe<uint<2>>
+    %cast_w_ro = firrtl.ref.cast %w_rw : (!firrtl.rwprobe<uint>) -> !firrtl.probe<uint>
 
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     firrtl.connect %w, %c0_ui2 : !firrtl.uint, !firrtl.uint<2>
@@ -928,4 +931,8 @@ firrtl.circuit "Foo" {
     firrtl.attach %2, %c : !firrtl.const.analog, !firrtl.const.analog<3>
     firrtl.connect %3, %d : !firrtl.const.vector<uint, 2>, !firrtl.const.vector<uint<4>, 2>
   }
+  
+  // Should not crash when encountering property types.
+  // CHECK: firrtl.module @Property(in %a: !firrtl.string)
+  firrtl.module @Property(in %a: !firrtl.string) { }
 }

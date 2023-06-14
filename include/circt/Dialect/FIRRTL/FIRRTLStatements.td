@@ -272,6 +272,28 @@ def MatchOp : FIRRTLOp<"match", [SingleBlock, NoTerminator,
   }];
 }
 
+def PropAssignOp : FIRRTLOp<"propassign", [FConnectLike, SameTypeOperands,
+                                           HasParent<"FModuleOp">]> {
+  let summary = "Assign to a sink property value.";
+  let description = [{
+    Assign an output property value. The types must match exactly.
+
+    Example:
+    ```mlir
+      firrtl.propassign %dest, %src : !firrtl.string
+    ```
+    }];
+  let arguments = (ins PropertyType:$dest, PropertyType:$src);
+  let results = (outs);
+  let hasVerifier = 1;
+  let assemblyFormat = "$dest `,` $src attr-dict `:` qualified(type($dest))";
+  let extraClassDeclaration = [{
+    static ConnectBehaviorKind getConnectBehaviorKind() {
+      return ConnectBehaviorKind::StaticSingleConnect;
+    }
+  }];
+}
+
 def ForceOp : FIRRTLOp<"force", [SameTypeOperands]> {
   let summary = "Force procedural statement";
   let description = "Maps to the corresponding `sv.force` operation.";
@@ -297,7 +319,7 @@ def ProbeOp : FIRRTLOp<"probe"> {
 class ForceRefTypeConstraint<string ref, string base>
   : TypesMatchWith<"reference type of " # ref # " should be RWProbe of " # base,
                    base, ref,
-                   "RefType::get($_self.cast<FIRRTLBaseType>(), true)">;
+                   "RefType::get($_self.cast<FIRRTLBaseType>().getAllConstDroppedType(), true)">;
 
 def RefForceOp : FIRRTLOp<"ref.force",[ForceRefTypeConstraint<"dest", "src">]> {
   let summary = "FIRRTL force statement";

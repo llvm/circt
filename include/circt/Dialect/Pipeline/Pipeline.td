@@ -35,7 +35,8 @@ def UnscheduledPipelineOp : Op<Pipeline_Dialect, "unscheduled", [
     SingleBlockImplicitTerminator<"ReturnOp">,
     RegionKindInterface,
     HasOnlyGraphRegion,
-    PipelineLike
+    PipelineLike,
+    AttrSizedOperandSegments
   ]> {
   
   let summary = "unscheduled pipeline operation";
@@ -44,27 +45,26 @@ def UnscheduledPipelineOp : Op<Pipeline_Dialect, "unscheduled", [
     been scheduled. It contains a single block representing a graph region of
     operations to-be-scheduled into a pipeline.
     Mainly serves as a container and entrypoint for scheduling.
+
+    A `pipeline.unscheduled` supports a `stall` input. This signal is intended to
+    connect to all stages within the pipeline, and is used to stall the entirety
+    of the pipeline. It is lowering defined how stages choose to use this signal,
+    although in the common case, a `stall` signal would typically connect to
+    the clock-enable input of the stage-separating registers.
   }];
 
   let arguments = (ins
-    Variadic<AnyType>:$inputs, I1:$clock, I1:$reset
+    Variadic<AnyType>:$inputs, I1:$clock, I1:$reset, Optional<I1>:$stall
   );
   let results = (outs Variadic<AnyType>:$results);
   let regions = (region SizedRegion<1>: $body);
   let hasVerifier = 1;
 
   let assemblyFormat = [{
-    `(` $inputs `)` `clock` $clock `reset` $reset attr-dict `:` functional-type($inputs, results) $body
+    `(` $inputs `)` (`stall` $stall^)? `clock` $clock `reset` $reset attr-dict `:` functional-type($inputs, results) $body
   }];
 
   let extraClassDeclaration = [{
-    // Returns true if this pipeline has a latency-insensitive interface.
-    // Latency sensitivity is defined based on whether _any_ `$input` is an 
-    // ESI channel.
-    bool isLatencyInsensitive(); 
-    bool isLatencySensitive() { return !isLatencyInsensitive(); }
-
-
     /// Returns the body of a Pipeline component.
     Block *getBodyBlock() {
       Region* region = &getOperation()->getRegion(0);
@@ -78,7 +78,8 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
     IsolatedFromAbove,
     Pure,
     RegionKindInterface,
-    PipelineLike
+    PipelineLike,
+    AttrSizedOperandSegments
   ]> {
   let summary = "Scheduled pipeline operation";
   let description = [{
@@ -89,16 +90,15 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
     pertaining to when registers have been materialized (made explicit).
     For an in-depth explanation, please refer to the Pipeline dialect rationale.
 
-    A pipelines' latency sensitivity is based on the I/O of the pipeline - if
-    any in- or output port is an ESI channel, all ports are expected to be ESI
-    channels, and the pipeline is considered latency sensitive.
-    The internal representation of the pipeline is agnostic to the latency
-    insensitivity of the I/O. This is by design - allowing us a single source
-    of truth for lowering either latency sensitive or latency insensitive pipelines.
+    A `pipeline.scheduled` supports a `stall` input. This signal is intended to
+    connect to all stages within the pipeline, and is used to stall the entirety
+    of the pipeline. It is lowering defined how stages choose to use this signal,
+    although in the common case, a `stall` signal would typically connect to
+    the clock-enable input of the stage-separating registers.
   }];
 
   let arguments = (ins
-    Variadic<AnyType>:$inputs, I1:$clock, I1:$reset
+    Variadic<AnyType>:$inputs, I1:$clock, I1:$reset, Optional<I1>:$stall
   );
   let results = (outs Variadic<AnyType>:$results);
   let regions = (region AnyRegion:$body);
@@ -106,11 +106,12 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
   let hasVerifier = 1;
 
   let builders = [
-    OpBuilder<(ins "TypeRange":$results, "ValueRange":$inputs, "Value":$clock, "Value":$reset)>
+    OpBuilder<(ins
+      "TypeRange":$results, "ValueRange":$inputs, "Value":$clock, "Value":$reset, CArg<"Value", "{}">:$stall)>
   ];
 
   let assemblyFormat = [{
-    `(` $inputs `)` `clock` $clock `reset` $reset attr-dict `:` functional-type($inputs, results) $body
+    `(` $inputs `)` (`stall` $stall^)? `clock` $clock `reset` $reset attr-dict `:` functional-type($inputs, results) $body
   }];
 
   let extraClassDeclaration = [{
@@ -137,6 +138,10 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
     // control flow of `pipeline.stage` operations.
     // Stages are ordered from first (entry) to last (exit).
     llvm::SmallVector<Block*> getOrderedStages();
+
+    // Returns a map of stages to their index in the pipeline - this is
+    // with respect to 'getOrderedStages'.
+    llvm::DenseMap<Block*, unsigned> getStageMap();
 
     // Gets the n'th stage of this pipeline
     Block* getStage(unsigned n) {
@@ -214,5 +219,61 @@ def ReturnOp : Op<Pipeline_Dialect, "return", [
   let builders = [OpBuilder<(ins), [{ return; }]>];
   let assemblyFormat = [{ ($inputs^)? attr-dict (`:` type($inputs)^)? }];
 }
+
+def LatencyOp : Op<Pipeline_Dialect, "latency", [
+    SingleBlockImplicitTerminator<"LatencyReturnOp">,
+    RegionKindInterface,
+    HasOnlyGraphRegion,
+    ParentOneOf<["UnscheduledPipelineOp", "ScheduledPipelineOp"]>
+  ]> {
+  
+  let summary = "Pipeline dialect latency operation.";
+  let description = [{
+    The `pipeline.latency` operation represents an operation for wrapping
+    multi-cycle operations. The operation declares a single block
+    wherein any operation may be placed within. The operation is not
+    `IsolatedFromAbove` meaning that the operation can reference values
+    defined outside of the operation (subject to the materialization
+    phase of the parent pipeline).
+  }];
+
+  let arguments = (ins ConfinedAttr<I32Attr, [IntMinValue<1>]>:$latency);
+  let results = (outs Variadic<AnyType>:$results);
+  let regions = (region SizedRegion<1>:$body);
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins "unsigned":$latency)>
+  ];
+  let skipDefaultBuilders = 1;
+
+  let assemblyFormat = [{
+    attr-dict $latency `->` `(` type($results) `)` $body
+  }];
+
+  let extraClassDeclaration = [{
+    // Returns the body block of the latency operation.
+    Block* getBodyBlock() {
+      return &getBody().front();
+    }
+  }];
+}
+
+def LatencyReturnOp : Op<Pipeline_Dialect, "latency.return", [
+    Terminator,
+    HasParent<"LatencyOp">
+  ]> {
+  let summary = "Pipeline latency return operation.";
+  let description = [{
+    The `pipeline.latency.return` operation represents a terminator of a
+    `pipeline.latency` operation.
+  }];
+
+  let hasVerifier = 1;
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let builders = [OpBuilder<(ins), [{ return; }]>];
+  let assemblyFormat = [{ ($inputs^)? attr-dict (`:` type($inputs)^)? }];
+}
+
 
 #endif // PIPELINE_OPS

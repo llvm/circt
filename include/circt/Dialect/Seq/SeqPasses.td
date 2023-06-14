@@ -53,4 +53,28 @@ def LowerSeqHLMem: Pass<"lower-seq-hlmem", "hw::HWModuleOp"> {
   let dependentDialects = ["circt::sv::SVDialect"];
 }
 
+def ExternalizeClockGate: Pass<"externalize-clock-gate", "mlir::ModuleOp"> {
+  let summary = "Convert seq.clock_gate ops into hw.module.extern instances";
+  let constructor = "circt::seq::createExternalizeClockGatePass()";
+  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
+  let options = [
+    Option<"moduleName", "name", "std::string", "\"CKG\"",
+           "Name of the external clock gate module">,
+    Option<"inputName", "input", "std::string", "\"I\"",
+           "Name of the clock input">,
+    Option<"outputName", "output", "std::string", "\"O\"",
+           "Name of the gated clock output">,
+    Option<"enableName", "enable", "std::string", "\"E\"",
+           "Name of the enable input">,
+    Option<"testEnableName", "test-enable", "std::string", "\"TE\"",
+           "Name of the optional test enable input">,
+    Option<"instName", "instance-name", "std::string", "\"ckg\"",
+           "Name of the generated instances">
+  ];
+  let statistics = [
+    Statistic<"numClockGatesConverted", "num-clock-gates-converted",
+      "Number of clock gates converted to external module instances">
+  ];
+}
+
 #endif // CIRCT_DIALECT_SEQ_SEQPASSES

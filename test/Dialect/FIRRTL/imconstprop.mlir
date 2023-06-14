@@ -553,6 +553,17 @@ firrtl.circuit "SendThroughRWProbe" {
 
 // -----
 
+// Should not crash when there are properties.
+
+// CHECK-LABEL: firrtl.circuit "Properties"
+firrtl.circuit "Properties" {
+  firrtl.module @Properties(in %in : !firrtl.string, out %out : !firrtl.string) {
+    firrtl.propassign %out, %in : !firrtl.string
+  }
+}
+
+// -----
+
 // Verbatim expressions should not be optimized away.
 firrtl.circuit "Verbatim"  {
   firrtl.module @Verbatim() {

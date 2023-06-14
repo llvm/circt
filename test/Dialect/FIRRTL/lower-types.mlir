@@ -1125,7 +1125,7 @@ firrtl.module private @is1436_FOO() {
 
     // Define using forceable ref preserved.
     // CHECK-NEXT: firrtl.ref.define %{{.+}}, %[[X_REF]] : !firrtl.rwprobe<bundle<a: vector<uint<1>, 2>, b: uint<2>>>
-    firrtl.ref.define %bov_ref, %x_ref : !firrtl.rwprobe<bundle<a: vector<uint<1> ,2>, b: uint<2>>>
+    firrtl.ref.define %bov_ref, %x_ref : !firrtl.rwprobe<bundle<a: vector<uint<1>, 2>, b: uint<2>>>
 
     // Preserve ref.sub uses.
     // CHECK-NEXT: %[[X_REF_A:.+]] = firrtl.ref.sub %[[X_REF]][0]
@@ -1150,8 +1150,30 @@ firrtl.module private @is1436_FOO() {
     %x_ref_b = firrtl.ref.sub %x_ref[1] : !firrtl.rwprobe<bundle<a: vector<uint<1>, 2>, b: uint<2>>>
     %x_b = firrtl.ref.resolve %x_ref_b : !firrtl.rwprobe<uint<2>>
 
-    // TODO: Handle rwprobe --> probe define, enable this.
-    // firrtl.ref.define %probe, %x_ref_b : !firrtl.probe<uint<2>>
+    // rwprobe -> probe demotion.
+    // CHECK-NEXT: %[[X_B_REF_PROBE:.+]] = firrtl.ref.cast %[[X_B_REF]]
+    // CHECK-NEXT: firrtl.ref.define %probe, %[[X_B_REF_PROBE]] : !firrtl.probe<uint<2>>
+    %x_ref_b_probe = firrtl.ref.cast %x_ref_b : (!firrtl.rwprobe<uint<2>>) -> !firrtl.probe<uint<2>>
+    firrtl.ref.define %probe, %x_ref_b_probe : !firrtl.probe<uint<2>>
+
+    // Aggregate ref.cast, check split up properly.  Demote to probe, cast away some width information.
+    // (Note: The variables here override values used above)
+    // CHECK-NEXT: %[[X_REF_A:.+]] = firrtl.ref.sub %[[X_REF]][0]
+    // CHECK-NEXT: %[[X_REF_A_0:.+]] = firrtl.ref.sub %[[X_REF_A]][0]
+    // CHECK-NEXT: %[[X_REF_A_0_CAST:.+]] = firrtl.ref.cast %[[X_REF_A_0]] : (!firrtl.rwprobe<uint<1>>) -> !firrtl.probe<uint>
+    // CHECK-NEXT: %[[X_REF_A_1:.+]] = firrtl.ref.sub %[[X_REF_A]][1]
+    // CHECK-NEXT: %[[X_REF_A_1_CAST:.+]] = firrtl.ref.cast %[[X_REF_A_1]] : (!firrtl.rwprobe<uint<1>>) -> !firrtl.probe<uint>
+    // CHECK-NEXT: %[[X_REF_B:.+]] = firrtl.ref.sub %[[X_REF]][1]
+    // CHECK-NEXT: %[[X_REF_B_CAST:.+]] = firrtl.ref.cast %[[X_REF_B]] : (!firrtl.rwprobe<uint<2>>) -> !firrtl.probe<uint<2>>
+    // CHECK-NEXT: %[[X_CAST_A_0:.+]] = firrtl.ref.resolve %[[X_REF_A_0_CAST]]
+    // CHECK-NEXT: %[[X_CAST_A_1:.+]] = firrtl.ref.resolve %[[X_REF_A_1_CAST]]
+    // CHECK-NEXT: %[[X_CAST_B:.+]] = firrtl.ref.resolve %[[X_REF_B_CAST]]
+    // CHECK-NEXT: firrtl.node %[[X_CAST_A_0]] : !firrtl.uint
+    // CHECK-NEXT: firrtl.node %[[X_CAST_A_1]] : !firrtl.uint
+    // CHECK-NEXT: firrtl.node %[[X_CAST_B]] : !firrtl.uint<2>
+    %x_ref_cast = firrtl.ref.cast %x_ref : (!firrtl.rwprobe<bundle<a: vector<uint<1>, 2>, b: uint<2>>>) -> !firrtl.probe<bundle<a: vector<uint, 2>, b: uint<2>>>
+    %x_ref_cast_resolve = firrtl.ref.resolve %x_ref_cast : !firrtl.probe<bundle<a: vector<uint, 2>, b: uint<2>>>
+    %x_ref_cast_node = firrtl.node %x_ref_cast_resolve : !firrtl.bundle<a: vector<uint, 2>, b: uint<2>>
 
     // Check resolve of rwprobe is preserved.
     // CHECK-NEXT: = firrtl.ref.resolve %[[X_REF]]
