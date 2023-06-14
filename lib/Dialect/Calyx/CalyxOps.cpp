@@ -2136,6 +2136,39 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
 }
 
 //===----------------------------------------------------------------------===//
+// InvokeOp
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseParameterList(OpAsmParser &parser, OperationState &result, SmallVector<Attribute> &portNames, SmallVector<OpAsmParser::Argument> &args) {
+  StringAttr portName; 
+  OpAsmParser::Argument arg;
+  auto parseParameter = [&]() -> ParseResult {
+    if (parser.parseSymbolName(portName) || parser.parseEqual() || parser.parseArgument(arg))
+      return failure();
+    portNames.push_back(portName);
+    args.push_back(arg);
+    return success();
+  };
+  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren, parseParameter); 
+}
+
+ParseResult InvokeOp::parse(OpAsmParser &parser, OperationState &result){
+  StringAttr componentName;
+  SmallVector<Attribute> portNames;
+  SmallVector<Attribute> argNames;
+  SmallVector<OpAsmParser::Argument> args;
+  if (parser.parseSymbolName(componentName, "callee", result.attributes))
+    return failure();
+  parseParameterList(parser, result, portNames, args);
+  llvm::outs() << "parse success!\n";
+}
+
+void InvokeOp::print(OpAsmPrinter &p) {
+
+}
+
+
+//===----------------------------------------------------------------------===//
 // Calyx library ops
 //===----------------------------------------------------------------------===//
 

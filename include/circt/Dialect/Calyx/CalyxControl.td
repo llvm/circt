@@ -258,3 +258,13 @@ def WhileOp : CalyxContainer<"while", [
   ];
 
 }
+
+def InvokeOp : CalyxOp<"invoke",
+                      [ControlLike]> {
+  let summary = "Calyx Invoke";
+  let arguments = (ins FlatSymbolRefAttr:$callee, 
+                   ArrayAttr:$portNames,
+                   ArrayAttr:$argNames);
+  let results = (outs);
+  let hasCustomAssemblyFormat = 1;
+}
