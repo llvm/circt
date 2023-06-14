@@ -282,6 +282,13 @@ LogicalResult ExtractOp::verify() {
   return success();
 }
 
+LogicalResult TruthTableOp::verify() {
+  ArrayAttr table = getLookupTable();
+  if (table.size() != (1ull << getInputs().size()))
+    return emitOpError("Expected lookup table of 2^n length");
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
