@@ -17,15 +17,19 @@
 #include "circt/LogicalEquivalence/Solver.h"
 #include "circt/LogicalEquivalence/Utility.h"
 #include "circt/Support/Version.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/Parser/Parser.h"
-#include "mlir/Pass/PassManager.h"
+#include "mlir/Support/FileUtilities.h"
+#include "mlir/Support/LogicalResult.h"
+#include "mlir/Support/ToolUtilities.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/SourceMgr.h"
 
 namespace cl = llvm::cl;
 using namespace circt;
+using namespace mlir;
 
 //===----------------------------------------------------------------------===//
 // Command-line options declaration
@@ -43,17 +47,24 @@ static cl::opt<int> clockBound(
     cl::desc("Specify a number of clock cycles to model check up to."),
     cl::value_desc("clock cycle count"), cl::cat(mainCategory));
 
+static cl::opt<bool>
+    verifyDiagnostics("verify-diagnostics",
+                      cl::desc("Check that emitted diagnostics match "
+                               "expected-* lines on the corresponding line"),
+                      cl::init(false), cl::Hidden, cl::cat(mainCategory));
+
+static cl::opt<bool>
+    splitInputFile("split-input-file",
+                   cl::desc("Split the input file into pieces and process each "
+                            "chunk independently"),
+                   cl::init(false), cl::Hidden, cl::cat(mainCategory));
+
 static cl::opt<std::string> inputFileName(cl::Positional, cl::Required,
                                           cl::desc("<input file>"),
                                           cl::cat(mainCategory));
 
-static mlir::LogicalResult checkProperty(mlir::MLIRContext &context,
-                                         int bound) {
-
-  mlir::OwningOpRef<mlir::ModuleOp> inputFile =
-      mlir::parseSourceFile<mlir::ModuleOp>(inputFileName, &context);
-  if (!inputFile)
-    return mlir::failure();
+static LogicalResult checkProperty(ModuleOp input, MLIRContext &context,
+                                   int bound) {
 
   // Create solver and add circuit
   // TODO: replace 'false' with a statistics option
@@ -61,24 +72,67 @@ static mlir::LogicalResult checkProperty(mlir::MLIRContext &context,
   Solver::Circuit *circuitModel = s.addCircuit(inputFileName);
 
   auto exporter = std::make_unique<LogicExporter>(moduleName, circuitModel);
-  mlir::ModuleOp m = inputFile.get();
-  if (failed(exporter->run(m)))
-    return mlir::failure();
+  if (failed(exporter->run(input)))
+    return failure();
 
   for (int i = 0; i < bound; i++) {
     if (!circuitModel->checkCycle(i)) {
       lec::outs() << "Failure\n";
-      return mlir::failure();
+      return input->emitError("Properties do not hold on module.");
     }
   }
   lec::outs() << "Success!\n";
-  return mlir::success();
+  return success();
+}
+
+static LogicalResult processBuffer(MLIRContext &context,
+                                   llvm::SourceMgr &sourceMgr) {
+  OwningOpRef<ModuleOp> module;
+  module = parseSourceFile<ModuleOp>(sourceMgr, &context);
+  if (!module)
+    return failure();
+
+  return checkProperty(module.get(), context, clockBound);
+}
+
+/// Process a single split of the input. This allocates a source manager and
+/// creates a regular or verifying diagnostic handler, depending on whether the
+/// user set the verifyDiagnostics option.
+static LogicalResult
+processInputSplit(MLIRContext &context,
+                  std::unique_ptr<llvm::MemoryBuffer> buffer) {
+  llvm::SourceMgr sourceMgr;
+  sourceMgr.AddNewSourceBuffer(std::move(buffer), llvm::SMLoc());
+  if (!verifyDiagnostics) {
+    SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
+    return processBuffer(context, sourceMgr);
+  }
+
+  SourceMgrDiagnosticVerifierHandler sourceMgrHandler(sourceMgr, &context);
+  context.printOpOnDiagnostic(false);
+  (void)processBuffer(context, sourceMgr);
+  return sourceMgrHandler.verify();
+}
+
+/// Process the entire input provided by the user, splitting it up if the
+/// corresponding option was specified.
+static LogicalResult processInput(MLIRContext &context,
+                                  std::unique_ptr<llvm::MemoryBuffer> input) {
+  if (!splitInputFile)
+    return processInputSplit(context, std::move(input));
+
+  return splitAndProcessBuffer(
+      std::move(input),
+      [&](std::unique_ptr<llvm::MemoryBuffer> buffer, raw_ostream &) {
+        return processInputSplit(context, std::move(buffer));
+      },
+      llvm::outs());
 }
 
 int main(int argc, char **argv) {
   // Configure the relevant command-line options.
   cl::HideUnrelatedOptions(mainCategory);
-  mlir::registerMLIRContextCLOptions();
+  registerMLIRContextCLOptions();
 
   // Parse the command-line options provided by the user.
   cl::ParseCommandLineOptions(argc, argv,
@@ -91,18 +145,20 @@ int main(int argc, char **argv) {
   llvm::setBugReportMsg(circt::circtBugReportMsg);
 
   // Register the supported CIRCT dialects and create a context to work with.
-  mlir::DialectRegistry registry;
+  DialectRegistry registry;
   registry.insert<circt::comb::CombDialect, circt::hw::HWDialect,
                   circt::seq::SeqDialect, circt::verif::VerifDialect>();
-  mlir::MLIRContext context(registry);
+  MLIRContext context(registry);
 
-  // Setup of diagnostic handling.
-  llvm::SourceMgr sourceMgr;
-  mlir::SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
-  // Avoid printing a superfluous note on diagnostic emission.
-  context.printOpOnDiagnostic(false);
+  // Set up the input file.
+  std::string errorMessage;
+  auto input = openInputFile(inputFileName, &errorMessage);
+  if (!input) {
+    llvm::errs() << errorMessage << "\n";
+    exit(false);
+  }
 
   // Perform the logical equivalence checking; using `exit` to avoid the slow
   // teardown of the MLIR context.
-  exit(failed(checkProperty(context, clockBound)));
+  exit(failed(processInput(context, std::move(input))));
 }
