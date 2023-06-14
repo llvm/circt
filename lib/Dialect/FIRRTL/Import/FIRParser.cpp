@@ -1685,6 +1685,18 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
         builder.getStringAttr(FIRToken::getStringValue(spelling)));
     break;
   }
+  case FIRToken::kw_BigInt: {
+    locationProcessor.setLoc(getToken().getLoc());
+    consumeToken(FIRToken::kw_BigInt);
+    APInt value;
+    if (parseToken(FIRToken::l_paren, "expected '(' in BigInt expression") ||
+        parseIntLit(value, "expected integer literal in BigInt expression") ||
+        parseToken(FIRToken::r_paren, "expected ')' in BigInt expression"))
+      return failure();
+    result =
+        builder.create<BigIntConstantOp>(APSInt(value, /*isUnsigned=*/false));
+    break;
+  }
 
     // Otherwise there are a bunch of keywords that are treated as identifiers
     // try them.
