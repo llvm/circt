@@ -30,14 +30,8 @@ with Context() as ctx, Location.unknown():
 
 # Test instantiate failure.
 
-
-@dataclass
-class Test:
-  field: int
-
-
 try:
-  obj = evaluator.instantiate(Test)
+  obj = evaluator.instantiate("Test")
 except ValueError as e:
   # CHECK: actual parameter list length (0) does not match
   # CHECK: actual parameters:
@@ -47,14 +41,9 @@ except ValueError as e:
 
 # Test get field failure.
 
-
-@dataclass
-class Test:
-  foo: int
-
-
 try:
-  obj = evaluator.instantiate(Test, 42)
+  obj = evaluator.instantiate("Test", 42)
+  obj.foo
 except ValueError as e:
   # CHECK: field "foo" does not exist
   # CHECK: see current operation:
@@ -63,19 +52,9 @@ except ValueError as e:
 
 # Test instantiate success.
 
+obj = evaluator.instantiate("Test", 42)
 
-@dataclass
-class Child:
-  foo: int
-
-
-@dataclass
-class Test:
-  field: int
-  child: Child
-
-
-obj = evaluator.instantiate(Test, 42)
-
-# CHECK: Test(field=42, child=Child(foo=14))
-print(obj)
+# CHECK: 42
+print(obj.field)
+# CHECK: 14
+print(obj.child.foo)
