@@ -296,11 +296,11 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
 
     // Check if the number of fields of mask and input type match.
     auto isValidMask = [&](FIRRTLType inType, FIRRTLType maskType) -> bool {
-      if (auto bundle = inType.dyn_cast<BundleType>()) {
-        if (auto mBundle = maskType.dyn_cast<BundleType>())
+      if (auto bundle = dyn_cast<BundleType>(inType)) {
+        if (auto mBundle = dyn_cast<BundleType>(maskType))
           return mBundle.getNumElements() == bundle.getNumElements();
-      } else if (auto vec = inType.dyn_cast<FVectorType>()) {
-        if (auto mVec = maskType.dyn_cast<FVectorType>())
+      } else if (auto vec = dyn_cast<FVectorType>(inType)) {
+        if (auto mVec = dyn_cast<FVectorType>(maskType))
           return mVec.getNumElements() == vec.getNumElements();
       } else
         return true;
@@ -309,8 +309,8 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
 
     std::function<bool(Value, Value, Value)> flatAccess =
         [&](Value reg, Value input, Value mask) -> bool {
-      FIRRTLType inType = input.getType().cast<FIRRTLType>();
-      if (!isValidMask(inType, mask.getType().cast<FIRRTLType>())) {
+      FIRRTLType inType = cast<FIRRTLType>(input.getType());
+      if (!isValidMask(inType, cast<FIRRTLType>(mask.getType()))) {
         input.getDefiningOp()->emitOpError("Mask type is not valid");
         return false;
       }
@@ -350,7 +350,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
                          ImplicitLocOpBuilder &builder) {
     AnnotationSet annos(attr);
     SmallVector<Attribute> regAnnotations;
-    auto vecType = op.getResult().getType().cast<FVectorType>();
+    auto vecType = cast<FVectorType>(op.getResult().getType());
     for (auto anno : annos) {
       if (anno.isClass(memTapSourceClass)) {
         for (size_t i = 0, e = op.getResult()

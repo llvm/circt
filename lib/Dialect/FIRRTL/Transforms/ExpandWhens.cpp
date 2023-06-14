@@ -197,7 +197,7 @@ public:
     // Recurse through a bundle and declare each leaf sink node.
     std::function<void(Type, Flow)> declare = [&](Type type, Flow flow) {
       // If this is a bundle type, recurse to each of the fields.
-      if (auto bundleType = type.dyn_cast<BundleType>()) {
+      if (auto bundleType = dyn_cast<BundleType>(type)) {
         for (auto &element : bundleType.getElements()) {
           id++;
           if (element.isFlip)
@@ -209,7 +209,7 @@ public:
       }
 
       // If this is a vector type, recurse to each of the elements.
-      if (auto vectorType = type.dyn_cast<FVectorType>()) {
+      if (auto vectorType = dyn_cast<FVectorType>(type)) {
         for (unsigned i = 0; i < vectorType.getNumElements(); ++i) {
           id++;
           declare(vectorType.getElementType(), flow);
@@ -218,7 +218,7 @@ public:
       }
 
       // If this is an analog type, it does not need to be tracked.
-      if (auto analogType = type.dyn_cast<AnalogType>())
+      if (auto analogType = dyn_cast<AnalogType>(type))
         return;
 
       // If it is a leaf node with Flow::Sink or Flow::Duplex, it must be
@@ -317,7 +317,7 @@ public:
   void visitDecl(MemOp op) {
     // Track any memory inputs which require connections.
     for (auto result : op.getResults())
-      if (!result.getType().isa<RefType>())
+      if (!isa<RefType>(result.getType()))
         declareSinks(result, Flow::Sink);
   }
 

@@ -203,8 +203,8 @@ struct MappingContextTraits<DescribedSignal, Context> {
       // The final non-array type must be an integer.  Leave this as an assert
       // with a blind cast because we generated this type in this pass (and we
       // therefore cannot fail this cast).
-      assert(tpe.isa<IntegerType>());
-      width = tpe.cast<IntegerType>().getWidth();
+      assert(isa<IntegerType>(tpe));
+      width = cast<IntegerType>(tpe).getWidth();
     }
 
     /// A no-argument constructor is necessary to work with LLVM's YAML library.
@@ -255,7 +255,7 @@ struct MappingContextTraits<DescribedInstance, Context> {
         description = stripComment(op.description.getValue());
 
       for (auto &d : op.dimensions) {
-        auto dimension = d.dyn_cast<IntegerAttr>();
+        auto dimension = dyn_cast<IntegerAttr>(d);
         dimensions.push_back(dimension.getInt());
       }
     }
@@ -794,7 +794,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     // Parse non-local annotations.
     SmallString<32> strpath;
     for (auto p : pathAttr) {
-      auto dict = p.dyn_cast_or_null<DictionaryAttr>();
+      auto dict = dyn_cast_or_null<DictionaryAttr>(p);
       if (!dict) {
         mlir::emitError(loc, "annotation '" + clazz +
                                  " has invalid type (expected DictionaryAttr)");
@@ -826,7 +826,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     for (size_t i = 0, e = componentAttr.size(); i != e; ++i) {
       auto cPath = (path + ".component[" + Twine(i) + "]").str();
       auto component = componentAttr[i];
-      auto dict = component.dyn_cast_or_null<DictionaryAttr>();
+      auto dict = dyn_cast_or_null<DictionaryAttr>(component);
       if (!dict) {
         mlir::emitError(loc, "annotation '" + clazz + "' with path '" + cPath +
                                  " has invalid type (expected DictionaryAttr)");
@@ -840,7 +840,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
       auto value = dict.get("value");
 
       // A subfield like "bar" in "~Foo|Foo>foo.bar".
-      if (auto field = value.dyn_cast<StringAttr>()) {
+      if (auto field = dyn_cast<StringAttr>(value)) {
         assert(classAttr.getValue() == "firrtl.annotations.TargetToken$Field" &&
                "A StringAttr target token must be found with a subfield target "
                "token.");
@@ -849,7 +849,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
       }
 
       // A subindex like "42" in "~Foo|Foo>foo[42]".
-      if (auto index = value.dyn_cast<IntegerAttr>()) {
+      if (auto index = dyn_cast<IntegerAttr>(value)) {
         assert(classAttr.getValue() == "firrtl.annotations.TargetToken$Index" &&
                "An IntegerAttr target token must be found with a subindex "
                "target token.");
@@ -910,7 +910,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     if (!elementsAttr)
       return std::nullopt;
     for (size_t i = 0, e = elementsAttr.size(); i != e; ++i) {
-      auto field = elementsAttr[i].dyn_cast_or_null<DictionaryAttr>();
+      auto field = dyn_cast_or_null<DictionaryAttr>(elementsAttr[i]);
       if (!field) {
         mlir::emitError(
             loc,
@@ -927,7 +927,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
           tryGetAs<DictionaryAttr>(field, root, "tpe", loc, clazz, ePath);
       std::optional<StringAttr> description;
       if (auto maybeDescription = field.get("description"))
-        description = maybeDescription.cast<StringAttr>();
+        description = cast<StringAttr>(maybeDescription);
       auto eltAttr = parseAugmentedType(
           state, tpe, root, companion, name, defName, std::nullopt, description,
           clazz, companionAttr, path + "_" + name.getValue());
@@ -938,7 +938,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
       // This includes the optional description and name.
       NamedAttrList attrs;
       if (auto maybeDescription = field.get("description"))
-        attrs.append("description", maybeDescription.cast<StringAttr>());
+        attrs.append("description", cast<StringAttr>(maybeDescription));
       attrs.append("name", name);
       attrs.append("tpe", tpe.getAs<StringAttr>("class"));
       elements.push_back(*eltAttr);
@@ -1097,7 +1097,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     SmallVector<Attribute> elements;
     for (auto [i, elt] : llvm::enumerate(elementsAttr)) {
       auto eltAttr = parseAugmentedType(
-          state, elt.cast<DictionaryAttr>(), root, companion, name,
+          state, cast<DictionaryAttr>(elt), root, companion, name,
           StringAttr::get(context, ""), id, std::nullopt, clazz, companionAttr,
           path + "_" + Twine(i));
       if (!eltAttr)
@@ -1187,7 +1187,7 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
 //===----------------------------------------------------------------------===//
 
 std::optional<Attribute> GrandCentralPass::fromAttr(Attribute attr) {
-  auto dict = attr.dyn_cast<DictionaryAttr>();
+  auto dict = dyn_cast<DictionaryAttr>(attr);
   if (!dict) {
     emitCircuitError() << "attribute is not a dictionary: " << attr << "\n";
     return std::nullopt;
@@ -1269,7 +1269,7 @@ bool GrandCentralPass::traverseField(
         auto companionModule = companionIDMap.lookup(id).companion;
         HWModuleLike enclosing = getEnclosingModule(leafValue, sym);
 
-        auto tpe = leafValue.getType().cast<FIRRTLBaseType>();
+        auto tpe = cast<FIRRTLBaseType>(leafValue.getType());
 
         // If the type is zero-width then do not emit an XMR.
         if (!tpe.getBitWidthOrSentinel())
@@ -1375,9 +1375,9 @@ bool GrandCentralPass::traverseField(
           auto field = fromAttr(element);
           if (!field)
             return false;
-          auto name = element.cast<DictionaryAttr>().getAs<StringAttr>("name");
+          auto name = cast<DictionaryAttr>(element).getAs<StringAttr>("name");
           if (!name)
-            name = element.cast<DictionaryAttr>().getAs<StringAttr>("defName");
+            name = cast<DictionaryAttr>(element).getAs<StringAttr>("defName");
           anyFailed &= traverseField(
               *field, id, path.snapshot().append("." + name.getValue()),
               xmrElems, interfaceBuilder);
@@ -1501,7 +1501,7 @@ std::optional<StringAttr> GrandCentralPass::traverseBundle(
     if (!field)
       return std::nullopt;
 
-    auto name = element.cast<DictionaryAttr>().getAs<StringAttr>("name");
+    auto name = cast<DictionaryAttr>(element).getAs<StringAttr>("name");
     // auto signalSym = hw::InnerRefAttr::get(iface.sym_nameAttr(), name);
     // TODO: The `append(name.getValue())` in the following should actually be
     // `append(signalSym)`, but this requires that `computeField` and the
@@ -1517,7 +1517,7 @@ std::optional<StringAttr> GrandCentralPass::traverseBundle(
     if (!elementType)
       return std::nullopt;
     StringAttr description =
-        element.cast<DictionaryAttr>().getAs<StringAttr>("description");
+        cast<DictionaryAttr>(element).getAs<StringAttr>("description");
     interfaceBuilder[lastIndex].elementsList.emplace_back(description, name,
                                                           *elementType);
   }
@@ -1528,7 +1528,7 @@ std::optional<StringAttr> GrandCentralPass::traverseBundle(
 /// constructed symbol table to make this fast.
 HWModuleLike GrandCentralPass::getEnclosingModule(Value value,
                                                   FlatSymbolRefAttr sym) {
-  if (auto blockArg = value.dyn_cast<BlockArgument>())
+  if (auto blockArg = dyn_cast<BlockArgument>(value))
     return cast<HWModuleLike>(blockArg.getOwner()->getParentOp());
 
   auto *op = value.getDefiningOp();
@@ -2010,7 +2010,7 @@ void GrandCentralPass::runOnOperation() {
       });
     };
     for (auto tuple : companionIDMap)
-      ids.push_back(tuple.first.cast<IntegerAttr>());
+      ids.push_back(cast<IntegerAttr>(tuple.first));
     sort();
     llvm::dbgs() << "companionIDMap:\n";
     for (auto id : ids) {
@@ -2020,14 +2020,14 @@ void GrandCentralPass::runOnOperation() {
     }
     ids.clear();
     for (auto tuple : leafMap)
-      ids.push_back(tuple.first.cast<IntegerAttr>());
+      ids.push_back(cast<IntegerAttr>(tuple.first));
     sort();
     llvm::dbgs() << "leafMap:\n";
     for (auto id : ids) {
       auto fieldRef = leafMap.lookup(id).field;
       auto value = fieldRef.getValue();
       auto fieldID = fieldRef.getFieldID();
-      if (auto blockArg = value.dyn_cast<BlockArgument>()) {
+      if (auto blockArg = dyn_cast<BlockArgument>(value)) {
         FModuleOp module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
         llvm::dbgs() << "  - " << id.getValue() << ": "
                      << module.getName() + ">" +

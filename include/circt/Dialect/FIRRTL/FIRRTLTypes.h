@@ -157,7 +157,8 @@ public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
     return llvm::isa<FIRRTLDialect>(type.getDialect()) &&
-           !type.isa<PropertyType, RefType, OpenBundleType, OpenVectorType>();
+           !llvm::isa<PropertyType, RefType, OpenBundleType, OpenVectorType>(
+               type);
   }
 
   /// Returns true if this is a non-const "passive" that which is not analog.
@@ -297,9 +298,7 @@ public:
   /// Return a 'const' or non-'const' version of this type.
   IntType getConstType(bool isConst);
 
-  static bool classof(Type type) {
-    return type.isa<SIntType>() || type.isa<UIntType>();
-  }
+  static bool classof(Type type) { return llvm::isa<SIntType, UIntType>(type); }
 };
 
 //===----------------------------------------------------------------------===//

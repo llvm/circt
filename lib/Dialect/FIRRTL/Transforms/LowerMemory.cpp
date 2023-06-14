@@ -490,7 +490,7 @@ LogicalResult LowerMemoryPass::runOnModule(FModuleOp module, bool shouldDedup) {
   for (auto op :
        llvm::make_early_inc_range(module.getBodyBlock()->getOps<MemOp>())) {
     // Check that the memory has been properly lowered already.
-    if (!op.getDataType().isa<UIntType>())
+    if (!isa<UIntType>(op.getDataType()))
       return op->emitError(
           "memories should be flattened before running LowerMemory");
 

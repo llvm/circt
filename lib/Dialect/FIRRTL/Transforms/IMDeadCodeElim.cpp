@@ -471,7 +471,7 @@ void IMDeadCodeElimPass::visitValue(Value value) {
     visitUser(user);
 
   // Requiring an input port propagates the liveness to each instance.
-  if (auto blockArg = value.dyn_cast<BlockArgument>()) {
+  if (auto blockArg = dyn_cast<BlockArgument>(value)) {
     auto module = cast<FModuleOp>(blockArg.getParentBlock()->getParentOp());
     auto portDirection = module.getPortDirection(blockArg.getArgNumber());
     // If the port is input, it's necessary to mark corresponding input ports of
@@ -695,7 +695,7 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
         continue;
 
       // RefType can't be a wire, especially if it won't be erased.  Skip.
-      if (argument.getType().isa<RefType>())
+      if (isa<RefType>(argument.getType()))
         continue;
 
       // Ok, this port is used only within its defined module. So we can replace

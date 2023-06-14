@@ -536,7 +536,7 @@ void ExtractInstancesPass::extractInstances() {
           prefix.empty() ? Twine(name) : Twine(prefix) + "_" + name);
 
       PortInfo newPort{nameAttr,
-                       inst.getResult(portIdx).getType().cast<FIRRTLType>(),
+                       cast<FIRRTLType>(inst.getResult(portIdx).getType()),
                        direction::flip(inst.getPortDirection(portIdx))};
       newPort.loc = inst.getResult(portIdx).getLoc();
       newPorts.push_back({numParentPorts, newPort});
@@ -676,7 +676,7 @@ void ExtractInstancesPass::extractInstances() {
         // module is multiply instantiated. In that case, we only move over NLAs
         // that actually affect the instance through the new parent module.
         if (nlaIdx > 0) {
-          auto innerRef = nlaPath[nlaIdx - 1].dyn_cast<InnerRefAttr>();
+          auto innerRef = dyn_cast<InnerRefAttr>(nlaPath[nlaIdx - 1]);
           if (innerRef &&
               !(innerRef.getModule() == newParent.getModuleNameAttr() &&
                 innerRef.getName() == getInnerSymName(newParentInst))) {
@@ -701,11 +701,11 @@ void ExtractInstancesPass::extractInstances() {
         // was rooted at.
         if (nlaIdx == 0) {
           LLVM_DEBUG(llvm::dbgs() << "    - Re-rooting " << nlaPath[0] << "\n");
-          assert(nlaPath[0].isa<InnerRefAttr>() &&
+          assert(isa<InnerRefAttr>(nlaPath[0]) &&
                  "head of hierpath must be an InnerRefAttr");
           nlaPath[0] =
               InnerRefAttr::get(newParent.getModuleNameAttr(),
-                                nlaPath[0].cast<InnerRefAttr>().getName());
+                                cast<InnerRefAttr>(nlaPath[0]).getName());
 
           if (instParentNode->hasOneUse()) {
             // Simply update the existing NLA since our parent is only
@@ -769,9 +769,9 @@ void ExtractInstancesPass::extractInstances() {
         // since we know that `nlaIdx` is a `InnerRefAttr`, we'll modify
         // `OldParent::BB` to be `NewParent::BB` and delete `NewParent::X`.
         StringAttr parentName =
-            nlaPath[nlaIdx - 1].cast<InnerRefAttr>().getModule();
+            cast<InnerRefAttr>(nlaPath[nlaIdx - 1]).getModule();
         Attribute newRef;
-        if (nlaPath[nlaIdx].isa<InnerRefAttr>())
+        if (isa<InnerRefAttr>(nlaPath[nlaIdx]))
           newRef = InnerRefAttr::get(parentName, getInnerSymName(newInst));
         else
           newRef = FlatSymbolRefAttr::get(parentName);
@@ -781,7 +781,7 @@ void ExtractInstancesPass::extractInstances() {
         nlaPath[nlaIdx] = newRef;
         nlaPath.erase(nlaPath.begin() + nlaIdx - 1);
 
-        if (newRef.isa<FlatSymbolRefAttr>()) {
+        if (isa<FlatSymbolRefAttr>(newRef)) {
           // Since the original NLA ended at the instance's parent module, there
           // is no guarantee that the instance is the sole user of the NLA (as
           // opposed to the original NLA explicitly naming the instance). Create
@@ -885,7 +885,7 @@ void ExtractInstancesPass::groupInstances() {
         auto nameAttr = builder.getStringAttr(
             prefix.empty() ? Twine(name) : Twine(prefix) + "_" + name);
         PortInfo port{nameAttr,
-                      inst.getResult(portIdx).getType().cast<FIRRTLType>(),
+                      cast<FIRRTLType>(inst.getResult(portIdx).getType()),
                       inst.getPortDirection(portIdx)};
         port.loc = inst.getResult(portIdx).getLoc();
         ports.push_back(port);
@@ -923,7 +923,7 @@ void ExtractInstancesPass::groupInstances() {
         auto ref1 =
             InnerRefAttr::get(parent.getModuleNameAttr(), wrapperInstName);
         Attribute ref2;
-        if (auto innerRef = nlaPath[nlaIdx].dyn_cast<InnerRefAttr>())
+        if (auto innerRef = dyn_cast<InnerRefAttr>(nlaPath[nlaIdx]))
           ref2 = InnerRefAttr::get(wrapperNameAttr, innerRef.getName());
         else
           ref2 = FlatSymbolRefAttr::get(wrapperNameAttr);
