@@ -887,9 +887,14 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
         .Case<VarExpr>([&](auto *expr) {
           if (solvedExprs.contains(expr->constraint)) {
             auto solution = solvedExprs[expr->constraint];
-            if (expr->upperBound)
-              expr->upperBoundSolution = solvedExprs[expr->upperBound].second;
-
+            // If we've solved the upper bound already, store the solution.
+            // This will be explicitly solved for later if not computed as
+            // part of the solving that resolved this constraint.
+            // This should only happen if somehow the constraint is
+            // solved before visiting this expression, so that our upperBound
+            // was not added to the worklist such that it was handled first.
+            if (expr->upperBound && solvedExprs.contains(expr->upperBound))
+              expr->upperBoundSolution = solvedExprs[expr->upperBound].first;
             seenVars.erase(expr);
             // Constrain variables >= 0.
             if (solution.first && *solution.first < 0)
@@ -1051,7 +1056,8 @@ LogicalResult ConstraintSolver::solve() {
                << "- Solving " << *var << " >= " << *var->constraint << "\n");
     seenVars.insert(var);
     auto solution = solveExpr(var->constraint, seenVars, defaultWorklistSize);
-    if (var->upperBound)
+    // Compute the upperBound if there is one and haven't already.
+    if (var->upperBound && !var->upperBoundSolution)
       var->upperBoundSolution =
           solveExpr(var->upperBound, seenVars, defaultWorklistSize).first;
     seenVars.clear();
@@ -1188,12 +1194,12 @@ public:
 
   /// Constrain the value "larger" to be greater than or equal to "smaller".
   /// These may be aggregate values. This is used for regular connects.
-  void constrainTypes(Value larger, Value smaller);
+  void constrainTypes(Value larger, Value smaller, bool equal = false);
 
   /// Constrain the expression "larger" to be greater than or equals to
   /// the expression "smaller".
   void constrainTypes(Expr *larger, Expr *smaller,
-                      bool imposeUpperBounds = false);
+                      bool imposeUpperBounds = false, bool equal = false);
 
   /// Assign the constraint expressions of the fields in the `src` argument as
   /// the expressions for the `dst` argument. Both fields must be of the given
@@ -1544,15 +1550,10 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
       .Case<ConnectOp>(
           [&](auto op) { constrainTypes(op.getDest(), op.getSrc()); })
-      .Case<RefDefineOp>(
-          [&](auto op) { constrainTypes(op.getDest(), op.getSrc()); })
-      // StrictConnect is an identify constraint
-      .Case<StrictConnectOp>([&](auto op) {
-        constrainTypes(op.getDest(), op.getSrc());
-        constrainTypes(op.getSrc(), op.getDest());
-        //                unifyTypes(FieldRef(op.getDest(), 0),
-        //                FieldRef(op.getSrc(), 0),
-        //           op.getDest().getType().template cast<FIRRTLType>());
+      .Case<RefDefineOp, StrictConnectOp>([&](auto op) {
+        // Dest >= Src, but also check Src <= Dest for correctness
+        // (but don't solve to make this true, don't back-propagate)
+        constrainTypes(op.getDest(), op.getSrc(), true);
       })
       .Case<AttachOp>([&](auto op) {
         // Attach connects multiple analog signals together. All signals must
@@ -1672,15 +1673,15 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 
       .Case<RefSendOp>([&](auto op) {
         declareVars(op.getResult(), op.getLoc());
-        constrainTypes(op.getResult(), op.getBase());
+        constrainTypes(op.getResult(), op.getBase(), true);
       })
       .Case<RefResolveOp>([&](auto op) {
         declareVars(op.getResult(), op.getLoc());
-        constrainTypes(op.getResult(), op.getRef());
+        constrainTypes(op.getResult(), op.getRef(), true);
       })
       .Case<RefCastOp>([&](auto op) {
         declareVars(op.getResult(), op.getLoc());
-        constrainTypes(op.getResult(), op.getInput());
+        constrainTypes(op.getResult(), op.getInput(), true);
       })
       .Case<mlir::UnrealizedConversionCastOp>([&](auto op) {
         for (Value result : op.getResults()) {
@@ -1695,10 +1696,9 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       });
 
   // Forceable declarations should have the ref constrained to data result.
-  if (auto fop = dyn_cast<Forceable>(op); fop && fop.isForceable()) {
-    declareVars(fop.getDataRef(), fop.getLoc());
-    constrainTypes(fop.getDataRef(), fop.getDataRaw());
-  }
+  if (auto fop = dyn_cast<Forceable>(op); fop && fop.isForceable())
+    unifyTypes(FieldRef(fop.getDataRef(), 0), FieldRef(fop.getDataRaw(), 0),
+               fop.getDataType());
 
   return failure(mappingFailed);
 }
@@ -1789,7 +1789,9 @@ void InferenceMapping::maximumOfTypes(Value result, Value rhs, Value lhs) {
 /// of bit widths.
 ///
 /// This function is used to apply regular connects.
-void InferenceMapping::constrainTypes(Value larger, Value smaller) {
+/// Set `equal` for constraining larger <= smaller for correctness but not
+/// solving.
+void InferenceMapping::constrainTypes(Value larger, Value smaller, bool equal) {
   // Recurse to every leaf element and set larger >= smaller. Ignore foreign
   // types as these do not participate in width inference.
 
@@ -1819,7 +1821,7 @@ void InferenceMapping::constrainTypes(Value larger, Value smaller) {
         } else if (type.isGround()) {
           // Leaf element, look up their expressions, and create the constraint.
           constrainTypes(getExpr(FieldRef(larger, fieldID)),
-                         getExpr(FieldRef(smaller, fieldID)));
+                         getExpr(FieldRef(smaller, fieldID)), false, equal);
           fieldID++;
         } else {
           llvm_unreachable("Unknown type inside a bundle!");
@@ -1833,7 +1835,7 @@ void InferenceMapping::constrainTypes(Value larger, Value smaller) {
 /// Establishes constraints to ensure the sizes in the `larger` type are greater
 /// than or equal to the sizes in the `smaller` type.
 void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller,
-                                      bool imposeUpperBounds) {
+                                      bool imposeUpperBounds, bool equal) {
   assert(larger && "Larger expression should be specified");
   assert(smaller && "Smaller expression should be specified");
 
@@ -1860,6 +1862,17 @@ void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller,
     LLVM_ATTRIBUTE_UNUSED auto *c = solver.addGeqConstraint(largerVar, smaller);
     LLVM_DEBUG(llvm::dbgs()
                << "Constrained " << *largerVar << " >= " << *c << "\n");
+    // If we're constraining larger == smaller, add the LEQ contraint as well.
+    // Solve for GEQ but check that LEQ is true.
+    // Used for strictconnect, some reference operations, and anywhere the
+    // widths should be inferred strictly in one direction but are required to
+    // also be equal for correctness.
+    if (equal) {
+      LLVM_ATTRIBUTE_UNUSED auto *leq =
+          solver.addLeqConstraint(largerVar, smaller);
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Constrained " << *largerVar << " <= " << *leq << "\n");
+    }
     return;
   }
 
@@ -1869,7 +1882,7 @@ void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller,
   // `>=` constraints, any `<=` constraints have no effect on the solution
   // besides indicating that a width is unsatisfiable.
   if (auto *smallerVar = dyn_cast<VarExpr>(smaller)) {
-    if (imposeUpperBounds) {
+    if (imposeUpperBounds || equal) {
       LLVM_ATTRIBUTE_UNUSED auto *c =
           solver.addLeqConstraint(smallerVar, larger);
       LLVM_DEBUG(llvm::dbgs()

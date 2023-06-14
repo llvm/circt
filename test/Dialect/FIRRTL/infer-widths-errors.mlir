@@ -147,3 +147,52 @@ firrtl.circuit "Foo" {
     firrtl.connect %out, %0 : !firrtl.uint, !firrtl.uint
   }
 }
+
+// -----
+// https://github.com/llvm/circt/issues/5391
+// Unclear if widthCast is/should be allowed to be CSE'd.
+// This IR was generated from test on that issue before InferWidths.
+
+// Don't back-propagate widths.
+firrtl.circuit "Issue5391" {
+  firrtl.module @Issue5391(in %x: !firrtl.uint<1>,
+                           in %y: !firrtl.uint<2>,
+                           out %out1: !firrtl.uint,
+                           out %out2: !firrtl.uint) {
+    // expected-error @below {{uninferred width: wire "w" cannot satisfy all width requirements}}
+    %w = firrtl.wire : !firrtl.uint
+    %0 = firrtl.widthCast %x : (!firrtl.uint<1>) -> !firrtl.uint
+    firrtl.strictconnect %w, %0 : !firrtl.uint
+    %1 = firrtl.widthCast %y : (!firrtl.uint<2>) -> !firrtl.uint
+    // expected-note @below {{width is constrained to be at most 1 here:}}
+    // expected-note @below {{width is constrained to be at least 2 here:}}
+    firrtl.strictconnect %w, %1 : !firrtl.uint
+    %2 = firrtl.widthCast %w : (!firrtl.uint) -> !firrtl.uint
+    firrtl.strictconnect %out1, %2 : !firrtl.uint
+    %wx = firrtl.wire : !firrtl.uint
+    firrtl.strictconnect %wx, %0 : !firrtl.uint
+    %3 = firrtl.widthCast %wx : (!firrtl.uint) -> !firrtl.uint
+    firrtl.strictconnect %out2, %3 : !firrtl.uint
+  }
+}
+
+// -----
+// https://github.com/llvm/circt/issues/5002
+
+firrtl.circuit "Issue5002" {
+  // expected-error @below {{uninferred width: port "ref" cannot satisfy all width requirements}}
+  firrtl.module private @InRef(in %ref : !firrtl.rwprobe<uint>) { }
+  firrtl.module @Issue5002(in %x : !firrtl.uint<1>, in %y : !firrtl.uint<2>) {
+    %w1, %w1_ref = firrtl.wire forceable : !firrtl.uint, !firrtl.rwprobe<uint>
+    %w2, %w2_ref = firrtl.wire forceable : !firrtl.uint, !firrtl.rwprobe<uint>
+    firrtl.connect %w1, %x : !firrtl.uint, !firrtl.uint<1>
+    firrtl.connect %w2, %y : !firrtl.uint, !firrtl.uint<2>
+
+    %inst1_ref = firrtl.instance inst1 @InRef(in ref: !firrtl.rwprobe<uint>)
+    %inst2_ref = firrtl.instance inst2 @InRef(in ref: !firrtl.rwprobe<uint>)
+    firrtl.ref.define %inst1_ref, %w1_ref : !firrtl.rwprobe<uint>
+    // expected-note @below {{width is constrained to be at most 1 here:}}
+    // expected-note @below {{width is constrained to be at least 2 here:}}
+    firrtl.ref.define %inst2_ref, %w2_ref : !firrtl.rwprobe<uint>
+  }
+}
