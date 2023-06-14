@@ -9,6 +9,7 @@
 #include "DialectModules.h"
 #include "circt-c/Dialect/OM.h"
 #include "circt/Support/LLVM.h"
+#include "mlir-c/BuiltinAttributes.h"
 #include "mlir-c/IR.h"
 #include "mlir/Bindings/Python/PybindAdaptors.h"
 #include <pybind11/pybind11.h>
@@ -23,15 +24,21 @@ using namespace mlir::python::adaptors;
 struct Object {
   // Instantiate an Object with a reference to the underlying OMObject.
   Object(OMObject object) : object(object) {}
+  Object(const Object &object) : object(object.object) {}
 
   /// Get the Type from an Object, which will be a ClassType.
   MlirType getType() { return omEvaluatorObjectGetType(object); }
 
   // Get a field from the Object, using pybind's support for variant to return a
   // Python object that is either an Object or Attribute.
-  std::variant<Object, MlirAttribute> getField(MlirAttribute name) {
+  std::variant<Object, MlirAttribute> getField(const std::string &name) {
+    // Wrap the requested field name in an attribute.
+    MlirContext context = mlirTypeGetContext(omEvaluatorObjectGetType(object));
+    MlirStringRef cName = mlirStringRefCreateFromCString(name.c_str());
+    MlirAttribute nameAttr = mlirStringAttrGet(context, cName);
+
     // Get the field's ObjectValue via the CAPI.
-    OMObjectValue result = omEvaluatorObjectGetField(object, name);
+    OMObjectValue result = omEvaluatorObjectGetField(object, nameAttr);
 
     // If the ObjectValue is null, something failed. Diagnostic handling is
     // implemented in pure Python, so nothing to do here besides throwing an
@@ -98,7 +105,8 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
 
   // Add the Object class definition.
   py::class_<Object>(m, "Object")
-      .def("get_field", &Object::getField, "Get a field from an Object",
+      .def(py::init<Object>(), py::arg("object"))
+      .def("__getattr__", &Object::getField, "Get a field from an Object",
            py::arg("name"))
       .def_property_readonly("type", &Object::getType,
                              "The Type of the Object");
