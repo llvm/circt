@@ -41,7 +41,7 @@ struct Property {
   Location loc;
 };
 
-/// Potentiall extract an OM class from a FIRRTL module which may contain
+/// Potentially extract an OM class from a FIRRTL module which may contain
 /// properties.
 void ExtractClassesPass::extractClass(FModuleOp moduleOp) {
   // Map from Values in the FModuleOp to Values in the ClassOp.
@@ -101,22 +101,24 @@ void ExtractClassesPass::extractClass(FModuleOp moduleOp) {
         cast<FIRRTLPropertyValue>(moduleOp.getArgument(outputProperty.index));
     Value originalValue = getDriverFromConnect(outputValue);
 
-    // Mark the property assign to be erased.
-    opsToErase.push_back(getPropertyAssignment(outputValue));
-
-    // If the Value is defined by an Operation, copy that into the body, and
-    // map from the old Value to the new Value. This may need to walk property
-    // ops in order to copy them into the ClassOp, but for now only constant
-    // ops exist. Mark the property op to be erased.
-    if (auto *op = originalValue.getDefiningOp()) {
-      builder.clone(*op, mapping);
-      opsToErase.push_back(op);
+    // If the Value is defined by an Operation that hasn't been copied yet, copy
+    // that into the body, and map from the old Value to the new Value. This may
+    // need to walk property ops in order to copy them into the ClassOp, but for
+    // now only constant ops exist. Mark the property op to be erased.
+    if (!mapping.contains(originalValue)) {
+      if (auto *op = originalValue.getDefiningOp()) {
+        builder.clone(*op, mapping);
+        opsToErase.push_back(op);
+      }
     }
 
     // Create the ClassFieldOp using the mapping to find the appropriate Value.
     Value fieldValue = mapping.lookup(originalValue);
     builder.create<ClassFieldOp>(originalValue.getLoc(), outputProperty.name,
                                  fieldValue);
+
+    // Eagerly erase the property assign, since it is done now.
+    getPropertyAssignment(outputValue).erase();
   }
 
   // Clean up the FModuleOp by removing property ports and operations. This
