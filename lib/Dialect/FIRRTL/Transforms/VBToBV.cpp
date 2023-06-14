@@ -732,7 +732,7 @@ Attribute Visitor::convertVectorConstant(FVectorType oldType,
     newElements.push_back(convertConstant(oldElementType, oldElement));
   }
 
-  auto bundleType = dyn_cast<BundleType>(newElementType);
+  auto bundleType = cast<BundleType>(newElementType);
   return convertBundleInVectorConstant(bundleType, newElements);
 }
 
