@@ -126,8 +126,8 @@ struct RootExpr : public ExprBase<RootExpr, Expr::Kind::Root> {
 struct VarExpr : public ExprBase<VarExpr, Expr::Kind::Var> {
   void print(llvm::raw_ostream &os) const {
     // Hash the `this` pointer into something somewhat human readable. Since
-    // this is just for debug dumping, we wrap around at 4096 variables.
-    os << "var" << ((size_t)this / llvm::PowerOf2Ceil(sizeof(*this)) & 0xFFF);
+    // this is just for debug dumping, we wrap around at 65536 variables.
+    os << "var" << ((size_t)this / llvm::PowerOf2Ceil(sizeof(*this)) & 0xFFFF);
   }
 
   /// The constraint expression this variable is supposed to be greater than or
@@ -1979,6 +1979,9 @@ void InferenceMapping::setExpr(FieldRef fieldRef, Expr *expr) {
     llvm::dbgs() << "Expr " << *expr << " for " << fieldRef.getValue();
     if (fieldRef.getFieldID())
       llvm::dbgs() << " '" << getFieldName(fieldRef).first << "'";
+    auto fieldName = getFieldName(fieldRef);
+    if (fieldName.second)
+      llvm::dbgs() << " (\"" << fieldName.first << "\")";
     llvm::dbgs() << "\n";
   });
   opExprs[fieldRef] = expr;
