@@ -204,11 +204,16 @@ FailureOr<ObjectValue> circt::om::Object::getField(StringAttr name) {
   return success(fields[name]);
 }
 
-/// Get an ArrayAttr with the names of the fields in the Object.
+/// Get an ArrayAttr with the names of the fields in the Object. Sort the fields
+/// so there is always a stable order.
 ArrayAttr circt::om::Object::getFieldNames() {
   SmallVector<Attribute> fieldNames;
   for (auto &f : fields)
     fieldNames.push_back(f.first);
+
+  llvm::sort(fieldNames, [](Attribute a, Attribute b) {
+    return cast<StringAttr>(a).getValue() < cast<StringAttr>(b).getValue();
+  });
 
   return ArrayAttr::get(cls.getContext(), fieldNames);
 }

@@ -108,7 +108,7 @@ void testEvaluator(MlirContext ctx) {
   OMObjectValue childField = omEvaluatorObjectGetField(object, childFieldName);
 
   MlirAttribute fieldNamesO = omEvaluatorObjectGetFieldNames(object);
-  // CHECK: ["field", "child"]
+  // CHECK: ["child", "field"]
   mlirAttributeDump(fieldNamesO);
 
   OMObject child = omEvaluatorObjectValueGetObject(childField);
