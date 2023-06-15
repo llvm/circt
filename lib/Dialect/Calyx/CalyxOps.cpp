@@ -211,7 +211,7 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto &region = op->getRegion(0);
   // Operations that are allowed in the body of a ControlLike op.
   auto isValidBodyOp = [](Operation *operation) {
-    return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp>(operation);
+    return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp, InvokeOp>(operation);
   };
   for (auto &&bodyOp : region.front()) {
     if (isValidBodyOp(&bodyOp))
@@ -1876,7 +1876,7 @@ LogicalResult EnableOp::verify() {
   auto component = (*this)->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
   StringRef name = getGroupName();
-
+  
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(name);
   if (!groupOp)
     return emitOpError() << "with group '" << name
@@ -2139,34 +2139,77 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
 // InvokeOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseParameterList(OpAsmParser &parser, OperationState &result, SmallVector<Attribute> &portNames, SmallVector<OpAsmParser::Argument> &args) {
-  StringAttr portName; 
-  OpAsmParser::Argument arg;
+static ParseResult parseParameterList(OpAsmParser &parser, OperationState &result, SmallVector<OpAsmParser::UnresolvedOperand> &ports, SmallVector<OpAsmParser::UnresolvedOperand, 4> &inputs, SmallVector<Type, 4> &types) {
+  OpAsmParser::UnresolvedOperand port;
+  OpAsmParser::UnresolvedOperand input;
+  Type type;
   auto parseParameter = [&]() -> ParseResult {
-    if (parser.parseSymbolName(portName) || parser.parseEqual() || parser.parseArgument(arg))
+    if (parser.parseOperand(port) || parser.parseEqual() || parser.parseOperand(input))
       return failure();
-    portNames.push_back(portName);
-    args.push_back(arg);
+    ports.push_back(port);
+    inputs.push_back(input);
     return success();
   };
-  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren, parseParameter); 
+  if(parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren, parseParameter))
+    return failure(); 
+  if(parser.parseArrow())
+    return failure();
+  auto parseType = [&]() -> ParseResult {
+    if (parser.parseType(type))
+      return failure();
+    types.push_back(type);
+    return success();
+  };  
+  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren, parseType);
 }
 
 ParseResult InvokeOp::parse(OpAsmParser &parser, OperationState &result){
   StringAttr componentName;
-  SmallVector<Attribute> portNames;
-  SmallVector<Attribute> argNames;
-  SmallVector<OpAsmParser::Argument> args;
-  if (parser.parseSymbolName(componentName, "callee", result.attributes))
+  SmallVector<OpAsmParser::UnresolvedOperand> ports;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> inputs;
+  SmallVector<Type, 4> types;
+  if (parser.parseSymbolName(componentName))
     return failure();
-  parseParameterList(parser, result, portNames, args);
-  llvm::outs() << "parse success!\n";
+  FlatSymbolRefAttr callee = FlatSymbolRefAttr::get(componentName);
+  auto loc = parser.getCurrentLocation();
+  result.addAttribute("callee", callee);
+    // to do return value
+  if (parseParameterList(parser, result, ports, inputs, types))
+    return failure();
+  if (parser.resolveOperands(ports, types, loc, result.operands))
+    return failure();
+  if (parser.resolveOperands(inputs, types, loc, result.operands))
+    return failure();
+  return success();
 }
 
 void InvokeOp::print(OpAsmPrinter &p) {
-
+  p << " @" << getCallee() << "(";
+  auto ports = this->getPorts();
+  auto inputs = this->getInputs();
+  for (size_t i = 0; i != ports.size(); i++) {
+    p << ports[i] << " = " << inputs[i];
+    if (i + 1 != ports.size()) 
+      p << ", ";
+  }
+  p << ")";
+  p << " -> " << "(";
+  for (size_t i = 0; i != ports.size(); i++) {
+    p << ports[i].getType();
+    if ( i + 1 != ports.size())
+      p << ", ";
+  }
+  p << ")";
 }
 
+LogicalResult InvokeOp::verify() {
+  auto componentOp = (*this)->getParentOfType<ComponentOp>();
+  StringRef callee = this->getCallee();
+  auto instanceOp = componentOp.lookupSymbol<InstanceOp>(callee);
+  if (!instanceOp) 
+    return emitOpError() << "with instance '" << callee << "', which does not exist.";  
+  return success();
+} 
 
 //===----------------------------------------------------------------------===//
 // Calyx library ops

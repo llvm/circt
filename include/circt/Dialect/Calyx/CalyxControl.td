@@ -259,12 +259,15 @@ def WhileOp : CalyxContainer<"while", [
 
 }
 
-def InvokeOp : CalyxOp<"invoke",
-                      [ControlLike]> {
+def InvokeOp : CalyxOp<"invoke", [
+                        ControlLike,
+                        SameVariadicOperandSize
+                        ]> {
   let summary = "Calyx Invoke";
   let arguments = (ins FlatSymbolRefAttr:$callee, 
-                   ArrayAttr:$portNames,
-                   ArrayAttr:$argNames);
+                   Variadic<AnyType>:$ports,
+                   Variadic<AnyType>:$inputs);
   let results = (outs);
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
