@@ -1550,10 +1550,19 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
       .Case<ConnectOp>(
           [&](auto op) { constrainTypes(op.getDest(), op.getSrc()); })
-      .Case<RefDefineOp, StrictConnectOp>([&](auto op) {
+      .Case<RefDefineOp>([&](auto op) {
         // Dest >= Src, but also check Src <= Dest for correctness
         // (but don't solve to make this true, don't back-propagate)
         constrainTypes(op.getDest(), op.getSrc(), true);
+      })
+      // StrictConnect is an identify constraint
+      .Case<StrictConnectOp>([&](auto op) {
+        // This back-propagates width from destination to source,
+        // causing source to sometimes be inferred wider than
+        // it should be (https://github.com/llvm/circt/issues/5391).
+        // This is needed to push the width into feeding widthCast?
+        constrainTypes(op.getDest(), op.getSrc());
+        constrainTypes(op.getSrc(), op.getDest());
       })
       .Case<AttachOp>([&](auto op) {
         // Attach connects multiple analog signals together. All signals must
