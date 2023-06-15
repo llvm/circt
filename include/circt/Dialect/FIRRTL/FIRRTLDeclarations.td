@@ -100,7 +100,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
 
     /// Return the port name for the specified result number.
     StringAttr getPortName(size_t resultNo) {
-      return getPortNames()[resultNo].cast<StringAttr>();
+      return cast<StringAttr>(getPortNames()[resultNo]);
     }
     StringRef getPortNameStr(size_t resultNo) {
       return getPortName(resultNo).getValue();
