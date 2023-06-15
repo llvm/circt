@@ -42,6 +42,7 @@ class Object(BaseObject):
     for name in self.field_names:
       yield (name, getattr(self, name))
 
+
 # Define the Evaluator class by inheriting from the base implementation in C++.
 class Evaluator(BaseEvaluator):
 
