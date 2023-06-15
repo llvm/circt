@@ -39,7 +39,7 @@ jobs:
             build-shared: ON
           # TODO: This corner is failing and has been for some time. #5253.
           - build-type: Release
-            compiler: gcc
+            compiler: {cc: gcc, cxx: g++}
             lit-flags: --vg
 
     steps:
