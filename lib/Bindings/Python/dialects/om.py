@@ -38,7 +38,7 @@ class Object(BaseObject):
     return Object(field)
 
   # Support iterating over an Object by yielding its fields.
-  def  __iter__(self):
+  def __iter__(self):
     for name in self.field_names:
       yield (name, getattr(self, name))
 
