@@ -68,7 +68,7 @@ static ParseResult typedPort(StringRef name, FModuleLike mod, unsigned n) {
     mod.emitError(name) << " missing port " << n;
     return failure();
   }
-  if (!ports[n].type.isa<T>()) {
+  if (!isa<T>(ports[n].type)) {
     mod.emitError(name) << " port " << n << " not of correct type";
     return failure();
   }
@@ -81,7 +81,7 @@ static ParseResult sizedPort(StringRef name, FModuleLike mod, unsigned n,
   auto ports = mod.getPorts();
   if (failed(typedPort<T>(name, mod, n)))
     return failure();
-  if (ports[n].type.cast<T>().getWidth() != size) {
+  if (cast<T>(ports[n].type).getWidth() != size) {
     mod.emitError(name) << " port " << n << " not size " << size;
     return failure();
   }
@@ -107,9 +107,9 @@ static ParseResult hasNParam(StringRef name, FModuleLike mod, unsigned n,
 static ParseResult namedParam(StringRef name, FModuleLike mod,
                               StringRef paramName, bool optional = false) {
   for (auto a : mod.getParameters()) {
-    auto param = a.cast<ParamDeclAttr>();
+    auto param = cast<ParamDeclAttr>(a);
     if (param.getName().getValue().equals(paramName)) {
-      if (param.getValue().isa<StringAttr>())
+      if (isa<StringAttr>(param.getValue()))
         return success();
 
       mod.emitError(name) << " has parameter '" << param.getName()
@@ -126,9 +126,9 @@ static ParseResult namedParam(StringRef name, FModuleLike mod,
 static ParseResult namedIntParam(StringRef name, FModuleLike mod,
                                  StringRef paramName, bool optional = false) {
   for (auto a : mod.getParameters()) {
-    auto param = a.cast<ParamDeclAttr>();
+    auto param = cast<ParamDeclAttr>(a);
     if (param.getName().getValue().equals(paramName)) {
-      if (param.getValue().isa<IntegerAttr>())
+      if (isa<IntegerAttr>(param.getValue()))
         return success();
 
       mod.emitError(name) << " has parameter '" << param.getName()
@@ -202,12 +202,12 @@ static bool lowerCirctPlusArgTest(InstancePathCache &instancePathCache,
       namedParam("circt.plusargs.test", mod, "FORMAT"))
     return false;
 
-  auto param = mod.getParameters()[0].cast<ParamDeclAttr>();
+  auto param = cast<ParamDeclAttr>(mod.getParameters()[0]);
   for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto newop = builder.create<PlusArgsTestIntrinsicOp>(
-        param.getValue().cast<StringAttr>());
+        cast<StringAttr>(param.getValue()));
     inst.getResult(0).replaceAllUsesWith(newop);
     inst.erase();
   }
@@ -224,13 +224,13 @@ static bool lowerCirctPlusArgValue(InstancePathCache &instancePathCache,
       namedParam("circt.plusargs.value", mod, "FORMAT"))
     return false;
 
-  auto param = mod.getParameters()[0].cast<ParamDeclAttr>();
+  auto param = cast<ParamDeclAttr>(mod.getParameters()[0]);
 
   for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto newop = builder.create<PlusArgsValueIntrinsicOp>(
-        inst.getResultTypes(), param.getValue().cast<StringAttr>());
+        inst.getResultTypes(), cast<StringAttr>(param.getValue()));
     inst.getResult(0).replaceAllUsesWith(newop.getFound());
     inst.getResult(1).replaceAllUsesWith(newop.getResult());
     inst.erase();
@@ -340,9 +340,9 @@ static bool lowerCirctLTLDelay(InstancePathCache &instancePathCache,
                               .getZExtValue());
   IntegerAttr length;
   if (params.size() >= 2)
-    if (auto lengthDecl = params[1].cast<ParamDeclAttr>())
+    if (auto lengthDecl = cast<ParamDeclAttr>(params[1]))
       length = getI64Attr(
-          lengthDecl.getValue().cast<IntegerAttr>().getValue().getZExtValue());
+          cast<IntegerAttr>(lengthDecl.getValue()).getValue().getZExtValue());
 
   for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
@@ -524,8 +524,8 @@ static bool lowerCirctVerif(InstancePathCache &instancePathCache,
   auto params = mod.getParameters();
   StringAttr label;
   if (!params.empty())
-    if (auto labelDecl = params[0].cast<ParamDeclAttr>())
-      label = labelDecl.getValue().cast<StringAttr>();
+    if (auto labelDecl = cast<ParamDeclAttr>(params[0]))
+      label = cast<StringAttr>(labelDecl.getValue());
 
   for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());

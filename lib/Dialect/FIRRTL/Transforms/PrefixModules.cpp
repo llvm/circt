@@ -137,7 +137,7 @@ void PrefixModulesPass::removeDeadAnnotations(StringAttr moduleName,
     auto nla = anno.getMember("circt.nonlocal");
     if (!nla)
       return false;
-    auto nlaName = nla.cast<FlatSymbolRefAttr>().getAttr();
+    auto nlaName = cast<FlatSymbolRefAttr>(nla).getAttr();
     auto nlaOp = nlaTable->getNLA(nlaName);
     if (!nlaOp) {
       op->emitError("cannot find HierPathOp :" + nlaName.getValue());
@@ -236,7 +236,7 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, StringRef oldName,
       // Update the NLAs that apply on this InstanceOp.
       for (Annotation anno : instAnnos) {
         if (auto nla = anno.getMember("circt.nonlocal")) {
-          auto nlaName = nla.cast<FlatSymbolRefAttr>().getAttr();
+          auto nlaName = cast<FlatSymbolRefAttr>(nla).getAttr();
           nlaTable->updateModuleInNLA(nlaName, oldModName, newTarget);
         }
       }

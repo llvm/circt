@@ -27,7 +27,7 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   // ports required everywhere else.
   auto portTypes = module.getPortTypesAttr();
   if (!portTypes || llvm::any_of(portTypes.getValue(), [](Attribute attr) {
-        return !attr.isa<TypeAttr>();
+        return !isa<TypeAttr>(attr);
       }))
     return module.emitOpError("requires valid port types");
 
@@ -50,7 +50,7 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   if (portNames.size() != numPorts)
     return module.emitOpError("requires ") << numPorts << " port names";
   if (llvm::any_of(portNames.getValue(),
-                   [](Attribute attr) { return !attr.isa<StringAttr>(); }))
+                   [](Attribute attr) { return !isa<StringAttr>(attr); }))
     return module.emitOpError("port names should all be string attributes");
 
   // Verify the port annotations.
@@ -62,13 +62,12 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
     return module.emitOpError("requires ") << numPorts << " port annotations";
   // TODO: Move this into an annotation verifier.
   for (auto annos : portAnnotations.getValue()) {
-    auto arrayAttr = annos.dyn_cast<ArrayAttr>();
+    auto arrayAttr = dyn_cast<ArrayAttr>(annos);
     if (!arrayAttr)
       return module.emitOpError(
           "requires port annotations be array attributes");
-    if (llvm::any_of(arrayAttr.getValue(), [](Attribute attr) {
-          return !attr.isa<DictionaryAttr>();
-        }))
+    if (llvm::any_of(arrayAttr.getValue(),
+                     [](Attribute attr) { return !isa<DictionaryAttr>(attr); }))
       return module.emitOpError(
           "annotations must be dictionaries or subannotations");
   }
@@ -80,7 +79,7 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   if (!portSymbols.empty() && portSymbols.size() != numPorts)
     return module.emitOpError("requires ") << numPorts << " port symbols";
   if (llvm::any_of(portSymbols.getValue(), [](Attribute attr) {
-        return !attr || !attr.isa<hw::InnerSymAttr>();
+        return !attr || !isa<hw::InnerSymAttr>(attr);
       }))
     return module.emitOpError("port symbols should all be InnerSym attributes");
 
@@ -91,7 +90,7 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   if (portLocs.size() != numPorts)
     return module.emitOpError("requires ") << numPorts << " port locations";
   if (llvm::any_of(portLocs.getValue(), [](Attribute attr) {
-        return !attr || !attr.isa<LocationAttr>();
+        return !attr || !isa<LocationAttr>(attr);
       }))
     return module.emitOpError("port symbols should all be location attributes");
 

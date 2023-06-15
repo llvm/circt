@@ -211,7 +211,7 @@ public:
     // Query the combinational paths between IOs of the current instance.
     auto module = getInstanceGraph()->getReferencedModule(instance);
     auto &combPaths = getCombPathsMap()->FindAndConstruct(module).second;
-    auto &ports = combPaths[getValue().cast<OpResult>().getResultNumber()];
+    auto &ports = combPaths[cast<OpResult>(getValue()).getResultNumber()];
 
     portEnd = ports.end();
     portIt = ports.begin();
@@ -260,7 +260,7 @@ public:
       return;
 
     auto portKind = memory.getPortKind(
-        subfield.getInput().cast<OpResult>().getResultNumber());
+        cast<OpResult>(subfield.getInput()).getResultNumber());
     auto subfieldIndex = subfield.getFieldIndex();
     // Combinational path exists only when the current subfield is `addr`.
     if (!(portKind == MemOp::PortKind::Read &&
@@ -589,7 +589,7 @@ void dumpPath(SmallVector<Node> &path, SmallString<16> &instancePath,
     };
 
     // If the currentValue is port, emit its name.
-    if (auto arg = currentValue.dyn_cast<BlockArgument>()) {
+    if (auto arg = dyn_cast<BlockArgument>(currentValue)) {
       attachInfo() << module.getPortName(arg.getArgNumber());
       continue;
     }
@@ -614,7 +614,7 @@ void dumpPath(SmallVector<Node> &path, SmallString<16> &instancePath,
             if (std::holds_alternative<InstanceNodeIterator>(iterImpl)) {
               // Instance. Print names of input and output ports.
               auto instance = currentValue.getDefiningOp<InstanceOp>();
-              auto inputPort = currentValue.cast<OpResult>().getResultNumber();
+              auto inputPort = cast<OpResult>(currentValue).getResultNumber();
               auto outputPort =
                   std::get<InstanceNodeIterator>(iterImpl).getPortNumber();
               if (isCycleEnd)
@@ -768,7 +768,7 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
           // There exists a path to self.
           outputVec.push_back(arg.getArgNumber());
           for (auto node : llvm::depth_first_ext<Node>(inputNode, nodeSet)) {
-            if (auto output = node.value.dyn_cast<BlockArgument>())
+            if (auto output = dyn_cast<BlockArgument>(node.value))
               if (directionVec[output.getArgNumber()])
                 outputVec.push_back(output.getArgNumber());
           }

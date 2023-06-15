@@ -27,11 +27,11 @@ static FIRRTLBaseType convertType(FIRRTLBaseType type) {
 
 /// Returns null type if no conversion is needed.
 static Type convertType(Type type) {
-  if (auto base = type.dyn_cast<FIRRTLBaseType>()) {
+  if (auto base = dyn_cast<FIRRTLBaseType>(type)) {
     return convertType(base);
   }
 
-  if (auto refType = type.dyn_cast<RefType>()) {
+  if (auto refType = dyn_cast<RefType>(type)) {
     if (auto converted = convertType(refType.getType()))
       return RefType::get(converted, refType.getForceable());
   }
@@ -72,7 +72,7 @@ class DropConstPass : public DropConstBase<DropConstPass> {
     llvm::transform(module.getPortTypes(), std::back_inserter(portTypes),
                     [&](Attribute type) -> Attribute {
                       if (auto convertedType =
-                              convertType(type.cast<TypeAttr>().getValue())) {
+                              convertType(cast<TypeAttr>(type).getValue())) {
                         convertedAny = true;
                         return TypeAttr::get(convertedType);
                       }
