@@ -126,6 +126,12 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
       .def_property_readonly("type", &Object::getType,
                              "The Type of the Object");
 
+  // Add the ReferenceAttr definition
+  mlir_attribute_subclass(m, "ReferenceAttr", omAttrIsAReferenceAttr)
+      .def_property_readonly("inner_ref", [](MlirAttribute self) {
+        return omReferenceAttrGetInnerRef(self);
+      });
+
   // Add the ClassType class definition.
   mlir_type_subclass(m, "ClassType", omTypeIsAClassType);
 }

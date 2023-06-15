@@ -133,6 +133,14 @@ omEvaluatorObjectValueIsAPrimitive(OMObjectValue objectValue);
 MLIR_CAPI_EXPORTED MlirAttribute
 omEvaluatorObjectValueGetPrimitive(OMObjectValue objectValue);
 
+//===----------------------------------------------------------------------===//
+// Attribute API.
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool omAttrIsAReferenceAttr(MlirAttribute attr);
+
+MLIR_CAPI_EXPORTED MlirAttribute omReferenceAttrGetInnerRef(MlirAttribute attr);
+
 #ifdef __cplusplus
 }
 #endif
