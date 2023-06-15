@@ -58,3 +58,8 @@ obj = evaluator.instantiate("Test", 42)
 print(obj.field)
 # CHECK: 14
 print(obj.child.foo)
+
+for (name, field) in obj:
+  # CHECK: name: child, field: <circt.dialects.om.Object object
+  # CHECK: name: field, field: 42
+  print(f"name: {name}, field: {field}")

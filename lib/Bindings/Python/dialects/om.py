@@ -37,6 +37,10 @@ class Object(BaseObject):
     assert isinstance(field, BaseObject)
     return Object(field)
 
+  # Support iterating over an Object by yielding its fields.
+  def  __iter__(self):
+    for name in self.field_names:
+      yield (name, getattr(self, name))
 
 # Define the Evaluator class by inheriting from the base implementation in C++.
 class Evaluator(BaseEvaluator):

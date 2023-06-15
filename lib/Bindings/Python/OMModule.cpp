@@ -12,6 +12,7 @@
 #include "mlir-c/BuiltinAttributes.h"
 #include "mlir-c/IR.h"
 #include "mlir/Bindings/Python/PybindAdaptors.h"
+#include "mlir/CAPI/IR.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 namespace py = pybind11;
@@ -55,9 +56,16 @@ struct Object {
     return omEvaluatorObjectValueGetPrimitive(result);
   }
 
-  // Get an ArrayAttr with the names of all the fields in the object.
-  MlirAttribute getFieldNames() {
-    return omEvaluatorObjectGetFieldNames(object);
+  // Get a list with the names of all the fields in the Object.
+  std::vector<std::string> getFieldNames() {
+    ArrayAttr fieldNames =
+        cast<ArrayAttr>(unwrap(omEvaluatorObjectGetFieldNames(object)));
+
+    std::vector<std::string> slots;
+    for (auto fieldName : fieldNames.getAsRange<StringAttr>())
+      slots.push_back(fieldName.str());
+
+    return slots;
   }
 
 private:
@@ -113,8 +121,8 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
       .def(py::init<Object>(), py::arg("object"))
       .def("__getattr__", &Object::getField, "Get a field from an Object",
            py::arg("name"))
-      .def("getFieldNames", &Object::getFieldNames,
-           "Get field names from an Object")
+      .def_property_readonly("field_names", &Object::getFieldNames,
+                             "Get field names from an Object")
       .def_property_readonly("type", &Object::getType,
                              "The Type of the Object");
 
