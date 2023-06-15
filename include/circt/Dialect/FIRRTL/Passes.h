@@ -114,8 +114,6 @@ createBlackBoxReaderPass(std::optional<mlir::StringRef> inputPrefix = {});
 std::unique_ptr<mlir::Pass>
 createGrandCentralPass(bool instantiateCompanionOnly = false);
 
-std::unique_ptr<mlir::Pass> createCheckCombCyclesPass();
-
 std::unique_ptr<mlir::Pass> createCheckCombLoopsPass();
 
 std::unique_ptr<mlir::Pass> createSFCCompatPass();
@@ -163,6 +161,8 @@ createResolveTracesPass(mlir::StringRef outputAnnotationFilename = "");
 std::unique_ptr<mlir::Pass> createInnerSymbolDCEPass();
 
 std::unique_ptr<mlir::Pass> createFinalizeIRPass();
+
+std::unique_ptr<mlir::Pass> createExtractClassesPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

@@ -28,10 +28,10 @@ def PortAnnotationsAttr : ArrayAttrBase<
       // Guarantee this is an ArrayAttr first
       CPred<"$_self.isa<::mlir::ArrayAttr>()">,
       // Guarantee all elements are an array or a dictionary.
-      CPred<"::llvm::all_of($_self.cast<::mlir::ArrayAttr>(), "
-            "[&](::mlir::Attribute attr) { return attr.isa<"
+      CPred<"::llvm::all_of(cast<mlir::ArrayAttr>($_self), "
+            "[&](::mlir::Attribute attr) { return isa<"
             "::mlir::ArrayAttr,"
-            "::mlir::DictionaryAttr>();})">]>,
+            "::mlir::DictionaryAttr>(attr);})">]>,
     "Port annotations attribute"> {
   let constBuilderCall = "$_builder.getArrayAttr($0)";
 }
