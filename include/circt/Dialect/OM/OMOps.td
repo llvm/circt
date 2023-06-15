@@ -16,6 +16,7 @@
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
 class OMOp<string mnemonic, list<Trait> traits = []> :
@@ -27,7 +28,7 @@ class OMOp<string mnemonic, list<Trait> traits = []> :
 
 def ClassOp : OMOp<"class",
     [SingleBlock, NoTerminator, Symbol, SymbolTable,
-     HasParent<"mlir::ModuleOp">,
+     HasParent<"mlir::ModuleOp">, RegionKindInterface,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>
     ]> {
   let arguments = (ins
@@ -59,6 +60,11 @@ def ClassOp : OMOp<"class",
     mlir::ArrayRef<mlir::StringRef> formalParamNames,
     mlir::ArrayRef<mlir::StringRef> fieldNames,
     mlir::ArrayRef<mlir::Type> fieldTypes);
+
+    // Implement RegionKindInterface.
+    static mlir::RegionKind getRegionKind(unsigned index) {
+      return mlir::RegionKind::Graph;
+    }
   }];
 }
 
