@@ -17,6 +17,8 @@ target_link_libraries(circt-opt
   CIRCTCalyxToHW
   CIRCTCalyxToFSM
   CIRCTCalyxTransforms
+  CIRCTComb
+  CIRCTCombTransforms
   CIRCTConvertToArcs
   CIRCTDC
   CIRCTDCTransforms

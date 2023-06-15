@@ -22,3 +22,5 @@ add_circt_dialect_library(CIRCTComb
    )
 
 add_dependencies(circt-headers MLIRCombIncGen MLIRCombEnumsIncGen)
+
+add_subdirectory(Transforms)
