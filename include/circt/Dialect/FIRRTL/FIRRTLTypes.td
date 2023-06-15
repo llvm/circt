@@ -25,11 +25,11 @@ class FIRRTLDialectType<Pred pred, string summary, string cpp, string desc = "">
 }
 
 // Helper class to define primitive types
-class FIRRTLPrimitiveType<string typeName, string summary, string desc = "">
+class FIRRTLDialectTypeHelper<string typeName, string summary, string desc = "">
   : FIRRTLDialectType<CPred<"isa<" # typeName # ">($_self)">, summary,
                       "::circt::firrtl::" # typeName, desc>;
 
-def FIRRTLType : FIRRTLPrimitiveType<"FIRRTLType", "FIRRTLType", [{
+def FIRRTLType : FIRRTLDialectTypeHelper<"FIRRTLType", "FIRRTLType", [{
     Any FIRRTL dialect type, represented by FIRRTLType.
   }]>;
 
@@ -48,29 +48,29 @@ def FIRRTLBaseType : FIRRTLDialectType<
 def ForeignType : FIRRTLDialectType<CPred<"!$_self.isa<FIRRTLType>()">,
                                     "foreign type", "::mlir::Type">;
 
-def ClockType : FIRRTLPrimitiveType<"ClockType", "clock">;
+def ClockType : FIRRTLDialectTypeHelper<"ClockType", "clock">;
 
 def NonConstClockType :
-  FIRRTLPrimitiveType<"ClockType", "clock">,
+  FIRRTLDialectTypeHelper<"ClockType", "clock">,
   BuildableType<"::circt::firrtl::ClockType::get($_builder.getContext())">;
 
-def IntType : FIRRTLPrimitiveType<"IntType", "sint or uint type">;
+def IntType : FIRRTLDialectTypeHelper<"IntType", "sint or uint type">;
 
-def SIntType : FIRRTLPrimitiveType<"SIntType", "sint type">;
+def SIntType : FIRRTLDialectTypeHelper<"SIntType", "sint type">;
 
-def UIntType : FIRRTLPrimitiveType<"UIntType", "uint type">;
+def UIntType : FIRRTLDialectTypeHelper<"UIntType", "uint type">;
 
-def AnalogType : FIRRTLPrimitiveType<"AnalogType", "analog type">;
+def AnalogType : FIRRTLDialectTypeHelper<"AnalogType", "analog type">;
 
-def BundleType : FIRRTLPrimitiveType<"BundleType", "bundle type">;
+def BundleType : FIRRTLDialectTypeHelper<"BundleType", "bundle type">;
 
-def OpenBundleType : FIRRTLPrimitiveType<"OpenBundleType", "open bundle type">;
+def OpenBundleType : FIRRTLDialectTypeHelper<"OpenBundleType", "open bundle type">;
 
-def FVectorType : FIRRTLPrimitiveType<"FVectorType", "vector type">;
+def FVectorType : FIRRTLDialectTypeHelper<"FVectorType", "vector type">;
 
-def OpenVectorType : FIRRTLPrimitiveType<"OpenVectorType", "open vector type">;
+def OpenVectorType : FIRRTLDialectTypeHelper<"OpenVectorType", "open vector type">;
 
-def FEnumType : FIRRTLPrimitiveType<"FEnumType", "enum type">;
+def FEnumType : FIRRTLDialectTypeHelper<"FEnumType", "enum type">;
 
 def AggregateType : FIRRTLDialectType<
   Or<[
@@ -85,15 +85,15 @@ def SizedType : FIRRTLDialectType<CPred<"$_self.isa<FIRRTLBaseType>() && "
     "a sized type (contains no uninferred widths)", "::circt::firrtl::FIRRTLType">;
 def SizedOrForeignType : AnyTypeOf<[SizedType, ForeignType]>;
 
-def AsyncResetType : FIRRTLPrimitiveType<"AsyncResetType", "async reset type">;
+def AsyncResetType : FIRRTLDialectTypeHelper<"AsyncResetType", "async reset type">;
 
-def ResetType : FIRRTLPrimitiveType<"ResetType", "reset type">;
+def ResetType : FIRRTLDialectTypeHelper<"ResetType", "reset type">;
 
 def PassiveType : FIRRTLDialectType<
   CPred<"$_self.isa<FIRRTLBaseType>() && $_self.cast<FIRRTLBaseType>().isPassive()">,
   "a passive base type (contain no flips)", "::circt::firrtl::FIRRTLBaseType">;
 
-def RefType : FIRRTLPrimitiveType<"RefType", "reference type">;
+def RefType : FIRRTLDialectTypeHelper<"RefType", "reference type">;
 
 def RWProbe : FIRRTLDialectType<
   CPred<"$_self.isa<RefType>() && $_self.cast<RefType>().getForceable()">,
@@ -189,15 +189,15 @@ class CompatibleRefTypes<string dst, string src>
 // Property Types
 //===----------------------------------------------------------------------===//
 
-def PropertyType : FIRRTLPrimitiveType<
+def PropertyType : FIRRTLDialectTypeHelper<
   "PropertyType", "property type", [{
     A FIRRTL property type, such as a string.
   }]>;
 
-def StringType : FIRRTLPrimitiveType<"StringType", "string type">,
+def StringType : FIRRTLDialectTypeHelper<"StringType", "string type">,
   BuildableType<"::circt::firrtl::StringType::get($_builder.getContext())">;
 
-def BigIntType : FIRRTLPrimitiveType<"BigIntType", "big integer type">,
+def BigIntType : FIRRTLDialectTypeHelper<"BigIntType", "big integer type">,
   BuildableType<"::circt::firrtl::BigIntType::get($_builder.getContext())">;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD
