@@ -45,21 +45,21 @@ def NullAttr : Constraint<CPred<"!$0">>;
 def EqualTypes : Constraint<CPred<"$0.getType() == $1.getType()">>;
 
 // Constraint that enforces int types
-def IntTypes : Constraint<CPred<"$0.isa<IntType>()">>;
+def IntTypes : Constraint<CPred<"isa<IntType>($0)">>;
 
 // Constraint that enforces sint types
-def SIntTypes : Constraint<CPred<"$0.isa<SIntType>()">>;
+def SIntTypes : Constraint<CPred<"isa<SIntType>($0)">>;
 
 // Constraint that enforces uint types
-def UIntTypes : Constraint<CPred<"$0.isa<UIntType>()">>;
+def UIntTypes : Constraint<CPred<"isa<UIntType>($0)">>;
 
 // Constraint that enforces types mismatches
 def mismatchTypes : Constraint<CPred<"$0.getType() != $1.getType()">>;
 
 // Constraint that enforces types of known width
 def KnownWidth : Constraint<CPred<[{
-  $0.getType().isa<FIRRTLBaseType>() &&
-    !$0.getType().cast<FIRRTLBaseType>().getRecursiveTypeProperties().hasUninferredWidth
+  isa<FIRRTLBaseType>($0.getType()) &&
+    !cast<FIRRTLBaseType>($0.getType()).getRecursiveTypeProperties().hasUninferredWidth
   }]>>;
 
 /// Constraint that matches a zero ConstantOp or SpecialConstantOp.
@@ -83,7 +83,7 @@ def AllOneConstantOp : Constraint<CPred<"$0.getDefiningOp<ConstantOp>() && $0.ge
 
 // Delta between type widths
 def TypeWidthAdjust32 : NativeCodeCall<
-  "$_builder.getI32IntegerAttr($0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel() - $1.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel())">;
+  "$_builder.getI32IntegerAttr(cast<FIRRTLBaseType>($0.getType()).getBitWidthOrSentinel() - cast<FIRRTLBaseType>($1.getType()).getBitWidthOrSentinel())">;
 
 /// Drop the writer to the first argument and passthrough the second
 def DropWrite : NativeCodeCall<"dropWrite($_builder, $0, $1)">;
@@ -133,14 +133,14 @@ def ConnectSameType : Pat<
 def ConnectExtension : Pat<
   (ConnectOp $dst, $src),
   (StrictConnectOp $dst, (PadPrimOp $src,
-    (NativeCodeCall<"$0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel()"> $dst))),
+    (NativeCodeCall<"cast<FIRRTLBaseType>($0.getType()).getBitWidthOrSentinel()"> $dst))),
   [(IntType $dst), (IntType $src), (KnownWidth $dst), (KnownWidth $src), (mismatchTypes $src, $dst)]>;
 
 def LimitConstant32 : NativeCodeCall<
   "$_builder.getI32IntegerAttr($0.getValue().getLimitedValue(1ULL << 31))">;
 
 def TypeWidth32 : NativeCodeCall<
-  "$_builder.getI32IntegerAttr($0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel())">;
+  "$_builder.getI32IntegerAttr(cast<FIRRTLBaseType>($0.getType()).getBitWidthOrSentinel())">;
 
 // dshl(a, const) -> shl(a, const)
 def DShlOfConstant : Pat<
@@ -243,7 +243,7 @@ def SubFromZeroUnsigned : Pat <
 //sub(a,a) -> 0
 def SubOfSelf : Pat <
   (SubPrimOp:$old $x, $x),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>(), getIntZerosAttr($0.getType()))"> $old),
+  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x)]>;
 
 // sub((pad a, n), b) -> pad(sub(a, b), n)
@@ -261,7 +261,7 @@ def SubOfPadR : Pat <
 // and(x, 0) -> 0, fold can't handle all cases
 def AndOfZero : Pat <
   (AndPrimOp:$old $x, (ConstantOp:$zcst $cst)),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>(), getIntZerosAttr($0.getType()))"> $old),
+  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x), (ZeroConstantOp $zcst)]>;
 
 // and(x, -1) -> x, fold can't handle all cases
@@ -291,7 +291,7 @@ def OrOfZero : Pat <
 // or(x, -1) -> -1, fold can't handle all cases
 def OrOfAllOne : Pat <
   (OrPrimOp:$old $x, (ConstantOp:$ocst $cst)),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>(), getIntOnesAttr($0.getType()))"> $old),
+  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntOnesAttr($0.getType()))"> $old),
   [(KnownWidth $x), (EqualTypes $x, $ocst), (AllOneConstantOp $ocst)]>;
 
 /// or(x,x) -> x, fold can't handle all cases
@@ -316,7 +316,7 @@ def XorOfZero : Pat <
 /// xor(x,x) -> 0, fold can't handle all cases
 def XorOfSelf : Pat <
   (XorPrimOp:$old $x, $x),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>(), getIntZerosAttr($0.getType()))"> $old),
+  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x)]>;
 
 /// xor(x, pad(y, n)) -> cat(head(x), xor(tail(x), y))
@@ -338,7 +338,7 @@ def BitsOfBits : Pat<
 // TODO: only enable if cst is inside a.  Subaccess and subindex behave differently for out-of-bounds indexes.
 def SubaccessOfConstant : Pat<
   (SubaccessOp:$old $array, (ConstantOp $cst)),
-  (MoveNameHint $old, (SubindexOp $array, (NativeCodeCall<"$_builder.getI32IntegerAttr($0.cast<IntegerAttr>().getAPSInt().getExtValue())"> $cst))),
+  (MoveNameHint $old, (SubindexOp $array, (NativeCodeCall<"$_builder.getI32IntegerAttr(cast<IntegerAttr>($0).getAPSInt().getExtValue())"> $cst))),
   []>;
 
 // mux(cond, 0, 1) -> ~cond
