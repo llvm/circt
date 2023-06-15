@@ -545,6 +545,5 @@ def GroupGoOp : CalyxGroupPort<"group_go", [
       $_state.addTypes($_builder.getI1Type());
       $_state.addOperands(src);
     }]>
-  ];
-  let hasVerifier = 1;
+  ]; 
 }
