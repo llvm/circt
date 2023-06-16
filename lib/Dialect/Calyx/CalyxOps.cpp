@@ -677,32 +677,70 @@ static LogicalResult hasRequiredPorts(ComponentOp op) {
          << difference;
 }
 
+size_t getInvokeOpNumber(Block* block) {
+  if (!block)
+    return 0;
+
+  auto iIt = block->getOps<InvokeOp>();
+  auto sIt = block->getOps<calyx::SeqOp>();
+  auto pIt = block->getOps<calyx::ParOp>();
+  auto wIt = block->getOps<calyx::WhileOp>();
+  auto ifIt = block->getOps<calyx::IfOp>();
+  size_t invokeNumber = std::distance(iIt.begin(), iIt.end());
+  if (!sIt.empty()) 
+    for (auto s : sIt)
+      invokeNumber += getInvokeOpNumber(s.getBodyBlock());      
+
+  if (!pIt.empty()) 
+    for (auto p : pIt) 
+      invokeNumber += getInvokeOpNumber(p.getBodyBlock());
+
+  if (!wIt.empty())
+    for (auto w : wIt)
+      invokeNumber += getInvokeOpNumber(w.getBodyBlock());
+  
+  if (!ifIt.empty())
+    for (auto i : ifIt)  {
+      invokeNumber += getInvokeOpNumber(i.getThenBody());
+      invokeNumber += getInvokeOpNumber(i.getElseBody());
+    }
+  
+  return invokeNumber;
+}
+
 LogicalResult ComponentOp::verify() {
-  // Verify there is exactly one of each the wires and control operations.
+  // Verify there is exactly one of each the wires and control operations,
+  // or check if there are invoke and a control operations.
   auto wIt = getBodyBlock()->getOps<WiresOp>();
   auto cIt = getBodyBlock()->getOps<ControlOp>();
-  if (std::distance(wIt.begin(), wIt.end()) +
-          std::distance(cIt.begin(), cIt.end()) !=
-      2)
+  if (std::distance(cIt.begin(), cIt.end()) != 1) 
+    return emitOpError() << "requires exactly one: '" << ControlOp::getOperationName() << "'."; 
+  
+  if (std::distance(wIt.begin(), wIt.end()) != 1 && getInvokeOpNumber((*cIt.begin()).getBodyBlock()) == 0)
+    return emitOpError() << "requires exactly one '" << WiresOp::getOperationName() << "' or some '" << InvokeOp::getOperationName() << "'.";
+ /* size_t number = getInvokeOpNumber((*cIt.begin()).getBodyBlock());
+  if (std::distance(wIt.begin(), wIt.end()) + std::distance(cIt.begin(), cIt.end()) != 2 && (std::distance(cIt.begin(), cIt.end()) != 1 && !number)) 
     return emitOpError() << "requires exactly one of each: '"
                          << WiresOp::getOperationName() << "', '"
-                         << ControlOp::getOperationName() << "'.";
-
+                         << ControlOp::getOperationName() << "'.";*/
+  
   if (failed(hasRequiredPorts(*this)))
     return failure();
 
   // Verify the component actually does something: has a non-empty Control
   // region, or continuous assignments.
-  bool hasNoControlConstructs =
-      getControlOp().getBodyBlock()->getOperations().empty();
-  bool hasNoAssignments =
-      getWiresOp().getBodyBlock()->getOps<AssignOp>().empty();
+
+  bool hasNoControlConstructs = getControlOp().getBodyBlock()->getOperations().empty();
+  bool hasNoAssignments = wIt.empty();
+  if (!hasNoAssignments) 
+    hasNoAssignments = getWiresOp().getBodyBlock()->getOps<AssignOp>().empty();
+  
   if (hasNoControlConstructs && hasNoAssignments)
     return emitOpError(
         "The component currently does nothing. It needs to either have "
         "continuous assignments in the Wires region or control constructs in "
         "the Control region.");
-
+  
   return success();
 }
 
@@ -1874,7 +1912,10 @@ LogicalResult MemoryOp::verify() {
 //===----------------------------------------------------------------------===//
 LogicalResult EnableOp::verify() {
   auto component = (*this)->getParentOfType<ComponentOp>();
-  auto wiresOp = component.getWiresOp();
+  auto wireOps = component.getBodyBlock()->getOps<WiresOp>();
+  if (wireOps.empty())
+    return emitOpError() << "'" << WiresOp::getOperationName() << "' does not exist,can't use '" << getOperationName() << "'." ;
+  WiresOp wiresOp = *wireOps.begin();
   StringRef name = getGroupName();
   
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(name);
