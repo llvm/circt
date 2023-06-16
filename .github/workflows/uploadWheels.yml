@@ -13,6 +13,7 @@ jobs:
     runs-on: ${{ matrix.config.os }}
     if: github.repository == 'llvm/circt'
     strategy:
+      fail-fast: false
       matrix:
         config:
           - os: ubuntu-20.04
