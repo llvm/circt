@@ -46,6 +46,7 @@ class RefType;
 class PropertyType;
 class StringType;
 class BigIntType;
+class BaseTypeAliasType;
 
 /// A collection of bits indicating the recursive properties of a type.
 struct RecursiveTypeProperties {
@@ -366,5 +367,73 @@ struct DenseMapInfo<circt::firrtl::FIRRTLType> {
 };
 
 } // namespace llvm
+
+namespace circt {
+namespace firrtl {
+//===--------------------------------------------------------------------===//
+// Utility for type aliases
+//===--------------------------------------------------------------------===//
+
+/// A struct to check if there is a type derived from FIRRTLBaseType.
+/// `ContainBaseSubTypes<BaseTy>::value` returns true if `BaseTy` is a derived
+/// from `FIRRTLBaseType` and not `FIRRTLBaseType` itself.
+template <typename head, typename... tail>
+struct ContainBaseSubTypes {
+  static constexpr bool value =
+      ContainBaseSubTypes<head>::value || ContainBaseSubTypes<tail...>::value;
+};
+
+template <typename BaseTy>
+struct ContainBaseSubTypes<BaseTy> {
+  static constexpr bool value =
+      std::is_base_of<FIRRTLBaseType, BaseTy>::value &&
+      !std::is_same_v<FIRRTLBaseType, BaseTy>;
+};
+
+template <typename... BaseTy>
+bool type_isa(Type type) { // NOLINT(readability-identifier-naming)
+  // First check if the type is the requested type.
+  if (isa<BaseTy...>(type))
+    return true;
+
+  // If the requested type is a subtype of FIRRTLBaseType, then check if it is a
+  // type alias wrapping the requested type.
+  if constexpr (ContainBaseSubTypes<BaseTy...>::value) {
+    if (auto alias = dyn_cast<BaseTypeAliasType>(type))
+      return type_isa<BaseTy...>(alias.getInnerType());
+  }
+
+  return false;
+}
+
+// type_isa for a nullable argument.
+template <typename... BaseTy>
+bool type_isa_and_nonnull(Type type) { // NOLINT(readability-identifier-naming)
+  if (!type)
+    return false;
+  return type_isa<BaseTy...>(type);
+}
+
+template <typename BaseTy>
+BaseTy type_cast(Type type) { // NOLINT(readability-identifier-naming)
+  assert(type_isa<BaseTy>(type) && "type must convert to requested type");
+
+  // If the type is the requested type, return it.
+  if (isa<BaseTy>(type))
+    return cast<BaseTy>(type);
+
+  // Otherwise, it must be a type alias wrapping the requested type.
+  if constexpr (ContainBaseSubTypes<BaseTy>::value) {
+    if (auto alias = dyn_cast<BaseTypeAliasType>(type))
+      return type_cast<BaseTy>(alias.getInnerType());
+  }
+
+  // Otherwise, it should fail. `cast` should cause a better assertion failure,
+  // so just use it.
+  return cast<BaseTy>(type);
+}
+
+} // namespace firrtl
+} // namespace circt
 
 #endif // CIRCT_DIALECT_FIRRTL_TYPES_H
