@@ -8,7 +8,7 @@ firrtl.circuit "Top" {
       in in0: !firrtl.string,
       out out0: !firrtl.string)
 
-    // CHECK: %{{.+}}, %{{.+}} = firrtl.instance some
+    // CHECK: %some_in1, %some_out2 = firrtl.instance some
     %some_in0, %some_in1, %some_out0, %some_out1, %some_out2 = firrtl.instance some @SomeProperties(
       in in0: !firrtl.string,
       in in1: !firrtl.uint<1>,
@@ -16,7 +16,7 @@ firrtl.circuit "Top" {
       out out1: !firrtl.string,
       out out2: !firrtl.uint<1>)
 
-    // CHECK: %{{.+}}, %{{.+}} = firrtl.instance no
+    // CHECK: %no_in0, %no_out0 = firrtl.instance no
     %no_in0, %no_out0 = firrtl.instance no @NoProperties(
       in in0: !firrtl.uint<1>,
       out out0: !firrtl.uint<1>)

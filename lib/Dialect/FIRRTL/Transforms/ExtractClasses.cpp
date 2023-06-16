@@ -141,7 +141,7 @@ void ExtractClassesPass::extractClass(FModuleOp moduleOp) {
 /// Clean up InstanceOps of any FModuleOps with properties.
 void ExtractClassesPass::updateInstances(FModuleOp moduleOp) {
   OpBuilder builder(&getContext());
-  llvm::BitVector modulePortsToErase = portsToErase[moduleOp];
+  const llvm::BitVector &modulePortsToErase = portsToErase[moduleOp];
   InstanceGraphNode *instanceGraphNode = instanceGraph->lookup(moduleOp);
 
   // If there are no ports to erase, nothing to do.
@@ -149,7 +149,8 @@ void ExtractClassesPass::updateInstances(FModuleOp moduleOp) {
     return;
 
   // Clean up instances of the FModuleOp.
-  for (InstanceRecord *node : instanceGraphNode->uses()) {
+  for (InstanceRecord *node :
+       llvm::make_early_inc_range(instanceGraphNode->uses())) {
     // Get the original InstanceOp.
     InstanceOp oldInstance = cast<InstanceOp>(node->getInstance());
     builder.setInsertionPointAfter(oldInstance);
@@ -165,7 +166,8 @@ void ExtractClassesPass::updateInstances(FModuleOp moduleOp) {
     // Clean up uses of property pins. This amounts to erasing property
     // assignments for now.
     for (int propertyIndex : modulePortsToErase.set_bits()) {
-      for (Operation *user : oldInstance.getResult(propertyIndex).getUsers()) {
+      for (Operation *user : llvm::make_early_inc_range(
+               oldInstance.getResult(propertyIndex).getUsers())) {
         assert(isa<FConnectLike>(user) &&
                "expected property pins to be used in property assignments");
         user->erase();
