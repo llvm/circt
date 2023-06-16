@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  publish-sources: 
-    if: startsWith(github.ref, 'refs/tags/')
+  publish-sources:
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-20.04
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
@@ -27,10 +27,13 @@ jobs:
             --exclude=circt-full-sources.tar.gz \
             -czf \
             circt-full-sources.tar.gz .
+          shasum -a 256 circt-full-sources.tar.gz | cut -d ' ' -f1 > circt-full-sources.tar.gz.sha256
+
       - name: Upload Source Archive
         uses: AButler/upload-release-assets@v2.0
         with:
-          files: circt-full-sources.tar.gz
+          # The * will grab the .sha256 as well
+          files: circt-full-sources.tar.gz*
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
   publish:
@@ -41,25 +44,36 @@ jobs:
             assert: OFF
             shared: OFF
             stats: ON
-            cmake-args: ''
-        runner: [ubuntu-20.04, ubuntu-18.04, macos-11]
+        runner: [windows-2019, ubuntu-20.04, macos-11]
         include:
           - runner: ubuntu-20.04
             os: linux
-            tar: tar
+            arch: x64
+            tar: tar czf
+            archive: tar.gz
+            sha256: shasum -a 256
+            cont: "\\"
+            setup: ""
             # Default clang (11) is broken, see LLVM issue 59622.
-            cc: clang-12
-            cxx: clang++-12
-          - runner: ubuntu-18.04
-            os: linux
-            tar: tar
-            cc: clang
-            cxx: clang++
+            cmake-args: "-DCMAKE_C_COMPILER=clang-12 -DCMAKE_CXX_COMPILER=clang++-12"
           - runner: macos-11
             os: macos
-            tar: gtar
-            cc: clang
-            cxx: clang++
+            arch: x64
+            tar: gtar czf
+            archive: tar.gz
+            sha256: shasum -a 256
+            cont: "\\"
+            setup: ""
+            cmake-args: ""
+          - runner: windows-2019
+            os: windows
+            arch: x64
+            tar: tar czf # unused
+            archive: zip
+            sha256: sha256sum
+            cont: "`"
+            setup: ./utils/find-vs.ps1
+            cmake-args: ""
     runs-on: ${{ matrix.runner }}
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
@@ -75,7 +89,7 @@ jobs:
         run: |
           git fetch --unshallow --no-recurse-submodules
 
-      - name: Setup Ninja Linux
+      - name: Setup Linux
         if: matrix.os == 'linux'
         run: sudo apt-get install ninja-build
 
@@ -85,30 +99,28 @@ jobs:
 
       - name: Build LLVM
         run: |
+          ${{ matrix.setup }}
           mkdir -p llvm/build
           cd llvm/build
-          cmake -G Ninja ../llvm \
-              ${{ matrix.build_config.cmake-args }} \
-              -DCMAKE_BUILD_TYPE=${{ matrix.build_config.mode }} \
-              -DCMAKE_C_COMPILER=${{ matrix.cc }} \
-              -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
-              -DBUILD_SHARED_LIBS=${{ matrix.build_config.shared }} \
-              -DLLVM_BUILD_TOOLS=OFF \
-              -DLLVM_BUILD_EXAMPLES=OFF \
-              -DLLVM_ENABLE_ASSERTIONS=${{ matrix.build_config.assert }} \
-              -DLLVM_ENABLE_BINDINGS=OFF \
-              -DLLVM_ENABLE_OCAMLDOC=OFF \
-              -DLLVM_ENABLE_PROJECTS='mlir' \
-              -DLLVM_OPTIMIZED_TABLEGEN=ON \
-              -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
-              -DLLVM_ENABLE_TERMINFO=OFF \
-              -DLLVM_PARALLEL_LINK_JOBS=1 \
-              -DLLVM_TARGETS_TO_BUILD="host" \
-              -DLLVM_FORCE_ENABLE_STATS=${{ matrix.build_config.stats }} \
+          cmake -G Ninja ../llvm ${{ matrix.cont }}
+              ${{ matrix.cmake-args }} ${{ matrix.cont }}
+              -DCMAKE_BUILD_TYPE=${{ matrix.build_config.mode }} ${{ matrix.cont }}
+              -DBUILD_SHARED_LIBS=${{ matrix.build_config.shared }} ${{ matrix.cont }}
+              -DLLVM_BUILD_TOOLS=OFF ${{ matrix.cont }}
+              -DLLVM_BUILD_EXAMPLES=OFF ${{ matrix.cont }}
+              -DLLVM_ENABLE_ASSERTIONS=${{ matrix.build_config.assert }} ${{ matrix.cont }}
+              -DLLVM_ENABLE_BINDINGS=OFF ${{ matrix.cont }}
+              -DLLVM_ENABLE_OCAMLDOC=OFF ${{ matrix.cont }}
+              -DLLVM_ENABLE_PROJECTS="mlir" ${{ matrix.cont }}
+              -DLLVM_OPTIMIZED_TABLEGEN=ON ${{ matrix.cont }}
+              -DLLVM_STATIC_LINK_CXX_STDLIB=ON ${{ matrix.cont }}
+              -DLLVM_ENABLE_TERMINFO=OFF ${{ matrix.cont }}
+              -DLLVM_PARALLEL_LINK_JOBS=1 ${{ matrix.cont }}
+              -DLLVM_TARGETS_TO_BUILD="host" ${{ matrix.cont }}
+              -DLLVM_FORCE_ENABLE_STATS=${{ matrix.build_config.stats }} ${{ matrix.cont }}
               -DLLVM_ENABLE_ZSTD=OFF
           ninja
-          #Checks temporarily disabled because current LLVM commit (9305b63d6) fails checks
-          #ninja check-llvm check-mlir
+          ninja check-mlir
 
       # --------
       # Build and test CIRCT
@@ -116,26 +128,25 @@ jobs:
 
       - name: Build and Test CIRCT
         run: |
+          ${{ matrix.setup }}
           mkdir build
           cd build
-          cmake -G Ninja .. \
-            ${{ matrix.build_config.cmake-args }} \
-            -DBUILD_SHARED_LIBS=${{ matrix.build_config.shared }} \
-            -DCMAKE_BUILD_TYPE=${{ matrix.build_config.mode }} \
-            -DLLVM_ENABLE_ASSERTIONS=${{ matrix.build_config.assert }} \
-            -DMLIR_DIR=`pwd`/../llvm/build/lib/cmake/mlir \
-            -DLLVM_DIR=`pwd`/../llvm/build/lib/cmake/llvm \
-            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
-            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
-            -DVERILATOR_DISABLE=ON \
-            -DLLVM_ENABLE_TERMINFO=OFF \
-            -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
-            -DLLVM_PARALLEL_LINK_JOBS=1 \
-            -DLLVM_FORCE_ENABLE_STATS=${{ matrix.build_config.stats }} \
-            -DCIRCT_RELEASE_TAG_ENABLED=ON \
-            -DCIRCT_RELEASE_TAG=firtool \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF \
-            -DCMAKE_INSTALL_PREFIX=`pwd`/../install
+          cmake -G Ninja .. ${{ matrix.cont }}
+            ${{ matrix.cmake-args }} ${{ matrix.cont }}
+            -DBUILD_SHARED_LIBS=${{ matrix.build_config.shared }} ${{ matrix.cont }}
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_config.mode }} ${{ matrix.cont }}
+            -DLLVM_ENABLE_ASSERTIONS=${{ matrix.build_config.assert }} ${{ matrix.cont }}
+            -DMLIR_DIR="$(pwd)/../llvm/build/lib/cmake/mlir" ${{ matrix.cont }}
+            -DLLVM_DIR="$(pwd)/../llvm/build/lib/cmake/llvm" ${{ matrix.cont }}
+            -DVERILATOR_DISABLE=ON ${{ matrix.cont }}
+            -DLLVM_ENABLE_TERMINFO=OFF ${{ matrix.cont }}
+            -DLLVM_STATIC_LINK_CXX_STDLIB=ON ${{ matrix.cont }}
+            -DLLVM_PARALLEL_LINK_JOBS=1 ${{ matrix.cont }}
+            -DLLVM_FORCE_ENABLE_STATS=${{ matrix.build_config.stats }} ${{ matrix.cont }}
+            -DCIRCT_RELEASE_TAG_ENABLED=ON ${{ matrix.cont }}
+            -DCIRCT_RELEASE_TAG=firtool ${{ matrix.cont }}
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF ${{ matrix.cont }}
+            -DCMAKE_INSTALL_PREFIX="$(pwd)/../install"
           ninja
           ninja check-circt check-circt-unit
           ninja install-firtool
@@ -146,31 +157,62 @@ jobs:
           file install/*
           file install/bin/*
 
+      # Specify bash for the Windows runner to work
       - name: Name Install Directory
         id: name_dir
+        shell: bash
         run: |
           BASE=$(git describe --tag)
           SANITIZED=$(echo -n $BASE | tr '/' '-')
           echo "value=$SANITIZED" >> "$GITHUB_OUTPUT"
 
-      - name: Package Binaries
+      - name: Name Archive
+        id: name_archive
+        shell: bash
+        run: |
+          NAME=firrtl-bin-${{ matrix.os }}-${{ matrix.arch }}.${{ matrix.archive }}
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Package Binaries Linux and MacOS
+        if: matrix.os == 'macos' || matrix.os == 'linux'
         run: |
           mv install ${{ steps.name_dir.outputs.value }}
-          ${{ matrix.tar }} czf firrtl-bin-${{ matrix.runner }}.tar.gz ${{ steps.name_dir.outputs.value }}
-      - name: Show Tarball
+          ${{ matrix.tar }} ${{ steps.name_archive.outputs.name }} ${{ steps.name_dir.outputs.value }}
+
+      # Not sure how to create a zip in bash on Windows so using powershell
+      - name: Package Binaries Windows
+        if: matrix.os == 'windows'
+        shell: pwsh
         run: |
-          ls -l firrtl-bin-${{ matrix.runner }}.tar.gz
-          shasum -a 256 firrtl-bin-${{ matrix.runner }}.tar.gz
-      - name: Upload Binaries (Non-Tag)
+          mv install ${{ steps.name_dir.outputs.value }}
+          Compress-Archive -Path ${{ steps.name_dir.outputs.value }} -DestinationPath ${{ steps.name_archive.outputs.name }}
+
+      # Specify bash for the Windows runner to work
+      - name: Show Tarball
+        shell: bash
+        run: |
+          ls -l ${{ steps.name_archive.outputs.name }}
+          ${{ matrix.sha256 }} ${{ steps.name_archive.outputs.name }} | cut -d ' ' -f1 > ${{ steps.name_archive.outputs.name }}.sha256
+
+      - name: Upload Binary (Non-Tag)
         uses: actions/upload-artifact@v3
         if: github.ref_type != 'tag'
         with:
-          name: firrtl-bin-${{ matrix.runner }}.tar.gz
-          path: firrtl-bin-${{ matrix.runner }}.tar.gz
+          name: ${{ steps.name_archive.outputs.name }}
+          path: ${{ steps.name_archive.outputs.name }}
           retention-days: 7
+      - name: Upload SHA256 (Non-Tag)
+        uses: actions/upload-artifact@v3
+        if: github.ref_type != 'tag'
+        with:
+          name: ${{ steps.name_archive.outputs.name }}.sha256
+          path: ${{ steps.name_archive.outputs.name }}.sha256
+          retention-days: 7
+
       - name: Upload Binaries (Tag)
         uses: AButler/upload-release-assets@v2.0
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.ref_type == 'tag'
         with:
-          files: firrtl-bin-${{ matrix.runner }}.tar.gz
+          # The * will grab the .sha256 as well
+          files: ${{ steps.name_archive.outputs.name }}*
           repo-token: ${{ secrets.GITHUB_TOKEN }}
