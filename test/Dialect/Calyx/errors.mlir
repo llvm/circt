@@ -68,7 +68,7 @@ module attributes {calyx.entrypoint = "main"} {
 // -----
 
 module attributes {calyx.entrypoint = "main"} {
-  // expected-error @+1 {{'calyx.component' op requires exactly one of each: 'calyx.wires', 'calyx.control'.}}
+  // expected-error @+1 {{'calyx.component' op requires exactly one 'calyx.wires' or some 'calyx.invoke'.}}
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     calyx.control {}
   }
