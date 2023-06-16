@@ -366,8 +366,21 @@ public:
     LocationAttr loc;
     if (failed(parser->parseOptionalInfoLocator(loc)))
       return failure();
-    if (loc)
-      infoLoc = loc;
+    if (loc) {
+      using ILH = FIRParserOptions::InfoLocHandling;
+      switch (parser->constants.options.infoLocatorHandling) {
+      case ILH::IgnoreInfo:
+        assert(0 && "Should not parse info locations if ignoring");
+        LLVM_FALLTHROUGH;
+      case ILH::PreferInfo:
+        infoLoc = loc;
+        break;
+      case ILH::FusedInfo:
+        infoLoc = FusedLoc::get(loc.getContext(),
+                                {loc, parser->translateLocation(firLoc)});
+        break;
+      }
+    }
     return success();
   }
 
@@ -401,8 +414,10 @@ ParseResult FIRParser::parseOptionalInfoLocator(LocationAttr &result) {
   consumeToken(FIRToken::fileinfo);
 
   auto locationPair = maybeStringToLocation(
-      spelling, constants.options.ignoreInfoLocators, locatorFilenameCache,
-      fileLineColLocCache, getContext());
+      spelling,
+      constants.options.infoLocatorHandling ==
+          FIRParserOptions::InfoLocHandling::IgnoreInfo,
+      locatorFilenameCache, fileLineColLocCache, getContext());
 
   // If parsing failed, then indicate that a weird info was found.
   if (!locationPair.first) {
@@ -413,7 +428,8 @@ ParseResult FIRParser::parseOptionalInfoLocator(LocationAttr &result) {
 
   // If the parsing succeeded, but we are supposed to drop locators, then just
   // return.
-  if (locationPair.first && constants.options.ignoreInfoLocators)
+  if (locationPair.first && constants.options.infoLocatorHandling ==
+                                FIRParserOptions::InfoLocHandling::IgnoreInfo)
     return success();
 
   // Otherwise, set the location attribute and return.
@@ -1309,8 +1325,24 @@ struct LazyLocationListener : public OpBuilder::Listener {
 
     // If we have a symbolic location, apply it to any subOps specified.
     if (infoLoc) {
-      for (auto opAndSMLoc : subOps)
-        opAndSMLoc.first->setLoc(infoLoc);
+      for (auto opAndSMLoc : subOps) {
+        // Follow user preference to either only use @info locations,
+        // or apply a fused location with @info and file loc.
+        using ILH = FIRParserOptions::InfoLocHandling;
+        switch (parser.getConstants().options.infoLocatorHandling) {
+        case ILH::IgnoreInfo:
+          assert(0 && "Should not parse info locations if ignoring");
+          LLVM_FALLTHROUGH;
+        case ILH::PreferInfo:
+          opAndSMLoc.first->setLoc(infoLoc);
+          break;
+        case ILH::FusedInfo:
+          opAndSMLoc.first->setLoc(FusedLoc::get(
+              infoLoc.getContext(),
+              {infoLoc, parser.translateLocation(opAndSMLoc.second)}));
+          break;
+        }
+      }
     } else {
       // If we don't, translate all the individual SMLoc's to Location objects
       // in the .fir file.
