@@ -53,9 +53,9 @@ jobs:
           CIBW_BUILD_FRONTEND: build
           SETUPTOOLS_SCM_DEBUG: True
 
-      - name: Upload wheels (Tag)
+      - name: Upload wheels (Tag or Nightly)
         uses: pypa/gh-action-pypi-publish@release/v1
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || github.event_name == 'cron'
         with:
           password: ${{ secrets.PYPI_CIRCT_API_TOKEN }}
           packages-dir: wheelhouse/
@@ -67,11 +67,3 @@ jobs:
         with:
           path: ./wheelhouse/*.whl
           retention-days: 7
-
-      - name: Upload wheels (Non-Tag and Nightly)
-        uses: pypa/gh-action-pypi-publish@release/v1
-        if: github.ref_type != 'tag' && github.event_name == 'cron'
-        with:
-          password: ${{ secrets.PYPI_CIRCT_API_TOKEN }}
-          packages-dir: wheelhouse/
-          verify-metadata: false
