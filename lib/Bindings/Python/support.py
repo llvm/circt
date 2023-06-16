@@ -165,14 +165,10 @@ def attribute_to_var(attr):
     return {i.name: attribute_to_var(i.attr) for i in dict}
   except ValueError:
     pass
-
-  from .dialects import om
   try:
     return attribute_to_var(om.ReferenceAttr(attr).inner_ref)
   except ValueError:
     pass
-
-  from .dialects import hw
   try:
     ref = hw.InnerRefAttr(attr)
     return (ir.StringAttr(ref.module).value, ir.StringAttr(ref.name).value)
