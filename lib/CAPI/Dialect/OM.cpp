@@ -12,6 +12,7 @@
 
 #include "circt-c/Dialect/OM.h"
 #include "circt/Dialect/OM/Evaluator/Evaluator.h"
+#include "circt/Dialect/OM/OMAttributes.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Wrap.h"
@@ -179,4 +180,17 @@ MlirAttribute omEvaluatorObjectValueGetPrimitive(OMObjectValue objectValue) {
   // Assert the Attribute is non-null, and return it.
   assert(omEvaluatorObjectValueIsAPrimitive(objectValue));
   return objectValue.primitive;
+}
+
+//===----------------------------------------------------------------------===//
+// Attribute API.
+//===----------------------------------------------------------------------===//
+
+bool omAttrIsAReferenceAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<ReferenceAttr>();
+}
+
+MlirAttribute omReferenceAttrGetInnerRef(MlirAttribute referenceAttr) {
+  return wrap(
+      (Attribute)unwrap(referenceAttr).cast<ReferenceAttr>().getInnerRef());
 }
