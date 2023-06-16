@@ -456,13 +456,15 @@ public:
   FIRDiagnosticHandler(MLIRContext *ctxt) : ScopedDiagnosticHandler(ctxt) {
     setHandler([](Diagnostic &d) {
       SmallPtrSet<Location, 8> firLocs;
+      // Recursively scan for .fir locations.
       d.getLocation().operator LocationAttr().walk([&](Location loc) {
         if (isFirLoc(loc))
           firLocs.insert(loc);
         return WalkResult::advance();
       });
 
-      assert(!firLocs.contains(d.getLocation()) || hasSingleElement(firLocs));
+      // If error is reported on a firLoc already, don't attach notes.
+      // It may be wise to impose an upper limit here.
       if (!firLocs.contains(d.getLocation()))
         for (auto l : firLocs)
           d.attachNote(l) << "FIRRTL location here";
