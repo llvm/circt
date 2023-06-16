@@ -735,3 +735,17 @@ sv.bind #hw.innerNameRef<@SiFive_MulDiv::@__ETC_SiFive_MulDiv_assert>
 // CHECK-NEXT:  ._io_req_ready_output (1'h0)
 // CHECK-NEXT:  .resetSignalName      (reset),
 // CHECK-NEXT:  .clock                (clock)
+
+// CHECK: hw.module @no_ports() attributes {verilogLocation = {col = "107", file = "", line = "1"}}
+
+// CHECK-LABEL: hw.module @Expressions
+// CHECK:   %0 = comb.extract %in4 from 2 {verilogLocation = {col = "183", file = "", line = "24"}} : (i4) -> i1 
+// CHECK:   %1 = comb.shru %in4, %in4 {verilogLocation = {col = "115", file = "", line = "19"}} : i4 
+// CHECK:   %2 = sv.wire {hw.verilogName = "_GEN", verilogLocation = {col = "115", file = "", line = "19"}} : !hw.inout<i4> 
+// CHECK:   sv.assign %2, %1 : i4
+// CHECK:   %3 = comb.xor %in4, %c-1_i4 {verilogLocation = {col = "114", file = "", line = "21"}} : i4 
+// CHECK:   %4 = comb.modu %in4, %c1_i4 {verilogLocation = {col = "130", file = "", line = "22"}} : i4 
+// CHECK:   %5 = comb.extract %in4 from 0 {verilogLocation = {col = "168", file = "", line = "28"}} : (i4) -> i2 
+// CHECK:   %6 = comb.extract %in4 from 2 {verilogLocation = {col = "168", file = "", line = "28"}} : (i4) -> i2 
+// CHECK:   %7 = comb.concat %0, %false {verilogLocation = {col = "183", file = "", line = "24"}} : i1, i1 
+// CHECK:   %8 = comb.or %6, %7 {verilogLocation = {col = "183", file = "", line = "24"}} : i2 

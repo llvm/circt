@@ -17,6 +17,7 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/Support/FormattedStream.h"
 #include <atomic>
 
 namespace circt {
@@ -266,7 +267,8 @@ struct SharedEmitterState {
 
   void collectOpsForFile(const FileInfo &fileInfo, EmissionList &thingsToEmit,
                          bool emitHeader = false);
-  void emitOps(EmissionList &thingsToEmit, raw_ostream &os, bool parallelize);
+  void emitOps(EmissionList &thingsToEmit, llvm::formatted_raw_ostream &os,
+               StringRef fileName, bool parallelize);
 };
 
 //===----------------------------------------------------------------------===//

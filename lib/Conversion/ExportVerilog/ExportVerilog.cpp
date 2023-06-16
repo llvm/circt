@@ -1,4 +1,4 @@
-//===- ExportVerilog.cpp - Verilog Emitter --------------------------------===//
+//===- ExportVerlog.cpp - Verilog Emitter --------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -46,6 +46,7 @@
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SaveAndRestore.h"
 #include "llvm/Support/ToolOutputFile.h"
@@ -832,10 +833,11 @@ public:
                                const LoweringOptions &options,
                                const HWSymbolCache &symbolCache,
                                const GlobalNameTable &globalNames,
-                               raw_ostream &os)
+                               llvm::formatted_raw_ostream &os,
+                               StringRef fileName)
       : designOp(designOp), shared(shared), options(options),
         symbolCache(symbolCache), globalNames(globalNames), os(os),
-        pp(os, options.emittedLineLength) {
+        pp(os, options.emittedLineLength), fileName(fileName) {
     pp.setListener(&saver);
   }
   /// This is the root mlir::ModuleOp that holds the whole design being emitted.
@@ -854,7 +856,7 @@ public:
   const GlobalNameTable &globalNames;
 
   /// The stream to emit to.
-  raw_ostream &os;
+  llvm::formatted_raw_ostream &os;
 
   bool encounteredError = false;
   unsigned currentIndent = 0;
@@ -874,6 +876,9 @@ public:
 
   /// Pretty printer.
   PrettyPrinter pp;
+
+  // Name of the output file, used for debug information.
+  const StringRef fileName;
 
 private:
   VerilogEmitterState(const VerilogEmitterState &) = delete;
@@ -928,6 +933,19 @@ public:
     emitLocationImpl(
         getLocationInfoAsString(ops, state.options.locationInfoStyle));
     setPendingNewline();
+    auto *ctxt = state.designOp.getContext();
+    // The column of the stream is incorrect, we can drop it here.
+    auto verilogLoc = DictionaryAttr::get(
+        ctxt,
+        {NamedAttribute(StringAttr::get(ctxt, "col"),
+                        StringAttr::get(ctxt, Twine(state.os.getColumn()))),
+         NamedAttribute(StringAttr::get(ctxt, "line"),
+                        StringAttr::get(ctxt, Twine(state.os.getLine() + 1))),
+         NamedAttribute(StringAttr::get(ctxt, "file"),
+                        StringAttr::get(ctxt, state.fileName))});
+
+    for (auto *op : ops)
+      op->setAttr(StringAttr::get(ctxt, "verilogLocation"), verilogLoc);
   }
 
   template <typename PPS>
@@ -5812,8 +5830,9 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
 
 /// Actually emit the collected list of operations and strings to the
 /// specified file.
-void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
-                                 bool parallelize) {
+void SharedEmitterState::emitOps(EmissionList &thingsToEmit,
+                                 llvm::formatted_raw_ostream &os,
+                                 StringRef fileName, bool parallelize) {
   MLIRContext *context = designOp->getContext();
 
   // Disable parallelization overhead if MLIR threading is disabled.
@@ -5824,7 +5843,7 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
   // specified stream.
   if (!parallelize) {
     VerilogEmitterState state(designOp, *this, options, symbolCache,
-                              globalNames, os);
+                              globalNames, os, fileName);
     for (auto &entry : thingsToEmit) {
       if (auto *op = entry.getOperation())
         emitOperation(state, op);
@@ -5852,8 +5871,9 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 
     SmallString<256> buffer;
     llvm::raw_svector_ostream tmpStream(buffer);
+    llvm::formatted_raw_ostream rs(tmpStream);
     VerilogEmitterState state(designOp, *this, options, symbolCache,
-                              globalNames, tmpStream);
+                              globalNames, rs, fileName);
     emitOperation(state, op);
     stringOrOp.setString(buffer);
   });
@@ -5870,7 +5890,7 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 
     // If this wasn't emitted to a string (e.g. it is a bind) do so now.
     VerilogEmitterState state(designOp, *this, options, symbolCache,
-                              globalNames, os);
+                              globalNames, os, fileName);
     emitOperation(state, op);
   }
 }
@@ -5913,8 +5933,9 @@ static LogicalResult exportVerilogImpl(ModuleOp module, llvm::raw_ostream &os) {
     list.emplace_back(contents);
   }
 
+  llvm::formatted_raw_ostream rs(os);
   // Finally, emit all the ops we collected.
-  emitter.emitOps(list, os, /*parallelize=*/true);
+  emitter.emitOps(list, rs, "", /*parallelize=*/true);
   return failure(emitter.encounteredError);
 }
 
@@ -6002,11 +6023,12 @@ static void createSplitOutputFile(StringAttr fileName, FileInfo &file,
   emitter.collectOpsForFile(file, list,
                             emitter.options.emitReplicatedOpsToHeader);
 
+  llvm::formatted_raw_ostream rs(output->os());
   // Emit the file, copying the global options into the individual module
   // state.  Don't parallelize emission of the ops within this file - we
   // already parallelize per-file emission and we pay a string copy overhead
   // for parallelization.
-  emitter.emitOps(list, output->os(), /*parallelize=*/false);
+  emitter.emitOps(list, rs, output->getFilename(), /*parallelize=*/false);
   output->keep();
 }
 
