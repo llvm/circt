@@ -18,6 +18,7 @@
 #include "circt/Dialect/LLHD/Simulator/Trace.h"
 #include "circt/Support/Version.h"
 
+#include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
@@ -191,8 +192,9 @@ int main(int argc, char **argv) {
 
   MLIRContext context;
   // Load the dialects
-  context.loadDialect<llhd::LLHDDialect, LLVM::LLVMDialect, FuncDialect,
-                      hw::HWDialect, comb::CombDialect>();
+  context
+      .loadDialect<llhd::LLHDDialect, LLVM::LLVMDialect, FuncDialect,
+                   hw::HWDialect, comb::CombDialect, cf::ControlFlowDialect>();
   mlir::registerLLVMDialectTranslation(context);
   mlir::registerBuiltinDialectTranslation(context);
 

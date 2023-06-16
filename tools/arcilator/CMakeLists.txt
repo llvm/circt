@@ -14,6 +14,7 @@ target_link_libraries(arcilator
   MLIRTargetLLVMIRExport
   MLIRBuiltinToLLVMIRTranslation
   MLIRLLVMToLLVMIRTranslation
+  MLIRFuncInlinerExtension
 )
 
 llvm_update_compile_flags(arcilator)
