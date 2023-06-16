@@ -261,4 +261,14 @@ firrtl.module @BigIntTest(in %in: !firrtl.bigint, out %out: !firrtl.bigint) {
   // CHECK: %1 = firrtl.bigint -4
   %1 = firrtl.bigint -4
 }
+
+// CHECK-LABEL: TypeAlias
+// CHECK-SAME: %in: !firrtl.alias<bar, uint<1>>
+// CHECK-SAME: %const: !firrtl.const.alias<baz, const.uint<1>>
+// CHECK-SAME: %r: !firrtl.openbundle<a: alias<baz, uint<1>>>
+firrtl.module @TypeAlias(in %in: !firrtl.alias<bar, uint<1>>,
+                         in %const: !firrtl.const.alias<baz, const.uint<1>>,
+                         out %r : !firrtl.openbundle<a: alias<baz, uint<1>>>) {
+}
+
 }
