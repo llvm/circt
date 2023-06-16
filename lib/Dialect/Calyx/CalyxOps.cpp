@@ -717,13 +717,7 @@ LogicalResult ComponentOp::verify() {
     return emitOpError() << "requires exactly one: '" << ControlOp::getOperationName() << "'."; 
   
   if (std::distance(wIt.begin(), wIt.end()) != 1 && getInvokeOpNumber((*cIt.begin()).getBodyBlock()) == 0)
-    return emitOpError() << "requires exactly one '" << WiresOp::getOperationName() << "' or some '" << InvokeOp::getOperationName() << "'.";
- /* size_t number = getInvokeOpNumber((*cIt.begin()).getBodyBlock());
-  if (std::distance(wIt.begin(), wIt.end()) + std::distance(cIt.begin(), cIt.end()) != 2 && (std::distance(cIt.begin(), cIt.end()) != 1 && !number)) 
-    return emitOpError() << "requires exactly one of each: '"
-                         << WiresOp::getOperationName() << "', '"
-                         << ControlOp::getOperationName() << "'.";*/
-  
+    return emitOpError() << "requires exactly one '" << WiresOp::getOperationName() << "' or some '" << InvokeOp::getOperationName() << "'."; 
   if (failed(hasRequiredPorts(*this)))
     return failure();
 
