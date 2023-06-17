@@ -22,6 +22,8 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Matchers.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/IntervalMap.h"
@@ -149,6 +151,7 @@ public:
   void lower();
 
   unsigned numSubaccessRestored = 0;
+  unsigned numForLoopRestored = 0;
 
 private:
   struct RegLowerInfo {
@@ -169,6 +172,10 @@ private:
   std::optional<std::tuple<Value, Value, Value>>
   tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
                         hw::ArrayCreateOp nextArray);
+  void tryRestoringForLoop(
+      OpBuilder &builder, Value reg, Value term, hw::ArrayCreateOp array,
+      llvm::function_ref<void(unsigned)> fn,
+      llvm::function_ref<void(Value, Value, Value)> addToWorklist);
 
   void addToAlwaysBlock(Block *block, sv::EventControl clockEdge, Value clock,
                         std::function<void(OpBuilder &)> body,
@@ -484,9 +491,223 @@ FirRegLower::tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
   return std::make_tuple(commonConditionValue, indexValue, trueVal);
 }
 
+// Value unify(val1, i,  val2, j, Value induction) {
+//    //  operands == neq, then check if only difference is constant comparison
+//   if(val1==val2) return val1;
+//   if(i is blockargument or j is blockargument) return {}; // failure
+//   auto op1 = getDefingOp();
+//   auto op2 = getDefinngOp();
+//   if (both are constant adn i==val1 and j==val2) return induction;
+//
+//   // check if operands are unifiarable.
+//   // check if attributes are unifiarable. ignore namehints.
+//   // special casing extract → bitcast and array_get
+//
+//   // just construct op.
+// }
+// Value unify(Value base,  Value val2, j, Value induction) {
+//    //  operands == neq, then check if only difference is constant comparison
+//   if(val1==val2) return val1;
+//   if(i is blockargument or j is blockargument) return {}; // failure
+//   auto op1 = getDefingOp();
+//   auto op2 = getDefinngOp();
+//   if (both are constant adn i==val1 and j==val2) return induction;
+//
+//   // check if operands are unifiarable.
+//   // check if attributes are unifiarable. ignore namehints.
+//   // special casing extract → bitcast and array_get
+//
+//   // just construct op.
+// }
+//
+
+static bool isSafeToInspect(Operation *op) {
+  if (isa<hw::InstanceOp>(op))
+    return false;
+  return isa<hw::HWDialect, comb::CombDialect>(op->getDialect());
+}
+
+// TODO: Make this iterative.
+static Value unifyTwoValues(OpBuilder &builder, Value value, unsigned index,
+                            Value next, Value inductionVariable) {
+  //    //  operands == neq, then check if only difference is constant
+  //    comparison
+  //   if(val1==val2) return val1;
+  //   if(i is blockargument or j is blockargument) return {}; // failure
+  //   auto op1 = getDefingOp();
+  //   auto op2 = getDefinngOp();
+  //   if (both are constant adn i==val1 and j==val2) return induction;
+  //
+  //   // check if operands are unifiarable.
+  //   // check if attributes are unifiarable. ignore namehints.
+  //   // special casing extract → bitcast and array_get
+  //
+  if (value == next)
+    return value;
+  auto valueOp = value.getDefiningOp();
+  auto nextOp = next.getDefiningOp();
+
+  // Make sure that we have the same structure. Attributes are checked
+  // afterwards. Also allow only comb and hw operations for correctness.
+  if (!valueOp || !nextOp || valueOp->getName() != nextOp->getName() ||
+      valueOp->getNumOperands() != nextOp->getNumOperands() ||
+      !isSafeToInspect(valueOp))
+    return {};
+
+  APInt valueInt, nextInt;
+  // Base case. Check constantOp.
+  if (matchPattern(value, mlir::m_ConstantInt(&valueInt)))
+    if (matchPattern(next, mlir::m_ConstantInt(&nextInt))) {
+      if (valueInt == index && nextInt == index + 1) {
+        // TODO: pad/trunc
+        if (value.getType() == inductionVariable.getType())
+          return inductionVariable;
+      }
+      return {};
+    }
+  SmallVector<Value> newOperands;
+  bool changed = false;
+  // Check operands.
+  for (auto [lhs, rhs] :
+       llvm::zip(valueOp->getOperands(), nextOp->getOperands())) {
+    auto operand = unifyTwoValues(builder, lhs, index, rhs, inductionVariable);
+    if (!operand)
+      return {};
+    newOperands.push_back(operand);
+    changed |= lhs != operand;
+  }
+
+  // Inspect attributes.
+  if (valueOp->getAttrs() == nextOp->getAttrs()) {
+    // Reuse the value.
+    if (!changed)
+      return value;
+    auto value = builder.clone(*valueOp)->getResult(0);
+    return value;
+  }
+
+  // Otherwise, handle operations separately.
+  return {};
+}
+
+// FIXME: Make this recursive.
+static bool unifyIntoTemplate(Value templateValue, Value value, unsigned index,
+                              Value inductionVariable) {
+  //    //  operands == neq, then check if only difference is constant
+  //    comparison
+  //   if(val1==val2) return val1;
+  //   if(i is blockargument or j is blockargument) return {}; // failure
+  //   auto op1 = getDefingOp();
+  //   auto op2 = getDefinngOp();
+  //   if (both are constant adn i==val1 and j==val2) return induction;
+  //
+  //   // check if operands are unifiarable.
+  //   // check if attributes are unifiarable. ignore namehints.
+  //   // special casing extract → bitcast and array_get
+  //
+  //   // just construct op.
+  if (templateValue == value)
+    return true;
+
+  APInt valueInt;
+  // Base Case.
+  if (templateValue == inductionVariable) {
+    if (matchPattern(value, mlir::m_ConstantInt(&valueInt)) &&
+        valueInt == index)
+      return true;
+    return false;
+  }
+
+  auto valueOp = templateValue.getDefiningOp();
+  auto nextOp = value.getDefiningOp();
+  // Make sure that we have the same structure. Attributes are checked
+  // afterwards. Also allow only comb and hw operations for correctness.
+  if (!valueOp || !nextOp || valueOp->getName() != nextOp->getName() ||
+      valueOp->getNumOperands() != nextOp->getNumOperands() ||
+      !isSafeToInspect(valueOp))
+    return false;
+
+  for (auto [lhs, rhs] :
+       llvm::zip(valueOp->getOperands(), nextOp->getOperands()))
+    if (!unifyIntoTemplate(lhs, rhs, index, inductionVariable))
+      return false;
+
+  // Inspect attributes.
+  // TODO: Drop namehints.
+  // TODO: Accept ExtractOp.
+  return valueOp->getAttrs() == nextOp->getAttrs();
+}
+
+void FirRegLower::tryRestoringForLoop(
+    OpBuilder &builder, Value reg, Value term, hw::ArrayCreateOp arrayGet,
+    llvm::function_ref<void(unsigned)> fn,
+    llvm::function_ref<void(Value, Value, Value)> addToWorklist) {
+  auto size = arrayGet.getNumOperands();
+  if (size <= 1)
+    return fn(0);
+  unsigned start = 0;
+
+  mlir::Type inductionVarType =
+      builder.getIntegerType(llvm::Log2_64_Ceil(size + 1));
+
+  while (start < size - 1) {
+    Value value = arrayGet.getOperand(size - 1 - start);
+    unsigned nextIndex = start + 1;
+    Value next = arrayGet.getOperand(size - 1 - nextIndex);
+    Value inductionVariable =
+        builder
+            .create<mlir::UnrealizedConversionCastOp>(
+                reg.getLoc(), ArrayRef<mlir::Type>{inductionVarType},
+                ArrayRef<Value>{})
+            ->getResult(0);
+    auto templateVal =
+        unifyTwoValues(builder, value, start, next, inductionVariable);
+    if (!templateVal) {
+      // LowerIndex.
+      fn(size - 1 - start++);
+      continue;
+    }
+    // Ok, at least we can create for-loop for the range [start, start+1].
+    // Let's try extending it.
+    unsigned end = start + 2;
+    for (; end < size; end++) {
+      if (!unifyIntoTemplate(templateVal, arrayGet.getOperand(size - 1 - end),
+                             end, inductionVariable)) {
+        break;
+      }
+    }
+    // Create a loop [start, end).
+    auto lb = getOrCreateConstant(reg.getLoc(),
+                                  APInt(llvm::Log2_64_Ceil(size + 1), start));
+    auto ub = getOrCreateConstant(reg.getLoc(),
+                                  APInt(llvm::Log2_64_Ceil(size + 1), end));
+
+    auto c = getOrCreateConstant(reg.getLoc(),
+                                 APInt(llvm::Log2_64_Ceil(size + 1), 1));
+
+    auto loc = reg.getLoc();
+    auto arrayIndexWidth = llvm::Log2_64_Ceil(size);
+    auto forLoop = builder.create<sv::ForOp>(
+        reg.getLoc(), lb, ub, c, "i", [&](BlockArgument iter) {
+          Value iterValue = iter;
+          if (!iter.getType().isInteger(arrayIndexWidth))
+            iterValue = builder.create<comb::ExtractOp>(loc, iterValue, 0,
+                                                        arrayIndexWidth);
+          Value lhs = builder.create<sv::ArrayIndexInOutOp>(reg.getLoc(), reg,
+                                                            iterValue);
+          inductionVariable.replaceAllUsesWith(iter);
+          auto termElement =
+              builder.create<hw::ArrayGetOp>(term.getLoc(), term, iterValue);
+          addToWorklist(lhs, termElement, templateVal);
+        });
+    numForLoopRestored++;
+
+    start = end;
+  }
+}
+
 void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
                              Value next) {
-
   SmallVector<std::tuple<Block *, Value, Value, Value>> worklist;
   auto addToWorklist = [&](Value reg, Value term, Value next) {
     worklist.push_back({builder.getBlock(), reg, term, next});
@@ -531,8 +752,8 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
             [&]() {
               Value nextReg = getArrayIndex(reg, index);
               // Create a value to use for equivalence checking in the
-              // recursive calls. Add the value to `opsToDelete` so that it can
-              // be deleted afterwards.
+              // recursive calls. Add the value to `opsToDelete` so that it
+              // can be deleted afterwards.
               auto termElement =
                   builder.create<hw::ArrayGetOp>(term.getLoc(), term, index);
               opsToDelete.push_back(termElement);
@@ -542,12 +763,8 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
         ++numSubaccessRestored;
         continue;
       }
-      // Compat fix for GCC12's libstdc++, cannot use
-      // llvm::enumerate(llvm::reverse(OperandRange)).  See #4900.
-      // SmallVector<Value> reverseOpValues(llvm::reverse(array.getOperands()));
-      for (auto [idx, value] : llvm::enumerate(array.getOperands())) {
-        idx = array.getOperands().size() - idx - 1;
-        // Create an index constant.
+
+      auto fn = [&](unsigned idx) {
         auto idxVal = getOrCreateConstant(
             array.getLoc(),
             APInt(std::max(1u, llvm::Log2_64_Ceil(array.getOperands().size())),
@@ -563,8 +780,12 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
         auto termElement =
             builder.create<hw::ArrayGetOp>(term.getLoc(), term, idxVal);
         opsToDelete.push_back(termElement);
-        addToWorklist(index, termElement, value);
-      }
+        addToWorklist(index, termElement,
+                      array.getOperand(array.getOperands().size() - 1 - idx));
+      };
+
+      tryRestoringForLoop(builder, reg, term, array, fn, addToWorklist);
+
       continue;
     }
 
@@ -787,6 +1008,7 @@ void SeqFIRRTLToSVPass::runOnOperation() {
                           emitSeparateAlwaysBlocks);
   firRegLower.lower();
   numSubaccessRestored += firRegLower.numSubaccessRestored;
+  numForLoopRestored += firRegLower.numForLoopRestored;
 }
 
 void SeqFIRRTLInitToSVPass::runOnOperation() {

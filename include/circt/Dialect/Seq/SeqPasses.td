@@ -43,7 +43,9 @@ def LowerSeqFIRRTLToSV: Pass<"lower-seq-firrtl-to-sv",  "hw::HWModuleOp"> {
   ];
   let statistics = [
     Statistic<"numSubaccessRestored", "num-subaccess-restored",
-      "Number of lhs subaccess operations restored ">
+      "Number of lhs subaccess operations restored ">,
+    Statistic<"numForLoopRestored", "num-forloop-restored",
+      "Number of for loop restored ">
   ];
 }
 
