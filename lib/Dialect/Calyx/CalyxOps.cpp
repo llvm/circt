@@ -563,9 +563,9 @@ static void buildComponentLike(OpBuilder &builder, OperationState &result,
 template <typename Op>
 static Op getControlOrWiresFrom(ComponentOp op) {
   auto *body = op.getBodyBlock();
-  // Because of the existence of the invoke operation, 
-  // the wires operation may not exist, so be careful 
-  // when using it and make sure that wires exist before 
+  // Because of the existence of the invoke operation,
+  // the wires operation may not exist, so be careful
+  // when using it and make sure that wires exist before
   // using it.
   auto opIt = body->getOps<Op>().begin();
   return *opIt;
@@ -680,7 +680,7 @@ static LogicalResult hasRequiredPorts(ComponentOp op) {
 }
 
 // A helper function to get the number of invoke operations in a block.
-size_t getInvokeOpNumber(Block* block) {
+size_t getInvokeOpNumber(Block *block) {
   if (!block)
     return 0;
 
@@ -690,54 +690,59 @@ size_t getInvokeOpNumber(Block* block) {
   auto wIt = block->getOps<calyx::WhileOp>();
   auto ifIt = block->getOps<calyx::IfOp>();
   size_t invokeNumber = std::distance(iIt.begin(), iIt.end());
-  if (!sIt.empty()) 
+  if (!sIt.empty())
     for (auto s : sIt)
-      invokeNumber += getInvokeOpNumber(s.getBodyBlock());      
+      invokeNumber += getInvokeOpNumber(s.getBodyBlock());
 
-  if (!pIt.empty()) 
-    for (auto p : pIt) 
+  if (!pIt.empty())
+    for (auto p : pIt)
       invokeNumber += getInvokeOpNumber(p.getBodyBlock());
 
   if (!wIt.empty())
     for (auto w : wIt)
       invokeNumber += getInvokeOpNumber(w.getBodyBlock());
-  
+
   if (!ifIt.empty())
-    for (auto i : ifIt)  {
+    for (auto i : ifIt) {
       invokeNumber += getInvokeOpNumber(i.getThenBody());
       invokeNumber += getInvokeOpNumber(i.getElseBody());
     }
-  
+
   return invokeNumber;
 }
 
 LogicalResult ComponentOp::verify() {
   // Verify there is exactly one of each the wires and control operations,
-  // or check if there are invoke and a control operations. First verify 
-  // that there is a control operation, then verify that there is a wires 
+  // or check if there are invoke and a control operations. First verify
+  // that there is a control operation, then verify that there is a wires
   // operation or some invoke operations.
   auto wIt = getBodyBlock()->getOps<WiresOp>();
   auto cIt = getBodyBlock()->getOps<ControlOp>();
-  if (std::distance(cIt.begin(), cIt.end()) != 1) 
-    return emitOpError() << "requires exactly one: '" << ControlOp::getOperationName() << "'."; 
-  
-  if (std::distance(wIt.begin(), wIt.end()) != 1 && getInvokeOpNumber((*cIt.begin()).getBodyBlock()) == 0)
-    return emitOpError() << "requires exactly one '" << WiresOp::getOperationName() << "' or some '" << InvokeOp::getOperationName() << "'."; 
+  if (std::distance(cIt.begin(), cIt.end()) != 1)
+    return emitOpError() << "requires exactly one: '"
+                         << ControlOp::getOperationName() << "'.";
+
+  if (std::distance(wIt.begin(), wIt.end()) != 1 &&
+      getInvokeOpNumber((*cIt.begin()).getBodyBlock()) == 0)
+    return emitOpError() << "requires exactly one '"
+                         << WiresOp::getOperationName() << "' or some '"
+                         << InvokeOp::getOperationName() << "'.";
   if (failed(hasRequiredPorts(*this)))
     return failure();
 
   // Verify the component actually does something: has a non-empty Control
   // region, or continuous assignments.
-  bool hasNoControlConstructs = getControlOp().getBodyBlock()->getOperations().empty();
+  bool hasNoControlConstructs =
+      getControlOp().getBodyBlock()->getOperations().empty();
   bool hasNoAssignments = wIt.empty();
-  if (!hasNoAssignments) 
-    hasNoAssignments = getWiresOp().getBodyBlock()->getOps<AssignOp>().empty();  
+  if (!hasNoAssignments)
+    hasNoAssignments = getWiresOp().getBodyBlock()->getOps<AssignOp>().empty();
   if (hasNoControlConstructs && hasNoAssignments)
     return emitOpError(
         "The component currently does nothing. It needs to either have "
         "continuous assignments in the Wires region or control constructs in "
         "the Control region.");
-  
+
   return success();
 }
 
@@ -1911,10 +1916,12 @@ LogicalResult EnableOp::verify() {
   auto component = (*this)->getParentOfType<ComponentOp>();
   auto wireOps = component.getBodyBlock()->getOps<WiresOp>();
   if (wireOps.empty())
-    return emitOpError() << "'" << WiresOp::getOperationName() << "' does not exist,can't use '" << getOperationName() << "'." ;
+    return emitOpError() << "'" << WiresOp::getOperationName()
+                         << "' does not exist,can't use '" << getOperationName()
+                         << "'.";
   WiresOp wiresOp = *wireOps.begin();
   StringRef name = getGroupName();
-  
+
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(name);
   if (!groupOp)
     return emitOpError() << "with group '" << name
@@ -2177,31 +2184,38 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
 // InvokeOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseParameterList(OpAsmParser &parser, OperationState &result, SmallVectorImpl<OpAsmParser::UnresolvedOperand> &ports, SmallVectorImpl<OpAsmParser::UnresolvedOperand> &inputs, SmallVectorImpl<Type> &types) {
+static ParseResult
+parseParameterList(OpAsmParser &parser, OperationState &result,
+                   SmallVectorImpl<OpAsmParser::UnresolvedOperand> &ports,
+                   SmallVectorImpl<OpAsmParser::UnresolvedOperand> &inputs,
+                   SmallVectorImpl<Type> &types) {
   OpAsmParser::UnresolvedOperand port;
   OpAsmParser::UnresolvedOperand input;
   Type type;
   auto parseParameter = [&]() -> ParseResult {
-    if (parser.parseOperand(port) || parser.parseEqual() || parser.parseOperand(input))
+    if (parser.parseOperand(port) || parser.parseEqual() ||
+        parser.parseOperand(input))
       return failure();
     ports.push_back(port);
     inputs.push_back(input);
     return success();
   };
-  if(parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren, parseParameter))
-    return failure(); 
-  if(parser.parseArrow())
+  if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                     parseParameter))
+    return failure();
+  if (parser.parseArrow())
     return failure();
   auto parseType = [&]() -> ParseResult {
     if (parser.parseType(type))
       return failure();
     types.push_back(type);
     return success();
-  };  
-  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren, parseType);
+  };
+  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                        parseType);
 }
 
-ParseResult InvokeOp::parse(OpAsmParser &parser, OperationState &result){
+ParseResult InvokeOp::parse(OpAsmParser &parser, OperationState &result) {
   StringAttr componentName;
   SmallVector<OpAsmParser::UnresolvedOperand> ports;
   SmallVector<OpAsmParser::UnresolvedOperand, 4> inputs;
@@ -2226,14 +2240,15 @@ void InvokeOp::print(OpAsmPrinter &p) {
   auto inputs = this->getInputs();
   for (size_t i = 0; i != ports.size(); i++) {
     p << ports[i] << " = " << inputs[i];
-    if (i + 1 != ports.size()) 
+    if (i + 1 != ports.size())
       p << ", ";
   }
   p << ")";
-  p << " -> " << "(";
+  p << " -> "
+    << "(";
   for (size_t i = 0; i != ports.size(); i++) {
     p << ports[i].getType();
-    if ( i + 1 != ports.size())
+    if (i + 1 != ports.size())
       p << ", ";
   }
   p << ")";
@@ -2243,12 +2258,14 @@ LogicalResult InvokeOp::verify() {
   ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
   StringRef callee = getCallee();
   InstanceOp instanceOp = componentOp.lookupSymbol<InstanceOp>(callee);
-  if (!instanceOp) 
-    return emitOpError() << "with instance '" << callee << "', which does not exist.";
+  if (!instanceOp)
+    return emitOpError() << "with instance '" << callee
+                         << "', which does not exist.";
   if (getInputs().empty())
-    return emitOpError() << "the input for '" << getOperationName() << "' is empty.";
+    return emitOpError() << "the input for '" << getOperationName()
+                         << "' is empty.";
   return success();
-} 
+}
 
 //===----------------------------------------------------------------------===//
 // Calyx library ops
