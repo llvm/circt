@@ -175,7 +175,8 @@ private:
   void tryRestoringForLoop(
       OpBuilder &builder, Value reg, Value term, hw::ArrayCreateOp array,
       llvm::function_ref<void(unsigned)> fn,
-      llvm::function_ref<void(Value, Value, Value)> addToWorklist);
+      llvm::function_ref<void(Value, Value, Value)> addToWorklist,
+      SmallVectorImpl<Value> &opsToErase);
 
   void addToAlwaysBlock(Block *block, sv::EventControl clockEdge, Value clock,
                         std::function<void(OpBuilder &)> body,
@@ -529,7 +530,8 @@ static bool isSafeToInspect(Operation *op) {
 
 // TODO: Make this iterative.
 static Value unifyTwoValues(OpBuilder &builder, Value value, unsigned index,
-                            Value next, Value inductionVariable) {
+                            Value next, Value inductionVariable,
+                            unsigned &upperLimitTermSize) {
   //    //  operands == neq, then check if only difference is constant
   //    comparison
   //   if(val1==val2) return val1;
@@ -544,12 +546,17 @@ static Value unifyTwoValues(OpBuilder &builder, Value value, unsigned index,
   //
   if (value == next)
     return value;
+  if (upperLimitTermSize == 0)
+    return {};
+  --upperLimitTermSize;
   auto valueOp = value.getDefiningOp();
   auto nextOp = next.getDefiningOp();
 
   // Make sure that we have the same structure. Attributes are checked
   // afterwards. Also allow only comb and hw operations for correctness.
   if (!valueOp || !nextOp || valueOp->getName() != nextOp->getName() ||
+      valueOp->getNumResults() != nextOp->getNumResults() ||
+      valueOp->getNumResults() != 1 ||
       valueOp->getNumOperands() != nextOp->getNumOperands() ||
       !isSafeToInspect(valueOp))
     return {};
@@ -570,22 +577,28 @@ static Value unifyTwoValues(OpBuilder &builder, Value value, unsigned index,
   // Check operands.
   for (auto [lhs, rhs] :
        llvm::zip(valueOp->getOperands(), nextOp->getOperands())) {
-    auto operand = unifyTwoValues(builder, lhs, index, rhs, inductionVariable);
+    auto operand =
+        unifyTwoValues(builder, lhs, index, rhs, inductionVariable, upperLimitTermSize);
     if (!operand)
       return {};
     newOperands.push_back(operand);
     changed |= lhs != operand;
   }
 
+  valueOp->removeAttr("sv.namehint");
+  nextOp->removeAttr("sv.namehint");
+
   // Inspect attributes.
   if (valueOp->getAttrs() == nextOp->getAttrs()) {
     // Reuse the value.
     if (!changed)
       return value;
-    auto value = builder.clone(*valueOp)->getResult(0);
-    return value;
+    Operation *op = builder.clone(*valueOp);
+    for (unsigned i = 0; i < valueOp->getNumOperands(); i++)
+      op->setOperand(i, newOperands[i]);
+    return op->getResult(0);
   }
-
+  // hw::ExtractOp
   // Otherwise, handle operations separately.
   return {};
 }
@@ -635,13 +648,15 @@ static bool unifyIntoTemplate(Value templateValue, Value value, unsigned index,
   // Inspect attributes.
   // TODO: Drop namehints.
   // TODO: Accept ExtractOp.
-  return valueOp->getAttrs() == nextOp->getAttrs();
+  nextOp->removeAttr("sv.namehint");
+  valueOp->getAttrs() == nextOp->getAttrs();
 }
 
 void FirRegLower::tryRestoringForLoop(
     OpBuilder &builder, Value reg, Value term, hw::ArrayCreateOp arrayGet,
     llvm::function_ref<void(unsigned)> fn,
-    llvm::function_ref<void(Value, Value, Value)> addToWorklist) {
+    llvm::function_ref<void(Value, Value, Value)> addToWorklist,
+    SmallVectorImpl<Value> &opsToErase) {
   auto size = arrayGet.getNumOperands();
   if (size <= 1)
     return fn(0);
@@ -651,20 +666,48 @@ void FirRegLower::tryRestoringForLoop(
       builder.getIntegerType(llvm::Log2_64_Ceil(size + 1));
 
   while (start < size - 1) {
+    // llvm::errs() << "Start!"
+    //              << " " << start << " " << size << arrayGet << "\n";
+
     Value value = arrayGet.getOperand(size - 1 - start);
     unsigned nextIndex = start + 1;
     Value next = arrayGet.getOperand(size - 1 - nextIndex);
-    Value inductionVariable =
-        builder
-            .create<mlir::UnrealizedConversionCastOp>(
-                reg.getLoc(), ArrayRef<mlir::Type>{inductionVarType},
-                ArrayRef<Value>{})
-            ->getResult(0);
-    auto templateVal =
-        unifyTwoValues(builder, value, start, next, inductionVariable);
+    auto loc = reg.getLoc();
+    auto arrayIndexWidth = llvm::Log2_64_Ceil(size);
+    auto lb = getOrCreateConstant(reg.getLoc(),
+                                  APInt(llvm::Log2_64_Ceil(size + 1), start));
+    Value templateVal;
+    Value inductionVariable;
+    SmallVector<Operation *> opsToEraseIfFail;
+    auto forLoop = builder.create<sv::ForOp>(
+        reg.getLoc(), lb, lb, lb, "i", [&](BlockArgument b) {
+          inductionVariable = b;
+          unsigned upper = 512;
+          templateVal =
+              unifyTwoValues(builder, value, start, next, inductionVariable, upper);
+          if (!templateVal)
+            return;
+          Value iterValue = inductionVariable;
+          if (!inductionVariable.getType().isInteger(arrayIndexWidth))
+            iterValue = builder.create<comb::ExtractOp>(loc, iterValue, 0,
+                                                        arrayIndexWidth);
+          Value lhs = builder.create<sv::ArrayIndexInOutOp>(reg.getLoc(), reg,
+                                                            iterValue);
+          Value termElement =
+              builder.create<hw::ArrayGetOp>(term.getLoc(), term, iterValue);
+          opsToErase.push_back(termElement);
+          addToWorklist(lhs, termElement, templateVal);
+        });
+    // Value inductionVariable =
+    //     builder
+    //         .create<mlir::UnrealizedConversionCastOp>(
+    //             reg.getLoc(), ArrayRef<mlir::Type>{inductionVarType},
+    //             ArrayRef<Value>{})
+    //         ->getResult(0);
     if (!templateVal) {
       // LowerIndex.
       fn(size - 1 - start++);
+      forLoop.erase();
       continue;
     }
     // Ok, at least we can create for-loop for the range [start, start+1].
@@ -677,31 +720,22 @@ void FirRegLower::tryRestoringForLoop(
       }
     }
     // Create a loop [start, end).
-    auto lb = getOrCreateConstant(reg.getLoc(),
-                                  APInt(llvm::Log2_64_Ceil(size + 1), start));
     auto ub = getOrCreateConstant(reg.getLoc(),
                                   APInt(llvm::Log2_64_Ceil(size + 1), end));
 
     auto c = getOrCreateConstant(reg.getLoc(),
                                  APInt(llvm::Log2_64_Ceil(size + 1), 1));
+    forLoop.setOperand(1, ub);
+    forLoop.setOperand(2, c);
 
-    auto loc = reg.getLoc();
-    auto arrayIndexWidth = llvm::Log2_64_Ceil(size);
-    auto forLoop = builder.create<sv::ForOp>(
-        reg.getLoc(), lb, ub, c, "i", [&](BlockArgument iter) {
-          Value iterValue = iter;
-          if (!iter.getType().isInteger(arrayIndexWidth))
-            iterValue = builder.create<comb::ExtractOp>(loc, iterValue, 0,
-                                                        arrayIndexWidth);
-          Value lhs = builder.create<sv::ArrayIndexInOutOp>(reg.getLoc(), reg,
-                                                            iterValue);
-          inductionVariable.replaceAllUsesWith(iter);
-          auto termElement =
-              builder.create<hw::ArrayGetOp>(term.getLoc(), term, iterValue);
-          addToWorklist(lhs, termElement, templateVal);
-        });
     numForLoopRestored++;
+    circt::sv::setSVAttributes(
+        forLoop, sv::SVAttributeAttr::get(builder.getContext(), "SV_FOR_LOOP",
+                                          /*emitAsComment=*/true));
 
+    llvm::errs() << "Restored!"
+                 << " " << start << " " << size << " " << end << arrayGet
+                 << "\n";
     start = end;
   }
 }
@@ -784,7 +818,8 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
                       array.getOperand(array.getOperands().size() - 1 - idx));
       };
 
-      tryRestoringForLoop(builder, reg, term, array, fn, addToWorklist);
+      tryRestoringForLoop(builder, reg, term, array, fn, addToWorklist,
+                          opsToDelete);
 
       continue;
     }
