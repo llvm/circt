@@ -243,6 +243,21 @@ void FirRegLower::lower() {
   if (regs.empty())
     return;
 
+  auto exts = module.getOps<comb::ExtractOp>();
+  for (auto e : exts) {
+    if (e.getType().isInteger(1)) {
+      OpBuilder builder(e);
+      auto width = e.getInput().getType().getIntOrFloatBitWidth();
+      auto c = builder.create<hw::ConstantOp>(
+          e.getLoc(),
+          APInt(std::max(1u, llvm::Log2_64_Ceil(width)), e.getLowBit()));
+      auto in = builder.create<hw::BitcastOp>(
+          e.getLoc(), hw::ArrayType::get(e.getType(), width), e.getInput());
+      Value arrayGet = builder.create<hw::ArrayGetOp>(e.getLoc(), in, c);
+      e.replaceAllUsesWith(arrayGet);
+    }
+  }
+
   // Lower the regs to SV regs.
   SmallVector<RegLowerInfo> toInit;
   for (auto reg : llvm::make_early_inc_range(regs))
@@ -551,6 +566,11 @@ static Value unifyTwoValues(OpBuilder &builder, Value value, unsigned index,
   --upperLimitTermSize;
   auto valueOp = value.getDefiningOp();
   auto nextOp = next.getDefiningOp();
+    auto debug = [&](){
+    llvm::errs() << "\nerror ";
+    value.dump();
+    next.dump();
+  };
 
   // Make sure that we have the same structure. Attributes are checked
   // afterwards. Also allow only comb and hw operations for correctness.
@@ -565,11 +585,24 @@ static Value unifyTwoValues(OpBuilder &builder, Value value, unsigned index,
   // Base case. Check constantOp.
   if (matchPattern(value, mlir::m_ConstantInt(&valueInt)))
     if (matchPattern(next, mlir::m_ConstantInt(&nextInt))) {
+      if(valueInt == nextInt)
+        return value;
       if (valueInt == index && nextInt == index + 1) {
         // TODO: pad/trunc
         if (value.getType() == inductionVariable.getType())
           return inductionVariable;
+        if (inductionVariable.getType().isInteger(
+                cast<IntegerType>(value.getType()).getIntOrFloatBitWidth() +
+                1)) {
+          return builder.create<comb::ExtractOp>(
+              inductionVariable.getLoc(), inductionVariable, 0,
+              cast<IntegerType>(value.getType()).getIntOrFloatBitWidth());
+          // value.dump();
+          // inductionVariable.dump();
+          // llvm::errs() << "\n";
+        }
       }
+      // debug();
       return {};
     }
   SmallVector<Value> newOperands;
@@ -577,8 +610,8 @@ static Value unifyTwoValues(OpBuilder &builder, Value value, unsigned index,
   // Check operands.
   for (auto [lhs, rhs] :
        llvm::zip(valueOp->getOperands(), nextOp->getOperands())) {
-    auto operand =
-        unifyTwoValues(builder, lhs, index, rhs, inductionVariable, upperLimitTermSize);
+    auto operand = unifyTwoValues(builder, lhs, index, rhs, inductionVariable,
+                                  upperLimitTermSize);
     if (!operand)
       return {};
     newOperands.push_back(operand);
@@ -621,13 +654,27 @@ static bool unifyIntoTemplate(Value templateValue, Value value, unsigned index,
   //   // just construct op.
   if (templateValue == value)
     return true;
-
+  auto debug = [&](){
+    llvm::errs() << "\nerror ";
+    value.dump();
+    templateValue.dump();
+  };
   APInt valueInt;
   // Base Case.
   if (templateValue == inductionVariable) {
     if (matchPattern(value, mlir::m_ConstantInt(&valueInt)) &&
         valueInt == index)
       return true;
+      debug();
+    return false;
+  }
+  if (auto extract = templateValue.getDefiningOp<comb::ExtractOp>();
+      extract && extract.getInput() == inductionVariable &&
+      extract.getLowBit() == 0) {
+    if (matchPattern(value, mlir::m_ConstantInt(&valueInt)) &&
+        valueInt == index)
+      return true;
+      debug();
     return false;
   }
 
@@ -637,8 +684,10 @@ static bool unifyIntoTemplate(Value templateValue, Value value, unsigned index,
   // afterwards. Also allow only comb and hw operations for correctness.
   if (!valueOp || !nextOp || valueOp->getName() != nextOp->getName() ||
       valueOp->getNumOperands() != nextOp->getNumOperands() ||
-      !isSafeToInspect(valueOp))
+      !isSafeToInspect(valueOp)){
+        debug();
     return false;
+      }
 
   for (auto [lhs, rhs] :
        llvm::zip(valueOp->getOperands(), nextOp->getOperands()))
@@ -649,7 +698,10 @@ static bool unifyIntoTemplate(Value templateValue, Value value, unsigned index,
   // TODO: Drop namehints.
   // TODO: Accept ExtractOp.
   nextOp->removeAttr("sv.namehint");
-  valueOp->getAttrs() == nextOp->getAttrs();
+  if( valueOp->getAttrs() == nextOp->getAttrs())
+  return true;
+  debug();
+  return false;
 }
 
 void FirRegLower::tryRestoringForLoop(
@@ -682,9 +734,9 @@ void FirRegLower::tryRestoringForLoop(
     auto forLoop = builder.create<sv::ForOp>(
         reg.getLoc(), lb, lb, lb, "i", [&](BlockArgument b) {
           inductionVariable = b;
-          unsigned upper = 512;
-          templateVal =
-              unifyTwoValues(builder, value, start, next, inductionVariable, upper);
+          unsigned upper = 8196*4;
+          templateVal = unifyTwoValues(builder, value, start, next,
+                                       inductionVariable, upper);
           if (!templateVal)
             return;
           Value iterValue = inductionVariable;
@@ -729,13 +781,14 @@ void FirRegLower::tryRestoringForLoop(
     forLoop.setOperand(2, c);
 
     numForLoopRestored++;
+    // PR ONLY: Remove 
     circt::sv::setSVAttributes(
         forLoop, sv::SVAttributeAttr::get(builder.getContext(), "SV_FOR_LOOP",
                                           /*emitAsComment=*/true));
 
-    llvm::errs() << "Restored!"
-                 << " " << start << " " << size << " " << end << arrayGet
-                 << "\n";
+    // llvm::errs() << "Restored!"
+    //              << " " << start << " " << size << " " << end << arrayGet
+    //              << "\n";
     start = end;
   }
 }
