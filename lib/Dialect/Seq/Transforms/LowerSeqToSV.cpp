@@ -188,6 +188,9 @@ private:
                     const std::function<void()> &trueSide,
                     const std::function<void()> &falseSide);
 
+  sv::ForOp addToForBlock(OpBuilder &builder, Value lb, Value ub, Value c,
+                          sv::ForOp op);
+
   hw::ConstantOp getOrCreateConstant(Location loc, const APInt &value) {
     OpBuilder builder(module.getBody());
     auto &constant = constantCache[value];
@@ -208,6 +211,10 @@ private:
   using IfKeyType = std::pair<Block *, Value>;
   llvm::SmallDenseMap<IfKeyType, sv::IfOp> ifCache;
 
+  // Lower, Upper, Consatnt
+  using ForKeyType = std::tuple<Block *, Value, Value, Value>;
+  llvm::SmallDenseMap<ForKeyType, sv::ForOp> forCache;
+
   llvm::SmallDenseMap<APInt, hw::ConstantOp> constantCache;
   llvm::SmallDenseMap<std::pair<Value, unsigned>, Value> arrayIndexCache;
 
@@ -217,6 +224,23 @@ private:
   bool emitSeparateAlwaysBlocks;
 };
 } // namespace
+
+sv::ForOp FirRegLower::addToForBlock(OpBuilder &builder, Value lb, Value ub,
+                                     Value c, sv::ForOp old) {
+
+  ForKeyType key{builder.getBlock(), lb, ub, c};
+  auto op = forCache.lookup(key);
+  if (!op) {
+    forCache.insert({key, old});
+    return old;
+  } else {
+    auto &b = op.getBody().front();
+    b.getOperations().splice(b.begin(), old.getBody().front().getOperations());
+    old.getBody().front().getArgument(0).replaceAllUsesWith(b.getArgument(0));
+    old.erase();
+    return op;
+  }
+}
 
 void FirRegLower::addToIfBlock(OpBuilder &builder, Value cond,
                                const std::function<void()> &trueSide,
@@ -566,7 +590,7 @@ static Value unifyTwoValues(OpBuilder &builder, Value value, unsigned index,
   --upperLimitTermSize;
   auto valueOp = value.getDefiningOp();
   auto nextOp = next.getDefiningOp();
-    auto debug = [&](){
+  auto debug = [&]() {
     llvm::errs() << "\nerror ";
     value.dump();
     next.dump();
@@ -585,7 +609,7 @@ static Value unifyTwoValues(OpBuilder &builder, Value value, unsigned index,
   // Base case. Check constantOp.
   if (matchPattern(value, mlir::m_ConstantInt(&valueInt)))
     if (matchPattern(next, mlir::m_ConstantInt(&nextInt))) {
-      if(valueInt == nextInt)
+      if (valueInt == nextInt)
         return value;
       if (valueInt == index && nextInt == index + 1) {
         // TODO: pad/trunc
@@ -654,7 +678,7 @@ static bool unifyIntoTemplate(Value templateValue, Value value, unsigned index,
   //   // just construct op.
   if (templateValue == value)
     return true;
-  auto debug = [&](){
+  auto debug = [&]() {
     llvm::errs() << "\nerror ";
     value.dump();
     templateValue.dump();
@@ -665,7 +689,7 @@ static bool unifyIntoTemplate(Value templateValue, Value value, unsigned index,
     if (matchPattern(value, mlir::m_ConstantInt(&valueInt)) &&
         valueInt == index)
       return true;
-      debug();
+    debug();
     return false;
   }
   if (auto extract = templateValue.getDefiningOp<comb::ExtractOp>();
@@ -674,7 +698,7 @@ static bool unifyIntoTemplate(Value templateValue, Value value, unsigned index,
     if (matchPattern(value, mlir::m_ConstantInt(&valueInt)) &&
         valueInt == index)
       return true;
-      debug();
+    debug();
     return false;
   }
 
@@ -684,10 +708,10 @@ static bool unifyIntoTemplate(Value templateValue, Value value, unsigned index,
   // afterwards. Also allow only comb and hw operations for correctness.
   if (!valueOp || !nextOp || valueOp->getName() != nextOp->getName() ||
       valueOp->getNumOperands() != nextOp->getNumOperands() ||
-      !isSafeToInspect(valueOp)){
-        debug();
+      !isSafeToInspect(valueOp)) {
+    debug();
     return false;
-      }
+  }
 
   for (auto [lhs, rhs] :
        llvm::zip(valueOp->getOperands(), nextOp->getOperands()))
@@ -698,8 +722,8 @@ static bool unifyIntoTemplate(Value templateValue, Value value, unsigned index,
   // TODO: Drop namehints.
   // TODO: Accept ExtractOp.
   nextOp->removeAttr("sv.namehint");
-  if( valueOp->getAttrs() == nextOp->getAttrs())
-  return true;
+  if (valueOp->getAttrs() == nextOp->getAttrs())
+    return true;
   debug();
   return false;
 }
@@ -734,21 +758,11 @@ void FirRegLower::tryRestoringForLoop(
     auto forLoop = builder.create<sv::ForOp>(
         reg.getLoc(), lb, lb, lb, "i", [&](BlockArgument b) {
           inductionVariable = b;
-          unsigned upper = 8196*4;
+          unsigned upper = 8196 * 4;
           templateVal = unifyTwoValues(builder, value, start, next,
                                        inductionVariable, upper);
           if (!templateVal)
             return;
-          Value iterValue = inductionVariable;
-          if (!inductionVariable.getType().isInteger(arrayIndexWidth))
-            iterValue = builder.create<comb::ExtractOp>(loc, iterValue, 0,
-                                                        arrayIndexWidth);
-          Value lhs = builder.create<sv::ArrayIndexInOutOp>(reg.getLoc(), reg,
-                                                            iterValue);
-          Value termElement =
-              builder.create<hw::ArrayGetOp>(term.getLoc(), term, iterValue);
-          opsToErase.push_back(termElement);
-          addToWorklist(lhs, termElement, templateVal);
         });
     // Value inductionVariable =
     //     builder
@@ -762,6 +776,7 @@ void FirRegLower::tryRestoringForLoop(
       forLoop.erase();
       continue;
     }
+
     // Ok, at least we can create for-loop for the range [start, start+1].
     // Let's try extending it.
     unsigned end = start + 2;
@@ -780,8 +795,23 @@ void FirRegLower::tryRestoringForLoop(
     forLoop.setOperand(1, ub);
     forLoop.setOperand(2, c);
 
+    forLoop = addToForBlock(builder, lb, ub, c, forLoop);
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(&forLoop.getBody().front());
+
+    Value iterValue = builder.getBlock()->getArgument(0);
+
+    if (!iterValue.getType().isInteger(arrayIndexWidth))
+      iterValue =
+          builder.create<comb::ExtractOp>(loc, iterValue, 0, arrayIndexWidth);
+    Value lhs = builder.create<sv::ArrayIndexInOutOp>(reg.getLoc(), reg, iterValue);
+    Value termElement =
+        builder.create<hw::ArrayGetOp>(term.getLoc(), term, iterValue);
+    opsToErase.push_back(termElement);
+    addToWorklist(lhs, termElement, templateVal);
+
     numForLoopRestored++;
-    // PR ONLY: Remove 
+    // PR ONLY: Remove
     circt::sv::setSVAttributes(
         forLoop, sv::SVAttributeAttr::get(builder.getContext(), "SV_FOR_LOOP",
                                           /*emitAsComment=*/true));
@@ -839,8 +869,8 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
             [&]() {
               Value nextReg = getArrayIndex(reg, index);
               // Create a value to use for equivalence checking in the
-              // recursive calls. Add the value to `opsToDelete` so that it
-              // can be deleted afterwards.
+              // recursive calls. Add the value to `opsToDelete` so that
+              // it can be deleted afterwards.
               auto termElement =
                   builder.create<hw::ArrayGetOp>(term.getLoc(), term, index);
               opsToDelete.push_back(termElement);
@@ -1018,9 +1048,9 @@ void FirRegLower::addToAlwaysBlock(Block *block, sv::EventControl clockEdge,
   if (!alwaysOp) {
     if (reset) {
       assert(resetStyle != ::ResetType::NoReset);
-      // Here, we want to create the following structure with sv.always and
-      // sv.if. If `reset` is async, we need to add `reset` to a sensitivity
-      // list.
+      // Here, we want to create the following structure with sv.always
+      // and sv.if. If `reset` is async, we need to add `reset` to a
+      // sensitivity list.
       //
       // sv.always @(clockEdge or reset) {
       //   sv.if (reset) {
@@ -1031,8 +1061,8 @@ void FirRegLower::addToAlwaysBlock(Block *block, sv::EventControl clockEdge,
       // }
 
       auto createIfOp = [&]() {
-        // It is weird but intended. Here we want to create an empty sv.if
-        // with an else block.
+        // It is weird but intended. Here we want to create an empty
+        // sv.if with an else block.
         insideIfOp = builder.create<sv::IfOp>(
             reset, []() {}, []() {});
       };
