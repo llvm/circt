@@ -2174,7 +2174,7 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
 // InvokeOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseParameterList(OpAsmParser &parser, OperationState &result, SmallVector<OpAsmParser::UnresolvedOperand> &ports, SmallVector<OpAsmParser::UnresolvedOperand, 4> &inputs, SmallVector<Type, 4> &types) {
+static ParseResult parseParameterList(OpAsmParser &parser, OperationState &result, SmallVectorImpl<OpAsmParser::UnresolvedOperand> &ports, SmallVectorImpl<OpAsmParser::UnresolvedOperand> &inputs, SmallVectorImpl<Type> &types) {
   OpAsmParser::UnresolvedOperand port;
   OpAsmParser::UnresolvedOperand input;
   Type type;

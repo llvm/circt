@@ -268,6 +268,92 @@ LogicalResult CompileFSMVisitor::visit(StateOp currentState, EnableOp enableOp,
   return success();
 }
 
+class CompileInvoke {    
+public:
+  CompileInvoke(ComponentOp& component, OpBuilder& builder)
+    : component(component), builder(builder){ }
+  void compile() {
+    checkWiresOp();
+    visitInvokeOps(component.getControlOp().getBodyBlock());
+  }
+private:
+  void checkWiresOp();
+  void visitInvokeOps(Block* block);
+  void lowerInvokeOp(InvokeOp& invokeOp);
+  ComponentOp& component;
+  OpBuilder& builder;  
+  size_t label = 0;
+};
+
+void CompileInvoke::checkWiresOp() {
+  auto wiresOps = component.getBodyBlock()->getOps<WiresOp>();
+  // If calyx.wires does not exist.
+  if (wiresOps.empty()) {
+    ControlOp ctrlOp = component.getControlOp(); 
+    // TODO: check if the cell is empty.
+    Operation* preNode= ctrlOp.getOperation()->getPrevNode();
+    builder.setInsertionPointAfter(preNode); 
+    Location loc = preNode->getLoc();
+    builder.create<WiresOp>(loc);
+  }
+}
+
+void CompileInvoke::visitInvokeOps(Block* block) {
+   if (!block)
+    return;
+  
+  auto inOps = block->getOps<InvokeOp>();
+  for (auto invokeOp : llvm::make_early_inc_range(inOps))
+    lowerInvokeOp(invokeOp);
+   
+  auto sIt = block->getOps<SeqOp>();
+  auto pIt = block->getOps<ParOp>();
+  auto wIt = block->getOps<WhileOp>();
+  auto iIt = block->getOps<IfOp>();
+  for (auto s : sIt)
+    visitInvokeOps(s.getBodyBlock());   
+
+  for (auto p : pIt) 
+    visitInvokeOps(p.getBodyBlock());   
+
+  for (auto w : wIt)
+    visitInvokeOps(w.getBodyBlock());
+  
+  for (auto i : iIt)  {
+    visitInvokeOps(i.getThenBody());
+    visitInvokeOps(i.getElseBody());
+  }
+}
+
+void CompileInvoke::lowerInvokeOp(InvokeOp& invokeOp) {
+  builder.setInsertionPointToEnd(component.getWiresOp().getBodyBlock()); 
+  // Build calyx.build.
+  GroupOp groupOp = builder.create<GroupOp>(component.getWiresOp().getLoc(), "invoke_" + std::to_string(label));
+  builder.setInsertionPointToStart(groupOp.getBodyBlock());
+  auto ports = invokeOp.getPorts();
+  auto inputs = invokeOp.getInputs();
+  for (size_t i = 0; i != ports.size(); i++) 
+    builder.create<AssignOp>(component.getWiresOp().getLoc(), ports[i], inputs[i]); 
+  calyx::InstanceOp instanceOp = component.lookupSymbol<calyx::InstanceOp>(invokeOp.getCallee());
+  ComponentInterface refComp = instanceOp.getReferencedComponent();
+  size_t doneIdx = 0;
+  auto portAttrs = refComp.getPortInfo();
+  for (PortInfo& portAttr : portAttrs) {
+    if (!portAttr.attributes.empty()) {
+      if (portAttr.attributes.begin()->getName().str() == "done")
+        break;   
+    }
+    doneIdx++;
+  }
+  
+  Value done = instanceOp.getResult(doneIdx);
+  builder.create<calyx::GroupDoneOp>(invokeOp.getLoc(), done);
+  // TODO: check port is empty.
+  builder.setInsertionPointAfter(invokeOp.getOperation());
+  builder.create<EnableOp>(invokeOp.getLoc(), "invoke_" + std::to_string(label++));
+  invokeOp.erase();
+} 
+
 class CalyxToFSMPass : public CalyxToFSMBase<CalyxToFSMPass> {
 public:
   void runOnOperation() override;
@@ -279,6 +365,8 @@ void CalyxToFSMPass::runOnOperation() {
   auto ctrlOp = component.getControlOp();
   assert(ctrlOp.getBodyBlock()->getOperations().size() == 1 &&
          "Expected a single top-level operation in the schedule");
+  CompileInvoke compileInvoke(component, builder);
+  compileInvoke.compile();
   Operation &topLevelCtrlOp = ctrlOp.getBodyBlock()->front();
   builder.setInsertionPoint(&topLevelCtrlOp);
 
