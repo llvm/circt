@@ -268,6 +268,8 @@ LogicalResult CompileFSMVisitor::visit(StateOp currentState, EnableOp enableOp,
   return success();
 }
 
+// CompileInvoke is used to convert invoke operations to group operations and enable 
+// operations.
 class CompileInvoke {    
 public:
   CompileInvoke(ComponentOp& component, OpBuilder& builder)
@@ -285,12 +287,12 @@ private:
   size_t label = 0;
 };
 
+// Check if the wires operation exists, and if it does not, create the wires operation.
 void CompileInvoke::checkWiresOp() {
   auto wiresOps = component.getBodyBlock()->getOps<WiresOp>();
   // If calyx.wires does not exist.
   if (wiresOps.empty()) {
     ControlOp ctrlOp = component.getControlOp(); 
-    // TODO: check if the cell is empty.
     Operation* preNode= ctrlOp.getOperation()->getPrevNode();
     builder.setInsertionPointAfter(preNode); 
     Location loc = preNode->getLoc();
@@ -298,6 +300,7 @@ void CompileInvoke::checkWiresOp() {
   }
 }
 
+// Access all nodes on the AST to convert each invoke operation.
 void CompileInvoke::visitInvokeOps(Block* block) {
    if (!block)
     return;
@@ -325,6 +328,7 @@ void CompileInvoke::visitInvokeOps(Block* block) {
   }
 }
 
+// Convert an invoke operation to a group operation and an enable operation.
 void CompileInvoke::lowerInvokeOp(InvokeOp& invokeOp) {
   builder.setInsertionPointToEnd(component.getWiresOp().getBodyBlock()); 
   // Build calyx.build.
@@ -348,7 +352,6 @@ void CompileInvoke::lowerInvokeOp(InvokeOp& invokeOp) {
   
   Value done = instanceOp.getResult(doneIdx);
   builder.create<calyx::GroupDoneOp>(invokeOp.getLoc(), done);
-  // TODO: check port is empty.
   builder.setInsertionPointAfter(invokeOp.getOperation());
   builder.create<EnableOp>(invokeOp.getLoc(), "invoke_" + std::to_string(label++));
   invokeOp.erase();
@@ -365,6 +368,7 @@ void CalyxToFSMPass::runOnOperation() {
   auto ctrlOp = component.getControlOp();
   assert(ctrlOp.getBodyBlock()->getOperations().size() == 1 &&
          "Expected a single top-level operation in the schedule");
+  // Compile all invoke operations.
   CompileInvoke compileInvoke(component, builder);
   compileInvoke.compile();
   Operation &topLevelCtrlOp = ctrlOp.getBodyBlock()->front();

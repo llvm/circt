@@ -563,8 +563,10 @@ static void buildComponentLike(OpBuilder &builder, OperationState &result,
 template <typename Op>
 static Op getControlOrWiresFrom(ComponentOp op) {
   auto *body = op.getBodyBlock();
-  // We verify there is a single WiresOp and ControlOp,
-  // so this is safe.
+  // Because of the existence of the invoke operation, 
+  // the wires operation may not exist, so be careful 
+  // when using it and make sure that wires exist before 
+  // using it.
   auto opIt = body->getOps<Op>().begin();
   return *opIt;
 }
@@ -677,6 +679,7 @@ static LogicalResult hasRequiredPorts(ComponentOp op) {
          << difference;
 }
 
+// A helper function to get the number of invoke operations in a block.
 size_t getInvokeOpNumber(Block* block) {
   if (!block)
     return 0;
@@ -710,7 +713,9 @@ size_t getInvokeOpNumber(Block* block) {
 
 LogicalResult ComponentOp::verify() {
   // Verify there is exactly one of each the wires and control operations,
-  // or check if there are invoke and a control operations.
+  // or check if there are invoke and a control operations. First verify 
+  // that there is a control operation, then verify that there is a wires 
+  // operation or some invoke operations.
   auto wIt = getBodyBlock()->getOps<WiresOp>();
   auto cIt = getBodyBlock()->getOps<ControlOp>();
   if (std::distance(cIt.begin(), cIt.end()) != 1) 
@@ -723,12 +728,10 @@ LogicalResult ComponentOp::verify() {
 
   // Verify the component actually does something: has a non-empty Control
   // region, or continuous assignments.
-
   bool hasNoControlConstructs = getControlOp().getBodyBlock()->getOperations().empty();
   bool hasNoAssignments = wIt.empty();
   if (!hasNoAssignments) 
-    hasNoAssignments = getWiresOp().getBodyBlock()->getOps<AssignOp>().empty();
-  
+    hasNoAssignments = getWiresOp().getBodyBlock()->getOps<AssignOp>().empty();  
   if (hasNoControlConstructs && hasNoAssignments)
     return emitOpError(
         "The component currently does nothing. It needs to either have "
@@ -2206,9 +2209,8 @@ ParseResult InvokeOp::parse(OpAsmParser &parser, OperationState &result){
   if (parser.parseSymbolName(componentName))
     return failure();
   FlatSymbolRefAttr callee = FlatSymbolRefAttr::get(componentName);
-  auto loc = parser.getCurrentLocation();
+  SMLoc loc = parser.getCurrentLocation();
   result.addAttribute("callee", callee);
-    // to do return value
   if (parseParameterList(parser, result, ports, inputs, types))
     return failure();
   if (parser.resolveOperands(ports, types, loc, result.operands))
@@ -2238,11 +2240,13 @@ void InvokeOp::print(OpAsmPrinter &p) {
 }
 
 LogicalResult InvokeOp::verify() {
-  auto componentOp = (*this)->getParentOfType<ComponentOp>();
-  StringRef callee = this->getCallee();
-  auto instanceOp = componentOp.lookupSymbol<InstanceOp>(callee);
+  ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
+  StringRef callee = getCallee();
+  InstanceOp instanceOp = componentOp.lookupSymbol<InstanceOp>(callee);
   if (!instanceOp) 
-    return emitOpError() << "with instance '" << callee << "', which does not exist.";  
+    return emitOpError() << "with instance '" << callee << "', which does not exist.";
+  if (getInputs().empty())
+    return emitOpError() << "the input for '" << getOperationName() << "' is empty.";
   return success();
 } 
 
