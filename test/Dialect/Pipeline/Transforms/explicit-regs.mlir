@@ -232,6 +232,8 @@ hw.module @test_arbitrary_nesting(%arg0 : i32, %arg1 : i32, %go : i1, %clk : i1,
     pipeline.return %a0 : i32
   }
   hw.output %out : i32
+}
+
 // CHECK-LABEL:   hw.module @testExtInput(
 // CHECK-SAME:            %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1) -> (out0: i32, out1: i32) {
 // CHECK:           %[[VAL_4:.*]]:2 = pipeline.scheduled(%[[VAL_0]]) ext(%[[VAL_1]] : i32) clock %[[VAL_2]] reset %[[VAL_3]] : (i32) -> (i32, i32) {

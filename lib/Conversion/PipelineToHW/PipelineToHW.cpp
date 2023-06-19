@@ -243,7 +243,7 @@ public:
     pipelineRst = pipelineMod.getBody().front().getArgument(
         pipelineMod.getBody().front().getNumArguments() - 1);
 
-    if (pipeline.getExtInputs().size() != 0) {
+    if (pipeline.getExtInputs().empty()) {
       // Maintain a mapping between external inputs and their corresponding
       // block argument in the top-level pipeline.
       auto modInnerExtInputs =
