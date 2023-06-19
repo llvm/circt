@@ -188,8 +188,8 @@ private:
                     const std::function<void()> &trueSide,
                     const std::function<void()> &falseSide);
 
-  sv::ForOp addToForBlock(OpBuilder &builder, Value lb, Value ub, Value c,
-                          sv::ForOp op);
+  void addToForBlock(OpBuilder &builder, Value lb, Value ub, Value c,
+                     const std::function<void(BlockArgument)> &body);
 
   hw::ConstantOp getOrCreateConstant(Location loc, const APInt &value) {
     OpBuilder builder(module.getBody());
