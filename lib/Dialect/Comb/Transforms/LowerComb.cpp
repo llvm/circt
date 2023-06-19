@@ -33,11 +33,9 @@ private:
   // NOLINTNEXTLINE(misc-no-recursion)
   Value getMux(Location loc, OpBuilder &b, Value t, Value f,
                ArrayRef<bool> table, Operation::operand_range inputs) const {
-    assert(!table.empty());
+    assert(table.size() == (1ull << inputs.size()));
     if (table.size() == 1)
       return table.front() ? t : f;
-    assert(!inputs.empty());
-    assert(table.size() % 2 == 0);
 
     size_t half = table.size() / 2;
     Value if1 =
