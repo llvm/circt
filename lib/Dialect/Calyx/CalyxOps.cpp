@@ -35,6 +35,16 @@ using namespace circt;
 using namespace circt::calyx;
 using namespace mlir;
 
+namespace {
+
+// A struct to enforce that the LHS template is one of the RHS templates.
+// For example:
+//   std::is_any<uint32_t, uint16_t, float, int32_t>::value is false.
+template <class T, class... Ts>
+struct is_any : std::disjunction<std::is_same<T, Ts>...> {};
+
+} // namespace
+
 //===----------------------------------------------------------------------===//
 // Utilities related to Direction
 //===----------------------------------------------------------------------===//
@@ -143,7 +153,7 @@ static bool hasControlRegion(Operation *op) {
 static bool isStaticControl(Operation *op) {
   if (isa<EnableOp>(op)) {
     // for enables, we need to check whether its corresponding group is static
-    auto component = op->template getParentOfType<ComponentOp>();
+    auto component = op->getParentOfType<ComponentOp>();
     auto enableOp = llvm::cast<EnableOp>(op);
     StringRef groupName = enableOp.getGroupName();
     auto group = component.getWiresOp().lookupSymbol<GroupInterface>(groupName);
@@ -240,6 +250,15 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   return verifyControlBody(op);
 }
 
+LogicalResult calyx::verifyIf(Operation *op) {
+  auto ifOp = dyn_cast<IfInterface>(op);
+
+  if (ifOp.elseBodyExists() && ifOp.getElseBody()->empty())
+    return ifOp->emitOpError() << "empty 'else' region.";
+
+  return success();
+}
+
 // Helper function for parsing a group port operation, i.e. GroupDoneOp and
 // GroupPortOp. These may take one of two different forms:
 // (1) %<guard> ? %<src> : i1
@@ -273,8 +292,7 @@ static ParseResult parseGroupPort(OpAsmParser &parser, OperationState &result) {
 // A helper function for printing group ports, i.e. GroupGoOp and GroupDoneOp.
 template <typename GroupPortType>
 static void printGroupPort(OpAsmPrinter &p, GroupPortType op) {
-  static_assert(std::is_same<GroupGoOp, GroupPortType>() ||
-                    std::is_same<GroupDoneOp, GroupPortType>(),
+  static_assert(is_any<GroupPortType, GroupGoOp, GroupDoneOp>(),
                 "Should be a Calyx Group port.");
 
   p << " ";
@@ -290,9 +308,7 @@ static void printGroupPort(OpAsmPrinter &p, GroupPortType op) {
 template <typename OpTy>
 static LogicalResult collapseControl(OpTy controlOp,
                                      PatternRewriter &rewriter) {
-  static_assert(std::is_same<SeqOp, OpTy>() || std::is_same<ParOp, OpTy>() ||
-                    std::is_same<StaticSeqOp, OpTy>() ||
-                    std::is_same<StaticParOp, OpTy>(),
+  static_assert(is_any<OpTy, SeqOp, ParOp, StaticSeqOp, StaticParOp>(),
                 "Should be a SeqOp, ParOp, StaticSeqOp, or StaticParOp");
 
   if (isa<OpTy>(controlOp->getParentOp())) {
@@ -322,7 +338,7 @@ static LogicalResult emptyControl(OpTy controlOp, PatternRewriter &rewriter) {
 template <typename OpTy>
 static void eraseControlWithGroupAndConditional(OpTy op,
                                                 PatternRewriter &rewriter) {
-  static_assert(std::is_same<OpTy, IfOp>() || std::is_same<OpTy, WhileOp>(),
+  static_assert(is_any<OpTy, IfOp, WhileOp>(),
                 "This is only applicable to WhileOp and IfOp.");
 
   // Save information about the operation, and erase it.
@@ -2080,17 +2096,13 @@ LogicalResult EnableOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult IfOp::verify() {
-  auto component = (*this)->getParentOfType<ComponentOp>();
-  WiresOp wiresOp = component.getWiresOp();
-
-  if (elseBodyExists() && getElseBody()->empty())
-    return emitError() << "empty 'else' region.";
-
   std::optional<StringRef> optGroupName = getGroupName();
   if (!optGroupName) {
     // No combinational group was provided.
     return success();
   }
+  auto component = (*this)->getParentOfType<ComponentOp>();
+  WiresOp wiresOp = component.getWiresOp();
   StringRef groupName = *optGroupName;
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
   if (!groupOp)
@@ -2115,8 +2127,7 @@ LogicalResult IfOp::verify() {
 /// is present), returns None.
 template <typename OpTy>
 static std::optional<EnableOp> getLastEnableOp(OpTy parent) {
-  static_assert(std::is_same<SeqOp, OpTy>() ||
-                    std::is_same<StaticSeqOp, OpTy>(),
+  static_assert(is_any<OpTy, SeqOp, StaticSeqOp>(),
                 "Should be a StaticSeqOp or SeqOp.");
   auto &lastOp = parent.getBodyBlock()->back();
   if (auto enableOp = dyn_cast<EnableOp>(lastOp))
@@ -2133,8 +2144,7 @@ static std::optional<EnableOp> getLastEnableOp(OpTy parent) {
 /// the immediate ParOp's body.
 template <typename OpTy>
 static llvm::StringMap<EnableOp> getAllEnableOpsInImmediateBody(OpTy parent) {
-  static_assert(std::is_same<ParOp, OpTy>() ||
-                    std::is_same<StaticParOp, OpTy>(),
+  static_assert(is_any<OpTy, ParOp, StaticParOp>(),
                 "Should be a StaticParOp or ParOp.");
 
   llvm::StringMap<EnableOp> enables;
@@ -2154,13 +2164,9 @@ static llvm::StringMap<EnableOp> getAllEnableOpsInImmediateBody(OpTy parent) {
 /// behavior.
 template <typename IfOpTy, typename TailOpTy>
 static bool hasCommonTailPatternPreConditions(IfOpTy op) {
-  static_assert(std::is_same<SeqOp, TailOpTy>() ||
-                    std::is_same<ParOp, TailOpTy>() ||
-                    std::is_same<StaticParOp, TailOpTy>() ||
-                    std::is_same<StaticSeqOp, TailOpTy>(),
-                "Should be a SeqOp or ParOp StaticParOp.");
-  static_assert(std::is_same<IfOp, IfOpTy>() ||
-                    std::is_same<StaticIfOp, IfOpTy>(),
+  static_assert(is_any<TailOpTy, SeqOp, ParOp, StaticSeqOp, StaticParOp>(),
+                "Should be a SeqOp, ParOp, StaticSeqOp, or StaticParOp.");
+  static_assert(is_any<IfOpTy, IfOp, StaticIfOp>(),
                 "Should be a IfOp or StaticIfOp.");
 
   if (!op.thenBodyExists() || !op.elseBodyExists())
@@ -2183,11 +2189,9 @@ static bool hasCommonTailPatternPreConditions(IfOpTy op) {
 template <typename IfOpTy, typename SeqOpTy>
 static LogicalResult commonTailPatternWithSeq(IfOpTy ifOp,
                                               PatternRewriter &rewriter) {
-  static_assert(std::is_same<StaticIfOp, IfOpTy>() ||
-                    std::is_same<IfOp, IfOpTy>(),
+  static_assert(is_any<IfOpTy, IfOp, StaticIfOp>(),
                 "Should be an IfOp or StaticIfOp.");
-  static_assert(std::is_same<StaticSeqOp, SeqOpTy>() ||
-                    std::is_same<SeqOp, SeqOpTy>(),
+  static_assert(is_any<SeqOpTy, SeqOp, StaticSeqOp>(),
                 "Branches should be checking for an SeqOp or StaticSeqOp");
   if (!hasCommonTailPatternPreConditions<IfOpTy, SeqOpTy>(ifOp))
     return failure();
@@ -2235,10 +2239,9 @@ static LogicalResult commonTailPatternWithSeq(IfOpTy ifOp,
 template <typename OpTy, typename ParOpTy>
 static LogicalResult commonTailPatternWithPar(OpTy controlOp,
                                               PatternRewriter &rewriter) {
-  static_assert(std::is_same<StaticIfOp, OpTy>() || std::is_same<IfOp, OpTy>(),
+  static_assert(is_any<OpTy, IfOp, StaticIfOp>(),
                 "Should be an IfOp or StaticIfOp.");
-  static_assert(std::is_same<StaticParOp, ParOpTy>() ||
-                    std::is_same<ParOp, ParOpTy>(),
+  static_assert(is_any<ParOpTy, ParOp, StaticParOp>(),
                 "Branches should be checking for an ParOp or StaticParOp");
   if (!hasCommonTailPatternPreConditions<OpTy, ParOpTy>(controlOp))
     return failure();
@@ -2308,9 +2311,6 @@ void IfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 // StaticIfOp
 //===----------------------------------------------------------------------===//
 LogicalResult StaticIfOp::verify() {
-  if (elseBodyExists() && getElseBody()->empty())
-    return emitError() << "empty 'else' region.";
-
   if (elseBodyExists()) {
     auto *elseBod = getElseBody();
     auto &elseOps = elseBod->getOperations();

@@ -23,7 +23,6 @@
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FormatVariadic.h"
-#include <string>
 
 using namespace circt;
 using namespace calyx;

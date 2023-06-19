@@ -483,9 +483,8 @@ def StaticGroupOp : CalyxOp<"static_group", [
     a "done" port.
 
     ```mlir
-      calyx.static_group @MyStaticGroup {
+      calyx.static_group latency<1> @MyStaticGroup {
         calyx.assign %1 = %2 : i32
-        calyx.group_done %3 : i1
       }
     ```
   }];
@@ -624,6 +623,16 @@ def CycleOp : CalyxOp<"cycle", [
 ]> {
   let summary = "Calyx Static Cycle Op";
   let description = [{
+    Returns an I1 signal that is active `start` cycles after the static 
+    group starts, and inactive all other times. Optional `end` 
+    attribute allows the signal to be active from until `end` cycles
+    after the static group starts. Must be used within a static group.
+
+    ```mlir
+      calyx.static_group latency<2> @MyStaticGroup {
+        %1 = calyx.cycle 1 : i1
+      }
+    ```
   }];
   let arguments = (ins
     I32Attr:$start,

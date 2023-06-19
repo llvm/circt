@@ -42,7 +42,8 @@ def ControlOp : CalyxContainer<"control", [
 }
 
 def IfOp : CalyxContainer<"if", [
-    ControlLike
+    ControlLike,
+    DeclareOpInterfaceMethods<IfOpInterface>
   ]> {
   let summary = "Calyx If";
   let arguments = (ins
@@ -76,36 +77,6 @@ def IfOp : CalyxContainer<"if", [
   let assemblyFormat = "$cond (`with` $groupName^)? $thenRegion (`else` $elseRegion^)? attr-dict";
   let hasVerifier = 1;
   let hasCanonicalizer = true;
-  let extraClassDeclaration = [{
-    /// Checks whether the `then` body exists.
-    bool thenBodyExists() {
-      Region* region = &getOperation()->getRegion(0);
-      if (region == nullptr)
-        return false;
-      return !region->empty();
-    }
-    /// Checks whether the `else` body exists.
-    bool elseBodyExists() {
-      Region* region = &getOperation()->getRegion(1);
-      if (region == nullptr)
-        return false;
-      return !region->empty();
-    }
-    /// Gets the single basic block representing the `then` region.
-    Block *getThenBody() {
-      assert(thenBodyExists() && "Then region does not exist.");
-      Region* region = &getOperation()->getRegion(0);
-      assert(region->hasOneBlock() && "The Then body should have one Block.");
-      return &region->front();
-    }
-    /// Gets the single basic block representing the `else` region.
-    Block *getElseBody() {
-      assert(elseBodyExists() && "Else region does not exist.");
-      Region* region = &getOperation()->getRegion(1);
-      assert(region->hasOneBlock() && "The Else body should have one Block.");
-      return &region->front();
-    }
-  }];
   let skipDefaultBuilders = true;
   let builders = [
     OpBuilder<(ins
@@ -126,7 +97,8 @@ def IfOp : CalyxContainer<"if", [
 }
 
 def StaticIfOp : CalyxContainer<"static_if", [
-    ControlLike
+    ControlLike,
+    DeclareOpInterfaceMethods<IfOpInterface>
   ]> {
   let summary = "Calyx Static If";
   let arguments = (ins
@@ -156,36 +128,36 @@ def StaticIfOp : CalyxContainer<"static_if", [
   let assemblyFormat = "$cond $thenRegion (`else` $elseRegion^)? attr-dict";
   let hasVerifier = 1;
   let hasCanonicalizer = true;
-  let extraClassDeclaration = [{
-    /// Checks whether the `then` body exists.
-    bool thenBodyExists() {
-      Region* region = &getOperation()->getRegion(0);
-      if (region == nullptr)
-        return false;
-      return !region->empty();
-    }
-    /// Checks whether the `else` body exists.
-    bool elseBodyExists() {
-      Region* region = &getOperation()->getRegion(1);
-      if (region == nullptr)
-        return false;
-      return !region->empty();
-    }
-    /// Gets the single basic block representing the `then` region.
-    Block *getThenBody() {
-      assert(thenBodyExists() && "Then region does not exist.");
-      Region* region = &getOperation()->getRegion(0);
-      assert(region->hasOneBlock() && "The Then body should have one Block.");
-      return &region->front();
-    }
-    /// Gets the single basic block representing the `else` region.
-    Block *getElseBody() {
-      assert(elseBodyExists() && "Else region does not exist.");
-      Region* region = &getOperation()->getRegion(1);
-      assert(region->hasOneBlock() && "The Else body should have one Block.");
-      return &region->front();
-    }
-  }];
+  /* let extraClassDeclaration = [{ */
+  /*   /// Checks whether the `then` body exists. */
+  /*   bool thenBodyExists() { */
+  /*     Region* region = &getOperation()->getRegion(0); */
+  /*     if (region == nullptr) */
+  /*       return false; */
+  /*     return !region->empty(); */
+  /*   } */
+  /*   /// Checks whether the `else` body exists. */
+  /*   bool elseBodyExists() { */
+  /*     Region* region = &getOperation()->getRegion(1); */
+  /*     if (region == nullptr) */
+  /*       return false; */
+  /*     return !region->empty(); */
+  /*   } */
+  /*   /// Gets the single basic block representing the `then` region. */
+  /*   Block *getThenBody() { */
+  /*     assert(thenBodyExists() && "Then region does not exist."); */
+  /*     Region* region = &getOperation()->getRegion(0); */
+  /*     assert(region->hasOneBlock() && "The Then body should have one Block."); */
+  /*     return &region->front(); */
+  /*   } */
+  /*   /// Gets the single basic block representing the `else` region. */
+  /*   Block *getElseBody() { */
+  /*     assert(elseBodyExists() && "Else region does not exist."); */
+  /*     Region* region = &getOperation()->getRegion(1); */
+  /*     assert(region->hasOneBlock() && "The Else body should have one Block."); */
+  /*     return &region->front(); */
+  /*   } */
+  /* }]; */
   let skipDefaultBuilders = true;
   let builders = [
     OpBuilder<(ins
@@ -403,6 +375,15 @@ def StaticRepeatOp : CalyxContainer<"static_repeat", [
     I32Attr:$count
   );
   let description = [{
+    The "calyx.static_repeat" operation represents the repeated execution of
+    the control within its region. All control within the region must be static.
+
+    ```mlir
+      calyx.static_repeat 10 {
+        calyx.enable @G1
+        ...
+      }
+    ```
   }];
   let hasVerifier = 1;
   let hasCanonicalizer = true;
@@ -421,4 +402,3 @@ def StaticRepeatOp : CalyxContainer<"static_repeat", [
   ];
 
 }
-
