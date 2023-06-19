@@ -418,6 +418,7 @@ static bool hoistNonSideEffectExpr(Operation *op) {
   // there may be intermediate operands that aren't hoistable.  If so, just
   // hoist one level.
   bool cantHoist = false;
+  bool hoistOneLevel = false;
   if (llvm::any_of(op->getOperands(), [&](Value operand) -> bool {
         // The operand value dominates the original operation, but may be
         // defined in one of the procedural regions between the operation and
@@ -432,14 +433,16 @@ static bool hoistNonSideEffectExpr(Operation *op) {
             cantHoist |= true;
             return true;
           }
-            return false;
+          hoistOneLevel = true;
+          return false;
         }
         Operation *operandOp = operand.getDefiningOp();
 
         if (operandOp->getParentOp()->hasTrait<ProceduralRegion>()) {
           cantHoist |= operandOp->getBlock() == op->getBlock();
-          if(cantHoist)
+          if (cantHoist)
             return true;
+          hoistOneLevel = true;
         }
         return false;
       })) {
@@ -453,6 +456,9 @@ static bool hoistNonSideEffectExpr(Operation *op) {
     // hoist one level out.
     parentOp = op->getParentOp();
   }
+  if(hoistOneLevel)
+    parentOp = op->getParentOp();
+
 
   op->moveBefore(parentOp);
   return true;
