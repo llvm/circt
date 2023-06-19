@@ -42,6 +42,28 @@ void printModuleSignature(OpAsmPrinter &p, Operation *op,
                           ArrayRef<Type> argTypes, bool isVariadic,
                           ArrayRef<Type> resultTypes, bool &needArgNamesAttr);
 
+// Creates index mappings of a modules ports based on the provided arg
+// and result names.
+void updateModuleIndexMappings(OperationState &result,
+                               ArrayRef<Attribute> argNames,
+                               ArrayRef<Attribute> resultNames);
+
+// Refreshes the index mappings of the module's ports based on the current
+// arg and result names.
+LogicalResult updateModuleIndexMappings(Operation *op);
+
+// Verifies that a modules arg and result index maps are consistent with
+// the current arg and result names.
+LogicalResult verifyModuleIdxMap(Operation *mod);
+
+// Returns the index of the module's argument with the given name, using
+// the module's arg index map.
+FailureOr<size_t> getModuleArgIndex(Operation *op, StringRef name);
+
+// Returns the index of the module's result with the given name, using
+// the module's result index map.
+FailureOr<size_t> getModuleResIndex(Operation *op, StringRef name);
+
 } // namespace module_like_impl
 } // namespace hw
 } // namespace circt

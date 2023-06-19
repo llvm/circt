@@ -586,6 +586,7 @@ void hw::setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names) {
   assert(getModuleType(module).getNumInputs() == names.size() &&
          "incorrect number of argument names specified");
   module->setAttr("argNames", ArrayAttr::get(module->getContext(), names));
+  (void)module_like_impl::updateModuleIndexMappings(module);
 }
 
 void hw::setModuleResultNames(Operation *module, ArrayRef<Attribute> names) {
@@ -593,6 +594,7 @@ void hw::setModuleResultNames(Operation *module, ArrayRef<Attribute> names) {
   assert(getModuleType(module).getNumResults() == names.size() &&
          "incorrect number of argument names specified");
   module->setAttr("resultNames", ArrayAttr::get(module->getContext(), names));
+  (void)module_like_impl::updateModuleIndexMappings(module);
 }
 
 LocationAttr hw::getModuleArgumentLocAttr(Operation *module, size_t argNo) {
@@ -693,6 +695,8 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   result.addAttribute("comment", comment);
   result.addAttributes(attributes);
   result.addRegion();
+
+  module_like_impl::updateModuleIndexMappings(result, argNames, resultNames);
 }
 
 /// Internal implementation of argument/result insertion and removal on modules.
@@ -835,6 +839,7 @@ void hw::modifyModulePorts(
   moduleOp->setAttr("resultNames", ArrayAttr::get(context, newResultNames));
   moduleOp.setResAttrsAttr(ArrayAttr::get(context, newResultAttrs));
   moduleOp->setAttr("resultLocs", ArrayAttr::get(context, newResultLocs));
+  (void)module_like_impl::updateModuleIndexMappings(moduleOp);
 }
 
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -1171,8 +1176,16 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   // we represent port names that aren't valid MLIR identifiers.  Result and
   // parameter names are printed quoted when they aren't valid identifiers, so
   // they don't need this affordance.
-  if (!hasAttribute("argNames", result.attributes))
+  auto explicitArgNamesAttr = result.attributes.get("argNames");
+  if (!explicitArgNamesAttr)
     result.addAttribute("argNames", ArrayAttr::get(context, argNames));
+  else {
+    // Store the explicit argNames so we can use them to update the module
+    // index mappings.
+    auto explicitArgNames = explicitArgNamesAttr.cast<ArrayAttr>().getValue();
+    argNames.clear();
+    llvm::append_range(argNames, explicitArgNames);
+  }
   result.addAttribute("argLocs", ArrayAttr::get(context, argLocs));
   result.addAttribute("resultNames", ArrayAttr::get(context, resultNames));
   result.addAttribute("resultLocs", ArrayAttr::get(context, resultLocs));
@@ -1186,6 +1199,8 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   addArgAndResultAttrs(parser.getBuilder(), result, entryArgs, resultAttrs,
                        ModuleTy::getArgAttrsAttrName(result.name),
                        ModuleTy::getResAttrsAttrName(result.name));
+
+  module_like_impl::updateModuleIndexMappings(result, argNames, resultNames);
 
   // Parse the optional function body.
   auto *body = result.addRegion();
@@ -1260,6 +1275,8 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
   omittedAttrs.push_back("resultNames");
   omittedAttrs.push_back("resultLocs");
   omittedAttrs.push_back("parameters");
+  omittedAttrs.push_back("argIdxMap");
+  omittedAttrs.push_back("resultIdxMap");
   omittedAttrs.push_back(visibilityAttrName);
   if (op->getAttrOfType<StringAttr>("comment").getValue().empty())
     omittedAttrs.push_back("comment");
@@ -1342,6 +1359,11 @@ static LogicalResult verifyModuleCommon(Operation *module) {
                                        /*disallowParamRefs=*/true)))
       return failure();
   }
+
+  // Check that the arg/res index mappings are valid.
+  if (failed(module_like_impl::verifyModuleIdxMap(module)))
+    return failure();
+
   return success();
 }
 

@@ -41,7 +41,21 @@ def HWModuleLike : OpInterface<"HWModuleLike"> {
     "size_t", "getNumPorts">,
 
     InterfaceMethod<"Get a port symbol attribute",
-    "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex)>
+    "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex)>,
+
+    InterfaceMethod<"Returns the index of the input port with the specified name",
+    "FailureOr<size_t>", "getArgIndex", (ins "llvm::StringRef":$portName),
+    /*methodBody=*/"",
+    /*defaultImplementation=*/[{
+      return hw::module_like_impl::getModuleArgIndex(this->getOperation(), portName);
+    }]>,
+
+    InterfaceMethod<"Returns the index of the output port with the specified name",
+    "FailureOr<size_t>", "getResIndex", (ins "llvm::StringRef":$portName),
+    /*methodBody=*/"",
+    /*defaultImplementation=*/[{
+      return hw::module_like_impl::getModuleResIndex(this->getOperation(), portName);
+    }]>,
   ];
 
   let verify = [{

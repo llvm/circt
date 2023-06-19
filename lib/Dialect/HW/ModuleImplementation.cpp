@@ -198,3 +198,145 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
     p << ')';
   }
 }
+
+static std::optional<DictionaryAttr> toIdxMap(MLIRContext *ctx,
+                                              ArrayRef<Attribute> names) {
+  DenseSet<StringAttr> seenNames;
+  SmallVector<NamedAttribute> idxMap;
+  for (auto name : llvm::enumerate(names)) {
+    auto nameAttr = name.value().cast<StringAttr>();
+
+    // If the port list has duplicate names, then we cannot create a valid
+    // index mapping.
+    if (!seenNames.insert(nameAttr).second)
+      return std::nullopt;
+
+    // Handle the special case of anonymous ports; these are ports named with
+    // empty strings, which are not legal to be used as NamedAttribute keys.
+    if (!nameAttr.getValue().empty()) {
+      idxMap.push_back(NamedAttribute(
+          nameAttr, IntegerAttr::get(IntegerType::get(ctx, 64), name.index())));
+    }
+  }
+
+  return {DictionaryAttr::get(ctx, idxMap)};
+}
+
+LogicalResult module_like_impl::updateModuleIndexMappings(Operation *mod) {
+  auto argNames = mod->getAttrOfType<ArrayAttr>("argNames");
+  auto resultNames = mod->getAttrOfType<ArrayAttr>("resultNames");
+
+  if (!argNames || !resultNames)
+    return mod->emitOpError("missing argNames or resultNames attribute");
+
+  auto argIdxMap = toIdxMap(mod->getContext(), argNames.getValue());
+  if (argIdxMap.has_value())
+    mod->setAttr("argIdxMap", *argIdxMap);
+  else
+    mod->removeAttr("argIdxMap");
+
+  auto resultIdxMap = toIdxMap(mod->getContext(), resultNames.getValue());
+  if (resultIdxMap.has_value())
+    mod->setAttr("resultIdxMap", *resultIdxMap);
+  else
+    mod->removeAttr("resultIdxMap");
+
+  return success();
+}
+
+void module_like_impl::updateModuleIndexMappings(
+    OperationState &result, ArrayRef<Attribute> argNames,
+    ArrayRef<Attribute> resultNames) {
+
+  auto argIdxMap = toIdxMap(result.getContext(), argNames);
+  if (argIdxMap.has_value())
+    result.addAttribute("argIdxMap", *argIdxMap);
+
+  auto resultIdxMap = toIdxMap(result.getContext(), resultNames);
+  if (resultIdxMap.has_value())
+    result.addAttribute("resultIdxMap", *resultIdxMap);
+}
+
+static LogicalResult verifyIdxMap(Location loc, DictionaryAttr idxMap,
+                                  ArrayAttr names) {
+  size_t nonAnonymousPorts = 0;
+  for (auto name : names)
+    if (!name.cast<StringAttr>().getValue().empty())
+      ++nonAnonymousPorts;
+
+  if (idxMap.size() != nonAnonymousPorts)
+    return emitError(loc) << "incorrect number of entries in index map";
+
+  // Validate that each port name is present in the index map and that each
+  // index is unique.
+  llvm::DenseSet<int64_t> seenIndices;
+  llvm::DenseSet<StringAttr> seenNames;
+
+  for (auto it : idxMap) {
+    auto portName = it.getName();
+    Attribute portIndex = it.getValue().dyn_cast<IntegerAttr>();
+    if (!portIndex)
+      return emitError(loc) << "expected integer attr for port " << portName
+                            << " index in index map";
+
+    if (!seenIndices.insert(portIndex.cast<IntegerAttr>().getInt()).second)
+      return emitError(loc) << "duplicate index " << portIndex << " for port "
+                            << portName << " in index map";
+
+    if (!seenNames.insert(portName).second)
+      return emitError(loc) << "duplicate port " << portName << " in index map";
+  }
+
+  return success();
+}
+
+LogicalResult module_like_impl::verifyModuleIdxMap(Operation *mod) {
+  auto argNames = mod->getAttrOfType<ArrayAttr>("argNames");
+  if (!argNames)
+    return mod->emitOpError("missing argNames attribute");
+  auto argIdxMap = mod->getAttrOfType<DictionaryAttr>("argIdxMap");
+  if (argIdxMap && failed(verifyIdxMap(mod->getLoc(), argIdxMap, argNames)))
+
+    return failure();
+
+  auto resultNames = mod->getAttrOfType<ArrayAttr>("resultNames");
+  if (!resultNames)
+    return mod->emitOpError("missing resultNames attribute");
+  auto resultIdxMap = mod->getAttrOfType<DictionaryAttr>("resultIdxMap");
+  if (resultIdxMap &&
+      failed(verifyIdxMap(mod->getLoc(), resultIdxMap, resultNames)))
+    return failure();
+
+  return success();
+}
+
+static FailureOr<size_t> lookupPortIndexFromMap(Location loc,
+                                                DictionaryAttr idxMap,
+                                                StringRef portName) {
+  auto portIndex = idxMap.getNamed(portName);
+  if (!portIndex)
+    return emitError(loc) << "missing port " << portName << " in index map";
+  return portIndex->getValue().cast<mlir::IntegerAttr>().getInt();
+}
+
+FailureOr<size_t> module_like_impl::getModuleArgIndex(Operation *op,
+                                                      StringRef name) {
+  auto argIdxMap = op->getAttrOfType<DictionaryAttr>("argIdxMap");
+  if (!argIdxMap)
+    return op->emitOpError("missing argIdxMap attribute - either the module "
+                           "was modified without updating the index map, or "
+                           "the module has duplicate port names, in which case "
+                           "the index map is unavailable");
+  return lookupPortIndexFromMap(op->getLoc(), argIdxMap, name);
+}
+
+FailureOr<size_t> module_like_impl::getModuleResIndex(Operation *op,
+                                                      StringRef name) {
+  auto resultIdxMap = op->getAttrOfType<DictionaryAttr>("resultIdxMap");
+  if (!resultIdxMap)
+    return op->emitOpError(
+        "missing resultIdxMap attribute - either the module was modified "
+        "without updating the index map, or the module has duplicate port "
+        "names, in which case the index map is unavailable");
+  return lookupPortIndexFromMap(op->getLoc(), resultIdxMap, name);
+}

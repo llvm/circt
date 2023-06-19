@@ -313,6 +313,7 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
       updateLocAttribute(op, "argLocs", ioInfo.argStructs);
       updateLocAttribute(op, "resultLocs", ioInfo.resStructs);
       updateBlockLocations(op, "argLocs", ioInfo.argStructs);
+      (void)hw::module_like_impl::updateModuleIndexMappings(op);
     }
 
     // Break if we've only lowering a single level of structs.

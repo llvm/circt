@@ -204,9 +204,9 @@ public:
         buildPipelineLike(pipelineName, pipeline.getInputs().getTypes(),
                           pipeline.getResults().getTypes());
     pipelineClk = pipelineMod.getBody().front().getArgument(
-        pipelineMod.getBody().front().getNumArguments() - 2);
+        *cast<hw::HWModuleLike>(*pipelineMod).getArgIndex("clk"));
     pipelineRst = pipelineMod.getBody().front().getArgument(
-        pipelineMod.getBody().front().getNumArguments() - 1);
+        *cast<hw::HWModuleLike>(*pipelineMod).getArgIndex("rst"));
 
     // Instantiate the pipeline in the parent module.
     builder.setInsertionPoint(pipeline);

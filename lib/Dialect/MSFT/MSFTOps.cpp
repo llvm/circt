@@ -96,6 +96,9 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addAttribute(MSFTModuleOp::getResAttrsAttrName(result.name),
                       builder.getArrayAttr(resultAttrs));
   result.addRegion();
+
+  hw::module_like_impl::updateModuleIndexMappings(result, argNames,
+                                                  resultNames);
 }
 
 //===----------------------------------------------------------------------===//
@@ -292,6 +295,9 @@ static ParseResult parseModuleLikeOp(OpAsmParser &parser,
                        MSFTModuleOp::getArgAttrsAttrName(result.name),
                        MSFTModuleOp::getResAttrsAttrName(result.name));
 
+  hw::module_like_impl::updateModuleIndexMappings(result, argNames,
+                                                  resultNames);
+
   // Parse the optional module body.
   auto regionSuccess =
       parser.parseOptionalRegion(*result.addRegion(), entryArgs);
@@ -332,6 +338,8 @@ static void printModuleLikeOp(mlir::FunctionOpInterface moduleLike,
   omittedAttrs.push_back("resultNames");
   omittedAttrs.push_back("resultLocs");
   omittedAttrs.push_back("parameters");
+  omittedAttrs.push_back("argIdxMap");
+  omittedAttrs.push_back("resultIdxMap");
   omittedAttrs.push_back(
       ModuleTy::getFunctionTypeAttrName(moduleLike->getName()));
   omittedAttrs.push_back(ModuleTy::getArgAttrsAttrName(moduleLike->getName()));
@@ -537,6 +545,8 @@ MSFTModuleOp::addPorts(ArrayRef<std::pair<StringAttr, Type>> inputs,
 
   // Finalize and return.
   setType(FunctionType::get(ctxt, modifiedArgs, modifiedResults));
+  (void)hw::module_like_impl::updateModuleIndexMappings(*this);
+
   return newBlockArgs;
 }
 
@@ -605,6 +615,7 @@ SmallVector<unsigned> MSFTModuleOp::removePorts(llvm::BitVector inputs,
     if (inputs.test(argNum))
       body->getArgument(argNum).dropAllUses();
   body->eraseArguments(inputs);
+  (void)hw::module_like_impl::updateModuleIndexMappings(*this);
 
   return newToOldResultMap;
 }
@@ -676,6 +687,10 @@ LogicalResult MSFTModuleOp::verify() {
       return emitOpError(
           "block argument locations should match signature locations");
   }
+
+  // Check that the arg/res index mappings are valid.
+  if (failed(hw::module_like_impl::verifyModuleIdxMap(this->getOperation())))
+    return failure();
 
   return success();
 }
@@ -815,6 +830,9 @@ ParseResult MSFTModuleExternOp::parse(OpAsmParser &parser,
                        MSFTModuleExternOp::getArgAttrsAttrName(result.name),
                        MSFTModuleExternOp::getResAttrsAttrName(result.name));
 
+  hw::module_like_impl::updateModuleIndexMappings(result, argNames,
+                                                  resultNames);
+
   // Extern modules carry an empty region to work with
   // HWModuleImplementation.h.
   result.addRegion();
@@ -849,6 +867,8 @@ void MSFTModuleExternOp::print(OpAsmPrinter &p) {
   omittedAttrs.push_back("resultNames");
   omittedAttrs.push_back("resultLocs");
   omittedAttrs.push_back("parameters");
+  omittedAttrs.push_back("argIdxMap");
+  omittedAttrs.push_back("resultIdxMap");
   omittedAttrs.push_back(getFunctionTypeAttrName());
   omittedAttrs.push_back(getArgAttrsAttrName());
   omittedAttrs.push_back(getResAttrsAttrName());

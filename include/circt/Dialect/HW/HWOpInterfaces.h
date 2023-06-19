@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_HW_HWOPINTERFACES_H
 
 #include "circt/Dialect/HW/InnerSymbolTable.h"
+#include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/SymbolTable.h"
