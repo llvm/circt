@@ -204,8 +204,10 @@ public:
                      hw::HWModuleOp mod) {
       size_t nStageInputArgs = parent.pipeline.getNumStageArguments(block);
       inputs = mod.getArguments().take_front(nStageInputArgs);
-      extInputs = mod.getArguments().slice(
-          nStageInputArgs, parent.getStageExtInputs(block).size());
+      llvm::SmallVector<Value> stageExtInputs;
+      parent.getStageExtInputs(block, stageExtInputs);
+      extInputs =
+          mod.getArguments().slice(nStageInputArgs, stageExtInputs.size());
       clock = mod.getArgument(mod.getNumArguments() - 2);
       reset = mod.getArgument(mod.getNumArguments() - 1);
     }
@@ -241,14 +243,17 @@ public:
     pipelineRst = pipelineMod.getBody().front().getArgument(
         pipelineMod.getBody().front().getNumArguments() - 1);
 
-    // Maintain a mapping between external inputs and their corresponding
-    // block argument in the top-level pipeline.
-    for (auto [extIn, barg] :
-         llvm::zip(pipeline.getInnerExtInputs(),
-                   pipelineMod.getBody().front().getArguments().slice(
-                       pipeline.getInputs().size(),
-                       pipeline.getExtInputs().size()))) {
-      toplevelExtInputs[extIn] = barg;
+    if (pipeline.getExtInputs().size() != 0) {
+      // Maintain a mapping between external inputs and their corresponding
+      // block argument in the top-level pipeline.
+      auto modInnerExtInputs =
+          pipelineMod.getBody().front().getArguments().slice(
+              pipeline.getExtInputs().getBeginOperandIndex(),
+              pipeline.getExtInputs().size());
+      for (auto [extIn, barg] :
+           llvm::zip(pipeline.getInnerExtInputs(), modInnerExtInputs)) {
+        toplevelExtInputs[extIn] = barg;
+      }
     }
 
     // Instantiate the pipeline in the parent module.
@@ -300,8 +305,10 @@ public:
 
       // Remap external inputs to the stage to the external inputs in the
       // module block arguments.
+      llvm::SmallVector<Value> stageExtInputs;
+      getStageExtInputs(stage, stageExtInputs);
       for (auto [vExtInput, vExtBarg] :
-           llvm::zip(getStageExtInputs(stage), pipelineStageMod.extInputs)) {
+           llvm::zip(stageExtInputs, pipelineStageMod.extInputs)) {
         vExtInput.replaceUsesWithIf(vExtBarg, [&](OpOperand &operand) {
           return operand.getOwner()->getBlock() == stage;
         });
@@ -322,11 +329,10 @@ public:
 
       // Remap external inputs with the top-level pipeline module external
       // inputs.
+      auto modInnerExtInputs = pipelineMod.getArguments().slice(
+          pipeline.getInputs().size(), pipeline.getExtInputs().size());
       for (auto [extIn, topLevelBarg] :
-           llvm::zip(pipeline.getInnerExtInputs(),
-                     pipelineMod.getArguments().slice(
-                         pipeline.getInputs().size(),
-                         pipeline.getExtInputs().size()))) {
+           llvm::zip(pipeline.getInnerExtInputs(), modInnerExtInputs)) {
         extIn.replaceAllUsesWith(topLevelBarg);
       }
 
@@ -433,7 +439,8 @@ private:
     else
       llvm::append_range(outputTypes, pipeline.getResultTypes());
 
-    auto stageExtInputs = getStageExtInputs(stage);
+    llvm::SmallVector<Value> stageExtInputs;
+    getStageExtInputs(stage, stageExtInputs);
     hw::HWModuleOp mod =
         buildPipelineLike(name, pipeline.getStageArguments(stage).getTypes(),
                           ValueRange(stageExtInputs).getTypes(), outputTypes);
@@ -479,10 +486,8 @@ private:
   // Wrapper around stageExtInputs which returns a llvm::SmallVector<Value>,
   // which in turn can be used to get a ValueRange (and by extension,
   // TypeRange).
-  llvm::SmallVector<Value> getStageExtInputs(Block *stage) {
-    llvm::SmallVector<Value> extInputs;
+  void getStageExtInputs(Block *stage, llvm::SmallVector<Value> &extInputs) {
     llvm::append_range(extInputs, stageExtInputs[stage]);
-    return extInputs;
   }
 };
 

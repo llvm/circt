@@ -165,9 +165,9 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
       if(stage != getEntryStage())
         return stage->getArguments();
 
-      // The entry block defines a lot of SSA values...
-      // drop everything but the 'input's to the stage
-      return stage->getArguments().take_front(getInputs().size());
+      // The entry stage block mirrors the input argument order of the pipeline.
+      // Grab the arguments corresponding to the inputs.
+      return stage->getArguments().slice(getInputs().getBeginOperandIndex(), getInputs().size());
     }
 
     size_t getNumStageArguments(Block* stage) {
