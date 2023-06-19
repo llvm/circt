@@ -25,10 +25,7 @@ namespace comb {
 namespace {
 /// Lower truth tables to mux trees.
 struct TruthTableToMuxTree : public OpConversionPattern<TruthTableOp> {
-  TruthTableToMuxTree(MLIRContext *ctxt, bool assignToWire,
-                      uint64_t &symCounter)
-      : OpConversionPattern(ctxt), assignToWire(assignToWire),
-        symCounter(symCounter) {}
+  using OpConversionPattern::OpConversionPattern;
 
 private:
   /// Get a mux tree for `inputs` corresponding to the given truth table. Do
@@ -61,23 +58,10 @@ public:
     Value f = b.create<hw::ConstantOp>(loc, b.getIntegerAttr(b.getI1Type(), 0));
 
     Value tree = getMux(loc, b, t, f, table, op.getInputs());
-    if (assignToWire) {
-      std::string sym;
-      llvm::raw_string_ostream(sym) << "__truth_table_mux_" << symCounter++;
-
-      auto namehint = op->getAttrOfType<StringAttr>("sv.namehint");
-      tree = b.create<hw::WireOp>(
-          loc, tree, (namehint ? namehint : (StringRef) ""), (StringRef)sym);
-    }
     tree.getDefiningOp()->setDialectAttrs(op->getDialectAttrs());
     b.replaceOp(op, tree);
     return success();
   }
-
-private:
-  bool assignToWire;
-  // Counter for wire symbols.
-  mutable uint64_t symCounter;
 };
 } // namespace
 
@@ -98,9 +82,7 @@ void LowerCombPass::runOnOperation() {
   target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
   target.addIllegalOp<TruthTableOp>();
 
-  uint64_t symCounter = 0;
-  patterns.add<TruthTableToMuxTree>(patterns.getContext(), assignToWire,
-                                    symCounter);
+  patterns.add<TruthTableToMuxTree>(patterns.getContext());
 
   if (failed(applyPartialConversion(module, target, std::move(patterns))))
     return signalPassFailure();

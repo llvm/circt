@@ -16,13 +16,6 @@ def LowerComb : Pass<"lower-comb", "mlir::ModuleOp"> {
   let description = [{
     Lowers truth tables.
   }];
-
-  let options = [
-    Option<"assignToWire", "assign-to-wire", "bool", "false",
-      "Assign each lowered op to a wire">,
-  ];
-
-  let dependentDialects = ["circt::hw::HWDialect"];
 }
 
 #endif // CIRCT_DIALECT_COMB_PASSES_TD
