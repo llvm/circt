@@ -407,7 +407,9 @@ static bool hoistNonSideEffectExpr(Operation *op) {
   // Never hoist "always inline" expressions except for inout stuffs - they will
   // never generate a temporary and in fact must always be emitted inline.
   if (isExpressionAlwaysInline(op) &&
-      !(isa<sv::ReadInOutOp>(op) ||
+      !((isa<sv::ReadInOutOp>(op) &&
+      /*HACK*/
+         !cast<sv::ReadInOutOp>(op).getInput().getDefiningOp<sv::LogicOp>()) ||
         op->getResult(0).getType().isa<hw::InOutType>()))
     return false;
 
@@ -456,9 +458,8 @@ static bool hoistNonSideEffectExpr(Operation *op) {
     // hoist one level out.
     parentOp = op->getParentOp();
   }
-  if(hoistOneLevel)
+  if (hoistOneLevel)
     parentOp = op->getParentOp();
-
 
   op->moveBefore(parentOp);
   return true;
@@ -989,8 +990,10 @@ static LogicalResult legalizeHWModule(Block &block,
             continue;
           } else {
             lowerUsersToTemporaryWire(op);
-            if (isProceduralRegion)
+            if (isProceduralRegion) {
+              opIterator = op.getIterator();
               continue;
+            }
           }
         } else {
           // If `disallowLocalVariables` is not enabled, we can spill the

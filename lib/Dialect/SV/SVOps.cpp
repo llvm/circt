@@ -1124,14 +1124,67 @@ LogicalResult ForOp::canonicalize(ForOp op, PatternRewriter &rewriter) {
   APInt lb, ub, step;
   if (matchPattern(op.getLowerBound(), mlir::m_ConstantInt(&lb)) &&
       matchPattern(op.getUpperBound(), mlir::m_ConstantInt(&ub)) &&
-      matchPattern(op.getStep(), mlir::m_ConstantInt(&step)) &&
-      lb + step == ub) {
-    // Unroll the loop if it's executed only once.
-    op.getInductionVar().replaceAllUsesWith(op.getLowerBound());
-    replaceOpWithRegion(rewriter, op, op.getBodyRegion());
-    rewriter.eraseOp(op);
-    return success();
+      matchPattern(op.getStep(), mlir::m_ConstantInt(&step))) {
+    if (lb + step == ub) {
+      // Unroll the loop if it's executed only once.
+      op.getInductionVar().replaceAllUsesWith(op.getLowerBound());
+      replaceOpWithRegion(rewriter, op, op.getBodyRegion());
+      rewriter.eraseOp(op);
+      return success();
+    }
+    if (lb == 0 && step == 1) {
+      auto replaceUser = [&](hw::ArrayGetOp arrayGet, Value ind) {
+        if (arrayGet.getType() != ind.getType())
+          return false;
+
+        auto array =
+            arrayGet.getInput().getDefiningOp<hw::AggregateConstantOp>();
+        if (!array)
+          return false;
+
+        auto arrayAttr = array.getFields().getValue();
+        // Offset.
+        for (auto [idx, val] : llvm::enumerate(llvm::reverse(arrayAttr))) {
+          if (idx + arrayAttr.back().cast<IntegerAttr>().getValue() !=
+              val.cast<IntegerAttr>().getValue()) {
+            return false;
+          }
+        }
+        auto foo = rewriter.create<hw::ConstantOp>(
+            op.getLoc(), arrayAttr.back().cast<IntegerAttr>().getValue());
+        assert(foo);
+        SmallVector<Value> ops{ind, foo};
+        rewriter.setInsertionPoint(arrayGet);
+        // Value val = rewriter.create<comb::AddOp>(arrayGet.getLoc(), ops,
+        // true); arrayGet.replaceAllUsesWith(val);
+        rewriter.replaceOpWithNewOp<comb::AddOp>(arrayGet, ops, true);
+        return true;
+      };
+      bool changed = false;
+      for (auto user :
+           llvm::make_early_inc_range(op.getInductionVar().getUsers())) {
+        if (auto arrayGet =
+                dyn_cast<hw::ArrayGetOp>(user))
+          if (replaceUser(arrayGet,  op.getInductionVar())) {
+            continue;
+            changed = true;
+          }
+        if (auto extract = dyn_cast<comb::ExtractOp>(user)) {
+          if (extract.getLowBit() != 0)
+            continue;
+          for (auto user2 :
+               llvm::make_early_inc_range(extract.getInput().getUsers())) {
+            if (auto arrayGet = dyn_cast<hw::ArrayGetOp>(user2))
+              if (replaceUser(arrayGet, extract))
+                changed = true;
+          }
+        }
+      }
+      if (changed)
+        return success();
+    }
   }
+
   return failure();
 }
 

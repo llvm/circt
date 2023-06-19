@@ -884,13 +884,38 @@ void FirRegLower::tryRestoringForLoop(
 
         builder.setInsertionPointToStart(block);
         if (!iterValue.getType().isInteger(llvm::Log2_64_Ceil(loopLength))) {
-        iterValue = builder.create<comb::ExtractOp>(
-            loc, iterValue, 0, llvm::Log2_64_Ceil(loopLength));
+          iterValue = builder.create<comb::ExtractOp>(
+              loc, iterValue, 0, llvm::Log2_64_Ceil(loopLength));
         }
-         lhs =
-            builder.create<sv::ArrayIndexInOutOp>(reg.getLoc(), reg, iterValue);
-         termElement =
-            builder.create<hw::ArrayGetOp>(term.getLoc(), term, iterValue);
+        auto globalIterValue = iterValue;
+        SmallVector<Value> operands;
+        for (int i = end - 1; i + 1  != start ; --i)
+          operands.push_back(
+              getOrCreateConstant(reg.getLoc(), APInt(arrayIndexWidth, i)));
+        // Pad
+        // if (arrayIndexWidth != llvm::Log2_64_Ceil(loopLength)) {
+        //   globalIterValue = builder.create<comb::ConcatOp>(
+        //       reg.getLoc(),
+        //       ArrayRef<Value>{
+        //           getOrCreateConstant(
+        //               reg.getLoc(),
+        //               APInt::getZero(arrayIndexWidth -
+        //                              llvm::Log2_64_Ceil(loopLength))),
+        //           globalIterValue});
+        // }
+        // if (start != 0) {
+        //   globalIterValue = builder.create<comb::AddOp>(reg.getLoc(),
+        //
+        //   );
+
+        // }
+        Value v = builder.create<hw::ArrayCreateOp>(term.getLoc(), operands);
+        v = builder.create<hw::ArrayGetOp>(term.getLoc(), v, iterValue);
+        termElement =
+            builder.create<hw::ArrayGetOp>(term.getLoc(), term, v);
+
+        lhs =
+            builder.create<sv::ArrayIndexInOutOp>(reg.getLoc(), reg, v);
       }
 
       for (auto [value, operands] : llvm::make_early_inc_range(dummyValues)) {
