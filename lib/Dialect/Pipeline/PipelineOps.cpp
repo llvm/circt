@@ -114,12 +114,6 @@ void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   auto *region = odsState.addRegion();
   odsState.addTypes(results);
 
-  odsState.addAttribute(
-      "operand_segment_sizes",
-      odsBuilder.getDenseI32ArrayAttr(
-          {static_cast<int32_t>(inputs.size()), static_cast<int32_t>(1),
-           static_cast<int32_t>(1), static_cast<int32_t>(stall ? 1 : 0)}));
-
   // Add the entry stage
   auto &entryBlock = region->emplaceBlock();
   llvm::SmallVector<Location> entryArgLocs(inputs.size(), odsState.location);
