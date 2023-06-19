@@ -859,6 +859,7 @@ void FirRegLower::tryRestoringForLoop(
       }
     }
     // Create a loop [start, end).
+    // FIXME: looplength must be end
     unsigned loopLength = end - start;
     auto lb = getOrCreateConstant(reg.getLoc(),
                                   APInt(llvm::Log2_64_Ceil(loopLength + 1), 0));
