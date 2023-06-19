@@ -225,20 +225,25 @@ private:
 };
 } // namespace
 
-sv::ForOp FirRegLower::addToForBlock(OpBuilder &builder, Value lb, Value ub,
-                                     Value c, sv::ForOp old) {
+void FirRegLower::addToForBlock(
+    OpBuilder &builder, Value lb, Value ub, Value c,
+    const std::function<void(BlockArgument)> &body) {
 
   ForKeyType key{builder.getBlock(), lb, ub, c};
   auto op = forCache.lookup(key);
   if (!op) {
-    forCache.insert({key, old});
-    return old;
+    auto newForOp =
+        builder.create<sv::ForOp>(lb.getLoc(), lb, ub, c, "i", body);
+    // PR ONLY: Remove
+    circt::sv::setSVAttributes(
+        newForOp, sv::SVAttributeAttr::get(builder.getContext(), "SV_FOR_LOOP",
+                                           /*emitAsComment=*/true));
+    forCache.insert({key, newForOp});
   } else {
     auto &b = op.getBody().front();
-    b.getOperations().splice(b.begin(), old.getBody().front().getOperations());
-    old.getBody().front().getArgument(0).replaceAllUsesWith(b.getArgument(0));
-    old.erase();
-    return op;
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToEnd(op.getBodyBlock());
+    body(b.getArgument(0));
   }
 }
 
@@ -572,15 +577,18 @@ static bool isSimpleExpression(Value v) {
   // Ports or iteration values are ok.
   if (!op)
     return true;
+  if (isa<comb::ExtractOp>(op) && isSimpleExpression(op->getOperand(0)))
+    return true;
   // Constants, output ports are ok.
   return isa<hw::ConstantOp, hw::InstanceOp>(op);
 }
 
 // TODO: Make this iterative.
-static Value unifyTwoValues(OpBuilder &builder, Value value, unsigned index,
-                            Value next, Value inductionVariable,
-                            unsigned &upperLimitTermSize, unsigned size,
-                            llvm::SmallDenseSet<Value, 4> &dummyValue) {
+static Value
+unifyTwoValues(OpBuilder &builder, Value value, unsigned index, Value next,
+               Value inductionVariable, unsigned &upperLimitTermSize,
+               unsigned size,
+               llvm::MapVector<Value, SmallVector<Value, 4>> &dummyValue) {
   //    //  operands == neq, then check if only difference is constant
   //    comparison
   //   if(val1==val2) return val1;
@@ -608,13 +616,21 @@ static Value unifyTwoValues(OpBuilder &builder, Value value, unsigned index,
 
   // Base case. Check constantOp.
   if (isSimpleExpression(value) && isSimpleExpression(next)) {
-    SmallVector<Value> ops(size, next);
-    assert(size >= 2);
-    ops.back() = value;
-    auto dummy = builder.create<hw::ArrayCreateOp>(value.getLoc(), ops);
-    auto v = builder.create<hw::ArrayGetOp>(value.getLoc(), dummy,
-                                          inductionVariable);
-    dummyValue.insert(v);
+    // SmallVector<Value> ops(size, next);
+    // assert(size >= 2);
+    // ops[size - 1 - index] = value;
+    // auto dummy = builder.create<hw::ArrayCreateOp>(value.getLoc(), ops);
+    // auto v = builder.create<hw::ArrayGetOp>(value.getLoc(), dummy,
+    //                                         inductionVariable);
+    // OpBuilder::InsertionGuard guard(builder);
+    // builder.setInsertionPointAfterValue(reg);
+
+    auto v = builder
+                 .create<mlir::UnrealizedConversionCastOp>(
+                     value.getLoc(), ArrayRef<Type>{value.getType()},
+                     ArrayRef<Value>{})
+                 .getResult(0);
+    dummyValue[v] = SmallVector<Value>{value, next};
     return v;
   }
 
@@ -682,9 +698,9 @@ static Value unifyTwoValues(OpBuilder &builder, Value value, unsigned index,
 }
 
 // FIXME: Make this recursive.
-static bool unifyIntoTemplate(Value templateValue, Value value, unsigned index,
-                              Value inductionVariable,
-                              llvm::SmallDenseSet<Value, 4> &dummyValues) {
+static bool unifyIntoTemplate(
+    Value templateValue, Value value, unsigned index, Value inductionVariable,
+    llvm::MapVector<Value, llvm::SmallVector<Value, 4>> &dummyValues) {
   //    //  operands == neq, then check if only difference is constant
   //    comparison
   //   if(val1==val2) return val1;
@@ -710,13 +726,16 @@ static bool unifyIntoTemplate(Value templateValue, Value value, unsigned index,
   if (dummyValues.count(templateValue)) {
     if (isSimpleExpression(value)) {
       // Ok!
-      auto array = templateValue.getDefiningOp<hw::ArrayGetOp>();
-      array.getInput().getDefiningOp()->setOperand(
-          array.getInput().getType().cast<hw::ArrayType>().getSize() - index -
-              1,
-          value);
+      dummyValues[templateValue].push_back(value);
+      // auto array = templateValue.getDefiningOp<hw::ArrayGetOp>();
+      // array.getInput().getDefiningOp()->setOperand(
+      //     array.getInput().getType().cast<hw::ArrayType>().getSize() - index
+      //     -
+      //         1,
+      //     value);
       return true;
     }
+    return false;
   }
   // if (templateValue == inductionVariable) {
   //   if (matchPattern(value, mlir::m_ConstantInt(&valueInt)) &&
@@ -770,40 +789,53 @@ void FirRegLower::tryRestoringForLoop(
   if (size <= 1)
     return fn(0);
   unsigned start = 0;
-  llvm::SmallDenseSet<Value, 4> dummyValues;
 
   mlir::Type inductionVarType =
       builder.getIntegerType(llvm::Log2_64_Ceil(size + 1));
 
-  while (start < size - 1) {
+  while (start < size) {
+    if (start == size - 1) {
+      fn(start);
+      break;
+    }
     // llvm::errs() << "Start!"
     //              << " " << start << " " << size << arrayGet << "\n";
 
+    llvm::MapVector<Value, llvm::SmallVector<Value, 4>> dummyValues;
     Value value = arrayGet.getOperand(size - 1 - start);
     unsigned nextIndex = start + 1;
     Value next = arrayGet.getOperand(size - 1 - nextIndex);
     auto loc = reg.getLoc();
     auto arrayIndexWidth = llvm::Log2_64_Ceil(size);
-    auto lb = getOrCreateConstant(reg.getLoc(),
-                                  APInt(llvm::Log2_64_Ceil(size + 1), start));
-    Value templateVal;
     Value inductionVariable;
 
     SmallVector<Operation *> opsToEraseIfFail;
-    auto forLoop = builder.create<sv::ForOp>(
-        reg.getLoc(), lb, lb, lb, "i", [&](BlockArgument b) {
-          inductionVariable = b;
-          if (!inductionVariable.getType().isInteger(arrayIndexWidth))
-            inductionVariable =
-                builder.create<comb::ExtractOp>(loc, b, 0, arrayIndexWidth);
-
+    unsigned upper = 8196;
+    Value templateVal; /*=
+        unifyTwoValues(builder, value, start, next, inductionVariable, upper,
+                       size, dummyValues);*/
+    // HACK:
+    auto sandbox =
+        builder.create<sv::IfDefProceduralOp>(reg.getLoc(), "HACK", [&]() {
           unsigned upper = 8196 * 16;
           templateVal =
               unifyTwoValues(builder, value, start, next, inductionVariable,
                              upper, size, dummyValues);
-          if (!templateVal)
-            return;
         });
+    // auto forLoop = builder.create<sv::ForOp>(
+    //     reg.getLoc(), lb, lb, lb, "i", [&](BlockArgument b) {
+    //       inductionVariable = b;
+    //       if (!inductionVariable.getType().isInteger(arrayIndexWidth))
+    //         inductionVariable =
+    //             builder.create<comb::ExtractOp>(loc, b, 0, arrayIndexWidth);
+
+    //       unsigned upper = 8196 * 16;
+    //       templateVal =
+    //           unifyTwoValues(builder, value, start, next, inductionVariable,
+    //                          upper, size, dummyValues);
+    //       if (!templateVal)
+    //         return;
+    //     });
     // Value inductionVariable =
     //     builder
     //         .create<mlir::UnrealizedConversionCastOp>(
@@ -812,8 +844,8 @@ void FirRegLower::tryRestoringForLoop(
     //         ->getResult(0);
     if (!templateVal) {
       // LowerIndex.
-      fn(size - 1 - start++);
-      forLoop.erase();
+      fn(start++);
+      sandbox.erase();
       continue;
     }
 
@@ -827,35 +859,80 @@ void FirRegLower::tryRestoringForLoop(
       }
     }
     // Create a loop [start, end).
-    auto ub = getOrCreateConstant(reg.getLoc(),
-                                  APInt(llvm::Log2_64_Ceil(size + 1), end));
+    unsigned loopLength = end - start;
+    auto lb = getOrCreateConstant(reg.getLoc(),
+                                  APInt(llvm::Log2_64_Ceil(loopLength + 1), 0));
+
+    auto ub = getOrCreateConstant(
+        reg.getLoc(), APInt(llvm::Log2_64_Ceil(loopLength + 1), loopLength));
 
     auto c = getOrCreateConstant(reg.getLoc(),
-                                 APInt(llvm::Log2_64_Ceil(size + 1), 1));
-    forLoop.setOperand(1, ub);
-    forLoop.setOperand(2, c);
+                                 APInt(llvm::Log2_64_Ceil(loopLength + 1), 1));
+    // forLoop.setOperand(1, ub);
+    // forLoop.setOperand(2, c);
 
-    forLoop = addToForBlock(builder, lb, ub, c, forLoop);
-    OpBuilder::InsertionGuard guard(builder);
-    builder.setInsertionPointToStart(&forLoop.getBody().front());
+    addToForBlock(builder, lb, ub, c, [&](BlockArgument arg) {
+      Value iterValue = arg;
+      auto *block = builder.getBlock();
+      // Insert all operations in the sandbox
+      block->getOperations().splice(block->begin(),
+                                    sandbox.getThenBlock()->getOperations());
+      Value lhs, termElement;
+      {
 
-    Value iterValue = builder.getBlock()->getArgument(0);
+        OpBuilder::InsertionGuard guard(builder);
 
-    if (!iterValue.getType().isInteger(arrayIndexWidth))
-      iterValue =
-          builder.create<comb::ExtractOp>(loc, iterValue, 0, arrayIndexWidth);
-    Value lhs =
-        builder.create<sv::ArrayIndexInOutOp>(reg.getLoc(), reg, iterValue);
-    Value termElement =
-        builder.create<hw::ArrayGetOp>(term.getLoc(), term, iterValue);
-    opsToErase.push_back(termElement);
-    addToWorklist(lhs, termElement, templateVal);
+        builder.setInsertionPointToStart(block);
+        if (!iterValue.getType().isInteger(llvm::Log2_64_Ceil(loopLength))) {
+        iterValue = builder.create<comb::ExtractOp>(
+            loc, iterValue, 0, llvm::Log2_64_Ceil(loopLength));
+        }
+         lhs =
+            builder.create<sv::ArrayIndexInOutOp>(reg.getLoc(), reg, iterValue);
+         termElement =
+            builder.create<hw::ArrayGetOp>(term.getLoc(), term, iterValue);
+      }
+
+      for (auto [value, operands] : llvm::make_early_inc_range(dummyValues)) {
+        assert(operands.size() >= loopLength);
+        // It's possible that the size is differnt;
+        operands.resize(loopLength);
+        // Make sure to reverse.
+        std::reverse(operands.begin(), operands.end());
+
+        builder.setInsertionPointAfterValue(value);
+        auto arrayCreate = builder.create<hw::ArrayCreateOp>(loc, operands);
+        auto arrayGet =
+            builder.create<hw::ArrayGetOp>(loc, arrayCreate, iterValue);
+        if (templateVal == value)
+          templateVal = arrayGet;
+        value.replaceAllUsesWith(arrayGet);
+        value.getDefiningOp()->erase();
+      }
+
+      // Erase sandbox.
+      sandbox.erase();
+      opsToErase.push_back(termElement);
+      addToWorklist(lhs, termElement, templateVal);
+    });
+
+    // OpBuilder::InsertionGuard guard(builder);
+    // builder.setInsertionPointToStart(&forLoop.getBody().front());
+
+    // Value iterValue = builder.getBlock()->getArgument(0);
+
+    // if (!iterValue.getType().isInteger(arrayIndexWidth))
+    //   iterValue =
+    //       builder.create<comb::ExtractOp>(loc, iterValue, 0,
+    //       arrayIndexWidth);
+    // Value lhs =
+    //     builder.create<sv::ArrayIndexInOutOp>(reg.getLoc(), reg, iterValue);
+    // Value termElement =
+    //     builder.create<hw::ArrayGetOp>(term.getLoc(), term, iterValue);
+    // opsToErase.push_back(termElement);
+    // addToWorklist(lhs, termElement, templateVal);
 
     numForLoopRestored++;
-    // PR ONLY: Remove
-    circt::sv::setSVAttributes(
-        forLoop, sv::SVAttributeAttr::get(builder.getContext(), "SV_FOR_LOOP",
-                                          /*emitAsComment=*/true));
 
     // llvm::errs() << "Restored!"
     //              << " " << start << " " << size << " " << end << arrayGet

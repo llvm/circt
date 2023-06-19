@@ -428,15 +428,18 @@ static bool hoistNonSideEffectExpr(Operation *op) {
           // References to ports are always ok.
           if (isa<hw::HWModuleOp>(block.getParentBlock()->getParentOp()))
             return false;
-
-          cantHoist = true;
-          return true;
+          if (block.getParentBlock() == op->getBlock()) {
+            cantHoist |= true;
+            return true;
+          }
+            return false;
         }
         Operation *operandOp = operand.getDefiningOp();
 
         if (operandOp->getParentOp()->hasTrait<ProceduralRegion>()) {
           cantHoist |= operandOp->getBlock() == op->getBlock();
-          return true;
+          if(cantHoist)
+            return true;
         }
         return false;
       })) {
