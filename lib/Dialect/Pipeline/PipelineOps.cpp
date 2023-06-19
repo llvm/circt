@@ -25,7 +25,6 @@ using namespace circt::pipeline;
 
 #define DEBUG_TYPE "pipeline-ops"
 
-// NOLINTNEXTLINE(misc-no-recursion)
 Block *circt::pipeline::getParentStageInPipeline(ScheduledPipelineOp pipeline,
                                                  Block *block) {
   // Optional debug check - ensure that 'block' eventually leads to the
@@ -39,14 +38,13 @@ Block *circt::pipeline::getParentStageInPipeline(ScheduledPipelineOp pipeline,
     }
   });
 
-  if (block->getParent() == &pipeline.getRegion()) {
-    // This is a block within the pipeline region, so it must be a stage.
-    return block;
+  while (block && block->getParent() != &pipeline.getRegion()) {
+    // Go one level up.
+    block = block->getParent()->getParentOp()->getBlock();
   }
 
-  // Recurse by going one level up.
-  Block *parentBlock = block->getParent()->getParentOp()->getBlock();
-  return getParentStageInPipeline(pipeline, parentBlock);
+  // This is a block within the pipeline region, so it must be a stage.
+  return block;
 }
 
 Block *circt::pipeline::getParentStageInPipeline(ScheduledPipelineOp pipeline,
@@ -124,7 +122,7 @@ Block *ScheduledPipelineOp::addStage() {
 }
 
 // Implementation of getOrderedStages which also produces an error if
-// there are any cycles in the pipeline.
+// there are any cfg cycles in the pipeline.
 static FailureOr<llvm::SmallVector<Block *>>
 getOrderedStagesFailable(ScheduledPipelineOp op) {
   llvm::DenseSet<Block *> visited;
