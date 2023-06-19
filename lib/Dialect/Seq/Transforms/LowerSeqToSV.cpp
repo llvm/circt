@@ -567,10 +567,20 @@ static bool isSafeToInspect(Operation *op) {
   return isa<hw::HWDialect, comb::CombDialect>(op->getDialect());
 }
 
+static bool isSimpleExpression(Value v) {
+  auto *op = v.getDefiningOp();
+  // Ports or iteration values are ok.
+  if (!op)
+    return true;
+  // Constants, output ports are ok.
+  return isa<hw::ConstantOp, hw::InstanceOp>(op);
+}
+
 // TODO: Make this iterative.
 static Value unifyTwoValues(OpBuilder &builder, Value value, unsigned index,
                             Value next, Value inductionVariable,
-                            unsigned &upperLimitTermSize) {
+                            unsigned &upperLimitTermSize, unsigned size,
+                            llvm::SmallDenseSet<Value, 4> &dummyValue) {
   //    //  operands == neq, then check if only difference is constant
   //    comparison
   //   if(val1==val2) return val1;
@@ -585,16 +595,28 @@ static Value unifyTwoValues(OpBuilder &builder, Value value, unsigned index,
   //
   if (value == next)
     return value;
-  if (upperLimitTermSize == 0)
+  if (upperLimitTermSize == 0 || value.getType() != next.getType())
     return {};
   --upperLimitTermSize;
   auto valueOp = value.getDefiningOp();
   auto nextOp = next.getDefiningOp();
   auto debug = [&]() {
-    llvm::errs() << "\nerror ";
-    value.dump();
-    next.dump();
+    // llvm::errs() << "\nerror ";
+    // value.dump();
+    // next.dump();
   };
+
+  // Base case. Check constantOp.
+  if (isSimpleExpression(value) && isSimpleExpression(next)) {
+    SmallVector<Value> ops(size, next);
+    assert(size >= 2);
+    ops.back() = value;
+    auto dummy = builder.create<hw::ArrayCreateOp>(value.getLoc(), ops);
+    auto v = builder.create<hw::ArrayGetOp>(value.getLoc(), dummy,
+                                          inductionVariable);
+    dummyValue.insert(v);
+    return v;
+  }
 
   // Make sure that we have the same structure. Attributes are checked
   // afterwards. Also allow only comb and hw operations for correctness.
@@ -606,36 +628,35 @@ static Value unifyTwoValues(OpBuilder &builder, Value value, unsigned index,
     return {};
 
   APInt valueInt, nextInt;
-  // Base case. Check constantOp.
-  if (matchPattern(value, mlir::m_ConstantInt(&valueInt)))
-    if (matchPattern(next, mlir::m_ConstantInt(&nextInt))) {
-      if (valueInt == nextInt)
-        return value;
-      if (valueInt == index && nextInt == index + 1) {
-        // TODO: pad/trunc
-        if (value.getType() == inductionVariable.getType())
-          return inductionVariable;
-        if (inductionVariable.getType().isInteger(
-                cast<IntegerType>(value.getType()).getIntOrFloatBitWidth() +
-                1)) {
-          return builder.create<comb::ExtractOp>(
-              inductionVariable.getLoc(), inductionVariable, 0,
-              cast<IntegerType>(value.getType()).getIntOrFloatBitWidth());
-          // value.dump();
-          // inductionVariable.dump();
-          // llvm::errs() << "\n";
-        }
-      }
-      // debug();
-      return {};
-    }
+  // if (matchPattern(value, mlir::m_ConstantInt(&valueInt)))
+  //   if (matchPattern(next, mlir::m_ConstantInt(&nextInt))) {
+  //     if (valueInt == nextInt)
+  //       return value;
+  //     if (valueInt == index && nextInt == index + 1) {
+  //       // TODO: pad/trunc
+  //       if (value.getType() == inductionVariable.getType())
+  //         return inductionVariable;
+  //       if (inductionVariable.getType().isInteger(
+  //               cast<IntegerType>(value.getType()).getIntOrFloatBitWidth() +
+  //               1)) {
+  //         return builder.create<comb::ExtractOp>(
+  //             inductionVariable.getLoc(), inductionVariable, 0,
+  //             cast<IntegerType>(value.getType()).getIntOrFloatBitWidth());
+  //         // value.dump();
+  //         // inductionVariable.dump();
+  //         // llvm::errs() << "\n";
+  //       }
+  //     }
+  //     // debug();
+  //     return {};
+  //   }
   SmallVector<Value> newOperands;
   bool changed = false;
   // Check operands.
   for (auto [lhs, rhs] :
        llvm::zip(valueOp->getOperands(), nextOp->getOperands())) {
     auto operand = unifyTwoValues(builder, lhs, index, rhs, inductionVariable,
-                                  upperLimitTermSize);
+                                  upperLimitTermSize, size, dummyValue);
     if (!operand)
       return {};
     newOperands.push_back(operand);
@@ -662,7 +683,8 @@ static Value unifyTwoValues(OpBuilder &builder, Value value, unsigned index,
 
 // FIXME: Make this recursive.
 static bool unifyIntoTemplate(Value templateValue, Value value, unsigned index,
-                              Value inductionVariable) {
+                              Value inductionVariable,
+                              llvm::SmallDenseSet<Value, 4> &dummyValues) {
   //    //  operands == neq, then check if only difference is constant
   //    comparison
   //   if(val1==val2) return val1;
@@ -679,28 +701,39 @@ static bool unifyIntoTemplate(Value templateValue, Value value, unsigned index,
   if (templateValue == value)
     return true;
   auto debug = [&]() {
-    llvm::errs() << "\nerror ";
-    value.dump();
-    templateValue.dump();
+    // llvm::errs() << "\nerror ";
+    // value.dump();
+    // templateValue.dump();
   };
-  APInt valueInt;
+  // APInt valueInt;
   // Base Case.
-  if (templateValue == inductionVariable) {
-    if (matchPattern(value, mlir::m_ConstantInt(&valueInt)) &&
-        valueInt == index)
+  if (dummyValues.count(templateValue)) {
+    if (isSimpleExpression(value)) {
+      // Ok!
+      auto array = templateValue.getDefiningOp<hw::ArrayGetOp>();
+      array.getInput().getDefiningOp()->setOperand(
+          array.getInput().getType().cast<hw::ArrayType>().getSize() - index -
+              1,
+          value);
       return true;
-    debug();
-    return false;
+    }
   }
-  if (auto extract = templateValue.getDefiningOp<comb::ExtractOp>();
-      extract && extract.getInput() == inductionVariable &&
-      extract.getLowBit() == 0) {
-    if (matchPattern(value, mlir::m_ConstantInt(&valueInt)) &&
-        valueInt == index)
-      return true;
-    debug();
-    return false;
-  }
+  // if (templateValue == inductionVariable) {
+  //   if (matchPattern(value, mlir::m_ConstantInt(&valueInt)) &&
+  //       valueInt == index)
+  //     return true;
+  //   debug();
+  //   return false;
+  // }
+  // if (auto extract = templateValue.getDefiningOp<comb::ExtractOp>();
+  //     extract && extract.getInput() == inductionVariable &&
+  //     extract.getLowBit() == 0) {
+  //   if (matchPattern(value, mlir::m_ConstantInt(&valueInt)) &&
+  //       valueInt == index)
+  //     return true;
+  //   debug();
+  //   return false;
+  // }
 
   auto valueOp = templateValue.getDefiningOp();
   auto nextOp = value.getDefiningOp();
@@ -715,7 +748,7 @@ static bool unifyIntoTemplate(Value templateValue, Value value, unsigned index,
 
   for (auto [lhs, rhs] :
        llvm::zip(valueOp->getOperands(), nextOp->getOperands()))
-    if (!unifyIntoTemplate(lhs, rhs, index, inductionVariable))
+    if (!unifyIntoTemplate(lhs, rhs, index, inductionVariable, dummyValues))
       return false;
 
   // Inspect attributes.
@@ -737,6 +770,7 @@ void FirRegLower::tryRestoringForLoop(
   if (size <= 1)
     return fn(0);
   unsigned start = 0;
+  llvm::SmallDenseSet<Value, 4> dummyValues;
 
   mlir::Type inductionVarType =
       builder.getIntegerType(llvm::Log2_64_Ceil(size + 1));
@@ -754,13 +788,19 @@ void FirRegLower::tryRestoringForLoop(
                                   APInt(llvm::Log2_64_Ceil(size + 1), start));
     Value templateVal;
     Value inductionVariable;
+
     SmallVector<Operation *> opsToEraseIfFail;
     auto forLoop = builder.create<sv::ForOp>(
         reg.getLoc(), lb, lb, lb, "i", [&](BlockArgument b) {
           inductionVariable = b;
-          unsigned upper = 8196 * 4;
-          templateVal = unifyTwoValues(builder, value, start, next,
-                                       inductionVariable, upper);
+          if (!inductionVariable.getType().isInteger(arrayIndexWidth))
+            inductionVariable =
+                builder.create<comb::ExtractOp>(loc, b, 0, arrayIndexWidth);
+
+          unsigned upper = 8196 * 16;
+          templateVal =
+              unifyTwoValues(builder, value, start, next, inductionVariable,
+                             upper, size, dummyValues);
           if (!templateVal)
             return;
         });
@@ -782,7 +822,7 @@ void FirRegLower::tryRestoringForLoop(
     unsigned end = start + 2;
     for (; end < size; end++) {
       if (!unifyIntoTemplate(templateVal, arrayGet.getOperand(size - 1 - end),
-                             end, inductionVariable)) {
+                             end, inductionVariable, dummyValues)) {
         break;
       }
     }
@@ -804,7 +844,8 @@ void FirRegLower::tryRestoringForLoop(
     if (!iterValue.getType().isInteger(arrayIndexWidth))
       iterValue =
           builder.create<comb::ExtractOp>(loc, iterValue, 0, arrayIndexWidth);
-    Value lhs = builder.create<sv::ArrayIndexInOutOp>(reg.getLoc(), reg, iterValue);
+    Value lhs =
+        builder.create<sv::ArrayIndexInOutOp>(reg.getLoc(), reg, iterValue);
     Value termElement =
         builder.create<hw::ArrayGetOp>(term.getLoc(), term, iterValue);
     opsToErase.push_back(termElement);
