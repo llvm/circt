@@ -41,7 +41,7 @@ namespace {
 // For example:
 //   std::is_any<uint32_t, uint16_t, float, int32_t>::value is false.
 template <class T, class... Ts>
-struct is_any : std::disjunction<std::is_same<T, Ts>...> {};
+struct IsAny : std::disjunction<std::is_same<T, Ts>...> {};
 
 } // namespace
 
@@ -292,7 +292,7 @@ static ParseResult parseGroupPort(OpAsmParser &parser, OperationState &result) {
 // A helper function for printing group ports, i.e. GroupGoOp and GroupDoneOp.
 template <typename GroupPortType>
 static void printGroupPort(OpAsmPrinter &p, GroupPortType op) {
-  static_assert(is_any<GroupPortType, GroupGoOp, GroupDoneOp>(),
+  static_assert(IsAny<GroupPortType, GroupGoOp, GroupDoneOp>(),
                 "Should be a Calyx Group port.");
 
   p << " ";
@@ -308,7 +308,7 @@ static void printGroupPort(OpAsmPrinter &p, GroupPortType op) {
 template <typename OpTy>
 static LogicalResult collapseControl(OpTy controlOp,
                                      PatternRewriter &rewriter) {
-  static_assert(is_any<OpTy, SeqOp, ParOp, StaticSeqOp, StaticParOp>(),
+  static_assert(IsAny<OpTy, SeqOp, ParOp, StaticSeqOp, StaticParOp>(),
                 "Should be a SeqOp, ParOp, StaticSeqOp, or StaticParOp");
 
   if (isa<OpTy>(controlOp->getParentOp())) {
@@ -338,7 +338,7 @@ static LogicalResult emptyControl(OpTy controlOp, PatternRewriter &rewriter) {
 template <typename OpTy>
 static void eraseControlWithGroupAndConditional(OpTy op,
                                                 PatternRewriter &rewriter) {
-  static_assert(is_any<OpTy, IfOp, WhileOp>(),
+  static_assert(IsAny<OpTy, IfOp, WhileOp>(),
                 "This is only applicable to WhileOp and IfOp.");
 
   // Save information about the operation, and erase it.
@@ -2127,7 +2127,7 @@ LogicalResult IfOp::verify() {
 /// is present), returns None.
 template <typename OpTy>
 static std::optional<EnableOp> getLastEnableOp(OpTy parent) {
-  static_assert(is_any<OpTy, SeqOp, StaticSeqOp>(),
+  static_assert(IsAny<OpTy, SeqOp, StaticSeqOp>(),
                 "Should be a StaticSeqOp or SeqOp.");
   auto &lastOp = parent.getBodyBlock()->back();
   if (auto enableOp = dyn_cast<EnableOp>(lastOp))
@@ -2144,7 +2144,7 @@ static std::optional<EnableOp> getLastEnableOp(OpTy parent) {
 /// the immediate ParOp's body.
 template <typename OpTy>
 static llvm::StringMap<EnableOp> getAllEnableOpsInImmediateBody(OpTy parent) {
-  static_assert(is_any<OpTy, ParOp, StaticParOp>(),
+  static_assert(IsAny<OpTy, ParOp, StaticParOp>(),
                 "Should be a StaticParOp or ParOp.");
 
   llvm::StringMap<EnableOp> enables;
@@ -2164,9 +2164,9 @@ static llvm::StringMap<EnableOp> getAllEnableOpsInImmediateBody(OpTy parent) {
 /// behavior.
 template <typename IfOpTy, typename TailOpTy>
 static bool hasCommonTailPatternPreConditions(IfOpTy op) {
-  static_assert(is_any<TailOpTy, SeqOp, ParOp, StaticSeqOp, StaticParOp>(),
+  static_assert(IsAny<TailOpTy, SeqOp, ParOp, StaticSeqOp, StaticParOp>(),
                 "Should be a SeqOp, ParOp, StaticSeqOp, or StaticParOp.");
-  static_assert(is_any<IfOpTy, IfOp, StaticIfOp>(),
+  static_assert(IsAny<IfOpTy, IfOp, StaticIfOp>(),
                 "Should be a IfOp or StaticIfOp.");
 
   if (!op.thenBodyExists() || !op.elseBodyExists())
@@ -2189,9 +2189,9 @@ static bool hasCommonTailPatternPreConditions(IfOpTy op) {
 template <typename IfOpTy, typename SeqOpTy>
 static LogicalResult commonTailPatternWithSeq(IfOpTy ifOp,
                                               PatternRewriter &rewriter) {
-  static_assert(is_any<IfOpTy, IfOp, StaticIfOp>(),
+  static_assert(IsAny<IfOpTy, IfOp, StaticIfOp>(),
                 "Should be an IfOp or StaticIfOp.");
-  static_assert(is_any<SeqOpTy, SeqOp, StaticSeqOp>(),
+  static_assert(IsAny<SeqOpTy, SeqOp, StaticSeqOp>(),
                 "Branches should be checking for an SeqOp or StaticSeqOp");
   if (!hasCommonTailPatternPreConditions<IfOpTy, SeqOpTy>(ifOp))
     return failure();
@@ -2239,9 +2239,9 @@ static LogicalResult commonTailPatternWithSeq(IfOpTy ifOp,
 template <typename OpTy, typename ParOpTy>
 static LogicalResult commonTailPatternWithPar(OpTy controlOp,
                                               PatternRewriter &rewriter) {
-  static_assert(is_any<OpTy, IfOp, StaticIfOp>(),
+  static_assert(IsAny<OpTy, IfOp, StaticIfOp>(),
                 "Should be an IfOp or StaticIfOp.");
-  static_assert(is_any<ParOpTy, ParOp, StaticParOp>(),
+  static_assert(IsAny<ParOpTy, ParOp, StaticParOp>(),
                 "Branches should be checking for an ParOp or StaticParOp");
   if (!hasCommonTailPatternPreConditions<OpTy, ParOpTy>(controlOp))
     return failure();
