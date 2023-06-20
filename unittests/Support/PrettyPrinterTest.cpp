@@ -10,6 +10,7 @@
 #include "circt/Support/PrettyPrinterHelpers.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "gtest/gtest.h"
@@ -132,7 +133,8 @@ protected:
   void print(SmallVectorImpl<Token> &tokens, size_t margin) {
     out = "\n";
     raw_svector_ostream os(out);
-    PrettyPrinter pp(os, margin);
+    llvm::formatted_raw_ostream rs(os);
+    PrettyPrinter pp(rs, margin);
     pp.addTokens(tokens);
     pp.eof();
   }
@@ -314,8 +316,9 @@ wahoo(int a, int b, int a1, int b1, int a2, int b2, int a3, int b3, yahooooooo(i
 TEST(PrettyPrinterTest, TrailingSpace) {
   SmallString<128> out;
   raw_svector_ostream os(out);
+  llvm::formatted_raw_ostream rs(os);
 
-  PrettyPrinter pp(os, 20);
+  PrettyPrinter pp(rs, 20);
   SmallVector<Token> tokens = {BeginToken(2),
                                StringToken("test"),
                                BreakToken(),
@@ -331,7 +334,8 @@ TEST(PrettyPrinterTest, Builder) {
   SmallString<128> out;
   raw_svector_ostream os(out);
 
-  PrettyPrinter pp(os, 7);
+  llvm::formatted_raw_ostream rs(os);
+  PrettyPrinter pp(rs, 7);
   TokenBuilder<> b(pp);
   {
     b.ibox();
@@ -349,7 +353,8 @@ TEST(PrettyPrinterTest, Stream) {
   SmallString<128> out;
   raw_svector_ostream os(out);
 
-  PrettyPrinter pp(os, 20);
+  llvm::formatted_raw_ostream rs(os);
+  PrettyPrinter pp(rs, 20);
   TokenStringSaver saver;
   TokenStream<> ps(pp, saver);
   ps.scopedBox(PP::ibox0, [&]() {
@@ -363,7 +368,8 @@ TEST(PrettyPrinterTest, StreamQuoted) {
   SmallString<128> out;
   raw_svector_ostream os(out);
 
-  PrettyPrinter pp(os, 20);
+  llvm::formatted_raw_ostream rs(os);
+  PrettyPrinter pp(rs, 20);
   TokenStringSaver saver;
   TokenStream<> ps(pp, saver);
   ps.writeQuotedEscaped("quote\"me", false, "'", "'");
@@ -371,7 +377,8 @@ TEST(PrettyPrinterTest, StreamQuoted) {
 }
 
 TEST(PrettyPrinterTest, LargeStream) {
-  PrettyPrinter pp(llvm::nulls(), 20);
+  llvm::formatted_raw_ostream rs(llvm::nulls());
+  PrettyPrinter pp(rs, 20);
   TokenStringSaver saver;
   TokenStream<> ps(pp, saver);
 
@@ -380,7 +387,8 @@ TEST(PrettyPrinterTest, LargeStream) {
 }
 
 TEST(PrettyPrinterTest, LargeStreamScan) {
-  PrettyPrinter pp(llvm::nulls(), 20);
+  llvm::formatted_raw_ostream rs(llvm::nulls());
+  PrettyPrinter pp(rs, 20);
   TokenStringSaver saver;
   TokenStream<> ps(pp, saver);
 
@@ -397,7 +405,8 @@ TEST(PrettyPrinterTest, IndentStyle) {
   raw_svector_ostream os(out);
 
   auto test = [&](auto margin, auto style) {
-    PrettyPrinter pp(os, margin);
+    llvm::formatted_raw_ostream rs(os);
+    PrettyPrinter pp(rs, margin);
     TokenStringSaver saver;
     TokenStream<> ps(pp, saver);
     out = "\n";
@@ -447,7 +456,8 @@ TEST(PrettyPrinterTest, FuncArgsBlock) {
   raw_svector_ostream os(out);
 
   auto test = [&](auto margin) {
-    PrettyPrinter pp(os, margin);
+    llvm::formatted_raw_ostream rs(os);
+    PrettyPrinter pp(rs, margin);
     TokenStringSaver saver;
     TokenStream<> ps(pp, saver);
     out = "\n";
@@ -491,7 +501,8 @@ TEST(PrettyPrinterTest, FuncArgsVisual) {
   raw_svector_ostream os(out);
 
   auto test = [&](auto margin) {
-    PrettyPrinter pp(os, margin);
+    llvm::formatted_raw_ostream rs(os);
+    PrettyPrinter pp(rs, margin);
     TokenStringSaver saver;
     TokenStream<> ps(pp, saver);
     out = "\n";
@@ -542,7 +553,8 @@ TEST(PrettyPrinterTest, Expr) {
   };
 
   auto test = [&](const char *id, auto margin) {
-    PrettyPrinter pp(os, margin);
+    llvm::formatted_raw_ostream rs(os);
+    PrettyPrinter pp(rs, margin);
     TokenStringSaver saver;
     TokenStream<> ps(pp, saver);
     out = "\n";
@@ -608,7 +620,8 @@ TEST(PrettyPrinterTest, InitWithBaseAndCurrentIndent) {
     out = "\n";
     for (int i = 0; populate && i < current; ++i)
       os << ">";
-    PrettyPrinter pp(os, 35, base, current);
+    llvm::formatted_raw_ostream rs(os);
+    PrettyPrinter pp(rs, 35, base, current);
     if (group)
       pp.add(BeginToken(2));
     pp.addTokens(tokens);
@@ -670,7 +683,8 @@ TEST(PrettyPrinterTest, NeverBreak) {
 
   auto test = [&](auto neverbreak) {
     out = "\n";
-    PrettyPrinter pp(os, 8);
+    llvm::formatted_raw_ostream rs(os);
+    PrettyPrinter pp(rs, 8);
     pp.add(BeginToken(2));
     pp.add(StringToken("test"));
     pp.add(BreakToken(1, 0, neverbreak));
@@ -702,7 +716,8 @@ TEST(PrettyPrinterTest, NeverBreakGroup) {
 
   auto test = [&](Breaks breaks1, Breaks breaks2) {
     out = "\n";
-    PrettyPrinter pp(os, 8);
+    llvm::formatted_raw_ostream rs(os);
+    PrettyPrinter pp(rs, 8);
     pp.add(BeginToken(2, breaks1));
     pp.add(StringToken("test"));
     pp.add(BreakToken());
@@ -774,12 +789,13 @@ TEST(PrettyPrinterTest, MaxStartingIndent) {
     pp.add(EndToken());
     pp.add(BreakToken(PrettyPrinter::kInfinity));
   };
+  llvm::formatted_raw_ostream rs(os);
   auto testDefault = [&]() {
-    PrettyPrinter pp(os, 4);
+    PrettyPrinter pp(rs, 4);
     test(pp);
   };
   auto testValue = [&](auto maxStartingIndent) {
-    PrettyPrinter pp(os, 4, 0, 0, maxStartingIndent);
+    PrettyPrinter pp(rs, 4, 0, 0, maxStartingIndent);
     test(pp);
   };
 
@@ -839,7 +855,8 @@ protected:
                    unsigned margin = 10) {
     out.clear();
     compare.clear();
-    PrettyPrinter pp(ppOS, margin);
+    llvm::formatted_raw_ostream rs(ppOS);
+    PrettyPrinter pp(rs, margin);
     TokenStream<> ps(pp, saver);
 
     std::invoke(test, ps, os);
