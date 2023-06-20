@@ -18,6 +18,7 @@
 #include "circt/Dialect/FSM/FSMGraph.h"
 #include "circt/Dialect/FSM/FSMOps.h"
 #include "circt/Support/Namespace.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
@@ -274,10 +275,7 @@ class CompileInvoke {
 public:
   CompileInvoke(ComponentOp &component, OpBuilder &builder)
       : component(component), builder(builder) {}
-  void compile() {
-    checkWiresOp();
-    visitInvokeOps(component.getControlOp().getBodyBlock());
-  }
+  void compile() { visitInvokeOps(component.getControlOp().getBodyBlock()); }
 
 private:
   void checkWiresOp();
@@ -285,6 +283,7 @@ private:
   void lowerInvokeOp(InvokeOp &invokeOp);
   ComponentOp &component;
   OpBuilder &builder;
+  hw::ConstantOp constantOp;
   size_t label = 0;
 };
 
@@ -297,9 +296,12 @@ void CompileInvoke::checkWiresOp() {
     ControlOp ctrlOp = component.getControlOp();
     Operation *preNode = ctrlOp.getOperation()->getPrevNode();
     builder.setInsertionPointAfter(preNode);
-    Location loc = preNode->getLoc();
-    builder.create<WiresOp>(loc);
+    builder.create<WiresOp>(preNode->getLoc());
   }
+  Operation *prevNode = component.getWiresOp().getOperation()->getPrevNode();
+  builder.setInsertionPointAfter(prevNode);
+  constantOp = builder.create<hw::ConstantOp>(prevNode->getLoc(),
+                                              builder.getI1Type(), 1);
 }
 
 // Access all nodes on the AST to convert each invoke operation.
@@ -332,31 +334,22 @@ void CompileInvoke::visitInvokeOps(Block *block) {
 
 // Convert an invoke operation to a group operation and an enable operation.
 void CompileInvoke::lowerInvokeOp(InvokeOp &invokeOp) {
+  if (!label)
+    checkWiresOp();
+
+  Location loc = component.getWiresOp().getLoc();
   builder.setInsertionPointToEnd(component.getWiresOp().getBodyBlock());
-  // Build calyx.build.
-  GroupOp groupOp = builder.create<GroupOp>(component.getWiresOp().getLoc(),
-                                            "invoke_" + std::to_string(label));
+  GroupOp groupOp =
+      builder.create<GroupOp>(loc, "invoke_" + std::to_string(label));
   builder.setInsertionPointToStart(groupOp.getBodyBlock());
+  Value go = invokeOp.getInstGoValue();
+  builder.create<AssignOp>(loc, go, constantOp);
   auto ports = invokeOp.getPorts();
   auto inputs = invokeOp.getInputs();
   for (size_t i = 0; i != ports.size(); i++)
-    builder.create<AssignOp>(component.getWiresOp().getLoc(), ports[i],
-                             inputs[i]);
-  calyx::InstanceOp instanceOp =
-      component.lookupSymbol<calyx::InstanceOp>(invokeOp.getCallee());
-  ComponentInterface refComp = instanceOp.getReferencedComponent();
-  size_t doneIdx = 0;
-  auto portAttrs = refComp.getPortInfo();
-  for (PortInfo &portAttr : portAttrs) {
-    if (!portAttr.attributes.empty()) {
-      if (portAttr.attributes.begin()->getName().str() == "done")
-        break;
-    }
-    doneIdx++;
-  }
-
-  Value done = instanceOp.getResult(doneIdx);
-  builder.create<calyx::GroupDoneOp>(invokeOp.getLoc(), done);
+    builder.create<AssignOp>(loc, ports[i], inputs[i]);
+  Value done = invokeOp.getInstDoneValue();
+  builder.create<calyx::GroupDoneOp>(loc, done);
   builder.setInsertionPointAfter(invokeOp.getOperation());
   builder.create<EnableOp>(invokeOp.getLoc(),
                            "invoke_" + std::to_string(label++));

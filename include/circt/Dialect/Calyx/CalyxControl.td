@@ -270,4 +270,8 @@ def InvokeOp : CalyxOp<"invoke", [
   let results = (outs);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
+  let extraClassDeclaration = [{
+    Value getInstGoValue();
+    Value getInstDoneValue();
+  }];
 }

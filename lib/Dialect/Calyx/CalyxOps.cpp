@@ -1258,7 +1258,8 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
 /// Determines whether the given direction is valid with the given inputs. The
 /// `isDestination` boolean is used to distinguish whether the value is a source
 /// or a destination.
-static LogicalResult verifyPortDirection(AssignOp op, Value value,
+template <typename T>
+static LogicalResult verifyPortDirection(T op, Value value,
                                          bool isDestination) {
   Operation *definingOp = value.getDefiningOp();
   bool isComponentPort = value.isa<BlockArgument>(),
@@ -2254,16 +2255,114 @@ void InvokeOp::print(OpAsmPrinter &p) {
   p << ")";
 }
 
+static LogicalResult verifyInvokeOpValue(InvokeOp op, Value value,
+                                         bool isDestination) {
+  bool isSource = !isDestination;
+  if (isPort(value))
+    return verifyPortDirection(op, value, isDestination);
+
+  if (isSource) {
+    // Refer to the above function verifyNotComplexSource for its role.
+    Operation *operation = value.getDefiningOp();
+    if (operation == nullptr)
+      return success();
+    if (auto dialect = operation->getDialect(); isa<comb::CombDialect>(dialect))
+      return op->emitOpError("has source that is not a port or constant. "
+                             "Complex logic should be conducted in the guard.");
+  }
+  return success();
+}
+
+// Get the value of the Go port within an instance.
+Value InvokeOp::getInstGoValue() {
+  ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
+  Operation *operation = componentOp.lookupSymbol(getCallee());
+  // Get the value of the writer_en port.
+  if (isa<RegisterOp>(operation))
+    return operation->getResult(1);
+  else if (isa<MemoryOp, DivSPipeLibOp, DivUPipeLibOp, MultPipeLibOp,
+               RemSPipeLibOp, RemUPipeLibOp>(operation)) {
+    // Get the value of the writer_en port or go port.
+    return operation->getResult(2);
+  } else if (isa<InstanceOp>(operation)) {
+    // Get the go port of the instance.
+    InstanceOp instanceOp = cast<InstanceOp>(operation);
+    auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
+    for (size_t i = 0; i != portInfo.size(); i++) {
+      if (portInfo[i].hasAttribute("go"))
+        return operation->getResult(i);
+    }
+  }
+  return nullptr;
+}
+
+Value InvokeOp::getInstDoneValue() {
+  ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
+  Operation *operation = componentOp.lookupSymbol(getCallee());
+  if (isa<RegisterOp, MemoryOp, DivSPipeLibOp, DivUPipeLibOp, MultPipeLibOp,
+          RemSPipeLibOp, RemUPipeLibOp>(operation)) {
+    size_t doneIdx = operation->getResults().size() - 1;
+    return operation->getResult(doneIdx);
+  } else if (isa<InstanceOp>(operation)) {
+    InstanceOp instanceOp = cast<InstanceOp>(operation);
+    auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
+    for (size_t i = 0; i != portInfo.size(); i++) {
+      if (portInfo[i].hasAttribute("done"))
+        return operation->getResult(i);
+    }
+  }
+  return nullptr;
+}
+
 LogicalResult InvokeOp::verify() {
   ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
   StringRef callee = getCallee();
-  InstanceOp instanceOp = componentOp.lookupSymbol<InstanceOp>(callee);
-  if (!instanceOp)
+  Operation *operation = componentOp.lookupSymbol(callee);
+  if (!operation)
     return emitOpError() << "with instance '" << callee
                          << "', which does not exist.";
+  if (isa<PrimitiveOp>(operation))
+    return emitOpError() << "with instance '" << callee
+                         << "', which is instantiated by '"
+                         << PrimitiveOp::getOperationName() << "'.";
   if (getInputs().empty())
     return emitOpError() << "the input for '" << getOperationName()
                          << "' is empty.";
+  size_t goPortNum = 0, donePortNum = 0;
+  if (isa<RegisterOp, DivSPipeLibOp, DivUPipeLibOp, MemoryOp, MultPipeLibOp,
+          RemSPipeLibOp, RemUPipeLibOp>(operation))
+    goPortNum = 1, donePortNum = 1;
+  else if (InstanceOp instanceOp = dyn_cast<calyx::InstanceOp>(operation)) {
+    auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
+    for (auto info : portInfo) {
+      if (info.hasAttribute("go"))
+        goPortNum++;
+      if (info.hasAttribute("done"))
+        donePortNum++;
+    }
+  }
+
+  if (goPortNum != 1 && donePortNum != 1)
+    return emitOpError() << callee << " used by '" << getOperationName()
+                         << "' must have a go port and a done port, the '"
+                         << callee << "' has " << goPortNum << " go port and "
+                         << donePortNum << " done port.";
+
+  auto ports = getPorts();
+  auto inputs = getInputs();
+  Value value = getInstGoValue();
+  // Check the direction of these ports.
+  for (Value port : ports) {
+    if (failed(verifyInvokeOpValue(*this, port, true)))
+      return failure();
+    if (port == value)
+      return emitOpError() << "the go port of '" << callee
+                           << "' cannot appear here.";
+  }
+
+  for (Value input : inputs)
+    if (failed(verifyInvokeOpValue(*this, input, false)))
+      return failure();
   return success();
 }
 

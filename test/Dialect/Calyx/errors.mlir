@@ -1050,3 +1050,26 @@ module attributes {calyx.entrypoint = "main"} {
     }
   }
 }
+
+// -----
+
+module attributes {calyx.entrypoint = "main"} {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    calyx.control {
+      // expected-error @+1 {{'calyx.invoke' op with instance 'comp', which does not exist.}}
+      calyx.invoke@comp() -> ()
+    }
+  }
+}
+
+// ----- 
+
+module attributes {calyx.entrypoint = "main"} {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i32, i1, i1, i1, i32, i1
+    calyx.control {
+      // expected-error @+1 {{'calyx.invoke' op the input for 'calyx.invoke' is empty.}}
+      calyx.invoke@r() -> ()
+    }
+  }
+}
