@@ -134,7 +134,7 @@ void testEvaluator(MlirContext ctx) {
   mlirAttributeDump(fooValue);
 }
 
-int main() {
+int main(void) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleRegisterDialect(mlirGetDialectHandle__om__(), ctx);
   testEvaluator(ctx);

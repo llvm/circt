@@ -21,6 +21,7 @@ target_link_libraries(circt-opt
   CIRCTCombTransforms
   CIRCTConvertToArcs
   CIRCTDC
+  CIRCTDCToHW
   CIRCTDCTransforms
   CIRCTESI
   CIRCTExportChiselInterface

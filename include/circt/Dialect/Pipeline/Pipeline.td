@@ -54,14 +54,15 @@ def UnscheduledPipelineOp : Op<Pipeline_Dialect, "unscheduled", [
   }];
 
   let arguments = (ins
-    Variadic<AnyType>:$inputs, I1:$clock, I1:$reset, Optional<I1>:$stall
+    Variadic<AnyType>:$inputs, Variadic<AnyType>:$extInputs,  I1:$clock, I1:$reset, Optional<I1>:$stall
   );
   let results = (outs Variadic<AnyType>:$results);
   let regions = (region SizedRegion<1>: $body);
   let hasVerifier = 1;
 
   let assemblyFormat = [{
-    `(` $inputs `)` (`stall` $stall^)? `clock` $clock `reset` $reset attr-dict `:` functional-type($inputs, results) $body
+    `(` $inputs `)` (`stall` $stall^)? (`ext` `(` $extInputs^ `:` type($extInputs) `)`)? 
+      `clock` $clock `reset` $reset attr-dict `:`functional-type($inputs, results) $body
   }];
 
   let extraClassDeclaration = [{
@@ -98,34 +99,26 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
   }];
 
   let arguments = (ins
-    Variadic<AnyType>:$inputs, I1:$clock, I1:$reset, Optional<I1>:$stall
+    Variadic<AnyType>:$inputs, Variadic<AnyType>:$extInputs,  I1:$clock, I1:$reset, Optional<I1>:$stall
   );
   let results = (outs Variadic<AnyType>:$results);
   let regions = (region AnyRegion:$body);
-  let skipDefaultBuilders = 1;
   let hasVerifier = 1;
+  let skipDefaultBuilders = 1;
 
   let builders = [
-    OpBuilder<(ins
-      "TypeRange":$results, "ValueRange":$inputs, "Value":$clock, "Value":$reset, CArg<"Value", "{}">:$stall)>
+    OpBuilder<(ins "TypeRange":$results, "ValueRange":$inputs, "ValueRange":$extInputs,
+      "Value":$clock, "Value":$reset, CArg<"Value", "{}">:$stall)>
   ];
 
   let assemblyFormat = [{
-    `(` $inputs `)` (`stall` $stall^)? `clock` $clock `reset` $reset attr-dict `:` functional-type($inputs, results) $body
+    `(` $inputs `)` (`stall` $stall^)? (`ext` `(` $extInputs^ `:` type($extInputs) `)`)? 
+      `clock` $clock `reset` $reset attr-dict `:`functional-type($inputs, results) $body
   }];
 
   let extraClassDeclaration = [{
     static mlir::RegionKind getRegionKind(unsigned index) {
       return mlir::RegionKind::SSACFG;
-    }
-
-    // Returns the internal inputs of this pipeline.
-    FailureOr<ValueRange> getInnerInputs() {
-      auto* firstStage = getStage(0);
-      if(!firstStage)
-        return emitOpError() << "Pipeline has no stages";
-      
-      return {firstStage->getArguments()};
     }
 
     // Returns all of the stages in this pipeline.
@@ -166,6 +159,22 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
     // This enables certain invariants such as "all values used within a stage
     // must be defined within a stage".
     bool isMaterialized();
+
+    // Returns the arguments for a stage.
+    ValueRange getStageArguments(Block* stage) {
+      if(stage != getEntryStage())
+        return stage->getArguments();
+
+      // The entry stage block mirrors the input argument order of the pipeline.
+      // Grab the arguments corresponding to the inputs.
+      return stage->getArguments().slice(getInputs().getBeginOperandIndex(), getInputs().size());
+    }
+
+    size_t getNumStageArguments(Block* stage) {
+      if(stage != getEntryStage())
+        return stage->getNumArguments();
+      return getInputs().size();
+    }
   }];
 }
 

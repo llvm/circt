@@ -12,9 +12,13 @@
 include "mlir/Pass/PassBase.td"
 
 def LowerComb : Pass<"lower-comb", "mlir::ModuleOp"> {
-  let summary = "Lowers some comb ops";
+  let summary = "Lowers the some of the comb ops";
   let description = [{
-    Lowers truth tables.
+    Some operations in the comb dialect (e.g. `comb.truth_table`) are not
+    directly supported by ExportVerilog. They need to be lowered into ops which
+    are supported. There are many ways to lower these ops so we do this in a
+    separate pass. This also allows the lowered form to participate in
+    optimizations like the comb canonicalizers.
   }];
 }
 

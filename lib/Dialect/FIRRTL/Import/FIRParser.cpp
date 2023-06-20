@@ -3972,6 +3972,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
         // If we got to the next module, then we're done.
       case FIRToken::kw_module:
       case FIRToken::kw_extmodule:
+      case FIRToken::kw_intmodule:
         // All module declarations should have the same indentation
         // level. Use this fact to differentiate between module
         // declarations and usages of "module" as identifiers.

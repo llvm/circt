@@ -4,6 +4,8 @@ on:
   release:
     types: [created]
   workflow_dispatch:
+  schedule:
+    - cron: 0 12 * * *
 
 jobs:
   build_wheels:
@@ -11,6 +13,7 @@ jobs:
     runs-on: ${{ matrix.config.os }}
     if: github.repository == 'llvm/circt'
     strategy:
+      fail-fast: false
       matrix:
         config:
           - os: ubuntu-20.04
@@ -51,17 +54,17 @@ jobs:
           CIBW_BUILD_FRONTEND: build
           SETUPTOOLS_SCM_DEBUG: True
 
-      - name: Upload wheels (Non-Tag)
-        uses: actions/upload-artifact@v3
-        if: github.ref_type != 'tag'
-        with:
-          path: ./wheelhouse/*.whl
-          retention-days: 7
-
-      - name: Upload wheels (Tag)
+      - name: Upload wheels (Tag or Nightly)
         uses: pypa/gh-action-pypi-publish@release/v1
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || github.event_name == 'cron'
         with:
           password: ${{ secrets.PYPI_CIRCT_API_TOKEN }}
           packages-dir: wheelhouse/
           verify-metadata: false
+
+      - name: Upload wheels (Non-Tag and Non-Nightly)
+        uses: actions/upload-artifact@v3
+        if: github.ref_type != 'tag' && github.event_name != 'cron'
+        with:
+          path: ./wheelhouse/*.whl
+          retention-days: 7

@@ -13,15 +13,23 @@ with Context() as ctx, Location.unknown():
 
   module = Module.parse("""
   module {
+    %sym = om.constant #om.ref<<@Root::@x>> : !om.ref
+
     om.class @Test(%param: i64) {
       om.class.field @field, %param : i64
 
       %0 = om.object @Child() : () -> !om.class.type<@Child>
       om.class.field @child, %0 : !om.class.type<@Child>
+
+      om.class.field @reference, %sym : !om.ref
     }
     om.class @Child() {
       %0 = om.constant 14 : i64
       om.class.field @foo, %0 : i64
+    }
+
+    hw.module @Root(%clock: i1) -> () {
+      %0 = sv.wire sym @x : !hw.inout<i1>
     }
   }
   """)
@@ -58,8 +66,11 @@ obj = evaluator.instantiate("Test", 42)
 print(obj.field)
 # CHECK: 14
 print(obj.child.foo)
+# CHECK: ('Root', 'x')
+print(obj.reference)
 
 for (name, field) in obj:
   # CHECK: name: child, field: <circt.dialects.om.Object object
   # CHECK: name: field, field: 42
+  # CHECK: name: reference, field: ('Root', 'x')
   print(f"name: {name}, field: {field}")
