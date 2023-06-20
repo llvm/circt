@@ -802,6 +802,51 @@ def TailPrimOp : PrimOp<"tail"> {
 }
 
 //===----------------------------------------------------------------------===//
+// Target Specific Intrinsics
+//===----------------------------------------------------------------------===//
+
+def SynopsysMux2IntrinsicOp : PrimOp<"int.synopsys.mux2"> {
+  let summary = [{
+    an intrinsic lowered into 2-to-1 MUX cell in the synopsys backend
+  }];
+
+  let description = [{
+    This intrinsic exposes a low-level API to use 2-to-1 MUX cell in the
+    synopsys target. A pragma "synopsys infer_mux_override" will be added to the
+    mux in the output verilog. At FIRRTL level, this operation participates
+    the inference process in the same way as a normal mux operation.
+  }];
+
+  let arguments = (ins UInt1OrUnsizedType:$sel, PassiveType:$high,
+                       PassiveType:$low);
+  let results = (outs PassiveType:$result);
+
+  let assemblyFormat =
+    "`(` operands `)` attr-dict `:` functional-type(operands, $result)";
+}
+
+def SynopsysMux4IntrinsicOp : PrimOp<"int.synopsys.mux4"> {
+  let summary = [{
+    an intrinsic lowered into 4-to-1 MUX cell in the synopsys backend.
+  }];
+
+  let description = [{
+    This intrinsic exposes a low-level API to use 4-to-1 MUX cell in the
+    synopsys target. A pragma "synopsys infer_mux_override" will be added to the
+    mux in the output verilog. At FIRRTL level, this operation participates
+    the inference process as a sugar of mux operation chains.
+  }];
+
+  let arguments = (ins UInt2OrUnsizedType:$sel, PassiveType:$v3,
+                       PassiveType:$v2, PassiveType:$v1,
+                       PassiveType:$v0);
+  let results = (outs PassiveType:$result);
+
+  let assemblyFormat =
+    "`(` operands `)` attr-dict `:` functional-type(operands, $result)";
+}
+
+//===----------------------------------------------------------------------===//
 // Verif and SV specific
 //===----------------------------------------------------------------------===//
 

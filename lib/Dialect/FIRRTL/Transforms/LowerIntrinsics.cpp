@@ -251,6 +251,50 @@ static bool lowerCirctClockGate(InstanceGraph &ig, FModuleLike mod) {
   return true;
 }
 
+template <bool isMux2>
+static bool lowerCirctSynopsysMux(InstanceGraph &ig, FModuleLike mod) {
+  StringRef mnemonic = isMux2 ? "circt.synopsys.mux2" : "circt.synopsys.mux4";
+  unsigned portNum = isMux2 ? 4 : 6;
+  if (hasNPorts(mnemonic, mod, portNum) || namedPort(mnemonic, mod, 0, "sel") ||
+      typedPort<UIntType>(mnemonic, mod, 0)) {
+    return false;
+  }
+
+  if (isMux2) {
+    if (namedPort(mnemonic, mod, 1, "high") ||
+        namedPort(mnemonic, mod, 2, "low") ||
+        namedPort(mnemonic, mod, 3, "out"))
+      return false;
+  } else {
+    if (namedPort(mnemonic, mod, 1, "v3") ||
+        namedPort(mnemonic, mod, 2, "v2") ||
+        namedPort(mnemonic, mod, 3, "v1") ||
+        namedPort(mnemonic, mod, 4, "v0") || namedPort(mnemonic, mod, 5, "out"))
+      return false;
+  }
+
+  for (auto *use : ig.lookup(mod)->uses()) {
+    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    SmallVector<Value> operands;
+    operands.reserve(portNum - 1);
+    for (unsigned i = 0; i < portNum - 1; i++) {
+      auto v = builder.create<WireOp>(inst.getResult(i).getType()).getResult();
+      operands.push_back(v);
+      inst.getResult(i).replaceAllUsesWith(v);
+    }
+    Value out;
+    if (isMux2)
+      out = builder.create<SynopsysMux2IntrinsicOp>(operands);
+    else
+      out = builder.create<SynopsysMux4IntrinsicOp>(operands);
+    inst.getResult(portNum - 1).replaceAllUsesWith(out);
+    inst.erase();
+  }
+
+  return true;
+}
+
 static bool lowerCirctLTLAnd(InstanceGraph &ig, FModuleLike mod) {
   if (hasNPorts("circt.ltl.and", mod, 3) ||
       namedPort("circt.ltl.and", mod, 0, "lhs") ||
@@ -552,7 +596,10 @@ std::pair<const char *, std::function<bool(InstanceGraph &, FModuleLike)>>
         {"circt_verif_assume", lowerCirctVerif<VerifAssumeIntrinsicOp>},
         {"circt.verif.cover", lowerCirctVerif<VerifCoverIntrinsicOp>},
         {"circt_verif_cover", lowerCirctVerif<VerifCoverIntrinsicOp>},
-};
+        {"circt.synopsys.mux2", lowerCirctSynopsysMux<true>},
+        {"circt_synopsys_mux2", lowerCirctSynopsysMux<true>},
+        {"circt.synopsys.mux4", lowerCirctSynopsysMux<false>},
+        {"circt_synopsys_mux4", lowerCirctSynopsysMux<false>}};
 
 // This is the main entrypoint for the lowering pass.
 void LowerIntrinsicsPass::runOnOperation() {

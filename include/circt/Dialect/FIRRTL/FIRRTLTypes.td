@@ -120,10 +120,12 @@ class NonConstSizedUIntType<int width> :
     "::circt::firrtl::UIntType::get($_builder.getContext(), " # width # ")">;
 
 def UInt1Type : SizedUIntType<1>;
+def UInt2Type : SizedUIntType<2>;
 def UInt32Type : SizedUIntType<32>;
 def NonConstUInt1Type : NonConstSizedUIntType<1>;
 
 def UInt1OrUnsizedType : AnyTypeOf<[UInt1Type, UnsizedUIntType]>;
+def UInt2OrUnsizedType : AnyTypeOf<[UInt2Type, UnsizedUIntType]>;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates

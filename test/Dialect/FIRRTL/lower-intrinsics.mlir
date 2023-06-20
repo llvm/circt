@@ -183,4 +183,15 @@ firrtl.circuit "Foo" {
     %assume.property = firrtl.instance "assume" @VerifAssume(in property: !firrtl.uint<1>)
     %cover.property = firrtl.instance "cover" @VerifCover(in property: !firrtl.uint<1>)
   }
+
+  firrtl.extmodule @SynopsysMux2(in sel: !firrtl.uint<1>, in high: !firrtl.uint, in low: !firrtl.uint, out out: !firrtl.uint) attributes {annotations = [{class = "circt.Intrinsic", intrinsic = "circt.synopsys.mux2"}]}
+  firrtl.intmodule @SynopsysMux4(in sel: !firrtl.uint<2>, in v3: !firrtl.uint, in v2: !firrtl.uint, in v1: !firrtl.uint, in v0: !firrtl.uint, out out: !firrtl.uint) attributes {intrinsic = "circt.synopsys.mux4"}
+
+  // CHECK: firrtl.module @SynopsysMux()
+  firrtl.module @SynopsysMux() {
+    // CHECK: firrtl.int.synopsys.mux2
+    // CHECK: firrtl.int.synopsys.mux4
+    %sel_0, %high, %low, %out_0 = firrtl.instance "mux2" @SynopsysMux2(in sel: !firrtl.uint<1>, in high: !firrtl.uint, in low: !firrtl.uint, out out: !firrtl.uint)
+    %sel_1, %v4, %v3, %v2, %v1, %out_1 = firrtl.instance "mux4" @SynopsysMux4(in sel: !firrtl.uint<2>, in v3: !firrtl.uint, in v2: !firrtl.uint, in v1: !firrtl.uint, in v0: !firrtl.uint, out out: !firrtl.uint)
+  }
 }

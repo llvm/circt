@@ -1313,8 +1313,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
   // case.
   bool allWidthsKnown = true;
   for (auto result : op->getResults()) {
-    if (auto mux = dyn_cast<MuxPrimOp>(op))
-      if (hasUninferredWidth(mux.getSel().getType()))
+    if (isa<MuxPrimOp, SynopsysMux4IntrinsicOp, SynopsysMux2IntrinsicOp>(op))
+      if (hasUninferredWidth(op->getOperand(0).getType()))
         allWidthsKnown = false;
     // Only consider FIRRTL types for width constraints. Ignore any foreign
     // types as they don't participate in the width inference process.
@@ -1537,11 +1537,17 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         assert(width > 0 && "width should have been checked by verifier");
         setExpr(op.getResult(), solver.known(width));
       })
-
-      .Case<MuxPrimOp>([&](auto op) {
-        auto sel = getExpr(op.getSel());
+      .Case<MuxPrimOp, SynopsysMux2IntrinsicOp>([&](auto op) {
+        auto *sel = getExpr(op.getSel());
         constrainTypes(sel, solver.known(1));
         maximumOfTypes(op.getResult(), op.getHigh(), op.getLow());
+      })
+      .Case<SynopsysMux4IntrinsicOp>([&](SynopsysMux4IntrinsicOp op) {
+        auto *sel = getExpr(op.getSel());
+        constrainTypes(sel, solver.known(2));
+        maximumOfTypes(op.getResult(), op.getV3(), op.getV2());
+        maximumOfTypes(op.getResult(), op.getResult(), op.getV1());
+        maximumOfTypes(op.getResult(), op.getResult(), op.getV0());
       })
       .Case<UninferredWidthCastOp>([&](auto op) {
         if (hasUninferredWidth(op.getResult().getType()))
