@@ -12,8 +12,6 @@ add_circt_library(CIRCTDCToHW
     CIRCTDCTransforms
     MLIRIR
     MLIRPass
-    MLIRArithDialect
-    MLIRControlFlowDialect
     MLIRFuncDialect
     MLIRSupport
     MLIRTransforms

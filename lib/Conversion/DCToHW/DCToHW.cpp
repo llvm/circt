@@ -24,8 +24,6 @@
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/ConversionPatterns.h"
 #include "circt/Support/ValueMapper.h"
-#include "mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -33,8 +31,6 @@
 #include "llvm/Support/MathExtras.h"
 
 #include <optional>
-
-#include "llvm/Support/Debug.h"
 
 using namespace mlir;
 using namespace circt;
@@ -51,8 +47,8 @@ static Type tupleToStruct(TupleType tuple) {
     Type convertedInnerType = innerType;
     if (auto tupleInnerType = innerType.dyn_cast<TupleType>())
       convertedInnerType = tupleToStruct(tupleInnerType);
-    hwfields.push_back({StringAttr::get(ctx, "field" + std::to_string(i)),
-                        convertedInnerType});
+    hwfields.push_back(
+        {StringAttr::get(ctx, "field" + Twine(i)), convertedInnerType});
   }
 
   return hw::StructType::get(ctx, hwfields);
@@ -75,27 +71,27 @@ static Type toHWType(TypeRange types) {
 // NOLINTNEXTLINE(misc-no-recursion)
 static Type toHWType(Type t) {
   return TypeSwitch<Type, Type>(t)
-      .Case([&](TupleType tt) { return toHWType(tupleToStruct(tt)); })
-      .Case([&](hw::StructType st) {
+      .Case([](TupleType tt) { return toHWType(tupleToStruct(tt)); })
+      .Case([](hw::StructType st) {
         llvm::SmallVector<hw::StructType::FieldInfo> structFields(
             st.getElements());
         for (auto &field : structFields)
           field.type = toHWType(field.type);
         return hw::StructType::get(st.getContext(), structFields);
       })
-      .Case([&](NoneType nt) { return IntegerType::get(nt.getContext(), 0); })
-      .Default([&](Type t) { return t; });
+      .Case([](NoneType nt) { return IntegerType::get(nt.getContext(), 0); })
+      .Default([](Type t) { return t; });
 }
 
 static Type toESIHWType(Type t) {
-  auto *ctx = t.getContext();
   Type outType =
       llvm::TypeSwitch<Type, Type>(t)
-          .Case<ValueType>([&](auto vt) {
-            return esi::ChannelType::get(ctx, toHWType(vt.getInnerTypes()));
+          .Case([](ValueType vt) {
+            return esi::ChannelType::get(vt.getContext(),
+                                         toHWType(vt.getInnerTypes()));
           })
-          .Case<TokenType>([&](auto tt) {
-            return esi::ChannelType::get(ctx,
+          .Case([](TokenType tt) {
+            return esi::ChannelType::get(tt.getContext(),
                                          IntegerType::get(tt.getContext(), 0));
           })
           .Default([](auto t) { return toHWType(t); });
@@ -154,7 +150,7 @@ namespace {
 struct InputHandshake {
   Value channel;
   Value valid;
-  std::shared_ptr<Backedge> ready;
+  std::optional<Backedge> ready;
   Value data;
 };
 
@@ -162,9 +158,9 @@ struct InputHandshake {
 /// (optional) data signals.
 struct OutputHandshake {
   Value channel;
-  std::shared_ptr<Backedge> valid;
+  std::optional<Backedge> valid;
   Value ready;
-  std::shared_ptr<Backedge> data;
+  std::optional<Backedge> data;
 };
 
 ///  Directly connect an input handshake to an output handshake
@@ -173,41 +169,6 @@ static void connect(InputHandshake &input, OutputHandshake &output) {
   input.ready->setValue(output.ready);
 }
 
-/// A helper struct that acts like a wire. Can be used to interact with the
-/// RTLBuilder when multiple built components should be connected.
-struct HandshakeWire {
-  HandshakeWire(BackedgeBuilder &bb, Type dataType) {
-    MLIRContext *ctx = dataType.getContext();
-    auto i1Type = IntegerType::get(ctx, 1);
-    valid = std::make_shared<Backedge>(bb.get(i1Type));
-    ready = std::make_shared<Backedge>(bb.get(i1Type));
-    data = std::make_shared<Backedge>(bb.get(dataType));
-  }
-
-  ///  Functions that allow to treat a wire like an input or output port.
-  ///  **Careful**: Such a port will not be updated when backedges are resolved.
-  InputHandshake getAsInput() {
-    InputHandshake ih;
-    ih.valid = *valid;
-    ih.ready = ready;
-    ih.data = *data;
-    ih.channel = nullptr;
-    return ih;
-  }
-  OutputHandshake getAsOutput() {
-    OutputHandshake oh;
-    oh.valid = valid;
-    oh.ready = *ready;
-    oh.data = data;
-    oh.channel = nullptr;
-    return oh;
-  }
-
-  std::shared_ptr<Backedge> valid;
-  std::shared_ptr<Backedge> ready;
-  std::shared_ptr<Backedge> data;
-};
-
 template <typename T, typename TInner>
 llvm::SmallVector<T> extractValues(llvm::SmallVector<TInner> &container,
                                    llvm::function_ref<T(TInner &)> extractor) {
@@ -215,6 +176,9 @@ llvm::SmallVector<T> extractValues(llvm::SmallVector<TInner> &container,
   llvm::transform(container, std::back_inserter(result), extractor);
   return result;
 }
+
+// Wraps a set of input and output handshakes with an API that provides
+// access to collections of the underlying values.
 struct UnwrappedIO {
   llvm::SmallVector<InputHandshake> inputs;
   llvm::SmallVector<OutputHandshake> outputs;
@@ -223,12 +187,12 @@ struct UnwrappedIO {
     return extractValues<Value, InputHandshake>(
         inputs, [](auto &hs) { return hs.valid; });
   }
-  llvm::SmallVector<std::shared_ptr<Backedge>> getInputReadys() {
-    return extractValues<std::shared_ptr<Backedge>, InputHandshake>(
+  llvm::SmallVector<std::optional<Backedge>> getInputReadys() {
+    return extractValues<std::optional<Backedge>, InputHandshake>(
         inputs, [](auto &hs) { return hs.ready; });
   }
-  llvm::SmallVector<std::shared_ptr<Backedge>> getOutputValids() {
-    return extractValues<std::shared_ptr<Backedge>, OutputHandshake>(
+  llvm::SmallVector<std::optional<Backedge>> getOutputValids() {
+    return extractValues<std::optional<Backedge>, OutputHandshake>(
         outputs, [](auto &hs) { return hs.valid; });
   }
   llvm::SmallVector<Value> getInputDatas() {
@@ -244,8 +208,8 @@ struct UnwrappedIO {
     return extractValues<Value, OutputHandshake>(
         outputs, [](auto &hs) { return hs.channel; });
   }
-  llvm::SmallVector<std::shared_ptr<Backedge>> getOutputDatas() {
-    return extractValues<std::shared_ptr<Backedge>, OutputHandshake>(
+  llvm::SmallVector<std::optional<Backedge>> getOutputDatas() {
+    return extractValues<std::optional<Backedge>, OutputHandshake>(
         outputs, [](auto &hs) { return hs.data; });
   }
 };
@@ -258,7 +222,7 @@ struct RTLBuilder {
              Value rst = Value())
       : b(builder), loc(loc), clk(clk), rst(rst) {}
 
-  Value constant(const APInt &apv, std::optional<StringRef> name = {}) {
+  Value constant(const APInt &apv, StringRef name = {}) {
     // Cannot use zero-width APInt's in DenseMap's, see
     // https://github.com/llvm/llvm-project/issues/58013
     bool isZeroWidth = apv.getBitWidth() == 0;
@@ -274,17 +238,15 @@ struct RTLBuilder {
     return cval;
   }
 
-  Value constant(unsigned width, int64_t value,
-                 std::optional<StringRef> name = {}) {
+  Value constant(unsigned width, int64_t value, StringRef name = {}) {
     return constant(APInt(width, value));
   }
-  std::pair<Value, Value> wrap(Value data, Value valid,
-                               std::optional<StringRef> name = {}) {
+  std::pair<Value, Value> wrap(Value data, Value valid, StringRef name = {}) {
     auto wrapOp = b.create<esi::WrapValidReadyOp>(loc, data, valid);
     return {wrapOp.getResult(0), wrapOp.getResult(1)};
   }
   std::pair<Value, Value> unwrap(Value channel, Value ready,
-                                 std::optional<StringRef> name = {}) {
+                                 StringRef name = {}) {
     auto unwrapOp = b.create<esi::UnwrapValidReadyOp>(loc, channel, ready);
     return {unwrapOp.getResult(0), unwrapOp.getResult(1)};
   }
@@ -306,38 +268,38 @@ struct RTLBuilder {
   }
 
   Value cmp(Value lhs, Value rhs, comb::ICmpPredicate predicate,
-            std::optional<StringRef> name = {}) {
+            StringRef name = {}) {
     return b.create<comb::ICmpOp>(loc, predicate, lhs, rhs);
   }
 
-  Value buildNamedOp(llvm::function_ref<Value()> f,
-                     std::optional<StringRef> name) {
+  Value buildNamedOp(llvm::function_ref<Value()> f, StringRef name) {
     Value v = f();
     StringAttr nameAttr;
     Operation *op = v.getDefiningOp();
-    if (name.has_value()) {
-      op->setAttr("sv.namehint", b.getStringAttr(*name));
-      nameAttr = b.getStringAttr(*name);
+    if (!name.empty()) {
+      op->setAttr("sv.namehint", b.getStringAttr(name));
+      nameAttr = b.getStringAttr(name);
     }
     return v;
   }
 
   ///  Bitwise 'and'.
-  Value bAnd(ValueRange values, std::optional<StringRef> name = {}) {
+  Value bitAnd(ValueRange values, StringRef name = {}) {
     return buildNamedOp(
         [&]() { return b.create<comb::AndOp>(loc, values, false); }, name);
   }
 
-  Value bOr(ValueRange values, std::optional<StringRef> name = {}) {
+  // Bitwise 'or'.
+  Value bitOr(ValueRange values, StringRef name = {}) {
     return buildNamedOp(
         [&]() { return b.create<comb::OrOp>(loc, values, false); }, name);
   }
 
   ///  Bitwise 'not'.
-  Value bNot(Value value, std::optional<StringRef> name = {}) {
+  Value bitNot(Value value, StringRef name = {}) {
     auto allOnes = constant(value.getType().getIntOrFloatBitWidth(), -1);
     std::string inferedName;
-    if (!name) {
+    if (!name.empty()) {
       // Try to create a name from the input value.
       if (auto valueName =
               value.getDefiningOp()->getAttrOfType<StringAttr>("sv.namehint")) {
@@ -350,19 +312,18 @@ struct RTLBuilder {
         [&]() { return b.create<comb::XorOp>(loc, value, allOnes); }, name);
   }
 
-  Value shl(Value value, Value shift, std::optional<StringRef> name = {}) {
+  Value shl(Value value, Value shift, StringRef name = {}) {
     return buildNamedOp(
         [&]() { return b.create<comb::ShlOp>(loc, value, shift); }, name);
   }
 
-  Value concat(ValueRange values, std::optional<StringRef> name = {}) {
+  Value concat(ValueRange values, StringRef name = {}) {
     return buildNamedOp([&]() { return b.create<comb::ConcatOp>(loc, values); },
                         name);
   }
 
   ///  Packs a list of values into a hw.struct.
-  Value pack(ValueRange values, Type structType = Type(),
-             std::optional<StringRef> name = {}) {
+  Value pack(ValueRange values, Type structType = Type(), StringRef name = {}) {
     if (!structType)
       structType = toHWType(values.getTypes());
 
@@ -379,7 +340,7 @@ struct RTLBuilder {
     return b.create<hw::StructExplodeOp>(loc, innerTypes, value).getResults();
   }
 
-  llvm::SmallVector<Value> toBits(Value v, std::optional<StringRef> name = {}) {
+  llvm::SmallVector<Value> extractBits(Value v, StringRef name = {}) {
     llvm::SmallVector<Value> bits;
     for (unsigned i = 0, e = v.getType().getIntOrFloatBitWidth(); i != e; ++i)
       bits.push_back(b.create<comb::ExtractOp>(loc, v, i, /*bitWidth=*/1));
@@ -387,52 +348,48 @@ struct RTLBuilder {
   }
 
   ///  OR-reduction of the bits in 'v'.
-  Value rOr(Value v, std::optional<StringRef> name = {}) {
-    return buildNamedOp([&]() { return bOr(toBits(v)); }, name);
+  Value reduceOr(Value v, StringRef name = {}) {
+    return buildNamedOp([&]() { return bitOr(extractBits(v)); }, name);
   }
 
   ///  Extract bits v[hi:lo] (inclusive).
-  Value extract(Value v, unsigned lo, unsigned hi,
-                std::optional<StringRef> name = {}) {
+  Value extract(Value v, unsigned lo, unsigned hi, StringRef name = {}) {
     unsigned width = hi - lo + 1;
     return buildNamedOp(
         [&]() { return b.create<comb::ExtractOp>(loc, v, lo, width); }, name);
   }
 
   ///  Truncates 'value' to its lower 'width' bits.
-  Value truncate(Value value, unsigned width,
-                 std::optional<StringRef> name = {}) {
+  Value truncate(Value value, unsigned width, StringRef name = {}) {
     return extract(value, 0, width - 1, name);
   }
 
-  Value zext(Value value, unsigned outWidth,
-             std::optional<StringRef> name = {}) {
+  Value zext(Value value, unsigned outWidth, StringRef name = {}) {
     unsigned inWidth = value.getType().getIntOrFloatBitWidth();
-    assert(inWidth <= outWidth && "zext: input width must be <- output width.");
+    assert(inWidth <= outWidth && "zext: input width must be <= output width.");
     if (inWidth == outWidth)
       return value;
     auto c0 = constant(outWidth - inWidth, 0);
     return concat({c0, value}, name);
   }
 
-  Value sext(Value value, unsigned outWidth,
-             std::optional<StringRef> name = {}) {
+  Value sext(Value value, unsigned outWidth, StringRef name = {}) {
     return comb::createOrFoldSExt(loc, value, b.getIntegerType(outWidth), b);
   }
 
   ///  Extracts a single bit v[bit].
-  Value bit(Value v, unsigned index, std::optional<StringRef> name = {}) {
+  Value bit(Value v, unsigned index, StringRef name = {}) {
     return extract(v, index, index, name);
   }
 
   ///  Creates a hw.array of the given values.
-  Value arrayCreate(ValueRange values, std::optional<StringRef> name = {}) {
+  Value arrayCreate(ValueRange values, StringRef name = {}) {
     return buildNamedOp(
         [&]() { return b.create<hw::ArrayCreateOp>(loc, values); }, name);
   }
 
   ///  Extract the 'index'th value from the input array.
-  Value arrayGet(Value array, Value index, std::optional<StringRef> name = {}) {
+  Value arrayGet(Value array, Value index, StringRef name = {}) {
     return buildNamedOp(
         [&]() { return b.create<hw::ArrayGetOp>(loc, array, index); }, name);
   }
@@ -440,24 +397,27 @@ struct RTLBuilder {
   ///  Muxes a range of values.
   ///  The select signal is expected to be a decimal value which selects
   ///  starting from the lowest index of value.
-  Value mux(Value index, ValueRange values,
-            std::optional<StringRef> name = {}) {
-    if (values.size() == 2)
-      return b.create<comb::MuxOp>(loc, index, values[1], values[0]);
-
+  Value mux(Value index, ValueRange values, StringRef name = {}) {
+    if (values.size() == 2) {
+      return buildNamedOp(
+          [&]() {
+            return b.create<comb::MuxOp>(loc, index, values[1], values[0]);
+          },
+          name);
+    }
     return arrayGet(arrayCreate(values), index, name);
   }
 
   ///  Muxes a range of values. The select signal is expected to be a 1-hot
   ///  encoded value.
-  Value ohMux(Value index, ValueRange inputs) {
+  Value oneHotMux(Value index, ValueRange inputs) {
     // Confirm the select input can be a one-hot encoding for the inputs.
     unsigned numInputs = inputs.size();
     assert(numInputs == index.getType().getIntOrFloatBitWidth() &&
-           "one-hot select can't mux inputs");
+           "mismatch between width of one-hot select input and the number of "
+           "inputs to be selected");
 
     // Start the mux tree with zero value.
-    // Todo: clean up when handshake supports i0.
     auto dataType = inputs[0].getType();
     unsigned width =
         dataType.isa<NoneType>() ? 0 : dataType.getIntOrFloatBitWidth();
@@ -479,28 +439,6 @@ struct RTLBuilder {
   DenseMap<APInt, Value> constants;
 };
 
-/// Creates a Value that has an assigned zero value. For structs, this
-/// corresponds to assigning zero to each element recursively.
-// NOLINTNEXTLINE(misc-no-recursion)
-static Value createZeroDataConst(RTLBuilder &rtlb, Location loc, Type type) {
-  return TypeSwitch<Type, Value>(type)
-      .Case<NoneType>([&](NoneType) { return rtlb.constant(0, 0); })
-      .Case<IntType, IntegerType>([&](auto type) {
-        return rtlb.constant(type.getIntOrFloatBitWidth(), 0);
-      })
-      .Case<hw::StructType>([&](auto structType) {
-        SmallVector<Value> zeroValues;
-        for (auto field : structType.getElements())
-          zeroValues.push_back(createZeroDataConst(rtlb, loc, field.type));
-        return rtlb.b.create<hw::StructCreateOp>(loc, structType, zeroValues);
-      })
-      .Default([&](Type) -> Value {
-        emitError(loc) << "unsupported type for zero value: " << type;
-        assert(false);
-        return {};
-      });
-}
-
 static bool isZeroWidthType(Type type) {
   if (auto intType = type.dyn_cast<IntegerType>())
     return intType.getWidth() == 0;
@@ -515,14 +453,9 @@ static UnwrappedIO unwrapIO(Location loc, ValueRange operands,
   UnwrappedIO unwrapped;
   for (auto in : operands) {
     assert(isa<esi::ChannelType>(in.getType()));
-    InputHandshake hs;
-    auto ready = std::make_shared<Backedge>(bb.get(rtlb.b.getI1Type()));
-    auto [data, valid] = rtlb.unwrap(in, *ready);
-    hs.valid = valid;
-    hs.ready = ready;
-    hs.data = data;
-    hs.channel = in;
-    unwrapped.inputs.push_back(hs);
+    auto ready = bb.get(rtlb.b.getI1Type());
+    auto [data, valid] = rtlb.unwrap(in, ready);
+    unwrapped.inputs.push_back(InputHandshake{in, valid, ready, data});
   }
   for (auto outputType : results) {
     outputType = toESIHWType(outputType);
@@ -536,12 +469,12 @@ static UnwrappedIO unwrapIO(Location loc, ValueRange operands,
           rewriter.create<hw::ConstantOp>(loc, rewriter.getIntegerType(0), 0);
     } else {
       // Create a backedge for the unresolved data.
-      auto dataBackedge = std::make_shared<Backedge>(bb.get(innerType));
+      auto dataBackedge = bb.get(innerType);
       hs.data = dataBackedge;
-      data = *dataBackedge;
+      data = dataBackedge;
     }
-    auto valid = std::make_shared<Backedge>(bb.get(rewriter.getI1Type()));
-    auto [dataCh, ready] = rtlb.wrap(data, *valid);
+    auto valid = bb.get(rewriter.getI1Type());
+    auto [dataCh, ready] = rtlb.wrap(data, valid);
     hs.valid = valid;
     hs.ready = ready;
     hs.channel = dataCh;
@@ -608,8 +541,8 @@ public:
     if (failed(crRes))
       return failure();
     auto [clock, reset] = *crRes;
-    auto rtlb = RTLBuilder(op.getLoc(), rewriter, clock, reset);
-    auto io = unwrapIO(op, operands.getOperands(), rewriter, bb);
+    RTLBuilder rtlb(op.getLoc(), rewriter, clock, reset);
+    UnwrappedIO io = unwrapIO(op, operands.getOperands(), rewriter, bb);
 
     auto &input = io.inputs[0];
 
@@ -617,18 +550,18 @@ public:
     llvm::SmallVector<Value> doneWires;
     for (auto [i, output] : llvm::enumerate(io.outputs)) {
       Backedge doneBE = bb.get(rtlb.b.getI1Type());
-      Value emitted = rtlb.bAnd({doneBE, rtlb.bNot(*input.ready)});
+      Value emitted = rtlb.bitAnd({doneBE, rtlb.bitNot(*input.ready)});
       Value emittedReg =
           rtlb.reg("emitted_" + std::to_string(i), emitted, c0I1);
-      Value outValid = rtlb.bAnd({rtlb.bNot(emittedReg), input.valid});
+      Value outValid = rtlb.bitAnd({rtlb.bitNot(emittedReg), input.valid});
       output.valid->setValue(outValid);
-      Value validReady = rtlb.bAnd({output.ready, outValid});
+      Value validReady = rtlb.bitAnd({output.ready, outValid});
       Value done =
-          rtlb.bOr({validReady, emittedReg}, "done" + std::to_string(i));
+          rtlb.bitOr({validReady, emittedReg}, "done" + std::to_string(i));
       doneBE.setValue(done);
       doneWires.push_back(done);
     }
-    input.ready->setValue(rtlb.bAnd(doneWires, "allDone"));
+    input.ready->setValue(rtlb.bitAnd(doneWires, "allDone"));
 
     rewriter.replaceOp(op, io.getOutputChannels());
     return success();
@@ -643,14 +576,14 @@ public:
   matchAndRewrite(JoinOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
     auto bb = BackedgeBuilder(rewriter, op.getLoc());
-    auto io = unwrapIO(op, operands.getOperands(), rewriter, bb);
-    auto rtlb = RTLBuilder(op.getLoc(), rewriter);
+    UnwrappedIO io = unwrapIO(op, operands.getOperands(), rewriter, bb);
+    RTLBuilder rtlb(op.getLoc(), rewriter);
     auto &output = io.outputs[0];
 
-    Value allValid = rtlb.bAnd(io.getInputValids());
+    Value allValid = rtlb.bitAnd(io.getInputValids());
     output.valid->setValue(allValid);
 
-    auto validAndReady = rtlb.bAnd({output.ready, allValid});
+    auto validAndReady = rtlb.bitAnd({output.ready, allValid});
     for (auto &input : io.inputs)
       input.ready->setValue(validAndReady);
 
@@ -667,8 +600,8 @@ public:
   matchAndRewrite(SelectOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
     auto bb = BackedgeBuilder(rewriter, op.getLoc());
-    auto io = unwrapIO(op, operands.getOperands(), rewriter, bb);
-    auto rtlb = RTLBuilder(op.getLoc(), rewriter);
+    UnwrappedIO io = unwrapIO(op, operands.getOperands(), rewriter, bb);
+    RTLBuilder rtlb(op.getLoc(), rewriter);
 
     // Extract select signal from the unwrapped IO.
     auto select = io.inputs[0];
@@ -702,9 +635,9 @@ public:
     auto selectedInputValid =
         rtlb.mux(truncatedSelect, unwrapped.getInputValids());
     // Result is valid when the selected input and the select input is valid.
-    auto selAndInputValid = rtlb.bAnd({selectedInputValid, select.valid});
+    auto selAndInputValid = rtlb.bitAnd({selectedInputValid, select.valid});
     res.valid->setValue(selAndInputValid);
-    auto resValidAndReady = rtlb.bAnd({selAndInputValid, res.ready});
+    auto resValidAndReady = rtlb.bitAnd({selAndInputValid, res.ready});
 
     // Select is ready when result is valid and ready (result transacting).
     select.ready->setValue(resValidAndReady);
@@ -717,7 +650,7 @@ public:
       // '&' that with the result valid and ready, and assign to the input
       // ready signal.
       auto activeAndResultValidAndReady =
-          rtlb.bAnd({isSelected, resValidAndReady});
+          rtlb.bitAnd({isSelected, resValidAndReady});
       in.ready->setValue(activeAndResultValidAndReady);
     }
   }
@@ -730,20 +663,20 @@ public:
   matchAndRewrite(BranchOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
     auto bb = BackedgeBuilder(rewriter, op.getLoc());
-    auto io = unwrapIO(op, operands.getOperands(), rewriter, bb);
-    auto rtlb = RTLBuilder(op.getLoc(), rewriter);
+    UnwrappedIO io = unwrapIO(op, operands.getOperands(), rewriter, bb);
+    RTLBuilder rtlb(op.getLoc(), rewriter);
     auto cond = io.inputs[0];
     auto trueRes = io.outputs[0];
     auto falseRes = io.outputs[1];
 
     // Connect valid signal of both results.
-    trueRes.valid->setValue(rtlb.bAnd({cond.data, cond.valid}));
-    falseRes.valid->setValue(rtlb.bAnd({rtlb.bNot(cond.data), cond.valid}));
+    trueRes.valid->setValue(rtlb.bitAnd({cond.data, cond.valid}));
+    falseRes.valid->setValue(rtlb.bitAnd({rtlb.bitNot(cond.data), cond.valid}));
 
     // Connect ready signal of condition.
     Value selectedResultReady =
         rtlb.mux(cond.data, {falseRes.ready, trueRes.ready});
-    Value condReady = rtlb.bAnd({selectedResultReady, cond.valid});
+    Value condReady = rtlb.bitAnd({selectedResultReady, cond.valid});
     cond.ready->setValue(condReady);
 
     rewriter.replaceOp(op,
@@ -760,7 +693,7 @@ public:
   matchAndRewrite(SinkOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
     auto bb = BackedgeBuilder(rewriter, op.getLoc());
-    auto io = unwrapIO(op, operands.getOperands(), rewriter, bb);
+    UnwrappedIO io = unwrapIO(op, operands.getOperands(), rewriter, bb);
     io.inputs[0].ready->setValue(
         RTLBuilder(op.getLoc(), rewriter).constant(1, 1));
     rewriter.replaceOp(op, io.outputs[0].channel);
@@ -775,8 +708,8 @@ public:
   matchAndRewrite(SourceOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
     auto bb = BackedgeBuilder(rewriter, op.getLoc());
-    auto io = unwrapIO(op, operands.getOperands(), rewriter, bb);
-    auto rtlb = RTLBuilder(op.getLoc(), rewriter);
+    UnwrappedIO io = unwrapIO(op, operands.getOperands(), rewriter, bb);
+    RTLBuilder rtlb(op.getLoc(), rewriter);
     io.outputs[0].valid->setValue(rtlb.constant(1, 1));
     io.outputs[0].data->setValue(rtlb.constant(0, 0));
     rewriter.replaceOp(op, io.outputs[0].channel);
@@ -791,9 +724,9 @@ public:
   matchAndRewrite(PackOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
     auto bb = BackedgeBuilder(rewriter, op.getLoc());
-    auto io = unwrapIO(op, llvm::SmallVector<Value>{operands.getToken()},
-                       rewriter, bb);
-    auto rtlb = RTLBuilder(op.getLoc(), rewriter);
+    UnwrappedIO io = unwrapIO(op, llvm::SmallVector<Value>{operands.getToken()},
+                              rewriter, bb);
+    RTLBuilder rtlb(op.getLoc(), rewriter);
     auto &input = io.inputs[0];
     auto &output = io.outputs[0];
 
@@ -817,11 +750,11 @@ public:
   matchAndRewrite(UnpackOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
     auto bb = BackedgeBuilder(rewriter, op.getLoc());
-    auto io = unwrapIO(
+    UnwrappedIO io = unwrapIO(
         op.getLoc(), llvm::SmallVector<Value>{operands.getInput()},
         // Only generate an output channel for the token typed output.
         llvm::SmallVector<Type>{op.getToken().getType()}, rewriter, bb);
-    auto rtlb = RTLBuilder(op.getLoc(), rewriter);
+    RTLBuilder rtlb(op.getLoc(), rewriter);
     auto &input = io.inputs[0];
     auto &output = io.outputs[0];
 
