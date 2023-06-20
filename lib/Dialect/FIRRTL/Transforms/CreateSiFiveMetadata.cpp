@@ -265,7 +265,7 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
       jsonStream.attributeArray("extra_ports", [&] {
         for (auto attr : mem.getExtraPorts()) {
           jsonStream.object([&] {
-            auto port = attr.cast<DictionaryAttr>();
+            auto port = cast<DictionaryAttr>(attr);
             auto name = port.getAs<StringAttr>("name").getValue();
             jsonStream.attribute("name", name);
             auto direction = port.getAs<StringAttr>("direction").getValue();

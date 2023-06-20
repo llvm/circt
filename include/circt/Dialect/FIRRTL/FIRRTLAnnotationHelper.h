@@ -325,7 +325,7 @@ A tryGetAs(DictionaryAttr &dict, const Attribute &root, StringRef key,
     return nullptr;
   }
   // Check that the value has the correct type.
-  auto valueA = value.dyn_cast_or_null<A>();
+  auto valueA = dyn_cast_or_null<A>(value);
   if (!valueA) {
     SmallString<128> msg;
     if (path.isTriviallyEmpty())

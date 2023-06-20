@@ -263,7 +263,7 @@ def MatchOp : FIRRTLOp<"match", [SingleBlock, NoTerminator,
 
   let extraClassDeclaration = [{
     IntegerAttr getFieldIndexAttr(size_t caseIndex) {
-      return getTags()[caseIndex].cast<IntegerAttr>();
+      return cast<IntegerAttr>(getTags()[caseIndex]);
     }
 
     uint32_t getFieldIndex(size_t caseIndex) {
@@ -319,7 +319,7 @@ def ProbeOp : FIRRTLOp<"probe"> {
 class ForceRefTypeConstraint<string ref, string base>
   : TypesMatchWith<"reference type of " # ref # " should be RWProbe of " # base,
                    base, ref,
-                   "RefType::get($_self.cast<FIRRTLBaseType>().getAllConstDroppedType(), true)">;
+                   "RefType::get(cast<FIRRTLBaseType>($_self).getAllConstDroppedType(), true)">;
 
 def RefForceOp : FIRRTLOp<"ref.force",[ForceRefTypeConstraint<"dest", "src">]> {
   let summary = "FIRRTL force statement";

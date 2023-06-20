@@ -37,6 +37,10 @@ jobs:
           - build-type: Release
             lit-flags: --vg
             build-shared: ON
+          # TODO: This corner is failing and has been for some time. #5253.
+          - build-type: Release
+            compiler: {cc: gcc, cxx: g++}
+            lit-flags: --vg
 
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone

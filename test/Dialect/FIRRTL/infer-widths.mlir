@@ -935,4 +935,29 @@ firrtl.circuit "Foo" {
   // Should not crash when encountering property types.
   // CHECK: firrtl.module @Property(in %a: !firrtl.string)
   firrtl.module @Property(in %a: !firrtl.string) { }
+
+  // Check some strictconnect + widthCast inferences.
+  // See https://github.com/llvm/circt/issues/5408 .
+  // CHECK-LABEL: module @StrictConnectBackIntoWidthCast1
+  firrtl.module @StrictConnectBackIntoWidthCast1(in %y: !firrtl.uint<2>, out %out1: !firrtl.uint) attributes {convention = #firrtl<convention scalarized>} {
+    %w = firrtl.wire : !firrtl.uint
+    %c0_ui = firrtl.constant 0 : !firrtl.const.uint
+    %0 = firrtl.widthCast %c0_ui : (!firrtl.const.uint) -> !firrtl.const.uint
+    %1 = firrtl.constCast %0 : (!firrtl.const.uint) -> !firrtl.uint
+    firrtl.strictconnect %w, %1 : !firrtl.uint
+    %2 = firrtl.widthCast %y : (!firrtl.uint<2>) -> !firrtl.uint
+    firrtl.strictconnect %w, %2 : !firrtl.uint
+    %3 = firrtl.widthCast %w : (!firrtl.uint) -> !firrtl.uint
+    firrtl.strictconnect %out1, %3 : !firrtl.uint
+  }
+  // CHECK-LABEL: module @StrictConnectBackIntoWidthCast2
+  firrtl.module @StrictConnectBackIntoWidthCast2(in %x: !firrtl.uint<1>, in %y: !firrtl.uint<2>, out %out1: !firrtl.uint) attributes {convention = #firrtl<convention scalarized>} {
+    %w = firrtl.wire : !firrtl.uint
+    %0 = firrtl.widthCast %x : (!firrtl.uint<1>) -> !firrtl.uint
+    firrtl.strictconnect %w, %0 : !firrtl.uint
+    %1 = firrtl.widthCast %y : (!firrtl.uint<2>) -> !firrtl.uint
+    firrtl.strictconnect %w, %1 : !firrtl.uint
+    %2 = firrtl.widthCast %w : (!firrtl.uint) -> !firrtl.uint
+    firrtl.strictconnect %out1, %2 : !firrtl.uint
+  }
 }

@@ -113,15 +113,22 @@ void ExplicitRegsPass::runOnOperation() {
   // Iterate over the pipeline body in-order (!).
   stageMap = pipeline.getStageMap();
   for (Block *stage : pipeline.getOrderedStages()) {
-    for (auto &op : *stage) {
+    // Walk the stage body - we do this since register materialization needs
+    // to consider all levels of nesting within the stage.
+    stage->walk([&](Operation *op) {
       // Check the operands of this operation to see if any of them cross a
       // stage boundary.
-      for (OpOperand &operand : op.getOpOperands()) {
+      for (OpOperand &operand : op->getOpOperands()) {
+        if (getParentStageInPipeline(pipeline, operand.get()) == stage) {
+          // The operand is defined by some operation or block which ultimately
+          // resides within the current pipeline stage. No routing needed.
+          continue;
+        }
         Value reroutedValue = routeThroughStage(operand.get(), stage);
         if (reroutedValue != operand.get())
-          op.setOperand(operand.getOperandNumber(), reroutedValue);
+          op->setOperand(operand.getOperandNumber(), reroutedValue);
       }
-    }
+    });
   }
 
   auto *ctx = &getContext();

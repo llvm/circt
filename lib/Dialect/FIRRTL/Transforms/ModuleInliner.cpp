@@ -461,7 +461,7 @@ static void replaceRefEdges(SmallVectorImpl<Backedge> &edges) {
 
   for (auto &edge : edges) {
     Value v = edge;
-    assert(v.getType().isa<RefType>());
+    assert(isa<RefType>(v.getType()));
 
     auto driver = getDriverAndRemoveConnects(v);
     if (!driver) {
@@ -469,7 +469,7 @@ static void replaceRefEdges(SmallVectorImpl<Backedge> &edges) {
           "unable to find driver for refty placeholder");
       continue;
     }
-    if (!driver.isa<BlockArgument>())
+    if (!isa<BlockArgument>(driver))
       moveUseAfterDef(v.getDefiningOp(), driver.getDefiningOp());
     // Resolve the edge (RAUW to driver).
     edge.setValue(driver);
@@ -754,7 +754,7 @@ bool Inliner::renameInstance(
     for (const auto &en : llvm::enumerate(nlaList)) {
       auto oldNLA = en.value();
       if (auto newSym = symbolRenames.lookup(oldNLA))
-        nlaList[en.index()] = newSym.cast<StringAttr>();
+        nlaList[en.index()] = cast<StringAttr>(newSym);
     }
   }
   activeHierpaths = std::move(parentActivePaths);
@@ -778,7 +778,7 @@ void Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b, IRMapping &mapper,
   for (unsigned i = 0, e = getNumPorts(target); i < e; ++i) {
     auto arg = target.getArgument(i);
     // Get the type of the wire.
-    auto type = arg.getType().cast<FIRRTLType>();
+    auto type = cast<FIRRTLType>(arg.getType());
 
     // Compute a unique symbol if needed
     StringAttr newSym;
@@ -1095,7 +1095,7 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b, IRMapping &mapper,
           instance.setInnerSymAttr(hw::InnerSymAttr::get(instSym));
         }
         instOpHierPaths[InnerRefAttr::get(moduleName, instSym)].push_back(
-            sym.cast<StringAttr>());
+            cast<StringAttr>(sym));
         // TODO: Update any symbol renames which need to be used by the next
         // call of inlineInto.  This will then check each instance and rename
         // any symbols appropriately for that instance.
@@ -1188,7 +1188,7 @@ void Inliner::inlineInstances(FModuleOp parent) {
                                return moduleNamespace;
                              });
         instOpHierPaths[InnerRefAttr::get(moduleName, instSym)].push_back(
-            sym.cast<StringAttr>());
+            cast<StringAttr>(sym));
         // TODO: Update any symbol renames which need to be used by the next
         // call of inlineInto.  This will then check each instance and rename
         // any symbols appropriately for that instance.
@@ -1309,7 +1309,7 @@ void Inliner::run() {
     nlaMap.insert({nla.getSymNameAttr(), mnla});
     rootMap[mnla.getNLA().root()].push_back(nla.getSymNameAttr());
     for (auto p : nla.getNamepath())
-      if (auto ref = p.dyn_cast<InnerRefAttr>())
+      if (auto ref = dyn_cast<InnerRefAttr>(p))
         instOpHierPaths[ref].push_back(nla.getSymNameAttr());
   }
   // Mark 'module-only' the NLA's that only target modules.

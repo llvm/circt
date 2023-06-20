@@ -39,7 +39,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
     auto hasSubAnno = [&](MemOp op) -> bool {
       for (size_t portIdx = 0, e = op.getNumResults(); portIdx < e; ++portIdx)
         for (auto attr : op.getPortAnnotation(portIdx))
-          if (attr.cast<DictionaryAttr>().get("circt.fieldID"))
+          if (cast<DictionaryAttr>(attr).get("circt.fieldID"))
             return true;
 
       return false;
@@ -59,7 +59,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
       // implies a memtap and we cannot transform the datatype for a memory that
       // is tapped.
       for (auto res : memOp.getResults())
-        if (res.getType().isa<RefType>())
+        if (isa<RefType>(res.getType()))
           return;
       // If subannotations present on aggregate fields, we cannot flatten the
       // memory. It must be split into one memory per aggregate field.
@@ -127,7 +127,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
         result.replaceAllUsesWith(wire);
         result = wire;
         auto newResult = flatMem.getResult(index);
-        auto rType = result.getType().cast<BundleType>();
+        auto rType = cast<BundleType>(result.getType());
         for (size_t fieldIndex = 0, fend = rType.getNumElements();
              fieldIndex != fend; ++fieldIndex) {
           auto name = rType.getElement(fieldIndex).name.getValue();
@@ -223,9 +223,9 @@ private:
   }
 
   Value getSubWhatever(ImplicitLocOpBuilder *builder, Value val, size_t index) {
-    if (BundleType bundle = val.getType().dyn_cast<BundleType>())
+    if (BundleType bundle = dyn_cast<BundleType>(val.getType()))
       return builder->create<SubfieldOp>(val, index);
-    if (FVectorType fvector = val.getType().dyn_cast<FVectorType>())
+    if (FVectorType fvector = dyn_cast<FVectorType>(val.getType()))
       return builder->create<SubindexOp>(val, index);
 
     llvm_unreachable("Unknown aggregate type");

@@ -365,7 +365,7 @@ void Emitter::emitModule(FExtModuleOp op) {
 
     // Emit the parameters.
     for (auto param : llvm::map_range(op.getParameters(), [](Attribute attr) {
-           return attr.cast<ParamDeclAttr>();
+           return cast<ParamDeclAttr>(attr);
          })) {
       startStatement();
       // TODO: AssignLike ?
@@ -634,7 +634,7 @@ void Emitter::emitStatement(MemOp op) {
   auto portNameBaseLen = portName.size();
   for (auto result : llvm::zip(op.getResults(), op.getPortNames())) {
     portName.resize(portNameBaseLen);
-    portName.append(std::get<1>(result).cast<StringAttr>().getValue());
+    portName.append(cast<StringAttr>(std::get<1>(result)).getValue());
     addValueName(std::get<0>(result), portName);
   }
 
@@ -888,7 +888,7 @@ void Emitter::emitExpression(SpecialConstantOp op) {
     ps.addAsString(op.getValue());
     ps << ")";
   };
-  TypeSwitch<FIRRTLType>(op.getType().cast<FIRRTLType>())
+  TypeSwitch<FIRRTLType>(cast<FIRRTLType>(op.getType()))
       .Case<ClockType>([&](auto type) {
         ps << "asClock(";
         emitInner();

@@ -96,15 +96,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createRandomizeRegisterInitPass());
 
-  if (opt.useOldCheckCombCycles) {
-    if (opt.preserveAggregate == firrtl::PreserveAggregate::None)
-      pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombCyclesPass());
-    else
-      emitWarning(module.getLoc())
-          << "CheckCombCyclesPass doesn't support aggregate "
-             "values yet so it is skipped\n";
-  } else
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombLoopsPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombLoopsPass());
 
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!opt.disableOptimization)

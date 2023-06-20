@@ -780,7 +780,7 @@ ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
           FIRRTLType parsedType;
           if (parseType(parsedType, "expected enumeration type"))
             return failure();
-          type = parsedType.dyn_cast<FIRRTLBaseType>();
+          type = dyn_cast<FIRRTLBaseType>(parsedType);
           if (!type)
             return emitError(fieldLoc, "field must be a base type");
         } else {
@@ -933,7 +933,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     if (failed(parseType(result, message)))
       return failure();
 
-    auto baseType = result.dyn_cast<FIRRTLBaseType>();
+    auto baseType = dyn_cast<FIRRTLBaseType>(result);
     if (!baseType)
       return emitError(loc, "only hardware types can be 'const'");
 
@@ -962,7 +962,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     if (size < 0)
       return emitError(sizeLoc, "invalid size specifier"), failure();
 
-    auto baseType = result.dyn_cast<FIRRTLBaseType>();
+    auto baseType = dyn_cast<FIRRTLBaseType>(result);
     if (baseType)
       result = FVectorType::get(baseType, size);
     else
@@ -1487,7 +1487,7 @@ private:
 /// Attach invalid values to every element of the value.
 // NOLINTNEXTLINE(misc-no-recursion)
 void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
-  auto tpe = val.getType().dyn_cast<FIRRTLBaseType>();
+  auto tpe = dyn_cast<FIRRTLBaseType>(val.getType());
   // Invalidate does nothing for non-base types.
   // When aggregates-of-refs are supported, instead check 'containsReference'
   // below.
@@ -1538,17 +1538,17 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
 
 void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
                                        Value src) {
-  auto dstType = dst.getType().dyn_cast<FIRRTLBaseType>();
-  auto srcType = src.getType().dyn_cast<FIRRTLBaseType>();
+  auto dstType = dyn_cast<FIRRTLBaseType>(dst.getType());
+  auto srcType = dyn_cast<FIRRTLBaseType>(src.getType());
   if (!dstType || !srcType)
     return emitConnect(builder, dst, src);
 
-  if (dstType.isa<AnalogType>()) {
+  if (isa<AnalogType>(dstType)) {
     builder.create<AttachOp>(ArrayRef<Value>{dst, src});
   } else if (dstType == srcType && !dstType.containsAnalog()) {
     emitConnect(builder, dst, src);
-  } else if (auto dstBundle = dstType.dyn_cast<BundleType>()) {
-    auto srcBundle = srcType.cast<BundleType>();
+  } else if (auto dstBundle = dyn_cast<BundleType>(dstType)) {
+    auto srcBundle = cast<BundleType>(srcType);
     auto numElements = dstBundle.getNumElements();
     for (size_t dstIndex = 0; dstIndex < numElements; ++dstIndex) {
       // Find a matching field by name in the other bundle.
@@ -1580,8 +1580,8 @@ void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
       else
         emitPartialConnect(builder, srcField, dstField);
     }
-  } else if (auto dstVector = dstType.dyn_cast<FVectorType>()) {
-    auto srcVector = srcType.cast<FVectorType>();
+  } else if (auto dstVector = dyn_cast<FVectorType>(dstType)) {
+    auto srcVector = cast<FVectorType>(srcType);
     auto dstNumElements = dstVector.getNumElements();
     auto srcNumEelemnts = srcVector.getNumElements();
     // Partial connect will connect all elements up to the end of the array.
@@ -1914,7 +1914,7 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result) {
     return failure();
 
   // If the index expression is a flip type, strip it off.
-  auto indexType = index.getType().dyn_cast<FIRRTLBaseType>();
+  auto indexType = dyn_cast<FIRRTLBaseType>(index.getType());
   if (!indexType)
     return emitError("expected base type for index expression");
   indexType = indexType.getPassiveType();
@@ -1973,7 +1973,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
 
   SmallVector<FIRRTLType, 3> opTypes;
   for (auto v : operands)
-    opTypes.push_back(v.getType().cast<FIRRTLType>());
+    opTypes.push_back(cast<FIRRTLType>(v.getType()));
 
   unsigned numOperandsExpected;
   SmallVector<StringAttr, 2> attrNames;
@@ -2353,7 +2353,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
       parseExp(clock, "expected clock expression") || parseOptionalInfo())
     return failure();
 
-  auto memVType = memory.getType().dyn_cast<CMemoryType>();
+  auto memVType = dyn_cast<CMemoryType>(memory.getType());
   if (!memVType)
     return emitError(startLoc,
                      "memory port should have behavioral memory type");
@@ -3087,8 +3087,8 @@ ParseResult FIRStmtParser::parseConnect() {
       parseExp(rhs, "expected connect expression") || parseOptionalInfo())
     return failure();
 
-  auto lhsType = lhs.getType().dyn_cast<FIRRTLBaseType>();
-  auto rhsType = rhs.getType().dyn_cast<FIRRTLBaseType>();
+  auto lhsType = dyn_cast<FIRRTLBaseType>(lhs.getType());
+  auto rhsType = dyn_cast<FIRRTLBaseType>(rhs.getType());
   if (!lhsType || !rhsType)
     return emitError(loc, "cannot connect reference or property types");
   // TODO: Once support lands for agg-of-ref, add test for this check!
@@ -3114,8 +3114,8 @@ ParseResult FIRStmtParser::parsePropAssign() {
       parseExp(rhs, "expected propassign expression") || parseOptionalInfo())
     return failure();
 
-  auto lhsType = lhs.getType().dyn_cast<PropertyType>();
-  auto rhsType = rhs.getType().dyn_cast<PropertyType>();
+  auto lhsType = dyn_cast<PropertyType>(lhs.getType());
+  auto rhsType = dyn_cast<PropertyType>(rhs.getType());
   if (!lhsType || !rhsType)
     return emitError(loc, "can only propassign property types");
   if (lhsType != rhsType)
@@ -3178,8 +3178,8 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
 
   locationProcessor.setLoc(loc);
 
-  auto lhsType = lhs.getType().dyn_cast<FIRRTLBaseType>();
-  auto rhsType = rhs.getType().dyn_cast<FIRRTLBaseType>();
+  auto lhsType = dyn_cast<FIRRTLBaseType>(lhs.getType());
+  auto rhsType = dyn_cast<FIRRTLBaseType>(rhs.getType());
   if (!lhsType || !rhsType)
     return emitError(loc, "cannot connect reference or property types");
   // TODO: Once support lands for agg-of-ref, add test for this check!
@@ -3289,7 +3289,7 @@ ParseResult FIRStmtParser::parseCombMem() {
   locationProcessor.setLoc(startTok.getLoc());
 
   // Transform the parsed vector type into a memory type.
-  auto vectorType = type.dyn_cast<FVectorType>();
+  auto vectorType = dyn_cast<FVectorType>(type);
   if (!vectorType)
     return emitError("cmem requires vector type");
 
@@ -3324,7 +3324,7 @@ ParseResult FIRStmtParser::parseSeqMem() {
   locationProcessor.setLoc(startTok.getLoc());
 
   // Transform the parsed vector type into a memory type.
-  auto vectorType = type.dyn_cast<FVectorType>();
+  auto vectorType = dyn_cast<FVectorType>(type);
   if (!vectorType)
     return emitError("smem requires vector type");
 
@@ -3421,7 +3421,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     StringRef portName;
     if (parseId(portName, "expected port name"))
       return failure();
-    auto baseType = type.dyn_cast<FIRRTLBaseType>();
+    auto baseType = dyn_cast<FIRRTLBaseType>(type);
     if (!baseType)
       return emitError("unexpected type, must be base type");
     ports.push_back({builder.getStringAttr(portName),
@@ -3506,9 +3506,9 @@ ParseResult FIRStmtParser::parseNode() {
   // this is added to align with the SFC. (2) is less restrictive than
   // the SFC to accomodate for situations where the node is something
   // weird like a module output or an instance input.
-  auto initializerType = initializer.getType().cast<FIRRTLType>();
-  auto initializerBaseType = initializer.getType().dyn_cast<FIRRTLBaseType>();
-  if (initializerType.isa<AnalogType>() ||
+  auto initializerType = cast<FIRRTLType>(initializer.getType());
+  auto initializerBaseType = dyn_cast<FIRRTLBaseType>(initializer.getType());
+  if (isa<AnalogType>(initializerType) ||
       !(initializerBaseType && initializerBaseType.isPassive())) {
     emitError(startTok.getLoc())
         << "Node cannot be analog and must be passive or passive under a flip "
@@ -3972,6 +3972,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
         // If we got to the next module, then we're done.
       case FIRToken::kw_module:
       case FIRToken::kw_extmodule:
+      case FIRToken::kw_intmodule:
         // All module declarations should have the same indentation
         // level. Use this fact to differentiate between module
         // declarations and usages of "module" as identifiers.

@@ -84,7 +84,7 @@ bool type_isa(Type type) {
 
   // Then check if it is a type alias wrapping the requested type.
   if (auto alias = type.dyn_cast<TypeAliasType>())
-    return alias.getInnerType().isa<BaseTy...>();
+    return type_isa<BaseTy...>(alias.getInnerType());
 
   return false;
 }
@@ -106,7 +106,7 @@ BaseTy type_cast(Type type) {
     return type.cast<BaseTy>();
 
   // Otherwise, it must be a type alias wrapping the requested type.
-  return type.cast<TypeAliasType>().getInnerType().cast<BaseTy>();
+  return type_cast<BaseTy>(type.cast<TypeAliasType>().getInnerType());
 }
 
 template <typename BaseTy>
