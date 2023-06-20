@@ -51,7 +51,7 @@ public:
     Location loc = op.getLoc();
     SmallVector<bool> table(
         llvm::map_range(op.getLookupTableAttr().getAsValueRange<IntegerAttr>(),
-                        [](APInt a) { return !a.isZero(); }));
+                        [](const APInt &a) { return !a.isZero(); }));
     Value t = b.create<hw::ConstantOp>(loc, b.getIntegerAttr(b.getI1Type(), 1));
     Value f = b.create<hw::ConstantOp>(loc, b.getIntegerAttr(b.getI1Type(), 0));
 
