@@ -967,6 +967,45 @@ static LogicalResult legalizeHWModule(Block &block,
       continue;
     }
 
+    // Lower mux intrinsics.
+    if (isa<SynopsysMux4IntrinsicOp, SynopsysMux2IntrinsicOp>(&op)) {
+      Value assigned;
+      ImplicitLocOpBuilder builder(op.getLoc(), &op);
+      if (auto mux4 = dyn_cast<SynopsysMux4IntrinsicOp>(&op)) {
+        // For 4-wide mux, lower into array_create and array_get with pragma.
+        auto array =
+            builder.create<hw::ArrayCreateOp>(mux4.getOperands().drop_front());
+        opIterator = array->getIterator();
+        assigned = builder.create<hw::ArrayGetOp>(array, mux4.getSel());
+      } else {
+        // For 2-wide mux, lower into a mux with pragma.
+        auto mux2 = cast<SynopsysMux2IntrinsicOp>(&op);
+        assigned = builder.create<comb::MuxOp>(mux2.getOperands());
+        opIterator = assigned.getDefiningOp()->getIterator();
+      }
+
+      Value wireOp;
+      Operation *assign;
+      auto type = op.getResult(0).getType();
+      if (op.getParentOp()->hasTrait<ProceduralRegion>()) {
+        wireOp = builder.create<LogicOp>(type);
+        assign = builder.create<BPAssignOp>(wireOp, assigned);
+      } else {
+        wireOp = builder.create<sv::WireOp>(type);
+        assign = builder.create<AssignOp>(wireOp, assigned);
+      }
+
+      auto readOp = builder.create<ReadInOutOp>(wireOp);
+      op.getResult(0).replaceAllUsesWith(readOp);
+      // Add infer_mux_override to the assignment.
+      sv::addSVAttributes(assign,
+                          SVAttributeAttr::get(wireOp.getContext(),
+                                               "synopsys infer_mux_override",
+                                               /*emitAsComment=*/true));
+      op.erase();
+      continue;
+    }
+
     // If this expression is deemed worth spilling into a wire, do it here.
     if (shouldSpillWire(op, options)) {
       // We first check that it is possible to reuse existing wires as a spilled

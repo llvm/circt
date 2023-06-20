@@ -316,3 +316,46 @@ def TruthTableOp : CombOp<"truth_table", [Pure]> {
 
   let hasVerifier = 1;
 }
+
+
+//===----------------------------------------------------------------------===//
+// Targest Specific Intrinsics
+//===----------------------------------------------------------------------===//
+
+def SynopsysMux2IntrinsicOp : CombOp<"int.synopsys.mux2",
+ [Pure, AllTypesMatch<["trueValue", "falseValue", "result"]>]> {
+  let summary = "An intrinsic lowered into 2-to-1 MUX cell in the synopsys target";
+  let description = [{
+    ```
+      %0 = int.synopsys.mux2 %pred, %tvalue, %fvalue : i4
+    ```
+  }];
+
+  let arguments = (ins I1:$cond, AnyType:$trueValue,
+                       AnyType:$falseValue, UnitAttr:$twoState);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    (`bin` $twoState^)? $cond `,` $trueValue `,` $falseValue
+      attr-dict `:` qualified(type($result))
+  }];
+}
+
+def SynopsysMux4IntrinsicOp : CombOp<"int.synopsys.mux4",
+ [Pure, AllTypesMatch<["v3", "v2", "v1", "v0", "result"]>]> {
+  let summary = "An intrinsic lowered into 4-to-1 MUX cell in the synopsys target";
+  let description = [{
+    ```
+      %0 = comb.int.synopsys.mux4 %sel, %v3, %v2, %v1, %v0 : i4
+    ```
+  }];
+
+  let arguments = (ins I<2>:$sel, AnyType:$v3, AnyType:$v2,
+                       AnyType:$v1, AnyType:$v0, UnitAttr:$twoState);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    (`bin` $twoState^)? $sel `,` $v3 `,` $v2 `,` $v1 `,` $v0
+      attr-dict `:` qualified(type($result))
+  }];
+}

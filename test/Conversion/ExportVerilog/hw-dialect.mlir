@@ -1063,6 +1063,20 @@ hw.module @structExplodeLowering(%a: !hw.struct<a: i1, b: i1>) -> (outA: i1, out
   hw.output %0#0, %0#1 : i1, i1
 }
 
+hw.module @SynopsysIntrinsic(%sel: i1, %sel2: i2, %high: i1, %low: i1) -> (out1: i1, out2: i1) {
+  // CHECK:      /* synopsys infer_mux_override */
+  // CHECK-NEXT: assign [[MUX2:.+]] = sel ? high : low;
+  // CHECK-NEXT: wire [3:0] [[ARRAY:.+]] =
+  // CHECK-SAME{LITERAL}: {{high}, {low}, {high}, {low}};
+  // CHECK:      /* synopsys infer_mux_override */
+  // CHECK-NEXT: assign [[MUX4:.+]] = [[ARRAY]][sel2];
+  // CHECK-NEXT: assign out1 = [[MUX2]];
+  // CHECK-NEXT: assign out2 = [[MUX4]];
+  %0 = comb.int.synopsys.mux2 bin %sel, %high, %low : i1
+  %1 = comb.int.synopsys.mux4 bin %sel2, %high, %low, %high, %low : i1
+  hw.output %0, %1 : i1, i1
+}
+
 
 // Rename field names
 // CHECK-LABEL: renameKeyword(

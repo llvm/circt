@@ -104,6 +104,8 @@ public:
   HANDLE(ReplicateOp, Unhandled);
   HANDLE(ExtractOp, Unhandled);
   HANDLE(MuxOp, Unhandled);
+  HANDLE(SynopsysMux2IntrinsicOp, Unhandled);
+  HANDLE(SynopsysMux4IntrinsicOp, Unhandled);
 #undef HANDLE
 };
 
