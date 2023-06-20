@@ -69,20 +69,34 @@ static LogicalResult verifyPipeline(PipelineLike op) {
   llvm::SmallVector<Type> expectedInArgTypes;
   llvm::append_range(expectedInArgTypes, op.getInputs().getTypes());
   llvm::append_range(expectedInArgTypes, op.getExtInputs().getTypes());
-  size_t expectedNumArgs = expectedInArgTypes.size();
-  if (entryStage->getNumArguments() != expectedNumArgs)
-    return op.emitOpError("expected ")
-           << expectedNumArgs << " arguments in the pipeline body block, got "
-           << entryStage->getNumArguments() << ".";
 
-  for (size_t i = 0; i < expectedNumArgs; i++) {
+  // Validate the stage data inputs.
+  size_t nEntryStageArguments = entryStage->getArgumentTypes().size();
+  if (nEntryStageArguments != expectedInArgTypes.size() + /*s0 valid*/ 1)
+    return op.emitOpError("expected ")
+           << expectedInArgTypes.size() + /*s0 valid*/ 1
+           << " arguments in the pipeline entry block, got "
+           << nEntryStageArguments << ".";
+
+  TypeRange entryStageArguments =
+      TypeRange(entryStage->getArgumentTypes()).drop_back();
+
+  for (size_t i = 0; i < expectedInArgTypes.size(); i++) {
     Type expectedInArg = expectedInArgTypes[i];
-    Type bodyArg = entryStage->getArgument(i).getType();
+    Type bodyArg = entryStageArguments[i];
     if (expectedInArg != bodyArg)
       return op.emitOpError("expected body block argument ")
              << i << " to have type " << expectedInArg << ", got " << bodyArg
              << ".";
   }
+
+  // Verify that the entry stage is terminated with an i1 signal (valid signal).
+  IntegerType lastEntryArgType =
+      entryStage->getArguments().back().getType().dyn_cast<IntegerType>();
+  if (!lastEntryArgType || !lastEntryArgType.isInteger(1))
+    return op.emitOpError(
+        "expected last argument to the entry stage to be an i1 "
+        "signal (stage valid signal).");
 
   return success();
 }
@@ -96,11 +110,12 @@ LogicalResult UnscheduledPipelineOp::verify() { return verifyPipeline(*this); }
 void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                                 TypeRange results, ValueRange inputs,
                                 ValueRange extInputs, Value clock, Value reset,
-                                mlir::Value stall) {
+                                Value go, Value stall) {
   odsState.addOperands(inputs);
   odsState.addOperands(extInputs);
   odsState.addOperands(clock);
   odsState.addOperands(reset);
+  odsState.addOperands(go);
   if (stall)
     odsState.addOperands(stall);
 
@@ -109,7 +124,8 @@ void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
       odsBuilder.getDenseI32ArrayAttr(
           {static_cast<int32_t>(inputs.size()),
            static_cast<int32_t>(extInputs.size()), static_cast<int32_t>(1),
-           static_cast<int32_t>(1), static_cast<int32_t>(stall ? 1 : 0)}));
+           static_cast<int32_t>(1), static_cast<int32_t>(1),
+           static_cast<int32_t>(stall ? 1 : 0)}));
 
   auto *region = odsState.addRegion();
   odsState.addTypes(results);
@@ -123,12 +139,42 @@ void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   entryBlock.addArguments(
       extInputs.getTypes(),
       llvm::SmallVector<Location>(extInputs.size(), odsState.location));
+  // entry stage valid signal.
+  entryBlock.addArgument(odsBuilder.getIntegerType(1), odsState.location);
 }
 
 Block *ScheduledPipelineOp::addStage() {
   OpBuilder builder(getContext());
   Block *stage = builder.createBlock(&getRegion());
+
+  // Add the stage valid signal.
+  stage->addArgument(builder.getIntegerType(1), getLoc());
   return stage;
+}
+
+void ScheduledPipelineOp::getAsmBlockArgumentNames(
+    mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
+  for (auto [i, block] : llvm::enumerate(getRegion())) {
+    if (&block == getEntryStage()) {
+      size_t nRegularInputs = getInputs().size();
+      size_t nExternalInputs = getExtInputs().size();
+      for (auto [argi, arg] :
+           llvm::enumerate(block.getArguments().slice(0, nRegularInputs)))
+        setNameFn(arg, "s0_arg" + std::to_string(argi));
+
+      for (auto [argi, arg] : llvm::enumerate(
+               block.getArguments().slice(nRegularInputs, nExternalInputs)))
+        setNameFn(arg, "ext" + std::to_string(argi));
+    } else {
+      for (auto [argi, arg] : llvm::enumerate(block.getArguments().drop_back()))
+        setNameFn(arg, "s" + std::to_string(i) + "_arg" + std::to_string(argi));
+    }
+
+    setNameFn(block.getArguments().back(), "s" + std::to_string(i) + "_valid");
+  }
+}
+void ScheduledPipelineOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getDone(), "done");
 }
 
 // Implementation of getOrderedStages which also produces an error if
@@ -171,12 +217,12 @@ Block *ScheduledPipelineOp::getLastStage() { return getOrderedStages().back(); }
 
 bool ScheduledPipelineOp::isMaterialized() {
   // We determine materialization as if any pipeline stage has an explicit
-  // input.
+  // input (apart from the stage valid signal).
   return llvm::any_of(getStages(), [this](Block &block) {
     // The entry stage doesn't count since it'll always have arguments.
     if (&block == getEntryStage())
       return false;
-    return block.getNumArguments() != 0;
+    return block.getNumArguments() > 1;
   });
 }
 
@@ -196,28 +242,42 @@ LogicalResult ScheduledPipelineOp::verify() {
   if (failed(getOrderedStagesFailable(*this)))
     return failure();
 
+  // Verify that every stage has a stage valid block argument.
+  for (auto [i, block] : llvm::enumerate(stages)) {
+    bool err = true;
+    if (block.getNumArguments() != 0) {
+      auto lastArgType =
+          block.getArguments().back().getType().dyn_cast<IntegerType>();
+      err = !lastArgType || lastArgType.getWidth() != 1;
+    }
+    if (err)
+      return emitOpError("block " + std::to_string(i) +
+                         " must have an i1 argument as the last block argument "
+                         "(stage valid signal).");
+  }
+
   // Cache external inputs in a set for fast lookup.
   llvm::DenseSet<Value> extInputs;
   for (auto extInput : getInnerExtInputs())
     extInputs.insert(extInput);
 
-  // Phase invariant - if any block has arguments, we are in register
-  // materialized mode.
-  // Check that all values used within a stage are defined within the stage.
+  // Phase invariant - if any block has arguments apart from the stage valid
+  // argument, we are in register materialized mode. Check that all values used
+  // within a stage are defined within the stage.
   bool materialized = isMaterialized();
   if (materialized) {
     for (auto &stage : stages) {
       for (auto &op : stage) {
         for (auto [index, operand] : llvm::enumerate(op.getOperands())) {
           bool err = false;
-          if (auto *definingOp = operand.getDefiningOp()) {
+          if (extInputs.contains(operand)) {
+            // This is an external input; legal to reference everywhere.
+            continue;
+          } else if (auto *definingOp = operand.getDefiningOp()) {
             // Constants are allowed to be used across stages.
             if (definingOp->hasTrait<OpTrait::ConstantLike>())
               continue;
             err = definingOp->getBlock() != &stage;
-          } else if (extInputs.contains(operand)) {
-            // This is an external input; legal to reference everywhere.
-            continue;
           } else {
             // This is a block argument;
             err = !llvm::is_contained(stage.getArguments(), operand);
@@ -243,13 +303,14 @@ LogicalResult ScheduledPipelineOp::verify() {
 LogicalResult ReturnOp::verify() {
   Operation *parent = getOperation()->getParentOp();
   size_t nInputs = getInputs().size();
-  size_t nResults = parent->getNumResults();
-  if (nInputs != nResults)
+  auto expectedResults = TypeRange(parent->getResultTypes()).drop_back();
+  size_t expectedNResults = expectedResults.size();
+  if (nInputs != expectedNResults)
     return emitOpError("expected ")
-           << nResults << " return values, got " << nInputs << ".";
+           << expectedNResults << " return values, got " << nInputs << ".";
 
   for (auto [inType, reqType] :
-       llvm::zip(getInputs().getTypes(), parent->getResultTypes())) {
+       llvm::zip(getInputs().getTypes(), expectedResults)) {
     if (inType != reqType)
       return emitOpError("expected return value of type ")
              << reqType << ", got " << inType << ".";
@@ -262,34 +323,23 @@ LogicalResult ReturnOp::verify() {
 // StageOp
 //===----------------------------------------------------------------------===//
 
-SuccessorOperands StageOp::getSuccessorOperands(unsigned index) {
-  assert(index == 0 && "invalid successor index");
-  // Successor operands are everything but the "valid" input to this stage op.
-  // Places a hard assumption on the regs and passthrough operands being next to
-  // each other in the operand list.
-  auto mutableRange =
-      mlir::MutableOperandRange(getOperation(), 0, getNumOperands() - 1);
-  return SuccessorOperands(mutableRange);
-}
-
-Block *StageOp::getSuccessorForOperands(ArrayRef<Attribute>) {
-  return getNextStage();
-}
-
 LogicalResult StageOp::verify() {
   // Verify that the target block has the correct arguments as this stage op.
   llvm::SmallVector<Type> expectedTargetArgTypes;
   llvm::append_range(expectedTargetArgTypes, getRegisters().getTypes());
   llvm::append_range(expectedTargetArgTypes, getPassthroughs().getTypes());
   Block *targetStage = getNextStage();
+  // Expected types is everything but the stage valid signal.
+  TypeRange targetStageArgTypes =
+      TypeRange(targetStage->getArgumentTypes()).drop_back();
 
-  if (targetStage->getNumArguments() != expectedTargetArgTypes.size())
+  if (targetStageArgTypes.size() != expectedTargetArgTypes.size())
     return emitOpError("expected ") << expectedTargetArgTypes.size()
                                     << " arguments in the target stage, got "
-                                    << targetStage->getNumArguments() << ".";
+                                    << targetStageArgTypes.size() << ".";
 
-  for (auto [index, it] : llvm::enumerate(llvm::zip(
-           expectedTargetArgTypes, targetStage->getArgumentTypes()))) {
+  for (auto [index, it] : llvm::enumerate(
+           llvm::zip(expectedTargetArgTypes, targetStageArgTypes))) {
     auto [arg, barg] = it;
     if (arg != barg)
       return emitOpError("expected target stage argument ")

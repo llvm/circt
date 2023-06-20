@@ -139,7 +139,7 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
   auto schedPipeline = b.template create<pipeline::ScheduledPipelineOp>(
       pipeline.getLoc(), pipeline->getResultTypes(), pipeline.getInputs(),
       pipeline.getExtInputs(), pipeline.getClock(), pipeline.getReset(),
-      pipeline.getStall());
+      pipeline.getGo(), pipeline.getStall());
 
   Block *currentStage = schedPipeline.getStage(0);
 
@@ -147,11 +147,6 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
        llvm::zip(pipeline.getBodyBlock()->getArguments(),
                  currentStage->getArguments()))
     oldBArg.replaceAllUsesWith(newBArg);
-
-  // true-valued constant used for the enable signals throughout the pipeline.
-  b.setInsertionPointToStart(currentStage);
-  Value c1i1 = b.create<hw::ConstantOp>(pipeline.getLoc(), b.getI1Type(),
-                                        b.getIntegerAttr(b.getI1Type(), 1));
 
   // Iterate over the ops in the pipeline, and add them to the stage map.
   // While doing so, we also build the pipeline stage operations.
@@ -173,7 +168,7 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
       // stage.
       b.setInsertionPointToEnd(currentStage);
       b.create<pipeline::StageOp>(pipeline.getLoc(), ValueRange{}, ValueRange{},
-                                  c1i1, newStage);
+                                  newStage);
       currentStage = newStage;
     }
   }

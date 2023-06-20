@@ -43,13 +43,16 @@ public:
   struct StageReturns {
     llvm::SmallVector<Value> regs;
     llvm::SmallVector<Value> passthroughs;
+    Value valid;
   };
 
   virtual LogicalResult lowerStage(Block *stage, ValueRange stageArguments,
-                                   size_t stageIndex) = 0;
+                                   Value stageValid, size_t stageIndex) = 0;
 
   StageReturns emitStageBody(Block *stage, size_t stageIndex = -1,
-                             Value clock = nullptr, Value reset = nullptr) {
+                             Value clock = nullptr, Value reset = nullptr,
+                             Value valid = nullptr) {
+    assert(valid && "valid not set");
     auto *terminator = stage->getTerminator();
 
     // Move the stage operations into the current insertion point.
@@ -81,21 +84,35 @@ public:
       assert(isa<ReturnOp>(terminator) && "expected ReturnOp");
       // This was the pipeline return op - we're done.
       rets.passthroughs = terminator->getOperands();
+      rets.valid = valid;
       return rets;
     }
 
-    // Build data registers
+    // Build data registers. These are clock gated by the stage valid signal.
     auto stageRegPrefix = getStageRegPrefix(stageIndex);
+
     for (auto it : llvm::enumerate(stageTerminator.getRegisters())) {
+      assert(clock && "clock not set");
+      assert(reset && "reset not set");
       auto regIdx = it.index();
       auto regIn = it.value();
       auto regName = builder.getStringAttr(stageRegPrefix.strref() + "_reg" +
                                            std::to_string(regIdx));
-      auto reg = builder.create<seq::CompRegOp>(
-          stageTerminator->getLoc(), regIn.getType(), regIn, clock, regName,
-          reset, Value(), StringAttr());
+      auto reg = builder.create<seq::CompRegClockEnabledOp>(
+          stageTerminator->getLoc(), regIn.getType(), regIn, clock, valid,
+          regName, reset, /*resetValue*/ Value(), /*sym_name*/ StringAttr());
       rets.regs.push_back(reg);
     }
+
+    // Build valid register. The valid register is always reset to 0.
+    auto validRegName =
+        builder.getStringAttr(stageRegPrefix.strref() + "_valid");
+    rets.valid = builder.create<seq::CompRegOp>(
+        stageTerminator->getLoc(), builder.getI1Type(), valid, clock,
+        validRegName, reset, /*resetValue*/
+        builder.create<hw::ConstantOp>(terminator->getLoc(), APInt(1, 0, false))
+            .getResult(),
+        /*sym_name*/ StringAttr());
 
     rets.passthroughs = stageTerminator.getPassthroughs();
     return rets;
@@ -149,8 +166,8 @@ public:
     // All operations should go directly before the pipeline op, into the
     // parent module.
     builder.setInsertionPoint(pipeline);
-    if (failed(
-            lowerStage(pipeline.getEntryStage(), pipeline.getInnerInputs(), 0)))
+    if (failed(lowerStage(pipeline.getEntryStage(), pipeline.getInnerInputs(),
+                          pipeline.getGo(), 0)))
       return failure();
 
     return success();
@@ -158,7 +175,7 @@ public:
 
   /// NOLINTNEXTLINE(misc-no-recursion)
   LogicalResult lowerStage(Block *stage, ValueRange stageArguments,
-                           size_t stageIndex) override {
+                           Value stageValid, size_t stageIndex) override {
     OpBuilder::InsertionGuard guard(builder);
 
     if (stage != pipeline.getEntryStage()) {
@@ -168,10 +185,13 @@ public:
         vInput.replaceAllUsesWith(vArg);
     }
 
+    // Replace the stage valid signal.
+    pipeline.getStageValidSignal(stage).replaceAllUsesWith(stageValid);
+
     // Move stage operations into the current module.
     builder.setInsertionPoint(pipeline);
     StageReturns stageRets =
-        emitStageBody(stage, stageIndex, parentClk, parentRst);
+        emitStageBody(stage, stageIndex, parentClk, parentRst, stageValid);
 
     if (auto nextStage = dyn_cast<StageOp>(stage->getTerminator())) {
       // Lower the next stage.
@@ -179,12 +199,16 @@ public:
       llvm::append_range(nextStageArgs, stageRets.regs);
       llvm::append_range(nextStageArgs, stageRets.passthroughs);
       return lowerStage(nextStage.getNextStage(), nextStageArgs,
-                        stageIndex + 1);
+                        stageRets.valid, stageIndex + 1);
     }
 
     // Replace the pipeline results with the return op operands.
     auto returnOp = cast<pipeline::ReturnOp>(stage->getTerminator());
-    pipeline.replaceAllUsesWith(returnOp.getInputs());
+    llvm::SmallVector<Value> pipelineReturns;
+    llvm::append_range(pipelineReturns, returnOp.getInputs());
+    // The last stage valid signal is the 'done' output of the pipeline.
+    pipelineReturns.push_back(stageValid);
+    pipeline.replaceAllUsesWith(pipelineReturns);
     pipeline.erase();
     return success();
   }
@@ -208,12 +232,14 @@ public:
       parent.getStageExtInputs(block, stageExtInputs);
       extInputs =
           mod.getArguments().slice(nStageInputArgs, stageExtInputs.size());
+      valid = mod.getArgument(mod.getNumArguments() - 3);
       clock = mod.getArgument(mod.getNumArguments() - 2);
       reset = mod.getArgument(mod.getNumArguments() - 1);
     }
 
     ValueRange inputs;
     ValueRange extInputs;
+    Value valid;
     Value clock;
     Value reset;
   };
@@ -276,10 +302,11 @@ public:
     // operations are inserted into the pipeline module.
     builder.setInsertionPointToStart(pipelineMod.getBodyBlock());
 
-    if (failed(lowerStage(
-            pipeline.getEntryStage(),
-            pipelineMod.getArguments().take_front(pipeline.getInputs().size()),
-            0)))
+    PipelineStageMod pipelineStageMod(*this, pipeline.getEntryStage(),
+                                      pipelineMod);
+
+    if (failed(lowerStage(pipeline.getEntryStage(), pipelineStageMod.inputs,
+                          pipelineStageMod.valid, 0)))
       return failure();
 
     pipeline.erase();
@@ -288,20 +315,25 @@ public:
 
   /// NOLINTNEXTLINE(misc-no-recursion)
   LogicalResult lowerStage(Block *stage, ValueRange stageArguments,
-                           size_t stageIndex) override {
+                           Value stageValid, size_t stageIndex) override {
     Block *nextStage = nullptr;
-    Value modClock, modReset;
+    Value modClock, modReset, modValid;
     hw::OutputOp stageOutputOp;
     ValueRange nextStageArgs;
+    Value nextStageValid;
 
     if (auto stageOp = dyn_cast<StageOp>(stage->getTerminator())) {
-      auto [mod, inst] = buildStage(stage, stageArguments, stageIndex);
+      auto [mod, inst] =
+          buildStage(stage, stageArguments, stageValid, stageIndex);
       auto pipelineStageMod = PipelineStageMod{*this, stage, mod};
 
       // Remap the internal inputs of the stage to the module block arguments.
       for (auto [vInput, vBarg] : llvm::zip(pipeline.getStageArguments(stage),
                                             pipelineStageMod.inputs))
         vInput.replaceAllUsesWith(vBarg);
+
+      pipeline.getStageValidSignal(stage).replaceAllUsesWith(
+          pipelineStageMod.valid);
 
       // Remap external inputs to the stage to the external inputs in the
       // module block arguments.
@@ -318,14 +350,18 @@ public:
       builder.setInsertionPointToStart(&mod.getBody().front());
       modClock = pipelineStageMod.clock;
       modReset = pipelineStageMod.reset;
+      modValid = pipelineStageMod.valid;
       stageOutputOp = cast<hw::OutputOp>(mod.getBody().front().getTerminator());
       nextStage = stageOp.getNextStage();
-      nextStageArgs = inst.getResults();
+      nextStageArgs = inst.getResults().drop_back();
+      nextStageValid = inst.getResults().back();
     } else {
       // Remap the internal inputs of the stage to the stage arguments.
       for (auto [vInput, vBarg] :
            llvm::zip(pipeline.getStageArguments(stage), stageArguments))
         vInput.replaceAllUsesWith(vBarg);
+
+      pipeline.getStageValidSignal(stage).replaceAllUsesWith(stageValid);
 
       // Remap external inputs with the top-level pipeline module external
       // inputs.
@@ -340,19 +376,23 @@ public:
           cast<hw::OutputOp>(pipelineMod.getBodyBlock()->getTerminator());
       // Move lingering operations into the top-level pipeline module.
       builder.setInsertionPoint(stageOutputOp);
+      modValid = stageValid;
     }
 
     StageReturns stageRets =
-        emitStageBody(stage, stageIndex, modClock, modReset);
+        emitStageBody(stage, stageIndex, modClock, modReset, modValid);
 
     // Assign the output operation to the stage return values.
     stageOutputOp->insertOperands(0, stageRets.regs);
     stageOutputOp->insertOperands(stageOutputOp.getNumOperands(),
                                   stageRets.passthroughs);
+    stageOutputOp->insertOperands(stageOutputOp.getNumOperands(),
+                                  stageRets.valid);
 
     // Lower the next stage.
     if (nextStage)
-      return lowerStage(nextStage, nextStageArgs, stageIndex + 1);
+      return lowerStage(nextStage, nextStageArgs, nextStageValid,
+                        stageIndex + 1);
 
     return success();
   }
@@ -409,6 +449,11 @@ private:
           hw::PortInfo{builder.getStringAttr("extIn" + std::to_string(idx)),
                        hw::PortDirection::INPUT, in});
 
+    // Enable input
+    ports.push_back(hw::PortInfo{builder.getStringAttr("enable"),
+                                 hw::PortDirection::INPUT,
+                                 builder.getI1Type()});
+
     // clock and reset
     ports.push_back(hw::PortInfo{builder.getStringAttr("clk"),
                                  hw::PortDirection::INPUT,
@@ -422,12 +467,18 @@ private:
           hw::PortInfo{builder.getStringAttr("out" + std::to_string(idx)),
                        hw::PortDirection::OUTPUT, out});
 
+    // Valid output
+    ports.push_back(hw::PortInfo{builder.getStringAttr("valid"),
+                                 hw::PortDirection::OUTPUT,
+                                 builder.getI1Type()});
+
     return builder.create<hw::HWModuleOp>(pipeline.getLoc(),
                                           builder.getStringAttr(name), ports);
   }
 
   std::tuple<hw::HWModuleOp, hw::InstanceOp>
-  buildStage(Block *stage, ValueRange stageArguments, size_t stageIndex) {
+  buildStage(Block *stage, ValueRange stageArguments, Value stageValid,
+             size_t stageIndex) {
     builder.setInsertionPoint(parentModule);
     auto name = pipelineName + "_s" + std::to_string(stageIndex);
 
@@ -456,6 +507,7 @@ private:
     for (auto extInput : stageExtInputs)
       stageOperands.push_back(toplevelExtInputs[extInput]);
 
+    stageOperands.push_back(stageValid);
     stageOperands.push_back(pipelineClk);
     stageOperands.push_back(pipelineRst);
     auto inst = builder.create<hw::InstanceOp>(pipeline.getLoc(), mod,

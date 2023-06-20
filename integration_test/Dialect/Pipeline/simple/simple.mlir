@@ -9,19 +9,19 @@
 // CHECK: ** TEST
 // CHECK: ** TESTS=[[N:.*]] PASS=[[N]] FAIL=0 SKIP=0
 
-hw.module @simple(%arg0 : i32, %arg1 : i32, %go : i1, %clock : i1, %reset : i1) -> (out: i32) {
-  %out = pipeline.scheduled(%arg0, %arg1, %go) clock %clock reset %reset : (i32, i32, i1) -> (i32) {
-    ^bb0(%a0 : i32, %a1: i32, %g : i1):
+hw.module @simple(%arg0 : i32, %arg1 : i32, %go : i1, %clock : i1, %reset : i1) -> (out: i32, done : i1) {
+  %out, %done = pipeline.scheduled(%arg0, %arg1) clock %clock reset %reset go %go : (i32, i32) -> (i32) {
+    ^bb0(%a0 : i32, %a1: i32, %s0_valid : i1):
       %add0 = comb.add %a0, %a1 : i32
-      pipeline.stage ^bb1 enable %g
+      pipeline.stage ^bb1
 
-    ^bb1:
+    ^bb1(%s1_valid : i1):
       %add1 = comb.add %add0, %a0 : i32
-      pipeline.stage ^bb2 enable %g
+      pipeline.stage ^bb2
 
-    ^bb2:
+    ^bb2(%s2_valid : i1):
       %add2 = comb.add %add1, %add0 : i32
       pipeline.return %add2 : i32
   }
-  hw.output %out : i32
+  hw.output %out, %done : i32, i1
 }
