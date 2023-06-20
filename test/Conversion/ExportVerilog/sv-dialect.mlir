@@ -1767,14 +1767,14 @@ sv.bind #hw.innerNameRef<@InlineBind::@foo2>
 // CHECK-NEXT:  );
 
 // CHECK-LABEL:  hw.module @issue595
-// CHECK:     sv.wire  {hw.verilogName = "_GEN", verilogLocation = {
-// CHECK-SAME: file = "", line = "5"}} : !hw.inout<i32>
+// CHECK:     sv.wire  {hw.verilogName = "_GEN"
+// CHECK-SAME: : !hw.inout<i32>
 
 // CHECK-LABEL: hw.module @extInst2
 // CHECK-SAME: (%signed: i1 {hw.verilogName = "signed_0"}
 
 // CHECK-LABEL:  hw.module @remoteInstDut
-// CHECK:    %signed = sv.wire  {hw.verilogName = "signed_0", verilogLocation
-// CHECK-SAME: file = "", line = "9"}} : !hw.inout<i1>
-// CHECK:    %output = sv.reg  {hw.verilogName = "output_0", verilogLocation
-// CHECK-SAME: file = "", line = "10"}} : !hw.inout<i1>
+// CHECK:    %signed = sv.wire  {hw.verilogName = "signed_0"
+// CHECK-SAME: verilogLocationBegin = #loc4, verilogLocationEnd = #loc534} : !hw.inout<i1>
+// CHECK:    %output = sv.reg  {hw.verilogName = "output_0"
+// CHECK-SAME: verilogLocationBegin = #loc6, verilogLocationEnd = #loc535} : !hw.inout<i1>
