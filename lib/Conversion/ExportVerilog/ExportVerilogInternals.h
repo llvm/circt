@@ -15,6 +15,9 @@
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVVisitors.h"
+#include "circt/Support/LLVM.h"
+#include "mlir/IR/Location.h"
+#include "mlir/IR/MLIRContext.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/FormattedStream.h"
@@ -170,6 +173,74 @@ struct FileInfo {
   bool isVerilog = true;
 };
 
+struct OpLocMap {
+  struct LineColPair {
+    unsigned line = -1U;
+    unsigned col = -1U;
+    LineColPair() = default;
+    LineColPair(llvm::formatted_raw_ostream &s)
+        : line(s.getLine()), col(s.getColumn()) {}
+    bool isValid() { return (line != -1U && col != -1U); }
+  };
+  struct LocationRange {
+    LineColPair begin;
+    LineColPair end;
+    // LocationRange(LineColPair begin, LineColPair end)
+    //     : begin(begin), end(end) {}
+    LocationRange(LineColPair begin) : begin(begin) {}
+  };
+  using Locations = SmallVector<LocationRange, 2>;
+  DenseMap<Operation *, Locations> map;
+  void addBeginLoc(Operation *op, llvm::formatted_raw_ostream &s) {
+    map[op].emplace_back(LocationRange(LineColPair(s)));
+  }
+  void addEndLoc(Operation *op, llvm::formatted_raw_ostream &s) {
+    assert(!map[op].empty());
+    assert(map[op].back().begin.isValid());
+    assert(!map[op].back().end.isValid());
+    map[op].back().end = LineColPair(s);
+  }
+  void addLoc(Operation *op, llvm::formatted_raw_ostream &s, bool beginPrint) {
+    if (beginPrint)
+      addBeginLoc(op, s);
+    else
+      addEndLoc(op, s);
+  }
+  StringAttr verilogLineAttr;
+  void print() {
+    llvm::errs() << "\n == map ==\n";
+    for (const auto &i : map) {
+      llvm::errs() << "\n Op:" << *i.first;
+      for (auto l : i.second) {
+        llvm::errs() << "\n begin:" << l.begin.line << ":" << l.begin.col
+                     << " end:" << l.end.line << ":" << l.end.col;
+      }
+    }
+  }
+  void updateIRwithLoc(unsigned lineOffset, StringAttr fileName,
+                       MLIRContext *context) {
+    if (!verilogLineAttr)
+      verilogLineAttr = StringAttr::get(context, "verilogLocations");
+    auto metadataAttr = StringAttr::get(context, "Range");
+    for (auto iter : map) {
+      Operation *op = iter.getFirst();
+      SmallVector<Location> verilogLocs;
+      for (auto &loc : iter.getSecond()) {
+        SmallVector<Location, 2> beginEndPair;
+        assert(loc.begin.isValid() && loc.end.isValid());
+        beginEndPair.emplace_back(mlir::FileLineColLoc::get(
+            fileName, loc.begin.line + lineOffset, loc.begin.col));
+        beginEndPair.emplace_back(mlir::FileLineColLoc::get(
+            fileName, loc.end.line + lineOffset, loc.end.col));
+        verilogLocs.emplace_back(
+            mlir::FusedLoc::get(context, beginEndPair, metadataAttr));
+      }
+      op->setAttr(verilogLineAttr, mlir::FusedLoc::get(context, verilogLocs));
+    }
+  }
+  void clear() { map.clear(); }
+};
+
 /// This class wraps an operation or a fixed string that should be emitted.
 class StringOrOpToEmit {
 public:
@@ -211,6 +282,8 @@ public:
       : pointerData(rhs.pointerData), length(rhs.length) {
     rhs.pointerData = (Operation *)nullptr;
   }
+
+  OpLocMap verilogLocs;
 
 private:
   StringOrOpToEmit(const StringOrOpToEmit &) = delete;
@@ -268,7 +341,7 @@ struct SharedEmitterState {
   void collectOpsForFile(const FileInfo &fileInfo, EmissionList &thingsToEmit,
                          bool emitHeader = false);
   void emitOps(EmissionList &thingsToEmit, llvm::formatted_raw_ostream &os,
-               StringRef fileName, bool parallelize);
+               StringAttr fileName, bool parallelize);
 };
 
 //===----------------------------------------------------------------------===//

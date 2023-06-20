@@ -33,10 +33,12 @@ firrtl.circuit "Top" {
 
 // VERILOG-WITH-MLIR-OUT-NOT: sv.verbatim{{.*}}output_file = {{.*}}meta.omir.json
 
-// VERILOG-WITH-MLIR-OUT: #loc = loc("-":1:76)
-// VERILOG-WITH-MLIR-OUT: #loc1 = loc("-":3:85)
-// VERILOG-WITH-MLIR-OUT: #loc2 = loc("-":6:0) 
-// VERILOG-WITH-MLIR-OUT: #loc3 = loc("-":6:18) 
-// VERILOG-WITH-MLIR-OUT-LABEL: hw.module @Top(%in: i8) -> (out: i8) attributes {verilogLocationBegin = #loc, verilogLocationEnd = #loc1} {
-// VERILOG-WITH-MLIR-OUT-NEXT:    hw.output {verilogLocationBegin = #loc2, verilogLocationEnd = #loc3} %in : i8
+// VERILOG-WITH-MLIR-OUT:       #loc = loc("":2:0) 
+// VERILOG-WITH-MLIR-OUT:       #loc1 = loc("":8:9) 
+// VERILOG-WITH-MLIR-OUT:       #loc2 = loc("":7:2) 
+// VERILOG-WITH-MLIR-OUT:       #loc3 = loc("":7:18) 
+// VERILOG-WITH-MLIR-OUT:       #loc4 = loc(fused<"Range">[#loc, #loc1]) 
+// VERILOG-WITH-MLIR-OUT:       #loc5 = loc(fused<"Range">[#loc2, #loc3]) 
+// VERILOG-WITH-MLIR-OUT-LABEL: hw.module @Top(%in: i8) -> (out: i8) attributes {verilogLocations = #loc4} {
+// VERILOG-WITH-MLIR-OUT-NEXT:    hw.output {verilogLocations = #loc5} %in : i8
 // VERILOG-WITH-MLIR-OUT-NEXT:  }

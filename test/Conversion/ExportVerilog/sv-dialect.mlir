@@ -1775,6 +1775,6 @@ sv.bind #hw.innerNameRef<@InlineBind::@foo2>
 
 // CHECK-LABEL:  hw.module @remoteInstDut
 // CHECK:    %signed = sv.wire  {hw.verilogName = "signed_0"
-// CHECK-SAME: verilogLocationBegin = #loc4, verilogLocationEnd = #loc534} : !hw.inout<i1>
+// CHECK-SAME: : !hw.inout<i1>
 // CHECK:    %output = sv.reg  {hw.verilogName = "output_0"
-// CHECK-SAME: verilogLocationBegin = #loc6, verilogLocationEnd = #loc535} : !hw.inout<i1>
+// CHECK-SAME: : !hw.inout<i1>

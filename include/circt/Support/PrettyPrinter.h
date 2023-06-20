@@ -24,7 +24,6 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/SaveAndRestore.h"
 
 #include <cstdint>
@@ -51,7 +50,7 @@ enum class IndentStyle { Visual, Block };
 
 class Token {
 public:
-  enum class Kind { String, Break, Begin, End };
+  enum class Kind { String, Break, Begin, End, Callback };
 
   struct TokenInfo {
     Kind kind; // Common initial sequence.
@@ -73,6 +72,14 @@ public:
   struct EndInfo : public TokenInfo {
     // Nothing
   };
+  // This can be used to associate a callback with the print event on the
+  // tokens stream. Note that the lambda used to create the function object will
+  // be out of scope when it is evoked. So extra care is required to ensure the
+  // values captured by the function object are valid out of scope.
+  struct CallbackInfo : public TokenInfo {
+    using CallbackTy = std::function<void()>;
+    CallbackTy *callback;
+  };
 
 private:
   union {
@@ -81,9 +88,8 @@ private:
     BreakInfo breakInfo;
     BeginInfo beginInfo;
     EndInfo endInfo;
+    CallbackInfo callbackInfo;
   } data;
-  // Only used for begin token, to keep track of the op that is being printed.
-  Operation *op = nullptr;
 
 protected:
   template <Kind k, typename T>
@@ -96,6 +102,8 @@ protected:
       return t.data.beginInfo;
     if constexpr (k == Kind::End)
       return t.data.endInfo;
+    if constexpr (k == Kind::Callback)
+      return t.data.callbackInfo;
     llvm_unreachable("unhandled token kind");
   }
 
@@ -103,8 +111,6 @@ protected:
 
 public:
   Kind getKind() const { return data.info.kind; }
-  void setOp(Operation *tokenOp) { op = tokenOp; }
-  Operation *getOp() const { return op; }
 };
 
 /// Helper class to CRTP-derive common functions.
@@ -161,14 +167,15 @@ struct BeginToken : public TokenBase<BeginToken, Token::Kind::Begin> {
 
 struct EndToken : public TokenBase<EndToken, Token::Kind::End> {};
 
+struct CallbackToken : public TokenBase<CallbackToken, Token::Kind::Callback> {
+  CallbackToken(Token::CallbackInfo::CallbackTy *c) { initialize(c); }
+  bool isValid() { return getInfo().callback; }
+  void invoke() const { std::invoke(*getInfo().callback); }
+};
+
 //===----------------------------------------------------------------------===//
 // PrettyPrinter
 //===----------------------------------------------------------------------===//
-
-/// The callback function used for keeping track of the file location of the op
-/// being printed.
-using CallBackType =
-    llvm::function_ref<void(bool, unsigned, unsigned, StringRef, Operation *)>;
 
 class PrettyPrinter {
 public:
@@ -184,8 +191,8 @@ public:
   /// - baseIndent: always indent at least this much (starting 'indent' value).
   /// - currentColumn: current column, used to calculate space remaining.
   /// - maxStartingIndent: max column indentation starts at, must be >= margin.
-  PrettyPrinter(llvm::formatted_raw_ostream &os, uint32_t margin,
-                uint32_t baseIndent = 0, uint32_t currentColumn = 0,
+  PrettyPrinter(llvm::raw_ostream &os, uint32_t margin, uint32_t baseIndent = 0,
+                uint32_t currentColumn = 0,
                 uint32_t maxStartingIndent = kInfinity / 4,
                 Listener *listener = nullptr)
       : space(margin - std::max(currentColumn, baseIndent)),
@@ -203,8 +210,6 @@ public:
 
   /// Add token for printing.  In Oppen, this is "scan".
   void add(Token t);
-
-  void nowPrintingOp(Operation *op) { beginPrintingOp = op; }
 
   /// Add a range of tokens.
   template <typename R>
@@ -225,11 +230,7 @@ public:
   void setListener(Listener *newListener) { listener = newListener; };
   auto *getListener() const { return listener; }
 
-  void setPrintCallBack(CallBackType c) { printCallback = c; }
-
   static constexpr uint32_t kInfinity = (1U << 15) - 1;
-
-  void setFileName(StringRef fName) { fileName = fName; }
 
 private:
   /// Format token with tracked size.
@@ -247,8 +248,6 @@ private:
   struct PrintEntry {
     uint32_t offset;
     PrintBreaks breaks;
-    // The op being printed.
-    Operation *op = nullptr;
   };
 
   /// Print out tokens we know sizes for, and drop from token buffer.
@@ -314,14 +313,10 @@ private:
   const uint32_t maxStartingIndent;
 
   /// Output stream.
-  llvm::formatted_raw_ostream &os;
+  llvm::raw_ostream &os;
 
   /// Hook for Token storage events.
   Listener *listener = nullptr;
-  /// Members to keep track of output file location for an op.
-  CallBackType printCallback = nullptr;
-  StringRef fileName;
-  Operation *beginPrintingOp = nullptr;
 
   /// Threshold for walking scan state and "rebasing" totals/offsets.
   static constexpr decltype(leftTotal) rebaseThreshold =

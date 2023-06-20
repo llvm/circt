@@ -21,15 +21,21 @@ using namespace pretty;
 
 namespace {
 
+using CallbackType = Token::CallbackInfo::CallbackTy;
+
 class FuncTest : public testing::Test {
 protected:
   // Test inputs.
   SmallVector<Token> funcTokens;
   SmallVector<Token> nestedTokens;
   SmallVector<Token> indentNestedTokens;
+  formatted_raw_ostream *fStream = nullptr;
+  llvm::BumpPtrAllocator allocator;
+  TokenStringAndCallbackSaver callbacks;
 
   /// Scratch buffer used by print.
   SmallString<256> out;
+  SmallString<8> locationOut1, locationOut2, locationOut3;
 
   SmallVector<Token> argTokens;
   void buildArgs() {
@@ -60,6 +66,23 @@ protected:
         });
   }
 
+  CallbackType *getCallback(SmallString<8> &str) {
+    // Note, the `fStream` is not yet initialized, it is null. Store the address
+    // of fStream, such that when it is initialized, the callback can access it.
+    formatted_raw_ostream **formattedStream = &fStream;
+    auto *locationStr = &str;
+    // Note, the callback captures the local variables by value. The value is an
+    // address, which should be safe to access even out of scope of this
+    // function. Also, the not-null check cannot be moved out of the lambda,
+    // since it is null when the lambda is created.
+    return callbacks.save([formattedStream, locationStr]() {
+      if (*formattedStream)
+        locationStr->append(("line <" + Twine((**formattedStream).getLine()) +
+                             "," + Twine((**formattedStream).getColumn()) +
+                             ">,")
+                                .str());
+    });
+  }
   void SetUp() override {
 
     buildArgs();
@@ -68,60 +91,77 @@ protected:
       // With ARGS in an ibox.
       funcTokens.append({StringToken("foooooo"), StringToken("("),
                          BeginToken(0, Breaks::Inconsistent), BreakToken(0)});
+      auto *callbackPtr = getCallback(locationOut1);
+
+      funcTokens.append({CallbackToken(callbackPtr)});
       funcTokens.append(argTokens);
+      funcTokens.append({CallbackToken(callbackPtr)});
       funcTokens.append({BreakToken(0), EndToken(), StringToken(");"),
                          BreakToken(PrettyPrinter::kInfinity)});
+      funcTokens.append({CallbackToken(callbackPtr)});
     }
     {
+      auto *callbackPtr = getCallback(locationOut2);
       // baroo(AR..  barooga(ARGS) .. GS)
       // Nested function call, nested method wrapped in cbox(0) w/breaks.
       nestedTokens.append({StringToken("baroo"), StringToken("("),
                            BeginToken(0, Breaks::Inconsistent), BreakToken(0)});
+      nestedTokens.append({CallbackToken(callbackPtr)});
       SmallVectorImpl<Token>::iterator argMiddle =
           argTokens.begin() + argTokens.size() / 2;
       nestedTokens.append(argTokens.begin(), argMiddle);
+      nestedTokens.append({CallbackToken(callbackPtr)});
 
       nestedTokens.append({
           BeginToken(0, Breaks::Consistent),
           StringToken("barooga"),
           StringToken("("),
+          CallbackToken(callbackPtr),
           BeginToken(0, Breaks::Inconsistent),
           BreakToken(0),
       });
+      nestedTokens.append({CallbackToken(callbackPtr)});
       nestedTokens.append(argTokens);
-      nestedTokens.append({BreakToken(0), EndToken(), StringToken("),"),
-                           BreakToken(), EndToken(),
+      nestedTokens.append({BreakToken(0), CallbackToken(callbackPtr),
+                           EndToken(), StringToken("),"), BreakToken(),
+                           EndToken(),
                            /* BreakToken(0), */});
       nestedTokens.append(argMiddle, argTokens.end());
       nestedTokens.append({BreakToken(0), EndToken(), StringToken(");"),
                            BreakToken(PrettyPrinter::kInfinity)});
     }
     {
+      auto *callbackPtr = getCallback(locationOut3);
       // wahoo(ARGS)
       // If wrap args, indent on next line
-      indentNestedTokens.append({
-          BeginToken(2, Breaks::Consistent),
-          StringToken("wahoo"),
-          StringToken("("),
-          BreakToken(0),
-          BeginToken(0, Breaks::Inconsistent),
-      });
+      indentNestedTokens.append(
+          {CallbackToken(callbackPtr), BeginToken(2, Breaks::Consistent),
+           /*No change in location*/ CallbackToken(callbackPtr),
+           StringToken("wahoo"), CallbackToken(callbackPtr), StringToken("("),
+           BreakToken(0), CallbackToken(callbackPtr),
+           BeginToken(0, Breaks::Inconsistent),
+           /*No change in location*/ CallbackToken(callbackPtr)});
 
       SmallVectorImpl<Token>::iterator argMiddle =
           argTokens.begin() + argTokens.size() / 2;
       indentNestedTokens.append(argTokens.begin(), argMiddle);
 
       indentNestedTokens.append({
+          CallbackToken(callbackPtr),
           BeginToken(0, Breaks::Consistent),
+          CallbackToken(callbackPtr),
           StringToken("yahooooooo"),
           StringToken("("),
           BeginToken(0, Breaks::Inconsistent),
+          CallbackToken(callbackPtr),
           BreakToken(0),
       });
       indentNestedTokens.append(argTokens);
       indentNestedTokens.append({
-          BreakToken(0), EndToken(), StringToken("),"), BreakToken(),
-          EndToken(), /* BreakToken(0), */
+          CallbackToken(callbackPtr), BreakToken(0), EndToken(),
+          CallbackToken(callbackPtr), StringToken("),"), BreakToken(),
+          CallbackToken(callbackPtr), EndToken(),
+          CallbackToken(callbackPtr), /* BreakToken(0), */
       });
       indentNestedTokens.append(argMiddle, argTokens.end());
       indentNestedTokens.append({EndToken(), BreakToken(0, -2),
@@ -133,8 +173,10 @@ protected:
   void print(SmallVectorImpl<Token> &tokens, size_t margin) {
     out = "\n";
     raw_svector_ostream os(out);
-    llvm::formatted_raw_ostream rs(os);
-    PrettyPrinter pp(rs, margin);
+    formatted_raw_ostream formattedStream(os);
+    fStream = &formattedStream;
+    locationOut1.clear();
+    PrettyPrinter pp(formattedStream, margin);
     pp.addTokens(tokens);
     pp.eof();
   }
@@ -164,6 +206,9 @@ foooooo(int a,
         float xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
         );
 )"""));
+
+    EXPECT_EQ(locationOut1.str(),
+              StringRef("line <0,8>,line <16,55>,line <18,0>,"));
   }
   {
     print(nestedTokens, margin);
@@ -204,6 +249,10 @@ baroo(int a, int b,
       float xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
       );
 )"""));
+    EXPECT_EQ(
+        locationOut2.str(),
+        StringRef(
+            "line <0,6>,line <7,6>,line <7,14>,line <7,14>,line <24,14>,"));
   }
   {
     print(indentNestedTokens, margin);
@@ -238,6 +287,10 @@ wahoo(
   float xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 );
 )"""));
+    EXPECT_EQ(locationOut3.str(),
+              StringRef("line <0,0>,line <0,0>,line <0,5>,line <1,2>,line "
+                        "<1,2>,line <5,2>,line <5,2>,line <5,13>,line "
+                        "<21,60>,line <22,13>,line <23,2>,line <23,2>,"));
   }
 }
 
@@ -316,9 +369,8 @@ wahoo(int a, int b, int a1, int b1, int a2, int b2, int a3, int b3, yahooooooo(i
 TEST(PrettyPrinterTest, TrailingSpace) {
   SmallString<128> out;
   raw_svector_ostream os(out);
-  llvm::formatted_raw_ostream rs(os);
 
-  PrettyPrinter pp(rs, 20);
+  PrettyPrinter pp(os, 20);
   SmallVector<Token> tokens = {BeginToken(2),
                                StringToken("test"),
                                BreakToken(),
@@ -334,8 +386,7 @@ TEST(PrettyPrinterTest, Builder) {
   SmallString<128> out;
   raw_svector_ostream os(out);
 
-  llvm::formatted_raw_ostream rs(os);
-  PrettyPrinter pp(rs, 7);
+  PrettyPrinter pp(os, 7);
   TokenBuilder<> b(pp);
   {
     b.ibox();
@@ -353,8 +404,7 @@ TEST(PrettyPrinterTest, Stream) {
   SmallString<128> out;
   raw_svector_ostream os(out);
 
-  llvm::formatted_raw_ostream rs(os);
-  PrettyPrinter pp(rs, 20);
+  PrettyPrinter pp(os, 20);
   TokenStringSaver saver;
   TokenStream<> ps(pp, saver);
   ps.scopedBox(PP::ibox0, [&]() {
@@ -368,8 +418,7 @@ TEST(PrettyPrinterTest, StreamQuoted) {
   SmallString<128> out;
   raw_svector_ostream os(out);
 
-  llvm::formatted_raw_ostream rs(os);
-  PrettyPrinter pp(rs, 20);
+  PrettyPrinter pp(os, 20);
   TokenStringSaver saver;
   TokenStream<> ps(pp, saver);
   ps.writeQuotedEscaped("quote\"me", false, "'", "'");
@@ -377,8 +426,7 @@ TEST(PrettyPrinterTest, StreamQuoted) {
 }
 
 TEST(PrettyPrinterTest, LargeStream) {
-  llvm::formatted_raw_ostream rs(llvm::nulls());
-  PrettyPrinter pp(rs, 20);
+  PrettyPrinter pp(llvm::nulls(), 20);
   TokenStringSaver saver;
   TokenStream<> ps(pp, saver);
 
@@ -387,8 +435,7 @@ TEST(PrettyPrinterTest, LargeStream) {
 }
 
 TEST(PrettyPrinterTest, LargeStreamScan) {
-  llvm::formatted_raw_ostream rs(llvm::nulls());
-  PrettyPrinter pp(rs, 20);
+  PrettyPrinter pp(llvm::nulls(), 20);
   TokenStringSaver saver;
   TokenStream<> ps(pp, saver);
 
@@ -405,8 +452,7 @@ TEST(PrettyPrinterTest, IndentStyle) {
   raw_svector_ostream os(out);
 
   auto test = [&](auto margin, auto style) {
-    llvm::formatted_raw_ostream rs(os);
-    PrettyPrinter pp(rs, margin);
+    PrettyPrinter pp(os, margin);
     TokenStringSaver saver;
     TokenStream<> ps(pp, saver);
     out = "\n";
@@ -456,8 +502,7 @@ TEST(PrettyPrinterTest, FuncArgsBlock) {
   raw_svector_ostream os(out);
 
   auto test = [&](auto margin) {
-    llvm::formatted_raw_ostream rs(os);
-    PrettyPrinter pp(rs, margin);
+    PrettyPrinter pp(os, margin);
     TokenStringSaver saver;
     TokenStream<> ps(pp, saver);
     out = "\n";
@@ -501,8 +546,7 @@ TEST(PrettyPrinterTest, FuncArgsVisual) {
   raw_svector_ostream os(out);
 
   auto test = [&](auto margin) {
-    llvm::formatted_raw_ostream rs(os);
-    PrettyPrinter pp(rs, margin);
+    PrettyPrinter pp(os, margin);
     TokenStringSaver saver;
     TokenStream<> ps(pp, saver);
     out = "\n";
@@ -538,27 +582,38 @@ foo(a, b, c, d, e);
 TEST(PrettyPrinterTest, Expr) {
   SmallString<128> out;
   raw_svector_ostream os(out);
+  formatted_raw_ostream formattedStream(os);
+  SmallString<8> locationOut;
+  auto callback = [&formattedStream, &locationOut]() {
+    locationOut.append(("line <" + Twine(formattedStream.getLine()) + "," +
+                        Twine(formattedStream.getColumn()) + ">,")
+                           .str());
+  };
+  TokenStringAndCallbackSaver callbacks;
+  CallbackType *callbackPtr = callbacks.save(callback);
 
-  auto sumExpr = [](auto &ps) {
-    ps << "(";
+  auto sumExpr = [&callbackPtr](auto &ps) {
+    ps << CallbackToken(callbackPtr) << "(";
     {
       ps << PP::ibox0;
       auto vars = {"a", "b", "c", "d", "e", "f"};
       llvm::interleave(
           vars, [&](const char *each) { ps << each; },
-          [&]() { ps << PP::space << "+" << PP::space; });
-      ps << PP::end;
+          [&]() {
+            ps << PP::space << "+" << CallbackToken(callbackPtr) << PP::space;
+          });
+      ps << PP::end << CallbackToken(callbackPtr);
     }
-    ps << ")";
+    ps << ")" << CallbackToken(callbackPtr);
   };
 
   auto test = [&](const char *id, auto margin) {
-    llvm::formatted_raw_ostream rs(os);
-    PrettyPrinter pp(rs, margin);
+    PrettyPrinter pp(formattedStream, margin);
     TokenStringSaver saver;
     TokenStream<> ps(pp, saver);
     out = "\n";
     ps.scopedBox(PP::ibox2, [&]() {
+      ps << CallbackToken(callbackPtr);
       ps << "assign" << PP::nbsp << id << PP::nbsp << "=";
       ps << PP::space;
       ps.scopedBox(PP::ibox0, [&]() {
@@ -584,6 +639,12 @@ assign foo =
    d + e
    + f);
 )"""));
+  EXPECT_EQ(
+      locationOut.str(),
+      StringRef(
+          "line <0,0>,line <1,2>,line <1,6>,line <2,4>,line <2,8>,line "
+          "<3,6>,line <4,4>,line <4,6>,line <4,7>,line <6,2>,line <6,6>,line "
+          "<7,4>,line <7,8>,line <8,6>,line <9,4>,line <9,6>,line <9,7>,"));
   test("foo", 12);
   EXPECT_EQ(out.str(), StringRef(R"""(
 assign foo =
@@ -620,8 +681,7 @@ TEST(PrettyPrinterTest, InitWithBaseAndCurrentIndent) {
     out = "\n";
     for (int i = 0; populate && i < current; ++i)
       os << ">";
-    llvm::formatted_raw_ostream rs(os);
-    PrettyPrinter pp(rs, 35, base, current);
+    PrettyPrinter pp(os, 35, base, current);
     if (group)
       pp.add(BeginToken(2));
     pp.addTokens(tokens);
@@ -683,8 +743,7 @@ TEST(PrettyPrinterTest, NeverBreak) {
 
   auto test = [&](auto neverbreak) {
     out = "\n";
-    llvm::formatted_raw_ostream rs(os);
-    PrettyPrinter pp(rs, 8);
+    PrettyPrinter pp(os, 8);
     pp.add(BeginToken(2));
     pp.add(StringToken("test"));
     pp.add(BreakToken(1, 0, neverbreak));
@@ -713,22 +772,38 @@ test
 TEST(PrettyPrinterTest, NeverBreakGroup) {
   SmallString<128> out;
   raw_svector_ostream os(out);
+  formatted_raw_ostream formattedStream(os);
+  SmallString<8> locationOut;
+  TokenStringAndCallbackSaver callbacks;
+  // Mostly checking location after break tokens.
+  CallbackType *callbackPtr =
+      callbacks.save([&formattedStream, &locationOut]() {
+        locationOut.append(("line <" + Twine(formattedStream.getLine()) + "," +
+                            Twine(formattedStream.getColumn()) + ">,")
+                               .str());
+      });
 
   auto test = [&](Breaks breaks1, Breaks breaks2) {
     out = "\n";
-    llvm::formatted_raw_ostream rs(os);
-    PrettyPrinter pp(rs, 8);
+    PrettyPrinter pp(formattedStream, 8);
+    pp.add(CallbackToken(callbackPtr));
     pp.add(BeginToken(2, breaks1));
     pp.add(StringToken("test"));
+    pp.add(CallbackToken(callbackPtr));
     pp.add(BreakToken());
+    pp.add(CallbackToken(callbackPtr));
     pp.add(StringToken("test"));
     {
       pp.add(BeginToken(2, breaks2));
+      pp.add(CallbackToken(callbackPtr));
       pp.add(BreakToken());
+      pp.add(CallbackToken(callbackPtr));
       pp.add(StringToken("test"));
       pp.add(BreakToken());
+      pp.add(CallbackToken(callbackPtr));
       pp.add(StringToken("test"));
       pp.add(EndToken());
+      pp.add(CallbackToken(callbackPtr));
     }
     pp.add(BreakToken());
     pp.add(StringToken("test"));
@@ -746,6 +821,9 @@ test
   test
 )"""));
 
+  EXPECT_EQ(locationOut.str(),
+            StringRef("line <0,0>,line <0,4>,line <1,2>,line <1,6>,line "
+                      "<2,8>,line <3,8>,line <3,12>,"));
   test(Breaks::Inconsistent, Breaks::Never);
   EXPECT_EQ(out.str(), StringRef(R"""(
 test
@@ -767,35 +845,50 @@ test test test test test
 TEST(PrettyPrinterTest, MaxStartingIndent) {
   SmallString<128> out;
   raw_svector_ostream os(out);
+  formatted_raw_ostream formattedStream(os);
+  SmallString<8> locationOut;
+
+  TokenStringAndCallbackSaver callbacks;
+  CallbackType *callbackPtr =
+      callbacks.save([&formattedStream, &locationOut]() {
+        locationOut.append(("line <" + Twine(formattedStream.getLine()) + "," +
+                            Twine(formattedStream.getColumn()) + ">,")
+                               .str());
+      });
 
   auto test = [&](PrettyPrinter &pp) {
     out = "\n";
+    pp.add(CallbackToken(callbackPtr));
     pp.add(BeginToken(2));
     pp.add(StringToken("test"));
+    pp.add(CallbackToken(callbackPtr));
     pp.add(BreakToken());
     pp.add(BeginToken(2));
     pp.add(StringToken("test"));
     pp.add(BreakToken());
     pp.add(BeginToken(2));
+    pp.add(CallbackToken(callbackPtr));
     pp.add(StringToken("test"));
+    pp.add(CallbackToken(callbackPtr));
     pp.add(BreakToken());
     pp.add(BeginToken(2));
     pp.add(StringToken("test"));
+    pp.add(CallbackToken(callbackPtr));
     pp.add(BreakToken());
     pp.add(StringToken("test"));
+    pp.add(CallbackToken(callbackPtr));
     pp.add(EndToken());
     pp.add(EndToken());
     pp.add(EndToken());
     pp.add(EndToken());
     pp.add(BreakToken(PrettyPrinter::kInfinity));
   };
-  llvm::formatted_raw_ostream rs(os);
   auto testDefault = [&]() {
-    PrettyPrinter pp(rs, 4);
+    PrettyPrinter pp(formattedStream, 4);
     test(pp);
   };
   auto testValue = [&](auto maxStartingIndent) {
-    PrettyPrinter pp(rs, 4, 0, 0, maxStartingIndent);
+    PrettyPrinter pp(formattedStream, 4, 0, 0, maxStartingIndent);
     test(pp);
   };
 
@@ -808,7 +901,10 @@ test
     test
     test
 )"""));
-
+  EXPECT_EQ(locationOut.str(),
+            StringRef("line <0,0>,line <0,4>,line <2,4>,line <2,8>,line "
+                      "<3,8>,line <4,8>,"));
+  locationOut.clear();
   // Limit max starting position to one past margin,
   // neither margin nor where the indent wants to place it.
   testValue(5);
@@ -820,6 +916,10 @@ test
      test
 )"""));
 
+  // Continued line number from last print.
+  EXPECT_EQ(locationOut.str(),
+            StringRef("line <5,0>,line <5,4>,line <7,4>,line <7,8>,line "
+                      "<8,9>,line <9,9>,"));
   // Check large limit allows repeated indent past margin.
   testValue(100);
   EXPECT_EQ(out.str(), StringRef(R"""(
@@ -847,16 +947,25 @@ protected:
   raw_svector_ostream ppOS = raw_svector_ostream(out);
   raw_svector_ostream os = raw_svector_ostream(compare);
 
+  TokenStringAndCallbackSaver callbacks;
   TokenStringSaver saver;
+  CallbackType *callbackPtr = nullptr;
 
   template <typename Callable>
   void testStreams(Callable &&test,
                    std::optional<StringRef> data = std::nullopt,
                    unsigned margin = 10) {
+    formatted_raw_ostream formattedStream(ppOS);
+    SmallString<8> locationOut;
+
+    callbackPtr = callbacks.save([&formattedStream, &locationOut]() {
+      locationOut.append(("line <" + Twine(formattedStream.getLine()) + "," +
+                          Twine(formattedStream.getColumn()) + ">,")
+                             .str());
+    });
     out.clear();
     compare.clear();
-    llvm::formatted_raw_ostream rs(ppOS);
-    PrettyPrinter pp(rs, margin);
+    PrettyPrinter pp(formattedStream, margin);
     TokenStream<> ps(pp, saver);
 
     std::invoke(test, ps, os);
@@ -898,6 +1007,8 @@ TEST_F(TokenStreamCompareTest, NBSPs) {
   for (auto i : {0, 1, 2, 3, 4, 8, 16, 32, 64, 128, 256, 511, 512, 513, 2048})
     testStreams([&](auto &ps, auto &os) {
       ps.nbsp(i);
+      // This just checks there is no change in output stream.
+      ps << CallbackToken(callbackPtr);
       os.indent(i);
     });
 }

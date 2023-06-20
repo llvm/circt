@@ -108,16 +108,19 @@ void PrettyPrinter::add(Token t) {
       .Case([&](BeginToken *b) {
         if (scanStack.empty())
           clear();
-        if (beginPrintingOp) {
-          t.setOp(beginPrintingOp);
-          beginPrintingOp = nullptr;
-        }
         addScanToken(-rightTotal);
       })
       .Case([&](EndToken *end) {
         if (scanStack.empty())
           return print({t, 0});
         addScanToken(-1);
+      })
+      .Case([&](CallbackToken *c) {
+        if (!c->isValid())
+          return;
+        if (scanStack.empty())
+          return print({t, 0});
+        tokens.push_back({t, 0});
       });
   rebaseIfNeeded();
 }
@@ -269,9 +272,8 @@ void PrettyPrinter::print(const FormattedToken &f) {
         }
       })
       .Case([&](const BeginToken *b) {
-        auto *op = b->getOp();
         if (b->breaks() == Breaks::Never) {
-          printStack.push_back({0, PrintBreaks::AlwaysFits, op});
+          printStack.push_back({0, PrintBreaks::AlwaysFits});
           ++alwaysFits;
         } else if (f.size > space && alwaysFits == 0) {
           auto breaks = b->breaks() == Breaks::Consistent
@@ -281,21 +283,16 @@ void PrettyPrinter::print(const FormattedToken &f) {
           if (b->style() == IndentStyle::Visual)
             newIndent = ssize_t{margin} - space;
           indent = computeNewIndent(newIndent, b->offset(), maxStartingIndent);
-          printStack.push_back({indent, breaks, op});
+          printStack.push_back({indent, breaks});
         } else {
-          printStack.push_back({0, PrintBreaks::Fits, op});
+          printStack.push_back({0, PrintBreaks::Fits});
         }
-        if (printCallback && b->getOp())
-          printCallback(true, os.getLine(), os.getColumn(), fileName, op);
       })
       .Case([&](const EndToken *) {
         assert(!printStack.empty() && "more ends than begins?");
         // Try to tolerate this when assertions are disabled.
         if (printStack.empty())
           return;
-        if (printCallback)
-          if (auto *op = getPrintFrame().op)
-            printCallback(false, os.getLine(), os.getColumn(), fileName, op);
         if (getPrintFrame().breaks == PrintBreaks::AlwaysFits)
           --alwaysFits;
         printStack.pop_back();
@@ -303,6 +300,15 @@ void PrettyPrinter::print(const FormattedToken &f) {
         if (frame.breaks != PrintBreaks::Fits &&
             frame.breaks != PrintBreaks::AlwaysFits)
           indent = frame.offset;
+      })
+      .Case([&](const CallbackToken *c) {
+        if (pendingIndentation) {
+          // This is necessary to get the correct location on the stream for the
+          // callback invocation.
+          os.indent(pendingIndentation);
+          pendingIndentation = 0;
+        }
+        c->invoke();
       });
 }
 } // end namespace pretty

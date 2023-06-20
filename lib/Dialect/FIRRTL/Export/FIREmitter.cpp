@@ -24,7 +24,6 @@
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/FormattedStream.h"
 
 #define DEBUG_TYPE "export-firrtl"
 
@@ -1173,16 +1172,10 @@ void Emitter::emitLocation(Location loc) {
 // Emit the specified FIRRTL circuit into the given output stream.
 mlir::LogicalResult
 circt::firrtl::exportFIRFile(mlir::ModuleOp module, llvm::raw_ostream &os,
-<<<<<<< HEAD
                              std::optional<size_t> targetLineLength,
                              FIRVersion version) {
   Emitter emitter(os, version,
                   targetLineLength.value_or(defaultTargetLineLength));
-=======
-                             std::optional<size_t> targetLineLength) {
-  llvm::formatted_raw_ostream rs(os);
-  Emitter emitter(rs, targetLineLength.value_or(defaultTargetLineLength));
->>>>>>> 052ddb14a (Update FirEmitter)
   for (auto &op : *module.getBody()) {
     if (auto circuitOp = dyn_cast<CircuitOp>(op))
       emitter.emitCircuit(circuitOp);
