@@ -2292,7 +2292,17 @@ Value InvokeOp::getInstGoValue() {
       if (portInfo[i].hasAttribute("go"))
         return operation->getResult(i);
     }
+  } else if (isa<PrimitiveOp>(operation)) {
+    PrimitiveOp primOp = cast<PrimitiveOp>(operation);
+    auto moduleExternOp = primOp.getReferencedPrimitive();
+    auto argAttrs = moduleExternOp.getArgAttrsAttr();
+    for (size_t i = 0; i != argAttrs.size(); i++)
+      if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(argAttrs[i]))
+        if (!dictAttr.empty())
+          if (dictAttr.begin()->getName().getValue() == "calyx.go")
+            return primOp.getResult(i);
   }
+
   return nullptr;
 }
 
@@ -2310,6 +2320,15 @@ Value InvokeOp::getInstDoneValue() {
       if (portInfo[i].hasAttribute("done"))
         return operation->getResult(i);
     }
+  } else if (isa<calyx::PrimitiveOp>(operation)) {
+    PrimitiveOp primOp = cast<PrimitiveOp>(operation);
+    auto moduleExternOp = primOp.getReferencedPrimitive();
+    auto resAttrs = moduleExternOp.getResAttrsAttr();
+    for (size_t i = 0; i != resAttrs.size(); i++)
+      if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(resAttrs[i]))
+        if (!dictAttr.empty())
+          if (dictAttr.begin()->getName().getValue() == "calyx.done")
+            return primOp.getResult(i);
   }
   return nullptr;
 }
@@ -2321,10 +2340,6 @@ LogicalResult InvokeOp::verify() {
   if (!operation)
     return emitOpError() << "with instance '" << callee
                          << "', which does not exist.";
-  if (isa<PrimitiveOp>(operation))
-    return emitOpError() << "with instance '" << callee
-                         << "', which is instantiated by '"
-                         << PrimitiveOp::getOperationName() << "'.";
   if (getInputs().empty())
     return emitOpError() << "the input for '" << getOperationName()
                          << "' is empty.";
@@ -2332,14 +2347,27 @@ LogicalResult InvokeOp::verify() {
   if (isa<RegisterOp, DivSPipeLibOp, DivUPipeLibOp, MemoryOp, MultPipeLibOp,
           RemSPipeLibOp, RemUPipeLibOp>(operation))
     goPortNum = 1, donePortNum = 1;
-  else if (InstanceOp instanceOp = dyn_cast<calyx::InstanceOp>(operation)) {
+  else if (InstanceOp instanceOp = dyn_cast<InstanceOp>(operation)) {
     auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
-    for (auto info : portInfo) {
+    for (PortInfo info : portInfo) {
       if (info.hasAttribute("go"))
         goPortNum++;
       if (info.hasAttribute("done"))
         donePortNum++;
     }
+  } else if (PrimitiveOp primOp = dyn_cast<PrimitiveOp>(operation)) {
+    auto moduleExternOp = primOp.getReferencedPrimitive();
+    for (Attribute attr : moduleExternOp.getArgAttrsAttr())
+      if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr))
+        if (!dictAttr.empty())
+          if (dictAttr.begin()->getName().getValue() == "calyx.go")
+            goPortNum++;
+
+    for (Attribute attr : moduleExternOp.getResAttrsAttr())
+      if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr))
+        if (!dictAttr.empty())
+          if (dictAttr.begin()->getName().getValue() == "calyx.done")
+            donePortNum++;
   }
 
   if (goPortNum != 1 && donePortNum != 1)
