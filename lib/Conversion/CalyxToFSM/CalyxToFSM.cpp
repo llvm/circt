@@ -283,6 +283,7 @@ private:
   void lowerInvokeOp(InvokeOp &invokeOp);
   ComponentOp &component;
   OpBuilder &builder;
+  // It is used to pass to the go port and assign a value to the go port.
   hw::ConstantOp constantOp;
   size_t label = 0;
 };
@@ -298,6 +299,7 @@ void CompileInvoke::checkWiresOp() {
     builder.setInsertionPointAfter(preNode);
     builder.create<WiresOp>(preNode->getLoc());
   }
+  // Create a ConstantOp to assign a value to the go port.
   Operation *prevNode = component.getWiresOp().getOperation()->getPrevNode();
   builder.setInsertionPointAfter(prevNode);
   constantOp = builder.create<hw::ConstantOp>(prevNode->getLoc(),
@@ -308,7 +310,7 @@ void CompileInvoke::checkWiresOp() {
 void CompileInvoke::visitInvokeOps(Block *block) {
   if (!block)
     return;
-
+  // Lower all the InvokeOp in this block.
   auto inOps = block->getOps<InvokeOp>();
   for (auto invokeOp : llvm::make_early_inc_range(inOps))
     lowerInvokeOp(invokeOp);
@@ -338,17 +340,21 @@ void CompileInvoke::lowerInvokeOp(InvokeOp &invokeOp) {
     checkWiresOp();
 
   Location loc = component.getWiresOp().getLoc();
+  // Set the insertion point at the end of the wires block.
   builder.setInsertionPointToEnd(component.getWiresOp().getBodyBlock());
   GroupOp groupOp =
       builder.create<GroupOp>(loc, "invoke_" + std::to_string(label));
   builder.setInsertionPointToStart(groupOp.getBodyBlock());
   Value go = invokeOp.getInstGoValue();
+  // Assign a value to the go port.
   builder.create<AssignOp>(loc, go, constantOp);
   auto ports = invokeOp.getPorts();
   auto inputs = invokeOp.getInputs();
+  // Generate a series of assignment operations from a list of parameters.
   for (size_t i = 0; i != ports.size(); i++)
     builder.create<AssignOp>(loc, ports[i], inputs[i]);
   Value done = invokeOp.getInstDoneValue();
+   // Generate a group_done operation with the instance's done port.
   builder.create<calyx::GroupDoneOp>(loc, done);
   builder.setInsertionPointAfter(invokeOp.getOperation());
   builder.create<EnableOp>(invokeOp.getLoc(),
