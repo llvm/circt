@@ -978,10 +978,12 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
     hwPort.sym = firrtlPort.sym;
     bool hadDontTouch = firrtlPort.annotations.removeDontTouch();
     if (hadDontTouch && !hwPort.sym) {
-      if (hwPort.type.isInteger(0) && enableAnnotationWarning) {
-        mlir::emitWarning(firrtlPort.loc)
-            << "zero width port " << hwPort.name
-            << " has dontTouch annotation, removing anyway";
+      if (hwPort.type.isInteger(0)) {
+        if (enableAnnotationWarning) {
+          mlir::emitWarning(firrtlPort.loc)
+              << "zero width port " << hwPort.name
+              << " has dontTouch annotation, removing anyway";
+        }
         continue;
       }
       hwPort.sym = hw::InnerSymAttr::get(StringAttr::get(
