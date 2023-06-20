@@ -47,8 +47,7 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
 
       // Requested depth might not be a valid comparison if they do not belong
       // to the same loop nest
-      if (depth >
-          getInnermostCommonLoopDepth(SmallVector({source, destination})))
+      if (depth > getInnermostCommonLoopDepth({source, destination}))
         continue;
 
       DependenceResult result = checkMemrefAccessDependence(
