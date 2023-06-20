@@ -156,9 +156,12 @@ def FirRegOp : SeqOp<"firreg",
 }
 
 def FIFOOp : SeqOp<"fifo", [
-    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+    TypesMatchWith<"Input type should match output type",
+      "input", "output", [{ $_self }]>,
+    AttrSizedResultSegments
   ]> {
-  let summary = "Instantiate a FIFO";
+  let summary = "A high-level FIFO operation";
   let description = [{
     This operation represents a high-level abstraction of a FIFO. Access to the
     FIFO is structural, and thus may be composed with other core RTL dialect
@@ -166,8 +169,8 @@ def FIFOOp : SeqOp<"fifo", [
     The fifo operation is configurable with the following parameters:
     1. Depth (cycles)
     2. Differing in- and output widths
-    3. Almost empty/full thresholds (optional). If not provided, these will
-       be asserted when the FIFO is empty/full.
+    3. Almost full/empty thresholds (optional). If not provided, these will
+       be asserted when the FIFO is full/empty.
 
     Like `seq.hlmem` there are no guarantees that all possible fifo configuration
     are able to be lowered. Available lowering passes will pattern match on the
@@ -177,20 +180,28 @@ def FIFOOp : SeqOp<"fifo", [
   let arguments = (ins
     HWIntegerType:$input, I1:$rdEn, I1:$wrEn, I1:$clk, I1:$rst,
     ConfinedAttr<I64Attr, [IntMinValue<1>]>:$depth,
-    OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<1>]>>:$almostEmptyThreshold,
-    OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<1>]>>:$almostFullThreshold
+    OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<0>]>>:$almostFullThreshold,
+    OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<0>]>>:$almostEmptyThreshold
   );
 
   let results = (outs
-    Variadic<HWIntegerType>:$outputs, I1:$empty, I1:$full, I1:$almostEmpty, I1:$almostFull);
+    HWIntegerType:$output, I1:$full, I1:$empty, Optional<I1>:$almostFull, Optional<I1>:$almostEmpty);
 
   let builders = [
     OpBuilder<(ins "Value":$clk, "Value":$rst, "StringRef":$symName,
                    "llvm::ArrayRef<int64_t>":$shape, "Type":$elementType)>
   ];
 
-  let assemblyFormat = " `[` $depth `]``(` $input `,` $rdEn `,` $wrEn `)` $clk `,` $rst attr-dict `:` functional-type($input, $outputs)";
+  let assemblyFormat = [{
+    `depth` $depth
+    custom<FIFOAFThreshold>($almostFullThreshold, type($almostFull))
+    custom<FIFOAEThreshold>($almostEmptyThreshold, type($almostEmpty))
+    `in` $input `rdEn` $rdEn `wrEn` $wrEn `clk` $clk `rst` $rst attr-dict `:` type($input)
+  }];
   let hasVerifier = 1;
+  let skipDefaultBuilders = 1;
+
+
 }
 
 def HLMemOp : SeqOp<"hlmem", [

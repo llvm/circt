@@ -312,13 +312,13 @@ The FIFO interface consists of:
   - read/write enable
 - **Outputs**:
   - output data
-  - full, almost full, empty, almost empty flags
+  - full, empty flags
+  - optional almost full, almost empty flags
 
 The fifo operation is configurable with the following parameters:
 1. Depth (cycles)
 2. Differing in- and output widths
-3. Almost empty/full thresholds (optional). If not provided, these will
-    be asserted when the FIFO is empty/full.
+3. Almost empty/full thresholds (optional)
 
 Like `seq.hlmem` there are no guarantees that all possible fifo configuration
 are able to be lowered. Available lowering passes will pattern match on the

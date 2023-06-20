@@ -223,28 +223,74 @@ void HLMemOp::build(OpBuilder &builder, OperationState &result, Value clk,
 // FIFOOp
 //===----------------------------------------------------------------------===//
 
-void FIFOOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  if (getOutputs().size() == 1)
-    setNameFn(getOutputs()[0], "out");
-  else {
-    for (auto [i, output] : llvm::enumerate(getOutputs()))
-      setNameFn(output, "out" + std::to_string(i));
+// Flag threshold custom directive
+static ParseResult parseFIFOFlagThreshold(OpAsmParser &parser,
+                                          IntegerAttr &threshold,
+                                          Type &outputFlagType,
+                                          StringRef directive) {
+  // look for an optional "almost_full $threshold>" group.
+  if (succeeded(parser.parseOptionalKeyword(directive))) {
+    int64_t thresholdValue;
+    if (succeeded(parser.parseInteger(thresholdValue))) {
+      threshold = parser.getBuilder().getI64IntegerAttr(thresholdValue);
+      outputFlagType = parser.getBuilder().getI1Type();
+      return success();
+    }
+    return parser.emitError(parser.getNameLoc(),
+                            "expected integer value after " + directive +
+                                " directive");
   }
+  return success();
+}
+
+ParseResult parseFIFOAFThreshold(OpAsmParser &parser, IntegerAttr &threshold,
+                                 Type &outputFlagType) {
+  return parseFIFOFlagThreshold(parser, threshold, outputFlagType,
+                                "almost_full");
+}
+
+ParseResult parseFIFOAEThreshold(OpAsmParser &parser, IntegerAttr &threshold,
+                                 Type &outputFlagType) {
+  return parseFIFOFlagThreshold(parser, threshold, outputFlagType,
+                                "almost_empty");
+}
+
+static void printFIFOFlagThreshold(OpAsmPrinter &p, Operation *op,
+                                   IntegerAttr threshold, StringRef directive) {
+  if (threshold)
+    p << directive << " " << threshold.getInt();
+}
+
+void printFIFOAFThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
+                          Type outputFlagType) {
+  printFIFOFlagThreshold(p, op, threshold, "almost_full");
+}
+
+void printFIFOAEThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
+                          Type outputFlagType) {
+  printFIFOFlagThreshold(p, op, threshold, "almost_empty");
+}
+
+void FIFOOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getOutput(), "out");
   setNameFn(getEmpty(), "empty");
   setNameFn(getFull(), "full");
-  setNameFn(getAlmostEmpty(), "almostEmpty");
-  setNameFn(getAlmostFull(), "almostFull");
+  if (auto ae = getAlmostEmpty())
+    setNameFn(ae, "almostEmpty");
+  if (auto af = getAlmostFull())
+    setNameFn(af, "almostFull");
 }
 
 LogicalResult FIFOOp::verify() {
-  unsigned outputWidth = 0;
-  unsigned inputWidth = getInput().getType().getIntOrFloatBitWidth();
-  for (auto output : getOutputs())
-    outputWidth += output.getType().getIntOrFloatBitWidth();
-  if (outputWidth != inputWidth)
-    return emitOpError(
-               "combined output width must match input width (expected ")
-           << inputWidth << " but got " << outputWidth << ")";
+  auto aet = getAlmostEmptyThreshold();
+  auto aft = getAlmostFullThreshold();
+  size_t depth = getDepth();
+  if (aft.has_value() && aft.value() > depth)
+    return emitOpError("almost full threshold must be <= FIFO depth");
+
+  if (aet.has_value() && aet.value() > depth)
+    return emitOpError("almost empty threshold must be <= FIFO depth");
+
   return success();
 }
 
@@ -618,11 +664,11 @@ OpFoldResult FirRegOp::fold(FoldAdaptor adaptor) {
 
   // If the register is held in permanent reset, replace it with its reset
   // value. This works trivially if the reset is asynchronous and therefore
-  // level-sensitive, in which case it will always immediately assume the reset
-  // value in silicon. If it is synchronous, the register value is undefined
-  // until the first clock edge at which point it becomes the reset value, in
-  // which case we simply define the initial value to already be the reset
-  // value.
+  // level-sensitive, in which case it will always immediately assume the
+  // reset value in silicon. If it is synchronous, the register value is
+  // undefined until the first clock edge at which point it becomes the reset
+  // value, in which case we simply define the initial value to already be the
+  // reset value.
   if (auto reset = getReset())
     if (auto constOp = reset.getDefiningOp<hw::ConstantOp>())
       if (constOp.getValue().isOne())
