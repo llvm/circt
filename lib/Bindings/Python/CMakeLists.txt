@@ -35,6 +35,7 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension
     MLIRCAPITransforms
   PRIVATE_LINK_LIBS
     LLVMSupport
+    MLIRIR
 )
 
 ################################################################################
