@@ -175,14 +175,14 @@ void ExtractClassesPass::updateInstances(FModuleOp moduleOp) {
     }
 
     // Erase the original instance.
-    oldInstance.erase();
     node->erase();
+    oldInstance.erase();
   }
 
   // If all ports are properties, remove the FModuleOp completely.
   if (!modulePortsToErase.empty() && modulePortsToErase.all()) {
-    moduleOp.erase();
     instanceGraph->erase(instanceGraphNode);
+    moduleOp.erase();
   }
 }
 
