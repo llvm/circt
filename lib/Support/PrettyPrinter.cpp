@@ -108,6 +108,10 @@ void PrettyPrinter::add(Token t) {
       .Case([&](BeginToken *b) {
         if (scanStack.empty())
           clear();
+        if (beginPrintingOp) {
+          t.setOp(beginPrintingOp);
+          beginPrintingOp = nullptr;
+        }
         addScanToken(-rightTotal);
       })
       .Case([&](EndToken *end) {
@@ -265,8 +269,9 @@ void PrettyPrinter::print(const FormattedToken &f) {
         }
       })
       .Case([&](const BeginToken *b) {
+        auto *op = b->getOp();
         if (b->breaks() == Breaks::Never) {
-          printStack.push_back({0, PrintBreaks::AlwaysFits});
+          printStack.push_back({0, PrintBreaks::AlwaysFits, op});
           ++alwaysFits;
         } else if (f.size > space && alwaysFits == 0) {
           auto breaks = b->breaks() == Breaks::Consistent
@@ -276,16 +281,21 @@ void PrettyPrinter::print(const FormattedToken &f) {
           if (b->style() == IndentStyle::Visual)
             newIndent = ssize_t{margin} - space;
           indent = computeNewIndent(newIndent, b->offset(), maxStartingIndent);
-          printStack.push_back({indent, breaks});
+          printStack.push_back({indent, breaks, op});
         } else {
-          printStack.push_back({0, PrintBreaks::Fits});
+          printStack.push_back({0, PrintBreaks::Fits, op});
         }
+        if (printCallback && b->getOp())
+          printCallback(true, os.getLine(), os.getColumn(), fileName, op);
       })
       .Case([&](const EndToken *) {
         assert(!printStack.empty() && "more ends than begins?");
         // Try to tolerate this when assertions are disabled.
         if (printStack.empty())
           return;
+        if (printCallback)
+          if (auto *op = getPrintFrame().op)
+            printCallback(false, os.getLine(), os.getColumn(), fileName, op);
         if (getPrintFrame().breaks == PrintBreaks::AlwaysFits)
           --alwaysFits;
         printStack.pop_back();
