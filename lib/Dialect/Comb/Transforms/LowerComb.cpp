@@ -42,21 +42,23 @@ private:
         getMux(loc, b, t, f, table.drop_front(half), inputs.drop_front());
     Value if0 =
         getMux(loc, b, t, f, table.drop_back(half), inputs.drop_front());
-    return b.create<MuxOp>(loc, inputs.front(), if1, if0, true);
+    return b.create<MuxOp>(loc, inputs.front(), if1, if0, false);
   }
 
 public:
   LogicalResult matchAndRewrite(TruthTableOp op, OpAdaptor adaptor,
                                 ConversionPatternRewriter &b) const override {
     Location loc = op.getLoc();
-    SmallVector<bool> table(llvm::map_range(
-        op.getLookupTableAttr().getAsRange<Attribute>(),
-        [](Attribute a) { return cast<IntegerAttr>(a).getValue() != 0; }));
+    SmallVector<bool> table(
+        llvm::map_range(op.getLookupTableAttr().getAsValueRange<IntegerAttr>(),
+                        [](APInt a) { return !a.isZero(); }));
     Value t = b.create<hw::ConstantOp>(loc, b.getIntegerAttr(b.getI1Type(), 1));
     Value f = b.create<hw::ConstantOp>(loc, b.getIntegerAttr(b.getI1Type(), 0));
 
     Value tree = getMux(loc, b, t, f, table, op.getInputs());
-    tree.getDefiningOp()->setDialectAttrs(op->getDialectAttrs());
+    b.updateRootInPlace(tree.getDefiningOp(), [&]() {
+      tree.getDefiningOp()->setDialectAttrs(op->getDialectAttrs());
+    });
     b.replaceOp(op, tree);
     return success();
   }

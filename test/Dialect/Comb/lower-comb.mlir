@@ -1,9 +1,9 @@
 // RUN: circt-opt %s --lower-comb | FileCheck %s
 
 // CHECK-LABEL: hw.module @ex2in
-// CHECK:         [[R0:%.+]] = comb.mux bin %b, %true, %false : i1
-// CHECK:         [[R1:%.+]] = comb.mux bin %b, %false, %true : i1
-// CHECK:         [[R2:%.+]] = comb.mux bin %a, [[R0]], [[R1]] {sv.namehint = "lut1"} : i1
+// CHECK:         [[R0:%.+]] = comb.mux %b, %true, %false : i1
+// CHECK:         [[R1:%.+]] = comb.mux %b, %false, %true : i1
+// CHECK:         [[R2:%.+]] = comb.mux %a, [[R0]], [[R1]] {sv.namehint = "lut1"} : i1
 hw.module @ex2in(%a: i1, %b: i1) -> (x: i1) {
   %0 = comb.truth_table %a, %b -> [true, false, false, true] {sv.namehint="lut1"}
   hw.output %0 : i1
