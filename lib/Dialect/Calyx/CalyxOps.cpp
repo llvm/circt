@@ -564,11 +564,12 @@ template <typename Op>
 static Op getControlOrWiresFrom(ComponentOp op) {
   auto *body = op.getBodyBlock();
   // Because of the existence of the invoke operation,
-  // the wires operation may not exist, so be careful
-  // when using it and make sure that wires exist before
-  // using it.
-  auto opIt = body->getOps<Op>().begin();
-  return *opIt;
+  // the wires operation may not exist.
+  if (!body->getOps<Op>().empty()) {
+    auto opIt = body->getOps<Op>().begin();
+    return *opIt;
+  }
+  return nullptr;
 }
 
 /// Returns the Block argument with the given name from a ComponentOp.
@@ -2236,7 +2237,6 @@ ParseResult InvokeOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-
 void InvokeOp::print(OpAsmPrinter &p) {
   // print the parameter list.
   p << " @" << getCallee() << "(";
@@ -2309,18 +2309,18 @@ Value InvokeOp::getInstGoValue() {
   return nullptr;
 }
 
-// Get the value of the done port within an instance. 
+// Get the value of the done port within an instance.
 Value InvokeOp::getInstDoneValue() {
   ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
   Operation *operation = componentOp.lookupSymbol(getCallee());
-  // The done port of these instances is the last result, so the ssa value 
+  // The done port of these instances is the last result, so the ssa value
   // of the last result is taken.
   if (isa<RegisterOp, MemoryOp, DivSPipeLibOp, DivUPipeLibOp, MultPipeLibOp,
           RemSPipeLibOp, RemUPipeLibOp>(operation)) {
     size_t doneIdx = operation->getResults().size() - 1;
     return operation->getResult(doneIdx);
   } else if (isa<InstanceOp>(operation)) {
-  //  Get the go port of the instance through the "done" attribute
+    //  Get the go port of the instance through the "done" attribute
     InstanceOp instanceOp = cast<InstanceOp>(operation);
     auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
     for (size_t i = 0; i != portInfo.size(); i++) {
@@ -2354,7 +2354,7 @@ LogicalResult InvokeOp::verify() {
     return emitOpError() << "the input for '" << getOperationName()
                          << "' is empty.";
   size_t goPortNum = 0, donePortNum = 0;
-  // They both have a go port and a done port, but the "go" port for 
+  // They both have a go port and a done port, but the "go" port for
   // registers and memrey should be "write_en" port.
   if (isa<RegisterOp, DivSPipeLibOp, DivUPipeLibOp, MemoryOp, MultPipeLibOp,
           RemSPipeLibOp, RemUPipeLibOp>(operation))
@@ -2384,7 +2384,7 @@ LogicalResult InvokeOp::verify() {
   }
   // If the number of go ports and done ports is wrong.
   if (goPortNum != 1 && donePortNum != 1)
-    return emitOpError() << callee << " used by '" << getOperationName()
+    return emitOpError() << " '" << callee
                          << "' must have a go port and a done port, the '"
                          << callee << "' has " << goPortNum << " go port and "
                          << donePortNum << " done port.";

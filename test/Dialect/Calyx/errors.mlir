@@ -1073,3 +1073,44 @@ module attributes {calyx.entrypoint = "main"} {
     }
   }
 }
+
+
+// -----
+
+module attributes {calyx.entrypoint = "main"} {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %c10 = hw.constant 10 : i32
+    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i32, i1, i1, i1, i32, i1 
+    calyx.control {
+      // expected-error @+1 {{'calyx.invoke' op has a cell port as the destination with the incorrect direction.}}
+      calyx.invoke@r(%r.out = %c10) -> (i32)
+    }
+  }
+}
+
+// ----- 
+
+module attributes {calyx.entrypoint = "main"} {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %c1 = hw.constant 1 : i1
+    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i32, i1, i1, i1, i32, i1 
+    calyx.control {
+      // expected-error @+1 {{'calyx.invoke' op the go port of 'r' cannot appear here.}}
+      calyx.invoke@r(%r.write_en = %c1) -> (i1)
+    }
+  }
+}
+
+
+// ----- 
+
+module attributes {calyx.entrypoint = "main"} {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %c10 = hw.constant 10 : i32
+    %add.left, %add.right, %add.out = calyx.std_add @add : i32, i32, i32
+    calyx.control {
+      // expected-error @+1 {{'calyx.invoke' op  'add' must have a go port and a done port, the 'add' has 0 go port and 0 done port.}}
+      calyx.invoke@add(%add.left = %c10, %add.right = %c10) -> (i32, i32)
+    }
+  }
+}
