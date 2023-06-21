@@ -4,12 +4,19 @@
 ##
 ##===----------------------------------------------------------------------===//
 
-set(srcs
+add_circt_dialect_library(CIRCTCalyx
   CalyxDialect.cpp
   CalyxOps.cpp
-  )
 
-set(Calyx_LinkLibs
+  DEPENDS
+  MLIRCalyxEnumsIncGen
+  MLIRCalyxInterfacesIncGen
+
+  LINK_COMPONENTS
+  Core
+  Support
+
+  LINK_LIBS PUBLIC
   CIRCTSupport
   CIRCTComb
   CIRCTSV
@@ -18,26 +25,6 @@ set(Calyx_LinkLibs
   MLIRIR
   MLIRMemRefDialect
   MLIRTransforms
-  )
-
-set(Calyx_Deps
-  ${Calyx_LinkLibs}
-  MLIRCalyxEnumsIncGen
-  MLIRCalyxInterfacesIncGen
-  )
-
-add_circt_dialect_library(CIRCTCalyx
-  ${srcs}
-
-  DEPENDS
-  ${Calyx_Deps}
-
-  LINK_COMPONENTS
-  Core
-  Support
-
-  LINK_LIBS PUBLIC
-  ${Calyx_LinkLibs}
   )
 
 add_subdirectory(Export)
