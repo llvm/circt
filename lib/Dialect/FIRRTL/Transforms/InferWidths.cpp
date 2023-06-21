@@ -1313,7 +1313,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
   // case.
   bool allWidthsKnown = true;
   for (auto result : op->getResults()) {
-    if (isa<MuxPrimOp, SynopsysMux4IntrinsicOp, SynopsysMux2IntrinsicOp>(op))
+    if (isa<MuxPrimOp, MuxCell4IntrinsicOp, MuxCell2IntrinsicOp>(op))
       if (hasUninferredWidth(op->getOperand(0).getType()))
         allWidthsKnown = false;
     // Only consider FIRRTL types for width constraints. Ignore any foreign
@@ -1537,12 +1537,12 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         assert(width > 0 && "width should have been checked by verifier");
         setExpr(op.getResult(), solver.known(width));
       })
-      .Case<MuxPrimOp, SynopsysMux2IntrinsicOp>([&](auto op) {
+      .Case<MuxPrimOp, MuxCell2IntrinsicOp>([&](auto op) {
         auto *sel = getExpr(op.getSel());
         constrainTypes(sel, solver.known(1));
         maximumOfTypes(op.getResult(), op.getHigh(), op.getLow());
       })
-      .Case<SynopsysMux4IntrinsicOp>([&](SynopsysMux4IntrinsicOp op) {
+      .Case<MuxCell4IntrinsicOp>([&](MuxCell4IntrinsicOp op) {
         auto *sel = getExpr(op.getSel());
         constrainTypes(sel, solver.known(2));
         maximumOfTypes(op.getResult(), op.getV3(), op.getV2());

@@ -805,15 +805,14 @@ def TailPrimOp : PrimOp<"tail"> {
 // Target Specific Intrinsics
 //===----------------------------------------------------------------------===//
 
-def SynopsysMux2IntrinsicOp : PrimOp<"int.synopsys.mux2"> {
+def MuxCell2IntrinsicOp : PrimOp<"int.muxcell2"> {
   let summary = [{
-    an intrinsic lowered into 2-to-1 MUX cell in the synopsys backend
+    an intrinsic lowered into 2-to-1 MUX cell in synthesis tools.
   }];
 
   let description = [{
-    This intrinsic exposes a low-level API to use 2-to-1 MUX cell in the
-    synopsys target. A pragma "synopsys infer_mux_override" will be added to the
-    mux in the output verilog. At FIRRTL level, this operation participates
+    This intrinsic exposes a low-level API to use 2-to-1 MUX cell in backend
+    synthesis tool. At FIRRTL level, this operation participates
     the inference process in the same way as a normal mux operation.
   }];
 
@@ -825,15 +824,14 @@ def SynopsysMux2IntrinsicOp : PrimOp<"int.synopsys.mux2"> {
     "`(` operands `)` attr-dict `:` functional-type(operands, $result)";
 }
 
-def SynopsysMux4IntrinsicOp : PrimOp<"int.synopsys.mux4"> {
+def MuxCell4IntrinsicOp : PrimOp<"int.muxcell4"> {
   let summary = [{
-    an intrinsic lowered into 4-to-1 MUX cell in the synopsys backend.
+    an intrinsic lowered into 4-to-1 MUX cell in synthesis tools.
   }];
 
   let description = [{
-    This intrinsic exposes a low-level API to use 4-to-1 MUX cell in the
-    synopsys target. A pragma "synopsys infer_mux_override" will be added to the
-    mux in the output verilog. At FIRRTL level, this operation participates
+    This intrinsic exposes a low-level API to use 4-to-1 MUX cell in backend
+    synthesis tool. At FIRRTL level, this operation participates
     the inference process as a sugar of mux operation chains.
   }];
 

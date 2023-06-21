@@ -4052,10 +4052,9 @@ FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
                             loc);
 }
 
-FIRRTLType
-SynopsysMux2IntrinsicOp::inferReturnType(ValueRange operands,
-                                         ArrayRef<NamedAttribute> attrs,
-                                         std::optional<Location> loc) {
+FIRRTLType MuxCell2IntrinsicOp::inferReturnType(ValueRange operands,
+                                                ArrayRef<NamedAttribute> attrs,
+                                                std::optional<Location> loc) {
   auto highType = dyn_cast<FIRRTLBaseType>(operands[1].getType());
   auto lowType = dyn_cast<FIRRTLBaseType>(operands[2].getType());
   if (!highType || !lowType)
@@ -4064,10 +4063,9 @@ SynopsysMux2IntrinsicOp::inferReturnType(ValueRange operands,
                             loc);
 }
 
-FIRRTLType
-SynopsysMux4IntrinsicOp::inferReturnType(ValueRange operands,
-                                         ArrayRef<NamedAttribute> attrs,
-                                         std::optional<Location> loc) {
+FIRRTLType MuxCell4IntrinsicOp::inferReturnType(ValueRange operands,
+                                                ArrayRef<NamedAttribute> attrs,
+                                                std::optional<Location> loc) {
   SmallVector<FIRRTLBaseType> types;
   FIRRTLBaseType result;
   for (unsigned i = 1; i < 5; i++) {
@@ -4540,10 +4538,10 @@ void MultibitMuxOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void MuxPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-void SynopsysMux4IntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void MuxCell4IntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-void SynopsysMux2IntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void MuxCell2IntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void NEQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

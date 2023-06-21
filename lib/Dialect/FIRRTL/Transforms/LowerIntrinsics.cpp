@@ -252,8 +252,8 @@ static bool lowerCirctClockGate(InstanceGraph &ig, FModuleLike mod) {
 }
 
 template <bool isMux2>
-static bool lowerCirctSynopsysMux(InstanceGraph &ig, FModuleLike mod) {
-  StringRef mnemonic = isMux2 ? "circt.synopsys.mux2" : "circt.synopsys.mux4";
+static bool lowerCirctMuxCell(InstanceGraph &ig, FModuleLike mod) {
+  StringRef mnemonic = isMux2 ? "circt.muxcell2" : "circt.muxcell4";
   unsigned portNum = isMux2 ? 4 : 6;
   if (hasNPorts(mnemonic, mod, portNum) || namedPort(mnemonic, mod, 0, "sel") ||
       typedPort<UIntType>(mnemonic, mod, 0)) {
@@ -285,9 +285,9 @@ static bool lowerCirctSynopsysMux(InstanceGraph &ig, FModuleLike mod) {
     }
     Value out;
     if (isMux2)
-      out = builder.create<SynopsysMux2IntrinsicOp>(operands);
+      out = builder.create<MuxCell2IntrinsicOp>(operands);
     else
-      out = builder.create<SynopsysMux4IntrinsicOp>(operands);
+      out = builder.create<MuxCell4IntrinsicOp>(operands);
     inst.getResult(portNum - 1).replaceAllUsesWith(out);
     inst.erase();
   }
@@ -596,10 +596,10 @@ std::pair<const char *, std::function<bool(InstanceGraph &, FModuleLike)>>
         {"circt_verif_assume", lowerCirctVerif<VerifAssumeIntrinsicOp>},
         {"circt.verif.cover", lowerCirctVerif<VerifCoverIntrinsicOp>},
         {"circt_verif_cover", lowerCirctVerif<VerifCoverIntrinsicOp>},
-        {"circt.synopsys.mux2", lowerCirctSynopsysMux<true>},
-        {"circt_synopsys_mux2", lowerCirctSynopsysMux<true>},
-        {"circt.synopsys.mux4", lowerCirctSynopsysMux<false>},
-        {"circt_synopsys_mux4", lowerCirctSynopsysMux<false>}};
+        {"circt.muxcell2", lowerCirctMuxCell<true>},
+        {"circt_muxcell2", lowerCirctMuxCell<true>},
+        {"circt.muxcell4", lowerCirctMuxCell<false>},
+        {"circt_muxcell4", lowerCirctMuxCell<false>}};
 
 // This is the main entrypoint for the lowering pass.
 void LowerIntrinsicsPass::runOnOperation() {
