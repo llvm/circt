@@ -325,6 +325,18 @@ hw.module @subCst(%a: i4) -> (o1: i4) {
   hw.output %b : i4
 }
 
+// CHECK-LABEL: @addConstAndConst
+hw.module @addConstAndConst(%a: i4) -> (o1: i4, o2: i4) {
+// CHECK: %c3_i4 = hw.constant 3 : i4
+// CHECK: [[RESULT:%.+]] = comb.add %a, %c3_i4 : i4
+// CHECK: hw.output [[RESULT]]
+  %c1 = hw.constant 1 : i4
+  %c2 = hw.constant 2 : i4
+  %b = comb.add %a, %c1 : i4
+  %c = comb.add %b, %c2 : i4
+  hw.output %c, %b : i4, i4
+}
+
 // Validates that when there is a matching suffix, and prefix, both of them are removed
 // appropriately, and strips of an unnecessary Cat where possible.
 // CHECK-LABEL: hw.module @compareStrengthReductionRemoveSuffixAndPrefix
@@ -777,6 +789,27 @@ hw.module @fold_mux_tree1(%sel: i2, %a: i8, %b: i8, %c: i8, %d: i8) -> (y: i8) {
   hw.output %5 : i8
 }
 
+// CHECK-LABEL: hw.module @fold_mux_tree1r
+hw.module @fold_mux_tree1r(%sel: i2, %a: i8, %b: i8, %c: i8, %d: i8) -> (y: i8) {
+  // CHECK-NEXT: %0 = hw.array_create %d, %c, %b, %a : i8
+  // CHECK-NEXT: %1 = hw.array_get %0[%sel]
+  // CHECK-NEXT: hw.output %1
+  %c2_i2 = hw.constant 2 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %c3_i2 = hw.constant 3 : i2
+
+  %0 = comb.icmp eq %sel, %c1_i2 : i2
+  %1 = comb.mux %0, %b, %a : i8
+
+  %2 = comb.icmp eq %sel, %c2_i2 : i2
+  %3 = comb.mux %2, %c, %1 : i8
+
+  %4 = comb.icmp eq %sel, %c3_i2 : i2
+  %5 = comb.mux %4, %d, %3 : i8
+  hw.output %5 : i8
+}
+
+
 // CHECK-LABEL: hw.module @fold_mux_tree2
 // This is a sparse tree with 5/8ths load.
 hw.module @fold_mux_tree2(%sel: i3, %a: i8, %b: i8, %c: i8, %d: i8) -> (y: i8) {
@@ -1144,6 +1177,23 @@ hw.module @xorICmpConstant2(%value: i9, %value2: i9) -> (a: i1, b: i9) {
   // CHECK: hw.output %2, %1 : i1, i9
 }
 
+// CHECK-LABEL: func.func @xorICmpConstant3
+// Regression check for a dominance issue in icmp(xor) refactoring.
+func.func @xorICmpConstant3(%arg0: i9, %arg1: i9) -> i1 {
+  %c2_i9 = hw.constant 2 : i9
+  %c0_i9 = hw.constant 0 : i9
+  %1 = comb.xor %arg0, %arg1, %c2_i9 : i9
+  call @xorICmpConstant3Keep(%1) : (i9) -> ()
+  %2 = comb.icmp eq %1, %c0_i9 : i9
+  return %2 : i1
+  // CHECK: %0 = comb.xor %arg0, %arg1 : i9
+  // CHECK: %1 = comb.xor %0, %c2_i9 : i9
+  // CHECK: call @xorICmpConstant3Keep(%1)
+  // CHECK: %2 = comb.icmp eq %0, %c2_i9 : i9
+  // CHECK: return %2 : i1
+}
+
+func.func private @xorICmpConstant3Keep(%arg0: i9)
 
 // CHECK-LABEL: hw.module @test1560
 // This is an integration test for the testcase in Issue #1560.

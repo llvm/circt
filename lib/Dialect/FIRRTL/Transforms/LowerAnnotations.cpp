@@ -97,7 +97,7 @@ static void addAnnotation(AnnoTarget ref, unsigned fieldIdx,
   }
   portAnno = replaceArrayAttrElement(
       portAnno, portRef.getPortNo(),
-      appendArrayAttr(portAnno[portRef.getPortNo()].dyn_cast<ArrayAttr>(),
+      appendArrayAttr(dyn_cast<ArrayAttr>(portAnno[portRef.getPortNo()]),
                       annotation));
   ref.getOp()->setAttr("portAnnotations", portAnno);
 }
@@ -184,13 +184,12 @@ static std::optional<AnnoPathValue> stdResolve(DictionaryAttr anno,
         << "No target field in annotation " << anno;
     return {};
   }
-  if (!target->getValue().isa<StringAttr>()) {
+  if (!isa<StringAttr>(target->getValue())) {
     mlir::emitError(state.circuit.getLoc())
         << "Target field in annotation doesn't contain string " << anno;
     return {};
   }
-  return stdResolveImpl(target->getValue().cast<StringAttr>().getValue(),
-                        state);
+  return stdResolveImpl(cast<StringAttr>(target->getValue()).getValue(), state);
 }
 
 /// Resolves with target, if it exists.  If not, resolves to the circuit.
@@ -198,7 +197,7 @@ static std::optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
                                                ApplyState &state) {
   auto target = anno.getNamed("target");
   if (target)
-    return stdResolveImpl(target->getValue().cast<StringAttr>().getValue(),
+    return stdResolveImpl(cast<StringAttr>(target->getValue()).getValue(),
                           state);
   return AnnoPathValue(state.circuit);
 }
@@ -609,7 +608,7 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
   // Lookup the class
   StringRef annoClassVal;
   if (auto annoClass = anno.getNamed("class"))
-    annoClassVal = annoClass->getValue().cast<StringAttr>().getValue();
+    annoClassVal = cast<StringAttr>(annoClass->getValue()).getValue();
   else if (ignoreClasslessAnno)
     annoClassVal = "circt.missing";
   else
@@ -671,7 +670,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
   // Utility function to extract the defining module from a value which may be
   // either a BlockArgument or an Operation result.
   auto getModule = [](Value value) {
-    if (BlockArgument blockArg = value.dyn_cast<BlockArgument>())
+    if (BlockArgument blockArg = dyn_cast<BlockArgument>(value))
       return cast<FModuleLike>(blockArg.getParentBlock()->getParentOp());
     return value.getDefiningOp()->getParentOfType<FModuleLike>();
   };
@@ -687,9 +686,9 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     assert(getModule(src) == getModule(dest));
     // Helper to determine if 'a' is available at 'b's block.
     auto safelyDoms = [&](Value a, Value b) {
-      if (a.isa<BlockArgument>())
+      if (isa<BlockArgument>(a))
         return true;
-      if (b.isa<BlockArgument>())
+      if (isa<BlockArgument>(b))
         return false;
       // Handle cases where 'b' is in child op after 'a'.
       auto *ancestor =
@@ -1072,7 +1071,7 @@ void LowerAnnotationsPass::runOnOperation() {
   // annotations to be processed in the order in which they appear in the
   // original JSON.
   for (auto anno : llvm::reverse(annotations.getValue()))
-    worklistAttrs.push_back(anno.cast<DictionaryAttr>());
+    worklistAttrs.push_back(cast<DictionaryAttr>(anno));
 
   size_t numFailures = 0;
   size_t numAdded = 0;

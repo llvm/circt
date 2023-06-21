@@ -202,7 +202,7 @@ public:
                           return op->getResult(0);
                         return {};
                       });
-              if (childVal && childVal.getType().isa<FIRRTLBaseType>())
+              if (childVal && isa<FIRRTLType>(childVal.getType()))
                 children.push_back(childVal);
             }
           }
@@ -248,12 +248,12 @@ public:
   void preprocess(SmallVector<Value> &worklist) {
     // All the input ports are added to the worklist.
     for (BlockArgument arg : module.getArguments()) {
-      auto argType = arg.getType();
-      if (argType.isa<RefType>())
+      auto argType = cast<FIRRTLType>(arg.getType());
+      if (isa<RefType>(argType))
         continue;
       if (module.getPortDirection(arg.getArgNumber()) == Direction::In)
         worklist.push_back(arg);
-      if (!argType.cast<FIRRTLBaseType>().isGround())
+      if (!argType.isGround())
         setValRefsTo(arg, FieldRef(arg, 0));
     }
     DenseSet<Value> memPorts;
@@ -263,7 +263,7 @@ public:
           // Wire is added to the worklist
           .Case<WireOp>([&](WireOp wire) {
             worklist.push_back(wire.getResult());
-            auto ty = wire.getResult().getType().dyn_cast<FIRRTLBaseType>();
+            auto ty = dyn_cast<FIRRTLBaseType>(wire.getResult().getType());
             if (ty && !ty.isGround())
               setValRefsTo(wire.getResult(), FieldRef(wire.getResult(), 0));
           })
@@ -350,7 +350,7 @@ public:
               return;
             }
             for (auto memPort : mem.getResults()) {
-              if (!memPort.getType().isa<FIRRTLBaseType>())
+              if (!isa<FIRRTLBaseType>(memPort.getType()))
                 continue;
               memPorts.insert(memPort);
             }
@@ -361,17 +361,19 @@ public:
 
   void handleInstanceOp(InstanceOp ins, SmallVector<Value> &worklist) {
     for (auto port : ins.getResults()) {
-      if (auto type = port.getType().dyn_cast<FIRRTLBaseType>()) {
+      if (auto type = dyn_cast<FIRRTLBaseType>(port.getType())) {
         worklist.push_back(port);
         if (!type.isGround())
           setValRefsTo(port, FieldRef(port, 0));
+      } else if (auto type = dyn_cast<PropertyType>(port.getType())) {
+        worklist.push_back(port);
       }
     }
   }
 
   void handlePorts(FieldRef ref, SmallVectorImpl<Value> &children) {
     if (auto inst = dyn_cast_or_null<InstanceOp>(ref.getDefiningOp())) {
-      auto res = ref.getValue().cast<OpResult>();
+      auto res = cast<OpResult>(ref.getValue());
       auto portNum = res.getResultNumber();
       auto refMod =
           dyn_cast_or_null<FModuleOp>(*instanceGraph.getReferencedModule(inst));
@@ -396,7 +398,7 @@ public:
       if (mem.getReadLatency() > 0)
         return;
       auto memPort = ref.getValue();
-      auto type = memPort.getType().cast<BundleType>();
+      auto type = cast<BundleType>(memPort.getType());
       auto enableFieldId = type.getFieldID((unsigned)ReadPortSubfield::en);
       auto dataFieldId = type.getFieldID((unsigned)ReadPortSubfield::data);
       auto addressFieldId = type.getFieldID((unsigned)ReadPortSubfield::addr);
@@ -466,7 +468,7 @@ public:
     auto pathsToOutPort = [&](FieldRef dstFieldRef) {
       if (dstFieldRef.getFieldID() != 0)
         onlyFieldZero = false;
-      if (!dstFieldRef.getValue().isa<BlockArgument>()) {
+      if (!isa<BlockArgument>(dstFieldRef.getValue())) {
         return failure();
       }
       onlyFieldZero = false;

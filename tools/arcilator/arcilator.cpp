@@ -80,12 +80,22 @@ static cl::opt<bool> observeWires("observe-wires",
                                   cl::desc("Make all wires observable"),
                                   cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool>
+    observeNamedValues("observe-named-values",
+                       cl::desc("Make values with `sv.namehint` observable"),
+                       cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<std::string> stateFile("state-file", cl::desc("State file"),
                                       cl::value_desc("filename"), cl::init(""),
                                       cl::cat(mainCategory));
 
 static cl::opt<bool> shouldInline("inline", cl::desc("Inline arcs"),
                                   cl::init(true), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    shouldMakeLUTs("lookup-tables",
+                   cl::desc("Optimize arcs into lookup tables"), cl::init(true),
+                   cl::cat(mainCategory));
 
 static cl::opt<bool> printDebugInfo("print-debug-info",
                                     cl::desc("Print debug information"),
@@ -161,9 +171,10 @@ static void populatePipeline(PassManager &pm) {
   // represented as intrinsic ops.
   if (untilReached(UntilPreprocessing))
     return;
-  pm.addPass(arc::createAddTapsPass(observePorts, observeWires));
+  pm.addPass(
+      arc::createAddTapsPass(observePorts, observeWires, observeNamedValues));
   pm.addPass(arc::createStripSVPass());
-  pm.addPass(arc::createInferMemoriesPass());
+  pm.addPass(arc::createInferMemoriesPass(observePorts));
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 
@@ -184,7 +195,8 @@ static void populatePipeline(PassManager &pm) {
   pm.addPass(arc::createDedupPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
-  pm.addPass(arc::createMakeTablesPass());
+  if (shouldMakeLUTs)
+    pm.addPass(arc::createMakeTablesPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 
@@ -249,9 +261,9 @@ static void populatePipeline(PassManager &pm) {
   pm.addPass(arc::createArcCanonicalizerPass());
 }
 
-static LogicalResult
-processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
-              Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+static LogicalResult processBuffer(
+    MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
+    std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   mlir::OwningOpRef<mlir::ModuleOp> module;
   {
     auto parserTimer = ts.nest("Parse MLIR input");
@@ -303,10 +315,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 /// Process a single split of the input. This allocates a source manager and
 /// creates a regular or verifying diagnostic handler, depending on whether the
 /// user set the verifyDiagnostics option.
-static LogicalResult
-processInputSplit(MLIRContext &context, TimingScope &ts,
-                  std::unique_ptr<llvm::MemoryBuffer> buffer,
-                  Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+static LogicalResult processInputSplit(
+    MLIRContext &context, TimingScope &ts,
+    std::unique_ptr<llvm::MemoryBuffer> buffer,
+    std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(buffer), llvm::SMLoc());
   if (!verifyDiagnostics) {
@@ -325,7 +337,7 @@ processInputSplit(MLIRContext &context, TimingScope &ts,
 static LogicalResult
 processInput(MLIRContext &context, TimingScope &ts,
              std::unique_ptr<llvm::MemoryBuffer> input,
-             Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+             std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   if (!splitInputFile)
     return processInputSplit(context, ts, std::move(input), outputFile);
 
@@ -352,7 +364,7 @@ static LogicalResult executeArcilator(MLIRContext &context) {
   }
 
   // Create the output directory or output file depending on our mode.
-  Optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
+  std::optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
   // Create an output file.
   outputFile.emplace(openOutputFile(outputFilename, &errorMessage));
   if (!outputFile.value()) {

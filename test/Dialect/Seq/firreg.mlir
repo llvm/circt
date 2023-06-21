@@ -585,8 +585,8 @@ hw.module @ArrayElements(%a: !hw.array<2xi1>, %clock: i1, %cond: i1) -> (b: !hw.
   %5 = comb.mux bin %cond, %0, %2 : i1
   %6 = hw.array_create %5, %4 : i1
   hw.output %r : !hw.array<2xi1>
-  // CHECK:      %[[r2:.+]] = sv.array_index_inout %r[%true] : !hw.inout<array<2xi1>>, i1
-  // CHECK-NEXT: %[[r1:.+]] = sv.array_index_inout %r[%false] : !hw.inout<array<2xi1>>, i1
+  // CHECK:      %[[r1:.+]] = sv.array_index_inout %r[%false] : !hw.inout<array<2xi1>>, i1
+  // CHECK-NEXT: %[[r2:.+]] = sv.array_index_inout %r[%true] : !hw.inout<array<2xi1>>, i1
   // CHECK:      sv.always posedge %clock {
   // CHECK-NEXT:   sv.if %cond {
   // CHECK-NEXT:     sv.passign %[[r1]], %1 : i1
@@ -694,10 +694,10 @@ hw.module @NestedSubaccess(%clock: i1, %en_0: i1, %en_1: i1, %en_2: i1, %addr_0:
   %31 = comb.mux bin %en_1, %27, %30 : !hw.array<3xi32>
   %32 = hw.array_create %26, %24, %22 : i32
   %33 = comb.mux bin %en_0, %31, %32 : !hw.array<3xi32>
-  // CHECK:        %[[IDX4:.+]] = sv.array_index_inout %r[%addr_3] : !hw.inout<array<3xi32>>, i2
-  // CHECK:        %[[IDX3:.+]] = sv.array_index_inout %r[%addr_2] : !hw.inout<array<3xi32>>, i2
-  // CHECK:        %[[IDX2:.+]] = sv.array_index_inout %r[%addr_1] : !hw.inout<array<3xi32>>, i2
   // CHECK:        %[[IDX1:.+]] = sv.array_index_inout %r[%addr_0] : !hw.inout<array<3xi32>>, i2
+  // CHECK:        %[[IDX2:.+]] = sv.array_index_inout %r[%addr_1] : !hw.inout<array<3xi32>>, i2
+  // CHECK:        %[[IDX3:.+]] = sv.array_index_inout %r[%addr_2] : !hw.inout<array<3xi32>>, i2
+  // CHECK:        %[[IDX4:.+]] = sv.array_index_inout %r[%addr_3] : !hw.inout<array<3xi32>>, i2
   // CHECK:        sv.always posedge %clock {
   // CHECK-NEXT:   sv.if %en_0 {
   // CHECK-NEXT:     sv.if %en_1 {

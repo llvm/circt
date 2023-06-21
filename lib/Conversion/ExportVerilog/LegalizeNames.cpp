@@ -14,6 +14,7 @@
 #include "ExportVerilogInternals.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -167,20 +168,22 @@ static void legalizeModuleLocalNames(HWModuleOp module,
       } else if (auto forOp = dyn_cast<ForOp>(op)) {
         nameEntries.emplace_back(op, forOp.getInductionVarNameAttr());
       } else if (isa<AssertOp, AssumeOp, CoverOp, AssertConcurrentOp,
-                     AssumeConcurrentOp, CoverConcurrentOp>(op)) {
+                     AssumeConcurrentOp, CoverConcurrentOp, verif::AssertOp,
+                     verif::CoverOp, verif::AssumeOp>(op)) {
         // Notice and renamify the labels on verification statements.
         if (auto labelAttr = op->getAttrOfType<StringAttr>("label"))
           nameEntries.emplace_back(op, labelAttr);
         else if (options.enforceVerifLabels) {
           // If labels are required for all verif statements, get a default
           // name from verificaiton kinds.
-          StringRef defaultName = llvm::TypeSwitch<Operation *, StringRef>(op)
-                                      .Case<AssertOp, AssertConcurrentOp>(
-                                          [](auto) { return "assert"; })
-                                      .Case<CoverOp, CoverConcurrentOp>(
-                                          [](auto) { return "cover"; })
-                                      .Case<AssumeOp, AssumeConcurrentOp>(
-                                          [](auto) { return "assume"; });
+          StringRef defaultName =
+              llvm::TypeSwitch<Operation *, StringRef>(op)
+                  .Case<AssertOp, AssertConcurrentOp, verif::AssertOp>(
+                      [](auto) { return "assert"; })
+                  .Case<CoverOp, CoverConcurrentOp, verif::CoverOp>(
+                      [](auto) { return "cover"; })
+                  .Case<AssumeOp, AssumeConcurrentOp, verif::AssumeOp>(
+                      [](auto) { return "assume"; });
           nameEntries.emplace_back(
               op, StringAttr::get(op->getContext(), defaultName));
         }

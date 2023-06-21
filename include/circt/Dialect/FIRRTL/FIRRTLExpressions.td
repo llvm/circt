@@ -15,6 +15,7 @@
 
 include "FIRRTLDialect.td"
 include "FIRRTLTypes.td"
+include "FIRRTLEnums.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Types.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
@@ -392,7 +393,7 @@ def IsTagOp : FIRRTLExprOp<"istag"> {
   let hasCustomAssemblyFormat = 1;
   let builders = [
     OpBuilder<(ins "Value":$input, "StringRef":$fieldName), [{
-      auto enumType = input.getType().cast<FEnumType>();
+      auto enumType = cast<FEnumType>(input.getType());
       auto fieldIndex = enumType.getElementIndex(fieldName);
       assert(fieldIndex.has_value() && "subtag operation to unknown field");
       return build($_builder, $_state, input, *fieldIndex);
@@ -402,13 +403,13 @@ def IsTagOp : FIRRTLExprOp<"istag"> {
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType().cast<FEnumType>()
+      return FieldRef(getInput(), cast<FEnumType>(getInput().getType())
                                             .getFieldID(getFieldIndex()));
     }
 
     /// Return the name of the accessed field.
     StringAttr getFieldNameAttr() {
-      return getInput().getType().cast<FEnumType>()
+      return cast<FEnumType>(getInput().getType())
         .getElementNameAttr(getFieldIndex());
     }
 
@@ -436,7 +437,7 @@ def SubtagOp : FIRRTLExprOp<"subtag"> {
 
   let builders = [
     OpBuilder<(ins "Value":$input, "StringRef":$fieldName), [{
-      auto enumType = input.getType().cast<FEnumType>();
+      auto enumType = cast<FEnumType>(input.getType());
       auto fieldIndex = enumType.getElementIndex(fieldName);
       assert(fieldIndex.has_value() && "subtag operation to unknown field");
       return build($_builder, $_state, input, *fieldIndex);
@@ -536,8 +537,8 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
     static FIRRTLType inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
                                       std::optional<Location> loc) {
-      return $_infer(operands[0].getType().cast<FIRRTLType>(),
-                     operands[1].getType().cast<FIRRTLType>(),
+      return $_infer(cast<FIRRTLType>(operands[0].getType()),
+                     cast<FIRRTLType>(operands[1].getType()),
                      loc);
     }
   }]);
@@ -653,7 +654,7 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
     static FIRRTLType inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
                                       std::optional<Location> loc) {
-      return $_infer(operands[0].getType().cast<FIRRTLType>(), loc);
+      return $_infer(cast<FIRRTLType>(operands[0].getType()), loc);
     }
   }]);
 
@@ -989,6 +990,41 @@ def BitCastOp: FIRRTLOp<"bitcast", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Properties
+//===----------------------------------------------------------------------===//
+
+def StringConstantOp : FIRRTLOp<"string", [Pure, ConstantLike]> {
+  let summary = "Produce a constant string value";
+  let description = [{
+    Produces a constant value of string type.
+
+    Example:
+    ```mlir
+    %0 = firrtl.string "hello world"
+    ```
+  }];
+  let arguments = (ins StrAttr:$value);
+  let results = (outs StringType:$result);
+  let hasFolder = 1;
+  let assemblyFormat = "$value attr-dict";
+}
+
+def BigIntConstantOp : FIRRTLOp<"bigint", [Pure, ConstantLike]> {
+  let summary = "Produce a constant bigint value";
+  let description = [{
+    Produces a constant value of bigint type.
+
+    Example:
+    ```mlir
+    %0 = firrtl.bigint 42
+    ```
+  }];
+  let arguments = (ins APSIntAttr:$value);
+  let results = (outs BigIntType:$result);
+  let hasCustomAssemblyFormat = true;
+}
+
+//===----------------------------------------------------------------------===//
 // RefOperations: Operations on the RefType.
 //
 // The RefType is used to capture dataflow paths.
@@ -1013,6 +1049,29 @@ def BitCastOp: FIRRTLOp<"bitcast", [Pure]> {
 //===----------------------------------------------------------------------===//
 // RefOps
 //===----------------------------------------------------------------------===//
+
+def RefCastOp : FIRRTLOp<"ref.cast",
+    [HasCustomSSAName,
+     Pure,
+     CompatibleRefTypes<"result","input">]> {
+  let summary = "Cast between compatible reference types";
+  let description = [{
+    Losslessly cast between compatible reference types.
+    Source and destination must be recursively identical or destination
+    has uninferred variants of the corresponding element in source.
+    ```
+      %result = firrtl.ref.cast %ref : (t1) -> t2
+    ```
+    }];
+
+  let arguments = (ins RefType:$input);
+  let results = (outs RefType:$result);
+
+  let hasFolder = 1;
+
+  let assemblyFormat =
+     "$input attr-dict `:` functional-type($input, $result)";
+}
 
 def RefResolveOp: FIRRTLExprOp<"ref.resolve",
                               [RefTypeConstraint<"ref","result">]> {
@@ -1062,5 +1121,60 @@ def RefSubOp : FIRRTLExprOp<"ref.sub"> {
   let assemblyFormat =
      "$input `[` $index `]` attr-dict `:` qualified(type($input))";
 }
+
+//===----------------------------------------------------------------------===//
+// LTL Dialect Sequence and Property Intrinsics
+//===----------------------------------------------------------------------===//
+
+class LTLIntrinsicOp<string mnemonic, list<Trait> traits = []> :
+    FIRRTLOp<"int.ltl." # mnemonic, traits # [Pure]> {
+  let summary = "FIRRTL variant of `ltl." # mnemonic # "`";
+  let description = "See `ltl." # mnemonic # "` op in the LTL dialect.";
+  let assemblyFormat = [{
+    operands attr-dict `:` functional-type(operands, results)
+  }];
+  let results = (outs UInt1Type:$result);
+}
+
+class UnaryLTLIntrinsicOp<string mnemonic, list<Trait> traits = []> :
+    LTLIntrinsicOp<mnemonic, traits> {
+  let arguments = (ins UInt1Type:$input);
+}
+
+class BinaryLTLIntrinsicOp<string mnemonic, list<Trait> traits = []> :
+    LTLIntrinsicOp<mnemonic, traits> {
+  let arguments = (ins UInt1Type:$lhs, UInt1Type:$rhs);
+}
+
+
+// Generic
+def LTLAndIntrinsicOp : BinaryLTLIntrinsicOp<"and", [Commutative]>;
+def LTLOrIntrinsicOp : BinaryLTLIntrinsicOp<"or", [Commutative]>;
+
+// Sequences
+def LTLDelayIntrinsicOp : LTLIntrinsicOp<"delay"> {
+  let arguments = (ins UInt1Type:$input,
+                       I64Attr:$delay,
+                       OptionalAttr<I64Attr>:$length);
+  let assemblyFormat = [{
+    $input `,` $delay (`,` $length^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+def LTLConcatIntrinsicOp : BinaryLTLIntrinsicOp<"concat">;
+
+// Properties
+def LTLNotIntrinsicOp : UnaryLTLIntrinsicOp<"not">;
+def LTLImplicationIntrinsicOp : BinaryLTLIntrinsicOp<"implication">;
+def LTLEventuallyIntrinsicOp : UnaryLTLIntrinsicOp<"eventually">;
+
+// Clocking
+def LTLClockIntrinsicOp : LTLIntrinsicOp<"clock"> {
+  let arguments = (ins UInt1Type:$input, ClockType:$clock);
+  let assemblyFormat = [{
+    $input `,` $clock attr-dict `:` functional-type(operands, results)
+  }];
+}
+def LTLDisableIntrinsicOp : BinaryLTLIntrinsicOp<"disable">;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD

@@ -808,7 +808,7 @@ def ForOp : SVOp<"for", [SingleBlock, NoTerminator, ProceduralOp,
 //===----------------------------------------------------------------------===//
 
 
-def MacroDeclOp : SVOp<"macro.decl", [Symbol, HasParent<"mlir::ModuleOp">]> {
+def MacroDeclOp : SVOp<"macro.decl", [Symbol]> {
   let summary = "System verilog macro declaration";
 
   let description = [{

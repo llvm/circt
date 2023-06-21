@@ -13,5 +13,11 @@ firrtl.circuit "Foo" {
     // NAMED: %_a = firrtl.wire  : !firrtl.uint<1>
     // NONE:  %_a = firrtl.wire  : !firrtl.uint<1>
     %_a = firrtl.wire interesting_name : !firrtl.uint<1>
+
+    // ALL:   %_T = firrtl.wire : !firrtl.uint<1>
+    // NAMED: %0 = firrtl.wire  : !firrtl.uint<1>
+    // NONE:  %0 = firrtl.wire  : !firrtl.uint<1>
+    %_T = firrtl.wire interesting_name : !firrtl.uint<1>
+
   }
 }

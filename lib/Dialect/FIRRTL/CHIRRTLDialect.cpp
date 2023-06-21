@@ -123,7 +123,7 @@ LogicalResult MemoryPortOp::inferReturnTypes(
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto inType = operands[0].getType();
-  auto memType = inType.dyn_cast<CMemoryType>();
+  auto memType = dyn_cast<CMemoryType>(inType);
   if (!memType) {
     if (loc)
       mlir::emitError(*loc, "memory port requires memory operand");
@@ -195,7 +195,7 @@ LogicalResult MemoryDebugPortOp::inferReturnTypes(
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto inType = operands[0].getType();
-  auto memType = inType.dyn_cast<CMemoryType>();
+  auto memType = dyn_cast<CMemoryType>(inType);
   if (!memType) {
     if (loc)
       mlir::emitError(*loc, "memory port requires memory operand");

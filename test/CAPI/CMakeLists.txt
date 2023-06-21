@@ -12,6 +12,7 @@ target_link_libraries(circt-capi-ir-test
   CIRCTCAPISeq
   CIRCTCAPISV
   CIRCTCAPIFSM
+  CIRCTCAPIExportFIRRTL
   CIRCTCAPIExportVerilog
 )
 

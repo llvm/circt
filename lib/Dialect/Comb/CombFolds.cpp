@@ -1445,6 +1445,19 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
   if (narrowOperationWidth(op, false, rewriter))
     return success();
 
+  // add(add(x, c1), c2) -> add(x, c1 + c2)
+  auto addOp = inputs[0].getDefiningOp<comb::AddOp>();
+  if (addOp && addOp.getInputs().size() == 2 &&
+      matchPattern(addOp.getInputs()[1], m_ConstantInt(&value2)) &&
+      inputs.size() == 2 && matchPattern(inputs[1], m_ConstantInt(&value))) {
+
+    auto rhs = rewriter.create<hw::ConstantOp>(op.getLoc(), value + value2);
+    replaceOpWithNewOpAndCopyName<AddOp>(
+        rewriter, op, op.getType(), ArrayRef<Value>{addOp.getInputs()[0], rhs},
+        /*twoState=*/op.getTwoState() && addOp.getTwoState());
+    return success();
+  }
+
   return failure();
 }
 
@@ -2386,8 +2399,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
       trueMux && falseMux && trueMux.getCond() == falseMux.getCond() &&
       trueMux.getTrueValue() == falseMux.getTrueValue()) {
     auto subMux = rewriter.create<MuxOp>(
-        rewriter.getFusedLoc(trueMux.getLoc(), falseMux.getLoc()), op.getCond(),
-        trueMux.getFalseValue(), falseMux.getFalseValue());
+        rewriter.getFusedLoc({trueMux.getLoc(), falseMux.getLoc()}),
+        op.getCond(), trueMux.getFalseValue(), falseMux.getFalseValue());
     replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, trueMux.getCond(),
                                          trueMux.getTrueValue(), subMux,
                                          op.getTwoStateAttr());
@@ -2400,8 +2413,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
       trueMux && falseMux && trueMux.getCond() == falseMux.getCond() &&
       trueMux.getFalseValue() == falseMux.getFalseValue()) {
     auto subMux = rewriter.create<MuxOp>(
-        rewriter.getFusedLoc(trueMux.getLoc(), falseMux.getLoc()), op.getCond(),
-        trueMux.getTrueValue(), falseMux.getTrueValue());
+        rewriter.getFusedLoc({trueMux.getLoc(), falseMux.getLoc()}),
+        op.getCond(), trueMux.getTrueValue(), falseMux.getTrueValue());
     replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, trueMux.getCond(),
                                          subMux, trueMux.getFalseValue(),
                                          op.getTwoStateAttr());
@@ -2507,12 +2520,12 @@ struct ArrayRewriter : public mlir::OpRewritePattern<hw::ArrayCreateOp> {
     return failure();
   }
 };
+
 } // namespace
 
 void MuxOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                         MLIRContext *context) {
-  results.insert<MuxRewriter>(context);
-  results.insert<ArrayRewriter>(context);
+  results.insert<MuxRewriter, ArrayRewriter>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2816,6 +2829,9 @@ static void combineEqualityICmpWithKnownBitsAndConstant(
 static void combineEqualityICmpWithXorOfConstant(ICmpOp cmpOp, XorOp xorOp,
                                                  const APInt &rhs,
                                                  PatternRewriter &rewriter) {
+  auto ip = rewriter.saveInsertionPoint();
+  rewriter.setInsertionPoint(xorOp);
+
   auto xorRHS = xorOp.getOperands().back().getDefiningOp<hw::ConstantOp>();
   auto newRHS = rewriter.create<hw::ConstantOp>(xorRHS->getLoc(),
                                                 xorRHS.getValue() ^ rhs);
@@ -2842,12 +2858,12 @@ static void combineEqualityICmpWithXorOfConstant(ICmpOp cmpOp, XorOp xorOp,
 
   // If the xor has multiple uses (not just the compare, then we need/want to
   // replace them as well.
-  if (xorMultipleUses) {
-    auto newXor = rewriter.create<XorOp>(xorOp.getLoc(), newLHS, xorRHS, false);
-    replaceOpAndCopyName(rewriter, xorOp, newXor->getResult(0));
-  }
+  if (xorMultipleUses)
+    replaceOpWithNewOpAndCopyName<XorOp>(rewriter, xorOp, newLHS, xorRHS,
+                                         false);
 
   // Replace the comparison.
+  rewriter.restoreInsertionPoint(ip);
   replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, cmpOp, cmpOp.getPredicate(),
                                         newLHS, newRHS, false);
 }

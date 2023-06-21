@@ -767,7 +767,7 @@ hw.hierpath private @nla [@A::@B::@C]
 
 
 firrtl.circuit "LowerToBind" {
- // expected-error @+1 {{the instance path cannot be empty/single element}}
+ // expected-error @+1 {{the instance path cannot be empty}}
 hw.hierpath private @NLA1 []
 hw.hierpath private @NLA2 [@LowerToBind::@s1]
 firrtl.module @InstanceLowerToBind() {}
@@ -1185,6 +1185,84 @@ firrtl.circuit "NoDefineIntoRefSub" {
 }
 
 // -----
+// Can't define into a ref.cast.
+
+firrtl.circuit "NoDefineIntoRefCast" {
+  firrtl.module @NoDefineIntoRefCast(out %r: !firrtl.probe<uint<1>>) {
+    // expected-note @below {{the destination was defined here}}
+    %dest_cast = firrtl.ref.cast %r : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint>
+    %x = firrtl.wire : !firrtl.uint
+    %xref = firrtl.ref.send %x : !firrtl.uint
+    // expected-error @below {{has invalid flow: the destination expression has source flow, expected sink or duplex flow}}
+    firrtl.ref.define %dest_cast, %xref : !firrtl.probe<uint>
+  }
+}
+
+// -----
+// Can't cast to gain width information.
+
+firrtl.circuit "CastAwayRefWidth" {
+  firrtl.module @CastAwayRefWidth(out %r: !firrtl.probe<uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint
+    %xref = firrtl.ref.send %zero : !firrtl.uint
+    // expected-error @below {{reference result must be compatible with reference input: recursively same or uninferred of same}}
+    %source = firrtl.ref.cast %xref : (!firrtl.probe<uint>) -> !firrtl.probe<uint<1>>
+    firrtl.ref.define %r, %source : !firrtl.probe<uint<1>>
+  }
+}
+
+// -----
+// Can't promote to rwprobe.
+
+firrtl.circuit "CastPromoteToRWProbe" {
+  firrtl.module @CastPromoteToRWProbe(out %r: !firrtl.rwprobe<uint>) {
+    %zero = firrtl.constant 0 : !firrtl.uint
+    %xref = firrtl.ref.send %zero : !firrtl.uint
+    // expected-error @below {{reference result must be compatible with reference input: recursively same or uninferred of same}}
+    %source = firrtl.ref.cast %xref : (!firrtl.probe<uint>) -> !firrtl.rwprobe<uint>
+    firrtl.ref.define %r, %source : !firrtl.rwprobe<uint>
+  }
+}
+
+// -----
+// Can't add const-ness via ref.cast
+
+firrtl.circuit "CastToMoreConst" {
+  firrtl.module @CastToMoreConst(out %r: !firrtl.probe<const.uint<3>>) {
+    %zero = firrtl.wire : !firrtl.uint<3>
+    %zref = firrtl.ref.send %zero : !firrtl.uint<3>
+    // expected-error @below {{reference result must be compatible with reference input: recursively same or uninferred of same}}
+    %zconst_ref= firrtl.ref.cast %zref : (!firrtl.probe<uint<3>>) -> !firrtl.probe<const.uint<3>>
+    firrtl.ref.define %r, %zconst_ref : !firrtl.probe<const.uint<3>>
+  }
+}
+
+// -----
+// Check that you can't drive a source.
+
+firrtl.circuit "PropertyDriveSource" {
+  // @expected-note @below {{the destination was defined here}}
+  firrtl.module @PropertyDriveSource(in %in: !firrtl.string) {
+    %0 = firrtl.string "hello"
+    // expected-error @below {{connect has invalid flow: the destination expression "in" has source flow, expected sink or duplex flow}}
+    firrtl.propassign %in, %0 : !firrtl.string
+  }
+}
+
+// -----
+// Check that you can't drive a sink more than once.
+
+firrtl.circuit "PropertyDoubleDrive" {
+  firrtl.module @PropertyDriveSource(out %out: !firrtl.string) {
+    %0 = firrtl.string "hello"
+    // expected-error @below {{destination property cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    firrtl.propassign %out, %0 : !firrtl.string
+    firrtl.propassign %out, %0 : !firrtl.string
+  }
+}
+
+
+// -----
 // Issue 4174-- handle duplicate module names.
 
 firrtl.circuit "hi" {
@@ -1293,7 +1371,7 @@ firrtl.circuit "RefReleaseProbe" {
 firrtl.circuit "EnumCreateNoCase" {
 firrtl.module @EnumCreateNoCase(in %in : !firrtl.uint<8>) {
   // expected-error @below {{unknown field SomeOther in enum type}}
-  %some = firrtl.enumcreate SomeOther(%in) : !firrtl.enum<None: uint<0>, Some: uint<8>>
+  %some = firrtl.enumcreate SomeOther(%in) : (!firrtl.uint<8>) -> !firrtl.enum<None: uint<0>, Some: uint<8>>
 }
 
 // -----
@@ -1302,7 +1380,7 @@ firrtl.circuit "EnumCreateWrongType" {
   // expected-note @below {{prior use here}}
 firrtl.module @EnumCreateWrongType(in %in : !firrtl.uint<7>) {
   // expected-error @below {{expects different type than prior uses}}
-  %some = firrtl.enumcreate Some(%in) : !firrtl.enum<None: uint<0>, Some: uint<8>>
+  %some = firrtl.enumcreate Some(%in) : (!firrtl.uint<8>) -> !firrtl.enum<None: uint<0>, Some: uint<8>>
 }
 
 // -----
@@ -1424,16 +1502,6 @@ firrtl.module @VectorNestedConstReg(in %clock: !firrtl.clock) {
 }
 
 // -----
-// nested 'const' firrtl.reg is invalid
-
-firrtl.circuit "EnumNestedConstReg" {
-firrtl.module @EnumNestedConstReg(in %clock: !firrtl.clock) {
-  // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.enum<a: const.uint<1>>'}}
-  %r = firrtl.reg %clock : !firrtl.clock, !firrtl.enum<a: const.uint<1>>
-}
-}
-
-// -----
 // nested 'const' firrtl.regreset is invalid
 
 firrtl.circuit "BundleNestedConstRegReset" {
@@ -1457,18 +1525,10 @@ firrtl.module @VectorNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !f
 // 'const' firrtl.regreset is invalid
 
 firrtl.circuit "EnumNestedConstRegReset" {
-firrtl.module @EnumNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.enum<a: const.uint<1>>) {
-  // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.enum<a: const.uint<1>>'}}
-  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.enum<a: const.uint<1>>, !firrtl.enum<a: const.uint<1>>
+firrtl.module @EnumNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.const.enum<a: uint<1>>) {
+  // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.enum<a: uint<1>>'}}
+  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.enum<a: uint<1>>, !firrtl.const.enum<a: uint<1>>
 }
-}
-
-// -----
-// hardware firrtl.string is invalid
-
-firrtl.circuit "HardwareString" {
-// expected-error @+1 {{strings are not representable in hardware}}
-firrtl.module @HardwareString(in %string: !firrtl.string) {}
 }
 
 // -----
@@ -1549,3 +1609,80 @@ firrtl.circuit "UninferredWidthCastNonConstToConst" {
   }
 }
 
+// -----
+
+// Primitive ops with all 'const' operands must have a 'const' result type
+firrtl.circuit "PrimOpConstOperandsNonConstResult" {
+firrtl.module @PrimOpConstOperandsNonConstResult(in %a: !firrtl.const.uint<4>, in %b: !firrtl.const.uint<4>) {
+  // expected-error @below {{failed to infer returned types}}
+  // expected-error @+1 {{'firrtl.and' op inferred type(s) '!firrtl.const.uint<4>' are incompatible with return type(s) of operation '!firrtl.uint<4>'}}
+  %0 = firrtl.and %a, %b : (!firrtl.const.uint<4>, !firrtl.const.uint<4>) -> !firrtl.uint<4>
+}
+}
+
+// -----
+
+// Primitive ops with mixed 'const' operands must have a non-'const' result type
+firrtl.circuit "PrimOpMixedConstOperandsConstResult" {
+firrtl.module @PrimOpMixedConstOperandsConstResult(in %a: !firrtl.const.uint<4>, in %b: !firrtl.uint<4>) {
+  // expected-error @below {{failed to infer returned types}}
+  // expected-error @+1 {{'firrtl.and' op inferred type(s) '!firrtl.uint<4>' are incompatible with return type(s) of operation '!firrtl.const.uint<4>'}}
+  %0 = firrtl.and %a, %b : (!firrtl.const.uint<4>, !firrtl.uint<4>) -> !firrtl.const.uint<4>
+}
+}
+
+// -----
+
+// A 'const' bundle can only be created with 'const' operands
+firrtl.circuit "ConstBundleCreateNonConstOperands" {
+firrtl.module @ConstBundleCreateNonConstOperands(in %a: !firrtl.uint<1>) {
+  // expected-error @+1 {{type of element doesn't match bundle for field "a"}}
+  %0 = firrtl.bundlecreate %a : (!firrtl.uint<1>) -> !firrtl.const.bundle<a: uint<1>>
+}
+}
+
+// -----
+
+// A 'const' vector can only be created with 'const' operands
+firrtl.circuit "ConstVectorCreateNonConstOperands" {
+firrtl.module @ConstVectorCreateNonConstOperands(in %a: !firrtl.uint<1>) {
+  // expected-error @+1 {{type of element doesn't match vector element}}
+  %0 = firrtl.vectorcreate %a : (!firrtl.uint<1>) -> !firrtl.const.vector<uint<1>, 1>
+}
+}
+
+// -----
+
+// A 'const' enum can only be created with 'const' operands
+firrtl.circuit "ConstEnumCreateNonConstOperands" {
+firrtl.module @ConstEnumCreateNonConstOperands(in %a: !firrtl.uint<1>) {
+  // expected-error @+1 {{type of element doesn't match enum element}}
+  %0 = firrtl.enumcreate Some(%a) : (!firrtl.uint<1>) -> !firrtl.const.enum<None: uint<0>, Some: uint<1>>
+}
+}
+
+// -----
+
+// Enum types must be passive
+firrtl.circuit "EnumNonPassive" {
+  // expected-error @+1 {{enum field '"a"' not passive}}
+  firrtl.module @EnumNonPassive(in %a : !firrtl.enum<a: bundle<a flip: uint<1>>>) {
+  }
+}
+
+// -----
+
+// Enum types must not contain analog
+firrtl.circuit "EnumAnalog" {
+  // expected-error @+1 {{enum field '"a"' contains analog}}
+  firrtl.module @EnumAnalog(in %a : !firrtl.enum<a: analog<1>>) {
+  }
+}
+
+// -----
+
+// An enum that contains 'const' elements must be 'const'
+firrtl.circuit "NonConstEnumConstElements" {
+// expected-error @+1 {{enum with 'const' elements must be 'const'}}
+firrtl.module @NonConstEnumConstElements(in %a: !firrtl.enum<None: uint<0>, Some: const.uint<1>>) {}
+}

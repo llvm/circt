@@ -122,7 +122,7 @@ def ICmpOp : CombOp<"icmp", [Pure, SameTypeOperands]> {
     bit wide result.
 
     ```
-        %r = hw.icmp eq %a, %b : i4
+        %r = comb.icmp eq %a, %b : i4
     ```
   }];
 
@@ -285,4 +285,34 @@ def MuxOp : CombOp<"mux",
 
   let hasFolder = true;
   let hasCanonicalizer = true;
+}
+
+def TruthTableOp : CombOp<"truth_table", [Pure]> {
+  let summary = "Return a true/false based on a lookup table";
+  let description = [{
+    ```
+      %a = ... : i1
+      %b = ... : i1
+      %0 = comb.truth_table %a, %b -> [false, true, true, false]
+    ```
+
+    This operation assumes a fully elaborated table -- 2^n entries. Inputs are
+    sorted MSB -> LSB from left to right and the offset into `lookupTable` is
+    computed from them. The table is sorted from 0 -> (2^n - 1) from left to
+    right.
+
+    No difference from array_get into an array of constants except for xprop
+    behavior. If one of the inputs is unknown, but said input doesn't make a
+    difference in the output (based on the lookup table) the result should not
+    be 'x' -- it should be the well-known result.
+  }];
+
+  let arguments = (ins Variadic<I1>:$inputs, BoolArrayAttr:$lookupTable);
+  let results = (outs I1:$result);
+
+  let assemblyFormat = [{
+    $inputs `->` $lookupTable attr-dict
+  }];
+
+  let hasVerifier = 1;
 }

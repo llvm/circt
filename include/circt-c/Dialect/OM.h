@@ -30,6 +30,13 @@ extern "C" {
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(OM, om);
 
 //===----------------------------------------------------------------------===//
+// Type API.
+//===----------------------------------------------------------------------===//
+
+/// Is the Type a ClassType.
+MLIR_CAPI_EXPORTED bool omTypeIsAClassType(MlirType type);
+
+//===----------------------------------------------------------------------===//
 // Evaluator data structures.
 //===----------------------------------------------------------------------===//
 
@@ -91,9 +98,17 @@ MLIR_CAPI_EXPORTED MlirModule omEvaluatorGetModule(OMEvaluator evaluator);
 /// Query if the Object is null.
 MLIR_CAPI_EXPORTED bool omEvaluatorObjectIsNull(OMObject object);
 
+/// Get the Type from an Object, which will be a ClassType.
+MLIR_CAPI_EXPORTED MlirType omEvaluatorObjectGetType(OMObject object);
+
 /// Get a field from an Object, which must contain a field of that name.
 MLIR_CAPI_EXPORTED OMObjectValue omEvaluatorObjectGetField(OMObject object,
                                                            MlirAttribute name);
+
+/// Get all the field names from an Object, can be empty if object has no
+/// fields.
+MLIR_CAPI_EXPORTED MlirAttribute
+omEvaluatorObjectGetFieldNames(OMObject object);
 
 //===----------------------------------------------------------------------===//
 // ObjectValue API.
@@ -117,6 +132,14 @@ omEvaluatorObjectValueIsAPrimitive(OMObjectValue objectValue);
 /// Get the Primitive from an  ObjectValue, which must contain a Primitive.
 MLIR_CAPI_EXPORTED MlirAttribute
 omEvaluatorObjectValueGetPrimitive(OMObjectValue objectValue);
+
+//===----------------------------------------------------------------------===//
+// Attribute API.
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool omAttrIsAReferenceAttr(MlirAttribute attr);
+
+MLIR_CAPI_EXPORTED MlirAttribute omReferenceAttrGetInnerRef(MlirAttribute attr);
 
 #ifdef __cplusplus
 }

@@ -13,6 +13,9 @@
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Location.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/Debug.h"
 #include "gtest/gtest.h"
 #include <mlir/IR/BuiltinAttributes.h>
@@ -192,11 +195,9 @@ TEST(EvaluatorTests, InstantiateObjectWithParamField) {
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
-  auto cls = builder.create<ClassOp>("MyClass", params);
-  auto &body = cls.getBody().emplaceBlock();
-  body.addArgument(builder.getIntegerType(32), cls.getLoc());
-  builder.setInsertionPointToStart(&body);
-  builder.create<ClassFieldOp>("field", body.getArgument(0));
+  StringRef fields[] = {"field"};
+  Type types[] = {builder.getIntegerType(32)};
+  ClassOp::buildSimpleClassOp(builder, loc, "MyClass", params, fields, types);
 
   Evaluator evaluator(mod);
 
@@ -262,11 +263,10 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
-  auto innerCls = builder.create<ClassOp>("MyInnerClass", params);
-  auto &innerBody = innerCls.getBody().emplaceBlock();
-  innerBody.addArgument(builder.getIntegerType(32), innerCls.getLoc());
-  builder.setInsertionPointToStart(&innerBody);
-  builder.create<ClassFieldOp>("field", innerBody.getArgument(0));
+  StringRef fields[] = {"field"};
+  Type types[] = {builder.getIntegerType(32)};
+  auto innerCls = ClassOp::buildSimpleClassOp(builder, loc, "MyInnerClass",
+                                              params, fields, types);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto cls = builder.create<ClassOp>("MyClass", params);
@@ -311,11 +311,10 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
-  auto innerCls = builder.create<ClassOp>("MyInnerClass", params);
-  auto &innerBody = innerCls.getBody().emplaceBlock();
-  innerBody.addArgument(builder.getIntegerType(32), innerCls.getLoc());
-  builder.setInsertionPointToStart(&innerBody);
-  builder.create<ClassFieldOp>("field", innerBody.getArgument(0));
+  StringRef fields[] = {"field"};
+  Type types[] = {builder.getIntegerType(32)};
+  auto innerCls = ClassOp::buildSimpleClassOp(builder, loc, "MyInnerClass",
+                                              params, fields, types);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto cls = builder.create<ClassOp>("MyClass", params);
@@ -381,6 +380,16 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
 
   auto field2Value = std::get<std::shared_ptr<Object>>(
       result.value()->getField(builder.getStringAttr("field2")).value());
+
+  auto fieldNames = result.value()->getFieldNames();
+
+  ASSERT_TRUE(fieldNames.size() == 2);
+  StringRef fieldNamesTruth[] = {"field1", "field2"};
+  for (auto fieldName : llvm::enumerate(fieldNames)) {
+    auto str = llvm::dyn_cast_or_null<StringAttr>(fieldName.value());
+    ASSERT_TRUE(str);
+    ASSERT_EQ(str.getValue(), fieldNamesTruth[fieldName.index()]);
+  }
 
   ASSERT_TRUE(field1Value);
   ASSERT_TRUE(field2Value);

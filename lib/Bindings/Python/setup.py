@@ -67,6 +67,7 @@ class CMakeBuild(build_py):
     cmake_args = [
         "-DCMAKE_BUILD_TYPE=Release",  # not used on MSVC, but no harm
         "-DCMAKE_INSTALL_PREFIX={}".format(os.path.abspath(cmake_install_dir)),
+        "-DCMAKE_OSX_DEPLOYMENT_TARGET=10.14",  # on OSX, min target for C++17
         "-DPython3_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
         "-DLLVM_ENABLE_PROJECTS=mlir",
         "-DLLVM_EXTERNAL_PROJECTS=circt",
@@ -74,6 +75,8 @@ class CMakeBuild(build_py):
         "-DLLVM_TARGETS_TO_BUILD=host",
         "-DMLIR_ENABLE_BINDINGS_PYTHON=ON",
         "-DCIRCT_BINDINGS_PYTHON_ENABLED=ON",
+        "-DCIRCT_RELEASE_TAG_ENABLED=ON",
+        "-DCIRCT_RELEASE_TAG=firtool",
     ]
 
     # HACK: CMake fails to auto-detect static linked Python installations, which

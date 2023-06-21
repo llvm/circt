@@ -9,9 +9,11 @@
 #include "PassDetails.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/Dominance.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "arc-group-resets-and-enables"
@@ -114,6 +116,65 @@ struct EnableGroupingPattern : public OpRewritePattern<ClockTreeOp> {
     return success(changed);
   }
 };
+
+/// Where possible without domination issues, group assignments inside IfOps and
+/// return true if any operations were moved.
+bool groupInRegion(Block *block, Operation *clockTreeOp,
+                   PatternRewriter *rewriter) {
+  bool changed = false;
+  if (!block)
+    return false;
+
+  SmallVector<Operation *> worklist;
+  // Don't walk as we don't want nested ops in order to restrict to IfOps
+  for (auto &op : block->getOperations()) {
+    worklist.push_back(&op);
+  }
+  while (!worklist.empty()) {
+    Operation *op = worklist.pop_back_val();
+    mlir::DominanceInfo dom(op);
+    for (auto operand : op->getOperands()) {
+      Operation *definition = operand.getDefiningOp();
+      if (definition == nullptr)
+        continue;
+      // Skip if the operand is already defined in this block or is
+      // defined out of the clock tree
+      if (definition->getBlock() == op->getBlock() ||
+          !clockTreeOp->isAncestor(definition))
+        continue;
+      if (!operand.hasOneUse() &&
+          llvm::any_of(operand.getUsers(),
+                       [&](auto *user) { return !dom.dominates(op, user); }))
+        continue;
+      // For some currently unknown reason, just calling moveBefore
+      // directly has the same output but is much slower
+      rewriter->updateRootInPlace(definition,
+                                  [&]() { definition->moveBefore(op); });
+      changed = true;
+      worklist.push_back(definition);
+    }
+  }
+  return changed;
+}
+
+struct GroupAssignmentsInIfPattern : public OpRewritePattern<scf::IfOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(scf::IfOp ifOp,
+                                PatternRewriter &rewriter) const override {
+    // Pull values only used in certain reset/enable cases into the appropriate
+    // IfOps
+    // Skip anything not in a ClockTreeOp
+    auto clockTreeOp = ifOp->getParentOfType<ClockTreeOp>();
+    if (!clockTreeOp)
+      return failure();
+    // Group assignments in each region and keep track of whether either
+    // grouping made changes
+    bool changed = groupInRegion(ifOp.thenBlock(), clockTreeOp, &rewriter) ||
+                   groupInRegion(ifOp.elseBlock(), clockTreeOp, &rewriter);
+    return success(changed);
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -141,12 +202,9 @@ LogicalResult GroupResetsAndEnablesPass::runOnModel(ModelOp modelOp) {
 
   MLIRContext &context = getContext();
   RewritePatternSet patterns(&context);
-  patterns.insert<ResetGroupingPattern>(&context);
-  patterns.insert<EnableGroupingPattern>(&context);
-  GreedyRewriteConfig config;
-  config.strictMode = GreedyRewriteStrictness::ExistingOps;
-  if (failed(
-          applyPatternsAndFoldGreedily(modelOp, std::move(patterns), config))) {
+  patterns.add<ResetGroupingPattern, EnableGroupingPattern,
+               GroupAssignmentsInIfPattern>(&context);
+  if (failed(applyPatternsAndFoldGreedily(modelOp, std::move(patterns)))) {
     signalPassFailure();
   }
   return success();

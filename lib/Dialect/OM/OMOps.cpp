@@ -13,6 +13,7 @@
 #include "circt/Dialect/OM/OMOps.h"
 
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 
 using namespace mlir;
 
@@ -63,6 +64,24 @@ void circt::om::ClassOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                                ArrayRef<StringRef> formalParamNames) {
   return build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
                odsBuilder.getStrArrayAttr(formalParamNames));
+}
+
+circt::om::ClassOp circt::om::ClassOp::buildSimpleClassOp(
+    OpBuilder &odsBuilder, Location loc, Twine name,
+    ArrayRef<StringRef> formalParamNames, ArrayRef<StringRef> fieldNames,
+    ArrayRef<Type> fieldTypes) {
+  circt::om::ClassOp classOp = odsBuilder.create<circt::om::ClassOp>(
+      loc, odsBuilder.getStringAttr(name),
+      odsBuilder.getStrArrayAttr(formalParamNames));
+  Block *body = &classOp.getRegion().emplaceBlock();
+  auto prevLoc = odsBuilder.saveInsertionPoint();
+  odsBuilder.setInsertionPointToEnd(body);
+  for (auto [name, type] : llvm::zip(fieldNames, fieldTypes))
+    odsBuilder.create<circt::om::ClassFieldOp>(loc, name,
+                                               body->addArgument(type, loc));
+  odsBuilder.restoreInsertionPoint(prevLoc);
+
+  return classOp;
 }
 
 void circt::om::ClassOp::build(OpBuilder &odsBuilder, OperationState &odsState,
@@ -254,6 +273,11 @@ void circt::om::ConstantOp::build(::mlir::OpBuilder &odsBuilder,
                                   ::mlir::OperationState &odsState,
                                   ::mlir::TypedAttr constVal) {
   return build(odsBuilder, odsState, constVal.getType(), constVal);
+}
+
+OpFoldResult circt::om::ConstantOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "constant has no operands");
+  return getValueAttr();
 }
 
 //===----------------------------------------------------------------------===//

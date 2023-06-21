@@ -40,9 +40,9 @@ def ClassOp : OMOp<"class",
   );
 
   let builders = [
+    OpBuilder<(ins "::mlir::Twine":$name)>,
     OpBuilder<(ins "::mlir::Twine":$name,
-                    "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames)>,
-    OpBuilder<(ins "::mlir::Twine":$name)>
+                   "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames)>,
   ];
 
   let hasCustomAssemblyFormat = 1;
@@ -51,6 +51,14 @@ def ClassOp : OMOp<"class",
 
   let extraClassDeclaration = [{
     mlir::Block *getBodyBlock() { return &getBody().front(); }
+    // This builds a ClassOp, and populates it with the CLassFieldOps.
+    // Build the ClassOp with `name` and `formalParamNames`. Then add
+    // ClassFieldOps for each name and type in `fieldNames` and `fieldTypes`.
+    circt::om::ClassOp static buildSimpleClassOp(
+    mlir::OpBuilder &odsBuilder, mlir::Location loc, mlir::Twine name,
+    mlir::ArrayRef<mlir::StringRef> formalParamNames,
+    mlir::ArrayRef<mlir::StringRef> fieldNames,
+    mlir::ArrayRef<mlir::Type> fieldTypes);
   }];
 }
 
@@ -128,6 +136,8 @@ def ConstantOp : OMOp<"constant",
   let assemblyFormat = [{
     $value attr-dict
   }];
+
+  let hasFolder = true;
 }
 
 #endif // CIRCT_DIALECT_OM_OMOPS_TD

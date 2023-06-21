@@ -17,8 +17,11 @@ target_link_libraries(circt-opt
   CIRCTCalyxToHW
   CIRCTCalyxToFSM
   CIRCTCalyxTransforms
+  CIRCTComb
+  CIRCTCombTransforms
   CIRCTConvertToArcs
   CIRCTDC
+  CIRCTDCToHW
   CIRCTDCTransforms
   CIRCTESI
   CIRCTExportChiselInterface
@@ -52,6 +55,7 @@ target_link_libraries(circt-opt
   CIRCTHWTransforms
   CIRCTLoopSchedule
   CIRCTLoopScheduleToCalyx
+  CIRCTLTL
   CIRCTSCFToCalyx
   CIRCTScheduling
   CIRCTSeq
@@ -69,6 +73,7 @@ target_link_libraries(circt-opt
   CIRCTSystemC
   CIRCTSystemCTransforms
   CIRCTTransforms
+  CIRCTVerif
 
   MLIRIR
   MLIRLLVMDialect

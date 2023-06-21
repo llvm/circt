@@ -26,14 +26,14 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
                                                   StringRef inputFilename) {
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerIntrinsicsPass());
 
-  if (!opt.disableOptimization)
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        mlir::createCSEPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
 
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createDropNamesPass(opt.getPreserveMode()));
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
+  if (!opt.disableOptimization)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        mlir::createCSEPass());
 
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLowerCHIRRTLPass());
@@ -59,6 +59,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
           opt.chiselInterfaceOutDirectory));
     }
   }
+
+  pm.nest<firrtl::CircuitOp>().nestAny().addPass(firrtl::createDropConstPass());
 
   if (opt.dedup)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
@@ -94,15 +96,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createRandomizeRegisterInitPass());
 
-  if (opt.useOldCheckCombCycles) {
-    if (opt.preserveAggregate == firrtl::PreserveAggregate::None)
-      pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombCyclesPass());
-    else
-      emitWarning(module.getLoc())
-          << "CheckCombCyclesPass doesn't support aggregate "
-             "values yet so it is skipped\n";
-  } else
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombLoopsPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombLoopsPass());
 
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!opt.disableOptimization)
@@ -159,7 +153,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
         createSimpleCanonicalizerPass());
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         circt::firrtl::createRegisterOptimizerPass());
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMDeadCodeElimPass());
+    pm.addPass(firrtl::createIMDeadCodeElimPass());
   }
 
   if (opt.emitOMIR)
@@ -191,7 +185,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   // Lower the ref.resolve and ref.send ops and remove the RefType ports.
   // LowerToHW cannot handle RefType so, this pass must be run to remove all
   // RefType ports and ops.
-  pm.addPass(firrtl::createLowerXMRPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerXMRPass());
 
   pm.addPass(createLowerFIRRTLToHWPass(
       opt.enableAnnotationWarning.getValue(),
@@ -210,6 +204,12 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 
 LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
                                       const FirtoolOptions &opt) {
+  if (opt.extractTestCode)
+    pm.addPass(sv::createSVExtractTestCodePass(opt.etcDisableInstanceExtraction,
+                                               opt.etcDisableRegisterExtraction,
+                                               opt.etcDisableModuleInlining));
+
+  pm.addPass(seq::createExternalizeClockGatePass(opt.clockGateOpts));
   pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass(
       {/*disableRandomization=*/!opt.isRandomEnabled(
            FirtoolOptions::RandomKind::Reg),
@@ -220,10 +220,6 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),
       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg),
       opt.addVivadoRAMAddressConflictSynthesisBugWorkaround));
-
-  if (opt.extractTestCode)
-    pm.addPass(sv::createSVExtractTestCodePass(opt.etcDisableInstanceExtraction,
-                                               opt.etcDisableModuleInlining));
 
   // If enabled, run the optimizer.
   if (!opt.disableOptimization) {

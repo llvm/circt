@@ -79,7 +79,7 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
   // partial connect. Also ignore non-passive connections or non-integer
   // connections.
   LLVM_DEBUG(llvm::dbgs() << "Visiting " << connect << "\n");
-  auto destTy = connect.getDest().getType().dyn_cast<FIRRTLBaseType>();
+  auto destTy = dyn_cast<FIRRTLBaseType>(connect.getDest().getType());
   if (!destTy || !destTy.isPassive() ||
       !firrtl::getBitWidth(destTy).has_value())
     return false;
@@ -109,9 +109,9 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
   // If it is the first time to visit the parent op, then allocate the vector
   // for subconnections.
   if (count == 0) {
-    if (auto bundle = parent.getType().dyn_cast<BundleType>())
+    if (auto bundle = dyn_cast<BundleType>(parent.getType()))
       subConnections.resize(bundle.getNumElements());
-    if (auto vector = parent.getType().dyn_cast<FVectorType>())
+    if (auto vector = dyn_cast<FVectorType>(parent.getType()))
       subConnections.resize(vector.getNumElements());
   }
   ++count;
@@ -212,7 +212,7 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
         subConnections[idx].erase();
     }
 
-    return parentType.isa<FVectorType>()
+    return isa<FVectorType>(parentType)
                ? builder->createOrFold<VectorCreateOp>(
                      builder->getFusedLoc(locs), parentType, operands)
                : builder->createOrFold<BundleCreateOp>(
@@ -220,9 +220,9 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
   };
 
   Value merged;
-  if (auto bundle = parentType.dyn_cast_or_null<BundleType>())
+  if (auto bundle = dyn_cast_or_null<BundleType>(parentType))
     merged = getMergedValue(bundle);
-  if (auto vector = parentType.dyn_cast_or_null<FVectorType>())
+  if (auto vector = dyn_cast_or_null<FVectorType>(parentType))
     merged = getMergedValue(vector);
   if (!merged)
     return false;

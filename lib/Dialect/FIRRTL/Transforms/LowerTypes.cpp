@@ -128,7 +128,7 @@ static bool containsBundleType(FIRRTLType type) {
 /// Return true if we can preserve the type.
 static bool isPreservableAggregateType(Type type,
                                        PreserveAggregate::PreserveMode mode) {
-  if (auto refType = dyn_cast<RefType>(type)) {
+  if (auto refType = llvm::dyn_cast<RefType>(type)) {
     // Always preserve rwprobe's.
     if (refType.getForceable())
       return true;
@@ -141,7 +141,7 @@ static bool isPreservableAggregateType(Type type,
   if (mode == PreserveAggregate::None)
     return false;
 
-  auto firrtlType = type.dyn_cast<FIRRTLBaseType>();
+  auto firrtlType = llvm::dyn_cast<FIRRTLBaseType>(type);
   if (!firrtlType)
     return false;
 
@@ -172,7 +172,7 @@ static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry> &fields,
   if (isPreservableAggregateType(type, mode))
     return false;
 
-  if (auto refType = type.dyn_cast<RefType>())
+  if (auto refType = llvm::dyn_cast<RefType>(type))
     type = refType.getType();
   return TypeSwitch<Type, bool>(type)
       .Case<BundleType>([&](auto bundle) {
@@ -203,10 +203,11 @@ static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry> &fields,
 /// Return if something is not a normal subaccess.  Non-normal includes
 /// zero-length vectors and constant indexes (which are really subindexes).
 static bool isNotSubAccess(Operation *op) {
-  SubaccessOp sao = dyn_cast<SubaccessOp>(op);
+  SubaccessOp sao = llvm::dyn_cast<SubaccessOp>(op);
   if (!sao)
     return true;
-  ConstantOp arg = dyn_cast_or_null<ConstantOp>(sao.getIndex().getDefiningOp());
+  ConstantOp arg =
+      llvm::dyn_cast_or_null<ConstantOp>(sao.getIndex().getDefiningOp());
   return arg && sao.getInput().getType().getNumElements() != 0;
 }
 
@@ -236,7 +237,7 @@ static bool isAnnotationSensitiveToFieldID(Annotation anno) {
 /// to such a replicated operation, if the annotation in question requires it.
 static Attribute updateAnnotationFieldID(MLIRContext *ctxt, Attribute attr,
                                          unsigned fieldID, Type i64ty) {
-  DictionaryAttr dict = attr.cast<DictionaryAttr>();
+  DictionaryAttr dict = cast<DictionaryAttr>(attr);
 
   // No need to do anything if the annotation applies to the entire field.
   if (fieldID == 0)
@@ -281,8 +282,8 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
 
   SmallVector<Attribute> newAnnotations;
   for (size_t portIdx = 0, e = newMem.getNumResults(); portIdx < e; ++portIdx) {
-    auto portType = newMem.getResult(portIdx).getType().cast<BundleType>();
-    auto oldPortType = op.getResult(portIdx).getType().cast<BundleType>();
+    auto portType = cast<BundleType>(newMem.getResult(portIdx).getType());
+    auto oldPortType = cast<BundleType>(op.getResult(portIdx).getType());
     SmallVector<Attribute> portAnno;
     for (auto attr : newMem.getPortAnnotation(portIdx)) {
       Annotation anno(attr);
@@ -300,7 +301,7 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
         }
 
         // Handle aggregate sub-fields, including `(r/w)data` and `(w)mask`.
-        if (oldPortType.getElement(targetIndex).type.isa<BundleType>()) {
+        if (isa<BundleType>(oldPortType.getElement(targetIndex).type)) {
           // Check whether the annotation falls into the range of the current
           // field. Note that the `field` here is peeled from the `data`
           // sub-field of the memory port, thus we need to add the fieldID of
@@ -400,6 +401,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitExpr(BitCastOp op);
   bool visitExpr(RefSendOp op);
   bool visitExpr(RefResolveOp op);
+  bool visitExpr(RefCastOp op);
   bool visitStmt(ConnectOp op);
   bool visitStmt(StrictConnectOp op);
   bool visitStmt(RefDefineOp op);
@@ -479,13 +481,12 @@ TypeLoweringVisitor::getPreservationModeForModule(FModuleLike module) {
 }
 
 Value TypeLoweringVisitor::getSubWhatever(Value val, size_t index) {
-  if (BundleType bundle = val.getType().dyn_cast<BundleType>()) {
+  if (isa<BundleType>(val.getType()))
     return builder->create<SubfieldOp>(val, index);
-  } else if (FVectorType fvector = val.getType().dyn_cast<FVectorType>()) {
+  if (isa<FVectorType>(val.getType()))
     return builder->create<SubindexOp>(val, index);
-  } else if (val.getType().isa<RefType>()) {
+  if (isa<RefType>(val.getType()))
     return builder->create<RefSubOp>(val, index);
-  }
   llvm_unreachable("Unknown aggregate type");
   return nullptr;
 }
@@ -537,7 +538,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
   for (auto opAttr : annotations) {
     std::optional<uint64_t> maybeFieldID;
     DictionaryAttr annotation;
-    annotation = opAttr.dyn_cast<DictionaryAttr>();
+    annotation = dyn_cast<DictionaryAttr>(opAttr);
     if (annotations)
       // Erase the circt.fieldID.  If this is needed later, it will be re-added.
       if (auto id = annotation.getAs<IntegerAttr>("circt.fieldID")) {
@@ -586,7 +587,7 @@ bool TypeLoweringVisitor::lowerProducer(
 
   if (!srcType)
     srcType = op->getResult(0).getType();
-  auto srcFType = dyn_cast<FIRRTLType>(srcType);
+  auto srcFType = llvm::dyn_cast<FIRRTLType>(srcType);
   if (!srcFType)
     return false;
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
@@ -673,7 +674,7 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
           // This shouldn't happen (non-FIRRTLBaseType's in lowered types, or
           // refs), check explicitly here for clarity/early detection.
           assert(llvm::none_of(mapping, [](auto v) {
-            auto fbasetype = dyn_cast<FIRRTLBaseType>(v.getType());
+            auto fbasetype = llvm::dyn_cast<FIRRTLBaseType>(v.getType());
             return !fbasetype || fbasetype.containsReference();
           }));
 
@@ -697,9 +698,9 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
 }
 
 void TypeLoweringVisitor::lowerModule(FModuleLike op) {
-  if (auto module = dyn_cast<FModuleOp>(*op))
+  if (auto module = llvm::dyn_cast<FModuleOp>(*op))
     visitDecl(module);
-  else if (auto extModule = dyn_cast<FExtModuleOp>(*op))
+  else if (auto extModule = llvm::dyn_cast<FExtModuleOp>(*op))
     visitDecl(extModule);
 }
 
@@ -712,7 +713,7 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
                             FlatBundleFieldEntry field, PortInfo &oldArg) {
   Value newValue;
   FIRRTLType fieldType = mapBaseType(srcType, [&](auto) { return field.type; });
-  if (auto mod = dyn_cast<FModuleOp>(module)) {
+  if (auto mod = llvm::dyn_cast<FModuleOp>(module)) {
     Block *body = mod.getBodyBlock();
     // Append the new argument.
     newValue = body->insertArgument(insertPt, fieldType, oldArg.loc);
@@ -750,7 +751,7 @@ bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
 
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry> fieldTypes;
-  auto srcType = newArgs[argIndex].type.cast<FIRRTLType>();
+  auto srcType = cast<FIRRTLType>(newArgs[argIndex].type);
   if (!peelType(srcType, fieldTypes, getPreservationModeForModule(module)))
     return false;
 
@@ -767,11 +768,11 @@ bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
 
 static Value cloneAccess(ImplicitLocOpBuilder *builder, Operation *op,
                          Value rhs) {
-  if (auto rop = dyn_cast<SubfieldOp>(op))
+  if (auto rop = llvm::dyn_cast<SubfieldOp>(op))
     return builder->create<SubfieldOp>(rhs, rop.getFieldIndex());
-  if (auto rop = dyn_cast<SubindexOp>(op))
+  if (auto rop = llvm::dyn_cast<SubindexOp>(op))
     return builder->create<SubindexOp>(rhs, rop.getIndex());
-  if (auto rop = dyn_cast<SubaccessOp>(op))
+  if (auto rop = llvm::dyn_cast<SubaccessOp>(op))
     return builder->create<SubaccessOp>(rhs, rop.getIndex());
   op->emitError("Unknown accessor");
   return nullptr;
@@ -913,7 +914,7 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
   // Hook up the new memories to the wires the old memory was replaced with.
   for (size_t index = 0, rend = op.getNumResults(); index < rend; ++index) {
     auto result = oldPorts[index].getResult();
-    auto rType = result.getType().cast<BundleType>();
+    auto rType = cast<BundleType>(result.getType());
     for (size_t fieldIndex = 0, fend = rType.getNumElements();
          fieldIndex != fend; ++fieldIndex) {
       auto name = rType.getElement(fieldIndex).name.getValue();
@@ -1221,7 +1222,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
   }
   // Now the input has been cast to srcLoweredVal, which is of UInt type.
   // If the result is an aggregate type, then use lowerProducer.
-  if (op.getResult().getType().isa<BundleType, FVectorType>()) {
+  if (isa<BundleType, FVectorType>(op.getResult().getType())) {
     // uptoBits is used to keep track of the bits that have been extracted.
     size_t uptoBits = 0;
     auto clone = [&](const FlatBundleFieldEntry &field,
@@ -1244,7 +1245,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
   }
 
   // If ground type, then replace the result.
-  if (op.getType().dyn_cast<SIntType>())
+  if (isa<SIntType>(op.getType()))
     srcLoweredVal = builder->create<AsSIntPrimOp>(srcLoweredVal);
   op.getResult().replaceAllUsesWith(srcLoweredVal);
   return true;
@@ -1273,6 +1274,15 @@ bool TypeLoweringVisitor::visitExpr(RefResolveOp op) {
   return lowerProducer(op, clone, op.getRef().getType());
 }
 
+bool TypeLoweringVisitor::visitExpr(RefCastOp op) {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Value {
+    auto input = getSubWhatever(op.getInput(), field.index);
+    return builder->create<RefCastOp>(RefType::get(field.type), input);
+  };
+  return lowerProducer(op, clone);
+}
+
 bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   bool skip = true;
   SmallVector<Type, 8> resultTypes;
@@ -1286,7 +1296,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
   endFields.push_back(0);
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-    auto srcType = op.getType(i).cast<FIRRTLType>();
+    auto srcType = cast<FIRRTLType>(op.getType(i));
 
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
@@ -1369,7 +1379,7 @@ bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
 
   // Check for constant instances
   if (ConstantOp arg =
-          dyn_cast_or_null<ConstantOp>(op.getIndex().getDefiningOp())) {
+          llvm::dyn_cast_or_null<ConstantOp>(op.getIndex().getDefiningOp())) {
     auto sio = builder->create<SubindexOp>(op.getInput(),
                                            arg.getValue().getExtValue());
     op.replaceAllUsesWith(sio.getResult());

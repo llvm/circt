@@ -238,9 +238,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: = comb.icmp bin eq {{.*}}, %c-1_i14 : i14
     %28 = firrtl.andr %18 : (!firrtl.uint<14>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: = comb.icmp bin ceq {{.*}}, %x_i1
-    %x28 = firrtl.int.isX %28 : !firrtl.uint<1>
-
     // CHECK-NEXT: [[XOREXT:%.+]] = comb.concat %c0_i11, [[XOR]]
     // CHECK-NEXT: [[SHIFT:%.+]] = comb.shru bin [[XOREXT]], [[VAL18]] : i14
     // CHECK-NEXT: [[DSHR:%.+]] = comb.extract [[SHIFT]] from 0 : (i14) -> i3
@@ -863,7 +860,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT: }
   firrtl.module private @SimpleEnumCreate(in %input: !firrtl.uint<0>,
                                          out %sink: !firrtl.enum<a: uint<0>, b: uint<0>, c: uint<0>>) {
-    %0 = firrtl.enumcreate a(%input) : !firrtl.enum<a: uint<0>, b: uint<0>, c: uint<0>>
+    %0 = firrtl.enumcreate a(%input) : (!firrtl.uint<0>) -> !firrtl.enum<a: uint<0>, b: uint<0>, c: uint<0>>
     firrtl.strictconnect %sink, %0 : !firrtl.enum<a: uint<0>, b: uint<0>, c: uint<0>>
   }
 
@@ -890,7 +887,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT: } 
   firrtl.module private @DataEnumCreate(in %input: !firrtl.uint<2>,
                                        out %sink: !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>) {
-    %0 = firrtl.enumcreate a (%input) : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
+    %0 = firrtl.enumcreate a (%input) : (!firrtl.uint<2>) -> !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
     firrtl.strictconnect %sink, %0 : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
   }
 
@@ -1509,34 +1506,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK{LITERAL}:   %0 = hw.aggregate_constant [[[3 : i8, 2 : i8], [1 : i8, 0 : i8]], [[7 : i8, 6 : i8], [5 : i8, 4 : i8]]]
     // CHECK-SAME: !hw.struct<a: !hw.array<2xarray<2xi8>>, b: !hw.array<2xarray<2xi8>>>
     // CHECK: hw.output %0
-  }
-
-  // CHECK-LABEL: hw.module @intrinsic
-  firrtl.module @intrinsic(in %clk: !firrtl.clock, out %io1: !firrtl.uint<1>, out %io2: !firrtl.uint<1>, out %io3: !firrtl.uint<1>, out %io4 : !firrtl.uint<5>) {
-    %1 = firrtl.int.isX %clk : !firrtl.clock
-    firrtl.strictconnect %io1, %1 : !firrtl.uint<1>
-    // CHECK: %[[x:.*]] = sv.constantX
-    // CHECK: comb.icmp bin ceq %clk, %[[x]]
-
-    %2 = firrtl.int.plusargs.test "foo"
-    firrtl.strictconnect %io2, %2 : !firrtl.uint<1>
-    %3, %4 = firrtl.int.plusargs.value "foo" : !firrtl.uint<5>
-    firrtl.strictconnect %io3, %3 : !firrtl.uint<1>
-    firrtl.strictconnect %io4, %4 : !firrtl.uint<5>
-
-    // CHECK: %[[foo:.*]] = sv.constantStr "foo"
-    // CHECK: %[[tst:.*]] = sv.reg : !hw.inout<i1>
-    // CHECK: %[[foo2:.*]] = sv.constantStr "foo"
-    // CHECK: %[[val:.*]] = sv.reg : !hw.inout<i5> 
-    // CHECK: %[[fnd:.*]] = sv.reg : !hw.inout<i1> 
-    // CHECK: sv.initial { 
-    // CHECK: %[[call:.*]] = sv.system "test$plusargs"(%[[foo]])
-    // CHECK: sv.passign %[[tst]], %[[call]]
-    // CHECK: %[[call:.*]] = sv.system "value$plusargs"(%[[foo2]], %[[val]])
-    // CHECK: sv.passign %[[fnd]], %[[call]]
-    // CHECK: }
-    // CHECK: %[[rfnd:.*]] = sv.read_inout %[[fnd]]
-    // CHECK: %[[rval:.*]] = sv.read_inout %[[val]]
   }
 
   // An internal-only analog connection between two instances should be implemented with a wire

@@ -551,7 +551,7 @@ firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.sint<1>) {
 
 // -----
 
-/// Non-const types cannot be connected to const types.
+// Non-const types cannot be connected to const types.
 
 firrtl.circuit "test" {
 firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.const.uint<1>) {
@@ -586,7 +586,7 @@ firrtl.module @test(in %in   : !firrtl.const.bundle<a flip: uint<1>>,
 
 // -----
 
-/// Nested const flip types cannot be connected to non-const flip types.
+// Nested const flip types cannot be connected to non-const flip types.
 
 firrtl.circuit "test" {
 firrtl.module @test(in %in   : !firrtl.bundle<a flip: const.uint<1>>,
@@ -606,5 +606,147 @@ firrtl.module @test(in %in   : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>,
   // expected-error @+1 {{type mismatch}}
   firrtl.connect %out, %in : !firrtl.const.bundle<a flip: bundle<a flip: uint<1>>>, 
                              !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
+}
+}
+
+// -----
+
+// Test that non-const subaccess of a const vector disallows assignment.
+firrtl.circuit "test" {
+firrtl.module @test(in %index: !firrtl.uint<1>, out %out: !firrtl.const.vector<uint<1>, 1>) {
+  %c = firrtl.constant 0 : !firrtl.uint<1>
+  %d = firrtl.subaccess %out[%index] : !firrtl.const.vector<uint<1>, 1>, !firrtl.uint<1>
+  // expected-error @+1 {{assignment to non-'const' subaccess of 'const' type is disallowed}}
+  firrtl.strictconnect %d, %c : !firrtl.uint<1>
+}
+}
+
+// -----
+
+// Test that non-const subaccess of a const vector disallows assignment, even if the source is const.
+firrtl.circuit "test" {
+firrtl.module @test(in %index: !firrtl.uint<1>, out %out: !firrtl.const.vector<uint<1>, 1>) {
+  %c = firrtl.constant 0 : !firrtl.const.uint<1>
+  %d = firrtl.subaccess %out[%index] : !firrtl.const.vector<uint<1>, 1>, !firrtl.uint<1>
+  // expected-error @+1 {{assignment to non-'const' subaccess of 'const' type is disallowed}}
+  firrtl.connect %d, %c : !firrtl.uint<1>, !firrtl.const.uint<1>
+}
+}
+
+// -----
+
+// Test that non-const subaccess of a flipped const vector disallows assignment.
+firrtl.circuit "test" {
+firrtl.module @test(in %index: !firrtl.uint<1>, in %in: !firrtl.const.vector<bundle<a flip: uint<1>>, 1>, out %out: !firrtl.bundle<a flip: uint<1>>) {
+  %element = firrtl.subaccess %in[%index] : !firrtl.const.vector<bundle<a flip: uint<1>>, 1>, !firrtl.uint<1>
+  // expected-error @+1 {{assignment to non-'const' subaccess of 'const' type is disallowed}}
+  firrtl.connect %out, %element : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
+}
+}
+
+// -----
+
+// Test that non-const subaccess of a flipped const vector disallows assignment, even if the source is const.
+firrtl.circuit "test" {
+firrtl.module @test(in %index: !firrtl.uint<1>, in %in: !firrtl.const.vector<bundle<a flip: uint<1>>, 1>, out %out: !firrtl.bundle<a flip: const.uint<1>>) {
+  %element = firrtl.subaccess %in[%index] : !firrtl.const.vector<bundle<a flip: uint<1>>, 1>, !firrtl.uint<1>
+  // expected-error @+1 {{assignment to non-'const' subaccess of 'const' type is disallowed}}
+  firrtl.connect %out, %element : !firrtl.bundle<a flip: const.uint<1>>, !firrtl.bundle<a flip: uint<1>>
+}
+}
+
+// -----
+firrtl.circuit "test" {
+firrtl.module @test(in %p: !firrtl.uint<1>, in %in: !firrtl.const.uint<2>, out %out: !firrtl.const.uint<2>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    // expected-error @+1 {{assignment to 'const' type '!firrtl.const.uint<2>' is dependent on a non-'const' condition}}
+    firrtl.connect %out, %in : !firrtl.const.uint<2>, !firrtl.const.uint<2>
+  }
+}
+}
+
+// -----
+
+firrtl.circuit "test" {
+firrtl.module @test(in %p: !firrtl.uint<1>, in %in: !firrtl.const.uint<2>, out %out: !firrtl.const.uint<2>) {
+  firrtl.when %p : !firrtl.uint<1> {
+  } else {
+    // expected-error @+1 {{assignment to 'const' type '!firrtl.const.uint<2>' is dependent on a non-'const' condition}}
+    firrtl.connect %out, %in : !firrtl.const.uint<2>, !firrtl.const.uint<2>
+  }
+}
+}
+
+// -----
+
+firrtl.circuit "test" {
+firrtl.module @test(in %constP: !firrtl.const.uint<1>, in %p: !firrtl.uint<1>, in %in: !firrtl.const.uint<2>, out %out: !firrtl.const.uint<2>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    firrtl.when %constP : !firrtl.const.uint<1> {
+      // expected-error @+1 {{assignment to 'const' type '!firrtl.const.uint<2>' is dependent on a non-'const' condition}}
+      firrtl.connect %out, %in : !firrtl.const.uint<2>, !firrtl.const.uint<2>
+    }
+  }
+}
+}
+
+// -----
+
+firrtl.circuit "test" {
+firrtl.module @test(in %p: !firrtl.uint<1>, in %in: !firrtl.bundle<a: const.uint<2>>, out %out: !firrtl.bundle<a: const.uint<2>>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    // expected-error @+1 {{assignment to nested 'const' member of type '!firrtl.bundle<a: const.uint<2>>' is dependent on a non-'const' condition}}
+    firrtl.connect %out, %in : !firrtl.bundle<a: const.uint<2>>, !firrtl.bundle<a: const.uint<2>>
+  }
+}
+}
+
+// -----
+
+firrtl.circuit "test" {
+firrtl.module @test(in %p: !firrtl.uint<1>, in %in: !firrtl.const.bundle<a flip: uint<2>>, out %out: !firrtl.const.bundle<a flip: uint<2>>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    // expected-error @+1 {{assignment to 'const' type '!firrtl.const.bundle<a flip: uint<2>>' is dependent on a non-'const' condition}}
+    firrtl.connect %out, %in : !firrtl.const.bundle<a flip: uint<2>>, !firrtl.const.bundle<a flip: uint<2>>
+  }
+}
+}
+
+// -----
+
+firrtl.circuit "test" {
+firrtl.module @test(in %p: !firrtl.uint<1>, in %in: !firrtl.bundle<a flip: const.uint<2>>, out %out: !firrtl.bundle<a flip: const.uint<2>>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    // expected-error @+1 {{assignment to nested 'const' member of type '!firrtl.bundle<a flip: const.uint<2>>' is dependent on a non-'const' condition}}
+    firrtl.connect %out, %in : !firrtl.bundle<a flip: const.uint<2>>, !firrtl.bundle<a flip: const.uint<2>>
+  }
+}
+}
+
+// -----
+
+// Test that the declaration location of the bundle containing the field is checked.
+firrtl.circuit "test" {
+firrtl.module @test(in %p: !firrtl.uint<1>, out %out: !firrtl.const.bundle<a: uint<1>>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    %f = firrtl.subfield %out[a] : !firrtl.const.bundle<a: uint<1>>
+    %c = firrtl.constant 0 : !firrtl.const.uint<1>
+    // expected-error @+1 {{assignment to 'const' type '!firrtl.const.uint<1>' is dependent on a non-'const' condition}}
+    firrtl.strictconnect %f, %c : !firrtl.const.uint<1>
+  }
+}
+}
+
+// -----
+
+// Test that the declaration location of the vector containing the field is checked.
+firrtl.circuit "test" {
+firrtl.module @test(in %p: !firrtl.uint<1>, out %out: !firrtl.const.vector<uint<1>, 1>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    %e = firrtl.subindex %out[0] : !firrtl.const.vector<uint<1>, 1>
+    %c = firrtl.constant 0 : !firrtl.const.uint<1>
+    // expected-error @+1 {{assignment to 'const' type '!firrtl.const.uint<1>' is dependent on a non-'const' condition}}
+    firrtl.strictconnect %e, %c : !firrtl.const.uint<1>
+  }
 }
 }

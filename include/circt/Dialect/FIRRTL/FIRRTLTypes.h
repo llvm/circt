@@ -14,7 +14,6 @@
 #define CIRCT_DIALECT_FIRRTL_TYPES_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
-#include "circt/Dialect/FIRRTL/FIRRTLTypeInterfaces.h"
 #include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
@@ -44,7 +43,9 @@ class OpenVectorType;
 class FVectorType;
 class FEnumType;
 class RefType;
+class PropertyType;
 class StringType;
+class BigIntType;
 
 /// A collection of bits indicating the recursive properties of a type.
 struct RecursiveTypeProperties {
@@ -135,6 +136,9 @@ public:
   /// Return a 'const' or non-'const' version of this type.
   FIRRTLBaseType getConstType(bool isConst);
 
+  /// Return this type with a 'const' modifiers dropped
+  FIRRTLBaseType getAllConstDroppedType();
+
   /// Return this type with all ground types replaced with UInt<1>.  This is
   /// used for `mem` operations.
   FIRRTLBaseType getMaskType();
@@ -153,7 +157,8 @@ public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
     return llvm::isa<FIRRTLDialect>(type.getDialect()) &&
-           !type.isa<RefType, OpenBundleType, OpenVectorType, StringType>();
+           !llvm::isa<PropertyType, RefType, OpenBundleType, OpenVectorType>(
+               type);
   }
 
   /// Returns true if this is a non-const "passive" that which is not analog.
@@ -222,6 +227,11 @@ bool areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
 bool areTypesConstCastable(FIRRTLType destType, FIRRTLType srcType,
                            bool srcOuterTypeIsConst = false);
 
+/// Return true if destination ref type can be cast from source ref type,
+/// per FIRRTL spec rules they must be identical or destination has
+/// more general versions of the corresponding type in the source.
+bool areTypesRefCastable(Type dstType, Type srcType);
+
 /// Returns true if the destination is at least as wide as a source.  The source
 /// and destination types must be equivalent non-analog types.  The types are
 /// recursively connected to ensure that the destination is larger than the
@@ -288,9 +298,22 @@ public:
   /// Return a 'const' or non-'const' version of this type.
   IntType getConstType(bool isConst);
 
+  static bool classof(Type type) { return llvm::isa<SIntType, UIntType>(type); }
+};
+
+//===----------------------------------------------------------------------===//
+// PropertyTypes
+//===----------------------------------------------------------------------===//
+
+class PropertyType : public FIRRTLType {
+public:
+  /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
-    return type.isa<SIntType>() || type.isa<UIntType>();
+    return llvm::isa<StringType, BigIntType>(type);
   }
+
+protected:
+  using FIRRTLType::FIRRTLType;
 };
 
 //===----------------------------------------------------------------------===//
@@ -315,6 +338,7 @@ void printNestedType(Type type, AsmPrinter &os);
 
 using FIRRTLValue = mlir::TypedValue<FIRRTLType>;
 using FIRRTLBaseValue = mlir::TypedValue<FIRRTLBaseType>;
+using FIRRTLPropertyValue = mlir::TypedValue<PropertyType>;
 
 } // namespace firrtl
 } // namespace circt

@@ -24,9 +24,12 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
+#include "circt/Dialect/LTL/LTLVisitors.h"
+#include "circt/Dialect/OM/OMOps.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVVisitors.h"
+#include "circt/Dialect/Verif/VerifVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/Path.h"
@@ -649,7 +652,7 @@ enum class BlockStatementCount { Zero, One, TwoOrMore };
 static BlockStatementCount countStatements(Block &block) {
   unsigned numStatements = 0;
   block.walk([&](Operation *op) {
-    if (isVerilogExpression(op))
+    if (isVerilogExpression(op) || isa<ltl::LTLDialect>(op->getDialect()))
       return WalkResult::advance();
     numStatements +=
         TypeSwitch<Operation *, unsigned>(op)
@@ -1794,6 +1797,11 @@ public:
   /// of any emitted expressions in the specified set.
   ExprEmitter(ModuleEmitter &emitter,
               SmallPtrSetImpl<Operation *> &emittedExprs)
+      : ExprEmitter(emitter, emittedExprs, tokens) {}
+
+  ExprEmitter(ModuleEmitter &emitter,
+              SmallPtrSetImpl<Operation *> &emittedExprs,
+              BufferingPP::BufferVec &tokens)
       : EmitterBase(emitter.state), emitter(emitter),
         emittedExprs(emittedExprs), buffer(tokens), ps(buffer, state.saver) {
     assert(state.pp.getListener() == &state.saver);
@@ -1811,7 +1819,11 @@ public:
                   /*signRequirement*/ NoRequirement,
                   /*isSelfDeterminedUnsignedValue*/ false);
     });
-    buffer.flush(state.pp);
+    // If we are not using an external token buffer provided through the
+    // constructor, but we're using the default `ExprEmitter`-scoped buffer,
+    // flush it.
+    if (&buffer.tokens == &tokens)
+      buffer.flush(state.pp);
   }
 
 private:
@@ -2419,40 +2431,24 @@ SubExprInfo ExprEmitter::visitSV(XMRRefOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  auto refAttr = op.getRefAttr();
-
-  // The XMR is pointing at an InnerRefAttr.
-  if (auto innerRef = dyn_cast<InnerRefAttr>(refAttr)) {
+  // The XMR is pointing at a GlobalRef.
+  auto globalRef = op.getReferencedPath(&state.symbolCache);
+  auto namepath = globalRef.getNamepathAttr().getValue();
+  auto *module = state.symbolCache.getDefinition(
+      cast<InnerRefAttr>(namepath.front()).getModule());
+  ps << PPExtString(getSymOpName(module));
+  for (auto sym : namepath) {
+    ps << ".";
+    auto innerRef = cast<InnerRefAttr>(sym);
     auto ref = state.symbolCache.getInnerDefinition(innerRef.getModule(),
                                                     innerRef.getName());
-    ps << PPExtString(getSymOpName(
-              state.symbolCache.getDefinition(innerRef.getModule())))
-       << ".";
-    if (ref.hasPort())
+    if (ref.hasPort()) {
       ps << PPExtString(getPortVerilogName(ref.getOp(), ref.getPort()));
-    else
-      ps << PPExtString(getSymOpName(ref.getOp()));
-  } else {
-    // The XMR is pointing at a GlobalRef.
-    auto globalRef = cast<hw::HierPathOp>(state.symbolCache.getDefinition(
-        cast<FlatSymbolRefAttr>(refAttr).getAttr()));
-    auto namepath = globalRef.getNamepathAttr().getValue();
-    auto *module = state.symbolCache.getDefinition(
-        cast<InnerRefAttr>(namepath.front()).getModule());
-    ps << PPExtString(getSymOpName(module));
-    for (auto sym : namepath) {
-      ps << ".";
-      auto innerRef = cast<InnerRefAttr>(sym);
-      auto ref = state.symbolCache.getInnerDefinition(innerRef.getModule(),
-                                                      innerRef.getName());
-      if (ref.hasPort()) {
-        ps << PPExtString(getPortVerilogName(ref.getOp(), ref.getPort()));
-        continue;
-      }
-      ps << PPExtString(getSymOpName(ref.getOp()));
+      continue;
     }
+    ps << PPExtString(getSymOpName(ref.getOp()));
   }
-  auto leaf = op.getStringLeafAttr();
+  auto leaf = op.getVerbatimSuffixAttr();
   if (leaf && leaf.size())
     ps << PPExtString(leaf);
   return {Selection, IsUnsigned};
@@ -2970,6 +2966,294 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
 // NOLINTEND(misc-no-recursion)
 
 //===----------------------------------------------------------------------===//
+// Property Emission
+//===----------------------------------------------------------------------===//
+
+// NOLINTBEGIN(misc-no-recursion)
+
+namespace {
+/// Precedence level of various property and sequence expressions. Lower numbers
+/// bind tighter.
+///
+/// See IEEE 1800-2017 section 16.12 "Declaring properties", specifically table
+/// 16-3 on "Sequence and property operator precedence and associativity".
+enum class PropertyPrecedence {
+  Symbol,      // Atomic symbol like `foo` and regular boolean expressions
+  Repeat,      // Sequence `[*]`, `[=]`, `[->]`
+  Concat,      // Sequence `##`
+  Throughout,  // Sequence `throughout`
+  Within,      // Sequence `within`
+  Intersect,   // Sequence `intersect`
+  Unary,       // Property `not`, `nexttime`-like
+  And,         // Sequence and property `and`
+  Or,          // Sequence and property `or`
+  Iff,         // Property `iff`
+  Until,       // Property `until`-like, `implies`
+  Implication, // Property `|->`, `|=>`, `#-#`, `#=#`
+  Qualifier,   // Property `always`-like, `eventually`-like, `if`, `case`,
+               // `accept`-like, `reject`-like
+  Clocking,    // `@(...)`, `disable iff` (not specified in the standard)
+  Lowest,      // Sentinel which is always the lowest precedence.
+};
+
+/// Additional information on emitted property and sequence expressions.
+struct EmittedProperty {
+  /// The precedence of this expression.
+  PropertyPrecedence precedence;
+};
+
+/// A helper to emit recursively nested property and sequence expressions for
+/// SystemVerilog assertions.
+class PropertyEmitter : public EmitterBase,
+                        public ltl::Visitor<PropertyEmitter, EmittedProperty> {
+public:
+  /// Create a PropertyEmitter for the specified module emitter, and keeping
+  /// track of any emitted expressions in the specified set.
+  PropertyEmitter(ModuleEmitter &emitter,
+                  SmallPtrSetImpl<Operation *> &emittedOps)
+      : PropertyEmitter(emitter, emittedOps, tokens) {}
+  PropertyEmitter(ModuleEmitter &emitter,
+                  SmallPtrSetImpl<Operation *> &emittedOps,
+                  BufferingPP::BufferVec &tokens)
+      : EmitterBase(emitter.state), emitter(emitter), emittedOps(emittedOps),
+        buffer(tokens), ps(buffer, state.saver) {
+    assert(state.pp.getListener() == &state.saver);
+  }
+
+  /// Emit the specified value as an SVA property or sequence. This is the entry
+  /// point to print an entire tree of property or sequence expressions in one
+  /// go.
+  void emitProperty(
+      Value property,
+      PropertyPrecedence parenthesizeIfLooserThan = PropertyPrecedence::Lowest);
+
+private:
+  using ltl::Visitor<PropertyEmitter, EmittedProperty>::visitLTL;
+  friend class ltl::Visitor<PropertyEmitter, EmittedProperty>;
+
+  /// Emit the specified value as an SVA property or sequence.
+  EmittedProperty
+  emitNestedProperty(Value property,
+                     PropertyPrecedence parenthesizeIfLooserThan);
+
+  EmittedProperty visitUnhandledLTL(Operation *op);
+  EmittedProperty visitLTL(ltl::AndOp op);
+  EmittedProperty visitLTL(ltl::OrOp op);
+  EmittedProperty visitLTL(ltl::DelayOp op);
+  EmittedProperty visitLTL(ltl::ConcatOp op);
+  EmittedProperty visitLTL(ltl::NotOp op);
+  EmittedProperty visitLTL(ltl::ImplicationOp op);
+  EmittedProperty visitLTL(ltl::EventuallyOp op);
+  EmittedProperty visitLTL(ltl::ClockOp op);
+  EmittedProperty visitLTL(ltl::DisableOp op);
+
+  void emitLTLConcat(ValueRange inputs);
+
+public:
+  ModuleEmitter &emitter;
+
+private:
+  /// Keep track of all operations emitted within this subexpression for
+  /// location information tracking.
+  SmallPtrSetImpl<Operation *> &emittedOps;
+
+  /// Tokens buffered for inserting casts/parens after emitting children.
+  SmallVector<Token> tokens;
+
+  /// Stores tokens until told to flush.  Uses provided buffer (tokens).
+  BufferingPP buffer;
+
+  /// Stream to emit expressions into, will add to buffer.
+  TokenStream<BufferingPP> ps;
+};
+} // end anonymous namespace
+
+void PropertyEmitter::emitProperty(
+    Value property, PropertyPrecedence parenthesizeIfLooserThan) {
+  assert(tokens.empty());
+  // Wrap to this column.
+  ps.scopedBox(PP::ibox0,
+               [&] { emitNestedProperty(property, parenthesizeIfLooserThan); });
+  // If we are not using an external token buffer provided through the
+  // constructor, but we're using the default `PropertyEmitter`-scoped buffer,
+  // flush it.
+  if (&buffer.tokens == &tokens)
+    buffer.flush(state.pp);
+}
+
+EmittedProperty PropertyEmitter::emitNestedProperty(
+    Value property, PropertyPrecedence parenthesizeIfLooserThan) {
+  // Emit the property as a plain expression if it doesn't have a property or
+  // sequence type, in which case it is just a boolean expression.
+  //
+  // We use the `LowestPrecedence` for the boolean expression such that it never
+  // gets parenthesized. According to IEEE 1800-2017, "the operators described
+  // in Table 11-2 have higher precedence than the sequence and property
+  // operators". Therefore any boolean expression behaves just like a
+  // `PropertyPrecedence::Symbol` and needs no parantheses, which is equivalent
+  // to `VerilogPrecedence::LowestPrecedence`.
+  if (!isa<ltl::SequenceType, ltl::PropertyType>(property.getType())) {
+    ExprEmitter(emitter, emittedOps, tokens)
+        .emitExpression(property, LowestPrecedence);
+    return {PropertyPrecedence::Symbol};
+  }
+
+  unsigned startIndex = tokens.size();
+  auto info = dispatchLTLVisitor(property.getDefiningOp());
+
+  // If this subexpression would bind looser than the expression it is bound
+  // into, then we need to parenthesize it. Insert the parentheses
+  // retroactively.
+  if (info.precedence > parenthesizeIfLooserThan) {
+    // Insert {"(", ibox0} before the subexpression.
+    tokens.insert(tokens.begin() + startIndex, BeginToken(0));
+    tokens.insert(tokens.begin() + startIndex, StringToken("("));
+    // Insert {end, ")" } after the subexpression.
+    ps << PP::end << ")";
+    // Reset the precedence level.
+    info.precedence = PropertyPrecedence::Symbol;
+  }
+
+  // Remember that we emitted this.
+  emittedOps.insert(property.getDefiningOp());
+  return info;
+}
+
+EmittedProperty PropertyEmitter::visitUnhandledLTL(Operation *op) {
+  emitOpError(op, "emission as Verilog property or sequence not supported");
+  ps << "<<unsupported: " << PPExtString(op->getName().getStringRef()) << ">>";
+  return {PropertyPrecedence::Symbol};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::AndOp op) {
+  llvm::interleave(
+      op.getInputs(),
+      [&](auto input) { emitNestedProperty(input, PropertyPrecedence::And); },
+      [&]() { ps << PP::space << "and" << PP::nbsp; });
+  return {PropertyPrecedence::And};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::OrOp op) {
+  llvm::interleave(
+      op.getInputs(),
+      [&](auto input) { emitNestedProperty(input, PropertyPrecedence::Or); },
+      [&]() { ps << PP::space << "or" << PP::nbsp; });
+  return {PropertyPrecedence::Or};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::DelayOp op) {
+  ps << "##";
+  if (auto length = op.getLength()) {
+    if (*length == 0) {
+      ps.addAsString(op.getDelay());
+    } else {
+      ps << "[";
+      ps.addAsString(op.getDelay());
+      ps << ":";
+      ps.addAsString(op.getDelay() + *length);
+      ps << "]";
+    }
+  } else {
+    if (op.getDelay() == 0) {
+      ps << "[*]";
+    } else if (op.getDelay() == 1) {
+      ps << "[+]";
+    } else {
+      ps << "[";
+      ps.addAsString(op.getDelay());
+      ps << ":$]";
+    }
+  }
+  ps << PP::space;
+  emitNestedProperty(op.getInput(), PropertyPrecedence::Concat);
+  return {PropertyPrecedence::Concat};
+}
+
+void PropertyEmitter::emitLTLConcat(ValueRange inputs) {
+  bool addSeparator = false;
+  for (auto input : inputs) {
+    if (addSeparator) {
+      ps << PP::space;
+      if (!input.getDefiningOp<ltl::DelayOp>())
+        ps << "##0" << PP::space;
+    }
+    addSeparator = true;
+    emitNestedProperty(input, PropertyPrecedence::Concat);
+  }
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::ConcatOp op) {
+  emitLTLConcat(op.getInputs());
+  return {PropertyPrecedence::Concat};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::NotOp op) {
+  ps << "not" << PP::space;
+  emitNestedProperty(op.getInput(), PropertyPrecedence::Unary);
+  return {PropertyPrecedence::Unary};
+}
+
+/// For a value `concat(..., delay(const(true), 1, 0))`, return `...`. This is
+/// useful for emitting `(seq ##1 true) |-> prop` as `seq |=> prop`.
+static ValueRange getNonOverlappingConcatSubrange(Value value) {
+  auto concatOp = value.getDefiningOp<ltl::ConcatOp>();
+  if (!concatOp || concatOp.getInputs().size() < 2)
+    return {};
+  auto delayOp = concatOp.getInputs().back().getDefiningOp<ltl::DelayOp>();
+  if (!delayOp || delayOp.getDelay() != 1 || delayOp.getLength() != 0)
+    return {};
+  auto constOp = delayOp.getInput().getDefiningOp<ConstantOp>();
+  if (!constOp || !constOp.getValue().isOne())
+    return {};
+  return concatOp.getInputs().drop_back();
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::ImplicationOp op) {
+  // Emit `(seq ##1 true) |-> prop` as `seq |=> prop`.
+  if (auto range = getNonOverlappingConcatSubrange(op.getAntecedent());
+      !range.empty()) {
+    emitLTLConcat(range);
+    ps << PP::space << "|=>" << PP::nbsp;
+  } else {
+    emitNestedProperty(op.getAntecedent(), PropertyPrecedence::Implication);
+    ps << PP::space << "|->" << PP::nbsp;
+  }
+  emitNestedProperty(op.getConsequent(), PropertyPrecedence::Implication);
+  return {PropertyPrecedence::Implication};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::EventuallyOp op) {
+  ps << "s_eventually" << PP::space;
+  emitNestedProperty(op.getInput(), PropertyPrecedence::Qualifier);
+  return {PropertyPrecedence::Qualifier};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::ClockOp op) {
+  ps << "@(";
+  ps.scopedBox(PP::ibox2, [&] {
+    ps << PPExtString(stringifyClockEdge(op.getEdge())) << PP::space;
+    emitNestedProperty(op.getClock(), PropertyPrecedence::Lowest);
+    ps << ")";
+  });
+  ps << PP::space;
+  emitNestedProperty(op.getInput(), PropertyPrecedence::Clocking);
+  return {PropertyPrecedence::Clocking};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::DisableOp op) {
+  ps << "disable iff" << PP::nbsp << "(";
+  ps.scopedBox(PP::ibox2, [&] {
+    emitNestedProperty(op.getCondition(), PropertyPrecedence::Lowest);
+    ps << ")";
+  });
+  ps << PP::space;
+  emitNestedProperty(op.getInput(), PropertyPrecedence::Clocking);
+  return {PropertyPrecedence::Clocking};
+}
+
+// NOLINTEND(misc-no-recursion)
+
+//===----------------------------------------------------------------------===//
 // NameCollector
 //===----------------------------------------------------------------------===//
 
@@ -3000,6 +3284,8 @@ void NameCollector::collectNames(Block &block) {
     // at the result values since wires used by instances should be traversed
     // anyway.
     if (isa<InstanceOp, InterfaceInstanceOp>(op))
+      continue;
+    if (isa<ltl::LTLDialect>(op.getDialect()))
       continue;
 
     bool isExpr = isVerilogExpression(&op);
@@ -3055,7 +3341,8 @@ namespace {
 // NOLINTBEGIN(misc-no-recursion)
 class StmtEmitter : public EmitterBase,
                     public hw::StmtVisitor<StmtEmitter, LogicalResult>,
-                    public sv::Visitor<StmtEmitter, LogicalResult> {
+                    public sv::Visitor<StmtEmitter, LogicalResult>,
+                    public verif::Visitor<StmtEmitter, LogicalResult> {
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
   /// of any emitted expressions in the specified set.
@@ -3076,16 +3363,20 @@ private:
                  VerilogPrecedence parenthesizeIfLooserThan = LowestPrecedence);
   void emitSVAttributes(Operation *op);
 
-  using StmtVisitor::visitStmt;
-  using Visitor::visitSV;
+  using hw::StmtVisitor<StmtEmitter, LogicalResult>::visitStmt;
+  using sv::Visitor<StmtEmitter, LogicalResult>::visitSV;
+  using verif::Visitor<StmtEmitter, LogicalResult>::visitVerif;
   friend class hw::StmtVisitor<StmtEmitter, LogicalResult>;
   friend class sv::Visitor<StmtEmitter, LogicalResult>;
+  friend class verif::Visitor<StmtEmitter, LogicalResult>;
 
   // Visitor methods.
   LogicalResult visitUnhandledStmt(Operation *op) { return failure(); }
   LogicalResult visitInvalidStmt(Operation *op) { return failure(); }
   LogicalResult visitUnhandledSV(Operation *op) { return failure(); }
   LogicalResult visitInvalidSV(Operation *op) { return failure(); }
+  LogicalResult visitUnhandledVerif(Operation *op) { return failure(); }
+  LogicalResult visitInvalidVerif(Operation *op) { return failure(); }
 
   LogicalResult visitSV(sv::WireOp op) { return emitDeclaration(op); }
   LogicalResult visitSV(RegOp op) { return emitDeclaration(op); }
@@ -3149,7 +3440,7 @@ private:
 
   LogicalResult visitSV(ForOp op);
 
-  void emitAssertionLabel(Operation *op, StringRef opName);
+  void emitAssertionLabel(Operation *op);
   void emitAssertionMessage(StringAttr message, ValueRange args,
                             SmallPtrSetImpl<Operation *> &ops,
                             bool isConcurrent);
@@ -3174,6 +3465,12 @@ private:
   void emitBlockAsStatement(Block *block,
                             const SmallPtrSetImpl<Operation *> &locationOps,
                             StringRef multiLineComment = StringRef());
+
+  LogicalResult emitVerifAssertLike(Operation *op, Value property,
+                                    PPExtString opName);
+  LogicalResult visitVerif(verif::AssertOp op);
+  LogicalResult visitVerif(verif::AssumeOp op);
+  LogicalResult visitVerif(verif::CoverOp op);
 
 public:
   ModuleEmitter &emitter;
@@ -3761,15 +4058,10 @@ LogicalResult StmtEmitter::visitSV(ForOp op) {
   return success();
 }
 
-/// Emit the `<label>:` portion of an immediate or concurrent verification
-/// operation. If a label has been stored for the operation through
-/// `addLegalName` in the pre-pass, that label is used. Otherwise, if the
-/// `enforceVerifLabels` option is set, a temporary name for the operation is
-/// picked and uniquified in pre-pass.
-void StmtEmitter::emitAssertionLabel(Operation *op, StringRef opName) {
-  if (auto label = op->getAttrOfType<StringAttr>("hw.verilogName")) {
+/// Emit the `<label>:` portion of a verification operation.
+void StmtEmitter::emitAssertionLabel(Operation *op) {
+  if (auto label = op->getAttrOfType<StringAttr>("hw.verilogName"))
     ps << PPExtString(label) << ":" << PP::space;
-  }
 }
 
 /// Emit the optional ` else $error(...)` portion of an immediate or concurrent
@@ -3800,7 +4092,7 @@ LogicalResult StmtEmitter::emitImmediateAssertion(Op op, PPExtString opName) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   ps.scopedBox(PP::ibox2, [&]() {
-    emitAssertionLabel(op, opName.str);
+    emitAssertionLabel(op);
     ps.scopedBox(PP::cbox0, [&]() {
       ps << opName;
       switch (op.getDefer()) {
@@ -3847,7 +4139,7 @@ LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, PPExtString opName) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   ps.scopedBox(PP::ibox2, [&]() {
-    emitAssertionLabel(op, opName.str);
+    emitAssertionLabel(op);
     ps.scopedBox(PP::cbox0, [&]() {
       ps << opName << PP::nbsp << "property (";
       ps.scopedBox(PP::ibox0, [&]() {
@@ -3877,6 +4169,57 @@ LogicalResult StmtEmitter::visitSV(AssumeConcurrentOp op) {
 
 LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
   return emitConcurrentAssertion(op, PPExtString("cover"));
+}
+
+/// Emit an assert-like operation from the `verif` dialect. This covers
+/// `verif.assert`, `verif.assume`, and `verif.cover`.
+LogicalResult StmtEmitter::emitVerifAssertLike(Operation *op, Value property,
+                                               PPExtString opName) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  // If we are inside a procedural region we have the option of emitting either
+  // an `assert` or `assert property`. If we are in a non-procedural region,
+  // e.g., the body of a module, we have to use the concurrent form `assert
+  // property` (which also supports plain booleans).
+  //
+  // See IEEE 1800-2017 section 16.14.5 "Using concurrent assertion statements
+  // outside procedural code" and 16.14.6 "Embedding concurrent assertions in
+  // procedural code".
+  bool isTemporal = !property.getType().isSignlessInteger(1);
+  bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
+  bool emitAsImmediate = !isTemporal && isProcedural;
+
+  startStatement();
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  ps.scopedBox(PP::ibox2, [&]() {
+    emitAssertionLabel(op);
+    ps.scopedBox(PP::cbox0, [&]() {
+      if (emitAsImmediate)
+        ps << opName << "(";
+      else
+        ps << opName << PP::nbsp << "property" << PP::nbsp << "(";
+      ps.scopedBox(PP::ibox2, [&]() {
+        PropertyEmitter(emitter, ops).emitProperty(property);
+        ps << ");";
+      });
+    });
+  });
+  emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+LogicalResult StmtEmitter::visitVerif(verif::AssertOp op) {
+  return emitVerifAssertLike(op, op.getProperty(), PPExtString("assert"));
+}
+
+LogicalResult StmtEmitter::visitVerif(verif::AssumeOp op) {
+  return emitVerifAssertLike(op, op.getProperty(), PPExtString("assume"));
+}
+
+LogicalResult StmtEmitter::visitVerif(verif::CoverOp op) {
+  return emitVerifAssertLike(op, op.getProperty(), PPExtString("cover"));
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
@@ -4489,11 +4832,18 @@ void StmtEmitter::emitStatement(Operation *op) {
   if (isVerilogExpression(op))
     return;
 
-  // Handle HW statements, SV statements.
-  if (succeeded(dispatchStmtVisitor(op)) || succeeded(dispatchSVVisitor(op)))
+  // Ignore LTL expressions as they are emitted as part of verification
+  // statements.
+  if (isa<ltl::LTLDialect>(op->getDialect()))
     return;
 
-  emitOpError(op, "cannot emit this operation to Verilog");
+  // Handle HW statements, SV statements.
+  if (succeeded(dispatchStmtVisitor(op)) || succeeded(dispatchSVVisitor(op)) ||
+      succeeded(dispatchVerifVisitor(op)))
+    return;
+
+  emitOpError(op, "emission to Verilog not supported");
+  emitPendingNewlineIfNeeded();
   ps << "unknown MLIR operation " << PPExtString(op->getName().getStringRef());
   setPendingNewline();
 }
@@ -5376,6 +5726,12 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         })
         .Case<MacroDeclOp>([&](auto op) {
           symbolCache.addDefinition(op.getSymNameAttr(), op);
+        })
+        .Case<om::ClassOp>([&](auto op) {
+          symbolCache.addDefinition(op.getSymNameAttr(), op);
+        })
+        .Case<om::ConstantOp>([&](auto op) {
+          // Constant ops might reference symbols, skip them.
         })
         .Default([&](auto *) {
           op.emitError("unknown operation (SharedEmitterState::gatherFiles)");

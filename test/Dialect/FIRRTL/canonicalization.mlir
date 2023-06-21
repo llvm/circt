@@ -2733,7 +2733,7 @@ firrtl.module @MultibitMux(in %a: !firrtl.vector<uint<1>, 3>, in %sel: !firrtl.u
 firrtl.module @NameProp(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
   %0 = firrtl.or %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   %_useless_name_1 = firrtl.node  %0  : !firrtl.uint<1>
-  %useful_name = firrtl.node  %_useless_name_1  : !firrtl.uint<1>
+  %useful_name = firrtl.node %_useless_name_1  : !firrtl.uint<1>
   %_useless_name_2 = firrtl.node  %useful_name  : !firrtl.uint<1>
   // CHECK-NEXT: %useful_name = firrtl.or %in0, %in1
   // CHECK-NEXT: firrtl.strictconnect %out, %useful_name
@@ -2957,6 +2957,24 @@ firrtl.module @RefTypes(
   %flipbundle_read = firrtl.ref.resolve %flipbundle_rw : !firrtl.rwprobe<bundle<a: uint<1>>>
   %flipbundle_wire = firrtl.wire : !firrtl.bundle<a : uint<1>>
   firrtl.strictconnect %flipbundle_wire, %flipbundle_read : !firrtl.bundle<a: uint<1>>
+}
+
+// Do not rename InstanceOp: https://github.com/llvm/circt/issues/5351
+firrtl.extmodule @System(out foo: !firrtl.uint<1>)
+firrtl.module @DonotUpdateInstanceName(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1>) attributes {convention = #firrtl<convention scalarized>} {
+  %system_foo = firrtl.instance system @System(out foo: !firrtl.uint<1>)
+  // CHECK: firrtl.instance system
+  %b = firrtl.node %system_foo : !firrtl.uint<1>
+  firrtl.strictconnect %a, %b : !firrtl.uint<1>
+}
+
+// CHECK-LABEL: @RefCastSame
+firrtl.module @RefCastSame(in %in: !firrtl.probe<uint<1>>, out %out: !firrtl.probe<uint<1>>) {
+  // Drop no-op ref.cast's.
+  // CHECK-NEXT:  firrtl.ref.define %out, %in
+  // CHECK-NEXT:  }
+  %same_as_in = firrtl.ref.cast %in : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>>
+  firrtl.ref.define %out, %same_as_in : !firrtl.probe<uint<1>>
 }
 
 }

@@ -68,3 +68,12 @@ om.class @Class2(%arg0: i1) {
   // expected-error @+1 {{'om.object.field' op expected type 'i2', but accessed field has type 'i1'}}
   om.object.field %0, [@foo] : (!om.class.type<@Class1>) -> i2
 }
+
+// -----
+
+// CHECK-LABEL: @List
+om.class @List() {
+  // expected-error @+1 {{an element of a list attribute must have a type 'i32' but got 'i64'}}
+  %0 = om.constant #om.list< i32, [42 : i64]> : !om.list<i32>
+  om.class.field @list, %0 : !om.list<i32>
+}

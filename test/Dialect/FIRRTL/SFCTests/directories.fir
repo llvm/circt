@@ -4,6 +4,7 @@
 ; RUN: firtool %s -repl-seq-mem -repl-seq-mem-file=mems.conf -disable-all-randomization -disable-opt -annotation-file %s.markdut.anno.json | FileCheck %s -check-prefixes=CHECK,MEMS_DUT
 ; RUN: firtool %s -disable-all-randomization -disable-opt -annotation-file %s.memtoregofvec.anno.json | FileCheck %s -check-prefixes=CHECK,MEMTOREG_NODUT
 ; RUN: firtool %s -disable-all-randomization -disable-opt -annotation-file %s.memtoregofvec.anno.json -annotation-file %s.markdut.anno.json | FileCheck %s -check-prefixes=CHECK,MEMTOREG_DUT
+; RUN: firtool %s -disable-all-randomization -disable-opt -repl-seq-mem -repl-seq-mem-file=mems.conf -annotation-file %s.sitestblackboxes.anno.json --ir-verilog | FileCheck %s -check-prefix=MLIR_OUT
 
 circuit TestHarness:
   ; Foo* are instantiated only by the TestHarness
@@ -132,6 +133,42 @@ circuit TestHarness:
 
 ; SITEST_NODUT:     FILE "testbench.sitest.json"
 ; SITEST-NODUT-NOT: FILE
+
+; MLIR_OUT:  om.class @SitestBlackBoxModulesSchema(%moduleName: !om.sym_ref) {
+; MLIR_OUT:    om.class.field @moduleName, %moduleName : !om.sym_ref
+; MLIR_OUT:  }
+
+; MLIR_OUT:  om.class @SitestBlackBoxMetadata() {
+; MLIR_OUT:    %0 = om.constant #om.sym_ref<@Foo_BlackBox> : !om.sym_ref
+; MLIR_OUT:    %1 = om.object @SitestBlackBoxModulesSchema(%0) : (!om.sym_ref) -> !om.class.type<@SitestBlackBoxModulesSchema>
+; MLIR_OUT:    om.class.field @exterMod_Foo_BlackBox, %1 : !om.class.type<@SitestBlackBoxModulesSchema>
+; MLIR_OUT:    %2 = om.constant #om.sym_ref<@Bar_BlackBox> : !om.sym_ref
+; MLIR_OUT:    %3 = om.object @SitestBlackBoxModulesSchema(%2) : (!om.sym_ref) -> !om.class.type<@SitestBlackBoxModulesSchema>
+; MLIR_OUT:    om.class.field @exterMod_Bar_BlackBox, %3 : !om.class.type<@SitestBlackBoxModulesSchema>
+; MLIR_OUT:    %4 = om.constant #om.sym_ref<@Baz_BlackBox> : !om.sym_ref
+; MLIR_OUT:    %5 = om.object @SitestBlackBoxModulesSchema(%4) : (!om.sym_ref) -> !om.class.type<@SitestBlackBoxModulesSchema>
+; MLIR_OUT:    om.class.field @exterMod_Baz_BlackBox, %5 : !om.class.type<@SitestBlackBoxModulesSchema>
+; MLIR_OUT:  }
+
+; MLIR_OUT:  om.class @MemorySchema(%name: !om.sym_ref, %depth: ui64, %width: ui32, %maskBits: ui32, %readPorts: ui32, %writePorts: ui32, %readwritePorts: ui32, %writeLatency: ui32, %readLatency: ui32) {
+; MLIR_OUT:    om.class.field @name, %name : !om.sym_ref
+; MLIR_OUT:    om.class.field @depth, %depth : ui64
+; MLIR_OUT:    om.class.field @width, %width : ui32
+; MLIR_OUT:    om.class.field @maskBits, %maskBits : ui32
+; MLIR_OUT:    om.class.field @readPorts, %readPorts : ui32
+; MLIR_OUT:    om.class.field @writePorts, %writePorts : ui32
+; MLIR_OUT:    om.class.field @readwritePorts, %readwritePorts : ui32
+; MLIR_OUT:    om.class.field @writeLatency, %writeLatency : ui32
+; MLIR_OUT:    om.class.field @readLatency, %readLatency : ui32
+; MLIR_OUT:  }
+; MLIR_OUT:  om.class @MemoryMetadata() {
+; MLIR_OUT:    om.constant #om.sym_ref<@foo_m_ext> : !om.sym_ref
+; MLIR_OUT:    om.object @MemorySchema
+; MLIR_OUT:    om.constant #om.sym_ref<@bar_m_ext> : !om.sym_ref
+; MLIR_OUT:    om.object @MemorySchema
+; MLIR_OUT:    om.constant #om.sym_ref<@baz_m_ext> : !om.sym_ref
+; MLIR_OUT:    om.object @MemorySchema
+; MLIR_OUT:  }
 
 ; SITEST_NODUT:     FILE "design.sitest.json"
 ; SITEST_NODUT-NOT: FILE

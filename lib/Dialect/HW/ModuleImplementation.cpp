@@ -70,7 +70,7 @@ parseFunctionResultList(OpAsmParser &parser,
     resultAttrs.push_back(attrs.getDictionary(parser.getContext()));
 
     // Parse the result location.
-    llvm::Optional<Location> maybeLoc;
+    std::optional<Location> maybeLoc;
     if (failed(parser.parseOptionalLocationSpecifier(maybeLoc)))
       return failure();
     Location loc = maybeLoc ? *maybeLoc : parser.getEncodedSourceLoc(irLoc);

@@ -236,6 +236,21 @@ firrtl.circuit "Foo" {
     firrtl.connect %1, %c2_si3 : !firrtl.sint, !firrtl.sint<3>
   }
 
+  // CHECK-LABEL: @ConstCastOp
+  firrtl.module @ConstCastOp() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
+    // CHECK: %0 = firrtl.wire : !firrtl.uint<2>
+    // CHECK: %1 = firrtl.wire : !firrtl.sint<3>
+    %0 = firrtl.wire : !firrtl.uint
+    %1 = firrtl.wire : !firrtl.sint
+    %c1 = firrtl.constant 1 : !firrtl.const.uint<2>
+    %c2 = firrtl.constant 2 : !firrtl.const.sint<3>
+    %3 = firrtl.constCast %c1 : (!firrtl.const.uint<2>) -> !firrtl.uint<2>
+    %4 = firrtl.constCast %c2 : (!firrtl.const.sint<3>) -> !firrtl.sint<3>
+    firrtl.connect %0, %3 : !firrtl.uint, !firrtl.uint<2>
+    firrtl.connect %1, %4 : !firrtl.sint, !firrtl.sint<3>
+  }
+
   // CHECK-LABEL: @CvtOp
   firrtl.module @CvtOp() {
     // CHECK: %0 = firrtl.wire : !firrtl.uint<2>
@@ -838,8 +853,11 @@ firrtl.circuit "Foo" {
     firrtl.ref.define %bov_ref, %bov_rw : !firrtl.rwprobe<bundle<a: vector<uint, 2>, b : uint>>
 
     %ref_w = firrtl.ref.send %w : !firrtl.uint
-    firrtl.ref.define %x, %ref_w : !firrtl.probe<uint>
+    %cast_ref_w = firrtl.ref.cast %ref_w : (!firrtl.probe<uint>) -> !firrtl.probe<uint>
+    firrtl.ref.define %x, %cast_ref_w : !firrtl.probe<uint>
     firrtl.ref.define %y, %w_rw : !firrtl.rwprobe<uint>
+    // CHECK: firrtl.ref.cast %w_ref : (!firrtl.rwprobe<uint<2>>) -> !firrtl.probe<uint<2>>
+    %cast_w_ro = firrtl.ref.cast %w_rw : (!firrtl.rwprobe<uint>) -> !firrtl.probe<uint>
 
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     firrtl.connect %w, %c0_ui2 : !firrtl.uint, !firrtl.uint<2>
@@ -912,5 +930,34 @@ firrtl.circuit "Foo" {
     firrtl.connect %1, %b : !firrtl.const.sint, !firrtl.const.sint<2>
     firrtl.attach %2, %c : !firrtl.const.analog, !firrtl.const.analog<3>
     firrtl.connect %3, %d : !firrtl.const.vector<uint, 2>, !firrtl.const.vector<uint<4>, 2>
+  }
+  
+  // Should not crash when encountering property types.
+  // CHECK: firrtl.module @Property(in %a: !firrtl.string)
+  firrtl.module @Property(in %a: !firrtl.string) { }
+
+  // Check some strictconnect + widthCast inferences.
+  // See https://github.com/llvm/circt/issues/5408 .
+  // CHECK-LABEL: module @StrictConnectBackIntoWidthCast1
+  firrtl.module @StrictConnectBackIntoWidthCast1(in %y: !firrtl.uint<2>, out %out1: !firrtl.uint) attributes {convention = #firrtl<convention scalarized>} {
+    %w = firrtl.wire : !firrtl.uint
+    %c0_ui = firrtl.constant 0 : !firrtl.const.uint
+    %0 = firrtl.widthCast %c0_ui : (!firrtl.const.uint) -> !firrtl.const.uint
+    %1 = firrtl.constCast %0 : (!firrtl.const.uint) -> !firrtl.uint
+    firrtl.strictconnect %w, %1 : !firrtl.uint
+    %2 = firrtl.widthCast %y : (!firrtl.uint<2>) -> !firrtl.uint
+    firrtl.strictconnect %w, %2 : !firrtl.uint
+    %3 = firrtl.widthCast %w : (!firrtl.uint) -> !firrtl.uint
+    firrtl.strictconnect %out1, %3 : !firrtl.uint
+  }
+  // CHECK-LABEL: module @StrictConnectBackIntoWidthCast2
+  firrtl.module @StrictConnectBackIntoWidthCast2(in %x: !firrtl.uint<1>, in %y: !firrtl.uint<2>, out %out1: !firrtl.uint) attributes {convention = #firrtl<convention scalarized>} {
+    %w = firrtl.wire : !firrtl.uint
+    %0 = firrtl.widthCast %x : (!firrtl.uint<1>) -> !firrtl.uint
+    firrtl.strictconnect %w, %0 : !firrtl.uint
+    %1 = firrtl.widthCast %y : (!firrtl.uint<2>) -> !firrtl.uint
+    firrtl.strictconnect %w, %1 : !firrtl.uint
+    %2 = firrtl.widthCast %w : (!firrtl.uint) -> !firrtl.uint
+    firrtl.strictconnect %out1, %2 : !firrtl.uint
   }
 }

@@ -324,31 +324,50 @@ ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
         return intType.getWidth();
     return std::nullopt;
   };
+  auto negate = [&](Value input) -> Value {
+    auto constTrue = rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(1, 1));
+    return rewriter.create<comb::XorOp>(op.getLoc(), input, constTrue,
+                                        op.getTwoState());
+  };
 
   APInt rhs;
   if (matchPattern(op.getRhs(), mlir::m_ConstantInt(&rhs))) {
     if (auto concatOp = op.getLhs().getDefiningOp<comb::ConcatOp>()) {
       if (auto optionalWidth =
               sameWidthIntegers(concatOp->getOperands().getTypes())) {
-        if (op.getPredicate() == comb::ICmpPredicate::eq && rhs.isAllOnes()) {
-          auto andOp = rewriter.create<comb::AndOp>(
+        if ((op.getPredicate() == comb::ICmpPredicate::eq ||
+             op.getPredicate() == comb::ICmpPredicate::ne) &&
+            rhs.isAllOnes()) {
+          Value andOp = rewriter.create<comb::AndOp>(
               op.getLoc(), concatOp.getInputs(), op.getTwoState());
-          if (*optionalWidth == 1)
-            return rewriter.replaceOp(op, andOp->getResults()), success();
+          if (*optionalWidth == 1) {
+            if (op.getPredicate() == comb::ICmpPredicate::ne)
+              andOp = negate(andOp);
+            rewriter.replaceOp(op, andOp);
+            return success();
+          }
           rewriter.replaceOpWithNewOp<comb::ICmpOp>(
-              op, comb::ICmpPredicate::eq, andOp,
-              getConstant(APInt::getAllOnes(*optionalWidth)), op.getTwoState());
+              op, op.getPredicate(), andOp,
+              getConstant(APInt(*optionalWidth, rhs.getZExtValue())),
+              op.getTwoState());
           return success();
         }
 
-        if (op.getPredicate() == comb::ICmpPredicate::ne && rhs.isZero()) {
-          auto orOp = rewriter.create<comb::OrOp>(
+        if ((op.getPredicate() == comb::ICmpPredicate::ne ||
+             op.getPredicate() == comb::ICmpPredicate::eq) &&
+            rhs.isZero()) {
+          Value orOp = rewriter.create<comb::OrOp>(
               op.getLoc(), concatOp.getInputs(), op.getTwoState());
-          if (*optionalWidth == 1)
-            return rewriter.replaceOp(op, orOp->getResults()), success();
+          if (*optionalWidth == 1) {
+            if (op.getPredicate() == comb::ICmpPredicate::eq)
+              orOp = negate(orOp);
+            rewriter.replaceOp(op, orOp);
+            return success();
+          }
           rewriter.replaceOpWithNewOp<comb::ICmpOp>(
-              op, comb::ICmpPredicate::ne, orOp,
-              getConstant(APInt::getZero(*optionalWidth)), op.getTwoState());
+              op, op.getPredicate(), orOp,
+              getConstant(APInt(*optionalWidth, rhs.getZExtValue())),
+              op.getTwoState());
           return success();
         }
       }

@@ -147,3 +147,33 @@ firrtl.circuit "Foo" {
     firrtl.connect %out, %0 : !firrtl.uint, !firrtl.uint
   }
 }
+
+// -----
+// https://github.com/llvm/circt/issues/5002
+
+firrtl.circuit "Issue5002" {
+  // expected-error @below {{uninferred width: port "ref" cannot satisfy all width requirements}}
+  firrtl.module private @InRef(in %ref : !firrtl.rwprobe<uint>) { }
+  firrtl.module @Issue5002(in %x : !firrtl.uint<1>, in %y : !firrtl.uint<2>) {
+    %w1, %w1_ref = firrtl.wire forceable : !firrtl.uint, !firrtl.rwprobe<uint>
+    %w2, %w2_ref = firrtl.wire forceable : !firrtl.uint, !firrtl.rwprobe<uint>
+    firrtl.connect %w1, %x : !firrtl.uint, !firrtl.uint<1>
+    firrtl.connect %w2, %y : !firrtl.uint, !firrtl.uint<2>
+
+    %inst1_ref = firrtl.instance inst1 @InRef(in ref: !firrtl.rwprobe<uint>)
+    %inst2_ref = firrtl.instance inst2 @InRef(in ref: !firrtl.rwprobe<uint>)
+    firrtl.ref.define %inst1_ref, %w1_ref : !firrtl.rwprobe<uint>
+    // expected-note @below {{width is constrained to be at most 1 here:}}
+    // expected-note @below {{width is constrained to be at least 2 here:}}
+    firrtl.ref.define %inst2_ref, %w2_ref : !firrtl.rwprobe<uint>
+  }
+}
+
+// -----
+// https://github.com/llvm/circt/issues/5324
+
+firrtl.circuit "NoWidthEnum" {
+  // expected-error @below {{uninferred width: port "o.Some" is unconstrained}}
+  firrtl.module @NoWidthEnum(out %o: !firrtl.enum<Some: uint>) {
+  }
+}

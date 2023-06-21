@@ -210,8 +210,8 @@ firrtl.module @EnumTest(in %in : !firrtl.enum<a: uint<1>, b: uint<2>>,
   // CHECK: = firrtl.istag %in a : !firrtl.enum<a: uint<1>, b: uint<2>>
 
   %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
-  %some = firrtl.enumcreate Some(%c1_ui8) : !firrtl.enum<None: uint<0>, Some: uint<8>>
-  // CHECK: = firrtl.enumcreate Some(%c1_ui8) : !firrtl.enum<None: uint<0>, Some: uint<8>>
+  %some = firrtl.enumcreate Some(%c1_ui8) : (!firrtl.uint<8>) -> !firrtl.enum<None: uint<0>, Some: uint<8>>
+  // CHECK: = firrtl.enumcreate Some(%c1_ui8) : (!firrtl.uint<8>) -> !firrtl.enum<None: uint<0>, Some: uint<8>>
 
   firrtl.match %in : !firrtl.enum<a: uint<1>, b: uint<2>> {
     case a(%arg0) {
@@ -244,8 +244,21 @@ firrtl.module @OpenAggTest(in %in: !firrtl.openbundle<a: bundle<data: uint<1>>, 
 }
 
 // CHECK-LABEL: StringTest
-// CHECK-SAME:  (in %in: !firrtl.property.string, out %out: !firrtl.property.string)
-firrtl.module @StringTest(in %in: !firrtl.property.string, out %out: !firrtl.property.string) {
-  firrtl.connect %out, %in : !firrtl.property.string, !firrtl.property.string
+// CHECK-SAME:  (in %in: !firrtl.string, out %out: !firrtl.string)
+firrtl.module @StringTest(in %in: !firrtl.string, out %out: !firrtl.string) {
+  firrtl.propassign %out, %in : !firrtl.string
+  // CHECK: %0 = firrtl.string "hello"
+  %0 = firrtl.string "hello"
+}
+
+// CHECK-LABEL: BigIntTest
+// CHECK-SAME:  (in %in: !firrtl.bigint, out %out: !firrtl.bigint)
+firrtl.module @BigIntTest(in %in: !firrtl.bigint, out %out: !firrtl.bigint) {
+  firrtl.propassign %out, %in : !firrtl.bigint
+
+  // CHECK: %0 = firrtl.bigint 4
+  %0 = firrtl.bigint 4
+  // CHECK: %1 = firrtl.bigint -4
+  %1 = firrtl.bigint -4
 }
 }

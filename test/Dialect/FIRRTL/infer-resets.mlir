@@ -60,6 +60,16 @@ firrtl.module @CastingToOtherTypes(in %a: !firrtl.uint<1>, out %v: !firrtl.uint<
   firrtl.strictconnect %y, %3 : !firrtl.asyncreset
 }
 
+// Should support const-casts
+// CHECK-LABEL: firrtl.module @ConstCast
+firrtl.module @ConstCast(in %a: !firrtl.const.uint<1>) {
+  // CHECK: %r = firrtl.wire : !firrtl.uint<1>
+  %r = firrtl.wire : !firrtl.reset
+  %0 = firrtl.resetCast %a : (!firrtl.const.uint<1>) -> !firrtl.const.reset
+  %1 = firrtl.constCast %0 : (!firrtl.const.reset) -> !firrtl.reset
+  firrtl.strictconnect %r, %1 : !firrtl.reset
+}
+
 // Should work across Module boundaries
 // CHECK-LABEL: firrtl.module @ModuleBoundariesChild
 // CHECK-SAME: in %childReset: !firrtl.uint<1>
@@ -855,6 +865,82 @@ firrtl.circuit "RefReset" {
     %s_r, %s_ref = firrtl.instance s @SendReset(in r: !firrtl.reset, out ref: !firrtl.probe<reset>)
     firrtl.connect %s_r, %r : !firrtl.reset, !firrtl.asyncreset
     %reset = firrtl.ref.resolve %s_ref : !firrtl.probe<reset>
+  }
+}
+
+// -----
+
+// CHECK-LABEL: "RefCastReset"
+firrtl.circuit "RefCastReset" {
+  // CHECK-LABEL: firrtl.module private @SendCastReset
+  // CHECK-SAME: in %r: !firrtl.asyncreset
+  // CHECK-SAME: out %ref: !firrtl.probe<asyncreset>
+  // CHECK-NEXT: send %r : !firrtl.asyncreset
+  // CHECK-NEXT: probe<asyncreset>
+  firrtl.module private @SendCastReset(in %r: !firrtl.asyncreset, out %ref: !firrtl.probe<reset>) {
+    %ref_r = firrtl.ref.send %r : !firrtl.asyncreset
+    %ref_r_cast = firrtl.ref.cast %ref_r : (!firrtl.probe<asyncreset>) -> !firrtl.probe<reset>
+    firrtl.ref.define %ref, %ref_r_cast : !firrtl.probe<reset>
+  }
+  // CHECK-LABEL: firrtl.module @RefCastReset
+  // CHECK-NEXT: in r: !firrtl.asyncreset
+  // CHECK-SAME: out ref: !firrtl.probe<asyncreset>
+  // CHECK-NEXT: : !firrtl.asyncreset
+  // CHECK-NEXT: %s_ref : !firrtl.probe<asyncreset>
+  firrtl.module @RefCastReset(in %r: !firrtl.asyncreset) {
+    %s_r, %s_ref = firrtl.instance s @SendCastReset(in r: !firrtl.asyncreset, out ref: !firrtl.probe<reset>)
+    firrtl.strictconnect %s_r, %r : !firrtl.asyncreset
+    %reset = firrtl.ref.resolve %s_ref : !firrtl.probe<reset>
+  }
+}
+
+// -----
+
+// CHECK-LABEL: "RefCastAggReset"
+firrtl.circuit "RefCastAggReset" {
+   // CHECK-LABEL: firrtl.module private @ResetAggSource
+   // CHECK-SAME: in %r: !firrtl.asyncreset,
+   // CHECK-SAME: out %p: !firrtl.rwprobe<bundle<a: asyncreset, b: uint<1>>>,
+   // CHECK-SAME: out %pconst: !firrtl.probe<bundle<a: asyncreset, b: const.uint<1>>>)
+  // CHECK-NOT: : {{(const\.)?reset}}
+  firrtl.module private @ResetAggSource(in %r: !firrtl.asyncreset, out %p: !firrtl.rwprobe<bundle<a: reset, b: reset>>, out %pconst: !firrtl.probe<bundle<a: reset, b: const.reset>>) {
+    %x = firrtl.wire : !firrtl.reset
+    %0 = firrtl.resetCast %r : (!firrtl.asyncreset) -> !firrtl.reset
+    firrtl.strictconnect %x, %0 : !firrtl.reset
+    %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
+    %zero = firrtl.node %c0_ui1 : !firrtl.const.uint<1>
+    %bundle, %bundle_ref = firrtl.wire forceable : !firrtl.bundle<a: reset, b: reset>, !firrtl.rwprobe<bundle<a: reset, b: reset>>
+    %1 = firrtl.subfield %bundle[b] : !firrtl.bundle<a: reset, b: reset>
+    %2 = firrtl.subfield %bundle[a] : !firrtl.bundle<a: reset, b: reset>
+    firrtl.strictconnect %2, %x : !firrtl.reset
+    %3 = firrtl.resetCast %zero : (!firrtl.const.uint<1>) -> !firrtl.const.reset
+    %4 = firrtl.constCast %3 : (!firrtl.const.reset) -> !firrtl.reset
+    firrtl.strictconnect %1, %4 : !firrtl.reset
+    firrtl.ref.define %p, %bundle_ref : !firrtl.rwprobe<bundle<a: reset, b: reset>>
+    %bundle_const = firrtl.wire : !firrtl.bundle<a: reset, b: const.reset>
+    %5 = firrtl.subfield %bundle_const[b] : !firrtl.bundle<a: reset, b: const.reset>
+    %6 = firrtl.subfield %bundle_const[a] : !firrtl.bundle<a: reset, b: const.reset>
+    firrtl.strictconnect %6, %x : !firrtl.reset
+    firrtl.strictconnect %5, %3 : !firrtl.const.reset
+    %7 = firrtl.ref.send %bundle_const : !firrtl.bundle<a: reset, b: const.reset>
+    firrtl.ref.define %pconst, %7 : !firrtl.probe<bundle<a: reset, b: const.reset>>
+  }
+  // CHECK-LABEL: firrtl.module @RefCastAggReset
+  // CHECK-SAME: in %r: !firrtl.asyncreset,
+  // CHECK-SAME: out %a: !firrtl.probe<asyncreset>,
+  // CHECK-SAME: out %b: !firrtl.probe<uint<1>>,
+  // CHECK-SAME: out %pconst: !firrtl.probe<bundle<a: asyncreset, b: const.uint<1>>>)
+  // CHECK-NOT: : {{(const\.)?reset}}
+  firrtl.module @RefCastAggReset(in %r: !firrtl.asyncreset, out %a: !firrtl.probe<reset>, out %b: !firrtl.probe<reset>, out %pconst: !firrtl.probe<bundle<a: reset, b: const.reset>>) {
+    %s_r, %s_p, %s_pconst = firrtl.instance s @ResetAggSource(in r: !firrtl.asyncreset, out p: !firrtl.rwprobe<bundle<a: reset, b: reset>>, out pconst: !firrtl.probe<bundle<a: reset, b: const.reset>>)
+    %0 = firrtl.ref.sub %s_p[1] : !firrtl.rwprobe<bundle<a: reset, b: reset>>
+    %1 = firrtl.ref.sub %s_p[0] : !firrtl.rwprobe<bundle<a: reset, b: reset>>
+    firrtl.strictconnect %s_r, %r : !firrtl.asyncreset
+    %2 = firrtl.ref.cast %1 : (!firrtl.rwprobe<reset>) -> !firrtl.probe<reset>
+    firrtl.ref.define %a, %2 : !firrtl.probe<reset>
+    %3 = firrtl.ref.cast %0 : (!firrtl.rwprobe<reset>) -> !firrtl.probe<reset>
+    firrtl.ref.define %b, %3 : !firrtl.probe<reset>
+    firrtl.ref.define %pconst, %s_pconst : !firrtl.probe<bundle<a: reset, b: const.reset>>
   }
 }
 

@@ -32,6 +32,9 @@ class ScheduleLinearPipelinePass
     : public ScheduleLinearPipelineBase<ScheduleLinearPipelinePass> {
 public:
   void runOnOperation() override;
+
+private:
+  LogicalResult schedulePipeline(UnscheduledPipelineOp pipeline);
 };
 
 } // end anonymous namespace
@@ -41,30 +44,17 @@ static bool ignoreOp(Operation *op) {
   return op->hasTrait<OpTrait::ConstantLike>();
 }
 
-void ScheduleLinearPipelinePass::runOnOperation() {
-  auto pipeline = getOperation();
-
+LogicalResult
+ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
   // Get operator library for the pipeline.
   auto opLibAttr = pipeline->getAttrOfType<FlatSymbolRefAttr>("operator_lib");
-  if (!opLibAttr) {
-    pipeline.emitError("missing 'operator_lib' attribute");
-    return signalPassFailure();
-  }
+  if (!opLibAttr)
+    return pipeline.emitError("missing 'operator_lib' attribute");
   auto opLib = dyn_cast_or_null<ssp::OperatorLibraryOp>(
       SymbolTable::lookupNearestSymbolFrom(pipeline->getParentOp(), opLibAttr));
-  if (!opLib) {
-    pipeline.emitError("operator library '") << opLibAttr << "' not found";
-    return signalPassFailure();
-  }
-
-  auto stageOpIt = pipeline.getOps<PipelineStageOp>();
-  auto stageRegOpIt = pipeline.getOps<PipelineStageRegisterOp>();
-
-  if (stageOpIt.begin() != stageOpIt.end() ||
-      stageRegOpIt.begin() != stageRegOpIt.end()) {
-    pipeline.emitError("Pipeline cannot have any stages or stage registers.");
-    return signalPassFailure();
-  }
+  if (!opLib)
+    return pipeline.emitError("operator library '")
+           << opLibAttr << "' not found";
 
   // Load operator info from attribute.
   auto problem = Problem::get(pipeline);
@@ -91,22 +81,18 @@ void ScheduleLinearPipelinePass::runOnOperation() {
       // Lookup operator info.
       auto operatorTypeAttr =
           op.getAttrOfType<SymbolRefAttr>("ssp.operator_type");
-      if (!operatorTypeAttr) {
-        op.emitError()
-            << "Expected 'ssp.operator_type' attribute on operation.";
-        return signalPassFailure();
-      }
+      if (!operatorTypeAttr)
+        return op.emitError()
+               << "Expected 'ssp.operator_type' attribute on operation.";
 
       auto operatorTypeIt = operatorTypes.find(operatorTypeAttr);
       if (operatorTypeIt == operatorTypes.end()) {
         // First time seeing operator type - load it into the problem.
         auto opTypeOp =
             opLib.lookupSymbol<ssp::OperatorTypeOp>(operatorTypeAttr);
-        if (!opTypeOp) {
-          op.emitError() << "Operator type '" << operatorTypeAttr
-                         << "' not found in operator library.";
-          return signalPassFailure();
-        }
+        if (!opTypeOp)
+          return op.emitError() << "Operator type '" << operatorTypeAttr
+                                << "' not found in operator library.";
 
         auto insertRes = operatorTypes.try_emplace(
             operatorTypeAttr, ssp::loadOperatorType<Problem, ssp::LatencyAttr>(
@@ -124,38 +110,52 @@ void ScheduleLinearPipelinePass::runOnOperation() {
     // auxiliary dependences from ops without users, complementing the implicit
     // dependences from the return op's operands.
     if (!isReturnOp && op.use_empty()) {
-      if (failed(problem.insertDependence({&op, returnOp.getOperation()}))) {
-        op.emitError()
-            << "Failed to insert dependence from operation to return op.";
-        return signalPassFailure();
-      }
+      if (failed(problem.insertDependence({&op, returnOp.getOperation()})))
+        return op.emitError()
+               << "Failed to insert dependence from operation to return op.";
     }
   }
 
   // Solve!
   assert(succeeded(problem.check()));
-  if (failed(scheduling::scheduleSimplex(problem, returnOp.getOperation()))) {
-    pipeline.emitError("Failed to schedule pipeline.");
-    return signalPassFailure();
-  }
+  if (failed(scheduling::scheduleSimplex(problem, returnOp.getOperation())))
+    return pipeline.emitError("Failed to schedule pipeline.");
+
   assert(succeeded(problem.verify()));
 
   // Gather stage results.
   using StageIdx = unsigned;
 
+  OpBuilder b(pipeline.getContext());
+
   // Maintain a mapping of {start time : [operations]}, that contains the
   // operations scheduled to a given start time. This is an ordered map, so that
   // we can iterate over the stages in order.
   std::map<StageIdx, llvm::SmallVector<Operation *>> stageMap;
-  DenseMap<StageIdx, PipelineStageOp> stages;
   llvm::SmallVector<Operation *, 4> otherOps;
+
+  // Create the scheduled pipeline.
+  b.setInsertionPoint(pipeline);
+  auto schedPipeline = b.template create<pipeline::ScheduledPipelineOp>(
+      pipeline.getLoc(), pipeline->getResultTypes(), pipeline.getInputs(),
+      pipeline.getExtInputs(), pipeline.getClock(), pipeline.getReset(),
+      pipeline.getStall());
+
+  Block *currentStage = schedPipeline.getStage(0);
+
+  for (auto [oldBArg, newBArg] :
+       llvm::zip(pipeline.getBodyBlock()->getArguments(),
+                 currentStage->getArguments()))
+    oldBArg.replaceAllUsesWith(newBArg);
+
+  // true-valued constant used for the enable signals throughout the pipeline.
+  b.setInsertionPointToStart(currentStage);
+  Value c1i1 = b.create<hw::ConstantOp>(pipeline.getLoc(), b.getI1Type(),
+                                        b.getIntegerAttr(b.getI1Type(), 1));
 
   // Iterate over the ops in the pipeline, and add them to the stage map.
   // While doing so, we also build the pipeline stage operations.
-  OpBuilder b(pipeline.getBody());
-  auto loc = pipeline.getLoc();
   unsigned currentEndTime = 0;
-  Value stageValid = b.create<hw::ConstantOp>(loc, APInt(1, 1));
   for (auto &op : pipeline.getOps()) {
     if (ignoreOp(&op)) {
       otherOps.push_back(&op);
@@ -167,37 +167,51 @@ void ScheduleLinearPipelinePass::runOnOperation() {
     auto oldEndTime = currentEndTime;
     currentEndTime = std::max(currentEndTime, *problem.getEndTime(&op));
     for (unsigned i = oldEndTime; i < currentEndTime; ++i) {
-      auto nextStage = b.create<PipelineStageOp>(loc, stageValid);
-      stageValid = nextStage.getValid();
-      stages[i] = nextStage;
+      Block *newStage = schedPipeline.addStage();
+
+      // Create a StageOp in the new stage, and branch it to the newly created
+      // stage.
+      b.setInsertionPointToEnd(currentStage);
+      b.create<pipeline::StageOp>(pipeline.getLoc(), ValueRange{}, ValueRange{},
+                                  c1i1, newStage);
+      currentStage = newStage;
     }
   }
 
-  // Reorder pipeline. Initially place unscheduled ops at the start, and then
-  // all following ops in their assigned stage.
+  // Move the return op to the last stage in the scheduled pipeline.
+  returnOp->moveBefore(currentStage, currentStage->end());
+
+  // Reorder pipeline. Initially place unscheduled ops at the entry stage, and
+  // then all following ops in their assigned stage.
+  Block *entryStage = schedPipeline.getStage(0);
   for (auto *op : otherOps)
-    op->moveBefore(stages[0]);
+    op->moveBefore(entryStage, entryStage->end());
 
   for (auto [startTime, ops] : stageMap) {
-    auto stageOp = stages.find(startTime);
-    Operation *moveBeforeOp;
-    if (stageOp == stages.end())
-      // Operation in "last" stage (move after last stage)
-      moveBeforeOp = returnOp;
-    else
-      // Operation before a specific stage (move before stage)
-      moveBeforeOp = stageOp->second;
-
+    auto *stageTerminator = schedPipeline.getStage(startTime)->getTerminator();
     for (auto *op : ops)
-      op->moveBefore(moveBeforeOp);
+      op->moveBefore(stageTerminator);
   }
 
-  // Replace the pipeline return value with one that uses the last stage valid
-  // signal.
-  b.setInsertionPoint(returnOp);
-  b.create<pipeline::ReturnOp>(returnOp.getLoc(), returnOp.getOutputs(),
-                               stageValid);
-  returnOp.erase();
+  // Remove the unscheduled pipeline
+  pipeline.replaceAllUsesWith(schedPipeline);
+  pipeline.erase();
+  return success();
+}
+
+void ScheduleLinearPipelinePass::runOnOperation() {
+  if (getOperation()->getNumRegions() == 0)
+    return;
+
+  for (auto pipeline :
+       llvm::make_early_inc_range(getOperation()
+                                      ->getRegions()
+                                      .front()
+                                      .front()
+                                      .getOps<UnscheduledPipelineOp>())) {
+    if (failed(schedulePipeline(pipeline)))
+      return signalPassFailure();
+  }
 }
 
 std::unique_ptr<mlir::Pass>

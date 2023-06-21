@@ -14,7 +14,6 @@ add_circt_dialect_library(CIRCTFIRRTL
   FIRRTLInstanceGraph.cpp
   FIRRTLOpInterfaces.cpp
   FIRRTLOps.cpp
-  FIRRTLTypeInterfaces.cpp
   FIRRTLTypes.cpp
   FIRRTLUtils.cpp
   NLATable.cpp
@@ -35,6 +34,7 @@ add_circt_dialect_library(CIRCTFIRRTL
   LINK_LIBS PUBLIC
   CIRCTSupport
   CIRCTHW
+  CIRCTOM
   CIRCTSeq
   MLIRIR
   MLIRPass

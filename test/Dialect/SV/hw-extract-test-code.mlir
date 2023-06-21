@@ -170,8 +170,8 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // CHECK: hw.instance "{{[^ ]+}}" sym @[[input_only_assert:[^ ]+]] @InputOnly_assert
 // CHECK: hw.instance "{{[^ ]+}}" sym @[[input_only_cover:[^ ]+]] @InputOnly_cover
 // CHECK: hw.instance "{{[^ ]+}}" {{.+}} @InputOnlySym
-// CHECK: %0 = comb.and %1
-// CHECK: %1 = comb.and %0
+// CHECK-NOT: %0 = comb.and %1
+// CHECK-NOT: %1 = comb.and %0
 // CHECK: hw.instance "{{[^ ]+}}" {{.+}} @InputOnlyCycle_cover
 // CHECK: hw.instance {{.*}} sym @[[already_bound:[^ ]+]] @AlreadyBound
 // CHECK-NOT: sv.bind <@InputOnly::
@@ -196,7 +196,8 @@ module {
   }
 
   hw.module private @InputOnlyCycle(%clock: i1, %cond: i1) -> () {
-    // Arbitrary code that won't be extracted, should be inlined, and has a cycle.
+    // Arbitrary code that won't be extracted, should be dead in the input only module.
+    // Make sure to delete them.
     %0 = comb.and %1 : i1
     %1 = comb.and %0 : i1
 
@@ -234,10 +235,15 @@ module {
 // CHECK: hw.instance "baz"
 
 // In SomeExtracted, only instance baz should be extracted.
+// Check that a dead external module bozo and its operand are still alive.
 // CHECK-LABEL: @SomeExtracted_cover
 // CHECK-NOT: hw.instance "foo"
 // CHECK-NOT: hw.instance "bar"
+// CHECK-NOT: hw.instance "bozo"
 // CHECK: hw.instance "baz"
+// CHECK-LABEL: @SomeExtracted
+// CHECK: comb.and
+// CHECK: hw.instance "bozo"
 
 // In CycleExtracted, instance foo should be extracted despite combinational cycle.
 // CHECK-LABEL: @CycleExtracted_cover
@@ -260,7 +266,7 @@ module {
 // CHECK: hw.instance "qux"
 // CHECK-LABEL: @MultiResultExtracted
 // CHECK-SAME: (%[[clock:.+]]: i1, %[[in:.+]]: i1)
-// CHECK: hw.instance {{.+}} @MultiResultExtracted_cover([[clock]]: %[[clock]]: i1, [[in]]: %[[in]]: i1)
+// CHECK: hw.instance {{.+}} @MultiResultExtracted_cover([[in]]: %[[in]]: i1, [[clock]]: %[[clock]]: i1)
 
 // In SymNotExtracted, instance foo should not be extracted because it has a sym.
 // CHECK-LABEL: @SymNotExtracted_cover
@@ -273,8 +279,7 @@ module {
 // CHECK: %[[or0:.+]] = comb.or
 // CHECK: hw.instance "foo" @Foo(a: %[[or0]]: i1)
 // CHECK-LABEL: @NoExtraInput
-// CHECK: %[[or1:.+]] = comb.or
-// CHECK-NOT: %[[or1]]
+// CHECK-NOT: %{{.+}} = comb.or
 
 // In InstancesWithCycles, the only_testcode instances should be extracted, but the non_testcode instances should not
 // CHECK-LABEL: @InstancesWithCycles_cover
@@ -318,10 +323,13 @@ module {
     %foo.b = hw.instance "foo" @Foo(a: %in: i1) -> (b: i1)
     %bar.b = hw.instance "bar" @Bar(a: %in: i1) -> (b: i1)
     %baz.b = hw.instance "baz" @Baz(a: %in: i1) -> (b: i1)
+    %and = comb.and %in, %clock: i1
+    %bozo = hw.instance "bozo" @Bozo(a: %and: i1) -> (b: i1)
     sv.always posedge %clock {
       sv.cover %foo.b, immediate
       sv.cover %bar.b, immediate
       sv.cover %baz.b, immediate
+      sv.cover %and, immediate
     }
     hw.output %foo.b, %bar.b : i1, i1
   }
@@ -404,5 +412,36 @@ module {
     }
 
     hw.output %0 : i1
+  }
+}
+
+// -----
+// Check register extraction
+
+module {
+  // CHECK-LABEL: @RegExtracted_cover
+  // CHECK: %testCode1 = seq.firreg
+  // CHECK: %testCode2 = seq.firreg
+  // CHECK-NOT: seq.firreg
+
+  // CHECK-LABEL: @RegExtracted
+  // CHECK: %symbol = seq.firreg
+  // CHECK: %designAndTestCode = seq.firreg
+  // CHECK-NOT: seq.firreg
+  hw.module @RegExtracted(%clock: i1, %reset: i1, %in: i1) -> (out: i1) {
+    %muxed = comb.mux bin %reset, %in, %testCode1 : i1
+    %testCode1 = seq.firreg %muxed clock %clock : i1
+    %testCode2 = seq.firreg %testCode1 clock %clock : i1
+    %symbol = seq.firreg %in clock %clock sym @foo : i1
+    %designAndTestCode = seq.firreg %in clock %clock : i1
+    %deadReg = seq.firreg %testCode1 clock %clock : i1
+
+    sv.always posedge %clock {
+      sv.cover %testCode1, immediate
+      sv.cover %testCode2, immediate
+      sv.cover %designAndTestCode, immediate
+    }
+
+    hw.output %designAndTestCode : i1
   }
 }

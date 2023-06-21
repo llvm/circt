@@ -15,7 +15,6 @@
 
 include "FIRRTLDialect.td"
 include "circt/Dialect/HW/HWTypeInterfaces.td"
-include "FIRRTLTypeInterfaces.td"
 
 // Base class for other typedefs. Provides dialact-specific defaults.
 class FIRRTLImplType<string name,
@@ -212,6 +211,9 @@ def FVectorImpl : BaseVectorTypeImpl<"FVector","::circt::firrtl::FIRRTLBaseType"
   let firrtlExtraClassDeclaration = [{
     /// Return this type with any flip types recursively removed from itself.
     FIRRTLBaseType getPassiveType();
+
+    /// Return this type with a 'const' modifiers dropped
+    FVectorType getAllConstDroppedType();
   }];
 }
 
@@ -331,6 +333,9 @@ def BundleImpl : BaseBundleTypeImpl<"Bundle","::circt::firrtl::FIRRTLBaseType", 
   let firrtlExtraClassDeclaration = [{
     /// Return this type with any flip types recursively removed from itself.
     FIRRTLBaseType getPassiveType();
+
+    /// Return this type with a 'const' modifiers dropped
+    BundleType getAllConstDroppedType();
   }];
 }
 
@@ -372,6 +377,9 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [FieldIDTypeInterface]> {
 
     FEnumType getConstType(bool isConst);
 
+    /// Return this type with a 'const' modifiers dropped
+    FEnumType getAllConstDroppedType();
+
     /// Look up an element's index by name.  This returns None on failure.
     std::optional<unsigned> getElementIndex(StringAttr name);
     std::optional<unsigned> getElementIndex(StringRef name);
@@ -393,6 +401,7 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [FieldIDTypeInterface]> {
 
     /// Look up an element type by index.
     FIRRTLBaseType getElementType(size_t index);
+    FIRRTLBaseType getElementTypePreservingConst(size_t index);
 
     /// Return the recursive properties of the type.
     RecursiveTypeProperties getRecursiveTypeProperties() const;
@@ -476,19 +485,20 @@ def RefImpl : FIRRTLImplType<"Ref",
 // Non-Hardware Type Definitions
 //===----------------------------------------------------------------------===//
 
-def StringImpl : FIRRTLImplType<
-  "String", [PhasedTypeInterface], "circt::firrtl::FIRRTLType"> {
+def StringImpl : FIRRTLImplType<"String", [], "circt::firrtl::FIRRTLType"> {
   let summary = [{
     An unlimited length string type. Not representable in hardware.
-    Commonly used as omir properties.
   }];
-  let parameters = (ins "Phase":$phase);
-  let genVerifyDecl = true;
+  let parameters = (ins);
   let genStorageClass = true;
-  let genAccessors = true;
-  let extraClassDeclaration = [{
-    bool isLegalInPhase(Phase phase) const { return getPhase() == phase; }
+}
+
+def BigIntImpl : FIRRTLImplType<"BigInt", [], "circt::firrtl::FIRRTLType"> {
+  let summary = [{
+    An unlimited length signed integer type.  Not representable in hardware.
   }];
+  let parameters = (ins);
+  let genStorageClass = true;
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD

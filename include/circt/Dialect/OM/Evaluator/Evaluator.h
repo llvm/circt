@@ -71,12 +71,18 @@ private:
 };
 
 /// A composite Object, which has a type and fields.
-struct Object {
+/// Enables the shared_from_this functionality so Object pointers can be passed
+/// through the CAPI and unwrapped back into C++ smart pointers with the
+/// appropriate reference count.
+struct Object : std::enable_shared_from_this<Object> {
   /// Get the type of the Object.
   mlir::Type getType();
 
   /// Get a field of the Object by name.
   FailureOr<ObjectValue> getField(StringAttr name);
+
+  /// Get all the field names of the Object.
+  ArrayAttr getFieldNames();
 
 private:
   /// Allow the instantiate method as a friend to construct Objects.

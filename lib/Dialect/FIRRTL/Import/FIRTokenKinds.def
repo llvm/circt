@@ -49,12 +49,13 @@ TOK_IDENTIFIER(identifier)         // foo
 TOK_IDENTIFIER(literal_identifier) // `42`
 
 // Literals
-TOK_LITERAL(integer)        // 42
-TOK_LITERAL(signed_integer) // -42 and +42
-TOK_LITERAL(floatingpoint)  // 42.0
-TOK_LITERAL(version)        // 1.2.3
-TOK_LITERAL(string)         // "foo"
-TOK_LITERAL(raw_string)     // 'foo'
+TOK_LITERAL(integer)                 // 42
+TOK_LITERAL(signed_integer)          // -42 and +42
+TOK_LITERAL(radix_specified_integer) // 0b101010, 0o52, 0d42, 0h2a and negations
+TOK_LITERAL(floatingpoint)           // 42.0
+TOK_LITERAL(version)                 // 1.2.3
+TOK_LITERAL(string)                  // "foo"
+TOK_LITERAL(raw_string)              // 'foo'
 
 TOK_LITERAL(fileinfo)
 TOK_LITERAL(inlineannotation) // %[{"foo":"bar"}]
@@ -66,7 +67,9 @@ TOK_PUNCTUATION(question, "?")
 TOK_PUNCTUATION(l_paren, "(")
 TOK_PUNCTUATION(r_paren, ")")
 TOK_PUNCTUATION(l_brace, "{")
+TOK_PUNCTUATION(l_brace_bar, "{|")
 TOK_PUNCTUATION(r_brace, "}")
+TOK_PUNCTUATION(r_brace_bar, "|}")
 TOK_PUNCTUATION(l_square, "[")
 TOK_PUNCTUATION(r_square, "]")
 TOK_PUNCTUATION(less, "<")
@@ -81,6 +84,8 @@ TOK_PUNCTUATION(equal_greater, "=>")
 // NOTE: Please key these alphabetized to make it easier to find something in
 // this list and to cater to OCD.
 TOK_KEYWORD(Analog)
+TOK_KEYWORD(BigInt)
+TOK_KEYWORD(propassign)
 TOK_KEYWORD(AsyncReset)
 TOK_KEYWORD(Clock)
 TOK_KEYWORD(FIRRTL)
@@ -91,9 +96,11 @@ TOK_KEYWORD(Reset)
 TOK_KEYWORD(SInt)
 TOK_KEYWORD(UInt)
 TOK_KEYWORD(attach)
+TOK_KEYWORD(case)
 TOK_KEYWORD(circuit)
 TOK_KEYWORD(cmem)
 TOK_KEYWORD(connect)
+TOK_KEYWORD(const)
 TOK_KEYWORD(define)
 TOK_KEYWORD(defname)
 TOK_KEYWORD(intrinsic)
@@ -107,6 +114,7 @@ TOK_KEYWORD(inst)
 TOK_KEYWORD(invalid)
 TOK_KEYWORD(invalidate)
 TOK_KEYWORD(is)
+TOK_KEYWORD(match)
 TOK_KEYWORD(mem)
 TOK_KEYWORD(module)
 TOK_KEYWORD(mport)
@@ -124,6 +132,7 @@ TOK_KEYWORD(regreset)
 TOK_KEYWORD(reset)
 TOK_KEYWORD(skip)
 TOK_KEYWORD(smem)
+TOK_KEYWORD(String)
 TOK_KEYWORD(undefined)
 TOK_KEYWORD(version)
 TOK_KEYWORD(when)

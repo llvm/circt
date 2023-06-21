@@ -12,6 +12,7 @@
 
 #include "PassDetails.h"
 #include "circt/Support/BackedgeBuilder.h"
+#include "llvm/Support/Debug.h"
 
 using namespace mlir;
 using namespace circt;
@@ -27,127 +28,174 @@ private:
   // Recursively routes value v backwards through the pipeline, adding new
   // registers to 'stage' if the value was not already registered in the stage.
   // Returns the registerred version of 'v' through 'stage'.
-  Value routeThroughStage(OpOperand &v, PipelineStageOp stage);
+  Value routeThroughStage(Value v, Block *stage);
 
+  // Returns the distance between two stages in the pipeline. The distance is
+  // defined wrt. the ordered stages of the pipeline.
+  int64_t stageDistance(Block *from, Block *to);
+
+  struct RoutedValue {
+    Backedge v;
+    // If true, this value is routed through a stage as a register, else
+    // it is routed through a stage as a pass-through.e
+    bool isReg;
+  };
   // A mapping storing whether a given stage register constains a registerred
   // version of a given value. The registered version will be a backedge during
   // pipeline body analysis. Once the entire body has been analyzed, the
-  // pipeline.stage operations will be replaced with pipeline.stage.register
+  // pipeline.stage operations will be replaced with pipeline.ss.reg
   // operations containing the requested regs, and the backedge will be
   // replaced. MapVector ensures deterministic iteration order, which in turn
   // ensures determinism during stage op IR emission.
-  DenseMap<PipelineStageOp, llvm::MapVector<Value, Backedge>> stageRegMap;
+  DenseMap<Block *, llvm::MapVector<Value, RoutedValue>> stageRegOrPassMap;
 
-  // A linked list of stages in the pipeline. Allows for easily looking up the
-  // predecessor stage of a given stage.
-  DenseMap<PipelineStageOp, PipelineStageOp> stagePredecessor;
+  // A mapping between stages and their index in the pipeline.
+  llvm::DenseMap<Block *, unsigned> stageMap;
 
   std::shared_ptr<BackedgeBuilder> bb;
 };
 
 } // end anonymous namespace
 
+int64_t ExplicitRegsPass::stageDistance(Block *from, Block *to) {
+  int64_t fromStage = stageMap[from];
+  int64_t toStage = stageMap[to];
+  return toStage - fromStage;
+}
+
 // NOLINTNEXTLINE(misc-no-recursion)
-Value ExplicitRegsPass::routeThroughStage(OpOperand &v, PipelineStageOp stage) {
-  Value retVal = v.get();
-  if (!stage) {
-    // Recursive base case - nothing to route (v is a block operand).
+Value ExplicitRegsPass::routeThroughStage(Value v, Block *stage) {
+  Value retVal = v;
+  Block *definingStage = retVal.getParentBlock();
+
+  // Is the value defined in the current stage?
+  if (definingStage == stage)
     return retVal;
+
+  auto regIt = stageRegOrPassMap[stage].find(retVal);
+  if (regIt != stageRegOrPassMap[stage].end()) {
+    // 'v' is already routed through 'stage' - return the registered/passed
+    // version.
+    return regIt->second.v;
   }
 
-  auto regIt = stageRegMap[stage].find(retVal);
-  if (regIt != stageRegMap[stage].end()) {
-    // 'v' is already registered in 'stage'.
-    return regIt->second;
-  }
-
+  // Is the value a constant? If so, we allow it; constants are special cases
+  // which are allowed to be used in any stage.
   auto *definingOp = retVal.getDefiningOp();
-  // Value is a block arg, a constant or defined after the provided stage
-  // - early exit here.
-  if (definingOp && (definingOp->hasTrait<OpTrait::ConstantLike>() ||
-                     !definingOp->isBeforeInBlock(stage)))
+  if (definingOp && definingOp->hasTrait<OpTrait::ConstantLike>())
     return retVal;
 
-  // Value is defined before the provided stage - route it through the stage.
-  auto regBackedge = bb->get(retVal.getType());
-  stageRegMap[stage].insert({retVal, regBackedge});
-  retVal = regBackedge;
+  // Value is defined somewhere before the provided stage - route it through the
+  // stage, and recurse to the predecessor stage.
+  int64_t valueLatency = 0;
+  if (auto latencyOp = dyn_cast_or_null<LatencyOp>(definingOp))
+    valueLatency = latencyOp.getLatency();
+
+  // A value should be registered in this stage if the latency of the value
+  // is less than the distance between the current stage and the defining stage.
+  bool isReg = valueLatency < stageDistance(definingStage, stage);
+  auto valueBackedge = bb->get(retVal.getType());
+  stageRegOrPassMap[stage].insert({retVal, {valueBackedge, isReg}});
+  retVal = valueBackedge;
 
   // Recurse - recursion will only create a new backedge if necessary.
-  auto predStageIt = stagePredecessor.find(stage);
-  assert(predStageIt != stagePredecessor.end() &&
-         "stage should have been registered before calling this function");
-  PipelineStageOp predecessorStage = predStageIt->second;
-  if (predecessorStage)
-    routeThroughStage(v, predecessorStage);
-
+  Block *stagePred = stage->getSinglePredecessor();
+  assert(stagePred && "Expected stage to have a single predecessor");
+  routeThroughStage(v, stagePred);
   return retVal;
 }
 
 void ExplicitRegsPass::runOnOperation() {
-  auto pipeline = getOperation();
+  ScheduledPipelineOp pipeline = getOperation();
   OpBuilder b(getOperation().getContext());
   bb = std::make_shared<BackedgeBuilder>(b, getOperation().getLoc());
 
-  // A list of stages in the pipeline in the order which they appear.
-  SmallVector<PipelineStageOp> stageList;
-  PipelineStageOp currStage = nullptr;
-  // Iterate over the pipeline body in-order (!).
-  for (auto &op : *pipeline.getBodyBlock()) {
-    if (auto stageOp = dyn_cast<PipelineStageOp>(&op)) {
-      stagePredecessor[stageOp] = currStage;
-      currStage = stageOp;
-      continue;
-    }
+  // Cache external inputs in a set for fast lookup.
+  llvm::DenseSet<Value> extInputs;
+  for (auto extInput : pipeline.getInnerExtInputs())
+    extInputs.insert(extInput);
 
-    // Check the operands of this operation to see if any of them cross a
-    // stage boundary.
-    for (OpOperand &operand : op.getOpOperands()) {
-      Value reroutedValue = routeThroughStage(operand, currStage);
-      if (reroutedValue != operand.get())
-        op.setOperand(operand.getOperandNumber(), reroutedValue);
-    }
+  // Iterate over the pipeline body in-order (!).
+  stageMap = pipeline.getStageMap();
+  for (Block *stage : pipeline.getOrderedStages()) {
+    // Walk the stage body - we do this since register materialization needs
+    // to consider all levels of nesting within the stage.
+    stage->walk([&](Operation *op) {
+      // Check the operands of this operation to see if any of them cross a
+      // stage boundary.
+      for (OpOperand &operand : op->getOpOperands()) {
+        if (extInputs.contains(operand.get())) {
+          // Never route external inputs through a stage.
+          continue;
+        }
+        if (getParentStageInPipeline(pipeline, operand.get()) == stage) {
+          // The operand is defined by some operation or block which ultimately
+          // resides within the current pipeline stage. No routing needed.
+          continue;
+        }
+        Value reroutedValue = routeThroughStage(operand.get(), stage);
+        if (reroutedValue != operand.get())
+          op->setOperand(operand.getOperandNumber(), reroutedValue);
+      }
+    });
   }
 
-  // All values have been recorded through the stages. Now, replace the
-  // stages with new stage operations containing the required registers.
-  for (auto &[stageOp, regMap] : stageRegMap) {
-    b.setInsertionPoint(stageOp);
-    auto predStageOp = stagePredecessor[stageOp];
+  auto *ctx = &getContext();
 
+  // All values have been recorded through the stages. Now, add registers to the
+  // stage blocks.
+  for (auto &[stage, regMap] : stageRegOrPassMap) {
     // Gather register inputs to this stage, either from a predecessor stage
     // or from the original op.
-    llvm::SmallVector<Value> regIns;
+    llvm::SmallVector<Value> regIns, passIns;
+    Block *predecessorStage = stage->getSinglePredecessor();
+    auto predStageRegOrPassMap = stageRegOrPassMap.find(predecessorStage);
+    assert(predecessorStage && "Stage should always have a single predecessor");
     for (auto &[value, backedge] : regMap) {
-      if (predStageOp) {
-        // Grab the value if registerred through the predecessor op, else,
+      if (predStageRegOrPassMap != stageRegOrPassMap.end()) {
+        // Grab the value if passed through the predecessor stage, else,
         // use the raw value.
-        auto predRegIt = stageRegMap[predStageOp].find(value);
-        if (predRegIt != stageRegMap[predStageOp].end()) {
-          regIns.push_back(predRegIt->second);
+        auto predRegIt = predStageRegOrPassMap->second.find(value);
+        if (predRegIt != predStageRegOrPassMap->second.end()) {
+          if (backedge.isReg)
+            regIns.push_back(predRegIt->second.v);
+          else
+            passIns.push_back(predRegIt->second.v);
           continue;
         }
       }
-      // Not in predecessor stage - must be the original value.
-      regIns.push_back(value);
+
+      // Not passed through the stage - must be the original value.
+      if (backedge.isReg)
+        regIns.push_back(value);
+      else
+        passIns.push_back(value);
     }
 
-    auto newStageOp = b.create<PipelineStageRegisterOp>(
-        stageOp.getLoc(), stageOp.getWhen(), regIns);
-    stageOp.getValid().replaceAllUsesWith(newStageOp.getValid());
+    // Append arguments to the predecessor stage terminator, which feeds this
+    // stage.
+    StageOp terminator = cast<StageOp>(predecessorStage->getTerminator());
+    terminator.getRegistersMutable().append(regIns);
+    terminator.getPassthroughsMutable().append(passIns);
 
-    // Replace backedges with the outputs of the new stage.
+    // ... add arguments to the next stage. Registers first, then passthroughs.
+    llvm::SmallVector<Type> regAndPassTypes;
+    llvm::append_range(regAndPassTypes, ValueRange(regIns).getTypes());
+    llvm::append_range(regAndPassTypes, ValueRange(passIns).getTypes());
+    stage->addArguments(regAndPassTypes,
+                        llvm::SmallVector<Location>(regAndPassTypes.size(),
+                                                    UnknownLoc::get(ctx)));
+
+    // Replace backedges for the next stage with the new arguments.
     for (auto it : llvm::enumerate(regMap)) {
       auto index = it.index();
       auto &[value, backedge] = it.value();
-      backedge.setValue(newStageOp.getRegOuts()[index]);
+      backedge.v.setValue(stage->getArgument(index));
     }
-    stageOp.erase();
   }
 
   // Clear internal state. See https://github.com/llvm/circt/issues/3235
-  stageRegMap.clear();
-  stagePredecessor.clear();
+  stageRegOrPassMap.clear();
 }
 
 std::unique_ptr<mlir::Pass> circt::pipeline::createExplicitRegsPass() {

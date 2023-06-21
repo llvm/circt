@@ -559,4 +559,12 @@ firrtl.module @WhenCForce(in %c: !firrtl.uint<1>, in %clock : !firrtl.clock, in 
   }
 }
 
+// Check that propassign initialized output ports.
+// CHECK-LABEL: firrtl.module @PropInitOut(out %out: !firrtl.string)
+firrtl.module @PropInitOut(out %out : !firrtl.string) {
+  %0 = firrtl.string "hello"
+  // CHECK: firrtl.propassign %out, %0 : !firrtl.string
+  firrtl.propassign %out, %0 : !firrtl.string
+}
+
 }

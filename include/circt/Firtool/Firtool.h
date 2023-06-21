@@ -14,6 +14,7 @@
 #define CIRCT_FIRTOOL_FIRTOOL_H
 
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Pass/PassManager.h"
 #include "llvm/Support/CommandLine.h"
@@ -83,12 +84,6 @@ struct FirtoolOptions {
   llvm::cl::opt<bool> dedup{
       "dedup", llvm::cl::desc("Deduplicate structurally identical modules"),
       llvm::cl::init(false), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> useOldCheckCombCycles{
-      "use-old-check-comb-cycles",
-      llvm::cl::desc(
-          "Use old CheckCombCycles pass, that does not support aggregates"),
-      llvm::cl::init(false), llvm::cl::Hidden, llvm::cl::cat(category)};
 
   llvm::cl::opt<bool> grandCentralInstantiateCompanionOnly{
       "grand-central-instantiate-companion",
@@ -199,6 +194,11 @@ struct FirtoolOptions {
       llvm::cl::desc("Disable extracting instances only that feed test code"),
       llvm::cl::init(false), llvm::cl::cat(category)};
 
+  llvm::cl::opt<bool> etcDisableRegisterExtraction{
+      "etc-disable-register-extraction",
+      llvm::cl::desc("Disable extracting registers that only feed test code"),
+      llvm::cl::init(false), llvm::cl::cat(category)};
+
   llvm::cl::opt<bool> etcDisableModuleInlining{
       "etc-disable-module-inlining",
       llvm::cl::desc("Disable inlining modules that only feed test code"),
@@ -212,6 +212,38 @@ struct FirtoolOptions {
           "for a vivado synthesis bug that incorrectly modifies "
           "address conflict behavivor of combinational memories"),
       llvm::cl::init(false), llvm::cl::cat(category)};
+
+  //===----------------------------------------------------------------------===
+  // External Clock Gate Options
+  //===----------------------------------------------------------------------===
+
+  seq::ExternalizeClockGateOptions clockGateOpts;
+
+  llvm::cl::opt<std::string, true> ckgModuleName{
+      "ckg-name", llvm::cl::desc("Clock gate module name"),
+      llvm::cl::location(clockGateOpts.moduleName),
+      llvm::cl::init("EICG_wrapper"), llvm::cl::cat(category)};
+
+  llvm::cl::opt<std::string, true> ckgInputName{
+      "ckg-input", llvm::cl::desc("Clock gate input port name"),
+      llvm::cl::location(clockGateOpts.inputName), llvm::cl::init("in"),
+      llvm::cl::cat(category)};
+
+  llvm::cl::opt<std::string, true> ckgOutputName{
+      "ckg-output", llvm::cl::desc("Clock gate output port name"),
+      llvm::cl::location(clockGateOpts.outputName), llvm::cl::init("out"),
+      llvm::cl::cat(category)};
+
+  llvm::cl::opt<std::string, true> ckgEnableName{
+      "ckg-enable", llvm::cl::desc("Clock gate enable port name"),
+      llvm::cl::location(clockGateOpts.enableName), llvm::cl::init("en"),
+      llvm::cl::cat(category)};
+
+  llvm::cl::opt<std::string, true> ckgTestEnableName{
+      "ckg-test-enable",
+      llvm::cl::desc("Clock gate test enable port name (optional)"),
+      llvm::cl::location(clockGateOpts.testEnableName),
+      llvm::cl::init("test_en"), llvm::cl::cat(category)};
 
   bool isRandomEnabled(RandomKind kind) const {
     return disableRandom != RandomKind::All && disableRandom != kind;

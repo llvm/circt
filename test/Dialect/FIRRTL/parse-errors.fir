@@ -358,7 +358,7 @@ circuit ProbeBase:
     output out : UInt
 
     inst pg of ProbeGen
-    out <= probe(pg.p) ; expected-error {{expected non-reference-type expression in 'probe', got}}
+    out <= probe(pg.p) ; expected-error {{expected base-type expression in 'probe', got}}
 
 ;// -----
 
@@ -532,7 +532,7 @@ circuit ProbeConnect:
     input in : UInt<1>
     output p : Probe<UInt<1>>
 
-    p <= probe(in) ; expected-error {{cannot connect reference types}}
+    p <= probe(in) ; expected-error {{cannot connect reference or property types}}
 
 ;// -----
 
@@ -542,7 +542,7 @@ circuit ProbeConnectAlternate:
     input in : UInt<1>
     output p : Probe<UInt<1>>
 
-    connect p, probe(in) ; expected-error {{cannot connect reference types}}
+    connect p, probe(in) ; expected-error {{cannot connect reference or property types}}
 
 ;// -----
 
@@ -552,7 +552,7 @@ circuit ProbePartialConnect:
     input in : UInt<1>
     output p : Probe<UInt<1>>
 
-    p <- probe(in) ; expected-error {{cannot connect reference types}}
+    p <- probe(in) ; expected-error {{cannot connect reference or property types}}
 
 ;// -----
 
@@ -605,16 +605,6 @@ circuit LeadingProbe:
 
 ;// -----
 
-; This should be supported, needs internal support to land first.
-circuit DefineWidths:
-  module DefineWidths:
-    input in : UInt<1>
-    output p : Probe<UInt>
-    define p = probe(in) ; expected-error {{'firrtl.ref.define' op requires all operands to have the same type}}
-
-
-;// -----
-
 circuit ForceProbe:
   module ForceProbe:
     input in : UInt<1>
@@ -627,6 +617,12 @@ circuit ForceWithLiteral:
     input in : UInt<1>
     node n = in
     force_initial(rwprobe(n), 1) ; expected-error {{expected source expression in force_initial}}
+
+;// -----
+
+circuit RWProbeConst:
+  extmodule RWProbeConst:
+    output p : RWProbe<{a: const UInt}> ; expected-error {{rwprobe cannot contain const}}
 
 ;// -----
 
@@ -668,3 +664,88 @@ circuit NodeProbe:
   module NodeProbe:
     inst r of Ref
     node n = r.x ; expected-error {{Node cannot be analog and must be passive or passive under a flip}}
+
+;// -----
+
+circuit ConstProbe:
+  module ConstProbe:
+    output x : const Probe<UInt<1>> ; expected-error {{only hardware types can be 'const'}}
+
+;// -----
+
+circuit MultiConst:
+  module MultiConst:
+    output x : const const UInt<1> ; expected-error {{'const' can only be specified once on a type}}
+
+;// -----
+
+circuit DefinePromoteToRW:
+  extmodule Ref:
+    output ro : Probe<UInt<1>>
+  module DefinePromoteToRW:
+    output rw : RWProbe<UInt<1>>
+    inst r of Ref
+    ; expected-error @below {{cannot define reference of type '!firrtl.rwprobe<uint<1>>' with incompatible reference of type '!firrtl.probe<uint<1>>'}}
+    define rw = r.ro
+
+;// -----
+
+circuit PropAssignNonProperty:
+  module PropAssignNonProperty:
+    input x : UInt<1>
+    output y : UInt<1>
+    propassign x, y ; expected-error {{can only propassign property types}}
+
+;// -----
+
+FIRRTL version 2.3.9
+circuit UnsupportedRadixSpecifiedIntegerLiterals:
+  module UnsupportedRadixSpecifiedIntegerLiterals:
+    output foo: UInt<8>
+    ; expected-error @below {{Radix-specified integer literals are a FIRRTL 2.4.0 feature, but the specified FIRRTL version was 2.3.9}}
+    foo <= UInt(0b101010)
+
+;// -----
+
+FIRRTL version 2.4.0
+circuit InvalidBinaryRadixSpecifiedIntegerLiteral:
+  module InvalidBinaryRadixSpecifiedIntegerLiteral:
+    output foo: UInt<8>
+    ; expected-error @below {{invalid character in integer literal}}
+    foo <= UInt(0b2)
+
+;// -----
+
+FIRRTL version 2.4.0
+circuit InvalidOctalRadixSpecifiedIntegerLiteral:
+  module InvalidOctalRadixSpecifiedIntegerLiteral:
+    output foo: UInt<8>
+    ; expected-error @below {{invalid character in integer literal}}
+    foo <= UInt(0o8)
+
+;// -----
+
+FIRRTL version 2.4.0
+circuit InvalidDecimalRadixSpecifiedIntegerLiteral:
+  module InvalidDecimalRadixSpecifiedIntegerLiteral:
+    output foo: UInt<8>
+    ; expected-error @below {{invalid character in integer literal}}
+    foo <= UInt(0da)
+
+;// -----
+
+FIRRTL version 2.4.0
+circuit InvalidHexadecimalRadixSpecifiedIntegerLiteral:
+  module InvalidHexadecimalRadixSpecifiedIntegerLiteral:
+    output foo: UInt<8>
+    ; expected-error @below {{invalid character in integer literal}}
+    foo <= UInt(0hg)
+
+;// -----
+
+FIRRTL version 3.0.0
+circuit UnsupportedStringEncodedIntegerLiterals:
+  module UnsupportedStringEncodedIntegerLiterals:
+    output foo: UInt<8>
+    ; expected-error @below {{String-encoded integer literals are unsupported after FIRRTL 3.0.0}}
+    connect foo, UInt("h2a")

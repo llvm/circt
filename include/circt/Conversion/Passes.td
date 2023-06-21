@@ -209,6 +209,10 @@ def PipelineToHW : Pass<"lower-pipeline-to-hw", "hw::HWModuleOp"> {
   let dependentDialects = [
     "hw::HWDialect", "comb::CombDialect", "seq::SeqDialect"
   ];
+  let options = [
+    Option<"outlineStages", "outline-stages", "bool", "false",
+      "Outline each stage to a separate `hw.module`.">
+  ];
 }
 
 //===----------------------------------------------------------------------===//
@@ -368,7 +372,8 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::createLowerFIRRTLToHWPass()";
   let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
-                           "seq::SeqDialect", "sv::SVDialect"];
+                           "seq::SeqDialect", "sv::SVDialect",
+                           "ltl::LTLDialect", "verif::VerifDialect"];
   let options = [
     Option<"disableMemRandomization", "disable-mem-randomization", "bool", "false",
             "Disable emission of memory randomization code">,
@@ -401,6 +406,24 @@ def HandshakeToDC : Pass<"lower-handshake-to-dc", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::createHandshakeToDCPass()";
   let dependentDialects = ["dc::DCDialect", "mlir::func::FuncDialect", "hw::HWDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// DCToHW
+//===----------------------------------------------------------------------===//
+
+def DCToHW : Pass<"lower-dc-to-hw", "mlir::ModuleOp"> {
+  let summary = "Lower DC to HW";
+  let description = [{
+    Lower DC to ESI/hw/comb/seq operations.
+    In case the IR contains DC operations that need to be clocked (fork, buffer),
+    there must exist a clock and reset signal in the parent `FunctionLike`
+    operation. These arguments are to be marked with a `dc.clock` and `dc.reset`
+    attribute, respectively.
+  }];
+  let constructor = "circt::createDCToHWPass()";
+  let dependentDialects = ["dc::DCDialect", "esi::ESIDialect", "hw::HWDialect",
+      "comb::CombDialect", "seq::SeqDialect"];
 }
 
 //===----------------------------------------------------------------------===//
