@@ -354,7 +354,7 @@ void CompileInvoke::lowerInvokeOp(InvokeOp &invokeOp) {
   for (size_t i = 0; i != ports.size(); i++)
     builder.create<AssignOp>(loc, ports[i], inputs[i]);
   Value done = invokeOp.getInstDoneValue();
-   // Generate a group_done operation with the instance's done port.
+  // Generate a group_done operation with the instance's done port.
   builder.create<calyx::GroupDoneOp>(loc, done);
   builder.setInsertionPointAfter(invokeOp.getOperation());
   builder.create<EnableOp>(invokeOp.getLoc(),
