@@ -8,11 +8,9 @@
 
 #include "DialectModules.h"
 #include "circt-c/Dialect/OM.h"
-#include "circt/Support/LLVM.h"
 #include "mlir-c/BuiltinAttributes.h"
 #include "mlir-c/IR.h"
 #include "mlir/Bindings/Python/PybindAdaptors.h"
-#include "mlir/CAPI/IR.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 namespace py = pybind11;
