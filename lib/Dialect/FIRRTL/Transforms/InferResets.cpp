@@ -1072,7 +1072,7 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
     Value value = signal.field.getValue();
     if (!isa<BlockArgument>(value) &&
         !isa_and_nonnull<WireOp, RegOp, RegResetOp, InstanceOp, InvalidValueOp,
-                         RefCastOp, UninferredResetCastOp>(
+                         ConstCastOp, RefCastOp, UninferredResetCastOp>(
             value.getDefiningOp()))
       continue;
     if (updateReset(signal.field, resetType)) {
@@ -1080,12 +1080,11 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
         worklist.insert(user);
       if (auto blockArg = dyn_cast<BlockArgument>(value))
         moduleWorklist.insert(blockArg.getOwner()->getParentOp());
-      if (auto instOp = value.getDefiningOp<InstanceOp>())
+      else if (auto instOp = value.getDefiningOp<InstanceOp>()) {
         if (auto extmodule = dyn_cast<FExtModuleOp>(
                 *instanceGraph->getReferencedModule(instOp)))
           extmoduleWorklist.insert({extmodule, instOp});
-      if (auto uncast =
-              dyn_cast_or_null<UninferredResetCastOp>(value.getDefiningOp())) {
+      } else if (auto uncast = value.getDefiningOp<UninferredResetCastOp>()) {
         uncast.replaceAllUsesWith(uncast.getInput());
         uncast.erase();
       }
@@ -1125,17 +1124,6 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
       uop.replaceAllUsesWith(uop.getInput());
       LLVM_DEBUG(llvm::dbgs() << "- Inferred " << uop << "\n");
       uop.erase();
-    } else if (auto constCastOp = dyn_cast<ConstCastOp>(wop)) {
-      // Propagate inferred reset types across const-casts of what was
-      // originally ResetType
-      if (isa<ResetType>(constCastOp.getResult().getType()) &&
-          !isa<ResetType>(constCastOp.getInput().getType())) {
-        auto result = constCastOp.getResult();
-        result.setType(constCastOp.getInput().getType().getConstType(false));
-        for (auto *user : result.getUsers())
-          worklist.insert(user);
-        LLVM_DEBUG(llvm::dbgs() << "- Inferred " << constCastOp << "\n");
-      }
     }
   }
 
