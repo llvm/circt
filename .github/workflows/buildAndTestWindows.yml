@@ -40,7 +40,6 @@ jobs:
         uses: actions/cache@v3
         with:
           path: |
-            llvm/build/bin/llvm-lit.py
             llvm/install
           key: ${{ runner.os }}-llvm-relobj-${{ steps.get-llvm-hash.outputs.hash }}
 
@@ -60,6 +59,12 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON `
             -DLLVM_INSTALL_UTILS=ON -DCMAKE_INSTALL_PREFIX="$(pwd)/../install"
           cmake --build . --target install --config Release
+          # Grab llvm-lit.py from build tree, we need it.
+          cp -v bin/llvm-lit.py ../install/bin/
+          # Nuke build tree to save disk space.
+          cd ..
+          rm -r -fo build
+          
 
       # --------
       # Build and test CIRCT in both debug and release mode.
@@ -77,7 +82,7 @@ jobs:
             -DLLVM_ENABLE_ASSERTIONS=ON `
             -DMLIR_DIR="$(pwd)/../llvm/install/lib/cmake/mlir/" `
             -DLLVM_DIR="$(pwd)/../llvm/install/lib/cmake/llvm/" `
-            -DLLVM_EXTERNAL_LIT="$(pwd)/../llvm/build/bin/llvm-lit.py" `
+            -DLLVM_EXTERNAL_LIT="$(pwd)/../llvm/install/bin/llvm-lit.py" `
             -DCMAKE_BUILD_TYPE=RelWithDebInfo `
             -DLLVM_LIT_ARGS="-v"
           cmake --build . --config RelWithDebInfo
