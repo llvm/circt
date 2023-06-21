@@ -2776,10 +2776,10 @@ LogicalResult UnionExtractOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  auto unionElements =
-      hw::type_cast<UnionType>((operands[0].getType())).getElements();
-  unsigned fieldIndex =
-      attrs.getAs<IntegerAttr>("fieldIndex").getValue().getZExtValue();
+  UnionExtractOpAdaptor op(operands, attrs,
+                           properties.as<UnionExtractOp::Properties *>());
+  auto unionElements = hw::type_cast<UnionType>(op.getInput().getType()).getElements();
+  auto fieldIndex = op.getFieldIndex();
   if (fieldIndex >= unionElements.size()) {
     if (loc)
       mlir::emitError(*loc, "field index " + Twine(fieldIndex) +
