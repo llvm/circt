@@ -9,4 +9,8 @@ add_circt_library(CIRCTReduceLib
   MLIRSupport
   MLIRTransforms
   MLIRReduceLib
+
+  # Dialect dependencies.
+  CIRCTFIRRTL
+  CIRCTHW
 )
