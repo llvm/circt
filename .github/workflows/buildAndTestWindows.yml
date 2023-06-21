@@ -63,7 +63,7 @@ jobs:
           cp -v bin/llvm-lit.py ../install/bin/
           # Nuke build tree to save disk space.
           cd ..
-          rm -rf build
+          rm -r -fo build
           
 
       # --------
