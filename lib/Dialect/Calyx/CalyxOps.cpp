@@ -2279,20 +2279,21 @@ static LogicalResult verifyInvokeOpValue(InvokeOp op, Value value,
 Value InvokeOp::getInstGoValue() {
   ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
   Operation *operation = componentOp.lookupSymbol(getCallee());
+  Value ret = nullptr;
   // Get the value of the writer_en port.
   if (isa<RegisterOp>(operation))
-    return operation->getResult(1);
+    ret = operation->getResult(1);
   else if (isa<MemoryOp, DivSPipeLibOp, DivUPipeLibOp, MultPipeLibOp,
                RemSPipeLibOp, RemUPipeLibOp>(operation)) {
     // Get the value of the writer_en port or go port.
-    return operation->getResult(2);
+    ret = operation->getResult(2);
   } else if (isa<InstanceOp>(operation)) {
     // Get the go port of the instance through the "go" attribute
     InstanceOp instanceOp = cast<InstanceOp>(operation);
     auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
     for (size_t i = 0; i != portInfo.size(); i++) {
       if (portInfo[i].hasAttribute("go"))
-        return operation->getResult(i);
+        ret = operation->getResult(i);
     }
   } else if (isa<PrimitiveOp>(operation)) {
     // Get the go part of the primitive through the "calyx.go" attribute
@@ -2303,29 +2304,30 @@ Value InvokeOp::getInstGoValue() {
       if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(argAttrs[i]))
         if (!dictAttr.empty())
           if (dictAttr.begin()->getName().getValue() == "calyx.go")
-            return primOp.getResult(i);
+            ret = primOp.getResult(i);
   }
 
-  return nullptr;
+  return ret;
 }
 
 // Get the value of the done port within an instance.
 Value InvokeOp::getInstDoneValue() {
   ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
   Operation *operation = componentOp.lookupSymbol(getCallee());
+  Value ret = nullptr;
   // The done port of these instances is the last result, so the ssa value
   // of the last result is taken.
   if (isa<RegisterOp, MemoryOp, DivSPipeLibOp, DivUPipeLibOp, MultPipeLibOp,
           RemSPipeLibOp, RemUPipeLibOp>(operation)) {
     size_t doneIdx = operation->getResults().size() - 1;
-    return operation->getResult(doneIdx);
+    ret = operation->getResult(doneIdx);
   } else if (isa<InstanceOp>(operation)) {
     //  Get the go port of the instance through the "done" attribute
     InstanceOp instanceOp = cast<InstanceOp>(operation);
     auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
     for (size_t i = 0; i != portInfo.size(); i++) {
       if (portInfo[i].hasAttribute("done"))
-        return operation->getResult(i);
+        ret = operation->getResult(i);
     }
   } else if (isa<calyx::PrimitiveOp>(operation)) {
     // Get the go part of the primitive through the "calyx.done" attribute
@@ -2336,9 +2338,9 @@ Value InvokeOp::getInstDoneValue() {
       if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(resAttrs[i]))
         if (!dictAttr.empty())
           if (dictAttr.begin()->getName().getValue() == "calyx.done")
-            return primOp.getResult(i);
+            ret = primOp.getResult(i);
   }
-  return nullptr;
+  return ret;
 }
 
 LogicalResult InvokeOp::verify() {
