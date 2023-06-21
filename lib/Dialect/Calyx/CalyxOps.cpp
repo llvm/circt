@@ -2268,7 +2268,8 @@ static LogicalResult verifyInvokeOpValue(InvokeOp op, Value value,
     Operation *operation = value.getDefiningOp();
     if (operation == nullptr)
       return success();
-    if (auto dialect = operation->getDialect(); isa<comb::CombDialect>(dialect))
+    if (auto *dialect = operation->getDialect(); 
+        isa<comb::CombDialect>(dialect))
       return op->emitOpError("has source that is not a port or constant. "
                              "Complex logic should be conducted in the guard.");
   }
