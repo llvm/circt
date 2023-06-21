@@ -228,7 +228,7 @@ static ParseResult parseFIFOFlagThreshold(OpAsmParser &parser,
                                           IntegerAttr &threshold,
                                           Type &outputFlagType,
                                           StringRef directive) {
-  // look for an optional "almost_full $threshold>" group.
+  // look for an optional "almost_full $threshold" group.
   if (succeeded(parser.parseOptionalKeyword(directive))) {
     int64_t thresholdValue;
     if (succeeded(parser.parseInteger(thresholdValue))) {
@@ -255,20 +255,20 @@ ParseResult parseFIFOAEThreshold(OpAsmParser &parser, IntegerAttr &threshold,
                                 "almost_empty");
 }
 
-static void printFIFOFlagThreshold(OpAsmPrinter &p, Operation *op,
-                                   IntegerAttr threshold, StringRef directive) {
-  if (threshold)
-    p << directive << " " << threshold.getInt();
-}
-
 void printFIFOAFThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
                           Type outputFlagType) {
-  printFIFOFlagThreshold(p, op, threshold, "almost_full");
+  if (threshold) {
+    p << "almost_full"
+      << " " << threshold.getInt();
+  }
 }
 
 void printFIFOAEThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
                           Type outputFlagType) {
-  printFIFOFlagThreshold(p, op, threshold, "almost_empty");
+  if (threshold) {
+    p << "almost_empty"
+      << " " << threshold.getInt();
+  }
 }
 
 void FIFOOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -664,11 +664,11 @@ OpFoldResult FirRegOp::fold(FoldAdaptor adaptor) {
 
   // If the register is held in permanent reset, replace it with its reset
   // value. This works trivially if the reset is asynchronous and therefore
-  // level-sensitive, in which case it will always immediately assume the
-  // reset value in silicon. If it is synchronous, the register value is
-  // undefined until the first clock edge at which point it becomes the reset
-  // value, in which case we simply define the initial value to already be the
-  // reset value.
+  // level-sensitive, in which case it will always immediately assume the reset
+  // value in silicon. If it is synchronous, the register value is undefined
+  // until the first clock edge at which point it becomes the reset value, in
+  // which case we simply define the initial value to already be the reset
+  // value.
   if (auto reset = getReset())
     if (auto constOp = reset.getDefiningOp<hw::ConstantOp>())
       if (constOp.getValue().isOne())

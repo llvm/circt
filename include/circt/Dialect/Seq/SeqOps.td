@@ -168,8 +168,7 @@ def FIFOOp : SeqOp<"fifo", [
     operations.
     The fifo operation is configurable with the following parameters:
     1. Depth (cycles)
-    2. Differing in- and output widths
-    3. Almost full/empty thresholds (optional). If not provided, these will
+    2. Almost full/empty thresholds (optional). If not provided, these will
        be asserted when the FIFO is full/empty.
 
     Like `seq.hlmem` there are no guarantees that all possible fifo configuration
@@ -185,12 +184,8 @@ def FIFOOp : SeqOp<"fifo", [
   );
 
   let results = (outs
-    HWIntegerType:$output, I1:$full, I1:$empty, Optional<I1>:$almostFull, Optional<I1>:$almostEmpty);
-
-  let builders = [
-    OpBuilder<(ins "Value":$clk, "Value":$rst, "StringRef":$symName,
-                   "llvm::ArrayRef<int64_t>":$shape, "Type":$elementType)>
-  ];
+    HWIntegerType:$output, I1:$full, I1:$empty, Optional<I1>:$almostFull,
+    Optional<I1>:$almostEmpty);
 
   let assemblyFormat = [{
     `depth` $depth
@@ -199,9 +194,6 @@ def FIFOOp : SeqOp<"fifo", [
     `in` $input `rdEn` $rdEn `wrEn` $wrEn `clk` $clk `rst` $rst attr-dict `:` type($input)
   }];
   let hasVerifier = 1;
-  let skipDefaultBuilders = 1;
-
-
 }
 
 def HLMemOp : SeqOp<"hlmem", [
