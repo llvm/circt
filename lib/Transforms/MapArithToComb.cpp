@@ -79,12 +79,11 @@ public:
     size_t outWidth = op.getOut().getType().getIntOrFloatBitWidth();
     size_t inWidth = adaptor.getIn().getType().getIntOrFloatBitWidth();
 
-    rewriter.replaceOp(
-        op,
-        {rewriter.create<comb::ConcatOp>(
-            loc,
-            rewriter.create<hw::ConstantOp>(loc, APInt(outWidth - inWidth, 0)),
-            adaptor.getIn())});
+    rewriter.replaceOp(op, rewriter.create<comb::ConcatOp>(
+                               loc,
+                               rewriter.create<hw::ConstantOp>(
+                                   loc, APInt(outWidth - inWidth, 0)),
+                               adaptor.getIn()));
     return success();
   }
 };

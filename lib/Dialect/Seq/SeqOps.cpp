@@ -220,6 +220,81 @@ void HLMemOp::build(OpBuilder &builder, OperationState &result, Value clk,
 }
 
 //===----------------------------------------------------------------------===//
+// FIFOOp
+//===----------------------------------------------------------------------===//
+
+// Flag threshold custom directive
+static ParseResult parseFIFOFlagThreshold(OpAsmParser &parser,
+                                          IntegerAttr &threshold,
+                                          Type &outputFlagType,
+                                          StringRef directive) {
+  // look for an optional "almost_full $threshold" group.
+  if (succeeded(parser.parseOptionalKeyword(directive))) {
+    int64_t thresholdValue;
+    if (succeeded(parser.parseInteger(thresholdValue))) {
+      threshold = parser.getBuilder().getI64IntegerAttr(thresholdValue);
+      outputFlagType = parser.getBuilder().getI1Type();
+      return success();
+    }
+    return parser.emitError(parser.getNameLoc(),
+                            "expected integer value after " + directive +
+                                " directive");
+  }
+  return success();
+}
+
+ParseResult parseFIFOAFThreshold(OpAsmParser &parser, IntegerAttr &threshold,
+                                 Type &outputFlagType) {
+  return parseFIFOFlagThreshold(parser, threshold, outputFlagType,
+                                "almost_full");
+}
+
+ParseResult parseFIFOAEThreshold(OpAsmParser &parser, IntegerAttr &threshold,
+                                 Type &outputFlagType) {
+  return parseFIFOFlagThreshold(parser, threshold, outputFlagType,
+                                "almost_empty");
+}
+
+void printFIFOAFThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
+                          Type outputFlagType) {
+  if (threshold) {
+    p << "almost_full"
+      << " " << threshold.getInt();
+  }
+}
+
+void printFIFOAEThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
+                          Type outputFlagType) {
+  if (threshold) {
+    p << "almost_empty"
+      << " " << threshold.getInt();
+  }
+}
+
+void FIFOOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getOutput(), "out");
+  setNameFn(getEmpty(), "empty");
+  setNameFn(getFull(), "full");
+  if (auto ae = getAlmostEmpty())
+    setNameFn(ae, "almostEmpty");
+  if (auto af = getAlmostFull())
+    setNameFn(af, "almostFull");
+}
+
+LogicalResult FIFOOp::verify() {
+  auto aet = getAlmostEmptyThreshold();
+  auto aft = getAlmostFullThreshold();
+  size_t depth = getDepth();
+  if (aft.has_value() && aft.value() > depth)
+    return emitOpError("almost full threshold must be <= FIFO depth");
+
+  if (aet.has_value() && aet.value() > depth)
+    return emitOpError("almost empty threshold must be <= FIFO depth");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // CompRegOp
 
 template <bool ClockEnabled>
@@ -565,7 +640,7 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
           if (arrayCreate->hasOneUse())
             // If the original next value has a single use, we can replace the
             // value directly.
-            rewriter.replaceOp(arrayCreate, {newNextVal});
+            rewriter.replaceOp(arrayCreate, newNextVal);
           else {
             // Otherwise, replace the entire firreg with a new one.
             rewriter.replaceOpWithNewOp<FirRegOp>(op, newNextVal, op.getClk(),
