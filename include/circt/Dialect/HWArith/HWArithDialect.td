@@ -17,8 +17,8 @@ def HWArithDialect : Dialect {
   let name = "hwarith";
   let cppNamespace = "::circt::hwarith";
 
-  // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
-  let usePropertiesForAttributes = 0;
+  // This will be the default after next LLVM bump.
+  let usePropertiesForAttributes = 1;
 
   let summary = "Types and operations for the HWArith dialect";
   let description = [{
