@@ -565,7 +565,7 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
           if (arrayCreate->hasOneUse())
             // If the original next value has a single use, we can replace the
             // value directly.
-            rewriter.replaceOp(arrayCreate, {newNextVal});
+            rewriter.replaceOp(arrayCreate, newNextVal);
           else {
             // Otherwise, replace the entire firreg with a new one.
             rewriter.replaceOpWithNewOp<FirRegOp>(op, newNextVal, op.getClk(),
