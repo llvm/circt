@@ -53,4 +53,30 @@ def HWSpecialize : Pass<"hw-specialize", "mlir::ModuleOp"> {
   }];
 }
 
+def MergeIdenticalPorts : Pass<"hw-merge-identical-ports", "mlir::ModuleOp"> {
+  let summary = "Merges module ports which are always driven by the same inputs";
+  let constructor = "circt::hw::createMergeIdenticalPortsPass()";
+  let description = [{
+    This pass merges ports for any hw::HWMutableModuleLike which, at all of
+    its instantiation points, are always driven by the same inputs.
+    Similarly, it removes any ports of modules which are driven by the
+    same values.
+
+    By doing so, we may reduce the i/o port list of a module, and by extension
+    provide more opportunities for other optimizations such as CSE.
+
+    In case a module intentionally has identically driven ports (i.e. for
+    adhering to an external interface), a module can be marked with a
+    `hw.merge_identical_ports.ignore` unit attribute, making this pass
+    ignore the module.
+
+    This pass currently only optimizes input ports when _all_ instantiations
+    of a module show the same identical-driven pattern. A future
+    improvement/change of the pass could be to duplicate modules to allow
+    for specializing modules based on their instantiation sites - a change which
+    will increase the # of unique modules, but may prove useful if enough
+    optimization sites are exposed.
+  }];
+}
+
 #endif // CIRCT_DIALECT_HW_PASSES_TD
