@@ -460,6 +460,8 @@ public:
 
       // Drop top-level location the diagnostic is reported on.
       locs.erase(d.getLocation());
+      // As well as the location the SourceMgrDiagnosticHandler will use.
+      locs.erase(d.getLocation()->findInstanceOf<FileLineColLoc>());
 
       // Attach additional locations as notes on the diagnostic.
       for (auto l : locs)
