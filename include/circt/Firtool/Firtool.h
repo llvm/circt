@@ -169,7 +169,8 @@ struct FirtoolOptions {
       llvm::cl::init(false), llvm::cl::cat(category)};
 
   llvm::cl::opt<bool> addMuxPragmas{
-      "add-mux-pragmas", llvm::cl::desc("Annotate mux pragmas"),
+      "add-mux-pragmas",
+      llvm::cl::desc("Annotate mux pragmas for memory array access"),
       llvm::cl::init(false), llvm::cl::cat(category)};
 
   llvm::cl::opt<bool> emitChiselAssertsAsSVA{

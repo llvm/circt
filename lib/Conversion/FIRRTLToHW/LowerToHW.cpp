@@ -228,12 +228,11 @@ struct CircuitLoweringState {
   std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN{false};
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
-                       bool emitChiselAssertsAsSVA, bool addMuxPragmas,
+                       bool emitChiselAssertsAsSVA,
                        InstanceGraph *instanceGraph, NLATable *nlaTable)
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
         enableAnnotationWarning(enableAnnotationWarning),
-        emitChiselAssertsAsSVA(emitChiselAssertsAsSVA),
-        addMuxPragmas(addMuxPragmas), nlaTable(nlaTable) {
+        emitChiselAssertsAsSVA(emitChiselAssertsAsSVA), nlaTable(nlaTable) {
     auto *context = circuitOp.getContext();
 
     // Get the testbench output directory.
@@ -327,7 +326,6 @@ private:
   std::mutex annotationPrintingMtx;
 
   const bool emitChiselAssertsAsSVA;
-  const bool addMuxPragmas;
 
   // Records any sv::BindOps that are found during the course of execution.
   // This is unsafe to access directly and should only be used through addBind.
@@ -423,7 +421,6 @@ struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
   void setDisableRegRandomization() { disableRegRandomization = true; }
   void setEnableAnnotationWarning() { enableAnnotationWarning = true; }
   void setEmitChiselAssertAsSVA() { emitChiselAssertsAsSVA = true; }
-  void setAddMuxPragmas() { addMuxPragmas = true; }
 
 private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
@@ -456,15 +453,12 @@ private:
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToHWPass(
     bool enableAnnotationWarning, bool emitChiselAssertsAsSVA,
-    bool addMuxPragmas, bool disableMemRandomization,
-    bool disableRegRandomization) {
+    bool disableMemRandomization, bool disableRegRandomization) {
   auto pass = std::make_unique<FIRRTLModuleLowering>();
   if (enableAnnotationWarning)
     pass->setEnableAnnotationWarning();
   if (emitChiselAssertsAsSVA)
     pass->setEmitChiselAssertAsSVA();
-  if (addMuxPragmas)
-    pass->setAddMuxPragmas();
   if (disableMemRandomization)
     pass->setDisableMemRandomization();
   if (disableRegRandomization)
@@ -495,7 +489,7 @@ void FIRRTLModuleLowering::runOnOperation() {
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
   CircuitLoweringState state(
-      circuit, enableAnnotationWarning, emitChiselAssertsAsSVA, addMuxPragmas,
+      circuit, enableAnnotationWarning, emitChiselAssertsAsSVA,
       &getAnalysis<InstanceGraph>(), &getAnalysis<NLATable>());
 
   SmallVector<FModuleOp, 32> modulesToProcess;
@@ -1546,6 +1540,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                                     FIRRTLBaseType destType,
                                     bool allowTruncate);
   Value createArrayIndexing(Value array, Value index);
+  Value createValueWithMuxAnnotation(Operation *op);
 
   // Create a temporary wire at the current insertion point, and try to
   // eliminate it later as part of lowering post processing.
@@ -1717,6 +1712,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   }
   LogicalResult visitExpr(TailPrimOp op);
   LogicalResult visitExpr(MuxPrimOp op);
+  LogicalResult visitExpr(Mux2CellIntrinsicOp op);
+  LogicalResult visitExpr(Mux4CellIntrinsicOp op);
   LogicalResult visitExpr(MultibitMuxOp op);
   LogicalResult visitExpr(VerbatimExprOp op);
 
@@ -3944,14 +3941,72 @@ LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
                                     true);
 }
 
-// Construct array indexing annotated with vendor pragmas to get
-// better synthesis results. Specifically we annotate pragmas in the following
-// form.
+LogicalResult FIRRTLLowering::visitExpr(Mux2CellIntrinsicOp op) {
+  auto cond = getLoweredValue(op.getSel());
+  auto ifTrue = getLoweredAndExtendedValue(op.getHigh(), op.getType());
+  auto ifFalse = getLoweredAndExtendedValue(op.getLow(), op.getType());
+  if (!cond || !ifTrue || !ifFalse)
+    return failure();
+
+  auto val = builder.create<comb::MuxOp>(ifTrue.getType(), cond, ifTrue,
+                                         ifFalse, true);
+  return setLowering(op, createValueWithMuxAnnotation(val));
+}
+
+LogicalResult FIRRTLLowering::visitExpr(Mux4CellIntrinsicOp op) {
+  auto sel = getLoweredValue(op.getSel());
+  auto v3 = getLoweredAndExtendedValue(op.getV3(), op.getType());
+  auto v2 = getLoweredAndExtendedValue(op.getV2(), op.getType());
+  auto v1 = getLoweredAndExtendedValue(op.getV1(), op.getType());
+  auto v0 = getLoweredAndExtendedValue(op.getV0(), op.getType());
+  if (!sel || !v3 || !v2 || !v1 || !v0)
+    return failure();
+  Value array[] = {v3, v2, v1, v0};
+  auto create = builder.create<hw::ArrayCreateOp>(array);
+  auto val = builder.create<hw::ArrayGetOp>(create, sel);
+  return setLowering(op, createValueWithMuxAnnotation(val));
+}
+
+// Construct a value with vendor specific pragmas to utilize MUX cells.
+// Specifically we annotate pragmas in the following form.
+//
+// For an array indexing:
 // ```
 //   wire GEN;
 //   /* synopsys infer_mux_override */
 //   assign GEN = array[index] /* cadence map_to_mux */;
 // ```
+//
+// For a mux:
+// ```
+//   wire GEN;
+//   /* synopsys infer_mux_override */
+//   assign GEN = sel ? /* cadence map_to_mux */ high : low;
+// ```
+Value FIRRTLLowering::createValueWithMuxAnnotation(Operation *op) {
+  assert(op->getNumResults() == 1 && "only expect a single result");
+  auto val = op->getResult(0);
+  auto valWire = builder.create<sv::WireOp>(val.getType());
+  // Use SV attributes to annotate pragmas.
+  circt::sv::setSVAttributes(
+      op, sv::SVAttributeAttr::get(builder.getContext(), "cadence map_to_mux",
+                                   /*emitAsComment=*/true));
+
+  // Add an unique string attribute to prevent CSE of the assigned value since
+  // if the vaule is used multiple, it would not be inlined into the assignment.
+  op->setAttr(
+      "circt.prevent_cse",
+      builder.getStringAttr("__MUX_PRAGMA_PREVENT_CSE__" +
+                            moduleNamespace.newName(theModule.getName())));
+
+  auto assignOp = builder.create<sv::AssignOp>(valWire, val);
+  sv::setSVAttributes(assignOp,
+                      sv::SVAttributeAttr::get(builder.getContext(),
+                                               "synopsys infer_mux_override",
+                                               /*emitAsComment=*/true));
+  return builder.create<sv::ReadInOutOp>(valWire);
+}
+
 Value FIRRTLLowering::createArrayIndexing(Value array, Value index) {
 
   auto size = hw::type_cast<hw::ArrayType>(array.getType()).getSize();
@@ -3968,29 +4023,7 @@ Value FIRRTLLowering::createArrayIndexing(Value array, Value index) {
     array = builder.create<hw::ArrayConcatOp>(temp2);
   }
 
-  Value inBoundsRead;
-  // If `addMuxPragmas` is enabled, add mux pragmas to array reads.
-  // Don't annotate mux pragmas if the array size is 1 since it causes a
-  // complication failure.
-  if (!circuitState.addMuxPragmas || size <= 1) {
-    inBoundsRead = builder.create<hw::ArrayGetOp>(array, index);
-  } else {
-    auto arrayGet = builder.create<hw::ArrayGetOp>(array, index);
-    auto valWire = builder.create<sv::WireOp>(
-        hw::type_cast<hw::ArrayType>(array.getType()).getElementType());
-    // Use SV attributes to annotate pragmas.
-    circt::sv::setSVAttributes(
-        arrayGet,
-        sv::SVAttributeAttr::get(builder.getContext(), "cadence map_to_mux",
-                                 /*emitAsComment=*/true));
-
-    auto assignOp = builder.create<sv::AssignOp>(valWire, arrayGet);
-    sv::setSVAttributes(assignOp,
-                        sv::SVAttributeAttr::get(builder.getContext(),
-                                                 "synopsys infer_mux_override",
-                                                 /*emitAsComment=*/true));
-    inBoundsRead = builder.create<sv::ReadInOutOp>(valWire);
-  }
+  Value inBoundsRead = builder.create<hw::ArrayGetOp>(array, index);
 
   return inBoundsRead;
 }

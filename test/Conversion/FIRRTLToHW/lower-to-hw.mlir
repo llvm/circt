@@ -1649,4 +1649,22 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK-NEXT: hw.output %[[OR]], %[[AND]], %[[XOR]] : !hw.array<2xi1>, !hw.array<2xi1>, !hw.array<2xi1>
   }
+  // CHECK-LABEL: @MuxIntrinsics 
+  firrtl.module @MuxIntrinsics(in %sel1: !firrtl.uint<1>, in %sel2: !firrtl.uint<2>, in %v3: !firrtl.uint<32>, in %v2: !firrtl.uint<32>, in %v1: !firrtl.uint<32>, in %v0: !firrtl.uint<32>, out %out1: !firrtl.uint<32>, out %out2: !firrtl.uint<32>) attributes {convention = #firrtl<convention scalarized>} {
+    %0 = firrtl.int.mux2cell(%sel1, %v1, %v0) : (!firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>
+    firrtl.strictconnect %out1, %0 : !firrtl.uint<32>
+    // CHECK-NEXT: %0 = comb.mux bin %sel1, %v1, %v0 {circt.prevent_cse = "__MUX_PRAGMA_PREVENT_CSE__MuxIntrinsics", sv.attributes = [#sv.attribute<"cadence map_to_mux", emitAsComment>]} : i32
+    // CHECK-NEXT: %1 = sv.wire : !hw.inout<i32>
+    // CHECK-NEXT: sv.assign %1, %0 {sv.attributes = [#sv.attribute<"synopsys infer_mux_override", emitAsComment>]} : i32
+    // CHECK-NEXT: %2 = sv.read_inout %1 : !hw.inout<i32>
+
+    %1 = firrtl.int.mux4cell(%sel2, %v3, %v2, %v1, %v0) : (!firrtl.uint<2>, !firrtl.uint<32>, !firrtl.uint<32>, !firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>
+    firrtl.strictconnect %out2, %1 : !firrtl.uint<32>
+    // CHECK-NEXT: %3 = hw.array_create %v3, %v2, %v1, %v0 : i32
+    // CHECK-NEXT: %4 = hw.array_get %3[%sel2] {circt.prevent_cse = "__MUX_PRAGMA_PREVENT_CSE__MuxIntrinsics_0", sv.attributes = [#sv.attribute<"cadence map_to_mux", emitAsComment>]} : !hw.array<4xi32>, i2
+    // CHECK-NEXT: %5 = sv.wire : !hw.inout<i32>
+    // CHECK-NEXT: sv.assign %5, %4 {sv.attributes = [#sv.attribute<"synopsys infer_mux_override", emitAsComment>]} : i32
+    // CHECK-NEXT: %6 = sv.read_inout %5 : !hw.inout<i32>
+    // CHECK-NEXT: hw.output %2, %6 : i32, i32
+  }
 }
