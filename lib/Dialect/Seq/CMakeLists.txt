@@ -24,6 +24,7 @@ add_circt_dialect_library(CIRCTSeq
   CIRCTSV
   MLIRSeqIncGen
   MLIRSeqEnumsIncGen
+  MLIRSeqAttributesIncGen
 
   LINK_COMPONENTS
   Support

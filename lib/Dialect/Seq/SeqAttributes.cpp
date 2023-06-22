@@ -17,3 +17,11 @@ using namespace seq;
 
 #include "circt/Dialect/Seq/SeqEnums.cpp.inc"
 #define GET_ATTRDEF_CLASSES
+#include "circt/Dialect/Seq/SeqAttributes.cpp.inc"
+
+void SeqDialect::registerAttributes() {
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "circt/Dialect/Seq/SeqAttributes.cpp.inc"
+      >();
+}
