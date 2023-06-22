@@ -16,9 +16,9 @@
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "circt/Support/LLVM.h"
-#include "llvm/ADT/TypeSwitch.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/Types.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
 namespace firrtl {
@@ -538,7 +538,6 @@ private:
   /// A flag detailing if we have already found a match.
   bool foundMatch = false;
 };
-
 
 } // namespace firrtl
 } // namespace circt
