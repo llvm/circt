@@ -433,6 +433,21 @@ BaseTy type_cast(Type type) { // NOLINT(readability-identifier-naming)
   return cast<BaseTy>(type);
 }
 
+template <typename BaseTy>
+BaseTy type_dyn_cast(Type type) { // NOLINT(readability-identifier-naming)
+  if (type_isa<BaseTy>(type))
+    return type_cast<BaseTy>(type);
+  return {};
+}
+
+template <typename BaseTy>
+BaseTy
+type_dyn_cast_or_null(Type type) { // NOLINT(readability-identifier-naming)
+  if (type_isa_and_nonnull<BaseTy>(type))
+    return type_cast<BaseTy>(type);
+  return {};
+}
+
 } // namespace firrtl
 } // namespace circt
 
