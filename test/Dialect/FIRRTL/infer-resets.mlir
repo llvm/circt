@@ -453,17 +453,17 @@ firrtl.circuit "Top" {
   // CHECK-LABEL: firrtl.module @Top
   firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) attributes {
     portAnnotations = [[],[{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
-    // CHECK: %c0_ui = firrtl.constant 0 : !firrtl.uint
+    // CHECK: %c0_ui = firrtl.constant 0 : !firrtl.const.uint
     // CHECK: %reg_uint = firrtl.regreset %clock, %reset, %c0_ui
     %reg_uint = firrtl.reg %clock : !firrtl.clock, !firrtl.uint
-    // CHECK: %c0_si = firrtl.constant 0 : !firrtl.sint
+    // CHECK: %c0_si = firrtl.constant 0 : !firrtl.const.sint
     // CHECK: %reg_sint = firrtl.regreset %clock, %reset, %c0_si
     %reg_sint = firrtl.reg %clock : !firrtl.clock, !firrtl.sint
-    // CHECK: %0 = firrtl.wire : !firrtl.bundle<a: uint<8>, b: bundle<x: uint<8>, y: uint<8>>>
-    // CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
+    // CHECK: %0 = firrtl.wire : !firrtl.const.bundle<a: uint<8>, b: bundle<x: uint<8>, y: uint<8>>>
+    // CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.const.uint<8>
     // CHECK: %1 = firrtl.subfield %0[a]
     // CHECK: firrtl.strictconnect %1, %c0_ui8
-    // CHECK: %2 = firrtl.wire : !firrtl.bundle<x: uint<8>, y: uint<8>>
+    // CHECK: %2 = firrtl.wire : !firrtl.const.bundle<x: uint<8>, y: uint<8>>
     // CHECK: %3 = firrtl.subfield %2[x]
     // CHECK: firrtl.strictconnect %3, %c0_ui8
     // CHECK: %4 = firrtl.subfield %2[y]
@@ -472,8 +472,8 @@ firrtl.circuit "Top" {
     // CHECK: firrtl.strictconnect %5, %2
     // CHECK: %reg_bundle = firrtl.regreset %clock, %reset, %0
     %reg_bundle = firrtl.reg %clock : !firrtl.clock, !firrtl.bundle<a: uint<8>, b: bundle<x: uint<8>, y: uint<8>>>
-    // CHECK: %6 = firrtl.wire : !firrtl.vector<uint<8>, 4>
-    // CHECK: %c0_ui8_0 = firrtl.constant 0 : !firrtl.uint<8>
+    // CHECK: %6 = firrtl.wire : !firrtl.const.vector<uint<8>, 4>
+    // CHECK: %c0_ui8_0 = firrtl.constant 0 : !firrtl.const.uint<8>
     // CHECK: %7 = firrtl.subindex %6[0]
     // CHECK: firrtl.strictconnect %7, %c0_ui8_0
     // CHECK: %8 = firrtl.subindex %6[1]
@@ -762,7 +762,7 @@ firrtl.circuit "SubAccess" {
     %reg6 = firrtl.regreset %clock, %init, %c1_ui8 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
     %2 = firrtl.subaccess %arr[%reg6] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<2>
     firrtl.strictconnect %2, %in : !firrtl.uint<8>
-    // CHECK:  %reg6 = firrtl.regreset %clock, %extraReset, %c0_ui2  : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<2>, !firrtl.uint<2>
+    // CHECK:  %reg6 = firrtl.regreset %clock, %extraReset, %c0_ui2  : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.uint<2>, !firrtl.uint<2>
     // CHECK-NEXT: %0 = firrtl.mux(%init, %c1_ui2, %reg6)
     // CHECK: firrtl.strictconnect %reg6, %0
     // CHECK-NEXT:  %[[v0:.+]] = firrtl.subaccess %arr[%reg6] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<2>
@@ -780,7 +780,7 @@ firrtl.circuit "ZeroWidthRegister" {
   firrtl.module @ZeroWidthRegister(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) attributes {
     portAnnotations = [[],[{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
     %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<0>
-    // CHECK-NEXT: [[TMP:%.+]] = firrtl.constant 0 : !firrtl.uint<0>
+    // CHECK-NEXT: [[TMP:%.+]] = firrtl.constant 0 : !firrtl.const.uint<0>
     // CHECK-NEXT: %reg = firrtl.regreset %clock, %reset, [[TMP]]
   }
 }
