@@ -376,7 +376,7 @@ namespace firrtl {
 //===--------------------------------------------------------------------===//
 
 /// A struct to check if there is a type derived from FIRRTLBaseType.
-/// `ContainBaseSubTypes<BaseTy>::value` returns true if `BaseTy` is a derived
+/// `ContainBaseSubTypes<BaseTy>::value` returns true if `BaseTy` is derived
 /// from `FIRRTLBaseType` and not `FIRRTLBaseType` itself.
 template <typename head, typename... tail>
 struct ContainBaseSubTypes {
@@ -449,6 +449,7 @@ type_dyn_cast_or_null(Type type) { // NOLINT(readability-identifier-naming)
   return {};
 }
 
+<<<<<<< HEAD
 //===--------------------------------------------------------------------===//
 // Type alias aware TypeSwitch.
 //===--------------------------------------------------------------------===//
@@ -539,6 +540,8 @@ private:
   bool foundMatch = false;
 };
 
+=======
+>>>>>>> a4aabbca0d1961054dc4353c4f3c3fe8cb57d6ea
 } // namespace firrtl
 } // namespace circt
 
