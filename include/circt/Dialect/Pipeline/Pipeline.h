@@ -38,6 +38,23 @@
 namespace circt {
 namespace pipeline {
 class StageOp;
+class ScheduledPipelineOp;
+
+// Determines the stage which 'op' resides in within the pipeline. This is
+// useful for analysis of the pipeline, wherein ops may reside in nested
+// regions within different stages of the pipeline.
+Block *getParentStageInPipeline(ScheduledPipelineOp pipeline, Operation *op);
+
+// Determines the stage which 'block' resides in within the pipeline. This is
+// useful for analysis of the pipeline, wherein blocks may reside in nested
+// regions within different stages of the pipeline.
+Block *getParentStageInPipeline(ScheduledPipelineOp pipeline, Block *block);
+
+// Determines the stage which 'v' resides in within the pipeline. This is
+// useful for analysis of the pipeline, wherein values may reside in nested
+// regions within different stages of the pipeline.
+Block *getParentStageInPipeline(ScheduledPipelineOp pipeline, Value v);
+
 } // namespace pipeline
 } // namespace circt
 

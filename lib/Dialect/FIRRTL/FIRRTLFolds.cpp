@@ -1237,28 +1237,29 @@ static void replaceWithBits(Operation *op, Value value, unsigned hiBit,
   rewriter.replaceOp(op, value);
 }
 
-OpFoldResult MuxPrimOp::fold(FoldAdaptor adaptor) {
-
+template <typename OpTy>
+static OpFoldResult foldMux(OpTy op, typename OpTy::FoldAdaptor adaptor) {
   // mux : UInt<0> -> 0
-  if (getType().getBitWidthOrSentinel() == 0)
-    return getIntAttr(getType(), APInt(0, 0, getType().isSignedInteger()));
+  if (op.getType().getBitWidthOrSentinel() == 0)
+    return getIntAttr(op.getType(),
+                      APInt(0, 0, op.getType().isSignedInteger()));
 
   // mux(cond, x, x) -> x
-  if (getHigh() == getLow())
-    return getHigh();
+  if (op.getHigh() == op.getLow())
+    return op.getHigh();
 
   // The following folds require that the result has a known width. Otherwise
   // the mux requires an additional padding operation to be inserted, which is
   // not possible in a fold.
-  if (getType().getBitWidthOrSentinel() < 0)
+  if (op.getType().getBitWidthOrSentinel() < 0)
     return {};
 
   // mux(0/1, x, y) -> x or y
   if (auto cond = getConstant(adaptor.getSel())) {
-    if (cond->isZero() && getLow().getType() == getType())
-      return getLow();
-    if (!cond->isZero() && getHigh().getType() == getType())
-      return getHigh();
+    if (cond->isZero() && op.getLow().getType() == op.getType())
+      return op.getLow();
+    if (!cond->isZero() && op.getHigh().getType() == op.getType())
+      return op.getHigh();
   }
 
   // mux(cond, x, cst)
@@ -1268,11 +1269,11 @@ OpFoldResult MuxPrimOp::fold(FoldAdaptor adaptor) {
       // mux(cond, cst, cst) -> cst
       if (highCst->getBitWidth() == lowCst->getBitWidth() &&
           *highCst == *lowCst)
-        return getIntAttr(getType(), *highCst);
+        return getIntAttr(op.getType(), *highCst);
       // mux(cond, 1, 0) -> cond
       if (highCst->isOne() && lowCst->isZero() &&
-          getType() == getSel().getType())
-        return getSel();
+          op.getType() == op.getSel().getType())
+        return op.getSel();
 
       // TODO: x ? ~0 : 0 -> sext(x)
       // TODO: "x ? c1 : c2" -> many tricks
@@ -1283,6 +1284,16 @@ OpFoldResult MuxPrimOp::fold(FoldAdaptor adaptor) {
   // TODO: "x ? c1 : y" -> "~x ? y : c1"
   return {};
 }
+
+OpFoldResult MuxPrimOp::fold(FoldAdaptor adaptor) {
+  return foldMux(*this, adaptor);
+}
+
+OpFoldResult Mux2CellIntrinsicOp::fold(FoldAdaptor adaptor) {
+  return foldMux(*this, adaptor);
+}
+
+OpFoldResult Mux4CellIntrinsicOp::fold(FoldAdaptor adaptor) { return {}; }
 
 namespace {
 

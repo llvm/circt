@@ -4052,6 +4052,38 @@ FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
                             loc);
 }
 
+FIRRTLType Mux2CellIntrinsicOp::inferReturnType(ValueRange operands,
+                                                ArrayRef<NamedAttribute> attrs,
+                                                std::optional<Location> loc) {
+  auto highType = dyn_cast<FIRRTLBaseType>(operands[1].getType());
+  auto lowType = dyn_cast<FIRRTLBaseType>(operands[2].getType());
+  if (!highType || !lowType)
+    return emitInferRetTypeError(loc, "operands must be base type");
+  return inferMuxReturnType(highType, lowType, isConst(operands[0].getType()),
+                            loc);
+}
+
+FIRRTLType Mux4CellIntrinsicOp::inferReturnType(ValueRange operands,
+                                                ArrayRef<NamedAttribute> attrs,
+                                                std::optional<Location> loc) {
+  SmallVector<FIRRTLBaseType> types;
+  FIRRTLBaseType result;
+  for (unsigned i = 1; i < 5; i++) {
+    types.push_back(dyn_cast<FIRRTLBaseType>(operands[i].getType()));
+    if (!types.back())
+      return emitInferRetTypeError(loc, "operands must be base type");
+    if (result) {
+      result = inferMuxReturnType(result, types.back(),
+                                  isConst(operands[0].getType()), loc);
+      if (!result)
+        return result;
+    } else {
+      result = types.back();
+    }
+  }
+  return result;
+}
+
 FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
                                       std::optional<Location> loc) {
@@ -4504,6 +4536,12 @@ void MultibitMuxOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void MuxPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void Mux4CellIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void Mux2CellIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void NEQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

@@ -66,14 +66,14 @@ class CoolPolynomialCompute(Module):
 
 
 @modparams
-def ExternWithParams(a, b):
+def ExternWithParams(A: str, B: int):
 
   typedef1 = types.struct({"a": types.i1}, "exTypedef")
 
   class M(Module):
     module_name = "parameterized_extern"
     ignored_input = Input(types.i1)
-    used_input = Input(types.i4)
+    used_input = Input(types.int(B))
 
     @property
     def instance_name(self):
@@ -105,7 +105,7 @@ class PolynomialSystem(Module):
     CoolPolynomialCompute([4, 42], x=23)
 
     w1 = Wire(types.i4)
-    m = ExternWithParams({"foo": "bar"}, 3)(ignored_input=None, used_input=w1)
+    m = ExternWithParams("foo", 4)(ignored_input=None, used_input=w1)
     m.name = "pexternInst"
     w1.assign(0)
 
@@ -128,14 +128,14 @@ poly.print()
 # CHECK:         %example2_1.y = msft.instance @example2_1 @PolyComputeForCoeff__1__2__3__4__5_(%example.y) : (i32) -> i32
 # CHECK:         %CoolPolynomialCompute.y = msft.instance @CoolPolynomialCompute @supercooldevice(%{{.+}}) : (i32) -> i32
 # CHECK:         [[R0:%.+]] = hw.bitcast %false : (i1) -> i1
-# CHECK:         msft.instance @singleton @parameterized_extern([[R0]], %c0_i4)  : (i1, i4) -> ()
+# CHECK:         msft.instance @singleton @parameterized_extern(%0, %c0_i4) <A: none = "foo", B: i64 = 4> : (i1, i4) -> ()
 # CHECK:         %c0_i4 = hw.constant 0 : i4
 # CHECK:         msft.output %example.y : i32
 # CHECK:       }
 # CHECK:       msft.module @PolyComputeForCoeff__62__42__6_ {coefficients = {coeff = [62, 42, 6]}} (%x: i32) -> (y: i32)
 # CHECK:       msft.module @PolyComputeForCoeff__1__2__3__4__5_ {coefficients = {coeff = [1, 2, 3, 4, 5]}} (%x: i32) -> (y: i32)
 # CHECK:       msft.module.extern @supercooldevice(%x: i32) -> (y: i32) attributes {verilogName = "supercooldevice"}
-# CHECK:       msft.module.extern @parameterized_extern(%ignored_input: i1, %used_input: i4) attributes {verilogName = "parameterized_extern"}
+# CHECK:       msft.module.extern @parameterized_extern<A: none, B: i64>(%ignored_input: i1, %used_input: i4) attributes {verilogName = "parameterized_extern"}
 
 print("Generating rest...")
 poly.generate()

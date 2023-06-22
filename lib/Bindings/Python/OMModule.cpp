@@ -8,11 +8,9 @@
 
 #include "DialectModules.h"
 #include "circt-c/Dialect/OM.h"
-#include "circt/Support/LLVM.h"
 #include "mlir-c/BuiltinAttributes.h"
 #include "mlir-c/IR.h"
 #include "mlir/Bindings/Python/PybindAdaptors.h"
-#include "mlir/CAPI/IR.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 namespace py = pybind11;
@@ -58,14 +56,17 @@ struct Object {
 
   // Get a list with the names of all the fields in the Object.
   std::vector<std::string> getFieldNames() {
-    ArrayAttr fieldNames =
-        cast<ArrayAttr>(unwrap(omEvaluatorObjectGetFieldNames(object)));
+    MlirAttribute fieldNames = omEvaluatorObjectGetFieldNames(object);
+    intptr_t numFieldNames = mlirArrayAttrGetNumElements(fieldNames);
 
-    std::vector<std::string> slots;
-    for (auto fieldName : fieldNames.getAsRange<StringAttr>())
-      slots.push_back(fieldName.str());
+    std::vector<std::string> pyFieldNames;
+    for (intptr_t i = 0; i < numFieldNames; ++i) {
+      MlirAttribute fieldName = mlirArrayAttrGetElement(fieldNames, i);
+      MlirStringRef fieldNameStr = mlirStringAttrGetValue(fieldName);
+      pyFieldNames.emplace_back(fieldNameStr.data, fieldNameStr.length);
+    }
 
-    return slots;
+    return pyFieldNames;
   }
 
 private:

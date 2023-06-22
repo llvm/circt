@@ -1289,6 +1289,15 @@ firrtl.module private @is1436_FOO() {
     firrtl.strictconnect %c_2, %2 : !firrtl.vector<uint<1>, 1>
   }
 
+  // CHECK-LABEL: firrtl.module @MuxInt
+  firrtl.module @MuxInt(in %sel1: !firrtl.uint<1>, in %sel2: !firrtl.uint<2>, in %v1: !firrtl.bundle<a: uint<5>>, in %v0: !firrtl.bundle<a: uint<5>>, out %out1: !firrtl.bundle<a: uint<5>>, out %out2: !firrtl.bundle<a: uint<5>>) {
+    // CHECK: firrtl.int.mux4cell(%sel2, %v1_a, %v0_a, %v1_a, %v0_a) : (!firrtl.uint<2>, !firrtl.uint<5>, !firrtl.uint<5>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5>
+    %0 = firrtl.int.mux4cell(%sel2, %v1, %v0, %v1, %v0) : (!firrtl.uint<2>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>) -> !firrtl.bundle<a: uint<5>>
+    firrtl.strictconnect %out1, %0 : !firrtl.bundle<a: uint<5>>
+    // CHECK: firrtl.int.mux2cell(%sel1, %v1_a, %v0_a) : (!firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5>
+    %1 = firrtl.int.mux2cell(%sel1, %v1, %v0) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>) -> !firrtl.bundle<a: uint<5>>
+    firrtl.strictconnect %out2, %0 : !firrtl.bundle<a: uint<5>>
+  }
 } // CIRCUIT
 
 // Check that we don't lose the DontTouchAnnotation when it is not the last

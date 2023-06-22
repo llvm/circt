@@ -23,6 +23,7 @@
 #include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
+#include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/Transforms/Passes.h"
@@ -380,6 +381,9 @@ static LogicalResult executeArcilator(MLIRContext &context) {
                   mlir::cf::ControlFlowDialect, mlir::LLVM::LLVMDialect>();
 
   arc::initAllExternalInterfaces(registry);
+
+  mlir::func::registerInlinerExtension(registry);
+
   mlir::registerBuiltinDialectTranslation(registry);
   mlir::registerLLVMDialectTranslation(registry);
   context.appendDialectRegistry(registry);

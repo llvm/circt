@@ -478,7 +478,7 @@ firrtl.module @Mux(in %in: !firrtl.uint<4>,
                    out %out3: !firrtl.uint<1>,
                    out %out4: !firrtl.uint<4>) {
   // CHECK: firrtl.strictconnect %out, %in
-  %0 = firrtl.mux (%cond, %in, %in) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  %0 = firrtl.int.mux2cell (%cond, %in, %in) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %0 : !firrtl.uint<4>, !firrtl.uint<4>
 
   // CHECK: firrtl.strictconnect %out, %c7_ui4

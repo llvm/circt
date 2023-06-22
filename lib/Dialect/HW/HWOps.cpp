@@ -2330,6 +2330,13 @@ LogicalResult StructCreateOp::verify() {
 }
 
 OpFoldResult StructCreateOp::fold(FoldAdaptor adaptor) {
+  // struct_create(struct_explode(x)) => x
+  if (!getInput().empty())
+    if (auto explodeOp = getInput()[0].getDefiningOp<StructExplodeOp>();
+        explodeOp && getInput() == explodeOp.getResults() &&
+        getResult().getType() == explodeOp.getInput().getType())
+      return explodeOp.getInput();
+
   auto inputs = adaptor.getInput();
   if (llvm::any_of(inputs, [](Attribute attr) { return !attr; }))
     return {};

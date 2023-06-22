@@ -128,7 +128,7 @@ public:
       }
     }
 
-    rewriter.replaceOp(reg, {regVal});
+    rewriter.replaceOp(reg, regVal);
     return success();
   }
 

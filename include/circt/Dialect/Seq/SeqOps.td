@@ -87,6 +87,10 @@ def CompRegClockEnabledOp : SeqOp<"compreg.ce",
   ];
 }
 
+//===----------------------------------------------------------------------===//
+// FIRRTL-flavored register
+//===----------------------------------------------------------------------===//
+
 def FirRegOp : SeqOp<"firreg",
     [Pure, Clocked, Resettable,
      AllTypesMatch<["next", "data"/*, "resetValue"*/]>,
@@ -153,6 +157,47 @@ def FirRegOp : SeqOp<"firreg",
     /// Check whether the register has a reset value.
     bool hasReset() { return !!getReset(); }
   }];
+}
+
+def FIFOOp : SeqOp<"fifo", [
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+    TypesMatchWith<"Input type should match output type",
+      "input", "output", [{ $_self }]>,
+    AttrSizedResultSegments
+  ]> {
+  let summary = "A high-level FIFO operation";
+  let description = [{
+    This operation represents a high-level abstraction of a FIFO. Access to the
+    FIFO is structural, and thus may be composed with other core RTL dialect
+    operations.
+    The fifo operation is configurable with the following parameters:
+    1. Depth (cycles)
+    2. Almost full/empty thresholds (optional). If not provided, these will
+       be asserted when the FIFO is full/empty.
+
+    Like `seq.hlmem` there are no guarantees that all possible fifo configuration
+    are able to be lowered. Available lowering passes will pattern match on the
+    requested fifo configuration and attempt to provide a legal lowering.
+  }];
+
+  let arguments = (ins
+    HWIntegerType:$input, I1:$rdEn, I1:$wrEn, I1:$clk, I1:$rst,
+    ConfinedAttr<I64Attr, [IntMinValue<1>]>:$depth,
+    OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<0>]>>:$almostFullThreshold,
+    OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<0>]>>:$almostEmptyThreshold
+  );
+
+  let results = (outs
+    HWIntegerType:$output, I1:$full, I1:$empty, Optional<I1>:$almostFull,
+    Optional<I1>:$almostEmpty);
+
+  let assemblyFormat = [{
+    `depth` $depth
+    custom<FIFOAFThreshold>($almostFullThreshold, type($almostFull))
+    custom<FIFOAEThreshold>($almostEmptyThreshold, type($almostEmpty))
+    `in` $input `rdEn` $rdEn `wrEn` $wrEn `clk` $clk `rst` $rst attr-dict `:` type($input)
+  }];
+  let hasVerifier = 1;
 }
 
 def HLMemOp : SeqOp<"hlmem", [
@@ -254,4 +299,163 @@ def ClockGateOp : SeqOp<"clock_gate", [Pure]> {
   let assemblyFormat = [{
     $input `,` $enable (`,` $test_enable^)? attr-dict
   }];
+}
+
+//===----------------------------------------------------------------------===//
+// FIRRTL-flavored memory
+//===----------------------------------------------------------------------===//
+
+def FirMemOp : SeqOp<"firmem", [
+  MemoryEffects<[MemAlloc]>,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+]> {
+  let summary = "A FIRRTL-flavored memory";
+  let description = [{
+    The `seq.firmem` op represents memories lowered from the FIRRTL dialect. It
+    is used to capture some of the peculiarities of what FIRRTL expects from
+    memories, while still representing them at the HW dialect level.
+
+    A `seq.firmem` declares the memory and captures the memory-level parameters
+    such as width and depth or how read/write collisions are resolved. The read,
+    write, and read-write ports are expressed as separate operations that take
+    the declared memory as an operand.
+  }];
+
+  let arguments = (ins
+    I32Attr:$readLatency,
+    I32Attr:$writeLatency,
+    RUWAttr:$ruw,
+    WUWAttr:$wuw,
+    OptionalAttr<StrAttr>:$name,
+    OptionalAttr<SymbolNameAttr>:$inner_sym,
+    OptionalAttr<FirMemInitAttr>:$init,
+    OptionalAttr<StrAttr>:$prefix,
+    OptionalAttr<AnyAttr>:$output_file
+  );
+  let results = (outs FirMemType:$memory);
+
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name)
+    $readLatency `,` $writeLatency `,` $ruw `,` $wuw
+    attr-dict `:` type($memory)
+  }];
+}
+
+class AddressMatchesFirMem<string memoryValue, string addressValue> :
+  TypesMatchWith<"address type should match clog2 of memory depth",
+    memoryValue, addressValue, [{
+      IntegerType::get(
+        $_self.getContext(),
+        std::max(1U, llvm::Log2_64_Ceil(cast<FirMemType>($_self).getDepth())))
+    }]>;
+
+class DataMatchesFirMem<string memoryValue, string dataValue> :
+  TypesMatchWith<"data type should match memory width",
+    memoryValue, dataValue, [{
+      IntegerType::get(
+        $_self.getContext(),
+        std::max(1U, cast<FirMemType>($_self).getWidth()))
+    }]>;
+
+def FirMemReadOp : SeqOp<"firmem.read_port", [
+  MemoryEffects<[MemRead]>,
+  AddressMatchesFirMem<"memory", "address">,
+  DataMatchesFirMem<"memory", "data">
+]> {
+  let summary = "A memory read port";
+  let description = [{
+    The `seq.firmem.read_port` op represents a read port on a `seq.firmem`
+    memory. It takes the memory as an operand, together with the address to
+    be read, the clock on which the read is synchronized, and an optional
+    enable. Omitting the enable operand has the same effect as passing a
+    constant `true` to it.
+  }];
+
+  let arguments = (ins
+    FirMemType:$memory,
+    AnySignlessInteger:$address,
+    I1:$clock,
+    Optional<I1>:$enable
+  );
+  let results = (outs AnySignlessInteger:$data);
+  let assemblyFormat = [{
+    $memory `[` $address `]` `,` `clock` $clock
+    (`enable` $enable^)?
+    attr-dict `:` type($memory)
+  }];
+  let hasCanonicalizeMethod = 1;
+}
+
+def FirMemWriteOp : SeqOp<"firmem.write_port", [
+  MemoryEffects<[MemWrite]>,
+  AddressMatchesFirMem<"memory", "address">,
+  DataMatchesFirMem<"memory", "data">,
+  AttrSizedOperandSegments
+]> {
+  let summary = "A memory write port";
+  let description = [{
+    The `seq.firmem.write_port` op represents a write port on a `seq.firmem`
+    memory. It takes the memory as an operand, together with the address and
+    data to be written, the clock on which the write is synchronized, an
+    optional enable, and and optional write mask. Omitting the enable operand
+    has the same effect as passing a constant `true` to it. Omitting the write
+    mask operand has the same effect as passing an all-ones value to it. A write
+    mask operand can only be present if the `seq.firmem` specifies a mask width;
+    otherwise it must be omitted.
+  }];
+
+  let arguments = (ins
+    FirMemType:$memory,
+    AnySignlessInteger:$address,
+    I1:$clock,
+    Optional<I1>:$enable,
+    AnySignlessInteger:$data,
+    Optional<AnySignlessInteger>:$mask
+  );
+  let assemblyFormat = [{
+    $memory `[` $address `]` `=` $data `,` `clock` $clock
+    (`enable` $enable^)? (`mask` $mask^)?
+    attr-dict `:` type($memory) (`,` type($mask)^)?
+  }];
+  let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
+}
+
+def FirMemReadWriteOp : SeqOp<"firmem.read_write_port", [
+  MemoryEffects<[MemRead, MemWrite]>,
+  AddressMatchesFirMem<"memory", "address">,
+  DataMatchesFirMem<"memory", "writeData">,
+  DataMatchesFirMem<"memory", "readData">,
+  AttrSizedOperandSegments
+]> {
+  let summary = "A memory read-write port";
+  let description = [{
+    The `seq.firmem.read_write_port` op represents a read-write port on a
+    `seq.firmem` memory. It takes the memory as an operand, together with the
+    address and data to be written, a mode operand indicating whether the port
+    should perform a read (`mode=0`) or a write (`mode=1`), the clock on which
+    the read and write is synchronized, an optional enable, and and optional
+    write mask. Omitting the enable operand has the same effect as passing a
+    constant `true` to it. Omitting the write mask operand has the same effect
+    as passing an all-ones value to it. A write mask operand can only be present
+    if the `seq.firmem` specifies a mask width; otherwise it must be omitted.
+  }];
+
+  let arguments = (ins
+    FirMemType:$memory,
+    AnySignlessInteger:$address,
+    I1:$clock,
+    Optional<I1>:$enable,
+    AnySignlessInteger:$writeData,
+    I1:$mode,
+    Optional<AnySignlessInteger>:$mask
+  );
+  let results = (outs AnySignlessInteger:$readData);
+  let assemblyFormat = [{
+    $memory `[` $address `]` `=` $writeData `if` $mode `,` `clock` $clock
+    (`enable` $enable^)? (`mask` $mask^)?
+    attr-dict `:` type($memory) (`,` type($mask)^)?
+  }];
+  let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
 }

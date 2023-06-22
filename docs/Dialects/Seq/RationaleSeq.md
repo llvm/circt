@@ -298,3 +298,28 @@ specialization is needed) attached to the memory symbol.
   ```mlir
   %mem = seq.debug @myMemory : !seq.hlmem<4xi32>
   ```
+
+## The FIFO operation
+The `seq.fifo` operation intends to capture the semantics of a FIFO which
+eventually map to some form of on-chip resources. By having a FIFO abstraction,
+we provide an abstraction that can be targeted for target-specialized implementations,
+as well as default behavioral lowerings (based on `seq.hlmem`).
+
+The FIFO interface consists of:
+- **Inputs**:
+  - clock, reset
+  - input data
+  - read/write enable
+- **Outputs**:
+  - output data
+  - full, empty flags
+  - optional almost full, almost empty flags
+
+The fifo operation is configurable with the following parameters:
+1. Depth (cycles)
+2. Differing in- and output widths
+3. Almost empty/full thresholds (optional)
+
+Like `seq.hlmem` there are no guarantees that all possible fifo configuration
+are able to be lowered. Available lowering passes will pattern match on the
+requested fifo configuration and attempt to provide a legal lowering.

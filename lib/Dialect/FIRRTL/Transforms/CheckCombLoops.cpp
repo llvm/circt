@@ -388,7 +388,7 @@ public:
             cast<BlockArgument>(modOutPort.getValue()).getArgNumber();
         if (modOutPort.getFieldID() == 0) {
           children.push_back(inst.getResult(outPortNum));
-          return;
+          continue;
         }
         FieldRef instanceOutPort(inst.getResult(outPortNum),
                                  modOutPort.getFieldID());
