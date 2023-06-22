@@ -1289,11 +1289,11 @@ OpFoldResult MuxPrimOp::fold(FoldAdaptor adaptor) {
   return foldMux(*this, adaptor);
 }
 
-OpFoldResult MuxCell2IntrinsicOp::fold(FoldAdaptor adaptor) {
+OpFoldResult Mux2CellIntrinsicOp::fold(FoldAdaptor adaptor) {
   return foldMux(*this, adaptor);
 }
 
-OpFoldResult MuxCell4IntrinsicOp::fold(FoldAdaptor adaptor) { return {}; }
+OpFoldResult Mux4CellIntrinsicOp::fold(FoldAdaptor adaptor) { return {}; }
 
 namespace {
 

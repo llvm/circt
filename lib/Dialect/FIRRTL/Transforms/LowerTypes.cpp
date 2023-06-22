@@ -397,8 +397,8 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitExpr(ElementwiseXorPrimOp op);
   bool visitExpr(MultibitMuxOp op);
   bool visitExpr(MuxPrimOp op);
-  bool visitExpr(MuxCell2IntrinsicOp op);
-  bool visitExpr(MuxCell4IntrinsicOp op);
+  bool visitExpr(Mux2CellIntrinsicOp op);
+  bool visitExpr(Mux4CellIntrinsicOp op);
   bool visitExpr(mlir::UnrealizedConversionCastOp op);
   bool visitExpr(BitCastOp op);
   bool visitExpr(RefSendOp op);
@@ -1181,25 +1181,25 @@ bool TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
 }
 
 // Expand muxes of aggregates
-bool TypeLoweringVisitor::visitExpr(MuxCell2IntrinsicOp op) {
+bool TypeLoweringVisitor::visitExpr(Mux2CellIntrinsicOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     auto high = getSubWhatever(op.getHigh(), field.index);
     auto low = getSubWhatever(op.getLow(), field.index);
-    return builder->create<MuxCell2IntrinsicOp>(op.getSel(), high, low);
+    return builder->create<Mux2CellIntrinsicOp>(op.getSel(), high, low);
   };
   return lowerProducer(op, clone);
 }
 
 // Expand muxes of aggregates
-bool TypeLoweringVisitor::visitExpr(MuxCell4IntrinsicOp op) {
+bool TypeLoweringVisitor::visitExpr(Mux4CellIntrinsicOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     auto v3 = getSubWhatever(op.getV3(), field.index);
     auto v2 = getSubWhatever(op.getV2(), field.index);
     auto v1 = getSubWhatever(op.getV1(), field.index);
     auto v0 = getSubWhatever(op.getV0(), field.index);
-    return builder->create<MuxCell4IntrinsicOp>(op.getSel(), v3, v2, v1, v0);
+    return builder->create<Mux4CellIntrinsicOp>(op.getSel(), v3, v2, v1, v0);
   };
   return lowerProducer(op, clone);
 }

@@ -805,7 +805,7 @@ def TailPrimOp : PrimOp<"tail"> {
 // Target Specific Intrinsics
 //===----------------------------------------------------------------------===//
 
-def MuxCell2IntrinsicOp : PrimOp<"int.muxcell2"> {
+def Mux2CellIntrinsicOp : PrimOp<"int.mux2cell"> {
   let summary = [{
     an intrinsic lowered into 2-to-1 MUX cell in synthesis tools.
   }];
@@ -824,7 +824,7 @@ def MuxCell2IntrinsicOp : PrimOp<"int.muxcell2"> {
     "`(` operands `)` attr-dict `:` functional-type(operands, $result)";
 }
 
-def MuxCell4IntrinsicOp : PrimOp<"int.muxcell4"> {
+def Mux4CellIntrinsicOp : PrimOp<"int.mux4cell"> {
   let summary = [{
     an intrinsic lowered into 4-to-1 MUX cell in synthesis tools.
   }];

@@ -52,7 +52,7 @@ public:
             LTLOrIntrinsicOp, LTLDelayIntrinsicOp, LTLConcatIntrinsicOp,
             LTLNotIntrinsicOp, LTLImplicationIntrinsicOp,
             LTLEventuallyIntrinsicOp, LTLClockIntrinsicOp,
-            LTLDisableIntrinsicOp, MuxCell2IntrinsicOp, MuxCell4IntrinsicOp,
+            LTLDisableIntrinsicOp, Mux2CellIntrinsicOp, Mux4CellIntrinsicOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
@@ -170,8 +170,8 @@ public:
   HANDLE(LTLEventuallyIntrinsicOp, Unhandled);
   HANDLE(LTLClockIntrinsicOp, Unhandled);
   HANDLE(LTLDisableIntrinsicOp, Unhandled);
-  HANDLE(MuxCell4IntrinsicOp, Unhandled);
-  HANDLE(MuxCell2IntrinsicOp, Unhandled);
+  HANDLE(Mux4CellIntrinsicOp, Unhandled);
+  HANDLE(Mux2CellIntrinsicOp, Unhandled);
 
   // Miscellaneous.
   HANDLE(BitsPrimOp, Unhandled);

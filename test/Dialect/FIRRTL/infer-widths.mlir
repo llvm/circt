@@ -971,14 +971,14 @@ firrtl.circuit "Foo" {
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1 = firrtl.constant 0: !firrtl.uint
-    // CHECK: firrtl.int.muxcell2
+    // CHECK: firrtl.int.mux2cell
     // CHECK-SAME: (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    %0 = firrtl.int.muxcell2(%sel, %c0_ui1, %c1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint) -> !firrtl.uint
+    %0 = firrtl.int.mux2cell(%sel, %c0_ui1, %c1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint) -> !firrtl.uint
     %cast1 = firrtl.widthCast %0 : (!firrtl.uint) -> !firrtl.uint
     firrtl.strictconnect %out1, %cast1 : !firrtl.uint
-    // CHECK: firrtl.int.muxcell4
+    // CHECK: firrtl.int.mux4cell
     // CHECK-SAME: (!firrtl.uint<2>, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<1>) -> !firrtl.uint<3>
-    %1 = firrtl.int.muxcell4(%sel2, %c1_ui1, %c2_ui2, %c3_ui3, %c1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint) -> !firrtl.uint
+    %1 = firrtl.int.mux4cell(%sel2, %c1_ui1, %c2_ui2, %c3_ui3, %c1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint) -> !firrtl.uint
     %cast2 = firrtl.widthCast %1 : (!firrtl.uint) -> !firrtl.uint
     firrtl.strictconnect %out2, %cast2 : !firrtl.uint
   }
