@@ -29,9 +29,19 @@ namespace circt {
 namespace firrtl {
 
 struct FIRParserOptions {
-  /// If this is set to true, the @info locators are ignored, and the locations
-  /// are set to the location in the .fir file.
-  bool ignoreInfoLocators = false;
+  /// Specify how @info locators should be handled.
+  enum class InfoLocHandling {
+    /// If this is set to true, the @info locators are ignored, and the
+    /// locations are set to the location in the .fir file.
+    IgnoreInfo,
+    /// Prefer @info locators, fallback to .fir locations.
+    PreferInfo,
+    /// Attach both @info locators (when present) and .fir locations.
+    FusedInfo
+  };
+
+  InfoLocHandling infoLocatorHandling = InfoLocHandling::PreferInfo;
+
   /// The number of annotation files that were specified on the command line.
   /// This, along with numOMIRFiles provides structure to the buffers in the
   /// source manager.

@@ -119,10 +119,18 @@ static cl::opt<bool> lowerAnnotationsNoRefTypePorts(
              "wiring problems inside the LowerAnnotations pass"),
     cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
-static cl::opt<bool>
-    ignoreFIRLocations("ignore-fir-locators",
-                       cl::desc("Ignore the @info locations in the .fir file"),
-                       cl::init(false), cl::cat(mainCategory));
+using InfoLocHandling = firrtl::FIRParserOptions::InfoLocHandling;
+static cl::opt<InfoLocHandling> infoLocHandling(
+    cl::desc("Location tracking:"),
+    cl::values(
+        clEnumValN(InfoLocHandling::IgnoreInfo, "ignore-info-locators",
+                   "Ignore the @info locations in the .fir file"),
+        clEnumValN(InfoLocHandling::FusedInfo, "fuse-info-locators",
+                   "@info locations are fused with .fir locations"),
+        clEnumValN(
+            InfoLocHandling::PreferInfo, "prefer-info-locators",
+            "Use @info locations when present, fallback to .fir locations")),
+    cl::init(InfoLocHandling::PreferInfo), cl::cat(mainCategory));
 
 static cl::opt<bool> exportModuleHierarchy(
     "export-module-hierarchy",
@@ -279,7 +287,7 @@ static LogicalResult processBuffer(
   if (inputFormat == InputFIRFile) {
     auto parserTimer = ts.nest("FIR Parser");
     firrtl::FIRParserOptions options;
-    options.ignoreInfoLocators = ignoreFIRLocations;
+    options.infoLocatorHandling = infoLocHandling;
     options.numAnnotationFiles = numAnnotationFiles;
     options.scalarizeTopModule = scalarizeTopModule;
     options.scalarizeExtModules = scalarizeExtModules;
@@ -437,6 +445,32 @@ static LogicalResult processBuffer(
   return success();
 }
 
+class FileLineColLocsAsNotesDiagnosticHandler : public ScopedDiagnosticHandler {
+public:
+  FileLineColLocsAsNotesDiagnosticHandler(MLIRContext *ctxt)
+      : ScopedDiagnosticHandler(ctxt) {
+    setHandler([](Diagnostic &d) {
+      SmallPtrSet<Location, 8> locs;
+      // Recursively scan for FileLineColLoc locations.
+      d.getLocation().operator LocationAttr().walk([&](Location loc) {
+        if (isa<FileLineColLoc>(loc))
+          locs.insert(loc);
+        return WalkResult::advance();
+      });
+
+      // Drop top-level location the diagnostic is reported on.
+      locs.erase(d.getLocation());
+      // As well as the location the SourceMgrDiagnosticHandler will use.
+      locs.erase(d.getLocation()->findInstanceOf<FileLineColLoc>());
+
+      // Attach additional locations as notes on the diagnostic.
+      for (auto l : locs)
+        d.attachNote(l) << "additional location here";
+      return failure();
+    });
+  }
+};
+
 /// Process a single split of the input. This allocates a source manager and
 /// creates a regular or verifying diagnostic handler, depending on whether the
 /// user set the verifyDiagnostics option.
@@ -448,7 +482,9 @@ static LogicalResult processInputSplit(
   sourceMgr.AddNewSourceBuffer(std::move(buffer), llvm::SMLoc());
   sourceMgr.setIncludeDirs(includeDirs);
   if (!verifyDiagnostics) {
-    SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
+    SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr,
+                                                &context /*, shouldShow */);
+    FileLineColLocsAsNotesDiagnosticHandler addLocs(&context);
     return processBuffer(context, ts, sourceMgr, outputFile);
   }
 
