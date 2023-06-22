@@ -445,29 +445,24 @@ static LogicalResult processBuffer(
   return success();
 }
 
-bool isFirLoc(Location loc) {
-  if (auto f = dyn_cast<FileLineColLoc>(loc))
-    return f.getFilename().strref().endswith(".fir");
-  return false;
-}
-
-class FIRDiagnosticHandler : public ScopedDiagnosticHandler {
+class AllLocsAsNotesDiagnosticHandler : public ScopedDiagnosticHandler {
 public:
-  FIRDiagnosticHandler(MLIRContext *ctxt) : ScopedDiagnosticHandler(ctxt) {
+  AllLocsAsNotesDiagnosticHandler(MLIRContext *ctxt)
+      : ScopedDiagnosticHandler(ctxt) {
     setHandler([](Diagnostic &d) {
-      SmallPtrSet<Location, 8> firLocs;
-      // Recursively scan for .fir locations.
+      SmallPtrSet<Location, 8> locs;
+      // Recursively scan for locations.
       d.getLocation().operator LocationAttr().walk([&](Location loc) {
-        if (isFirLoc(loc))
-          firLocs.insert(loc);
+        locs.insert(loc);
         return WalkResult::advance();
       });
 
-      // If error is reported on a firLoc already, don't attach notes.
-      // It may be wise to impose an upper limit here.
-      if (!firLocs.contains(d.getLocation()))
-        for (auto l : firLocs)
-          d.attachNote(l) << "FIRRTL location here";
+      // Drop top-level location the diagnostic is reported on.
+      locs.erase(d.getLocation());
+
+      // Attach additional locations as notes on the diagnostic.
+      for (auto l : locs)
+        d.attachNote(l) << "additional location here";
       return failure();
     });
   }
@@ -486,7 +481,7 @@ static LogicalResult processInputSplit(
   if (!verifyDiagnostics) {
     SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr,
                                                 &context /*, shouldShow */);
-    FIRDiagnosticHandler addFIR(&context);
+    AllLocsAsNotesDiagnosticHandler addLocs(&context);
     return processBuffer(context, ts, sourceMgr, outputFile);
   }
 

@@ -5,7 +5,7 @@
 
 ; RUN: not firtool %s -fuse-info-locators 2>&1 | FileCheck %s --check-prefixes=DIAG
 ; DIAG: path/to/Foo.scala:273:69: error:
-; DIAG: locators-diagnostics.fir:20:5: note: FIRRTL location here
+; DIAG: locators-diagnostics.fir:20:5: note: additional location here
 ; DIAG: locators-diagnostics.fir:23:5: error:
 ; DIAG-NOT: note
 circuit Error:
