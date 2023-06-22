@@ -168,3 +168,12 @@ firrtl.circuit "Issue5002" {
     firrtl.ref.define %inst2_ref, %w2_ref : !firrtl.rwprobe<uint>
   }
 }
+
+// -----
+// https://github.com/llvm/circt/issues/5324
+
+firrtl.circuit "NoWidthEnum" {
+  // expected-error @below {{uninferred width: port "o.Some" is unconstrained}}
+  firrtl.module @NoWidthEnum(out %o: !firrtl.enum<Some: uint>) {
+  }
+}

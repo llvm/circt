@@ -1026,6 +1026,44 @@ firrtl.circuit "ConstReset" {
 
 // -----
 
+// CHECK-LABEL "ConstAggReset"
+firrtl.circuit "ConstAggReset" {
+  // CHECK-LABEL: module @ConstAggReset
+  // CHECK-NOT: : reset
+  firrtl.module @ConstAggReset(in %in: !firrtl.const.bundle<a: reset, b: uint<1>>, out %out: !firrtl.bundle<a: asyncreset>, out %out2: !firrtl.bundle<a: reset, b: uint<1>>) {
+    %out_a = firrtl.subfield %out[a] : !firrtl.bundle<a: asyncreset>
+    %in_a = firrtl.subfield %in[a] : !firrtl.const.bundle<a: reset, b: uint<1>>
+    %in_a_asyncreset = firrtl.resetCast %in_a : (!firrtl.const.reset) -> !firrtl.const.asyncreset
+    %in_a_asyncreset_noconst = firrtl.constCast %in_a_asyncreset : (!firrtl.const.asyncreset) -> !firrtl.asyncreset
+    firrtl.strictconnect %out_a, %in_a_asyncreset_noconst : !firrtl.asyncreset
+
+    %in_noconst = firrtl.constCast %in : (!firrtl.const.bundle<a: reset, b: uint<1>>) -> !firrtl.bundle<a: reset, b : uint<1>>
+    firrtl.strictconnect %out2, %in_noconst : !firrtl.bundle<a: reset, b: uint<1>>
+  }
+}
+
+// -----
+
+// CHECK-LABEL "ConstAggCastReset"
+firrtl.circuit "ConstAggCastReset" {
+  // CHECK-LABEL: module @ConstAggCastReset
+  // CHECK-NOT: : reset
+  firrtl.module @ConstAggCastReset(in %in: !firrtl.const.bundle<a: reset, b: uint<1>>, out %out: !firrtl.bundle<a: asyncreset>, out %out2: !firrtl.bundle<a: reset, b: uint<1>>) {
+    %out_a = firrtl.subfield %out[a] : !firrtl.bundle<a: asyncreset>
+    %in_a = firrtl.subfield %in[a] : !firrtl.const.bundle<a: reset, b: uint<1>>
+    // CHECK: constCast %{{.+}} : (!firrtl.const.asyncreset) -> !firrtl.asyncreset
+    %in_a_noconst = firrtl.constCast %in_a : (!firrtl.const.reset) -> !firrtl.reset
+    %in_a_asyncreset = firrtl.resetCast %in_a_noconst : (!firrtl.reset) -> !firrtl.asyncreset
+    // CHECK-NEXT: strictconnect
+    firrtl.strictconnect %out_a, %in_a_asyncreset : !firrtl.asyncreset
+    // CHECK-NOT: : reset
+    %in_noconst = firrtl.constCast %in : (!firrtl.const.bundle<a: reset, b: uint<1>>) -> !firrtl.bundle<a: reset, b : uint<1>>
+    firrtl.strictconnect %out2, %in_noconst : !firrtl.bundle<a: reset, b: uint<1>>
+  }
+}
+
+// -----
+
 // Check resets are inferred for forceable ops.
 
 // CHECK-LABEL: "InferToRWProbe"

@@ -183,4 +183,15 @@ firrtl.circuit "Foo" {
     %assume.property = firrtl.instance "assume" @VerifAssume(in property: !firrtl.uint<1>)
     %cover.property = firrtl.instance "cover" @VerifCover(in property: !firrtl.uint<1>)
   }
+
+  firrtl.extmodule @Mux2Cell(in sel: !firrtl.uint<1>, in high: !firrtl.uint, in low: !firrtl.uint, out out: !firrtl.uint) attributes {annotations = [{class = "circt.Intrinsic", intrinsic = "circt.mux2cell"}]}
+  firrtl.intmodule @Mux4Cell(in sel: !firrtl.uint<2>, in v3: !firrtl.uint, in v2: !firrtl.uint, in v1: !firrtl.uint, in v0: !firrtl.uint, out out: !firrtl.uint) attributes {intrinsic = "circt.mux4cell"}
+
+  // CHECK: firrtl.module @MuxCell()
+  firrtl.module @MuxCell() {
+    // CHECK: firrtl.int.mux2cell
+    // CHECK: firrtl.int.mux4cell
+    %sel_0, %high, %low, %out_0 = firrtl.instance "mux2" @Mux2Cell(in sel: !firrtl.uint<1>, in high: !firrtl.uint, in low: !firrtl.uint, out out: !firrtl.uint)
+    %sel_1, %v4, %v3, %v2, %v1, %out_1 = firrtl.instance "mux4" @Mux4Cell(in sel: !firrtl.uint<2>, in v3: !firrtl.uint, in v2: !firrtl.uint, in v1: !firrtl.uint, in v0: !firrtl.uint, out out: !firrtl.uint)
+  }
 }

@@ -45,7 +45,7 @@ static FailureOr<unsigned> findBundleElement(Operation *op, Type type,
   auto bundle = dyn_cast<BundleType>(type);
   if (!bundle) {
     op->emitError("field access '")
-        << field << "' into non-bundle type '" << bundle << "'";
+        << field << "' into non-bundle type '" << type << "'";
     return failure();
   }
   auto idx = bundle.getElementIndex(field);

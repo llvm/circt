@@ -44,6 +44,27 @@ def PipelineLike : OpInterface<"PipelineLike"> {
     InterfaceMethod<"Returns the pipeline inputs",
       "ValueRange",
       "getInputs", (ins)>,
+    InterfaceMethod<"Returns the inner pipeline inputs",
+      "ValueRange",
+      "getInnerInputs", (ins),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        Block* firstStage = $_op.getEntryStage();        
+        return firstStage->getArguments().take_front($_op.getInputs().size());
+      }]
+    >,
+    InterfaceMethod<"Returns the pipeline external inputs",
+      "ValueRange",
+      "getExtInputs", (ins)>,
+    InterfaceMethod<"Returns the inner external inputs",
+      "ValueRange",
+      "getInnerExtInputs", (ins),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        Block* firstStage = $_op.getEntryStage();
+        return firstStage->getArguments().take_back($_op.getExtInputs().size());
+      }]
+     >,
     InterfaceMethod<"Returns the first stage in the pipeline",
       "Block*",
       "getEntryStage",

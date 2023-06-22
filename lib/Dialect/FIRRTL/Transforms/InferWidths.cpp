@@ -126,8 +126,8 @@ struct RootExpr : public ExprBase<RootExpr, Expr::Kind::Root> {
 struct VarExpr : public ExprBase<VarExpr, Expr::Kind::Var> {
   void print(llvm::raw_ostream &os) const {
     // Hash the `this` pointer into something somewhat human readable. Since
-    // this is just for debug dumping, we wrap around at 4096 variables.
-    os << "var" << ((size_t)this / llvm::PowerOf2Ceil(sizeof(*this)) & 0xFFF);
+    // this is just for debug dumping, we wrap around at 65536 variables.
+    os << "var" << ((size_t)this / llvm::PowerOf2Ceil(sizeof(*this)) & 0xFFFF);
   }
 
   /// The constraint expression this variable is supposed to be greater than or
@@ -1313,8 +1313,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
   // case.
   bool allWidthsKnown = true;
   for (auto result : op->getResults()) {
-    if (auto mux = dyn_cast<MuxPrimOp>(op))
-      if (hasUninferredWidth(mux.getSel().getType()))
+    if (isa<MuxPrimOp, Mux4CellIntrinsicOp, Mux2CellIntrinsicOp>(op))
+      if (hasUninferredWidth(op->getOperand(0).getType()))
         allWidthsKnown = false;
     // Only consider FIRRTL types for width constraints. Ignore any foreign
     // types as they don't participate in the width inference process.
@@ -1537,11 +1537,17 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         assert(width > 0 && "width should have been checked by verifier");
         setExpr(op.getResult(), solver.known(width));
       })
-
-      .Case<MuxPrimOp>([&](auto op) {
-        auto sel = getExpr(op.getSel());
+      .Case<MuxPrimOp, Mux2CellIntrinsicOp>([&](auto op) {
+        auto *sel = getExpr(op.getSel());
         constrainTypes(sel, solver.known(1));
         maximumOfTypes(op.getResult(), op.getHigh(), op.getLow());
+      })
+      .Case<Mux4CellIntrinsicOp>([&](Mux4CellIntrinsicOp op) {
+        auto *sel = getExpr(op.getSel());
+        constrainTypes(sel, solver.known(2));
+        maximumOfTypes(op.getResult(), op.getV3(), op.getV2());
+        maximumOfTypes(op.getResult(), op.getResult(), op.getV1());
+        maximumOfTypes(op.getResult(), op.getResult(), op.getV0());
       })
       .Case<UninferredWidthCastOp>([&](auto op) {
         if (hasUninferredWidth(op.getResult().getType()))
@@ -1979,6 +1985,9 @@ void InferenceMapping::setExpr(FieldRef fieldRef, Expr *expr) {
     llvm::dbgs() << "Expr " << *expr << " for " << fieldRef.getValue();
     if (fieldRef.getFieldID())
       llvm::dbgs() << " '" << getFieldName(fieldRef).first << "'";
+    auto fieldName = getFieldName(fieldRef);
+    if (fieldName.second)
+      llvm::dbgs() << " (\"" << fieldName.first << "\")";
     llvm::dbgs() << "\n";
   });
   opExprs[fieldRef] = expr;

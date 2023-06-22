@@ -582,6 +582,13 @@ circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
       // Recurse in to the element type.
       type = vecType.getElementType();
       localID = localID - vecType.getFieldID(index);
+    } else if (auto enumType = dyn_cast<FEnumType>(type)) {
+      auto index = enumType.getIndexForFieldID(localID);
+      auto &element = enumType.getElements()[index];
+      name += nameSafe ? "_" : ".";
+      name += element.name.getValue();
+      type = element.type;
+      localID = localID - enumType.getFieldID(index);
     } else {
       // If we reach here, the field ref is pointing inside some aggregate type
       // that isn't a bundle or a vector. If the type is a ground type, then the
