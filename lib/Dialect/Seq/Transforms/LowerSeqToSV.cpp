@@ -135,6 +135,49 @@ public:
 private:
   bool lowerToAlwaysFF;
 };
+
+// Lower seq.clock_gate to a fairly standard clock gate implementation.
+//
+class ClockGateLowering : public OpConversionPattern<ClockGateOp> {
+public:
+  using OpConversionPattern<ClockGateOp>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<ClockGateOp>::OpAdaptor;
+  LogicalResult
+  matchAndRewrite(ClockGateOp clockGate, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto loc = clockGate.getLoc();
+    Value clk = adaptor.getInput();
+
+    // enable in
+    Value enable = adaptor.getEnable();
+    if (auto te = adaptor.getTestEnable())
+      enable = rewriter.create<comb::OrOp>(loc, enable, te);
+
+    // Enable latch.
+    Value enableLatch = rewriter.create<sv::RegOp>(
+        loc, rewriter.getI1Type(), rewriter.getStringAttr("cg_en_latch"));
+
+    // Latch the enable signal.
+    rewriter.create<sv::AlwaysOp>(
+        loc,
+        llvm::SmallVector<sv::EventControl>{sv::EventControl::AtEdge,
+                                            sv::EventControl::AtEdge},
+        llvm::SmallVector<Value>{clk, enable}, [&]() {
+          rewriter.create<sv::IfOp>(
+              loc, comb::createOrFoldNot(loc, clk, rewriter), [&]() {
+                rewriter.create<sv::PAssignOp>(loc, enableLatch, enable);
+              });
+        });
+
+    // Create the gated clock signal.
+    Value gclk = rewriter.create<comb::AndOp>(
+        loc, clk, rewriter.create<sv::ReadInOutOp>(loc, enableLatch));
+    clockGate.replaceAllUsesWith(gclk);
+    rewriter.eraseOp(clockGate);
+    return success();
+  }
+};
+
 } // namespace
 
 namespace {
@@ -772,10 +815,11 @@ void SeqToSVPass::runOnOperation() {
   MLIRContext &ctxt = getContext();
   ConversionTarget target(ctxt);
   target.addIllegalDialect<SeqDialect>();
-  target.addLegalDialect<sv::SVDialect>();
+  target.addLegalDialect<sv::SVDialect, comb::CombDialect, hw::HWDialect>();
   RewritePatternSet patterns(&ctxt);
   patterns.add<CompRegLower<CompRegOp>>(&ctxt, lowerToAlwaysFF);
   patterns.add<CompRegLower<CompRegClockEnabledOp>>(&ctxt, lowerToAlwaysFF);
+  patterns.add<ClockGateLowering>(&ctxt);
 
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
