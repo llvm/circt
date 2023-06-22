@@ -449,7 +449,6 @@ type_dyn_cast_or_null(Type type) { // NOLINT(readability-identifier-naming)
   return {};
 }
 
-<<<<<<< HEAD
 //===--------------------------------------------------------------------===//
 // Type alias aware TypeSwitch.
 //===--------------------------------------------------------------------===//
