@@ -75,7 +75,7 @@ def FirMemType : SeqType<"FirMem"> {
   let parameters = (ins
     "uint32_t":$depth,
     "uint32_t":$width,
-    OptionalParameter<"llvm::Optional<uint32_t>">:$maskWidth
+    OptionalParameter<"std::optional<uint32_t>">:$maskWidth
   );
   let assemblyFormat = "`<` $depth `x` $width (`,` `mask` $maskWidth^)? `>`";
 }
