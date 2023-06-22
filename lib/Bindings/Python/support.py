@@ -132,7 +132,7 @@ def attribute_to_var(attr):
   # If it's not the root type, assume it's already been downcasted and don't do
   # the expensive probing below.
   if attr.__class__ != ir.Attribute:
-    return attr
+    return attr.value
 
   from .dialects import hw, om
   try:
