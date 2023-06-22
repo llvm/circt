@@ -445,15 +445,16 @@ static LogicalResult processBuffer(
   return success();
 }
 
-class AllLocsAsNotesDiagnosticHandler : public ScopedDiagnosticHandler {
+class FileLineColLocsAsNotesDiagnosticHandler : public ScopedDiagnosticHandler {
 public:
-  AllLocsAsNotesDiagnosticHandler(MLIRContext *ctxt)
+  FileLineColLocsAsNotesDiagnosticHandler(MLIRContext *ctxt)
       : ScopedDiagnosticHandler(ctxt) {
     setHandler([](Diagnostic &d) {
       SmallPtrSet<Location, 8> locs;
-      // Recursively scan for locations.
+      // Recursively scan for FileLineColLoc locations.
       d.getLocation().operator LocationAttr().walk([&](Location loc) {
-        locs.insert(loc);
+        if (isa<FileLineColLoc>(loc))
+          locs.insert(loc);
         return WalkResult::advance();
       });
 
@@ -481,7 +482,7 @@ static LogicalResult processInputSplit(
   if (!verifyDiagnostics) {
     SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr,
                                                 &context /*, shouldShow */);
-    AllLocsAsNotesDiagnosticHandler addLocs(&context);
+    FileLineColLocsAsNotesDiagnosticHandler addLocs(&context);
     return processBuffer(context, ts, sourceMgr, outputFile);
   }
 
