@@ -349,3 +349,39 @@ hw.module @testControlUsage(%arg0: i32, %go : i1, %clk: i1, %rst: i1) -> (out0: 
   }
   hw.output %0#0 : i32
 }
+
+// -----
+
+// CHECK-LABEL:   hw.module @testWithStall_p0(
+// CHECK-SAME:           %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, valid: i1) {
+// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = hw.instance "testWithStall_p0_s0" @testWithStall_p0_s0(in0: %[[VAL_0]]: i32, enable: %[[VAL_1]]: i1, stall: %[[VAL_2]]: i1, clk: %[[VAL_3]]: i1, rst: %[[VAL_4]]: i1) -> (out0: i32, valid: i1)
+// CHECK:           hw.output %[[VAL_5]], %[[VAL_6]] : i32, i1
+// CHECK:         }
+
+// CHECK-LABEL:   hw.module @testWithStall_p0_s0(
+// CHECK-SAME:             %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, valid: i1) {
+// CHECK:           %[[VAL_5:.*]] = hw.constant true
+// CHECK:           %[[VAL_6:.*]] = comb.xor %[[VAL_2]], %[[VAL_5]] : i1
+// CHECK:           %[[VAL_7:.*]] = comb.and %[[VAL_1]], %[[VAL_6]] : i1
+// CHECK:           %[[VAL_8:.*]] = comb.mux %[[VAL_7]], %[[VAL_0]], %[[VAL_9:.*]] : i32
+// CHECK:           %[[VAL_9]] = seq.compreg %[[VAL_8]], %[[VAL_3]] : i32
+// CHECK:           %[[VAL_10:.*]] = hw.constant false
+// CHECK:           %[[VAL_11:.*]] = comb.mux %[[VAL_6]], %[[VAL_1]], %[[VAL_12:.*]] : i1
+// CHECK:           %[[VAL_12]] = seq.compreg %[[VAL_11]], %[[VAL_3]], %[[VAL_4]], %[[VAL_10]]  : i1
+// CHECK:           hw.output %[[VAL_9]], %[[VAL_12]] : i32, i1
+// CHECK:         }
+
+// CHECK-LABEL:   hw.module @testWithStall(
+// CHECK-SAME:           %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, out1: i1) {
+// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = hw.instance "testWithStall_p0" @testWithStall_p0(in0: %[[VAL_0]]: i32, enable: %[[VAL_1]]: i1, stall: %[[VAL_2]]: i1, clk: %[[VAL_3]]: i1, rst: %[[VAL_4]]: i1) -> (out0: i32, valid: i1)
+// CHECK:           hw.output %[[VAL_5]], %[[VAL_6]] : i32, i1
+// CHECK:         }
+hw.module @testWithStall(%arg0: i32, %go: i1, %stall : i1, %clk: i1, %rst: i1) -> (out0: i32, out1: i1) {
+  %0:2 = pipeline.scheduled(%arg0) stall %stall clock %clk reset %rst go %go : (i32) -> (i32) {
+  ^bb0(%arg0_0: i32, %s0_valid : i1):
+    pipeline.stage ^bb1 regs(%arg0_0 : i32)
+  ^bb1(%1: i32, %s1_valid : i1):  // pred: ^bb1
+    pipeline.return %1 : i32
+  }
+  hw.output %0#0, %0#1 : i32, i1
+}
