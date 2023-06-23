@@ -113,12 +113,15 @@ static inline StringAttr getResetName(Value reset) {
 /// Construct a zero value of the given type using the given builder.
 static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
                              SmallDenseMap<FIRRTLBaseType, Value> &cache) {
+  // The zero value's type is a const version of `type`.
+  type = type.getConstType(true);
   auto it = cache.find(type);
   if (it != cache.end())
     return it->second;
   auto nullBit = [&]() {
-    return createZeroValue(builder, UIntType::get(builder.getContext(), 1),
-                           cache);
+    return createZeroValue(
+        builder, UIntType::get(builder.getContext(), 1, /*isConst=*/true),
+        cache);
   };
   auto value =
       TypeSwitch<FIRRTLBaseType, Value>(type)
@@ -134,17 +137,19 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
           })
           .Case<BundleType>([&](auto type) {
             auto wireOp = builder.create<WireOp>(type);
-            for (auto field : llvm::enumerate(type)) {
-              auto zero = createZeroValue(builder, field.value().type, cache);
-              auto acc = builder.create<SubfieldOp>(
-                  field.value().type, wireOp.getResult(), field.index());
+            for (unsigned i = 0, e = type.getNumElements(); i < e; ++i) {
+              auto fieldType = type.getElementTypePreservingConst(i);
+              auto zero = createZeroValue(builder, fieldType, cache);
+              auto acc =
+                  builder.create<SubfieldOp>(fieldType, wireOp.getResult(), i);
               builder.create<StrictConnectOp>(acc, zero);
             }
             return wireOp.getResult();
           })
           .Case<FVectorType>([&](auto type) {
             auto wireOp = builder.create<WireOp>(type);
-            auto zero = createZeroValue(builder, type.getElementType(), cache);
+            auto zero = createZeroValue(
+                builder, type.getElementTypePreservingConst(), cache);
             for (unsigned i = 0, e = type.getNumElements(); i < e; ++i) {
               auto acc = builder.create<SubindexOp>(zero.getType(),
                                                     wireOp.getResult(), i);
