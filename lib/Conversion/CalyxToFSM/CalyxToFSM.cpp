@@ -275,11 +275,10 @@ class CompileInvoke {
 public:
   CompileInvoke(ComponentOp &component, OpBuilder &builder)
       : component(component), builder(builder) {}
-  void compile() { visitInvokeOps(component.getControlOp().getBodyBlock()); }
+  void compile();
 
 private:
   void checkWiresOp();
-  void visitInvokeOps(Block *block);
   void lowerInvokeOp(InvokeOp &invokeOp);
   ComponentOp &component;
   OpBuilder &builder;
@@ -306,32 +305,11 @@ void CompileInvoke::checkWiresOp() {
                                               builder.getI1Type(), 1);
 }
 
-// Access all nodes on the AST to convert each invoke operation.
-void CompileInvoke::visitInvokeOps(Block *block) {
-  if (!block)
-    return;
-  // Lower all the InvokeOp in this block.
-  auto inOps = block->getOps<InvokeOp>();
-  for (auto invokeOp : llvm::make_early_inc_range(inOps))
-    lowerInvokeOp(invokeOp);
-
-  auto sIt = block->getOps<SeqOp>();
-  auto pIt = block->getOps<ParOp>();
-  auto wIt = block->getOps<WhileOp>();
-  auto iIt = block->getOps<IfOp>();
-  for (auto s : sIt)
-    visitInvokeOps(s.getBodyBlock());
-
-  for (auto p : pIt)
-    visitInvokeOps(p.getBodyBlock());
-
-  for (auto w : wIt)
-    visitInvokeOps(w.getBodyBlock());
-
-  for (auto i : iIt) {
-    visitInvokeOps(i.getThenBody());
-    visitInvokeOps(i.getElseBody());
-  }
+// Access all invokeOp.
+void CompileInvoke::compile() {
+  auto invokeOps = component.getControlOp().getInvokeOps();
+  for (InvokeOp op : invokeOps)
+    lowerInvokeOp(op);
 }
 
 // Convert an invoke operation to a group operation and an enable operation.
@@ -351,7 +329,7 @@ void CompileInvoke::lowerInvokeOp(InvokeOp &invokeOp) {
   auto ports = invokeOp.getPorts();
   auto inputs = invokeOp.getInputs();
   // Generate a series of assignment operations from a list of parameters.
-  for (size_t i = 0; i != ports.size(); i++)
+  for (size_t i = 0; i != ports.size(); ++i)
     builder.create<AssignOp>(loc, ports[i], inputs[i]);
   Value done = invokeOp.getInstDoneValue();
   // Generate a group_done operation with the instance's done port.

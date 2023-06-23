@@ -25,6 +25,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/PriorityQueue.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
@@ -681,7 +682,7 @@ static LogicalResult hasRequiredPorts(ComponentOp op) {
 }
 
 // A helper function to get the number of invoke operations in a block.
-size_t getInvokeOpNumber(Block *block) {
+/*size_t getInvokeOpNumber(Block *block) {
   if (!block)
     return 0;
 
@@ -710,7 +711,7 @@ size_t getInvokeOpNumber(Block *block) {
     }
 
   return invokeNumber;
-}
+}*/
 
 LogicalResult ComponentOp::verify() {
   // Verify there is exactly one of each the wires and control operations,
@@ -724,7 +725,7 @@ LogicalResult ComponentOp::verify() {
                          << ControlOp::getOperationName() << "'.";
 
   if (std::distance(wIt.begin(), wIt.end()) != 1 &&
-      getInvokeOpNumber((*cIt.begin()).getBodyBlock()) == 0)
+      getControlOp().getInvokeOps().empty())
     return emitOpError() << "requires exactly one '"
                          << WiresOp::getOperationName() << "' or some '"
                          << InvokeOp::getOperationName() << "'.";
@@ -879,6 +880,44 @@ void CombComponentOp::getAsmBlockArgumentNames(
 // ControlOp
 //===----------------------------------------------------------------------===//
 LogicalResult ControlOp::verify() { return verifyControlBody(*this); }
+
+// Helper function to set the return value and add elements to the queue.
+static void setOps(std::queue<Operation *> &que, SmallVector<InvokeOp, 4> &ret,
+                   Block *block) {
+  auto ops = block->getOps<InvokeOp>();
+  for (InvokeOp op : ops)
+    ret.push_back(op);
+  auto sIt = block->getOps<SeqOp>();
+  for (auto op : sIt)
+    que.push(op.getOperation());
+  auto pIt = block->getOps<ParOp>();
+  for (auto op : pIt)
+    que.push(op.getOperation());
+  auto wIt = block->getOps<WhileOp>();
+  for (auto op : wIt)
+    que.push(op.getOperation());
+  auto iIt = block->getOps<IfOp>();
+  for (auto op : iIt)
+    que.push(op.getOperation());
+}
+
+// Get the InvokeOp of the ControlOp.
+SmallVector<InvokeOp, 4> ControlOp::getInvokeOps() {
+  SmallVector<InvokeOp, 4> ret;
+  std::queue<Operation *> que;
+  setOps(que, ret, getBodyBlock());
+  while (!que.empty()) {
+    Operation *op = que.front();
+    if (IfOp ifOp = dyn_cast<IfOp>(op)) {
+      setOps(que, ret, ifOp.getThenBody());
+      setOps(que, ret, ifOp.getElseBody());
+    } else
+      setOps(que, ret, &op->getRegion(0).front());
+
+    que.pop();
+  }
+  return ret;
+}
 
 //===----------------------------------------------------------------------===//
 // SeqOp
@@ -2344,6 +2383,20 @@ Value InvokeOp::getInstDoneValue() {
   return ret;
 }
 
+// A helper function that gets the number of go or done ports in
+// hw.module.extern.
+static size_t getHwModuleExtPortNumber(mlir::ArrayAttr attrsAttr,
+                                       StringRef string) {
+  size_t ret = 0;
+  for (Attribute attr : attrsAttr)
+    if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr))
+      ret = llvm::count_if(dictAttr, [&](NamedAttribute iter) {
+        return iter.getName().getValue() == string;
+      });
+
+  return ret;
+}
+
 LogicalResult InvokeOp::verify() {
   ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
   StringRef callee = getCallee();
@@ -2373,7 +2426,11 @@ LogicalResult InvokeOp::verify() {
   } else if (PrimitiveOp primOp = dyn_cast<PrimitiveOp>(operation)) {
     auto moduleExternOp = primOp.getReferencedPrimitive();
     // Get the number of go ports and done ports by their attrubutes.
-    for (Attribute attr : moduleExternOp.getArgAttrsAttr())
+    goPortNum =
+        getHwModuleExtPortNumber(moduleExternOp.getArgAttrsAttr(), "calyx.go");
+    donePortNum =
+        getHwModuleExtPortNumber(moduleExternOp.getResAttrsAttr(), "calyx.do");
+    /*for (Attribute attr : moduleExternOp.getArgAttrsAttr())
       if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr))
         if (!dictAttr.empty())
           if (dictAttr.begin()->getName().getValue() == "calyx.go")
@@ -2383,14 +2440,15 @@ LogicalResult InvokeOp::verify() {
       if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr))
         if (!dictAttr.empty())
           if (dictAttr.begin()->getName().getValue() == "calyx.done")
-            donePortNum++;
+            donePortNum++;*/
   }
   // If the number of go ports and done ports is wrong.
   if (goPortNum != 1 && donePortNum != 1)
-    return emitOpError() << " '" << callee
-                         << "' must have a go port and a done port, the '"
-                         << callee << "' has " << goPortNum << " go port and "
-                         << donePortNum << " done port.";
+    return emitOpError()
+           << " '" << callee
+           << "' must have single go port and single done port, the '" << callee
+           << "' has " << goPortNum << " go port and " << donePortNum
+           << " done port.";
 
   auto ports = getPorts();
   auto inputs = getInputs();
