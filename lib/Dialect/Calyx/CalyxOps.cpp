@@ -681,38 +681,6 @@ static LogicalResult hasRequiredPorts(ComponentOp op) {
          << difference;
 }
 
-// A helper function to get the number of invoke operations in a block.
-/*size_t getInvokeOpNumber(Block *block) {
-  if (!block)
-    return 0;
-
-  auto iIt = block->getOps<InvokeOp>();
-  auto sIt = block->getOps<calyx::SeqOp>();
-  auto pIt = block->getOps<calyx::ParOp>();
-  auto wIt = block->getOps<calyx::WhileOp>();
-  auto ifIt = block->getOps<calyx::IfOp>();
-  size_t invokeNumber = std::distance(iIt.begin(), iIt.end());
-  if (!sIt.empty())
-    for (auto s : sIt)
-      invokeNumber += getInvokeOpNumber(s.getBodyBlock());
-
-  if (!pIt.empty())
-    for (auto p : pIt)
-      invokeNumber += getInvokeOpNumber(p.getBodyBlock());
-
-  if (!wIt.empty())
-    for (auto w : wIt)
-      invokeNumber += getInvokeOpNumber(w.getBodyBlock());
-
-  if (!ifIt.empty())
-    for (auto i : ifIt) {
-      invokeNumber += getInvokeOpNumber(i.getThenBody());
-      invokeNumber += getInvokeOpNumber(i.getElseBody());
-    }
-
-  return invokeNumber;
-}*/
-
 LogicalResult ComponentOp::verify() {
   // Verify there is exactly one of each the wires and control operations,
   // or check if there are invoke and a control operations. First verify
