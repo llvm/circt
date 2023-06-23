@@ -72,7 +72,14 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
           os << "open";
         os << "bundle<";
         llvm::interleaveComma(bundleType, os, [&](auto element) {
+          StringRef fieldName = element.name.getValue();
+          bool isLiteralIdentifier =
+              !fieldName.empty() && llvm::isDigit(fieldName.front());
+          if (isLiteralIdentifier)
+            os << "\"";
           os << element.name.getValue();
+          if (isLiteralIdentifier)
+            os << "\"";
           if (element.isFlip)
             os << " flip";
           os << ": ";
@@ -128,25 +135,6 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
 //===----------------------------------------------------------------------===//
 // Type Parsing
 //===----------------------------------------------------------------------===//
-
-/// Parse the field name for a bundle.
-static ParseResult parseFieldName(AsmParser &parser, std::string &nameStr,
-                                  StringRef &name) {
-  // The 'name' can be an identifier or an integer.
-  uint32_t fieldIntName;
-  auto intName = parser.parseOptionalInteger(fieldIntName);
-  if (intName.has_value()) {
-    if (failed(intName.value()))
-      return failure();
-    nameStr = llvm::utostr(fieldIntName);
-    name = nameStr;
-  } else {
-    // Otherwise must be an identifier.
-    if (parser.parseKeyword(&name))
-      return failure();
-  }
-  return success();
-}
 
 /// Parse a type with a custom parser implementation.
 ///
@@ -221,8 +209,9 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       StringRef name;
       FIRRTLBaseType type;
 
-      if (failed(parseFieldName(parser, nameStr, name)))
+      if (failed(parser.parseKeywordOrString(&nameStr)))
         return failure();
+      name = nameStr;
 
       bool isFlip = succeeded(parser.parseOptionalKeyword("flip"));
       if (parser.parseColon() || parseNestedBaseType(type, parser))
@@ -246,8 +235,9 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       StringRef name;
       FIRRTLType type;
 
-      if (failed(parseFieldName(parser, nameStr, name)))
+      if (failed(parser.parseKeywordOrString(&nameStr)))
         return failure();
+      name = nameStr;
 
       bool isFlip = succeeded(parser.parseOptionalKeyword("flip"));
       if (parser.parseColon() || parseNestedType(type, parser))
@@ -272,8 +262,9 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       StringRef name;
       FIRRTLBaseType type;
 
-      if (failed(parseFieldName(parser, nameStr, name)))
+      if (failed(parser.parseKeywordOrString(&nameStr)))
         return failure();
+      name = nameStr;
 
       if (parser.parseColon() || parseNestedBaseType(type, parser))
         return failure();
