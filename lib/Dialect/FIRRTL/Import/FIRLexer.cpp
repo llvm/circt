@@ -286,8 +286,9 @@ FIRToken FIRLexer::lexTokenImpl() {
     case '|':
       if (*curPtr == '}')
         return ++curPtr, formToken(FIRToken::r_brace_bar, tokStart);
+      return formToken(FIRToken::pipe, tokStart);
       // Unknown character, emit an error.
-      return emitError(tokStart, "unexpected character");
+      // return emitError(tokStart, "unexpected character");
 
     case ';':
       skipComment();

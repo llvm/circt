@@ -61,6 +61,7 @@ llvm::raw_ostream &printHash(llvm::raw_ostream &stream, std::string data) {
 struct StructuralHasher {
   explicit StructuralHasher(MLIRContext *context) {
     portTypesAttr = StringAttr::get(context, "portTypes");
+    desiredNameAttr = StringAttr::get(context, "desiredName");
     nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "name"));
     nonessentialAttributes.insert(StringAttr::get(context, "portAnnotations"));
@@ -187,6 +188,8 @@ private:
   DenseSet<Attribute> nonessentialAttributes;
   // This is a cached "portTypes" string attr.
   StringAttr portTypesAttr;
+  // This is the cached "desiredName" string attr.
+  StringAttr desiredNameAttr;
 
   // This is the actual running hash calculation. This is a stateful element
   // that should be reinitialized after each hash is produced.

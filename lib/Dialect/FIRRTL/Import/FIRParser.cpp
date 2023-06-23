@@ -3858,7 +3858,7 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
 
 /// Parse an external or present module depending on what token we have.
 ///
-/// module ::= 'module' id ':' info? INDENT pohwist simple_stmt_block DEDENT
+/// module ::= 'module' id '|' desiredName ':' info? INDENT pohwist simple_stmt_block DEDENT
 /// module ::=
 ///        'extmodule' id ':' info? INDENT pohwist defname? parameter* ref*
 ///        DEDENT
@@ -3881,6 +3881,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   bool isIntModule = getToken().is(FIRToken::kw_intmodule);
   consumeToken();
   StringAttr name;
+  StringAttr desiredName;
   SmallVector<PortInfo, 8> portList;
   SmallVector<SMLoc> portLocs;
 
@@ -3888,6 +3889,12 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   if (parseId(name, "expected module name"))
     return failure();
 
+  if (getToken().is(FIRToken::pipe)) { // optional desiredName
+      consumeToken(FIRToken::pipe);
+      if (parseId(desiredName, "expected desired name"))
+	  return failure();
+  }      
+  
   auto moduleTarget = (circuitTarget + "|" + name.getValue()).str();
   ArrayAttr annotations = getConstants().emptyArrayAttr;
 
