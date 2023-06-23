@@ -555,9 +555,12 @@ private:
       return false;
 
     // Find the data-flow and structural ops to clone.  Result includes roots.
-    // Track dataflow until it reaches to design parts.
-    auto opsToClone = getBackwardSlice(
-        roots, [&](Operation *op) { return !opsInDesign.count(op); });
+    // Track dataflow until it reaches to design parts except for constants that
+    // can be cloned freely.
+    auto opsToClone = getBackwardSlice(roots, [&](Operation *op) {
+      return !opsInDesign.count(op) ||
+             op->hasTrait<mlir::OpTrait::ConstantLike>();
+    });
 
     // Find the dataflow into the clone set
     SetVector<Value> inputs;
