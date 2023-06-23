@@ -246,6 +246,9 @@ struct Emitter {
   // Memory emission
   void emitMemory(MemoryOp memory);
 
+  // Invoke emission
+  void emitInvoke(InvokeOp invoke);
+
   // Emits a library primitive with template parameters based on all in- and
   // output ports.
   // e.g.:
@@ -510,6 +513,7 @@ private:
                                [&]() { emitCalyxControl(op.getElseBody()); });
           })
           .Case<EnableOp>([&](auto op) { emitEnable(op); })
+          .Case<InvokeOp>([&](auto op) { emitInvoke(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside control.");
           });
@@ -734,6 +738,54 @@ void Emitter::emitMemory(MemoryOp memory) {
   os << RParen() << semicolonEndL();
 }
 
+void Emitter::emitInvoke(InvokeOp invoke) {
+  StringRef callee = invoke.getCallee();
+  indent() << "invoke " << callee;
+  ArrayAttr portNames = invoke.getPortNames();
+  ArrayAttr inputNames = invoke.getInputNames();
+  /// Because the ports of all components of calyx.invoke are inside a (),
+  /// here the input and output ports are divided, inputs and outputs store
+  /// the connections for a subset of input and output ports of the instance.
+  llvm::StringMap<StringRef> inputs;
+  llvm::StringMap<StringRef> outputs;
+  for (size_t i = 0; i < portNames.size(); ++i) {
+    StringRef portName = cast<StringAttr>(portNames[i]).getValue();
+    StringRef inputName = cast<StringAttr>(inputNames[i]).getValue();
+    /// Classify the connection of ports,here's an example. calyx.invoke
+    /// @r(%r.in = %id.out, %out = %r.out) -> (i32, i32) %r.in = %id.out will be
+    /// stored in inputs, because %.r.in is the input port of the component, and
+    /// %out = %r.out will be stored in outputs, because %r.out is the output
+    /// port of the component, which is a bit different from calyx's native
+    /// compiler. Later on, the classified connection relations are outputted
+    /// uniformly and converted to calyx's native compiler format.
+    if (portName.substr(1, callee.size()) == callee)
+      inputs[portName.drop_front(2 + callee.size())] = inputName.drop_front(1);
+    else if (inputName.substr(1, callee.size()) == callee)
+      outputs[inputName.drop_front(2 + callee.size())] = portName.drop_front(1);
+    else
+      invoke.emitOpError(
+          "the connection of a set of ports for the invoke operation must "
+          "contain the input or output ports of the invoke component.");
+  }
+  /// Emit inputs
+  os << LParen();
+  for (auto iter = inputs.begin(); iter != inputs.end();) {
+    os << iter->getKey() << " = " << iter->getValue();
+    if (++iter != inputs.end())
+      os << comma() << " ";
+  }
+  os << RParen();
+
+  /// Emit outputs
+  os << LParen();
+  for (auto iter = outputs.begin(); iter != outputs.end();) {
+    os << iter->getKey() << " = " << iter->getValue();
+    if (++iter != outputs.end())
+      os << comma() << " ";
+  }
+  os << RParen() << endl();
+}
+
 /// Calling getName() on a calyx operation will return "calyx.${opname}". This
 /// function returns whatever is left after the first '.' in the string,
 /// removing the 'calyx' prefix.
@@ -784,18 +836,20 @@ void Emitter::emitAssignment(AssignOp op) {
 }
 
 void Emitter::emitWires(WiresOp op) {
-  emitCalyxSection("wires", [&]() {
-    for (auto &&bodyOp : *op.getBodyBlock()) {
-      TypeSwitch<Operation *>(&bodyOp)
-          .Case<GroupInterface>([&](auto op) { emitGroup(op); })
-          .Case<AssignOp>([&](auto op) { emitAssignment(op); })
-          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp>(
-              [&](auto op) { /* Do nothing. */ })
-          .Default([&](auto op) {
-            emitOpError(op, "not supported for emission inside wires section");
-          });
-    }
-  });
+  if (op)
+    emitCalyxSection("wires", [&]() {
+      for (auto &&bodyOp : *op.getBodyBlock()) {
+        TypeSwitch<Operation *>(&bodyOp)
+            .Case<GroupInterface>([&](auto op) { emitGroup(op); })
+            .Case<AssignOp>([&](auto op) { emitAssignment(op); })
+            .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp>(
+                [&](auto op) { /* Do nothing. */ })
+            .Default([&](auto op) {
+              emitOpError(op,
+                          "not supported for emission inside wires section");
+            });
+      }
+    });
 }
 
 void Emitter::emitGroup(GroupInterface group) {

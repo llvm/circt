@@ -291,7 +291,9 @@ def InvokeOp : CalyxOp<"invoke", [
   
   let arguments = (ins FlatSymbolRefAttr:$callee, 
                    Variadic<AnyType>:$ports,
-                   Variadic<AnyType>:$inputs);
+                   Variadic<AnyType>:$inputs,
+                   ArrayAttr:$portNames,
+                   ArrayAttr:$inputNames);
   let results = (outs);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;

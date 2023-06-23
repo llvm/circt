@@ -2198,6 +2198,8 @@ static ParseResult
 parseParameterList(OpAsmParser &parser, OperationState &result,
                    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &ports,
                    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &inputs,
+                   SmallVectorImpl<Attribute> &portNames,
+                   SmallVectorImpl<Attribute> &inputNames,
                    SmallVectorImpl<Type> &types) {
   OpAsmParser::UnresolvedOperand port;
   OpAsmParser::UnresolvedOperand input;
@@ -2207,7 +2209,9 @@ parseParameterList(OpAsmParser &parser, OperationState &result,
         parser.parseOperand(input))
       return failure();
     ports.push_back(port);
+    portNames.push_back(StringAttr::get(parser.getContext(), port.name));
     inputs.push_back(input);
+    inputNames.push_back(StringAttr::get(parser.getContext(), input.name));
     return success();
   };
   if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
@@ -2227,20 +2231,27 @@ parseParameterList(OpAsmParser &parser, OperationState &result,
 
 ParseResult InvokeOp::parse(OpAsmParser &parser, OperationState &result) {
   StringAttr componentName;
-  SmallVector<OpAsmParser::UnresolvedOperand> ports;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> ports;
   SmallVector<OpAsmParser::UnresolvedOperand, 4> inputs;
+  SmallVector<Attribute> portNames;
+  SmallVector<Attribute> inputNames;
   SmallVector<Type, 4> types;
   if (parser.parseSymbolName(componentName))
     return failure();
   FlatSymbolRefAttr callee = FlatSymbolRefAttr::get(componentName);
   SMLoc loc = parser.getCurrentLocation();
   result.addAttribute("callee", callee);
-  if (parseParameterList(parser, result, ports, inputs, types))
+  if (parseParameterList(parser, result, ports, inputs, portNames, inputNames,
+                         types))
     return failure();
   if (parser.resolveOperands(ports, types, loc, result.operands))
     return failure();
   if (parser.resolveOperands(inputs, types, loc, result.operands))
     return failure();
+  result.addAttribute("portNames",
+                      ArrayAttr::get(parser.getContext(), portNames));
+  result.addAttribute("inputNames",
+                      ArrayAttr::get(parser.getContext(), inputNames));
   return success();
 }
 
@@ -2398,17 +2409,6 @@ LogicalResult InvokeOp::verify() {
         getHwModuleExtPortNumber(moduleExternOp.getArgAttrsAttr(), "calyx.go");
     donePortNum =
         getHwModuleExtPortNumber(moduleExternOp.getResAttrsAttr(), "calyx.do");
-    /*for (Attribute attr : moduleExternOp.getArgAttrsAttr())
-      if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr))
-        if (!dictAttr.empty())
-          if (dictAttr.begin()->getName().getValue() == "calyx.go")
-            goPortNum++;
-
-    for (Attribute attr : moduleExternOp.getResAttrsAttr())
-      if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr))
-        if (!dictAttr.empty())
-          if (dictAttr.begin()->getName().getValue() == "calyx.done")
-            donePortNum++;*/
   }
   // If the number of go ports and done ports is wrong.
   if (goPortNum != 1 && donePortNum != 1)
