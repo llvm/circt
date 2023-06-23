@@ -24,6 +24,7 @@ async def initDut(dut):
 
 @cocotb.test()
 async def test1(dut):
+  dut.go.value = 0
   await initDut(dut)
 
   dut.arg0.value = 42

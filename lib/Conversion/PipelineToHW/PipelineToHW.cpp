@@ -285,7 +285,12 @@ public:
     // Instantiate the pipeline in the parent module.
     builder.setInsertionPoint(pipeline);
     llvm::SmallVector<Value, 4> pipelineOperands;
-    llvm::append_range(pipelineOperands, pipeline.getOperands());
+    llvm::append_range(pipelineOperands, pipeline.getInputs());
+    llvm::append_range(pipelineOperands, pipeline.getExtInputs());
+    llvm::append_range(
+        pipelineOperands,
+        ValueRange{pipeline.getGo(), pipeline.getClock(), pipeline.getReset()});
+
     auto pipelineInst = builder.create<hw::InstanceOp>(
         pipeline.getLoc(), pipelineMod,
         builder.getStringAttr(pipelineMod.getName()), pipelineOperands);

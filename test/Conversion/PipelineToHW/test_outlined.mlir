@@ -7,10 +7,9 @@
 
 // CHECK-LABEL:   hw.module @testBasic(
 // CHECK-SAME:                         %[[VAL_0:.*]]: i1, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1) -> (out: i1) {
-// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = hw.instance "testBasic_p0" @testBasic_p0(in0: %[[VAL_0]]: i1, enable: %[[VAL_1]]: i1, clk: %[[VAL_2]]: i1, rst: %[[VAL_0]]: i1) -> (out0: i1, valid: i1)
+// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = hw.instance "testBasic_p0" @testBasic_p0(in0: %[[VAL_0]]: i1, enable: %[[VAL_0]]: i1, clk: %[[VAL_1]]: i1, rst: %[[VAL_2]]: i1) -> (out0: i1, valid: i1)
 // CHECK:           hw.output %[[VAL_3]] : i1
 // CHECK:         }
-
 hw.module @testBasic(%arg0: i1, %clk: i1, %rst: i1) -> (out: i1) {
   %0:2 = pipeline.scheduled(%arg0) clock %clk reset %rst go %arg0 : (i1) -> (i1) {
   ^bb0(%a0: i1, %s0_valid: i1):
@@ -31,41 +30,37 @@ hw.module @testBasic(%arg0: i1, %clk: i1, %rst: i1) -> (out: i1) {
 // CHECK-LABEL:   hw.module @testLatency1_p0_s0(
 // CHECK-SAME:            %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i1,  %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1) -> (out0: i32, valid: i1) {
 // CHECK:           %[[VAL_4:.*]] = comb.add %[[VAL_0]], %[[VAL_0]] : i32
-// CHECK:           %[[VAL_5:.*]] = seq.clock_gate %[[VAL_2]], %[[VAL_1]]
-// CHECK:           %[[VAL_6:.*]] = hw.constant false
-// CHECK:           %[[VAL_7:.*]] = seq.compreg %[[VAL_1]], %[[VAL_2]], %[[VAL_3]], %[[VAL_6]]  : i1
-// CHECK:           hw.output %[[VAL_4]], %[[VAL_7]] : i32, i1
+// CHECK:           %[[VAL_5:.*]] = hw.constant false
+// CHECK:           %[[VAL_6:.*]] = seq.compreg %[[VAL_1]], %[[VAL_2]], %[[VAL_3]], %[[VAL_5]]  : i1
+// CHECK:           hw.output %[[VAL_4]], %[[VAL_6]] : i32, i1
 // CHECK:         }
 
 // CHECK-LABEL:   hw.module @testLatency1_p0_s1(
 // CHECK-SAME:               %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1) -> (out0: i32, valid: i1) {
-// CHECK:           %[[VAL_4:.*]] = seq.clock_gate %[[VAL_2]], %[[VAL_1]]
-// CHECK:           %[[VAL_5:.*]] = hw.constant false
-// CHECK:           %[[VAL_6:.*]] = seq.compreg %[[VAL_1]], %[[VAL_2]], %[[VAL_3]], %[[VAL_5]]  : i1
-// CHECK:           hw.output %[[VAL_0]], %[[VAL_6]] : i32, i1
+// CHECK:           %[[VAL_4:.*]] = hw.constant false
+// CHECK:           %[[VAL_5:.*]] = seq.compreg %[[VAL_1]], %[[VAL_2]], %[[VAL_3]], %[[VAL_4]]  : i1
+// CHECK:           hw.output %[[VAL_0]], %[[VAL_5]] : i32, i1
 // CHECK:         }
 
 // CHECK-LABEL:   hw.module @testLatency1_p0_s2(
 // CHECK-SAME:                %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1) -> (out0: i32, valid: i1) {
-// CHECK:           %[[VAL_4:.*]] = seq.clock_gate %[[VAL_2]], %[[VAL_1]]
-// CHECK:           %[[VAL_5:.*]] = seq.compreg %[[VAL_0]], %[[VAL_4]] : i32
-// CHECK:           %[[VAL_6:.*]] = hw.constant false
-// CHECK:           %[[VAL_7:.*]] = seq.compreg %[[VAL_1]], %[[VAL_2]], %[[VAL_3]], %[[VAL_6]]  : i1
-// CHECK:           hw.output %[[VAL_5]], %[[VAL_7]] : i32, i1
+// CHECK:           %[[VAL_4:.*]] = seq.compreg.ce %[[VAL_0]], %[[VAL_2]], %[[VAL_1]] : i32
+// CHECK:           %[[VAL_5:.*]] = hw.constant false
+// CHECK:           %[[VAL_6:.*]] = seq.compreg %[[VAL_1]], %[[VAL_2]], %[[VAL_3]], %[[VAL_5]]  : i1
+// CHECK:           hw.output %[[VAL_4]], %[[VAL_6]] : i32, i1
 // CHECK:         }
 
 // CHECK-LABEL:   hw.module @testLatency1_p0_s3(
 // CHECK-SAME:                                  %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1) -> (out0: i32, valid: i1) {
-// CHECK:           %[[VAL_4:.*]] = seq.clock_gate %[[VAL_2]], %[[VAL_1]]
-// CHECK:           %[[VAL_5:.*]] = seq.compreg %[[VAL_0]], %[[VAL_4]] : i32
-// CHECK:           %[[VAL_6:.*]] = hw.constant false
-// CHECK:           %[[VAL_7:.*]] = seq.compreg %[[VAL_1]], %[[VAL_2]], %[[VAL_3]], %[[VAL_6]]  : i1
-// CHECK:           hw.output %[[VAL_5]], %[[VAL_7]] : i32, i1
+// CHECK:           %[[VAL_4:.*]] = seq.compreg.ce %[[VAL_0]], %[[VAL_2]], %[[VAL_1]] : i32
+// CHECK:           %[[VAL_5:.*]] = hw.constant false
+// CHECK:           %[[VAL_6:.*]] = seq.compreg %[[VAL_1]], %[[VAL_2]], %[[VAL_3]], %[[VAL_5]]  : i1
+// CHECK:           hw.output %[[VAL_4]], %[[VAL_6]] : i32, i1
 // CHECK:         }
 
 // CHECK-LABEL:   hw.module @testLatency1(
 // CHECK-SAME:            %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out: i32, done: i1) {
-// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = hw.instance "testLatency1_p0" @testLatency1_p0(in0: %[[VAL_0]]: i32, enable: %[[VAL_3]]: i1, clk: %[[VAL_4]]: i1, rst: %[[VAL_2]]: i1) -> (out0: i32, valid: i1)
+// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = hw.instance "testLatency1_p0" @testLatency1_p0(in0: %[[VAL_0]]: i32, enable: %[[VAL_2]]: i1, clk: %[[VAL_3]]: i1, rst: %[[VAL_4]]: i1) -> (out0: i32, valid: i1)
 // CHECK:           hw.output %[[VAL_5]], %[[VAL_6]] : i32, i1
 // CHECK:         }
 hw.module @testLatency1(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out: i32, done: i1) {
@@ -98,17 +93,16 @@ hw.module @testLatency1(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> 
 // CHECK-LABEL:   hw.module @testSingle_p0_s0(
 // CHECK-SAME:                                %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, out1: i32, valid: i1) {
 // CHECK:           %[[VAL_5:.*]] = comb.sub %[[VAL_0]], %[[VAL_1]] : i32
-// CHECK:           %[[VAL_6:.*]] = seq.clock_gate %[[VAL_3]], %[[VAL_2]]
-// CHECK:           %[[VAL_7:.*]] = seq.compreg %[[VAL_5]], %[[VAL_6]] : i32
-// CHECK:           %[[VAL_8:.*]] = seq.compreg %[[VAL_0]], %[[VAL_6]] : i32
-// CHECK:           %[[VAL_9:.*]] = hw.constant false
-// CHECK:           %[[VAL_10:.*]] = seq.compreg %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_9]]  : i1
-// CHECK:           hw.output %[[VAL_7]], %[[VAL_8]], %[[VAL_10]] : i32, i32, i1
+// CHECK:           %[[VAL_6:.*]] = seq.compreg.ce %[[VAL_5]], %[[VAL_3]], %[[VAL_2]] : i32
+// CHECK:           %[[VAL_7:.*]] = seq.compreg.ce %[[VAL_0]], %[[VAL_3]], %[[VAL_2]] : i32
+// CHECK:           %[[VAL_8:.*]] = hw.constant false
+// CHECK:           %[[VAL_9:.*]] = seq.compreg %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_8]]  : i1
+// CHECK:           hw.output %[[VAL_6]], %[[VAL_7]], %[[VAL_9]] : i32, i32, i1
 // CHECK:         }
 
 // CHECK-LABEL:   hw.module @testSingle(
 // CHECK-SAME:                          %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, out1: i1) {
-// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = hw.instance "testSingle_p0" @testSingle_p0(in0: %[[VAL_0]]: i32, in1: %[[VAL_1]]: i32, enable: %[[VAL_3]]: i1, clk: %[[VAL_4]]: i1, rst: %[[VAL_2]]: i1) -> (out0: i32, valid: i1)
+// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = hw.instance "testSingle_p0" @testSingle_p0(in0: %[[VAL_0]]: i32, in1: %[[VAL_1]]: i32, enable: %[[VAL_2]]: i1, clk: %[[VAL_3]]: i1, rst: %[[VAL_4]]: i1) -> (out0: i32, valid: i1)
 // CHECK:           hw.output %[[VAL_5]], %[[VAL_6]] : i32, i1
 // CHECK:         }
 hw.module @testSingle(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out0: i32, out1: i1) {
@@ -134,23 +128,21 @@ hw.module @testSingle(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (o
 // CHECK-LABEL:   hw.module @testMultiple_p0_s0(
 // CHECK-SAME:                                  %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, out1: i32, valid: i1) {
 // CHECK:           %[[VAL_5:.*]] = comb.sub %[[VAL_0]], %[[VAL_1]] : i32
-// CHECK:           %[[VAL_6:.*]] = seq.clock_gate %[[VAL_3]], %[[VAL_2]]
-// CHECK:           %[[VAL_7:.*]] = seq.compreg %[[VAL_5]], %[[VAL_6]] : i32
-// CHECK:           %[[VAL_8:.*]] = seq.compreg %[[VAL_0]], %[[VAL_6]] : i32
-// CHECK:           %[[VAL_9:.*]] = hw.constant false
-// CHECK:           %[[VAL_10:.*]] = seq.compreg %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_9]]  : i1
-// CHECK:           hw.output %[[VAL_7]], %[[VAL_8]], %[[VAL_10]] : i32, i32, i1
+// CHECK:           %[[VAL_6:.*]] = seq.compreg.ce %[[VAL_5]], %[[VAL_3]], %[[VAL_2]] : i32
+// CHECK:           %[[VAL_7:.*]] = seq.compreg.ce %[[VAL_0]], %[[VAL_3]], %[[VAL_2]] : i32
+// CHECK:           %[[VAL_8:.*]] = hw.constant false
+// CHECK:           %[[VAL_9:.*]] = seq.compreg %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_8]]  : i1
+// CHECK:           hw.output %[[VAL_6]], %[[VAL_7]], %[[VAL_9]] : i32, i32, i1
 // CHECK:         }
 
 // CHECK-LABEL:   hw.module @testMultiple_p0_s1(
 // CHECK-SAME:                                  %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, out1: i32, valid: i1) {
 // CHECK:           %[[VAL_5:.*]] = comb.add %[[VAL_0]], %[[VAL_1]] : i32
-// CHECK:           %[[VAL_6:.*]] = seq.clock_gate %[[VAL_3]], %[[VAL_2]]
-// CHECK:           %[[VAL_7:.*]] = seq.compreg %[[VAL_5]], %[[VAL_6]] : i32
-// CHECK:           %[[VAL_8:.*]] = seq.compreg %[[VAL_0]], %[[VAL_6]] : i32
-// CHECK:           %[[VAL_9:.*]] = hw.constant false
-// CHECK:           %[[VAL_10:.*]] = seq.compreg %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_9]]  : i1
-// CHECK:           hw.output %[[VAL_7]], %[[VAL_8]], %[[VAL_10]] : i32, i32, i1
+// CHECK:           %[[VAL_6:.*]] = seq.compreg.ce %[[VAL_5]], %[[VAL_3]], %[[VAL_2]] : i32
+// CHECK:           %[[VAL_7:.*]] = seq.compreg.ce %[[VAL_0]], %[[VAL_3]], %[[VAL_2]] : i32
+// CHECK:           %[[VAL_8:.*]] = hw.constant false
+// CHECK:           %[[VAL_9:.*]] = seq.compreg %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_8]]  : i1
+// CHECK:           hw.output %[[VAL_6]], %[[VAL_7]], %[[VAL_9]] : i32, i32, i1
 // CHECK:         }
 
 // CHECK-LABEL:   hw.module @testMultiple_p1(
@@ -164,29 +156,27 @@ hw.module @testSingle(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (o
 // CHECK-LABEL:   hw.module @testMultiple_p1_s0(
 // CHECK-SAME:                                  %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, out1: i32, valid: i1) {
 // CHECK:           %[[VAL_5:.*]] = comb.sub %[[VAL_0]], %[[VAL_1]] : i32
-// CHECK:           %[[VAL_6:.*]] = seq.clock_gate %[[VAL_3]], %[[VAL_2]]
-// CHECK:           %[[VAL_7:.*]] = seq.compreg %[[VAL_5]], %[[VAL_6]] : i32
-// CHECK:           %[[VAL_8:.*]] = seq.compreg %[[VAL_0]], %[[VAL_6]] : i32
-// CHECK:           %[[VAL_9:.*]] = hw.constant false
-// CHECK:           %[[VAL_10:.*]] = seq.compreg %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_9]]  : i1
-// CHECK:           hw.output %[[VAL_7]], %[[VAL_8]], %[[VAL_10]] : i32, i32, i1
+// CHECK:           %[[VAL_6:.*]] = seq.compreg.ce %[[VAL_5]], %[[VAL_3]], %[[VAL_2]] : i32
+// CHECK:           %[[VAL_7:.*]] = seq.compreg.ce %[[VAL_0]], %[[VAL_3]], %[[VAL_2]] : i32
+// CHECK:           %[[VAL_8:.*]] = hw.constant false
+// CHECK:           %[[VAL_9:.*]] = seq.compreg %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_8]]  : i1
+// CHECK:           hw.output %[[VAL_6]], %[[VAL_7]], %[[VAL_9]] : i32, i32, i1
 // CHECK:         }
 
 // CHECK-LABEL:   hw.module @testMultiple_p1_s1(
 // CHECK-SAME:                                  %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, out1: i32, valid: i1) {
 // CHECK:           %[[VAL_5:.*]] = comb.add %[[VAL_0]], %[[VAL_1]] : i32
-// CHECK:           %[[VAL_6:.*]] = seq.clock_gate %[[VAL_3]], %[[VAL_2]]
-// CHECK:           %[[VAL_7:.*]] = seq.compreg %[[VAL_5]], %[[VAL_6]] : i32
-// CHECK:           %[[VAL_8:.*]] = seq.compreg %[[VAL_0]], %[[VAL_6]] : i32
-// CHECK:           %[[VAL_9:.*]] = hw.constant false
-// CHECK:           %[[VAL_10:.*]] = seq.compreg %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_9]]  : i1
-// CHECK:           hw.output %[[VAL_7]], %[[VAL_8]], %[[VAL_10]] : i32, i32, i1
+// CHECK:           %[[VAL_6:.*]] = seq.compreg.ce %[[VAL_5]], %[[VAL_3]], %[[VAL_2]] : i32
+// CHECK:           %[[VAL_7:.*]] = seq.compreg.ce %[[VAL_0]], %[[VAL_3]], %[[VAL_2]] : i32
+// CHECK:           %[[VAL_8:.*]] = hw.constant false
+// CHECK:           %[[VAL_9:.*]] = seq.compreg %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_8]]  : i1
+// CHECK:           hw.output %[[VAL_6]], %[[VAL_7]], %[[VAL_9]] : i32, i32, i1
 // CHECK:         }
 
 // CHECK-LABEL:   hw.module @testMultiple(
 // CHECK-SAME:                            %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, out1: i1) {
-// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = hw.instance "testMultiple_p0" @testMultiple_p0(in0: %[[VAL_0]]: i32, in1: %[[VAL_1]]: i32, enable: %[[VAL_3]]: i1, clk: %[[VAL_4]]: i1, rst: %[[VAL_2]]: i1) -> (out0: i32, valid: i1)
-// CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = hw.instance "testMultiple_p1" @testMultiple_p1(in0: %[[VAL_5]]: i32, in1: %[[VAL_1]]: i32, enable: %[[VAL_3]]: i1, clk: %[[VAL_4]]: i1, rst: %[[VAL_2]]: i1) -> (out0: i32, valid: i1)
+// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = hw.instance "testMultiple_p0" @testMultiple_p0(in0: %[[VAL_0]]: i32, in1: %[[VAL_1]]: i32, enable: %[[VAL_2]]: i1, clk: %[[VAL_3]]: i1, rst: %[[VAL_4]]: i1) -> (out0: i32, valid: i1)
+// CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = hw.instance "testMultiple_p1" @testMultiple_p1(in0: %[[VAL_5]]: i32, in1: %[[VAL_1]]: i32, enable: %[[VAL_2]]: i1, clk: %[[VAL_3]]: i1, rst: %[[VAL_4]]: i1) -> (out0: i32, valid: i1)
 // CHECK:           hw.output %[[VAL_5]], %[[VAL_6]] : i32, i1
 // CHECK:         }
 hw.module @testMultiple(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out0: i32, out1: i1) {
@@ -228,26 +218,24 @@ hw.module @testMultiple(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> 
 // CHECK-SAME:                                       %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, valid: i1) {
 // CHECK:           %[[VAL_5:.*]] = hw.constant true
 // CHECK:           %[[VAL_6:.*]] = comb.sub %[[VAL_0]], %[[VAL_0]] : i32
-// CHECK:           %[[VAL_7:.*]] = seq.clock_gate %[[VAL_3]], %[[VAL_2]]
-// CHECK:           %[[VAL_8:.*]] = seq.compreg %[[VAL_6]], %[[VAL_7]] : i32
-// CHECK:           %[[VAL_9:.*]] = hw.constant false
-// CHECK:           %[[VAL_10:.*]] = seq.compreg %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_9]]  : i1
-// CHECK:           hw.output %[[VAL_8]], %[[VAL_10]] : i32, i1
-// CHECK:         }
-
-// CHECK-LABEL:   hw.module @testSingleWithExt_p0_s1(
-// CHECK-SAME:                                       %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, valid: i1) {
-// CHECK:           %[[VAL_5:.*]] = comb.add %[[VAL_0]], %[[VAL_1]] : i32
-// CHECK:           %[[VAL_6:.*]] = seq.clock_gate %[[VAL_3]], %[[VAL_2]]
-// CHECK:           %[[VAL_7:.*]] = seq.compreg %[[VAL_5]], %[[VAL_6]] : i32
+// CHECK:           %[[VAL_7:.*]] = seq.compreg.ce %[[VAL_6]], %[[VAL_3]], %[[VAL_2]] : i32
 // CHECK:           %[[VAL_8:.*]] = hw.constant false
 // CHECK:           %[[VAL_9:.*]] = seq.compreg %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_8]]  : i1
 // CHECK:           hw.output %[[VAL_7]], %[[VAL_9]] : i32, i1
 // CHECK:         }
 
+// CHECK-LABEL:   hw.module @testSingleWithExt_p0_s1(
+// CHECK-SAME:                                       %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, valid: i1) {
+// CHECK:           %[[VAL_5:.*]] = comb.add %[[VAL_0]], %[[VAL_1]] : i32
+// CHECK:           %[[VAL_6:.*]] = seq.compreg.ce %[[VAL_5]], %[[VAL_3]], %[[VAL_2]] : i32
+// CHECK:           %[[VAL_7:.*]] = hw.constant false
+// CHECK:           %[[VAL_8:.*]] = seq.compreg %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_7]]  : i1
+// CHECK:           hw.output %[[VAL_6]], %[[VAL_8]] : i32, i1
+// CHECK:         }
+
 // CHECK-LABEL:   hw.module @testSingleWithExt(
 // CHECK-SAME:                                 %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, out1: i32) {
-// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]], %[[VAL_7:.*]] = hw.instance "testSingleWithExt_p0" @testSingleWithExt_p0(in0: %[[VAL_0]]: i32, in1: %[[VAL_0]]: i32, extIn0: %[[VAL_1]]: i32, enable: %[[VAL_3]]: i1, clk: %[[VAL_4]]: i1, rst: %[[VAL_2]]: i1) -> (out0: i32, out1: i32, valid: i1)
+// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]], %[[VAL_7:.*]] = hw.instance "testSingleWithExt_p0" @testSingleWithExt_p0(in0: %[[VAL_0]]: i32, in1: %[[VAL_0]]: i32, extIn0: %[[VAL_1]]: i32, enable: %[[VAL_2]]: i1, clk: %[[VAL_3]]: i1, rst: %[[VAL_4]]: i1) -> (out0: i32, out1: i32, valid: i1)
 // CHECK:           hw.output %[[VAL_5]], %[[VAL_6]] : i32, i32
 // CHECK:         }
 hw.module @testSingleWithExt(%arg0: i32, %ext1: i32, %go : i1, %clk: i1, %rst: i1) -> (out0: i32, out1: i32) {
@@ -290,11 +278,10 @@ hw.module @testSingleWithExt(%arg0: i32, %ext1: i32, %go : i1, %clk: i1, %rst: i
 // CHECK:           %[[VAL_9:.*]] = comb.add %[[VAL_8]], %[[VAL_0]] : i32
 // CHECK:           %[[VAL_10:.*]] = seq.compreg.ce %[[VAL_9]], %[[VAL_1]], %[[VAL_3]], %[[VAL_2]], %[[VAL_6]]  : i32
 // CHECK:           sv.assign %[[VAL_7]], %[[VAL_10]] : i32
-// CHECK:           %[[VAL_11:.*]] = seq.clock_gate %[[VAL_4]], %[[VAL_3]]
-// CHECK:           %[[VAL_12:.*]] = seq.compreg %[[VAL_10]], %[[VAL_11]] : i32
-// CHECK:           %[[VAL_13:.*]] = hw.constant false
-// CHECK:           %[[VAL_14:.*]] = seq.compreg %[[VAL_3]], %[[VAL_4]], %[[VAL_5]], %[[VAL_13]]  : i1
-// CHECK:           hw.output %[[VAL_12]], %[[VAL_14]] : i32, i1
+// CHECK:           %[[VAL_11:.*]] = seq.compreg.ce %[[VAL_10]], %[[VAL_4]], %[[VAL_3]] : i32
+// CHECK:           %[[VAL_12:.*]] = hw.constant false
+// CHECK:           %[[VAL_13:.*]] = seq.compreg %[[VAL_3]], %[[VAL_4]], %[[VAL_5]], %[[VAL_12]]  : i1
+// CHECK:           hw.output %[[VAL_11]], %[[VAL_13]] : i32, i1
 // CHECK:         }
 
 // CHECK-LABEL:   hw.module @testControlUsage_p0_s1(
@@ -305,16 +292,15 @@ hw.module @testSingleWithExt(%arg0: i32, %ext1: i32, %go : i1, %clk: i1, %rst: i
 // CHECK:           %[[VAL_9:.*]] = comb.add %[[VAL_8]], %[[VAL_0]] : i32
 // CHECK:           %[[VAL_10:.*]] = seq.compreg.ce %[[VAL_9]], %[[VAL_1]], %[[VAL_3]], %[[VAL_2]], %[[VAL_6]]  : i32
 // CHECK:           sv.assign %[[VAL_7]], %[[VAL_10]] : i32
-// CHECK:           %[[VAL_11:.*]] = seq.clock_gate %[[VAL_4]], %[[VAL_3]]
-// CHECK:           %[[VAL_12:.*]] = seq.compreg %[[VAL_10]], %[[VAL_11]] : i32
-// CHECK:           %[[VAL_13:.*]] = hw.constant false
-// CHECK:           %[[VAL_14:.*]] = seq.compreg %[[VAL_3]], %[[VAL_4]], %[[VAL_5]], %[[VAL_13]]  : i1
-// CHECK:           hw.output %[[VAL_12]], %[[VAL_14]] : i32, i1
+// CHECK:           %[[VAL_11:.*]] = seq.compreg.ce %[[VAL_10]], %[[VAL_4]], %[[VAL_3]] : i32
+// CHECK:           %[[VAL_12:.*]] = hw.constant false
+// CHECK:           %[[VAL_13:.*]] = seq.compreg %[[VAL_3]], %[[VAL_4]], %[[VAL_5]], %[[VAL_12]]  : i1
+// CHECK:           hw.output %[[VAL_11]], %[[VAL_13]] : i32, i1
 // CHECK:         }
 
 // CHECK-LABEL:   hw.module @testControlUsage(
 // CHECK-SAME:                                %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1) -> (out0: i32) {
-// CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = hw.instance "testControlUsage_p0" @testControlUsage_p0(in0: %[[VAL_0]]: i32, extIn0: %[[VAL_2]]: i1, extIn1: %[[VAL_3]]: i1, enable: %[[VAL_2]]: i1, clk: %[[VAL_3]]: i1, rst: %[[VAL_1]]: i1) -> (out0: i32, valid: i1)
+// CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = hw.instance "testControlUsage_p0" @testControlUsage_p0(in0: %[[VAL_0]]: i32, extIn0: %[[VAL_2]]: i1, extIn1: %[[VAL_3]]: i1, enable: %[[VAL_1]]: i1, clk: %[[VAL_2]]: i1, rst: %[[VAL_3]]: i1) -> (out0: i32, valid: i1)
 // CHECK:           hw.output %[[VAL_4]] : i32
 // CHECK:         }
 hw.module @testControlUsage(%arg0: i32, %go : i1, %clk: i1, %rst: i1) -> (out0: i32) {
