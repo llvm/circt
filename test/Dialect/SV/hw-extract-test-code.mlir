@@ -420,6 +420,7 @@ module {
 
 module {
   // CHECK-LABEL: @RegExtracted_cover
+  // CHECK-SAME: %designAndTestCode
   // CHECK: %testCode1 = seq.firreg
   // CHECK: %testCode2 = seq.firreg
   // CHECK-NOT: seq.firreg

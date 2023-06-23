@@ -147,17 +147,20 @@ static StringAttr getNameForPort(Value val, ArrayAttr modulePorts) {
           return reg.getNameAttr();
       }
     } else if (auto inst = dyn_cast<hw::InstanceOp>(op)) {
-      for (auto [index, result] : llvm::enumerate(inst.getResults()))
-        if (result == val) {
-          SmallString<64> portName = inst.getInstanceName();
-          portName += ".";
-          auto resultName = inst.getResultName(index);
-          if (resultName && !resultName.getValue().empty())
-            portName += resultName.getValue();
-          else
-            Twine(index).toVector(portName);
-          return StringAttr::get(val.getContext(), portName);
-        }
+      auto index = val.cast<mlir::OpResult>().getResultNumber();
+      SmallString<64> portName = inst.getInstanceName();
+      portName += ".";
+      auto resultName = inst.getResultName(index);
+      if (resultName && !resultName.getValue().empty())
+        portName += resultName.getValue();
+      else
+        Twine(index).toVector(portName);
+      return StringAttr::get(val.getContext(), portName);
+    } else if (op->getNumResults() == 1) {
+      if (auto name = op->getAttrOfType<StringAttr>("name"))
+        return name;
+      if (auto namehint = op->getAttrOfType<StringAttr>("sv.namehint"))
+        return namehint;
     }
   }
 
