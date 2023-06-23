@@ -826,10 +826,12 @@ LogicalResult FirMemReadWriteOp::canonicalize(FirMemReadWriteOp op,
   // trivially disabled.
   if (isConstZero(op.getEnable()) || isConstZero(op.getMask()) ||
       isConst(op.getClock()) || isConstZero(op.getMode())) {
+    auto opAttrs = op->getAttrs();
+    auto opAttrNames = op.getAttributeNames();
     auto newOp = rewriter.replaceOpWithNewOp<FirMemReadOp>(
         op, op.getMemory(), op.getAddress(), op.getClock(), op.getEnable());
-    for (auto namedAttr : op->getAttrs())
-      if (!llvm::is_contained(op.getAttributeNames(), namedAttr.getName()))
+    for (auto namedAttr : opAttrs)
+      if (!llvm::is_contained(opAttrNames, namedAttr.getName()))
         newOp->setAttr(namedAttr.getName(), namedAttr.getValue());
     return success();
   }
