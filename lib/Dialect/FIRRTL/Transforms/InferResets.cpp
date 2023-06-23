@@ -120,7 +120,7 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
     return it->second;
   auto nullBit = [&]() {
     return createZeroValue(builder,
-                           UIntType::get(builder.getContext(), 1, true), cache);
+                           UIntType::get(builder.getContext(), 1, /*isConst=*/true), cache);
   };
   auto value =
       TypeSwitch<FIRRTLBaseType, Value>(type)
