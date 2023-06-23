@@ -129,6 +129,25 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
 // Type Parsing
 //===----------------------------------------------------------------------===//
 
+/// Parse the field name for a bundle.
+static ParseResult parseFieldName(AsmParser &parser, std::string &nameStr,
+                                  StringRef &name) {
+  // The 'name' can be an identifier or an integer.
+  uint32_t fieldIntName;
+  auto intName = parser.parseOptionalInteger(fieldIntName);
+  if (intName.has_value()) {
+    if (failed(intName.value()))
+      return failure();
+    nameStr = llvm::utostr(fieldIntName);
+    name = nameStr;
+  } else {
+    // Otherwise must be an identifier.
+    if (parser.parseKeyword(&name))
+      return failure();
+  }
+  return success();
+}
+
 /// Parse a type with a custom parser implementation.
 ///
 /// This only accepts a subset of all types in the dialect. Use `parseType`
@@ -202,19 +221,8 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       StringRef name;
       FIRRTLBaseType type;
 
-      // The 'name' can be an identifier or an integer.
-      uint32_t fieldIntName;
-      auto intName = parser.parseOptionalInteger(fieldIntName);
-      if (intName.has_value()) {
-        if (failed(intName.value()))
-          return failure();
-        nameStr = llvm::utostr(fieldIntName);
-        name = nameStr;
-      } else {
-        // Otherwise must be an identifier.
-        if (parser.parseKeyword(&name))
-          return failure();
-      }
+      if (failed(parseFieldName(parser, nameStr, name)))
+        return failure();
 
       bool isFlip = succeeded(parser.parseOptionalKeyword("flip"));
       if (parser.parseColon() || parseNestedBaseType(type, parser))
@@ -238,19 +246,8 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       StringRef name;
       FIRRTLType type;
 
-      // The 'name' can be an identifier or an integer.
-      uint32_t fieldIntName;
-      auto intName = parser.parseOptionalInteger(fieldIntName);
-      if (intName.has_value()) {
-        if (failed(intName.value()))
-          return failure();
-        nameStr = llvm::utostr(fieldIntName);
-        name = nameStr;
-      } else {
-        // Otherwise must be an identifier.
-        if (parser.parseKeyword(&name))
-          return failure();
-      }
+      if (failed(parseFieldName(parser, nameStr, name)))
+        return failure();
 
       bool isFlip = succeeded(parser.parseOptionalKeyword("flip"));
       if (parser.parseColon() || parseNestedType(type, parser))
@@ -275,19 +272,8 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       StringRef name;
       FIRRTLBaseType type;
 
-      // The 'name' can be an identifier or an integer.
-      uint32_t fieldIntName;
-      auto intName = parser.parseOptionalInteger(fieldIntName);
-      if (intName.has_value()) {
-        if (failed(intName.value()))
-          return failure();
-        nameStr = llvm::utostr(fieldIntName);
-        name = nameStr;
-      } else {
-        // Otherwise must be an identifier.
-        if (parser.parseKeyword(&name))
-          return failure();
-      }
+      if (failed(parseFieldName(parser, nameStr, name)))
+        return failure();
 
       if (parser.parseColon() || parseNestedBaseType(type, parser))
         return failure();
