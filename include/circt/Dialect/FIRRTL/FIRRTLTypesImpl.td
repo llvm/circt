@@ -264,6 +264,7 @@ class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [
     std::optional<unsigned> getElementIndex(StringRef name);
 
     /// Look up an element's name by index. This asserts if index is invalid.
+    StringAttr getElementNameAttr(size_t index);
     StringRef getElementName(size_t index);
 
     /// Look up an element by name.  This returns None on failure.

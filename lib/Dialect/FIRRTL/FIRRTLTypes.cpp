@@ -1363,10 +1363,14 @@ std::optional<unsigned> BundleType::getElementIndex(StringRef name) {
   return std::nullopt;
 }
 
-StringRef BundleType::getElementName(size_t index) {
+StringAttr BundleType::getElementNameAttr(size_t index) {
   assert(index < getNumElements() &&
          "index must be less than number of fields in bundle");
-  return getElements()[index].name.getValue();
+  return getElements()[index].name;
+}
+
+StringRef BundleType::getElementName(size_t index) {
+  return getElementNameAttr(index).getValue();
 }
 
 std::optional<BundleType::BundleElement>
@@ -1557,10 +1561,14 @@ std::optional<unsigned> OpenBundleType::getElementIndex(StringRef name) {
   return std::nullopt;
 }
 
-StringRef OpenBundleType::getElementName(size_t index) {
+StringAttr OpenBundleType::getElementNameAttr(size_t index) {
   assert(index < getNumElements() &&
          "index must be less than number of fields in bundle");
-  return getElements()[index].name.getValue();
+  return getElements()[index].name;
+}
+
+StringRef OpenBundleType::getElementName(size_t index) {
+  return getElementNameAttr(index).getValue();
 }
 
 std::optional<OpenBundleType::BundleElement>
