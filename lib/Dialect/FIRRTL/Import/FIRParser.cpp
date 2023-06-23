@@ -4200,7 +4200,7 @@ ParseResult FIRCircuitParser::parseTypeDecl() {
     type = BaseTypeAliasType::get(name, base);
   else
     emitWarning(loc)
-        << "type alias for non-based type " << type
+        << "type alias for non-base type " << type
         << " is currently not supported. Type alias is stripped immediately";
 
   if (!getConstants().aliasMap.insert({id, type}).second)
