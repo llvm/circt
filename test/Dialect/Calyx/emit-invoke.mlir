@@ -20,13 +20,13 @@ calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%don
   %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i32, i1, i1, i1, i32, i1 
   %c1_10 = hw.constant 10 : i32
 
-  calyx.control {
-    calyx.seq {
-       // CHECK: invoke id(in = 32'd10)();
-       calyx.invoke @id(%id.in = %c1_10) -> (i32)
-       // CHECK: invoke r(in = id.out)(out = out);
-       calyx.invoke @r(%r.in = %id.out, %out = %r.out) -> (i32, i32) 
+    calyx.control {
+      calyx.seq {
+        // CHECK: invoke id(in = 32'd10)();
+        calyx.invoke @id(%id.in = %c1_10) -> (i32)
+        // CHECK: invoke r(in = id.out)(out = out);
+        calyx.invoke @r(%r.in = %id.out, %out = %r.out) -> (i32, i32) 
+      }
     }
   }
-}
 }
