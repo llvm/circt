@@ -741,13 +741,14 @@ void Emitter::emitMemory(MemoryOp memory) {
 void Emitter::emitInvoke(InvokeOp invoke) {
   StringRef callee = invoke.getCallee();
   indent() << "invoke " << callee;
+  auto inputs = invoke.getInputs();
   ArrayAttr portNames = invoke.getPortNames();
   ArrayAttr inputNames = invoke.getInputNames();
   /// Because the ports of all components of calyx.invoke are inside a (),
   /// here the input and output ports are divided, inputs and outputs store
   /// the connections for a subset of input and output ports of the instance.
-  llvm::StringMap<StringRef> inputs;
-  llvm::StringMap<StringRef> outputs;
+  llvm::StringMap<StringRef> inputsMap;
+  llvm::StringMap<StringRef> outputsMap;
   for (size_t i = 0; i < portNames.size(); ++i) {
     StringRef portName = cast<StringAttr>(portNames[i]).getValue();
     StringRef inputName = cast<StringAttr>(inputNames[i]).getValue();
@@ -758,29 +759,39 @@ void Emitter::emitInvoke(InvokeOp invoke) {
     /// port of the component, which is a bit different from calyx's native
     /// compiler. Later on, the classified connection relations are outputted
     /// uniformly and converted to calyx's native compiler format.
-    if (portName.substr(1, callee.size()) == callee)
-      inputs[portName.drop_front(2 + callee.size())] = inputName.drop_front(1);
-    else if (inputName.substr(1, callee.size()) == callee)
-      outputs[inputName.drop_front(2 + callee.size())] = portName.drop_front(1);
-    else
-      invoke.emitOpError(
-          "the connection of a set of ports for the invoke operation must "
-          "contain the input or output ports of the invoke component.");
+    if (portName.substr(1, callee.size()) == callee) {
+      // If the input to the port is a number.
+      if (inputs[i].getDefiningOp() &&
+          isa<hw::ConstantOp>(inputs[i].getDefiningOp())) {
+        hw::ConstantOp constant =
+            cast<hw::ConstantOp>(inputs[i].getDefiningOp());
+        APInt value = constant.getValue();
+        std::string mapValue = std::to_string(value.getBitWidth()) +
+                               apostrophe().data() + "d" +
+                               std::to_string(value.getZExtValue());
+        inputsMap[portName.drop_front(2 + callee.size())] = mapValue;
+        continue;
+      }
+      inputsMap[portName.drop_front(2 + callee.size())] =
+          inputName.drop_front(1);
+    } else if (inputName.substr(1, callee.size()) == callee)
+      outputsMap[inputName.drop_front(2 + callee.size())] =
+          portName.drop_front(1);
   }
   /// Emit inputs
   os << LParen();
-  for (auto iter = inputs.begin(); iter != inputs.end();) {
+  for (auto iter = inputsMap.begin(); iter != inputsMap.end();) {
     os << iter->getKey() << " = " << iter->getValue();
-    if (++iter != inputs.end())
+    if (++iter != inputsMap.end())
       os << comma() << " ";
   }
   os << RParen();
 
   /// Emit outputs
   os << LParen();
-  for (auto iter = outputs.begin(); iter != outputs.end();) {
+  for (auto iter = outputsMap.begin(); iter != outputsMap.end();) {
     os << iter->getKey() << " = " << iter->getValue();
-    if (++iter != outputs.end())
+    if (++iter != outputsMap.end())
       os << comma() << " ";
   }
   os << RParen() << semicolonEndL();

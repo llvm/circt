@@ -22,7 +22,7 @@ calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%don
 
   calyx.control {
     calyx.seq {
-       // CHECK: invoke id(in = c1_10)();
+       // CHECK: invoke id(in = 32'd10)();
        calyx.invoke @id(%id.in = %c1_10) -> (i32)
        // CHECK: invoke r(in = id.out)(out = out);
        calyx.invoke @r(%r.in = %id.out, %out = %r.out) -> (i32, i32) 
