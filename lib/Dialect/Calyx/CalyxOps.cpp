@@ -2421,20 +2421,29 @@ LogicalResult InvokeOp::verify() {
   auto ports = getPorts();
   auto inputs = getInputs();
   // We have verified earlier that the instance has a go port.
-  Value value = getInstGoValue();
-  for (Value port : ports) {
+  Value goValue = getInstGoValue();
+  Value doneValue = getInstDoneValue();
+  for (size_t i = 0; i < ports.size(); ++i) {
     // Check the direction of these input ports.
-    if (failed(verifyInvokeOpValue(*this, port, true)))
+    if (failed(verifyInvokeOpValue(*this, ports[i], true)))
       return failure();
     // The go port should not appear in the parameter list.
-    if (port == value)
+    if (ports[i] == goValue)
       return emitOpError() << "the go port of '" << callee
                            << "' cannot appear here.";
-  }
-  // Check the direction of these input ports.
-  for (Value input : inputs)
-    if (failed(verifyInvokeOpValue(*this, input, false)))
+    // Check the direction of these input ports.
+    if (failed(verifyInvokeOpValue(*this, inputs[i], false)))
       return failure();
+    if (inputs[i] == doneValue)
+      return emitOpError() << "the done port of '" << callee
+                           << "' cannot appear here.";
+    // Check if the connection uses the callee's port.
+    if (ports[i].getDefiningOp() != operation &&
+        inputs[i].getDefiningOp() != operation)
+      return emitOpError() << "all connections should involve the port of the "
+                              "invoke instance.";
+  }
+
   return success();
 }
 

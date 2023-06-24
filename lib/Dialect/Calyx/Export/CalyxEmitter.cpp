@@ -783,7 +783,7 @@ void Emitter::emitInvoke(InvokeOp invoke) {
     if (++iter != outputs.end())
       os << comma() << " ";
   }
-  os << RParen() << endl();
+  os << RParen() << semicolonEndL();
 }
 
 /// Calling getName() on a calyx operation will return "calyx.${opname}". This
@@ -836,20 +836,23 @@ void Emitter::emitAssignment(AssignOp op) {
 }
 
 void Emitter::emitWires(WiresOp op) {
-  if (op)
-    emitCalyxSection("wires", [&]() {
-      for (auto &&bodyOp : *op.getBodyBlock()) {
-        TypeSwitch<Operation *>(&bodyOp)
-            .Case<GroupInterface>([&](auto op) { emitGroup(op); })
-            .Case<AssignOp>([&](auto op) { emitAssignment(op); })
-            .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp>(
-                [&](auto op) { /* Do nothing. */ })
-            .Default([&](auto op) {
-              emitOpError(op,
-                          "not supported for emission inside wires section");
-            });
-      }
-    });
+  if (!op) {
+    indent() << "wires " << LBraceEndL() << endl();
+    indent() << RBraceEndL();
+    return;
+  }
+  emitCalyxSection("wires", [&]() {
+    for (auto &&bodyOp : *op.getBodyBlock()) {
+      TypeSwitch<Operation *>(&bodyOp)
+          .Case<GroupInterface>([&](auto op) { emitGroup(op); })
+          .Case<AssignOp>([&](auto op) { emitAssignment(op); })
+          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp>(
+              [&](auto op) { /* Do nothing. */ })
+          .Default([&](auto op) {
+            emitOpError(op, "not supported for emission inside wires section");
+          });
+    }
+  });
 }
 
 void Emitter::emitGroup(GroupInterface group) {

@@ -4,7 +4,6 @@
 // CHECK-NEXT:   calyx.component @identity(%in: i32, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i32, %done: i1 {done}) {
 // CHECK-NEXT:     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i32, i1, i1, i1, i32, i1
 // CHECK-NEXT:     %true = hw.constant true
-// CHECK-NEXT:     %true_0 = hw.constant true
 // CHECK-NEXT:     calyx.wires {
 // CHECK-NEXT:       calyx.group @save {
 // CHECK-NEXT:         calyx.assign %r.in = %in : i32
@@ -81,8 +80,7 @@
 module attributes {calyx.entrypoint = "main"} { 
 calyx.component @identity(%in: i32, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i32, %done: i1 {done}) {
   %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i32, i1, i1, i1, i32, i1
-  %c1_1 = hw.constant 1 : i1
-  %true = hw.constant true
+  %c1_1 = hw.constant 1 : i1 
   calyx.wires {
     calyx.group @save {
       calyx.assign %r.in = %in : i32 
