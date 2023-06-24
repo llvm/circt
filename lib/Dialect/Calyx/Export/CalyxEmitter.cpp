@@ -761,8 +761,7 @@ void Emitter::emitInvoke(InvokeOp invoke) {
     /// uniformly and converted to calyx's native compiler format.
     if (portName.substr(1, callee.size()) == callee) {
       // If the input to the port is a number.
-      if (inputs[i].getDefiningOp() &&
-          isa<hw::ConstantOp>(inputs[i].getDefiningOp())) {
+      if (isa_and_nonnull<hw::ConstantOp>(inputs[i].getDefiningOp())) {
         hw::ConstantOp constant =
             cast<hw::ConstantOp>(inputs[i].getDefiningOp());
         APInt value = constant.getValue();
