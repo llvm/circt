@@ -60,7 +60,7 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
     dimension in `$sizes`. The `$width` attribute dictates the width of a single
     element.
 
-    See https://capra.cs.cornell.edu/docs/calyx/libraries/core.html#memories for
+    See https://docs.calyxir.org/libraries/core.html#memories for
     more information.
 
     ```mlir
