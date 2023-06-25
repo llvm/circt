@@ -1869,7 +1869,8 @@ SmallVector<StringRef> SeqMemoryOp::portNames() {
         StringAttr::get(this->getContext(), "addr" + std::to_string(i));
     portNames.push_back(nameAttr.getValue());
   }
-  portNames.append({"write_data", "write_en", "write_done", "clk", "read_data", "read_en", "read_done"});
+  portNames.append({"write_data", "write_en", "write_done", "clk", "read_data",
+                    "read_en", "read_done"});
   return portNames;
 }
 
@@ -1897,13 +1898,13 @@ SmallVector<DictionaryAttr> SeqMemoryOp::portAttributes() {
   clk.append("clk", isSet);
   readEn.append("go", isTwo);
   readDone.append("done", isTwo);
-  portAttributes.append({DictionaryAttr::get(context),   // Write Data
-                         writeEn.getDictionary(context), // Write enable
+  portAttributes.append({DictionaryAttr::get(context),     // Write Data
+                         writeEn.getDictionary(context),   // Write enable
                          writeDone.getDictionary(context), // Write done
-                         clk.getDictionary(context),     // Clk
-                         DictionaryAttr::get(context),   // Out
-                         readEn.getDictionary(context), // Read enable
-                         readDone.getDictionary(context)} // Read done
+                         clk.getDictionary(context),       // Clk
+                         DictionaryAttr::get(context),     // Out
+                         readEn.getDictionary(context),    // Read enable
+                         readDone.getDictionary(context)}  // Read done
   );
   return portAttributes;
 }
@@ -1911,8 +1912,8 @@ SmallVector<DictionaryAttr> SeqMemoryOp::portAttributes() {
 bool SeqMemoryOp::isCombinational() { return false; }
 
 void SeqMemoryOp::build(OpBuilder &builder, OperationState &state,
-                     StringRef instanceName, int64_t width,
-                     ArrayRef<int64_t> sizes, ArrayRef<int64_t> addrSizes) {
+                        StringRef instanceName, int64_t width,
+                        ArrayRef<int64_t> sizes, ArrayRef<int64_t> addrSizes) {
   state.addAttribute(SymbolTable::getSymbolAttrName(),
                      builder.getStringAttr(instanceName));
   state.addAttribute("width", builder.getI64IntegerAttr(width));
@@ -1940,7 +1941,8 @@ LogicalResult SeqMemoryOp::verify() {
     return emitOpError("mismatched number of dimensions (")
            << numDims << ") and address sizes (" << numAddrs << ")";
 
-  size_t numExtraPorts = 7; // write data/enable/done, clk, and read data/enable/done.
+  size_t numExtraPorts =
+      7; // write data/enable/done, clk, and read data/enable/done.
   if (getNumResults() != numAddrs + numExtraPorts)
     return emitOpError("incorrect number of address ports, expected ")
            << numAddrs;
