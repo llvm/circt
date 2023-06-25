@@ -50,7 +50,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
       firrtl::createMemToRegOfVecPass(opt.replSeqMem, opt.ignoreReadEnableMem));
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
-  
 
   if (opt.exportChiselInterface) {
     if (opt.chiselInterfaceOutDirectory.empty()) {

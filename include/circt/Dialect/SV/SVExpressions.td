@@ -12,6 +12,7 @@
 
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "circt/Dialect/SV/SVTypes.td"
+include "circt/Dialect/HW/HWTypes.td"
 
 def HWValueOrInOutType : AnyTypeOf<[HWValueType, InOutType]>;
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
@@ -170,6 +171,18 @@ def ConstantXOp : SVOp<"constantX", [Pure, HasCustomSSAName]> {
     }
   }];
 }
+
+class SVUnpackedArrayReductionOp<string mnemonic, list<Trait> traits = []> :
+    SVOp<mnemonic, traits # [Pure]> {
+  let arguments = (ins HWValueType:$input);
+  let results = (outs HWValueType:$result);
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
+}
+
+def UnpackedArrayOrOp : SVUnpackedArrayReductionOp<"unpacked_array.or">;
+def UnpackedArrayAndOp : SVUnpackedArrayReductionOp<"unpacked_array.and">;
+def UnpackedArrayXOrOp : SVUnpackedArrayReductionOp<"unpacked_array.xor">;
 
 def ConstantZOp : SVOp<"constantZ", [Pure, HasCustomSSAName]> {
   let summary = "A constant of value 'z'";

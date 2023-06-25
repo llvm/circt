@@ -408,7 +408,7 @@ static bool hoistNonSideEffectExpr(Operation *op) {
   // never generate a temporary and in fact must always be emitted inline.
   if (isExpressionAlwaysInline(op) &&
       !((isa<sv::ReadInOutOp>(op) &&
-      /*HACK*/
+         /*HACK*/
          !cast<sv::ReadInOutOp>(op).getInput().getDefiningOp<sv::LogicOp>()) ||
         op->getResult(0).getType().isa<hw::InOutType>()))
     return false;

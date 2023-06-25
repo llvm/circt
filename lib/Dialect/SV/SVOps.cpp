@@ -1163,9 +1163,8 @@ LogicalResult ForOp::canonicalize(ForOp op, PatternRewriter &rewriter) {
       bool changed = false;
       for (auto user :
            llvm::make_early_inc_range(op.getInductionVar().getUsers())) {
-        if (auto arrayGet =
-                dyn_cast<hw::ArrayGetOp>(user))
-          if (replaceUser(arrayGet,  op.getInductionVar())) {
+        if (auto arrayGet = dyn_cast<hw::ArrayGetOp>(user))
+          if (replaceUser(arrayGet, op.getInductionVar())) {
             continue;
             changed = true;
           }

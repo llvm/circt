@@ -32,6 +32,11 @@ def HWCleanup : Pass<"hw-cleanup", "hw::HWModuleOp"> {
   let constructor = "circt::sv::createHWCleanupPass()";
 }
 
+def HWLoopRerolling : Pass<"hw-loop-rerolling", "hw::HWModuleOp"> {
+  let summary = "Create for-loop";
+  let constructor = "circt::sv::createHWLoopRerollingPass()";
+}
+
 def HWLegalizeModules : Pass<"hw-legalize-modules", "hw::HWModuleOp"> {
   let summary = "Eliminate features marked unsupported in LoweringOptions";
   let description = [{
