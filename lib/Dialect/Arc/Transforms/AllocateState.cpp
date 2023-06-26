@@ -110,6 +110,10 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
   }
 
   // For every user of the alloc op, create a local `StorageGetOp`.
+  // First, create an ordering of operations to avoid a very expensive
+  // combination of isBeforeInBlock and moveBefore calls (which can be O(n²))
+  DenseMap<Operation *, unsigned> opOrder;
+  block->walk([&](Operation *op) { opOrder.insert({op, opOrder.size()}); });
   SmallVector<StorageGetOp> getters;
   for (auto [result, storage, offset] : gettersToCreate) {
     SmallDenseMap<Block *, StorageGetOp> getterForBlock;
@@ -122,13 +126,10 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
         getter =
             builder.create<StorageGetOp>(result.getType(), storage, offset);
         getters.push_back(getter);
-      } else if (user->isBeforeInBlock(getter)) {
-        // TODO: This is a very expensive operation since us inserting
-        // operations makes `isBeforeInBlock` re-enumerate the entire block
-        // every single time. This doesn't happen often in practice since there
-        // are relatively few `AllocStorageOp`s, but we should improve this in a
-        // similar fashion as we did in the `LowerStates` pass.
+        opOrder[getter] = opOrder.lookup(user);
+      } else if (opOrder.lookup(user) < opOrder.lookup(getter)) {
         getter->moveBefore(user);
+        opOrder[getter] = opOrder.lookup(user);
       }
       user->replaceUsesOfWith(result, getter);
     }
