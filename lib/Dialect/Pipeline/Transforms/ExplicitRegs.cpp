@@ -182,9 +182,8 @@ void ExplicitRegsPass::runOnOperation() {
     llvm::SmallVector<Type> regAndPassTypes;
     llvm::append_range(regAndPassTypes, ValueRange(regIns).getTypes());
     llvm::append_range(regAndPassTypes, ValueRange(passIns).getTypes());
-    stage->addArguments(regAndPassTypes,
-                        llvm::SmallVector<Location>(regAndPassTypes.size(),
-                                                    UnknownLoc::get(ctx)));
+    for (auto [i, type] : llvm::enumerate(regAndPassTypes))
+      stage->insertArgument(i, type, UnknownLoc::get(ctx));
 
     // Replace backedges for the next stage with the new arguments.
     for (auto it : llvm::enumerate(regMap)) {

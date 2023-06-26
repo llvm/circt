@@ -211,7 +211,9 @@ def PipelineToHW : Pass<"lower-pipeline-to-hw", "hw::HWModuleOp"> {
   ];
   let options = [
     Option<"outlineStages", "outline-stages", "bool", "false",
-      "Outline each stage to a separate `hw.module`.">
+      "Outline each stage to a separate `hw.module`.">,
+    Option<"clockGateRegs", "clock-gate-regs", "bool", "false",
+      "Clock gate each register instead of (default) input muxing  (ASIC optimization).">
   ];
 }
 
