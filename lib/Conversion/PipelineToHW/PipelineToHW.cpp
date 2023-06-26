@@ -285,11 +285,13 @@ public:
       parent.getStageExtInputs(block, stageExtInputs);
       extInputs =
           mod.getArguments().slice(nStageInputArgs, stageExtInputs.size());
-      valid = mod.getArgument(mod.getNumArguments() - (withStall ? 4 : 3));
+
+      auto portLookup = mod.getPortLookupInfo();
       if (withStall)
-        stall = mod.getArgument(mod.getNumArguments() - 3);
-      clock = mod.getArgument(mod.getNumArguments() - 2);
-      reset = mod.getArgument(mod.getNumArguments() - 1);
+        stall = mod.getArgument(*portLookup.getInputPortIndex("stall"));
+      valid = mod.getArgument(*portLookup.getInputPortIndex("enable"));
+      clock = mod.getArgument(*portLookup.getInputPortIndex("clk"));
+      reset = mod.getArgument(*portLookup.getInputPortIndex("rst"));
     }
 
     ValueRange inputs;
@@ -322,10 +324,11 @@ public:
         buildPipelineLike(pipelineName, pipeline.getInputs().getTypes(),
                           pipeline.getExtInputs().getTypes(),
                           pipeline.getResults().getTypes(), withStall);
+    auto portLookup = pipelineMod.getPortLookupInfo();
     pipelineClk = pipelineMod.getBody().front().getArgument(
-        pipelineMod.getBody().front().getNumArguments() - 2);
+        *portLookup.getInputPortIndex("clk"));
     pipelineRst = pipelineMod.getBody().front().getArgument(
-        pipelineMod.getBody().front().getNumArguments() - 1);
+        *portLookup.getInputPortIndex("rst"));
 
     if (!pipeline.getExtInputs().empty()) {
       // Maintain a mapping between external inputs and their corresponding
