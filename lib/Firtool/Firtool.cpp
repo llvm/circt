@@ -215,6 +215,7 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
            FirtoolOptions::RandomKind::Reg),
        /*emitSeparateAlwaysBlocks=*/
        opt.emitSeparateAlwaysBlocks}));
+  pm.addPass(seq::createLowerFirMemPass());
   pm.addPass(sv::createHWMemSimImplPass(
       opt.replSeqMem, opt.ignoreReadEnableMem, opt.addMuxPragmas,
       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),

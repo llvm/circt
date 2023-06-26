@@ -38,10 +38,16 @@ using namespace circt;
 using namespace seq;
 
 namespace {
+#define GEN_PASS_DEF_LOWERSEQTOSV
+#define GEN_PASS_DEF_LOWERSEQFIRRTLTOSV
+#define GEN_PASS_DEF_LOWERSEQFIRRTLINITTOSV
+#include "circt/Dialect/Seq/SeqPasses.h.inc"
+
 struct SeqToSVPass : public impl::LowerSeqToSVBase<SeqToSVPass> {
   void runOnOperation() override;
   using LowerSeqToSVBase::lowerToAlwaysFF;
 };
+
 struct SeqFIRRTLToSVPass
     : public impl::LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass> {
   void runOnOperation() override;

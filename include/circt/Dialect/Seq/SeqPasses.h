@@ -32,6 +32,7 @@ createSeqFIRRTLLowerToSVPass(const LowerSeqFIRRTLToSVOptions &options = {});
 std::unique_ptr<mlir::Pass> createLowerSeqHLMemPass();
 std::unique_ptr<mlir::Pass>
 createExternalizeClockGatePass(const ExternalizeClockGateOptions &options = {});
+std::unique_ptr<mlir::Pass> createLowerFirMemPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
