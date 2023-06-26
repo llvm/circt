@@ -19,8 +19,26 @@ else ()
   add_compile_options(-Wno-cast-qual)
   # visitor switch statements cover all cases but have default
   add_compile_options(-Wno-covered-switch-default)
+  # several macro flags slang used
+  add_compile_definitions(DEBUG)
+  add_compile_definitions(BOOST_ALL_NO_LIB)
+  add_compile_definitions(SLANG_STATIC_DEFINE)
+  add_compile_definitions(SLANG_USE_BOOST)
+
+  # compiler version check needed in slang 3.0+
+  if(slang_VERSION VERSION_GREATER 3.0)
+    # check Clang version
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 16)
+      message(FATAL_ERROR "Clang version must be >= 16")
+    endif()
+    # check GCC version
+    if (CMAKE_CXX_COMPILER_ID MATCHES "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 10)
+      message(FATAL_ERROR "GCC version must be >= 10")
+    endif()
+  endif()
 endif ()
 
+set(CMAKE_CXX_STANDARD 20)
 add_circt_translation_library(CIRCTImportVerilog
   ImportVerilog.cpp
   Structure.cpp
