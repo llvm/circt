@@ -278,10 +278,10 @@ LogicalResult ScheduledPipelineOp::verify() {
             if (definingOp->hasTrait<OpTrait::ConstantLike>())
               continue;
             err = definingOp->getBlock() != &stage;
+          } else {
+            // This is a block argument;
+            err = !llvm::is_contained(stage.getArguments(), operand);
           }
-
-          // This is a block argument;
-          err = !llvm::is_contained(stage.getArguments(), operand);
 
           if (err)
             return op.emitOpError(

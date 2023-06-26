@@ -12,7 +12,6 @@
 // CHECK:           hw.output %[[VAL_10]], %[[VAL_9]] : i32, i1
 // CHECK:         }
 
-
 hw.module @testSingle(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out0: i32, out1: i1) {
   %0:2 = pipeline.scheduled(%arg0, %arg1) clock %clk reset %rst go %go : (i32, i32) -> (i32) {
   ^bb0(%arg0_0: i32, %arg1_1: i32, %s0_valid : i1):
