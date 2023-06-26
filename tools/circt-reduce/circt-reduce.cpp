@@ -25,6 +25,7 @@
 #include "mlir/IR/AsmState.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Support/FileUtilities.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/ToolOutputFile.h"

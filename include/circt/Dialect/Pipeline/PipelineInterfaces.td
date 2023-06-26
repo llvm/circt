@@ -6,12 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This describes the Pipeline operation interfaces.
+// This describes the Pipeline dialect operation interfaces.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_Pipeline_PipelineInterfaces
-#define CIRCT_DIALECT_Pipeline_PipelineInterfaces
+#ifndef CIRCT_DIALECT_PIPELINE_PIPELINEINTERFACES_TD
+#define CIRCT_DIALECT_PIPELINE_PIPELINEINTERFACES_TD
 
 include "mlir/IR/OpBase.td"
 
@@ -89,4 +89,4 @@ def PipelineLike : OpInterface<"PipelineLike"> {
   ];
 }
 
-#endif
+#endif // CIRCT_DIALECT_PIPELINE_PIPELINEINTERFACES_TD

@@ -14,7 +14,7 @@
 #include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/Pipeline/Pipeline.h"
+#include "circt/Dialect/Pipeline/PipelineOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "mlir/IR/Builders.h"
