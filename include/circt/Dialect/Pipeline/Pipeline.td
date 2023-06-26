@@ -80,7 +80,6 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
     RegionKindInterface,
     PipelineLike,
     AttrSizedOperandSegments,
-    OpAsmOpInterface,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
   ]> {
   let summary = "Scheduled pipeline operation";
