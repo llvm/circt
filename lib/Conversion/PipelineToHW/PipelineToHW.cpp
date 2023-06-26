@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Pipeline/Pipeline.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Support/BackedgeBuilder.h"
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -30,8 +31,9 @@ using namespace pipeline;
 class PipelineLowering {
 public:
   PipelineLowering(size_t pipelineID, ScheduledPipelineOp pipeline,
-                   OpBuilder &builder)
-      : pipelineID(pipelineID), pipeline(pipeline), builder(builder) {
+                   OpBuilder &builder, bool clockGateRegs)
+      : pipelineID(pipelineID), pipeline(pipeline), builder(builder),
+        clockGateRegs(clockGateRegs) {
     parentClk = pipeline.getClock();
     parentRst = pipeline.getReset();
     parentModule = pipeline->getParentOfType<hw::HWModuleOp>();
@@ -88,8 +90,9 @@ public:
       return rets;
     }
 
-    // Build data registers. These are clock gated by the stage valid signal.
+    // Build data registers.
     auto stageRegPrefix = getStageRegPrefix(stageIndex);
+    BackedgeBuilder bb(builder, stageTerminator->getLoc());
 
     for (auto it : llvm::enumerate(stageTerminator.getRegisters())) {
       assert(clock && "clock not set");
@@ -98,10 +101,25 @@ public:
       auto regIn = it.value();
       auto regName = builder.getStringAttr(stageRegPrefix.strref() + "_reg" +
                                            std::to_string(regIdx));
-      auto reg = builder.create<seq::CompRegClockEnabledOp>(
-          stageTerminator->getLoc(), regIn.getType(), regIn, clock, valid,
-          regName, reset, /*resetValue*/ Value(), /*sym_name*/ StringAttr());
-      rets.regs.push_back(reg);
+      Type dataType = regIn.getType();
+      Value dataReg;
+      if (this->clockGateRegs) {
+        // Clock gate based on the valid signal.
+        dataReg = builder.create<seq::CompRegClockEnabledOp>(
+            stageTerminator->getLoc(), dataType, regIn, clock, valid, regName,
+            reset, /*resetValue*/ Value(), /*sym_name*/ StringAttr());
+      } else {
+        // Use input muxing.
+        auto dataRegBE = bb.get(dataType);
+        auto dataRegNext = builder.create<comb::MuxOp>(
+            stageTerminator->getLoc(), valid, regIn, dataRegBE);
+        dataReg = builder.create<seq::CompRegOp>(
+            stageTerminator->getLoc(), dataType, dataRegNext, clock, regName,
+            reset,
+            /*resetValue*/ Value(), /*sym_name*/ StringAttr());
+        dataRegBE.setValue(dataReg);
+      }
+      rets.regs.push_back(dataReg);
     }
 
     // Build valid register. The valid register is always reset to 0.
@@ -135,6 +153,9 @@ protected:
   hw::HWModuleOp parentModule;
 
   OpBuilder &builder;
+
+  // If true, will use clock gating for registers instead of input muxing.
+  bool clockGateRegs;
 
   // Name of this pipeline - used for naming stages and registers.
   // Implementation defined.
@@ -567,12 +588,14 @@ void PipelineToHWPass::runOnOperation() {
   for (auto pipeline : llvm::make_early_inc_range(
            getOperation().getOps<ScheduledPipelineOp>())) {
     if (outlineStages) {
-      if (failed(PipelineOutlineLowering(pipelinesSeen, pipeline, builder)
+      if (failed(PipelineOutlineLowering(pipelinesSeen, pipeline, builder,
+                                         clockGateRegs)
                      .run())) {
         signalPassFailure();
         return;
       }
-    } else if (failed(PipelineInlineLowering(pipelinesSeen, pipeline, builder)
+    } else if (failed(PipelineInlineLowering(pipelinesSeen, pipeline, builder,
+                                             clockGateRegs)
                           .run())) {
       signalPassFailure();
       return;

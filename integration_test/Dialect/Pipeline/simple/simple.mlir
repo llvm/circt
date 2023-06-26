@@ -1,10 +1,21 @@
 // REQUIRES: iverilog,cocotb
 
+// Test 1: default lowering
+
 // RUN: circt-opt %s -pass-pipeline='builtin.module(hw.module(pipeline.scheduled(pipeline-explicit-regs), lower-pipeline-to-hw{outline-stages}), lower-seq-to-sv, sv-trace-iverilog, export-verilog)' \
 // RUN:     -o %t.mlir > %t.sv
 
 // RUN: circt-cocotb-driver.py --objdir=%T --topLevel=simple \
 // RUN:     --pythonModule=simple --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
+
+// Test 2: Clock-gate implementation
+
+// RUN: circt-opt %s -pass-pipeline='builtin.module(hw.module(pipeline.scheduled(pipeline-explicit-regs), lower-pipeline-to-hw{outline-stages,clock-gate-regs}), lower-seq-to-sv, sv-trace-iverilog, export-verilog)' \
+// RUN:     -o %t.mlir > %t.sv
+
+// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=simple \
+// RUN:     --pythonModule=simple --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
+
 
 // CHECK: ** TEST
 // CHECK: ** TESTS=[[N:.*]] PASS=[[N]] FAIL=0 SKIP=0
