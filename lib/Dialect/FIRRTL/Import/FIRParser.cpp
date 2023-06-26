@@ -4204,7 +4204,8 @@ ParseResult FIRCircuitParser::parseTypeDecl() {
         << " is currently not supported. Type alias is stripped immediately";
 
   if (!getConstants().aliasMap.insert({id, type}).second)
-    return emitError(loc) << "type alias " << name << " is already defined";
+    return emitError(loc) << "type alias `" << name.getValue()
+                          << "` is already defined";
   return success();
 }
 

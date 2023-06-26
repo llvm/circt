@@ -1586,7 +1586,7 @@ circuit Top:
   type Data = {w: const WordType[2], valid: ValidType, flip ready: UInt<1>}
   type Complex = { real: SInt<10>, imag: SInt<10> }
   type Complex_id = Complex
-  ; expected-warning @+1 {{type alias for non-based type '!firrtl.probe<alias<Complex, bundle<real: sint<10>, imag: sint<10>>>>' is currently not supported. Type alias is stripped immediately}}
+  ; expected-warning @+1 {{type alias for non-base type '!firrtl.probe<alias<Complex, bundle<real: sint<10>, imag: sint<10>>>>' is currently not supported. Type alias is stripped immediately}}
   type ProbeComplex = Probe<Complex>
   ; CHECK: @Top
   ; CHECK-SAME: in %in_data: !firrtl.alias<Data, bundle<w: const.vector<const.alias<WordType, const.uint<32>>, 2>,
