@@ -16,6 +16,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/FormatVariadic.h"
 
 using namespace mlir;
 using namespace circt;
@@ -160,17 +161,18 @@ void ScheduledPipelineOp::getAsmBlockArgumentNames(
       size_t nExternalInputs = getExtInputs().size();
       for (auto [argi, arg] :
            llvm::enumerate(block.getArguments().slice(0, nRegularInputs)))
-        setNameFn(arg, "s0_arg" + std::to_string(argi));
+        setNameFn(arg, llvm::formatv("s0_arg{0}", argi).str());
 
       for (auto [argi, arg] : llvm::enumerate(
                block.getArguments().slice(nRegularInputs, nExternalInputs)))
-        setNameFn(arg, "ext" + std::to_string(argi));
+        setNameFn(arg, llvm::formatv("ext{0}", argi).str());
     } else {
       for (auto [argi, arg] : llvm::enumerate(block.getArguments().drop_back()))
-        setNameFn(arg, "s" + std::to_string(i) + "_arg" + std::to_string(argi));
+        setNameFn(arg, llvm::formatv("s{0}_arg{1}", i, argi).str());
     }
 
-    setNameFn(block.getArguments().back(), "s" + std::to_string(i) + "_valid");
+    setNameFn(block.getArguments().back(),
+              llvm::formatv("s{0}_valid", i).str());
   }
 }
 void ScheduledPipelineOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
