@@ -18,7 +18,9 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; ANNOTATIONS-SAME: {class = "circt.test", info = "a CircuitTarget Annotation"}
 ; ANNOTATIONS-SAME: {class = "circt.test", info = "a CircuitName Annotation"}
 
-; OMIR-DAG:   [[loc0:#loc[0-9]*]] = loc(fused["Foo.scala":64:64, "Bar.scala":128:128])
+; OMIR-DAG:   [[loc2:#loc[0-9]*]] = loc("Foo.scala":64:64) 
+; OMIR-DAG:   [[loc3:#loc[0-9]*]] = loc("Bar.scala":128:128) 
+; OMIR-DAG:   [[loc0:#loc[0-9]*]] = loc(fused[[[loc2]], [[loc3]]])
 ; OMIR-DAG:   [[loc1:#loc[0-9]*]] = loc("Foo.scala":32:32)
 ; OMIR-LABEL: firrtl.circuit "test_mod"
 ; OMIR-SAME:  {class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
@@ -43,7 +45,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; OMIROUT-NEXT:       }
 
 ; VERILOG-IR: sv.verbatim{{.*}}Standard header to adapt well known macros to our needs
-; VERILOG-IR: sv.verbatim "`define INIT_RANDOM_PROLOG_
+; VERILOG-IR: sv.macro.def @INIT_RANDOM_PROLOG_
 
   module test_mod :
     input clock : Clock
@@ -134,7 +136,8 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; VERILOG-NEXT:    output       c,
 ; VERILOG-NEXT:                 out_implicitTrunc,
 ; VERILOG-NEXT:                 out_prettifyExample,
-; VERILOG-NEXT:                 out_multibitMux);
+; VERILOG-NEXT:                 out_multibitMux
+; VERILOG-NEXT:    );
 ; VERILOG-EMPTY:
 ; VERILOG-NEXT:    wire [9:0] _prettifyExample_out1;
 ; VERILOG-NEXT:    wire [9:0] _prettifyExample_out2;
@@ -214,7 +217,8 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; VERILOG-NEXT:   input        inp_1,
 ; VERILOG-NEXT:   input  [4:0] inp_2,
 ; VERILOG-NEXT:   output [2:0] out1,
-; VERILOG-NEXT:                out2);
+; VERILOG-NEXT:                out2
+; VERILOG-NEXT:   );
 ; VERILOG-EMPTY:
 ; VERILOG-NEXT:   wire [5:0] _GEN = {inp_2[4], inp_2} << inp_1;
 ; VERILOG-NEXT:   assign out1 = _GEN[2:0];
@@ -251,9 +255,10 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     a_q <= r
 
 ; VERILOG-LABEL: module FlipFlop(
-; VERILOG-NEXT:    input clock,
-; VERILOG-NEXT:          a_d,
-; VERILOG-NEXT:    output a_q);
+; VERILOG-NEXT:    input  clock,
+; VERILOG-NEXT:           a_d,
+; VERILOG-NEXT:    output a_q
+; VERILOG-NEXT:  );
 ; VERILOG:         always @(posedge clock)
 ; VERILOG-NEXT:      r <= a_d;
 ; VERILOG:         assign a_q = r;
@@ -266,10 +271,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; VERILOG-LABEL: module MultibitMux(
 ; VERILOG:  wire [3:0] [[T2:.*]] =
 ; VERILOG-SAME{LITERAL}: {{a_0}, {a_2}, {a_1}, {a_0}};
-; VERILOG:  wire [[T1:.*]];
-; VERILOG-NEXT:  /* synopsys infer_mux_override */
-; VERILOG-NEXT:  assign [[T1]] = [[T2]][sel] /* cadence map_to_mux */;
-; VERILOG-NEXT:  assign b = [[T1]];
+; VERILOG-NEXT:  assign b = [[T2]][sel];
 
   module UnusedPortsMod :
     input in : UInt<1>

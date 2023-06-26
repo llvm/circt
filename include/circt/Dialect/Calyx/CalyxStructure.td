@@ -39,6 +39,7 @@ def UndefinedOp : CalyxOp<"undef", [
 
 def ComponentOp : CalyxOp<"component", [
     HasParent<"mlir::ModuleOp">,
+    RegionKindInterface,
     SymbolTable, /* contains Cell names. */
     Symbol,
     FunctionOpInterface,
@@ -67,6 +68,9 @@ def ComponentOp : CalyxOp<"component", [
   }];
 
   let arguments = (ins
+    TypeAttrOf<FunctionType>:$function_type,
+    OptionalAttr<DictArrayAttr>:$arg_attrs,
+    OptionalAttr<DictArrayAttr>:$res_attrs,
     ArrayAttr:$portNames,
     ArrayAttr:$portAttributes,
     APIntAttr:$portDirections
@@ -82,10 +86,8 @@ def ComponentOp : CalyxOp<"component", [
       using mlir::detail::FunctionOpInterfaceTrait<ComponentOp>::front;
       using mlir::detail::FunctionOpInterfaceTrait<ComponentOp>::getFunctionBody;
 
-      /// Returns the type of this function.
-      FunctionType getFunctionType() {
-        return getFunctionTypeAttr().getValue().cast<FunctionType>();
-      }
+      // Implement RegionKindInterface.
+      static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
       /// Returns the argument types of this function.
       ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
@@ -98,7 +100,8 @@ def ComponentOp : CalyxOp<"component", [
       LogicalResult verifyType() {
         auto type = getFunctionTypeAttr().getValue();
         if (!type.isa<FunctionType>())
-          return emitOpError("requires '" + getTypeAttrName() +
+          return emitOpError("requires '" +
+	                     getFunctionTypeAttrName().getValue() +
                              "' attribute of function type");
         return success();
       }
@@ -174,6 +177,9 @@ def CombComponentOp : CalyxOp<"comb_component", [
   }];
 
   let arguments = (ins
+    TypeAttrOf<FunctionType>:$function_type,
+    OptionalAttr<DictArrayAttr>:$arg_attrs,
+    OptionalAttr<DictArrayAttr>:$res_attrs,
     ArrayAttr:$portNames,
     ArrayAttr:$portAttributes,
     APIntAttr:$portDirections
@@ -189,11 +195,6 @@ def CombComponentOp : CalyxOp<"comb_component", [
       using mlir::detail::FunctionOpInterfaceTrait<CombComponentOp>::front;
       using mlir::detail::FunctionOpInterfaceTrait<CombComponentOp>::getFunctionBody;
 
-      /// Returns the type of this function.
-      FunctionType getFunctionType() {
-        return getFunctionTypeAttr().getValue().cast<FunctionType>();
-      }
-
       /// Returns the argument types of this function.
       ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
@@ -205,7 +206,8 @@ def CombComponentOp : CalyxOp<"comb_component", [
       LogicalResult verifyType() {
         auto type = getFunctionTypeAttr().getValue();
         if (!type.isa<FunctionType>())
-          return emitOpError("requires '" + getTypeAttrName() +
+          return emitOpError("requires '" +
+	                     getFunctionTypeAttrName().getValue() +
                              "' attribute of function type");
         return success();
       }
@@ -337,7 +339,7 @@ def PrimitiveOp : CalyxCell<"primitive", [
   let results = (outs Variadic<AnyType>:$results);
 
   let assemblyFormat = [{
-    $sym_name `of` $primitiveName``custom<ParameterList>($parameters) attr-dict (`:` qualified(type($results))^)?
+    $sym_name `of` $primitiveName `` custom<ParameterList>($parameters) attr-dict (`:` qualified(type($results))^)?
   }];
 }
 

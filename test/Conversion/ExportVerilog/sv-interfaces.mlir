@@ -126,7 +126,7 @@ module {
   // CHECK: wire struct packed {logic [383:0] foo; } _GEN
   // CHECK: endmodule
   hw.module @structs(%clk: i1, %rstn: i1) {
-    %0 = sv.interface.instance {name = "iface"} : !sv.interface<@IValidReady_Struct>
+    %0 = sv.interface.instance name "iface" : !sv.interface<@IValidReady_Struct>
     sv.interface.signal.assign %0(@IValidReady_Struct::@data) = %s : !hw.struct<foo: !hw.array<384xi1>>
     %c0 = hw.constant 0 : i8
     %c64 = hw.constant 100000 : i64

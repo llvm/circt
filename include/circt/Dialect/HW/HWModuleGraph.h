@@ -183,7 +183,7 @@ struct llvm::DOTGraphTraits<circt::hw::HWModuleOp>
       os << " style=bold";
 
     return os.str();
-  };
+  }
 };
 
 #endif // CIRCT_DIALECT_HW_HWMODULEGRAPH_H

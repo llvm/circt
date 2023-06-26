@@ -10,11 +10,11 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   esi-cosim-runner
   firtool
   hlstool
+  handshake-runner
   )
 
 # If Python bindings are available to build then enable the tests.
 if(CIRCT_BINDINGS_PYTHON_ENABLED)
-  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS CIRCTMLIRPythonModules)
   list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS CIRCTPythonModules)
 endif()
 
@@ -23,6 +23,11 @@ if (TARGET EsiCosimDpiServer)
   list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS EsiCosimDpiServer)
   get_property(ESI_COSIM_LIB_DIR TARGET EsiCosimDpiServer PROPERTY LIBRARY_OUTPUT_DIRECTORY)
   set(ESI_COSIM_PATH ${ESI_COSIM_LIB_DIR}/libEsiCosimDpiServer.so)
+endif()
+
+# Enable circt-lec tests if it is built.
+if(CIRCT_LEC_ENABLED)
+  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS circt-lec)
 endif()
 
 set(CIRCT_INTEGRATION_TIMEOUT 60) # Set a 60s timeout on individual tests.

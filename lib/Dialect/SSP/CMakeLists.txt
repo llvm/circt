@@ -34,3 +34,5 @@ add_circt_dialect_library(CIRCTSSP
   LINK_LIBS PUBLIC
   ${SSP_LinkLibs}
   )
+
+add_subdirectory(Transforms)

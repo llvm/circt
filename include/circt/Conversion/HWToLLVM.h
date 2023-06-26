@@ -20,9 +20,13 @@
 
 namespace mlir {
 class LLVMTypeConverter;
+namespace LLVM {
+class GlobalOp;
+} // namespace LLVM
 } // namespace mlir
 
 namespace circt {
+class Namespace;
 
 struct HWToLLVMEndianessConverter {
   /// Convert an index into a HW ArrayType or StructType to LLVM Endianess.
@@ -38,8 +42,11 @@ struct HWToLLVMEndianessConverter {
 void populateHWToLLVMTypeConversions(mlir::LLVMTypeConverter &converter);
 
 /// Get the HW to LLVM conversion patterns.
-void populateHWToLLVMConversionPatterns(mlir::LLVMTypeConverter &converter,
-                                        RewritePatternSet &patterns);
+void populateHWToLLVMConversionPatterns(
+    mlir::LLVMTypeConverter &converter, RewritePatternSet &patterns,
+    Namespace &globals,
+    DenseMap<std::pair<Type, ArrayAttr>, mlir::LLVM::GlobalOp>
+        &constAggregateGlobalsMap);
 
 /// Create an HW to LLVM conversion pass.
 std::unique_ptr<OperationPass<ModuleOp>> createConvertHWToLLVMPass();

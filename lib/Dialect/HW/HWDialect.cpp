@@ -49,16 +49,18 @@ struct HWInlinerInterface : public mlir::DialectInlinerInterface {
   using mlir::DialectInlinerInterface::DialectInlinerInterface;
 
   bool isLegalToInline(Operation *op, Region *, bool,
-                       BlockAndValueMapping &) const final {
-    return isa<ConstantOp>(op) || isa<BitcastOp>(op) ||
+                       mlir::IRMapping &) const final {
+    return isa<ConstantOp>(op) || isa<AggregateConstantOp>(op) ||
+           isa<EnumConstantOp>(op) || isa<BitcastOp>(op) ||
            isa<ArrayCreateOp>(op) || isa<ArrayConcatOp>(op) ||
            isa<ArraySliceOp>(op) || isa<ArrayGetOp>(op) ||
-           isa<StructCreateOp>(op) || isa<StructInjectOp>(op) ||
+           isa<StructCreateOp>(op) || isa<StructExplodeOp>(op) ||
+           isa<StructExtractOp>(op) || isa<StructInjectOp>(op) ||
            isa<UnionCreateOp>(op) || isa<UnionExtractOp>(op);
   }
 
   bool isLegalToInline(Region *, Region *, bool,
-                       BlockAndValueMapping &) const final {
+                       mlir::IRMapping &) const final {
     return false;
   }
 };
@@ -92,6 +94,12 @@ Operation *HWDialect::materializeConstant(OpBuilder &builder, Attribute value,
   if (auto intType = type.dyn_cast<IntegerType>())
     if (auto attrValue = value.dyn_cast<IntegerAttr>())
       return builder.create<ConstantOp>(loc, type, attrValue);
+
+  // Aggregate constants.
+  if (auto arrayAttr = value.dyn_cast<ArrayAttr>()) {
+    if (type.isa<StructType, ArrayType, UnpackedArrayType>())
+      return builder.create<AggregateConstantOp>(loc, type, arrayAttr);
+  }
 
   // Parameter expressions materialize into hw.param.value.
   auto parentOp = builder.getBlock()->getParentOp();

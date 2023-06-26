@@ -22,7 +22,7 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-  firrtl.hierpath @path [@Foo::@bar, @Bar]
+  hw.hierpath @path [@Foo::@bar, @Bar]
   firrtl.module @Bar() attributes {annotations = [
     {
       class = "chisel3.experimental.Trace$TraceAnnotation",
@@ -80,6 +80,28 @@ firrtl.circuit "Foo" {
 // Test that the wire receives a symbol.
 //
 // CHECK: %a = firrtl.wire sym
+
+// -----
+
+firrtl.circuit "Forceable" {
+  firrtl.module @Forceable() {
+    %w, %w_ref = firrtl.wire forceable {annotations = [
+      {
+        class = "chisel3.experimental.Trace$TraceAnnotation",
+        chiselTarget = "~Forceable|Forceable>forced"
+      }
+    ]} : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+  }
+}
+
+// Test that a local wire annotation is resolved.
+//
+// CHECK: ~Forceable|Forceable>w{{.*}}~Forceable|Forceable>forced
+
+// Test that the wire receives a symbol.
+//
+// CHECK-LABEL: firrtl.circuit "Forceable"
+// CHECK: %w, %w_ref = firrtl.wire sym
 
 // -----
 

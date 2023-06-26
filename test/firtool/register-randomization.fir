@@ -26,39 +26,26 @@ circuit Foo:
 
     q <= r
 
-    ; ALL:        automatic logic [31:0] _RANDOM_0;
-    ; ALL-NEXT:   automatic logic [31:0] _RANDOM_1;
-    ; ALL-NEXT:   automatic logic [31:0] _RANDOM_2;
-    ; ALL-NEXT:   automatic logic [31:0] _RANDOM_3;
-    ; ALL:        _RANDOM_0 = `RANDOM;
-    ; ALL-NEXT:   _RANDOM_1 = `RANDOM;
-    ; ALL-NEXT:   _RANDOM_2 = `RANDOM;
-    ; ALL-NEXT:   _RANDOM_3 = `RANDOM;
+    ; ALL:        automatic logic [31:0] _RANDOM[0:3];
+    ; ALL:        for (logic [2:0] i = 3'h0; i < 3'h4; i += 3'h1) begin
+    ; ALL-NEXT:     _RANDOM[i[1:0]] = `RANDOM;
 
-    ; NAMED:        automatic logic [31:0] _RANDOM_0;
-    ; NAMED-NEXT:   automatic logic [31:0] _RANDOM_1;
-    ; NAMED-NEXT:   automatic logic [31:0] _RANDOM_2;
-    ; NAMED-NEXT:   automatic logic [31:0] _RANDOM_3;
-    ; NAMED:        _RANDOM_0 = `RANDOM;
-    ; NAMED-NEXT:   _RANDOM_1 = `RANDOM;
-    ; NAMED-NEXT:   _RANDOM_2 = `RANDOM;
-    ; NAMED-NEXT:   _RANDOM_3 = `RANDOM;
+    ; NAMED:        automatic logic [31:0] _RANDOM[0:3];
+    ; NAMED:        for (logic [2:0] i = 3'h0; i < 3'h4; i += 3'h1) begin
+    ; NAMED-NEXT:     _RANDOM[i[1:0]] = `RANDOM;
 
-    ; NONE:        automatic logic [31:0] _RANDOM_0;
-    ; NONE-NEXT:   automatic logic [31:0] _RANDOM_1;
-    ; NONE-NEXT:   automatic logic [31:0] _RANDOM_2;
-    ; NONE:        _RANDOM_0 = `RANDOM;
-    ; NONE-NEXT:   _RANDOM_1 = `RANDOM;
-    ; NONE-NEXT:   _RANDOM_2 = `RANDOM;
+    ; NONE:        automatic logic [31:0] _RANDOM[0:2];
+    ; NONE:        for (logic [1:0] i = 2'h0; i < 2'h3; i += 2'h1) begin
+    ; NONE-NEXT:     _RANDOM[i] = `RANDOM;
 
-    ; ALL:       _r = {_RANDOM_0, _RANDOM_1[0]};
+    ; ALL:       _r = {_RANDOM[2'h0], _RANDOM[2'h1][0]};
     ; NAMED-NOT: _r =
     ; NONE-NOT:  _r =
 
-    ; ALL:       r = {_RANDOM_1[31:1], _RANDOM_2[1:0]};
-    ; NAMED:     r = {_RANDOM_1[31:1], _RANDOM_2[1:0]};
-    ; NONE:      r = {_RANDOM_1[31:1], _RANDOM_2[1:0]};
+    ; ALL:       r = {_RANDOM[2'h1][31:1], _RANDOM[2'h2][1:0]};
+    ; NAMED:     r = {_RANDOM[2'h1][31:1], _RANDOM[2'h2][1:0]};
+    ; NONE:      r = {_RANDOM[2'h1][31:1], _RANDOM[2'h2][1:0]};
 
-    ; ALL:       s = {_RANDOM_2[31:2], _RANDOM_3[2:0]};
-    ; NAMED:     s = {_RANDOM_2[31:2], _RANDOM_3[2:0]};
+    ; ALL:       s = {_RANDOM[2'h2][31:2], _RANDOM[2'h3][2:0]};
+    ; NAMED:     s = {_RANDOM[2'h2][31:2], _RANDOM[2'h3][2:0]};
     ; NONE-NOT:  s = {{.*}};

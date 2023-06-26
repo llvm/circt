@@ -43,3 +43,9 @@ msft.module @Foo { "WIDTH" = 1 } () -> (x: i32) {
 // CHECK-LABEL: msft.module.extern @Extern<param: i1>(%in: i1) -> (out: i1)
 // HWLOW-LABEL: hw.module.extern @Extern<param: i1>(%in: i1) -> (out: i1)
 msft.module.extern @Extern<param: i1> (%in: i1) -> (out: i1)
+
+// HWLOW-LABEL: esi.pure_module @PureMod
+esi.pure_module @PureMod {
+  // HWLOW-NEXT: hw.instance "top" sym @top @top<__INST_HIER: none = "PureMod.top">() -> ()
+  msft.instance @top @top() {} : () -> ()
+}

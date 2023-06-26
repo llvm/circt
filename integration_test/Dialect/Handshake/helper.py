@@ -1,5 +1,35 @@
 import cocotb.clock
 from cocotb.triggers import RisingEdge, ReadOnly
+import ctypes
+from ctypes import *
+
+
+def struct_type(fieldTypes):
+  # cocotb requires struct values to be written/read as cstructs.
+  # This places assumptions on the struct naming standard of HandshakeToHW,
+  # that is, the fields are named field0, field1, ...
+  # For now, all tests require that all fields are of the same type, hence
+  # the single fieldType argument.
+  class MyStructType(ctypes.BigEndianStructure):
+    _fields_ = [(f"field{x}", fieldTypes[x]) for x in range(len(fieldTypes))]
+
+    def __eq__(self, other):
+      # Comparison is just defined as equality of all fields.
+      for fld in self._fields_:
+        if getattr(self, fld[0]) != getattr(other, fld[0]):
+          return False
+      return True
+
+  return MyStructType
+
+
+def to_struct(tuple, fieldType):
+  return struct_type([fieldType for _ in range(len(tuple))])(*tuple)
+
+
+def from_struct(bytes, n, fieldType):
+  cStructType = struct_type([fieldType for _ in range(1)])
+  return cStructType.from_buffer_copy(bytes.buff)
 
 
 class HandshakePort:
@@ -69,38 +99,13 @@ class HandshakeDataPort(HandshakePort):
     self.data.value = val
     await super().send()
 
-  async def checkOutputs(self, results):
+  async def checkOutputs(self, results, converter=lambda x: x):
+    # converter is a function that optionally converts the data field.
     assert (self.isReady())
     for res in results:
       await self.waitUntilValid()
-      assert (self.data.value == res)
-      await RisingEdge(self.dut.clock)
-
-
-class HandshakeTuplePort(HandshakePort):
-  """
-  A handshaked port that sends a tuple.
-  """
-
-  def __init__(self, dut, rdy, val, fields):
-    super().__init__(dut, rdy, val)
-    self.fields = fields
-
-  async def send(self, val):
-    assert (len(list(val)) == len(self.fields))
-    for (f, v) in zip(self.fields, list(val)):
-      f.value = v
-
-    await super().send()
-
-  async def checkOutputs(self, results):
-    assert (self.isReady())
-    for res in results:
-      await self.waitUntilValid()
-
-      assert (len(list(res)) == len(self.fields))
-      for (f, r) in zip(self.fields, list(res)):
-        assert (f.value == r)
+      conv_value = converter(self.data.value)
+      assert conv_value == res, f"Expected {res}, got {conv_value}"
       await RisingEdge(self.dut.clock)
 
 
@@ -111,7 +116,7 @@ def _findPort(dut, name):
   """
   readyName = f"{name}_ready"
   validName = f"{name}_valid"
-  dataName = f"{name}_data"
+  dataName = f"{name}"
   if (not hasattr(dut, readyName) or not hasattr(dut, validName)):
     raise Exception(f"dut does not have a port named {name}")
 
@@ -119,13 +124,8 @@ def _findPort(dut, name):
   valid = getattr(dut, validName)
   data = getattr(dut, dataName, None)
 
-  if data is None:
-    # Try with just the base name - this is the case for HandshakeToHW (ESI standard)
-    data = getattr(dut, name, None)
-
   # Needed, as it otherwise would try to resolve the value
-  hasData = not isinstance(data, type(None))
-  if hasData:
+  if not isinstance(data, type(None)):
     return HandshakeDataPort(dut, ready, valid, data)
 
   isCtrl = not hasattr(dut, f"{name}_data_field0")
@@ -133,13 +133,7 @@ def _findPort(dut, name):
   if (isCtrl):
     return HandshakePort(dut, ready, valid)
 
-  fields = []
-  i = 0
-  while hasattr(dut, f"{name}_data_field{i}"):
-    fields.append(getattr(dut, f"{name}_data_field{i}"))
-    i += 1
-
-  return HandshakeTuplePort(dut, ready, valid, fields)
+  raise Exception(f"Port {name} is neither a control nor a data port")
 
 
 def getPorts(dut, inNames, outNames):

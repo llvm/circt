@@ -134,11 +134,11 @@ MLIR_CAPI_EXPORTED void circtMSFTPlacementDBWalkPlacements(
                             DynInstDataOpInterface locOp) {
     ccb(wrap(loc), wrap(locOp), userData);
   };
-  Optional<PrimitiveType> primTypeFilter;
+  std::optional<PrimitiveType> primTypeFilter;
   if (cPrimTypeFilter >= 0)
     primTypeFilter = static_cast<PrimitiveType>(cPrimTypeFilter);
 
-  Optional<PlacementDB::WalkOrder> walkOrder;
+  std::optional<PlacementDB::WalkOrder> walkOrder;
   if (cWalkOrder.columns != CirctMSFTDirection::NONE ||
       cWalkOrder.rows != CirctMSFTDirection::NONE)
     walkOrder = PlacementDB::WalkOrder{

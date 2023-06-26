@@ -13,7 +13,9 @@
 //===----------------------------------------------------------------------===//
 
 include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/Seq/SeqAttributes.td"
 include "circt/Dialect/Seq/SeqOpInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 
 // Base class for the operation in this dialect.
 class SeqOp<string mnemonic, list<Trait> traits = []> :
@@ -46,6 +48,40 @@ def CompRegOp : SeqOp<"compreg",
                    "Value":$rstValue, "StringRef":$sym_name), [{
       return build($_builder, $_state, input.getType(),
                    input, clk, sym_name, reset, rstValue,
+                   StringAttr::get($_builder.getContext(), sym_name));
+    }]>,
+  ];
+}
+
+def CompRegClockEnabledOp : SeqOp<"compreg.ce",
+    [Pure, Clocked, Resettable,
+     AllTypesMatch<["input", "data"/*, "resetValue"*/]>,
+     SameVariadicOperandSize,
+     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]> ]> {
+       // AllTypesMatch doesn't work with Optional types yet.
+
+  let summary = "When enabled, register a value";
+  let description = "See the Seq dialect rationale for a longer description";
+
+  let arguments = (ins AnyType:$input, I1:$clk, I1:$clockEnable, StrAttr:$name,
+    Optional<I1>:$reset, Optional<AnyType>:$resetValue,
+    OptionalAttr<SymbolNameAttr>:$sym_name);
+  let results = (outs AnyType:$data);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$ce,
+                   "StringRef":$sym_name), [{
+      return build($_builder, $_state, input.getType(),
+                   input, clk, ce, sym_name, Value(), Value(),
+                   StringAttr::get($_builder.getContext(), sym_name));
+    }]>,
+    OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$ce,
+                   "Value":$reset, "Value":$rstValue, "StringRef":$sym_name),
+    [{
+      return build($_builder, $_state, input.getType(),
+                   input, clk, ce, sym_name, reset, rstValue,
                    StringAttr::get($_builder.getContext(), sym_name));
     }]>,
   ];
@@ -119,6 +155,47 @@ def FirRegOp : SeqOp<"firreg",
   }];
 }
 
+def FIFOOp : SeqOp<"fifo", [
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+    TypesMatchWith<"Input type should match output type",
+      "input", "output", [{ $_self }]>,
+    AttrSizedResultSegments
+  ]> {
+  let summary = "A high-level FIFO operation";
+  let description = [{
+    This operation represents a high-level abstraction of a FIFO. Access to the
+    FIFO is structural, and thus may be composed with other core RTL dialect
+    operations.
+    The fifo operation is configurable with the following parameters:
+    1. Depth (cycles)
+    2. Almost full/empty thresholds (optional). If not provided, these will
+       be asserted when the FIFO is full/empty.
+
+    Like `seq.hlmem` there are no guarantees that all possible fifo configuration
+    are able to be lowered. Available lowering passes will pattern match on the
+    requested fifo configuration and attempt to provide a legal lowering.
+  }];
+
+  let arguments = (ins
+    HWIntegerType:$input, I1:$rdEn, I1:$wrEn, I1:$clk, I1:$rst,
+    ConfinedAttr<I64Attr, [IntMinValue<1>]>:$depth,
+    OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<0>]>>:$almostFullThreshold,
+    OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<0>]>>:$almostEmptyThreshold
+  );
+
+  let results = (outs
+    HWIntegerType:$output, I1:$full, I1:$empty, Optional<I1>:$almostFull,
+    Optional<I1>:$almostEmpty);
+
+  let assemblyFormat = [{
+    `depth` $depth
+    custom<FIFOAFThreshold>($almostFullThreshold, type($almostFull))
+    custom<FIFOAEThreshold>($almostEmptyThreshold, type($almostEmpty))
+    `in` $input `rdEn` $rdEn `wrEn` $wrEn `clk` $clk `rst` $rst attr-dict `:` type($input)
+  }];
+  let hasVerifier = 1;
+}
+
 def HLMemOp : SeqOp<"hlmem", [
      Symbol,
      Clocked,
@@ -184,4 +261,38 @@ def WritePortOp : SeqOp<"write", [
   );
   let results = (outs);
   let hasCustomAssemblyFormat = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// Clock Gate
+//===----------------------------------------------------------------------===//
+
+def ClockGateOp : SeqOp<"clock_gate", [Pure]> {
+  let summary = "Safely gates a clock with an enable signal";
+  let description = [{
+    The `seq.clock_gate` enables and disables a clock safely, without glitches,
+    based on a boolean enable value. If the enable operand is 1, the output
+    clock produced by the clock gate is identical to the input clock. If the
+    enable operand is 0, the output clock is a constant zero.
+
+    The `enable` operand is sampled at the rising edge of the input clock; any
+    changes on the enable before or after that edge are ignored and do not
+    affect the output clock.
+
+    The `test_enable` operand is optional and if present is OR'd together with
+    the `enable` operand to determine whether the output clock is gated or not.
+
+    ```
+    %gatedClock = seq.clock_gate %clock, %enable : i1
+    %gatedClock = seq.clock_gate %clock, %enable, %test_enable : i1, i1
+    ```
+  }];
+
+  let arguments = (ins I1:$input, I1:$enable, Optional<I1>:$test_enable);
+  let results = (outs I1:$output);
+  let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
+  let assemblyFormat = [{
+    $input `,` $enable (`,` $test_enable^)? attr-dict
+  }];
 }

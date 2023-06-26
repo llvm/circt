@@ -81,6 +81,17 @@ constructs that work with the inout type.  These aren't necessary
 for combinational logic, but are nonetheless pretty useful when generating
 Verilog.
 
+### `enum` Type
+
+Enum types have the property that the bit width of the type is the minimum 
+necessary to hold the tag values.  Tag values are either explicit or 
+sequentially numbered in tag order from 0.  Enum tags are unsigned values.
+
+### `union` Type
+
+Union types contain a single data element (which may be an aggregate).  They
+optionally have an offset per varient which allows non-SV layouts.
+
 ## `hw.module` and `hw.instance`
 
 The basic structure of a hardware design is made up an "instance tree" of

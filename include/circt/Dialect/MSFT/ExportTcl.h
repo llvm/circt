@@ -29,7 +29,7 @@ class MSFTModuleOp;
 class TclEmitter {
 public:
   TclEmitter(mlir::ModuleOp topLevel);
-  LogicalResult emit(Operation *forMod, StringRef outputFile);
+  LogicalResult emit(Operation *hwMod, StringRef outputFile);
 
   Operation *getDefinition(FlatSymbolRefAttr);
   const DenseSet<hw::GlobalRefOp> &getRefsUsed() { return refsUsed; }

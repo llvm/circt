@@ -94,6 +94,8 @@ static void mergeRegions(Region *region1, Region *region2) {
 
 namespace {
 struct HWCleanupPass : public sv::HWCleanupBase<HWCleanupPass> {
+  using sv::HWCleanupBase<HWCleanupPass>::mergeAlwaysBlocks;
+
   void runOnOperation() override;
 
   void runOnRegionsInOp(Operation &op);
@@ -155,12 +157,11 @@ void HWCleanupPass::runOnGraphRegion(Region &region) {
   DenseSet<Operation *, AlwaysLikeOpInfo> alwaysFFOpsSeen;
   llvm::SmallDenseMap<Attribute, Operation *, 4> ifdefOps;
   sv::InitialOp initialOpSeen;
-  sv::AlwaysCombOp alwaysCombOpSeen;
 
   for (Operation &op : llvm::make_early_inc_range(body)) {
     // Merge alwaysff and always operations by hashing them to check to see if
     // we've already encountered one.  If so, merge them and reprocess the body.
-    if (isa<sv::AlwaysOp, sv::AlwaysFFOp>(op)) {
+    if (isa<sv::AlwaysOp, sv::AlwaysFFOp>(op) && mergeAlwaysBlocks) {
       // Merge identical alwaysff's together and delete the old operation.
       auto itAndInserted = alwaysFFOpsSeen.insert(&op);
       if (itAndInserted.second)
@@ -187,14 +188,6 @@ void HWCleanupPass::runOnGraphRegion(Region &region) {
       if (initialOpSeen)
         mergeOperationsIntoFrom(initialOp, initialOpSeen);
       initialOpSeen = initialOp;
-      continue;
-    }
-
-    // Merge always_comb ops anywhere in the module.
-    if (auto alwaysComb = dyn_cast<sv::AlwaysCombOp>(op)) {
-      if (alwaysCombOpSeen)
-        mergeOperationsIntoFrom(alwaysComb, alwaysCombOpSeen);
-      alwaysCombOpSeen = alwaysComb;
       continue;
     }
   }
@@ -249,6 +242,8 @@ void HWCleanupPass::runOnProceduralRegion(Region &region) {
   }
 }
 
-std::unique_ptr<Pass> circt::sv::createHWCleanupPass() {
-  return std::make_unique<HWCleanupPass>();
+std::unique_ptr<Pass> circt::sv::createHWCleanupPass(bool mergeAlwaysBlocks) {
+  auto pass = std::make_unique<HWCleanupPass>();
+  pass->mergeAlwaysBlocks = mergeAlwaysBlocks;
+  return pass;
 }

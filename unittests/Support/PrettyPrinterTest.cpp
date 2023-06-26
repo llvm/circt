@@ -749,6 +749,82 @@ test test test test test
 )"""));
 }
 
+TEST(PrettyPrinterTest, MaxStartingIndent) {
+  SmallString<128> out;
+  raw_svector_ostream os(out);
+
+  auto test = [&](PrettyPrinter &pp) {
+    out = "\n";
+    pp.add(BeginToken(2));
+    pp.add(StringToken("test"));
+    pp.add(BreakToken());
+    pp.add(BeginToken(2));
+    pp.add(StringToken("test"));
+    pp.add(BreakToken());
+    pp.add(BeginToken(2));
+    pp.add(StringToken("test"));
+    pp.add(BreakToken());
+    pp.add(BeginToken(2));
+    pp.add(StringToken("test"));
+    pp.add(BreakToken());
+    pp.add(StringToken("test"));
+    pp.add(EndToken());
+    pp.add(EndToken());
+    pp.add(EndToken());
+    pp.add(EndToken());
+    pp.add(BreakToken(PrettyPrinter::kInfinity));
+  };
+  auto testDefault = [&]() {
+    PrettyPrinter pp(os, 4);
+    test(pp);
+  };
+  auto testValue = [&](auto maxStartingIndent) {
+    PrettyPrinter pp(os, 4, 0, 0, maxStartingIndent);
+    test(pp);
+  };
+
+  // Limit max starting position to margin (=4).
+  testValue(4);
+  EXPECT_EQ(out.str(), StringRef(R"""(
+test
+  test
+    test
+    test
+    test
+)"""));
+
+  // Limit max starting position to one past margin,
+  // neither margin nor where the indent wants to place it.
+  testValue(5);
+  EXPECT_EQ(out.str(), StringRef(R"""(
+test
+  test
+    test
+     test
+     test
+)"""));
+
+  // Check large limit allows repeated indent past margin.
+  testValue(100);
+  EXPECT_EQ(out.str(), StringRef(R"""(
+test
+  test
+    test
+      test
+        test
+)"""));
+
+  // Check that default value does not (easily) limit indent start.
+  testDefault();
+  EXPECT_EQ(out.str(), StringRef(R"""(
+test
+  test
+    test
+      test
+        test
+)"""));
+}
+
 class TokenStreamCompareTest : public testing::Test {
 protected:
   SmallString<128> out, compare;
@@ -758,7 +834,8 @@ protected:
   TokenStringSaver saver;
 
   template <typename Callable>
-  void testStreams(Callable &&test, llvm::Optional<StringRef> data = llvm::None,
+  void testStreams(Callable &&test,
+                   std::optional<StringRef> data = std::nullopt,
                    unsigned margin = 10) {
     out.clear();
     compare.clear();
@@ -776,7 +853,7 @@ protected:
 
   template <typename Callable>
   void testStreamsSame(Callable &&test,
-                       llvm::Optional<StringRef> data = llvm::None,
+                       std::optional<StringRef> data = std::nullopt,
                        unsigned margin = 10) {
     testStreams(
         [&](auto &ps, auto &os) {
@@ -809,7 +886,7 @@ TEST_F(TokenStreamCompareTest, NBSPs) {
 }
 
 TEST_F(TokenStreamCompareTest, Numeric) {
-  auto test = [&](auto x, llvm::Optional<StringRef> data = llvm::None) {
+  auto test = [&](auto x, std::optional<StringRef> data = std::nullopt) {
     testStreams(
         [&](auto &ps, auto &os) {
           ps.addAsString(x);

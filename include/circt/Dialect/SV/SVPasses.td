@@ -24,6 +24,11 @@ def HWCleanup : Pass<"hw-cleanup", "hw::HWModuleOp"> {
       opportunities for other simpler passes (like canonicalize).
   }];
 
+  let options = [
+    Option<"mergeAlwaysBlocks", "merge-always-blocks", "bool",
+           "true", "Allow always and always_ff blocks to be merged">
+  ];
+
   let constructor = "circt::sv::createHWCleanupPass()";
 }
 
@@ -100,11 +105,11 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
             "Disable emission of register randomization code">,
     Option<"replSeqMem", "repl-seq-mem", "bool",
                 "false", "Prepare seq mems for macro replacement">,
-    Option<"ignoreReadEnableMem", "ignore-read-enable-mem", "bool",
+    Option<"ignoreReadEnable", "ignore-read-enable", "bool",
                 "false",
     "ignore the read enable signal, instead of assigning X on read disable">,
-    Option<"stripMuxPragmas", "strip-mux-pragmas", "bool", "false",
-            "Do not annotate mux pragmas to memory reads">,
+    Option<"addMuxPragmas", "add-mux-pragmas", "bool", "false",
+            "Add mux pragmas to memory reads">,
     Option<"addVivadoRAMAddressConflictSynthesisBugWorkaround",
            "add-vivado-ram-address-conflict-synthesis-bug-workaround", "bool", "false",
             "Add a vivado attribute to specify a ram style of an array register">
@@ -125,6 +130,8 @@ def SVExtractTestCode : Pass<"sv-extract-test-code", "ModuleOp"> {
   let options = [
     Option<"disableInstanceExtraction", "disable-instance-extraction", "bool",
            "false", "Disable extracting instances only that feed test code">,
+    Option<"disableRegisterExtraction", "disable-register-extraction", "bool",
+           "false", "Disable extracting registers only that feed test code">,
     Option<"disableModuleInlining", "disable-module-inlining", "bool",
            "false", "Disable inlining modules that only feed test code">
   ];

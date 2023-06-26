@@ -48,7 +48,7 @@ firrtl.module @CheckInitialization() {
 firrtl.circuit "declaration_in_when" {
 // Check that wires declared inside of a when are detected as uninitialized.
 firrtl.module @declaration_in_when(in %p : !firrtl.uint<1>) {
-  firrtl.when %p {
+  firrtl.when %p : !firrtl.uint<1> {
     // expected-error @below {{sink "w_then" not fully initialized}}
     %w_then = firrtl.wire : !firrtl.uint<2>
   }
@@ -60,7 +60,7 @@ firrtl.module @declaration_in_when(in %p : !firrtl.uint<1>) {
 firrtl.circuit "declaration_in_when" {
 // Check that wires declared inside of a when are detected as uninitialized.
 firrtl.module @declaration_in_when(in %p : !firrtl.uint<1>) {
-  firrtl.when %p {
+  firrtl.when %p : !firrtl.uint<1> {
   } else {
     // expected-error @below {{sink "w_else" not fully initialized}}
     %w_else = firrtl.wire : !firrtl.uint<2>
@@ -77,12 +77,12 @@ firrtl.module @complex(in %p : !firrtl.uint<1>, in %q : !firrtl.uint<1>) {
   // expected-error @below {{sink "w" not fully initialized}}
   %w = firrtl.wire : !firrtl.uint<2>
 
-  firrtl.when %p {
+  firrtl.when %p : !firrtl.uint<1> {
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     firrtl.connect %w, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   }
 
-  firrtl.when %q {
+  firrtl.when %q : !firrtl.uint<1> {
   } else {
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     firrtl.connect %w, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
@@ -133,5 +133,45 @@ firrtl.circuit "CheckInitialization" {
 firrtl.module @CheckInitialization(in %p : !firrtl.uint<1>, out %out: !firrtl.vector<bundle<a:uint<1>, b:uint<1>>, 1>) {
   // expected-error @above {{port "out[0].a" not fully initialized in module "CheckInitialization"}}
   // expected-error @above {{port "out[0].b" not fully initialized in module "CheckInitialization"}}
+}
+}
+
+// -----
+
+// Check initialization error is produced for out-references
+firrtl.circuit "RefInitOut" {
+firrtl.module @RefInitOut(out %out : !firrtl.probe<uint<1>>) {
+  // expected-error @above {{port "out" not fully initialized in module "RefInitOut"}}
+}
+}
+
+// -----
+
+// Check initialization error is produced for in-references
+firrtl.circuit "RefInitIn" {
+firrtl.module @Child(in %in: !firrtl.probe<uint<1>>) { }
+firrtl.module @RefInitIn() {
+  %child_in = firrtl.instance child @Child(in in : !firrtl.probe<uint<1>>)
+  // expected-error @above {{sink "child.in" not fully initialized in module "RefInitIn"}}
+}
+}
+
+// -----
+
+// Check initialization error is produced for out-properties.
+firrtl.circuit "PropInitOut" {
+firrtl.module @PropInitOut(out %out : !firrtl.string) {
+  // expected-error @above {{port "out" not fully initialized in module "PropInitOut"}}
+}
+}
+
+// -----
+
+// Check initialization error is produced for in-properties.
+firrtl.circuit "PropInitIn" {
+firrtl.module @Child(in %in: !firrtl.string) { }
+firrtl.module @PropInitIn() {
+  %child_in = firrtl.instance child @Child(in in : !firrtl.string)
+  // expected-error @above {{sink "child.in" not fully initialized in module "PropInitIn"}}
 }
 }

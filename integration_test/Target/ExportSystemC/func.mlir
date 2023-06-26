@@ -1,6 +1,6 @@
 // REQUIRES: clang-tidy
 // RUN: circt-translate %s --export-systemc > %t.cpp
-// RUN: clang-tidy --extra-arg=-frtti %t.cpp
+// RUN: clang-tidy --extra-arg=-frtti %t.cpp --
 
 emitc.include <"stdint.h">
 emitc.include <"functional">

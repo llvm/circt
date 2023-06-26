@@ -311,3 +311,10 @@ hw.module @MergeAssignments(%a: !hw.array<4xi1>, %clock: i1) -> (d: !hw.array<4x
   }
   hw.output %read : !hw.array<4xi1>
 }
+
+// CHECK-LABEL: @Sampled
+// CHECK-NEXT: hw.output
+hw.module @Sampled(%in: i1) {
+  %2 = sv.system.sampled %in : i1
+  hw.output
+}

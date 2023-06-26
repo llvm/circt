@@ -350,7 +350,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
     %ref_ui1 = firrtl.ref.send %_ui1 : !firrtl.uint<1>
     %ref_ui2 = firrtl.ref.send %_ui2 : !firrtl.uint<2>
 
-    %ui1 = firrtl.ref.resolve %ref_ui1 : !firrtl.ref<uint<1>>
+    %ui1 = firrtl.ref.resolve %ref_ui1 : !firrtl.probe<uint<1>>
     %foo = firrtl.node %ui1 {
       annotations = [
         {
@@ -376,7 +376,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
       ]
     } : !firrtl.uint<1>
 
-    %ui2 = firrtl.ref.resolve %ref_ui2 : !firrtl.ref<uint<2>>
+    %ui2 = firrtl.ref.resolve %ref_ui2 : !firrtl.probe<uint<2>>
     %bar = firrtl.node %ui2 {
       annotations = [
         {
@@ -418,7 +418,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
       ]
     } : !firrtl.uint<2>
 
-    %ui0 = firrtl.ref.resolve %ref_ui0 : !firrtl.ref<uint<0>>
+    %ui0 = firrtl.ref.resolve %ref_ui0 : !firrtl.probe<uint<0>>
     %baz = firrtl.node %ui0 {
       annotations = [
         {
@@ -561,9 +561,9 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-NEXT:       %VectorView = sv.interface.instance sym @[[vectorSym:[a-zA-Z0-9_]+]] : !sv.interface<@VectorView>
 // CHECK-NEXT:       %GroundView = sv.interface.instance sym @[[groundSym:[a-zA-Z0-9_]+]] : !sv.interface<@GroundView>
 //
-// CHECK:            %[[foo_ref:[a-zA-Z0-9_]+]] = firrtl.ref.resolve {{.+}} : !firrtl.ref<uint<1>>
+// CHECK:            %[[foo_ref:[a-zA-Z0-9_]+]] = firrtl.ref.resolve {{.+}} : !firrtl.probe<uint<1>>
 // CHECK-NOT:        sifive.enterprise.grandcentral.AugmentedGroundType
-// CHECK:            %[[bar_ref:[a-zA-Z0-9_]+]] = firrtl.ref.resolve {{.+}} : !firrtl.ref<uint<2>>
+// CHECK:            %[[bar_ref:[a-zA-Z0-9_]+]] = firrtl.ref.resolve {{.+}} : !firrtl.probe<uint<2>>
 // CHECK-NOT:        sifive.enterprise.grandcentral.AugmentedGroundType
 //
 // CHECK{LITERAL}:   sv.verbatim "assign {{1}}.foo = {{0}};"
@@ -978,7 +978,7 @@ firrtl.circuit "Top" attributes {
     }
   ]
 } {
-  firrtl.module @Companion_w1(in %_gen_uint: !firrtl.ref<uint<1>>) attributes {
+  firrtl.module @Companion_w1(in %_gen_uint: !firrtl.probe<uint<1>>) attributes {
     annotations = [
       {
         class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
@@ -987,7 +987,7 @@ firrtl.circuit "Top" attributes {
       }
     ]
   } {
-    %0 = firrtl.ref.resolve %_gen_uint : !firrtl.ref<uint<1>>
+    %0 = firrtl.ref.resolve %_gen_uint : !firrtl.probe<uint<1>>
     %view_uintrefPort = firrtl.node  %0  {
       annotations = [
         {
@@ -997,7 +997,7 @@ firrtl.circuit "Top" attributes {
       ]
     } : !firrtl.uint<1>
   }
-  firrtl.module @Companion_w2(in %_gen_uint: !firrtl.ref<uint<2>>) attributes {
+  firrtl.module @Companion_w2(in %_gen_uint: !firrtl.probe<uint<2>>) attributes {
     annotations = [
       {
         class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
@@ -1006,7 +1006,7 @@ firrtl.circuit "Top" attributes {
       }
     ]
   } {
-    %0 = firrtl.ref.resolve %_gen_uint : !firrtl.ref<uint<2>>
+    %0 = firrtl.ref.resolve %_gen_uint : !firrtl.probe<uint<2>>
     %view_uintrefPort = firrtl.node  %0  {
       annotations = [
         {
@@ -1023,12 +1023,12 @@ firrtl.circuit "Top" attributes {
     firrtl.strictconnect %a_w1, %c0_ui1 : !firrtl.uint<1>
     %a_w2 = firrtl.wire   {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
     firrtl.strictconnect %a_w2, %c0_ui2 : !firrtl.uint<2>
-    %companion_w1__gen_uint = firrtl.instance companion_w1  @Companion_w1(in _gen_uint: !firrtl.ref<uint<1>>)
-    %companion_w2__gen_uint = firrtl.instance companion_w2  @Companion_w2(in _gen_uint: !firrtl.ref<uint<2>>)
+    %companion_w1__gen_uint = firrtl.instance companion_w1  @Companion_w1(in _gen_uint: !firrtl.probe<uint<1>>)
+    %companion_w2__gen_uint = firrtl.instance companion_w2  @Companion_w2(in _gen_uint: !firrtl.probe<uint<2>>)
     %0 = firrtl.ref.send %a_w1 : !firrtl.uint<1>
-    firrtl.connect %companion_w1__gen_uint, %0 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+    firrtl.ref.define %companion_w1__gen_uint, %0 : !firrtl.probe<uint<1>>
     %1 = firrtl.ref.send %a_w2 : !firrtl.uint<2>
-    firrtl.connect %companion_w2__gen_uint, %1 : !firrtl.ref<uint<2>>, !firrtl.ref<uint<2>>
+    firrtl.ref.define %companion_w2__gen_uint, %1 : !firrtl.probe<uint<2>>
   }
   firrtl.module @Top() {
     firrtl.instance dut  @DUT()
@@ -1060,3 +1060,155 @@ firrtl.circuit "NoInterfaces" attributes {
 // CHECK-LABEL: module {
 // CHECK:         sv.verbatim
 // CHECK-SAME:      []
+
+// -----
+
+// Check that nonlocal duplicate views are dropped.
+firrtl.circuit "Top" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "VectorOfBundleView",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+          elements = [
+            {
+              class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+              defName = "Bundle2",
+              elements = [
+                {
+                  class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+                  name = "foo",
+                  id = 10 : i64
+                },
+                {
+                  class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+                  name = "bar",
+                  id = 11 : i64
+                }
+              ],
+              name = "bundle2"
+            }
+          ],
+          name = "vector"
+        }
+      ],
+      id = 9 : i64,
+      name = "VectorOfBundleView"
+    },
+    {
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "VectorOfBundleView",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+          elements = [
+            {
+              class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+              defName = "Bundle2",
+              elements = [
+                {
+                  class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+                  name = "foo",
+                  id = 110 : i64
+                },
+                {
+                  class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+                  name = "bar",
+                  id = 111 : i64
+                }
+              ],
+              name = "bundle2"
+            }
+          ],
+          name = "vector"
+        }
+      ],
+      id = 19 : i64,
+      name = "VectorOfBundleView"
+    },
+    {
+      class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+      directory = "gct-dir",
+      filename = "bindings.sv"
+    },
+    {
+      class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
+      filename = "gct.yaml"
+    }
+  ]
+} {
+  hw.hierpath private @nla_0 [@Top::@t1, @Dut::@s1]
+  hw.hierpath private @nla [@Top::@t1, @Dut::@s1]
+  firrtl.module @Companion() attributes {
+    annotations = [
+      {
+        circt.nonlocal = @nla,
+        class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+        defName = "VectorOfBundleView",
+        id = 9 : i64,
+        name = "VectorOfBundleView"
+      },
+      {
+        circt.nonlocal = @nla_0,
+        class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+        defName = "VectorOfBundleView",
+        id = 19 : i64,
+        name = "VectorOfBundleView"
+      }
+    ]
+  } {
+      // These are dummy references created for the purposes of the test.
+      %_ui1 = firrtl.verbatim.expr "???" : () -> !firrtl.uint<1>
+      %_ui2 = firrtl.verbatim.expr "???" : () -> !firrtl.uint<2>
+      %ref_ui1 = firrtl.ref.send %_ui1 : !firrtl.uint<1>
+      %ref_ui2 = firrtl.ref.send %_ui2 : !firrtl.uint<2>
+
+      %ui1 = firrtl.ref.resolve %ref_ui1 : !firrtl.probe<uint<1>>
+      %foo = firrtl.node %ui1 {
+        annotations = [
+          {
+            circt.nonlocal = @nla,
+            class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+            id = 10 : i64
+          },{
+            circt.nonlocal = @nla_0,
+            class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+            id = 110 : i64
+          }
+        ]
+      } : !firrtl.uint<1>
+      %ui2 = firrtl.ref.resolve %ref_ui2 : !firrtl.probe<uint<2>>
+      %bar = firrtl.node %ui2 {
+        annotations = [
+          {
+            circt.nonlocal = @nla,
+            class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+            id = 11 : i64
+          },
+          {
+            circt.nonlocal = @nla_0,
+            class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+            id = 111 : i64
+          }
+        ]
+      } : !firrtl.uint<2>
+      // CHECK: sv.interface.instance sym
+      // CHECK-SAME: !sv.interface<@[[VectorOfBundleView:[a-zA-Z0-9_]+]]>
+      // CHECK-NOT: sv.interface.instance
+    }
+  firrtl.module public @Dut() {
+    firrtl.instance s1 sym @s1 @Companion()
+  }
+  firrtl.module public @Top() {
+    firrtl.instance t1 sym @t1 @Dut()
+  }
+
+  // CHECK:      sv.interface @[[VectorOfBundleView]] attributes
+  // CHECK-NOT:    sv.interface @VectorOfBundleView_0
+  // CHECK:      sv.interface @Bundle2
+  // CHECK-NEXT:   sv.interface.signal @foo : i1
+  // CHECK-NEXT:   sv.interface.signal @bar : i2
+  // CHECK-NOT:    sv.interface @Bundle2_0
+}

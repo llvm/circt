@@ -38,6 +38,7 @@ hw.module @testTypeAliasArray(%arg0: !Foo, %arg1: !Foo, %arg2: !FooArray) {
   %1 = hw.array_concat %arg2, %arg2 : !FooArray, !FooArray
   %2 = hw.array_slice %arg2[%c1] : (!FooArray) -> !hw.array<1x!Foo>
   %3 = hw.array_get %arg2[%c1] : !FooArray, i1
+  %4 = hw.aggregate_constant [false, true] : !FooArray
 }
 
 // CHECK-LABEL: hw.module @testTypeAliasStruct
@@ -46,6 +47,7 @@ hw.module @testTypeAliasStruct(%arg0: !FooStruct, %arg1: i1) {
   %0 = hw.struct_extract %arg0["a"] : !FooStruct
   %1 = hw.struct_inject %arg0["a"], %arg1 : !FooStruct
   %2:1 = hw.struct_explode %arg0 : !FooStruct
+  %3 = hw.aggregate_constant [false] : !FooStruct
 }
 
 // CHECK-LABEL: hw.module @testTypeAliasUnion

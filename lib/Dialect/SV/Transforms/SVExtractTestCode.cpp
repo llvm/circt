@@ -19,8 +19,10 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/SV/SVPasses.h"
-#include "mlir/IR/BlockAndValueMapping.h"
+#include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/IRMapping.h"
 
 #include <set>
 
@@ -36,9 +38,9 @@ using BindTable = DenseMap<Attribute, SmallDenseMap<Attribute, sv::BindOp>>;
 
 // Reimplemented from SliceAnalysis to use a worklist rather than recursion and
 // non-insert ordered set.
-static void getBackwardSliceSimple(Operation *rootOp,
-                                   SetVector<Operation *> &backwardSlice,
-                                   std::function<bool(Operation *)> filter) {
+static void
+getBackwardSliceSimple(Operation *rootOp, SetVector<Operation *> &backwardSlice,
+                       llvm::function_ref<bool(Operation *)> filter) {
   SmallVector<Operation *> worklist;
   worklist.push_back(rootOp);
 
@@ -77,49 +79,6 @@ static void getBackwardSliceSimple(Operation *rootOp,
 
     backwardSlice.insert(op);
   }
-
-  // Don't insert the top level operation, we just queried on it and don't
-  // want it in the results.
-  backwardSlice.remove(rootOp);
-}
-
-// Reimplemented and simplified from SliceAnalysis to use a worklist rather than
-// recursion and not consider nested regions. Also accepts a clone set
-// representing a backward dataflow slice. As soon as a use is found outside the
-// backward slice, return false. Otherwise, the whole forward slice is contained
-// in the backward slice, and return true.
-static bool getForwardSliceSimple(Operation *rootOp,
-                                  SetVector<Operation *> &opsToClone,
-                                  SetVector<Operation *> &forwardSlice) {
-  SmallPtrSet<Operation *, 32> visited;
-  SmallVector<Operation *> worklist;
-  worklist.push_back(rootOp);
-  visited.insert(rootOp);
-
-  while (!worklist.empty()) {
-    Operation *op = worklist.pop_back_val();
-    forwardSlice.insert(op);
-
-    for (auto *user : op->getUsers()) {
-      if (!opsToClone.contains(user))
-        return false;
-      if (visited.insert(user).second)
-        worklist.push_back(user);
-    }
-  }
-
-  return true;
-}
-
-// Compute the dataflow for a set of ops.
-static void dataflowSlice(SetVector<Operation *> &ops,
-                          SetVector<Operation *> &results) {
-  for (auto op : ops) {
-    getBackwardSliceSimple(op, results, [](Operation *testOp) -> bool {
-      return !isa<sv::ReadInOutOp>(testOp) && !isa<hw::InstanceOp>(testOp) &&
-             !isa<sv::PAssignOp>(testOp) && !isa<sv::BPAssignOp>(testOp);
-    });
-  }
 }
 
 // Compute the ops defining the blocks a set of ops are in.
@@ -133,13 +92,20 @@ static void blockSlice(SetVector<Operation *> &ops,
   }
 }
 
-// Aggressively mark operations to be moved to the new module.  This leaves
-// maximum flexibility for optimization after removal of the nodes from the
-// old module.
-static SetVector<Operation *> computeCloneSet(SetVector<Operation *> &roots) {
+static void computeSlice(SetVector<Operation *> &roots,
+                         SetVector<Operation *> &results,
+                         llvm::function_ref<bool(Operation *)> filter) {
+  for (auto *op : roots)
+    getBackwardSliceSimple(op, results, filter);
+}
+
+// Return a backward slice started from `roots` until dataflow reaches to an
+// operations for which `filter` returns false.
+static SetVector<Operation *>
+getBackwardSlice(SetVector<Operation *> &roots,
+                 llvm::function_ref<bool(Operation *)> filter) {
   SetVector<Operation *> results;
-  // Get Dataflow for roots
-  dataflowSlice(roots, results);
+  computeSlice(roots, results, filter);
 
   // Get Blocks
   SetVector<Operation *> blocks;
@@ -147,103 +113,65 @@ static SetVector<Operation *> computeCloneSet(SetVector<Operation *> &roots) {
   blockSlice(results, blocks);
 
   // Make sure dataflow to block args (if conds, etc) is included
-  dataflowSlice(blocks, results);
+  computeSlice(blocks, results, filter);
 
-  // include the blocks and roots to clone
   results.insert(roots.begin(), roots.end());
   results.insert(blocks.begin(), blocks.end());
-
   return results;
 }
 
-// Find instances that directly feed the clone set, and add them if possible.
-// This also returns a list of ops that should be erased, which includes such
-// instances and their forward dataflow slices.
-static void addInstancesToCloneSet(
-    SetVector<Value> &inputs, SetVector<Operation *> &opsToClone,
-    SmallPtrSetImpl<Operation *> &opsToErase,
-    DenseMap<StringAttr, SmallPtrSet<Operation *, 32>> &extractedInstances) {
-  // Track inputs to add, which are used by the instance that will be extracted.
-  SmallVector<Value> inputsToAdd;
-
-  // Track inputs to remove, which come from instances that will be extracted.
-  SmallVector<Value> inputsToRemove;
-
-  // Check each input into the clone set.
-  for (auto value : inputs) {
-    // Check if the input comes from an instance, and it isn't already added to
-    // the clone set.
-    auto instance = value.getDefiningOp<hw::InstanceOp>();
-    if (!instance)
-      continue;
-    if (opsToClone.contains(instance))
-      continue;
-
-    // If the instance had a symbol, we can't extract it without more work.
-    if (instance.getInnerSym().has_value())
-      continue;
-
-    // Compute the instance's forward slice. If it wasn't fully contained in
-    // the clone set, move along.
-    SetVector<Operation *> forwardSlice;
-    if (!getForwardSliceSimple(instance, opsToClone, forwardSlice))
-      continue;
-
-    // Add the instance to the clone set and mark the input to be removed from
-    // the input set. Add any instance inputs to the input set. Also add the
-    // instance to the map of extracted instances by module.
-    opsToClone.insert(instance);
-    for (auto operand : instance.getOperands())
-      inputsToAdd.push_back(operand);
-    for (auto result : instance.getResults())
-      inputsToRemove.push_back(result);
-    extractedInstances[instance.getModuleNameAttr().getAttr()].insert(instance);
-
-    // Mark the instance and its forward dataflow to be erased from the pass.
-    // Normally, ops in the clone set are canonicalized away later, but for
-    // this case, we have to proactively erase them. The instances must be
-    // erased because we can't canonicalize away instances with unused results
-    // in general. The forward dataflow must be erased because the instance is
-    // being erased, and we can't leave null operands after this pass. Also
-    // erase any intermediate parents of the forward slice.
-    opsToErase.insert(instance);
-    for (auto *forwardOp : forwardSlice)
-      opsToErase.insert(forwardOp);
-
-    SetVector<Operation *> forwardSliceParents;
-    blockSlice(forwardSlice, forwardSliceParents);
-    for (auto *forwardOpParent : forwardSliceParents)
-      opsToErase.insert(forwardOpParent);
-  }
-
-  // Remove any inputs marked for removal.
-  for (auto v : inputsToRemove)
-    inputs.remove(v);
-
-  // Add any inputs marked for addition.
-  for (auto v : inputsToAdd)
-    inputs.insert(v);
+// Return a backward slice started from opertaions for which `rootFn` returns
+// true.
+static SetVector<Operation *>
+getBackwardSlice(hw::HWModuleOp module,
+                 llvm::function_ref<bool(Operation *)> rootFn,
+                 llvm::function_ref<bool(Operation *)> filterFn) {
+  SetVector<Operation *> roots;
+  module.walk([&](Operation *op) {
+    if (!isa<hw::HWModuleOp>(op) && rootFn(op))
+      roots.insert(op);
+  });
+  return getBackwardSlice(roots, filterFn);
 }
 
-static StringRef getNameForPort(Value val, ArrayAttr modulePorts) {
-  if (auto readinout = dyn_cast_or_null<ReadInOutOp>(val.getDefiningOp())) {
-    if (auto wire = dyn_cast<WireOp>(readinout.getInput().getDefiningOp()))
-      return wire.getName();
-    if (auto reg = dyn_cast<RegOp>(readinout.getInput().getDefiningOp()))
-      return reg.getName();
-  } else if (auto bv = val.dyn_cast<BlockArgument>()) {
-    return modulePorts[bv.getArgNumber()].cast<StringAttr>().getValue();
+static StringAttr getNameForPort(Value val, ArrayAttr modulePorts) {
+  if (auto bv = val.dyn_cast<BlockArgument>())
+    return modulePorts[bv.getArgNumber()].cast<StringAttr>();
+
+  if (auto *op = val.getDefiningOp()) {
+    if (auto readinout = dyn_cast<ReadInOutOp>(op)) {
+      if (auto *readOp = readinout.getInput().getDefiningOp()) {
+        if (auto wire = dyn_cast<WireOp>(readOp))
+          return wire.getNameAttr();
+        if (auto reg = dyn_cast<RegOp>(readOp))
+          return reg.getNameAttr();
+      }
+    } else if (auto inst = dyn_cast<hw::InstanceOp>(op)) {
+      for (auto [index, result] : llvm::enumerate(inst.getResults()))
+        if (result == val) {
+          SmallString<64> portName = inst.getInstanceName();
+          portName += ".";
+          auto resultName = inst.getResultName(index);
+          if (resultName && !resultName.getValue().empty())
+            portName += resultName.getValue();
+          else
+            Twine(index).toVector(portName);
+          return StringAttr::get(val.getContext(), portName);
+        }
+    }
   }
-  return "";
+
+  return StringAttr::get(val.getContext(), "");
 }
 
 // Given a set of values, construct a module and bind instance of that module
 // that passes those values through.  Returns the new module and the instance
 // pointing to it.
-static hw::HWModuleOp
-createModuleForCut(hw::HWModuleOp op, SetVector<Value> &inputs,
-                   BlockAndValueMapping &cutMap, StringRef suffix,
-                   Attribute path, Attribute fileName, BindTable &bindTable) {
+static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
+                                         SetVector<Value> &inputs,
+                                         IRMapping &cutMap, StringRef suffix,
+                                         Attribute path, Attribute fileName,
+                                         BindTable &bindTable) {
   // Filter duplicates and track duplicate reads of elements so we don't
   // make ports for them
   SmallVector<Value> realInputs;
@@ -269,10 +197,10 @@ createModuleForCut(hw::HWModuleOp op, SetVector<Value> &inputs,
   SmallVector<hw::PortInfo> ports;
   {
     auto srcPorts = op.getArgNames();
-    for (auto &port : llvm::enumerate(realInputs)) {
+    for (auto port : llvm::enumerate(realInputs)) {
       auto name = getNameForPort(port.value(), srcPorts);
-      ports.push_back({b.getStringAttr(name), hw::PortDirection::INPUT,
-                       port.value().getType(), port.index()});
+      ports.push_back({name, hw::PortDirection::INPUT, port.value().getType(),
+                       port.index()});
     }
   }
 
@@ -285,7 +213,7 @@ createModuleForCut(hw::HWModuleOp op, SetVector<Value> &inputs,
   newMod.setCommentAttr(b.getStringAttr("VCS coverage exclude_file"));
 
   // Update the mapping from old values to cloned values
-  for (auto &port : llvm::enumerate(realInputs)) {
+  for (auto port : llvm::enumerate(realInputs)) {
     cutMap.map(port.value(), newMod.getBody().getArgument(port.index()));
     for (auto extra : realReads[port.value()])
       cutMap.map(extra, newMod.getBody().getArgument(port.index()));
@@ -320,7 +248,7 @@ static void setInsertPointToEndOrTerminator(OpBuilder &builder, Block *block) {
 
 // Shallow clone, which we use to not clone the content of blocks, doesn't
 // clone the regions, so create all the blocks we need and update the mapping.
-static void addBlockMapping(BlockAndValueMapping &cutMap, Operation *oldOp,
+static void addBlockMapping(IRMapping &cutMap, Operation *oldOp,
                             Operation *newOp) {
   assert(oldOp->getNumRegions() == newOp->getNumRegions());
   for (size_t i = 0, e = oldOp->getNumRegions(); i != e; ++i) {
@@ -346,7 +274,7 @@ static bool hasOoOArgs(hw::HWModuleOp newMod, Operation *op) {
 
 // Update any operand which was emitted before its defining op was.
 static void updateOoOArgs(SmallVectorImpl<Operation *> &lateBoundOps,
-                          BlockAndValueMapping &cutMap) {
+                          IRMapping &cutMap) {
   for (auto *op : lateBoundOps)
     for (unsigned argidx = 0, e = op->getNumOperands(); argidx < e; ++argidx) {
       Value arg = op->getOperand(argidx);
@@ -358,8 +286,7 @@ static void updateOoOArgs(SmallVectorImpl<Operation *> &lateBoundOps,
 // Do the cloning, which is just a pre-order traversal over the module looking
 // for marked ops.
 static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
-                       SetVector<Operation *> &depOps,
-                       BlockAndValueMapping &cutMap,
+                       SetVector<Operation *> &depOps, IRMapping &cutMap,
                        hw::InstanceGraph &instanceGraph) {
   hw::InstanceGraphNode *newModNode = instanceGraph.lookup(newMod);
   SmallVector<Operation *, 16> lateBoundOps;
@@ -433,7 +360,7 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
     }
 
     // Build a mapping from module block arguments to instance inputs.
-    BlockAndValueMapping mapping;
+    IRMapping mapping;
     assert(inst.getInputs().size() == oldMod.getNumInputs());
     auto inputPorts = oldMod.getBodyBlock()->getArguments();
     for (size_t i = 0, e = inputPorts.size(); i < e; ++i)
@@ -458,7 +385,7 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
             sv::BindOp bind = it->second;
             auto oldInnerRef = bind.getInstanceAttr();
             auto newInnerRef = hw::InnerRefAttr::get(
-                instParent.moduleNameAttr(), oldInnerRef.getName());
+                instParent.getModuleNameAttr(), oldInnerRef.getName());
             bind.setInstanceAttr(newInnerRef);
           }
         }
@@ -498,6 +425,92 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
   }
 }
 
+static bool isAssertOp(hw::HWSymbolCache &symCache, Operation *op) {
+  // Symbols not in the cache will only be fore instances added by an extract
+  // phase and are not instances that could possibly have extract flags on them.
+  if (auto inst = dyn_cast<hw::InstanceOp>(op))
+    if (auto *mod = symCache.getDefinition(inst.getModuleNameAttr()))
+      if (mod->getAttr("firrtl.extract.assert.extra"))
+        return true;
+
+  // If the format of assert is "ifElseFatal", PrintOp is lowered into
+  // ErrorOp. So we have to check message contents whether they encode
+  // verifications. See FIRParserAsserts for more details.
+  if (auto error = dyn_cast<ErrorOp>(op)) {
+    if (auto message = error.getMessage())
+      return message->startswith("assert:") ||
+             message->startswith("assert failed (verification library)") ||
+             message->startswith("Assertion failed") ||
+             message->startswith("assertNotX:") ||
+             message->contains("[verif-library-assert]");
+    return false;
+  }
+
+  return isa<AssertOp, FinishOp, FWriteOp, AssertConcurrentOp, FatalOp>(op);
+}
+
+static bool isCoverOp(hw::HWSymbolCache &symCache, Operation *op) {
+  // Symbols not in the cache will only be fore instances added by an extract
+  // phase and are not instances that could possibly have extract flags on them.
+  if (auto inst = dyn_cast<hw::InstanceOp>(op))
+    if (auto *mod = symCache.getDefinition(inst.getModuleNameAttr()))
+      if (mod->getAttr("firrtl.extract.cover.extra"))
+        return true;
+  return isa<CoverOp, CoverConcurrentOp>(op);
+}
+
+static bool isAssumeOp(hw::HWSymbolCache &symCache, Operation *op) {
+  // Symbols not in the cache will only be fore instances added by an extract
+  // phase and are not instances that could possibly have extract flags on them.
+  if (auto inst = dyn_cast<hw::InstanceOp>(op))
+    if (auto *mod = symCache.getDefinition(inst.getModuleNameAttr()))
+      if (mod->getAttr("firrtl.extract.assume.extra"))
+        return true;
+
+  return isa<AssumeOp, AssumeConcurrentOp>(op);
+}
+
+/// Return true if the operation belongs to the design.
+bool isInDesign(hw::HWSymbolCache &symCache, Operation *op,
+                bool disableInstanceExtraction = false,
+                bool disableRegisterExtraction = false) {
+
+  // Module outputs are marked as designs.
+  if (isa<hw::OutputOp>(op))
+    return true;
+
+  // If an op has an innner sym, don't extract.
+  if (auto innerSym = op->getAttrOfType<StringAttr>("inner_sym"))
+    if (!innerSym.getValue().empty())
+      return true;
+
+  // Check whether the operation is a verification construct. Instance op could
+  // be used as verification construct so make sure to check this property
+  // first.
+  if (isAssertOp(symCache, op) || isCoverOp(symCache, op) ||
+      isAssumeOp(symCache, op))
+    return false;
+
+  // For instances and regiseters, check by passed arguments.
+  if (isa<hw::InstanceOp>(op))
+    return disableInstanceExtraction;
+  if (isa<seq::FirRegOp>(op))
+    return disableRegisterExtraction;
+
+  // Since we are not tracking dataflow through SV assignments, and we don't
+  // extract SV declarations (e.g. wire, reg or logic), so just read is part of
+  // the design.
+  if (isa<sv::ReadInOutOp>(op))
+    return true;
+
+  // If the op has regions, we visit sub-regions later.
+  if (op->getNumRegions() > 0)
+    return false;
+
+  // Otherwise, operations with memory effects as a part design.
+  return !mlir::isMemoryEffectFree(op);
+}
+
 //===----------------------------------------------------------------------===//
 // StubExternalModules Pass
 //===----------------------------------------------------------------------===//
@@ -507,18 +520,20 @@ namespace {
 struct SVExtractTestCodeImplPass
     : public SVExtractTestCodeBase<SVExtractTestCodeImplPass> {
   SVExtractTestCodeImplPass(bool disableInstanceExtraction,
+                            bool disableRegisterExtraction,
                             bool disableModuleInlining) {
     this->disableInstanceExtraction = disableInstanceExtraction;
+    this->disableRegisterExtraction = disableRegisterExtraction;
     this->disableModuleInlining = disableModuleInlining;
   }
   void runOnOperation() override;
 
 private:
   // Run the extraction on a module, and return true if test code was extracted.
-  bool doModule(hw::HWModuleOp module, std::function<bool(Operation *)> fn,
+  bool doModule(hw::HWModuleOp module, llvm::function_ref<bool(Operation *)> fn,
                 StringRef suffix, Attribute path, Attribute bindFile,
-                BindTable &bindTable,
-                SmallPtrSetImpl<Operation *> &opsToErase) {
+                BindTable &bindTable, SmallPtrSetImpl<Operation *> &opsToErase,
+                SetVector<Operation *> &opsInDesign) {
     bool hasError = false;
     // Find Operations of interest.
     SetVector<Operation *> roots;
@@ -540,27 +555,26 @@ private:
       return false;
 
     // Find the data-flow and structural ops to clone.  Result includes roots.
-    auto opsToClone = computeCloneSet(roots);
+    // Track dataflow until it reaches to design parts.
+    auto opsToClone = getBackwardSlice(
+        roots, [&](Operation *op) { return !opsInDesign.count(op); });
 
     // Find the dataflow into the clone set
     SetVector<Value> inputs;
-    for (auto op : opsToClone)
+    for (auto *op : opsToClone) {
       for (auto arg : op->getOperands()) {
         auto argOp = arg.getDefiningOp(); // may be null
         if (!opsToClone.count(argOp))
           inputs.insert(arg);
       }
+      // Erase cloned operations.
+      opsToErase.insert(op);
+    }
 
-    // Find instances that directly feed the clone set, and add them if
-    // possible.
-    if (!disableInstanceExtraction)
-      addInstancesToCloneSet(inputs, opsToClone, opsToErase,
-                             extractedInstances);
     numOpsExtracted += opsToClone.size();
-    numOpsErased += opsToErase.size();
 
     // Make a module to contain the clone set, with arguments being the cut
-    BlockAndValueMapping cutMap;
+    IRMapping cutMap;
     auto bmod = createModuleForCut(module, inputs, cutMap, suffix, path,
                                    bindFile, bindTable);
 
@@ -579,38 +593,6 @@ private:
     return true;
   }
 
-  // Move any modules that had all instances extracted to the testbench path.
-  void maybeMoveExtractedModules(hw::InstanceGraph &instanceGraph,
-                                 Attribute testBenchDir) {
-    // Ensure we have a valid test code path.
-    if (!testBenchDir)
-      return;
-
-    // Check each module that had instances extracted.
-    for (auto &pair : extractedInstances) {
-      hw::InstanceGraphNode *node = instanceGraph.lookup(pair.first);
-      assert(!node->noUses() && "expected module whose instances were "
-                                "extracted to be instantiated at least once");
-
-      // See if all instances were extracted.
-      bool allInstancesExtracted = true;
-      for (hw::InstanceRecord *use : node->uses()) {
-        allInstancesExtracted &= extractedInstances[pair.first].contains(
-            use->getInstance().getOperation());
-      }
-
-      if (!allInstancesExtracted)
-        continue;
-
-      // If so, move the module to the test code path.
-      hw::HWModuleLike mod = node->getModule();
-      mod->setAttr("output_file", testBenchDir);
-    }
-  }
-
-  // Map from module name to set of extracted instances for that module.
-  DenseMap<StringAttr, SmallPtrSet<Operation *, 32>> extractedInstances;
-
   // Instance graph we are using and maintaining.
   hw::InstanceGraph *instanceGraph = nullptr;
 };
@@ -628,8 +610,6 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.assume");
   auto coverDir =
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.cover");
-  auto testBenchDir =
-      top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.testbench");
   auto assertBindFile =
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.assert.bindfile");
   auto assumeBindFile =
@@ -641,43 +621,16 @@ void SVExtractTestCodeImplPass::runOnOperation() {
   symCache.addDefinitions(top);
   symCache.freeze();
 
-  // Symbols not in the cache will only be fore instances added by an extract
-  // phase and are not instances that could possibly have extract flags on them.
   auto isAssert = [&symCache](Operation *op) -> bool {
-    if (auto inst = dyn_cast<hw::InstanceOp>(op))
-      if (auto mod = symCache.getDefinition(inst.getModuleNameAttr()))
-        if (mod->getAttr("firrtl.extract.assert.extra"))
-          return true;
-
-    // If the format of assert is "ifElseFatal", PrintOp is lowered into
-    // ErrorOp. So we have to check message contents whether they encode
-    // verifications. See FIRParserAsserts for more details.
-    if (auto error = dyn_cast<ErrorOp>(op)) {
-      if (auto message = error.getMessage())
-        return message->startswith("assert:") ||
-               message->startswith("assert failed (verification library)") ||
-               message->startswith("Assertion failed") ||
-               message->startswith("assertNotX:") ||
-               message->contains("[verif-library-assert]");
-      return false;
-    }
-
-    return isa<AssertOp>(op) || isa<FinishOp>(op) || isa<FWriteOp>(op) ||
-           isa<AssertConcurrentOp>(op) || isa<FatalOp>(op);
+    return isAssertOp(symCache, op);
   };
+
   auto isAssume = [&symCache](Operation *op) -> bool {
-    if (auto inst = dyn_cast<hw::InstanceOp>(op))
-      if (auto mod = symCache.getDefinition(inst.getModuleNameAttr()))
-        if (mod->getAttr("firrtl.extract.assume.extra"))
-          return true;
-    return isa<AssumeOp>(op) || isa<AssumeConcurrentOp>(op);
+    return isAssumeOp(symCache, op);
   };
+
   auto isCover = [&symCache](Operation *op) -> bool {
-    if (auto inst = dyn_cast<hw::InstanceOp>(op))
-      if (auto mod = symCache.getDefinition(inst.getModuleNameAttr()))
-        if (mod->getAttr("firrtl.extract.cover.extra"))
-          return true;
-    return isa<CoverOp>(op) || isa<CoverConcurrentOp>(op);
+    return isCoverOp(symCache, op);
   };
 
   // Collect modules that are already bound and add the bound instance(s) to the
@@ -702,24 +655,71 @@ void SVExtractTestCodeImplPass::runOnOperation() {
         continue;
       }
 
+      // Get a set for operations in the design. We can extract operations that
+      // don't belong to the design.
+      auto opsInDesign = getBackwardSlice(
+          rtlmod,
+          /*rootFn=*/
+          [&](Operation *op) {
+            return isInDesign(symCache, op, disableInstanceExtraction,
+                              disableRegisterExtraction);
+          },
+          /*filterFn=*/{});
+
       SmallPtrSet<Operation *, 32> opsToErase;
       bool anyThingExtracted = false;
-      anyThingExtracted |= doModule(rtlmod, isAssert, "_assert", assertDir,
-                                    assertBindFile, bindTable, opsToErase);
-      anyThingExtracted |= doModule(rtlmod, isAssume, "_assume", assumeDir,
-                                    assumeBindFile, bindTable, opsToErase);
-      anyThingExtracted |= doModule(rtlmod, isCover, "_cover", coverDir,
-                                    coverBindFile, bindTable, opsToErase);
+      anyThingExtracted |=
+          doModule(rtlmod, isAssert, "_assert", assertDir, assertBindFile,
+                   bindTable, opsToErase, opsInDesign);
+      anyThingExtracted |=
+          doModule(rtlmod, isAssume, "_assume", assumeDir, assumeBindFile,
+                   bindTable, opsToErase, opsInDesign);
+      anyThingExtracted |=
+          doModule(rtlmod, isCover, "_cover", coverDir, coverBindFile,
+                   bindTable, opsToErase, opsInDesign);
+
+      // If nothing is extracted, we are done.
+      if (!anyThingExtracted)
+        continue;
+
+      // Here, erase extracted operations as well as dead operations.
+      // `opsToErase` includes extracted operations but doesn't contain all
+      // dead operations. Even though it's not ideal to perform non-trivial DCE
+      // here but we have to delete dead operations that might be an user of an
+      // extracted operation.
+      auto opsAlive = getBackwardSlice(
+          rtlmod,
+          /*rootFn=*/
+          [&](Operation *op) {
+            // Don't remove instances not to eliminate extracted instances
+            // introduced above. However we do want to erase old instances in
+            // the original module extracted into verification parts so identify
+            // such instances by querying to `opsToErase`.
+            return isInDesign(symCache, op,
+                              /*disableInstanceExtraction=*/true,
+                              disableRegisterExtraction) &&
+                   !opsToErase.contains(op);
+          },
+          /*filterFn=*/{});
+
+      // Walk the module and add dead operations to `opsToErase`.
+      op.walk([&](Operation *operation) {
+        // Skip the module itself.
+        if (&op == operation)
+          return;
+
+        // Update `opsToErase`.
+        if (opsAlive.count(operation))
+          opsToErase.erase(operation);
+        else
+          opsToErase.insert(operation);
+      });
 
       // Inline any modules that only have inputs for test code.
       if (!disableModuleInlining && anyThingExtracted)
         inlineInputOnly(rtlmod, *instanceGraph, bindTable, opsToErase);
 
-      // Erase any instances that were extracted, and their forward dataflow.
-      // Also erase old instances that were inlined and can now be cleaned up.
-      // Parts of the forward dataflow may have been nested under other ops to
-      // erase, so as we visit ops to erase, we remove them and all their
-      // children from the set of ops to erase until nothing is left.
+      numOpsErased += opsToErase.size();
       while (!opsToErase.empty()) {
         Operation *op = *opsToErase.begin();
         op->walk([&](Operation *erasedOp) { opsToErase.erase(erasedOp); });
@@ -729,10 +729,6 @@ void SVExtractTestCodeImplPass::runOnOperation() {
     }
   }
 
-  // After all instances are processed, move any modules that had all instances
-  // extracted to the testbench path.
-  maybeMoveExtractedModules(*instanceGraph, testBenchDir);
-
   // We have to wait until all the instances are processed to clean up the
   // annotations.
   for (auto &op : topLevelModule->getOperations())
@@ -741,14 +737,15 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       op.removeAttr("firrtl.extract.cover.extra");
       op.removeAttr("firrtl.extract.assume.extra");
     }
-  top->removeAttr("firrtl.extract.testbench");
 
   markAnalysesPreserved<circt::hw::InstanceGraph>();
 }
 
 std::unique_ptr<Pass>
 circt::sv::createSVExtractTestCodePass(bool disableInstanceExtraction,
+                                       bool disableRegisterExtraction,
                                        bool disableModuleInlining) {
   return std::make_unique<SVExtractTestCodeImplPass>(disableInstanceExtraction,
+                                                     disableRegisterExtraction,
                                                      disableModuleInlining);
 }

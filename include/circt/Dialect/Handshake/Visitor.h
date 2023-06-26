@@ -32,10 +32,9 @@ public:
         .template Case<
             // Handshake nodes.
             BranchOp, BufferOp, ConditionalBranchOp, ConstantOp, ControlMergeOp,
-            EndOp, ForkOp, FuncOp, InstanceOp, JoinOp, LazyForkOp, LoadOp,
-            MemoryOp, ExternalMemoryOp, MergeOp, MuxOp, ReturnOp, SinkOp,
-            handshake::SelectOp, SourceOp, StartOp, StoreOp, SyncOp,
-            TerminatorOp, PackOp, UnpackOp>([&](auto opNode) -> ResultType {
+            ForkOp, FuncOp, InstanceOp, JoinOp, LazyForkOp, LoadOp, MemoryOp,
+            ExternalMemoryOp, MergeOp, MuxOp, ReturnOp, SinkOp, SourceOp,
+            StoreOp, SyncOp, PackOp, UnpackOp>([&](auto opNode) -> ResultType {
           return thisCast->visitHandshake(opNode, args...);
         })
         .Default([&](auto opNode) -> ResultType {
@@ -66,7 +65,6 @@ public:
   HANDLE(ConditionalBranchOp);
   HANDLE(ConstantOp);
   HANDLE(ControlMergeOp);
-  HANDLE(EndOp);
   HANDLE(ForkOp);
   HANDLE(FuncOp);
   HANDLE(InstanceOp);
@@ -74,17 +72,14 @@ public:
   HANDLE(LazyForkOp);
   HANDLE(LoadOp);
   HANDLE(MemoryOp);
-  HANDLE(handshake::SelectOp);
   HANDLE(ExternalMemoryOp);
   HANDLE(MergeOp);
   HANDLE(MuxOp);
   HANDLE(ReturnOp);
   HANDLE(SinkOp);
   HANDLE(SourceOp);
-  HANDLE(StartOp);
   HANDLE(StoreOp);
   HANDLE(SyncOp);
-  HANDLE(TerminatorOp);
   HANDLE(PackOp);
   HANDLE(UnpackOp);
 #undef HANDLE
@@ -109,9 +104,10 @@ public:
             arith::CmpIOp, arith::AddIOp, arith::SubIOp, arith::MulIOp,
             arith::DivSIOp, arith::RemSIOp, arith::DivUIOp, arith::RemUIOp,
             arith::XOrIOp, arith::AndIOp, arith::OrIOp, arith::ShLIOp,
-            arith::ShRSIOp, arith::ShRUIOp>([&](auto opNode) -> ResultType {
-          return thisCast->visitStdExpr(opNode, args...);
-        })
+            arith::ShRSIOp, arith::ShRUIOp, arith::SelectOp>(
+            [&](auto opNode) -> ResultType {
+              return thisCast->visitStdExpr(opNode, args...);
+            })
         .Default([&](auto opNode) -> ResultType {
           return thisCast->visitInvalidOp(op, args...);
         });

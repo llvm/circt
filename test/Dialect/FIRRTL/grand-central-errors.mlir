@@ -39,7 +39,7 @@ firrtl.circuit "NonGroundType" attributes {
        name = "View"}]} {
     %_vector = firrtl.verbatim.expr "???" : () -> !firrtl.vector<uint<2>, 1>
     %ref_vector = firrtl.ref.send %_vector : !firrtl.vector<uint<2>, 1>
-    %vector = firrtl.ref.resolve %ref_vector : !firrtl.ref<vector<uint<2>, 1>>
+    %vector = firrtl.ref.resolve %ref_vector : !firrtl.probe<vector<uint<2>, 1>>
     // expected-error @+1 {{'firrtl.node' op cannot be added to interface with id '0' because it is not a ground type}}
     %a = firrtl.node %vector {
       annotations = [
@@ -264,5 +264,85 @@ firrtl.circuit "InvalidField" attributes {
   }
   firrtl.module @InvalidField() {
     firrtl.instance companion @Companion()
+  }
+}
+
+// -----
+
+firrtl.circuit "MultiplyInstantiated" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Bar",
+     elements = [
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        id = 42 : i64,
+        name = "baz"}],
+     id = 0 : i64},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]}  {
+  // expected-error @below {{'firrtl.module' op is marked as a GrandCentral 'companion', but it is instantiated more than once}}
+  firrtl.module private @View_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+       defName = "Companion",
+       id = 0 : i64,
+       name = "View"}]} {
+    %0 = firrtl.constant 0 :!firrtl.uint<1>
+    %zero = firrtl.node  %0  {
+      annotations = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 42 : i64
+        }
+      ]
+    } : !firrtl.uint<1>
+  }
+  firrtl.module private @DUT() {
+    // expected-note @below {{it is instantiated here}}
+    firrtl.instance View_companion @View_companion()
+    // expected-note @below {{it is instantiated here}}
+    firrtl.instance View_companion @View_companion()
+  }
+  firrtl.module @MultiplyInstantiated() {
+    firrtl.instance dut @DUT()
+  }
+}
+
+// -----
+
+firrtl.circuit "NotInstantiated" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Bar",
+     elements = [
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        id = 42 : i64,
+        name = "baz"}],
+     id = 0 : i64},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]}  {
+  // expected-error @below {{'firrtl.module' op is marked as a GrandCentral 'companion', but is never instantiated}}
+  firrtl.module private @View_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+       defName = "Companion",
+       id = 0 : i64,
+       name = "View"}]} {
+    %0 = firrtl.constant 0 :!firrtl.uint<1>
+    %zero = firrtl.node  %0  {
+      annotations = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 42 : i64
+        }
+      ]
+    } : !firrtl.uint<1>
+  }
+  firrtl.module private @DUT() {
+  }
+  firrtl.module @NotInstantiated() {
+    firrtl.instance dut @DUT()
   }
 }

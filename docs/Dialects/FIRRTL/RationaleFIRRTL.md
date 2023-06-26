@@ -331,8 +331,8 @@ enabled.
 
 ## Symbols and Inner Symbols
 
-Symbols and Inner Symbols are documented in the [symbol
-rationale](RationaleSymbols.md).  This section documents how symbols are used,
+Symbols and Inner Symbols are documented in [Symbol
+Rationale](https://circt.llvm.org/docs/RationaleSymbols/).  This documents how symbols are used,
 their interaction with "Don't Touch", and the semantics imposed by them.
 
 Public Symbols indicate there are uses of an entity outside the analysis scope
@@ -390,7 +390,7 @@ followed by instance `@baz` in module `@Bar`, followed by the wire named `@w` in
 module `@Baz`.
 
 ``` mlir
-firrtl.circuit "Foo"   {
+firrtl.circuit "Foo" {
   firrtl.hierpath @nla [@Foo::@bar, @Bar::@baz, @Baz::@w]
   firrtl.module @Baz() {
     %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "ExampleAnno"}]} : !firrtl.uint
@@ -548,9 +548,9 @@ instance inputs which may be also read from).  A value with `source` flow may be
 read from, but not written to.  A value with `duplex` flow may be read from or
 written to.
 
-For FIRRTL connects or partial connect statements, it follows that the
-left-hand-side must be `sink` or `duplex` and the right-hand-side must be
-`source`, `duplex`, or a port/instance `sink`.
+For FIRRTL connect statements, it follows that the left-hand-side must be `sink`
+or `duplex` and the right-hand-side must be `source`, `duplex`, or a
+port/instance `sink`.
 
 Flow is _not_ represented as a first-class type in CIRCT.  We instead provide
 utilities for computing flow when needed, e.g., for connect statement
@@ -568,6 +568,10 @@ The FIRRTL dialect has limited support for foreign types, i.e., types that are d
 The expected lowering for strict connects is for the connect to be eliminated and the right-hand-side source value of the connect being instead materialized in all places where the left hand side is used. Basically we want wires and connects to disappear, and all places where the wire is "read" should instead read the value that was driven onto the wire.
 
 The reason we provide this foreign type support is to allow for partial lowering of FIRRTL to HW and other dialects. Passes might lower a subset of types and operations to the target dialect and we need a mechanism to have the lowered values be passed around the FIRRTL module hierarchy untouched alongside the FIRRTL ops that are yet to be lowered.
+
+### Const Types
+
+FIRRTL hardware types can be specified as `const`, meaning they can only be assigned compile-time constant values or values of other `const` types.
 
 ## Operations
 
@@ -642,9 +646,7 @@ conditions for macro replacement are as follows:
 1. `–replSeqMem` option is passed and
 2. `readLatency == 1`  and
 3. `writeLatency == 1` and
-4. `numWritePorts + numReadWritePorts == 1` and
-5. `numReadPorts <= 1` and
-6. `width(data) > 0`
+4. `width(data) > 0`
 
 Any `MemOp` not satisfying the above conditions is lowered to Register vector.
 
@@ -822,7 +824,7 @@ out <= myport
 ```mlir
 %mymem = chirrtl.seqmem Undefined  : !chirrtl.cmemory<uint<1>, 8>
 %myport_data, %myport_port = chirrtl.memoryport Infer %mymem {name = "myport"}  : (!chirrtl.cmemory<uint<1>, 8>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
-firrtl.when %cond  {
+firrtl.when %cond : !firrtl.uint<1> {
   chirrtl.memoryport.access %myport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<3>, !firrtl.clock
 }
 firrtl.connect %out, %myport_data : !firrtl.uint<1>, !firrtl.uint<1
@@ -880,43 +882,11 @@ This is parsed into the following MLIR.  Here, only `a.a` is invalidated:
 
 ``` mlir
 firrtl.module @Foo(out %a: !firrtl.bundle<a: uint<1>, b: flip<uint<1>>>) {
-  %0 = firrtl.subfield %a("a") : (!firrtl.bundle<a: uint<1>, b: flip<uint<1>>>) -> !firrtl.uint<1>
+  %0 = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<1>, b: flip<uint<1>>>
   %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
   firrtl.connect %0, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 ```
-
-### `validif` represented as a multiplexer
-
-The FIRRTL spec describes a `validif(en, x)` operation that is used during
-lowering from high to low FIRRTL. Consider the following example:
-
-```firrtl
-c <= invalid
-when a:
-  c <= b
-```
-
-Lowering will introduce the following intermediate representation in low FIRRTL:
-
-```firrtl
-c <= validif(a, b)
-```
-
-Since there is no precedence of this `validif` being used anywhere in the
-Chisel/FIRRTL ecosystem thus far and instead is always replaced by its
-right-hand operand `b`, the FIRRTL MLIR dialect does not provide such an
-operation at all. Rather it directly replaces any `validif` in FIRRTL input with
-the following equivalent operations:
-
-```mlir
-%0 = firrtl.invalidvalue : !firrtl.uint<42>
-%c = firrtl.mux(%a, %b, %0) : (!firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>) -> !firrtl.uint<42>
-```
-
-A canonicalization then folds this combination of `firrtl.invalidvalue` and
-`firrtl.mux` to the "high" operand of the multiplexer to facilitate downstream
-transformation passes.
 
 ### Inline SystemVerilog through `verbatim.expr` operation
 
@@ -974,7 +944,6 @@ interpretations is enumerated below and then described in more detail.
    register.
 1. An invalid value used in a `when`-encoded multiplexer tree results in a
    direct connection to the non-invalid leg of the multiplexer.
-1. A `validif` construct is a direct connection.
 1. Any other use of an invalid value is treated as constant zero.
 
 Interpretation (1) is a mechanism to remove unnecessary reset connections in a
@@ -999,8 +968,8 @@ reg r: UInt<8>, clock with : (reset => (reset, tmp))
 
 Notably, if `tmp` is a `node`, this optimization should not be performed.
 
-Interpretation (2) and Interpretation (3) mean that either of the following
-circuits should be optimized to a direct connection from `bar` to `foo`:
+Interpretation (2) means that the following circuit should be optimized to a
+direct connection from `bar` to `foo`:
 
 ```firrtl
 foo is invalid
@@ -1008,20 +977,18 @@ when cond:
   foo <= bar
 ```
 
-```firrtl
-foo <= validif(cond, bar)
-```
-
 Note that the SFC implementation of this optimization is handled via two passes.
 An `ExpandWhens` (later refactored as `ExpandWhensAndCheck`) pass converts all
 `when` blocks to multiplexer trees.  Any invalid values that arise from this
-conversion produce `validif` expressions.  A later pass, `RemoveValidIfs`
-optimizes/removes `validif` by replacing it with a direct connection.
+conversion produce `validif` expressions.  (This is the "conditionally valid"
+expression which is an internal detail of the SFC which was removed from the
+FIRRTL specification.)  A later pass, `RemoveValidIfs` optimizes/removes
+`validif` by replacing it with a direct connection.
 
-It is important to note that the above two formulations using `when` or
-`validif` _are not equivalent to a mux formulation_ like the following.  The
-code below should be optimized using Interpretation (4) of invalid as constant
-zero:
+It is important to note that the above formulations using `when` or the
+SFC-internal representation using `validif` _are not equivalent to a mux
+formulation_ like the following.  The code below should be optimized using
+Interpretation (3) of invalid as constant zero:
 
 ```firrtl
 wire inv: UInt<8>
@@ -1036,7 +1003,7 @@ A legal lowering of this is only to:
 foo <= mux(cond, bar, UInt<8>(0))
 ```
 
-Interpretation (4) is used in all other situations involving an invalid value.
+Interpretation (3) is used in all other situations involving an invalid value.
 
 **Critically, the nature of an invalid value has context-sensitive information
 that relies on the exact structural nature of the circuit.**  It follows that
@@ -1062,5 +1029,13 @@ to:
 b <= mux(cond, a, inv)
 ```
 
-It follows that interpretation (4) will then convert the false leg of the `mux`
+It follows that interpretation (3) will then convert the false leg of the `mux`
 to a constant zero.
+
+## Intrinsics
+
+Intrinsics are implementation-defined constructs.  Intrinsics provide a way to
+extend the system with funcitonality without changing the langauge.  They form
+an implementation-specific built-in library.  Unlike traditional libraries,
+implementations of intrinsics have access to internals of the compiler, allowing
+them to implement features not possible in the language.

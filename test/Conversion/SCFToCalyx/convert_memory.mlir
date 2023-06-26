@@ -415,7 +415,7 @@ module {
 // CHECK-NEXT:         calyx.assign %ret_arg0_reg.write_en = %true : i1
 // CHECK-NEXT:         calyx.assign %ret_arg1_reg.in = %load_1_reg.out : i32
 // CHECK-NEXT:         calyx.assign %ret_arg1_reg.write_en = %true : i1
-// CHECK-NEXT:         %0 = comb.and %ret_arg0_reg.done, %ret_arg1_reg.done : i1
+// CHECK-NEXT:         %0 = comb.and %ret_arg1_reg.done, %ret_arg0_reg.done : i1
 // CHECK-NEXT:         calyx.group_done %0 ? %true : i1
 // CHECK-NEXT:       }
 // CHECK-NEXT:     }

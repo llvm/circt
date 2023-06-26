@@ -60,8 +60,8 @@ void CastOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 APSInt ConstantOp::getConstantValue() { return getRawValueAttr().getAPSInt(); }
 
-OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
-  assert(constants.empty() && "constant has no operands");
+OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "constant has no operands");
   return getRawValueAttr();
 }
 
@@ -89,8 +89,9 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult AddOp::inferReturnTypes(MLIRContext *context,
-                                      Optional<Location> loc,
+                                      std::optional<Location> loc,
                                       ValueRange operands, DictionaryAttr attrs,
+                                      mlir::OpaqueProperties properties,
                                       mlir::RegionRange regions,
                                       SmallVectorImpl<Type> &results) {
   auto lhs = operands[0].getType().cast<IntegerType>();
@@ -107,8 +108,9 @@ LogicalResult AddOp::inferReturnTypes(MLIRContext *context,
 //===----------------------------------------------------------------------===//
 
 LogicalResult SubOp::inferReturnTypes(MLIRContext *context,
-                                      Optional<Location> loc,
+                                      std::optional<Location> loc,
                                       ValueRange operands, DictionaryAttr attrs,
+                                      mlir::OpaqueProperties properties,
                                       mlir::RegionRange regions,
                                       SmallVectorImpl<Type> &results) {
   auto lhs = operands[0].getType().cast<IntegerType>();
@@ -140,8 +142,9 @@ getSignedInheritedSignedness(IntegerType lhs, IntegerType rhs) {
 }
 
 LogicalResult MulOp::inferReturnTypes(MLIRContext *context,
-                                      Optional<Location> loc,
+                                      std::optional<Location> loc,
                                       ValueRange operands, DictionaryAttr attrs,
+                                      mlir::OpaqueProperties properties,
                                       mlir::RegionRange regions,
                                       SmallVectorImpl<Type> &results) {
   auto lhs = operands[0].getType().cast<IntegerType>();
@@ -160,8 +163,9 @@ LogicalResult MulOp::inferReturnTypes(MLIRContext *context,
 //===----------------------------------------------------------------------===//
 
 LogicalResult DivOp::inferReturnTypes(MLIRContext *context,
-                                      Optional<Location> loc,
+                                      std::optional<Location> loc,
                                       ValueRange operands, DictionaryAttr attrs,
+                                      mlir::OpaqueProperties properties,
                                       mlir::RegionRange regions,
                                       SmallVectorImpl<Type> &results) {
   auto lhs = operands[0].getType().cast<IntegerType>();

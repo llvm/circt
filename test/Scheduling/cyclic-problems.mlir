@@ -1,101 +1,87 @@
-// RUN: circt-opt %s -test-cyclic-problem
-// RUN: circt-opt %s -test-simplex-scheduler=with=CyclicProblem | FileCheck %s -check-prefix=SIMPLEX
+// RUN: circt-opt %s -ssp-roundtrip=verify
+// RUN: circt-opt %s -ssp-schedule=scheduler=simplex | FileCheck %s -check-prefixes=CHECK,SIMPLEX
+// RUN: %if or-tools %{ circt-opt %s -ssp-schedule=scheduler=lp | FileCheck %s -check-prefixes=CHECK,LP %} 
 
-// SIMPLEX-LABEL: cyclic
-// SIMPLEX-SAME: simplexInitiationInterval = 2
-func.func @cyclic(%a1 : i32, %a2 : i32) -> i32 attributes {
-  problemInitiationInterval = 2,
-  auxdeps = [ [4,1,1], [4,2,2] ],
-  operatortypes = [ { name = "_0", latency = 0 }, { name = "_2", latency = 2 } ]
-  } {
-  // SIMPLEX-NEXT: simplexStartTime = 0
-  %0 = arith.constant { problemStartTime = 0 } 42 : i32
-  // SIMPLEX-NEXT: simplexStartTime = 1
-  %1 = arith.addi %a1, %a2 { opr = "_0", problemStartTime = 2 } : i32
-  // SIMPLEX-NEXT: simplexStartTime = 0
-  %2 = arith.subi %a2, %a1 { opr = "_2", problemStartTime = 0 } : i32
-  // SIMPLEX-NEXT: simplexStartTime = 2
-  %3 = arith.muli %1, %2 { problemStartTime = 2 } : i32
-  // SIMPLEX-NEXT: simplexStartTime = 2
-  %4 = arith.divui %2, %0 { problemStartTime = 3 } : i32
-  // SIMPLEX-NEXT: simplexStartTime = 3
-  return { problemStartTime = 4 } %3 : i32
+// CHECK-LABEL: cyclic
+// SIMPLEX-SAME: [II<2>]
+// LP-SAME: [II<2>]
+ssp.instance @cyclic of "CyclicProblem" [II<2>] {
+  library {
+    operator_type @_0 [latency<0>]
+    operator_type @_1 [latency<1>]
+    operator_type @_2 [latency<2>]
+  }
+  graph {
+    %0 = operation<@_1>() [t<0>]
+    %1 = operation<@_0>(@op4 [dist<1>]) [t<2>]
+    %2 = operation<@_2>(@op4 [dist<2>]) [t<0>]
+    %3 = operation<@_1>(%1, %2) [t<2>]
+    %4 = operation<@_1> @op4(%2, %0) [t<3>]
+    // SIMPLEX: @last(%{{.*}}) [t<3>]
+    // LP: @last(%{{.*}}) [t<3>]
+    operation<@_1> @last(%4) [t<4>]
+  }
 }
 
-// SIMPLEX-LABEL: mobility
-// SIMPLEX-SAME: simplexInitiationInterval = 3
-func.func @mobility() attributes {
-  problemInitiationInterval = 3,
-  auxdeps = [
-    [0,1], [0,2], [1,3], [2,3],
-    [3,4], [3,5], [4,6], [5,6],
-    [5,2,1]
-  ],
-  operatortypes = [ { name = "_4", latency = 4 }]
-  } {
-  // SIMPLEX-NEXT: simplexStartTime = 0
-  %0 = arith.constant { problemStartTime = 0 } 0 : i32
-  // SIMPLEX-NEXT: simplexStartTime = 1
-  %1 = arith.constant { opr = "_4", problemStartTime = 1 } 1 : i32
-  // SIMPLEX-NEXT: simplexStartTime = 4
-  %2 = arith.constant { problemStartTime = 4 } 2 : i32
-  // SIMPLEX-NEXT: simplexStartTime = 5
-  %3 = arith.constant { problemStartTime = 5 } 3 : i32
-  // SIMPLEX-NEXT: simplexStartTime = 6
-  %4 = arith.constant { opr = "_4", problemStartTime = 6 } 4 : i32
-  // SIMPLEX-NEXT: simplexStartTime = 6
-  %5 = arith.constant { problemStartTime = 6} 5 : i32
-  // SIMPLEX-NEXT: simplexStartTime = 10
-  return { problemStartTime = 10 }
+// CHECK-LABEL: mobility
+// SIMPLEX-SAME: [II<3>]
+// LP-SAME: [II<3>]
+ssp.instance @mobility of "CyclicProblem" [II<3>] {
+  library {
+    operator_type @_1 [latency<1>]
+    operator_type @_4 [latency<4>]
+  }
+  graph {
+    %0 = operation<@_1>() [t<0>]
+    %1 = operation<@_4>(%0) [t<1>]
+    %2 = operation<@_1>(%0, @op5 [dist<1>]) [t<4>]
+    %3 = operation<@_1>(%1, %2) [t<5>]
+    %4 = operation<@_4>(%3) [t<6>]
+    %5 = operation<@_1> @op5(%3) [t<6>]
+    // SIMPLEX: @last(%{{.*}}, %{{.*}}) [t<10>]
+    // LP: @last(%{{.*}}, %{{.*}}) [t<10>]
+    operation<@_1> @last(%4, %5) [t<10>]
+  }
 }
 
-// SIMPLEX-LABEL: interleaved_cycles
-// SIMPLEX-SAME: simplexInitiationInterval = 4
-func.func @interleaved_cycles() attributes {
-  problemInitiationInterval = 4,
-  auxdeps = [
-    [0,1], [0,2], [1,3], [2,3],
-    [3,4], [4,7], [3,5], [5,6], [6,7],
-    [7,8], [7,9], [8,10], [9,10],
-    [6,2,2], [9,5,2]
-  ],
-  operatortypes = [ { name = "_10", latency = 10 } ]
-  } {
-  // SIMPLEX-NEXT: simplexStartTime = 0
-  %0 = arith.constant { problemStartTime = 0 } 0 : i32
-  // SIMPLEX-NEXT: simplexStartTime = 1
-  %1 = arith.constant { opr = "_10", problemStartTime = 1 } 1 : i32
-  // SIMPLEX-NEXT: simplexStartTime = 10
-  %2 = arith.constant { problemStartTime = 10 } 2 : i32
-  // SIMPLEX-NEXT: simplexStartTime = 11
-  %3 = arith.constant { problemStartTime = 11 } 3 : i32
-  // SIMPLEX-NEXT: simplexStartTime = 12
-  %4 = arith.constant { opr = "_10", problemStartTime = 12 } 4 : i32
-  // SIMPLEX-NEXT: simplexStartTime = 16
-  %5 = arith.constant { problemStartTime = 16 } 5 : i32
-  // SIMPLEX-NEXT: simplexStartTime = 17
-  %6 = arith.constant { problemStartTime = 17 } 6 : i32
-  // SIMPLEX-NEXT: simplexStartTime = 22
-  %7 = arith.constant { problemStartTime = 22 } 7 : i32
-  // SIMPLEX-NEXT: simplexStartTime = 23
-  %8 = arith.constant { opr = "_10", problemStartTime = 23 } 8 : i32
-  // SIMPLEX-NEXT: simplexStartTime = 23
-  %9 = arith.constant { problemStartTime = 23 } 9 : i32
-  // SIMPLEX-NEXT: simplexStartTime = 33
-  return { problemStartTime = 33 }
+// CHECK-LABEL: interleaved_cycles
+// SIMPLEX-SAME: [II<4>]
+// LP-SAME: [II<4>]
+ssp.instance @interleaved_cycles of "CyclicProblem" [II<4>] {
+  library {
+    operator_type @_1 [latency<1>]
+    operator_type @_10 [latency<10>]
+  }
+  graph {
+    %0 = operation<@_1>() [t<0>]
+    %1 = operation<@_10>(%0) [t<1>]
+    %2 = operation<@_1>(%0, @op6 [dist<2>]) [t<10>]
+    %3 = operation<@_1>(%1, %2) [t<11>]
+    %4 = operation<@_10>(%3) [t<12>]
+    %5 = operation<@_1>(%3, @op9 [dist<2>]) [t<16>]
+    %6 = operation<@_1> @op6(%5) [t<17>]
+    %7 = operation<@_1>(%4, %6) [t<22>]
+    %8 = operation<@_10>(%7) [t<23>]
+    %9 = operation<@_1> @op9(%7) [t<23>]
+    // SIMPLEX: @last(%{{.*}}, %{{.*}}) [t<33>]
+    // LP: @last(%{{.*}}, %{{.*}}) [t<33>]
+    operation<@_1> @last(%8, %9) [t<33>]
+  }
 }
 
-// SIMPLEX-LABEL: self_arc
-// SIMPLEX-SAME: simplexInitiationInterval = 3
-func.func @self_arc() -> i32 attributes {
-  problemInitiationInterval = 3,
-  auxdeps = [ [1,1,1] ],
-  operatortypes = [ { name = "_3", latency = 3 } ]
-  } {
-  // SIMPLEX-NEXT: simplexStartTime = 0
-  %0 = arith.constant { problemStartTime = 0 } 1 : i32
-  // SIMPLEX-NEXT: simplexStartTime = 1
-  %1 = arith.muli %0, %0 { opr = "_3", problemStartTime = 1 } : i32
-  // SIMPLEX-NEXT: simplexStartTime = 4
-  return { problemStartTime = 4 } %1 : i32
+// CHECK-LABEL: self_arc
+// SIMPLEX-SAME: [II<3>]
+// LP-SAME: [II<3>]
+ssp.instance @self_arc of "CyclicProblem" [II<3>] {
+  library {
+    operator_type @_1 [latency<1>]
+    operator_type @_3 [latency<3>]
+  }
+  graph {
+    %0 = operation<@_1>() [t<0>]
+    %1 = operation<@_3> @op1(%0, @op1 [dist<1>]) [t<1>]
+    // SIMPLEX: operation<@_1> @last(%{{.*}}) [t<4>]
+    // LP: operation<@_1> @last(%{{.*}}) [t<4>]
+    %2 = operation<@_1> @last(%1) [t<4>]
+  }
 }

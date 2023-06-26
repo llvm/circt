@@ -15,32 +15,43 @@ hw.module @longvariadic(%a: i8) -> (b: i8) {
 
 // CHECK-LABEL: module longvariadic
 
-// SHORT:       assign b = a + a + a + a + a + a + a + a + a + a + a
-// SHORT-NEXT:             + a + a + a + a + a + a + a + a + a + a +
-// SHORT-NEXT:             a + a + a + a + a + a + a + a + a + a + a
-// SHORT-NEXT:             + a + a + a + a + a + a + a + a + a + a +
-// SHORT-NEXT:             a + a + a + a + a + a + a + a + a + a + a
-// SHORT-NEXT:             + a + a + a + a + a + a + a + a + a + a +
-// SHORT-NEXT:             a;
+//               ---------------------------------------v
+// SHORT:          assign b =
+// SHORT-NEXT:       a + a + a + a + a + a + a + a + a
+// SHORT-COUNT-6:    + a + a + a + a + a + a + a + a + a
+// SHORT-NEXT:       + a;
 
-// DEFAULT:       assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-// DEFAULT-NEXT:             a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-// DEFAULT-NEXT:             a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+//              -----------------------------------------------------------------------------------------v
+// DEFAULT:       assign b =
+// DEFAULT-NEXT:    a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
+// DEFAULT-NEXT:    + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
+// DEFAULT-NEXT:    + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
 
-// LONG:       assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
-// LONG-NEXT:             + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+//           -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------v
+// LONG:       assign b =
+// LONG-NEXT:    a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
+// LONG-NEXT:    + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
 
-// LIMIT_SHORT:       wire [7:0] _GEN = a + a + a + a + a + a + a + a + a + a + a
-// LIMIT_SHORT-NEXT:                       + a + a + a + a + a + a + a + a + a + a +
-// LIMIT_SHORT-NEXT:                       a + a + a + a + a + a + a + a + a + a + a;
-// LIMIT_SHORT-NEXT:  wire [7:0] _GEN_0 = a + a + a + a + a + a + a + a + a + a + a
-// LIMIT_SHORT-NEXT:                       + a + a + a + a + a + a + a + a + a + a +
-// LIMIT_SHORT-NEXT:                       a + a + a + a + a + a + a + a + a + a + a;
+//                  ---------------------------------------v
+// LIMIT_SHORT:       wire [7:0] _GEN =
+// LIMIT_SHORT-NEXT:    a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT-NEXT:    + a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT-NEXT:    + a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT-NEXT:    + a + a + a + a + a;
+
+//                  ---------------------------------------v
+// LIMIT_SHORT-NEXT:  wire [7:0] _GEN_0 =
+// LIMIT_SHORT-NEXT:    a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT-NEXT:    + a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT-NEXT:    + a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT-NEXT:    + a + a + a + a + a;
 // LIMIT_SHORT-NEXT:  assign b = _GEN + _GEN_0;
 
-// LIMIT_LONG:        assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-// LIMIT_LONG-NEXT:                 a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-// LIMIT_LONG-NEXT:                 a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+//                  -----------------------------------------------------------------------------------------v
+// LIMIT_LONG:        assign b =
+// LIMIT_LONG-NEXT:     a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
+// LIMIT_LONG-NEXT:     + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
+// LIMIT_LONG-NEXT:     + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
 
 hw.module @moduleWithComment()
   attributes {comment = "The quick brown fox jumps over the lazy dog.  The quick brown fox jumps over the lazy dog.\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"} {}

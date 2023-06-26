@@ -111,7 +111,8 @@ static LogicalResult execute(MLIRContext &context) {
     return failure();
 
   // Write bytecode.
-  writeBytecodeToFile(*module, output->os());
+  if (failed(writeBytecodeToFile(*module, output->os())))
+    return failure();
   output->keep();
 
   return success();
@@ -129,7 +130,7 @@ int main(int argc, char **argv) {
   circt::registerAllDialects(registry);
 
   // From circt-opt, register subset of MLIR dialects.
-  registry.insert<mlir::AffineDialect>();
+  registry.insert<mlir::affine::AffineDialect>();
   registry.insert<mlir::LLVM::LLVMDialect>();
   registry.insert<mlir::memref::MemRefDialect>();
   registry.insert<mlir::func::FuncDialect>();

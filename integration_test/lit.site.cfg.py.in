@@ -51,6 +51,7 @@ config.have_systemc = "@HAVE_SYSTEMC@"
 config.esi_capnp = "@ESI_CAPNP@"
 config.bindings_python_enabled = @CIRCT_BINDINGS_PYTHON_ENABLED@
 config.bindings_tcl_enabled = @CIRCT_BINDINGS_TCL_ENABLED@
+config.lec_enabled = "@CIRCT_LEC_ENABLED@"
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.

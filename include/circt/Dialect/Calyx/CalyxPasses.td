@@ -67,6 +67,75 @@ def GroupInvariantCodeMotion : Pass<"calyx-gicm", "calyx::ComponentOp"> {
   let constructor = "circt::calyx::createGroupInvariantCodeMotionPass()";
 }
 
+def RemoveCombGroups : Pass<"calyx-remove-comb-groups", "calyx::ComponentOp"> {
+  let summary = "Removes combinational groups from a Calyx component.";
+  let description = [{
+    Transforms combinational groups, which have a constant done condition,
+    into proper groups by registering the values read from the ports of cells
+    used within the combinational group.
+
+    It also transforms (invoke,if,while)-with into semantically equivalent
+    control programs that first enable a group that calculates and registers the
+    ports defined by the combinational group execute the respective cond group
+    and then execute the control operator.
+
+    ## Example
+    ```
+    group comb_cond<"static"=0> {
+        lt.right = 32'd10;
+        lt.left = 32'd1;
+        eq.right = r.out;
+        eq.left = x.out;
+        comb_cond[done] = 1'd1;
+    }
+    control {
+        invoke comp(left = lt.out, ..)(..) with comb_cond;
+        if lt.out with comb_cond {
+            ...
+        }
+        while eq.out with comb_cond {
+            ...
+        }
+    }
+    ```
+    into:
+    ```
+    group comb_cond<"static"=1> {
+        lt.right = 32'd10;
+        lt.left = 32'd1;
+        eq.right = r.out;
+        eq.left = x.out;
+        lt_reg.in = lt.out
+        lt_reg.write_en = 1'd1;
+        eq_reg.in = eq.out;
+        eq_reg.write_en = 1'd1;
+        comb_cond[done] = lt_reg.done & eq_reg.done ? 1'd1;
+    }
+    control {
+        seq {
+          comb_cond;
+          invoke comp(left = lt_reg.out, ..)(..);
+        }
+        seq {
+          comb_cond;
+          if lt_reg.out {
+              ...
+          }
+        }
+        seq {
+          comb_cond;
+          while eq_reg.out {
+              ...
+              comb_cond;
+          }
+        }
+    }
+    ```
+  }];
+  let dependentDialects = ["comb::CombDialect"];
+  let constructor = "circt::calyx::createRemoveCombGroupsPass()";
+}
+
 def CompileControl : Pass<"calyx-compile-control", "calyx::ComponentOp"> {
   let summary = "Generates latency-insensitive finite state machines to realize control.";
   let description = [{

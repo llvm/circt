@@ -50,6 +50,13 @@ FIRRTL version 1.1.0 circuit test :
 
 ;// -----
 
+; expected-error @below {{FIRRTL version must be >=0.2.0}}
+FIRRTL version 0.1.0
+circuit test :
+  module test :
+
+;// -----
+
 circuit test test : ; expected-error {{expected ':' in circuit definition}}
 
 ;// -----
@@ -98,6 +105,7 @@ circuit subfield_of_ground_type :
 
 ;// -----
 
+FIRRTL version 1.2.0
 circuit invalid_name :
   module invalid_name :
    input out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
@@ -106,6 +114,7 @@ circuit invalid_name :
 
 ;// -----
 
+FIRRTL version 1.2.0
 circuit invalid_name :
   module invalid_name :
    input out_0 : SInt<8>[5]
@@ -138,6 +147,7 @@ circuit invalid_int_literal :
 
 ;// -----
 ; When scopes are local to the body
+FIRRTL version 1.2.0
 circuit invalid_name :
   module invalid_name :
     input reset : UInt<1>
@@ -215,10 +225,24 @@ circuit Issue418:
 
 ;// -----
 
-circuit Issue426:
-  module Issue426:
-    ; expected-error @+1 {{zero bit constants are not allowed}}
-    node x = UInt<0>("h0")
+circuit Issue3799:
+  module Issue3799:
+    output a: UInt<0>
+    a <= UInt<0>(0) ; ok
+    a <= UInt<0>(-0) ; ok
+    ; expected-error @below {{zero bit constant must be zero}}
+    a <= UInt<0>(1)
+
+;// -----
+
+circuit Issue3799:
+  module Issue3799:
+    output a: SInt<0>
+    a <= SInt<0>(0) ; ok
+    a <= SInt<0>(-0) ; ok
+    ; expected-error @below {{zero bit constant must be zero}}
+    a <= SInt<0>(1)
+
 
 ;// -----
 
@@ -264,30 +288,6 @@ circuit circuit:
 
 ;// -----
 
-circuit Issue886:
-  module Issue886 :
-    input a: SInt<1>
-    input b: UInt<42>
-    node n = validif(a, b)  ; expected-error {{first operand should have UInt type}}
-
-;// -----
-
-circuit Issue886:
-  module Issue886 :
-    input a: UInt<2>
-    input b: UInt<42>
-    node n = validif(a, b)  ; expected-error {{first operand should have 'uint<1>' type}}
-
-;// -----
-
-circuit Issue886:
-  module Issue886 :
-    input a: UInt<1>
-    input b: UInt<42>
-    node n = validif(a, b, b)  ; expected-error {{operation requires two operands}}
-
-;// -----
-
 circuit Issue2971: ; expected-error {{no main module}}
   module NotIssue2971:
     input in: UInt<1>
@@ -298,3 +298,454 @@ circuit Issue2971: ; expected-error {{no main module}}
 
 circuit NoModules: ; expected-error {{no modules found}}
    ; nothing
+
+;// -----
+
+circuit NonAscii:
+  module NonAscii:
+    input clk: Clock
+    input enable: UInt<1>
+    printf(clk, enable, "’") ; expected-error {{string characters must be 7-bit ASCII}}
+
+;// -----
+
+circuit UnicodeEscape:
+  module UnicodeEscape:
+    input clk: Clock
+    input enable: UInt<1>
+    printf(clk, enable, "\u0065") ; expected-error {{unicode escape not supported in string}}
+
+;// -----
+
+circuit PrintfExpr:
+  module PrintfExpr:
+    input clk: Clock
+    input enable: UInt<1>
+    output out : UInt<1>
+    out <= printf(clk, enable, "b1") ; expected-error {{unexpected token in statement}}
+
+;// -----
+
+circuit ProbeFlipType:
+  module ProbeFlipType:
+    output p : Probe<{a: UInt, flip b: UInt}> ; expected-error {{probe inner type must be passive}}
+
+;// -----
+
+circuit NestedProbes:
+  module NestedProbes:
+    output p : Probe<Probe<UInt>> ; expected-error {{cannot nest reference types}}
+
+;// -----
+
+circuit RefSubaccess:
+  module RefSubaccess:
+    input in : UInt<1>[3]
+    input sel : UInt<2>
+    output out : UInt<1>
+
+    out <= read(probe(in)[sel]) ; expected-error {{expected ')' in 'read'}}
+
+;// -----
+
+circuit ProbeBase:
+  extmodule ProbeGen:
+    output p : Probe<UInt<2>>
+    ref p is "x.y"
+
+  module ProbeBase:
+    input in : UInt<1>
+    output out : UInt
+
+    inst pg of ProbeGen
+    out <= probe(pg.p) ; expected-error {{expected base-type expression in 'probe', got}}
+
+;// -----
+
+circuit ProbeProbe:
+  module ProbeProbe:
+    input in : UInt<1>
+    output out : UInt
+
+    out <= probe(probe(in)) ; expected-error {{expected static reference expression in 'probe'}}
+
+;// -----
+
+circuit ReadBase:
+  module ReadBase:
+    input in : UInt<1>
+    output out : UInt
+
+    out <= read(in) ; expected-error {{expected reference-type expression in 'read', got}}
+
+;// -----
+
+circuit DefineBaseLHS:
+  module DefineBaseLHS:
+    input in : UInt<1>
+    output out : UInt
+
+    define out = probe(in) ; expected-error {{expected reference-type expression in 'define' target (LHS), got}}
+
+;// -----
+
+circuit DefineBaseRHS:
+  module DefineBaseRHS:
+    input in : UInt<1>
+    output out : Probe<UInt>
+
+    define out = in ; expected-error {{expected reference-type expression in 'define' source (RHS), got}}
+
+;// -----
+circuit RefSubaccess:
+  module RefSubaccess:
+    input in : UInt<1>[3]
+    input sel : UInt<2>
+    output out : UInt<1>
+
+    out <= read(probe(in[sel])) ; expected-error {{subaccess not allowed here}}
+
+;// -----
+
+circuit DefineTwice:
+  module DefineTwice:
+    input in: UInt<1>
+    output out : Probe<UInt<1>>
+    define out = probe(in) ; expected-error {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    define out = probe(in)
+
+;// -----
+
+circuit DefineIntoSubindex:
+  module DefineIntoSubindex:
+    input in : UInt<1>[3]
+    output out : Probe<UInt<1>[3]>
+
+    define out[0] = probe(in) ; expected-error {{cannot define into a sub-element of a reference}}
+
+;// -----
+
+circuit DefineIntoProbe:
+  module DefineIntoProbe:
+    input in : UInt<1>
+    output out : UInt<1>
+
+    define probe(out) = probe(in) ; expected-error {{expected static reference expression in 'define'}}
+
+;// -----
+
+circuit InProbeTop:
+  module InProbeTop:
+    input p : Probe<UInt<1>> ; expected-error {{input probes not yet supported}}
+
+;// -----
+
+circuit InProbeExt:
+  extmodule BadExtMod:
+    input p : Probe<UInt<1>> ; expected-error {{input probes not yet supported}}
+
+  module InProbeExt:
+    inst e of BadExtMod
+
+;// -----
+; Input probes not allowed anywhere for now.
+
+circuit InProbe:
+  module Child:
+    input p : Probe<UInt<1>> ; expected-error {{input probes not yet supported}}
+  module InProbe:
+    input x : UInt<1>
+    inst c of Child
+    define c.p = probe(x)
+
+;// -----
+; Input probes not allowed anywhere for now.
+
+circuit InProbeBundle:
+  module Child:
+    output out : { flip p: Probe<UInt<1>>} ; expected-error {{input probes not yet supported}}
+  module InProbeBundle:
+    input x : UInt<1>
+    inst c of Child
+    define c.out.p = probe(x)
+
+;// -----
+
+circuit RefDupe:
+  extmodule RefDupe:
+    output p : Probe<UInt<2>>
+    ref p is "x.y"
+    ref p is "a.z" ; expected-error {{duplicate ref statement for 'p'}}
+
+;// -----
+; Either use ref statements or ABI, can't partially use ref statements.
+
+circuit MissingRef:
+  extmodule MissingRef:
+    output p : Probe<UInt<2>> ; expected-error {{no ref statement found for ref port "p"}}
+    output q : Probe<UInt<2>>
+    ref q is "foo.bar"
+
+;// -----
+
+circuit UnusedRef:
+  extmodule UnusedRef:
+    ref p is "x.y" ; expected-error {{unused ref statement}}
+
+;// -----
+
+circuit RefNotString:
+  extmodule RefNotString:
+    output p : Probe<UInt<2>>
+    ref p is a.b ; expected-error {{expected string in ref statement}}
+
+;// -----
+
+circuit RefForAggElement:
+  extmodule RefForAggElement:
+    output p : { x: Probe<UInt<2>> }
+    ref p.x is a.b ; expected-error {{ref statements for aggregate elements not yet supported}}
+
+;// -----
+
+circuit ConnectWrongType:
+  module ConnectWrongType:
+    input a: UInt<1>
+    output b: SInt<1>
+
+    b <= a ; expected-error {{cannot connect non-equivalent type}}
+
+;// -----
+
+FIRRTL version 3.0.0
+circuit ConnectAlternateWrongType:
+  module ConnectAlternateWrongType:
+    input a: UInt<1>
+    output b: SInt<1>
+
+    connect b, a ; expected-error {{cannot connect non-equivalent type}}
+
+;// -----
+
+circuit ProbeConnect:
+  module ProbeConnect:
+    input in : UInt<1>
+    output p : Probe<UInt<1>>
+
+    p <= probe(in) ; expected-error {{cannot connect reference or property types}}
+
+;// -----
+
+FIRRTL version 3.0.0
+circuit ProbeConnectAlternate:
+  module ProbeConnectAlternate:
+    input in : UInt<1>
+    output p : Probe<UInt<1>>
+
+    connect p, probe(in) ; expected-error {{cannot connect reference or property types}}
+
+;// -----
+
+FIRRTL version 1.2.0
+circuit ProbePartialConnect:
+  module ProbePartialConnect:
+    input in : UInt<1>
+    output p : Probe<UInt<1>>
+
+    p <- probe(in) ; expected-error {{cannot connect reference or property types}}
+
+;// -----
+
+circuit ProbeMem:
+  module ProbeMem:
+    output out : Probe<UInt<3>> ; (wrong probe type, can't probe memories)
+
+    mem memory:
+      data-type => UInt<8>
+      depth => 4
+      reader => r
+      writer => w
+      read-latency => 1
+      write-latency => 1
+      read-under-write => undefined
+
+    memory.r is invalid
+    memory.w is invalid
+    define out = probe(memory.r) ; expected-error {{cannot probe memories or their ports}}
+
+
+;// -----
+
+circuit ProbeSMem:
+  module ProbeSMem:
+    input clock : Clock
+    input reset : Reset
+    output io : { flip addr : UInt<3>, dataOut : UInt<8>}
+    output out : Probe<UInt<8>>
+
+    smem mem : UInt<8> [8]
+    infer mport read = mem[io.addr], clock
+    io.dataOut <= read
+    define out = probe(read) ; expected-error {{cannot probe memories or their ports}}
+
+
+;// -----
+
+circuit LeadingRead:
+  module LeadingRead:
+    input in : UInt<1>
+    read(probe(in)) ; expected-error {{unexpected read() as start of statement}}
+
+;// -----
+
+circuit LeadingProbe:
+  module LeadingProbe:
+    input in : UInt<1>
+    probe(in) ; expected-error {{unexpected probe() as start of statement}}
+
+;// -----
+
+circuit ForceProbe:
+  module ForceProbe:
+    input in : UInt<1>
+    force_initial(probe(in), UInt<1>(1)) ; expected-error {{expected rwprobe-type expression for force_initial destination, got '!firrtl.probe<uint<1>>'}}
+
+;// -----
+
+circuit ForceWithLiteral:
+  module ForceWithLiteral:
+    input in : UInt<1>
+    node n = in
+    force_initial(rwprobe(n), 1) ; expected-error {{expected source expression in force_initial}}
+
+;// -----
+
+circuit RWProbeConst:
+  extmodule RWProbeConst:
+    output p : RWProbe<{a: const UInt}> ; expected-error {{rwprobe cannot contain const}}
+
+;// -----
+
+FIRRTL version 2.0.0
+circuit PartialConnect_v2p0p0:
+  module PartialConnect_v2p0p0:
+    input a: UInt<1>
+    output b: UInt<1>
+
+    b <- a ; expected-error {{unexpected token '<-' in statement}}
+
+;// -----
+
+FIRRTL version 2.0.0
+circuit RegReset_v2p0p0:
+  module RegReset_v2p0p0:
+    input clock: Clock
+
+    ; expected-error @below {{use of unknown declaration 'regreset'}}
+    regreset a: UInt<1>, clock, UInt<1>(0), UInt<1>(0)
+
+;// -----
+FIRRTL version 3.0.0
+circuit IllegalLiteral:
+  module IllegalLiteral:
+    input `b: UInt<1> ; expected-error {{unterminated literal identifier}}
+
+;// -----
+
+circuit WireProbe:
+  module WireProbe:
+    wire x : Probe<UInt<1>> ; expected-error {{wire must have base type}}
+
+;// -----
+
+circuit NodeProbe:
+  extmodule Ref:
+    output x : Probe<UInt<1>>
+  module NodeProbe:
+    inst r of Ref
+    node n = r.x ; expected-error {{Node cannot be analog and must be passive or passive under a flip}}
+
+;// -----
+
+circuit ConstProbe:
+  module ConstProbe:
+    output x : const Probe<UInt<1>> ; expected-error {{only hardware types can be 'const'}}
+
+;// -----
+
+circuit MultiConst:
+  module MultiConst:
+    output x : const const UInt<1> ; expected-error {{'const' can only be specified once on a type}}
+
+;// -----
+
+circuit DefinePromoteToRW:
+  extmodule Ref:
+    output ro : Probe<UInt<1>>
+  module DefinePromoteToRW:
+    output rw : RWProbe<UInt<1>>
+    inst r of Ref
+    ; expected-error @below {{cannot define reference of type '!firrtl.rwprobe<uint<1>>' with incompatible reference of type '!firrtl.probe<uint<1>>'}}
+    define rw = r.ro
+
+;// -----
+
+circuit PropAssignNonProperty:
+  module PropAssignNonProperty:
+    input x : UInt<1>
+    output y : UInt<1>
+    propassign x, y ; expected-error {{can only propassign property types}}
+
+;// -----
+
+FIRRTL version 2.3.9
+circuit UnsupportedRadixSpecifiedIntegerLiterals:
+  module UnsupportedRadixSpecifiedIntegerLiterals:
+    output foo: UInt<8>
+    ; expected-error @below {{Radix-specified integer literals are a FIRRTL 2.4.0 feature, but the specified FIRRTL version was 2.3.9}}
+    foo <= UInt(0b101010)
+
+;// -----
+
+FIRRTL version 2.4.0
+circuit InvalidBinaryRadixSpecifiedIntegerLiteral:
+  module InvalidBinaryRadixSpecifiedIntegerLiteral:
+    output foo: UInt<8>
+    ; expected-error @below {{invalid character in integer literal}}
+    foo <= UInt(0b2)
+
+;// -----
+
+FIRRTL version 2.4.0
+circuit InvalidOctalRadixSpecifiedIntegerLiteral:
+  module InvalidOctalRadixSpecifiedIntegerLiteral:
+    output foo: UInt<8>
+    ; expected-error @below {{invalid character in integer literal}}
+    foo <= UInt(0o8)
+
+;// -----
+
+FIRRTL version 2.4.0
+circuit InvalidDecimalRadixSpecifiedIntegerLiteral:
+  module InvalidDecimalRadixSpecifiedIntegerLiteral:
+    output foo: UInt<8>
+    ; expected-error @below {{invalid character in integer literal}}
+    foo <= UInt(0da)
+
+;// -----
+
+FIRRTL version 2.4.0
+circuit InvalidHexadecimalRadixSpecifiedIntegerLiteral:
+  module InvalidHexadecimalRadixSpecifiedIntegerLiteral:
+    output foo: UInt<8>
+    ; expected-error @below {{invalid character in integer literal}}
+    foo <= UInt(0hg)
+
+;// -----
+
+FIRRTL version 3.0.0
+circuit UnsupportedStringEncodedIntegerLiterals:
+  module UnsupportedStringEncodedIntegerLiterals:
+    output foo: UInt<8>
+    ; expected-error @below {{String-encoded integer literals are unsupported after FIRRTL 3.0.0}}
+    connect foo, UInt("h2a")

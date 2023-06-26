@@ -52,9 +52,9 @@ PrimitiveDB::DimPrimitiveType &PrimitiveDB::getLeaf(PhysLocationAttr loc) {
 
 void PrimitiveDB::foreach (
     function_ref<void(PhysLocationAttr)> callback) const {
-  for (auto x : placements)
-    for (auto y : x.second)
-      for (auto n : y.second)
+  for (const auto &x : placements)
+    for (const auto &y : x.second)
+      for (const auto &n : y.second)
         for (auto p : n.second)
           callback(PhysLocationAttr::get(ctxt, PrimitiveTypeAttr::get(ctxt, p),
                                          x.first, y.first, n.first));
@@ -349,7 +349,7 @@ PlacementDB::PlacementCell *PlacementDB::getLeaf(PhysLocationAttr loc) {
 void PlacementDB::walkPlacements(
     function_ref<void(PhysLocationAttr, DynInstDataOpInterface)> callback,
     std::tuple<int64_t, int64_t, int64_t, int64_t> bounds,
-    Optional<PrimitiveType> primType, Optional<WalkOrder> walkOrder) {
+    std::optional<PrimitiveType> primType, std::optional<WalkOrder> walkOrder) {
   uint64_t xmin = std::get<0>(bounds) < 0 ? 0 : std::get<0>(bounds);
   uint64_t xmax = std::get<1>(bounds) < 0 ? std::numeric_limits<uint64_t>::max()
                                           : (uint64_t)std::get<1>(bounds);
@@ -379,8 +379,9 @@ void PlacementDB::walkPlacements(
   // X loop.
   SmallVector<std::pair<size_t, DimYMap>> cols(placements.begin(),
                                                placements.end());
-  maybeSort(cols, walkOrder.transform([](auto wo) { return wo.columns; }));
-  for (auto colF : cols) {
+  maybeSort(cols, llvm::transformOptional(walkOrder,
+                                          [](auto wo) { return wo.columns; }));
+  for (const auto &colF : cols) {
     size_t x = colF.first;
     if (x < xmin || x > xmax)
       continue;
@@ -388,26 +389,25 @@ void PlacementDB::walkPlacements(
 
     // Y loop.
     SmallVector<std::pair<size_t, DimNumMap>> rows(yMap.begin(), yMap.end());
-    maybeSort(rows, walkOrder.transform([](auto wo) { return wo.rows; }));
-    for (auto rowF : rows) {
+    maybeSort(rows, llvm::transformOptional(walkOrder,
+                                            [](auto wo) { return wo.rows; }));
+    for (const auto &rowF : rows) {
       size_t y = rowF.first;
       if (y < ymin || y > ymax)
         continue;
       DimNumMap numMap = rowF.second;
 
       // Num loop.
-      for (auto numF = numMap.begin(), numE = numMap.end(); numF != numE;
-           ++numF) {
-        size_t num = numF->getFirst();
-        DimDevType devMap = numF->getSecond();
+      for (auto &numF : numMap) {
+        size_t num = numF.getFirst();
+        DimDevType devMap = numF.getSecond();
 
         // DevType loop.
-        for (auto devF = devMap.begin(), devE = devMap.end(); devF != devE;
-             ++devF) {
-          PrimitiveType devtype = devF->getFirst();
+        for (auto &devF : devMap) {
+          PrimitiveType devtype = devF.getFirst();
           if (primType && devtype != *primType)
             continue;
-          PlacementCell &inst = devF->getSecond();
+          PlacementCell &inst = devF.getSecond();
 
           // Marshall and run the callback.
           PhysLocationAttr loc = PhysLocationAttr::get(

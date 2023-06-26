@@ -239,6 +239,110 @@ void InnerRefAttr::print(AsmPrinter &p) const {
 }
 
 //===----------------------------------------------------------------------===//
+// InnerSymAttr
+//===----------------------------------------------------------------------===//
+
+Attribute InnerSymPropertiesAttr::parse(AsmParser &parser, Type type) {
+  StringAttr name;
+  NamedAttrList dummyList;
+  int64_t fieldId = 0;
+  StringRef visibility;
+  if (parser.parseLess() || parser.parseSymbolName(name, "name", dummyList) ||
+      parser.parseComma() || parser.parseInteger(fieldId) ||
+      parser.parseComma() ||
+      parser.parseOptionalKeyword(&visibility,
+                                  {"public", "private", "nested"}) ||
+      parser.parseGreater())
+    return Attribute();
+  StringAttr visibilityAttr = parser.getBuilder().getStringAttr(visibility);
+
+  return InnerSymPropertiesAttr::get(parser.getContext(), name, fieldId,
+                                     visibilityAttr);
+}
+
+void InnerSymPropertiesAttr::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << "<@" << getName().getValue() << "," << getFieldID() << ","
+             << getSymVisibility().getValue() << ">";
+}
+
+StringAttr InnerSymAttr::getSymIfExists(unsigned fieldId) const {
+  const auto *it =
+      llvm::find_if(getImpl()->props, [&](const InnerSymPropertiesAttr &p) {
+        return p.getFieldID() == fieldId;
+      });
+  if (it != getProps().end())
+    return it->getName();
+  return {};
+}
+
+InnerSymAttr InnerSymAttr::erase(unsigned fieldID) const {
+  SmallVector<InnerSymPropertiesAttr> syms(getProps());
+  const auto *it = llvm::find_if(syms, [fieldID](InnerSymPropertiesAttr p) {
+    return p.getFieldID() == fieldID;
+  });
+  assert(it != syms.end());
+  syms.erase(it);
+  return InnerSymAttr::get(getContext(), syms);
+}
+
+LogicalResult InnerSymAttr::walkSymbols(
+    llvm::function_ref<LogicalResult(StringAttr)> callback) const {
+  for (auto p : getImpl()->props)
+    if (callback(p.getName()).failed())
+      return failure();
+  return success();
+}
+
+Attribute InnerSymAttr::parse(AsmParser &parser, Type type) {
+  StringAttr sym;
+  NamedAttrList dummyList;
+  SmallVector<InnerSymPropertiesAttr, 4> names;
+  if (!parser.parseOptionalSymbolName(sym, "dummy", dummyList))
+    names.push_back(InnerSymPropertiesAttr::get(sym));
+  else if (parser.parseCommaSeparatedList(
+               OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
+                 InnerSymPropertiesAttr prop;
+                 if (parser.parseCustomAttributeWithFallback(
+                         prop, mlir::Type{}, "dummy", dummyList))
+                   return failure();
+
+                 names.push_back(prop);
+
+                 return success();
+               }))
+    return Attribute();
+
+  std::sort(names.begin(), names.end(),
+            [&](InnerSymPropertiesAttr a, InnerSymPropertiesAttr b) {
+              return a.getFieldID() < b.getFieldID();
+            });
+
+  return InnerSymAttr::get(parser.getContext(), names);
+}
+
+void InnerSymAttr::print(AsmPrinter &odsPrinter) const {
+
+  auto props = getProps();
+  if (props.size() == 1 &&
+      props[0].getSymVisibility().getValue().equals("public") &&
+      props[0].getFieldID() == 0) {
+    odsPrinter << "@" << props[0].getName().getValue();
+    return;
+  }
+  auto names = props.vec();
+
+  std::sort(names.begin(), names.end(),
+            [&](InnerSymPropertiesAttr a, InnerSymPropertiesAttr b) {
+              return a.getFieldID() < b.getFieldID();
+            });
+  odsPrinter << "[";
+  llvm::interleaveComma(names, odsPrinter, [&](InnerSymPropertiesAttr attr) {
+    attr.print(odsPrinter);
+  });
+  odsPrinter << "]";
+}
+
+//===----------------------------------------------------------------------===//
 // ParamDeclAttr
 //===----------------------------------------------------------------------===//
 
@@ -261,7 +365,8 @@ Attribute ParamDeclAttr::parse(AsmParser &p, Type trailing) {
     return Attribute();
 
   if (value)
-    return ParamDeclAttr::get(name, value);
+    return ParamDeclAttr::get(p.getContext(),
+                              p.getBuilder().getStringAttr(name), type, value);
   return ParamDeclAttr::get(name, type);
 }
 
@@ -468,7 +573,7 @@ static TypedAttr simplifyAssocOp(
       operands.pop_back();
   }
 
-  return operands.size() == 1 ? operands[0] : Attribute();
+  return operands.size() == 1 ? operands[0] : TypedAttr();
 }
 
 /// Analyze an operand to an add.  If it is a multiplication by a constant (e.g.
@@ -793,7 +898,7 @@ static Attribute parseParamExprWithOpcode(StringRef opcodeStr,
           }))
     return {};
 
-  Optional<PEO> opcode = symbolizePEO(opcodeStr);
+  std::optional<PEO> opcode = symbolizePEO(opcodeStr);
   if (!opcode.has_value()) {
     p.emitError(p.getNameLoc(), "unknown parameter expr operator name");
     return {};
@@ -835,7 +940,7 @@ replaceDeclRefInExpr(Location loc,
       auto res = replaceDeclRefInExpr(loc, parameters, operand);
       if (failed(res))
         return {failure()};
-      replacedOperands.push_back(*res);
+      replacedOperands.push_back(res->cast<TypedAttr>());
     }
     return {
         hw::ParamExprAttr::get(paramExprAttr.getOpcode(), replacedOperands)};
@@ -844,7 +949,7 @@ replaceDeclRefInExpr(Location loc,
   return {};
 }
 
-FailureOr<Attribute> hw::evaluateParametricAttr(Location loc,
+FailureOr<TypedAttr> hw::evaluateParametricAttr(Location loc,
                                                 ArrayAttr parameters,
                                                 Attribute paramAttr) {
   // Create a map of the provided parameters for faster lookup.
@@ -862,8 +967,8 @@ FailureOr<Attribute> hw::evaluateParametricAttr(Location loc,
   paramAttr = *paramAttrRes;
 
   // Then, evaluate the parametric attribute.
-  if (paramAttr.isa<IntegerAttr>() || paramAttr.isa<hw::ParamDeclRefAttr>())
-    return paramAttr;
+  if (paramAttr.isa<IntegerAttr, hw::ParamDeclRefAttr>())
+    return paramAttr.cast<TypedAttr>();
   if (auto paramExprAttr = paramAttr.dyn_cast<hw::ParamExprAttr>()) {
     // Since any ParamDeclRefAttr was replaced within the expression,
     // we re-evaluate the expression through the existing ParamExprAttr
@@ -873,7 +978,7 @@ FailureOr<Attribute> hw::evaluateParametricAttr(Location loc,
   }
 
   llvm_unreachable("Unhandled parametric attribute");
-  return Attribute();
+  return TypedAttr();
 }
 
 FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
@@ -891,7 +996,7 @@ FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
                                    intAttr.getValue().getSExtValue())};
 
         // Otherwise parameter references are still involved
-        return hw::IntType::get(*evaluatedWidth);
+        return hw::IntType::get(evaluatedWidth->cast<TypedAttr>());
       })
       .Case<hw::ArrayType>([&](hw::ArrayType arrayType) -> FailureOr<Type> {
         auto size =

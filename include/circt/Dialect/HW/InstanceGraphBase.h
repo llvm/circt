@@ -210,8 +210,7 @@ public:
   Operation *getParent() { return parent; }
 
   /// Returns pointer to member of operation list.
-  static NodeList InstanceGraphBase::*
-  getSublistAccessgetSublistAccess(Operation *) {
+  static NodeList InstanceGraphBase::*getSublistAccess(Operation *) {
     return &InstanceGraphBase::nodes;
   }
 
@@ -270,7 +269,8 @@ template <typename T>
 inline static T &formatInstancePath(T &into, const InstancePath &path) {
   into << "$root";
   for (auto inst : path)
-    into << "/" << inst.instanceName() << ":" << inst.referencedModuleName();
+    into << "/" << inst.getInstanceName() << ":"
+         << inst.getReferencedModuleName();
   return into;
 }
 
@@ -382,7 +382,7 @@ struct llvm::DOTGraphTraits<circt::hw::InstanceGraphBase *>
   static std::string getNodeLabel(circt::hw::InstanceGraphNode *node,
                                   circt::hw::InstanceGraphBase *) {
     // The name of the graph node is the module name.
-    return node->getModule().moduleName().str();
+    return node->getModule().getModuleName().str();
   }
 
   template <typename Iterator>
@@ -392,7 +392,7 @@ struct llvm::DOTGraphTraits<circt::hw::InstanceGraphBase *>
     // Set an edge label that is the name of the instance.
     auto *instanceRecord = *it.getCurrent();
     auto instanceOp = instanceRecord->getInstance();
-    return ("label=" + instanceOp.instanceName()).str();
+    return ("label=" + instanceOp.getInstanceName()).str();
   }
 };
 

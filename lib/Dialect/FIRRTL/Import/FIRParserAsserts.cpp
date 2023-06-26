@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
 
@@ -164,6 +165,7 @@ ParseResult parseJson(Location loc, const JsonType &jsonValue, FnType fn) {
 enum class VerifFlavor {
   VerifLibAssert, // contains "[verif-library-assert]"
   VerifLibAssume, // contains "[verif-library-assume]"
+  VerifLibCover,  // contains "[verif-library-cover]"
   Assert,         // begins with "assert:"
   Assume,         // begins with "assume:"
   Cover,          // begins with "cover:"
@@ -177,35 +179,35 @@ enum class PredicateModifier { NoMod, TrueOrIsX };
 /// Parse a conditional compile toggle (e.g. "unrOnly") into the corresponding
 /// preprocessor guard macro name (e.g. "USE_UNR_ONLY_CONSTRAINTS"), or report
 /// an error.
-static Optional<StringRef>
+static std::optional<StringRef>
 parseConditionalCompileToggle(const ExtractionSummaryCursor<StringRef> &ex) {
   if (ex.value == "formalOnly")
     return {"USE_FORMAL_ONLY_CONSTRAINTS"};
   else if (ex.value == "unrOnly")
     return {"USE_UNR_ONLY_CONSTRAINTS"};
   ex.emitError() << "must be `formalOnly` or `unrOnly`";
-  return llvm::None;
+  return std::nullopt;
 }
 
 /// Parse a string into a `PredicateModifier`.
-static Optional<PredicateModifier>
+static std::optional<PredicateModifier>
 parsePredicateModifier(const ExtractionSummaryCursor<StringRef> &ex) {
   if (ex.value == "noMod")
     return PredicateModifier::NoMod;
   else if (ex.value == "trueOrIsX")
     return PredicateModifier::TrueOrIsX;
   ex.emitError() << "must be `noMod` or `trueOrIsX`";
-  return llvm::None;
+  return std::nullopt;
 }
 
 /// Check that an assertion "format" is one of the admissible values, or report
 /// an error.
-static Optional<StringRef>
+static std::optional<StringRef>
 parseAssertionFormat(const ExtractionSummaryCursor<StringRef> &ex) {
   if (ex.value == "sva" || ex.value == "ifElseFatal")
     return ex.value;
   ex.emitError() << "must be `sva` or `ifElseFatal`";
-  return llvm::None;
+  return std::nullopt;
 }
 
 /// Chisel has a tendency to emit complex assert/assume/cover statements encoded
@@ -263,6 +265,8 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     flavor = VerifFlavor::VerifLibAssert;
   else if (fmt.contains("[verif-library-assume]"))
     flavor = VerifFlavor::VerifLibAssume;
+  else if (fmt.contains("[verif-library-cover]"))
+    flavor = VerifFlavor::VerifLibCover;
   else if (fmt.consume_front("assert:"))
     flavor = VerifFlavor::Assert;
   else if (fmt.consume_front("assume:"))
@@ -404,7 +408,7 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
       // Construct a `!whenCond | (value !== 1'bx)` predicate.
       Value notCond = predicate;
       predicate = builder.create<XorRPrimOp>(printOp.getSubstitutions()[0]);
-      predicate = builder.create<IsXVerifOp>(predicate);
+      predicate = builder.create<IsXIntrinsicOp>(predicate);
       predicate = builder.create<NotPrimOp>(predicate);
       predicate = builder.create<OrPrimOp>(notCond, predicate);
     }
@@ -454,7 +458,8 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     // to JSON and embedded in the print message within `<extraction-summary>`
     // XML tags.
   case VerifFlavor::VerifLibAssert:
-  case VerifFlavor::VerifLibAssume: {
+  case VerifFlavor::VerifLibAssume:
+  case VerifFlavor::VerifLibCover: {
     // Isolate the JSON text in the `<extraction-summary>` XML tag.
     StringRef prefix, exStr, suffix;
     std::tie(prefix, exStr) = fmt.split("<extraction-summary>");
@@ -467,7 +472,7 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
           "printf-encoded assert/assume requires extraction summary");
       diag.attachNote(printOp.getLoc())
           << "because printf message contains "
-             "`[verif-library-{assert,assume}]` tag";
+             "`[verif-library-{assert,assume,cover}]` tag";
       diag.attachNote(printOp.getLoc())
           << "expected JSON-encoded extraction summary in "
              "`<extraction-summary>` XML tag";
@@ -566,7 +571,7 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
       return failure();
 
     // Assertions carry an additional `format` field.
-    Optional<StringRef> format;
+    std::optional<StringRef> format;
     if (flavor == VerifFlavor::VerifLibAssert) {
       if (parseJson(printOp.getLoc(), exObj, [&](const auto &ex) {
             return ex.withObjectField("format", [&](const auto &ex) {
@@ -590,10 +595,14 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
       op = builder.create<AssertOp>(printOp.getClock(), predicate,
                                     printOp.getCond(), message,
                                     printOp.getSubstitutions(), label, true);
-    else // VerifFlavor::VerifLibAssume
+    else if (flavor == VerifFlavor::VerifLibAssume)
       op = builder.create<AssumeOp>(printOp.getClock(), predicate,
                                     printOp.getCond(), message,
                                     printOp.getSubstitutions(), label, true);
+    else // VerifFlavor::VerifLibCover
+      op = builder.create<CoverOp>(printOp.getClock(), predicate,
+                                   printOp.getCond(), message,
+                                   printOp.getSubstitutions(), label, true);
     printOp.erase();
 
     // Attach additional attributes extracted from the JSON object.

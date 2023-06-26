@@ -19,6 +19,7 @@
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/HW/InstanceImplementation.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
@@ -208,33 +209,51 @@ bool hw::isValidParameterExpression(Attribute attr, Operation *module) {
   return succeeded(checkParameterInContext(attr, module, nullptr, false));
 }
 
+/// Return the name of the arg attributes list used for both modules and
+/// instances. Normally we'd use the FunctionOpInterface for this, but both
+/// modules and instances use the same attribute name, and instances don't
+/// implement that interface.
+StringAttr getArgAttrsName(MLIRContext *context) {
+  return HWModuleOp::getArgAttrsAttrName(
+      mlir::OperationName(HWModuleOp::getOperationName(), context));
+}
+
+/// Return the name of the result attributes list used for both modules and
+/// instances. Normally we'd use the FunctionOpInterface for this, but both
+/// modules and instances use the same attribute name, and instances don't
+/// implement that interface.
+StringAttr getResAttrsName(MLIRContext *context) {
+  return HWModuleOp::getResAttrsAttrName(
+      mlir::OperationName(HWModuleOp::getOperationName(), context));
+}
+
 /// Return the symbol (if any, else null) on the corresponding input port
 /// argument.
-StringAttr hw::getArgSym(Operation *op, unsigned i) {
+InnerSymAttr hw::getArgSym(Operation *op, unsigned i) {
   assert(isAnyModuleOrInstance(op) &&
          "Can only get module ports from an instance or module");
-  StringAttr sym = {};
-  auto argAttrs = op->getAttrOfType<ArrayAttr>(
-      mlir::function_interface_impl::getArgDictAttrName());
+  InnerSymAttr sym = {};
+  auto argAttrs =
+      op->getAttrOfType<ArrayAttr>(getArgAttrsName(op->getContext()));
   if (argAttrs && (i < argAttrs.size()))
     if (auto s = argAttrs[i].cast<DictionaryAttr>())
       if (auto symRef = s.get("hw.exportPort"))
-        sym = symRef.cast<FlatSymbolRefAttr>().getAttr();
+        sym = symRef.cast<InnerSymAttr>();
   return sym;
 }
 
 /// Return the symbol (if any, else null) on the corresponding output port
 /// argument.
-StringAttr hw::getResultSym(Operation *op, unsigned i) {
+InnerSymAttr hw::getResultSym(Operation *op, unsigned i) {
   assert(isAnyModuleOrInstance(op) &&
          "Can only get module ports from an instance or module");
-  StringAttr sym = {};
-  auto resAttrs = op->getAttrOfType<ArrayAttr>(
-      mlir::function_interface_impl::getResultDictAttrName());
+  InnerSymAttr sym = {};
+  auto resAttrs =
+      op->getAttrOfType<ArrayAttr>(getResAttrsName(op->getContext()));
   if (resAttrs && (i < resAttrs.size()))
     if (auto s = resAttrs[i].cast<DictionaryAttr>())
       if (auto symRef = s.get("hw.exportPort"))
-        sym = symRef.cast<FlatSymbolRefAttr>().getAttr();
+        sym = symRef.cast<InnerSymAttr>();
   return sym;
 }
 
@@ -344,10 +363,135 @@ void ConstantOp::getAsmResultNames(
   setNameFn(getResult(), specialName.str());
 }
 
-OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
-  assert(constants.empty() && "constant has no operands");
+OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "constant has no operands");
   return getValueAttr();
 }
+
+//===----------------------------------------------------------------------===//
+// WireOp
+//===----------------------------------------------------------------------===//
+
+/// Check whether an operation has any additional attributes set beyond its
+/// standard list of attributes returned by `getAttributeNames`.
+template <class Op>
+static bool hasAdditionalAttributes(Op op,
+                                    ArrayRef<StringRef> ignoredAttrs = {}) {
+  auto names = op.getAttributeNames();
+  llvm::SmallDenseSet<StringRef> nameSet;
+  nameSet.reserve(names.size() + ignoredAttrs.size());
+  nameSet.insert(names.begin(), names.end());
+  nameSet.insert(ignoredAttrs.begin(), ignoredAttrs.end());
+  return llvm::any_of(op->getAttrs(), [&](auto namedAttr) {
+    return !nameSet.contains(namedAttr.getName());
+  });
+}
+
+void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the wire has an optional 'name' attribute, use it.
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (!nameAttr.getValue().empty())
+    setNameFn(getResult(), nameAttr.getValue());
+}
+
+OpFoldResult WireOp::fold(FoldAdaptor adaptor) {
+  // If the wire has no additional attributes, no name, and no symbol, just
+  // forward its input.
+  if (!hasAdditionalAttributes(*this, {"sv.namehint"}) && !getNameAttr() &&
+      !getInnerSymAttr())
+    return getInput();
+  return {};
+}
+
+LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
+  // Block if the wire has any attributes.
+  if (hasAdditionalAttributes(wire, {"sv.namehint"}))
+    return failure();
+
+  // If the wire has a symbol, then we can't delete it.
+  if (wire.getInnerSymAttr())
+    return failure();
+
+  // If the wire has a name or an `sv.namehint` attribute, propagate it as an
+  // `sv.namehint` to the expression.
+  if (auto *inputOp = wire.getInput().getDefiningOp()) {
+    auto name = wire.getNameAttr();
+    if (!name || name.getValue().empty())
+      name = wire->getAttrOfType<StringAttr>("sv.namehint");
+    if (name)
+      rewriter.updateRootInPlace(
+          inputOp, [&] { inputOp->setAttr("sv.namehint", name); });
+  }
+
+  rewriter.replaceOp(wire, wire.getInput());
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// AggregateConstantOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult checkAttributes(Operation *op, Attribute attr, Type type) {
+  // If this is a type alias, get the underlying type.
+  if (auto typeAlias = type.dyn_cast<TypeAliasType>())
+    type = typeAlias.getCanonicalType();
+
+  if (auto structType = type.dyn_cast<StructType>()) {
+    auto arrayAttr = attr.dyn_cast<ArrayAttr>();
+    if (!arrayAttr)
+      return op->emitOpError("expected array attribute for constant of type ")
+             << type;
+    for (auto [attr, fieldInfo] :
+         llvm::zip(arrayAttr.getValue(), structType.getElements())) {
+      if (failed(checkAttributes(op, attr, fieldInfo.type)))
+        return failure();
+    }
+  } else if (auto arrayType = type.dyn_cast<ArrayType>()) {
+    auto arrayAttr = attr.dyn_cast<ArrayAttr>();
+    if (!arrayAttr)
+      return op->emitOpError("expected array attribute for constant of type ")
+             << type;
+    auto elementType = arrayType.getElementType();
+    for (auto attr : arrayAttr.getValue()) {
+      if (failed(checkAttributes(op, attr, elementType)))
+        return failure();
+    }
+  } else if (auto arrayType = type.dyn_cast<UnpackedArrayType>()) {
+    auto arrayAttr = attr.dyn_cast<ArrayAttr>();
+    if (!arrayAttr)
+      return op->emitOpError("expected array attribute for constant of type ")
+             << type;
+    auto elementType = arrayType.getElementType();
+    for (auto attr : arrayAttr.getValue()) {
+      if (failed(checkAttributes(op, attr, elementType)))
+        return failure();
+    }
+  } else if (auto enumType = type.dyn_cast<EnumType>()) {
+    auto stringAttr = attr.dyn_cast<StringAttr>();
+    if (!stringAttr)
+      return op->emitOpError("expected string attribute for constant of type ")
+             << type;
+  } else if (auto intType = type.dyn_cast<IntegerType>()) {
+    // Check the attribute kind is correct.
+    auto intAttr = attr.dyn_cast<IntegerAttr>();
+    if (!intAttr)
+      return op->emitOpError("expected integer attribute for constant of type ")
+             << type;
+    // Check the bitwidth is correct.
+    if (intAttr.getValue().getBitWidth() != intType.getWidth())
+      return op->emitOpError("hw.constant attribute bitwidth "
+                             "doesn't match return type");
+  } else {
+    return op->emitOpError("unknown element type") << type;
+  }
+  return success();
+}
+
+LogicalResult AggregateConstantOp::verify() {
+  return checkAttributes(*this, getFieldsAttr(), getType());
+}
+
+OpFoldResult AggregateConstantOp::fold(FoldAdaptor) { return getFieldsAttr(); }
 
 //===----------------------------------------------------------------------===//
 // ParamValueOp
@@ -373,8 +517,8 @@ LogicalResult ParamValueOp::verify() {
       getValue(), (*this)->getParentOfType<hw::HWModuleOp>(), *this);
 }
 
-OpFoldResult ParamValueOp::fold(ArrayRef<Attribute> constants) {
-  assert(constants.empty() && "hw.param.value has no operands");
+OpFoldResult ParamValueOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "hw.param.value has no operands");
   return getValueAttr();
 }
 
@@ -404,9 +548,9 @@ FunctionType hw::getModuleType(Operation *moduleOrInstance) {
 
   assert(isAnyModule(moduleOrInstance) &&
          "must be called on instance or module");
-  auto typeAttr =
-      moduleOrInstance->getAttrOfType<TypeAttr>(HWModuleOp::getTypeAttrName());
-  return typeAttr.getValue().cast<FunctionType>();
+  return cast<mlir::FunctionOpInterface>(moduleOrInstance)
+      .getFunctionType()
+      .cast<FunctionType>();
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -440,26 +584,57 @@ StringAttr hw::getModuleResultNameAttr(Operation *module, size_t resultNo) {
 void hw::setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names) {
   assert(isAnyModule(module) && "Must be called on a module");
   assert(getModuleType(module).getNumInputs() == names.size() &&
-         "incorrect number of arguments names specified");
+         "incorrect number of argument names specified");
   module->setAttr("argNames", ArrayAttr::get(module->getContext(), names));
 }
 
 void hw::setModuleResultNames(Operation *module, ArrayRef<Attribute> names) {
   assert(isAnyModule(module) && "Must be called on a module");
   assert(getModuleType(module).getNumResults() == names.size() &&
-         "incorrect number of arguments names specified");
+         "incorrect number of argument names specified");
   module->setAttr("resultNames", ArrayAttr::get(module->getContext(), names));
+}
+
+LocationAttr hw::getModuleArgumentLocAttr(Operation *module, size_t argNo) {
+  auto argumentLocs = module->getAttrOfType<ArrayAttr>("argLocs");
+  // Tolerate malformed IR here to enable debug printing etc.
+  if (argumentLocs && argNo < argumentLocs.size())
+    return argumentLocs[argNo].cast<LocationAttr>();
+  return LocationAttr();
+}
+
+LocationAttr hw::getModuleResultLocAttr(Operation *module, size_t resultNo) {
+  auto resultLocs = module->getAttrOfType<ArrayAttr>("resultLocs");
+  // Tolerate malformed IR here to enable debug printing etc.
+  if (resultLocs && resultNo < resultLocs.size())
+    return resultLocs[resultNo].cast<LocationAttr>();
+  return LocationAttr();
+}
+
+void hw::setModuleArgumentLocs(Operation *module, ArrayRef<Attribute> locs) {
+  assert(isAnyModule(module) && "Must be called on a module");
+  assert(getModuleType(module).getNumInputs() == locs.size() &&
+         "incorrect number of argument locations specified");
+  module->setAttr("argLocs", ArrayAttr::get(module->getContext(), locs));
+}
+
+void hw::setModuleResultLocs(Operation *module, ArrayRef<Attribute> locs) {
+  assert(isAnyModule(module) && "Must be called on a module");
+  assert(getModuleType(module).getNumResults() == locs.size() &&
+         "incorrect number of result locations specified");
+  module->setAttr("resultLocs", ArrayAttr::get(module->getContext(), locs));
 }
 
 // Flag for parsing different module types
 enum ExternModKind { PlainMod, ExternMod, GenMod };
 
-static void buildModule(OpBuilder &builder, OperationState &result,
-                        StringAttr name, const ModulePortInfo &ports,
-                        ArrayAttr parameters,
-                        ArrayRef<NamedAttribute> attributes,
-                        StringAttr comment) {
+template <typename ModuleTy>
+static void
+buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
+            const ModulePortInfo &ports, ArrayAttr parameters,
+            ArrayRef<NamedAttribute> attributes, StringAttr comment) {
   using namespace mlir::function_interface_impl;
+  LocationAttr unknownLoc = builder.getUnknownLoc();
 
   // Add an attribute for the name.
   result.addAttribute(SymbolTable::getSymbolAttrName(), name);
@@ -467,6 +642,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   SmallVector<Attribute> argNames, resultNames;
   SmallVector<Type, 4> argTypes, resultTypes;
   SmallVector<Attribute> argAttrs, resultAttrs;
+  SmallVector<Attribute> argLocs, resultLocs;
   auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
 
   for (auto elt : ports.inputs) {
@@ -474,10 +650,10 @@ static void buildModule(OpBuilder &builder, OperationState &result,
       elt.type = hw::InOutType::get(elt.type);
     argTypes.push_back(elt.type);
     argNames.push_back(elt.name);
+    argLocs.push_back(elt.loc ? elt.loc : unknownLoc);
     Attribute attr;
-    if (elt.sym && !elt.sym.getValue().empty())
-      attr = builder.getDictionaryAttr(
-          {{exportPortIdent, FlatSymbolRefAttr::get(elt.sym)}});
+    if (elt.sym && !elt.sym.empty())
+      attr = builder.getDictionaryAttr({{exportPortIdent, elt.sym}});
     else
       attr = builder.getDictionaryAttr({});
     argAttrs.push_back(attr);
@@ -486,10 +662,10 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   for (auto elt : ports.outputs) {
     resultTypes.push_back(elt.type);
     resultNames.push_back(elt.name);
+    resultLocs.push_back(elt.loc ? elt.loc : unknownLoc);
     Attribute attr;
-    if (elt.sym && !elt.sym.getValue().empty())
-      attr = builder.getDictionaryAttr(
-          {{exportPortIdent, FlatSymbolRefAttr::get(elt.sym)}});
+    if (elt.sym && !elt.sym.empty())
+      attr = builder.getDictionaryAttr({{exportPortIdent, elt.sym}});
     else
       attr = builder.getDictionaryAttr({});
     resultAttrs.push_back(attr);
@@ -501,12 +677,15 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 
   // Record the argument and result types as an attribute.
   auto type = builder.getFunctionType(argTypes, resultTypes);
-  result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+  result.addAttribute(ModuleTy::getFunctionTypeAttrName(result.name),
+                      TypeAttr::get(type));
   result.addAttribute("argNames", builder.getArrayAttr(argNames));
   result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
-  result.addAttribute(mlir::function_interface_impl::getArgDictAttrName(),
+  result.addAttribute("argLocs", builder.getArrayAttr(argLocs));
+  result.addAttribute("resultLocs", builder.getArrayAttr(resultLocs));
+  result.addAttribute(ModuleTy::getArgAttrsAttrName(result.name),
                       builder.getArrayAttr(argAttrs));
-  result.addAttribute(mlir::function_interface_impl::getResultDictAttrName(),
+  result.addAttribute(ModuleTy::getResAttrsAttrName(result.name),
                       builder.getArrayAttr(resultAttrs));
   result.addAttribute("parameters", parameters);
   if (!comment)
@@ -521,8 +700,9 @@ static void modifyModuleArgs(
     MLIRContext *context, ArrayRef<std::pair<unsigned, PortInfo>> insertArgs,
     ArrayRef<unsigned> removeArgs, ArrayRef<Attribute> oldArgNames,
     ArrayRef<Type> oldArgTypes, ArrayRef<Attribute> oldArgAttrs,
-    SmallVector<Attribute> &newArgNames, SmallVector<Type> &newArgTypes,
-    SmallVector<Attribute> &newArgAttrs, Block *body = nullptr) {
+    ArrayRef<Attribute> oldArgLocs, SmallVector<Attribute> &newArgNames,
+    SmallVector<Type> &newArgTypes, SmallVector<Attribute> &newArgAttrs,
+    SmallVector<Attribute> &newArgLocs, Block *body = nullptr) {
 
 #ifndef NDEBUG
   // Check that the `insertArgs` and `removeArgs` indices are in ascending
@@ -541,9 +721,11 @@ static void modifyModuleArgs(
   newArgNames.reserve(newArgCount);
   newArgTypes.reserve(newArgCount);
   newArgAttrs.reserve(newArgCount);
+  newArgLocs.reserve(newArgCount);
 
   auto exportPortAttrName = StringAttr::get(context, "hw.exportPort");
   auto emptyDictAttr = DictionaryAttr::get(context, {});
+  auto unknownLoc = UnknownLoc::get(context);
 
   BitVector erasedIndices;
   if (body)
@@ -556,17 +738,17 @@ static void modifyModuleArgs(
       if (port.direction == PortDirection::INOUT && !port.type.isa<InOutType>())
         port.type = InOutType::get(port.type);
       Attribute attr =
-          (port.sym && !port.sym.getValue().empty())
-              ? DictionaryAttr::get(
-                    context,
-                    {{exportPortAttrName, FlatSymbolRefAttr::get(port.sym)}})
+          (port.sym && !port.sym.empty())
+              ? DictionaryAttr::get(context, {{exportPortAttrName, port.sym}})
               : emptyDictAttr;
       newArgNames.push_back(port.name);
       newArgTypes.push_back(port.type);
       newArgAttrs.push_back(attr);
       insertArgs = insertArgs.drop_front();
+      LocationAttr loc = port.loc ? port.loc : unknownLoc;
+      newArgLocs.push_back(loc);
       if (body)
-        body->insertArgument(idx++, port.type, UnknownLoc::get(context));
+        body->insertArgument(idx++, port.type, loc);
     }
     if (argIdx == oldArgCount)
       break;
@@ -586,6 +768,7 @@ static void modifyModuleArgs(
       newArgTypes.push_back(oldArgTypes[argIdx]);
       newArgAttrs.push_back(oldArgAttrs.empty() ? emptyDictAttr
                                                 : oldArgAttrs[argIdx]);
+      newArgLocs.push_back(oldArgLocs[argIdx]);
     }
   }
 
@@ -595,6 +778,7 @@ static void modifyModuleArgs(
   assert(newArgNames.size() == newArgCount);
   assert(newArgTypes.size() == newArgCount);
   assert(newArgAttrs.size() == newArgCount);
+  assert(newArgLocs.size() == newArgCount);
 }
 
 /// Insert and remove ports of a module. The insertion and removal indices must
@@ -609,50 +793,48 @@ void hw::modifyModulePorts(
     ArrayRef<unsigned> removeInputs, ArrayRef<unsigned> removeOutputs,
     Block *body) {
   auto moduleOp = cast<mlir::FunctionOpInterface>(op);
+  auto *context = moduleOp.getContext();
 
   auto arrayOrEmpty = [](ArrayAttr attr) {
     return attr ? attr.getValue() : ArrayRef<Attribute>{};
   };
 
   // Dig up the old argument and result data.
-  ArrayRef<Attribute> oldArgNames =
-      moduleOp->getAttrOfType<ArrayAttr>("argNames").getValue();
-  ArrayRef<Type> oldArgTypes = moduleOp.getArgumentTypes();
-  ArrayRef<Attribute> oldArgAttrs =
-      arrayOrEmpty(moduleOp->getAttrOfType<ArrayAttr>(
-          mlir::function_interface_impl::getArgDictAttrName()));
+  auto oldArgNames = moduleOp->getAttrOfType<ArrayAttr>("argNames").getValue();
+  auto oldArgTypes = moduleOp.getArgumentTypes();
+  auto oldArgAttrs = arrayOrEmpty(moduleOp.getArgAttrsAttr());
+  auto oldArgLocs = moduleOp->getAttrOfType<ArrayAttr>("argLocs").getValue();
 
-  ArrayRef<Attribute> oldResultNames =
+  auto oldResultNames =
       moduleOp->getAttrOfType<ArrayAttr>("resultNames").getValue();
-  ArrayRef<Type> oldResultTypes = moduleOp.getResultTypes();
-  ArrayRef<Attribute> oldResultAttrs =
-      arrayOrEmpty(moduleOp->getAttrOfType<ArrayAttr>(
-          mlir::function_interface_impl::getResultDictAttrName()));
+  auto oldResultTypes = moduleOp.getResultTypes();
+  auto oldResultAttrs = arrayOrEmpty(moduleOp.getResAttrsAttr());
+  auto oldResultLocs =
+      moduleOp->getAttrOfType<ArrayAttr>("resultLocs").getValue();
 
   // Modify the ports.
   SmallVector<Attribute> newArgNames, newResultNames;
   SmallVector<Type> newArgTypes, newResultTypes;
   SmallVector<Attribute> newArgAttrs, newResultAttrs;
+  SmallVector<Attribute> newArgLocs, newResultLocs;
 
-  modifyModuleArgs(moduleOp.getContext(), insertInputs, removeInputs,
-                   oldArgNames, oldArgTypes, oldArgAttrs, newArgNames,
-                   newArgTypes, newArgAttrs, body);
+  modifyModuleArgs(context, insertInputs, removeInputs, oldArgNames,
+                   oldArgTypes, oldArgAttrs, oldArgLocs, newArgNames,
+                   newArgTypes, newArgAttrs, newArgLocs, body);
 
-  modifyModuleArgs(moduleOp.getContext(), insertOutputs, removeOutputs,
-                   oldResultNames, oldResultTypes, oldResultAttrs,
-                   newResultNames, newResultTypes, newResultAttrs);
+  modifyModuleArgs(context, insertOutputs, removeOutputs, oldResultNames,
+                   oldResultTypes, oldResultAttrs, oldResultLocs,
+                   newResultNames, newResultTypes, newResultAttrs,
+                   newResultLocs);
 
   // Update the module operation types and attributes.
-  moduleOp.setType(
-      FunctionType::get(moduleOp.getContext(), newArgTypes, newResultTypes));
-  moduleOp->setAttr("argNames",
-                    ArrayAttr::get(moduleOp.getContext(), newArgNames));
-  moduleOp->setAttr("resultNames",
-                    ArrayAttr::get(moduleOp.getContext(), newResultNames));
-  moduleOp->setAttr(mlir::function_interface_impl::getArgDictAttrName(),
-                    ArrayAttr::get(moduleOp.getContext(), newArgAttrs));
-  moduleOp->setAttr(mlir::function_interface_impl::getResultDictAttrName(),
-                    ArrayAttr::get(moduleOp.getContext(), newResultAttrs));
+  moduleOp.setType(FunctionType::get(context, newArgTypes, newResultTypes));
+  moduleOp->setAttr("argNames", ArrayAttr::get(context, newArgNames));
+  moduleOp.setArgAttrsAttr(ArrayAttr::get(context, newArgAttrs));
+  moduleOp->setAttr("argLocs", ArrayAttr::get(context, newArgLocs));
+  moduleOp->setAttr("resultNames", ArrayAttr::get(context, newResultNames));
+  moduleOp.setResAttrsAttr(ArrayAttr::get(context, newResultAttrs));
+  moduleOp->setAttr("resultLocs", ArrayAttr::get(context, newResultLocs));
 }
 
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -660,7 +842,8 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        ArrayAttr parameters,
                        ArrayRef<NamedAttribute> attributes, StringAttr comment,
                        bool shouldEnsureTerminator) {
-  buildModule(builder, result, name, ports, parameters, attributes, comment);
+  buildModule<HWModuleOp>(builder, result, name, ports, parameters, attributes,
+                          comment);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -668,8 +851,14 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
   bodyRegion->push_back(body);
 
   // Add arguments to the body block.
-  for (auto elt : ports.inputs)
-    body->addArgument(elt.type, builder.getUnknownLoc());
+  auto unknownLoc = builder.getUnknownLoc();
+  for (auto port : ports.inputs) {
+    auto loc = port.loc ? Location(port.loc) : unknownLoc;
+    auto type = port.type;
+    if (port.isInOut() && !type.isa<InOutType>())
+      type = InOutType::get(type);
+    body->addArgument(type, loc);
+  }
 
   if (shouldEnsureTerminator)
     HWModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
@@ -706,7 +895,7 @@ void HWModuleOp::modifyPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
     ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
   hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
-                        eraseOutputs, getBodyBlock());
+                        eraseOutputs);
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -731,7 +920,8 @@ void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
                              StringAttr name, const ModulePortInfo &ports,
                              StringRef verilogName, ArrayAttr parameters,
                              ArrayRef<NamedAttribute> attributes) {
-  buildModule(builder, result, name, ports, parameters, attributes, {});
+  buildModule<HWModuleExternOp>(builder, result, name, ports, parameters,
+                                attributes, {});
 
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
@@ -761,7 +951,8 @@ void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
                                 const ModulePortInfo &ports,
                                 StringRef verilogName, ArrayAttr parameters,
                                 ArrayRef<NamedAttribute> attributes) {
-  buildModule(builder, result, name, ports, parameters, attributes, {});
+  buildModule<HWModuleGeneratedOp>(builder, result, name, ports, parameters,
+                                   attributes, {});
   result.addAttribute("generatorKind", genKind);
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
@@ -795,9 +986,9 @@ ModulePortInfo hw::getModulePortInfo(Operation *op) {
          "Can only get module ports from an instance or module");
 
   SmallVector<PortInfo> inputs, outputs;
-  auto argTypes = getModuleType(op).getInputs();
-
   auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
+  auto argTypes = getModuleType(op).getInputs();
+  auto argLocs = op->getAttrOfType<ArrayAttr>("argLocs");
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     bool isInOut = false;
     auto type = argTypes[i];
@@ -808,15 +999,23 @@ ModulePortInfo hw::getModulePortInfo(Operation *op) {
     }
 
     auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
-    inputs.push_back(
-        {argNames[i].cast<StringAttr>(), direction, type, i, getArgSym(op, i)});
+    LocationAttr loc;
+    if (argLocs)
+      loc = argLocs[i].cast<LocationAttr>();
+
+    inputs.push_back({argNames[i].cast<StringAttr>(), direction, type, i,
+                      getArgSym(op, i), loc});
   }
 
   auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
   auto resultTypes = getModuleType(op).getResults();
+  auto resultLocs = op->getAttrOfType<ArrayAttr>("resultLocs");
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
+    LocationAttr loc;
+    if (resultLocs)
+      loc = resultLocs[i].cast<LocationAttr>();
     outputs.push_back({resultNames[i].cast<StringAttr>(), PortDirection::OUTPUT,
-                       resultTypes[i], i, getResultSym(op, i)});
+                       resultTypes[i], i, getResultSym(op, i), loc});
   }
   return ModulePortInfo(inputs, outputs);
 }
@@ -831,6 +1030,8 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
   SmallVector<PortInfo> results;
   auto argTypes = getModuleType(op).getInputs();
   auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
+  auto argLocs = op->getAttrOfType<ArrayAttr>("argLocs");
+
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     bool isInOut = false;
     auto type = argTypes[i];
@@ -840,16 +1041,28 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
       type = inout.getElementType();
     }
 
+    // Instance ops will not have port location information.
+    LocationAttr argLoc;
+    if (argLocs)
+      argLoc = argLocs[i].cast<LocationAttr>();
+
     auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
-    results.push_back(
-        {argNames[i].cast<StringAttr>(), direction, type, i, getArgSym(op, i)});
+    results.push_back({argNames[i].cast<StringAttr>(), direction, type, i,
+                       getArgSym(op, i), argLoc});
   }
 
   auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
+  auto resultLocs = op->getAttrOfType<ArrayAttr>("resultLocs");
   auto resultTypes = getModuleType(op).getResults();
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
+
+    // Instance ops will not have port location information.
+    LocationAttr resultLoc;
+    if (resultLocs)
+      resultLoc = resultLocs[i].cast<mlir::LocationAttr>();
+
     results.push_back({resultNames[i].cast<StringAttr>(), PortDirection::OUTPUT,
-                       resultTypes[i], i, getResultSym(op, i)});
+                       resultTypes[i], i, getResultSym(op, i), resultLoc});
   }
   return results;
 }
@@ -858,6 +1071,7 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
 PortInfo hw::getModuleInOrInoutPort(Operation *op, size_t idx) {
   auto argTypes = getModuleType(op).getInputs();
   auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
+  auto argLocs = op->getAttrOfType<ArrayAttr>("argLocs");
   bool isInOut = false;
   auto type = argTypes[idx];
 
@@ -867,17 +1081,26 @@ PortInfo hw::getModuleInOrInoutPort(Operation *op, size_t idx) {
   }
 
   auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
-  return {argNames[idx].cast<StringAttr>(), direction, type, idx,
-          getArgSym(op, idx)};
+  return {argNames[idx].cast<StringAttr>(),
+          direction,
+          type,
+          idx,
+          getArgSym(op, idx),
+          argLocs[idx].cast<LocationAttr>()};
 }
 
 /// Return the PortInfo for the specified output port.
 PortInfo hw::getModuleOutputPort(Operation *op, size_t idx) {
   auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
+  auto resultLocs = op->getAttrOfType<ArrayAttr>("resultLocs");
   auto resultTypes = getModuleType(op).getResults();
   assert(idx < resultNames.size() && "invalid result number");
-  return {resultNames[idx].cast<StringAttr>(), PortDirection::OUTPUT,
-          resultTypes[idx], idx, getResultSym(op, idx)};
+  return {resultNames[idx].cast<StringAttr>(),
+          PortDirection::OUTPUT,
+          resultTypes[idx],
+          idx,
+          getResultSym(op, idx),
+          resultLocs[idx].cast<LocationAttr>()};
 }
 
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
@@ -887,18 +1110,12 @@ static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   return false;
 }
 
+template <typename ModuleTy>
 static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
                                    ExternModKind modKind = PlainMod) {
 
   using namespace mlir::function_interface_impl;
-
   auto loc = parser.getCurrentLocation();
-
-  SmallVector<OpAsmParser::Argument, 4> entryArgs;
-  SmallVector<DictionaryAttr> resultAttrs;
-  SmallVector<Type, 4> resultTypes;
-  ArrayAttr parameters;
-  auto &builder = parser.getBuilder();
 
   // Parse the visibility attribute.
   (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
@@ -909,6 +1126,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
                              result.attributes))
     return failure();
 
+  // Parse the generator information.
   FlatSymbolRefAttr kindAttr;
   if (modKind == GenMod) {
     if (parser.parseComma() ||
@@ -917,27 +1135,28 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
     }
   }
 
-  // Parse the function signature.
-  bool isVariadic = false;
-  SmallVector<Attribute> resultNames;
-  if (parseOptionalParameterList(parser, parameters) ||
-      module_like_impl::parseModuleFunctionSignature(
-          parser, entryArgs, isVariadic, resultTypes, resultAttrs,
-          resultNames) ||
-      // If function attributes are present, parse them.
-      parser.parseOptionalAttrDictWithKeyword(result.attributes))
+  // Parse the parameters.
+  ArrayAttr parameters;
+  if (parseOptionalParameterList(parser, parameters))
     return failure();
 
-  // Record the argument and result types as an attribute.  This is necessary
-  // for external modules.
-  SmallVector<Type> argTypes;
-  for (auto &arg : entryArgs)
-    argTypes.push_back(arg.type);
+  // Parse the function signature.
+  bool isVariadic = false;
+  SmallVector<OpAsmParser::Argument, 4> entryArgs;
+  SmallVector<Attribute> argNames;
+  SmallVector<Attribute> argLocs;
+  SmallVector<Attribute> resultNames;
+  SmallVector<DictionaryAttr> resultAttrs;
+  SmallVector<Attribute> resultLocs;
+  TypeAttr functionType;
+  if (failed(module_like_impl::parseModuleFunctionSignature(
+          parser, isVariadic, entryArgs, argNames, argLocs, resultNames,
+          resultAttrs, resultLocs, functionType)))
+    return failure();
 
-  auto type = builder.getFunctionType(argTypes, resultTypes);
-  result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
-
-  auto *context = result.getContext();
+  // Parse the attribute dict.
+  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
+    return failure();
 
   if (hasAttribute("resultNames", result.attributes) ||
       hasAttribute("parameters", result.attributes)) {
@@ -946,16 +1165,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
     return failure();
   }
 
-  // Use the argument and result names if not already specified.
-  SmallVector<Attribute> argNames;
-  if (!entryArgs.empty()) {
-    for (auto &arg : entryArgs)
-      argNames.push_back(
-          module_like_impl::getPortNameAttr(context, arg.ssaName.name));
-  } else if (!argTypes.empty()) {
-    // The parser returns empty names in a special way.
-    argNames.assign(argTypes.size(), StringAttr::get(context, ""));
-  }
+  auto *context = result.getContext();
 
   // An explicit `argNames` attribute overrides the MLIR names.  This is how
   // we represent port names that aren't valid MLIR identifiers.  Result and
@@ -963,15 +1173,19 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   // they don't need this affordance.
   if (!hasAttribute("argNames", result.attributes))
     result.addAttribute("argNames", ArrayAttr::get(context, argNames));
+  result.addAttribute("argLocs", ArrayAttr::get(context, argLocs));
   result.addAttribute("resultNames", ArrayAttr::get(context, resultNames));
+  result.addAttribute("resultLocs", ArrayAttr::get(context, resultLocs));
   result.addAttribute("parameters", parameters);
   if (!hasAttribute("comment", result.attributes))
     result.addAttribute("comment", StringAttr::get(context, ""));
-
-  assert(resultAttrs.size() == resultTypes.size());
+  result.addAttribute(ModuleTy::getFunctionTypeAttrName(result.name),
+                      functionType);
 
   // Add the attributes to the function arguments.
-  addArgAndResultAttrs(builder, result, entryArgs, resultAttrs);
+  addArgAndResultAttrs(parser.getBuilder(), result, entryArgs, resultAttrs,
+                       ModuleTy::getArgAttrsAttrName(result.name),
+                       ModuleTy::getResAttrsAttrName(result.name));
 
   // Parse the optional function body.
   auto *body = result.addRegion();
@@ -985,24 +1199,26 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
 }
 
 ParseResult HWModuleOp::parse(OpAsmParser &parser, OperationState &result) {
-  return parseHWModuleOp(parser, result);
+  return parseHWModuleOp<HWModuleOp>(parser, result);
 }
 
 ParseResult HWModuleExternOp::parse(OpAsmParser &parser,
                                     OperationState &result) {
-  return parseHWModuleOp(parser, result, ExternMod);
+  return parseHWModuleOp<HWModuleExternOp>(parser, result, ExternMod);
 }
 
 ParseResult HWModuleGeneratedOp::parse(OpAsmParser &parser,
                                        OperationState &result) {
-  return parseHWModuleOp(parser, result, GenMod);
+  return parseHWModuleOp<HWModuleGeneratedOp>(parser, result, GenMod);
 }
 
 FunctionType getHWModuleOpType(Operation *op) {
-  auto typeAttr = op->getAttrOfType<TypeAttr>(HWModuleOp::getTypeAttrName());
-  return typeAttr.getValue().cast<FunctionType>();
+  return cast<mlir::FunctionOpInterface>(op)
+      .getFunctionType()
+      .cast<FunctionType>();
 }
 
+template <typename ModuleTy>
 static void printModuleOp(OpAsmPrinter &p, Operation *op,
                           ExternModKind modKind) {
   using namespace mlir::function_interface_impl;
@@ -1037,25 +1253,29 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
     omittedAttrs.push_back("generatorKind");
   if (!needArgNamesAttr)
     omittedAttrs.push_back("argNames");
+  omittedAttrs.push_back("argLocs");
+  omittedAttrs.push_back(ModuleTy::getFunctionTypeAttrName(op->getName()));
+  omittedAttrs.push_back(ModuleTy::getArgAttrsAttrName(op->getName()));
+  omittedAttrs.push_back(ModuleTy::getResAttrsAttrName(op->getName()));
   omittedAttrs.push_back("resultNames");
+  omittedAttrs.push_back("resultLocs");
   omittedAttrs.push_back("parameters");
   omittedAttrs.push_back(visibilityAttrName);
   if (op->getAttrOfType<StringAttr>("comment").getValue().empty())
     omittedAttrs.push_back("comment");
 
-  printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
-                          omittedAttrs);
+  printFunctionAttributes(p, op, omittedAttrs);
 }
 
 void HWModuleExternOp::print(OpAsmPrinter &p) {
-  printModuleOp(p, *this, ExternMod);
+  printModuleOp<HWModuleExternOp>(p, *this, ExternMod);
 }
 void HWModuleGeneratedOp::print(OpAsmPrinter &p) {
-  printModuleOp(p, *this, GenMod);
+  printModuleOp<HWModuleGeneratedOp>(p, *this, GenMod);
 }
 
 void HWModuleOp::print(OpAsmPrinter &p) {
-  printModuleOp(p, *this, PlainMod);
+  printModuleOp<HWModuleOp>(p, *this, PlainMod);
 
   // Print the body if this is not an external function.
   Region &body = getBody();
@@ -1071,12 +1291,22 @@ static LogicalResult verifyModuleCommon(Operation *module) {
          "verifier hook should only be called on modules");
 
   auto moduleType = getModuleType(module);
+
   auto argNames = module->getAttrOfType<ArrayAttr>("argNames");
-  auto resultNames = module->getAttrOfType<ArrayAttr>("resultNames");
   if (argNames.size() != moduleType.getNumInputs())
     return module->emitOpError("incorrect number of argument names");
+
+  auto resultNames = module->getAttrOfType<ArrayAttr>("resultNames");
   if (resultNames.size() != moduleType.getNumResults())
     return module->emitOpError("incorrect number of result names");
+
+  auto argLocs = module->getAttrOfType<ArrayAttr>("argLocs");
+  if (argLocs.size() != moduleType.getNumInputs())
+    return module->emitOpError("incorrect number of argument locations");
+
+  auto resultLocs = module->getAttrOfType<ArrayAttr>("resultLocs");
+  if (resultLocs.size() != moduleType.getNumResults())
+    return module->emitOpError("incorrect number of result locations");
 
   SmallPtrSet<Attribute, 4> paramNames;
 
@@ -1115,7 +1345,31 @@ static LogicalResult verifyModuleCommon(Operation *module) {
   return success();
 }
 
-LogicalResult HWModuleOp::verify() { return verifyModuleCommon(*this); }
+LogicalResult HWModuleOp::verify() {
+  if (failed(verifyModuleCommon(*this)))
+    return failure();
+
+  auto type = getFunctionType();
+  auto *body = getBodyBlock();
+
+  // Verify the number of block arguments.
+  auto numInputs = type.getNumInputs();
+  if (body->getNumArguments() != numInputs)
+    return emitOpError("entry block must have")
+           << numInputs << " arguments to match module signature";
+
+  // Verify that the block arguments match the op's attributes.
+  for (auto [arg, type, loc] :
+       llvm::zip(getArguments(), type.getInputs(), getArgLocs())) {
+    if (arg.getType() != type)
+      return emitOpError("block argument types should match signature types");
+    if (arg.getLoc() != loc.cast<LocationAttr>())
+      return emitOpError(
+          "block argument locations should match signature locations");
+  }
+
+  return success();
+}
 
 LogicalResult HWModuleExternOp::verify() { return verifyModuleCommon(*this); }
 
@@ -1127,15 +1381,18 @@ HWModuleOp::insertInput(unsigned index, StringAttr name, Type ty) {
     ns.newName(port.name.getValue());
   auto nameAttr = StringAttr::get(getContext(), ns.newName(name.getValue()));
 
+  Block *body = getBodyBlock();
+
   // Create a new port for the host clock.
   PortInfo port;
   port.name = nameAttr;
   port.direction = PortDirection::INPUT;
   port.type = ty;
-  insertPorts({std::make_pair(index, port)}, {});
+  hw::modifyModulePorts(getOperation(), {std::make_pair(index, port)}, {}, {},
+                        {}, body);
 
   // Add a new argument.
-  return {nameAttr, getBody().getArgument(index)};
+  return {nameAttr, body->getArgument(index)};
 }
 
 void HWModuleOp::insertOutputs(unsigned index,
@@ -1153,7 +1410,8 @@ void HWModuleOp::insertOutputs(unsigned index,
     port.type = value.getType();
     indexedNewPorts.emplace_back(index, port);
   }
-  insertPorts({}, indexedNewPorts);
+  hw::modifyModulePorts(getOperation(), {}, indexedNewPorts, {}, {},
+                        getBodyBlock());
 
   // Rewrite the output op.
   for (auto &[name, value] : outputs)
@@ -1360,7 +1618,7 @@ void InstanceOp::setResultName(size_t i, StringAttr name) {
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  instance_like_impl::getAsmResultNames(setNameFn, instanceName(),
+  instance_like_impl::getAsmResultNames(setNameFn, getInstanceName(),
                                         getResultNames(), getResults());
 }
 
@@ -1444,21 +1702,21 @@ GlobalRefOp::verifySymbolUses(mlir::SymbolTableCollection &symTables) {
       // TODO: Doesn't yet work for symbls on FIRRTL module ports. Need to
       // implement an interface.
       if (isa<HWModuleOp, HWModuleExternOp>(mod)) {
-        if (auto argAttrs = mod->getAttr(
-                mlir::function_interface_impl::getArgDictAttrName()))
+        if (auto argAttrs =
+                cast<mlir::FunctionOpInterface>(mod).getArgAttrsAttr())
           for (auto attr :
                argAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
-            if (auto symRef = attr.get("hw.exportPort"))
-              if (symRef.cast<FlatSymbolRefAttr>().getValue() == innerSym)
+            if (auto symRef = attr.getAs<hw::InnerSymAttr>("hw.exportPort"))
+              if (symRef.getSymName() == innerSym)
                 if (hasGlobalRef(attr.get(GlobalRefAttr::DialectAttrName)))
                   return success();
 
-        if (auto resAttrs = mod->getAttr(
-                mlir::function_interface_impl::getResultDictAttrName()))
+        if (auto resAttrs =
+                cast<mlir::FunctionOpInterface>(mod).getResAttrsAttr())
           for (auto attr :
                resAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
-            if (auto symRef = attr.get("hw.exportPort"))
-              if (symRef.cast<FlatSymbolRefAttr>().getValue() == innerSym)
+            if (auto symRef = attr.getAs<hw::InnerSymAttr>("hw.exportPort"))
+              if (symRef.getSymName() == innerSym)
                 if (hasGlobalRef(attr.get(GlobalRefAttr::DialectAttrName)))
                   return success();
       }
@@ -1538,6 +1796,12 @@ LogicalResult ArrayCreateOp::verify() {
   if (getInputs().size() != returnSize)
     return failure();
   return success();
+}
+
+OpFoldResult ArrayCreateOp::fold(FoldAdaptor adaptor) {
+  if (llvm::any_of(adaptor.getInputs(), [](Attribute attr) { return !attr; }))
+    return {};
+  return ArrayAttr::get(getContext(), adaptor.getInputs());
 }
 
 // Check whether an integer value is an offset from a base.
@@ -1636,13 +1900,13 @@ Value ArrayCreateOp::getUniformElement() {
   return {};
 }
 
-static Optional<uint64_t> getUIntFromValue(Value value) {
+static std::optional<uint64_t> getUIntFromValue(Value value) {
   auto idxOp = dyn_cast_or_null<ConstantOp>(value.getDefiningOp());
   if (!idxOp)
-    return llvm::None;
+    return std::nullopt;
   APInt idxAttr = idxOp.getValue();
   if (idxAttr.getBitWidth() > 64)
-    return llvm::None;
+    return std::nullopt;
   return idxAttr.getLimitedValue();
 }
 
@@ -1655,7 +1919,7 @@ LogicalResult ArraySliceOp::verify() {
   return success();
 }
 
-OpFoldResult ArraySliceOp::fold(ArrayRef<Attribute> constants) {
+OpFoldResult ArraySliceOp::fold(FoldAdaptor adaptor) {
   // If we are slicing the entire input, then return it.
   if (getType() == getInput().getType())
     return getInput();
@@ -1667,7 +1931,8 @@ LogicalResult ArraySliceOp::canonicalize(ArraySliceOp op,
   auto sliceTy = hw::type_cast<ArrayType>(op.getType());
   auto elemTy = sliceTy.getElementType();
   uint64_t sliceSize = sliceTy.getSize();
-  assert(sliceSize != 0 && "empty slice");
+  if (sliceSize == 0)
+    return failure();
 
   if (sliceSize == 1) {
     // slice(a, n) -> create(a[n])
@@ -1816,6 +2081,17 @@ void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
   build(b, state, ArrayType::get(elemTy, resultSize), values);
 }
 
+OpFoldResult ArrayConcatOp::fold(FoldAdaptor adaptor) {
+  auto inputs = adaptor.getInputs();
+  SmallVector<Attribute> array;
+  for (size_t i = 0, e = getNumOperands(); i < e; ++i) {
+    if (!inputs[i])
+      return {};
+    llvm::copy(inputs[i].cast<ArrayAttr>(), std::back_inserter(array));
+  }
+  return ArrayAttr::get(getContext(), array);
+}
+
 // Flatten a concatenation of array creates into a single create.
 static bool flattenConcatOp(ArrayConcatOp op, PatternRewriter &rewriter) {
   for (auto input : op.getInputs())
@@ -1844,7 +2120,7 @@ static bool mergeConcatSlices(ArrayConcatOp op, PatternRewriter &rewriter) {
   };
 
   SmallVector<Value> items;
-  Optional<Slice> last;
+  std::optional<Slice> last;
   bool changed = false;
 
   auto concatenate = [&] {
@@ -1968,9 +2244,38 @@ void EnumConstantOp::getAsmResultNames(
   setNameFn(getResult(), getField().getField().str());
 }
 
-OpFoldResult EnumConstantOp::fold(ArrayRef<Attribute> constants) {
-  assert(constants.empty() && "constant has no operands");
+void EnumConstantOp::build(OpBuilder &builder, OperationState &odsState,
+                           EnumFieldAttr field) {
+  return build(builder, odsState, field.getType().getValue(), field);
+}
+
+OpFoldResult EnumConstantOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "constant has no operands");
   return getFieldAttr();
+}
+
+LogicalResult EnumConstantOp::verify() {
+  auto fieldAttr = getFieldAttr();
+  auto fieldType = fieldAttr.getType().getValue();
+  // This check ensures that we are using the exact same type, without looking
+  // through type aliases.
+  if (fieldType != getType())
+    emitOpError("return type ")
+        << getType() << " does not match attribute type " << fieldAttr;
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// EnumCmpOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult EnumCmpOp::verify() {
+  // Compare the canonical types.
+  auto lhsType = type_cast<EnumType>(getLhs().getType());
+  auto rhsType = type_cast<EnumType>(getRhs().getType());
+  if (rhsType != lhsType)
+    emitOpError("types do not match");
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -2024,6 +2329,13 @@ LogicalResult StructCreateOp::verify() {
   return success();
 }
 
+OpFoldResult StructCreateOp::fold(FoldAdaptor adaptor) {
+  auto inputs = adaptor.getInput();
+  if (llvm::any_of(inputs, [](Attribute attr) { return !attr; }))
+    return {};
+  return ArrayAttr::get(getContext(), inputs);
+}
+
 //===----------------------------------------------------------------------===//
 // StructExplodeOp
 //===----------------------------------------------------------------------===//
@@ -2058,15 +2370,27 @@ void StructExplodeOp::print(OpAsmPrinter &printer) {
   printer << " : " << getInput().getType();
 }
 
+LogicalResult StructExplodeOp::fold(FoldAdaptor adaptor,
+                                    SmallVectorImpl<OpFoldResult> &results) {
+  auto input = adaptor.getInput();
+  if (!input)
+    return failure();
+  llvm::copy(input.cast<ArrayAttr>(), std::back_inserter(results));
+  return success();
+}
+
 LogicalResult StructExplodeOp::canonicalize(StructExplodeOp op,
                                             PatternRewriter &rewriter) {
   auto *inputOp = op.getInput().getDefiningOp();
   auto elements = type_cast<StructType>(op.getInput().getType()).getElements();
+  auto result = failure();
   for (auto [element, res] : llvm::zip(elements, op.getResults())) {
-    if (auto foldResult = foldStructExtract(inputOp, element.name.str()))
-      res.replaceAllUsesWith(foldResult);
+    if (auto foldResult = foldStructExtract(inputOp, element.name.str())) {
+      rewriter.replaceAllUsesWith(res, foldResult);
+      result = success();
+    }
   }
-  return failure();
+  return result;
 }
 
 void StructExplodeOp::getAsmResultNames(
@@ -2074,6 +2398,16 @@ void StructExplodeOp::getAsmResultNames(
   auto structType = type_cast<StructType>(getInput().getType());
   for (auto [res, field] : llvm::zip(getResults(), structType.getElements()))
     setNameFn(res, field.name.str());
+}
+
+void StructExplodeOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                            Value input) {
+  StructType inputType = input.getType().dyn_cast<StructType>();
+  assert(inputType);
+  SmallVector<Type, 16> fieldTypes;
+  for (auto field : inputType.getElements())
+    fieldTypes.push_back(field.type);
+  build(odsBuilder, odsState, fieldTypes, input);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2143,7 +2477,7 @@ void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
   build(builder, odsState, resultType, input, fieldAttr);
 }
 
-OpFoldResult StructExtractOp::fold(ArrayRef<Attribute> operands) {
+OpFoldResult StructExtractOp::fold(FoldAdaptor) {
   if (auto foldResult =
           foldStructExtract(getInput().getDefiningOp(), getField()))
     return foldResult;
@@ -2218,6 +2552,19 @@ void StructInjectOp::print(OpAsmPrinter &printer) {
   printer.printOperand(getNewValue());
   printer.printOptionalAttrDict((*this)->getAttrs(), {"field"});
   printer << " : " << getInput().getType();
+}
+
+OpFoldResult StructInjectOp::fold(FoldAdaptor adaptor) {
+  auto input = adaptor.getInput();
+  auto newValue = adaptor.getNewValue();
+  if (!input || !newValue)
+    return {};
+  SmallVector<Attribute> array;
+  llvm::copy(input.cast<ArrayAttr>(), std::back_inserter(array));
+  StructType structType = getInput().getType();
+  auto index = *structType.getFieldIndex(getField());
+  array[index] = newValue;
+  return ArrayAttr::get(getContext(), array);
 }
 
 LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
@@ -2324,60 +2671,78 @@ void UnionExtractOp::print(OpAsmPrinter &printer) {
   printExtractOp(printer, *this);
 }
 
+LogicalResult UnionExtractOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  results.push_back(cast<UnionType>(getCanonicalType(operands[0].getType()))
+                        .getFieldType(attrs.getAs<StringAttr>("field")));
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // ArrayGetOp
 //===----------------------------------------------------------------------===//
-
-void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
-                       Value index) {
-  auto resultType = type_cast<ArrayType>(input.getType()).getElementType();
-  build(builder, result, resultType, input, index);
-}
 
 // An array_get of an array_create with a constant index can just be the
 // array_create operand at the constant index. If the array_create has a
 // single uniform value for each element, just return that value regardless of
 // the index. If the array is constructed from a constant by a bitcast
 // operation, we can fold into a constant.
-OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
+OpFoldResult ArrayGetOp::fold(FoldAdaptor adaptor) {
+  auto inputCst = adaptor.getInput().dyn_cast_or_null<ArrayAttr>();
+  auto indexCst = adaptor.getIndex().dyn_cast_or_null<IntegerAttr>();
+
+  if (inputCst) {
+    // Constant array index.
+    if (indexCst) {
+      auto indexVal = indexCst.getValue();
+      if (indexVal.getBitWidth() < 64) {
+        auto index = indexVal.getZExtValue();
+        return inputCst[inputCst.size() - 1 - index];
+      }
+    }
+    // If all elements of the array are the same, we can return any element of
+    // array.
+    if (!inputCst.empty() && llvm::all_equal(inputCst))
+      return inputCst[0];
+  }
+
   // array_get(bitcast(c), i) -> c[i*w+w-1:i*w]
   if (auto bitcast = getInput().getDefiningOp<hw::BitcastOp>()) {
     auto intTy = getType().dyn_cast<IntegerType>();
     if (!intTy)
       return {};
-    auto inputConsatnt = bitcast.getInput().getDefiningOp<hw::ConstantOp>();
-    if (!inputConsatnt)
+    auto bitcastInputOp = bitcast.getInput().getDefiningOp<hw::ConstantOp>();
+    if (!bitcastInputOp)
       return {};
-    IntegerAttr constIdx = operands[1].dyn_cast_or_null<IntegerAttr>();
-    if (!constIdx)
+    if (!indexCst)
       return {};
-    auto constant = inputConsatnt.getValue();
+    auto bitcastInputCst = bitcastInputOp.getValue();
     // Calculate the index. Make sure to zero-extend the index value before
     // multiplying the element width.
-    auto startIdx = constIdx.getValue().zext(constant.getBitWidth()) *
+    auto startIdx = indexCst.getValue().zext(bitcastInputCst.getBitWidth()) *
                     getType().getIntOrFloatBitWidth();
     // Extract [startIdx + width - 1: startIdx].
-    return IntegerAttr::get(
-        intTy, constant.lshr(startIdx).trunc(intTy.getIntOrFloatBitWidth()));
+    return IntegerAttr::get(intTy, bitcastInputCst.lshr(startIdx).trunc(
+                                       intTy.getIntOrFloatBitWidth()));
   }
 
-  auto inputCreate =
-      dyn_cast_or_null<ArrayCreateOp>(getInput().getDefiningOp());
+  auto inputCreate = getInput().getDefiningOp<ArrayCreateOp>();
   if (!inputCreate)
     return {};
 
   if (auto uniformValue = inputCreate.getUniformElement())
     return uniformValue;
 
-  IntegerAttr constIdx = operands[1].dyn_cast_or_null<IntegerAttr>();
-  if (!constIdx || constIdx.getValue().getBitWidth() > 64)
+  if (!indexCst || indexCst.getValue().getBitWidth() > 64)
     return {};
 
-  uint64_t idx = constIdx.getValue().getLimitedValue();
+  uint64_t index = indexCst.getValue().getLimitedValue();
   auto createInputs = inputCreate.getInputs();
-  if (idx >= createInputs.size())
+  if (index >= createInputs.size())
     return {};
-  return createInputs[createInputs.size() - idx - 1];
+  return createInputs[createInputs.size() - index - 1];
 }
 
 LogicalResult ArrayGetOp::canonicalize(ArrayGetOp op,
@@ -2422,6 +2787,28 @@ LogicalResult ArrayGetOp::canonicalize(ArrayGetOp op,
     return failure();
   }
 
+  // array_get const, (array_get sel, (array_create a, b, c, d)) -->
+  //   array_get sel, (array_create (array_get const a), (array_get const b),
+  //   (array_get const, c), (array_get const, d))
+  if (auto innerGet = dyn_cast_or_null<hw::ArrayGetOp>(inputOp)) {
+    if (!innerGet.getIndex().getDefiningOp<hw::ConstantOp>()) {
+      if (auto create =
+              innerGet.getInput().getDefiningOp<hw::ArrayCreateOp>()) {
+
+        SmallVector<Value> newValues;
+        for (auto operand : create.getOperands())
+          newValues.push_back(rewriter.createOrFold<hw::ArrayGetOp>(
+              op.getLoc(), operand, op.getIndex()));
+
+        rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(
+            op,
+            rewriter.createOrFold<hw::ArrayCreateOp>(op.getLoc(), newValues),
+            innerGet.getIndex());
+        return success();
+      }
+    }
+  }
+
   return failure();
 }
 
@@ -2445,7 +2832,7 @@ Type TypedeclOp::getAliasType() {
 // BitcastOp
 //===----------------------------------------------------------------------===//
 
-OpFoldResult BitcastOp::fold(ArrayRef<Attribute> operands) {
+OpFoldResult BitcastOp::fold(FoldAdaptor) {
   // Identity.
   // bitcast(%a) : A -> A ==> %a
   if (getOperand().getType() == getType())
@@ -2472,6 +2859,339 @@ LogicalResult BitcastOp::canonicalize(BitcastOp op, PatternRewriter &rewriter) {
 LogicalResult BitcastOp::verify() {
   if (getBitWidth(getInput().getType()) != getBitWidth(getResult().getType()))
     return this->emitOpError("Bitwidth of input must match result");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// HierPathOp helpers.
+//===----------------------------------------------------------------------===//
+
+bool HierPathOp::dropModule(StringAttr moduleToDrop) {
+  SmallVector<Attribute, 4> newPath;
+  bool updateMade = false;
+  for (auto nameRef : getNamepath()) {
+    // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
+    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+      if (ref.getModule() == moduleToDrop)
+        updateMade = true;
+      else
+        newPath.push_back(ref);
+    } else {
+      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == moduleToDrop)
+        updateMade = true;
+      else
+        newPath.push_back(nameRef);
+    }
+  }
+  if (updateMade)
+    setNamepathAttr(ArrayAttr::get(getContext(), newPath));
+  return updateMade;
+}
+
+bool HierPathOp::inlineModule(StringAttr moduleToDrop) {
+  SmallVector<Attribute, 4> newPath;
+  bool updateMade = false;
+  StringRef inlinedInstanceName = "";
+  for (auto nameRef : getNamepath()) {
+    // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
+    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+      if (ref.getModule() == moduleToDrop) {
+        inlinedInstanceName = ref.getName().getValue();
+        updateMade = true;
+      } else if (!inlinedInstanceName.empty()) {
+        newPath.push_back(hw::InnerRefAttr::get(
+            ref.getModule(),
+            StringAttr::get(getContext(), inlinedInstanceName + "_" +
+                                              ref.getName().getValue())));
+        inlinedInstanceName = "";
+      } else
+        newPath.push_back(ref);
+    } else {
+      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == moduleToDrop)
+        updateMade = true;
+      else
+        newPath.push_back(nameRef);
+    }
+  }
+  if (updateMade)
+    setNamepathAttr(ArrayAttr::get(getContext(), newPath));
+  return updateMade;
+}
+
+bool HierPathOp::updateModule(StringAttr oldMod, StringAttr newMod) {
+  SmallVector<Attribute, 4> newPath;
+  bool updateMade = false;
+  for (auto nameRef : getNamepath()) {
+    // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
+    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+      if (ref.getModule() == oldMod) {
+        newPath.push_back(hw::InnerRefAttr::get(newMod, ref.getName()));
+        updateMade = true;
+      } else
+        newPath.push_back(ref);
+    } else {
+      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == oldMod) {
+        newPath.push_back(FlatSymbolRefAttr::get(newMod));
+        updateMade = true;
+      } else
+        newPath.push_back(nameRef);
+    }
+  }
+  if (updateMade)
+    setNamepathAttr(ArrayAttr::get(getContext(), newPath));
+  return updateMade;
+}
+
+bool HierPathOp::updateModuleAndInnerRef(
+    StringAttr oldMod, StringAttr newMod,
+    const llvm::DenseMap<StringAttr, StringAttr> &innerSymRenameMap) {
+  auto fromRef = FlatSymbolRefAttr::get(oldMod);
+  if (oldMod == newMod)
+    return false;
+
+  auto namepathNew = getNamepath().getValue().vec();
+  bool updateMade = false;
+  // Break from the loop if the module is found, since it can occur only once.
+  for (auto &element : namepathNew) {
+    if (auto innerRef = element.dyn_cast<hw::InnerRefAttr>()) {
+      if (innerRef.getModule() != oldMod)
+        continue;
+      auto symName = innerRef.getName();
+      // Since the module got updated, the old innerRef symbol inside oldMod
+      // should also be updated to the new symbol inside the newMod.
+      auto to = innerSymRenameMap.find(symName);
+      if (to != innerSymRenameMap.end())
+        symName = to->second;
+      updateMade = true;
+      element = hw::InnerRefAttr::get(newMod, symName);
+      break;
+    }
+    if (element != fromRef)
+      continue;
+
+    updateMade = true;
+    element = FlatSymbolRefAttr::get(newMod);
+    break;
+  }
+  if (updateMade)
+    setNamepathAttr(ArrayAttr::get(getContext(), namepathNew));
+  return updateMade;
+}
+
+bool HierPathOp::truncateAtModule(StringAttr atMod, bool includeMod) {
+  SmallVector<Attribute, 4> newPath;
+  bool updateMade = false;
+  for (auto nameRef : getNamepath()) {
+    // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
+    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+      if (ref.getModule() == atMod) {
+        updateMade = true;
+        if (includeMod)
+          newPath.push_back(ref);
+      } else
+        newPath.push_back(ref);
+    } else {
+      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == atMod && !includeMod)
+        updateMade = true;
+      else
+        newPath.push_back(nameRef);
+    }
+    if (updateMade)
+      break;
+  }
+  if (updateMade)
+    setNamepathAttr(ArrayAttr::get(getContext(), newPath));
+  return updateMade;
+}
+
+/// Return just the module part of the namepath at a specific index.
+StringAttr HierPathOp::modPart(unsigned i) {
+  return TypeSwitch<Attribute, StringAttr>(getNamepath()[i])
+      .Case<FlatSymbolRefAttr>([](auto a) { return a.getAttr(); })
+      .Case<hw::InnerRefAttr>([](auto a) { return a.getModule(); });
+}
+
+/// Return the root module.
+StringAttr HierPathOp::root() {
+  assert(!getNamepath().empty());
+  return modPart(0);
+}
+
+/// Return true if the NLA has the module in its path.
+bool HierPathOp::hasModule(StringAttr modName) {
+  for (auto nameRef : getNamepath()) {
+    // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
+    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+      if (ref.getModule() == modName)
+        return true;
+    } else {
+      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == modName)
+        return true;
+    }
+  }
+  return false;
+}
+
+/// Return true if the NLA has the InnerSym .
+bool HierPathOp::hasInnerSym(StringAttr modName, StringAttr symName) const {
+  for (auto nameRef : const_cast<HierPathOp *>(this)->getNamepath())
+    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>())
+      if (ref.getName() == symName && ref.getModule() == modName)
+        return true;
+
+  return false;
+}
+
+/// Return just the reference part of the namepath at a specific index.  This
+/// will return an empty attribute if this is the leaf and the leaf is a module.
+StringAttr HierPathOp::refPart(unsigned i) {
+  return TypeSwitch<Attribute, StringAttr>(getNamepath()[i])
+      .Case<FlatSymbolRefAttr>([](auto a) { return StringAttr({}); })
+      .Case<hw::InnerRefAttr>([](auto a) { return a.getName(); });
+}
+
+/// Return the leaf reference.  This returns an empty attribute if the leaf
+/// reference is a module.
+StringAttr HierPathOp::ref() {
+  assert(!getNamepath().empty());
+  return refPart(getNamepath().size() - 1);
+}
+
+/// Return the leaf module.
+StringAttr HierPathOp::leafMod() {
+  assert(!getNamepath().empty());
+  return modPart(getNamepath().size() - 1);
+}
+
+/// Returns true if this NLA targets an instance of a module (as opposed to
+/// an instance's port or something inside an instance).
+bool HierPathOp::isModule() { return !ref(); }
+
+/// Returns true if this NLA targets something inside a module (as opposed
+/// to a module or an instance of a module);
+bool HierPathOp::isComponent() { return (bool)ref(); }
+
+// Verify the HierPathOp.
+// 1. Iterate over the namepath.
+// 2. The namepath should be a valid instance path, specified either on a
+// module or a declaration inside a module.
+// 3. Each element in the namepath is an InnerRefAttr except possibly the
+// last element.
+// 4. Make sure that the InnerRefAttr is legal, by verifying the module name
+// and the corresponding inner_sym on the instance.
+// 5. Make sure that the instance path is legal, by verifying the sequence of
+// instance and the expected module occurs as the next element in the path.
+// 6. The last element of the namepath, can be an InnerRefAttr on either a
+// module port or a declaration inside the module.
+// 7. The last element of the namepath can also be a module symbol.
+LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  StringAttr expectedModuleName = {};
+  if (!getNamepath() || getNamepath().empty())
+    return emitOpError() << "the instance path cannot be empty";
+  for (unsigned i = 0, s = getNamepath().size() - 1; i < s; ++i) {
+    hw::InnerRefAttr innerRef = getNamepath()[i].dyn_cast<hw::InnerRefAttr>();
+    if (!innerRef)
+      return emitOpError()
+             << "the instance path can only contain inner sym reference"
+             << ", only the leaf can refer to a module symbol";
+
+    if (expectedModuleName && expectedModuleName != innerRef.getModule())
+      return emitOpError() << "instance path is incorrect. Expected module: "
+                           << expectedModuleName
+                           << " instead found: " << innerRef.getModule();
+    HWInstanceLike instOp = ns.lookupOp<HWInstanceLike>(innerRef);
+    if (!instOp)
+      return emitOpError() << " module: " << innerRef.getModule()
+                           << " does not contain any instance with symbol: "
+                           << innerRef.getName();
+    expectedModuleName = instOp.getReferencedModuleNameAttr();
+  }
+  // The instance path has been verified. Now verify the last element.
+  auto leafRef = getNamepath()[getNamepath().size() - 1];
+  if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>()) {
+    if (!ns.lookup(innerRef)) {
+      return emitOpError() << " operation with symbol: " << innerRef
+                           << " was not found ";
+    }
+    if (expectedModuleName && expectedModuleName != innerRef.getModule())
+      return emitOpError() << "instance path is incorrect. Expected module: "
+                           << expectedModuleName
+                           << " instead found: " << innerRef.getModule();
+  } else if (expectedModuleName !=
+             leafRef.cast<FlatSymbolRefAttr>().getAttr()) {
+    // This is the case when the nla is applied to a module.
+    return emitOpError() << "instance path is incorrect. Expected module: "
+                         << expectedModuleName << " instead found: "
+                         << leafRef.cast<FlatSymbolRefAttr>().getAttr();
+  }
+  return success();
+}
+
+void HierPathOp::print(OpAsmPrinter &p) {
+  p << " ";
+
+  // Print visibility if present.
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility =
+          getOperation()->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+
+  p.printSymbolName(getSymName());
+  p << " [";
+  llvm::interleaveComma(getNamepath().getValue(), p, [&](Attribute attr) {
+    if (auto ref = attr.dyn_cast<hw::InnerRefAttr>()) {
+      p.printSymbolName(ref.getModule().getValue());
+      p << "::";
+      p.printSymbolName(ref.getName().getValue());
+    } else {
+      p.printSymbolName(attr.cast<FlatSymbolRefAttr>().getValue());
+    }
+  });
+  p << "]";
+  p.printOptionalAttrDict(
+      (*this)->getAttrs(),
+      {SymbolTable::getSymbolAttrName(), "namepath", visibilityAttrName});
+}
+
+ParseResult HierPathOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse the visibility attribute.
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
+  // Parse the symbol name.
+  StringAttr symName;
+  if (parser.parseSymbolName(symName, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  // Parse the namepath.
+  SmallVector<Attribute> namepath;
+  if (parser.parseCommaSeparatedList(
+          OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
+            auto loc = parser.getCurrentLocation();
+            SymbolRefAttr ref;
+            if (parser.parseAttribute(ref))
+              return failure();
+
+            // "A" is a Ref, "A::b" is a InnerRef, "A::B::c" is an error.
+            auto pathLength = ref.getNestedReferences().size();
+            if (pathLength == 0)
+              namepath.push_back(
+                  FlatSymbolRefAttr::get(ref.getRootReference()));
+            else if (pathLength == 1)
+              namepath.push_back(hw::InnerRefAttr::get(ref.getRootReference(),
+                                                       ref.getLeafReference()));
+            else
+              return parser.emitError(loc,
+                                      "only one nested reference is allowed");
+            return success();
+          }))
+    return failure();
+  result.addAttribute("namepath",
+                      ArrayAttr::get(parser.getContext(), namepath));
+
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
   return success();
 }
 

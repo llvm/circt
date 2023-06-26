@@ -10,6 +10,16 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_HW_HWMISCOPS_TD
+#define CIRCT_DIALECT_HW_HWMISCOPS_TD
+
+include "circt/Dialect/HW/HWAttributes.td"
+include "circt/Dialect/HW/HWDialect.td"
+include "circt/Dialect/HW/HWTypes.td"
+include "mlir/IR/OpAsmInterface.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+
 def ConstantOp
  : HWOp<"constant", [Pure, ConstantLike, FirstAttrDerivedResultType,
          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
@@ -42,6 +52,66 @@ def ConstantOp
   ];
   let hasFolder = true;
   let hasVerifier = 1;
+}
+
+def WireOp : HWOp<"wire", [
+    SameOperandsAndResultType,
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+  let summary = "Assign a name or symbol to an SSA edge";
+  let description = [{
+    An `hw.wire` is used to assign a human-readable name or a symbol for remote
+    references to an SSA edge. It takes a single operand and returns its value
+    unchanged as a result. The operation guarantees the following:
+
+    - If the wire has a symbol, the value of its operand remains observable
+      under that symbol within the IR.
+
+    - If the wire has a name, the name is treated as a hint. If the wire
+      persists until code generation the resulting wire will have this name,
+      with a potential suffix to ensure uniqueness. If the wire is canonicalized
+      away, its name is propagated to its input operand as a name hint.
+
+    - The users of its result will always observe the operand through the
+      operation itself, meaning that optimizations cannot bypass the wire. This
+      ensures that if the wire's value is *forced*, for example through a
+      Verilog force statement, the forced value will affect all users of the
+      wire in the output.
+
+    Example:
+    ```
+    %1 = hw.wire %0 : i42
+    %2 = hw.wire %0 sym @mySym : i42
+    %3 = hw.wire %0 name "myWire" : i42
+    %myWire = hw.wire %0 : i42
+    ```
+  }];
+
+  let arguments = (ins AnyType:$input,
+                       OptionalAttr<StrAttr>:$name,
+                       OptionalAttr<SymbolNameAttr>:$inner_sym);
+  let results = (outs AnyType:$result);
+
+  let hasFolder = true;
+  let hasCanonicalizeMethod = 1;
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$input,
+                   CArg<"const StringAttrOrRef &", "{}">:$name,
+                   CArg<"const StringAttrOrRef &", "{}">:$inner_sym), [{
+      auto *context = odsBuilder.getContext();
+      odsState.addOperands(input);
+      if (auto attr = name.get(context))
+        odsState.addAttribute(getNameAttrName(odsState.name), attr);
+      if (auto attr = inner_sym.get(context))
+        odsState.addAttribute(getInnerSymAttrName(odsState.name), attr);
+      odsState.addTypes(input.getType());
+    }]>
+  ];
+
+  let assemblyFormat = [{
+    $input (`sym` $inner_sym^)? custom<ImplicitSSAName>($name) attr-dict
+    `:` qualified(type($input))
+  }];
 }
 
 def KnownBitWidthType : Type<CPred<[{getBitWidth($_self) != -1}]>,
@@ -93,8 +163,29 @@ def EnumConstantOp : HWOp<"enum.constant", [Pure, ConstantLike,
   let results = (outs EnumType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasFolder = true;
-
+  let hasVerifier = true;
   let builders = [
     OpBuilder<(ins "hw::EnumFieldAttr":$field)>,
   ];
 }
+
+def EnumCmpOp : HWOp<"enum.cmp", [Pure]> {
+  let summary = "Compare two values of an enumeration";
+  let description = [{
+    This operation compares two values with the same canonical enumeration
+    type, returning 0 if they are different, and 1 if they are the same.
+
+    Example:
+    ```mlir
+      %enumcmp = hw.enum.cmp %A, %B : !hw.enum<A, B, C>, !hw.enum<A, B, C>
+    ```
+  }];
+  let arguments = (ins EnumType:$lhs, EnumType:$rhs);
+  let results = (outs I1:$result);
+  let hasVerifier = true;
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` qualified(type($lhs)) `,` qualified(type($rhs))
+  }];
+}
+
+#endif // CIRCT_DIALECT_HW_HWMISCOPS_TD

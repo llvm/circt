@@ -842,6 +842,24 @@ module attributes {calyx.entrypoint = "main"} {
 // -----
 
 module attributes {calyx.entrypoint = "main"} {
+  calyx.component @main(%cond: i1, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %std_lt_0.left, %std_lt_0.right, %std_lt_0.out = calyx.std_lt @std_lt_0 : i32, i32, i1
+    %c64_i32 = hw.constant 64 : i32
+    %c42_i32 = hw.constant 42 : i32
+    calyx.wires {
+      // expected-error @+1 {{'calyx.assign' op destination is already continuously driven. Other assignment is "calyx.assign"(%0#0, %2) : (i32, i32) -> ()}}
+      calyx.assign %std_lt_0.left = %cond ? %c64_i32 : i32
+      calyx.assign %std_lt_0.left = %c42_i32 : i32
+    }
+    calyx.control {
+      calyx.seq { }
+    }
+  }
+}
+
+// -----
+
+module attributes {calyx.entrypoint = "main"} {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %std_lt_0.left, %std_lt_0.right, %std_lt_0.out = calyx.std_lt @std_lt_0 : i32, i32, i1
     %c64_i32 = hw.constant 64 : i32

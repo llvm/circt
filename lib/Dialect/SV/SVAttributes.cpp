@@ -12,6 +12,7 @@
 #include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
@@ -26,60 +27,161 @@ using namespace circt::sv;
 
 #include "circt/Dialect/SV/SVEnums.cpp.inc"
 
-bool circt::sv::hasSVAttributes(mlir::Operation *op) {
-  return op->hasAttr(sv::SVAttributeAttr::getSVAttributesAttrName());
-}
-
-SVAttributesAttr circt::sv::getSVAttributes(mlir::Operation *op) {
-  return op->getAttrOfType<SVAttributesAttr>(
-      SVAttributeAttr::getSVAttributesAttrName());
-}
-
-void circt::sv::setSVAttributes(mlir::Operation *op, mlir::Attribute attr) {
-  return op->setAttr(SVAttributeAttr::getSVAttributesAttrName(), attr);
-}
-
-mlir::Attribute SVAttributesAttr::parse(mlir::AsmParser &p, mlir::Type type) {
-  mlir::ArrayAttr attributes;
-  if (p.parseLess() || p.parseAttribute<ArrayAttr>(attributes))
-    return Attribute();
-  bool emitAsComments = false;
-  if (!p.parseOptionalComma()) {
-    if (p.parseKeyword("emitAsComments"))
-      return Attribute();
-    emitAsComments = true;
-  }
-
-  if (p.parseGreater())
-    return Attribute();
-
-  return SVAttributesAttr::get(p.getContext(), attributes,
-                               BoolAttr::get(p.getContext(), emitAsComments));
-}
-
-SVAttributesAttr
-SVAttributesAttr::get(MLIRContext *context,
-                      ArrayRef<std::pair<StringRef, StringRef>> keyValuePairs,
-                      bool emitAsComments) {
-  SmallVector<Attribute> attrs;
-  for (auto [key, value] : keyValuePairs)
-    attrs.push_back(sv::SVAttributeAttr::get(
-        context, StringAttr::get(context, key),
-        value.empty() ? StringAttr() : StringAttr::get(context, value)));
-  return SVAttributesAttr::get(context, ArrayAttr::get(context, attrs),
-                               BoolAttr::get(context, emitAsComments));
-}
-
-void SVAttributesAttr::print(::mlir::AsmPrinter &p) const {
-  p << "<" << getAttributes();
-  if (getEmitAsComments().getValue())
-    p << ", emitAsComments";
-  p << ">";
-}
-
 void SVDialect::registerAttributes() {
   addAttributes<
 #define GET_ATTRDEF_LIST
 #include "circt/Dialect/SV/SVAttributes.cpp.inc"
       >();
+}
+
+//===----------------------------------------------------------------------===//
+// SV Attribute Modification Helpers
+//===----------------------------------------------------------------------===//
+
+bool sv::hasSVAttributes(Operation *op) {
+  if (auto attrs = getSVAttributes(op))
+    return !attrs.empty();
+  return false;
+}
+
+ArrayAttr sv::getSVAttributes(Operation *op) {
+  auto attrs = op->getAttr(SVAttributeAttr::getSVAttributesAttrName());
+  if (!attrs)
+    return {};
+  auto arrayAttr = attrs.dyn_cast<ArrayAttr>();
+  if (!arrayAttr) {
+    op->emitOpError("'sv.attributes' must be an array attribute");
+    return {};
+  }
+  for (auto attr : arrayAttr) {
+    if (!attr.isa<SVAttributeAttr>()) {
+      op->emitOpError("'sv.attributes' elements must be `SVAttributeAttr`s");
+      return {};
+    }
+  }
+  if (arrayAttr.empty())
+    return {};
+  return arrayAttr;
+}
+
+void sv::setSVAttributes(Operation *op, ArrayAttr attrs) {
+  if (attrs && !attrs.getValue().empty())
+    op->setAttr(SVAttributeAttr::getSVAttributesAttrName(), attrs);
+  else
+    op->removeAttr(SVAttributeAttr::getSVAttributesAttrName());
+}
+
+void sv::setSVAttributes(Operation *op, ArrayRef<SVAttributeAttr> attrs) {
+  if (attrs.empty())
+    return sv::setSVAttributes(op, ArrayAttr());
+  SmallVector<Attribute> filteredAttrs;
+  SmallPtrSet<Attribute, 4> seenAttrs;
+  filteredAttrs.reserve(attrs.size());
+  for (auto attr : attrs)
+    if (seenAttrs.insert(attr).second)
+      filteredAttrs.push_back(attr);
+  sv::setSVAttributes(op, ArrayAttr::get(op->getContext(), filteredAttrs));
+}
+
+bool sv::modifySVAttributes(
+    Operation *op, llvm::function_ref<void(SmallVectorImpl<SVAttributeAttr> &)>
+                       modifyCallback) {
+  ArrayRef<Attribute> oldAttrs;
+  if (auto attrs = sv::getSVAttributes(op))
+    oldAttrs = attrs.getValue();
+
+  SmallVector<SVAttributeAttr> newAttrs;
+  newAttrs.reserve(oldAttrs.size());
+  for (auto oldAttr : oldAttrs)
+    newAttrs.push_back(cast<SVAttributeAttr>(oldAttr));
+  modifyCallback(newAttrs);
+
+  if (newAttrs.size() == oldAttrs.size() &&
+      llvm::none_of(llvm::zip(oldAttrs, newAttrs), [](auto pair) {
+        return std::get<0>(pair) != std::get<1>(pair);
+      }))
+    return false;
+
+  sv::setSVAttributes(op, newAttrs);
+  return true;
+}
+
+unsigned sv::addSVAttributes(Operation *op,
+                             ArrayRef<SVAttributeAttr> newAttrs) {
+  if (newAttrs.empty())
+    return 0;
+  unsigned numAdded = 0;
+  modifySVAttributes(op, [&](auto &attrs) {
+    SmallPtrSet<Attribute, 4> seenAttrs(attrs.begin(), attrs.end());
+    for (auto newAttr : newAttrs) {
+      if (seenAttrs.insert(newAttr).second) {
+        attrs.push_back(newAttr);
+        ++numAdded;
+      }
+    }
+  });
+  return numAdded;
+}
+
+unsigned sv::removeSVAttributes(
+    Operation *op, llvm::function_ref<bool(SVAttributeAttr)> removeCallback) {
+  unsigned numRemoved = 0;
+  sv::modifySVAttributes(op, [&](auto &attrs) {
+    // Only keep attributes for which the callback returns false.
+    unsigned inIdx = 0, outIdx = 0, endIdx = attrs.size();
+    for (; inIdx != endIdx; ++inIdx) {
+      if (removeCallback(attrs[inIdx]))
+        ++numRemoved;
+      else
+        attrs[outIdx++] = attrs[inIdx];
+    }
+    attrs.truncate(outIdx);
+  });
+  return numRemoved;
+}
+
+unsigned sv::removeSVAttributes(Operation *op,
+                                ArrayRef<SVAttributeAttr> attrs) {
+  SmallPtrSet<Attribute, 4> attrSet;
+  for (auto attr : attrs)
+    attrSet.insert(attr);
+  return removeSVAttributes(op,
+                            [&](auto attr) { return attrSet.contains(attr); });
+}
+
+//===----------------------------------------------------------------------===//
+// SVAttributeAttr
+//===----------------------------------------------------------------------===//
+
+mlir::Attribute SVAttributeAttr::parse(mlir::AsmParser &p, mlir::Type type) {
+  StringAttr nameAttr;
+  if (p.parseLess() || p.parseAttribute(nameAttr))
+    return {};
+
+  StringAttr expressionAttr;
+  if (!p.parseOptionalEqual())
+    if (p.parseAttribute(expressionAttr))
+      return {};
+
+  bool emitAsComment = false;
+  if (!p.parseOptionalComma()) {
+    if (p.parseKeyword("emitAsComment"))
+      return {};
+    emitAsComment = true;
+  }
+
+  if (p.parseGreater())
+    return {};
+
+  return SVAttributeAttr::get(p.getContext(), nameAttr, expressionAttr,
+                              BoolAttr::get(p.getContext(), emitAsComment));
+}
+
+void SVAttributeAttr::print(::mlir::AsmPrinter &p) const {
+  p << "<" << getName();
+  if (auto expr = getExpression())
+    p << " = " << expr;
+  if (getEmitAsComment().getValue())
+    p << ", emitAsComment";
+  p << ">";
 }

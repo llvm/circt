@@ -10,6 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_HW_HWTYPEDECLS_TD
+#define CIRCT_DIALECT_HW_HWTYPEDECLS_TD
+
+include "circt/Dialect/HW/HWDialect.td"
+include "mlir/IR/SymbolInterfaces.td"
+
 //===----------------------------------------------------------------------===//
 // Declaration operations
 //===----------------------------------------------------------------------===//
@@ -53,3 +59,5 @@ def TypedeclOp : HWOp<"typedecl", [Symbol, HasParent<"TypeScopeOp">]> {
     Type getAliasType();
   }];
 }
+
+#endif // CIRCT_DIALECT_HW_HWTYPEDECLS_TD

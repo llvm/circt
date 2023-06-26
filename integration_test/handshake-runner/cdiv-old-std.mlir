@@ -1,5 +1,5 @@
 // RUN: handshake-runner %s 2,3,4,5 2,3,4,5 2,3,4,5 2,3,4,5 2,3,4,5 2,3,4,5 2,3,4,5 2,3,4,5 1,0,1,0 | FileCheck %s
-// RUN: circt-opt -lower-std-to-handshake %s | handshake-runner - 2,3,4,5 2,3,4,5 2,3,4,5 2,3,4,5 2,3,4,5 2,3,4,5 2,3,4,5 2,3,4,5 1,0,1,0 | FileCheck %s
+// RUN: circt-opt -lower-std-to-handshake -handshake-materialize-forks-sinks %s | handshake-runner - 2,3,4,5 2,3,4,5 2,3,4,5 2,3,4,5 2,3,4,5 2,3,4,5 2,3,4,5 2,3,4,5 1,0,1,0 | FileCheck %s
 // CHECK: 0 2,3,4,5 2,3,4,5 1,1431655763,3,858993455 3,4,5,6 2,3,4,5 2,3,4,5 2,3,4,5 2,3,4,5 0,-1,0,-1
 
 module {

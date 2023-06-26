@@ -145,6 +145,19 @@ msft.module @LoopbackCosimTop {} (%clk: i1, %rst: i1) {
   msft.output
 }
 
+// CONN-LABEL:  esi.pure_module @LoopbackCosimPure {
+// CONN-NEXT:     [[clk:%.+]] = esi.pure_module.input "clk" : i1
+// CONN-NEXT:     [[rst:%.+]] = esi.pure_module.input "rst" : i1
+// CONN-NEXT:     [[r2:%.+]] = esi.cosim [[clk]], [[rst]], %m1.loopback_inout, "m1.loopback_inout" : !esi.channel<i8> -> !esi.channel<i16>
+// CONN-NEXT:     esi.service.hierarchy.metadata path [] implementing @HostComms impl as "cosim" clients [{client_name = ["m1", "loopback_inout"], port = #hw.innerNameRef<@HostComms::@ReqResp>, to_client_type = !esi.channel<i16>, to_server_type = !esi.channel<i8>}]
+// CONN-NEXT:     %m1.loopback_inout = msft.instance @m1 @InOutLoopback([[clk]], [[r2]])  : (i1, !esi.channel<i16>) -> !esi.channel<i8>
+esi.pure_module @LoopbackCosimPure {
+  %clk = esi.pure_module.input "clk" : i1
+  %rst = esi.pure_module.input "rst" : i1
+  esi.service.instance svc @HostComms impl as "cosim" (%clk, %rst) : (i1, i1) -> ()
+  msft.instance @m1 @InOutLoopback(%clk) : (i1) -> ()
+}
+
 // CHECK-LABEL: esi.mem.ram @MemA i64 x 20
 // CHECK-LABEL: hw.module @MemoryAccess1(%clk: i1, %rst: i1, %write: !esi.channel<!hw.struct<address: i5, data: i64>>, %readAddress: !esi.channel<i5>) -> (readData: !esi.channel<i64>, writeDone: !esi.channel<i0>) {
 // CHECK:         esi.service.instance svc @MemA impl as "sv_mem"(%clk, %rst) : (i1, i1) -> ()

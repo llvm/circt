@@ -53,42 +53,41 @@ def SVAttributeAttr : AttrDef<SVDialect, "SVAttribute"> {
     For more information, refer to Section 5.12 of the SystemVerilog (1800-2017)
     specification.
   }];
-  let parameters = (ins "::mlir::StringAttr":$name,
-                        OptionalParameter<"::mlir::StringAttr">:$expression);
+  let parameters = (ins
+    "::mlir::StringAttr":$name,
+    OptionalParameter<"::mlir::StringAttr">:$expression,
+    DefaultValuedParameter<
+      "mlir::BoolAttr", "mlir::BoolAttr::get($_ctxt, false)">:$emitAsComment
+  );
 
-  let assemblyFormat = [{ `<` $name ( `=` $expression^ )? `>` }];
+  let builders = [
+    AttrBuilder<(ins "::llvm::StringRef":$name,
+                     CArg<"bool", "false">: $emitAsComment), [{
+      return get(context, StringAttr::get(context, name), StringAttr(),
+                 BoolAttr::get(context, emitAsComment));
+    }]>,
+    AttrBuilder<(ins "::mlir::StringAttr":$name,
+                     CArg<"bool", "false">: $emitAsComment), [{
+      return get(context, name, StringAttr(),
+                 BoolAttr::get(context, emitAsComment));
+    }]>,
+    AttrBuilder<(ins "::llvm::StringRef":$name,
+                     "::llvm::StringRef":$expression,
+                     CArg<"bool", "false">: $emitAsComment), [{
+      return get(context, StringAttr::get(context, name),
+                 StringAttr::get(context, expression),
+                 BoolAttr::get(context, emitAsComment));
+    }]>,
+    AttrBuilder<(ins "::mlir::StringAttr":$name,
+                     "::mlir::StringAttr":$expression,
+                     CArg<"bool", "false">: $emitAsComment), [{
+      return get(context, name, expression,
+                 BoolAttr::get(context, emitAsComment));
+    }]>
+  ];
+  let hasCustomAssemblyFormat = true;
   let extraClassDeclaration = [{
     static inline llvm::StringRef
         getSVAttributesAttrName() { return "sv.attributes"; }
   }];
-}
-
-def SVAttributesAttr : AttrDef<SVDialect, "SVAttributes"> {
-  let summary = "A container of system verilog attributes";
-  let mnemonic = "attributes";
-  let description = [{
-    This attribute is used to store SV attributes. The `attributes` field
-    represents SV attributes we want to annotate. The `emitAsComments` field
-    controls its emission style: SV spec defines the syntax of SV attributes as
-    `(* identifier (= identifer)? *)`. However, unfortunately many vendor-specific
-    pragmas violate the syntax and they are intended to be attached as comments.
-    Hence we emit given attributes as comments if `emitAsComments` field is true.
-  }];
-  let parameters = (ins "mlir::ArrayAttr":$attributes,
-                      DefaultValuedParameter<"mlir::BoolAttr",
-                      "mlir::BoolAttr::get($_ctxt, false)">:$emitAsComments);
-  let builders = [
-    AttrBuilder<(ins "llvm::ArrayRef<llvm::StringRef>":$strings,
-                     CArg<"bool", "false">: $emitAsComments), [{
-      SmallVector<Attribute> attrs;
-      for (auto str : strings)
-        attrs.push_back(sv::SVAttributeAttr::get(
-            $_ctxt, ::mlir::StringAttr::get($_ctxt, str), ::mlir::StringAttr()));
-      return $_get($_ctxt, ::mlir::ArrayAttr::get($_ctxt, attrs),
-                   ::mlir::BoolAttr::get($_ctxt, emitAsComments));
-    }]>,
-    AttrBuilder<(ins
-      "llvm::ArrayRef<std::pair<llvm::StringRef, llvm::StringRef>>":$keyValuePairs,
-       CArg<"bool", "false">: $emitAsComments)>];
-  let hasCustomAssemblyFormat = true;
 }

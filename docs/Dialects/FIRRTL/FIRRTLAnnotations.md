@@ -173,7 +173,7 @@ operation or port attributes.  As an example of this, the above parses into the
 following MLIR representation:
 
 ```mlir
-firrtl.circuit "Foo"  {
+firrtl.circuit "Foo" {
   firrtl.module @Foo() attributes {annotations = [{hello = "world"}]} {
     firrtl.skip
   }
@@ -200,6 +200,28 @@ annotation specific data.
 Annotations here are written in their JSON format. A "reference target"
 indicates that the annotation could target any object in the hierarchy,
 although there may be further restrictions in the annotation.
+
+### [AttributeAnnotation](https://javadoc.io/doc/edu.berkeley.cs/firrtl_2.13/latest/firrtl/AttributeAnnotation.html)
+
+| Property    | Type   | Description                  |
+| ----------  | ------ | ---------------------------- |
+| class       | string | `firrtl.AttributeAnnotation` |
+| target      | string | A reference target           |
+| description | string | An attribute                 |
+
+This annotation attaches SV attributes to a specified target. A reference
+target must be a wire, node, reg, or module. This annotation doesn't prevent
+optimizations so it's necessary to add dontTouch annotation if users want to
+preseve the target.
+
+Example:
+```json
+{
+  "class": "firrtl.AttributeAnnotation",
+  "target": "~Foo|Foo>r",
+  "description": "debug = \"true\""
+}
+```
 
 ### BlackBox
 
@@ -299,6 +321,30 @@ Example:
 }
 ```
 
+### Convention
+
+| Property   | Type   | Description                             |
+| ---------- | ------ | --------------------------------------- |
+| class      | string | `circt.ConventionAnnotation`            |
+| convention | string | `scalarized`                            |
+| target     | string | Reference target                        |
+
+Specify the port convention for a module. The port convention controls how a
+module's ports are transformed, and how that module can be instantiated, in the
+output format.
+
+The options are:
+- `scalarized`: Convert aggregate ports (i.e. vector or bundles) into multiple
+  ground-typed ports.
+
+```json
+{
+  "class": "circt.ConventionAnnotation",
+  "convention": "scalarized",
+  "target": "~Foo|Bar/d:Baz"
+}
+```
+
 ### ElaborationArtefactsDirectory
 
 | Property   | Type   | Description                                              |
@@ -364,6 +410,28 @@ Example:
 {
   "class":"sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation",
   "filename":"SRAMPorts.txt"
+}
+```
+
+### [DocStringAnnotation](https://javadoc.io/doc/edu.berkeley.cs/firrtl_2.13/latest/firrtl/DocStringAnnotation.html)
+
+| Property    | Type   | Description                  |
+| ----------  | ------ | ---------------------------- |
+| class       | string | `firrtl.DocStringAnnotation` |
+| target      | string | A reference target           |
+| description | string | An attribute                 |
+
+This annotation attaches a comment to a specified target. A reference
+target must be a wire, node, reg, or module. This annotation doesn't prevent
+optimizations so it's necessary to add dontTouch annotation if users want to
+preseve the target.
+
+Example:
+```json
+{
+  "class": "firrtl.DocStringAnnotation",
+  "target": "~Foo|Foo>r",
+  "description": "comment"
 }
 ```
 
@@ -733,8 +801,8 @@ Example:
 | target     | string | Reference target                             								|
 
 This annotation attaches metadata to the firrtl.mem operation. The `data` is
-emitted onto the `seq_mems.json` and `tb_seq_mems.json` file. It is required
-for verification only and used by memory generator tools for simulation.
+emitted onto the `seq_mems.json` file. It is required for verification only and
+used by memory generator tools for simulation.
 
 Example:
 ```json
@@ -770,6 +838,19 @@ Example:
   "className":"freechips.rocketchip.prci.ClockGroupAggregator"
 }
 ```
+
+### circt.Intrinsic
+
+| Property   | Type   | Description       |
+| ---------- | ------ | -------------     |
+| class      | string | `circt.Intrinsic` |
+| target     | string | Reference target  |
+| intrinsic  | string | Name of Intrinsic |
+
+Used to indicate an external module is really an intrinsic module.  This exists
+to allow a frontend to generate intrinsics without FIRRTL language support for
+intrinsics.  It is expected this will be deprecated as soon as the FIRRTL language
+supports intrinsics.  This annotation can only be local and applied to a module.
 
 ### SitestBlackBoxAnnotation
 
@@ -1450,11 +1531,6 @@ modules. This attribute has type `OutputFileAttr`.
 Used by SVExtractTestCode.  Specifies the output directory for extracted
 modules. This attribute has type `OutputFileAttr`.
 
-### firrtl.extract.testbench
-
-Used by SVExtractTestCode.  Specifies the output directory for extracted
-testbench only modules. This attribute has type `OutputFileAttr`.
-
 ### firrtl.extract.assert.bindfile
 
 Used by SVExtractTestCode.  Specifies the output file for extracted
@@ -1474,3 +1550,4 @@ modules' bind file. This attribute has type `OutputFileAttr`.
 
 Used by SVExtractTestCode.  Indicates a module whose instances should be
 extracted from the circuit in the indicated extraction type.
+

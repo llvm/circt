@@ -19,8 +19,8 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/ValueMapper.h"
-#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -168,7 +168,7 @@ struct ParametricTypeConversionPattern : public ConversionPattern {
     bool ok = true;
     rewriter.updateRootInPlace(op, [&]() {
       // Mutate result types
-      for (auto &it : llvm::enumerate(op->getResultTypes())) {
+      for (auto it : llvm::enumerate(op->getResultTypes())) {
         FailureOr<Type> res =
             evaluateParametricType(op->getLoc(), parameters, it.value());
         ok &= succeeded(res);
@@ -196,10 +196,10 @@ static void populateTypeConversion(Location loc, TypeConverter &typeConverter,
                                    ArrayAttr parameters) {
   // Possibly parametric types
   typeConverter.addConversion([=](hw::IntType type) {
-    return evaluateParametricType(loc, parameters, type).value();
+    return evaluateParametricType(loc, parameters, type);
   });
   typeConverter.addConversion([=](hw::ArrayType type) {
-    return evaluateParametricType(loc, parameters, type).value();
+    return evaluateParametricType(loc, parameters, type);
   });
 
   // Valid target types.
@@ -274,14 +274,14 @@ static LogicalResult specializeModule(
   // Update the types of the source module ports based on evaluating any
   // parametric in/output ports.
   auto ports = source.getPorts();
-  for (auto &in : llvm::enumerate(source.getFunctionType().getInputs())) {
+  for (auto in : llvm::enumerate(source.getFunctionType().getInputs())) {
     FailureOr<Type> resType =
         evaluateParametricType(source.getLoc(), parameters, in.value());
     if (failed(resType))
       return failure();
     ports.inputs[in.index()].type = *resType;
   }
-  for (auto &out : llvm::enumerate(source.getFunctionType().getResults())) {
+  for (auto out : llvm::enumerate(source.getFunctionType().getResults())) {
     FailureOr<Type> resolvedType =
         evaluateParametricType(source.getLoc(), parameters, out.value());
     if (failed(resolvedType))
@@ -308,7 +308,7 @@ static LogicalResult specializeModule(
   builder.setInsertionPointToStart(target.getBodyBlock());
 
   for (auto &op : source.getOps()) {
-    BlockAndValueMapping bvMapper;
+    IRMapping bvMapper;
     for (auto operand : op.getOperands())
       bvMapper.map(operand, mapper.get(operand));
     auto *newOp = builder.clone(op, bvMapper);

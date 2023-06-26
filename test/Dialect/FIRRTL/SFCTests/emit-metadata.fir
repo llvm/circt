@@ -1,4 +1,4 @@
-; RUN: firtool --verify-diagnostics --verilog --emit-metadata %s | FileCheck %s
+; RUN: firtool --verify-diagnostics --verilog %s | FileCheck %s
 
 circuit Foo : %[[{
   "class": "firrtl.transforms.BlackBoxInlineAnno",

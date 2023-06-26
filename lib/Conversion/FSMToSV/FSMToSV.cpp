@@ -282,7 +282,7 @@ private:
 
     // An optional default value to be assigned before the case statement, if
     // the case is not fully specified for all states.
-    Optional<Value> defaultValue = {};
+    std::optional<Value> defaultValue = {};
   };
 
   // Build an SV-based case mux for the given assignments. Assignments are
@@ -365,8 +365,13 @@ void MachineOpConverter::buildStateCaseMux(
 
   // Case assignments.
   caseMux = b.create<sv::CaseOp>(
-      machineOp.getLoc(), CaseStmtType::CaseStmt, select,
-      /*numCases=*/machineOp.getNumStates(), [&](size_t caseIdx) {
+      machineOp.getLoc(), CaseStmtType::CaseStmt,
+      /*sv::ValidationQualifierTypeEnum::ValidationQualifierUnique, */ select,
+      /*numCases=*/machineOp.getNumStates() + 1, [&](size_t caseIdx) {
+        // Make Verilator happy for sized enums.
+        if (caseIdx == machineOp.getNumStates())
+          return std::unique_ptr<sv::CasePattern>(
+              new sv::CaseDefaultPattern(b.getContext()));
         StateOp state = orderedStates[caseIdx];
         return encoding->getCasePattern(state);
       });
@@ -614,7 +619,9 @@ MachineOpConverter::convertTransitions( // NOLINT(misc-no-recursion)
       if (failed(guardOpRes))
         return failure();
 
-      auto guard = cast<ReturnOp>(*guardOpRes).getOperand();
+      auto guardOp = cast<ReturnOp>(*guardOpRes);
+      assert(guardOp && "guard should be defined");
+      auto guard = guardOp.getOperand();
       auto otherNextState =
           convertTransitions(currentState, transitions.drop_front());
       if (failed(otherNextState))

@@ -223,13 +223,13 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [HasCustomSSAName]> {
   let results = (outs InterfaceType : $result);
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict)
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
     `:` qualified(type($result))
   }];
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$result), [{
-      return build($_builder, $_state, result, None);
+      return build($_builder, $_state, result, std::nullopt);
     }]>
   ];
 

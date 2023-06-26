@@ -19,7 +19,6 @@
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/Namespace.h"
 
-#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
@@ -58,23 +57,52 @@ InstanceOpLowering::matchAndRewrite(InstanceOp msftInst, OpAdaptor adaptor,
     return rewriter.notifyMatchFailure(
         msftInst, "Referenced module was not an HW module");
 
+  StringAttr instHierParamName = rewriter.getStringAttr("__INST_HIER");
+  // Does `mod` have either a parameter named __INST_HIER or implicitly has it?
+  auto hasInstHierParam = [instHierParamName](hw::HWModuleLike mod) {
+    if (!mod)
+      return false;
+    if (isa<MSFTModuleOp>(mod.getOperation()))
+      return true;
+    auto hwmod = dyn_cast<hw::HWModuleOp>(mod.getOperation());
+    if (!hwmod)
+      return false;
+    ArrayAttr params = hwmod.getParametersAttr();
+    return llvm::any_of(params.getAsRange<hw::ParamDeclAttr>(),
+                        [instHierParamName](hw::ParamDeclAttr param) {
+                          return param.getName() == instHierParamName;
+                        });
+  };
+
   ArrayAttr paramValues;
   if (isa<hw::HWModuleExternOp>(referencedModule)) {
     paramValues = msftInst.getParametersAttr();
     if (!paramValues)
       paramValues = rewriter.getArrayAttr({});
   } else {
-    auto instAppendParam = hw::ParamExprAttr::get(
-        hw::PEO::StrConcat,
-        {hw::ParamDeclRefAttr::get(rewriter.getStringAttr("__INST_HIER"),
-                                   rewriter.getNoneType()),
-         rewriter.getStringAttr("."), msftInst.getSymNameAttr()});
-    paramValues = rewriter.getArrayAttr(
-        {hw::ParamDeclAttr::get("__INST_HIER", instAppendParam)});
+    // If the containing module supports instantiation with the instance path,
+    // use it.
+    auto mod = msftInst->getParentOfType<hw::HWModuleLike>();
+    if (hasInstHierParam(mod)) {
+      auto instAppendParam = hw::ParamExprAttr::get(
+          hw::PEO::StrConcat,
+          {hw::ParamDeclRefAttr::get(instHierParamName, rewriter.getNoneType()),
+           rewriter.getStringAttr("."), msftInst.getSymNameAttr()});
+      paramValues = rewriter.getArrayAttr(
+          {hw::ParamDeclAttr::get("__INST_HIER", instAppendParam)});
+    } else {
+      // Otherwise, create an instance path name assuming that the containing
+      // mod is the top level.
+      std::string instHier;
+      llvm::raw_string_ostream(instHier)
+          << mod.getModuleName() << "." << msftInst.getInstanceName();
+      paramValues = rewriter.getArrayAttr({hw::ParamDeclAttr::get(
+          "__INST_HIER", rewriter.getStringAttr(instHier))});
+    }
   }
 
   auto hwInst = rewriter.create<hw::InstanceOp>(
-      msftInst.getLoc(), referencedModule, msftInst.instanceNameAttr(),
+      msftInst.getLoc(), referencedModule, msftInst.getInstanceNameAttr(),
       SmallVector<Value>(adaptor.getOperands().begin(),
                          adaptor.getOperands().end()),
       paramValues, msftInst.getSymNameAttr());
@@ -132,6 +160,7 @@ ModuleOpLowering::matchAndRewrite(MSFTModuleOp mod, OpAdaptor adaptor,
         rewriter.getContext(), outputFile, false, true);
     hwmod->setAttr("output_file", outputFileAttr);
   }
+  hwmod->setDialectAttrs(mod->getDialectAttrs());
 
   return success();
 }
@@ -165,6 +194,7 @@ LogicalResult ModuleExternOpLowering::matchAndRewrite(
         rewriter.getContext(), outputFile, false, true);
     hwMod->setAttr("output_file", outputFileAttr);
   }
+  hwMod->setDialectAttrs(mod->getDialectAttrs());
 
   return success();
 }

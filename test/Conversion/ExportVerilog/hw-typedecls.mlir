@@ -7,6 +7,8 @@ hw.type_scope @__hw_typedecls {
   hw.typedecl @foo : i1
   // CHECK: typedef struct packed {logic a; logic b; } bar;
   hw.typedecl @bar : !hw.struct<a: i1, b: i1>
+  hw.typedecl @nest1 : !hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>
+  hw.typedecl @nest2 : !hw.typealias<@__hw_typedecls::@nest1, !hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
 
   // CHECK: typedef struct packed {logic a; logic [7:0] b[0:15]; } barArray;
   hw.typedecl @barArray : !hw.struct<a: i1, b: !hw.uarray<16xi8>>
@@ -19,7 +21,7 @@ hw.type_scope @__hw_typedecls {
   hw.typedecl @qux, "customName" : i32
   // CHECK: typedef struct packed {foo a; _other_scope_foo b; } nestedRef;
   hw.typedecl @nestedRef : !hw.struct<a: !hw.typealias<@__hw_typedecls::@foo,i1>, b: !hw.typealias<@_other_scope::@foo,i2>>
-  // CHECK: typedef enum {myEnum_A, myEnum_B, myEnum_C} myEnum;
+  // CHECK: typedef enum bit [1:0] {myEnum_A, myEnum_B, myEnum_C} myEnum;
   hw.typedecl @myEnum : !hw.enum<A, B, C>
 }
 // CHECK: `endif // _TYPESCOPE___hw_typedecls
@@ -80,6 +82,10 @@ hw.module @testAggregateCreate(%i: i1) -> (out1: i1, out2: i1) {
   // CHECK: [[NAME]].b
   %2 = hw.struct_extract %0["b"] : !hw.typealias<@__hw_typedecls::@bar,!hw.struct<a: i1, b: i1>>
   hw.output %1, %2 : i1, i1
+}
+
+hw.module @testNestedAlias(%i: !hw.typealias<@__hw_typedecls::@nest2, !hw.typealias<@__hw_typedecls::@nest1, !hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>>) -> () {
+  %0 = hw.struct_extract %i["a"] : !hw.typealias<@__hw_typedecls::@nest2, !hw.typealias<@__hw_typedecls::@nest1, !hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>>
 }
 
 // CHECK-LABEL: module testAggregateInout

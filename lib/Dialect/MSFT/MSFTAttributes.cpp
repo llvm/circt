@@ -34,7 +34,7 @@ Attribute PhysLocationAttr::parse(AsmParser &p, Type type) {
       p.parseComma() || p.parseInteger(num) || p.parseGreater())
     return Attribute();
 
-  Optional<PrimitiveType> devType = symbolizePrimitiveType(devTypeStr);
+  std::optional<PrimitiveType> devType = symbolizePrimitiveType(devTypeStr);
   if (!devType) {
     p.emitError(loc, "Unknown device type '" + devTypeStr + "'");
     return Attribute();

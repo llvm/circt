@@ -27,11 +27,11 @@ handshake.func @simple(%arg0: none, ...) -> none {
 // -----
 
 // CHECK:   handshake.func @cmerge_with_control_used(%[[VAL_0:.*]]: none, %[[VAL_1:.*]]: none, %[[VAL_2:.*]]: none, ...) -> (none, index, none)
-// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = control_merge %[[VAL_0]], %[[VAL_1]] : none
+// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = control_merge %[[VAL_0]], %[[VAL_1]] : none, index
 // CHECK:           return %[[VAL_3]], %[[VAL_4]], %[[VAL_2]] : none, index, none
 // CHECK:         }
 handshake.func @cmerge_with_control_used(%arg0: none, %arg1: none, %arg2: none) -> (none, index, none) {
-  %result, %index = control_merge %arg0, %arg1 : none
+  %result, %index = control_merge %arg0, %arg1 : none, index
   handshake.return %result, %index, %arg2 : none, index, none
 }
 
@@ -43,7 +43,7 @@ handshake.func @cmerge_with_control_used(%arg0: none, %arg1: none, %arg2: none) 
 // CHECK:           return %[[VAL_3]], %[[VAL_2]] : none, none
 // CHECK:         }
 handshake.func @cmerge_with_control_sunk(%arg0: none, %arg1: none, %arg2: none) -> (none, none) {
-  %result, %index = control_merge %arg0, %arg1 : none
+  %result, %index = control_merge %arg0, %arg1 : none, index
   sink %index : index
   handshake.return %result, %arg2 : none, none
 }
@@ -55,7 +55,7 @@ handshake.func @cmerge_with_control_sunk(%arg0: none, %arg1: none, %arg2: none) 
 // CHECK:           return %[[VAL_3]], %[[VAL_2]] : none, none
 // CHECK:         }
 handshake.func @cmerge_with_control_ignored(%arg0: none, %arg1: none, %arg2: none) -> (none, none) {
-  %result, %index = control_merge %arg0, %arg1 : none
+  %result, %index = control_merge %arg0, %arg1 : none, index
   handshake.return %result, %arg2 : none, none
 }
 
@@ -212,4 +212,22 @@ handshake.func @cbranch_into_mux_extend(%arg0 : i1, %arg1 : index, %arg2 : i32, 
   %trueResult, %falseResult = cond_br %arg0, %arg2 : i32
   %0 = mux %arg1 [%trueResult, %falseResult, %arg2] : index, i32
   handshake.return %0, %arg4 : i32, none
+}
+
+// -----
+
+// CHECK-LABEL:   handshake.func @cbranch_into_mux_no_erase(
+// CHECK-SAME:                                          %[[VAL_0:.*]]: i1,
+// CHECK-SAME:                                          %[[VAL_1:.*]]: index,
+// CHECK-SAME:                                          %[[VAL_2:.*]]: i32,
+// CHECK-SAME:                                          %[[VAL_3:.*]]: none, ...) -> (i32, i32, none)
+// CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = cond_br %[[VAL_0]], %[[VAL_2]] : i32
+// CHECK:           %[[VAL_6:.*]] = arith.addi %[[VAL_4]], %[[VAL_4]] : i32
+// CHECK:           return %[[VAL_2]], %[[VAL_6]], %[[VAL_3]] : i32, i32, none
+// CHECK:         }
+handshake.func @cbranch_into_mux_no_erase(%arg0 : i1, %arg1 : index, %arg2 : i32, %arg3: none) -> (i32, i32, none) {
+  %trueResult, %falseResult = cond_br %arg0, %arg2 : i32
+  %0 = mux %arg1 [%trueResult, %falseResult] : index, i32
+  %1 = arith.addi %trueResult, %trueResult : i32 
+  handshake.return %0, %1, %arg3 : i32, i32, none
 }

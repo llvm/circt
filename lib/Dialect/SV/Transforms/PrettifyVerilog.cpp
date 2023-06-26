@@ -22,6 +22,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Matchers.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -51,6 +52,7 @@ private:
   bool splitAssignment(OpBuilder &builder, Value dst, Value src);
 
   bool anythingChanged;
+  LoweringOptions options;
 
   DenseSet<Operation *> toDelete;
 };
@@ -72,10 +74,10 @@ static bool isVerilogUnaryOperator(Operation *op) {
 }
 
 /// Helper to convert a value to a constant integer if it is one.
-static llvm::Optional<APInt> getInt(Value value) {
+static std::optional<APInt> getInt(Value value) {
   if (auto cst = dyn_cast_or_null<hw::ConstantOp>(value.getDefiningOp()))
     return cst.getValue();
-  return llvm::None;
+  return std::nullopt;
 }
 
 // Checks whether the destination and the source of an assignment are the same.
@@ -248,7 +250,7 @@ bool PrettifyVerilogPass::splitArrayAssignment(OpBuilder &builder,
     return std::get<0>(l).ult(std::get<0>(r));
   });
 
-  llvm::Optional<APInt> last;
+  std::optional<APInt> last;
   for (auto &[i, loc, value] : fields) {
     if (i == last)
       continue;
@@ -336,6 +338,9 @@ bool PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
   // don't duplicate any of them.
   for (auto *user : op->getUsers()) {
     if (isa<comb::ExtractOp, hw::ArraySliceOp>(user))
+      return false;
+    if (!options.allowExprInEventControl &&
+        isa<sv::AlwaysFFOp, sv::AlwaysOp>(user))
       return false;
   }
 
@@ -531,6 +536,7 @@ void PrettifyVerilogPass::processPostOrder(Block &body) {
 
 void PrettifyVerilogPass::runOnOperation() {
   hw::HWModuleOp thisModule = getOperation();
+  options = LoweringOptions(thisModule->getParentOfType<mlir::ModuleOp>());
 
   // Keeps track if anything changed during this pass, used to determine if
   // the analyses were preserved.

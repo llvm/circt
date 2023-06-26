@@ -58,6 +58,10 @@ static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
       }
     }
 
+    bool emitConst = type.isConst();
+    if (emitConst)
+      os << "Const(";
+
     os << name;
 
     if (emitParentheses)
@@ -67,6 +71,9 @@ static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
       return failure();
 
     if (emitParentheses)
+      os << ')';
+
+    if (emitConst)
       os << ')';
 
     if (emitDirection)
@@ -89,7 +96,7 @@ static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
           location, "Expected width to be inferred for exported port"));
     }
     return emitTypeWithArguments(name, [&](bool) {
-      os << width.value() << ".W";
+      os << *width << ".W";
       return success();
     });
   };
@@ -161,7 +168,7 @@ static LogicalResult emitPort(const PortInfo &port, llvm::raw_ostream &os) {
 
 /// Emits an `ExtModule` class with port declarations for `module`.
 static LogicalResult emitModule(FModuleLike module, llvm::raw_ostream &os) {
-  os << "class " << module.moduleName() << " extends ExtModule {\n";
+  os << "class " << module.getModuleName() << " extends ExtModule {\n";
 
   for (const auto &port : module.getPorts()) {
     if (failed(emitPort(port, os)))

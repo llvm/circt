@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Support/BuilderUtils.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/FunctionInterfaces.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -23,6 +24,7 @@
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
+#include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/ADT/StringExtras.h"
 
@@ -31,62 +33,8 @@ namespace hw {
 
 class EnumFieldAttr;
 
-/// A module port direction.
-enum class PortDirection {
-  INPUT = 1,
-  OUTPUT = 2,
-  INOUT = 3,
-};
-
 /// Flip a port direction.
 PortDirection flip(PortDirection direction);
-
-/// This holds the name, type, direction of a module's ports
-struct PortInfo {
-  StringAttr name;
-  PortDirection direction;
-  Type type;
-
-  /// This is the argument index or the result index depending on the direction.
-  /// "0" for an output means the first output, "0" for a in/inout means the
-  /// first argument.
-  size_t argNum = ~0U;
-
-  /// The optional symbol for this port.
-  StringAttr sym = {};
-
-  StringRef getName() const { return name.getValue(); }
-  bool isInput() const { return direction == PortDirection::INPUT; }
-  bool isOutput() const { return direction == PortDirection::OUTPUT; }
-  bool isInOut() const { return direction == PortDirection::INOUT; }
-
-  /// Return a unique numeric identifier for this port.
-  ssize_t getId() const { return isOutput() ? argNum : (-1 - argNum); };
-};
-
-/// This holds a decoded list of input/inout and output ports for a module or
-/// instance.
-struct ModulePortInfo {
-  explicit ModulePortInfo(ArrayRef<PortInfo> inputs, ArrayRef<PortInfo> outputs)
-      : inputs(inputs.begin(), inputs.end()),
-        outputs(outputs.begin(), outputs.end()) {}
-
-  explicit ModulePortInfo(ArrayRef<PortInfo> mergedPorts) {
-    inputs.reserve(mergedPorts.size());
-    outputs.reserve(mergedPorts.size());
-    for (auto port : mergedPorts) {
-      if (port.isOutput())
-        outputs.push_back(port);
-      else
-        inputs.push_back(port);
-    }
-  }
-
-  /// This contains a list of the input and inout ports.
-  SmallVector<PortInfo> inputs;
-  /// This is a list of the output ports.
-  SmallVector<PortInfo> outputs;
-};
 
 /// TODO: Move all these functions to a hw::ModuleLike interface.
 
@@ -152,7 +100,7 @@ inline StringRef getVerilogModuleName(Operation *module) {
 /// Return the port name for the specified argument or result.  These can only
 /// return a null StringAttr when the IR is invalid.
 StringAttr getModuleArgumentNameAttr(Operation *module, size_t argNo);
-StringAttr getModuleResultNameAttr(Operation *module, size_t argNo);
+StringAttr getModuleResultNameAttr(Operation *module, size_t resultNo);
 
 static inline StringRef getModuleArgumentName(Operation *module, size_t argNo) {
   auto attr = getModuleArgumentNameAttr(module, argNo);
@@ -164,12 +112,19 @@ static inline StringRef getModuleResultName(Operation *module,
   return attr ? attr.getValue() : StringRef();
 }
 
+/// Return the port location for the specified argument or result.  These can
+/// only return a null LocationAttr when the IR is invalid.
+LocationAttr getModuleArgumentLocAttr(Operation *module, size_t argNo);
+LocationAttr getModuleResultLocAttr(Operation *module, size_t resultNo);
+
 // Index width should be exactly clog2 (size of array), or either 0 or 1 if the
 // array is a singleton.
 bool isValidIndexBitWidth(Value index, Value array);
 
 void setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names);
 void setModuleResultNames(Operation *module, ArrayRef<Attribute> names);
+void setModuleArgumentLocs(Operation *module, ArrayRef<Attribute> locs);
+void setModuleResultLocs(Operation *module, ArrayRef<Attribute> locs);
 
 /// Return true if the specified operation is a combinational logic op.
 bool isCombinational(Operation *op);
@@ -201,11 +156,11 @@ LogicalResult checkParameterInContext(
 
 /// Return the symbol (if exists, else null) on the corresponding input port
 /// argument.
-StringAttr getArgSym(Operation *op, unsigned i);
+InnerSymAttr getArgSym(Operation *op, unsigned i);
 
 /// Return the symbol (if any, else null) on the corresponding output port
 /// argument.
-StringAttr getResultSym(Operation *op, unsigned i);
+InnerSymAttr getResultSym(Operation *op, unsigned i);
 
 // Check whether an integer value is an offset from a base.
 bool isOffset(Value base, Value index, uint64_t offset);

@@ -22,6 +22,7 @@
 #include "mlir/IR/BuiltinOps.h"
 
 using namespace mlir;
+using namespace mlir::affine;
 using namespace circt::analysis;
 
 /// Helper to iterate through memory operation pairs and check for dependences
@@ -43,6 +44,12 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
       MemRefAccess dst(destination);
       FlatAffineValueConstraints dependenceConstraints;
       SmallVector<DependenceComponent, 2> depComps;
+
+      // Requested depth might not be a valid comparison if they do not belong
+      // to the same loop nest
+      if (depth > getInnermostCommonLoopDepth({source, destination}))
+        continue;
+
       DependenceResult result = checkMemrefAccessDependence(
           src, dst, depth, &dependenceConstraints, &depComps, true);
 
@@ -56,7 +63,7 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
       // Collect surrounding loops to use in dependence components. Only proceed
       // if we are in the innermost loop.
       SmallVector<AffineForOp> enclosingLoops;
-      getLoopIVs(*destination, &enclosingLoops);
+      getAffineForIVs(*destination, &enclosingLoops);
       if (enclosingLoops.size() != depth)
         continue;
 
@@ -129,7 +136,7 @@ circt::analysis::MemoryDependenceAnalysis::MemoryDependenceAnalysis(
 
   // Collect affine loops grouped by nesting depth.
   std::vector<SmallVector<AffineForOp, 2>> depthToLoops;
-  mlir::gatherLoops(funcOp, depthToLoops);
+  mlir::affine::gatherLoops(funcOp, depthToLoops);
 
   // Collect load and store operations to check.
   SmallVector<Operation *> memoryOps;

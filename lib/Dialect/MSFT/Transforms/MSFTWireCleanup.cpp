@@ -17,8 +17,8 @@
 #include "circt/Dialect/MSFT/MSFTPasses.h"
 #include "circt/Support/Namespace.h"
 
-#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"

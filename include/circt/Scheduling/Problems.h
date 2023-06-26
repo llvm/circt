@@ -22,14 +22,16 @@
 
 #include "mlir/IR/BuiltinAttributes.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SetVector.h"
 
-#define DEFINE_FACTORY_METHOD(ProblemClass)                                    \
+#include <optional>
+
+#define DEFINE_COMMON_MEMBERS(ProblemClass)                                    \
 protected:                                                                     \
   ProblemClass() {}                                                            \
                                                                                \
 public:                                                                        \
+  static constexpr auto PROBLEM_NAME = #ProblemClass;                          \
   static ProblemClass get(Operation *containingOp) {                           \
     ProblemClass prob;                                                         \
     prob.setContainingOp(containingOp);                                        \
@@ -83,7 +85,7 @@ namespace scheduling {
 /// for each registered operation, and the precedence constraints as modeled by
 /// the dependences are satisfied.
 class Problem {
-  DEFINE_FACTORY_METHOD(Problem)
+  DEFINE_COMMON_MEMBERS(Problem)
 
 public:
   virtual ~Problem() = default;
@@ -114,13 +116,13 @@ protected:
       llvm::DenseMap<Operation *, llvm::SmallSetVector<Operation *, 4>>;
 
   template <typename T>
-  using OperationProperty = llvm::DenseMap<Operation *, Optional<T>>;
+  using OperationProperty = llvm::DenseMap<Operation *, std::optional<T>>;
   template <typename T>
-  using DependenceProperty = llvm::DenseMap<Dependence, Optional<T>>;
+  using DependenceProperty = llvm::DenseMap<Dependence, std::optional<T>>;
   template <typename T>
-  using OperatorTypeProperty = llvm::DenseMap<OperatorType, Optional<T>>;
+  using OperatorTypeProperty = llvm::DenseMap<OperatorType, std::optional<T>>;
   template <typename T>
-  using InstanceProperty = Optional<T>;
+  using InstanceProperty = std::optional<T>;
 
   //===--------------------------------------------------------------------===//
   // Containers for problem components and properties
@@ -197,7 +199,7 @@ public:
   //===--------------------------------------------------------------------===//
 public:
   /// The linked operator type provides the runtime characteristics for \p op.
-  Optional<OperatorType> getLinkedOperatorType(Operation *op) {
+  std::optional<OperatorType> getLinkedOperatorType(Operation *op) {
     return linkedOperatorType.lookup(op);
   }
   void setLinkedOperatorType(Operation *op, OperatorType opr) {
@@ -205,7 +207,7 @@ public:
   }
 
   /// The latency is the number of cycles \p opr needs to compute its result.
-  Optional<unsigned> getLatency(OperatorType opr) {
+  std::optional<unsigned> getLatency(OperatorType opr) {
     return latency.lookup(opr);
   }
   void setLatency(OperatorType opr, unsigned val) { latency[opr] = val; }
@@ -213,10 +215,40 @@ public:
   /// Return the start time for \p op, as computed by the scheduler.
   /// These start times comprise the basic problem's solution, i.e. the
   /// *schedule*.
-  Optional<unsigned> getStartTime(Operation *op) {
+  std::optional<unsigned> getStartTime(Operation *op) {
     return startTime.lookup(op);
   }
   void setStartTime(Operation *op, unsigned val) { startTime[op] = val; }
+
+  //===--------------------------------------------------------------------===//
+  // Access to derived properties
+  //===--------------------------------------------------------------------===//
+public:
+  /// Returns the end time for \p op, as computed by the scheduler.
+  /// This end time is derived from the start time and the operator type's
+  /// latency.
+  std::optional<unsigned> getEndTime(Operation *op);
+
+  //===--------------------------------------------------------------------===//
+  // Optional names (for exporting and debugging instances)
+  //===--------------------------------------------------------------------===//
+private:
+  StringAttr instanceName, libraryName;
+  SmallDenseMap<Operation *, StringAttr> operationNames;
+
+public:
+  StringAttr getInstanceName() { return instanceName; }
+  void setInstanceName(StringAttr name) { instanceName = name; }
+
+  StringAttr getLibraryName() { return libraryName; }
+  void setLibraryName(StringAttr name) { libraryName = name; }
+
+  StringAttr getOperationName(Operation *op) {
+    return operationNames.lookup(op);
+  }
+  void setOperationName(Operation *op, StringAttr name) {
+    operationNames[op] = name;
+  }
 
   //===--------------------------------------------------------------------===//
   // Properties as string key-value pairs (e.g. for DOT graphs)
@@ -258,7 +290,7 @@ public:
 /// construct a pipelined datapath with a fixed, integer initiation interval,
 /// in which the execution of multiple iterations/samples/etc. may overlap.
 class CyclicProblem : public virtual Problem {
-  DEFINE_FACTORY_METHOD(CyclicProblem)
+  DEFINE_COMMON_MEMBERS(CyclicProblem)
 
 private:
   DependenceProperty<unsigned> distance;
@@ -267,7 +299,7 @@ private:
 public:
   /// The distance determines whether a dependence has to be satisfied in the
   /// same iteration (distance=0 or not set), or distance-many iterations later.
-  Optional<unsigned> getDistance(Dependence dep) {
+  std::optional<unsigned> getDistance(Dependence dep) {
     return distance.lookup(dep);
   }
   void setDistance(Dependence dep, unsigned val) { distance[dep] = val; }
@@ -277,7 +309,7 @@ public:
   /// steps. The best possible value is 1, meaning that a corresponding pipeline
   /// accepts new data every cycle. This property is part of the cyclic
   /// problem's solution.
-  Optional<unsigned> getInitiationInterval() { return initiationInterval; }
+  std::optional<unsigned> getInitiationInterval() { return initiationInterval; }
   void setInitiationInterval(unsigned val) { initiationInterval = val; }
 
   virtual PropertyStringVector getProperties(Dependence dep) override;
@@ -306,7 +338,7 @@ public:
 /// continuous unit, e.g. in nanoseconds, inside the discrete time steps/cycles
 /// determined by the underlying scheduling problem.
 class ChainingProblem : public virtual Problem {
-  DEFINE_FACTORY_METHOD(ChainingProblem)
+  DEFINE_COMMON_MEMBERS(ChainingProblem)
 
 private:
   OperatorTypeProperty<float> incomingDelay, outgoingDelay;
@@ -316,7 +348,7 @@ public:
   /// The incoming delay denotes the propagation time from the operand inputs to
   /// either the result outputs (combinational operators) or the first internal
   /// register stage.
-  Optional<float> getIncomingDelay(OperatorType opr) {
+  std::optional<float> getIncomingDelay(OperatorType opr) {
     return incomingDelay.lookup(opr);
   }
   void setIncomingDelay(OperatorType opr, float delay) {
@@ -326,7 +358,7 @@ public:
   /// The outgoing delay denotes the propagation time from either the operand
   /// inputs (combinational operators) or the last internal register stage to
   /// the result outputs.
-  Optional<float> getOutgoingDelay(OperatorType opr) {
+  std::optional<float> getOutgoingDelay(OperatorType opr) {
     return outgoingDelay.lookup(opr);
   }
   void setOutgoingDelay(OperatorType opr, float delay) {
@@ -335,7 +367,7 @@ public:
 
   /// Computed by the scheduler, this start time is relative to the beginning of
   /// the cycle that \p op starts in.
-  Optional<float> getStartTimeInCycle(Operation *op) {
+  std::optional<float> getStartTimeInCycle(Operation *op) {
     return startTimeInCycle.lookup(op);
   }
   void setStartTimeInCycle(Operation *op, float time) {
@@ -374,7 +406,7 @@ public:
 /// exceed the operator type's limit. These constraints do not apply to operator
 /// types without a limit (not set, or 0).
 class SharedOperatorsProblem : public virtual Problem {
-  DEFINE_FACTORY_METHOD(SharedOperatorsProblem)
+  DEFINE_COMMON_MEMBERS(SharedOperatorsProblem)
 
 private:
   OperatorTypeProperty<unsigned> limit;
@@ -382,7 +414,9 @@ private:
 public:
   /// The limit is the maximum number of operations using \p opr that are
   /// allowed to start in the same time step.
-  Optional<unsigned> getLimit(OperatorType opr) { return limit.lookup(opr); }
+  std::optional<unsigned> getLimit(OperatorType opr) {
+    return limit.lookup(opr);
+  }
   void setLimit(OperatorType opr, unsigned val) { limit[opr] = val; }
 
   virtual PropertyStringVector getProperties(OperatorType opr) override;
@@ -410,7 +444,7 @@ public:
 ///      not exceed the operator type's limit.
 class ModuloProblem : public virtual CyclicProblem,
                       public virtual SharedOperatorsProblem {
-  DEFINE_FACTORY_METHOD(ModuloProblem)
+  DEFINE_COMMON_MEMBERS(ModuloProblem)
 
 protected:
   /// \p opr is not oversubscribed in any congruence class modulo II.
@@ -423,6 +457,6 @@ public:
 } // namespace scheduling
 } // namespace circt
 
-#undef DEFINE_FACTORY_METHOD
+#undef DEFINE_COMMON_MEMBERS
 
 #endif // CIRCT_SCHEDULING_PROBLEMS_H

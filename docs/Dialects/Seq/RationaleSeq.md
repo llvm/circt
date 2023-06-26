@@ -68,6 +68,13 @@ passed to the `sv.reg` during lowering if present.
 
 Upon initialization, the state is defined to be uninitialized.
 
+### Variant: `seq.compreg.ce`
+
+This op is a version of compreg with the addition of a clock enable signal.
+Having the clock enable explicit (instead of a mux feeding it) is convenient for
+mapping to SV behavioral and will be (in the future) easier to map to device
+primitives or standard cells.
+
 ### Rationale
 
 Several design decisions were made in defining this op. Mostly, they were
@@ -82,10 +89,6 @@ optimization) another op could be added.
   (potentially complex) analysis to find the reset mux if required
   - Inclusion of 'resetValue': if we have a 'reset' signal, we need to
   include a value.
-  - Omission of 'enable': enables are easily modeled via a multiplexer on the
-  input with one of the mux inputs as the output of the register. This -- we
-  assume -- property makes 'enables' easier to detect than reset in the
-  common case.
 
 - Timing / clocking:
   - Omission of 'negedge' event on 'clock': this is easily modeled by
@@ -178,7 +181,7 @@ Registers expect the logic assignment to them to be in SSA form.
 For example, a strict connect to a field of a structure:
 
 ```firrtl
-%field = firrtl.subfield %a(0)
+%field = firrtl.subfield %a[field]
 firrtl.strictconnect %field, %value
 ```
 Is converted into a `hw.struct_inject` operation:
@@ -295,3 +298,28 @@ specialization is needed) attached to the memory symbol.
   ```mlir
   %mem = seq.debug @myMemory : !seq.hlmem<4xi32>
   ```
+
+## The FIFO operation
+The `seq.fifo` operation intends to capture the semantics of a FIFO which
+eventually map to some form of on-chip resources. By having a FIFO abstraction,
+we provide an abstraction that can be targeted for target-specialized implementations,
+as well as default behavioral lowerings (based on `seq.hlmem`).
+
+The FIFO interface consists of:
+- **Inputs**:
+  - clock, reset
+  - input data
+  - read/write enable
+- **Outputs**:
+  - output data
+  - full, empty flags
+  - optional almost full, almost empty flags
+
+The fifo operation is configurable with the following parameters:
+1. Depth (cycles)
+2. Differing in- and output widths
+3. Almost empty/full thresholds (optional)
+
+Like `seq.hlmem` there are no guarantees that all possible fifo configuration
+are able to be lowered. Available lowering passes will pattern match on the
+requested fifo configuration and attempt to provide a legal lowering.

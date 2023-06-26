@@ -14,6 +14,7 @@ if(CapnProto_FOUND)
 
   if (MSVC)
     string(REPLACE "/EHs-c-" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHa")
   else ()
     string(REPLACE "-fno-exceptions" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
   endif ()
@@ -28,4 +29,7 @@ if(CapnProto_FOUND)
     PRIVATE
     CapnProto::capnp
     CapnProto::capnp-rpc)
+  target_sources(EsiCosimCapnp PUBLIC FILE_SET HEADERS
+    BASE_DIRS "."
+    FILES "CosimDpi.capnp")
 endif()

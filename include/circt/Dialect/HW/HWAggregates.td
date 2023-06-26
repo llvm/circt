@@ -11,6 +11,41 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_HW_HWAGGREGATES_TD
+#define CIRCT_DIALECT_HW_HWAGGREGATES_TD
+
+include "circt/Dialect/HW/HWDialect.td"
+include "circt/Dialect/HW/HWTypes.td"
+include "mlir/IR/OpBase.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/IR/OpAsmInterface.td"
+
+//===----------------------------------------------------------------------===//
+// Constants
+//===----------------------------------------------------------------------===//
+
+def AggregateConstantOp : HWOp<"aggregate_constant", [Pure, ConstantLike]> {
+  let summary = "Produce a constant aggregate value";
+  let description = [{
+    This operation produces a constant value of an aggregate type. Clock and
+    reset values are supported. For nested aggregates, embedded arrays are
+    used.
+
+    Examples:
+    ```mlir
+      %result = hw.aggregate.constant [1 : i1, 2 : i2, 3 : i2] : !hw.struct<a: i8, b: i8, c: i8>
+      %result = hw.aggregate.constant [1 : i1, [2 : i2, 3 : i2]] : !hw.struct<a: i8, b: vector<i8, 2>>
+    ```
+  }];
+
+  let arguments = (ins ArrayAttr:$fields);
+  let results = (outs HWAggregateType:$result);
+  let assemblyFormat = "$fields attr-dict `:` type($result)";
+  let hasVerifier = 1;
+  let hasFolder = 1;
+}
+
 //===----------------------------------------------------------------------===//
 // Packed Array Processing Operations
 //===----------------------------------------------------------------------===//
@@ -33,6 +68,7 @@ def ArrayCreateOp : HWOp<"array_create", [Pure, SameTypeOperands]> {
   let results = (outs ArrayType:$result);
 
   let hasVerifier = 1;
+  let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
 
   let hasCustomAssemblyFormat = 1;
@@ -76,7 +112,7 @@ def ArrayConcatOp : HWOp<"array_concat", [Pure]> {
     // ValueRange needs to contain at least one element.
     OpBuilder<(ins "ValueRange":$inputs)>
   ];
-
+  let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
 }
 
@@ -140,10 +176,6 @@ def ArrayGetOp : HWOp<"array_get",
     $input`[`$index`]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))
   }];
 
-  let builders = [
-    OpBuilder<(ins "Value":$input, "Value":$index)>
-  ];
-
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
 }
@@ -157,6 +189,7 @@ def StructCreateOp : HWOp<"struct_create", [Pure]> {
   let arguments = (ins Variadic<HWNonInOutType>:$input);
   let results = (outs StructType:$result);
   let hasCustomAssemblyFormat = 1;
+  let hasFolder = 1;
   let hasVerifier = 1;
 }
 
@@ -178,7 +211,10 @@ def StructExtractOp : HWOp<"struct_extract",
 
   let builders = [
     OpBuilder<(ins "Value":$input, "StructType::FieldInfo":$field)>,
-    OpBuilder<(ins "Value":$input, "StringAttr":$field)>
+    OpBuilder<(ins "Value":$input, "StringAttr":$field)>,
+    OpBuilder<(ins "Value":$input, "StringRef":$field), [{
+      build(odsBuilder, odsState, input, odsBuilder.getStringAttr(field));
+    }]>
   ];
 
   let hasFolder = 1;
@@ -200,7 +236,7 @@ def StructInjectOp : HWOp<"struct_inject", [Pure,
                    HWNonInOutType:$newValue);
   let results = (outs StructType:$result);
   let hasCustomAssemblyFormat = 1;
-
+  let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
 }
 
@@ -216,6 +252,12 @@ def StructExplodeOp : HWOp<"struct_explode", [Pure,
   let arguments = (ins StructType:$input);
   let results = (outs Variadic<HWNonInOutType>:$result);
   let hasCustomAssemblyFormat = 1;
+
+  let builders = [
+    OpBuilder<(ins "Value":$input)>
+  ];
+
+  let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
  }
 
@@ -240,7 +282,9 @@ def UnionCreateOp : HWOp<"union_create", [Pure]> {
   let hasCustomAssemblyFormat = 1;
 }
 
-def UnionExtractOp : HWOp<"union_extract", [Pure]> {
+def UnionExtractOp : HWOp<"union_extract", [Pure, 
+    DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>,
+  ]> {
   let summary = "Get a union member.";
   let description = [{
     Get the value of a union, interpreting it as the type of the specified
@@ -258,3 +302,5 @@ def UnionExtractOp : HWOp<"union_extract", [Pure]> {
   let results = (outs HWNonInOutType:$result);
   let hasCustomAssemblyFormat = 1;
 }
+
+#endif // CIRCT_DIALECT_HW_HWAGGREGATES_TD

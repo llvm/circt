@@ -25,11 +25,6 @@ def GenerateOp : SVOp<"generate",
   }];
 }
 
-// A region with at most the given number of blocks.
-class MaxSizedRegion<int numBlocks> : Region<
-  CPred<"::llvm::hasNItemsOrLess($_self, " # numBlocks # ")">,
-  "region with at most " # numBlocks # " blocks">;
-
 /// An array of case patterns. This is either a typed attribute of some kind,
 /// an integer constant or a parameter expression for example, or a `unit` attr
 /// that indicates the `default` case.

@@ -17,8 +17,8 @@
 #include "circt/Dialect/MSFT/MSFTPasses.h"
 #include "circt/Support/Namespace.h"
 
-#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
@@ -48,7 +48,7 @@ private:
   void partition(MSFTModuleOp mod);
   MSFTModuleOp partition(DesignPartitionOp part, Block *partBlock);
 
-  void bubbleUp(MSFTModuleOp mod, Block *ops);
+  void bubbleUp(MSFTModuleOp mod, Block *partBlock);
   void bubbleUpGlobalRefs(Operation *op, StringAttr parentMod,
                           StringAttr parentName,
                           llvm::DenseSet<hw::GlobalRefAttr> &refsMoved);
@@ -92,8 +92,7 @@ void PartitionPass::runOnOperation() {
 /// Determine if 'op' is driven exclusively by other tagged ops or wires which
 /// are themselves exclusively driven by tagged ops. Recursive but memoized via
 /// `seen`.
-static bool isDrivenByPartOpsOnly(Operation *op,
-                                  const BlockAndValueMapping &partOps,
+static bool isDrivenByPartOpsOnly(Operation *op, const IRMapping &partOps,
                                   DenseMap<Operation *, bool> &seen) {
   auto prevResult = seen.find(op);
   if (prevResult != seen.end())
@@ -120,7 +119,7 @@ static bool isDrivenByPartOpsOnly(Operation *op,
 /// attempt to copy all the way up to the block args.
 void copyIntoPart(ArrayRef<Operation *> taggedOps, Block *partBlock,
                   bool extendMaximalUp) {
-  BlockAndValueMapping map;
+  IRMapping map;
   if (taggedOps.empty())
     return;
   OpBuilder b(taggedOps[0]->getContext());
@@ -273,7 +272,7 @@ static StringRef getOpName(Operation *op) {
 }
 /// Try to set the entity name.
 /// TODO: this needs to be more complex to deal with renaming symbols.
-static void setEntityName(Operation *op, Twine name) {
+static void setEntityName(Operation *op, const Twine &name) {
   StringAttr nameAttr = StringAttr::get(op->getContext(), name);
   if (op->hasAttrOfType<StringAttr>("name"))
     op->setAttr("name", nameAttr);
@@ -579,7 +578,7 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
   auto cloneOpsGetOperands = [&](InstanceOp newInst, InstanceOp oldInst,
                                  SmallVectorImpl<Value> &newOperands) {
     OpBuilder b(newInst);
-    BlockAndValueMapping map;
+    IRMapping map;
 
     // Add all of 'mod''s block args to the map in case one of the tagged ops
     // was driven by a block arg. Map to the oldInst operand Value.
@@ -700,7 +699,7 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
                 ctxt, opName + (portName.empty() ? "" : "." + portName)),
             /*direction*/ hw::PortDirection::INPUT,
             /*type*/ v.getType(),
-            /*argNum*/ inputPorts.size()});
+            /*argNum*/ inputPorts.size(), /*sym*/ {}, /*location*/ loc});
       } else {
         // There's already an existing port. Just set it.
         oper.set(partBlock->getArgument(existingF->second));

@@ -14,10 +14,11 @@ add_circt_dialect_library(CIRCTSV
   Support
 
   LINK_LIBS PUBLIC
-  MLIRIR
-  CIRCTHW
   CIRCTComb
-   )
+  CIRCTHW
+  CIRCTSupport
+  MLIRIR
+)
 
 add_dependencies(circt-headers MLIRSVIncGen)
 

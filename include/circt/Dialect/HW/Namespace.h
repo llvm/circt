@@ -21,15 +21,15 @@ namespace circt {
 namespace hw {
 
 struct ModuleNamespace : Namespace {
-  ModuleNamespace() {}
+  ModuleNamespace() = default;
   ModuleNamespace(hw::HWModuleOp module) { add(module); }
 
   /// Populate the namespace from a module-like operation. This namespace will
   /// be composed of the `inner_sym`s of the module's ports and declarations.
   void add(hw::HWModuleOp module) {
     for (auto port : module.getAllPorts())
-      if (port.sym && !port.sym.getValue().empty())
-        nextIndex.insert({port.sym.getValue(), 0});
+      if (port.sym && !port.sym.empty())
+        nextIndex.insert({port.sym.getSymName().getValue(), 0});
     module.walk([&](Operation *op) {
       auto attr = op->getAttrOfType<StringAttr>("inner_sym");
       if (attr)

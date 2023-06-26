@@ -9,9 +9,7 @@
 set(PyCDE_TEST_DEPENDS
   FileCheck count not
   PyCDE
-  CIRCTMLIRPythonModules
-  CIRCTPythonModules
-  )
+)
 
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in

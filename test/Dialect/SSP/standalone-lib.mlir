@@ -1,5 +1,5 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
-// RUN: circt-opt %s -test-ssp-roundtrip | circt-opt | FileCheck %s --check-prefix=INFRA
+// RUN: circt-opt %s -ssp-roundtrip | circt-opt | FileCheck %s --check-prefix=INFRA
 
 // 1) tests the plain parser/printer roundtrip.
 // CHECK: ssp.library @Lib {
@@ -24,9 +24,9 @@
 // CHECK: }
 
 // 2) Import/export via the scheduling infra (i.e. populates a `Problem` instance and reconstructs the SSP IR from it.)
-//    Operator types from stand-alone libraries are appended to the instance's internal library, whose name is not preserved.
+//    Operator types from stand-alone libraries are appended to the instance's internal library.
 // INFRA: ssp.instance @SomeInstance of "ModuloProblem" {
-// INFRA:   library {
+// INFRA:   library @InternalLib {
 // INFRA:     operator_type @Opr [latency<3>, limit<3>]
 // INFRA:     operator_type @Opr_1 [latency<1>, limit<1>]
 // INFRA:     operator_type @Opr_2 [latency<2>, limit<2>]

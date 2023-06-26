@@ -17,8 +17,10 @@
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVAttributes.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
@@ -45,8 +47,8 @@ bool sv::is2StateExpression(Value v) {
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
   return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
-             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, MacroRefExprOp,
-             MacroRefExprSEOp>(op);
+             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, ConstantStrOp,
+             MacroRefExprOp, MacroRefExprSEOp>(op);
 }
 
 LogicalResult sv::verifyInProceduralRegion(Operation *op) {
@@ -90,68 +92,6 @@ static Operation *lookupSymbolInNested(Operation *symbolTableOp,
 }
 
 //===----------------------------------------------------------------------===//
-// ImplicitSSAName Custom Directive
-//===----------------------------------------------------------------------===//
-
-static ParseResult parseImplicitSSAName(OpAsmParser &parser,
-                                        NamedAttrList &resultAttrs) {
-
-  if (parser.parseOptionalAttrDict(resultAttrs))
-    return failure();
-
-  // If the attribute dictionary contains no 'name' attribute, infer it from
-  // the SSA name (if specified).
-  bool hadName = llvm::any_of(resultAttrs, [](NamedAttribute attr) {
-    return attr.getName() == "name";
-  });
-
-  // If there was no name specified, check to see if there was a useful name
-  // specified in the asm file.
-  if (hadName)
-    return success();
-
-  // If there is no explicit name attribute, get it from the SSA result name.
-  // If numeric, just use an empty name.
-  auto resultName = parser.getResultName(0).first;
-  if (!resultName.empty() && isdigit(resultName[0]))
-    resultName = "";
-  auto nameAttr = parser.getBuilder().getStringAttr(resultName);
-  auto *context = parser.getBuilder().getContext();
-  resultAttrs.push_back({StringAttr::get(context, "name"), nameAttr});
-  return success();
-}
-
-static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
-                                 DictionaryAttr attr) {
-  // Note that we only need to print the "name" attribute if the asmprinter
-  // result name disagrees with it.  This can happen in strange cases, e.g.
-  // when there are conflicts.
-  bool namesDisagree = false;
-
-  SmallString<32> resultNameStr;
-  llvm::raw_svector_ostream tmpStream(resultNameStr);
-  p.printOperand(op->getResult(0), tmpStream);
-  auto expectedName = op->getAttrOfType<StringAttr>("name").getValue();
-  auto actualName = tmpStream.str().drop_front();
-  if (actualName != expectedName) {
-    // Anonymous names are printed as digits, which is fine.
-    if (!expectedName.empty() || !isdigit(actualName[0]))
-      namesDisagree = true;
-  }
-
-  if (namesDisagree)
-    p.printOptionalAttrDict(op->getAttrs(),
-                            {SymbolTable::getSymbolAttrName(),
-                             hw::InnerName::getInnerNameAttrName(),
-                             "svAttributes"});
-  else
-    p.printOptionalAttrDict(op->getAttrs(),
-                            {"name", SymbolTable::getSymbolAttrName(),
-                             hw::InnerName::getInnerNameAttrName(),
-                             "svAttributes"});
-}
-
-//===----------------------------------------------------------------------===//
 // VerbatimExprOp
 //===----------------------------------------------------------------------===//
 
@@ -188,12 +128,65 @@ void VerbatimExprSEOp::getAsmResultNames(
 
 void MacroRefExprOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  setNameFn(getResult(), getIdent().getName());
+  setNameFn(getResult(), getMacroName());
 }
 
 void MacroRefExprSEOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  setNameFn(getResult(), getIdent().getName());
+  setNameFn(getResult(), getMacroName());
+}
+
+static MacroDeclOp getReferencedMacro(const hw::HWSymbolCache *cache,
+                                      Operation *op,
+                                      FlatSymbolRefAttr macroName) {
+  if (cache)
+    if (auto *result = cache->getDefinition(macroName.getAttr()))
+      return cast<MacroDeclOp>(result);
+
+  auto topLevelModuleOp = op->getParentOfType<ModuleOp>();
+  return topLevelModuleOp.lookupSymbol<MacroDeclOp>(macroName.getValue());
+}
+
+/// Lookup the module or extmodule for the symbol.  This returns null on
+/// invalid IR.
+MacroDeclOp MacroRefExprOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
+  return ::getReferencedMacro(cache, *this, getMacroNameAttr());
+}
+
+MacroDeclOp
+MacroRefExprSEOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
+  return ::getReferencedMacro(cache, *this, getMacroNameAttr());
+}
+
+MacroDeclOp MacroDefOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
+  return ::getReferencedMacro(cache, *this, getMacroNameAttr());
+}
+
+/// Ensure that the symbol being instantiated exists and is a MacroDeclOp.
+static LogicalResult verifyMacroSymbolUse(Operation *op, StringAttr name,
+                                          SymbolTableCollection &symbolTable) {
+  auto macro = symbolTable.lookupNearestSymbolFrom<MacroDeclOp>(op, name);
+  if (!macro)
+    return op->emitError("Referenced macro doesn't exist ") << name;
+
+  return success();
+}
+
+/// Ensure that the symbol being instantiated exists and is a MacroDefOp.
+LogicalResult
+MacroRefExprOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyMacroSymbolUse(*this, getMacroNameAttr().getAttr(), symbolTable);
+}
+
+/// Ensure that the symbol being instantiated exists and is a MacroDefOp.
+LogicalResult
+MacroRefExprSEOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyMacroSymbolUse(*this, getMacroNameAttr().getAttr(), symbolTable);
+}
+
+/// Ensure that the symbol being instantiated exists and is a MacroDefOp.
+LogicalResult MacroDefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyMacroSymbolUse(*this, getMacroNameAttr().getAttr(), symbolTable);
 }
 
 //===----------------------------------------------------------------------===//
@@ -458,7 +451,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
 
   if (auto constant = op.getCond().getDefiningOp<hw::ConstantOp>()) {
 
-    if (constant.getValue().isAllOnesValue())
+    if (constant.getValue().isAllOnes())
       replaceOpWithRegion(rewriter, op, op.getThenRegion());
     else if (!op.getElseRegion().empty())
       replaceOpWithRegion(rewriter, op, op.getElseRegion());
@@ -515,7 +508,7 @@ AlwaysOp::Condition AlwaysOp::getCondition(size_t idx) {
 }
 
 void AlwaysOp::build(OpBuilder &builder, OperationState &result,
-                     ArrayRef<EventControl> events, ArrayRef<Value> clocks,
+                     ArrayRef<sv::EventControl> events, ArrayRef<Value> clocks,
                      std::function<void()> bodyCtor) {
   assert(events.size() == clocks.size() &&
          "mismatch between event and clock list");
@@ -554,7 +547,7 @@ static ParseResult parseEventList(
   StringRef keyword;
   if (!p.parseOptionalKeyword(&keyword)) {
     while (1) {
-      auto kind = symbolizeEventControl(keyword);
+      auto kind = sv::symbolizeEventControl(keyword);
       if (!kind.has_value())
         return p.emitError(loc, "expected 'posedge', 'negedge', or 'edge'");
       auto eventEnum = static_cast<int32_t>(*kind);
@@ -1038,6 +1031,111 @@ void OrderedOutputOp::build(OpBuilder &builder, OperationState &result,
 }
 
 //===----------------------------------------------------------------------===//
+// ForOp
+//===----------------------------------------------------------------------===//
+
+void ForOp::build(OpBuilder &builder, OperationState &result,
+                  int64_t lowerBound, int64_t upperBound, int64_t step,
+                  IntegerType type, StringRef name,
+                  llvm::function_ref<void(BlockArgument)> body) {
+  auto lb = builder.create<hw::ConstantOp>(result.location, type, lowerBound);
+  auto ub = builder.create<hw::ConstantOp>(result.location, type, upperBound);
+  auto st = builder.create<hw::ConstantOp>(result.location, type, step);
+  build(builder, result, lb, ub, st, name, body);
+}
+void ForOp::build(OpBuilder &builder, OperationState &result, Value lowerBound,
+                  Value upperBound, Value step, StringRef name,
+                  llvm::function_ref<void(BlockArgument)> body) {
+  OpBuilder::InsertionGuard guard(builder);
+  build(builder, result, lowerBound, upperBound, step, name);
+  auto *region = result.regions.front().get();
+  builder.createBlock(region);
+  BlockArgument blockArgument =
+      region->addArgument(lowerBound.getType(), result.location);
+
+  if (body)
+    body(blockArgument);
+}
+
+void ForOp::getAsmBlockArgumentNames(mlir::Region &region,
+                                     mlir::OpAsmSetValueNameFn setNameFn) {
+  auto *block = &region.front();
+  setNameFn(block->getArgument(0), getInductionVarNameAttr());
+}
+
+ParseResult ForOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto &builder = parser.getBuilder();
+  Type type;
+
+  OpAsmParser::Argument inductionVariable;
+  OpAsmParser::UnresolvedOperand lb, ub, step;
+  // Parse the optional initial iteration arguments.
+  SmallVector<OpAsmParser::Argument, 4> regionArgs;
+
+  // Parse the induction variable followed by '='.
+  if (parser.parseOperand(inductionVariable.ssaName) || parser.parseEqual() ||
+      // Parse loop bounds.
+      parser.parseOperand(lb) || parser.parseKeyword("to") ||
+      parser.parseOperand(ub) || parser.parseKeyword("step") ||
+      parser.parseOperand(step) || parser.parseColon() ||
+      parser.parseType(type))
+    return failure();
+
+  regionArgs.push_back(inductionVariable);
+
+  // Resolve input operands.
+  regionArgs.front().type = type;
+  if (parser.resolveOperand(lb, type, result.operands) ||
+      parser.resolveOperand(ub, type, result.operands) ||
+      parser.resolveOperand(step, type, result.operands))
+    return failure();
+
+  // Parse the body region.
+  Region *body = result.addRegion();
+  if (parser.parseRegion(*body, regionArgs))
+    return failure();
+
+  // Parse the optional attribute list.
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  if (!inductionVariable.ssaName.name.empty()) {
+    if (!isdigit(inductionVariable.ssaName.name[1]))
+      // Retrive from its SSA name.
+      result.attributes.append(
+          {builder.getStringAttr("inductionVarName"),
+           builder.getStringAttr(inductionVariable.ssaName.name.drop_front())});
+  }
+
+  return success();
+}
+
+void ForOp::print(OpAsmPrinter &p) {
+  p << " " << getInductionVar() << " = " << getLowerBound() << " to "
+    << getUpperBound() << " step " << getStep();
+  p << " : " << getInductionVar().getType() << ' ';
+  p.printRegion(getRegion(),
+                /*printEntryBlockArgs=*/false,
+                /*printBlockTerminators=*/false);
+  p.printOptionalAttrDict((*this)->getAttrs(), {"inductionVarName"});
+}
+
+LogicalResult ForOp::canonicalize(ForOp op, PatternRewriter &rewriter) {
+  APInt lb, ub, step;
+  if (matchPattern(op.getLowerBound(), mlir::m_ConstantInt(&lb)) &&
+      matchPattern(op.getUpperBound(), mlir::m_ConstantInt(&ub)) &&
+      matchPattern(op.getStep(), mlir::m_ConstantInt(&step)) &&
+      lb + step == ub) {
+    // Unroll the loop if it's executed only once.
+    op.getInductionVar().replaceAllUsesWith(op.getLowerBound());
+    replaceOpWithRegion(rewriter, op, op.getBodyRegion());
+    rewriter.eraseOp(op);
+    return success();
+  }
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
 // Assignment statements
 //===----------------------------------------------------------------------===//
 
@@ -1481,8 +1579,10 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
   Value connected;
   if (!write) {
-    // If no write and only reads, then replace with XOp.
-    connected = rewriter.create<ConstantXOp>(
+    // If no write and only reads, then replace with ZOp.
+    // SV 6.6: "If no driver is connected to a net, its
+    // value shall be high-impedance (z) unless the net is a trireg"
+    connected = rewriter.create<ConstantZOp>(
         wire.getLoc(),
         wire.getResult().getType().cast<InOutType>().getElementType());
   } else if (isa<hw::HWModuleOp>(write->getParentOp()))
@@ -1511,28 +1611,6 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
-// ReadInOutOp
-//===----------------------------------------------------------------------===//
-
-void ReadInOutOp::build(OpBuilder &builder, OperationState &result,
-                        Value input) {
-  auto resultType = input.getType().cast<InOutType>().getElementType();
-  build(builder, result, resultType, input);
-}
-
-//===----------------------------------------------------------------------===//
-// ArrayIndexInOutOp
-//===----------------------------------------------------------------------===//
-
-void ArrayIndexInOutOp::build(OpBuilder &builder, OperationState &result,
-                              Value input, Value index) {
-  auto resultType = input.getType().cast<InOutType>().getElementType();
-  resultType = getAnyHWArrayElementType(resultType);
-  assert(resultType && "input should have 'inout of an array' type");
-  build(builder, result, InOutType::get(resultType), input, index);
-}
-
-//===----------------------------------------------------------------------===//
 // IndexedPartSelectInOutOp
 //===----------------------------------------------------------------------===//
 
@@ -1548,9 +1626,9 @@ static Type getElementTypeOfWidth(Type type, int32_t width) {
 }
 
 LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::RegionRange regions,
-    SmallVectorImpl<Type> &results) {
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto width = attrs.get("width");
   if (!width)
     return failure();
@@ -1590,7 +1668,7 @@ LogicalResult IndexedPartSelectInOutOp::verify() {
   return success();
 }
 
-OpFoldResult IndexedPartSelectInOutOp::fold(ArrayRef<Attribute> constants) {
+OpFoldResult IndexedPartSelectInOutOp::fold(FoldAdaptor) {
   if (getType() == getInput().getType())
     return getInput();
   return {};
@@ -1601,9 +1679,9 @@ OpFoldResult IndexedPartSelectInOutOp::fold(ArrayRef<Attribute> constants) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult IndexedPartSelectOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::RegionRange regions,
-    SmallVectorImpl<Type> &results) {
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto width = attrs.get("width");
   if (!width)
     return failure();
@@ -1631,9 +1709,9 @@ LogicalResult IndexedPartSelectOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult StructFieldInOutOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::RegionRange regions,
-    SmallVectorImpl<Type> &results) {
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto field = attrs.get("field");
   if (!field)
     return failure();
@@ -1812,6 +1890,26 @@ void printXMRPath(OpAsmPrinter &p, XMROp op, ArrayAttr pathAttr,
                   StringAttr terminalAttr) {
   llvm::interleaveComma(pathAttr, p);
   p << ", " << terminalAttr;
+}
+
+/// Ensure that the symbol being instantiated exists and is a HierPathOp.
+LogicalResult XMRRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *table = SymbolTable::getNearestSymbolTable(*this);
+  auto path = dyn_cast_or_null<hw::HierPathOp>(
+      symbolTable.lookupSymbolIn(table, getRefAttr()));
+  if (!path)
+    return emitError("Referenced path doesn't exist ") << getRefAttr();
+
+  return success();
+}
+
+hw::HierPathOp XMRRefOp::getReferencedPath(const hw::HWSymbolCache *cache) {
+  if (cache)
+    if (auto *result = cache->getDefinition(getRefAttr().getAttr()))
+      return cast<hw::HierPathOp>(result);
+
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  return topLevelModuleOp.lookupSymbol<hw::HierPathOp>(getRefAttr().getValue());
 }
 
 //===----------------------------------------------------------------------===//

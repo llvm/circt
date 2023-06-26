@@ -22,13 +22,12 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
-#include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/DepthFirstIterator.h"
-#include "llvm/ADT/None.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -46,7 +45,7 @@ using hw::InnerRefAttr;
 llvm::raw_ostream &printHex(llvm::raw_ostream &stream,
                             ArrayRef<uint8_t> bytes) {
   // Print the hash on a single line.
-  return stream << format_bytes(bytes, llvm::None, 32) << "\n";
+  return stream << format_bytes(bytes, std::nullopt, 32) << "\n";
 }
 
 llvm::raw_ostream &printHash(llvm::raw_ostream &stream, llvm::SHA256 &data) {
@@ -67,6 +66,7 @@ struct StructuralHasher {
     nonessentialAttributes.insert(StringAttr::get(context, "portAnnotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "portNames"));
     nonessentialAttributes.insert(StringAttr::get(context, "portSyms"));
+    nonessentialAttributes.insert(StringAttr::get(context, "portLocations"));
     nonessentialAttributes.insert(StringAttr::get(context, "sym_name"));
     nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
   };
@@ -108,7 +108,7 @@ private:
 
   // NOLINTNEXTLINE(misc-no-recursion)
   void update(Type type) {
-    if (auto bundle = type.dyn_cast<BundleType>())
+    if (auto bundle = dyn_cast<BundleType>(type))
       return update(bundle);
     update(type.getAsOpaquePointer());
   }
@@ -136,7 +136,7 @@ private:
         continue;
       // Hash the port types.
       if (name == portTypesAttr) {
-        auto portTypes = value.cast<ArrayAttr>().getAsValueRange<TypeAttr>();
+        auto portTypes = cast<ArrayAttr>(value).getAsValueRange<TypeAttr>();
         for (auto type : portTypes)
           update(type);
         continue;
@@ -210,8 +210,24 @@ struct Equivalence {
     nonessentialAttributes.insert(StringAttr::get(context, "portNames"));
     nonessentialAttributes.insert(StringAttr::get(context, "portTypes"));
     nonessentialAttributes.insert(StringAttr::get(context, "portSyms"));
+    nonessentialAttributes.insert(StringAttr::get(context, "portLocations"));
     nonessentialAttributes.insert(StringAttr::get(context, "sym_name"));
     nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
+  }
+
+  std::string prettyPrint(Attribute attr) {
+    SmallString<64> buffer;
+    llvm::raw_svector_ostream os(buffer);
+    if (auto integerAttr = dyn_cast<IntegerAttr>(attr)) {
+      os << "0x";
+      if (integerAttr.getType().isSignlessInteger())
+        integerAttr.getValue().toStringUnsigned(buffer, /*radix=*/16);
+      else
+        integerAttr.getAPSInt().toString(buffer, /*radix=*/16);
+
+    } else
+      os << attr;
+    return std::string(buffer);
   }
 
   // NOLINTNEXTLINE(misc-no-recursion)
@@ -248,19 +264,19 @@ struct Equivalence {
                       Operation *a, Type aType, Operation *b, Type bType) {
     if (aType == bType)
       return success();
-    if (aType.isa<BundleType>() && bType.isa<BundleType>())
-      return check(diag, message, a, aType.cast<BundleType>(), b,
-                   bType.cast<BundleType>());
-    if (aType.isa<RefType>() && bType.isa<RefType>() && aType != bType) {
+    if (auto aBundleType = dyn_cast<BundleType>(aType))
+      if (auto bBundleType = dyn_cast<BundleType>(bType))
+        return check(diag, message, a, aBundleType, b, bBundleType);
+    if (isa<RefType>(aType) && isa<RefType>(bType) && aType != bType) {
       diag.attachNote(a->getLoc())
           << message << ", has a RefType with a different base type "
-          << aType.cast<RefType>().getType()
+          << cast<RefType>(aType).getType()
           << " in the same position of the two modules marked as 'must dedup'. "
              "(This may be due to Grand Central Taps or Views being different "
              "between the two modules.)";
       diag.attachNote(b->getLoc())
           << "the second module has a different base type "
-          << bType.cast<RefType>().getType();
+          << cast<RefType>(bType).getType();
       return failure();
     }
     diag.attachNote(a->getLoc())
@@ -269,9 +285,8 @@ struct Equivalence {
     return failure();
   }
 
-  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
-                      Operation *a, Block &aBlock, Operation *b,
-                      Block &bBlock) {
+  LogicalResult check(InFlightDiagnostic &diag, IRMapping &map, Operation *a,
+                      Block &aBlock, Operation *b, Block &bBlock) {
 
     // Block argument types.
     auto portNames = a->getAttrOfType<ArrayAttr>("portNames");
@@ -281,9 +296,9 @@ struct Equivalence {
       StringRef portName;
       auto portNames = opExists->getAttrOfType<ArrayAttr>("portNames");
       if (portNames)
-        if (auto portNameAttr = portNames[portNo].dyn_cast<StringAttr>())
+        if (auto portNameAttr = dyn_cast<StringAttr>(portNames[portNo]))
           portName = portNameAttr.getValue();
-      if (existsVal.getType().isa<RefType>()) {
+      if (isa<RefType>(existsVal.getType())) {
         diag.attachNote(opExists->getLoc())
             << " contains a RefType port named '" + portName +
                    "' that only exists in one of the modules (can be due to "
@@ -310,7 +325,7 @@ struct Equivalence {
         // there are always port names ;).
         StringRef portName;
         if (portNames) {
-          if (auto portNameAttr = portNames[portNo].dyn_cast<StringAttr>())
+          if (auto portNameAttr = dyn_cast<StringAttr>(portNames[portNo]))
             portName = portNameAttr.getValue();
         }
         // Assumption here that block arguments correspond to ports.
@@ -348,9 +363,8 @@ struct Equivalence {
     return success();
   }
 
-  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
-                      Operation *a, Region &aRegion, Operation *b,
-                      Region &bRegion) {
+  LogicalResult check(InFlightDiagnostic &diag, IRMapping &map, Operation *a,
+                      Region &aRegion, Operation *b, Region &bRegion) {
     auto aIt = aRegion.begin();
     auto aEnd = aRegion.end();
     auto bIt = bRegion.begin();
@@ -382,7 +396,7 @@ struct Equivalence {
       if (aDirection != bDirection) {
         auto &note = diag.attachNote(a->getLoc()) << "module port ";
         if (portNames)
-          note << "'" << portNames[i].cast<StringAttr>().getValue() << "'";
+          note << "'" << cast<StringAttr>(portNames[i]).getValue() << "'";
         else
           note << i;
         note << " directions don't match, first direction is '"
@@ -395,8 +409,8 @@ struct Equivalence {
     return success();
   }
 
-  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
-                      Operation *a, DictionaryAttr aDict, Operation *b,
+  LogicalResult check(InFlightDiagnostic &diag, IRMapping &map, Operation *a,
+                      DictionaryAttr aDict, Operation *b,
                       DictionaryAttr bDict) {
     // Fast path.
     if (aDict == bDict)
@@ -420,14 +434,15 @@ struct Equivalence {
       if (attrName == "portDirections") {
         // Special handling for the port directions attribute for better
         // error messages.
-        if (failed(check(diag, a, aAttr.cast<IntegerAttr>(), b,
-                         bAttr.cast<IntegerAttr>())))
+        if (failed(check(diag, a, cast<IntegerAttr>(aAttr), b,
+                         cast<IntegerAttr>(bAttr))))
           return failure();
       } else if (aAttr != bAttr) {
         diag.attachNote(a->getLoc())
             << "first operation has attribute '" << attrName.getValue()
-            << "' with value " << aAttr;
-        diag.attachNote(b->getLoc()) << "second operation has value " << bAttr;
+            << "' with value " << prettyPrint(aAttr);
+        diag.attachNote(b->getLoc())
+            << "second operation has value " << prettyPrint(bAttr);
         return failure();
       }
       seenAttrs.insert(attrName);
@@ -461,7 +476,7 @@ struct Equivalence {
       auto aModule = instanceGraph.getReferencedModule(a);
       auto bModule = instanceGraph.getReferencedModule(b);
       // Create a new error for the submodule.
-      diag.attachNote(llvm::None)
+      diag.attachNote(std::nullopt)
           << "in instance " << a.getNameAttr() << " of " << aName
           << ", and instance " << b.getNameAttr() << " of " << bName;
       check(diag, aModule, bModule);
@@ -471,8 +486,8 @@ struct Equivalence {
   }
 
   // NOLINTNEXTLINE(misc-no-recursion)
-  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
-                      Operation *a, Operation *b) {
+  LogicalResult check(InFlightDiagnostic &diag, IRMapping &map, Operation *a,
+                      Operation *b) {
     // Operation name.
     if (a->getName() != b->getName()) {
       diag.attachNote(a->getLoc()) << "first operation is a " << a->getName();
@@ -517,12 +532,13 @@ struct Equivalence {
       if (bValue != map.lookup(aValue)) {
         diag.attachNote(a->getLoc())
             << "operations use different operands, first operand is '"
-            << getFieldName(getFieldRefFromValue(aValue)) << "'";
+            << getFieldName(getFieldRefFromValue(aValue)).first << "'";
         diag.attachNote(b->getLoc())
             << "second operand is '"
-            << getFieldName(getFieldRefFromValue(bValue))
+            << getFieldName(getFieldRefFromValue(bValue)).first
             << "', but should have been '"
-            << getFieldName(getFieldRefFromValue(map.lookup(aValue))) << "'";
+            << getFieldName(getFieldRefFromValue(map.lookup(aValue))).first
+            << "'";
         return failure();
       }
     }
@@ -550,7 +566,7 @@ struct Equivalence {
 
   // NOLINTNEXTLINE(misc-no-recursion)
   void check(InFlightDiagnostic &diag, Operation *a, Operation *b) {
-    BlockAndValueMapping map;
+    IRMapping map;
     if (AnnotationSet(a).hasAnnotation(noDedupClass)) {
       diag.attachNote(a->getLoc()) << "module marked NoDedup";
       return;
@@ -591,11 +607,11 @@ static Location mergeLoc(MLIRContext *context, Location to, Location from) {
   for (auto loc : {to, from}) {
     // If the location is a fused location we decompose it if it has no
     // metadata or the metadata is the same as the top level metadata.
-    if (auto fusedLoc = loc.dyn_cast<FusedLoc>()) {
+    if (auto fusedLoc = dyn_cast<FusedLoc>(loc)) {
       // UnknownLoc's have already been removed from FusedLocs so we can
       // simply add all of the internal locations.
       for (auto loc : fusedLoc.getLocations()) {
-        if (FileLineColLoc fileLoc = loc.dyn_cast<FileLineColLoc>()) {
+        if (FileLineColLoc fileLoc = dyn_cast<FileLineColLoc>(loc)) {
           if (fileLoc.getFilename().strref().endswith(".fir")) {
             ++seenFIR;
             if (seenFIR > 8)
@@ -608,7 +624,7 @@ static Location mergeLoc(MLIRContext *context, Location to, Location from) {
     }
 
     // Might need to skip this fir.
-    if (FileLineColLoc fileLoc = loc.dyn_cast<FileLineColLoc>()) {
+    if (FileLineColLoc fileLoc = dyn_cast<FileLineColLoc>(loc)) {
       if (fileLoc.getFilename().strref().endswith(".fir")) {
         ++seenFIR;
         if (seenFIR > 8)
@@ -616,7 +632,7 @@ static Location mergeLoc(MLIRContext *context, Location to, Location from) {
       }
     }
     // Otherwise, only add known locations to the set.
-    if (!loc.isa<UnknownLoc>())
+    if (!isa<UnknownLoc>(loc))
       decomposedLocs.insert(loc);
   }
 
@@ -644,7 +660,7 @@ struct Deduper {
         nonLocalString(StringAttr::get(context, "circt.nonlocal")),
         classString(StringAttr::get(context, "class")) {
     // Populate the NLA cache.
-    for (auto nla : circuit.getOps<HierPathOp>())
+    for (auto nla : circuit.getOps<hw::HierPathOp>())
       nlaCache[nla.getNamepathAttr()] = nla.getSymNameAttr();
   }
 
@@ -657,6 +673,18 @@ struct Deduper {
     // used to update NLAs that reference the "fromModule".
     RenameMap renameMap;
 
+    // Merge the port locations.
+    SmallVector<Attribute> newLocs;
+    for (auto [toLoc, fromLoc] : llvm::zip(toModule.getPortLocations(),
+                                           fromModule.getPortLocations())) {
+      if (toLoc == fromLoc)
+        newLocs.push_back(toLoc);
+      else
+        newLocs.push_back(mergeLoc(context, cast<LocationAttr>(toLoc),
+                                   cast<LocationAttr>(fromLoc)));
+    }
+    toModule->setAttr("portLocations", ArrayAttr::get(context, newLocs));
+
     // Merge the two modules.
     mergeOps(renameMap, toModule, toModule, fromModule, fromModule);
 
@@ -667,8 +695,8 @@ struct Deduper {
     if (auto to = dyn_cast<FModuleOp>(*toModule))
       rewriteModuleNLAs(renameMap, to, cast<FModuleOp>(*fromModule));
     else
-      rewriteExtModuleNLAs(renameMap, toModule.moduleNameAttr(),
-                           fromModule.moduleNameAttr());
+      rewriteExtModuleNLAs(renameMap, toModule.getModuleNameAttr(),
+                           fromModule.getModuleNameAttr());
 
     replaceInstances(toModule, fromModule);
   }
@@ -679,7 +707,7 @@ struct Deduper {
     // Record any annotations on the module.
     recordAnnotations(module);
     // Record port annotations.
-    for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i)
+    for (unsigned i = 0, e = getNumPorts(module); i < e; ++i)
       recordAnnotations(PortAnnoTarget(module, i));
     // Record any annotations in the module body.
     module->walk([&](Operation *op) { recordAnnotations(op); });
@@ -688,7 +716,8 @@ struct Deduper {
 private:
   /// Get a cached namespace for a module.
   ModuleNamespace &getNamespace(Operation *module) {
-    auto [it, inserted] = moduleNamespaces.try_emplace(module, module);
+    auto [it, inserted] =
+        moduleNamespaces.try_emplace(module, cast<FModuleLike>(module));
     return it->second;
   }
 
@@ -719,9 +748,9 @@ private:
   /// of the "toModule".
   void replaceInstances(FModuleLike toModule, Operation *fromModule) {
     // Replace all instances of the other module.
-    auto *fromNode = instanceGraph[fromModule];
-    auto *toNode = instanceGraph[::cast<hw::HWModuleLike>(*toModule)];
-    auto toModuleRef = FlatSymbolRefAttr::get(toModule.moduleNameAttr());
+    auto *fromNode = instanceGraph[::cast<hw::HWModuleLike>(fromModule)];
+    auto *toNode = instanceGraph[toModule];
+    auto toModuleRef = FlatSymbolRefAttr::get(toModule.getModuleNameAttr());
     for (auto *oldInstRec : llvm::make_early_inc_range(fromNode->uses())) {
       auto inst = ::cast<InstanceOp>(*oldInstRec->getInstance());
       inst.setModuleNameAttr(toModuleRef);
@@ -747,8 +776,9 @@ private:
     namepath.append(baseNamepath.begin(), baseNamepath.end());
 
     auto loc = fromModule->getLoc();
+    auto *fromNode = instanceGraph[cast<hw::HWModuleLike>(fromModule)];
     SmallVector<FlatSymbolRefAttr> nlas;
-    for (auto *instanceRecord : instanceGraph[fromModule]->uses()) {
+    for (auto *instanceRecord : fromNode->uses()) {
       auto parent = cast<FModuleOp>(*instanceRecord->getParent()->getModule());
       auto inst = instanceRecord->getInstance();
       namepath[0] = OpAnnoTarget(inst).getNLAReference(getNamespace(parent));
@@ -756,7 +786,7 @@ private:
       // Check the NLA cache to see if we already have this NLA.
       auto &cacheEntry = nlaCache[arrayAttr];
       if (!cacheEntry) {
-        auto nla = OpBuilder::atBlockBegin(nlaBlock).create<HierPathOp>(
+        auto nla = OpBuilder::atBlockBegin(nlaBlock).create<hw::HierPathOp>(
             loc, "nla", arrayAttr);
         // Insert it into the symbol table to get a unique name.
         symbolTable.insert(nla);
@@ -765,7 +795,7 @@ private:
         nla.setVisibility(vis);
         nlaTable->addNLA(nla);
       }
-      auto nlaRef = FlatSymbolRefAttr::get(cacheEntry.cast<StringAttr>());
+      auto nlaRef = FlatSymbolRefAttr::get(cast<StringAttr>(cacheEntry));
       nlas.push_back(nlaRef);
     }
     return nlas;
@@ -802,7 +832,7 @@ private:
   /// This erases the NLA op, and removes the NLA from every module's NLA map,
   /// but it does not delete the NLA reference from the target operation's
   /// annotations.
-  void eraseNLA(HierPathOp nla) {
+  void eraseNLA(hw::HierPathOp nla) {
     // Erase the NLA from the leaf module's nlaMap.
     targetMap.erase(nla.getNameAttr());
     nlaTable->erase(nla);
@@ -845,7 +875,7 @@ private:
               anno.begin(), anno.end(), nonLocalString);
           // If this annotation doesn't use the target NLA, copy it with no
           // changes.
-          if (!found || it->getValue().cast<FlatSymbolRefAttr>().getAttr() !=
+          if (!found || cast<FlatSymbolRefAttr>(it->getValue()).getAttr() !=
                             nla.getSymNameAttr()) {
             newAnnotations.push_back(anno);
             continue;
@@ -953,7 +983,7 @@ private:
         continue;
       }
       // Otherwise make the annotation non-local and add it to the set.
-      makeAnnotationNonLocal(toModule.moduleNameAttr(), to, fromModule, anno,
+      makeAnnotationNonLocal(toModule.getModuleNameAttr(), to, fromModule, anno,
                              newAnnotations);
     }
   }
@@ -992,7 +1022,7 @@ private:
     // Merge port annotations.
     if (toModule == to) {
       // Merge module port annotations.
-      for (unsigned i = 0, e = toModule.getNumPorts(); i < e; ++i)
+      for (unsigned i = 0, e = getNumPorts(toModule); i < e; ++i)
         mergeAnnotations(toModule, PortAnnoTarget(toModule, i),
                          AnnotationSet::forPort(toModule, i), fromModule,
                          PortAnnoTarget(fromModule, i),
@@ -1035,7 +1065,7 @@ private:
     // old symbols if it has any, create an empty symbol array if it doesn't.
     SmallVector<Attribute> newPortSyms;
     if (toPortSyms.empty())
-      newPortSyms.assign(portCount, InnerSymAttr());
+      newPortSyms.assign(portCount, hw::InnerSymAttr());
     else
       newPortSyms.assign(toPortSyms.begin(), toPortSyms.end());
 
@@ -1043,21 +1073,21 @@ private:
       // If this fromPort doesn't have a symbol, move on to the next one.
       if (!fromPortSyms[portNo])
         continue;
-      auto fromSym = fromPortSyms[portNo].cast<InnerSymAttr>();
+      auto fromSym = fromPortSyms[portNo].cast<hw::InnerSymAttr>();
 
       // If this toPort doesn't have a symbol, assign one.
-      InnerSymAttr toSym;
+      hw::InnerSymAttr toSym;
       if (!newPortSyms[portNo]) {
         // Get a reasonable base name for the port.
         StringRef symName = "inner_sym";
         if (portNames)
-          symName = portNames[portNo].cast<StringAttr>().getValue();
+          symName = cast<StringAttr>(portNames[portNo]).getValue();
         // Create the symbol and store it into the array.
-        toSym = InnerSymAttr::get(
+        toSym = hw::InnerSymAttr::get(
             StringAttr::get(context, moduleNamespace.newName(symName)));
         newPortSyms[portNo] = toSym;
       } else
-        toSym = newPortSyms[portNo].cast<InnerSymAttr>();
+        toSym = newPortSyms[portNo].cast<hw::InnerSymAttr>();
 
       // Record the renaming.
       renameMap[fromSym.getSymName()] = toSym.getSymName();
@@ -1090,6 +1120,12 @@ private:
   /// Recursively merge two blocks.
   void mergeBlocks(RenameMap &renameMap, FModuleLike toModule, Block &toBlock,
                    FModuleLike fromModule, Block &fromBlock) {
+    // Merge the block locations.
+    for (auto [toArg, fromArg] :
+         llvm::zip(toBlock.getArguments(), fromBlock.getArguments()))
+      if (toArg.getLoc() != fromArg.getLoc())
+        toArg.setLoc(mergeLoc(context, toArg.getLoc(), fromArg.getLoc()));
+
     for (auto ops : llvm::zip(toBlock, fromBlock))
       mergeOps(renameMap, toModule, &std::get<0>(ops), fromModule,
                &std::get<1>(ops));
@@ -1136,19 +1172,18 @@ private:
 /// This fixes up connects when the field names of a bundle type changes.  It
 /// finds all fields which were previously bulk connected and legalizes it
 /// into a connect for each field.
-template <typename T>
 void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
   // If the types already match we can emit a connect.
   auto dstType = dst.getType();
   auto srcType = src.getType();
   if (dstType == srcType) {
-    builder.create<T>(dst, src);
+    emitConnect(builder, dst, src);
     return;
   }
   // It must be a bundle type and the field name has changed. We have to
   // manually decompose the bulk connect into a connect for each field.
-  auto dstBundle = dstType.cast<BundleType>();
-  auto srcBundle = srcType.cast<BundleType>();
+  auto dstBundle = cast<BundleType>(dstType);
+  auto srcBundle = cast<BundleType>(srcType);
   for (unsigned i = 0; i < dstBundle.getNumElements(); ++i) {
     auto dstField = builder.create<SubfieldOp>(dst, i);
     auto srcField = builder.create<SubfieldOp>(src, i);
@@ -1156,50 +1191,7 @@ void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
       std::swap(srcBundle, dstBundle);
       std::swap(srcField, dstField);
     }
-    fixupConnect<T>(builder, dstField, srcField);
-  }
-}
-
-/// Replaces a ConnectOp or StrictConnectOp with new bundle types.
-template <typename T>
-void fixupConnect(T connect) {
-  ImplicitLocOpBuilder builder(connect.getLoc(), connect);
-  fixupConnect<T>(builder, connect.getDest(), connect.getSrc());
-  connect->erase();
-}
-
-/// When we replace a bundle type with a similar bundle with different field
-/// names, we have to rewrite all the code to use the new field names. This
-/// mostly affects subfield result types and any bulk connects.
-void fixupReferences(Value oldValue, Type newType) {
-  SmallVector<std::pair<Value, Type>> workList;
-  workList.emplace_back(oldValue, newType);
-  while (!workList.empty()) {
-    auto [oldValue, newType] = workList.pop_back_val();
-    auto oldType = oldValue.getType();
-    // If the two types are identical, we don't need to do anything, otherwise
-    // update the type in place.
-    if (oldType == newType)
-      continue;
-    oldValue.setType(newType);
-    for (auto *op : llvm::make_early_inc_range(oldValue.getUsers())) {
-      if (auto subfield = dyn_cast<SubfieldOp>(op)) {
-        // Rewrite a subfield op to return the correct type.
-        auto index = subfield.getFieldIndex();
-        auto result = subfield.getResult();
-        auto newResultType = newType.cast<BundleType>().getElementType(index);
-        workList.emplace_back(result, newResultType);
-        continue;
-      }
-      if (auto connect = dyn_cast<ConnectOp>(op)) {
-        fixupConnect<ConnectOp>(connect);
-        continue;
-      }
-      if (auto strict = dyn_cast<StrictConnectOp>(op)) {
-        fixupConnect<StrictConnectOp>(strict);
-        continue;
-      }
-    }
+    fixupConnect(builder, dstField, srcField);
   }
 }
 
@@ -1210,9 +1202,27 @@ void fixupAllModules(InstanceGraph &instanceGraph) {
   for (auto *node : instanceGraph) {
     auto module = cast<FModuleLike>(*node->getModule());
     for (auto *instRec : node->uses()) {
-      auto inst = instRec->getInstance();
-      for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i)
-        fixupReferences(inst->getResult(i), module.getPortType(i));
+      auto inst = cast<InstanceOp>(instRec->getInstance());
+      ImplicitLocOpBuilder builder(inst.getLoc(), inst->getContext());
+      builder.setInsertionPointAfter(inst);
+      for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
+        auto result = inst.getResult(i);
+        auto newType = module.getPortType(i);
+        auto oldType = result.getType();
+        // If the type has not changed, we don't have to fix up anything.
+        if (newType == oldType)
+          continue;
+        // If the type changed we transform it back to the old type with an
+        // intermediate wire.
+        auto wire =
+            builder.create<WireOp>(oldType, inst.getPortName(i)).getResult();
+        result.replaceAllUsesWith(wire);
+        result.setType(newType);
+        if (inst.getPortDirection(i) == Direction::Out)
+          fixupConnect(builder, wire, result);
+        else
+          fixupConnect(builder, result, wire);
+      }
     }
   }
 }
@@ -1284,13 +1294,20 @@ class DedupPass : public DedupBase<DedupPass> {
         }));
 
     for (auto module : modules) {
-      auto moduleName = module.moduleNameAttr();
+      auto moduleName = module.getModuleNameAttr();
       // If the module is marked with NoDedup, just skip it.
       if (AnnotationSet(module).hasAnnotation(noDedupClass)) {
         // We record it in the dedup map to help detect errors when the user
         // marks the module as both NoDedup and MustDedup. We do not record this
         // module in the hasher to make sure no other module dedups "into" this
         // one.
+        dedupMap[moduleName] = moduleName;
+        continue;
+      }
+      // If the module has input RefType ports, also skip it.
+      if (llvm::any_of(module.getPorts(), [&](PortInfo port) {
+            return isa<RefType>(port.type) && port.isInput();
+          })) {
         dedupMap[moduleName] = moduleName;
         continue;
       }
@@ -1301,7 +1318,7 @@ class DedupPass : public DedupBase<DedupPass> {
       if (it != moduleHashes.end()) {
         auto original = cast<FModuleLike>(it->second);
         // Record the group ID of the other module.
-        dedupMap[moduleName] = original.moduleNameAttr();
+        dedupMap[moduleName] = original.getModuleNameAttr();
         deduper.dedup(original, module);
         ++erasedModules;
         anythingChanged = true;
@@ -1325,7 +1342,7 @@ class DedupPass : public DedupBase<DedupPass> {
     auto parseModule = [&](Attribute path) -> StringAttr {
       // Each module is listed as a target "~Circuit|Module" which we have to
       // parse.
-      auto [_, rhs] = path.cast<StringAttr>().getValue().split('|');
+      auto [_, rhs] = cast<StringAttr>(path).getValue().split('|');
       return StringAttr::get(context, rhs);
     };
     // This gets the name of the module which the current module was deduped

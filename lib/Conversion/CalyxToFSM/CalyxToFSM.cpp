@@ -286,9 +286,10 @@ void CalyxToFSMPass::runOnOperation() {
   // refer to the symbols and SSA values defined in the regions of the
   // ComponentOp. This makes for an intermediate step, which allows for
   // outlining the FSM (materializing FSM I/O) at a later point.
+  auto machineName = ("control_" + component.getName()).str();
   auto funcType = FunctionType::get(&getContext(), {}, {});
   auto machine =
-      builder.create<MachineOp>(ctrlOp.getLoc(), /*name=*/"control",
+      builder.create<MachineOp>(ctrlOp.getLoc(), machineName,
                                 /*initialState=*/"fsm_entry", funcType);
   auto graph = FSMGraph(machine);
 
@@ -317,8 +318,6 @@ void CalyxToFSMPass::runOnOperation() {
   machine->setAttr(
       "compiledGroups",
       ArrayAttr::get(builder.getContext(), visitor.getCompiledGroups()));
-
-  machine->getParentOp()->dump();
 }
 
 } // namespace

@@ -52,24 +52,24 @@ InstanceGraphNode *InstanceGraphBase::getOrAddNode(StringAttr name) {
 
 InstanceGraphBase::InstanceGraphBase(Operation *parent) : parent(parent) {
   parent->walk([&](HWModuleLike module) {
-    auto name = module.moduleNameAttr();
+    auto name = module.getModuleNameAttr();
     auto *currentNode = getOrAddNode(name);
     currentNode->module = module;
 
     // Find all instance operations in the module body.
     module.walk([&](HWInstanceLike instanceOp) {
       // Add an edge to indicate that this module instantiates the target.
-      auto *targetNode = getOrAddNode(instanceOp.referencedModuleNameAttr());
+      auto *targetNode = getOrAddNode(instanceOp.getReferencedModuleNameAttr());
       currentNode->addInstance(instanceOp, targetNode);
     });
   });
 }
 
 InstanceGraphNode *InstanceGraphBase::addModule(HWModuleLike module) {
-  assert(!nodeMap.count(module.moduleNameAttr()) && "module already added");
+  assert(!nodeMap.count(module.getModuleNameAttr()) && "module already added");
   auto *node = new InstanceGraphNode();
   node->module = module;
-  nodeMap[module.moduleNameAttr()] = node;
+  nodeMap[module.getModuleNameAttr()] = node;
   nodes.push_back(node);
   return node;
 }
@@ -80,7 +80,7 @@ void InstanceGraphBase::erase(InstanceGraphNode *node) {
   // Erase all instances inside this module.
   for (auto *instance : llvm::make_early_inc_range(*node))
     instance->erase();
-  nodeMap.erase(node->getModule().moduleNameAttr());
+  nodeMap.erase(node->getModule().getModuleNameAttr());
   nodes.erase(node);
 }
 
@@ -91,22 +91,22 @@ InstanceGraphNode *InstanceGraphBase::lookup(StringAttr name) {
 }
 
 InstanceGraphNode *InstanceGraphBase::lookup(HWModuleLike op) {
-  return lookup(cast<HWModuleLike>(op).moduleNameAttr());
+  return lookup(cast<HWModuleLike>(op).getModuleNameAttr());
 }
 
 HWModuleLike InstanceGraphBase::getReferencedModule(HWInstanceLike op) {
-  return lookup(op.referencedModuleNameAttr())->getModule();
+  return lookup(op.getReferencedModuleNameAttr())->getModule();
 }
 
 InstanceGraphBase::~InstanceGraphBase() {}
 
 void InstanceGraphBase::replaceInstance(HWInstanceLike inst,
                                         HWInstanceLike newInst) {
-  assert(inst.referencedModuleName() == newInst.referencedModuleName() &&
+  assert(inst.getReferencedModuleName() == newInst.getReferencedModuleName() &&
          "Both instances must be targeting the same module");
 
   // Find the instance record of this instance.
-  auto *node = lookup(inst.referencedModuleNameAttr());
+  auto *node = lookup(inst.getReferencedModuleNameAttr());
   auto it = llvm::find_if(node->uses(), [&](InstanceRecord *record) {
     return record->getInstance() == inst;
   });
@@ -190,7 +190,7 @@ InstanceGraphBase::getInferredTopLevelNodes() {
            "detected in instance graph (";
     llvm::interleave(
         cycleTrace, err,
-        [&](auto node) { err << node->getModule().moduleName(); }, "->");
+        [&](auto node) { err << node->getModule().getModuleName(); }, "->");
     err << ").";
     return err;
   }

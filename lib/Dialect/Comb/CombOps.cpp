@@ -260,12 +260,10 @@ void ConcatOp::build(OpBuilder &builder, OperationState &result, Value hd,
   result.addTypes(builder.getIntegerType(getTotalWidth(tl) + hdWidth));
 }
 
-LogicalResult ConcatOp::inferReturnTypes(MLIRContext *context,
-                                         Optional<Location> loc,
-                                         ValueRange operands,
-                                         DictionaryAttr attrs,
-                                         mlir::RegionRange regions,
-                                         SmallVectorImpl<Type> &results) {
+LogicalResult ConcatOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   unsigned resultWidth = getTotalWidth(operands);
   results.push_back(IntegerType::get(context, resultWidth));
   return success();
@@ -281,6 +279,18 @@ LogicalResult ExtractOp::verify() {
   if (getLowBit() >= srcWidth || srcWidth - getLowBit() < dstWidth)
     return emitOpError("from bit too large for input"), failure();
 
+  return success();
+}
+
+LogicalResult TruthTableOp::verify() {
+  size_t numInputs = getInputs().size();
+  if (numInputs >= sizeof(size_t) * 8)
+    return emitOpError("Truth tables support a maximum of ")
+           << sizeof(size_t) * 8 - 1 << " inputs on your platform";
+
+  ArrayAttr table = getLookupTable();
+  if (table.size() != (1ull << numInputs))
+    return emitOpError("Expected lookup table of 2^n length");
   return success();
 }
 

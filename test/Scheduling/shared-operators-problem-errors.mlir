@@ -1,23 +1,23 @@
-// RUN: circt-opt %s -test-shared-operators-problem -verify-diagnostics -split-input-file
+// RUN: circt-opt %s -ssp-roundtrip=verify -verify-diagnostics -split-input-file
 
-// expected-error@+2 {{Limited operator type '_0' has zero latency}}
-// expected-error@+1 {{problem check failed}}
-func.func @limited_but_zero_latency() attributes {
-  operatortypes = [ { name = "_0", latency = 0, limit = 1} ]
-  } {
-  return { opr = "_0" }
+// expected-error@+1 {{Limited operator type 'limited' has zero latency}}
+ssp.instance @limited_but_zero_latency of "SharedOperatorsProblem" {
+  library {
+    operator_type @limited [latency<0>, limit<1>]
+  }
+  graph {}
 }
 
 // -----
 
-// expected-error@+2 {{Operator type 'limited' is oversubscribed}}
-// expected-error@+1 {{problem verification failed}}
-func.func @oversubscribed(%a0 : i32, %a1 : i32, %a2 : i32) -> i32 attributes {
-  operatortypes = [ { name = "limited", latency = 1, limit = 2} ]
-  } {
-  %0 = arith.addi %a0, %a0 { problemStartTime = 0 } : i32
-  %1 = arith.addi %a1, %0 { opr = "limited", problemStartTime = 1 } : i32
-  %2 = arith.addi %0, %a2 { opr = "limited", problemStartTime = 1 } : i32
-  %3 = arith.addi %0, %0 { opr = "limited", problemStartTime = 1 } : i32
-  return { problemStartTime = 2 } %3 : i32
+// expected-error@+1 {{Operator type 'limited' is oversubscribed}}
+ssp.instance @oversubscribed of "SharedOperatorsProblem" {
+  library {
+    operator_type @limited [latency<1>, limit<2>]
+  }
+  graph {
+    operation<@limited>() [t<0>]
+    operation<@limited>() [t<0>]
+    operation<@limited>() [t<0>]
+  }
 }

@@ -1,6 +1,0 @@
-{
-  "name": "Add code owner for triage",
-  "includes": ["**/Dialect/Handshake/**"],
-  "action": "review",
-  "users": ["hanchenye", "stephenneuendorffer"]
-}

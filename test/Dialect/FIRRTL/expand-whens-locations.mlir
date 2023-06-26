@@ -3,7 +3,7 @@
 firrtl.circuit "Basic"  {
 // CHECK-LABEL: @Basic
 firrtl.module @Basic(in %p: !firrtl.uint<1>, in %v0: !firrtl.uint<8>, in %v1: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
-  firrtl.when %p {
+  firrtl.when %p : !firrtl.uint<1> {
     firrtl.connect %out, %v0 : !firrtl.uint<8>, !firrtl.uint<8> loc("then")
   } else {
     firrtl.connect %out, %v1 : !firrtl.uint<8>, !firrtl.uint<8> loc("else")
@@ -18,7 +18,7 @@ firrtl.module @Basic(in %p: !firrtl.uint<1>, in %v0: !firrtl.uint<8>, in %v1: !f
 // CHECK-LABEL: @Default
 firrtl.module @Default(in %p: !firrtl.uint<1>, in %v0: !firrtl.uint<8>, in %v1: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
   firrtl.connect %out, %v1 : !firrtl.uint<8>, !firrtl.uint<8> loc("else")
-  firrtl.when %p {
+  firrtl.when %p : !firrtl.uint<1> {
     firrtl.connect %out, %v0 : !firrtl.uint<8>, !firrtl.uint<8> loc("then")
   } loc("when")
   // CHECK: [[MUX:%.*]] = firrtl.mux(%p, %v0, %v1)
@@ -31,8 +31,8 @@ firrtl.module @Default(in %p: !firrtl.uint<1>, in %v0: !firrtl.uint<8>, in %v1: 
 // CHECK-LABEL: @Nested
 firrtl.module @Nested(in %p: !firrtl.uint<1>, in %v0: !firrtl.uint<8>, in %v1: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
   firrtl.connect %out, %v1 : !firrtl.uint<8>, !firrtl.uint<8> loc("else")
-  firrtl.when %p {
-    firrtl.when %p {
+  firrtl.when %p : !firrtl.uint<1> {
+    firrtl.when %p : !firrtl.uint<1> {
       firrtl.connect %out, %v0 : !firrtl.uint<8>, !firrtl.uint<8> loc("then")
     } else {
     } loc("inside")

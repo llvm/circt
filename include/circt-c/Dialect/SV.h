@@ -25,19 +25,13 @@ MLIR_CAPI_EXPORTED void registerSVPasses();
 //===----------------------------------------------------------------------===//
 
 MLIR_CAPI_EXPORTED bool svAttrIsASVAttributeAttr(MlirAttribute);
-MLIR_CAPI_EXPORTED MlirAttribute svSVAttributeAttrGet(MlirContext cCtxt,
+MLIR_CAPI_EXPORTED MlirAttribute svSVAttributeAttrGet(MlirContext,
                                                       MlirStringRef name,
-                                                      MlirStringRef expression);
+                                                      MlirStringRef expression,
+                                                      bool emitAsComment);
 MLIR_CAPI_EXPORTED MlirStringRef svSVAttributeAttrGetName(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirStringRef svSVAttributeAttrGetExpression(MlirAttribute);
-
-MLIR_CAPI_EXPORTED bool svAttrIsASVAttributesAttr(MlirAttribute);
-MLIR_CAPI_EXPORTED MlirAttribute svSVAttributesAttrGet(MlirContext cCtxt,
-                                                       MlirAttribute attributes,
-                                                       bool emitAsComments);
-MLIR_CAPI_EXPORTED MlirAttribute svSVAttributesAttrGetAttributes(MlirAttribute);
-MLIR_CAPI_EXPORTED
-bool svSVAttributesAttrGetEmitAsComments(MlirAttribute);
+MLIR_CAPI_EXPORTED bool svSVAttributeAttrGetEmitAsComment(MlirAttribute);
 
 #ifdef __cplusplus
 }

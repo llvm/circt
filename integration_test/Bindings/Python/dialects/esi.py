@@ -5,8 +5,8 @@
 import circt
 from circt.dialects import esi
 
-from mlir.ir import *
-from mlir import passmanager
+from circt.ir import *
+from circt import passmanager
 
 with Context() as ctx:
   circt.register_dialects(ctx)
@@ -14,6 +14,11 @@ with Context() as ctx:
   print(any_type)
   print()
   # CHECK: !esi.any
+
+  list_type = esi.ListType.get(IntegerType.get_signless(3))
+  print(list_type)
+  print()
+  # CHECK: !esi.list<i3>
 
 
 # CHECK-LABEL: === testGen called with op:
@@ -50,4 +55,4 @@ msft.module @MsLoopback {} (%clk: i1) -> () {
 }
 """)
   pm = passmanager.PassManager.parse("builtin.module(esi-connect-services)")
-  pm.run(mod)
+  pm.run(mod.operation)

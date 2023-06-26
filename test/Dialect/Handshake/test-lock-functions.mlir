@@ -29,7 +29,7 @@ handshake.func @single_block(%arg0: i32, %arg1: i32, %arg2: none, ...) -> (i32, 
 // CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = cond_br %[[VAL_6]]#0, %[[VAL_5]]#2 : none
 // CHECK:           %[[VAL_11:.*]]:2 = fork [2] %[[VAL_9]] : none
 // CHECK:           %[[VAL_12:.*]] = constant %[[VAL_11]]#0 {value = 42 : i32} : i32
-// CHECK:           %[[VAL_13:.*]], %[[VAL_14:.*]] = control_merge %[[VAL_11]]#1, %[[VAL_10]] : none
+// CHECK:           %[[VAL_13:.*]], %[[VAL_14:.*]] = control_merge %[[VAL_11]]#1, %[[VAL_10]] : none, index
 // CHECK:           %[[VAL_15:.*]] = mux %[[VAL_14]] {{\[}}%[[VAL_12]], %[[VAL_8]]] : index, i32
 // CHECK:           %[[VAL_4]] = join %[[VAL_15]], %[[VAL_13]], %[[VAL_5]]#3 : i32, none, none
 // CHECK:           return %[[VAL_15]], %[[VAL_13]] : i32, none
@@ -42,7 +42,7 @@ handshake.func @triangle(%arg0: i32, %arg1: i1, %arg2: none, ...) -> (i32, none)
   %trueResult_0, %falseResult_1 = cond_br %0#0, %arg2 : none
   %1:2 = fork [2] %trueResult_0 : none
   %2 = constant %1#0 {value = 42 : i32} : i32
-  %result, %index = control_merge %1#1, %falseResult_1 : none
+  %result, %index = control_merge %1#1, %falseResult_1 : none, index
   %3 = mux %index [%2, %falseResult] : index, i32
   return %3, %result : i32, none
 }

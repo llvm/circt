@@ -43,19 +43,14 @@
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/ESI/ESIPasses.h"
-#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
-#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
-#include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/LoweringOptionsParser.h"
 #include "circt/Support/Version.h"
 #include "circt/Transforms/Passes.h"
-
-#include "circt/InitAllDialects.h"
-#include "circt/InitAllPasses.h"
 
 #include <iostream>
 
@@ -105,13 +100,11 @@ static cl::opt<bool>
                               cl::init(false), cl::Hidden,
                               cl::cat(mainCategory));
 
-enum HLSFlow { HLSFlowDynamicFIRRTL, HLSFlowDynamicHW };
+enum HLSFlow { HLSFlowDynamicHW };
 
 static cl::opt<HLSFlow>
     hlsFlow(cl::desc("HLS flow"),
-            cl::values(clEnumValN(HLSFlowDynamicFIRRTL, "dynamic-firrtl",
-                                  "Dynamically scheduled (FIRRTL path)"),
-                       clEnumValN(HLSFlowDynamicHW, "dynamic-hw",
+            cl::values(clEnumValN(HLSFlowDynamicHW, "dynamic-hw",
                                   "Dynamically scheduled (HW path)")),
             cl::cat(mainCategory));
 
@@ -136,7 +129,7 @@ static cl::opt<DynamicParallelismKind> dynParallelism(
                    "preserving correctness.")),
     cl::init(DynamicParallelismPipelining), cl::cat(mainCategory));
 
-enum OutputFormatKind { OutputIR, OutputVerilog };
+enum OutputFormatKind { OutputIR, OutputVerilog, OutputSplitVerilog };
 
 static cl::opt<int>
     irInputLevel("ir-input-level",
@@ -153,7 +146,10 @@ static cl::opt<int>
 static cl::opt<OutputFormatKind> outputFormat(
     cl::desc("Specify output format:"),
     cl::values(clEnumValN(OutputIR, "ir", "Emit post-HLS IR"),
-               clEnumValN(OutputVerilog, "verilog", "Emit Verilog")),
+               clEnumValN(OutputVerilog, "verilog", "Emit Verilog"),
+               clEnumValN(OutputSplitVerilog, "split-verilog",
+                          "Emit Verilog (one file per module; specify "
+                          "directory with -o=<dir>)")),
     cl::init(OutputVerilog), cl::cat(mainCategory));
 
 static cl::opt<bool>
@@ -210,6 +206,8 @@ static void loadDHLSPipeline(OpPassManager &pm) {
       /*sourceConstants=*/false,
       /*disableTaskPipelining=*/dynParallelism !=
           DynamicParallelismPipelining));
+  pm.addPass(circt::handshake::createHandshakeLowerExtmemToHWPass(withESI));
+
   if (dynParallelism == DynamicParallelismLocking) {
     pm.nest<handshake::FuncOp>().addPass(
         circt::handshake::createHandshakeLockFunctionsPass());
@@ -237,37 +235,9 @@ static void loadESILoweringPipeline(OpPassManager &pm) {
   pm.addPass(circt::esi::createESItoHWPass());
 }
 
-static void loadFIRRTLLoweringPipeline(OpPassManager &pm) {
-  // FIRRTL lowering; inspired by firtool but without the parameters.
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
-  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
-      /*preserveAggregate=*/firrtl::PreserveAggregate::PreserveMode::None,
-      /*preservePublicTypes=*/false));
-  auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-  modulePM.addPass(firrtl::createExpandWhensPass());
-  // a bit of cleanup.
-  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-      createSimpleCanonicalizerPass());
-  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-      firrtl::createInferReadWritePass());
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerMemoryPass());
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
-  // The above passes, IMConstProp in particular, introduce additional
-  // canonicalization opportunities that we should pick up here before we
-  // proceed to output-specific pipelines.
-  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-      createSimpleCanonicalizerPass());
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createRemoveUnusedPortsPass());
-  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-      firrtl::createMergeConnectionsPass(
-          /*mergeConnectionsAgggresively=*/false));
-}
-
 static void loadHWLoweringPipeline(OpPassManager &pm) {
   pm.addPass(createSimpleCanonicalizerPass());
   pm.nest<hw::HWModuleOp>().addPass(circt::seq::createLowerSeqHLMemPass());
-  pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass());
   pm.addPass(sv::createHWMemSimImplPass(false, false));
   pm.addPass(seq::createSeqLowerToSVPass());
   pm.nest<hw::HWModuleOp>().addPass(sv::createHWCleanupPass());
@@ -286,25 +256,23 @@ static void loadHWLoweringPipeline(OpPassManager &pm) {
 // --------------------------------------------------------------------------
 
 enum HLSFlowDynamicIRLevel {
-  High = 0,
-  Handshake = 1,
-  Firrtl = 2,
-  Rtl = 3,
-  Sv = 4,
+  High,
+  Handshake,
+  Rtl,
+  Sv,
 };
 
 static void printHLSFlowDynamic() {
   llvm::errs() << "Valid levels are:\n";
   llvm::errs() << HLSFlowDynamicIRLevel::High << ": 'cf/scf/affine' level IR\n";
   llvm::errs() << HLSFlowDynamicIRLevel::Handshake << ": 'handshake' IR\n";
-  llvm::errs() << HLSFlowDynamicIRLevel::Firrtl << ": 'firrtl'\n";
   llvm::errs() << HLSFlowDynamicIRLevel::Rtl << ": 'hw/comb/seq' IR\n";
   llvm::errs() << HLSFlowDynamicIRLevel::Sv << ": 'hw/comb/sv' IR\n";
 }
 
-static LogicalResult
-doHLSFlowDynamic(PassManager &pm, ModuleOp module,
-                 Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+static LogicalResult doHLSFlowDynamic(
+    PassManager &pm, ModuleOp module,
+    std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
 
   if (irInputLevel < 0)
     irInputLevel = HLSFlowDynamicIRLevel::High; // Default to highest level
@@ -349,37 +317,26 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
   addIRLevel(HLSFlowDynamicIRLevel::Handshake,
              [&]() { loadHandshakeTransformsPipeline(pm); });
 
-  if (hlsFlow == HLSFlowDynamicFIRRTL) {
-    // FIRRTL path.
-    addIRLevel(HLSFlowDynamicIRLevel::Firrtl, [&]() {
-      pm.addPass(circt::createHandshakeToFIRRTLPass());
-      loadFIRRTLLoweringPipeline(pm);
-    });
-    addIRLevel(HLSFlowDynamicIRLevel::Rtl, [&]() {
-      pm.addPass(createLowerFIRRTLToHWPass(/*enableAnnotationWarning=*/false,
-                                           /*emitChiselAssertsAsSVA=*/false));
-    });
-  } else {
-    // HW path.
-    addIRLevel(HLSFlowDynamicIRLevel::Firrtl, [&]() {
-      pm.addPass(circt::handshake::createHandshakeLowerExtmemToHWPass(withESI));
-      pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
-      pm.addPass(circt::createHandshakeToHWPass());
-      pm.addPass(createSimpleCanonicalizerPass());
-    });
-    addIRLevel(HLSFlowDynamicIRLevel::Rtl,
-               [&]() { loadESILoweringPipeline(pm); });
-  }
+  // HW path.
+
+  addIRLevel(HLSFlowDynamicIRLevel::Rtl, [&]() {
+    pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
+    pm.addPass(circt::createHandshakeToHWPass());
+    pm.addPass(createSimpleCanonicalizerPass());
+    loadESILoweringPipeline(pm);
+  });
 
   addIRLevel(HLSFlowDynamicIRLevel::Sv, [&]() { loadHWLoweringPipeline(pm); });
 
   if (traceIVerilog)
     pm.addPass(circt::sv::createSVTraceIVerilogPass());
 
+  if (loweringOptions.getNumOccurrences())
+    loweringOptions.setAsAttribute(module);
   if (outputFormat == OutputVerilog) {
-    if (loweringOptions.getNumOccurrences())
-      loweringOptions.setAsAttribute(module);
-    pm.addPass(createExportVerilogPass(outputFile.value()->os()));
+    pm.addPass(createExportVerilogPass((*outputFile)->os()));
+  } else if (outputFormat == OutputSplitVerilog) {
+    pm.addPass(createExportSplitVerilogPass(outputFilename));
   }
 
   // Go execute!
@@ -387,15 +344,15 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
     return failure();
 
   if (outputFormat == OutputIR)
-    module->print(outputFile.value()->os());
+    module->print((*outputFile)->os());
 
   return success();
 }
 
 /// Process a single buffer of the input.
-static LogicalResult
-processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
-              Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+static LogicalResult processBuffer(
+    MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
+    std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   // Parse the input.
   mlir::OwningOpRef<mlir::ModuleOp> module;
   llvm::sys::TimePoint<> parseStartTime;
@@ -421,10 +378,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   PassManager pm(&context);
   pm.enableVerifier(verifyPasses);
   pm.enableTiming(ts);
-  applyPassManagerCLOptions(pm);
+  if (failed(applyPassManagerCLOptions(pm)))
+    return failure();
 
-  if (hlsFlow == HLSFlow::HLSFlowDynamicFIRRTL ||
-      hlsFlow == HLSFlow::HLSFlowDynamicHW) {
+  if (hlsFlow == HLSFlow::HLSFlowDynamicHW) {
     if (failed(doHLSFlowDynamic(pm, module.get(), outputFile)))
       return failure();
   }
@@ -439,10 +396,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 /// Process a single split of the input. This allocates a source manager and
 /// creates a regular or verifying diagnostic handler, depending on whether
 /// the user set the verifyDiagnostics option.
-static LogicalResult
-processInputSplit(MLIRContext &context, TimingScope &ts,
-                  std::unique_ptr<llvm::MemoryBuffer> buffer,
-                  Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+static LogicalResult processInputSplit(
+    MLIRContext &context, TimingScope &ts,
+    std::unique_ptr<llvm::MemoryBuffer> buffer,
+    std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(buffer), llvm::SMLoc());
   if (!verifyDiagnostics) {
@@ -461,7 +418,7 @@ processInputSplit(MLIRContext &context, TimingScope &ts,
 static LogicalResult
 processInput(MLIRContext &context, TimingScope &ts,
              std::unique_ptr<llvm::MemoryBuffer> input,
-             Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+             std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   if (!splitInputFile)
     return processInputSplit(context, ts, std::move(input), outputFile);
 
@@ -490,11 +447,13 @@ static LogicalResult executeHlstool(MLIRContext &context) {
     return failure();
   }
 
-  Optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
-  outputFile.emplace(openOutputFile(outputFilename, &errorMessage));
-  if (!outputFile.value()) {
-    llvm::errs() << errorMessage << "\n";
-    return failure();
+  std::optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
+  if (outputFormat != OutputSplitVerilog) {
+    outputFile.emplace(openOutputFile(outputFilename, &errorMessage));
+    if (!*outputFile) {
+      llvm::errs() << errorMessage << "\n";
+      return failure();
+    }
   }
 
   // Process the input.
@@ -503,7 +462,7 @@ static LogicalResult executeHlstool(MLIRContext &context) {
 
   // If the result succeeded and we're emitting a file, close it.
   if (outputFile.has_value())
-    outputFile.value()->keep();
+    (*outputFile)->keep();
 
   return success();
 }
@@ -534,7 +493,7 @@ int main(int argc, char **argv) {
 
   DialectRegistry registry;
   // Register MLIR dialects.
-  registry.insert<mlir::AffineDialect>();
+  registry.insert<mlir::affine::AffineDialect>();
   registry.insert<mlir::memref::MemRefDialect>();
   registry.insert<mlir::func::FuncDialect>();
   registry.insert<mlir::arith::ArithDialect>();
@@ -548,9 +507,9 @@ int main(int argc, char **argv) {
   mlir::registerCanonicalizerPass();
 
   // Register CIRCT dialects.
-  registry.insert<firrtl::FIRRTLDialect, hw::HWDialect, comb::CombDialect,
-                  seq::SeqDialect, sv::SVDialect, handshake::HandshakeDialect,
-                  esi::ESIDialect>();
+  registry
+      .insert<hw::HWDialect, comb::CombDialect, seq::SeqDialect, sv::SVDialect,
+              handshake::HandshakeDialect, esi::ESIDialect>();
 
   // Do the guts of the hlstool process.
   MLIRContext context(registry);

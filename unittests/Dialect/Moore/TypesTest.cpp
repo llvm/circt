@@ -31,9 +31,9 @@ TEST(TypesTest, UnitTypes) {
   ASSERT_EQ(eventType.toString(), "event");
 
   ASSERT_EQ(voidType.getBitSize(), 0u);
-  ASSERT_EQ(stringType.getBitSize(), llvm::None);
-  ASSERT_EQ(chandleType.getBitSize(), llvm::None);
-  ASSERT_EQ(eventType.getBitSize(), llvm::None);
+  ASSERT_EQ(stringType.getBitSize(), std::nullopt);
+  ASSERT_EQ(chandleType.getBitSize(), std::nullopt);
+  ASSERT_EQ(eventType.getBitSize(), std::nullopt);
 
   ASSERT_EQ(voidType.getDomain(), Domain::TwoValued);
   ASSERT_EQ(stringType.getDomain(), Domain::TwoValued);
@@ -156,9 +156,9 @@ TEST(TypesTest, PackedDim) {
   ASSERT_EQ(arrayType3.toString(), "bit [][1:0][2:0]");
 
   ASSERT_EQ(arrayType1.getRange(), Range(3));
-  ASSERT_EQ(arrayType3.getRange(), llvm::None);
+  ASSERT_EQ(arrayType3.getRange(), std::nullopt);
   ASSERT_EQ(arrayType1.getSize(), 3u);
-  ASSERT_EQ(arrayType3.getSize(), llvm::None);
+  ASSERT_EQ(arrayType3.getSize(), std::nullopt);
 }
 
 TEST(TypesTest, UnpackedDim) {
@@ -186,7 +186,7 @@ TEST(TypesTest, UnpackedDim) {
   ASSERT_EQ(arrayType3.getRange(), Range(2));
   ASSERT_EQ(arrayType4.getIndexType(), UnpackedType{});
   ASSERT_EQ(arrayType5.getIndexType(), stringType);
-  ASSERT_EQ(arrayType6.getBound(), llvm::None);
+  ASSERT_EQ(arrayType6.getBound(), std::nullopt);
   ASSERT_EQ(arrayType7.getBound(), 9u);
 }
 
@@ -337,7 +337,7 @@ TEST(TypesTest, Structs) {
   ASSERT_EQ(s0.getBitSize(), 1u);
   ASSERT_EQ(s1.getBitSize(), 9u);
   ASSERT_EQ(s2.getBitSize(), 2u);
-  ASSERT_EQ(s3.getBitSize(), llvm::None);
+  ASSERT_EQ(s3.getBitSize(), std::nullopt);
 }
 
 TEST(TypesTest, Enums) {

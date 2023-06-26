@@ -18,12 +18,14 @@
 #include "circt/Dialect/LLHD/Simulator/Trace.h"
 #include "circt/Support/Version.h"
 
+#include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
+#include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/Passes.h"
@@ -190,9 +192,11 @@ int main(int argc, char **argv) {
 
   MLIRContext context;
   // Load the dialects
-  context.loadDialect<llhd::LLHDDialect, LLVM::LLVMDialect, FuncDialect,
-                      hw::HWDialect, comb::CombDialect>();
+  context
+      .loadDialect<llhd::LLHDDialect, LLVM::LLVMDialect, FuncDialect,
+                   hw::HWDialect, comb::CombDialect, cf::ControlFlowDialect>();
   mlir::registerLLVMDialectTranslation(context);
+  mlir::registerBuiltinDialectTranslation(context);
 
   mlir::OwningOpRef<mlir::ModuleOp> module(
       parseSourceFile<ModuleOp>(mgr, &context));

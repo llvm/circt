@@ -133,7 +133,7 @@ LogicalResult ReturnOp::verify() {
            << " operands, but enclosing interop operation requires "
            << values.size() << " values";
 
-  for (auto &it :
+  for (auto it :
        llvm::enumerate(llvm::zip(getOperandTypes(), values.getTypes()))) {
     auto [returnOperandType, parentType] = it.value();
     if (returnOperandType != parentType)

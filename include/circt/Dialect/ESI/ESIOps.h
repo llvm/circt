@@ -19,6 +19,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 namespace circt {

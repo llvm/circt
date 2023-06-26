@@ -104,7 +104,7 @@ static void printNameKind(OpAsmPrinter &p, Operation *op,
                           firrtl::NameKindEnumAttr attr,
                           ArrayRef<StringRef> extraElides = {}) {
   if (attr.getValue() != NameKindEnum::DroppableName)
-    p << stringifyNameKindEnum(attr.getValue());
+    p << " " << stringifyNameKindEnum(attr.getValue());
 }
 
 //===----------------------------------------------------------------------===//
@@ -118,14 +118,12 @@ void MemoryPortOp::build(OpBuilder &builder, OperationState &result,
         memory, direction, name, builder.getArrayAttr(annotations));
 }
 
-LogicalResult MemoryPortOp::inferReturnTypes(MLIRContext *context,
-                                             Optional<Location> loc,
-                                             ValueRange operands,
-                                             DictionaryAttr attrs,
-                                             mlir::RegionRange regions,
-                                             SmallVectorImpl<Type> &results) {
+LogicalResult MemoryPortOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto inType = operands[0].getType();
-  auto memType = inType.dyn_cast<CMemoryType>();
+  auto memType = dyn_cast<CMemoryType>(inType);
   if (!memType) {
     if (loc)
       mlir::emitError(*loc, "memory port requires memory operand");
@@ -193,11 +191,11 @@ void MemoryDebugPortOp::build(OpBuilder &builder, OperationState &result,
 }
 
 LogicalResult MemoryDebugPortOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::RegionRange regions,
-    SmallVectorImpl<Type> &results) {
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto inType = operands[0].getType();
-  auto memType = inType.dyn_cast<CMemoryType>();
+  auto memType = dyn_cast<CMemoryType>(inType);
   if (!memType) {
     if (loc)
       mlir::emitError(*loc, "memory port requires memory operand");
@@ -253,15 +251,21 @@ static void printCombMemOp(OpAsmPrinter &p, Operation *op,
 void CombMemOp::build(OpBuilder &builder, OperationState &result,
                       FIRRTLBaseType elementType, uint64_t numElements,
                       StringRef name, NameKindEnum nameKind,
-                      ArrayAttr annotations, StringAttr innerSym) {
+                      ArrayAttr annotations, StringAttr innerSym,
+                      MemoryInitAttr init) {
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), name,
         nameKind, annotations,
-        innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
+        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(), init);
 }
 
 void CombMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), getName());
+}
+
+std::optional<size_t> CombMemOp::getTargetResultIndex() {
+  // Inner symbols on comb memory operations target the op not any result.
+  return std::nullopt;
 }
 
 //===----------------------------------------------------------------------===//
@@ -281,15 +285,21 @@ static void printSeqMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
 void SeqMemOp::build(OpBuilder &builder, OperationState &result,
                      FIRRTLBaseType elementType, uint64_t numElements,
                      RUWAttr ruw, StringRef name, NameKindEnum nameKind,
-                     ArrayAttr annotations, StringAttr innerSym) {
+                     ArrayAttr annotations, StringAttr innerSym,
+                     MemoryInitAttr init) {
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), ruw,
         name, nameKind, annotations,
-        innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
+        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(), init);
 }
 
 void SeqMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), getName());
+}
+
+std::optional<size_t> SeqMemOp::getTargetResultIndex() {
+  // Inner symbols on seq memory operations target the op not any result.
+  return std::nullopt;
 }
 
 //===----------------------------------------------------------------------===//

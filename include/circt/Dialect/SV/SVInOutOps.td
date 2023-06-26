@@ -38,7 +38,8 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
+    `:` qualified(type($result))
   }];
   let hasCanonicalizeMethod = true;
 
@@ -68,8 +69,8 @@ def RegOp : SVOp<"reg", [
 
   // We handle the name in a custom way, so we use a customer parser/printer.
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict)
-     `:` qualified(type($result))
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
+    `:` qualified(type($result))
   }];
   let hasCanonicalizeMethod = true;
 
@@ -101,6 +102,35 @@ def XMROp : SVOp<"xmr", []> {
   let assemblyFormat = "(`isRooted` $isRooted^)? custom<XMRPath>($path, $terminal) attr-dict `:` qualified(type($result))";
 }
 
+def XMRRefOp : SVOp<"xmr.ref", [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Encode a reference to something with a hw.hierpath.";
+  let description = [{
+    This represents a hierarchical path, but using something which the compiler
+    can understand.  In contrast to the XMROp (which models pure Verilog
+    hierarchical paths which may not map to anything knowable in the circuit),
+    this op uses a `hw.hierpath` to refer to something which exists in the
+    circuit.
+
+    Generally, this operation is always preferred for situations where
+    hierarchical paths cannot be known statically and may change.
+
+    `verbatimSuffix` should only be populated when the final operation on the
+    path is an instance of an external module.
+  }];
+  let arguments = (
+    ins FlatSymbolRefAttr:$ref,
+    DefaultValuedAttr<StrAttr, "{}">:$verbatimSuffix
+  );
+  let results = (outs InOutType:$result);
+  let assemblyFormat = [{
+    $ref ( $verbatimSuffix^ )? attr-dict `:` qualified(type($result))
+  }];
+
+  let extraClassDeclaration = [{
+    hw::HierPathOp getReferencedPath(const hw::HWSymbolCache *cache);
+  }];
+}
+
 def ReadInOutOp
  : SVOp<"read_inout",
         [Pure, InOutElementConstraint<"result", "input">]> {
@@ -108,11 +138,6 @@ def ReadInOutOp
                 " inout port) as the value itself.";
   let arguments = (ins InOutType:$input);
   let results = (outs HWValueType:$result);
-
-  let builders = [
-    OpBuilder<(ins "Value":$input)>
-  ];
-
   let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
 }
 
@@ -134,11 +159,6 @@ def ArrayIndexInOutOp
   let description = "See SV Spec 11.5.2.";
   let arguments = (ins InOutArrayType:$input, HWIntegerType:$index);
   let results = (outs InOutType:$result);
-
-  let builders = [
-    OpBuilder<(ins "Value":$input, "Value":$index)>
-  ];
-
   let assemblyFormat =
     "$input`[`$index`]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))";
 }
@@ -162,9 +182,10 @@ def IndexedPartSelectInOutOp : SVOp<"indexed_part_select_inout",
   let extraClassDeclaration = [{
     /// Infer the return types of this operation.
     static LogicalResult inferReturnTypes(MLIRContext *context,
-                                          Optional<Location> loc,
+                                          std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
+                                          mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
   }];
@@ -192,9 +213,10 @@ def StructFieldInOutOp : SVOp<"struct_field_inout",
   let extraClassDeclaration = [{
     /// Infer the return types of this operation.
     static LogicalResult inferReturnTypes(MLIRContext *context,
-                                          Optional<Location> loc,
+                                          std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
+                                          mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
   }];
@@ -224,8 +246,8 @@ def LogicOp : SVOp<"logic", [DeclareOpInterfaceMethods<OpAsmOpInterface,
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict) `:`
-                                                qualified(type($result))
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
+    `:` qualified(type($result))
   }];
 
   let extraClassDeclaration = [{

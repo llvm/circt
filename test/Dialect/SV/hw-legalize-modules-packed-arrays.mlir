@@ -1,8 +1,6 @@
-// RUN: circt-opt -hw-legalize-modules -verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt -split-input-file -hw-legalize-modules -verify-diagnostics %s | FileCheck %s
 
 module attributes {circt.loweringOptions = "disallowPackedArrays"} {
-
-// CHECK-LABEL: hw.module @reject_arrays
 hw.module @reject_arrays(%arg0: i8, %arg1: i8, %arg2: i8,
                          %arg3: i8, %sel: i2, %clock: i1)
    -> (a: !hw.array<4xi8>) {
@@ -19,7 +17,10 @@ hw.module @reject_arrays(%arg0: i8, %arg1: i8, %arg2: i8,
   %1 = sv.read_inout %reg : !hw.inout<array<4xi8>>
   hw.output %1 : !hw.array<4xi8>
 }
+}
 
+// -----
+module attributes {circt.loweringOptions = "disallowPackedArrays"} {
 // CHECK-LABEL: hw.module @array_create_get_comb
 hw.module @array_create_get_comb(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i8,
                                  %sel: i2)
@@ -81,6 +82,33 @@ hw.module @array_create_get_default(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i8,
       sv.fatal 1
     }
   }
+}
+
+// CHECK-LABEL: hw.module @array_constant_get_comb
+hw.module @array_constant_get_comb(%sel: i2)
+   -> (a: i8) {
+  // CHECK: %casez_tmp = sv.reg  : !hw.inout<i8>
+  // CHECK: sv.alwayscomb  {
+  // CHECK:   sv.case casez %sel : i2
+  // CHECK:   case b00: {
+  // CHECK:     sv.bpassign %casez_tmp, %c3_i8 : i8
+  // CHECK:   }
+  // CHECK:   case b01: {
+  // CHECK:     sv.bpassign %casez_tmp, %c2_i8 : i8
+  // CHECK:   }
+  // CHECK:   case b10: {
+  // CHECK:     sv.bpassign %casez_tmp, %c1_i8 : i8
+  // CHECK:   }
+  // CHECK:   default: {
+  // CHECK:     sv.bpassign %casez_tmp, %c0_i8 : i8
+  // CHECK:   }
+  // CHECK: }
+  %0 = hw.aggregate_constant [0 : i8, 1 : i8, 2 : i8, 3 : i8] : !hw.array<4xi8>
+  // CHECK: %0 = sv.read_inout %casez_tmp : !hw.inout<i8>
+  %1 = hw.array_get %0[%sel] : !hw.array<4xi8>, i2
+
+  // CHECK: hw.output %0 : i8
+  hw.output %1 : i8
 }
 
 }  // end builtin.module

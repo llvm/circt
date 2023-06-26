@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SEQ_TD
-#define SEQ_TD
+#ifndef CIRCT_DIALECT_SEQ_SEQ_TD
+#define CIRCT_DIALECT_SEQ_SEQ_TD
 
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
@@ -20,7 +20,8 @@ include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 include "circt/Dialect/Seq/SeqDialect.td"
+include "circt/Dialect/Seq/SeqAttributes.td"
 include "circt/Dialect/Seq/SeqTypes.td"
 include "circt/Dialect/Seq/SeqOps.td"
 
-#endif // SEQ_TD
+#endif // CIRCT_DIALECT_SEQ_SEQ_TD

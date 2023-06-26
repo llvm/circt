@@ -61,7 +61,7 @@ circuit Top : %[[
   module Top :
     inst a1 of A
     inst a2 of A_
-  ; CHECK: firrtl.hierpath private @[[nlaSym]] [@Top::@[[a1Sym]], @A::@[[bSym:[_a-zA-Z0-9]+]]]
+  ; CHECK: hw.hierpath private @[[nlaSym]] [@Top::@[[a1Sym]], @A::@[[bSym:[_a-zA-Z0-9]+]]]
   module A :
     output x: UInt<1>
     ; CHECk-NEXT: firrtl.wire sym @[[bSym]] {annotations = [{circt.nonlocal = @[[nlaSym]], class = "firrtl.transforms.DontTouchAnnotation"}]}
@@ -101,8 +101,8 @@ circuit Top : %[[
   module Top :
     inst a1 of A
     inst a2 of A_
-  ; CHECK: firrtl.hierpath private @[[nlaSym1]] [@Top::@[[a1Sym1]], @A::@[[bSym:[_a-zA-Z0-9]+]]]
-  ; CHECK: firrtl.hierpath private @[[nlaSym2]] [@Top::@[[a1Sym2]], @A::@[[bSym]]]
+  ; CHECK: hw.hierpath private @[[nlaSym1]] [@Top::@[[a1Sym1]], @A::@[[bSym:[_a-zA-Z0-9]+]]]
+  ; CHECK: hw.hierpath private @[[nlaSym2]] [@Top::@[[a1Sym2]], @A::@[[bSym]]]
   module A :
     output x: UInt<1>
     ; CHECk-NEXT: firrtl.wire sym @[[bSym]]

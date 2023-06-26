@@ -11,10 +11,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "Reduction.h"
-#include "Tester.h"
+#include "circt/Dialect/Arc/ArcReductions.h"
+#include "circt/Dialect/FIRRTL/FIRRTLReductions.h"
+#include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWReductions.h"
 #include "circt/InitAllDialects.h"
+#include "circt/Reduce/GenericReductions.h"
+#include "circt/Reduce/Tester.h"
 #include "circt/Support/Version.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Support/FileUtilities.h"
@@ -150,30 +157,32 @@ static LogicalResult execute(MLIRContext &context) {
   llvm::DenseSet<StringRef> exclusionSet(excludeReductions.begin(),
                                          excludeReductions.end());
 
-  // Gather a list of reduction patterns that we should try.
-  SmallVector<std::unique_ptr<Reduction>> patterns;
-  createAllReductions(&context, [&](auto reduction) {
-    auto name = reduction->getName();
-    if (!inclusionSet.empty() && !inclusionSet.count(name))
-      return;
-    if (exclusionSet.count(name))
-      return;
-    patterns.push_back(std::move(reduction));
-  });
-
-  // Print the list of patterns.
-  if (listReductions) {
-    for (auto &pattern : patterns)
-      llvm::outs() << pattern->getName() << "\n";
-    return success();
-  }
-
   // Parse the input file.
   VERBOSE(llvm::errs() << "Reading input\n");
   mlir::OwningOpRef<mlir::ModuleOp> module =
       parseSourceFile<ModuleOp>(inputFilename, &context);
   if (!module)
     return failure();
+
+  // Gather a list of reduction patterns that we should try.
+  ReducePatternSet patterns;
+  populateGenericReducePatterns(&context, patterns);
+  ReducePatternInterfaceCollection reducePatternCollection(&context);
+  reducePatternCollection.populateReducePatterns(patterns);
+  auto reductionFilter = [&](const Reduction &reduction) {
+    auto name = reduction.getName();
+    return (inclusionSet.empty() || inclusionSet.count(name)) &&
+           !exclusionSet.count(name);
+  };
+  patterns.filter(reductionFilter);
+  patterns.sortByBenefit();
+
+  // Print the list of patterns.
+  if (listReductions) {
+    for (unsigned i = 0; i < patterns.size(); ++i)
+      llvm::outs() << patterns[i].getName() << "\n";
+    return success();
+  }
 
   // Evaluate the unreduced input.
   VERBOSE({
@@ -206,7 +215,7 @@ static LogicalResult execute(MLIRContext &context) {
   // ModuleExternalizer pattern;
   BitVector appliedOneShotPatterns(patterns.size(), false);
   for (unsigned patternIdx = 0; patternIdx < patterns.size();) {
-    Reduction &pattern = *patterns[patternIdx];
+    auto &pattern = patterns[patternIdx];
     if (pattern.isOneShot() && appliedOneShotPatterns[patternIdx]) {
       LLVM_DEBUG(llvm::dbgs()
                  << "Skipping one-shot `" << pattern.getName() << "`\n");
@@ -234,6 +243,10 @@ static LogicalResult execute(MLIRContext &context) {
       mlir::OwningOpRef<mlir::ModuleOp> newModule = module->clone();
       pattern.beforeReduction(*newModule);
       SmallVector<std::pair<Operation *, uint64_t>, 16> opBenefits;
+      SmallDenseSet<Operation *> opsTouched;
+      pattern.notifyOpErasedCallback = [&](Operation *op) {
+        opsTouched.insert(op);
+      };
       newModule->walk([&](Operation *op) {
         uint64_t benefit = pattern.match(op);
         if (benefit > 0) {
@@ -243,13 +256,19 @@ static LogicalResult execute(MLIRContext &context) {
       });
       std::sort(opBenefits.begin(), opBenefits.end(),
                 [](auto a, auto b) { return a.second > b.second; });
-      for (size_t i = rangeBase;
-           i < rangeBase + rangeLength && i < opBenefits.size(); i++) {
-        auto *op = opBenefits[i].first;
-        if (pattern.match(op))
+      for (size_t idx = rangeBase, num = 0;
+           num < rangeLength && idx < opBenefits.size(); ++idx) {
+        auto *op = opBenefits[idx].first;
+        if (opsTouched.contains(op))
+          continue;
+        if (pattern.match(op)) {
+          op->walk([&](Operation *subop) { opsTouched.insert(subop); });
           (void)pattern.rewrite(op);
+          ++num;
+        }
       }
       pattern.afterReduction(*newModule);
+      pattern.notifyOpErasedCallback = nullptr;
       if (opIdx == 0) {
         VERBOSE({
           clearSummary();
@@ -404,6 +423,10 @@ int main(int argc, char **argv) {
   // Register all the dialects and create a context to work wtih.
   mlir::DialectRegistry registry;
   registerAllDialects(registry);
+  registry.insert<func::FuncDialect, scf::SCFDialect, LLVM::LLVMDialect>();
+  arc::registerReducePatternDialectInterface(registry);
+  firrtl::registerReducePatternDialectInterface(registry);
+  hw::registerReducePatternDialectInterface(registry);
   mlir::MLIRContext context(registry);
 
   // Do the actual processing and use `exit` to avoid the slow teardown of the

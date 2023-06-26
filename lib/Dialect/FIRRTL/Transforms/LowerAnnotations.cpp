@@ -21,10 +21,12 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -95,7 +97,7 @@ static void addAnnotation(AnnoTarget ref, unsigned fieldIdx,
   }
   portAnno = replaceArrayAttrElement(
       portAnno, portRef.getPortNo(),
-      appendArrayAttr(portAnno[portRef.getPortNo()].dyn_cast<ArrayAttr>(),
+      appendArrayAttr(dyn_cast<ArrayAttr>(portAnno[portRef.getPortNo()]),
                       annotation));
   ref.getOp()->setAttr("portAnnotations", portAnno);
 }
@@ -112,7 +114,7 @@ static FlatSymbolRefAttr buildNLA(const AnnoPathValue &target,
   }
 
   insts.push_back(
-      FlatSymbolRefAttr::get(target.ref.getModule().moduleNameAttr()));
+      FlatSymbolRefAttr::get(target.ref.getModule().getModuleNameAttr()));
 
   auto instAttr = ArrayAttr::get(state.circuit.getContext(), insts);
 
@@ -124,7 +126,7 @@ static FlatSymbolRefAttr buildNLA(const AnnoPathValue &target,
   }
 
   // Create the NLA
-  auto nla = b.create<HierPathOp>(state.circuit.getLoc(), "nla", instAttr);
+  auto nla = b.create<hw::HierPathOp>(state.circuit.getLoc(), "nla", instAttr);
   state.symTbl.insert(nla);
   nla.setVisibility(SymbolTable::Visibility::Private);
   auto sym = FlatSymbolRefAttr::get(nla);
@@ -148,15 +150,15 @@ static FlatSymbolRefAttr scatterNonLocalPath(const AnnoPathValue &target,
 //===----------------------------------------------------------------------===//
 
 /// Always resolve to the circuit, ignoring the annotation.
-static Optional<AnnoPathValue> noResolve(DictionaryAttr anno,
-                                         ApplyState &state) {
+static std::optional<AnnoPathValue> noResolve(DictionaryAttr anno,
+                                              ApplyState &state) {
   return AnnoPathValue(state.circuit);
 }
 
 /// Implementation of standard resolution.  First parses the target path, then
 /// resolves it.
-static Optional<AnnoPathValue> stdResolveImpl(StringRef rawPath,
-                                              ApplyState &state) {
+static std::optional<AnnoPathValue> stdResolveImpl(StringRef rawPath,
+                                                   ApplyState &state) {
   auto pathStr = canonicalizeTarget(rawPath);
   StringRef path{pathStr};
 
@@ -174,29 +176,28 @@ static Optional<AnnoPathValue> stdResolveImpl(StringRef rawPath,
 /// (SFC) FIRRTL SingleTargetAnnotation resolver.  Uses the 'target' field of
 /// the annotation with standard parsing to resolve the path.  This requires
 /// 'target' to exist and be normalized (per docs/FIRRTLAnnotations.md).
-static Optional<AnnoPathValue> stdResolve(DictionaryAttr anno,
-                                          ApplyState &state) {
+static std::optional<AnnoPathValue> stdResolve(DictionaryAttr anno,
+                                               ApplyState &state) {
   auto target = anno.getNamed("target");
   if (!target) {
     mlir::emitError(state.circuit.getLoc())
         << "No target field in annotation " << anno;
     return {};
   }
-  if (!target->getValue().isa<StringAttr>()) {
+  if (!isa<StringAttr>(target->getValue())) {
     mlir::emitError(state.circuit.getLoc())
         << "Target field in annotation doesn't contain string " << anno;
     return {};
   }
-  return stdResolveImpl(target->getValue().cast<StringAttr>().getValue(),
-                        state);
+  return stdResolveImpl(cast<StringAttr>(target->getValue()).getValue(), state);
 }
 
 /// Resolves with target, if it exists.  If not, resolves to the circuit.
-static Optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
-                                          ApplyState &state) {
+static std::optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
+                                               ApplyState &state) {
   auto target = anno.getNamed("target");
   if (target)
-    return stdResolveImpl(target->getValue().cast<StringAttr>().getValue(),
+    return stdResolveImpl(cast<StringAttr>(target->getValue()).getValue(),
                           state);
   return AnnoPathValue(state.circuit);
 }
@@ -236,7 +237,7 @@ static LogicalResult applyWithoutTargetImpl(const AnnoPathValue &target,
 }
 
 /// An applier which puts the annotation on the target and drops the 'target'
-/// field from the annotaiton.  Optionally handles non-local annotations.
+/// field from the annotation.  Optionally handles non-local annotations.
 /// Ensures the target resolves to an expected type of operation.
 template <bool allowNonLocal, bool allowPortAnnoTarget, typename T,
           typename... Tr>
@@ -277,12 +278,167 @@ static LogicalResult drop(const AnnoPathValue &target, DictionaryAttr anno,
 }
 
 //===----------------------------------------------------------------------===//
+// Customized Appliers
+//===----------------------------------------------------------------------===//
+
+static LogicalResult applyDUTAnno(const AnnoPathValue &target,
+                                  DictionaryAttr anno, ApplyState &state) {
+  auto *op = target.ref.getOp();
+  auto loc = op->getLoc();
+
+  if (!target.isLocal())
+    return mlir::emitError(loc) << "must be local";
+
+  if (!target.ref.isa<OpAnnoTarget>() || !isa<FModuleOp>(op))
+    return mlir::emitError(loc) << "can only target to a module";
+
+  auto moduleOp = cast<FModuleOp>(op);
+
+  // DUT has public visibility.
+  moduleOp.setPublic();
+  SmallVector<NamedAttribute> newAnnoAttrs;
+  for (auto &na : anno)
+    if (na.getName().getValue() != "target")
+      newAnnoAttrs.push_back(na);
+  addAnnotation(target.ref, target.fieldIdx, newAnnoAttrs);
+  return success();
+}
+
+// Like symbolizeConvention, but disallows the internal convention.
+static std::optional<Convention> parseConvention(llvm::StringRef str) {
+  return ::llvm::StringSwitch<::std::optional<Convention>>(str)
+      .Case("scalarized", Convention::Scalarized)
+      .Default(std::nullopt);
+}
+
+static LogicalResult applyConventionAnno(const AnnoPathValue &target,
+                                         DictionaryAttr anno,
+                                         ApplyState &state) {
+  auto *op = target.ref.getOp();
+  auto loc = op->getLoc();
+  auto error = [&]() {
+    auto diag = mlir::emitError(loc);
+    diag << "circuit.ConventionAnnotation ";
+    return diag;
+  };
+
+  auto opTarget = target.ref.dyn_cast<OpAnnoTarget>();
+  if (!opTarget)
+    return error() << "must target a module object";
+
+  if (!target.isLocal())
+    return error() << "must be local";
+
+  auto conventionStrAttr =
+      tryGetAs<StringAttr>(anno, anno, "convention", loc, conventionAnnoClass);
+  if (!conventionStrAttr)
+    return failure();
+
+  auto conventionStr = conventionStrAttr.getValue();
+  auto conventionOpt = parseConvention(conventionStr);
+  if (!conventionOpt)
+    return error() << "unknown convention " << conventionStr;
+
+  auto convention = *conventionOpt;
+
+  if (auto moduleOp = dyn_cast<FModuleOp>(op)) {
+    moduleOp.setConvention(convention);
+    return success();
+  }
+
+  if (auto extModuleOp = dyn_cast<FExtModuleOp>(op)) {
+    extModuleOp.setConvention(convention);
+    return success();
+  }
+
+  return error() << "can only target to a module or extmodule";
+}
+
+static LogicalResult applyAttributeAnnotation(const AnnoPathValue &target,
+                                              DictionaryAttr anno,
+                                              ApplyState &state) {
+  auto *op = target.ref.getOp();
+
+  auto error = [&]() {
+    auto diag = mlir::emitError(op->getLoc());
+    diag << anno.getAs<StringAttr>("class").getValue() << " ";
+    return diag;
+  };
+
+  if (!target.ref.isa<OpAnnoTarget>())
+    return error()
+           << "must target an operation. Currently ports are not supported";
+
+  if (!target.isLocal())
+    return error() << "must be local";
+
+  if (!isa<FModuleOp, WireOp, NodeOp, RegOp, RegResetOp>(op))
+    return error()
+           << "unhandled operation. The target must be a module, wire, node or "
+              "register";
+
+  auto name = anno.getAs<StringAttr>("description");
+  auto svAttr = sv::SVAttributeAttr::get(name.getContext(), name);
+  sv::addSVAttributes(op, {svAttr});
+  return success();
+}
+
+/// Update a memory op with attributes about memory file loading.
+template <bool isInline>
+static LogicalResult applyLoadMemoryAnno(const AnnoPathValue &target,
+                                         DictionaryAttr anno,
+                                         ApplyState &state) {
+  if (!target.isLocal()) {
+    mlir::emitError(state.circuit.getLoc())
+        << "has a " << anno.get("class")
+        << " annotation which is non-local, but this annotation is not allowed "
+           "to be non-local";
+    return failure();
+  }
+
+  auto *op = target.ref.getOp();
+
+  if (!target.isOpOfType<MemOp, CombMemOp, SeqMemOp>()) {
+    mlir::emitError(op->getLoc())
+        << "can only apply a load memory annotation to a memory";
+    return failure();
+  }
+
+  // The two annotations have different case usage in "filename".
+  StringAttr filename = tryGetAs<StringAttr>(
+      anno, anno, isInline ? "filename" : "fileName", op->getLoc(),
+      anno.getAs<StringAttr>("class").getValue());
+  if (!filename)
+    return failure();
+
+  auto hexOrBinary =
+      tryGetAs<StringAttr>(anno, anno, "hexOrBinary", op->getLoc(),
+                           anno.getAs<StringAttr>("class").getValue());
+  if (!hexOrBinary)
+    return failure();
+
+  auto hexOrBinaryValue = hexOrBinary.getValue();
+  if (hexOrBinaryValue != "h" && hexOrBinaryValue != "b") {
+    auto diag = mlir::emitError(op->getLoc())
+                << "has memory initialization annotation with invalid format, "
+                   "'hexOrBinary' field must be either 'h' or 'b'";
+    diag.attachNote() << "the full annotation is: " << anno;
+    return failure();
+  }
+
+  op->setAttr("init", MemoryInitAttr::get(op->getContext(), filename,
+                                          hexOrBinaryValue == "b", isInline));
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Driving table
 //===----------------------------------------------------------------------===//
 
 namespace {
 struct AnnoRecord {
-  llvm::function_ref<Optional<AnnoPathValue>(DictionaryAttr, ApplyState &)>
+  llvm::function_ref<std::optional<AnnoPathValue>(DictionaryAttr, ApplyState &)>
       resolver;
   llvm::function_ref<LogicalResult(const AnnoPathValue &, DictionaryAttr,
                                    ApplyState &)>
@@ -294,9 +450,9 @@ struct AnnoRecord {
 /// the FIRRTL Circuit, i.e., an Annotation which has no target.  Historically,
 /// NoTargetAnnotations were used to control the Scala FIRRTL Compiler (SFC) or
 /// its passes, e.g., to set the output directory or to turn on a pass.
-/// Examplesof these in the SFC are "firrtl.options.TargetDirAnnotation" to set
+/// Examples of these in the SFC are "firrtl.options.TargetDirAnnotation" to set
 /// the output directory or "firrtl.stage.RunFIRRTLTransformAnnotation" to
-/// casuse the SFC to schedule a specified pass.  Instead of leaving these
+/// cause the SFC to schedule a specified pass.  Instead of leaving these
 /// floating or attaching them to the top-level MLIR module (which is a purer
 /// interpretation of "no target"), we choose to attach them to the Circuit even
 /// they do not "apply" to the Circuit.  This gives later passes a common place,
@@ -313,6 +469,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {"circt.testLocalOnly", {stdResolve, applyWithoutTarget<>}},
     {"circt.testNT", {noResolve, applyWithoutTarget<>}},
     {"circt.missing", {tryResolve, applyWithoutTarget<true>}},
+    {"circt.Intrinsic", {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
     // Grand Central Views/Interfaces Annotations
     {extractGrandCentralClass, NoTargetAnnotation},
     {grandCentralHierarchyFileAnnoClass, NoTargetAnnotation},
@@ -334,15 +491,12 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {memTapSourceClass, {stdResolve, applyWithoutTarget<true>}},
     {memTapPortClass, {stdResolve, applyWithoutTarget<true>}},
     {memTapBlackboxClass, {stdResolve, applyWithoutTarget<true>}},
-    // Grand Central Signal Mapping Annotations
-    {signalDriverAnnoClass, {noResolve, applyGCTSignalMappings}},
-    {signalDriverTargetAnnoClass, {stdResolve, applyWithoutTarget<true>}},
-    {signalDriverModuleAnnoClass, {stdResolve, applyWithoutTarget<true>}},
     // OMIR Annotations
     {omirAnnoClass, {noResolve, applyOMIR}},
     {omirTrackerAnnoClass, {stdResolve, applyWithoutTarget<true>}},
     {omirFileAnnoClass, NoTargetAnnotation},
     // Miscellaneous Annotations
+    {conventionAnnoClass, {stdResolve, applyConventionAnno}},
     {dontTouchAnnoClass,
      {stdResolve, applyWithoutTarget<true, true, WireOp, NodeOp, RegOp,
                                      RegResetOp, InstanceOp, MemOp, CombMemOp,
@@ -350,7 +504,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {prefixModulesAnnoClass,
      {stdResolve,
       applyWithoutTarget<true, FModuleOp, FExtModuleOp, InstanceOp>}},
-    {dutAnnoClass, {stdResolve, applyWithoutTarget<false, FModuleOp>}},
+    {dutAnnoClass, {stdResolve, applyDUTAnno}},
     {extractSeqMemsAnnoClass, NoTargetAnnotation},
     {injectDUTHierarchyAnnoClass, NoTargetAnnotation},
     {convertMemToRegOfVecAnnoClass, NoTargetAnnotation},
@@ -367,6 +521,8 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {noDedupAnnoClass,
      {stdResolve, applyWithoutTarget<false, FModuleOp, FExtModuleOp>}},
     {blackBoxInlineAnnoClass,
+     {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
+    {blackBoxPathAnnoClass,
      {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
     {dontObfuscateModuleAnnoClass,
      {stdResolve, applyWithoutTarget<false, FModuleOp>}},
@@ -389,11 +545,13 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {extractAssumeAnnoClass, NoTargetAnnotation},
     {extractCoverageAnnoClass, NoTargetAnnotation},
     {dftTestModeEnableAnnoClass, {stdResolve, applyWithoutTarget<true>}},
+    {dftClockDividerBypassAnnoClass, {stdResolve, applyWithoutTarget<true>}},
     {runFIRRTLTransformAnnoClass, {noResolve, drop}},
     {mustDedupAnnoClass, NoTargetAnnotation},
     {addSeqMemPortAnnoClass, NoTargetAnnotation},
     {addSeqMemPortsFileAnnoClass, NoTargetAnnotation},
     {extractClockGatesAnnoClass, NoTargetAnnotation},
+    {extractBlackBoxAnnoClass, {stdResolve, applyWithoutTarget<false>}},
     {fullAsyncResetAnnoClass, {stdResolve, applyWithoutTarget<true>}},
     {ignoreFullAsyncResetAnnoClass,
      {stdResolve, applyWithoutTarget<true, FModuleOp>}},
@@ -401,8 +559,12 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {blackBoxTargetDirAnnoClass, NoTargetAnnotation},
     {traceNameAnnoClass, {stdResolve, applyTraceName}},
     {traceAnnoClass, {stdResolve, applyWithoutTarget<true>}},
-
-}};
+    {loadMemoryFromFileAnnoClass, {stdResolve, applyLoadMemoryAnno<false>}},
+    {loadMemoryFromFileInlineAnnoClass,
+     {stdResolve, applyLoadMemoryAnno<true>}},
+    {wiringSinkAnnoClass, {stdResolve, applyWiring}},
+    {wiringSourceAnnoClass, {stdResolve, applyWiring}},
+    {attributeAnnoClass, {stdResolve, applyAttributeAnnotation}}}};
 
 /// Lookup a record for a given annotation class.  Optionally, returns the
 /// record for "circuit.missing" if the record doesn't exist.
@@ -429,10 +591,12 @@ struct LowerAnnotationsPass
     : public LowerFIRRTLAnnotationsBase<LowerAnnotationsPass> {
   void runOnOperation() override;
   LogicalResult applyAnnotation(DictionaryAttr anno, ApplyState &state);
+  LogicalResult legacyToWiringProblems(ApplyState &state);
   LogicalResult solveWiringProblems(ApplyState &state);
 
   bool ignoreUnhandledAnno = false;
   bool ignoreClasslessAnno = false;
+  bool noRefTypePorts = false;
   SmallVector<DictionaryAttr> worklistAttrs;
 };
 } // end anonymous namespace
@@ -444,7 +608,7 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
   // Lookup the class
   StringRef annoClassVal;
   if (auto annoClass = anno.getNamed("class"))
-    annoClassVal = annoClass->getValue().cast<StringAttr>().getValue();
+    annoClassVal = cast<StringAttr>(annoClass->getValue()).getValue();
   else if (ignoreClasslessAnno)
     annoClassVal = "circt.missing";
   else
@@ -475,43 +639,131 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
   return success();
 }
 
+/// Convert consumed SourceAnnotation and SinkAnnotation into WiringProblems,
+/// using the pin attribute as newNameHint
+LogicalResult LowerAnnotationsPass::legacyToWiringProblems(ApplyState &state) {
+  for (const auto &[name, problem] : state.legacyWiringProblems) {
+    if (!problem.source)
+      return mlir::emitError(state.circuit.getLoc())
+             << "Unable to resolve source for pin: " << name;
+
+    if (problem.sinks.empty())
+      return mlir::emitError(state.circuit.getLoc())
+             << "Unable to resolve sink(s) for pin: " << name;
+
+    for (const auto &sink : problem.sinks) {
+      state.wiringProblems.push_back(
+          {problem.source, sink, {}, WiringProblem::RefTypeUsage::Never});
+    }
+  }
+  return success();
+}
+
 /// Modify the circuit to solve and apply all Wiring Problems in the circuit.  A
-/// Wiring Problem is a mapping from a source to a sink that should be connected
-/// via a RefType.  This uses a two-step approach.  First, all Wiring Problems
-/// are analyzed to compute pending modifications to modules.  Second, modules
-/// are visited from leaves to roots to apply module modifications.  Module
-/// modifications include addings ports and connecting things up.
+/// Wiring Problem is a mapping from a source to a sink that can be connected
+/// via a base Type or RefType as requested.  This uses a two-step approach.
+/// First, all Wiring Problems are analyzed to compute pending modifications to
+/// modules. Second, modules are visited from leaves to roots to apply module
+/// modifications.  Module modifications include addings ports and connecting
+/// things up.
 LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
   // Utility function to extract the defining module from a value which may be
   // either a BlockArgument or an Operation result.
   auto getModule = [](Value value) {
-    if (BlockArgument blockArg = value.dyn_cast<BlockArgument>())
+    if (BlockArgument blockArg = dyn_cast<BlockArgument>(value))
       return cast<FModuleLike>(blockArg.getParentBlock()->getParentOp());
     return value.getDefiningOp()->getParentOfType<FModuleLike>();
+  };
+
+  // Utility function to determine where to insert connection operations.
+  auto findInsertionBlock = [&getModule](Value src, Value dest) -> Block * {
+    // Check for easy case: both are in the same block.
+    if (src.getParentBlock() == dest.getParentBlock())
+      return src.getParentBlock();
+
+    // If connecting across blocks, figure out where to connect.
+    (void)getModule;
+    assert(getModule(src) == getModule(dest));
+    // Helper to determine if 'a' is available at 'b's block.
+    auto safelyDoms = [&](Value a, Value b) {
+      if (isa<BlockArgument>(a))
+        return true;
+      if (isa<BlockArgument>(b))
+        return false;
+      // Handle cases where 'b' is in child op after 'a'.
+      auto *ancestor =
+          a.getParentBlock()->findAncestorOpInBlock(*b.getDefiningOp());
+      return ancestor && a.getDefiningOp()->isBeforeInBlock(ancestor);
+    };
+    if (safelyDoms(src, dest))
+      return dest.getParentBlock();
+    if (safelyDoms(dest, src))
+      return src.getParentBlock();
+    return {};
+  };
+
+  auto getNoopCast = [](Value v) -> mlir::UnrealizedConversionCastOp {
+    auto op =
+        dyn_cast_or_null<mlir::UnrealizedConversionCastOp>(v.getDefiningOp());
+    if (op && op.getNumResults() == 1 && op.getNumOperands() == 1 &&
+        op.getResultTypes()[0] == op.getOperandTypes()[0])
+      return op;
+    return {};
   };
 
   // Utility function to connect a destination to a source.  Always use a
   // ConnectOp as the widths may be uninferred.
   SmallVector<Operation *> opsToErase;
-  auto connect = [&](Value src, Value dest, ImplicitLocOpBuilder &builder) {
+  auto connect = [&](Value src, Value dest,
+                     ImplicitLocOpBuilder &builder) -> LogicalResult {
+    // Strip away noop unrealized_conversion_cast's, used as placeholders.
+    // In the future, these should be created/managed as part of creating WP's.
+    if (auto op = getNoopCast(dest)) {
+      dest = op.getOperand(0);
+      opsToErase.push_back(op);
+      std::swap(src, dest);
+    } else if (auto op = getNoopCast(src)) {
+      src = op.getOperand(0);
+      opsToErase.push_back(op);
+    }
+
     if (foldFlow(dest) == Flow::Source)
       std::swap(src, dest);
+
+    // Figure out where to insert operations.
+    auto *insertBlock = findInsertionBlock(src, dest);
+    if (!insertBlock)
+      return emitError(src.getLoc())
+          .append("This value is involved with a Wiring Problem where the "
+                  "destination is in the same module but neither dominates the "
+                  "other, which is not supported.")
+          .attachNote(dest.getLoc())
+          .append("The destination is here.");
+
+    // Insert at end, past invalidation in same block.
+    builder.setInsertionPointToEnd(insertBlock);
+
     // Create RefSend/RefResolve if necessary.
-    if (dest.getType().isa<RefType>() && !src.getType().isa<RefType>()) {
-      src = builder.create<RefSendOp>(src);
-    } else if (!dest.getType().isa<RefType>() && src.getType().isa<RefType>()) {
-      src = builder.create<RefResolveOp>(src);
+    if (isa<RefType>(dest.getType()) != isa<RefType>(src.getType())) {
+      if (isa<RefType>(dest.getType()))
+        src = builder.create<RefSendOp>(src);
+      else
+        src = builder.create<RefResolveOp>(src);
     }
+
     // If the sink is a wire with no users, then convert this to a node.
     auto destOp = dyn_cast_or_null<WireOp>(dest.getDefiningOp());
     if (destOp && dest.getUses().empty()) {
-      builder.create<NodeOp>(src.getType(), src, destOp.getName())
+      builder.create<NodeOp>(src, destOp.getName())
           .setAnnotationsAttr(destOp.getAnnotations());
       opsToErase.push_back(destOp);
-      return;
+      return success();
     }
+
     // Otherwise, just connect to the source.
-    builder.create<ConnectOp>(dest, src);
+    emitConnect(builder, dest, src);
+
+    return success();
   };
 
   auto &instanceGraph = state.instancePathCache.instanceGraph;
@@ -521,8 +773,10 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
   // to be made per-module.
   LLVM_DEBUG({ llvm::dbgs() << "Analyzing wiring problems:\n"; });
   DenseMap<FModuleLike, ModuleModifications> moduleModifications;
-  DenseSet<Value> sinks;
-  for (auto [index, problem] : llvm::enumerate(state.wiringProblems)) {
+  DenseSet<Value> visitedSinks;
+  for (auto e : llvm::enumerate(state.wiringProblems)) {
+    auto index = e.index();
+    auto problem = e.value();
     // This is a unique index that is assigned to this specific wiring problem
     // and is used as a key during wiring to know which Values (ports, sources,
     // or sinks) should be connected.
@@ -531,7 +785,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
 
     // Check that no WiringProblems are trying to use the same sink.  This
     // should never happen.
-    if (!sinks.insert(sink).second) {
+    if (!visitedSinks.insert(sink).second) {
       auto diag = mlir::emitError(source.getLoc())
                   << "This sink is involved with a Wiring Problem which is "
                      "targeted by a source used by another Wiring Problem. "
@@ -553,27 +807,36 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     LLVM_DEBUG({
       llvm::dbgs() << "  - index: " << index << "\n"
                    << "    source:\n"
-                   << "      module: " << sourceModule.moduleName() << "\n"
+                   << "      module: " << sourceModule.getModuleName() << "\n"
                    << "      value: " << source << "\n"
                    << "    sink:\n"
-                   << "      module: " << sinkModule.moduleName() << "\n"
+                   << "      module: " << sinkModule.getModuleName() << "\n"
                    << "      value: " << sink << "\n"
                    << "    newNameHint: " << problem.newNameHint << "\n";
     });
 
-    // If the source and sink are in the same module, just wire them up.
+    // If the source and sink are in the same block, just wire them up.
     if (sink.getParentBlock() == source.getParentBlock()) {
       auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
                                                       sink.getParentBlock());
-      connect(source, sink, builder);
+      if (failed(connect(source, sink, builder)))
+        return failure();
+      continue;
+    }
+    // If both are in the same module but not same block, U-turn.
+    // We may not be able to handle this, but that is checked below while
+    // connecting.
+    if (sourceModule == sinkModule) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "    LCA: " << sourceModule.getModuleName() << "\n");
+      moduleModifications[sourceModule].connectionMap[index] = source;
+      moduleModifications[sourceModule].uturns.push_back({index, sink});
       continue;
     }
 
     // Otherwise, get instance paths for source/sink, and compute LCA.
-    auto sourcePaths = state.instancePathCache.getAbsolutePaths(
-        cast<hw::HWModuleLike>(*sourceModule));
-    auto sinkPaths = state.instancePathCache.getAbsolutePaths(
-        cast<hw::HWModuleLike>(*sinkModule));
+    auto sourcePaths = state.instancePathCache.getAbsolutePaths(sourceModule);
+    auto sinkPaths = state.instancePathCache.getAbsolutePaths(sinkModule);
 
     if (sourcePaths.size() != 1 || sinkPaths.size() != 1) {
       auto diag =
@@ -598,39 +861,99 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     }
 
     LLVM_DEBUG({
-      llvm::dbgs() << "    LCA: " << lca.moduleName() << "\n"
+      llvm::dbgs() << "    LCA: " << lca.getModuleName() << "\n"
                    << "    sourcePaths:\n";
       for (auto inst : sourcePaths[0])
-        llvm::dbgs() << "      - " << inst.instanceName() << " of "
-                     << inst.referencedModuleName() << "\n";
+        llvm::dbgs() << "      - " << inst.getInstanceName() << " of "
+                     << inst.getReferencedModuleName() << "\n";
       llvm::dbgs() << "    sinkPaths:\n";
       for (auto inst : sinkPaths[0])
-        llvm::dbgs() << "      - " << inst.instanceName() << " of "
-                     << inst.referencedModuleName() << "\n";
+        llvm::dbgs() << "      - " << inst.getInstanceName() << " of "
+                     << inst.getReferencedModuleName() << "\n";
     });
 
     // Pre-populate the connectionMap of the module with the source and sink.
     moduleModifications[sourceModule].connectionMap[index] = source;
     moduleModifications[sinkModule].connectionMap[index] = sink;
 
-    // Record ports that should be added to each module along the LCA path.
-    auto tpe = RefType::get(cast<FIRRTLBaseType>(problem.sink.getType()));
-    for (auto sourceInst : sources) {
-      auto mod = cast<FModuleOp>(instanceGraph.getReferencedModule(sourceInst));
-      moduleModifications[mod].portsToAdd.push_back(
-          {index,
-           {StringAttr::get(
-                context, state.getNamespace(mod).newName(problem.newNameHint)),
-            tpe, Direction::Out}});
+    // Record port types that should be added to each module along the LCA path.
+    Type sourceType, sinkType;
+    auto useRefTypes =
+        !noRefTypePorts &&
+        problem.refTypeUsage == WiringProblem::RefTypeUsage::Prefer;
+    if (useRefTypes) {
+      // Use RefType ports if possible
+      RefType refType = TypeSwitch<Type, RefType>(source.getType())
+                            .Case<FIRRTLBaseType>([](FIRRTLBaseType base) {
+                              return RefType::get(base.getPassiveType());
+                            })
+                            .Case<RefType>([](RefType ref) { return ref; });
+      sourceType = refType;
+      sinkType = refType.getType();
+    } else {
+      // Use specified port types.
+      sourceType = source.getType();
+      sinkType = sink.getType();
+
+      // Types must be connectable, which means FIRRTLType's.
+      auto sourceFType = dyn_cast<FIRRTLType>(sourceType);
+      auto sinkFType = dyn_cast<FIRRTLType>(sinkType);
+      if (!sourceFType)
+        return emitError(source.getLoc())
+               << "Wiring Problem source type \"" << sourceType
+               << "\" must be a FIRRTL type";
+      if (!sinkFType)
+        return emitError(sink.getLoc())
+               << "Wiring Problem sink type \"" << sinkType
+               << "\" must be a FIRRTL type";
+
+      // Otherwise they must be identical or FIRRTL type-equivalent
+      // (connectable).
+      if (sourceFType != sinkFType &&
+          !areTypesEquivalent(sourceFType, sinkFType)) {
+        auto diag = mlir::emitError(source.getLoc())
+                    << "Wiring Problem source type " << sourceType
+                    << " does not match sink type " << sinkType;
+        diag.attachNote(sink.getLoc()) << "The sink is here.";
+        return failure();
+      }
     }
-    for (auto sinkInst : sinks) {
-      auto mod = cast<FModuleOp>(instanceGraph.getReferencedModule(sinkInst));
-      moduleModifications[mod].portsToAdd.push_back(
-          {index,
-           {StringAttr::get(
-                context, state.getNamespace(mod).newName(problem.newNameHint)),
-            tpe, Direction::In}});
-    }
+    // If wiring using references, check that the sink value we connect to is
+    // passive.
+    if (auto sinkFType = dyn_cast<FIRRTLType>(sink.getType());
+        sinkFType && isa<RefType>(sourceType) &&
+        !getBaseType(sinkFType).isPassive())
+      return emitError(sink.getLoc())
+             << "Wiring Problem sink type \"" << sink.getType()
+             << "\" must be passive (no flips) when using references";
+
+    // Record module modifications related to adding ports to modules.
+    auto addPorts = [&](ArrayRef<hw::HWInstanceLike> insts, Value val, Type tpe,
+                        Direction dir) {
+      StringRef name, instName;
+      for (auto inst : llvm::reverse(insts)) {
+        auto mod = cast<FModuleOp>(instanceGraph.getReferencedModule(inst));
+        if (name.empty()) {
+          if (problem.newNameHint.empty())
+            name = state.getNamespace(mod).newName(
+                getFieldName(getFieldRefFromValue(val), /*nameSafe=*/true)
+                    .first +
+                "__bore");
+          else
+            name = state.getNamespace(mod).newName(problem.newNameHint);
+        } else {
+          assert(!instName.empty());
+          name = state.getNamespace(mod).newName(instName + "_" + name);
+        }
+        moduleModifications[mod].portsToAdd.push_back(
+            {index, {StringAttr::get(context, name), tpe, dir}});
+        instName = inst.getInstanceName();
+      }
+    };
+
+    // Record the addition of ports.
+    addPorts(sources, source, sourceType, Direction::Out);
+    addPorts(sinks, sink, sinkType, Direction::In);
   }
 
   // Iterate over modules from leaves to roots, applying ModuleModifications to
@@ -644,7 +967,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
 
     auto modifications = moduleModifications[fmodule];
     LLVM_DEBUG({
-      llvm::dbgs() << "  - module: " << fmodule.moduleName() << "\n";
+      llvm::dbgs() << "  - module: " << fmodule.getModuleName() << "\n";
       llvm::dbgs() << "    ports:\n";
       for (auto [index, port] : modifications.portsToAdd) {
         llvm::dbgs() << "      - name: " << port.getName() << "\n"
@@ -668,8 +991,8 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     auto portIdx = fmodule.getNumPorts();
     fmodule.insertPorts(newPorts);
 
-    auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
-                                                    fmodule.getBodyBlock());
+    auto builder = ImplicitLocOpBuilder::atBlockBegin(UnknownLoc::get(context),
+                                                      fmodule.getBodyBlock());
 
     // Connect each port to the value stored in the connectionMap for this
     // wiring problem index.
@@ -677,15 +1000,17 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       Value src = moduleModifications[fmodule].connectionMap[problemIdx];
       assert(src && "there did not exist a driver for the port");
       Value dest = fmodule.getArgument(portIdx++);
-      connect(src, dest, builder);
+      if (failed(connect(src, dest, builder)))
+        return failure();
     }
 
-    // If a U-turn exists, this is an LCA and we need a U-turn connection.  This
-    // is the last connection made for this module.
+    // If a U-turn exists, this is an LCA and we need a U-turn connection. These
+    // are the last connections made for this module.
     for (auto [problemIdx, dest] : moduleModifications[fmodule].uturns) {
       Value src = moduleModifications[fmodule].connectionMap[problemIdx];
       assert(src && "there did not exist a connection for the u-turn");
-      connect(src, dest, builder);
+      if (failed(connect(src, dest, builder)))
+        return failure();
     }
 
     // Update the connectionMap of all modules for which we created a port.
@@ -746,7 +1071,7 @@ void LowerAnnotationsPass::runOnOperation() {
   // annotations to be processed in the order in which they appear in the
   // original JSON.
   for (auto anno : llvm::reverse(annotations.getValue()))
-    worklistAttrs.push_back(anno.cast<DictionaryAttr>());
+    worklistAttrs.push_back(cast<DictionaryAttr>(anno));
 
   size_t numFailures = 0;
   size_t numAdded = 0;
@@ -763,6 +1088,9 @@ void LowerAnnotationsPass::runOnOperation() {
       ++numFailures;
   }
 
+  if (failed(legacyToWiringProblems(state)))
+    ++numFailures;
+
   if (failed(solveWiringProblems(state)))
     ++numFailures;
 
@@ -777,10 +1105,13 @@ void LowerAnnotationsPass::runOnOperation() {
 }
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLAnnotationsPass(
-    bool ignoreUnhandledAnnotations, bool ignoreClasslessAnnotations) {
+std::unique_ptr<mlir::Pass>
+circt::firrtl::createLowerFIRRTLAnnotationsPass(bool ignoreUnhandledAnnotations,
+                                                bool ignoreClasslessAnnotations,
+                                                bool noRefTypePorts) {
   auto pass = std::make_unique<LowerAnnotationsPass>();
   pass->ignoreUnhandledAnno = ignoreUnhandledAnnotations;
   pass->ignoreClasslessAnno = ignoreClasslessAnnotations;
+  pass->noRefTypePorts = noRefTypePorts;
   return pass;
 }

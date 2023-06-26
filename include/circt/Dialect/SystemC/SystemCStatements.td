@@ -130,9 +130,6 @@ def InstanceDeclOp : SystemCOp<"instance.decl", [
       return getInstanceHandle().getType().cast<systemc::ModuleType>();
     }
 
-    StringRef getInstanceName() { return getName(); }
-    StringAttr getInstanceNameAttr() { return getNameAttr(); }
-
     /// Lookup the module for the symbol. This returns null on invalid IR.
     Operation *getReferencedModule(const hw::HWSymbolCache *cache);
 
@@ -265,6 +262,13 @@ def CallIndirectOp : SystemCOp<"cpp.call_indirect", [
 
     /// Return the callee of this operation.
     CallInterfaceCallable getCallableForCallee() { return getCallee(); }
+
+    /// Set the callee for this operation.
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      assert(0 && "setCallee not possible");
+      abort();
+    }
+
   }];
 
   let assemblyFormat = [{
@@ -333,6 +337,12 @@ def CallOp : SystemCOp<"cpp.call", [
     CallInterfaceCallable getCallableForCallee() {
       return (*this)->getAttrOfType<SymbolRefAttr>("callee");
     }
+
+    /// Set the callee for this operation.
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getCalleeAttrName(), callee.get<mlir::SymbolRefAttr>());
+    }
+
   }];
 
   let assemblyFormat = [{

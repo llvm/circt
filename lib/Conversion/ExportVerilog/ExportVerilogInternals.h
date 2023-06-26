@@ -28,11 +28,6 @@ class GlobalNameResolver;
 /// Check if the value is from read of a wire or reg or is a port.
 bool isSimpleReadOrPort(Value v);
 
-/// If the given `op` is a declaration, return the attribute that dictates its
-/// name. For things like wires and registers this will be the `name` attribute,
-/// for instances this is `instanceName`, etc.
-StringAttr getDeclarationName(Operation *op);
-
 /// Given an expression that is spilled into a temporary wire, try to
 /// synthesize a better name than "_T_42" based on the structure of the
 /// expression.
@@ -292,7 +287,7 @@ static inline bool isExpressionAlwaysInline(Operation *op) {
 
   // XMRs can't be spilled if they are on the lhs.  Conservatively never spill
   // them.
-  if (isa<sv::XMROp>(op))
+  if (isa<sv::XMROp, sv::XMRRefOp>(op))
     return true;
 
   if (isa<sv::SampledOp>(op))
@@ -301,9 +296,12 @@ static inline bool isExpressionAlwaysInline(Operation *op) {
   return false;
 }
 
+StringRef getSymOpName(Operation *symOp);
+
 /// Return whether an operation is a constant.
 static inline bool isConstantExpression(Operation *op) {
-  return isa<hw::ConstantOp, sv::ConstantXOp, sv::ConstantZOp>(op);
+  return isa<hw::ConstantOp, sv::ConstantXOp, sv::ConstantZOp,
+             sv::ConstantStrOp>(op);
 }
 
 /// This predicate returns true if the specified operation is considered a
@@ -318,18 +316,20 @@ bool isZeroBitType(Type type);
 
 /// Return true if this expression should be emitted inline into any statement
 /// that uses it.
-bool isExpressionEmittedInline(Operation *op);
+bool isExpressionEmittedInline(Operation *op, const LoweringOptions &options);
 
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
-void prepareHWModule(Block &block, const LoweringOptions &options);
-void prepareHWModule(hw::HWModuleOp module, const LoweringOptions &options);
+LogicalResult prepareHWModule(Block &block, const LoweringOptions &options);
+LogicalResult prepareHWModule(hw::HWModuleOp module,
+                              const LoweringOptions &options);
 
 void pruneZeroValuedLogic(hw::HWModuleOp module);
 
 /// Rewrite module names and interfaces to not conflict with each other or with
 /// Verilog keywords.
-GlobalNameTable legalizeGlobalNames(ModuleOp topLevel);
+GlobalNameTable legalizeGlobalNames(ModuleOp topLevel,
+                                    const LoweringOptions &options);
 
 } // namespace ExportVerilog
 } // namespace circt

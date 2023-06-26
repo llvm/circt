@@ -12,6 +12,8 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -40,7 +42,11 @@ using mlir::TypeStorageAllocator;
 /// This only prints a subset of all types in the dialect. Use `printNestedType`
 /// instead, which will call this function in turn, as appropriate.
 static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
-  auto printWidthQualifier = [&](Optional<int32_t> width) {
+  if (isConst(type)) {
+    os << "const.";
+  }
+
+  auto printWidthQualifier = [&](std::optional<int32_t> width) {
     if (width)
       os << '<' << *width << '>';
   };
@@ -61,28 +67,45 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         os << "analog";
         printWidthQualifier(analogType.getWidth());
       })
-      .Case<BundleType>([&](auto bundleType) {
+      .Case<BundleType, OpenBundleType>([&](auto bundleType) {
+        if (isa<OpenBundleType>(bundleType))
+          os << "open";
         os << "bundle<";
-        llvm::interleaveComma(bundleType, os,
-                              [&](BundleType::BundleElement element) {
+        llvm::interleaveComma(bundleType, os, [&](auto element) {
+          os << element.name.getValue();
+          if (element.isFlip)
+            os << " flip";
+          os << ": ";
+          printNestedType(element.type, os);
+        });
+        os << '>';
+      })
+      .Case<FEnumType>([&](auto fenumType) {
+        os << "enum<";
+        llvm::interleaveComma(fenumType, os,
+                              [&](FEnumType::EnumElement element) {
                                 os << element.name.getValue();
-                                if (element.isFlip)
-                                  os << " flip";
                                 os << ": ";
                                 printNestedType(element.type, os);
                               });
         os << '>';
       })
-      .Case<FVectorType>([&](auto vectorType) {
+      .Case<FVectorType, OpenVectorType>([&](auto vectorType) {
+        if (isa<OpenVectorType>(vectorType))
+          os << "open";
         os << "vector<";
         printNestedType(vectorType.getElementType(), os);
         os << ", " << vectorType.getNumElements() << '>';
       })
       .Case<RefType>([&](auto refType) {
-        os << "ref<";
+        if (refType.getForceable())
+          os << "rw";
+        os << "probe<";
         printNestedType(refType.getType(), os);
         os << '>';
       })
+      .Case<StringType>([&](auto stringType) { os << "string"; })
+      .Case<BigIntType>([&](auto bigIntType) { os << "bigint"; })
       .Default([&](auto) { anyFailed = true; });
   return failure(anyFailed);
 }
@@ -106,7 +129,7 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
 /// This only accepts a subset of all types in the dialect. Use `parseType`
 /// instead, which will call this function in turn, as appropriate.
 ///
-/// Returns `llvm::None` if the type `name` is not covered by the custom
+/// Returns `std::nullopt` if the type `name` is not covered by the custom
 /// parsers. Otherwise returns success or failure as appropriate. On success,
 /// `result` is set to the resulting type.
 ///
@@ -119,19 +142,29 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
 ///   ::= uint ('<' int '>')?
 ///   ::= analog ('<' int '>')?
 ///   ::= bundle '<' (bundle-elt (',' bundle-elt)*)? '>'
+///   ::= enum '<' (enum-elt (',' enum-elt)*)? '>'
 ///   ::= vector '<' type ',' int '>'
-///
-/// bundle-elt ::= identifier ':' type
+///   ::= const '.' type
+///   ::= 'property.' firrtl-phased-type
+/// bundle-elt ::= identifier flip? ':' type
+/// enum-elt ::= identifier ':' type
 /// ```
 static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
                                             Type &result) {
+  bool isConst = false;
+  const char constPrefix[] = "const.";
+  if (name.starts_with(constPrefix)) {
+    isConst = true;
+    name = name.drop_front(std::size(constPrefix) - 1);
+  }
+
   auto *context = parser.getContext();
   if (name.equals("clock"))
-    return result = ClockType::get(context), success();
+    return result = ClockType::get(context, isConst), success();
   if (name.equals("reset"))
-    return result = ResetType::get(context), success();
+    return result = ResetType::get(context, isConst), success();
   if (name.equals("asyncreset"))
-    return result = AsyncResetType::get(context), success();
+    return result = AsyncResetType::get(context, isConst), success();
 
   if (name.equals("sint") || name.equals("uint") || name.equals("analog")) {
     // Parse the width specifier if it exists.
@@ -146,12 +179,12 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     }
 
     if (name.equals("sint"))
-      result = SIntType::get(context, width);
+      result = SIntType::get(context, width, isConst);
     else if (name.equals("uint"))
-      result = UIntType::get(context, width);
+      result = UIntType::get(context, width, isConst);
     else {
       assert(name.equals("analog"));
-      result = AnalogType::get(context, width);
+      result = AnalogType::get(context, width, isConst);
     }
     return success();
   }
@@ -190,7 +223,83 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
                                        parseBundleElement))
       return failure();
 
-    return result = BundleType::get(elements, context), success();
+    return result = BundleType::get(context, elements, isConst), success();
+  }
+  if (name.equals("openbundle")) {
+    SmallVector<OpenBundleType::BundleElement, 4> elements;
+
+    auto parseBundleElement = [&]() -> ParseResult {
+      std::string nameStr;
+      StringRef name;
+      FIRRTLType type;
+
+      // The 'name' can be an identifier or an integer.
+      uint32_t fieldIntName;
+      auto intName = parser.parseOptionalInteger(fieldIntName);
+      if (intName.has_value()) {
+        if (failed(intName.value()))
+          return failure();
+        nameStr = llvm::utostr(fieldIntName);
+        name = nameStr;
+      } else {
+        // Otherwise must be an identifier.
+        if (parser.parseKeyword(&name))
+          return failure();
+      }
+
+      bool isFlip = succeeded(parser.parseOptionalKeyword("flip"));
+      if (parser.parseColon() || parseNestedType(type, parser))
+        return failure();
+
+      elements.push_back({StringAttr::get(context, name), isFlip, type});
+      return success();
+    };
+
+    if (parser.parseCommaSeparatedList(mlir::AsmParser::Delimiter::LessGreater,
+                                       parseBundleElement))
+      return failure();
+
+    return result = OpenBundleType::get(context, elements, isConst), success();
+  }
+
+  if (name.equals("enum")) {
+    SmallVector<FEnumType::EnumElement, 4> elements;
+
+    auto parseEnumElement = [&]() -> ParseResult {
+      std::string nameStr;
+      StringRef name;
+      FIRRTLBaseType type;
+
+      // The 'name' can be an identifier or an integer.
+      uint32_t fieldIntName;
+      auto intName = parser.parseOptionalInteger(fieldIntName);
+      if (intName.has_value()) {
+        if (failed(intName.value()))
+          return failure();
+        nameStr = llvm::utostr(fieldIntName);
+        name = nameStr;
+      } else {
+        // Otherwise must be an identifier.
+        if (parser.parseKeyword(&name))
+          return failure();
+      }
+
+      if (parser.parseColon() || parseNestedBaseType(type, parser))
+        return failure();
+
+      elements.push_back({StringAttr::get(context, name), type});
+      return success();
+    };
+
+    if (parser.parseCommaSeparatedList(mlir::AsmParser::Delimiter::LessGreater,
+                                       parseEnumElement))
+      return failure();
+    if (failed(FEnumType::verify(
+            [&]() { return parser.emitError(parser.getNameLoc()); }, elements,
+            isConst)))
+      return failure();
+
+    return result = FEnumType::get(context, elements, isConst), success();
   }
 
   if (name.equals("vector")) {
@@ -202,20 +311,64 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
         parser.parseGreater())
       return failure();
 
-    return result = FVectorType::get(elementType, width), success();
+    return result = FVectorType::get(elementType, width, isConst), success();
+  }
+  if (name.equals("openvector")) {
+    FIRRTLType elementType;
+    uint64_t width = 0;
+
+    if (parser.parseLess() || parseNestedType(elementType, parser) ||
+        parser.parseComma() || parser.parseInteger(width) ||
+        parser.parseGreater())
+      return failure();
+
+    return result = OpenVectorType::get(elementType, width, isConst), success();
   }
 
-  if (name.equals("ref")) {
+  // For now, support both firrtl.ref and firrtl.probe.
+  if (name.equals("ref") || name.equals("probe")) {
+    FIRRTLBaseType type;
+    // Don't pass `isConst` to `parseNestedBaseType since `ref` can point to
+    // either `const` or non-`const` types
+    if (parser.parseLess() || parseNestedBaseType(type, parser) ||
+        parser.parseGreater())
+      return failure();
+
+    if (failed(RefType::verify(
+            [&]() { return parser.emitError(parser.getNameLoc()); }, type,
+            false)))
+      return failure();
+
+    return result = RefType::get(type, false), success();
+  }
+  if (name.equals("rwprobe")) {
     FIRRTLBaseType type;
     if (parser.parseLess() || parseNestedBaseType(type, parser) ||
         parser.parseGreater())
       return failure();
 
     if (failed(RefType::verify(
-            [&]() { return parser.emitError(parser.getNameLoc()); }, type)))
+            [&]() { return parser.emitError(parser.getNameLoc()); }, type,
+            true)))
       return failure();
 
-    return result = RefType::get(type), success();
+    return result = RefType::get(type, true), success();
+  }
+  if (name.equals("string")) {
+    if (isConst) {
+      parser.emitError(parser.getNameLoc(), "strings cannot be const");
+      return failure();
+    }
+    result = StringType::get(parser.getContext());
+    return success();
+  }
+  if (name.equals("bigint")) {
+    if (isConst) {
+      parser.emitError(parser.getNameLoc(), "bigints cannot be const");
+      return failure();
+    }
+    result = BigIntType::get(parser.getContext());
+    return success();
   }
 
   return {};
@@ -247,7 +400,7 @@ static ParseResult parseFIRRTLType(FIRRTLType &result, StringRef name,
   Type type;
   if (failed(parseType(type, name, parser)))
     return failure();
-  result = type.dyn_cast<FIRRTLType>();
+  result = llvm::dyn_cast<FIRRTLType>(type);
   if (result)
     return success();
   parser.emitError(parser.getNameLoc(), "unknown FIRRTL type: \"")
@@ -260,7 +413,7 @@ static ParseResult parseFIRRTLBaseType(FIRRTLBaseType &result, StringRef name,
   FIRRTLType type;
   if (failed(parseFIRRTLType(type, name, parser)))
     return failure();
-  if (auto base = type.dyn_cast<FIRRTLBaseType>()) {
+  if (auto base = llvm::dyn_cast<FIRRTLBaseType>(type)) {
     result = base;
     return success();
   }
@@ -319,60 +472,72 @@ enum {
   HasUninferredWidthBitMask = 0x4,
 };
 
-/// Unpack `RecursiveTypeProperties` from a bunch of bits.
-RecursiveTypeProperties RecursiveTypeProperties::fromFlags(unsigned flags) {
-  return RecursiveTypeProperties{
-      (flags & IsPassiveBitMask) != 0,
-      (flags & ContainsAnalogBitMask) != 0,
-      (flags & HasUninferredWidthBitMask) != 0,
-  };
-}
-
-/// Pack `RecursiveTypeProperties` as a bunch of bits.
-unsigned RecursiveTypeProperties::toFlags() const {
-  unsigned flags = 0;
-  if (isPassive)
-    flags |= IsPassiveBitMask;
-  if (containsAnalog)
-    flags |= ContainsAnalogBitMask;
-  if (hasUninferredWidth)
-    flags |= HasUninferredWidthBitMask;
-  return flags;
-}
-
 //===----------------------------------------------------------------------===//
 // FIRRTLBaseType Implementation
 //===----------------------------------------------------------------------===//
 
+struct circt::firrtl::detail::FIRRTLBaseTypeStorage : mlir::TypeStorage {
+  // Use `char` instead of `bool` since llvm already provides a
+  // DenseMapInfo<char> specialization
+  using KeyTy = char;
+
+  FIRRTLBaseTypeStorage(bool isConst) : isConst(static_cast<char>(isConst)) {}
+
+  bool operator==(const KeyTy &key) const { return key == isConst; }
+
+  static FIRRTLBaseTypeStorage *construct(TypeStorageAllocator &allocator,
+                                          KeyTy key) {
+    return new (allocator.allocate<FIRRTLBaseTypeStorage>())
+        FIRRTLBaseTypeStorage(key);
+  }
+
+  char isConst;
+};
+
 /// Return true if this is a 'ground' type, aka a non-aggregate type.
-bool FIRRTLBaseType::isGround() {
-  return TypeSwitch<FIRRTLBaseType, bool>(*this)
+bool FIRRTLType::isGround() {
+  return TypeSwitch<FIRRTLType, bool>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType>([](Type) { return true; })
-      .Case<BundleType, FVectorType>([](Type) { return false; })
+      .Case<BundleType, FVectorType, FEnumType, OpenBundleType, OpenVectorType>(
+          [](Type) { return false; })
+      // Not ground per spec, but leaf of aggregate.
+      .Case<PropertyType, RefType>([](Type) { return false; })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return false;
       });
 }
 
-/// Return a pair with the 'isPassive' and 'containsAnalog' bits.
-RecursiveTypeProperties FIRRTLBaseType::getRecursiveTypeProperties() {
-  return TypeSwitch<FIRRTLBaseType, RecursiveTypeProperties>(*this)
-      .Case<ClockType, ResetType, AsyncResetType>([](Type) {
-        return RecursiveTypeProperties{true, false, false};
+bool FIRRTLType::isConst() {
+  return TypeSwitch<FIRRTLType, bool>(*this)
+      .Case<FIRRTLBaseType, OpenBundleType, OpenVectorType>(
+          [](auto type) { return type.isConst(); })
+      .Default(false);
+}
+
+bool FIRRTLBaseType::isConst() { return getImpl()->isConst; }
+
+RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
+  return TypeSwitch<FIRRTLType, RecursiveTypeProperties>(*this)
+      .Case<ClockType, ResetType, AsyncResetType>([](FIRRTLBaseType type) {
+        return RecursiveTypeProperties{true,  false,
+                                       false, type.isConst(),
+                                       false, llvm::isa<ResetType>(type)};
       })
       .Case<SIntType, UIntType>([](auto type) {
-        return RecursiveTypeProperties{true, false, !type.hasWidth()};
+        return RecursiveTypeProperties{
+            true, false, false, type.isConst(), !type.hasWidth(), false};
       })
       .Case<AnalogType>([](auto type) {
-        return RecursiveTypeProperties{true, true, !type.hasWidth()};
+        return RecursiveTypeProperties{
+            true, false, true, type.isConst(), !type.hasWidth(), false};
       })
-      .Case<BundleType>([](BundleType bundleType) {
-        return bundleType.getRecursiveTypeProperties();
-      })
-      .Case<FVectorType>([](FVectorType vectorType) {
-        return vectorType.getRecursiveTypeProperties();
+      .Case<BundleType, FVectorType, FEnumType, OpenBundleType, OpenVectorType,
+            RefType>(
+          [](auto type) { return type.getRecursiveTypeProperties(); })
+      .Case<StringType, BigIntType>([](auto type) {
+        return RecursiveTypeProperties{true, false, false, false, false, false};
       })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
@@ -384,11 +549,34 @@ RecursiveTypeProperties FIRRTLBaseType::getRecursiveTypeProperties() {
 FIRRTLBaseType FIRRTLBaseType::getPassiveType() {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
-            AnalogType>([&](Type) { return *this; })
-      .Case<BundleType>(
-          [](BundleType bundleType) { return bundleType.getPassiveType(); })
-      .Case<FVectorType>(
-          [](FVectorType vectorType) { return vectorType.getPassiveType(); })
+            AnalogType, FEnumType>([&](Type) { return *this; })
+      .Case<BundleType, FVectorType, FEnumType>(
+          [](auto type) { return type.getPassiveType(); })
+      .Default([](Type) {
+        llvm_unreachable("unknown FIRRTL type");
+        return FIRRTLBaseType();
+      });
+}
+
+/// Return a 'const' or non-'const' version of this type.
+FIRRTLBaseType FIRRTLBaseType::getConstType(bool isConst) {
+  return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
+      .Case<ClockType, ResetType, AsyncResetType, AnalogType, SIntType,
+            UIntType, BundleType, FVectorType, FEnumType>(
+          [&](auto type) { return type.getConstType(isConst); })
+      .Default([](Type) {
+        llvm_unreachable("unknown FIRRTL type");
+        return FIRRTLBaseType();
+      });
+}
+
+/// Return this type with a 'const' modifiers dropped
+FIRRTLBaseType FIRRTLBaseType::getAllConstDroppedType() {
+  return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
+      .Case<ClockType, ResetType, AsyncResetType, AnalogType, SIntType,
+            UIntType>([&](auto type) { return type.getConstType(false); })
+      .Case<BundleType, FVectorType, FEnumType>(
+          [&](auto type) { return type.getAllConstDroppedType(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return FIRRTLBaseType();
@@ -400,19 +588,22 @@ FIRRTLBaseType FIRRTLBaseType::getPassiveType() {
 FIRRTLBaseType FIRRTLBaseType::getMaskType() {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
-            AnalogType>(
-          [&](Type) { return UIntType::get(this->getContext(), 1); })
+            AnalogType>([&](Type) {
+        return UIntType::get(this->getContext(), 1, this->isConst());
+      })
       .Case<BundleType>([&](BundleType bundleType) {
         SmallVector<BundleType::BundleElement, 4> newElements;
         newElements.reserve(bundleType.getElements().size());
         for (auto elt : bundleType)
           newElements.push_back(
               {elt.name, false /* FIXME */, elt.type.getMaskType()});
-        return BundleType::get(newElements, this->getContext());
+        return BundleType::get(this->getContext(), newElements,
+                               bundleType.isConst());
       })
       .Case<FVectorType>([](FVectorType vectorType) {
         return FVectorType::get(vectorType.getElementType().getMaskType(),
-                                vectorType.getNumElements());
+                                vectorType.getNumElements(),
+                                vectorType.isConst());
       })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
@@ -426,18 +617,25 @@ FIRRTLBaseType FIRRTLBaseType::getWidthlessType() {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
       .Case<ClockType, ResetType, AsyncResetType>([](auto a) { return a; })
       .Case<UIntType, SIntType, AnalogType>(
-          [&](auto a) { return a.get(this->getContext(), -1); })
+          [&](auto a) { return a.get(this->getContext(), -1, a.isConst()); })
       .Case<BundleType>([&](auto a) {
         SmallVector<BundleType::BundleElement, 4> newElements;
         newElements.reserve(a.getElements().size());
         for (auto elt : a)
           newElements.push_back(
               {elt.name, elt.isFlip, elt.type.getWidthlessType()});
-        return BundleType::get(newElements, this->getContext());
+        return BundleType::get(this->getContext(), newElements, a.isConst());
       })
       .Case<FVectorType>([](auto a) {
         return FVectorType::get(a.getElementType().getWidthlessType(),
-                                a.getNumElements());
+                                a.getNumElements(), a.isConst());
+      })
+      .Case<FEnumType>([&](FEnumType a) {
+        SmallVector<FEnumType::EnumElement, 4> newElements;
+        newElements.reserve(a.getNumElements());
+        for (auto elt : a)
+          newElements.push_back({elt.name, elt.type.getWidthlessType()});
+        return FEnumType::get(this->getContext(), newElements, a.isConst());
       })
       .Default([](auto) {
         llvm_unreachable("unknown FIRRTL type");
@@ -456,7 +654,7 @@ int32_t FIRRTLBaseType::getBitWidthOrSentinel() {
           [&](IntType intType) { return intType.getWidthOrSentinel(); })
       .Case<AnalogType>(
           [](AnalogType analogType) { return analogType.getWidthOrSentinel(); })
-      .Case<BundleType, FVectorType>([](Type) { return -2; })
+      .Case<BundleType, FVectorType, FEnumType>([](Type) { return -2; })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return -2;
@@ -467,18 +665,18 @@ int32_t FIRRTLBaseType::getBitWidthOrSentinel() {
 /// either an abstract reset, a concrete 1-bit UInt, an
 /// asynchronous reset, or an uninfered width UInt.
 bool FIRRTLBaseType::isResetType() {
-  return TypeSwitch<FIRRTLBaseType, bool>(*this)
+  return TypeSwitch<FIRRTLType, bool>(*this)
       .Case<ResetType, AsyncResetType>([](Type) { return true; })
       .Case<UIntType>(
           [](UIntType a) { return !a.hasWidth() || a.getWidth() == 1; })
       .Default([](Type) { return false; });
 }
 
-unsigned FIRRTLBaseType::getMaxFieldID() {
-  return TypeSwitch<FIRRTLBaseType, int32_t>(*this)
+uint64_t FIRRTLBaseType::getMaxFieldID() {
+  return TypeSwitch<FIRRTLBaseType, uint64_t>(*this)
       .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
             UIntType>([](Type) { return 0; })
-      .Case<BundleType, FVectorType>(
+      .Case<BundleType, FVectorType, FEnumType>(
           [](auto type) { return type.getMaxFieldID(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
@@ -486,35 +684,37 @@ unsigned FIRRTLBaseType::getMaxFieldID() {
       });
 }
 
-std::pair<FIRRTLBaseType, unsigned>
-FIRRTLBaseType::getSubTypeByFieldID(unsigned fieldID) {
-  return TypeSwitch<FIRRTLBaseType, std::pair<FIRRTLBaseType, unsigned>>(*this)
+std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+FIRRTLBaseType::getSubTypeByFieldID(uint64_t fieldID) {
+  return TypeSwitch<FIRRTLBaseType,
+                    std::pair<circt::hw::FieldIDTypeInterface, unsigned>>(*this)
       .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
             UIntType>([&](FIRRTLBaseType t) {
         assert(!fieldID && "non-aggregate types must have a field id of 0");
         return std::pair(t, 0);
       })
-      .Case<BundleType, FVectorType>(
+      .Case<BundleType, FVectorType, FEnumType>(
           [&](auto type) { return type.getSubTypeByFieldID(fieldID); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
-        return std::pair(FIRRTLBaseType(), 0);
+        return std::pair(circt::hw::FieldIDTypeInterface(), 0);
       });
 }
 
-FIRRTLBaseType FIRRTLBaseType::getFinalTypeByFieldID(unsigned fieldID) {
-  std::pair<FIRRTLBaseType, unsigned> pair(*this, fieldID);
+circt::hw::FieldIDTypeInterface
+FIRRTLBaseType::getFinalTypeByFieldID(uint64_t fieldID) {
+  std::pair<circt::hw::FieldIDTypeInterface, uint64_t> pair(*this, fieldID);
   while (pair.second)
     pair = pair.first.getSubTypeByFieldID(pair.second);
   return pair.first;
 }
 
-std::pair<unsigned, bool> FIRRTLBaseType::rootChildFieldID(unsigned fieldID,
-                                                           unsigned index) {
-  return TypeSwitch<FIRRTLBaseType, std::pair<unsigned, bool>>(*this)
+std::pair<uint64_t, bool> FIRRTLBaseType::rootChildFieldID(uint64_t fieldID,
+                                                           uint64_t index) {
+  return TypeSwitch<FIRRTLBaseType, std::pair<uint64_t, bool>>(*this)
       .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
             UIntType>([&](Type) { return std::make_pair(0, fieldID == 0); })
-      .Case<BundleType, FVectorType>(
+      .Case<BundleType, FVectorType, FEnumType>(
           [&](auto type) { return type.rootChildFieldID(fieldID, index); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
@@ -522,18 +722,18 @@ std::pair<unsigned, bool> FIRRTLBaseType::rootChildFieldID(unsigned fieldID,
       });
 }
 
-unsigned FIRRTLBaseType::getGroundFields() const {
-  return TypeSwitch<FIRRTLBaseType, unsigned>(*this)
-      .Case<BundleType>([](auto type) {
-        unsigned sum = 0;
-        for (auto &field : type.getElements())
-          sum += field.type.getGroundFields();
-        return sum;
-      })
-      .Case<FVectorType>([](auto type) {
-        return type.getNumElements() * type.getElementType().getGroundFields();
-      })
-      .Default([](Type) { return 1; });
+bool firrtl::isConst(Type type) {
+  return TypeSwitch<Type, bool>(type)
+      .Case<FIRRTLBaseType, OpenBundleType, OpenVectorType>(
+          [](auto base) { return base.isConst(); })
+      .Default(false);
+}
+
+bool firrtl::containsConst(Type type) {
+  return TypeSwitch<Type, bool>(type)
+      .Case<FIRRTLBaseType, OpenBundleType, OpenVectorType>(
+          [](auto base) { return base.containsConst(); })
+      .Default(false);
 }
 
 /// Helper to implement the equivalence logic for a pair of bundle elements.
@@ -542,47 +742,56 @@ unsigned FIRRTLBaseType::getGroundFields() const {
 /// differs from the spec in how it uses flip types for module output ports and
 /// canonicalizes flips in bundles, so only passive types can be compared here.
 static bool areBundleElementsEquivalent(BundleType::BundleElement destElement,
-                                        BundleType::BundleElement srcElement) {
+                                        BundleType::BundleElement srcElement,
+                                        bool destOuterTypeIsConst,
+                                        bool srcOuterTypeIsConst,
+                                        bool requiresSameWidth) {
   if (destElement.name != srcElement.name)
     return false;
   if (destElement.isFlip != srcElement.isFlip)
     return false;
 
-  return areTypesEquivalent(destElement.type, srcElement.type);
+  if (destElement.isFlip) {
+    std::swap(destElement, srcElement);
+    std::swap(destOuterTypeIsConst, srcOuterTypeIsConst);
+  }
+
+  return areTypesEquivalent(destElement.type, srcElement.type,
+                            destOuterTypeIsConst, srcOuterTypeIsConst,
+                            requiresSameWidth);
 }
 
 /// Returns whether the two types are equivalent.  This implements the exact
 /// definition of type equivalence in the FIRRTL spec.  If the types being
 /// compared have any outer flips that encode FIRRTL module directions (input or
 /// output), these should be stripped before using this method.
-bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType) {
-  auto destType = destFType.dyn_cast<FIRRTLBaseType>();
-  auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
+bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
+                                bool destOuterTypeIsConst,
+                                bool srcOuterTypeIsConst,
+                                bool requireSameWidths) {
+  auto destType = llvm::dyn_cast<FIRRTLBaseType>(destFType);
+  auto srcType = llvm::dyn_cast<FIRRTLBaseType>(srcFType);
 
   // For non-base types, only equivalent if identical.
   if (!destType || !srcType)
     return destFType == srcFType;
 
-  // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
-  if (destType.isa<ResetType>())
-    return srcType.isResetType();
-
-  // Reset types can drive UInt<1>, AsyncReset, or Reset types.
-  if (srcType.isa<ResetType>())
-    return destType.isResetType();
+  bool srcIsConst = srcOuterTypeIsConst || srcFType.isConst();
+  bool destIsConst = destOuterTypeIsConst || destFType.isConst();
 
   // Vector types can be connected if they have the same size and element type.
-  auto destVectorType = destType.dyn_cast<FVectorType>();
-  auto srcVectorType = srcType.dyn_cast<FVectorType>();
+  auto destVectorType = dyn_cast<FVectorType>(destType);
+  auto srcVectorType = dyn_cast<FVectorType>(srcType);
   if (destVectorType && srcVectorType)
     return destVectorType.getNumElements() == srcVectorType.getNumElements() &&
            areTypesEquivalent(destVectorType.getElementType(),
-                              srcVectorType.getElementType());
+                              srcVectorType.getElementType(), destIsConst,
+                              srcIsConst, requireSameWidths);
 
   // Bundle types can be connected if they have the same size, element names,
   // and element types.
-  auto destBundleType = destType.dyn_cast<BundleType>();
-  auto srcBundleType = srcType.dyn_cast<BundleType>();
+  auto destBundleType = dyn_cast<BundleType>(destType);
+  auto srcBundleType = dyn_cast<BundleType>(srcType);
   if (destBundleType && srcBundleType) {
     auto destElements = destBundleType.getElements();
     auto srcElements = srcBundleType.getElements();
@@ -593,49 +802,87 @@ bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType) {
     for (size_t i = 0; i < numDestElements; ++i) {
       auto destElement = destElements[i];
       auto srcElement = srcElements[i];
-      if (!areBundleElementsEquivalent(destElement, srcElement))
+      if (!areBundleElementsEquivalent(destElement, srcElement, destIsConst,
+                                       srcIsConst, requireSameWidths))
         return false;
     }
     return true;
   }
 
-  // Ground types can be connected if their passive, widthless versions
-  // are equal.
-  return destType.getWidthlessType() == srcType.getWidthlessType();
+  // Enum types can be connected if they have the same size, element names, and
+  // element types.
+  auto dstEnumType = dyn_cast<FEnumType>(destType);
+  auto srcEnumType = dyn_cast<FEnumType>(srcType);
+
+  if (dstEnumType && srcEnumType) {
+    if (dstEnumType.getNumElements() != srcEnumType.getNumElements())
+      return false;
+    // Enums requires the types to match exactly.
+    for (const auto &[dst, src] : llvm::zip(dstEnumType, srcEnumType)) {
+      // The variant names must match.
+      if (dst.name != src.name)
+        return false;
+      // Enumeration types can only be connected if the inner types have the
+      // same width.
+      if (!areTypesEquivalent(dst.type, src.type, destIsConst, srcIsConst,
+                              true))
+        return false;
+    }
+    return true;
+  }
+
+  // Ground type connections must be const compatible.
+  if (destIsConst && !srcIsConst)
+    return false;
+
+  // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
+  if (isa<ResetType>(destType))
+    return srcType.isResetType();
+
+  // Reset types can drive UInt<1>, AsyncReset, or Reset types.
+  if (isa<ResetType>(srcType))
+    return destType.isResetType();
+
+  // If we can implicitly truncate or extend the bitwidth, or either width is
+  // currently uninferred, then compare the widthless version of these types.
+  if (!requireSameWidths || destType.getBitWidthOrSentinel() == -1)
+    srcType = srcType.getWidthlessType();
+  if (!requireSameWidths || srcType.getBitWidthOrSentinel() == -1)
+    destType = destType.getWidthlessType();
+
+  // Ground types can be connected if their constless types are the same
+  return destType.getConstType(false) == srcType.getConstType(false);
 }
 
 /// Returns whether the two types are weakly equivalent.
 bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
-                                      bool destFlip, bool srcFlip) {
-  auto destType = destFType.dyn_cast<FIRRTLBaseType>();
-  auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
+                                      bool destFlip, bool srcFlip,
+                                      bool destOuterTypeIsConst,
+                                      bool srcOuterTypeIsConst) {
+  auto destType = dyn_cast<FIRRTLBaseType>(destFType);
+  auto srcType = dyn_cast<FIRRTLBaseType>(srcFType);
 
   // For non-base types, only equivalent if identical.
   if (!destType || !srcType)
     return destFType == srcFType;
 
-  // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
-  if (destType.isa<ResetType>())
-    return srcType.isResetType();
-
-  // Reset types can drive UInt<1>, AsyncReset, or Reset types.
-  if (srcType.isa<ResetType>())
-    return destType.isResetType();
+  bool srcIsConst = srcOuterTypeIsConst || srcFType.isConst();
+  bool destIsConst = destOuterTypeIsConst || destFType.isConst();
 
   // Vector types can be connected if their element types are weakly equivalent.
   // Size doesn't matter.
-  auto destVectorType = destType.dyn_cast<FVectorType>();
-  auto srcVectorType = srcType.dyn_cast<FVectorType>();
+  auto destVectorType = dyn_cast<FVectorType>(destType);
+  auto srcVectorType = dyn_cast<FVectorType>(srcType);
   if (destVectorType && srcVectorType)
     return areTypesWeaklyEquivalent(destVectorType.getElementType(),
                                     srcVectorType.getElementType(), destFlip,
-                                    srcFlip);
+                                    srcFlip, destIsConst, srcIsConst);
 
   // Bundle types are weakly equivalent if all common elements are weakly
   // equivalent.  Non-matching fields are ignored.  Flips are "pushed" into
   // recursive weak type equivalence checks.
-  auto destBundleType = destType.dyn_cast<BundleType>();
-  auto srcBundleType = srcType.dyn_cast<BundleType>();
+  auto destBundleType = dyn_cast<BundleType>(destType);
+  auto srcBundleType = dyn_cast<BundleType>(srcType);
   if (destBundleType && srcBundleType)
     return llvm::all_of(destBundleType, [&](auto destElt) -> bool {
       auto destField = destElt.name.getValue();
@@ -643,22 +890,201 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
       // If the src doesn't contain the destination's field, that's okay.
       if (!srcElt)
         return true;
-      return areTypesWeaklyEquivalent(destElt.type, srcElt->type,
-                                      destFlip ^ destElt.isFlip,
-                                      srcFlip ^ srcElt->isFlip);
+
+      return areTypesWeaklyEquivalent(
+          destElt.type, srcElt->type, destFlip ^ destElt.isFlip,
+          srcFlip ^ srcElt->isFlip, destOuterTypeIsConst, srcOuterTypeIsConst);
     });
 
+  // Ground types require leaf flippedness and const compatibility
+  if (destFlip != srcFlip)
+    return false;
+  if (destFlip && srcIsConst && !destIsConst)
+    return false;
+  if (srcFlip && destIsConst && !srcIsConst)
+    return false;
+
+  // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
+  if (isa<ResetType>(destType))
+    return srcType.isResetType();
+
+  // Reset types can drive UInt<1>, AsyncReset, or Reset types.
+  if (isa<ResetType>(srcType))
+    return destType.isResetType();
+
   // Ground types can be connected if their passive, widthless versions
-  // are equal and leaf flippedness matches.
-  return destType.getWidthlessType() == srcType.getWidthlessType() &&
-         destFlip == srcFlip;
+  // are equal and are const and flip compatible
+  auto widthlessDestType = destType.getWidthlessType();
+  auto widthlessSrcType = srcType.getWidthlessType();
+  return widthlessDestType.getConstType(false) ==
+         widthlessSrcType.getConstType(false);
 }
 
+/// Returns whether the srcType can be const-casted to the destType.
+bool firrtl::areTypesConstCastable(FIRRTLType destFType, FIRRTLType srcFType,
+                                   bool srcOuterTypeIsConst) {
+  // Identical types are always castable
+  if (destFType == srcFType)
+    return true;
+
+  auto destType = dyn_cast<FIRRTLBaseType>(destFType);
+  auto srcType = dyn_cast<FIRRTLBaseType>(srcFType);
+
+  // For non-base types, only castable if identical.
+  if (!destType || !srcType)
+    return false;
+
+  // Types must be passive
+  if (!destType.isPassive() || !srcType.isPassive())
+    return false;
+
+  bool srcIsConst = srcType.isConst() || srcOuterTypeIsConst;
+
+  // Cannot cast non-'const' src to 'const' dest
+  if (destType.isConst() && !srcIsConst)
+    return false;
+
+  // Vector types can be casted if they have the same size and castable element
+  // type.
+  auto destVectorType = dyn_cast<FVectorType>(destType);
+  auto srcVectorType = dyn_cast<FVectorType>(srcType);
+  if (destVectorType && srcVectorType)
+    return destVectorType.getNumElements() == srcVectorType.getNumElements() &&
+           areTypesConstCastable(destVectorType.getElementType(),
+                                 srcVectorType.getElementType(), srcIsConst);
+  if (destVectorType != srcVectorType)
+    return false;
+
+  // Bundle types can be casted if they have the same size, element names,
+  // and castable element types.
+  auto destBundleType = dyn_cast<BundleType>(destType);
+  auto srcBundleType = dyn_cast<BundleType>(srcType);
+  if (destBundleType && srcBundleType) {
+    auto destElements = destBundleType.getElements();
+    auto srcElements = srcBundleType.getElements();
+    size_t numDestElements = destElements.size();
+    if (numDestElements != srcElements.size())
+      return false;
+
+    return llvm::all_of_zip(
+        destElements, srcElements,
+        [&](const auto &destElement, const auto &srcElement) {
+          return destElement.name == srcElement.name &&
+                 areTypesConstCastable(destElement.type, srcElement.type,
+                                       srcIsConst);
+        });
+  }
+  if (destBundleType != srcBundleType)
+    return false;
+
+  // Ground types can be casted if the source type is a const
+  // version of the destination type
+  return destType == srcType.getConstType(destType.isConst());
+}
+
+bool firrtl::areTypesRefCastable(Type dstType, Type srcType) {
+  auto dstRefType = dyn_cast<RefType>(dstType);
+  auto srcRefType = dyn_cast<RefType>(srcType);
+  if (!dstRefType || !srcRefType)
+    return false;
+  if (dstRefType == srcRefType)
+    return true;
+  if (dstRefType.getForceable() && !srcRefType.getForceable())
+    return false;
+
+  // Okay walk the types recursively.  They must be identical "structurally"
+  // with exception leaf (ground) types of destination can be uninferred
+  // versions of the corresponding source type. (can lose width information or
+  // become a more general reset type)
+  // In addition, while not explicitly in spec its useful to allow probes
+  // to have const cast away, especially for probes of literals and expressions
+  // derived from them.  Check const as with const cast.
+  // NOLINTBEGIN(misc-no-recursion)
+  auto recurse = [&](auto &&f, FIRRTLBaseType dest, FIRRTLBaseType src,
+                     bool srcOuterTypeIsConst) -> bool {
+    // Fast-path for identical types.
+    if (dest == src)
+      return true;
+
+    // Always passive inside probes, but for sanity assert this.
+    assert(dest.isPassive() && src.isPassive());
+
+    bool srcIsConst = src.isConst() || srcOuterTypeIsConst;
+
+    // Cannot cast non-'const' src to 'const' dest
+    if (dest.isConst() && !srcIsConst)
+      return false;
+
+    // Recurse through aggregates to get the leaves, checking
+    // structural equivalence re:element count + names.
+
+    if (auto destVectorType = dyn_cast<FVectorType>(dest)) {
+      auto srcVectorType = dyn_cast<FVectorType>(src);
+      return srcVectorType &&
+             destVectorType.getNumElements() ==
+                 srcVectorType.getNumElements() &&
+             f(f, destVectorType.getElementType(),
+               srcVectorType.getElementType(), srcIsConst);
+    }
+
+    if (auto destBundleType = dyn_cast<BundleType>(dest)) {
+      auto srcBundleType = dyn_cast<BundleType>(src);
+      if (!srcBundleType)
+        return false;
+      // (no need to check orientation, these are always passive)
+      auto destElements = destBundleType.getElements();
+      auto srcElements = srcBundleType.getElements();
+
+      return destElements.size() == srcElements.size() &&
+             llvm::all_of_zip(
+                 destElements, srcElements,
+                 [&](const auto &destElement, const auto &srcElement) {
+                   return destElement.name == srcElement.name &&
+                          f(f, destElement.type, srcElement.type, srcIsConst);
+                 });
+    }
+
+    if (auto destEnumType = dyn_cast<FEnumType>(dest)) {
+      auto srcEnumType = dyn_cast<FEnumType>(src);
+      if (!srcEnumType)
+        return false;
+      auto destElements = destEnumType.getElements();
+      auto srcElements = srcEnumType.getElements();
+
+      return destElements.size() == srcElements.size() &&
+             llvm::all_of_zip(
+                 destElements, srcElements,
+                 [&](const auto &destElement, const auto &srcElement) {
+                   return destElement.name == srcElement.name &&
+                          f(f, destElement.type, srcElement.type, srcIsConst);
+                 });
+    }
+
+    // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
+    if (isa<ResetType>(dest))
+      return src.isResetType();
+    // (but don't allow the other direction, can only become more general)
+
+    // Compare against const src if dest is const.
+    src = src.getConstType(dest.isConst());
+
+    // Compare against widthless src if dest is widthless.
+    if (dest.getBitWidthOrSentinel() == -1)
+      src = src.getWidthlessType();
+
+    return dest == src;
+  };
+
+  return recurse(recurse, dstRefType.getType(), srcRefType.getType(), false);
+  // NOLINTEND(misc-no-recursion)
+}
+
+// NOLINTBEGIN(misc-no-recursion)
 /// Returns true if the destination is at least as wide as an equivalent source.
 bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
   return TypeSwitch<FIRRTLBaseType, bool>(dstType)
       .Case<BundleType>([&](auto dstBundle) {
-        auto srcBundle = srcType.cast<BundleType>();
+        auto srcBundle = cast<BundleType>(srcType);
         for (size_t i = 0, n = dstBundle.getNumElements(); i < n; ++i) {
           auto srcElem = srcBundle.getElement(i);
           auto dstElem = dstBundle.getElement(i);
@@ -674,7 +1100,7 @@ bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
       })
       .Case<FVectorType>([&](auto vector) {
         return isTypeLarger(vector.getElementType(),
-                            srcType.cast<FVectorType>().getElementType());
+                            cast<FVectorType>(srcType).getElementType());
       })
       .Default([&](auto dstGround) {
         int32_t destWidth = dstType.getPassiveType().getBitWidthOrSentinel();
@@ -682,155 +1108,177 @@ bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
         return destWidth <= -1 || srcWidth <= -1 || destWidth >= srcWidth;
       });
 }
-
-/// Return the element of an array type or null.  This strips flip types.
-Type firrtl::getVectorElementType(Type array) {
-  auto vectorType = array.dyn_cast<FVectorType>();
-  if (!vectorType)
-    return Type();
-  return vectorType.getElementType();
-}
+// NOLINTEND(misc-no-recursion)
 
 /// Return the passive version of a firrtl type
 /// top level for ODS constraint usage
 Type firrtl::getPassiveType(Type anyBaseFIRRTLType) {
-  return anyBaseFIRRTLType.cast<FIRRTLBaseType>().getPassiveType();
+  return cast<FIRRTLBaseType>(anyBaseFIRRTLType).getPassiveType();
 }
 
 //===----------------------------------------------------------------------===//
 // IntType
 //===----------------------------------------------------------------------===//
 
-/// Return the bitwidth of this type or None if unknown.
-Optional<int32_t> IntType::getWidth() {
-  return isSigned() ? this->cast<SIntType>().getWidth()
-                    : this->cast<UIntType>().getWidth();
-}
-
-/// Return a SIntType or UInt type with the specified signedness and width.
-IntType IntType::get(MLIRContext *context, bool isSigned, int32_t width) {
+/// Return a SIntType or UIntType with the specified signedness, width, and
+/// constness
+IntType IntType::get(MLIRContext *context, bool isSigned,
+                     int32_t widthOrSentinel, bool isConst) {
   if (isSigned)
-    return SIntType::get(context, width);
-  return UIntType::get(context, width);
+    return SIntType::get(context, widthOrSentinel, isConst);
+  return UIntType::get(context, widthOrSentinel, isConst);
+}
+
+int32_t IntType::getWidthOrSentinel() {
+  if (auto sintType = llvm::dyn_cast<SIntType>(*this))
+    return sintType.getWidthOrSentinel();
+  if (auto uintType = llvm::dyn_cast<UIntType>(*this))
+    return uintType.getWidthOrSentinel();
+  return -1;
 }
 
 //===----------------------------------------------------------------------===//
-// Width Qualified Ground Types
+// WidthTypeStorage
 //===----------------------------------------------------------------------===//
 
-namespace circt {
-namespace firrtl {
-namespace detail {
-struct WidthTypeStorage : mlir::TypeStorage {
-  WidthTypeStorage(int32_t width) : width(width) {}
-  using KeyTy = int32_t;
+struct circt::firrtl::detail::WidthTypeStorage : detail::FIRRTLBaseTypeStorage {
+  WidthTypeStorage(int32_t width, bool isConst)
+      : FIRRTLBaseTypeStorage(isConst), width(width) {}
+  using KeyTy = std::pair<int32_t, char>;
 
-  bool operator==(const KeyTy &key) const { return key == width; }
+  bool operator==(const KeyTy &key) const {
+    return key == std::pair{width, isConst};
+  }
 
   static WidthTypeStorage *construct(TypeStorageAllocator &allocator,
                                      const KeyTy &key) {
-    return new (allocator.allocate<WidthTypeStorage>()) WidthTypeStorage(key);
+    return new (allocator.allocate<WidthTypeStorage>())
+        WidthTypeStorage(key.first, key.second);
   }
 
   int32_t width;
 };
-} // namespace detail
-} // namespace firrtl
-} // namespace circt
 
-static Optional<int32_t>
-getWidthQualifiedTypeWidth(firrtl::detail::WidthTypeStorage *impl) {
-  int width = impl->width;
-  if (width < 0)
-    return None;
-  return width;
+IntType IntType::getConstType(bool isConst) {
+
+  if (auto sIntType = llvm::dyn_cast<SIntType>(*this))
+    return sIntType.getConstType(isConst);
+  return llvm::cast<UIntType>(*this).getConstType(isConst);
 }
 
-/// Get an with a known width, or -1 for unknown.
-SIntType SIntType::get(MLIRContext *context, int32_t width) {
-  assert(width >= -1 && "unknown width");
-  return Base::get(context, width);
+//===----------------------------------------------------------------------===//
+// SIntType
+//===----------------------------------------------------------------------===//
+
+SIntType SIntType::get(MLIRContext *context) { return get(context, -1, false); }
+
+SIntType SIntType::get(MLIRContext *context, std::optional<int32_t> width,
+                       bool isConst) {
+  return get(context, width ? *width : -1, isConst);
 }
 
-Optional<int32_t> SIntType::getWidth() {
-  return getWidthQualifiedTypeWidth(this->getImpl());
+LogicalResult SIntType::verify(function_ref<InFlightDiagnostic()> emitError,
+                               int32_t widthOrSentinel, bool isConst) {
+  if (widthOrSentinel < -1)
+    return emitError() << "invalid width";
+  return success();
 }
 
-UIntType UIntType::get(MLIRContext *context, int32_t width) {
-  assert(width >= -1 && "unknown width");
-  return Base::get(context, width);
+int32_t SIntType::getWidthOrSentinel() const { return getImpl()->width; }
+
+SIntType SIntType::getConstType(bool isConst) {
+  if (isConst == this->isConst())
+    return *this;
+  return get(getContext(), getWidthOrSentinel(), isConst);
 }
 
-Optional<int32_t> UIntType::getWidth() {
-  return getWidthQualifiedTypeWidth(this->getImpl());
+//===----------------------------------------------------------------------===//
+// UIntType
+//===----------------------------------------------------------------------===//
+
+UIntType UIntType::get(MLIRContext *context) { return get(context, -1, false); }
+
+UIntType UIntType::get(MLIRContext *context, std::optional<int32_t> width,
+                       bool isConst) {
+  return get(context, width ? *width : -1, isConst);
+}
+
+LogicalResult UIntType::verify(function_ref<InFlightDiagnostic()> emitError,
+                               int32_t widthOrSentinel, bool isConst) {
+  if (widthOrSentinel < -1)
+    return emitError() << "invalid width";
+  return success();
+}
+
+int32_t UIntType::getWidthOrSentinel() const { return getImpl()->width; }
+
+UIntType UIntType::getConstType(bool isConst) {
+  if (isConst == this->isConst())
+    return *this;
+  return get(getContext(), getWidthOrSentinel(), isConst);
 }
 
 //===----------------------------------------------------------------------===//
 // Bundle Type
 //===----------------------------------------------------------------------===//
 
-namespace circt {
-namespace firrtl {
-llvm::hash_code hash_value(const BundleType::BundleElement &arg) {
-  return mlir::hash_value(arg.name) ^ mlir::hash_value(arg.type);
-}
-} // namespace firrtl
-} // namespace circt
+struct circt::firrtl::detail::BundleTypeStorage
+    : detail::FIRRTLBaseTypeStorage {
+  using KeyTy = std::pair<ArrayRef<BundleType::BundleElement>, char>;
 
-namespace circt {
-namespace firrtl {
-namespace detail {
-struct BundleTypeStorage : mlir::TypeStorage {
-  using KeyTy = ArrayRef<BundleType::BundleElement>;
-
-  BundleTypeStorage(KeyTy elements)
-      : elements(elements.begin(), elements.end()) {
-    RecursiveTypeProperties props{true, false, false};
-    unsigned fieldID = 0;
+  BundleTypeStorage(ArrayRef<BundleType::BundleElement> elements, bool isConst)
+      : detail::FIRRTLBaseTypeStorage(isConst),
+        elements(elements.begin(), elements.end()), props{true,  false,
+                                                          false, isConst,
+                                                          false, false} {
+    uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
       auto type = element.type;
       auto eltInfo = type.getRecursiveTypeProperties();
       props.isPassive &= eltInfo.isPassive & !element.isFlip;
       props.containsAnalog |= eltInfo.containsAnalog;
+      props.containsReference |= eltInfo.containsReference;
+      props.containsConst |= eltInfo.containsConst;
       props.hasUninferredWidth |= eltInfo.hasUninferredWidth;
+      props.hasUninferredReset |= eltInfo.hasUninferredReset;
       fieldID += 1;
       fieldIDs.push_back(fieldID);
       // Increment the field ID for the next field by the number of subfields.
       fieldID += type.getMaxFieldID();
     }
     maxFieldID = fieldID;
-    passiveContainsAnalogTypeInfo.setInt(props.toFlags());
   }
 
-  bool operator==(const KeyTy &key) const { return key == KeyTy(elements); }
+  bool operator==(const KeyTy &key) const {
+    return key == KeyTy(elements, isConst);
+  }
 
   static llvm::hash_code hashKey(const KeyTy &key) {
-    return llvm::hash_combine_range(key.begin(), key.end());
+    return llvm::hash_combine(
+        llvm::hash_combine_range(key.first.begin(), key.first.end()),
+        key.second);
   }
 
   static BundleTypeStorage *construct(TypeStorageAllocator &allocator,
                                       KeyTy key) {
-    return new (allocator.allocate<BundleTypeStorage>()) BundleTypeStorage(key);
+    return new (allocator.allocate<BundleTypeStorage>())
+        BundleTypeStorage(key.first, static_cast<bool>(key.second));
   }
 
   SmallVector<BundleType::BundleElement, 4> elements;
-  SmallVector<unsigned, 4> fieldIDs;
-  unsigned maxFieldID;
+  SmallVector<uint64_t, 4> fieldIDs;
+  uint64_t maxFieldID;
 
   /// This holds the bits for the type's recursive properties, and can hold a
   /// pointer to a passive version of the type.
-  llvm::PointerIntPair<Type, RecursiveTypeProperties::numBits, unsigned>
-      passiveContainsAnalogTypeInfo;
+  RecursiveTypeProperties props;
+  BundleType passiveType;
 };
 
-} // namespace detail
-} // namespace firrtl
-} // namespace circt
-
-BundleType BundleType::get(ArrayRef<BundleElement> elements,
-                           MLIRContext *context) {
-  return Base::get(context, elements);
+BundleType BundleType::get(MLIRContext *context,
+                           ArrayRef<BundleElement> elements, bool isConst) {
+  return Base::get(context, elements, isConst);
 }
 
 auto BundleType::getElements() const -> ArrayRef<BundleElement> {
@@ -838,9 +1286,8 @@ auto BundleType::getElements() const -> ArrayRef<BundleElement> {
 }
 
 /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
-RecursiveTypeProperties BundleType::getRecursiveTypeProperties() {
-  auto flags = getImpl()->passiveContainsAnalogTypeInfo.getInt();
-  return RecursiveTypeProperties::fromFlags(flags);
+RecursiveTypeProperties BundleType::getRecursiveTypeProperties() const {
+  return getImpl()->props;
 }
 
 /// Return this type with any flip types recursively removed from itself.
@@ -848,12 +1295,12 @@ FIRRTLBaseType BundleType::getPassiveType() {
   auto *impl = getImpl();
 
   // If we've already determined and cached the passive type, use it.
-  if (auto passiveType = impl->passiveContainsAnalogTypeInfo.getPointer())
-    return passiveType.cast<FIRRTLBaseType>();
+  if (impl->passiveType)
+    return impl->passiveType;
 
   // If this type is already passive, use it and remember for next time.
-  if (impl->passiveContainsAnalogTypeInfo.getInt() & IsPassiveBitMask) {
-    impl->passiveContainsAnalogTypeInfo.setPointer(*this);
+  if (impl->props.isPassive) {
+    impl->passiveType = *this;
     return *this;
   }
 
@@ -864,29 +1311,47 @@ FIRRTLBaseType BundleType::getPassiveType() {
     newElements.push_back({elt.name, false, elt.type.getPassiveType()});
   }
 
-  auto passiveType = BundleType::get(newElements, getContext());
-  impl->passiveContainsAnalogTypeInfo.setPointer(passiveType);
+  auto passiveType = BundleType::get(getContext(), newElements, isConst());
+  impl->passiveType = passiveType;
   return passiveType;
 }
 
-llvm::Optional<unsigned> BundleType::getElementIndex(StringAttr name) {
+BundleType BundleType::getConstType(bool isConst) {
+  if (isConst == this->isConst())
+    return *this;
+  return get(getContext(), getElements(), isConst);
+}
+
+BundleType BundleType::getAllConstDroppedType() {
+  if (!containsConst())
+    return *this;
+
+  SmallVector<BundleElement> constDroppedElements(
+      llvm::map_range(getElements(), [](BundleElement element) {
+        element.type = element.type.getAllConstDroppedType();
+        return element;
+      }));
+  return get(getContext(), constDroppedElements, false);
+}
+
+std::optional<unsigned> BundleType::getElementIndex(StringAttr name) {
   for (const auto &it : llvm::enumerate(getElements())) {
     auto element = it.value();
     if (element.name == name) {
       return unsigned(it.index());
     }
   }
-  return None;
+  return std::nullopt;
 }
 
-llvm::Optional<unsigned> BundleType::getElementIndex(StringRef name) {
+std::optional<unsigned> BundleType::getElementIndex(StringRef name) {
   for (const auto &it : llvm::enumerate(getElements())) {
     auto element = it.value();
     if (element.name.getValue() == name) {
       return unsigned(it.index());
     }
   }
-  return None;
+  return std::nullopt;
 }
 
 StringRef BundleType::getElementName(size_t index) {
@@ -895,16 +1360,18 @@ StringRef BundleType::getElementName(size_t index) {
   return getElements()[index].name.getValue();
 }
 
-Optional<BundleType::BundleElement> BundleType::getElement(StringAttr name) {
+std::optional<BundleType::BundleElement>
+BundleType::getElement(StringAttr name) {
   if (auto maybeIndex = getElementIndex(name))
     return getElements()[*maybeIndex];
-  return None;
+  return std::nullopt;
 }
 
-Optional<BundleType::BundleElement> BundleType::getElement(StringRef name) {
+std::optional<BundleType::BundleElement>
+BundleType::getElement(StringRef name) {
   if (auto maybeIndex = getElementIndex(name))
     return getElements()[*maybeIndex];
-  return None;
+  return std::nullopt;
 }
 
 /// Look up an element by index.
@@ -930,32 +1397,40 @@ FIRRTLBaseType BundleType::getElementType(size_t index) {
   return getElements()[index].type;
 }
 
-unsigned BundleType::getFieldID(unsigned index) {
+uint64_t BundleType::getFieldID(uint64_t index) {
   return getImpl()->fieldIDs[index];
 }
 
-unsigned BundleType::getIndexForFieldID(unsigned fieldID) {
-  assert(getElements().size() && "Bundle must have >0 fields");
+uint64_t BundleType::getIndexForFieldID(uint64_t fieldID) {
+  assert(!getElements().empty() && "Bundle must have >0 fields");
   auto fieldIDs = getImpl()->fieldIDs;
   auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
   return std::distance(fieldIDs.begin(), it);
 }
 
-std::pair<FIRRTLBaseType, unsigned>
-BundleType::getSubTypeByFieldID(unsigned fieldID) {
+std::pair<uint64_t, uint64_t>
+BundleType::getIndexAndSubfieldID(uint64_t fieldID) {
+  auto index = getIndexForFieldID(fieldID);
+  auto elementFieldID = getFieldID(index);
+  return {index, fieldID - elementFieldID};
+}
+
+std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+BundleType::getSubTypeByFieldID(uint64_t fieldID) {
   if (fieldID == 0)
     return {*this, 0};
   auto fieldIDs = getImpl()->fieldIDs;
   auto subfieldIndex = getIndexForFieldID(fieldID);
   auto subfieldType = getElementType(subfieldIndex);
   auto subfieldID = fieldID - getFieldID(subfieldIndex);
-  return {subfieldType, subfieldID};
+  return {llvm::cast<circt::hw::FieldIDTypeInterface>(subfieldType),
+          subfieldID};
 }
 
-unsigned BundleType::getMaxFieldID() { return getImpl()->maxFieldID; }
+uint64_t BundleType::getMaxFieldID() { return getImpl()->maxFieldID; }
 
-std::pair<unsigned, bool> BundleType::rootChildFieldID(unsigned fieldID,
-                                                       unsigned index) {
+std::pair<uint64_t, bool> BundleType::rootChildFieldID(uint64_t fieldID,
+                                                       uint64_t index) {
   auto childRoot = getFieldID(index);
   auto rangeEnd = index + 1 >= getNumElements() ? getMaxFieldID()
                                                 : (getFieldID(index + 1) - 1);
@@ -963,53 +1438,271 @@ std::pair<unsigned, bool> BundleType::rootChildFieldID(unsigned fieldID,
                         fieldID >= childRoot && fieldID <= rangeEnd);
 }
 
+bool BundleType::isConst() { return getImpl()->isConst; }
+
+BundleType::ElementType
+BundleType::getElementTypePreservingConst(size_t index) {
+  auto type = getElementType(index);
+  return type.getConstType(type.isConst() || isConst());
+}
+
 //===----------------------------------------------------------------------===//
-// Vector Type
+// OpenBundle Type
 //===----------------------------------------------------------------------===//
 
-namespace circt {
-namespace firrtl {
-namespace detail {
-struct VectorTypeStorage : mlir::TypeStorage {
-  using KeyTy = std::pair<FIRRTLBaseType, size_t>;
+struct circt::firrtl::detail::OpenBundleTypeStorage : mlir::TypeStorage {
+  using KeyTy = std::pair<ArrayRef<OpenBundleType::BundleElement>, char>;
 
-  VectorTypeStorage(KeyTy value) : value(value) {
-    auto properties = value.first.getRecursiveTypeProperties();
-    passiveContainsAnalogTypeInfo.setInt(properties.toFlags());
+  OpenBundleTypeStorage(ArrayRef<OpenBundleType::BundleElement> elements,
+                        bool isConst)
+      : elements(elements.begin(), elements.end()), props{true,  false,
+                                                          false, isConst,
+                                                          false, false},
+        isConst(static_cast<char>(isConst)) {
+    uint64_t fieldID = 0;
+    fieldIDs.reserve(elements.size());
+    for (auto &element : elements) {
+      auto type = element.type;
+      auto eltInfo = type.getRecursiveTypeProperties();
+      props.isPassive &= eltInfo.isPassive & !element.isFlip;
+      props.containsAnalog |= eltInfo.containsAnalog;
+      props.containsReference |= eltInfo.containsReference;
+      props.containsConst |= eltInfo.containsConst;
+      props.hasUninferredWidth |= eltInfo.hasUninferredWidth;
+      props.hasUninferredReset |= eltInfo.hasUninferredReset;
+      fieldID += 1;
+      fieldIDs.push_back(fieldID);
+      // Increment the field ID for the next field by the number of subfields.
+      // TODO: Maybe just have elementType be FieldIDTypeInterface ?
+      fieldID += cast<hw::FieldIDTypeInterface>(type).getMaxFieldID();
+    }
+    maxFieldID = fieldID;
   }
 
-  bool operator==(const KeyTy &key) const { return key == value; }
-
-  static VectorTypeStorage *construct(TypeStorageAllocator &allocator,
-                                      KeyTy key) {
-    return new (allocator.allocate<VectorTypeStorage>()) VectorTypeStorage(key);
+  bool operator==(const KeyTy &key) const {
+    return key == KeyTy(elements, isConst);
   }
 
-  KeyTy value;
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine(
+        llvm::hash_combine_range(key.first.begin(), key.first.end()),
+        key.second);
+  }
+
+  static OpenBundleTypeStorage *construct(TypeStorageAllocator &allocator,
+                                          KeyTy key) {
+    return new (allocator.allocate<OpenBundleTypeStorage>())
+        OpenBundleTypeStorage(key.first, static_cast<bool>(key.second));
+  }
+
+  SmallVector<OpenBundleType::BundleElement, 4> elements;
+  SmallVector<uint64_t, 4> fieldIDs;
+  uint64_t maxFieldID;
 
   /// This holds the bits for the type's recursive properties, and can hold a
   /// pointer to a passive version of the type.
-  llvm::PointerIntPair<Type, RecursiveTypeProperties::numBits, size_t>
-      passiveContainsAnalogTypeInfo;
+  RecursiveTypeProperties props;
+
+  // Whether this is 'const'.
+  char isConst;
 };
 
-} // namespace detail
-} // namespace firrtl
-} // namespace circt
-
-FVectorType FVectorType::get(FIRRTLBaseType elementType, size_t numElements) {
-  return Base::get(elementType.getContext(),
-                   std::make_pair(elementType, numElements));
+OpenBundleType OpenBundleType::get(MLIRContext *context,
+                                   ArrayRef<BundleElement> elements,
+                                   bool isConst) {
+  return Base::get(context, elements, isConst);
 }
 
-FIRRTLBaseType FVectorType::getElementType() { return getImpl()->value.first; }
+auto OpenBundleType::getElements() const -> ArrayRef<BundleElement> {
+  return getImpl()->elements;
+}
 
-size_t FVectorType::getNumElements() { return getImpl()->value.second; }
+/// Return a pair with the 'isPassive' and 'containsAnalog' bits.
+RecursiveTypeProperties OpenBundleType::getRecursiveTypeProperties() const {
+  return getImpl()->props;
+}
+
+OpenBundleType OpenBundleType::getConstType(bool isConst) {
+  if (isConst == this->isConst())
+    return *this;
+  return get(getContext(), getElements(), isConst);
+}
+
+std::optional<unsigned> OpenBundleType::getElementIndex(StringAttr name) {
+  for (const auto &it : llvm::enumerate(getElements())) {
+    auto element = it.value();
+    if (element.name == name) {
+      return unsigned(it.index());
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<unsigned> OpenBundleType::getElementIndex(StringRef name) {
+  for (const auto &it : llvm::enumerate(getElements())) {
+    auto element = it.value();
+    if (element.name.getValue() == name) {
+      return unsigned(it.index());
+    }
+  }
+  return std::nullopt;
+}
+
+StringRef OpenBundleType::getElementName(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in bundle");
+  return getElements()[index].name.getValue();
+}
+
+std::optional<OpenBundleType::BundleElement>
+OpenBundleType::getElement(StringAttr name) {
+  if (auto maybeIndex = getElementIndex(name))
+    return getElements()[*maybeIndex];
+  return std::nullopt;
+}
+
+std::optional<OpenBundleType::BundleElement>
+OpenBundleType::getElement(StringRef name) {
+  if (auto maybeIndex = getElementIndex(name))
+    return getElements()[*maybeIndex];
+  return std::nullopt;
+}
+
+/// Look up an element by index.
+OpenBundleType::BundleElement OpenBundleType::getElement(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in bundle");
+  return getElements()[index];
+}
+
+OpenBundleType::ElementType OpenBundleType::getElementType(StringAttr name) {
+  auto element = getElement(name);
+  return element ? element->type : FIRRTLBaseType();
+}
+
+OpenBundleType::ElementType OpenBundleType::getElementType(StringRef name) {
+  auto element = getElement(name);
+  return element ? element->type : FIRRTLBaseType();
+}
+
+OpenBundleType::ElementType OpenBundleType::getElementType(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in bundle");
+  return getElements()[index].type;
+}
+
+uint64_t OpenBundleType::getFieldID(uint64_t index) {
+  return getImpl()->fieldIDs[index];
+}
+
+uint64_t OpenBundleType::getIndexForFieldID(uint64_t fieldID) {
+  assert(!getElements().empty() && "Bundle must have >0 fields");
+  auto fieldIDs = getImpl()->fieldIDs;
+  auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
+  return std::distance(fieldIDs.begin(), it);
+}
+
+std::pair<uint64_t, uint64_t>
+OpenBundleType::getIndexAndSubfieldID(uint64_t fieldID) {
+  auto index = getIndexForFieldID(fieldID);
+  auto elementFieldID = getFieldID(index);
+  return {index, fieldID - elementFieldID};
+}
+
+std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+OpenBundleType::getSubTypeByFieldID(uint64_t fieldID) {
+  if (fieldID == 0)
+    return {*this, 0};
+  auto fieldIDs = getImpl()->fieldIDs;
+  auto subfieldIndex = getIndexForFieldID(fieldID);
+  auto subfieldType = getElementType(subfieldIndex);
+  auto subfieldID = fieldID - getFieldID(subfieldIndex);
+  return {llvm::cast<circt::hw::FieldIDTypeInterface>(subfieldType),
+          subfieldID};
+}
+
+uint64_t OpenBundleType::getMaxFieldID() { return getImpl()->maxFieldID; }
+
+std::pair<uint64_t, bool> OpenBundleType::rootChildFieldID(uint64_t fieldID,
+                                                           uint64_t index) {
+  auto childRoot = getFieldID(index);
+  auto rangeEnd = index + 1 >= getNumElements() ? getMaxFieldID()
+                                                : (getFieldID(index + 1) - 1);
+  return std::make_pair(fieldID - childRoot,
+                        fieldID >= childRoot && fieldID <= rangeEnd);
+}
+
+circt::hw::FieldIDTypeInterface
+OpenBundleType::getFinalTypeByFieldID(uint64_t fieldID) const {
+  std::pair<circt::hw::FieldIDTypeInterface, uint64_t> pair(*this, fieldID);
+  while (pair.second)
+    pair = pair.first.getSubTypeByFieldID(pair.second);
+  return pair.first;
+}
+
+bool OpenBundleType::isConst() { return getImpl()->isConst; }
+
+OpenBundleType::ElementType
+OpenBundleType::getElementTypePreservingConst(size_t index) {
+  auto type = getElementType(index);
+  // TODO: ConstTypeInterface / Trait ?
+  return TypeSwitch<FIRRTLType, ElementType>(type)
+      .Case<FIRRTLBaseType, OpenBundleType, OpenVectorType>([&](auto type) {
+        return type.getConstType(type.isConst() || isConst());
+      })
+      .Default(type);
+}
+
+//===----------------------------------------------------------------------===//
+// FVectorType
+//===----------------------------------------------------------------------===//
+
+struct circt::firrtl::detail::FVectorTypeStorage
+    : detail::FIRRTLBaseTypeStorage {
+  using KeyTy = std::tuple<FIRRTLBaseType, size_t, char>;
+
+  FVectorTypeStorage(FIRRTLBaseType elementType, size_t numElements,
+                     bool isConst)
+      : detail::FIRRTLBaseTypeStorage(isConst), elementType(elementType),
+        numElements(numElements),
+        props(elementType.getRecursiveTypeProperties()) {
+    props.containsConst |= isConst;
+  }
+
+  bool operator==(const KeyTy &key) const {
+    return key == std::make_tuple(elementType, numElements, isConst);
+  }
+
+  static FVectorTypeStorage *construct(TypeStorageAllocator &allocator,
+                                       KeyTy key) {
+    return new (allocator.allocate<FVectorTypeStorage>())
+        FVectorTypeStorage(std::get<0>(key), std::get<1>(key),
+                           static_cast<bool>(std::get<2>(key)));
+  }
+
+  FIRRTLBaseType elementType;
+  size_t numElements;
+
+  /// This holds the bits for the type's recursive properties, and can hold a
+  /// pointer to a passive version of the type.
+  RecursiveTypeProperties props;
+  FIRRTLBaseType passiveType;
+};
+
+FVectorType FVectorType::get(FIRRTLBaseType elementType, size_t numElements,
+                             bool isConst) {
+  return Base::get(elementType.getContext(), elementType, numElements, isConst);
+}
+
+FIRRTLBaseType FVectorType::getElementType() const {
+  return getImpl()->elementType;
+}
+
+size_t FVectorType::getNumElements() const { return getImpl()->numElements; }
 
 /// Return the recursive properties of the type.
-RecursiveTypeProperties FVectorType::getRecursiveTypeProperties() {
-  auto flags = getImpl()->passiveContainsAnalogTypeInfo.getInt();
-  return RecursiveTypeProperties::fromFlags(flags);
+RecursiveTypeProperties FVectorType::getRecursiveTypeProperties() const {
+  return getImpl()->props;
 }
 
 /// Return this type with any flip types recursively removed from itself.
@@ -1017,46 +1710,64 @@ FIRRTLBaseType FVectorType::getPassiveType() {
   auto *impl = getImpl();
 
   // If we've already determined and cached the passive type, use it.
-  if (auto passiveType = impl->passiveContainsAnalogTypeInfo.getPointer())
-    return passiveType.cast<FIRRTLBaseType>();
+  if (impl->passiveType)
+    return impl->passiveType;
 
   // If this type is already passive, return it and remember for next time.
-  if (impl->passiveContainsAnalogTypeInfo.getInt() & IsPassiveBitMask) {
-    impl->passiveContainsAnalogTypeInfo.setPointer(*this);
-    return *this;
-  }
+  if (impl->elementType.getRecursiveTypeProperties().isPassive)
+    return impl->passiveType = *this;
 
   // Otherwise, rebuild a passive version.
-  auto passiveType =
-      FVectorType::get(getElementType().getPassiveType(), getNumElements());
-  impl->passiveContainsAnalogTypeInfo.setPointer(passiveType);
+  auto passiveType = FVectorType::get(getElementType().getPassiveType(),
+                                      getNumElements(), isConst());
+  impl->passiveType = passiveType;
   return passiveType;
 }
 
-size_t FVectorType::getFieldID(size_t index) {
+FVectorType FVectorType::getConstType(bool isConst) {
+  if (isConst == this->isConst())
+    return *this;
+  return get(getElementType(), getNumElements(), isConst);
+}
+
+FVectorType FVectorType::getAllConstDroppedType() {
+  if (!containsConst())
+    return *this;
+  return get(getElementType().getAllConstDroppedType(), getNumElements(),
+             false);
+}
+
+uint64_t FVectorType::getFieldID(uint64_t index) {
   return 1 + index * (getElementType().getMaxFieldID() + 1);
 }
 
-size_t FVectorType::getIndexForFieldID(size_t fieldID) {
+uint64_t FVectorType::getIndexForFieldID(uint64_t fieldID) {
   assert(fieldID && "fieldID must be at least 1");
   // Divide the field ID by the number of fieldID's per element.
   return (fieldID - 1) / (getElementType().getMaxFieldID() + 1);
 }
 
-std::pair<FIRRTLBaseType, size_t>
-FVectorType::getSubTypeByFieldID(size_t fieldID) {
-  if (fieldID == 0)
-    return {*this, 0};
-  auto subfieldIndex = getIndexForFieldID(fieldID);
-  return {getElementType(), fieldID - getFieldID(subfieldIndex)};
+std::pair<uint64_t, uint64_t>
+FVectorType::getIndexAndSubfieldID(uint64_t fieldID) {
+  auto index = getIndexForFieldID(fieldID);
+  auto elementFieldID = getFieldID(index);
+  return {index, fieldID - elementFieldID};
 }
 
-size_t FVectorType::getMaxFieldID() {
+std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+FVectorType::getSubTypeByFieldID(uint64_t fieldID) {
+  if (fieldID == 0)
+    return {*this, 0};
+  return {llvm::cast<circt::hw::FieldIDTypeInterface>(getElementType()),
+          getIndexAndSubfieldID(fieldID).second};
+}
+
+uint64_t FVectorType::getMaxFieldID() {
   return getNumElements() * (getElementType().getMaxFieldID() + 1);
 }
 
-std::pair<size_t, bool> FVectorType::rootChildFieldID(size_t fieldID,
-                                                      size_t index) {
+std::pair<uint64_t, bool> FVectorType::rootChildFieldID(uint64_t fieldID,
+                                                        uint64_t index) {
   auto childRoot = getFieldID(index);
   auto rangeEnd =
       index >= getNumElements() ? getMaxFieldID() : (getFieldID(index + 1) - 1);
@@ -1064,50 +1775,447 @@ std::pair<size_t, bool> FVectorType::rootChildFieldID(size_t fieldID,
                         fieldID >= childRoot && fieldID <= rangeEnd);
 }
 
-//===----------------------------------------------------------------------===//
-// RefType
-//===----------------------------------------------------------------------===//
+bool FVectorType::isConst() { return getImpl()->isConst; }
 
-namespace circt {
-namespace firrtl {
-namespace detail {
-struct RefTypeStorage : mlir::TypeStorage {
-  using KeyTy = FIRRTLBaseType;
-
-  RefTypeStorage(KeyTy value) : value(value) {}
-
-  bool operator==(const KeyTy &key) const { return key == value; }
-
-  static RefTypeStorage *construct(TypeStorageAllocator &allocator, KeyTy key) {
-    return new (allocator.allocate<RefTypeStorage>()) RefTypeStorage(key);
-  }
-
-  KeyTy value;
-};
-
-} // namespace detail
-} // namespace firrtl
-} // namespace circt
-
-auto RefType::get(FIRRTLBaseType type) -> RefType {
-  return Base::get(type.getContext(), type);
+FVectorType::ElementType FVectorType::getElementTypePreservingConst() {
+  auto type = getElementType();
+  return type.getConstType(type.isConst() || isConst());
 }
 
-auto RefType::getType() -> FIRRTLBaseType { return getImpl()->value; }
+//===----------------------------------------------------------------------===//
+// OpenVectorType
+//===----------------------------------------------------------------------===//
 
-auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
-                     FIRRTLBaseType base) -> LogicalResult {
-  if (!base.isPassive())
-    return emitErrorFn() << "reference base type must be passive";
+struct circt::firrtl::detail::OpenVectorTypeStorage : mlir::TypeStorage {
+  using KeyTy = std::tuple<FIRRTLType, size_t, char>;
+
+  OpenVectorTypeStorage(FIRRTLType elementType, size_t numElements,
+                        bool isConst)
+      : elementType(elementType), numElements(numElements),
+        isConst(static_cast<char>(isConst)) {
+    props = elementType.getRecursiveTypeProperties();
+    props.containsConst |= isConst;
+  }
+
+  bool operator==(const KeyTy &key) const {
+    return key == std::make_tuple(elementType, numElements, isConst);
+  }
+
+  static OpenVectorTypeStorage *construct(TypeStorageAllocator &allocator,
+                                          KeyTy key) {
+    return new (allocator.allocate<OpenVectorTypeStorage>())
+        OpenVectorTypeStorage(std::get<0>(key), std::get<1>(key),
+                              static_cast<bool>(std::get<2>(key)));
+  }
+
+  FIRRTLType elementType;
+  size_t numElements;
+
+  RecursiveTypeProperties props;
+  char isConst;
+};
+
+OpenVectorType OpenVectorType::get(FIRRTLType elementType, size_t numElements,
+                                   bool isConst) {
+  return Base::get(elementType.getContext(), elementType, numElements, isConst);
+}
+
+FIRRTLType OpenVectorType::getElementType() const {
+  return getImpl()->elementType;
+}
+
+size_t OpenVectorType::getNumElements() const { return getImpl()->numElements; }
+
+/// Return the recursive properties of the type.
+RecursiveTypeProperties OpenVectorType::getRecursiveTypeProperties() const {
+  return getImpl()->props;
+}
+
+OpenVectorType OpenVectorType::getConstType(bool isConst) {
+  if (isConst == this->isConst())
+    return *this;
+  return get(getElementType(), getNumElements(), isConst);
+}
+
+uint64_t OpenVectorType::getFieldID(uint64_t index) {
+  return 1 + index * (llvm::cast<hw::FieldIDTypeInterface>(getElementType())
+                          .getMaxFieldID() +
+                      1);
+}
+
+uint64_t OpenVectorType::getIndexForFieldID(uint64_t fieldID) {
+  assert(fieldID && "fieldID must be at least 1");
+  // Divide the field ID by the number of fieldID's per element.
+  return (fieldID - 1) / (llvm::cast<hw::FieldIDTypeInterface>(getElementType())
+                              .getMaxFieldID() +
+                          1);
+}
+
+std::pair<uint64_t, uint64_t>
+OpenVectorType::getIndexAndSubfieldID(uint64_t fieldID) {
+  auto index = getIndexForFieldID(fieldID);
+  auto elementFieldID = getFieldID(index);
+  return {index, fieldID - elementFieldID};
+}
+
+std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+OpenVectorType::getSubTypeByFieldID(uint64_t fieldID) {
+  if (fieldID == 0)
+    return {*this, 0};
+  return {llvm::cast<circt::hw::FieldIDTypeInterface>(getElementType()),
+          getIndexForFieldID(fieldID)};
+}
+
+uint64_t OpenVectorType::getMaxFieldID() {
+  // If this is requirement, make ODS constraint or actual elementType.
+  return getNumElements() *
+         (llvm::cast<hw::FieldIDTypeInterface>(getElementType())
+              .getMaxFieldID() +
+          1);
+}
+
+std::pair<uint64_t, bool> OpenVectorType::rootChildFieldID(uint64_t fieldID,
+                                                           uint64_t index) {
+  auto childRoot = getFieldID(index);
+  auto rangeEnd =
+      index >= getNumElements() ? getMaxFieldID() : (getFieldID(index + 1) - 1);
+  return std::make_pair(fieldID - childRoot,
+                        fieldID >= childRoot && fieldID <= rangeEnd);
+}
+
+circt::hw::FieldIDTypeInterface
+OpenVectorType::getFinalTypeByFieldID(uint64_t fieldID) const {
+  std::pair<circt::hw::FieldIDTypeInterface, uint64_t> pair(*this, fieldID);
+  while (pair.second)
+    pair = pair.first.getSubTypeByFieldID(pair.second);
+  return pair.first;
+}
+
+bool OpenVectorType::isConst() { return getImpl()->isConst; }
+
+OpenVectorType::ElementType OpenVectorType::getElementTypePreservingConst() {
+  auto type = getElementType();
+  // TODO: ConstTypeInterface / Trait ?
+  return TypeSwitch<FIRRTLType, ElementType>(type)
+      .Case<FIRRTLBaseType, OpenBundleType, OpenVectorType>([&](auto type) {
+        return type.getConstType(type.isConst() || isConst());
+      })
+      .Default(type);
+}
+
+//===----------------------------------------------------------------------===//
+// FEnum Type
+//===----------------------------------------------------------------------===//
+
+struct circt::firrtl::detail::FEnumTypeStorage : detail::FIRRTLBaseTypeStorage {
+  using KeyTy = std::pair<ArrayRef<FEnumType::EnumElement>, char>;
+
+  FEnumTypeStorage(ArrayRef<FEnumType::EnumElement> elements, bool isConst)
+      : detail::FIRRTLBaseTypeStorage(isConst),
+        elements(elements.begin(), elements.end()) {
+    RecursiveTypeProperties props{true, false, false, isConst, false, false};
+    uint64_t fieldID = 0;
+    fieldIDs.reserve(elements.size());
+    for (auto &element : elements) {
+      auto type = element.type;
+      auto eltInfo = type.getRecursiveTypeProperties();
+      props.isPassive &= eltInfo.isPassive;
+      props.containsAnalog |= eltInfo.containsAnalog;
+      props.containsConst |= eltInfo.containsConst;
+      props.hasUninferredWidth |= eltInfo.hasUninferredWidth;
+      fieldID += 1;
+      fieldIDs.push_back(fieldID);
+      // Increment the field ID for the next field by the number of subfields.
+      fieldID += type.getMaxFieldID();
+    }
+    maxFieldID = fieldID;
+    recProps = props;
+  }
+
+  bool operator==(const KeyTy &key) const {
+    return key == KeyTy(elements, isConst);
+  }
+
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine(
+        llvm::hash_combine_range(key.first.begin(), key.first.end()),
+        key.second);
+  }
+
+  static FEnumTypeStorage *construct(TypeStorageAllocator &allocator,
+                                     KeyTy key) {
+    return new (allocator.allocate<FEnumTypeStorage>())
+        FEnumTypeStorage(key.first, static_cast<bool>(key.second));
+  }
+
+  SmallVector<FEnumType::EnumElement, 4> elements;
+  SmallVector<uint64_t, 4> fieldIDs;
+  uint64_t maxFieldID;
+
+  RecursiveTypeProperties recProps;
+};
+
+FEnumType FEnumType::get(::mlir::MLIRContext *context,
+                         ArrayRef<EnumElement> elements, bool isConst) {
+  return Base::get(context, elements, isConst);
+}
+
+ArrayRef<FEnumType::EnumElement> FEnumType::getElements() const {
+  return getImpl()->elements;
+}
+
+FEnumType FEnumType::getConstType(bool isConst) {
+  return get(getContext(), getElements(), isConst);
+}
+
+FEnumType FEnumType::getAllConstDroppedType() {
+  if (!containsConst())
+    return *this;
+
+  SmallVector<EnumElement> constDroppedElements(
+      llvm::map_range(getElements(), [](EnumElement element) {
+        element.type = element.type.getAllConstDroppedType();
+        return element;
+      }));
+  return get(getContext(), constDroppedElements, false);
+}
+
+/// Return a pair with the 'isPassive' and 'containsAnalog' bits.
+RecursiveTypeProperties FEnumType::getRecursiveTypeProperties() const {
+  return getImpl()->recProps;
+}
+
+std::optional<unsigned> FEnumType::getElementIndex(StringAttr name) {
+  for (const auto &it : llvm::enumerate(getElements())) {
+    auto element = it.value();
+    if (element.name == name) {
+      return unsigned(it.index());
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<unsigned> FEnumType::getElementIndex(StringRef name) {
+  for (const auto &it : llvm::enumerate(getElements())) {
+    auto element = it.value();
+    if (element.name.getValue() == name) {
+      return unsigned(it.index());
+    }
+  }
+  return std::nullopt;
+}
+
+StringAttr FEnumType::getElementNameAttr(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in enum");
+  return getElements()[index].name;
+}
+
+StringRef FEnumType::getElementName(size_t index) {
+  return getElementNameAttr(index).getValue();
+}
+
+std::optional<FEnumType::EnumElement> FEnumType::getElement(StringAttr name) {
+  if (auto maybeIndex = getElementIndex(name))
+    return getElements()[*maybeIndex];
+  return std::nullopt;
+}
+
+std::optional<FEnumType::EnumElement> FEnumType::getElement(StringRef name) {
+  if (auto maybeIndex = getElementIndex(name))
+    return getElements()[*maybeIndex];
+  return std::nullopt;
+}
+
+/// Look up an element by index.
+FEnumType::EnumElement FEnumType::getElement(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in enum");
+  return getElements()[index];
+}
+
+FIRRTLBaseType FEnumType::getElementType(StringAttr name) {
+  auto element = getElement(name);
+  return element ? element->type : FIRRTLBaseType();
+}
+
+FIRRTLBaseType FEnumType::getElementType(StringRef name) {
+  auto element = getElement(name);
+  return element ? element->type : FIRRTLBaseType();
+}
+
+FIRRTLBaseType FEnumType::getElementType(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in enum");
+  return getElements()[index].type;
+}
+
+FIRRTLBaseType FEnumType::getElementTypePreservingConst(size_t index) {
+  auto type = getElementType(index);
+  return type.getConstType(type.isConst() || isConst());
+}
+
+uint64_t FEnumType::getFieldID(uint64_t index) {
+  return getImpl()->fieldIDs[index];
+}
+
+uint64_t FEnumType::getIndexForFieldID(uint64_t fieldID) {
+  assert(!getElements().empty() && "Enum must have >0 fields");
+  auto fieldIDs = getImpl()->fieldIDs;
+  auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
+  return std::distance(fieldIDs.begin(), it);
+}
+
+std::pair<uint64_t, uint64_t>
+FEnumType::getIndexAndSubfieldID(uint64_t fieldID) {
+  auto index = getIndexForFieldID(fieldID);
+  auto elementFieldID = getFieldID(index);
+  return {index, fieldID - elementFieldID};
+}
+
+std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+FEnumType::getSubTypeByFieldID(uint64_t fieldID) {
+  if (fieldID == 0)
+    return {*this, 0};
+  auto fieldIDs = getImpl()->fieldIDs;
+  auto subfieldIndex = getIndexForFieldID(fieldID);
+  auto subfieldType = getElementType(subfieldIndex);
+  auto subfieldID = fieldID - getFieldID(subfieldIndex);
+  return {llvm::cast<circt::hw::FieldIDTypeInterface>(subfieldType),
+          subfieldID};
+}
+
+uint64_t FEnumType::getMaxFieldID() { return getImpl()->maxFieldID; }
+
+std::pair<uint64_t, bool> FEnumType::rootChildFieldID(uint64_t fieldID,
+                                                      uint64_t index) {
+  auto childRoot = getFieldID(index);
+  auto rangeEnd = index + 1 >= getNumElements() ? getMaxFieldID()
+                                                : (getFieldID(index + 1) - 1);
+  return std::make_pair(fieldID - childRoot,
+                        fieldID >= childRoot && fieldID <= rangeEnd);
+}
+
+auto FEnumType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
+                       ArrayRef<EnumElement> elements, bool isConst)
+    -> LogicalResult {
+  for (auto &elt : elements) {
+    auto r = elt.type.getRecursiveTypeProperties();
+    if (!r.isPassive)
+      return emitErrorFn() << "enum field '" << elt.name << "' not passive";
+    if (r.containsAnalog)
+      return emitErrorFn() << "enum field '" << elt.name << "' contains analog";
+    if (r.containsConst && !isConst)
+      return emitErrorFn() << "enum with 'const' elements must be 'const'";
+    // TODO: exclude reference containing
+  }
   return success();
 }
 
 //===----------------------------------------------------------------------===//
-// ODS Custom Builders
+// RefType
+//===----------------------------------------------------------------------===//
+
+auto RefType::get(FIRRTLBaseType type, bool forceable) -> RefType {
+  return Base::get(type.getContext(), type, forceable);
+}
+
+auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
+                     FIRRTLBaseType base, bool forceable) -> LogicalResult {
+  if (!base.isPassive())
+    return emitErrorFn() << "reference base type must be passive";
+  if (forceable && base.containsConst())
+    return emitErrorFn()
+           << "forceable reference base type cannot contain const";
+  return success();
+}
+
+//- RefType implementations of FieldIDTypeInterface --------------------------//
+// Needs to be implemented to be used in a FIRRTL aggregate.
+
+uint64_t RefType::getMaxFieldID() const { return 0; }
+
+circt::hw::FieldIDTypeInterface
+RefType::getFinalTypeByFieldID(uint64_t fieldID) const {
+  assert(fieldID == 0);
+  return *this;
+}
+
+std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+RefType::getSubTypeByFieldID(uint64_t fieldID) const {
+  assert(fieldID == 0);
+  return {*this, 0};
+}
+
+std::pair<uint64_t, bool> RefType::rootChildFieldID(uint64_t fieldID,
+                                                    uint64_t index) const {
+  return {0, fieldID == 0};
+}
+
+RecursiveTypeProperties RefType::getRecursiveTypeProperties() const {
+  auto rtp = getType().getRecursiveTypeProperties();
+  rtp.containsReference = true;
+  // References are not "passive", per FIRRTL spec.
+  rtp.isPassive = false;
+  return rtp;
+}
+
+//===----------------------------------------------------------------------===//
+// AnalogType
 //===----------------------------------------------------------------------===//
 
 AnalogType AnalogType::get(mlir::MLIRContext *context) {
-  return AnalogType::get(context, -1);
+  return AnalogType::get(context, -1, false);
+}
+
+AnalogType AnalogType::get(mlir::MLIRContext *context,
+                           std::optional<int32_t> width, bool isConst) {
+  return AnalogType::get(context, width ? *width : -1, isConst);
+}
+
+LogicalResult AnalogType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                 int32_t widthOrSentinel, bool isConst) {
+  if (widthOrSentinel < -1)
+    return emitError() << "invalid width";
+  return success();
+}
+
+int32_t AnalogType::getWidthOrSentinel() const { return getImpl()->width; }
+
+AnalogType AnalogType::getConstType(bool isConst) {
+  if (isConst == this->isConst())
+    return *this;
+  return get(getContext(), getWidthOrSentinel(), isConst);
+}
+
+//===----------------------------------------------------------------------===//
+// ClockType
+//===----------------------------------------------------------------------===//
+
+ClockType ClockType::getConstType(bool isConst) {
+  if (isConst == this->isConst())
+    return *this;
+  return get(getContext(), isConst);
+}
+
+//===----------------------------------------------------------------------===//
+// ResetType
+//===----------------------------------------------------------------------===//
+
+ResetType ResetType::getConstType(bool isConst) {
+  if (isConst == this->isConst())
+    return *this;
+  return get(getContext(), isConst);
+}
+
+//===----------------------------------------------------------------------===//
+// AsyncResetType
+//===----------------------------------------------------------------------===//
+
+AsyncResetType AsyncResetType::getConstType(bool isConst) {
+  if (isConst == this->isConst())
+    return *this;
+  return get(getContext(), isConst);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1117,7 +2225,8 @@ AnalogType AnalogType::get(mlir::MLIRContext *context) {
 void FIRRTLDialect::registerTypes() {
   addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
            // Derived Types
-           BundleType, FVectorType, RefType>();
+           BundleType, FVectorType, FEnumType, RefType, OpenBundleType,
+           OpenVectorType, StringType, BigIntType>();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike
@@ -1126,38 +2235,42 @@ void FIRRTLDialect::registerTypes() {
 // field element and return the total bit width of the aggregate type. This
 // returns None, if any of the bundle fields is a flip type, or ground type with
 // unknown bit width.
-llvm::Optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
-                                            bool ignoreFlip) {
-  std::function<llvm::Optional<int64_t>(FIRRTLBaseType)> getWidth =
-      [&](FIRRTLBaseType type) -> llvm::Optional<int64_t> {
-    return TypeSwitch<FIRRTLBaseType, llvm::Optional<int64_t>>(type)
-        .Case<BundleType>([&](BundleType bundle) {
+std::optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
+                                           bool ignoreFlip) {
+  std::function<std::optional<int64_t>(FIRRTLBaseType)> getWidth =
+      [&](FIRRTLBaseType type) -> std::optional<int64_t> {
+    return TypeSwitch<FIRRTLBaseType, std::optional<int64_t>>(type)
+        .Case<BundleType>([&](BundleType bundle) -> std::optional<int64_t> {
           int64_t width = 0;
           for (auto &elt : bundle) {
             if (elt.isFlip && !ignoreFlip)
-              return llvm::Optional<int64_t>(None);
+              return std::nullopt;
             auto w = getBitWidth(elt.type);
             if (!w.has_value())
-              return llvm::Optional<int64_t>(None);
+              return std::nullopt;
             width += *w;
           }
-          return llvm::Optional<int64_t>(width);
+          return width;
         })
-        .Case<FVectorType>([&](auto vector) {
+        .Case<FEnumType>([&](FEnumType fenum) -> std::optional<int64_t> {
+          int64_t width = 0;
+          for (auto &elt : fenum) {
+            auto w = getBitWidth(elt.type);
+            if (!w.has_value())
+              return std::nullopt;
+            width = std::max(width, *w);
+          }
+          return width + llvm::Log2_32_Ceil(fenum.getNumElements());
+        })
+        .Case<FVectorType>([&](auto vector) -> std::optional<int64_t> {
           auto w = getBitWidth(vector.getElementType());
           if (!w.has_value())
-            return llvm::Optional<int64_t>(None);
-          return llvm::Optional<int64_t>(*w * vector.getNumElements());
+            return std::nullopt;
+          return *w * vector.getNumElements();
         })
-        .Case<IntType>([&](IntType iType) {
-          auto retval = iType.getWidth();
-          if (retval)
-            return llvm::Optional<int64_t>(*retval);
-          else
-            return llvm::Optional<int64_t>(None);
-        })
+        .Case<IntType>([&](IntType iType) { return iType.getWidth(); })
         .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
-        .Default([&](auto t) { return llvm::Optional<int64_t>(None); });
+        .Default([&](auto t) { return std::nullopt; });
   };
   return getWidth(type);
 }

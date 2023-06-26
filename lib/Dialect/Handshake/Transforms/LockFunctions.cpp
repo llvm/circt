@@ -37,9 +37,8 @@ LogicalResult handshake::lockRegion(Region &r, OpBuilder &rewriter) {
   BackedgeBuilder bebuilder(rewriter, loc);
   auto backEdge = bebuilder.get(rewriter.getNoneType());
 
-  auto buff = rewriter.create<handshake::BufferOp>(
-      loc, rewriter.getNoneType(), 1, backEdge,
-      /*bufferType=*/BufferTypeEnum::seq);
+  auto buff = rewriter.create<handshake::BufferOp>(loc, backEdge, 1,
+                                                   BufferTypeEnum::seq);
 
   // Dummy value that causes a buffer initialization, but itself does not have a
   // semantic meaning.

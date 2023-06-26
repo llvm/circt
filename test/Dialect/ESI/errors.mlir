@@ -117,3 +117,56 @@ hw.module @Top(%clk: i1, %rst: i1) -> () {
   // expected-error @+1 {{'esi.service.instance' op failed to generate server}}
   esi.service.instance svc @HostComms impl as  "cosim" opts {badOpt = "wrong!"} (%clk, %rst) : (i1, i1) -> ()
 }
+
+// -----
+
+!TypeA = !hw.struct<bar: i6>
+// expected-error @+1 {{invalid field name: "header5"}}
+!TypeAwin1 = !esi.window<
+  "TypeAwin1", !TypeA, [
+    <"FrameA", [
+      <"header5">
+    ]>
+  ]>
+
+hw.module.extern @TypeAModuleDst(%windowed: !TypeAwin1)
+
+// -----
+
+!TypeA = !hw.struct<bar: i6>
+// expected-error @+1 {{cannot specify num items on non-array field "bar"}}
+!TypeAwin1 = !esi.window<
+  "TypeAwin1", !TypeA, [
+    <"FrameA", [
+      <"bar", 4>
+    ]>
+  ]>
+
+hw.module.extern @TypeAModuleDst(%windowed: !TypeAwin1)
+
+// -----
+
+!TypeA = !hw.struct<bar: !hw.array<5xi2>>
+// expected-error @+1 {{num items is larger than array size}}
+!TypeAwin1 = !esi.window<
+  "TypeAwin1", !TypeA, [
+    <"FrameA", [
+      <"bar", 8>
+    ]>
+  ]>
+
+hw.module.extern @TypeAModuleDst(%windowed: !TypeAwin1)
+
+// -----
+
+!TypeA = !hw.struct<foo : i3, bar: !hw.array<5xi2>>
+// expected-error @+1 {{array with size specified must be in their own frame (in "bar")}}
+!TypeAwin1 = !esi.window<
+  "TypeAwin1", !TypeA, [
+    <"FrameA", [
+      <"foo">,
+      <"bar", 5>
+    ]>
+  ]>
+
+hw.module.extern @TypeAModuleDst(%windowed: !TypeAwin1)

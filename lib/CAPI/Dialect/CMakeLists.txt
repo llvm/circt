@@ -2,11 +2,13 @@
 set(LLVM_OPTIONAL_SOURCES
   Comb.cpp
   ESI.cpp
+  FIRRTL.cpp
   MSFT.cpp
   HW.cpp
   HWArith.cpp
   LLHD.cpp
   Moore.cpp
+  OM.cpp
   Seq.cpp
   SV.cpp
   FSM.cpp
@@ -27,6 +29,14 @@ add_mlir_public_c_api_library(CIRCTCAPIESI
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTESI
+)
+
+add_mlir_public_c_api_library(CIRCTCAPIFIRRTL
+  FIRRTL.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRCAPIIR
+  CIRCTFIRRTL
 )
 
 add_mlir_public_c_api_library(CIRCTCAPIMSFT
@@ -64,6 +74,15 @@ add_mlir_public_c_api_library(CIRCTCAPIMoore
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTMoore
+)
+
+add_mlir_public_c_api_library(CIRCTCAPIOM
+  OM.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRCAPIIR
+  CIRCTOM
+  CIRCTOMEvaluator
 )
 
 add_mlir_public_c_api_library(CIRCTCAPISeq

@@ -19,18 +19,31 @@ def LowerSeqToSV: Pass<"lower-seq-to-sv", "mlir::ModuleOp"> {
   let summary = "Lower sequential ops to SV.";
   let constructor = "circt::seq::createSeqLowerToSVPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
+  let options = [
+    Option<"lowerToAlwaysFF", "lower-to-always-ff", "bool", "true",
+           "Place assignments to registers into `always_ff` blocks">
+  ];
 }
 
-def LowerSeqFIRRTLToSV: Pass<"lower-seq-firrtl-to-sv", "hw::HWModuleOp"> {
+def LowerSeqFIRRTLInitToSV: Pass<"lower-seq-firrtl-init-to-sv", "mlir::ModuleOp"> {
+  let summary = "Prep the module with macro definitions for firrtl registers.";
+  let constructor = "circt::seq::createLowerSeqFIRRTLInitToSV()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+}
+
+def LowerSeqFIRRTLToSV: Pass<"lower-seq-firrtl-to-sv",  "hw::HWModuleOp"> {
   let summary = "Lower sequential firrtl ops to SV.";
   let constructor = "circt::seq::createSeqFIRRTLLowerToSVPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
   let options = [
     Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
-            "Disable emission of register randomization code">,
-    Option<"addVivadoRAMAddressConflictSynthesisBugWorkaround",
-           "add-vivado-ram-address-conflict-synthesis-bug-workaround", "bool", "false",
-            "Add a vivado attribute to specify a ram style of array registers">
+           "Disable emission of register randomization code">,
+    Option<"emitSeparateAlwaysBlocks", "emit-separate-always-blocks", "bool", "false",
+           "Emit assigments to registers in separate always blocks">
+  ];
+  let statistics = [
+    Statistic<"numSubaccessRestored", "num-subaccess-restored",
+      "Number of lhs subaccess operations restored ">
   ];
 }
 
@@ -38,6 +51,30 @@ def LowerSeqHLMem: Pass<"lower-seq-hlmem", "hw::HWModuleOp"> {
   let summary = "Lowers seq.hlmem operations.";
   let constructor = "circt::seq::createLowerSeqHLMemPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
+}
+
+def ExternalizeClockGate: Pass<"externalize-clock-gate", "mlir::ModuleOp"> {
+  let summary = "Convert seq.clock_gate ops into hw.module.extern instances";
+  let constructor = "circt::seq::createExternalizeClockGatePass()";
+  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
+  let options = [
+    Option<"moduleName", "name", "std::string", "\"CKG\"",
+           "Name of the external clock gate module">,
+    Option<"inputName", "input", "std::string", "\"I\"",
+           "Name of the clock input">,
+    Option<"outputName", "output", "std::string", "\"O\"",
+           "Name of the gated clock output">,
+    Option<"enableName", "enable", "std::string", "\"E\"",
+           "Name of the enable input">,
+    Option<"testEnableName", "test-enable", "std::string", "\"TE\"",
+           "Name of the optional test enable input">,
+    Option<"instName", "instance-name", "std::string", "\"ckg\"",
+           "Name of the generated instances">
+  ];
+  let statistics = [
+    Statistic<"numClockGatesConverted", "num-clock-gates-converted",
+      "Number of clock gates converted to external module instances">
+  ];
 }
 
 #endif // CIRCT_DIALECT_SEQ_SEQPASSES

@@ -30,23 +30,23 @@ LoweringOptions::LoweringOptions(mlir::ModuleOp module) : LoweringOptions() {
   parseFromAttribute(module);
 }
 
-static Optional<LoweringOptions::LocationInfoStyle>
+static std::optional<LoweringOptions::LocationInfoStyle>
 parseLocationInfoStyle(StringRef option) {
-  return llvm::StringSwitch<llvm::Optional<LoweringOptions::LocationInfoStyle>>(
+  return llvm::StringSwitch<std::optional<LoweringOptions::LocationInfoStyle>>(
              option)
       .Case("plain", LoweringOptions::Plain)
       .Case("wrapInAtSquareBracket", LoweringOptions::WrapInAtSquareBracket)
       .Case("none", LoweringOptions::None)
-      .Default(llvm::None);
+      .Default(std::nullopt);
 }
 
-static Optional<LoweringOptions::WireSpillingHeuristic>
+static std::optional<LoweringOptions::WireSpillingHeuristic>
 parseWireSpillingHeuristic(StringRef option) {
   return llvm::StringSwitch<
-             llvm::Optional<LoweringOptions::WireSpillingHeuristic>>(option)
+             std::optional<LoweringOptions::WireSpillingHeuristic>>(option)
       .Case("spillLargeTermsWithNamehints",
             LoweringOptions::SpillLargeTermsWithNamehints)
-      .Default(llvm::None);
+      .Default(std::nullopt);
 }
 
 void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
@@ -63,6 +63,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       allowExprInEventControl = true;
     } else if (option == "disallowPackedArrays") {
       disallowPackedArrays = true;
+    } else if (option == "disallowPackedStructAssignments") {
+      disallowPackedStructAssignments = true;
     } else if (option == "disallowLocalVariables") {
       disallowLocalVariables = true;
     } else if (option == "verifLabels") {
@@ -95,6 +97,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       disallowExpressionInliningInPorts = true;
     } else if (option == "disallowMuxInlining") {
       disallowMuxInlining = true;
+    } else if (option == "mitigateVivadoArrayIndexConstPropBug") {
+      mitigateVivadoArrayIndexConstPropBug = true;
     } else if (option.consume_front("wireSpillingHeuristic=")) {
       if (auto heuristic = parseWireSpillingHeuristic(option)) {
         wireSpillingHeuristicSet |= *heuristic;
@@ -107,6 +111,12 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
             "expected integer for number of namehint heurstic term limit");
         wireSpillingNamehintTermLimit = DEFAULT_NAMEHINT_TERM_LIMIT;
       }
+    } else if (option == "emitWireInPorts") {
+      emitWireInPorts = true;
+    } else if (option == "emitBindComments") {
+      emitBindComments = true;
+    } else if (option == "omitVersionComment") {
+      omitVersionComment = true;
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
@@ -123,6 +133,8 @@ std::string LoweringOptions::toString() const {
     options += "exprInEventControl,";
   if (disallowPackedArrays)
     options += "disallowPackedArrays,";
+  if (disallowPackedStructAssignments)
+    options += "disallowPackedStructAssignments,";
   if (disallowLocalVariables)
     options += "disallowLocalVariables,";
   if (enforceVerifLabels)
@@ -146,12 +158,20 @@ std::string LoweringOptions::toString() const {
     options += "disallowExpressionInliningInPorts,";
   if (disallowMuxInlining)
     options += "disallowMuxInlining,";
+  if (mitigateVivadoArrayIndexConstPropBug)
+    options += "mitigateVivadoArrayIndexConstPropBug,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
   if (maximumNumberOfTermsPerExpression != DEFAULT_TERM_LIMIT)
     options += "maximumNumberOfTermsPerExpression=" +
                std::to_string(maximumNumberOfTermsPerExpression) + ',';
+  if (emitWireInPorts)
+    options += "emitWireInPorts,";
+  if (emitBindComments)
+    options += "emitBindComments,";
+  if (omitVersionComment)
+    options += "omitVersionComment,";
 
   // Remove a trailing comma if present.
   if (!options.empty()) {

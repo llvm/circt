@@ -4,7 +4,7 @@
 ; RUN: firtool --repl-seq-mem --repl-seq-mem-file=mems.conf --split-verilog --dedup --emit-omir -o=%t %s
 ; RUN: FileCheck %s --check-prefix=TESTHARNESS < %t/TestHarness.sv
 ; RUN: FileCheck %s --check-prefix=DUTMODULE < %t/Prefix_DUTModule.sv
-; RUN: FileCheck %s --check-prefix=SEQMEMSGROUP < %t/SeqMemsGroup.sv
+; RUN: FileCheck %s --check-prefix=SEQMEMSGROUP < %t/Prefix_SeqMemsGroup.sv
 ; RUN: FileCheck %s --check-prefix=INJECTEDSUBMODULE < %t/Prefix_InjectedSubmodule.sv
 ; RUN: FileCheck %s --check-prefix=SOMEMODULE < %t/Prefix_SomeModule.sv
 ; RUN: FileCheck %s --check-prefix=MEM < %t/Prefix_mem.sv
@@ -143,7 +143,7 @@ circuit TestHarness : %[[
   ; SOMEMODULE: module Prefix_SomeModule
   ; SOMEMODULE: Prefix_mem mem
 
-  ; SEQMEMSGROUP: module SeqMemsGroup
+  ; SEQMEMSGROUP: module Prefix_SeqMemsGroup
   ; SEQMEMSGROUP:   mem_wiring_1_R0_addr
   ; SEQMEMSGROUP:   mem_wiring_0_R0_addr
   ; SEQMEMSGROUP: Prefix_mem_ext mem_ext
@@ -154,12 +154,12 @@ circuit TestHarness : %[[
   ; MEM-NOT: Prefix_mem_ext mem_ext
 
   ; MEMS-CONF: name Prefix_mem_ext depth 8 width 8 ports write,read
-  ; SEQMEMS-TXT: mem_wiring_1 -> Prefix_DUTModule.InjectedSubmodule.inst0.mem.mem_ext
-  ; SEQMEMS-TXT: mem_wiring_0 -> Prefix_DUTModule.InjectedSubmodule.inst1.mem.mem_ext
+  ; SEQMEMS-TXT: mem_wiring_1 -> Prefix_DUTModule.InjectedSubmodule.inst0.mem
+  ; SEQMEMS-TXT: mem_wiring_0 -> Prefix_DUTModule.InjectedSubmodule.inst1.mem
 
   ; OMIR:      "id": "OMID:0"
   ; OMIR:      "name": "finalPath"
-  ; OMIR-NEXT: "value": "OMMemberInstanceTarget:~Prefix_DUTModule|Prefix_DUTModule/SeqMemsGroup:SeqMemsGroup/mem_ext{{[^:]*}}:Prefix_mem_ext"
+  ; OMIR-NEXT: "value": "OMMemberInstanceTarget:~Prefix_DUTModule|Prefix_DUTModule/SeqMemsGroup:Prefix_SeqMemsGroup/mem_ext{{[^:]*}}:Prefix_mem_ext"
   ; OMIR:      "id": "OMID:1"
   ; OMIR:      "name": "finalPath"
-  ; OMIR-NEXT: "value": "OMMemberInstanceTarget:~Prefix_DUTModule|Prefix_DUTModule/SeqMemsGroup:SeqMemsGroup/mem_ext{{[^:]*}}:Prefix_mem_ext"
+  ; OMIR-NEXT: "value": "OMMemberInstanceTarget:~Prefix_DUTModule|Prefix_DUTModule/SeqMemsGroup:Prefix_SeqMemsGroup/mem_ext{{[^:]*}}:Prefix_mem_ext"

@@ -8,7 +8,7 @@ set(LIBS
 
 # llhd-sim fails to link on Windows with MSVC.
 IF(CIRCT_LLHD_SIM_ENABLED)
-  add_llvm_executable(llhd-sim
+  add_llvm_tool(llhd-sim
     llhd-sim.cpp)
   
   llvm_update_compile_flags(llhd-sim)

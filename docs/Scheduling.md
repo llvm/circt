@@ -330,11 +330,23 @@ See
 - Redefine `check()` (input constraints) and `verify()` (solution constraints).
   If possible, follow the
   [design used in the existing problem classes](#constraints).
+
+### Testing
+
+Please extend the [SSP](https://circt.llvm.org/docs/Dialects/SSP/) dialect to
+enable testing of the new problem definition.
+- If the problem defines any new properties, add them to
+  [`SSPAttributes.td`](https://github.com/llvm/circt/blob/main/include/circt/Dialect/SSP/SSPAttributes.td).
+- Instantiate the
+  [`Default<ProblemT>`](https://github.com/llvm/circt/blob/main/include/circt/Dialect/SSP/Utilities.h#L457-L459)
+  template for the new problem.
+- Handle the problem class in the
+  [`-ssp-roundtrip`](https://github.com/llvm/circt/blob/main/lib/Dialect/SSP/Transforms/Roundtrip.cpp)
+  pass.
 - Write a couple of "positive" testcases, as well as at least one error test for
   each input/solution constraint, as validated by `check()` / `verify()`. See
-  [`TestPasses.cpp`](https://github.com/llvm/circt/blob/main/lib/Scheduling/TestPasses.cpp)
-  for inspiration. The testing situation will hopefully improve with
-  [#2760](https://github.com/llvm/circt/issues/2760).
+  the [existing test cases](https://github.com/llvm/circt/tree/main/test/Scheduling)
+  for inspiration.
 
 ## Adding a new scheduler
 
@@ -357,3 +369,12 @@ scheduler for the `CyclicProblem`.*
 - Objectives are not part of the problem signature. Therefore, if an algorithm
   supports optimizing for different objectives, clients should be able to select
   one via the entry point(s).
+
+### Testing
+
+- To enable testing, add the new scheduler to the
+  [`-ssp-schedule`](https://github.com/llvm/circt/blob/main/lib/Dialect/SSP/Transforms/Schedule.cpp)
+  pass, and invoke it from the test cases for the supported problems
+  ([example](https://github.com/llvm/circt/blob/main/test/Scheduling/problems.mlir#L2-L4)).
+- If the algorithm may fail in certain situations (e.g., "linear program is
+  infeasible"), add suitable error tests as well.

@@ -17,7 +17,7 @@
 // CHECK:           %[[VAL_12:.*]] = mux %[[VAL_13:.*]]#1 {{\[}}%[[VAL_14:.*]], %[[VAL_11]]] : index, index
 // CHECK:           %[[VAL_15:.*]] = buffer [2] seq %[[VAL_12]] : index
 // CHECK:           %[[VAL_16:.*]]:2 = fork [2] %[[VAL_15]] : index
-// CHECK:           %[[VAL_17:.*]], %[[VAL_18:.*]] = control_merge %[[VAL_19:.*]], %[[VAL_9]] : none
+// CHECK:           %[[VAL_17:.*]], %[[VAL_18:.*]] = control_merge %[[VAL_19:.*]], %[[VAL_9]] : none, index
 // CHECK:           %[[VAL_20:.*]] = buffer [2] seq %[[VAL_18]] : index
 // CHECK:           %[[VAL_21:.*]] = buffer [2] seq %[[VAL_17]] : none
 // CHECK:           %[[VAL_13]]:2 = fork [2] %[[VAL_20]] : index
@@ -35,7 +35,7 @@
 // CHECK:           %[[VAL_35:.*]] = buffer [2] fifo %[[VAL_34]] : index
 // CHECK:           %[[VAL_36:.*]] = merge %[[VAL_28]] : index
 // CHECK:           %[[VAL_37:.*]] = buffer [2] fifo %[[VAL_36]] : index
-// CHECK:           %[[VAL_38:.*]], %[[VAL_39:.*]] = control_merge %[[VAL_30]] : none
+// CHECK:           %[[VAL_38:.*]], %[[VAL_39:.*]] = control_merge %[[VAL_30]] : none, index
 // CHECK:           %[[VAL_40:.*]] = buffer [2] fifo %[[VAL_39]] : index
 // CHECK:           %[[VAL_41:.*]] = buffer [2] fifo %[[VAL_38]] : none
 // CHECK:           %[[VAL_42:.*]]:2 = fork [2] %[[VAL_41]] : none
@@ -45,7 +45,7 @@
 // CHECK:           %[[VAL_14]] = br %[[VAL_37]] : index
 // CHECK:           %[[VAL_19]] = br %[[VAL_42]]#1 : none
 // CHECK:           %[[VAL_23]] = br %[[VAL_44]] : index
-// CHECK:           %[[VAL_45:.*]], %[[VAL_46:.*]] = control_merge %[[VAL_31]] : none
+// CHECK:           %[[VAL_45:.*]], %[[VAL_46:.*]] = control_merge %[[VAL_31]] : none, index
 // CHECK:           %[[VAL_47:.*]] = buffer [2] fifo %[[VAL_46]] : index
 // CHECK:           %[[VAL_48:.*]] = buffer [2] fifo %[[VAL_45]] : none
 // CHECK:           sink %[[VAL_47]] : index
@@ -54,7 +54,7 @@
 module {
   handshake.func @simple_loop(%arg0: none, ...) -> none {
     %0 = br %arg0 : none
-    %1:2 = control_merge %0 : none
+    %1:2 = control_merge %0 : none, index
     %2:3 = fork [3] %1#0 : none
     sink %1#1 : index
     %3 = constant %2#1 {value = 1 : index} : index
@@ -64,7 +64,7 @@ module {
     %7 = br %4 : index
     %8 = mux %11#1 [%22, %7] : index, index
     %9:2 = fork [2] %8 : index
-    %10:2 = control_merge %23, %5 : none
+    %10:2 = control_merge %23, %5 : none, index
     %11:2 = fork [2] %10#1 : index
     %12 = mux %9#0 [%24, %6] : index, index
     %13:2 = fork [2] %12 : index
@@ -77,7 +77,7 @@ module {
     sink %falseResult_3 : index
     %16 = merge %trueResult_2 : index
     %17 = merge %trueResult : index
-    %18:2 = control_merge %trueResult_0 : none
+    %18:2 = control_merge %trueResult_0 : none, index
     %19:2 = fork [2] %18#0 : none
     sink %18#1 : index
     %20 = constant %19#0 {value = 1 : index} : index
@@ -85,7 +85,7 @@ module {
     %22 = br %17 : index
     %23 = br %19#1 : none
     %24 = br %21 : index
-    %25:2 = control_merge %falseResult_1 : none
+    %25:2 = control_merge %falseResult_1 : none, index
     sink %25#1 : index
     return %25#0 : none
   }

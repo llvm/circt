@@ -26,6 +26,7 @@ import os
 import platform
 import shutil
 import subprocess
+import sys
 import sysconfig
 
 from distutils.command.build import build as _build
@@ -66,12 +67,16 @@ class CMakeBuild(build_py):
     cmake_args = [
         "-DCMAKE_BUILD_TYPE=Release",  # not used on MSVC, but no harm
         "-DCMAKE_INSTALL_PREFIX={}".format(os.path.abspath(cmake_install_dir)),
+        "-DCMAKE_OSX_DEPLOYMENT_TARGET=10.14",  # on OSX, min target for C++17
+        "-DPython3_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
         "-DLLVM_ENABLE_PROJECTS=mlir",
         "-DLLVM_EXTERNAL_PROJECTS=circt",
         "-DLLVM_EXTERNAL_CIRCT_SOURCE_DIR={}".format(circt_dir),
         "-DLLVM_TARGETS_TO_BUILD=host",
         "-DMLIR_ENABLE_BINDINGS_PYTHON=ON",
         "-DCIRCT_BINDINGS_PYTHON_ENABLED=ON",
+        "-DCIRCT_RELEASE_TAG_ENABLED=ON",
+        "-DCIRCT_RELEASE_TAG=firtool",
     ]
 
     # HACK: CMake fails to auto-detect static linked Python installations, which
@@ -92,7 +97,6 @@ class CMakeBuild(build_py):
         subprocess.check_call(["ar", "q", fake_library])
         cmake_args.append("-DPython3_LIBRARY:PATH={}".format(fake_library))
 
-    build_args = []
     os.makedirs(cmake_build_dir, exist_ok=True)
     if os.path.exists(cmake_install_dir):
       shutil.rmtree(cmake_install_dir)
@@ -100,14 +104,15 @@ class CMakeBuild(build_py):
     if os.path.exists(cmake_cache_file):
       os.remove(cmake_cache_file)
     subprocess.check_call(["cmake", llvm_dir] + cmake_args, cwd=cmake_build_dir)
-    subprocess.check_call(["cmake", "--build", ".", "--target", "install"] +
-                          build_args,
-                          cwd=cmake_build_dir)
+    subprocess.check_call(
+        ["cmake", "--build", ".", "--target", "install-CIRCTPythonModules"],
+        cwd=cmake_build_dir)
+    if os.path.exists(target_dir):
+      os.remove(target_dir)
     shutil.copytree(os.path.join(cmake_install_dir, "python_packages",
                                  "circt_core"),
                     target_dir,
-                    symlinks=False,
-                    dirs_exist_ok=True)
+                    symlinks=False)
 
 
 class NoopBuildExtension(build_ext):
@@ -117,16 +122,16 @@ class NoopBuildExtension(build_ext):
 
 
 setup(
-    name="circt-core",
+    name="circt",
     version="0.0.1",
     author="Mike Urbach",
-    author_email="mike@alloystack.io",
-    description="CIRCT Core",
+    author_email="mikeurbach@gmail.com",
+    description="CIRCT Python Bindings",
     long_description="",
     include_package_data=True,
     ext_modules=[
-        CMakeExtension("mlir._mlir_libs._mlir"),
-        CMakeExtension("mlir._mlir_libs._circt"),
+        CMakeExtension("circt._mlir_libs._mlir"),
+        CMakeExtension("circt._mlir_libs._circt"),
     ],
     cmdclass={
         "build": CustomBuild,

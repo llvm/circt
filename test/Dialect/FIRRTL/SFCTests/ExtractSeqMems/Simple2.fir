@@ -61,4 +61,4 @@ circuit TestHarness : %[[
   ; MEM-NOT: mem_ext mem_ext
 
   ; MEMS-CONF: name mem_ext depth 8 width 8 ports write,read
-  ; SEQMEMS-TXT: mem_wiring_0 -> DUTModule.mem.mem_ext
+  ; SEQMEMS-TXT: mem_wiring_0 -> DUTModule.mem

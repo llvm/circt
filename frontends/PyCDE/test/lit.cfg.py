@@ -35,7 +35,7 @@ config.substitutions.append(('%PATH%', config.environment['PATH']))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
 config.substitutions.append(('%shlibdir', config.circt_shlib_dir))
 config.substitutions.append(('%INC%', config.circt_include_dir))
-config.substitutions.append(('%PYTHON%', config.python_executable))
+config.substitutions.append(('%PYTHON%', f'"{config.python_executable}"'))
 
 llvm_config.with_system_environment(['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
 
@@ -58,7 +58,7 @@ config.test_source_root = os.path.dirname(__file__)
 
 # test_exec_root: The root path where tests should be run.
 config.test_exec_root = os.path.join(config.circt_obj_root,
-                                     'frontends/pycde/test')
+                                     'frontends/PyCDE/test')
 
 # Tweak the PATH to include the tools dir.
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
@@ -85,8 +85,6 @@ except ImportError:
 llvm_config.add_tool_substitutions(tools, tool_dirs)
 
 # Tweak the PYTHONPATH to include the binary dir.
-llvm_config.with_environment('PYTHONPATH', [
-    os.path.join(config.circt_python_packages_dir, 'circt_core'),
-    os.path.join(config.circt_python_packages_dir, 'pycde')
-],
-                             append_path=True)
+llvm_config.with_environment(
+    'PYTHONPATH', [os.path.join(config.circt_python_packages_dir, 'pycde')],
+    append_path=True)

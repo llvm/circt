@@ -126,6 +126,11 @@ public:
 
   //===- Groups -----------------------------------------------------------===//
 
+  /// Start a IndentStyle::Block group with specified offset.
+  void bbox(int32_t offset = 0, Breaks breaks = Breaks::Consistent) {
+    add<BeginToken>(offset, breaks, IndentStyle::Block);
+  }
+
   /// Start a consistent group with specified offset.
   void cbox(int32_t offset = 0, IndentStyle style = IndentStyle::Visual) {
     add<BeginToken>(offset, Breaks::Consistent, style);
@@ -135,6 +140,10 @@ public:
   void ibox(int32_t offset = 0, IndentStyle style = IndentStyle::Visual) {
     add<BeginToken>(offset, Breaks::Inconsistent, style);
   }
+
+  /// Start a group that cannot break, including nested groups.
+  /// Use sparingly.
+  void neverbox() { add<BeginToken>(0, Breaks::Never); }
 
   /// End a group.
   void end() { add<EndToken>(); }
@@ -164,6 +173,7 @@ public:
 /// Send one of these to TokenStream to add the corresponding token.
 /// See TokenBuilder for details of each.
 enum class PP {
+  bbox2,
   cbox0,
   cbox2,
   end,
@@ -171,6 +181,7 @@ enum class PP {
   ibox0,
   ibox2,
   nbsp,
+  neverbox,
   neverbreak,
   newline,
   space,
@@ -231,6 +242,9 @@ public:
   /// Convenience for inline streaming of builder methods.
   TokenStream &operator<<(PP s) {
     switch (s) {
+    case PP::bbox2:
+      Base::bbox(2);
+      break;
     case PP::cbox0:
       Base::cbox(0);
       break;
@@ -251,6 +265,9 @@ public:
       break;
     case PP::nbsp:
       Base::nbsp();
+      break;
+    case PP::neverbox:
+      Base::neverbox();
       break;
     case PP::neverbreak:
       Base::neverbreak();

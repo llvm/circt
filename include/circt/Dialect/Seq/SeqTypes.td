@@ -55,7 +55,7 @@ def HLMemType : SeqType<"HLMem",[
 
     /// Clone this vector type with the given shape and element type. If the
     /// provided shape is `None`, the current shape of the type is used.
-    HLMemType cloneWith(Optional<ArrayRef<int64_t>> shape,
+    HLMemType cloneWith(std::optional<ArrayRef<int64_t>> shape,
                          Type elementType) const;
   }];
 

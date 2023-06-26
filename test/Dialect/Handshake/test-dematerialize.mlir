@@ -2,7 +2,7 @@
 
 // CHECK-LABEL:   handshake.func @gcd(
 // CHECK-SAME:                        %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: none, ...) -> (i32, none)
-// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = control_merge %[[VAL_5:.*]], %[[VAL_6:.*]], %[[VAL_2]] : none
+// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = control_merge %[[VAL_5:.*]], %[[VAL_6:.*]], %[[VAL_2]] : none, index
 // CHECK:           %[[VAL_7:.*]] = mux %[[VAL_4]] {{\[}}%[[VAL_8:.*]], %[[VAL_9:.*]], %[[VAL_1]]] : index, i32
 // CHECK:           %[[VAL_10:.*]] = mux %[[VAL_4]] {{\[}}%[[VAL_11:.*]], %[[VAL_12:.*]], %[[VAL_0]]] : index, i32
 // CHECK:           %[[VAL_13:.*]] = arith.cmpi ne, %[[VAL_10]], %[[VAL_7]] : i32
@@ -18,7 +18,7 @@
 // CHECK:           return %[[VAL_19]], %[[VAL_15]] : i32, none
 // CHECK:         }
 handshake.func @gcd(%arg0: i32, %arg1: i32, %arg2: none, ...) -> (i32, none) {
-  %result, %index = control_merge %falseResult_5, %trueResult_4, %arg2 : none
+  %result, %index = control_merge %falseResult_5, %trueResult_4, %arg2 : none, index
   %0:2 = fork [2] %index : index
   %1 = mux %0#1 [%14, %11#0, %arg1] : index, i32
   %2:2 = fork [2] %1 : i32

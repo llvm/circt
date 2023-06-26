@@ -62,7 +62,7 @@ AnnotationSet::AnnotationSet(Operation *op)
 static AnnotationSet forPort(Operation *op, size_t portNo) {
   auto ports = op->getAttrOfType<ArrayAttr>(getPortAnnotationAttrName());
   if (ports && !ports.empty())
-    return AnnotationSet(ports[portNo].cast<ArrayAttr>());
+    return AnnotationSet(cast<ArrayAttr>(ports[portNo]));
   return AnnotationSet(ArrayAttr::get(op->getContext(), {}));
 }
 
@@ -79,7 +79,7 @@ AnnotationSet AnnotationSet::get(Value v) {
   if (auto op = v.getDefiningOp())
     return AnnotationSet(op);
   // If its not an Operation, then must be a block argument.
-  auto arg = v.dyn_cast<BlockArgument>();
+  auto arg = dyn_cast<BlockArgument>(v);
   auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
   return forPort(module, arg.getArgNumber());
 }
@@ -109,7 +109,7 @@ static bool applyToPort(AnnotationSet annos, Operation *op, size_t portCount,
 }
 
 bool AnnotationSet::applyToPort(FModuleLike op, size_t portNo) const {
-  return ::applyToPort(*this, op.getOperation(), op.getNumPorts(), portNo);
+  return ::applyToPort(*this, op.getOperation(), getNumPorts(op), portNo);
 }
 
 bool AnnotationSet::applyToPort(MemOp op, size_t portNo) const {
@@ -411,7 +411,7 @@ bool AnnotationSet::removePortAnnotations(
   bool changed = false;
   for (unsigned argNum = 0, argNumEnd = ports.size(); argNum < argNumEnd;
        ++argNum) {
-    AnnotationSet annos(AnnotationSet(ports[argNum].cast<ArrayAttr>()));
+    AnnotationSet annos(AnnotationSet(cast<ArrayAttr>(ports[argNum])));
 
     // Go through all annotations on this port and extract the interesting
     // ones. If any modifications were done, keep a reduced set of attributes
@@ -434,7 +434,7 @@ bool AnnotationSet::removePortAnnotations(
 //===----------------------------------------------------------------------===//
 
 DictionaryAttr Annotation::getDict() const {
-  return attr.cast<DictionaryAttr>();
+  return cast<DictionaryAttr>(attr);
 }
 
 void Annotation::setDict(DictionaryAttr dict) { attr = dict; }
@@ -592,8 +592,8 @@ Attribute
 OpAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
   // If the op is a module, just return the module name.
   if (auto module = llvm::dyn_cast<FModuleLike>(getOp())) {
-    assert(module.moduleNameAttr() && "invalid NLA reference");
-    return FlatSymbolRefAttr::get(module.moduleNameAttr());
+    assert(module.getModuleNameAttr() && "invalid NLA reference");
+    return FlatSymbolRefAttr::get(module.getModuleNameAttr());
   }
   // Return an inner-ref to the target.
   return ::getInnerRefTo(getOp(), "",
@@ -604,9 +604,17 @@ OpAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
 
 FIRRTLType OpAnnoTarget::getType() const {
   auto *op = getOp();
+  // Annotations that target operations are resolved like inner symbols.
+  if (auto is = llvm::dyn_cast<hw::InnerSymbolOpInterface>(op)) {
+    auto result = is.getTargetResult();
+    if (!result)
+      return {};
+    return llvm::cast<FIRRTLType>(result.getType());
+  }
+  // Fallback to assuming the single result is the target.
   if (op->getNumResults() != 1)
     return {};
-  return op->getResult(0).getType().cast<FIRRTLType>();
+  return llvm::cast<FIRRTLType>(op->getResult(0).getType());
 }
 
 PortAnnoTarget::PortAnnoTarget(FModuleLike op, unsigned portNo)
@@ -666,9 +674,9 @@ PortAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
 FIRRTLType PortAnnoTarget::getType() const {
   auto *op = getOp();
   if (auto module = llvm::dyn_cast<FModuleLike>(op))
-    return module.getPortType(getPortNo()).cast<FIRRTLType>();
+    return llvm::cast<FIRRTLType>(module.getPortType(getPortNo()));
   if (llvm::isa<MemOp, InstanceOp>(op))
-    return op->getResult(getPortNo()).getType().cast<FIRRTLType>();
+    return llvm::cast<FIRRTLType>(op->getResult(getPortNo()).getType());
   llvm_unreachable("unknow operation kind");
   return {};
 }
@@ -701,7 +709,7 @@ LogicalResult circt::firrtl::extractDUT(const FModuleOp mod, FModuleOp &dut) {
   if (dut) {
     auto diag = emitError(mod->getLoc())
                 << "is marked with a '" << dutAnnoClass << "', but '"
-                << dut.moduleName()
+                << dut.getModuleName()
                 << "' also had such an annotation (this should "
                    "be impossible!)";
     diag.attachNote(dut.getLoc()) << "the first DUT was found here";

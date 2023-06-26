@@ -62,18 +62,18 @@ public:
     addTargetMaterialization(
         [&](mlir::OpBuilder &builder, mlir::Type resultType,
             mlir::ValueRange inputs,
-            mlir::Location loc) -> llvm::Optional<mlir::Value> {
+            mlir::Location loc) -> std::optional<mlir::Value> {
           if (inputs.size() != 1)
-            return llvm::None;
+            return std::nullopt;
           return inputs[0];
         });
 
     addSourceMaterialization(
         [&](mlir::OpBuilder &builder, mlir::Type resultType,
             mlir::ValueRange inputs,
-            mlir::Location loc) -> llvm::Optional<mlir::Value> {
+            mlir::Location loc) -> std::optional<mlir::Value> {
           if (inputs.size() != 1)
-            return llvm::None;
+            return std::nullopt;
           return inputs[0];
         });
   }
@@ -248,24 +248,28 @@ static std::string getSubModuleName(Operation *oldOp) {
 /// Check whether a submodule with the same name has been created elsewhere in
 /// the top level module. Return the matched module operation if true, otherwise
 /// return nullptr.
-static Operation *checkSubModuleOp(mlir::ModuleOp parentModule,
-                                   StringRef modName) {
+static HWModuleLike checkSubModuleOp(mlir::ModuleOp parentModule,
+                                     StringRef modName) {
   if (auto mod = parentModule.lookupSymbol<HWModuleOp>(modName))
     return mod;
   if (auto mod = parentModule.lookupSymbol<HWModuleExternOp>(modName))
     return mod;
-  return nullptr;
+  return {};
 }
 
-static Operation *checkSubModuleOp(mlir::ModuleOp parentModule,
-                                   Operation *oldOp) {
-  auto *moduleOp = checkSubModuleOp(parentModule, getSubModuleName(oldOp));
+static HWModuleLike checkSubModuleOp(mlir::ModuleOp parentModule,
+                                     Operation *oldOp) {
+  HWModuleLike targetModule;
+  if (auto instanceOp = dyn_cast<handshake::InstanceOp>(oldOp))
+    targetModule = checkSubModuleOp(parentModule, instanceOp.getModule());
+  else
+    targetModule = checkSubModuleOp(parentModule, getSubModuleName(oldOp));
 
   if (isa<handshake::InstanceOp>(oldOp))
-    assert(moduleOp &&
+    assert(targetModule &&
            "handshake.instance target modules should always have been lowered "
            "before the modules that reference them!");
-  return moduleOp;
+  return targetModule;
 }
 
 /// Returns a vector of PortInfo's which defines the HW interface of the
@@ -728,6 +732,7 @@ public:
     if (!implModule) {
       auto portInfo = ModulePortInfo(getPortInfoForOp(op));
 
+      submoduleBuilder.setInsertionPoint(op->getParentOp());
       implModule = submoduleBuilder.create<hw::HWModuleOp>(
           op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
           portInfo, [&](OpBuilder &b, hw::HWModulePortAccessor &ports) {
@@ -1022,41 +1027,18 @@ public:
   };
 };
 
-class SelectConversionPattern
-    : public HandshakeConversionPattern<handshake::SelectOp> {
+class InstanceConversionPattern
+    : public HandshakeConversionPattern<handshake::InstanceOp> {
 public:
   using HandshakeConversionPattern<
-      handshake::SelectOp>::HandshakeConversionPattern;
-  void buildModule(handshake::SelectOp op, BackedgeBuilder &bb, RTLBuilder &s,
+      handshake::InstanceOp>::HandshakeConversionPattern;
+  void buildModule(handshake::InstanceOp op, BackedgeBuilder &bb, RTLBuilder &s,
                    hw::HWModulePortAccessor &ports) const override {
-    auto unwrappedIO = unwrapIO(s, bb, ports);
-
-    // Extract select signal from the unwrapped IO.
-    auto select = unwrappedIO.inputs[0];
-    auto trueIn = unwrappedIO.inputs[1];
-    auto falseIn = unwrappedIO.inputs[2];
-    auto out = unwrappedIO.outputs[0];
-
-    // Mux the true and false data to the output.
-    auto muxedData = s.mux(select.data, {falseIn.data, trueIn.data});
-    out.data->setValue(muxedData);
-
-    // 'and' the arg valids and select valid
-    Value allValid = s.bAnd({select.valid, trueIn.valid, falseIn.valid});
-
-    // Connect that to the result valid.
-    out.valid->setValue(allValid);
-
-    // 'and' the result valid with the result ready.
-    auto resValidAndReady = s.bAnd({allValid, out.ready});
-
-    // Connect that to the 'ready' signal of all inputs. This implies that all
-    // inputs + select is transacted when all are valid (and the output is
-    // ready), but only the selected data is forwarded.
-    select.ready->setValue(resValidAndReady);
-    trueIn.ready->setValue(resValidAndReady);
-    falseIn.ready->setValue(resValidAndReady);
-  };
+    assert(false &&
+           "If we indeed perform conversion in post-order, this "
+           "should never be called. The base HandshakeConversionPattern logic "
+           "will instantiate the external module.");
+  }
 };
 
 class ReturnConversionPattern
@@ -1650,7 +1632,7 @@ public:
         initValueCs = s.constant(dataType.getIntOrFloatBitWidth(), *initValue);
 
       // This could/should be revised but needs a larger rethinking to avoid
-      // introducing new bugs. Implement similarly to HandshakeToFIRRTL.
+      // introducing new bugs.
       Value dataReg =
           buildDataBufferLogic(validReg, initValueCs, validBE, readyBE);
       buildControlBufferLogic(validReg, readyBE, dataReg);
@@ -1826,9 +1808,9 @@ public:
       auto hwModuleOp = rewriter.create<hw::HWModuleOp>(
           op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
       auto args = hwModuleOp.getArguments().drop_back(2);
-      rewriter.mergeBlockBefore(&op.getBody().front(),
-                                hwModuleOp.getBodyBlock()->getTerminator(),
-                                args);
+      rewriter.inlineBlockBefore(&op.getBody().front(),
+                                 hwModuleOp.getBodyBlock()->getTerminator(),
+                                 args);
       hwModule = hwModuleOp;
     }
 
@@ -1841,7 +1823,7 @@ public:
           SymbolTable::lookupSymbolIn(parentOp, predecl.getValue());
       if (predeclModule) {
         if (failed(SymbolTable::replaceAllSymbolUses(
-                predeclModule, hwModule.moduleNameAttr(), parentOp)))
+                predeclModule, hwModule.getModuleNameAttr(), parentOp)))
           return failure();
         rewriter.eraseOp(predeclModule);
       }
@@ -1901,15 +1883,17 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
       UnitRateConversionPattern<arith::ShLIOp, comb::OrOp>,
       UnitRateConversionPattern<arith::ShRUIOp, comb::ShrUOp>,
       UnitRateConversionPattern<arith::ShRSIOp, comb::ShrSOp>,
+      UnitRateConversionPattern<arith::SelectOp, comb::MuxOp>,
       // HW operations.
       StructCreateConversionPattern,
       // Handshake operations.
       ConditionalBranchConversionPattern, MuxConversionPattern,
-      SelectConversionPattern, PackConversionPattern, UnpackConversionPattern,
+      PackConversionPattern, UnpackConversionPattern,
       ComparisonConversionPattern, BufferConversionPattern,
       SourceConversionPattern, SinkConversionPattern, ConstantConversionPattern,
       MergeConversionPattern, ControlMergeConversionPattern,
       LoadConversionPattern, StoreConversionPattern, MemoryConversionPattern,
+      InstanceConversionPattern,
       // Arith operations.
       ExtendConversionPattern<arith::ExtUIOp, /*signExtend=*/false>,
       ExtendConversionPattern<arith::ExtSIOp, /*signExtend=*/true>,
@@ -1952,7 +1936,8 @@ public:
     ConversionTarget target(getContext());
     // All top-level logic of a handshake module will be the interconnectivity
     // between instantiated modules.
-    target.addLegalOp<hw::HWModuleOp, hw::OutputOp, hw::InstanceOp>();
+    target.addLegalOp<hw::HWModuleOp, hw::HWModuleExternOp, hw::OutputOp,
+                      hw::InstanceOp>();
     target
         .addIllegalDialect<handshake::HandshakeDialect, arith::ArithDialect>();
 

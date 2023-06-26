@@ -4,8 +4,8 @@
 import circt
 from circt.dialects import comb, esi, hw, seq, sv
 
-from mlir.passmanager import PassManager
-from mlir.ir import Context
+from circt.passmanager import PassManager
+from circt.ir import Context
 
 with Context():
   pm = PassManager.parse("builtin.module(cse)")

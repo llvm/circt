@@ -2,12 +2,16 @@
 
 circuit MyModule :  @[CIRCUIT.scala 127]
 
-  ; CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint, out %out: !firrtl.uint<8>) {
+  ; CHECK-LABEL: firrtl.module @MyModule(
+  ; CHECK-SAME:    in %in: !firrtl.uint loc("InputPort.scala":0:0)
+  ; CHECK-SAME:    out %out: !firrtl.uint<8> loc("OutputPort.scala":0:0)
+  ; CHECK-SAME:  ) {
   module MyModule :   @[FooBar.scala 369:27]
-    input in: UInt
-    output out: UInt<8>
+    input in: UInt      @[InputPort.scala 0:0]
+    output out: UInt<8> @[OutputPort.scala 0:0]
 
-    ; CHECK: firrtl.connect {{.*}}loc("Somewhere.galaxy":42:1)
+    ; CHECK: firrtl.widthCast %in : {{.*}} loc("Somewhere.galaxy":42:1)
+    ; CHECK-NEXT: firrtl.strictconnect {{.*}}loc("Somewhere.galaxy":42:1)
     out <= in   @[Somewhere.galaxy 42:1]
 
     ; CHECK: firrtl.node {{.*}}loc("Somewhere.galaxy":42:2)
@@ -34,14 +38,14 @@ circuit MyModule :  @[CIRCUIT.scala 127]
   module Subexpressions :
     input in: UInt
     output auto : { out_0 : UInt<1> }
-    ; CHECK: %0 = firrtl.subfield %auto(0) {{.*}} loc("Field":173:49)
+    ; CHECK: %0 = firrtl.subfield %auto[out_0] {{.*}} loc("Field":173:49)
 
     ; CHECK: %out_0 = firrtl.wire
     wire out_0 : { member : { 0 : { reset : UInt<1>}}}
 
-    ; CHECK: %1 = firrtl.subfield %out_0(0) {{.*}} loc("Field":173:49)
-    ; CHECK: %2 = firrtl.subfield %1(0) {{.*}} loc("Field":173:49)
-    ; CHECK: %3 = firrtl.subfield %2(0) : {{.*}} loc("Field":173:49)
+    ; CHECK: %1 = firrtl.subfield %out_0[member] {{.*}} loc("Field":173:49)
+    ; CHECK: %2 = firrtl.subfield %1["0"] {{.*}} loc("Field":173:49)
+    ; CHECK: %3 = firrtl.subfield %2[reset] : {{.*}} loc("Field":173:49)
     ; CHECK: firrtl.strictconnect %0, %3 : {{.*}} loc("Field":173:49)
     auto.out_0 <- out_0.member.0.reset @[Field 173:49]
 
@@ -60,8 +64,8 @@ circuit MyModule :  @[CIRCUIT.scala 127]
     node mask_nbit_2 = eq(mask_bit_2, UInt<1>("h0")) @[Misc.scala 210:20]
 
     ; Make sure the locator is applied to all the subexpressions.
-    ; CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1> loc("Misc.scala":210:20)
-    ; CHECK:  %0 = firrtl.eq %mask_bit_2, %c0_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1> loc("Misc.scala":210:20)
+    ; CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1> loc("Misc.scala":210:20)
+    ; CHECK:  %0 = firrtl.eq %mask_bit_2, %c0_ui1 : (!firrtl.uint<1>, !firrtl.const.uint<1>) -> !firrtl.uint<1> loc("Misc.scala":210:20)
     ; CHECK:  %mask_nbit_2 = firrtl.node interesting_name %0  : !firrtl.uint<1> loc("Misc.scala":210:20)
 
 

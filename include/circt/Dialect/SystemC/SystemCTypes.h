@@ -50,7 +50,7 @@ Type getSignalBaseType(Type type);
 
 /// Return the bitwidth of a type. SystemC types with a dynamic bit-width and
 /// unsupported types result in a None return value.
-Optional<size_t> getBitWidth(Type type);
+std::optional<size_t> getBitWidth(Type type);
 
 //===----------------------------------------------------------------------===//
 // Integer types

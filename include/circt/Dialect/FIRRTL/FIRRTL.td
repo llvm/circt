@@ -10,29 +10,26 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef FIRRTL_TD
-#define FIRRTL_TD
+#ifndef CIRCT_DIALECT_FIRRTL_FIRRTL_TD
+#define CIRCT_DIALECT_FIRRTL_FIRRTL_TD
 
-include "mlir/IR/AttrTypeBase.td"
-include "mlir/IR/OpBase.td"
-include "mlir/IR/OpAsmInterface.td"
-include "mlir/IR/PatternBase.td"
-include "mlir/IR/SymbolInterfaces.td"
-include "mlir/IR/RegionKindInterface.td"
-include "mlir/IR/FunctionInterfaces.td"
-include "mlir/Interfaces/SideEffectInterfaces.td"
-include "mlir/Interfaces/InferTypeOpInterface.td"
-
-include "circt/Dialect/HW/HWOpInterfaces.td"
-
+// Dialect
 include "FIRRTLDialect.td"
-include "FIRRTLAttributes.td"
-include "FIRRTLTypesImpl.td"
-include "FIRRTLTypes.td"
-include "FIRRTLOpInterfaces.td"
+
+// Operations
 include "FIRRTLStructure.td"
 include "FIRRTLDeclarations.td"
-include "FIRRTLExpressions.td"
 include "FIRRTLStatements.td"
+include "FIRRTLExpressions.td"
 
-#endif // FIRRTL_TD
+// Types
+include "FIRRTLTypes.td"
+include "FIRRTLTypesImpl.td"
+
+// Attributes
+include "FIRRTLAttributes.td"
+
+// Op Interfaces
+include "FIRRTLOpInterfaces.td"
+
+#endif // CIRCT_DIALECT_FIRRTL_FIRRTL_TD

@@ -41,7 +41,7 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
   // CHECK-LABEL: firrtl.module @ExtractBlackBoxesSimple
   firrtl.module @ExtractBlackBoxesSimple(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
     // CHECK: %dut_in, %dut_out, %dut_bb_0_in, %dut_bb_0_out = firrtl.instance dut sym {{@.+}} @DUTModule
-    // CHECK-NEXT: %bb_in, %bb_out = firrtl.instance bb sym [[BB_SYM:@.+]] @MyBlackBox
+    // CHECK-NEXT: %bb_in, %bb_out = firrtl.instance bb @MyBlackBox
     // CHECK-NEXT: firrtl.strictconnect %bb_in, %dut_bb_0_in
     // CHECK-NEXT: firrtl.strictconnect %dut_bb_0_out, %bb_out
     %dut_in, %dut_out = firrtl.instance dut @DUTModule(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
@@ -49,12 +49,11 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
     firrtl.connect %dut_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
   }
   // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: bb_0 -> {{0}}.{{1}}.{{2}}\0A
+  // CHECK-SAME{LITERAL}: bb_0 -> {{0}}.{{1}}\0A
   // CHECK-SAME: output_file = #hw.output_file<"BlackBoxes.txt", excludeFromFileList>
   // CHECK-SAME: symbols = [
   // CHECK-SAME: @DUTModule
   // CHECK-SAME: #hw.innerNameRef<@DUTModule::[[WRAPPER_SYM]]>
-  // CHECK-SAME: #hw.innerNameRef<@ExtractBlackBoxesSimple::[[BB_SYM]]>
   // CHECK-SAME: ]
 }
 
@@ -66,18 +65,18 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
 // CHECK: firrtl.circuit "ExtractBlackBoxesSimple2"
 firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "firrtl.transforms.BlackBoxTargetDirAnno", targetDir = "BlackBoxes"}]} {
   // Old style NLAs
-  firrtl.hierpath private @nla_old1 [@DUTModule::@mod, @BBWrapper::@bb]
-  firrtl.hierpath private @nla_old2 [@ExtractBlackBoxesSimple2::@dut, @DUTModule::@mod, @BBWrapper::@bb]
+  hw.hierpath private @nla_old1 [@DUTModule::@mod, @BBWrapper::@bb]
+  hw.hierpath private @nla_old2 [@ExtractBlackBoxesSimple2::@dut, @DUTModule::@mod, @BBWrapper::@bb]
   // New style NLAs on extracted instance
-  firrtl.hierpath private @nla_on1 [@DUTModule::@mod, @BBWrapper]
-  firrtl.hierpath private @nla_on2 [@ExtractBlackBoxesSimple2::@dut, @DUTModule::@mod, @BBWrapper]
+  hw.hierpath private @nla_on1 [@DUTModule::@mod, @BBWrapper]
+  hw.hierpath private @nla_on2 [@ExtractBlackBoxesSimple2::@dut, @DUTModule::@mod, @BBWrapper]
   // New style NLAs through extracted instance
-  firrtl.hierpath private @nla_thru1 [@BBWrapper::@bb, @MyBlackBox]
-  firrtl.hierpath private @nla_thru2 [@DUTModule::@mod, @BBWrapper::@bb, @MyBlackBox]
-  firrtl.hierpath private @nla_thru3 [@ExtractBlackBoxesSimple2::@dut, @DUTModule::@mod, @BBWrapper::@bb, @MyBlackBox]
-  // CHECK: firrtl.hierpath private [[THRU1:@nla_thru1]] [@ExtractBlackBoxesSimple2::@bb, @MyBlackBox]
-  // CHECK: firrtl.hierpath private [[THRU2:@nla_thru2]] [@ExtractBlackBoxesSimple2::@bb, @MyBlackBox]
-  // CHECK: firrtl.hierpath private [[THRU3:@nla_thru3]] [@ExtractBlackBoxesSimple2::@bb, @MyBlackBox]
+  hw.hierpath private @nla_thru1 [@BBWrapper::@bb, @MyBlackBox]
+  hw.hierpath private @nla_thru2 [@DUTModule::@mod, @BBWrapper::@bb, @MyBlackBox]
+  hw.hierpath private @nla_thru3 [@ExtractBlackBoxesSimple2::@dut, @DUTModule::@mod, @BBWrapper::@bb, @MyBlackBox]
+  // CHECK: hw.hierpath private [[THRU1:@nla_thru1]] [@ExtractBlackBoxesSimple2::@bb, @MyBlackBox]
+  // CHECK: hw.hierpath private [[THRU2:@nla_thru2]] [@ExtractBlackBoxesSimple2::@bb, @MyBlackBox]
+  // CHECK: hw.hierpath private [[THRU3:@nla_thru3]] [@ExtractBlackBoxesSimple2::@bb, @MyBlackBox]
 
   // Annotation on the extmodule itself
   // CHECK-LABEL: firrtl.extmodule private @MyBlackBox
@@ -140,7 +139,7 @@ firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "f
     // CHECK-NEXT: %bb_in, %bb_out = firrtl.instance bb sym [[BB_SYM:@.+]] {annotations = [{class = "Old1"}, {class = "On1"}, {class = "Old2"}, {class = "On2"}]} @MyBlackBox
     // CHECK-NEXT: firrtl.strictconnect %bb_in, %dut_prefix_1_in
     // CHECK-NEXT: firrtl.strictconnect %dut_prefix_1_out, %bb_out
-    // CHECK-NEXT: %bb2_in, %bb2_out = firrtl.instance bb2 sym [[BB2_SYM:@.+]] @MyBlackBox2
+    // CHECK-NEXT: %bb2_in, %bb2_out = firrtl.instance bb2 @MyBlackBox2
     // CHECK-NEXT: firrtl.strictconnect %bb2_in, %dut_prefix_0_in
     // CHECK-NEXT: firrtl.strictconnect %dut_prefix_0_out, %bb2_out
     %dut_in, %dut_out = firrtl.instance dut sym @dut @DUTModule(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
@@ -148,14 +147,12 @@ firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "f
     firrtl.connect %dut_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
   }
   // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: prefix_0 -> {{0}}.{{1}}.{{2}}\0A
-  // CHECK-SAME{LITERAL}: prefix_1 -> {{0}}.{{1}}.{{3}}\0A
+  // CHECK-SAME{LITERAL}: prefix_0 -> {{0}}.{{1}}\0A
+  // CHECK-SAME{LITERAL}: prefix_1 -> {{0}}.{{1}}\0A
   // CHECK-SAME: output_file = #hw.output_file<"BlackBoxes.txt", excludeFromFileList>
   // CHECK-SAME: symbols = [
   // CHECK-SAME: @DUTModule
   // CHECK-SAME: @DUTModule::[[WRAPPER_SYM]]
-  // CHECK-SAME: @ExtractBlackBoxesSimple2::[[BB2_SYM]]
-  // CHECK-SAME: @ExtractBlackBoxesSimple2::[[BB_SYM]]
   // CHECK-SAME: ]
 }
 
@@ -165,43 +162,43 @@ firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "f
 
 // CHECK: firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"
 firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"  {
-  // CHECK-LABEL: firrtl.hierpath private @nla_new_0 [
+  // CHECK-LABEL: hw.hierpath private @nla_new_0 [
   // CHECK-SAME:    @ExtractBlackBoxesIntoDUTSubmodule::@tb
   // CHECK-SAME:    @TestHarness::@dut
   // CHECK-SAME:    @DUTModule::@BlackBoxes
   // CHECK-SAME:    @BlackBoxes
   // CHECK-SAME:  ]
-  // CHECK-LABEL: firrtl.hierpath private @nla_new_1 [
+  // CHECK-LABEL: hw.hierpath private @nla_new_1 [
   // CHECK-SAME:    @ExtractBlackBoxesIntoDUTSubmodule::@tb
   // CHECK-SAME:    @TestHarness::@dut
   // CHECK-SAME:    @DUTModule::@BlackBoxes
   // CHECK-SAME:    @BlackBoxes
   // CHECK-SAME:  ]
-  firrtl.hierpath private @nla_new [
+  hw.hierpath private @nla_new [
     @ExtractBlackBoxesIntoDUTSubmodule::@tb,
     @TestHarness::@dut,
     @DUTModule::@mod,
     @BBWrapper
   ]
-  // CHECK-LABEL: firrtl.hierpath private @nla_old1 [
+  // CHECK-LABEL: hw.hierpath private @nla_old1 [
   // CHECK-SAME:    @ExtractBlackBoxesIntoDUTSubmodule::@tb
   // CHECK-SAME:    @TestHarness::@dut
   // CHECK-SAME:    @DUTModule::@BlackBoxes
   // CHECK-SAME:    @BlackBoxes::@bb1
   // CHECK-SAME:  ]
-  firrtl.hierpath private @nla_old1 [
+  hw.hierpath private @nla_old1 [
     @ExtractBlackBoxesIntoDUTSubmodule::@tb,
     @TestHarness::@dut,
     @DUTModule::@mod,
     @BBWrapper::@bb1
   ]
-  // CHECK-LABEL: firrtl.hierpath private @nla_old2 [
+  // CHECK-LABEL: hw.hierpath private @nla_old2 [
   // CHECK-SAME:    @ExtractBlackBoxesIntoDUTSubmodule::@tb
   // CHECK-SAME:    @TestHarness::@dut
   // CHECK-SAME:    @DUTModule::@BlackBoxes
   // CHECK-SAME:    @BlackBoxes::@bb2
   // CHECK-SAME:  ]
-  firrtl.hierpath private @nla_old2 [
+  hw.hierpath private @nla_old2 [
     @ExtractBlackBoxesIntoDUTSubmodule::@tb,
     @TestHarness::@dut,
     @DUTModule::@mod,
@@ -254,14 +251,12 @@ firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"  {
     firrtl.connect %tb_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
   }
   // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: bb_0 -> {{0}}.{{1}}.{{2}}\0A
-  // CHECK-SAME{LITERAL}: bb_1 -> {{0}}.{{1}}.{{3}}\0A
+  // CHECK-SAME{LITERAL}: bb_0 -> {{0}}.{{1}}\0A
+  // CHECK-SAME{LITERAL}: bb_1 -> {{0}}.{{1}}\0A
   // CHECK-SAME: output_file = #hw.output_file<"BlackBoxes.txt", excludeFromFileList>
   // CHECK-SAME: symbols = [
   // CHECK-SAME: @DUTModule
   // CHECK-SAME: @DUTModule::[[WRAPPER_SYM]]
-  // CHECK-SAME: @BlackBoxes::[[BB2_SYM]]
-  // CHECK-SAME: @BlackBoxes::[[BB1_SYM]]
   // CHECK-SAME: ]
 }
 
@@ -279,17 +274,16 @@ firrtl.circuit "ExtractClockGatesSimple" attributes {annotations = [{class = "si
   }
   // CHECK-LABEL: firrtl.module @ExtractClockGatesSimple
   firrtl.module @ExtractClockGatesSimple(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
-    // CHECK: firrtl.instance gate sym [[CKG_SYM:@.+]] @EICG_wrapper
+    // CHECK: firrtl.instance gate @EICG_wrapper
     %dut_clock, %dut_en = firrtl.instance dut @DUTModule(in clock: !firrtl.clock, in en: !firrtl.uint<1>)
     firrtl.connect %dut_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %dut_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: clock_gate_0 -> {{0}}.{{1}}\0A
+  // CHECK-SAME{LITERAL}: clock_gate_0 -> {{0}}\0A
   // CHECK-SAME: output_file = #hw.output_file<"ClockGates.txt", excludeFromFileList>
   // CHECK-SAME: symbols = [
   // CHECK-SAME: @DUTModule
-  // CHECK-SAME: @ExtractClockGatesSimple::[[CKG_SYM]]
   // CHECK-SAME: ]
 }
 
@@ -363,14 +357,12 @@ firrtl.circuit "ExtractClockGatesMixed" attributes {annotations = [{class = "sif
     firrtl.connect %dut_in, %intf_in : !firrtl.uint<8>, !firrtl.uint<8>
   }
   // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: clock_gate_0 -> {{0}}.{{1}}.{{2}}\0A
-  // CHECK-SAME{LITERAL}: clock_gate_1 -> {{0}}.{{3}}\0A
+  // CHECK-SAME{LITERAL}: clock_gate_0 -> {{0}}.{{1}}\0A
+  // CHECK-SAME{LITERAL}: clock_gate_1 -> {{0}}\0A
   // CHECK-SAME: output_file = #hw.output_file<"ClockGates.txt", excludeFromFileList>
   // CHECK-SAME: symbols = [
   // CHECK-SAME: @DUTModule
   // CHECK-SAME: @DUTModule::@inst
-  // CHECK-SAME: @ExtractClockGatesMixed::@ckg1
-  // CHECK-SAME: @ExtractClockGatesMixed::@ckg2
   // CHECK-SAME: ]
 }
 
@@ -393,25 +385,24 @@ firrtl.circuit "ExtractClockGatesComposed" attributes {annotations = [
   }
   // CHECK-LABEL: firrtl.module @ExtractClockGatesComposed
   firrtl.module @ExtractClockGatesComposed(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
-    // CHECK: firrtl.instance gate sym [[CKG_SYM:@.+]] @EICG_wrapper
-    // CHECK: firrtl.instance mem_ext sym [[MEM_SYM:@.+]] @mem_ext
+    // CHECK: firrtl.instance gate @EICG_wrapper
+    // CHECK: firrtl.instance mem_ext @mem_ext
     %dut_clock, %dut_en = firrtl.instance dut @DUTModule(in clock: !firrtl.clock, in en: !firrtl.uint<1>)
     firrtl.connect %dut_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %dut_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
   }
+  // CHECK: sv.verbatim ""
   // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: clock_gate_0 -> {{0}}.{{1}}\0A
+  // CHECK-SAME{LITERAL}: clock_gate_0 -> {{0}}\0A
   // CHECK-SAME: output_file = #hw.output_file<"ClockGates.txt", excludeFromFileList>
   // CHECK-SAME: symbols = [
   // CHECK-SAME: @DUTModule
-  // CHECK-SAME: @ExtractClockGatesComposed::[[CKG_SYM]]
   // CHECK-SAME: ]
   // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: mem_wiring_0 -> {{0}}.{{1}}\0A
+  // CHECK-SAME{LITERAL}: mem_wiring_0 -> {{0}}\0A
   // CHECK-SAME: output_file = #hw.output_file<"SeqMems.txt", excludeFromFileList>
   // CHECK-SAME: symbols = [
   // CHECK-SAME: @DUTModule
-  // CHECK-SAME: @ExtractClockGatesComposed::[[MEM_SYM]]
   // CHECK-SAME: ]
 }
 
@@ -436,16 +427,27 @@ firrtl.circuit "ExtractSeqMemsSimple2" attributes {annotations = [{class = "sifi
   firrtl.module @ExtractSeqMemsSimple2() {
     firrtl.instance dut @DUTModule()
     // CHECK-NEXT: firrtl.instance dut sym [[DUT_SYM:@.+]] @DUTModule
-    // CHECK-NEXT: firrtl.instance mem_ext sym [[MEM_EXT_SYM:@.+]] @mem_ext
+    // CHECK-NEXT: firrtl.instance mem_ext @mem_ext
   }
+  // CHECK: sv.verbatim ""
   // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: mem_wiring_0 -> {{0}}.{{1}}.{{2}}\0A
+  // CHECK-SAME{LITERAL}: mem_wiring_0 -> {{0}}.{{1}}\0A
   // CHECK-SAME: output_file = #hw.output_file<"SeqMems.txt", excludeFromFileList>
   // CHECK-SAME: symbols = [
   // CHECK-SAME: @DUTModule
   // CHECK-SAME: @DUTModule::[[MEM_SYM]]
-  // CHECK-SAME: @ExtractSeqMemsSimple2::[[MEM_EXT_SYM]]
   // CHECK-SAME: ]
+}
+
+//===----------------------------------------------------------------------===//
+// ExtractSeqMems NoExtraction
+//===----------------------------------------------------------------------===//
+
+// CHECK: firrtl.circuit "ExtractSeqMemsNoExtraction"
+firrtl.circuit "ExtractSeqMemsNoExtraction"  attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractSeqMemsFileAnnotation", filename = "SeqMems.txt"}]} {
+  firrtl.module @ExtractSeqMemsNoExtraction() {}
+  // CHECK: sv.verbatim ""
+  // CHECK-SAME: output_file = #hw.output_file<"SeqMems.txt", excludeFromFileList>
 }
 
 //===----------------------------------------------------------------------===//
@@ -455,14 +457,14 @@ firrtl.circuit "ExtractSeqMemsSimple2" attributes {annotations = [{class = "sifi
 
 // CHECK: firrtl.circuit "InstSymConflict"
 firrtl.circuit "InstSymConflict" {
-  // CHECK-NOT: firrtl.hierpath private @nla_1
-  // CHECK-NOT: firrtl.hierpath private @nla_2
-  firrtl.hierpath private @nla_1 [
+  // CHECK-NOT: hw.hierpath private @nla_1
+  // CHECK-NOT: hw.hierpath private @nla_2
+  hw.hierpath private @nla_1 [
     @InstSymConflict::@dut,
     @DUTModule::@mod1,
     @BBWrapper::@bb
   ]
-  firrtl.hierpath private @nla_2 [
+  hw.hierpath private @nla_2 [
     @InstSymConflict::@dut,
     @DUTModule::@mod2,
     @BBWrapper::@bb
@@ -494,13 +496,11 @@ firrtl.circuit "InstSymConflict" {
     firrtl.strictconnect %out, %dut_out : !firrtl.uint<8>
   }
   // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: bb_1 -> {{0}}.{{1}}.{{2}}\0A
-  // CHECK-SAME{LITERAL}: bb_0 -> {{0}}.{{3}}.{{4}}\0A
+  // CHECK-SAME{LITERAL}: bb_1 -> {{0}}.{{1}}\0A
+  // CHECK-SAME{LITERAL}: bb_0 -> {{0}}.{{2}}\0A
   // CHECK-SAME: symbols = [
   // CHECK-SAME: @DUTModule
   // CHECK-SAME: #hw.innerNameRef<@DUTModule::@mod1>
-  // CHECK-SAME: #hw.innerNameRef<@InstSymConflict::@bb_0>
   // CHECK-SAME: #hw.innerNameRef<@DUTModule::@mod2>
-  // CHECK-SAME: #hw.innerNameRef<@InstSymConflict::@bb>
   // CHECK-SAME: ]
 }

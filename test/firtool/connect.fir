@@ -21,12 +21,12 @@ circuit truncatingIntegerConnect :
    a <= b
 
 ; CHECK-LABEL: @regularBundleConnect
-; CHECK: %0 = firrtl.subfield %a(0) : (!firrtl.bundle<a: uint<5>, b: uint<3>>) -> !firrtl.uint<5>
-; CHECK: %1 = firrtl.subfield %b(0) : (!firrtl.bundle<a: uint<3>, b: uint<2>>) -> !firrtl.uint<3>
+; CHECK: %0 = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<5>, b: uint<3>>
+; CHECK: %1 = firrtl.subfield %b[a] : !firrtl.bundle<a: uint<3>, b: uint<2>>
 ; CHECK: %2 = firrtl.pad %1, 5 : (!firrtl.uint<3>) -> !firrtl.uint<5>
 ; CHECK: firrtl.strictconnect %0, %2 : !firrtl.uint<5>
-; CHECK: %3 = firrtl.subfield %a(1) : (!firrtl.bundle<a: uint<5>, b: uint<3>>) -> !firrtl.uint<3>
-; CHECK: %4 = firrtl.subfield %b(1) : (!firrtl.bundle<a: uint<3>, b: uint<2>>) -> !firrtl.uint<2>
+; CHECK: %3 = firrtl.subfield %a[b] : !firrtl.bundle<a: uint<5>, b: uint<3>>
+; CHECK: %4 = firrtl.subfield %b[b] : !firrtl.bundle<a: uint<3>, b: uint<2>>
 ; CHECK: %5 = firrtl.pad %4, 3 : (!firrtl.uint<2>) -> !firrtl.uint<3>
 ; CHECK: firrtl.strictconnect %3, %5 : !firrtl.uint<3>
 circuit regularBundleConnect :
@@ -36,12 +36,12 @@ circuit regularBundleConnect :
    a <= b
 
 ; CHECK-LABEL: @truncatingBundleConnect
-; CHECK: %0 = firrtl.subfield %a(0) : (!firrtl.bundle<a: uint<5>, b: uint<3>>) -> !firrtl.uint<5>
-; CHECK: %1 = firrtl.subfield %b(0) : (!firrtl.bundle<a: uint<6>, b: uint<1>>) -> !firrtl.uint<6>
+; CHECK: %0 = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<5>, b: uint<3>>
+; CHECK: %1 = firrtl.subfield %b[a] : !firrtl.bundle<a: uint<6>, b: uint<1>>
 ; CHECK: %2 = firrtl.tail %1, 1 : (!firrtl.uint<6>) -> !firrtl.uint<5>
 ; CHECK: firrtl.strictconnect %0, %2 : !firrtl.uint<5>
-; CHECK: %3 = firrtl.subfield %a(1) : (!firrtl.bundle<a: uint<5>, b: uint<3>>) -> !firrtl.uint<3>
-; CHECK: %4 = firrtl.subfield %b(1) : (!firrtl.bundle<a: uint<6>, b: uint<1>>) -> !firrtl.uint<1>
+; CHECK: %3 = firrtl.subfield %a[b] : !firrtl.bundle<a: uint<5>, b: uint<3>>
+; CHECK: %4 = firrtl.subfield %b[b] : !firrtl.bundle<a: uint<6>, b: uint<1>>
 ; CHECK: %5 = firrtl.pad %4, 3 : (!firrtl.uint<1>) -> !firrtl.uint<3>
 ; CHECK: firrtl.strictconnect %3, %5 : !firrtl.uint<3>
 circuit truncatingBundleConnect :

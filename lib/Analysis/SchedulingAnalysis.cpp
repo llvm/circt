@@ -23,6 +23,7 @@
 #include <limits>
 
 using namespace mlir;
+using namespace mlir::affine;
 
 /// CyclicSchedulingAnalysis constructs a CyclicProblem for each AffineForOp by
 /// performing a memory dependence analysis and inserting dependences into the
@@ -72,7 +73,7 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
       // assumes outer loops execute sequentially, i.e. one iteration of the
       // inner loop completes before the next iteration is initiated. With
       // proper analysis and lowerings, this can be relaxed.
-      unsigned distance = memoryDep.dependenceComponents.back().lb.value();
+      unsigned distance = *memoryDep.dependenceComponents.back().lb;
       if (distance > 0)
         problem.setDistance(dep, distance);
     }
@@ -117,7 +118,7 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
   // terminator to ensure the problem schedules them before the terminator.
   auto *anchor = forOp.getBody()->getTerminator();
   forOp.getBody()->walk([&](Operation *op) {
-    if (!isa<mlir::AffineStoreOp, memref::StoreOp>(op))
+    if (!isa<AffineStoreOp, memref::StoreOp>(op))
       return;
     Problem::Dependence dep(op, anchor);
     auto depInserted = problem.insertDependence(dep);

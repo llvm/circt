@@ -2,7 +2,8 @@
 
 // CHECK: module namechange(
 // CHECK: input  [3:0] casex_0,
-// CHECK: output [3:0] if_0);
+// CHECK: output [3:0] if_0
+// CHECK: );
 hw.module @namechange(%casex: i4) -> (if: i4) {
   // CHECK: assign if_0 = casex_0;
   hw.output %casex : i4
@@ -11,16 +12,17 @@ hw.module @namechange(%casex: i4) -> (if: i4) {
 hw.module.extern @module_with_bool<bparam: i1>() -> ()
 
 // CHECK-LABEL: module parametersNameConflict
-// CHECK-NEXT:    #(parameter [41:0] p1_0 = 42'd17,
+// CHECK-NEXT:    #(parameter [41:0] p2 = 42'd17,
 // CHECK-NEXT:      parameter [0:0]  wire_0) (
-// CHECK-NEXT:    input [7:0] p1);
-hw.module @parametersNameConflict<p1: i42 = 17, wire: i1>(%p1: i8) {
+// CHECK-NEXT:    input [7:0] p1
+// CHECK-NEXT: );
+hw.module @parametersNameConflict<p2: i42 = 17, wire: i1>(%p1: i8) {
   %myWire = sv.wire : !hw.inout<i1>
 
   // CHECK: `ifdef SOMEMACRO
   sv.ifdef "SOMEMACRO" {
     // CHECK: localparam local_0 = wire_0;
-    %local = sv.localparam : i1 { value = #hw.param.decl.ref<"wire">: i1 }
+    %local = sv.localparam { value = #hw.param.decl.ref<"wire">: i1 } : i1
 
     // CHECK: assign myWire = wire_0;
     %0 = hw.param.value i1 = #hw.param.decl.ref<"wire">
@@ -43,17 +45,17 @@ hw.module @parametersNameConflict<p1: i42 = 17, wire: i1>(%p1: i8) {
 // CHECK-LABEL: module useParametersNameConflict(
 hw.module @useParametersNameConflict(%xxx: i8) {
   // CHECK: parametersNameConflict #(
-  // CHECK:  .p1_0(42'd27),
+  // CHECK:  .p2(42'd27),
   // CHECK:  .wire_0(0)
   // CHECK: ) inst (
   // CHECK:  .p1 (xxx)
   // CHECK: );
-  hw.instance "inst" @parametersNameConflict<p1: i42 = 27, wire: i1 = 0>(p1: %xxx: i8) -> ()
+  hw.instance "inst" @parametersNameConflict<p2: i42 = 27, wire: i1 = 0>(p1: %xxx: i8) -> ()
 
   // CHECK: `ifdef SOMEMACRO
   sv.ifdef "SOMEMACRO" {
     // CHECK: reg [3:0] xxx_0;
-    %0 = sv.reg  { name = "xxx" } : !hw.inout<i4>
+    %0 = sv.reg name "xxx" : !hw.inout<i4>
   }
 }
 
@@ -61,7 +63,8 @@ hw.module @useParametersNameConflict(%xxx: i8) {
 // Rename keywords used in variable/module names
 // CHECK-LABEL: module inout_0(
 // CHECK:         input  inout_0,
-// CHECK:         output output_0);
+// CHECK:         output output_0
+// CHECK:       );
 hw.module @inout(%inout: i1) -> (output: i1) {
 // CHECK:       assign output_0 = inout_0;
   hw.output %inout : i1
@@ -71,7 +74,7 @@ hw.module @inout(%inout: i1) -> (output: i1) {
 hw.module @inout_inst(%a: i1) {
   // CHECK: inout_0 foo (
   // CHECK:   .inout_0  (a),
-  // CHECK:   .output_0 (_foo_output)
+  // CHECK:   .output_0 (/* unused */)
   // CHECK: );
   %0 = hw.instance "foo" @inout (inout: %a: i1) -> (output: i1)
 }
@@ -80,7 +83,8 @@ hw.module @inout_inst(%a: i1) {
 // Rename keywords used in variable/module names
 // CHECK-LABEL: module reg_0(
 // CHECK-NEXT:    input  inout_0,
-// CHECK-NEXT:    output output_0);
+// CHECK-NEXT:    output output_0
+// CHECK-NEXT:  );
 hw.module @reg(%inout: i1) -> (output: i1) {
   // CHECK: assign output_0 = inout_0;
   hw.output %inout : i1
@@ -90,7 +94,8 @@ hw.module @reg(%inout: i1) -> (output: i1) {
 // CHECK-LABEL: module issue525(
 // CHECK-NEXT:    input  [1:0] struct_0,
 // CHECK-NEXT:                 else_0,
-// CHECK-NEXT:    output [1:0] casex_0);
+// CHECK-NEXT:    output [1:0] casex_0
+// CHECK-NEXT:  );
 hw.module @issue525(%struct: i2, %else: i2) -> (casex: i2) {
   // CHECK: assign casex_0 = struct_0 + else_0;
   %2 = comb.add %struct, %else : i2
@@ -145,7 +150,7 @@ hw.module @verif_renames(%cond: i1) {
 }
 
 // CHECK-LABEL: module verbatim_renames(
-hw.module @verbatim_renames(%a: i1 {hw.exportPort = @asym}) {
+hw.module @verbatim_renames(%a: i1 {hw.exportPort = #hw<innerSym@asym>}) {
   // CHECK: // VERB Module : reg_0 inout_0
   // CHECK: wire wire_0;
   sv.verbatim "// VERB Module : {{0}} {{1}}" {symbols = [@reg, @inout]}

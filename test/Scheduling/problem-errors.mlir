@@ -1,47 +1,46 @@
-// RUN: circt-opt %s -test-scheduling-problem -verify-diagnostics -split-input-file
+// RUN: circt-opt %s -ssp-roundtrip=verify -verify-diagnostics -split-input-file
 
-// expected-error@+2 {{Operator type 'foo' has no latency}}
-// expected-error@+1 {{problem check failed}}
-func.func @no_latency() {
-  %0 = arith.constant 0 : i32
-  %1 = arith.constant { problemStartTime = 0, opr = "foo" } 1 : i32
-  return
+// expected-error@+1 {{Operator type 'foo' has no latency}}
+ssp.instance @no_latency of "Problem" {
+  library {
+    operator_type @foo
+  }
+  graph {}
 }
 
 // -----
 
-// expected-error@+1 {{problem verification failed}}
-func.func @no_starttime() {
-  %0 = arith.constant { problemStartTime = 0 } 0 : i32
-  %1 = arith.constant 1 : i32 // expected-error {{Operation has no start time}}
-  return { problemStartTime = 0 }
+ssp.instance @no_starttime of "Problem" {
+  library {
+    operator_type @_1 [latency<1>]
+  }
+  graph {
+    operation<@_1>() // expected-error {{Operation has no start time}}
+  }
 }
 
 // -----
 
-// expected-error@+2 {{Precedence violated for dependence}}
-// expected-error@+1 {{problem verification failed}}
-func.func @ssa_dep_violated(%a0 : i32, %a1 : i32, %a2 : i32) -> i32 attributes {
-  operatortypes = [
-    { name = "_0", latency = 0 },
-    { name = "_1", latency = 1 },
-    { name = "_3", latency = 3 }
-  ] } {
-  %0 = arith.addi %a0, %a0 { opr = "_3", problemStartTime = 0 } : i32
-  %1 = arith.addi %a1, %0 { opr = "_1", problemStartTime = 3 } : i32
-  %2 = arith.addi %1, %a2 { opr = "_0", problemStartTime = 3 } : i32
-  return { opr = "_1", problemStartTime = 4 } %2 : i32
+// expected-error@+1 {{Precedence violated for dependence}}
+ssp.instance @ssa_dep_violated of "Problem" {
+  library {
+    operator_type @_1 [latency<1>]
+  }
+  graph {
+    %0 = operation<@_1>() [t<0>]
+    %1 = operation<@_1>(%0) [t<0>]
+  }
 }
 
 // -----
 
-// expected-error@+2 {{Precedence violated for dependence}}
-// expected-error@+1 {{problem verification failed}}
-func.func @aux_dep_violated() attributes {
-  auxdeps = [ [0,1], [1,2], [2,3] ]
-  } {
-  %0 = arith.constant { problemStartTime = 123 } 0 : i32
-  %1 = arith.constant { problemStartTime = 456 } 1 : i32
-  %2 = arith.constant { problemStartTime = 123 } 2 : i32
-  return { problemStartTime = 456 }
+// expected-error@+1 {{Precedence violated for dependence}}
+ssp.instance @aux_dep_violated of "Problem" {
+  library {
+    operator_type @_1 [latency<1>]
+  }
+  graph {
+    operation<@_1> @op0() [t<0>]
+    operation<@_1> @op1(@op0) [t<0>]
+  }
 }
