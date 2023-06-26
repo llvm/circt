@@ -114,6 +114,10 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
     Value readData()  { return getResult(getNumDimensions() + 3); }
     Value done()      { return getResult(getNumDimensions() + 4); }
   }];
+
+  let extraClassDefinition = [{
+    bool $cppClass::isCombinational() { return false; }
+  }];
 }
 
 def SeqMemoryOp : CalyxPrimitive<"seq_mem", []> {
@@ -181,7 +185,10 @@ def SeqMemoryOp : CalyxPrimitive<"seq_mem", []> {
     Value readData()  { return getResult(getNumDimensions() + 4); }
     Value readEn()  { return getResult(getNumDimensions() + 5); }
     Value readDone()      { return getResult(getNumDimensions() + 6); }
-    bool isCombinational() { return false; }
+  }];
+
+  let extraClassDefinition = [{
+    bool $cppClass::isCombinational() { return false; }
   }];
 }
 

@@ -1822,8 +1822,6 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
   return portAttributes;
 }
 
-bool MemoryOp::isCombinational() { return false; }
-
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
                      StringRef instanceName, int64_t width,
                      ArrayRef<int64_t> sizes, ArrayRef<int64_t> addrSizes) {
