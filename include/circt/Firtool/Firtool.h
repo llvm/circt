@@ -128,11 +128,6 @@ struct FirtoolOptions {
                      "relevant metadata"),
       llvm::cl::init(false), llvm::cl::cat(category)};
 
-  llvm::cl::opt<std::string> replSeqMemCircuit{
-      "repl-seq-mem-circuit",
-      llvm::cl::desc("Circuit root for seq mem metadata"), llvm::cl::init(""),
-      llvm::cl::cat(category)};
-
   llvm::cl::opt<std::string> replSeqMemFile{
       "repl-seq-mem-file", llvm::cl::desc("File name for seq mem metadata"),
       llvm::cl::init(""), llvm::cl::cat(category)};
