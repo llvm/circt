@@ -539,8 +539,6 @@ private:
   bool foundMatch = false;
 };
 
-=======
->>>>>>> a4aabbca0d1961054dc4353c4f3c3fe8cb57d6ea
 } // namespace firrtl
 } // namespace circt
 
