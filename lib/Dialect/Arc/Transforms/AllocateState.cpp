@@ -121,15 +121,16 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
       auto &getter = getterForBlock[user->getBlock()];
       // Create a local getter in front of each user, except for
       // `AllocStorageOp`s, for which we create a block-wider accessor.
+      auto userOrder = opOrder.lookup(user);
       if (!getter || !result.getDefiningOp<AllocStorageOp>()) {
         ImplicitLocOpBuilder builder(result.getLoc(), user);
         getter =
             builder.create<StorageGetOp>(result.getType(), storage, offset);
         getters.push_back(getter);
-        opOrder[getter] = opOrder.lookup(user);
-      } else if (opOrder.lookup(user) < opOrder.lookup(getter)) {
+        opOrder[getter] = userOrder;
+      } else if (userOrder < opOrder.lookup(getter)) {
         getter->moveBefore(user);
-        opOrder[getter] = opOrder.lookup(user);
+        opOrder[getter] = userOrder;
       }
       user->replaceUsesOfWith(result, getter);
     }
