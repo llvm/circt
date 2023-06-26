@@ -24,6 +24,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Threading.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseMapInfo.h"
@@ -58,9 +59,19 @@ llvm::raw_ostream &printHash(llvm::raw_ostream &stream, std::string data) {
   return printHex(stream, bytes);
 }
 
-struct StructuralHasher {
-  explicit StructuralHasher(MLIRContext *context) {
+// This data structure is used as hash for modules. A first element is a
+// structural hash of the module, and the second element is an array which
+// tracks module names encountered in the walk. Since module names could
+// be replaced during dedup, it's necessary to keep names up-to-date before
+// actually combining them into structural hashes.
+using Hash = std::pair<std::array<uint8_t, 32>, mlir::Attribute>;
+
+/// This struct contains constant string attributes shared across different
+/// threads.
+struct StructuralHasherSharedConstants {
+  explicit StructuralHasherSharedConstants(MLIRContext *context) {
     portTypesAttr = StringAttr::get(context, "portTypes");
+    moduleNameAttr = StringAttr::get(context, "moduleName");
     nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "name"));
     nonessentialAttributes.insert(StringAttr::get(context, "portAnnotations"));
@@ -71,20 +82,28 @@ struct StructuralHasher {
     nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
   };
 
-  std::array<uint8_t, 32> hash(FModuleLike module) {
+  // This is a cached "portTypes" string attr.
+  StringAttr portTypesAttr;
+
+  // This is a cached "moduleName" string attr.
+  StringAttr moduleNameAttr;
+
+  // This is a set of every attribute we should ignore.
+  DenseSet<Attribute> nonessentialAttributes;
+};
+
+struct StructuralHasher {
+  explicit StructuralHasher(const StructuralHasherSharedConstants &constants)
+      : constants(constants){};
+
+  Hash hash(FModuleLike module) {
     update(&(*module));
     auto hash = sha.final();
-    reset();
-    return hash;
+    auto array = mlir::ArrayAttr::get(module.getContext(), referredModuleNames);
+    return {hash, array};
   }
 
 private:
-  void reset() {
-    currentIndex = 0;
-    indexes.clear();
-    sha.init();
-  }
-
   void update(const void *pointer) {
     auto *addr = reinterpret_cast<const uint8_t *>(&pointer);
     sha.update(ArrayRef<uint8_t>(addr, sizeof pointer));
@@ -127,20 +146,32 @@ private:
     update(it->second);
   }
 
-  void update(DictionaryAttr dict) {
+  void update(DictionaryAttr dict, bool isInstance) {
     for (auto namedAttr : dict) {
       auto name = namedAttr.getName();
       auto value = namedAttr.getValue();
       // Skip names and annotations.
-      if (nonessentialAttributes.contains(name))
+      if (constants.nonessentialAttributes.contains(name))
         continue;
+
       // Hash the port types.
-      if (name == portTypesAttr) {
+      if (name == constants.portTypesAttr) {
         auto portTypes = cast<ArrayAttr>(value).getAsValueRange<TypeAttr>();
         for (auto type : portTypes)
           update(type);
         continue;
       }
+
+      // For instance op, don't use `moduleName` attributes since they might be
+      // replaced by dedup. Record the names and lazily combine their hashes.
+      // It is assumed that module names are hashed only through instance ops;
+      // it could cause suboptimal results if there was other operation that
+      // refers to module names through essential attributes.
+      if (isInstance && name == constants.moduleNameAttr) {
+        referredModuleNames.push_back(cast<FlatSymbolRefAttr>(value).getAttr());
+        continue;
+      }
+
       // Hash the interned pointer.
       update(name.getAsOpaquePointer());
       update(value.getAsOpaquePointer());
@@ -164,7 +195,7 @@ private:
   // NOLINTNEXTLINE(misc-no-recursion)
   void update(Operation *op) {
     update(op->getName());
-    update(op->getAttrDictionary());
+    update(op->getAttrDictionary(), /*isInstance=*/isa<InstanceOp>(op));
     // Hash the operands.
     for (auto &operand : op->getOpOperands())
       update(operand);
@@ -183,10 +214,11 @@ private:
   unsigned currentIndex = 0;
   DenseMap<Value, unsigned> indexes;
 
-  // This is a set of every attribute we should ignore.
-  DenseSet<Attribute> nonessentialAttributes;
-  // This is a cached "portTypes" string attr.
-  StringAttr portTypesAttr;
+  // This keeps track of module names in the order of the appearance.
+  SmallVector<Attribute> referredModuleNames;
+
+  // String constants.
+  const StructuralHasherSharedConstants &constants;
 
   // This is the actual running hash calculation. This is a stateful element
   // that should be reinitialized after each hash is produced.
@@ -1236,6 +1268,7 @@ struct SHA256HashDenseMapInfo {
     std::fill(key.begin(), key.end(), ~0);
     return key;
   }
+
   static inline std::array<uint8_t, 32> getTombstoneKey() {
     std::array<uint8_t, 32> key;
     std::fill(key.begin(), key.end(), ~0 - 1);
@@ -1256,6 +1289,28 @@ struct SHA256HashDenseMapInfo {
   }
 };
 
+/// A DenseMapInfo implementation for a pair of llvm::SHA256 hashes and mlir
+/// attributes.
+struct HashDenseMapInfo {
+  static inline Hash getEmptyKey() {
+    return {SHA256HashDenseMapInfo::getEmptyKey(),
+            DenseMapInfo<mlir::Attribute>::getEmptyKey()};
+  }
+
+  static inline Hash getTombstoneKey() {
+    return {SHA256HashDenseMapInfo::getTombstoneKey(),
+            DenseMapInfo<mlir::Attribute>::getTombstoneKey()};
+  }
+
+  static unsigned getHashValue(const Hash &val) {
+    return llvm::hash_combine(
+        SHA256HashDenseMapInfo::getHashValue(val.first),
+        DenseMapInfo<mlir::Attribute>::getHashValue(val.second));
+  }
+
+  static bool isEqual(const Hash &lhs, const Hash &rhs) { return lhs == rhs; }
+};
+
 //===----------------------------------------------------------------------===//
 // DedupPass
 //===----------------------------------------------------------------------===//
@@ -1269,7 +1324,6 @@ class DedupPass : public DedupBase<DedupPass> {
     auto *nlaTable = &getAnalysis<NLATable>();
     SymbolTable symbolTable(circuit);
     Deduper deduper(instanceGraph, symbolTable, nlaTable, circuit);
-    StructuralHasher hasher(&getContext());
     Equivalence equiv(context, instanceGraph);
     auto anythingChanged = false;
 
@@ -1277,8 +1331,7 @@ class DedupPass : public DedupBase<DedupPass> {
     auto noDedupClass = StringAttr::get(context, noDedupAnnoClass);
 
     // A map of all the module hashes that we have calculated so far.
-    llvm::DenseMap<std::array<uint8_t, 32>, Operation *, SHA256HashDenseMapInfo>
-        moduleHashes;
+    llvm::DenseMap<Hash, Operation *, HashDenseMapInfo> moduleHashes;
 
     // We track the name of the module that each module is deduped into, so that
     // we can make sure all modules which are marked "must dedup" with each
@@ -1293,10 +1346,30 @@ class DedupPass : public DedupBase<DedupPass> {
           return cast<FModuleLike>(*node->getModule());
         }));
 
-    for (auto module : modules) {
-      auto moduleName = module.getModuleNameAttr();
+    SmallVector<std::optional<Hash>> hashes(modules.size());
+    StructuralHasherSharedConstants hasherConstants(&getContext());
+    // Calculate module hashes parallelly.
+    mlir::parallelFor(context, 0, modules.size(), [&](unsigned idx) {
+      auto module = modules[idx];
       // If the module is marked with NoDedup, just skip it.
-      if (AnnotationSet(module).hasAnnotation(noDedupClass)) {
+      if (AnnotationSet(module).hasAnnotation(noDedupClass))
+        return;
+      // If the module has input RefType ports, also skip it.
+      if (llvm::any_of(module.getPorts(), [&](PortInfo port) {
+            return isa<RefType>(port.type) && port.isInput();
+          }))
+        return;
+
+      StructuralHasher hasher(hasherConstants);
+      // Calculate the hash of the module.
+      hashes[idx] = hasher.hash(module);
+    });
+
+    for (auto [i, module] : llvm::enumerate(modules)) {
+      auto moduleName = module.getModuleNameAttr();
+      auto &h = hashes[i];
+      // If the hash was not calculated, we need to skip it.
+      if (!h) {
         // We record it in the dedup map to help detect errors when the user
         // marks the module as both NoDedup and MustDedup. We do not record this
         // module in the hasher to make sure no other module dedups "into" this
@@ -1304,17 +1377,23 @@ class DedupPass : public DedupBase<DedupPass> {
         dedupMap[moduleName] = moduleName;
         continue;
       }
-      // If the module has input RefType ports, also skip it.
-      if (llvm::any_of(module.getPorts(), [&](PortInfo port) {
-            return isa<RefType>(port.type) && port.isInput();
-          })) {
-        dedupMap[moduleName] = moduleName;
-        continue;
+
+      // Replace module names referred the module in with new names.
+      SmallVector<Attribute> newModuleNames;
+      bool changed = false;
+      for (auto oldModuleName :
+           h->second.cast<ArrayAttr>().getAsRange<StringAttr>()) {
+        auto newModuleName = dedupMap[oldModuleName];
+        changed |= newModuleName != oldModuleName;
+        newModuleNames.push_back(newModuleName);
       }
-      // Calculate the hash of the module.
-      auto h = hasher.hash(module);
+
+      // If there was a renamed module, renew the array attr.
+      if (changed)
+        h->second = mlir::ArrayAttr::get(context, newModuleNames);
+
       // Check if there a module with the same hash.
-      auto it = moduleHashes.find(h);
+      auto it = moduleHashes.find(*h);
       if (it != moduleHashes.end()) {
         auto original = cast<FModuleLike>(it->second);
         // Record the group ID of the other module.
@@ -1329,7 +1408,7 @@ class DedupPass : public DedupBase<DedupPass> {
       // Add the module to a new dedup group.
       dedupMap[moduleName] = moduleName;
       // Record the module's hash.
-      moduleHashes[h] = module;
+      moduleHashes[*h] = module;
     }
 
     // This part verifies that all modules marked by "MustDedup" have been
