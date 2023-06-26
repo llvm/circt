@@ -11,7 +11,7 @@
 // CHECK-NEXT:       "module_name": "MainDesign",
 // CHECK-NEXT:       "instances": [
 // CHECK-NEXT:         {
-// CHECK-NEXT:           "instance_name": "inner",
+// CHECK-NEXT:           "instance_name": "INNER",
 // CHECK-NEXT:           "module_name": "InnerModule",
 // CHECK-NEXT:           "instances": []
 // CHECK-NEXT:         }
@@ -25,7 +25,7 @@ hw.module @InnerModule(%in: i1) -> (out: i1) {
 }
 
 hw.module @MainDesign(%in: i1) -> (out: i1) {
-  %0 = hw.instance "inner" @InnerModule(in: %in: i1) -> (out: i1)
+  %0 = hw.instance "inner" @InnerModule(in: %in: i1) -> (out: i1) {hw.verilogName = "INNER"}
   hw.output %0 : i1
 }
 
