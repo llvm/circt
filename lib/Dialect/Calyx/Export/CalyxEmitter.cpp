@@ -125,13 +125,13 @@ private:
   /// Returns the library name for a given Operation Type.
   FailureOr<StringRef> getLibraryFor(Operation *op) {
     return TypeSwitch<Operation *, FailureOr<StringRef>>(op)
-        .Case<MemoryOp, RegisterOp, NotLibOp, AndLibOp, OrLibOp, XorLibOp,
-              AddLibOp, SubLibOp, GtLibOp, LtLibOp, EqLibOp, NeqLibOp, GeLibOp,
-              LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp, WireLibOp>(
-            [&](auto op) -> FailureOr<StringRef> {
-              static constexpr std::string_view sCore = "core";
-              return {sCore};
-            })
+        .Case<MemoryOp, SeqMemoryOp, RegisterOp, NotLibOp, AndLibOp, OrLibOp,
+              XorLibOp, AddLibOp, SubLibOp, GtLibOp, LtLibOp, EqLibOp, NeqLibOp,
+              GeLibOp, LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp,
+              WireLibOp>([&](auto op) -> FailureOr<StringRef> {
+          static constexpr std::string_view sCore = "core";
+          return {sCore};
+        })
         .Case<SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp,
               SrshLibOp, MultPipeLibOp, RemUPipeLibOp, RemSPipeLibOp,
               DivUPipeLibOp, DivSPipeLibOp>(
@@ -245,6 +245,9 @@ struct Emitter {
 
   // Memory emission
   void emitMemory(MemoryOp memory);
+
+  // Seq Memory emission
+  void emitSeqMemory(SeqMemoryOp memory);
 
   // Emits a library primitive with template parameters based on all in- and
   // output ports.
@@ -566,6 +569,7 @@ void Emitter::emitComponent(ComponentInterface op) {
           .Case<PrimitiveOp>([&](auto op) { emitPrimitive(op); })
           .Case<RegisterOp>([&](auto op) { emitRegister(op); })
           .Case<MemoryOp>([&](auto op) { emitMemory(op); })
+          .Case<SeqMemoryOp>([&](auto op) { emitSeqMemory(op); })
           .Case<hw::ConstantOp>([&](auto op) { /*Do nothing*/ })
           .Case<SliceLibOp, PadLibOp>(
               [&](auto op) { emitLibraryPrimTypedByAllPorts(op); })
@@ -716,6 +720,33 @@ void Emitter::emitMemory(MemoryOp memory) {
   }
   indent() << getAttributes(memory) << memory.instanceName() << space()
            << equals() << space() << "std_mem_d" << std::to_string(dimension)
+           << LParen() << memory.getWidth() << comma();
+  for (Attribute size : memory.getSizes()) {
+    APInt memSize = size.cast<IntegerAttr>().getValue();
+    memSize.print(os, /*isSigned=*/false);
+    os << comma();
+  }
+
+  ArrayAttr addrSizes = memory.getAddrSizes();
+  for (size_t i = 0, e = addrSizes.size(); i != e; ++i) {
+    APInt addrSize = addrSizes[i].cast<IntegerAttr>().getValue();
+    addrSize.print(os, /*isSigned=*/false);
+    if (i + 1 == e)
+      continue;
+    os << comma();
+  }
+  os << RParen() << semicolonEndL();
+}
+
+void Emitter::emitSeqMemory(SeqMemoryOp memory) {
+  size_t dimension = memory.getSizes().size();
+  if (dimension < 1 || dimension > 4) {
+    emitOpError(memory, "Only memories with dimensionality in range [1, 4] are "
+                        "supported by the native Calyx compiler.");
+    return;
+  }
+  indent() << getAttributes(memory) << memory.instanceName() << space()
+           << equals() << space() << "seq_mem_d" << std::to_string(dimension)
            << LParen() << memory.getWidth() << comma();
   for (Attribute size : memory.getSizes()) {
     APInt memSize = size.cast<IntegerAttr>().getValue();

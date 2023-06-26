@@ -1822,8 +1822,6 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
   return portAttributes;
 }
 
-bool MemoryOp::isCombinational() { return false; }
-
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
                      StringRef instanceName, int64_t width,
                      ArrayRef<int64_t> sizes, ArrayRef<int64_t> addrSizes) {
@@ -1853,6 +1851,110 @@ LogicalResult MemoryOp::verify() {
            << numDims << ") and address sizes (" << numAddrs << ")";
 
   size_t numExtraPorts = 5; // write data/enable, clk, and read data/done.
+  if (getNumResults() != numAddrs + numExtraPorts)
+    return emitOpError("incorrect number of address ports, expected ")
+           << numAddrs;
+
+  for (size_t i = 0; i < numDims; ++i) {
+    int64_t size = opSizes[i].cast<IntegerAttr>().getInt();
+    int64_t addrSize = opAddrSizes[i].cast<IntegerAttr>().getInt();
+    if (llvm::Log2_64_Ceil(size) > addrSize)
+      return emitOpError("address size (")
+             << addrSize << ") for dimension " << i
+             << " can't address the entire range (" << size << ")";
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SeqMemoryOp
+//===----------------------------------------------------------------------===//
+
+/// Provide meaningful names to the result values of a SeqMemoryOp.
+void SeqMemoryOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  getCellAsmResultNames(setNameFn, *this, this->portNames());
+}
+
+SmallVector<StringRef> SeqMemoryOp::portNames() {
+  SmallVector<StringRef> portNames;
+  for (size_t i = 0, e = getAddrSizes().size(); i != e; ++i) {
+    auto nameAttr =
+        StringAttr::get(this->getContext(), "addr" + std::to_string(i));
+    portNames.push_back(nameAttr.getValue());
+  }
+  portNames.append({"write_data", "write_en", "write_done", "clk", "read_data",
+                    "read_en", "read_done"});
+  return portNames;
+}
+
+SmallVector<Direction> SeqMemoryOp::portDirections() {
+  SmallVector<Direction> portDirections;
+  for (size_t i = 0, e = getAddrSizes().size(); i != e; ++i)
+    portDirections.push_back(Input);
+  portDirections.append({Input, Input, Output, Input, Output, Input, Output});
+  return portDirections;
+}
+
+SmallVector<DictionaryAttr> SeqMemoryOp::portAttributes() {
+  SmallVector<DictionaryAttr> portAttributes;
+  MLIRContext *context = getContext();
+  for (size_t i = 0, e = getAddrSizes().size(); i != e; ++i)
+    portAttributes.push_back(DictionaryAttr::get(context)); // Addresses
+
+  OpBuilder builder(context);
+  // Use a boolean to indicate this attribute is used.
+  IntegerAttr isSet = IntegerAttr::get(builder.getIndexType(), 1);
+  IntegerAttr isTwo = IntegerAttr::get(builder.getIndexType(), 2);
+  NamedAttrList writeEn, writeDone, clk, reset, readEn, readDone;
+  writeEn.append("go", isSet);
+  writeDone.append("done", isSet);
+  clk.append("clk", isSet);
+  readEn.append("go", isTwo);
+  readDone.append("done", isTwo);
+  portAttributes.append({DictionaryAttr::get(context),     // Write Data
+                         writeEn.getDictionary(context),   // Write enable
+                         writeDone.getDictionary(context), // Write done
+                         clk.getDictionary(context),       // Clk
+                         DictionaryAttr::get(context),     // Out
+                         readEn.getDictionary(context),    // Read enable
+                         readDone.getDictionary(context)}  // Read done
+  );
+  return portAttributes;
+}
+
+void SeqMemoryOp::build(OpBuilder &builder, OperationState &state,
+                        StringRef instanceName, int64_t width,
+                        ArrayRef<int64_t> sizes, ArrayRef<int64_t> addrSizes) {
+  state.addAttribute(SymbolTable::getSymbolAttrName(),
+                     builder.getStringAttr(instanceName));
+  state.addAttribute("width", builder.getI64IntegerAttr(width));
+  state.addAttribute("sizes", builder.getI64ArrayAttr(sizes));
+  state.addAttribute("addrSizes", builder.getI64ArrayAttr(addrSizes));
+  SmallVector<Type> types;
+  for (int64_t size : addrSizes)
+    types.push_back(builder.getIntegerType(size)); // Addresses
+  types.push_back(builder.getIntegerType(width));  // Write data
+  types.push_back(builder.getI1Type());            // Write enable
+  types.push_back(builder.getI1Type());            // Write done
+  types.push_back(builder.getI1Type());            // Clk
+  types.push_back(builder.getIntegerType(width));  // Read data
+  types.push_back(builder.getI1Type());            // Read enable
+  types.push_back(builder.getI1Type());            // Read done
+  state.addTypes(types);
+}
+
+LogicalResult SeqMemoryOp::verify() {
+  ArrayRef<Attribute> opSizes = getSizes().getValue();
+  ArrayRef<Attribute> opAddrSizes = getAddrSizes().getValue();
+  size_t numDims = getSizes().size();
+  size_t numAddrs = getAddrSizes().size();
+  if (numDims != numAddrs)
+    return emitOpError("mismatched number of dimensions (")
+           << numDims << ") and address sizes (" << numAddrs << ")";
+
+  size_t numExtraPorts =
+      7; // write data/enable/done, clk, and read data/enable/done.
   if (getNumResults() != numAddrs + numExtraPorts)
     return emitOpError("incorrect number of address ports, expected ")
            << numAddrs;
