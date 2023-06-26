@@ -152,7 +152,7 @@ public:
 
     std::reverse(peOutputs.begin(), peOutputs.end());
     rewriter.replaceOp(array,
-                       {rewriter.create<hw::ArrayCreateOp>(loc, peOutputs)});
+                       rewriter.create<hw::ArrayCreateOp>(loc, peOutputs));
     return success();
   }
 };

@@ -12,6 +12,7 @@
 
 #include "circt-c/Dialect/OM.h"
 #include "circt/Dialect/OM/Evaluator/Evaluator.h"
+#include "circt/Dialect/OM/OMAttributes.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Wrap.h"
@@ -114,6 +115,11 @@ MlirType omEvaluatorObjectGetType(OMObject object) {
   return wrap(unwrap(object)->getType());
 }
 
+/// Get an ArrayAttr with the names of the fields in an Object.
+MlirAttribute omEvaluatorObjectGetFieldNames(OMObject object) {
+  return wrap(unwrap(object)->getFieldNames());
+}
+
 /// Get a field from an Object, which must contain a field of that name.
 OMObjectValue omEvaluatorObjectGetField(OMObject object, MlirAttribute name) {
   // Unwrap the Object and get the field of the name, which the client must
@@ -174,4 +180,17 @@ MlirAttribute omEvaluatorObjectValueGetPrimitive(OMObjectValue objectValue) {
   // Assert the Attribute is non-null, and return it.
   assert(omEvaluatorObjectValueIsAPrimitive(objectValue));
   return objectValue.primitive;
+}
+
+//===----------------------------------------------------------------------===//
+// Attribute API.
+//===----------------------------------------------------------------------===//
+
+bool omAttrIsAReferenceAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<ReferenceAttr>();
+}
+
+MlirAttribute omReferenceAttrGetInnerRef(MlirAttribute referenceAttr) {
+  return wrap(
+      (Attribute)unwrap(referenceAttr).cast<ReferenceAttr>().getInnerRef());
 }

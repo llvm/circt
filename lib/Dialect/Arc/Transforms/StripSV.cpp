@@ -24,7 +24,6 @@ struct StripSVPass : public StripSVBase<StripSVPass> {
   void runOnOperation() override;
   SmallVector<Operation *> opsToDelete;
   SmallPtrSet<StringAttr, 4> clockGateModuleNames;
-  SmallPtrSet<StringAttr, 4> externModuleNames;
 };
 } // namespace
 
@@ -32,7 +31,6 @@ void StripSVPass::runOnOperation() {
   auto mlirModule = getOperation();
   opsToDelete.clear();
   clockGateModuleNames.clear();
-  externModuleNames.clear();
 
   auto expectedClockGateInputs =
       ArrayAttr::get(&getContext(), {StringAttr::get(&getContext(), "in"),
@@ -65,14 +63,9 @@ void StripSVPass::runOnOperation() {
       opsToDelete.push_back(extModOp);
       continue;
     }
-
-    externModuleNames.insert(extModOp.getModuleNameAttr());
-    if (replaceExtModuleOutputs)
-      opsToDelete.push_back(extModOp);
   }
   LLVM_DEBUG(llvm::dbgs() << "Found " << clockGateModuleNames.size()
-                          << " clock gates, " << externModuleNames.size()
-                          << " other extern modules\n");
+                          << " clock gates\n");
 
   // Remove `sv.*` operation attributes.
   mlirModule.walk([](Operation *op) {
@@ -164,15 +157,6 @@ void StripSVPass::runOnOperation() {
               builder.create<arc::ClockGateOp>(instOp.getOperand(0), enable);
           instOp.replaceAllUsesWith(gated);
           opsToDelete.push_back(instOp);
-        } else if (externModuleNames.contains(modName)) {
-          if (replaceExtModuleOutputs) {
-            instOp->emitWarning("StripSV: outputs of external module instance "
-                                "replaced with zero value!");
-            for (auto result : instOp.getResults())
-              result.replaceAllUsesWith(
-                  builder.create<hw::ConstantOp>(result.getType(), 0));
-            opsToDelete.push_back(instOp);
-          }
         }
         continue;
       }

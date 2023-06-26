@@ -478,7 +478,7 @@ firrtl.module @Mux(in %in: !firrtl.uint<4>,
                    out %out3: !firrtl.uint<1>,
                    out %out4: !firrtl.uint<4>) {
   // CHECK: firrtl.strictconnect %out, %in
-  %0 = firrtl.mux (%cond, %in, %in) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  %0 = firrtl.int.mux2cell (%cond, %in, %in) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %0 : !firrtl.uint<4>, !firrtl.uint<4>
 
   // CHECK: firrtl.strictconnect %out, %c7_ui4
@@ -2966,6 +2966,15 @@ firrtl.module @DonotUpdateInstanceName(in %in: !firrtl.uint<1>, out %a: !firrtl.
   // CHECK: firrtl.instance system
   %b = firrtl.node %system_foo : !firrtl.uint<1>
   firrtl.strictconnect %a, %b : !firrtl.uint<1>
+}
+
+// CHECK-LABEL: @RefCastSame
+firrtl.module @RefCastSame(in %in: !firrtl.probe<uint<1>>, out %out: !firrtl.probe<uint<1>>) {
+  // Drop no-op ref.cast's.
+  // CHECK-NEXT:  firrtl.ref.define %out, %in
+  // CHECK-NEXT:  }
+  %same_as_in = firrtl.ref.cast %in : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>>
+  firrtl.ref.define %out, %same_as_in : !firrtl.probe<uint<1>>
 }
 
 }

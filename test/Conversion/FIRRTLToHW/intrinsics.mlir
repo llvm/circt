@@ -37,6 +37,23 @@ firrtl.circuit "Intrinsics" {
     %x4 = firrtl.node interesting_name %4 : !firrtl.uint<5>
   }
 
+  // CHECK-LABEL: hw.module @ClockGate
+  firrtl.module @ClockGate(
+    in %clk: !firrtl.clock,
+    in %enable: !firrtl.uint<1>,
+    in %testEnable: !firrtl.uint<1>,
+    out %gated_clk0: !firrtl.clock,
+    out %gated_clk1: !firrtl.clock
+  ) {
+    // CHECK-NEXT: [[CLK0:%.+]] = seq.clock_gate %clk, %enable
+    // CHECK-NEXT: [[CLK1:%.+]] = seq.clock_gate %clk, %enable, %testEnable
+    // CHECK-NEXT: hw.output [[CLK0]], [[CLK1]]
+    %0 = firrtl.int.clock_gate %clk, %enable
+    %1 = firrtl.int.clock_gate %clk, %enable, %testEnable
+    firrtl.strictconnect %gated_clk0, %0 : !firrtl.clock
+    firrtl.strictconnect %gated_clk1, %1 : !firrtl.clock
+  }
+
   // CHECK-LABEL: hw.module @LTLAndVerif
   firrtl.module @LTLAndVerif(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>) {
     // CHECK-NEXT: [[D0:%.+]] = ltl.delay %a, 42 : i1

@@ -140,12 +140,12 @@ struct NLARemover {
   /// can be an entire array or dictionary of annotations, and the function will
   /// descend into child annotations appropriately.
   void markNLAsInAnnotation(Attribute anno) {
-    if (auto dict = anno.dyn_cast<DictionaryAttr>()) {
+    if (auto dict = dyn_cast<DictionaryAttr>(anno)) {
       if (auto field = dict.getAs<FlatSymbolRefAttr>("circt.nonlocal"))
         nlasToRemove.insert(field.getAttr());
       for (auto namedAttr : dict)
         markNLAsInAnnotation(namedAttr.getValue());
-    } else if (auto array = anno.dyn_cast<ArrayAttr>()) {
+    } else if (auto array = dyn_cast<ArrayAttr>(anno)) {
       for (auto attr : array)
         markNLAsInAnnotation(attr);
     }
@@ -273,8 +273,8 @@ static void connectToLeafs(ImplicitLocOpBuilder &builder, Value dest,
   auto valueWidth = valueType ? valueType.getBitWidthOrSentinel() : -1;
   if (destWidth >= 0 && valueWidth >= 0 && destWidth < valueWidth)
     value = builder.create<firrtl::HeadPrimOp>(value, destWidth);
-  if (!type.isa<firrtl::UIntType>()) {
-    if (type.isa<firrtl::SIntType>())
+  if (!isa<firrtl::UIntType>(type)) {
+    if (isa<firrtl::SIntType>(type))
       value = builder.create<firrtl::AsSIntPrimOp>(value);
     else
       return;
@@ -300,8 +300,8 @@ static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
                 builder.createOrFold<firrtl::SubindexOp>(value, i));
     return;
   }
-  if (!type.isa<firrtl::UIntType>()) {
-    if (type.isa<firrtl::SIntType>())
+  if (!isa<firrtl::UIntType>(type)) {
+    if (isa<firrtl::SIntType>(type))
       value = builder.create<firrtl::AsUIntPrimOp>(value);
     else
       return;
@@ -443,7 +443,7 @@ struct MemoryStubber : public OpReduction<firrtl::MemOp> {
         break;
       }
 
-      if (!result.getType().cast<firrtl::FIRRTLType>().isa<firrtl::RefType>()) {
+      if (!isa<firrtl::RefType>(result.getType())) {
         // Reduce all input ports to a single one through an XOR tree.
         unsigned numFields =
             wire.getType().cast<firrtl::BundleType>().getNumElements();
@@ -501,7 +501,7 @@ struct FIRRTLOperandForwarder : public Reduction {
            resultTy.getWidthlessType() == opTy.getWidthlessType() &&
            (resultTy.getBitWidthOrSentinel() == -1) ==
                (opTy.getBitWidthOrSentinel() == -1) &&
-           resultTy.isa<firrtl::UIntType, firrtl::SIntType>();
+           isa<firrtl::UIntType, firrtl::SIntType>(resultTy);
   }
   LogicalResult rewrite(Operation *op) override {
     assert(match(op));
@@ -539,7 +539,7 @@ struct FIRRTLConstantifier : public Reduction {
     if (isFlowSensitiveOp(op))
       return 0;
     auto type = op->getResult(0).getType().dyn_cast<firrtl::FIRRTLBaseType>();
-    return type && type.isa<firrtl::UIntType, firrtl::SIntType>();
+    return isa_and_nonnull<firrtl::UIntType, firrtl::SIntType>(type);
   }
   LogicalResult rewrite(Operation *op) override {
     assert(match(op));
@@ -549,7 +549,7 @@ struct FIRRTLConstantifier : public Reduction {
     if (width == -1)
       width = 64;
     auto newOp = builder.create<firrtl::ConstantOp>(
-        op->getLoc(), type, APSInt(width, type.isa<firrtl::UIntType>()));
+        op->getLoc(), type, APSInt(width, isa<firrtl::UIntType>(type)));
     op->replaceAllUsesWith(newOp);
     reduce::pruneUnusedOps(op, *this);
     return success();
@@ -767,7 +767,7 @@ struct ConnectSourceOperandForwarder : public Reduction {
            resultTy.getWidthlessType() == opTy.getWidthlessType() &&
            ((resultTy.getBitWidthOrSentinel() == -1) ==
             (opTy.getBitWidthOrSentinel() == -1)) &&
-           resultTy.isa<firrtl::UIntType, firrtl::SIntType>();
+           isa<firrtl::UIntType, firrtl::SIntType>(resultTy);
   }
 
   LogicalResult rewrite(Operation *op) override {
@@ -920,7 +920,7 @@ struct EagerInliner : public OpReduction<firrtl::InstanceOp> {
       op.remove();
       builder.insert(&op);
       for (auto &operand : op.getOpOperands())
-        if (auto blockArg = operand.get().dyn_cast<BlockArgument>())
+        if (auto blockArg = dyn_cast<BlockArgument>(operand.get()))
           operand.set(argReplacements[blockArg.getArgNumber()]);
     }
     nlaRemover.markNLAsInOperation(instOp);

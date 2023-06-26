@@ -44,8 +44,12 @@ static void printHierarchy(hw::InstanceOp &inst, SymbolTable &symbolTable,
                            llvm::json::OStream &j) {
   auto moduleOp = symbolTable.lookup(inst.getModuleNameAttr().getValue());
 
+  StringRef instanceName = inst.getInstanceName();
+  if (auto verilogNameAttr = inst->getAttrOfType<StringAttr>("hw.verilogName"))
+    instanceName = verilogNameAttr.getValue();
+
   j.object([&] {
-    j.attribute("instance_name", inst.getInstanceName());
+    j.attribute("instance_name", instanceName);
     j.attribute("module_name", hw::getVerilogModuleName(moduleOp));
     j.attributeArray("instances", [&] {
       // Only recurse on module ops, not extern or generated ops, whose internal

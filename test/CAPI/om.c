@@ -107,6 +107,10 @@ void testEvaluator(MlirContext ctx) {
 
   OMObjectValue childField = omEvaluatorObjectGetField(object, childFieldName);
 
+  MlirAttribute fieldNamesO = omEvaluatorObjectGetFieldNames(object);
+  // CHECK: ["child", "field"]
+  mlirAttributeDump(fieldNamesO);
+
   OMObject child = omEvaluatorObjectValueGetObject(childField);
 
   // CHECK: 0
@@ -114,6 +118,11 @@ void testEvaluator(MlirContext ctx) {
 
   OMObjectValue foo = omEvaluatorObjectGetField(
       child, mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("foo")));
+
+  MlirAttribute fieldNamesC = omEvaluatorObjectGetFieldNames(child);
+
+  // CHECK: ["foo"]
+  mlirAttributeDump(fieldNamesC);
 
   // CHECK: child object field  is primitive: 1
   fprintf(stderr, "child object field is primitive: %d\n",
@@ -125,7 +134,7 @@ void testEvaluator(MlirContext ctx) {
   mlirAttributeDump(fooValue);
 }
 
-int main() {
+int main(void) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleRegisterDialect(mlirGetDialectHandle__om__(), ctx);
   testEvaluator(ctx);

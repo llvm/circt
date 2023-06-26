@@ -105,6 +105,11 @@ MLIR_CAPI_EXPORTED MlirType omEvaluatorObjectGetType(OMObject object);
 MLIR_CAPI_EXPORTED OMObjectValue omEvaluatorObjectGetField(OMObject object,
                                                            MlirAttribute name);
 
+/// Get all the field names from an Object, can be empty if object has no
+/// fields.
+MLIR_CAPI_EXPORTED MlirAttribute
+omEvaluatorObjectGetFieldNames(OMObject object);
+
 //===----------------------------------------------------------------------===//
 // ObjectValue API.
 //===----------------------------------------------------------------------===//
@@ -127,6 +132,14 @@ omEvaluatorObjectValueIsAPrimitive(OMObjectValue objectValue);
 /// Get the Primitive from an  ObjectValue, which must contain a Primitive.
 MLIR_CAPI_EXPORTED MlirAttribute
 omEvaluatorObjectValueGetPrimitive(OMObjectValue objectValue);
+
+//===----------------------------------------------------------------------===//
+// Attribute API.
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool omAttrIsAReferenceAttr(MlirAttribute attr);
+
+MLIR_CAPI_EXPORTED MlirAttribute omReferenceAttrGetInnerRef(MlirAttribute attr);
 
 #ifdef __cplusplus
 }

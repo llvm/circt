@@ -16,7 +16,6 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/HW/HWSymCache.h"
-#include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/ValueMapper.h"
 #include "mlir/IR/Builders.h"

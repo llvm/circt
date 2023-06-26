@@ -71,7 +71,6 @@ std::unique_ptr<mlir::Pass> createInferReadWritePass();
 
 std::unique_ptr<mlir::Pass>
 createCreateSiFiveMetadataPass(bool replSeqMem = false,
-                               mlir::StringRef replSeqMemCircuit = "",
                                mlir::StringRef replSeqMemFile = "");
 
 std::unique_ptr<mlir::Pass> createWireDFTPass();
@@ -113,8 +112,6 @@ createBlackBoxReaderPass(std::optional<mlir::StringRef> inputPrefix = {});
 
 std::unique_ptr<mlir::Pass>
 createGrandCentralPass(bool instantiateCompanionOnly = false);
-
-std::unique_ptr<mlir::Pass> createCheckCombCyclesPass();
 
 std::unique_ptr<mlir::Pass> createCheckCombLoopsPass();
 
@@ -163,6 +160,8 @@ createResolveTracesPass(mlir::StringRef outputAnnotationFilename = "");
 std::unique_ptr<mlir::Pass> createInnerSymbolDCEPass();
 
 std::unique_ptr<mlir::Pass> createFinalizeIRPass();
+
+std::unique_ptr<mlir::Pass> createExtractClassesPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

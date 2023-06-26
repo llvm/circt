@@ -33,6 +33,9 @@ IntegerAttr getIntZerosAttr(Type type);
 /// Utility for generating a constant all ones attribute.
 IntegerAttr getIntOnesAttr(Type type);
 
+/// Return the single assignment to a Property value.
+PropAssignOp getPropertyAssignment(FIRRTLPropertyValue value);
+
 /// Return the module-scoped driver of a value only looking through one connect.
 Value getDriverFromConnect(Value val);
 
@@ -133,25 +136,19 @@ getInnerRefTo(FModuleLike mod, size_t portIdx, StringRef nameHint,
 // Type utilities
 //===----------------------------------------------------------------------===//
 
-/// If reftype, return wrapped base type.  Otherwise (if base), return as-is.
-inline FIRRTLBaseType getBaseType(FIRRTLType type) {
-  return TypeSwitch<FIRRTLType, FIRRTLBaseType>(type)
+/// If it is a base type, return it as is. If reftype, return wrapped base type.
+/// Otherwise, return null.
+inline FIRRTLBaseType getBaseType(Type type) {
+  return TypeSwitch<Type, FIRRTLBaseType>(type)
       .Case<FIRRTLBaseType>([](auto base) { return base; })
-      .Case<RefType>([](auto ref) { return ref.getType(); });
-}
-
-/// Return base type or passthrough if FIRRTLType, else null.
-inline FIRRTLBaseType getBaseTypeOrNull(Type type) {
-  auto ftype = dyn_cast_or_null<FIRRTLType>(type);
-  if (!ftype)
-    return {};
-  return getBaseType(ftype);
+      .Case<RefType>([](auto ref) { return ref.getType(); })
+      .Default([](Type type) { return nullptr; });
 }
 
 /// Get base type if isa<> the requested type, else null.
 template <typename T>
 inline T getBaseOfType(Type type) {
-  return dyn_cast_or_null<T>(getBaseTypeOrNull(type));
+  return dyn_cast_or_null<T>(getBaseType(type));
 }
 
 /// Return a FIRRTLType with its base type component mutated by the given

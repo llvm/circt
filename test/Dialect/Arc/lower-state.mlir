@@ -297,3 +297,31 @@ arc.define @Queue_arc_0(%arg0: i1) -> i1 {
 arc.define @Queue_arc_1(%arg0: i3) -> i3 {
   arc.output %arg0 : i3
 }
+
+// CHECK-LABEL: arc.model "BlackBox"
+hw.module @BlackBox(%clk: i1) {
+  %0 = arc.state @DummyArc(%2) clock %clk lat 1 : (i42) -> i42
+  %1 = comb.and %0, %0 : i42
+  %ext.c, %ext.d = hw.instance "ext" @BlackBoxExt(a: %0: i42, b: %1: i42) -> (c: i42, d: i42)
+  %2 = comb.or %ext.c, %ext.d : i42
+  // CHECK-DAG: [[EXT_A:%.+]] = arc.alloc_state %arg0 {name = "ext/a"}
+  // CHECK-DAG: [[EXT_B:%.+]] = arc.alloc_state %arg0 {name = "ext/b"}
+  // CHECK-DAG: [[EXT_C:%.+]] = arc.alloc_state %arg0 {name = "ext/c"}
+  // CHECK-DAG: [[EXT_D:%.+]] = arc.alloc_state %arg0 {name = "ext/d"}
+  // CHECK-DAG: [[STATE:%.+]] = arc.alloc_state %arg0 :
+
+  // Clock Tree
+  // CHECK-DAG: [[TMP1:%.+]] = arc.state_read [[EXT_C]]
+  // CHECK-DAG: [[TMP2:%.+]] = arc.state_read [[EXT_D]]
+  // CHECK-DAG: [[TMP3:%.+]] = comb.or [[TMP1]], [[TMP2]]
+  // CHECK-DAG: [[TMP4:%.+]] = arc.state @DummyArc([[TMP3]])
+  // CHECK-DAG: arc.state_write [[STATE]] = [[TMP4]]
+
+  // Passthrough
+  // CHECK-DAG: [[TMP1:%.+]] = arc.state_read [[STATE]]
+  // CHECK-DAG: [[TMP2:%.+]] = comb.and [[TMP1]], [[TMP1]]
+  // CHECK-DAG: arc.state_write [[EXT_A]] = [[TMP1]]
+  // CHECK-DAG: arc.state_write [[EXT_B]] = [[TMP2]]
+}
+// CHECK-NOT: hw.module.extern private @BlackBoxExt
+hw.module.extern private @BlackBoxExt(%a: i42, %b: i42) -> (c: i42, d: i42)

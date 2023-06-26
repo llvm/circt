@@ -52,38 +52,36 @@ Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
   // Boolean constants. Boolean attributes are always a special constant type
   // like ClockType and ResetType.  Since BoolAttrs are also IntegerAttrs, its
   // important that this goes first.
-  if (auto attrValue = value.dyn_cast<BoolAttr>()) {
-    assert((type.isa<ClockType>() || type.isa<AsyncResetType>() ||
-            type.isa<ResetType>()) &&
-           "BoolAttrs can only be materialized for special constant types.");
+  if (auto attrValue = dyn_cast<BoolAttr>(value)) {
+    assert((isa<ClockType, AsyncResetType, ResetType>(type) &&
+            "BoolAttrs can only be materialized for special constant types."));
     return builder.create<SpecialConstantOp>(loc, type, attrValue);
   }
 
   // Integer constants.
-  if (auto attrValue = value.dyn_cast<IntegerAttr>()) {
+  if (auto attrValue = dyn_cast<IntegerAttr>(value)) {
     // Integer attributes (ui1) might still be special constant types.
     if (attrValue.getValue().getBitWidth() == 1 &&
-        (type.isa<ClockType>() || type.isa<AsyncResetType>() ||
-         type.isa<ResetType>()))
+        isa<ClockType, AsyncResetType, ResetType>(type))
       return builder.create<SpecialConstantOp>(
           loc, type, builder.getBoolAttr(attrValue.getValue().isAllOnes()));
 
-    assert((!type.cast<IntType>().hasWidth() ||
-            (unsigned)type.cast<IntType>().getWidthOrSentinel() ==
+    assert((!cast<IntType>(type).hasWidth() ||
+            (unsigned)cast<IntType>(type).getWidthOrSentinel() ==
                 attrValue.getValue().getBitWidth()) &&
            "type/value width mismatch materializing constant");
     return builder.create<ConstantOp>(loc, type, attrValue);
   }
 
   // Aggregate constants.
-  if (auto arrayAttr = value.dyn_cast<ArrayAttr>()) {
-    if (type.isa<BundleType, FVectorType>())
+  if (auto arrayAttr = dyn_cast<ArrayAttr>(value)) {
+    if (isa<BundleType, FVectorType>(type))
       return builder.create<AggregateConstantOp>(loc, type, arrayAttr);
   }
 
   // String constants.
-  if (auto stringAttr = value.dyn_cast<StringAttr>()) {
-    if (type.isa<StringType>())
+  if (auto stringAttr = dyn_cast<StringAttr>(value)) {
+    if (isa<StringType>(type))
       return builder.create<StringConstantOp>(loc, type, stringAttr);
   }
 

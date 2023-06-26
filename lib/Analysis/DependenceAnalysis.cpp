@@ -44,6 +44,12 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
       MemRefAccess dst(destination);
       FlatAffineValueConstraints dependenceConstraints;
       SmallVector<DependenceComponent, 2> depComps;
+
+      // Requested depth might not be a valid comparison if they do not belong
+      // to the same loop nest
+      if (depth > getInnermostCommonLoopDepth({source, destination}))
+        continue;
+
       DependenceResult result = checkMemrefAccessDependence(
           src, dst, depth, &dependenceConstraints, &depComps, true);
 

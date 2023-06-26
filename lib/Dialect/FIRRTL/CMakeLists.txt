@@ -1,9 +1,4 @@
-set(LLVM_OPTIONAL_SOURCES
-  FIRRTLReductions.cpp
-)
-
-include_directories(.)
-add_circt_dialect_library(CIRCTFIRRTL
+set(CIRCT_FIRRTL_Sources
   CHIRRTLDialect.cpp
   FIRRTLAnnotationHelper.cpp
   FIRRTLAnnotations.cpp
@@ -17,6 +12,16 @@ add_circt_dialect_library(CIRCTFIRRTL
   FIRRTLTypes.cpp
   FIRRTLUtils.cpp
   NLATable.cpp
+)
+
+set(LLVM_OPTIONAL_SOURCES
+  ${CIRCT_FIRRTL_Sources}
+  FIRRTLReductions.cpp
+)
+
+include_directories(.)
+add_circt_dialect_library(CIRCTFIRRTL
+  ${CIRCT_FIRRTL_Sources}
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/FIRRTL

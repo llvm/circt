@@ -176,11 +176,9 @@ class CreateSiFiveMetadataPass
   CircuitOp circuitOp;
 
 public:
-  CreateSiFiveMetadataPass(bool _replSeqMem, StringRef _replSeqMemCircuit,
-                           StringRef _replSeqMemFile) {
-    replSeqMem = _replSeqMem;
-    replSeqMemCircuit = _replSeqMemCircuit.str();
-    replSeqMemFile = _replSeqMemFile.str();
+  CreateSiFiveMetadataPass(bool replSeqMem, StringRef replSeqMemFile) {
+    this->replSeqMem = replSeqMem;
+    this->replSeqMemFile = replSeqMemFile.str();
   }
 };
 } // end anonymous namespace
@@ -265,7 +263,7 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
       jsonStream.attributeArray("extra_ports", [&] {
         for (auto attr : mem.getExtraPorts()) {
           jsonStream.object([&] {
-            auto port = attr.cast<DictionaryAttr>();
+            auto port = cast<DictionaryAttr>(attr);
             auto name = port.getAs<StringAttr>("name").getValue();
             jsonStream.attribute("name", name);
             auto direction = port.getAs<StringAttr>("direction").getValue();
@@ -596,8 +594,8 @@ void CreateSiFiveMetadataPass::runOnOperation() {
   dutModuleSet.empty();
 }
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createCreateSiFiveMetadataPass(
-    bool replSeqMem, StringRef replSeqMemCircuit, StringRef replSeqMemFile) {
-  return std::make_unique<CreateSiFiveMetadataPass>(
-      replSeqMem, replSeqMemCircuit, replSeqMemFile);
+std::unique_ptr<mlir::Pass>
+circt::firrtl::createCreateSiFiveMetadataPass(bool replSeqMem,
+                                              StringRef replSeqMemFile) {
+  return std::make_unique<CreateSiFiveMetadataPass>(replSeqMem, replSeqMemFile);
 }

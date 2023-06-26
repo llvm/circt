@@ -1,7 +1,6 @@
 add_circt_dialect_library(CIRCTPipelineTransforms
   ExplicitRegs.cpp
   ScheduleLinearPipeline.cpp
-  StageSeparatorToStage.cpp
 
   DEPENDS
   CIRCTPipelineTransformsIncGen

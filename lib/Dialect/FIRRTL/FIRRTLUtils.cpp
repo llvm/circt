@@ -28,17 +28,18 @@ void circt::firrtl::emitConnect(OpBuilder &builder, Location loc, Value dst,
 /// Emit a connect between two values.
 void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
                                 Value src) {
-  auto dstFType = dst.getType().cast<FIRRTLType>();
-  auto srcFType = src.getType().cast<FIRRTLType>();
-  auto dstType = dstFType.dyn_cast<FIRRTLBaseType>();
-  auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
-
+  auto dstFType = cast<FIRRTLType>(dst.getType());
+  auto srcFType = cast<FIRRTLType>(src.getType());
+  auto dstType = dyn_cast<FIRRTLBaseType>(dstFType);
+  auto srcType = dyn_cast<FIRRTLBaseType>(srcFType);
   // Special Connects (non-base, foreign):
   if (!dstType) {
-    // References use ref.define.  Types should match, leave to verifier if not.
-    if (isa<RefType>(dstFType))
+    // References use ref.define.  Add cast if types don't match.
+    if (isa<RefType>(dstFType)) {
+      if (dstFType != srcFType)
+        src = builder.create<RefCastOp>(dstFType, src);
       builder.create<RefDefineOp>(dst, src);
-    else // Other types, give up and leave a connect
+    } else // Other types, give up and leave a connect
       builder.create<ConnectOp>(dst, src);
     return;
   }
@@ -50,12 +51,12 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     return;
   }
 
-  if (auto dstBundle = dstType.dyn_cast<BundleType>()) {
+  if (auto dstBundle = dyn_cast<BundleType>(dstType)) {
     // Connect all the bundle elements pairwise.
     auto numElements = dstBundle.getNumElements();
     // Check if we are trying to create an illegal connect - just create the
     // connect and let the verifier catch it.
-    auto srcBundle = srcType.dyn_cast<BundleType>();
+    auto srcBundle = dyn_cast<BundleType>(srcType);
     if (!srcBundle || numElements != srcBundle.getNumElements()) {
       builder.create<ConnectOp>(dst, src);
       return;
@@ -70,12 +71,12 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     return;
   }
 
-  if (auto dstVector = dstType.dyn_cast<FVectorType>()) {
+  if (auto dstVector = dyn_cast<FVectorType>(dstType)) {
     // Connect all the vector elements pairwise.
     auto numElements = dstVector.getNumElements();
     // Check if we are trying to create an illegal connect - just create the
     // connect and let the verifier catch it.
-    auto srcVector = srcType.dyn_cast<FVectorType>();
+    auto srcVector = dyn_cast<FVectorType>(srcType);
     if (!srcVector || numElements != srcVector.getNumElements()) {
       builder.create<ConnectOp>(dst, src);
       return;
@@ -108,7 +109,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   // The source must be extended or truncated.
   if (dstWidth < srcWidth) {
     // firrtl.tail always returns uint even for sint operands.
-    IntType tmpType = dstType.cast<IntType>().getConstType(srcType.isConst());
+    IntType tmpType = cast<IntType>(dstType).getConstType(srcType.isConst());
     bool isSignedDest = tmpType.isSigned();
     if (isSignedDest)
       tmpType =
@@ -123,7 +124,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     src = builder.create<PadPrimOp>(src, dstWidth);
   }
 
-  if (auto srcType = src.getType().cast<FIRRTLBaseType>();
+  if (auto srcType = cast<FIRRTLBaseType>(src.getType());
       srcType && dstType != srcType &&
       areTypesConstCastable(dstType, srcType)) {
     src = builder.create<ConstCastOp>(dstType, src);
@@ -136,7 +137,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 }
 
 IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {
-  auto intType = type.cast<IntType>();
+  auto intType = cast<IntType>(type);
   assert((!intType.hasWidth() ||
           (unsigned)intType.getWidthOrSentinel() == value.getBitWidth()) &&
          "value / type width mismatch");
@@ -150,15 +151,29 @@ IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {
 /// Return an IntegerAttr filled with zeros for the specified FIRRTL integer
 /// type. This handles both the known width and unknown width case.
 IntegerAttr circt::firrtl::getIntZerosAttr(Type type) {
-  int32_t width = abs(type.cast<IntType>().getWidthOrSentinel());
+  int32_t width = abs(cast<IntType>(type).getWidthOrSentinel());
   return getIntAttr(type, APInt(width, 0));
 }
 
 /// Return an IntegerAttr filled with ones for the specified FIRRTL integer
 /// type. This handles both the known width and unknown width case.
 IntegerAttr circt::firrtl::getIntOnesAttr(Type type) {
-  int32_t width = abs(type.cast<IntType>().getWidthOrSentinel());
+  int32_t width = abs(cast<IntType>(type).getWidthOrSentinel());
   return getIntAttr(type, APInt(width, -1));
+}
+
+/// Return the single assignment to a Property value. It is assumed that the
+/// single assigment invariant is enforced elsewhere.
+PropAssignOp circt::firrtl::getPropertyAssignment(FIRRTLPropertyValue value) {
+  for (auto *user : value.getUsers())
+    if (auto propassign = dyn_cast<PropAssignOp>(user))
+      if (propassign.getDest() == value)
+        return propassign;
+
+  // The invariant that there is a single assignment should be enforced
+  // elsewhere. If for some reason a user called this on a Property value that
+  // is not assigned (like a module input port), just return null.
+  return nullptr;
 }
 
 /// Return the value that drives another FIRRTL value within module scope.  Only
@@ -199,7 +214,7 @@ Value circt::firrtl::getModuleScopedDriver(Value val, bool lookThroughWires,
 
   while (val) {
     // The value is a port.
-    if (auto blockArg = val.dyn_cast<BlockArgument>()) {
+    if (auto blockArg = dyn_cast<BlockArgument>(val)) {
       FModuleOp op = cast<FModuleOp>(val.getParentBlock()->getParentOp());
       auto direction = op.getPortDirection(blockArg.getArgNumber());
       // Base case: this is one of the module's input ports.
@@ -213,7 +228,7 @@ Value circt::firrtl::getModuleScopedDriver(Value val, bool lookThroughWires,
 
     // The value is an instance port.
     if (auto inst = dyn_cast<InstanceOp>(op)) {
-      auto resultNo = val.cast<OpResult>().getResultNumber();
+      auto resultNo = cast<OpResult>(val).getResultNumber();
       // Base case: this is an instance's output port.
       if (inst.getPortDirection(resultNo) == Direction::Out)
         return inst.getResult(resultNo);
@@ -315,7 +330,7 @@ bool circt::firrtl::walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
       auto val = fieldRef.getValue();
 
       // The value is a port.
-      if (auto blockArg = val.dyn_cast<BlockArgument>()) {
+      if (auto blockArg = dyn_cast<BlockArgument>(val)) {
         FModuleOp op = cast<FModuleOp>(val.getParentBlock()->getParentOp());
         auto direction = op.getPortDirection(blockArg.getArgNumber());
         // Base case: this is one of the module's input ports.
@@ -332,7 +347,7 @@ bool circt::firrtl::walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
 
       // The value is an instance port.
       if (auto inst = dyn_cast<InstanceOp>(op)) {
-        auto resultNo = val.cast<OpResult>().getResultNumber();
+        auto resultNo = cast<OpResult>(val).getResultNumber();
         // Base case: this is an instance's output port.
         if (inst.getPortDirection(resultNo) == Direction::Out) {
           if (!callback(original, fieldRef))
@@ -493,7 +508,7 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
 static void getDeclName(Value value, SmallString<64> &string, bool nameSafe) {
   // Treat the value as a worklist to allow for recursion.
   while (value) {
-    if (auto arg = value.dyn_cast<BlockArgument>()) {
+    if (auto arg = dyn_cast<BlockArgument>(value)) {
       // Get the module ports and get the name.
       auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
       SmallVector<PortInfo> ports = module.getPorts();
@@ -506,7 +521,7 @@ static void getDeclName(Value value, SmallString<64> &string, bool nameSafe) {
         .Case<InstanceOp, MemOp>([&](auto op) {
           string += op.getName();
           string += nameSafe ? "_" : ".";
-          string += op.getPortName(value.cast<OpResult>().getResultNumber())
+          string += op.getPortName(cast<OpResult>(value).getResultNumber())
                         .getValue();
           value = nullptr;
         })
@@ -548,7 +563,7 @@ circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
     if (auto refTy = dyn_cast<RefType>(type))
       type = refTy.getType();
 
-    if (auto bundleType = type.dyn_cast<BundleType>()) {
+    if (auto bundleType = dyn_cast<BundleType>(type)) {
       auto index = bundleType.getIndexForFieldID(localID);
       // Add the current field string, and recurse into a subfield.
       auto &element = bundleType.getElements()[index];
@@ -558,7 +573,7 @@ circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
       // Recurse in to the element type.
       type = element.type;
       localID = localID - bundleType.getFieldID(index);
-    } else if (auto vecType = type.dyn_cast<FVectorType>()) {
+    } else if (auto vecType = dyn_cast<FVectorType>(type)) {
       auto index = vecType.getIndexForFieldID(localID);
       name += nameSafe ? "_" : "[";
       name += std::to_string(index);
@@ -567,6 +582,13 @@ circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
       // Recurse in to the element type.
       type = vecType.getElementType();
       localID = localID - vecType.getFieldID(index);
+    } else if (auto enumType = dyn_cast<FEnumType>(type)) {
+      auto index = enumType.getIndexForFieldID(localID);
+      auto &element = enumType.getElements()[index];
+      name += nameSafe ? "_" : ".";
+      name += element.name.getValue();
+      type = element.type;
+      localID = localID - enumType.getFieldID(index);
     } else {
       // If we reach here, the field ref is pointing inside some aggregate type
       // that isn't a bundle or a vector. If the type is a ground type, then the
@@ -626,6 +648,11 @@ void circt::firrtl::walkGroundTypes(
     FIRRTLType firrtlType,
     llvm::function_ref<void(uint64_t, FIRRTLBaseType)> fn) {
   auto type = getBaseType(firrtlType);
+
+  // If this is not a base type, return.
+  if (!type)
+    return;
+
   // If this is a ground type, don't call recursive functions.
   if (type.isGround())
     return fn(0, type);
@@ -848,14 +875,14 @@ circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
 /// Non-FIRRTL types are simply passed through. This returns a null type if it
 /// cannot be lowered.
 Type circt::firrtl::lowerType(Type type) {
-  auto firType = type.dyn_cast<FIRRTLBaseType>();
+  auto firType = dyn_cast<FIRRTLBaseType>(type);
   if (!firType)
     return type;
 
   // Ignore flip types.
   firType = firType.getPassiveType();
 
-  if (auto bundle = firType.dyn_cast<BundleType>()) {
+  if (auto bundle = dyn_cast<BundleType>(firType)) {
     mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
     for (auto element : bundle) {
       Type etype = lowerType(element.type);
@@ -865,13 +892,13 @@ Type circt::firrtl::lowerType(Type type) {
     }
     return hw::StructType::get(type.getContext(), hwfields);
   }
-  if (auto vec = firType.dyn_cast<FVectorType>()) {
+  if (auto vec = dyn_cast<FVectorType>(firType)) {
     auto elemTy = lowerType(vec.getElementType());
     if (!elemTy)
       return {};
     return hw::ArrayType::get(elemTy, vec.getNumElements());
   }
-  if (auto fenum = firType.dyn_cast<FEnumType>()) {
+  if (auto fenum = dyn_cast<FEnumType>(firType)) {
     mlir::SmallVector<hw::UnionType::FieldInfo, 8> hwfields;
     SmallVector<Attribute> names;
     bool simple = true;
@@ -881,7 +908,7 @@ Type circt::firrtl::lowerType(Type type) {
         return {};
       hwfields.push_back(hw::UnionType::FieldInfo{element.name, etype, 0});
       names.push_back(element.name);
-      if (!element.type.isa<UIntType>() ||
+      if (!isa<UIntType>(element.type) ||
           element.type.getBitWidthOrSentinel() != 0)
         simple = false;
     }

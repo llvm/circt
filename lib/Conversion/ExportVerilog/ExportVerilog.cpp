@@ -2581,7 +2581,7 @@ SubExprInfo ExprEmitter::visitTypeOp(AggregateConstantOp op) {
     if (auto arrayType = hw::type_dyn_cast<ArrayType>(type)) {
       auto elementType = arrayType.getElementType();
       emitBracedList(
-          attr.cast<ArrayAttr>(), [&]() { ps << "'{"; },
+          attr.cast<ArrayAttr>(), [&]() { ps << "{"; },
           [&](Attribute attr) { printAggregate(attr, elementType); },
           [&]() { ps << "}"; });
     } else if (auto arrayType = hw::type_dyn_cast<UnpackedArrayType>(type)) {

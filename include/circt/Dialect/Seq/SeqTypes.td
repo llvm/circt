@@ -63,3 +63,19 @@ def HLMemType : SeqType<"HLMem",[
   let hasCustomAssemblyFormat = 1;
   let genVerifyDecl = 1;
 }
+
+def FirMemType : SeqType<"FirMem"> {
+  let summary = "A FIRRTL-flavored memory";
+  let description = [{
+    The `!seq.firmem` type represents a FIRRTL-flavored memory declared by a
+    `seq.firmem` operation. It captures the parameters of the memory that are
+    relevant to the read, write, and read-write ports, such as width and depth.
+  }];
+  let mnemonic = "firmem";
+  let parameters = (ins
+    "uint32_t":$depth,
+    "uint32_t":$width,
+    OptionalParameter<"std::optional<uint32_t>">:$maskWidth
+  );
+  let assemblyFormat = "`<` $depth `x` $width (`,` `mask` $maskWidth^)? `>`";
+}

@@ -13,6 +13,9 @@
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Location.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/Debug.h"
 #include "gtest/gtest.h"
 #include <mlir/IR/BuiltinAttributes.h>
@@ -377,6 +380,16 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
 
   auto field2Value = std::get<std::shared_ptr<Object>>(
       result.value()->getField(builder.getStringAttr("field2")).value());
+
+  auto fieldNames = result.value()->getFieldNames();
+
+  ASSERT_TRUE(fieldNames.size() == 2);
+  StringRef fieldNamesTruth[] = {"field1", "field2"};
+  for (auto fieldName : llvm::enumerate(fieldNames)) {
+    auto str = llvm::dyn_cast_or_null<StringAttr>(fieldName.value());
+    ASSERT_TRUE(str);
+    ASSERT_EQ(str.getValue(), fieldNamesTruth[fieldName.index()]);
+  }
 
   ASSERT_TRUE(field1Value);
   ASSERT_TRUE(field2Value);

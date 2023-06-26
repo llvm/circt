@@ -64,6 +64,10 @@ def InferMemories : Pass<"arc-infer-memories", "mlir::ModuleOp"> {
   let dependentDialects = [
     "arc::ArcDialect", "comb::CombDialect", "seq::SeqDialect"
   ];
+  let options = [
+    Option<"tapPorts", "tap-ports", "bool", "true",
+      "Make memory ports observable">,
+  ];
 }
 
 def InlineArcs : Pass<"arc-inline" , "mlir::ModuleOp"> {
@@ -196,11 +200,6 @@ def SplitLoops : Pass<"arc-split-loops", "mlir::ModuleOp"> {
 def StripSV : Pass<"arc-strip-sv", "mlir::ModuleOp"> {
   let summary = "Remove SV wire, reg, and assigns";
   let constructor = "circt::arc::createStripSVPass()";
-  let options = [
-    Option<"replaceExtModuleOutputs", "replace-ext-module-outputs",
-      "bool", "true", "When enabled replaces all extern module instance "
-      "outputs with 0 and removes the instances and external modules">,
-  ];
   let dependentDialects = ["arc::ArcDialect", "comb::CombDialect",
                            "hw::HWDialect", "seq::SeqDialect"];
 }

@@ -1092,6 +1092,19 @@ hw.module @struct_create() -> (r0: !hw.struct<a: i2, b: i2, c : i2>) {
   hw.output %arr : !hw.struct<a: i2, b: i2, c : i2>
 }
 
+// CHECK-LABEL: hw.module @struct_create1(%in: !hw.struct<a: i2, b: i2, c: i2>, %in1: i2) -> (r0: !hw.struct<a: i2, b: i2, c: i2>, r1: !hw.struct<a: i2, b: i2, d: i2>, r2: !hw.struct<a: i2, b: i2, c: i2>)
+hw.module @struct_create1(%in: !hw.struct<a: i2, b: i2, c: i2>, %in1: i2) -> (r0: !hw.struct<a: i2, b: i2, c: i2>, r1: !hw.struct<a: i2, b: i2, d: i2>, r2: !hw.struct<a: i2, b: i2, c: i2>) {
+  // CHECK-NEXT: %a, %b, %c = hw.struct_explode %in : !hw.struct<a: i2, b: i2, c: i2>
+  %a, %b, %c = hw.struct_explode %in : !hw.struct<a: i2, b: i2, c: i2>
+  %1 = hw.struct_create (%a, %b, %c) : !hw.struct<a: i2, b: i2, c: i2>
+  // CHECK-NEXT: [[V1:%.+]] = hw.struct_create (%a, %b, %c) : !hw.struct<a: i2, b: i2, d: i2>
+  %2 = hw.struct_create (%a, %b, %c) : !hw.struct<a: i2, b: i2, d: i2>
+  // CHECK-NEXT: [[V2:%.+]] = hw.struct_create (%a, %b, %in1) : !hw.struct<a: i2, b: i2, c: i2>
+  %3 = hw.struct_create (%a, %b, %in1) : !hw.struct<a: i2, b: i2, c: i2>
+  // CHECK-NEXT: hw.output %in, [[V1]], [[V2]] : !hw.struct<a: i2, b: i2, c: i2>, !hw.struct<a: i2, b: i2, d: i2>, !hw.struct<a: i2, b: i2, c: i2>
+  hw.output %1, %2, %3 : !hw.struct<a: i2, b: i2, c: i2>, !hw.struct<a: i2, b: i2, d: i2>, !hw.struct<a: i2, b: i2, c: i2>
+}
+
 // CHECK-LABEL: hw.module @struct_extract1(%a0: i3, %a1: i5) -> (r0: i3)
 // CHECK-NEXT:    hw.output %a0 : i3
 hw.module @struct_extract1(%a0: i3, %a1: i5) -> (r0: i3) {

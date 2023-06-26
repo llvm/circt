@@ -1453,7 +1453,7 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
 
     auto rhs = rewriter.create<hw::ConstantOp>(op.getLoc(), value + value2);
     replaceOpWithNewOpAndCopyName<AddOp>(
-        rewriter, op, op.getType(), ArrayRef<Value>{addOp.getInputs()[1], rhs},
+        rewriter, op, op.getType(), ArrayRef<Value>{addOp.getInputs()[0], rhs},
         /*twoState=*/op.getTwoState() && addOp.getTwoState());
     return success();
   }

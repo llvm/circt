@@ -42,10 +42,10 @@ static LogicalResult updateExpandedPort(StringRef field, AnnoTarget &ref) {
 /// represent bundle returns as split into constituent parts.
 static FailureOr<unsigned> findBundleElement(Operation *op, Type type,
                                              StringRef field) {
-  auto bundle = type.dyn_cast<BundleType>();
+  auto bundle = dyn_cast<BundleType>(type);
   if (!bundle) {
     op->emitError("field access '")
-        << field << "' into non-bundle type '" << bundle << "'";
+        << field << "' into non-bundle type '" << type << "'";
     return failure();
   }
   auto idx = bundle.getElementIndex(field);
@@ -66,7 +66,7 @@ static FailureOr<unsigned> findVectorElement(Operation *op, Type type,
     op->emitError("Cannot convert '") << indexStr << "' to an integer";
     return failure();
   }
-  auto vec = type.dyn_cast<FVectorType>();
+  auto vec = dyn_cast<FVectorType>(type);
   if (!vec) {
     op->emitError("index access '")
         << index << "' into non-vector type '" << type << "'";
@@ -95,14 +95,14 @@ static FailureOr<unsigned> findFieldID(AnnoTarget &ref,
       auto result = findVectorElement(op, type, token.name);
       if (failed(result))
         return failure();
-      auto vector = type.cast<FVectorType>();
+      auto vector = cast<FVectorType>(type);
       type = vector.getElementType();
       fieldIdx += vector.getFieldID(*result);
     } else {
       auto result = findBundleElement(op, type, token.name);
       if (failed(result))
         return failure();
-      auto bundle = type.cast<BundleType>();
+      auto bundle = cast<BundleType>(type);
       type = bundle.getElementType(*result);
       fieldIdx += bundle.getFieldID(*result);
     }
@@ -510,7 +510,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
   for (size_t i = 0, e = keyAttr.size(); i != e; ++i) {
     auto b = keyAttr[i];
     auto path = ("keys[" + Twine(i) + "]").str();
-    auto bDict = b.cast<DictionaryAttr>();
+    auto bDict = cast<DictionaryAttr>(b);
     auto classAttr =
         tryGetAs<StringAttr>(bDict, anno, "class", loc, dataTapsClass, path);
     if (!classAttr)
@@ -573,7 +573,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
       if (!moduleTarget)
         return failure();
       AnnoPathValue internalPathSrc;
-      auto targetType = wireTarget->ref.getType().cast<FIRRTLBaseType>();
+      auto targetType = cast<FIRRTLBaseType>(wireTarget->ref.getType());
       if (wireTarget->fieldIdx)
         targetType = cast<FIRRTLBaseType>(
             targetType.getFinalTypeByFieldID(wireTarget->fieldIdx));

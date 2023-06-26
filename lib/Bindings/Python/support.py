@@ -132,8 +132,9 @@ def attribute_to_var(attr):
   # If it's not the root type, assume it's already been downcasted and don't do
   # the expensive probing below.
   if attr.__class__ != ir.Attribute:
-    return attr
+    return attr.value
 
+  from .dialects import hw, om
   try:
     return ir.BoolAttr(attr).value
   except ValueError:
@@ -162,6 +163,15 @@ def attribute_to_var(attr):
   try:
     dict = ir.DictAttr(attr)
     return {i.name: attribute_to_var(i.attr) for i in dict}
+  except ValueError:
+    pass
+  try:
+    return attribute_to_var(om.ReferenceAttr(attr).inner_ref)
+  except ValueError:
+    pass
+  try:
+    ref = hw.InnerRefAttr(attr)
+    return (ir.StringAttr(ref.module).value, ir.StringAttr(ref.name).value)
   except ValueError:
     pass
 

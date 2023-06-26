@@ -125,10 +125,10 @@ struct LowerCHIRRTLPass : public LowerCHIRRTLPassBase<LowerCHIRRTLPass>,
 static void forEachLeaf(ImplicitLocOpBuilder &builder, Value value,
                         llvm::function_ref<void(Value)> func) {
   auto type = value.getType();
-  if (auto bundleType = type.dyn_cast<BundleType>()) {
+  if (auto bundleType = dyn_cast<BundleType>(type)) {
     for (size_t i = 0, e = bundleType.getNumElements(); i < e; ++i)
       forEachLeaf(builder, builder.create<SubfieldOp>(value, i), func);
-  } else if (auto vectorType = type.dyn_cast<FVectorType>()) {
+  } else if (auto vectorType = dyn_cast<FVectorType>(type)) {
     for (size_t i = 0, e = vectorType.getNumElements(); i != e; ++i)
       forEachLeaf(builder, builder.create<SubindexOp>(value, i), func);
   } else {
@@ -277,7 +277,7 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
   opsToDelete.push_back(cmem);
   ++numLoweredMems;
 
-  auto cmemType = cmem->getResult(0).getType().cast<CMemoryType>();
+  auto cmemType = cast<CMemoryType>(cmem->getResult(0).getType());
   auto depth = cmemType.getNumElements();
   auto type = cmemType.getElementType();
 

@@ -77,7 +77,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             // Get an InnerRefAttr to the xmrDef op. If the operation does not
             // take any InnerSym (like firrtl.add, firrtl.or etc) then create a
             // NodeOp to add the InnerSym.
-            if (!xmrDef.isa<BlockArgument>()) {
+            if (!isa<BlockArgument>(xmrDef)) {
               Operation *xmrDefOp = xmrDef.getDefiningOp();
               if (auto verbExpr = dyn_cast<VerbatimExprOp>(xmrDefOp))
                 if (verbExpr.getSymbolsAttr().empty() &&
@@ -128,7 +128,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             // is assumed to be "Memory". Note that MemOp creates RefType
             // without a RefSend.
             for (const auto &res : llvm::enumerate(mem.getResults()))
-              if (mem.getResult(res.index()).getType().isa<RefType>()) {
+              if (isa<RefType>(mem.getResult(res.index()).getType())) {
                 auto inRef = getInnerRefTo(mem);
                 auto ind = addReachingSendsEntry(res.value(), inRef);
                 xmrPathSuffix[ind] = "Memory";
@@ -142,11 +142,11 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
               [&](auto inst) { return handleInstanceOp(inst, instanceGraph); })
           .Case<FConnectLike>([&](FConnectLike connect) {
             // Ignore BaseType.
-            if (!connect.getSrc().getType().isa<RefType>())
+            if (!isa<RefType>(connect.getSrc().getType()))
               return success();
             markForRemoval(connect);
             if (isZeroWidth(
-                    connect.getSrc().getType().cast<RefType>().getType()))
+                    cast<RefType>(connect.getSrc().getType()).getType()))
               return success();
             // Merge the dataflow classes of destination into the source of the
             // Connect. This handles two cases:
@@ -198,6 +198,12 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             resolveOps.push_back(resolve);
             return success();
           })
+          .Case<RefCastOp>([&](RefCastOp op) {
+            markForRemoval(op);
+            if (!isZeroWidth(op.getType().getType()))
+              dataFlowClasses->unionSets(op.getInput(), op.getResult());
+            return success();
+          })
           .Case<Forceable>([&](Forceable op) {
             if (!op.isForceable() || op.getDataRef().use_empty())
               return success();
@@ -232,7 +238,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       // Record all the RefType ports to be removed later.
       size_t numPorts = module.getNumPorts();
       for (size_t portNum = 0; portNum < numPorts; ++portNum)
-        if (module.getPortType(portNum).isa<RefType>()) {
+        if (isa<RefType>(module.getPortType(portNum))) {
           setPortToRemove(module, portNum, numPorts);
         }
     }
@@ -426,7 +432,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       auto getPath = [&](size_t portNo) {
         // If there's an internalPaths array, grab the next element.
         if (!internalPaths.empty())
-          return internalPaths[pathsIndex++].cast<StringAttr>();
+          return cast<StringAttr>(internalPaths[pathsIndex++]);
 
         // Otherwise, we're using the ref ABI.  Generate the prefix string
         // and return the macro for the specified port.
@@ -455,7 +461,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     for (size_t portNum = 0, numPorts = inst.getNumResults();
          portNum < numPorts; ++portNum) {
       auto instanceResult = inst.getResult(portNum);
-      if (!instanceResult.getType().isa<RefType>())
+      if (!isa<RefType>(instanceResult.getType()))
         continue;
       if (!refMod)
         return inst.emitOpError("cannot lower ext modules with RefType ports");
@@ -463,7 +469,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       setPortToRemove(inst, portNum, numPorts);
       // Drop the dead-instance-ports.
       if (instanceResult.use_empty() ||
-          isZeroWidth(instanceResult.getType().cast<RefType>().getType()))
+          isZeroWidth(cast<RefType>(instanceResult.getType()).getType()))
         continue;
       auto refModuleArg = refMod.getArgument(portNum);
       if (inst.getPortDirection(portNum) == Direction::Out) {
@@ -501,7 +507,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     SmallString<128> circuitRefPrefix;
     for (size_t portIndex = 0, numPorts = module.getNumPorts();
          portIndex != numPorts; ++portIndex) {
-      auto refType = module.getPortType(portIndex).dyn_cast<RefType>();
+      auto refType = dyn_cast<RefType>(module.getPortType(portIndex));
       if (!refType || isZeroWidth(refType.getType()) ||
           module.getPortDirection(portIndex) != Direction::Out)
         continue;
@@ -551,7 +557,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   }
 
   InnerRefAttr getInnerRefTo(Value val) {
-    if (auto arg = val.dyn_cast<BlockArgument>())
+    if (auto arg = dyn_cast<BlockArgument>(val))
       return ::getInnerRefTo(
           cast<FModuleLike>(arg.getParentBlock()->getParentOp()),
           arg.getArgNumber(), "xmr_sym",
@@ -577,7 +583,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       return iter->getSecond();
     // The referenced module must have already been analyzed, error out if the
     // dataflow at the child module is not resolved.
-    if (BlockArgument arg = val.dyn_cast<BlockArgument>())
+    if (BlockArgument arg = dyn_cast<BlockArgument>(val))
       arg.getOwner()->getParentOp()->emitError(
           "reference dataflow cannot be traced back to the remote read op "
           "for module port '")

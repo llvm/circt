@@ -21,12 +21,12 @@ class FIRRTLImplType<string name,
                      list<Trait> traits = [],
                      string baseCppClass = "::circt::firrtl::FIRRTLBaseType">
     : TypeDef<FIRRTLDialect, name, traits, baseCppClass> {
-  // Storage classes must be defined in C++ and 
+  // Storage classes must be defined in C++ and
   // inherit from FIRRTLBaseTypeStorage
   let genStorageClass = false;
-  
-  // MLIR generates awkward accessor "getIsConst" for the "isConst" parameter, 
-  // which is common on FIRRTLBaseType anyway, so we generate the other 
+
+  // MLIR generates awkward accessor "getIsConst" for the "isConst" parameter,
+  // which is common on FIRRTLBaseType anyway, so we generate the other
   // accessors manually
   let genAccessors = false;
 }
@@ -264,6 +264,7 @@ class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [
     std::optional<unsigned> getElementIndex(StringRef name);
 
     /// Look up an element's name by index. This asserts if index is invalid.
+    StringAttr getElementNameAttr(size_t index);
     StringRef getElementName(size_t index);
 
     /// Look up an element by name.  This returns None on failure.
@@ -459,7 +460,7 @@ def RefImpl : FIRRTLImplType<"Ref",
 
     Values of this type are used to capture dataflow paths,
     and do not represent a circuit element or entity.
-    
+
     Generally read-only (probe), optionally forceable (rwprobe).
   }];
   let parameters = (ins TypeParameter<"::circt::firrtl::FIRRTLBaseType",
@@ -481,6 +482,51 @@ def RefImpl : FIRRTLImplType<"Ref",
   }];
 }
 
+def BaseTypeAliasImpl : FIRRTLImplType<"BaseTypeAlias", [FieldIDTypeInterface],
+                                        "::circt::firrtl::FIRRTLBaseType"> {
+  let summary = "type alias for firrtl base types";
+  let parameters =
+    (ins  "StringAttr":$name, TypeParameter<"::circt::firrtl::FIRRTLBaseType",
+                                            "An inner type">:$innerType);
+  let storageClass = "BaseTypeAliasStorage";
+  let genAccessors = true;
+  let skipDefaultBuilders = true;
+  let extraClassDeclaration = [{
+      // FIRRTLBaseType utils.
+      FIRRTLBaseType getAnonymousType();
+      FIRRTLBaseType getPassiveType();
+      FIRRTLBaseType getConstType(bool isConst);
+      FIRRTLBaseType getAllConstDroppedType();
+
+      /// Return the recursive properties of the type.
+      RecursiveTypeProperties getRecursiveTypeProperties() const;
+
+      // If a given `newInnerType` is identical to innerType, return `*this`
+      // because we can reuse the type alias. Otherwise return `newInnerType`.
+      FIRRTLBaseType getModifiedType(FIRRTLBaseType newInnerType);
+
+      /// Implement FieldIDTypeInterface.
+
+      /// Strip off a single layer of this type and return the sub-type and a
+      /// field ID targeting the same field, but rebased on the sub-type.
+      std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+      getSubTypeByFieldID(uint64_t fieldID);
+
+      /// Get the maximum field ID.
+      uint64_t getMaxFieldID();
+
+      /// Returns the effective field id when treating the index field as the root
+      /// of the type.  Essentially maps a fieldID to a fieldID after a subfield
+      /// op. Returns the new id and whether the id is in the given child.
+      std::pair<uint64_t, bool> rootChildFieldID(uint64_t fieldID, uint64_t index);
+  }];
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "::mlir::StringAttr":$name,
+           "::circt::firrtl::FIRRTLBaseType":$innerType)>
+  ];
+}
+
 //===----------------------------------------------------------------------===//
 // Non-Hardware Type Definitions
 //===----------------------------------------------------------------------===//
@@ -488,6 +534,14 @@ def RefImpl : FIRRTLImplType<"Ref",
 def StringImpl : FIRRTLImplType<"String", [], "circt::firrtl::FIRRTLType"> {
   let summary = [{
     An unlimited length string type. Not representable in hardware.
+  }];
+  let parameters = (ins);
+  let genStorageClass = true;
+}
+
+def BigIntImpl : FIRRTLImplType<"BigInt", [], "circt::firrtl::FIRRTLType"> {
+  let summary = [{
+    An unlimited length signed integer type.  Not representable in hardware.
   }];
   let parameters = (ins);
   let genStorageClass = true;

@@ -471,7 +471,7 @@ void IMDeadCodeElimPass::visitValue(Value value) {
     visitUser(user);
 
   // Requiring an input port propagates the liveness to each instance.
-  if (auto blockArg = value.dyn_cast<BlockArgument>()) {
+  if (auto blockArg = dyn_cast<BlockArgument>(value)) {
     auto module = cast<FModuleOp>(blockArg.getParentBlock()->getParentOp());
     auto portDirection = module.getPortDirection(blockArg.getArgNumber());
     // If the port is input, it's necessary to mark corresponding input ports of
@@ -625,14 +625,16 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
       };
       auto rd = getRefDefine(result);
       assert(rd && "input ref port to instance is alive, but no driver?");
-      assert(isKnownAlive(rd.getSrc()));
-      auto *srcDefOp = rd.getSrc().getDefiningOp();
+      auto source = rd.getSrc();
+      auto *srcDefOp = source.getDefiningOp();
       if (srcDefOp && llvm::any_of(result.getUsers(), [&](auto user) {
-            return user->getBlock() != rd.getSrc().getParentBlock() ||
-                   user->isBeforeInBlock(rd.getSrc().getDefiningOp());
+            return user->getBlock() != source.getParentBlock() ||
+                   user->isBeforeInBlock(source.getDefiningOp());
           }))
         llvm::report_fatal_error("unsupported IR with references in IMDCE");
-      result.replaceAllUsesWith(rd.getSrc());
+      result.replaceAllUsesWith(source);
+      liveElements.erase(result);
+      assert(isKnownAlive(source));
       ++numErasedOps;
       rd.erase();
       return;
@@ -693,7 +695,7 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
         continue;
 
       // RefType can't be a wire, especially if it won't be erased.  Skip.
-      if (argument.getType().isa<RefType>())
+      if (isa<RefType>(argument.getType()))
         continue;
 
       // Ok, this port is used only within its defined module. So we can replace

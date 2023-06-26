@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/Matchers.h"
@@ -220,7 +221,83 @@ void HLMemOp::build(OpBuilder &builder, OperationState &result, Value clk,
 }
 
 //===----------------------------------------------------------------------===//
+// FIFOOp
+//===----------------------------------------------------------------------===//
+
+// Flag threshold custom directive
+static ParseResult parseFIFOFlagThreshold(OpAsmParser &parser,
+                                          IntegerAttr &threshold,
+                                          Type &outputFlagType,
+                                          StringRef directive) {
+  // look for an optional "almost_full $threshold" group.
+  if (succeeded(parser.parseOptionalKeyword(directive))) {
+    int64_t thresholdValue;
+    if (succeeded(parser.parseInteger(thresholdValue))) {
+      threshold = parser.getBuilder().getI64IntegerAttr(thresholdValue);
+      outputFlagType = parser.getBuilder().getI1Type();
+      return success();
+    }
+    return parser.emitError(parser.getNameLoc(),
+                            "expected integer value after " + directive +
+                                " directive");
+  }
+  return success();
+}
+
+ParseResult parseFIFOAFThreshold(OpAsmParser &parser, IntegerAttr &threshold,
+                                 Type &outputFlagType) {
+  return parseFIFOFlagThreshold(parser, threshold, outputFlagType,
+                                "almost_full");
+}
+
+ParseResult parseFIFOAEThreshold(OpAsmParser &parser, IntegerAttr &threshold,
+                                 Type &outputFlagType) {
+  return parseFIFOFlagThreshold(parser, threshold, outputFlagType,
+                                "almost_empty");
+}
+
+void printFIFOAFThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
+                          Type outputFlagType) {
+  if (threshold) {
+    p << "almost_full"
+      << " " << threshold.getInt();
+  }
+}
+
+void printFIFOAEThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
+                          Type outputFlagType) {
+  if (threshold) {
+    p << "almost_empty"
+      << " " << threshold.getInt();
+  }
+}
+
+void FIFOOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getOutput(), "out");
+  setNameFn(getEmpty(), "empty");
+  setNameFn(getFull(), "full");
+  if (auto ae = getAlmostEmpty())
+    setNameFn(ae, "almostEmpty");
+  if (auto af = getAlmostFull())
+    setNameFn(af, "almostFull");
+}
+
+LogicalResult FIFOOp::verify() {
+  auto aet = getAlmostEmptyThreshold();
+  auto aft = getAlmostFullThreshold();
+  size_t depth = getDepth();
+  if (aft.has_value() && aft.value() > depth)
+    return emitOpError("almost full threshold must be <= FIFO depth");
+
+  if (aet.has_value() && aet.value() > depth)
+    return emitOpError("almost empty threshold must be <= FIFO depth");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // CompRegOp
+//===----------------------------------------------------------------------===//
 
 template <bool ClockEnabled>
 static ParseResult parseCompReg(OpAsmParser &parser, OperationState &result) {
@@ -350,6 +427,7 @@ void CompRegClockEnabledOp::print(::mlir::OpAsmPrinter &p) {
 
 //===----------------------------------------------------------------------===//
 // FirRegOp
+//===----------------------------------------------------------------------===//
 
 void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
                      Value clk, StringAttr name, StringAttr innerSym) {
@@ -565,7 +643,7 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
           if (arrayCreate->hasOneUse())
             // If the original next value has a single use, we can replace the
             // value directly.
-            rewriter.replaceOp(arrayCreate, {newNextVal});
+            rewriter.replaceOp(arrayCreate, newNextVal);
           else {
             // Otherwise, replace the entire firreg with a new one.
             rewriter.replaceOpWithNewOp<FirRegOp>(op, newNextVal, op.getClk(),
@@ -656,6 +734,122 @@ LogicalResult ClockGateOp::canonicalize(ClockGateOp op,
   }
 
   return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// FirMemOp
+//===----------------------------------------------------------------------===//
+
+void FirMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (!nameAttr.getValue().empty())
+    setNameFn(getResult(), nameAttr.getValue());
+}
+
+template <class Op>
+static LogicalResult verifyFirMemMask(Op op) {
+  if (auto mask = op.getMask()) {
+    auto memType = op.getMemory().getType();
+    if (!memType.getMaskWidth())
+      return op.emitOpError("has mask operand but memory type '")
+             << memType << "' has no mask";
+    auto expected = IntegerType::get(op.getContext(), *memType.getMaskWidth());
+    if (mask.getType() != expected)
+      return op.emitOpError("has mask operand of type '")
+             << mask.getType() << "', but memory type requires '" << expected
+             << "'";
+  }
+  return success();
+}
+
+LogicalResult FirMemWriteOp::verify() { return verifyFirMemMask(*this); }
+LogicalResult FirMemReadWriteOp::verify() { return verifyFirMemMask(*this); }
+
+static bool isConst(Value value) {
+  if (value)
+    return value.getDefiningOp<hw::ConstantOp>();
+  return false;
+}
+
+static bool isConstZero(Value value) {
+  if (value)
+    if (auto constOp = value.getDefiningOp<hw::ConstantOp>())
+      return constOp.getValue().isZero();
+  return false;
+}
+
+static bool isConstAllOnes(Value value) {
+  if (value)
+    if (auto constOp = value.getDefiningOp<hw::ConstantOp>())
+      return constOp.getValue().isAllOnes();
+  return false;
+}
+
+LogicalResult FirMemReadOp::canonicalize(FirMemReadOp op,
+                                         PatternRewriter &rewriter) {
+  // Remove the enable if it is constant true.
+  if (isConstAllOnes(op.getEnable())) {
+    rewriter.updateRootInPlace(op, [&] { op.getEnableMutable().erase(0); });
+    return success();
+  }
+  return failure();
+}
+
+LogicalResult FirMemWriteOp::canonicalize(FirMemWriteOp op,
+                                          PatternRewriter &rewriter) {
+  // Remove the write port if it is trivially dead.
+  if (isConstZero(op.getEnable()) || isConstZero(op.getMask()) ||
+      isConst(op.getClock())) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+  bool anyChanges = false;
+
+  // Remove the enable if it is constant true.
+  if (auto enable = op.getEnable(); isConstAllOnes(enable)) {
+    rewriter.updateRootInPlace(op, [&] { op.getEnableMutable().erase(0); });
+    anyChanges = true;
+  }
+
+  // Remove the mask if it is all ones.
+  if (auto mask = op.getMask(); isConstAllOnes(mask)) {
+    rewriter.updateRootInPlace(op, [&] { op.getMaskMutable().erase(0); });
+    anyChanges = true;
+  }
+
+  return success(anyChanges);
+}
+
+LogicalResult FirMemReadWriteOp::canonicalize(FirMemReadWriteOp op,
+                                              PatternRewriter &rewriter) {
+  // Replace the read-write port with a read port if the write behavior is
+  // trivially disabled.
+  if (isConstZero(op.getEnable()) || isConstZero(op.getMask()) ||
+      isConst(op.getClock()) || isConstZero(op.getMode())) {
+    auto opAttrs = op->getAttrs();
+    auto opAttrNames = op.getAttributeNames();
+    auto newOp = rewriter.replaceOpWithNewOp<FirMemReadOp>(
+        op, op.getMemory(), op.getAddress(), op.getClock(), op.getEnable());
+    for (auto namedAttr : opAttrs)
+      if (!llvm::is_contained(opAttrNames, namedAttr.getName()))
+        newOp->setAttr(namedAttr.getName(), namedAttr.getValue());
+    return success();
+  }
+  bool anyChanges = false;
+
+  // Remove the enable if it is constant true.
+  if (auto enable = op.getEnable(); isConstAllOnes(enable)) {
+    rewriter.updateRootInPlace(op, [&] { op.getEnableMutable().erase(0); });
+    anyChanges = true;
+  }
+
+  // Remove the mask if it is all ones.
+  if (auto mask = op.getMask(); isConstAllOnes(mask)) {
+    rewriter.updateRootInPlace(op, [&] { op.getMaskMutable().erase(0); });
+    anyChanges = true;
+  }
+
+  return success(anyChanges);
 }
 
 //===----------------------------------------------------------------------===//

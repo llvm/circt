@@ -16,7 +16,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def ExplicitRegs : Pass<"pipeline-explicit-regs", "pipeline::PipelineOp"> {
+def ExplicitRegs : Pass<"pipeline-explicit-regs", "pipeline::ScheduledPipelineOp"> {
   let summary = "Makes stage registers explicit.";
   let description = [{
     Makes all stage-crossing def-use chains into explicit registers.
@@ -25,20 +25,13 @@ def ExplicitRegs : Pass<"pipeline-explicit-regs", "pipeline::PipelineOp"> {
   let constructor = "circt::pipeline::createExplicitRegsPass()";
 }
 
-def StageSeparatorToStage : Pass<"pipeline-stagesep-to-stage", "pipeline::PipelineOp"> {
-  let summary = "Lowers pipeline stage separations (`pipeline.stagesep`) into explicit stages.";
+def ScheduleLinearPipeline : InterfacePass<"pipeline-schedule-linear", "circt::hw::HWModuleLike"> {
+  let summary = "Schedules `pipeline.unscheduled` operations.";
   let description = [{
-    Lowers pipeline stage separations (`pipeline.stagesep`) into explicit stages.
-  }];
-  let dependentDialects = ["hw::HWDialect"];
-  let constructor = "circt::pipeline::createStageSeparatorToStagePass()";
-}
-
-
-def ScheduleLinearPipeline : Pass<"pipeline-schedule-linear", "pipeline::PipelineOp"> {
-  let summary = "Schedules a linear pipeline.";
-  let description = [{
-    Schedules a linear pipeline based on operator latencies.
+    Schedules `pipeline.unscheduled` operations based on operator latencies.
+    This pass runs with `HWModuleLike` granularity, since it is necessary to
+    erase the `pipeline.unscheduled` operation in favor of creating a
+    `pipeline.scheduled` operation.
   }];
   let dependentDialects = ["hw::HWDialect"];
   let constructor = "circt::pipeline::createScheduleLinearPipelinePass()";

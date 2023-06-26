@@ -307,7 +307,7 @@ class ModuleLikeBuilderBase(_PyProxy):
   def name(self):
     if hasattr(self.modcls, "module_name"):
       return self.modcls.module_name
-    elif self.parameters is not None:
+    elif self.parameters is not None and len(self.generators) > 0:
       return _create_module_name(self.modcls.__name__, self.parameters)
     else:
       return self.modcls.__name__
@@ -579,8 +579,7 @@ class modparams:
     if not issubclass(cls, Module):
       raise ValueError("Parameterization function must return Module class")
 
-    if len(cls._builder.generators) > 0:
-      cls._builder.parameters = cache_key[1]
+    cls._builder.parameters = cache_key[1]
     _MODULE_CACHE[cache_key] = cls
     return cls
 
