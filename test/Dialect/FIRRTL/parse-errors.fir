@@ -749,3 +749,16 @@ circuit UnsupportedStringEncodedIntegerLiterals:
     output foo: UInt<8>
     ; expected-error @below {{String-encoded integer literals are unsupported after FIRRTL 3.0.0}}
     connect foo, UInt("h2a")
+
+// -----
+
+circuit UnknownTypeAlias:
+  module UnknownTypeAlias:
+    output x : Foo ; expected-error {{type identifier `Foo` is not declared}}
+
+// -----
+
+circuit DuplicateAlias:
+  type Foo = UInt
+  type Foo = UInt; expected-error {{type alias `Foo` is already defined}}
+  module DuplicateAlias:
