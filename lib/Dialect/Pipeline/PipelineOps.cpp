@@ -275,7 +275,9 @@ LogicalResult ScheduledPipelineOp::verify() {
           if (extInputs.contains(operand)) {
             // This is an external input; legal to reference everywhere.
             continue;
-          } else if (auto *definingOp = operand.getDefiningOp()) {
+          }
+
+          if (auto *definingOp = operand.getDefiningOp()) {
             // Constants are allowed to be used across stages.
             if (definingOp->hasTrait<OpTrait::ConstantLike>())
               continue;
