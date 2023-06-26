@@ -88,7 +88,8 @@ struct ModulePortLookupInfo {
   }
 
 public:
-  explicit ModulePortLookupInfo(MLIRContext *ctx, ModulePortInfo portInfo)
+  explicit ModulePortLookupInfo(MLIRContext *ctx,
+                                const ModulePortInfo &portInfo)
       : ctx(ctx) {
     for (auto &in : portInfo.inputs)
       inputPortMap[in.name] = in.argNum;
