@@ -1925,8 +1925,6 @@ SmallVector<DictionaryAttr> SeqMemoryOp::portAttributes() {
   return portAttributes;
 }
 
-bool SeqMemoryOp::isCombinational() { return false; }
-
 void SeqMemoryOp::build(OpBuilder &builder, OperationState &state,
                         StringRef instanceName, int64_t width,
                         ArrayRef<int64_t> sizes, ArrayRef<int64_t> addrSizes) {

@@ -60,7 +60,7 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
     dimension in `$sizes`. The `$width` attribute dictates the width of a single
     element.
 
-    See https://capra.cs.cornell.edu/docs/calyx/libraries/core.html#memories for
+    See https://docs.calyxir.org/libraries/core.html#memories for
     more information.
 
     ```mlir
@@ -126,7 +126,7 @@ def SeqMemoryOp : CalyxPrimitive<"seq_mem", []> {
     dimension in `$sizes`. The `$width` attribute dictates the width of a single
     element.
 
-    See https://capra.cs.cornell.edu/docs/calyx/libraries/core.html#memories for
+    See https://docs.calyxir.org/libraries/core.html#memories for
     more information.
 
     ```mlir
@@ -181,6 +181,7 @@ def SeqMemoryOp : CalyxPrimitive<"seq_mem", []> {
     Value readData()  { return getResult(getNumDimensions() + 4); }
     Value readEn()  { return getResult(getNumDimensions() + 5); }
     Value readDone()      { return getResult(getNumDimensions() + 6); }
+    bool isCombinational() { return false; }
   }];
 }
 
