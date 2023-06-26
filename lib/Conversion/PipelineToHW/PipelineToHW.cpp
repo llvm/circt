@@ -49,11 +49,12 @@ public:
   };
 
   virtual LogicalResult lowerStage(Block *stage, ValueRange stageArguments,
-                                   Value stageValid, size_t stageIndex) = 0;
+                                   Value stageValid, Value stageStall,
+                                   size_t stageIndex) = 0;
 
-  StageReturns emitStageBody(Block *stage, size_t stageIndex = -1,
-                             Value clock = nullptr, Value reset = nullptr,
-                             Value valid = nullptr) {
+  StageReturns emitStageBody(Block *stage, Value valid, Value stall,
+                             size_t stageIndex = -1, Value clock = nullptr,
+                             Value reset = nullptr) {
     assert(valid && "valid not set");
     auto *terminator = stage->getTerminator();
 
@@ -93,6 +94,16 @@ public:
     // Build data registers.
     auto stageRegPrefix = getStageRegPrefix(stageIndex);
     BackedgeBuilder bb(builder, stageTerminator->getLoc());
+    auto loc = stageTerminator->getLoc();
+
+    // Build the clock enable signal: valid && !stall (if applicable)
+    Value dataValid = valid;
+    Value notStalled;
+    bool hasStall = static_cast<bool>(stall);
+    if (hasStall) {
+      notStalled = comb::createOrFoldNot(loc, stall, builder);
+      dataValid = builder.create<comb::AndOp>(loc, dataValid, notStalled);
+    }
 
     for (auto it : llvm::enumerate(stageTerminator.getRegisters())) {
       assert(clock && "clock not set");
@@ -106,13 +117,13 @@ public:
       if (this->clockGateRegs) {
         // Clock gate based on the valid signal.
         dataReg = builder.create<seq::CompRegClockEnabledOp>(
-            stageTerminator->getLoc(), dataType, regIn, clock, valid, regName,
-            reset, /*resetValue*/ Value(), /*sym_name*/ StringAttr());
+            stageTerminator->getLoc(), dataType, regIn, clock, dataValid,
+            regName, reset, /*resetValue*/ Value(), /*sym_name*/ StringAttr());
       } else {
         // Use input muxing.
         auto dataRegBE = bb.get(dataType);
         auto dataRegNext = builder.create<comb::MuxOp>(
-            stageTerminator->getLoc(), valid, regIn, dataRegBE);
+            stageTerminator->getLoc(), dataValid, regIn, dataRegBE);
         dataReg = builder.create<seq::CompRegOp>(
             stageTerminator->getLoc(), dataType, dataRegNext, clock, regName,
             reset,
@@ -122,15 +133,35 @@ public:
       rets.regs.push_back(dataReg);
     }
 
-    // Build valid register. The valid register is always reset to 0.
+    // Build valid register. The valid register is always reset to 0, and
+    // clock enabled when not stalling.
     auto validRegName =
         builder.getStringAttr(stageRegPrefix.strref() + "_valid");
-    rets.valid = builder.create<seq::CompRegOp>(
-        stageTerminator->getLoc(), builder.getI1Type(), valid, clock,
-        validRegName, reset, /*resetValue*/
+    Value validRegResetVal =
         builder.create<hw::ConstantOp>(terminator->getLoc(), APInt(1, 0, false))
-            .getResult(),
-        /*sym_name*/ StringAttr());
+            .getResult();
+    if (hasStall) {
+      if (clockGateRegs) {
+        rets.valid = builder.create<seq::CompRegClockEnabledOp>(
+            loc, builder.getI1Type(), valid, clock, notStalled, validRegName,
+            reset, validRegResetVal,
+            /*sym_name*/ StringAttr());
+      } else {
+        auto validRegBE = bb.get(builder.getI1Type());
+        auto validRegNext =
+            builder.create<comb::MuxOp>(loc, notStalled, valid, validRegBE);
+        rets.valid = builder.create<seq::CompRegOp>(
+            loc, builder.getI1Type(), validRegNext, clock, validRegName, reset,
+            validRegResetVal,
+            /*sym_name*/ StringAttr());
+        validRegBE.setValue(rets.valid);
+      }
+    } else {
+      rets.valid =
+          builder.create<seq::CompRegOp>(loc, builder.getI1Type(), valid, clock,
+                                         validRegName, reset, validRegResetVal,
+                                         /*sym_name*/ StringAttr());
+    }
 
     rets.passthroughs = stageTerminator.getPassthroughs();
     return rets;
@@ -188,7 +219,7 @@ public:
     // parent module.
     builder.setInsertionPoint(pipeline);
     if (failed(lowerStage(pipeline.getEntryStage(), pipeline.getInnerInputs(),
-                          pipeline.getGo(), 0)))
+                          pipeline.getGo(), pipeline.getStall(), 0)))
       return failure();
 
     return success();
@@ -196,7 +227,8 @@ public:
 
   /// NOLINTNEXTLINE(misc-no-recursion)
   LogicalResult lowerStage(Block *stage, ValueRange stageArguments,
-                           Value stageValid, size_t stageIndex) override {
+                           Value stageValid, Value stageStall,
+                           size_t stageIndex) override {
     OpBuilder::InsertionGuard guard(builder);
 
     if (stage != pipeline.getEntryStage()) {
@@ -211,8 +243,8 @@ public:
 
     // Move stage operations into the current module.
     builder.setInsertionPoint(pipeline);
-    StageReturns stageRets =
-        emitStageBody(stage, stageIndex, parentClk, parentRst, stageValid);
+    StageReturns stageRets = emitStageBody(stage, stageValid, stageStall,
+                                           stageIndex, parentClk, parentRst);
 
     if (auto nextStage = dyn_cast<StageOp>(stage->getTerminator())) {
       // Lower the next stage.
@@ -220,7 +252,7 @@ public:
       llvm::append_range(nextStageArgs, stageRets.regs);
       llvm::append_range(nextStageArgs, stageRets.passthroughs);
       return lowerStage(nextStage.getNextStage(), nextStageArgs,
-                        stageRets.valid, stageIndex + 1);
+                        stageRets.valid, stageStall, stageIndex + 1);
     }
 
     // Replace the pipeline results with the return op operands.
@@ -246,14 +278,16 @@ public:
   // Helper class to manage grabbing the various inputs for stage modules.
   struct PipelineStageMod {
     PipelineStageMod(PipelineOutlineLowering &parent, Block *block,
-                     hw::HWModuleOp mod) {
+                     hw::HWModuleOp mod, bool withStall) {
       size_t nStageInputArgs = parent.pipeline.getNumStageArguments(block);
       inputs = mod.getArguments().take_front(nStageInputArgs);
       llvm::SmallVector<Value> stageExtInputs;
       parent.getStageExtInputs(block, stageExtInputs);
       extInputs =
           mod.getArguments().slice(nStageInputArgs, stageExtInputs.size());
-      valid = mod.getArgument(mod.getNumArguments() - 3);
+      valid = mod.getArgument(mod.getNumArguments() - (withStall ? 4 : 3));
+      if (withStall)
+        stall = mod.getArgument(mod.getNumArguments() - 3);
       clock = mod.getArgument(mod.getNumArguments() - 2);
       reset = mod.getArgument(mod.getNumArguments() - 1);
     }
@@ -261,6 +295,7 @@ public:
     ValueRange inputs;
     ValueRange extInputs;
     Value valid;
+    Value stall;
     Value clock;
     Value reset;
   };
@@ -282,9 +317,11 @@ public:
     cloneConstantsToStages();
 
     // Build the top-level pipeline module.
-    pipelineMod = buildPipelineLike(
-        pipelineName, pipeline.getInputs().getTypes(),
-        pipeline.getExtInputs().getTypes(), pipeline.getResults().getTypes());
+    bool withStall = static_cast<bool>(pipeline.getStall());
+    pipelineMod =
+        buildPipelineLike(pipelineName, pipeline.getInputs().getTypes(),
+                          pipeline.getExtInputs().getTypes(),
+                          pipeline.getResults().getTypes(), withStall);
     pipelineClk = pipelineMod.getBody().front().getArgument(
         pipelineMod.getBody().front().getNumArguments() - 2);
     pipelineRst = pipelineMod.getBody().front().getArgument(
@@ -308,9 +345,11 @@ public:
     llvm::SmallVector<Value, 4> pipelineOperands;
     llvm::append_range(pipelineOperands, pipeline.getInputs());
     llvm::append_range(pipelineOperands, pipeline.getExtInputs());
-    llvm::append_range(
-        pipelineOperands,
-        ValueRange{pipeline.getGo(), pipeline.getClock(), pipeline.getReset()});
+    pipelineOperands.push_back(pipeline.getGo());
+    if (auto stall = pipeline.getStall())
+      pipelineOperands.push_back(stall);
+    llvm::append_range(pipelineOperands,
+                       ValueRange{pipeline.getClock(), pipeline.getReset()});
 
     auto pipelineInst = builder.create<hw::InstanceOp>(
         pipeline.getLoc(), pipelineMod,
@@ -329,10 +368,10 @@ public:
     builder.setInsertionPointToStart(pipelineMod.getBodyBlock());
 
     PipelineStageMod pipelineStageMod(*this, pipeline.getEntryStage(),
-                                      pipelineMod);
+                                      pipelineMod, withStall);
 
     if (failed(lowerStage(pipeline.getEntryStage(), pipelineStageMod.inputs,
-                          pipelineStageMod.valid, 0)))
+                          pipelineStageMod.valid, pipelineStageMod.stall, 0)))
       return failure();
 
     pipeline.erase();
@@ -341,17 +380,19 @@ public:
 
   /// NOLINTNEXTLINE(misc-no-recursion)
   LogicalResult lowerStage(Block *stage, ValueRange stageArguments,
-                           Value stageValid, size_t stageIndex) override {
+                           Value stageValid, Value stageStall,
+                           size_t stageIndex) override {
     Block *nextStage = nullptr;
-    Value modClock, modReset, modValid;
+    Value modClock, modReset, modValid, modStall;
     hw::OutputOp stageOutputOp;
     ValueRange nextStageArgs;
     Value nextStageValid;
+    bool withStall = static_cast<bool>(stageStall);
 
     if (auto stageOp = dyn_cast<StageOp>(stage->getTerminator())) {
       auto [mod, inst] =
-          buildStage(stage, stageArguments, stageValid, stageIndex);
-      auto pipelineStageMod = PipelineStageMod{*this, stage, mod};
+          buildStage(stage, stageArguments, stageValid, stageStall, stageIndex);
+      auto pipelineStageMod = PipelineStageMod{*this, stage, mod, withStall};
 
       // Remap the internal inputs of the stage to the module block arguments.
       for (auto [vInput, vBarg] : llvm::zip(pipeline.getStageArguments(stage),
@@ -377,6 +418,7 @@ public:
       modClock = pipelineStageMod.clock;
       modReset = pipelineStageMod.reset;
       modValid = pipelineStageMod.valid;
+      modStall = pipelineStageMod.stall;
       stageOutputOp = cast<hw::OutputOp>(mod.getBody().front().getTerminator());
       nextStage = stageOp.getNextStage();
       nextStageArgs = inst.getResults().drop_back();
@@ -403,10 +445,11 @@ public:
       // Move lingering operations into the top-level pipeline module.
       builder.setInsertionPoint(stageOutputOp);
       modValid = stageValid;
+      modStall = stageStall;
     }
 
-    StageReturns stageRets =
-        emitStageBody(stage, stageIndex, modClock, modReset, modValid);
+    StageReturns stageRets = emitStageBody(stage, modValid, modStall,
+                                           stageIndex, modClock, modReset);
 
     // Assign the output operation to the stage return values.
     stageOutputOp->insertOperands(0, stageRets.regs);
@@ -417,7 +460,7 @@ public:
 
     // Lower the next stage.
     if (nextStage)
-      return lowerStage(nextStage, nextStageArgs, nextStageValid,
+      return lowerStage(nextStage, nextStageArgs, nextStageValid, stageStall,
                         stageIndex + 1);
 
     return success();
@@ -457,8 +500,13 @@ private:
     }
   }
 
+  // Builds a pipeline-like module (top level pipeline and pipeline stages).
+  // The module signature is:
+  // ($ins, $extIns, enable, (stall)? : i1, clk : i1, reset : i1)
+  //    -> ($outs, valid : i1)
   hw::HWModuleOp buildPipelineLike(Twine name, TypeRange inputs,
-                                   TypeRange extInputs, TypeRange outputs) {
+                                   TypeRange extInputs, TypeRange outputs,
+                                   bool withStall) {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPoint(parentModule);
     llvm::SmallVector<hw::PortInfo> ports;
@@ -479,6 +527,13 @@ private:
     ports.push_back(hw::PortInfo{builder.getStringAttr("enable"),
                                  hw::PortDirection::INPUT,
                                  builder.getI1Type()});
+
+    if (withStall) {
+      // Stall input
+      ports.push_back(hw::PortInfo{builder.getStringAttr("stall"),
+                                   hw::PortDirection::INPUT,
+                                   builder.getI1Type()});
+    }
 
     // clock and reset
     ports.push_back(hw::PortInfo{builder.getStringAttr("clk"),
@@ -504,7 +559,7 @@ private:
 
   std::tuple<hw::HWModuleOp, hw::InstanceOp>
   buildStage(Block *stage, ValueRange stageArguments, Value stageValid,
-             size_t stageIndex) {
+             Value stageStall, size_t stageIndex) {
     builder.setInsertionPoint(parentModule);
     auto name = pipelineName + "_s" + std::to_string(stageIndex);
 
@@ -518,9 +573,10 @@ private:
 
     llvm::SmallVector<Value> stageExtInputs;
     getStageExtInputs(stage, stageExtInputs);
-    hw::HWModuleOp mod =
-        buildPipelineLike(name, pipeline.getStageArguments(stage).getTypes(),
-                          ValueRange(stageExtInputs).getTypes(), outputTypes);
+    bool hasStall = static_cast<bool>(stageStall);
+    hw::HWModuleOp mod = buildPipelineLike(
+        name, pipeline.getStageArguments(stage).getTypes(),
+        ValueRange(stageExtInputs).getTypes(), outputTypes, hasStall);
 
     // instantiate...
     OpBuilder::InsertionGuard guard(builder);
@@ -534,6 +590,8 @@ private:
       stageOperands.push_back(toplevelExtInputs[extInput]);
 
     stageOperands.push_back(stageValid);
+    if (hasStall)
+      stageOperands.push_back(stageStall);
     stageOperands.push_back(pipelineClk);
     stageOperands.push_back(pipelineRst);
     auto inst = builder.create<hw::InstanceOp>(pipeline.getLoc(), mod,
