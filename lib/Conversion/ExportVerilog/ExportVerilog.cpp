@@ -260,7 +260,8 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
   if (isa<ReadInOutOp, AggregateConstantOp, ArrayIndexInOutOp,
           IndexedPartSelectInOutOp, StructFieldInOutOp, IndexedPartSelectOp,
-          ParamValueOp, XMROp, XMRRefOp, SampledOp, EnumConstantOp,
+          ParamValueOp, XMROp, XMRRefOp, SampledOp, EnumConstantOp, UnpackedArrayOrOp,
+UnpackedArrayAndOp,UnpackedArrayXOrOp,
           SystemFunctionOp>(op))
     return true;
 
@@ -1953,6 +1954,9 @@ private:
   SubExprInfo visitSV(SystemFunctionOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
   SubExprInfo visitSV(XMROp op);
+  SubExprInfo visitSV(UnpackedArrayOrOp op);
+  SubExprInfo visitSV(UnpackedArrayXOrOp op);
+  SubExprInfo visitSV(UnpackedArrayAndOp op);
   SubExprInfo visitSV(XMRRefOp op);
   SubExprInfo visitVerbatimExprOp(Operation *op, ArrayAttr symbols);
   SubExprInfo visitSV(VerbatimExprOp op) {
@@ -2422,6 +2426,29 @@ SubExprInfo ExprEmitter::visitSV(XMROp op) {
   for (auto s : op.getPath())
     ps << PPExtString(s.cast<StringAttr>().getValue()) << ".";
   ps << PPExtString(op.getTerminal());
+  return {Selection, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitSV(UnpackedArrayOrOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+emitSubExpr(op.getInput(), Selection);
+  ps << ".or()";
+  return {Selection, IsUnsigned};
+}
+SubExprInfo ExprEmitter::visitSV(UnpackedArrayAndOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+emitSubExpr(op.getInput(), Selection);
+  ps << ".and()";
+  return {Selection, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitSV(UnpackedArrayXOrOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+emitSubExpr(op.getInput(), Selection);
+  ps << ".xor()";
   return {Selection, IsUnsigned};
 }
 

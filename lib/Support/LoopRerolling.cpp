@@ -2,6 +2,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 using namespace circt;
 using namespace mlir;
@@ -17,28 +18,28 @@ static bool isSimpleExpression(Value v) {
   // Ports or iteration values are ok.
   if (!op)
     return true;
-  if (isa<comb::ExtractOp>(op) && isSimpleExpression(op->getOperand(0)))
+  if (isa<comb::ExtractOp, hw::BitcastOp>(op) && isSimpleExpression(op->getOperand(0)))
     return true;
+  // if (isa<hw::ArrayGetOp>(op) && isSimpleExpression(op->getOperand(0)) &&
+  //     isSimpleExpression(op->getOperand(1)))
+  //   return true;
   // Constants, output ports are ok.
-  return isa<hw::ConstantOp, hw::InstanceOp>(op);
+  return isa<hw::ConstantOp, seq::FirRegOp, hw::InstanceOp>(op);
 }
 
 LogicalResult circt::LoopReroller::unifyTwoValues(Value value, Value next) {
   sandbox = builder.create<sv::IfDefProceduralOp>(
       "HACK", [&]() { templateValue = unifyTwoValuesImpl(value, next); });
-  if (!templateValue) {
-    sandbox.erase();
+  if (!templateValue)
     return failure();
-  }
   return success();
 }
 
 Value circt::LoopReroller::unifyTwoValuesImpl(Value value, Value next) {
-  if (value == next)
-    return value;
-  if (upperLimitTermSize == 0 || value.getType() != next.getType())
+
+  if (upperLimitTermSize == termSize || value.getType() != next.getType())
     return {};
-  --upperLimitTermSize;
+  termSize++;
   auto valueOp = value.getDefiningOp();
   auto nextOp = next.getDefiningOp();
 
@@ -52,6 +53,9 @@ Value circt::LoopReroller::unifyTwoValuesImpl(Value value, Value next) {
     dummyValues[v] = SmallVector<Value>{value, next};
     return v;
   }
+
+  if (value == next)
+    return value;
 
   // Make sure that we have the same structure. Attributes are checked
   // afterwards. Also allow only comb and hw operations for correctness.
@@ -102,6 +106,8 @@ LogicalResult circt::LoopReroller::unifyIntoTemplateImpl(Value templateValue,
                                                          Value value) {
   if (templateValue == value)
     return success();
+  if (templateValue.getType() != value.getType())
+    return failure();
 
   // Base Case.
   if (dummyValues.count(templateValue)) {

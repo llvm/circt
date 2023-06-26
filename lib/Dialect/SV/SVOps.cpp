@@ -1134,8 +1134,8 @@ LogicalResult ForOp::canonicalize(ForOp op, PatternRewriter &rewriter) {
     }
     if (lb == 0 && step == 1) {
       auto replaceUser = [&](hw::ArrayGetOp arrayGet, Value ind) {
-        if (arrayGet.getType() != ind.getType())
-          return false;
+        if (!arrayGet.getType().isa<mlir::IntegerType>())
+           return false;
 
         auto array =
             arrayGet.getInput().getDefiningOp<hw::AggregateConstantOp>();
@@ -1150,11 +1150,22 @@ LogicalResult ForOp::canonicalize(ForOp op, PatternRewriter &rewriter) {
             return false;
           }
         }
+
+        rewriter.setInsertionPoint(arrayGet);
+         if (arrayGet.getType() != ind.getType())
+         {
+            if(arrayGet.getType().getIntOrFloatBitWidth() <
+            ind.getType().getIntOrFloatBitWidth())
+            return false;
+            Value a[] = {rewriter.create<hw::ConstantOp>(arrayGet.getLoc(), APInt::getZero(arrayGet.getType().getIntOrFloatBitWidth() -
+            ind.getType().getIntOrFloatBitWidth())), ind};
+            ind = rewriter.create<comb::ConcatOp>(arrayGet.getLoc(), a);
+            assert(arrayGet.getType() == ind.getType());
+         }
         auto foo = rewriter.create<hw::ConstantOp>(
             op.getLoc(), arrayAttr.back().cast<IntegerAttr>().getValue());
-        assert(foo);
+
         SmallVector<Value> ops{ind, foo};
-        rewriter.setInsertionPoint(arrayGet);
         // Value val = rewriter.create<comb::AddOp>(arrayGet.getLoc(), ops,
         // true); arrayGet.replaceAllUsesWith(val);
         rewriter.replaceOpWithNewOp<comb::AddOp>(arrayGet, ops, true);
@@ -1165,17 +1176,19 @@ LogicalResult ForOp::canonicalize(ForOp op, PatternRewriter &rewriter) {
            llvm::make_early_inc_range(op.getInductionVar().getUsers())) {
         if (auto arrayGet = dyn_cast<hw::ArrayGetOp>(user))
           if (replaceUser(arrayGet, op.getInductionVar())) {
-            continue;
             changed = true;
+            continue;
           }
         if (auto extract = dyn_cast<comb::ExtractOp>(user)) {
           if (extract.getLowBit() != 0)
             continue;
           for (auto user2 :
-               llvm::make_early_inc_range(extract.getInput().getUsers())) {
+               llvm::make_early_inc_range(extract->getUsers())) {
             if (auto arrayGet = dyn_cast<hw::ArrayGetOp>(user2))
-              if (replaceUser(arrayGet, extract))
+              if (replaceUser(arrayGet, extract)){
                 changed = true;
+                continue;
+              }
           }
         }
       }

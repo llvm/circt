@@ -3,7 +3,6 @@
 #include "llvm/ADT/SmallVector.h"
 #include "mlir/IR/Value.h"
 #include "circt/Dialect/SV/SVOps.h"
-// TODO: Make this iterative.
 namespace circt {
 struct LoopReroller {
   LoopReroller(ImplicitLocOpBuilder &builder,
@@ -13,12 +12,30 @@ struct LoopReroller {
   LogicalResult unifyTwoValues(Value value, Value next);
   LogicalResult unifyIntoTemplateImpl(Value value, Value next);
   LogicalResult unifyIntoTemplate(Value value);
+  auto& getOperations() {
+    return sandbox.getThenBlock()->getOperations();
+  }
+  Value getTemplateValue() {
+    return templateValue;
+  }
+  ~LoopReroller(){
+    if(sandbox){
+    sandbox.erase();
+    }
+  }
+  auto& getDummyValues() {
+    return dummyValues;
+  }
+  unsigned getTermSize() const {
+    return termSize;
+  }
 
 private:
+  ImplicitLocOpBuilder &builder;
   unsigned upperLimitTermSize;
+  unsigned termSize = 0;
   llvm::MapVector<Value, SmallVector<Value, 4>> dummyValues;
   mlir::Value templateValue;
-  ImplicitLocOpBuilder &builder;
   sv::IfDefProceduralOp sandbox;
 };
 

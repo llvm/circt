@@ -35,6 +35,14 @@ def HWCleanup : Pass<"hw-cleanup", "hw::HWModuleOp"> {
 def HWLoopRerolling : Pass<"hw-loop-rerolling", "hw::HWModuleOp"> {
   let summary = "Create for-loop";
   let constructor = "circt::sv::createHWLoopRerollingPass()";
+
+  let statistics = [
+    Statistic<"numAndOpsRerolled", "num-and-ops-rerolled", "Number of ops extracted">,
+    Statistic<"numOrOpsRerolled", "num-or-ops-rerolled", "Number of ops erased">,
+    Statistic<"numXorOpsRerolled", "num-xor-ops-rerolled", "Number of ops erased">,
+    Statistic<"numConcatOpsRerolled", "num-concat-ops-rerolled", "Number of ops erased">
+  ];
+
 }
 
 def HWLegalizeModules : Pass<"hw-legalize-modules", "hw::HWModuleOp"> {
