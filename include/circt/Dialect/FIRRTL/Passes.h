@@ -71,7 +71,6 @@ std::unique_ptr<mlir::Pass> createInferReadWritePass();
 
 std::unique_ptr<mlir::Pass>
 createCreateSiFiveMetadataPass(bool replSeqMem = false,
-                               mlir::StringRef replSeqMemCircuit = "",
                                mlir::StringRef replSeqMemFile = "");
 
 std::unique_ptr<mlir::Pass> createWireDFTPass();

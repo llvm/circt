@@ -119,8 +119,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
 
-  pm.addPass(firrtl::createCreateSiFiveMetadataPass(
-      opt.replSeqMem, opt.replSeqMemCircuit, opt.replSeqMemFile));
+  pm.addPass(firrtl::createCreateSiFiveMetadataPass(opt.replSeqMem,
+                                                    opt.replSeqMemFile));
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
 
