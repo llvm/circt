@@ -181,7 +181,7 @@ def SeqMemoryOp : CalyxPrimitive<"seq_mem", []> {
     Value readData()  { return getResult(getNumDimensions() + 4); }
     Value readEn()  { return getResult(getNumDimensions() + 5); }
     Value readDone()      { return getResult(getNumDimensions() + 6); }
-    bool SeqMemoryOp::isCombinational() { return false; }
+    bool isCombinational() { return false; }
   }];
 }
 
