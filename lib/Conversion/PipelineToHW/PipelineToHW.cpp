@@ -97,12 +97,20 @@ public:
     auto loc = stageTerminator->getLoc();
 
     // Build the clock enable signal: valid && !stall (if applicable)
-    Value dataValid = valid;
+    Value stageValidAndNotStalled = valid;
     Value notStalled;
     bool hasStall = static_cast<bool>(stall);
     if (hasStall) {
       notStalled = comb::createOrFoldNot(loc, stall, builder);
-      dataValid = builder.create<comb::AndOp>(loc, dataValid, notStalled);
+      stageValidAndNotStalled =
+          builder.create<comb::AndOp>(loc, stageValidAndNotStalled, notStalled);
+    }
+
+    Value notStalledClockGate;
+    if (this->clockGateRegs) {
+      // Create the top-level clock gate.
+      notStalledClockGate = builder.create<seq::ClockGateOp>(
+          loc, clock, stageValidAndNotStalled, /*test_enable=*/Value());
     }
 
     for (auto it : llvm::enumerate(stageTerminator.getRegisters())) {
@@ -115,15 +123,32 @@ public:
       Type dataType = regIn.getType();
       Value dataReg;
       if (this->clockGateRegs) {
-        // Clock gate based on the valid signal.
-        dataReg = builder.create<seq::CompRegClockEnabledOp>(
-            stageTerminator->getLoc(), dataType, regIn, clock, dataValid,
-            regName, reset, /*resetValue*/ Value(), /*sym_name*/ StringAttr());
+        // Use the clock gate instead of input muxing.
+        Value currClockGate = notStalledClockGate;
+        for (auto hierClockGateEnable :
+             stageTerminator.getClockGatesForReg(regIdx)) {
+          // Create clock gates for any hierarchically nested clock gates.
+          currClockGate = builder.create<seq::ClockGateOp>(
+              loc, currClockGate, hierClockGateEnable, /*test_enable=*/Value());
+        }
+        dataReg = builder.create<seq::CompRegOp>(
+            stageTerminator->getLoc(), dataType, regIn, currClockGate, regName,
+            reset, /*resetValue*/ Value(), /*sym_name*/ StringAttr());
       } else {
-        // Use input muxing.
+        // Use input muxing. The select signal is &&'ed with any clock gates
+        // that may be present.
         auto dataRegBE = bb.get(dataType);
-        auto dataRegNext = builder.create<comb::MuxOp>(
-            stageTerminator->getLoc(), dataValid, regIn, dataRegBE);
+        Value imuxSelect = stageValidAndNotStalled;
+        if (auto clockGates = stageTerminator.getClockGatesForReg(regIdx);
+            !clockGates.empty()) {
+          imuxSelect = builder.create<comb::AndOp>(
+              loc, imuxSelect,
+              builder.create<comb::AndOp>(loc, builder.getI1Type(),
+                                          clockGates));
+        }
+
+        Value dataRegNext = builder.create<comb::MuxOp>(
+            stageTerminator->getLoc(), imuxSelect, regIn, dataRegBE);
         dataReg = builder.create<seq::CompRegOp>(
             stageTerminator->getLoc(), dataType, dataRegNext, clock, regName,
             reset,

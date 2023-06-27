@@ -218,3 +218,18 @@ hw.module @missing_valid_entry3(%arg : i32, %go : i1, %clk : i1, %rst : i1) -> (
   }
   hw.output
 }
+
+// -----
+
+hw.module @invalid_clock_gate(%arg : i32, %go : i1, %clk : i1, %rst : i1) -> () {
+  %done = pipeline.scheduled(%arg) clock %clk reset %rst go %go : (i32) -> () {
+   ^bb0(%a0 : i32, %s0_valid : i1):
+     // expected-note@+1 {{prior use here}}
+     %c0_i2 = hw.constant 0 : i2
+     // expected-error @+1 {{use of value '%c0_i2' expects different type than prior uses: 'i1' vs 'i2'}}
+     pipeline.stage ^bb1 regs(%a0 : i32 gated by [%c0_i2])
+   ^bb1(%0 : i32, %s1_valid : i1):
+      pipeline.return
+  }
+  hw.output
+}
