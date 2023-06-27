@@ -762,3 +762,18 @@ circuit DuplicateAlias:
   type Foo = UInt
   type Foo = UInt; expected-error {{type alias `Foo` is already defined}}
   module DuplicateAlias:
+
+;// -----
+; https://github.com/llvm/circt/issues/5494
+
+circuit BundleOfProps:
+  module BundleOfProps:
+    input x : {a : String}
+    ; expected-error @above {{bundle elements must support fieldID's, unsupported element type: '!firrtl.string'}}
+
+;// -----
+
+circuit VecOfProps:
+  module VecOfProps:
+    input x : String[2]
+    ; expected-error @above {{vector elements must support fieldID's, unsupported element type: '!firrtl.string'}}
