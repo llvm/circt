@@ -19,7 +19,7 @@ extern "C" {
 
 // NOLINTNEXTLINE(modernize-use-using)
 typedef struct FIRRTLBundleField {
-  MlirAttribute name;
+  MlirIdentifier name;
   bool isFlip;
   MlirType type;
 } FIRRTLBundleField;
@@ -102,7 +102,7 @@ MLIR_CAPI_EXPORTED MlirAttribute firrtlAttrGetRUW(MlirContext ctx,
                                                   FIRRTLRUW ruw);
 
 MLIR_CAPI_EXPORTED MlirAttribute firrtlAttrGetMemInit(MlirContext ctx,
-                                                      MlirStringRef filename,
+                                                      MlirIdentifier filename,
                                                       bool isBinary,
                                                       bool isInline);
 
