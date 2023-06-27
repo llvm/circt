@@ -1261,6 +1261,16 @@ firrtl.circuit "PropertyDoubleDrive" {
   }
 }
 
+// -----
+// Check that you can't connect property types.
+
+firrtl.circuit "PropertyConnect" {
+  firrtl.module @PropertyConnect(out %out: !firrtl.string) {
+    %0 = firrtl.string "hello"
+    // expected-error @below {{must be a passive base type}}
+    firrtl.strictconnect %out, %0 : !firrtl.string
+  }
+}
 
 // -----
 // Issue 4174-- handle duplicate module names.
