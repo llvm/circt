@@ -36,8 +36,8 @@ circuit Foo : %[[
     input writeAddr : UInt<3>
     input writeData : UInt<32>
 
-    ; REPL-FIR:     firrtl.instance mem @prefix1_mem
-    ; REPL-HW:      hw.instance "mem" @prefix1_mem
+    ; REPL-FIR:     firrtl.instance mem sym @mem @prefix1_mem
+    ; REPL-HW:      hw.instance "mem" sym @mem @prefix1_mem
     ; SIM-FIR:      firrtl.mem
     ; SIM-FIR-SAME:   name = "mem"
     ; SIM-FIR-SAME:   prefix = "prefix1_"
@@ -79,8 +79,8 @@ circuit Foo : %[[
     input writeAddr : UInt<3>
     input writeData : UInt<32>
 
-    ; REPL-FIR:     firrtl.instance mem @prefix2_mem
-    ; REPL-HW:      hw.instance "mem" @prefix2_mem
+    ; REPL-FIR:     firrtl.instance mem sym @mem @prefix2_mem
+    ; REPL-HW:      hw.instance "mem" sym @mem @prefix2_mem
     ; SIM-FIR:      firrtl.mem
     ; SIM-FIR-SAME:   name = "mem"
     ; SIM-FIR-SAME:   prefix = "prefix2_"
