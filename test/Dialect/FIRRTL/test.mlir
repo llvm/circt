@@ -274,6 +274,12 @@ firrtl.module @MapTest(in %in: !firrtl.map<bigint, string>, out %out: !firrtl.ma
   firrtl.propassign %out, %in : !firrtl.map<bigint, string>
 }
 
+// CHECK-LABEL: PropertyNestedTest
+// CHECK-SAME:  (in %in: !firrtl.map<bigint, list<map<string, bigint>>>, out %out: !firrtl.map<bigint, list<map<string, bigint>>>)
+firrtl.module @PropertyNestedTest(in %in: !firrtl.map<bigint, list<map<string, bigint>>>, out %out: !firrtl.map<bigint, list<map<string, bigint>>>) {
+  firrtl.propassign %out, %in : !firrtl.map<bigint, list<map<string, bigint>>>
+}
+
 // CHECK-LABEL: TypeAlias
 // CHECK-SAME: %in: !firrtl.alias<bar, uint<1>>
 // CHECK-SAME: %const: !firrtl.const.alias<baz, const.uint<1>>
