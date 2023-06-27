@@ -674,7 +674,7 @@ let hasCanonicalizer = true in
 def NotPrimOp : UnaryPrimOp<"not", IntType, UIntType>;
 
 let inferType = "impl::inferReductionResult" in {
-  let hasCanonicalizer =1 in {
+  let hasCanonicalizer = 1 in {
     def AndRPrimOp : UnaryPrimOp<"andr", IntType, UInt1Type> {
       let description = [{
         Horizontally reduce a value to one bit, using the 'and' operation to merge
