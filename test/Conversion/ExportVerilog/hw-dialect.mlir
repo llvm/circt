@@ -68,7 +68,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %arrCreated = hw.array_create %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone { sv.namehint="name_hint" } : i4
   %slice1 = hw.array_slice %arrCreated[%a] : (!hw.array<9xi4>) -> !hw.array<3xi4>
   %slice2 = hw.array_slice %arrCreated[%b] : (!hw.array<9xi4>) -> !hw.array<3xi4>
-  %35 = comb.mux %cond, %slice1, %slice2 : !hw.array<3xi4>
+  %35 = comb.mux %cond, %slice1, %slice2 {sv.attributes = [#sv.attribute<"svAttr">]} : !hw.array<3xi4>
 
   %ab = comb.add %a, %b : i4
   %subArr = hw.array_create %allone, %ab, %allone : i4
@@ -194,7 +194,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:      assign r31 = {{[{}][{}]}}5{a[3]}}, a};
 // CHECK-NEXT:      assign r33 = cond ? a : b;
 // CHECK-NEXT:      assign r34 = ~a;
-// CHECK-NEXT:      assign r35 = cond ? name_hint[a +: 3] : name_hint[b +: 3];
+// CHECK-NEXT:      assign r35 = cond ? (* svAttr *) name_hint[a +: 3] : name_hint[b +: 3];
 // CHECK-NEXT:      assign r36 = {[[WIRE0]], [[WIRE0]]};
 // CHECK-NEXT:      assign r37 = array2d[a][b] (* svAttr *);
 // CHECK-NEXT:      assign r38 = {3{a}};
