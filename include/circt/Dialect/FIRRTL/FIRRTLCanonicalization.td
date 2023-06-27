@@ -45,13 +45,13 @@ def NullAttr : Constraint<CPred<"!$0">>;
 def EqualTypes : Constraint<CPred<"$0.getType() == $1.getType()">>;
 
 // Constraint that enforces int types
-def IntTypes : Constraint<CPred<"isa<IntType>($0)">>;
+def IntTypes : Constraint<CPred<"isa<IntType>($0.getType())">>;
 
 // Constraint that enforces sint types
-def SIntTypes : Constraint<CPred<"isa<SIntType>($0)">>;
+def SIntTypes : Constraint<CPred<"isa<SIntType>($0.getType())">>;
 
 // Constraint that enforces uint types
-def UIntTypes : Constraint<CPred<"isa<UIntType>($0)">>;
+def UIntTypes : Constraint<CPred<"isa<UIntType>($0.getType())">>;
 
 // Constraint that enforces types mismatches
 def mismatchTypes : Constraint<CPred<"$0.getType() != $1.getType()">>;
@@ -325,6 +325,43 @@ def XorOfPad : Pat <
   (MoveNameHint $old, (CatPrimOp (HeadPrimOp $x, (TypeWidthAdjust32 $x, $y)),
                                  (XorPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y))),
   [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
+
+/// orr(asSInt(x)) -> orr(x)
+def OrRasSInt : Pat <
+  (OrRPrimOp:$old (AsSIntPrimOp $x)),
+  (MoveNameHint $old, (OrRPrimOp $x)),
+  [(KnownWidth $x), (IntTypes $x)]>;
+
+/// orr(asUInt(x)) -> orr(x)
+def OrRasUInt : Pat <
+  (OrRPrimOp:$old (AsUIntPrimOp $x)),
+  (MoveNameHint $old, (OrRPrimOp $x)),
+  [(KnownWidth $x), (IntTypes $x)]>;
+
+/// xorr(asSInt(x)) -> xorr(x)
+def XorRasSInt : Pat <
+  (XorRPrimOp:$old (AsSIntPrimOp $x)),
+  (MoveNameHint $old, (XorRPrimOp $x)),
+  [(KnownWidth $x), (IntTypes $x)]>;
+
+/// xorr(asUInt(x)) -> xorr(x)
+def XorRasUInt : Pat <
+  (XorRPrimOp:$old (AsUIntPrimOp $x)),
+  (MoveNameHint $old, (XorRPrimOp $x)),
+  [(KnownWidth $x), (IntTypes $x)]>;
+
+/// andr(asSInt(x)) -> andr(x)
+def AndRasSInt : Pat <
+  (AndRPrimOp:$old (AsSIntPrimOp $x)),
+  (MoveNameHint $old, (AndRPrimOp $x)),
+  [(KnownWidth $x), (IntTypes $x)]>;
+
+/// andr(asUInt(x)) -> andr(x)
+def AndRasUInt : Pat <
+  (AndRPrimOp:$old (AsUIntPrimOp $x)),
+  (MoveNameHint $old, (AndRPrimOp $x)),
+  [(KnownWidth $x), (IntTypes $x)]>;
+
 
 // bits(bits(x, ...), ...) -> bits(x, ...)
 def BitsOfBits : Pat<
