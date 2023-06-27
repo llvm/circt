@@ -24,6 +24,8 @@
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/OM/OMOps.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Location.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -358,7 +360,8 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
   });
 
   auto *context = &getContext();
-  auto builder = OpBuilder::atBlockEnd(circuitOp.getBodyBlock());
+  auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
+                                                  circuitOp.getBodyBlock());
   AnnotationSet annos(circuitOp);
   auto dirAnno = annos.getAnnotation(metadataDirectoryAttrName);
   StringRef metadataDir = "metadata";
@@ -368,15 +371,13 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
 
   // Use unknown loc to avoid printing the location in the metadata files.
   auto dutVerbatimOp = builder.create<sv::VerbatimOp>(
-      builder.getUnknownLoc(), dutJsonBuffer, ValueRange(),
-      builder.getArrayAttr(jsonSymbols));
+      dutJsonBuffer, ValueRange(), builder.getArrayAttr(jsonSymbols));
   auto fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
       context, metadataDir, "seq_mems.json", /*excludeFromFilelist=*/true);
   dutVerbatimOp->setAttr("output_file", fileAttr);
 
   auto confVerbatimOp = builder.create<sv::VerbatimOp>(
-      builder.getUnknownLoc(), seqMemConfStr, ValueRange(),
-      builder.getArrayAttr(seqMemSymbols));
+      seqMemConfStr, ValueRange(), builder.getArrayAttr(seqMemSymbols));
   if (replSeqMemFile.empty()) {
     emitError(circuitOp->getLoc())
         << "metadata emission failed, the option "
