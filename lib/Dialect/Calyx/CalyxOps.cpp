@@ -908,10 +908,8 @@ void SeqOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 LogicalResult StaticSeqOp::verify() {
   // StaticSeqOp should only have static control in it
   auto &ops = (*this).getBodyBlock()->getOperations();
-  for (Operation &op : ops) {
-    if (!isStaticControl(&op)) {
-      return op.emitOpError("StaticSeqOp has non static control within it");
-    }
+  if (!llvm::all_of(ops, [&](Operation &op) { return isStaticControl(&op); })) {
+    return emitOpError("StaticSeqOp has non static control within it");
   }
 
   return success();
