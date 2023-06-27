@@ -113,6 +113,18 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
       })
       .Case<StringType>([&](auto stringType) { os << "string"; })
       .Case<BigIntType>([&](auto bigIntType) { os << "bigint"; })
+      .Case<ListType>([&](auto listType) {
+        os << "list<";
+        printNestedType(listType.getElementType(), os);
+        os << '>';
+      })
+      .Case<MapType>([&](auto mapType) {
+        os << "map<";
+        printNestedType(mapType.getKeyType(), os);
+        os << ", ";
+        printNestedType(mapType.getValueType(), os);
+        os << '>';
+      })
       .Case<BaseTypeAliasType>([&](BaseTypeAliasType alias) {
         os << "alias<" << alias.getName().getValue() << ", ";
         printNestedType(alias.getInnerType(), os);
@@ -352,6 +364,39 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     result = BigIntType::get(parser.getContext());
     return success();
   }
+  if (name.equals("list")) {
+    if (isConst) {
+      parser.emitError(parser.getNameLoc(), "lists cannot be const");
+      return failure();
+    }
+    PropertyType elementType;
+    if (parser.parseLess() || parseNestedPropertyType(elementType, parser) ||
+        parser.parseGreater())
+      return failure();
+    result = ListType::getChecked(
+        [&]() { return parser.emitError(parser.getNameLoc()); }, context,
+        elementType);
+    if (!result)
+      return failure();
+    return success();
+  }
+  if (name.equals("map")) {
+    if (isConst) {
+      parser.emitError(parser.getNameLoc(), "maps cannot be const");
+      return failure();
+    }
+    PropertyType keyType, valueType;
+    if (parser.parseLess() || parseNestedPropertyType(keyType, parser) ||
+        parser.parseComma() || parseNestedPropertyType(valueType, parser) ||
+        parser.parseGreater())
+      return failure();
+    result = MapType::getChecked(
+        [&]() { return parser.emitError(parser.getNameLoc()); }, context,
+        keyType, valueType);
+    if (!result)
+      return failure();
+    return success();
+  }
   if (name.equals("alias")) {
     FIRRTLBaseType type;
     StringRef name;
@@ -415,6 +460,20 @@ static ParseResult parseFIRRTLBaseType(FIRRTLBaseType &result, StringRef name,
   return failure();
 }
 
+static ParseResult parseFIRRTLPropertyType(PropertyType &result, StringRef name,
+                                           AsmParser &parser) {
+  FIRRTLType type;
+  if (failed(parseFIRRTLType(type, name, parser)))
+    return failure();
+  if (auto prop = llvm::dyn_cast<PropertyType>(type)) {
+    result = prop;
+    return success();
+  }
+  parser.emitError(parser.getNameLoc(), "expected property type, found ")
+      << type;
+  return failure();
+}
+
 /// Parse a `FIRRTLType`.
 ///
 /// Note that only a subset of types defined in the FIRRTL dialect inherit from
@@ -433,6 +492,14 @@ ParseResult circt::firrtl::parseNestedBaseType(FIRRTLBaseType &result,
   if (parser.parseKeyword(&name))
     return failure();
   return parseFIRRTLBaseType(result, name, parser);
+}
+
+ParseResult circt::firrtl::parseNestedPropertyType(PropertyType &result,
+                                                   AsmParser &parser) {
+  StringRef name;
+  if (parser.parseKeyword(&name))
+    return failure();
+  return parseFIRRTLPropertyType(result, name, parser);
 }
 
 //===---------------------------------------------------------------------===//
@@ -2333,8 +2400,11 @@ AsyncResetType AsyncResetType::getConstType(bool isConst) {
 void FIRRTLDialect::registerTypes() {
   addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
            // Derived Types
-           BundleType, FVectorType, FEnumType, BaseTypeAliasType, RefType,
-           OpenBundleType, OpenVectorType, StringType, BigIntType>();
+           BundleType, FVectorType, FEnumType, BaseTypeAliasType,
+           // References and open aggregates
+           RefType, OpenBundleType, OpenVectorType,
+           // Non-Hardware types
+           StringType, BigIntType, ListType, MapType>();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike

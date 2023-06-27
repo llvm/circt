@@ -198,4 +198,7 @@ def StringType : FIRRTLDialectTypeHelper<"StringType", "string type">,
 def BigIntType : FIRRTLDialectTypeHelper<"BigIntType", "big integer type">,
   BuildableType<"::circt::firrtl::BigIntType::get($_builder.getContext())">;
 
+def ListType : FIRRTLDialectTypeHelper<"ListType", "list type">;
+def MapType : FIRRTLDialectTypeHelper<"MapType", "map type">;
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD

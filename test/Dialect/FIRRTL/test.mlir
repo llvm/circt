@@ -262,6 +262,18 @@ firrtl.module @BigIntTest(in %in: !firrtl.bigint, out %out: !firrtl.bigint) {
   %1 = firrtl.bigint -4
 }
 
+// CHECK-LABEL: ListTest
+// CHECK-SAME:  (in %in: !firrtl.list<string>, out %out: !firrtl.list<string>)
+firrtl.module @ListTest(in %in: !firrtl.list<string>, out %out: !firrtl.list<string>) {
+  firrtl.propassign %out, %in : !firrtl.list<string>
+}
+
+// CHECK-LABEL: MapTest
+// CHECK-SAME:  (in %in: !firrtl.map<bigint, string>, out %out: !firrtl.map<bigint, string>)
+firrtl.module @MapTest(in %in: !firrtl.map<bigint, string>, out %out: !firrtl.map<bigint, string>) {
+  firrtl.propassign %out, %in : !firrtl.map<bigint, string>
+}
+
 // CHECK-LABEL: TypeAlias
 // CHECK-SAME: %in: !firrtl.alias<bar, uint<1>>
 // CHECK-SAME: %const: !firrtl.const.alias<baz, const.uint<1>>
