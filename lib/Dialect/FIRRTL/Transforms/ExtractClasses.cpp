@@ -30,9 +30,12 @@ struct ExtractClassesPass : public ExtractClassesBase<ExtractClassesPass> {
   void runOnOperation() override;
 
 private:
-  Value getOrCreateObjectValue(OpResult instanceOutput, InstanceOp instance,
-                               OpBuilder &builder, IRMapping &mapping,
-                               SmallVectorImpl<Operation *> &opsToErase);
+  void convertValue(Value originalValue, OpBuilder &builder, IRMapping &mapping,
+                    SmallVectorImpl<Operation *> &opsToErase);
+  Value getOrCreateObjectFieldValue(OpResult instanceOutput,
+                                    InstanceOp instance, OpBuilder &builder,
+                                    IRMapping &mapping,
+                                    SmallVectorImpl<Operation *> &opsToErase);
   ObjectOp getOrCreateObject(InstanceOp instance, OpBuilder &builder,
                              IRMapping &mapping,
                              SmallVectorImpl<Operation *> &opsToErase);
@@ -54,12 +57,53 @@ struct Property {
   Location loc;
 };
 
+/// Helper to convert a Value while building up a ClassOp. If the Value is
+/// already in the IRMapping, it's already been converted. If the Value is
+/// defined by an op, one of two things happens. If the op is an InstanceOp, the
+/// instance is converted to an ObjectOp and the output field accessed. If the
+/// op is anything else, it is cloned into the ClassOp and marked for erasure.
+/// NOLINTNEXTLINE(misc-no-recursion)
+void ExtractClassesPass::convertValue(
+    Value originalValue, OpBuilder &builder, IRMapping &mapping,
+    SmallVectorImpl<Operation *> &opsToErase) {
+  // If the Value is defined by an Operation that has already been processed,
+  // there is nothing to do.
+  if (mapping.contains(originalValue))
+    return;
+
+  // If the Value is not defined by an Operation, there is nothing to do.
+  auto *op = originalValue.getDefiningOp();
+  if (!op)
+    return;
+
+  // InstanceOps are handled specially, by creating ObjectOps and
+  // extracting an ObjectFieldOp. This will take care of re-using
+  // ObjectOps and ObjectFieldOps, updating the mapping, and keeping
+  // track of related ops that can be erased. The original value is
+  // mapped to the ObjectFieldOp.
+  if (auto instance = dyn_cast<InstanceOp>(op)) {
+    Value fieldValue = getOrCreateObjectFieldValue(
+        cast<OpResult>(originalValue), instance, builder, mapping, opsToErase);
+    mapping.map(originalValue, fieldValue);
+  } else {
+    // For all other ops, copy the defining op into the body, and
+    // map from the old Value to the new Value. This may need to walk
+    // property ops in order to copy them into the ClassOp, but for now
+    // only constant ops exist. Mark the property op to be erased.
+    builder.clone(*op, mapping);
+
+    // Property defining ops should be erased after being copied over.
+    opsToErase.push_back(op);
+  }
+}
+
 /// Helper to get or create a Value from an ObjectFieldOp. This consults a cache
 /// to avoid re-creating ObjectFieldOps. An ObjectOp is looked up or created,
 /// and the field corresponding to the instance output is accessed. Note that
 /// this is able to work locally with just the instance and the OpResult, and
 /// the rest of the pass ensures the correct ClassOp is created.
-Value ExtractClassesPass::getOrCreateObjectValue(
+/// NOLINTNEXTLINE(misc-no-recursion)
+Value ExtractClassesPass::getOrCreateObjectFieldValue(
     OpResult instanceOutput, InstanceOp instance, OpBuilder &builder,
     IRMapping &mapping, SmallVectorImpl<Operation *> &opsToErase) {
   // Check if this ObjectField has already been created, and return it if so.
@@ -98,6 +142,7 @@ Value ExtractClassesPass::getOrCreateObjectValue(
 /// created with the appropriate type, class name, and the actual parameters.
 /// Note that this is able to work locally with just the instance, and the rest
 /// of the pass ensures the correct ClassOp is created.
+/// NOLINTNEXTLINE(misc-no-recursion)
 ObjectOp ExtractClassesPass::getOrCreateObject(
     InstanceOp instance, OpBuilder &builder, IRMapping &mapping,
     SmallVectorImpl<Operation *> &opsToErase) {
@@ -122,17 +167,8 @@ ObjectOp ExtractClassesPass::getOrCreateObject(
     // The source value will be mapped into the actual parameter.
     Value inputValue = propassign.getSrc();
 
-    // If the Value is defined by an Operation that has already been processed,
-    // there is nothing to do.
-    if (!mapping.contains(inputValue)) {
-      // If the property was assigned from a property op, copy that over to the
-      // ClassOp as well. This may need to walk property ops, but for now only
-      // constant ops exist. Mark the defining op to be erased.
-      if (auto *definingOp = inputValue.getDefiningOp()) {
-        builder.clone(*definingOp, mapping);
-        opsToErase.push_back(definingOp);
-      }
-    }
+    // Convert the inputValue, if necessary.
+    convertValue(inputValue, builder, mapping, opsToErase);
 
     // Lookup the mapping for the input value, and use this as an actual
     // parameter.
@@ -219,32 +255,8 @@ void ExtractClassesPass::extractClass(FModuleOp moduleOp) {
         cast<FIRRTLPropertyValue>(moduleOp.getArgument(outputProperty.index));
     Value originalValue = getDriverFromConnect(outputValue);
 
-    // If the Value is defined by an Operation that has already been processed,
-    // there is nothing to do.
-    if (!mapping.contains(originalValue)) {
-      if (auto *op = originalValue.getDefiningOp()) {
-        // InstanceOps are handled specially, by creating ObjectOps and
-        // extracting an ObjectFieldOp. This will take care of re-using
-        // ObjectOps and ObjectFieldOps, updating the mapping, and keeping
-        // track of related ops that can be erased. The original value is
-        // mapped to the ObjectFieldOp.
-        if (auto instance = dyn_cast<InstanceOp>(op)) {
-          Value fieldValue =
-              getOrCreateObjectValue(cast<OpResult>(originalValue), instance,
-                                     builder, mapping, opsToErase);
-          mapping.map(originalValue, fieldValue);
-        } else {
-          // For all other ops, copy the defining op into the body, and
-          // map from the old Value to the new Value. This may need to walk
-          // property ops in order to copy them into the ClassOp, but for now
-          // only constant ops exist. Mark the property op to be erased.
-          builder.clone(*op, mapping);
-
-          // Property defining ops should be erased after being copied over.
-          opsToErase.push_back(op);
-        }
-      }
-    }
+    // Convert the inputValue, if necessary.
+    convertValue(originalValue, builder, mapping, opsToErase);
 
     // Create the ClassFieldOp using the mapping to find the appropriate Value.
     Value fieldValue = mapping.lookup(originalValue);
