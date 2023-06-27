@@ -37,6 +37,7 @@ using mlir::TypeStorageAllocator;
 // Type Printing
 //===----------------------------------------------------------------------===//
 
+// NOLINTBEGIN(misc-no-recursion)
 /// Print a type with a custom printer implementation.
 ///
 /// This only prints a subset of all types in the dialect. Use `printNestedType`
@@ -133,6 +134,7 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
       .Default([&](auto) { anyFailed = true; });
   return failure(anyFailed);
 }
+// NOLINTEND(misc-no-recursion)
 
 /// Print a type defined by this dialect.
 void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
@@ -474,6 +476,7 @@ static ParseResult parseFIRRTLPropertyType(PropertyType &result, StringRef name,
   return failure();
 }
 
+// NOLINTBEGIN(misc-no-recursion)
 /// Parse a `FIRRTLType`.
 ///
 /// Note that only a subset of types defined in the FIRRTL dialect inherit from
@@ -485,7 +488,9 @@ ParseResult circt::firrtl::parseNestedType(FIRRTLType &result,
     return failure();
   return parseFIRRTLType(result, name, parser);
 }
+// NOLINTEND(misc-no-recursion)
 
+// NOLINTBEGIN(misc-no-recursion)
 ParseResult circt::firrtl::parseNestedBaseType(FIRRTLBaseType &result,
                                                AsmParser &parser) {
   StringRef name;
@@ -493,7 +498,9 @@ ParseResult circt::firrtl::parseNestedBaseType(FIRRTLBaseType &result,
     return failure();
   return parseFIRRTLBaseType(result, name, parser);
 }
+// NOLINTEND(misc-no-recursion)
 
+// NOLINTBEGIN(misc-no-recursion)
 ParseResult circt::firrtl::parseNestedPropertyType(PropertyType &result,
                                                    AsmParser &parser) {
   StringRef name;
@@ -501,6 +508,7 @@ ParseResult circt::firrtl::parseNestedPropertyType(PropertyType &result,
     return failure();
   return parseFIRRTLPropertyType(result, name, parser);
 }
+// NOLINTEND(misc-no-recursion)
 
 //===---------------------------------------------------------------------===//
 // Dialect Type Parsing and Printing
