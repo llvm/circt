@@ -142,7 +142,7 @@ def AnalogTypeImpl : FIRRTLImplType<"Analog",
 class BaseVectorTypeImpl<string name, string ElementType, list<Trait> traits = [], string BaseType = ElementType> : FIRRTLImplType<name, traits, BaseType> {
   let summary = "a fixed size collection of elements, like an array.";
   let parameters = (ins
-      TypeParameter<ElementType, "Type of vector elements">:$lementType,
+      TypeParameter<ElementType, "Type of vector elements">:$elementType,
      "size_t":$numElements,
      "bool":$isConst
   );
