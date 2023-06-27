@@ -282,6 +282,16 @@ def AndOfPad : Pat <
   (MoveNameHint $old, (PadPrimOp (AndPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y), $n)),
   [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
 
+/// cvt is adding a 0, which will pass through the and
+/// and(cvt(x:U), const) -> cat(0, and(x,trunc(const))
+def AndCvtU : Pat <
+  (AndPrimOp:$old (CvtPrimOp $x), (ConstantOp:$ocst $cst)),
+  (MoveNameHint $old, (CatPrimOp 
+    (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), APSInt(APInt()))"> $ocst),
+    (AndPrimOp $x, (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), $1.getValue().trunc($1.getValue().getBitWidth()-1).zext(*cast<IntType>($0.getType()).getWidth()))"> $x, $cst))
+  )),
+  [(KnownWidth $x), (UIntType $x)]>;
+
 // or(x, 0) -> x, fold can't handle all cases
 def OrOfZero : Pat <
   (OrPrimOp:$old $x, (ConstantOp:$zcst $cst)),
@@ -338,6 +348,24 @@ def OrRasUInt : Pat <
   (MoveNameHint $old, (OrRPrimOp $x)),
   [(KnownWidth $x), (IntTypes $x)]>;
 
+/// orr(cvt(x)) -> orr(x)
+def OrRCvt : Pat <
+  (OrRPrimOp:$old (CvtPrimOp $x)),
+  (MoveNameHint $old, (OrRPrimOp $x)),
+  [(KnownWidth $x), (IntTypes $x)]>;
+
+/// orr(cat(0,x)) -> orr(x)
+def OrRCatZeroH : Pat <
+  (OrRPrimOp:$old (CatPrimOp $c, $x)),
+  (MoveNameHint $old, (OrRPrimOp $x)),
+  [(KnownWidth $x), (IntTypes $x), (ZeroConstantOp $c)]>;
+
+/// orr(cat(x,0)) -> orr(x)
+def OrRCatZeroL : Pat <
+  (OrRPrimOp:$old (CatPrimOp $x, $c)),
+  (MoveNameHint $old, (OrRPrimOp $x)),
+  [(KnownWidth $x), (IntTypes $x), (ZeroConstantOp $c)]>;
+
 /// xorr(asSInt(x)) -> xorr(x)
 def XorRasSInt : Pat <
   (XorRPrimOp:$old (AsSIntPrimOp $x)),
@@ -347,6 +375,12 @@ def XorRasSInt : Pat <
 /// xorr(asUInt(x)) -> xorr(x)
 def XorRasUInt : Pat <
   (XorRPrimOp:$old (AsUIntPrimOp $x)),
+  (MoveNameHint $old, (XorRPrimOp $x)),
+  [(KnownWidth $x), (IntTypes $x)]>;
+
+/// xorr(cvt(x)) -> xorr(x)
+def XorRCvt : Pat <
+  (XorRPrimOp:$old (CvtPrimOp $x)),
   (MoveNameHint $old, (XorRPrimOp $x)),
   [(KnownWidth $x), (IntTypes $x)]>;
 
@@ -361,6 +395,19 @@ def AndRasUInt : Pat <
   (AndRPrimOp:$old (AsUIntPrimOp $x)),
   (MoveNameHint $old, (AndRPrimOp $x)),
   [(KnownWidth $x), (IntTypes $x)]>;
+
+/// andr(cvt(x:unsigned)) -> 0
+def AndRCvtU : Pat <
+  (AndRPrimOp:$old (CvtPrimOp $x)),
+  (MoveNameHint $old,
+    (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old)),
+  [(KnownWidth $x), (UIntTypes $x)]>;
+
+/// andr(cvt(x:signed)) -> andr(x)
+def AndRCvtS : Pat <
+  (AndRPrimOp:$old (CvtPrimOp $x)),
+  (MoveNameHint $old, (AndRPrimOp $x)),
+  [(KnownWidth $x), (SIntTypes $x)]>;
 
 
 // bits(bits(x, ...), ...) -> bits(x, ...)

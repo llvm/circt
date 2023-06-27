@@ -579,10 +579,10 @@ OpFoldResult AndPrimOp::fold(FoldAdaptor adaptor) {
 
 void AndPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results
-      .insert<patterns::extendAnd, patterns::moveConstAnd, patterns::AndOfZero,
-              patterns::AndOfAllOne, patterns::AndOfSelf, patterns::AndOfPad>(
-          context);
+  results.insert<patterns::extendAnd, patterns::moveConstAnd,
+                 patterns::AndOfZero, patterns::AndOfAllOne,
+                 patterns::AndOfSelf, patterns::AndOfPad, patterns::AndCvtU>(
+      context);
 }
 
 OpFoldResult OrPrimOp::fold(FoldAdaptor adaptor) {
@@ -1080,8 +1080,9 @@ OpFoldResult AndRPrimOp::fold(FoldAdaptor adaptor) {
 }
 
 void AndRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                            MLIRContext *context) {
-  results.insert<patterns::AndRasSInt, patterns::AndRasUInt>(context);
+                                             MLIRContext *context) {
+  results.insert<patterns::AndRasSInt, patterns::AndRasUInt, patterns::AndRCvtU,
+                 patterns::AndRCvtS>(context);
 }
 
 OpFoldResult OrRPrimOp::fold(FoldAdaptor adaptor) {
@@ -1105,7 +1106,8 @@ OpFoldResult OrRPrimOp::fold(FoldAdaptor adaptor) {
 
 void OrRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.insert<patterns::OrRasSInt, patterns::OrRasUInt>(context);
+  results.insert<patterns::OrRasSInt, patterns::OrRasUInt, patterns::OrRCvt,
+                 patterns::OrRCatZeroH, patterns::OrRCatZeroL>(context);
 }
 
 OpFoldResult XorRPrimOp::fold(FoldAdaptor adaptor) {
@@ -1127,10 +1129,10 @@ OpFoldResult XorRPrimOp::fold(FoldAdaptor adaptor) {
 }
 
 void XorRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                            MLIRContext *context) {
-  results.insert<patterns::XorRasSInt, patterns::XorRasUInt>(context);
+                                             MLIRContext *context) {
+  results.insert<patterns::XorRasSInt, patterns::XorRasUInt, patterns::XorRCvt>(
+      context);
 }
-
 
 //===----------------------------------------------------------------------===//
 // Other Operators
