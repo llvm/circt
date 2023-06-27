@@ -22,7 +22,7 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(CHIRRTL, chirrtl,
 // Type API.
 //===----------------------------------------------------------------------===//
 
-MlirType chirrtlGetTypeCMemory(MlirContext ctx, MlirType elementType,
+MlirType chirrtlTypeGetCMemory(MlirContext ctx, MlirType elementType,
                                uint64_t numElements) {
   auto baseType = unwrap(elementType).cast<firrtl::FIRRTLBaseType>();
   assert(baseType && "element must be base type");
@@ -30,6 +30,6 @@ MlirType chirrtlGetTypeCMemory(MlirContext ctx, MlirType elementType,
   return wrap(CMemoryType::get(unwrap(ctx), baseType, numElements));
 }
 
-MlirType chirrtlGetTypeCMemoryPort(MlirContext ctx) {
+MlirType chirrtlTypeGetCMemoryPort(MlirContext ctx) {
   return wrap(CMemoryPortType::get(unwrap(ctx)));
 }
