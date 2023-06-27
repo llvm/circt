@@ -6,13 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_PIPELINE_PIPELINE_TD
-#define CIRCT_DIALECT_PIPELINE_PIPELINE_TD
+#ifndef CIRCT_DIALECT_PIPELINE_DIALECT_TD
+#define CIRCT_DIALECT_PIPELINE_DIALECT_TD
 
 include "mlir/IR/OpBase.td"
 
-include "circt/Dialect/Pipeline/PipelineDialect.td"
-include "circt/Dialect/Pipeline/PipelineInterfaces.td"
-include "circt/Dialect/Pipeline/PipelineOps.td"
+def Pipeline_Dialect : Dialect {
+  let name = "pipeline";
+  let cppNamespace = "::circt::pipeline";
+}
 
-#endif // CIRCT_DIALECT_PIPELINE_PIPELINE_TD
+#endif // CIRCT_DIALECT_PIPELINE_DIALECT_TD
