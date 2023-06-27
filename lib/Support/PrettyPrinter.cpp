@@ -83,6 +83,7 @@ void PrettyPrinter::add(Token t) {
     scanStack.push_back(right);
     tokens.push_back({t, offset});
   };
+  bool skipRebase = false;
   llvm::TypeSwitch<Token *>(&t)
       .Case([&](StringToken *s) {
         // If nothing on stack, directly print
@@ -114,8 +115,13 @@ void PrettyPrinter::add(Token t) {
         if (scanStack.empty())
           return print({t, 0});
         addScanToken(-1);
+      })
+      .Case([&](CallbackToken *c) {
+        tokens.push_back({t, 0});
+        skipRebase = true;
       });
-  rebaseIfNeeded();
+  if (!skipRebase)
+    rebaseIfNeeded();
 }
 
 void PrettyPrinter::rebaseIfNeeded() {
@@ -159,6 +165,16 @@ void PrettyPrinter::eof() {
 
 void PrettyPrinter::clear() {
   assert(scanStack.empty() && "clearing tokens while still on scan stack");
+  // tokens can still have callback tokens, invoke them and clear it.
+  while (!tokens.empty()) {
+    auto t = tokens.front();
+    tokens.pop_front();
+    if (CallbackToken *callback = dyn_cast<CallbackToken>(&t.token)) {
+      callback->invoke();
+      continue;
+    }
+    llvm_unreachable("not expecting any other token");
+  }
   assert(tokens.empty());
   leftTotal = rightTotal = 1;
   tokens.clear();
@@ -293,7 +309,8 @@ void PrettyPrinter::print(const FormattedToken &f) {
         if (frame.breaks != PrintBreaks::Fits &&
             frame.breaks != PrintBreaks::AlwaysFits)
           indent = frame.offset;
-      });
+      })
+      .Case([&](const CallbackToken *c) { c->invoke(); });
 }
 } // end namespace pretty
 } // end namespace circt

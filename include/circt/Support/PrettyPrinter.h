@@ -50,7 +50,7 @@ enum class IndentStyle { Visual, Block };
 
 class Token {
 public:
-  enum class Kind { String, Break, Begin, End };
+  enum class Kind { String, Break, Begin, End, Callback };
 
   struct TokenInfo {
     Kind kind; // Common initial sequence.
@@ -72,6 +72,10 @@ public:
   struct EndInfo : public TokenInfo {
     // Nothing
   };
+  struct CallbackInfo : public TokenInfo {
+    using CallbackTy = std::function<void()>;
+    CallbackTy *callback;
+  };
 
 private:
   union {
@@ -80,6 +84,7 @@ private:
     BreakInfo breakInfo;
     BeginInfo beginInfo;
     EndInfo endInfo;
+    CallbackInfo callbackInfo;
   } data;
 
 protected:
@@ -93,6 +98,8 @@ protected:
       return t.data.beginInfo;
     if constexpr (k == Kind::End)
       return t.data.endInfo;
+    if constexpr (k == Kind::Callback)
+      return t.data.callbackInfo;
     llvm_unreachable("unhandled token kind");
   }
 
@@ -155,6 +162,14 @@ struct BeginToken : public TokenBase<BeginToken, Token::Kind::Begin> {
 };
 
 struct EndToken : public TokenBase<EndToken, Token::Kind::End> {};
+
+struct CallbackToken : public TokenBase<CallbackToken, Token::Kind::Callback> {
+  CallbackToken(Token::CallbackInfo::CallbackTy *c) { initialize(c); }
+  void invoke() const {
+    if (auto *c = getInfo().callback)
+      std::invoke(*c);
+  }
+};
 
 //===----------------------------------------------------------------------===//
 // PrettyPrinter
