@@ -24,38 +24,38 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(FIRRTL, firrtl,
 // Type API.
 //===----------------------------------------------------------------------===//
 
-MlirType firrtlGetTypeUInt(MlirContext ctx, int32_t width) {
+MlirType firrtlTypeGetUInt(MlirContext ctx, int32_t width) {
   return wrap(UIntType::get(unwrap(ctx), width));
 }
 
-MlirType firrtlGetTypeSInt(MlirContext ctx, int32_t width) {
+MlirType firrtlTypeGetSInt(MlirContext ctx, int32_t width) {
   return wrap(SIntType::get(unwrap(ctx), width));
 }
 
-MlirType firrtlGetTypeClock(MlirContext ctx) {
+MlirType firrtlTypeGetClock(MlirContext ctx) {
   return wrap(ClockType::get(unwrap(ctx)));
 }
 
-MlirType firrtlGetTypeReset(MlirContext ctx) {
+MlirType firrtlTypeGetReset(MlirContext ctx) {
   return wrap(ResetType::get(unwrap(ctx)));
 }
 
-MlirType firrtlGetTypeAsyncReset(MlirContext ctx) {
+MlirType firrtlTypeGetAsyncReset(MlirContext ctx) {
   return wrap(AsyncResetType::get(unwrap(ctx)));
 }
 
-MlirType firrtlGetTypeAnalog(MlirContext ctx, int32_t width) {
+MlirType firrtlTypeGetAnalog(MlirContext ctx, int32_t width) {
   return wrap(AnalogType::get(unwrap(ctx), width));
 }
 
-MlirType firrtlGetTypeVector(MlirContext ctx, MlirType element, size_t count) {
+MlirType firrtlTypeGetVector(MlirContext ctx, MlirType element, size_t count) {
   auto baseType = unwrap(element).cast<FIRRTLBaseType>();
   assert(baseType && "element must be base type");
 
   return wrap(FVectorType::get(baseType, count));
 }
 
-MlirType firrtlGetTypeBundle(MlirContext ctx, size_t count,
+MlirType firrtlTypeGetBundle(MlirContext ctx, size_t count,
                              const FIRRTLBundleField *fields) {
   SmallVector<BundleType::BundleElement, 4> bundleFields;
   bundleFields.reserve(count);
@@ -67,7 +67,7 @@ MlirType firrtlGetTypeBundle(MlirContext ctx, size_t count,
     auto baseType = unwrap(field.type).dyn_cast<FIRRTLBaseType>();
     assert(baseType && "field must be base type");
 
-    bundleFields.emplace_back(name, field.flip, baseType);
+    bundleFields.emplace_back(name, field.isFlip, baseType);
   }
   return wrap(BundleType::get(unwrap(ctx), bundleFields));
 }
@@ -76,7 +76,7 @@ MlirType firrtlGetTypeBundle(MlirContext ctx, size_t count,
 // Attribute API.
 //===----------------------------------------------------------------------===//
 
-MlirAttribute firrtlGetAttrConvention(MlirContext ctx,
+MlirAttribute firrtlAttrGetConvention(MlirContext ctx,
                                       FIRRTLConvention convention) {
   Convention value;
 
@@ -94,7 +94,7 @@ MlirAttribute firrtlGetAttrConvention(MlirContext ctx,
   return wrap(ConventionAttr::get(unwrap(ctx), value));
 }
 
-MlirAttribute firrtlGetAttrPortDirs(MlirContext ctx, size_t count,
+MlirAttribute firrtlAttrGetPortDirs(MlirContext ctx, size_t count,
                                     const FIRRTLPortDir *dirs) {
   static_assert(FIRRTLPortDir::FIRRTL_PORT_DIR_INPUT ==
                 static_cast<std::underlying_type_t<Direction>>(Direction::In));
@@ -107,7 +107,7 @@ MlirAttribute firrtlGetAttrPortDirs(MlirContext ctx, size_t count,
       unwrap(ctx), ArrayRef(reinterpret_cast<const Direction *>(dirs), count)));
 }
 
-MlirAttribute firrtlGetAttrNameKind(MlirContext ctx, FIRRTLNameKind nameKind) {
+MlirAttribute firrtlAttrGetNameKind(MlirContext ctx, FIRRTLNameKind nameKind) {
   NameKindEnum value;
 
   switch (nameKind) {
@@ -124,7 +124,7 @@ MlirAttribute firrtlGetAttrNameKind(MlirContext ctx, FIRRTLNameKind nameKind) {
   return wrap(NameKindEnumAttr::get(unwrap(ctx), value));
 }
 
-MlirAttribute firrtlGetAttrRUW(MlirContext ctx, FIRRTLRUW ruw) {
+MlirAttribute firrtlAttrGetRUW(MlirContext ctx, FIRRTLRUW ruw) {
   RUWAttr value;
 
   switch (ruw) {
@@ -144,7 +144,7 @@ MlirAttribute firrtlGetAttrRUW(MlirContext ctx, FIRRTLRUW ruw) {
   return wrap(RUWAttrAttr::get(unwrap(ctx), value));
 }
 
-MlirAttribute firrtlGetAttrMemInit(MlirContext ctx, MlirStringRef filename,
+MlirAttribute firrtlAttrGetMemInit(MlirContext ctx, MlirStringRef filename,
                                    bool isBinary, bool isInline) {
   MLIRContext *mlirCtx = unwrap(ctx);
 
@@ -152,7 +152,7 @@ MlirAttribute firrtlGetAttrMemInit(MlirContext ctx, MlirStringRef filename,
       mlirCtx, StringAttr::get(mlirCtx, unwrap(filename)), isBinary, isInline));
 }
 
-MlirAttribute firrtlGetAttrMemDir(MlirContext ctx, FIRRTLMemDir dir) {
+MlirAttribute firrtlAttrGetMemDir(MlirContext ctx, FIRRTLMemDir dir) {
   MemDirAttr value;
 
   switch (dir) {
@@ -175,7 +175,7 @@ MlirAttribute firrtlGetAttrMemDir(MlirContext ctx, FIRRTLMemDir dir) {
   return wrap(MemDirAttrAttr::get(unwrap(ctx), value));
 }
 
-MlirAttribute firrtlGetAttrEventControl(MlirContext ctx,
+MlirAttribute firrtlAttrGetEventControl(MlirContext ctx,
                                         FIRRTLEventControl eventControl) {
   EventControl value;
 
