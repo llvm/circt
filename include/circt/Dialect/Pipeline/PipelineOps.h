@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_PIPELINEOPS_H
-#define CIRCT_DIALECT_PIPELINEOPS_H
+#ifndef CIRCT_DIALECT_PIPELINE_PIPELINEOPS_H
+#define CIRCT_DIALECT_PIPELINE_PIPELINEOPS_H
 
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"
@@ -46,4 +46,4 @@ Block *getParentStageInPipeline(ScheduledPipelineOp pipeline, Value v);
 #define GET_OP_CLASSES
 #include "circt/Dialect/Pipeline/Pipeline.h.inc"
 
-#endif // CIRCT_DIALECT_PIPELINEOPS_H
+#endif // CIRCT_DIALECT_PIPELINE_PIPELINEOPS_H
