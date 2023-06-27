@@ -63,11 +63,10 @@ MlirType firrtlTypeGetBundle(MlirContext ctx, size_t count,
   for (size_t i = 0; i < count; i++) {
     auto field = fields[i];
 
-    auto name = unwrap(field.name).cast<StringAttr>();
     auto baseType = unwrap(field.type).dyn_cast<FIRRTLBaseType>();
     assert(baseType && "field must be base type");
 
-    bundleFields.emplace_back(name, field.isFlip, baseType);
+    bundleFields.emplace_back(unwrap(field.name), field.isFlip, baseType);
   }
   return wrap(BundleType::get(unwrap(ctx), bundleFields));
 }
@@ -144,12 +143,10 @@ MlirAttribute firrtlAttrGetRUW(MlirContext ctx, FIRRTLRUW ruw) {
   return wrap(RUWAttrAttr::get(unwrap(ctx), value));
 }
 
-MlirAttribute firrtlAttrGetMemInit(MlirContext ctx, MlirStringRef filename,
+MlirAttribute firrtlAttrGetMemInit(MlirContext ctx, MlirIdentifier filename,
                                    bool isBinary, bool isInline) {
-  MLIRContext *mlirCtx = unwrap(ctx);
-
-  return wrap(MemoryInitAttr::get(
-      mlirCtx, StringAttr::get(mlirCtx, unwrap(filename)), isBinary, isInline));
+  return wrap(
+      MemoryInitAttr::get(unwrap(ctx), unwrap(filename), isBinary, isInline));
 }
 
 MlirAttribute firrtlAttrGetMemDir(MlirContext ctx, FIRRTLMemDir dir) {
