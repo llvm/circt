@@ -142,8 +142,7 @@ bool groupInRegion(Block *block, Operation *clockTreeOp,
       if (definition->getBlock() == op->getBlock() ||
           !clockTreeOp->isAncestor(definition))
         continue;
-      if (!operand.hasOneUse() &&
-          llvm::any_of(operand.getUsers(),
+      if (llvm::any_of(definition->getUsers(),
                        [&](auto *user) { return !dom.dominates(op, user); }))
         continue;
       // For some currently unknown reason, just calling moveBefore
@@ -166,7 +165,8 @@ struct GroupAssignmentsInIfPattern : public OpRewritePattern<scf::IfOp> {
     // Skip anything not in a ClockTreeOp
     auto clockTreeOp = ifOp->getParentOfType<ClockTreeOp>();
     if (!clockTreeOp)
-      return failure();
+      // This probably means the design uses a derived clock (warning).
+      return success(false);
     // Group assignments in each region and keep track of whether either
     // grouping made changes
     bool changed = groupInRegion(ifOp.thenBlock(), clockTreeOp, &rewriter) ||
