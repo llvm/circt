@@ -1273,6 +1273,24 @@ firrtl.circuit "PropertyConnect" {
 }
 
 // -----
+// Property aggregates can only contain properties.
+// Check list.
+
+firrtl.circuit "ListOfHW" {
+  // expected-error @below {{expected property type, found '!firrtl.uint<2>'}}
+  firrtl.module @MapOfHW(in %in: !firrtl.list<uint<2>>) {}
+}
+
+// -----
+// Property aggregates can only contain properties.
+// Check map.
+
+firrtl.circuit "MapOfHW" {
+  // expected-error @below {{expected property type, found '!firrtl.uint<4>'}}
+  firrtl.module @MapOfHW(in %in: !firrtl.map<string,uint<4>>) {}
+}
+
+// -----
 // Issue 4174-- handle duplicate module names.
 
 firrtl.circuit "hi" {
