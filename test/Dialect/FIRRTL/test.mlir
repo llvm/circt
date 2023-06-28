@@ -250,10 +250,45 @@ firrtl.module @BigIntTest(in %in: !firrtl.integer, out %out: !firrtl.integer) {
   %1 = firrtl.integer -4
 }
 
+// CHECK-LABEL: ClassTest()
+firrtl.class @ClassTest() {}
+
 // CHECK-LABEL: ListTest
-// CHECK-SAME:  (in %in: !firrtl.list<string>, out %out: !firrtl.list<string>)
-firrtl.module @ListTest(in %in: !firrtl.list<string>, out %out: !firrtl.list<string>) {
-  firrtl.propassign %out, %in : !firrtl.list<string>
+// CHECK-SAME:   out %out_strings: !firrtl.list<string>,
+// CHECK-SAME:   out %out_empty: !firrtl.list<string>,
+// CHECK-SAME:   out %out_nested: !firrtl.list<list<string>>,
+// CHECK-SAME:   out %out_objs: !firrtl.list<class<@ClassTest()>>) {
+firrtl.module @ListTest(in %s1: !firrtl.string,
+                        in %s2: !firrtl.string,
+                        in %c1: !firrtl.class<@ClassTest()>,
+                        in %c2: !firrtl.class<@ClassTest()>,
+                        out %out_strings: !firrtl.list<string>,
+                        out %out_empty: !firrtl.list<string>,
+                        out %out_nested: !firrtl.list<list<string>>,
+                        out %out_objs: !firrtl.list<class<@ClassTest()>>) {
+  // List of basic property types (strings)
+  // CHECK-NEXT: %[[STRINGS:.+]] = firrtl.list.create %s1, %s2 : !firrtl.list<string>
+  // CHECK-NEXT: firrtl.propassign %out_strings, %[[STRINGS]] : !firrtl.list<string>
+  %strings = firrtl.list.create %s1, %s2 : !firrtl.list<string>
+  firrtl.propassign %out_strings, %strings : !firrtl.list<string>
+  
+  // Empty list
+  // CHECK-NEXT: %[[EMPTY:.+]] = firrtl.list.create : !firrtl.list<string>
+  // CHECK-NEXT: firrtl.propassign %out_empty, %[[EMPTY]] : !firrtl.list<string>
+  %empty = firrtl.list.create : !firrtl.list<string>
+  firrtl.propassign %out_empty, %empty : !firrtl.list<string>
+
+  // Nested list
+  // CHECK-NEXT: %[[NESTED:.+]] = firrtl.list.create %[[STRINGS]], %[[EMPTY]] : !firrtl.list<list<string>>
+  // CHECK-NEXT: firrtl.propassign %out_nested, %[[NESTED]] : !firrtl.list<list<string>>
+  %nested = firrtl.list.create %strings, %empty : !firrtl.list<list<string>>
+  firrtl.propassign %out_nested, %nested: !firrtl.list<list<string>>
+
+  // List of objects
+  // CHECK-NEXT: %[[OBJS:.+]] = firrtl.list.create %c1, %c2 : !firrtl.list<class<@ClassTest()>>
+  // CHECK-NEXT: firrtl.propassign %out_objs, %[[OBJS]] : !firrtl.list<class<@ClassTest()>>
+  %objs = firrtl.list.create %c1, %c2 : !firrtl.list<class<@ClassTest()>>
+  firrtl.propassign %out_objs, %objs : !firrtl.list<class<@ClassTest()>>
 }
 
 // CHECK-LABEL: MapTest

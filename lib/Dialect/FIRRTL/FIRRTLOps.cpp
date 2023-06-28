@@ -3578,6 +3578,40 @@ ParseResult FIntegerConstantOp::parse(OpAsmParser &parser,
   return success();
 }
 
+ParseResult ListCreateOp::parse(OpAsmParser &parser, OperationState &result) {
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 16> operands;
+  ListType type;
+
+  if (parser.parseOperandList(operands) ||
+      parser.parseOptionalAttrDict(result.attributes) ||
+      parser.parseColonType(type))
+    return failure();
+  result.addTypes(type);
+
+  return parser.resolveOperands(operands, type.getElementType(),
+                                result.operands);
+}
+
+void ListCreateOp::print(OpAsmPrinter &p) {
+  p << " ";
+  p.printOperands(getElements());
+  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " : " << getType();
+}
+
+LogicalResult ListCreateOp::verify() {
+  if (getElements().empty())
+    return success();
+
+  auto elementType = getElements().front().getType();
+  auto listElementType = getType().getElementType();
+  if (elementType != listElementType)
+    return emitOpError("has elements of type ")
+           << elementType << " instead of " << listElementType;
+
+  return success();
+}
+
 LogicalResult BundleCreateOp::verify() {
   BundleType resultType = getType();
   if (resultType.getNumElements() != getFields().size())
