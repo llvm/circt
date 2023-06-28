@@ -3,7 +3,7 @@
 // CHECK-LABEL:   hw.module @cg1(
 // CHECK-SAME:          %[[VAL_0:.*]]: i1, %[[VAL_1:.*]]: i1) -> (gclk: i1) {
 // CHECK:           %[[VAL_2:.*]] = sv.reg : !hw.inout<i1>
-// CHECK:           sv.always edge %[[VAL_0]], edge %[[VAL_1]] {
+// CHECK:           sv.always  {
 // CHECK:             %[[VAL_3:.*]] = hw.constant true
 // CHECK:             %[[VAL_4:.*]] = comb.xor %[[VAL_0]], %[[VAL_3]] : i1
 // CHECK:             sv.if %[[VAL_4]] {
@@ -23,7 +23,7 @@ hw.module @cg1(%clk : i1, %enable : i1) -> (gclk : i1) {
 // CHECK-SAME:            %[[VAL_0:.*]]: i1, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1) -> (gclk: i1) {
 // CHECK:           %[[VAL_3:.*]] = comb.or %[[VAL_1]], %[[VAL_2]] : i1
 // CHECK:           %[[VAL_4:.*]] = sv.reg : !hw.inout<i1>
-// CHECK:           sv.always edge %[[VAL_0]], edge %[[VAL_3]] {
+// CHECK:           sv.always  {
 // CHECK:             %[[VAL_5:.*]] = hw.constant true
 // CHECK:             %[[VAL_6:.*]] = comb.xor %[[VAL_0]], %[[VAL_5]] : i1
 // CHECK:             sv.if %[[VAL_6]] {
