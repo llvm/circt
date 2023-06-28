@@ -265,7 +265,8 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
                                        parseBundleElement))
       return failure();
 
-    return result = OpenBundleType::get(context, elements, isConst), success();
+    result = parser.getChecked<OpenBundleType>(context, elements, isConst);
+    return failure(!result);
   }
 
   if (name.equals("enum")) {
@@ -318,7 +319,9 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
         parser.parseGreater())
       return failure();
 
-    return result = OpenVectorType::get(elementType, width, isConst), success();
+    result =
+        parser.getChecked<OpenVectorType>(context, elementType, width, isConst);
+    return failure(!result);
   }
 
   // For now, support both firrtl.ref and firrtl.probe.
@@ -1741,6 +1744,24 @@ OpenBundleType::getElementTypePreservingConst(size_t index) {
       .Default(type);
 }
 
+LogicalResult
+OpenBundleType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
+                       ArrayRef<BundleElement> elements, bool isConst) {
+  for (auto &element : elements) {
+    if (!type_isa<hw::FieldIDTypeInterface>(element.type))
+      return emitErrorFn()
+             << "bundle element " << element.name
+             << " has unsupported type that does not support fieldID's: "
+             << element.type;
+    if (FIRRTLType(element.type).containsReference() && isConst)
+      return emitErrorFn()
+             << "'const' bundle cannot have references, but element "
+             << element.name << " has type " << element.type;
+  }
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // FVectorType
 //===----------------------------------------------------------------------===//
@@ -1989,6 +2010,19 @@ OpenVectorType::ElementType OpenVectorType::getElementTypePreservingConst() {
         return type.getConstType(type.isConst() || isConst());
       })
       .Default(type);
+}
+
+LogicalResult
+OpenVectorType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
+                       FIRRTLType elementType, size_t numElements,
+                       bool isConst) {
+  if (!type_isa<hw::FieldIDTypeInterface>(elementType))
+    return emitErrorFn()
+           << "vector element type does not support fieldID's, type: "
+           << elementType;
+  if (elementType.containsReference() && isConst)
+    return emitErrorFn() << "vector cannot be const with references";
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

@@ -923,9 +923,17 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
           StringRef fieldName;
           FIRRTLType type;
           if (parseFieldId(fieldName, "expected bundle field name") ||
-              parseToken(FIRToken::colon, "expected ':' in bundle") ||
-              parseType(type, "expected bundle field type"))
+              parseToken(FIRToken::colon, "expected ':' in bundle"))
             return failure();
+          auto loc = getToken().getLoc();
+          if (parseType(type, "expected bundle field type"))
+            return failure();
+
+          // We require that elements of aggregates themselves
+          // support notion of FieldID, reject if the type does not.
+          if (!isa<hw::FieldIDTypeInterface>(type))
+            return emitError(loc, "type ")
+                   << type << " cannot be used as field in a bundle";
 
           elements.push_back(
               {StringAttr::get(getContext(), fieldName), isFlipped, type});
@@ -1006,6 +1014,12 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
 
     if (size < 0)
       return emitError(sizeLoc, "invalid size specifier"), failure();
+
+    // We require that elements of aggregates themselves
+    // support notion of FieldID, reject if the type does not.
+    if (!isa<hw::FieldIDTypeInterface>(result))
+      return emitError(sizeLoc, "type ")
+             << result << " cannot be used in a vector";
 
     auto baseType = dyn_cast<FIRRTLBaseType>(result);
     if (baseType)
