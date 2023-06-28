@@ -162,6 +162,22 @@ inline FIRRTLType mapBaseType(FIRRTLType type,
       });
 }
 
+/// Return a FIRRTLType with its base type component mutated by the given
+/// function. Return null when the function returns null.
+/// (i.e., ref<T> -> ref<f(T)> if f(T) != null else null, and T -> f(T)).
+inline FIRRTLType
+mapBaseTypeNullable(FIRRTLType type,
+                    function_ref<FIRRTLBaseType(FIRRTLBaseType)> fn) {
+  return TypeSwitch<FIRRTLType, FIRRTLType>(type)
+      .Case<FIRRTLBaseType>([&](auto base) { return fn(base); })
+      .Case<RefType>([&](auto ref) -> FIRRTLType {
+        auto result = fn(ref.getType());
+        if (!result)
+          return {};
+        return RefType::get(result, ref.getForceable());
+      });
+}
+
 /// Given a type, return the corresponding lowered type for the HW dialect.
 /// Non-FIRRTL types are simply passed through. This returns a null type if it
 /// cannot be lowered.

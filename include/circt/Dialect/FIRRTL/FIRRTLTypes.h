@@ -46,6 +46,8 @@ class RefType;
 class PropertyType;
 class StringType;
 class BigIntType;
+class ListType;
+class MapType;
 class BaseTypeAliasType;
 
 /// A collection of bits indicating the recursive properties of a type.
@@ -310,7 +312,7 @@ class PropertyType : public FIRRTLType {
 public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
-    return llvm::isa<StringType, BigIntType>(type);
+    return llvm::isa<StringType, BigIntType, ListType, MapType>(type);
   }
 
 protected:
@@ -333,6 +335,7 @@ std::optional<int64_t> getBitWidth(FIRRTLBaseType type,
 // Parse a FIRRTL type without a leading `!firrtl.` dialect tag.
 ParseResult parseNestedType(FIRRTLType &result, AsmParser &parser);
 ParseResult parseNestedBaseType(FIRRTLBaseType &result, AsmParser &parser);
+ParseResult parseNestedPropertyType(PropertyType &result, AsmParser &parser);
 
 // Print a FIRRTL type without a leading `!firrtl.` dialect tag.
 void printNestedType(Type type, AsmPrinter &os);

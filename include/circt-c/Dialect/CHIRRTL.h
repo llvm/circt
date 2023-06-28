@@ -27,11 +27,11 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(CHIRRTL, chirrtl);
 // Type API.
 //===----------------------------------------------------------------------===//
 
-MLIR_CAPI_EXPORTED MlirType chirrtlGetTypeCMemory(MlirContext ctx,
+MLIR_CAPI_EXPORTED MlirType chirrtlTypeGetCMemory(MlirContext ctx,
                                                   MlirType elementType,
                                                   uint64_t numElements);
 
-MLIR_CAPI_EXPORTED MlirType chirrtlGetTypeCMemoryPort(MlirContext ctx);
+MLIR_CAPI_EXPORTED MlirType chirrtlTypeGetCMemoryPort(MlirContext ctx);
 
 #ifdef __cplusplus
 }

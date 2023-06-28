@@ -387,6 +387,10 @@ static LogicalResult processBuffer(
       exportPm.addPass(circt::createStripDebugInfoWithPredPass(
           [](mlir::Location loc) { return true; }));
 
+    // Emit module and testbench hierarchy JSON files.
+    if (exportModuleHierarchy)
+      exportPm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
+
     // Emit a single file or multiple files depending on the output format.
     switch (outputFormat) {
     default:
@@ -402,11 +406,6 @@ static LogicalResult processBuffer(
       exportPm.addPass(createExportVerilogPass(llvm::nulls()));
       break;
     }
-
-    // Run module hierarchy emission after verilog emission, which ensures we
-    // pick up any changes that verilog emission made.
-    if (exportModuleHierarchy)
-      exportPm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
 
     // Run final IR mutations to clean it up after ExportVerilog and before
     // emitting the final MLIR.

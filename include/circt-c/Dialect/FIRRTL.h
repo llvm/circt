@@ -19,8 +19,8 @@ extern "C" {
 
 // NOLINTNEXTLINE(modernize-use-using)
 typedef struct FIRRTLBundleField {
-  bool flip;
-  MlirAttribute name;
+  MlirIdentifier name;
+  bool isFlip;
   MlirType type;
 } FIRRTLBundleField;
 
@@ -74,15 +74,15 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(FIRRTL, firrtl);
 // Type API.
 //===----------------------------------------------------------------------===//
 
-MLIR_CAPI_EXPORTED MlirType firrtlGetTypeUInt(MlirContext ctx, int32_t width);
-MLIR_CAPI_EXPORTED MlirType firrtlGetTypeSInt(MlirContext ctx, int32_t width);
-MLIR_CAPI_EXPORTED MlirType firrtlGetTypeClock(MlirContext ctx);
-MLIR_CAPI_EXPORTED MlirType firrtlGetTypeReset(MlirContext ctx);
-MLIR_CAPI_EXPORTED MlirType firrtlGetTypeAsyncReset(MlirContext ctx);
-MLIR_CAPI_EXPORTED MlirType firrtlGetTypeAnalog(MlirContext ctx, int32_t width);
-MLIR_CAPI_EXPORTED MlirType firrtlGetTypeVector(MlirContext ctx,
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetUInt(MlirContext ctx, int32_t width);
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetSInt(MlirContext ctx, int32_t width);
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetClock(MlirContext ctx);
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetReset(MlirContext ctx);
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetAsyncReset(MlirContext ctx);
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetAnalog(MlirContext ctx, int32_t width);
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetVector(MlirContext ctx,
                                                 MlirType element, size_t count);
-MLIR_CAPI_EXPORTED MlirType firrtlGetTypeBundle(
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetBundle(
     MlirContext ctx, size_t count, const FIRRTLBundleField *fields);
 
 //===----------------------------------------------------------------------===//
@@ -90,27 +90,27 @@ MLIR_CAPI_EXPORTED MlirType firrtlGetTypeBundle(
 //===----------------------------------------------------------------------===//
 
 MLIR_CAPI_EXPORTED MlirAttribute
-firrtlGetAttrConvention(MlirContext ctx, FIRRTLConvention convention);
+firrtlAttrGetConvention(MlirContext ctx, FIRRTLConvention convention);
 
 MLIR_CAPI_EXPORTED MlirAttribute
-firrtlGetAttrPortDirs(MlirContext ctx, size_t count, const FIRRTLPortDir *dirs);
+firrtlAttrGetPortDirs(MlirContext ctx, size_t count, const FIRRTLPortDir *dirs);
 
-MLIR_CAPI_EXPORTED MlirAttribute firrtlGetAttrNameKind(MlirContext ctx,
+MLIR_CAPI_EXPORTED MlirAttribute firrtlAttrGetNameKind(MlirContext ctx,
                                                        FIRRTLNameKind nameKind);
 
-MLIR_CAPI_EXPORTED MlirAttribute firrtlGetAttrRUW(MlirContext ctx,
+MLIR_CAPI_EXPORTED MlirAttribute firrtlAttrGetRUW(MlirContext ctx,
                                                   FIRRTLRUW ruw);
 
-MLIR_CAPI_EXPORTED MlirAttribute firrtlGetAttrMemInit(MlirContext ctx,
-                                                      MlirStringRef filename,
+MLIR_CAPI_EXPORTED MlirAttribute firrtlAttrGetMemInit(MlirContext ctx,
+                                                      MlirIdentifier filename,
                                                       bool isBinary,
                                                       bool isInline);
 
-MLIR_CAPI_EXPORTED MlirAttribute firrtlGetAttrMemDir(MlirContext ctx,
+MLIR_CAPI_EXPORTED MlirAttribute firrtlAttrGetMemDir(MlirContext ctx,
                                                      FIRRTLMemDir dir);
 
 MLIR_CAPI_EXPORTED MlirAttribute
-firrtlGetAttrEventControl(MlirContext ctx, FIRRTLEventControl eventControl);
+firrtlAttrGetEventControl(MlirContext ctx, FIRRTLEventControl eventControl);
 
 #ifdef __cplusplus
 }
