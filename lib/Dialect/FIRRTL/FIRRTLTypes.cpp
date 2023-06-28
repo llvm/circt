@@ -265,7 +265,8 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
                                        parseBundleElement))
       return failure();
 
-    return result = OpenBundleType::get(context, elements, isConst), success();
+    result = parser.getChecked<OpenBundleType>(context, elements, isConst);
+    return failure(!result);
   }
 
   if (name.equals("enum")) {
@@ -318,7 +319,9 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
         parser.parseGreater())
       return failure();
 
-    return result = OpenVectorType::get(elementType, width, isConst), success();
+    result =
+        parser.getChecked<OpenVectorType>(context, elementType, width, isConst);
+    return failure(!result);
   }
 
   // For now, support both firrtl.ref and firrtl.probe.
