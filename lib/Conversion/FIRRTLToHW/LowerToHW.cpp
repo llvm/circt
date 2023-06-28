@@ -2451,7 +2451,6 @@ bool FIRRTLLowering::updateIfBackedge(Value dest, Value src) {
   auto backedgeIt = backedges.find(dest);
   if (backedgeIt == backedges.end())
     return false;
-  assert(backedgeIt->first == backedgeIt->second && "backedge lowered twice");
   backedgeIt->second = src;
   return true;
 }
@@ -2871,9 +2870,10 @@ LogicalResult FIRRTLLowering::visitExpr(SubtagOp op) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
+  auto origResultType = op.getResult().getType();
+
   // Foreign types lower to a backedge that needs to be resolved by a later
   // connect op.
-  auto origResultType = op.getResult().getType();
   if (!isa<FIRRTLType>(origResultType)) {
     createBackedge(op.getResult(), origResultType);
     return success();
@@ -3289,15 +3289,21 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     auto portResult = oldInstance.getResult(portIndex);
     assert(portResult && "invalid IR, couldn't find port");
 
-    // Directly materialize inputs which are trivially assigned once through a
-    // `StrictConnectOp`.
-    if (port.isInput() && getSingleConnectUserOf(portResult)) {
+    // Directly materialize foreign types.
+    if (!isa<FIRRTLType>(port.type)) {
       operands.push_back(createBackedge(portResult, portType));
       continue;
     }
 
-    // If the result has an analog type and is used only by attach op,
-    // try eliminating a temporary wire by directly using an attached value.
+    // Replace the input port with a backedge.  If it turns out that this port
+    // is never driven, an uninitialized wire will be materialized at the end.
+    if (port.isInput()) {
+      operands.push_back(createBackedge(portResult, portType));
+      continue;
+    }
+
+    // If the result has an analog type and is used only by attach op, try
+    // eliminating a temporary wire by directly using an attached value.
     if (isa<AnalogType>(portResult.getType()) && portResult.hasOneUse()) {
       if (auto attach = dyn_cast<AttachOp>(*portResult.getUsers().begin())) {
         if (auto source = getSingleNonInstanceOperand(attach)) {
@@ -3309,21 +3315,9 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
       }
     }
 
-    // Directly materialize foreign types.
-    if (!isa<FIRRTLType>(port.type)) {
-      operands.push_back(createBackedge(portResult, portType));
-      continue;
-    }
-
-    // Create a wire for each input/inout operand, so there is
-    // something to connect to.
-    Value wire;
-    if (port.isInOut()) {
-      wire = createTmpWireOp(portType, "." + port.getName().str() + ".wire");
-    } else {
-      wire = createTmpHWWireOp(portType, "." + port.getName() + ".wire");
-    }
-
+    // Create a wire for each inout operand, so there is something to connect
+    // to.
+    auto wire = createTmpWireOp(portType, "." + port.getName().str() + ".wire");
     // Know that the argument FIRRTL value is equal to this wire, allowing
     // connects to it to be lowered.
     (void)setLowering(portResult, wire);
@@ -4093,6 +4087,11 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   if (failed(result))
     return failure();
   if (*result)
+    return success();
+
+  // If this connect is driving a value that is currently a backedge, record
+  // that the source is the value of the backedge.
+  if (updateIfBackedge(destVal, srcVal))
     return success();
 
   if (!destVal.getType().isa<hw::InOutType>())
