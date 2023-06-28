@@ -375,9 +375,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     if (parser.parseLess() || parseNestedPropertyType(elementType, parser) ||
         parser.parseGreater())
       return failure();
-    result = ListType::getChecked(
-        [&]() { return parser.emitError(parser.getNameLoc()); }, context,
-        elementType);
+    result = parser.getChecked<ListType>(context, elementType);
     if (!result)
       return failure();
     return success();
@@ -392,9 +390,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
         parser.parseComma() || parseNestedPropertyType(valueType, parser) ||
         parser.parseGreater())
       return failure();
-    result = MapType::getChecked(
-        [&]() { return parser.emitError(parser.getNameLoc()); }, context,
-        keyType, valueType);
+    result = parser.getChecked<MapType>(context, keyType, valueType);
     if (!result)
       return failure();
     return success();
