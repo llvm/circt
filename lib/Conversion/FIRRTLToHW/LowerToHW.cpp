@@ -3274,12 +3274,6 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     auto portResult = oldInstance.getResult(portIndex);
     assert(portResult && "invalid IR, couldn't find port");
 
-    // Directly materialize foreign types.
-    if (!isa<FIRRTLType>(port.type)) {
-      operands.push_back(createBackedge(portResult, portType));
-      continue;
-    }
-
     // Replace the input port with a backedge.  If it turns out that this port
     // is never driven, an uninitialized wire will be materialized at the end.
     if (port.isInput()) {
