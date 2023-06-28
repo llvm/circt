@@ -1,5 +1,4 @@
 // RUN: circt-opt --namehints-insensitive-cse %s | FileCheck %s
-// This test verifies that debug locations are stripped.
 // CHECK-LABEL: MyModule
 hw.module @MyModule(%a : i1, %b: i1) -> (c : i1, d: i1) {
   // CHECK: %0 = comb.and %a, %b {sv.namehint = "foo"} : i1
