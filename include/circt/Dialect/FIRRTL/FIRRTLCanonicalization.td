@@ -434,6 +434,12 @@ def BitsOfMux : Pat<
   (MoveNameHint $old, (MuxPrimOp $c, (BitsPrimOp $x, $oHigh, $oLow), (BitsPrimOp $y, $oHigh, $oLow))),
   [(AnyConstantOp $x), (AnyConstantOp $y)]>;
 
+// bits(asUInt) -> bits
+def BitsOfAsUInt : Pat<
+  (BitsPrimOp:$old (AsUIntPrimOp $x), I32Attr:$oHigh, I32Attr:$oLow),
+  (MoveNameHint $old, (BitsPrimOp $x, $oHigh, $oLow)),
+  [(KnownWidth $x)]>;
+
 // subaccess a, cst -> subindex a, cst
 // TODO: only enable if cst is inside a.  Subaccess and subindex behave differently for out-of-bounds indexes.
 def SubaccessOfConstant : Pat<

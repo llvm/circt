@@ -1244,7 +1244,8 @@ OpFoldResult BitsPrimOp::fold(FoldAdaptor adaptor) {
 
 void BitsPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results.insert<patterns::BitsOfBits, patterns::BitsOfMux>(context);
+  results.insert<patterns::BitsOfBits, patterns::BitsOfMux,
+                 patterns::BitsOfAsUInt>(context);
 }
 
 /// Replace the specified operation with a 'bits' op from the specified hi/lo
