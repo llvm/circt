@@ -769,11 +769,11 @@ circuit DuplicateAlias:
 circuit BundleOfProps:
   module BundleOfProps:
     input x : {a : String}
-    ; expected-error @above {{bundle elements must support fieldID's, unsupported element type: '!firrtl.string'}}
+    ; expected-error @above {{type '!firrtl.string' cannot be used as field in a bundle}}
 
 ;// -----
 
 circuit VecOfProps:
   module VecOfProps:
     input x : String[2]
-    ; expected-error @above {{vector elements must support fieldID's, unsupported element type: '!firrtl.string'}}
+    ; expected-error @above {{type '!firrtl.string' cannot be used in a vector}}

@@ -932,9 +932,8 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
           // We require that elements of aggregates themselves
           // support notion of FieldID, reject if the type does not.
           if (!isa<hw::FieldIDTypeInterface>(type))
-            return emitError(loc, "bundle elements must support fieldID's, "
-                                  "unsupported element type: ")
-                   << type;
+            return emitError(loc, "type ")
+                   << type << " cannot be used as field in a bundle";
 
           elements.push_back(
               {StringAttr::get(getContext(), fieldName), isFlipped, type});
@@ -1019,10 +1018,8 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     // We require that elements of aggregates themselves
     // support notion of FieldID, reject if the type does not.
     if (!isa<hw::FieldIDTypeInterface>(result))
-      return emitError(sizeLoc,
-                       "vector elements must support fieldID's, unsupported "
-                       "element type: ")
-             << result;
+      return emitError(sizeLoc, "type ")
+             << result << " cannot be used in a vector";
 
     auto baseType = dyn_cast<FIRRTLBaseType>(result);
     if (baseType)
