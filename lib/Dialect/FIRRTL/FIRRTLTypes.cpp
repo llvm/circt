@@ -1741,6 +1741,24 @@ OpenBundleType::getElementTypePreservingConst(size_t index) {
       .Default(type);
 }
 
+auto OpenBundleType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
+                            ArrayRef<BundleElement> elements, bool isConst)
+    -> LogicalResult {
+  for (auto &element : elements) {
+    if (!type_isa<hw::FieldIDTypeInterface>(element.type))
+      return emitErrorFn()
+             << "bundle element " << element.name
+             << " has unsupported type that does not support fieldID's: "
+             << element.type;
+    if (FIRRTLType(element.type).containsReference() && isConst)
+      return emitErrorFn()
+             << "'const' bundle cannot have references, but element "
+             << element.name << " has type " << element.type;
+  }
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // FVectorType
 //===----------------------------------------------------------------------===//
@@ -1989,6 +2007,18 @@ OpenVectorType::ElementType OpenVectorType::getElementTypePreservingConst() {
         return type.getConstType(type.isConst() || isConst());
       })
       .Default(type);
+}
+
+auto OpenVectorType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
+                            FIRRTLType elementType, size_t numElements,
+                            bool isConst) -> LogicalResult {
+  if (!type_isa<hw::FieldIDTypeInterface>(elementType))
+    return emitErrorFn()
+           << "vector element type does not support fieldID's, type: "
+           << elementType;
+  if (elementType.containsReference() && isConst)
+    return emitErrorFn() << "vector cannot be const with references";
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
