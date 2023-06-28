@@ -466,11 +466,10 @@ ValueRange StageOp::getClockGatesForReg(unsigned regIdx) {
     if (index == regIdx) {
       // This is the register we are looking for.
       return getClockGates().slice(clockGateStartIdx, nClockGates);
-    } else {
-      // Increment the start index by the number of clock gates for this
-      // register.
-      clockGateStartIdx += nClockGates;
     }
+    // Increment the start index by the number of clock gates for this
+    // register.
+    clockGateStartIdx += nClockGates;
   }
 
   llvm_unreachable("register index out of bounds.");
