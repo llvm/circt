@@ -117,15 +117,6 @@ def GTWithConstLHS : Pat<
   (MoveNameHint $old, (LTPrimOp $rhs, $lhs)),
   [(AnyConstantOp $lhs), (NonConstantOp $rhs)]>;
 
-////////////////////////////////////////////////////////////////////////////////
-// Width Narrow
-////////////////////////////////////////////////////////////////////////////////
-
-// leq(shl(x, c), const) -> leq(x, const >> c) if lowest c bits of const are zero
-
-
-
-
 // not(not(x)) -> x
 def NotNot : Pat <
   (NotPrimOp:$old (NotPrimOp $x)),
@@ -393,6 +384,18 @@ def XorRCvt : Pat <
   (MoveNameHint $old, (XorRPrimOp $x)),
   [(KnownWidth $x), (IntTypes $x)]>;
 
+/// xorr(cat(0,x)) -> xorr(x)
+def XorRCatZeroH : Pat <
+  (XorRPrimOp:$old (CatPrimOp $c, $x)),
+  (MoveNameHint $old, (XorRPrimOp $x)),
+  [(KnownWidth $x), (IntTypes $x), (ZeroConstantOp $c)]>;
+
+/// xorr(cat(x,0)) -> xorr(x)
+def XorRCatZeroL : Pat <
+  (XorRPrimOp:$old (CatPrimOp $x, $c)),
+  (MoveNameHint $old, (XorRPrimOp $x)),
+  [(KnownWidth $x), (IntTypes $x), (ZeroConstantOp $c)]>;
+
 /// andr(asSInt(x)) -> andr(x)
 def AndRasSInt : Pat <
   (AndRPrimOp:$old (AsSIntPrimOp $x)),
@@ -496,7 +499,7 @@ def RefResolveOfRefSend : Pat<
 >;
 
 def UtoStoU : Pat<
-  (AsUIntPrimOp (AsSIntPrimOp $x)),
+  (AsSIntPrimOp (AsUIntPrimOp $x)),
   (replaceWithValue $x),
   []>;
 

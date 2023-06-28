@@ -1140,8 +1140,8 @@ OpFoldResult XorRPrimOp::fold(FoldAdaptor adaptor) {
 
 void XorRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results.insert<patterns::XorRasSInt, patterns::XorRasUInt, patterns::XorRCvt>(
-      context);
+  results.insert<patterns::XorRasSInt, patterns::XorRasUInt, patterns::XorRCvt,
+                 patterns::XorRCatZeroH, patterns::XorRCatZeroL>(context);
 }
 
 //===----------------------------------------------------------------------===//
