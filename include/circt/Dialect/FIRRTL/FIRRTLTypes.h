@@ -467,7 +467,8 @@ public:
 
   /// Add a case on the given type.
   template <typename CaseT, typename CallableT>
-  FIRRTLTypeSwitch<T, ResultT> &Case(CallableT &&caseFn) {
+  FIRRTLTypeSwitch<T, ResultT> &
+  Case(CallableT &&caseFn) { // NOLINT(readability-identifier-naming)
     if (result)
       return *this;
 
@@ -479,14 +480,16 @@ public:
 
   /// As a default, invoke the given callable within the root value.
   template <typename CallableT>
-  [[nodiscard]] ResultT Default(CallableT &&defaultFn) {
+  [[nodiscard]] ResultT
+  Default(CallableT &&defaultFn) { // NOLINT(readability-identifier-naming)
     if (result)
       return std::move(*result);
     return defaultFn(this->value);
   }
 
   /// As a default, return the given value.
-  [[nodiscard]] ResultT Default(ResultT defaultResult) {
+  [[nodiscard]] ResultT
+  Default(ResultT defaultResult) { // NOLINT(readability-identifier-naming)
     if (result)
       return std::move(*result);
     return defaultResult;
@@ -515,7 +518,8 @@ public:
 
   /// Add a case on the given type.
   template <typename CaseT, typename CallableT>
-  FIRRTLTypeSwitch<T, void> &Case(CallableT &&caseFn) {
+  FIRRTLTypeSwitch<T, void> &
+  Case(CallableT &&caseFn) { // NOLINT(readability-identifier-naming)
     if (foundMatch)
       return *this;
 
@@ -529,7 +533,7 @@ public:
 
   /// As a default, invoke the given callable within the root value.
   template <typename CallableT>
-  void Default(CallableT &&defaultFn) {
+  void Default(CallableT &&defaultFn) { // NOLINT(readability-identifier-naming)
     if (!foundMatch)
       defaultFn(this->value);
   }
