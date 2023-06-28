@@ -1,4 +1,5 @@
 add_circt_library(CIRCTTransforms
+  CSE.cpp
   FlattenMemRefs.cpp
   StripDebugInfoWithPred.cpp
   MapArithToComb.cpp

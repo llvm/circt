@@ -13,6 +13,7 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Support/Passes.h"
+#include "circt/Transforms/Passes.h"
 #include "mlir/Transforms/Passes.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
@@ -195,7 +196,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 
   if (!opt.disableOptimization) {
     auto &modulePM = pm.nest<hw::HWModuleOp>();
-    modulePM.addPass(mlir::createCSEPass());
+    modulePM.addPass(createNamehintsInsensitiveCSEPass());
     modulePM.addPass(createSimpleCanonicalizerPass());
   }
 
@@ -225,9 +226,9 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
   // If enabled, run the optimizer.
   if (!opt.disableOptimization) {
     auto &modulePM = pm.nest<hw::HWModuleOp>();
-    modulePM.addPass(mlir::createCSEPass());
+    modulePM.addPass(createNamehintsInsensitiveCSEPass());
     modulePM.addPass(createSimpleCanonicalizerPass());
-    modulePM.addPass(mlir::createCSEPass());
+    modulePM.addPass(createNamehintsInsensitiveCSEPass());
     modulePM.addPass(sv::createHWCleanupPass(
         /*mergeAlwaysBlocks=*/!opt.emitSeparateAlwaysBlocks));
   }

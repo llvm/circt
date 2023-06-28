@@ -70,4 +70,16 @@ def MapArithToCombPass : InterfacePass<"map-arith-to-comb", "circt::hw::HWModule
   let dependentDialects = ["circt::hw::HWDialect, mlir::arith::ArithDialect, circt::comb::CombDialect"];
 }
 
+def NamehintsInsensitiveCSE : Pass<"namehints-insensitive-cse"> {
+  let summary = "CSE that ignores namehints";
+  let description = [{
+    This pass implements customized CSE that ignores namehints.
+  }];
+  let constructor = "circt::createNamehintsInsensitiveCSEPass()";
+  let statistics = [
+    Statistic<"numCSE", "num-cse'd", "Number of operations CSE'd">,
+    Statistic<"numDCE", "num-dce'd", "Number of operations DCE'd">
+  ];
+}
+
 #endif // CIRCT_TRANSFORMS_PASSES
