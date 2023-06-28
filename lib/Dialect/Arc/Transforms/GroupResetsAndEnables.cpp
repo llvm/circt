@@ -165,8 +165,7 @@ struct GroupAssignmentsInIfPattern : public OpRewritePattern<scf::IfOp> {
     // Skip anything not in a ClockTreeOp
     auto clockTreeOp = ifOp->getParentOfType<ClockTreeOp>();
     if (!clockTreeOp)
-      // This probably means the design uses a derived clock (warning).
-      return success(false);
+      return failure();
     // Group assignments in each region and keep track of whether either
     // grouping made changes
     bool changed = groupInRegion(ifOp.thenBlock(), clockTreeOp, &rewriter) ||
