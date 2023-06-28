@@ -163,12 +163,10 @@ public:
     Value enableLatch = rewriter.create<sv::RegOp>(
         loc, rewriter.getI1Type(), rewriter.getStringAttr("cg_en_latch"));
 
-    // Latch the enable signal.
+    // Latch the enable signal using an always @* block.
     rewriter.create<sv::AlwaysOp>(
-        loc,
-        llvm::SmallVector<sv::EventControl>{sv::EventControl::AtEdge,
-                                            sv::EventControl::AtEdge},
-        llvm::SmallVector<Value>{clk, enable}, [&]() {
+        loc, llvm::SmallVector<sv::EventControl>{}, llvm::SmallVector<Value>{},
+        [&]() {
           rewriter.create<sv::IfOp>(
               loc, comb::createOrFoldNot(loc, clk, rewriter), [&]() {
                 rewriter.create<sv::PAssignOp>(loc, enableLatch, enable);
