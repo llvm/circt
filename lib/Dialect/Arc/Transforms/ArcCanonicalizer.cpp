@@ -17,8 +17,11 @@
 #include "circt/Support/Namespace.h"
 #include "circt/Support/SymCache.h"
 #include "mlir/IR/Matchers.h"
+#include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "arc-canonicalizer"
@@ -174,6 +177,19 @@ struct RemoveUnusedArcArgumentsPattern : public SymOpRewritePattern<DefineOp> {
 struct SinkArcInputsPattern : public SymOpRewritePattern<DefineOp> {
   using SymOpRewritePattern::SymOpRewritePattern;
   LogicalResult matchAndRewrite(DefineOp op,
+                                PatternRewriter &rewriter) const final;
+};
+
+template <typename BitwiseOp>
+struct ConcatPushThroughPattern : public OpRewritePattern<BitwiseOp> {
+  using OpRewritePattern<BitwiseOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(BitwiseOp op,
+                                PatternRewriter &rewriter) const final;
+};
+
+struct ConcatPullUpPattern : public OpRewritePattern<comb::ConcatOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(comb::ConcatOp op,
                                 PatternRewriter &rewriter) const final;
 };
 
@@ -480,6 +496,59 @@ SinkArcInputsPattern::matchAndRewrite(DefineOp op,
   return success(toDelete.any());
 }
 
+template <typename BitwiseOp>
+LogicalResult ConcatPushThroughPattern<BitwiseOp>::matchAndRewrite(
+    BitwiseOp op, PatternRewriter &rewriter) const {
+  for (Value operand : op.getOperands()) {
+    if (auto concatOp = operand.getDefiningOp<comb::ConcatOp>()) {
+
+    } else {
+      return failure();
+    }
+  }
+  return failure();
+  return success();
+}
+
+LogicalResult
+ConcatPullUpPattern::matchAndRewrite(comb::ConcatOp op,
+                                     PatternRewriter &rewriter) const {
+  bool precond = llvm::all_of(op.getOperands(), [](Value operand) {
+    auto *defOp = operand.getDefiningOp();
+    if (!defOp)
+      return false;
+    if (!isa<comb::XorOp, comb::AndOp, comb::OrOp>(defOp))
+      return false;
+    if (defOp->getNumOperands() != 2)
+      return false;
+    if (auto *constOp = defOp->getOperand(1).getDefiningOp();
+        constOp && constOp->hasTrait<OpTrait::ConstantLike>()) {
+      return true;
+    }
+    return false;
+  });
+  if (!precond ||
+      !llvm::all_equal(llvm::map_range(op.getOperands(), [](Value val) {
+        return val.getDefiningOp()->getName();
+      })))
+    return failure();
+  SmallVector<Value> newConcatInputs(
+      llvm::map_range(op.getOperands(), [](Value val) {
+        return val.getDefiningOp()->getOperand(0);
+      }));
+  APInt c(0, 0, false);
+  for (auto operand : op.getOperands()) {
+    c = c.concat(cast<hw::ConstantOp>(
+                     operand.getDefiningOp()->getOperand(1).getDefiningOp())
+                     .getValue());
+  }
+  auto newConstant = rewriter.create<hw::ConstantOp>(op.getLoc(), c);
+  auto newConcat =
+      rewriter.create<comb::ConcatOp>(op.getLoc(), newConcatInputs);
+  rewriter.replaceOpWithNewOp<comb::XorOp>(op, newConcat, newConstant);
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // ArcCanonicalizerPass implementation
 //===----------------------------------------------------------------------===//
@@ -525,7 +594,7 @@ void ArcCanonicalizerPass::runOnOperation() {
     dialect->getCanonicalizationPatterns(patterns);
   for (mlir::RegisteredOperationName op : ctxt.getRegisteredOperations())
     op.getCanonicalizationPatterns(patterns, &ctxt);
-  patterns.add<ICMPCanonicalizer>(&getContext());
+  patterns.add<ICMPCanonicalizer, ConcatPullUpPattern>(&getContext());
 
   // Don't test for convergence since it is often not reached.
   (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns),
