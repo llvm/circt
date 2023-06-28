@@ -717,6 +717,15 @@ OpFoldResult ClockGateOp::fold(FoldAdaptor adaptor) {
   if (isConstantZero(adaptor.getInput()))
     return IntegerAttr::get(IntegerType::get(getContext(), 1), 0);
 
+  // Transitive clock gating - eliminate clock gates that are driven by an
+  // identical enable signal somewhere in a clock gate hierarchy.
+  auto clockGateInput = getInput().getDefiningOp<ClockGateOp>();
+  while (clockGateInput) {
+    if (clockGateInput.getEnable() == getEnable())
+      return getInput();
+    clockGateInput = clockGateInput.getInput().getDefiningOp<ClockGateOp>();
+  }
+
   return {};
 }
 
