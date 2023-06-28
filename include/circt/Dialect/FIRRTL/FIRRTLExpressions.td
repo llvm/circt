@@ -663,8 +663,10 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
 
 def SizeOfIntrinsicOp : UnaryPrimOp<"int.sizeof", FIRRTLBaseType, UInt32Type>;
 
-def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLBaseType, SIntType>;
-def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLBaseType, UIntType>;
+let hasCanonicalizer=1 in {
+  def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLBaseType, SIntType>;
+  def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLBaseType, UIntType>;
+}
 def AsAsyncResetPrimOp
   : UnaryPrimOp<"asAsyncReset", OneBitCastableType, AsyncResetType>;
 def AsClockPrimOp : UnaryPrimOp<"asClock", OneBitCastableType, ClockType>;

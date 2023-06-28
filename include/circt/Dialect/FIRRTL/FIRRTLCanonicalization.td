@@ -117,6 +117,15 @@ def GTWithConstLHS : Pat<
   (MoveNameHint $old, (LTPrimOp $rhs, $lhs)),
   [(AnyConstantOp $lhs), (NonConstantOp $rhs)]>;
 
+////////////////////////////////////////////////////////////////////////////////
+// Width Narrow
+////////////////////////////////////////////////////////////////////////////////
+
+// leq(shl(x, c), const) -> leq(x, const >> c) if lowest c bits of const are zero
+
+
+
+
 // not(not(x)) -> x
 def NotNot : Pat <
   (NotPrimOp:$old (NotPrimOp $x)),
@@ -418,6 +427,13 @@ def BitsOfBits : Pat<
     (NativeCodeCall<"$_builder.getI32IntegerAttr($0.getValue().getZExtValue() + $1.getValue().getZExtValue())"> $oLow, $iLow))),
   []>;
 
+// bits(mux(c,x,y)) -> mux(c, bits(x), bits(y))
+// This isn't obviously good if the mux has multiple uses, so limit it to constants.
+def BitsOfMux : Pat<
+  (BitsPrimOp:$old (MuxPrimOp $c, $x, $y), I32Attr:$oHigh, I32Attr:$oLow),
+  (MoveNameHint $old, (MuxPrimOp $c, (BitsPrimOp $x, $oHigh, $oLow), (BitsPrimOp $y, $oHigh, $oLow))),
+  [(AnyConstantOp $x), (AnyConstantOp $y)]>;
+
 // subaccess a, cst -> subindex a, cst
 // TODO: only enable if cst is inside a.  Subaccess and subindex behave differently for out-of-bounds indexes.
 def SubaccessOfConstant : Pat<
@@ -472,5 +488,16 @@ def RefResolveOfRefSend : Pat<
   (RefResolveOp:$resolve (RefSendOp $base)),
   (replaceWithValue $base), [(EqualTypes $base, $resolve)]
 >;
+
+def UtoStoU : Pat<
+  (AsUIntPrimOp (AsSIntPrimOp $x)),
+  (replaceWithValue $x),
+  []>;
+
+def StoUtoS : Pat<
+  (AsUIntPrimOp (AsSIntPrimOp $x)),
+  (replaceWithValue $x),
+  []>;
+
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD

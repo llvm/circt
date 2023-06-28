@@ -980,6 +980,11 @@ OpFoldResult AsSIntPrimOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+void AsSIntPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                               MLIRContext *context) {
+  results.insert<patterns::StoUtoS>(context);
+}
+
 OpFoldResult AsUIntPrimOp::fold(FoldAdaptor adaptor) {
   // No effect.
   if (getInput().getType() == getType())
@@ -993,6 +998,11 @@ OpFoldResult AsUIntPrimOp::fold(FoldAdaptor adaptor) {
       return getIntAttr(getType(), *cst);
 
   return {};
+}
+
+void AsUIntPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                               MLIRContext *context) {
+  results.insert<patterns::UtoStoU>(context);
 }
 
 OpFoldResult AsAsyncResetPrimOp::fold(FoldAdaptor adaptor) {
@@ -1234,7 +1244,7 @@ OpFoldResult BitsPrimOp::fold(FoldAdaptor adaptor) {
 
 void BitsPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results.insert<patterns::BitsOfBits>(context);
+  results.insert<patterns::BitsOfBits, patterns::BitsOfMux>(context);
 }
 
 /// Replace the specified operation with a 'bits' op from the specified hi/lo
