@@ -1518,6 +1518,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult setLoweringTo(Operation *orig, CtorArgTypes... args);
   template <typename ResultOpType, typename... CtorArgTypes>
   LogicalResult setLoweringToLTL(Operation *orig, CtorArgTypes... args);
+  Backedge createBackedge(Location loc, Type type);
   Backedge createBackedge(Value orig, Type type);
   bool updateIfBackedge(Value dest, Value src);
 
@@ -1555,14 +1556,6 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
     auto result = builder.create<sv::WireOp>(type, name);
     tmpWiresToOptimize.push_back(result);
     return result;
-  }
-
-  // Create a temporary wire to act as a destination for connect operations.
-  // These wires are removed after all connects have been lowered.
-  hw::WireOp createTmpHWWireOp(Type type, StringAttrOrRef name = {}) {
-    auto wire = builder.create<hw::WireOp>(getOrCreateZConstant(type), name);
-    tmpWiresToRemove.push_back(wire);
-    return wire;
   }
 
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitExpr;
@@ -1795,11 +1788,6 @@ private:
   /// lowering.
   SmallVector<sv::WireOp> tmpWiresToOptimize;
 
-  /// A list of wires created as a temporary destination to for connect-like
-  /// operations to hook up to. These wires are deleted again and replaced with
-  /// their connected value after all operations have been lowered.
-  SmallVector<hw::WireOp> tmpWiresToRemove;
-
   /// A namespace that can be used to generte new symbol names that are unique
   /// within this module.
   hw::ModuleNamespace moduleNamespace;
@@ -1934,15 +1922,6 @@ LogicalResult FIRRTLLowering::run() {
   // inserted by MemOp insertions.
   for (auto wire : tmpWiresToOptimize)
     optimizeTemporaryWire(wire);
-
-  // Remove all temporary wires created solely for the purpose of facilitating
-  // the lowering of connect-like operations.
-  for (auto wire : tmpWiresToRemove) {
-    if (wire.getInnerSymAttr())
-      return wire.emitError("temporary wire was given an inner symbol");
-    wire.replaceAllUsesWith(wire.getInput());
-    wire.erase();
-  }
 
   // Determine the actual types of lowered LTL operations and remove any
   // intermediate wires among them.
@@ -2434,13 +2413,24 @@ LogicalResult FIRRTLLowering::setLoweringToLTL(Operation *orig,
   return setPossiblyFoldedLowering(orig->getResult(0), result);
 }
 
+/// Creates a backedge of the specified result type. A backedge represents a
+/// placeholder to be filled in later by a lowered value. If the backedge is not
+/// updated with a real value by the end of the pass, it will be replaced with
+/// an undriven wire.  Backedges are allowed to be updated to other backedges.
+/// If a chain of backedges forms a combinational loop, they will be replaced
+/// with an undriven wire.
+Backedge FIRRTLLowering::createBackedge(Location loc, Type type) {
+  auto backedge = backedgeBuilder.get(type, loc);
+  backedges.insert({backedge, backedge});
+  return backedge;
+}
+
 /// Sets the lowering for a value to a backedge of the specified result type.
 /// This is useful for lowering types which cannot pass through a wire, or to
 /// directly materialize values in operations that violate the SSA dominance
 /// constraint.
 Backedge FIRRTLLowering::createBackedge(Value orig, Type type) {
-  auto backedge = backedgeBuilder.get(type, orig.getLoc());
-  backedges.insert({backedge, backedge});
+  auto backedge = createBackedge(orig.getLoc(), type);
   (void)setLowering(orig, backedge);
   return backedge;
 }
@@ -3122,23 +3112,19 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       if (memportKind != op.getPortKind(i))
         continue;
 
-      auto portName = op.getPortName(i).getValue();
-
       auto addInput = [&](StringRef portLabel, StringRef portLabel2,
                           StringRef field, size_t width,
                           StringRef field2 = "") {
         auto portType =
             IntegerType::get(op.getContext(), std::max((size_t)1, width));
+
+        Value backedge = createBackedge(builder.getLoc(), portType);
         auto accesses = getAllFieldAccesses(op.getResult(i), field);
-
-        Value wire =
-            createTmpHWWireOp(portType, "." + portName + "." + field + ".wire");
-
         for (auto a : accesses) {
           if (cast<FIRRTLBaseType>(a.getType())
                   .getPassiveType()
                   .getBitWidthOrSentinel() > 0)
-            (void)setLowering(a, wire);
+            (void)setLowering(a, backedge);
           else
             a->eraseOperand(0);
         }
@@ -3146,22 +3132,21 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         if (!field2.empty()) {
           // This handles the case, when the single bit mask field is removed,
           // and the enable is updated after 'And' with mask bit.
-          Value wire2 = createTmpHWWireOp(portType, "." + portName + "." +
-                                                        field2 + ".wire");
+          auto backedge2 = createBackedge(builder.getLoc(), portType);
           auto accesses2 = getAllFieldAccesses(op.getResult(i), field2);
-
           for (auto a : accesses2) {
             if (cast<FIRRTLBaseType>(a.getType())
                     .getPassiveType()
                     .getBitWidthOrSentinel() > 0)
-              (void)setLowering(a, wire2);
+              (void)setLowering(a, backedge2);
             else
               a->eraseOperand(0);
           }
-          wire = builder.createOrFold<comb::AndOp>(wire, wire2, true);
+          backedge =
+              builder.createOrFold<comb::AndOp>(backedge, backedge2, true);
         }
 
-        operands.push_back(wire);
+        operands.push_back(backedge);
         argNames.push_back(
             builder.getStringAttr(portLabel + Twine(portNumber) + portLabel2));
       };
