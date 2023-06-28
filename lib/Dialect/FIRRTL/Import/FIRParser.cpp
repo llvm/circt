@@ -384,8 +384,8 @@ public:
       using ILH = FIRParserOptions::InfoLocHandling;
       switch (parser->constants.options.infoLocatorHandling) {
       case ILH::IgnoreInfo:
-        assert(0 && "Should not parse info locations if ignoring");
-        LLVM_FALLTHROUGH;
+        assert(0 && "Should not return info locations if ignoring");
+        break;
       case ILH::PreferInfo:
         infoLoc = loc;
         break;
@@ -1360,8 +1360,9 @@ struct LazyLocationListener : public OpBuilder::Listener {
         using ILH = FIRParserOptions::InfoLocHandling;
         switch (parser.getConstants().options.infoLocatorHandling) {
         case ILH::IgnoreInfo:
-          assert(0 && "Should not parse info locations if ignoring");
-          LLVM_FALLTHROUGH;
+          // Shouldn't have an infoLoc, but if we do ignore it.
+          opAndSMLoc.first->setLoc(parser.translateLocation(opAndSMLoc.second));
+          break;
         case ILH::PreferInfo:
           opAndSMLoc.first->setLoc(infoLoc);
           break;
