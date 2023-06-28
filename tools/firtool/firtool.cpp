@@ -451,7 +451,7 @@ public:
     setHandler([](Diagnostic &d) {
       SmallPtrSet<Location, 8> locs;
       // Recursively scan for FileLineColLoc locations.
-      d.getLocation().operator LocationAttr().walk([&](Location loc) {
+      d.getLocation()->walk([&](Location loc) {
         if (isa<FileLineColLoc>(loc))
           locs.insert(loc);
         return WalkResult::advance();
@@ -460,7 +460,8 @@ public:
       // Drop top-level location the diagnostic is reported on.
       locs.erase(d.getLocation());
       // As well as the location the SourceMgrDiagnosticHandler will use.
-      locs.erase(d.getLocation()->findInstanceOf<FileLineColLoc>());
+      if (auto reportLoc = d.getLocation()->findInstanceOf<FileLineColLoc>())
+        locs.erase(reportLoc);
 
       // Attach additional locations as notes on the diagnostic.
       for (auto l : locs)
