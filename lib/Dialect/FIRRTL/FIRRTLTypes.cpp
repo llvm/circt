@@ -1744,9 +1744,9 @@ OpenBundleType::getElementTypePreservingConst(size_t index) {
       .Default(type);
 }
 
-auto OpenBundleType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
-                            ArrayRef<BundleElement> elements, bool isConst)
-    -> LogicalResult {
+LogicalResult
+OpenBundleType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
+                       ArrayRef<BundleElement> elements, bool isConst) {
   for (auto &element : elements) {
     if (!type_isa<hw::FieldIDTypeInterface>(element.type))
       return emitErrorFn()
@@ -2012,9 +2012,10 @@ OpenVectorType::ElementType OpenVectorType::getElementTypePreservingConst() {
       .Default(type);
 }
 
-auto OpenVectorType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
-                            FIRRTLType elementType, size_t numElements,
-                            bool isConst) -> LogicalResult {
+LogicalResult
+OpenVectorType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
+                       FIRRTLType elementType, size_t numElements,
+                       bool isConst) {
   if (!type_isa<hw::FieldIDTypeInterface>(elementType))
     return emitErrorFn()
            << "vector element type does not support fieldID's, type: "
