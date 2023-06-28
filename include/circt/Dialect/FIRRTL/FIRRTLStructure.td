@@ -105,10 +105,13 @@ def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
   let skipDefaultBuilders = 1;
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
+
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "ConventionAttr":$convention,
-               "ArrayRef<PortInfo>":$ports,
-               CArg<"ArrayAttr", "ArrayAttr()">:$annotations)>,
+    OpBuilder<(ins "StringAttr":$name,
+               "ConventionAttr":$convention,
+               "ArrayRef<PortInfo>":$ports, CArg<"ArrayAttr",
+               "ArrayAttr()">:$annotations,
+               CArg<"StringRef", "StringRef()">:$desiredName)>
   ];
 
   let extraClassDeclaration = [{

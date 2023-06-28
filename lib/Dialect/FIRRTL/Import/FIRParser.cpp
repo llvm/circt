@@ -3881,7 +3881,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   bool isIntModule = getToken().is(FIRToken::kw_intmodule);
   consumeToken();
   StringAttr name;
-  StringAttr desiredName;
+  StringRef desiredName;
   SmallVector<PortInfo, 8> portList;
   SmallVector<SMLoc> portLocs;
 
@@ -3955,7 +3955,9 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     auto conventionAttr = ConventionAttr::get(getContext(), convention);
 
     auto moduleOp = builder.create<FModuleOp>(
-        info.getLoc(), name, conventionAttr, portList, annotations);
+        info.getLoc(), name, conventionAttr, portList, annotations, desiredName);
+
+    moduleOp->setAttr("desiredName", StringAttr::get(getContext(), desiredName));
     auto visibility = isMainModule ? SymbolTable::Visibility::Public
                                    : SymbolTable::Visibility::Private;
     SymbolTable::setSymbolVisibility(moduleOp, visibility);

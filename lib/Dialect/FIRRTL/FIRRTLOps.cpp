@@ -653,7 +653,7 @@ void FMemModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
 
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<PortInfo> ports,
-                        ArrayAttr annotations) {
+                        ArrayAttr annotations, StringRef desiredName = "") {
   // Add an attribute for the name.
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 
@@ -700,8 +700,9 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
                       StringAttr name, ConventionAttr convention,
-                      ArrayRef<PortInfo> ports, ArrayAttr annotations) {
-  buildModule(builder, result, name, ports, annotations);
+                      ArrayRef<PortInfo> ports, ArrayAttr annotations,
+		      StringRef desiredName) {
+    buildModule(builder, result, name, ports, annotations, desiredName);
   result.addAttribute("convention", convention);
 
   // Create a region and a block for the body.
