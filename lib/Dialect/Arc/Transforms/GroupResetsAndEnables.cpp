@@ -203,9 +203,11 @@ LogicalResult GroupResetsAndEnablesPass::runOnModel(ModelOp modelOp) {
   RewritePatternSet patterns(&context);
   patterns.add<ResetGroupingPattern, EnableGroupingPattern,
                GroupAssignmentsInIfPattern>(&context);
-  if (failed(applyPatternsAndFoldGreedily(modelOp, std::move(patterns)))) {
-    signalPassFailure();
-  }
+
+  if (failed(applyPatternsAndFoldGreedily(modelOp, std::move(patterns))))
+    return emitError(modelOp.getLoc(),
+                     "GroupResetsAndEnables: greedy rewriter did not converge");
+
   return success();
 }
 
