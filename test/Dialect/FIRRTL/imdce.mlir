@@ -446,12 +446,9 @@ firrtl.circuit "Test" {
     // CHECK: firrtl.instance blah interesting_name @Blah()
     %blah_out = firrtl.instance blah interesting_name @Blah(out out : !firrtl.uint<1>)
   }
-  // This module is dead.  Since it is the only user of @Blah's output port, the
-  // output should be deleted.
+  // This module is dead (unreachable from the toplevel) so the module should be removed.
+  // CHECK-NOT: firrtl.module private @Other
   firrtl.module private @Other(out %out : !firrtl.uint<1>) {
-    // CHECK: %0 = builtin.unrealized_conversion_cast to !firrtl.uint<1>
-    // CHECK: firrtl.instance blah interesting_name @Blah()
-    // CHECK: firrtl.strictconnect %out, %0 : !firrtl.uint<1>
     %blah_out = firrtl.instance blah interesting_name @Blah(out out : !firrtl.uint<1>)
     firrtl.strictconnect %out, %blah_out : !firrtl.uint<1>
   }

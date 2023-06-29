@@ -420,9 +420,19 @@ void IMDeadCodeElimPass::runOnOperation() {
       visitModuleOp(*module);
   }
 
-  // Rewrite module signatures.
-  for (auto module : circuit.getBodyBlock()->getOps<FModuleOp>())
-    rewriteModuleSignature(module);
+  // Rewrite module signatures or delete unreachable modules.
+  for (auto module : llvm::make_early_inc_range(
+           circuit.getBodyBlock()->getOps<FModuleOp>())) {
+    if (isBlockExecutable(module.getBodyBlock()))
+      rewriteModuleSignature(module);
+    else {
+      // If the module is unreachable from the toplevel, just delete it.
+      // Note that post-order traversal on the instance graph never visit
+      // unreachable modules so it's safe to erase the module even though
+      // `modules` seems to be capturing module pointers.
+      module.erase();
+    }
+  }
 
   // Rewrite module bodies parallelly.
   mlir::parallelForEach(circuit.getContext(),
@@ -515,10 +525,8 @@ void IMDeadCodeElimPass::visitSubelement(Operation *op) {
 
 void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
   auto *body = module.getBodyBlock();
-  // If the module is unreachable, just ignore it.
-  // TODO: Erase this module from circuit op.
-  if (!isBlockExecutable(body))
-    return;
+  assert(isBlockExecutable(body) &&
+         "unreachable modules must be already deleted");
 
   auto removeDeadNonLocalAnnotations = [&](int _, Annotation anno) -> bool {
     auto hierPathSym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
@@ -567,11 +575,8 @@ void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
 }
 
 void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
-  // If the module is unreachable, just ignore it.
-  // TODO: Erase this module from circuit op.
-  if (!isBlockExecutable(module.getBodyBlock()))
-    return;
-
+  assert(isBlockExecutable(module.getBodyBlock()) &&
+         "unreachable modules must be already deleted");
   InstanceGraphNode *instanceGraphNode = instanceGraph->lookup(module);
   LLVM_DEBUG(llvm::dbgs() << "Prune ports of module: " << module.getName()
                           << "\n");
