@@ -663,8 +663,10 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
 
 def SizeOfIntrinsicOp : UnaryPrimOp<"int.sizeof", FIRRTLBaseType, UInt32Type>;
 
-def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLBaseType, SIntType>;
-def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLBaseType, UIntType>;
+let hasCanonicalizer=1 in {
+  def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLBaseType, SIntType>;
+  def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLBaseType, UIntType>;
+}
 def AsAsyncResetPrimOp
   : UnaryPrimOp<"asAsyncReset", OneBitCastableType, AsyncResetType>;
 def AsClockPrimOp : UnaryPrimOp<"asClock", OneBitCastableType, ClockType>;
@@ -674,26 +676,28 @@ let hasCanonicalizer = true in
 def NotPrimOp : UnaryPrimOp<"not", IntType, UIntType>;
 
 let inferType = "impl::inferReductionResult" in {
-  def AndRPrimOp : UnaryPrimOp<"andr", IntType, UInt1Type> {
-    let description = [{
-      Horizontally reduce a value to one bit, using the 'and' operation to merge
-      bits.  `andr(x)` is equivalent to `concat(x, 1b1) == ~0`.  As such, it
-      returns 1 for zero-bit-wide operands.
-    }];
-  }
-  def OrRPrimOp : UnaryPrimOp<"orr", IntType, UInt1Type> {
-    let description = [{
-      Horizontally reduce a value to one bit, using the 'or' operation to merge
-      bits.  `orr(x)` is equivalent to `concat(x, 1b0) != 0`.  As such, it
-      returns 0 for zero-bit-wide operands.
-    }];
-  }
-  def XorRPrimOp : UnaryPrimOp<"xorr", IntType, UInt1Type> {
-    let description = [{
-      Horizontally reduce a value to one bit, using the 'xor' operation to merge
-      bits.  `xorr(x)` is equivalent to `popcount(concat(x, 1b0)) & 1`.  As
-      such, it returns 0 for zero-bit-wide operands.
-    }];
+  let hasCanonicalizer = 1 in {
+    def AndRPrimOp : UnaryPrimOp<"andr", IntType, UInt1Type> {
+      let description = [{
+        Horizontally reduce a value to one bit, using the 'and' operation to merge
+        bits.  `andr(x)` is equivalent to `concat(x, 1b1) == ~0`.  As such, it
+        returns 1 for zero-bit-wide operands.
+      }];
+    }
+    def OrRPrimOp : UnaryPrimOp<"orr", IntType, UInt1Type> {
+      let description = [{
+        Horizontally reduce a value to one bit, using the 'or' operation to merge
+        bits.  `orr(x)` is equivalent to `concat(x, 1b0) != 0`.  As such, it
+        returns 0 for zero-bit-wide operands.
+      }];
+    }
+    def XorRPrimOp : UnaryPrimOp<"xorr", IntType, UInt1Type> {
+      let description = [{
+        Horizontally reduce a value to one bit, using the 'xor' operation to merge
+        bits.  `xorr(x)` is equivalent to `popcount(concat(x, 1b0)) & 1`.  As
+        such, it returns 0 for zero-bit-wide operands.
+      }];
+    }
   }
 }
 

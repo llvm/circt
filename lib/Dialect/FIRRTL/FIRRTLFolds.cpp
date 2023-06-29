@@ -579,10 +579,10 @@ OpFoldResult AndPrimOp::fold(FoldAdaptor adaptor) {
 
 void AndPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results
-      .insert<patterns::extendAnd, patterns::moveConstAnd, patterns::AndOfZero,
-              patterns::AndOfAllOne, patterns::AndOfSelf, patterns::AndOfPad>(
-          context);
+  results.insert<patterns::extendAnd, patterns::moveConstAnd,
+                 patterns::AndOfZero, patterns::AndOfAllOne,
+                 patterns::AndOfSelf, patterns::AndOfPad, patterns::AndCvtU>(
+      context);
 }
 
 OpFoldResult OrPrimOp::fold(FoldAdaptor adaptor) {
@@ -980,6 +980,11 @@ OpFoldResult AsSIntPrimOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+void AsSIntPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                               MLIRContext *context) {
+  results.insert<patterns::StoUtoS>(context);
+}
+
 OpFoldResult AsUIntPrimOp::fold(FoldAdaptor adaptor) {
   // No effect.
   if (getInput().getType() == getType())
@@ -993,6 +998,11 @@ OpFoldResult AsUIntPrimOp::fold(FoldAdaptor adaptor) {
       return getIntAttr(getType(), *cst);
 
   return {};
+}
+
+void AsUIntPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                               MLIRContext *context) {
+  results.insert<patterns::UtoStoU>(context);
 }
 
 OpFoldResult AsAsyncResetPrimOp::fold(FoldAdaptor adaptor) {
@@ -1079,6 +1089,12 @@ OpFoldResult AndRPrimOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+void AndRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                             MLIRContext *context) {
+  results.insert<patterns::AndRasSInt, patterns::AndRasUInt, patterns::AndRCvtU,
+                 patterns::AndRCvtS>(context);
+}
+
 OpFoldResult OrRPrimOp::fold(FoldAdaptor adaptor) {
   if (!hasKnownWidthIntTypes(*this))
     return {};
@@ -1098,6 +1114,12 @@ OpFoldResult OrRPrimOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+void OrRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::OrRasSInt, patterns::OrRasUInt, patterns::OrRCvt,
+                 patterns::OrRCatZeroH, patterns::OrRCatZeroL>(context);
+}
+
 OpFoldResult XorRPrimOp::fold(FoldAdaptor adaptor) {
   if (!hasKnownWidthIntTypes(*this))
     return {};
@@ -1114,6 +1136,12 @@ OpFoldResult XorRPrimOp::fold(FoldAdaptor adaptor) {
     return getInput();
 
   return {};
+}
+
+void XorRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                             MLIRContext *context) {
+  results.insert<patterns::XorRasSInt, patterns::XorRasUInt, patterns::XorRCvt,
+                 patterns::XorRCatZeroH, patterns::XorRCatZeroL>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1216,7 +1244,8 @@ OpFoldResult BitsPrimOp::fold(FoldAdaptor adaptor) {
 
 void BitsPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results.insert<patterns::BitsOfBits>(context);
+  results.insert<patterns::BitsOfBits, patterns::BitsOfMux,
+                 patterns::BitsOfAsUInt>(context);
 }
 
 /// Replace the specified operation with a 'bits' op from the specified hi/lo
