@@ -7,7 +7,8 @@ firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
     in %clock : !firrtl.clock, in %asyncreset : !firrtl.asyncreset,
     in %inreset : !firrtl.reset, out %outreset : !firrtl.reset,
     out %out_ui1 : !firrtl.uint<1>, out %out_si1 : !firrtl.sint<1>,
-    out %out_clock : !firrtl.clock, out %out_asyncreset : !firrtl.asyncreset) {
+    out %out_clock : !firrtl.clock, out %out_asyncreset : !firrtl.asyncreset,
+    out %out2_si1 : !firrtl.sint<1>, out %out2_ui1 : !firrtl.uint<1>) {
 
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %c1_si1 = firrtl.constant 1 : !firrtl.sint<1>
@@ -46,6 +47,16 @@ firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
   // CHECK: firrtl.strictconnect %outreset, %inreset : !firrtl.reset
   %8 = firrtl.resetCast %inreset : (!firrtl.reset) -> !firrtl.reset
   firrtl.strictconnect %outreset, %8 : !firrtl.reset
+
+  // Transparent
+  // CHECK: firrtl.strictconnect %out2_si1, %si1
+  %9 = firrtl.asUInt %si1 : (!firrtl.sint<1>) -> !firrtl.uint<1>
+  %10 = firrtl.asSInt %9 : (!firrtl.uint<1>) -> !firrtl.sint<1>
+  firrtl.strictconnect %out2_si1, %10 : !firrtl.sint<1>
+  // CHECK: firrtl.strictconnect %out2_ui1, %ui1
+  %11 = firrtl.asSInt %ui1 : (!firrtl.uint<1>) -> !firrtl.sint<1>
+  %12 = firrtl.asUInt %11 : (!firrtl.sint<1>) -> !firrtl.uint<1>
+  firrtl.strictconnect %out2_ui1, %12 : !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @Div
@@ -105,10 +116,13 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
                    in %zin2: !firrtl.uint<0>,
                    out %out: !firrtl.uint<4>,
                    out %out6: !firrtl.uint<6>,
+                   out %out5: !firrtl.uint<5>,
                    out %outz: !firrtl.uint<0>) {
   // CHECK: firrtl.strictconnect %out, %c1_ui4
   %c1_ui4 = firrtl.constant 1 : !firrtl.uint<4>
   %c3_ui4 = firrtl.constant 3 : !firrtl.uint<4>
+  %c3_si5 = firrtl.constant 3 : !firrtl.sint<5>
+
   %0 = firrtl.and %c3_ui4, %c1_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %0 : !firrtl.uint<4>, !firrtl.uint<4>
 
@@ -162,7 +176,7 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
   // CHECK: firrtl.strictconnect %out, %c0_ui4
   %c0_si2 = firrtl.constant 0 : !firrtl.sint<2>
   %7 = firrtl.and %sin, %c0_si2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.uint<4>
-  firrtl.connect %out, %7 : !firrtl.uint<4>, !firrtl.uint<4>
+  firrtl.strictconnect %out, %7 : !firrtl.uint<4>
 
   // CHECK: %[[trunc:.*]] = firrtl.bits %in6
   // CHECK: %[[ANDPAD:.*]] = firrtl.and %[[trunc]], %in
@@ -170,7 +184,13 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
   // CHECK: firrtl.strictconnect %out6, %[[POST]]
   %8 = firrtl.pad %in, 6 : (!firrtl.uint<4>) -> !firrtl.uint<6>
   %9 = firrtl.and %in6, %8  : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<6>
-  firrtl.connect %out6, %9 : !firrtl.uint<6>, !firrtl.uint<6>
+  firrtl.strictconnect %out6, %9 : !firrtl.uint<6>
+
+  // CHECK: %[[AND:.*]] = firrtl.and %in, %c3_ui4
+  // CHECK: firrtl.cat %c0_ui1, %[[AND]]
+  %10 = firrtl.cvt %in : (!firrtl.uint<4>) -> !firrtl.sint<5>
+  %11 = firrtl.and %10, %c3_si5 : (!firrtl.sint<5>, !firrtl.sint<5>) -> !firrtl.uint<5>
+  firrtl.strictconnect %out5, %11 : !firrtl.uint<5>
 }
 
 // CHECK-LABEL: firrtl.module @Or
@@ -420,7 +440,8 @@ firrtl.module @Bits(in %in1: !firrtl.uint<1>,
                     in %in4: !firrtl.uint<4>,
                     out %out1: !firrtl.uint<1>,
                     out %out2: !firrtl.uint<2>,
-                    out %out4: !firrtl.uint<4>) {
+                    out %out4: !firrtl.uint<4>,
+                    out %out2b: !firrtl.uint<2>) {
   // CHECK: firrtl.strictconnect %out1, %in1
   %0 = firrtl.bits %in1 0 to 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -444,6 +465,12 @@ firrtl.module @Bits(in %in1: !firrtl.uint<1>,
   // CHECK: firrtl.strictconnect %out1, %in1
   %5 = firrtl.bits %in1 0 to 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out1, %5 : !firrtl.uint<1>, !firrtl.uint<1>
+
+  // CHECK: firrtl.strictconnect %out2b, %c1_ui2
+  %c11_ui4 = firrtl.constant 11 : !firrtl.uint<4>
+  %6 = firrtl.mux( %in1, %c10_ui4, %c11_ui4) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  %7 = firrtl.bits %6 2 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+  firrtl.strictconnect %out2b, %7 : !firrtl.uint<2>
 }
 
 // CHECK-LABEL: firrtl.module @Head
@@ -651,7 +678,8 @@ firrtl.module @Tail(in %in4u: !firrtl.uint<4>,
 firrtl.module @Andr(in %in0 : !firrtl.uint<0>,
                     out %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
                     out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>,
-                    out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>) {
+                    out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>, 
+                    out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>) {
   %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
   %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
@@ -662,8 +690,8 @@ firrtl.module @Andr(in %in0 : !firrtl.uint<0>,
   %2 = firrtl.andr %cn2_si2 : (!firrtl.sint<2>) -> !firrtl.uint<1>
   %3 = firrtl.andr %cn1_si2 : (!firrtl.sint<2>) -> !firrtl.uint<1>
   %4 = firrtl.andr %in0 : (!firrtl.uint<0>) -> !firrtl.uint<1>
-  // CHECK: %[[ONE:.+]] = firrtl.constant 1 : !firrtl.uint<1>
   // CHECK: %[[ZERO:.+]] = firrtl.constant 0 : !firrtl.uint<1>
+  // CHECK: %[[ONE:.+]] = firrtl.constant 1 : !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %a, %[[ZERO]]
   firrtl.connect %a, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %b, %[[ONE]]
@@ -674,13 +702,21 @@ firrtl.module @Andr(in %in0 : !firrtl.uint<0>,
   firrtl.connect %d, %3 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %e, %[[ONE]]
   firrtl.connect %e, %4 : !firrtl.uint<1>, !firrtl.uint<1>
-}
+
+  // CHECK: firrtl.strictconnect %g, %[[ZERO]]
+  %5 = firrtl.asSInt %h : (!firrtl.uint<64>) -> !firrtl.sint<64>
+  %6 = firrtl.asUInt %5 : (!firrtl.sint<64>) -> !firrtl.uint<64>
+  %9 = firrtl.cvt %6 : (!firrtl.uint<64>) -> !firrtl.sint<65>
+  %10 = firrtl.andr %9 : (!firrtl.sint<65>) -> !firrtl.uint<1>
+  firrtl.strictconnect %g, %10 : !firrtl.uint<1>
+  }
 
 // CHECK-LABEL: firrtl.module @Orr
 firrtl.module @Orr(in %in0 : !firrtl.uint<0>,
                    out %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
                    out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>,
-                   out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>) {
+                   out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>, 
+                   out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>) {
   %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
@@ -703,16 +739,28 @@ firrtl.module @Orr(in %in0 : !firrtl.uint<0>,
   firrtl.connect %d, %3 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %e, %[[ZERO]]
   firrtl.connect %e, %4 : !firrtl.uint<1>, !firrtl.uint<1>
+
+  // CHECK: %[[OR:.*]] = firrtl.orr %h
+  // CHECK: firrtl.strictconnect %g, %[[OR]]
+  %5 = firrtl.asSInt %h : (!firrtl.uint<64>) -> !firrtl.sint<64>
+  %6 = firrtl.asUInt %5 : (!firrtl.sint<64>) -> !firrtl.uint<64>
+  %7 = firrtl.cat %6, %c0_ui2 : (!firrtl.uint<64>, !firrtl.uint<2>) -> !firrtl.uint<66>
+  %8 = firrtl.cat %c0_ui2, %7 : (!firrtl.uint<2>, !firrtl.uint<66>) -> !firrtl.uint<68>
+  %9 = firrtl.cvt %8 : (!firrtl.uint<68>) -> !firrtl.sint<69>  
+  %10 = firrtl.orr %9 : (!firrtl.sint<69>) -> !firrtl.uint<1>
+  firrtl.strictconnect %g, %10 : !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @Xorr
 firrtl.module @Xorr(in %in0 : !firrtl.uint<0>,
                     out %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
                     out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>,
-                    out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>) {
+                    out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>, 
+                    out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>) {
   %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
   %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
+  %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
   %cn1_si2 = firrtl.constant -1 : !firrtl.sint<2>
   %cn2_si2 = firrtl.constant -2 : !firrtl.sint<2>
   %0 = firrtl.xorr %c3_ui2 : (!firrtl.uint<2>) -> !firrtl.uint<1>
@@ -732,6 +780,16 @@ firrtl.module @Xorr(in %in0 : !firrtl.uint<0>,
   firrtl.connect %d, %3 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %e, %[[ZERO]]
   firrtl.connect %e, %4 : !firrtl.uint<1>, !firrtl.uint<1>
+
+  // CHECK: %[[XOR:.*]] = firrtl.xorr %h
+  // CHECK: firrtl.strictconnect %g, %[[OR]]
+  %5 = firrtl.asSInt %h : (!firrtl.uint<64>) -> !firrtl.sint<64>
+  %6 = firrtl.asUInt %5 : (!firrtl.sint<64>) -> !firrtl.uint<64>
+  %7 = firrtl.cat %6, %c0_ui2 : (!firrtl.uint<64>, !firrtl.uint<2>) -> !firrtl.uint<66>
+  %8 = firrtl.cat %c0_ui2, %7 : (!firrtl.uint<2>, !firrtl.uint<66>) -> !firrtl.uint<68>
+  %9 = firrtl.cvt %8 : (!firrtl.uint<68>) -> !firrtl.sint<69>  
+  %10 = firrtl.xorr %9 : (!firrtl.sint<69>) -> !firrtl.uint<1>
+  firrtl.strictconnect %g, %10 : !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @Reduce
