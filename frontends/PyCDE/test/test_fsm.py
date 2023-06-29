@@ -1,6 +1,7 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
 from pycde import System, Input, Output, generator, Module
+from pycde.common import Clock, Reset
 from pycde.dialects import comb
 from pycde import fsm
 from pycde.types import types
@@ -121,3 +122,21 @@ class FSMUser(Module):
 system = System([FSMUser])
 system.generate()
 system.print()
+
+# ------
+
+# Test alternative clock / reset names.
+
+
+# CHECK-LABEL:  fsm.machine @FsmClockTest(%arg0: i1, %arg1: i1, %arg2: i1) -> (i1, i1) attributes {clock_name = "clock", in_names = ["clock", "reset", "a"], initialState = "A", out_names = ["is_A", "is_B"], reset_name = "reset"}
+@unittestmodule()
+class FsmClockTest(fsm.Machine):
+  clock = Clock()
+  reset = Reset()
+
+  a = Input(types.i1)
+  A = fsm.State(initial=True)
+  B = fsm.State()
+
+  A.set_transitions((B, lambda ports: ports.a))
+  B.set_transitions((A, lambda ports: ports.a))

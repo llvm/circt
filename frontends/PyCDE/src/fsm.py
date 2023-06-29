@@ -147,14 +147,14 @@ class MachineModuleBuilder(ModuleLikeBuilderBase):
     else:
       self.clock_name = "clk"
       if len(self.clocks) == 1:
-        self.clocks = self.inputs[self.clocks[0]][0]
+        self.clock_name = self.inputs[self.clocks.pop()][0]
 
     if len(self.resets) > 1:
       raise ValueError("FSMs must have at most one reset")
     else:
       self.reset_name = "rst"
       if len(self.resets) == 1:
-        self.reset_name = self.inputs[self.resets[0]][0]
+        self.reset_name = self.inputs[self.resets.pop()][0]
 
   def create_op(self, sys, symbol):
     """Creation callback for creating a FSM MachineOp."""
