@@ -52,15 +52,13 @@ InstanceGraphNode *InstanceGraphBase::getOrAddNode(StringAttr name) {
 }
 
 InstanceGraphBase::InstanceGraphBase(Operation *parent) : parent(parent) {
+  assert(parent->hasTrait<mlir::OpTrait::SingleBlock>() &&
+         "top-level operation must have a single block");
   SmallVector<std::pair<HWModuleLike, SmallVector<HWInstanceLike>>>
       moduleToInstances;
-  // First accumulate modules inside the parent op. Use `PreOrder` to avoid
-  // visiting module bodies.
-  parent->walk<mlir::WalkOrder::PreOrder>([&](HWModuleLike module) {
+  // First accumulate modules inside the parent op.
+  for (auto module : parent->getRegion(0).front().getOps<hw::HWModuleLike>())
     moduleToInstances.push_back({module, {}});
-    // Skip.
-    return WalkResult::skip();
-  });
 
   // Populate instances in the module parallelly.
   mlir::parallelFor(parent->getContext(), 0, moduleToInstances.size(),
