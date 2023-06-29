@@ -1,11 +1,10 @@
-from .common import Input, Output
 from .dialects import fsm
-from .module import generator, Generator, Module, ModuleLikeBuilderBase
-from .support import _obj_to_attribute, attributes_of_type
-from .types import types, Bits
+from .module import Module, ModuleLikeBuilderBase
+from .support import _obj_to_attribute
+from .types import types
 
 from .circt.ir import FlatSymbolRefAttr, InsertionPoint, StringAttr
-from .circt.support import connect, attribute_to_var
+from .circt.support import attribute_to_var
 from .circt.dialects import fsm as raw_fsm
 
 from typing import Callable
@@ -57,7 +56,7 @@ class State:
     # Assign the current state as being active in the FSM output vector.
     with InsertionPoint(state_op.output):
       outputs = []
-      for (idx, (outport_it_name, _)) in enumerate(spec_mod.outputs):
+      for idx in range(len(spec_mod.outputs)):
         outputs.append(types.i1(idx == self.output))
       fsm.OutputOp(*outputs)
 
@@ -90,20 +89,8 @@ class MachineModuleBuilder(ModuleLikeBuilderBase):
     return ret
 
   def scan_cls(self):
-    """
-    Wrap a class as an FSM machine.
-
-    An FSM PyCDE module is expected to implement:
-
-    - A set of input ports:
-        These can be of any type, and are used to drive the FSM.
-
-        Transitions can be specified either as a tuple of (next_state, condition)
-        or as a single `next_state` string (unconditionally taken).
-        a `condition` function is a function which takes a single input representing
-        the `ports` of a component, similar to the `@generator` decorator used
-        elsewhere in PyCDE.
-    """
+    """Scan the class as usual, but also scan for State. Add implicit signals.
+    Run some other validity checks."""
     super().scan_cls()
 
     states = {}
@@ -142,19 +129,29 @@ class MachineModuleBuilder(ModuleLikeBuilderBase):
       state.output = len(self.outputs)
       self.outputs.append(('is_' + state_name, types.i1))
 
+    inputs_to_remove = []
     if len(self.clocks) > 1:
       raise ValueError("FSMs must have at most one clock")
     else:
       self.clock_name = "clk"
       if len(self.clocks) == 1:
-        self.clock_name = self.inputs[self.clocks.pop()][0]
+        idx = self.clocks.pop()
+        self.clock_name = self.inputs[idx][0]
+        inputs_to_remove.append(idx)
 
     if len(self.resets) > 1:
       raise ValueError("FSMs must have at most one reset")
     else:
       self.reset_name = "rst"
       if len(self.resets) == 1:
-        self.reset_name = self.inputs[self.resets.pop()][0]
+        idx = self.resets.pop()
+        self.reset_name = self.inputs[idx][0]
+        inputs_to_remove.append(idx)
+
+    # Remove the clock and reset inputs, if necessary.
+    inputs_to_remove.sort(reverse=True)
+    for idx in inputs_to_remove:
+      self.inputs.pop(idx)
 
   def create_op(self, sys, symbol):
     """Creation callback for creating a FSM MachineOp."""
@@ -199,8 +196,6 @@ class MachineModuleBuilder(ModuleLikeBuilderBase):
     # Clock and resets are not part of the input ports of the FSM, but
     # it is at the point of `fsm.hw_instance` instantiation that they
     # must be connected.
-    # Attach backedges to these, and associate these backedges to the operation.
-    # They can then be accessed at the point of instantiation and assigned.
     clock = kwargs[StringAttr(circt_mod.attributes['clock_name']).value]
     reset = kwargs[StringAttr(circt_mod.attributes['reset_name']).value]
 

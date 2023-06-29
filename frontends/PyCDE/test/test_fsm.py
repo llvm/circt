@@ -128,7 +128,7 @@ system.print()
 # Test alternative clock / reset names.
 
 
-# CHECK-LABEL:  fsm.machine @FsmClockTest(%arg0: i1, %arg1: i1, %arg2: i1) -> (i1, i1) attributes {clock_name = "clock", in_names = ["clock", "reset", "a"], initialState = "A", out_names = ["is_A", "is_B"], reset_name = "reset"}
+# CHECK-LABEL:  fsm.machine @FsmClockTest(%arg0: i1) -> (i1, i1) attributes {clock_name = "clock", in_names = ["a"], initialState = "A", out_names = ["is_A", "is_B"], reset_name = "reset"}
 @unittestmodule()
 class FsmClockTest(fsm.Machine):
   clock = Clock()
