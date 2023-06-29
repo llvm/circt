@@ -2981,15 +2981,19 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
            << staticRef.getType();
 
   // Check for other unsupported reference sources.
-  // TODO: Add to ref.send verifier / inferReturnTypes.
+  if (getFieldRefFromValue(staticRef).getValue() != staticRef)
+    return emitError(startTok.getLoc(),
+                     "cannot rwprobe elements of an aggregate");
+
+  // TODO: Support for non-public ports.
+  if (isa<BlockArgument>(staticRef))
+    return emitError(startTok.getLoc(), "rwprobe of port not yet supported");
+
   if (isa_and_nonnull<MemOp, CombMemOp, SeqMemOp, MemoryPortOp,
                       MemoryDebugPortOp, MemoryPortAccessOp>(
           staticRef.getDefiningOp()))
     return emitError(startTok.getLoc(), "cannot probe memories or their ports");
 
-  // TODO: Support for non-public ports.
-  if (isa<BlockArgument>(staticRef))
-    return emitError(startTok.getLoc(), "rwprobe of port not yet supported");
   auto *op = staticRef.getDefiningOp();
   if (!op)
     return emitError(startTok.getLoc(),
