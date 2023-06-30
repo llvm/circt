@@ -30,155 +30,189 @@ using namespace firrtl;
 
 static const unsigned int indentIncrement = 2;
 
-/// Emits type construction expression for the port type, recursing into
-/// aggregate types as needed.
-static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
-                                  Direction direction, llvm::raw_ostream &os,
-                                  unsigned int indent,
-                                  bool hasEmittedDirection = false) {
-  auto emitTypeWithArguments =
-      [&](StringRef name,
-          // A lambda of type (bool hasEmittedDirection) -> LogicalResult.
-          auto emitArguments,
-          // Indicates whether parentheses around type arguments should be used.
-          bool emitParentheses = true) -> LogicalResult {
-    // Include the direction if the type is not composed of flips and analog
-    // signals and we haven't already emitted the direction before recursing to
-    // this field.
-    bool emitDirection =
-        type.isPassive() && !type.containsAnalog() && !hasEmittedDirection;
-    if (emitDirection) {
-      switch (direction) {
-      case Direction::In:
-        os << "Input(";
-        break;
-      case Direction::Out:
-        os << "Output(";
-        break;
-      }
+namespace {
+class Emitter {
+public:
+  Emitter(llvm::raw_ostream &os) : os(os) {}
+
+  bool hasEmittedProbeType() { return hasEmittedProbe; }
+
+  /// Emits an `ExtModule` class with port declarations for `module`.
+  LogicalResult emitModule(FModuleLike module) {
+    os << "class " << module.getModuleName() << " extends ExtModule {\n";
+
+    for (const auto &port : module.getPorts()) {
+      if (failed(emitPort(port)))
+        return failure();
     }
 
-    bool emitConst = type.isConst();
-    if (emitConst)
-      os << "Const(";
-
-    os << name;
-
-    if (emitParentheses)
-      os << "(";
-
-    if (failed(emitArguments(hasEmittedDirection || emitDirection)))
-      return failure();
-
-    if (emitParentheses)
-      os << ')';
-
-    if (emitConst)
-      os << ')';
-
-    if (emitDirection)
-      os << ')';
+    os << "}\n";
 
     return success();
-  };
-
-  // Emits a type that does not require arguments.
-  auto emitType = [&](StringRef name) -> LogicalResult {
-    return emitTypeWithArguments(name, [](bool) { return success(); });
-  };
-
-  // Emits a type that requires a known width argument.
-  auto emitWidthQualifiedType = [&](auto type,
-                                    StringRef name) -> LogicalResult {
-    auto width = type.getWidth();
-    if (!width.has_value()) {
-      return LogicalResult(emitError(
-          location, "Expected width to be inferred for exported port"));
-    }
-    return emitTypeWithArguments(name, [&](bool) {
-      os << *width << ".W";
-      return success();
-    });
-  };
-
-  return TypeSwitch<FIRRTLBaseType, LogicalResult>(type)
-      .Case<ClockType>([&](ClockType) { return emitType("Clock"); })
-      .Case<AsyncResetType>(
-          [&](AsyncResetType) { return emitType("AsyncReset"); })
-      .Case<ResetType>([&](ResetType) {
-        return emitError(
-            location, "Expected reset type to be inferred for exported port");
-      })
-      .Case<UIntType>([&](UIntType uIntType) {
-        return emitWidthQualifiedType(uIntType, "UInt");
-      })
-      .Case<SIntType>([&](SIntType sIntType) {
-        return emitWidthQualifiedType(sIntType, "SInt");
-      })
-      .Case<AnalogType>([&](AnalogType analogType) {
-        return emitWidthQualifiedType(analogType, "Analog");
-      })
-      .Case<BundleType>([&](BundleType bundleType) {
-        // Emit an anonymous bundle, emitting a `val` for each field.
-        return emitTypeWithArguments(
-            "new Bundle ",
-            [&](bool hasEmittedDirection) {
-              os << "{\n";
-              unsigned int nestedIndent = indent + indentIncrement;
-              for (const auto &element : bundleType.getElements()) {
-                os.indent(nestedIndent)
-                    << "val " << element.name.getValue() << " = ";
-                auto elementResult = emitPortType(
-                    location, element.type,
-                    element.isFlip ? direction::flip(direction) : direction, os,
-                    nestedIndent, hasEmittedDirection);
-                if (failed(elementResult))
-                  return failure();
-                os << '\n';
-              }
-              os.indent(indent) << "}";
-              return success();
-            },
-            false);
-      })
-      .Case<FVectorType>([&](FVectorType vectorType) {
-        // Emit a vector type, emitting the type of its element as an argument.
-        return emitTypeWithArguments("Vec", [&](bool hasEmittedDirection) {
-          os << vectorType.getNumElements() << ", ";
-          return emitPortType(location, vectorType.getElementType(), direction,
-                              os, indent, hasEmittedDirection);
-        });
-      })
-      .Default([](FIRRTLBaseType) {
-        llvm_unreachable("unknown FIRRTL type");
-        return failure();
-      });
-}
-
-/// Emits an `IO` for the `port`.
-static LogicalResult emitPort(const PortInfo &port, llvm::raw_ostream &os) {
-  os.indent(indentIncrement) << "val " << port.getName() << " = IO(";
-  if (failed(emitPortType(port.loc, port.type.cast<FIRRTLBaseType>(),
-                          port.direction, os, indentIncrement)))
-    return failure();
-  os << ")\n";
-
-  return success();
-}
-
-/// Emits an `ExtModule` class with port declarations for `module`.
-static LogicalResult emitModule(FModuleLike module, llvm::raw_ostream &os) {
-  os << "class " << module.getModuleName() << " extends ExtModule {\n";
-
-  for (const auto &port : module.getPorts()) {
-    if (failed(emitPort(port, os)))
-      return failure();
   }
 
-  os << "}\n";
+private:
+  /// Emits an `IO` for the `port`.
+  LogicalResult emitPort(const PortInfo &port) {
+    os.indent(indentIncrement) << "val " << port.getName() << " = IO(";
+    if (failed(
+            emitPortType(port.loc, port.type, port.direction, indentIncrement)))
+      return failure();
+    os << ")\n";
 
-  return success();
-}
+    return success();
+  }
+
+  /// Emits type construction expression for the port type, recursing into
+  /// aggregate types as needed.
+  LogicalResult emitPortType(Location location, Type type, Direction direction,
+                             unsigned int indent,
+                             bool hasEmittedDirection = false) {
+    auto emitTypeWithArguments =
+        [&]( // This is provided if the type is a base type, otherwise this is
+             // null
+            FIRRTLBaseType baseType, StringRef name,
+            // A lambda of type (bool hasEmittedDirection) -> LogicalResult.
+            auto emitArguments,
+            // Indicates whether parentheses around type arguments should be
+            // used.
+            bool emitParentheses = true) -> LogicalResult {
+      // Include the direction if the type is not a base (i.e. hardware) type or
+      // is not composed of flips and analog signals and we haven't already
+      // emitted the direction before recursing to this field.
+      // Chisel direction functions override any internal directions. In other
+      // words, Output(new Bundle {...}) erases all direction information inside
+      // the bundle. Because of this, directions are placed on the outermost
+      // passive members of a hardware type.
+      bool emitDirection =
+          !baseType || (!hasEmittedDirection && baseType.isPassive() &&
+                        !baseType.containsAnalog());
+      if (emitDirection) {
+        switch (direction) {
+        case Direction::In:
+          os << "Input(";
+          break;
+        case Direction::Out:
+          os << "Output(";
+          break;
+        }
+      }
+
+      bool emitConst = baseType && baseType.isConst();
+      if (emitConst)
+        os << "Const(";
+
+      os << name;
+
+      if (emitParentheses)
+        os << "(";
+
+      if (failed(emitArguments(hasEmittedDirection || emitDirection)))
+        return failure();
+
+      if (emitParentheses)
+        os << ')';
+
+      if (emitConst)
+        os << ')';
+
+      if (emitDirection)
+        os << ')';
+
+      return success();
+    };
+
+    // Emits a type that does not require arguments.
+    auto emitType = [&](FIRRTLBaseType baseType,
+                        StringRef name) -> LogicalResult {
+      return emitTypeWithArguments(baseType, name,
+                                   [](bool) { return success(); });
+    };
+
+    // Emits a type that requires a known width argument.
+    auto emitWidthQualifiedType = [&](auto type,
+                                      StringRef name) -> LogicalResult {
+      auto width = type.getWidth();
+      if (!width.has_value()) {
+        return LogicalResult(emitError(
+            location, "Expected width to be inferred for exported port"));
+      }
+      return emitTypeWithArguments(type, name, [&](bool) {
+        os << *width << ".W";
+        return success();
+      });
+    };
+
+    return TypeSwitch<Type, LogicalResult>(type)
+        .Case<ClockType>(
+            [&](ClockType type) { return emitType(type, "Clock"); })
+        .Case<AsyncResetType>(
+            [&](AsyncResetType type) { return emitType(type, "AsyncReset"); })
+        .Case<ResetType>([&](ResetType) {
+          return emitError(
+              location, "Expected reset type to be inferred for exported port");
+        })
+        .Case<UIntType>([&](UIntType uIntType) {
+          return emitWidthQualifiedType(uIntType, "UInt");
+        })
+        .Case<SIntType>([&](SIntType sIntType) {
+          return emitWidthQualifiedType(sIntType, "SInt");
+        })
+        .Case<AnalogType>([&](AnalogType analogType) {
+          return emitWidthQualifiedType(analogType, "Analog");
+        })
+        .Case<BundleType>([&](BundleType bundleType) {
+          // Emit an anonymous bundle, emitting a `val` for each field.
+          return emitTypeWithArguments(
+              bundleType, "new Bundle ",
+              [&](bool hasEmittedDirection) {
+                os << "{\n";
+                unsigned int nestedIndent = indent + indentIncrement;
+                for (const auto &element : bundleType.getElements()) {
+                  os.indent(nestedIndent)
+                      << "val " << element.name.getValue() << " = ";
+                  auto elementResult = emitPortType(
+                      location, element.type,
+                      element.isFlip ? direction::flip(direction) : direction,
+                      nestedIndent, hasEmittedDirection);
+                  if (failed(elementResult))
+                    return failure();
+                  os << '\n';
+                }
+                os.indent(indent) << "}";
+                return success();
+              },
+              false);
+        })
+        .Case<FVectorType>([&](FVectorType vectorType) {
+          // Emit a vector type, emitting the type of its element as an
+          // argument.
+          return emitTypeWithArguments(
+              vectorType, "Vec", [&](bool hasEmittedDirection) {
+                os << vectorType.getNumElements() << ", ";
+                return emitPortType(location, vectorType.getElementType(),
+                                    direction, indent, hasEmittedDirection);
+              });
+        })
+        .Case<RefType>([&](RefType refType) {
+          hasEmittedProbe = true;
+          StringRef name = refType.getForceable() ? "RWProbe" : "Probe";
+          return emitTypeWithArguments(
+              nullptr, name, [&](bool hasEmittedDirection) {
+                return emitPortType(location, refType.getType(), direction,
+                                    indent, hasEmittedDirection);
+              });
+        })
+        .Default([&](Type type) {
+          mlir::emitError(location) << "Unhandled type: " << type;
+          return failure();
+        });
+  }
+
+  llvm::raw_ostream &os;
+  bool hasEmittedProbe = false;
+};
+} // namespace
 
 /// Exports a Chisel interface to the output stream.
 static LogicalResult exportChiselInterface(CircuitOp circuit,
@@ -186,12 +220,23 @@ static LogicalResult exportChiselInterface(CircuitOp circuit,
   // Emit version, package, and import declarations
   os << circt::getCirctVersionComment() << "package shelf."
      << circuit.getName().lower()
-     << "\n\nimport chisel3._\nimport chisel3.experimental._\n\n";
+     << "\n\nimport chisel3._\nimport chisel3.experimental._\n";
+
+  std::string body;
+  llvm::raw_string_ostream bodyStream(body);
+  Emitter emitter(bodyStream);
 
   // Emit a class for the main circuit module.
   auto topModule = circuit.getMainModule();
-  if (failed(emitModule(topModule, os)))
+  if (failed(emitter.emitModule(topModule)))
     return failure();
+
+  // Emit an import for probe types if needed
+  if (emitter.hasEmittedProbeType())
+    os << "import chisel3.probe._\n";
+
+  // Emit the body
+  os << '\n' << body;
 
   return success();
 }
