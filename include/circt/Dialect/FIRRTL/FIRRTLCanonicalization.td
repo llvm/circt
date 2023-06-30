@@ -285,18 +285,28 @@ def AndOfPad : Pat <
   (MoveNameHint $old, (PadPrimOp (AndPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y), $n)),
   [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
 
-/// cvt is adding a 0, which will pass through the and
-/// Only trigger when cvt is full length
-/// and(cvt(x:U), const) -> cat(0, and(x,sextortrunc(const))
+def AndOfAsSIntL : Pat<
+  (AndPrimOp:$old (AsSIntPrimOp $x), $y),
+  (MoveNameHint $old, (AndPrimOp $x, (AsUIntPrimOp $y))),
+  []>;
+
+def AndOfAsSIntR : Pat<
+  (AndPrimOp:$old $x, (AsSIntPrimOp $y)),
+  (MoveNameHint $old, (AndPrimOp (AsUIntPrimOp $x), $y)),
+  []>;
+
+
+/// Width narrowing
+/// Only trigger when cat is full length
+/// and(cat(0, x:U), const) -> cat(0, and(x,zextortrunc(const))
 def AndCvtU : Pat <
-  (AndPrimOp:$old (CvtPrimOp:$cvt $x), (ConstantOp:$ocst $cst)),
-  (MoveNameHint $old, (CatPrimOp 
-    (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), APSInt(APInt()))"> $ocst),
+  (AndPrimOp:$old (CatPrimOp:$cat $z, $x), (ConstantOp $cst)),
+  (MoveNameHint $old, (CatPrimOp $z, 
     (AndPrimOp $x, (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), "
                                       "cast<IntType>($0.getType()), "
-                                      "$1.getValue().sextOrTrunc(cast<IntType>($0.getType()).getWidthOrSentinel()))"> $x, $cst))
+                                      "$1.getValue().zextOrTrunc(cast<IntType>($0.getType()).getWidthOrSentinel()))"> $x, $cst))
   )),
-  [(KnownWidth $x), (UIntType $x), (EqualIntSize $old, $cvt)]>;
+  [(KnownWidth $x), (UIntType $x), (EqualIntSize $old, $cat), (ZeroConstantOp $z)]>;
 
 // or(x, 0) -> x, fold can't handle all cases
 def OrOfZero : Pat <
@@ -354,23 +364,17 @@ def OrRasUInt : Pat <
   (MoveNameHint $old, (OrRPrimOp $x)),
   [(KnownWidth $x), (IntTypes $x)]>;
 
-/// orr(cvt(x)) -> orr(x)
-def OrRCvt : Pat <
-  (OrRPrimOp:$old (CvtPrimOp $x)),
-  (MoveNameHint $old, (OrRPrimOp $x)),
-  [(KnownWidth $x), (IntTypes $x)]>;
-
 /// orr(cat(0,x)) -> orr(x)
 def OrRCatZeroH : Pat <
   (OrRPrimOp:$old (CatPrimOp $c, $x)),
   (MoveNameHint $old, (OrRPrimOp $x)),
-  [(KnownWidth $x), (IntTypes $x), (ZeroConstantOp $c)]>;
+  [(KnownWidth $x), (ZeroConstantOp $c)]>;
 
 /// orr(cat(x,0)) -> orr(x)
 def OrRCatZeroL : Pat <
   (OrRPrimOp:$old (CatPrimOp $x, $c)),
   (MoveNameHint $old, (OrRPrimOp $x)),
-  [(KnownWidth $x), (IntTypes $x), (ZeroConstantOp $c)]>;
+  [(KnownWidth $x), (ZeroConstantOp $c)]>;
 
 /// xorr(asSInt(x)) -> xorr(x)
 def XorRasSInt : Pat <
@@ -381,12 +385,6 @@ def XorRasSInt : Pat <
 /// xorr(asUInt(x)) -> xorr(x)
 def XorRasUInt : Pat <
   (XorRPrimOp:$old (AsUIntPrimOp $x)),
-  (MoveNameHint $old, (XorRPrimOp $x)),
-  [(KnownWidth $x), (IntTypes $x)]>;
-
-/// xorr(cvt(x)) -> xorr(x)
-def XorRCvt : Pat <
-  (XorRPrimOp:$old (CvtPrimOp $x)),
   (MoveNameHint $old, (XorRPrimOp $x)),
   [(KnownWidth $x), (IntTypes $x)]>;
 
@@ -414,19 +412,17 @@ def AndRasUInt : Pat <
   (MoveNameHint $old, (AndRPrimOp $x)),
   [(KnownWidth $x), (IntTypes $x)]>;
 
-/// andr(cvt(x:unsigned)) -> 0
-def AndRCvtU : Pat <
-  (AndRPrimOp:$old (CvtPrimOp $x)),
-  (MoveNameHint $old,
-    (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old)),
-  [(KnownWidth $x), (UIntTypes $x)]>;
+/// andr(cat(0, x)) -> 0
+def AndRCatZeroL : Pat <
+  (AndRPrimOp:$old (CatPrimOp $z, $x)),
+  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
+  [(ZeroConstantOp $z)]>;
 
-/// andr(cvt(x:signed)) -> andr(x)
-def AndRCvtS : Pat <
-  (AndRPrimOp:$old (CvtPrimOp $x)),
-  (MoveNameHint $old, (AndRPrimOp $x)),
-  [(KnownWidth $x), (SIntTypes $x)]>;
-
+/// andr(cat(x, 0)) -> 0
+def AndRCatZeroR : Pat <
+  (AndRPrimOp:$old (CatPrimOp $x, $z)),
+  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
+  [(ZeroConstantOp $z)]>;
 
 // bits(bits(x, ...), ...) -> bits(x, ...)
 def BitsOfBits : Pat<
@@ -514,5 +510,18 @@ def StoUtoS : Pat<
   (replaceWithValue $x),
   []>;
 
+def CVTSigned : Pat<
+  (CvtPrimOp $x),
+  (replaceWithValue $x),
+  [(SIntType $x)]>;
+
+def CVTUnSigned : Pat<
+  (CvtPrimOp:$old $x),
+  (MoveNameHint $old,
+    (AsSIntPrimOp
+      (CatPrimOp 
+        (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), APSInt(APInt()))"> $old),
+        $x))),
+  [(UIntType $x)]>;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD

@@ -581,8 +581,8 @@ void AndPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.insert<patterns::extendAnd, patterns::moveConstAnd,
                  patterns::AndOfZero, patterns::AndOfAllOne,
-                 patterns::AndOfSelf, patterns::AndOfPad, patterns::AndCvtU>(
-      context);
+                 patterns::AndOfSelf, patterns::AndOfPad, patterns::AndCvtU,
+                 patterns::AndOfAsSIntL, patterns::AndOfAsSIntR>(context);
 }
 
 OpFoldResult OrPrimOp::fold(FoldAdaptor adaptor) {
@@ -1041,6 +1041,11 @@ OpFoldResult CvtPrimOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+void CvtPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::CVTSigned, patterns::CVTUnSigned>(context);
+}
+
 OpFoldResult NegPrimOp::fold(FoldAdaptor adaptor) {
   if (!hasKnownWidthIntTypes(*this))
     return {};
@@ -1091,8 +1096,8 @@ OpFoldResult AndRPrimOp::fold(FoldAdaptor adaptor) {
 
 void AndRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results.insert<patterns::AndRasSInt, patterns::AndRasUInt, patterns::AndRCvtU,
-                 patterns::AndRCvtS>(context);
+  results.insert<patterns::AndRasSInt, patterns::AndRasUInt,
+                 patterns::AndRCatZeroL, patterns::AndRCatZeroR>(context);
 }
 
 OpFoldResult OrRPrimOp::fold(FoldAdaptor adaptor) {
@@ -1116,7 +1121,7 @@ OpFoldResult OrRPrimOp::fold(FoldAdaptor adaptor) {
 
 void OrRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.insert<patterns::OrRasSInt, patterns::OrRasUInt, patterns::OrRCvt,
+  results.insert<patterns::OrRasSInt, patterns::OrRasUInt,
                  patterns::OrRCatZeroH, patterns::OrRCatZeroL>(context);
 }
 
@@ -1140,7 +1145,7 @@ OpFoldResult XorRPrimOp::fold(FoldAdaptor adaptor) {
 
 void XorRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results.insert<patterns::XorRasSInt, patterns::XorRasUInt, patterns::XorRCvt,
+  results.insert<patterns::XorRasSInt, patterns::XorRasUInt,
                  patterns::XorRCatZeroH, patterns::XorRCatZeroL>(context);
 }
 

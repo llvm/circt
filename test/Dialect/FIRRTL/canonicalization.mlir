@@ -57,6 +57,9 @@ firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
   %11 = firrtl.asSInt %ui1 : (!firrtl.uint<1>) -> !firrtl.sint<1>
   %12 = firrtl.asUInt %11 : (!firrtl.sint<1>) -> !firrtl.uint<1>
   firrtl.strictconnect %out2_ui1, %12 : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %out2_si1, %si1 
+  %13 = firrtl.cvt %si1 : (!firrtl.sint<1>) -> !firrtl.sint<1>
+  firrtl.strictconnect %out2_si1, %13 : !firrtl.sint<1>
 }
 
 // CHECK-LABEL: firrtl.module @Div
