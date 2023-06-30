@@ -626,6 +626,15 @@ circuit RWProbeConst:
 
 ;// -----
 
+circuit RWProbeField:
+  module RWProbeField:
+    input in : UInt<1>[2]
+    output p : RWProbe<UInt<1>>
+    node n = in
+    define p = rwprobe(in[0]) ; expected-error {{cannot rwprobe elements of an aggregate}}
+
+;// -----
+
 FIRRTL version 2.0.0
 circuit PartialConnect_v2p0p0:
   module PartialConnect_v2p0p0:
