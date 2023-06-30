@@ -3038,4 +3038,14 @@ firrtl.module @RefCastSame(in %in: !firrtl.probe<uint<1>>, out %out: !firrtl.pro
   firrtl.ref.define %out, %same_as_in : !firrtl.probe<uint<1>>
 }
 
+// CHECK-LABEL: @Issue5527
+firrtl.module @Issue5527(in %x: !firrtl.uint<1>, out %out: !firrtl.uint<2>) attributes {convention = #firrtl<convention scalarized>} {
+  %0 = firrtl.cvt %x : (!firrtl.uint<1>) -> !firrtl.sint<2>
+  %c2_si4 = firrtl.constant 2 : !firrtl.sint<4>
+  %1 = firrtl.and %0, %c2_si4 : (!firrtl.sint<2>, !firrtl.sint<4>) -> !firrtl.uint<4>
+  %2 = firrtl.tail %1, 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+  // CHECK: firrtl.strictconnect %out, %c0_ui2
+  firrtl.strictconnect %out, %2 : !firrtl.uint<2>
+}
+
 }
