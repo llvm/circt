@@ -7,7 +7,7 @@ from __future__ import annotations
 from .circt.dialects import msft
 from .circt import ir
 
-from .types import Type, Channel, ChannelSignaling, ClockType
+from .types import Type, Channel, ChannelSignaling, ClockType, Bits
 
 from functools import singledispatchmethod
 
@@ -50,6 +50,13 @@ class Clock(Input):
 
   def __init__(self, name: str = None):
     super().__init__(ClockType(), name)
+
+
+class Reset(Input):
+  """Create a reset input."""
+
+  def __init__(self, name: str = None):
+    super().__init__(Bits(1), name)
 
 
 class InputChannel(Input):

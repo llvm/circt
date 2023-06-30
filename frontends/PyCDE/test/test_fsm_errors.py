@@ -5,8 +5,7 @@ from pycde import fsm
 from pycde.types import types
 
 
-@fsm.machine()
-class FSM:
+class FSM(fsm.Machine):
   # CHECK: ValueError: Input port a has width 2. For now, FSMs only support i1 inputs.
   a = Input(types.i2)
   A = fsm.State(initial=True)
@@ -16,8 +15,7 @@ class FSM:
 
 
 # CHECK: ValueError: No initial state specified, please create a state with `initial=True`.
-@fsm.machine()
-class FSM:
+class FSM(fsm.Machine):
   a = Input(types.i1)
   A = fsm.State()
 
@@ -26,8 +24,7 @@ class FSM:
 
 
 # CHECK: ValueError: Multiple initial states specified (B, A).
-@fsm.machine()
-class FSM:
+class FSM(fsm.Machine):
   a = Input(types.i1)
   A = fsm.State(initial=True)
   B = fsm.State(initial=True)
