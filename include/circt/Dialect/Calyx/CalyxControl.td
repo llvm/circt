@@ -42,7 +42,8 @@ def ControlOp : CalyxContainer<"control", [
 }
 
 def IfOp : CalyxContainer<"if", [
-    ControlLike
+    ControlLike,
+    DeclareOpInterfaceMethods<IfOpInterface>
   ]> {
   let summary = "Calyx If";
   let arguments = (ins
@@ -76,36 +77,6 @@ def IfOp : CalyxContainer<"if", [
   let assemblyFormat = "$cond (`with` $groupName^)? $thenRegion (`else` $elseRegion^)? attr-dict";
   let hasVerifier = 1;
   let hasCanonicalizer = true;
-  let extraClassDeclaration = [{
-    /// Checks whether the `then` body exists.
-    bool thenBodyExists() {
-      Region* region = &getOperation()->getRegion(0);
-      if (region == nullptr)
-        return false;
-      return !region->empty();
-    }
-    /// Checks whether the `else` body exists.
-    bool elseBodyExists() {
-      Region* region = &getOperation()->getRegion(1);
-      if (region == nullptr)
-        return false;
-      return !region->empty();
-    }
-    /// Gets the single basic block representing the `then` region.
-    Block *getThenBody() {
-      assert(thenBodyExists() && "Then region does not exist.");
-      Region* region = &getOperation()->getRegion(0);
-      assert(region->hasOneBlock() && "The Then body should have one Block.");
-      return &region->front();
-    }
-    /// Gets the single basic block representing the `else` region.
-    Block *getElseBody() {
-      assert(elseBodyExists() && "Else region does not exist.");
-      Region* region = &getOperation()->getRegion(1);
-      assert(region->hasOneBlock() && "The Else body should have one Block.");
-      return &region->front();
-    }
-  }];
   let skipDefaultBuilders = true;
   let builders = [
     OpBuilder<(ins
@@ -124,6 +95,55 @@ def IfOp : CalyxContainer<"if", [
     }]>
   ];
 }
+
+def StaticIfOp : CalyxContainer<"static_if", [
+    ControlLike,
+    DeclareOpInterfaceMethods<IfOpInterface>
+  ]> {
+  let summary = "Calyx Static If";
+  let arguments = (ins
+    I1:$cond
+    );
+  let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
+  let description = [{
+    The "calyx.static_if" operation represents an if-then-else construct for
+    conditionally executing two Calyx groups. The operands to an if operation is
+    a 1-bit port. 
+
+    ```mlir
+      calyx.static_if %1 {
+        calyx.enable @G2
+        ...
+      } else {
+        calyx.enable @G3
+        ...
+      }
+      calyx.if %1 {
+        calyx.enable @G2
+        ...
+      }
+    ```
+  }];
+
+  let assemblyFormat = "$cond $thenRegion (`else` $elseRegion^)? attr-dict";
+  let hasVerifier = 1;
+  let hasCanonicalizer = true;
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins
+      "Value":$cond,
+      CArg<"bool", "false">:$initializeElseBody), [{
+        $_state.addOperands(cond);
+
+        Region *thenRegion = $_state.addRegion();
+        Region *elseRegion = $_state.addRegion();
+        thenRegion->push_back(new Block());
+        if (initializeElseBody)
+          elseRegion->push_back(new Block());
+    }]>
+  ];
+}
+
 
 def SeqOp : CalyxContainer<"seq", [
     ControlLike
@@ -149,6 +169,34 @@ def SeqOp : CalyxContainer<"seq", [
     }]>
   ];
   let hasCanonicalizer = true;
+}
+
+
+def StaticSeqOp : CalyxContainer<"static_seq", [
+    ControlLike
+  ]> {
+  let summary = "Calyx Static Seq";
+  let description = [{
+    The "calyx.static_seq" operation executes the
+    control within its region sequentially.
+
+    ```mlir
+      calyx.static_seq {
+        // G2 will not begin execution until G1 is done.
+        calyx.enable @G1
+        calyx.enable @G2
+      }
+    ```
+  }];
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins), [{
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
+  let hasCanonicalizer = true;
+  let hasVerifier = 1;
 }
 
 def ParOp : CalyxContainer<"par", [
@@ -179,6 +227,36 @@ def ParOp : CalyxContainer<"par", [
   let hasCanonicalizer = true;
   let hasVerifier = 1;
 }
+
+def StaticParOp : CalyxContainer<"static_par", [
+    ControlLike
+  ]> {
+  let summary = "Calyx Static Parallel";
+  let description = [{
+    The "calyx.static_par" operation executes the
+    control within its region in parallel.
+
+    ```mlir
+      calyx.static_par {
+        // G1 and G2 will execute in parallel.
+        // The region is complete when both
+        // G1 and G2 are done.
+        calyx.enable @G1
+        calyx.enable @G2
+      }
+    ```
+  }];
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins), [{
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
+  let hasCanonicalizer = true;
+  let hasVerifier = 1;
+}
+
 
 def EnableOp : CalyxOp<"enable", [
     ControlLike
@@ -251,6 +329,42 @@ def WhileOp : CalyxContainer<"while", [
         $_state.addOperands(cond);
         if (groupName)
           $_state.addAttribute("groupName", groupName);
+
+        Region *body = $_state.addRegion();
+        body->push_back(new Block());
+    }]>
+  ];
+
+}
+
+def StaticRepeatOp : CalyxContainer<"static_repeat", [
+    ControlLike
+  ]> {
+  let summary = "Calyx Static Repeat";
+  let arguments = (ins
+    I32Attr:$count
+  );
+  let description = [{
+    The "calyx.static_repeat" operation represents the repeated execution of
+    the control within its region. All control within the region must be static.
+
+    ```mlir
+      calyx.static_repeat 10 {
+        calyx.enable @G1
+        ...
+      }
+    ```
+  }];
+  let hasVerifier = 1;
+  let hasCanonicalizer = true;
+  let assemblyFormat = "$count $body attr-dict";
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins
+      "uint32_t":$count), [{
+        $_state.addAttribute("count", 
+        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 32), count)
+        );
 
         Region *body = $_state.addRegion();
         body->push_back(new Block());
