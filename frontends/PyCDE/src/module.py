@@ -5,7 +5,7 @@
 from __future__ import annotations
 from typing import List, Optional, Set, Tuple, Dict
 
-from .common import (AppID, Clock, Input, Output, PortError, _PyProxy)
+from .common import (AppID, Clock, Input, Output, PortError, _PyProxy, Reset)
 from .support import (get_user_loc, _obj_to_attribute, create_type_string,
                       create_const_zero)
 from .signals import ClockSignal, Signal, _FromCirctValue
@@ -198,6 +198,7 @@ class ModuleLikeBuilderBase(_PyProxy):
     self.outputs: Optional[List[Tuple[str, Type]]] = None
     self.inputs: Optional[List[Tuple[str, Type]]] = None
     self.clocks: Optional[Set[int]] = None
+    self.resets: Optional[Set[int]] = None
     self.generators = None
     self.generator_port_proxy = None
     self.parameters = None
@@ -219,6 +220,7 @@ class ModuleLikeBuilderBase(_PyProxy):
     input_ports = []
     output_ports = []
     clock_ports = set()
+    reset_ports = set()
     generators = {}
     for attr_name, attr in self.cls_dct.items():
       if attr_name.startswith("_"):
@@ -240,6 +242,9 @@ class ModuleLikeBuilderBase(_PyProxy):
       if isinstance(attr, Clock):
         clock_ports.add(len(input_ports))
         input_ports.append((attr_name, Bits(1)))
+      elif isinstance(attr, Reset):
+        reset_ports.add(len(input_ports))
+        input_ports.append((attr_name, Bits(1)))
       elif isinstance(attr, Input):
         input_ports.append((attr_name, attr.type))
       elif isinstance(attr, Output):
@@ -250,6 +255,7 @@ class ModuleLikeBuilderBase(_PyProxy):
     self.outputs = output_ports
     self.inputs = input_ports
     self.clocks = clock_ports
+    self.resets = reset_ports
     self.generators = generators
 
   def create_port_proxy(self):
