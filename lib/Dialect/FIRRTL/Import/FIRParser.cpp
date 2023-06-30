@@ -102,46 +102,6 @@ private:
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// The FIRRTL specification version.
-struct FIRVersion {
-  uint32_t major, minor, patch;
-
-  /// Three way compare of one FIRRTL version with another FIRRTL version.
-  /// Return 1 if the first version is greater than the second version, -1 if
-  /// the first version is less than the second version, and 0 if the versions
-  /// are equal.
-  static int compare(const FIRVersion &a, const FIRVersion &b) {
-    if (a.major > b.major)
-      return 1;
-    if (a.major < b.major)
-      return -1;
-    if (a.minor > b.minor)
-      return 1;
-    if (a.minor < b.minor)
-      return -1;
-    if (a.patch > b.patch)
-      return 1;
-    if (a.patch < b.patch)
-      return -1;
-    return 0;
-  }
-};
-
-/// Method to enable printing of FIRVersions
-template <typename T>
-static T &operator<<(T &os, const FIRVersion &version) {
-  os << version.major << "." << version.minor << "." << version.patch;
-  return os;
-}
-
-/// The minimum FIRRTL Version supported by this compiler.  If a version is seen
-/// less than this, the compiler should reject the circuit.
-FIRVersion minimumFIRVersion{0, 2, 0};
-
-/// The default FIRRTL Version that is assumed if no FIRRTL Version string is
-/// specified.
-FIRVersion defaultFIRVersion{1, 0, 0};
-
 /// This class implements logic common to all levels of the parser, including
 /// things like types and helper logic.
 struct FIRParser {
@@ -661,8 +621,9 @@ ParseResult FIRParser::parseVersionLit(const Twine &message) {
   version.patch = cInt.getLimitedValue(UINT32_MAX);
   if (version.major != aInt || version.minor != bInt || version.patch != cInt)
     return emitError("integers out of range"), failure();
-  if (FIRVersion::compare(version, minimumFIRVersion) < 0)
-    return emitError() << "FIRRTL version must be >=" << minimumFIRVersion,
+  if (FIRVersion::compare(version, FIRVersion::minimumFIRVersion()) < 0)
+    return emitError() << "FIRRTL version must be >="
+                       << FIRVersion::minimumFIRVersion(),
            failure();
   consumeToken(FIRToken::version);
   return success();
@@ -4530,7 +4491,7 @@ circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
                           /*column=*/0)));
   SharedParserConstants state(context, options);
   FIRLexer lexer(sourceMgr, context);
-  FIRVersion version = defaultFIRVersion;
+  FIRVersion version = FIRVersion::defaultFIRVersion();
   if (FIRCircuitParser(state, lexer, *module, version)
           .parseCircuit(annotationsBufs, omirBufs, ts))
     return nullptr;

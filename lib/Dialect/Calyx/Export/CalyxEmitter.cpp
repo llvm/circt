@@ -22,6 +22,7 @@
 #include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/FormatVariadic.h"
 
 using namespace circt;
 using namespace calyx;
@@ -401,6 +402,17 @@ private:
     os << RParen();
   }
 
+  void emitCycleValue(CycleOp op) {
+    os << "%";
+    if (op.getEnd().has_value()) {
+      os << LSquare();
+      os << op.getStart() << ":" << op.getEnd();
+      os << RSquare();
+    } else {
+      os << op.getStart();
+    }
+  }
+
   /// Emits the value of a guard or assignment.
   void emitValue(Value value, bool isIndented) {
     if (auto blockArg = value.dyn_cast<BlockArgument>()) {
@@ -443,6 +455,7 @@ private:
           os << exclamationMark();
           emitValue(op.getInputs()[0], /*isIndented=*/false);
         })
+        .Case<CycleOp>([&](auto op) { emitCycleValue(op); })
         .Default(
             [&](auto op) { emitOpError(op, "not supported for emission"); });
   }
@@ -487,6 +500,10 @@ private:
             emitCalyxSection(prependAttributes(op, "seq"),
                              [&]() { emitCalyxControl(op.getBodyBlock()); });
           })
+          .Case<StaticSeqOp>([&](auto op) {
+            emitCalyxSection(prependAttributes(op, "static seq"),
+                             [&]() { emitCalyxControl(op.getBodyBlock()); });
+          })
           .Case<ParOp>([&](auto op) {
             emitCalyxSection(prependAttributes(op, "par"),
                              [&]() { emitCalyxControl(op.getBodyBlock()); });
@@ -511,6 +528,25 @@ private:
             if (op.elseBodyExists())
               emitCalyxSection("else",
                                [&]() { emitCalyxControl(op.getElseBody()); });
+          })
+          .Case<StaticIfOp>([&](auto op) {
+            indent() << prependAttributes(op, "static if ");
+            emitValue(op.getCond(), /*isIndented=*/false);
+
+            emitCalyxBody([&]() { emitCalyxControl(op.getThenBody()); });
+            if (op.elseBodyExists())
+              emitCalyxSection("else",
+                               [&]() { emitCalyxControl(op.getElseBody()); });
+          })
+          .Case<StaticRepeatOp>([&](auto op) {
+            indent() << prependAttributes(op, "static repeat ");
+            os << op.getCount();
+
+            emitCalyxBody([&]() { emitCalyxControl(op.getBodyBlock()); });
+          })
+          .Case<StaticParOp>([&](auto op) {
+            emitCalyxSection(prependAttributes(op, "static par"),
+                             [&]() { emitCalyxControl(op.getBodyBlock()); });
           })
           .Case<EnableOp>([&](auto op) { emitEnable(op); })
           .Default([&](auto op) {
@@ -820,7 +856,7 @@ void Emitter::emitWires(WiresOp op) {
       TypeSwitch<Operation *>(&bodyOp)
           .Case<GroupInterface>([&](auto op) { emitGroup(op); })
           .Case<AssignOp>([&](auto op) { emitAssignment(op); })
-          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp>(
+          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp, CycleOp>(
               [&](auto op) { /* Do nothing. */ })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside wires section");
@@ -836,15 +872,20 @@ void Emitter::emitGroup(GroupInterface group) {
           .Case<AssignOp>([&](auto op) { emitAssignment(op); })
           .Case<GroupDoneOp>([&](auto op) { emitGroupPort(group, op, "done"); })
           .Case<GroupGoOp>([&](auto op) { emitGroupPort(group, op, "go"); })
-          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp>(
+          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp, CycleOp>(
               [&](auto op) { /* Do nothing. */ })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside group.");
           });
     }
   };
-
-  StringRef prefix = isa<CombGroupOp>(group) ? "comb group" : "group";
+  std::string prefix;
+  if (isa<StaticGroupOp>(group)) {
+    auto staticGroup = cast<StaticGroupOp>(group);
+    prefix = llvm::formatv("static<{0}> group", staticGroup.getLatency());
+  } else {
+    prefix = isa<CombGroupOp>(group) ? "comb group" : "group";
+  }
   auto groupHeader = (group.symName().getValue() + getAttributes(group)).str();
   emitCalyxSection(prefix, emitGroupBody, groupHeader);
 }

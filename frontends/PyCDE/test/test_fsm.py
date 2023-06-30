@@ -1,70 +1,33 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
-# XFAIL: *
 
 from pycde import System, Input, Output, generator, Module
+from pycde.common import Clock, Reset
 from pycde.dialects import comb
 from pycde import fsm
 from pycde.types import types
 from pycde.testing import unittestmodule
 
-# FSM instantiation example
-
-# CHECK-LABEL:  msft.module @FSMUser {} (%a: i1, %b: i1, %c: i1, %clk: i1, %rst: i1) -> (is_a: i1, is_b: i1, is_c: i1) attributes {fileName = "FSMUser.sv"} {
-# CHECK:          %FSM.is_A, %FSM.is_B, %FSM.is_C = msft.instance @FSM @FSM(%a, %b, %c, %clk, %rst)  : (i1, i1, i1, i1, i1) -> (i1, i1, i1)
-# CHECK:          msft.output %FSM.is_A, %FSM.is_B, %FSM.is_C : i1, i1, i1
-# CHECK:        }
-# CHECK-LABEL:  msft.module @FSM {} (%a: i1, %b: i1, %c: i1, %clk: i1, %rst: i1) -> (is_A: i1, is_B: i1, is_C: i1) attributes {fileName = "FSM.sv"} {
-# CHECK:          %0:3 = fsm.hw_instance "FSM_impl" @FSM_impl(%a, %b, %c), clock %clk, reset %rst : (i1, i1, i1) -> (i1, i1, i1)
-# CHECK:          msft.output %0#0, %0#1, %0#2 : i1, i1, i1
-# CHECK:        }
-
-
-@fsm.machine()
-class FSM:
-  a = Input(types.i1)
-  b = Input(types.i1)
-  c = Input(types.i1)
-
-  # States
-  A = fsm.State(initial=True)
-  (B, C) = fsm.States(2)
-
-  # Transitions
-  A.set_transitions((B, lambda ports: ports.a))
-  B.set_transitions((A, lambda ports: ports.b), (C,))
-  C.set_transitions((B, lambda ports: ports.a))
-
-
-@unittestmodule()
-class FSMUser(Module):
-  a = Input(types.i1)
-  b = Input(types.i1)
-  c = Input(types.i1)
-  clk = Input(types.i1)
-  rst = Input(types.i1)
-  is_a = Output(types.i1)
-  is_b = Output(types.i1)
-  is_c = Output(types.i1)
-
-  @generator
-  def construct(ports):
-    fsm = FSM(a=ports.a, b=ports.b, c=ports.c, clk=ports.clk, rst=ports.rst)
-    ports.is_a = fsm.is_A
-    ports.is_b = fsm.is_B
-    ports.is_c = fsm.is_C
-
-
-# -----
-
 # FSM state transitions example
-
-# CHECK:      fsm.machine @F0_impl(%arg0: i1, %arg1: i1, %arg2: i1) -> (i1, i1, i1, i1) attributes {clock_name = "clock", in_names = ["a", "b", "c"], initialState = "idle", out_names = ["is_A", "is_B", "is_C", "is_idle"], reset_name = "rst"} {
-# CHECK-NEXT:    fsm.state @A output {
+# CHECK-LABEL: msft.module @FSMUser {} (%a: i1, %b: i1, %c: i1, %clk: i1, %rst: i1) -> (is_a: i1, is_b: i1, is_c: i1)
+# CHECK-NEXT:    %0:4 = fsm.hw_instance "F0" @F0(%a, %b, %c), clock %clk, reset %rst : (i1, i1, i1) -> (i1, i1, i1, i1)
+# CHECK-NEXT:    msft.output %0#1, %0#2, %0#3 : i1, i1, i1
+# CHECK-NEXT:  }
+# CHECK-LABEL: fsm.machine @F0(%arg0: i1, %arg1: i1, %arg2: i1) -> (i1, i1, i1, i1) attributes {clock_name = "clk", in_names = ["a", "b", "c"], initialState = "idle", out_names = ["is_idle", "is_A", "is_B", "is_C"], reset_name = "rst"} {
+# CHECK-NEXT:    fsm.state @idle output {
 # CHECK-NEXT:      %true = hw.constant true
 # CHECK-NEXT:      %false = hw.constant false
 # CHECK-NEXT:      %false_0 = hw.constant false
 # CHECK-NEXT:      %false_1 = hw.constant false
 # CHECK-NEXT:      fsm.output %true, %false, %false_0, %false_1 : i1, i1, i1, i1
+# CHECK-NEXT:    } transitions {
+# CHECK-NEXT:      fsm.transition @A
+# CHECK-NEXT:    }
+# CHECK-NEXT:    fsm.state @A output {
+# CHECK-NEXT:      %false = hw.constant false
+# CHECK-NEXT:      %true = hw.constant true
+# CHECK-NEXT:      %false_0 = hw.constant false
+# CHECK-NEXT:      %false_1 = hw.constant false
+# CHECK-NEXT:      fsm.output %false, %true, %false_0, %false_1 : i1, i1, i1, i1
 # CHECK-NEXT:    } transitions {
 # CHECK-NEXT:      fsm.transition @B guard {
 # CHECK-NEXT:        fsm.return %arg0
@@ -72,10 +35,10 @@ class FSMUser(Module):
 # CHECK-NEXT:    }
 # CHECK-NEXT:    fsm.state @B output {
 # CHECK-NEXT:      %false = hw.constant false
-# CHECK-NEXT:      %true = hw.constant true
 # CHECK-NEXT:      %false_0 = hw.constant false
+# CHECK-NEXT:      %true = hw.constant true
 # CHECK-NEXT:      %false_1 = hw.constant false
-# CHECK-NEXT:      fsm.output %false, %true, %false_0, %false_1 : i1, i1, i1, i1
+# CHECK-NEXT:      fsm.output %false, %false_0, %true, %false_1 : i1, i1, i1, i1
 # CHECK-NEXT:    } transitions {
 # CHECK-NEXT:      fsm.transition @C guard {
 # CHECK-NEXT:        %0 = comb.and bin %arg0, %arg1 : i1
@@ -96,9 +59,9 @@ class FSMUser(Module):
 # CHECK-NEXT:    fsm.state @C output {
 # CHECK-NEXT:      %false = hw.constant false
 # CHECK-NEXT:      %false_0 = hw.constant false
-# CHECK-NEXT:      %true = hw.constant true
 # CHECK-NEXT:      %false_1 = hw.constant false
-# CHECK-NEXT:      fsm.output %false, %false_0, %true, %false_1 : i1, i1, i1, i1
+# CHECK-NEXT:      %true = hw.constant true
+# CHECK-NEXT:      fsm.output %false, %false_0, %false_1, %true : i1, i1, i1, i1
 # CHECK-NEXT:    } transitions {
 # CHECK-NEXT:      fsm.transition @idle guard {
 # CHECK-NEXT:        fsm.return %arg2
@@ -109,20 +72,10 @@ class FSMUser(Module):
 # CHECK-NEXT:        fsm.return %0
 # CHECK-NEXT:      }
 # CHECK-NEXT:    }
-# CHECK-NEXT:    fsm.state @idle output {
-# CHECK-NEXT:      %false = hw.constant false
-# CHECK-NEXT:      %false_0 = hw.constant false
-# CHECK-NEXT:      %false_1 = hw.constant false
-# CHECK-NEXT:      %true = hw.constant true
-# CHECK-NEXT:      fsm.output %false, %false_0, %false_1, %true : i1, i1, i1, i1
-# CHECK-NEXT:    } transitions {
-# CHECK-NEXT:      fsm.transition @A
-# CHECK-NEXT:    }
 # CHECK-NEXT:  }
 
 
-@fsm.machine(clock="clock")
-class F0:
+class F0(fsm.Machine):
   a = Input(types.i1)
   b = Input(types.i1)
   c = Input(types.i1)
@@ -147,46 +100,11 @@ class F0:
                     (A, lambda ports: comb.XorOp(ports.b, types.i1(1))))
 
 
-system = System([F0])
-system.generate()
-system.print()
-
-# -----
-
-# Shorthand FSM generator.
-
-# CHECK:      fsm.machine @Generated_FSM_impl(%arg0: i1) -> (i1, i1, i1) attributes {clock_name = "clk", in_names = ["go"], initialState = "a", out_names = ["is_a", "is_b", "is_c"], reset_name = "rst"} {
-# CHECK-NEXT:    fsm.state @a output {
-# CHECK-NEXT:      %true = hw.constant true
-# CHECK-NEXT:      %false = hw.constant false
-# CHECK-NEXT:      %false_0 = hw.constant false
-# CHECK-NEXT:      fsm.output %true, %false, %false_0 : i1, i1, i1
-# CHECK-NEXT:    } transitions {
-# CHECK-NEXT:      fsm.transition @b
-# CHECK-NEXT:      fsm.transition @c guard {
-# CHECK-NEXT:        fsm.return %arg0
-# CHECK-NEXT:      }
-# CHECK-NEXT:    }
-# CHECK-NEXT:    fsm.state @b output {
-# CHECK-NEXT:      %false = hw.constant false
-# CHECK-NEXT:      %true = hw.constant true
-# CHECK-NEXT:      %false_0 = hw.constant false
-# CHECK-NEXT:      fsm.output %false, %true, %false_0 : i1, i1, i1
-# CHECK-NEXT:    } transitions {
-# CHECK-NEXT:    }
-# CHECK-NEXT:    fsm.state @c output {
-# CHECK-NEXT:      %false = hw.constant false
-# CHECK-NEXT:      %false_0 = hw.constant false
-# CHECK-NEXT:      %true = hw.constant true
-# CHECK-NEXT:      fsm.output %false, %false_0, %true : i1, i1, i1
-# CHECK-NEXT:    } transitions {
-# CHECK-NEXT:    }
-# CHECK-NEXT:  }
-
-
 @unittestmodule()
 class FSMUser(Module):
-  go = Input(types.i1)
+  a = Input(types.i1)
+  b = Input(types.i1)
+  c = Input(types.i1)
   clk = Input(types.i1)
   rst = Input(types.i1)
   is_a = Output(types.i1)
@@ -195,16 +113,30 @@ class FSMUser(Module):
 
   @generator
   def construct(ports):
-    MyFSM = fsm.gen_fsm({
-        "a": [
-            "b",
-            ("c", "go"),
-        ],
-        "b": [],
-        "c": []
-    }, "Generated_FSM")
+    fsm = F0(a=ports.a, b=ports.b, c=ports.c, clk=ports.clk, rst=ports.rst)
+    ports.is_a = fsm.is_A
+    ports.is_b = fsm.is_B
+    ports.is_c = fsm.is_C
 
-    inst = MyFSM(go=ports.go, clk=ports.clk, rst=ports.rst)
-    ports.is_a = inst.is_a
-    ports.is_b = inst.is_b
-    ports.is_c = inst.is_c
+
+system = System([FSMUser])
+system.generate()
+system.print()
+
+# ------
+
+# Test alternative clock / reset names.
+
+
+# CHECK-LABEL:  fsm.machine @FsmClockTest(%arg0: i1) -> (i1, i1) attributes {clock_name = "clock", in_names = ["a"], initialState = "A", out_names = ["is_A", "is_B"], reset_name = "reset"}
+@unittestmodule()
+class FsmClockTest(fsm.Machine):
+  clock = Clock()
+  reset = Reset()
+
+  a = Input(types.i1)
+  A = fsm.State(initial=True)
+  B = fsm.State()
+
+  A.set_transitions((B, lambda ports: ports.a))
+  B.set_transitions((A, lambda ports: ports.a))

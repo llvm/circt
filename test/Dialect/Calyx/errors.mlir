@@ -147,7 +147,7 @@ module attributes {calyx.entrypoint = "main"} {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %a.go, %a.clk, %a.reset, %a.out, %a.done = calyx.instance @a of @A : i1, i1, i1, i16, i1
     %b.in, %b.go, %b.clk, %b.reset, %b.done = calyx.instance @b of @B : i16, i1, i1, i1, i1
-    // expected-error @+1 {{'calyx.assign' op expects parent op to be one of 'calyx.group, calyx.comb_group, calyx.wires'}}
+    // expected-error @+1 {{'calyx.assign' op expects parent op to be one of 'calyx.group, calyx.comb_group, calyx.static_group, calyx.wires'}}
     calyx.assign %b.in = %a.out : i16
 
     calyx.wires { calyx.assign %b.in = %a.out : i16 }

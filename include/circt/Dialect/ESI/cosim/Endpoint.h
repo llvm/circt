@@ -18,6 +18,7 @@
 #include <memory>
 #include <mutex>
 #include <queue>
+#include <string>
 
 namespace circt {
 namespace esi {
