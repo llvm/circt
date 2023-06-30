@@ -1030,6 +1030,10 @@ OpFoldResult AsClockPrimOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult CvtPrimOp::fold(FoldAdaptor adaptor) {
+  // No-op if signed-to-signed.  Result is always signed.
+  if (getOperand().getType() == getType())
+    return getOperand();
+
   if (!hasKnownWidthIntTypes(*this))
     return {};
 

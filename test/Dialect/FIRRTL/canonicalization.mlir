@@ -3035,4 +3035,11 @@ firrtl.module @RefCastSame(in %in: !firrtl.probe<uint<1>>, out %out: !firrtl.pro
   firrtl.ref.define %out, %same_as_in : !firrtl.probe<uint<1>>
 }
 
+// CHECK-LABEL: @CvtS
+firrtl.module @CvtS(in %in: !firrtl.sint, out %out: !firrtl.sint) {
+  // CHECK-NOT: firrtl.cvt
+  %cvt = firrtl.cvt %in : (!firrtl.sint) -> !firrtl.sint
+  firrtl.connect %out, %cvt : !firrtl.sint, !firrtl.sint
+}
+
 }
