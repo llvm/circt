@@ -465,9 +465,79 @@ def CombGroupOp : CalyxOp<"comb_group", [
   ];
 }
 
+def StaticGroupOp : CalyxOp<"static_group", [
+    HasParent<"WiresOp">,
+    DeclareOpInterfaceMethods<GroupOpInterface>,
+    NoRegionArguments,
+    RegionKindInterface,
+    SingleBlock,
+    Symbol,
+    NoTerminator
+  ]> {
+  let summary = "Calyx Static Group";
+  let description = [{
+    Represents a Calyx static group, which is a collection
+    of assignments that are only active when the group
+    is run from the control execution schedule. A group
+    signifies its termination with a special port named
+    a "done" port.
+
+    ```mlir
+      calyx.static_group latency<1> @MyStaticGroup {
+        calyx.assign %1 = %2 : i32
+      }
+    ```
+  }];
+
+  let arguments = (ins SymbolNameAttr: $sym_name,
+                   I64Attr: $latency);
+
+  let extraClassDeclaration = [{
+    // Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+
+    /// Returns the GroupGoOp for this group.
+    GroupGoOp getGoOp();
+
+    /// Returns the body of a Calyx component.
+    Block *getBodyBlock() {
+      Region* region = &getOperation()->getRegion(0);
+      assert(region->hasOneBlock() && "The body should have one Block.");
+      return &region->front();
+    }
+  }];
+
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "`latency` `<` $latency `>` $sym_name $body attr-dict";
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins "StringRef":$sym_name, "uint64_t":$latency), [{
+      $_state.addAttribute(
+        mlir::SymbolTable::getSymbolAttrName(),
+        StringAttr::get($_state.getContext(), sym_name)
+      );
+      $_state.addAttribute(
+        getLatencyAttrName($_state.name),
+        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 64), latency)
+      );
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>,
+    OpBuilder<(ins "StringAttr":$sym_name, "uint64_t":$latency), [{
+      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), sym_name);
+      $_state.addAttribute(
+        getLatencyAttrName($_state.name),
+        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 64), latency)
+      );
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
+}
+
 def AssignOp : CalyxOp<"assign", [
     SameTypeConstraint<"dest", "src">,
-    ParentOneOf<["GroupOp", "CombGroupOp", "WiresOp"]>
+    ParentOneOf<["GroupOp", "CombGroupOp", "StaticGroupOp","WiresOp"]>
   ]> {
   let summary = "Calyx Assignment";
   let description = [{
@@ -546,4 +616,53 @@ def GroupGoOp : CalyxGroupPort<"group_go", [
       $_state.addOperands(src);
     }]>
   ];
+}
+
+def CycleOp : CalyxOp<"cycle", [
+  HasParent<"StaticGroupOp">,
+]> {
+  let summary = "Calyx Static Cycle Op";
+  let description = [{
+    Returns an I1 signal that is active `start` cycles after the static 
+    group starts, and inactive all other times. Optional `end` 
+    attribute allows the signal to be active from until `end` cycles
+    after the static group starts. Must be used within a static group.
+
+    ```mlir
+      calyx.static_group latency<2> @MyStaticGroup {
+        %1 = calyx.cycle 1 : i1
+      }
+    ```
+  }];
+  let arguments = (ins
+    I32Attr:$start,
+    OptionalAttr<I32Attr>:$end
+  );
+  let results = (outs 
+    I1:$active
+  );
+  let extraClassDeclaration = [{
+    /// Returns the latency of the parent static group.
+    uint32_t getGroupLatency();
+  }];
+  let builders = [
+    OpBuilder<(ins "uint32_t":$start), [{
+      $_state.addAttribute(
+        getStartAttrName($_state.name),
+        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 32), start)
+      );
+    }]>,
+    OpBuilder<(ins "uint32_t":$start, "uint32_t":$end), [{
+      $_state.addAttribute(
+        getStartAttrName($_state.name),
+        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 32), start)
+      );
+      $_state.addAttribute(
+        getEndAttrName($_state.name),
+        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 32), end)
+      );
+    }]>
+  ];
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
