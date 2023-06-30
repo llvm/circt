@@ -1095,8 +1095,9 @@ OpFoldResult AndRPrimOp::fold(FoldAdaptor adaptor) {
 
 void AndRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results.insert<patterns::AndRasSInt, patterns::AndRasUInt, patterns::AndRCvtU,
-                 patterns::AndRCvtS>(context);
+  results
+      .insert<patterns::AndRasSInt, patterns::AndRasUInt, patterns::AndRCvtU>(
+          context);
 }
 
 OpFoldResult OrRPrimOp::fold(FoldAdaptor adaptor) {

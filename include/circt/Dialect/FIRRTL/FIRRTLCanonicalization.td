@@ -415,13 +415,6 @@ def AndRCvtU : Pat <
     (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old)),
   [(KnownWidth $x), (UIntTypes $x)]>;
 
-/// andr(cvt(x:signed)) -> andr(x)
-def AndRCvtS : Pat <
-  (AndRPrimOp:$old (CvtPrimOp $x)),
-  (MoveNameHint $old, (AndRPrimOp $x)),
-  [(KnownWidth $x), (SIntTypes $x)]>;
-
-
 // bits(bits(x, ...), ...) -> bits(x, ...)
 def BitsOfBits : Pat<
   (BitsPrimOp:$old (BitsPrimOp $x, I32Attr:$iHigh, I32Attr:$iLow), I32Attr:$oHigh, I32Attr:$oLow),
