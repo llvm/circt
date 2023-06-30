@@ -242,7 +242,7 @@ public:
     return it->second;
   }
 
-  /// Registers grp to be the loop latch group of `op`.
+  /// Registers groups to be the loop init groups of `op`.
   void setLoopInitGroups(Loop op, SmallVector<calyx::GroupOp> groups) {
     Operation *operation = op.getOperation();
     assert(loopInitGroups.count(operation) == 0 &&
@@ -250,7 +250,7 @@ public:
     loopInitGroups[operation] = std::move(groups);
   }
 
-  /// Retrieve the loop latch group registered for `op`.
+  /// Retrieve the loop init groups registered for `op`.
   SmallVector<calyx::GroupOp> getLoopInitGroups(Loop op) {
     auto it = loopInitGroups.find(op.getOperation());
     assert(it != loopInitGroups.end() &&
@@ -289,7 +289,7 @@ private:
   /// yield'ed loop body values to the iteration argument registers.
   DenseMap<Operation *, calyx::GroupOp> loopLatchGroups;
 
-  /// Loop init groups are to be scheduled before the while operation These
+  /// Loop init groups are to be scheduled before the while operation. These
   /// groups should set the initial value(s) of the loop init_args register(s).
   DenseMap<Operation *, SmallVector<calyx::GroupOp>> loopInitGroups;
 };
