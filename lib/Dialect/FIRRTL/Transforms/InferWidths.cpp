@@ -1264,16 +1264,13 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
              << "\n===----- Mapping ops to constraint exprs -----===\n\n");
 
   // Ensure we have constraint variables established for all module ports.
-  op.walk<WalkOrder::PostOrder>([&](FModuleOp module) {
+  for (auto module : op.getOps<FModuleOp>())
     for (auto arg : module.getArguments()) {
       solver.setCurrentContextInfo(FieldRef(arg, 0));
       declareVars(arg, module.getLoc());
     }
-    return WalkResult::skip(); // no need to look inside the module
-  });
 
-  // Go through the module bodies and populate the constraint problem.
-  auto result = op.walk<WalkOrder::PostOrder>([&](FModuleOp module) {
+  for (auto module : op.getOps<FModuleOp>()) {
     // Check if the module contains *any* uninferred widths. This allows us to
     // do an early skip if the module is already fully inferred.
     bool anyUninferred = false;
@@ -1289,12 +1286,14 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
         return WalkResult::interrupt();
       return WalkResult::advance();
     });
+
     if (!anyUninferred) {
       LLVM_DEBUG(llvm::dbgs() << "Skipping fully-inferred module '"
                               << module.getName() << "'\n");
       skippedModules.insert(module);
-      return WalkResult::skip();
+      continue;
     }
+
     allModulesSkipped = false;
 
     // Go through operations in the module, creating type variables for results,
@@ -1302,10 +1301,10 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
     auto result = module.getBodyBlock()->walk(
         [&](Operation *op) { return WalkResult(mapOperation(op)); });
     if (result.wasInterrupted())
-      return WalkResult::interrupt();
-    return WalkResult::skip(); // walk above already visited module body
-  });
-  return failure(result.wasInterrupted());
+      return failure();
+  }
+
+  return success();
 }
 
 LogicalResult InferenceMapping::mapOperation(Operation *op) {
