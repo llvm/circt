@@ -279,8 +279,7 @@ struct ESIConnectServicesPass
   /// module specified. Create and connect up ports to tunnel the ESI channels
   /// through.
   LogicalResult surfaceReqs(hw::HWMutableModuleLike,
-                            ArrayRef<RequestToClientConnectionOp>,
-                            ArrayRef<RequestToServerConnectionOp>);
+                            ArrayRef<ServiceReqOpInterface>);
 
   /// Copy all service metadata up the instance hierarchy. Modify the service
   /// name path while copying.
@@ -353,15 +352,8 @@ LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
 
   // Find all of the "local" requests.
   mod.walk([&](Operation *op) {
-    if (auto req = dyn_cast<RequestToClientConnectionOp>(op)) {
-      auto service = req.getServicePortAttr().getModuleRef();
-      auto implOpF = localImplReqs.find(service);
-      if (implOpF != localImplReqs.end())
-        req->moveBefore(implOpF->second, implOpF->second->end());
-      else if (anyServiceInst)
-        req->moveBefore(anyServiceInst, anyServiceInst->end());
-    } else if (auto req = dyn_cast<RequestToServerConnectionOp>(op)) {
-      auto service = req.getServicePortAttr().getModuleRef();
+    if (auto req = dyn_cast<ServiceReqOpInterface>(op)) {
+      auto service = req.getServicePort().getModuleRef();
       auto implOpF = localImplReqs.find(service);
       if (implOpF != localImplReqs.end())
         req->moveBefore(implOpF->second, implOpF->second->end());
@@ -383,28 +375,22 @@ LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
   copyMetadata(mod);
 
   // Identify the non-local reqs which need to be surfaced from this module.
-  SmallVector<RequestToClientConnectionOp, 4> nonLocalToClientReqs;
-  SmallVector<RequestToServerConnectionOp, 4> nonLocalToServerReqs;
+  SmallVector<ServiceReqOpInterface, 4> nonLocalReqs;
   mod.walk([&](Operation *op) {
-    if (auto req = dyn_cast<RequestToClientConnectionOp>(op)) {
-      auto service = req.getServicePortAttr().getModuleRef();
+    if (auto req = dyn_cast<ServiceReqOpInterface>(op)) {
+      auto service = req.getServicePort().getModuleRef();
       auto implOpF = localImplReqs.find(service);
       if (implOpF == localImplReqs.end())
-        nonLocalToClientReqs.push_back(req);
-    } else if (auto req = dyn_cast<RequestToServerConnectionOp>(op)) {
-      auto service = req.getServicePortAttr().getModuleRef();
-      auto implOpF = localImplReqs.find(service);
-      if (implOpF == localImplReqs.end())
-        nonLocalToServerReqs.push_back(req);
+        nonLocalReqs.push_back(req);
     }
   });
 
   // Surface all of the requests which cannot be fulfilled locally.
-  if (nonLocalToClientReqs.empty() && nonLocalToServerReqs.empty())
+  if (nonLocalReqs.empty())
     return success();
 
   if (auto mutableMod = dyn_cast<hw::HWMutableModuleLike>(mod.getOperation()))
-    return surfaceReqs(mutableMod, nonLocalToClientReqs, nonLocalToServerReqs);
+    return surfaceReqs(mutableMod, nonLocalReqs);
   return mod.emitOpError(
       "Cannot surface requests through module without mutable ports");
 }
@@ -549,10 +535,9 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
   return success();
 }
 
-LogicalResult ESIConnectServicesPass::surfaceReqs(
-    hw::HWMutableModuleLike mod,
-    ArrayRef<RequestToClientConnectionOp> toClientReqs,
-    ArrayRef<RequestToServerConnectionOp> toServerReqs) {
+LogicalResult
+ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
+                                    ArrayRef<ServiceReqOpInterface> reqs) {
   auto *ctxt = mod.getContext();
   Block *body = &mod->getRegion(0).front();
 
@@ -574,31 +559,30 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
   };
 
   // Insert new module input ESI ports.
-  for (auto toClient : toClientReqs) {
+  for (auto req : reqs) {
+    Type toClientType = req.getToClientType();
+    if (!toClientType)
+      continue;
     newInputs.push_back(std::make_pair(
-        origNumInputs,
-        hw::PortInfo{getPortName(toClient.getClientNamePath()),
-                     hw::PortDirection::INPUT, toClient.getType(),
-                     origNumInputs, nullptr, toClient.getLoc()}));
-    body->addArgument(toClient.getType(), toClient.getLoc());
+        origNumInputs, hw::PortInfo{getPortName(req.getClientNamePath()),
+                                    hw::PortDirection::INPUT, toClientType,
+                                    origNumInputs, nullptr, req->getLoc()}));
+
+    // Replace uses with new block args which will correspond to said ports.
+    Value replValue = body->addArgument(toClientType, req->getLoc());
+    req.getToClient().replaceAllUsesWith(replValue);
   }
   mod.insertPorts(newInputs, {});
-
-  // Replace uses with new block args which will correspond to said ports.
-  // Note: no zip or enumerate here because we need mutable access to
-  // toClientReqs.
-  int i = 0;
-  for (auto toClient : toClientReqs) {
-    toClient.replaceAllUsesWith(body->getArguments()[origNumInputs + i]);
-    ++i;
-  }
 
   // Append output ports to new port list and redirect toServer inputs to
   // output op.
   unsigned outputCounter = origNumOutputs;
-  for (auto toServer : toServerReqs)
-    newOutputs.push_back(
-        {getPortName(toServer.getClientNamePath()), toServer.getToServer()});
+  for (auto req : reqs) {
+    Value toServer = req.getToServer();
+    if (!toServer)
+      continue;
+    newOutputs.push_back({getPortName(req.getClientNamePath()), toServer});
+  }
 
   mod.appendOutputs(newOutputs);
 
@@ -626,11 +610,13 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
 
     // Add new inputs for the new to_client requests and clone the request
     // into the module containing `inst`.
-    for (auto [toClient, newPort] : llvm::zip(toClientReqs, newInputs)) {
-      auto instToClient = cast<RequestToClientConnectionOp>(b.clone(*toClient));
-      instToClient.setClientNamePathAttr(prependNamePart(
-          instToClient.getClientNamePath(), inst.getInstanceName()));
-      newOperands.push_back(instToClient.getToClient());
+    for (auto req : reqs) {
+      if (!req.getToClientType())
+        continue;
+      auto clone = cast<ServiceReqOpInterface>(b.clone(*req));
+      clone.setClientNamePath(
+          prependNamePart(clone.getClientNamePath(), inst.getInstanceName()));
+      newOperands.push_back(clone.getToClient());
     }
 
     // Append the results for the to_server requests.

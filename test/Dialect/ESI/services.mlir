@@ -195,3 +195,11 @@ hw.module @MemoryAccess1(%clk: i1, %rst: i1, %write: !esi.channel<!write>, %read
   %readData = esi.service.req.inout %readAddress -> <@MemA::@read> ([]) : !esi.channel<i5> -> !esi.channel<i64>
   hw.output %readData, %done : !esi.channel<i64>, !esi.channel<i0>
 }
+
+// hw.module @MemoryAccess2Read(%clk: i1, %rst: i1, %write: !esi.channel<!write>, %readAddress: !esi.channel<i5>, %readAddress2: !esi.channel<i5>) -> (readData: !esi.channel<i64>, readData2: !esi.channel<i64>, writeDone: !esi.channel<i0>) {
+//   esi.service.instance svc @MemA impl as "sv_mem" (%clk, %rst) : (i1, i1) -> ()
+//   %done = esi.service.req.inout %write -> <@MemA::@write> ([]) : !esi.channel<!write> -> !esi.channel<i0>
+//   %readData = esi.service.req.inout %readAddress -> <@MemA::@read> ([]) : !esi.channel<i5> -> !esi.channel<i64>
+//   %readData2 = esi.service.req.inout %readAddress2 -> <@MemA::@read> ([]) : !esi.channel<i5> -> !esi.channel<i64>
+//   hw.output %readData, %readData2, %done : !esi.channel<i64>, !esi.channel<i64>, !esi.channel<i0>
+// }

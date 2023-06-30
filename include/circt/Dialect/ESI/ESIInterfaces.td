@@ -64,3 +64,64 @@ def ServiceDeclOpInterface : OpInterface<"ServiceDeclOpInterface"> {
         }]>,
   ];
 }
+
+def ServiceReqOpInterface : OpInterface<"ServiceReqOpInterface"> {
+  let cppNamespace = "circt::esi";
+  let description = [{
+    Any op which is requesting connection to a service's port or has information
+    pertaining to one of said requests.
+  }];
+
+  let methods = [
+    InterfaceMethod<
+      "Returns the service port symbol.",
+      "hw::InnerRefAttr", "getServicePort", (ins)
+    >,
+    InterfaceMethod<
+      "Returns the client name path.",
+      "ArrayAttr", "getClientNamePath", (ins)
+    >,
+    InterfaceMethod<
+      "Set the client name path.",
+      "void", "setClientNamePath", (ins "ArrayAttr":$newClientNamePath),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        $_op.setClientNamePathAttr(newClientNamePath);
+      }]>,
+    InterfaceMethod<
+      "Returns the type headed to the client. Can be null.",
+      "Type", "getToClientType", (ins),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        return {};
+      }]>,
+    InterfaceMethod<
+      "Returns the value headed to the client. Can be null.",
+      "Value", "getToClient", (ins),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        return {};
+      }]>,
+    InterfaceMethod<
+      "Returns the type headed to the client.",
+      "Type", "getToServerType", (ins),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        return {};
+      }]>,
+    InterfaceMethod<
+      "Returns the value headed to the server. Can be null.",
+      "Value", "getToServer", (ins),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        return {};
+      }]>,
+    InterfaceMethod<
+      "Set the value headed to the server. Can assert().",
+      "void", "setToServer", (ins "Value":$newValue),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        assert(false && "This op doesn't support the to server direction");
+      }]>
+  ];
+}

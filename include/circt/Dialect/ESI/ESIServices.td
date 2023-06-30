@@ -137,7 +137,8 @@ def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
 }
 
 def RequestToServerConnectionOp : ESI_Op<"service.req.to_server", [
-        DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+        ServiceReqOpInterface]> {
   let summary = "Request a connection to send data";
 
   let arguments = (ins HWInnerRefAttr:$servicePort,
@@ -149,7 +150,8 @@ def RequestToServerConnectionOp : ESI_Op<"service.req.to_server", [
 }
 
 def RequestToClientConnectionOp : ESI_Op<"service.req.to_client", [
-        DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+        ServiceReqOpInterface]> {
   let summary = "Request a connection to receive data";
 
   let arguments = (ins HWInnerRefAttr:$servicePort,
@@ -162,7 +164,8 @@ def RequestToClientConnectionOp : ESI_Op<"service.req.to_client", [
 }
 
 def RequestInOutChannelOp : ESI_Op<"service.req.inout", [
-        DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+        ServiceReqOpInterface]> {
   let summary = "Request a bidirectional channel";
 
   let arguments = (ins HWInnerRefAttr:$servicePort,
