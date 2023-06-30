@@ -175,7 +175,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: = comb.concat [[CONCAT1]], %c0_i3 : i8, i3
     %14 = firrtl.shl %6, 3 : (!firrtl.uint<8>) -> !firrtl.uint<11>
 
-    // CHECK-NEXT: = comb.parity [[CONCAT1]] : i8
+    // CHECK-NEXT: = comb.parity bin [[CONCAT1]] : i8
     %15 = firrtl.xorr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: = comb.icmp bin eq  {{.*}}, %c-1_i8 : i8
@@ -430,16 +430,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.assert %clock, %aCond, %aEn, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, name = "assert_0"}
     firrtl.assert %clock, %aCond, %aEn, "assert0"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42> {isConcurrent = true}
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %aEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %aEn, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.or bin [[TMP1]], %aCond
     // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP2]] message "assert0"
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP3:%.+]] = comb.xor %aEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP3:%.+]] = comb.xor bin %aEn, [[TRUE]]
     // CHECK-NEXT: [[TMP4:%.+]] = comb.or bin [[TMP3]], %aCond
     // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP4]] label "assert__assert_0" message "assert0"
     // CHECK-NEXT: [[SAMPLED:%.+]] =  sv.system.sampled %value : i42
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP5:%.+]] = comb.xor %aEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP5:%.+]] = comb.xor bin %aEn, [[TRUE]]
     // CHECK-NEXT: [[TMP6:%.+]] = comb.or bin [[TMP5]], %aCond
     // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP6]] message "assert0"([[SAMPLED]]) : i42
     // CHECK-NEXT: sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
@@ -451,16 +451,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.assume %clock, %bCond, %bEn, "assume0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, name = "assume_0"}
     firrtl.assume %clock, %bCond, %bEn, "assume0"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42> {isConcurrent = true}
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %bEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %bEn, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.or bin [[TMP1]], %bCond
     // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP2]] message "assume0"
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %bEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %bEn, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.or bin [[TMP1]], %bCond
     // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP2]] label "assume__assume_0" message "assume0"
     // CHECK-NEXT: [[SAMPLED:%.+]] = sv.system.sampled %value
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %bEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %bEn, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.or bin [[TMP1]], %bCond
     // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP2]] message "assume0"([[SAMPLED]]) : i42
     firrtl.cover %clock, %cCond, %cEn, "cover0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true}
@@ -521,14 +521,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: sv.ifdef "HELLO" {
     // CHECK-NEXT:   sv.ifdef "WORLD" {
     // CHECK-NEXT:     [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
+    // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor bin %enable, [[TRUE]]
     // CHECK-NEXT:     [[TMP2:%.+]] = comb.or bin [[TMP1]], %cond
     // CHECK-NEXT:     sv.assert.concurrent posedge %clock, [[TMP2]] message "assert0"
     // CHECK-NEXT:     sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
     // CHECK-NEXT:       sv.assume.concurrent posedge %clock, [[TMP2]]
     // CHECK-NEXT:     }
     // CHECK-NEXT:     [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
+    // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor bin %enable, [[TRUE]]
     // CHECK-NEXT:     [[TMP2:%.+]] = comb.or bin [[TMP1]], %cond
     // CHECK-NEXT:     sv.assume.concurrent posedge %clock, [[TMP2]] message "assume0"
     // CHECK-NEXT:     [[TMP:%.+]] = comb.and bin %enable, %cond
@@ -549,7 +549,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.assert %clock, %cond, %enable, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, format = "sva"}
     // CHECK-NEXT: [[FALSE:%.+]] = hw.constant false
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %enable, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.or bin [[TMP1]], %cond
     // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP2]] message "assert0"
     // CHECK-NEXT: sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
@@ -557,7 +557,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: }
     firrtl.assert %clock, %cond, %enable, "assert1 %d, %d"(%value, %i0) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<0> {isConcurrent = true, format = "ifElseFatal"}
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %cond, [[TRUE]]
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %cond, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.and bin %enable, [[TMP1]]
     // CHECK-NEXT: sv.ifdef "SYNTHESIS" {
     // CHECK-NEXT: } else {
@@ -1245,7 +1245,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @PreserveName
   firrtl.module private @PreserveName(in %a : !firrtl.uint<1>, in %b : !firrtl.uint<1>, out %c : !firrtl.uint<1>) {
-    //CHECK comb.or %a, %b {sv.namehint = "myname"}
+    // CHECK: comb.or bin %a, %b {sv.namehint = "myname"}
     %foo = firrtl.or %a, %b {name = "myname"} : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.connect %c, %foo : !firrtl.uint<1>, !firrtl.uint<1>
 
@@ -1634,17 +1634,17 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK-NEXT: %0 = hw.bitcast %a : (!hw.array<2xi1>) -> i2
     // CHECK-NEXT: %1 = hw.bitcast %b : (!hw.array<2xi1>) -> i2
-    // CHECK-NEXT: %2 = comb.or %0, %1 : i2
+    // CHECK-NEXT: %2 = comb.or bin %0, %1 : i2
     // CHECK-NEXT: %[[OR:.+]] = hw.bitcast %2 : (i2) -> !hw.array<2xi1>
 
     // CHECK-NEXT: %4 = hw.bitcast %a : (!hw.array<2xi1>) -> i2
     // CHECK-NEXT: %5 = hw.bitcast %b : (!hw.array<2xi1>) -> i2
-    // CHECK-NEXT: %6 = comb.and %4, %5 : i2
+    // CHECK-NEXT: %6 = comb.and bin %4, %5 : i2
     // CHECK-NEXT: %[[AND:.+]] = hw.bitcast %6 : (i2) -> !hw.array<2xi1>
 
     // CHECK-NEXT: %8 = hw.bitcast %a : (!hw.array<2xi1>) -> i2
     // CHECK-NEXT: %9 = hw.bitcast %b : (!hw.array<2xi1>) -> i2
-    // CHECK-NEXT: %10 = comb.xor %8, %9 : i2
+    // CHECK-NEXT: %10 = comb.xor bin %8, %9 : i2
     // CHECK-NEXT: %[[XOR:.+]] = hw.bitcast %10 : (i2) -> !hw.array<2xi1>
 
     // CHECK-NEXT: hw.output %[[OR]], %[[AND]], %[[XOR]] : !hw.array<2xi1>, !hw.array<2xi1>, !hw.array<2xi1>

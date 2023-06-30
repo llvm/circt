@@ -428,3 +428,28 @@ firrtl.circuit "Top" {
     firrtl.instance baz2 sym @baz2 @Baz()
   }
 }
+
+// -----
+
+// This tests that dead modules do not keep dead instance output ports alive.
+
+firrtl.circuit "Test" {
+  firrtl.extmodule @ExtModule(out out : !firrtl.uint<1>)
+
+  // %out is only used by a dead module. It should be removed from the port list.
+  // CHECK: firrtl.module private @Blah() {
+  firrtl.module private @Blah(out %out : !firrtl.uint<1>) {
+    %extmodule_out = firrtl.instance extmodule @ExtModule(out out : !firrtl.uint<1>)
+    firrtl.strictconnect %out, %extmodule_out : !firrtl.uint<1>
+  }
+  firrtl.module @Test() attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK: firrtl.instance blah interesting_name @Blah()
+    %blah_out = firrtl.instance blah interesting_name @Blah(out out : !firrtl.uint<1>)
+  }
+  // This module is dead (unreachable from the toplevel) so the module should be removed.
+  // CHECK-NOT: firrtl.module private @Other
+  firrtl.module private @Other(out %out : !firrtl.uint<1>) {
+    %blah_out = firrtl.instance blah interesting_name @Blah(out out : !firrtl.uint<1>)
+    firrtl.strictconnect %out, %blah_out : !firrtl.uint<1>
+  }
+}

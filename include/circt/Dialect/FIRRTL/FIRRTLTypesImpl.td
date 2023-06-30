@@ -142,7 +142,7 @@ def AnalogTypeImpl : FIRRTLImplType<"Analog",
 class BaseVectorTypeImpl<string name, string ElementType, list<Trait> traits = [], string BaseType = ElementType> : FIRRTLImplType<name, traits, BaseType> {
   let summary = "a fixed size collection of elements, like an array.";
   let parameters = (ins
-      TypeParameter<ElementType, "Type of vector elements">:$lementType,
+      TypeParameter<ElementType, "Type of vector elements">:$elementType,
      "size_t":$numElements,
      "bool":$isConst
   );
@@ -217,7 +217,9 @@ def FVectorImpl : BaseVectorTypeImpl<"FVector","::circt::firrtl::FIRRTLBaseType"
   }];
 }
 
-def OpenVectorImpl : BaseVectorTypeImpl<"OpenVector","::circt::firrtl::FIRRTLType", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]>;
+def OpenVectorImpl : BaseVectorTypeImpl<"OpenVector","::circt::firrtl::FIRRTLType", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]> {
+  let genVerifyDecl = 1;
+}
 
 class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [], string BaseType = ElementType> : FIRRTLImplType<name, traits, BaseType> {
   let summary = "an aggregate of named elements. This is effectively a struct.";
@@ -340,7 +342,9 @@ def BundleImpl : BaseBundleTypeImpl<"Bundle","::circt::firrtl::FIRRTLBaseType", 
   }];
 }
 
-def OpenBundleImpl : BaseBundleTypeImpl<"OpenBundle","::circt::firrtl::FIRRTLType", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]>;
+def OpenBundleImpl : BaseBundleTypeImpl<"OpenBundle","::circt::firrtl::FIRRTLType", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]> {
+  let genVerifyDecl = 1;
+}
 
 def FEnumImpl : FIRRTLImplType<"FEnum", [FieldIDTypeInterface]> {
   let summary = "a sum type of named elements.";
@@ -545,6 +549,25 @@ def BigIntImpl : FIRRTLImplType<"BigInt", [], "circt::firrtl::FIRRTLType"> {
   }];
   let parameters = (ins);
   let genStorageClass = true;
+}
+
+def ListImpl : FIRRTLImplType<"List", [], "circt::firrtl::FIRRTLType"> {
+  let summary = [{
+    A typed property list of any length.  Not representable in hardware.
+  }];
+  let parameters = (ins TypeParameter<"circt::firrtl::PropertyType", "element type">:$elementType);
+  let genStorageClass = true;
+  let genAccessors = true;
+}
+
+def MapImpl : FIRRTLImplType<"Map", [], "circt::firrtl::FIRRTLType"> {
+  let summary = [{
+    A typed map of properties.  Not representable in hardware.
+  }];
+  let parameters = (ins TypeParameter<"circt::firrtl::PropertyType", "key type">:$keyType,
+                    TypeParameter<"circt::firrtl::PropertyType", "value type">:$valueType);
+  let genStorageClass = true;
+  let genAccessors = true;
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD

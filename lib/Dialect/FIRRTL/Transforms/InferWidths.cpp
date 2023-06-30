@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/FieldRef.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/GraphTraits.h"
@@ -1208,14 +1209,14 @@ public:
 
   /// Get the expr associated with the value.  The value must be a non-aggregate
   /// type.
-  Expr *getExpr(Value value);
+  Expr *getExpr(Value value) const;
 
   /// Get the expr associated with a specific field in a value.
-  Expr *getExpr(FieldRef fieldRef);
+  Expr *getExpr(FieldRef fieldRef) const;
 
   /// Get the expr associated with a specific field in a value. If value is
   /// NULL, then this returns NULL.
-  Expr *getExprOrNull(FieldRef fieldRef);
+  Expr *getExprOrNull(FieldRef fieldRef) const;
 
   /// Set the expr associated with the value. The value must be a non-aggregate
   /// type.
@@ -1225,10 +1226,12 @@ public:
   void setExpr(FieldRef fieldRef, Expr *expr);
 
   /// Return whether a module was skipped due to being fully inferred already.
-  bool isModuleSkipped(ModuleOp module) { return skippedModules.count(module); }
+  bool isModuleSkipped(FModuleOp module) const {
+    return skippedModules.count(module);
+  }
 
   /// Return whether all modules in the mapping were fully inferred.
-  bool areAllModulesSkipped() { return allModulesSkipped; }
+  bool areAllModulesSkipped() const { return allModulesSkipped; }
 
 private:
   /// The constraint solver into which we emit variables and constraints.
@@ -1261,16 +1264,13 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
              << "\n===----- Mapping ops to constraint exprs -----===\n\n");
 
   // Ensure we have constraint variables established for all module ports.
-  op.walk<WalkOrder::PostOrder>([&](FModuleOp module) {
+  for (auto module : op.getOps<FModuleOp>())
     for (auto arg : module.getArguments()) {
       solver.setCurrentContextInfo(FieldRef(arg, 0));
       declareVars(arg, module.getLoc());
     }
-    return WalkResult::skip(); // no need to look inside the module
-  });
 
-  // Go through the module bodies and populate the constraint problem.
-  auto result = op.walk<WalkOrder::PostOrder>([&](FModuleOp module) {
+  for (auto module : op.getOps<FModuleOp>()) {
     // Check if the module contains *any* uninferred widths. This allows us to
     // do an early skip if the module is already fully inferred.
     bool anyUninferred = false;
@@ -1286,12 +1286,14 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
         return WalkResult::interrupt();
       return WalkResult::advance();
     });
+
     if (!anyUninferred) {
       LLVM_DEBUG(llvm::dbgs() << "Skipping fully-inferred module '"
                               << module.getName() << "'\n");
       skippedModules.insert(module);
-      return WalkResult::skip();
+      continue;
     }
+
     allModulesSkipped = false;
 
     // Go through operations in the module, creating type variables for results,
@@ -1299,10 +1301,10 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
     auto result = module.getBodyBlock()->walk(
         [&](Operation *op) { return WalkResult(mapOperation(op)); });
     if (result.wasInterrupted())
-      return WalkResult::interrupt();
-    return WalkResult::skip(); // walk above already visited module body
-  });
-  return failure(result.wasInterrupted());
+      return failure();
+  }
+
+  return success();
 }
 
 LogicalResult InferenceMapping::mapOperation(Operation *op) {
@@ -1954,20 +1956,20 @@ void InferenceMapping::unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type) {
 }
 
 /// Get the constraint expression for a value.
-Expr *InferenceMapping::getExpr(Value value) {
+Expr *InferenceMapping::getExpr(Value value) const {
   assert(cast<FIRRTLType>(getBaseType(value.getType())).isGround());
   // A field ID of 0 indicates the entire value.
   return getExpr(FieldRef(value, 0));
 }
 
 /// Get the constraint expression for a value.
-Expr *InferenceMapping::getExpr(FieldRef fieldRef) {
+Expr *InferenceMapping::getExpr(FieldRef fieldRef) const {
   auto expr = getExprOrNull(fieldRef);
   assert(expr && "constraint expr should have been constructed for value");
   return expr;
 }
 
-Expr *InferenceMapping::getExprOrNull(FieldRef fieldRef) {
+Expr *InferenceMapping::getExprOrNull(FieldRef fieldRef) const {
   auto it = opExprs.find(fieldRef);
   return it != opExprs.end() ? it->second : nullptr;
 }
@@ -2005,13 +2007,12 @@ public:
   InferenceTypeUpdate(InferenceMapping &mapping) : mapping(mapping) {}
 
   LogicalResult update(CircuitOp op);
-  bool updateOperation(Operation *op);
-  bool updateValue(Value value);
+  FailureOr<bool> updateOperation(Operation *op);
+  FailureOr<bool> updateValue(Value value);
   FIRRTLBaseType updateType(FieldRef fieldRef, FIRRTLBaseType type);
 
 private:
-  bool anyFailed;
-  InferenceMapping &mapping;
+  const InferenceMapping &mapping;
 };
 
 } // namespace
@@ -2019,27 +2020,30 @@ private:
 /// Update the types throughout a circuit.
 LogicalResult InferenceTypeUpdate::update(CircuitOp op) {
   LLVM_DEBUG(llvm::dbgs() << "\n===----- Update types -----===\n\n");
-  anyFailed = false;
-  op.walk<WalkOrder::PreOrder>([&](Operation *op) {
-    // Skip this module if it had no widths to be inferred at all.
-    if (auto module = dyn_cast<ModuleOp>(op))
-      if (mapping.isModuleSkipped(module))
-        return WalkResult::skip();
-
-    updateOperation(op);
-    return WalkResult(failure(anyFailed));
-  });
-  return failure(anyFailed);
+  return mlir::failableParallelForEach(
+      op.getContext(), op.getOps<FModuleOp>(), [&](FModuleOp op) {
+        // Skip this module if it had no widths to be
+        // inferred at all.
+        if (mapping.isModuleSkipped(op))
+          return success();
+        auto isFailed = op.walk<WalkOrder::PreOrder>([&](Operation *op) {
+                            if (failed(updateOperation(op)))
+                              return WalkResult::interrupt();
+                            return WalkResult::advance();
+                          }).wasInterrupted();
+        return failure(isFailed);
+      });
 }
 
 /// Update the result types of an operation.
-bool InferenceTypeUpdate::updateOperation(Operation *op) {
+FailureOr<bool> InferenceTypeUpdate::updateOperation(Operation *op) {
   bool anyChanged = false;
 
   for (Value v : op->getResults()) {
-    anyChanged |= updateValue(v);
-    if (anyFailed)
-      return false;
+    auto result = updateValue(v);
+    if (failed(result))
+      return result;
+    anyChanged |= *result;
   }
 
   // If this is a connect operation, width inference might have inferred a RHS
@@ -2112,10 +2116,11 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
     SmallVector<Attribute> argTypes;
     argTypes.reserve(module.getNumPorts());
     for (auto arg : module.getArguments()) {
-      argsChanged |= updateValue(arg);
+      auto result = updateValue(arg);
+      if (failed(result))
+        return result;
+      argsChanged |= *result;
       argTypes.push_back(TypeAttr::get(arg.getType()));
-      if (anyFailed)
-        return false;
     }
 
     // Update the module function type if needed.
@@ -2145,7 +2150,7 @@ static FIRRTLBaseType resizeType(FIRRTLBaseType type, uint32_t newWidth) {
 }
 
 /// Update the type of a value.
-bool InferenceTypeUpdate::updateValue(Value value) {
+FailureOr<bool> InferenceTypeUpdate::updateValue(Value value) {
   // Check if the value has a type which we can update.
   auto type = dyn_cast<FIRRTLType>(value.getType());
   if (!type)
@@ -2164,10 +2169,9 @@ bool InferenceTypeUpdate::updateValue(Value value) {
         op.inferReturnTypes(op->getContext(), op->getLoc(), op->getOperands(),
                             op->getAttrDictionary(), op->getPropertiesStorage(),
                             op->getRegions(), types);
-    if (failed(res)) {
-      anyFailed = true;
-      return false;
-    }
+    if (failed(res))
+      return failure();
+
     assert(types.size() == op->getNumResults());
     for (auto it : llvm::zip(op->getResults(), types)) {
       LLVM_DEBUG(llvm::dbgs() << "Inferring " << std::get<0>(it) << " as "
@@ -2197,8 +2201,10 @@ bool InferenceTypeUpdate::updateValue(Value value) {
       fieldID++;
       llvm::SmallVector<BundleType::BundleElement, 3> elements;
       for (auto &element : bundleType) {
-        elements.emplace_back(element.name, element.isFlip,
-                              updateBase(element.type));
+        auto updatedBase = updateBase(element.type);
+        if (!updateBase)
+          return {};
+        elements.emplace_back(element.name, element.isFlip, updatedBase);
       }
       return BundleType::get(context, elements, bundleType.isConst());
     } else if (auto vecType = dyn_cast<FVectorType>(type)) {
@@ -2207,9 +2213,11 @@ bool InferenceTypeUpdate::updateValue(Value value) {
       // TODO: this should recurse into the element type of 0 length vectors and
       // set any unknown width to 0.
       if (vecType.getNumElements() > 0) {
-        auto newType =
-            FVectorType::get(updateBase(vecType.getElementType()),
-                             vecType.getNumElements(), vecType.isConst());
+        auto updatedBase = updateBase(vecType.getElementType());
+        if (!updatedBase)
+          return {};
+        auto newType = FVectorType::get(updatedBase, vecType.getNumElements(),
+                                        vecType.isConst());
         fieldID = save + vecType.getMaxFieldID();
         return newType;
       }
@@ -2218,15 +2226,21 @@ bool InferenceTypeUpdate::updateValue(Value value) {
     } else if (auto enumType = dyn_cast<FEnumType>(type)) {
       fieldID++;
       llvm::SmallVector<FEnumType::EnumElement> elements;
-      for (auto &element : enumType.getElements())
-        elements.emplace_back(element.name, updateBase(element.type));
+      for (auto &element : enumType.getElements()) {
+        auto updatedBase = updateBase(element.type);
+        if (!updateBase)
+          return {};
+        elements.emplace_back(element.name, updatedBase);
+      }
       return FEnumType::get(context, elements, enumType.isConst());
     }
     llvm_unreachable("Unknown type inside a bundle!");
   };
 
   // Update the type.
-  auto newType = mapBaseType(type, updateBase);
+  auto newType = mapBaseTypeNullable(type, updateBase);
+  if (!newType)
+    return failure();
   LLVM_DEBUG(llvm::dbgs() << "Update " << value << " to " << newType << "\n");
   value.setType(newType);
 
@@ -2256,9 +2270,8 @@ FIRRTLBaseType InferenceTypeUpdate::updateType(FieldRef fieldRef,
     // In case the constraints are not resolvable, checks before the calls to
     // `updateType` must have already caught the issues and aborted the pass
     // early. Might turn this into an assert later.
-    anyFailed = true;
     mlir::emitError(value.getLoc(), "width should have been inferred");
-    return type;
+    return {};
   }
   int32_t solution = *expr->solution;
   assert(solution >= 0); // The solver infers variables to be 0 or greater.

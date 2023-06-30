@@ -287,6 +287,15 @@ private:
   DenseMap<Value, StringRef> valueNames;
   StringSet<> valueNamesStorage;
 
+  /// Legalize names for emission.  Convert names which begin with a number to
+  /// be escaped using backticks.
+  StringAttr legalize(StringAttr attr) {
+    StringRef str = attr.getValue();
+    if (str.empty() || !isdigit(str.front()))
+      return attr;
+    return StringAttr::get(attr.getContext(), "`" + Twine(attr) + "`");
+  }
+
   void addValueName(Value value, StringAttr attr) {
     valueNames.insert({value, attr.getValue()});
   }
@@ -306,7 +315,7 @@ LogicalResult Emitter::finalize() { return failure(encounteredError); }
 void Emitter::emitCircuit(CircuitOp op) {
   circuitNamespace.add(op);
   startStatement();
-  ps << "circuit " << PPExtString(op.getName()) << " :";
+  ps << "circuit " << PPExtString(legalize(op.getNameAttr())) << " :";
   setPendingNewline();
   ps.scopedBox(PP::bbox2, [&]() {
     for (auto &bodyOp : *op.getBodyBlock()) {
@@ -328,7 +337,7 @@ void Emitter::emitCircuit(CircuitOp op) {
 /// Emit an entire module.
 void Emitter::emitModule(FModuleOp op) {
   startStatement();
-  ps << "module " << PPExtString(op.getName()) << " :";
+  ps << "module " << PPExtString(legalize(op.getNameAttr())) << " :";
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
 
@@ -348,7 +357,7 @@ void Emitter::emitModule(FModuleOp op) {
 /// Emit an external module.
 void Emitter::emitModule(FExtModuleOp op) {
   startStatement();
-  ps << "extmodule " << PPExtString(op.getName()) << " :";
+  ps << "extmodule " << PPExtString(legalize(op.getNameAttr())) << " :";
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
 
@@ -400,9 +409,10 @@ void Emitter::emitModulePorts(ArrayRef<PortInfo> ports,
     startStatement();
     const auto &port = ports[i];
     ps << (port.direction == Direction::In ? "input " : "output ");
+    auto legalName = legalize(port.name);
     if (!arguments.empty())
-      addValueName(arguments[i], port.name);
-    ps << PPExtString(port.name.getValue()) << " : ";
+      addValueName(arguments[i], legalName);
+    ps << PPExtString(legalName) << " : ";
     emitType(port.type);
     setPendingNewline();
   }
@@ -465,20 +475,22 @@ void Emitter::emitStatement(WhenOp op) {
 }
 
 void Emitter::emitStatement(WireOp op) {
-  addValueName(op.getResult(), op.getNameAttr());
+  auto legalName = legalize(op.getNameAttr());
+  addValueName(op.getResult(), legalName);
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
-    ps << "wire " << PPExtString(op.getName());
+    ps << "wire " << PPExtString(legalName);
     emitTypeWithColon(op.getResult().getType());
   });
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(RegOp op) {
-  addValueName(op.getResult(), op.getNameAttr());
+  auto legalName = legalize(op.getNameAttr());
+  addValueName(op.getResult(), legalName);
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
-    ps << "reg " << PPExtString(op.getName());
+    ps << "reg " << PPExtString(legalName);
     emitTypeWithColon(op.getResult().getType());
     ps << "," << PP::space;
     emitExpression(op.getClockVal());
@@ -487,10 +499,11 @@ void Emitter::emitStatement(RegOp op) {
 }
 
 void Emitter::emitStatement(RegResetOp op) {
-  addValueName(op.getResult(), op.getNameAttr());
+  auto legalName = legalize(op.getNameAttr());
+  addValueName(op.getResult(), legalName);
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
-    ps << "reg " << op.getName();
+    ps << "reg " << legalName;
     emitTypeWithColon(op.getResult().getType());
     ps << "," << PP::space;
     emitExpression(op.getClockVal());
@@ -509,9 +522,10 @@ void Emitter::emitStatement(RegResetOp op) {
 }
 
 void Emitter::emitStatement(NodeOp op) {
-  addValueName(op.getResult(), op.getNameAttr());
+  auto legalName = legalize(op.getNameAttr());
+  addValueName(op.getResult(), legalName);
   startStatement();
-  emitAssignLike([&]() { ps << "node " << PPExtString(op.getName()); },
+  emitAssignLike([&]() { ps << "node " << PPExtString(legalName); },
                  [&]() { emitExpression(op.getInput()); });
   emitLocationAndNewLine(op);
 }
@@ -527,7 +541,7 @@ void Emitter::emitStatement(StopOp op) {
     ps.addAsString(op.getExitCode());
     ps << ")" << PP::end;
     if (!op.getName().empty()) {
-      ps << PP::space << ": " << PPExtString(op.getName());
+      ps << PP::space << ": " << PPExtString(legalize(op.getNameAttr()));
     }
   });
   emitLocationAndNewLine(op);
@@ -554,7 +568,7 @@ void Emitter::emitStatement(PrintFOp op) {
     }
     ps << ")" << PP::end;
     if (!op.getName().empty()) {
-      ps << PP::space << ": " << PPExtString(op.getName());
+      ps << PP::space << ": " << PPExtString(legalize(op.getNameAttr()));
     }
   });
   emitLocationAndNewLine(op);
@@ -574,7 +588,7 @@ void Emitter::emitVerifStatement(T op, StringRef mnemonic) {
     ps.writeQuotedEscaped(op.getMessage());
     ps << ")" << PP::end;
     if (!op.getName().empty()) {
-      ps << PP::space << ": " << PPExtString(op.getName());
+      ps << PP::space << ": " << PPExtString(legalize(op.getNameAttr()));
     }
   });
   emitLocationAndNewLine(op);
@@ -608,17 +622,18 @@ void Emitter::emitStatement(StrictConnectOp op) {
 
 void Emitter::emitStatement(InstanceOp op) {
   startStatement();
-  ps << "inst " << PPExtString(op.getName()) << " of "
-     << PPExtString(op.getModuleName());
+  auto legalName = legalize(op.getNameAttr());
+  ps << "inst " << PPExtString(legalName) << " of "
+     << PPExtString(legalize(op.getModuleNameAttr().getAttr()));
   emitLocationAndNewLine(op);
 
   // Make sure we have a name like `<inst>.<port>` for each of the instance
   // result values.
-  SmallString<16> portName(op.getName());
+  SmallString<16> portName(legalName);
   portName.push_back('.');
   unsigned baseLen = portName.size();
   for (unsigned i = 0, e = op.getNumResults(); i < e; ++i) {
-    portName.append(op.getPortNameStr(i));
+    portName.append(legalize(op.getPortName(i)));
     addValueName(op.getResult(i), portName);
     portName.resize(baseLen);
   }
@@ -629,17 +644,18 @@ void Emitter::emitStatement(AttachOp op) {
 }
 
 void Emitter::emitStatement(MemOp op) {
-  SmallString<16> portName(op.getName());
+  auto legalName = legalize(op.getNameAttr());
+  SmallString<16> portName(legalName);
   portName.push_back('.');
   auto portNameBaseLen = portName.size();
   for (auto result : llvm::zip(op.getResults(), op.getPortNames())) {
     portName.resize(portNameBaseLen);
-    portName.append(cast<StringAttr>(std::get<1>(result)).getValue());
+    portName.append(legalize(cast<StringAttr>(std::get<1>(result))));
     addValueName(std::get<0>(result), portName);
   }
 
   startStatement();
-  ps << "mem " << PPExtString(op.getName()) << " :";
+  ps << "mem " << PPExtString(legalName) << " :";
   emitLocationAndNewLine(op);
   ps.scopedBox(PP::bbox2, [&]() {
     startStatement();
@@ -665,13 +681,13 @@ void Emitter::emitStatement(MemOp op) {
       };
       switch (port.second) {
       case MemOp::PortKind::Read:
-        add(reader, port.first);
+        add(reader, legalize(port.first));
         break;
       case MemOp::PortKind::Write:
-        add(writer, port.first);
+        add(writer, legalize(port.first));
         break;
       case MemOp::PortKind::ReadWrite:
-        add(readwriter, port.first);
+        add(readwriter, legalize(port.first));
         break;
       case MemOp::PortKind::Debug:
         emitOpError(op, "has unsupported 'debug' port");
@@ -694,7 +710,7 @@ void Emitter::emitStatement(MemOp op) {
 void Emitter::emitStatement(SeqMemOp op) {
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
-    ps << "smem " << PPExtString(op.getName());
+    ps << "smem " << PPExtString(legalize(op.getNameAttr()));
     emitTypeWithColon(op.getType());
     ps << PP::space;
     emitAttribute(op.getRuw());
@@ -705,7 +721,7 @@ void Emitter::emitStatement(SeqMemOp op) {
 void Emitter::emitStatement(CombMemOp op) {
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
-    ps << "cmem " << PPExtString(op.getName());
+    ps << "cmem " << PPExtString(legalize(op.getNameAttr()));
     emitTypeWithColon(op.getType());
   });
   emitLocationAndNewLine(op);
@@ -713,12 +729,12 @@ void Emitter::emitStatement(CombMemOp op) {
 
 void Emitter::emitStatement(MemoryPortOp op) {
   // Nothing to output for this operation.
-  addValueName(op.getData(), op.getName());
+  addValueName(op.getData(), legalize(op.getNameAttr()));
 }
 
 void Emitter::emitStatement(MemoryDebugPortOp op) {
   // Nothing to output for this operation.
-  addValueName(op.getData(), op.getName());
+  addValueName(op.getData(), legalize(op.getNameAttr()));
 }
 
 void Emitter::emitStatement(MemoryPortAccessOp op) {
@@ -728,14 +744,14 @@ void Emitter::emitStatement(MemoryPortAccessOp op) {
   auto port = cast<MemoryPortOp>(op.getPort().getDefiningOp());
   emitAttribute(port.getDirection());
   // TODO: emitAssignLike
-  ps << " mport " << PPExtString(port.getName()) << " = ";
+  ps << " mport " << PPExtString(legalize(port.getNameAttr())) << " = ";
 
   // Print the memory name.
   auto *mem = port.getMemory().getDefiningOp();
   if (auto seqMem = dyn_cast<SeqMemOp>(mem))
-    ps << seqMem.getName();
+    ps << legalize(seqMem.getNameAttr());
   else
-    ps << cast<CombMemOp>(mem).getName();
+    ps << legalize(cast<CombMemOp>(mem).getNameAttr());
 
   // Print the address.
   ps << "[";
@@ -906,7 +922,7 @@ void Emitter::emitExpression(SpecialConstantOp op) {
 void Emitter::emitExpression(SubfieldOp op) {
   auto type = op.getInput().getType();
   emitExpression(op.getInput());
-  ps << "." << type.getElementName(op.getFieldIndex());
+  ps << "." << legalize(type.getElementNameAttr(op.getFieldIndex()));
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
@@ -928,7 +944,7 @@ void Emitter::emitExpression(SubaccessOp op) {
 void Emitter::emitExpression(OpenSubfieldOp op) {
   auto type = op.getInput().getType();
   emitExpression(op.getInput());
-  ps << "." << type.getElementName(op.getFieldIndex());
+  ps << "." << legalize(type.getElementNameAttr(op.getFieldIndex()));
 }
 
 void Emitter::emitExpression(OpenSubindexOp op) {
@@ -1052,7 +1068,7 @@ void Emitter::emitType(Type type, bool includeConst) {
             ps.scopedBox(PP::ibox2, [&]() {
               if (element.isFlip)
                 ps << "flip ";
-              ps << element.name.getValue();
+              ps << legalize(element.name);
               emitTypeWithColon(element.type);
               anyEmitted = true;
             });

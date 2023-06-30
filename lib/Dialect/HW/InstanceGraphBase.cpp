@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/HW/InstanceGraphBase.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Threading.h"
 
 using namespace circt;
 using namespace hw;
@@ -51,18 +52,36 @@ InstanceGraphNode *InstanceGraphBase::getOrAddNode(StringAttr name) {
 }
 
 InstanceGraphBase::InstanceGraphBase(Operation *parent) : parent(parent) {
-  parent->walk([&](HWModuleLike module) {
+  assert(parent->hasTrait<mlir::OpTrait::SingleBlock>() &&
+         "top-level operation must have a single block");
+  SmallVector<std::pair<HWModuleLike, SmallVector<HWInstanceLike>>>
+      moduleToInstances;
+  // First accumulate modules inside the parent op.
+  for (auto module : parent->getRegion(0).front().getOps<hw::HWModuleLike>())
+    moduleToInstances.push_back({module, {}});
+
+  // Populate instances in the module parallelly.
+  mlir::parallelFor(parent->getContext(), 0, moduleToInstances.size(),
+                    [&](size_t idx) {
+                      auto module = moduleToInstances[idx].first;
+                      auto &instances = moduleToInstances[idx].second;
+                      // Find all instance operations in the module body.
+                      module.walk([&](HWInstanceLike instanceOp) {
+                        instances.push_back(instanceOp);
+                      });
+                    });
+
+  // Construct an instance graph sequentially.
+  for (auto &[module, instances] : moduleToInstances) {
     auto name = module.getModuleNameAttr();
     auto *currentNode = getOrAddNode(name);
     currentNode->module = module;
-
-    // Find all instance operations in the module body.
-    module.walk([&](HWInstanceLike instanceOp) {
+    for (auto instanceOp : instances) {
       // Add an edge to indicate that this module instantiates the target.
       auto *targetNode = getOrAddNode(instanceOp.getReferencedModuleNameAttr());
       currentNode->addInstance(instanceOp, targetNode);
-    });
-  });
+    }
+  }
 }
 
 InstanceGraphNode *InstanceGraphBase::addModule(HWModuleLike module) {

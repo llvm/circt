@@ -124,6 +124,28 @@ firrtl.circuit "Simple" {
     // CHECK: [[OUTE:%.+]] = comb.concat %false, %inE : i1, i3
     // CHECK: hw.output %inA, [[OUTB]], [[OUTC]], [[OUTD]], [[OUTE]]
   }
+  
+  firrtl.module private @InputPorts(in %in : !firrtl.uint<1>) { }
+  firrtl.module private @InputPortsParent(in %in : !firrtl.uint<1>) {
+    // Unconnected.
+    // CHECK: %undriven = sv.wire : !hw.inout<i1>
+    // CHECK: %0 = sv.read_inout %undriven : !hw.inout<i1>
+    // CHECK: hw.instance "ip0" @InputPorts(in: %0: i1) -> ()
+    %ip0_in = firrtl.instance ip0 @InputPorts(in in : !firrtl.uint<1>)
+    
+    // Double connected.
+    // CHECK: hw.instance "ip1" @InputPorts(in: %in: i1) -> ()
+    %ip1_in = firrtl.instance ip1 @InputPorts(in in : !firrtl.uint<1>)
+    firrtl.connect %ip1_in, %in : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %ip1_in, %in : !firrtl.uint<1>, !firrtl.uint<1>
+
+    // Combinational loop.
+    // CHECK: %undriven_0 = sv.wire name "undriven" : !hw.inout<i1>
+    // CHECK: %1 = sv.read_inout %undriven_0 : !hw.inout<i1>
+    // CHECK: hw.instance "ip2" @InputPorts(in: %1: i1) -> ()
+    %ip2_in = firrtl.instance ip2 @InputPorts(in in : !firrtl.uint<1>)
+    firrtl.connect %ip2_in, %ip2_in : !firrtl.uint<1>, !firrtl.uint<1>
+  }
 
   // CHECK-LABEL: hw.module private @Analog(%a1: !hw.inout<i1>) -> (outClock: i1) {
   // CHECK-NEXT:    %0 = sv.read_inout %a1 : !hw.inout<i1>

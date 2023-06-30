@@ -387,6 +387,10 @@ static LogicalResult processBuffer(
       exportPm.addPass(circt::createStripDebugInfoWithPredPass(
           [](mlir::Location loc) { return true; }));
 
+    // Emit module and testbench hierarchy JSON files.
+    if (exportModuleHierarchy)
+      exportPm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
+
     // Emit a single file or multiple files depending on the output format.
     switch (outputFormat) {
     default:
@@ -402,11 +406,6 @@ static LogicalResult processBuffer(
       exportPm.addPass(createExportVerilogPass(llvm::nulls()));
       break;
     }
-
-    // Run module hierarchy emission after verilog emission, which ensures we
-    // pick up any changes that verilog emission made.
-    if (exportModuleHierarchy)
-      exportPm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
 
     // Run final IR mutations to clean it up after ExportVerilog and before
     // emitting the final MLIR.
@@ -452,7 +451,7 @@ public:
     setHandler([](Diagnostic &d) {
       SmallPtrSet<Location, 8> locs;
       // Recursively scan for FileLineColLoc locations.
-      d.getLocation().operator LocationAttr().walk([&](Location loc) {
+      d.getLocation()->walk([&](Location loc) {
         if (isa<FileLineColLoc>(loc))
           locs.insert(loc);
         return WalkResult::advance();
@@ -461,7 +460,8 @@ public:
       // Drop top-level location the diagnostic is reported on.
       locs.erase(d.getLocation());
       // As well as the location the SourceMgrDiagnosticHandler will use.
-      locs.erase(d.getLocation()->findInstanceOf<FileLineColLoc>());
+      if (auto reportLoc = d.getLocation()->findInstanceOf<FileLineColLoc>())
+        locs.erase(reportLoc);
 
       // Attach additional locations as notes on the diagnostic.
       for (auto l : locs)

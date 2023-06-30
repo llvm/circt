@@ -142,8 +142,7 @@ bool groupInRegion(Block *block, Operation *clockTreeOp,
       if (definition->getBlock() == op->getBlock() ||
           !clockTreeOp->isAncestor(definition))
         continue;
-      if (!operand.hasOneUse() &&
-          llvm::any_of(operand.getUsers(),
+      if (llvm::any_of(definition->getUsers(),
                        [&](auto *user) { return !dom.dominates(op, user); }))
         continue;
       // For some currently unknown reason, just calling moveBefore
@@ -204,9 +203,11 @@ LogicalResult GroupResetsAndEnablesPass::runOnModel(ModelOp modelOp) {
   RewritePatternSet patterns(&context);
   patterns.add<ResetGroupingPattern, EnableGroupingPattern,
                GroupAssignmentsInIfPattern>(&context);
-  if (failed(applyPatternsAndFoldGreedily(modelOp, std::move(patterns)))) {
-    signalPassFailure();
-  }
+
+  if (failed(applyPatternsAndFoldGreedily(modelOp, std::move(patterns))))
+    return emitError(modelOp.getLoc(),
+                     "GroupResetsAndEnables: greedy rewriter did not converge");
+
   return success();
 }
 
