@@ -28,6 +28,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
+#include <utility>
 #include <variant>
 
 namespace circt {
@@ -249,7 +250,7 @@ public:
     loopInitGroups[operation] = std::move(groups);
   }
 
-  /// Retrieve the loop init groups registered for `op`.
+  /// Retrieve the loop latch group registered for `op`.
   SmallVector<calyx::GroupOp> getLoopInitGroups(Loop op) {
     auto it = loopInitGroups.find(op.getOperation());
     assert(it != loopInitGroups.end() &&
