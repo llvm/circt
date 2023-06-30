@@ -1902,7 +1902,7 @@ FIRRTLBaseType FVectorType::getAnonymousType() {
     return impl->anonymousType;
 
   // If this type is already anonymous, return it and remember for next time.
-  if (impl->elementType.getRecursiveTypeProperties().containsTypeAlias)
+  if (!impl->props.containsTypeAlias)
     return impl->anonymousType = *this;
 
   // Otherwise, rebuild an anonymous version.
@@ -2305,11 +2305,14 @@ auto FEnumType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
 
 /// Return this type with any type aliases recursively removed from itself.
 FIRRTLBaseType FEnumType::getAnonymousType() {
-  if (!this->containsTypeAlias())
-    return *this;
   auto *impl = getImpl();
+
   if (impl->anonymousType)
     return impl->anonymousType;
+
+  if (!impl->recProps.containsTypeAlias)
+    return impl->anonymousType = *this;
+
   SmallVector<FEnumType::EnumElement, 4> elements;
 
   for (auto element : getElements())
