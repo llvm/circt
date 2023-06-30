@@ -250,7 +250,7 @@ public:
     loopInitGroups[operation] = std::move(groups);
   }
 
-  /// Retrieve the loop latch group registered for `op`.
+  /// Retrieve the loop init groups registered for `op`.
   SmallVector<calyx::GroupOp> getLoopInitGroups(Loop op) {
     auto it = loopInitGroups.find(op.getOperation());
     assert(it != loopInitGroups.end() &&
