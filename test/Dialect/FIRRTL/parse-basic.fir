@@ -8,8 +8,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input in: UInt
     output out: UInt<8>
 
-    ; CHECK: %0 = firrtl.widthCast %in : (!firrtl.uint) -> !firrtl.uint<8>
-    ; CHECK: firrtl.strictconnect %out, %0 : !firrtl.uint<8>
+    ; CHECK: firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint
     out <= in
 
   ; CHECK: }
@@ -465,7 +464,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module expr_stmt_ambiguity :
     ; CHECK: %reg = firrtl.wire interesting_name : !firrtl.uint
     wire reg : UInt
-    ; CHECK: firrtl.strictconnect %reg,
+    ; CHECK: firrtl.connect %reg,
     reg <= UInt(42)
 
     ; CHECK: %write = firrtl.wire
@@ -478,7 +477,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module expr_stmt_ambiguity2 :
     ; CHECK: firrtl.instance write interesting_name @circuit
     inst write of circuit
-    ; CHECK: firrtl.strictconnect %write_in
+    ; CHECK: firrtl.connect %write_in
     write.in <= UInt(1)
 
   ; CHECK-LABEL: firrtl.module private @oversize_shift(
@@ -1251,13 +1250,12 @@ circuit EnumTypes:
     ; CHECK-DAG: %[[AGG_B:.+]] = firrtl.subfield %[[AGG]][b]
     ; CHECK-DAG: %[[AGG_B_PROBE:.+]] = firrtl.ref.send %[[AGG_B]]
     ; CHECK-DAG: %[[READ_AGG_B_PROBE:.+]] = firrtl.ref.resolve %[[AGG_B_PROBE]]
-    ; CHECK-NEXT: %[[wfix:.*]] = firrtl.widthCast %[[READ_AGG_B_PROBE]]
-    ; CHECK-DAG: strictconnect %out2, %[[wfix]]
+    ; CHECK-DAG: connect %out2, %[[READ_AGG_B_PROBE]]
     out2 <= read(probe(agg.b))
     ; CHECK-DAG: %[[AGG2_PROBE:.+]] = firrtl.ref.send %[[AGG2]]
     ; CHECK-DAG: %[[READ_AGG2_PROBE:.+]] = firrtl.ref.resolve %[[AGG2_PROBE]]
     ; CHECK-DAG: %[[READ_AGG2_PROBE__B:.+]] = firrtl.subfield %[[READ_AGG2_PROBE]][b]
-    ; CHECK-DAG: strictconnect %out2, %[[READ_AGG2_PROBE__B]]
+    ; CHECK-DAG: connect %out2, %[[READ_AGG2_PROBE__B]]
     out2 <= read(probe(agg2)).b
 
     ; CHECK: %[[AGG3:.+]] = firrtl.wire
@@ -1271,7 +1269,7 @@ circuit EnumTypes:
     ; CHECK-NEXT: %[[REM_R2_1:.+]] = firrtl.ref.sub %[[REM_R2]][1]
     ; CHECK-NEXT: %[[REM_R2_1_A:.+]] = firrtl.ref.sub %[[REM_R2_1]][0]
     ; CHECK-NEXT: %[[READ_REM_R2_1_A:.+]] = firrtl.ref.resolve %[[REM_R2_1_A]]
-    ; CHECK-NEXT: strictconnect %out3, %[[READ_REM_R2_1_A]]
+    ; CHECK-NEXT: connect %out3, %[[READ_REM_R2_1_A]]
     inst rem of RefExtMore
     out3 <= read(rem.r2[1].a)
 
@@ -1519,63 +1517,53 @@ circuit RadixEncodedIntegerLiterals:
     output hs: SInt<8>
 
     ; CHECK:      %[[c42_ui7:[-a-zA-Z_0-9]+]] = firrtl.constant 42
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[c42_ui7]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %bu, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui7]]
+    ; CHECK-NEXT: firrtl.connect %bu, %[[c_constCast]]
     bu <= UInt(0b101010)
 
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[c42_ui7]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %ou, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui7]]
+    ; CHECK-NEXT: firrtl.connect %ou, %[[c_constCast]]
     ou <= UInt(0o052)
 
     ; Note: this creates a second constant because the width of a parsed
     ; constant is dependent on the overestimation of LLVM::StringRef.
     ;
     ; CHECK:      %[[c42_ui8:[-a-zA-Z_0-9]+]] = firrtl.constant 42
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[c42_ui8]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %du0, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui8]]
+    ; CHECK-NEXT: firrtl.connect %du0, %[[c_constCast]]
     du0 <= UInt(42)
 
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[c42_ui8]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %du1, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui8]]
+    ; CHECK-NEXT: firrtl.connect %du1, %[[c_constCast]]
     du1 <= UInt(0d42)
 
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[c42_ui7]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %hu, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui7]]
+    ; CHECK-NEXT: firrtl.connect %hu, %[[c_constCast]]
     hu <= UInt(0h2a)
 
     ; CHECK:      %[[cn42_si7:[-a-zA-Z_0-9]+]] = firrtl.constant -42
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[cn42_si7]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %bs, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si7]]
+    ; CHECK-NEXT: firrtl.connect %bs, %[[c_constCast]]
     bs <= SInt(-0b101010)
 
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[cn42_si7]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %os, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si7]]
+    ; CHECK-NEXT: firrtl.connect %os, %[[c_constCast]]
     os <= SInt(-0o52)
 
     ; Note: this creates a second constant because the width of a parsed
     ; constant is dependent on the overestimation of LLVM::StringRef.
     ;
     ; CHECK:      %[[cn42_si8:[-a-zA-Z_0-9]+]] = firrtl.constant -42
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[cn42_si8]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %dus0, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si8]]
+    ; CHECK-NEXT: firrtl.connect %dus0, %[[c_constCast]]
     dus0 <= SInt(-42)
 
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[cn42_si8]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %dus1, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si8]]
+    ; CHECK-NEXT: firrtl.connect %dus1, %[[c_constCast]]
     dus1 <= SInt(-0d42)
 
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[cn42_si7]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %hs, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si7]]
+    ; CHECK-NEXT: firrtl.connect %hs, %[[c_constCast]]
     hs <= SInt(-0h2a)
 
 ;// -----

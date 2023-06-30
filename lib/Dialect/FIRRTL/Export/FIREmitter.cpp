@@ -103,7 +103,6 @@ struct Emitter {
   void emitExpression(RefSendOp op);
   void emitExpression(RefSubOp op);
   void emitExpression(UninferredResetCastOp op);
-  void emitExpression(UninferredWidthCastOp op);
   void emitExpression(ConstCastOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
@@ -932,7 +931,7 @@ void Emitter::emitExpression(Value value) {
           CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
-          ShrPrimOp, UninferredResetCastOp, UninferredWidthCastOp, ConstCastOp,
+          ShrPrimOp, UninferredResetCastOp, ConstCastOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp>([&](auto op) {
         ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
@@ -1034,10 +1033,6 @@ void Emitter::emitExpression(RefSubOp op) {
 }
 
 void Emitter::emitExpression(UninferredResetCastOp op) {
-  emitExpression(op.getInput());
-}
-
-void Emitter::emitExpression(UninferredWidthCastOp op) {
   emitExpression(op.getInput());
 }
 

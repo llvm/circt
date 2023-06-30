@@ -903,11 +903,11 @@ firrtl.circuit "Foo" {
   firrtl.module @ForeignTypes(in %a: !firrtl.uint<42>, out %b: !firrtl.uint) {
     %0 = firrtl.wire : index
     %1 = firrtl.wire : index
-    firrtl.connect %0, %1 : index, index
+    firrtl.strictconnect %0, %1 : index
     firrtl.connect %b, %a : !firrtl.uint, !firrtl.uint<42>
     // CHECK-NEXT: [[W0:%.+]] = firrtl.wire : index
     // CHECK-NEXT: [[W1:%.+]] = firrtl.wire : index
-    // CHECK-NEXT: firrtl.connect [[W0]], [[W1]] : index
+    // CHECK-NEXT: firrtl.strictconnect [[W0]], [[W1]] : index
   }
 
   // CHECK-LABEL: @Issue4859
@@ -936,30 +936,6 @@ firrtl.circuit "Foo" {
   // CHECK: firrtl.module @Property(in %a: !firrtl.string)
   firrtl.module @Property(in %a: !firrtl.string) { }
 
-  // Check some strictconnect + widthCast inferences.
-  // See https://github.com/llvm/circt/issues/5408 .
-  // CHECK-LABEL: module @StrictConnectBackIntoWidthCast1
-  firrtl.module @StrictConnectBackIntoWidthCast1(in %y: !firrtl.uint<2>, out %out1: !firrtl.uint) attributes {convention = #firrtl<convention scalarized>} {
-    %w = firrtl.wire : !firrtl.uint
-    %c0_ui = firrtl.constant 0 : !firrtl.const.uint
-    %0 = firrtl.widthCast %c0_ui : (!firrtl.const.uint) -> !firrtl.const.uint
-    %1 = firrtl.constCast %0 : (!firrtl.const.uint) -> !firrtl.uint
-    firrtl.strictconnect %w, %1 : !firrtl.uint
-    %2 = firrtl.widthCast %y : (!firrtl.uint<2>) -> !firrtl.uint
-    firrtl.strictconnect %w, %2 : !firrtl.uint
-    %3 = firrtl.widthCast %w : (!firrtl.uint) -> !firrtl.uint
-    firrtl.strictconnect %out1, %3 : !firrtl.uint
-  }
-  // CHECK-LABEL: module @StrictConnectBackIntoWidthCast2
-  firrtl.module @StrictConnectBackIntoWidthCast2(in %x: !firrtl.uint<1>, in %y: !firrtl.uint<2>, out %out1: !firrtl.uint) attributes {convention = #firrtl<convention scalarized>} {
-    %w = firrtl.wire : !firrtl.uint
-    %0 = firrtl.widthCast %x : (!firrtl.uint<1>) -> !firrtl.uint
-    firrtl.strictconnect %w, %0 : !firrtl.uint
-    %1 = firrtl.widthCast %y : (!firrtl.uint<2>) -> !firrtl.uint
-    firrtl.strictconnect %w, %1 : !firrtl.uint
-    %2 = firrtl.widthCast %w : (!firrtl.uint) -> !firrtl.uint
-    firrtl.strictconnect %out1, %2 : !firrtl.uint
-  }
   // CHECK-LABEL: module @MuxIntrinsics
   // CHECK-SAME: %sel: !firrtl.uint<1>
   // CHECK-SAME: %sel2: !firrtl.uint<2>
@@ -974,12 +950,10 @@ firrtl.circuit "Foo" {
     // CHECK: firrtl.int.mux2cell
     // CHECK-SAME: (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     %0 = firrtl.int.mux2cell(%sel, %c0_ui1, %c1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint) -> !firrtl.uint
-    %cast1 = firrtl.widthCast %0 : (!firrtl.uint) -> !firrtl.uint
-    firrtl.strictconnect %out1, %cast1 : !firrtl.uint
+    firrtl.connect %out1, %0: !firrtl.uint, !firrtl.uint
     // CHECK: firrtl.int.mux4cell
     // CHECK-SAME: (!firrtl.uint<2>, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<1>) -> !firrtl.uint<3>
     %1 = firrtl.int.mux4cell(%sel2, %c1_ui1, %c2_ui2, %c3_ui3, %c1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint) -> !firrtl.uint
-    %cast2 = firrtl.widthCast %1 : (!firrtl.uint) -> !firrtl.uint
-    firrtl.strictconnect %out2, %cast2 : !firrtl.uint
+    firrtl.connect %out2, %1: !firrtl.uint, !firrtl.uint
   }
 }

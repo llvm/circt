@@ -876,6 +876,16 @@ firrtl.circuit "Top"   {
 
 // -----
 
+firrtl.circuit "Top" {
+  firrtl.module @Top (in %in : !firrtl.uint) {
+    %a = firrtl.wire : !firrtl.uint
+    // expected-error @+1 {{op operand #0 must be a sized passive base type}}
+    firrtl.strictconnect %a, %in : !firrtl.uint
+  }
+}
+
+// -----
+
 firrtl.circuit "AnalogRegister" {
   firrtl.module @AnalogRegister(in %clock: !firrtl.clock) {
     // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.analog'}}
@@ -1109,7 +1119,7 @@ firrtl.circuit "Top" {
   firrtl.module @Foo (in %in: !firrtl.probe<uint<2>>) {}
   firrtl.module @Top (in %in: !firrtl.probe<uint<2>>) {
     %foo_in = firrtl.instance foo @Foo(in in: !firrtl.probe<uint<2>>)
-    // expected-error @below {{must be a passive base type}}
+    // expected-error @below {{must be a sized passive base type}}
     firrtl.strictconnect %foo_in, %in : !firrtl.probe<uint<2>>
   }
 }
@@ -1267,7 +1277,7 @@ firrtl.circuit "PropertyDoubleDrive" {
 firrtl.circuit "PropertyConnect" {
   firrtl.module @PropertyConnect(out %out: !firrtl.string) {
     %0 = firrtl.string "hello"
-    // expected-error @below {{must be a passive base type}}
+    // expected-error @below {{must be a sized passive base type}}
     firrtl.strictconnect %out, %0 : !firrtl.string
   }
 }
@@ -1614,16 +1624,6 @@ firrtl.circuit "BitcastNonConstToConstContaining" {
   firrtl.module @BitcastNonConstToConstContaining(in %a: !firrtl.bundle<a: uint<1>>) {
     // expected-error @+1 {{cannot cast non-'const' input type '!firrtl.bundle<a: uint<1>>' to 'const' result type '!firrtl.bundle<a: const.sint<1>>'}}
     %b = firrtl.bitcast %a : (!firrtl.bundle<a: uint<1>>) -> !firrtl.bundle<a: const.sint<1>>
-  }
-}
-
-// -----
-
-// Uninferred width cast non-const to const
-firrtl.circuit "UninferredWidthCastNonConstToConst" {
-  firrtl.module @UninferredWidthCastNonConstToConst(in %a: !firrtl.uint) {
-    // expected-error @+1 {{operand constness must match}}
-    %b = firrtl.widthCast %a : (!firrtl.uint) -> !firrtl.const.uint<1>
   }
 }
 
