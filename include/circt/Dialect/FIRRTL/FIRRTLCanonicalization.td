@@ -44,6 +44,9 @@ def NullAttr : Constraint<CPred<"!$0">>;
 // Constraint that enforces equal types
 def EqualTypes : Constraint<CPred<"$0.getType() == $1.getType()">>;
 
+// Constraint that enforces equal type sizes
+def EqualIntSize : Constraint<CPred<"cast<IntType>($0.getType()).getWidth() == cast<IntType>($1.getType()).getWidth()">>;
+
 // Constraint that enforces int types
 def IntTypes : Constraint<CPred<"isa<IntType>($0.getType())">>;
 
@@ -283,14 +286,17 @@ def AndOfPad : Pat <
   [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
 
 /// cvt is adding a 0, which will pass through the and
-/// and(cvt(x:U), const) -> cat(0, and(x,trunc(const))
+/// Only trigger when cvt is full length
+/// and(cvt(x:U), const) -> cat(0, and(x,sextortrunc(const))
 def AndCvtU : Pat <
-  (AndPrimOp:$old (CvtPrimOp $x), (ConstantOp:$ocst $cst)),
+  (AndPrimOp:$old (CvtPrimOp:$cvt $x), (ConstantOp:$ocst $cst)),
   (MoveNameHint $old, (CatPrimOp 
     (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), APSInt(APInt()))"> $ocst),
-    (AndPrimOp $x, (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), $1.getValue().trunc($1.getValue().getBitWidth()-1).zext(*cast<IntType>($0.getType()).getWidth()))"> $x, $cst))
+    (AndPrimOp $x, (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), "
+                                      "cast<IntType>($0.getType()), "
+                                      "$1.getValue().sextOrTrunc(cast<IntType>($0.getType()).getWidthOrSentinel()))"> $x, $cst))
   )),
-  [(KnownWidth $x), (UIntType $x)]>;
+  [(KnownWidth $x), (UIntType $x), (EqualIntSize $old, $cvt)]>;
 
 // or(x, 0) -> x, fold can't handle all cases
 def OrOfZero : Pat <
