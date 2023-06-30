@@ -126,11 +126,13 @@ hw.module @ClockGate(%clock: i1, %enable: i1, %enable2 : i1, %testEnable: i1) {
   %8 = seq.clock_gate %clock, %enable
   %transitiveClock1 = hw.wire %7 sym @transitiveClock1 : i1
 
-  // CHECK-NEXT: [[TCG2:%.+]] = seq.clock_gate [[TCG1]], %enable
-  // CHECK-NEXT: %transitiveClock2 = hw.wire [[TCG2]] sym @transitiveClock2  : i1
-  %9 = seq.clock_gate %7, %enable2
-  %10 = seq.clock_gate %9, %enable
-  %transitiveClock2 = hw.wire %10 sym @transitiveClock2 : i1
+  // CHECK-NEXT: [[TCG2:%.+]] = seq.clock_gate %clock, %enable, %testEnable
+  // CHECK-NEXT: [[TCG3:%.+]] = seq.clock_gate [[TCG2]], %enable
+  // CHECK-NEXT: %transitiveClock2 = hw.wire [[TCG3]] sym @transitiveClock2  : i1
+  %9 = seq.clock_gate %clock, %enable, %testEnable
+  %10 = seq.clock_gate %9, %enable2 
+  %11 = seq.clock_gate %10, %enable, %testEnable
+  %transitiveClock2 = hw.wire %11 sym @transitiveClock2 : i1
 }
 
 // CHECK-LABEL: @FirMem
