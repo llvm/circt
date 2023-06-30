@@ -17,6 +17,7 @@ include "FIRRTLDialect.td"
 include "FIRRTLEnums.td"
 include "FIRRTLOpInterfaces.td"
 include "FIRRTLTypes.td"
+include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def AttachOp : FIRRTLOp<"attach"> {
@@ -374,5 +375,37 @@ class VerifIntrinsicOp<string mnemonic, list<Trait> traits = []> :
 def VerifAssertIntrinsicOp : VerifIntrinsicOp<"assert">;
 def VerifAssumeIntrinsicOp : VerifIntrinsicOp<"assume">;
 def VerifCoverIntrinsicOp : VerifIntrinsicOp<"cover">;
+
+//===----------------------------------------------------------------------===//
+// Group Op
+//===----------------------------------------------------------------------===//
+
+def GroupOp : FIRRTLOp<
+  "group",
+  [SingleBlock, NoTerminator, NoRegionArguments,
+   ParentOneOf<["firrtl::FModuleOp", "firrtl::GroupOp"]>,
+   DeclareOpInterfaceMethods<SymbolUserOpInterface>]
+> {
+  let summary = "A definition of an optional group";
+  let description = [{
+    The `firrtl.group` operation defines optional code that is conditionally
+    part of a `firrtl.module`.  This is typically used to store verification or
+    debugging code that is lowered to a SystemVerilog `bind` instantiation.  An
+    optional group can read from (capture) values defined in parent group
+    definitions or in the parent module, but may not write to hardware declared
+    outside the group.
+
+    A `firrtl.group` must refer to an existing optional group declaration
+    (`firrtl.declgroup`) via a symbol reference.  A nested `firrtl.group` refers
+    to a nested group declaration via a nested symbol reference.
+  }];
+  let arguments = (ins SymbolRefAttr:$groupName);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$region);
+  let assemblyFormat = [{
+    $groupName $region attr-dict
+  }];
+  let hasVerifier = 1;
+}
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLSTATEMENTS_TD

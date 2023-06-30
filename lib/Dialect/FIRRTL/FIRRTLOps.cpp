@@ -4725,6 +4725,106 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
 }
 
 //===----------------------------------------------------------------------===//
+// Optional Group Operations
+//===----------------------------------------------------------------------===//
+
+LogicalResult GroupOp::verify() {
+  auto groupName = getGroupName();
+  auto *parentOp = (*this)->getParentOp();
+
+  // Verify the correctness of the symbol reference.  Only verify that this
+  // group makes sense in its parent module or group.
+  auto nestedReferences = groupName.getNestedReferences();
+  if (nestedReferences.empty()) {
+    if (!isa<FModuleOp>(parentOp)) {
+      auto diag = emitOpError() << "has an un-nested group symbol, but does "
+                                   "not have a 'firrtl.module' op as a parent";
+      return diag.attachNote(parentOp->getLoc())
+             << "illegal parent op defined here";
+    }
+  } else {
+    auto parentGroup = dyn_cast<GroupOp>(parentOp);
+    if (!parentGroup) {
+      auto diag = emitOpError()
+                  << "has a nested group symbol, but does not have a '"
+                  << getOperationName() << "' op as a parent'";
+      return diag.attachNote(parentOp->getLoc())
+             << "illegal parent op defined here";
+    }
+    auto parentGroupName = parentGroup.getGroupName();
+    if (parentGroupName.getRootReference() != groupName.getRootReference() ||
+        parentGroupName.getNestedReferences() !=
+            groupName.getNestedReferences().drop_back()) {
+      auto diag = emitOpError() << "is nested under an illegal group";
+      return diag.attachNote(parentGroup->getLoc())
+             << "illegal parent group defined here";
+    }
+  }
+
+  // Verify the body of the region.
+  Block *body = getBody(0);
+  bool failed = false;
+  body->walk<mlir::WalkOrder::PreOrder>([&](Operation *op) {
+    // Skip nested groups.  Those will be verified separately.
+    if (isa<GroupOp>(op))
+      return WalkResult::skip();
+    // Check all the operands of each op to make sure that only legal things are
+    // captured.
+    for (auto operand : op->getOperands()) {
+      // Any value captured from the current group is fine.
+      if (operand.getParentBlock() == body)
+        continue;
+      // Capture of a non-base type, e.g., reference is illegal.
+      FIRRTLBaseType baseType = dyn_cast<FIRRTLBaseType>(operand.getType());
+      if (!baseType) {
+        auto diag = emitOpError()
+                    << "captures an operand which is not a FIRRTL base type";
+        diag.attachNote(operand.getLoc()) << "operand is defined here";
+        diag.attachNote(op->getLoc()) << "operand is used here";
+        failed = true;
+        return WalkResult::advance();
+      }
+      // Capturing a non-passive type is illegal.
+      if (!baseType.isPassive()) {
+        auto diag = emitOpError()
+                    << "captures an operand which is not a passive type";
+        diag.attachNote(operand.getLoc()) << "operand is defined here";
+        diag.attachNote(op->getLoc()) << "operand is used here";
+        failed = true;
+        return WalkResult::advance();
+      }
+    }
+    // Ensure that the group does not drive any sinks.
+    if (auto connect = dyn_cast<FConnectLike>(op)) {
+      auto dest = getFieldRefFromValue(connect.getDest()).getValue();
+      if (dest.getParentBlock() == body)
+        return WalkResult::advance();
+      auto diag = connect.emitOpError()
+                  << "connects to a destination which is defined outside its "
+                     "enclosing group";
+      diag.attachNote(getLoc()) << "enclosing group is defined here";
+      diag.attachNote(dest.getLoc()) << "destination is defined here";
+      failed = true;
+    }
+    return WalkResult::advance();
+  });
+  if (failed)
+    return failure();
+
+  return success();
+}
+
+LogicalResult GroupOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto groupDeclOp = symbolTable.lookupNearestSymbolFrom<GroupDeclOp>(
+      *this, getGroupNameAttr());
+  if (!groupDeclOp) {
+    return emitOpError("invalid symbol reference");
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//
 
