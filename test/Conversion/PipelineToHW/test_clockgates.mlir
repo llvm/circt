@@ -7,16 +7,12 @@
 // CHECK:           %[[VAL_5:.*]] = comb.sub %[[VAL_0]], %[[VAL_1]] : i32
 // CHECK:           %[[VAL_6:.*]] = hw.constant true
 // CHECK:           %[[VAL_7:.*]] = hw.constant false
-// CHECK:           %[[VAL_8:.*]] = comb.and %[[VAL_6]], %[[VAL_7]] : i1
-// CHECK:           %[[VAL_9:.*]] = comb.and %[[VAL_2]], %[[VAL_8]] : i1
-// CHECK:           %[[VAL_10:.*]] = comb.mux %[[VAL_9]], %[[VAL_5]], %[[VAL_11:.*]] : i32
-// CHECK:           %[[VAL_11]] = seq.compreg %[[VAL_10]], %[[VAL_3]] : i32
-// CHECK:           %[[VAL_12:.*]] = comb.mux %[[VAL_2]], %[[VAL_0]], %[[VAL_13:.*]] : i32
-// CHECK:           %[[VAL_13]] = seq.compreg %[[VAL_12]], %[[VAL_3]] : i32
-// CHECK:           %[[VAL_14:.*]] = hw.constant false
-// CHECK:           %[[VAL_15:.*]] = seq.compreg %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_14]]  : i1
-// CHECK:           %[[VAL_16:.*]] = comb.add %[[VAL_11]], %[[VAL_13]] : i32
-// CHECK:           hw.output %[[VAL_16]], %[[VAL_15]] : i32, i1
+// CHECK:           %[[VAL_8:.*]] = seq.compreg.ce sym @p0_s0_reg0 %[[VAL_5]], %[[VAL_3]], %[[VAL_2]] : i32
+// CHECK:           %[[VAL_9:.*]] = seq.compreg.ce sym @p0_s0_reg1 %[[VAL_0]], %[[VAL_3]], %[[VAL_2]] : i32
+// CHECK:           %[[VAL_10:.*]] = hw.constant false
+// CHECK:           %[[VAL_11:.*]] = seq.compreg sym @p0_s0_valid %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_10]]  : i1
+// CHECK:           %[[VAL_12:.*]] = comb.add %[[VAL_8]], %[[VAL_9]] : i32
+// CHECK:           hw.output %[[VAL_12]], %[[VAL_11]] : i32, i1
 // CHECK:         }
 
 // CGATE-LABEL:   hw.module @testSingle(
@@ -27,10 +23,10 @@
 // CGATE:           %[[VAL_8:.*]] = seq.clock_gate %[[VAL_3]], %[[VAL_2]]
 // CGATE:           %[[VAL_9:.*]] = seq.clock_gate %[[VAL_8]], %[[VAL_6]]
 // CGATE:           %[[VAL_10:.*]] = seq.clock_gate %[[VAL_9]], %[[VAL_7]]
-// CGATE:           %[[VAL_11:.*]] = seq.compreg %[[VAL_5]], %[[VAL_10]] : i32
-// CGATE:           %[[VAL_12:.*]] = seq.compreg %[[VAL_0]], %[[VAL_8]] : i32
+// CGATE:           %[[VAL_11:.*]] = seq.compreg sym @p0_s0_reg0 %[[VAL_5]], %[[VAL_10]] : i32
+// CGATE:           %[[VAL_12:.*]] = seq.compreg sym @p0_s0_reg1 %[[VAL_0]], %[[VAL_8]] : i32
 // CGATE:           %[[VAL_13:.*]] = hw.constant false
-// CGATE:           %[[VAL_14:.*]] = seq.compreg %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_13]]  : i1
+// CGATE:           %[[VAL_14:.*]] = seq.compreg sym @p0_s0_valid %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_13]]  : i1
 // CGATE:           %[[VAL_15:.*]] = comb.add %[[VAL_11]], %[[VAL_12]] : i32
 // CGATE:           hw.output %[[VAL_15]], %[[VAL_14]] : i32, i1
 // CGATE:         }

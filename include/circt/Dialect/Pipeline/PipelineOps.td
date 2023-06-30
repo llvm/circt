@@ -207,12 +207,13 @@ def StageOp : Op<Pipeline_Dialect, "stage", [
     to communicate:
     1. which stage (block) to transition to next
     2. which registers to build at this stage boundary
-    3. An optional hierarchy of boolean values to be used for clock gates for
+    3. which values to pass through to the next stage without registering
+    4. An optional hierarchy of boolean values to be used for clock gates for
        each register.
       - The implicit '!stalled' gate will always be the first signal in the
         hierarchy. Further signals are added to the hierarchy from left to
         right.
-    4. which values to pass through to the next stage without registering
+
 
     Example:
     ```mlir

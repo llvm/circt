@@ -422,41 +422,11 @@ void StageOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                         odsBuilder.getI64ArrayAttr(clockGatesPerRegister));
 }
 
-void StageOp::build(
-    OpBuilder &odsBuilder, OperationState &odsState, Block *dest,
-    ValueRange registers, ValueRange passthroughs,
-    const llvm::DenseMap<Value, llvm::SmallVector<Value>> &clockGates) {
-  odsState.addSuccessors(dest);
-  odsState.addOperands(registers);
-  odsState.addOperands(passthroughs);
-
-  // Get a sorted list of clock gates wrt. the registers.
-  llvm::SmallVector<int64_t> clockGatesPerRegister;
-  llvm::SmallVector<Value> sortedClockGates;
-  for (Value reg : registers) {
-    size_t nClockGates = 0;
-    if (auto it = clockGates.find(reg); it != clockGates.end()) {
-      llvm::append_range(sortedClockGates, it->second);
-      nClockGates = it->second.size();
-    }
-    clockGatesPerRegister.push_back(nClockGates);
-  }
-  odsState.addOperands(sortedClockGates);
-  odsState.addAttribute(
-      "operand_segment_sizes",
-      odsBuilder.getDenseI32ArrayAttr(
-          {static_cast<int32_t>(registers.size()),
-           static_cast<int32_t>(passthroughs.size()),
-           /*clock gates*/ static_cast<int32_t>(sortedClockGates.size())}));
-  odsState.addAttribute("clockGatesPerRegister",
-                        odsBuilder.getI64ArrayAttr(clockGatesPerRegister));
-}
-
 ValueRange StageOp::getClockGatesForReg(unsigned regIdx) {
   assert(regIdx < getRegisters().size() && "register index out of bounds.");
 
-  // This could be optimized quite a bit if we didn't store clock gates per
-  // register as an array of sizes... TODO: look into using properties and maybe
+  // TODO: This could be optimized quite a bit if we didn't store clock gates
+  // per register as an array of sizes... look into using properties and maybe
   // attaching a more complex datastructure to reduce compute here.
 
   unsigned clockGateStartIdx = 0;

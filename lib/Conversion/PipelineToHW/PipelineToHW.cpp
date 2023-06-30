@@ -16,7 +16,6 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Pipeline/PipelineOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
-#include "circt/Support/BackedgeBuilder.h"
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -93,7 +92,6 @@ public:
 
     // Build data registers.
     auto stageRegPrefix = getStageRegPrefix(stageIndex);
-    BackedgeBuilder bb(builder, stageTerminator->getLoc());
     auto loc = stageTerminator->getLoc();
 
     // Build the clock enable signal: valid && !stall (if applicable)
@@ -120,7 +118,6 @@ public:
       auto regIn = it.value();
       auto regName = builder.getStringAttr(stageRegPrefix.strref() + "_reg" +
                                            std::to_string(regIdx));
-      Type dataType = regIn.getType();
       Value dataReg;
       if (this->clockGateRegs) {
         // Use the clock gate instead of input muxing.
@@ -131,29 +128,12 @@ public:
           currClockGate = builder.create<seq::ClockGateOp>(
               loc, currClockGate, hierClockGateEnable, /*test_enable=*/Value());
         }
-        dataReg = builder.create<seq::CompRegOp>(
-            stageTerminator->getLoc(), dataType, regIn, currClockGate, regName,
-            reset, /*resetValue*/ Value(), /*sym_name*/ StringAttr());
+        dataReg = builder.create<seq::CompRegOp>(stageTerminator->getLoc(),
+                                                 regIn, currClockGate, regName);
       } else {
-        // Use input muxing. The select signal is &&'ed with any clock gates
-        // that may be present.
-        auto dataRegBE = bb.get(dataType);
-        Value imuxSelect = stageValidAndNotStalled;
-        if (auto clockGates = stageTerminator.getClockGatesForReg(regIdx);
-            !clockGates.empty()) {
-          imuxSelect = builder.create<comb::AndOp>(
-              loc, imuxSelect,
-              builder.create<comb::AndOp>(loc, builder.getI1Type(),
-                                          clockGates));
-        }
-
-        Value dataRegNext = builder.create<comb::MuxOp>(
-            stageTerminator->getLoc(), imuxSelect, regIn, dataRegBE);
-        dataReg = builder.create<seq::CompRegOp>(
-            stageTerminator->getLoc(), dataType, dataRegNext, clock, regName,
-            reset,
-            /*resetValue*/ Value(), /*sym_name*/ StringAttr());
-        dataRegBE.setValue(dataReg);
+        dataReg = builder.create<seq::CompRegClockEnabledOp>(
+            stageTerminator->getLoc(), regIn, clock, stageValidAndNotStalled,
+            regName);
       }
       rets.regs.push_back(dataReg);
     }
@@ -166,26 +146,13 @@ public:
         builder.create<hw::ConstantOp>(terminator->getLoc(), APInt(1, 0, false))
             .getResult();
     if (hasStall) {
-      if (clockGateRegs) {
-        rets.valid = builder.create<seq::CompRegClockEnabledOp>(
-            loc, builder.getI1Type(), valid, clock, notStalled, validRegName,
-            reset, validRegResetVal,
-            /*sym_name*/ StringAttr());
-      } else {
-        auto validRegBE = bb.get(builder.getI1Type());
-        auto validRegNext =
-            builder.create<comb::MuxOp>(loc, notStalled, valid, validRegBE);
-        rets.valid = builder.create<seq::CompRegOp>(
-            loc, builder.getI1Type(), validRegNext, clock, validRegName, reset,
-            validRegResetVal,
-            /*sym_name*/ StringAttr());
-        validRegBE.setValue(rets.valid);
-      }
+      rets.valid = builder.create<seq::CompRegClockEnabledOp>(
+          loc, builder.getI1Type(), valid, clock, notStalled, validRegName,
+          reset, validRegResetVal, validRegName);
     } else {
-      rets.valid =
-          builder.create<seq::CompRegOp>(loc, builder.getI1Type(), valid, clock,
-                                         validRegName, reset, validRegResetVal,
-                                         /*sym_name*/ StringAttr());
+      rets.valid = builder.create<seq::CompRegOp>(
+          loc, builder.getI1Type(), valid, clock, validRegName, reset,
+          validRegResetVal, validRegName);
     }
 
     rets.passthroughs = stageTerminator.getPassthroughs();
