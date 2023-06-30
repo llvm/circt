@@ -29,6 +29,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 
+#include <iostream>
 #include <variant>
 
 using namespace llvm;
@@ -114,7 +115,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
           TypeSwitch<mlir::Operation *, bool>(_op)
               .template Case<arith::ConstantOp, ReturnOp, BranchOpInterface,
                              /// SCF
-                             scf::YieldOp,
+                             scf::YieldOp, scf::WhileOp,
                              /// memref
                              memref::AllocOp, memref::AllocaOp, memref::LoadOp,
                              memref::StoreOp,
@@ -124,7 +125,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                              MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp,
                              IndexCastOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
-              .template Case<scf::WhileOp, FuncOp, scf::ConditionOp>([&](auto) {
+              .template Case<FuncOp, scf::ConditionOp>([&](auto) {
                 /// Skip: these special cases will be handled separately.
                 return true;
               })
@@ -170,6 +171,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, memref::AllocaOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::LoadOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::StoreOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, scf::WhileOp whileOp) const;
 
   /// buildLibraryOp will build a TCalyxLibOp inside a TGroupOp based on the
   /// source operation TSrcOp.
@@ -658,6 +660,21 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   return res;
 }
 
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     scf::WhileOp whileOp) const {
+  // only need to add the whileOp to the BlockSchedulables scheduler interface.
+  // everything else was handled in the `BuildWhileGroups` pattern
+  ScfWhileOp scfWhileOp(whileOp);
+  SmallVector<calyx::GroupOp> initWhileGroups =
+      getState<ComponentLoweringState>().getLoopInitGroups(scfWhileOp);
+  getState<ComponentLoweringState>().addBlockScheduleable(
+      whileOp.getOperation()->getBlock(), WhileScheduleable{
+                                              scfWhileOp,
+                                              initWhileGroups,
+                                          });
+  return success();
+}
+
 /// Inlines Calyx ExecuteRegionOp operations within their parent blocks.
 /// An execution region op (ERO) is inlined by:
 ///  i  : add a sink basic block for all yield operations inside the
@@ -909,11 +926,8 @@ class BuildWhileGroups : public calyx::FuncOpPartialLoweringPattern {
         initGroups.push_back(initGroupOp);
       }
 
-      getState<ComponentLoweringState>().addBlockScheduleable(
-          whileOp.getOperation()->getBlock(), WhileScheduleable{
-                                                  whileOp,
-                                                  initGroups,
-                                              });
+      getState<ComponentLoweringState>().setLoopInitGroups(whileOp, initGroups);
+
       return WalkResult::advance();
     });
     return res;
