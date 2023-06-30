@@ -1540,7 +1540,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                                     FIRRTLBaseType destType,
                                     bool allowTruncate);
   Value createArrayIndexing(Value array, Value index);
-  Value createValueWithMuxAnnotation(Operation *op);
+  Value createValueWithMuxAnnotation(Operation *op, bool isMux2);
 
   // Create a temporary wire at the current insertion point, and try to
   // eliminate it later as part of lowering post processing.
@@ -3951,7 +3951,7 @@ LogicalResult FIRRTLLowering::visitExpr(Mux2CellIntrinsicOp op) {
 
   auto val = builder.create<comb::MuxOp>(ifTrue.getType(), cond, ifTrue,
                                          ifFalse, true);
-  return setLowering(op, createValueWithMuxAnnotation(val));
+  return setLowering(op, createValueWithMuxAnnotation(val, true));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(Mux4CellIntrinsicOp op) {
@@ -3965,7 +3965,7 @@ LogicalResult FIRRTLLowering::visitExpr(Mux4CellIntrinsicOp op) {
   Value array[] = {v3, v2, v1, v0};
   auto create = builder.create<hw::ArrayCreateOp>(array);
   auto val = builder.create<hw::ArrayGetOp>(create, sel);
-  return setLowering(op, createValueWithMuxAnnotation(val));
+  return setLowering(op, createValueWithMuxAnnotation(val, false));
 }
 
 // Construct a value with vendor specific pragmas to utilize MUX cells.
@@ -3984,7 +3984,7 @@ LogicalResult FIRRTLLowering::visitExpr(Mux4CellIntrinsicOp op) {
 //   /* synopsys infer_mux_override */
 //   assign GEN = sel ? /* cadence map_to_mux */ high : low;
 // ```
-Value FIRRTLLowering::createValueWithMuxAnnotation(Operation *op) {
+Value FIRRTLLowering::createValueWithMuxAnnotation(Operation *op, bool isMux2) {
   assert(op->getNumResults() == 1 && "only expect a single result");
   auto val = op->getResult(0);
   auto valWire = builder.create<sv::WireOp>(val.getType());
@@ -3993,12 +3993,21 @@ Value FIRRTLLowering::createValueWithMuxAnnotation(Operation *op) {
       op, sv::SVAttributeAttr::get(builder.getContext(), "cadence map_to_mux",
                                    /*emitAsComment=*/true));
 
-  // Add an unique string attribute to prevent CSE of the assigned value since
-  // if the vaule is used multiple, it would not be inlined into the assignment.
-  op->setAttr(
-      "circt.prevent_cse",
-      builder.getStringAttr("__MUX_PRAGMA_PREVENT_CSE__" +
-                            moduleNamespace.newName(theModule.getName())));
+  // For operands, create temporary wires with optimization blockers(inner
+  // symbols) so that the AST structure will never be destoyed in the later
+  // pipeline.
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPoint(op);
+    StringRef namehint = isMux2 ? "mux2cell_in" : "mux4cell_in";
+    for (auto [idx, operand] : llvm::enumerate(op->getOperands())) {
+      auto sym = moduleNamespace.newName(Twine("__") + theModule.getName() +
+                                         Twine("__MUX__PRAGMA"));
+      auto wire =
+          builder.create<hw::WireOp>(operand, namehint + Twine(idx), sym);
+      op->setOperand(idx, wire);
+    }
+  }
 
   auto assignOp = builder.create<sv::AssignOp>(valWire, val);
   sv::setSVAttributes(assignOp,

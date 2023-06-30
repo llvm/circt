@@ -297,11 +297,11 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
      output v: UInt<1>
   ; VERILOG-LABEL: Mux2Cell
   ; Make sure that mux annotations are emitted properly.
-  ; Check that an assigned expression `~cond ? ... low` is not CSEd.
   ; VERILOG:      /* synopsys infer_mux_override */
-  ; VERILOG-NEXT: assign [[OUT1:.+]] = ~cond ? /* cadence map_to_mux */ _ext_v : low;
+  ; VERILOG-NEXT: assign [[OUT1:.+]] = mux2cell_in0 ? /* cadence map_to_mux */ mux2cell_in1 : mux2cell_in2;
   ; VERILOG:      /* synopsys infer_mux_override */
-  ; VERILOG-NEXT: assign [[OUT2:.+]] = ~cond ? /* cadence map_to_mux */ _ext_v : low;
+  ; VERILOG-NEXT: assign [[OUT2:.+]] =
+  ; VERILOG-NEXT: mux2cell_in0_0 ? /* cadence map_to_mux */ mux2cell_in1_0 : mux2cell_in2_0;
   ; VERILOG: assign out_0 = [[OUT1]];
   ; VERILOG: assign out_1 = [[OUT2]];
 
