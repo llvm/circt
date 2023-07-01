@@ -421,6 +421,7 @@ struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
   void runOnOperation() override;
   void setDisableMemRandomization() { disableMemRandomization = true; }
   void setDisableRegRandomization() { disableRegRandomization = true; }
+  void setInitializeMemSynthesis() { initializeMemSynthesis = true; }
   void setEnableAnnotationWarning() { enableAnnotationWarning = true; }
   void setEmitChiselAssertAsSVA() { emitChiselAssertsAsSVA = true; }
   void setAddMuxPragmas() { addMuxPragmas = true; }
@@ -457,7 +458,7 @@ private:
 std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToHWPass(
     bool enableAnnotationWarning, bool emitChiselAssertsAsSVA,
     bool addMuxPragmas, bool disableMemRandomization,
-    bool disableRegRandomization) {
+    bool disableRegRandomization, bool initializeMemSynthesis) {
   auto pass = std::make_unique<FIRRTLModuleLowering>();
   if (enableAnnotationWarning)
     pass->setEnableAnnotationWarning();
@@ -469,6 +470,8 @@ std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToHWPass(
     pass->setDisableMemRandomization();
   if (disableRegRandomization)
     pass->setDisableRegRandomization();
+  if (initializeMemSynthesis)
+    pass->setInitializeMemSynthesis();
   return pass;
 }
 

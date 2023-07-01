@@ -191,7 +191,8 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
       opt.enableAnnotationWarning.getValue(),
       opt.emitChiselAssertsAsSVA.getValue(), opt.addMuxPragmas.getValue(),
       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),
-      !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg)));
+      !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg),
+      opt.initializeMemSynthesis.getValue()));
 
   if (!opt.disableOptimization) {
     auto &modulePM = pm.nest<hw::HWModuleOp>();
@@ -220,6 +221,7 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
       opt.replSeqMem, opt.ignoreReadEnableMem, opt.addMuxPragmas,
       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),
       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg),
+      opt.initializeMemSynthesis,
       opt.addVivadoRAMAddressConflictSynthesisBugWorkaround));
 
   // If enabled, run the optimizer.

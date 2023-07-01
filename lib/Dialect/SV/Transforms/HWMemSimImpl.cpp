@@ -56,6 +56,7 @@ class HWMemSimImpl {
   bool addMuxPragmas;
   bool disableMemRandomization;
   bool disableRegRandomization;
+  bool initializeMemSynthesis;
   bool addVivadoRAMAddressConflictSynthesisBugWorkaround;
 
   SmallVector<sv::RegOp> registers;
@@ -70,11 +71,13 @@ public:
 
   HWMemSimImpl(bool ignoreReadEnable, bool addMuxPragmas,
                bool disableMemRandomization, bool disableRegRandomization,
+               bool initializeMemSynthesis,
                bool addVivadoRAMAddressConflictSynthesisBugWorkaround,
                Namespace &mlirModuleNamespace)
       : ignoreReadEnable(ignoreReadEnable), addMuxPragmas(addMuxPragmas),
         disableMemRandomization(disableMemRandomization),
         disableRegRandomization(disableRegRandomization),
+        initializeMemSynthesis(initializeMemSynthesis),
         addVivadoRAMAddressConflictSynthesisBugWorkaround(
             addVivadoRAMAddressConflictSynthesisBugWorkaround),
         mlirModuleNamespace(mlirModuleNamespace) {}
@@ -90,6 +93,7 @@ struct HWMemSimImplPass : public sv::HWMemSimImplBase<HWMemSimImplPass> {
   using sv::HWMemSimImplBase<HWMemSimImplPass>::addMuxPragmas;
   using sv::HWMemSimImplBase<HWMemSimImplPass>::disableMemRandomization;
   using sv::HWMemSimImplBase<HWMemSimImplPass>::disableRegRandomization;
+  using sv::HWMemSimImplBase<HWMemSimImplPass>::initializeMemSynthesis;
   using sv::HWMemSimImplBase<
       HWMemSimImplPass>::addVivadoRAMAddressConflictSynthesisBugWorkaround;
 };
@@ -477,15 +481,20 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       reg.setInnerSymAttr(
           b.getStringAttr(moduleNamespace.newName(reg.getName())));
 
-    if (mem.initIsInline) {
-      b.create<sv::IfDefOp>("ENABLE_INITIAL_MEM_", [&]() {
-        b.create<sv::InitialOp>([&]() {
-          b.create<sv::ReadMemOp>(reg, mem.initFilename,
-                                  mem.initIsBinary
-                                      ? MemBaseTypeAttr::MemBaseBin
-                                      : MemBaseTypeAttr::MemBaseHex);
-        });
+    // Define the memory initialization lambda
+    auto initMem = [&]() {
+      b.create<sv::InitialOp>([&]() {
+        b.create<sv::ReadMemOp>(reg, mem.initFilename,
+                                mem.initIsBinary ? MemBaseTypeAttr::MemBaseBin
+                                                 : MemBaseTypeAttr::MemBaseHex);
       });
+    };
+    if (mem.initIsInline) {
+      if (initializeMemSynthesis) {
+        initMem();
+      } else {
+        b.create<sv::IfDefOp>("ENABLE_INITIAL_MEM_", [&]() { initMem(); });
+      }
     } else {
       OpBuilder::InsertionGuard guard(b);
 
@@ -692,9 +701,9 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
 void HWMemSimImplPass::runOnOperation() {
   auto topModule = getOperation();
 
-  // Populate a namespace from the symbols visible to the top-level MLIR module.
-  // Memories with initializations create modules and these need to be legal
-  // symbols.
+  // Populate a namespace from the symbols visible to the top-level MLIR
+  // module. Memories with initializations create modules and these need to be
+  // legal symbols.
   SymbolCache symbolCache;
   symbolCache.addDefinitions(topModule);
   Namespace mlirModuleNamespace;
@@ -732,7 +741,7 @@ void HWMemSimImplPass::runOnOperation() {
             builder.getStringAttr("VCS coverage exclude_file"));
 
         HWMemSimImpl(ignoreReadEnable, addMuxPragmas, disableMemRandomization,
-                     disableRegRandomization,
+                     disableRegRandomization, initializeMemSynthesis,
                      addVivadoRAMAddressConflictSynthesisBugWorkaround,
                      mlirModuleNamespace)
             .generateMemory(newModule, mem);
@@ -750,6 +759,7 @@ void HWMemSimImplPass::runOnOperation() {
 std::unique_ptr<Pass> circt::sv::createHWMemSimImplPass(
     bool replSeqMem, bool ignoreReadEnable, bool addMuxPragmas,
     bool disableMemRandomization, bool disableRegRandomization,
+    bool initializeMemSynthesis,
     bool addVivadoRAMAddressConflictSynthesisBugWorkaround) {
   auto pass = std::make_unique<HWMemSimImplPass>();
   pass->replSeqMem = replSeqMem;
@@ -757,6 +767,7 @@ std::unique_ptr<Pass> circt::sv::createHWMemSimImplPass(
   pass->addMuxPragmas = addMuxPragmas;
   pass->disableMemRandomization = disableMemRandomization;
   pass->disableRegRandomization = disableRegRandomization;
+  pass->initializeMemSynthesis = initializeMemSynthesis;
   pass->addVivadoRAMAddressConflictSynthesisBugWorkaround =
       addVivadoRAMAddressConflictSynthesisBugWorkaround;
   return pass;
