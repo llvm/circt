@@ -214,6 +214,9 @@ def FVectorImpl : BaseVectorTypeImpl<"FVector","::circt::firrtl::FIRRTLBaseType"
 
     /// Return this type with a 'const' modifiers dropped
     FVectorType getAllConstDroppedType();
+
+    /// Return this type with any type alias types recursively removed from itself.
+    FIRRTLBaseType getAnonymousType();
   }];
 }
 
@@ -339,6 +342,9 @@ def BundleImpl : BaseBundleTypeImpl<"Bundle","::circt::firrtl::FIRRTLBaseType", 
 
     /// Return this type with a 'const' modifiers dropped
     BundleType getAllConstDroppedType();
+
+    /// Return this type with any type alias types recursively removed from itself.
+    FIRRTLBaseType getAnonymousType();
   }];
 }
 
@@ -384,6 +390,9 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [FieldIDTypeInterface]> {
 
     /// Return this type with a 'const' modifiers dropped
     FEnumType getAllConstDroppedType();
+
+    /// Return this type with any type alias types recursively removed from itself.
+    FIRRTLBaseType getAnonymousType();
 
     /// Look up an element's index by name.  This returns None on failure.
     std::optional<unsigned> getElementIndex(StringAttr name);
