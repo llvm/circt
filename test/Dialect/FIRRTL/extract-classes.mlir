@@ -22,8 +22,13 @@ firrtl.circuit "Top" {
       in in0: !firrtl.uint<1>,
       out out0: !firrtl.uint<1>)
 
+    %external_in0, %external_out0 = firrtl.instance external @ExternalProperties(
+      in in0: !firrtl.string,
+      out out0: !firrtl.string)
+
     // CHECK-NOT: firrtl.propassign
     firrtl.propassign %some_in0, %all_out0 : !firrtl.string
+    firrtl.propassign %external_in0, %some_out0 : !firrtl.string
   }
 
   // CHECK-NOT: @AllProperties
@@ -113,6 +118,8 @@ firrtl.circuit "Top" {
     firrtl.propassign %out3, %some0_out0 : !firrtl.string
     firrtl.connect %out4, %no0_out0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
+
+  firrtl.extmodule @ExternalProperties(in in0: !firrtl.string, out out0: !firrtl.string)
 }
 
 // CHECK-LABEL: om.class @AllProperties

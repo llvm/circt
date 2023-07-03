@@ -39,8 +39,8 @@ private:
   ObjectOp getOrCreateObject(InstanceOp instance, OpBuilder &builder,
                              IRMapping &mapping,
                              SmallVectorImpl<Operation *> &opsToErase);
-  void extractClass(FModuleOp moduleOp);
-  void updateInstances(FModuleOp moduleOp);
+  void extractClass(FModuleLike moduleOp);
+  void updateInstances(FModuleLike moduleOp);
 
   InstanceGraph *instanceGraph;
   DenseMap<Operation *, llvm::BitVector> portsToErase;
@@ -197,23 +197,27 @@ ObjectOp ExtractClassesPass::getOrCreateObject(
 
 /// Potentially extract an OM class from a FIRRTL module which may contain
 /// properties.
-void ExtractClassesPass::extractClass(FModuleOp moduleOp) {
+void ExtractClassesPass::extractClass(FModuleLike moduleLike) {
+  // Only process modules and external modules.
+  if (!isa<FModuleOp, FExtModuleOp>(moduleLike))
+    return;
+
   // Map from Values in the FModuleOp to Values in the ClassOp.
   IRMapping mapping;
 
   // Remember ports and operations to clean up when done.
-  portsToErase[moduleOp] = llvm::BitVector(moduleOp.getNumPorts());
+  portsToErase[moduleLike] = llvm::BitVector(moduleLike.getNumPorts());
   SmallVector<Operation *> opsToErase;
 
   // Collect information about input and output properties. Mark property ports
   // to be erased.
   SmallVector<Property> inputProperties;
   SmallVector<Property> outputProperties;
-  for (auto [index, port] : llvm::enumerate(moduleOp.getPorts())) {
+  for (auto [index, port] : llvm::enumerate(moduleLike.getPorts())) {
     if (!isa<PropertyType>(port.type))
       continue;
 
-    portsToErase[moduleOp].set(index);
+    portsToErase[moduleLike].set(index);
 
     if (port.isInput())
       inputProperties.push_back({index, port.name, port.type, port.loc});
@@ -233,8 +237,24 @@ void ExtractClassesPass::extractClass(FModuleOp moduleOp) {
   for (auto inputProperty : inputProperties)
     formalParamNames.push_back(inputProperty.name);
 
+  // See if we are working with a FModuleOp.
+  auto moduleOp = dyn_cast<FModuleOp>(moduleLike.getOperation());
+
+  // Get the ClassOp name from the module or external module.
+  StringAttr name;
+  if (moduleOp) {
+    name = moduleOp.getNameAttr();
+  } else {
+    auto extModuleOp = cast<FExtModuleOp>(moduleLike);
+    if (extModuleOp.getDefnameAttr()) {
+      name = extModuleOp.getDefnameAttr();
+    } else {
+      name = extModuleOp.getModuleNameAttr();
+    }
+  }
+
   // Construct the ClassOp with the FModuleOp name and parameter names.
-  auto classOp = builder.create<ClassOp>(moduleOp.getLoc(), moduleOp.getName(),
+  auto classOp = builder.create<ClassOp>(moduleLike.getLoc(), name.getValue(),
                                          formalParamNames);
 
   // Construct the ClassOp body with block arguments for each input property,
@@ -243,13 +263,24 @@ void ExtractClassesPass::extractClass(FModuleOp moduleOp) {
   for (auto inputProperty : inputProperties) {
     BlockArgument parameterValue =
         classBody->addArgument(inputProperty.type, inputProperty.loc);
-    BlockArgument inputValue = moduleOp.getArgument(inputProperty.index);
-    mapping.map(inputValue, parameterValue);
+
+    if (moduleOp) {
+      BlockArgument inputValue = moduleOp.getArgument(inputProperty.index);
+      mapping.map(inputValue, parameterValue);
+    }
   }
 
   // Construct ClassFieldOps for each output property.
   builder.setInsertionPointToStart(classBody);
   for (auto outputProperty : outputProperties) {
+    if (!moduleOp) {
+      Value fieldValue =
+          builder.create<UndefOp>(outputProperty.loc, outputProperty.type);
+      builder.create<ClassFieldOp>(fieldValue.getLoc(), outputProperty.name,
+                                   fieldValue);
+      continue;
+    }
+
     // Get the Value driven to the property to use for this ClassFieldOp.
     auto outputValue =
         cast<FIRRTLPropertyValue>(moduleOp.getArgument(outputProperty.index));
@@ -272,14 +303,18 @@ void ExtractClassesPass::extractClass(FModuleOp moduleOp) {
   // assignments are erased before value defining ops. Then it erases ports.
   for (auto *op : opsToErase)
     op->erase();
-  moduleOp.erasePorts(portsToErase[moduleOp]);
+  moduleLike.erasePorts(portsToErase[moduleLike]);
 }
 
 /// Clean up InstanceOps of any FModuleOps with properties.
-void ExtractClassesPass::updateInstances(FModuleOp moduleOp) {
+void ExtractClassesPass::updateInstances(FModuleLike moduleLike) {
+  // Only process modules and external modules.
+  if (!isa<FModuleOp, FExtModuleOp>(moduleLike))
+    return;
+
   OpBuilder builder(&getContext());
-  const llvm::BitVector &modulePortsToErase = portsToErase[moduleOp];
-  InstanceGraphNode *instanceGraphNode = instanceGraph->lookup(moduleOp);
+  const llvm::BitVector &modulePortsToErase = portsToErase[moduleLike];
+  InstanceGraphNode *instanceGraphNode = instanceGraph->lookup(moduleLike);
 
   // If there are no ports to erase, nothing to do.
   if (!modulePortsToErase.empty() && !modulePortsToErase.any())
@@ -292,14 +327,6 @@ void ExtractClassesPass::updateInstances(FModuleOp moduleOp) {
     InstanceOp oldInstance = cast<InstanceOp>(node->getInstance());
     builder.setInsertionPointAfter(oldInstance);
 
-    // If some but not all ports are properties, create a new instance without
-    // the property pins.
-    if (!modulePortsToErase.all()) {
-      InstanceOp newInstance =
-          oldInstance.erasePorts(builder, portsToErase[moduleOp]);
-      instanceGraph->replaceInstance(oldInstance, newInstance);
-    }
-
     // Clean up uses of property pins. This amounts to erasing property
     // assignments for now.
     for (int propertyIndex : modulePortsToErase.set_bits()) {
@@ -311,6 +338,14 @@ void ExtractClassesPass::updateInstances(FModuleOp moduleOp) {
       }
     }
 
+    // If some but not all ports are properties, create a new instance without
+    // the property pins.
+    if (!modulePortsToErase.all()) {
+      InstanceOp newInstance =
+          oldInstance.erasePorts(builder, portsToErase[moduleLike]);
+      instanceGraph->replaceInstance(oldInstance, newInstance);
+    }
+
     // Erase the original instance.
     node->erase();
     oldInstance.erase();
@@ -319,7 +354,7 @@ void ExtractClassesPass::updateInstances(FModuleOp moduleOp) {
   // If all ports are properties, remove the FModuleOp completely.
   if (!modulePortsToErase.empty() && modulePortsToErase.all()) {
     instanceGraph->erase(instanceGraphNode);
-    moduleOp.erase();
+    moduleLike.erase();
   }
 }
 
@@ -336,13 +371,15 @@ void ExtractClassesPass::runOnOperation() {
 
   // Walk all FModuleOps to potentially extract an OM class if the FModuleOp
   // contains properties.
-  for (auto moduleOp : llvm::make_early_inc_range(circuit.getOps<FModuleOp>()))
+  for (auto moduleOp :
+       llvm::make_early_inc_range(circuit.getOps<FModuleLike>()))
     extractClass(moduleOp);
 
   // Clean up InstanceOps of any FModuleOps with properties. This is done after
   // the classes are extracted to avoid extra bookeeping as InstanceOps are
   // cleaned up.
-  for (auto moduleOp : llvm::make_early_inc_range(circuit.getOps<FModuleOp>()))
+  for (auto moduleOp :
+       llvm::make_early_inc_range(circuit.getOps<FModuleLike>()))
     updateInstances(moduleOp);
 
   // Mark analyses preserved, since we keep the instance graph up to date.

@@ -140,4 +140,14 @@ def ConstantOp : OMOp<"constant",
   let hasFolder = true;
 }
 
+def UndefOp : OMOp<"undef"> {
+  let results = (outs
+    AnyType:$result
+  );
+
+  let assemblyFormat = [{
+    attr-dict type($result)
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMOPS_TD
