@@ -579,10 +579,10 @@ OpFoldResult AndPrimOp::fold(FoldAdaptor adaptor) {
 
 void AndPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.insert<patterns::extendAnd, patterns::moveConstAnd,
-                 patterns::AndOfZero, patterns::AndOfAllOne,
-                 patterns::AndOfSelf, patterns::AndOfPad, patterns::AndCvtU,
-                 patterns::AndOfAsSIntL, patterns::AndOfAsSIntR>(context);
+  results
+      .insert<patterns::extendAnd, patterns::moveConstAnd, patterns::AndOfZero,
+              patterns::AndOfAllOne, patterns::AndOfSelf, patterns::AndOfPad,
+              patterns::AndOfAsSIntL, patterns::AndOfAsSIntR>(context);
 }
 
 OpFoldResult OrPrimOp::fold(FoldAdaptor adaptor) {
@@ -1096,7 +1096,7 @@ OpFoldResult AndRPrimOp::fold(FoldAdaptor adaptor) {
 
 void AndRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results.insert<patterns::AndRasSInt, patterns::AndRasUInt,
+  results.insert<patterns::AndRasSInt, patterns::AndRasUInt, patterns::AndRPadU,
                  patterns::AndRCatZeroL, patterns::AndRCatZeroR>(context);
 }
 
@@ -1121,7 +1121,7 @@ OpFoldResult OrRPrimOp::fold(FoldAdaptor adaptor) {
 
 void OrRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.insert<patterns::OrRasSInt, patterns::OrRasUInt,
+  results.insert<patterns::OrRasSInt, patterns::OrRasUInt, patterns::OrRPadU,
                  patterns::OrRCatZeroH, patterns::OrRCatZeroL>(context);
 }
 
@@ -1145,7 +1145,7 @@ OpFoldResult XorRPrimOp::fold(FoldAdaptor adaptor) {
 
 void XorRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results.insert<patterns::XorRasSInt, patterns::XorRasUInt,
+  results.insert<patterns::XorRasSInt, patterns::XorRasUInt, patterns::XorRPadU,
                  patterns::XorRCatZeroH, patterns::XorRCatZeroL>(context);
 }
 

@@ -190,7 +190,7 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
   firrtl.strictconnect %out6, %9 : !firrtl.uint<6>
 
   // CHECK: %[[AND:.*]] = firrtl.and %in, %c3_ui4
-  // CHECK: firrtl.cat %c0_ui1, %[[AND]]
+  // CHECK: firrtl.pad %[[AND]], 5
   %10 = firrtl.cvt %in : (!firrtl.uint<4>) -> !firrtl.sint<5>
   %11 = firrtl.and %10, %c3_si5 : (!firrtl.sint<5>, !firrtl.sint<5>) -> !firrtl.uint<5>
   firrtl.strictconnect %out5, %11 : !firrtl.uint<5>

@@ -47,6 +47,14 @@ def EqualTypes : Constraint<CPred<"$0.getType() == $1.getType()">>;
 // Constraint that enforces equal type sizes
 def EqualIntSize : Constraint<CPred<"cast<IntType>($0.getType()).getWidth() == cast<IntType>($1.getType()).getWidth()">>;
 
+// sizeof(0) >= sizeof(1)
+def IntTypeWidthGEQ32 : Constraint<CPred<
+  "cast<IntType>($0.getType()).getBitWidthOrSentinel() >= cast<IntType>($1.getType()).getBitWidthOrSentinel()">>;
+
+// sizeof(0) > sizeof(1)
+def IntTypeWidthGT32 : Constraint<CPred<
+  "cast<IntType>($0.getType()).getBitWidthOrSentinel() > cast<IntType>($1.getType()).getBitWidthOrSentinel()">>;
+
 // Constraint that enforces int types
 def IntTypes : Constraint<CPred<"isa<IntType>($0.getType())">>;
 
@@ -295,19 +303,6 @@ def AndOfAsSIntR : Pat<
   (MoveNameHint $old, (AndPrimOp (AsUIntPrimOp $x), $y)),
   []>;
 
-
-/// Width narrowing
-/// Only trigger when cat is full length
-/// and(cat(0, x:U), const) -> cat(0, and(x,zextortrunc(const))
-def AndCvtU : Pat <
-  (AndPrimOp:$old (CatPrimOp:$cat $z, $x), (ConstantOp $cst)),
-  (MoveNameHint $old, (CatPrimOp $z, 
-    (AndPrimOp $x, (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), "
-                                      "cast<IntType>($0.getType()), "
-                                      "$1.getValue().zextOrTrunc(cast<IntType>($0.getType()).getWidthOrSentinel()))"> $x, $cst))
-  )),
-  [(KnownWidth $x), (UIntType $x), (EqualIntSize $old, $cat), (ZeroConstantOp $z)]>;
-
 // or(x, 0) -> x, fold can't handle all cases
 def OrOfZero : Pat <
   (OrPrimOp:$old $x, (ConstantOp:$zcst $cst)),
@@ -376,6 +371,12 @@ def OrRCatZeroL : Pat <
   (MoveNameHint $old, (OrRPrimOp $x)),
   [(KnownWidth $x), (ZeroConstantOp $c)]>;
 
+/// orr(pad(x,n)) -> orr(x)
+def OrRPadU : Pat <
+  (OrRPrimOp:$old (PadPrimOp:$pad $x, $n)),
+  (MoveNameHint $old, (OrRPrimOp $x)),
+  [(KnownWidth $x), (UIntTypes $x), (IntTypeWidthGEQ32 $pad, $x)]>;
+
 /// xorr(asSInt(x)) -> xorr(x)
 def XorRasSInt : Pat <
   (XorRPrimOp:$old (AsSIntPrimOp $x)),
@@ -400,6 +401,12 @@ def XorRCatZeroL : Pat <
   (MoveNameHint $old, (XorRPrimOp $x)),
   [(KnownWidth $x), (IntTypes $x), (ZeroConstantOp $c)]>;
 
+/// xorr(pad(x,n)) -> xorr(x)
+def XorRPadU : Pat <
+  (XorRPrimOp:$old (PadPrimOp:$pad $x, $n)),
+  (MoveNameHint $old, (XorRPrimOp $x)),
+  [(KnownWidth $x), (UIntTypes $x), (IntTypeWidthGEQ32 $pad, $x)]>;
+
 /// andr(asSInt(x)) -> andr(x)
 def AndRasSInt : Pat <
   (AndRPrimOp:$old (AsSIntPrimOp $x)),
@@ -423,6 +430,12 @@ def AndRCatZeroR : Pat <
   (AndRPrimOp:$old (CatPrimOp $x, $z)),
   (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
   [(ZeroConstantOp $z)]>;
+
+/// andr(pad(x,n)) -> 0 (where pad is doing something)
+def AndRPadU : Pat <
+  (AndRPrimOp:$old (PadPrimOp:$pad $x, $n)),
+  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
+  [(KnownWidth $x), (UIntTypes $x), (IntTypeWidthGT32 $pad, $x)]>;
 
 // bits(bits(x, ...), ...) -> bits(x, ...)
 def BitsOfBits : Pat<
@@ -519,9 +532,8 @@ def CVTUnSigned : Pat<
   (CvtPrimOp:$old $x),
   (MoveNameHint $old,
     (AsSIntPrimOp
-      (CatPrimOp 
-        (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), APSInt(APInt()))"> $old),
-        $x))),
-  [(UIntType $x)]>;
+      (PadPrimOp $x,
+        (NativeCodeCall<"$_builder.getI32IntegerAttr(cast<SIntType>($0.getType()).getBitWidthOrSentinel())"> $old)))),
+  [(UIntType $x), (KnownWidth $old)]>;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD
