@@ -1,6 +1,6 @@
 // RUN: circt-opt %s --lower-esi-to-physical -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 // RUN: circt-opt %s --lower-esi-ports -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=IFACE %s
-// RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=HW %s
+// RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --hw-flatten-io --lower-esi-to-hw -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=HW %s
 
 hw.module.extern @Sender(%clk: i1) -> (x: !esi.channel<i4>, y: i8) attributes {esi.bundle}
 hw.module.extern @ArrSender() -> (x: !esi.channel<!hw.array<4xi64>>) attributes {esi.bundle}

@@ -19,6 +19,7 @@ add_circt_library(CIRCTSupport
   PrettyPrinterHelpers.cpp
   SymCache.cpp
   ValueMapper.cpp
+  PortConverter.cpp
   "${VERSION_CPP}"
 
   ADDITIONAL_HEADER_DIRS
