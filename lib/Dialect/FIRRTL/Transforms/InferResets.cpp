@@ -20,6 +20,7 @@
 #include "circt/Support/FieldRef.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Threading.h"
 #include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/TinyPtrVector.h"
@@ -443,7 +444,12 @@ struct InferResetsPass : public InferResetsBase<InferResetsPass> {
   // Async reset implementation
 
   LogicalResult collectAnnos(CircuitOp circuit);
-  LogicalResult collectAnnos(FModuleOp module);
+  // Collect async reset annotations in the module and return a reset signal.
+  // Return `failure()` if there was an error in the annotation processing.
+  // Return `std::nullopt` if there was no async reset annotation.
+  // Return `nullptr` if there was `ignore` annotation.
+  // Return a non-null Value if the reset was actually provided.
+  FailureOr<std::optional<Value>> collectAnnos(FModuleOp module);
 
   LogicalResult buildDomains(CircuitOp circuit);
   void buildDomains(FModuleOp module, const InstancePathVec &instPath,
@@ -1222,17 +1228,28 @@ bool InferResetsPass::updateReset(FieldRef field, FIRRTLBaseType resetType) {
 LogicalResult InferResetsPass::collectAnnos(CircuitOp circuit) {
   LLVM_DEBUG(
       llvm::dbgs() << "\n===----- Gather async reset annotations -----===\n\n");
-  auto result = circuit.walk<WalkOrder::PreOrder>([&](FModuleOp module) {
-    if (failed(collectAnnos(module)))
-      return WalkResult::interrupt();
-    return WalkResult::skip();
-  });
-  if (result == WalkResult::interrupt())
+  SmallVector<std::pair<FModuleOp, std::optional<Value>>> results;
+  for (auto module : circuit.getOps<FModuleOp>())
+    results.push_back({module, {}});
+  // Collect annotations parallelly.
+  if (failed(mlir::failableParallelForEach(
+          circuit.getContext(), results, [&](auto &moduleAndResult) {
+            auto result = collectAnnos(moduleAndResult.first);
+            if (failed(result))
+              return failure();
+            moduleAndResult.second = *result;
+            return success();
+          })))
     return failure();
+
+  for (auto [module, reset] : results)
+    if (reset.has_value())
+      annotatedResets.insert({module, *reset});
   return success();
 }
 
-LogicalResult InferResetsPass::collectAnnos(FModuleOp module) {
+FailureOr<std::optional<Value>>
+InferResetsPass::collectAnnos(FModuleOp module) {
   bool anyFailed = false;
   SmallSetVector<std::pair<Annotation, Location>, 4> conflictingAnnos;
 
@@ -1323,7 +1340,7 @@ LogicalResult InferResetsPass::collectAnnos(FModuleOp module) {
   if (!ignore && !reset) {
     LLVM_DEBUG(llvm::dbgs()
                << "No reset annotation for " << module.getName() << "\n");
-    return success();
+    return std::optional<Value>();
   }
 
   // If we have found multiple annotations, emit an error and abort.
@@ -1351,8 +1368,7 @@ LogicalResult InferResetsPass::collectAnnos(FModuleOp module) {
 
   // Store the annotated reset for this module.
   assert(ignore || reset);
-  annotatedResets.insert({module, reset});
-  return success();
+  return std::optional<Value>(reset);
 }
 
 //===----------------------------------------------------------------------===//
