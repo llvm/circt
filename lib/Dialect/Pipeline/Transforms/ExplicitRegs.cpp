@@ -172,11 +172,13 @@ void ExplicitRegsPass::runOnOperation() {
         passIns.push_back(value);
     }
 
-    // Append arguments to the predecessor stage terminator, which feeds this
-    // stage.
+    // Replace the predecessor stage terminator, which feeds this stage, with
+    // a new terminator that has materialized arguments.
     StageOp terminator = cast<StageOp>(predecessorStage->getTerminator());
-    terminator.getRegistersMutable().append(regIns);
-    terminator.getPassthroughsMutable().append(passIns);
+    b.setInsertionPoint(terminator);
+    b.create<StageOp>(terminator.getLoc(), terminator.getNextStage(), regIns,
+                      passIns);
+    terminator.erase();
 
     // ... add arguments to the next stage. Registers first, then passthroughs.
     llvm::SmallVector<Type> regAndPassTypes;
