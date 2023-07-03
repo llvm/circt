@@ -189,7 +189,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 
   pm.addPass(createLowerFIRRTLToHWPass(
       opt.enableAnnotationWarning.getValue(),
-      opt.emitChiselAssertsAsSVA.getValue(), opt.addMuxPragmas.getValue(),
+      opt.emitChiselAssertsAsSVA.getValue(),
       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),
       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg)));
 
