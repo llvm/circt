@@ -167,8 +167,8 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
       // Create a StageOp in the new stage, and branch it to the newly created
       // stage.
       b.setInsertionPointToEnd(currentStage);
-      b.create<pipeline::StageOp>(pipeline.getLoc(), ValueRange{}, ValueRange{},
-                                  newStage);
+      b.create<pipeline::StageOp>(pipeline.getLoc(), newStage, ValueRange{},
+                                  ValueRange{});
       currentStage = newStage;
     }
   }
