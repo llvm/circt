@@ -678,7 +678,7 @@ firrtl.module @Tail(in %in4u: !firrtl.uint<4>,
 }
 
 // CHECK-LABEL: firrtl.module @Andr
-firrtl.module @Andr(in %in0 : !firrtl.uint<0>,
+firrtl.module @Andr(in %in0 : !firrtl.uint<0>, in %in1 : !firrtl.sint<2>,
                     out %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
                     out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>,
                     out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>, 
@@ -705,6 +705,17 @@ firrtl.module @Andr(in %in0 : !firrtl.uint<0>,
   firrtl.connect %d, %3 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %e, %[[ONE]]
   firrtl.connect %e, %4 : !firrtl.uint<1>, !firrtl.uint<1>
+
+  // CHECK: %[[and1:.*]] = firrtl.andr %in1
+  // CHECK-NEXT: firrtl.strictconnect %e, %[[and1]]
+  %cat = firrtl.cat %in1, %cn1_si2 : (!firrtl.sint<2>, !firrtl.sint<2>) -> !firrtl.uint<4>
+  %andrcat = firrtl.andr %cat : (!firrtl.uint<4>) -> !firrtl.uint<1>
+  firrtl.connect %e, %andrcat : !firrtl.uint<1>, !firrtl.uint<1>
+
+  // CHECK: firrtl.strictconnect %e, %[[ZERO]]
+  %cat2 = firrtl.cat %in1, %cn2_si2 : (!firrtl.sint<2>, !firrtl.sint<2>) -> !firrtl.uint<4>
+  %andrcat2 = firrtl.andr %cat2 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+  firrtl.connect %e, %andrcat2 : !firrtl.uint<1>, !firrtl.uint<1>
 
   // CHECK: firrtl.strictconnect %g, %[[ZERO]]
   %5 = firrtl.asSInt %h : (!firrtl.uint<64>) -> !firrtl.sint<64>

@@ -89,6 +89,14 @@ def OneConstantOp : Constraint<Or<[
         "$0.getDefiningOp<SpecialConstantOp>().getValue() == true">
 ]>>;
 
+/// Constraint that matches a zero ConstantOp or SpecialConstantOp.
+def NotAllOneConstantOp : Constraint<Or<[
+  CPred<"$0.getDefiningOp<ConstantOp>() &&"
+        "!$0.getDefiningOp<ConstantOp>().getValue().isAllOnes()">,
+  CPred<"$0.getDefiningOp<SpecialConstantOp>() &&"
+        "$0.getDefiningOp<SpecialConstantOp>().getValue() == false">
+]>>;
+
 /// Constraint that matches an all ones ConstantOp.
 def AllOneConstantOp : Constraint<CPred<"$0.getDefiningOp<ConstantOp>() && $0.getDefiningOp<ConstantOp>().getValue().isAllOnes()">>;
 
@@ -419,23 +427,42 @@ def AndRasUInt : Pat <
   (MoveNameHint $old, (AndRPrimOp $x)),
   [(KnownWidth $x), (IntTypes $x)]>;
 
-/// andr(cat(0, x)) -> 0
+/// andr(cat(*0*, x)) -> 0
 def AndRCatZeroL : Pat <
   (AndRPrimOp:$old (CatPrimOp $z, $x)),
   (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
-  [(ZeroConstantOp $z)]>;
+  [(NotAllOneConstantOp $z)]>;
 
-/// andr(cat(x, 0)) -> 0
+/// andr(cat(x, *0*)) -> 0
 def AndRCatZeroR : Pat <
   (AndRPrimOp:$old (CatPrimOp $x, $z)),
   (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
-  [(ZeroConstantOp $z)]>;
+  [(NotAllOneConstantOp $z)]>;
 
-/// andr(pad(x,n)) -> 0 (where pad is doing something)
+/// andr(cat(1, x)) -> andr(x)
+def AndRCatOneL : Pat <
+  (AndRPrimOp:$old (CatPrimOp $z, $x)),
+  (MoveNameHint $old, (AndRPrimOp $x)),
+  [(AllOneConstantOp $z)]>;
+
+/// andr(cat(x, 1)) -> andr(x)
+def AndRCatOneR : Pat <
+  (AndRPrimOp:$old (CatPrimOp $x, $z)),
+  (MoveNameHint $old, (AndRPrimOp $x)),
+  [(AllOneConstantOp $z)]>;
+
+/// andr(pad(x:U,n)) -> 0 (where pad is doing something)
 def AndRPadU : Pat <
   (AndRPrimOp:$old (PadPrimOp:$pad $x, $n)),
   (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x), (UIntTypes $x), (IntTypeWidthGT32 $pad, $x)]>;
+
+/// andr(pad(x:S,n)) -> andr(x)
+def AndRPadS : Pat <
+  (AndRPrimOp:$old (PadPrimOp:$pad $x, $n)),
+  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
+  [(KnownWidth $x), (SIntTypes $x)]>;
+
 
 // bits(bits(x, ...), ...) -> bits(x, ...)
 def BitsOfBits : Pat<
