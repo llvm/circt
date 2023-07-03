@@ -592,27 +592,45 @@ bool FIRRTLBaseType::isConst() { return getImpl()->isConst; }
 RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
   return TypeSwitch<FIRRTLType, RecursiveTypeProperties>(*this)
       .Case<ClockType, ResetType, AsyncResetType>([](FIRRTLBaseType type) {
-        return RecursiveTypeProperties{true,  false,
-                                       false, type.isConst(),
-                                       false, llvm::isa<ResetType>(type)};
+        return RecursiveTypeProperties{true,
+                                       false,
+                                       false,
+                                       type.isConst(),
+                                       false,
+                                       false,
+                                       llvm::isa<ResetType>(type)};
       })
       .Case<SIntType, UIntType>([](auto type) {
         return RecursiveTypeProperties{
-            true, false, false, type.isConst(), !type.hasWidth(), false};
+            true, false, false, type.isConst(), false, !type.hasWidth(), false};
       })
       .Case<AnalogType>([](auto type) {
         return RecursiveTypeProperties{
-            true, false, true, type.isConst(), !type.hasWidth(), false};
+            true, false, true, type.isConst(), false, !type.hasWidth(), false};
       })
       .Case<BundleType, FVectorType, FEnumType, OpenBundleType, OpenVectorType,
             RefType, BaseTypeAliasType>(
           [](auto type) { return type.getRecursiveTypeProperties(); })
       .Case<StringType, BigIntType>([](auto type) {
-        return RecursiveTypeProperties{true, false, false, false, false, false};
+        return RecursiveTypeProperties{true,  false, false, false,
+                                       false, false, false};
       })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return RecursiveTypeProperties{};
+      });
+}
+
+/// Return this type with any type aliases recursively removed from itself.
+FIRRTLBaseType FIRRTLBaseType::getAnonymousType() {
+  return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
+      .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
+            AnalogType>([&](Type) { return *this; })
+      .Case<BundleType, FVectorType, FEnumType, BaseTypeAliasType>(
+          [](auto type) { return type.getAnonymousType(); })
+      .Default([](Type) {
+        llvm_unreachable("unknown FIRRTL type");
+        return FIRRTLBaseType();
       });
 }
 
@@ -1311,9 +1329,9 @@ struct circt::firrtl::detail::BundleTypeStorage
 
   BundleTypeStorage(ArrayRef<BundleType::BundleElement> elements, bool isConst)
       : detail::FIRRTLBaseTypeStorage(isConst),
-        elements(elements.begin(), elements.end()), props{true,  false,
-                                                          false, isConst,
-                                                          false, false} {
+        elements(elements.begin(), elements.end()), props{true,    false, false,
+                                                          isConst, false, false,
+                                                          false} {
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
@@ -1323,6 +1341,7 @@ struct circt::firrtl::detail::BundleTypeStorage
       props.containsAnalog |= eltInfo.containsAnalog;
       props.containsReference |= eltInfo.containsReference;
       props.containsConst |= eltInfo.containsConst;
+      props.containsTypeAlias |= eltInfo.containsTypeAlias;
       props.hasUninferredWidth |= eltInfo.hasUninferredWidth;
       props.hasUninferredReset |= eltInfo.hasUninferredReset;
       fieldID += 1;
@@ -1357,6 +1376,7 @@ struct circt::firrtl::detail::BundleTypeStorage
   /// pointer to a passive version of the type.
   RecursiveTypeProperties props;
   BundleType passiveType;
+  BundleType anonymousType;
 };
 
 BundleType BundleType::get(MLIRContext *context,
@@ -1533,6 +1553,32 @@ BundleType::getElementTypePreservingConst(size_t index) {
   return type.getConstType(type.isConst() || isConst());
 }
 
+/// Return this type with any type aliases recursively removed from itself.
+FIRRTLBaseType BundleType::getAnonymousType() {
+  auto *impl = getImpl();
+
+  // If we've already determined and cached the anonymous type, use it.
+  if (impl->anonymousType)
+    return impl->anonymousType;
+
+  // If this type is already anonymous, use it and remember for next time.
+  if (!impl->props.containsTypeAlias) {
+    impl->anonymousType = *this;
+    return *this;
+  }
+
+  // Otherwise at least one element has an alias type, rebuild an anonymous
+  // version.
+  SmallVector<BundleType::BundleElement, 16> newElements;
+  newElements.reserve(impl->elements.size());
+  for (auto &elt : impl->elements)
+    newElements.push_back({elt.name, elt.isFlip, elt.type.getAnonymousType()});
+
+  auto anonymousType = BundleType::get(getContext(), newElements, isConst());
+  impl->anonymousType = anonymousType;
+  return anonymousType;
+}
+
 //===----------------------------------------------------------------------===//
 // OpenBundle Type
 //===----------------------------------------------------------------------===//
@@ -1542,9 +1588,9 @@ struct circt::firrtl::detail::OpenBundleTypeStorage : mlir::TypeStorage {
 
   OpenBundleTypeStorage(ArrayRef<OpenBundleType::BundleElement> elements,
                         bool isConst)
-      : elements(elements.begin(), elements.end()), props{true,  false,
-                                                          false, isConst,
-                                                          false, false},
+      : elements(elements.begin(), elements.end()), props{true,    false, false,
+                                                          isConst, false, false,
+                                                          false},
         isConst(static_cast<char>(isConst)) {
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
@@ -1555,6 +1601,7 @@ struct circt::firrtl::detail::OpenBundleTypeStorage : mlir::TypeStorage {
       props.containsAnalog |= eltInfo.containsAnalog;
       props.containsReference |= eltInfo.containsReference;
       props.containsConst |= eltInfo.containsConst;
+      props.containsTypeAlias |= eltInfo.containsTypeAlias;
       props.hasUninferredWidth |= eltInfo.hasUninferredWidth;
       props.hasUninferredReset |= eltInfo.hasUninferredReset;
       fieldID += 1;
@@ -1796,6 +1843,7 @@ struct circt::firrtl::detail::FVectorTypeStorage
   /// pointer to a passive version of the type.
   RecursiveTypeProperties props;
   FIRRTLBaseType passiveType;
+  FIRRTLBaseType anonymousType;
 };
 
 FVectorType FVectorType::get(FIRRTLBaseType elementType, size_t numElements,
@@ -1844,6 +1892,24 @@ FVectorType FVectorType::getAllConstDroppedType() {
     return *this;
   return get(getElementType().getAllConstDroppedType(), getNumElements(),
              false);
+}
+
+/// Return this type with any type aliases recursively removed from itself.
+FIRRTLBaseType FVectorType::getAnonymousType() {
+  auto *impl = getImpl();
+
+  if (impl->anonymousType)
+    return impl->anonymousType;
+
+  // If this type is already anonymous, return it and remember for next time.
+  if (!impl->props.containsTypeAlias)
+    return impl->anonymousType = *this;
+
+  // Otherwise, rebuild an anonymous version.
+  auto anonymousType = FVectorType::get(getElementType().getAnonymousType(),
+                                        getNumElements(), isConst());
+  impl->anonymousType = anonymousType;
+  return anonymousType;
 }
 
 uint64_t FVectorType::getFieldID(uint64_t index) {
@@ -2035,7 +2101,8 @@ struct circt::firrtl::detail::FEnumTypeStorage : detail::FIRRTLBaseTypeStorage {
   FEnumTypeStorage(ArrayRef<FEnumType::EnumElement> elements, bool isConst)
       : detail::FIRRTLBaseTypeStorage(isConst),
         elements(elements.begin(), elements.end()) {
-    RecursiveTypeProperties props{true, false, false, isConst, false, false};
+    RecursiveTypeProperties props{true,  false, false, isConst,
+                                  false, false, false};
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
@@ -2045,6 +2112,7 @@ struct circt::firrtl::detail::FEnumTypeStorage : detail::FIRRTLBaseTypeStorage {
       props.containsAnalog |= eltInfo.containsAnalog;
       props.containsConst |= eltInfo.containsConst;
       props.hasUninferredWidth |= eltInfo.hasUninferredWidth;
+      props.containsTypeAlias |= eltInfo.containsTypeAlias;
       fieldID += 1;
       fieldIDs.push_back(fieldID);
       // Increment the field ID for the next field by the number of subfields.
@@ -2075,6 +2143,7 @@ struct circt::firrtl::detail::FEnumTypeStorage : detail::FIRRTLBaseTypeStorage {
   uint64_t maxFieldID;
 
   RecursiveTypeProperties recProps;
+  FIRRTLBaseType anonymousType;
 };
 
 FEnumType FEnumType::get(::mlir::MLIRContext *context,
@@ -2234,6 +2303,23 @@ auto FEnumType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
   return success();
 }
 
+/// Return this type with any type aliases recursively removed from itself.
+FIRRTLBaseType FEnumType::getAnonymousType() {
+  auto *impl = getImpl();
+
+  if (impl->anonymousType)
+    return impl->anonymousType;
+
+  if (!impl->recProps.containsTypeAlias)
+    return impl->anonymousType = *this;
+
+  SmallVector<FEnumType::EnumElement, 4> elements;
+
+  for (auto element : getElements())
+    elements.push_back({element.name, element.type.getAnonymousType()});
+  return impl->anonymousType = FEnumType::get(getContext(), elements);
+}
+
 //===----------------------------------------------------------------------===//
 // BaseTypeAliasType
 //===----------------------------------------------------------------------===//
@@ -2278,8 +2364,10 @@ auto BaseTypeAliasType::getInnerType() const -> FIRRTLBaseType {
 }
 
 FIRRTLBaseType BaseTypeAliasType::getAnonymousType() {
-  // FIXME: Update to use FIRRTLBaseType::getAnonymousType()
-  return getInnerType();
+  auto *impl = getImpl();
+  if (impl->anonymousType)
+    return impl->anonymousType;
+  return impl->anonymousType = getInnerType().getAnonymousType();
 }
 
 FIRRTLBaseType BaseTypeAliasType::getPassiveType() {
@@ -2288,7 +2376,7 @@ FIRRTLBaseType BaseTypeAliasType::getPassiveType() {
 
 RecursiveTypeProperties BaseTypeAliasType::getRecursiveTypeProperties() const {
   auto rtp = getInnerType().getRecursiveTypeProperties();
-  // TODO: Enable containsTypeAlias
+  rtp.containsTypeAlias = true;
   return rtp;
 }
 

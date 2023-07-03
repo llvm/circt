@@ -208,15 +208,31 @@ def StageOp : Op<Pipeline_Dialect, "stage", [
     1. which stage (block) to transition to next
     2. which registers to build at this stage boundary
     3. which values to pass through to the next stage without registering
+    4. An optional hierarchy of boolean values to be used for clock gates for
+       each register.
+      - The implicit '!stalled' gate will always be the first signal in the
+        hierarchy. Further signals are added to the hierarchy from left to
+        right.
+
+
+    Example:
+    ```mlir
+    pipeline.stage ^bb1 regs(%a : i32 gated by [%foo, %bar], %b : i1) pass(%c : i32)
+    ```
   }];
 
-  let arguments = (ins Variadic<AnyType>:$registers, Variadic<AnyType>:$passthroughs);
+  let arguments = (ins
+    Variadic<AnyType>:$registers,
+    Variadic<AnyType>:$passthroughs,
+    Variadic<I1>:$clockGates,
+    I64ArrayAttr:$clockGatesPerRegister);
   let successors = (successor AnySuccessor:$nextStage);
   let results = (outs);
   let hasVerifier = 1;
+  let skipDefaultBuilders = 1;
 
   let assemblyFormat = [{
-    $nextStage (`regs` `(` $registers^ `:` type($registers) `)`)?
+    $nextStage custom<StageRegisters>($registers, type($registers), $clockGates, $clockGatesPerRegister)
       (`pass` `(` $passthroughs^ `:` type($passthroughs) `)` )? attr-dict
   }];
 
@@ -225,9 +241,19 @@ def StageOp : Op<Pipeline_Dialect, "stage", [
     void setNextStage(Block *block) {
       setSuccessor(block);
     }
-  }];
-}
 
+    // Returns the list of clock gates for the given register.
+    ValueRange getClockGatesForReg(unsigned regIdx);
+  }];
+
+  let builders = [
+    OpBuilder<(ins "Block*":$dest, "ValueRange":$registers, "ValueRange":$passthroughs)>,
+    // Clock gate builder, which takes a mapping between the registers and
+    // and their clock gate hierarchy.
+    OpBuilder<(ins "Block*":$dest, "ValueRange":$registers, "ValueRange":$passthroughs,
+      "const llvm::DenseMap<Value, llvm::SmallVector<Value>>&":$clockGates)>
+  ];
+}
 
 def ReturnOp : Op<Pipeline_Dialect, "return", [
     Terminator,

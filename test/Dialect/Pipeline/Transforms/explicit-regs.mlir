@@ -5,10 +5,10 @@
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = pipeline.scheduled(%[[VAL_0]], %[[VAL_1]]) clock %[[VAL_3]] reset %[[VAL_4]] go %[[VAL_2]] : (i32, i32) -> i32 {
 // CHECK:           ^bb0(%[[VAL_7:.*]]: i32, %[[VAL_8:.*]]: i32, %[[VAL_9:.*]]: i1):
 // CHECK:             %[[VAL_10:.*]] = comb.add %[[VAL_7]], %[[VAL_8]] : i32
-// CHECK:             pipeline.stage ^bb1 regs(%[[VAL_10]], %[[VAL_7]] : i32, i32)
+// CHECK:             pipeline.stage ^bb1 regs(%[[VAL_10]] : i32, %[[VAL_7]] : i32)
 // CHECK:           ^bb1(%[[VAL_11:.*]]: i32, %[[VAL_12:.*]]: i32, %[[VAL_13:.*]]: i1):
 // CHECK:             %[[VAL_14:.*]] = comb.add %[[VAL_11]], %[[VAL_12]] : i32
-// CHECK:             pipeline.stage ^bb2 regs(%[[VAL_14]], %[[VAL_11]] : i32, i32)
+// CHECK:             pipeline.stage ^bb2 regs(%[[VAL_14]] : i32, %[[VAL_11]] : i32)
 // CHECK:           ^bb2(%[[VAL_15:.*]]: i32, %[[VAL_16:.*]]: i32, %[[VAL_17:.*]]: i1):
 // CHECK:             %[[VAL_18:.*]] = comb.add %[[VAL_15]], %[[VAL_16]] : i32
 // CHECK:             pipeline.return %[[VAL_18]] : i32
