@@ -9,6 +9,7 @@ target_link_libraries(arcilator
   CIRCTCombToArith
   CIRCTConvertToArcs
   CIRCTSupport
+  CIRCTTransforms
   MLIRParser
   MLIRLLVMIRTransforms
   MLIRTargetLLVMIRExport
