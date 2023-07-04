@@ -178,12 +178,12 @@ ObjectOp ExtractClassesPass::getOrCreateObject(
     propassign.erase();
   }
 
+  // Get the Object's class name.
+  auto objectClass = builder.getStringAttr("OM" + instance.getModuleNameAttr().getValue());
+
   // Get the Object type.
   auto objectType =
-      ClassType::get(instance.getContext(), instance.getModuleNameAttr());
-
-  // Get the Object's class name.
-  auto objectClass = instance.getModuleNameAttr().getAttr();
+    ClassType::get(instance.getContext(), FlatSymbolRefAttr::get(objectClass));
 
   // Construct the ObjectOp.
   auto object = builder.create<ObjectOp>(instance.getLoc(), objectType,
@@ -256,11 +256,11 @@ void ExtractClassesPass::extractClass(FModuleLike moduleLike) {
   // Construct the ClassOp with the FModuleOp name and parameter names.
   ClassLike classOp;
   if (moduleOp)
-    classOp = builder.create<ClassOp>(moduleLike.getLoc(), name.getValue(),
+    classOp = builder.create<ClassOp>(moduleLike.getLoc(), "OM" + name.getValue(),
                                       formalParamNames);
   else
     classOp = builder.create<ClassExternOp>(moduleLike.getLoc(),
-                                            name.getValue(), formalParamNames);
+                                            "OM" + name.getValue(), formalParamNames);
 
   // Construct the ClassOp body with block arguments for each input property,
   // updating the mapping to map from the input property to the block argument.
