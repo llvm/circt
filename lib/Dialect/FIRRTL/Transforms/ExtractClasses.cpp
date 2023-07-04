@@ -246,11 +246,7 @@ void ExtractClassesPass::extractClass(FModuleLike moduleLike) {
     name = moduleOp.getNameAttr();
   } else {
     auto extModuleOp = cast<FExtModuleOp>(moduleLike);
-    if (extModuleOp.getDefnameAttr()) {
-      name = extModuleOp.getDefnameAttr();
-    } else {
-      name = extModuleOp.getModuleNameAttr();
-    }
+    name = extModuleOp.getModuleNameAttr();
   }
 
   // Construct the ClassOp with the FModuleOp name and parameter names.
