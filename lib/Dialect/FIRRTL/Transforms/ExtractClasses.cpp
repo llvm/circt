@@ -254,12 +254,17 @@ void ExtractClassesPass::extractClass(FModuleLike moduleLike) {
   }
 
   // Construct the ClassOp with the FModuleOp name and parameter names.
-  auto classOp = builder.create<ClassOp>(moduleLike.getLoc(), name.getValue(),
-                                         formalParamNames);
+  ClassLike classOp;
+  if (moduleOp)
+    classOp = builder.create<ClassOp>(moduleLike.getLoc(), name.getValue(),
+                                      formalParamNames);
+  else
+    classOp = builder.create<ClassExternOp>(moduleLike.getLoc(),
+                                            name.getValue(), formalParamNames);
 
   // Construct the ClassOp body with block arguments for each input property,
   // updating the mapping to map from the input property to the block argument.
-  Block *classBody = &classOp.getRegion().emplaceBlock();
+  Block *classBody = &classOp.getBody().emplaceBlock();
   for (auto inputProperty : inputProperties) {
     BlockArgument parameterValue =
         classBody->addArgument(inputProperty.type, inputProperty.loc);
@@ -274,10 +279,8 @@ void ExtractClassesPass::extractClass(FModuleLike moduleLike) {
   builder.setInsertionPointToStart(classBody);
   for (auto outputProperty : outputProperties) {
     if (!moduleOp) {
-      Value fieldValue =
-          builder.create<UndefOp>(outputProperty.loc, outputProperty.type);
-      builder.create<ClassFieldOp>(fieldValue.getLoc(), outputProperty.name,
-                                   fieldValue);
+      builder.create<ClassExternFieldOp>(
+          outputProperty.loc, outputProperty.name, outputProperty.type);
       continue;
     }
 
