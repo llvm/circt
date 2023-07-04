@@ -579,10 +579,10 @@ OpFoldResult AndPrimOp::fold(FoldAdaptor adaptor) {
 
 void AndPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results
-      .insert<patterns::extendAnd, patterns::moveConstAnd, patterns::AndOfZero,
-              patterns::AndOfAllOne, patterns::AndOfSelf, patterns::AndOfPad,
-              patterns::AndOfAsSIntL, patterns::AndOfAsSIntR>(context);
+  results.insert<patterns::extendAnd, patterns::moveConstAnd,
+                 patterns::AndOfZero, patterns::AndOfAllOne,
+                 patterns::AndOfSelf, patterns::AndOfPadU, patterns::AndOfPadS,
+                 patterns::AndOfAsSIntL, patterns::AndOfAsSIntR>(context);
 }
 
 OpFoldResult OrPrimOp::fold(FoldAdaptor adaptor) {
@@ -1251,8 +1251,9 @@ OpFoldResult BitsPrimOp::fold(FoldAdaptor adaptor) {
 
 void BitsPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results.insert<patterns::BitsOfBits, patterns::BitsOfMux,
-                 patterns::BitsOfAsUInt>(context);
+  results
+      .insert<patterns::BitsOfBits, patterns::BitsOfMux, patterns::BitsOfAsUInt,
+              patterns::BitsOfAnd, patterns::BitsOfPad>(context);
 }
 
 /// Replace the specified operation with a 'bits' op from the specified hi/lo

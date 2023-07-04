@@ -296,20 +296,26 @@ def AndOfSelf : Pat <
   [(KnownWidth $x)]>;
 
 /// and(x, pad(y, n)) -> pad(and(tail(x), y), n), x is unsigned
-def AndOfPad : Pat <
+def AndOfPadU : Pat <
   (AndPrimOp:$old (either $x, (PadPrimOp:$pad $y, $n))),
   (MoveNameHint $old, (PadPrimOp (AndPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y), $n)),
   [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
 
+/// and(x, pad(y, n)) -> cat(head(x), and(tail(x), y)), x is signed
+def AndOfPadS : Pat <
+  (AndPrimOp:$old (either $x, (PadPrimOp:$pad $y, $n))),
+  (MoveNameHint $old, (CatPrimOp (HeadPrimOp $x, (TypeWidthAdjust32 $x, $y)), (AndPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), (AsUIntPrimOp $y)))),
+  [(KnownWidth $x), (SIntType $x), (EqualTypes $x, $pad)]>;
+
 def AndOfAsSIntL : Pat<
   (AndPrimOp:$old (AsSIntPrimOp $x), $y),
   (MoveNameHint $old, (AndPrimOp $x, (AsUIntPrimOp $y))),
-  []>;
+  [(EqualIntSize $x, $y)]>;
 
 def AndOfAsSIntR : Pat<
   (AndPrimOp:$old $x, (AsSIntPrimOp $y)),
   (MoveNameHint $old, (AndPrimOp (AsUIntPrimOp $x), $y)),
-  []>;
+  [(EqualIntSize $x, $y)]>;
 
 // or(x, 0) -> x, fold can't handle all cases
 def OrOfZero : Pat <
@@ -484,6 +490,19 @@ def BitsOfAsUInt : Pat<
   (BitsPrimOp:$old (AsUIntPrimOp $x), I32Attr:$oHigh, I32Attr:$oLow),
   (MoveNameHint $old, (BitsPrimOp $x, $oHigh, $oLow)),
   [(KnownWidth $x)]>;
+
+// bits(asUInt) -> bits
+def BitsOfAnd : Pat<
+  (BitsPrimOp:$old (AndPrimOp $x, $y), I32Attr:$oHigh, I32Attr:$oLow),
+  (MoveNameHint $old, (AndPrimOp (BitsPrimOp $x, $oHigh, $oLow), (BitsPrimOp $y, $oHigh, $oLow))),
+  [(KnownWidth $x), (EqualTypes $x, $y)]>;
+
+// bits(pad(x)) -> x when they cancel out
+def AttrIsZero : Constraint<CPred<"$0.getValue().isZero()">>;
+def BitsOfPad : Pat<
+  (BitsPrimOp:$old (PadPrimOp $x, I32Attr:$n), I32Attr:$oHigh, I32Attr:$oLow),
+  (AsUIntPrimOp $x),
+  [(KnownWidth $x), (EqualIntSize $old, $x), (AttrIsZero $oLow)]>;
 
 // subaccess a, cst -> subindex a, cst
 // TODO: only enable if cst is inside a.  Subaccess and subindex behave differently for out-of-bounds indexes.
