@@ -25,6 +25,8 @@ def ClassLike : OpInterface<"ClassLike"> {
   let methods = [
     InterfaceMethod<"Get the class-like symbol name",
       "llvm::StringRef", "getSymName", (ins)>,
+    InterfaceMethod<"Get the class-like symbol name attribute",
+      "mlir::StringAttr", "getSymNameAttr", (ins)>,
     InterfaceMethod<"",
       "mlir::StringAttr", "getSymNameAttrName", (ins)>,
     InterfaceMethod<"",
