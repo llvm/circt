@@ -55,6 +55,16 @@ om.class @Empty() {}
 // CHECK-SAME: attributes {foo.bar = "baz"}
 om.class @DiscardableAttrs() attributes {foo.bar="baz"} {}
 
+// CHECK-LABEL: om.class.extern @Extern
+// CHECK-SAME: (%param1: i1, %param2: i2)
+om.class.extern @Extern(%param1: i1, %param2: i2) {
+  // CHECK: om.class.extern.field @field1 : i3
+  om.class.extern.field @field1 : i3
+
+  // CHECK: om.class.extern.field @field2 : i4
+  om.class.extern.field @field2 : i4
+}
+
 om.class @NestedField1() {
   %0 = om.constant 1 : i1
   om.class.field @baz, %0 : i1

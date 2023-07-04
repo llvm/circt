@@ -12,6 +12,7 @@ add_circt_dialect_library(
   OMAttributes.cpp
   OMDialect.cpp
   OMOps.cpp
+  OMOpInterfaces.cpp
   OMTypes.cpp
 
   DEPENDS

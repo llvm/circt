@@ -16,13 +16,13 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 
 using namespace mlir;
+using namespace circt::om;
 
 //===----------------------------------------------------------------------===//
-// ClassOp
+// Shared Helpers
 //===----------------------------------------------------------------------===//
 
-ParseResult circt::om::ClassOp::parse(OpAsmParser &parser,
-                                      OperationState &state) {
+static ParseResult parseClassLike(OpAsmParser &parser, OperationState &state) {
   // Parse the Class symbol name.
   StringAttr symName;
   if (parser.parseSymbolName(symName, mlir::SymbolTable::getSymbolAttrName(),
@@ -59,6 +59,74 @@ ParseResult circt::om::ClassOp::parse(OpAsmParser &parser,
   return success();
 }
 
+static void printClassLike(ClassLike classLike, OpAsmPrinter &printer) {
+  // Print the Class symbol name.
+  printer << " @";
+  printer << classLike.getSymName();
+
+  // Retrieve the formal parameter names and values.
+  auto argNames = SmallVector<StringRef>(
+      classLike.getFormalParamNames().getAsValueRange<StringAttr>());
+  ArrayRef<BlockArgument> args = classLike.getBodyBlock()->getArguments();
+
+  // Print the formal parameters.
+  printer << '(';
+  for (size_t i = 0, e = args.size(); i < e; ++i) {
+    printer << '%' << argNames[i] << ": " << args[i].getType();
+    if (i < e - 1)
+      printer << ", ";
+  }
+  printer << ") ";
+
+  // Print the optional attribute dictionary.
+  SmallVector<StringRef> elidedAttrs{classLike.getSymNameAttrName(),
+                                     classLike.getFormalParamNamesAttrName()};
+  printer.printOptionalAttrDictWithKeyword(classLike.getOperation()->getAttrs(),
+                                           elidedAttrs);
+
+  // Print the body.
+  printer.printRegion(classLike.getBody(), /*printEntryBlockArgs=*/false,
+                      /*printBlockTerminators=*/true);
+}
+
+LogicalResult verifyClassLike(ClassLike classLike) {
+  // Verify the formal parameter names match up with the values.
+  if (classLike.getFormalParamNames().size() !=
+      classLike.getBodyBlock()->getArguments().size()) {
+    auto error = classLike.emitOpError(
+        "formal parameter name list doesn't match formal parameter value list");
+    error.attachNote(classLike.getLoc())
+        << "formal parameter names: " << classLike.getFormalParamNames();
+    error.attachNote(classLike.getLoc())
+        << "formal parameter values: "
+        << classLike.getBodyBlock()->getArguments();
+    return error;
+  }
+
+  return success();
+}
+
+void getClassLikeAsmBlockArgumentNames(ClassLike classLike, Region &region,
+                                       OpAsmSetValueNameFn setNameFn) {
+  // Retrieve the formal parameter names and values.
+  auto argNames = SmallVector<StringRef>(
+      classLike.getFormalParamNames().getAsValueRange<StringAttr>());
+  ArrayRef<BlockArgument> args = classLike.getBodyBlock()->getArguments();
+
+  // Use the formal parameter names as the SSA value names.
+  for (size_t i = 0, e = args.size(); i < e; ++i)
+    setNameFn(args[i], argNames[i]);
+}
+
+//===----------------------------------------------------------------------===//
+// ClassOp
+//===----------------------------------------------------------------------===//
+
+ParseResult circt::om::ClassOp::parse(OpAsmParser &parser,
+                                      OperationState &state) {
+  return parseClassLike(parser, state);
+}
+
 void circt::om::ClassOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                                Twine name,
                                ArrayRef<StringRef> formalParamNames) {
@@ -91,60 +159,49 @@ void circt::om::ClassOp::build(OpBuilder &odsBuilder, OperationState &odsState,
 }
 
 void circt::om::ClassOp::print(OpAsmPrinter &printer) {
-  // Print the Class symbol name.
-  printer << " @";
-  printer << getSymName();
-
-  // Retrieve the formal parameter names and values.
-  auto argNames = SmallVector<StringRef>(
-      getFormalParamNames().getAsValueRange<StringAttr>());
-  ArrayRef<BlockArgument> args = getBodyBlock()->getArguments();
-
-  // Print the formal parameters.
-  printer << '(';
-  for (size_t i = 0, e = args.size(); i < e; ++i) {
-    printer << '%' << argNames[i] << ": " << args[i].getType();
-    if (i < e - 1)
-      printer << ", ";
-  }
-  printer << ") ";
-
-  // Print the optional attribute dictionary.
-  SmallVector<StringRef> elidedAttrs{getSymNameAttrName(),
-                                     getFormalParamNamesAttrName()};
-  printer.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
-                                           elidedAttrs);
-
-  // Print the body.
-  printer.printRegion(getBody(), /*printEntryBlockArgs=*/false,
-                      /*printBlockTerminators=*/true);
+  printClassLike(*this, printer);
 }
 
-LogicalResult circt::om::ClassOp::verify() {
-  // Verify the formal parameter names match up with the values.
-  if (getFormalParamNames().size() != getBodyBlock()->getArguments().size()) {
-    auto error = emitOpError(
-        "formal parameter name list doesn't match formal parameter value list");
-    error.attachNote(getLoc())
-        << "formal parameter names: " << getFormalParamNames();
-    error.attachNote(getLoc())
-        << "formal parameter values: " << getBodyBlock()->getArguments();
-    return error;
-  }
-
-  return success();
-}
+LogicalResult circt::om::ClassOp::verify() { return verifyClassLike(*this); }
 
 void circt::om::ClassOp::getAsmBlockArgumentNames(
     Region &region, OpAsmSetValueNameFn setNameFn) {
-  // Retrieve the formal parameter names and values.
-  auto argNames = SmallVector<StringRef>(
-      getFormalParamNames().getAsValueRange<StringAttr>());
-  ArrayRef<BlockArgument> args = getBodyBlock()->getArguments();
+  getClassLikeAsmBlockArgumentNames(*this, region, setNameFn);
+}
 
-  // Use the formal parameter names as the SSA value names.
-  for (size_t i = 0, e = args.size(); i < e; ++i)
-    setNameFn(args[i], argNames[i]);
+//===----------------------------------------------------------------------===//
+// ClassExternOp
+//===----------------------------------------------------------------------===//
+
+ParseResult circt::om::ClassExternOp::parse(OpAsmParser &parser,
+                                            OperationState &state) {
+  return parseClassLike(parser, state);
+}
+
+void circt::om::ClassExternOp::build(OpBuilder &odsBuilder,
+                                     OperationState &odsState, Twine name) {
+  return build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+               odsBuilder.getStrArrayAttr({}));
+}
+
+void circt::om::ClassExternOp::build(OpBuilder &odsBuilder,
+                                     OperationState &odsState, Twine name,
+                                     ArrayRef<StringRef> formalParamNames) {
+  return build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+               odsBuilder.getStrArrayAttr(formalParamNames));
+}
+
+void circt::om::ClassExternOp::print(OpAsmPrinter &printer) {
+  printClassLike(*this, printer);
+}
+
+LogicalResult circt::om::ClassExternOp::verify() {
+  return verifyClassLike(*this);
+}
+
+void circt::om::ClassExternOp::getAsmBlockArgumentNames(
+    Region &region, OpAsmSetValueNameFn setNameFn) {
+  getClassLikeAsmBlockArgumentNames(*this, region, setNameFn);
 }
 
 //===----------------------------------------------------------------------===//
@@ -181,14 +238,16 @@ circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitOpError("refers to non-existant class (") << className << ')';
 
   auto actualTypes = getActualParams().getTypes();
-  auto formalTypes = classDef.getBodyBlock()->getArgumentTypes();
+  auto formalTypes =
+      cast<ClassLike>(*classDef).getBodyBlock()->getArgumentTypes();
 
   // Verify the actual parameter list matches the formal parameter list.
   if (actualTypes.size() != formalTypes.size()) {
     auto error = emitOpError(
         "actual parameter list doesn't match formal parameter list");
     error.attachNote(classDef.getLoc())
-        << "formal parameters: " << classDef.getBodyBlock()->getArguments();
+        << "formal parameters: "
+        << cast<ClassLike>(*classDef).getBodyBlock()->getArguments();
     error.attachNote(getLoc()) << "actual parameters: " << getActualParams();
     return error;
   }

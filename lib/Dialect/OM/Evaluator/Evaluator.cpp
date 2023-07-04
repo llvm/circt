@@ -35,7 +35,8 @@ circt::om::Evaluator::instantiate(StringAttr className,
     return symbolTable.getOp()->emitError("unknown class name ") << className;
 
   auto formalParamNames = cls.getFormalParamNames().getAsRange<StringAttr>();
-  auto formalParamTypes = cls.getBodyBlock()->getArgumentTypes();
+  auto formalParamTypes =
+      cast<ClassLike>(*cls).getBodyBlock()->getArgumentTypes();
 
   // Verify the actual parameters are the right size and types for this class.
   if (actualParams.size() != formalParamTypes.size()) {

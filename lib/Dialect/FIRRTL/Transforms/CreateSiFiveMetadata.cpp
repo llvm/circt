@@ -89,7 +89,8 @@ struct ObjectModelIR {
     if (!retimeModulesSchemaClass)
       createRetimeModulesSchema();
     auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
-        module->getLoc(), retimeModulesMetadataClass.getBodyBlock());
+        module->getLoc(),
+        cast<circt::om::ClassLike>(*retimeModulesMetadataClass).getBodyBlock());
     auto modEntry =
         builderOM.create<om::ConstantOp>(om::SymbolRefAttr::get(module));
     auto object = builderOM.create<om::ObjectOp>(retimeModulesSchemaClass,
@@ -116,7 +117,8 @@ struct ObjectModelIR {
     if (!blackBoxModulesSchemaClass)
       addBlackBoxModulesSchema();
     auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
-        module.getLoc(), blackBoxMetadataClass.getBodyBlock());
+        module.getLoc(),
+        cast<circt::om::ClassLike>(*blackBoxMetadataClass).getBodyBlock());
     auto modEntry =
         builderOM.create<om::ConstantOp>(om::SymbolRefAttr::get(module));
     auto object = builderOM.create<om::ObjectOp>(blackBoxModulesSchemaClass,
@@ -129,7 +131,8 @@ struct ObjectModelIR {
     if (!memorySchemaClass)
       createMemorySchema();
     auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
-        mem.getLoc(), memoryMetadataClass.getBodyBlock());
+        mem.getLoc(),
+        cast<circt::om::ClassLike>(*memoryMetadataClass).getBodyBlock());
     auto createConstField = [&](Attribute constVal) {
       return builderOM.create<om::ConstantOp>(constVal.cast<mlir::TypedAttr>());
     };

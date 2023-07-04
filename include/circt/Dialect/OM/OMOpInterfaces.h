@@ -1,4 +1,4 @@
-//===- OMOps.h - Object Model operation declarations ----------------------===//
+//===- OMOpInterfaces.h - Object Model operation interfaces ---------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,16 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_OM_OMOPS_H
-#define CIRCT_DIALECT_OM_OMOPS_H
+#ifndef CIRCT_DIALECT_OM_OMOPINTERFACES_H
+#define CIRCT_DIALECT_OM_OMOPINTERFACES_H
 
-#include "circt/Dialect/OM/OMOpInterfaces.h"
-#include "circt/Dialect/OM/OMTypes.h"
-
-#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/OpDefinition.h"
 
-#define GET_OP_CLASSES
-#include "circt/Dialect/OM/OM.h.inc"
+#include "circt/Dialect/OM/OMOpInterfaces.h.inc"
 
-#endif // CIRCT_DIALECT_OM_OMOPS_H
+#endif // CIRCT_DIALECT_OM_OMOPINTERFACES_H
