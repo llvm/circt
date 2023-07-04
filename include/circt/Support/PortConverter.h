@@ -26,7 +26,6 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
-#include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
 
@@ -144,47 +143,6 @@ protected:
   bool isUntouchedFlag = false;
 };
 
-/// We consider non-caught ports to be ad-hoc signaling or 'untouched'. (Which
-/// counts as a signaling protocol if one squints pretty hard). We mostly do
-/// this since it allows us a more consistent internal API.
-class UntouchedSignalingStandard : public SignalingStandard {
-public:
-  UntouchedSignalingStandard(PortConverterImpl &converter,
-                             hw::PortInfo origPort)
-      : SignalingStandard(converter, origPort) {
-    // Set the 'RTTI flag' to true.
-    isUntouchedFlag = true;
-  }
-
-  void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
-                       SmallVectorImpl<Value> &newOperands,
-                       ArrayRef<Backedge> newResults) override {
-    newOperands[origPort.argNum] = instValue;
-  }
-  void mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
-                        SmallVectorImpl<Value> &newOperands,
-                        ArrayRef<Backedge> newResults) override {
-    instValue.replaceAllUsesWith(newOperands[origPort.argNum]);
-  }
-
-private:
-  void buildInputSignals() override {
-    Value newValue =
-        converter.createNewInput(origPort, "", origPort.type, portInfo);
-    if (body)
-      body->getArgument(origPort.argNum).replaceAllUsesWith(newValue);
-  }
-
-  void buildOutputSignals() override {
-    Value output;
-    if (body)
-      output = body->getTerminator()->getOperand(origPort.argNum);
-    converter.createNewOutput(origPort, "", origPort.type, output, portInfo);
-  }
-
-  hw::PortInfo portInfo;
-};
-
 // A SignalStandardBuilder will, given an input type, build the appropriate
 // signaling standard for that type.
 class SignalStandardBuilder {
@@ -196,15 +154,12 @@ public:
   // override this method with their own llvm::TypeSwitch-based dispatch code,
   // and by default call this method when no signaling standard applies.
   virtual FailureOr<std::unique_ptr<SignalingStandard>>
-  build(hw::PortInfo port) {
-    // Default builder is the 'untouched' signaling standard..
-    return {std::make_unique<UntouchedSignalingStandard>(converter, port)};
-  }
+  build(hw::PortInfo port);
 
   PortConverterImpl &converter;
 };
 
-// The PortConverter wraps a single HWMutableModuleLike operation, and is
+// A PortConverter wraps a single HWMutableModuleLike operation, and is
 // initialized from an instance graph node. The port converter is templated
 // on a SignalStandardBuilder, which is used to build the appropriate
 // signaling standard for each port type.

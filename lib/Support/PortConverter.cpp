@@ -19,6 +19,58 @@ static StringAttr append(StringAttr base, const Twine &suffix) {
   return StringAttr::get(context, base.getValue() + suffix);
 }
 
+namespace {
+
+/// We consider non-caught ports to be ad-hoc signaling or 'untouched'. (Which
+/// counts as a signaling protocol if one squints pretty hard). We mostly do
+/// this since it allows us a more consistent internal API.
+class UntouchedSignalingStandard : public SignalingStandard {
+public:
+  UntouchedSignalingStandard(PortConverterImpl &converter,
+                             hw::PortInfo origPort)
+      : SignalingStandard(converter, origPort) {
+    // Set the "RTTI flag" to true.
+    isUntouchedFlag = true;
+  }
+
+  void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                       SmallVectorImpl<Value> &newOperands,
+                       ArrayRef<Backedge> newResults) override {
+    newOperands[origPort.argNum] = instValue;
+  }
+  void mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                        SmallVectorImpl<Value> &newOperands,
+                        ArrayRef<Backedge> newResults) override {
+    instValue.replaceAllUsesWith(newOperands[origPort.argNum]);
+  }
+
+private:
+  void buildInputSignals() override {
+    Value newValue =
+        converter.createNewInput(origPort, "", origPort.type, portInfo);
+    if (body)
+      body->getArgument(origPort.argNum).replaceAllUsesWith(newValue);
+  }
+
+  void buildOutputSignals() override {
+    Value output;
+    if (body)
+      output = body->getTerminator()->getOperand(origPort.argNum);
+    converter.createNewOutput(origPort, "", origPort.type, output, portInfo);
+  }
+
+  hw::PortInfo portInfo;
+};
+
+} // namespace
+
+FailureOr<std::unique_ptr<SignalingStandard>>
+SignalStandardBuilder::build(hw::PortInfo port) {
+  // Default builder is the 'untouched' signaling standard which will simply
+  // pass ports through unmodified.
+  return {std::make_unique<UntouchedSignalingStandard>(converter, port)};
+}
+
 Value PortConverterImpl::createNewInput(PortInfo origPort, const Twine &suffix,
                                         Type type, PortInfo &newPort) {
   newPort =
