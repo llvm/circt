@@ -285,12 +285,12 @@ def AndOfPad : Pat <
 /// cvt is adding a 0, which will pass through the and
 /// and(cvt(x:U), const) -> cat(0, and(x,trunc(const))
 def AndCvtU : Pat <
-  (AndPrimOp:$old (CvtPrimOp $x), (ConstantOp:$ocst $cst)),
+  (AndPrimOp:$old (CvtPrimOp:$ox $x), (ConstantOp:$ocst $cst)),
   (MoveNameHint $old, (CatPrimOp 
     (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), APSInt(APInt()))"> $ocst),
     (AndPrimOp $x, (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), $1.getValue().trunc($1.getValue().getBitWidth()-1).zext(*cast<IntType>($0.getType()).getWidth()))"> $x, $cst))
   )),
-  [(KnownWidth $x), (UIntType $x)]>;
+  [(KnownWidth $x), (UIntType $x), (EqualTypes $ox, $ocst)]>;
 
 // or(x, 0) -> x, fold can't handle all cases
 def OrOfZero : Pat <
