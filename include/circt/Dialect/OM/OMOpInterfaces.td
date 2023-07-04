@@ -39,4 +39,17 @@ def ClassLike : OpInterface<"ClassLike"> {
   ];
 }
 
+def ClassFieldLike : OpInterface<"ClassFieldLike"> {
+  let cppNamespace = "circt::om";
+
+  let description = [{
+    Common functionality for class-like field operations.
+  }];
+
+  let methods = [
+    InterfaceMethod<"Get the class-like field's type",
+      "mlir::Type", "getType", (ins)>
+  ];
+}
+
 #endif // CIRCT_DIALECT_OM_OMOPINTERFACES_TD

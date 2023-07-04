@@ -52,6 +52,12 @@ class OMClassLike<string mnemonic, list<Trait> traits = []> :
   let hasVerifier = 1;
 }
 
+class OMClassFieldLike<string mnemonic, list<Trait> traits = []> :
+  OMOp<mnemonic, traits # [
+    Symbol,
+    DeclareOpInterfaceMethods<ClassFieldLike>]> {
+}
+
 //===----------------------------------------------------------------------===//
 // Class definitions
 //===----------------------------------------------------------------------===//
@@ -69,8 +75,8 @@ def ClassOp : OMClassLike<"class"> {
   }];
 }
 
-def ClassFieldOp : OMOp<"class.field",
-    [HasParent<"ClassOp">, Symbol]> {
+def ClassFieldOp : OMClassFieldLike<"class.field",
+    [HasParent<"ClassOp">]> {
   let arguments = (ins
     SymbolNameAttr:$sym_name,
     AnyType:$value
@@ -88,8 +94,8 @@ def ClassFieldOp : OMOp<"class.field",
 def ClassExternOp : OMClassLike<"class.extern"> {
 }
 
-def ClassExternFieldOp : OMOp<"class.extern.field",
-    [HasParent<"ClassExternOp">, Symbol]> {
+def ClassExternFieldOp : OMClassFieldLike<"class.extern.field",
+    [HasParent<"ClassExternOp">]> {
   let arguments = (ins
     SymbolNameAttr:$sym_name,
     TypeAttr:$type

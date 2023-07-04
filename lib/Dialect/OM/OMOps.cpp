@@ -170,6 +170,14 @@ void circt::om::ClassOp::getAsmBlockArgumentNames(
 }
 
 //===----------------------------------------------------------------------===//
+// ClassFieldOp
+//===----------------------------------------------------------------------===//
+
+Type circt::om::ClassFieldOp::getType() {
+  return getValue().getType();
+}
+
+//===----------------------------------------------------------------------===//
 // ClassExternOp
 //===----------------------------------------------------------------------===//
 
@@ -232,14 +240,14 @@ circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
            << className << ')';
 
   // Verify the referred to ClassOp exists.
-  auto classDef = dyn_cast_or_null<ClassOp>(
+  auto classDef = dyn_cast_or_null<ClassLike>(
       symbolTable.lookupSymbolIn(moduleOp, className));
   if (!classDef)
     return emitOpError("refers to non-existant class (") << className << ')';
 
   auto actualTypes = getActualParams().getTypes();
   auto formalTypes =
-      cast<ClassLike>(*classDef).getBodyBlock()->getArgumentTypes();
+      classDef.getBodyBlock()->getArgumentTypes();
 
   // Verify the actual parameter list matches the formal parameter list.
   if (actualTypes.size() != formalTypes.size()) {
@@ -247,7 +255,7 @@ circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
         "actual parameter list doesn't match formal parameter list");
     error.attachNote(classDef.getLoc())
         << "formal parameters: "
-        << cast<ClassLike>(*classDef).getBodyBlock()->getArguments();
+        << classDef.getBodyBlock()->getArguments();
     error.attachNote(getLoc()) << "actual parameters: " << getActualParams();
     return error;
   }
@@ -275,18 +283,18 @@ circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
   // Get the ObjectInstOp and the ClassOp it is an instance of.
   ObjectOp objectInst = getObject().getDefiningOp<ObjectOp>();
-  ClassOp classDef = cast<ClassOp>(
+  ClassLike classDef = cast<ClassLike>(
       symbolTable.lookupSymbolIn(moduleOp, objectInst.getClassNameAttr()));
 
   // Traverse the field path, verifying each field exists.
-  Value finalField;
+  ClassFieldLike finalField;
   auto fields = SmallVector<FlatSymbolRefAttr>(
       getFieldPath().getAsRange<FlatSymbolRefAttr>());
   for (size_t i = 0, e = fields.size(); i < e; ++i) {
     // Verify the field exists on the ClassOp.
     auto field = fields[i];
-    ClassFieldOp fieldDef =
-        cast_or_null<ClassFieldOp>(symbolTable.lookupSymbolIn(classDef, field));
+    ClassFieldLike fieldDef =
+        cast_or_null<ClassFieldLike>(symbolTable.lookupSymbolIn(classDef, field));
     if (!fieldDef) {
       auto error = emitOpError("referenced non-existant field ") << field;
       error.attachNote(classDef.getLoc()) << "class defined here";
@@ -296,15 +304,15 @@ circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     // If there are more fields, verify the current field is of ClassType, and
     // look up the ClassOp for that field.
     if (i < e - 1) {
-      auto classType = fieldDef.getValue().getType().dyn_cast<ClassType>();
+      auto classType = fieldDef.getType().dyn_cast<ClassType>();
       if (!classType)
         return emitOpError("nested field access into ")
                << field << " requires a ClassType, but found "
-               << fieldDef.getValue().getType();
+               << fieldDef.getType();
 
       // The nested ClassOp must exist, since a field with ClassType must be
       // an ObjectInstOp, which already verifies the class exists.
-      classDef = cast<ClassOp>(
+      classDef = cast<ClassLike>(
           symbolTable.lookupSymbolIn(moduleOp, classType.getClassName()));
 
       // Proceed to the next field in the path.
@@ -312,7 +320,7 @@ circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     }
 
     // On the last iteration down the path, save the final field being accessed.
-    finalField = fieldDef.getValue();
+    finalField = fieldDef;
   }
 
   // Verify the accessed field type matches the result type.
