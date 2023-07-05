@@ -2117,9 +2117,8 @@ FailureOr<bool> InferenceTypeUpdate::updateOperation(Operation *op) {
             auto type = cast<FIRRTLBaseType>(muxOp.getSel().getType());
             auto width = type.getBitWidthOrSentinel();
             assert(width >= 0 && "Unknown width after inference");
-            assert(isa<IntType>(type) && "Selector must be integer type");
-            assert(cast<IntType>(type).isUnsigned() &&
-                   "Selected must be unsigned");
+            assert(isa<IntType>(type) && cast<IntType>(type).isUnsigned() &&
+                   "Selector must be unsigned integer type");
             if (width < bits) {
               ImplicitLocOpBuilder builder(muxOp.getSel().getLoc(), op);
               auto extend =
