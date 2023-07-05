@@ -29,7 +29,6 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-#include <iostream>
 #include <variant>
 
 using namespace llvm;
@@ -662,8 +661,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      scf::WhileOp whileOp) const {
-  // only need to add the whileOp to the BlockSchedulables scheduler interface.
-  // everything else was handled in the `BuildWhileGroups` pattern
+  // Only need to add the whileOp to the BlockSchedulables scheduler interface.
+  // Everything else was handled in the `BuildWhileGroups` pattern.
   ScfWhileOp scfWhileOp(whileOp);
   SmallVector<calyx::GroupOp> initWhileGroups =
       getState<ComponentLoweringState>().getLoopInitGroups(scfWhileOp);
