@@ -122,13 +122,6 @@ firrtl.circuit "Foo" {
     %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<1>
     firrtl.strictconnect %someOut, %invalid_ui2 : !firrtl.uint<1>
 
-    // CHECK: connect unknownWidth, knownWidth
-    %knownWidth = firrtl.wire : !firrtl.uint<1>
-    %unknownWidth = firrtl.wire : !firrtl.uint
-    %widthCast = firrtl.widthCast %knownWidth :
-      (!firrtl.uint<1>) -> !firrtl.uint
-    firrtl.strictconnect %unknownWidth, %widthCast : !firrtl.uint
-
     // CHECK: connect unknownReset, knownReset
     %knownReset = firrtl.wire : !firrtl.asyncreset
     %unknownReset = firrtl.wire : !firrtl.reset
@@ -532,12 +525,11 @@ firrtl.circuit "Foo" {
     %_17 = firrtl.node %_3 {name = "17"} : !firrtl.uint<1>
 
     // CHECK:      connect `9`.`1`, `9`.`0`
-    %2 = firrtl.widthCast %0 : (!firrtl.uint) -> !firrtl.uint
-    firrtl.strictconnect %1, %2 : !firrtl.uint
+    firrtl.connect %1, %0 : !firrtl.uint, !firrtl.uint
 
     // CHECK:      invalidate `11`
     %invalid_ui = firrtl.invalidvalue : !firrtl.uint
-    firrtl.strictconnect %_11, %invalid_ui : !firrtl.uint
+    firrtl.connect %_11, %invalid_ui : !firrtl.uint, !firrtl.uint
 
     // CHECK:      inst `0bar` of `0Bar`
     // CHECK-NEXT: connect `0bar`.`0`, `3`
@@ -587,8 +579,7 @@ firrtl.circuit "Foo" {
     firrtl.strictconnect %10, %_3 : !firrtl.uint<1>
     %12 = firrtl.pad %_3, 5 : (!firrtl.uint<1>) -> !firrtl.uint<5>
     firrtl.strictconnect %9, %12 : !firrtl.uint<5>
-    %13 = firrtl.widthCast %8 : (!firrtl.uint<8>) -> !firrtl.uint
-    firrtl.strictconnect %_11, %13 : !firrtl.uint
+    firrtl.connect %_11, %8 : !firrtl.uint, !firrtl.uint<8>
     firrtl.strictconnect %7, %_0 : !firrtl.clock
     firrtl.strictconnect %6, %_3 : !firrtl.uint<1>
     %14 = firrtl.pad %_3, 8 : (!firrtl.uint<1>) -> !firrtl.uint<8>
