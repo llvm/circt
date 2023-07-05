@@ -127,13 +127,12 @@ public:
             return {std::make_unique<ValidReady>(converter, port)};
           } else if (signaling == ChannelSignaling::FIFO0) {
             return {std::make_unique<FIFO>(converter, port)};
-          } else {
-            auto error = converter.getModule().emitOpError(
-                             "encountered unknown signaling standard on port '")
-                         << stringifyEnum(signaling) << "'";
-            error.attachNote(port.loc);
-            return error;
           }
+          auto error = converter.getModule().emitOpError(
+                           "encountered unknown signaling standard on port '")
+                       << stringifyEnum(signaling) << "'";
+          error.attachNote(port.loc);
+          return error;
         })
         .Default([&](auto) { return SignalStandardBuilder::build(port); });
   }
