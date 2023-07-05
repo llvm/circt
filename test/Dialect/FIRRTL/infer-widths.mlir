@@ -983,4 +983,15 @@ firrtl.circuit "Foo" {
     %cast2 = firrtl.widthCast %1 : (!firrtl.uint) -> !firrtl.uint
     firrtl.strictconnect %out2, %cast2 : !firrtl.uint
   }
+
+  // CHECK-LABEL: module @Issue5444Reg(
+  // CHECK-SAME: %out: !firrtl.uint<0>
+  // CHECK-NEXT: firrtl.reg {{.+}} : !firrtl.clock, !firrtl.uint<0>
+  // CHECK-NEXT: firrtl.
+  firrtl.module @Issue5444Reg(in %clock: !firrtl.clock, out %out: !firrtl.uint) {
+    %r1 = firrtl.reg interesting_name %clock : !firrtl.clock, !firrtl.uint
+    %0 = firrtl.mux(%r1, %r1, %r1) : (!firrtl.uint, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    firrtl.connect %r1, %0 : !firrtl.uint, !firrtl.uint
+    firrtl.connect %out, %r1 : !firrtl.uint, !firrtl.uint
+  }
 }
