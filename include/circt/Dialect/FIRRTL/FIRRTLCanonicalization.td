@@ -310,12 +310,12 @@ def AndOfPadS : Pat <
 def AndOfAsSIntL : Pat<
   (AndPrimOp:$old (AsSIntPrimOp $x), $y),
   (MoveNameHint $old, (AndPrimOp $x, (AsUIntPrimOp $y))),
-  [(EqualIntSize $x, $y)]>;
+  [(KnownWidth $x), (EqualIntSize $x, $y)]>;
 
 def AndOfAsSIntR : Pat<
   (AndPrimOp:$old $x, (AsSIntPrimOp $y)),
   (MoveNameHint $old, (AndPrimOp (AsUIntPrimOp $x), $y)),
-  [(EqualIntSize $x, $y)]>;
+  [(KnownWidth $x), (EqualIntSize $x, $y)]>;
 
 // or(x, 0) -> x, fold can't handle all cases
 def OrOfZero : Pat <
