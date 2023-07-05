@@ -14,6 +14,7 @@
 #include "PassDetail.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/PortConverter.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -32,159 +33,161 @@ namespace {
 struct HWRaiseInOutPortsPass
     : public sv::HWRaiseInOutPortsBase<HWRaiseInOutPortsPass> {
   void runOnOperation() override;
-
-private:
-  LogicalResult raise(InstanceGraphNode *topModule);
-
-  LogicalResult convertPort(InstanceGraphNode *module, PortInfo port);
 };
 } // end anonymous namespace
 
-LogicalResult HWRaiseInOutPortsPass::convertPort(InstanceGraphNode *node,
-                                                 PortInfo inoutPort) {
+namespace {
 
-  HWModuleOp mod = cast<HWModuleOp>(node->getModule());
-  BlockArgument inoutArg = mod.getArgument(inoutPort.argNum);
-  InOutType inoutType = inoutArg.getType().dyn_cast<InOutType>();
-  assert(inoutType && "expected inout type");
-  Type elementType = inoutType.getElementType();
-  auto users = inoutArg.getUsers();
+class HWInOutSignalStandard : public SignalingStandard {
+public:
+  HWInOutSignalStandard(PortConverterImpl &converter, hw::PortInfo port);
 
-  // Gather readers and writers (how to handle sv.passign?)
+  void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                       SmallVectorImpl<Value> &newOperands,
+                       ArrayRef<Backedge> newResults) override;
+  void mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                        SmallVectorImpl<Value> &newOperands,
+                        ArrayRef<Backedge> newResults) override;
+
+private:
+  void buildInputSignals() override;
+  void buildOutputSignals() override;
+
+  // Readers of this port internal in the module.
   llvm::SmallVector<sv::ReadInOutOp, 4> readers;
+  // Writers of this port internal in the module.
   llvm::SmallVector<sv::AssignOp, 4> writers;
 
-  for (auto user : users) {
+  bool hasReaders() { return !readers.empty(); }
+  bool hasWriters() { return !writers.empty(); }
+
+  // Handles to port info of the newly created ports.
+  PortInfo readPort, writePort;
+};
+
+HWInOutSignalStandard::HWInOutSignalStandard(PortConverterImpl &converter,
+                                             hw::PortInfo port)
+    : SignalingStandard(converter, port) {
+  // Gather readers and writers (how to handle sv.passign?)
+  for (auto *user : body->getArgument(port.argNum).getUsers()) {
     if (auto read = dyn_cast<sv::ReadInOutOp>(user))
       readers.push_back(read);
     else if (auto write = dyn_cast<sv::AssignOp>(user))
       writers.push_back(write);
+    else
+      user->emitWarning() << "Use of inout port " << port.name
+                          << " is not supported";
   }
-
-  bool hasReaders = !readers.empty();
-  bool hasWriter = !writers.empty();
-
-  if (!hasReaders && !hasWriter)
-    return success();
 
   if (writers.size() > 1)
-    return emitError(inoutArg.getLoc()) << "multiple writers to inout port";
+    converter.getModule()->emitWarning()
+        << "Multiple writers of inout port " << port.name
+        << " detected. Will only create an output for the first write";
+}
 
-  // Input port rewriting
-  if (hasReaders) {
-    auto newInput = mod.insertInput(inoutPort.argNum + 1,
-                                    inoutPort.getName() + "_in", elementType);
-    // Replace all readers with the new input.
-    for (auto reader : readers) {
-      reader.replaceAllUsesWith(newInput.second);
-      reader.erase();
+void HWInOutSignalStandard::buildInputSignals() {
+  if (hasReaders()) {
+    Value readValue =
+        converter.createNewInput(origPort, "_rd", origPort.type, readPort);
+
+    // Replace all sv::ReadInOutOp's with the new input.
+    Value origInput = body->getArgument(origPort.argNum);
+    for (auto *user : llvm::make_early_inc_range(origInput.getUsers())) {
+      sv::ReadInOutOp read = dyn_cast<sv::ReadInOutOp>(user);
+      if (!read)
+        continue;
+
+      read.replaceAllUsesWith(readValue);
+      read.erase();
     }
   }
 
-  // Output port rewriting.
-  if (hasWriter) {
-    auto writer = writers.front();
-    mod.appendOutput(inoutPort.getName() + "_out", writer.getSrc());
-    writer.erase();
+  if (hasWriters()) {
+    sv::AssignOp write = writers.front();
+    converter.createNewOutput(origPort, "_wr", origPort.type, write.getSrc(),
+                              writePort);
+    write.erase();
   }
-
-  // Erase the inout port.
-  modifyModulePorts(mod, {}, {}, {static_cast<unsigned>(inoutPort.argNum)}, {},
-                    mod.getBodyBlock());
-
-  // TODO: all of the 3 above port modifications can be done in one go.
-
-  // Instantiation rewriting.
-  OpBuilder b(mod.getContext());
-
-  for (auto user : node->uses()) {
-    // Skip anything that isn't plain old instance ops.
-    auto inst = dyn_cast_or_null<InstanceOp>(user->getInstance());
-    if (!inst)
-      continue;
-
-    llvm::SmallVector<Value> newArgs;
-    newArgs = inst.getOperands();
-    b.setInsertionPoint(inst);
-
-    Value inourArgToInstance = newArgs[inoutPort.argNum];
-
-    if (hasReaders) {
-      // Create a read_inout op at the instantiation point. This effectively
-      // pushes the read_inout op from the module to the instantiation.
-      newArgs[inoutPort.argNum] =
-          b.create<ReadInOutOp>(inst.getLoc(), inourArgToInstance).getResult();
-    } else
-      newArgs.erase(newArgs.begin() + inoutPort.argNum);
-
-    // Replace the instance
-    auto newInst = b.create<InstanceOp>(inst.getLoc(), mod,
-                                        inst.getInstanceName(), newArgs);
-    inst.replaceAllUsesWith(newInst.getResults().drop_back(hasWriter ? 1 : 0));
-    if (hasWriter) {
-      // Create a sv.assign at the instantiation point. This effectively
-      // pushes the assign op from the module to the instantiation.
-      // This will always be the last result of the instance.
-      b.create<AssignOp>(inst.getLoc(), inourArgToInstance,
-                         newInst.getResult(newInst.getNumResults() - 1));
-    }
-    inst.erase();
-  }
-
-  return success();
 }
 
-LogicalResult HWRaiseInOutPortsPass::raise(InstanceGraphNode *instanceNode) {
-  hw::HWModuleLike moduleLike = instanceNode->getModule();
+void HWInOutSignalStandard::buildOutputSignals() {
+  // TODO: could support hw.inout outputs (always create read/write ports) -
+  // don't need it for now, though.
+  assert(false && "hw.inout outputs not yet supported");
+}
 
-  // Will only touch HWModuleOp
-  hw::HWModuleOp moduleOp = dyn_cast<hw::HWModuleOp>(moduleLike.getOperation());
-  if (!moduleOp)
-    return success();
+void HWInOutSignalStandard::mapInputSignals(OpBuilder &b, Operation *inst,
+                                            Value instValue,
+                                            SmallVectorImpl<Value> &newOperands,
+                                            ArrayRef<Backedge> newResults) {
 
-  // Gather inout ports of this module.
-  llvm::MapVector<size_t, PortInfo> inoutPorts;
-  for (size_t portIdx = 0; portIdx < moduleOp.getNumInOrInoutPorts();
-       ++portIdx) {
-    auto portInfo = moduleOp.getInOrInoutPort(portIdx);
-    if (portInfo.direction != hw::PortDirection::INOUT)
-      continue;
-
-    inoutPorts[portIdx] = portInfo;
+  if (hasReaders()) {
+    // Create a read_inout op at the instantiation point. This effectively
+    // pushes the read_inout op from the module to the instantiation site.
+    newOperands[readPort.argNum] =
+        b.create<ReadInOutOp>(inst->getLoc(), instValue).getResult();
   }
 
-  if (inoutPorts.empty())
-    return success();
-
-  // Convert each port
-  for (auto inoutPort : inoutPorts)
-    if (failed(convertPort(instanceNode, inoutPort.second)))
-      return failure();
-
-  return success();
+  if (hasWriters()) {
+    // Create a sv::AssignOp at the instantiation point. This effectively
+    // pushes the write op from the module to the instantiation site.
+    Value writeFromInsideMod = newResults[writePort.argNum];
+    b.create<sv::AssignOp>(inst->getLoc(), instValue, writeFromInsideMod);
+  }
 }
+
+void HWInOutSignalStandard::mapOutputSignals(
+    OpBuilder &b, Operation *inst, Value instValue,
+    SmallVectorImpl<Value> &newOperands, ArrayRef<Backedge> newResults) {
+  llvm_unreachable("hw.inout outputs not yet supported");
+}
+
+class HWInoutSignalStandardBuilder : public SignalStandardBuilder {
+public:
+  using SignalStandardBuilder::SignalStandardBuilder;
+  FailureOr<std::unique_ptr<SignalingStandard>>
+  build(hw::PortInfo port) override {
+    if (port.direction == hw::PortDirection::INOUT)
+      return {std::make_unique<HWInOutSignalStandard>(converter, port)};
+    return SignalStandardBuilder::build(port);
+  }
+};
+
+} // namespace
 
 void HWRaiseInOutPortsPass::runOnOperation() {
-  circt::hw::InstanceGraph &analysis = getAnalysis<circt::hw::InstanceGraph>();
-  auto res = analysis.getInferredTopLevelNodes();
-
-  if (failed(res)) {
-    signalPassFailure();
-    return;
-  }
-
-  // Maintain the set of visited modules; there may be multiple top modules
-  // which share subcircuits.
+  // Find all modules and run port conversion on them.
+  circt::hw::InstanceGraph &instanceGraph =
+      getAnalysis<circt::hw::InstanceGraph>();
   llvm::DenseSet<InstanceGraphNode *> visited;
+  auto res = instanceGraph.getInferredTopLevelNodes();
+
+  // Visit the instance hierarchy in a depth-first manner, modifying child
+  // modules and their ports before their parents.
+
+  // Doing this DFS ensures that all module instance uses of an inout value has
+  // been converted before the current instance use. E.g. say you have m1 -> m2
+  // -> m3 where both m3 and m2 reads an inout value defined in m1. If we don't
+  // do DFS, and we just randomly pick a module, we have to e.g. select m2, see
+  // that it also passes that inout value to other module instances, processes
+  // those first (which may bubble up read/writes to that hw.inout op), and then
+  // process m2... which in essence is a DFS traversal. So we just go ahead and
+  // do the DFS to begin with, ensuring the invariant that all module instance
+  // uses of an inout value have been converted before converting any given
+  // module.
+
   for (InstanceGraphNode *topModule : res.value()) {
-    // Visit the instance hierarchy in a depth-first manner, modifying child
-    // modules and their ports before their parents.
     for (InstanceGraphNode *node : llvm::post_order(topModule)) {
       if (visited.count(node))
         continue;
-      if (failed(raise(node)))
+      auto mutableModule =
+          dyn_cast_or_null<hw::HWMutableModuleLike>(*node->getModule());
+      if (!mutableModule)
+        continue;
+      if (failed(PortConverter<HWInoutSignalStandardBuilder>(instanceGraph,
+                                                             mutableModule)
+                     .run()))
         return signalPassFailure();
-      visited.insert(node);
     }
   }
 }

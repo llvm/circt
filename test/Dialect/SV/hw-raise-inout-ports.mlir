@@ -9,7 +9,7 @@ hw.module @read(%a: !hw.inout<i42>) -> (out: i42) {
   hw.output %aget : i42
 }
 
-// CHECK-LABEL:   hw.module @write() -> (a_out: i42) {
+// CHECK-LABEL:   hw.module @write() -> (a_wr: i42) {
 // CHECK:           %[[VAL_0:.*]] = hw.constant 0 : i42
 // CHECK:           hw.output %[[VAL_0]] : i42
 // CHECK:         }
@@ -19,7 +19,7 @@ hw.module @write(%a: !hw.inout<i42>) {
 }
 
 // CHECK-LABEL:   hw.module @read_write(
-// CHECK-SAME:                          %[[VAL_0:.*]]: i42) -> (out: i42, a_out: i42) {
+// CHECK-SAME:                          %[[VAL_0:.*]]: i42) -> (a_wr: i42, out: i42) {
 // CHECK:           hw.output %[[VAL_0]], %[[VAL_0]] : i42, i42
 // CHECK:         }
 hw.module @read_write(%a: !hw.inout<i42>) -> (out: i42) {
@@ -31,12 +31,12 @@ hw.module @read_write(%a: !hw.inout<i42>) -> (out: i42) {
 // CHECK-LABEL:   hw.module @oneLevel() {
 // CHECK:           %[[VAL_0:.*]] = sv.wire : !hw.inout<i42>
 // CHECK:           %[[VAL_1:.*]] = sv.read_inout %[[VAL_0]] : !hw.inout<i42>
-// CHECK:           %[[VAL_2:.*]] = hw.instance "read" @read(a_in: %[[VAL_1]]: i42) -> (out: i42)
-// CHECK:           %[[VAL_3:.*]] = hw.instance "write" @write() -> (a_out: i42)
-// CHECK:           sv.assign %[[VAL_0]], %[[VAL_3]] : i42
+// CHECK:           %[[VAL_2:.*]] = hw.instance "read" @read(a_rd: %[[VAL_1]]: i42) -> (out: i42)
+// CHECK:           sv.assign %[[VAL_0]], %[[VAL_3:.*]] : i42
+// CHECK:           %[[VAL_3]] = hw.instance "write" @write() -> (a_wr: i42)
 // CHECK:           %[[VAL_4:.*]] = sv.read_inout %[[VAL_0]] : !hw.inout<i42>
-// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = hw.instance "readWrite" @read_write(a_in: %[[VAL_4]]: i42) -> (out: i42, a_out: i42)
-// CHECK:           sv.assign %[[VAL_0]], %[[VAL_6]] : i42
+// CHECK:           sv.assign %[[VAL_0]], %[[VAL_5:.*]] : i42
+// CHECK:           %[[VAL_5]], %[[VAL_6:.*]] = hw.instance "readWrite" @read_write(a_rd: %[[VAL_4]]: i42) -> (a_wr: i42, out: i42)
 // CHECK:           hw.output
 // CHECK:         }
 hw.module @oneLevel() {
@@ -50,8 +50,8 @@ hw.module @oneLevel() {
 }
 
 
-// CHECK-LABEL:   hw.module @passthrough() -> (a_out: i42) {
-// CHECK:           %[[VAL_0:.*]] = hw.instance "write" @write() -> (a_out: i42)
+// CHECK-LABEL:   hw.module @passthrough() -> (a_wr: i42) {
+// CHECK:           %[[VAL_0:.*]] = hw.instance "write" @write() -> (a_wr: i42)
 // CHECK:           hw.output %[[VAL_0]] : i42
 // CHECK:         }
 hw.module @passthrough(%a : !hw.inout<i42>) -> () {
@@ -60,8 +60,8 @@ hw.module @passthrough(%a : !hw.inout<i42>) -> () {
 
 // CHECK-LABEL:   hw.module @passthroughTwoLevels() {
 // CHECK:           %[[VAL_0:.*]] = sv.wire : !hw.inout<i42>
-// CHECK:           %[[VAL_1:.*]] = hw.instance "passthrough" @passthrough() -> (a_out: i42)
-// CHECK:           sv.assign %[[VAL_0]], %[[VAL_1]] : i42
+// CHECK:           sv.assign %[[VAL_0]], %[[VAL_1:.*]] : i42
+// CHECK:           %[[VAL_1]] = hw.instance "passthrough" @passthrough() -> (a_wr: i42)
 // CHECK:           hw.output
 // CHECK:         }
 hw.module @passthroughTwoLevels() {
