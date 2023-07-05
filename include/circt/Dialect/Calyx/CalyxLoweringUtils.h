@@ -28,7 +28,6 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-#include <utility>
 #include <variant>
 
 namespace circt {

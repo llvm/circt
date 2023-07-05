@@ -29,7 +29,6 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-#include <iostream>
 #include <variant>
 
 using namespace llvm;
