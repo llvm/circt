@@ -16,6 +16,8 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include "egg_netlist_synthesizer.h"
+
 using namespace mlir;
 using namespace circt;
 
@@ -33,6 +35,9 @@ void EggSynthesisPass::runOnOperation() {
   arc::DefineOp defineOp = getOperation();
 
   OpPrintingFlags flags;
+
+  // Initialize an EGraph.
+  rust::Box<BooleanEGraph> egraph = egraph_new();
 
   // Print the wrapper module.
   llvm::outs() << "(module\n";
@@ -53,6 +58,8 @@ void EggSynthesisPass::runOnOperation() {
     // Print the symbol name for this expression.
     op.getResult(0).printAsOperand(llvm::outs(), flags);
     llvm::outs() << ' ';
+
+    // TODO: add a helper to recursively build expressions with egg.
 
     // Print this expression.
     llvm::TypeSwitch<Operation *>(&op)

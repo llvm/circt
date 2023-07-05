@@ -1,4 +1,4 @@
-add_circt_library(CIRCTTransforms
+set(LLVM_OPTIONAL_SOURCES
   FlattenMemRefs.cpp
   StripDebugInfoWithPred.cpp
   MapArithToComb.cpp
@@ -8,12 +8,17 @@ add_circt_library(CIRCTTransforms
   MemoryBanking.cpp
   IndexSwitchToIf.cpp
   EggSynthesis.cpp
+)
+
+add_circt_library(CIRCTTransforms
+  FlattenMemRefs.cpp
+  StripDebugInfoWithPred.cpp
+  MapArithToComb.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Transforms
 
   LINK_LIBS PUBLIC
-  CIRCTArc
   CIRCTComb
   CIRCTHW
   CIRCTOpCountAnalysis
@@ -31,3 +36,28 @@ add_circt_library(CIRCTTransforms
   CIRCTTransformsPassIncGen
   MLIRArithDialect
 )
+
+if(egg-netlist-synthesizer_FOUND)
+  add_circt_library(CIRCTEggSynthesis
+    EggSynthesis.cpp
+
+    ADDITIONAL_HEADER_DIRS
+    ${CIRCT_MAIN_INCLUDE_DIR}/circt/Transforms
+
+    LINK_LIBS PUBLIC
+    CIRCTArc
+    CIRCTComb
+    MLIRIR
+    MLIRSupport
+    MLIRTransforms
+    egg_netlist_synthesizer
+
+    DEPENDS
+    CIRCTTransformsPassIncGen
+  )
+
+  target_include_directories(CIRCTEggSynthesis
+    PUBLIC
+    ${egg-netlist-synthesizer_INCLUDE_DIRS}
+  )
+endif()
