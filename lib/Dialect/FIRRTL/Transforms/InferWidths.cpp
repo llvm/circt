@@ -2048,105 +2048,104 @@ FailureOr<bool> InferenceTypeUpdate::updateOperation(Operation *op) {
     anyChanged |= *result;
   }
 
-  // If this is a connect operation, width inference might have inferred a RHS
-  // that is wider than the LHS, in which case an additional BitsPrimOp is
-  // necessary to truncate the value.
-  if (auto con = dyn_cast<ConnectOp>(op)) {
-    auto lhs = con.getDest();
-    auto rhs = con.getSrc();
-    auto lhsType = dyn_cast<FIRRTLBaseType>(lhs.getType());
-    auto rhsType = dyn_cast<FIRRTLBaseType>(rhs.getType());
+  return TypeSwitch<Operation *, FailureOr<bool>>(op)
+      // If this is a connect operation, width inference might have inferred a
+      // RHS that is wider than the LHS, in which case an additional BitsPrimOp
+      // is necessary to truncate the value.
+      .Case<ConnectOp>([&](auto con) {
+        auto lhs = con.getDest();
+        auto rhs = con.getSrc();
+        auto lhsType = dyn_cast<FIRRTLBaseType>(lhs.getType());
+        auto rhsType = dyn_cast<FIRRTLBaseType>(rhs.getType());
 
-    // Nothing to do if not base types.
-    if (!lhsType || !rhsType)
-      return anyChanged;
+        // Nothing to do if not base types.
+        if (!lhsType || !rhsType)
+          return anyChanged;
 
-    auto lhsWidth = lhsType.getBitWidthOrSentinel();
-    auto rhsWidth = rhsType.getBitWidthOrSentinel();
-    if (lhsWidth >= 0 && rhsWidth >= 0 && lhsWidth < rhsWidth) {
-      OpBuilder builder(op);
-      auto trunc = builder.createOrFold<TailPrimOp>(con.getLoc(), con.getSrc(),
-                                                    rhsWidth - lhsWidth);
-      if (isa<SIntType>(rhsType))
-        trunc =
-            builder.createOrFold<AsSIntPrimOp>(con.getLoc(), lhsType, trunc);
+        auto lhsWidth = lhsType.getBitWidthOrSentinel();
+        auto rhsWidth = rhsType.getBitWidthOrSentinel();
+        if (lhsWidth >= 0 && rhsWidth >= 0 && lhsWidth < rhsWidth) {
+          OpBuilder builder(op);
+          auto trunc = builder.createOrFold<TailPrimOp>(
+              con.getLoc(), con.getSrc(), rhsWidth - lhsWidth);
+          if (isa<SIntType>(rhsType))
+            trunc = builder.createOrFold<AsSIntPrimOp>(con.getLoc(), lhsType,
+                                                       trunc);
 
-      LLVM_DEBUG(llvm::dbgs()
-                 << "Truncating RHS to " << lhsType << " in " << con << "\n");
-      con->replaceUsesOfWith(con.getSrc(), trunc);
-    }
-    return anyChanged;
-  }
+          LLVM_DEBUG(llvm::dbgs() << "Truncating RHS to " << lhsType << " in "
+                                  << con << "\n");
+          con->replaceUsesOfWith(con.getSrc(), trunc);
+        }
+        return anyChanged;
+      })
+      .Case<UninferredWidthCastOp>([&](auto cast) {
+        auto lhs = cast.getResult();
+        auto rhs = cast.getInput();
+        auto lhsType = dyn_cast<FIRRTLBaseType>(lhs.getType());
+        auto rhsType = dyn_cast<FIRRTLBaseType>(rhs.getType());
 
-  if (auto cast = dyn_cast<UninferredWidthCastOp>(op)) {
-    auto lhs = cast.getResult();
-    auto rhs = cast.getInput();
-    auto lhsType = dyn_cast<FIRRTLBaseType>(lhs.getType());
-    auto rhsType = dyn_cast<FIRRTLBaseType>(rhs.getType());
+        auto lhsWidth = lhsType.getBitWidthOrSentinel();
+        auto rhsWidth = rhsType.getBitWidthOrSentinel();
+        if (lhsWidth < rhsWidth) {
+          OpBuilder builder(op);
+          auto trunc = builder.createOrFold<TailPrimOp>(cast.getLoc(), rhs,
+                                                        rhsWidth - lhsWidth);
+          if (isa<SIntType>(rhsType))
+            trunc = builder.createOrFold<AsSIntPrimOp>(cast.getLoc(), lhsType,
+                                                       trunc);
 
-    auto lhsWidth = lhsType.getBitWidthOrSentinel();
-    auto rhsWidth = rhsType.getBitWidthOrSentinel();
-    if (lhsWidth < rhsWidth) {
-      OpBuilder builder(op);
-      auto trunc = builder.createOrFold<TailPrimOp>(cast.getLoc(), rhs,
-                                                    rhsWidth - lhsWidth);
-      if (isa<SIntType>(rhsType))
-        trunc =
-            builder.createOrFold<AsSIntPrimOp>(cast.getLoc(), lhsType, trunc);
+          LLVM_DEBUG(llvm::dbgs() << "Truncating RHS to " << lhsType << " in "
+                                  << cast << "\n");
+          lhs.replaceAllUsesWith(trunc);
+        } else if (lhsWidth > rhsWidth) {
+          OpBuilder builder(op);
+          auto extend =
+              builder.createOrFold<PadPrimOp>(cast.getLoc(), rhs, lhsWidth);
+          LLVM_DEBUG(llvm::dbgs() << "Extending RHS to " << lhsType << " in "
+                                  << cast << "\n");
+          lhs.replaceAllUsesWith(extend);
+        } else {
+          LLVM_DEBUG(llvm::dbgs() << "NOOP " << cast << "\n");
+          lhs.replaceAllUsesWith(rhs);
+        }
+        return anyChanged;
+      })
+      // Mux operations may need selector to be extended (#5444).
+      .Case<MuxPrimOp, Mux2CellIntrinsicOp, Mux4CellIntrinsicOp>(
+          [&](auto muxOp) {
+            auto bits = isa<Mux4CellIntrinsicOp>(op) ? 2 : 1;
+            auto type = cast<FIRRTLBaseType>(muxOp.getSel().getType());
+            if (type.getBitWidthOrSentinel() == 0) {
+              ImplicitLocOpBuilder builder(muxOp.getSel().getLoc(), op);
+              auto extend =
+                  builder.createOrFold<PadPrimOp>(muxOp.getSel(), bits);
+              muxOp.getSelMutable().assign(extend);
+            }
+            return anyChanged;
+          })
+      // If this is a module, update its ports.
+      .Case<FModuleOp>([&](auto module) -> FailureOr<bool> {
+        // Update the block argument types.
+        bool argsChanged = false;
+        SmallVector<Attribute> argTypes;
+        argTypes.reserve(module.getNumPorts());
+        for (auto arg : module.getArguments()) {
+          auto result = updateValue(arg);
+          if (failed(result))
+            return result;
+          argsChanged |= *result;
+          argTypes.push_back(TypeAttr::get(arg.getType()));
+        }
 
-      LLVM_DEBUG(llvm::dbgs()
-                 << "Truncating RHS to " << lhsType << " in " << cast << "\n");
-      lhs.replaceAllUsesWith(trunc);
-    } else if (lhsWidth > rhsWidth) {
-      OpBuilder builder(op);
-      auto extend =
-          builder.createOrFold<PadPrimOp>(cast.getLoc(), rhs, lhsWidth);
-      LLVM_DEBUG(llvm::dbgs()
-                 << "Extending RHS to " << lhsType << " in " << cast << "\n");
-      lhs.replaceAllUsesWith(extend);
-    } else {
-      LLVM_DEBUG(llvm::dbgs() << "NOOP " << cast << "\n");
-      lhs.replaceAllUsesWith(rhs);
-    }
-    return anyChanged;
-  }
-
-  // Mux operations may need selector to be extended (#5444).
-  auto selectorFixup = [&](auto muxOp, auto bits) {
-    auto type = cast<FIRRTLBaseType>(muxOp.getSel().getType());
-    if (type.getBitWidthOrSentinel() == 0) {
-      ImplicitLocOpBuilder builder(muxOp.getSel().getLoc(), op);
-      auto onebit = builder.createOrFold<PadPrimOp>(muxOp.getSel(), bits);
-      muxOp.getSelMutable().assign(onebit);
-    }
-  };
-  TypeSwitch<Operation *>(op)
-      .Case<MuxPrimOp, Mux2CellIntrinsicOp>(
-          [&](auto muxOp) { selectorFixup(muxOp, 1); })
-      .Case<Mux4CellIntrinsicOp>([&](auto muxOp) { selectorFixup(muxOp, 2); });
-
-  // If this is a module, update its ports.
-  if (auto module = dyn_cast<FModuleOp>(op)) {
-    // Update the block argument types.
-    bool argsChanged = false;
-    SmallVector<Attribute> argTypes;
-    argTypes.reserve(module.getNumPorts());
-    for (auto arg : module.getArguments()) {
-      auto result = updateValue(arg);
-      if (failed(result))
-        return result;
-      argsChanged |= *result;
-      argTypes.push_back(TypeAttr::get(arg.getType()));
-    }
-
-    // Update the module function type if needed.
-    if (argsChanged) {
-      module->setAttr(FModuleLike::getPortTypesAttrName(),
-                      ArrayAttr::get(module.getContext(), argTypes));
-      anyChanged = true;
-    }
-  }
-  return anyChanged;
+        // Update the module function type if needed.
+        if (argsChanged) {
+          module->setAttr(FModuleLike::getPortTypesAttrName(),
+                          ArrayAttr::get(module.getContext(), argTypes));
+          anyChanged = true;
+        }
+        return anyChanged;
+      })
+      .Default([&](auto _) { return anyChanged; });
 }
 
 /// Resize a `uint`, `sint`, or `analog` type to a specific width.
