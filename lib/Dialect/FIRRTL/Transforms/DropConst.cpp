@@ -27,11 +27,11 @@ static FIRRTLBaseType convertType(FIRRTLBaseType type) {
 
 /// Returns null type if no conversion is needed.
 static Type convertType(Type type) {
-  if (auto base = dyn_cast<FIRRTLBaseType>(type)) {
+  if (auto base = type_dyn_cast<FIRRTLBaseType>(type)) {
     return convertType(base);
   }
 
-  if (auto refType = dyn_cast<RefType>(type)) {
+  if (auto refType = type_dyn_cast<RefType>(type)) {
     if (auto converted = convertType(refType.getType()))
       return RefType::get(converted, refType.getForceable());
   }

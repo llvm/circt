@@ -934,7 +934,7 @@ void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
     jsonStream.attribute("name", "ports");
     jsonStream.attributeArray("value", [&] {
       for (const auto &port : llvm::enumerate(module.getPorts())) {
-        auto portType = dyn_cast<FIRRTLBaseType>(port.value().type);
+        auto portType = type_dyn_cast<FIRRTLBaseType>(port.value().type);
         if (!portType || portType.getBitWidthOrSentinel() == 0)
           continue;
         jsonStream.object([&] {
@@ -1251,13 +1251,13 @@ FIRRTLType EmitOMIRPass::getTypeOf(Operation *op) {
   assert(op->getNumResults() == 1 &&
          isa<FIRRTLType>(op->getResult(0).getType()) &&
          "op must have a single FIRRTLType result");
-  return cast<FIRRTLType>(op->getResult(0).getType());
+  return type_cast<FIRRTLType>(op->getResult(0).getType());
 }
 
 FIRRTLType EmitOMIRPass::getTypeOf(FModuleLike mod, size_t portIdx) {
   Type portType = mod.getPortType(portIdx);
   assert(isa<FIRRTLType>(portType) && "port must have a FIRRTLType");
-  return cast<FIRRTLType>(portType);
+  return type_cast<FIRRTLType>(portType);
 }
 
 // Constructs a reference to a field of an aggregate FIRRTLType with a fieldID,
@@ -1266,7 +1266,7 @@ FIRRTLType EmitOMIRPass::getTypeOf(FModuleLike mod, size_t portIdx) {
 void EmitOMIRPass::addFieldID(FIRRTLType type, unsigned fieldID,
                               SmallVectorImpl<char> &result) {
   while (fieldID)
-    TypeSwitch<FIRRTLType>(type)
+    FIRRTLTypeSwitch<FIRRTLType>(type)
         .Case<FVectorType>([&](FVectorType vector) {
           size_t index = vector.getIndexForFieldID(fieldID);
           type = vector.getElementType();

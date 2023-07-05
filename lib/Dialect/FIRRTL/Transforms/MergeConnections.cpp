@@ -79,7 +79,7 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
   // partial connect. Also ignore non-passive connections or non-integer
   // connections.
   LLVM_DEBUG(llvm::dbgs() << "Visiting " << connect << "\n");
-  auto destTy = dyn_cast<FIRRTLBaseType>(connect.getDest().getType());
+  auto destTy = type_dyn_cast<FIRRTLBaseType>(connect.getDest().getType());
   if (!destTy || !destTy.isPassive() ||
       !firrtl::getBitWidth(destTy).has_value())
     return false;
@@ -109,9 +109,9 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
   // If it is the first time to visit the parent op, then allocate the vector
   // for subconnections.
   if (count == 0) {
-    if (auto bundle = dyn_cast<BundleType>(parent.getType()))
+    if (auto bundle = type_dyn_cast<BundleType>(parent.getType()))
       subConnections.resize(bundle.getNumElements());
-    if (auto vector = dyn_cast<FVectorType>(parent.getType()))
+    if (auto vector = type_dyn_cast<FVectorType>(parent.getType()))
       subConnections.resize(vector.getNumElements());
   }
   ++count;

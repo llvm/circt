@@ -42,7 +42,7 @@ static LogicalResult updateExpandedPort(StringRef field, AnnoTarget &ref) {
 /// represent bundle returns as split into constituent parts.
 static FailureOr<unsigned> findBundleElement(Operation *op, Type type,
                                              StringRef field) {
-  auto bundle = dyn_cast<BundleType>(type);
+  auto bundle = type_dyn_cast<BundleType>(type);
   if (!bundle) {
     op->emitError("field access '")
         << field << "' into non-bundle type '" << type << "'";
@@ -66,7 +66,7 @@ static FailureOr<unsigned> findVectorElement(Operation *op, Type type,
     op->emitError("Cannot convert '") << indexStr << "' to an integer";
     return failure();
   }
-  auto vec = dyn_cast<FVectorType>(type);
+  auto vec = type_dyn_cast<FVectorType>(type);
   if (!vec) {
     op->emitError("index access '")
         << index << "' into non-vector type '" << type << "'";
@@ -95,14 +95,14 @@ static FailureOr<unsigned> findFieldID(AnnoTarget &ref,
       auto result = findVectorElement(op, type, token.name);
       if (failed(result))
         return failure();
-      auto vector = cast<FVectorType>(type);
+      auto vector = type_cast<FVectorType>(type);
       type = vector.getElementType();
       fieldIdx += vector.getFieldID(*result);
     } else {
       auto result = findBundleElement(op, type, token.name);
       if (failed(result))
         return failure();
-      auto bundle = cast<BundleType>(type);
+      auto bundle = type_cast<BundleType>(type);
       type = bundle.getElementType(*result);
       fieldIdx += bundle.getFieldID(*result);
     }
@@ -573,9 +573,10 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
       if (!moduleTarget)
         return failure();
       AnnoPathValue internalPathSrc;
-      auto targetType = cast<FIRRTLBaseType>(wireTarget->ref.getType());
+      auto targetType =
+          firrtl::type_cast<FIRRTLBaseType>(wireTarget->ref.getType());
       if (wireTarget->fieldIdx)
-        targetType = cast<FIRRTLBaseType>(
+        targetType = firrtl::type_cast<FIRRTLBaseType>(
             targetType.getFinalTypeByFieldID(wireTarget->fieldIdx));
       sendVal = lowerInternalPathAnno(internalPathSrc, *moduleTarget, target,
                                       internalPathAttr, targetType, state);
@@ -645,9 +646,9 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
     auto *targetOp = wireTarget->ref.getOp();
     auto sinkBuilder = ImplicitLocOpBuilder::atBlockEnd(wireModule.getLoc(),
                                                         targetOp->getBlock());
-    auto wireType = cast<FIRRTLBaseType>(targetOp->getResult(0).getType());
+    auto wireType = type_cast<FIRRTLBaseType>(targetOp->getResult(0).getType());
     // Get type of sent value, if already a RefType, the base type.
-    auto valType = getBaseType(cast<FIRRTLType>(sendVal.getType()));
+    auto valType = getBaseType(type_cast<FIRRTLType>(sendVal.getType()));
     Value sink = getValueByFieldID(sinkBuilder, targetOp->getResult(0),
                                    wireTarget->fieldIdx);
 
@@ -758,7 +759,7 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
 
   auto sendVal = memDbgPort;
   if (wireTarget->ref.getOp()->getResult(0).getType() !=
-      cast<RefType>(sendVal.getType()).getType())
+      type_cast<RefType>(sendVal.getType()).getType())
     return wireTarget->ref.getOp()->emitError(
         "cannot generate the MemTap, wiretap Type does not match the memory "
         "type");

@@ -958,7 +958,8 @@ void Emitter::emitExpression(SpecialConstantOp op) {
     ps.addAsString(op.getValue());
     ps << ")";
   };
-  TypeSwitch<FIRRTLType>(cast<FIRRTLType>(op.getType()))
+  // TODO: Emit type decl for type alias.
+  FIRRTLTypeSwitch<FIRRTLType>(type_cast<FIRRTLType>(op.getType()))
       .Case<ClockType>([&](auto type) {
         ps << "asClock(";
         emitInner();
@@ -1022,7 +1023,7 @@ void Emitter::emitExpression(RefResolveOp op) {
 
 void Emitter::emitExpression(RefSubOp op) {
   emitExpression(op.getInput());
-  TypeSwitch<FIRRTLBaseType, void>(op.getInput().getType().getType())
+  FIRRTLTypeSwitch<FIRRTLBaseType, void>(op.getInput().getType().getType())
       .Case<FVectorType>([&](auto type) {
         ps << "[";
         ps.addAsString(op.getIndex());
@@ -1090,7 +1091,8 @@ void Emitter::emitType(Type type, bool includeConst) {
       ps << ">";
     }
   };
-  TypeSwitch<Type>(type)
+  // TODO: Emit type decl for type alias.
+  FIRRTLTypeSwitch<Type>(type)
       .Case<ClockType>([&](auto) { ps << "Clock"; })
       .Case<ResetType>([&](auto) { ps << "Reset"; })
       .Case<AsyncResetType>([&](auto) { ps << "AsyncReset"; })

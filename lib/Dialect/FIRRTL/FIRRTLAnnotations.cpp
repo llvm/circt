@@ -609,12 +609,12 @@ FIRRTLType OpAnnoTarget::getType() const {
     auto result = is.getTargetResult();
     if (!result)
       return {};
-    return llvm::cast<FIRRTLType>(result.getType());
+    return type_cast<FIRRTLType>(result.getType());
   }
   // Fallback to assuming the single result is the target.
   if (op->getNumResults() != 1)
     return {};
-  return llvm::cast<FIRRTLType>(op->getResult(0).getType());
+  return type_cast<FIRRTLType>(op->getResult(0).getType());
 }
 
 PortAnnoTarget::PortAnnoTarget(FModuleLike op, unsigned portNo)
@@ -674,9 +674,9 @@ PortAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
 FIRRTLType PortAnnoTarget::getType() const {
   auto *op = getOp();
   if (auto module = llvm::dyn_cast<FModuleLike>(op))
-    return llvm::cast<FIRRTLType>(module.getPortType(getPortNo()));
+    return type_cast<FIRRTLType>(module.getPortType(getPortNo()));
   if (llvm::isa<MemOp, InstanceOp>(op))
-    return llvm::cast<FIRRTLType>(op->getResult(getPortNo()).getType());
+    return type_cast<FIRRTLType>(op->getResult(getPortNo()).getType());
   llvm_unreachable("unknow operation kind");
   return {};
 }

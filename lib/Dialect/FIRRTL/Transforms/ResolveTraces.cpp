@@ -108,7 +108,7 @@ private:
     // Add information if this is an aggregate.
     auto targetFieldID = anno.getFieldID();
     while (targetFieldID) {
-      TypeSwitch<FIRRTLBaseType>(type)
+      FIRRTLTypeSwitch<FIRRTLBaseType>(type)
           .Case<FVectorType>([&](FVectorType vector) {
             auto index = vector.getIndexForFieldID(targetFieldID);
             newTarget.append("[");
@@ -138,7 +138,7 @@ private:
   /// location of the port in the circuit.
   bool updatePortTarget(FModuleLike &module, Annotation &anno,
                         unsigned portIdx) {
-    auto type = getBaseType(cast<FIRRTLType>(module.getPortType(portIdx)));
+    auto type = getBaseType(type_cast<FIRRTLType>(module.getPortType(portIdx)));
     return updateTargetImpl(anno, module, type, module.getPortName(portIdx));
   }
 
@@ -164,7 +164,7 @@ private:
       type = op->getResultTypes().front();
     }
 
-    auto baseType = getBaseType(cast<FIRRTLType>(type));
+    auto baseType = getBaseType(type_cast<FIRRTLType>(type));
     return updateTargetImpl(anno, module, baseType, name);
   }
 

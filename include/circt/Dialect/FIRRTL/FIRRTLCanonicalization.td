@@ -56,21 +56,21 @@ def IntTypeWidthGT32 : Constraint<CPred<
   "cast<IntType>($0.getType()).getBitWidthOrSentinel() > cast<IntType>($1.getType()).getBitWidthOrSentinel()">>;
 
 // Constraint that enforces int types
-def IntTypes : Constraint<CPred<"isa<IntType>($0.getType())">>;
+def IntTypes : Constraint<CPred<"type_isa<IntType>($0.getType())">>;
 
 // Constraint that enforces sint types
-def SIntTypes : Constraint<CPred<"isa<SIntType>($0.getType())">>;
+def SIntTypes : Constraint<CPred<"type_isa<SIntType>($0.getType())">>;
 
 // Constraint that enforces uint types
-def UIntTypes : Constraint<CPred<"isa<UIntType>($0.getType())">>;
+def UIntTypes : Constraint<CPred<"type_isa<UIntType>($0.getType())">>;
 
 // Constraint that enforces types mismatches
 def mismatchTypes : Constraint<CPred<"$0.getType() != $1.getType()">>;
 
 // Constraint that enforces types of known width
 def KnownWidth : Constraint<CPred<[{
-  isa<FIRRTLBaseType>($0.getType()) &&
-    !cast<FIRRTLBaseType>($0.getType()).getRecursiveTypeProperties().hasUninferredWidth
+  type_isa<FIRRTLBaseType>($0.getType()) &&
+    !type_cast<FIRRTLBaseType>($0.getType()).getRecursiveTypeProperties().hasUninferredWidth
   }]>>;
 
 /// Constraint that matches a zero ConstantOp or SpecialConstantOp.
@@ -102,7 +102,7 @@ def AllOneConstantOp : Constraint<CPred<"$0.getDefiningOp<ConstantOp>() && $0.ge
 
 // Delta between type widths
 def TypeWidthAdjust32 : NativeCodeCall<
-  "$_builder.getI32IntegerAttr(cast<FIRRTLBaseType>($0.getType()).getBitWidthOrSentinel() - cast<FIRRTLBaseType>($1.getType()).getBitWidthOrSentinel())">;
+  "$_builder.getI32IntegerAttr(type_cast<FIRRTLBaseType>($0.getType()).getBitWidthOrSentinel() - type_cast<FIRRTLBaseType>($1.getType()).getBitWidthOrSentinel())">;
 
 /// Drop the writer to the first argument and passthrough the second
 def DropWrite : NativeCodeCall<"dropWrite($_builder, $0, $1)">;
@@ -152,14 +152,14 @@ def ConnectSameType : Pat<
 def ConnectExtension : Pat<
   (ConnectOp $dst, $src),
   (StrictConnectOp $dst, (PadPrimOp $src,
-    (NativeCodeCall<"cast<FIRRTLBaseType>($0.getType()).getBitWidthOrSentinel()"> $dst))),
+    (NativeCodeCall<"type_cast<FIRRTLBaseType>($0.getType()).getBitWidthOrSentinel()"> $dst))),
   [(IntType $dst), (IntType $src), (KnownWidth $dst), (KnownWidth $src), (mismatchTypes $src, $dst)]>;
 
 def LimitConstant32 : NativeCodeCall<
   "$_builder.getI32IntegerAttr($0.getValue().getLimitedValue(1ULL << 31))">;
 
 def TypeWidth32 : NativeCodeCall<
-  "$_builder.getI32IntegerAttr(cast<FIRRTLBaseType>($0.getType()).getBitWidthOrSentinel())">;
+  "$_builder.getI32IntegerAttr(type_cast<FIRRTLBaseType>($0.getType()).getBitWidthOrSentinel())">;
 
 // dshl(a, const) -> shl(a, const)
 def DShlOfConstant : Pat<
@@ -262,7 +262,7 @@ def SubFromZeroUnsigned : Pat <
 //sub(a,a) -> 0
 def SubOfSelf : Pat <
   (SubPrimOp:$old $x, $x),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
+  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), type_cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x)]>;
 
 // sub((pad a, n), b) -> pad(sub(a, b), n)
@@ -280,7 +280,7 @@ def SubOfPadR : Pat <
 // and(x, 0) -> 0, fold can't handle all cases
 def AndOfZero : Pat <
   (AndPrimOp:$old $x, (ConstantOp:$zcst $cst)),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
+  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), type_cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x), (ZeroConstantOp $zcst)]>;
 
 // and(x, -1) -> x, fold can't handle all cases
@@ -326,7 +326,7 @@ def OrOfZero : Pat <
 // or(x, -1) -> -1, fold can't handle all cases
 def OrOfAllOne : Pat <
   (OrPrimOp:$old $x, (ConstantOp:$ocst $cst)),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntOnesAttr($0.getType()))"> $old),
+  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), type_cast<IntType>($0.getType()), getIntOnesAttr($0.getType()))"> $old),
   [(KnownWidth $x), (EqualTypes $x, $ocst), (AllOneConstantOp $ocst)]>;
 
 /// or(x,x) -> x, fold can't handle all cases
@@ -351,7 +351,7 @@ def XorOfZero : Pat <
 /// xor(x,x) -> 0, fold can't handle all cases
 def XorOfSelf : Pat <
   (XorPrimOp:$old $x, $x),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
+  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), type_cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x)]>;
 
 /// xor(x, pad(y, n)) -> cat(head(x), xor(tail(x), y))

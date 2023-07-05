@@ -778,7 +778,7 @@ void Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b, IRMapping &mapper,
   for (unsigned i = 0, e = getNumPorts(target); i < e; ++i) {
     auto arg = target.getArgument(i);
     // Get the type of the wire.
-    auto type = cast<FIRRTLType>(arg.getType());
+    auto type = type_cast<FIRRTLType>(arg.getType());
 
     // Compute a unique symbol if needed
     StringAttr newSym;

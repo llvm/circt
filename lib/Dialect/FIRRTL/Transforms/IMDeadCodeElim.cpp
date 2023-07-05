@@ -598,7 +598,7 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
     }
 
     // If RefType and live, don't want to leave wire around.
-    if (isa<RefType>(result.getType())) {
+    if (type_isa<RefType>(result.getType())) {
       auto getRefDefine = [](Value result) -> RefDefineOp {
         for (auto *user : result.getUsers()) {
           if (auto rd = dyn_cast<RefDefineOp>(user);
@@ -684,7 +684,7 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
         continue;
 
       // RefType can't be a wire, especially if it won't be erased.  Skip.
-      if (isa<RefType>(argument.getType()))
+      if (type_isa<RefType>(argument.getType()))
         continue;
 
       // Ok, this port is used only within its defined module. So we can replace

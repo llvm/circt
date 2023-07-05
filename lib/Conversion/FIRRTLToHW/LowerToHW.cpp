@@ -118,7 +118,7 @@ static LogicalResult verifyOpLegality(Operation *op) {
 
 /// Given two FIRRTL integer types, return the widest one.
 static IntType getWidestIntType(Type t1, Type t2) {
-  auto t1c = cast<IntType>(t1), t2c = cast<IntType>(t2);
+  auto t1c = type_cast<IntType>(t1), t2c = type_cast<IntType>(t2);
   return t2c.getWidth() > t1c.getWidth() ? t2c : t1c;
 }
 
@@ -143,10 +143,11 @@ static Value castFromFIRRTLType(Value val, Type type,
 
   if (hw::StructType structTy = type.dyn_cast<hw::StructType>()) {
     // Strip off Flip type if needed.
-    val = builder
-              .create<mlir::UnrealizedConversionCastOp>(
-                  cast<FIRRTLBaseType>(val.getType()).getPassiveType(), val)
-              .getResult(0);
+    val =
+        builder
+            .create<mlir::UnrealizedConversionCastOp>(
+                type_cast<FIRRTLBaseType>(val.getType()).getPassiveType(), val)
+            .getResult(0);
     val = builder.createOrFold<HWStructCastOp>(type, val);
     return val;
   }
@@ -1281,7 +1282,7 @@ static Value tryEliminatingAttachesToAnalogValue(Value value,
 static Value tryEliminatingConnectsToValue(Value flipValue,
                                            Operation *insertPoint) {
   // Handle analog's separately.
-  if (flipValue.getType().isa<AnalogType>())
+  if (type_isa<AnalogType>(flipValue.getType()))
     return tryEliminatingAttachesToAnalogValue(flipValue, insertPoint);
 
   Operation *connectOp = nullptr;
@@ -1322,24 +1323,24 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   }
 
   // Convert fliped sources to passive sources.
-  if (!cast<FIRRTLBaseType>(connectSrc.getType()).isPassive())
-    connectSrc =
-        builder
-            .create<mlir::UnrealizedConversionCastOp>(
-                cast<FIRRTLBaseType>(connectSrc.getType()).getPassiveType(),
-                connectSrc)
-            .getResult(0);
+  if (!type_cast<FIRRTLBaseType>(connectSrc.getType()).isPassive())
+    connectSrc = builder
+                     .create<mlir::UnrealizedConversionCastOp>(
+                         type_cast<FIRRTLBaseType>(connectSrc.getType())
+                             .getPassiveType(),
+                         connectSrc)
+                     .getResult(0);
 
   // We know it must be the destination operand due to the types, but the
   // source may not match the destination width.
-  auto destTy = cast<FIRRTLBaseType>(flipValue.getType()).getPassiveType();
+  auto destTy = type_cast<FIRRTLBaseType>(flipValue.getType()).getPassiveType();
 
   if (!destTy.isGround()) {
     // If types are not ground type and they don't match, we give up.
-    if (destTy != cast<FIRRTLType>(connectSrc.getType()))
+    if (destTy != type_cast<FIRRTLType>(connectSrc.getType()))
       return {};
   } else if (destTy.getBitWidthOrSentinel() !=
-             cast<FIRRTLBaseType>(connectSrc.getType())
+             type_cast<FIRRTLBaseType>(connectSrc.getType())
                  .getBitWidthOrSentinel()) {
     // The only type mismatchs we care about is due to integer width
     // differences.
@@ -1407,8 +1408,8 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
     auto oldArg = oldModule.getBody().getArgument(firrtlArg++);
 
     bool isZeroWidth =
-        isa<FIRRTLBaseType>(port.type) &&
-        cast<FIRRTLBaseType>(port.type).getBitWidthOrSentinel() == 0;
+        type_isa<FIRRTLBaseType>(port.type) &&
+        type_cast<FIRRTLBaseType>(port.type).getBitWidthOrSentinel() == 0;
 
     if (!port.isOutput() && !isZeroWidth) {
       // Inputs and InOuts are modeled as arguments in the result, so we can
@@ -2103,8 +2104,8 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
   // Helper function to cast each element of array to dest type.
   auto cast = [&](Value value, FIRRTLBaseType sourceType,
                   FIRRTLBaseType destType) {
-    auto srcWidth = llvm::cast<IntType>(sourceType).getWidthOrSentinel();
-    auto destWidth = llvm::cast<IntType>(destType).getWidthOrSentinel();
+    auto srcWidth = firrtl::type_cast<IntType>(sourceType).getWidthOrSentinel();
+    auto destWidth = firrtl::type_cast<IntType>(destType).getWidthOrSentinel();
     auto resultType = builder.getIntegerType(destWidth);
 
     if (srcWidth == destWidth)
@@ -2118,7 +2119,7 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
       return Value();
     }
 
-    if (llvm::cast<IntType>(sourceType).isSigned())
+    if (firrtl::type_cast<IntType>(sourceType).isSigned())
       return comb::createOrFoldSExt(value, resultType, builder);
     auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
     return builder.createOrFold<comb::ConcatOp>(zero, value);
@@ -2130,7 +2131,7 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
           FIRRTLBaseType destType) -> LogicalResult {
     return TypeSwitch<FIRRTLBaseType, LogicalResult>(srcType)
         .Case<FVectorType>([&](auto srcVectorType) {
-          auto destVectorType = llvm::cast<FVectorType>(destType);
+          auto destVectorType = firrtl::type_cast<FVectorType>(destType);
           unsigned size = resultBuffer.size();
           unsigned indexWidth =
               getBitWidthFromVectorSize(srcVectorType.getNumElements());
@@ -2151,7 +2152,7 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
           return success();
         })
         .Case<BundleType>([&](BundleType srcStructType) {
-          auto destStructType = llvm::cast<BundleType>(destType);
+          auto destStructType = firrtl::type_cast<BundleType>(destType);
           unsigned size = resultBuffer.size();
 
           // TODO: We don't support partial connects for bundles for now.
@@ -2198,12 +2199,12 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
 /// This returns a null value for FIRRTL values that cannot be lowered, e.g.
 /// unknown width integers.
 Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
-  assert(isa<FIRRTLBaseType>(value.getType()) &&
-         isa<FIRRTLBaseType>(destType) &&
+  assert(type_isa<FIRRTLBaseType>(value.getType()) &&
+         type_isa<FIRRTLBaseType>(destType) &&
          "input/output value should be FIRRTL");
 
   // We only know how to extend integer types with known width.
-  auto destWidth = cast<FIRRTLBaseType>(destType).getBitWidthOrSentinel();
+  auto destWidth = type_cast<FIRRTLBaseType>(destType).getBitWidthOrSentinel();
   if (destWidth == -1)
     return {};
 
@@ -2228,10 +2229,10 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
     if (destType == value.getType())
       return result;
 
-    return getExtOrTruncAggregateValue(result,
-                                       cast<FIRRTLBaseType>(value.getType()),
-                                       cast<FIRRTLBaseType>(destType),
-                                       /* allowTruncate */ false);
+    return getExtOrTruncAggregateValue(
+        result, type_cast<FIRRTLBaseType>(value.getType()),
+        type_cast<FIRRTLBaseType>(destType),
+        /* allowTruncate */ false);
   }
 
   auto intResultType = dyn_cast<IntegerType>(result.getType());
@@ -2253,8 +2254,9 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
   auto resultType = builder.getIntegerType(destWidth);
 
   // Extension follows the sign of the source value, not the destination.
-  auto valueFIRType = cast<FIRRTLBaseType>(value.getType()).getPassiveType();
-  if (cast<IntType>(valueFIRType).isSigned())
+  auto valueFIRType =
+      type_cast<FIRRTLBaseType>(value.getType()).getPassiveType();
+  if (type_cast<IntType>(valueFIRType).isSigned())
     return comb::createOrFoldSExt(result, resultType, builder);
 
   auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
@@ -2267,12 +2269,12 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
 /// This returns a null value for FIRRTL values that cannot be lowered, e.g.
 /// unknown width integers.
 Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
-  assert(isa<FIRRTLBaseType>(value.getType()) &&
-         isa<FIRRTLBaseType>(destType) &&
+  assert(type_isa<FIRRTLBaseType>(value.getType()) &&
+         type_isa<FIRRTLBaseType>(destType) &&
          "input/output value should be FIRRTL");
 
   // We only know how to adjust integer types with known width.
-  auto destWidth = cast<FIRRTLBaseType>(destType).getBitWidthOrSentinel();
+  auto destWidth = type_cast<FIRRTLBaseType>(destType).getBitWidthOrSentinel();
   if (destWidth == -1)
     return {};
 
@@ -2297,13 +2299,13 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
     if (destType == value.getType())
       return result;
 
-    return getExtOrTruncAggregateValue(result,
-                                       cast<FIRRTLBaseType>(value.getType()),
-                                       cast<FIRRTLBaseType>(destType),
-                                       /* allowTruncate */ true);
+    return getExtOrTruncAggregateValue(
+        result, type_cast<FIRRTLBaseType>(value.getType()),
+        type_cast<FIRRTLBaseType>(destType),
+        /* allowTruncate */ true);
   }
 
-  auto srcWidth = cast<IntegerType>(result.getType()).getWidth();
+  auto srcWidth = type_cast<IntegerType>(result.getType()).getWidth();
   if (srcWidth == unsigned(destWidth))
     return result;
 
@@ -2318,8 +2320,9 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
   auto resultType = builder.getIntegerType(destWidth);
 
   // Extension follows the sign of the source value, not the destination.
-  auto valueFIRType = cast<FIRRTLBaseType>(value.getType()).getPassiveType();
-  if (cast<IntType>(valueFIRType).isSigned())
+  auto valueFIRType =
+      type_cast<FIRRTLBaseType>(value.getType()).getPassiveType();
+  if (type_cast<IntType>(valueFIRType).isSigned())
     return comb::createOrFoldSExt(result, resultType, builder);
 
   auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
@@ -2334,7 +2337,7 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
 ///
 LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
   if (auto origType = dyn_cast<FIRRTLType>(orig.getType())) {
-    assert((!result || !isa<FIRRTLType>(result.getType())) &&
+    assert((!result || !type_isa<FIRRTLType>(result.getType())) &&
            "Lowering didn't turn a FIRRTL value into a non-FIRRTL value");
 
 #ifndef NDEBUG
@@ -2643,7 +2646,8 @@ FIRRTLLowering::handleUnloweredOp(Operation *op) {
   // them all right here.
   if (op->getNumResults() == 1) {
     auto resultType = op->getResult(0).getType();
-    if (isa<FIRRTLBaseType>(resultType) && isZeroBitFIRRTLType(resultType) &&
+    if (type_isa<FIRRTLBaseType>(resultType) &&
+        isZeroBitFIRRTLType(resultType) &&
         (isExpression(op) || isa<mlir::UnrealizedConversionCastOp>(op))) {
       // Zero bit values lower to the null Value.
       (void)setLowering(op->getResult(0), Value());
@@ -2670,7 +2674,8 @@ LogicalResult FIRRTLLowering::visitExpr(SpecialConstantOp op) {
 FailureOr<Value> FIRRTLLowering::lowerSubindex(SubindexOp op, Value input) {
   auto iIdx = getOrCreateIntConstant(
       getBitWidthFromVectorSize(
-          cast<FVectorType>(op.getInput().getType()).getNumElements()),
+          firrtl::type_cast<FVectorType>(op.getInput().getType())
+              .getNumElements()),
       op.getIndex());
 
   // If the input has an inout type, we need to lower to ArrayIndexInOutOp;
@@ -2687,10 +2692,10 @@ FailureOr<Value> FIRRTLLowering::lowerSubindex(SubindexOp op, Value input) {
 FailureOr<Value> FIRRTLLowering::lowerSubaccess(SubaccessOp op, Value input) {
   Value valueIdx = getLoweredAndExtOrTruncValue(
       op.getIndex(),
-      UIntType::get(
-          op->getContext(),
-          getBitWidthFromVectorSize(
-              cast<FVectorType>(op.getInput().getType()).getNumElements())));
+      UIntType::get(op->getContext(),
+                    getBitWidthFromVectorSize(
+                        firrtl::type_cast<FVectorType>(op.getInput().getType())
+                            .getNumElements())));
   if (!valueIdx) {
     op->emitError() << "input lowering failed";
     return failure();
@@ -2716,7 +2721,7 @@ FailureOr<Value> FIRRTLLowering::lowerSubfield(SubfieldOp op, Value input) {
 
   // If the input has an inout type, we need to lower to StructFieldInOutOp;
   // otherwise, StructExtractOp.
-  auto field = cast<BundleType>(op.getInput().getType())
+  auto field = firrtl::type_cast<BundleType>(op.getInput().getType())
                    .getElementName(op.getFieldIndex());
   Value result;
   if (input.getType().isa<sv::InOutType>())
@@ -2861,7 +2866,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
 
   // Foreign types lower to a backedge that needs to be resolved by a later
   // connect op.
-  if (!isa<FIRRTLType>(origResultType)) {
+  if (!type_isa<FIRRTLType>(origResultType)) {
     createBackedge(op.getResult(), origResultType);
     return success();
   }
@@ -3016,7 +3021,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   Value resetSignal = getLoweredValue(op.getResetSignal());
   // Reset values may be narrower than the register.  Extend appropriately.
   Value resetValue = getLoweredAndExtOrTruncValue(
-      op.getResetValue(), cast<FIRRTLBaseType>(op.getResult().getType()));
+      op.getResetValue(), type_cast<FIRRTLBaseType>(op.getResult().getType()));
 
   if (!clockVal || !resetSignal || !resetValue)
     return failure();
@@ -3030,7 +3035,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
     symName = op.getNameAttr();
 
   // Create a reg op, wiring itself to its input.
-  bool isAsync = isa<AsyncResetType>(op.getResetSignal().getType());
+  bool isAsync = type_isa<AsyncResetType>(op.getResetSignal().getType());
   Backedge inputEdge = backedgeBuilder.get(resultType);
   auto reg =
       builder.create<seq::FirRegOp>(inputEdge, clockVal, op.getNameAttr(),
@@ -3062,7 +3067,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
   // TODO: Remove this restriction and preserve aggregates in
   // memories.
-  if (isa<BundleType>(op.getDataType()))
+  if (type_isa<BundleType>(op.getDataType()))
     return op.emitOpError(
         "should have already been lowered from a ground type to an aggregate "
         "type using the LowerTypes pass. Use "
@@ -3118,7 +3123,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         Value backedge = createBackedge(builder.getLoc(), portType);
         auto accesses = getAllFieldAccesses(op.getResult(i), field);
         for (auto a : accesses) {
-          if (cast<FIRRTLBaseType>(a.getType())
+          if (type_cast<FIRRTLBaseType>(a.getType())
                   .getPassiveType()
                   .getBitWidthOrSentinel() > 0)
             (void)setLowering(a, backedge);
@@ -3132,7 +3137,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
           auto backedge2 = createBackedge(builder.getLoc(), portType);
           auto accesses2 = getAllFieldAccesses(op.getResult(i), field2);
           for (auto a : accesses2) {
-            if (cast<FIRRTLBaseType>(a.getType())
+            if (type_cast<FIRRTLBaseType>(a.getType())
                     .getPassiveType()
                     .getBitWidthOrSentinel() > 0)
               (void)setLowering(a, backedge2);
@@ -3280,7 +3285,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
     // If the result has an analog type and is used only by attach op, try
     // eliminating a temporary wire by directly using an attached value.
-    if (isa<AnalogType>(portResult.getType()) && portResult.hasOneUse()) {
+    if (type_isa<AnalogType>(portResult.getType()) && portResult.hasOneUse()) {
       if (auto attach = dyn_cast<AttachOp>(*portResult.getUsers().begin())) {
         if (auto source = getSingleNonInstanceOperand(attach)) {
           auto loweredResult = getPossiblyInoutLoweredValue(source);
@@ -3372,13 +3377,14 @@ LogicalResult FIRRTLLowering::visitExpr(mlir::UnrealizedConversionCastOp op) {
   auto result = op.getResult(0);
 
   // FIRRTL -> FIRRTL
-  if (isa<FIRRTLType>(operand.getType()) && isa<FIRRTLType>(result.getType()))
+  if (type_isa<FIRRTLType>(operand.getType()) &&
+      type_isa<FIRRTLType>(result.getType()))
     return lowerNoopCast(op);
 
   // other -> FIRRTL
   // other -> other
-  if (!isa<FIRRTLType>(operand.getType())) {
-    if (isa<FIRRTLType>(result.getType()))
+  if (!type_isa<FIRRTLType>(operand.getType())) {
+    if (type_isa<FIRRTLType>(result.getType()))
       return setLowering(result, getPossiblyInoutLoweredValue(operand));
     return failure(); // general foreign op lowering for other -> other
   }
@@ -3435,7 +3441,7 @@ LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
   if (!operand) {
     return handleZeroBit(op.getOperand(), [&]() {
       // Unsigned zero bit to Signed is 1b0.
-      if (cast<IntType>(op.getOperand().getType()).isUnsigned())
+      if (type_cast<IntType>(op.getOperand().getType()).isUnsigned())
         return setLowering(op, getOrCreateIntConstant(1, 0));
       // Signed->Signed is a zero bit value.
       return setLowering(op, Value());
@@ -3443,7 +3449,7 @@ LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
   }
 
   // Signed to signed is a noop.
-  if (cast<IntType>(op.getOperand().getType()).isSigned())
+  if (type_cast<IntType>(op.getOperand().getType()).isSigned())
     return setLowering(op, operand);
 
   // Otherwise prepend a zero bit.
@@ -3553,7 +3559,7 @@ LogicalResult FIRRTLLowering::lowerElementwiseLogicalOp(Operation *op) {
 
   if (!lhs || !rhs)
     return failure();
-  auto bitwidth = firrtl::getBitWidth(cast<FIRRTLBaseType>(resultType));
+  auto bitwidth = firrtl::getBitWidth(type_cast<FIRRTLBaseType>(resultType));
 
   if (!bitwidth)
     return failure();
@@ -3580,7 +3586,7 @@ LogicalResult FIRRTLLowering::lowerBinOp(Operation *op) {
     return failure();
 
   // Emit the result operation.
-  if (cast<IntType>(resultType).isSigned())
+  if (type_cast<IntType>(resultType).isSigned())
     return setLoweringTo<ResultSignedOpType>(op, lhs, rhs, true);
   return setLoweringTo<ResultUnsignedOpType>(op, lhs, rhs, true);
 }
@@ -3590,8 +3596,8 @@ LogicalResult FIRRTLLowering::lowerBinOp(Operation *op) {
 LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate signedOp,
                                          ICmpPredicate unsignedOp) {
   // Extend the two operands to match the longest type.
-  auto lhsIntType = cast<IntType>(op->getOperand(0).getType());
-  auto rhsIntType = cast<IntType>(op->getOperand(1).getType());
+  auto lhsIntType = type_cast<IntType>(op->getOperand(0).getType());
+  auto rhsIntType = type_cast<IntType>(op->getOperand(1).getType());
   if (!lhsIntType.hasWidth() || !rhsIntType.hasWidth())
     return failure();
 
@@ -3617,7 +3623,7 @@ LogicalResult FIRRTLLowering::lowerDivLikeOp(Operation *op) {
   // hw has equal types for these, firrtl doesn't.  The type of the firrtl
   // RHS may be wider than the LHS, and we cannot truncate off the high bits
   // (because an overlarge amount is supposed to shift in sign or zero bits).
-  auto opType = cast<IntType>(op->getResult(0).getType());
+  auto opType = type_cast<IntType>(op->getResult(0).getType());
   if (opType.getWidth() == 0)
     return setLowering(op->getResult(0), Value());
 
@@ -3813,25 +3819,26 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
   // Values of analog type always need to be lowered to something with inout
   // type.  We do that by lowering to a wire and return that.  As with the
   // SFC, we do not connect anything to this, because it is bidirectional.
-  if (isa<AnalogType>(op.getType()))
+  if (type_isa<AnalogType>(op.getType()))
     // This is a locally visible, private wire created by the compiler, so do
     // not attach a symbol name.
     return setLoweringTo<sv::WireOp>(op, resultTy, ".invalid_analog");
 
   // We don't allow aggregate values which contain values of analog types.
-  if (cast<FIRRTLBaseType>(op.getType()).containsAnalog())
+  if (type_cast<FIRRTLBaseType>(op.getType()).containsAnalog())
     return failure();
 
   // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
   // lowering it to a random value, we should see if this is what we need to
   // do.
-  if (auto bitwidth = firrtl::getBitWidth(cast<FIRRTLBaseType>(op.getType()))) {
+  if (auto bitwidth =
+          firrtl::getBitWidth(type_cast<FIRRTLBaseType>(op.getType()))) {
     if (*bitwidth == 0) // Let the caller handle zero width values.
       return failure();
 
     auto constant = getOrCreateIntConstant(*bitwidth, 0);
     // If the result is an aggregate value, we have to bitcast the constant.
-    if (!isa<IntegerType>(resultTy))
+    if (!type_isa<IntegerType>(resultTy))
       constant = builder.create<hw::BitcastOp>(resultTy, constant);
     return setLowering(op, constant);
   }
@@ -3845,7 +3852,7 @@ LogicalResult FIRRTLLowering::visitExpr(HeadPrimOp op) {
   auto input = getLoweredValue(op.getInput());
   if (!input)
     return failure();
-  auto inWidth = cast<IntegerType>(input.getType()).getWidth();
+  auto inWidth = type_cast<IntegerType>(input.getType()).getWidth();
   if (op.getAmount() == 0)
     return setLowering(op, Value());
   Type resultType = builder.getIntegerType(op.getAmount());
@@ -3877,11 +3884,11 @@ LogicalResult FIRRTLLowering::visitExpr(ShrPrimOp op) {
     return failure();
 
   // Handle the special degenerate cases.
-  auto inWidth = cast<IntegerType>(input.getType()).getWidth();
+  auto inWidth = type_cast<IntegerType>(input.getType()).getWidth();
   auto shiftAmount = op.getAmount();
   if (shiftAmount >= inWidth) {
     // Unsigned shift by full width returns a single-bit zero.
-    if (cast<IntType>(op.getInput().getType()).isUnsigned())
+    if (type_cast<IntType>(op.getInput().getType()).isUnsigned())
       return setLowering(op, getOrCreateIntConstant(1, 0));
 
     // Signed shift by full width is equivalent to extracting the sign bit.
@@ -3897,7 +3904,7 @@ LogicalResult FIRRTLLowering::visitExpr(TailPrimOp op) {
   if (!input)
     return failure();
 
-  auto inWidth = cast<IntegerType>(input.getType()).getWidth();
+  auto inWidth = type_cast<IntegerType>(input.getType()).getWidth();
   if (inWidth == op.getAmount())
     return setLowering(op, Value());
   Type resultType = builder.getIntegerType(inWidth - op.getAmount());
@@ -4095,7 +4102,7 @@ FailureOr<bool> FIRRTLLowering::lowerConnect(Value destVal, Value srcVal) {
 LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   auto dest = op.getDest();
   // The source can be a smaller integer, extend it as appropriate if so.
-  auto destType = cast<FIRRTLBaseType>(dest.getType()).getPassiveType();
+  auto destType = type_cast<FIRRTLBaseType>(dest.getType()).getPassiveType();
   auto srcVal = getLoweredAndExtendedValue(op.getSrc(), destType);
   if (!srcVal)
     return handleZeroBit(op.getSrc(), []() { return success(); });

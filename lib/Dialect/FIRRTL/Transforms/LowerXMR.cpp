@@ -146,7 +146,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
               return success();
             markForRemoval(connect);
             if (isZeroWidth(
-                    cast<RefType>(connect.getSrc().getType()).getType()))
+                    type_cast<RefType>(connect.getSrc().getType()).getType()))
               return success();
             // Merge the dataflow classes of destination into the source of the
             // Connect. This handles two cases:
@@ -469,7 +469,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       setPortToRemove(inst, portNum, numPorts);
       // Drop the dead-instance-ports.
       if (instanceResult.use_empty() ||
-          isZeroWidth(cast<RefType>(instanceResult.getType()).getType()))
+          isZeroWidth(type_cast<RefType>(instanceResult.getType()).getType()))
         continue;
       auto refModuleArg = refMod.getArgument(portNum);
       if (inst.getPortDirection(portNum) == Direction::Out) {
@@ -507,7 +507,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     SmallString<128> circuitRefPrefix;
     for (size_t portIndex = 0, numPorts = module.getNumPorts();
          portIndex != numPorts; ++portIndex) {
-      auto refType = dyn_cast<RefType>(module.getPortType(portIndex));
+      auto refType = type_dyn_cast<RefType>(module.getPortType(portIndex));
       if (!refType || isZeroWidth(refType.getType()) ||
           module.getPortDirection(portIndex) != Direction::Out)
         continue;

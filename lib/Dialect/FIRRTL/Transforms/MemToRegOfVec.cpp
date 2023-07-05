@@ -125,7 +125,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
   }
 
   Value getMask(ImplicitLocOpBuilder &builder, Value bundle) {
-    auto bType = cast<BundleType>(bundle.getType());
+    auto bType = type_cast<BundleType>(bundle.getType());
     if (bType.getElement("mask"))
       return builder.create<SubfieldOp>(bundle, "mask");
     return builder.create<SubfieldOp>(bundle, "wmask");
@@ -133,7 +133,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
 
   Value getData(ImplicitLocOpBuilder &builder, Value bundle,
                 bool getWdata = false) {
-    auto bType = cast<BundleType>(bundle.getType());
+    auto bType = type_cast<BundleType>(bundle.getType());
     if (bType.getElement("data"))
       return builder.create<SubfieldOp>(bundle, "data");
     if (bType.getElement("rdata") && !getWdata)
@@ -296,11 +296,11 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
 
     // Check if the number of fields of mask and input type match.
     auto isValidMask = [&](FIRRTLType inType, FIRRTLType maskType) -> bool {
-      if (auto bundle = dyn_cast<BundleType>(inType)) {
-        if (auto mBundle = dyn_cast<BundleType>(maskType))
+      if (auto bundle = type_dyn_cast<BundleType>(inType)) {
+        if (auto mBundle = type_dyn_cast<BundleType>(maskType))
           return mBundle.getNumElements() == bundle.getNumElements();
-      } else if (auto vec = dyn_cast<FVectorType>(inType)) {
-        if (auto mVec = dyn_cast<FVectorType>(maskType))
+      } else if (auto vec = type_dyn_cast<FVectorType>(inType)) {
+        if (auto mVec = type_dyn_cast<FVectorType>(maskType))
           return mVec.getNumElements() == vec.getNumElements();
       } else
         return true;
@@ -309,12 +309,12 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
 
     std::function<bool(Value, Value, Value)> flatAccess =
         [&](Value reg, Value input, Value mask) -> bool {
-      FIRRTLType inType = cast<FIRRTLType>(input.getType());
-      if (!isValidMask(inType, cast<FIRRTLType>(mask.getType()))) {
+      FIRRTLType inType = type_cast<FIRRTLType>(input.getType());
+      if (!isValidMask(inType, type_cast<FIRRTLType>(mask.getType()))) {
         input.getDefiningOp()->emitOpError("Mask type is not valid");
         return false;
       }
-      return TypeSwitch<FIRRTLType, bool>(inType)
+      return FIRRTLTypeSwitch<FIRRTLType, bool>(inType)
           .Case<BundleType>([&](BundleType bundle) {
             for (size_t i = 0, e = bundle.getNumElements(); i != e; ++i) {
               auto regField = builder.create<SubfieldOp>(reg, i);
@@ -350,12 +350,10 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
                          ImplicitLocOpBuilder &builder) {
     AnnotationSet annos(attr);
     SmallVector<Attribute> regAnnotations;
-    auto vecType = cast<FVectorType>(op.getResult().getType());
+    auto vecType = type_cast<FVectorType>(op.getResult().getType());
     for (auto anno : annos) {
       if (anno.isClass(memTapSourceClass)) {
-        for (size_t i = 0, e = op.getResult()
-                                   .getType()
-                                   .cast<FVectorType>()
+        for (size_t i = 0, e = type_cast<FVectorType>(op.getResult().getType())
                                    .getNumElements();
              i != e; ++i) {
           NamedAttrList newAnno;
@@ -389,7 +387,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
     for (size_t index = 0, rend = memOp.getNumResults(); index < rend;
          ++index) {
       auto result = memOp.getResult(index);
-      if (isa<RefType>(result.getType())) {
+      if (type_isa<RefType>(result.getType())) {
         debugPorts.push_back(result);
         continue;
       }

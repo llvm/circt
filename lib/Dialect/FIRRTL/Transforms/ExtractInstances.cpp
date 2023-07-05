@@ -536,7 +536,7 @@ void ExtractInstancesPass::extractInstances() {
           prefix.empty() ? Twine(name) : Twine(prefix) + "_" + name);
 
       PortInfo newPort{nameAttr,
-                       cast<FIRRTLType>(inst.getResult(portIdx).getType()),
+                       type_cast<FIRRTLType>(inst.getResult(portIdx).getType()),
                        direction::flip(inst.getPortDirection(portIdx))};
       newPort.loc = inst.getResult(portIdx).getLoc();
       newPorts.push_back({numParentPorts, newPort});
@@ -885,7 +885,7 @@ void ExtractInstancesPass::groupInstances() {
         auto nameAttr = builder.getStringAttr(
             prefix.empty() ? Twine(name) : Twine(prefix) + "_" + name);
         PortInfo port{nameAttr,
-                      cast<FIRRTLType>(inst.getResult(portIdx).getType()),
+                      type_cast<FIRRTLType>(inst.getResult(portIdx).getType()),
                       inst.getPortDirection(portIdx)};
         port.loc = inst.getResult(portIdx).getLoc();
         ports.push_back(port);
