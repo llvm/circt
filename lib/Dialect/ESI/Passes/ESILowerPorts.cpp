@@ -123,11 +123,12 @@ public:
                   -> FailureOr<std::unique_ptr<SignalingStandard>> {
           // Determine which ESI signaling standard is specified.
           ChannelSignaling signaling = chanTy.getSignaling();
-          if (signaling == ChannelSignaling::ValidReady) {
+          if (signaling == ChannelSignaling::ValidReady)
             return {std::make_unique<ValidReady>(converter, port)};
-          } else if (signaling == ChannelSignaling::FIFO0) {
+
+          if (signaling == ChannelSignaling::FIFO0)
             return {std::make_unique<FIFO>(converter, port)};
-          }
+
           auto error = converter.getModule().emitOpError(
                            "encountered unknown signaling standard on port '")
                        << stringifyEnum(signaling) << "'";
