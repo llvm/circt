@@ -36,12 +36,12 @@ public:
   void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
                        SmallVectorImpl<Value> &newOperands,
                        ArrayRef<Backedge> newResults) override {
-    newOperands[origPort.argNum] = instValue;
+    newOperands[portInfo.argNum] = instValue;
   }
   void mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
                         SmallVectorImpl<Value> &newOperands,
                         ArrayRef<Backedge> newResults) override {
-    instValue.replaceAllUsesWith(newOperands[origPort.argNum]);
+    instValue.replaceAllUsesWith(newOperands[portInfo.argNum]);
   }
 
 private:
