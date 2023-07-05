@@ -76,18 +76,22 @@ def AggregateType : FIRRTLDialectType<
   CPred<"isa<FVectorType, BundleType, FEnumType>($_self)">,
   "a aggregate type", "::circt::firrtl::FIRRTLBaseType">;
 
+def PassiveType : FIRRTLDialectType<
+  CPred<"isa<FIRRTLBaseType>($_self) && cast<FIRRTLBaseType>($_self).isPassive()">,
+  "a passive base type (contain no flips)", "::circt::firrtl::FIRRTLBaseType">;
+
 def SizedType : FIRRTLDialectType<CPred<"isa<FIRRTLBaseType>($_self) && "
     "!cast<FIRRTLBaseType>($_self).hasUninferredWidth()">,
     "a sized type (contains no uninferred widths)", "::circt::firrtl::FIRRTLType">;
 def SizedOrForeignType : AnyTypeOf<[SizedType, ForeignType]>;
+def SizedPassiveType : FIRRTLDialectType<And<[SizedType.predicate,PassiveType.predicate]>,
+    "a sized passive base type (contains no uninferred widths, or flips)", "::circt::firrtl::FIRRTLType">;
+def SizedPassiveOrForeignType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
 
 def AsyncResetType : FIRRTLDialectTypeHelper<"AsyncResetType", "async reset type">;
 
 def ResetType : FIRRTLDialectTypeHelper<"ResetType", "reset type">;
 
-def PassiveType : FIRRTLDialectType<
-  CPred<"isa<FIRRTLBaseType>($_self) && cast<FIRRTLBaseType>($_self).isPassive()">,
-  "a passive base type (contain no flips)", "::circt::firrtl::FIRRTLBaseType">;
 
 def RefType : FIRRTLDialectTypeHelper<"RefType", "reference type">;
 
@@ -95,9 +99,8 @@ def RWProbe : FIRRTLDialectType<
   CPred<"isa<RefType>($_self) && cast<RefType>($_self).getForceable()">,
    "rwprobe type", "::circt::firrtl::RefType">;
 
-// TODO: When Refs can appear within Base, need to disallow that too.
 def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;
-def StrictConnectableType : AnyTypeOf<[PassiveType, ForeignType]>;
+def StrictConnectableType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
 
 //===----------------------------------------------------------------------===//
 // Sized and Unsized Integers

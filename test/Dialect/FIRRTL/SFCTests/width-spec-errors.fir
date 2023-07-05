@@ -55,12 +55,11 @@ circuit Unit :
   module Unit :
     input clock: Clock
     input reset: UInt<1>
-    ; expected-error @+1 {{is constrained to be wider than itself}}
+    ; expected-error @+1 {{'firrtl.regreset' op is constrained to be wider than itself}}
     reg r : UInt, clock with :
       reset => (reset, UInt(3))
     ; expected-note @+1 {{constrained width W >= W+1 here:}}
     node T_7 = add(r, r)
-    ; expected-error @+2 {{is constrained to be wider than itself}}
     ; expected-note @+1 {{constrained width W >= W+1 here:}}
     r <= T_7
 
