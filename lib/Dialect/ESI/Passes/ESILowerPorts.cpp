@@ -35,16 +35,29 @@ inline static StringRef getStringAttributeOr(Operation *op, StringRef attrName,
 
 namespace {
 
+// Base class for all ESI signaling standards, which handles potentially funky
+// attribute-based naming conventions.
+struct ESISignalingStandad : public SignalingStandard {
+  ESISignalingStandad(PortConverterImpl &converter, hw::PortInfo origPort)
+      : SignalingStandard(converter, origPort),
+        inSuffix(getStringAttributeOr(converter.getModule(), extModPortInSuffix,
+                                      "")),
+        outSuffix(getStringAttributeOr(converter.getModule(),
+                                       extModPortOutSuffix, "")) {}
+
+  const StringRef inSuffix, outSuffix;
+};
+
 /// Implement the Valid/Ready signaling standard.
-class ValidReady : public SignalingStandard {
+class ValidReady : public ESISignalingStandad {
 public:
   ValidReady(PortConverterImpl &converter, hw::PortInfo origPort)
-      : SignalingStandard(converter, origPort), validPort(origPort),
+      : ESISignalingStandad(converter, origPort), validPort(origPort),
         readyPort(origPort),
         validSuffix(getStringAttributeOr(converter.getModule(),
                                          extModPortValidSuffix, "_valid")),
         readySuffix(getStringAttributeOr(converter.getModule(),
-                                         extModPortValidSuffix, "_ready")) {}
+                                         extModPortReadySuffix, "_ready")) {}
 
   void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
                        SmallVectorImpl<Value> &newOperands,
@@ -68,14 +81,10 @@ private:
 };
 
 /// Implement the FIFO signaling standard.
-class FIFO : public SignalingStandard {
+class FIFO : public ESISignalingStandad {
 public:
   FIFO(PortConverterImpl &converter, hw::PortInfo origPort)
-      : SignalingStandard(converter, origPort),
-        inSuffix(getStringAttributeOr(converter.getModule(), extModPortInSuffix,
-                                      "_in")),
-        outSuffix(getStringAttributeOr(converter.getModule(),
-                                       extModPortOutSuffix, "_out")),
+      : ESISignalingStandad(converter, origPort),
         rdenSuffix(getStringAttributeOr(converter.getModule(),
                                         extModPortRdenSuffix, "_rden")),
         emptySuffix(getStringAttributeOr(converter.getModule(),
@@ -99,7 +108,7 @@ private:
   /// Some external modules use unusual port naming conventions. Since we want
   /// to avoid needing to write wrappers, provide some flexibility in the naming
   /// convention.
-  const StringRef inSuffix, outSuffix, rdenSuffix, emptySuffix;
+  const StringRef rdenSuffix, emptySuffix;
 };
 
 class ESISignalStandardBuilder : public SignalStandardBuilder {
@@ -136,8 +145,10 @@ void ValidReady::buildInputSignals() {
 
   // When we find one, add a data and valid signal to the new args.
   Value data = converter.createNewInput(
-      origPort, "", cast<esi::ChannelType>(origPort.type).getInner(), dataPort);
-  Value valid = converter.createNewInput(origPort, validSuffix, i1, validPort);
+      origPort, inSuffix, cast<esi::ChannelType>(origPort.type).getInner(),
+      dataPort);
+  Value valid =
+      converter.createNewInput(origPort, validSuffix + inSuffix, i1, validPort);
 
   Value ready;
   if (body) {
@@ -151,7 +162,8 @@ void ValidReady::buildInputSignals() {
     body->getArgument(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
   }
 
-  converter.createNewOutput(origPort, readySuffix, i1, ready, readyPort);
+  converter.createNewOutput(origPort, readySuffix + outSuffix, i1, ready,
+                            readyPort);
 }
 
 void ValidReady::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
@@ -167,7 +179,8 @@ void ValidReady::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
 void ValidReady::buildOutputSignals() {
   Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
 
-  Value ready = converter.createNewInput(origPort, readySuffix, i1, readyPort);
+  Value ready =
+      converter.createNewInput(origPort, readySuffix + inSuffix, i1, readyPort);
   Value data, valid;
   if (body) {
     auto *terminator = body->getTerminator();
@@ -180,10 +193,11 @@ void ValidReady::buildOutputSignals() {
   }
 
   // New outputs.
-  converter.createNewOutput(origPort, "",
+  converter.createNewOutput(origPort, outSuffix,
                             origPort.type.cast<esi::ChannelType>().getInner(),
                             data, dataPort);
-  converter.createNewOutput(origPort, validSuffix, i1, valid, validPort);
+  converter.createNewOutput(origPort, validSuffix + outSuffix, i1, valid,
+                            validPort);
 }
 
 void ValidReady::mapOutputSignals(OpBuilder &b, Operation *inst,
@@ -203,9 +217,10 @@ void FIFO::buildInputSignals() {
 
   // When we find one, add a data and valid signal to the new args.
   Value data = converter.createNewInput(
-      origPort, "", origPort.type.cast<esi::ChannelType>().getInner(),
+      origPort, inSuffix, origPort.type.cast<esi::ChannelType>().getInner(),
       dataPort);
-  Value empty = converter.createNewInput(origPort, emptySuffix, i1, emptyPort);
+  Value empty =
+      converter.createNewInput(origPort, emptySuffix + inSuffix, i1, emptyPort);
 
   Value rden;
   if (body) {
@@ -220,7 +235,8 @@ void FIFO::buildInputSignals() {
     body->getArgument(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
   }
 
-  converter.createNewOutput(origPort, rdenSuffix, i1, rden, rdenPort);
+  converter.createNewOutput(origPort, rdenSuffix + outSuffix, i1, rden,
+                            rdenPort);
 }
 
 void FIFO::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
@@ -236,7 +252,8 @@ void FIFO::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
 void FIFO::buildOutputSignals() {
   Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
 
-  Value rden = converter.createNewInput(origPort, rdenSuffix, i1, rdenPort);
+  Value rden =
+      converter.createNewInput(origPort, rdenSuffix + inSuffix, i1, rdenPort);
   Value data, empty;
   if (body) {
     auto *terminator = body->getTerminator();
@@ -249,10 +266,11 @@ void FIFO::buildOutputSignals() {
   }
 
   // New outputs.
-  converter.createNewOutput(origPort, "",
+  converter.createNewOutput(origPort, outSuffix,
                             origPort.type.cast<esi::ChannelType>().getInner(),
                             data, dataPort);
-  converter.createNewOutput(origPort, emptySuffix, i1, empty, emptyPort);
+  converter.createNewOutput(origPort, emptySuffix + outSuffix, i1, empty,
+                            emptyPort);
 }
 
 void FIFO::mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
