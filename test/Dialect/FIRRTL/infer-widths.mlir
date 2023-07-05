@@ -362,15 +362,16 @@ firrtl.circuit "Foo" {
 
   // CHECK-LABEL: @MuxOp
   firrtl.module @MuxOp() {
-    // CHECK: %0 = firrtl.wire : !firrtl.uint<2>
-    // CHECK: %1 = firrtl.wire : !firrtl.uint<3>
-    // CHECK: %2 = firrtl.wire : !firrtl.uint<1>
-    // CHECK: %3 = firrtl.mux{{.*}} -> !firrtl.uint<3>
+    // CHECK-NEXT: %0 = firrtl.wire : !firrtl.uint<2>
+    // CHECK-NEXT: %1 = firrtl.wire : !firrtl.uint<3>
+    // CHECK-NEXT: %2 = firrtl.wire : !firrtl.uint<0>
+    // CHECK-NEXT: %3 = firrtl.pad %2
+    // CHECK-NEXT: %4 = firrtl.mux{{.*}} -> !firrtl.uint<3>
     %0 = firrtl.wire : !firrtl.uint
     %1 = firrtl.wire : !firrtl.uint
     %2 = firrtl.wire : !firrtl.uint
     %3 = firrtl.mux(%2, %0, %1) : (!firrtl.uint, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    // CHECK: %4 = firrtl.wire : !firrtl.uint<1>
+    // CHECK: %5 = firrtl.wire : !firrtl.uint<0>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %4 = firrtl.wire : !firrtl.uint
     %5 = firrtl.mux(%4, %c1_ui1, %c1_ui1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
@@ -961,8 +962,8 @@ firrtl.circuit "Foo" {
     firrtl.strictconnect %out1, %2 : !firrtl.uint
   }
   // CHECK-LABEL: module @MuxIntrinsics
-  // CHECK-SAME: %sel: !firrtl.uint<1>
-  // CHECK-SAME: %sel2: !firrtl.uint<2>
+  // CHECK-SAME: %sel: !firrtl.uint<0>
+  // CHECK-SAME: %sel2: !firrtl.uint<0>
   firrtl.module @MuxIntrinsics(in %sel: !firrtl.uint, in %sel2: !firrtl.uint, in %high: !firrtl.uint<1>, in %low: !firrtl.uint<1>, out %out1: !firrtl.uint, out %out2: !firrtl.uint) {
     %c3_ui4 = firrtl.constant 3 : !firrtl.uint<4>
     %c3_ui3 = firrtl.constant 3 : !firrtl.uint<3>

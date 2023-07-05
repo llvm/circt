@@ -1541,12 +1541,14 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
       .Case<MuxPrimOp, Mux2CellIntrinsicOp>([&](auto op) {
         auto *sel = getExpr(op.getSel());
-        constrainTypes(sel, solver.known(1));
+        constrainTypes(solver.known(1), sel); // may not be useful
+        constrainTypes(sel, solver.known(0)); // back-prop
         maximumOfTypes(op.getResult(), op.getHigh(), op.getLow());
       })
       .Case<Mux4CellIntrinsicOp>([&](Mux4CellIntrinsicOp op) {
         auto *sel = getExpr(op.getSel());
-        constrainTypes(sel, solver.known(2));
+        constrainTypes(solver.known(2), sel); // may not be useful
+        constrainTypes(sel, solver.known(0)); // back-prop
         maximumOfTypes(op.getResult(), op.getV3(), op.getV2());
         maximumOfTypes(op.getResult(), op.getResult(), op.getV1());
         maximumOfTypes(op.getResult(), op.getResult(), op.getV0());
@@ -2108,6 +2110,20 @@ FailureOr<bool> InferenceTypeUpdate::updateOperation(Operation *op) {
     }
     return anyChanged;
   }
+
+  // Mux operations may need selector to be extended (#5444).
+  auto selectorFixup = [&](auto muxOp, auto bits) {
+    auto type = cast<FIRRTLBaseType>(muxOp.getSel().getType());
+    if (type.getBitWidthOrSentinel() == 0) {
+      ImplicitLocOpBuilder builder(muxOp.getSel().getLoc(), op);
+      auto onebit = builder.createOrFold<PadPrimOp>(muxOp.getSel(), bits);
+      muxOp.getSelMutable().assign(onebit);
+    }
+  };
+  TypeSwitch<Operation *>(op)
+      .Case<MuxPrimOp, Mux2CellIntrinsicOp>(
+          [&](auto muxOp) { selectorFixup(muxOp, 1); })
+      .Case<Mux4CellIntrinsicOp>([&](auto muxOp) { selectorFixup(muxOp, 2); });
 
   // If this is a module, update its ports.
   if (auto module = dyn_cast<FModuleOp>(op)) {
