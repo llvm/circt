@@ -19,8 +19,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_SUPPORT_PORTCONVERTER_H
-#define CIRCT_SUPPORT_PORTCONVERTER_H
+#ifndef CIRCT_DIALECT_HW_PORTCONVERTER_H
+#define CIRCT_DIALECT_HW_PORTCONVERTER_H
 
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -28,6 +28,7 @@
 #include "circt/Support/LLVM.h"
 
 namespace circt {
+namespace hw {
 
 class SignalStandardBuilder;
 class SignalingStandard;
@@ -172,6 +173,7 @@ public:
   }
 };
 
+} // namespace hw
 } // namespace circt
 
-#endif // CIRCT_SUPPORT_PORTCONVERTER_H
+#endif // CIRCT_DIALECT_HW_PORTCONVERTER_H

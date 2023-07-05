@@ -10,10 +10,10 @@
 
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/PortConverter.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
-#include "circt/Support/PortConverter.h"
 #include "circt/Support/SymCache.h"
 
 #include "mlir/Transforms/DialectConversion.h"

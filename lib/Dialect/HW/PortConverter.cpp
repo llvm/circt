@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Support/PortConverter.h"
+#include "circt/Dialect/HW/PortConverter.h"
 
 #include <numeric>
 

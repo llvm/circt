@@ -11,6 +11,7 @@ set(CIRCT_HW_Sources
   InstanceImplementation.cpp
   ModuleImplementation.cpp
   InnerSymbolTable.cpp
+  PortConverter.cpp
 )
 
 set(LLVM_OPTIONAL_SOURCES
@@ -32,7 +33,7 @@ add_circt_dialect_library(CIRCTHW
   LINK_COMPONENTS
   Support
 
-  LINK_LIBS PUBLIC
+LINK_LIBS PUBLIC
   CIRCTSupport
   MLIRIR
   MLIRInferTypeOpInterface
