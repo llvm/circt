@@ -73,28 +73,35 @@ def KnownWidth : Constraint<CPred<[{
     !cast<FIRRTLBaseType>($0.getType()).getRecursiveTypeProperties().hasUninferredWidth
   }]>>;
 
+/// Constraint that matches a false SpecialConstantOp
+def FalseSpecialConstantOp : Constraint<CPred<
+  "$0.getDefiningOp<SpecialConstantOp>() &&"
+  "$0.getDefiningOp<SpecialConstantOp>().getValue() == false">>;
+
+/// Constraint that matches a true SpecialConstantOp
+def TrueSpecialConstantOp : Constraint<CPred<
+  "$0.getDefiningOp<SpecialConstantOp>() &&"
+  "$0.getDefiningOp<SpecialConstantOp>().getValue() == true">>;
+
 /// Constraint that matches a zero ConstantOp or SpecialConstantOp.
 def ZeroConstantOp : Constraint<Or<[
   CPred<"$0.getDefiningOp<ConstantOp>() &&"
         "$0.getDefiningOp<ConstantOp>().getValue().isZero()">,
-  CPred<"$0.getDefiningOp<SpecialConstantOp>() &&"
-        "$0.getDefiningOp<SpecialConstantOp>().getValue() == false">
+  FalseSpecialConstantOp.predicate
 ]>>;
 
 /// Constraint that matches a one ConstantOp or SpecialConstantOp.
 def OneConstantOp : Constraint<Or<[
   CPred<"$0.getDefiningOp<ConstantOp>() &&"
         "$0.getDefiningOp<ConstantOp>().getValue().isOne()">,
-  CPred<"$0.getDefiningOp<SpecialConstantOp>() &&"
-        "$0.getDefiningOp<SpecialConstantOp>().getValue() == true">
+  TrueSpecialConstantOp.predicate
 ]>>;
 
-/// Constraint that matches a zero ConstantOp or SpecialConstantOp.
+/// Constraint that matches a not-all-ones ConstantOp or SpecialConstantOp.
 def NotAllOneConstantOp : Constraint<Or<[
   CPred<"$0.getDefiningOp<ConstantOp>() &&"
         "!$0.getDefiningOp<ConstantOp>().getValue().isAllOnes()">,
-  CPred<"$0.getDefiningOp<SpecialConstantOp>() &&"
-        "$0.getDefiningOp<SpecialConstantOp>().getValue() == false">
+  FalseSpecialConstantOp.predicate
 ]>>;
 
 /// Constraint that matches an all ones ConstantOp.
