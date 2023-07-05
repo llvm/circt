@@ -107,6 +107,15 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike"> {
       return getModulePortInfo($_op);
     }]>,
 
+    InterfaceMethod<"Get a handle to a utility class which provides by-name lookup of port indices. The returned object does _not_ update if the module is mutated.",
+    "::circt::hw::ModulePortLookupInfo", "getPortLookupInfo", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return hw::ModulePortLookupInfo(
+        $_op->getContext(),
+        this->getPorts());
+    }]>,
+
     /// Insert and remove input and output ports of this module. Does not modify
     /// the block arguments of the module body. The insertion and removal
     /// indices must be in ascending order. The indices refer to the port
