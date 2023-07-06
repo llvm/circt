@@ -2514,7 +2514,7 @@ LogicalResult StrictConnectOp::verify() {
     // The anonymous types of operands must be equivalent.
     assert(areAnonymousTypesEquivalent(cast<FIRRTLBaseType>(getSrc().getType()),
                                        baseType) &&
-           "`SameAnnoTypeOperands` trait should have already rejected "
+           "`SameAnonTypeOperands` trait should have already rejected "
            "structurally non-equivalent types");
   }
 
@@ -3627,7 +3627,7 @@ LogicalResult impl::verifySameOperandsIntTypeKind(Operation *op) {
                                    rhsWidth, isConstResult, op->getLoc()));
 }
 
-LogicalResult impl::verifySameAnnoTypeOperands(Operation *op) {
+LogicalResult impl::verifySameAnonTypeOperands(Operation *op) {
   assert(op->getNumOperands() == 2 && "SameAnnoTypeOperand on non-binary op");
   if (!circt::firrtl::areAnonymousTypesEquivalent(op->getOperand(0).getType(),
                                                   op->getOperand(1).getType()))

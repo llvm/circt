@@ -50,12 +50,12 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
   let hasCanonicalizer = true;
 }
 
-def SameAnnoTypeOperands : NativeOpTrait<"SameAnnoTypeOperands"> {
+def SameAnonTypeOperands : NativeOpTrait<"SameAnonTypeOperands"> {
   let cppNamespace = "::circt::firrtl";
 }
 
 def StrictConnectOp : FIRRTLOp<"strictconnect", [FConnectLike,
-                      SameAnnoTypeOperands]> {
+                      SameAnonTypeOperands]> {
   let summary = "Connect two signals";
   let description =  [{
     Connect two values with strict constraints:

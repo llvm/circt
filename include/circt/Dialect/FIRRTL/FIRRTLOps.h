@@ -130,7 +130,7 @@ StrictConnectOp getSingleConnectUserOf(Value value);
 // functions commonly used among operations.
 namespace impl {
 LogicalResult verifySameOperandsIntTypeKind(Operation *op);
-LogicalResult verifySameAnnoTypeOperands(Operation *op);
+LogicalResult verifySameAnonTypeOperands(Operation *op);
 
 // Type inference adaptor for FIRRTL operations.
 LogicalResult inferReturnTypes(
@@ -176,11 +176,11 @@ public:
 
 /// A binary operation where the operands have the anonymous types..
 template <typename ConcreteOp>
-class SameAnnoTypeOperands
-    : public OpTrait::TraitBase<ConcreteOp, SameAnnoTypeOperands> {
+class SameAnonTypeOperands
+    : public OpTrait::TraitBase<ConcreteOp, SameAnonTypeOperands> {
 public:
   static LogicalResult verifyTrait(Operation *op) {
-    return impl::verifySameAnnoTypeOperands(op);
+    return impl::verifySameAnonTypeOperands(op);
   }
 };
 
