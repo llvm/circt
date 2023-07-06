@@ -50,7 +50,12 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
   let hasCanonicalizer = true;
 }
 
-def StrictConnectOp : FIRRTLOp<"strictconnect", [FConnectLike]> {
+def SameAnnoTypeOperands : NativeOpTrait<"SameAnnoTypeOperands"> {
+  let cppNamespace = "::circt::firrtl";
+}
+
+def StrictConnectOp : FIRRTLOp<"strictconnect", [FConnectLike,
+                      SameAnnoTypeOperands]> {
   let summary = "Connect two signals";
   let description =  [{
     Connect two values with strict constraints:
@@ -66,8 +71,8 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [FConnectLike]> {
   let hasCanonicalizeMethod = true;
 
   let hasVerifier = 1;
-
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{$dest `,` $src  attr-dict `:`
+      custom<OptionalConnectOperandTypes>(type($dest), type($src))}];
 }
 
 def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {

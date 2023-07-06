@@ -1216,6 +1216,20 @@ bool firrtl::areAnonymousTypesEquivalent(FIRRTLBaseType destType,
   return destType.getAnonymousType() == srcType.getAnonymousType();
 }
 
+bool firrtl::areAnonymousTypesEquivalent(mlir::Type destType,
+                                         mlir::Type srcType) {
+  if (auto destBaseType = type_dyn_cast<FIRRTLBaseType>(destType))
+    if (auto srcBaseType = type_dyn_cast<FIRRTLBaseType>(srcType))
+      return areAnonymousTypesEquivalent(destBaseType, srcBaseType);
+
+  if (auto destRefType = type_dyn_cast<RefType>(destType))
+    if (auto srcRefType = type_dyn_cast<RefType>(srcType))
+      return areAnonymousTypesEquivalent(destRefType.getType(),
+                                         srcRefType.getType());
+
+  return destType == srcType;
+}
+
 /// Return the passive version of a firrtl type
 /// top level for ODS constraint usage
 Type firrtl::getPassiveType(Type anyBaseFIRRTLType) {

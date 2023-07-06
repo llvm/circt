@@ -2478,44 +2478,29 @@ LogicalResult ConnectOp::verify() {
   return success();
 }
 
-// strictconnect %dest, %src attr-dict : type(%dest) ^(, type(%src))
-ParseResult StrictConnectOp::parse(OpAsmParser &parser,
-                                   OperationState &result) {
-  OpAsmParser::UnresolvedOperand dest, src;
-  Type destType, srcType;
-
-  if (parser.parseOperand(dest) || parser.parseComma() ||
-      parser.parseOperand(src) ||
-      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.parseType(destType) ||
-      parser.resolveOperand(dest, destType, result.operands))
+// type(%dest) ^(, type(%src))
+static ParseResult parseOptionalConnectOperandTypes(OpAsmParser &parser,
+                                                    mlir::Type &dest,
+                                                    mlir::Type &src) {
+  if (parser.parseType(dest))
     return failure();
 
   // Parse an optional src type.
   if (parser.parseOptionalComma()) {
-    srcType = destType;
+    src = dest;
   } else {
-    if (parser.parseType(srcType))
+    if (parser.parseType(src))
       return failure();
   }
-
-  if (parser.resolveOperand(src, srcType, result.operands))
-    return failure();
-
   return success();
 }
 
-void StrictConnectOp::print(OpAsmPrinter &odsPrinter) {
-  odsPrinter << ' ';
-  odsPrinter << getDest();
-  odsPrinter << ", ";
-  odsPrinter << getSrc();
-  odsPrinter.printOptionalAttrDict((*this)->getAttrs(), {});
-  odsPrinter << " : ";
-  odsPrinter << getDest().getType();
+static void printOptionalConnectOperandTypes(OpAsmPrinter &p, Operation *op,
+                                             mlir::Type dest, mlir::Type src) {
+  p << dest;
   // If operand types are not same, print a src type.
-  if (getDest().getType() != getSrc().getType())
-    odsPrinter << ", " << getSrc().getType();
+  if (dest != src)
+    p << ", " << src;
 }
 
 LogicalResult StrictConnectOp::verify() {
@@ -2527,9 +2512,10 @@ LogicalResult StrictConnectOp::verify() {
       return emitError("analog types may not be connected");
 
     // The anonymous types of operands must be equivalent.
-    if (!areAnonymousTypesEquivalent(cast<FIRRTLBaseType>(getSrc().getType()),
-                                     cast<FIRRTLBaseType>(getDest().getType())))
-      return failure();
+    assert(areAnonymousTypesEquivalent(cast<FIRRTLBaseType>(getSrc().getType()),
+                                       baseType) &&
+           "`SameAnnoTypeOperands` trait should have already rejected "
+           "structurally non-equivalent types");
   }
 
   // Check that the flows make sense.
@@ -3639,6 +3625,17 @@ LogicalResult impl::verifySameOperandsIntTypeKind(Operation *op) {
   return success(isSameIntTypeKind(op->getOperand(0).getType(),
                                    op->getOperand(1).getType(), lhsWidth,
                                    rhsWidth, isConstResult, op->getLoc()));
+}
+
+LogicalResult impl::verifySameAnnoTypeOperands(Operation *op) {
+  assert(op->getNumOperands() == 2 && "SameAnnoTypeOperand on non-binary op");
+  if (!circt::firrtl::areAnonymousTypesEquivalent(op->getOperand(0).getType(),
+                                                  op->getOperand(1).getType()))
+    return mlir::emitError(op->getLoc(), "operand types must be structually "
+                                         "equivalent but a dest type is ")
+           << op->getOperand(0).getType() << ", and a src type is "
+           << op->getOperand(1).getType();
+  return success();
 }
 
 LogicalResult impl::validateBinaryOpArguments(ValueRange operands,
