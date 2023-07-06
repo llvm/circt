@@ -181,9 +181,9 @@ public:
 protected:
   // Determine a reasonable name for the pipeline. This will affect naming
   // of things such as stage registers and outlined stage modules.
-  StringRef getPipelineBaseName() {
-    if (auto nameAttr = pipeline.getName())
-      return *nameAttr;
+  StringAttr getPipelineBaseName() {
+    if (auto nameAttr = pipeline.getNameAttr())
+      return nameAttr;
     return StringAttr::get(pipeline.getContext(), "p" + Twine(pipelineID));
   }
 
@@ -206,7 +206,7 @@ protected:
 
   // Name of this pipeline - used for naming stages and registers.
   // Implementation defined.
-  StringRef pipelineName;
+  StringAttr pipelineName;
 };
 
 class PipelineInlineLowering : public PipelineLowering {
@@ -214,7 +214,8 @@ public:
   using PipelineLowering::PipelineLowering;
 
   StringAttr getStageRegPrefix(size_t stageIdx) override {
-    return builder.getStringAttr(pipelineName + "_s" + Twine(stageIdx));
+    return builder.getStringAttr(pipelineName.strref() + "_s" +
+                                 Twine(stageIdx));
   }
 
   LogicalResult run() override {
@@ -328,17 +329,17 @@ public:
   }
 
   LogicalResult run() override {
-    pipelineName =
-        StringAttr::get(pipeline.getContext(),
-                        parentModule.getName() + "_" + getPipelineBaseName());
+    pipelineName = StringAttr::get(pipeline.getContext(),
+                                   parentModule.getName() + "_" +
+                                       getPipelineBaseName().strref());
     cloneConstantsToStages();
 
     // Build the top-level pipeline module.
     bool withStall = static_cast<bool>(pipeline.getStall());
-    pipelineMod =
-        buildPipelineLike(pipelineName, pipeline.getInputs().getTypes(),
-                          pipeline.getExtInputs().getTypes(),
-                          pipeline.getDataOutputs().getTypes(), withStall);
+    pipelineMod = buildPipelineLike(
+        pipelineName.strref(), pipeline.getInputs().getTypes(),
+        pipeline.getExtInputs().getTypes(),
+        pipeline.getDataOutputs().getTypes(), withStall);
     auto portLookup = pipelineMod.getPortLookupInfo();
     pipelineClk = pipelineMod.getBody().front().getArgument(
         *portLookup.getInputPortIndex("clk"));
@@ -579,7 +580,7 @@ private:
   buildStage(Block *stage, ValueRange stageArguments, Value stageValid,
              Value stageStall, size_t stageIndex) {
     builder.setInsertionPoint(parentModule);
-    auto name = pipelineName + "_s" + std::to_string(stageIndex);
+    Twine name = pipelineName.strref() + "_s" + Twine(stageIndex);
 
     llvm::SmallVector<Type> outputTypes;
     if (auto stageOp = dyn_cast<StageOp>(stage->getTerminator()))
