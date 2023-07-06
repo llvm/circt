@@ -116,8 +116,24 @@ public:
       assert(reset && "reset not set");
       auto regIdx = it.index();
       auto regIn = it.value();
-      auto regName = builder.getStringAttr(stageRegPrefix.strref() + "_reg" +
-                                           std::to_string(regIdx));
+
+      // Register naming: If the source value has an `sv.namehint` attribute
+      // attached, use that as a register prefix.
+      StringAttr regName;
+      if (auto definingOp = regIn.getDefiningOp()) {
+        if (auto nameHint =
+                definingOp->getAttrOfType<StringAttr>("sv.namehint")) {
+          regName = StringAttr::get(pipeline.getContext(),
+                                    stageRegPrefix.strref() + "_" +
+                                        nameHint.getValue() + "_reg");
+        }
+      }
+      // Else, use a generic name.
+      if (!regName) {
+        regName = builder.getStringAttr(stageRegPrefix.strref() + "_reg" +
+                                        Twine(regIdx));
+      }
+
       Value dataReg;
       if (this->clockGateRegs) {
         // Use the clock gate instead of input muxing.
@@ -163,6 +179,14 @@ public:
   virtual StringAttr getStageRegPrefix(size_t stageIdx) = 0;
 
 protected:
+  // Determine a reasonable name for the pipeline. This will affect naming
+  // of things such as stage registers and outlined stage modules.
+  StringRef getPipelineBaseName() {
+    if (auto nameAttr = pipeline.getName())
+      return *nameAttr;
+    return StringAttr::get(pipeline.getContext(), "p" + Twine(pipelineID));
+  }
+
   // Parent module clock.
   Value parentClk;
   // Parent module reset.
@@ -182,7 +206,7 @@ protected:
 
   // Name of this pipeline - used for naming stages and registers.
   // Implementation defined.
-  std::string pipelineName;
+  StringRef pipelineName;
 };
 
 class PipelineInlineLowering : public PipelineLowering {
@@ -190,12 +214,11 @@ public:
   using PipelineLowering::PipelineLowering;
 
   StringAttr getStageRegPrefix(size_t stageIdx) override {
-    return builder.getStringAttr(pipelineName + "_s" +
-                                 std::to_string(stageIdx));
+    return builder.getStringAttr(pipelineName + "_s" + Twine(stageIdx));
   }
 
   LogicalResult run() override {
-    pipelineName = "p" + std::to_string(pipelineID);
+    pipelineName = getPipelineBaseName();
 
     // Replace uses of the pipeline internal inputs with the pipeline inputs.
     for (auto [outer, inner] :
@@ -306,8 +329,8 @@ public:
 
   LogicalResult run() override {
     pipelineName =
-        (parentModule.getName() + "_p" + std::to_string(pipelineID)).str();
-
+        StringAttr::get(pipeline.getContext(),
+                        parentModule.getName() + "_" + getPipelineBaseName());
     cloneConstantsToStages();
 
     // Build the top-level pipeline module.

@@ -45,14 +45,15 @@ def UnscheduledPipelineOp : Op<Pipeline_Dialect, "unscheduled", [
   }];
 
   let arguments = (ins
-    Variadic<AnyType>:$inputs, Variadic<AnyType>:$extInputs, I1:$go, I1:$clock, I1:$reset, Optional<I1>:$stall
+    OptionalAttr<StrAttr>:$name, Variadic<AnyType>:$inputs,
+    Variadic<AnyType>:$extInputs, I1:$go, I1:$clock, I1:$reset, Optional<I1>:$stall
   );
   let results = (outs Variadic<AnyType>:$dataOutputs, I1:$done);
   let regions = (region SizedRegion<1>: $body);
   let hasVerifier = 1;
 
   let assemblyFormat = [{
-    `(` $inputs `)` (`stall` $stall^)? (`ext` `(` $extInputs^ `:` type($extInputs) `)`)? 
+    ($name^)? `(` $inputs `)` (`stall` $stall^)? (`ext` `(` $extInputs^ `:` type($extInputs) `)`)? 
       `clock` $clock `reset` $reset `go` $go attr-dict `:`functional-type($inputs, $dataOutputs) $body
   }];
 
@@ -98,7 +99,8 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
   }];
 
   let arguments = (ins
-    Variadic<AnyType>:$inputs, Variadic<AnyType>:$extInputs,  I1:$clock, I1:$reset, I1:$go, Optional<I1>:$stall
+    OptionalAttr<StrAttr>:$name, Variadic<AnyType>:$inputs,
+    Variadic<AnyType>:$extInputs,  I1:$clock, I1:$reset, I1:$go, Optional<I1>:$stall
   );
   let results = (outs Variadic<AnyType>:$dataOutputs, I1:$done);
   let regions = (region AnyRegion:$body);
@@ -111,7 +113,7 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
   ];
 
   let assemblyFormat = [{
-    `(` $inputs `)` (`stall` $stall^)? (`ext` `(` $extInputs^ `:` type($extInputs) `)`)? 
+    ($name^)? `(` $inputs `)` (`stall` $stall^)? (`ext` `(` $extInputs^ `:` type($extInputs) `)`)? 
       `clock` $clock `reset` $reset `go` $go attr-dict `:`functional-type($inputs, $dataOutputs) $body
   }];
 
