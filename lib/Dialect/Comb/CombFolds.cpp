@@ -221,6 +221,7 @@ static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
                                                       inop, range.first));
   }
   Value newop = rewriter.createOrFold<OpTy>(op.getLoc(), newType, args);
+  newop.getDefiningOp()->setDialectAttrs(op->getDialectAttrs());
   if (range.first)
     newop = rewriter.createOrFold<ConcatOp>(
         op.getLoc(), newop,
@@ -232,7 +233,7 @@ static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
         rewriter.create<hw::ConstantOp>(
             op.getLoc(), APInt::getZero(opType.getWidth() - range.second - 1)),
         newop);
-  replaceOpAndCopyName(rewriter, op, newop);
+  rewriter.replaceOp(op, newop);
   return true;
 }
 
