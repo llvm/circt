@@ -47,13 +47,13 @@ def UnscheduledPipelineOp : Op<Pipeline_Dialect, "unscheduled", [
   let arguments = (ins
     Variadic<AnyType>:$inputs, Variadic<AnyType>:$extInputs, I1:$go, I1:$clock, I1:$reset, Optional<I1>:$stall
   );
-  let results = (outs Variadic<AnyType>:$results, I1:$done);
+  let results = (outs Variadic<AnyType>:$dataOutputs, I1:$done);
   let regions = (region SizedRegion<1>: $body);
   let hasVerifier = 1;
 
   let assemblyFormat = [{
     `(` $inputs `)` (`stall` $stall^)? (`ext` `(` $extInputs^ `:` type($extInputs) `)`)? 
-      `clock` $clock `reset` $reset `go` $go attr-dict `:`functional-type($inputs, $results) $body
+      `clock` $clock `reset` $reset `go` $go attr-dict `:`functional-type($inputs, $dataOutputs) $body
   }];
 
   let extraClassDeclaration = [{
@@ -100,19 +100,19 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
   let arguments = (ins
     Variadic<AnyType>:$inputs, Variadic<AnyType>:$extInputs,  I1:$clock, I1:$reset, I1:$go, Optional<I1>:$stall
   );
-  let results = (outs Variadic<AnyType>:$results, I1:$done);
+  let results = (outs Variadic<AnyType>:$dataOutputs, I1:$done);
   let regions = (region AnyRegion:$body);
   let hasVerifier = 1;
   let skipDefaultBuilders = 1;
 
   let builders = [
-    OpBuilder<(ins "TypeRange":$results, "ValueRange":$inputs, "ValueRange":$extInputs,
+    OpBuilder<(ins "TypeRange":$dataOutputs, "ValueRange":$inputs, "ValueRange":$extInputs,
       "Value":$clock, "Value":$reset, "Value":$go, CArg<"Value", "{}">:$stall)>
   ];
 
   let assemblyFormat = [{
     `(` $inputs `)` (`stall` $stall^)? (`ext` `(` $extInputs^ `:` type($extInputs) `)`)? 
-      `clock` $clock `reset` $reset `go` $go attr-dict `:`functional-type($inputs, $results) $body
+      `clock` $clock `reset` $reset `go` $go attr-dict `:`functional-type($inputs, $dataOutputs) $body
   }];
 
   let extraClassDeclaration = [{
