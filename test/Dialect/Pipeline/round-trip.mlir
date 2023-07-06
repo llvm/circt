@@ -1,20 +1,17 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
-// CHECK-LABEL:   hw.module @unscheduled1(
-// CHECK-SAME:            %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out: i32) {
-// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = pipeline.unscheduled(%[[VAL_0]], %[[VAL_1]]) clock %[[VAL_3]] reset %[[VAL_4]] go %[[VAL_2]] : (i32, i32) -> i32 {
-// CHECK:           ^bb0(%[[VAL_7:.*]]: i32, %[[VAL_8:.*]]: i32, %[[VAL_9:.*]]: i1):
-// CHECK:             %[[VAL_10:.*]] = pipeline.latency 2 -> (i32) {
-// CHECK:               %[[VAL_11:.*]] = comb.add %[[VAL_7]], %[[VAL_8]] : i32
-// CHECK:               pipeline.latency.return %[[VAL_11]] : i32
-// CHECK:             }
-// CHECK:             pipeline.return %[[VAL_12:.*]] : i32
-// CHECK:           }
-// CHECK:           hw.output %[[VAL_13:.*]] : i32
-// CHECK:         }
+// CHECK-LABEL:  hw.module @unscheduled1(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out: i32) {
+// CHECK-NEXT:    %dataOutputs, %done = pipeline.unscheduled(%arg0_0 : i32 = %arg0, %arg1_1 : i32 = %arg1) clock(%arg2 = %clk) reset(%arg3 = %rst) go(%arg4 = %go) -> (out : i32) {
+// CHECK-NEXT:      %0 = pipeline.latency 2 -> (i32) {
+// CHECK-NEXT:        %1 = comb.add %arg0_0, %arg1_1 : i32
+// CHECK-NEXT:        pipeline.latency.return %1 : i32
+// CHECK-NEXT:      }
+// CHECK-NEXT:      pipeline.return %0 : i32
+// CHECK-NEXT:    }
+// CHECK-NEXT:    hw.output %dataOutputs : i32
+// CHECK-NEXT:  }
 hw.module @unscheduled1(%arg0 : i32, %arg1 : i32, %go : i1, %clk : i1, %rst : i1) -> (out: i32) {
-  %0:2 = pipeline.unscheduled(%arg0, %arg1) clock %clk reset %rst go %go : (i32, i32) -> (i32) {
-   ^bb0(%a0 : i32, %a1: i32, %s0_valid : i1):
+  %0:2 = pipeline.unscheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out: i32){
     %0 = pipeline.latency 2 -> (i32) {
       %1 = comb.add %a0, %a1 : i32
       pipeline.latency.return %1 : i32
@@ -24,20 +21,17 @@ hw.module @unscheduled1(%arg0 : i32, %arg1 : i32, %go : i1, %clk : i1, %rst : i1
   hw.output %0 : i32
 }
 
-// CHECK-LABEL:   hw.module @scheduled1(
-// CHECK-SAME:            %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out: i32) {
-// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = pipeline.scheduled(%[[VAL_0]], %[[VAL_1]]) clock %[[VAL_3]] reset %[[VAL_4]] go %[[VAL_2]] : (i32, i32) -> i32 {
-// CHECK:           ^bb0(%[[VAL_7:.*]]: i32, %[[VAL_8:.*]]: i32, %[[VAL_9:.*]]: i1):
-// CHECK:             %[[VAL_10:.*]] = comb.add %[[VAL_7]], %[[VAL_8]] : i32
-// CHECK:             pipeline.stage ^bb1
-// CHECK:           ^bb1(%[[VAL_11:.*]]: i1):
-// CHECK:             pipeline.return %[[VAL_10]] : i32
-// CHECK:           }
-// CHECK:           hw.output %[[VAL_12:.*]] : i32
-// CHECK:         }
+// CHECK-LABEL:  hw.module @scheduled1(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out: i32) {
+// CHECK-NEXT:    %out, %done = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out : i32) {
+// CHECK-NEXT:      %0 = comb.add %a0, %a1 : i32
+// CHECK-NEXT:      pipeline.stage ^bb1 
+// CHECK-NEXT:    ^bb1(%s1_valid: i1):  // pred: ^bb0
+// CHECK-NEXT:      pipeline.return %0 : i32
+// CHECK-NEXT:    }
+// CHECK-NEXT:    hw.output %out : i32
+// CHECK-NEXT:  }
 hw.module @scheduled1(%arg0 : i32, %arg1 : i32, %go : i1, %clk : i1, %rst : i1) -> (out: i32) {
-  %0:2 = pipeline.scheduled(%arg0, %arg1) clock %clk reset %rst go %go : (i32, i32) -> (i32) {
-   ^bb0(%a0 : i32, %a1: i32, %s0_valid : i1):
+  %0:2 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out: i32){
     %0 = comb.add %a0, %a1 : i32
     pipeline.stage ^bb1
 
@@ -48,20 +42,17 @@ hw.module @scheduled1(%arg0 : i32, %arg1 : i32, %go : i1, %clk : i1, %rst : i1) 
 }
 
 
-// CHECK-LABEL:   hw.module @scheduled2(
-// CHECK-SAME:               %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out: i32) {
-// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = pipeline.scheduled(%[[VAL_0]], %[[VAL_1]]) clock %[[VAL_3]] reset %[[VAL_4]] go %[[VAL_2]] : (i32, i32) -> i32 {
-// CHECK:           ^bb0(%[[VAL_7:.*]]: i32, %[[VAL_8:.*]]: i32, %[[VAL_9:.*]]: i1):
-// CHECK:             %[[VAL_10:.*]] = comb.add %[[VAL_7]], %[[VAL_8]] : i32
-// CHECK:             pipeline.stage ^bb1 regs(%[[VAL_10]] : i32)
-// CHECK:           ^bb1(%[[VAL_11:.*]]: i32, %[[VAL_12:.*]]: i1):
-// CHECK:             pipeline.return %[[VAL_11]] : i32
-// CHECK:           }
-// CHECK:           hw.output %[[VAL_13:.*]] : i32
-// CHECK:         }
-hw.module @scheduled2(%arg0 : i32, %arg1 : i32, %g : i1, %clk : i1, %rst : i1) -> (out: i32) {
-  %0:2 = pipeline.scheduled(%arg0, %arg1) clock %clk reset %rst go %g : (i32, i32) -> (i32) {
-   ^bb0(%a0 : i32, %a1: i32, %s0_valid : i1):
+// CHECK-LABEL:  hw.module @scheduled2(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out: i32) {
+// CHECK-NEXT:    %out, %done = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out : i32) {
+// CHECK-NEXT:      %0 = comb.add %a0, %a1 : i32
+// CHECK-NEXT:      pipeline.stage ^bb1 regs(%0 : i32)
+// CHECK-NEXT:    ^bb1(%s1_arg0: i32, %s1_valid: i1):  // pred: ^bb0
+// CHECK-NEXT:      pipeline.return %s1_arg0 : i32
+// CHECK-NEXT:    }
+// CHECK-NEXT:    hw.output %out : i32
+// CHECK-NEXT:  }
+hw.module @scheduled2(%arg0 : i32, %arg1 : i32, %go : i1, %clk : i1, %rst : i1) -> (out: i32) {
+  %0:2 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out: i32) {
     %0 = comb.add %a0, %a1 : i32
     pipeline.stage ^bb1 regs(%0 : i32)
 
@@ -71,20 +62,17 @@ hw.module @scheduled2(%arg0 : i32, %arg1 : i32, %g : i1, %clk : i1, %rst : i1) -
   hw.output %0 : i32
 }
 
-// CHECK-LABEL:   hw.module @scheduledWithPassthrough(
-// CHECK-SAME:           %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out: i32) {
-// CHECK:           %[[VAL_5:.*]]:2, %[[VAL_6:.*]] = pipeline.scheduled(%[[VAL_0]], %[[VAL_1]]) clock %[[VAL_3]] reset %[[VAL_4]] go %[[VAL_2]] : (i32, i32) -> (i32, i32) {
-// CHECK:           ^bb0(%[[VAL_7:.*]]: i32, %[[VAL_8:.*]]: i32, %[[VAL_9:.*]]: i1):
-// CHECK:             %[[VAL_10:.*]] = comb.add %[[VAL_7]], %[[VAL_8]] : i32
-// CHECK:             pipeline.stage ^bb1 regs(%[[VAL_10]] : i32) pass(%[[VAL_8]] : i32)
-// CHECK:           ^bb1(%[[VAL_11:.*]]: i32, %[[VAL_12:.*]]: i32, %[[VAL_13:.*]]: i1):
-// CHECK:             pipeline.return %[[VAL_11]], %[[VAL_12]] : i32, i32
-// CHECK:           }
-// CHECK:           hw.output %[[VAL_14:.*]]#0 : i32
-// CHECK:         }
-hw.module @scheduledWithPassthrough(%arg0 : i32, %arg1 : i32, %g : i1, %clk : i1, %rst : i1) -> (out: i32) {
-  %0:3 = pipeline.scheduled(%arg0, %arg1) clock %clk reset %rst go %g : (i32, i32) -> (i32, i32) {
-   ^bb0(%a0 : i32, %a1: i32, %s0_valid : i1):
+// CHECK-LABEL:  hw.module @scheduledWithPassthrough(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out: i32) {
+// CHECK-NEXT:    %out0, %out1, %done = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out0 : i32, out1 : i32) {
+// CHECK-NEXT:      %0 = comb.add %a0, %a1 : i32
+// CHECK-NEXT:      pipeline.stage ^bb1 regs(%0 : i32) pass(%a1 : i32)
+// CHECK-NEXT:    ^bb1(%s1_arg0: i32, %s1_arg1: i32, %s1_valid: i1):  // pred: ^bb0
+// CHECK-NEXT:      pipeline.return %s1_arg0, %s1_arg1 : i32, i32
+// CHECK-NEXT:    }
+// CHECK-NEXT:    hw.output %out0 : i32
+// CHECK-NEXT:  }
+hw.module @scheduledWithPassthrough(%arg0 : i32, %arg1 : i32, %go : i1, %clk : i1, %rst : i1) -> (out: i32) {
+  %0:3 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out0: i32, out1: i32) {
     %0 = comb.add %a0, %a1 : i32
     pipeline.stage ^bb1 regs(%0 : i32) pass(%a1 : i32)
 
@@ -94,35 +82,29 @@ hw.module @scheduledWithPassthrough(%arg0 : i32, %arg1 : i32, %g : i1, %clk : i1
   hw.output %0#0 : i32
 }
 
-// CHECK-LABEL:   hw.module @withStall(
-// CHECK-SAME:           %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out: i32) {
-// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = pipeline.scheduled(%[[VAL_0]]) stall %[[VAL_1]] clock %[[VAL_3]] reset %[[VAL_4]] go %[[VAL_2]] : (i32) -> i32 {
-// CHECK:           ^bb0(%[[VAL_7:.*]]: i32, %[[VAL_8:.*]]: i1):
-// CHECK:             pipeline.return %[[VAL_7]] : i32
-// CHECK:           }
-// CHECK:           hw.output %[[VAL_9:.*]] : i32
-// CHECK:         }
+// CHECK-LABEL:  hw.module @withStall(%arg0: i32, %stall: i1, %go: i1, %clk: i1, %rst: i1) -> (out: i32) {
+// CHECK-NEXT:    %out, %done = pipeline.scheduled(%a0 : i32 = %arg0) stall(%s = %stall) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out : i32) {
+// CHECK-NEXT:      pipeline.return %a0 : i32
+// CHECK-NEXT:    }
+// CHECK-NEXT:    hw.output %out : i32
+// CHECK-NEXT:  }
 hw.module @withStall(%arg0 : i32, %stall : i1, %go : i1, %clk : i1, %rst : i1) -> (out: i32) {
-  %0:2 = pipeline.scheduled(%arg0) stall %stall clock %clk reset %rst go %go : (i32) -> (i32) {
-   ^bb0(%a0 : i32, %s0_valid : i1):
+  %0:2 = pipeline.scheduled(%a0 : i32 = %arg0) stall(%s = %stall) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out: i32) {
     pipeline.return %a0 : i32
   }
   hw.output %0 : i32
 }
 
-// CHECK-LABEL:   hw.module @withMultipleRegs(
-// CHECK-SAME:           %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out: i32) {
-// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = pipeline.scheduled(%[[VAL_0]]) stall %[[VAL_1]] clock %[[VAL_3]] reset %[[VAL_4]] go %[[VAL_2]] : (i32) -> i32 {
-// CHECK:           ^bb0(%[[VAL_7:.*]]: i32, %[[VAL_8:.*]]: i1):
-// CHECK:             pipeline.stage ^bb1 regs(%[[VAL_7]] : i32, %[[VAL_7]] : i32)
-// CHECK:           ^bb1(%[[VAL_9:.*]]: i32, %[[VAL_10:.*]]: i32, %[[VAL_11:.*]]: i1):
-// CHECK:             pipeline.return %[[VAL_9]] : i32
-// CHECK:           }
-// CHECK:           hw.output %[[VAL_12:.*]] : i32
-// CHECK:         }
+// CHECK-LABEL:  hw.module @withMultipleRegs(%arg0: i32, %stall: i1, %go: i1, %clk: i1, %rst: i1) -> (out: i32) {
+// CHECK-NEXT:    %out, %done = pipeline.scheduled(%a0 : i32 = %arg0) stall(%s = %stall) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out : i32) {
+// CHECK-NEXT:      pipeline.stage ^bb1 regs(%a0 : i32, %a0 : i32)
+// CHECK-NEXT:    ^bb1(%s1_arg0: i32, %s1_arg1: i32, %s1_valid: i1):  // pred: ^bb0
+// CHECK-NEXT:      pipeline.return %s1_arg0 : i32
+// CHECK-NEXT:    }
+// CHECK-NEXT:    hw.output %out : i32
+// CHECK-NEXT:  }
 hw.module @withMultipleRegs(%arg0 : i32, %stall : i1, %go : i1, %clk : i1, %rst : i1) -> (out: i32) {
-  %0:2 = pipeline.scheduled(%arg0) stall %stall clock %clk reset %rst go %go : (i32) -> (i32) {
-   ^bb0(%a0 : i32, %s0_valid : i1):
+  %0:2 = pipeline.scheduled(%a0 : i32 = %arg0) stall(%s = %stall) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out: i32) {
     pipeline.stage ^bb1 regs(%a0 : i32, %a0 : i32)
 
    ^bb1(%0 : i32, %1 : i32, %s1_valid : i1):
@@ -131,26 +113,22 @@ hw.module @withMultipleRegs(%arg0 : i32, %stall : i1, %go : i1, %clk : i1, %rst 
   hw.output %0 : i32
 }
 
-// CHECK-LABEL:   hw.module @withClockGates(
-// CHECK-SAME:          %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out: i32) {
-// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = pipeline.scheduled(%[[VAL_0]]) stall %[[VAL_1]] clock %[[VAL_3]] reset %[[VAL_4]] go %[[VAL_2]] : (i32) -> i32 {
-// CHECK:           ^bb0(%[[VAL_7:.*]]: i32, %[[VAL_8:.*]]: i1):
-// CHECK:             %[[VAL_9:.*]] = hw.constant true
-// CHECK:             %[[VAL_10:.*]] = hw.constant true
-// CHECK:             %[[VAL_11:.*]] = hw.constant true
-// CHECK:             pipeline.stage ^bb1 regs(%[[VAL_7]] : i32 gated by {{\[}}%[[VAL_9]]], %[[VAL_7]] : i32, %[[VAL_7]] : i32 gated by {{\[}}%[[VAL_10]], %[[VAL_11]]])
-// CHECK:           ^bb1(%[[VAL_12:.*]]: i32, %[[VAL_13:.*]]: i32, %[[VAL_14:.*]]: i32, %[[VAL_15:.*]]: i1):
-// CHECK:             pipeline.return %[[VAL_12]] : i32
-// CHECK:           }
-// CHECK:           hw.output %[[VAL_16:.*]] : i32
-// CHECK:         }
+// CHECK-LABEL:  hw.module @withClockGates(%arg0: i32, %stall: i1, %go: i1, %clk: i1, %rst: i1) -> (out: i32) {
+// CHECK-NEXT:    %out, %done = pipeline.scheduled(%a0 : i32 = %arg0) stall(%s = %stall) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out : i32) {
+// CHECK-NEXT:      %true = hw.constant true
+// CHECK-NEXT:      %true_0 = hw.constant true
+// CHECK-NEXT:      %true_1 = hw.constant true
+// CHECK-NEXT:      pipeline.stage ^bb1 regs(%a0 : i32 gated by [%true], %a0 : i32, %a0 : i32 gated by [%true_0, %true_1])
+// CHECK-NEXT:    ^bb1(%s1_arg0: i32, %s1_arg1: i32, %s1_arg2: i32, %s1_valid: i1):  // pred: ^bb0
+// CHECK-NEXT:      pipeline.return %s1_arg0 : i32
+// CHECK-NEXT:    }
+// CHECK-NEXT:    hw.output %out : i32
+// CHECK-NEXT:  }
 hw.module @withClockGates(%arg0 : i32, %stall : i1, %go : i1, %clk : i1, %rst : i1) -> (out: i32) {
-  %0:2 = pipeline.scheduled(%arg0) stall %stall clock %clk reset %rst go %go : (i32) -> (i32) {
-   ^bb0(%a0 : i32, %s0_valid : i1):
+  %0:2 = pipeline.scheduled(%a0 : i32 = %arg0) stall(%s = %stall) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out: i32) {
     %true1 = hw.constant true
     %true2 = hw.constant true
     %true3 = hw.constant true
-
     pipeline.stage ^bb1 regs(%a0 : i32 gated by [%true1], %a0 : i32, %a0 : i32 gated by [%true2, %true3])
 
    ^bb1(%0 : i32, %1 : i32, %2 : i32, %s1_valid : i1):

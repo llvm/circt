@@ -18,7 +18,6 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #include "circt/Dialect/Pipeline/PipelineDialect.h"
-#include "circt/Dialect/Pipeline/PipelineInterfaces.h"
 
 namespace circt {
 namespace pipeline {
