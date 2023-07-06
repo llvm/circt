@@ -315,7 +315,7 @@ public:
     pipelineMod =
         buildPipelineLike(pipelineName, pipeline.getInputs().getTypes(),
                           pipeline.getExtInputs().getTypes(),
-                          pipeline.getResults().getTypes(), withStall);
+                          pipeline.getDataOutputs().getTypes(), withStall);
     auto portLookup = pipelineMod.getPortLookupInfo();
     pipelineClk = pipelineMod.getBody().front().getArgument(
         *portLookup.getInputPortIndex("clk"));

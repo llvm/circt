@@ -109,7 +109,7 @@ LogicalResult UnscheduledPipelineOp::verify() { return verifyPipeline(*this); }
 //===----------------------------------------------------------------------===//
 
 void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                                TypeRange results, ValueRange inputs,
+                                TypeRange dataOutputs, ValueRange inputs,
                                 ValueRange extInputs, Value clock, Value reset,
                                 Value go, Value stall) {
   odsState.addOperands(inputs);
@@ -129,7 +129,10 @@ void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
            static_cast<int32_t>(stall ? 1 : 0)}));
 
   auto *region = odsState.addRegion();
-  odsState.addTypes(results);
+  odsState.addTypes(dataOutputs);
+
+  // Add the implicit done output signal.
+  odsState.addTypes({odsBuilder.getIntegerType(1)});
 
   // Add the entry stage
   auto &entryBlock = region->emplaceBlock();
