@@ -59,25 +59,13 @@ firrtl.circuit "Top" {
 }
 
 // -----
-// Check handling of unexpected ref.sub.
-
-firrtl.circuit "RefSubNotFromMemory" {
-  firrtl.module @RefSubNotFromMemory(in %in : !firrtl.bundle<a: uint<1>, b: uint<2>>) {
-    // expected-note @below {{input here}}
-    %ref = firrtl.ref.send %in : !firrtl.bundle<a: uint<1>, b: uint<2>>
-    // expected-error @below {{can only lower RefSubOp of Memory}}
-    %sub = firrtl.ref.sub %ref[1] : !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>
-    %res = firrtl.ref.resolve %sub : !firrtl.probe<uint<2>>
-  }
-}
-
-// -----
-// Check handling of unexpected ref.sub, from port.
+// Check handling of unexpected ref.sub, from input port.
 
 firrtl.circuit "RefSubNotFromOp" {
-  // expected-note @below {{input here}}
+  // expected-error @below {{reference dataflow cannot be traced back to the remote read op for module port 'ref'}}
+  // expected-note @below {{indexing through this reference}}
   firrtl.module private @Child(in %ref : !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>) {
-    // expected-error @below {{can only lower RefSubOp of Memory}}
+    // expected-error @below {{indexing through probe of unknown origin (input probe?)}}
     %sub = firrtl.ref.sub %ref[1] : !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>
     %res = firrtl.ref.resolve %sub : !firrtl.probe<uint<2>>
   }
