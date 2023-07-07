@@ -60,8 +60,9 @@ struct OutputOpConversion : public OpConversionPattern<hw::OutputOp> {
             op.getLoc(), getInnerTypes(structType), operand);
         llvm::copy(explodedStruct.getResults(),
                    std::back_inserter(convOperands));
-      } else
+      } else {
         convOperands.push_back(operand);
+      }
     }
 
     // And replace.
@@ -69,20 +70,60 @@ struct OutputOpConversion : public OpConversionPattern<hw::OutputOp> {
     opVisited->insert(op->getParentOp());
     return success();
   }
-  mutable DenseSet<Operation *> *opVisited;
+  DenseSet<Operation *> *opVisited;
 };
 
-struct StructExplodeOpConversion
-    : public OpConversionPattern<hw::StructExplodeOp> {
-  StructExplodeOpConversion(TypeConverter &typeConverter, MLIRContext *context)
-      : OpConversionPattern(typeConverter, context) {}
+struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
+  InstanceOpConversion(TypeConverter &typeConverter, MLIRContext *context,
+                       DenseSet<hw::InstanceOp> *convertedOps)
+      : OpConversionPattern(typeConverter, context),
+        convertedOps(convertedOps) {}
 
   LogicalResult
-  matchAndRewrite(hw::StructExplodeOp op, OpAdaptor adaptor,
+  matchAndRewrite(hw::InstanceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOp(op, adaptor.getOperands());
+    auto loc = op.getLoc();
+    // Flatten the operands.
+    llvm::SmallVector<Value> convOperands;
+    for (auto operand : adaptor.getOperands()) {
+      if (auto structType = getStructType(operand.getType())) {
+        auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
+            loc, getInnerTypes(structType), operand);
+        llvm::copy(explodedStruct.getResults(),
+                   std::back_inserter(convOperands));
+      } else {
+        convOperands.push_back(operand);
+      }
+    }
+
+    // Create the new instance...
+    auto newInstance = rewriter.create<hw::InstanceOp>(
+        loc, op.getReferencedModule(), op.getInstanceName(), convOperands);
+
+    // re-create any structs in the result.
+    llvm::SmallVector<Value> convResults;
+    size_t oldResultCntr = 0;
+    for (size_t resIndex = 0; resIndex < newInstance.getNumResults();
+         ++resIndex) {
+      Type oldResultType = op.getResultTypes()[oldResultCntr];
+      if (auto structType = getStructType(oldResultType)) {
+        size_t nElements = structType.getElements().size();
+        auto implodedStruct = rewriter.create<hw::StructCreateOp>(
+            loc, structType,
+            newInstance.getResults().slice(resIndex, nElements));
+        convResults.push_back(implodedStruct.getResult());
+        resIndex += nElements - 1;
+      } else
+        convResults.push_back(newInstance.getResult(resIndex));
+
+      ++oldResultCntr;
+    }
+    rewriter.replaceOp(op, convResults);
+    convertedOps->insert(newInstance);
     return success();
   }
+
+  DenseSet<hw::InstanceOp> *convertedOps;
 };
 
 using IOTypes = std::pair<TypeRange, TypeRange>;
@@ -190,18 +231,17 @@ static DenseMap<Operation *, IOTypes> populateIOMap(mlir::ModuleOp module) {
   return ioMap;
 }
 
-static void updateNameAttribute(FunctionOpInterface op, StringRef attrName,
+static void updateNameAttribute(Operation *op, StringRef attrName,
                                 DenseMap<unsigned, hw::StructType> &structMap) {
   llvm::SmallVector<Attribute> newNames;
-  auto oldNames = op.getOperation()
-                      ->getAttrOfType<ArrayAttr>(attrName)
-                      .getAsValueRange<StringAttr>();
+  auto oldNames =
+      op->getAttrOfType<ArrayAttr>(attrName).getAsValueRange<StringAttr>();
   for (auto [i, oldName] : llvm::enumerate(oldNames)) {
     // Was this arg/res index a struct?
     auto it = structMap.find(i);
     if (it == structMap.end()) {
       // No, keep old name.
-      newNames.push_back(StringAttr::get(op.getContext(), oldName));
+      newNames.push_back(StringAttr::get(op->getContext(), oldName));
       continue;
     }
 
@@ -210,10 +250,9 @@ static void updateNameAttribute(FunctionOpInterface op, StringRef attrName,
     auto structType = it->second;
     for (auto field : structType.getElements())
       newNames.push_back(
-          StringAttr::get(op.getContext(), oldName + "." + field.name.str()));
+          StringAttr::get(op->getContext(), oldName + "." + field.name.str()));
   }
-  op.getOperation()->setAttr(attrName,
-                             ArrayAttr::get(op.getContext(), newNames));
+  op->setAttr(attrName, ArrayAttr::get(op->getContext(), newNames));
 }
 
 static void updateLocAttribute(FunctionOpInterface op, StringRef attrName,
@@ -290,17 +329,28 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
     // post-conversion to update the argument and result names.
     auto ioInfoMap = populateIOInfoMap<T>(module);
 
-    // Signature conversion and legalization patterns.
-    addSignatureConversion<T>(ioInfoMap, target, patterns, typeConverter);
+    // Record the instances that were converted. We keep these around since we
+    // need to update their arg/res attribute names after the modules themselves
+    // have been updated.
+    llvm::DenseSet<hw::InstanceOp> convertedInstances;
 
     // Argument conversion for output ops. Similarly to the signature
     // conversion, legality is based on the op having been visited once, due to
     // the possibility of nested structs.
     DenseSet<Operation *> opVisited;
     patterns.add<OutputOpConversion>(typeConverter, ctx, &opVisited);
-    // patterns.add<StructExplodeOpConversion>(typeConverter, ctx);
+
+    patterns.add<InstanceOpConversion>(typeConverter, ctx, &convertedInstances);
     target.addDynamicallyLegalOp<hw::OutputOp>(
         [&](auto op) { return opVisited.contains(op->getParentOp()); });
+    target.addDynamicallyLegalOp<hw::InstanceOp>([&](auto op) {
+      return llvm::none_of(op->getOperands(), [](auto operand) {
+        return isStructType(operand.getType());
+      });
+    });
+
+    // Signature conversion and legalization patterns.
+    addSignatureConversion<T>(ioInfoMap, target, patterns, typeConverter);
 
     if (failed(applyPartialConversion(module, target, std::move(patterns))))
       return failure();
@@ -313,6 +363,14 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
       updateLocAttribute(op, "argLocs", ioInfo.argStructs);
       updateLocAttribute(op, "resultLocs", ioInfo.resStructs);
       updateBlockLocations(op, "argLocs", ioInfo.argStructs);
+    }
+
+    // And likewise with the converted instance ops.
+    for (auto instanceOp : convertedInstances) {
+      Operation *targetModule = instanceOp.getReferencedModule();
+      auto ioInfo = ioInfoMap[targetModule];
+      updateNameAttribute(instanceOp, "argNames", ioInfo.argStructs);
+      updateNameAttribute(instanceOp, "resultNames", ioInfo.resStructs);
     }
 
     // Break if we've only lowering a single level of structs.
