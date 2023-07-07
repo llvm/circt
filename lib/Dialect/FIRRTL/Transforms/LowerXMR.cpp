@@ -312,7 +312,6 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     if (!remoteOpPath)
       return failure();
     SmallVector<Attribute> refSendPath;
-    SmallVector<Attribute> refSendSimplePath;
     size_t lastIndex;
     while (remoteOpPath) {
       lastIndex = *remoteOpPath;
