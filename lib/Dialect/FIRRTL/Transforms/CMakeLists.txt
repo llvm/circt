@@ -18,6 +18,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   InferResets.cpp
   InferReadWrite.cpp
   InferWidths.cpp
+  InferWidthsAlt.cpp
   InjectDUTHierarchy.cpp
   InnerSymbolDCE.cpp
   LegacyWiring.cpp

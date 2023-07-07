@@ -340,6 +340,15 @@ def InferWidths : Pass<"firrtl-infer-widths", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createInferWidthsPass()";
 }
 
+def InferWidthsAlt : Pass<"firrtl-infer-widths-alt", "firrtl::CircuitOp"> {
+  let summary = "Infer the width of types";
+  let description = [{
+    This pass infers the widths of all types throughout a FIRRTL module, and
+    emits diagnostics for types that could not be inferred.
+  }];
+  let constructor = "circt::firrtl::createInferWidthsAltPass()";
+}
+
 def InferResets : Pass<"firrtl-infer-resets", "firrtl::CircuitOp"> {
   let summary = "Infer reset synchronicity and add implicit resets";
   let description = [{
