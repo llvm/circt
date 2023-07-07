@@ -174,7 +174,7 @@ public:
   }
 };
 
-/// A binary operation where the operands have the anonymous types..
+/// A binary operation where the operands have the anonymous types.
 template <typename ConcreteOp>
 class SameAnonTypeOperands
     : public OpTrait::TraitBase<ConcreteOp, SameAnonTypeOperands> {
