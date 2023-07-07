@@ -72,6 +72,10 @@ public:
   struct EndInfo : public TokenInfo {
     // Nothing
   };
+  // This can be used to associate a callback with the print event on the
+  // tokens stream. Note that the lambda used to create the function object will
+  // be out of scope when it is evoked. So extra care is required to ensure the
+  // values captured by the function object are valid out of scope.
   struct CallbackInfo : public TokenInfo {
     using CallbackTy = std::function<void()>;
     CallbackTy *callback;
@@ -165,10 +169,8 @@ struct EndToken : public TokenBase<EndToken, Token::Kind::End> {};
 
 struct CallbackToken : public TokenBase<CallbackToken, Token::Kind::Callback> {
   CallbackToken(Token::CallbackInfo::CallbackTy *c) { initialize(c); }
-  void invoke() const {
-    if (auto *c = getInfo().callback)
-      std::invoke(*c);
-  }
+  bool isValid() { return getInfo().callback; }
+  void invoke() const { std::invoke(*getInfo().callback); }
 };
 
 //===----------------------------------------------------------------------===//

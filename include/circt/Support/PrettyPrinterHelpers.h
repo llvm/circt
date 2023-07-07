@@ -166,6 +166,20 @@ public:
   void clear() override;
 };
 
+class TokenStringAndCallbackSaver : public TokenStringSaver {
+  llvm::SpecificBumpPtrAllocator<Token::CallbackInfo::CallbackTy> callbackAlloc;
+
+public:
+  Token::CallbackInfo::CallbackTy *
+  save(const Token::CallbackInfo::CallbackTy &c) {
+    return new (callbackAlloc.Allocate()) Token::CallbackInfo::CallbackTy(c);
+  }
+  void clear() override {
+    callbackAlloc.DestroyAll();
+    TokenStringSaver::clear();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Streaming support.
 //===----------------------------------------------------------------------===//

@@ -31,6 +31,7 @@ protected:
   SmallVector<Token> indentNestedTokens;
   formatted_raw_ostream *fStream = nullptr;
   llvm::BumpPtrAllocator allocator;
+  TokenCallbackSaver callbacks;
 
   /// Scratch buffer used by print.
   SmallString<256> out;
@@ -75,7 +76,8 @@ protected:
                              ">,")
                                 .str());
     };
-    return new (allocator.Allocate<CallbackType>()) CallbackType(callback);
+    return callbacks.get(callback);
+    // return new (allocator.Allocate<CallbackType>()) CallbackType(callback);
   }
   void SetUp() override {
 
@@ -573,9 +575,8 @@ TEST(PrettyPrinterTest, Expr) {
                         Twine(formattedStream.getColumn()) + ">,")
                            .str());
   };
-  llvm::BumpPtrAllocator allocator;
-  CallbackType *callbackPtr =
-      new (allocator.Allocate<CallbackType>()) CallbackType(callback);
+  TokenCallbackSaver callbacks;
+  CallbackType *callbackPtr = callbacks.get(callback);
 
   auto sumExpr = [&callbackPtr](auto &ps) {
     ps << CallbackToken(callbackPtr) << "(";
@@ -818,9 +819,8 @@ TEST(PrettyPrinterTest, MaxStartingIndent) {
                         Twine(formattedStream.getColumn()) + ">,")
                            .str());
   };
-  llvm::BumpPtrAllocator allocator;
-  CallbackType *callbackPtr =
-      new (allocator.Allocate<CallbackType>()) CallbackType(callback);
+  TokenCallbackSaver callbacks;
+  CallbackType *callbackPtr = callbacks.get(callback);
 
   auto test = [&](PrettyPrinter &pp) {
     out = "\n";
