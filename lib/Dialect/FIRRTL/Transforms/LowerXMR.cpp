@@ -434,7 +434,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     return TypeSwitch<Operation *, LogicalResult>(op)
         .Case<RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp>(
             [&](auto op) {
-              // LowerXMR removes zero-width refs and their users, so drop these too.
+              // Drop if zero-width target.
               if (isZeroWidth(op.getDest().getType().getType())) {
                 op.erase();
                 return success();
