@@ -37,15 +37,9 @@ namespace {
 
 // Base class for all ESI signaling standards, which handles potentially funky
 // attribute-based naming conventions.
-struct ESISignalingStandad : public SignalingStandard {
+struct ESISignalingStandad : public PortConversion {
   ESISignalingStandad(PortConverterImpl &converter, hw::PortInfo origPort)
-      : SignalingStandard(converter, origPort),
-        inSuffix(getStringAttributeOr(converter.getModule(), extModPortInSuffix,
-                                      "")),
-        outSuffix(getStringAttributeOr(converter.getModule(),
-                                       extModPortOutSuffix, "")) {}
-
-  const StringRef inSuffix, outSuffix;
+      : PortConversion(converter, origPort) {}
 };
 
 /// Implement the Valid/Ready signaling standard.
@@ -53,11 +47,7 @@ class ValidReady : public ESISignalingStandad {
 public:
   ValidReady(PortConverterImpl &converter, hw::PortInfo origPort)
       : ESISignalingStandad(converter, origPort), validPort(origPort),
-        readyPort(origPort),
-        validSuffix(getStringAttributeOr(converter.getModule(),
-                                         extModPortValidSuffix, "_valid")),
-        readySuffix(getStringAttributeOr(converter.getModule(),
-                                         extModPortReadySuffix, "_ready")) {}
+        readyPort(origPort) {}
 
   void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
                        SmallVectorImpl<Value> &newOperands,
@@ -73,22 +63,13 @@ private:
   // Keep around information about the port numbers of the relevant ports and
   // use that later to update the instances.
   PortInfo validPort, readyPort, dataPort;
-
-  /// Some external modules use unusual port naming conventions. Since we want
-  /// to avoid needing to write wrappers, provide some flexibility in the naming
-  /// convention.
-  const StringRef validSuffix, readySuffix;
 };
 
 /// Implement the FIFO signaling standard.
 class FIFO : public ESISignalingStandad {
 public:
   FIFO(PortConverterImpl &converter, hw::PortInfo origPort)
-      : ESISignalingStandad(converter, origPort),
-        rdenSuffix(getStringAttributeOr(converter.getModule(),
-                                        extModPortRdenSuffix, "_rden")),
-        emptySuffix(getStringAttributeOr(converter.getModule(),
-                                         extModPortEmptySuffix, "_empty")) {}
+      : ESISignalingStandad(converter, origPort) {}
 
   void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
                        SmallVectorImpl<Value> &newOperands,
@@ -104,23 +85,16 @@ private:
   // Keep around information about the port numbers of the relevant ports and
   // use that later to update the instances.
   PortInfo rdenPort, emptyPort, dataPort;
-
-  /// Some external modules use unusual port naming conventions. Since we want
-  /// to avoid needing to write wrappers, provide some flexibility in the naming
-  /// convention.
-  const StringRef rdenSuffix, emptySuffix;
 };
 
-class ESISignalStandardBuilder : public SignalStandardBuilder {
+class ESIPortConversionBuilder : public PortConversionBuilder {
 public:
-  using SignalStandardBuilder::SignalStandardBuilder;
-  FailureOr<std::unique_ptr<SignalingStandard>>
-  build(hw::PortInfo port) override {
-    return llvm::TypeSwitch<Type,
-                            FailureOr<std::unique_ptr<SignalingStandard>>>(
+  using PortConversionBuilder::PortConversionBuilder;
+  FailureOr<std::unique_ptr<PortConversion>> build(hw::PortInfo port) override {
+    return llvm::TypeSwitch<Type, FailureOr<std::unique_ptr<PortConversion>>>(
                port.type)
         .Case([&](esi::ChannelType chanTy)
-                  -> FailureOr<std::unique_ptr<SignalingStandard>> {
+                  -> FailureOr<std::unique_ptr<PortConversion>> {
           // Determine which ESI signaling standard is specified.
           ChannelSignaling signaling = chanTy.getSignaling();
           if (signaling == ChannelSignaling::ValidReady)
@@ -135,13 +109,18 @@ public:
           error.attachNote(port.loc);
           return error;
         })
-        .Default([&](auto) { return SignalStandardBuilder::build(port); });
+        .Default([&](auto) { return PortConversionBuilder::build(port); });
   }
 };
 } // namespace
 
 void ValidReady::buildInputSignals() {
   Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
+
+  StringRef inSuffix =
+      getStringAttributeOr(converter.getModule(), extModPortInSuffix, "");
+  StringRef validSuffix(getStringAttributeOr(converter.getModule(),
+                                             extModPortValidSuffix, "_valid"));
 
   // When we find one, add a data and valid signal to the new args.
   Value data = converter.createNewInput(
@@ -162,6 +141,10 @@ void ValidReady::buildInputSignals() {
     body->getArgument(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
   }
 
+  StringRef readySuffix = getStringAttributeOr(converter.getModule(),
+                                               extModPortReadySuffix, "_ready");
+  StringRef outSuffix =
+      getStringAttributeOr(converter.getModule(), extModPortOutSuffix, "");
   converter.createNewOutput(origPort, readySuffix + outSuffix, i1, ready,
                             readyPort);
 }
@@ -179,6 +162,11 @@ void ValidReady::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
 void ValidReady::buildOutputSignals() {
   Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
 
+  StringRef readySuffix = getStringAttributeOr(converter.getModule(),
+                                               extModPortReadySuffix, "_ready");
+  StringRef inSuffix =
+      getStringAttributeOr(converter.getModule(), extModPortInSuffix, "");
+
   Value ready =
       converter.createNewInput(origPort, readySuffix + inSuffix, i1, readyPort);
   Value data, valid;
@@ -193,6 +181,10 @@ void ValidReady::buildOutputSignals() {
   }
 
   // New outputs.
+  StringRef outSuffix =
+      getStringAttributeOr(converter.getModule(), extModPortOutSuffix, "");
+  StringRef validSuffix = getStringAttributeOr(converter.getModule(),
+                                               extModPortValidSuffix, "_valid");
   converter.createNewOutput(origPort, outSuffix,
                             origPort.type.cast<esi::ChannelType>().getInner(),
                             data, dataPort);
@@ -214,6 +206,15 @@ void ValidReady::mapOutputSignals(OpBuilder &b, Operation *inst,
 void FIFO::buildInputSignals() {
   Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
   auto chanTy = origPort.type.cast<ChannelType>();
+
+  StringRef rdenSuffix(getStringAttributeOr(converter.getModule(),
+                                            extModPortRdenSuffix, "_rden"));
+  StringRef emptySuffix(getStringAttributeOr(converter.getModule(),
+                                             extModPortEmptySuffix, "_empty"));
+  StringRef inSuffix =
+      getStringAttributeOr(converter.getModule(), extModPortInSuffix, "");
+  StringRef outSuffix =
+      getStringAttributeOr(converter.getModule(), extModPortOutSuffix, "");
 
   // When we find one, add a data and valid signal to the new args.
   Value data = converter.createNewInput(
@@ -252,6 +253,14 @@ void FIFO::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
 void FIFO::buildOutputSignals() {
   Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
 
+  StringRef inSuffix =
+      getStringAttributeOr(converter.getModule(), extModPortInSuffix, "");
+  StringRef outSuffix =
+      getStringAttributeOr(converter.getModule(), extModPortOutSuffix, "");
+  StringRef rdenSuffix(getStringAttributeOr(converter.getModule(),
+                                            extModPortRdenSuffix, "_rden"));
+  StringRef emptySuffix(getStringAttributeOr(converter.getModule(),
+                                             extModPortEmptySuffix, "_empty"));
   Value rden =
       converter.createNewInput(origPort, rdenSuffix + inSuffix, i1, rdenPort);
   Value data, empty;
@@ -325,7 +334,7 @@ void ESIPortsPass::runOnOperation() {
 
   for (auto mod : top.getOps<HWMutableModuleLike>()) {
     if (failed(
-            PortConverter<ESISignalStandardBuilder>(instanceGraph, mod).run()))
+            PortConverter<ESIPortConversionBuilder>(instanceGraph, mod).run()))
       return signalPassFailure();
   }
 

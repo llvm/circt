@@ -15,6 +15,8 @@ using namespace hw;
 
 /// Return a attribute with the specified suffix appended.
 static StringAttr append(StringAttr base, const Twine &suffix) {
+  if (suffix.isTriviallyEmpty())
+    return base;
   auto *context = base.getContext();
   return StringAttr::get(context, base.getValue() + suffix);
 }
@@ -24,12 +26,11 @@ namespace {
 /// We consider non-caught ports to be ad-hoc signaling or 'untouched'. (Which
 /// counts as a signaling protocol if one squints pretty hard). We mostly do
 /// this since it allows us a more consistent internal API.
-class UntouchedSignalingStandard : public SignalingStandard {
+class UntouchedPortConversion : public PortConversion {
 public:
-  UntouchedSignalingStandard(PortConverterImpl &converter,
-                             hw::PortInfo origPort)
-      : SignalingStandard(converter, origPort) {
-    // Set the "RTTI flag" to true.
+  UntouchedPortConversion(PortConverterImpl &converter, hw::PortInfo origPort)
+      : PortConversion(converter, origPort) {
+    // Set the "RTTI flag" to true (see comment in header for this variable).
     isUntouchedFlag = true;
   }
 
@@ -64,22 +65,21 @@ private:
 
 } // namespace
 
-FailureOr<std::unique_ptr<SignalingStandard>>
-SignalStandardBuilder::build(hw::PortInfo port) {
-  // Default builder is the 'untouched' signaling standard which will simply
+FailureOr<std::unique_ptr<PortConversion>>
+PortConversionBuilder::build(hw::PortInfo port) {
+  // Default builder is the 'untouched' port conversion which will simply
   // pass ports through unmodified.
-  return {std::make_unique<UntouchedSignalingStandard>(converter, port)};
+  return {std::make_unique<UntouchedPortConversion>(converter, port)};
 }
 
 Value PortConverterImpl::createNewInput(PortInfo origPort, const Twine &suffix,
                                         Type type, PortInfo &newPort) {
-  newPort =
-      PortInfo{append(origPort.name, suffix.isTriviallyEmpty() ? "" : suffix),
-               PortDirection::INPUT,
-               type,
-               newInputs.size(),
-               {},
-               origPort.loc};
+  newPort = PortInfo{append(origPort.name, suffix),
+                     PortDirection::INPUT,
+                     type,
+                     newInputs.size(),
+                     {},
+                     origPort.loc};
   newInputs.emplace_back(0, newPort);
 
   if (!body)
@@ -90,13 +90,12 @@ Value PortConverterImpl::createNewInput(PortInfo origPort, const Twine &suffix,
 void PortConverterImpl::createNewOutput(PortInfo origPort, const Twine &suffix,
                                         Type type, Value output,
                                         PortInfo &newPort) {
-  newPort =
-      PortInfo{append(origPort.name, suffix.isTriviallyEmpty() ? "" : suffix),
-               PortDirection::OUTPUT,
-               type,
-               newOutputs.size(),
-               {},
-               origPort.loc};
+  newPort = PortInfo{append(origPort.name, suffix),
+                     PortDirection::OUTPUT,
+                     type,
+                     newOutputs.size(),
+                     {},
+                     origPort.loc};
   newOutputs.emplace_back(0, newPort);
 
   if (!body)
@@ -123,7 +122,7 @@ LogicalResult PortConverterImpl::run() {
     return success();
   };
 
-  // Dispatch the signaling standard builder on the I/O of the module.
+  // Dispatch the port conversion builder on the I/O of the module.
   for (PortInfo port : ports.inputs)
     if (failed(createPortLowering(port)))
       return failure();
@@ -170,15 +169,15 @@ LogicalResult PortConverterImpl::run() {
 
   // Rewrite instances pointing to this module.
   for (auto *instance : moduleNode->uses()) {
-    if (!instance->getInstance())
+    hw::HWInstanceLike instanceLike = instance->getInstance();
+    if (!instanceLike)
       continue;
-    hw::InstanceOp hwInstance =
-        dyn_cast_or_null<hw::InstanceOp>(instance->getInstance());
+    hw::InstanceOp hwInstance = dyn_cast_or_null<hw::InstanceOp>(*instanceLike);
     if (!hwInstance) {
-      return mod->emitOpError(
-          "Can only convert hw.instance instances - if more generality is "
-          "needed, please implement e.g. an hw::HWMutableInstanceLike "
-          "interface");
+      return instanceLike->emitOpError(
+          "This code only converts hw.instance instances - ask your friendly "
+          "neighborhood compiler engineers to implement support for something "
+          "like an hw::HWMutableInstanceLike interface");
     }
     updateInstance(hwInstance);
   }

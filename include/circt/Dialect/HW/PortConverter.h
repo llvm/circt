@@ -30,8 +30,8 @@
 namespace circt {
 namespace hw {
 
-class SignalStandardBuilder;
-class SignalingStandard;
+class PortConversionBuilder;
+class PortConversion;
 
 class PortConverterImpl {
 public:
@@ -64,7 +64,7 @@ protected:
       body = &mod->getRegion(0).front();
   }
 
-  std::unique_ptr<SignalStandardBuilder> ssb;
+  std::unique_ptr<PortConversionBuilder> ssb;
 
 private:
   /// Materializes/commits all of the recorded port changes to the module.
@@ -75,17 +75,17 @@ private:
   void updateInstance(hw::InstanceOp);
 
   // If the module has a block and it wants to be modified, this'll be
-  // nomoduleNoden-null.
+  // non-null.
   Block *body = nullptr;
 
   hw::InstanceGraphNode *moduleNode;
   hw::HWMutableModuleLike mod;
 
-  // Keep around a reference to the specific signaling standard classes to
+  // Keep around a reference to the specific port conversion classes to
   // facilitate updating the instance ops. Indexed by the original port
   // location.
-  SmallVector<std::unique_ptr<SignalingStandard>> loweredInputs;
-  SmallVector<std::unique_ptr<SignalingStandard>> loweredOutputs;
+  SmallVector<std::unique_ptr<PortConversion>> loweredInputs;
+  SmallVector<std::unique_ptr<PortConversion>> loweredOutputs;
 
   // Tracking information to modify the module. Populated by the
   // 'createNew(Input|Output)' methods. Will be cleared once port changes have
@@ -96,14 +96,14 @@ private:
   SmallVector<Value, 0> newOutputValues;
 };
 
-/// Base class for the signaling standard of a particular port. Abstracts the
-/// details of a particular signaling standard from the port layout. Subclasses
+/// Base class for the port conversion of a particular port. Abstracts the
+/// details of a particular port conversion from the port layout. Subclasses
 /// keep around port mapping information to use when updating instances.
-class SignalingStandard {
+class PortConversion {
 public:
-  SignalingStandard(PortConverterImpl &converter, hw::PortInfo origPort)
+  PortConversion(PortConverterImpl &converter, hw::PortInfo origPort)
       : converter(converter), body(converter.getBody()), origPort(origPort) {}
-  virtual ~SignalingStandard() = default;
+  virtual ~PortConversion() = default;
 
   // Lower the specified port into a wire-level signaling protocol. The two
   // virtual methods 'build*Signals' should be overridden by subclasses. They
@@ -139,37 +139,38 @@ protected:
 
   hw::HWMutableModuleLike getModule() { return converter.getModule(); }
 
-  // We don't need full RTTI support for SignalingStandard, we only need to know
-  // if this SignalingStandard is the UntouchedSignalingStandard.
+  // We don't need full LLVM-style RTTI support for PortConversion (would
+  // require some mechanism of registering user-provided PortConversion-derived
+  // classes), we only need to dynamically tell whether any given PortConversion
+  // is the UntouchedPortConversion.
   bool isUntouchedFlag = false;
 };
 
-// A SignalStandardBuilder will, given an input type, build the appropriate
-// signaling standard for that type.
-class SignalStandardBuilder {
+// A PortConversionBuilder will, given an input type, build the appropriate
+// port conversion for that type.
+class PortConversionBuilder {
 public:
-  SignalStandardBuilder(PortConverterImpl &converter) : converter(converter) {}
-  virtual ~SignalStandardBuilder() = default;
+  PortConversionBuilder(PortConverterImpl &converter) : converter(converter) {}
+  virtual ~PortConversionBuilder() = default;
 
-  // Builds the appropriate signaling standard for the port. Users should
+  // Builds the appropriate port conversion for the port. Users should
   // override this method with their own llvm::TypeSwitch-based dispatch code,
-  // and by default call this method when no signaling standard applies.
-  virtual FailureOr<std::unique_ptr<SignalingStandard>>
-  build(hw::PortInfo port);
+  // and by default call this method when no port conversion applies.
+  virtual FailureOr<std::unique_ptr<PortConversion>> build(hw::PortInfo port);
 
   PortConverterImpl &converter;
 };
 
 // A PortConverter wraps a single HWMutableModuleLike operation, and is
 // initialized from an instance graph node. The port converter is templated
-// on a SignalStandardBuilder, which is used to build the appropriate
-// signaling standard for each port type.
-template <typename SignalStandardBuilderImpl>
+// on a PortConversionBuilder, which is used to build the appropriate
+// port conversion for each port type.
+template <typename PortConversionBuilderImpl>
 class PortConverter : public PortConverterImpl {
 public:
   PortConverter(hw::InstanceGraph &graph, hw::HWMutableModuleLike mod)
       : PortConverterImpl(graph.lookup(cast<hw::HWModuleLike>(*mod))) {
-    ssb = std::make_unique<SignalStandardBuilderImpl>(*this);
+    ssb = std::make_unique<PortConversionBuilderImpl>(*this);
   }
 };
 

@@ -33,7 +33,7 @@ add_circt_dialect_library(CIRCTHW
   LINK_COMPONENTS
   Support
 
-LINK_LIBS PUBLIC
+  LINK_LIBS PUBLIC
   CIRCTSupport
   MLIRIR
   MLIRInferTypeOpInterface
