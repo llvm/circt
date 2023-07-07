@@ -602,22 +602,6 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     auto leader = dataFlowClasses->getOrInsertLeaderValue(atRefVal);
     auto indx = refSendPathList.size();
     dataflowAt[leader] = indx;
-    if (continueFrom.has_value()) {
-      if (!refSendPathList[*continueFrom].first) {
-        // This handles the case when the InnerRef is set to null at the
-        // following path, that implies the path ends at this node, so copy the
-        // xmrPathSuffix and end the path here.
-        auto xmrIter = xmrPathSuffix.find(*continueFrom);
-        if (xmrIter != xmrPathSuffix.end()) {
-          SmallString<128> xmrSuffix = xmrIter->getSecond();
-          // The following assignment to the DenseMap can potentially reallocate
-          // the map, that might invalidate the `xmrIter`. So, copy the result
-          // to a temp, and then insert it back to the Map.
-          xmrPathSuffix[indx] = xmrSuffix;
-        }
-        continueFrom = std::nullopt;
-      }
-    }
     refSendPathList.push_back(std::make_pair(newRef, continueFrom));
     return indx;
   }
