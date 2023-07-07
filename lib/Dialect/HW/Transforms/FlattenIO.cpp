@@ -60,8 +60,9 @@ struct OutputOpConversion : public OpConversionPattern<hw::OutputOp> {
             op.getLoc(), getInnerTypes(structType), operand);
         llvm::copy(explodedStruct.getResults(),
                    std::back_inserter(convOperands));
-      } else
+      } else {
         convOperands.push_back(operand);
+      }
     }
 
     // And replace.
@@ -69,7 +70,7 @@ struct OutputOpConversion : public OpConversionPattern<hw::OutputOp> {
     opVisited->insert(op->getParentOp());
     return success();
   }
-  mutable DenseSet<Operation *> *opVisited;
+  DenseSet<Operation *> *opVisited;
 };
 
 struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
@@ -90,8 +91,9 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
             loc, getInnerTypes(structType), operand);
         llvm::copy(explodedStruct.getResults(),
                    std::back_inserter(convOperands));
-      } else
+      } else {
         convOperands.push_back(operand);
+      }
     }
 
     // Create the new instance...
@@ -121,7 +123,7 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
     return success();
   }
 
-  mutable DenseSet<hw::InstanceOp> *convertedOps;
+  DenseSet<hw::InstanceOp> *convertedOps;
 };
 
 using IOTypes = std::pair<TypeRange, TypeRange>;
