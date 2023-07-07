@@ -473,9 +473,8 @@ def AndRPadU : Pat <
 /// andr(pad(x:S,n)) -> andr(x)
 def AndRPadS : Pat <
   (AndRPrimOp:$old (PadPrimOp:$pad $x, $n)),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
+  (MoveNameHint $old, (AndRPrimOp $x)),
   [(KnownWidth $x), (SIntTypes $x)]>;
-
 
 // bits(bits(x, ...), ...) -> bits(x, ...)
 def BitsOfBits : Pat<
