@@ -224,7 +224,13 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             return success();
           })
           .Case<Forceable>([&](Forceable op) {
-            if (!op.isForceable() || op.getDataRef().use_empty())
+            if (!op.isForceable())
+              return success();
+
+            // Record this so can demote this to non-forceable.
+            forceableDecls.push_back(op);
+
+            if (op.getDataRef().use_empty() || isZeroWidth(op.getDataType()))
               return success();
             addReachingSendsEntry(op.getDataRef(), getInnerRefTo(op));
             return success();
@@ -301,6 +307,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     dataFlowClasses = nullptr;
     refPortsToRemoveMap.clear();
     opsToRemove.clear();
+    forceableDecls.clear();
     xmrPathSuffix.clear();
     circuitNamespace = nullptr;
     pathCache.clear();
@@ -427,6 +434,11 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     return TypeSwitch<Operation *, LogicalResult>(op)
         .Case<RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp>(
             [&](auto op) {
+              // LowerXMR removes zero-width refs and their users, so drop these too.
+              if (isZeroWidth(op.getDest().getType().getType())) {
+                op.erase();
+                return success();
+              }
               Value ref;
               if (failed(resolveReference(op.getDest(), op.getDest().getType(),
                                           op.getLoc(), op, ref)))
@@ -664,6 +676,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     // the def is erased.
     for (Operation *op : llvm::reverse(opsToRemove))
       op->erase();
+    for (Forceable f : forceableDecls)
+      firrtl::detail::replaceWithNewForceability(f, false);
     for (auto iter : refPortsToRemoveMap)
       if (auto mod = dyn_cast<FModuleOp>(iter.getFirst()))
         mod.erasePorts(iter.getSecond());
@@ -778,6 +792,9 @@ private:
 
   /// RefResolve, RefSend, and Connects involving them that will be removed.
   SmallVector<Operation *> opsToRemove;
+
+  /// Forceable declarations, these should all be demoted after dropping uses.
+  SmallVector<Forceable> forceableDecls;
 
   /// Record the internal path to an external module or a memory.
   DenseMap<size_t, SmallString<128>> xmrPathSuffix;
