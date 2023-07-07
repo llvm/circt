@@ -59,12 +59,17 @@ llvm::raw_ostream &printHash(llvm::raw_ostream &stream, std::string data) {
   return printHex(stream, bytes);
 }
 
-// This data structure is used as hash for modules. A first element is a
-// structural hash of the module, and the second element is an array which
-// tracks module names encountered in the walk. Since module names could
-// be replaced during dedup, it's necessary to keep names up-to-date before
-// actually combining them into structural hashes.
-using Hash = std::pair<std::array<uint8_t, 32>, mlir::Attribute>;
+// This struct contains information to determine module module uniqueness. A
+// first element is a structural hash of the module, and the second element is
+// an array which tracks module names encountered in the walk. Since module
+// names could be replaced during dedup, it's necessary to keep names up-to-date
+// before actually combining them into structural hashes.
+struct ModuleInfo {
+  // SHA256 hash.
+  std::array<uint8_t, 32> structuralHash;
+  // Module names referred by instance op in the module.
+  SmallVector<mlir::StringAttr> referredModuleNames;
+};
 
 /// This struct contains constant string attributes shared across different
 /// threads.
@@ -96,11 +101,10 @@ struct StructuralHasher {
   explicit StructuralHasher(const StructuralHasherSharedConstants &constants)
       : constants(constants){};
 
-  Hash hash(FModuleLike module) {
+  ModuleInfo getModuleInfo(FModuleLike module) {
     update(&(*module));
     auto hash = sha.final();
-    auto array = mlir::ArrayAttr::get(module.getContext(), referredModuleNames);
-    return {hash, array};
+    return {hash, referredModuleNames};
   }
 
 private:
@@ -215,7 +219,7 @@ private:
   DenseMap<Value, unsigned> indexes;
 
   // This keeps track of module names in the order of the appearance.
-  SmallVector<Attribute> referredModuleNames;
+  SmallVector<mlir::StringAttr> referredModuleNames;
 
   // String constants.
   const StructuralHasherSharedConstants &constants;
@@ -1259,57 +1263,43 @@ void fixupAllModules(InstanceGraph &instanceGraph) {
   }
 }
 
-/// A DenseMapInfo implementation for llvm::SHA256 hashes, which are represented
-/// as std::array<uint8_t, 32>. This allows us to create DenseMaps with SHA256
-/// hashes as keys.
-struct SHA256HashDenseMapInfo {
-  static inline std::array<uint8_t, 32> getEmptyKey() {
+namespace llvm {
+/// A DenseMapInfo implementation for `ModuleInfo` that is a pair of
+/// llvm::SHA256 hashes, which are represented as std::array<uint8_t, 32>, and
+/// an array of string attr. This allows us to create DenseMaps with
+/// `ModuleInfo` as keys.
+template <>
+struct DenseMapInfo<ModuleInfo> {
+  static inline ModuleInfo getEmptyKey() {
     std::array<uint8_t, 32> key;
     std::fill(key.begin(), key.end(), ~0);
-    return key;
+    return {key, {}};
   }
 
-  static inline std::array<uint8_t, 32> getTombstoneKey() {
+  static inline ModuleInfo getTombstoneKey() {
     std::array<uint8_t, 32> key;
     std::fill(key.begin(), key.end(), ~0 - 1);
-    return key;
+    return {key, {}};
   }
 
-  static unsigned getHashValue(const std::array<uint8_t, 32> &val) {
+  static unsigned getHashValue(const ModuleInfo &val) {
     // We assume SHA256 is already a good hash and just truncate down to the
     // number of bytes we need for DenseMap.
     unsigned hash;
-    std::memcpy(&hash, val.data(), sizeof(unsigned));
+    std::memcpy(&hash, val.structuralHash.data(), sizeof(unsigned));
+
+    // Combine module names.
+    for (auto i : val.referredModuleNames)
+      hash = llvm::hash_combine(hash, i);
     return hash;
   }
 
-  static bool isEqual(const std::array<uint8_t, 32> &lhs,
-                      const std::array<uint8_t, 32> &rhs) {
-    return lhs == rhs;
+  static bool isEqual(const ModuleInfo &lhs, const ModuleInfo &rhs) {
+    return lhs.structuralHash == rhs.structuralHash &&
+           lhs.referredModuleNames == lhs.referredModuleNames;
   }
 };
-
-/// A DenseMapInfo implementation for a pair of llvm::SHA256 hashes and mlir
-/// attributes.
-struct HashDenseMapInfo {
-  static inline Hash getEmptyKey() {
-    return {SHA256HashDenseMapInfo::getEmptyKey(),
-            DenseMapInfo<mlir::Attribute>::getEmptyKey()};
-  }
-
-  static inline Hash getTombstoneKey() {
-    return {SHA256HashDenseMapInfo::getTombstoneKey(),
-            DenseMapInfo<mlir::Attribute>::getTombstoneKey()};
-  }
-
-  static unsigned getHashValue(const Hash &val) {
-    return llvm::hash_combine(
-        SHA256HashDenseMapInfo::getHashValue(val.first),
-        DenseMapInfo<mlir::Attribute>::getHashValue(val.second));
-  }
-
-  static bool isEqual(const Hash &lhs, const Hash &rhs) { return lhs == rhs; }
-};
+} // namespace llvm
 
 //===----------------------------------------------------------------------===//
 // DedupPass
@@ -1330,8 +1320,8 @@ class DedupPass : public DedupBase<DedupPass> {
     // Modules annotated with this should not be considered for deduplication.
     auto noDedupClass = StringAttr::get(context, noDedupAnnoClass);
 
-    // A map of all the module hashes that we have calculated so far.
-    llvm::DenseMap<Hash, Operation *, HashDenseMapInfo> moduleHashes;
+    // A map of all the module moduleInfo that we have calculated so far.
+    llvm::DenseMap<ModuleInfo, Operation *> moduleHashes;
 
     // We track the name of the module that each module is deduped into, so that
     // we can make sure all modules which are marked "must dedup" with each
@@ -1346,9 +1336,9 @@ class DedupPass : public DedupBase<DedupPass> {
           return cast<FModuleLike>(*node->getModule());
         }));
 
-    SmallVector<std::optional<Hash>> hashes(modules.size());
+    SmallVector<std::optional<ModuleInfo>> moduleInfo(modules.size());
     StructuralHasherSharedConstants hasherConstants(&getContext());
-    // Calculate module hashes parallelly.
+    // Calculate module information parallelly.
     mlir::parallelFor(context, 0, modules.size(), [&](unsigned idx) {
       auto module = modules[idx];
       // If the module is marked with NoDedup, just skip it.
@@ -1362,14 +1352,14 @@ class DedupPass : public DedupBase<DedupPass> {
 
       StructuralHasher hasher(hasherConstants);
       // Calculate the hash of the module.
-      hashes[idx] = hasher.hash(module);
+      moduleInfo[idx] = hasher.getModuleInfo(module);
     });
 
     for (auto [i, module] : llvm::enumerate(modules)) {
       auto moduleName = module.getModuleNameAttr();
-      auto &h = hashes[i];
-      // If the hash was not calculated, we need to skip it.
-      if (!h) {
+      auto &info = moduleInfo[i];
+      // If the module info was not calculated, we need to skip it.
+      if (!info) {
         // We record it in the dedup map to help detect errors when the user
         // marks the module as both NoDedup and MustDedup. We do not record this
         // module in the hasher to make sure no other module dedups "into" this
@@ -1380,20 +1370,13 @@ class DedupPass : public DedupBase<DedupPass> {
 
       // Replace module names referred the module in with new names.
       SmallVector<Attribute> newModuleNames;
-      bool changed = false;
-      for (auto oldModuleName :
-           h->second.cast<ArrayAttr>().getAsRange<StringAttr>()) {
+      for (auto &oldModuleName : info->referredModuleNames) {
         auto newModuleName = dedupMap[oldModuleName];
-        changed |= newModuleName != oldModuleName;
-        newModuleNames.push_back(newModuleName);
+        oldModuleName = newModuleName;
       }
 
-      // If there was a renamed module, renew the array attr.
-      if (changed)
-        h->second = mlir::ArrayAttr::get(context, newModuleNames);
-
       // Check if there a module with the same hash.
-      auto it = moduleHashes.find(*h);
+      auto it = moduleHashes.find(*info);
       if (it != moduleHashes.end()) {
         auto original = cast<FModuleLike>(it->second);
         // Record the group ID of the other module.
@@ -1408,7 +1391,7 @@ class DedupPass : public DedupBase<DedupPass> {
       // Add the module to a new dedup group.
       dedupMap[moduleName] = moduleName;
       // Record the module's hash.
-      moduleHashes[*h] = module;
+      moduleHashes[*info] = module;
     }
 
     // This part verifies that all modules marked by "MustDedup" have been
