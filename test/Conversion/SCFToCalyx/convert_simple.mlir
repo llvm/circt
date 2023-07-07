@@ -80,7 +80,8 @@ module {
 // CHECK-DAG:    calyx.assign %std_mult_pipe_0.right = %in1 : i32
 // CHECK-DAG:    calyx.assign %muli_0_reg.in = %std_mult_pipe_0.out : i32
 // CHECK-DAG:    calyx.assign %muli_0_reg.write_en = %std_mult_pipe_0.done : i1
-// CHECK-DAG:    calyx.assign %std_mult_pipe_0.go = %true : i1
+// CHECK-DAG:    %0 = comb.xor %std_mult_pipe_0.done, %true : i1
+// CHECK-DAG:    calyx.assign %std_mult_pipe_0.go = %0 ? %true : i1
 // CHECK-DAG:    calyx.group_done %muli_0_reg.done : i1
 // CHECK-NEXT:  }
     %0 = arith.muli %a0, %a1 : i32
@@ -97,7 +98,8 @@ module {
 // CHECK-DAG:    calyx.assign %std_divu_pipe_0.right = %in1 : i32
 // CHECK-DAG:    calyx.assign %divui_0_reg.in = %std_divu_pipe_0.out_quotient : i32
 // CHECK-DAG:    calyx.assign %divui_0_reg.write_en = %std_divu_pipe_0.done : i1
-// CHECK-DAG:    calyx.assign %std_divu_pipe_0.go = %true : i1
+// CHECK-DAG:    %0 = comb.xor %std_divu_pipe_0.done, %true : i1
+// CHECK-DAG:    calyx.assign %std_divu_pipe_0.go = %0 ? %true : i1
 // CHECK-DAG:    calyx.group_done %divui_0_reg.done : i1
 // CHECK-NEXT:  }
     %0 = arith.divui %a0, %a1 : i32
@@ -114,7 +116,8 @@ module {
 // CHECK-DAG:    calyx.assign %std_remu_pipe_0.right = %in1 : i32
 // CHECK-DAG:    calyx.assign %remui_0_reg.in = %std_remu_pipe_0.out_remainder : i32
 // CHECK-DAG:    calyx.assign %remui_0_reg.write_en = %std_remu_pipe_0.done : i1
-// CHECK-DAG:    calyx.assign %std_remu_pipe_0.go = %true : i1
+// CHECK-DAG:    %0 = comb.xor %std_remu_pipe_0.done, %true : i1
+// CHECK-DAG:    calyx.assign %std_remu_pipe_0.go = %0 ? %true : i1
 // CHECK-DAG:    calyx.group_done %remui_0_reg.done : i1
 // CHECK-NEXT:  }
     %0 = arith.remui %a0, %a1 : i32
@@ -131,7 +134,8 @@ module {
 // CHECK-DAG:    calyx.assign %std_divs_pipe_0.right = %in1 : i32
 // CHECK-DAG:    calyx.assign %divsi_0_reg.in = %std_divs_pipe_0.out_quotient : i32
 // CHECK-DAG:    calyx.assign %divsi_0_reg.write_en = %std_divs_pipe_0.done : i1
-// CHECK-DAG:    calyx.assign %std_divs_pipe_0.go = %true : i1
+// CHECK-DAG:    %0 = comb.xor %std_divs_pipe_0.done, %true : i1
+// CHECK-DAG:    calyx.assign %std_divs_pipe_0.go = %0 ? %true : i1
 // CHECK-DAG:    calyx.group_done %divsi_0_reg.done : i1
 // CHECK-NEXT:  }
     %0 = arith.divsi %a0, %a1 : i32
@@ -148,7 +152,8 @@ module {
 // CHECK-DAG:    calyx.assign %std_rems_pipe_0.right = %in1 : i32
 // CHECK-DAG:    calyx.assign %remsi_0_reg.in = %std_rems_pipe_0.out_remainder : i32
 // CHECK-DAG:    calyx.assign %remsi_0_reg.write_en = %std_rems_pipe_0.done : i1
-// CHECK-DAG:    calyx.assign %std_rems_pipe_0.go = %true : i1
+// CHECK-DAG:    %0 = comb.xor %std_rems_pipe_0.done, %true : i1
+// CHECK-DAG:    calyx.assign %std_rems_pipe_0.go = %0 ? %true : i1
 // CHECK-DAG:    calyx.group_done %remsi_0_reg.done : i1
 // CHECK-NEXT:  }
     %0 = arith.remsi %a0, %a1 : i32
@@ -198,5 +203,24 @@ module {
     %0 = arith.extui %arg0 : i4 to i8
     %1 = arith.extsi %arg0 : i4 to i8
     return %0, %1 : i8, i8
+  }
+}
+
+// -----
+
+// Check nonzero-width memref address ports for memrefs with some dimension = 1
+// See: https://github.com/llvm/circt/issues/2660 and https://github.com/llvm/circt/pull/2661
+
+// CHECK-DAG:       %std_slice_3.in, %std_slice_3.out = calyx.std_slice @std_slice_3 : i32, i1
+// CHECK-DAG:       %std_slice_2.in, %std_slice_2.out = calyx.std_slice @std_slice_2 : i32, i1
+// CHECK-DAG:           calyx.assign %mem_0.addr0 = %std_slice_3.out : i1
+// CHECK-DAG:           calyx.assign %mem_0.addr1 = %std_slice_2.out : i1
+module {
+  func.func @main() {
+    %c1_32 = arith.constant 1 : i32
+    %i = arith.constant 0 : index
+    %0 = memref.alloc() : memref<1x1x1x1xi32>
+    memref.store %c1_32, %0[%i, %i, %i, %i] : memref<1x1x1x1xi32>
+    return
   }
 }

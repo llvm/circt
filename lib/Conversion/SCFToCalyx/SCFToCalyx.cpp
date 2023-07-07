@@ -250,6 +250,7 @@ private:
         getState<ComponentLoweringState>().getUniqueName(opName));
     // Operation pipelines are not combinational, so a GroupOp is required.
     auto group = createGroupForOp<calyx::GroupOp>(rewriter, op);
+    OpBuilder builder(group->getRegion(0));
     getState<ComponentLoweringState>().addBlockScheduleable(op->getBlock(),
                                                             group);
 
@@ -260,9 +261,16 @@ private:
     rewriter.create<calyx::AssignOp>(loc, reg.getIn(), out);
     // The write enable port is high when the pipeline is done.
     rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(), opPipe.getDone());
+
+    // Set pipelineOp to hi as long as its done signal is not high.
+    // This prevents the pipelineOP from executing when we write into the
+    // register.
+    // To get !(pipelineOp.done) we do 1 xor pipelineOp.done
+    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
     rewriter.create<calyx::AssignOp>(
-        loc, opPipe.getGo(),
-        createConstant(loc, rewriter, getComponent(), 1, 1));
+        loc, opPipe.getGo(), c1,
+        builder.create<comb::XorOp>(group.getLoc(), opPipe.getDone(), c1,
+                                    false));
     // The group is done when the register write is complete.
     rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone());
 
@@ -285,12 +293,23 @@ private:
     IRRewriter::InsertionGuard guard(rewriter);
     rewriter.setInsertionPointToEnd(group.getBody());
     auto addrPorts = memoryInterface.addrPorts();
-    assert(addrPorts.size() == addressValues.size() &&
-           "Mismatch between number of address ports of the provided memory "
-           "and address assignment values");
-    for (auto address : enumerate(addressValues))
-      rewriter.create<calyx::AssignOp>(loc, addrPorts[address.index()],
-                                       address.value());
+    if (addressValues.empty()) {
+      assert(
+          addrPorts.size() == 1 &&
+          "We expected a 1 dimensional memory of size 1 because there were no "
+          "address assignment values");
+      // Assign 1'd0 to the address port.
+      rewriter.create<calyx::AssignOp>(
+          loc, addrPorts[0],
+          createConstant(loc, rewriter, getComponent(), 1, 0));
+    } else {
+      assert(addrPorts.size() == addressValues.size() &&
+             "Mismatch between number of address ports of the provided memory "
+             "and address assignment values");
+      for (auto address : enumerate(addressValues))
+        rewriter.create<calyx::AssignOp>(loc, addrPorts[address.index()],
+                                         address.value());
+    }
   }
 };
 
@@ -447,6 +466,12 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   for (int64_t dim : memtype.getShape()) {
     sizes.push_back(dim);
     addrSizes.push_back(calyx::handleZeroWidth(dim));
+  }
+  // if memref has no size (e.g., memref<i32>) create a 1 dimensional memory of
+  // size 1
+  if (sizes.empty() && addrSizes.empty()) {
+    sizes.push_back(1);
+    addrSizes.push_back(1);
   }
   auto memoryOp = rewriter.create<calyx::MemoryOp>(
       allocOp.getLoc(), componentState.getUniqueName("mem"),
