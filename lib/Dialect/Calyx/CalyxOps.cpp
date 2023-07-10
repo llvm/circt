@@ -2772,8 +2772,10 @@ LogicalResult InvokeOp::verify() {
                          << "', which does not exist.";
   // The argument list of invoke is empty.
   if (getInputs().empty())
-    return emitOpError() << "the input for '" << getOperationName()
-                         << "' is empty.";
+    return emitOpError()
+           << "should specify how one of input or output ports for data "
+              "transfer is to be connected, which belong to instance '"
+           << callee << "'.";
   size_t goPortNum = 0, donePortNum = 0;
   // They both have a go port and a done port, but the "go" port for
   // registers and memrey should be "write_en" port.
@@ -2799,10 +2801,9 @@ LogicalResult InvokeOp::verify() {
   // If the number of go ports and done ports is wrong.
   if (goPortNum != 1 && donePortNum != 1)
     return emitOpError()
-           << " '" << callee
-           << "' must have single go port and single done port, the '" << callee
-           << "' has " << goPortNum << " go port and " << donePortNum
-           << " done port.";
+           << "'" << callee << "'"
+           << " is a combinational component and cannot be invoked, which must "
+              "have signle go port and single done port.";
 
   auto ports = getPorts();
   auto inputs = getInputs();
@@ -2810,16 +2811,20 @@ LogicalResult InvokeOp::verify() {
   Value goValue = getInstGoValue();
   Value doneValue = getInstDoneValue();
   for (size_t i = 0; i < ports.size(); ++i) {
-    // Check the direction of these input ports.
+    // Check the direction of these destination ports.
     if (failed(verifyInvokeOpValue(*this, ports[i], true)))
-      return failure();
+      return emitOpError()
+             << "the " << this->getPortNames()[i].cast<StringAttr>().getValue()
+             << " is source port.";
     // The go port should not appear in the parameter list.
     if (ports[i] == goValue)
-      return emitOpError() << "the go port of '" << callee
+      return emitOpError() << "the go or write_en port of '" << callee
                            << "' cannot appear here.";
-    // Check the direction of these input ports.
+    // Check the direction of these source ports.
     if (failed(verifyInvokeOpValue(*this, inputs[i], false)))
-      return failure();
+      return emitOpError()
+             << "the " << this->getInputNames()[i].cast<StringAttr>().getValue()
+             << " is destination port.";
     if (inputs[i] == doneValue)
       return emitOpError() << "the done port of '" << callee
                            << "' cannot appear here.";
@@ -2827,7 +2832,7 @@ LogicalResult InvokeOp::verify() {
     if (ports[i].getDefiningOp() != operation &&
         inputs[i].getDefiningOp() != operation)
       return emitOpError() << "all connections should involve the port of the "
-                              "invoke instance.";
+                           << "'" << callee << "'.";
   }
 
   return success();
