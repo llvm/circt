@@ -36,6 +36,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/Debug.h"
@@ -4372,26 +4373,32 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     StringAttr opNameAttr, bool isConcurrent, EventControl opEventControl) {
   StringRef opName = op->getName().stripDialect();
   ArrayRef<Attribute> guards{};
-  ArrayRef<StringRef> guardsStringRef;
   if (auto guardsAttr = op->template getAttrOfType<ArrayAttr>("guards"))
     guards = guardsAttr.getValue();
 
-  auto isUnrGuard = [op](Attribute attr) {
+  std::vector<StringRef> guardsStringRefVector(guards.size());
+
+  auto getGuardStringRef = [op](Attribute attr) {
     auto stringAttr = attr.dyn_cast<StringAttr>();
     if (!stringAttr) {
       op->emitOpError("elements in `guards` array must be `StringAttr`");
     }
-    auto t = stringAttr.getValue();
-    return t == "USE_UNR_ONLY_CONSTRAINTS";
+    return stringAttr.getValue();
   };
-  // std::transform(guards.begin(), guards.end(), guardsStringRef.begin(),
-  //                getGuardStringRef);
+  std::transform(guards.begin(), guards.end(), guardsStringRefVector.begin(),
+                 getGuardStringRef);
+
+  ArrayRef<StringRef> guardsStringRef(guardsStringRefVector.data(),
+                                      guardsStringRefVector.size());
   auto isAssert = opName == "assert";
   auto isCover = opName == "cover";
-  auto unrOnlyGuard = std::string("USE_UNR_ONLY_CONSTRAINTS");
+  auto unrOnlyGuard = "USE_UNR_ONLY_CONSTRAINTS";
 
   auto isUnrOnlyAssert =
-      std::find_if(guards.begin(), guards.end(), isUnrGuard) != guards.end();
+      std::find_if(guardsStringRef.begin(), guardsStringRef.end(),
+                   [unrOnlyGuard](StringRef stringRef) {
+                     return stringRef == unrOnlyGuard;
+                   }) != guardsStringRef.end();
 
   auto clock = getLoweredValue(opClock);
   auto enable = getLoweredValue(opEnable);
