@@ -39,6 +39,7 @@
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
+#include <memory>
 
 using namespace circt;
 using namespace firrtl;
@@ -1146,6 +1147,11 @@ struct FIRModuleContext : public FIRParser {
   /// bundle type in the FIRRTL spec but for which we represent as an exploded
   /// set of elements in the FIRRTL dialect.
   UnbundledValuesList unbundledValues;
+
+  /// This is a bump allocator for sub parsers used in the current module scope
+  /// in order to avoid stack overflow when parsing deeply nested `when`
+  /// statements.
+  llvm::BumpPtrAllocator subParserAllocator;
 
   /// Provide a symbol table scope that automatically pops all the entries off
   /// the symbol table when the scope is exited.
@@ -2591,22 +2597,22 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 
     // We parse the substatements into their own parser, so they get inserted
     // into the specified 'when' region.
-    FIRStmtParser subParser(blockToInsertInto, moduleContext, modNameSpace,
-                            version);
+    auto *subParser = new (moduleContext.subParserAllocator)
+        FIRStmtParser(blockToInsertInto, moduleContext, modNameSpace, version);
 
     // Figure out whether the body is a single statement or a nested one.
     auto stmtIndent = getIndentation();
 
     // Parsing a single statment is straightforward.
     if (!stmtIndent.has_value())
-      return subParser.parseSimpleStmt(whenIndent);
+      return subParser->parseSimpleStmt(whenIndent);
 
     if (*stmtIndent <= whenIndent)
       return emitError("statement must be indented more than 'when'"),
              failure();
 
     // Parse a block of statements that are indented more than the when.
-    return subParser.parseSimpleStmtBlock(whenIndent);
+    return subParser->parseSimpleStmtBlock(whenIndent);
   };
 
   // Parse the 'then' body into the 'then' region.
@@ -2634,9 +2640,10 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // the outer 'when'.
   if (getToken().is(FIRToken::kw_when)) {
     // We create a sub parser for the else block.
-    FIRStmtParser subParser(whenStmt.getElseBlock(), moduleContext,
-                            modNameSpace, version);
-    return subParser.parseSimpleStmt(whenIndent);
+    auto *subParser = new (moduleContext.subParserAllocator) FIRStmtParser(
+        whenStmt.getElseBlock(), moduleContext, modNameSpace, version);
+
+    return subParser->parseSimpleStmt(whenIndent);
   }
 
   // Parse the 'else' body into the 'else' region.
@@ -2771,8 +2778,9 @@ ParseResult FIRStmtParser::parseMatch(unsigned matchIndent) {
       return failure();
 
     // Parse a block of statements that are indented more than the case.
-    FIRStmtParser subParser(*caseBlock, moduleContext, modNameSpace, version);
-    if (subParser.parseSimpleStmtBlock(*caseIndent))
+    auto subParser = new (moduleContext.subParserAllocator)
+        FIRStmtParser(*caseBlock, moduleContext, modNameSpace, version);
+    if (subParser->parseSimpleStmtBlock(*caseIndent))
       return failure();
   }
 
