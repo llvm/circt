@@ -269,8 +269,7 @@ private:
     hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
     rewriter.create<calyx::AssignOp>(
         loc, opPipe.getGo(), c1,
-        builder.create<comb::XorOp>(group.getLoc(), opPipe.getDone(), c1,
-                                    false));
+        comb::createOrFoldNot(group.getLoc(), opPipe.getDone(), builder));
     // The group is done when the register write is complete.
     rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone());
 
