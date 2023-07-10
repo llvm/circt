@@ -3066,4 +3066,24 @@ firrtl.module @Issue5527(in %x: !firrtl.uint<1>, out %out: !firrtl.uint<2>) attr
   firrtl.strictconnect %out, %2 : !firrtl.uint<2>
 }
 
+// Test dropping force/release statements with constant-zero predicates.
+// CHECK-LABEL: @RefMe(
+firrtl.module private @RefMe(out %p: !firrtl.rwprobe<uint<4>>) {
+  %x, %x_ref = firrtl.wire forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
+  firrtl.ref.define %p, %x_ref : !firrtl.rwprobe<uint<4>>
+}
+// CHECK-LABEL: @ForceRelease(
+firrtl.module @ForceRelease(in %clock: !firrtl.clock, in %x: !firrtl.uint<4>) {
+    %c = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK: firrtl.instance
+    %r_p = firrtl.instance r @RefMe(out p: !firrtl.rwprobe<uint<4>>)
+
+    // CHECK-NOT: firrtl.ref
+    firrtl.ref.force %clock, %c, %r_p, %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>
+    firrtl.ref.force_initial %c, %r_p, %x : !firrtl.uint<1>, !firrtl.uint<4>
+    firrtl.ref.release %clock, %c, %r_p : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
+    firrtl.ref.release_initial %c, %r_p : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
+    // CHECK-NEXT: }
+}
+
 }

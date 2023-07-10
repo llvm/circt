@@ -3195,3 +3195,34 @@ OpFoldResult RefCastOp::fold(FoldAdaptor adaptor) {
     return getInput();
   return {};
 }
+
+static bool isConstantZero(Value operand) {
+  auto constOp = operand.getDefiningOp<ConstantOp>();
+  return constOp && constOp.getValue().isZero();
+}
+
+template <typename Op>
+static LogicalResult eraseIfPredFalse(Op op, PatternRewriter &rewriter) {
+  if (isConstantZero(op.getPredicate())) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+  return failure();
+}
+
+void RefForceOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                             MLIRContext *context) {
+  results.add(eraseIfPredFalse<RefForceOp>);
+}
+void RefForceInitialOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                    MLIRContext *context) {
+  results.add(eraseIfPredFalse<RefForceInitialOp>);
+}
+void RefReleaseOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                               MLIRContext *context) {
+  results.add(eraseIfPredFalse<RefReleaseOp>);
+}
+void RefReleaseInitialOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
+  results.add(eraseIfPredFalse<RefReleaseInitialOp>);
+}
