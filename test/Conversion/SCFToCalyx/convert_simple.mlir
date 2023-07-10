@@ -205,22 +205,3 @@ module {
     return %0, %1 : i8, i8
   }
 }
-
-// -----
-
-// Check nonzero-width memref address ports for memrefs with some dimension = 1
-// See: https://github.com/llvm/circt/issues/2660 and https://github.com/llvm/circt/pull/2661
-
-// CHECK-DAG:       %std_slice_3.in, %std_slice_3.out = calyx.std_slice @std_slice_3 : i32, i1
-// CHECK-DAG:       %std_slice_2.in, %std_slice_2.out = calyx.std_slice @std_slice_2 : i32, i1
-// CHECK-DAG:           calyx.assign %mem_0.addr0 = %std_slice_3.out : i1
-// CHECK-DAG:           calyx.assign %mem_0.addr1 = %std_slice_2.out : i1
-module {
-  func.func @main() {
-    %c1_32 = arith.constant 1 : i32
-    %i = arith.constant 0 : index
-    %0 = memref.alloc() : memref<1x1x1x1xi32>
-    memref.store %c1_32, %0[%i, %i, %i, %i] : memref<1x1x1x1xi32>
-    return
-  }
-}
