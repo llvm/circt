@@ -939,7 +939,7 @@ firrtl.circuit "Foo" {
   // CHECK-LABEL: module @MuxIntrinsics
   // CHECK-SAME: %sel: !firrtl.uint<1>
   // CHECK-SAME: %sel2: !firrtl.uint<2>
-  firrtl.module @MuxIntrinsics(in %sel: !firrtl.uint, in %sel2: !firrtl.uint, in %high: !firrtl.uint<1>, in %low: !firrtl.uint<1>, out %out1: !firrtl.uint, out %out2: !firrtl.uint) {
+  firrtl.module @MuxIntrinsics(in %sel: !firrtl.uint<1>, in %sel2: !firrtl.uint<2>, in %high: !firrtl.uint<1>, in %low: !firrtl.uint<1>, out %out1: !firrtl.uint, out %out2: !firrtl.uint) {
     %c3_ui4 = firrtl.constant 3 : !firrtl.uint<4>
     %c3_ui3 = firrtl.constant 3 : !firrtl.uint<3>
     %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
@@ -949,11 +949,11 @@ firrtl.circuit "Foo" {
     %c1 = firrtl.constant 0: !firrtl.uint
     // CHECK: firrtl.int.mux2cell
     // CHECK-SAME: (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    %0 = firrtl.int.mux2cell(%sel, %c0_ui1, %c1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint) -> !firrtl.uint
+    %0 = firrtl.int.mux2cell(%sel, %c0_ui1, %c1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint) -> !firrtl.uint
     firrtl.connect %out1, %0: !firrtl.uint, !firrtl.uint
     // CHECK: firrtl.int.mux4cell
     // CHECK-SAME: (!firrtl.uint<2>, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<1>) -> !firrtl.uint<3>
-    %1 = firrtl.int.mux4cell(%sel2, %c1_ui1, %c2_ui2, %c3_ui3, %c1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint) -> !firrtl.uint
+    %1 = firrtl.int.mux4cell(%sel2, %c1_ui1, %c2_ui2, %c3_ui3, %c1) : (!firrtl.uint<2>, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint) -> !firrtl.uint
     firrtl.connect %out2, %1: !firrtl.uint, !firrtl.uint
   }
 }
