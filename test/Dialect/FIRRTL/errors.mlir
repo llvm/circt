@@ -1748,7 +1748,7 @@ firrtl.circuit "OpenBundleNotFieldID" {
 }
 
 // -----
-// Strict connet between non-equivalent anonymous type operands.
+// Strict connect between non-equivalent anonymous type operands.
 
 firrtl.circuit "NonEquivalenctStrictConnect" {
   firrtl.module @NonEquivalenctStrictConnect(in %in: !firrtl.uint<1>, out %out: !firrtl.alias<foo, uint<2>>) {
