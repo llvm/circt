@@ -41,6 +41,9 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/Parallel.h"
+#include <algorithm>
+#include <mlir/IR/Attributes.h>
+#include <mlir/IR/BuiltinAttributes.h>
 
 #define DEBUG_TYPE "lower-to-hw"
 
@@ -4368,8 +4371,27 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     Value opEnable, StringAttr opMessageAttr, ValueRange opOperands,
     StringAttr opNameAttr, bool isConcurrent, EventControl opEventControl) {
   StringRef opName = op->getName().stripDialect();
+  ArrayRef<Attribute> guards{};
+  ArrayRef<StringRef> guardsStringRef;
+  if (auto guardsAttr = op->template getAttrOfType<ArrayAttr>("guards"))
+    guards = guardsAttr.getValue();
+
+  auto isUnrGuard = [op](Attribute attr) {
+    auto stringAttr = attr.dyn_cast<StringAttr>();
+    if (!stringAttr) {
+      op->emitOpError("elements in `guards` array must be `StringAttr`");
+    }
+    auto t = stringAttr.getValue();
+    return t == "USE_UNR_ONLY_CONSTRAINTS";
+  };
+  // std::transform(guards.begin(), guards.end(), guardsStringRef.begin(),
+  //                getGuardStringRef);
   auto isAssert = opName == "assert";
   auto isCover = opName == "cover";
+  auto unrOnlyGuard = std::string("USE_UNR_ONLY_CONSTRAINTS");
+
+  auto isUnrOnlyAssert =
+      std::find_if(guards.begin(), guards.end(), isUnrGuard) != guards.end();
 
   auto clock = getLoweredValue(opClock);
   auto enable = getLoweredValue(opEnable);
@@ -4490,9 +4512,20 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
         assumeLabel = StringAttr::get(builder.getContext(),
                                       "assume__" + label.getValue());
       addToIfDefBlock("USE_PROPERTY_AS_CONSTRAINT", [&]() {
-        builder.create<sv::AssumeConcurrentOp>(
-            circt::sv::EventControlAttr::get(builder.getContext(), event),
-            clock, predicate, assumeLabel);
+        if (!isUnrOnlyAssert) {
+          builder.create<sv::AssumeConcurrentOp>(
+              circt::sv::EventControlAttr::get(builder.getContext(), event),
+              clock, predicate, assumeLabel);
+        } else {
+          builder.create<sv::AlwaysOp>(
+              ArrayRef(sv::EventControl::AtEdge), ArrayRef(predicate), [&]() {
+                buildImmediateVerifOp(builder, "assume", predicate,
+                                      circt::sv::DeferAssertAttr::get(
+                                          builder.getContext(),
+                                          circt::sv::DeferAssert::Immediate),
+                                      assumeLabel);
+              });
+        }
       });
     }
   };
@@ -4500,9 +4533,6 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
   // Wrap the verification statement up in the optional preprocessor
   // guards. This is a bit awkward since we want to translate an array of
   // guards into a recursive call to `addToIfDefBlock`.
-  ArrayRef<Attribute> guards{};
-  if (auto guardsAttr = op->template getAttrOfType<ArrayAttr>("guards"))
-    guards = guardsAttr.getValue();
   bool anyFailed = false;
   std::function<void()> emitWrapped = [&]() {
     if (guards.empty()) {

@@ -115,7 +115,8 @@ circuit Foo:
     ; CHECK-NEXT:   assert__verif_library_1: assert property (@(posedge clock) [[TMP4]])
     ; CHECK-SAME:     else $error("Assertion failed (verification library): Conditional compilation example for UNR-only assert");
     ; CHECK-NEXT:   `ifdef USE_PROPERTY_AS_CONSTRAINT
-    ; CHECK-NEXT:     assume__verif_library_1: assume property (@(posedge clock) [[TMP4]]);
+    ; CHECK-NEXT:     always @(edge [[TMP4]])
+    ; CHECK-NEXT:       assume__verif_library_1: assume([[TMP4]]);
     ; CHECK-NEXT:   `endif
     when not(or(predicate8, asUInt(reset))) :
       printf(clock, enable, "foo [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"}],\"format\":{\"type\":\"sva\"},\"baseMsg\":\"Assertion failed (verification library): Conditional compilation example for UNR-only assert\"}</extraction-summary> bar")
@@ -144,7 +145,8 @@ circuit Foo:
     ; CHECK-NEXT:     assert__verif_library_2: assert property (@(posedge clock) [[TMP5]])
     ; CHECK-SAME:       else $error("Assertion failed (verification library): Conditional compilation example for UNR-only and formal-only assert");
     ; CHECK-NEXT:     `ifdef USE_PROPERTY_AS_CONSTRAINT
-    ; CHECK-NEXT:       assume__verif_library_2: assume property (@(posedge clock) [[TMP5]]);
+    ; CHECK-NEXT:       always @(edge [[TMP5]])
+    ; CHECK-NEXT:         assume__verif_library_2: assume([[TMP5]]);
     ; CHECK-NEXT:     `endif
     ; CHECK-NEXT:   `endif
     ; CHECK-NEXT: `endif
