@@ -4384,9 +4384,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
   std::vector<StringRef> guardsStringRefVector(guards.size());
   auto getGuardStringRef = [op](Attribute attr) {
     auto stringAttr = attr.dyn_cast<StringAttr>();
-    if (!stringAttr) {
-      op->emitOpError("elements in `guards` array must be `StringAttr`");
-    }
+    assert(stringAttr && "Elements in the guards must be StringAttr");
     return stringAttr.getValue();
   };
   std::transform(guards.begin(), guards.end(), guardsStringRefVector.begin(),
