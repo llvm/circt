@@ -891,41 +891,10 @@ void CombComponentOp::getAsmBlockArgumentNames(
 //===----------------------------------------------------------------------===//
 LogicalResult ControlOp::verify() { return verifyControlBody(*this); }
 
-// Helper function to set the return value and add elements to the queue.
-static void setOps(std::queue<Operation *> &que, SmallVector<InvokeOp, 4> &ret,
-                   Block *block) {
-  auto ops = block->getOps<InvokeOp>();
-  for (InvokeOp op : ops)
-    ret.push_back(op);
-  auto sIt = block->getOps<SeqOp>();
-  for (auto op : sIt)
-    que.push(op.getOperation());
-  auto pIt = block->getOps<ParOp>();
-  for (auto op : pIt)
-    que.push(op.getOperation());
-  auto wIt = block->getOps<WhileOp>();
-  for (auto op : wIt)
-    que.push(op.getOperation());
-  auto iIt = block->getOps<IfOp>();
-  for (auto op : iIt)
-    que.push(op.getOperation());
-}
-
-// Get the InvokeOp of the ControlOp.
+// Get the InvokeOps of this ControlOp.
 SmallVector<InvokeOp, 4> ControlOp::getInvokeOps() {
   SmallVector<InvokeOp, 4> ret;
-  std::queue<Operation *> que;
-  setOps(que, ret, getBodyBlock());
-  while (!que.empty()) {
-    Operation *op = que.front();
-    if (IfOp ifOp = dyn_cast<IfOp>(op)) {
-      setOps(que, ret, ifOp.getThenBody());
-      setOps(que, ret, ifOp.getElseBody());
-    } else
-      setOps(que, ret, &op->getRegion(0).front());
-
-    que.pop();
-  }
+  this->walk([&](InvokeOp invokeOp) { ret.push_back(invokeOp); });
   return ret;
 }
 
@@ -2644,23 +2613,19 @@ ParseResult InvokeOp::parse(OpAsmParser &parser, OperationState &result) {
 void InvokeOp::print(OpAsmPrinter &p) {
   // print the parameter list.
   p << " @" << getCallee() << "(";
-  auto ports = this->getPorts();
-  auto inputs = this->getInputs();
-  for (size_t i = 0; i != ports.size(); i++) {
-    p << ports[i] << " = " << inputs[i];
-    if (i + 1 != ports.size())
-      p << ", ";
-  }
+  auto ports = getPorts();
+  auto inputs = getInputs();
+  llvm::interleaveComma(llvm::zip(ports, inputs), p, [&](auto arg) {
+    p << std::get<0>(arg) << " = " << std::get<1>(arg);
+  });
   p << ") -> (";
   // Print argument type.
-  for (size_t i = 0; i != ports.size(); i++) {
-    p << ports[i].getType();
-    if (i + 1 != ports.size())
-      p << ", ";
-  }
+  llvm::interleaveComma(ports, p, [&](auto port) { p << port.getType(); });
   p << ")";
 }
 
+// Check the direction of one of the ports in one of the connections of an
+// InvokeOp.
 static LogicalResult verifyInvokeOpValue(InvokeOp op, Value value,
                                          bool isDestination) {
   bool isSource = !isDestination;
@@ -2680,42 +2645,44 @@ static LogicalResult verifyInvokeOpValue(InvokeOp op, Value value,
   return success();
 }
 
-// Get the value of the Go port within an instance.
+// Get the go port of the invoked component.
 Value InvokeOp::getInstGoValue() {
   ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
   Operation *operation = componentOp.lookupSymbol(getCallee());
   Value ret = nullptr;
   // Get the value of the writer_en port.
-  if (isa<RegisterOp>(operation))
+  if (isa<RegisterOp>(operation)) {
     ret = operation->getResult(1);
-  else if (isa<MemoryOp, DivSPipeLibOp, DivUPipeLibOp, MultPipeLibOp,
-               RemSPipeLibOp, RemUPipeLibOp>(operation)) {
+  } else if (isa<MemoryOp, DivSPipeLibOp, DivUPipeLibOp, MultPipeLibOp,
+                 RemSPipeLibOp, RemUPipeLibOp>(operation)) {
     // Get the value of the writer_en port or go port.
     ret = operation->getResult(2);
   } else if (isa<InstanceOp>(operation)) {
     // Get the go port of the instance through the "go" attribute
     InstanceOp instanceOp = cast<InstanceOp>(operation);
     auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
-    for (size_t i = 0; i != portInfo.size(); i++) {
-      if (portInfo[i].hasAttribute("go"))
-        ret = operation->getResult(i);
+    for (auto [portInfo, res] : llvm::zip(portInfo, operation->getResults())) {
+      if (portInfo.hasAttribute("go"))
+        ret = res;
     }
   } else if (isa<PrimitiveOp>(operation)) {
     // Get the go part of the primitive through the "calyx.go" attribute
     PrimitiveOp primOp = cast<PrimitiveOp>(operation);
     auto moduleExternOp = primOp.getReferencedPrimitive();
     auto argAttrs = moduleExternOp.getArgAttrsAttr();
-    for (size_t i = 0; i != argAttrs.size(); i++)
-      if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(argAttrs[i]))
-        if (!dictAttr.empty())
+    for (auto [attr, res] : llvm::zip(argAttrs, primOp.getResults())) {
+      if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr)) {
+        if (!dictAttr.empty()) {
           if (dictAttr.begin()->getName().getValue() == "calyx.go")
-            ret = primOp.getResult(i);
+            ret = res;
+        }
+      }
+    }
   }
-
   return ret;
 }
 
-// Get the value of the done port within an instance.
+// Get the done port of the invoked component.
 Value InvokeOp::getInstDoneValue() {
   ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
   Operation *operation = componentOp.lookupSymbol(getCallee());
@@ -2730,33 +2697,38 @@ Value InvokeOp::getInstDoneValue() {
     //  Get the go port of the instance through the "done" attribute
     InstanceOp instanceOp = cast<InstanceOp>(operation);
     auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
-    for (size_t i = 0; i != portInfo.size(); i++) {
-      if (portInfo[i].hasAttribute("done"))
-        ret = operation->getResult(i);
+    for (auto [portInfo, res] : llvm::zip(portInfo, operation->getResults())) {
+      if (portInfo.hasAttribute("done"))
+        ret = res;
     }
   } else if (isa<calyx::PrimitiveOp>(operation)) {
     // Get the go part of the primitive through the "calyx.done" attribute
     PrimitiveOp primOp = cast<PrimitiveOp>(operation);
     auto moduleExternOp = primOp.getReferencedPrimitive();
     auto resAttrs = moduleExternOp.getResAttrsAttr();
-    for (size_t i = 0; i != resAttrs.size(); i++)
-      if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(resAttrs[i]))
-        if (!dictAttr.empty())
+    for (auto [attr, res] : llvm::zip(resAttrs, primOp.getResults())) {
+      if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr)) {
+        if (!dictAttr.empty()) {
           if (dictAttr.begin()->getName().getValue() == "calyx.done")
-            ret = primOp.getResult(i);
+            ret = res;
+        }
+      }
+    }
   }
   return ret;
 }
 
 // A helper function that gets the number of go or done ports in
 // hw.module.extern.
-static size_t getHwModuleExtPortNumber(mlir::ArrayAttr attrsAttr,
-                                       StringRef string) {
+static size_t
+getHwModuleExtGoOrDonePortNumber(hw::HWModuleExternOp &moduleExternOp,
+                                 bool isGo) {
   size_t ret = 0;
-  for (Attribute attr : attrsAttr)
+  std::string str = isGo ? "calyx.go" : "calyx.done";
+  for (Attribute attr : moduleExternOp.getArgAttrsAttr())
     if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr))
       ret = llvm::count_if(dictAttr, [&](NamedAttribute iter) {
-        return iter.getName().getValue() == string;
+        return iter.getName().getValue() == str;
       });
 
   return ret;
@@ -2768,73 +2740,78 @@ LogicalResult InvokeOp::verify() {
   Operation *operation = componentOp.lookupSymbol(callee);
   // The referenced symbol does not exist.
   if (!operation)
-    return emitOpError() << "with instance '" << callee
+    return emitOpError() << "with instance '@" << callee
                          << "', which does not exist.";
   // The argument list of invoke is empty.
   if (getInputs().empty())
-    return emitOpError()
-           << "should specify how one of input or output ports for data "
-              "transfer is to be connected, which belong to instance '"
-           << callee << "'.";
+    return emitOpError() << "'@" << callee
+                         << "' has zero input and output port connections; "
+                            "expected at least one.";
   size_t goPortNum = 0, donePortNum = 0;
   // They both have a go port and a done port, but the "go" port for
   // registers and memrey should be "write_en" port.
-  if (isa<RegisterOp, DivSPipeLibOp, DivUPipeLibOp, MemoryOp, MultPipeLibOp,
-          RemSPipeLibOp, RemUPipeLibOp>(operation))
-    goPortNum = 1, donePortNum = 1;
-  else if (InstanceOp instanceOp = dyn_cast<InstanceOp>(operation)) {
-    auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
-    for (PortInfo info : portInfo) {
-      if (info.hasAttribute("go"))
-        goPortNum++;
-      if (info.hasAttribute("done"))
-        donePortNum++;
-    }
-  } else if (PrimitiveOp primOp = dyn_cast<PrimitiveOp>(operation)) {
-    auto moduleExternOp = primOp.getReferencedPrimitive();
-    // Get the number of go ports and done ports by their attrubutes.
-    goPortNum =
-        getHwModuleExtPortNumber(moduleExternOp.getArgAttrsAttr(), "calyx.go");
-    donePortNum =
-        getHwModuleExtPortNumber(moduleExternOp.getResAttrsAttr(), "calyx.do");
-  }
+  llvm::TypeSwitch<Operation *>(operation)
+      .Case<RegisterOp, DivSPipeLibOp, DivUPipeLibOp, MemoryOp, MultPipeLibOp,
+            RemSPipeLibOp, RemUPipeLibOp>(
+          [&](auto op) { goPortNum = 1, donePortNum = 1; })
+      .Case<InstanceOp>([&](auto op) {
+        auto portInfo = op.getReferencedComponent().getPortInfo();
+        for (PortInfo info : portInfo) {
+          if (info.hasAttribute("go"))
+            ++goPortNum;
+          if (info.hasAttribute("done"))
+            ++donePortNum;
+        }
+      })
+      .Case<PrimitiveOp>([&](auto op) {
+        auto moduleExternOp = op.getReferencedPrimitive();
+        // Get the number of go ports and done ports by their attrubutes.
+        goPortNum = getHwModuleExtGoOrDonePortNumber(moduleExternOp, true);
+        donePortNum = getHwModuleExtGoOrDonePortNumber(moduleExternOp, false);
+      });
   // If the number of go ports and done ports is wrong.
   if (goPortNum != 1 && donePortNum != 1)
     return emitOpError()
-           << "'" << callee << "'"
+           << "'@" << callee << "'"
            << " is a combinational component and cannot be invoked, which must "
-              "have signle go port and single done port.";
+              "have single go port and single done port.";
 
   auto ports = getPorts();
   auto inputs = getInputs();
-  // We have verified earlier that the instance has a go port.
+  // We have verified earlier that the instance has a go and a done port.
   Value goValue = getInstGoValue();
   Value doneValue = getInstDoneValue();
-  for (size_t i = 0; i < ports.size(); ++i) {
+  for (auto [port, input, portName, inputName] :
+       llvm::zip(ports, inputs, getPortNames(), getInputNames())) {
     // Check the direction of these destination ports.
-    if (failed(verifyInvokeOpValue(*this, ports[i], true)))
-      return emitOpError()
-             << "the " << this->getPortNames()[i].cast<StringAttr>().getValue()
-             << " is source port.";
+    // 'calyx.invoke' op '@r0' has input '%r.out', which is a source port. The
+    // inputs are required to be destination ports.
+    if (failed(verifyInvokeOpValue(*this, port, true)))
+      return emitOpError() << "'@" << callee << "' has input '"
+                           << portName.cast<StringAttr>().getValue()
+                           << "', which is a source port. The inputs are "
+                              "required to be destination ports.";
     // The go port should not appear in the parameter list.
-    if (ports[i] == goValue)
-      return emitOpError() << "the go or write_en port of '" << callee
+    if (port == goValue)
+      return emitOpError() << "the go or write_en port of '@" << callee
                            << "' cannot appear here.";
     // Check the direction of these source ports.
-    if (failed(verifyInvokeOpValue(*this, inputs[i], false)))
+    if (failed(verifyInvokeOpValue(*this, input, false)))
       return emitOpError()
-             << "the " << this->getInputNames()[i].cast<StringAttr>().getValue()
-             << " is destination port.";
-    if (inputs[i] == doneValue)
-      return emitOpError() << "the done port of '" << callee
+             << "'@" << callee << "' has output '"
+             << inputName.cast<StringAttr>().getValue()
+             << "', which is a destination port or a complex logic. The inputs "
+                "are required to be source ports.";
+    if (input == doneValue)
+      return emitOpError() << "the done port of '@" << callee
                            << "' cannot appear here.";
     // Check if the connection uses the callee's port.
-    if (ports[i].getDefiningOp() != operation &&
-        inputs[i].getDefiningOp() != operation)
-      return emitOpError() << "all connections should involve the port of the "
-                           << "'" << callee << "'.";
+    if (port.getDefiningOp() != operation && input.getDefiningOp() != operation)
+      return emitOpError() << "the connection "
+                           << portName.cast<StringAttr>().getValue() << " = "
+                           << inputName.cast<StringAttr>().getValue()
+                           << " is unrelated to the '@" << callee << "'.";
   }
-
   return success();
 }
 

@@ -412,7 +412,9 @@ def InvokeOp : CalyxOp<"invoke", [
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
   let extraClassDeclaration = [{
+    // Get the go port of the invoked component.
     Value getInstGoValue();
+    // Get the done port of the invoked component.
     Value getInstDoneValue();
   }];
 }

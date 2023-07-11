@@ -1060,8 +1060,8 @@ module attributes {calyx.entrypoint = "main"} {
 
     }
     calyx.control {
-      // expected-error @+1 {{'calyx.invoke' op should specify how one of input or output ports for data transfer is to be connected, which belong to instance 'r'.}}
-      calyx.invoke@r() -> ()
+      // expected-error @+1 {{'calyx.invoke' op '@r' has zero input and output port connections; expected at least one.}}
+      calyx.invoke @r() -> ()
     }
   }
 }
@@ -1077,9 +1077,27 @@ module attributes {calyx.entrypoint = "main"} {
     }
     calyx.control {
       // expected-error @+2 {{'calyx.invoke' op has a cell port as the destination with the incorrect direction.}} 
-      // expected-error @+1 {{'calyx.invoke' op the %r.out is source port.}}
-      calyx.invoke@r(%r.out = %c10) -> (i32)
+      // expected-error @+1 {{'calyx.invoke' op '@r' has input '%r.out', which is a source port. The inputs are required to be destination ports.}}
+      calyx.invoke @r(%r.out = %c10) -> (i32)
       
+    }
+  }
+}
+
+// ----- 
+
+module attributes {calyx.entrypoint = "main"} {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %c10 = hw.constant 10 : i32
+    %r0.in, %r0.write_en, %r0.clk, %r0.reset, %r0.out, %r0.done = calyx.register @r0 : i32, i1, i1, i1, i32, i1 
+    %r1.in, %r1.write_en, %r1.clk, %r1.reset, %r1.out, %r1.done = calyx.register @r1 : i32, i1, i1, i1, i32, i1
+    calyx.wires {
+
+    }
+    calyx.control {
+      // expected-error @+2 {{'calyx.invoke' op has a cell port as the source with the incorrect direction.}} 
+      // expected-error @+1 {{'calyx.invoke' op '@r0' has output '%r1.in', which is a destination port or a complex logic. The inputs are required to be source ports.}}
+      calyx.invoke @r0(%r0.in = %r1.in) -> (i32)
     }
   }
 }
@@ -1094,8 +1112,8 @@ module attributes {calyx.entrypoint = "main"} {
 
     }
     calyx.control {
-      // expected-error @+1 {{'calyx.invoke' op the go or write_en port of 'r' cannot appear here.}}
-      calyx.invoke@r(%r.write_en = %c1) -> (i1)
+      // expected-error @+1 {{'calyx.invoke' op the go or write_en port of '@r' cannot appear here.}}
+      calyx.invoke @r(%r.write_en = %c1) -> (i1)
     }
   }
 }
@@ -1110,8 +1128,8 @@ module attributes {calyx.entrypoint = "main"} {
 
     }
     calyx.control {
-      // expected-error @+1 {{'calyx.invoke' op the done port of 'r' cannot appear here.}}
-      calyx.invoke@r(%done = %r.done) -> (i1)
+      // expected-error @+1 {{'calyx.invoke' op the done port of '@r' cannot appear here.}}
+      calyx.invoke @r(%done = %r.done) -> (i1)
     }
   }
 }
@@ -1126,8 +1144,8 @@ module attributes {calyx.entrypoint = "main"} {
 
     }
     calyx.control {
-      // expected-error @+1 {{'calyx.invoke' op 'add' is a combinational component and cannot be invoked, which must have signle go port and single done port.}}
-      calyx.invoke@add(%add.left = %c10, %add.right = %c10) -> (i32, i32)
+      // expected-error @+1 {{'calyx.invoke' op '@add' is a combinational component and cannot be invoked, which must have single go port and single done port.}}
+      calyx.invoke @add(%add.left = %c10, %add.right = %c10) -> (i32, i32)
     }
   }
 }
@@ -1143,8 +1161,41 @@ module attributes {calyx.entrypoint = "main"} {
       
     }
     calyx.control {
-      // expected-error @+1 {{'calyx.invoke' op all connections should involve the port of the 'r0'.}}
-      calyx.invoke@r0(%r1.in = %c10) -> (i32)
+      // expected-error @+1 {{'calyx.invoke' op the connection %r1.in = %c10 is unrelated to the '@r0'.}}
+      calyx.invoke @r0(%r1.in = %c10) -> (i32)
+    }
+  }
+}
+
+// -----
+
+module attributes {calyx.entrypoint = "main"} {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    calyx.wires {
+
+    }
+    calyx.control {
+      // expected-error @+1 {{'calyx.invoke' op with instance '@comp', which does not exist.}}
+      calyx.invoke @comp() -> ()
+    }
+  }
+}
+
+// -----
+
+module attributes {calyx.entrypoint = "main"} {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %c0 = hw.constant 0 : i32 
+    %c1 = hw.constant 1 : i32  
+    %and = comb.and %c0, %c1 : i32 
+    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i32, i1, i1, i1, i32, i1
+    calyx.wires {
+
+    }
+    calyx.control {
+      // expected-error @+2 {{'calyx.invoke' op has source that is not a port or constant. Complex logic should be conducted in the guard.}}
+      // expected-error @+1 {{'calyx.invoke' op '@r' has output '%and', which is a destination port or a complex logic. The inputs are required to be source ports.}}
+      calyx.invoke @r(%r.in = %and) -> (i32)
     }
   }
 }
