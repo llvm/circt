@@ -11,7 +11,7 @@ circuit Example :
     input srst : UInt<1>
     input in : UInt<1>
     output out : UInt<1>[2]
-    wire bar : UInt<1>
+    wire bar : const UInt<1>
     bar is invalid
     ; CHECK: %foo0 = firrtl.reg %clock
     ; CHECK: %foo1 = firrtl.reg %clock
@@ -36,7 +36,7 @@ circuit Example1 :
     input in :  {a : UInt<1>[2], b : UInt<1>}
     output out :  {a : UInt<1>[2], b : UInt<1>}[2]
 
-    wire bar : {a : UInt<1>[2], b : UInt<1>}
+    wire bar : const {a : UInt<1>[2], b : UInt<1>}
     bar is invalid
     bar.a[1] <= UInt<1>(0)
 
@@ -67,11 +67,11 @@ circuit Example2 :
     input in : { a : UInt<1>, b : UInt<1> }
     output out : { a : UInt<1>, b : UInt<1> }[2]
 
-    wire bar : { a : UInt<1>, b : UInt<1> }
+    wire bar : const { a : UInt<1>, b : UInt<1> }
     bar is invalid
     bar.a <= UInt<1>(0)
 
-    wire baz : { a : UInt<1>, b : UInt<1> }
+    wire baz : const { a : UInt<1>, b : UInt<1> }
     baz is invalid
     baz <= bar
 

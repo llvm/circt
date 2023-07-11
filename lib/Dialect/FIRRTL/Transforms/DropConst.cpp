@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "mlir/IR/Iterators.h"
 #include "mlir/IR/Threading.h"
 
 using namespace circt;
@@ -43,30 +44,53 @@ static Type convertType(Type type) {
 namespace {
 class DropConstPass : public DropConstBase<DropConstPass> {
   void runOnOperation() override {
-    mlir::parallelForEach(
+    auto result = mlir::failableParallelForEach(
         &getContext(), getOperation().getOps<firrtl::FModuleLike>(),
         [](auto module) {
           // Convert the module body if present
-          module->walk([](Operation *op) {
-            if (auto constCastOp = dyn_cast<ConstCastOp>(op)) {
-              // Remove any `ConstCastOp`, replacing results with inputs
-              constCastOp.getResult().replaceAllUsesWith(
-                  constCastOp.getInput());
-              constCastOp->erase();
-              return;
-            }
+          auto walkResult = module->template walk<mlir::WalkOrder::PostOrder,
+                                                  mlir::ReverseIterator>(
+              [](Operation *op) -> WalkResult {
+                if (auto constCastOp = dyn_cast<ConstCastOp>(op)) {
+                  // Remove any `ConstCastOp`, replacing results with inputs
+                  constCastOp.getResult().replaceAllUsesWith(
+                      constCastOp.getInput());
+                  constCastOp->erase();
+                  return WalkResult::advance();
+                }
 
-            // Convert any block arguments
-            for (auto &region : op->getRegions())
-              for (auto &block : region.getBlocks())
-                for (auto argument : block.getArguments())
-                  if (auto convertedType = convertType(argument.getType()))
-                    argument.setType(convertedType);
+                // Check that any `RegResetOp` with an async reset has a 'const'
+                // reset
+                // value
+                if (auto regResetOp = dyn_cast<RegResetOp>(op)) {
+                  if (regResetOp.getResetSignal()
+                          .getType()
+                          .isa<AsyncResetType>() &&
+                      !regResetOp.getResetValue().getType().isConst()) {
+                    regResetOp.emitError()
+                        << "register " << regResetOp.getNameAttr()
+                        << " has an async reset, but its reset value is not "
+                           "'const'";
+                    return WalkResult::interrupt();
+                  }
+                }
 
-            for (auto result : op->getResults())
-              if (auto convertedType = convertType(result.getType()))
-                result.setType(convertedType);
-          });
+                // Convert any block arguments
+                for (auto &region : op->getRegions())
+                  for (auto &block : region.getBlocks())
+                    for (auto argument : block.getArguments())
+                      if (auto convertedType = convertType(argument.getType()))
+                        argument.setType(convertedType);
+
+                for (auto result : op->getResults())
+                  if (auto convertedType = convertType(result.getType()))
+                    result.setType(convertedType);
+
+                return WalkResult::advance();
+              });
+
+          if (walkResult.wasInterrupted())
+            return failure();
 
           // Update the module signature with non-'const' ports
           SmallVector<Attribute> portTypes;
@@ -84,7 +108,11 @@ class DropConstPass : public DropConstBase<DropConstPass> {
           if (convertedAny)
             module->setAttr(FModuleLike::getPortTypesAttrName(),
                             ArrayAttr::get(module.getContext(), portTypes));
+
+          return success();
         });
+    if (failed(result))
+      signalPassFailure();
   }
 };
 } // namespace

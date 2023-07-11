@@ -9,7 +9,7 @@ circuit Foo:
     input reset : AsyncReset
     input x : UInt<1>[4]
     output z : UInt<1>[4]
-    wire literal : UInt<1>[4]
+    wire literal : const UInt<1>[4]
     literal[0] <= UInt<1>("h00")
     literal[1] <= UInt<1>("h00")
     literal[2] <= UInt<1>("h00")
@@ -32,10 +32,10 @@ circuit Foo:
     input reset : AsyncReset
     input x : UInt<1>[4]
     output z : UInt<1>[4]
-    wire literal : UInt<1>[2]
+    wire literal : const UInt<1>[2]
     literal[0] <= UInt<1>("h01")
     literal[1] <= UInt<1>("h01")
-    wire complex_literal : UInt<1>[4]
+    wire complex_literal : const UInt<1>[4]
     complex_literal[0] <= literal[0]
     complex_literal[1] <= literal[1]
     complex_literal[2] <= UInt<1>("h00")
@@ -57,10 +57,10 @@ circuit Foo:
     input reset : AsyncReset
     input x : UInt<1>[4]
     output z : UInt<1>[4]
-    wire bundle : {a: UInt<1>, b: UInt<1>}
+    wire bundle : const {a: UInt<1>, b: UInt<1>}
     bundle.a <= UInt<1>("h01")
     bundle.b <= UInt<1>("h01")
-    wire complex_literal : UInt<1>[4]
+    wire complex_literal : const UInt<1>[4]
     complex_literal[0] <= bundle.a
     complex_literal[1] <= bundle.b
     complex_literal[2] <= UInt<1>("h00")
@@ -86,7 +86,7 @@ circuit Foo:
     ; CHECK: %r = firrtl.regreset %clock, %reset, %c0_si1
     reg r : SInt<4>, clock with : (reset => (reset, asSInt(UInt(0))))
     r <= x
-    wire w : SInt<4>
+    wire w : const SInt<4>
     ; CHECK: %r2 = firrtl.regreset %clock, %reset, %c-1_si4
     reg r2 : SInt<4>, clock with : (reset => (reset, w))
     r2 <= x
@@ -103,10 +103,10 @@ circuit Foo:
     input clock : Clock
     input reset : AsyncReset
     output z : UInt<1>[4]
-    wire literal : UInt<1>[2]
+    wire literal : const UInt<1>[2]
     literal[0] <= UInt<1>("h01")
     literal[1] <= UInt<1>("h01")
-    wire complex_literal : UInt<1>[4]
+    wire complex_literal : const UInt<1>[4]
     complex_literal[0] <= literal[0]
     complex_literal[1] <= literal[1]
     complex_literal[2] <= UInt<1>("h00")

@@ -682,10 +682,10 @@ def VBToBV : Pass<"firrtl-vb-to-bv", "firrtl::CircuitOp"> {
 def DropConst : Pass<"firrtl-drop-const", "firrtl::CircuitOp"> {
   let summary = "Drop 'const' modifier from types";
   let description = [{
-    This pass drops the 'const' modifier from all types and removes all
-    const-cast ops.
+    This pass drops the 'const' modifier from all types and removes all 
+    const-cast ops. The pass also checks that async reset values are 'const'.
 
-    This simplifies downstream passes and folds so that they do not need to
+    This simplifies downstream passes and folds so that they do not need to 
     take 'const' into account.
   }];
   let constructor = "circt::firrtl::createDropConstPass()";
