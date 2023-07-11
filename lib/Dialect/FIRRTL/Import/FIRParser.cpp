@@ -2582,8 +2582,8 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // This is a function to parse a suite body.
   auto parseSuite = [&](Block &blockToInsertInto) -> ParseResult {
     // Declarations within the suite are scoped to within the suite.
-    auto suiteScope = std::make_unique<FIRModuleContext::ContextScope> (moduleContext,
-                                              &blockToInsertInto);
+    auto suiteScope = std::make_unique<FIRModuleContext::ContextScope>(
+        moduleContext, &blockToInsertInto);
 
     // After parsing the when region, we can release any new entries in
     // unbundledValues since the symbol table entries that refer to them will be
