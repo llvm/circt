@@ -18,7 +18,6 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/PostOrderIterator.h"
-#include "llvm/Support/Debug.h"
 
 using namespace circt;
 using namespace sv;
@@ -38,9 +37,9 @@ struct HWRaiseInOutPortsPass
 
 namespace {
 
-class HWInOutSignalStandard : public SignalingStandard {
+class HWInOutPortConversion : public PortConversion {
 public:
-  HWInOutSignalStandard(PortConverterImpl &converter, hw::PortInfo port);
+  HWInOutPortConversion(PortConverterImpl &converter, hw::PortInfo port);
 
   void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
                        SmallVectorImpl<Value> &newOperands,
@@ -65,9 +64,9 @@ private:
   PortInfo readPort, writePort;
 };
 
-HWInOutSignalStandard::HWInOutSignalStandard(PortConverterImpl &converter,
+HWInOutPortConversion::HWInOutPortConversion(PortConverterImpl &converter,
                                              hw::PortInfo port)
-    : SignalingStandard(converter, port) {
+    : PortConversion(converter, port) {
   // Gather readers and writers (how to handle sv.passign?)
   for (auto *user : body->getArgument(port.argNum).getUsers()) {
     if (auto read = dyn_cast<sv::ReadInOutOp>(user))
@@ -85,7 +84,7 @@ HWInOutSignalStandard::HWInOutSignalStandard(PortConverterImpl &converter,
         << " detected. Will only create an output for the first write";
 }
 
-void HWInOutSignalStandard::buildInputSignals() {
+void HWInOutPortConversion::buildInputSignals() {
   if (hasReaders()) {
     Value readValue =
         converter.createNewInput(origPort, "_rd", origPort.type, readPort);
@@ -110,13 +109,13 @@ void HWInOutSignalStandard::buildInputSignals() {
   }
 }
 
-void HWInOutSignalStandard::buildOutputSignals() {
+void HWInOutPortConversion::buildOutputSignals() {
   // TODO: could support hw.inout outputs (always create read/write ports) -
   // don't need it for now, though.
   assert(false && "hw.inout outputs not yet supported");
 }
 
-void HWInOutSignalStandard::mapInputSignals(OpBuilder &b, Operation *inst,
+void HWInOutPortConversion::mapInputSignals(OpBuilder &b, Operation *inst,
                                             Value instValue,
                                             SmallVectorImpl<Value> &newOperands,
                                             ArrayRef<Backedge> newResults) {
@@ -136,20 +135,19 @@ void HWInOutSignalStandard::mapInputSignals(OpBuilder &b, Operation *inst,
   }
 }
 
-void HWInOutSignalStandard::mapOutputSignals(
+void HWInOutPortConversion::mapOutputSignals(
     OpBuilder &b, Operation *inst, Value instValue,
     SmallVectorImpl<Value> &newOperands, ArrayRef<Backedge> newResults) {
   llvm_unreachable("hw.inout outputs not yet supported");
 }
 
-class HWInoutSignalStandardBuilder : public SignalStandardBuilder {
+class HWInoutPortConversionBuilder : public PortConversionBuilder {
 public:
-  using SignalStandardBuilder::SignalStandardBuilder;
-  FailureOr<std::unique_ptr<SignalingStandard>>
-  build(hw::PortInfo port) override {
+  using PortConversionBuilder::PortConversionBuilder;
+  FailureOr<std::unique_ptr<PortConversion>> build(hw::PortInfo port) override {
     if (port.direction == hw::PortDirection::INOUT)
-      return {std::make_unique<HWInOutSignalStandard>(converter, port)};
-    return SignalStandardBuilder::build(port);
+      return {std::make_unique<HWInOutPortConversion>(converter, port)};
+    return PortConversionBuilder::build(port);
   }
 };
 
@@ -184,7 +182,7 @@ void HWRaiseInOutPortsPass::runOnOperation() {
           dyn_cast_or_null<hw::HWMutableModuleLike>(*node->getModule());
       if (!mutableModule)
         continue;
-      if (failed(PortConverter<HWInoutSignalStandardBuilder>(instanceGraph,
+      if (failed(PortConverter<HWInoutPortConversionBuilder>(instanceGraph,
                                                              mutableModule)
                      .run()))
         return signalPassFailure();
