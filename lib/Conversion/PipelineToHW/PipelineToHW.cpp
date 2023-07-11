@@ -165,7 +165,7 @@ public:
       // Register naming: If the source value has an `sv.namehint` attribute
       // attached, use that as a register prefix.
       StringAttr regName;
-      if (auto definingOp = regIn.getDefiningOp()) {
+      if (auto *definingOp = regIn.getDefiningOp()) {
         if (auto nameHint =
                 definingOp->getAttrOfType<StringAttr>("sv.namehint")) {
           regName = StringAttr::get(pipeline.getContext(),
@@ -348,7 +348,7 @@ public:
 
   // Helper class to manage grabbing the various inputs for stage modules.
   struct PipelineStageMod {
-    PipelineStageMod() {}
+    PipelineStageMod() = default;
     PipelineStageMod(PipelineOutlineLowering &parent, Block *stage,
                      hw::HWModuleOp mod, bool withStall,
                      bool isParentPipeline = false) {
@@ -567,12 +567,12 @@ public:
       nextStageArgs.reset = pipelineRst;
       nextStageArgs.stall = pipelineStall;
       return lowerStage(stageOp.getNextStage(), nextStageArgs, stageIndex + 1);
-    } else {
-      // This was the final stage - forward the return values of the last stage
-      // instance as the stage return value.
-      stageRets.passthroughs = stageInst.getResults().drop_back();
-      stageRets.valid = stageInst.getResults().back();
     }
+
+    // This was the final stage - forward the return values of the last stage
+    // instance as the stage return value.
+    stageRets.passthroughs = stageInst.getResults().drop_back();
+    stageRets.valid = stageInst.getResults().back();
 
     return stageRets;
   }
@@ -692,7 +692,7 @@ private:
   buildStage(Block *stage, StageArgs args, size_t stageIndex) {
     builder.setInsertionPoint(parentModule);
     llvm::SmallVector<Type> outputTypes;
-    auto terminator = stage->getTerminator();
+    auto *terminator = stage->getTerminator();
     if (auto stageOp = dyn_cast<StageOp>(terminator)) {
       // The return values of a stage are the inputs to the next stage.
       llvm::append_range(outputTypes, ValueRange(pipeline.getStageDataArgs(
