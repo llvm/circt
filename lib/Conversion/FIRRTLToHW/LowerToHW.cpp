@@ -4378,32 +4378,17 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
   if (auto guardsAttr = op->template getAttrOfType<ArrayAttr>("guards"))
     guards = guardsAttr.getValue();
 
-  // Get the casted version of guards to concrete StringRef type
-  // Need to first use a vector container to do the transform and then wrap it
-  // around an ArrayRef.
-  std::vector<StringRef> guardsStringRefVector(guards.size());
-  auto getGuardStringRef = [op](Attribute attr) {
-    auto stringAttr = attr.dyn_cast<StringAttr>();
-    assert(stringAttr && "Elements in the guards must be StringAttr");
-    return stringAttr.getValue();
-  };
-  std::transform(guards.begin(), guards.end(), guardsStringRefVector.begin(),
-                 getGuardStringRef);
-  const ArrayRef<StringRef> guardsStringRef(guardsStringRefVector.data(),
-                                            guardsStringRefVector.size());
-
   auto isAssert = opName == "assert";
   auto isCover = opName == "cover";
 
-  // TODO : Need to figure out if there is a cleaner way to get this string.
-  // Or better - not rely on this at all - ideally there should have been some
-  // other attribute which indicated that this assert for UNR only.
-  const auto *unrOnlyGuard = "USE_UNR_ONLY_CONSTRAINTS";
-  auto isUnrOnlyAssert =
-      std::find_if(guardsStringRef.begin(), guardsStringRef.end(),
-                   [unrOnlyGuard](StringRef stringRef) {
-                     return stringRef == unrOnlyGuard;
-                   }) != guardsStringRef.end();
+  // TODO : Need to figure out if there is a cleaner way to get the string which
+  // indicates the assert is UNR only. Or better - not rely on this at all -
+  // ideally there should have been some other attribute which indicated that
+  // this assert for UNR only.
+  auto isUnrOnlyAssert = llvm::any_of(guards, [](Attribute attr) {
+    StringAttr strAttr = dyn_cast<StringAttr>(attr);
+    return strAttr && strAttr.getValue() == "USE_UNR_ONLY_CONSTRAINTS";
+  });
 
   auto clock = getLoweredValue(opClock);
   auto enable = getLoweredValue(opEnable);
