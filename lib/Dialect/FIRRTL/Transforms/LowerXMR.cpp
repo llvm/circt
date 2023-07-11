@@ -760,8 +760,8 @@ private:
   /// next node in the path. The InnerRefAttr can be to an InstanceOp or to the
   /// XMR defining op, the index op records narrowing along path. All the nodes
   /// representing an InstanceOp or indexing operation must have a valid
-  /// nextNodeOnPath. Only the node representing the final XMR defining op has
-  /// no nextNodeOnPath, which denotes a leaf node on the path.
+  /// NextNodeOnPath. Only the node representing the final XMR defining op has
+  /// no NextNodeOnPath, which denotes a leaf node on the path.
   SmallVector<XMRNode> refSendPathList;
 
   /// llvm::EquivalenceClasses wants comparable elements. This comparator uses
