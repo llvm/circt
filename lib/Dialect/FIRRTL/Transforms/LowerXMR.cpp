@@ -49,10 +49,10 @@ using hw::InnerRefAttr;
 
 namespace {
 struct XMRNode {
-  using nextNodeOnPath = std::optional<size_t>;
-  using symOrIndexOp = PointerUnion<Attribute, Operation *>;
-  symOrIndexOp info;
-  nextNodeOnPath next;
+  using NextNodeOnPath = std::optional<size_t>;
+  using SymOrIndexOp = PointerUnion<Attribute, Operation *>;
+  SymOrIndexOp info;
+  NextNodeOnPath next;
 };
 llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const XMRNode &node) {
   os << "node(";
@@ -338,7 +338,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     while (remoteOpPath) {
       lastIndex = *remoteOpPath;
       auto entr = refSendPathList[*remoteOpPath];
-      TypeSwitch<XMRNode::symOrIndexOp>(entr.info)
+      TypeSwitch<XMRNode::SymOrIndexOp>(entr.info)
           .Case<Attribute>([&](auto attr) {
             // If the path is a singular verbatim expression, the attribute of
             // the send path list entry will be null.
@@ -637,7 +637,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   }
 
   size_t
-  addReachingSendsEntry(Value atRefVal, XMRNode::symOrIndexOp info,
+  addReachingSendsEntry(Value atRefVal, XMRNode::SymOrIndexOp info,
                         std::optional<size_t> continueFrom = std::nullopt) {
     auto leader = dataFlowClasses->getOrInsertLeaderValue(atRefVal);
     auto indx = refSendPathList.size();
