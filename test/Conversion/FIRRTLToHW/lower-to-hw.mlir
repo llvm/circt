@@ -1,7 +1,5 @@
 // RUN: circt-opt -pass-pipeline="builtin.module(lower-firrtl-to-hw)" -verify-diagnostics %s | FileCheck %s
-// RUN: circt-opt -pass-pipeline="builtin.module(lower-firrtl-to-hw{disable-mem-randomization})" -verify-diagnostics %s | FileCheck %s --check-prefix DISABLE_RANDOM --implicit-check-not RANDOMIZE_MEM
 // RUN: circt-opt -pass-pipeline="builtin.module(lower-firrtl-to-hw{disable-reg-randomization})" -verify-diagnostics %s | FileCheck %s --check-prefix DISABLE_RANDOM --implicit-check-not RANDOMIZE_REG
-// RUN: circt-opt -pass-pipeline="builtin.module(lower-firrtl-to-hw{disable-mem-randomization disable-reg-randomization})" -verify-diagnostics %s | FileCheck %s --check-prefix DISABLE_RANDOM --implicit-check-not RANDOMIZE_MEM --implicit-check-not RANDOMIZE_REG
 
 // DISABLE_RANDOM-LABEL: module @Simple
 firrtl.circuit "Simple"   attributes {annotations = [{class =
@@ -46,16 +44,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:     sv.macro.def @INIT_RANDOM_PROLOG_ ""
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
-
-  //These come from MemSimple, IncompleteRead, and MemDepth1
-  // CHECK-LABEL: hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "maskGran", "readUnderWrite", "writeUnderWrite", "writeClockIDs", "initFilename", "initIsBinary", "initIsInline"]
-  // CHECK: hw.module.generated @aa_combMem, @FIRRTLMem(%W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8, %W1_addr: i4, %W1_en: i1, %W1_clk: i1, %W1_data: i8) attributes {depth = 16 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 8 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : i32, width = 8 : ui32, writeClockIDs = [0 : i32, 0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-  // CHECK: hw.module.generated @ab_combMem, @FIRRTLMem(%W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8, %W1_addr: i4, %W1_en: i1, %W1_clk: i1, %W1_data: i8) attributes {depth = 16 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 8 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : i32, width = 8 : ui32, writeClockIDs = [0 : i32, 1 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-  // CHECK: hw.module.generated @mem0_combMem, @FIRRTLMem(%R0_addr: i1, %R0_en: i1, %R0_clk: i1) -> (R0_data: i32) attributes {depth = 1 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 32 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, readUnderWrite = 1 : i32, width = 32 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-  // CHECK: hw.module.generated @_M_combMem, @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1) -> (R0_data: i42) attributes {depth = 12 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 42 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 42 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-  // CHECK: hw.module.generated @tbMemoryKind1_combMem, @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8) -> (R0_data: i8) attributes {depth = 16 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 8 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : i32, width = 8 : ui32, writeClockIDs = [0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-  // CHECK: hw.module.generated @_M_mask_combMem, @FIRRTLMem(%R0_addr: i10, %R0_en: i1, %R0_clk: i1, %RW0_addr: i10, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i40, %RW0_wmask: i4, %W0_addr: i10, %W0_en: i1, %W0_clk: i1, %W0_data: i40, %W0_mask: i4) -> (R0_data: i40, RW0_rdata: i40) attributes {depth = 1022 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 10 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : i32, width = 40 : ui32, writeClockIDs = [0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-  // CHECK: hw.module.generated @_M_combMem_0, @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %RW0_addr: i4, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i42, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i42) -> (R0_data: i42, RW0_rdata: i42) attributes {depth = 12 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 42 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 42 : ui32, writeClockIDs = [0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
 
   // CHECK-LABEL: hw.module @Simple
   firrtl.module @Simple(in %in1: !firrtl.uint<4>,
@@ -665,158 +653,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %outClock, %1 : !firrtl.clock, !firrtl.clock
   }
 
-  //  module MemSimple :
-  //     input clock1  : Clock
-  //     input clock2  : Clock
-  //     input inpred  : UInt<1>
-  //     input indata  : SInt<42>
-  //     output result : SInt<42>
-  //     output result2 : SInt<42>
-  //
-  //     mem _M : @[Decoupled.scala 209:27]
-  //           data-type => SInt<42>
-  //           depth => 12
-  //           read-latency => 0
-  //           write-latency => 1
-  //           reader => read
-  //           writer => write
-  //           readwriter => rw
-  //           read-under-write => undefined
-  //
-  //     result <= _M.read.data
-  //     result2 <= _M.rw.rdata
-  //
-  //     _M.read.addr <= UInt<1>("h0")
-  //     _M.read.en <= UInt<1>("h1")
-  //     _M.read.clk <= clock1
-  //     _M.rw.addr <= UInt<1>("h0")
-  //     _M.rw.en <= UInt<1>("h1")
-  //     _M.rw.clk <= clock1
-  //     _M.rw.wmask <= UInt<1>("h1")
-  //     _M.rw.wmode <= UInt<1>("h1")
-  //     _M.write.addr <= validif(inpred, UInt<3>("h0"))
-  //     _M.write.en <= mux(inpred, UInt<1>("h1"), UInt<1>("h0"))
-  //     _M.write.clk <= clock2
-  //     _M.write.data <= validif(inpred, indata)
-  //     _M.write.mask <= validif(inpred, UInt<1>("h1"))
-
-  // CHECK-LABEL: hw.module private @MemSimple(
-  firrtl.module private @MemSimple(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock,
-                           in %inpred: !firrtl.uint<1>, in %indata: !firrtl.sint<42>,
-                           out %result: !firrtl.sint<42>,
-                           out %result2: !firrtl.sint<42>) {
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
-    %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "rw", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
-  // CHECK: %[[v1:.+]] = comb.and bin %true, %inpred : i1
-  // CHECK: %[[v2:.+]] = comb.and bin %inpred, %true : i1
-  // CHECK: %_M_ext.R0_data, %_M_ext.RW0_rdata = hw.instance "_M_ext" @_M_combMem_0(R0_addr: %c0_i4: i4, R0_en: %true: i1, R0_clk: %clock1: i1, RW0_addr: %c0_i4_0: i4, RW0_en: %true: i1, RW0_clk: %clock1: i1, RW0_wmode: %[[v1]]: i1, RW0_wdata: %indata: i42, W0_addr: %c0_i4_1: i4, W0_en: %[[v2]]: i1, W0_clk: %clock2: i1, W0_data: %indata: i42) -> (R0_data: i42, RW0_rdata: i42)
-  // CHECK: hw.output %_M_ext.R0_data, %_M_ext.RW0_rdata : i42, i42
-
-      %0 = firrtl.subfield %_M_read[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
-      firrtl.connect %result, %0 : !firrtl.sint<42>, !firrtl.sint<42>
-      %1 = firrtl.subfield %_M_rw[rdata] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>
-      firrtl.connect %result2, %1 : !firrtl.sint<42>, !firrtl.sint<42>
-      %2 = firrtl.subfield %_M_read[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
-      firrtl.connect %2, %c0_ui1 : !firrtl.uint<4>, !firrtl.uint<1>
-      %3 = firrtl.subfield %_M_read[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
-      firrtl.connect %3, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-      %4 = firrtl.subfield %_M_read[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
-      firrtl.connect %4, %clock1 : !firrtl.clock, !firrtl.clock
-
-      %5 = firrtl.subfield %_M_rw[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>
-      firrtl.connect %5, %c0_ui1 : !firrtl.uint<4>, !firrtl.uint<1>
-      %6 = firrtl.subfield %_M_rw[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>
-      firrtl.connect %6, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-      %7 = firrtl.subfield %_M_rw[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>
-      firrtl.connect %7, %clock1 : !firrtl.clock, !firrtl.clock
-      %8 = firrtl.subfield %_M_rw[wmask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>
-      firrtl.connect %8, %inpred : !firrtl.uint<1>, !firrtl.uint<1>
-      %9 = firrtl.subfield %_M_rw[wmode] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>
-      firrtl.connect %9, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-      %10 = firrtl.subfield %_M_rw[wdata] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>
-      firrtl.connect %10, %indata : !firrtl.sint<42>, !firrtl.sint<42>
-
-      %11 = firrtl.subfield %_M_write[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
-      firrtl.connect %11, %c0_ui3 : !firrtl.uint<4>, !firrtl.uint<3>
-      %12 = firrtl.subfield %_M_write[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
-      firrtl.connect %12, %inpred : !firrtl.uint<1>, !firrtl.uint<1>
-      %13 = firrtl.subfield %_M_write[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
-      firrtl.connect %13, %clock2 : !firrtl.clock, !firrtl.clock
-      %14 = firrtl.subfield %_M_write[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
-      firrtl.connect %14, %indata : !firrtl.sint<42>, !firrtl.sint<42>
-      %15 = firrtl.subfield %_M_write[mask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
-      firrtl.connect %15, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-  }
-
-  // CHECK-LABEL: hw.module private @MemSimple_mask(
-  firrtl.module private @MemSimple_mask(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock,
-                           in %inpred: !firrtl.uint<1>, in %indata: !firrtl.sint<40>,
-                           out %result: !firrtl.sint<40>,
-                           out %result2: !firrtl.sint<40>) {
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %c0_ui10 = firrtl.constant 0 : !firrtl.uint<10>
-    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
-    %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
-    %c1_ui5 = firrtl.constant 1 : !firrtl.uint<5>
-    %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 1022 : i64, name = "_M_mask", portNames = ["read", "rw", "write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>, !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>, !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>
-    // CHECK: %_M_mask_ext.R0_data, %_M_mask_ext.RW0_rdata = hw.instance "_M_mask_ext" @_M_mask_combMem(R0_addr: %c0_i10: i10, R0_en: %true: i1, R0_clk: %clock1: i1, RW0_addr: %c0_i10: i10, RW0_en: %true: i1, RW0_clk: %clock1: i1, RW0_wmode: %true: i1, RW0_wdata: %indata: i40, RW0_wmask: %c0_i4: i4, W0_addr: %c0_i10: i10, W0_en: %inpred: i1, W0_clk: %clock2: i1, W0_data: %indata: i40, W0_mask: %c0_i4: i4) -> (R0_data: i40, RW0_rdata: i40)
-    // CHECK: hw.output %_M_mask_ext.R0_data, %_M_mask_ext.RW0_rdata : i40, i40
-
-      %0 = firrtl.subfield %_M_read[data] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>
-      firrtl.connect %result, %0 : !firrtl.sint<40>, !firrtl.sint<40>
-      %1 = firrtl.subfield %_M_rw[rdata] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>
-      firrtl.connect %result2, %1 : !firrtl.sint<40>, !firrtl.sint<40>
-      %2 = firrtl.subfield %_M_read[addr] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>
-      firrtl.connect %2, %c0_ui10 : !firrtl.uint<10>, !firrtl.uint<10>
-      %3 = firrtl.subfield %_M_read[en] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>
-      firrtl.connect %3, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-      %4 = firrtl.subfield %_M_read[clk] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>
-      firrtl.connect %4, %clock1 : !firrtl.clock, !firrtl.clock
-
-      %5 = firrtl.subfield %_M_rw[addr] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>,  wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>
-      firrtl.connect %5, %c0_ui10 : !firrtl.uint<10>, !firrtl.uint<10>
-      %6 = firrtl.subfield %_M_rw[en] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>
-      firrtl.connect %6, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-      %7 = firrtl.subfield %_M_rw[clk] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>
-      firrtl.connect %7, %clock1 : !firrtl.clock, !firrtl.clock
-      %8 = firrtl.subfield %_M_rw[wmask] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>
-      firrtl.connect %8, %c0_ui4 : !firrtl.uint<4>, !firrtl.uint<4>
-      %9 = firrtl.subfield %_M_rw[wmode] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>
-      firrtl.connect %9, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-      %10 = firrtl.subfield %_M_rw[wdata] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>
-      firrtl.connect %10, %indata : !firrtl.sint<40>, !firrtl.sint<40>
-
-      %11 = firrtl.subfield %_M_write[addr] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>
-      firrtl.connect %11, %c0_ui10 : !firrtl.uint<10>, !firrtl.uint<10>
-      %12 = firrtl.subfield %_M_write[en] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>
-      firrtl.connect %12, %inpred : !firrtl.uint<1>, !firrtl.uint<1>
-      %13 = firrtl.subfield %_M_write[clk] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>
-      firrtl.connect %13, %clock2 : !firrtl.clock, !firrtl.clock
-      %14 = firrtl.subfield %_M_write[data] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>
-      firrtl.connect %14, %indata : !firrtl.sint<40>, !firrtl.sint<40>
-      %15 = firrtl.subfield %_M_write[mask] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>
-      firrtl.connect %15, %c0_ui4 : !firrtl.uint<4>, !firrtl.uint<4>
-  }
-  // CHECK-LABEL: hw.module private @IncompleteRead(
-  // The read port has no use of the data field.
-  firrtl.module private @IncompleteRead(in %clock1: !firrtl.clock) {
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-
-    // CHECK:  %_M_ext.R0_data = hw.instance "_M_ext" @_M_combMem(R0_addr: %c0_i4: i4, R0_en: %true: i1, R0_clk: %clock1: i1) -> (R0_data: i42)
-    %_M_read = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
-    // Read port.
-    %6 = firrtl.subfield %_M_read[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
-    firrtl.connect %6, %c0_ui1 : !firrtl.uint<4>, !firrtl.uint<1>
-    %7 = firrtl.subfield %_M_read[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
-    firrtl.connect %7, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    %8 = firrtl.subfield %_M_read[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
-    firrtl.connect %8, %clock1 : !firrtl.clock, !firrtl.clock
-  }
-
   // CHECK-LABEL: hw.module private @top_modx() -> (tmp27: i23) {
   // CHECK-NEXT:    %c0_i23 = hw.constant 0 : i23
   // CHECK-NEXT:    %c42_i23 = hw.constant 42 : i23
@@ -935,22 +771,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %2 = firrtl.subfield %source[data] : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>
   }
 
-  // CHECK-LABEL: hw.module private @MemDepth1
-  firrtl.module private @MemDepth1(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>,
-                           in %addr: !firrtl.uint<1>, out %data: !firrtl.uint<32>) {
-    // CHECK: %mem0_ext.R0_data = hw.instance "mem0_ext" @mem0_combMem(R0_addr: %addr: i1, R0_en: %en: i1, R0_clk: %clock: i1) -> (R0_data: i32)
-    // CHECK: hw.output %mem0_ext.R0_data : i32
-    %mem0_load0 = firrtl.mem Old {depth = 1 : i64, name = "mem0", portNames = ["load0"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
-    %0 = firrtl.subfield %mem0_load0[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
-    firrtl.connect %0, %clock : !firrtl.clock, !firrtl.clock
-    %1 = firrtl.subfield %mem0_load0[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
-    firrtl.connect %1, %addr : !firrtl.uint<1>, !firrtl.uint<1>
-    %2 = firrtl.subfield %mem0_load0[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
-    firrtl.connect %data, %2 : !firrtl.uint<32>, !firrtl.uint<32>
-    %3 = firrtl.subfield %mem0_load0[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
-    firrtl.connect %3, %en : !firrtl.uint<1>, !firrtl.uint<1>
-}
-
   // https://github.com/llvm/circt/issues/1115
   // CHECK-LABEL: hw.module private @issue1115
   firrtl.module private @issue1115(in %a: !firrtl.sint<20>, out %tmp59: !firrtl.sint<2>) {
@@ -1003,47 +823,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module private @FooDUT() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     %chckcoverAnno_clock = firrtl.instance chkcoverAnno @chkcoverAnno(in clock: !firrtl.clock)
-  }
-
-  // CHECK-LABEL: hw.module private @MemoryWritePortBehavior
-  firrtl.module private @MemoryWritePortBehavior(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock) {
-    // This memory has both write ports driven by the same clock.  It should be
-    // lowered to an "aa" memory. Even if the clock is passed via different wires,
-    // we should identify the clocks to be same.
-    //
-    // CHECK: hw.instance "aa_ext" @aa_combMem
-    %memory_aa_w0, %memory_aa_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "aa", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    %clk_aa_w0 = firrtl.subfield %memory_aa_w0[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    %clk_aa_w1 = firrtl.subfield %memory_aa_w1[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    %cwire1 = firrtl.wire : !firrtl.clock
-    %cwire2 = firrtl.wire : !firrtl.clock
-    firrtl.connect %cwire1, %clock1 : !firrtl.clock, !firrtl.clock
-    firrtl.connect %cwire2, %clock1 : !firrtl.clock, !firrtl.clock
-    firrtl.connect %clk_aa_w0, %cwire1 : !firrtl.clock, !firrtl.clock
-    firrtl.connect %clk_aa_w1, %cwire2 : !firrtl.clock, !firrtl.clock
-
-    // This memory has different clocks for each write port.  It should be
-    // lowered to an "ab" memory.
-    //
-    // CHECK: hw.instance "ab_ext" @ab_combMem
-    %memory_ab_w0, %memory_ab_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "ab", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    %clk_ab_w0 = firrtl.subfield %memory_ab_w0[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    %clk_ab_w1 = firrtl.subfield %memory_ab_w1[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    firrtl.connect %clk_ab_w0, %clock1 : !firrtl.clock, !firrtl.clock
-    firrtl.connect %clk_ab_w1, %clock2 : !firrtl.clock, !firrtl.clock
-
-    // This memory is the same as the first memory, but a node is used to alias
-    // the second write port clock (e.g., this could be due to a dont touch
-    // annotation blocking this from being optimized away).  This should be
-    // lowered to an "aa" since they are identical.
-    //
-    // CHECK: hw.instance "ab_node_ext" @aa_combMem
-    %memory_ab_node_w0, %memory_ab_node_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "ab_node", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    %clk_ab_node_w0 = firrtl.subfield %memory_ab_node_w0[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    %clk_ab_node_w1 = firrtl.subfield %memory_ab_node_w1[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    firrtl.connect %clk_ab_node_w0, %clock1 : !firrtl.clock, !firrtl.clock
-    %tmp = firrtl.node %clock1 : !firrtl.clock
-    firrtl.connect %clk_ab_node_w1, %tmp : !firrtl.clock, !firrtl.clock
   }
 
   // CHECK-LABEL: hw.module private @AsyncResetBasic(
@@ -1117,7 +896,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %regResetName = firrtl.regreset sym @regResetSym %clock, %reset, %value : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
     // CHECK: %regResetName = seq.firreg %regResetName clock %clock sym @regResetSym reset sync %reset, %value : i42
     %memName_port = firrtl.mem sym @memSym Undefined {depth = 12 : i64, name = "memName", portNames = ["port"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
-    // CHECK: {{%.+}} = hw.instance "memName_ext" sym @memSym
+    // CHECK: %memName = seq.firmem sym @memSym 0, 1, undefined, port_order : <12 x 42>
     firrtl.connect %out, %reset : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
@@ -1265,32 +1044,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %4 = hw.array_get %3[%index]
     // CHECK-NEXT: hw.output %4 : i1
   }
-
-  firrtl.module private @inferUnmaskedMemory(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out %rData: !firrtl.uint<8>, in %wMask: !firrtl.uint<1>, in %wData: !firrtl.uint<8>) {
-    %tbMemoryKind1_r, %tbMemoryKind1_w = firrtl.mem Undefined  {depth = 16 : i64, modName = "tbMemoryKind1_ext", name = "tbMemoryKind1", portNames = ["r", "w"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    %0 = firrtl.subfield %tbMemoryKind1_w[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    %1 = firrtl.subfield %tbMemoryKind1_w[mask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    %2 = firrtl.subfield %tbMemoryKind1_w[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    %3 = firrtl.subfield %tbMemoryKind1_w[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    %4 = firrtl.subfield %tbMemoryKind1_w[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    %5 = firrtl.subfield %tbMemoryKind1_r[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
-    %6 = firrtl.subfield %tbMemoryKind1_r[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
-    %7 = firrtl.subfield %tbMemoryKind1_r[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
-    %8 = firrtl.subfield %tbMemoryKind1_r[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
-    firrtl.connect %8, %clock : !firrtl.clock, !firrtl.clock
-    firrtl.connect %7, %rEn : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %6, %rAddr : !firrtl.uint<4>, !firrtl.uint<4>
-    firrtl.connect %rData, %5 : !firrtl.uint<8>, !firrtl.uint<8>
-    firrtl.connect %4, %clock : !firrtl.clock, !firrtl.clock
-    firrtl.connect %3, %rEn : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %2, %rAddr : !firrtl.uint<4>, !firrtl.uint<4>
-    firrtl.connect %1, %wMask : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %0, %wData : !firrtl.uint<8>, !firrtl.uint<8>
-  }
-  // CHECK-LABEL: hw.module private @inferUnmaskedMemory
-  // CHECK-NEXT:   %[[v0:.+]] = comb.and bin %rEn, %wMask : i1
-  // CHECK-NEXT:   %tbMemoryKind1_ext.R0_data = hw.instance "tbMemoryKind1_ext" @tbMemoryKind1_combMem(R0_addr: %rAddr: i4, R0_en: %rEn: i1, R0_clk: %clock: i1, W0_addr: %rAddr: i4, W0_en: %[[v0]]: i1, W0_clk: %clock: i1, W0_data: %wData: i8) -> (R0_data: i8)
-  // CHECK-NEXT:   hw.output %tbMemoryKind1_ext.R0_data : i8
 
   // CHECK-LABEL: hw.module private @eliminateSingleOutputConnects
   // CHECK-NOT:     [[WIRE:%.+]] = sv.wire
