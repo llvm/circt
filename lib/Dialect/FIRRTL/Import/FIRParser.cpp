@@ -1148,11 +1148,6 @@ struct FIRModuleContext : public FIRParser {
   /// set of elements in the FIRRTL dialect.
   UnbundledValuesList unbundledValues;
 
-  /// This is a bump allocator for sub parsers used in the current module scope
-  /// in order to avoid stack overflow when parsing deeply nested `when`
-  /// statements.
-  llvm::BumpPtrAllocator subParserAllocator;
-
   /// Provide a symbol table scope that automatically pops all the entries off
   /// the symbol table when the scope is exited.
   struct ContextScope {
@@ -2587,7 +2582,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // This is a function to parse a suite body.
   auto parseSuite = [&](Block &blockToInsertInto) -> ParseResult {
     // Declarations within the suite are scoped to within the suite.
-    FIRModuleContext::ContextScope suiteScope(moduleContext,
+    auto suiteScope = std::make_unique<FIRModuleContext::ContextScope> (moduleContext,
                                               &blockToInsertInto);
 
     // After parsing the when region, we can release any new entries in
@@ -2597,8 +2592,8 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 
     // We parse the substatements into their own parser, so they get inserted
     // into the specified 'when' region.
-    auto *subParser = new (moduleContext.subParserAllocator)
-        FIRStmtParser(blockToInsertInto, moduleContext, modNameSpace, version);
+    auto subParser = std::make_unique<FIRStmtParser>(
+        blockToInsertInto, moduleContext, modNameSpace, version);
 
     // Figure out whether the body is a single statement or a nested one.
     auto stmtIndent = getIndentation();
@@ -2640,7 +2635,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // the outer 'when'.
   if (getToken().is(FIRToken::kw_when)) {
     // We create a sub parser for the else block.
-    auto *subParser = new (moduleContext.subParserAllocator) FIRStmtParser(
+    auto subParser = std::make_unique<FIRStmtParser>(
         whenStmt.getElseBlock(), moduleContext, modNameSpace, version);
 
     return subParser->parseSimpleStmt(whenIndent);
@@ -2778,8 +2773,8 @@ ParseResult FIRStmtParser::parseMatch(unsigned matchIndent) {
       return failure();
 
     // Parse a block of statements that are indented more than the case.
-    auto subParser = new (moduleContext.subParserAllocator)
-        FIRStmtParser(*caseBlock, moduleContext, modNameSpace, version);
+    auto subParser = std::make_unique<FIRStmtParser>(*caseBlock, moduleContext,
+                                                     modNameSpace, version);
     if (subParser->parseSimpleStmtBlock(*caseIndent))
       return failure();
   }
