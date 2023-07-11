@@ -691,8 +691,6 @@ private:
   std::tuple<hw::HWModuleOp, hw::InstanceOp>
   buildStage(Block *stage, StageArgs args, size_t stageIndex) {
     builder.setInsertionPoint(parentModule);
-    Twine name = pipelineName.strref() + "_s" + Twine(stageIndex);
-
     llvm::SmallVector<Type> outputTypes;
     auto terminator = stage->getTerminator();
     if (auto stageOp = dyn_cast<StageOp>(terminator)) {
@@ -710,8 +708,9 @@ private:
     getStageExtInputs(stage, stageExtInputs);
     bool hasStall = static_cast<bool>(args.stall);
     hw::HWModuleOp mod = buildPipelineLike(
-        name, ValueRange(pipeline.getStageDataArgs(stage)).getTypes(),
-        stageExtInputs, outputTypes, hasStall);
+        pipelineName.strref() + "_s" + Twine(stageIndex),
+        ValueRange(pipeline.getStageDataArgs(stage)).getTypes(), stageExtInputs,
+        outputTypes, hasStall);
 
     // instantiate...
     OpBuilder::InsertionGuard guard(builder);
