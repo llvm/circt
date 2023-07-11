@@ -4368,8 +4368,23 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     Value opEnable, StringAttr opMessageAttr, ValueRange opOperands,
     StringAttr opNameAttr, bool isConcurrent, EventControl opEventControl) {
   StringRef opName = op->getName().stripDialect();
+
+  // The attribute holding the compile guards
+  ArrayRef<Attribute> guards{};
+  if (auto guardsAttr = op->template getAttrOfType<ArrayAttr>("guards"))
+    guards = guardsAttr.getValue();
+
   auto isAssert = opName == "assert";
   auto isCover = opName == "cover";
+
+  // TODO : Need to figure out if there is a cleaner way to get the string which
+  // indicates the assert is UNR only. Or better - not rely on this at all -
+  // ideally there should have been some other attribute which indicated that
+  // this assert for UNR only.
+  auto isUnrOnlyAssert = llvm::any_of(guards, [](Attribute attr) {
+    StringAttr strAttr = dyn_cast<StringAttr>(attr);
+    return strAttr && strAttr.getValue() == "USE_UNR_ONLY_CONSTRAINTS";
+  });
 
   auto clock = getLoweredValue(opClock);
   auto enable = getLoweredValue(opEnable);
@@ -4490,19 +4505,27 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
         assumeLabel = StringAttr::get(builder.getContext(),
                                       "assume__" + label.getValue());
       addToIfDefBlock("USE_PROPERTY_AS_CONSTRAINT", [&]() {
-        builder.create<sv::AssumeConcurrentOp>(
-            circt::sv::EventControlAttr::get(builder.getContext(), event),
-            clock, predicate, assumeLabel);
+        if (!isUnrOnlyAssert) {
+          builder.create<sv::AssumeConcurrentOp>(
+              circt::sv::EventControlAttr::get(builder.getContext(), event),
+              clock, predicate, assumeLabel);
+        } else {
+          builder.create<sv::AlwaysOp>(
+              ArrayRef(sv::EventControl::AtEdge), ArrayRef(predicate), [&]() {
+                buildImmediateVerifOp(builder, "assume", predicate,
+                                      circt::sv::DeferAssertAttr::get(
+                                          builder.getContext(),
+                                          circt::sv::DeferAssert::Immediate),
+                                      assumeLabel);
+              });
+        }
       });
     }
   };
 
   // Wrap the verification statement up in the optional preprocessor
   // guards. This is a bit awkward since we want to translate an array of
-  // guards into a recursive call to `addToIfDefBlock`.
-  ArrayRef<Attribute> guards{};
-  if (auto guardsAttr = op->template getAttrOfType<ArrayAttr>("guards"))
-    guards = guardsAttr.getValue();
+  // guards  into a recursive call to `addToIfDefBlock`.
   bool anyFailed = false;
   std::function<void()> emitWrapped = [&]() {
     if (guards.empty()) {
@@ -4521,7 +4544,6 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
   emitWrapped();
   if (anyFailed)
     return failure();
-
   return success();
 }
 
