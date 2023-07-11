@@ -73,28 +73,35 @@ def KnownWidth : Constraint<CPred<[{
     !type_cast<FIRRTLBaseType>($0.getType()).getRecursiveTypeProperties().hasUninferredWidth
   }]>>;
 
+/// Constraint that matches a false SpecialConstantOp
+def FalseSpecialConstantOp : Constraint<CPred<
+  "$0.getDefiningOp<SpecialConstantOp>() &&"
+  "$0.getDefiningOp<SpecialConstantOp>().getValue() == false">>;
+
+/// Constraint that matches a true SpecialConstantOp
+def TrueSpecialConstantOp : Constraint<CPred<
+  "$0.getDefiningOp<SpecialConstantOp>() &&"
+  "$0.getDefiningOp<SpecialConstantOp>().getValue() == true">>;
+
 /// Constraint that matches a zero ConstantOp or SpecialConstantOp.
 def ZeroConstantOp : Constraint<Or<[
   CPred<"$0.getDefiningOp<ConstantOp>() &&"
         "$0.getDefiningOp<ConstantOp>().getValue().isZero()">,
-  CPred<"$0.getDefiningOp<SpecialConstantOp>() &&"
-        "$0.getDefiningOp<SpecialConstantOp>().getValue() == false">
+  FalseSpecialConstantOp.predicate
 ]>>;
 
 /// Constraint that matches a one ConstantOp or SpecialConstantOp.
 def OneConstantOp : Constraint<Or<[
   CPred<"$0.getDefiningOp<ConstantOp>() &&"
         "$0.getDefiningOp<ConstantOp>().getValue().isOne()">,
-  CPred<"$0.getDefiningOp<SpecialConstantOp>() &&"
-        "$0.getDefiningOp<SpecialConstantOp>().getValue() == true">
+  TrueSpecialConstantOp.predicate
 ]>>;
 
-/// Constraint that matches a zero ConstantOp or SpecialConstantOp.
+/// Constraint that matches a not-all-ones ConstantOp or SpecialConstantOp.
 def NotAllOneConstantOp : Constraint<Or<[
   CPred<"$0.getDefiningOp<ConstantOp>() &&"
         "!$0.getDefiningOp<ConstantOp>().getValue().isAllOnes()">,
-  CPred<"$0.getDefiningOp<SpecialConstantOp>() &&"
-        "$0.getDefiningOp<SpecialConstantOp>().getValue() == false">
+  FalseSpecialConstantOp.predicate
 ]>>;
 
 /// Constraint that matches an all ones ConstantOp.
@@ -296,16 +303,10 @@ def AndOfSelf : Pat <
   [(KnownWidth $x)]>;
 
 /// and(x, pad(y, n)) -> pad(and(tail(x), y), n), x is unsigned
-def AndOfPadU : Pat <
+def AndOfPad : Pat <
   (AndPrimOp:$old (either $x, (PadPrimOp:$pad $y, $n))),
   (MoveNameHint $old, (PadPrimOp (AndPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y), $n)),
   [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
-
-/// and(x, pad(y, n)) -> cat(head(x), and(tail(x), y)), x is signed
-def AndOfPadS : Pat <
-  (AndPrimOp:$old (either $x, (PadPrimOp:$pad $y, $n))),
-  (MoveNameHint $old, (CatPrimOp (HeadPrimOp $x, (TypeWidthAdjust32 $x, $y)), (AndPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), (AsUIntPrimOp $y)))),
-  [(KnownWidth $x), (SIntType $x), (EqualTypes $x, $pad)]>;
 
 def AndOfAsSIntL : Pat<
   (AndPrimOp:$old (AsSIntPrimOp $x), $y),
@@ -466,9 +467,8 @@ def AndRPadU : Pat <
 /// andr(pad(x:S,n)) -> andr(x)
 def AndRPadS : Pat <
   (AndRPrimOp:$old (PadPrimOp:$pad $x, $n)),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
+  (MoveNameHint $old, (AndRPrimOp $x)),
   [(KnownWidth $x), (SIntTypes $x)]>;
-
 
 // bits(bits(x, ...), ...) -> bits(x, ...)
 def BitsOfBits : Pat<

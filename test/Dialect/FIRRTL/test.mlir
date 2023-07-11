@@ -284,9 +284,14 @@ firrtl.module @PropertyNestedTest(in %in: !firrtl.map<bigint, list<map<string, b
 // CHECK-SAME: %in: !firrtl.alias<bar, uint<1>>
 // CHECK-SAME: %const: !firrtl.const.alias<baz, const.uint<1>>
 // CHECK-SAME: %r: !firrtl.openbundle<a: alias<baz, uint<1>>>
+// CHECK-SAME: %out: !firrtl.alias<foo, uint<1>>
+// CHECK-NEXT: firrtl.strictconnect %out, %in : !firrtl.alias<foo, uint<1>>, !firrtl.alias<bar, uint<1>>
+
 firrtl.module @TypeAlias(in %in: !firrtl.alias<bar, uint<1>>,
                          in %const: !firrtl.const.alias<baz, const.uint<1>>,
-                         out %r : !firrtl.openbundle<a: alias<baz, uint<1>>>) {
+                         out %r : !firrtl.openbundle<a: alias<baz, uint<1>>>,
+                         out %out: !firrtl.alias<foo, uint<1>>) {
+  firrtl.strictconnect %out, %in: !firrtl.alias<foo, uint<1>>, !firrtl.alias<bar, uint<1>>
 }
 
 }

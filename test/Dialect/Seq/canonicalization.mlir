@@ -89,7 +89,7 @@ hw.module @UninitializedArrayElement(%a: i1, %clock: i1) -> (b: !hw.array<2xi1>)
 }
 
 // CHECK-LABEL: hw.module @ClockGate
-hw.module @ClockGate(%clock: i1, %enable: i1, %testEnable: i1) {
+hw.module @ClockGate(%clock: i1, %enable: i1, %enable2 : i1, %testEnable: i1) {
   // CHECK-NEXT: hw.constant false
   %false = hw.constant false
   %true = hw.constant true
@@ -119,6 +119,20 @@ hw.module @ClockGate(%clock: i1, %enable: i1, %testEnable: i1) {
   // CHECK-NEXT: %dropTestEnable = hw.wire [[TMP]] sym @dropTestEnable
   %6 = seq.clock_gate %clock, %enable, %false
   %dropTestEnable = hw.wire %6 sym @dropTestEnable : i1
+
+  // CHECK-NEXT: [[TCG1:%.+]] = seq.clock_gate %clock, %enable
+  // CHECK-NEXT: %transitiveClock1 = hw.wire [[TCG1]] sym @transitiveClock1  : i1
+  %7 = seq.clock_gate %clock, %enable
+  %8 = seq.clock_gate %clock, %enable
+  %transitiveClock1 = hw.wire %7 sym @transitiveClock1 : i1
+
+  // CHECK-NEXT: [[TCG2:%.+]] = seq.clock_gate %clock, %enable, %testEnable
+  // CHECK-NEXT: [[TCG3:%.+]] = seq.clock_gate [[TCG2]], %enable
+  // CHECK-NEXT: %transitiveClock2 = hw.wire [[TCG3]] sym @transitiveClock2  : i1
+  %9 = seq.clock_gate %clock, %enable, %testEnable
+  %10 = seq.clock_gate %9, %enable2 
+  %11 = seq.clock_gate %10, %enable, %testEnable
+  %transitiveClock2 = hw.wire %11 sym @transitiveClock2 : i1
 }
 
 // CHECK-LABEL: @FirMem

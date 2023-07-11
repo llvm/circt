@@ -1211,6 +1211,24 @@ bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
 }
 // NOLINTEND(misc-no-recursion)
 
+bool firrtl::areAnonymousTypesEquivalent(FIRRTLBaseType lhs,
+                                         FIRRTLBaseType rhs) {
+  return lhs.getAnonymousType() == rhs.getAnonymousType();
+}
+
+bool firrtl::areAnonymousTypesEquivalent(mlir::Type lhs, mlir::Type rhs) {
+  if (auto destBaseType = type_dyn_cast<FIRRTLBaseType>(lhs))
+    if (auto srcBaseType = type_dyn_cast<FIRRTLBaseType>(rhs))
+      return areAnonymousTypesEquivalent(destBaseType, srcBaseType);
+
+  if (auto destRefType = type_dyn_cast<RefType>(lhs))
+    if (auto srcRefType = type_dyn_cast<RefType>(rhs))
+      return areAnonymousTypesEquivalent(destRefType.getType(),
+                                         srcRefType.getType());
+
+  return lhs == rhs;
+}
+
 /// Return the passive version of a firrtl type
 /// top level for ODS constraint usage
 Type firrtl::getPassiveType(Type anyBaseFIRRTLType) {

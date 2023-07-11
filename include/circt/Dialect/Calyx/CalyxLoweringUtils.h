@@ -241,6 +241,22 @@ public:
     return it->second;
   }
 
+  /// Registers groups to be the loop init groups of `op`.
+  void setLoopInitGroups(Loop op, SmallVector<calyx::GroupOp> groups) {
+    Operation *operation = op.getOperation();
+    assert(loopInitGroups.count(operation) == 0 &&
+           "Init group(s) was already set for this loopOp");
+    loopInitGroups[operation] = std::move(groups);
+  }
+
+  /// Retrieve the loop init groups registered for `op`.
+  SmallVector<calyx::GroupOp> getLoopInitGroups(Loop op) {
+    auto it = loopInitGroups.find(op.getOperation());
+    assert(it != loopInitGroups.end() &&
+           "No init group(s) was set for this loopOp");
+    return it->second;
+  }
+
   /// Creates a new group that assigns the 'ops' values to the iter arg
   /// registers of the loop operation.
   calyx::GroupOp buildLoopIterArgAssignments(OpBuilder &builder, Loop op,
@@ -271,6 +287,10 @@ private:
   /// finishing a loop body. The execution of this group will write the
   /// yield'ed loop body values to the iteration argument registers.
   DenseMap<Operation *, calyx::GroupOp> loopLatchGroups;
+
+  /// Loop init groups are to be scheduled before the while operation. These
+  /// groups should set the initial value(s) of the loop init_args register(s).
+  DenseMap<Operation *, SmallVector<calyx::GroupOp>> loopInitGroups;
 };
 
 // Handles state during the lowering of a Calyx component. This provides common

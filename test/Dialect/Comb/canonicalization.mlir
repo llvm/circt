@@ -1508,3 +1508,12 @@ hw.module @twoStateICmp(%arg: i4) -> (cond: i1) {
   %0 = comb.icmp bin eq %c-1_i4, %arg : i4
   hw.output %0 : i1
 }
+
+// https://github.com/llvm/circt/issues/5531
+// CHECK-LABEL: @Issue5531
+hw.module @Issue5531(%arg0: i64, %arg1: i64) -> (out: i32) {
+  // CHECK:  %2 = comb.mul %0, %1 {sv.namehint = "hint"} : i32
+  %2 = comb.mul %arg0, %arg1 {sv.namehint = "hint"} : i64
+  %3 = comb.extract %2 from 0 : (i64) -> i32
+  hw.output %3 : i32
+}

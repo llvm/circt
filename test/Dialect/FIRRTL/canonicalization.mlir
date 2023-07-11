@@ -682,7 +682,8 @@ firrtl.module @Andr(in %in0 : !firrtl.uint<0>, in %in1 : !firrtl.sint<2>,
                     out %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
                     out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>,
                     out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>, 
-                    out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>) {
+                    out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>,
+                    out %i: !firrtl.uint<1>) {
   %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
   %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
@@ -723,7 +724,13 @@ firrtl.module @Andr(in %in0 : !firrtl.uint<0>, in %in1 : !firrtl.sint<2>,
   %9 = firrtl.cvt %6 : (!firrtl.uint<64>) -> !firrtl.sint<65>
   %10 = firrtl.andr %9 : (!firrtl.sint<65>) -> !firrtl.uint<1>
   firrtl.strictconnect %g, %10 : !firrtl.uint<1>
-  }
+
+  // CHECK: %[[andr:.*]] = firrtl.andr %in1
+  // CHECK-NEXT: firrtl.strictconnect %i, %[[andr]]
+  %11 = firrtl.pad %in1, 3 : (!firrtl.sint<2>) -> !firrtl.sint<3>
+  %12 = firrtl.andr %11 : (!firrtl.sint<3>) -> !firrtl.uint<1>
+  firrtl.strictconnect %i, %12 : !firrtl.uint<1>
+}
 
 // CHECK-LABEL: firrtl.module @Orr
 firrtl.module @Orr(in %in0 : !firrtl.uint<0>,
@@ -3057,6 +3064,26 @@ firrtl.module @Issue5527(in %x: !firrtl.uint<1>, out %out: !firrtl.uint<2>) attr
   %2 = firrtl.tail %1, 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
   // CHECK: firrtl.strictconnect %out, %c0_ui2
   firrtl.strictconnect %out, %2 : !firrtl.uint<2>
+}
+
+// Test dropping force/release statements with constant-zero predicates.
+// CHECK-LABEL: @RefMe(
+firrtl.module private @RefMe(out %p: !firrtl.rwprobe<uint<4>>) {
+  %x, %x_ref = firrtl.wire forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
+  firrtl.ref.define %p, %x_ref : !firrtl.rwprobe<uint<4>>
+}
+// CHECK-LABEL: @ForceRelease(
+firrtl.module @ForceRelease(in %clock: !firrtl.clock, in %x: !firrtl.uint<4>) {
+    %c = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK: firrtl.instance
+    %r_p = firrtl.instance r @RefMe(out p: !firrtl.rwprobe<uint<4>>)
+
+    // CHECK-NOT: firrtl.ref
+    firrtl.ref.force %clock, %c, %r_p, %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>
+    firrtl.ref.force_initial %c, %r_p, %x : !firrtl.uint<1>, !firrtl.uint<4>
+    firrtl.ref.release %clock, %c, %r_p : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
+    firrtl.ref.release_initial %c, %r_p : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
+    // CHECK-NEXT: }
 }
 
 }

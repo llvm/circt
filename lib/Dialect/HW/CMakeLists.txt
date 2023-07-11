@@ -11,6 +11,7 @@ set(CIRCT_HW_Sources
   InstanceImplementation.cpp
   ModuleImplementation.cpp
   InnerSymbolTable.cpp
+  PortConverter.cpp
 )
 
 set(LLVM_OPTIONAL_SOURCES
