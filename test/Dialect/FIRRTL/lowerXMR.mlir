@@ -921,3 +921,45 @@ firrtl.circuit "RefSubLayers" {
     firrtl.ref.define %rw, %sub : !firrtl.probe<vector<bundle<a: uint<2>, b: uint<1>>, 2>>
   }
 }
+
+// -----
+// Check dropping force/etc. ops that target zero-width references.
+// Ensure no symbol added, so can be dropped in LowerToHW.
+
+// CHECK-LABEL: circuit "DropForceOp"
+firrtl.circuit "DropForceOp" {
+  firrtl.module @DropForceOp() {
+    // CHECK: firrtl.wire
+    // CHECK-NOT: sym
+    // CHECK-NEXT: }
+    %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %x, %x_ref = firrtl.wire forceable : !firrtl.uint<0>, !firrtl.rwprobe<uint<0>>
+    firrtl.ref.force_initial %c1_ui1, %x_ref, %c0_ui0 : !firrtl.uint<1>, !firrtl.uint<0>
+  }
+}
+
+// -----
+// Check dropping zero-width and interaction with ABI/across layers.
+
+// CHECK-LABEL: circuit "RefSubZeroWidth"
+firrtl.circuit "RefSubZeroWidth" {
+   // CHECK-NOT: probe<
+   firrtl.extmodule @ExtRef(out out: !firrtl.probe<bundle<a: uint<1>, b: vector<bundle<a: uint<0>, b: uint<1>>, 2>>>)
+  firrtl.module @RefSubZeroWidth(out %rw : !firrtl.probe<uint<0>>) {
+    %ref = firrtl.instance m @Mid(out rw: !firrtl.probe<bundle<a: uint<0>, b: uint<1>>>)
+    %sub = firrtl.ref.sub %ref[0] : !firrtl.probe<bundle<a: uint<0>, b: uint<1>>>
+    firrtl.ref.define %rw, %sub : !firrtl.probe<uint<0>>
+  }
+  firrtl.module private @Mid(out %rw : !firrtl.probe<bundle<a: uint<0>, b: uint<1>>>) {
+    %ref = firrtl.instance l @Leaf(out rw: !firrtl.probe<vector<bundle<a: uint<0>, b: uint<1>>, 2>>)
+    %sub = firrtl.ref.sub %ref[1] : !firrtl.probe<vector<bundle<a: uint<0>, b: uint<1>>, 2>>
+    firrtl.ref.define %rw, %sub : !firrtl.probe<bundle<a: uint<0>, b: uint<1>>>
+  }
+
+  firrtl.module private @Leaf(out %rw : !firrtl.probe<vector<bundle<a: uint<0>, b: uint<1>>, 2>>) {
+    %ref = firrtl.instance ext @ExtRef(out out: !firrtl.probe<bundle<a: uint<1>, b: vector<bundle<a: uint<0>, b: uint<1>>, 2>>>)
+    %sub = firrtl.ref.sub %ref[1] : !firrtl.probe<bundle<a: uint<1>, b: vector<bundle<a: uint<0>, b: uint<1>>, 2>>>
+    firrtl.ref.define %rw, %sub : !firrtl.probe<vector<bundle<a: uint<0>, b: uint<1>>, 2>>
+  }
+}
