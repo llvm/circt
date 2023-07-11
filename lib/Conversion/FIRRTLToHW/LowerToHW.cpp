@@ -4544,23 +4544,25 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
 
   // Wrap the verification statement up in the optional preprocessor
   // guards. This is a bit awkward since we want to translate an array of
-  // guards (StringRefs) into a recursive call to `addToIfDefBlock`.
-
-  // Explicitly use a new variable to hold the ref and use that to recurse /
-  // mutate. Does not create any new array - points to the same underlying data.
-  // Hence should not impact performance.
-  auto guardsStringRefCopy = guardsStringRef;
+  // guards  into a recursive call to `addToIfDefBlock`.
+  bool anyFailed = false;
   std::function<void()> emitWrapped = [&]() {
-    if (guardsStringRefCopy.empty()) {
+    if (guards.empty()) {
       emit();
       return;
     }
-    auto guard = guardsStringRefCopy.front();
-    guardsStringRefCopy = guardsStringRefCopy.drop_front();
-    addToIfDefBlock(guard, emitWrapped);
+    auto guard = guards[0].dyn_cast<StringAttr>();
+    if (!guard) {
+      op->emitOpError("elements in `guards` array must be `StringAttr`");
+      anyFailed = true;
+      return;
+    }
+    guards = guards.drop_front();
+    addToIfDefBlock(guard.getValue(), emitWrapped);
   };
   emitWrapped();
-
+  if (anyFailed)
+    return failure();
   return success();
 }
 
