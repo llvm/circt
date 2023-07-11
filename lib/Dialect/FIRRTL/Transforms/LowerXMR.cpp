@@ -361,6 +361,18 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
     assert(!(refSendPath.empty() && stringLeaf.empty()) &&
            "nothing to index through");
+
+    // All indexing done as the ref is plumbed around indexes through
+    // the target/referent, not the current point of the path which
+    // describes how to access the referent we're indexing through.
+    // Above we gathered all indexing operations, so now append them
+    // to the path (after any relevant `xmrPathSuffix`) to reach
+    // the target element.
+    // Generating these strings here (especially if ref is sent
+    // out from a different design) is fragile but should get this
+    // working well enough while sorting out how to do this better.
+    // Some discussion of this can be found here:
+    // https://github.com/llvm/circt/pull/5551#discussion_r1258908834
     for (auto subOp : llvm::reverse(indexing)) {
       TypeSwitch<FIRRTLBaseType>(subOp.getInput().getType().getType())
           .Case<FVectorType, OpenVectorType>([&](auto vecType) {
