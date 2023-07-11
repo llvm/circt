@@ -808,7 +808,6 @@ void Emitter::emitSeqMemory(SeqMemoryOp memory) {
 void Emitter::emitInvoke(InvokeOp invoke) {
   StringRef callee = invoke.getCallee();
   indent() << "invoke " << callee;
-  auto inputs = invoke.getInputs();
   ArrayAttr portNames = invoke.getPortNames();
   ArrayAttr inputNames = invoke.getInputNames();
   /// Because the ports of all components of calyx.invoke are inside a (),
@@ -827,6 +826,7 @@ void Emitter::emitInvoke(InvokeOp invoke) {
     /// port of the component, which is a bit different from calyx's native
     /// compiler. Later on, the classified connection relations are outputted
     /// uniformly and converted to calyx's native compiler format.
+    StringRef inputMapKey = portName.drop_front(2 + callee.size());
     if (portName.substr(1, callee.size()) == callee) {
       // If the input to the port is a number.
       if (isa_and_nonnull<hw::ConstantOp>(input.getDefiningOp())) {
@@ -835,11 +835,10 @@ void Emitter::emitInvoke(InvokeOp invoke) {
         std::string mapValue = std::to_string(value.getBitWidth()) +
                                apostrophe().data() + "d" +
                                std::to_string(value.getZExtValue());
-        inputsMap[portName.drop_front(2 + callee.size())] = mapValue;
+        inputsMap[inputMapKey] = mapValue;
         continue;
       }
-      inputsMap[portName.drop_front(2 + callee.size())] =
-          inputName.drop_front(1);
+      inputsMap[inputMapKey] = inputName.drop_front(1);
     } else if (inputName.substr(1, callee.size()) == callee)
       outputsMap[inputName.drop_front(2 + callee.size())] =
           portName.drop_front(1);

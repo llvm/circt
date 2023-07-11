@@ -1096,7 +1096,7 @@ module attributes {calyx.entrypoint = "main"} {
     }
     calyx.control {
       // expected-error @+2 {{'calyx.invoke' op has a cell port as the source with the incorrect direction.}} 
-      // expected-error @+1 {{'calyx.invoke' op '@r0' has output '%r1.in', which is a destination port or a complex logic. The inputs are required to be source ports.}}
+      // expected-error @+1 {{'calyx.invoke' op '@r0' has output '%r1.in', which is a destination port. The inputs are required to be source ports.}}
       calyx.invoke @r0(%r0.in = %r1.in) -> (i32)
     }
   }
@@ -1161,7 +1161,7 @@ module attributes {calyx.entrypoint = "main"} {
       
     }
     calyx.control {
-      // expected-error @+1 {{'calyx.invoke' op the connection %r1.in = %c10 is unrelated to the '@r0'.}}
+      // expected-error @+1 {{'calyx.invoke' op the connection %r1.in = %c10 is not defined as an input port of '@r0'.}}
       calyx.invoke @r0(%r1.in = %c10) -> (i32)
     }
   }
@@ -1193,8 +1193,7 @@ module attributes {calyx.entrypoint = "main"} {
 
     }
     calyx.control {
-      // expected-error @+2 {{'calyx.invoke' op has source that is not a port or constant. Complex logic should be conducted in the guard.}}
-      // expected-error @+1 {{'calyx.invoke' op '@r' has output '%and', which is a destination port or a complex logic. The inputs are required to be source ports.}}
+      // expected-error @+1 {{'calyx.invoke' op '@r' has '%and', which is not a port or constant. Complex logic should be conducted in the guard.}}
       calyx.invoke @r(%r.in = %and) -> (i32)
     }
   }
