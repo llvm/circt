@@ -1,0 +1,18 @@
+#!/bin/bash
+mkdir -p build
+cd build
+cmake -G Ninja ../llvm/llvm \
+    -DCMAKE_BUILD_TYPE=DEBUG\
+    -DCMAKE_C_COMPILER=clang \
+    -DCMAKE_CXX_COMPILER=clang++ \
+    -DLLVM_EXTERNAL_PROJECTS="circt" \
+    -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$PWD/.. \
+    -DLLVM_ENABLE_PROJECTS=mlir \
+    -DLLVM_TARGETS_TO_BUILD=host \
+    -DLLVM_ENABLE_ASSERTIONS=ON \
+    -DLLVM_USE_LINKER=gold \
+    -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DLLVM_ENABLE_TERMINFO=OFF \
+    -DCIRCT_RELEASE_TAG=firtool \
+    -DCIRCT_RELEASE_TAG_ENABLED=On
