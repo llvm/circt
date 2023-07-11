@@ -302,22 +302,39 @@ LowerFirMemPass::createMemoryModule(UniqueConfig &config, OpBuilder &builder,
   const auto &mem = config.first;
   auto &memOps = config.second;
 
-  // Pick a name for the memory. Honor the optional prefix and try to mention
-  // the names of the memory instances that use this configuration.
-  SmallDenseSet<StringRef> usedNames;
-  SmallString<32> nameBuffer;
-  nameBuffer += mem.prefix;
+  // Pick a name for the memory. Honor the optional prefix and try to include
+  // the common part of the names of the memory instances that use this
+  // configuration. The resulting name is of the form:
+  //
+  //   <prefix>_<commonName>_<depth>x<width>
+  //
+  StringRef baseName = "";
+  bool firstFound = false;
   for (auto memOp : memOps) {
     if (auto memName = memOp.getName()) {
-      if (usedNames.insert(*memName).second) {
-        if (usedNames.size() > 1)
-          nameBuffer.push_back('_');
-        nameBuffer += *memName;
+      if (!firstFound) {
+        baseName = *memName;
+        firstFound = true;
+        continue;
       }
+      unsigned idx = 0;
+      for (; idx < memName->size() && idx < baseName.size(); ++idx)
+        if ((*memName)[idx] != baseName[idx])
+          break;
+      baseName = baseName.take_front(idx);
     }
   }
-  if (nameBuffer.empty())
+  baseName = baseName.rtrim('_');
+
+  SmallString<32> nameBuffer;
+  nameBuffer += mem.prefix;
+  if (!baseName.empty()) {
+    nameBuffer += baseName;
+  } else {
     nameBuffer += "mem";
+  }
+  nameBuffer += "_";
+  (Twine(mem.depth) + "x" + Twine(mem.dataWidth)).toVector(nameBuffer);
   auto name = builder.getStringAttr(globalNamespace.newName(nameBuffer));
 
   LLVM_DEBUG(llvm::dbgs() << "Creating " << name << " for " << mem.depth
