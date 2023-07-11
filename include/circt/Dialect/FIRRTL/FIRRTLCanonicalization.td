@@ -303,16 +303,10 @@ def AndOfSelf : Pat <
   [(KnownWidth $x)]>;
 
 /// and(x, pad(y, n)) -> pad(and(tail(x), y), n), x is unsigned
-def AndOfPadU : Pat <
+def AndOfPad : Pat <
   (AndPrimOp:$old (either $x, (PadPrimOp:$pad $y, $n))),
   (MoveNameHint $old, (PadPrimOp (AndPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y), $n)),
   [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
-
-/// and(x, pad(y, n)) -> cat(head(x), and(tail(x), y)), x is signed
-def AndOfPadS : Pat <
-  (AndPrimOp:$old (either $x, (PadPrimOp:$pad $y, $n))),
-  (MoveNameHint $old, (CatPrimOp (HeadPrimOp $x, (TypeWidthAdjust32 $x, $y)), (AndPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), (AsUIntPrimOp $y)))),
-  [(KnownWidth $x), (SIntType $x), (EqualTypes $x, $pad)]>;
 
 def AndOfAsSIntL : Pat<
   (AndPrimOp:$old (AsSIntPrimOp $x), $y),
@@ -473,9 +467,8 @@ def AndRPadU : Pat <
 /// andr(pad(x:S,n)) -> andr(x)
 def AndRPadS : Pat <
   (AndRPrimOp:$old (PadPrimOp:$pad $x, $n)),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
+  (MoveNameHint $old, (AndRPrimOp $x)),
   [(KnownWidth $x), (SIntTypes $x)]>;
-
 
 // bits(bits(x, ...), ...) -> bits(x, ...)
 def BitsOfBits : Pat<
