@@ -89,26 +89,25 @@ void circt::elideImplicitSSAName(OpAsmPrinter &printer, Operation *op,
     elides.push_back("name");
 }
 
-ParseResult circt::parseOptionalBinaryOpTypes(OpAsmParser &parser,
-                                                    mlir::Type &dest,
-                                                    mlir::Type &src) {
-  if (parser.parseType(dest))
+ParseResult circt::parseOptionalBinaryOpTypes(OpAsmParser &parser, Type &lhs,
+                                              Type &rhs) {
+  if (parser.parseType(lhs))
     return failure();
 
-  // Parse an optional src type.
+  // Parse an optional rhs type.
   if (parser.parseOptionalComma()) {
-    src = dest;
+    rhs = lhs;
   } else {
-    if (parser.parseType(src))
+    if (parser.parseType(rhs))
       return failure();
   }
   return success();
 }
 
-void circt::printOptionalBinaryOpTypes(OpAsmPrinter &p, Operation *op,
-                                             mlir::Type dest, mlir::Type src) {
-  p << dest;
-  // If operand types are not same, print a src type.
-  if (dest != src)
-    p << ", " << src;
+void circt::printOptionalBinaryOpTypes(OpAsmPrinter &p, Operation *op, Type lhs,
+                                       Type rhs) {
+  p << lhs;
+  // If operand types are not same, print a rhs type.
+  if (lhs != rhs)
+    p << ", " << rhs;
 }

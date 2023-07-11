@@ -258,8 +258,7 @@ bool isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType);
 
 /// Return true if anonymous types of given arguments are equivalent by pointer
 /// comparison.
-bool areAnonymousTypesEquivalent(FIRRTLBaseType lhs,
-                                 FIRRTLBaseType rhs);
+bool areAnonymousTypesEquivalent(FIRRTLBaseType lhs, FIRRTLBaseType rhs);
 bool areAnonymousTypesEquivalent(mlir::Type lhs, mlir::Type rhs);
 
 mlir::Type getPassiveType(mlir::Type anyBaseFIRRTLType);

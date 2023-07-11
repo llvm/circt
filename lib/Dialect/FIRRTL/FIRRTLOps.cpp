@@ -2478,8 +2478,6 @@ LogicalResult ConnectOp::verify() {
   return success();
 }
 
-// type(%dest) ^(, type(%src))
-// ParseResult circt::parseOptionalBinaryOpTypes(OpAsmParser &parser,
 LogicalResult StrictConnectOp::verify() {
   if (auto type = dyn_cast<FIRRTLType>(getDest().getType())) {
     auto baseType = cast<FIRRTLBaseType>(type);
