@@ -224,8 +224,10 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             return success();
           })
           .Case<Forceable>([&](Forceable op) {
-            if (!op.isForceable() || op.getDataRef().use_empty())
+            if (!op.isForceable() || op.getDataRef().use_empty() ||
+                isZeroWidth(op.getDataType()))
               return success();
+
             addReachingSendsEntry(op.getDataRef(), getInnerRefTo(op));
             return success();
           })
@@ -427,6 +429,11 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     return TypeSwitch<Operation *, LogicalResult>(op)
         .Case<RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp>(
             [&](auto op) {
+              // Drop if zero-width target.
+              if (isZeroWidth(op.getDest().getType().getType())) {
+                op.erase();
+                return success();
+              }
               Value ref;
               if (failed(resolveReference(op.getDest(), op.getDest().getType(),
                                           op.getLoc(), op, ref)))
