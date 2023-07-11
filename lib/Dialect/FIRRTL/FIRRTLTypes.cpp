@@ -1211,23 +1211,22 @@ bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
 }
 // NOLINTEND(misc-no-recursion)
 
-bool firrtl::areAnonymousTypesEquivalent(FIRRTLBaseType destType,
-                                         FIRRTLBaseType srcType) {
-  return destType.getAnonymousType() == srcType.getAnonymousType();
+bool firrtl::areAnonymousTypesEquivalent(FIRRTLBaseType lhs,
+                                         FIRRTLBaseType rhs) {
+  return lhs.getAnonymousType() == rhs.getAnonymousType();
 }
 
-bool firrtl::areAnonymousTypesEquivalent(mlir::Type destType,
-                                         mlir::Type srcType) {
-  if (auto destBaseType = type_dyn_cast<FIRRTLBaseType>(destType))
-    if (auto srcBaseType = type_dyn_cast<FIRRTLBaseType>(srcType))
+bool firrtl::areAnonymousTypesEquivalent(mlir::Type lhs, mlir::Type rhs) {
+  if (auto destBaseType = type_dyn_cast<FIRRTLBaseType>(lhs))
+    if (auto srcBaseType = type_dyn_cast<FIRRTLBaseType>(rhs))
       return areAnonymousTypesEquivalent(destBaseType, srcBaseType);
 
-  if (auto destRefType = type_dyn_cast<RefType>(destType))
-    if (auto srcRefType = type_dyn_cast<RefType>(srcType))
+  if (auto destRefType = type_dyn_cast<RefType>(lhs))
+    if (auto srcRefType = type_dyn_cast<RefType>(rhs))
       return areAnonymousTypesEquivalent(destRefType.getType(),
                                          srcRefType.getType());
 
-  return destType == srcType;
+  return lhs == rhs;
 }
 
 /// Return the passive version of a firrtl type

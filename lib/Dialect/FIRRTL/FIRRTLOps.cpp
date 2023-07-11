@@ -2479,30 +2479,7 @@ LogicalResult ConnectOp::verify() {
 }
 
 // type(%dest) ^(, type(%src))
-static ParseResult parseOptionalConnectOperandTypes(OpAsmParser &parser,
-                                                    mlir::Type &dest,
-                                                    mlir::Type &src) {
-  if (parser.parseType(dest))
-    return failure();
-
-  // Parse an optional src type.
-  if (parser.parseOptionalComma()) {
-    src = dest;
-  } else {
-    if (parser.parseType(src))
-      return failure();
-  }
-  return success();
-}
-
-static void printOptionalConnectOperandTypes(OpAsmPrinter &p, Operation *op,
-                                             mlir::Type dest, mlir::Type src) {
-  p << dest;
-  // If operand types are not same, print a src type.
-  if (dest != src)
-    p << ", " << src;
-}
-
+// ParseResult circt::parseOptionalBinaryOpTypes(OpAsmParser &parser,
 LogicalResult StrictConnectOp::verify() {
   if (auto type = dyn_cast<FIRRTLType>(getDest().getType())) {
     auto baseType = cast<FIRRTLBaseType>(type);
@@ -3625,17 +3602,6 @@ LogicalResult impl::verifySameOperandsIntTypeKind(Operation *op) {
   return success(isSameIntTypeKind(op->getOperand(0).getType(),
                                    op->getOperand(1).getType(), lhsWidth,
                                    rhsWidth, isConstResult, op->getLoc()));
-}
-
-LogicalResult impl::verifySameAnonTypeOperands(Operation *op) {
-  assert(op->getNumOperands() == 2 && "SameAnnoTypeOperand on non-binary op");
-  if (!circt::firrtl::areAnonymousTypesEquivalent(op->getOperand(0).getType(),
-                                                  op->getOperand(1).getType()))
-    return mlir::emitError(op->getLoc(), "operand types must be structually "
-                                         "equivalent but a dest type is ")
-           << op->getOperand(0).getType() << ", and a src type is "
-           << op->getOperand(1).getType();
-  return success();
 }
 
 LogicalResult impl::validateBinaryOpArguments(ValueRange operands,

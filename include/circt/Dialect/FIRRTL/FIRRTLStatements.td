@@ -50,10 +50,9 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
   let hasCanonicalizer = true;
 }
 
-def SameAnonTypeOperands : NativeOpTrait<"SameAnonTypeOperands"> {
-  let cppNamespace = "::circt::firrtl";
-}
-
+def SameAnonTypeOperands: PredOpTrait<
+        "operands must be structurally equivalent",
+        CPred<[{areAnonymousTypesEquivalent(getOperand(0).getType(), getOperand(1).getType())}]>>;
 def StrictConnectOp : FIRRTLOp<"strictconnect", [FConnectLike,
                       SameAnonTypeOperands]> {
   let summary = "Connect two signals";
@@ -72,7 +71,7 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [FConnectLike,
 
   let hasVerifier = 1;
   let assemblyFormat = [{$dest `,` $src  attr-dict `:`
-      custom<OptionalConnectOperandTypes>(type($dest), type($src))}];
+      custom<OptionalBinaryOpTypes>(type($dest), type($src))}];
 }
 
 def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {

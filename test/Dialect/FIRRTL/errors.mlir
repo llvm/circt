@@ -1752,7 +1752,7 @@ firrtl.circuit "OpenBundleNotFieldID" {
 
 firrtl.circuit "NonEquivalenctStrictConnect" {
   firrtl.module @NonEquivalenctStrictConnect(in %in: !firrtl.uint<1>, out %out: !firrtl.alias<foo, uint<2>>) {
-    // expected-error @below {{operand types must be structually equivalent but a dest type is '!firrtl.alias<foo, uint<2>>', and a src type is '!firrtl.uint<1>'}}
+    // expected-error @below {{op failed to verify that operands must be structurally equivalent}}
     firrtl.strictconnect %out, %in: !firrtl.alias<foo, uint<2>>, !firrtl.uint<1>
   }
 }
