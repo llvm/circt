@@ -2947,12 +2947,12 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
   // Check for other unsupported reference sources.
   auto fieldRef = getFieldRefFromValue(staticRef);
   auto target = fieldRef.getValue();
-  auto *definingOp = fieldRef.getDefiningOp();
 
   // TODO: Support for non-public ports.
   if (isa<BlockArgument>(target))
     return emitError(startTok.getLoc(), "rwprobe of port not yet supported");
 
+  auto *definingOp = target.getDefiningOp();
   if (!definingOp)
     return emitError(startTok.getLoc(),
                      "rwprobe value must be defined by an operation");
