@@ -1746,3 +1746,13 @@ firrtl.circuit "OpenBundleNotFieldID" {
   // expected-error @below {{bundle element "a" has unsupported type that does not support fieldID's: '!firrtl.string'}}
   firrtl.extmodule @OpenBundleNotFieldID(out out : !firrtl.openbundle<a: string>)
 }
+
+// -----
+// Strict connect between non-equivalent anonymous type operands.
+
+firrtl.circuit "NonEquivalenctStrictConnect" {
+  firrtl.module @NonEquivalenctStrictConnect(in %in: !firrtl.uint<1>, out %out: !firrtl.alias<foo, uint<2>>) {
+    // expected-error @below {{op failed to verify that operands must be structurally equivalent}}
+    firrtl.strictconnect %out, %in: !firrtl.alias<foo, uint<2>>, !firrtl.uint<1>
+  }
+}

@@ -2485,6 +2485,12 @@ LogicalResult StrictConnectOp::verify() {
     // Analog types cannot be connected and must be attached.
     if (baseType && baseType.containsAnalog())
       return emitError("analog types may not be connected");
+
+    // The anonymous types of operands must be equivalent.
+    assert(areAnonymousTypesEquivalent(cast<FIRRTLBaseType>(getSrc().getType()),
+                                       baseType) &&
+           "`SameAnonTypeOperands` trait should have already rejected "
+           "structurally non-equivalent types");
   }
 
   // Check that the flows make sense.
