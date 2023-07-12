@@ -32,12 +32,11 @@
 // CGATE:         }
 
 hw.module @testSingle(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out0: i32, out1: i1) {
-  %0:2 = pipeline.scheduled(%arg0, %arg1) clock %clk reset %rst go %go : (i32, i32) -> (i32) {
-  ^bb0(%arg0_0: i32, %arg1_1: i32, %s0_valid : i1):
-    %1 = comb.sub %arg0_0, %arg1_1 : i32
+  %0:2 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out: i32){
+    %1 = comb.sub %a0, %a1 : i32
     %true = hw.constant true
     %false = hw.constant false
-    pipeline.stage ^bb1 regs(%1 : i32 gated by [%true, %false], %arg0_0 : i32)
+    pipeline.stage ^bb1 regs(%1 : i32 gated by [%true, %false], %a0 : i32)
   ^bb1(%6: i32, %7: i32, %s1_valid : i1):  // pred: ^bb1
     %8 = comb.add %6, %7 : i32
     pipeline.return %8 : i32

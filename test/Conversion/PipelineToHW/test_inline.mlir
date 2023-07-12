@@ -5,8 +5,7 @@
 // CHECK:           hw.output %[[VAL_0]] : i1
 // CHECK:         }
 hw.module @testBasic(%arg0: i1, %clk: i1, %rst: i1) -> (out: i1) {
-  %0:2 = pipeline.scheduled(%arg0) clock %clk reset %rst go %arg0 : (i1) -> (i1) {
-  ^bb0(%a0: i1, %s0_valid: i1):
+  %0:2 = pipeline.scheduled(%a0 : i1 = %arg0) clock(%c = %clk) reset(%r = %rst) go(%g = %arg0) -> (out : i1) {
     pipeline.return %a0 : i1
   }
   hw.output %0#0 : i1
@@ -28,10 +27,9 @@ hw.module @testBasic(%arg0: i1, %clk: i1, %rst: i1) -> (out: i1) {
 // CHECK:           hw.output %[[VAL_13]], %[[VAL_15]] : i32, i1
 // CHECK:         }
 hw.module @testLatency1(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out: i32, done: i1) {
-  %out, %done = pipeline.scheduled(%arg0) clock %clk reset %rst go %go : (i32) -> i32 {
-  ^bb0(%arg0_0: i32, %s0_valid: i1):
+  %out, %done = pipeline.scheduled(%a0 : i32 = %arg0) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out: i32) {
     %1 = pipeline.latency 2 -> (i32) {
-      %6 = comb.add %arg0_0, %arg0_0 : i32
+      %6 = comb.add %a0, %a0 : i32
       pipeline.latency.return %6 : i32
     }
     pipeline.stage ^bb1 pass(%1 : i32)
@@ -58,10 +56,9 @@ hw.module @testLatency1(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> 
 // CHECK:           hw.output %[[VAL_10]], %[[VAL_9]] : i32, i1
 // CHECK:         }
 hw.module @testSingle(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out0: i32, out1: i1) {
-  %0:2 = pipeline.scheduled(%arg0, %arg1) clock %clk reset %rst go %go : (i32, i32) -> (i32) {
-  ^bb0(%arg0_0: i32, %arg1_1: i32, %s0_valid : i1):
-    %1 = comb.sub %arg0_0, %arg1_1 : i32
-    pipeline.stage ^bb1 regs(%1 : i32, %arg0_0 : i32)
+  %0:2 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out: i32){
+    %1 = comb.sub %a0,%a1 : i32
+    pipeline.stage ^bb1 regs(%1 : i32, %a0 : i32)
   ^bb1(%6: i32, %7: i32, %s1_valid : i1):  // pred: ^bb1
     %8 = comb.add %6, %7 : i32
     pipeline.return %8 : i32
@@ -96,10 +93,9 @@ hw.module @testSingle(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (o
 // CHECK:           hw.output %[[VAL_15]], %[[VAL_14]] : i32, i1
 // CHECK:         }
 hw.module @testMultiple(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out0: i32, out1: i1) {
-  %0:2 = pipeline.scheduled(%arg0, %arg1) clock %clk reset %rst go %go : (i32, i32) -> (i32) {
-  ^bb0(%arg0_0: i32, %arg1_1: i32, %s0_valid: i1):
-    %1 = comb.sub %arg0_0, %arg1_1 : i32
-    pipeline.stage ^bb1 regs(%1 : i32, %arg0_0 : i32)
+  %0:2 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out: i32){
+    %1 = comb.sub %a0,%a1 : i32
+    pipeline.stage ^bb1 regs(%1 : i32, %a0 : i32)
   ^bb1(%2: i32, %3: i32, %s1_valid: i1):  // pred: ^bb0
     %5 = comb.add %2, %3 : i32
     pipeline.stage ^bb2 regs(%5 : i32, %2 : i32)
@@ -108,10 +104,9 @@ hw.module @testMultiple(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> 
     pipeline.return %8 : i32
   }
 
-  %1:2 = pipeline.scheduled(%0#0, %arg1) clock %clk reset %rst go %go : (i32, i32) -> (i32) {
-  ^bb0(%arg0_0: i32, %arg1_1: i32, %s0_valid: i1):
-    %1 = comb.sub %arg0_0, %arg1_1 : i32
-    pipeline.stage ^bb1 regs(%1 : i32, %arg0_0 : i32)
+  %1:2 = pipeline.scheduled(%a0 : i32 = %0#0, %a1 : i32 = %arg1) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out: i32){
+    %1 = comb.sub %a0,%a1 : i32
+    pipeline.stage ^bb1 regs(%1 : i32, %a0 : i32)
   ^bb1(%2: i32, %3: i32, %s1_valid: i1):  // pred: ^bb0
     %5 = comb.add %2, %3 : i32
     pipeline.stage ^bb2 regs(%5 : i32, %2 : i32)
@@ -137,20 +132,19 @@ hw.module @testMultiple(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> 
 // CHECK:           hw.output %[[VAL_11]], %[[VAL_1]] : i32, i32
 // CHECK:         }
 hw.module @testSingleWithExt(%arg0: i32, %ext1: i32, %go : i1, %clk: i1, %rst: i1) -> (out0: i32, out1: i32) {
-  %0:3 = pipeline.scheduled(%arg0, %arg0) ext (%ext1 : i32) clock %clk reset %rst go %go : (i32, i32) -> (i32, i32) {
-  ^bb0(%a0: i32, %a1 : i32, %ext0: i32, %s0_valid: i1):
+  %0:3 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg0) ext (%e0 : i32 = %ext1) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out0: i32, out1: i32) {
     %true = hw.constant true
     %1 = comb.sub %a0, %a0 : i32
     pipeline.stage ^bb1 regs(%1 : i32)
 
   ^bb1(%6: i32, %s1_valid: i1):
     // Use the external value inside a stage
-    %8 = comb.add %6, %ext0 : i32
+    %8 = comb.add %6, %e0 : i32
     pipeline.stage ^bb2 regs(%8 : i32)
   
   ^bb2(%9 : i32, %s2_valid: i1):
   // Use the external value in the exit stage.
-    pipeline.return %9, %ext0 : i32, i32
+    pipeline.return %9, %e0 : i32, i32
   }
   hw.output %0#0, %0#1 : i32, i32
 }
@@ -182,13 +176,12 @@ hw.module @testSingleWithExt(%arg0: i32, %ext1: i32, %go : i1, %clk: i1, %rst: i
 // CHECK:           hw.output %[[VAL_22]] : i32
 // CHECK:         }
 hw.module @testControlUsage(%arg0: i32, %go : i1, %clk: i1, %rst: i1) -> (out0: i32) {
-  %0:2 = pipeline.scheduled(%arg0) ext (%clk, %rst : i1, i1) clock %clk reset %rst go %go : (i32) -> (i32) {
-  ^bb0(%a0: i32, %ext_clk: i1, %ext_rst : i1, %s0_valid: i1):
+  %0:2 = pipeline.scheduled(%a0 : i32 = %arg0) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out: i32) {
     %zero = hw.constant 0 : i32
     %reg_out_wire = sv.wire : !hw.inout<i32>
     %reg_out = sv.read_inout %reg_out_wire : !hw.inout<i32>
     %add0 = comb.add %reg_out, %a0 : i32
-    %out = seq.compreg.ce %add0, %ext_clk, %s0_valid, %ext_rst, %zero : i32
+    %out = seq.compreg.ce %add0, %c, %g, %r, %zero : i32
     sv.assign %reg_out_wire, %out : i32
     pipeline.stage ^bb1 regs(%out : i32)
 
@@ -196,7 +189,7 @@ hw.module @testControlUsage(%arg0: i32, %go : i1, %clk: i1, %rst: i1) -> (out0: 
     %reg1_out_wire = sv.wire : !hw.inout<i32>
     %reg1_out = sv.read_inout %reg1_out_wire : !hw.inout<i32>
     %add1 = comb.add %reg1_out, %6 : i32
-    %out1 = seq.compreg.ce %add1, %ext_clk, %s1_valid, %ext_rst, %zero : i32
+    %out1 = seq.compreg.ce %add1, %c, %s1_valid, %r, %zero : i32
     sv.assign %reg1_out_wire, %out1 : i32
 
     pipeline.stage ^bb2 regs(%out1 : i32)
@@ -205,7 +198,7 @@ hw.module @testControlUsage(%arg0: i32, %go : i1, %clk: i1, %rst: i1) -> (out0: 
     %reg2_out_wire = sv.wire : !hw.inout<i32>
     %reg2_out = sv.read_inout %reg2_out_wire : !hw.inout<i32>
     %add2 = comb.add %reg2_out, %9 : i32
-    %out2 = seq.compreg.ce %add2, %ext_clk, %s2_valid, %ext_rst, %zero : i32
+    %out2 = seq.compreg.ce %add2, %c, %s2_valid, %r, %zero : i32
     sv.assign %reg2_out_wire, %out2 : i32
     pipeline.return %out2  : i32
   }
@@ -225,9 +218,8 @@ hw.module @testControlUsage(%arg0: i32, %go : i1, %clk: i1, %rst: i1) -> (out0: 
 // CHECK:           hw.output %[[VAL_8]], %[[VAL_10]] : i32, i1
 // CHECK:         }
 hw.module @testWithStall(%arg0: i32, %go: i1, %stall : i1, %clk: i1, %rst: i1) -> (out0: i32, out1: i1) {
-  %0:2 = pipeline.scheduled(%arg0) stall %stall clock %clk reset %rst go %go : (i32) -> (i32) {
-  ^bb0(%arg0_0: i32, %s0_valid : i1):
-    pipeline.stage ^bb1 regs(%arg0_0 : i32)
+  %0:2 = pipeline.scheduled(%a0 : i32 = %arg0) stall(%s = %stall) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out: i32) {
+    pipeline.stage ^bb1 regs(%a0 : i32)
   ^bb1(%1: i32, %s1_valid : i1):  // pred: ^bb1
     pipeline.return %1 : i32
   }
