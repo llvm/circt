@@ -15,5 +15,18 @@ firrtl.circuit "ifElseFatalToSVA" {
     // CHECK-NEXT: sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
     // CHECK-NEXT:   sv.assume.concurrent posedge %clock, [[TMP2]]
     // CHECK-NEXT: }
-}
+  }
+
+  // Test that an immediate assertion is always converted to a concurrent
+  // assertion if the "emit-chisel-asserts-as-sva" option is enabled.
+  //
+  // CHECK-LABEL: hw.module @immediateToConcurrent
+  firrtl.module @immediateToConcurrent(
+    in %clock: !firrtl.clock,
+    in %cond: !firrtl.uint<1>,
+    in %enable: !firrtl.uint<1>
+  ) {
+    firrtl.assert %clock, %cond, %enable, "assert1" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: sv.assert.concurrent
+  }
 }
