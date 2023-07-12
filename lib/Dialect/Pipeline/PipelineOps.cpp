@@ -382,8 +382,8 @@ void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                                 TypeRange dataOutputs, ValueRange inputs,
                                 ValueRange extInputs, ArrayAttr inputNames,
                                 ArrayAttr outputNames, ArrayAttr extInputNames,
-                                Value clock, Value reset, Value go,
-                                Value stall) {
+                                Value clock, Value reset, Value go, Value stall,
+                                StringAttr name) {
   odsState.addOperands(inputs);
   odsState.addOperands(extInputs);
   odsState.addOperands(go);
@@ -391,6 +391,9 @@ void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   odsState.addOperands(reset);
   if (stall)
     odsState.addOperands(stall);
+
+  if (name)
+    odsState.addAttribute("name", name);
 
   odsState.addAttribute(
       "operand_segment_sizes",

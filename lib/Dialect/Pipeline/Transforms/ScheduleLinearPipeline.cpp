@@ -141,7 +141,8 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
       pipeline.getInputs(), pipeline.getExtInputs(), pipeline.getInputNames(),
       pipeline.getOutputNames(),
       pipeline.getExtInputNames().value_or(ArrayAttr()), pipeline.getClock(),
-      pipeline.getReset(), pipeline.getGo(), pipeline.getStall());
+      pipeline.getReset(), pipeline.getGo(), pipeline.getStall(),
+      pipeline.getNameAttr());
 
   Block *currentStage = schedPipeline.getStage(0);
 
