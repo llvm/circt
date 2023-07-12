@@ -383,12 +383,23 @@ private:
     IRRewriter::InsertionGuard guard(rewriter);
     rewriter.setInsertionPointToEnd(group.getBody());
     auto addrPorts = memoryInterface.addrPorts();
-    assert(addrPorts.size() == addressValues.size() &&
-           "Mismatch between number of address ports of the provided memory "
-           "and address assignment values");
-    for (auto address : enumerate(addressValues))
-      rewriter.create<calyx::AssignOp>(loc, addrPorts[address.index()],
-                                       address.value());
+    if (addressValues.empty()) {
+      assert(
+          addrPorts.size() == 1 &&
+          "We expected a 1 dimensional memory of size 1 because there were no "
+          "address assignment values");
+      // Assign 1'd0 to the address port.
+      rewriter.create<calyx::AssignOp>(
+          loc, addrPorts[0],
+          createConstant(loc, rewriter, getComponent(), 1, 0));
+    } else {
+      assert(addrPorts.size() == addressValues.size() &&
+             "Mismatch between number of address ports of the provided memory "
+             "and address assignment values");
+      for (auto address : enumerate(addressValues))
+        rewriter.create<calyx::AssignOp>(loc, addrPorts[address.index()],
+                                         address.value());
+    }
   }
 };
 
@@ -522,6 +533,12 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   for (int64_t dim : memtype.getShape()) {
     sizes.push_back(dim);
     addrSizes.push_back(calyx::handleZeroWidth(dim));
+  }
+  // If memref has no size (e.g., memref<i32>) create a 1 dimensional memory of
+  // size 1.
+  if (sizes.empty() && addrSizes.empty()) {
+    sizes.push_back(1);
+    addrSizes.push_back(1);
   }
   auto memoryOp = rewriter.create<calyx::MemoryOp>(
       allocOp.getLoc(), componentState.getUniqueName("mem"),
