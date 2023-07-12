@@ -49,8 +49,14 @@ struct NonHWField {
   bool isFlip;
   /// String suffix naming this field.
   SmallString<16> suffix;
+
+  /// Print this structure to the specified stream.
+  void print(raw_ostream &os) const;
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
   /// Print this structure to llvm::errs().
-  void dump() const;
+  LLVM_DUMP_METHOD void dump() const { print(llvm::errs()); }
+#endif
 };
 
 /// Mapped port info
@@ -71,34 +77,49 @@ struct PortMappingInfo {
       return 1;
     return fields.size() + (hwType ? 1 : 0) + (includeErased ? 1 : 0);
   }
-  void dump() const;
+
+  /// Print this structure to the specified stream.
+  void print(raw_ostream &os) const;
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+  /// Print this structure to llvm::errs().
+  LLVM_DUMP_METHOD void dump() const { print(llvm::errs()); }
+#endif
 };
 
-llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const NonHWField &field) {
-  return os << llvm::formatv(
-             "non-HW(type={0}, fieldID={1}, isFlip={2}, suffix={3})",
-             field.type, field.fieldID, field.isFlip, field.suffix);
+inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                     const NonHWField &field) {
+  field.print(os);
+  return os;
 }
 
-llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
-                              const PortMappingInfo &pmi) {
-  if (pmi.identity)
-    return os << "(identity)";
-
-  os << "[[hw portion: ";
-  if (pmi.hwType)
-    os << pmi.hwType;
-  else
-    os << "(none)";
-  os << ", fields: ";
-  llvm::interleaveComma(pmi.fields, os);
-  return os << "]]";
+inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                     const PortMappingInfo &pmi) {
+  pmi.print(os);
+  return os;
 }
 
 } // namespace
 
-void NonHWField::dump() const { llvm::errs() << *this; }
-void PortMappingInfo::dump() const { llvm::errs() << *this; }
+void NonHWField::print(llvm::raw_ostream &os) const {
+  os << llvm::formatv("non-HW(type={0}, fieldID={1}, isFlip={2}, suffix={3})",
+                      type, fieldID, isFlip, suffix);
+}
+void PortMappingInfo::print(llvm::raw_ostream &os) const {
+  if (identity) {
+    os << "(identity)";
+    return;
+  }
+
+  os << "[[hw portion: ";
+  if (hwType)
+    os << hwType;
+  else
+    os << "(none)";
+  os << ", fields: ";
+  llvm::interleaveComma(fields, os);
+  os << "]]";
+}
 
 template <typename Range>
 LogicalResult walkPortMappings(
