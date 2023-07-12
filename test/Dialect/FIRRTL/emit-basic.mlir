@@ -12,6 +12,7 @@
 // Check if printing with very short line length, removing info locators (@[...]), no line is longer than 5x line length.
 // RUN: circt-translate --export-firrtl %s --target-line-length=10 | sed -e 's/ @\[.*\]//' | FileCheck %s --implicit-check-not "{{^(.{50})}}" --check-prefix PRETTY
 
+// CHECK-LABEL: FIRRTL version 3.0.0
 // CHECK-LABEL: circuit Foo :
 // PRETTY-LABEL: circuit Foo :
 firrtl.circuit "Foo" {
@@ -88,8 +89,7 @@ firrtl.circuit "Foo" {
     %someWire = firrtl.wire : !firrtl.uint<1>
     // CHECK: reg someReg : UInt<1>, someClock
     %someReg = firrtl.reg %someClock : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: reg someReg2 : UInt<1>, someClock with :
-    // CHECK:   reset => (someReset, ui1)
+    // CHECK: regreset someReg2 : UInt<1>, someClock, someReset, ui1
     %someReg2 = firrtl.regreset %someClock, %someReset, %ui1 : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: node someNode = ui1
     %someNode = firrtl.node %ui1 : !firrtl.uint<1>
@@ -105,31 +105,24 @@ firrtl.circuit "Foo" {
     firrtl.assert %someClock, %ui1, %ui1, "msg" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {name = "foo"}
     firrtl.assume %someClock, %ui1, %ui1, "msg" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {name = "foo"}
     firrtl.cover %someClock, %ui1, %ui1, "msg" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {name = "foo"}
-    // CHECK: someOut <= ui1
+    // CHECK: connect someOut, ui1
     firrtl.connect %someOut, %ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: inst someInst of Simple
-    // CHECK: someInst.someIn <= ui1
-    // CHECK: someOut <= someInst.someOut
+    // CHECK: connect someInst.someIn, ui1
+    // CHECK: connect someOut, someInst.someOut
     %someInst_someIn, %someInst_someOut = firrtl.instance someInst @Simple(in someIn: !firrtl.uint<1>, out someOut: !firrtl.uint<1>)
     firrtl.connect %someInst_someIn, %ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %someOut, %someInst_someOut : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK-NOT: _invalid
-    // CHECK: someOut is invalid
+    // CHECK: invalidate someOut
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
     firrtl.connect %someOut, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK-NOT: _invalid
-    // CHECK: someOut is invalid
+    // CHECK: invalidate someOut
     %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<1>
     firrtl.strictconnect %someOut, %invalid_ui2 : !firrtl.uint<1>
 
-    // CHECK: unknownWidth <= knownWidth
-    %knownWidth = firrtl.wire : !firrtl.uint<1>
-    %unknownWidth = firrtl.wire : !firrtl.uint
-    %widthCast = firrtl.widthCast %knownWidth :
-      (!firrtl.uint<1>) -> !firrtl.uint
-    firrtl.strictconnect %unknownWidth, %widthCast : !firrtl.uint
-
-    // CHECK: unknownReset <= knownReset
+    // CHECK: connect unknownReset, knownReset
     %knownReset = firrtl.wire : !firrtl.asyncreset
     %unknownReset = firrtl.wire : !firrtl.reset
     %resetCast = firrtl.resetCast %knownReset :
@@ -305,9 +298,9 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT:    writer => b
     // CHECK-NEXT:    readwriter => c
     // CHECK-NEXT:    read-under-write => undefined
-    // CHECK-NEXT:  MyMem.a.clk <= someClock
-    // CHECK-NEXT:  MyMem.b.clk <= someClock
-    // CHECK-NEXT:  MyMem.c.clk <= someClock
+    // CHECK-NEXT:  connect MyMem.a.clk, someClock
+    // CHECK-NEXT:  connect MyMem.b.clk, someClock
+    // CHECK-NEXT:  connect MyMem.c.clk, someClock
 
     %combmem = chirrtl.combmem : !chirrtl.cmemory<uint<3>, 256>
     %port0_data, %port0_port = chirrtl.memoryport Infer %combmem {name = "port0"} : (!chirrtl.cmemory<uint<3>, 256>) -> (!firrtl.uint<3>, !chirrtl.cmemoryport)
@@ -328,12 +321,12 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT:   infer mport port1 = seqmem[someAddr], someClock
 
     firrtl.connect %port0_data, %port1_data : !firrtl.uint<3>, !firrtl.uint<3>
-    // CHECK: port0 <= port1
+    // CHECK: connect port0, port1
 
     %invalid_clock = firrtl.invalidvalue : !firrtl.clock
     %dummyReg = firrtl.reg %invalid_clock : !firrtl.clock, !firrtl.uint<42>
     // CHECK: wire [[INV:_invalid.*]] : Clock
-    // CHECK-NEXT: [[INV]] is invalid
+    // CHECK-NEXT: invalidate [[INV]]
     // CHECK-NEXT: reg dummyReg : UInt<42>, [[INV]]
   }
 
@@ -473,7 +466,7 @@ firrtl.circuit "Foo" {
     out %b0: !firrtl.const.uint<42>
   ) {
     // Make sure literals strip the 'const' prefix
-    // CHECK: b0 <= UInt<42>(1)
+    // CHECK: connect b0, UInt<42>(1)
     %c = firrtl.constant 1 : !firrtl.const.uint<42>
     firrtl.strictconnect %b0, %c : !firrtl.const.uint<42>
   }
@@ -522,8 +515,7 @@ firrtl.circuit "Foo" {
 
     // CHECK:      wire `14` : UInt<1>
     // CHECK-NEXT: reg `15` : UInt<1>, `0`
-    // CHECK-NEXT: reg `16` : UInt<1>, `0` with :
-    // CHECK-NEXT:   reset => (`1`, `3`)
+    // CHECK-NEXT: regreset `16` : UInt<1>, `0`, `1`, `3`
     // CHECK-NEXT: node `17` = `3`
     %_14 = firrtl.wire interesting_name {name = "14"} : !firrtl.uint<1>
     %_15, %_15_ref = firrtl.reg %_0 forceable {name = "15"} :
@@ -532,16 +524,15 @@ firrtl.circuit "Foo" {
       !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
     %_17 = firrtl.node %_3 {name = "17"} : !firrtl.uint<1>
 
-    // CHECK:      `9`.`1` <= `9`.`0`
-    %2 = firrtl.widthCast %0 : (!firrtl.uint) -> !firrtl.uint
-    firrtl.strictconnect %1, %2 : !firrtl.uint
+    // CHECK:      connect `9`.`1`, `9`.`0`
+    firrtl.connect %1, %0 : !firrtl.uint, !firrtl.uint
 
-    // CHECK:      `11` is invalid
+    // CHECK:      invalidate `11`
     %invalid_ui = firrtl.invalidvalue : !firrtl.uint
-    firrtl.strictconnect %_11, %invalid_ui : !firrtl.uint
+    firrtl.connect %_11, %invalid_ui : !firrtl.uint, !firrtl.uint
 
     // CHECK:      inst `0bar` of `0Bar`
-    // CHECK-NEXT: `0bar`.`0` <= `3`
+    // CHECK-NEXT: connect `0bar`.`0`, `3`
     %_0bar_0 = firrtl.instance "0bar" @"0Bar"(in "0": !firrtl.uint<1>)
     firrtl.strictconnect %_0bar_0, %_3 : !firrtl.uint<1>
 
@@ -564,16 +555,16 @@ firrtl.circuit "Foo" {
         !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>,
         !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<1>>
 
-    // CHECK:      `18`.`0`.clk <= `0`
-    // CHECK-NEXT: `18`.`0`.en <= `3`
-    // CHECK-NEXT: `18`.`0`.addr <= pad(`3`, 5)
-    // CHECK-NEXT: `11` <= `18`.`0`.data
+    // CHECK:      connect `18`.`0`.clk, `0`
+    // CHECK-NEXT: connect `18`.`0`.en, `3`
+    // CHECK-NEXT: connect `18`.`0`.addr, pad(`3`, 5)
+    // CHECK-NEXT: connect `11`, `18`.`0`.data
 
-    // CHECK-NEXT: `18`.`1`.clk <= `0`
-    // CHECK-NEXT: `18`.`1`.en <= `3`
-    // CHECK-NEXT: `18`.`1`.data <= pad(`3`, 8)
-    // CHECK-NEXT: `18`.`1`.addr <= pad(`3`, 5)
-    // CHECK-NEXT: `18`.`1`.mask <= `3`
+    // CHECK-NEXT: connect `18`.`1`.clk, `0`
+    // CHECK-NEXT: connect `18`.`1`.en, `3`
+    // CHECK-NEXT: connect `18`.`1`.data, pad(`3`, 8)
+    // CHECK-NEXT: connect `18`.`1`.addr, pad(`3`, 5)
+    // CHECK-NEXT: connect `18`.`1`.mask, `3`
     %3 = firrtl.subfield %_18_1[mask] : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     %4 = firrtl.subfield %_18_1[addr] : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     %5 = firrtl.subfield %_18_1[data] : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
@@ -588,8 +579,7 @@ firrtl.circuit "Foo" {
     firrtl.strictconnect %10, %_3 : !firrtl.uint<1>
     %12 = firrtl.pad %_3, 5 : (!firrtl.uint<1>) -> !firrtl.uint<5>
     firrtl.strictconnect %9, %12 : !firrtl.uint<5>
-    %13 = firrtl.widthCast %8 : (!firrtl.uint<8>) -> !firrtl.uint
-    firrtl.strictconnect %_11, %13 : !firrtl.uint
+    firrtl.connect %_11, %8 : !firrtl.uint, !firrtl.uint<8>
     firrtl.strictconnect %7, %_0 : !firrtl.clock
     firrtl.strictconnect %6, %_3 : !firrtl.uint<1>
     %14 = firrtl.pad %_3, 8 : (!firrtl.uint<1>) -> !firrtl.uint<8>
@@ -602,7 +592,7 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: smem `20` : { `0` : UInt<8> }[32]
 
     // CHECK-NEXT: write mport `21` = `19`[UInt<5>(8)], `0`
-    // CHECK-NEXT: `21`.`0` <= UInt<8>(0)
+    // CHECK-NEXT: connect `21`.`0`, UInt<8>(0)
     %_19 = chirrtl.combmem {name = "19"} : !chirrtl.cmemory<bundle<"0": uint<8>>, 32>
     %_21_data, %_21_port = chirrtl.memoryport Write %_19 {name = "21"} : (!chirrtl.cmemory<bundle<"0": uint<8>>, 32>) -> (!firrtl.bundle<"0": uint<8>>, !chirrtl.cmemoryport)
     %16 = firrtl.subfield %_21_data["0"] : !firrtl.bundle<"0": uint<8>>

@@ -47,6 +47,26 @@ using hw::InnerRefAttr;
 /// and Top.Foo.xmr_wire and Top.Zoo.Foo.xmr_wire for different instance paths
 /// that exist in the circuit.
 
+namespace {
+struct XMRNode {
+  using NextNodeOnPath = std::optional<size_t>;
+  using SymOrIndexOp = PointerUnion<Attribute, Operation *>;
+  SymOrIndexOp info;
+  NextNodeOnPath next;
+};
+llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const XMRNode &node) {
+  os << "node(";
+  if (auto attr = dyn_cast<Attribute>(node.info))
+    os << "path=" << attr;
+  else {
+    auto subOp = cast<RefSubOp>(cast<Operation *>(node.info));
+    os << "index=" << subOp.getIndex() << " (-> " << subOp.getType() << ")";
+  }
+  os << ", next=" << node.next << ")";
+  return os;
+}
+} // end anonymous namespace
+
 class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   void runOnOperation() override {
@@ -163,21 +183,20 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             dataFlowClasses->unionSets(connect.getSrc(), connect.getDest());
             return success();
           })
-          .Case<RefSubOp>([&](RefSubOp op) {
+          .Case<RefSubOp>([&](RefSubOp op) -> LogicalResult {
             markForRemoval(op);
             if (isZeroWidth(op.getType().getType()))
               return success();
-            auto defMem =
-                dyn_cast_or_null<MemOp>(op.getInput().getDefiningOp());
-            if (!defMem) {
-              op.emitError("can only lower RefSubOp of Memory")
-                      .attachNote(op.getInput().getLoc())
-                  << "input here";
-              return failure();
-            }
-            auto inRef = getInnerRefTo(defMem);
-            auto ind = addReachingSendsEntry(op.getResult(), inRef);
-            xmrPathSuffix[ind] = ("Memory[" + Twine(op.getIndex()) + "]").str();
+            // TODO: May not work (getRemoteRefSend) if indexing input probe.
+            auto inputEntry = getRemoteRefSend(op.getInput());
+            if (!inputEntry)
+              return op
+                  .emitError(
+                      "indexing through probe of unknown origin (input probe?)")
+                  .attachNote(op.getInput().getLoc())
+                  .append("indexing through this reference");
+            addReachingSendsEntry(op.getResult(), op.getOperation(),
+                                  inputEntry);
 
             return success();
           })
@@ -205,8 +224,10 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             return success();
           })
           .Case<Forceable>([&](Forceable op) {
-            if (!op.isForceable() || op.getDataRef().use_empty())
+            if (!op.isForceable() || op.getDataRef().use_empty() ||
+                isZeroWidth(op.getDataType()))
               return success();
+
             addReachingSendsEntry(op.getDataRef(), getInnerRefTo(op));
             return success();
           })
@@ -255,9 +276,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         llvm::dbgs() << "\n dataflow at leader::" << I->getData() << "\n =>";
         auto iter = dataflowAt.find(I->getData());
         if (iter != dataflowAt.end()) {
-          for (auto init = refSendPathList[iter->getSecond()]; init.second;
-               init = refSendPathList[*init.second])
-            llvm::dbgs() << "\n path ::" << init.first << "::" << init.second;
+          for (auto init = refSendPathList[iter->getSecond()]; init.next;
+               init = refSendPathList[*init.next])
+            llvm::dbgs() << "\n " << init;
         }
         llvm::dbgs() << "\n Done\n"; // Finish set.
       }
@@ -308,20 +329,27 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
                                      ImplicitLocOpBuilder builder,
                                      mlir::FlatSymbolRefAttr &ref,
                                      SmallString<128> &stringLeaf) {
+    assert(stringLeaf.empty());
+
     auto remoteOpPath = getRemoteRefSend(refVal);
     if (!remoteOpPath)
       return failure();
     SmallVector<Attribute> refSendPath;
-    SmallVector<Attribute> refSendSimplePath;
+    SmallVector<RefSubOp> indexing;
     size_t lastIndex;
     while (remoteOpPath) {
       lastIndex = *remoteOpPath;
       auto entr = refSendPathList[*remoteOpPath];
-      // If the path is a singular verbatim expression, the attribute of the
-      // send path list entry will be null
-      if (entr.first)
-        refSendPath.push_back(entr.first);
-      remoteOpPath = entr.second;
+      TypeSwitch<XMRNode::SymOrIndexOp>(entr.info)
+          .Case<Attribute>([&](auto attr) {
+            // If the path is a singular verbatim expression, the attribute of
+            // the send path list entry will be null.
+            if (attr)
+              refSendPath.push_back(attr);
+          })
+          .Case<Operation *>(
+              [&](auto *op) { indexing.push_back(cast<RefSubOp>(op)); });
+      remoteOpPath = entr.next;
     }
     auto iter = xmrPathSuffix.find(lastIndex);
 
@@ -331,6 +359,31 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       if (!refSendPath.empty())
         stringLeaf.append(".");
       stringLeaf.append(iter->getSecond());
+    }
+
+    assert(!(refSendPath.empty() && stringLeaf.empty()) &&
+           "nothing to index through");
+
+    // All indexing done as the ref is plumbed around indexes through
+    // the target/referent, not the current point of the path which
+    // describes how to access the referent we're indexing through.
+    // Above we gathered all indexing operations, so now append them
+    // to the path (after any relevant `xmrPathSuffix`) to reach
+    // the target element.
+    // Generating these strings here (especially if ref is sent
+    // out from a different design) is fragile but should get this
+    // working well enough while sorting out how to do this better.
+    // Some discussion of this can be found here:
+    // https://github.com/llvm/circt/pull/5551#discussion_r1258908834
+    for (auto subOp : llvm::reverse(indexing)) {
+      TypeSwitch<FIRRTLBaseType>(subOp.getInput().getType().getType())
+          .Case<FVectorType, OpenVectorType>([&](auto vecType) {
+            (Twine("[") + Twine(subOp.getIndex()) + "]").toVector(stringLeaf);
+          })
+          .Case<BundleType, OpenBundleType>([&](auto bundleType) {
+            auto fieldName = bundleType.getElementName(subOp.getIndex());
+            stringLeaf.append({".", fieldName});
+          });
     }
 
     if (!refSendPath.empty())
@@ -376,6 +429,11 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     return TypeSwitch<Operation *, LogicalResult>(op)
         .Case<RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp>(
             [&](auto op) {
+              // Drop if zero-width target.
+              if (isZeroWidth(op.getDest().getType().getType())) {
+                op.erase();
+                return success();
+              }
               Value ref;
               if (failed(resolveReference(op.getDest(), op.getDest().getType(),
                                           op.getLoc(), op, ref)))
@@ -598,28 +656,12 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   }
 
   size_t
-  addReachingSendsEntry(Value atRefVal, Attribute newRef,
+  addReachingSendsEntry(Value atRefVal, XMRNode::SymOrIndexOp info,
                         std::optional<size_t> continueFrom = std::nullopt) {
     auto leader = dataFlowClasses->getOrInsertLeaderValue(atRefVal);
     auto indx = refSendPathList.size();
     dataflowAt[leader] = indx;
-    if (continueFrom.has_value()) {
-      if (!refSendPathList[*continueFrom].first) {
-        // This handles the case when the InnerRef is set to null at the
-        // following path, that implies the path ends at this node, so copy the
-        // xmrPathSuffix and end the path here.
-        auto xmrIter = xmrPathSuffix.find(*continueFrom);
-        if (xmrIter != xmrPathSuffix.end()) {
-          SmallString<128> xmrSuffix = xmrIter->getSecond();
-          // The following assignment to the DenseMap can potentially reallocate
-          // the map, that might invalidate the `xmrIter`. So, copy the result
-          // to a temp, and then insert it back to the Map.
-          xmrPathSuffix[indx] = xmrSuffix;
-        }
-        continueFrom = std::nullopt;
-      }
-    }
-    refSendPathList.push_back(std::make_pair(newRef, continueFrom));
+    refSendPathList.push_back({info, continueFrom});
     return indx;
   }
 
@@ -721,14 +763,13 @@ private:
   DenseMap<Value, size_t> dataflowAt;
 
   /// refSendPathList is used to construct a path to the RefSendOp. Each entry
-  /// is a node, with an InnerRefAttr and a pointer to the next node in the
-  /// path. The InnerRefAttr can be to an InstanceOp or to the XMR defining
-  /// op. All the nodes representing an InstanceOp must have a valid
-  /// nextNodeOnPath. Only the node representing the final XMR defining op has
-  /// no nextNodeOnPath, which denotes a leaf node on the path.
-  using nextNodeOnPath = std::optional<size_t>;
-  using node = std::pair<Attribute, nextNodeOnPath>;
-  SmallVector<node> refSendPathList;
+  /// is an XMRNode, with an InnerRefAttr or indexing op, and a pointer to the
+  /// next node in the path. The InnerRefAttr can be to an InstanceOp or to the
+  /// XMR defining op, the index op records narrowing along path. All the nodes
+  /// representing an InstanceOp or indexing operation must have a valid
+  /// NextNodeOnPath. Only the node representing the final XMR defining op has
+  /// no NextNodeOnPath, which denotes a leaf node on the path.
+  SmallVector<XMRNode> refSendPathList;
 
   /// llvm::EquivalenceClasses wants comparable elements. This comparator uses
   /// uses pointer comparison on the Impl.

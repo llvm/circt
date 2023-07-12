@@ -199,11 +199,10 @@ firrtl.circuit "IntWidths" attributes {
   }
   // CHECK-LABEL module @IntWidths
   firrtl.module @IntWidths() {
-    // CHECK:  firrtl.widthCast %bar_y__bore
-    // CHECK-NEXT: firrtl.strictconnect %x, %{{[^ ]*}} 
+    // CHECK: firrtl.connect %x, %{{[^ ]*}} : !firrtl.uint, !firrtl.uint<4>
     firrtl.instance bar interesting_name @Bar()
     %x = firrtl.wire interesting_name : !firrtl.uint
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint
-    firrtl.strictconnect %x, %invalid_ui1 : !firrtl.uint
+    firrtl.connect %x, %invalid_ui1 : !firrtl.uint, !firrtl.uint
   }
 }

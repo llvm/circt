@@ -16,7 +16,6 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Pipeline/PipelineOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
-#include "circt/Support/BackedgeBuilder.h"
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -93,16 +92,23 @@ public:
 
     // Build data registers.
     auto stageRegPrefix = getStageRegPrefix(stageIndex);
-    BackedgeBuilder bb(builder, stageTerminator->getLoc());
     auto loc = stageTerminator->getLoc();
 
     // Build the clock enable signal: valid && !stall (if applicable)
-    Value dataValid = valid;
+    Value stageValidAndNotStalled = valid;
     Value notStalled;
     bool hasStall = static_cast<bool>(stall);
     if (hasStall) {
       notStalled = comb::createOrFoldNot(loc, stall, builder);
-      dataValid = builder.create<comb::AndOp>(loc, dataValid, notStalled);
+      stageValidAndNotStalled =
+          builder.create<comb::AndOp>(loc, stageValidAndNotStalled, notStalled);
+    }
+
+    Value notStalledClockGate;
+    if (this->clockGateRegs) {
+      // Create the top-level clock gate.
+      notStalledClockGate = builder.create<seq::ClockGateOp>(
+          loc, clock, stageValidAndNotStalled, /*test_enable=*/Value());
     }
 
     for (auto it : llvm::enumerate(stageTerminator.getRegisters())) {
@@ -112,23 +118,22 @@ public:
       auto regIn = it.value();
       auto regName = builder.getStringAttr(stageRegPrefix.strref() + "_reg" +
                                            std::to_string(regIdx));
-      Type dataType = regIn.getType();
       Value dataReg;
       if (this->clockGateRegs) {
-        // Clock gate based on the valid signal.
-        dataReg = builder.create<seq::CompRegClockEnabledOp>(
-            stageTerminator->getLoc(), dataType, regIn, clock, dataValid,
-            regName, reset, /*resetValue*/ Value(), /*sym_name*/ StringAttr());
+        // Use the clock gate instead of input muxing.
+        Value currClockGate = notStalledClockGate;
+        for (auto hierClockGateEnable :
+             stageTerminator.getClockGatesForReg(regIdx)) {
+          // Create clock gates for any hierarchically nested clock gates.
+          currClockGate = builder.create<seq::ClockGateOp>(
+              loc, currClockGate, hierClockGateEnable, /*test_enable=*/Value());
+        }
+        dataReg = builder.create<seq::CompRegOp>(stageTerminator->getLoc(),
+                                                 regIn, currClockGate, regName);
       } else {
-        // Use input muxing.
-        auto dataRegBE = bb.get(dataType);
-        auto dataRegNext = builder.create<comb::MuxOp>(
-            stageTerminator->getLoc(), dataValid, regIn, dataRegBE);
-        dataReg = builder.create<seq::CompRegOp>(
-            stageTerminator->getLoc(), dataType, dataRegNext, clock, regName,
-            reset,
-            /*resetValue*/ Value(), /*sym_name*/ StringAttr());
-        dataRegBE.setValue(dataReg);
+        dataReg = builder.create<seq::CompRegClockEnabledOp>(
+            stageTerminator->getLoc(), regIn, clock, stageValidAndNotStalled,
+            regName);
       }
       rets.regs.push_back(dataReg);
     }
@@ -141,26 +146,13 @@ public:
         builder.create<hw::ConstantOp>(terminator->getLoc(), APInt(1, 0, false))
             .getResult();
     if (hasStall) {
-      if (clockGateRegs) {
-        rets.valid = builder.create<seq::CompRegClockEnabledOp>(
-            loc, builder.getI1Type(), valid, clock, notStalled, validRegName,
-            reset, validRegResetVal,
-            /*sym_name*/ StringAttr());
-      } else {
-        auto validRegBE = bb.get(builder.getI1Type());
-        auto validRegNext =
-            builder.create<comb::MuxOp>(loc, notStalled, valid, validRegBE);
-        rets.valid = builder.create<seq::CompRegOp>(
-            loc, builder.getI1Type(), validRegNext, clock, validRegName, reset,
-            validRegResetVal,
-            /*sym_name*/ StringAttr());
-        validRegBE.setValue(rets.valid);
-      }
+      rets.valid = builder.create<seq::CompRegClockEnabledOp>(
+          loc, builder.getI1Type(), valid, clock, notStalled, validRegName,
+          reset, validRegResetVal, validRegName);
     } else {
-      rets.valid =
-          builder.create<seq::CompRegOp>(loc, builder.getI1Type(), valid, clock,
-                                         validRegName, reset, validRegResetVal,
-                                         /*sym_name*/ StringAttr());
+      rets.valid = builder.create<seq::CompRegOp>(
+          loc, builder.getI1Type(), valid, clock, validRegName, reset,
+          validRegResetVal, validRegName);
     }
 
     rets.passthroughs = stageTerminator.getPassthroughs();
@@ -285,11 +277,13 @@ public:
       parent.getStageExtInputs(block, stageExtInputs);
       extInputs =
           mod.getArguments().slice(nStageInputArgs, stageExtInputs.size());
-      valid = mod.getArgument(mod.getNumArguments() - (withStall ? 4 : 3));
+
+      auto portLookup = mod.getPortLookupInfo();
       if (withStall)
-        stall = mod.getArgument(mod.getNumArguments() - 3);
-      clock = mod.getArgument(mod.getNumArguments() - 2);
-      reset = mod.getArgument(mod.getNumArguments() - 1);
+        stall = mod.getArgument(*portLookup.getInputPortIndex("stall"));
+      valid = mod.getArgument(*portLookup.getInputPortIndex("enable"));
+      clock = mod.getArgument(*portLookup.getInputPortIndex("clk"));
+      reset = mod.getArgument(*portLookup.getInputPortIndex("rst"));
     }
 
     ValueRange inputs;
@@ -321,11 +315,12 @@ public:
     pipelineMod =
         buildPipelineLike(pipelineName, pipeline.getInputs().getTypes(),
                           pipeline.getExtInputs().getTypes(),
-                          pipeline.getResults().getTypes(), withStall);
+                          pipeline.getDataOutputs().getTypes(), withStall);
+    auto portLookup = pipelineMod.getPortLookupInfo();
     pipelineClk = pipelineMod.getBody().front().getArgument(
-        pipelineMod.getBody().front().getNumArguments() - 2);
+        *portLookup.getInputPortIndex("clk"));
     pipelineRst = pipelineMod.getBody().front().getArgument(
-        pipelineMod.getBody().front().getNumArguments() - 1);
+        *portLookup.getInputPortIndex("rst"));
 
     if (!pipeline.getExtInputs().empty()) {
       // Maintain a mapping between external inputs and their corresponding

@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/FIRRTL/FIREmitter.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
@@ -42,9 +43,9 @@ constexpr size_t defaultTargetLineLength = 80;
 
 /// An emitter for FIRRTL dialect operations to .fir output.
 struct Emitter {
-  Emitter(llvm::raw_ostream &os,
+  Emitter(llvm::raw_ostream &os, FIRVersion version,
           size_t targetLineLength = defaultTargetLineLength)
-      : pp(os, targetLineLength), ps(pp, saver) {
+      : pp(os, targetLineLength), ps(pp, saver), version(version) {
     pp.setListener(&saver);
   }
   LogicalResult finalize();
@@ -102,7 +103,6 @@ struct Emitter {
   void emitExpression(RefSendOp op);
   void emitExpression(RefSubOp op);
   void emitExpression(UninferredResetCastOp op);
-  void emitExpression(UninferredWidthCastOp op);
   void emitExpression(ConstCastOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
@@ -306,6 +306,9 @@ private:
 
   /// The current circuit namespace valid within the call to `emitCircuit`.
   CircuitNamespace circuitNamespace;
+
+  /// The version of the FIRRTL spec that should be emitted.
+  FIRVersion version;
 };
 } // namespace
 
@@ -315,6 +318,13 @@ LogicalResult Emitter::finalize() { return failure(encounteredError); }
 void Emitter::emitCircuit(CircuitOp op) {
   circuitNamespace.add(op);
   startStatement();
+  ps << "FIRRTL version ";
+  ps.addAsString(version.major);
+  ps << ".";
+  ps.addAsString(version.minor);
+  ps << ".";
+  ps.addAsString(version.patch);
+  ps << PP::newline;
   ps << "circuit " << PPExtString(legalize(op.getNameAttr())) << " :";
   setPendingNewline();
   ps.scopedBox(PP::bbox2, [&]() {
@@ -502,22 +512,35 @@ void Emitter::emitStatement(RegResetOp op) {
   auto legalName = legalize(op.getNameAttr());
   addValueName(op.getResult(), legalName);
   startStatement();
-  ps.scopedBox(PP::ibox2, [&]() {
-    ps << "reg " << legalName;
-    emitTypeWithColon(op.getResult().getType());
-    ps << "," << PP::space;
-    emitExpression(op.getClockVal());
-    ps << PP::space << "with :";
-    // Don't break this because of the newline.
-    ps << PP::neverbreak;
-    // No-paren version must be newline + indent.
-    ps << PP::newline; // ibox2 will indent.
-    ps << "reset => (" << PP::ibox0;
-    emitExpression(op.getResetSignal());
-    ps << "," << PP::space;
-    emitExpression(op.getResetValue());
-    ps << ")" << PP::end;
-  });
+  if (FIRVersion::compare(version, {3, 0, 0}) >= 0) {
+    ps.scopedBox(PP::ibox2, [&]() {
+      ps << "regreset " << legalName;
+      emitTypeWithColon(op.getResult().getType());
+      ps << "," << PP::space;
+      emitExpression(op.getClockVal());
+      ps << "," << PP::space;
+      emitExpression(op.getResetSignal());
+      ps << "," << PP::space;
+      emitExpression(op.getResetValue());
+    });
+  } else {
+    ps.scopedBox(PP::ibox2, [&]() {
+      ps << "reg " << legalName;
+      emitTypeWithColon(op.getResult().getType());
+      ps << "," << PP::space;
+      emitExpression(op.getClockVal());
+      ps << PP::space << "with :";
+      // Don't break this because of the newline.
+      ps << PP::neverbreak;
+      // No-paren version must be newline + indent.
+      ps << PP::newline; // ibox2 will indent.
+      ps << "reset => (" << PP::ibox0;
+      emitExpression(op.getResetSignal());
+      ps << "," << PP::space;
+      emitExpression(op.getResetValue());
+      ps << ")" << PP::end;
+    });
+  }
   emitLocationAndNewLine(op);
 }
 
@@ -596,26 +619,54 @@ void Emitter::emitVerifStatement(T op, StringRef mnemonic) {
 
 void Emitter::emitStatement(ConnectOp op) {
   startStatement();
-  auto emitLHS = [&]() { emitExpression(op.getDest()); };
-  if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
-    emitAssignLike(
-        emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
+  if (FIRVersion::compare(version, {3, 0, 0}) >= 0) {
+    ps.scopedBox(PP::ibox2, [&]() {
+      if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
+        ps << "invalidate" << PP::space;
+        emitExpression(op.getDest());
+      } else {
+        ps << "connect" << PP::space;
+        emitExpression(op.getDest());
+        ps << "," << PP::space;
+        emitExpression(op.getSrc());
+      }
+    });
   } else {
-    emitAssignLike(
-        emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
+    auto emitLHS = [&]() { emitExpression(op.getDest()); };
+    if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
+      emitAssignLike(
+          emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
+    } else {
+      emitAssignLike(
+          emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
+    }
   }
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(StrictConnectOp op) {
   startStatement();
-  auto emitLHS = [&]() { emitExpression(op.getDest()); };
-  if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
-    emitAssignLike(
-        emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
+  if (FIRVersion::compare(version, {3, 0, 0}) >= 0) {
+    ps.scopedBox(PP::ibox2, [&]() {
+      if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
+        ps << "invalidate" << PP::space;
+        emitExpression(op.getDest());
+      } else {
+        ps << "connect" << PP::space;
+        emitExpression(op.getDest());
+        ps << "," << PP::space;
+        emitExpression(op.getSrc());
+      }
+    });
   } else {
-    emitAssignLike(
-        emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
+    auto emitLHS = [&]() { emitExpression(op.getDest()); };
+    if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
+      emitAssignLike(
+          emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
+    } else {
+      emitAssignLike(
+          emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
+    }
   }
   emitLocationAndNewLine(op);
 }
@@ -848,7 +899,10 @@ void Emitter::emitStatement(InvalidValueOp op) {
   emitType(op.getType());
   emitLocationAndNewLine(op);
   startStatement();
-  ps << PPExtString(name) << " is invalid";
+  if (FIRVersion::compare(version, {3, 0, 0}) >= 0)
+    ps << "invalidate " << PPExtString(name);
+  else
+    ps << PPExtString(name) << " is invalid";
   emitLocationAndNewLine(op);
 }
 
@@ -877,7 +931,7 @@ void Emitter::emitExpression(Value value) {
           CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
-          ShrPrimOp, UninferredResetCastOp, UninferredWidthCastOp, ConstCastOp,
+          ShrPrimOp, UninferredResetCastOp, ConstCastOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp>([&](auto op) {
         ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
@@ -979,10 +1033,6 @@ void Emitter::emitExpression(RefSubOp op) {
 }
 
 void Emitter::emitExpression(UninferredResetCastOp op) {
-  emitExpression(op.getInput());
-}
-
-void Emitter::emitExpression(UninferredWidthCastOp op) {
   emitExpression(op.getInput());
 }
 
@@ -1122,8 +1172,10 @@ void Emitter::emitLocation(Location loc) {
 // Emit the specified FIRRTL circuit into the given output stream.
 mlir::LogicalResult
 circt::firrtl::exportFIRFile(mlir::ModuleOp module, llvm::raw_ostream &os,
-                             std::optional<size_t> targetLineLength) {
-  Emitter emitter(os, targetLineLength.value_or(defaultTargetLineLength));
+                             std::optional<size_t> targetLineLength,
+                             FIRVersion version) {
+  Emitter emitter(os, version,
+                  targetLineLength.value_or(defaultTargetLineLength));
   for (auto &op : *module.getBody()) {
     if (auto circuitOp = dyn_cast<CircuitOp>(op))
       emitter.emitCircuit(circuitOp);
@@ -1140,7 +1192,7 @@ void circt::firrtl::registerToFIRFileTranslation() {
   static mlir::TranslateFromMLIRRegistration toFIR(
       "export-firrtl", "emit FIRRTL dialect operations to .fir output",
       [](ModuleOp module, llvm::raw_ostream &os) {
-        return exportFIRFile(module, os, targetLineLength);
+        return exportFIRFile(module, os, targetLineLength, {3, 0, 0});
       },
       [](mlir::DialectRegistry &registry) {
         registry.insert<chirrtl::CHIRRTLDialect>();

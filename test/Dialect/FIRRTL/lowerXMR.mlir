@@ -846,3 +846,120 @@ firrtl.circuit "RefABI" {
    %node_r2 = firrtl.node %read_r2 : !firrtl.vector<bundle<a: uint<3>>, 3>
   }
 }
+
+// -----
+// Check handling of basic ref.sub.
+
+// CHECK-LABEL: circuit "BasicRefSub"
+firrtl.circuit "BasicRefSub" {
+  // CHECK:  hw.hierpath private @[[XMRPATH:.+]] [@BasicRefSub::@[[C_SYM:[^,]+]], @Child::@[[REF_SYM:[^,]+]]]
+  // CHECK-LABEL: firrtl.module private @Child
+  // CHECK-SAME: in %in: !firrtl.bundle<a: uint<1>, b: uint<2>> sym @[[REF_SYM]])
+  firrtl.module private @Child(in %in : !firrtl.bundle<a: uint<1>, b: uint<2>>, out %out : !firrtl.probe<uint<2>>) {
+    %ref = firrtl.ref.send %in : !firrtl.bundle<a: uint<1>, b: uint<2>>
+    %sub = firrtl.ref.sub %ref[1] : !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>
+    firrtl.ref.define %out, %sub : !firrtl.probe<uint<2>>
+  }
+  // CHECK-LABEL: module @BasicRefSub(
+  firrtl.module @BasicRefSub(in %in : !firrtl.bundle<a: uint<1>, b: uint<2>>, out %out : !firrtl.uint<2>) {
+    // CHECK: firrtl.instance c sym @[[C_SYM]]
+    %c_in, %c_out = firrtl.instance c @Child(in in : !firrtl.bundle<a: uint<1>, b: uint<2>>, out out : !firrtl.probe<uint<2>>)
+    firrtl.strictconnect %c_in, %in : !firrtl.bundle<a: uint<1>, b: uint<2>>
+    // CHECK: sv.xmr.ref @[[XMRPATH]] ".b"
+    %res = firrtl.ref.resolve %c_out : !firrtl.probe<uint<2>>
+    firrtl.strictconnect %out, %res : !firrtl.uint<2>
+  }
+}
+
+// -----
+// Check rwprobe, forceable, ABI
+
+// CHECK-LABEL: circuit "RWProbe_field"
+firrtl.circuit "RWProbe_field" {
+  // CHECK: hw.hierpath private @[[XMRPATH:.+]] [@RWProbe_field::@[[SYM:[^,]+]]]
+  // CHECK-NEXT: sv.macro.decl @ref_RWProbe_field_RWProbe_field_rw
+  // e.g., "n[0]"
+  // CHECK-NEXT{LITERAL}: sv.macro.def @ref_RWProbe_field_RWProbe_field_rw "{{0}}[0]"
+  // CHECK-SAME: ([@[[XMRPATH]]])
+  // CHECK-NEXT: sv.macro.decl @ref_RWProbe_field_RWProbe_field_rw_narrow
+  // e.g., "n[0].a"
+  // CHECK-NEXT{LITERAL}: sv.macro.def @ref_RWProbe_field_RWProbe_field_rw_narrow "{{0}}[0].a"
+  // CHECK-SAME: ([@[[XMRPATH]]])
+  firrtl.module @RWProbe_field(in %x: !firrtl.vector<bundle<a: uint<1>>, 2>, out %rw: !firrtl.rwprobe<bundle<a: uint<1>>>, out %rw_narrow : !firrtl.rwprobe<uint<1>>) {
+    %n, %n_ref = firrtl.node %x forceable : !firrtl.vector<bundle<a: uint<1>>, 2>
+    %0 = firrtl.ref.sub %n_ref[0] : !firrtl.rwprobe<vector<bundle<a: uint<1>>, 2>>
+    firrtl.ref.define %rw, %0 : !firrtl.rwprobe<bundle<a: uint<1>>>
+    %1 = firrtl.ref.sub %0[0] : !firrtl.rwprobe<bundle<a: uint<1>>>
+    firrtl.ref.define %rw_narrow, %1 : !firrtl.rwprobe<uint<1>>
+  }
+}
+
+// -----
+// Check ref.sub handling through layers, combining with import/export ABI (if aggs preserved?).
+
+// CHECK-LABEL: circuit "RefSubLayers"
+firrtl.circuit "RefSubLayers" {
+  // CHECK: hw.hierpath private @[[XMRPATH:.+]] [@RefSubLayers::@[[TOP_SYM:[^,]+]], @Mid::@[[MID_SYM:[^,]+]], @Leaf::@[[LEAF_SYM:.+]]]
+  // CHECK-NEXT: sv.macro.decl @ref_RefSubLayers_RefSubLayers_rw
+  // CHECK-NEXT{LITERAL}: sv.macro.def @ref_RefSubLayers_RefSubLayers_rw "{{0}}.`ref_ExtRef_ExtRef_out.b[1].a"
+  // CHECK-SAME ([@[[XMRPATH]]])
+   firrtl.extmodule @ExtRef(out out: !firrtl.probe<bundle<a: uint<1>, b: vector<bundle<a: uint<2>, b: uint<1>>, 2>>>)
+  firrtl.module @RefSubLayers(out %rw : !firrtl.probe<uint<2>>) {
+    %ref = firrtl.instance m @Mid(out rw: !firrtl.probe<bundle<a: uint<2>, b: uint<1>>>)
+    %sub = firrtl.ref.sub %ref[0] : !firrtl.probe<bundle<a: uint<2>, b: uint<1>>>
+    firrtl.ref.define %rw, %sub : !firrtl.probe<uint<2>>
+  }
+  firrtl.module private @Mid(out %rw : !firrtl.probe<bundle<a: uint<2>, b: uint<1>>>) {
+    %ref = firrtl.instance l @Leaf(out rw: !firrtl.probe<vector<bundle<a: uint<2>, b: uint<1>>, 2>>)
+    %sub = firrtl.ref.sub %ref[1] : !firrtl.probe<vector<bundle<a: uint<2>, b: uint<1>>, 2>>
+    firrtl.ref.define %rw, %sub : !firrtl.probe<bundle<a: uint<2>, b: uint<1>>>
+  }
+
+  firrtl.module private @Leaf(out %rw : !firrtl.probe<vector<bundle<a: uint<2>, b: uint<1>>, 2>>) {
+    %ref = firrtl.instance ext @ExtRef(out out: !firrtl.probe<bundle<a: uint<1>, b: vector<bundle<a: uint<2>, b: uint<1>>, 2>>>)
+    %sub = firrtl.ref.sub %ref[1] : !firrtl.probe<bundle<a: uint<1>, b: vector<bundle<a: uint<2>, b: uint<1>>, 2>>>
+    firrtl.ref.define %rw, %sub : !firrtl.probe<vector<bundle<a: uint<2>, b: uint<1>>, 2>>
+  }
+}
+
+// -----
+// Check dropping force/etc. ops that target zero-width references.
+// Ensure no symbol added, so can be dropped in LowerToHW.
+
+// CHECK-LABEL: circuit "DropForceOp"
+firrtl.circuit "DropForceOp" {
+  firrtl.module @DropForceOp() {
+    // CHECK: firrtl.wire
+    // CHECK-NOT: sym
+    // CHECK-NEXT: }
+    %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %x, %x_ref = firrtl.wire forceable : !firrtl.uint<0>, !firrtl.rwprobe<uint<0>>
+    firrtl.ref.force_initial %c1_ui1, %x_ref, %c0_ui0 : !firrtl.uint<1>, !firrtl.uint<0>
+  }
+}
+
+// -----
+// Check dropping zero-width and interaction with ABI/across layers.
+
+// CHECK-LABEL: circuit "RefSubZeroWidth"
+firrtl.circuit "RefSubZeroWidth" {
+   // CHECK-NOT: probe<
+   firrtl.extmodule @ExtRef(out out: !firrtl.probe<bundle<a: uint<1>, b: vector<bundle<a: uint<0>, b: uint<1>>, 2>>>)
+  firrtl.module @RefSubZeroWidth(out %rw : !firrtl.probe<uint<0>>) {
+    %ref = firrtl.instance m @Mid(out rw: !firrtl.probe<bundle<a: uint<0>, b: uint<1>>>)
+    %sub = firrtl.ref.sub %ref[0] : !firrtl.probe<bundle<a: uint<0>, b: uint<1>>>
+    firrtl.ref.define %rw, %sub : !firrtl.probe<uint<0>>
+  }
+  firrtl.module private @Mid(out %rw : !firrtl.probe<bundle<a: uint<0>, b: uint<1>>>) {
+    %ref = firrtl.instance l @Leaf(out rw: !firrtl.probe<vector<bundle<a: uint<0>, b: uint<1>>, 2>>)
+    %sub = firrtl.ref.sub %ref[1] : !firrtl.probe<vector<bundle<a: uint<0>, b: uint<1>>, 2>>
+    firrtl.ref.define %rw, %sub : !firrtl.probe<bundle<a: uint<0>, b: uint<1>>>
+  }
+
+  firrtl.module private @Leaf(out %rw : !firrtl.probe<vector<bundle<a: uint<0>, b: uint<1>>, 2>>) {
+    %ref = firrtl.instance ext @ExtRef(out out: !firrtl.probe<bundle<a: uint<1>, b: vector<bundle<a: uint<0>, b: uint<1>>, 2>>>)
+    %sub = firrtl.ref.sub %ref[1] : !firrtl.probe<bundle<a: uint<1>, b: vector<bundle<a: uint<0>, b: uint<1>>, 2>>>
+    firrtl.ref.define %rw, %sub : !firrtl.probe<vector<bundle<a: uint<0>, b: uint<1>>, 2>>
+  }
+}

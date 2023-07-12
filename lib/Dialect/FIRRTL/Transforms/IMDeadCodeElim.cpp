@@ -15,6 +15,7 @@
 #include "mlir/IR/Threading.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/ADT/BitVector.h"
+#include "llvm/ADT/DenseMapInfoVariant.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/Debug.h"

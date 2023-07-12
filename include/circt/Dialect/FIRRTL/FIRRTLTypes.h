@@ -61,6 +61,8 @@ struct RecursiveTypeProperties {
   bool containsAnalog : 1;
   /// Whether the type contains a const type.
   bool containsConst : 1;
+  /// Whether the type contains a type alias.
+  bool containsTypeAlias : 1;
   /// Whether the type has any uninferred bit widths.
   bool hasUninferredWidth : 1;
   /// Whether the type has any uninferred reset.
@@ -92,6 +94,11 @@ public:
   /// Return true if this is or contains a Reference type.
   bool containsReference() {
     return getRecursiveTypeProperties().containsReference;
+  }
+
+  /// Return true if this is an anonymous type (no type alias).
+  bool containsTypeAlias() {
+    return getRecursiveTypeProperties().containsTypeAlias;
   }
 
   /// Return true if this type contains an uninferred bit width.
@@ -136,6 +143,10 @@ public:
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLBaseType getPassiveType();
+
+  /// Return this type with any type alias types recursively removed from
+  /// itself.
+  FIRRTLBaseType getAnonymousType();
 
   /// Return a 'const' or non-'const' version of this type.
   FIRRTLBaseType getConstType(bool isConst);
@@ -244,6 +255,11 @@ bool areTypesRefCastable(Type dstType, Type srcType);
 /// field-by-field.  Types with unresolved widths are assumed to fit into or
 /// hold their counterparts.
 bool isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType);
+
+/// Return true if anonymous types of given arguments are equivalent by pointer
+/// comparison.
+bool areAnonymousTypesEquivalent(FIRRTLBaseType lhs, FIRRTLBaseType rhs);
+bool areAnonymousTypesEquivalent(mlir::Type lhs, mlir::Type rhs);
 
 mlir::Type getPassiveType(mlir::Type anyBaseFIRRTLType);
 

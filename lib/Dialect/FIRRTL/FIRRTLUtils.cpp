@@ -95,16 +95,25 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     src = builder.create<UninferredResetCastOp>(srcType, src);
   }
 
-  // Be sure uint, uint -> uint, (uir uint) since we are changing extneding
-  // connect to identity.
-  if (dstType.hasUninferredWidth() || srcType.hasUninferredWidth()) {
-    srcType = dstType.getConstType(srcType.isConst());
-    src = builder.create<UninferredWidthCastOp>(srcType, src);
-  }
-
   // Handle ground types with possibly uninferred widths.
   auto dstWidth = dstType.getBitWidthOrSentinel();
   auto srcWidth = srcType.getBitWidthOrSentinel();
+  if (dstWidth < 0 || srcWidth < 0) {
+    // If one of these types has an uninferred width, we connect them with a
+    // regular connect operation.
+
+    // Const-cast as needed, using widthless version of dest.
+    // (dest is either widthless already, or source is and if the types
+    //  can be const-cast'd, do so)
+    assert(srcType.isGround() && dstType.isGround());
+    if (dstType != srcType && dstType.getWidthlessType() != srcType &&
+        areTypesConstCastable(dstType.getWidthlessType(), srcType)) {
+      src = builder.create<ConstCastOp>(dstType.getWidthlessType(), src);
+    }
+
+    builder.create<ConnectOp>(dst, src);
+    return;
+  }
 
   // The source must be extended or truncated.
   if (dstWidth < srcWidth) {
@@ -132,8 +141,11 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 
   // Strict connect requires the types to be completely equal, including
   // connecting uint<1> to abstract reset types.
-  assert("Connect Types are equal" && dstType == src.getType());
-  builder.create<StrictConnectOp>(dst, src);
+  if (dstType == src.getType() && dstType.isPassive() &&
+      !dstType.hasUninferredWidth()) {
+    builder.create<StrictConnectOp>(dst, src);
+  } else
+    builder.create<ConnectOp>(dst, src);
 }
 
 IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {

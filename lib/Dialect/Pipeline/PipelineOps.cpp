@@ -109,7 +109,7 @@ LogicalResult UnscheduledPipelineOp::verify() { return verifyPipeline(*this); }
 //===----------------------------------------------------------------------===//
 
 void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                                TypeRange results, ValueRange inputs,
+                                TypeRange dataOutputs, ValueRange inputs,
                                 ValueRange extInputs, Value clock, Value reset,
                                 Value go, Value stall) {
   odsState.addOperands(inputs);
@@ -129,7 +129,10 @@ void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
            static_cast<int32_t>(stall ? 1 : 0)}));
 
   auto *region = odsState.addRegion();
-  odsState.addTypes(results);
+  odsState.addTypes(dataOutputs);
+
+  // Add the implicit done output signal.
+  odsState.addTypes({odsBuilder.getIntegerType(1)});
 
   // Add the entry stage
   auto &entryBlock = region->emplaceBlock();
@@ -327,6 +330,124 @@ LogicalResult ReturnOp::verify() {
 // StageOp
 //===----------------------------------------------------------------------===//
 
+static ParseResult parseSingleStageRegister(
+    OpAsmParser &parser, OpAsmParser::UnresolvedOperand &v, Type &t,
+    llvm::SmallVector<OpAsmParser::UnresolvedOperand> &clockGates) {
+
+  if (failed(parser.parseOperand(v)) || failed(parser.parseColonType(t)))
+    return failure();
+
+  if (failed(parser.parseOptionalKeyword("gated")))
+    return success();
+
+  if (failed(parser.parseKeyword("by")) ||
+      failed(
+          parser.parseOperandList(clockGates, OpAsmParser::Delimiter::Square)))
+    return failure();
+
+  return success();
+}
+
+// Parses the form:
+// regs($register : type($register) (`gated by` `[` $clockGates `]`)?, ...)
+ParseResult parseStageRegisters(
+    OpAsmParser &parser,
+    llvm::SmallVector<OpAsmParser::UnresolvedOperand, 4> &registers,
+    llvm::SmallVector<mlir::Type, 1> &registerTypes,
+    llvm::SmallVector<OpAsmParser::UnresolvedOperand, 4> &clockGates,
+    ArrayAttr &clockGatesPerRegister) {
+
+  if (failed(parser.parseOptionalKeyword("regs"))) {
+    clockGatesPerRegister = parser.getBuilder().getI64ArrayAttr({});
+    return success(); // no registers to parse.
+  }
+
+  llvm::SmallVector<int64_t> clockGatesPerRegisterList;
+  if (failed(parser.parseCommaSeparatedList(AsmParser::Delimiter::Paren, [&]() {
+        OpAsmParser::UnresolvedOperand v;
+        Type t;
+        llvm::SmallVector<OpAsmParser::UnresolvedOperand> cgs;
+        if (parseSingleStageRegister(parser, v, t, cgs))
+          return failure();
+        registers.push_back(v);
+        registerTypes.push_back(t);
+        llvm::append_range(clockGates, cgs);
+        clockGatesPerRegisterList.push_back(cgs.size());
+        return success();
+      })))
+    return failure();
+
+  clockGatesPerRegister =
+      parser.getBuilder().getI64ArrayAttr(clockGatesPerRegisterList);
+
+  return success();
+}
+
+void printStageRegisters(OpAsmPrinter &p, Operation *op, ValueRange registers,
+                         TypeRange registerTypes, ValueRange clockGates,
+                         ArrayAttr clockGatesPerRegister) {
+  if (registers.empty())
+    return;
+
+  p << "regs(";
+  size_t clockGateStartIdx = 0;
+  llvm::interleaveComma(
+      llvm::zip(registers, registerTypes, clockGatesPerRegister), p,
+      [&](auto it) {
+        auto &[reg, type, nClockGatesAttr] = it;
+        p << reg << " : " << type;
+        int64_t nClockGates =
+            nClockGatesAttr.template cast<IntegerAttr>().getInt();
+        if (nClockGates == 0)
+          return;
+        p << " gated by [";
+        llvm::interleaveComma(clockGates.slice(clockGateStartIdx, nClockGates),
+                              p);
+        p << "]";
+        clockGateStartIdx += nClockGates;
+      });
+  p << ")";
+}
+
+void StageOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                    Block *dest, ValueRange registers,
+                    ValueRange passthroughs) {
+  odsState.addSuccessors(dest);
+  odsState.addOperands(registers);
+  odsState.addOperands(passthroughs);
+  odsState.addAttribute("operand_segment_sizes",
+                        odsBuilder.getDenseI32ArrayAttr(
+                            {static_cast<int32_t>(registers.size()),
+                             static_cast<int32_t>(passthroughs.size()),
+                             /*clock gates*/ static_cast<int32_t>(0)}));
+  llvm::SmallVector<int64_t> clockGatesPerRegister(registers.size(), 0);
+  odsState.addAttribute("clockGatesPerRegister",
+                        odsBuilder.getI64ArrayAttr(clockGatesPerRegister));
+}
+
+ValueRange StageOp::getClockGatesForReg(unsigned regIdx) {
+  assert(regIdx < getRegisters().size() && "register index out of bounds.");
+
+  // TODO: This could be optimized quite a bit if we didn't store clock gates
+  // per register as an array of sizes... look into using properties and maybe
+  // attaching a more complex datastructure to reduce compute here.
+
+  unsigned clockGateStartIdx = 0;
+  for (auto [index, nClockGatesAttr] :
+       llvm::enumerate(getClockGatesPerRegister().getAsRange<IntegerAttr>())) {
+    int64_t nClockGates = nClockGatesAttr.getInt();
+    if (index == regIdx) {
+      // This is the register we are looking for.
+      return getClockGates().slice(clockGateStartIdx, nClockGates);
+    }
+    // Increment the start index by the number of clock gates for this
+    // register.
+    clockGateStartIdx += nClockGates;
+  }
+
+  llvm_unreachable("register index out of bounds.");
+}
+
 LogicalResult StageOp::verify() {
   // Verify that the target block has the correct arguments as this stage op.
   llvm::SmallVector<Type> expectedTargetArgTypes;
@@ -349,6 +470,12 @@ LogicalResult StageOp::verify() {
       return emitOpError("expected target stage argument ")
              << index << " to have type " << arg << ", got " << barg << ".";
   }
+
+  // Verify that the clock gate index list is equally sized to the # of
+  // registers.
+  if (getClockGatesPerRegister().size() != getRegisters().size())
+    return emitOpError("expected clockGatesPerRegister to be equally sized to "
+                       "the number of registers.");
 
   return success();
 }

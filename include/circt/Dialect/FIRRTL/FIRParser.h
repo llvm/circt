@@ -76,6 +76,43 @@ maybeStringToLocation(llvm::StringRef spelling, bool skipParsing,
 
 void registerFromFIRFileTranslation();
 
+/// The FIRRTL specification version.
+struct FIRVersion {
+  uint32_t major, minor, patch;
+
+  /// Three way compare of one FIRRTL version with another FIRRTL version.
+  /// Return 1 if the first version is greater than the second version, -1 if
+  /// the first version is less than the second version, and 0 if the versions
+  /// are equal.
+  static int compare(const FIRVersion &a, const FIRVersion &b) {
+    if (a.major > b.major)
+      return 1;
+    if (a.major < b.major)
+      return -1;
+    if (a.minor > b.minor)
+      return 1;
+    if (a.minor < b.minor)
+      return -1;
+    if (a.patch > b.patch)
+      return 1;
+    if (a.patch < b.patch)
+      return -1;
+    return 0;
+  }
+
+  static FIRVersion minimumFIRVersion() { return {0, 2, 0}; }
+
+  static FIRVersion defaultFIRVersion() { return {1, 0, 0}; }
+
+}; // namespace firrtl
+
+/// Method to enable printing of FIRVersions
+template <typename T>
+static T &operator<<(T &os, const FIRVersion &version) {
+  os << version.major << "." << version.minor << "." << version.patch;
+  return os;
+}
+
 } // namespace firrtl
 } // namespace circt
 
