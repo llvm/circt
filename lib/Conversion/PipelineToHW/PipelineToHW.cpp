@@ -31,11 +31,11 @@ static constexpr std::string_view kResetPortName = "rst";
 static constexpr std::string_view kValidPortName = "valid";
 } // namespace
 
-// Inlines the module pointed to by 'inst' if it is empty. This assumes
-// that 'inst' is the only user of the module. Should probably implement some
-// more generic inlining code for this, but it's simple enough to do when we
-// know that the module is empty.
-static void inlineIfEmpty(hw::InstanceOp inst) {
+// Inlines the module pointed to by 'inst' if the module is empty. This assumes
+// that 'inst' is the only user of the module. Furthermore, will remove the
+// inlined module(!). Should probably implement some more generic inlining code
+// for this, but it's simple enough to do when we know that the module is empty.
+static void inlineAndEraseIfEmpty(hw::InstanceOp inst) {
   auto mod = cast<hw::HWModuleLike>(inst.getReferencedModule());
   if (mod->getNumRegions() == 0)
     return; // Nothing to do.
@@ -174,10 +174,9 @@ public:
         }
       }
       // Else, use a generic name.
-      if (!regName) {
+      if (!regName)
         regName = builder.getStringAttr(stageRegPrefix.strref() + "_reg" +
                                         Twine(regIdx));
-      }
 
       Value dataReg;
       if (this->clockGateRegs) {
@@ -490,7 +489,7 @@ public:
     // In many cases, there are no operations in the final stage, except for the
     // return op. In these cases, we'll just inline the exit stage into the
     // pipeline module, and erase the (empty) last stage module.
-    inlineIfEmpty(currentStageInst);
+    inlineAndEraseIfEmpty(currentStageInst);
 
     return success();
   }

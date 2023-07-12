@@ -37,6 +37,9 @@ class PipelineBase<string mnemonic, list<Trait> traits = []> :
   let results = (outs Variadic<AnyType>:$dataOutputs, I1:$done);
   let hasCustomAssemblyFormat = 1;
 
+  /// Additional class declarations inside the pipeline op.
+  code extraModuleClassDeclaration = ?;
+
   // The entry block of the pipeline contains a lot of block arguments - the
   // indices are kept away from the user and only "hardcoded" here, as well as
   // in the printer/parser.
@@ -47,7 +50,7 @@ class PipelineBase<string mnemonic, list<Trait> traits = []> :
   // 4. Clock
   // 5. Reset
   // 6. Go
-  code extraClassDeclarationBase = [{
+  let extraClassDeclaration = extraModuleClassDeclaration # [{
     // Returns the entry stage of this pipeline.
     Block* getEntryStage() {
       Region* region = &getOperation()->getRegion(0);
@@ -115,7 +118,7 @@ def UnscheduledPipelineOp : PipelineBase<"unscheduled", [
   }];
 
   let regions = (region SizedRegion<1>: $body);
-  let extraClassDeclaration = extraClassDeclarationBase;
+  let extraModuleClassDeclaration = "";
 }
 
 def ScheduledPipelineOp : PipelineBase<"scheduled", [
@@ -155,7 +158,7 @@ def ScheduledPipelineOp : PipelineBase<"scheduled", [
   ];
 
 
-  let extraClassDeclaration = extraClassDeclarationBase # [{
+  code extraModuleClassDeclaration = [{
     static mlir::RegionKind getRegionKind(unsigned index) {
       return mlir::RegionKind::SSACFG;
     }
