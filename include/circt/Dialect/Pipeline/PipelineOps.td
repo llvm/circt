@@ -154,7 +154,7 @@ def ScheduledPipelineOp : PipelineBase<"scheduled", [
   let builders = [
     OpBuilder<(ins "TypeRange":$dataOutputs, "ValueRange":$inputs, "ValueRange":$extInputs,
       "ArrayAttr":$inputNames, "ArrayAttr":$outputNames, "ArrayAttr":$extInputNames,
-      "Value":$clock, "Value":$reset, "Value":$go, CArg<"Value", "{}">:$stall)>
+      "Value":$clock, "Value":$reset, "Value":$go, CArg<"Value", "{}">:$stall, CArg<"StringAttr", "{}">:$name)>
   ];
 
 
