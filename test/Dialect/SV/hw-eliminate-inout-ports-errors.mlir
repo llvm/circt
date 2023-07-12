@@ -1,4 +1,4 @@
-// RUN: circt-opt --split-input-file -allow-unregistered-dialect --hw-raise-inout-ports -verify-diagnostics %s
+// RUN: circt-opt --split-input-file -allow-unregistered-dialect --hw-eliminate-inout-ports -verify-diagnostics %s
 
 hw.module @unsupported(%a: !hw.inout<i42>) {
   // expected-error @+1 {{uses hw.inout port "a" but the operation itself is unsupported.}}

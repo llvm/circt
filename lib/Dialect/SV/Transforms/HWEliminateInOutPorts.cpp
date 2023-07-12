@@ -1,13 +1,9 @@
-//===- HWRaiseInOutPorts.cpp - Generator Callout Pass ---------------------===//
+//===- HWEliminateInOutPorts.cpp - Generator Callout Pass
+//---------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-//
-// Call arbitrary programs and pass them the attributes attached to external
-// modules.
 //
 //===----------------------------------------------------------------------===//
 
@@ -23,14 +19,10 @@ using namespace circt;
 using namespace sv;
 using namespace hw;
 
-//===----------------------------------------------------------------------===//
-// HWRaiseInOutPortsPass
-//===----------------------------------------------------------------------===//
-
 namespace {
 
-struct HWRaiseInOutPortsPass
-    : public sv::HWRaiseInOutPortsBase<HWRaiseInOutPortsPass> {
+struct HWEliminateInOutPortsPass
+    : public sv::HWEliminateInOutPortsBase<HWEliminateInOutPortsPass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace
@@ -165,7 +157,7 @@ public:
 
 } // namespace
 
-void HWRaiseInOutPortsPass::runOnOperation() {
+void HWEliminateInOutPortsPass::runOnOperation() {
   // Find all modules and run port conversion on them.
   circt::hw::InstanceGraph &instanceGraph =
       getAnalysis<circt::hw::InstanceGraph>();
@@ -208,6 +200,6 @@ void HWRaiseInOutPortsPass::runOnOperation() {
   }
 }
 
-std::unique_ptr<Pass> circt::sv::createHWRaiseInOutPortsPass() {
-  return std::make_unique<HWRaiseInOutPortsPass>();
+std::unique_ptr<Pass> circt::sv::createHWEliminateInOutPortsPass() {
+  return std::make_unique<HWEliminateInOutPortsPass>();
 }

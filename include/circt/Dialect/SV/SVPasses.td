@@ -173,7 +173,7 @@ def HWExportModuleHierarchy : Pass<"hw-export-module-hierarchy",
   let dependentDialects = ["circt::sv::SVDialect"];
 }
 
-def HWRaiseInOutPorts : Pass<"hw-raise-inout-ports",
+def HWEliminateInOutPorts : Pass<"hw-eliminate-inout-ports",
                              "mlir::ModuleOp"> {
   let summary = "Raises usages of inout ports into explicit input and output ports";
   let description = [{
@@ -182,7 +182,7 @@ def HWRaiseInOutPorts : Pass<"hw-raise-inout-ports",
     input and output ports at the using module, and subsequently moving the
     inout read- and writes to the instantiation site.
   }];
-  let constructor = "circt::sv::createHWRaiseInOutPortsPass()";
+  let constructor = "circt::sv::createHWEliminateInOutPortsPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
 }
 

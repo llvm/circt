@@ -1,4 +1,4 @@
-// RUN: circt-opt --hw-raise-inout-ports %s | FileCheck %s
+// RUN: circt-opt --hw-eliminate-inout-ports %s | FileCheck %s
 
 // CHECK-LABEL:   hw.module @read(
 // CHECK-SAME:                    %[[VAL_0:.*]]: i42) -> (out: i42) {
