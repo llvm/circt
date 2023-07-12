@@ -1,4 +1,5 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-widths))' --verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-widths-alt))' --verify-diagnostics %s | FileCheck %s
 
 firrtl.circuit "Foo" {
   // CHECK-LABEL: @InferConstant
@@ -38,10 +39,13 @@ firrtl.circuit "Foo" {
     // Check that the invalid values are duplicated, and a corner case where the
     // wire won't be updated with a width until after updating the invalid value
     // above.
+    // It is not the job of infer-widths to duplicate invalids.  Invalids should 
+    // not be CSEd, but the parser ensured they were unique.
     // CHECK: %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
+    %invalid2_ui = firrtl.invalidvalue : !firrtl.uint
     %w = firrtl.wire : !firrtl.uint
     %c2_ui = firrtl.constant 2 : !firrtl.uint
-    firrtl.connect %w, %invalid_ui : !firrtl.uint, !firrtl.uint
+    firrtl.connect %w, %invalid2_ui : !firrtl.uint, !firrtl.uint
     firrtl.connect %w, %c2_ui : !firrtl.uint, !firrtl.uint
 
     // Check that invalid values are inferred to width zero if not used in a
@@ -459,7 +463,7 @@ firrtl.circuit "Foo" {
     // CHECK: %c200_si9 = firrtl.constant 200 : !firrtl.sint<9>
     // CHECK: %0 = firrtl.tail %x, 5 : (!firrtl.sint<9>) -> !firrtl.uint<4>
     // CHECK: %1 = firrtl.asSInt %0 : (!firrtl.uint<4>) -> !firrtl.sint<4>
-    // CHECK: firrtl.connect %y, %1 : !firrtl.sint<4>, !firrtl.sint<4>
+    // CHECK: connect %y, %1 : !firrtl.sint<4>
     // CHECK: firrtl.connect %x, %c200_si9 : !firrtl.sint<9>, !firrtl.sint<9>
     %x = firrtl.wire : !firrtl.sint
     %c200_si = firrtl.constant 200 : !firrtl.sint
@@ -475,7 +479,7 @@ firrtl.circuit "Foo" {
     firrtl.connect %w, %c1_ui1 : !firrtl.uint, !firrtl.uint<1>
     %w1 = firrtl.wire  : !firrtl.uint<0>
     // CHECK: %0 = firrtl.tail %w, 1 : (!firrtl.uint<1>) -> !firrtl.uint<0>
-    // CHECK: firrtl.connect %w1, %0 : !firrtl.uint<0>, !firrtl.uint<0>
+    // CHECK: connect %w1, %0 : !firrtl.uint<0>
     firrtl.connect %w1, %w : !firrtl.uint<0>, !firrtl.uint
   }
 

@@ -18,15 +18,10 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/FieldRef.h"
 #include "mlir/IR/AsmState.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/DenseSet.h"
-#include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/Hashing.h"
-#include "llvm/ADT/MapVector.h"
-#include "llvm/ADT/PostOrderIterator.h"
-#include "llvm/ADT/SetVector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 
@@ -107,14 +102,6 @@ static SmallVector<unsigned, 4> getUninferred(Type t1, Type t2) {
   return fields;
 }
 
-static SmallVector<unsigned, 4> getUninferred(Value v) {
-  return getUninferred(v.getType());
-}
-
-static SmallVector<unsigned, 4> getUninferred(Value v1, Value v2) {
-  return getUninferred(v1.getType(), v2.getType());
-}
-
 namespace {
 
 // RefArg (Field of argument relative field), RefStorage (source of value) ->
@@ -126,9 +113,13 @@ struct InferWidth : public FIRRTLVisitor<InferWidth, void, FieldRef> {
   void prepare(FModuleOp fmod);
   void solve();
   void apply(FModuleOp fmod);
+  void apply();
 
   void addSource(FieldRef ref);
   void addAlias(FieldRef dest, FieldRef src);
+
+  // Get the source of the ref by lookup in the alias map.
+  FieldRef getSource(FieldRef ref);
 
   void updateProposal(FieldRef ref, unsigned width);
   void updateProposalOrAlias(FieldRef ref, unsigned width);
@@ -143,9 +134,14 @@ struct InferWidth : public FIRRTLVisitor<InferWidth, void, FieldRef> {
   using FIRRTLVisitor<InferWidth, void, FieldRef>::visitStmt;
   using FIRRTLVisitor<InferWidth, void, FieldRef>::visitDecl;
 
-  void unify(Operation *op, int destAdj, FieldRef refArg, int srcAdj) {
+  void unify(Operation *op, int destAdj, FieldRef refArg, int srcAdj = 0) {
     addAlias({op->getResult(0), refArg.getFieldID() + destAdj},
              {refArg.getValue(), refArg.getFieldID() + srcAdj});
+  }
+
+  void sinkOnly(Operation *op) {
+    assert(
+        !cast<FIRRTLBaseType>(op->getResult(0).getType()).hasUninferredWidth());
   }
 
   void visitExpr(ConstantOp op, FieldRef);
@@ -176,6 +172,8 @@ struct InferWidth : public FIRRTLVisitor<InferWidth, void, FieldRef> {
 
   void visitExpr(TailPrimOp op, FieldRef);
   void visitExpr(PadPrimOp op, FieldRef);
+  void visitExpr(HeadPrimOp op, FieldRef) { sinkOnly(op); }
+  void visitExpr(BitsPrimOp op, FieldRef) { sinkOnly(op); }
 
   void lowerNoopMux(Operation *op, FieldRef);
   void visitExpr(MuxPrimOp op, FieldRef ref) { lowerNoopMux(op, ref); }
@@ -202,9 +200,9 @@ struct InferWidth : public FIRRTLVisitor<InferWidth, void, FieldRef> {
   void visitStmt(ConnectOp op, FieldRef);
   void visitStmt(AttachOp op, FieldRef);
   void visitStmt(RefDefineOp op, FieldRef);
-  void visitExpr(RefCastOp op, FieldRef);
-  void visitExpr(RefSendOp op, FieldRef);
-  void visitExpr(RefResolveOp op, FieldRef);
+  void visitExpr(RefCastOp op, FieldRef refArg) { unify(op, 0, refArg); }
+  void visitExpr(RefSendOp op, FieldRef refArg) { unify(op, 1, refArg); }
+  void visitExpr(RefResolveOp op, FieldRef refArg) { unify(op, -1, refArg); }
   void visitExpr(RefSubOp op, FieldRef);
 
   void visitDecl(WireOp op, FieldRef);
@@ -214,7 +212,11 @@ struct InferWidth : public FIRRTLVisitor<InferWidth, void, FieldRef> {
 
   void visitDecl(MemOp op, FieldRef);
 
-  void visitUnhandledOp(Operation *op, FieldRef) {
+  void visitUnhandledOp(Operation *op, FieldRef refArg) {
+    if (isa<mlir::UnrealizedConversionCastOp>(op)) {
+      lowerNoopCast(op, refArg);
+      return;
+    }
     llvm::errs() << "Unhandled ";
     op->dump();
     llvm::errs() << "\n";
@@ -231,6 +233,9 @@ struct InferWidth : public FIRRTLVisitor<InferWidth, void, FieldRef> {
 
   // Keep track of aliased values so we can be sure to update their ops
   DenseSet<Value> aliased;
+
+  // Connects which might truncate.  This is stupidly error inducing in designs.
+  DenseSet<ConnectOp> potentialTrunc;
 
   // Blockarg -> instance results
   // Note, instance results are marked as aliased to the block arts in `sources`
@@ -260,9 +265,7 @@ Type InferWidth::updateBaseType(Value v, Type type, unsigned fieldID) {
     return fbt;
   } else if (width == -1) {
     FieldRef ref(v, fieldID);
-    auto it = sources.find(ref);
-    if (it != sources.end())
-      ref = it->second;
+    ref = getSource(ref);
     assert(proposals.count(ref));
     return resizeType(fbt, proposals[ref]);
   } else if (auto bundleType = dyn_cast<BundleType>(fbt)) {
@@ -313,7 +316,7 @@ void InferWidth::prepare(FModuleOp fmod) {
   size_t firrtlArg = 0;
   for (auto port : fmod.getPorts()) {
     auto arg = fmod.getBody().getArgument(firrtlArg++);
-    for (auto uninferred : getUninferred(arg))
+    for (auto uninferred : getUninferred(arg.getType()))
       addSource({arg, uninferred});
   }
 
@@ -326,7 +329,7 @@ void InferWidth::prepare(FModuleOp fmod) {
       continue;
     if (isa<WireOp, InvalidValueOp, RegOp, RegResetOp>(op)) {
       bool forceable = op.getNumResults() == 2;
-      for (auto uninferred : getUninferred(op.getResult(0))) {
+      for (auto uninferred : getUninferred(op.getResult(0).getType())) {
         addSource({op.getResult(0), uninferred});
         if (forceable)
           addAlias({op.getResult(1), uninferred + 1},
@@ -341,7 +344,7 @@ void InferWidth::prepare(FModuleOp fmod) {
         continue;
       }
       for (auto it : llvm::zip(inst.getResults(), module.getArguments())) {
-        for (auto uninferred : getUninferred(std::get<0>(it))) {
+        for (auto uninferred : getUninferred(std::get<0>(it).getType())) {
           FieldRef ref(std::get<0>(it), uninferred);
           FieldRef src(std::get<1>(it), uninferred);
           addAlias(ref, src);
@@ -443,7 +446,9 @@ void InferWidth::apply(FModuleOp fmod) {
     fmod->setAttr(FModuleLike::getPortTypesAttrName(),
                   ArrayAttr::get(fmod.getContext(), argTypes));
   }
+}
 
+void InferWidth::apply() {
   auto updateValue = [&](Value v) {
     if (isa<BlockArgument>(v))
       return;
@@ -465,13 +470,23 @@ void InferWidth::apply(FModuleOp fmod) {
       continue;
     updateValue(v);
   }
+
+  // Connects can truncate sometimes, check them.
+  // This shouldn't be a thing.
+  for (auto con : potentialTrunc) {
+    if (con.getDest().getType() == con.getSrc().getType())
+      return;
+    OpBuilder builder(con);
+    emitConnect(builder, con.getLoc(), con.getDest(), con.getSrc());
+    con.erase();
+  }
 }
 
 void InferWidth::addSource(FieldRef ref) {
   mlir::AsmState asmstate(ref.getValue().getParentBlock()->getParentOp());
-  llvm::errs() << "Source: [";
-  ref.getValue().printAsOperand(llvm::errs(), asmstate);
-  llvm::errs() << "]:" << ref.getFieldID() << "\n";
+  LLVM_DEBUG(llvm::errs() << "Source: [";
+             ref.getValue().printAsOperand(llvm::errs(), asmstate);
+             llvm::errs() << "]:" << ref.getFieldID() << "\n";);
   sources[ref] = ref;
   updateProposal(ref, 0);
 }
@@ -486,14 +501,15 @@ void InferWidth::addAlias(FieldRef dest, FieldRef src) {
     invSources[realSrc].append(invSources[dest]);
     invSources[realSrc].push_back(dest);
     invSources.erase(dest);
-    mlir::AsmState asmstate(dest.getValue().getParentBlock()->getParentOp());
-    llvm::errs() << "Alias: [";
-    dest.getValue().printAsOperand(llvm::errs(), asmstate);
-    llvm::errs() << "]:" << dest.getFieldID() << " [";
-    src.getValue().printAsOperand(llvm::errs(), asmstate);
-    llvm::errs() << "]:" << src.getFieldID() << " [";
-    realSrc.getValue().printAsOperand(llvm::errs(), asmstate);
-    llvm::errs() << "]:" << realSrc.getFieldID() << "\n";
+    LLVM_DEBUG(mlir::AsmState asmstate(
+                   dest.getValue().getParentBlock()->getParentOp());
+               llvm::errs() << "Alias: [";
+               dest.getValue().printAsOperand(llvm::errs(), asmstate);
+               llvm::errs() << "]:" << dest.getFieldID() << " [";
+               src.getValue().printAsOperand(llvm::errs(), asmstate);
+               llvm::errs() << "]:" << src.getFieldID() << " [";
+               realSrc.getValue().printAsOperand(llvm::errs(), asmstate);
+               llvm::errs() << "]:" << realSrc.getFieldID() << "\n";);
   }
   assert(sources[dest] == sources[src]);
   queueUsers(dest);
@@ -510,11 +526,11 @@ void InferWidth::updateProposal(FieldRef ref, unsigned width) {
     return;
   assert(width > it->second);
   it->second = width;
-  mlir::AsmState asmstate(ref.getValue().getParentBlock()->getParentOp());
-
-  llvm::errs() << "Updated [";
-  ref.getValue().printAsOperand(llvm::errs(), asmstate);
-  llvm::errs() << "]:" << ref.getFieldID() << " to " << width << "\n";
+  LLVM_DEBUG(
+      mlir::AsmState asmstate(ref.getValue().getParentBlock()->getParentOp());
+      llvm::errs() << "Updated [";
+      ref.getValue().printAsOperand(llvm::errs(), asmstate);
+      llvm::errs() << "]:" << ref.getFieldID() << " to " << width << "\n";);
   queueUsers(ref);
 }
 
@@ -526,12 +542,13 @@ void InferWidth::updateProposalOrAlias(FieldRef ref, unsigned width) {
     return;
   assert(width > val);
   val = width;
-  mlir::AsmState asmstate(ref.getValue().getParentBlock()->getParentOp());
-  llvm::errs() << "Updated [";
-  src.getValue().printAsOperand(llvm::errs(), asmstate);
-  llvm::errs() << "]:" << src.getFieldID() << " Initial [";
-  ref.getValue().printAsOperand(llvm::errs(), asmstate);
-  llvm::errs() << "]:" << ref.getFieldID() << " to " << width << "\n";
+  LLVM_DEBUG(
+      mlir::AsmState asmstate(ref.getValue().getParentBlock()->getParentOp());
+      llvm::errs() << "Updated [";
+      src.getValue().printAsOperand(llvm::errs(), asmstate);
+      llvm::errs() << "]:" << src.getFieldID() << " Initial [";
+      ref.getValue().printAsOperand(llvm::errs(), asmstate);
+      llvm::errs() << "]:" << ref.getFieldID() << " to " << width << "\n";);
   if (auto *op = src.getValue().getDefiningOp())
     worklist.emplace_back(op, src);
   if (auto blkarg = dyn_cast<BlockArgument>(src.getValue()))
@@ -542,6 +559,13 @@ void InferWidth::updateProposalOrAlias(FieldRef ref, unsigned width) {
     for (auto ali : it->second)
       queueUsers(ali);
   queueUsers(src);
+}
+
+FieldRef InferWidth::getSource(FieldRef ref) {
+  auto it = sources.find(ref);
+  if (it != sources.end())
+    return it->second;
+  return ref;
 }
 
 std::tuple<bool, unsigned> InferWidth::getWidth(FieldRef ref) {
@@ -555,10 +579,7 @@ std::tuple<bool, unsigned> InferWidth::getWidth(FieldRef ref) {
   auto bw = type.getBitWidthOrSentinel();
   if (bw >= 0)
     return std::make_tuple(true, bw);
-  auto it = sources.find(ref);
-  if (it != sources.end())
-    ref = it->second;
-  return std::make_tuple(false, proposals[ref]);
+  return std::make_tuple(false, proposals[getSource(ref)]);
 }
 
 // Val is the result that is being used, ref is the originating definition.
@@ -574,6 +595,9 @@ void InferWidth::visitExpr(ConstantOp cst, FieldRef refArg) {
            (v.isNegative() ? v.countLeadingOnes() : v.countLeadingZeros());
   if (v.isSigned())
     w += 1;
+  // I don't see why we can't infer a 0-width constant for zeros
+  if (!w)
+    w = 1;
   if (v.getBitWidth() > unsigned(w))
     v = v.trunc(w);
   // Go ahead and pre-update constants then we don't have to track them.
@@ -761,9 +785,16 @@ void InferWidth::visitStmt(ConnectOp op, FieldRef refArg) {
   FieldRef srcRef = FieldRef(op.getSrc(), refArg.getFieldID());
   auto [dstFixed, dstWidth] = getWidth(destRef);
   auto [srcFixed, srcWidth] = getWidth(srcRef);
+  // Invalids are stupid too.
+  auto trueSrc = getSource(srcRef);
+  if (auto inv = trueSrc.getDefiningOp<InvalidValueOp>())
+    updateProposal(trueSrc, dstWidth);
   // No truncation!
   if (!dstFixed && dstWidth < srcWidth)
     updateProposalOrAlias(destRef, srcWidth);
+  // Ok, some truncation :(
+  if (dstFixed && !srcFixed)
+    potentialTrunc.insert(op);
 }
 
 void InferWidth::visitStmt(AttachOp op, FieldRef refArg) {
@@ -794,18 +825,6 @@ void InferWidth::visitStmt(RefDefineOp op, FieldRef refArg) {
   // No truncation!
   if (!dstFixed && dstWidth < srcWidth)
     updateProposalOrAlias(destRef, srcWidth);
-}
-
-void InferWidth::visitExpr(RefSendOp op, FieldRef refArg) {
-  addAlias({op, refArg.getFieldID() + 1}, refArg);
-}
-
-void InferWidth::visitExpr(RefCastOp op, FieldRef refArg) {
-  addAlias({op, refArg.getFieldID()}, refArg);
-}
-
-void InferWidth::visitExpr(RefResolveOp op, FieldRef refArg) {
-  addAlias({op, refArg.getFieldID() - 1}, refArg);
 }
 
 void InferWidth::visitExpr(RefSubOp op, FieldRef refArg) {
@@ -867,23 +886,16 @@ class InferWidthsAltPass : public InferWidthsAltBase<InferWidthsAltPass> {
 void InferWidthsAltPass::runOnOperation() {
   CircuitOp circuit = getOperation();
   SymbolTable symtbl(circuit);
-  llvm::errs() << "Starting " << circuit.getName() << "\n";
   InferWidth iw(symtbl);
-  for (auto op : circuit.getOps<FModuleOp>()) {
-    llvm::errs() << "** prepare: " << op.getModuleName() << " **\n";
-    op.dump();
+  for (auto op : circuit.getOps<FModuleOp>())
     iw.prepare(op);
-    llvm::errs() << "\n";
-  }
 
-  llvm::errs() << "** solve **\n";
   iw.solve();
-  llvm::errs() << "\n";
 
-  for (auto op : circuit.getOps<FModuleOp>()) {
-    llvm::errs() << "** apply: " << op.getModuleName() << " **\n";
+  for (auto op : circuit.getOps<FModuleOp>())
     iw.apply(op);
-  }
+
+  iw.apply();
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createInferWidthsAltPass() {
