@@ -42,7 +42,7 @@ public:
   void mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
                         SmallVectorImpl<Value> &newOperands,
                         ArrayRef<Backedge> newResults) override {
-    instValue.replaceAllUsesWith(newOperands[portInfo.argNum]);
+    instValue.replaceAllUsesWith(newResults[portInfo.argNum]);
   }
 
 private:
@@ -119,6 +119,10 @@ LogicalResult PortConverterImpl::run() {
 
     foundLoweredPorts |= !(*loweredPort)->isUntouched();
     loweredPorts.emplace_back(std::move(*loweredPort));
+
+    if (failed(loweredPorts.back()->init()))
+      return failure();
+
     return success();
   };
 

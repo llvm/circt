@@ -8,6 +8,7 @@ add_circt_dialect_library(CIRCTSVTransforms
   SVExtractTestCode.cpp
   HWExportModuleHierarchy.cpp
   SVTraceIVerilog.cpp
+  HWEliminateInOutPorts.cpp
 
   DEPENDS
   CIRCTSVTransformsIncGen
