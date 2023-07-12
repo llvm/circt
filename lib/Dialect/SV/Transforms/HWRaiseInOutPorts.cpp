@@ -48,6 +48,8 @@ public:
                         SmallVectorImpl<Value> &newOperands,
                         ArrayRef<Backedge> newResults) override;
 
+  LogicalResult init() override;
+
 private:
   void buildInputSignals() override;
   void buildOutputSignals() override;
@@ -66,30 +68,33 @@ private:
 
 HWInOutPortConversion::HWInOutPortConversion(PortConverterImpl &converter,
                                              hw::PortInfo port)
-    : PortConversion(converter, port) {
+    : PortConversion(converter, port) {}
+
+LogicalResult HWInOutPortConversion::init() {
   // Gather readers and writers (how to handle sv.passign?)
-  for (auto *user : body->getArgument(port.argNum).getUsers()) {
+  for (auto *user : body->getArgument(origPort.argNum).getUsers()) {
     if (auto read = dyn_cast<sv::ReadInOutOp>(user))
       readers.push_back(read);
     else if (auto write = dyn_cast<sv::AssignOp>(user))
       writers.push_back(write);
     else
-      user->emitWarning() << "Use of inout port " << port.name
-                          << " is not supported";
+      return user->emitOpError() << "uses hw.inout port " << origPort.name
+                                 << " but the operation itself is unsupported.";
   }
 
   if (writers.size() > 1)
-    converter.getModule()->emitWarning()
-        << "Multiple writers of inout port " << port.name
-        << " detected. Will only create an output for the first write";
+    return converter.getModule()->emitOpError()
+           << "multiple writers of inout port " << origPort.name
+           << " is unsupported.";
+
+  return success();
 }
 
 void HWInOutPortConversion::buildInputSignals() {
   if (hasReaders()) {
+    // Replace all sv::ReadInOutOp's with the new input.
     Value readValue =
         converter.createNewInput(origPort, "_rd", origPort.type, readPort);
-
-    // Replace all sv::ReadInOutOp's with the new input.
     Value origInput = body->getArgument(origPort.argNum);
     for (auto *user : llvm::make_early_inc_range(origInput.getUsers())) {
       sv::ReadInOutOp read = dyn_cast<sv::ReadInOutOp>(user);
@@ -102,6 +107,7 @@ void HWInOutPortConversion::buildInputSignals() {
   }
 
   if (hasWriters()) {
+    // Replace the sv::AssignOp with the new output.
     sv::AssignOp write = writers.front();
     converter.createNewOutput(origPort, "_wr", origPort.type, write.getSrc(),
                               writePort);
@@ -110,9 +116,11 @@ void HWInOutPortConversion::buildInputSignals() {
 }
 
 void HWInOutPortConversion::buildOutputSignals() {
-  // TODO: could support hw.inout outputs (always create read/write ports) -
-  // don't need it for now, though.
-  assert(false && "hw.inout outputs not yet supported");
+  assert(false && "`hw.inout` outputs not yet supported. Currently, `hw.inout` "
+                  "outputs are handled by UntouchedPortConversion, given that "
+                  "output `hw.inout` ports have a `PortDirection::Output` "
+                  "direction instead of `PortDirection::InOut`. If this for "
+                  "some reason changes, then this assert will fire.");
 }
 
 void HWInOutPortConversion::mapInputSignals(OpBuilder &b, Operation *inst,
@@ -138,7 +146,11 @@ void HWInOutPortConversion::mapInputSignals(OpBuilder &b, Operation *inst,
 void HWInOutPortConversion::mapOutputSignals(
     OpBuilder &b, Operation *inst, Value instValue,
     SmallVectorImpl<Value> &newOperands, ArrayRef<Backedge> newResults) {
-  llvm_unreachable("hw.inout outputs not yet supported");
+  assert(false && "`hw.inout` outputs not yet supported. Currently, `hw.inout` "
+                  "outputs are handled by UntouchedPortConversion, given that "
+                  "output `hw.inout` ports have a `PortDirection::Output` "
+                  "direction instead of `PortDirection::InOut`. If this for "
+                  "some reason changes, then this assert will fire.");
 }
 
 class HWInoutPortConversionBuilder : public PortConversionBuilder {
@@ -158,7 +170,13 @@ void HWRaiseInOutPortsPass::runOnOperation() {
   circt::hw::InstanceGraph &instanceGraph =
       getAnalysis<circt::hw::InstanceGraph>();
   llvm::DenseSet<InstanceGraphNode *> visited;
-  auto res = instanceGraph.getInferredTopLevelNodes();
+  FailureOr<llvm::ArrayRef<InstanceGraphNode *>> res =
+      instanceGraph.getInferredTopLevelNodes();
+
+  if (failed(res)) {
+    signalPassFailure();
+    return;
+  }
 
   // Visit the instance hierarchy in a depth-first manner, modifying child
   // modules and their ports before their parents.

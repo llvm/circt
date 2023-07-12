@@ -105,6 +105,11 @@ public:
       : converter(converter), body(converter.getBody()), origPort(origPort) {}
   virtual ~PortConversion() = default;
 
+  // An optional initialization step that can be overridden by subclasses.
+  // This allows subclasses to perform a failable post-construction
+  // initialization step.
+  virtual LogicalResult init() { return success(); }
+
   // Lower the specified port into a wire-level signaling protocol. The two
   // virtual methods 'build*Signals' should be overridden by subclasses. They
   // should use the 'create*' methods in 'PortConverter' to create the
@@ -144,7 +149,7 @@ protected:
   // classes), we only need to dynamically tell whether any given PortConversion
   // is the UntouchedPortConversion.
   bool isUntouchedFlag = false;
-};
+}; // namespace hw
 
 // A PortConversionBuilder will, given an input type, build the appropriate
 // port conversion for that type.

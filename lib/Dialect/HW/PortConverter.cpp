@@ -119,6 +119,10 @@ LogicalResult PortConverterImpl::run() {
 
     foundLoweredPorts |= !(*loweredPort)->isUntouched();
     loweredPorts.emplace_back(std::move(*loweredPort));
+
+    if (failed(loweredPorts.back()->init()))
+      return failure();
+
     return success();
   };
 
