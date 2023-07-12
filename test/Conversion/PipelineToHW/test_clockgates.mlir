@@ -7,8 +7,8 @@
 // CHECK:           %[[VAL_5:.*]] = comb.sub %[[VAL_0]], %[[VAL_1]] : i32
 // CHECK:           %[[VAL_6:.*]] = hw.constant true
 // CHECK:           %[[VAL_7:.*]] = hw.constant false
-// CHECK:           %[[VAL_8:.*]] = seq.compreg.ce sym @p0_s0_reg0 %[[VAL_5]], %[[VAL_3]], %[[VAL_2]] : i32
-// CHECK:           %[[VAL_9:.*]] = seq.compreg.ce sym @p0_s0_reg1 %[[VAL_0]], %[[VAL_3]], %[[VAL_2]] : i32
+// CHECK:           %[[VAL_8:.*]] = seq.compreg sym @p0_s0_reg0 %[[VAL_5]], %[[VAL_3]] : i32
+// CHECK:           %[[VAL_9:.*]] = seq.compreg sym @p0_s0_reg1 %[[VAL_0]], %[[VAL_3]] : i32
 // CHECK:           %[[VAL_10:.*]] = hw.constant false
 // CHECK:           %[[VAL_11:.*]] = seq.compreg sym @p0_s0_valid %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_10]]  : i1
 // CHECK:           %[[VAL_12:.*]] = comb.add %[[VAL_8]], %[[VAL_9]] : i32

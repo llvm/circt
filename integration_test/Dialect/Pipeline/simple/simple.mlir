@@ -11,10 +11,10 @@
 // Test 2: Clock-gate implementation
 
 // RUN: circt-opt %s -pass-pipeline='builtin.module(hw.module(pipeline.scheduled(pipeline-explicit-regs), lower-pipeline-to-hw{outline-stages clock-gate-regs}), lower-seq-to-sv, sv-trace-iverilog, export-verilog)' \
-// RUN:     -o %t.mlir > %t.sv
+// RUN:     -o %t.mlir > %t_cg.sv
 
 // RUN: circt-cocotb-driver.py --objdir=%T --topLevel=simple \
-// RUN:     --pythonModule=simple --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
+// RUN:     --pythonModule=simple --pythonFolder="%S,%S/.." %t_cg.sv 2>&1 | FileCheck %s
 
 
 // CHECK: ** TEST
