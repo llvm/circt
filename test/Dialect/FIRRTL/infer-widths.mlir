@@ -452,7 +452,7 @@ firrtl.circuit "Foo" {
     firrtl.cover %clk, %true, %true, "foo" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // Issue #1088
+  // Issue #1088 // THIS IS STUPID BEHAVIOR
   // CHECK-LABEL: @Issue1088
   firrtl.module @Issue1088(out %y: !firrtl.sint<4>) {
     // CHECK: %x = firrtl.wire : !firrtl.sint<9>
