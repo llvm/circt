@@ -180,7 +180,7 @@ public:
 
       Value dataReg;
       if (this->clockGateRegs) {
-        // Use the clock gate instead of input muxing.
+        // Use the clock gate instead of clock enable.
         Value currClockGate = notStalledClockGate;
         for (auto hierClockGateEnable :
              stageTerminator.getClockGatesForReg(regIdx)) {
@@ -191,9 +191,16 @@ public:
         dataReg = builder.create<seq::CompRegOp>(stageTerminator->getLoc(),
                                                  regIn, currClockGate, regName);
       } else {
-        dataReg = builder.create<seq::CompRegClockEnabledOp>(
-            stageTerminator->getLoc(), regIn, args.clock,
-            stageValidAndNotStalled, regName);
+        // Only clock-enable the register if the pipeline is stallable.
+        // For non-stallable pipelines, a data register can always be clocked.
+        if (hasStall) {
+          dataReg = builder.create<seq::CompRegClockEnabledOp>(
+              stageTerminator->getLoc(), regIn, args.clock,
+              stageValidAndNotStalled, regName);
+        } else {
+          dataReg = builder.create<seq::CompRegOp>(stageTerminator->getLoc(),
+                                                   regIn, args.clock, regName);
+        }
       }
       rets.regs.push_back(dataReg);
     }
