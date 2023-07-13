@@ -91,9 +91,11 @@ def ServiceReqOpInterface : OpInterface<"ServiceReqOpInterface"> {
     InterfaceMethod<
       "Returns the type headed to the client. Can be null.",
       "Type", "getToClientType", (ins),
-      /*methodBody=*/"",
-      /*defaultImplementation=*/[{
-        return {};
+      /*methodBody=*/[{
+        Value toClient = $_op.getToClient();
+        if (!toClient)
+          return {};
+        return toClient.getType();
       }]>,
     InterfaceMethod<
       "Returns the value headed to the client. Can be null.",
@@ -103,11 +105,13 @@ def ServiceReqOpInterface : OpInterface<"ServiceReqOpInterface"> {
         return {};
       }]>,
     InterfaceMethod<
-      "Returns the type headed to the client.",
+      "Returns the type headed to the server. Can be null.",
       "Type", "getToServerType", (ins),
-      /*methodBody=*/"",
-      /*defaultImplementation=*/[{
-        return {};
+      /*methodBody=*/[{
+        Value toServer = $_op.getToServer();
+        if (!toServer)
+          return {};
+        return toServer.getType();
       }]>,
     InterfaceMethod<
       "Returns the value headed to the server. Can be null.",

@@ -120,15 +120,6 @@ def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
   let results = (outs Variadic<AnyType>:$outputs);
   let regions = (region SizedRegion<1>:$portReqs);
 
-  let extraClassDeclaration = [{
-    /// Find pairs of toServer and toClient requests with the same client path.
-    /// In cases where there doesn't exist a pair, one of the two entries will
-    /// be null. Should never contain a pair with both entries null.
-    void gatherPairedReqs(
-      llvm::SmallVectorImpl<std::pair<RequestToServerConnectionOp,
-                                      RequestToClientConnectionOp>>&);
-  }];
-
   let assemblyFormat = [{
     (`svc` $service_symbol^)? `impl` `as` $impl_type (`opts` $impl_opts^)?
      `(` $inputs `)` attr-dict `:` functional-type($inputs, results)
@@ -146,6 +137,12 @@ def RequestToServerConnectionOp : ESI_Op<"service.req.to_server", [
   let assemblyFormat = [{
     $toServer `->` $servicePort `(` $clientNamePath `)`
       attr-dict `:` qualified(type($toServer))
+  }];
+
+  let extraClassDeclaration = [{
+    void setToServer(Value v) {
+      getToServerMutable().assign(v);
+    }
   }];
 }
 
@@ -176,6 +173,12 @@ def RequestInOutChannelOp : ESI_Op<"service.req.inout", [
   let assemblyFormat = [{
     $toServer `->` $servicePort `(` $clientNamePath `)` attr-dict `:`
       qualified(type($toServer)) `->` qualified(type($toClient))
+  }];
+
+  let extraClassDeclaration = [{
+    void setToServer(Value v) {
+      getToServerMutable().assign(v);
+    }
   }];
 }
 
