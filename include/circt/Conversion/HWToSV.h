@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_CONVERSION_HWTOSV_HWTOSV_H_
-#define CIRCT_CONVERSION_HWTOSV_HWTOSV_H_
+#ifndef CIRCT_CONVERSION_HWTOSV_H
+#define CIRCT_CONVERSION_HWTOSV_H
 
 #include <memory>
 
@@ -24,11 +24,11 @@ class OperationPass;
 namespace circt {
 namespace hw {
 class HWModuleOp;
-}
+} // namespace hw
 } // namespace circt
 
 namespace circt {
 std::unique_ptr<mlir::OperationPass<hw::HWModuleOp>> createConvertHWToSVPass();
 } // namespace circt
 
-#endif // CIRCT_CONVERSION_HWTOSV_HWTOSV_H_
+#endif // CIRCT_CONVERSION_HWTOSV_H
