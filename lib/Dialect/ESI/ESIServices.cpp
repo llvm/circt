@@ -327,15 +327,13 @@ LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
   }
 
   // Find all of the "local" requests.
-  mod.walk([&](Operation *op) {
-    if (auto req = dyn_cast<ServiceReqOpInterface>(op)) {
-      auto service = req.getServicePort().getModuleRef();
-      auto implOpF = localImplReqs.find(service);
-      if (implOpF != localImplReqs.end())
-        req->moveBefore(implOpF->second, implOpF->second->end());
-      else if (anyServiceInst)
-        req->moveBefore(anyServiceInst, anyServiceInst->end());
-    }
+  mod.walk([&](ServiceReqOpInterface req) {
+    auto service = req.getServicePort().getModuleRef();
+    auto implOpF = localImplReqs.find(service);
+    if (implOpF != localImplReqs.end())
+      req->moveBefore(implOpF->second, implOpF->second->end());
+    else if (anyServiceInst)
+      req->moveBefore(anyServiceInst, anyServiceInst->end());
   });
 
   // Replace each service instance with a generation request. If a service
@@ -352,13 +350,11 @@ LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
 
   // Identify the non-local reqs which need to be surfaced from this module.
   SmallVector<ServiceReqOpInterface, 4> nonLocalReqs;
-  mod.walk([&](Operation *op) {
-    if (auto req = dyn_cast<ServiceReqOpInterface>(op)) {
-      auto service = req.getServicePort().getModuleRef();
-      auto implOpF = localImplReqs.find(service);
-      if (implOpF == localImplReqs.end())
-        nonLocalReqs.push_back(req);
-    }
+  mod.walk([&](ServiceReqOpInterface req) {
+    auto service = req.getServicePort().getModuleRef();
+    auto implOpF = localImplReqs.find(service);
+    if (implOpF == localImplReqs.end())
+      nonLocalReqs.push_back(req);
   });
 
   // Surface all of the requests which cannot be fulfilled locally.

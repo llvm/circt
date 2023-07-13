@@ -195,6 +195,11 @@ hw.module @MemoryAccess1(%clk: i1, %rst: i1, %write: !esi.channel<!write>, %read
   hw.output %readData, %done : !esi.channel<i64>, !esi.channel<i0>
 }
 
+// CONN-LABEL: hw.module @MemoryAccess2Read(%clk: i1, %rst: i1, %write: !esi.channel<!hw.struct<address: i5, data: i64>>, %readAddress: !esi.channel<i5>, %readAddress2: !esi.channel<i5>) -> (readData: !esi.channel<i64>, readData2: !esi.channel<i64>, writeDone: !esi.channel<i0>) {
+// CONN:         %MemA = sv.reg : !hw.inout<uarray<20xi64>>
+// CONN:         esi.service.hierarchy.metadata path [] implementing @MemA impl as "sv_mem" clients [{client_name = [], port = #hw.innerNameRef<@MemA::@write>, to_client_type = !esi.channel<i0>, to_server_type = !esi.channel<!hw.struct<address: i5, data: i64>>}, {client_name = [], port = #hw.innerNameRef<@MemA::@read>, to_client_type = !esi.channel<i64>, to_server_type = !esi.channel<i5>}, {client_name = [], port = #hw.innerNameRef<@MemA::@read>, to_client_type = !esi.channel<i64>, to_server_type = !esi.channel<i5>}]
+// CONN:         hw.output %chanOutput_0, %chanOutput_4, %chanOutput : !esi.channel<i64>, !esi.channel<i64>, !esi.channel<i0>
+
 hw.module @MemoryAccess2Read(%clk: i1, %rst: i1, %write: !esi.channel<!write>, %readAddress: !esi.channel<i5>, %readAddress2: !esi.channel<i5>) -> (readData: !esi.channel<i64>, readData2: !esi.channel<i64>, writeDone: !esi.channel<i0>) {
   esi.service.instance svc @MemA impl as "sv_mem" (%clk, %rst) : (i1, i1) -> ()
   %done = esi.service.req.inout %write -> <@MemA::@write> ([]) : !esi.channel<!write> -> !esi.channel<i0>
