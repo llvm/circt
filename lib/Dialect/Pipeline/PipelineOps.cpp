@@ -393,7 +393,7 @@ void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   odsState.addOperands(clock);
   odsState.addOperands(reset);
   odsState.addOperands(go);
- 
+
   if (name)
     odsState.addAttribute("name", name);
 
