@@ -524,6 +524,19 @@ def ConvertHWToSystemC : Pass<"convert-hw-to-systemc", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// HWToSV
+//===----------------------------------------------------------------------===//
+
+def ConvertHWToSV : Pass<"convert-hw-to-sv", "hw::HWModuleOp"> {
+  let summary = "Convert HW to SV";
+  let description = [{
+    This pass converts various HW contructs to SV.
+  }];
+  let constructor = "circt::createConvertHWToSVPass()";
+  let dependentDialects = ["sv::SVDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // StandardToHandshake
 //===----------------------------------------------------------------------===//
 
