@@ -295,6 +295,7 @@ private:
           addrPorts.size() == 1 &&
           "We expected a 1 dimensional memory of size 1 because there were no "
           "address assignment values");
+      // Assign to address 1'd0 in memory.
       rewriter.create<calyx::AssignOp>(
           loc, addrPorts[0],
           createConstant(loc, rewriter, getComponent(), 1, 0));
