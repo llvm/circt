@@ -1,4 +1,4 @@
-// RUN: circt-opt --lower-hw-to-sv --allow-unregistered-dialect %s | FileCheck %s
+// RUN: circt-opt --convert-hw-to-sv --allow-unregistered-dialect %s | FileCheck %s
 
 hw.module @foo(%trigger : i1, %in : i32) {
   // CHECK:       sv.always posedge %trigger {
