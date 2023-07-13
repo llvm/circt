@@ -21,6 +21,7 @@ using llvm::SmallMapVector;
 using llvm::SmallSetVector;
 
 namespace {
+
 struct StructuralHash {
   using Hash = std::array<uint8_t, 32>;
   Hash hash;
@@ -711,6 +712,9 @@ void DedupPass::runOnOperation() {
 }
 
 void DedupPass::replaceArcWith(DefineOp oldArc, DefineOp newArc) {
+  ++dedupPassNumArcsDeduped;
+  auto oldArcOps = oldArc.getOps();
+  dedupPassTotalOps += std::distance(oldArcOps.begin(), oldArcOps.end());
   auto &oldUses = callSites[oldArc];
   auto &newUses = callSites[newArc];
   auto newArcName = SymbolRefAttr::get(newArc.getSymNameAttr());
