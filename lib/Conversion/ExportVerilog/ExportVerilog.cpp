@@ -5726,7 +5726,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         .Case<MacroDeclOp>([&](auto op) {
           symbolCache.addDefinition(op.getSymNameAttr(), op);
         })
-        .Case<om::ClassOp>([&](auto op) {
+        .Case<om::ClassLike>([&](auto op) {
           symbolCache.addDefinition(op.getSymNameAttr(), op);
         })
         .Case<om::ConstantOp>([&](auto op) {

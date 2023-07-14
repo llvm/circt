@@ -49,6 +49,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   CIRCTFIRRTLTransformsIncGen
   MLIROMIncGen
   MLIROMAttrIncGen
+  MLIROMOpInterfacesIncGen
 
   LINK_LIBS PUBLIC
   CIRCTFIRRTL
