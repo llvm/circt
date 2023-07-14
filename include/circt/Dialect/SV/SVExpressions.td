@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 include "mlir/Interfaces/InferTypeOpInterface.td"
+include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/SV/SVTypes.td"
 
 def HWValueOrInOutType : AnyTypeOf<[HWValueType, InOutType]>;
@@ -196,7 +197,7 @@ def ConstantStrOp : SVOp<"constantStr", [Pure]> {
     }];
 
   let arguments = (ins StrAttr:$str);
-  let results = (outs StringType:$result);
+  let results = (outs HWStringType:$result);
   let assemblyFormat = " $str attr-dict";
 }
 
