@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline="builtin.module(lower-firrtl-to-hw)" -verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline="builtin.module(lower-firrtl-to-hw)" -verify-diagnostics %s --split-input-file | FileCheck %s
 // RUN: circt-opt -pass-pipeline="builtin.module(lower-firrtl-to-hw{disable-reg-randomization})" -verify-diagnostics %s | FileCheck %s --check-prefix DISABLE_RANDOM --implicit-check-not RANDOMIZE_REG
 
 // DISABLE_RANDOM-LABEL: module @Simple
@@ -1423,5 +1423,41 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: sv.assign %5, %4 {sv.attributes = [#sv.attribute<"synopsys infer_mux_override", emitAsComment>]} : i32
     // CHECK-NEXT: %6 = sv.read_inout %5 : !hw.inout<i32>
     // CHECK-NEXT: hw.output %2, %6 : i32, i32
+  }
+}
+
+// -----
+
+firrtl.circuit "TypeAlias" {
+//CHECK:   hw.type_scope @TypeAlias__TYPESCOPE_ {
+//CHECK:     hw.typedecl @bar : i1
+//CHECK:     hw.typedecl @bar_TypeAlias : i1
+//CHECK:     hw.typedecl @baz : i1
+//CHECK:     hw.typedecl @bar_0_TypeAlias : !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>
+//CHECK:     hw.typedecl @baf : i1
+//CHECK:   }
+//CHECK:   hw.module @TypeAlias
+//CHECK-SAME:   %in: !hw.typealias<@TypeAlias__TYPESCOPE_::@bar, i1>
+//CHECK-SAME:   %const: !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_TypeAlias, i1>)
+//CHECK-SAME:   out: !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_0_TypeAlias, !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>>
+//CHECK-SAME:   out2: !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_TypeAlias, i1>
+//CHECK:     %wire = hw.wire %[[v0:.+]]  : !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>
+//CHECK:     %[[v0]] = hw.bitcast %in : (!hw.typealias<@TypeAlias__TYPESCOPE_::@bar, i1>) -> !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>
+//CHECK:     %wire2 = hw.wire %[[v1:.+]]  : !hw.typealias<@TypeAlias__TYPESCOPE_::@baf, i1>
+//CHECK:     %[[v1]] = hw.bitcast %const : (!hw.typealias<@TypeAlias__TYPESCOPE_::@bar_TypeAlias, i1>) -> !hw.typealias<@TypeAlias__TYPESCOPE_::@baf, i1>
+//CHECK:     %[[v2:.+]] = hw.bitcast %in : (!hw.typealias<@TypeAlias__TYPESCOPE_::@bar, i1>) -> !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_0_TypeAlias, !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>>
+//CHECK:     %[[v3:.+]] = hw.bitcast %wire2 : (!hw.typealias<@TypeAlias__TYPESCOPE_::@baf, i1>) -> !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_TypeAlias, i1>
+//CHECK:     hw.output %[[v2]], %[[v3]] : !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_0_TypeAlias, !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>>, !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_TypeAlias, i1>
+
+  firrtl.module @TypeAlias(in %in: !firrtl.alias<bar, uint<1>>,
+                           in %const: !firrtl.const.alias<bar, const.uint<1>>,
+                           out %out: !firrtl.alias<bar, alias<baz, uint<1>>>,
+                           out %out2: !firrtl.const.alias<bar, const.uint<1>>) {
+    firrtl.strictconnect %out, %in: !firrtl.alias<bar, alias<baz, uint<1>>>,!firrtl.alias<bar, uint<1>> 
+    %wire = firrtl.wire : !firrtl.alias<baz, uint<1>>
+    firrtl.connect %wire, %in :!firrtl.alias<baz, uint<1>> , !firrtl.alias<bar, uint<1>>
+    %wire2 = firrtl.wire : !firrtl.const.alias<baf, const.uint<1>>
+    firrtl.strictconnect %wire2, %const :!firrtl.const.alias<baf, const.uint<1>> , !firrtl.const.alias<bar, const.uint<1>>
+    firrtl.strictconnect %out2, %wire2 :!firrtl.const.alias<bar, const.uint<1>> , !firrtl.const.alias<baf, const.uint<1>>
   }
 }
