@@ -132,10 +132,15 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
   auto i1 = b.getI1Type();
   auto c0 = b.create<hw::ConstantOp>(i1, 0);
 
+  // List of reqs which have a result.
+  SmallVector<ServiceReqOpInterface, 8> toClientReqs(llvm::make_filter_range(
+      implReq.getOps<ServiceReqOpInterface>(),
+      [](auto req) { return req.getToClient() != nullptr; }));
+
   // Assemble a mapping of toClient results to actual consumers.
   DenseMap<Value, Value> outputMap;
-  for (auto [bout, reqout] : llvm::zip_longest(
-           implReq.getOps<ServiceReqOpInterface>(), implReq.getResults())) {
+  for (auto [bout, reqout] :
+       llvm::zip_longest(toClientReqs, implReq.getResults())) {
     assert(bout.has_value());
     assert(reqout.has_value());
     Value toClient = bout->getToClient();
@@ -420,16 +425,20 @@ static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
     if (!bspPorts)
       continue;
 
-    if (isa<RequestInOutChannelOp>(req))
-      b.create<ServiceDeclInOutOp>(req.getServicePort().getName(),
-                                   TypeAttr::get(req.getToServerType()),
-                                   TypeAttr::get(req.getToClientType()));
-    else if (isa<RequestToClientConnectionOp>(req))
-      b.create<ToClientOp>(req.getServicePort().getName(),
-                           TypeAttr::get(req.getToClientType()));
-    else
-      b.create<ToServerOp>(req.getServicePort().getName(),
-                           TypeAttr::get(req.getToServerType()));
+    llvm::TypeSwitch<ServiceReqOpInterface>(req)
+        .Case([&](RequestInOutChannelOp) {
+          b.create<ServiceDeclInOutOp>(req.getServicePort().getName(),
+                                       TypeAttr::get(req.getToServerType()),
+                                       TypeAttr::get(req.getToClientType()));
+        })
+        .Case([&](RequestToClientConnectionOp) {
+          b.create<ToClientOp>(req.getServicePort().getName(),
+                               TypeAttr::get(req.getToClientType()));
+        })
+        .Case([&](RequestToServerConnectionOp) {
+          b.create<ToServerOp>(req.getServicePort().getName(),
+                               TypeAttr::get(req.getToServerType()));
+        });
   }
 
   if (bspPorts && !bspPorts->empty()) {
@@ -482,13 +491,13 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
   for (auto [n, o] : llvm::zip(implOp.getResults(), instOp.getResults()))
     o.replaceAllUsesWith(n);
   unsigned instOpNumResults = instOp.getNumResults();
-  for (auto e : llvm::enumerate(
+  for (auto [idx, req] : llvm::enumerate(
            llvm::make_filter_range(portReqs->getOps<ServiceReqOpInterface>(),
                                    [](ServiceReqOpInterface req) -> bool {
                                      return req.getToClient() != nullptr;
                                    }))) {
-    e.value().getToClient().replaceAllUsesWith(
-        implOp.getResult(e.index() + instOpNumResults));
+    req.getToClient().replaceAllUsesWith(
+        implOp.getResult(idx + instOpNumResults));
   }
 
   emitServiceMetadata(implOp);

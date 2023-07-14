@@ -140,6 +140,8 @@ def RequestToServerConnectionOp : ESI_Op<"service.req.to_server", [
   }];
 
   let extraClassDeclaration = [{
+    // Set the value headed to the server. Overrides method in
+    // ServiceReqOpInterface.
     void setToServer(Value v) {
       getToServerMutable().assign(v);
     }
@@ -176,6 +178,8 @@ def RequestInOutChannelOp : ESI_Op<"service.req.inout", [
   }];
 
   let extraClassDeclaration = [{
+    // Set the value headed to the server. Overrides method in
+    // ServiceReqOpInterface.
     void setToServer(Value v) {
       getToServerMutable().assign(v);
     }
