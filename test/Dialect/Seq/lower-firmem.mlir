@@ -2,21 +2,13 @@
 
 // CHECK: hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "maskGran", "readUnderWrite", "writeUnderWrite", "writeClockIDs", "initFilename", "initIsBinary", "initIsInline"]
 
+// CHECK: sv.macro.decl @SomeMacro
+sv.macro.decl @SomeMacro
+
 // CHECK: hw.module.generated @m0_mem1_12x42, @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1) -> (R0_data: i42) attributes {depth = 12 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 42 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 42 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
 // CHECK: hw.module.generated @m0_mem2_12x42, @FIRRTLMem(%W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i42, %W0_mask: i2) attributes {depth = 12 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 21 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 42 : ui32, writeClockIDs = [0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
 // CHECK: hw.module.generated @m0_mem3_12x42, @FIRRTLMem(%RW0_addr: i4, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i42, %RW0_wmask: i3) -> (RW0_rdata: i42) attributes {depth = 12 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 14 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 42 : ui32, writeClockIDs = [0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
 // CHECK: hw.module.generated @m0_mem4_12x42, @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %RW0_addr: i4, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i42, %RW0_wmask: i6, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i42, %W0_mask: i6) -> (R0_data: i42, RW0_rdata: i42) attributes {depth = 12 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 7 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 42 : ui32, writeClockIDs = [0 : i32, 0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-
-// CHECK: hw.module.generated @m1_mem1_24x1337, @FIRRTLMem() attributes {depth = 24 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 1337 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, output_file = "foo", readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 1337 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-// CHECK: hw.module.generated @m1_mem2_24x1337, @FIRRTLMem() attributes {depth = 24 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 1337 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, output_file = "bar", readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 1337 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-
-// CHECK: hw.module.generated @foo_m2_mem1_24x9001, @FIRRTLMem() attributes {depth = 24 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 9001 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 9001 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-// CHECK: hw.module.generated @bar_m2_mem2_24x9001, @FIRRTLMem() attributes {depth = 24 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 9001 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 9001 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-// CHECK: hw.module.generated @uwu_m2_mem_24x9001, @FIRRTLMem() attributes {depth = 24 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 9001 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 9001 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-
-// CHECK: hw.module.generated @m3_mem_12x8, @FIRRTLMem(%W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8, %W1_addr: i4, %W1_en: i1, %W1_clk: i1, %W1_data: i8) attributes {depth = 12 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 8 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 8 : ui32, writeClockIDs = [0 : i32, 0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-// CHECK: hw.module.generated @m3_mem2_12x8, @FIRRTLMem(%W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8, %W1_addr: i4, %W1_en: i1, %W1_clk: i1, %W1_data: i8) attributes {depth = 12 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 8 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 8 : ui32, writeClockIDs = [0 : i32, 1 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-
 
 // CHECK-LABEL: hw.module @Foo
 hw.module @Foo(%clk: i1, %en: i1, %addr: i4, %wdata: i42, %wmode: i1, %mask2: i2, %mask3: i3, %mask6: i6) {
@@ -48,6 +40,9 @@ hw.module @Foo(%clk: i1, %en: i1, %addr: i4, %wdata: i42, %wmode: i1, %mask2: i2
   comb.xor %3, %4 : i42
 }
 
+// CHECK: hw.module.generated @m1_mem1_24x1337, @FIRRTLMem() attributes {depth = 24 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 1337 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, output_file = "foo", readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 1337 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+// CHECK: hw.module.generated @m1_mem2_24x1337, @FIRRTLMem() attributes {depth = 24 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 1337 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, output_file = "bar", readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 1337 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+
 // CHECK-LABEL: hw.module @SeparateOutputFiles
 hw.module @SeparateOutputFiles() {
   // CHECK-NEXT: hw.instance "m1_mem1_ext" @m1_mem1_24x1337(
@@ -55,6 +50,10 @@ hw.module @SeparateOutputFiles() {
   %m1_mem1 = seq.firmem 0, 1, undefined, port_order {output_file = "foo"} : <24 x 1337>
   %m1_mem2 = seq.firmem 0, 1, undefined, port_order {output_file = "bar"} : <24 x 1337>
 }
+
+// CHECK: hw.module.generated @foo_m2_mem1_24x9001, @FIRRTLMem() attributes {depth = 24 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 9001 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 9001 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+// CHECK: hw.module.generated @bar_m2_mem2_24x9001, @FIRRTLMem() attributes {depth = 24 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 9001 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 9001 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+// CHECK: hw.module.generated @uwu_m2_mem_24x9001, @FIRRTLMem() attributes {depth = 24 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 9001 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 9001 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
 
 // CHECK-LABEL: hw.module @SeparatePrefices
 hw.module @SeparatePrefices() {
@@ -67,6 +66,9 @@ hw.module @SeparatePrefices() {
   %m2_mem3 = seq.firmem 0, 1, undefined, port_order {prefix = "uwu_"} : <24 x 9001>
   %m2_mem4 = seq.firmem 0, 1, undefined, port_order {prefix = "uwu_"} : <24 x 9001>
 }
+
+// CHECK: hw.module.generated @m3_mem_12x8, @FIRRTLMem(%W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8, %W1_addr: i4, %W1_en: i1, %W1_clk: i1, %W1_data: i8) attributes {depth = 12 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 8 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 8 : ui32, writeClockIDs = [0 : i32, 0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+// CHECK: hw.module.generated @m3_mem2_12x8, @FIRRTLMem(%W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8, %W1_addr: i4, %W1_en: i1, %W1_clk: i1, %W1_data: i8) attributes {depth = 12 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 8 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 8 : ui32, writeClockIDs = [0 : i32, 1 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
 
 // CHECK-LABEL: hw.module @MemoryWritePortBehavior
 hw.module @MemoryWritePortBehavior(%clock1: i1, %clock2: i1) {
