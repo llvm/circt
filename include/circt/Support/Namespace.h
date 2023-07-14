@@ -83,16 +83,24 @@ public:
   }
 
   /// Return a unique name, derived from the input `name` and ensure the
-  /// returned name has the input `suffix`. Also add the new name to the
-  /// internal namespace.
-  /// There are two possible outcomes for the returned name:
-  /// 1. The original name + `_<suffix>` is returned.
+  /// returned name has the input `suffix` only if `allowNoSuffix` is false.
+  /// `allowNoSuffix` ensures that the original name without the suffix is
+  /// returned if there is no conflict. Also add the new name to the internal
+  /// namespace. There are two possible outcomes for the returned name:
+  /// 1. The original name if `allowNoSuffix` is true, else original name +
+  /// `_<suffix>` is returned.
   /// 2. The name is given a suffix `_<n>_<suffix>` where `<n>` is a number
   ///    starting from `0` and incrementing by one each time.
-  StringRef newName(const Twine &name, const Twine &suffix) {
+  StringRef newName(const Twine &name, const Twine &suffix,
+                    bool allowNoSuffix = false) {
     // Special case the situation where there is no name collision to avoid
     // messing with the SmallString allocation below.
     llvm::SmallString<64> tryName;
+    if (allowNoSuffix) {
+      auto inserted = nextIndex.insert({name.toStringRef(tryName), 0});
+      if (inserted.second)
+        return inserted.first->getKey();
+    }
     auto inserted = nextIndex.insert(
         {name.concat("_").concat(suffix).toStringRef(tryName), 0});
     if (inserted.second)
