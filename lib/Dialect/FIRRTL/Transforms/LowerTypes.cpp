@@ -519,8 +519,8 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
     }
     // Check whether the annotation falls into the range of the current field.
 
-    if (!(fieldID >= field.fieldID &&
-          fieldID <= field.fieldID + field.type.getMaxFieldID()))
+    if (fieldID < field.fieldID ||
+        fieldID > field.fieldID + field.type.getMaxFieldID())
       continue;
 
     // Add fieldID back if non-zero relative to this field.
