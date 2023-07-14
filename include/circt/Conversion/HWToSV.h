@@ -28,7 +28,7 @@ class HWModuleOp;
 } // namespace circt
 
 namespace circt {
-std::unique_ptr<mlir::OperationPass<hw::HWModuleOp>> createConvertHWToSVPass();
+std::unique_ptr<mlir::OperationPass<hw::HWModuleOp>> createLowerHWToSVPass();
 } // namespace circt
 
 #endif // CIRCT_CONVERSION_HWTOSV_H

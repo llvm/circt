@@ -35,7 +35,7 @@ static sv::EventControl hwToSvEventControl(hw::EventControl ec) {
 }
 
 namespace {
-struct HWToSVPass : public ConvertHWToSVBase<HWToSVPass> {
+struct HWToSVPass : public LowerHWToSVBase<HWToSVPass> {
   void runOnOperation() override;
 };
 
@@ -78,7 +78,6 @@ void HWToSVPass::runOnOperation() {
 // HW to SV Conversion Pass
 //===----------------------------------------------------------------------===//
 
-std::unique_ptr<OperationPass<hw::HWModuleOp>>
-circt::createConvertHWToSVPass() {
+std::unique_ptr<OperationPass<hw::HWModuleOp>> circt::createLowerHWToSVPass() {
   return std::make_unique<HWToSVPass>();
 }

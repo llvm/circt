@@ -3215,8 +3215,12 @@ void TriggeredOp::build(OpBuilder &builder, OperationState &odsState,
   auto *r = odsState.addRegion();
   Block *b = new Block();
   r->push_back(b);
-  b->addArguments(inputs.getTypes(), llvm::SmallVector<mlir::Location>(
-                                         inputs.size(), odsState.location));
+  Value v;
+
+  llvm::SmallVector<Location> argLocs;
+  llvm::transform(inputs, std::back_inserter(argLocs),
+                  [&](Value v) { return v.getLoc(); });
+  b->addArguments(inputs.getTypes(), argLocs);
 }
 
 //===----------------------------------------------------------------------===//
