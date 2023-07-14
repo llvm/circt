@@ -225,37 +225,6 @@ static SmallVector<Operation *> getSAWritePath(Operation *op) {
   return retval;
 }
 
-/// Returns whether the given annotation requires precise tracking of the field
-/// ID as it gets replicated across lowered operations.
-static bool isAnnotationSensitiveToFieldID(Annotation anno) {
-  return anno.isClass(signalDriverAnnoClass);
-}
-
-/// If an annotation on one operation is replicated across multiple IR
-/// operations as a result of type lowering, the replicated annotations may want
-/// to track which field ID they were applied to. This function adds a fieldID
-/// to such a replicated operation, if the annotation in question requires it.
-static Attribute updateAnnotationFieldID(MLIRContext *ctxt, Attribute attr,
-                                         unsigned fieldID, Type i64ty) {
-  DictionaryAttr dict = cast<DictionaryAttr>(attr);
-
-  // No need to do anything if the annotation applies to the entire field.
-  if (fieldID == 0)
-    return attr;
-
-  // Only certain annotations require precise tracking of field IDs.
-  Annotation anno(dict);
-  if (!isAnnotationSensitiveToFieldID(anno))
-    return attr;
-
-  // Add the new ID to the existing field ID in the annotation.
-  if (auto existingFieldID = anno.getMember<IntegerAttr>("fieldID"))
-    fieldID += existingFieldID.getValue().getZExtValue();
-  NamedAttrList fields(dict);
-  fields.set("fieldID", IntegerAttr::get(i64ty, fieldID));
-  return DictionaryAttr::get(ctxt, fields);
-}
-
 static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
                                  FlatBundleFieldEntry field) {
   SmallVector<Type, 8> ports;
@@ -538,46 +507,30 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
   if (!annotations || annotations.empty())
     return ArrayAttr::get(ctxt, retval);
   for (auto opAttr : annotations) {
-    std::optional<uint64_t> maybeFieldID;
-    DictionaryAttr annotation;
-    annotation = dyn_cast<DictionaryAttr>(opAttr);
-    if (annotations)
-      // Erase the circt.fieldID.  If this is needed later, it will be re-added.
-      if (auto id = annotation.getAs<IntegerAttr>("circt.fieldID")) {
-        maybeFieldID = id.getInt();
-        Annotation anno(annotation);
-        anno.removeMember("circt.fieldID");
-        annotation = anno.getDict();
-      }
-    if (!maybeFieldID) {
-      retval.push_back(
-          updateAnnotationFieldID(ctxt, opAttr, field.fieldID, cache.i64ty));
+    Annotation anno(opAttr);
+    auto fieldID = anno.getFieldID();
+    anno.removeMember("circt.fieldID");
+
+    // If no fieldID set, or points to root, forward the annotation without the
+    // fieldID field (which was removed above).
+    if (fieldID == 0) {
+      retval.push_back(anno.getAttr());
       continue;
     }
-    auto fieldID = *maybeFieldID;
     // Check whether the annotation falls into the range of the current field.
-    if (fieldID != 0 &&
-        !(fieldID >= field.fieldID &&
+
+    if (!(fieldID >= field.fieldID &&
           fieldID <= field.fieldID + field.type.getMaxFieldID()))
       continue;
 
-    // Apply annotations to all elements if fieldID is equal to zero.
-    if (fieldID == 0) {
-      retval.push_back(annotation);
-      continue;
-    }
-
+    // Add fieldID back if non-zero relative to this field.
     if (auto newFieldID = fieldID - field.fieldID) {
       // If the target is a subfield/subindex of the current field, create a
       // new annotation with the correct circt.fieldID.
-      Annotation newAnno(annotation);
-      newAnno.setMember("circt.fieldID",
-                        builder->getI32IntegerAttr(newFieldID));
-      retval.push_back(newAnno.getDict());
-      continue;
+      anno.setMember("circt.fieldID", builder->getI32IntegerAttr(newFieldID));
     }
 
-    retval.push_back(annotation);
+    retval.push_back(anno.getAttr());
   }
   return ArrayAttr::get(ctxt, retval);
 }
