@@ -386,12 +386,11 @@ void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                                 StringAttr name) {
   odsState.addOperands(inputs);
   odsState.addOperands(extInputs);
-  odsState.addOperands(go);
-  odsState.addOperands(clock);
-  odsState.addOperands(reset);
   if (stall)
     odsState.addOperands(stall);
-
+  odsState.addOperands(clock);
+  odsState.addOperands(reset);
+  odsState.addOperands(go);
   if (name)
     odsState.addAttribute("name", name);
 

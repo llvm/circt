@@ -2,7 +2,7 @@
 
 // CHECK-LABEL:   hw.module @pipeline(
 // CHECK-SAME:          %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out: i32) {
-// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = pipeline.scheduled(%[[VAL_7:.*]] : i32 = %[[VAL_0]], %[[VAL_8:.*]] : i32 = %[[VAL_1]]) clock(%[[VAL_9:.*]] = %[[VAL_2]]) reset(%[[VAL_10:.*]] = %[[VAL_3]]) go(%[[VAL_11:.*]] = %[[VAL_4]]) -> (out : i32) {
+// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = pipeline.scheduled(%[[VAL_7:.*]] : i32 = %[[VAL_0]], %[[VAL_8:.*]] : i32 = %[[VAL_1]]) clock(%[[VAL_9:.*]] = %[[VAL_3]]) reset(%[[VAL_10:.*]] = %[[VAL_4]]) go(%[[VAL_11:.*]] = %[[VAL_2]]) -> (out : i32) {
 // CHECK:             %[[VAL_12:.*]] = comb.add %[[VAL_7]], %[[VAL_8]] {ssp.operator_type = @add1} : i32
 // CHECK:             %[[VAL_13:.*]] = comb.add %[[VAL_8]], %[[VAL_7]] {ssp.operator_type = @add1} : i32
 // CHECK:             pipeline.stage ^bb1
