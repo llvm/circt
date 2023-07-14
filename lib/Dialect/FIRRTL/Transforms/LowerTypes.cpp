@@ -245,9 +245,9 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
       op.getRuw(), portNames, (op.getName() + field.suffix).str(),
       op.getNameKind(), op.getAnnotations().getValue(),
       op.getPortAnnotations().getValue(), op.getInnerSymAttr());
-  if (auto oldName = getInnerSymName(op))
-    newMem.setInnerSymAttr(hw::InnerSymAttr::get(StringAttr::get(
-        b->getContext(), oldName.getValue() + (op.getName() + field.suffix))));
+
+  assert(!op.getInnerSym() &&
+         "should already have produced error if sym present");
 
   SmallVector<Attribute> newAnnotations;
   for (size_t portIdx = 0, e = newMem.getNumResults(); portIdx < e; ++portIdx) {
@@ -849,6 +849,13 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
   // MemOp should have ground types so we can't preserve aggregates.
   if (!peelType(op.getDataType(), fields, memoryPreservationMode))
     return false;
+
+  if (op.getInnerSym()) {
+    op->emitError() << "has a symbol, but no symbols may exist on aggregates "
+                       "passed through LowerTypes";
+    encounteredError = true;
+    return false;
+  }
 
   SmallVector<MemOp> newMemories;
   SmallVector<WireOp> oldPorts;
