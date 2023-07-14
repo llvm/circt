@@ -20,13 +20,6 @@ include "circt/Dialect/SV/SVDialect.td"
 // includable for other dialects, without polluting their output with SV types.
 class SVType<string name> : TypeDef<SVDialect, name> { }
 
-def StringType : SVType<"String"> {
-  let summary = "SystemVerilog string type";
-  let description = "Defines the string type in verilog";
-
-  let mnemonic = "string";
-}
-
 //===----------------------------------------------------------------------===//
 // InOut type and related helpers.
 //===----------------------------------------------------------------------===//
