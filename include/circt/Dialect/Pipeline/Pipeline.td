@@ -12,7 +12,6 @@
 include "mlir/IR/OpBase.td"
 
 include "circt/Dialect/Pipeline/PipelineDialect.td"
-include "circt/Dialect/Pipeline/PipelineInterfaces.td"
 include "circt/Dialect/Pipeline/PipelineOps.td"
 
 #endif // CIRCT_DIALECT_PIPELINE_PIPELINE_TD

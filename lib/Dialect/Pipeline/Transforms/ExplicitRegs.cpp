@@ -110,10 +110,15 @@ void ExplicitRegsPass::runOnOperation() {
   OpBuilder b(getOperation().getContext());
   bb = std::make_shared<BackedgeBuilder>(b, getOperation().getLoc());
 
-  // Cache external inputs in a set for fast lookup.
-  llvm::DenseSet<Value> extInputs;
+  // Cache external-like inputs in a set for fast lookup. This also includes
+  // clock, reset, and stall.
+  llvm::DenseSet<Value> extLikeInputs;
   for (auto extInput : pipeline.getInnerExtInputs())
-    extInputs.insert(extInput);
+    extLikeInputs.insert(extInput);
+  extLikeInputs.insert(pipeline.getInnerClock());
+  extLikeInputs.insert(pipeline.getInnerReset());
+  if (pipeline.hasStall())
+    extLikeInputs.insert(pipeline.getInnerStall());
 
   // Iterate over the pipeline body in-order (!).
   stageMap = pipeline.getStageMap();
@@ -124,7 +129,7 @@ void ExplicitRegsPass::runOnOperation() {
       // Check the operands of this operation to see if any of them cross a
       // stage boundary.
       for (OpOperand &operand : op->getOpOperands()) {
-        if (extInputs.contains(operand.get())) {
+        if (extLikeInputs.contains(operand.get())) {
           // Never route external inputs through a stage.
           continue;
         }

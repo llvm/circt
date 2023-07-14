@@ -196,4 +196,12 @@ firrtl.circuit "Foo" {
     firrtl.connect %mem_r.en, %en : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %data, %mem_r.data : !firrtl.uint<42>, !firrtl.uint<42>
   }
+
+  // CHECK-LABEL: hw.module @ExcessiveDepth
+  firrtl.module @ExcessiveDepth() {
+    // CHECK: seq.firmem 0, 1, undefined, port_order : <2147483648 x 42>
+    // CHECK: seq.firmem 0, 1, undefined, port_order : <8589934592 x 42>
+    %0 = firrtl.mem Undefined {depth = 2147483648 : i64, name = "mem31", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<31>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %1 = firrtl.mem Undefined {depth = 8589934592 : i64, name = "mem33", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<33>, en: uint<1>, clk: clock, data flip: uint<42>>
+  }
 }

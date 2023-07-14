@@ -76,6 +76,13 @@ def HWAggregateType : DialectType<HWDialect,
 // Type Definitions
 //===----------------------------------------------------------------------===//
 
+def HWStringType : TypeDef<HWDialect, "String"> {
+  let summary = "String type";
+  let description = "Defines a string type for the hw-centric dialects";
+
+  let mnemonic = "string";
+}
+
 /// Points to a name within a module.
 def HWInnerRefAttr : Attr<
   CPred<"$_self.isa<::circt::hw::InnerRefAttr>()">,

@@ -19,17 +19,90 @@ include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 
-include "circt/Dialect/Pipeline/PipelineInterfaces.td"
 include "circt/Dialect/Pipeline/PipelineDialect.td"
 
-def UnscheduledPipelineOp : Op<Pipeline_Dialect, "unscheduled", [
-    IsolatedFromAbove,
-    Pure,
-    SingleBlockImplicitTerminator<"ReturnOp">,
+
+class PipelineBase<string mnemonic, list<Trait> traits = []> : 
+  Op<Pipeline_Dialect, mnemonic, !listconcat(traits, [
+      IsolatedFromAbove,
+      Pure,
+      RegionKindInterface,
+      AttrSizedOperandSegments])> {
+
+  let arguments = (ins
+    OptionalAttr<StrAttr>:$name, Variadic<AnyType>:$inputs, Variadic<AnyType>:$extInputs, Optional<I1>:$stall,
+    I1:$clock, I1:$reset, I1:$go, StrArrayAttr:$inputNames,
+    OptionalAttr<StrArrayAttr>:$extInputNames, StrArrayAttr:$outputNames
+  );
+  let results = (outs Variadic<AnyType>:$dataOutputs, I1:$done);
+  let hasCustomAssemblyFormat = 1;
+
+  /// Additional class declarations inside the pipeline op.
+  code extraModuleClassDeclaration = ?;
+
+  // The entry block of the pipeline contains a lot of block arguments - the
+  // indices are kept away from the user and only "hardcoded" here, as well as
+  // in the printer/parser.
+  // Order:
+  // 1. Inputs
+  // 2. External inputs (opt)
+  // 3. Stall (opt)
+  // 4. Clock
+  // 5. Reset
+  // 6. Go
+  let extraClassDeclaration = extraModuleClassDeclaration # [{
+    // Returns the entry stage of this pipeline.
+    Block* getEntryStage() {
+      Region* region = &getOperation()->getRegion(0);
+      return &region->front();
+    }
+
+    // Returns the inner clock signal argument of this pipeline.
+    BlockArgument getInnerClock() {
+      Block* entryStage = getEntryStage();
+      return entryStage->getArgument(entryStage->getNumArguments() - 3);
+    }
+
+    // Returns the inner reset signal argument of this pipeline.
+    BlockArgument getInnerReset() {
+      Block* entryStage = getEntryStage();
+      return getEntryStage()->getArgument(entryStage->getNumArguments() - 2);
+    }
+
+    // Returns the inner go signal argument of this pipeline.
+    BlockArgument getInnerGo() {
+      Block* entryStage = getEntryStage();
+      return getEntryStage()->getArgument(entryStage->getNumArguments() - 1);
+    }
+
+    // Returns true if this pipeline has a stall signal.
+    bool hasStall() {
+      return static_cast<bool>(getStall());
+    }
+
+    // Returns the stall signal argument of this pipeline, if it exists.
+    BlockArgument getInnerStall() {
+      assert(hasStall() && "pipeline has no stall signal");
+      Block* entryStage = getEntryStage();
+      return getEntryStage()->getArgument(entryStage->getNumArguments() - 4);
+    }
+
+    llvm::ArrayRef<BlockArgument> getInnerInputs() {
+      return getEntryStage()->getArguments().take_front(getInputs().size());
+    }
+
+    llvm::ArrayRef<BlockArgument> getInnerExtInputs() {
+      return getEntryStage()->getArguments().slice(
+          getInputs().size(), getExtInputs().size()
+      );
+    }
+  }];
+}
+
+def UnscheduledPipelineOp : PipelineBase<"unscheduled", [
     RegionKindInterface,
     HasOnlyGraphRegion,
-    PipelineLike,
-    AttrSizedOperandSegments
+    SingleBlockImplicitTerminator<"ReturnOp">
   ]> {
   
   let summary = "unscheduled pipeline operation";
@@ -44,34 +117,11 @@ def UnscheduledPipelineOp : Op<Pipeline_Dialect, "unscheduled", [
     about the interface signals.
   }];
 
-  let arguments = (ins
-    Variadic<AnyType>:$inputs, Variadic<AnyType>:$extInputs, I1:$go, I1:$clock, I1:$reset, Optional<I1>:$stall
-  );
-  let results = (outs Variadic<AnyType>:$dataOutputs, I1:$done);
   let regions = (region SizedRegion<1>: $body);
-  let hasVerifier = 1;
-
-  let assemblyFormat = [{
-    `(` $inputs `)` (`stall` $stall^)? (`ext` `(` $extInputs^ `:` type($extInputs) `)`)? 
-      `clock` $clock `reset` $reset `go` $go attr-dict `:`functional-type($inputs, $dataOutputs) $body
-  }];
-
-  let extraClassDeclaration = [{
-    /// Returns the body of a Pipeline component.
-    Block *getBodyBlock() {
-      Region* region = &getOperation()->getRegion(0);
-      assert(region->hasOneBlock() && "The body should have one Block.");
-      return &region->front();
-    }
-  }];
+  let extraModuleClassDeclaration = "";
 }
 
-def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
-    IsolatedFromAbove,
-    Pure,
-    RegionKindInterface,
-    PipelineLike,
-    AttrSizedOperandSegments,
+def ScheduledPipelineOp : PipelineBase<"scheduled", [
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
   ]> {
   let summary = "Scheduled pipeline operation";
@@ -90,32 +140,25 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
     the clock-enable input of the stage-separating registers.
 
     The `go` input is used to start the pipeline. This value is fed through
-    the stages as the stage valid signal.
+    the stages as the current stage enable/next stage valid signal.
     Note: the op is currently only designed for pipelines with II=1. For
     pipelines with II>1, a user must themselves maintain state about when
     the pipeline is ready to accept new inputs. We plan to add support for
     head-of-pipeline backpressure in the future.
   }];
 
-  let arguments = (ins
-    Variadic<AnyType>:$inputs, Variadic<AnyType>:$extInputs,  I1:$clock, I1:$reset, I1:$go, Optional<I1>:$stall
-  );
-  let results = (outs Variadic<AnyType>:$dataOutputs, I1:$done);
   let regions = (region AnyRegion:$body);
   let hasVerifier = 1;
   let skipDefaultBuilders = 1;
 
   let builders = [
     OpBuilder<(ins "TypeRange":$dataOutputs, "ValueRange":$inputs, "ValueRange":$extInputs,
-      "Value":$clock, "Value":$reset, "Value":$go, CArg<"Value", "{}">:$stall)>
+      "ArrayAttr":$inputNames, "ArrayAttr":$outputNames, "ArrayAttr":$extInputNames,
+      "Value":$clock, "Value":$reset, "Value":$go, CArg<"Value", "{}">:$stall, CArg<"StringAttr", "{}">:$name)>
   ];
 
-  let assemblyFormat = [{
-    `(` $inputs `)` (`stall` $stall^)? (`ext` `(` $extInputs^ `:` type($extInputs) `)`)? 
-      `clock` $clock `reset` $reset `go` $go attr-dict `:`functional-type($inputs, $dataOutputs) $body
-  }];
 
-  let extraClassDeclaration = [{
+  code extraModuleClassDeclaration = [{
     static mlir::RegionKind getRegionKind(unsigned index) {
       return mlir::RegionKind::SSACFG;
     }
@@ -123,13 +166,6 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
     // Returns all of the stages in this pipeline.
     llvm::iplist<mlir::Block>& getStages() {
       return getRegion().getBlocks();
-    }
-
-    // Returns the valid signal of the given pipeline stage. This is always
-    // the last block argument of a stage.
-    Value getStageValidSignal(size_t stageIdx) {
-      Block* stage = getStage(stageIdx);
-      return stage->getArguments().back();
     }
 
     void getAsmBlockArgumentNames(mlir::Region &region,
@@ -152,11 +188,6 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
       return &*std::next(blocks.begin(), n);
     }
 
-    // Returns the entry stage of this pipeline.
-    Block* getEntryStage() {
-      return getStage(0);
-    }
-
     // Returns the last stage in the pipeline.
     Block* getLastStage();
 
@@ -169,27 +200,29 @@ def ScheduledPipelineOp : Op<Pipeline_Dialect, "scheduled", [
     // must be defined within a stage".
     bool isMaterialized();
 
-    // Returns the arguments for a stage. The stage valid signal is _not_ part
+    // Returns the data arguments for a stage. The stage enable signal is _not_ part
     // of the returned values.
-    ValueRange getStageArguments(Block* stage) {
-      if(stage != getEntryStage())
-        return stage->getArguments().drop_back();
+    llvm::ArrayRef<BlockArgument> getStageDataArgs(Block* stage) {
+      if(stage == getEntryStage())
+        return getInnerInputs();
 
-      // The entry stage block mirrors the input argument order of the pipeline.
-      // Grab the arguments corresponding to the inputs.
-      return stage->getArguments().slice(getInputs().getBeginOperandIndex(), getInputs().size());
+      // Data arguments for all non-entry stages are all block arguments
+      // except for the last block arguments (which is the stage enable signal).
+      return stage->getArguments().drop_back();
     }
 
-    // Returns the valid signal for the given stage. The valid signal is always
+    // Returns the enable signal of the given pipeline stage. This is always
+    // the last block argument of a stage for anything but the entry stage.
+    Value getStageEnableSignal(size_t stageIdx) {
+      return getStageEnableSignal(getStage(stageIdx));
+    }
+
+    // Returns the enable signal for the given stage. The enable signal is always
     // the last signal in the stage argument list.
-    Value getStageValidSignal(Block* stage) {
-      return stage->getArguments().back();
-    }
-
-    size_t getNumStageArguments(Block* stage) {
+    Value getStageEnableSignal(Block* stage) {
       if(stage != getEntryStage())
-        return stage->getNumArguments() - /*stage valid*/1;
-      return getInputs().size();
+        return stage->getArguments().back();
+      return getInnerGo();
     }
   }];
 }

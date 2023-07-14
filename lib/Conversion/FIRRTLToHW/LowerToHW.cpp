@@ -4194,7 +4194,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
 
   auto emit = [&]() {
     // Handle the purely procedural flavor of the operation.
-    if (!isConcurrent) {
+    if (!isConcurrent && !circuitState.emitChiselAssertsAsSVA) {
       auto deferImmediate = circt::sv::DeferAssertAttr::get(
           builder.getContext(), circt::sv::DeferAssert::Immediate);
       addToAlwaysBlock(clock, [&]() {

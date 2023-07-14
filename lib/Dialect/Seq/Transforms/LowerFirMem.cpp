@@ -279,6 +279,21 @@ LowerFirMemPass::createMemoryModules(MutableArrayRef<UniqueConfig> configs) {
       builder.getStrArrayAttr(schemaFields));
   auto schemaSymRef = FlatSymbolRefAttr::get(schemaOp);
 
+  // Determine the insertion point for each of the memory modules. We basically
+  // put them ahead of the first module that instantiates that memory. Do this
+  // here in one go such that the `isBeforeInBlock` calls don't have to
+  // re-enumerate the entire IR every time we insert one of the memory modules.
+  SmallVector<Operation *> insertionPoints;
+  insertionPoints.reserve(configs.size());
+  for (auto &config : configs) {
+    Operation *op = nullptr;
+    for (auto memOp : config.second)
+      if (auto parent = memOp->getParentOfType<HWModuleOp>())
+        if (!op || parent->isBeforeInBlock(op))
+          op = parent;
+    insertionPoints.push_back(op);
+  }
+
   // Create the individual memory modules.
   SymbolCache symbolCache;
   symbolCache.addDefinitions(getOperation());
@@ -287,9 +302,11 @@ LowerFirMemPass::createMemoryModules(MutableArrayRef<UniqueConfig> configs) {
 
   SmallVector<HWModuleGeneratedOp> genOps;
   genOps.reserve(configs.size());
-  for (auto &config : configs)
+  for (auto [config, insertBefore] : llvm::zip(configs, insertionPoints)) {
+    builder.setInsertionPoint(insertBefore);
     genOps.push_back(
         createMemoryModule(config, builder, schemaSymRef, globalNamespace));
+  }
 
   return genOps;
 }

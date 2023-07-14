@@ -495,3 +495,27 @@ module {
     return
   }
 }
+
+// -----
+
+// Convert memrefs w/o shape (e.g., memref<i32>) to 1 dimensional Calyx memories 
+// of size 1
+
+// CHECK-DAG: %mem_0.addr0, %mem_0.write_data, %mem_0.write_en, %mem_0.clk, %mem_0.read_data, %mem_0.done = calyx.memory @mem_0 <[1] x 32> [1] {external = true} : i1, i32, i1, i1, i32, i1
+//CHECK-NEXT: calyx.wires {
+//CHECK-NEXT:   calyx.group @bb0_0 {
+//CHECK-NEXT:     calyx.assign %mem_0.addr0 = %false : i1
+//CHECK-NEXT:     calyx.assign %mem_0.write_data = %c1_i32 : i32
+//CHECK-NEXT:     calyx.assign %mem_0.write_en = %true : i1
+//CHECK-NEXT:     calyx.group_done %mem_0.done : i1
+//CHECK-NEXT:   }
+//CHECK-NEXT: }
+module {
+  func.func @main() {
+    %c1_i32 = arith.constant 1 : i32
+    %alloca = memref.alloca() : memref<i32>
+    memref.store %c1_i32, %alloca[] : memref<i32>
+    return
+  }
+}
+

@@ -73,7 +73,7 @@ def FirMemType : SeqType<"FirMem"> {
   }];
   let mnemonic = "firmem";
   let parameters = (ins
-    "uint32_t":$depth,
+    "uint64_t":$depth,
     "uint32_t":$width,
     OptionalParameter<"std::optional<uint32_t>">:$maskWidth
   );
