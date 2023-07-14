@@ -845,20 +845,15 @@ void Emitter::emitInvoke(InvokeOp invoke) {
   }
   /// Emit inputs
   os << LParen();
-  for (auto iter = inputsMap.begin(); iter != inputsMap.end();) {
-    os << iter->getKey() << " = " << iter->getValue();
-    if (++iter != inputsMap.end())
-      os << comma() << " ";
-  }
+  llvm::interleaveComma(inputsMap, os, [&](const auto &iter) {
+    os << iter.getKey() << " = " << iter.getValue();
+  });
   os << RParen();
-
   /// Emit outputs
   os << LParen();
-  for (auto iter = outputsMap.begin(); iter != outputsMap.end();) {
-    os << iter->getKey() << " = " << iter->getValue();
-    if (++iter != outputsMap.end())
-      os << comma() << " ";
-  }
+  llvm::interleaveComma(outputsMap, os, [&](const auto &iter) {
+    os << iter.getKey() << " = " << iter.getValue();
+  });
   os << RParen() << semicolonEndL();
 }
 

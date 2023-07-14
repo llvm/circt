@@ -1426,8 +1426,7 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
 /// Determines whether the given direction is valid with the given inputs. The
 /// `isDestination` boolean is used to distinguish whether the value is a source
 /// or a destination.
-template <typename T>
-static LogicalResult verifyPortDirection(T op, Value value,
+static LogicalResult verifyPortDirection(Operation *op, Value value,
                                          bool isDestination) {
   Operation *definingOp = value.getDefiningOp();
   bool isComponentPort = value.isa<BlockArgument>(),
@@ -1447,7 +1446,7 @@ static LogicalResult verifyPortDirection(T op, Value value,
 
   return port.direction == validDirection
              ? success()
-             : op.emitOpError()
+             : op->emitOpError()
                    << "has a " << (isComponentPort ? "component" : "cell")
                    << " port as the "
                    << (isDestination ? "destination" : "source")
@@ -2611,7 +2610,6 @@ ParseResult InvokeOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void InvokeOp::print(OpAsmPrinter &p) {
-  // print the parameter list.
   p << " @" << getCallee() << "(";
   auto ports = getPorts();
   auto inputs = getInputs();
@@ -2619,7 +2617,6 @@ void InvokeOp::print(OpAsmPrinter &p) {
     p << std::get<0>(arg) << " = " << std::get<1>(arg);
   });
   p << ") -> (";
-  // Print argument type.
   llvm::interleaveComma(ports, p, [&](auto port) { p << port.getType(); });
   p << ")";
 }
@@ -2649,35 +2646,31 @@ Value InvokeOp::getInstGoValue() {
   ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
   Operation *operation = componentOp.lookupSymbol(getCallee());
   Value ret = nullptr;
-  // Get the value of the writer_en port.
-  if (isa<RegisterOp>(operation)) {
-    ret = operation->getResult(1);
-  } else if (isa<MemoryOp, DivSPipeLibOp, DivUPipeLibOp, MultPipeLibOp,
-                 RemSPipeLibOp, RemUPipeLibOp>(operation)) {
-    // Get the value of the writer_en port or go port.
-    ret = operation->getResult(2);
-  } else if (isa<InstanceOp>(operation)) {
-    // Get the go port of the instance through the "go" attribute
-    InstanceOp instanceOp = cast<InstanceOp>(operation);
-    auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
-    for (auto [portInfo, res] : llvm::zip(portInfo, operation->getResults())) {
-      if (portInfo.hasAttribute("go"))
-        ret = res;
-    }
-  } else if (isa<PrimitiveOp>(operation)) {
-    // Get the go part of the primitive through the "calyx.go" attribute
-    PrimitiveOp primOp = cast<PrimitiveOp>(operation);
-    auto moduleExternOp = primOp.getReferencedPrimitive();
-    auto argAttrs = moduleExternOp.getArgAttrsAttr();
-    for (auto [attr, res] : llvm::zip(argAttrs, primOp.getResults())) {
-      if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr)) {
-        if (!dictAttr.empty()) {
-          if (dictAttr.begin()->getName().getValue() == "calyx.go")
+  llvm::TypeSwitch<Operation *>(operation)
+      .Case<RegisterOp>([&](auto op) { ret = operation->getResult(1); })
+      .Case<MemoryOp, DivSPipeLibOp, DivUPipeLibOp, MultPipeLibOp,
+            RemSPipeLibOp, RemUPipeLibOp>(
+          [&](auto op) { ret = operation->getResult(2); })
+      .Case<InstanceOp>([&](auto op) {
+        auto portInfo = op.getReferencedComponent().getPortInfo();
+        for (auto [portInfo, res] :
+             llvm::zip(portInfo, operation->getResults())) {
+          if (portInfo.hasAttribute("go"))
             ret = res;
         }
-      }
-    }
-  }
+      })
+      .Case<PrimitiveOp>([&](auto op) {
+        auto moduleExternOp = op.getReferencedPrimitive();
+        auto argAttrs = moduleExternOp.getArgAttrsAttr();
+        for (auto [attr, res] : llvm::zip(argAttrs, op.getResults())) {
+          if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr)) {
+            if (!dictAttr.empty()) {
+              if (dictAttr.begin()->getName().getValue() == "calyx.go")
+                ret = res;
+            }
+          }
+        }
+      });
   return ret;
 }
 
@@ -2686,34 +2679,34 @@ Value InvokeOp::getInstDoneValue() {
   ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
   Operation *operation = componentOp.lookupSymbol(getCallee());
   Value ret = nullptr;
-  // The done port of these instances is the last result, so the ssa value
-  // of the last result is taken.
-  if (isa<RegisterOp, MemoryOp, DivSPipeLibOp, DivUPipeLibOp, MultPipeLibOp,
-          RemSPipeLibOp, RemUPipeLibOp>(operation)) {
-    size_t doneIdx = operation->getResults().size() - 1;
-    ret = operation->getResult(doneIdx);
-  } else if (isa<InstanceOp>(operation)) {
-    //  Get the go port of the instance through the "done" attribute
-    InstanceOp instanceOp = cast<InstanceOp>(operation);
-    auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
-    for (auto [portInfo, res] : llvm::zip(portInfo, operation->getResults())) {
-      if (portInfo.hasAttribute("done"))
-        ret = res;
-    }
-  } else if (isa<calyx::PrimitiveOp>(operation)) {
-    // Get the go part of the primitive through the "calyx.done" attribute
-    PrimitiveOp primOp = cast<PrimitiveOp>(operation);
-    auto moduleExternOp = primOp.getReferencedPrimitive();
-    auto resAttrs = moduleExternOp.getResAttrsAttr();
-    for (auto [attr, res] : llvm::zip(resAttrs, primOp.getResults())) {
-      if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr)) {
-        if (!dictAttr.empty()) {
-          if (dictAttr.begin()->getName().getValue() == "calyx.done")
+  llvm::TypeSwitch<Operation *>(operation)
+      .Case<RegisterOp, MemoryOp, DivSPipeLibOp, DivUPipeLibOp, MultPipeLibOp,
+            RemSPipeLibOp, RemUPipeLibOp>([&](auto op) {
+        size_t doneIdx = operation->getResults().size() - 1;
+        ret = operation->getResult(doneIdx);
+      })
+      .Case<InstanceOp>([&](auto op) {
+        InstanceOp instanceOp = cast<InstanceOp>(operation);
+        auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
+        for (auto [portInfo, res] :
+             llvm::zip(portInfo, operation->getResults())) {
+          if (portInfo.hasAttribute("done"))
             ret = res;
         }
-      }
-    }
-  }
+      })
+      .Case<PrimitiveOp>([&](auto op) {
+        PrimitiveOp primOp = cast<PrimitiveOp>(operation);
+        auto moduleExternOp = primOp.getReferencedPrimitive();
+        auto resAttrs = moduleExternOp.getResAttrsAttr();
+        for (auto [attr, res] : llvm::zip(resAttrs, primOp.getResults())) {
+          if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr)) {
+            if (!dictAttr.empty()) {
+              if (dictAttr.begin()->getName().getValue() == "calyx.done")
+                ret = res;
+            }
+          }
+        }
+      });
   return ret;
 }
 
@@ -2724,12 +2717,13 @@ getHwModuleExtGoOrDonePortNumber(hw::HWModuleExternOp &moduleExternOp,
                                  bool isGo) {
   size_t ret = 0;
   std::string str = isGo ? "calyx.go" : "calyx.done";
-  for (Attribute attr : moduleExternOp.getArgAttrsAttr())
-    if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr))
+  for (Attribute attr : moduleExternOp.getArgAttrsAttr()) {
+    if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr)) {
       ret = llvm::count_if(dictAttr, [&](NamedAttribute iter) {
         return iter.getName().getValue() == str;
       });
-
+    }
+  }
   return ret;
 }
 
