@@ -339,8 +339,6 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
         rewriter, group, getState<ComponentLoweringState>().getComponentOp(),
         reg, memoryInterface.readData());
     loadOp.getResult().replaceAllUsesWith(reg.getOut());
-    // getState<ComponentLoweringState>().addBlockScheduleable(loadOp->getBlock(),
-    //                                                         group);
     res = reg.getOut();
   }
 
