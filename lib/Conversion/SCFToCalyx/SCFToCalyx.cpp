@@ -321,29 +321,41 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
   rewriter.setInsertionPointToEnd(group.getBodyBlock());
 
+  bool needReg = true;
   Value res;
+  Value regWriteEn =
+      createConstant(loadOp.getLoc(), rewriter, getComponent(), 1, 1);
   if (memoryInterface.readEnOpt().has_value()) {
     auto oneI1 =
         calyx::createConstant(loadOp.getLoc(), rewriter, getComponent(), 1, 1);
     rewriter.create<calyx::AssignOp>(loadOp.getLoc(), memoryInterface.readEn(),
                                      oneI1);
-    rewriter.create<calyx::GroupDoneOp>(loadOp.getLoc(),
-                                        memoryInterface.readDone());
-    res = memoryInterface.readData();
-  } else {
+    regWriteEn = memoryInterface.readDone();
+    if (calyx::noStoresToMemory(memref) &&
+        calyx::singleLoadFromMemory(memref)) {
+      needReg = false;
+      rewriter.create<calyx::GroupDoneOp>(loadOp.getLoc(),
+                                          memoryInterface.readDone());
+      res = loadOp.getResult();
+    }
+  }
+
+  if (needReg) {
     auto reg = createRegister(
         loadOp.getLoc(), rewriter, getComponent(),
         loadOp.getMemRefType().getElementTypeBitWidth(),
         getState<ComponentLoweringState>().getUniqueName("load"));
-    calyx::buildAssignmentsForRegisterWrite(
-        rewriter, group, getState<ComponentLoweringState>().getComponentOp(),
-        reg, memoryInterface.readData());
+    rewriter.setInsertionPointToEnd(group.getBodyBlock());
+    rewriter.create<calyx::AssignOp>(loadOp.getLoc(), reg.getIn(),
+                                     memoryInterface.readData());
+    rewriter.create<calyx::AssignOp>(loadOp.getLoc(), reg.getWriteEn(),
+                                     regWriteEn);
+    rewriter.create<calyx::GroupDoneOp>(loadOp.getLoc(), reg.getDone());
     loadOp.getResult().replaceAllUsesWith(reg.getOut());
     res = reg.getOut();
   }
 
-  getState<ComponentLoweringState>().registerEvaluatingGroup(loadOp.getResult(),
-                                                             group);
+  getState<ComponentLoweringState>().registerEvaluatingGroup(res, group);
   getState<ComponentLoweringState>().addBlockScheduleable(loadOp->getBlock(),
                                                           group);
   return success();
