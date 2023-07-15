@@ -692,6 +692,7 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
           if (!input) {
             user->emitError("unable to reconstruct source of type ")
                 << val.getType();
+            encounteredError = true;
             return;
           }
           user->replaceUsesOfWith(val, input);
@@ -794,8 +795,14 @@ void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
     builder->create<WhenOp>(cond, false, [&]() {
       // Recreate the write Path
       Value leaf = builder->create<SubindexOp>(sao.getInput(), index);
-      for (int i = writePath.size() - 2; i >= 0; --i)
-        leaf = cloneAccess(builder, writePath[i], leaf);
+      for (int i = writePath.size() - 2; i >= 0; --i) {
+        if (auto access = cloneAccess(builder, writePath[i], leaf))
+          leaf = access;
+        else {
+          encounteredError = true;
+          return;
+        }
+      }
 
       emitConnect(*builder, leaf, op->getOperand(1));
     });
@@ -898,6 +905,7 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
     auto result = op.getResult(index);
     if (op.getPortKind(index) == MemOp::PortKind::Debug) {
       op.emitOpError("cannot lower memory with debug port");
+      encounteredError = true;
       return false;
     }
     auto wire = builder->create<WireOp>(
