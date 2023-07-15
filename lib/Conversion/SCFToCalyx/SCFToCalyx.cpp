@@ -333,14 +333,33 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     regWriteEn = memoryInterface.readDone();
     if (calyx::noStoresToMemory(memref) &&
         calyx::singleLoadFromMemory(memref)) {
+      // Single load from memory; we do not need to write the output to a
+      // register. The readData value will be held until readEn is asserted
+      // again
       needReg = false;
       rewriter.create<calyx::GroupDoneOp>(loadOp.getLoc(),
                                           memoryInterface.readDone());
+      // We refrain from replacing the loadOp result with
+      // memoryInterface.readData, since multiple loadOp's need to be converted
+      // to a single memory's ReadData. If this replacement is done now, we lose
+      // the link between which SSA memref::LoadOp values map to which groups
+      // for loading a value from the Calyx memory. At this point of lowering,
+      // we keep the memref::LoadOp SSA value, and do value replacement _after_
+      // control has been generated (see LateSSAReplacement). This is *vital*
+      // for things such as calyx::InlineCombGroups to be able to properly track
+      // which memory assignment groups belong to which accesses.
       res = loadOp.getResult();
     }
   }
 
   if (needReg) {
+    // Multiple loads from the same memory; In this case, we _may_ have a
+    // structural hazard in the design we generate. To get around this, we
+    // conservatively place a register in front of each load operation, and
+    // replace all uses of the loaded value with the register output. Reading
+    // for sequential memories will cause a read to take at least 2 cycles,
+    // but it will usually be better because combinational reads on memories
+    // can significantly decrease the maximum achievable frequency.
     auto reg = createRegister(
         loadOp.getLoc(), rewriter, getComponent(),
         loadOp.getMemRefType().getElementTypeBitWidth(),
