@@ -260,7 +260,7 @@ std::optional<Value> MemoryInterface::writeDoneOpt() {
   }
 
   if (auto *memOp = std::get_if<calyx::SeqMemoryOp>(&impl); memOp) {
-    return memOp->readDone();
+    return memOp->writeDone();
   }
   return std::get<MemoryPortsImpl>(impl).writeDone;
 }
@@ -630,10 +630,10 @@ void InlineCombGroups::recurseInlineCombGroups(
     //   been rewritten to their register outputs, see comment in
     //   LateSSAReplacement)
     if (src.isa<BlockArgument>() ||
-        isa<calyx::RegisterOp, calyx::MemoryOp, hw::ConstantOp,
-            mlir::arith::ConstantOp, calyx::MultPipeLibOp, calyx::DivUPipeLibOp,
-            calyx::DivSPipeLibOp, calyx::RemSPipeLibOp, calyx::RemUPipeLibOp,
-            mlir::scf::WhileOp>(src.getDefiningOp()))
+        isa<calyx::RegisterOp, calyx::MemoryOp, calyx::SeqMemoryOp,
+            hw::ConstantOp, mlir::arith::ConstantOp, calyx::MultPipeLibOp,
+            calyx::DivUPipeLibOp, calyx::DivSPipeLibOp, calyx::RemSPipeLibOp,
+            calyx::RemUPipeLibOp, mlir::scf::WhileOp>(src.getDefiningOp()))
       continue;
 
     auto srcCombGroup = dyn_cast<calyx::CombGroupOp>(

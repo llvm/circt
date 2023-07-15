@@ -408,20 +408,41 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   Value memref = loadOp.getMemref();
   auto memoryInterface =
       getState<ComponentLoweringState>().getMemoryInterface(memref);
-  auto group = createGroupForOp<calyx::GroupOp>(rewriter, loadOp);
-  assignAddressPorts(rewriter, loadOp.getLoc(), group, memoryInterface,
-                     loadOp.getIndices());
+  if (calyx::noStoresToMemory(memref) && calyx::singleLoadFromMemory(memref)) {
+    // Single load from memory; we do not need to write the
+    // output to a register. This is essentially a "combinational read" under
+    // current Calyx semantics with memory, and thus can be done in a
+    // combinational group. Note that if any stores are done to this memory,
+    // we require that the load and store be in separate non-combinational
+    // groups to avoid reading and writing to the same memory in the same group.
+    auto combGroup = createGroupForOp<calyx::CombGroupOp>(rewriter, loadOp);
+    assignAddressPorts(rewriter, loadOp.getLoc(), combGroup, memoryInterface,
+                       loadOp.getIndices());
 
-  rewriter.setInsertionPointToEnd(group.getBodyBlock());
-
-  Value res;
-  if (memoryInterface.readEnOpt().has_value()) {
-    auto oneI1 = 
-      calyx::createConstant(loadOp.getLoc(), rewriter, getComponent(), 1, 1);
-    rewriter.create<calyx::AssignOp>(loadOp.getLoc(), memoryInterface.readEn(), oneI1);
-    rewriter.create<calyx::GroupDoneOp>(loadOp.getLoc(), memoryInterface.readDone());
-    res = memoryInterface.readData();
+    // We refrain from replacing the loadOp result with
+    // memoryInterface.readData, since multiple loadOp's need to be converted
+    // to a single memory's ReadData. If this replacement is done now, we lose
+    // the link between which SSA memref::LoadOp values map to which groups for
+    // loading a value from the Calyx memory. At this point of lowering, we
+    // keep the memref::LoadOp SSA value, and do value replacement _after_
+    // control has been generated (see LateSSAReplacement). This is *vital* for
+    // things such as InlineCombGroups to be able to properly track which
+    // memory assignment groups belong to which accesses.
+    getState<ComponentLoweringState>().registerEvaluatingGroup(
+        loadOp.getResult(), combGroup);
   } else {
+    auto group = createGroupForOp<calyx::GroupOp>(rewriter, loadOp);
+    assignAddressPorts(rewriter, loadOp.getLoc(), group, memoryInterface,
+                       loadOp.getIndices());
+
+    // Multiple loads from the same memory; In this case, we _may_ have a
+    // structural hazard in the design we generate. To get around this, we
+    // conservatively place a register in front of each load operation, and
+    // replace all uses of the loaded value with the register output. Proper
+    // handling of this requires the combinational group inliner/scheduler to
+    // be aware of when a combinational expression references multiple loaded
+    // values from the same memory, and then schedule assignments to temporary
+    // registers to get around the structural hazard.
     auto reg = createRegister(
         loadOp.getLoc(), rewriter, getComponent(),
         loadOp.getMemRefType().getElementTypeBitWidth(),
@@ -432,12 +453,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     loadOp.getResult().replaceAllUsesWith(reg.getOut());
     getState<ComponentLoweringState>().addBlockScheduleable(loadOp->getBlock(),
                                                             group);
-    res = reg.getOut();
   }
-
-  loadOp.getResult().replaceAllUsesWith(memoryInterface.readData());
-  getState<ComponentLoweringState>().addBlockScheduleable(loadOp->getBlock(),
-                                                          group);
   return success();
 }
 
