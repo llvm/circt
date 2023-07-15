@@ -369,7 +369,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   rewriter.create<calyx::AssignOp>(
       storeOp.getLoc(), memoryInterface.writeEn(),
       createConstant(storeOp.getLoc(), rewriter, getComponent(), 1, 1));
-  rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(), memoryInterface.writeDone());
+  rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(),
+                                      memoryInterface.writeDone());
 
   return success();
 }
