@@ -126,13 +126,13 @@ private:
   /// Returns the library name for a given Operation Type.
   FailureOr<StringRef> getLibraryFor(Operation *op) {
     return TypeSwitch<Operation *, FailureOr<StringRef>>(op)
-        .Case<MemoryOp, SeqMemoryOp, RegisterOp, NotLibOp, AndLibOp, OrLibOp,
-              XorLibOp, AddLibOp, SubLibOp, GtLibOp, LtLibOp, EqLibOp, NeqLibOp,
-              GeLibOp, LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp,
-              WireLibOp>([&](auto op) -> FailureOr<StringRef> {
-          static constexpr std::string_view sCore = "core";
-          return {sCore};
-        })
+        .Case<MemoryOp, RegisterOp, NotLibOp, AndLibOp, OrLibOp, XorLibOp,
+              AddLibOp, SubLibOp, GtLibOp, LtLibOp, EqLibOp, NeqLibOp, GeLibOp,
+              LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp, WireLibOp>(
+            [&](auto op) -> FailureOr<StringRef> {
+              static constexpr std::string_view sCore = "core";
+              return {sCore};
+            })
         .Case<SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp,
               SrshLibOp, MultPipeLibOp, RemUPipeLibOp, RemSPipeLibOp,
               DivUPipeLibOp, DivSPipeLibOp>(
@@ -141,6 +141,10 @@ private:
                   "binary_operators";
               return {sBinaryOperators};
             })
+        .Case<SeqMemoryOp>([&](auto op) -> FailureOr<StringRef> {
+          static constexpr std::string_view sMemories = "memories";
+          return {sMemories};
+        })
         /*.Case<>([&](auto op) { library = "math"; })*/
         .Default([&](auto op) {
           auto diag = op->emitOpError() << "not supported for emission";
