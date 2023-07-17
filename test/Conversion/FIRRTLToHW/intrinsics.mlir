@@ -3,6 +3,7 @@
 firrtl.circuit "Intrinsics" {
   // CHECK-LABEL: hw.module @Intrinsics
   firrtl.module @Intrinsics(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>) {
+    // CHECK-NEXT: %c0_i32 = hw.constant 0 : i32 
     // CHECK-NEXT: %x_i1 = sv.constantX : i1
     // CHECK-NEXT: [[T0:%.+]] = comb.icmp bin ceq %a, %x_i1
     // CHECK-NEXT: [[T1:%.+]] = comb.icmp bin ceq %clk, %x_i1
@@ -23,7 +24,8 @@ firrtl.circuit "Intrinsics" {
     // CHECK-NEXT:   [[TMP:%.*]] = sv.system "test$plusargs"([[FOO_STR]])
     // CHECK-NEXT:   sv.passign [[FOO_DECL]], [[TMP]]
     // CHECK-NEXT:   [[TMP:%.*]] = sv.system "value$plusargs"([[BAR_STR]], [[BAR_VALUE_DECL]])
-    // CHECK-NEXT:   sv.passign [[BAR_FOUND_DECL]], [[TMP]]
+    // CHECK-NEXT:   [[TMP2:%.*]] = comb.icmp bin ne [[TMP]], %c0_i32
+    // CHECK-NEXT:   sv.passign [[BAR_FOUND_DECL]], [[TMP2]]
     // CHECK-NEXT: }
     // CHECK-NEXT: [[BAR_FOUND:%.*]] = sv.read_inout [[BAR_FOUND_DECL]]
     // CHECK-NEXT: [[BAR_VALUE:%.*]] = sv.read_inout [[BAR_VALUE_DECL]]
