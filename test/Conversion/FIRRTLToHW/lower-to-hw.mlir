@@ -1434,6 +1434,8 @@ firrtl.circuit "TypeAlias" {
 //CHECK:     hw.typedecl @bar_TypeAlias : i1
 //CHECK:     hw.typedecl @baz : i1
 //CHECK:     hw.typedecl @bar_0_TypeAlias : !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>
+//CHECK:     hw.typedecl @bar_SimpleStruct : !hw.struct<valid: i1, ready: i1, data: i64>
+//CHECK:     hw.typedecl @bar_0_SimpleStruct : i64
 //CHECK:     hw.typedecl @baf : i1
 //CHECK:   }
 //CHECK:   hw.module @TypeAlias
@@ -1449,6 +1451,15 @@ firrtl.circuit "TypeAlias" {
 //CHECK:     %[[v3:.+]] = hw.bitcast %wire2 : (!hw.typealias<@TypeAlias__TYPESCOPE_::@baf, i1>) -> !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_TypeAlias, i1>
 //CHECK:     hw.output %[[v2]], %[[v3]] : !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_0_TypeAlias, !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>>, !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_TypeAlias, i1>
 
+// CHECK:   hw.module private @SimpleStruct
+// CHECK-SAME: %source: !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_SimpleStruct, !hw.struct<valid: i1, ready: i1, data: i64>>) -> 
+// CHECK-SAME: (fldout: !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_0_SimpleStruct, i64>)
+// CHECK:     %wire = hw.wire %0  : !hw.struct<valid: i1, ready: i1, data: i64>
+// CHECK:     %0 = hw.bitcast %source : (!hw.typealias<@TypeAlias__TYPESCOPE_::@bar_SimpleStruct, !hw.struct<valid: i1, ready: i1, data: i64>>) -> !hw.struct<valid: i1, ready: i1, data: i64>
+// CHECK:     %data = hw.struct_extract %wire["data"] : !hw.struct<valid: i1, ready: i1, data: i64>
+// CHECK:     %1 = hw.bitcast %data : (i64) -> !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_0_SimpleStruct, i64>
+// CHECK:     hw.output %1 : !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_0_SimpleStruct, i64>
+
   firrtl.module @TypeAlias(in %in: !firrtl.alias<bar, uint<1>>,
                            in %const: !firrtl.const.alias<bar, const.uint<1>>,
                            out %out: !firrtl.alias<bar, alias<baz, uint<1>>>,
@@ -1459,5 +1470,12 @@ firrtl.circuit "TypeAlias" {
     %wire2 = firrtl.wire : !firrtl.const.alias<baf, const.uint<1>>
     firrtl.strictconnect %wire2, %const :!firrtl.const.alias<baf, const.uint<1>> , !firrtl.const.alias<bar, const.uint<1>>
     firrtl.strictconnect %out2, %wire2 :!firrtl.const.alias<bar, const.uint<1>> , !firrtl.const.alias<baf, const.uint<1>>
+  }
+  firrtl.module private @SimpleStruct(in %source: !firrtl.alias<bar, bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>>,
+                              out %fldout: !firrtl.alias<bar, uint<64>>) {
+    %wire = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+    firrtl.strictconnect %wire, %source : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>, !firrtl.alias<bar, bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>>
+    %2 = firrtl.subfield %wire[data] : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+    firrtl.connect %fldout, %2 : !firrtl.alias<bar, uint<64>>, !firrtl.uint<64>
   }
 }
