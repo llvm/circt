@@ -640,7 +640,16 @@ void EmitOMIRPass::runOnOperation() {
       }
       if (sramIDs.erase(tracker.id))
         makeTrackerAbsolute(tracker);
-      trackers.insert({tracker.id, tracker});
+      if (auto [it, inserted] = trackers.try_emplace(tracker.id, tracker);
+          !inserted) {
+        auto diag = op->emitError(omirTrackerAnnoClass)
+                    << " annotation with same ID already found, must resolve "
+                       "to single target";
+        diag.attachNote(it->second.op->getLoc())
+            << "tracker with same ID already found here";
+        anyFailures = true;
+        return true;
+      }
       return true;
     };
     AnnotationSet::removePortAnnotations(op, setTracker);
