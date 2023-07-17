@@ -189,14 +189,16 @@ static void printHWElementType(Type element, AsmPrinter &p) {
   p.printType(element);
 }
 
-size_t LogicType::checkLiteral(const std::string &lit, circt::hw::LogicKind kind) {
+size_t LogicType::checkLiteral(const std::string &lit,
+                               circt::hw::LogicKind kind) {
 
   // Construct set of valid atomic literals for logic kind
-  std::string atomicVals = LogicType::kindAtomicValues[static_cast<int64_t>(kind)].str();
+  std::string atomicVals =
+      LogicType::kindAtomicValues[static_cast<int64_t>(kind)].str();
   llvm::SmallSet<char, 9> atomicsSet;
   atomicsSet.insert(atomicVals.begin(), atomicVals.end());
 
-  for(size_t i = 0; i < lit.size(); i++) {
+  for (size_t i = 0; i < lit.size(); i++) {
     if (!atomicsSet.contains(lit[i]))
       return i;
   }
@@ -204,7 +206,8 @@ size_t LogicType::checkLiteral(const std::string &lit, circt::hw::LogicKind kind
   return lit.size();
 }
 
-bool circt::hw::isNBitWideLogicType(mlir::Type type, std::optional<unsigned> width) {
+bool circt::hw::isNBitWideLogicType(mlir::Type type,
+                                    std::optional<unsigned> width) {
   auto canonicalType = getCanonicalType(type);
   if (auto baseInt = llvm::dyn_cast<IntegerType>(canonicalType)) {
     return (!width) || (baseInt.getIntOrFloatBitWidth() == *width);
@@ -220,7 +223,7 @@ bool circt::hw::isNBitWideLogicType(mlir::Type type, std::optional<unsigned> wid
 
 bool circt::hw::isTwoStateLogicType(Type type) {
   auto canonicalType = getCanonicalType(type);
-  if (llvm::isa<IntegerType>(canonicalType)) 
+  if (llvm::isa<IntegerType>(canonicalType))
     return true;
   if (auto logType = llvm::dyn_cast<LogicType>(canonicalType))
     return logType.getKind() == LogicKind::Two;
@@ -277,19 +280,18 @@ void IntType::print(AsmPrinter &p) const {
 Type LogicType::get(::circt::hw::LogicKind kind, ::mlir::TypedAttr widthAttr) {
   if (auto cstWidth = widthAttr.dyn_cast<IntegerAttr>()) {
     // Construct an integer type for fixed-width logic of kind 2
-      if (kind == LogicKind::Two)
-        return IntegerType::get(widthAttr.getContext(),
-                                cstWidth.getValue().getZExtValue());
+    if (kind == LogicKind::Two)
+      return IntegerType::get(widthAttr.getContext(),
+                              cstWidth.getValue().getZExtValue());
   } else {
-      auto widthWidth = widthAttr.getType().dyn_cast<IntegerType>();
-      assert(widthWidth && widthWidth.getWidth() == 32 &&
-          "!hw.log width must be 32-bits");
-      (void)widthWidth;
+    auto widthWidth = widthAttr.getType().dyn_cast<IntegerType>();
+    assert(widthWidth && widthWidth.getWidth() == 32 &&
+           "!hw.log width must be 32-bits");
+    (void)widthWidth;
   }
 
   return Base::get(widthAttr.getContext(), kind, widthAttr);
 }
-
 
 // Examples:
 // !hw.log<SV:8>          8 digit SystemVerilog four valued logic
@@ -297,25 +299,27 @@ Type LogicType::get(::circt::hw::LogicKind kind, ::mlir::TypedAttr widthAttr) {
 // !hw.log<B:3>           3 bit binary logic, will yield 'i3' type
 //
 // !hw.log<B:#hw.param.decl.ref<"p">>    Binary logic of parameterized width 'p'
-// !hw.log<VH:#hw.param.decl.ref<"p">>   9-valued VHDL logic of parameterized width 'p'
+// !hw.log<VH:#hw.param.decl.ref<"p">>   9-valued VHDL logic of parameterized
+// width 'p'
 
 Type LogicType::parse(::mlir::AsmParser &odsParser) {
   if (odsParser.parseLess())
     return Type();
-  
+
   // Parse logic kind
   auto kindParse = mlir::FieldParser<LogicKind>::parse(odsParser);
   if (failed(kindParse))
     return Type();
 
-  // Optionally parse width from integer literal or attribute, defaults to 1 if missing.
+  // Optionally parse width from integer literal or attribute, defaults to 1 if
+  // missing.
   bool hasFixedWidth = true;
   unsigned fixedWidth = 1;
   TypedAttr widthAttr;
 
   if (odsParser.parseOptionalColon().succeeded()) {
     auto widthIntParse = odsParser.parseOptionalInteger(fixedWidth);
-    if(widthIntParse.has_value() && failed(*widthIntParse))
+    if (widthIntParse.has_value() && failed(*widthIntParse))
       return Type();
     if (!widthIntParse.has_value()) {
       // Try to parse width from attribute

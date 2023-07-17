@@ -76,7 +76,6 @@ int64_t getBitWidth(mlir::Type type);
 /// false on known InOut types, rather than any unknown types.
 bool hasHWInOutType(mlir::Type type);
 
-
 bool isNBitWideLogicType(mlir::Type type, std::optional<unsigned> width);
 
 bool isTwoStateLogicType(Type type);

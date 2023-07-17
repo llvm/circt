@@ -1004,7 +1004,7 @@ FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
             evaluateParametricAttr(loc, parameters, t.getWidthAttr());
         if (failed(evaluatedWidth))
           return {failure()};
-        
+
         return LogicType::get(t.getKind(), *evaluatedWidth);
       })
       .Case<hw::ArrayType>([&](hw::ArrayType arrayType) -> FailureOr<Type> {
@@ -1057,21 +1057,26 @@ bool hw::isParametricType(mlir::Type t) {
 // LogicLiteralAttr
 // -----------------
 
-LogicLiteralAttr LogicLiteralAttr::get(MLIRContext *context, LogicKind kind, StringAttr literal, Type type) {
+LogicLiteralAttr LogicLiteralAttr::get(MLIRContext *context, LogicKind kind,
+                                       StringAttr literal, Type type) {
   if (type == NoneType::get(context)) {
     type = LogicType::get(literal.getContext(), kind, literal.size());
   }
   return Base::get(context, kind, literal, type);
 }
 
-LogicLiteralAttr LogicLiteralAttr::getChecked(::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError, MLIRContext *context, LogicKind kind, StringAttr literal, Type type) {
+LogicLiteralAttr LogicLiteralAttr::getChecked(
+    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+    MLIRContext *context, LogicKind kind, StringAttr literal, Type type) {
   if (type == NoneType::get(context)) {
     type = LogicType::get(literal.getContext(), kind, literal.size());
   }
   return Base::getChecked(emitError, context, kind, literal, type);
 }
 
-LogicalResult LogicLiteralAttr::verify(::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError, circt::hw::LogicKind kind, ::mlir::StringAttr literal, ::mlir::Type type) {
+LogicalResult LogicLiteralAttr::verify(
+    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+    circt::hw::LogicKind kind, ::mlir::StringAttr literal, ::mlir::Type type) {
   auto width = literal.size();
 
   if (width == 0) {
@@ -1081,14 +1086,16 @@ LogicalResult LogicLiteralAttr::verify(::llvm::function_ref<::mlir::InFlightDiag
 
   if (auto logType = hw::type_dyn_cast<LogicType>(type)) {
     if (logType.getKind() != kind) {
-      emitError() << "logic kind of specified type (" << stringifyLogicKind(logType.getKind()) 
-      << ") does not match kind of literal (" << stringifyLogicKind(kind) << ")";
+      emitError() << "logic kind of specified type ("
+                  << stringifyLogicKind(logType.getKind())
+                  << ") does not match kind of literal ("
+                  << stringifyLogicKind(kind) << ")";
       return failure();
     }
     if (auto fixedWidth = logType.getWidth()) {
       if (*fixedWidth != width) {
-        emitError() << "width of specified type (" << *fixedWidth 
-          << ") does not match width of literal (" << width << ")";
+        emitError() << "width of specified type (" << *fixedWidth
+                    << ") does not match width of literal (" << width << ")";
         return failure();
       }
     } else {
@@ -1105,7 +1112,8 @@ LogicalResult LogicLiteralAttr::verify(::llvm::function_ref<::mlir::InFlightDiag
 
   auto matchLen = LogicType::checkLiteral(literal.str(), kind);
   if (matchLen != width) {
-    emitError() << "logic literal contains invalid character at index " << matchLen;
+    emitError() << "logic literal contains invalid character at index "
+                << matchLen;
     return failure();
   }
 
