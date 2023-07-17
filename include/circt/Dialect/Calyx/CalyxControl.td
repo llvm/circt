@@ -383,6 +383,9 @@ def RepeatOp : CalyxContainer<"repeat", [
   let description = [{
     The "calyx.repeat" operation represents the repeated execution of
     the control within its region.
+    You must specify (statically) how many times to repeat the function. 
+    The "dynamic" part is that the body that you repeat can be dynamically timed, 
+    unlike static repeat, where the body must be static. 
 
     ```mlir
       calyx.repeat 10 {

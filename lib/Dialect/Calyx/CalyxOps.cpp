@@ -145,8 +145,8 @@ PortInfo calyx::getPortInfo(BlockArgument arg) {
 
 /// Returns whether the given operation has a control region.
 static bool hasControlRegion(Operation *op) {
-  return isa<ControlOp, SeqOp, IfOp, WhileOp, ParOp, StaticRepeatOp,
-             StaticParOp, StaticSeqOp, StaticIfOp, RepeatOp>(op);
+  return isa<ControlOp, SeqOp, IfOp, RepeatOp, WhileOp, ParOp, StaticRepeatOp,
+             StaticParOp, StaticSeqOp, StaticIfOp>(op);
 }
 
 /// Returns whether the given operation is a static control operator
@@ -236,8 +236,8 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto &region = op->getRegion(0);
   // Operations that are allowed in the body of a ControlLike op.
   auto isValidBodyOp = [](Operation *operation) {
-    return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp, StaticParOp,
-               StaticRepeatOp, StaticSeqOp, StaticIfOp, RepeatOp>(operation);
+    return isa<EnableOp, SeqOp, IfOp, RepeatOp, WhileOp, ParOp, StaticParOp,
+               StaticRepeatOp, StaticSeqOp, StaticIfOp>(operation);
   };
   for (auto &&bodyOp : region.front()) {
     if (isValidBodyOp(&bodyOp))
