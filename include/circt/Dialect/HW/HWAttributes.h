@@ -18,6 +18,8 @@ namespace hw {
 class PEOAttr;
 class EnumType;
 enum class PEO : uint32_t;
+enum class LogicKind: uint32_t;
+class LogicType;
 
 // Eventually move this to an op trait
 struct InnerName {
