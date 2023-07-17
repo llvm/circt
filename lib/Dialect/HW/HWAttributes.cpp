@@ -999,6 +999,14 @@ FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
         // Otherwise parameter references are still involved
         return hw::IntType::get(evaluatedWidth->cast<TypedAttr>());
       })
+      .Case<hw::LogicType>([&](hw::LogicType t) -> FailureOr<Type> {
+        auto evaluatedWidth =
+            evaluateParametricAttr(loc, parameters, t.getWidthAttr());
+        if (failed(evaluatedWidth))
+          return {failure()};
+        
+        return LogicType::get(t.getKind(), *evaluatedWidth);
+      })
       .Case<hw::ArrayType>([&](hw::ArrayType arrayType) -> FailureOr<Type> {
         auto size =
             evaluateParametricAttr(loc, parameters, arrayType.getSizeAttr());
