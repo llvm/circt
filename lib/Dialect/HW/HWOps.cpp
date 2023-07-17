@@ -3203,6 +3203,27 @@ ParseResult HierPathOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 //===----------------------------------------------------------------------===//
+// TriggeredOp
+//===----------------------------------------------------------------------===//
+
+void TriggeredOp::build(OpBuilder &builder, OperationState &odsState,
+                        EventControlAttr event, Value trigger,
+                        ValueRange inputs) {
+  odsState.addOperands(trigger);
+  odsState.addOperands(inputs);
+  odsState.addAttribute(getEventAttrName(odsState.name), event);
+  auto *r = odsState.addRegion();
+  Block *b = new Block();
+  r->push_back(b);
+  Value v;
+
+  llvm::SmallVector<Location> argLocs;
+  llvm::transform(inputs, std::back_inserter(argLocs),
+                  [&](Value v) { return v.getLoc(); });
+  b->addArguments(inputs.getTypes(), argLocs);
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

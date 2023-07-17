@@ -52,6 +52,7 @@ target_link_libraries(circt-opt
   CIRCTInteropDialect
   CIRCTHWToLLHD
   CIRCTHWToSystemC
+  CIRCTHWToSV
   CIRCTHWTransforms
   CIRCTLoopSchedule
   CIRCTLoopScheduleToCalyx

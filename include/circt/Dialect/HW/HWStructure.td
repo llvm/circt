@@ -656,4 +656,53 @@ def HierPathOp : HWOp<"hierpath",
     }];
 }
 
+// Edge behavior for trigger blocks. Currently these map 1:1 to SV event
+// control kinds.
+
+/// AtPosEdge triggers on a rise from 0 to 1/X/Z, or X/Z to 1.
+def AtPosEdge: I32EnumAttrCase<"AtPosEdge", 0, "posedge">;
+/// AtNegEdge triggers on a drop from 1 to 0/X/Z, or X/Z to 0.
+def AtNegEdge: I32EnumAttrCase<"AtNegEdge", 1, "negedge">;
+/// AtEdge(v) is syntactic sugar for "AtPosEdge(v) or AtNegEdge(v)".
+def AtEdge   : I32EnumAttrCase<"AtEdge", 2, "edge">;
+
+def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
+                                   [AtPosEdge, AtNegEdge, AtEdge]> {
+  let cppNamespace = "circt::hw";
+}
+
+def TriggeredOp : HWOp<"triggered", [
+    IsolatedFromAbove, SingleBlock, NoTerminator]> {
+  let summary = "A procedural region with a trigger condition";
+  let description = [{
+    A procedural region that can be triggered by an event. The trigger
+    condition is a 1-bit value that is activated based on some event control
+    attribute.
+    The operation is `IsolatedFromAbove`, and thus requires values passed into
+    the trigger region to be explicitly passed in through the `inputs` list.
+  }];
+
+  let regions = (region SizedRegion<1>:$body);
+  let arguments = (ins EventControlAttr:$event, I1:$trigger, Variadic<AnyType>:$inputs);
+  let results = (outs);
+
+  let assemblyFormat = [{
+    $event $trigger  `(` $inputs `)` `:` type($inputs) $body attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &getBody().front(); }
+
+    // Return the input arguments inside the trigger region.
+    ArrayRef<BlockArgument> getInnerInputs() {
+      return getBodyBlock()->getArguments();
+    }
+  }];
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "EventControlAttr":$event, "Value":$trigger, "ValueRange":$inputs)>
+  ];
+}
+
 #endif // CIRCT_DIALECT_HW_HWSTRUCTURE_TD
