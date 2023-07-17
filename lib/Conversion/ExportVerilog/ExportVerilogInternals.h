@@ -206,22 +206,14 @@ struct OpLocMap {
     else
       addEndLoc(op, s);
   }
-  StringAttr verilogLineAttr;
-  void print() {
-    llvm::errs() << "\n == map ==\n";
-    for (const auto &i : map) {
-      llvm::errs() << "\n Op:" << *i.first;
-      for (auto l : i.second) {
-        llvm::errs() << "\n begin:" << l.begin.line << ":" << l.begin.col
-                     << " end:" << l.end.line << ":" << l.end.col;
-      }
-    }
-  }
+  StringAttr verilogLineAttr, metadataAttr;
+
   void updateIRwithLoc(unsigned lineOffset, StringAttr fileName,
                        MLIRContext *context) {
-    if (!verilogLineAttr)
+    if (!verilogLineAttr) {
       verilogLineAttr = StringAttr::get(context, "verilogLocations");
-    auto metadataAttr = StringAttr::get(context, "Range");
+      metadataAttr = StringAttr::get(context, "Range");
+    }
     for (auto iter : map) {
       Operation *op = iter.getFirst();
       SmallVector<Location> verilogLocs;
@@ -235,7 +227,9 @@ struct OpLocMap {
         verilogLocs.emplace_back(
             mlir::FusedLoc::get(context, beginEndPair, metadataAttr));
       }
-      op->setAttr(verilogLineAttr, mlir::FusedLoc::get(context, verilogLocs));
+      op->setLoc(mlir::FusedLoc::get(
+          context, {op->getLoc(), mlir::FusedLoc::get(context, verilogLocs,
+                                                      verilogLineAttr)}));
     }
   }
   void clear() { map.clear(); }
