@@ -369,6 +369,40 @@ OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// LogicConstantOp
+//===----------------------------------------------------------------------===//
+
+
+LogicalResult LogicConstantOp::verify() {
+  // If the result type has a bitwidth, then the attribute must match its width.
+  if (getValue().getType() != getType())
+    return emitError(
+        "hw.constant attribute type doesn't match return type");
+
+  return success();
+}
+
+
+OpFoldResult LogicConstantOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "constant has no operands");
+  return getValueAttr();
+}
+
+LogicalResult LogicConstantOp::inferReturnTypes(MLIRContext *context,
+                                          std::optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::OpaqueProperties properties,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results) {
+     auto valueAttr = attrs.getAs<LogicLiteralAttr>("value");
+     if (!hw::type_isa<LogicType,IntegerType>(valueAttr.getType()))
+      return failure();
+    results.push_back(valueAttr.getType());
+    return success();
+}
+
+//===----------------------------------------------------------------------===//
 // WireOp
 //===----------------------------------------------------------------------===//
 
