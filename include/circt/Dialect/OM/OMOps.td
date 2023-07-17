@@ -90,6 +90,28 @@ def ClassFieldOp : OMClassFieldLike<"class.field",
 }
 
 //===----------------------------------------------------------------------===//
+// External class definitions
+//===----------------------------------------------------------------------===//
+
+def ClassExternOp : OMClassLike<"class.extern"> {
+  let extraClassDeclaration = [{
+    mlir::Block *getBodyBlock() { return &getBody().front(); }
+  }];
+}
+
+def ClassExternFieldOp : OMClassFieldLike<"class.extern.field",
+    [HasParent<"ClassExternOp">]> {
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttr:$type
+  );
+
+  let assemblyFormat = [{
+    $sym_name `:` $type attr-dict
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Object instantiations and fields
 //===----------------------------------------------------------------------===//
 
