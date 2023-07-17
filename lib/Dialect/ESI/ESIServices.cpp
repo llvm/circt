@@ -425,8 +425,10 @@ static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
     if (!bspPorts)
       continue;
 
-    llvm::TypeSwitch<ServiceReqOpInterface>(req)
+    llvm::TypeSwitch<Operation *>(req)
         .Case([&](RequestInOutChannelOp) {
+          assert(req.getToClientType());
+          assert(req.getToServerType());
           b.create<ServiceDeclInOutOp>(req.getServicePort().getName(),
                                        TypeAttr::get(req.getToServerType()),
                                        TypeAttr::get(req.getToClientType()));
@@ -438,7 +440,8 @@ static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
         .Case([&](RequestToServerConnectionOp) {
           b.create<ToServerOp>(req.getServicePort().getName(),
                                TypeAttr::get(req.getToServerType()));
-        });
+        })
+        .Default([](Operation *) {});
   }
 
   if (bspPorts && !bspPorts->empty()) {
