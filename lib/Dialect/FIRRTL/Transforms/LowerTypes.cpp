@@ -225,6 +225,7 @@ static SmallVector<Operation *> getSAWritePath(Operation *op) {
   return retval;
 }
 
+/// Clone memory for the specified field.  Returns null op on error.
 static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
                                  FlatBundleFieldEntry field) {
   SmallVector<Type, 8> ports;
@@ -245,9 +246,11 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
       op.getRuw(), portNames, (op.getName() + field.suffix).str(),
       op.getNameKind(), op.getAnnotations().getValue(),
       op.getPortAnnotations().getValue(), op.getInnerSymAttr());
-  if (auto oldName = getInnerSymName(op))
-    newMem.setInnerSymAttr(hw::InnerSymAttr::get(StringAttr::get(
-        b->getContext(), oldName.getValue() + (op.getName() + field.suffix))));
+
+  if (op.getInnerSym()) {
+    op.emitError("cannot split memory with symbol present");
+    return {};
+  }
 
   SmallVector<Attribute> newAnnotations;
   for (size_t portIdx = 0, e = newMem.getNumResults(); portIdx < e; ++portIdx) {
@@ -850,6 +853,13 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
   if (!peelType(op.getDataType(), fields, memoryPreservationMode))
     return false;
 
+  if (op.getInnerSym()) {
+    op->emitError() << "has a symbol, but no symbols may exist on aggregates "
+                       "passed through LowerTypes";
+    encounteredError = true;
+    return false;
+  }
+
   SmallVector<MemOp> newMemories;
   SmallVector<WireOp> oldPorts;
 
@@ -872,8 +882,15 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
   // Do not overwrite the pass flag!
 
   // Memory for each field
-  for (const auto &field : fields)
-    newMemories.push_back(cloneMemWithNewType(builder, op, field));
+  for (const auto &field : fields) {
+    auto newMemForField = cloneMemWithNewType(builder, op, field);
+    if (!newMemForField) {
+      op.emitError("failed cloning memory for field");
+      encounteredError = true;
+      return false;
+    }
+    newMemories.push_back(newMemForField);
+  }
   // Hook up the new memories to the wires the old memory was replaced with.
   for (size_t index = 0, rend = op.getNumResults(); index < rend; ++index) {
     auto result = oldPorts[index].getResult();
