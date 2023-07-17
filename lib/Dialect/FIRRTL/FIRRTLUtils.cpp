@@ -903,13 +903,14 @@ Type circt::firrtl::lowerType(
   if (!firType)
     return type;
 
-  if (BaseTypeAliasType aliasType = dyn_cast<BaseTypeAliasType>(firType)) {
-    type = lowerType(aliasType.getInnerType(), loc, getTypeDeclFn);
-    if (!loc)
-      loc = UnknownLoc::get(type.getContext());
-    if (getTypeDeclFn)
+  // If not known how to lower alias types, then ignore the alias.
+  if (getTypeDeclFn)
+    if (BaseTypeAliasType aliasType = dyn_cast<BaseTypeAliasType>(firType)) {
+      if (!loc)
+        loc = UnknownLoc::get(type.getContext());
+      type = lowerType(aliasType.getInnerType(), loc, getTypeDeclFn);
       return getTypeDeclFn(type, aliasType, *loc);
-  }
+    }
   // Ignore flip types.
   firType = firType.getPassiveType();
 
