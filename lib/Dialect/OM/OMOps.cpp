@@ -67,8 +67,7 @@ static void printClassLike(ClassLike classLike, OpAsmPrinter &printer) {
   // Retrieve the formal parameter names and values.
   auto argNames = SmallVector<StringRef>(
       classLike.getFormalParamNames().getAsValueRange<StringAttr>());
-  ArrayRef<BlockArgument> args =
-      classLike.getBodyBlockPointer()->getArguments();
+  ArrayRef<BlockArgument> args = classLike.getBodyBlock()->getArguments();
 
   // Print the formal parameters.
   printer << '(';
@@ -93,14 +92,14 @@ static void printClassLike(ClassLike classLike, OpAsmPrinter &printer) {
 LogicalResult verifyClassLike(ClassLike classLike) {
   // Verify the formal parameter names match up with the values.
   if (classLike.getFormalParamNames().size() !=
-      classLike.getBodyBlockPointer()->getArguments().size()) {
+      classLike.getBodyBlock()->getArguments().size()) {
     auto error = classLike.emitOpError(
         "formal parameter name list doesn't match formal parameter value list");
     error.attachNote(classLike.getLoc())
         << "formal parameter names: " << classLike.getFormalParamNames();
     error.attachNote(classLike.getLoc())
         << "formal parameter values: "
-        << classLike.getBodyBlockPointer()->getArguments();
+        << classLike.getBodyBlock()->getArguments();
     return error;
   }
 
@@ -112,8 +111,7 @@ void getClassLikeAsmBlockArgumentNames(ClassLike classLike, Region &region,
   // Retrieve the formal parameter names and values.
   auto argNames = SmallVector<StringRef>(
       classLike.getFormalParamNames().getAsValueRange<StringAttr>());
-  ArrayRef<BlockArgument> args =
-      classLike.getBodyBlockPointer()->getArguments();
+  ArrayRef<BlockArgument> args = classLike.getBodyBlock()->getArguments();
 
   // Use the formal parameter names as the SSA value names.
   for (size_t i = 0, e = args.size(); i < e; ++i)
@@ -211,15 +209,14 @@ circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitOpError("refers to non-existant class (") << className << ')';
 
   auto actualTypes = getActualParams().getTypes();
-  auto formalTypes = classDef.getBodyBlockPointer()->getArgumentTypes();
+  auto formalTypes = classDef.getBodyBlock()->getArgumentTypes();
 
   // Verify the actual parameter list matches the formal parameter list.
   if (actualTypes.size() != formalTypes.size()) {
     auto error = emitOpError(
         "actual parameter list doesn't match formal parameter list");
     error.attachNote(classDef.getLoc())
-        << "formal parameters: "
-        << classDef.getBodyBlockPointer()->getArguments();
+        << "formal parameters: " << classDef.getBodyBlock()->getArguments();
     error.attachNote(getLoc()) << "actual parameters: " << getActualParams();
     return error;
   }
