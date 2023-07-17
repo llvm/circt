@@ -15,6 +15,7 @@
 
 include "circt/Dialect/HW/HWDialect.td"
 include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/EnumAttr.td"
 
 // Base class for other typedefs. Provides dialact-specific defaults.
 class HWType<string name> : TypeDef<HWDialect, name> { }
@@ -44,6 +45,74 @@ def IntTypeImpl : HWType<"Int"> {
     /// a builtin integer type if the width is a known-constant value.
     static Type get(::mlir::TypedAttr width);
   }];
+}
+
+// N-Valued Logic
+
+class LogicKindAttrCase<string sym, int val, string str, string lits>
+    : I32EnumAttrCase<sym, val, str> {
+  string atomicLitsStr = "\"" # lits # "\""; 
+}
+    
+
+defset list<LogicKindAttrCase> LogicKinds = {
+  def LogicKindTwo     : LogicKindAttrCase<"Two",   0, "B",  "01">;
+  def LogicKindThree   : LogicKindAttrCase<"Three", 1, "T",  "01X">;
+  def LogicKindSV      : LogicKindAttrCase<"SV",    2, "SV", "01XZ">;
+  def LogicKindVHDL    : LogicKindAttrCase<"VHDL",  3, "VH", "01XZULHW-">;
+}
+
+def LogicKindAttr : I32EnumAttr<
+    "LogicKind",
+    "Logic kind for HW logic type",
+    LogicKinds> {
+
+    let cppNamespace = "circt::hw";
+    let convertFromStorage = "$_self";
+
+    list<string> atomicLitsList = !foreach(kind, LogicKinds, kind.atomicLitsStr);
+}
+
+
+def LogicTypeImpl : HWType<"Logic"> {
+
+  let summary = "n-valued logic vector of fixed or parameterized length";
+  let description = [{
+    TODO
+  }];
+
+  let mnemonic = "log";
+   
+  let parameters = (ins LogicKindAttr:$kind,  "::mlir::TypedAttr":$widthAttr);
+
+  let hasCustomAssemblyFormat = true;
+  let skipDefaultBuilders = true;
+
+  let extraClassDeclaration = [{
+    constexpr const static std::array<::llvm::StringLiteral, }] # !size(LogicKindAttr.atomicLitsList) # [{> kindAtomicValues = { }]
+     # !interleave(LogicKindAttr.atomicLitsList, ", ") # [{ }; 
+    static size_t checkLiteral (const std::string &lit, circt::hw::LogicKind kind);
+    static Type get(::circt::hw::LogicKind kind, ::mlir::TypedAttr widthAttr);
+    static Type get(::circt::hw::LogicKindAttr kind, ::mlir::TypedAttr widthAttr) {
+      return get(kind.getValue(), widthAttr);
+    }
+    static Type get(::mlir::MLIRContext *context, ::circt::hw::LogicKind kind, unsigned width) {
+      auto int32Type = mlir::IntegerType::get(context, 32);
+      return get(kind, mlir::IntegerAttr::get(int32Type, (int32_t)width)); 
+    }
+    static Type get(::circt::hw::LogicKindAttr kind, unsigned width) {
+      auto int32Type = mlir::IntegerType::get(kind.getContext(), 32);
+      return get(kind, mlir::IntegerAttr::get(int32Type, (int32_t)width)); 
+    }
+    std::optional<unsigned> getWidth() const {
+      if (auto cstWidth = getWidthAttr().dyn_cast<IntegerAttr>()) {
+        auto cstAttrVal = cstWidth.getValue().getZExtValue();
+        return (unsigned) cstAttrVal;
+      }
+      return {};
+    };
+  }];
+
 }
 
 // A simple fixed size array. Declares the hw::ArrayType in C++.
