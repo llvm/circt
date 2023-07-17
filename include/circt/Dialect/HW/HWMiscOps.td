@@ -80,6 +80,20 @@ def LogicConstantOp
   }];
 }
 
+def LogicCastOp
+  : HWOp<"logcast", [Pure]> {
+
+  let summary = "TODO";
+  let description = "TODO";
+
+  let arguments = (ins HWIntegerType:$input);
+  let results = (outs HWIntegerType:$result);
+  let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";
+
+  let hasFolder = true;
+  let hasVerifier = true;  
+}
+
 def WireOp : HWOp<"wire", [
     SameOperandsAndResultType,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {

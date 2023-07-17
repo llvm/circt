@@ -403,6 +403,36 @@ LogicalResult LogicConstantOp::inferReturnTypes(MLIRContext *context,
 }
 
 //===----------------------------------------------------------------------===//
+// LogicCastOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult LogicCastOp::verify() {
+  // Ensure widths of input and result are identical
+  std::optional<unsigned> resultWidth = getLogicBitWidth(getResult().getType());
+  std::optional<unsigned> inputWidth = getLogicBitWidth(getInput().getType());
+
+  if (resultWidth && inputWidth && (*resultWidth == *inputWidth))
+    return success();
+  else if (!resultWidth && !inputWidth) {
+    // Input and result are parameterized-width logic type
+    auto logResult = hw::type_cast<LogicType>(getResult().getType());
+    auto logInput  = hw::type_cast<LogicType>(getInput().getType());
+    if (logResult.getWidthAttr() == logInput.getWidthAttr())
+      return success();
+  }
+  
+  emitError("width of cast input and result must be equal");
+  return failure();
+}
+
+OpFoldResult LogicCastOp::fold(FoldAdaptor adaptor) {
+  // Remove casts to same type
+  if (getCanonicalType(getInput().getType()) == getCanonicalType(getResult().getType()))
+    return getInput();
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // WireOp
 //===----------------------------------------------------------------------===//
 
