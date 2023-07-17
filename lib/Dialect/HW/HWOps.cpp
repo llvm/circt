@@ -3215,7 +3215,6 @@ void TriggeredOp::build(OpBuilder &builder, OperationState &odsState,
   auto *r = odsState.addRegion();
   Block *b = new Block();
   r->push_back(b);
-  Value v;
 
   llvm::SmallVector<Location> argLocs;
   llvm::transform(inputs, std::back_inserter(argLocs),
