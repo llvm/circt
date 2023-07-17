@@ -386,17 +386,18 @@ hw.module @testWithStall(%arg0: i32, %go: i1, %stall : i1, %clk: i1, %rst: i1) -
 
 // -----
 
-// CHECK-LABEL: hw.module @testNaming_MyPipeline(%a0: i1, %enable: i1, %clk: i1, %rst: i1) -> (out: i1, valid: i1) {
-// CHECK-NEXT:    %testNaming_MyPipeline_s0.out0, %testNaming_MyPipeline_s0.valid = hw.instance "testNaming_MyPipeline_s0" @testNaming_MyPipeline_s0(in0: %a0: i1, enable: %enable: i1, clk: %clk: i1, rst: %rst: i1) -> (out0: i1, valid: i1)
-// CHECK-NEXT:    hw.output %testNaming_MyPipeline_s0.out0, %testNaming_MyPipeline_s0.valid : i1, i1
+// CHECK-LABEL:  hw.module @testNaming_MyPipeline(%a0: i1, %enable: i1, %clk: i1, %rst: i1) -> (out: i1, valid: i1) {
+// CHECK-NEXT:    %testNaming_MyPipeline_s0.s0_myNamed_out, %testNaming_MyPipeline_s0.s0_out1, %testNaming_MyPipeline_s0.valid = hw.instance "testNaming_MyPipeline_s0" @testNaming_MyPipeline_s0(a0: %a0: i1, enable: %enable: i1, clk: %clk: i1, rst: %rst: i1) -> (s0_myNamed_out: i1, s0_out1: i1, valid: i1)
+// CHECK-NEXT:    hw.output %testNaming_MyPipeline_s0.s0_myNamed_out, %testNaming_MyPipeline_s0.s0_out1 : i1, i1
 // CHECK-NEXT:  }
 
-// CHECK-LABEL:  hw.module @testNaming_MyPipeline_s0(%in0: i1, %enable: i1, %clk: i1, %rst: i1) -> (out0: i1, valid: i1) {
-// CHECK-NEXT:    %0 = comb.add %in0, %in0 {sv.namehint = "myAdd"} : i1
-// CHECK-NEXT:    %s0_myAdd_reg = seq.compreg sym @s0_myAdd_reg %0, %clk : i1
+// CHECK-LABEL:  hw.module @testNaming_MyPipeline_s0(%a0: i1, %enable: i1, %clk: i1, %rst: i1) -> (s0_myNamed_out: i1, s0_out1: i1, valid: i1) {
+// CHECK-NEXT:    %0 = comb.add %a0, %a0 : i1
+// CHECK-NEXT:    %s0_myNamed_reg = seq.compreg sym @s0_myNamed_reg %0, %clk : i1
+// CHECK-NEXT:    %s0_reg1 = seq.compreg sym @s0_reg1 %0, %clk : i1
 // CHECK-NEXT:    %false = hw.constant false
 // CHECK-NEXT:    %s0_valid = seq.compreg sym @s0_valid %enable, %clk, %rst, %false  : i1
-// CHECK-NEXT:    hw.output %s0_myAdd_reg, %s0_valid : i1, i1
+// CHECK-NEXT:    hw.output %s0_myNamed_reg, %s0_reg1, %s0_valid : i1, i1, i1
 // CHECK-NEXT:  }
 
 // CHECK-LABEL:  hw.module @testNaming(%go: i1, %clk: i1, %rst: i1) -> (out: i1) {
@@ -406,11 +407,10 @@ hw.module @testWithStall(%arg0: i32, %go: i1, %stall : i1, %clk: i1, %rst: i1) -
 
 hw.module @testNaming(%go: i1, %clk: i1, %rst: i1) -> (out: i1) {
   %0:2 = pipeline.scheduled "MyPipeline"(%a0 : i1 = %go) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out: i1) {
-    // The register will be named after the namehint on the source operation.
-    %add = comb.add %a0, %a0 {sv.namehint = "myAdd"} : i1
-    pipeline.stage ^bb1 regs(%add : i1)
+    %add = comb.add %a0, %a0 : i1
+    pipeline.stage ^bb1 regs("myNamed" = %add : i1, %add : i1)
   
-  ^bb1(%1 : i1, %s1_valid: i1):
+  ^bb1(%1 : i1, %2 : i1, %s1_valid: i1):
     pipeline.return %1 : i1
   
   }

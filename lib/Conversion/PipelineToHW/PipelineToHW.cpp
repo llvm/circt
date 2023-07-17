@@ -94,10 +94,12 @@ public:
     Value valid;
   };
 
-  virtual FailureOr<StageReturns> lowerStage(Block *stage, StageArgs args,
-                                             size_t stageIndex) = 0;
+  virtual FailureOr<StageReturns>
+  lowerStage(Block *stage, StageArgs args, size_t stageIndex,
+             llvm::ArrayRef<Attribute> inputNames = {}) = 0;
 
   StageReturns emitStageBody(Block *stage, StageArgs args,
+                             llvm::ArrayRef<Attribute> registerNames,
                              size_t stageIndex = -1) {
     assert(args.enable && "enable not set");
     auto *terminator = stage->getTerminator();
@@ -137,6 +139,9 @@ public:
       return rets;
     }
 
+    assert(registerNames.size() == stageTerminator.getRegisters().size() &&
+           "register names and registers must be the same size");
+
     // Build data registers.
     auto stageRegPrefix = getStageRegPrefix(stageIndex);
     auto loc = stageTerminator->getLoc();
@@ -162,22 +167,7 @@ public:
       auto regIdx = it.index();
       auto regIn = it.value();
 
-      // Register naming: If the source value has an `sv.namehint` attribute
-      // attached, use that as a register prefix.
-      StringAttr regName;
-      if (auto *definingOp = regIn.getDefiningOp()) {
-        if (auto nameHint =
-                definingOp->getAttrOfType<StringAttr>("sv.namehint")) {
-          regName = StringAttr::get(pipeline.getContext(),
-                                    stageRegPrefix.strref() + "_" +
-                                        nameHint.getValue() + "_reg");
-        }
-      }
-      // Else, use a generic name.
-      if (!regName)
-        regName = builder.getStringAttr(stageRegPrefix.strref() + "_reg" +
-                                        Twine(regIdx));
-
+      StringAttr regName = registerNames[regIdx].cast<StringAttr>();
       Value dataReg;
       if (this->clockGateRegs) {
         // Use the clock gate instead of clock enable.
@@ -224,6 +214,68 @@ public:
 
     rets.passthroughs = stageTerminator.getPassthroughs();
     return rets;
+  }
+
+  // A container carrying all-things stage output naming related.
+  // To avoid overloading 'output's to much (i'm trying to keep that reserved
+  // for "output" ports), this is named "egress".
+  struct StageEgressNames {
+    llvm::SmallVector<Attribute> regNames;
+    llvm::SmallVector<Attribute> outNames;
+  };
+
+  // Returns a set of names for the output values of a given stage (registers
+  // and passthrough). If `withPipelinePrefix` is true, the names will be
+  // prefixed with the pipeline name.
+  void getStageEgressNames(size_t stageIndex, Operation *stageTerminator,
+                           bool withPipelinePrefix,
+                           StageEgressNames &egressNames) {
+    StringAttr pipelineName;
+    if (withPipelinePrefix)
+      pipelineName = getPipelineBaseName();
+
+    if (auto stageOp = dyn_cast<StageOp>(stageTerminator)) {
+      // Registers...
+      std::string assignedRegName, assignedOutName;
+      for (size_t regi = 0; regi < stageOp.getRegisters().size(); ++regi) {
+        if (auto regName = stageOp.getRegisterName(regi)) {
+          assignedRegName =
+              ("s" + Twine(stageIndex) + "_" + regName.strref() + "_reg").str();
+          assignedOutName = regName.str();
+        } else {
+          assignedRegName =
+              ("s" + Twine(stageIndex) + "_reg" + Twine(regi)).str();
+          assignedOutName = ("out" + Twine(regi)).str();
+        }
+
+        if (pipelineName) {
+          assignedRegName = pipelineName.str() + "_" + assignedRegName;
+          assignedOutName = pipelineName.str() + "_" + assignedOutName;
+        }
+
+        egressNames.regNames.push_back(builder.getStringAttr(assignedRegName));
+        egressNames.outNames.push_back(builder.getStringAttr(assignedOutName));
+      }
+
+      // Passthroughs
+      for (size_t passi = 0; passi < stageOp.getPassthroughs().size();
+           ++passi) {
+        if (auto passName = stageOp.getPassthroughName(passi))
+          assignedOutName = (passName.strref() + "_pass").str();
+        else
+          assignedOutName = ("pass" + Twine(passi)).str();
+
+        if (pipelineName)
+          assignedOutName = pipelineName.str() + "_" + assignedOutName;
+
+        egressNames.outNames.push_back(builder.getStringAttr(assignedOutName));
+      }
+    } else {
+      // For the return op, we just inherit the names of the top-level pipeline
+      // as stage output names.
+      llvm::copy(pipeline.getOutputNames().getAsRange<StringAttr>(),
+                 std::back_inserter(egressNames.outNames));
+    }
   }
 
   // Returns a string to be used as a prefix for all stage registers.
@@ -305,8 +357,9 @@ public:
   }
 
   /// NOLINTNEXTLINE(misc-no-recursion)
-  FailureOr<StageReturns> lowerStage(Block *stage, StageArgs args,
-                                     size_t stageIndex) override {
+  FailureOr<StageReturns>
+  lowerStage(Block *stage, StageArgs args, size_t stageIndex,
+             llvm::ArrayRef<Attribute> /*inputNames*/ = {}) override {
     OpBuilder::InsertionGuard guard(builder);
 
     if (stage != pipeline.getEntryStage()) {
@@ -319,11 +372,20 @@ public:
     // Replace the stage valid signal.
     pipeline.getStageEnableSignal(stage).replaceAllUsesWith(args.enable);
 
+    // Determine register names.
+    llvm::SmallVector<Attribute> stageRegisterNames;
+    auto nextStage = dyn_cast<StageOp>(stage->getTerminator());
+    StageEgressNames egressNames;
+    if (nextStage)
+      getStageEgressNames(stageIndex, nextStage,
+                          /*withPipelinePrefix=*/true, egressNames);
+
     // Move stage operations into the current module.
     builder.setInsertionPoint(pipeline);
-    StageReturns stageRets = emitStageBody(stage, args, stageIndex);
+    StageReturns stageRets =
+        emitStageBody(stage, args, stageRegisterNames, stageIndex);
 
-    if (auto nextStage = dyn_cast<StageOp>(stage->getTerminator())) {
+    if (nextStage) {
       // Lower the next stage.
       SmallVector<Value> nextStageArgs;
       llvm::append_range(nextStageArgs, stageRets.regs);
@@ -418,7 +480,8 @@ public:
     pipelineMod = buildPipelineLike(
         pipelineName.strref(), pipeline.getInputs().getTypes(),
         pipeline.getInnerExtInputs(), pipeline.getDataOutputs().getTypes(),
-        withStall, pipeline.getInputNames(), pipeline.getOutputNames());
+        withStall, pipeline.getInputNames().getValue(),
+        pipeline.getOutputNames().getValue());
     auto portLookup = pipelineMod.getPortLookupInfo();
     pipelineClk = pipelineMod.getBody().front().getArgument(
         *portLookup.getInputPortIndex(kClockPortName));
@@ -479,8 +542,8 @@ public:
     args.clock = pipelineStageMod.clock;
     args.reset = pipelineStageMod.reset;
     args.stall = pipelineStageMod.stall;
-    FailureOr<StageReturns> lowerRes =
-        lowerStage(pipeline.getEntryStage(), args, 0);
+    FailureOr<StageReturns> lowerRes = lowerStage(
+        pipeline.getEntryStage(), args, 0, pipeline.getInputNames().getValue());
     if (failed(lowerRes))
       return failure();
 
@@ -502,8 +565,9 @@ public:
   }
 
   /// NOLINTNEXTLINE(misc-no-recursion)
-  FailureOr<StageReturns> lowerStage(Block *stage, StageArgs argsToStage,
-                                     size_t stageIndex) override {
+  FailureOr<StageReturns>
+  lowerStage(Block *stage, StageArgs argsToStage, size_t stageIndex,
+             llvm::ArrayRef<Attribute> inputNames = {}) override {
     hw::OutputOp stageOutputOp;
     ValueRange nextStageArgs;
     bool withStall = static_cast<bool>(argsToStage.stall);
@@ -515,7 +579,9 @@ public:
     };
 
     // Anything but the last stage
-    auto [stageMod, stageInst] = buildStage(stage, argsToStage, stageIndex);
+    StageEgressNames egressNames;
+    auto [stageMod, stageInst] =
+        buildStage(stage, argsToStage, stageIndex, inputNames, egressNames);
     auto thisStageMod = PipelineStageMod{*this, stage, stageMod, withStall};
     currentStageInst = stageInst;
 
@@ -555,7 +621,8 @@ public:
     innerArgs.clock = thisStageMod.clock;
     innerArgs.reset = thisStageMod.reset;
     innerArgs.stall = thisStageMod.stall;
-    StageReturns stageRets = emitStageBody(stage, innerArgs, stageIndex);
+    StageReturns stageRets =
+        emitStageBody(stage, innerArgs, egressNames.regNames, stageIndex);
 
     // Assign the output operation to the stage return values.
     stageOutputOp->insertOperands(0, stageRets.regs);
@@ -572,7 +639,10 @@ public:
       nextStageArgs.clock = pipelineClk;
       nextStageArgs.reset = pipelineRst;
       nextStageArgs.stall = pipelineStall;
-      return lowerStage(stageOp.getNextStage(), nextStageArgs, stageIndex + 1);
+      return lowerStage(stageOp.getNextStage(), nextStageArgs, stageIndex + 1,
+                        // The output register names of this stage is the input
+                        // names of the next stage.
+                        egressNames.outNames);
     }
 
     // This was the final stage - forward the return values of the last stage
@@ -625,35 +695,19 @@ private:
   // external inputs.
   hw::HWModuleOp buildPipelineLike(Twine name, TypeRange inputs,
                                    ValueRange extInputs, TypeRange outputs,
-                                   bool withStall, ArrayAttr inputNames = {},
-                                   ArrayAttr outputNames = {}) {
-    bool withInputNames = inputNames && !inputNames.empty();
-    bool withOutputNames = outputNames && !outputNames.empty();
-    if (withInputNames)
-      assert(inputs.size() == inputNames.size());
-    if (withOutputNames)
-      assert(outputs.size() == outputNames.size());
-
-    auto getInputName = [&](unsigned idx) {
-      if (withInputNames)
-        return inputNames[idx].cast<StringAttr>();
-      return builder.getStringAttr("in" + std::to_string(idx));
-    };
-
-    auto getOutputName = [&](unsigned idx) {
-      if (withOutputNames)
-        return outputNames[idx].cast<StringAttr>();
-      return builder.getStringAttr("out" + std::to_string(idx));
-    };
-
+                                   bool withStall,
+                                   llvm::ArrayRef<Attribute> inputNames,
+                                   llvm::ArrayRef<Attribute> outputNames) {
+    assert(inputs.size() == inputNames.size());
+    assert(outputs.size() == outputNames.size());
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPoint(parentModule);
     llvm::SmallVector<hw::PortInfo> ports;
 
     // Data inputs
     for (auto [idx, in] : llvm::enumerate(inputs))
-      ports.push_back(
-          hw::PortInfo{getInputName(idx), hw::PortDirection::INPUT, in});
+      ports.push_back(hw::PortInfo{inputNames[idx].cast<StringAttr>(),
+                                   hw::PortDirection::INPUT, in});
 
     // External inputs
     for (auto extIn : extInputs) {
@@ -682,8 +736,8 @@ private:
                                  builder.getI1Type()});
 
     for (auto [idx, out] : llvm::enumerate(outputs))
-      ports.push_back(
-          hw::PortInfo{getOutputName(idx), hw::PortDirection::OUTPUT, out});
+      ports.push_back(hw::PortInfo{outputNames[idx].cast<StringAttr>(),
+                                   hw::PortDirection::OUTPUT, out});
 
     // Valid output
     ports.push_back(hw::PortInfo{builder.getStringAttr(kValidPortName),
@@ -695,7 +749,9 @@ private:
   }
 
   std::tuple<hw::HWModuleOp, hw::InstanceOp>
-  buildStage(Block *stage, StageArgs args, size_t stageIndex) {
+  buildStage(Block *stage, StageArgs args, size_t stageIndex,
+             llvm::ArrayRef<Attribute> inputNames,
+             StageEgressNames &egressNames) {
     builder.setInsertionPoint(parentModule);
     llvm::SmallVector<Type> outputTypes;
     auto *terminator = stage->getTerminator();
@@ -709,6 +765,8 @@ private:
       auto returnOp = cast<ReturnOp>(terminator);
       llvm::append_range(outputTypes, returnOp.getOperandTypes());
     }
+    getStageEgressNames(stageIndex, terminator,
+                        /*withPipelinePrefix=*/false, egressNames);
 
     llvm::SmallVector<Value> stageExtInputs;
     getStageExtInputs(stage, stageExtInputs);
@@ -716,7 +774,7 @@ private:
     hw::HWModuleOp mod = buildPipelineLike(
         pipelineName.strref() + "_s" + Twine(stageIndex),
         ValueRange(pipeline.getStageDataArgs(stage)).getTypes(), stageExtInputs,
-        outputTypes, hasStall);
+        outputTypes, hasStall, inputNames, egressNames.outNames);
 
     // instantiate...
     OpBuilder::InsertionGuard guard(builder);
