@@ -37,6 +37,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/OperationSupport.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassInstrumentation.h"
@@ -238,11 +239,15 @@ static bool checkBytecodeOutputToConsole(raw_ostream &os) {
 
 /// Print the operation to the specified stream, emitting bytecode when
 /// requested and politely avoiding dumping to terminal unless forced.
-static LogicalResult printOp(Operation *op, raw_ostream &os) {
+static LogicalResult printOp(Operation *op, raw_ostream &os,
+                             bool printLocs = false) {
   if (emitBytecode && (force || !checkBytecodeOutputToConsole(os)))
     return writeBytecodeToFile(op, os,
                                mlir::BytecodeWriterConfig(getCirctVersion()));
-  op->print(os);
+  if (printLocs)
+    op->print(os, OpPrintingFlags().enableDebugInfo());
+  else
+    op->print(os);
   return success();
 }
 
@@ -432,7 +437,8 @@ static LogicalResult processBuffer(
       return failure();
     }
 
-    if (failed(printOp(*module, mlirFile->os())))
+    if (failed(
+            printOp(*module, mlirFile->os(), /*Print final locations*/ true)))
       return failure();
     mlirFile->keep();
   }
