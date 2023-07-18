@@ -1,4 +1,4 @@
-//===- IbisOps.td - Definition of Ibis dialect operations -------------------===//
+//===- IbisOps.td - Definition of Ibis dialect operations -----------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -17,4 +17,4 @@ include "circt/Dialect/HW/HWOpInterfaces.td"
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>;
 
 
-#endif // CIRCT_DIALECT_Ibis_IbisOPS_TD
+#endif // CIRCT_DIALECT_IBIS_IBISOPS_TD

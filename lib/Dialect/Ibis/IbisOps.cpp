@@ -1,4 +1,4 @@
-//===- IbisOps.cpp - Implementation of Ibis dialect ops ---------===//
+//===- IbisOps.cpp - Implementation of Ibis dialect ops -------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -24,5 +24,3 @@ using namespace ibis;
 #define GET_OP_CLASSES
 #include "circt/Dialect/Ibis/Ibis.cpp.inc"
 #undef GET_OP_CLASSES
-
-#include "circt/Dialect/Ibis/IbisDialect.cpp.inc"
