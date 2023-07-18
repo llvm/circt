@@ -22,7 +22,7 @@ calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%don
     calyx.wires {
 
     }
-
+    
     calyx.control {
       calyx.seq {
         // CHECK: invoke id(in = 32'd10)();
