@@ -816,10 +816,9 @@ void Emitter::emitInvoke(InvokeOp invoke) {
   /// the connections for a subset of input and output ports of the instance.
   llvm::StringMap<StringRef> inputsMap;
   llvm::StringMap<StringRef> outputsMap;
-  for (auto [portNameAttr, inputNameAttr, input] :
-       llvm::zip(portNames, inputNames, invoke.getInputs())) {
-    StringRef portName = cast<StringAttr>(portNameAttr).getValue();
-    StringRef inputName = cast<StringAttr>(inputNameAttr).getValue();
+  for (size_t i = 0; i < portNames.size(); ++i) {
+    StringRef portName = cast<StringAttr>(portNames[i]).getValue();
+    StringRef inputName = cast<StringAttr>(inputNames[i]).getValue();
     /// Classify the connection of ports,here's an example. calyx.invoke
     /// @r(%r.in = %id.out, %out = %r.out) -> (i32, i32) %r.in = %id.out will be
     /// stored in inputs, because %.r.in is the input port of the component, and
@@ -829,8 +828,9 @@ void Emitter::emitInvoke(InvokeOp invoke) {
     /// uniformly and converted to calyx's native compiler format.
     if (portName.substr(1, callee.size()) == callee) {
       // If the input to the port is a number.
-      if (isa_and_nonnull<hw::ConstantOp>(input.getDefiningOp())) {
-        hw::ConstantOp constant = cast<hw::ConstantOp>(input.getDefiningOp());
+      if (isa_and_nonnull<hw::ConstantOp>(inputs[i].getDefiningOp())) {
+        hw::ConstantOp constant =
+            cast<hw::ConstantOp>(inputs[i].getDefiningOp());
         APInt value = constant.getValue();
         std::string mapValue = std::to_string(value.getBitWidth()) +
                                apostrophe().data() + "d" +

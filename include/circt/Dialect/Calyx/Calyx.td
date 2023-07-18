@@ -69,7 +69,7 @@ class CalyxContainer<string mnemonic, list<Trait> traits = []> :
 
   /// Because extraClassDeclaration is overloaded in the subclass, 
   /// commonClassDeclaration is defined here to help define extraClassDeclaration.
-  code commonClassDeclaration = [{
+  string commonClassDeclaration = [{
     /// Returns the body of a Calyx container.
     Block *getBodyBlock() {
       Region* region = &getOperation()->getRegion(0);
