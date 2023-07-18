@@ -25,6 +25,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/PriorityQueue.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
@@ -236,7 +237,7 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto &region = op->getRegion(0);
   // Operations that are allowed in the body of a ControlLike op.
   auto isValidBodyOp = [](Operation *operation) {
-    return isa<EnableOp, SeqOp, IfOp, RepeatOp, WhileOp, ParOp, StaticParOp,
+    return isa<EnableOp, InvokeOp, SeqOp, IfOp, RepeatOp, WhileOp, ParOp, StaticParOp,
                StaticRepeatOp, StaticSeqOp, StaticIfOp>(operation);
   };
   for (auto &&bodyOp : region.front()) {
@@ -890,6 +891,13 @@ void CombComponentOp::getAsmBlockArgumentNames(
 //===----------------------------------------------------------------------===//
 LogicalResult ControlOp::verify() { return verifyControlBody(*this); }
 
+// Get the InvokeOps of this ControlOp.
+SmallVector<InvokeOp, 4> ControlOp::getInvokeOps() {
+  SmallVector<InvokeOp, 4> ret;
+  this->walk([&](InvokeOp invokeOp) { ret.push_back(invokeOp); });
+  return ret;
+}
+
 //===----------------------------------------------------------------------===//
 // SeqOp
 //===----------------------------------------------------------------------===//
@@ -1418,7 +1426,7 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
 /// Determines whether the given direction is valid with the given inputs. The
 /// `isDestination` boolean is used to distinguish whether the value is a source
 /// or a destination.
-static LogicalResult verifyPortDirection(AssignOp op, Value value,
+static LogicalResult verifyPortDirection(Operation *op, Value value,
                                          bool isDestination) {
   Operation *definingOp = value.getDefiningOp();
   bool isComponentPort = value.isa<BlockArgument>(),
@@ -1438,7 +1446,7 @@ static LogicalResult verifyPortDirection(AssignOp op, Value value,
 
   return port.direction == validDirection
              ? success()
-             : op.emitOpError()
+             : op->emitOpError()
                    << "has a " << (isComponentPort ? "component" : "cell")
                    << " port as the "
                    << (isDestination ? "destination" : "source")
@@ -2545,6 +2553,276 @@ void RepeatOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                            MLIRContext *context) {
   patterns.add(emptyControl<RepeatOp>);
   patterns.add(zeroRepeat<RepeatOp>);
+}
+
+//===----------------------------------------------------------------------===//
+// InvokeOp
+//===----------------------------------------------------------------------===//
+
+// Parse the parameter list of invoke.
+static ParseResult
+parseParameterList(OpAsmParser &parser, OperationState &result,
+                   SmallVectorImpl<OpAsmParser::UnresolvedOperand> &ports,
+                   SmallVectorImpl<OpAsmParser::UnresolvedOperand> &inputs,
+                   SmallVectorImpl<Attribute> &portNames,
+                   SmallVectorImpl<Attribute> &inputNames,
+                   SmallVectorImpl<Type> &types) {
+  OpAsmParser::UnresolvedOperand port;
+  OpAsmParser::UnresolvedOperand input;
+  Type type;
+  auto parseParameter = [&]() -> ParseResult {
+    if (parser.parseOperand(port) || parser.parseEqual() ||
+        parser.parseOperand(input))
+      return failure();
+    ports.push_back(port);
+    portNames.push_back(StringAttr::get(parser.getContext(), port.name));
+    inputs.push_back(input);
+    inputNames.push_back(StringAttr::get(parser.getContext(), input.name));
+    return success();
+  };
+  if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                     parseParameter))
+    return failure();
+  if (parser.parseArrow())
+    return failure();
+  auto parseType = [&]() -> ParseResult {
+    if (parser.parseType(type))
+      return failure();
+    types.push_back(type);
+    return success();
+  };
+  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                        parseType);
+}
+
+ParseResult InvokeOp::parse(OpAsmParser &parser, OperationState &result) {
+  StringAttr componentName;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> ports;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> inputs;
+  SmallVector<Attribute> portNames;
+  SmallVector<Attribute> inputNames;
+  SmallVector<Type, 4> types;
+  if (parser.parseSymbolName(componentName))
+    return failure();
+  FlatSymbolRefAttr callee = FlatSymbolRefAttr::get(componentName);
+  SMLoc loc = parser.getCurrentLocation();
+  result.addAttribute("callee", callee);
+  if (parseParameterList(parser, result, ports, inputs, portNames, inputNames,
+                         types))
+    return failure();
+  if (parser.resolveOperands(ports, types, loc, result.operands))
+    return failure();
+  if (parser.resolveOperands(inputs, types, loc, result.operands))
+    return failure();
+  result.addAttribute("portNames",
+                      ArrayAttr::get(parser.getContext(), portNames));
+  result.addAttribute("inputNames",
+                      ArrayAttr::get(parser.getContext(), inputNames));
+  return success();
+}
+
+void InvokeOp::print(OpAsmPrinter &p) {
+  p << " @" << getCallee() << "(";
+  auto ports = getPorts();
+  auto inputs = getInputs();
+  llvm::interleaveComma(llvm::zip(ports, inputs), p, [&](auto arg) {
+    p << std::get<0>(arg) << " = " << std::get<1>(arg);
+  });
+  p << ") -> (";
+  llvm::interleaveComma(ports, p, [&](auto port) { p << port.getType(); });
+  p << ")";
+}
+
+// Check the direction of one of the ports in one of the connections of an
+// InvokeOp.
+static LogicalResult verifyInvokeOpValue(InvokeOp &op, Value &value,
+                                         bool isDestination) {
+  if (isPort(value))
+    return verifyPortDirection(op, value, isDestination);
+  return success();
+}
+
+// Checks if the value comes from complex logic.
+static LogicalResult verifyComplexLogic(InvokeOp &op, Value &value) {
+  // Refer to the above function verifyNotComplexSource for its role.
+  Operation *operation = value.getDefiningOp();
+  if (operation == nullptr)
+    return success();
+  if (auto *dialect = operation->getDialect(); isa<comb::CombDialect>(dialect))
+    return failure();
+  return success();
+}
+
+// Get the go port of the invoked component.
+Value InvokeOp::getInstGoValue() {
+  ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
+  Operation *operation = componentOp.lookupSymbol(getCallee());
+  Value ret = nullptr;
+  llvm::TypeSwitch<Operation *>(operation)
+      .Case<RegisterOp>([&](auto op) { ret = operation->getResult(1); })
+      .Case<MemoryOp, DivSPipeLibOp, DivUPipeLibOp, MultPipeLibOp,
+            RemSPipeLibOp, RemUPipeLibOp>(
+          [&](auto op) { ret = operation->getResult(2); })
+      .Case<InstanceOp>([&](auto op) {
+        auto portInfo = op.getReferencedComponent().getPortInfo();
+        for (auto [portInfo, res] :
+             llvm::zip(portInfo, operation->getResults())) {
+          if (portInfo.hasAttribute("go"))
+            ret = res;
+        }
+      })
+      .Case<PrimitiveOp>([&](auto op) {
+        auto moduleExternOp = op.getReferencedPrimitive();
+        auto argAttrs = moduleExternOp.getArgAttrsAttr();
+        for (auto [attr, res] : llvm::zip(argAttrs, op.getResults())) {
+          if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr)) {
+            if (!dictAttr.empty()) {
+              if (dictAttr.begin()->getName().getValue() == "calyx.go")
+                ret = res;
+            }
+          }
+        }
+      });
+  return ret;
+}
+
+// Get the done port of the invoked component.
+Value InvokeOp::getInstDoneValue() {
+  ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
+  Operation *operation = componentOp.lookupSymbol(getCallee());
+  Value ret = nullptr;
+  llvm::TypeSwitch<Operation *>(operation)
+      .Case<RegisterOp, MemoryOp, DivSPipeLibOp, DivUPipeLibOp, MultPipeLibOp,
+            RemSPipeLibOp, RemUPipeLibOp>([&](auto op) {
+        size_t doneIdx = operation->getResults().size() - 1;
+        ret = operation->getResult(doneIdx);
+      })
+      .Case<InstanceOp>([&](auto op) {
+        InstanceOp instanceOp = cast<InstanceOp>(operation);
+        auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
+        for (auto [portInfo, res] :
+             llvm::zip(portInfo, operation->getResults())) {
+          if (portInfo.hasAttribute("done"))
+            ret = res;
+        }
+      })
+      .Case<PrimitiveOp>([&](auto op) {
+        PrimitiveOp primOp = cast<PrimitiveOp>(operation);
+        auto moduleExternOp = primOp.getReferencedPrimitive();
+        auto resAttrs = moduleExternOp.getResAttrsAttr();
+        for (auto [attr, res] : llvm::zip(resAttrs, primOp.getResults())) {
+          if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr)) {
+            if (!dictAttr.empty()) {
+              if (dictAttr.begin()->getName().getValue() == "calyx.done")
+                ret = res;
+            }
+          }
+        }
+      });
+  return ret;
+}
+
+// A helper function that gets the number of go or done ports in
+// hw.module.extern.
+static size_t
+getHwModuleExtGoOrDonePortNumber(hw::HWModuleExternOp &moduleExternOp,
+                                 bool isGo) {
+  size_t ret = 0;
+  std::string str = isGo ? "calyx.go" : "calyx.done";
+  for (Attribute attr : moduleExternOp.getArgAttrsAttr()) {
+    if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr)) {
+      ret = llvm::count_if(dictAttr, [&](NamedAttribute iter) {
+        return iter.getName().getValue() == str;
+      });
+    }
+  }
+  return ret;
+}
+
+LogicalResult InvokeOp::verify() {
+  ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
+  StringRef callee = getCallee();
+  Operation *operation = componentOp.lookupSymbol(callee);
+  // The referenced symbol does not exist.
+  if (!operation)
+    return emitOpError() << "with instance '@" << callee
+                         << "', which does not exist.";
+  // The argument list of invoke is empty.
+  if (getInputs().empty())
+    return emitOpError() << "'@" << callee
+                         << "' has zero input and output port connections; "
+                            "expected at least one.";
+  size_t goPortNum = 0, donePortNum = 0;
+  // They both have a go port and a done port, but the "go" port for
+  // registers and memrey should be "write_en" port.
+  llvm::TypeSwitch<Operation *>(operation)
+      .Case<RegisterOp, DivSPipeLibOp, DivUPipeLibOp, MemoryOp, MultPipeLibOp,
+            RemSPipeLibOp, RemUPipeLibOp>(
+          [&](auto op) { goPortNum = 1, donePortNum = 1; })
+      .Case<InstanceOp>([&](auto op) {
+        auto portInfo = op.getReferencedComponent().getPortInfo();
+        for (PortInfo info : portInfo) {
+          if (info.hasAttribute("go"))
+            ++goPortNum;
+          if (info.hasAttribute("done"))
+            ++donePortNum;
+        }
+      })
+      .Case<PrimitiveOp>([&](auto op) {
+        auto moduleExternOp = op.getReferencedPrimitive();
+        // Get the number of go ports and done ports by their attrubutes.
+        goPortNum = getHwModuleExtGoOrDonePortNumber(moduleExternOp, true);
+        donePortNum = getHwModuleExtGoOrDonePortNumber(moduleExternOp, false);
+      });
+  // If the number of go ports and done ports is wrong.
+  if (goPortNum != 1 && donePortNum != 1)
+    return emitOpError()
+           << "'@" << callee << "'"
+           << " is a combinational component and cannot be invoked, which must "
+              "have single go port and single done port.";
+
+  auto ports = getPorts();
+  auto inputs = getInputs();
+  // We have verified earlier that the instance has a go and a done port.
+  Value goValue = getInstGoValue();
+  Value doneValue = getInstDoneValue();
+  for (auto [port, input, portName, inputName] :
+       llvm::zip(ports, inputs, getPortNames(), getInputNames())) {
+    // Check the direction of these destination ports.
+    // 'calyx.invoke' op '@r0' has input '%r.out', which is a source port. The
+    // inputs are required to be destination ports.
+    if (failed(verifyInvokeOpValue(*this, port, true)))
+      return emitOpError() << "'@" << callee << "' has input '"
+                           << portName.cast<StringAttr>().getValue()
+                           << "', which is a source port. The inputs are "
+                              "required to be destination ports.";
+    // The go port should not appear in the parameter list.
+    if (port == goValue)
+      return emitOpError() << "the go or write_en port of '@" << callee
+                           << "' cannot appear here.";
+    // Check the direction of these source ports.
+    if (failed(verifyInvokeOpValue(*this, input, false)))
+      return emitOpError() << "'@" << callee << "' has output '"
+                           << inputName.cast<StringAttr>().getValue()
+                           << "', which is a destination port. The inputs are "
+                              "required to be source ports.";
+    if (failed(verifyComplexLogic(*this, input)))
+      return emitOpError() << "'@" << callee << "' has '"
+                           << inputName.cast<StringAttr>().getValue()
+                           << "', which is not a port or constant. Complex "
+                              "logic should be conducted in the guard.";
+    if (input == doneValue)
+      return emitOpError() << "the done port of '@" << callee
+                           << "' cannot appear here.";
+    // Check if the connection uses the callee's port.
+    if (port.getDefiningOp() != operation && input.getDefiningOp() != operation)
+      return emitOpError() << "the connection "
+                           << portName.cast<StringAttr>().getValue() << " = "
+                           << inputName.cast<StringAttr>().getValue()
+                           << " is not defined as an input port of '@" << callee
+                           << "'.";
+  }
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

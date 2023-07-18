@@ -4,6 +4,7 @@ add_circt_library(CIRCTOMEvaluator
   DEPENDS
   MLIROMIncGen
   MLIROMAttrIncGen
+  MLIROMOpInterfacesIncGen
 
   LINK_LIBS
   CIRCTOM

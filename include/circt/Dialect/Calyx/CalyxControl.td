@@ -39,6 +39,10 @@ def ControlOp : CalyxContainer<"control", [
       region->push_back(new Block());
     }]>
   ];
+  let extraClassDeclaration = commonClassDeclaration # [{
+    /// Get the InvokeOp of the ControlOp.
+    SmallVector<InvokeOp, 4> getInvokeOps();
+  }];
 }
 
 def IfOp : CalyxContainer<"if", [
@@ -410,3 +414,45 @@ def RepeatOp : CalyxContainer<"repeat", [
   ];
 }
 
+def InvokeOp : CalyxOp<"invoke", [
+                        ControlLike,
+                        SameVariadicOperandSize
+                        ]> {
+  let summary = "Calyx Invoke";
+  let description = [{
+    calyx.invoke is similar to the behavior of a function 
+    call, which invokes a given component.
+
+    The 'callee' attribute is the name of the component,
+    the 'ports' attribute The ports attribute specifies 
+    the input port of the component when it is invoked, 
+    and the 'inputs' attribute specifies the assignment on 
+    the corresponding port.
+
+    ```mlir
+      %id.in, %id.out, ... = calyx.instance @id of @identity : i32, i32, ...
+      %r.in, ... = calyx.register @r : i32, ...
+      ...
+      calyx.control {
+        calyx.seq {
+          calyx.invoke @id(%id.in = %c1_10, %r.in = %id.out) -> (i32, i32)
+        }
+      }
+    ```
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$callee, 
+                   Variadic<AnyType>:$ports,
+                   Variadic<AnyType>:$inputs,
+                   ArrayAttr:$portNames,
+                   ArrayAttr:$inputNames);
+  let results = (outs);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+  let extraClassDeclaration = [{
+    // Get the go port of the invoked component.
+    Value getInstGoValue();
+    // Get the done port of the invoked component.
+    Value getInstDoneValue();
+  }];
+}
