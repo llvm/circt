@@ -25,7 +25,6 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/PriorityQueue.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
@@ -238,7 +237,7 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   // Operations that are allowed in the body of a ControlLike op.
   auto isValidBodyOp = [](Operation *operation) {
     return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp, StaticParOp,
-               StaticRepeatOp, StaticSeqOp, StaticIfOp, InvokeOp>(operation);
+               StaticRepeatOp, StaticSeqOp, StaticIfOp>(operation);
   };
   for (auto &&bodyOp : region.front()) {
     if (isValidBodyOp(&bodyOp))
@@ -891,44 +890,6 @@ void CombComponentOp::getAsmBlockArgumentNames(
 //===----------------------------------------------------------------------===//
 LogicalResult ControlOp::verify() { return verifyControlBody(*this); }
 
-// Helper function to set the return value and add elements to the queue.
-static void setOps(std::queue<Operation *> &que, SmallVector<InvokeOp, 4> &ret,
-                   Block *block) {
-  auto ops = block->getOps<InvokeOp>();
-  for (InvokeOp op : ops)
-    ret.push_back(op);
-  auto sIt = block->getOps<SeqOp>();
-  for (auto op : sIt)
-    que.push(op.getOperation());
-  auto pIt = block->getOps<ParOp>();
-  for (auto op : pIt)
-    que.push(op.getOperation());
-  auto wIt = block->getOps<WhileOp>();
-  for (auto op : wIt)
-    que.push(op.getOperation());
-  auto iIt = block->getOps<IfOp>();
-  for (auto op : iIt)
-    que.push(op.getOperation());
-}
-
-// Get the InvokeOp of the ControlOp.
-SmallVector<InvokeOp, 4> ControlOp::getInvokeOps() {
-  SmallVector<InvokeOp, 4> ret;
-  std::queue<Operation *> que;
-  setOps(que, ret, getBodyBlock());
-  while (!que.empty()) {
-    Operation *op = que.front();
-    if (IfOp ifOp = dyn_cast<IfOp>(op)) {
-      setOps(que, ret, ifOp.getThenBody());
-      setOps(que, ret, ifOp.getElseBody());
-    } else
-      setOps(que, ret, &op->getRegion(0).front());
-
-    que.pop();
-  }
-  return ret;
-}
-
 //===----------------------------------------------------------------------===//
 // SeqOp
 //===----------------------------------------------------------------------===//
@@ -1457,8 +1418,7 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
 /// Determines whether the given direction is valid with the given inputs. The
 /// `isDestination` boolean is used to distinguish whether the value is a source
 /// or a destination.
-template <typename T>
-static LogicalResult verifyPortDirection(T op, Value value,
+static LogicalResult verifyPortDirection(AssignOp op, Value value,
                                          bool isDestination) {
   Operation *definingOp = value.getDefiningOp();
   bool isComponentPort = value.isa<BlockArgument>(),
@@ -2573,264 +2533,6 @@ void StaticRepeatOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                                  MLIRContext *context) {
   patterns.add(emptyControl<StaticRepeatOp>);
   patterns.add(zeroRepeat);
-}
-
-//===----------------------------------------------------------------------===//
-// InvokeOp
-//===----------------------------------------------------------------------===//
-
-// Parse the parameter list of invoke.
-static ParseResult
-parseParameterList(OpAsmParser &parser, OperationState &result,
-                   SmallVectorImpl<OpAsmParser::UnresolvedOperand> &ports,
-                   SmallVectorImpl<OpAsmParser::UnresolvedOperand> &inputs,
-                   SmallVectorImpl<Attribute> &portNames,
-                   SmallVectorImpl<Attribute> &inputNames,
-                   SmallVectorImpl<Type> &types) {
-  OpAsmParser::UnresolvedOperand port;
-  OpAsmParser::UnresolvedOperand input;
-  Type type;
-  auto parseParameter = [&]() -> ParseResult {
-    if (parser.parseOperand(port) || parser.parseEqual() ||
-        parser.parseOperand(input))
-      return failure();
-    ports.push_back(port);
-    portNames.push_back(StringAttr::get(parser.getContext(), port.name));
-    inputs.push_back(input);
-    inputNames.push_back(StringAttr::get(parser.getContext(), input.name));
-    return success();
-  };
-  if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
-                                     parseParameter))
-    return failure();
-  if (parser.parseArrow())
-    return failure();
-  auto parseType = [&]() -> ParseResult {
-    if (parser.parseType(type))
-      return failure();
-    types.push_back(type);
-    return success();
-  };
-  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
-                                        parseType);
-}
-
-ParseResult InvokeOp::parse(OpAsmParser &parser, OperationState &result) {
-  StringAttr componentName;
-  SmallVector<OpAsmParser::UnresolvedOperand, 4> ports;
-  SmallVector<OpAsmParser::UnresolvedOperand, 4> inputs;
-  SmallVector<Attribute> portNames;
-  SmallVector<Attribute> inputNames;
-  SmallVector<Type, 4> types;
-  if (parser.parseSymbolName(componentName))
-    return failure();
-  FlatSymbolRefAttr callee = FlatSymbolRefAttr::get(componentName);
-  SMLoc loc = parser.getCurrentLocation();
-  result.addAttribute("callee", callee);
-  if (parseParameterList(parser, result, ports, inputs, portNames, inputNames,
-                         types))
-    return failure();
-  if (parser.resolveOperands(ports, types, loc, result.operands))
-    return failure();
-  if (parser.resolveOperands(inputs, types, loc, result.operands))
-    return failure();
-  result.addAttribute("portNames",
-                      ArrayAttr::get(parser.getContext(), portNames));
-  result.addAttribute("inputNames",
-                      ArrayAttr::get(parser.getContext(), inputNames));
-  return success();
-}
-
-void InvokeOp::print(OpAsmPrinter &p) {
-  // print the parameter list.
-  p << " @" << getCallee() << "(";
-  auto ports = this->getPorts();
-  auto inputs = this->getInputs();
-  for (size_t i = 0; i != ports.size(); i++) {
-    p << ports[i] << " = " << inputs[i];
-    if (i + 1 != ports.size())
-      p << ", ";
-  }
-  p << ") -> (";
-  // Print argument type.
-  for (size_t i = 0; i != ports.size(); i++) {
-    p << ports[i].getType();
-    if (i + 1 != ports.size())
-      p << ", ";
-  }
-  p << ")";
-}
-
-static LogicalResult verifyInvokeOpValue(InvokeOp op, Value value,
-                                         bool isDestination) {
-  bool isSource = !isDestination;
-  if (isPort(value))
-    return verifyPortDirection(op, value, isDestination);
-
-  if (isSource) {
-    // Refer to the above function verifyNotComplexSource for its role.
-    Operation *operation = value.getDefiningOp();
-    if (operation == nullptr)
-      return success();
-    if (auto *dialect = operation->getDialect();
-        isa<comb::CombDialect>(dialect))
-      return op->emitOpError("has source that is not a port or constant. "
-                             "Complex logic should be conducted in the guard.");
-  }
-  return success();
-}
-
-// Get the value of the Go port within an instance.
-Value InvokeOp::getInstGoValue() {
-  ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
-  Operation *operation = componentOp.lookupSymbol(getCallee());
-  Value ret = nullptr;
-  // Get the value of the writer_en port.
-  if (isa<RegisterOp>(operation))
-    ret = operation->getResult(1);
-  else if (isa<MemoryOp, DivSPipeLibOp, DivUPipeLibOp, MultPipeLibOp,
-               RemSPipeLibOp, RemUPipeLibOp>(operation)) {
-    // Get the value of the writer_en port or go port.
-    ret = operation->getResult(2);
-  } else if (isa<InstanceOp>(operation)) {
-    // Get the go port of the instance through the "go" attribute
-    InstanceOp instanceOp = cast<InstanceOp>(operation);
-    auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
-    for (size_t i = 0; i != portInfo.size(); i++) {
-      if (portInfo[i].hasAttribute("go"))
-        ret = operation->getResult(i);
-    }
-  } else if (isa<PrimitiveOp>(operation)) {
-    // Get the go part of the primitive through the "calyx.go" attribute
-    PrimitiveOp primOp = cast<PrimitiveOp>(operation);
-    auto moduleExternOp = primOp.getReferencedPrimitive();
-    auto argAttrs = moduleExternOp.getArgAttrsAttr();
-    for (size_t i = 0; i != argAttrs.size(); i++)
-      if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(argAttrs[i]))
-        if (!dictAttr.empty())
-          if (dictAttr.begin()->getName().getValue() == "calyx.go")
-            ret = primOp.getResult(i);
-  }
-
-  return ret;
-}
-
-// Get the value of the done port within an instance.
-Value InvokeOp::getInstDoneValue() {
-  ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
-  Operation *operation = componentOp.lookupSymbol(getCallee());
-  Value ret = nullptr;
-  // The done port of these instances is the last result, so the ssa value
-  // of the last result is taken.
-  if (isa<RegisterOp, MemoryOp, DivSPipeLibOp, DivUPipeLibOp, MultPipeLibOp,
-          RemSPipeLibOp, RemUPipeLibOp>(operation)) {
-    size_t doneIdx = operation->getResults().size() - 1;
-    ret = operation->getResult(doneIdx);
-  } else if (isa<InstanceOp>(operation)) {
-    //  Get the go port of the instance through the "done" attribute
-    InstanceOp instanceOp = cast<InstanceOp>(operation);
-    auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
-    for (size_t i = 0; i != portInfo.size(); i++) {
-      if (portInfo[i].hasAttribute("done"))
-        ret = operation->getResult(i);
-    }
-  } else if (isa<calyx::PrimitiveOp>(operation)) {
-    // Get the go part of the primitive through the "calyx.done" attribute
-    PrimitiveOp primOp = cast<PrimitiveOp>(operation);
-    auto moduleExternOp = primOp.getReferencedPrimitive();
-    auto resAttrs = moduleExternOp.getResAttrsAttr();
-    for (size_t i = 0; i != resAttrs.size(); i++)
-      if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(resAttrs[i]))
-        if (!dictAttr.empty())
-          if (dictAttr.begin()->getName().getValue() == "calyx.done")
-            ret = primOp.getResult(i);
-  }
-  return ret;
-}
-
-// A helper function that gets the number of go or done ports in
-// hw.module.extern.
-static size_t getHwModuleExtPortNumber(mlir::ArrayAttr attrsAttr,
-                                       StringRef string) {
-  size_t ret = 0;
-  for (Attribute attr : attrsAttr)
-    if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr))
-      ret = llvm::count_if(dictAttr, [&](NamedAttribute iter) {
-        return iter.getName().getValue() == string;
-      });
-
-  return ret;
-}
-
-LogicalResult InvokeOp::verify() {
-  ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
-  StringRef callee = getCallee();
-  Operation *operation = componentOp.lookupSymbol(callee);
-  // The referenced symbol does not exist.
-  if (!operation)
-    return emitOpError() << "with instance '" << callee
-                         << "', which does not exist.";
-  // The argument list of invoke is empty.
-  if (getInputs().empty())
-    return emitOpError() << "the input for '" << getOperationName()
-                         << "' is empty.";
-  size_t goPortNum = 0, donePortNum = 0;
-  // They both have a go port and a done port, but the "go" port for
-  // registers and memrey should be "write_en" port.
-  if (isa<RegisterOp, DivSPipeLibOp, DivUPipeLibOp, MemoryOp, MultPipeLibOp,
-          RemSPipeLibOp, RemUPipeLibOp>(operation))
-    goPortNum = 1, donePortNum = 1;
-  else if (InstanceOp instanceOp = dyn_cast<InstanceOp>(operation)) {
-    auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
-    for (PortInfo info : portInfo) {
-      if (info.hasAttribute("go"))
-        goPortNum++;
-      if (info.hasAttribute("done"))
-        donePortNum++;
-    }
-  } else if (PrimitiveOp primOp = dyn_cast<PrimitiveOp>(operation)) {
-    auto moduleExternOp = primOp.getReferencedPrimitive();
-    // Get the number of go ports and done ports by their attrubutes.
-    goPortNum =
-        getHwModuleExtPortNumber(moduleExternOp.getArgAttrsAttr(), "calyx.go");
-    donePortNum =
-        getHwModuleExtPortNumber(moduleExternOp.getResAttrsAttr(), "calyx.do");
-  }
-  // If the number of go ports and done ports is wrong.
-  if (goPortNum != 1 && donePortNum != 1)
-    return emitOpError()
-           << " '" << callee
-           << "' must have single go port and single done port, the '" << callee
-           << "' has " << goPortNum << " go port and " << donePortNum
-           << " done port.";
-
-  auto ports = getPorts();
-  auto inputs = getInputs();
-  // We have verified earlier that the instance has a go port.
-  Value goValue = getInstGoValue();
-  Value doneValue = getInstDoneValue();
-  for (size_t i = 0; i < ports.size(); ++i) {
-    // Check the direction of these input ports.
-    if (failed(verifyInvokeOpValue(*this, ports[i], true)))
-      return failure();
-    // The go port should not appear in the parameter list.
-    if (ports[i] == goValue)
-      return emitOpError() << "the go port of '" << callee
-                           << "' cannot appear here.";
-    // Check the direction of these input ports.
-    if (failed(verifyInvokeOpValue(*this, inputs[i], false)))
-      return failure();
-    if (inputs[i] == doneValue)
-      return emitOpError() << "the done port of '" << callee
-                           << "' cannot appear here.";
-    // Check if the connection uses the callee's port.
-    if (ports[i].getDefiningOp() != operation &&
-        inputs[i].getDefiningOp() != operation)
-      return emitOpError() << "all connections should involve the port of the "
-                              "invoke instance.";
-  }
-
-  return success();
 }
 
 //===----------------------------------------------------------------------===//
