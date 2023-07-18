@@ -2626,21 +2626,22 @@ void InvokeOp::print(OpAsmPrinter &p) {
 
 // Check the direction of one of the ports in one of the connections of an
 // InvokeOp.
-static LogicalResult verifyInvokeOpValue(InvokeOp &op, Value &value,
+static LogicalResult verifyInvokeOpValue(InvokeOp op, Value value,
                                          bool isDestination) {
+  bool isSource = !isDestination;
   if (isPort(value))
     return verifyPortDirection(op, value, isDestination);
-  return success();
-}
 
-// Checks if the value comes from complex logic.
-static LogicalResult verifyComplexLogic(InvokeOp &op, Value &value) {
-  // Refer to the above function verifyNotComplexSource for its role.
-  Operation *operation = value.getDefiningOp();
-  if (operation == nullptr)
-    return success();
-  if (auto *dialect = operation->getDialect(); isa<comb::CombDialect>(dialect))
-    return failure();
+  if (isSource) {
+    // Refer to the above function verifyNotComplexSource for its role.
+    Operation *operation = value.getDefiningOp();
+    if (operation == nullptr)
+      return success();
+    if (auto *dialect = operation->getDialect();
+        isa<comb::CombDialect>(dialect))
+      return op->emitOpError("has source that is not a port or constant. "
+                             "Complex logic should be conducted in the guard.");
+  }
   return success();
 }
 
@@ -2796,15 +2797,11 @@ LogicalResult InvokeOp::verify() {
                            << "' cannot appear here.";
     // Check the direction of these source ports.
     if (failed(verifyInvokeOpValue(*this, input, false)))
-      return emitOpError() << "'@" << callee << "' has output '"
-                           << inputName.cast<StringAttr>().getValue()
-                           << "', which is a destination port. The inputs are "
-                              "required to be source ports.";
-    if (failed(verifyComplexLogic(*this, input)))
-      return emitOpError() << "'@" << callee << "' has '"
-                           << inputName.cast<StringAttr>().getValue()
-                           << "', which is not a port or constant. Complex "
-                              "logic should be conducted in the guard.";
+      return emitOpError()
+             << "'@" << callee << "' has output '"
+             << inputName.cast<StringAttr>().getValue()
+             << "', which is a destination port or a complex logic. The inputs "
+                "are required to be source ports.";
     if (input == doneValue)
       return emitOpError() << "the done port of '@" << callee
                            << "' cannot appear here.";
@@ -2813,8 +2810,7 @@ LogicalResult InvokeOp::verify() {
       return emitOpError() << "the connection "
                            << portName.cast<StringAttr>().getValue() << " = "
                            << inputName.cast<StringAttr>().getValue()
-                           << " is not defined as an input port of '@" << callee
-                           << "'.";
+                           << " is unrelated to the '@" << callee << "'.";
   }
   return success();
 }

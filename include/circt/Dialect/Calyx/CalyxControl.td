@@ -393,12 +393,11 @@ def InvokeOp : CalyxOp<"invoke", [
     the corresponding port.
 
     ```mlir
-      %id.in, %id.out, ... = calyx.instance @id of @identity : i32, i32, ...
-      %r.in, ... = calyx.register @r : i32, ...
+      %id.in, ... = calyx.instance @id of @identity : i32, ...
       ...
       calyx.control {
         calyx.seq {
-          calyx.invoke @id(%id.in = %c1_10, %r.in = %id.out) -> (i32, i32)
+          calyx.invoke @id(%id.in = %c1_10) -> (i32)
         }
       }
     ```
