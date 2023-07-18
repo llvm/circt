@@ -174,6 +174,10 @@ def attribute_to_var(attr):
     return (ir.StringAttr(ref.module).value, ir.StringAttr(ref.name).value)
   except ValueError:
     pass
+  try:
+    return list(map(attribute_to_var, om.ListAttr(attr)))
+  except ValueError:
+    pass
 
   raise TypeError(f"Cannot convert {repr(attr)} to python value")
 
