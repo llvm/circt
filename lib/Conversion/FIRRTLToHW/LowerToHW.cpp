@@ -3449,7 +3449,7 @@ LogicalResult FIRRTLLowering::visitExpr(PlusArgsTestIntrinsicOp op) {
   addToInitialBlock([&]() {
     auto call = builder.create<sv::SystemFunctionOp>(
         resultType, "test$plusargs", ArrayRef<Value>{str});
-    builder.create<sv::PAssignOp>(reg, call);
+    builder.create<sv::BPAssignOp>(reg, call);
   });
   return setLoweringTo<sv::ReadInOutOp>(op, reg);
 }
@@ -3459,22 +3459,28 @@ LogicalResult FIRRTLLowering::visitExpr(PlusArgsValueIntrinsicOp op) {
   auto type = lowerType(op.getResult().getType());
   if (!type)
     return failure();
-
-  auto tmpResultType = builder.getIntegerType(32);
-
-  auto str = builder.create<sv::ConstantStrOp>(op.getFormatString());
   auto regv =
-      builder.create<sv::RegOp>(type, builder.getStringAttr("_pargs_v"));
+      builder.create<sv::RegOp>(type, builder.getStringAttr("_pargs_v_"));
   auto regf =
       builder.create<sv::RegOp>(resultType, builder.getStringAttr("_pargs_f"));
-  auto zero32 = getOrCreateIntConstant(32, 0);
-  addToInitialBlock([&]() {
-    auto call = builder.create<sv::SystemFunctionOp>(
-        tmpResultType, "value$plusargs", ArrayRef<Value>{str, regv});
-    auto truevalue =
-        builder.create<comb::ICmpOp>(ICmpPredicate::ne, call, zero32, true);
-    builder.create<sv::PAssignOp>(regf, truevalue);
-  });
+  builder.create<sv::IfDefOp>(
+      "SYNTHESIS",
+      [&]() {
+        auto cst0 = getOrCreateIntConstant(1, 0);
+        builder.create<sv::AssignOp>(regf, cst0);
+      },
+      [&]() {
+        addToInitialBlock([&]() {
+          auto zero32 = getOrCreateIntConstant(32, 0);
+          auto tmpResultType = builder.getIntegerType(32);
+          auto str = builder.create<sv::ConstantStrOp>(op.getFormatString());
+          auto call = builder.create<sv::SystemFunctionOp>(
+              tmpResultType, "value$plusargs", ArrayRef<Value>{str, regv});
+          auto truevalue = builder.create<comb::ICmpOp>(ICmpPredicate::ne, call,
+                                                        zero32, true);
+          builder.create<sv::BPAssignOp>(regf, truevalue);
+        });
+      });
   auto readf = builder.create<sv::ReadInOutOp>(regf);
   auto readv = builder.create<sv::ReadInOutOp>(regv);
 

@@ -22,10 +22,10 @@ firrtl.circuit "Intrinsics" {
     // CHECK-NEXT: [[BAR_FOUND_DECL:%.*]] = sv.reg : !hw.inout<i1>
     // CHECK-NEXT: sv.initial {
     // CHECK-NEXT:   [[TMP:%.*]] = sv.system "test$plusargs"([[FOO_STR]])
-    // CHECK-NEXT:   sv.passign [[FOO_DECL]], [[TMP]]
+    // CHECK-NEXT:   sv.bpassign [[FOO_DECL]], [[TMP]]
     // CHECK-NEXT:   [[TMP:%.*]] = sv.system "value$plusargs"([[BAR_STR]], [[BAR_VALUE_DECL]])
     // CHECK-NEXT:   [[TMP2:%.*]] = comb.icmp bin ne [[TMP]], %c0_i32
-    // CHECK-NEXT:   sv.passign [[BAR_FOUND_DECL]], [[TMP2]]
+    // CHECK-NEXT:   sv.bpassign [[BAR_FOUND_DECL]], [[TMP2]]
     // CHECK-NEXT: }
     // CHECK-NEXT: [[BAR_FOUND:%.*]] = sv.read_inout [[BAR_FOUND_DECL]]
     // CHECK-NEXT: [[BAR_VALUE:%.*]] = sv.read_inout [[BAR_VALUE_DECL]]
