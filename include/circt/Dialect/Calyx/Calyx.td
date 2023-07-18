@@ -66,8 +66,8 @@ class CalyxContainer<string mnemonic, list<Trait> traits = []> :
   ])> {
   let assemblyFormat = "$body attr-dict";
   let regions = (region SizedRegion<1>: $body);
-
-  let extraClassDeclaration = [{
+  
+  code commonClassDeclaration = [{
     /// Returns the body of a Calyx container.
     Block *getBodyBlock() {
       Region* region = &getOperation()->getRegion(0);
@@ -75,6 +75,7 @@ class CalyxContainer<string mnemonic, list<Trait> traits = []> :
       return &region->front();
     }
   }];
+  let extraClassDeclaration = commonClassDeclaration;
 }
 
 /// Base class for ports associated with a Calyx GroupOp.
