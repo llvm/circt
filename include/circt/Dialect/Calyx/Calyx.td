@@ -66,7 +66,9 @@ class CalyxContainer<string mnemonic, list<Trait> traits = []> :
   ])> {
   let assemblyFormat = "$body attr-dict";
   let regions = (region SizedRegion<1>: $body);
-  
+
+  /// Because extraClassDeclaration is overloaded in the subclass, 
+  /// commonClassDeclaration is defined here to help define extraClassDeclaration.
   code commonClassDeclaration = [{
     /// Returns the body of a Calyx container.
     Block *getBodyBlock() {
