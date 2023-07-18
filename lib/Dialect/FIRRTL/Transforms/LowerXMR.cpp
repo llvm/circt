@@ -618,8 +618,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     if (auto arg = dyn_cast<BlockArgument>(val))
       return ::getInnerRefTo(
           cast<FModuleLike>(arg.getParentBlock()->getParentOp()),
-          arg.getArgNumber(), "xmr_sym",
-          [&](FModuleLike mod) -> ModuleNamespace & {
+          arg.getArgNumber(), [&](FModuleLike mod) -> ModuleNamespace & {
             return getModuleNamespace(mod);
           });
     else
@@ -627,10 +626,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   }
 
   InnerRefAttr getInnerRefTo(Operation *op) {
-    return ::getInnerRefTo(op, "xmr_sym",
-                           [&](FModuleOp mod) -> ModuleNamespace & {
-                             return getModuleNamespace(mod);
-                           });
+    return ::getInnerRefTo(op, [&](FModuleOp mod) -> ModuleNamespace & {
+      return getModuleNamespace(mod);
+    });
   }
 
   void markForRemoval(Operation *op) { opsToRemove.push_back(op); }

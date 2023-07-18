@@ -662,11 +662,11 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
 // CHECK-LABEL: firrtl.circuit "SRAMPathsWithNLA"
 // CHECK:      symbols = [
 // CHECK-SAME:   @SRAMPathsWithNLA,
-// CHECK-SAME:   #hw.innerNameRef<@SRAMPathsWithNLA::@omir_sym>,
+// CHECK-SAME:   #hw.innerNameRef<@SRAMPathsWithNLA::@{{[^>]+}}>,
 // CHECK-SAME:   @SRAMPaths,
 // CHECK-SAME:   #hw.innerNameRef<@SRAMPaths::@sub>,
 // CHECK-SAME:   @Submodule,
-// CHECK-SAME:   #hw.innerNameRef<@Submodule::@omir_sym>,
+// CHECK-SAME:   #hw.innerNameRef<@Submodule::@{{[^>]+}}>,
 // CHECK-SAME:   @MySRAM
 // CHECK-SAME: ]
 

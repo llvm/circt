@@ -701,19 +701,13 @@ void circt::firrtl::walkGroundTypes(
 
 /// Returns an operation's `inner_sym`, adding one if necessary.
 StringAttr circt::firrtl::getOrAddInnerSym(
-    Operation *op, StringRef nameHint, FModuleOp mod,
+    Operation *op, FModuleOp mod,
     std::function<ModuleNamespace &(FModuleOp)> getNamespace) {
   auto attr = getInnerSymName(op);
   if (attr)
     return attr;
-  if (nameHint.empty()) {
-    if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
-      nameHint = nameAttr.getValue();
-    // Ensure if the op name is also empty, nameHint is initialized.
-    if (nameHint.empty())
-      nameHint = "sym";
-  }
-  auto name = getNamespace(mod).newName(nameHint);
+
+  auto name = getNamespace(mod).newName("sym");
   attr = StringAttr::get(op->getContext(), name);
   op->setAttr("inner_sym", hw::InnerSymAttr::get(attr));
   return attr;
@@ -722,30 +716,22 @@ StringAttr circt::firrtl::getOrAddInnerSym(
 /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
 /// to that operation.
 hw::InnerRefAttr circt::firrtl::getInnerRefTo(
-    Operation *op, StringRef nameHint,
-    std::function<ModuleNamespace &(FModuleOp)> getNamespace) {
+    Operation *op, std::function<ModuleNamespace &(FModuleOp)> getNamespace) {
   auto mod = op->getParentOfType<FModuleOp>();
   assert(mod && "must be an operation inside an FModuleOp");
-  return hw::InnerRefAttr::get(
-      SymbolTable::getSymbolName(mod),
-      getOrAddInnerSym(op, nameHint, mod, getNamespace));
+  return hw::InnerRefAttr::get(SymbolTable::getSymbolName(mod),
+                               getOrAddInnerSym(op, mod, getNamespace));
 }
 
 /// Returns a port's `inner_sym`, adding one if necessary.
 StringAttr circt::firrtl::getOrAddInnerSym(
-    FModuleLike mod, size_t portIdx, StringRef nameHint,
+    FModuleLike mod, size_t portIdx,
     std::function<ModuleNamespace &(FModuleLike)> getNamespace) {
 
   auto attr = cast<hw::HWModuleLike>(*mod).getPortSymbolAttr(portIdx);
   if (attr)
     return attr.getSymName();
-  if (nameHint.empty()) {
-    if (auto name = mod.getPortNameAttr(portIdx))
-      nameHint = name;
-    else
-      nameHint = "sym";
-  }
-  auto name = getNamespace(mod).newName(nameHint);
+  auto name = getNamespace(mod).newName("sym");
   auto sAttr = StringAttr::get(mod.getContext(), name);
   mod.setPortSymbolAttr(portIdx, sAttr);
   return sAttr;
@@ -754,11 +740,10 @@ StringAttr circt::firrtl::getOrAddInnerSym(
 /// Obtain an inner reference to a port, possibly adding an `inner_sym`
 /// to the port.
 hw::InnerRefAttr circt::firrtl::getInnerRefTo(
-    FModuleLike mod, size_t portIdx, StringRef nameHint,
+    FModuleLike mod, size_t portIdx,
     std::function<ModuleNamespace &(FModuleLike)> getNamespace) {
-  return hw::InnerRefAttr::get(
-      SymbolTable::getSymbolName(mod),
-      getOrAddInnerSym(mod, portIdx, nameHint, getNamespace));
+  return hw::InnerRefAttr::get(SymbolTable::getSymbolName(mod),
+                               getOrAddInnerSym(mod, portIdx, getNamespace));
 }
 
 /// Parse a string that may encode a FIRRTL location into a LocationAttr.
