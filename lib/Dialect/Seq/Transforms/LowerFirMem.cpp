@@ -266,17 +266,30 @@ FirMemConfig LowerFirMemPass::collectMemory(FirMemOp op) {
 /// Create the `HWModuleGeneratedOp` for a list of memory parametrizations.
 SmallVector<HWModuleGeneratedOp>
 LowerFirMemPass::createMemoryModules(MutableArrayRef<UniqueConfig> configs) {
-  // Create the generator schema.
-  OpBuilder builder(getOperation());
-  builder.setInsertionPointToStart(getOperation().getBody());
-  std::array<StringRef, 14> schemaFields = {
-      "depth",          "numReadPorts",    "numWritePorts", "numReadWritePorts",
-      "readLatency",    "writeLatency",    "width",         "maskGran",
-      "readUnderWrite", "writeUnderWrite", "writeClockIDs", "initFilename",
-      "initIsBinary",   "initIsInline"};
-  auto schemaOp = builder.create<hw::HWGeneratorSchemaOp>(
-      getOperation().getLoc(), "FIRRTLMem", "FIRRTL_Memory",
-      builder.getStrArrayAttr(schemaFields));
+  ModuleOp circuit = getOperation();
+
+  // Create or re-use the generator schema.
+  hw::HWGeneratorSchemaOp schemaOp;
+  for (auto op : circuit.getOps<hw::HWGeneratorSchemaOp>()) {
+    if (op.getDescriptor() == "FIRRTL_Memory") {
+      schemaOp = op;
+      break;
+    }
+  }
+  if (!schemaOp) {
+    auto builder = OpBuilder::atBlockBegin(getOperation().getBody());
+    std::array<StringRef, 14> schemaFields = {
+        "depth",          "numReadPorts",
+        "numWritePorts",  "numReadWritePorts",
+        "readLatency",    "writeLatency",
+        "width",          "maskGran",
+        "readUnderWrite", "writeUnderWrite",
+        "writeClockIDs",  "initFilename",
+        "initIsBinary",   "initIsInline"};
+    schemaOp = builder.create<hw::HWGeneratorSchemaOp>(
+        getOperation().getLoc(), "FIRRTLMem", "FIRRTL_Memory",
+        builder.getStrArrayAttr(schemaFields));
+  }
   auto schemaSymRef = FlatSymbolRefAttr::get(schemaOp);
 
   // Determine the insertion point for each of the memory modules. We basically
@@ -303,6 +316,7 @@ LowerFirMemPass::createMemoryModules(MutableArrayRef<UniqueConfig> configs) {
   SmallVector<HWModuleGeneratedOp> genOps;
   genOps.reserve(configs.size());
   for (auto [config, insertBefore] : llvm::zip(configs, insertionPoints)) {
+    OpBuilder builder(circuit.getContext());
     builder.setInsertionPoint(insertBefore);
     genOps.push_back(
         createMemoryModule(config, builder, schemaSymRef, globalNamespace));
