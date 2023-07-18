@@ -346,11 +346,11 @@ A tryGetAs(DictionaryAttr &dict, const Attribute &root, StringRef key,
 /// Add ports to the module and all its instances and return the clone for
 /// `instOnPath`. This does not connect the new ports to anything. Replace
 /// the old instances with the new cloned instance in all the caches.
-InstanceOp addPortsToModule(
-    FModuleLike mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir,
-    StringRef newName, InstancePathCache &instancePathcache,
-    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
-    CircuitTargetCache *targetCaches = nullptr);
+InstanceOp addPortsToModule(FModuleLike mod, InstanceOp instOnPath,
+                            FIRRTLType portType, Direction dir,
+                            StringRef newName,
+                            InstancePathCache &instancePathcache,
+                            CircuitTargetCache *targetCaches = nullptr);
 
 } // namespace firrtl
 } // namespace circt
