@@ -176,6 +176,50 @@ void circt::om::ClassOp::getAsmBlockArgumentNames(
 Type circt::om::ClassFieldOp::getType() { return getValue().getType(); }
 
 //===----------------------------------------------------------------------===//
+// ClassExternOp
+//===----------------------------------------------------------------------===//
+
+ParseResult circt::om::ClassExternOp::parse(OpAsmParser &parser,
+                                            OperationState &state) {
+  return parseClassLike(parser, state);
+}
+
+void circt::om::ClassExternOp::build(OpBuilder &odsBuilder,
+                                     OperationState &odsState, Twine name) {
+  return build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+               odsBuilder.getStrArrayAttr({}));
+}
+
+void circt::om::ClassExternOp::build(OpBuilder &odsBuilder,
+                                     OperationState &odsState, Twine name,
+                                     ArrayRef<StringRef> formalParamNames) {
+  return build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+               odsBuilder.getStrArrayAttr(formalParamNames));
+}
+
+void circt::om::ClassExternOp::print(OpAsmPrinter &printer) {
+  printClassLike(*this, printer);
+}
+
+LogicalResult circt::om::ClassExternOp::verify() {
+  if (failed(verifyClassLike(*this))) {
+    return failure();
+  }
+
+  // Verify that only external class field declarations are present in the body.
+  for (auto &op : getOps())
+    if (!isa<ClassExternFieldOp>(op))
+      return op.emitOpError("not allowed in external class");
+
+  return success();
+}
+
+void circt::om::ClassExternOp::getAsmBlockArgumentNames(
+    Region &region, OpAsmSetValueNameFn setNameFn) {
+  getClassLikeAsmBlockArgumentNames(*this, region, setNameFn);
+}
+
+//===----------------------------------------------------------------------===//
 // ObjectOp
 //===----------------------------------------------------------------------===//
 
