@@ -22,7 +22,11 @@ with Context() as ctx, Location.unknown():
       om.class.field @child, %0 : !om.class.type<@Child>
 
       om.class.field @reference, %sym : !om.ref
+
+      %list = om.constant #om.list<!om.string, ["X" : !om.string, "Y" : !om.string]> : !om.list<!om.string>
+      om.class.field @list, %list : !om.list<!om.string>
     }
+
     om.class @Child() {
       %0 = om.constant 14 : i64
       om.class.field @foo, %0 : i64
@@ -74,3 +78,6 @@ for (name, field) in obj:
   # CHECK: name: field, field: 42
   # CHECK: name: reference, field: ('Root', 'x')
   print(f"name: {name}, field: {field}")
+
+# CHECK: ['X', 'Y']
+print(obj.list)

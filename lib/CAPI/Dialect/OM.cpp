@@ -183,7 +183,7 @@ MlirAttribute omEvaluatorObjectValueGetPrimitive(OMObjectValue objectValue) {
 }
 
 //===----------------------------------------------------------------------===//
-// Attribute API.
+// ReferenceAttr API.
 //===----------------------------------------------------------------------===//
 
 bool omAttrIsAReferenceAttr(MlirAttribute attr) {
@@ -193,4 +193,22 @@ bool omAttrIsAReferenceAttr(MlirAttribute attr) {
 MlirAttribute omReferenceAttrGetInnerRef(MlirAttribute referenceAttr) {
   return wrap(
       (Attribute)unwrap(referenceAttr).cast<ReferenceAttr>().getInnerRef());
+}
+
+//===----------------------------------------------------------------------===//
+// ListAttr API.
+//===----------------------------------------------------------------------===//
+
+bool omAttrIsAListAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<ListAttr>();
+}
+
+intptr_t omListAttrGetNumElements(MlirAttribute attr) {
+  auto listAttr = llvm::cast<ListAttr>(unwrap(attr));
+  return static_cast<intptr_t>(listAttr.getElements().size());
+}
+
+MlirAttribute omListAttrGetElement(MlirAttribute attr, intptr_t pos) {
+  auto listAttr = llvm::cast<ListAttr>(unwrap(attr));
+  return wrap(listAttr.getElements()[pos]);
 }
