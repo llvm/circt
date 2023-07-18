@@ -128,8 +128,8 @@ public:
     }
 
     StageReturns rets;
-    auto stageTerminator = dyn_cast<StageOp>(terminator);
-    if (!stageTerminator) {
+    auto stageOp = dyn_cast<StageOp>(terminator);
+    if (!stageOp) {
       assert(isa<ReturnOp>(terminator) && "expected ReturnOp");
       // This was the pipeline return op - the return op/last stage doesn't
       // register its operands, hence, all return operands are passthrough
@@ -139,12 +139,12 @@ public:
       return rets;
     }
 
-    assert(registerNames.size() == stageTerminator.getRegisters().size() &&
+    assert(registerNames.size() == stageOp.getRegisters().size() &&
            "register names and registers must be the same size");
 
     // Build data registers.
     auto stageRegPrefix = getStageRegPrefix(stageIndex);
-    auto loc = stageTerminator->getLoc();
+    auto loc = stageOp->getLoc();
 
     // Build the clock enable signal: enable && !stall (if applicable)
     Value stageValidAndNotStalled = args.enable;
@@ -163,7 +163,7 @@ public:
           loc, args.clock, stageValidAndNotStalled, /*test_enable=*/Value());
     }
 
-    for (auto it : llvm::enumerate(stageTerminator.getRegisters())) {
+    for (auto it : llvm::enumerate(stageOp.getRegisters())) {
       auto regIdx = it.index();
       auto regIn = it.value();
 
@@ -172,24 +172,23 @@ public:
       if (this->clockGateRegs) {
         // Use the clock gate instead of clock enable.
         Value currClockGate = notStalledClockGate;
-        for (auto hierClockGateEnable :
-             stageTerminator.getClockGatesForReg(regIdx)) {
+        for (auto hierClockGateEnable : stageOp.getClockGatesForReg(regIdx)) {
           // Create clock gates for any hierarchically nested clock gates.
           currClockGate = builder.create<seq::ClockGateOp>(
               loc, currClockGate, hierClockGateEnable, /*test_enable=*/Value());
         }
-        dataReg = builder.create<seq::CompRegOp>(stageTerminator->getLoc(),
-                                                 regIn, currClockGate, regName);
+        dataReg = builder.create<seq::CompRegOp>(stageOp->getLoc(), regIn,
+                                                 currClockGate, regName);
       } else {
         // Only clock-enable the register if the pipeline is stallable.
         // For non-stallable pipelines, a data register can always be clocked.
         if (hasStall) {
           dataReg = builder.create<seq::CompRegClockEnabledOp>(
-              stageTerminator->getLoc(), regIn, args.clock,
-              stageValidAndNotStalled, regName);
+              stageOp->getLoc(), regIn, args.clock, stageValidAndNotStalled,
+              regName);
         } else {
-          dataReg = builder.create<seq::CompRegOp>(stageTerminator->getLoc(),
-                                                   regIn, args.clock, regName);
+          dataReg = builder.create<seq::CompRegOp>(stageOp->getLoc(), regIn,
+                                                   args.clock, regName);
         }
       }
       rets.regs.push_back(dataReg);
@@ -212,7 +211,7 @@ public:
           args.reset, validRegResetVal, validRegName);
     }
 
-    rets.passthroughs = stageTerminator.getPassthroughs();
+    rets.passthroughs = stageOp.getPassthroughs();
     return rets;
   }
 
@@ -222,6 +221,7 @@ public:
   struct StageEgressNames {
     llvm::SmallVector<Attribute> regNames;
     llvm::SmallVector<Attribute> outNames;
+    llvm::SmallVector<Attribute> inNames;
   };
 
   // Returns a set of names for the output values of a given stage (registers
@@ -236,39 +236,48 @@ public:
 
     if (auto stageOp = dyn_cast<StageOp>(stageTerminator)) {
       // Registers...
-      std::string assignedRegName, assignedOutName;
+      std::string assignedRegName, assignedOutName, assignedInName;
       for (size_t regi = 0; regi < stageOp.getRegisters().size(); ++regi) {
         if (auto regName = stageOp.getRegisterName(regi)) {
-          assignedRegName =
-              ("s" + Twine(stageIndex) + "_" + regName.strref() + "_reg").str();
-          assignedOutName = regName.str();
+          assignedRegName = regName.str();
+          assignedOutName = assignedRegName + "_out";
+          assignedInName = assignedRegName + "_in";
         } else {
           assignedRegName =
-              ("s" + Twine(stageIndex) + "_reg" + Twine(regi)).str();
+              ("stage" + Twine(stageIndex) + "_reg" + Twine(regi)).str();
           assignedOutName = ("out" + Twine(regi)).str();
+          assignedInName = ("in" + Twine(regi)).str();
         }
 
         if (pipelineName) {
           assignedRegName = pipelineName.str() + "_" + assignedRegName;
           assignedOutName = pipelineName.str() + "_" + assignedOutName;
+          assignedInName = pipelineName.str() + "_" + assignedInName;
         }
 
         egressNames.regNames.push_back(builder.getStringAttr(assignedRegName));
         egressNames.outNames.push_back(builder.getStringAttr(assignedOutName));
+        egressNames.inNames.push_back(builder.getStringAttr(assignedInName));
       }
 
       // Passthroughs
       for (size_t passi = 0; passi < stageOp.getPassthroughs().size();
            ++passi) {
-        if (auto passName = stageOp.getPassthroughName(passi))
-          assignedOutName = (passName.strref() + "_pass").str();
-        else
+        if (auto passName = stageOp.getPassthroughName(passi)) {
+          assignedOutName = (passName.strref() + "_out").str();
+          assignedInName = (passName.strref() + "_in").str();
+        } else {
           assignedOutName = ("pass" + Twine(passi)).str();
+          assignedInName = ("pass" + Twine(passi)).str();
+        }
 
-        if (pipelineName)
+        if (pipelineName) {
           assignedOutName = pipelineName.str() + "_" + assignedOutName;
+          assignedInName = pipelineName.str() + "_" + assignedInName;
+        }
 
         egressNames.outNames.push_back(builder.getStringAttr(assignedOutName));
+        egressNames.inNames.push_back(builder.getStringAttr(assignedInName));
       }
     } else {
       // For the return op, we just inherit the names of the top-level pipeline
@@ -317,7 +326,7 @@ public:
   using PipelineLowering::PipelineLowering;
 
   StringAttr getStageRegPrefix(size_t stageIdx) override {
-    return builder.getStringAttr(pipelineName.strref() + "_s" +
+    return builder.getStringAttr(pipelineName.strref() + "_stage" +
                                  Twine(stageIdx));
   }
 
@@ -372,8 +381,7 @@ public:
     // Replace the stage valid signal.
     pipeline.getStageEnableSignal(stage).replaceAllUsesWith(args.enable);
 
-    // Determine register names.
-    llvm::SmallVector<Attribute> stageRegisterNames;
+    // Determine stage egress info.
     auto nextStage = dyn_cast<StageOp>(stage->getTerminator());
     StageEgressNames egressNames;
     if (nextStage)
@@ -383,7 +391,7 @@ public:
     // Move stage operations into the current module.
     builder.setInsertionPoint(pipeline);
     StageReturns stageRets =
-        emitStageBody(stage, args, stageRegisterNames, stageIndex);
+        emitStageBody(stage, args, egressNames.regNames, stageIndex);
 
     if (nextStage) {
       // Lower the next stage.
@@ -411,7 +419,7 @@ public:
   using PipelineLowering::PipelineLowering;
 
   StringAttr getStageRegPrefix(size_t stageIdx) override {
-    return builder.getStringAttr("s" + std::to_string(stageIdx));
+    return builder.getStringAttr("stage" + std::to_string(stageIdx));
   }
 
   // Helper class to manage grabbing the various inputs for stage modules.
@@ -640,9 +648,9 @@ public:
       nextStageArgs.reset = pipelineRst;
       nextStageArgs.stall = pipelineStall;
       return lowerStage(stageOp.getNextStage(), nextStageArgs, stageIndex + 1,
-                        // The output register names of this stage is the input
-                        // names of the next stage.
-                        egressNames.outNames);
+                        // It is the current stages' egress info which
+                        // determines the next stage input names.
+                        egressNames.inNames);
     }
 
     // This was the final stage - forward the return values of the last stage
@@ -752,6 +760,7 @@ private:
   buildStage(Block *stage, StageArgs args, size_t stageIndex,
              llvm::ArrayRef<Attribute> inputNames,
              StageEgressNames &egressNames) {
+    assert(args.data.size() == inputNames.size());
     builder.setInsertionPoint(parentModule);
     llvm::SmallVector<Type> outputTypes;
     auto *terminator = stage->getTerminator();
