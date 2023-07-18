@@ -5,10 +5,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-//
-// This file defines the passes that work on the Ibis dialect.
-//
-//===----------------------------------------------------------------------===//
 
 #ifndef CIRCT_DIALECT_IBIS_PASSES_TD
 #define CIRCT_DIALECT_IBIS_PASSES_TD
