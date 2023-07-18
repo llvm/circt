@@ -813,8 +813,8 @@ void Emitter::emitInvoke(InvokeOp invoke) {
   /// Because the ports of all components of calyx.invoke are inside a (),
   /// here the input and output ports are divided, inputs and outputs store
   /// the connections for a subset of input and output ports of the instance.
-  llvm::StringMap<StringRef> inputsMap;
-  llvm::StringMap<StringRef> outputsMap;
+  llvm::StringMap<std::string> inputsMap;
+  llvm::StringMap<std::string> outputsMap;
   for (auto [portNameAttr, inputNameAttr, input] :
        llvm::zip(portNames, inputNames, invoke.getInputs())) {
     StringRef portName = cast<StringAttr>(portNameAttr).getValue();
@@ -838,10 +838,10 @@ void Emitter::emitInvoke(InvokeOp invoke) {
         inputsMap[inputMapKey] = mapValue;
         continue;
       }
-      inputsMap[inputMapKey] = inputName.drop_front(1);
+      inputsMap[inputMapKey] = inputName.drop_front(1).str();
     } else if (inputName.substr(1, callee.size()) == callee)
       outputsMap[inputName.drop_front(2 + callee.size())] =
-          portName.drop_front(1);
+          portName.drop_front(1).str();
   }
   /// Emit inputs
   os << LParen();
