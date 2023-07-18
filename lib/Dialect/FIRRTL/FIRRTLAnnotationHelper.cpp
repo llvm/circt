@@ -333,24 +333,19 @@ std::optional<AnnoPathValue> firrtl::resolvePath(StringRef rawPath,
   return resolveEntities(*tokens, circuit, symTbl, cache);
 }
 
-InstanceOp firrtl::addPortsToModule(
-    FModuleLike mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir,
-    StringRef newName, InstancePathCache &instancePathcache,
-    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
-    CircuitTargetCache *targetCaches) {
+InstanceOp firrtl::addPortsToModule(FModuleLike mod, InstanceOp instOnPath,
+                                    FIRRTLType portType, Direction dir,
+                                    StringRef newName,
+                                    InstancePathCache &instancePathcache,
+                                    CircuitTargetCache *targetCaches) {
   // To store the cloned version of `instOnPath`.
   InstanceOp clonedInstOnPath;
   // Get a new port name from the Namespace.
-  auto portName = [&](FModuleLike nameForMod) {
-    return StringAttr::get(nameForMod.getContext(),
-                           getNamespace(nameForMod).newName(newName));
-  };
+  auto portName = StringAttr::get(mod.getContext(), newName);
   // The port number for the new port.
   unsigned portNo = getNumPorts(mod);
-  PortInfo portInfo = {portName(mod), portType, dir, {}, mod.getLoc()};
+  PortInfo portInfo = {portName, portType, dir, {}, mod.getLoc()};
   mod.insertPorts({{portNo, portInfo}});
-  if (targetCaches)
-    targetCaches->insertPort(mod, portNo);
   // Now update all the instances of `mod`.
   for (auto *use : instancePathcache.instanceGraph.lookup(mod)->uses()) {
     InstanceOp useInst = cast<InstanceOp>(use->getInstance());
@@ -427,13 +422,9 @@ static Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
   // This removes and replaces the instance, and returns the updated
   // instance.
   if (!state.wiringProblemInstRefs.contains(modInstance)) {
-    modInstance = addPortsToModule(
-        mod, modInstance, portRefType, Direction::Out, refName,
-        state.instancePathCache,
-        [&](FModuleLike mod) -> ModuleNamespace & {
-          return state.getNamespace(mod);
-        },
-        &state.targetCaches);
+    modInstance =
+        addPortsToModule(mod, modInstance, portRefType, Direction::Out, refName,
+                         state.instancePathCache, &state.targetCaches);
   } else {
     // As a current limitation, mixing legacy Wiring and Data Taps is forbidden
     // to prevent invalidating Values used later
@@ -658,11 +649,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
       // Helper: create a wire, cast it with callback, connect cast to sink.
       auto addWireWithCast = [&](auto createCast) {
         auto wire =
-            sinkBuilder
-                .create<WireOp>(
-                    valType,
-                    state.getNamespace(wireModule).newName(tapName.getValue()))
-                .getResult();
+            sinkBuilder.create<WireOp>(valType, tapName.getValue()).getResult();
         emitConnect(sinkBuilder, sink, createCast(wire));
         sink = wire;
       };
