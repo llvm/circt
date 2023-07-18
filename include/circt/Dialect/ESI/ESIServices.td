@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/HW/HWAttributesNaming.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "mlir/IR/RegionKindInterface.td"
 
@@ -132,7 +133,7 @@ def RequestToServerConnectionOp : ESI_Op<"service.req.to_server", [
         ServiceReqOpInterface]> {
   let summary = "Request a connection to send data";
 
-  let arguments = (ins HWInnerRefAttr:$servicePort,
+  let arguments = (ins InnerRefAttr:$servicePort,
                        ChannelType:$toServer, StrArrayAttr:$clientNamePath);
   let assemblyFormat = [{
     $toServer `->` $servicePort `(` $clientNamePath `)`
@@ -153,7 +154,7 @@ def RequestToClientConnectionOp : ESI_Op<"service.req.to_client", [
         ServiceReqOpInterface]> {
   let summary = "Request a connection to receive data";
 
-  let arguments = (ins HWInnerRefAttr:$servicePort,
+  let arguments = (ins InnerRefAttr:$servicePort,
                        StrArrayAttr:$clientNamePath);
   let results = (outs ChannelType:$toClient);
   let assemblyFormat = [{
@@ -167,7 +168,7 @@ def RequestInOutChannelOp : ESI_Op<"service.req.inout", [
         ServiceReqOpInterface]> {
   let summary = "Request a bidirectional channel";
 
-  let arguments = (ins HWInnerRefAttr:$servicePort,
+  let arguments = (ins InnerRefAttr:$servicePort,
                        ChannelType:$toServer,
                        StrArrayAttr:$clientNamePath);
   let results = (outs ChannelType:$toClient);
