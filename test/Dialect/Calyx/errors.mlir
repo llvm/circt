@@ -1060,7 +1060,7 @@ module attributes {calyx.entrypoint = "main"} {
 
     }
     calyx.control {
-      // expected-error @+1 {{'calyx.invoke' op should specify how one of input or output ports for data transfer is to be connected, which belong to instance 'r'.}}
+      // expected-error @+1 {{'calyx.invoke' op the input for 'calyx.invoke' is empty.}}
       calyx.invoke@r() -> ()
     }
   }
@@ -1076,10 +1076,8 @@ module attributes {calyx.entrypoint = "main"} {
 
     }
     calyx.control {
-      // expected-error @+2 {{'calyx.invoke' op has a cell port as the destination with the incorrect direction.}} 
-      // expected-error @+1 {{'calyx.invoke' op the %r.out is source port.}}
+      // expected-error @+1 {{'calyx.invoke' op has a cell port as the destination with the incorrect direction.}}
       calyx.invoke@r(%r.out = %c10) -> (i32)
-      
     }
   }
 }
@@ -1094,7 +1092,7 @@ module attributes {calyx.entrypoint = "main"} {
 
     }
     calyx.control {
-      // expected-error @+1 {{'calyx.invoke' op the go or write_en port of 'r' cannot appear here.}}
+      // expected-error @+1 {{'calyx.invoke' op the go port of 'r' cannot appear here.}}
       calyx.invoke@r(%r.write_en = %c1) -> (i1)
     }
   }
@@ -1126,7 +1124,7 @@ module attributes {calyx.entrypoint = "main"} {
 
     }
     calyx.control {
-      // expected-error @+1 {{'calyx.invoke' op 'add' is a combinational component and cannot be invoked, which must have signle go port and single done port.}}
+      // expected-error @+1 {{'calyx.invoke' op  'add' must have single go port and single done port, the 'add' has 0 go port and 0 done port.}}
       calyx.invoke@add(%add.left = %c10, %add.right = %c10) -> (i32, i32)
     }
   }
@@ -1143,7 +1141,7 @@ module attributes {calyx.entrypoint = "main"} {
       
     }
     calyx.control {
-      // expected-error @+1 {{'calyx.invoke' op all connections should involve the port of the 'r0'.}}
+      // expected-error @+1 {{'calyx.invoke' op all connections should involve the port of the invoke instance.}}
       calyx.invoke@r0(%r1.in = %c10) -> (i32)
     }
   }
