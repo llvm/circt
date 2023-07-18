@@ -827,6 +827,10 @@ static LogicalResult legalizeHWModule(Block &block,
       return failure();
     }
 
+    // Do not reorder LTL expressions, which are always emitted inline.
+    if (isa<ltl::LTLDialect>(op.getDialect()))
+      continue;
+
     // Name legalization should have happened in a different pass for these sv
     // elements and we don't want to change their name through re-legalization
     // (e.g. letting a temporary take the name of an unvisited wire). Adding
@@ -1083,6 +1087,10 @@ static LogicalResult legalizeHWModule(Block &block,
   SmallPtrSet<Operation *, 32> seenOperations;
 
   for (auto &op : llvm::make_early_inc_range(block)) {
+    // Do not reorder LTL expressions, which are always emitted inline.
+    if (isa<ltl::LTLDialect>(op.getDialect()))
+      continue;
+
     // Check the users of any expressions to see if they are
     // lexically below the operation itself.  If so, it is being used out
     // of order.
