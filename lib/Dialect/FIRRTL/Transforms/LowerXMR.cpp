@@ -621,8 +621,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
           arg.getArgNumber(), [&](FModuleLike mod) -> ModuleNamespace & {
             return getModuleNamespace(mod);
           });
-    else
-      return getInnerRefTo(val.getDefiningOp());
+    return getInnerRefTo(val.getDefiningOp());
   }
 
   InnerRefAttr getInnerRefTo(Operation *op) {
