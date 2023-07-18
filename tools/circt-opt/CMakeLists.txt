@@ -49,6 +49,7 @@ target_link_libraries(circt-opt
   CIRCTHW
   CIRCTHWArith
   CIRCTHWArithToHW
+  CIRCTIbis
   CIRCTInteropDialect
   CIRCTHWToLLHD
   CIRCTHWToSystemC
