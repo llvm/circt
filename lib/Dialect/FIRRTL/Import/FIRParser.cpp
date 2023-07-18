@@ -1541,12 +1541,14 @@ void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
   auto dstType = dyn_cast<FIRRTLBaseType>(dst.getType());
   auto srcType = dyn_cast<FIRRTLBaseType>(src.getType());
   if (!dstType || !srcType)
-    return emitConnect(builder, dst, src);
+    // TODO audit builder.getLoc()
+    return emitConnect(builder, builder.getLoc(), dst, src);
 
   if (isa<AnalogType>(dstType)) {
     builder.create<AttachOp>(ArrayRef<Value>{dst, src});
   } else if (dstType == srcType && !dstType.containsAnalog()) {
-    emitConnect(builder, dst, src);
+    // TODO audit builder.getLoc()
+    emitConnect(builder, builder.getLoc(), dst, src);
   } else if (auto dstBundle = dyn_cast<BundleType>(dstType)) {
     auto srcBundle = cast<BundleType>(srcType);
     auto numElements = dstBundle.getNumElements();
@@ -1603,7 +1605,8 @@ void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
       emitPartialConnect(builder, dstField, srcField);
     }
   } else {
-    emitConnect(builder, dst, src);
+    // TODO audit builder.getLoc()
+    emitConnect(builder, builder.getLoc(), dst, src);
   }
 }
 
@@ -2825,7 +2828,8 @@ ParseResult FIRStmtParser::parseRefDefine() {
            << target.getType() << " with incompatible reference of type "
            << src.getType();
 
-  emitConnect(builder, target, src);
+  // TODO audit builder.getLoc()
+  emitConnect(builder, builder.getLoc(), target, src);
 
   return success();
 }
@@ -3100,7 +3104,8 @@ ParseResult FIRStmtParser::parseConnect() {
            << rhsType << " to " << lhsType;
 
   locationProcessor.setLoc(loc);
-  emitConnect(builder, lhs, rhs);
+  // TODO do we want the translateLocation here? May be expensive
+  emitConnect(builder, translateLocation(loc), lhs, rhs);
   return success();
 }
 
@@ -3190,6 +3195,7 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
     if (!areTypesEquivalent(lhsType, rhsType))
       return emitError(loc, "cannot connect non-equivalent type ")
              << rhsType << " to " << lhsType;
+    builder.setLoc(translateLocation(loc));
     emitConnect(builder, lhs, rhs);
   } else {
     assert(kind == FIRToken::less_minus && "unexpected kind");

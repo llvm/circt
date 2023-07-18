@@ -21,13 +21,19 @@ void circt::firrtl::emitConnect(OpBuilder &builder, Location loc, Value dst,
                                 Value src) {
   ImplicitLocOpBuilder locBuilder(loc, builder.getInsertionBlock(),
                                   builder.getInsertionPoint());
-  emitConnect(locBuilder, dst, src);
+  emitConnect(locBuilder, loc, dst, src);
   builder.restoreInsertionPoint(locBuilder.saveInsertionPoint());
 }
 
 /// Emit a connect between two values.
 void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
                                 Value src) {
+  emitConnect(builder, builder.getLoc(), dst, src);
+}
+
+/// Emit a connect between two values.
+void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Location origLoc,
+                                Value dst, Value src) {
   auto dstFType = cast<FIRRTLType>(dst.getType());
   auto srcFType = cast<FIRRTLType>(src.getType());
   auto dstType = dyn_cast<FIRRTLBaseType>(dstFType);
@@ -66,7 +72,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
       auto srcField = builder.create<SubfieldOp>(src, i);
       if (dstBundle.getElement(i).isFlip)
         std::swap(dstField, srcField);
-      emitConnect(builder, dstField, srcField);
+      emitConnect(builder, origLoc, dstField, srcField);
     }
     return;
   }
@@ -84,7 +90,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     for (size_t i = 0; i < numElements; ++i) {
       auto dstField = builder.create<SubindexOp>(dst, i);
       auto srcField = builder.create<SubindexOp>(src, i);
-      emitConnect(builder, dstField, srcField);
+      emitConnect(builder, origLoc, dstField, srcField);
     }
     return;
   }
@@ -95,7 +101,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     src = builder.create<UninferredResetCastOp>(srcType, src);
   }
 
-  // Be sure uint, uint -> uint, (uir uint) since we are changing extneding
+  // Be sure uint, uint -> uint, (uir uint) since we are changing extending
   // connect to identity.
   if (dstType.hasUninferredWidth() || srcType.hasUninferredWidth()) {
     srcType = dstType.getConstType(srcType.isConst());
@@ -107,7 +113,17 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   auto srcWidth = srcType.getBitWidthOrSentinel();
 
   // The source must be extended or truncated.
-  if (dstWidth < srcWidth) {
+  if (dstWidth < srcWidth) { // Jack
+    // Warn for mistmatched widths, will eventually be elevated to an error
+    auto dstRef = getFieldRefFromValue(dst);
+    auto [dstName, rootKnown] = getFieldName(dstRef);
+    auto diag = mlir::emitWarning(origLoc)
+                << "connect is truncating: the destination ";
+    if (rootKnown)
+      diag << "\"" << dstName << "\"";
+    diag << " has width " << dstWidth;
+    diag << " while the source has width " << srcWidth;
+
     // firrtl.tail always returns uint even for sint operands.
     IntType tmpType = cast<IntType>(dstType).getConstType(srcType.isConst());
     bool isSignedDest = tmpType.isSigned();

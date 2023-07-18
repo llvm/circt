@@ -465,7 +465,9 @@ static Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
     auto pathStr = builder.create<VerbatimExprOp>(
         portRefType.getType(), internalPathAttr.getValue(), ValueRange{});
     auto sendPath = builder.create<RefSendOp>(pathStr);
-    emitConnect(builder, intMod.getArguments().back(), sendPath.getResult());
+    // TODO audit builder.getLoc9)
+    emitConnect(builder, builder.getLoc(), intMod.getArguments().back(),
+                sendPath.getResult());
   }
 
   if (!moduleTarget.instances.empty())
@@ -663,7 +665,8 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
                     valType,
                     state.getNamespace(wireModule).newName(tapName.getValue()))
                 .getResult();
-        emitConnect(sinkBuilder, sink, createCast(wire));
+        // TODO audit sinkBuilder.getLoc
+        emitConnect(sinkBuilder, sinkBuilder.getLoc(), sink, createCast(wire));
         sink = wire;
       };
       if (isa<IntType>(wireType))
