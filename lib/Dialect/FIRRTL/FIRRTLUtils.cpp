@@ -702,7 +702,7 @@ void circt::firrtl::walkGroundTypes(
 /// Returns an operation's `inner_sym`, adding one if necessary.
 StringAttr circt::firrtl::getOrAddInnerSym(
     Operation *op, FModuleOp mod,
-    std::function<ModuleNamespace &(FModuleOp)> getNamespace) {
+    llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace) {
   auto attr = getInnerSymName(op);
   if (attr)
     return attr;
@@ -716,7 +716,8 @@ StringAttr circt::firrtl::getOrAddInnerSym(
 /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
 /// to that operation.
 hw::InnerRefAttr circt::firrtl::getInnerRefTo(
-    Operation *op, std::function<ModuleNamespace &(FModuleOp)> getNamespace) {
+    Operation *op,
+    llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace) {
   auto mod = op->getParentOfType<FModuleOp>();
   assert(mod && "must be an operation inside an FModuleOp");
   return hw::InnerRefAttr::get(SymbolTable::getSymbolName(mod),
@@ -726,7 +727,7 @@ hw::InnerRefAttr circt::firrtl::getInnerRefTo(
 /// Returns a port's `inner_sym`, adding one if necessary.
 StringAttr circt::firrtl::getOrAddInnerSym(
     FModuleLike mod, size_t portIdx,
-    std::function<ModuleNamespace &(FModuleLike)> getNamespace) {
+    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace) {
 
   auto attr = cast<hw::HWModuleLike>(*mod).getPortSymbolAttr(portIdx);
   if (attr)
@@ -741,7 +742,7 @@ StringAttr circt::firrtl::getOrAddInnerSym(
 /// to the port.
 hw::InnerRefAttr circt::firrtl::getInnerRefTo(
     FModuleLike mod, size_t portIdx,
-    std::function<ModuleNamespace &(FModuleLike)> getNamespace) {
+    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace) {
   return hw::InnerRefAttr::get(SymbolTable::getSymbolName(mod),
                                getOrAddInnerSym(mod, portIdx, getNamespace));
 }

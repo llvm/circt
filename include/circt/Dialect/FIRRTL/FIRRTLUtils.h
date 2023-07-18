@@ -113,24 +113,24 @@ void walkGroundTypes(FIRRTLType firrtlType,
 /// Returns an operation's `inner_sym`, adding one if necessary.
 StringAttr
 getOrAddInnerSym(Operation *op, FModuleOp mod,
-                 std::function<ModuleNamespace &(FModuleOp)> getNamespace);
+                 llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace);
 
 /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
 /// to that operation.
 hw::InnerRefAttr
 getInnerRefTo(Operation *op,
-              std::function<ModuleNamespace &(FModuleOp)> getNamespace);
+              llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace);
 
 /// Returns a port's `inner_sym`, adding one if necessary.
-StringAttr
-getOrAddInnerSym(FModuleLike mod, size_t portIdx,
-                 std::function<ModuleNamespace &(FModuleLike)> getNamespace);
+StringAttr getOrAddInnerSym(
+    FModuleLike mod, size_t portIdx,
+    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace);
 
 /// Obtain an inner reference to a port, possibly adding an `inner_sym`
 /// to the port.
 hw::InnerRefAttr
 getInnerRefTo(FModuleLike mod, size_t portIdx,
-              std::function<ModuleNamespace &(FModuleLike)> getNamespace);
+              llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace);
 
 //===----------------------------------------------------------------------===//
 // Type utilities
