@@ -553,6 +553,8 @@ struct circt::firrtl::detail::FIRRTLBaseTypeStorage : mlir::TypeStorage {
 
   bool operator==(const KeyTy &key) const { return key == isConst; }
 
+  KeyTy getAsKey() const { return isConst; }
+
   static FIRRTLBaseTypeStorage *construct(TypeStorageAllocator &allocator,
                                           KeyTy key) {
     return new (allocator.allocate<FIRRTLBaseTypeStorage>())
@@ -1266,8 +1268,10 @@ struct circt::firrtl::detail::WidthTypeStorage : detail::FIRRTLBaseTypeStorage {
   using KeyTy = std::pair<int32_t, char>;
 
   bool operator==(const KeyTy &key) const {
-    return key == std::pair{width, isConst};
+    return key == getAsKey();
   }
+
+  KeyTy getAsKey() const { return KeyTy(width, isConst); }
 
   static WidthTypeStorage *construct(TypeStorageAllocator &allocator,
                                      const KeyTy &key) {
@@ -1371,8 +1375,10 @@ struct circt::firrtl::detail::BundleTypeStorage
   }
 
   bool operator==(const KeyTy &key) const {
-    return key == KeyTy(elements, isConst);
+    return key == getAsKey();
   }
+
+  KeyTy getAsKey() const { return KeyTy(elements, isConst); }
 
   static llvm::hash_code hashKey(const KeyTy &key) {
     return llvm::hash_combine(
@@ -1632,7 +1638,7 @@ struct circt::firrtl::detail::OpenBundleTypeStorage : mlir::TypeStorage {
   }
 
   bool operator==(const KeyTy &key) const {
-    return key == KeyTy(elements, isConst);
+    return key == getAsKey();
   }
 
   static llvm::hash_code hashKey(const KeyTy &key) {
@@ -1640,6 +1646,8 @@ struct circt::firrtl::detail::OpenBundleTypeStorage : mlir::TypeStorage {
         llvm::hash_combine_range(key.first.begin(), key.first.end()),
         key.second);
   }
+
+  KeyTy getAsKey() const { return KeyTy(elements, isConst); }
 
   static OpenBundleTypeStorage *construct(TypeStorageAllocator &allocator,
                                           KeyTy key) {
@@ -1844,8 +1852,10 @@ struct circt::firrtl::detail::FVectorTypeStorage
   }
 
   bool operator==(const KeyTy &key) const {
-    return key == std::make_tuple(elementType, numElements, isConst);
+    return key == getAsKey();
   }
+
+  KeyTy getAsKey() const { return KeyTy(elementType, numElements, isConst); }
 
   static FVectorTypeStorage *construct(TypeStorageAllocator &allocator,
                                        KeyTy key) {
@@ -1991,8 +2001,10 @@ struct circt::firrtl::detail::OpenVectorTypeStorage : mlir::TypeStorage {
   }
 
   bool operator==(const KeyTy &key) const {
-    return key == std::make_tuple(elementType, numElements, isConst);
+    return key == getAsKey();
   }
+
+  KeyTy getAsKey() const { return KeyTy(elementType, numElements, isConst); }
 
   static OpenVectorTypeStorage *construct(TypeStorageAllocator &allocator,
                                           KeyTy key) {
@@ -2141,8 +2153,10 @@ struct circt::firrtl::detail::FEnumTypeStorage : detail::FIRRTLBaseTypeStorage {
   }
 
   bool operator==(const KeyTy &key) const {
-    return key == KeyTy(elements, isConst);
+    return key == getAsKey();
   }
+
+  KeyTy getAsKey() const { return KeyTy(elements, isConst); }
 
   static llvm::hash_code hashKey(const KeyTy &key) {
     return llvm::hash_combine(
@@ -2351,8 +2365,10 @@ struct circt::firrtl::detail::BaseTypeAliasStorage
         innerType(innerType) {}
 
   bool operator==(const KeyTy &key) const {
-    return key == KeyTy(name, innerType);
+    return key == getAsKey();
   }
+
+  KeyTy getAsKey() const { return KeyTy(name, innerType); }
 
   static llvm::hash_code hashKey(const KeyTy &key) {
     return llvm::hash_combine(key);
