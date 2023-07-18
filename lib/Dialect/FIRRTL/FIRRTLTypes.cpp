@@ -1267,9 +1267,7 @@ struct circt::firrtl::detail::WidthTypeStorage : detail::FIRRTLBaseTypeStorage {
       : FIRRTLBaseTypeStorage(isConst), width(width) {}
   using KeyTy = std::pair<int32_t, char>;
 
-  bool operator==(const KeyTy &key) const {
-    return key == getAsKey();
-  }
+  bool operator==(const KeyTy &key) const { return key == getAsKey(); }
 
   KeyTy getAsKey() const { return KeyTy(width, isConst); }
 
@@ -1374,9 +1372,7 @@ struct circt::firrtl::detail::BundleTypeStorage
     maxFieldID = fieldID;
   }
 
-  bool operator==(const KeyTy &key) const {
-    return key == getAsKey();
-  }
+  bool operator==(const KeyTy &key) const { return key == getAsKey(); }
 
   KeyTy getAsKey() const { return KeyTy(elements, isConst); }
 
@@ -1637,9 +1633,7 @@ struct circt::firrtl::detail::OpenBundleTypeStorage : mlir::TypeStorage {
     maxFieldID = fieldID;
   }
 
-  bool operator==(const KeyTy &key) const {
-    return key == getAsKey();
-  }
+  bool operator==(const KeyTy &key) const { return key == getAsKey(); }
 
   static llvm::hash_code hashKey(const KeyTy &key) {
     return llvm::hash_combine(
@@ -1851,9 +1845,7 @@ struct circt::firrtl::detail::FVectorTypeStorage
     props.containsConst |= isConst;
   }
 
-  bool operator==(const KeyTy &key) const {
-    return key == getAsKey();
-  }
+  bool operator==(const KeyTy &key) const { return key == getAsKey(); }
 
   KeyTy getAsKey() const { return KeyTy(elementType, numElements, isConst); }
 
@@ -2000,9 +1992,7 @@ struct circt::firrtl::detail::OpenVectorTypeStorage : mlir::TypeStorage {
     props.containsConst |= isConst;
   }
 
-  bool operator==(const KeyTy &key) const {
-    return key == getAsKey();
-  }
+  bool operator==(const KeyTy &key) const { return key == getAsKey(); }
 
   KeyTy getAsKey() const { return KeyTy(elementType, numElements, isConst); }
 
@@ -2152,9 +2142,7 @@ struct circt::firrtl::detail::FEnumTypeStorage : detail::FIRRTLBaseTypeStorage {
     recProps = props;
   }
 
-  bool operator==(const KeyTy &key) const {
-    return key == getAsKey();
-  }
+  bool operator==(const KeyTy &key) const { return key == getAsKey(); }
 
   KeyTy getAsKey() const { return KeyTy(elements, isConst); }
 
@@ -2364,9 +2352,7 @@ struct circt::firrtl::detail::BaseTypeAliasStorage
       : detail::FIRRTLBaseTypeStorage(innerType.isConst()), name(name),
         innerType(innerType) {}
 
-  bool operator==(const KeyTy &key) const {
-    return key == getAsKey();
-  }
+  bool operator==(const KeyTy &key) const { return key == getAsKey(); }
 
   KeyTy getAsKey() const { return KeyTy(name, innerType); }
 
