@@ -363,7 +363,7 @@ def StaticRepeatOp : CalyxContainer<"static_repeat", [
     OpBuilder<(ins
       "uint32_t":$count), [{
         $_state.addAttribute("count", 
-        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 32), count)
+          mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 32), count)
         );
 
         Region *body = $_state.addRegion();
@@ -401,12 +401,11 @@ def RepeatOp : CalyxContainer<"repeat", [
     OpBuilder<(ins
       "uint32_t":$count), [{
         $_state.addAttribute("count", 
-        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 32), count)
+          mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 32), count)
         );
 
         Region *body = $_state.addRegion();
         body->push_back(new Block());
     }]>
   ];
-
 }
