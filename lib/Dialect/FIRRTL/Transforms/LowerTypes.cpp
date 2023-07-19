@@ -408,7 +408,7 @@ private:
   /// Partition a symbol across the specified fields.  Fails if any symbols
   /// cannot be assigned to a field, such as inner symbol on root.
   /// Expects fields to be in ascending fieldID order.
-  LogicalResult partitionSymbols(hw::InnerSymAttr sym,
+  LogicalResult partitionSymbols(hw::InnerSymAttr sym, FIRRTLType parentType,
                                  ArrayRef<FlatBundleFieldEntry> fields,
                                  SmallVectorImpl<hw::InnerSymAttr> &newSyms,
                                  Location errorLoc);
@@ -547,34 +547,34 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
 }
 
 LogicalResult TypeLoweringVisitor::partitionSymbols(
-    hw::InnerSymAttr sym, ArrayRef<FlatBundleFieldEntry> fields,
+    hw::InnerSymAttr sym, FIRRTLType parentType,
+    ArrayRef<FlatBundleFieldEntry> fields,
     SmallVectorImpl<hw::InnerSymAttr> &newSyms, Location errorLoc) {
 
   // No symbol, nothing to partition.
-  if (!sym)
+  if (!sym || sym.empty())
     return success();
 
   auto *context = sym.getContext();
 
-  // Helper for getting max fieldID from const FIRRTLBaseType's.
-  auto getMaxFieldID = [](const FIRRTLBaseType type) {
-    return FIRRTLBaseType(type).getMaxFieldID();
-  };
+  // Required for rootChildFieldID.
+  auto baseType = getBaseType(parentType);
+  if (!baseType)
+    return mlir::emitError(errorLoc,
+                           "unstable to partition symbol on unsupported type ")
+           << parentType;
 
   newSyms.resize(fields.size());
 
   // Sort inner symbols by fieldID if not already sorted.
   auto props = llvm::to_vector(sym);
-  if (props.empty())
-    return success();
   llvm::stable_sort(props, [&](const auto &lhs, const auto &rhs) {
     return lhs.getFieldID() < rhs.getFieldID();
   });
 
   // Double-check fields are in increasing order.
   assert(llvm::is_sorted(fields, [&](const auto &lhs, const auto &rhs) {
-    return lhs.fieldID < rhs.fieldID &&
-           (rhs.fieldID - lhs.fieldID) > getMaxFieldID(lhs.type);
+    return lhs.fieldID < rhs.fieldID;
   }));
 
   // Walk fields, gather symbols that target each and assign with
@@ -592,9 +592,10 @@ LogicalResult TypeLoweringVisitor::partitionSymbols(
     SmallVector<hw::InnerSymPropertiesAttr> propsForField;
     do {
       assert(propIt->getFieldID() >= field.fieldID);
-      auto relFieldID = propIt->getFieldID() - field.fieldID;
+      auto [relFieldID, contained] =
+          baseType.rootChildFieldID(propIt->getFieldID(), field.index);
       // If skips this field, we're done.
-      if (relFieldID > getMaxFieldID(field.type))
+      if (!contained)
         break;
       // Otherwise, add to list and continue.
       propsForField.push_back(hw::InnerSymPropertiesAttr::get(
@@ -647,8 +648,8 @@ bool TypeLoweringVisitor::lowerProducer(
 
   SmallVector<hw::InnerSymAttr> fieldSyms(fieldTypes.size());
   if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op)) {
-    if (failed(partitionSymbols(symOp.getInnerSymAttr(), fieldTypes, fieldSyms,
-                                symOp.getLoc()))) {
+    if (failed(partitionSymbols(symOp.getInnerSymAttr(), srcFType, fieldTypes,
+                                fieldSyms, symOp.getLoc()))) {
       encounteredError = true;
       return false;
     }
@@ -800,8 +801,8 @@ bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
     return false;
 
   SmallVector<hw::InnerSymAttr> fieldSyms(fieldTypes.size());
-  if (failed(partitionSymbols(newArgs[argIndex].sym, fieldTypes, fieldSyms,
-                              newArgs[argIndex].loc))) {
+  if (failed(partitionSymbols(newArgs[argIndex].sym, srcType, fieldTypes,
+                              fieldSyms, newArgs[argIndex].loc))) {
     encounteredError = true;
     return false;
   }
