@@ -68,18 +68,18 @@ namespace patterns {
 /// Return true if this operation's operands and results all have a known width.
 /// This only works for integer types.
 static bool hasKnownWidthIntTypes(Operation *op) {
-  auto resultType = cast<IntType>(op->getResult(0).getType());
+  auto resultType = type_cast<IntType>(op->getResult(0).getType());
   if (!resultType.hasWidth())
     return false;
   for (Value operand : op->getOperands())
-    if (!cast<IntType>(operand.getType()).hasWidth())
+    if (!type_cast<IntType>(operand.getType()).hasWidth())
       return false;
   return true;
 }
 
 /// Return true if this value is 1 bit UInt.
 static bool isUInt1(Type type) {
-  auto t = dyn_cast<UIntType>(type);
+  auto t = type_dyn_cast<UIntType>(type);
   if (!t || !t.hasWidth() || t.getWidth() != 1)
     return false;
   return true;
@@ -181,7 +181,7 @@ bool circt::firrtl::hasDroppableName(Operation *op) {
 /// zero-width dynamic values or invalid values with a constant of value 0.
 static std::optional<APSInt>
 getExtendedConstant(Value operand, Attribute constant, int32_t destWidth) {
-  assert(cast<IntType>(operand.getType()) &&
+  assert(type_cast<IntType>(operand.getType()) &&
          "getExtendedConstant is limited to integer types");
 
   // We never support constant folding to unknown width values.
@@ -194,8 +194,9 @@ getExtendedConstant(Value operand, Attribute constant, int32_t destWidth) {
 
   // If the operand is zero bits, then we can return a zero of the result
   // type.
-  if (cast<IntType>(operand.getType()).getWidth() == 0)
-    return APSInt(destWidth, cast<IntType>(operand.getType()).isUnsigned());
+  if (type_cast<IntType>(operand.getType()).getWidth() == 0)
+    return APSInt(destWidth,
+                  type_cast<IntType>(operand.getType()).isUnsigned());
   return {};
 }
 
@@ -246,7 +247,7 @@ static Attribute constFoldFIRRTLBinaryOp(
   assert(operands.size() == 2 && "binary op takes two operands");
 
   // We cannot fold something to an unknown width.
-  auto resultType = cast<IntType>(op->getResult(0).getType());
+  auto resultType = type_cast<IntType>(op->getResult(0).getType());
   if (resultType.getWidthOrSentinel() < 0)
     return {};
 
@@ -258,9 +259,9 @@ static Attribute constFoldFIRRTLBinaryOp(
   // or if that type is an unsized integer, by the actual bits necessary to
   // represent the constant value.
   auto lhsWidth =
-      cast<IntType>(op->getOperand(0).getType()).getWidthOrSentinel();
+      type_cast<IntType>(op->getOperand(0).getType()).getWidthOrSentinel();
   auto rhsWidth =
-      cast<IntType>(op->getOperand(1).getType()).getWidthOrSentinel();
+      type_cast<IntType>(op->getOperand(1).getType()).getWidthOrSentinel();
   if (auto lhs = operands[0].dyn_cast_or_null<IntegerAttr>())
     lhsWidth = std::max<int32_t>(lhsWidth, lhs.getValue().getBitWidth());
   if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>())
@@ -317,7 +318,7 @@ static LogicalResult canonicalizePrimOp(
   // Can only operate on FIRRTL primitive operations.
   if (op->getNumResults() != 1)
     return failure();
-  auto type = dyn_cast<FIRRTLBaseType>(op->getResult(0).getType());
+  auto type = type_dyn_cast<FIRRTLBaseType>(op->getResult(0).getType());
   if (!type)
     return failure();
 
@@ -352,13 +353,14 @@ static LogicalResult canonicalizePrimOp(
 
   // Insert a pad if the type widths disagree.
   if (width !=
-      cast<FIRRTLBaseType>(resultValue.getType()).getBitWidthOrSentinel())
+      type_cast<FIRRTLBaseType>(resultValue.getType()).getBitWidthOrSentinel())
     resultValue = rewriter.create<PadPrimOp>(op->getLoc(), resultValue, width);
 
   // Insert a cast if this is a uint vs. sint or vice versa.
-  if (isa<SIntType>(type) && isa<UIntType>(resultValue.getType()))
+  if (type_isa<SIntType>(type) && type_isa<UIntType>(resultValue.getType()))
     resultValue = rewriter.create<AsSIntPrimOp>(op->getLoc(), resultValue);
-  else if (isa<UIntType>(type) && isa<SIntType>(resultValue.getType()))
+  else if (type_isa<UIntType>(type) &&
+           type_isa<SIntType>(resultValue.getType()))
     resultValue = rewriter.create<AsUIntPrimOp>(op->getLoc(), resultValue);
 
   assert(type == resultValue.getType() && "canonicalization changed type");
@@ -1261,14 +1263,14 @@ void BitsPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 /// returned a signed integer.
 static void replaceWithBits(Operation *op, Value value, unsigned hiBit,
                             unsigned loBit, PatternRewriter &rewriter) {
-  auto resType = cast<IntType>(op->getResult(0).getType());
-  if (cast<IntType>(value.getType()).getWidth() != resType.getWidth())
+  auto resType = type_cast<IntType>(op->getResult(0).getType());
+  if (type_cast<IntType>(value.getType()).getWidth() != resType.getWidth())
     value = rewriter.create<BitsPrimOp>(op->getLoc(), value, hiBit, loBit);
 
-  if (resType.isSigned() && !cast<IntType>(value.getType()).isSigned()) {
+  if (resType.isSigned() && !type_cast<IntType>(value.getType()).isSigned()) {
     value = rewriter.createOrFold<AsSIntPrimOp>(op->getLoc(), resType, value);
   } else if (resType.isUnsigned() &&
-             !cast<IntType>(value.getType()).isUnsigned()) {
+             !type_cast<IntType>(value.getType()).isUnsigned()) {
     value = rewriter.createOrFold<AsUIntPrimOp>(op->getLoc(), resType, value);
   }
   rewriter.replaceOp(op, value);
@@ -1352,7 +1354,7 @@ public:
 
     auto pad = [&](Value input) -> Value {
       auto inputWidth =
-          cast<FIRRTLBaseType>(input.getType()).getBitWidthOrSentinel();
+          type_cast<FIRRTLBaseType>(input.getType()).getBitWidthOrSentinel();
       if (inputWidth < 0 || width == inputWidth)
         return input;
       return rewriter
@@ -1994,9 +1996,9 @@ struct AggOneShot : public mlir::RewritePattern {
     }
 
     SmallVector<Value> values;
-    uint32_t total = isa<BundleType>(lhsTy)
-                         ? cast<BundleType>(lhsTy).getNumElements()
-                         : cast<FVectorType>(lhsTy).getNumElements();
+    uint32_t total = type_isa<BundleType>(lhsTy)
+                         ? type_cast<BundleType>(lhsTy).getNumElements()
+                         : type_cast<FVectorType>(lhsTy).getNumElements();
     for (uint32_t i = 0; i < total; ++i) {
       if (!fields.count(i))
         return {};
@@ -2011,7 +2013,7 @@ struct AggOneShot : public mlir::RewritePattern {
     if (values.empty())
       return failure();
     rewriter.setInsertionPointToEnd(op->getBlock());
-    Value newVal = isa<BundleType>(op->getResult(0).getType())
+    Value newVal = type_isa<BundleType>(op->getResult(0).getType())
                        ? rewriter.createOrFold<BundleCreateOp>(
                              op->getLoc(), op->getResult(0).getType(), values)
                        : rewriter.createOrFold<VectorCreateOp>(
@@ -2220,7 +2222,7 @@ void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 // Returns the value connected to a port, if there is only one.
 static Value getPortFieldValue(Value port, StringRef name) {
-  auto portTy = cast<BundleType>(port.getType());
+  auto portTy = type_cast<BundleType>(port.getType());
   auto fieldIndex = portTy.getElementIndex(name);
   assert(fieldIndex && "missing field on memory port");
 
@@ -2250,7 +2252,7 @@ static bool isPortDisabled(Value port) {
 
 // Returns true if the data output is unused.
 static bool isPortUnused(Value port, StringRef data) {
-  auto portTy = cast<BundleType>(port.getType());
+  auto portTy = type_cast<BundleType>(port.getType());
   auto fieldIndex = portTy.getElementIndex(data);
   assert(fieldIndex && "missing enable flag on memory port");
 
@@ -2268,7 +2270,7 @@ static bool isPortUnused(Value port, StringRef data) {
 // Returns the value connected to a port, if there is only one.
 static void replacePortField(PatternRewriter &rewriter, Value port,
                              StringRef name, Value value) {
-  auto portTy = cast<BundleType>(port.getType());
+  auto portTy = type_cast<BundleType>(port.getType());
   auto fieldIndex = portTy.getElementIndex(name);
   assert(fieldIndex && "missing field on memory port");
 
@@ -2532,7 +2534,7 @@ struct FoldReadWritePorts : public mlir::RewritePattern {
       auto result = mem.getResult(i);
       auto newResult = newOp.getResult(i);
       if (deadReads[i]) {
-        auto resultPortTy = cast<BundleType>(result.getType());
+        auto resultPortTy = type_cast<BundleType>(result.getType());
 
         // Rewrite accesses to the old port field to accesses to a
         // corresponding field of the new port.
@@ -2589,7 +2591,7 @@ struct FoldUnusedBits : public mlir::RewritePattern {
     if (summary.isMasked || summary.isSeqMem())
       return failure();
 
-    auto type = dyn_cast<IntType>(mem.getDataType());
+    auto type = type_dyn_cast<IntType>(mem.getDataType());
     if (!type)
       return failure();
     auto width = type.getBitWidthOrSentinel();
@@ -2604,7 +2606,7 @@ struct FoldUnusedBits : public mlir::RewritePattern {
     // bit selects are then used to build a bit-mask. The ops are collected.
     SmallVector<BitsPrimOp> readOps;
     auto findReadUsers = [&](Value port, StringRef field) {
-      auto portTy = cast<BundleType>(port.getType());
+      auto portTy = type_cast<BundleType>(port.getType());
       auto fieldIndex = portTy.getElementIndex(field);
       assert(fieldIndex && "missing data port");
 
@@ -2632,7 +2634,7 @@ struct FoldUnusedBits : public mlir::RewritePattern {
     // If a memory has ports with other uses, it is excluded from optimisation.
     SmallVector<StrictConnectOp> writeOps;
     auto findWriteUsers = [&](Value port, StringRef field) -> LogicalResult {
-      auto portTy = cast<BundleType>(port.getType());
+      auto portTy = type_cast<BundleType>(port.getType());
       auto fieldIndex = portTy.getElementIndex(field);
       assert(fieldIndex && "missing data port");
 
@@ -2712,7 +2714,7 @@ struct FoldUnusedBits : public mlir::RewritePattern {
 
     // Rewrite bundle users to the new data type.
     auto rewriteSubfield = [&](Value port, StringRef field) {
-      auto portTy = cast<BundleType>(port.getType());
+      auto portTy = type_cast<BundleType>(port.getType());
       auto fieldIndex = portTy.getElementIndex(field);
       assert(fieldIndex && "missing data port");
 
@@ -2803,7 +2805,7 @@ struct FoldRegMems : public mlir::RewritePattern {
         continue;
 
       auto collect = [&, port = port](ArrayRef<StringRef> fields) {
-        auto portTy = cast<BundleType>(port.getType());
+        auto portTy = type_cast<BundleType>(port.getType());
         for (auto field : fields) {
           auto fieldIndex = portTy.getElementIndex(field);
           assert(fieldIndex && "missing field on memory port");

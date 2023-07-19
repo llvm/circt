@@ -54,7 +54,7 @@ static void createRandomizationAttributes(FModuleOp mod) {
 
     // Compute the width of all registers, and remember which bits are assigned
     // to each register.
-    auto regType = cast<FIRRTLBaseType>(op->getResult(0).getType());
+    auto regType = type_cast<FIRRTLBaseType>(op->getResult(0).getType());
     std::optional<int64_t> regWidth = getBitWidth(regType);
     assert(regWidth.has_value() && "register must have a valid FIRRTL width");
 

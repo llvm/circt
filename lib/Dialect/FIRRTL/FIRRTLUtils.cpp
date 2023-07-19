@@ -28,10 +28,10 @@ void circt::firrtl::emitConnect(OpBuilder &builder, Location loc, Value dst,
 /// Emit a connect between two values.
 void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
                                 Value src) {
-  auto dstFType = cast<FIRRTLType>(dst.getType());
-  auto srcFType = cast<FIRRTLType>(src.getType());
-  auto dstType = dyn_cast<FIRRTLBaseType>(dstFType);
-  auto srcType = dyn_cast<FIRRTLBaseType>(srcFType);
+  auto dstFType = type_cast<FIRRTLType>(dst.getType());
+  auto srcFType = type_cast<FIRRTLType>(src.getType());
+  auto dstType = type_dyn_cast<FIRRTLBaseType>(dstFType);
+  auto srcType = type_dyn_cast<FIRRTLBaseType>(srcFType);
   // Special Connects (non-base, foreign):
   if (!dstType) {
     // References use ref.define.  Add cast if types don't match.
@@ -51,12 +51,12 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     return;
   }
 
-  if (auto dstBundle = dyn_cast<BundleType>(dstType)) {
+  if (auto dstBundle = type_dyn_cast<BundleType>(dstType)) {
     // Connect all the bundle elements pairwise.
     auto numElements = dstBundle.getNumElements();
     // Check if we are trying to create an illegal connect - just create the
     // connect and let the verifier catch it.
-    auto srcBundle = dyn_cast<BundleType>(srcType);
+    auto srcBundle = type_dyn_cast<BundleType>(srcType);
     if (!srcBundle || numElements != srcBundle.getNumElements()) {
       builder.create<ConnectOp>(dst, src);
       return;
@@ -71,12 +71,12 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     return;
   }
 
-  if (auto dstVector = dyn_cast<FVectorType>(dstType)) {
+  if (auto dstVector = type_dyn_cast<FVectorType>(dstType)) {
     // Connect all the vector elements pairwise.
     auto numElements = dstVector.getNumElements();
     // Check if we are trying to create an illegal connect - just create the
     // connect and let the verifier catch it.
-    auto srcVector = dyn_cast<FVectorType>(srcType);
+    auto srcVector = type_dyn_cast<FVectorType>(srcType);
     if (!srcVector || numElements != srcVector.getNumElements()) {
       builder.create<ConnectOp>(dst, src);
       return;
@@ -118,7 +118,8 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   // The source must be extended or truncated.
   if (dstWidth < srcWidth) {
     // firrtl.tail always returns uint even for sint operands.
-    IntType tmpType = cast<IntType>(dstType).getConstType(srcType.isConst());
+    IntType tmpType =
+        type_cast<IntType>(dstType).getConstType(srcType.isConst());
     bool isSignedDest = tmpType.isSigned();
     if (isSignedDest)
       tmpType =
@@ -133,7 +134,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     src = builder.create<PadPrimOp>(src, dstWidth);
   }
 
-  if (auto srcType = cast<FIRRTLBaseType>(src.getType());
+  if (auto srcType = type_cast<FIRRTLBaseType>(src.getType());
       srcType && dstType != srcType &&
       areTypesConstCastable(dstType, srcType)) {
     src = builder.create<ConstCastOp>(dstType, src);
@@ -149,7 +150,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 }
 
 IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {
-  auto intType = cast<IntType>(type);
+  auto intType = type_cast<IntType>(type);
   assert((!intType.hasWidth() ||
           (unsigned)intType.getWidthOrSentinel() == value.getBitWidth()) &&
          "value / type width mismatch");
@@ -163,14 +164,14 @@ IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {
 /// Return an IntegerAttr filled with zeros for the specified FIRRTL integer
 /// type. This handles both the known width and unknown width case.
 IntegerAttr circt::firrtl::getIntZerosAttr(Type type) {
-  int32_t width = abs(cast<IntType>(type).getWidthOrSentinel());
+  int32_t width = abs(type_cast<IntType>(type).getWidthOrSentinel());
   return getIntAttr(type, APInt(width, 0));
 }
 
 /// Return an IntegerAttr filled with ones for the specified FIRRTL integer
 /// type. This handles both the known width and unknown width case.
 IntegerAttr circt::firrtl::getIntOnesAttr(Type type) {
-  int32_t width = abs(cast<IntType>(type).getWidthOrSentinel());
+  int32_t width = abs(type_cast<IntType>(type).getWidthOrSentinel());
   return getIntAttr(type, APInt(width, -1));
 }
 
@@ -503,7 +504,8 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
             .Case<RefSubOp>([&](RefSubOp refSubOp) {
               value = refSubOp.getInput();
               auto refInputType = refSubOp.getInput().getType();
-              id += TypeSwitch<FIRRTLBaseType, size_t>(refInputType.getType())
+              id += FIRRTLTypeSwitch<FIRRTLBaseType, size_t>(
+                        refInputType.getType())
                         .Case<FVectorType, BundleType>([&](auto type) {
                           return type.getFieldID(refSubOp.getIndex());
                         });
@@ -572,10 +574,10 @@ circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
   auto localID = fieldRef.getFieldID();
   while (localID) {
     // Index directly into ref inner type.
-    if (auto refTy = dyn_cast<RefType>(type))
+    if (auto refTy = type_dyn_cast<RefType>(type))
       type = refTy.getType();
 
-    if (auto bundleType = dyn_cast<BundleType>(type)) {
+    if (auto bundleType = type_dyn_cast<BundleType>(type)) {
       auto index = bundleType.getIndexForFieldID(localID);
       // Add the current field string, and recurse into a subfield.
       auto &element = bundleType.getElements()[index];
@@ -585,7 +587,7 @@ circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
       // Recurse in to the element type.
       type = element.type;
       localID = localID - bundleType.getFieldID(index);
-    } else if (auto vecType = dyn_cast<FVectorType>(type)) {
+    } else if (auto vecType = type_dyn_cast<FVectorType>(type)) {
       auto index = vecType.getIndexForFieldID(localID);
       name += nameSafe ? "_" : "[";
       name += std::to_string(index);
@@ -594,7 +596,7 @@ circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
       // Recurse in to the element type.
       type = vecType.getElementType();
       localID = localID - vecType.getFieldID(index);
-    } else if (auto enumType = dyn_cast<FEnumType>(type)) {
+    } else if (auto enumType = type_dyn_cast<FEnumType>(type)) {
       auto index = enumType.getIndexForFieldID(localID);
       auto &element = enumType.getElements()[index];
       name += nameSafe ? "_" : ".";
@@ -621,7 +623,7 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
                                        Value value, unsigned fieldID) {
   // When the fieldID hits 0, we've found the target value.
   while (fieldID != 0) {
-    TypeSwitch<Type, void>(value.getType())
+    FIRRTLTypeSwitch<Type, void>(value.getType())
         .Case<BundleType, OpenBundleType>([&](auto bundle) {
           auto index = bundle.getIndexForFieldID(fieldID);
           value = builder.create<SubfieldOp>(value, index);
@@ -633,7 +635,7 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
           fieldID -= vector.getFieldID(index);
         })
         .Case<RefType>([&](auto reftype) {
-          TypeSwitch<FIRRTLBaseType, void>(reftype.getType())
+          FIRRTLTypeSwitch<FIRRTLBaseType, void>(reftype.getType())
               .template Case<BundleType, FVectorType>([&](auto type) {
                 auto index = type.getIndexForFieldID(fieldID);
                 value = builder.create<RefSubOp>(value, index);
@@ -671,7 +673,7 @@ void circt::firrtl::walkGroundTypes(
 
   uint64_t fieldID = 0;
   auto recurse = [&](auto &&f, FIRRTLBaseType type) -> void {
-    TypeSwitch<FIRRTLBaseType>(type)
+    FIRRTLTypeSwitch<FIRRTLBaseType>(type)
         .Case<BundleType>([&](BundleType bundle) {
           for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
             fieldID++;
@@ -873,14 +875,14 @@ circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
 /// Non-FIRRTL types are simply passed through. This returns a null type if it
 /// cannot be lowered.
 Type circt::firrtl::lowerType(Type type) {
-  auto firType = dyn_cast<FIRRTLBaseType>(type);
+  auto firType = type_dyn_cast<FIRRTLBaseType>(type);
   if (!firType)
     return type;
 
   // Ignore flip types.
   firType = firType.getPassiveType();
 
-  if (auto bundle = dyn_cast<BundleType>(firType)) {
+  if (auto bundle = type_dyn_cast<BundleType>(firType)) {
     mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
     for (auto element : bundle) {
       Type etype = lowerType(element.type);
@@ -890,13 +892,13 @@ Type circt::firrtl::lowerType(Type type) {
     }
     return hw::StructType::get(type.getContext(), hwfields);
   }
-  if (auto vec = dyn_cast<FVectorType>(firType)) {
+  if (auto vec = type_dyn_cast<FVectorType>(firType)) {
     auto elemTy = lowerType(vec.getElementType());
     if (!elemTy)
       return {};
     return hw::ArrayType::get(elemTy, vec.getNumElements());
   }
-  if (auto fenum = dyn_cast<FEnumType>(firType)) {
+  if (auto fenum = type_dyn_cast<FEnumType>(firType)) {
     mlir::SmallVector<hw::UnionType::FieldInfo, 8> hwfields;
     SmallVector<Attribute> names;
     bool simple = true;

@@ -132,7 +132,7 @@ private:
 
   // NOLINTNEXTLINE(misc-no-recursion)
   void update(Type type) {
-    if (auto bundle = dyn_cast<BundleType>(type))
+    if (auto bundle = type_dyn_cast<BundleType>(type))
       return update(bundle);
     update(type.getAsOpaquePointer());
   }
@@ -301,19 +301,20 @@ struct Equivalence {
                       Operation *a, Type aType, Operation *b, Type bType) {
     if (aType == bType)
       return success();
-    if (auto aBundleType = dyn_cast<BundleType>(aType))
-      if (auto bBundleType = dyn_cast<BundleType>(bType))
+    if (auto aBundleType = type_dyn_cast<BundleType>(aType))
+      if (auto bBundleType = type_dyn_cast<BundleType>(bType))
         return check(diag, message, a, aBundleType, b, bBundleType);
-    if (isa<RefType>(aType) && isa<RefType>(bType) && aType != bType) {
+    if (type_isa<RefType>(aType) && type_isa<RefType>(bType) &&
+        aType != bType) {
       diag.attachNote(a->getLoc())
           << message << ", has a RefType with a different base type "
-          << cast<RefType>(aType).getType()
+          << type_cast<RefType>(aType).getType()
           << " in the same position of the two modules marked as 'must dedup'. "
              "(This may be due to Grand Central Taps or Views being different "
              "between the two modules.)";
       diag.attachNote(b->getLoc())
           << "the second module has a different base type "
-          << cast<RefType>(bType).getType();
+          << type_cast<RefType>(bType).getType();
       return failure();
     }
     diag.attachNote(a->getLoc())
@@ -335,7 +336,7 @@ struct Equivalence {
       if (portNames)
         if (auto portNameAttr = dyn_cast<StringAttr>(portNames[portNo]))
           portName = portNameAttr.getValue();
-      if (isa<RefType>(existsVal.getType())) {
+      if (type_isa<RefType>(existsVal.getType())) {
         diag.attachNote(opExists->getLoc())
             << " contains a RefType port named '" + portName +
                    "' that only exists in one of the modules (can be due to "
@@ -1219,8 +1220,8 @@ void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
   }
   // It must be a bundle type and the field name has changed. We have to
   // manually decompose the bulk connect into a connect for each field.
-  auto dstBundle = cast<BundleType>(dstType);
-  auto srcBundle = cast<BundleType>(srcType);
+  auto dstBundle = type_cast<BundleType>(dstType);
+  auto srcBundle = type_cast<BundleType>(srcType);
   for (unsigned i = 0; i < dstBundle.getNumElements(); ++i) {
     auto dstField = builder.create<SubfieldOp>(dst, i);
     auto srcField = builder.create<SubfieldOp>(src, i);
@@ -1347,7 +1348,7 @@ class DedupPass : public DedupBase<DedupPass> {
         return;
       // If the module has input RefType ports, also skip it.
       if (llvm::any_of(module.getPorts(), [&](PortInfo port) {
-            return isa<RefType>(port.type) && port.isInput();
+            return type_isa<RefType>(port.type) && port.isInput();
           }))
         return;
 

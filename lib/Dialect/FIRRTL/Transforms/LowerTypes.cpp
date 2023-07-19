@@ -82,7 +82,7 @@ struct FlatBundleFieldEntry {
 
 /// Return true if the type has more than zero bitwidth.
 static bool hasZeroBitWidth(FIRRTLType type) {
-  return TypeSwitch<FIRRTLType, bool>(type)
+  return FIRRTLTypeSwitch<FIRRTLType, bool>(type)
       .Case<BundleType>([&](auto bundle) {
         for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
           auto elt = bundle.getElement(i);
@@ -105,7 +105,7 @@ static bool hasZeroBitWidth(FIRRTLType type) {
 
 /// Return true if the type is a 1d vector type or ground type.
 static bool isOneDimVectorType(FIRRTLType type) {
-  return TypeSwitch<FIRRTLType, bool>(type)
+  return FIRRTLTypeSwitch<FIRRTLType, bool>(type)
       .Case<BundleType>([&](auto bundle) { return false; })
       .Case<FVectorType>([&](FVectorType vector) {
         // When the size is 1, lower the vector into a scalar.
@@ -117,7 +117,7 @@ static bool isOneDimVectorType(FIRRTLType type) {
 
 /// Return true if the type has a bundle type as subtype.
 static bool containsBundleType(FIRRTLType type) {
-  return TypeSwitch<FIRRTLType, bool>(type)
+  return FIRRTLTypeSwitch<FIRRTLType, bool>(type)
       .Case<BundleType>([&](auto bundle) { return true; })
       .Case<FVectorType>([&](FVectorType vector) {
         return containsBundleType(vector.getElementType());
@@ -128,7 +128,7 @@ static bool containsBundleType(FIRRTLType type) {
 /// Return true if we can preserve the type.
 static bool isPreservableAggregateType(Type type,
                                        PreserveAggregate::PreserveMode mode) {
-  if (auto refType = llvm::dyn_cast<RefType>(type)) {
+  if (auto refType = type_dyn_cast<RefType>(type)) {
     // Always preserve rwprobe's.
     if (refType.getForceable())
       return true;
@@ -141,7 +141,7 @@ static bool isPreservableAggregateType(Type type,
   if (mode == PreserveAggregate::None)
     return false;
 
-  auto firrtlType = llvm::dyn_cast<FIRRTLBaseType>(type);
+  auto firrtlType = type_dyn_cast<FIRRTLBaseType>(type);
   if (!firrtlType)
     return false;
 
@@ -172,7 +172,7 @@ static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry> &fields,
   if (isPreservableAggregateType(type, mode))
     return false;
 
-  if (auto refType = llvm::dyn_cast<RefType>(type))
+  if (auto refType = type_dyn_cast<RefType>(type))
     type = refType.getType();
   return TypeSwitch<Type, bool>(type)
       .Case<BundleType>([&](auto bundle) {
@@ -254,8 +254,8 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
 
   SmallVector<Attribute> newAnnotations;
   for (size_t portIdx = 0, e = newMem.getNumResults(); portIdx < e; ++portIdx) {
-    auto portType = cast<BundleType>(newMem.getResult(portIdx).getType());
-    auto oldPortType = cast<BundleType>(op.getResult(portIdx).getType());
+    auto portType = type_cast<BundleType>(newMem.getResult(portIdx).getType());
+    auto oldPortType = type_cast<BundleType>(op.getResult(portIdx).getType());
     SmallVector<Attribute> portAnno;
     for (auto attr : newMem.getPortAnnotation(portIdx)) {
       Annotation anno(attr);
@@ -545,7 +545,7 @@ bool TypeLoweringVisitor::lowerProducer(
 
   if (!srcType)
     srcType = op->getResult(0).getType();
-  auto srcFType = llvm::dyn_cast<FIRRTLType>(srcType);
+  auto srcFType = type_dyn_cast<FIRRTLType>(srcType);
   if (!srcFType)
     return false;
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
@@ -632,7 +632,7 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
           // This shouldn't happen (non-FIRRTLBaseType's in lowered types, or
           // refs), check explicitly here for clarity/early detection.
           assert(llvm::none_of(mapping, [](auto v) {
-            auto fbasetype = llvm::dyn_cast<FIRRTLBaseType>(v.getType());
+            auto fbasetype = type_dyn_cast<FIRRTLBaseType>(v.getType());
             return !fbasetype || fbasetype.containsReference();
           }));
 
@@ -710,7 +710,7 @@ bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
 
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry> fieldTypes;
-  auto srcType = cast<FIRRTLType>(newArgs[argIndex].type);
+  auto srcType = type_cast<FIRRTLType>(newArgs[argIndex].type);
   if (!peelType(srcType, fieldTypes, getPreservationModeForModule(module)))
     return false;
 
@@ -894,7 +894,7 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
   // Hook up the new memories to the wires the old memory was replaced with.
   for (size_t index = 0, rend = op.getNumResults(); index < rend; ++index) {
     auto result = oldPorts[index].getResult();
-    auto rType = cast<BundleType>(result.getType());
+    auto rType = type_cast<BundleType>(result.getType());
     for (size_t fieldIndex = 0, fend = rType.getNumElements();
          fieldIndex != fend; ++fieldIndex) {
       auto name = rType.getElement(fieldIndex).name.getValue();
@@ -1300,7 +1300,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
   endFields.push_back(0);
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-    auto srcType = cast<FIRRTLType>(op.getType(i));
+    auto srcType = type_cast<FIRRTLType>(op.getType(i));
 
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;

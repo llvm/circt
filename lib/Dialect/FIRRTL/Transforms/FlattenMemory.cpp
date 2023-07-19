@@ -127,7 +127,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
         result.replaceAllUsesWith(wire);
         result = wire;
         auto newResult = flatMem.getResult(index);
-        auto rType = cast<BundleType>(result.getType());
+        auto rType = type_cast<BundleType>(result.getType());
         for (size_t fieldIndex = 0, fend = rType.getNumElements();
              fieldIndex != fend; ++fieldIndex) {
           auto name = rType.getElement(fieldIndex).name.getValue();
@@ -197,7 +197,7 @@ private:
   // Recursively populate the results with each ground type field.
   static bool flattenType(FIRRTLType type, SmallVectorImpl<IntType> &results) {
     std::function<bool(FIRRTLType)> flatten = [&](FIRRTLType type) -> bool {
-      return TypeSwitch<FIRRTLType, bool>(type)
+      return FIRRTLTypeSwitch<FIRRTLType, bool>(type)
           .Case<BundleType>([&](auto bundle) {
             for (auto &elt : bundle)
               if (!flatten(elt.type))
@@ -223,9 +223,9 @@ private:
   }
 
   Value getSubWhatever(ImplicitLocOpBuilder *builder, Value val, size_t index) {
-    if (BundleType bundle = dyn_cast<BundleType>(val.getType()))
+    if (BundleType bundle = type_dyn_cast<BundleType>(val.getType()))
       return builder->create<SubfieldOp>(val, index);
-    if (FVectorType fvector = dyn_cast<FVectorType>(val.getType()))
+    if (FVectorType fvector = type_dyn_cast<FVectorType>(val.getType()))
       return builder->create<SubindexOp>(val, index);
 
     llvm_unreachable("Unknown aggregate type");

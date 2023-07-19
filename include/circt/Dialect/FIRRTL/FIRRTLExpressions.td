@@ -268,7 +268,7 @@ class BaseSubfieldOp<string name, Type btype, Type rtype> : FIRRTLExprOp<name> {
 
   let builders = [
     OpBuilder<(ins "Value":$input, "StringRef":$fieldName), [{
-      auto bundleType = input.getType().cast<}] # btype # [{>();
+      auto bundleType = firrtl::type_cast<}] # btype # [{>(input.getType());
       auto fieldIndex = bundleType.getElementIndex(fieldName);
       assert(fieldIndex.has_value() && "subfield operation to unknown field");
       return build($_builder, $_state, input, *fieldIndex);
@@ -393,7 +393,7 @@ def IsTagOp : FIRRTLExprOp<"istag"> {
   let hasCustomAssemblyFormat = 1;
   let builders = [
     OpBuilder<(ins "Value":$input, "StringRef":$fieldName), [{
-      auto enumType = cast<FEnumType>(input.getType());
+      auto enumType = firrtl::type_cast<FEnumType>(input.getType());
       auto fieldIndex = enumType.getElementIndex(fieldName);
       assert(fieldIndex.has_value() && "subtag operation to unknown field");
       return build($_builder, $_state, input, *fieldIndex);
@@ -403,13 +403,13 @@ def IsTagOp : FIRRTLExprOp<"istag"> {
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), cast<FEnumType>(getInput().getType())
+      return FieldRef(getInput(), firrtl::type_cast<FEnumType>(getInput().getType())
                                             .getFieldID(getFieldIndex()));
     }
 
     /// Return the name of the accessed field.
     StringAttr getFieldNameAttr() {
-      return cast<FEnumType>(getInput().getType())
+      return firrtl::type_cast<FEnumType>(getInput().getType())
         .getElementNameAttr(getFieldIndex());
     }
 
@@ -437,7 +437,7 @@ def SubtagOp : FIRRTLExprOp<"subtag"> {
 
   let builders = [
     OpBuilder<(ins "Value":$input, "StringRef":$fieldName), [{
-      auto enumType = cast<FEnumType>(input.getType());
+      auto enumType = firrtl::type_cast<FEnumType>(input.getType());
       auto fieldIndex = enumType.getElementIndex(fieldName);
       assert(fieldIndex.has_value() && "subtag operation to unknown field");
       return build($_builder, $_state, input, *fieldIndex);
@@ -537,8 +537,8 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
     static FIRRTLType inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
                                       std::optional<Location> loc) {
-      return $_infer(cast<FIRRTLType>(operands[0].getType()),
-                     cast<FIRRTLType>(operands[1].getType()),
+      return $_infer(firrtl::type_cast<FIRRTLType>(operands[0].getType()),
+                     firrtl::type_cast<FIRRTLType>(operands[1].getType()),
                      loc);
     }
   }]);
@@ -654,7 +654,7 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
     static FIRRTLType inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
                                       std::optional<Location> loc) {
-      return $_infer(cast<FIRRTLType>(operands[0].getType()), loc);
+      return $_infer(firrtl::type_cast<FIRRTLType>(operands[0].getType()), loc);
     }
   }]);
 

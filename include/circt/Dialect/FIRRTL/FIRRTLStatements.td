@@ -323,7 +323,7 @@ def ProbeOp : FIRRTLOp<"probe"> {
 class ForceRefTypeConstraint<string ref, string base>
   : TypesMatchWith<"reference type of " # ref # " should be RWProbe of " # base,
                    base, ref,
-                   "RefType::get(cast<FIRRTLBaseType>($_self).getAllConstDroppedType(), true)">;
+                   "RefType::get(firrtl::type_cast<FIRRTLBaseType>($_self).getAllConstDroppedType(), true)">;
 
 def RefForceOp : FIRRTLOp<"ref.force",[ForceRefTypeConstraint<"dest", "src">]> {
   let summary = "FIRRTL force statement";
