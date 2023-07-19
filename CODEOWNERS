@@ -4,6 +4,13 @@
 **/Dialect/Arc @fabianschuiki @maerhart
 tools/arcilator @fabianschuiki @maerhart
 
+# Calyx
+**/Dialect/Calyx @rachitnigam @mortbopet @cgyurgyik @mikeurbach @andrewb1999
+**/Conversion/CalyxToFSM @mortbopet
+**/Conversion/CalyxToHW @mortbopet
+**/Conversion/SCFToCalyx @mikeurbach
+**/Conversion/LoopScheduleToCalyx @andrewb1999
+
 # DC
 **/Dialect/DC @mortbopet
 
