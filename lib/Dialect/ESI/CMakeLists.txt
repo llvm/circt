@@ -62,7 +62,6 @@ add_circt_dialect_library(CIRCTESI
   ${srcs}
 
   DEPENDS
-  MLIRArithOpsInterfacesIncGen
   MLIRESITransformsIncGen
   MLIRESIEnumsIncGen
   ${ESI_Deps}

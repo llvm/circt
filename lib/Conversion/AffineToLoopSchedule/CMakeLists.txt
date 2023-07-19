@@ -3,6 +3,7 @@ add_circt_library(CIRCTAffineToLoopSchedule
 
   DEPENDS
   CIRCTConversionPassIncGen
+  MLIRArithOpsInterfacesIncGen
 
   LINK_LIBS PUBLIC
   MLIRAffineToStandard

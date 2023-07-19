@@ -9,7 +9,6 @@ add_circt_dialect_library(CIRCTCalyxTransforms
   CalyxLoweringUtils.cpp
 
   DEPENDS
-  MLIRArithOpsInterfacesIncGen
   CIRCTCalyxTransformsIncGen
 
   LINK_LIBS PUBLIC
