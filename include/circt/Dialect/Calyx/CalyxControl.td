@@ -367,7 +367,7 @@ def StaticRepeatOp : CalyxContainer<"static_repeat", [
     OpBuilder<(ins
       "uint32_t":$count), [{
         $_state.addAttribute("count", 
-        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 32), count)
+          mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 32), count)
         );
 
         Region *body = $_state.addRegion();
@@ -375,6 +375,42 @@ def StaticRepeatOp : CalyxContainer<"static_repeat", [
     }]>
   ];
 
+}
+
+def RepeatOp : CalyxContainer<"repeat", [
+    ControlLike
+  ]> {
+  let summary = "Calyx Dynamic Repeat";
+  let arguments = (ins
+    I32Attr:$count
+  );
+  let description = [{
+    The "calyx.repeat" operation represents the repeated execution of
+    the control within its region.
+    The key difference with static repeat is that the body (unlike with static 
+    repeat) can be dynamically timed. 
+
+    ```mlir
+      calyx.repeat 10 {
+        calyx.enable @G1
+        ...
+      }
+    ```
+  }];
+  let hasCanonicalizer = true;
+  let assemblyFormat = "$count $body attr-dict";
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins
+      "uint32_t":$count), [{
+        $_state.addAttribute("count", 
+          mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 32), count)
+        );
+
+        Region *body = $_state.addRegion();
+        body->push_back(new Block());
+    }]>
+  ];
 }
 
 def InvokeOp : CalyxOp<"invoke", [

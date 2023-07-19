@@ -541,6 +541,12 @@ private:
               emitCalyxSection("else",
                                [&]() { emitCalyxControl(op.getElseBody()); });
           })
+          .Case<RepeatOp>([&](auto op) {
+            indent() << prependAttributes(op, "repeat ");
+            os << op.getCount();
+
+            emitCalyxBody([&]() { emitCalyxControl(op.getBodyBlock()); });
+          })
           .Case<StaticRepeatOp>([&](auto op) {
             indent() << prependAttributes(op, "static repeat ");
             os << op.getCount();
