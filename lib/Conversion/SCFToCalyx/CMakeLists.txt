@@ -3,6 +3,7 @@ add_circt_conversion_library(CIRCTSCFToCalyx
 
   DEPENDS
   CIRCTConversionPassIncGen
+  MLIRArithOpsInterfacesIncGen
 
   LINK_COMPONENTS
   Core

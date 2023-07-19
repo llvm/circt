@@ -9,6 +9,7 @@ add_circt_dialect_library(CIRCTCalyx
   CalyxOps.cpp
 
   DEPENDS
+  MLIRArithOpsInterfacesIncGen
   MLIRCalyxEnumsIncGen
   MLIRCalyxInterfacesIncGen
 
