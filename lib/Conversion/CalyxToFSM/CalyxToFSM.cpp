@@ -268,6 +268,74 @@ LogicalResult CompileFSMVisitor::visit(StateOp currentState, EnableOp enableOp,
   return success();
 }
 
+// CompileInvoke is used to convert invoke operations to group operations and
+// enable operations.
+class CompileInvoke {
+public:
+  CompileInvoke(ComponentOp &component, OpBuilder &builder)
+      : component(component), builder(builder) {}
+  void compile();
+
+private:
+  void lowerInvokeOp(InvokeOp &invokeOp);
+  ComponentOp &component;
+  OpBuilder &builder;
+  // It is used to pass to the go port and assign a value to the go port.
+  hw::ConstantOp constantOp = nullptr;
+  size_t label = 0;
+};
+
+// Access all invokeOp.
+void CompileInvoke::compile() {
+  auto invokeOps = component.getControlOp().getInvokeOps();
+  for (auto op : invokeOps) {
+    lowerInvokeOp(op);
+  }
+}
+
+// Convert an invoke operation to a group operation and an enable operation.
+void CompileInvoke::lowerInvokeOp(InvokeOp &invokeOp) {
+  if (!constantOp) {
+    WalkResult result = component.walk([&](hw::ConstantOp op) {
+      if (op.getType() == builder.getI1Type() &&
+          op.getValue().getZExtValue() == 1) {
+        constantOp = op;
+        return WalkResult::interrupt();
+      }
+      return WalkResult::advance();
+    });
+    if (!result.wasInterrupted()) {
+      // Create a ConstantOp to assign a value to the go port.
+      Operation *prevNode =
+          component.getWiresOp().getOperation()->getPrevNode();
+      builder.setInsertionPointAfter(prevNode);
+      constantOp = builder.create<hw::ConstantOp>(prevNode->getLoc(),
+                                                  builder.getI1Type(), 1);
+    }
+  }
+  Location loc = component.getWiresOp().getLoc();
+  // Set the insertion point at the end of the wires block.
+  builder.setInsertionPointToEnd(component.getWiresOp().getBodyBlock());
+  GroupOp groupOp =
+      builder.create<GroupOp>(loc, "invoke_" + std::to_string(label));
+  builder.setInsertionPointToStart(groupOp.getBodyBlock());
+  Value go = invokeOp.getInstGoValue();
+  // Assign a value to the go port.
+  builder.create<AssignOp>(loc, go, constantOp);
+  auto ports = invokeOp.getPorts();
+  auto inputs = invokeOp.getInputs();
+  // Generate a series of assignment operations from a list of parameters.
+  for (size_t i = 0; i != ports.size(); ++i)
+    builder.create<AssignOp>(loc, ports[i], inputs[i]);
+  Value done = invokeOp.getInstDoneValue();
+  // Generate a group_done operation with the instance's done port.
+  builder.create<calyx::GroupDoneOp>(loc, done);
+  builder.setInsertionPointAfter(invokeOp.getOperation());
+  builder.create<EnableOp>(invokeOp.getLoc(),
+                           "invoke_" + std::to_string(label++));
+  invokeOp.erase();
+}
+
 class CalyxToFSMPass : public CalyxToFSMBase<CalyxToFSMPass> {
 public:
   void runOnOperation() override;
@@ -279,6 +347,8 @@ void CalyxToFSMPass::runOnOperation() {
   auto ctrlOp = component.getControlOp();
   assert(ctrlOp.getBodyBlock()->getOperations().size() == 1 &&
          "Expected a single top-level operation in the schedule");
+  CompileInvoke compileInvoke(component, builder);
+  compileInvoke.compile();
   Operation &topLevelCtrlOp = ctrlOp.getBodyBlock()->front();
   builder.setInsertionPoint(&topLevelCtrlOp);
 
