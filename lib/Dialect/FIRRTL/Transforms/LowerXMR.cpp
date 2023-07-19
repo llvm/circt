@@ -224,8 +224,10 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             return success();
           })
           .Case<Forceable>([&](Forceable op) {
-            if (!op.isForceable() || op.getDataRef().use_empty())
+            if (!op.isForceable() || op.getDataRef().use_empty() ||
+                isZeroWidth(op.getDataType()))
               return success();
+
             addReachingSendsEntry(op.getDataRef(), getInnerRefTo(op));
             return success();
           })
@@ -427,6 +429,11 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     return TypeSwitch<Operation *, LogicalResult>(op)
         .Case<RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp>(
             [&](auto op) {
+              // Drop if zero-width target.
+              if (isZeroWidth(op.getDest().getType().getType())) {
+                op.erase();
+                return success();
+              }
               Value ref;
               if (failed(resolveReference(op.getDest(), op.getDest().getType(),
                                           op.getLoc(), op, ref)))
@@ -611,19 +618,16 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     if (auto arg = dyn_cast<BlockArgument>(val))
       return ::getInnerRefTo(
           cast<FModuleLike>(arg.getParentBlock()->getParentOp()),
-          arg.getArgNumber(), "xmr_sym",
-          [&](FModuleLike mod) -> ModuleNamespace & {
+          arg.getArgNumber(), [&](FModuleLike mod) -> ModuleNamespace & {
             return getModuleNamespace(mod);
           });
-    else
-      return getInnerRefTo(val.getDefiningOp());
+    return getInnerRefTo(val.getDefiningOp());
   }
 
   InnerRefAttr getInnerRefTo(Operation *op) {
-    return ::getInnerRefTo(op, "xmr_sym",
-                           [&](FModuleOp mod) -> ModuleNamespace & {
-                             return getModuleNamespace(mod);
-                           });
+    return ::getInnerRefTo(op, [&](FModuleOp mod) -> ModuleNamespace & {
+      return getModuleNamespace(mod);
+    });
   }
 
   void markForRemoval(Operation *op) { opsToRemove.push_back(op); }

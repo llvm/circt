@@ -266,18 +266,46 @@ FirMemConfig LowerFirMemPass::collectMemory(FirMemOp op) {
 /// Create the `HWModuleGeneratedOp` for a list of memory parametrizations.
 SmallVector<HWModuleGeneratedOp>
 LowerFirMemPass::createMemoryModules(MutableArrayRef<UniqueConfig> configs) {
-  // Create the generator schema.
-  OpBuilder builder(getOperation());
-  builder.setInsertionPointToStart(getOperation().getBody());
-  std::array<StringRef, 14> schemaFields = {
-      "depth",          "numReadPorts",    "numWritePorts", "numReadWritePorts",
-      "readLatency",    "writeLatency",    "width",         "maskGran",
-      "readUnderWrite", "writeUnderWrite", "writeClockIDs", "initFilename",
-      "initIsBinary",   "initIsInline"};
-  auto schemaOp = builder.create<hw::HWGeneratorSchemaOp>(
-      getOperation().getLoc(), "FIRRTLMem", "FIRRTL_Memory",
-      builder.getStrArrayAttr(schemaFields));
+  ModuleOp circuit = getOperation();
+
+  // Create or re-use the generator schema.
+  hw::HWGeneratorSchemaOp schemaOp;
+  for (auto op : circuit.getOps<hw::HWGeneratorSchemaOp>()) {
+    if (op.getDescriptor() == "FIRRTL_Memory") {
+      schemaOp = op;
+      break;
+    }
+  }
+  if (!schemaOp) {
+    auto builder = OpBuilder::atBlockBegin(getOperation().getBody());
+    std::array<StringRef, 14> schemaFields = {
+        "depth",          "numReadPorts",
+        "numWritePorts",  "numReadWritePorts",
+        "readLatency",    "writeLatency",
+        "width",          "maskGran",
+        "readUnderWrite", "writeUnderWrite",
+        "writeClockIDs",  "initFilename",
+        "initIsBinary",   "initIsInline"};
+    schemaOp = builder.create<hw::HWGeneratorSchemaOp>(
+        getOperation().getLoc(), "FIRRTLMem", "FIRRTL_Memory",
+        builder.getStrArrayAttr(schemaFields));
+  }
   auto schemaSymRef = FlatSymbolRefAttr::get(schemaOp);
+
+  // Determine the insertion point for each of the memory modules. We basically
+  // put them ahead of the first module that instantiates that memory. Do this
+  // here in one go such that the `isBeforeInBlock` calls don't have to
+  // re-enumerate the entire IR every time we insert one of the memory modules.
+  SmallVector<Operation *> insertionPoints;
+  insertionPoints.reserve(configs.size());
+  for (auto &config : configs) {
+    Operation *op = nullptr;
+    for (auto memOp : config.second)
+      if (auto parent = memOp->getParentOfType<HWModuleOp>())
+        if (!op || parent->isBeforeInBlock(op))
+          op = parent;
+    insertionPoints.push_back(op);
+  }
 
   // Create the individual memory modules.
   SymbolCache symbolCache;
@@ -287,9 +315,12 @@ LowerFirMemPass::createMemoryModules(MutableArrayRef<UniqueConfig> configs) {
 
   SmallVector<HWModuleGeneratedOp> genOps;
   genOps.reserve(configs.size());
-  for (auto &config : configs)
+  for (auto [config, insertBefore] : llvm::zip(configs, insertionPoints)) {
+    OpBuilder builder(circuit.getContext());
+    builder.setInsertionPoint(insertBefore);
     genOps.push_back(
         createMemoryModule(config, builder, schemaSymRef, globalNamespace));
+  }
 
   return genOps;
 }
@@ -302,22 +333,39 @@ LowerFirMemPass::createMemoryModule(UniqueConfig &config, OpBuilder &builder,
   const auto &mem = config.first;
   auto &memOps = config.second;
 
-  // Pick a name for the memory. Honor the optional prefix and try to mention
-  // the names of the memory instances that use this configuration.
-  SmallDenseSet<StringRef> usedNames;
-  SmallString<32> nameBuffer;
-  nameBuffer += mem.prefix;
+  // Pick a name for the memory. Honor the optional prefix and try to include
+  // the common part of the names of the memory instances that use this
+  // configuration. The resulting name is of the form:
+  //
+  //   <prefix>_<commonName>_<depth>x<width>
+  //
+  StringRef baseName = "";
+  bool firstFound = false;
   for (auto memOp : memOps) {
     if (auto memName = memOp.getName()) {
-      if (usedNames.insert(*memName).second) {
-        if (usedNames.size() > 1)
-          nameBuffer.push_back('_');
-        nameBuffer += *memName;
+      if (!firstFound) {
+        baseName = *memName;
+        firstFound = true;
+        continue;
       }
+      unsigned idx = 0;
+      for (; idx < memName->size() && idx < baseName.size(); ++idx)
+        if ((*memName)[idx] != baseName[idx])
+          break;
+      baseName = baseName.take_front(idx);
     }
   }
-  if (nameBuffer.empty())
+  baseName = baseName.rtrim('_');
+
+  SmallString<32> nameBuffer;
+  nameBuffer += mem.prefix;
+  if (!baseName.empty()) {
+    nameBuffer += baseName;
+  } else {
     nameBuffer += "mem";
+  }
+  nameBuffer += "_";
+  (Twine(mem.depth) + "x" + Twine(mem.dataWidth)).toVector(nameBuffer);
   auto name = builder.getStringAttr(globalNamespace.newName(nameBuffer));
 
   LLVM_DEBUG(llvm::dbgs() << "Creating " << name << " for " << mem.depth

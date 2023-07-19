@@ -31,7 +31,7 @@ circuit Foo :
       ; INIT_OUTLINE-NEXT;   */
       ; INIT_OUTLINE:        endmodule
       ;
-      ; INIT_OUTLINE:      FILE "m_combMem_init.sv"
+      ; INIT_OUTLINE:      FILE "[[memoryModule]]_init.sv"
       ; INIT_OUTLINE-NOT:  FILE
       ; INIT_OUTLINE:      module [[bindModule]]();
       ; INIT_OUTLINE:        initial

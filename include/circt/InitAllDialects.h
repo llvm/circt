@@ -25,6 +25,7 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HWArith/HWArithDialect.h"
 #include "circt/Dialect/Handshake/HandshakeDialect.h"
+#include "circt/Dialect/Ibis/IbisDialect.h"
 #include "circt/Dialect/Interop/InteropDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LTL/LTLDialect.h"
@@ -58,6 +59,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     hw::HWDialect,
     hwarith::HWArithDialect,
     interop::InteropDialect,
+    ibis::IbisDialect,
     llhd::LLHDDialect,
     loopschedule::LoopScheduleDialect,
     ltl::LTLDialect,

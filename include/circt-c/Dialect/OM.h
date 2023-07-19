@@ -134,12 +134,23 @@ MLIR_CAPI_EXPORTED MlirAttribute
 omEvaluatorObjectValueGetPrimitive(OMObjectValue objectValue);
 
 //===----------------------------------------------------------------------===//
-// Attribute API.
+// ReferenceAttr API
 //===----------------------------------------------------------------------===//
 
 MLIR_CAPI_EXPORTED bool omAttrIsAReferenceAttr(MlirAttribute attr);
 
 MLIR_CAPI_EXPORTED MlirAttribute omReferenceAttrGetInnerRef(MlirAttribute attr);
+
+//===----------------------------------------------------------------------===//
+// ListAttr API
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool omAttrIsAListAttr(MlirAttribute attr);
+
+MLIR_CAPI_EXPORTED intptr_t omListAttrGetNumElements(MlirAttribute attr);
+
+MLIR_CAPI_EXPORTED MlirAttribute omListAttrGetElement(MlirAttribute attr,
+                                                      intptr_t pos);
 
 #ifdef __cplusplus
 }

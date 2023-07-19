@@ -71,6 +71,14 @@ om.class @Class2(%arg0: i1) {
 
 // -----
 
+om.class.extern @Extern(%param1: i1) {
+  // expected-error @+1 {{'om.constant' op not allowed in external class}}
+  %0 = om.constant 0 : i1
+  om.class.extern.field @field1 : i1
+}
+
+// -----
+
 // CHECK-LABEL: @List
 om.class @List() {
   // expected-error @+1 {{an element of a list attribute must have a type 'i32' but got 'i64'}}

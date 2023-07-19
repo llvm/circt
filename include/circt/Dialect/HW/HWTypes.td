@@ -76,13 +76,11 @@ def HWAggregateType : DialectType<HWDialect,
 // Type Definitions
 //===----------------------------------------------------------------------===//
 
-/// Points to a name within a module.
-def HWInnerRefAttr : Attr<
-  CPred<"$_self.isa<::circt::hw::InnerRefAttr>()">,
-        "name reference attribute"> {
-  let returnType = "::circt::hw::InnerRefAttr";
-  let storageType = "::circt::hw::InnerRefAttr";
-  let convertFromStorage = "$_self";
+def HWStringType : TypeDef<HWDialect, "String"> {
+  let summary = "String type";
+  let description = "Defines a string type for the hw-centric dialects";
+
+  let mnemonic = "string";
 }
 
 /// A flat symbol reference or a reference to a name within a module.

@@ -75,7 +75,6 @@ def OMListAttr : AttrDef<OMDialect, "List", [TypedAttrInterface]> {
   }];
 
   let genVerifyDecl = 1;
-  let skipDefaultBuilders = 1;
 
   let extraClassDeclaration = [{
     mlir::Type getType();

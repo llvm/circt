@@ -1691,12 +1691,12 @@ hw.module @intrinsic(%clk: i1) -> (io1: i1, io2: i1, io3: i1, io4: i5) {
   // CHECK: assign io1 = clk === 1'bx
 
   %1 = sv.constantStr "foo"
-  %2 = sv.system "test$plusargs"(%1) : (!sv.string) -> i1
+  %2 = sv.system "test$plusargs"(%1) : (!hw.string) -> i1
   // CHECK: assign io2 = $test$plusargs("foo")
 
   %_pargs = sv.wire  : !hw.inout<i5>
   %3 = sv.read_inout %_pargs : !hw.inout<i5>
-  %4 = sv.system "value$plusargs"(%1, %_pargs) : (!sv.string, !hw.inout<i5>) -> i1
+  %4 = sv.system "value$plusargs"(%1, %_pargs) : (!hw.string, !hw.inout<i5>) -> i1
   // CHECK: assign io3 = $value$plusargs("foo", [[tmp]])
   // CHECK: assign io4 = [[tmp]]
 

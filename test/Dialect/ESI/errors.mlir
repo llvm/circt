@@ -79,6 +79,27 @@ hw.module @Loopback (%clk: i1) -> () {
 
 // -----
 
+esi.mem.ram @MemA i64 x 20
+!write = !hw.struct<address: i5, data: i64>
+hw.module @MemoryAccess1(%clk: i1, %rst: i1, %write: !esi.channel<!write>) -> () {
+  // expected-error @+1 {{'esi.service.instance' op failed to generate server}}
+  esi.service.instance svc @MemA impl as "sv_mem" (%clk, %rst) : (i1, i1) -> ()
+  // expected-error @+1 {{'esi.service.req.to_server' op Memory write requests must be to/from server}}
+  esi.service.req.to_server %write -> <@MemA::@write> ([]) : !esi.channel<!write>
+}
+
+// -----
+
+esi.mem.ram @MemA i64 x 20
+hw.module @MemoryAccess1(%clk: i1, %rst: i1, %addr: !esi.channel<i5>) -> () {
+  // expected-error @+1 {{'esi.service.instance' op failed to generate server}}
+  esi.service.instance svc @MemA impl as "sv_mem" (%clk, %rst) : (i1, i1) -> ()
+  // expected-error @+1 {{'esi.service.req.to_server' op Memory read requests must be to/from server}}
+  esi.service.req.to_server %addr -> <@MemA::@read> ([]) : !esi.channel<i5>
+}
+
+// -----
+
 esi.service.decl @HostComms {
   esi.service.inout @ReqResp : !esi.channel<i8> -> !esi.channel<i16>
 }

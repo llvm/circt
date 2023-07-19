@@ -112,25 +112,25 @@ void walkGroundTypes(FIRRTLType firrtlType,
 
 /// Returns an operation's `inner_sym`, adding one if necessary.
 StringAttr
-getOrAddInnerSym(Operation *op, StringRef nameHint, FModuleOp mod,
-                 std::function<ModuleNamespace &(FModuleOp)> getNamespace);
+getOrAddInnerSym(Operation *op, FModuleOp mod,
+                 llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace);
 
 /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
 /// to that operation.
 hw::InnerRefAttr
-getInnerRefTo(Operation *op, StringRef nameHint,
-              std::function<ModuleNamespace &(FModuleOp)> getNamespace);
+getInnerRefTo(Operation *op,
+              llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace);
 
 /// Returns a port's `inner_sym`, adding one if necessary.
-StringAttr
-getOrAddInnerSym(FModuleLike mod, size_t portIdx, StringRef nameHint,
-                 std::function<ModuleNamespace &(FModuleLike)> getNamespace);
+StringAttr getOrAddInnerSym(
+    FModuleLike mod, size_t portIdx,
+    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace);
 
 /// Obtain an inner reference to a port, possibly adding an `inner_sym`
 /// to the port.
 hw::InnerRefAttr
-getInnerRefTo(FModuleLike mod, size_t portIdx, StringRef nameHint,
-              std::function<ModuleNamespace &(FModuleLike)> getNamespace);
+getInnerRefTo(FModuleLike mod, size_t portIdx,
+              llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace);
 
 //===----------------------------------------------------------------------===//
 // Type utilities

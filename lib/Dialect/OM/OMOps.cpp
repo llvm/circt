@@ -16,13 +16,13 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 
 using namespace mlir;
+using namespace circt::om;
 
 //===----------------------------------------------------------------------===//
-// ClassOp
+// Shared definitions
 //===----------------------------------------------------------------------===//
 
-ParseResult circt::om::ClassOp::parse(OpAsmParser &parser,
-                                      OperationState &state) {
+static ParseResult parseClassLike(OpAsmParser &parser, OperationState &state) {
   // Parse the Class symbol name.
   StringAttr symName;
   if (parser.parseSymbolName(symName, mlir::SymbolTable::getSymbolAttrName(),
@@ -59,6 +59,74 @@ ParseResult circt::om::ClassOp::parse(OpAsmParser &parser,
   return success();
 }
 
+static void printClassLike(ClassLike classLike, OpAsmPrinter &printer) {
+  // Print the Class symbol name.
+  printer << " @";
+  printer << classLike.getSymName();
+
+  // Retrieve the formal parameter names and values.
+  auto argNames = SmallVector<StringRef>(
+      classLike.getFormalParamNames().getAsValueRange<StringAttr>());
+  ArrayRef<BlockArgument> args = classLike.getBodyBlock()->getArguments();
+
+  // Print the formal parameters.
+  printer << '(';
+  for (size_t i = 0, e = args.size(); i < e; ++i) {
+    printer << '%' << argNames[i] << ": " << args[i].getType();
+    if (i < e - 1)
+      printer << ", ";
+  }
+  printer << ") ";
+
+  // Print the optional attribute dictionary.
+  SmallVector<StringRef> elidedAttrs{classLike.getSymNameAttrName(),
+                                     classLike.getFormalParamNamesAttrName()};
+  printer.printOptionalAttrDictWithKeyword(classLike.getOperation()->getAttrs(),
+                                           elidedAttrs);
+
+  // Print the body.
+  printer.printRegion(classLike.getBody(), /*printEntryBlockArgs=*/false,
+                      /*printBlockTerminators=*/true);
+}
+
+LogicalResult verifyClassLike(ClassLike classLike) {
+  // Verify the formal parameter names match up with the values.
+  if (classLike.getFormalParamNames().size() !=
+      classLike.getBodyBlock()->getArguments().size()) {
+    auto error = classLike.emitOpError(
+        "formal parameter name list doesn't match formal parameter value list");
+    error.attachNote(classLike.getLoc())
+        << "formal parameter names: " << classLike.getFormalParamNames();
+    error.attachNote(classLike.getLoc())
+        << "formal parameter values: "
+        << classLike.getBodyBlock()->getArguments();
+    return error;
+  }
+
+  return success();
+}
+
+void getClassLikeAsmBlockArgumentNames(ClassLike classLike, Region &region,
+                                       OpAsmSetValueNameFn setNameFn) {
+  // Retrieve the formal parameter names and values.
+  auto argNames = SmallVector<StringRef>(
+      classLike.getFormalParamNames().getAsValueRange<StringAttr>());
+  ArrayRef<BlockArgument> args = classLike.getBodyBlock()->getArguments();
+
+  // Use the formal parameter names as the SSA value names.
+  for (size_t i = 0, e = args.size(); i < e; ++i)
+    setNameFn(args[i], argNames[i]);
+}
+
+//===----------------------------------------------------------------------===//
+// ClassOp
+//===----------------------------------------------------------------------===//
+
+ParseResult circt::om::ClassOp::parse(OpAsmParser &parser,
+                                      OperationState &state) {
+  return parseClassLike(parser, state);
+}
+
 void circt::om::ClassOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                                Twine name,
                                ArrayRef<StringRef> formalParamNames) {
@@ -91,60 +159,64 @@ void circt::om::ClassOp::build(OpBuilder &odsBuilder, OperationState &odsState,
 }
 
 void circt::om::ClassOp::print(OpAsmPrinter &printer) {
-  // Print the Class symbol name.
-  printer << " @";
-  printer << getSymName();
-
-  // Retrieve the formal parameter names and values.
-  auto argNames = SmallVector<StringRef>(
-      getFormalParamNames().getAsValueRange<StringAttr>());
-  ArrayRef<BlockArgument> args = getBodyBlock()->getArguments();
-
-  // Print the formal parameters.
-  printer << '(';
-  for (size_t i = 0, e = args.size(); i < e; ++i) {
-    printer << '%' << argNames[i] << ": " << args[i].getType();
-    if (i < e - 1)
-      printer << ", ";
-  }
-  printer << ") ";
-
-  // Print the optional attribute dictionary.
-  SmallVector<StringRef> elidedAttrs{getSymNameAttrName(),
-                                     getFormalParamNamesAttrName()};
-  printer.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
-                                           elidedAttrs);
-
-  // Print the body.
-  printer.printRegion(getBody(), /*printEntryBlockArgs=*/false,
-                      /*printBlockTerminators=*/true);
+  printClassLike(*this, printer);
 }
 
-LogicalResult circt::om::ClassOp::verify() {
-  // Verify the formal parameter names match up with the values.
-  if (getFormalParamNames().size() != getBodyBlock()->getArguments().size()) {
-    auto error = emitOpError(
-        "formal parameter name list doesn't match formal parameter value list");
-    error.attachNote(getLoc())
-        << "formal parameter names: " << getFormalParamNames();
-    error.attachNote(getLoc())
-        << "formal parameter values: " << getBodyBlock()->getArguments();
-    return error;
+LogicalResult circt::om::ClassOp::verify() { return verifyClassLike(*this); }
+
+void circt::om::ClassOp::getAsmBlockArgumentNames(
+    Region &region, OpAsmSetValueNameFn setNameFn) {
+  getClassLikeAsmBlockArgumentNames(*this, region, setNameFn);
+}
+
+//===----------------------------------------------------------------------===//
+// ClassFieldOp
+//===----------------------------------------------------------------------===//
+
+Type circt::om::ClassFieldOp::getType() { return getValue().getType(); }
+
+//===----------------------------------------------------------------------===//
+// ClassExternOp
+//===----------------------------------------------------------------------===//
+
+ParseResult circt::om::ClassExternOp::parse(OpAsmParser &parser,
+                                            OperationState &state) {
+  return parseClassLike(parser, state);
+}
+
+void circt::om::ClassExternOp::build(OpBuilder &odsBuilder,
+                                     OperationState &odsState, Twine name) {
+  return build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+               odsBuilder.getStrArrayAttr({}));
+}
+
+void circt::om::ClassExternOp::build(OpBuilder &odsBuilder,
+                                     OperationState &odsState, Twine name,
+                                     ArrayRef<StringRef> formalParamNames) {
+  return build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+               odsBuilder.getStrArrayAttr(formalParamNames));
+}
+
+void circt::om::ClassExternOp::print(OpAsmPrinter &printer) {
+  printClassLike(*this, printer);
+}
+
+LogicalResult circt::om::ClassExternOp::verify() {
+  if (failed(verifyClassLike(*this))) {
+    return failure();
   }
+
+  // Verify that only external class field declarations are present in the body.
+  for (auto &op : getOps())
+    if (!isa<ClassExternFieldOp>(op))
+      return op.emitOpError("not allowed in external class");
 
   return success();
 }
 
-void circt::om::ClassOp::getAsmBlockArgumentNames(
+void circt::om::ClassExternOp::getAsmBlockArgumentNames(
     Region &region, OpAsmSetValueNameFn setNameFn) {
-  // Retrieve the formal parameter names and values.
-  auto argNames = SmallVector<StringRef>(
-      getFormalParamNames().getAsValueRange<StringAttr>());
-  ArrayRef<BlockArgument> args = getBodyBlock()->getArguments();
-
-  // Use the formal parameter names as the SSA value names.
-  for (size_t i = 0, e = args.size(); i < e; ++i)
-    setNameFn(args[i], argNames[i]);
+  getClassLikeAsmBlockArgumentNames(*this, region, setNameFn);
 }
 
 //===----------------------------------------------------------------------===//
@@ -175,7 +247,7 @@ circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
            << className << ')';
 
   // Verify the referred to ClassOp exists.
-  auto classDef = dyn_cast_or_null<ClassOp>(
+  auto classDef = dyn_cast_or_null<ClassLike>(
       symbolTable.lookupSymbolIn(moduleOp, className));
   if (!classDef)
     return emitOpError("refers to non-existant class (") << className << ')';
@@ -214,20 +286,20 @@ circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // Get the containing ModuleOp.
   auto moduleOp = getOperation()->getParentOfType<ModuleOp>();
 
-  // Get the ObjectInstOp and the ClassOp it is an instance of.
+  // Get the ObjectInstOp and the ClassLike it is an instance of.
   ObjectOp objectInst = getObject().getDefiningOp<ObjectOp>();
-  ClassOp classDef = cast<ClassOp>(
+  ClassLike classDef = cast<ClassLike>(
       symbolTable.lookupSymbolIn(moduleOp, objectInst.getClassNameAttr()));
 
   // Traverse the field path, verifying each field exists.
-  Value finalField;
+  ClassFieldLike finalField;
   auto fields = SmallVector<FlatSymbolRefAttr>(
       getFieldPath().getAsRange<FlatSymbolRefAttr>());
   for (size_t i = 0, e = fields.size(); i < e; ++i) {
     // Verify the field exists on the ClassOp.
     auto field = fields[i];
-    ClassFieldOp fieldDef =
-        cast_or_null<ClassFieldOp>(symbolTable.lookupSymbolIn(classDef, field));
+    ClassFieldLike fieldDef = cast_or_null<ClassFieldLike>(
+        symbolTable.lookupSymbolIn(classDef, field));
     if (!fieldDef) {
       auto error = emitOpError("referenced non-existant field ") << field;
       error.attachNote(classDef.getLoc()) << "class defined here";
@@ -237,15 +309,15 @@ circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     // If there are more fields, verify the current field is of ClassType, and
     // look up the ClassOp for that field.
     if (i < e - 1) {
-      auto classType = fieldDef.getValue().getType().dyn_cast<ClassType>();
+      auto classType = fieldDef.getType().dyn_cast<ClassType>();
       if (!classType)
         return emitOpError("nested field access into ")
                << field << " requires a ClassType, but found "
-               << fieldDef.getValue().getType();
+               << fieldDef.getType();
 
       // The nested ClassOp must exist, since a field with ClassType must be
       // an ObjectInstOp, which already verifies the class exists.
-      classDef = cast<ClassOp>(
+      classDef = cast<ClassLike>(
           symbolTable.lookupSymbolIn(moduleOp, classType.getClassName()));
 
       // Proceed to the next field in the path.
@@ -253,7 +325,7 @@ circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     }
 
     // On the last iteration down the path, save the final field being accessed.
-    finalField = fieldDef.getValue();
+    finalField = fieldDef;
   }
 
   // Verify the accessed field type matches the result type.

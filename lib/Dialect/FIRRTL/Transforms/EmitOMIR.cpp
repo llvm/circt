@@ -640,7 +640,16 @@ void EmitOMIRPass::runOnOperation() {
       }
       if (sramIDs.erase(tracker.id))
         makeTrackerAbsolute(tracker);
-      trackers.insert({tracker.id, tracker});
+      if (auto [it, inserted] = trackers.try_emplace(tracker.id, tracker);
+          !inserted) {
+        auto diag = op->emitError(omirTrackerAnnoClass)
+                    << " annotation with same ID already found, must resolve "
+                       "to single target";
+        diag.attachNote(it->second.op->getLoc())
+            << "tracker with same ID already found here";
+        anyFailures = true;
+        return true;
+      }
       return true;
     };
     AnnotationSet::removePortAnnotations(op, setTracker);
@@ -1231,15 +1240,14 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
 }
 
 hw::InnerRefAttr EmitOMIRPass::getInnerRefTo(Operation *op) {
-  return ::getInnerRefTo(op, "omir_sym",
-                         [&](FModuleOp module) -> ModuleNamespace & {
-                           return getModuleNamespace(module);
-                         });
+  return ::getInnerRefTo(op, [&](FModuleOp module) -> ModuleNamespace & {
+    return getModuleNamespace(module);
+  });
 }
 
 hw::InnerRefAttr EmitOMIRPass::getInnerRefTo(FModuleLike module,
                                              size_t portIdx) {
-  return ::getInnerRefTo(module, portIdx, "omir_sym",
+  return ::getInnerRefTo(module, portIdx,
                          [&](FModuleLike mod) -> ModuleNamespace & {
                            return getModuleNamespace(mod);
                          });

@@ -250,8 +250,7 @@ void ResolveTracesPass::runOnOperation() {
           if (!updatePortTarget(moduleLike, anno, portIdx))
             return false;
 
-          getOrAddInnerSym(moduleLike, portIdx, moduleLike.getPortName(portIdx),
-                           getNamespace);
+          getOrAddInnerSym(moduleLike, portIdx, getNamespace);
           outputAnnotations.push_back(anno);
           return true;
         });
@@ -263,9 +262,7 @@ void ResolveTracesPass::runOnOperation() {
           return false;
 
         auto module = cast<FModuleOp>(moduleLike);
-        getOrAddInnerSym(
-            component, component->getAttrOfType<StringAttr>("name").getValue(),
-            module, getNamespace);
+        getOrAddInnerSym(component, module, getNamespace);
         outputAnnotations.push_back(anno);
         return true;
       });

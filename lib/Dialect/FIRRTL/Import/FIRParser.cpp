@@ -2945,29 +2945,30 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
            << staticRef.getType();
 
   // Check for other unsupported reference sources.
-  if (getFieldRefFromValue(staticRef).getValue() != staticRef)
-    return emitError(startTok.getLoc(),
-                     "cannot rwprobe elements of an aggregate");
+  auto fieldRef = getFieldRefFromValue(staticRef);
+  auto target = fieldRef.getValue();
 
   // TODO: Support for non-public ports.
-  if (isa<BlockArgument>(staticRef))
+  if (isa<BlockArgument>(target))
     return emitError(startTok.getLoc(), "rwprobe of port not yet supported");
 
-  if (isa_and_nonnull<MemOp, CombMemOp, SeqMemOp, MemoryPortOp,
-                      MemoryDebugPortOp, MemoryPortAccessOp>(
-          staticRef.getDefiningOp()))
-    return emitError(startTok.getLoc(), "cannot probe memories or their ports");
-
-  auto *op = staticRef.getDefiningOp();
-  if (!op)
+  auto *definingOp = target.getDefiningOp();
+  if (!definingOp)
     return emitError(startTok.getLoc(),
                      "rwprobe value must be defined by an operation");
-  auto forceable = dyn_cast<Forceable>(op);
+
+  if (isa<MemOp, CombMemOp, SeqMemOp, MemoryPortOp, MemoryDebugPortOp,
+          MemoryPortAccessOp>(definingOp))
+    return emitError(startTok.getLoc(), "cannot probe memories or their ports");
+
+  auto forceable = dyn_cast<Forceable>(definingOp);
   if (!forceable || !forceable.isForceable() /* e.g., is/has const type*/)
     return emitError(startTok.getLoc(), "rwprobe target not forceable")
-        .attachNote(op->getLoc());
+        .attachNote(definingOp->getLoc());
 
-  result = forceable.getDataRef();
+  // TODO: do the ref.sub work while parsing the static expression.
+  result =
+      getValueByFieldID(builder, forceable.getDataRef(), fieldRef.getFieldID());
 
   return success();
 }

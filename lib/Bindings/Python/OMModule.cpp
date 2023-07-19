@@ -19,6 +19,8 @@ using namespace mlir;
 using namespace mlir::python;
 using namespace mlir::python::adaptors;
 
+namespace {
+
 /// Provides an Object class by simply wrapping the OMObject CAPI.
 struct Object {
   // Instantiate an Object with a reference to the underlying OMObject.
@@ -105,6 +107,32 @@ private:
   OMEvaluator evaluator;
 };
 
+class PyListAttrIterator {
+public:
+  PyListAttrIterator(MlirAttribute attr) : attr(std::move(attr)) {}
+
+  PyListAttrIterator &dunderIter() { return *this; }
+
+  MlirAttribute dunderNext() {
+    if (nextIndex >= omListAttrGetNumElements(attr))
+      throw py::stop_iteration();
+    return omListAttrGetElement(attr, nextIndex++);
+  }
+
+  static void bind(py::module &m) {
+    py::class_<PyListAttrIterator>(m, "ListAttributeIterator",
+                                   py::module_local())
+        .def("__iter__", &PyListAttrIterator::dunderIter)
+        .def("__next__", &PyListAttrIterator::dunderNext);
+  }
+
+private:
+  MlirAttribute attr;
+  intptr_t nextIndex = 0;
+};
+
+} // namespace
+
 /// Populate the OM Python module.
 void circt::python::populateDialectOMSubmodule(py::module &m) {
   m.doc() = "OM dialect Python native extension";
@@ -132,6 +160,14 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
       .def_property_readonly("inner_ref", [](MlirAttribute self) {
         return omReferenceAttrGetInnerRef(self);
       });
+
+  // Add the OMListAttr definition
+  mlir_attribute_subclass(m, "ListAttr", omAttrIsAListAttr)
+      .def("__getitem__", &omListAttrGetElement)
+      .def("__len__", &omListAttrGetElement)
+      .def("__iter__",
+           [](MlirAttribute arr) { return PyListAttrIterator(arr); });
+  PyListAttrIterator::bind(m);
 
   // Add the ClassType class definition.
   mlir_type_subclass(m, "ClassType", omTypeIsAClassType);

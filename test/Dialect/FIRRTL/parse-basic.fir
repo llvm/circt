@@ -1217,6 +1217,7 @@ circuit EnumTypes:
     output outconst : const UInt<1>
     ; CHECK-SAME: out %agg_out: !firrtl.probe<bundle<a: uint<1>, b: const.uint>>
     output agg_out : Probe<{a: UInt<1>, b: const UInt}>
+    output field_rw : RWProbe<UInt<1>>
 
     ; CHECK-NEXT: %[[RC_IN:.+]], %[[RC_R:.+]], %[[RC_RW:.+]] = firrtl.instance rc
     inst rc of RefsChild
@@ -1277,6 +1278,15 @@ circuit EnumTypes:
     ; CHECK-DAG: %[[READ_PROBE_IN:.+]] = firrtl.ref.resolve %[[PROBE_IN]]
     ; CHECK-DAG: %[[SUM:.+]] = firrtl.and %[[READ_PROBE_IN]],
     outconst <= and(read(probe(in)), UInt(1))
+
+    ; CHECK: %[[AGG4:.+]], %[[AGG4_RWREF:.+]] = firrtl.wire
+    wire agg4 : { a : UInt, flip b : {x : UInt<1>} }[2]
+    ; (static ref expr creates dead subfield accesses, skip)
+    ; CHECK: %[[AGG4_RW_0:.+]] = firrtl.ref.sub %[[AGG4_RWREF]][0]
+    ; CHECK-NEXT: %[[AGG4_RW_0_b:.+]] = firrtl.ref.sub %[[AGG4_RW_0]][1]
+    ; CHECK-NEXT: %[[AGG4_RW_0_b_x:.+]] = firrtl.ref.sub %[[AGG4_RW_0_b]][0]
+    ; CHECK-NEXT: firrtl.ref.define %field_rw, %[[AGG4_RW_0_b_x]]
+    define field_rw = rwprobe(agg4[0].b.x)
 
   ; CHECK-LABEL: module private @ForceRelease(
   module ForceRelease :

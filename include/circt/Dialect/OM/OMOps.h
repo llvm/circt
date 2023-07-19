@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_OM_OMOPS_H
 #define CIRCT_DIALECT_OM_OMOPS_H
 
+#include "circt/Dialect/OM/OMOpInterfaces.h"
 #include "circt/Dialect/OM/OMTypes.h"
 
 #include "mlir/IR/BuiltinOps.h"

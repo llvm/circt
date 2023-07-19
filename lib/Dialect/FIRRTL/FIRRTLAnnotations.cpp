@@ -582,7 +582,7 @@ void OpAnnoTarget::setAnnotations(AnnotationSet annotations) const {
 }
 
 StringAttr OpAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
-  return ::getOrAddInnerSym(getOp(), "", getOp()->getParentOfType<FModuleOp>(),
+  return ::getOrAddInnerSym(getOp(), getOp()->getParentOfType<FModuleOp>(),
                             [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
                               return moduleNamespace;
                             });
@@ -596,7 +596,7 @@ OpAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
     return FlatSymbolRefAttr::get(module.getModuleNameAttr());
   }
   // Return an inner-ref to the target.
-  return ::getInnerRefTo(getOp(), "",
+  return ::getInnerRefTo(getOp(),
                          [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
                            return moduleNamespace;
                          });
@@ -646,11 +646,10 @@ StringAttr PortAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
   // itself.
   if (auto mod = ::llvm::dyn_cast<FModuleLike>(getOp()))
     return ::getOrAddInnerSym(
-        mod, getPortNo(), "",
-        [&moduleNamespace](FModuleLike) -> ModuleNamespace & {
+        mod, getPortNo(), [&moduleNamespace](FModuleLike) -> ModuleNamespace & {
           return moduleNamespace;
         });
-  return ::getOrAddInnerSym(getOp(), "", getOp()->getParentOfType<FModuleOp>(),
+  return ::getOrAddInnerSym(getOp(), getOp()->getParentOfType<FModuleOp>(),
                             [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
                               return moduleNamespace;
                             });
@@ -660,12 +659,12 @@ Attribute
 PortAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
   auto module = llvm::dyn_cast<FModuleLike>(getOp());
   if (!module)
-    return ::getInnerRefTo(getOp(), "",
+    return ::getInnerRefTo(getOp(),
                            [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
                              return moduleNamespace;
                            });
 
-  return ::getInnerRefTo(module, getPortNo(), "",
+  return ::getInnerRefTo(module, getPortNo(),
                          [&moduleNamespace](FModuleLike) -> ModuleNamespace & {
                            return moduleNamespace;
                          });

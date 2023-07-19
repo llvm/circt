@@ -62,79 +62,365 @@ Block *circt::pipeline::getParentStageInPipeline(ScheduledPipelineOp pipeline,
 }
 
 //===----------------------------------------------------------------------===//
-// UnscheduledPipelineOp
+// Fancy pipeline-like op printer/parser functions.
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyPipeline(PipelineLike op) {
-  Block *entryStage = op.getEntryStage();
-  llvm::SmallVector<Type> expectedInArgTypes;
-  llvm::append_range(expectedInArgTypes, op.getInputs().getTypes());
-  llvm::append_range(expectedInArgTypes, op.getExtInputs().getTypes());
+// An initializer list is a list of operands, types and names on the format:
+//  (%arg = %input : type, ...)
+static ParseResult parseInitializerList(
+    OpAsmParser &parser,
+    llvm::SmallVector<OpAsmParser::Argument> &inputArguments,
+    llvm::SmallVector<OpAsmParser::UnresolvedOperand> &inputOperands,
+    llvm::SmallVector<Type> &inputTypes, ArrayAttr &inputNames) {
 
-  // Validate the stage data inputs.
-  size_t nEntryStageArguments = entryStage->getArgumentTypes().size();
-  if (nEntryStageArguments != expectedInArgTypes.size() + /*s0 valid*/ 1)
-    return op.emitOpError("expected ")
-           << expectedInArgTypes.size() + /*s0 valid*/ 1
-           << " arguments in the pipeline entry block, got "
-           << nEntryStageArguments << ".";
+  llvm::SmallVector<Attribute> names;
+  if (failed(parser.parseCommaSeparatedList(
+          OpAsmParser::Delimiter::Paren, [&]() -> ParseResult {
+            OpAsmParser::UnresolvedOperand inputOperand;
+            Type type;
+            auto &arg = inputArguments.emplace_back();
+            if (parser.parseArgument(arg) || parser.parseColonType(type) ||
+                parser.parseEqual() || parser.parseOperand(inputOperand))
+              return failure();
 
-  TypeRange entryStageArguments =
-      TypeRange(entryStage->getArgumentTypes()).drop_back();
+            inputOperands.push_back(inputOperand);
+            inputTypes.push_back(type);
+            arg.type = type;
+            names.push_back(StringAttr::get(
+                parser.getContext(),
+                /*drop leading %*/ arg.ssaName.name.drop_front()));
+            return success();
+          })))
+    return failure();
 
-  for (size_t i = 0; i < expectedInArgTypes.size(); i++) {
-    Type expectedInArg = expectedInArgTypes[i];
-    Type bodyArg = entryStageArguments[i];
-    if (expectedInArg != bodyArg)
-      return op.emitOpError("expected body block argument ")
-             << i << " to have type " << expectedInArg << ", got " << bodyArg
-             << ".";
+  inputNames = ArrayAttr::get(parser.getContext(), names);
+  return success();
+}
+
+static void printInitializerList(OpAsmPrinter &p, ValueRange ins,
+                                 ArrayRef<BlockArgument> args) {
+  p << "(";
+  llvm::interleaveComma(llvm::zip(ins, args), p, [&](auto it) {
+    auto [in, arg] = it;
+    p << arg << " : " << in.getType() << " = " << in;
+  });
+  p << ")";
+}
+
+// Like parseInitializerList, but is an optional group based on an 'ext'
+// keyword.
+static ParseResult parseExtInitializerList(
+    OpAsmParser &parser, llvm::SmallVector<OpAsmParser::Argument> &extArguments,
+    llvm::SmallVector<OpAsmParser::UnresolvedOperand> &extInputOperands,
+    llvm::SmallVector<Type> &extInputTypes, mlir::ArrayAttr &extInputNames) {
+  if (parser.parseOptionalKeyword("ext"))
+    return success();
+
+  return parseInitializerList(parser, extArguments, extInputOperands,
+                              extInputTypes, extInputNames);
+}
+
+static void printExtInitializerList(OpAsmPrinter &p, ValueRange extInputs,
+                                    ArrayRef<BlockArgument> extArgs) {
+  if (extInputs.empty())
+    return;
+
+  p << "ext";
+  printInitializerList(p, extInputs, extArgs);
+}
+
+// Parses a list of operands on the format:
+//   (name : type, ...)
+static ParseResult parseOutputList(OpAsmParser &parser,
+                                   llvm::SmallVector<Type> &inputTypes,
+                                   mlir::ArrayAttr &outputNames) {
+
+  llvm::SmallVector<Attribute> names;
+  if (parser.parseCommaSeparatedList(
+          OpAsmParser::Delimiter::Paren, [&]() -> ParseResult {
+            StringRef name;
+            Type type;
+            if (parser.parseKeyword(&name) || parser.parseColonType(type))
+              return failure();
+
+            inputTypes.push_back(type);
+            names.push_back(StringAttr::get(parser.getContext(), name));
+            return success();
+          }))
+    return failure();
+
+  outputNames = ArrayAttr::get(parser.getContext(), names);
+  return success();
+}
+
+static void printOutputList(OpAsmPrinter &p, TypeRange types, ArrayAttr names) {
+  p << "(";
+  llvm::interleaveComma(llvm::zip(types, names), p, [&](auto it) {
+    auto [type, name] = it;
+    p.printKeywordOrString(name.template cast<StringAttr>().str());
+    p << " : " << type;
+  });
+  p << ")";
+}
+
+// Parses `(` %arg `=` %input `)`
+static ParseResult parseArgAssignment(OpAsmParser &p,
+                                      OpAsmParser::Argument &arg,
+                                      OpAsmParser::UnresolvedOperand &operand,
+                                      Type type) {
+  if (p.parseLParen() || p.parseOperand(arg.ssaName) || p.parseEqual() ||
+      p.parseOperand(operand) || p.parseRParen())
+    return failure();
+  arg.type = type;
+  return success();
+}
+
+static ParseResult
+parseKeywordArgAssignment(OpAsmParser &p, StringRef keyword,
+                          OpAsmParser::Argument &arg,
+                          OpAsmParser::UnresolvedOperand &operand, Type type) {
+  if (p.parseKeyword(keyword))
+    return failure();
+  return parseArgAssignment(p, arg, operand, type);
+}
+
+// Assembly format is roughly:
+// ( $name )? initializer-list (ext-initializer list)? (%stall = $stall)?
+//   ($clock = %clock) ($reset = %reset) ($valid = %valid) {
+//   --- elided inner block ---
+static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
+                                   mlir::OperationState &result) {
+  std::string name;
+  if (succeeded(parser.parseOptionalString(&name)))
+    result.addAttribute("name", parser.getBuilder().getStringAttr(name));
+
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand> inputOperands;
+  llvm::SmallVector<OpAsmParser::Argument> inputArguments;
+  llvm::SmallVector<Type> inputTypes;
+  ArrayAttr inputNames;
+  if (parseInitializerList(parser, inputArguments, inputOperands, inputTypes,
+                           inputNames))
+    return failure();
+  result.addAttribute("inputNames", inputNames);
+
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand> extInputOperands;
+  llvm::SmallVector<Type> extInputTypes;
+  llvm::SmallVector<OpAsmParser::Argument> extInputArguments;
+  ArrayAttr extInputNames;
+  if (parseExtInitializerList(parser, extInputArguments, extInputOperands,
+                              extInputTypes, extInputNames))
+    return failure();
+  if (!extInputOperands.empty())
+    result.addAttribute("extInputNames", extInputNames);
+
+  Type i1 = parser.getBuilder().getI1Type();
+  // Parse optional 'stall %innerStall = %stallArg'
+  OpAsmParser::Argument stallArg;
+  OpAsmParser::UnresolvedOperand stallOperand;
+  bool withStall = false;
+  if (succeeded(parser.parseOptionalKeyword("stall"))) {
+    if (parseArgAssignment(parser, stallArg, stallOperand, i1))
+      return failure();
+    withStall = true;
   }
 
-  // Verify that the entry stage is terminated with an i1 signal (valid signal).
-  IntegerType lastEntryArgType =
-      entryStage->getArguments().back().getType().dyn_cast<IntegerType>();
-  if (!lastEntryArgType || !lastEntryArgType.isInteger(1))
-    return op.emitOpError(
-        "expected last argument to the entry stage to be an i1 "
-        "signal (stage valid signal).");
+  // Parse clock, reset, and go.
+  OpAsmParser::Argument clockArg, resetArg, goArg;
+  OpAsmParser::UnresolvedOperand clockOperand, resetOperand, goOperand;
+  if (parseKeywordArgAssignment(parser, "clock", clockArg, clockOperand, i1) ||
+      parseKeywordArgAssignment(parser, "reset", resetArg, resetOperand, i1) ||
+      parseKeywordArgAssignment(parser, "go", goArg, goOperand, i1))
+    return failure();
+
+  // Optional attribute dict
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  // Parse the output assignment list
+  if (parser.parseArrow())
+    return failure();
+
+  llvm::SmallVector<Type> outputTypes;
+  ArrayAttr outputNames;
+  if (parseOutputList(parser, outputTypes, outputNames))
+    return failure();
+  result.addTypes(outputTypes);
+  result.addAttribute("outputNames", outputNames);
+
+  // And the implicit 'done' output.
+  result.addTypes({parser.getBuilder().getI1Type()});
+
+  // All operands have been parsed - resolve.
+  if (parser.resolveOperands(inputOperands, inputTypes, parser.getNameLoc(),
+                             result.operands) ||
+      parser.resolveOperands(extInputOperands, extInputTypes,
+                             parser.getNameLoc(), result.operands))
+    return failure();
+
+  Type i1Type = parser.getBuilder().getI1Type();
+  if (withStall) {
+    if (parser.resolveOperand(stallOperand, i1Type, result.operands))
+      return failure();
+  }
+
+  if (parser.resolveOperand(clockOperand, i1Type, result.operands) ||
+      parser.resolveOperand(resetOperand, i1Type, result.operands) ||
+      parser.resolveOperand(goOperand, i1Type, result.operands))
+    return failure();
+
+  // Assemble the body region block arguments - this is where the magic happens
+  // and why we're doing a custom printer/parser - if the user had to magically
+  // know the order of these block arguments, we're asking for issues.
+  SmallVector<OpAsmParser::Argument> regionArgs;
+  // First we add the input arguments.
+  llvm::append_range(regionArgs, inputArguments);
+  // Then the external input arguments.
+  llvm::append_range(regionArgs, extInputArguments);
+  // then the optional stall argument.
+  if (withStall)
+    regionArgs.push_back(stallArg);
+  // Then the clock, reset, and go arguments.
+  llvm::append_range(regionArgs, SmallVector<OpAsmParser::Argument>{
+                                     clockArg, resetArg, goArg});
+
+  // Parse the body region.
+  Region *body = result.addRegion();
+  if (parser.parseRegion(*body, regionArgs))
+    return failure();
+
+  result.addAttribute(
+      "operand_segment_sizes",
+      parser.getBuilder().getDenseI32ArrayAttr(
+          {static_cast<int32_t>(inputTypes.size()),
+           static_cast<int32_t>(extInputTypes.size()),
+           static_cast<int32_t>(withStall ? 1 : 0),
+           /*clock*/ static_cast<int32_t>(1),
+           /*reset*/ static_cast<int32_t>(1), /*go*/ static_cast<int32_t>(1)}));
 
   return success();
 }
 
-LogicalResult UnscheduledPipelineOp::verify() { return verifyPipeline(*this); }
+static void printKeywordAssignment(OpAsmPrinter &p, StringRef keyword,
+                                   BlockArgument arg, Value value) {
+  p << keyword << "(";
+  p.printOperand(arg);
+  p << " = ";
+  p.printOperand(value);
+  p << ")";
+}
+
+template <typename TPipelineOp>
+static void printPipelineOp(OpAsmPrinter &p, TPipelineOp op) {
+  if (auto name = op.getNameAttr())
+    p.printKeywordOrString(name.getValue());
+
+  // Print the input list.
+  printInitializerList(p, op.getInputs(), op.getInnerInputs());
+  p << " ";
+
+  // Print the external input list.
+  if (!op.getExtInputs().empty()) {
+    printExtInitializerList(p, op.getExtInputs(), op.getInnerExtInputs());
+    p << " ";
+  }
+
+  // Print the optional stall.
+  if (op.hasStall()) {
+    printKeywordAssignment(p, "stall", op.getInnerStall(), op.getStall());
+    p << " ";
+  }
+
+  // Print the clock, reset, and go.
+  printKeywordAssignment(p, "clock", op.getInnerClock(), op.getClock());
+  p << " ";
+  printKeywordAssignment(p, "reset", op.getInnerReset(), op.getReset());
+  p << " ";
+  printKeywordAssignment(p, "go", op.getInnerGo(), op.getGo());
+  p << " -> ";
+
+  // Print the output list.
+  printOutputList(p, op.getDataOutputs().getTypes(), op.getOutputNames());
+
+  // Print the optional attribute dict.
+  p.printOptionalAttrDict(op->getAttrs(),
+                          /*elidedAttrs=*/{"name", "operand_segment_sizes",
+                                           "outputNames", "inputNames",
+                                           "extInputNames"});
+  p << " ";
+
+  // Print the inner region, eliding the entry block arguments - we've already
+  // defined these in our initializer lists.
+  p.printRegion(op.getBody(), /*printEntryBlockArgs=*/false,
+                /*printBlockTerminators=*/true);
+}
+
+//===----------------------------------------------------------------------===//
+// UnscheduledPipelineOp
+//===----------------------------------------------------------------------===//
+
+void UnscheduledPipelineOp::print(OpAsmPrinter &p) {
+  printPipelineOp(p, *this);
+}
+
+ParseResult UnscheduledPipelineOp::parse(OpAsmParser &parser,
+                                         OperationState &result) {
+  return parsePipelineOp(parser, result);
+}
 
 //===----------------------------------------------------------------------===//
 // ScheduledPipelineOp
 //===----------------------------------------------------------------------===//
 
+void ScheduledPipelineOp::print(OpAsmPrinter &p) { printPipelineOp(p, *this); }
+
+ParseResult ScheduledPipelineOp::parse(OpAsmParser &parser,
+                                       OperationState &result) {
+  return parsePipelineOp(parser, result);
+}
+
 void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                                 TypeRange dataOutputs, ValueRange inputs,
-                                ValueRange extInputs, Value clock, Value reset,
-                                Value go, Value stall) {
+                                ValueRange extInputs, ArrayAttr inputNames,
+                                ArrayAttr outputNames, ArrayAttr extInputNames,
+                                Value clock, Value reset, Value go, Value stall,
+                                StringAttr name) {
   odsState.addOperands(inputs);
   odsState.addOperands(extInputs);
+  if (stall)
+    odsState.addOperands(stall);
   odsState.addOperands(clock);
   odsState.addOperands(reset);
   odsState.addOperands(go);
-  if (stall)
-    odsState.addOperands(stall);
+  if (name)
+    odsState.addAttribute("name", name);
 
   odsState.addAttribute(
       "operand_segment_sizes",
       odsBuilder.getDenseI32ArrayAttr(
           {static_cast<int32_t>(inputs.size()),
-           static_cast<int32_t>(extInputs.size()), static_cast<int32_t>(1),
-           static_cast<int32_t>(1), static_cast<int32_t>(1),
-           static_cast<int32_t>(stall ? 1 : 0)}));
+           static_cast<int32_t>(extInputs.size()),
+           static_cast<int32_t>(stall ? 1 : 0), static_cast<int32_t>(1),
+           static_cast<int32_t>(1), static_cast<int32_t>(1)}));
+
+  odsState.addAttribute("inputNames", inputNames);
+  odsState.addAttribute("outputNames", outputNames);
+  if (extInputNames)
+    odsState.addAttribute("extInputNames", extInputNames);
 
   auto *region = odsState.addRegion();
   odsState.addTypes(dataOutputs);
 
   // Add the implicit done output signal.
-  odsState.addTypes({odsBuilder.getIntegerType(1)});
+  Type i1 = odsBuilder.getIntegerType(1);
+  odsState.addTypes({i1});
 
-  // Add the entry stage
+  // Add the entry stage - arguments order:
+  // 1. Inputs
+  // 2. External inputs (opt)
+  // 3. Stall (opt)
+  // 4. Clock
+  // 5. Reset
+  // 6. Go
   auto &entryBlock = region->emplaceBlock();
   llvm::SmallVector<Location> entryArgLocs(inputs.size(), odsState.location);
   entryBlock.addArguments(
@@ -143,8 +429,13 @@ void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   entryBlock.addArguments(
       extInputs.getTypes(),
       llvm::SmallVector<Location>(extInputs.size(), odsState.location));
+  if (stall)
+    entryBlock.addArgument(i1, odsState.location);
+  entryBlock.addArgument(i1, odsState.location);
+  entryBlock.addArgument(i1, odsState.location);
+
   // entry stage valid signal.
-  entryBlock.addArgument(odsBuilder.getIntegerType(1), odsState.location);
+  entryBlock.addArgument(i1, odsState.location);
 }
 
 Block *ScheduledPipelineOp::addStage() {
@@ -160,25 +451,36 @@ void ScheduledPipelineOp::getAsmBlockArgumentNames(
     mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
   for (auto [i, block] : llvm::enumerate(getRegion())) {
     if (&block == getEntryStage()) {
-      size_t nRegularInputs = getInputs().size();
-      size_t nExternalInputs = getExtInputs().size();
-      for (auto [argi, arg] :
-           llvm::enumerate(block.getArguments().slice(0, nRegularInputs)))
-        setNameFn(arg, llvm::formatv("s0_arg{0}", argi).str());
+      for (auto [inputArg, inputName] : llvm::zip(
+               getInnerInputs(), getInputNames().getAsValueRange<StringAttr>()))
+        setNameFn(inputArg, inputName);
 
-      for (auto [argi, arg] : llvm::enumerate(
-               block.getArguments().slice(nRegularInputs, nExternalInputs)))
-        setNameFn(arg, llvm::formatv("ext{0}", argi).str());
+      auto extInputs = getInnerExtInputs();
+      if (!extInputs.empty()) {
+        for (auto [extArg, extName] : llvm::zip(
+                 extInputs, getExtInputNames()->getAsValueRange<StringAttr>()))
+          setNameFn(extArg, extName);
+      }
+
+      if (hasStall())
+        setNameFn(getInnerStall(), "s");
+      setNameFn(getInnerClock(), "c");
+      setNameFn(getInnerReset(), "r");
+      setNameFn(getInnerGo(), "g");
+
     } else {
       for (auto [argi, arg] : llvm::enumerate(block.getArguments().drop_back()))
         setNameFn(arg, llvm::formatv("s{0}_arg{1}", i, argi).str());
+      // Last argument in any (non-entry) stage is the stage valid signal.
+      setNameFn(block.getArguments().back(),
+                llvm::formatv("s{0}_valid", i).str());
     }
-
-    setNameFn(block.getArguments().back(),
-              llvm::formatv("s{0}_valid", i).str());
   }
 }
 void ScheduledPipelineOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  for (auto [res, name] : llvm::zip(
+           getDataOutputs(), getOutputNames().getAsValueRange<StringAttr>()))
+    setNameFn(res, name);
   setNameFn(getDone(), "done");
 }
 
@@ -232,10 +534,6 @@ bool ScheduledPipelineOp::isMaterialized() {
 }
 
 LogicalResult ScheduledPipelineOp::verify() {
-  // Generic scheduled/unscheduled verification.
-  if (failed(verifyPipeline(*this)))
-    return failure();
-
   // Verify that all block are terminated properly.
   auto &stages = getStages();
   for (Block &stage : stages) {
@@ -261,21 +559,26 @@ LogicalResult ScheduledPipelineOp::verify() {
                          "(stage valid signal).");
   }
 
-  // Cache external inputs in a set for fast lookup.
-  llvm::DenseSet<Value> extInputs;
+  // Cache external inputs in a set for fast lookup (also includes clock, reset,
+  // and stall).
+  llvm::DenseSet<Value> extLikeInputs;
   for (auto extInput : getInnerExtInputs())
-    extInputs.insert(extInput);
+    extLikeInputs.insert(extInput);
+  extLikeInputs.insert(getInnerClock());
+  extLikeInputs.insert(getInnerReset());
+  if (hasStall())
+    extLikeInputs.insert(getInnerStall());
 
   // Phase invariant - if any block has arguments apart from the stage valid
-  // argument, we are in register materialized mode. Check that all values used
-  // within a stage are defined within the stage.
+  // argument, we are in register materialized mode. Check that all values
+  // used within a stage are defined within the stage.
   bool materialized = isMaterialized();
   if (materialized) {
     for (auto &stage : stages) {
       for (auto &op : stage) {
         for (auto [index, operand] : llvm::enumerate(op.getOperands())) {
           bool err = false;
-          if (extInputs.contains(operand)) {
+          if (extLikeInputs.contains(operand)) {
             // This is an external input; legal to reference everywhere.
             continue;
           }
@@ -567,8 +870,6 @@ LogicalResult LatencyReturnOp::verify() {
 
   return success();
 }
-
-#include "circt/Dialect/Pipeline/PipelineInterfaces.cpp.inc"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Pipeline/Pipeline.cpp.inc"

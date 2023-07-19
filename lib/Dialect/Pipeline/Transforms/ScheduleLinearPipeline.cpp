@@ -64,7 +64,7 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
 
   // Set operation operator types.
   auto returnOp =
-      cast<pipeline::ReturnOp>(pipeline.getBodyBlock()->getTerminator());
+      cast<pipeline::ReturnOp>(pipeline.getEntryStage()->getTerminator());
   for (auto &op : pipeline.getOps()) {
     // Skip if is a known non-functional operator
     if (ignoreOp(&op))
@@ -138,13 +138,16 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
   b.setInsertionPoint(pipeline);
   auto schedPipeline = b.template create<pipeline::ScheduledPipelineOp>(
       pipeline.getLoc(), pipeline.getDataOutputs().getTypes(),
-      pipeline.getInputs(), pipeline.getExtInputs(), pipeline.getClock(),
-      pipeline.getReset(), pipeline.getGo(), pipeline.getStall());
+      pipeline.getInputs(), pipeline.getExtInputs(), pipeline.getInputNames(),
+      pipeline.getOutputNames(),
+      pipeline.getExtInputNames().value_or(ArrayAttr()), pipeline.getClock(),
+      pipeline.getReset(), pipeline.getGo(), pipeline.getStall(),
+      pipeline.getNameAttr());
 
   Block *currentStage = schedPipeline.getStage(0);
 
   for (auto [oldBArg, newBArg] :
-       llvm::zip(pipeline.getBodyBlock()->getArguments(),
+       llvm::zip(pipeline.getEntryStage()->getArguments(),
                  currentStage->getArguments()))
     oldBArg.replaceAllUsesWith(newBArg);
 

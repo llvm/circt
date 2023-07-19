@@ -626,12 +626,11 @@ circuit RWProbeConst:
 
 ;// -----
 
-circuit RWProbeField:
-  module RWProbeField:
+circuit RWProbePort:
+  module RWProbePort:
     input in : UInt<1>[2]
     output p : RWProbe<UInt<1>>
-    node n = in
-    define p = rwprobe(in[0]) ; expected-error {{cannot rwprobe elements of an aggregate}}
+    define p = rwprobe(in[1]) ; expected-error {{rwprobe of port not yet supported}}
 
 ;// -----
 

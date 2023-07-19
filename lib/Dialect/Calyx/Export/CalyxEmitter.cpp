@@ -250,6 +250,9 @@ struct Emitter {
   // Seq Memory emission
   void emitSeqMemory(SeqMemoryOp memory);
 
+  // Invoke emission
+  void emitInvoke(InvokeOp invoke);
+
   // Emits a library primitive with template parameters based on all in- and
   // output ports.
   // e.g.:
@@ -549,6 +552,7 @@ private:
                              [&]() { emitCalyxControl(op.getBodyBlock()); });
           })
           .Case<EnableOp>([&](auto op) { emitEnable(op); })
+          .Case<InvokeOp>([&](auto op) { emitInvoke(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside control.");
           });
@@ -798,6 +802,58 @@ void Emitter::emitSeqMemory(SeqMemoryOp memory) {
       continue;
     os << comma();
   }
+  os << RParen() << semicolonEndL();
+}
+
+void Emitter::emitInvoke(InvokeOp invoke) {
+  StringRef callee = invoke.getCallee();
+  indent() << "invoke " << callee;
+  ArrayAttr portNames = invoke.getPortNames();
+  ArrayAttr inputNames = invoke.getInputNames();
+  /// Because the ports of all components of calyx.invoke are inside a (),
+  /// here the input and output ports are divided, inputs and outputs store
+  /// the connections for a subset of input and output ports of the instance.
+  llvm::StringMap<std::string> inputsMap;
+  llvm::StringMap<std::string> outputsMap;
+  for (auto [portNameAttr, inputNameAttr, input] :
+       llvm::zip(portNames, inputNames, invoke.getInputs())) {
+    StringRef portName = cast<StringAttr>(portNameAttr).getValue();
+    StringRef inputName = cast<StringAttr>(inputNameAttr).getValue();
+    /// Classify the connection of ports,here's an example. calyx.invoke
+    /// @r(%r.in = %id.out, %out = %r.out) -> (i32, i32) %r.in = %id.out will be
+    /// stored in inputs, because %.r.in is the input port of the component, and
+    /// %out = %r.out will be stored in outputs, because %r.out is the output
+    /// port of the component, which is a bit different from calyx's native
+    /// compiler. Later on, the classified connection relations are outputted
+    /// uniformly and converted to calyx's native compiler format.
+    StringRef inputMapKey = portName.drop_front(2 + callee.size());
+    if (portName.substr(1, callee.size()) == callee) {
+      // If the input to the port is a number.
+      if (isa_and_nonnull<hw::ConstantOp>(input.getDefiningOp())) {
+        hw::ConstantOp constant = cast<hw::ConstantOp>(input.getDefiningOp());
+        APInt value = constant.getValue();
+        std::string mapValue = std::to_string(value.getBitWidth()) +
+                               apostrophe().data() + "d" +
+                               std::to_string(value.getZExtValue());
+        inputsMap[inputMapKey] = mapValue;
+        continue;
+      }
+      inputsMap[inputMapKey] = inputName.drop_front(1).str();
+    } else if (inputName.substr(1, callee.size()) == callee)
+      outputsMap[inputName.drop_front(2 + callee.size())] =
+          portName.drop_front(1).str();
+  }
+  /// Emit inputs
+  os << LParen();
+  llvm::interleaveComma(inputsMap, os, [&](const auto &iter) {
+    os << iter.getKey() << " = " << iter.getValue();
+  });
+  os << RParen();
+  /// Emit outputs
+  os << LParen();
+  llvm::interleaveComma(outputsMap, os, [&](const auto &iter) {
+    os << iter.getKey() << " = " << iter.getValue();
+  });
   os << RParen() << semicolonEndL();
 }
 

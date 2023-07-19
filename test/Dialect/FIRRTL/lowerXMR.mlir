@@ -213,7 +213,7 @@ firrtl.circuit "Top" {
 firrtl.circuit "Top" {
   // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@bar, @Bar::@barXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
   firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1>, out %_a: !firrtl.probe<uint<1>>) {
-    // CHECK: firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1> sym @xmr_sym) {
+    // CHECK: firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1> sym @[[xmrSym]]) {
     %1 = firrtl.ref.send %pa : !firrtl.uint<1>
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
@@ -422,13 +422,13 @@ firrtl.circuit "Top" {
 // -----
 
 firrtl.circuit "Top"  {
-  // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@xmr_sym, @DUTModule::@[[xmrSym:[a-zA-Z0-9_]+]]]
+  // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@[[TOP_XMR_SYM:.+]], @DUTModule::@[[xmrSym:[a-zA-Z0-9_]+]]]
   // CHECK-LABEL: firrtl.module private @DUTModule
   // CHECK-SAME: (in %clock: !firrtl.clock, in %io_addr: !firrtl.uint<3>, in %io_dataIn: !firrtl.uint<8>, in %io_wen: !firrtl.uint<1>, out %io_dataOut: !firrtl.uint<8>)
   firrtl.module private @DUTModule(in %clock: !firrtl.clock, in %io_addr: !firrtl.uint<3>, in %io_dataIn: !firrtl.uint<8>, in %io_wen: !firrtl.uint<1>, out %io_dataOut: !firrtl.uint<8>, out %_gen_memTap: !firrtl.probe<vector<uint<8>, 8>>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %rf_memTap, %rf_read, %rf_write = firrtl.mem  Undefined  {depth = 8 : i64, name = "rf", portNames = ["memTap", "read", "write"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.probe<vector<uint<8>, 8>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    // CHECK:  %rf_read, %rf_write = firrtl.mem sym @xmr_sym  Undefined  {depth = 8 : i64, name = "rf", portNames = ["read", "write"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    // CHECK:  %rf_read, %rf_write = firrtl.mem sym @[[xmrSym]] Undefined  {depth = 8 : i64, name = "rf", portNames = ["read", "write"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     %0 = firrtl.subfield %rf_read[addr] : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>
     %1 = firrtl.subfield %rf_read[en] : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>
     %2 = firrtl.subfield %rf_read[clk] : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>
@@ -451,6 +451,7 @@ firrtl.circuit "Top"  {
   }
   // CHECK: firrtl.module @Top
   firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io_addr: !firrtl.uint<3>, in %io_dataIn: !firrtl.uint<8>, in %io_wen: !firrtl.uint<1>, out %io_dataOut: !firrtl.uint<8>) {
+    // CHECK: firrtl.instance dut sym @[[TOP_XMR_SYM]] @DUTModule
     %dut_clock, %dut_io_addr, %dut_io_dataIn, %dut_io_wen, %dut_io_dataOut, %dut__gen_memTap = firrtl.instance dut  @DUTModule(in clock: !firrtl.clock, in io_addr: !firrtl.uint<3>, in io_dataIn: !firrtl.uint<8>, in io_wen: !firrtl.uint<1>, out io_dataOut: !firrtl.uint<8>, out _gen_memTap: !firrtl.probe<vector<uint<8>, 8>>)
     %0 = firrtl.ref.resolve %dut__gen_memTap : !firrtl.probe<vector<uint<8>, 8>>
     // CHECK:      %[[#xmr:]] = sv.xmr.ref @[[path]] ".Memory"
@@ -506,19 +507,20 @@ firrtl.circuit "Top"  {
 // -----
 
 firrtl.circuit "Top"  {
-  // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@xmr_sym, @DUTModule::@[[xmrSym:[a-zA-Z0-9_]+]]]
+  // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@[[TOP_XMR_SYM:.+]], @DUTModule::@[[xmrSym:[a-zA-Z0-9_]+]]]
   // CHECK-LABEL:  firrtl.module private @DUTModule
   // CHECK-SAME: in %io_wen: !firrtl.uint<1>, out %io_dataOut: !firrtl.uint<8>)
   firrtl.module private @DUTModule(in %clock: !firrtl.clock, in %io_addr: !firrtl.uint<3>, in %io_dataIn: !firrtl.uint<8>, in %io_wen: !firrtl.uint<1>, out %io_dataOut: !firrtl.uint<8>, out %_gen_memTap_0: !firrtl.probe<uint<8>>, out %_gen_memTap_1: !firrtl.probe<uint<8>>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %rf_memTap, %rf_read, %rf_write = firrtl.mem  Undefined  {depth = 2 : i64, name = "rf", portNames = ["memTap", "read", "write"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.probe<vector<uint<8>, 2>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    // CHECK:  %rf_read, %rf_write = firrtl.mem sym @xmr_sym  Undefined  {depth = 2 : i64, name = "rf", portNames = ["read", "write"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    // CHECK:  %rf_read, %rf_write = firrtl.mem sym @[[xmrSym]] Undefined  {depth = 2 : i64, name = "rf", portNames = ["read", "write"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     %9 = firrtl.ref.sub %rf_memTap[0] : !firrtl.probe<vector<uint<8>, 2>>
     firrtl.ref.define %_gen_memTap_0, %9 : !firrtl.probe<uint<8>>
     %10 = firrtl.ref.sub %rf_memTap[1] : !firrtl.probe<vector<uint<8>, 2>>
     firrtl.ref.define %_gen_memTap_1, %10 : !firrtl.probe<uint<8>>
   }
   firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io_addr: !firrtl.uint<3>, in %io_dataIn: !firrtl.uint<8>, in %io_wen: !firrtl.uint<1>, out %io_dataOut: !firrtl.uint<8>) {
+    // CHECK: firrtl.instance dut sym @[[TOP_XMR_SYM]] @DUTModule
     %dut_clock, %dut_io_addr, %dut_io_dataIn, %dut_io_wen, %dut_io_dataOut, %dut__gen_memTap_0, %dut__gen_memTap_1 = firrtl.instance dut  @DUTModule(in clock: !firrtl.clock, in io_addr: !firrtl.uint<3>, in io_dataIn: !firrtl.uint<8>, in io_wen: !firrtl.uint<1>, out io_dataOut: !firrtl.uint<8>, out _gen_memTap_0: !firrtl.probe<uint<8>>, out _gen_memTap_1: !firrtl.probe<uint<8>>)
     %0 = firrtl.ref.resolve %dut__gen_memTap_0 : !firrtl.probe<uint<8>>
     // CHECK:      %[[#xmr:]] = sv.xmr.ref @[[path]] ".Memory[0]"
@@ -575,7 +577,7 @@ firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
     // CHECK: firrtl.module @XmrSrcMod() {
     // CHECK{LITERAL}:  firrtl.verbatim.expr "internal.path" : () -> !firrtl.uint<1> {symbols = [@XmrSrcMod]}
-    // CHECK:  = firrtl.node sym @xmr_sym  %[[internal:.+]]  : !firrtl.uint<1>
+    // CHECK:  = firrtl.node sym @[[xmrSym]] %[[internal:.+]]  : !firrtl.uint<1>
     %z = firrtl.verbatim.expr "internal.path" : () -> !firrtl.uint<1> {symbols = [@XmrSrcMod]}
     %1 = firrtl.ref.send %z : !firrtl.uint<1>
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
@@ -749,7 +751,7 @@ firrtl.circuit "Top" {
   // CHECK:        hw.hierpath private @[[XMR1]] [@Top::@w]
   // CHECK:        hw.hierpath private @[[XMR2]] [@Top::@foo, @Foo::@x]
   // CHECK:        hw.hierpath private @[[XMR3]] [@Top::@foo]
-  // CHECK:        hw.hierpath private @[[XMR4]] [@Top::@xmr_sym]
+  // CHECK:        hw.hierpath private @[[XMR4]] [@Top::@{{.+}}]
   
   // CHECK-LABEL: firrtl.module @Top()
   firrtl.module @Top(out %a: !firrtl.probe<uint<1>>, 
@@ -791,10 +793,10 @@ firrtl.circuit "InternalPaths" {
                                        out r: !firrtl.probe<uint<1>>,
                                        out data: !firrtl.uint<3>,
                                        out r2: !firrtl.probe<vector<bundle<a: uint<3>>, 3>>) attributes {convention = #firrtl<convention scalarized>, internalPaths = ["path.to.internal.signal", "in"]}
-  // CHECK: hw.hierpath private @xmrPath [@InternalPaths::@xmr_sym] 
+  // CHECK: hw.hierpath private @xmrPath [@InternalPaths::@[[EXT_SYM:.+]]] 
   // CHECK: module public @InternalPaths(
   firrtl.module public @InternalPaths(in %in: !firrtl.uint<1>) {
-    // CHECK: firrtl.instance ext sym @[[EXT_SYM:.+]] @RefExtMore
+    // CHECK: firrtl.instance ext sym @[[EXT_SYM]] @RefExtMore
     %ext_in, %ext_r, %ext_data, %ext_r2 =
       firrtl.instance ext @RefExtMore(in in: !firrtl.uint<1>,
                                       out r: !firrtl.probe<uint<1>>,
@@ -824,10 +826,11 @@ firrtl.circuit "RefABI" {
                                        out r: !firrtl.probe<uint<1>>,
                                        out data: !firrtl.uint<3>,
                                        out r2: !firrtl.probe<vector<bundle<a: uint<3>>, 3>>) attributes {convention = #firrtl<convention scalarized>}
-  // CHECK:  hw.hierpath private @xmrPath [@RefABI::@xmr_sym] 
+  // CHECK:  hw.hierpath private @xmrPath [@RefABI::@[[XMR_SYM:.+]]] 
   // CHECK: module public @RefABI(
   firrtl.module public @RefABI(in %in: !firrtl.uint<1>) {
     %ext_in, %ext_r, %ext_data, %ext_r2 =
+      // CHECK: firrtl.instance ext sym @[[XMR_SYM]] @RefExtMore
       firrtl.instance ext @RefExtMore(in in: !firrtl.uint<1>,
                                       out r: !firrtl.probe<uint<1>>,
                                       out data: !firrtl.uint<3>,
@@ -919,5 +922,47 @@ firrtl.circuit "RefSubLayers" {
     %ref = firrtl.instance ext @ExtRef(out out: !firrtl.probe<bundle<a: uint<1>, b: vector<bundle<a: uint<2>, b: uint<1>>, 2>>>)
     %sub = firrtl.ref.sub %ref[1] : !firrtl.probe<bundle<a: uint<1>, b: vector<bundle<a: uint<2>, b: uint<1>>, 2>>>
     firrtl.ref.define %rw, %sub : !firrtl.probe<vector<bundle<a: uint<2>, b: uint<1>>, 2>>
+  }
+}
+
+// -----
+// Check dropping force/etc. ops that target zero-width references.
+// Ensure no symbol added, so can be dropped in LowerToHW.
+
+// CHECK-LABEL: circuit "DropForceOp"
+firrtl.circuit "DropForceOp" {
+  firrtl.module @DropForceOp() {
+    // CHECK: firrtl.wire
+    // CHECK-NOT: sym
+    // CHECK-NEXT: }
+    %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %x, %x_ref = firrtl.wire forceable : !firrtl.uint<0>, !firrtl.rwprobe<uint<0>>
+    firrtl.ref.force_initial %c1_ui1, %x_ref, %c0_ui0 : !firrtl.uint<1>, !firrtl.uint<0>
+  }
+}
+
+// -----
+// Check dropping zero-width and interaction with ABI/across layers.
+
+// CHECK-LABEL: circuit "RefSubZeroWidth"
+firrtl.circuit "RefSubZeroWidth" {
+   // CHECK-NOT: probe<
+   firrtl.extmodule @ExtRef(out out: !firrtl.probe<bundle<a: uint<1>, b: vector<bundle<a: uint<0>, b: uint<1>>, 2>>>)
+  firrtl.module @RefSubZeroWidth(out %rw : !firrtl.probe<uint<0>>) {
+    %ref = firrtl.instance m @Mid(out rw: !firrtl.probe<bundle<a: uint<0>, b: uint<1>>>)
+    %sub = firrtl.ref.sub %ref[0] : !firrtl.probe<bundle<a: uint<0>, b: uint<1>>>
+    firrtl.ref.define %rw, %sub : !firrtl.probe<uint<0>>
+  }
+  firrtl.module private @Mid(out %rw : !firrtl.probe<bundle<a: uint<0>, b: uint<1>>>) {
+    %ref = firrtl.instance l @Leaf(out rw: !firrtl.probe<vector<bundle<a: uint<0>, b: uint<1>>, 2>>)
+    %sub = firrtl.ref.sub %ref[1] : !firrtl.probe<vector<bundle<a: uint<0>, b: uint<1>>, 2>>
+    firrtl.ref.define %rw, %sub : !firrtl.probe<bundle<a: uint<0>, b: uint<1>>>
+  }
+
+  firrtl.module private @Leaf(out %rw : !firrtl.probe<vector<bundle<a: uint<0>, b: uint<1>>, 2>>) {
+    %ref = firrtl.instance ext @ExtRef(out out: !firrtl.probe<bundle<a: uint<1>, b: vector<bundle<a: uint<0>, b: uint<1>>, 2>>>)
+    %sub = firrtl.ref.sub %ref[1] : !firrtl.probe<bundle<a: uint<1>, b: vector<bundle<a: uint<0>, b: uint<1>>, 2>>>
+    firrtl.ref.define %rw, %sub : !firrtl.probe<vector<bundle<a: uint<0>, b: uint<1>>, 2>>
   }
 }
