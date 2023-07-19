@@ -54,17 +54,34 @@ jobs:
           CIBW_BUILD_FRONTEND: build
           SETUPTOOLS_SCM_DEBUG: True
 
-      - name: Upload wheels (Tag or Nightly)
+      - name: Upload (stage) wheels as artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: python-wheels
+          path: ./wheelhouse/*.whl
+          retention-days: 7
+          if-no-files-found: error
+
+  push_wheels:
+    name: Push wheels (Tag or Nightly)
+    runs-on: ubuntu-20.04
+    if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'schedule')
+    needs: build_wheels
+
+    steps:
+      - name: Download wheels
+        uses: actions/download-artifact@v3
+        with:
+          name: python-wheels
+          path: ./wheelhouse/
+
+      - name: List downloaded wheels
+        run: ls -laR
+        working-directory: ./wheelhouse/
+
+      - name: Upload wheels to pypi
         uses: pypa/gh-action-pypi-publish@release/v1
-        if: github.ref_type == 'tag' || github.event_name == 'schedule'
         with:
           password: ${{ secrets.PYPI_CIRCT_API_TOKEN }}
           packages-dir: wheelhouse/
           verify-metadata: false
-
-      - name: Upload wheels (Non-Tag and Non-Nightly)
-        uses: actions/upload-artifact@v3
-        if: github.ref_type != 'tag' && github.event_name != 'schedule'
-        with:
-          path: ./wheelhouse/*.whl
-          retention-days: 7
