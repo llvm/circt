@@ -228,3 +228,18 @@ module attributes { circt.loweringOptions = "disallowPackedStructAssignments"} {
       hw.output %0, %0 : !T, !T
   }
 }
+
+// -----
+// LTL expressions that are used before being defined should not be spilled to
+// wires, where they crash the PrepareForEmission pass. They are always emitted
+// inline, so no need to restructure the IR.
+// CHECK-LABEL: hw.module @Issue5613
+hw.module @Issue5613(%a: i1, %b: i1) {
+  verif.assert %2 : !ltl.sequence
+  %0 = ltl.implication %2, %1 : !ltl.sequence, !ltl.property
+  %1 = ltl.or %b, %3 : i1, !ltl.property
+  %2 = ltl.and %b, %4 : i1, !ltl.sequence
+  %3 = ltl.not %b : i1
+  %4 = ltl.delay %a, 42 : i1
+  hw.output
+}
