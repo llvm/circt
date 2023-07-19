@@ -589,29 +589,30 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      scf::YieldOp yieldOp) const {
-  if (yieldOp.getOperands().size() == 0) {
-    // We assume for loops must have no iter_args
+  if (yieldOp.getOperands().empty()) {
+    // If yiedOp operands are empty, we assume we have a for llop
     auto forOp = dyn_cast<scf::ForOp>(yieldOp->getParentOp());
     assert(forOp);
     ScfForOp forOpInterface(forOp);
 
-    SmallVector<Type> types;
-    // llvm::append_range(types, srcTypes);
-    auto reg =
+    // get the ForLoop' Induction Register
+    auto inductionReg =
         getState<ComponentLoweringState>().getForLoopIterReg(forOpInterface, 0);
 
-    // Get the width of the register's output (= register's input width).
-    Type regWidth = reg.getOut().getType();
-
+    // Trying to build a AddLibOp in Calyx.
+    // Mimics what is dones in `buildLibraryOp`. There may be a more concise way
+    // to do this.
+    SmallVector<Type> types;
+    Type regWidth = inductionReg.getOut().getType();
     types.push_back(regWidth);
     types.push_back(regWidth);
     types.push_back(regWidth);
-
     auto calyxOp = getState<ComponentLoweringState>()
                        .getNewLibraryOpInstance<calyx::AddLibOp>(
                            rewriter, forOp.getLoc(), types);
 
     auto directions = calyxOp.portDirections();
+    // For an add operation, we expect two input ports and one output port
     SmallVector<Value, 2> opInputPorts;
     Value opOutputPort;
     for (auto dir : enumerate(directions)) {
@@ -620,35 +621,43 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
       else {
         if (opOutputPort != nullptr) {
           assert(false &&
-                 "expected Calyx add operation to have only one output port");
+                 "Expected Calyx add operation to have only one output port");
         }
         opOutputPort = calyxOp.getResult(dir.index());
       }
     }
     assert(opInputPorts.size() == 2 &&
            "Expected an add Calyx operation to have 2 inputs");
+
+    // Create a "LatchGroup" for the For Loop that increments inductionReg by
+    // forLoop's step value.
     calyx::ComponentOp componentOp =
         getState<ComponentLoweringState>().getComponentOp();
     auto groupOp = calyx::createGroup<calyx::GroupOp>(
-        rewriter, componentOp, forOp.getLoc(), "filler_idk");
+        rewriter, componentOp, forOp.getLoc(),
+        "incr_" + getState<ComponentLoweringState>().getUniqueName(forOp) +
+            "_induction_var");
     rewriter.setInsertionPointToEnd(groupOp.getBodyBlock());
 
+    // Assign inductionReg.out to the left port of the adder.
     auto leftOp = opInputPorts.front();
-    rewriter.create<calyx::AssignOp>(forOp.getLoc(), leftOp, reg.getOut());
+    rewriter.create<calyx::AssignOp>(forOp.getLoc(), leftOp,
+                                     inductionReg.getOut());
+    // Assign forOp.getConstantStep to the right port of the adder.
     auto rightOp = opInputPorts.back();
     rewriter.create<calyx::AssignOp>(
         forOp.getLoc(), rightOp,
         createConstant(forOp->getLoc(), rewriter, componentOp,
                        regWidth.getIntOrFloatBitWidth(),
                        forOp.getConstantStep().value().getSExtValue()));
-
-    getState<ComponentLoweringState>().registerEvaluatingGroup(opOutputPort,
-                                                               groupOp);
-    buildAssignmentsForRegisterWrite(rewriter, groupOp, componentOp, reg,
-                                     opOutputPort);
-
+    // Assign adder's output port to inductionReg.
+    buildAssignmentsForRegisterWrite(rewriter, groupOp, componentOp,
+                                     inductionReg, opOutputPort);
+    // Set group as For Loop's "latch" group.
     getState<ComponentLoweringState>().setForLoopLatchGroup(forOpInterface,
                                                             groupOp);
+    getState<ComponentLoweringState>().registerEvaluatingGroup(opOutputPort,
+                                                               groupOp);
     return success();
   }
   auto whileOp = dyn_cast<scf::WhileOp>(yieldOp->getParentOp());
@@ -1129,7 +1138,7 @@ class BuildForGroups : public calyx::FuncOpPartialLoweringPattern {
                            PatternRewriter &rewriter) const override {
     LogicalResult res = success();
     funcOp.walk([&](Operation *op) {
-      // Only work on ops that support the ScfWhileOp.
+      // Only work on ops that support the ScfForOp.
       if (!isa<scf::ForOp>(op))
         return WalkResult::advance();
 
@@ -1139,46 +1148,33 @@ class BuildForGroups : public calyx::FuncOpPartialLoweringPattern {
       getState<ComponentLoweringState>().setUniqueName(forOp.getOperation(),
                                                        "for");
 
-      if (!(forOp.getBound().has_value())) {
-        res = forOp.getOperation()->emitError()
-              << "could not compute trip count of for loop. Should "
-                 "transform into while loop using `--scf-for-to-while`";
-        return WalkResult::interrupt();
-      }
-
-      // Create iteration argument registers.
-      // The iteration argument registers will be referenced:
-      // - In the "before" part of the while loop, calculating the
-      // conditional,
-      // - In the "after" part of the while loop,
-      // - Outside the while loop, rewriting the while loop return values.
-      auto arg = forOp.getOperation().getInductionVar();
+      // Create a register for the InductionVar, and set that Register as the
+      // only IterReg for the For Loop
+      auto inductionVar = forOp.getOperation().getInductionVar();
       std::string name = getState<ComponentLoweringState>()
                              .getUniqueName(forOp.getOperation())
                              .str() +
-                         "_arg0";
-      auto reg = createRegister(arg.getLoc(), rewriter, getComponent(),
-                                arg.getType().getIntOrFloatBitWidth(), name);
+                         "_induction_var";
+      auto reg =
+          createRegister(inductionVar.getLoc(), rewriter, getComponent(),
+                         inductionVar.getType().getIntOrFloatBitWidth(), name);
       getState<ComponentLoweringState>().addForLoopIterReg(forOp, reg, 0);
-      arg.replaceAllUsesWith(reg.getOut());
+      inductionVar.replaceAllUsesWith(reg.getOut());
 
-      // Create iter args initial value assignment group(s), one per
-      // register.
+      // Create InitGroup that sets the InductionVar to LowerBound
+      calyx::ComponentOp componentOp =
+          getState<ComponentLoweringState>().getComponentOp();
       SmallVector<calyx::GroupOp> initGroups;
-      auto numOperands = forOp.getOperation()->getNumOperands();
-      std::cout << numOperands;
-      for (size_t i = 0; i < 1; ++i) {
-        auto initGroupOp =
-            getState<ComponentLoweringState>().buildForLoopIterArgAssignments(
-                rewriter, forOp,
-                getState<ComponentLoweringState>().getComponentOp(),
-                getState<ComponentLoweringState>().getUniqueName(
-                    forOp.getOperation()) +
-                    "_init_" + std::to_string(i),
-                forOp.getOperation()->getOpOperand(i));
-        initGroups.push_back(initGroupOp);
-      }
-
+      std::string groupName = "init_" +
+                              getState<ComponentLoweringState>()
+                                  .getUniqueName(forOp.getOperation())
+                                  .str() +
+                              "_induction_var";
+      auto groupOp = calyx::createGroup<calyx::GroupOp>(
+          rewriter, componentOp, forOp.getLoc(), groupName);
+      buildAssignmentsForRegisterWrite(rewriter, groupOp, componentOp, reg,
+                                       forOp.getOperation().getLowerBound());
+      initGroups.push_back(groupOp);
       getState<ComponentLoweringState>().setForLoopInitGroups(forOp,
                                                               initGroups);
 
@@ -1265,12 +1261,11 @@ private:
             getState<ComponentLoweringState>().getForLoopInitGroups(forOp),
             rewriter);
         rewriter.setInsertionPointToEnd(forCtrlOp.getBodyBlock());
-        auto whileBodyOp =
+        auto forBodyOp =
             rewriter.create<calyx::SeqOp>(forOp.getOperation()->getLoc());
-        auto *forBodyOpBlock = whileBodyOp.getBodyBlock();
+        auto *forBodyOpBlock = forBodyOp.getBodyBlock();
 
-        /// Only schedule the 'after' block. The 'before' block is
-        /// implicitly scheduled when evaluating the while condition.
+        /// Schedule the body of the for loop
         LogicalResult res = buildCFGControl(path, rewriter, forBodyOpBlock,
                                             block, forOp.getBodyBlock());
 
@@ -1280,7 +1275,6 @@ private:
             getState<ComponentLoweringState>().getForLoopLatchGroup(forOp);
         rewriter.create<calyx::EnableOp>(forLatchGroup.getLoc(),
                                          forLatchGroup.getName());
-
         if (res.failed())
           return res;
       } else
@@ -1374,19 +1368,25 @@ private:
     return success();
   }
 
+  // Insert a Par of initGroups at Location loc. Used as helper for
+  // `buildWhileCtrlOp` and `buildForCtrlOp`.
+  void
+  insertParInitGroups(PatternRewriter &rewriter, Location loc,
+                      const SmallVector<calyx::GroupOp> &initGroups) const {
+    PatternRewriter::InsertionGuard g(rewriter);
+    auto parOp = rewriter.create<calyx::ParOp>(loc);
+    rewriter.setInsertionPointToStart(parOp.getBodyBlock());
+    for (calyx::GroupOp group : initGroups)
+      rewriter.create<calyx::EnableOp>(group.getLoc(), group.getName());
+  }
+
   calyx::WhileOp buildWhileCtrlOp(ScfWhileOp whileOp,
                                   SmallVector<calyx::GroupOp> initGroups,
                                   PatternRewriter &rewriter) const {
     Location loc = whileOp.getLoc();
     /// Insert while iter arg initialization group(s). Emit a
     /// parallel group to assign one or more registers all at once.
-    {
-      PatternRewriter::InsertionGuard g(rewriter);
-      auto parOp = rewriter.create<calyx::ParOp>(loc);
-      rewriter.setInsertionPointToStart(parOp.getBodyBlock());
-      for (calyx::GroupOp group : initGroups)
-        rewriter.create<calyx::EnableOp>(group.getLoc(), group.getName());
-    }
+    insertParInitGroups(rewriter, loc, initGroups);
 
     /// Insert the while op itself.
     auto cond = whileOp.getConditionValue();
@@ -1401,25 +1401,21 @@ private:
                                  SmallVector<calyx::GroupOp> initGroups,
                                  PatternRewriter &rewriter) const {
     Location loc = forOp.getLoc();
-    /// Insert while iter arg initialization group(s). Emit a
+    /// Insert for iter arg initialization group(s). Emit a
     /// parallel group to assign one or more registers all at once.
-    {
-      PatternRewriter::InsertionGuard g(rewriter);
-      auto parOp = rewriter.create<calyx::ParOp>(loc);
-      rewriter.setInsertionPointToStart(parOp.getBodyBlock());
-      for (calyx::GroupOp group : initGroups)
-        rewriter.create<calyx::EnableOp>(group.getLoc(), group.getName());
-    }
+    insertParInitGroups(rewriter, loc, initGroups);
 
-    /// Insert the while op itself.
-    // auto cond = whileOp.getConditionValue();
-    // auto condGroup = getState<ComponentLoweringState>()
-    //                      .getEvaluatingGroup<calyx::CombGroupOp>(cond);
-    // auto symbolAttr = FlatSymbolRefAttr::get(
-    //     StringAttr::get(getContext(), condGroup.getSymName()));
-    // already checked the bound in BuildWhileGroups
-    uint32_t bound = *forOp.getBound();
-    return rewriter.create<calyx::RepeatOp>(loc, bound);
+    // Insert the repeatOp that corresponds to the For loop.
+    // If we cannot compute the trip count of the for loop, then we should
+    // emit an error saying to use --scf-for-to-while
+    std::optional<uint64_t> bound = forOp.getBound();
+    if (!(bound.has_value())) {
+      forOp.getOperation()->emitError()
+          << "Could not compute trip count of for loop. Should "
+             "transform into while loop using `--scf-for-to-while` before "
+             "running --lower-scf-to-calyx";
+    }
+    return rewriter.create<calyx::RepeatOp>(loc, bound.value());
   }
 };
 
@@ -1539,9 +1535,6 @@ public:
     target.addLegalDialect<scf::SCFDialect>();
     target.addIllegalDialect<hw::HWDialect>();
     target.addIllegalDialect<comb::CombDialect>();
-
-    // For loops should have been lowered to while loops
-    // target.addIllegalOp<scf::ForOp>();
 
     // Only accept std operations which we've added lowerings for
     target.addIllegalDialect<FuncDialect>();
