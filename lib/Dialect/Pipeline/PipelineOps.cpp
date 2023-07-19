@@ -311,8 +311,9 @@ static void printKeywordAssignment(OpAsmPrinter &p, StringRef keyword,
 
 template <typename TPipelineOp>
 static void printPipelineOp(OpAsmPrinter &p, TPipelineOp op) {
-  if (auto name = op.getNameAttr())
-    p.printKeywordOrString(name.getValue());
+  if (auto name = op.getNameAttr()) {
+    p << " \"" << name.getValue() << "\"";
+  }
 
   // Print the input list.
   printInitializerList(p, op.getInputs(), op.getInnerInputs());
@@ -633,13 +634,45 @@ LogicalResult ReturnOp::verify() {
 // StageOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseSingleStageRegister(
-    OpAsmParser &parser, OpAsmParser::UnresolvedOperand &v, Type &t,
-    llvm::SmallVector<OpAsmParser::UnresolvedOperand> &clockGates) {
+// Parses the form:
+// ($name `=`)? $register : type($register)
 
+static ParseResult
+parseOptNamedTypedAssignment(OpAsmParser &parser,
+                             OpAsmParser::UnresolvedOperand &v, Type &t,
+                             StringAttr &name) {
+  // Parse optional name.
+  std::string nameref;
+  if (succeeded(parser.parseOptionalString(&nameref))) {
+    if (nameref.empty())
+      return parser.emitError(parser.getCurrentLocation(),
+                              "name cannot be empty");
+
+    if (failed(parser.parseEqual()))
+      return parser.emitError(parser.getCurrentLocation(),
+                              "expected '=' after name");
+    name = parser.getBuilder().getStringAttr(nameref);
+  } else {
+    name = parser.getBuilder().getStringAttr("");
+  }
+
+  // Parse mandatory value and type.
   if (failed(parser.parseOperand(v)) || failed(parser.parseColonType(t)))
     return failure();
 
+  return success();
+}
+
+// Parses the form:
+// parseOptNamedTypedAssignment (`gated by` `[` $clockGates `]`)?
+static ParseResult parseSingleStageRegister(
+    OpAsmParser &parser, OpAsmParser::UnresolvedOperand &v, Type &t,
+    llvm::SmallVector<OpAsmParser::UnresolvedOperand> &clockGates,
+    StringAttr &name) {
+  if (failed(parseOptNamedTypedAssignment(parser, v, t, name)))
+    return failure();
+
+  // Parse optional gated-by clause.
   if (failed(parser.parseOptionalKeyword("gated")))
     return success();
 
@@ -652,13 +685,14 @@ static ParseResult parseSingleStageRegister(
 }
 
 // Parses the form:
-// regs($register : type($register) (`gated by` `[` $clockGates `]`)?, ...)
+// regs( ($name `=`)? $register : type($register) (`gated by` `[` $clockGates
+// `]`)?, ...)
 ParseResult parseStageRegisters(
     OpAsmParser &parser,
     llvm::SmallVector<OpAsmParser::UnresolvedOperand, 4> &registers,
     llvm::SmallVector<mlir::Type, 1> &registerTypes,
     llvm::SmallVector<OpAsmParser::UnresolvedOperand, 4> &clockGates,
-    ArrayAttr &clockGatesPerRegister) {
+    ArrayAttr &clockGatesPerRegister, ArrayAttr &registerNames) {
 
   if (failed(parser.parseOptionalKeyword("regs"))) {
     clockGatesPerRegister = parser.getBuilder().getI64ArrayAttr({});
@@ -666,14 +700,19 @@ ParseResult parseStageRegisters(
   }
 
   llvm::SmallVector<int64_t> clockGatesPerRegisterList;
+  llvm::SmallVector<Attribute> registerNamesList;
+  bool withNames = false;
   if (failed(parser.parseCommaSeparatedList(AsmParser::Delimiter::Paren, [&]() {
         OpAsmParser::UnresolvedOperand v;
         Type t;
         llvm::SmallVector<OpAsmParser::UnresolvedOperand> cgs;
-        if (parseSingleStageRegister(parser, v, t, cgs))
+        StringAttr name;
+        if (parseSingleStageRegister(parser, v, t, cgs, name))
           return failure();
         registers.push_back(v);
         registerTypes.push_back(t);
+        registerNamesList.push_back(name);
+        withNames |= static_cast<bool>(name);
         llvm::append_range(clockGates, cgs);
         clockGatesPerRegisterList.push_back(cgs.size());
         return success();
@@ -682,22 +721,32 @@ ParseResult parseStageRegisters(
 
   clockGatesPerRegister =
       parser.getBuilder().getI64ArrayAttr(clockGatesPerRegisterList);
+  if (withNames)
+    registerNames = parser.getBuilder().getArrayAttr(registerNamesList);
 
   return success();
 }
 
 void printStageRegisters(OpAsmPrinter &p, Operation *op, ValueRange registers,
                          TypeRange registerTypes, ValueRange clockGates,
-                         ArrayAttr clockGatesPerRegister) {
+                         ArrayAttr clockGatesPerRegister, ArrayAttr names) {
   if (registers.empty())
     return;
 
   p << "regs(";
   size_t clockGateStartIdx = 0;
   llvm::interleaveComma(
-      llvm::zip(registers, registerTypes, clockGatesPerRegister), p,
-      [&](auto it) {
-        auto &[reg, type, nClockGatesAttr] = it;
+      llvm::enumerate(
+          llvm::zip(registers, registerTypes, clockGatesPerRegister)),
+      p, [&](auto it) {
+        size_t idx = it.index();
+        auto &[reg, type, nClockGatesAttr] = it.value();
+        if (names) {
+          if (auto nameAttr = names[idx].dyn_cast<StringAttr>();
+              nameAttr && !nameAttr.strref().empty())
+            p << nameAttr << " = ";
+        }
+
         p << reg << " : " << type;
         int64_t nClockGates =
             nClockGatesAttr.template cast<IntegerAttr>().getInt();
@@ -710,6 +759,60 @@ void printStageRegisters(OpAsmPrinter &p, Operation *op, ValueRange registers,
         clockGateStartIdx += nClockGates;
       });
   p << ")";
+}
+
+void printPassthroughs(OpAsmPrinter &p, Operation *op, ValueRange passthroughs,
+                       TypeRange passthroughTypes, ArrayAttr names) {
+
+  if (passthroughs.empty())
+    return;
+
+  p << "pass(";
+  llvm::interleaveComma(
+      llvm::enumerate(llvm::zip(passthroughs, passthroughTypes)), p,
+      [&](auto it) {
+        size_t idx = it.index();
+        auto &[reg, type] = it.value();
+        if (names) {
+          if (auto nameAttr = names[idx].dyn_cast<StringAttr>();
+              nameAttr && !nameAttr.strref().empty())
+            p << nameAttr << " = ";
+        }
+        p << reg << " : " << type;
+      });
+  p << ")";
+}
+
+// Parses the form:
+// (`pass` `(` ($name `=`)? $register : type($register), ... `)` )?
+ParseResult parsePassthroughs(
+    OpAsmParser &parser,
+    llvm::SmallVector<OpAsmParser::UnresolvedOperand, 4> &passthroughs,
+    llvm::SmallVector<mlir::Type, 1> &passthroughTypes,
+    ArrayAttr &passthroughNames) {
+  if (failed(parser.parseOptionalKeyword("pass")))
+    return success(); // no passthroughs to parse.
+
+  llvm::SmallVector<Attribute> passthroughsNameList;
+  bool withNames = false;
+  if (failed(parser.parseCommaSeparatedList(AsmParser::Delimiter::Paren, [&]() {
+        OpAsmParser::UnresolvedOperand v;
+        Type t;
+        StringAttr name;
+        if (parseOptNamedTypedAssignment(parser, v, t, name))
+          return failure();
+        passthroughs.push_back(v);
+        passthroughTypes.push_back(t);
+        passthroughsNameList.push_back(name);
+        withNames |= static_cast<bool>(name);
+        return success();
+      })))
+    return failure();
+
+  if (withNames)
+    passthroughNames = parser.getBuilder().getArrayAttr(passthroughsNameList);
+
+  return success();
 }
 
 void StageOp::build(OpBuilder &odsBuilder, OperationState &odsState,
