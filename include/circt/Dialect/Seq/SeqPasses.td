@@ -47,6 +47,12 @@ def LowerSeqFIRRTLToSV: Pass<"lower-seq-firrtl-to-sv",  "hw::HWModuleOp"> {
   ];
 }
 
+def LowerSeqFIFO : Pass<"lower-seq-fifo", "hw::HWModuleOp"> {
+  let summary = "Lower seq.fifo ops";
+  let constructor = "circt::seq::createLowerSeqFIFOPass()";
+  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
+}
+
 def LowerSeqHLMem: Pass<"lower-seq-hlmem", "hw::HWModuleOp"> {
   let summary = "Lowers seq.hlmem operations.";
   let constructor = "circt::seq::createLowerSeqHLMemPass()";

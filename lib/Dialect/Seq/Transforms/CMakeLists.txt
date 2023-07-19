@@ -3,6 +3,7 @@ add_circt_dialect_library(CIRCTSeqTransforms
   LowerFirMem.cpp
   LowerSeqHLMem.cpp
   LowerSeqToSV.cpp
+  LowerSeqFIFO.cpp
 
   DEPENDS
   CIRCTSeqTransformsIncGen
