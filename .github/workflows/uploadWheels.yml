@@ -38,7 +38,7 @@ jobs:
 
       - name: Unshallow CIRCT
         run: |
-          git fetch --unshallow --tags --no-recurse-submodules
+          git fetch --force --unshallow --tags --no-recurse-submodules
 
       - name: Setup Python
         uses: actions/setup-python@v3
