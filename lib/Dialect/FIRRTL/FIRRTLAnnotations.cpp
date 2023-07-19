@@ -582,7 +582,7 @@ void OpAnnoTarget::setAnnotations(AnnotationSet annotations) const {
 }
 
 StringAttr OpAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
-  return ::getOrAddInnerSym(getOp(), getOp()->getParentOfType<FModuleOp>(),
+  return ::getOrAddInnerSym(hw::InnerSymTarget(getOp()),
                             [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
                               return moduleNamespace;
                             });
@@ -596,7 +596,7 @@ OpAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
     return FlatSymbolRefAttr::get(module.getModuleNameAttr());
   }
   // Return an inner-ref to the target.
-  return ::getInnerRefTo(getOp(),
+  return ::getInnerRefTo(hw::InnerSymTarget(getOp()),
                          [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
                            return moduleNamespace;
                          });
@@ -644,28 +644,22 @@ void PortAnnoTarget::setAnnotations(AnnotationSet annotations) const {
 StringAttr PortAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
   // If this is not a module, we just need to get an inner_sym on the operation
   // itself.
-  if (auto mod = ::llvm::dyn_cast<FModuleLike>(getOp()))
-    return ::getOrAddInnerSym(
-        mod, getPortNo(), [&moduleNamespace](FModuleLike) -> ModuleNamespace & {
-          return moduleNamespace;
-        });
-  return ::getOrAddInnerSym(getOp(), getOp()->getParentOfType<FModuleOp>(),
-                            [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
-                              return moduleNamespace;
-                            });
+  auto module = llvm::dyn_cast<FModuleLike>(getOp());
+  auto target = module ? hw::InnerSymTarget(getPortNo(), module)
+                       : hw::InnerSymTarget(getOp());
+  return ::getOrAddInnerSym(
+      target, [&moduleNamespace](FModuleLike) -> ModuleNamespace & {
+        return moduleNamespace;
+      });
 }
 
 Attribute
 PortAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
   auto module = llvm::dyn_cast<FModuleLike>(getOp());
-  if (!module)
-    return ::getInnerRefTo(getOp(),
-                           [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
-                             return moduleNamespace;
-                           });
-
-  return ::getInnerRefTo(module, getPortNo(),
-                         [&moduleNamespace](FModuleLike) -> ModuleNamespace & {
+  auto target = module ? hw::InnerSymTarget(getPortNo(), module)
+                       : hw::InnerSymTarget(getOp());
+  return ::getInnerRefTo(target,
+                         [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
                            return moduleNamespace;
                          });
 }

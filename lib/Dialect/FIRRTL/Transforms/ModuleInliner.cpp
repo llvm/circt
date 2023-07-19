@@ -1182,10 +1182,11 @@ void Inliner::inlineInstances(FModuleOp parent) {
       for (auto sym : rootMap[target.getNameAttr()]) {
         auto &mnla = nlaMap[sym];
         sym = mnla.reTop(parent);
-        StringAttr instSym = getOrAddInnerSym(
-            instance, parent, [&](FModuleOp mod) -> ModuleNamespace & {
-              return moduleNamespace;
-            });
+        StringAttr instSym =
+            getOrAddInnerSym(hw::InnerSymTarget(instance),
+                             [&](FModuleOp mod) -> ModuleNamespace & {
+                               return moduleNamespace;
+                             });
         instOpHierPaths[InnerRefAttr::get(moduleName, instSym)].push_back(
             cast<StringAttr>(sym));
         // TODO: Update any symbol renames which need to be used by the next

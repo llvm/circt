@@ -617,17 +617,20 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   InnerRefAttr getInnerRefTo(Value val) {
     if (auto arg = dyn_cast<BlockArgument>(val))
       return ::getInnerRefTo(
-          cast<FModuleLike>(arg.getParentBlock()->getParentOp()),
-          arg.getArgNumber(), [&](FModuleLike mod) -> ModuleNamespace & {
+          hw::InnerSymTarget(
+              arg.getArgNumber(),
+              cast<FModuleLike>(arg.getParentBlock()->getParentOp())),
+          [&](FModuleLike mod) -> ModuleNamespace & {
             return getModuleNamespace(mod);
           });
     return getInnerRefTo(val.getDefiningOp());
   }
 
   InnerRefAttr getInnerRefTo(Operation *op) {
-    return ::getInnerRefTo(op, [&](FModuleOp mod) -> ModuleNamespace & {
-      return getModuleNamespace(mod);
-    });
+    return ::getInnerRefTo(hw::InnerSymTarget(op),
+                           [&](FModuleOp mod) -> ModuleNamespace & {
+                             return getModuleNamespace(mod);
+                           });
   }
 
   void markForRemoval(Operation *op) { opsToRemove.push_back(op); }
