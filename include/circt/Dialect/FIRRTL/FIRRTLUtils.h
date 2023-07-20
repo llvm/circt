@@ -122,6 +122,68 @@ hw::InnerRefAttr
 getInnerRefTo(const hw::InnerSymTarget &target,
               llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace);
 
+/// Returns an inner symbol identifier for the specified operation, adding one
+/// if necessary.
+static inline StringAttr getOrAddInnerSym(
+    Operation *op,
+    llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace) {
+  return getOrAddInnerSym(hw::InnerSymTarget(op), getNamespace);
+}
+/// Returns an inner symbol identifier for the specified operation's field
+/// adding one if necessary.
+static inline StringAttr getOrAddInnerSym(
+    Operation *op, uint64_t fieldID,
+    llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace) {
+  return getOrAddInnerSym(hw::InnerSymTarget(op, fieldID), getNamespace);
+}
+
+/// Obtain an inner reference to an operation, possibly adding an inner symbol.
+static inline hw::InnerRefAttr
+getInnerRefTo(Operation *op,
+              llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace) {
+  return getInnerRefTo(hw::InnerSymTarget(op), getNamespace);
+}
+
+/// Obtain an inner reference to an operation's field, possibly adding an inner
+/// symbol.
+static inline hw::InnerRefAttr
+getInnerRefTo(Operation *op, uint64_t fieldID,
+              llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace) {
+  return getInnerRefTo(hw::InnerSymTarget(op, fieldID), getNamespace);
+}
+
+/// Returns an inner symbol identifier for the specified port, adding one if
+/// necessary.
+static inline StringAttr getOrAddInnerSym(
+    FModuleLike mod, size_t portIdx,
+    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace) {
+  return getOrAddInnerSym(hw::InnerSymTarget(portIdx, mod), getNamespace);
+}
+
+/// Returns an inner symbol identifier for the specified port's field, adding
+/// one if necessary.
+static inline StringAttr getOrAddInnerSym(
+    FModuleLike mod, size_t portIdx, uint64_t fieldID,
+    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace) {
+  return getOrAddInnerSym(hw::InnerSymTarget(portIdx, mod, fieldID),
+                          getNamespace);
+}
+
+/// Obtain an inner reference to a port, possibly adding an inner symbol.
+static inline hw::InnerRefAttr
+getInnerRefTo(FModuleLike mod, size_t portIdx,
+              llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace) {
+  return getInnerRefTo(hw::InnerSymTarget(portIdx, mod), getNamespace);
+}
+
+/// Obtain an inner reference to a port's field, possibly adding an inner
+/// symbol.
+static inline hw::InnerRefAttr
+getInnerRefTo(FModuleLike mod, size_t portIdx, uint64_t fieldID,
+              llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace) {
+  return getInnerRefTo(hw::InnerSymTarget(portIdx, mod, fieldID), getNamespace);
+}
+
 //===----------------------------------------------------------------------===//
 // Type utilities
 //===----------------------------------------------------------------------===//

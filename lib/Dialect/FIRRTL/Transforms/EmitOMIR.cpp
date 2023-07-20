@@ -1240,15 +1240,14 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
 }
 
 hw::InnerRefAttr EmitOMIRPass::getInnerRefTo(Operation *op) {
-  return ::getInnerRefTo(hw::InnerSymTarget(op),
-                         [&](FModuleOp module) -> ModuleNamespace & {
-                           return getModuleNamespace(module);
-                         });
+  return ::getInnerRefTo(op, [&](FModuleOp module) -> ModuleNamespace & {
+    return getModuleNamespace(module);
+  });
 }
 
 hw::InnerRefAttr EmitOMIRPass::getInnerRefTo(FModuleLike module,
                                              size_t portIdx) {
-  return ::getInnerRefTo(hw::InnerSymTarget(portIdx, module),
+  return ::getInnerRefTo(module, portIdx,
                          [&](FModuleLike mod) -> ModuleNamespace & {
                            return getModuleNamespace(mod);
                          });

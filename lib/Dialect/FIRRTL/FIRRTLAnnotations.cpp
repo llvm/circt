@@ -582,7 +582,7 @@ void OpAnnoTarget::setAnnotations(AnnotationSet annotations) const {
 }
 
 StringAttr OpAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
-  return ::getOrAddInnerSym(hw::InnerSymTarget(getOp()),
+  return ::getOrAddInnerSym(getOp(),
                             [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
                               return moduleNamespace;
                             });
@@ -596,7 +596,7 @@ OpAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
     return FlatSymbolRefAttr::get(module.getModuleNameAttr());
   }
   // Return an inner-ref to the target.
-  return ::getInnerRefTo(hw::InnerSymTarget(getOp()),
+  return ::getInnerRefTo(getOp(),
                          [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
                            return moduleNamespace;
                          });

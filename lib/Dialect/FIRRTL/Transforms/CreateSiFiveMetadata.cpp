@@ -216,10 +216,10 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
     if (auto module = dyn_cast<FModuleLike>(op))
       symbol = FlatSymbolRefAttr::get(module);
     else
-      symbol = firrtl::getInnerRefTo(hw::InnerSymTarget(op),
-                                     [&](FModuleOp mod) -> ModuleNamespace & {
-                                       return getModuleNamespace(mod);
-                                     });
+      symbol =
+          firrtl::getInnerRefTo(op, [&](FModuleOp mod) -> ModuleNamespace & {
+            return getModuleNamespace(mod);
+          });
 
     auto [it, inserted] = symbolIndices.try_emplace(symbol, symbols.size());
     if (inserted)

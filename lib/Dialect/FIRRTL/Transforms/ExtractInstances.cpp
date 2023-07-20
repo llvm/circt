@@ -77,10 +77,9 @@ struct ExtractInstancesPass
   /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
   /// to that operation.
   InnerRefAttr getInnerRefTo(Operation *op) {
-    return ::getInnerRefTo(hw::InnerSymTarget(op),
-                           [&](FModuleOp mod) -> ModuleNamespace & {
-                             return getModuleNamespace(mod);
-                           });
+    return ::getInnerRefTo(op, [&](FModuleOp mod) -> ModuleNamespace & {
+      return getModuleNamespace(mod);
+    });
   }
 
   /// Create a clone of a `HierPathOp` with a new uniquified name.

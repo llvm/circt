@@ -286,8 +286,8 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
       auto namepath = nla.getNamepath().getValue();
       SmallVector<Attribute> newNamepath(namepath.begin(), namepath.end());
       if (!nla.isComponent())
-        newNamepath.back() = getInnerRefTo(
-            hw::InnerSymTarget(inst), [&](FModuleOp mod) -> ModuleNamespace & {
+        newNamepath.back() =
+            getInnerRefTo(inst, [&](FModuleOp mod) -> ModuleNamespace & {
               return getModuleNamespace(mod);
             });
       newNamepath.push_back(leafAttr);
