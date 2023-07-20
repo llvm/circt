@@ -41,7 +41,6 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
   void runOnOperation() override {
     LLVM_DEBUG(llvm::dbgs() << "\n Running Infer Read Write on module:"
                             << getOperation().getName());
-    ModuleNamespace modNamespace(getOperation());
     SmallVector<Operation *> opsToErase;
     for (MemOp memOp : llvm::make_early_inc_range(
              getOperation().getBodyBlock()->getOps<MemOp>())) {
@@ -70,7 +69,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
           continue;
         }
         // Append the annotations from the two ports.
-        if (!portAnno.cast<ArrayAttr>().empty())
+        if (!cast<ArrayAttr>(portAnno).empty())
           portAtts.push_back(memOp.getPortAnnotation(portIt.index()));
         // Get the port value.
         Value portVal = portIt.value();
@@ -121,8 +120,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
         continue;
 
       // Create the merged rw port for the new memory.
-      resultNames.push_back(
-          StringAttr::get(memOp.getContext(), modNamespace.newName("rw")));
+      resultNames.push_back(StringAttr::get(memOp.getContext(), "rw"));
       // Set the type of the rw port.
       resultTypes.push_back(MemOp::getTypeForPort(
           memOp.getDepth(), memOp.getDataType(), MemOp::PortKind::ReadWrite,
@@ -264,7 +262,7 @@ private:
       auto term = worklist.back();
       worklist.pop_back();
       terms.push_back(term);
-      if (term.isa<BlockArgument>())
+      if (isa<BlockArgument>(term))
         continue;
       TypeSwitch<Operation *>(term.getDefiningOp())
           .Case<NodeOp>([&](auto n) { worklist.push_back(n.getInput()); })
@@ -302,11 +300,11 @@ private:
     for (auto t1 : readTerms)
       for (auto t2 : writeTerms) {
         // Return t2, t1 is a Not of t2.
-        if (!t1.isa<BlockArgument>() && isa<NotPrimOp>(t1.getDefiningOp()))
+        if (!isa<BlockArgument>(t1) && isa<NotPrimOp>(t1.getDefiningOp()))
           if (cast<NotPrimOp>(t1.getDefiningOp()).getInput() == t2)
             return t2;
         // Else Return t2, if t2 is a Not of t1.
-        if (!t2.isa<BlockArgument>() && isa<NotPrimOp>(t2.getDefiningOp()))
+        if (!isa<BlockArgument>(t2) && isa<NotPrimOp>(t2.getDefiningOp()))
           if (cast<NotPrimOp>(t2.getDefiningOp()).getInput() == t1)
             return t2;
       }

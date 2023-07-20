@@ -24,13 +24,17 @@ async def initDut(dut):
 
 @cocotb.test()
 async def test1(dut):
+  dut.go.value = 0
   await initDut(dut)
 
   dut.arg0.value = 42
   dut.arg1.value = 24
   dut.go.value = 1
 
-  for i in range(3):
+  while dut.done != 1:
     await clock(dut)
+    dut.go.value = 0
+    dut.arg0.value = 0
+    dut.arg1.value = 0
 
   assert dut.out == 174, f"Expected 174, got {dut.out}"

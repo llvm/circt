@@ -79,10 +79,6 @@ getBackwardSliceSimple(Operation *rootOp, SetVector<Operation *> &backwardSlice,
 
     backwardSlice.insert(op);
   }
-
-  // Don't insert the top level operation, we just queried on it and don't
-  // want it in the results.
-  backwardSlice.remove(rootOp);
 }
 
 // Compute the ops defining the blocks a set of ops are in.
@@ -151,17 +147,20 @@ static StringAttr getNameForPort(Value val, ArrayAttr modulePorts) {
           return reg.getNameAttr();
       }
     } else if (auto inst = dyn_cast<hw::InstanceOp>(op)) {
-      for (auto [index, result] : llvm::enumerate(inst.getResults()))
-        if (result == val) {
-          SmallString<64> portName = inst.getInstanceName();
-          portName += ".";
-          auto resultName = inst.getResultName(index);
-          if (resultName && !resultName.getValue().empty())
-            portName += resultName.getValue();
-          else
-            Twine(index).toVector(portName);
-          return StringAttr::get(val.getContext(), portName);
-        }
+      auto index = val.cast<mlir::OpResult>().getResultNumber();
+      SmallString<64> portName = inst.getInstanceName();
+      portName += ".";
+      auto resultName = inst.getResultName(index);
+      if (resultName && !resultName.getValue().empty())
+        portName += resultName.getValue();
+      else
+        Twine(index).toVector(portName);
+      return StringAttr::get(val.getContext(), portName);
+    } else if (op->getNumResults() == 1) {
+      if (auto name = op->getAttrOfType<StringAttr>("name"))
+        return name;
+      if (auto namehint = op->getAttrOfType<StringAttr>("sv.namehint"))
+        return namehint;
     }
   }
 
@@ -559,9 +558,12 @@ private:
       return false;
 
     // Find the data-flow and structural ops to clone.  Result includes roots.
-    // Track dataflow until it reaches to design parts.
-    auto opsToClone = getBackwardSlice(
-        roots, [&](Operation *op) { return !opsInDesign.count(op); });
+    // Track dataflow until it reaches to design parts except for constants that
+    // can be cloned freely.
+    auto opsToClone = getBackwardSlice(roots, [&](Operation *op) {
+      return !opsInDesign.count(op) ||
+             op->hasTrait<mlir::OpTrait::ConstantLike>();
+    });
 
     // Find the dataflow into the clone set
     SetVector<Value> inputs;
@@ -686,10 +688,6 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       if (!anyThingExtracted)
         continue;
 
-      // Inline any modules that only have inputs for test code.
-      if (!disableModuleInlining && anyThingExtracted)
-        inlineInputOnly(rtlmod, *instanceGraph, bindTable, opsToErase);
-
       // Here, erase extracted operations as well as dead operations.
       // `opsToErase` includes extracted operations but doesn't contain all
       // dead operations. Even though it's not ideal to perform non-trivial DCE
@@ -712,9 +710,20 @@ void SVExtractTestCodeImplPass::runOnOperation() {
 
       // Walk the module and add dead operations to `opsToErase`.
       op.walk([&](Operation *operation) {
-        if (&op != operation && !opsAlive.count(operation))
+        // Skip the module itself.
+        if (&op == operation)
+          return;
+
+        // Update `opsToErase`.
+        if (opsAlive.count(operation))
+          opsToErase.erase(operation);
+        else
           opsToErase.insert(operation);
       });
+
+      // Inline any modules that only have inputs for test code.
+      if (!disableModuleInlining && anyThingExtracted)
+        inlineInputOnly(rtlmod, *instanceGraph, bindTable, opsToErase);
 
       numOpsErased += opsToErase.size();
       while (!opsToErase.empty()) {

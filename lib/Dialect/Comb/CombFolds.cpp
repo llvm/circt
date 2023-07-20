@@ -82,6 +82,13 @@ static OpTy replaceOpWithNewOpAndCopyName(PatternRewriter &rewriter,
   return newOp;
 }
 
+// Return true if the op has SV attributes. Note that we cannot use a helper
+// function `hasSVAttributes` defined under SV dialect because of a cyclic
+// dependency.
+static bool hasSVAttributes(Operation *op) {
+  return op->hasAttr("sv.attributes");
+}
+
 namespace {
 template <typename SubType>
 struct ComplementMatcher {
@@ -214,6 +221,7 @@ static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
                                                       inop, range.first));
   }
   Value newop = rewriter.createOrFold<OpTy>(op.getLoc(), newType, args);
+  newop.getDefiningOp()->setDialectAttrs(op->getDialectAttrs());
   if (range.first)
     newop = rewriter.createOrFold<ConcatOp>(
         op.getLoc(), newop,
@@ -225,7 +233,7 @@ static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
         rewriter.create<hw::ConstantOp>(
             op.getLoc(), APInt::getZero(opType.getWidth() - range.second - 1)),
         newop);
-  replaceOpAndCopyName(rewriter, op, newop);
+  rewriter.replaceOp(op, newop);
   return true;
 }
 
@@ -1445,6 +1453,19 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
   if (narrowOperationWidth(op, false, rewriter))
     return success();
 
+  // add(add(x, c1), c2) -> add(x, c1 + c2)
+  auto addOp = inputs[0].getDefiningOp<comb::AddOp>();
+  if (addOp && addOp.getInputs().size() == 2 &&
+      matchPattern(addOp.getInputs()[1], m_ConstantInt(&value2)) &&
+      inputs.size() == 2 && matchPattern(inputs[1], m_ConstantInt(&value))) {
+
+    auto rhs = rewriter.create<hw::ConstantOp>(op.getLoc(), value + value2);
+    replaceOpWithNewOpAndCopyName<AddOp>(
+        rewriter, op, op.getType(), ArrayRef<Value>{addOp.getInputs()[0], rhs},
+        /*twoState=*/op.getTwoState() && addOp.getTwoState());
+    return success();
+  }
+
   return failure();
 }
 
@@ -2215,6 +2236,9 @@ struct MuxRewriter : public mlir::OpRewritePattern<MuxOp> {
 
 LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
                                            PatternRewriter &rewriter) const {
+  // If the op has a SV attribute, don't optimize it.
+  if (hasSVAttributes(op))
+    return failure();
   APInt value;
 
   if (matchPattern(op.getTrueValue(), m_ConstantInt(&value))) {
@@ -2386,8 +2410,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
       trueMux && falseMux && trueMux.getCond() == falseMux.getCond() &&
       trueMux.getTrueValue() == falseMux.getTrueValue()) {
     auto subMux = rewriter.create<MuxOp>(
-        rewriter.getFusedLoc(trueMux.getLoc(), falseMux.getLoc()), op.getCond(),
-        trueMux.getFalseValue(), falseMux.getFalseValue());
+        rewriter.getFusedLoc({trueMux.getLoc(), falseMux.getLoc()}),
+        op.getCond(), trueMux.getFalseValue(), falseMux.getFalseValue());
     replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, trueMux.getCond(),
                                          trueMux.getTrueValue(), subMux,
                                          op.getTwoStateAttr());
@@ -2400,8 +2424,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
       trueMux && falseMux && trueMux.getCond() == falseMux.getCond() &&
       trueMux.getFalseValue() == falseMux.getFalseValue()) {
     auto subMux = rewriter.create<MuxOp>(
-        rewriter.getFusedLoc(trueMux.getLoc(), falseMux.getLoc()), op.getCond(),
-        trueMux.getTrueValue(), falseMux.getTrueValue());
+        rewriter.getFusedLoc({trueMux.getLoc(), falseMux.getLoc()}),
+        op.getCond(), trueMux.getTrueValue(), falseMux.getTrueValue());
     replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, trueMux.getCond(),
                                          subMux, trueMux.getFalseValue(),
                                          op.getTwoStateAttr());
@@ -2460,7 +2484,7 @@ static bool foldArrayOfMuxes(hw::ArrayCreateOp op, PatternRewriter &rewriter) {
   // Check the operands to the array create.  Ensure all of them are the
   // same op with the same number of operands.
   auto first = inputs[0].getDefiningOp<comb::MuxOp>();
-  if (!first)
+  if (!first || hasSVAttributes(first))
     return false;
 
   // Check whether all operands are muxes with the same condition.

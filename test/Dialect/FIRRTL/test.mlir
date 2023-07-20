@@ -246,6 +246,52 @@ firrtl.module @OpenAggTest(in %in: !firrtl.openbundle<a: bundle<data: uint<1>>, 
 // CHECK-LABEL: StringTest
 // CHECK-SAME:  (in %in: !firrtl.string, out %out: !firrtl.string)
 firrtl.module @StringTest(in %in: !firrtl.string, out %out: !firrtl.string) {
-  firrtl.connect %out, %in : !firrtl.string, !firrtl.string
+  firrtl.propassign %out, %in : !firrtl.string
+  // CHECK: %0 = firrtl.string "hello"
+  %0 = firrtl.string "hello"
 }
+
+// CHECK-LABEL: BigIntTest
+// CHECK-SAME:  (in %in: !firrtl.bigint, out %out: !firrtl.bigint)
+firrtl.module @BigIntTest(in %in: !firrtl.bigint, out %out: !firrtl.bigint) {
+  firrtl.propassign %out, %in : !firrtl.bigint
+
+  // CHECK: %0 = firrtl.bigint 4
+  %0 = firrtl.bigint 4
+  // CHECK: %1 = firrtl.bigint -4
+  %1 = firrtl.bigint -4
+}
+
+// CHECK-LABEL: ListTest
+// CHECK-SAME:  (in %in: !firrtl.list<string>, out %out: !firrtl.list<string>)
+firrtl.module @ListTest(in %in: !firrtl.list<string>, out %out: !firrtl.list<string>) {
+  firrtl.propassign %out, %in : !firrtl.list<string>
+}
+
+// CHECK-LABEL: MapTest
+// CHECK-SAME:  (in %in: !firrtl.map<bigint, string>, out %out: !firrtl.map<bigint, string>)
+firrtl.module @MapTest(in %in: !firrtl.map<bigint, string>, out %out: !firrtl.map<bigint, string>) {
+  firrtl.propassign %out, %in : !firrtl.map<bigint, string>
+}
+
+// CHECK-LABEL: PropertyNestedTest
+// CHECK-SAME:  (in %in: !firrtl.map<bigint, list<map<string, bigint>>>, out %out: !firrtl.map<bigint, list<map<string, bigint>>>)
+firrtl.module @PropertyNestedTest(in %in: !firrtl.map<bigint, list<map<string, bigint>>>, out %out: !firrtl.map<bigint, list<map<string, bigint>>>) {
+  firrtl.propassign %out, %in : !firrtl.map<bigint, list<map<string, bigint>>>
+}
+
+// CHECK-LABEL: TypeAlias
+// CHECK-SAME: %in: !firrtl.alias<bar, uint<1>>
+// CHECK-SAME: %const: !firrtl.const.alias<baz, const.uint<1>>
+// CHECK-SAME: %r: !firrtl.openbundle<a: alias<baz, uint<1>>>
+// CHECK-SAME: %out: !firrtl.alias<foo, uint<1>>
+// CHECK-NEXT: firrtl.strictconnect %out, %in : !firrtl.alias<foo, uint<1>>, !firrtl.alias<bar, uint<1>>
+
+firrtl.module @TypeAlias(in %in: !firrtl.alias<bar, uint<1>>,
+                         in %const: !firrtl.const.alias<baz, const.uint<1>>,
+                         out %r : !firrtl.openbundle<a: alias<baz, uint<1>>>,
+                         out %out: !firrtl.alias<foo, uint<1>>) {
+  firrtl.strictconnect %out, %in: !firrtl.alias<foo, uint<1>>, !firrtl.alias<bar, uint<1>>
+}
+
 }

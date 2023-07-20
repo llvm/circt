@@ -268,7 +268,7 @@ class BaseSubfieldOp<string name, Type btype, Type rtype> : FIRRTLExprOp<name> {
 
   let builders = [
     OpBuilder<(ins "Value":$input, "StringRef":$fieldName), [{
-      auto bundleType = input.getType().cast<}] # btype # [{>();
+      auto bundleType = firrtl::type_cast<}] # btype # [{>(input.getType());
       auto fieldIndex = bundleType.getElementIndex(fieldName);
       assert(fieldIndex.has_value() && "subfield operation to unknown field");
       return build($_builder, $_state, input, *fieldIndex);
@@ -393,7 +393,7 @@ def IsTagOp : FIRRTLExprOp<"istag"> {
   let hasCustomAssemblyFormat = 1;
   let builders = [
     OpBuilder<(ins "Value":$input, "StringRef":$fieldName), [{
-      auto enumType = input.getType().cast<FEnumType>();
+      auto enumType = firrtl::type_cast<FEnumType>(input.getType());
       auto fieldIndex = enumType.getElementIndex(fieldName);
       assert(fieldIndex.has_value() && "subtag operation to unknown field");
       return build($_builder, $_state, input, *fieldIndex);
@@ -403,13 +403,13 @@ def IsTagOp : FIRRTLExprOp<"istag"> {
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType().cast<FEnumType>()
+      return FieldRef(getInput(), firrtl::type_cast<FEnumType>(getInput().getType())
                                             .getFieldID(getFieldIndex()));
     }
 
     /// Return the name of the accessed field.
     StringAttr getFieldNameAttr() {
-      return getInput().getType().cast<FEnumType>()
+      return firrtl::type_cast<FEnumType>(getInput().getType())
         .getElementNameAttr(getFieldIndex());
     }
 
@@ -437,7 +437,7 @@ def SubtagOp : FIRRTLExprOp<"subtag"> {
 
   let builders = [
     OpBuilder<(ins "Value":$input, "StringRef":$fieldName), [{
-      auto enumType = input.getType().cast<FEnumType>();
+      auto enumType = firrtl::type_cast<FEnumType>(input.getType());
       auto fieldIndex = enumType.getElementIndex(fieldName);
       assert(fieldIndex.has_value() && "subtag operation to unknown field");
       return build($_builder, $_state, input, *fieldIndex);
@@ -537,8 +537,8 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
     static FIRRTLType inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
                                       std::optional<Location> loc) {
-      return $_infer(operands[0].getType().cast<FIRRTLType>(),
-                     operands[1].getType().cast<FIRRTLType>(),
+      return $_infer(firrtl::type_cast<FIRRTLType>(operands[0].getType()),
+                     firrtl::type_cast<FIRRTLType>(operands[1].getType()),
                      loc);
     }
   }]);
@@ -654,7 +654,7 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
     static FIRRTLType inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
                                       std::optional<Location> loc) {
-      return $_infer(operands[0].getType().cast<FIRRTLType>(), loc);
+      return $_infer(firrtl::type_cast<FIRRTLType>(operands[0].getType()), loc);
     }
   }]);
 
@@ -663,37 +663,41 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
 
 def SizeOfIntrinsicOp : UnaryPrimOp<"int.sizeof", FIRRTLBaseType, UInt32Type>;
 
-def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLBaseType, SIntType>;
-def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLBaseType, UIntType>;
+let hasCanonicalizer=1 in {
+  def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLBaseType, SIntType>;
+  def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLBaseType, UIntType>;
+  def CvtPrimOp : UnaryPrimOp<"cvt", IntType, SIntType>;
+}
 def AsAsyncResetPrimOp
   : UnaryPrimOp<"asAsyncReset", OneBitCastableType, AsyncResetType>;
 def AsClockPrimOp : UnaryPrimOp<"asClock", OneBitCastableType, ClockType>;
-def CvtPrimOp : UnaryPrimOp<"cvt", IntType, SIntType>;
 def NegPrimOp : UnaryPrimOp<"neg", IntType, SIntType>;
 let hasCanonicalizer = true in
 def NotPrimOp : UnaryPrimOp<"not", IntType, UIntType>;
 
 let inferType = "impl::inferReductionResult" in {
-  def AndRPrimOp : UnaryPrimOp<"andr", IntType, UInt1Type> {
-    let description = [{
-      Horizontally reduce a value to one bit, using the 'and' operation to merge
-      bits.  `andr(x)` is equivalent to `concat(x, 1b1) == ~0`.  As such, it
-      returns 1 for zero-bit-wide operands.
-    }];
-  }
-  def OrRPrimOp : UnaryPrimOp<"orr", IntType, UInt1Type> {
-    let description = [{
-      Horizontally reduce a value to one bit, using the 'or' operation to merge
-      bits.  `orr(x)` is equivalent to `concat(x, 1b0) != 0`.  As such, it
-      returns 0 for zero-bit-wide operands.
-    }];
-  }
-  def XorRPrimOp : UnaryPrimOp<"xorr", IntType, UInt1Type> {
-    let description = [{
-      Horizontally reduce a value to one bit, using the 'xor' operation to merge
-      bits.  `xorr(x)` is equivalent to `popcount(concat(x, 1b0)) & 1`.  As
-      such, it returns 0 for zero-bit-wide operands.
-    }];
+  let hasCanonicalizer = 1 in {
+    def AndRPrimOp : UnaryPrimOp<"andr", IntType, UInt1Type> {
+      let description = [{
+        Horizontally reduce a value to one bit, using the 'and' operation to merge
+        bits.  `andr(x)` is equivalent to `concat(x, 1b1) == ~0`.  As such, it
+        returns 1 for zero-bit-wide operands.
+      }];
+    }
+    def OrRPrimOp : UnaryPrimOp<"orr", IntType, UInt1Type> {
+      let description = [{
+        Horizontally reduce a value to one bit, using the 'or' operation to merge
+        bits.  `orr(x)` is equivalent to `concat(x, 1b0) != 0`.  As such, it
+        returns 0 for zero-bit-wide operands.
+      }];
+    }
+    def XorRPrimOp : UnaryPrimOp<"xorr", IntType, UInt1Type> {
+      let description = [{
+        Horizontally reduce a value to one bit, using the 'xor' operation to merge
+        bits.  `xorr(x)` is equivalent to `popcount(concat(x, 1b0)) & 1`.  As
+        such, it returns 0 for zero-bit-wide operands.
+      }];
+    }
   }
 }
 
@@ -799,6 +803,49 @@ def TailPrimOp : PrimOp<"tail"> {
 
   let hasCanonicalizeMethod = true;
   let parseValidator = "impl::validateOneOperandOneConst";
+}
+
+//===----------------------------------------------------------------------===//
+// Target Specific Intrinsics
+//===----------------------------------------------------------------------===//
+
+def Mux2CellIntrinsicOp : PrimOp<"int.mux2cell"> {
+  let summary = [{
+    an intrinsic lowered into 2-to-1 MUX cell in synthesis tools.
+  }];
+
+  let description = [{
+    This intrinsic exposes a low-level API to use 2-to-1 MUX cell in backend
+    synthesis tool. At FIRRTL level, this operation participates
+    the inference process in the same way as a normal mux operation.
+  }];
+
+  let arguments = (ins UInt1OrUnsizedType:$sel, PassiveType:$high,
+                       PassiveType:$low);
+  let results = (outs PassiveType:$result);
+
+  let assemblyFormat =
+    "`(` operands `)` attr-dict `:` functional-type(operands, $result)";
+}
+
+def Mux4CellIntrinsicOp : PrimOp<"int.mux4cell"> {
+  let summary = [{
+    an intrinsic lowered into 4-to-1 MUX cell in synthesis tools.
+  }];
+
+  let description = [{
+    This intrinsic exposes a low-level API to use 4-to-1 MUX cell in backend
+    synthesis tool. At FIRRTL level, this operation participates
+    the inference process as a sugar of mux operation chains.
+  }];
+
+  let arguments = (ins UInt2OrUnsizedType:$sel, PassiveType:$v3,
+                       PassiveType:$v2, PassiveType:$v1,
+                       PassiveType:$v0);
+  let results = (outs PassiveType:$result);
+
+  let assemblyFormat =
+    "`(` operands `)` attr-dict `:` functional-type(operands, $result)";
 }
 
 //===----------------------------------------------------------------------===//
@@ -932,19 +979,6 @@ def UninferredResetCastOp : FIRRTLOp<"resetCast", [HasCustomSSAName, Pure, SameG
     "$input attr-dict `:` functional-type($input, $result)";
 }
 
-def UninferredWidthCastOp : FIRRTLOp<"widthCast", [HasCustomSSAName, Pure, SameGroundTypeOperandConstness<"input", "result">]> {
-  let description = [{
-    Cast between sized and unsized integer types.  This is used to enable
-    strictconnects early in the pipeline by isolating all uninferred width
-    connections to a single op.
-  }];
-  let arguments = (ins IntType:$input);
-  let results = (outs IntType:$result);
-  let hasFolder = 1;
-  let assemblyFormat =
-    "$input attr-dict `:` functional-type($input, $result)";
-}
-
 def ConstCastOp : FIRRTLOp<"constCast", [HasCustomSSAName, Pure]> {
   let description = [{
     Cast from a 'const' to a non-'const' type.
@@ -990,6 +1024,41 @@ def BitCastOp: FIRRTLOp<"bitcast", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Properties
+//===----------------------------------------------------------------------===//
+
+def StringConstantOp : FIRRTLOp<"string", [Pure, ConstantLike]> {
+  let summary = "Produce a constant string value";
+  let description = [{
+    Produces a constant value of string type.
+
+    Example:
+    ```mlir
+    %0 = firrtl.string "hello world"
+    ```
+  }];
+  let arguments = (ins StrAttr:$value);
+  let results = (outs StringType:$result);
+  let hasFolder = 1;
+  let assemblyFormat = "$value attr-dict";
+}
+
+def BigIntConstantOp : FIRRTLOp<"bigint", [Pure, ConstantLike]> {
+  let summary = "Produce a constant bigint value";
+  let description = [{
+    Produces a constant value of bigint type.
+
+    Example:
+    ```mlir
+    %0 = firrtl.bigint 42
+    ```
+  }];
+  let arguments = (ins APSIntAttr:$value);
+  let results = (outs BigIntType:$result);
+  let hasCustomAssemblyFormat = true;
+}
+
+//===----------------------------------------------------------------------===//
 // RefOperations: Operations on the RefType.
 //
 // The RefType is used to capture dataflow paths.
@@ -1014,6 +1083,29 @@ def BitCastOp: FIRRTLOp<"bitcast", [Pure]> {
 //===----------------------------------------------------------------------===//
 // RefOps
 //===----------------------------------------------------------------------===//
+
+def RefCastOp : FIRRTLOp<"ref.cast",
+    [HasCustomSSAName,
+     Pure,
+     CompatibleRefTypes<"result","input">]> {
+  let summary = "Cast between compatible reference types";
+  let description = [{
+    Losslessly cast between compatible reference types.
+    Source and destination must be recursively identical or destination
+    has uninferred variants of the corresponding element in source.
+    ```
+      %result = firrtl.ref.cast %ref : (t1) -> t2
+    ```
+    }];
+
+  let arguments = (ins RefType:$input);
+  let results = (outs RefType:$result);
+
+  let hasFolder = 1;
+
+  let assemblyFormat =
+     "$input attr-dict `:` functional-type($input, $result)";
+}
 
 def RefResolveOp: FIRRTLExprOp<"ref.resolve",
                               [RefTypeConstraint<"ref","result">]> {

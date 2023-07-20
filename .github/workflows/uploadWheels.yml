@@ -4,6 +4,8 @@ on:
   release:
     types: [created]
   workflow_dispatch:
+  schedule:
+    - cron: 0 12 * * *
 
 jobs:
   build_wheels:
@@ -11,6 +13,7 @@ jobs:
     runs-on: ${{ matrix.config.os }}
     if: github.repository == 'llvm/circt'
     strategy:
+      fail-fast: false
       matrix:
         config:
           - os: ubuntu-20.04
@@ -35,7 +38,7 @@ jobs:
 
       - name: Unshallow CIRCT
         run: |
-          git fetch --unshallow --tags --no-recurse-submodules
+          git fetch --force --unshallow --tags --no-recurse-submodules
 
       - name: Setup Python
         uses: actions/setup-python@v3
@@ -51,16 +54,33 @@ jobs:
           CIBW_BUILD_FRONTEND: build
           SETUPTOOLS_SCM_DEBUG: True
 
-      - name: Upload wheels (Non-Tag)
+      - name: Upload (stage) wheels as artifacts
         uses: actions/upload-artifact@v3
-        if: github.ref_type != 'tag'
         with:
+          name: python-wheels
           path: ./wheelhouse/*.whl
           retention-days: 7
+          if-no-files-found: error
 
-      - name: Upload wheels (Tag)
+  push_wheels:
+    name: Push wheels (Tag or Nightly)
+    runs-on: ubuntu-20.04
+    if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'schedule')
+    needs: build_wheels
+
+    steps:
+      - name: Download wheels
+        uses: actions/download-artifact@v3
+        with:
+          name: python-wheels
+          path: ./wheelhouse/
+
+      - name: List downloaded wheels
+        run: ls -laR
+        working-directory: ./wheelhouse/
+
+      - name: Upload wheels to pypi
         uses: pypa/gh-action-pypi-publish@release/v1
-        if: github.ref_type == 'tag'
         with:
           password: ${{ secrets.PYPI_CIRCT_API_TOKEN }}
           packages-dir: wheelhouse/

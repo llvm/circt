@@ -50,12 +50,17 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
   let hasCanonicalizer = true;
 }
 
-def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]> {
+def SameAnonTypeOperands: PredOpTrait<
+        "operands must be structurally equivalent",
+        CPred<"areAnonymousTypesEquivalent(getOperand(0).getType(), getOperand(1).getType())">>;
+def StrictConnectOp : FIRRTLOp<"strictconnect", [FConnectLike,
+                      SameAnonTypeOperands]> {
   let summary = "Connect two signals";
   let description =  [{
     Connect two values with strict constraints:
     ```
       firrtl.strictconnect %dest, %src : t1
+      firrtl.strictconnect %dest, %src : t1, !firrtl.alias<foo, t1>
     ```
     }];
 
@@ -65,9 +70,8 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]
   let hasCanonicalizeMethod = true;
 
   let hasVerifier = 1;
-
-  let assemblyFormat =
-    "$dest `,` $src  attr-dict `:` qualified(type($dest))";
+  let assemblyFormat = [{$dest `,` $src  attr-dict `:`
+      custom<OptionalBinaryOpTypes>(type($dest), type($src))}];
 }
 
 def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {
@@ -263,11 +267,33 @@ def MatchOp : FIRRTLOp<"match", [SingleBlock, NoTerminator,
 
   let extraClassDeclaration = [{
     IntegerAttr getFieldIndexAttr(size_t caseIndex) {
-      return getTags()[caseIndex].cast<IntegerAttr>();
+      return cast<IntegerAttr>(getTags()[caseIndex]);
     }
 
     uint32_t getFieldIndex(size_t caseIndex) {
       return getFieldIndexAttr(caseIndex).getUInt();
+    }
+  }];
+}
+
+def PropAssignOp : FIRRTLOp<"propassign", [FConnectLike, SameTypeOperands,
+                                           HasParent<"FModuleOp">]> {
+  let summary = "Assign to a sink property value.";
+  let description = [{
+    Assign an output property value. The types must match exactly.
+
+    Example:
+    ```mlir
+      firrtl.propassign %dest, %src : !firrtl.string
+    ```
+    }];
+  let arguments = (ins PropertyType:$dest, PropertyType:$src);
+  let results = (outs);
+  let hasVerifier = 1;
+  let assemblyFormat = "$dest `,` $src attr-dict `:` qualified(type($dest))";
+  let extraClassDeclaration = [{
+    static ConnectBehaviorKind getConnectBehaviorKind() {
+      return ConnectBehaviorKind::StaticSingleConnect;
     }
   }];
 }
@@ -297,7 +323,7 @@ def ProbeOp : FIRRTLOp<"probe"> {
 class ForceRefTypeConstraint<string ref, string base>
   : TypesMatchWith<"reference type of " # ref # " should be RWProbe of " # base,
                    base, ref,
-                   "RefType::get($_self.cast<FIRRTLBaseType>(), true)">;
+                   "RefType::get(firrtl::type_cast<FIRRTLBaseType>($_self).getAllConstDroppedType(), true)">;
 
 def RefForceOp : FIRRTLOp<"ref.force",[ForceRefTypeConstraint<"dest", "src">]> {
   let summary = "FIRRTL force statement";
@@ -305,6 +331,7 @@ def RefForceOp : FIRRTLOp<"ref.force",[ForceRefTypeConstraint<"dest", "src">]> {
   let arguments = (ins ClockType:$clock, UInt1Type:$predicate, RWProbe:$dest, FIRRTLBaseType:$src);
   let assemblyFormat =
     "$clock `,` $predicate `,` $dest `,` $src attr-dict `:` type($clock) `,` type($predicate) `,` qualified(type($src))";
+  let hasCanonicalizer = 1;
 }
 def RefForceInitialOp : FIRRTLOp<"ref.force_initial",[ForceRefTypeConstraint<"dest", "src">]> {
   let summary = "FIRRTL force_initial statement";
@@ -312,6 +339,7 @@ def RefForceInitialOp : FIRRTLOp<"ref.force_initial",[ForceRefTypeConstraint<"de
   let arguments = (ins UInt1Type:$predicate, RWProbe:$dest, FIRRTLBaseType:$src);
   let assemblyFormat =
     "$predicate `,` $dest `,` $src attr-dict `:` type($predicate) `,` qualified(type($src))";
+  let hasCanonicalizer = 1;
 }
 def RefReleaseOp : FIRRTLOp<"ref.release"> {
   let summary = "FIRRTL release statement";
@@ -319,12 +347,14 @@ def RefReleaseOp : FIRRTLOp<"ref.release"> {
   let arguments = (ins ClockType:$clock, UInt1Type:$predicate, RWProbe:$dest);
   let assemblyFormat =
     "$clock `,` $predicate `,` $dest attr-dict `:` type($clock) `,` type($predicate) `,` qualified(type($dest))";
+  let hasCanonicalizer = 1;
 }
 def RefReleaseInitialOp : FIRRTLOp<"ref.release_initial"> {
   let summary = "FIRRTL release_initial statement";
   let description = "Release the target RWProbe.";
   let arguments = (ins UInt1Type:$predicate, RWProbe:$dest);
   let assemblyFormat = "$predicate `,` $dest attr-dict `:` type($predicate) `,` qualified(type($dest))";
+  let hasCanonicalizer = 1;
 }
 
 //===----------------------------------------------------------------------===//

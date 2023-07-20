@@ -51,7 +51,7 @@ struct PortInfo {
   bool isOutput() {
     if (direction != Direction::Out)
       return false;
-    if (type.isa<FIRRTLType>())
+    if (isa<FIRRTLType>(type))
       return !isInOut();
     return true;
   }
@@ -61,7 +61,7 @@ struct PortInfo {
   bool isInput() {
     if (direction != Direction::In)
       return false;
-    if (type.isa<FIRRTLType>())
+    if (isa<FIRRTLType>(type))
       return !isInOut();
     return true;
   }

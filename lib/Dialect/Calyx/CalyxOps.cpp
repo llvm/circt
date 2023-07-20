@@ -25,6 +25,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/PriorityQueue.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
@@ -34,6 +35,16 @@
 using namespace circt;
 using namespace circt::calyx;
 using namespace mlir;
+
+namespace {
+
+// A struct to enforce that the LHS template is one of the RHS templates.
+// For example:
+//   std::is_any<uint32_t, uint16_t, float, int32_t>::value is false.
+template <class T, class... Ts>
+struct IsAny : std::disjunction<std::is_same<T, Ts>...> {};
+
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Utilities related to Direction
@@ -67,8 +78,9 @@ struct CollapseUnaryControl : mlir::OpRewritePattern<CtrlOp> {
   LogicalResult matchAndRewrite(CtrlOp ctrlOp,
                                 PatternRewriter &rewriter) const override {
     auto &ops = ctrlOp.getBodyBlock()->getOperations();
-    bool isUnaryControl = (ops.size() == 1) && isa<EnableOp>(ops.front()) &&
-                          isa<SeqOp, ParOp>(ctrlOp->getParentOp());
+    bool isUnaryControl =
+        (ops.size() == 1) && isa<EnableOp>(ops.front()) &&
+        isa<SeqOp, ParOp, StaticSeqOp, StaticParOp>(ctrlOp->getParentOp());
     if (!isUnaryControl)
       return failure();
 
@@ -134,12 +146,26 @@ PortInfo calyx::getPortInfo(BlockArgument arg) {
 
 /// Returns whether the given operation has a control region.
 static bool hasControlRegion(Operation *op) {
-  return isa<ControlOp, SeqOp, IfOp, WhileOp, ParOp>(op);
+  return isa<ControlOp, SeqOp, IfOp, RepeatOp, WhileOp, ParOp, StaticRepeatOp,
+             StaticParOp, StaticSeqOp, StaticIfOp>(op);
+}
+
+/// Returns whether the given operation is a static control operator
+static bool isStaticControl(Operation *op) {
+  if (isa<EnableOp>(op)) {
+    // for enables, we need to check whether its corresponding group is static
+    auto component = op->getParentOfType<ComponentOp>();
+    auto enableOp = llvm::cast<EnableOp>(op);
+    StringRef groupName = enableOp.getGroupName();
+    auto group = component.getWiresOp().lookupSymbol<GroupInterface>(groupName);
+    return isa<StaticGroupOp>(group);
+  }
+  return isa<StaticIfOp, StaticSeqOp, StaticRepeatOp, StaticParOp>(op);
 }
 
 /// Verifies the body of a ControlLikeOp.
 static LogicalResult verifyControlBody(Operation *op) {
-  if (isa<SeqOp, ParOp>(op))
+  if (isa<SeqOp, ParOp, StaticSeqOp, StaticParOp>(op))
     // This does not apply to sequential and parallel regions.
     return success();
 
@@ -211,7 +237,8 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto &region = op->getRegion(0);
   // Operations that are allowed in the body of a ControlLike op.
   auto isValidBodyOp = [](Operation *operation) {
-    return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp>(operation);
+    return isa<EnableOp, InvokeOp, SeqOp, IfOp, RepeatOp, WhileOp, ParOp,
+               StaticParOp, StaticRepeatOp, StaticSeqOp, StaticIfOp>(operation);
   };
   for (auto &&bodyOp : region.front()) {
     if (isValidBodyOp(&bodyOp))
@@ -222,6 +249,15 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
            << ", which is not allowed in this control-like operation";
   }
   return verifyControlBody(op);
+}
+
+LogicalResult calyx::verifyIf(Operation *op) {
+  auto ifOp = dyn_cast<IfInterface>(op);
+
+  if (ifOp.elseBodyExists() && ifOp.getElseBody()->empty())
+    return ifOp->emitOpError() << "empty 'else' region.";
+
+  return success();
 }
 
 // Helper function for parsing a group port operation, i.e. GroupDoneOp and
@@ -257,8 +293,7 @@ static ParseResult parseGroupPort(OpAsmParser &parser, OperationState &result) {
 // A helper function for printing group ports, i.e. GroupGoOp and GroupDoneOp.
 template <typename GroupPortType>
 static void printGroupPort(OpAsmPrinter &p, GroupPortType op) {
-  static_assert(std::is_same<GroupGoOp, GroupPortType>() ||
-                    std::is_same<GroupDoneOp, GroupPortType>(),
+  static_assert(IsAny<GroupPortType, GroupGoOp, GroupDoneOp>(),
                 "Should be a Calyx Group port.");
 
   p << " ";
@@ -274,8 +309,8 @@ static void printGroupPort(OpAsmPrinter &p, GroupPortType op) {
 template <typename OpTy>
 static LogicalResult collapseControl(OpTy controlOp,
                                      PatternRewriter &rewriter) {
-  static_assert(std::is_same<SeqOp, OpTy>() || std::is_same<ParOp, OpTy>(),
-                "Should be a SeqOp or ParOp.");
+  static_assert(IsAny<OpTy, SeqOp, ParOp, StaticSeqOp, StaticParOp>(),
+                "Should be a SeqOp, ParOp, StaticSeqOp, or StaticParOp");
 
   if (isa<OpTy>(controlOp->getParentOp())) {
     Block *controlBody = controlOp.getBodyBlock();
@@ -304,7 +339,7 @@ static LogicalResult emptyControl(OpTy controlOp, PatternRewriter &rewriter) {
 template <typename OpTy>
 static void eraseControlWithGroupAndConditional(OpTy op,
                                                 PatternRewriter &rewriter) {
-  static_assert(std::is_same<OpTy, IfOp>() || std::is_same<OpTy, WhileOp>(),
+  static_assert(IsAny<OpTy, IfOp, WhileOp>(),
                 "This is only applicable to WhileOp and IfOp.");
 
   // Save information about the operation, and erase it.
@@ -321,6 +356,23 @@ static void eraseControlWithGroupAndConditional(OpTy op,
       rewriter.eraseOp(group);
   }
   // Check the conditional after the Group, since it will be driven within.
+  if (!cond.isa<BlockArgument>() && cond.getDefiningOp()->use_empty())
+    rewriter.eraseOp(cond.getDefiningOp());
+}
+
+/// A helper function to check whether the conditional needs to be erased
+/// to maintain a valid state of a Calyx program. If these
+/// have no more uses, they will be erased.
+template <typename OpTy>
+static void eraseControlWithConditional(OpTy op, PatternRewriter &rewriter) {
+  static_assert(std::is_same<OpTy, StaticIfOp>(),
+                "This is only applicable to StatifIfOp.");
+
+  // Save information about the operation, and erase it.
+  Value cond = op.getCond();
+  rewriter.eraseOp(op);
+
+  // Check if conditional is still needed, and remove if it isn't
   if (!cond.isa<BlockArgument>() && cond.getDefiningOp()->use_empty())
     rewriter.eraseOp(cond.getDefiningOp());
 }
@@ -839,6 +891,13 @@ void CombComponentOp::getAsmBlockArgumentNames(
 //===----------------------------------------------------------------------===//
 LogicalResult ControlOp::verify() { return verifyControlBody(*this); }
 
+// Get the InvokeOps of this ControlOp.
+SmallVector<InvokeOp, 4> ControlOp::getInvokeOps() {
+  SmallVector<InvokeOp, 4> ret;
+  this->walk([&](InvokeOp invokeOp) { ret.push_back(invokeOp); });
+  return ret;
+}
+
 //===----------------------------------------------------------------------===//
 // SeqOp
 //===----------------------------------------------------------------------===//
@@ -848,6 +907,27 @@ void SeqOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
   patterns.add(collapseControl<SeqOp>);
   patterns.add(emptyControl<SeqOp>);
   patterns.insert<CollapseUnaryControl<SeqOp>>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// StaticSeqOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StaticSeqOp::verify() {
+  // StaticSeqOp should only have static control in it
+  auto &ops = (*this).getBodyBlock()->getOperations();
+  if (!llvm::all_of(ops, [&](Operation &op) { return isStaticControl(&op); })) {
+    return emitOpError("StaticSeqOp has non static control within it");
+  }
+
+  return success();
+}
+
+void StaticSeqOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                              MLIRContext *context) {
+  patterns.add(collapseControl<StaticSeqOp>);
+  patterns.add(emptyControl<StaticSeqOp>);
+  patterns.insert<CollapseUnaryControl<StaticSeqOp>>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -875,6 +955,41 @@ void ParOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
   patterns.add(collapseControl<ParOp>);
   patterns.add(emptyControl<ParOp>);
   patterns.insert<CollapseUnaryControl<ParOp>>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// StaticParOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StaticParOp::verify() {
+  llvm::SmallSet<StringRef, 8> groupNames;
+
+  // Add loose requirement that the body of a ParOp may not enable the same
+  // Group more than once, e.g. calyx.par { calyx.enable @G calyx.enable @G }
+  for (EnableOp op : getBodyBlock()->getOps<EnableOp>()) {
+    StringRef groupName = op.getGroupName();
+    if (groupNames.count(groupName))
+      return emitOpError() << "cannot enable the same group: \"" << groupName
+                           << "\" more than once.";
+    groupNames.insert(groupName);
+  }
+
+  // static par must only have static control in it
+  auto &ops = (*this).getBodyBlock()->getOperations();
+  for (Operation &op : ops) {
+    if (!isStaticControl(&op)) {
+      return op.emitOpError("StaticParOp has non static control within it");
+    }
+  }
+
+  return success();
+}
+
+void StaticParOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                              MLIRContext *context) {
+  patterns.add(collapseControl<StaticParOp>);
+  patterns.add(emptyControl<StaticParOp>);
+  patterns.insert<CollapseUnaryControl<StaticParOp>>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -985,7 +1100,7 @@ LogicalResult CombGroupOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
-// GroupOp
+// GroupGoOp
 //===----------------------------------------------------------------------===//
 GroupGoOp GroupOp::getGoOp() {
   auto goOps = getBodyBlock()->getOps<GroupGoOp>();
@@ -996,6 +1111,83 @@ GroupGoOp GroupOp::getGoOp() {
 GroupDoneOp GroupOp::getDoneOp() {
   auto body = this->getBodyBlock();
   return cast<GroupDoneOp>(body->getTerminator());
+}
+
+//===----------------------------------------------------------------------===//
+// CycleOp
+//===----------------------------------------------------------------------===//
+void CycleOp::print(OpAsmPrinter &p) {
+  p << " ";
+  // The guard is optional.
+  auto start = this->getStart();
+  auto end = this->getEnd();
+  if (end.has_value()) {
+    p << "[" << start << ":" << end.value() << "]";
+  } else {
+    p << start;
+  }
+}
+
+ParseResult CycleOp::parse(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::UnresolvedOperand, 2> operandInfos;
+
+  uint32_t startLiteral;
+  uint32_t endLiteral;
+
+  auto hasEnd = succeeded(parser.parseOptionalLSquare());
+
+  if (parser.parseInteger(startLiteral)) {
+    parser.emitError(parser.getNameLoc(), "Could not parse start cycle");
+    return failure();
+  }
+
+  auto start = parser.getBuilder().getI32IntegerAttr(startLiteral);
+  result.addAttribute(getStartAttrName(result.name), start);
+
+  if (hasEnd) {
+    if (parser.parseColon())
+      return failure();
+
+    if (auto res = parser.parseOptionalInteger(endLiteral); res.has_value()) {
+      auto end = parser.getBuilder().getI32IntegerAttr(endLiteral);
+      result.addAttribute(getEndAttrName(result.name), end);
+    }
+
+    if (parser.parseRSquare())
+      return failure();
+  }
+
+  result.addTypes(parser.getBuilder().getI1Type());
+
+  return success();
+}
+
+LogicalResult CycleOp::verify() {
+  uint32_t latency = this->getGroupLatency();
+
+  if (this->getStart() >= latency) {
+    emitOpError("start cycle must be less than the group latency");
+    return failure();
+  }
+
+  if (this->getEnd().has_value()) {
+    if (this->getStart() >= this->getEnd().value()) {
+      emitOpError("start cycle must be less than end cycle");
+      return failure();
+    }
+
+    if (this->getEnd() >= latency) {
+      emitOpError("end cycle must be less than the group latency");
+      return failure();
+    }
+  }
+
+  return success();
+}
+
+uint32_t CycleOp::getGroupLatency() {
+  auto group = (*this)->getParentOfType<StaticGroupOp>();
+  return group.getLatency();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1049,6 +1241,10 @@ LogicalResult CombGroupOp::drivesPort(Value port) {
   return portDrivenByGroup(*this, port);
 }
 
+LogicalResult StaticGroupOp::drivesPort(Value port) {
+  return portDrivenByGroup(*this, port);
+}
+
 /// Checks whether all ports are driven within the group.
 static LogicalResult allPortsDrivenByGroup(GroupInterface group,
                                            ValueRange ports) {
@@ -1062,6 +1258,10 @@ LogicalResult GroupOp::drivesAllPorts(ValueRange ports) {
 }
 
 LogicalResult CombGroupOp::drivesAllPorts(ValueRange ports) {
+  return allPortsDrivenByGroup(*this, ports);
+}
+
+LogicalResult StaticGroupOp::drivesAllPorts(ValueRange ports) {
   return allPortsDrivenByGroup(*this, ports);
 }
 
@@ -1081,6 +1281,10 @@ LogicalResult CombGroupOp::drivesAnyPort(ValueRange ports) {
   return anyPortsDrivenByGroup(*this, ports);
 }
 
+LogicalResult StaticGroupOp::drivesAnyPort(ValueRange ports) {
+  return anyPortsDrivenByGroup(*this, ports);
+}
+
 /// Checks whether any ports are read within the group.
 static LogicalResult anyPortsReadByGroup(GroupInterface group,
                                          ValueRange ports) {
@@ -1094,6 +1298,10 @@ LogicalResult GroupOp::readsAnyPort(ValueRange ports) {
 }
 
 LogicalResult CombGroupOp::readsAnyPort(ValueRange ports) {
+  return anyPortsReadByGroup(*this, ports);
+}
+
+LogicalResult StaticGroupOp::readsAnyPort(ValueRange ports) {
   return anyPortsReadByGroup(*this, ports);
 }
 
@@ -1218,7 +1426,7 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
 /// Determines whether the given direction is valid with the given inputs. The
 /// `isDestination` boolean is used to distinguish whether the value is a source
 /// or a destination.
-static LogicalResult verifyPortDirection(AssignOp op, Value value,
+static LogicalResult verifyPortDirection(Operation *op, Value value,
                                          bool isDestination) {
   Operation *definingOp = value.getDefiningOp();
   bool isComponentPort = value.isa<BlockArgument>(),
@@ -1238,7 +1446,7 @@ static LogicalResult verifyPortDirection(AssignOp op, Value value,
 
   return port.direction == validDirection
              ? success()
-             : op.emitOpError()
+             : op->emitOpError()
                    << "has a " << (isComponentPort ? "component" : "cell")
                    << " port as the "
                    << (isDestination ? "destination" : "source")
@@ -1822,8 +2030,6 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
   return portAttributes;
 }
 
-bool MemoryOp::isCombinational() { return false; }
-
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
                      StringRef instanceName, int64_t width,
                      ArrayRef<int64_t> sizes, ArrayRef<int64_t> addrSizes) {
@@ -1870,6 +2076,110 @@ LogicalResult MemoryOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// SeqMemoryOp
+//===----------------------------------------------------------------------===//
+
+/// Provide meaningful names to the result values of a SeqMemoryOp.
+void SeqMemoryOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  getCellAsmResultNames(setNameFn, *this, this->portNames());
+}
+
+SmallVector<StringRef> SeqMemoryOp::portNames() {
+  SmallVector<StringRef> portNames;
+  for (size_t i = 0, e = getAddrSizes().size(); i != e; ++i) {
+    auto nameAttr =
+        StringAttr::get(this->getContext(), "addr" + std::to_string(i));
+    portNames.push_back(nameAttr.getValue());
+  }
+  portNames.append({"write_data", "write_en", "write_done", "clk", "read_data",
+                    "read_en", "read_done"});
+  return portNames;
+}
+
+SmallVector<Direction> SeqMemoryOp::portDirections() {
+  SmallVector<Direction> portDirections;
+  for (size_t i = 0, e = getAddrSizes().size(); i != e; ++i)
+    portDirections.push_back(Input);
+  portDirections.append({Input, Input, Output, Input, Output, Input, Output});
+  return portDirections;
+}
+
+SmallVector<DictionaryAttr> SeqMemoryOp::portAttributes() {
+  SmallVector<DictionaryAttr> portAttributes;
+  MLIRContext *context = getContext();
+  for (size_t i = 0, e = getAddrSizes().size(); i != e; ++i)
+    portAttributes.push_back(DictionaryAttr::get(context)); // Addresses
+
+  OpBuilder builder(context);
+  // Use a boolean to indicate this attribute is used.
+  IntegerAttr isSet = IntegerAttr::get(builder.getIndexType(), 1);
+  IntegerAttr isTwo = IntegerAttr::get(builder.getIndexType(), 2);
+  NamedAttrList writeEn, writeDone, clk, reset, readEn, readDone;
+  writeEn.append("go", isSet);
+  writeDone.append("done", isSet);
+  clk.append("clk", isSet);
+  readEn.append("go", isTwo);
+  readDone.append("done", isTwo);
+  portAttributes.append({DictionaryAttr::get(context),     // Write Data
+                         writeEn.getDictionary(context),   // Write enable
+                         writeDone.getDictionary(context), // Write done
+                         clk.getDictionary(context),       // Clk
+                         DictionaryAttr::get(context),     // Out
+                         readEn.getDictionary(context),    // Read enable
+                         readDone.getDictionary(context)}  // Read done
+  );
+  return portAttributes;
+}
+
+void SeqMemoryOp::build(OpBuilder &builder, OperationState &state,
+                        StringRef instanceName, int64_t width,
+                        ArrayRef<int64_t> sizes, ArrayRef<int64_t> addrSizes) {
+  state.addAttribute(SymbolTable::getSymbolAttrName(),
+                     builder.getStringAttr(instanceName));
+  state.addAttribute("width", builder.getI64IntegerAttr(width));
+  state.addAttribute("sizes", builder.getI64ArrayAttr(sizes));
+  state.addAttribute("addrSizes", builder.getI64ArrayAttr(addrSizes));
+  SmallVector<Type> types;
+  for (int64_t size : addrSizes)
+    types.push_back(builder.getIntegerType(size)); // Addresses
+  types.push_back(builder.getIntegerType(width));  // Write data
+  types.push_back(builder.getI1Type());            // Write enable
+  types.push_back(builder.getI1Type());            // Write done
+  types.push_back(builder.getI1Type());            // Clk
+  types.push_back(builder.getIntegerType(width));  // Read data
+  types.push_back(builder.getI1Type());            // Read enable
+  types.push_back(builder.getI1Type());            // Read done
+  state.addTypes(types);
+}
+
+LogicalResult SeqMemoryOp::verify() {
+  ArrayRef<Attribute> opSizes = getSizes().getValue();
+  ArrayRef<Attribute> opAddrSizes = getAddrSizes().getValue();
+  size_t numDims = getSizes().size();
+  size_t numAddrs = getAddrSizes().size();
+  if (numDims != numAddrs)
+    return emitOpError("mismatched number of dimensions (")
+           << numDims << ") and address sizes (" << numAddrs << ")";
+
+  size_t numExtraPorts =
+      7; // write data/enable/done, clk, and read data/enable/done.
+  if (getNumResults() != numAddrs + numExtraPorts)
+    return emitOpError("incorrect number of address ports, expected ")
+           << numAddrs;
+
+  for (size_t i = 0; i < numDims; ++i) {
+    int64_t size = opSizes[i].cast<IntegerAttr>().getInt();
+    int64_t addrSize = opAddrSizes[i].cast<IntegerAttr>().getInt();
+    if (llvm::Log2_64_Ceil(size) > addrSize)
+      return emitOpError("address size (")
+             << addrSize << ") for dimension " << i
+             << " can't address the entire range (" << size << ")";
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // EnableOp
 //===----------------------------------------------------------------------===//
 LogicalResult EnableOp::verify() {
@@ -1894,17 +2204,13 @@ LogicalResult EnableOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult IfOp::verify() {
-  auto component = (*this)->getParentOfType<ComponentOp>();
-  WiresOp wiresOp = component.getWiresOp();
-
-  if (elseBodyExists() && getElseBody()->empty())
-    return emitError() << "empty 'else' region.";
-
   std::optional<StringRef> optGroupName = getGroupName();
   if (!optGroupName) {
     // No combinational group was provided.
     return success();
   }
+  auto component = (*this)->getParentOfType<ComponentOp>();
+  WiresOp wiresOp = component.getWiresOp();
   StringRef groupName = *optGroupName;
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
   if (!groupOp)
@@ -1924,22 +2230,31 @@ LogicalResult IfOp::verify() {
   return success();
 }
 
-/// Returns the last EnableOp within the child tree of 'parentSeqOp'. If no
-/// EnableOp was found (e.g. a "calyx.par" operation is present), returns
-/// None.
-static std::optional<EnableOp> getLastEnableOp(SeqOp parent) {
+/// Returns the last EnableOp within the child tree of 'parentSeqOp' or
+/// `parentStaticSeqOp.` If no EnableOp was found (e.g. a "calyx.par" operation
+/// is present), returns None.
+template <typename OpTy>
+static std::optional<EnableOp> getLastEnableOp(OpTy parent) {
+  static_assert(IsAny<OpTy, SeqOp, StaticSeqOp>(),
+                "Should be a StaticSeqOp or SeqOp.");
   auto &lastOp = parent.getBodyBlock()->back();
   if (auto enableOp = dyn_cast<EnableOp>(lastOp))
     return enableOp;
-  else if (auto seqOp = dyn_cast<SeqOp>(lastOp))
+  if (auto seqOp = dyn_cast<SeqOp>(lastOp))
     return getLastEnableOp(seqOp);
+  if (auto staticSeqOp = dyn_cast<StaticSeqOp>(lastOp))
+    return getLastEnableOp(staticSeqOp);
 
   return std::nullopt;
 }
 
 /// Returns a mapping of {enabled Group name, EnableOp} for all EnableOps within
 /// the immediate ParOp's body.
-static llvm::StringMap<EnableOp> getAllEnableOpsInImmediateBody(ParOp parent) {
+template <typename OpTy>
+static llvm::StringMap<EnableOp> getAllEnableOpsInImmediateBody(OpTy parent) {
+  static_assert(IsAny<OpTy, ParOp, StaticParOp>(),
+                "Should be a StaticParOp or ParOp.");
+
   llvm::StringMap<EnableOp> enables;
   Block *body = parent.getBodyBlock();
   for (EnableOp op : body->getOps<EnableOp>())
@@ -1955,10 +2270,12 @@ static llvm::StringMap<EnableOp> getAllEnableOpsInImmediateBody(ParOp parent) {
 /// (2) both regions are SeqOps. The case when these are different, e.g. ParOp
 /// and SeqOp, will only produce less optimal code, or even worse, change the
 /// behavior.
-template <typename OpTy>
-static bool hasCommonTailPatternPreConditions(IfOp op) {
-  static_assert(std::is_same<SeqOp, OpTy>() || std::is_same<ParOp, OpTy>(),
-                "Should be a SeqOp or ParOp.");
+template <typename IfOpTy, typename TailOpTy>
+static bool hasCommonTailPatternPreConditions(IfOpTy op) {
+  static_assert(IsAny<TailOpTy, SeqOp, ParOp, StaticSeqOp, StaticParOp>(),
+                "Should be a SeqOp, ParOp, StaticSeqOp, or StaticParOp.");
+  static_assert(IsAny<IfOpTy, IfOp, StaticIfOp>(),
+                "Should be a IfOp or StaticIfOp.");
 
   if (!op.thenBodyExists() || !op.elseBodyExists())
     return false;
@@ -1966,7 +2283,7 @@ static bool hasCommonTailPatternPreConditions(IfOp op) {
     return false;
 
   Block *thenBody = op.getThenBody(), *elseBody = op.getElseBody();
-  return isa<OpTy>(thenBody->front()) && isa<OpTy>(elseBody->front());
+  return isa<TailOpTy>(thenBody->front()) && isa<TailOpTy>(elseBody->front());
 }
 
 ///                                         seq {
@@ -1977,41 +2294,42 @@ static bool hasCommonTailPatternPreConditions(IfOp op) {
 ///   }                                       }
 ///                                           calyx.enable @A
 ///                                         }
-struct CommonTailPatternWithSeq : mlir::OpRewritePattern<IfOp> {
-  using mlir::OpRewritePattern<IfOp>::OpRewritePattern;
+template <typename IfOpTy, typename SeqOpTy>
+static LogicalResult commonTailPatternWithSeq(IfOpTy ifOp,
+                                              PatternRewriter &rewriter) {
+  static_assert(IsAny<IfOpTy, IfOp, StaticIfOp>(),
+                "Should be an IfOp or StaticIfOp.");
+  static_assert(IsAny<SeqOpTy, SeqOp, StaticSeqOp>(),
+                "Branches should be checking for an SeqOp or StaticSeqOp");
+  if (!hasCommonTailPatternPreConditions<IfOpTy, SeqOpTy>(ifOp))
+    return failure();
+  auto thenControl = cast<SeqOpTy>(ifOp.getThenBody()->front()),
+       elseControl = cast<SeqOpTy>(ifOp.getElseBody()->front());
 
-  LogicalResult matchAndRewrite(IfOp ifOp,
-                                PatternRewriter &rewriter) const override {
-    if (!hasCommonTailPatternPreConditions<SeqOp>(ifOp))
-      return failure();
+  std::optional<EnableOp> lastThenEnableOp = getLastEnableOp(thenControl),
+                          lastElseEnableOp = getLastEnableOp(elseControl);
 
-    auto thenControl = cast<SeqOp>(ifOp.getThenBody()->front()),
-         elseControl = cast<SeqOp>(ifOp.getElseBody()->front());
-    std::optional<EnableOp> lastThenEnableOp = getLastEnableOp(thenControl),
-                            lastElseEnableOp = getLastEnableOp(elseControl);
+  if (!lastThenEnableOp || !lastElseEnableOp)
+    return failure();
+  if (lastThenEnableOp->getGroupName() != lastElseEnableOp->getGroupName())
+    return failure();
 
-    if (!lastThenEnableOp || !lastElseEnableOp)
-      return failure();
-    if (lastThenEnableOp->getGroupName() != lastElseEnableOp->getGroupName())
-      return failure();
+  // Place the IfOp and pulled EnableOp inside a sequential region, in case
+  // this IfOp is nested in a ParOp. This avoids unintentionally
+  // parallelizing the pulled out EnableOps.
+  rewriter.setInsertionPointAfter(ifOp);
+  SeqOpTy seqOp = rewriter.create<SeqOpTy>(ifOp.getLoc());
+  Block *body = seqOp.getBodyBlock();
+  ifOp->remove();
+  body->push_back(ifOp);
+  rewriter.setInsertionPointToEnd(body);
+  rewriter.create<EnableOp>(seqOp.getLoc(), lastThenEnableOp->getGroupName());
 
-    // Place the IfOp and pulled EnableOp inside a sequential region, in case
-    // this IfOp is nested in a ParOp. This avoids unintentionally
-    // parallelizing the pulled out EnableOps.
-    rewriter.setInsertionPointAfter(ifOp);
-    SeqOp seqOp = rewriter.create<SeqOp>(ifOp.getLoc());
-    Block *body = seqOp.getBodyBlock();
-    ifOp->remove();
-    body->push_back(ifOp);
-    rewriter.setInsertionPointToEnd(body);
-    rewriter.create<EnableOp>(seqOp.getLoc(), lastThenEnableOp->getGroupName());
-
-    // Erase the common EnableOp from the Then and Else regions.
-    rewriter.eraseOp(*lastThenEnableOp);
-    rewriter.eraseOp(*lastElseEnableOp);
-    return success();
-  }
-};
+  // Erase the common EnableOp from the Then and Else regions.
+  rewriter.eraseOp(*lastThenEnableOp);
+  rewriter.eraseOp(*lastElseEnableOp);
+  return success();
+}
 
 ///    if %a with @G {              par {
 ///      par {                        if %a with @G {
@@ -2026,50 +2344,51 @@ struct CommonTailPatternWithSeq : mlir::OpRewritePattern<IfOp> {
 ///        calyx.enable @B
 ///      }
 ///    }
-struct CommonTailPatternWithPar : mlir::OpRewritePattern<IfOp> {
-  using mlir::OpRewritePattern<IfOp>::OpRewritePattern;
+template <typename OpTy, typename ParOpTy>
+static LogicalResult commonTailPatternWithPar(OpTy controlOp,
+                                              PatternRewriter &rewriter) {
+  static_assert(IsAny<OpTy, IfOp, StaticIfOp>(),
+                "Should be an IfOp or StaticIfOp.");
+  static_assert(IsAny<ParOpTy, ParOp, StaticParOp>(),
+                "Branches should be checking for an ParOp or StaticParOp");
+  if (!hasCommonTailPatternPreConditions<OpTy, ParOpTy>(controlOp))
+    return failure();
+  auto thenControl = cast<ParOpTy>(controlOp.getThenBody()->front()),
+       elseControl = cast<ParOpTy>(controlOp.getElseBody()->front());
 
-  LogicalResult matchAndRewrite(IfOp ifOp,
-                                PatternRewriter &rewriter) const override {
-    if (!hasCommonTailPatternPreConditions<ParOp>(ifOp))
-      return failure();
-    auto thenControl = cast<ParOp>(ifOp.getThenBody()->front()),
-         elseControl = cast<ParOp>(ifOp.getElseBody()->front());
-
-    llvm::StringMap<EnableOp> A = getAllEnableOpsInImmediateBody(thenControl),
-                              B = getAllEnableOpsInImmediateBody(elseControl);
-
-    // Compute the intersection between `A` and `B`.
-    SmallVector<StringRef> groupNames;
-    for (auto a = A.begin(); a != A.end(); ++a) {
-      StringRef groupName = a->getKey();
-      auto b = B.find(groupName);
-      if (b == B.end())
-        continue;
-      // This is also an element in B.
-      groupNames.push_back(groupName);
-      // Since these are being pulled out, erase them.
-      rewriter.eraseOp(a->getValue());
-      rewriter.eraseOp(b->getValue());
-    }
-    // Place the IfOp and EnableOp(s) inside a parallel region, in case this
-    // IfOp is nested in a SeqOp. This avoids unintentionally sequentializing
-    // the pulled out EnableOps.
-    rewriter.setInsertionPointAfter(ifOp);
-    ParOp parOp = rewriter.create<ParOp>(ifOp.getLoc());
-    Block *body = parOp.getBodyBlock();
-    ifOp->remove();
-    body->push_back(ifOp);
-
-    // Pull out the intersection between these two sets, and erase their
-    // counterparts in the Then and Else regions.
-    rewriter.setInsertionPointToEnd(body);
-    for (StringRef groupName : groupNames)
-      rewriter.create<EnableOp>(parOp.getLoc(), groupName);
-
-    return success();
+  llvm::StringMap<EnableOp> a = getAllEnableOpsInImmediateBody(thenControl),
+                            b = getAllEnableOpsInImmediateBody(elseControl);
+  // Compute the intersection between `A` and `B`.
+  SmallVector<StringRef> groupNames;
+  for (auto aIndex = a.begin(); aIndex != a.end(); ++aIndex) {
+    StringRef groupName = aIndex->getKey();
+    auto bIndex = b.find(groupName);
+    if (bIndex == b.end())
+      continue;
+    // This is also an element in B.
+    groupNames.push_back(groupName);
+    // Since these are being pulled out, erase them.
+    rewriter.eraseOp(aIndex->getValue());
+    rewriter.eraseOp(bIndex->getValue());
   }
-};
+
+  // Place the IfOp and EnableOp(s) inside a parallel region, in case this
+  // IfOp is nested in a SeqOp. This avoids unintentionally sequentializing
+  // the pulled out EnableOps.
+  rewriter.setInsertionPointAfter(controlOp);
+
+  ParOpTy parOp = rewriter.create<ParOpTy>(controlOp.getLoc());
+  Block *body = parOp.getBodyBlock();
+  controlOp->remove();
+  body->push_back(controlOp);
+  // Pull out the intersection between these two sets, and erase their
+  // counterparts in the Then and Else regions.
+  rewriter.setInsertionPointToEnd(body);
+  for (StringRef groupName : groupNames)
+    rewriter.create<EnableOp>(parOp.getLoc(), groupName);
+
+  return success();
+}
 
 /// This pattern checks for one of two cases that will lead to IfOp deletion:
 /// (1) Then and Else bodies are both empty.
@@ -2091,8 +2410,63 @@ struct EmptyIfBody : mlir::OpRewritePattern<IfOp> {
 
 void IfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                        MLIRContext *context) {
-  patterns.add<CommonTailPatternWithSeq, CommonTailPatternWithPar, EmptyIfBody>(
-      context);
+  patterns.add<EmptyIfBody>(context);
+  patterns.add(commonTailPatternWithPar<IfOp, ParOp>);
+  patterns.add(commonTailPatternWithSeq<IfOp, SeqOp>);
+}
+
+//===----------------------------------------------------------------------===//
+// StaticIfOp
+//===----------------------------------------------------------------------===//
+LogicalResult StaticIfOp::verify() {
+  if (elseBodyExists()) {
+    auto *elseBod = getElseBody();
+    auto &elseOps = elseBod->getOperations();
+    // should only have one Operation, static, in the else branch
+    for (Operation &op : elseOps) {
+      if (!isStaticControl(&op)) {
+        return op.emitOpError(
+            "static if's else branch has non static control within it");
+      }
+    }
+  }
+
+  auto *thenBod = getThenBody();
+  auto &thenOps = thenBod->getOperations();
+  for (Operation &op : thenOps) {
+    // should only have one, static, Operation in the then branch
+    if (!isStaticControl(&op)) {
+      return op.emitOpError(
+          "static if's then branch has non static control within it");
+    }
+  }
+
+  return success();
+}
+
+/// This pattern checks for one of two cases that will lead to StaticIfOp
+/// deletion: (1) Then and Else bodies are both empty. (2) Then body is empty
+/// and Else body does not exist.
+struct EmptyStaticIfBody : mlir::OpRewritePattern<StaticIfOp> {
+  using mlir::OpRewritePattern<StaticIfOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(StaticIfOp ifOp,
+                                PatternRewriter &rewriter) const override {
+    if (!ifOp.getThenBody()->empty())
+      return failure();
+    if (ifOp.elseBodyExists() && !ifOp.getElseBody()->empty())
+      return failure();
+
+    eraseControlWithConditional(ifOp, rewriter);
+
+    return success();
+  }
+};
+
+void StaticIfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                             MLIRContext *context) {
+  patterns.add<EmptyStaticIfBody>(context);
+  patterns.add(commonTailPatternWithPar<StaticIfOp, StaticParOp>);
+  patterns.add(commonTailPatternWithSeq<StaticIfOp, StaticSeqOp>);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2133,6 +2507,322 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
   }
 
   return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// StaticRepeatOp
+//===----------------------------------------------------------------------===//
+LogicalResult StaticRepeatOp::verify() {
+  for (auto &&bodyOp : (*this).getRegion().front()) {
+    // there should only be one bodyOp for each StaticRepeatOp
+    if (!isStaticControl(&bodyOp)) {
+      return bodyOp.emitOpError(
+          "static repeat has non static control within it");
+    }
+  }
+
+  return success();
+}
+
+template <typename OpTy>
+static LogicalResult zeroRepeat(OpTy op, PatternRewriter &rewriter) {
+  static_assert(IsAny<OpTy, RepeatOp, StaticRepeatOp>(),
+                "Should be a RepeatOp or StaticPRepeatOp");
+  if (op.getCount() == 0) {
+    Block *controlBody = op.getBodyBlock();
+    for (auto &op : make_early_inc_range(*controlBody))
+      op.erase();
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  return failure();
+}
+
+void StaticRepeatOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                                 MLIRContext *context) {
+  patterns.add(emptyControl<StaticRepeatOp>);
+  patterns.add(zeroRepeat<StaticRepeatOp>);
+}
+
+//===----------------------------------------------------------------------===//
+// RepeatOp
+//===----------------------------------------------------------------------===//
+void RepeatOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                           MLIRContext *context) {
+  patterns.add(emptyControl<RepeatOp>);
+  patterns.add(zeroRepeat<RepeatOp>);
+}
+
+//===----------------------------------------------------------------------===//
+// InvokeOp
+//===----------------------------------------------------------------------===//
+
+// Parse the parameter list of invoke.
+static ParseResult
+parseParameterList(OpAsmParser &parser, OperationState &result,
+                   SmallVectorImpl<OpAsmParser::UnresolvedOperand> &ports,
+                   SmallVectorImpl<OpAsmParser::UnresolvedOperand> &inputs,
+                   SmallVectorImpl<Attribute> &portNames,
+                   SmallVectorImpl<Attribute> &inputNames,
+                   SmallVectorImpl<Type> &types) {
+  OpAsmParser::UnresolvedOperand port;
+  OpAsmParser::UnresolvedOperand input;
+  Type type;
+  auto parseParameter = [&]() -> ParseResult {
+    if (parser.parseOperand(port) || parser.parseEqual() ||
+        parser.parseOperand(input))
+      return failure();
+    ports.push_back(port);
+    portNames.push_back(StringAttr::get(parser.getContext(), port.name));
+    inputs.push_back(input);
+    inputNames.push_back(StringAttr::get(parser.getContext(), input.name));
+    return success();
+  };
+  if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                     parseParameter))
+    return failure();
+  if (parser.parseArrow())
+    return failure();
+  auto parseType = [&]() -> ParseResult {
+    if (parser.parseType(type))
+      return failure();
+    types.push_back(type);
+    return success();
+  };
+  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                        parseType);
+}
+
+ParseResult InvokeOp::parse(OpAsmParser &parser, OperationState &result) {
+  StringAttr componentName;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> ports;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> inputs;
+  SmallVector<Attribute> portNames;
+  SmallVector<Attribute> inputNames;
+  SmallVector<Type, 4> types;
+  if (parser.parseSymbolName(componentName))
+    return failure();
+  FlatSymbolRefAttr callee = FlatSymbolRefAttr::get(componentName);
+  SMLoc loc = parser.getCurrentLocation();
+  result.addAttribute("callee", callee);
+  if (parseParameterList(parser, result, ports, inputs, portNames, inputNames,
+                         types))
+    return failure();
+  if (parser.resolveOperands(ports, types, loc, result.operands))
+    return failure();
+  if (parser.resolveOperands(inputs, types, loc, result.operands))
+    return failure();
+  result.addAttribute("portNames",
+                      ArrayAttr::get(parser.getContext(), portNames));
+  result.addAttribute("inputNames",
+                      ArrayAttr::get(parser.getContext(), inputNames));
+  return success();
+}
+
+void InvokeOp::print(OpAsmPrinter &p) {
+  p << " @" << getCallee() << "(";
+  auto ports = getPorts();
+  auto inputs = getInputs();
+  llvm::interleaveComma(llvm::zip(ports, inputs), p, [&](auto arg) {
+    p << std::get<0>(arg) << " = " << std::get<1>(arg);
+  });
+  p << ") -> (";
+  llvm::interleaveComma(ports, p, [&](auto port) { p << port.getType(); });
+  p << ")";
+}
+
+// Check the direction of one of the ports in one of the connections of an
+// InvokeOp.
+static LogicalResult verifyInvokeOpValue(InvokeOp &op, Value &value,
+                                         bool isDestination) {
+  if (isPort(value))
+    return verifyPortDirection(op, value, isDestination);
+  return success();
+}
+
+// Checks if the value comes from complex logic.
+static LogicalResult verifyComplexLogic(InvokeOp &op, Value &value) {
+  // Refer to the above function verifyNotComplexSource for its role.
+  Operation *operation = value.getDefiningOp();
+  if (operation == nullptr)
+    return success();
+  if (auto *dialect = operation->getDialect(); isa<comb::CombDialect>(dialect))
+    return failure();
+  return success();
+}
+
+// Get the go port of the invoked component.
+Value InvokeOp::getInstGoValue() {
+  ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
+  Operation *operation = componentOp.lookupSymbol(getCallee());
+  Value ret = nullptr;
+  llvm::TypeSwitch<Operation *>(operation)
+      .Case<RegisterOp>([&](auto op) { ret = operation->getResult(1); })
+      .Case<MemoryOp, DivSPipeLibOp, DivUPipeLibOp, MultPipeLibOp,
+            RemSPipeLibOp, RemUPipeLibOp>(
+          [&](auto op) { ret = operation->getResult(2); })
+      .Case<InstanceOp>([&](auto op) {
+        auto portInfo = op.getReferencedComponent().getPortInfo();
+        for (auto [portInfo, res] :
+             llvm::zip(portInfo, operation->getResults())) {
+          if (portInfo.hasAttribute("go"))
+            ret = res;
+        }
+      })
+      .Case<PrimitiveOp>([&](auto op) {
+        auto moduleExternOp = op.getReferencedPrimitive();
+        auto argAttrs = moduleExternOp.getArgAttrsAttr();
+        for (auto [attr, res] : llvm::zip(argAttrs, op.getResults())) {
+          if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr)) {
+            if (!dictAttr.empty()) {
+              if (dictAttr.begin()->getName().getValue() == "calyx.go")
+                ret = res;
+            }
+          }
+        }
+      });
+  return ret;
+}
+
+// Get the done port of the invoked component.
+Value InvokeOp::getInstDoneValue() {
+  ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
+  Operation *operation = componentOp.lookupSymbol(getCallee());
+  Value ret = nullptr;
+  llvm::TypeSwitch<Operation *>(operation)
+      .Case<RegisterOp, MemoryOp, DivSPipeLibOp, DivUPipeLibOp, MultPipeLibOp,
+            RemSPipeLibOp, RemUPipeLibOp>([&](auto op) {
+        size_t doneIdx = operation->getResults().size() - 1;
+        ret = operation->getResult(doneIdx);
+      })
+      .Case<InstanceOp>([&](auto op) {
+        InstanceOp instanceOp = cast<InstanceOp>(operation);
+        auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
+        for (auto [portInfo, res] :
+             llvm::zip(portInfo, operation->getResults())) {
+          if (portInfo.hasAttribute("done"))
+            ret = res;
+        }
+      })
+      .Case<PrimitiveOp>([&](auto op) {
+        PrimitiveOp primOp = cast<PrimitiveOp>(operation);
+        auto moduleExternOp = primOp.getReferencedPrimitive();
+        auto resAttrs = moduleExternOp.getResAttrsAttr();
+        for (auto [attr, res] : llvm::zip(resAttrs, primOp.getResults())) {
+          if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr)) {
+            if (!dictAttr.empty()) {
+              if (dictAttr.begin()->getName().getValue() == "calyx.done")
+                ret = res;
+            }
+          }
+        }
+      });
+  return ret;
+}
+
+// A helper function that gets the number of go or done ports in
+// hw.module.extern.
+static size_t
+getHwModuleExtGoOrDonePortNumber(hw::HWModuleExternOp &moduleExternOp,
+                                 bool isGo) {
+  size_t ret = 0;
+  std::string str = isGo ? "calyx.go" : "calyx.done";
+  for (Attribute attr : moduleExternOp.getArgAttrsAttr()) {
+    if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr)) {
+      ret = llvm::count_if(dictAttr, [&](NamedAttribute iter) {
+        return iter.getName().getValue() == str;
+      });
+    }
+  }
+  return ret;
+}
+
+LogicalResult InvokeOp::verify() {
+  ComponentOp componentOp = (*this)->getParentOfType<ComponentOp>();
+  StringRef callee = getCallee();
+  Operation *operation = componentOp.lookupSymbol(callee);
+  // The referenced symbol does not exist.
+  if (!operation)
+    return emitOpError() << "with instance '@" << callee
+                         << "', which does not exist.";
+  // The argument list of invoke is empty.
+  if (getInputs().empty())
+    return emitOpError() << "'@" << callee
+                         << "' has zero input and output port connections; "
+                            "expected at least one.";
+  size_t goPortNum = 0, donePortNum = 0;
+  // They both have a go port and a done port, but the "go" port for
+  // registers and memrey should be "write_en" port.
+  llvm::TypeSwitch<Operation *>(operation)
+      .Case<RegisterOp, DivSPipeLibOp, DivUPipeLibOp, MemoryOp, MultPipeLibOp,
+            RemSPipeLibOp, RemUPipeLibOp>(
+          [&](auto op) { goPortNum = 1, donePortNum = 1; })
+      .Case<InstanceOp>([&](auto op) {
+        auto portInfo = op.getReferencedComponent().getPortInfo();
+        for (PortInfo info : portInfo) {
+          if (info.hasAttribute("go"))
+            ++goPortNum;
+          if (info.hasAttribute("done"))
+            ++donePortNum;
+        }
+      })
+      .Case<PrimitiveOp>([&](auto op) {
+        auto moduleExternOp = op.getReferencedPrimitive();
+        // Get the number of go ports and done ports by their attrubutes.
+        goPortNum = getHwModuleExtGoOrDonePortNumber(moduleExternOp, true);
+        donePortNum = getHwModuleExtGoOrDonePortNumber(moduleExternOp, false);
+      });
+  // If the number of go ports and done ports is wrong.
+  if (goPortNum != 1 && donePortNum != 1)
+    return emitOpError()
+           << "'@" << callee << "'"
+           << " is a combinational component and cannot be invoked, which must "
+              "have single go port and single done port.";
+
+  auto ports = getPorts();
+  auto inputs = getInputs();
+  // We have verified earlier that the instance has a go and a done port.
+  Value goValue = getInstGoValue();
+  Value doneValue = getInstDoneValue();
+  for (auto [port, input, portName, inputName] :
+       llvm::zip(ports, inputs, getPortNames(), getInputNames())) {
+    // Check the direction of these destination ports.
+    // 'calyx.invoke' op '@r0' has input '%r.out', which is a source port. The
+    // inputs are required to be destination ports.
+    if (failed(verifyInvokeOpValue(*this, port, true)))
+      return emitOpError() << "'@" << callee << "' has input '"
+                           << portName.cast<StringAttr>().getValue()
+                           << "', which is a source port. The inputs are "
+                              "required to be destination ports.";
+    // The go port should not appear in the parameter list.
+    if (port == goValue)
+      return emitOpError() << "the go or write_en port of '@" << callee
+                           << "' cannot appear here.";
+    // Check the direction of these source ports.
+    if (failed(verifyInvokeOpValue(*this, input, false)))
+      return emitOpError() << "'@" << callee << "' has output '"
+                           << inputName.cast<StringAttr>().getValue()
+                           << "', which is a destination port. The inputs are "
+                              "required to be source ports.";
+    if (failed(verifyComplexLogic(*this, input)))
+      return emitOpError() << "'@" << callee << "' has '"
+                           << inputName.cast<StringAttr>().getValue()
+                           << "', which is not a port or constant. Complex "
+                              "logic should be conducted in the guard.";
+    if (input == doneValue)
+      return emitOpError() << "the done port of '@" << callee
+                           << "' cannot appear here.";
+    // Check if the connection uses the callee's port.
+    if (port.getDefiningOp() != operation && input.getDefiningOp() != operation)
+      return emitOpError() << "the connection "
+                           << portName.cast<StringAttr>().getValue() << " = "
+                           << inputName.cast<StringAttr>().getValue()
+                           << " is not defined as an input port of '@" << callee
+                           << "'.";
+  }
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

@@ -91,13 +91,9 @@ def ModuleType : HW_Type<"Module", "module"> {
   let genVerifyDecl = 1;
 }
 
-/// Points to a name within a module.
-def HWInnerRefAttr : Attr<
-  CPred<"$_self.isa<::circt::hw::InnerRefAttr>()">,
-        "name reference attribute"> {
-  let returnType = "::circt::hw::InnerRefAttr";
-  let storageType = "::circt::hw::InnerRefAttr";
-  let convertFromStorage = "$_self";
+def HWStringType : HW_Type<"String", "string"> {
+  let summary = "String type";
+  let description = "Defines a string type for the hw-centric dialects";
 }
 
 /// A flat symbol reference or a reference to a name within a module.

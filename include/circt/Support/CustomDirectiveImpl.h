@@ -61,6 +61,13 @@ void elideImplicitSSAName(OpAsmPrinter &printer, Operation *op,
                           DictionaryAttr attrs,
                           SmallVectorImpl<StringRef> &elides);
 
+/// Print/parse binary operands type only when types are different.
+/// optional-bin-op-types := type($lhs) (, type($rhs))?
+void printOptionalBinaryOpTypes(OpAsmPrinter &p, Operation *op, Type lhs,
+                                Type rhs);
+ParseResult parseOptionalBinaryOpTypes(OpAsmParser &parser, Type &lhs,
+                                       Type &rhs);
+
 } // namespace circt
 
 #endif // CIRCT_SUPPORT_CUSTOMDIRECTIVEIMPL_H

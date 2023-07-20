@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"

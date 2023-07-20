@@ -76,6 +76,52 @@ struct ModulePortInfo {
   SmallVector<PortInfo> outputs;
 };
 
+// This provides capability for looking up port indices based on port names.
+struct ModulePortLookupInfo {
+  FailureOr<unsigned>
+  lookupPortIndex(const llvm::DenseMap<StringAttr, unsigned> &portMap,
+                  StringAttr name) const {
+    auto it = portMap.find(name);
+    if (it == portMap.end())
+      return failure();
+    return it->second;
+  }
+
+public:
+  explicit ModulePortLookupInfo(MLIRContext *ctx,
+                                const ModulePortInfo &portInfo)
+      : ctx(ctx) {
+    for (auto &in : portInfo.inputs)
+      inputPortMap[in.name] = in.argNum;
+
+    for (auto &out : portInfo.outputs)
+      outputPortMap[out.name] = out.argNum;
+  }
+
+  // Return the index of the input port with the specified name.
+  FailureOr<unsigned> getInputPortIndex(StringAttr name) const {
+    return lookupPortIndex(inputPortMap, name);
+  }
+
+  // Return the index of the output port with the specified name.
+  FailureOr<unsigned> getOutputPortIndex(StringAttr name) const {
+    return lookupPortIndex(outputPortMap, name);
+  }
+
+  FailureOr<unsigned> getInputPortIndex(StringRef name) const {
+    return getInputPortIndex(StringAttr::get(ctx, name));
+  }
+
+  FailureOr<unsigned> getOutputPortIndex(StringRef name) const {
+    return getOutputPortIndex(StringAttr::get(ctx, name));
+  }
+
+private:
+  llvm::DenseMap<StringAttr, unsigned> inputPortMap;
+  llvm::DenseMap<StringAttr, unsigned> outputPortMap;
+  MLIRContext *ctx;
+};
+
 class InnerSymbolOpInterface;
 /// Verification hook for verifying InnerSym Attribute.
 LogicalResult verifyInnerSymAttr(InnerSymbolOpInterface op);

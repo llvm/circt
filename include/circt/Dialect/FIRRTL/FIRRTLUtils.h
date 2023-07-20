@@ -33,6 +33,9 @@ IntegerAttr getIntZerosAttr(Type type);
 /// Utility for generating a constant all ones attribute.
 IntegerAttr getIntOnesAttr(Type type);
 
+/// Return the single assignment to a Property value.
+PropAssignOp getPropertyAssignment(FIRRTLPropertyValue value);
+
 /// Return the module-scoped driver of a value only looking through one connect.
 Value getDriverFromConnect(Value val);
 
@@ -109,49 +112,43 @@ void walkGroundTypes(FIRRTLType firrtlType,
 
 /// Returns an operation's `inner_sym`, adding one if necessary.
 StringAttr
-getOrAddInnerSym(Operation *op, StringRef nameHint, FModuleOp mod,
-                 std::function<ModuleNamespace &(FModuleOp)> getNamespace);
+getOrAddInnerSym(Operation *op, FModuleOp mod,
+                 llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace);
 
 /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
 /// to that operation.
 hw::InnerRefAttr
-getInnerRefTo(Operation *op, StringRef nameHint,
-              std::function<ModuleNamespace &(FModuleOp)> getNamespace);
+getInnerRefTo(Operation *op,
+              llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace);
 
 /// Returns a port's `inner_sym`, adding one if necessary.
-StringAttr
-getOrAddInnerSym(FModuleLike mod, size_t portIdx, StringRef nameHint,
-                 std::function<ModuleNamespace &(FModuleLike)> getNamespace);
+StringAttr getOrAddInnerSym(
+    FModuleLike mod, size_t portIdx,
+    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace);
 
 /// Obtain an inner reference to a port, possibly adding an `inner_sym`
 /// to the port.
 hw::InnerRefAttr
-getInnerRefTo(FModuleLike mod, size_t portIdx, StringRef nameHint,
-              std::function<ModuleNamespace &(FModuleLike)> getNamespace);
+getInnerRefTo(FModuleLike mod, size_t portIdx,
+              llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace);
 
 //===----------------------------------------------------------------------===//
 // Type utilities
 //===----------------------------------------------------------------------===//
 
-/// If reftype, return wrapped base type.  Otherwise (if base), return as-is.
-inline FIRRTLBaseType getBaseType(FIRRTLType type) {
-  return TypeSwitch<FIRRTLType, FIRRTLBaseType>(type)
+/// If it is a base type, return it as is. If reftype, return wrapped base type.
+/// Otherwise, return null.
+inline FIRRTLBaseType getBaseType(Type type) {
+  return TypeSwitch<Type, FIRRTLBaseType>(type)
       .Case<FIRRTLBaseType>([](auto base) { return base; })
-      .Case<RefType>([](auto ref) { return ref.getType(); });
-}
-
-/// Return base type or passthrough if FIRRTLType, else null.
-inline FIRRTLBaseType getBaseTypeOrNull(Type type) {
-  auto ftype = dyn_cast_or_null<FIRRTLType>(type);
-  if (!ftype)
-    return {};
-  return getBaseType(ftype);
+      .Case<RefType>([](auto ref) { return ref.getType(); })
+      .Default([](Type type) { return nullptr; });
 }
 
 /// Get base type if isa<> the requested type, else null.
 template <typename T>
 inline T getBaseOfType(Type type) {
-  return dyn_cast_or_null<T>(getBaseTypeOrNull(type));
+  return dyn_cast_or_null<T>(getBaseType(type));
 }
 
 /// Return a FIRRTLType with its base type component mutated by the given
@@ -162,6 +159,22 @@ inline FIRRTLType mapBaseType(FIRRTLType type,
       .Case<FIRRTLBaseType>([&](auto base) { return fn(base); })
       .Case<RefType>([&](auto ref) {
         return RefType::get(fn(ref.getType()), ref.getForceable());
+      });
+}
+
+/// Return a FIRRTLType with its base type component mutated by the given
+/// function. Return null when the function returns null.
+/// (i.e., ref<T> -> ref<f(T)> if f(T) != null else null, and T -> f(T)).
+inline FIRRTLType
+mapBaseTypeNullable(FIRRTLType type,
+                    function_ref<FIRRTLBaseType(FIRRTLBaseType)> fn) {
+  return TypeSwitch<FIRRTLType, FIRRTLType>(type)
+      .Case<FIRRTLBaseType>([&](auto base) { return fn(base); })
+      .Case<RefType>([&](auto ref) -> FIRRTLType {
+        auto result = fn(ref.getType());
+        if (!result)
+          return {};
+        return RefType::get(result, ref.getForceable());
       });
 }
 

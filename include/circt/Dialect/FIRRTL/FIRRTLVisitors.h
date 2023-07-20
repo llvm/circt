@@ -48,16 +48,17 @@ public:
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
             // Intrinsic Expressions.
             IsXIntrinsicOp, PlusArgsValueIntrinsicOp, PlusArgsTestIntrinsicOp,
-            SizeOfIntrinsicOp, LTLAndIntrinsicOp, LTLOrIntrinsicOp,
-            LTLDelayIntrinsicOp, LTLConcatIntrinsicOp, LTLNotIntrinsicOp,
-            LTLImplicationIntrinsicOp, LTLEventuallyIntrinsicOp,
-            LTLClockIntrinsicOp, LTLDisableIntrinsicOp,
+            SizeOfIntrinsicOp, ClockGateIntrinsicOp, LTLAndIntrinsicOp,
+            LTLOrIntrinsicOp, LTLDelayIntrinsicOp, LTLConcatIntrinsicOp,
+            LTLNotIntrinsicOp, LTLImplicationIntrinsicOp,
+            LTLEventuallyIntrinsicOp, LTLClockIntrinsicOp,
+            LTLDisableIntrinsicOp, Mux2CellIntrinsicOp, Mux4CellIntrinsicOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
             RefResolveOp, RefSubOp,
             // Casts to deal with weird stuff
-            UninferredResetCastOp, UninferredWidthCastOp, ConstCastOp,
+            UninferredResetCastOp, ConstCastOp, RefCastOp,
             mlir::UnrealizedConversionCastOp>([&](auto expr) -> ResultType {
           return thisCast->visitExpr(expr, args...);
         })
@@ -158,6 +159,7 @@ public:
   HANDLE(PlusArgsValueIntrinsicOp, Unhandled);
   HANDLE(PlusArgsTestIntrinsicOp, Unhandled);
   HANDLE(SizeOfIntrinsicOp, Unhandled);
+  HANDLE(ClockGateIntrinsicOp, Unhandled);
   HANDLE(LTLAndIntrinsicOp, Unhandled);
   HANDLE(LTLOrIntrinsicOp, Unhandled);
   HANDLE(LTLDelayIntrinsicOp, Unhandled);
@@ -167,6 +169,8 @@ public:
   HANDLE(LTLEventuallyIntrinsicOp, Unhandled);
   HANDLE(LTLClockIntrinsicOp, Unhandled);
   HANDLE(LTLDisableIntrinsicOp, Unhandled);
+  HANDLE(Mux4CellIntrinsicOp, Unhandled);
+  HANDLE(Mux2CellIntrinsicOp, Unhandled);
 
   // Miscellaneous.
   HANDLE(BitsPrimOp, Unhandled);
@@ -185,10 +189,10 @@ public:
   // Conversions.
   HANDLE(HWStructCastOp, Unhandled);
   HANDLE(UninferredResetCastOp, Unhandled);
-  HANDLE(UninferredWidthCastOp, Unhandled);
   HANDLE(ConstCastOp, Unhandled);
   HANDLE(mlir::UnrealizedConversionCastOp, Unhandled);
   HANDLE(BitCastOp, Unhandled);
+  HANDLE(RefCastOp, Unhandled);
 #undef HANDLE
 };
 
@@ -202,7 +206,7 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<AttachOp, ConnectOp, StrictConnectOp, RefDefineOp,
                        ForceOp, PrintFOp, SkipOp, StopOp, WhenOp, AssertOp,
-                       AssumeOp, CoverOp, ProbeOp, RefForceOp,
+                       AssumeOp, CoverOp, PropAssignOp, ProbeOp, RefForceOp,
                        RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
                        VerifAssertIntrinsicOp, VerifAssumeIntrinsicOp,
                        VerifCoverIntrinsicOp>([&](auto opNode) -> ResultType {
@@ -243,6 +247,7 @@ public:
   HANDLE(AssumeOp);
   HANDLE(CoverOp);
   HANDLE(ProbeOp);
+  HANDLE(PropAssignOp);
   HANDLE(RefForceOp);
   HANDLE(RefForceInitialOp);
   HANDLE(RefReleaseOp);

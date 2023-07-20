@@ -38,10 +38,16 @@ using namespace circt;
 using namespace seq;
 
 namespace {
+#define GEN_PASS_DEF_LOWERSEQTOSV
+#define GEN_PASS_DEF_LOWERSEQFIRRTLTOSV
+#define GEN_PASS_DEF_LOWERSEQFIRRTLINITTOSV
+#include "circt/Dialect/Seq/SeqPasses.h.inc"
+
 struct SeqToSVPass : public impl::LowerSeqToSVBase<SeqToSVPass> {
   void runOnOperation() override;
   using LowerSeqToSVBase::lowerToAlwaysFF;
 };
+
 struct SeqFIRRTLToSVPass
     : public impl::LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass> {
   void runOnOperation() override;
@@ -128,13 +134,54 @@ public:
       }
     }
 
-    rewriter.replaceOp(reg, {regVal});
+    rewriter.replaceOp(reg, regVal);
     return success();
   }
 
 private:
   bool lowerToAlwaysFF;
 };
+
+// Lower seq.clock_gate to a fairly standard clock gate implementation.
+//
+class ClockGateLowering : public OpConversionPattern<ClockGateOp> {
+public:
+  using OpConversionPattern<ClockGateOp>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<ClockGateOp>::OpAdaptor;
+  LogicalResult
+  matchAndRewrite(ClockGateOp clockGate, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto loc = clockGate.getLoc();
+    Value clk = adaptor.getInput();
+
+    // enable in
+    Value enable = adaptor.getEnable();
+    if (auto te = adaptor.getTestEnable())
+      enable = rewriter.create<comb::OrOp>(loc, enable, te);
+
+    // Enable latch.
+    Value enableLatch = rewriter.create<sv::RegOp>(
+        loc, rewriter.getI1Type(), rewriter.getStringAttr("cg_en_latch"));
+
+    // Latch the enable signal using an always @* block.
+    rewriter.create<sv::AlwaysOp>(
+        loc, llvm::SmallVector<sv::EventControl>{}, llvm::SmallVector<Value>{},
+        [&]() {
+          rewriter.create<sv::IfOp>(
+              loc, comb::createOrFoldNot(loc, clk, rewriter), [&]() {
+                rewriter.create<sv::PAssignOp>(loc, enableLatch, enable);
+              });
+        });
+
+    // Create the gated clock signal.
+    Value gclk = rewriter.create<comb::AndOp>(
+        loc, clk, rewriter.create<sv::ReadInOutOp>(loc, enableLatch));
+    clockGate.replaceAllUsesWith(gclk);
+    rewriter.eraseOp(clockGate);
+    return success();
+  }
+};
+
 } // namespace
 
 namespace {
@@ -184,7 +231,7 @@ private:
     OpBuilder builder(module.getBody());
     auto &constant = constantCache[value];
     if (constant) {
-      constant->setLoc(builder.getFusedLoc(constant->getLoc(), loc));
+      constant->setLoc(builder.getFusedLoc({constant->getLoc(), loc}));
       return constant;
     }
 
@@ -772,10 +819,11 @@ void SeqToSVPass::runOnOperation() {
   MLIRContext &ctxt = getContext();
   ConversionTarget target(ctxt);
   target.addIllegalDialect<SeqDialect>();
-  target.addLegalDialect<sv::SVDialect>();
+  target.addLegalDialect<sv::SVDialect, comb::CombDialect, hw::HWDialect>();
   RewritePatternSet patterns(&ctxt);
   patterns.add<CompRegLower<CompRegOp>>(&ctxt, lowerToAlwaysFF);
   patterns.add<CompRegLower<CompRegClockEnabledOp>>(&ctxt, lowerToAlwaysFF);
+  patterns.add<ClockGateLowering>(&ctxt);
 
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();

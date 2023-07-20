@@ -2581,7 +2581,7 @@ SubExprInfo ExprEmitter::visitTypeOp(AggregateConstantOp op) {
     if (auto arrayType = hw::type_dyn_cast<ArrayType>(type)) {
       auto elementType = arrayType.getElementType();
       emitBracedList(
-          attr.cast<ArrayAttr>(), [&]() { ps << "'{"; },
+          attr.cast<ArrayAttr>(), [&]() { ps << "{"; },
           [&](Attribute attr) { printAggregate(attr, elementType); },
           [&]() { ps << "}"; });
     } else if (auto arrayType = hw::type_dyn_cast<UnpackedArrayType>(type)) {
@@ -2769,9 +2769,6 @@ SubExprInfo ExprEmitter::visitSV(SampledOp op) {
 }
 
 SubExprInfo ExprEmitter::visitComb(MuxOp op) {
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
-
   // The ?: operator is right associative.
 
   // Layout:
@@ -2790,7 +2787,9 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
       emitSubExpr(op.getCond(), VerilogPrecedence(Conditional - 1));
     });
     ps << BreakToken(1, 2);
-    ps << "? ";
+    ps << "?";
+    emitSVAttributes(op);
+    ps << " ";
     auto lhsInfo = ps.scopedBox(PP::ibox0, [&]() {
       return emitSubExpr(op.getTrueValue(), VerilogPrecedence(Conditional - 1));
     });
@@ -5727,7 +5726,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         .Case<MacroDeclOp>([&](auto op) {
           symbolCache.addDefinition(op.getSymNameAttr(), op);
         })
-        .Case<om::ClassOp>([&](auto op) {
+        .Case<om::ClassLike>([&](auto op) {
           symbolCache.addDefinition(op.getSymNameAttr(), op);
         })
         .Case<om::ConstantOp>([&](auto op) {

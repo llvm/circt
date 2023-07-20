@@ -8,12 +8,15 @@ target_link_libraries(arcilator
   CIRCTArcTransforms
   CIRCTCombToArith
   CIRCTConvertToArcs
+  CIRCTSeqTransforms
   CIRCTSupport
+  CIRCTTransforms
   MLIRParser
   MLIRLLVMIRTransforms
   MLIRTargetLLVMIRExport
   MLIRBuiltinToLLVMIRTranslation
   MLIRLLVMToLLVMIRTranslation
+  MLIRFuncInlinerExtension
 )
 
 llvm_update_compile_flags(arcilator)

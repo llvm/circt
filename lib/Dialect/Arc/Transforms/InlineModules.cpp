@@ -64,6 +64,8 @@ struct PrefixingInliner : public InlinerInterface {
   void updateNames(Operation *op) const {
     if (auto name = op->getAttrOfType<StringAttr>("name"))
       op->setAttr("name", updateName(name));
+    if (auto name = op->getAttrOfType<StringAttr>("instanceName"))
+      op->setAttr("instanceName", updateName(name));
     if (auto namesAttr = op->getAttrOfType<ArrayAttr>("names")) {
       SmallVector<Attribute> names(namesAttr.getValue().begin(),
                                    namesAttr.getValue().end());

@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/FIRRTL/FIREmitter.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
@@ -42,9 +43,9 @@ constexpr size_t defaultTargetLineLength = 80;
 
 /// An emitter for FIRRTL dialect operations to .fir output.
 struct Emitter {
-  Emitter(llvm::raw_ostream &os,
+  Emitter(llvm::raw_ostream &os, FIRVersion version,
           size_t targetLineLength = defaultTargetLineLength)
-      : pp(os, targetLineLength), ps(pp, saver) {
+      : pp(os, targetLineLength), ps(pp, saver), version(version) {
     pp.setListener(&saver);
   }
   LogicalResult finalize();
@@ -102,7 +103,6 @@ struct Emitter {
   void emitExpression(RefSendOp op);
   void emitExpression(RefSubOp op);
   void emitExpression(UninferredResetCastOp op);
-  void emitExpression(UninferredWidthCastOp op);
   void emitExpression(ConstCastOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
@@ -287,6 +287,15 @@ private:
   DenseMap<Value, StringRef> valueNames;
   StringSet<> valueNamesStorage;
 
+  /// Legalize names for emission.  Convert names which begin with a number to
+  /// be escaped using backticks.
+  StringAttr legalize(StringAttr attr) {
+    StringRef str = attr.getValue();
+    if (str.empty() || !isdigit(str.front()))
+      return attr;
+    return StringAttr::get(attr.getContext(), "`" + Twine(attr) + "`");
+  }
+
   void addValueName(Value value, StringAttr attr) {
     valueNames.insert({value, attr.getValue()});
   }
@@ -297,6 +306,9 @@ private:
 
   /// The current circuit namespace valid within the call to `emitCircuit`.
   CircuitNamespace circuitNamespace;
+
+  /// The version of the FIRRTL spec that should be emitted.
+  FIRVersion version;
 };
 } // namespace
 
@@ -306,7 +318,14 @@ LogicalResult Emitter::finalize() { return failure(encounteredError); }
 void Emitter::emitCircuit(CircuitOp op) {
   circuitNamespace.add(op);
   startStatement();
-  ps << "circuit " << PPExtString(op.getName()) << " :";
+  ps << "FIRRTL version ";
+  ps.addAsString(version.major);
+  ps << ".";
+  ps.addAsString(version.minor);
+  ps << ".";
+  ps.addAsString(version.patch);
+  ps << PP::newline;
+  ps << "circuit " << PPExtString(legalize(op.getNameAttr())) << " :";
   setPendingNewline();
   ps.scopedBox(PP::bbox2, [&]() {
     for (auto &bodyOp : *op.getBodyBlock()) {
@@ -328,7 +347,7 @@ void Emitter::emitCircuit(CircuitOp op) {
 /// Emit an entire module.
 void Emitter::emitModule(FModuleOp op) {
   startStatement();
-  ps << "module " << PPExtString(op.getName()) << " :";
+  ps << "module " << PPExtString(legalize(op.getNameAttr())) << " :";
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
 
@@ -348,7 +367,7 @@ void Emitter::emitModule(FModuleOp op) {
 /// Emit an external module.
 void Emitter::emitModule(FExtModuleOp op) {
   startStatement();
-  ps << "extmodule " << PPExtString(op.getName()) << " :";
+  ps << "extmodule " << PPExtString(legalize(op.getNameAttr())) << " :";
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
 
@@ -365,7 +384,7 @@ void Emitter::emitModule(FExtModuleOp op) {
 
     // Emit the parameters.
     for (auto param : llvm::map_range(op.getParameters(), [](Attribute attr) {
-           return attr.cast<ParamDeclAttr>();
+           return cast<ParamDeclAttr>(attr);
          })) {
       startStatement();
       // TODO: AssignLike ?
@@ -400,9 +419,10 @@ void Emitter::emitModulePorts(ArrayRef<PortInfo> ports,
     startStatement();
     const auto &port = ports[i];
     ps << (port.direction == Direction::In ? "input " : "output ");
+    auto legalName = legalize(port.name);
     if (!arguments.empty())
-      addValueName(arguments[i], port.name);
-    ps << PPExtString(port.name.getValue()) << " : ";
+      addValueName(arguments[i], legalName);
+    ps << PPExtString(legalName) << " : ";
     emitType(port.type);
     setPendingNewline();
   }
@@ -465,20 +485,22 @@ void Emitter::emitStatement(WhenOp op) {
 }
 
 void Emitter::emitStatement(WireOp op) {
-  addValueName(op.getResult(), op.getNameAttr());
+  auto legalName = legalize(op.getNameAttr());
+  addValueName(op.getResult(), legalName);
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
-    ps << "wire " << PPExtString(op.getName());
+    ps << "wire " << PPExtString(legalName);
     emitTypeWithColon(op.getResult().getType());
   });
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(RegOp op) {
-  addValueName(op.getResult(), op.getNameAttr());
+  auto legalName = legalize(op.getNameAttr());
+  addValueName(op.getResult(), legalName);
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
-    ps << "reg " << PPExtString(op.getName());
+    ps << "reg " << PPExtString(legalName);
     emitTypeWithColon(op.getResult().getType());
     ps << "," << PP::space;
     emitExpression(op.getClockVal());
@@ -487,31 +509,46 @@ void Emitter::emitStatement(RegOp op) {
 }
 
 void Emitter::emitStatement(RegResetOp op) {
-  addValueName(op.getResult(), op.getNameAttr());
+  auto legalName = legalize(op.getNameAttr());
+  addValueName(op.getResult(), legalName);
   startStatement();
-  ps.scopedBox(PP::ibox2, [&]() {
-    ps << "reg " << op.getName();
-    emitTypeWithColon(op.getResult().getType());
-    ps << "," << PP::space;
-    emitExpression(op.getClockVal());
-    ps << PP::space << "with :";
-    // Don't break this because of the newline.
-    ps << PP::neverbreak;
-    // No-paren version must be newline + indent.
-    ps << PP::newline; // ibox2 will indent.
-    ps << "reset => (" << PP::ibox0;
-    emitExpression(op.getResetSignal());
-    ps << "," << PP::space;
-    emitExpression(op.getResetValue());
-    ps << ")" << PP::end;
-  });
+  if (FIRVersion::compare(version, {3, 0, 0}) >= 0) {
+    ps.scopedBox(PP::ibox2, [&]() {
+      ps << "regreset " << legalName;
+      emitTypeWithColon(op.getResult().getType());
+      ps << "," << PP::space;
+      emitExpression(op.getClockVal());
+      ps << "," << PP::space;
+      emitExpression(op.getResetSignal());
+      ps << "," << PP::space;
+      emitExpression(op.getResetValue());
+    });
+  } else {
+    ps.scopedBox(PP::ibox2, [&]() {
+      ps << "reg " << legalName;
+      emitTypeWithColon(op.getResult().getType());
+      ps << "," << PP::space;
+      emitExpression(op.getClockVal());
+      ps << PP::space << "with :";
+      // Don't break this because of the newline.
+      ps << PP::neverbreak;
+      // No-paren version must be newline + indent.
+      ps << PP::newline; // ibox2 will indent.
+      ps << "reset => (" << PP::ibox0;
+      emitExpression(op.getResetSignal());
+      ps << "," << PP::space;
+      emitExpression(op.getResetValue());
+      ps << ")" << PP::end;
+    });
+  }
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(NodeOp op) {
-  addValueName(op.getResult(), op.getNameAttr());
+  auto legalName = legalize(op.getNameAttr());
+  addValueName(op.getResult(), legalName);
   startStatement();
-  emitAssignLike([&]() { ps << "node " << PPExtString(op.getName()); },
+  emitAssignLike([&]() { ps << "node " << PPExtString(legalName); },
                  [&]() { emitExpression(op.getInput()); });
   emitLocationAndNewLine(op);
 }
@@ -527,7 +564,7 @@ void Emitter::emitStatement(StopOp op) {
     ps.addAsString(op.getExitCode());
     ps << ")" << PP::end;
     if (!op.getName().empty()) {
-      ps << PP::space << ": " << PPExtString(op.getName());
+      ps << PP::space << ": " << PPExtString(legalize(op.getNameAttr()));
     }
   });
   emitLocationAndNewLine(op);
@@ -554,7 +591,7 @@ void Emitter::emitStatement(PrintFOp op) {
     }
     ps << ")" << PP::end;
     if (!op.getName().empty()) {
-      ps << PP::space << ": " << PPExtString(op.getName());
+      ps << PP::space << ": " << PPExtString(legalize(op.getNameAttr()));
     }
   });
   emitLocationAndNewLine(op);
@@ -574,7 +611,7 @@ void Emitter::emitVerifStatement(T op, StringRef mnemonic) {
     ps.writeQuotedEscaped(op.getMessage());
     ps << ")" << PP::end;
     if (!op.getName().empty()) {
-      ps << PP::space << ": " << PPExtString(op.getName());
+      ps << PP::space << ": " << PPExtString(legalize(op.getNameAttr()));
     }
   });
   emitLocationAndNewLine(op);
@@ -582,43 +619,72 @@ void Emitter::emitVerifStatement(T op, StringRef mnemonic) {
 
 void Emitter::emitStatement(ConnectOp op) {
   startStatement();
-  auto emitLHS = [&]() { emitExpression(op.getDest()); };
-  if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
-    emitAssignLike(
-        emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
+  if (FIRVersion::compare(version, {3, 0, 0}) >= 0) {
+    ps.scopedBox(PP::ibox2, [&]() {
+      if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
+        ps << "invalidate" << PP::space;
+        emitExpression(op.getDest());
+      } else {
+        ps << "connect" << PP::space;
+        emitExpression(op.getDest());
+        ps << "," << PP::space;
+        emitExpression(op.getSrc());
+      }
+    });
   } else {
-    emitAssignLike(
-        emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
+    auto emitLHS = [&]() { emitExpression(op.getDest()); };
+    if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
+      emitAssignLike(
+          emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
+    } else {
+      emitAssignLike(
+          emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
+    }
   }
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(StrictConnectOp op) {
   startStatement();
-  auto emitLHS = [&]() { emitExpression(op.getDest()); };
-  if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
-    emitAssignLike(
-        emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
+  if (FIRVersion::compare(version, {3, 0, 0}) >= 0) {
+    ps.scopedBox(PP::ibox2, [&]() {
+      if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
+        ps << "invalidate" << PP::space;
+        emitExpression(op.getDest());
+      } else {
+        ps << "connect" << PP::space;
+        emitExpression(op.getDest());
+        ps << "," << PP::space;
+        emitExpression(op.getSrc());
+      }
+    });
   } else {
-    emitAssignLike(
-        emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
+    auto emitLHS = [&]() { emitExpression(op.getDest()); };
+    if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
+      emitAssignLike(
+          emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
+    } else {
+      emitAssignLike(
+          emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
+    }
   }
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(InstanceOp op) {
   startStatement();
-  ps << "inst " << PPExtString(op.getName()) << " of "
-     << PPExtString(op.getModuleName());
+  auto legalName = legalize(op.getNameAttr());
+  ps << "inst " << PPExtString(legalName) << " of "
+     << PPExtString(legalize(op.getModuleNameAttr().getAttr()));
   emitLocationAndNewLine(op);
 
   // Make sure we have a name like `<inst>.<port>` for each of the instance
   // result values.
-  SmallString<16> portName(op.getName());
+  SmallString<16> portName(legalName);
   portName.push_back('.');
   unsigned baseLen = portName.size();
   for (unsigned i = 0, e = op.getNumResults(); i < e; ++i) {
-    portName.append(op.getPortNameStr(i));
+    portName.append(legalize(op.getPortName(i)));
     addValueName(op.getResult(i), portName);
     portName.resize(baseLen);
   }
@@ -629,17 +695,18 @@ void Emitter::emitStatement(AttachOp op) {
 }
 
 void Emitter::emitStatement(MemOp op) {
-  SmallString<16> portName(op.getName());
+  auto legalName = legalize(op.getNameAttr());
+  SmallString<16> portName(legalName);
   portName.push_back('.');
   auto portNameBaseLen = portName.size();
   for (auto result : llvm::zip(op.getResults(), op.getPortNames())) {
     portName.resize(portNameBaseLen);
-    portName.append(std::get<1>(result).cast<StringAttr>().getValue());
+    portName.append(legalize(cast<StringAttr>(std::get<1>(result))));
     addValueName(std::get<0>(result), portName);
   }
 
   startStatement();
-  ps << "mem " << PPExtString(op.getName()) << " :";
+  ps << "mem " << PPExtString(legalName) << " :";
   emitLocationAndNewLine(op);
   ps.scopedBox(PP::bbox2, [&]() {
     startStatement();
@@ -665,13 +732,13 @@ void Emitter::emitStatement(MemOp op) {
       };
       switch (port.second) {
       case MemOp::PortKind::Read:
-        add(reader, port.first);
+        add(reader, legalize(port.first));
         break;
       case MemOp::PortKind::Write:
-        add(writer, port.first);
+        add(writer, legalize(port.first));
         break;
       case MemOp::PortKind::ReadWrite:
-        add(readwriter, port.first);
+        add(readwriter, legalize(port.first));
         break;
       case MemOp::PortKind::Debug:
         emitOpError(op, "has unsupported 'debug' port");
@@ -694,7 +761,7 @@ void Emitter::emitStatement(MemOp op) {
 void Emitter::emitStatement(SeqMemOp op) {
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
-    ps << "smem " << PPExtString(op.getName());
+    ps << "smem " << PPExtString(legalize(op.getNameAttr()));
     emitTypeWithColon(op.getType());
     ps << PP::space;
     emitAttribute(op.getRuw());
@@ -705,7 +772,7 @@ void Emitter::emitStatement(SeqMemOp op) {
 void Emitter::emitStatement(CombMemOp op) {
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
-    ps << "cmem " << PPExtString(op.getName());
+    ps << "cmem " << PPExtString(legalize(op.getNameAttr()));
     emitTypeWithColon(op.getType());
   });
   emitLocationAndNewLine(op);
@@ -713,12 +780,12 @@ void Emitter::emitStatement(CombMemOp op) {
 
 void Emitter::emitStatement(MemoryPortOp op) {
   // Nothing to output for this operation.
-  addValueName(op.getData(), op.getName());
+  addValueName(op.getData(), legalize(op.getNameAttr()));
 }
 
 void Emitter::emitStatement(MemoryDebugPortOp op) {
   // Nothing to output for this operation.
-  addValueName(op.getData(), op.getName());
+  addValueName(op.getData(), legalize(op.getNameAttr()));
 }
 
 void Emitter::emitStatement(MemoryPortAccessOp op) {
@@ -728,14 +795,14 @@ void Emitter::emitStatement(MemoryPortAccessOp op) {
   auto port = cast<MemoryPortOp>(op.getPort().getDefiningOp());
   emitAttribute(port.getDirection());
   // TODO: emitAssignLike
-  ps << " mport " << PPExtString(port.getName()) << " = ";
+  ps << " mport " << PPExtString(legalize(port.getNameAttr())) << " = ";
 
   // Print the memory name.
   auto *mem = port.getMemory().getDefiningOp();
   if (auto seqMem = dyn_cast<SeqMemOp>(mem))
-    ps << seqMem.getName();
+    ps << legalize(seqMem.getNameAttr());
   else
-    ps << cast<CombMemOp>(mem).getName();
+    ps << legalize(cast<CombMemOp>(mem).getNameAttr());
 
   // Print the address.
   ps << "[";
@@ -832,7 +899,10 @@ void Emitter::emitStatement(InvalidValueOp op) {
   emitType(op.getType());
   emitLocationAndNewLine(op);
   startStatement();
-  ps << PPExtString(name) << " is invalid";
+  if (FIRVersion::compare(version, {3, 0, 0}) >= 0)
+    ps << "invalidate " << PPExtString(name);
+  else
+    ps << PPExtString(name) << " is invalid";
   emitLocationAndNewLine(op);
 }
 
@@ -861,7 +931,7 @@ void Emitter::emitExpression(Value value) {
           CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
-          ShrPrimOp, UninferredResetCastOp, UninferredWidthCastOp, ConstCastOp,
+          ShrPrimOp, UninferredResetCastOp, ConstCastOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp>([&](auto op) {
         ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
@@ -888,7 +958,8 @@ void Emitter::emitExpression(SpecialConstantOp op) {
     ps.addAsString(op.getValue());
     ps << ")";
   };
-  TypeSwitch<FIRRTLType>(op.getType().cast<FIRRTLType>())
+  // TODO: Emit type decl for type alias.
+  FIRRTLTypeSwitch<FIRRTLType>(type_cast<FIRRTLType>(op.getType()))
       .Case<ClockType>([&](auto type) {
         ps << "asClock(";
         emitInner();
@@ -906,7 +977,7 @@ void Emitter::emitExpression(SpecialConstantOp op) {
 void Emitter::emitExpression(SubfieldOp op) {
   auto type = op.getInput().getType();
   emitExpression(op.getInput());
-  ps << "." << type.getElementName(op.getFieldIndex());
+  ps << "." << legalize(type.getElementNameAttr(op.getFieldIndex()));
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
@@ -928,7 +999,7 @@ void Emitter::emitExpression(SubaccessOp op) {
 void Emitter::emitExpression(OpenSubfieldOp op) {
   auto type = op.getInput().getType();
   emitExpression(op.getInput());
-  ps << "." << type.getElementName(op.getFieldIndex());
+  ps << "." << legalize(type.getElementNameAttr(op.getFieldIndex()));
 }
 
 void Emitter::emitExpression(OpenSubindexOp op) {
@@ -952,7 +1023,7 @@ void Emitter::emitExpression(RefResolveOp op) {
 
 void Emitter::emitExpression(RefSubOp op) {
   emitExpression(op.getInput());
-  TypeSwitch<FIRRTLBaseType, void>(op.getInput().getType().getType())
+  FIRRTLTypeSwitch<FIRRTLBaseType, void>(op.getInput().getType().getType())
       .Case<FVectorType>([&](auto type) {
         ps << "[";
         ps.addAsString(op.getIndex());
@@ -963,10 +1034,6 @@ void Emitter::emitExpression(RefSubOp op) {
 }
 
 void Emitter::emitExpression(UninferredResetCastOp op) {
-  emitExpression(op.getInput());
-}
-
-void Emitter::emitExpression(UninferredWidthCastOp op) {
   emitExpression(op.getInput());
 }
 
@@ -1024,7 +1091,8 @@ void Emitter::emitType(Type type, bool includeConst) {
       ps << ">";
     }
   };
-  TypeSwitch<Type>(type)
+  // TODO: Emit type decl for type alias.
+  FIRRTLTypeSwitch<Type>(type)
       .Case<ClockType>([&](auto) { ps << "Clock"; })
       .Case<ResetType>([&](auto) { ps << "Reset"; })
       .Case<AsyncResetType>([&](auto) { ps << "AsyncReset"; })
@@ -1052,7 +1120,7 @@ void Emitter::emitType(Type type, bool includeConst) {
             ps.scopedBox(PP::ibox2, [&]() {
               if (element.isFlip)
                 ps << "flip ";
-              ps << element.name.getValue();
+              ps << legalize(element.name);
               emitTypeWithColon(element.type);
               anyEmitted = true;
             });
@@ -1106,8 +1174,10 @@ void Emitter::emitLocation(Location loc) {
 // Emit the specified FIRRTL circuit into the given output stream.
 mlir::LogicalResult
 circt::firrtl::exportFIRFile(mlir::ModuleOp module, llvm::raw_ostream &os,
-                             std::optional<size_t> targetLineLength) {
-  Emitter emitter(os, targetLineLength.value_or(defaultTargetLineLength));
+                             std::optional<size_t> targetLineLength,
+                             FIRVersion version) {
+  Emitter emitter(os, version,
+                  targetLineLength.value_or(defaultTargetLineLength));
   for (auto &op : *module.getBody()) {
     if (auto circuitOp = dyn_cast<CircuitOp>(op))
       emitter.emitCircuit(circuitOp);
@@ -1124,7 +1194,7 @@ void circt::firrtl::registerToFIRFileTranslation() {
   static mlir::TranslateFromMLIRRegistration toFIR(
       "export-firrtl", "emit FIRRTL dialect operations to .fir output",
       [](ModuleOp module, llvm::raw_ostream &os) {
-        return exportFIRFile(module, os, targetLineLength);
+        return exportFIRFile(module, os, targetLineLength, {3, 0, 0});
       },
       [](mlir::DialectRegistry &registry) {
         registry.insert<chirrtl::CHIRRTLDialect>();

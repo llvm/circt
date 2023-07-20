@@ -42,10 +42,10 @@ static LogicalResult updateExpandedPort(StringRef field, AnnoTarget &ref) {
 /// represent bundle returns as split into constituent parts.
 static FailureOr<unsigned> findBundleElement(Operation *op, Type type,
                                              StringRef field) {
-  auto bundle = type.dyn_cast<BundleType>();
+  auto bundle = type_dyn_cast<BundleType>(type);
   if (!bundle) {
     op->emitError("field access '")
-        << field << "' into non-bundle type '" << bundle << "'";
+        << field << "' into non-bundle type '" << type << "'";
     return failure();
   }
   auto idx = bundle.getElementIndex(field);
@@ -66,7 +66,7 @@ static FailureOr<unsigned> findVectorElement(Operation *op, Type type,
     op->emitError("Cannot convert '") << indexStr << "' to an integer";
     return failure();
   }
-  auto vec = type.dyn_cast<FVectorType>();
+  auto vec = type_dyn_cast<FVectorType>(type);
   if (!vec) {
     op->emitError("index access '")
         << index << "' into non-vector type '" << type << "'";
@@ -95,14 +95,14 @@ static FailureOr<unsigned> findFieldID(AnnoTarget &ref,
       auto result = findVectorElement(op, type, token.name);
       if (failed(result))
         return failure();
-      auto vector = type.cast<FVectorType>();
+      auto vector = type_cast<FVectorType>(type);
       type = vector.getElementType();
       fieldIdx += vector.getFieldID(*result);
     } else {
       auto result = findBundleElement(op, type, token.name);
       if (failed(result))
         return failure();
-      auto bundle = type.cast<BundleType>();
+      auto bundle = type_cast<BundleType>(type);
       type = bundle.getElementType(*result);
       fieldIdx += bundle.getFieldID(*result);
     }
@@ -333,24 +333,19 @@ std::optional<AnnoPathValue> firrtl::resolvePath(StringRef rawPath,
   return resolveEntities(*tokens, circuit, symTbl, cache);
 }
 
-InstanceOp firrtl::addPortsToModule(
-    FModuleLike mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir,
-    StringRef newName, InstancePathCache &instancePathcache,
-    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
-    CircuitTargetCache *targetCaches) {
+InstanceOp firrtl::addPortsToModule(FModuleLike mod, InstanceOp instOnPath,
+                                    FIRRTLType portType, Direction dir,
+                                    StringRef newName,
+                                    InstancePathCache &instancePathcache,
+                                    CircuitTargetCache *targetCaches) {
   // To store the cloned version of `instOnPath`.
   InstanceOp clonedInstOnPath;
   // Get a new port name from the Namespace.
-  auto portName = [&](FModuleLike nameForMod) {
-    return StringAttr::get(nameForMod.getContext(),
-                           getNamespace(nameForMod).newName(newName));
-  };
+  auto portName = StringAttr::get(mod.getContext(), newName);
   // The port number for the new port.
   unsigned portNo = getNumPorts(mod);
-  PortInfo portInfo = {portName(mod), portType, dir, {}, mod.getLoc()};
+  PortInfo portInfo = {portName, portType, dir, {}, mod.getLoc()};
   mod.insertPorts({{portNo, portInfo}});
-  if (targetCaches)
-    targetCaches->insertPort(mod, portNo);
   // Now update all the instances of `mod`.
   for (auto *use : instancePathcache.instanceGraph.lookup(mod)->uses()) {
     InstanceOp useInst = cast<InstanceOp>(use->getInstance());
@@ -427,13 +422,9 @@ static Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
   // This removes and replaces the instance, and returns the updated
   // instance.
   if (!state.wiringProblemInstRefs.contains(modInstance)) {
-    modInstance = addPortsToModule(
-        mod, modInstance, portRefType, Direction::Out, refName,
-        state.instancePathCache,
-        [&](FModuleLike mod) -> ModuleNamespace & {
-          return state.getNamespace(mod);
-        },
-        &state.targetCaches);
+    modInstance =
+        addPortsToModule(mod, modInstance, portRefType, Direction::Out, refName,
+                         state.instancePathCache, &state.targetCaches);
   } else {
     // As a current limitation, mixing legacy Wiring and Data Taps is forbidden
     // to prevent invalidating Values used later
@@ -510,7 +501,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
   for (size_t i = 0, e = keyAttr.size(); i != e; ++i) {
     auto b = keyAttr[i];
     auto path = ("keys[" + Twine(i) + "]").str();
-    auto bDict = b.cast<DictionaryAttr>();
+    auto bDict = cast<DictionaryAttr>(b);
     auto classAttr =
         tryGetAs<StringAttr>(bDict, anno, "class", loc, dataTapsClass, path);
     if (!classAttr)
@@ -573,9 +564,10 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
       if (!moduleTarget)
         return failure();
       AnnoPathValue internalPathSrc;
-      auto targetType = wireTarget->ref.getType().cast<FIRRTLBaseType>();
+      auto targetType =
+          firrtl::type_cast<FIRRTLBaseType>(wireTarget->ref.getType());
       if (wireTarget->fieldIdx)
-        targetType = cast<FIRRTLBaseType>(
+        targetType = firrtl::type_cast<FIRRTLBaseType>(
             targetType.getFinalTypeByFieldID(wireTarget->fieldIdx));
       sendVal = lowerInternalPathAnno(internalPathSrc, *moduleTarget, target,
                                       internalPathAttr, targetType, state);
@@ -645,9 +637,9 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
     auto *targetOp = wireTarget->ref.getOp();
     auto sinkBuilder = ImplicitLocOpBuilder::atBlockEnd(wireModule.getLoc(),
                                                         targetOp->getBlock());
-    auto wireType = cast<FIRRTLBaseType>(targetOp->getResult(0).getType());
+    auto wireType = type_cast<FIRRTLBaseType>(targetOp->getResult(0).getType());
     // Get type of sent value, if already a RefType, the base type.
-    auto valType = getBaseType(cast<FIRRTLType>(sendVal.getType()));
+    auto valType = getBaseType(type_cast<FIRRTLType>(sendVal.getType()));
     Value sink = getValueByFieldID(sinkBuilder, targetOp->getResult(0),
                                    wireTarget->fieldIdx);
 
@@ -658,11 +650,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
       // Helper: create a wire, cast it with callback, connect cast to sink.
       auto addWireWithCast = [&](auto createCast) {
         auto wire =
-            sinkBuilder
-                .create<WireOp>(
-                    valType,
-                    state.getNamespace(wireModule).newName(tapName.getValue()))
-                .getResult();
+            sinkBuilder.create<WireOp>(valType, tapName.getValue()).getResult();
         emitConnect(sinkBuilder, sink, createCast(wire));
         sink = wire;
       };
@@ -758,7 +746,7 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
 
   auto sendVal = memDbgPort;
   if (wireTarget->ref.getOp()->getResult(0).getType() !=
-      cast<RefType>(sendVal.getType()).getType())
+      type_cast<RefType>(sendVal.getType()).getType())
     return wireTarget->ref.getOp()->emitError(
         "cannot generate the MemTap, wiretap Type does not match the memory "
         "type");

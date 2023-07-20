@@ -152,15 +152,16 @@ firrtl.circuit "Complex" attributes {annotations = [
   }]} {
   firrtl.memmodule @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
   firrtl.module @Child() {
+    // CHECK: firrtl.instance MWrite_ext sym @[[CHILD_MWRITE_EXT:.+]] @MWrite_ext
     %0:4 = firrtl.instance MWrite_ext  @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
   }
   firrtl.module @DUT() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     // Double check that these instances now have symbols on them:
-    // CHECK: firrtl.instance MWrite_ext sym @MWrite_ext
+    // CHECK: firrtl.instance MWrite_ext sym @[[MWRITE_EXT:.+]] @MWrite_ext(
     %0:4 = firrtl.instance MWrite_ext  @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
-    // CHECK: firrtl.instance child sym @child  @Child
+    // CHECK: firrtl.instance child sym @[[CHILD:.+]] @Child(
     firrtl.instance child @Child()
-    // CHECK: firrtl.instance MWrite_ext sym @MWrite_ext_0  @MWrite_ext
+    // CHECK: firrtl.instance MWrite_ext sym @[[MWRITE_EXT_0:.+]] @MWrite_ext(
     %1:4 = firrtl.instance MWrite_ext  @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
   }
   firrtl.module @Complex() {
@@ -171,5 +172,5 @@ firrtl.circuit "Complex" attributes {annotations = [
   // CHECK-SAME{LITERAL}: 1 -> {{0}}.{{2}}.{{3}}
   // CHECK-SAME{LITERAL}: 2 -> {{0}}.{{4}}
   // CHECK-SAME: {output_file = #hw.output_file<"metadata{{/|\\\\}}sram.txt", excludeFromFileList>,
-  // CHECK-SAME: symbols = [@DUT, #hw.innerNameRef<@DUT::@MWrite_ext>, #hw.innerNameRef<@DUT::@child>, #hw.innerNameRef<@Child::@MWrite_ext>, #hw.innerNameRef<@DUT::@MWrite_ext_0>]
+  // CHECK-SAME: symbols = [@DUT, #hw.innerNameRef<@DUT::@[[MWRITE_EXT]]>, #hw.innerNameRef<@DUT::@[[CHILD]]>, #hw.innerNameRef<@Child::@[[CHILD_MWRITE_EXT]]>, #hw.innerNameRef<@DUT::@[[MWRITE_EXT_0]]>]
 }

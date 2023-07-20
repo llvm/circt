@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_OM_OMOPS_TD
 #define CIRCT_DIALECT_OM_OMOPS_TD
 
+include "circt/Dialect/OM/OMOpInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
@@ -22,14 +23,16 @@ class OMOp<string mnemonic, list<Trait> traits = []> :
     Op<OMDialect, mnemonic, traits>;
 
 //===----------------------------------------------------------------------===//
-// Class definitions
+// Shared definitions
 //===----------------------------------------------------------------------===//
 
-def ClassOp : OMOp<"class",
-    [SingleBlock, NoTerminator, Symbol, SymbolTable,
-     HasParent<"mlir::ModuleOp">,
-     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>
-    ]> {
+class OMClassLike<string mnemonic, list<Trait> traits = []> :
+  OMOp<mnemonic, traits # [
+    SingleBlock, NoTerminator, Symbol, SymbolTable,
+    HasParent<"mlir::ModuleOp">,
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
+    DeclareOpInterfaceMethods<ClassLike>]> {
+
   let arguments = (ins
     SymbolNameAttr:$sym_name,
     StrArrayAttr:$formalParamNames
@@ -48,7 +51,19 @@ def ClassOp : OMOp<"class",
   let hasCustomAssemblyFormat = 1;
 
   let hasVerifier = 1;
+}
 
+class OMClassFieldLike<string mnemonic, list<Trait> traits = []> :
+  OMOp<mnemonic, traits # [
+    Symbol,
+    DeclareOpInterfaceMethods<ClassFieldLike>]> {
+}
+
+//===----------------------------------------------------------------------===//
+// Class definitions
+//===----------------------------------------------------------------------===//
+
+def ClassOp : OMClassLike<"class"> {
   let extraClassDeclaration = [{
     mlir::Block *getBodyBlock() { return &getBody().front(); }
     // This builds a ClassOp, and populates it with the CLassFieldOps.
@@ -62,8 +77,8 @@ def ClassOp : OMOp<"class",
   }];
 }
 
-def ClassFieldOp : OMOp<"class.field",
-    [HasParent<"ClassOp">, Symbol]> {
+def ClassFieldOp : OMClassFieldLike<"class.field",
+    [HasParent<"ClassOp">]> {
   let arguments = (ins
     SymbolNameAttr:$sym_name,
     AnyType:$value
@@ -71,6 +86,28 @@ def ClassFieldOp : OMOp<"class.field",
 
   let assemblyFormat = [{
     $sym_name `,` $value `:` type($value) attr-dict
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// External class definitions
+//===----------------------------------------------------------------------===//
+
+def ClassExternOp : OMClassLike<"class.extern"> {
+  let extraClassDeclaration = [{
+    mlir::Block *getBodyBlock() { return &getBody().front(); }
+  }];
+}
+
+def ClassExternFieldOp : OMClassFieldLike<"class.extern.field",
+    [HasParent<"ClassExternOp">]> {
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttr:$type
+  );
+
+  let assemblyFormat = [{
+    $sym_name `:` $type attr-dict
   }];
 }
 

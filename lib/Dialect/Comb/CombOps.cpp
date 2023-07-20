@@ -45,13 +45,15 @@ Value comb::createOrFoldSExt(Value value, Type destTy,
   return createOrFoldSExt(builder.getLoc(), value, destTy, builder);
 }
 
-Value comb::createOrFoldNot(Location loc, Value value, OpBuilder &builder) {
+Value comb::createOrFoldNot(Location loc, Value value, OpBuilder &builder,
+                            bool twoState) {
   auto allOnes = builder.create<hw::ConstantOp>(loc, value.getType(), -1);
-  return builder.createOrFold<XorOp>(loc, value, allOnes, false);
+  return builder.createOrFold<XorOp>(loc, value, allOnes, twoState);
 }
 
-Value comb::createOrFoldNot(Value value, ImplicitLocOpBuilder &builder) {
-  return createOrFoldNot(builder.getLoc(), value, builder);
+Value comb::createOrFoldNot(Value value, ImplicitLocOpBuilder &builder,
+                            bool twoState) {
+  return createOrFoldNot(builder.getLoc(), value, builder, twoState);
 }
 
 //===----------------------------------------------------------------------===//
@@ -279,6 +281,18 @@ LogicalResult ExtractOp::verify() {
   if (getLowBit() >= srcWidth || srcWidth - getLowBit() < dstWidth)
     return emitOpError("from bit too large for input"), failure();
 
+  return success();
+}
+
+LogicalResult TruthTableOp::verify() {
+  size_t numInputs = getInputs().size();
+  if (numInputs >= sizeof(size_t) * 8)
+    return emitOpError("Truth tables support a maximum of ")
+           << sizeof(size_t) * 8 - 1 << " inputs on your platform";
+
+  ArrayAttr table = getLookupTable();
+  if (table.size() != (1ull << numInputs))
+    return emitOpError("Expected lookup table of 2^n length");
   return success();
 }
 

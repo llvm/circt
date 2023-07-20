@@ -287,7 +287,7 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
       SmallVector<Attribute> newNamepath(namepath.begin(), namepath.end());
       if (!nla.isComponent())
         newNamepath.back() =
-            getInnerRefTo(inst, "", [&](FModuleOp mod) -> ModuleNamespace & {
+            getInnerRefTo(inst, [&](FModuleOp mod) -> ModuleNamespace & {
               return getModuleNamespace(mod);
             });
       newNamepath.push_back(leafAttr);
@@ -490,7 +490,7 @@ LogicalResult LowerMemoryPass::runOnModule(FModuleOp module, bool shouldDedup) {
   for (auto op :
        llvm::make_early_inc_range(module.getBodyBlock()->getOps<MemOp>())) {
     // Check that the memory has been properly lowered already.
-    if (!op.getDataType().isa<UIntType>())
+    if (!type_isa<UIntType>(op.getDataType()))
       return op->emitError(
           "memories should be flattened before running LowerMemory");
 

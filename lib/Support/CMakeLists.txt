@@ -21,8 +21,6 @@ add_circt_library(CIRCTSupport
   ValueMapper.cpp
   "${VERSION_CPP}"
 
-  ADDITIONAL_HEADER_DIRS
-
   LINK_LIBS PUBLIC
   MLIRIR
   MLIRTransforms

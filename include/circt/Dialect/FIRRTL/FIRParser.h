@@ -29,9 +29,19 @@ namespace circt {
 namespace firrtl {
 
 struct FIRParserOptions {
-  /// If this is set to true, the @info locators are ignored, and the locations
-  /// are set to the location in the .fir file.
-  bool ignoreInfoLocators = false;
+  /// Specify how @info locators should be handled.
+  enum class InfoLocHandling {
+    /// If this is set to true, the @info locators are ignored, and the
+    /// locations are set to the location in the .fir file.
+    IgnoreInfo,
+    /// Prefer @info locators, fallback to .fir locations.
+    PreferInfo,
+    /// Attach both @info locators (when present) and .fir locations.
+    FusedInfo
+  };
+
+  InfoLocHandling infoLocatorHandling = InfoLocHandling::PreferInfo;
+
   /// The number of annotation files that were specified on the command line.
   /// This, along with numOMIRFiles provides structure to the buffers in the
   /// source manager.
@@ -65,6 +75,43 @@ maybeStringToLocation(llvm::StringRef spelling, bool skipParsing,
                       MLIRContext *context);
 
 void registerFromFIRFileTranslation();
+
+/// The FIRRTL specification version.
+struct FIRVersion {
+  uint32_t major, minor, patch;
+
+  /// Three way compare of one FIRRTL version with another FIRRTL version.
+  /// Return 1 if the first version is greater than the second version, -1 if
+  /// the first version is less than the second version, and 0 if the versions
+  /// are equal.
+  static int compare(const FIRVersion &a, const FIRVersion &b) {
+    if (a.major > b.major)
+      return 1;
+    if (a.major < b.major)
+      return -1;
+    if (a.minor > b.minor)
+      return 1;
+    if (a.minor < b.minor)
+      return -1;
+    if (a.patch > b.patch)
+      return 1;
+    if (a.patch < b.patch)
+      return -1;
+    return 0;
+  }
+
+  static FIRVersion minimumFIRVersion() { return {0, 2, 0}; }
+
+  static FIRVersion defaultFIRVersion() { return {1, 0, 0}; }
+
+}; // namespace firrtl
+
+/// Method to enable printing of FIRVersions
+template <typename T>
+static T &operator<<(T &os, const FIRVersion &version) {
+  os << version.major << "." << version.minor << "." << version.patch;
+  return os;
+}
 
 } // namespace firrtl
 } // namespace circt

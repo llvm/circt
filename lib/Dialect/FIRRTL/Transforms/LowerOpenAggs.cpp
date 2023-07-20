@@ -49,8 +49,14 @@ struct NonHWField {
   bool isFlip;
   /// String suffix naming this field.
   SmallString<16> suffix;
+
+  /// Print this structure to the specified stream.
+  void print(raw_ostream &os) const;
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
   /// Print this structure to llvm::errs().
-  void dump() const;
+  LLVM_DUMP_METHOD void dump() const { print(llvm::errs()); }
+#endif
 };
 
 /// Mapped port info
@@ -71,34 +77,49 @@ struct PortMappingInfo {
       return 1;
     return fields.size() + (hwType ? 1 : 0) + (includeErased ? 1 : 0);
   }
-  void dump() const;
+
+  /// Print this structure to the specified stream.
+  void print(raw_ostream &os) const;
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+  /// Print this structure to llvm::errs().
+  LLVM_DUMP_METHOD void dump() const { print(llvm::errs()); }
+#endif
 };
 
-llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const NonHWField &field) {
-  return os << llvm::formatv(
-             "non-HW(type={0}, fieldID={1}, isFlip={2}, suffix={3})",
-             field.type, field.fieldID, field.isFlip, field.suffix);
+inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                     const NonHWField &field) {
+  field.print(os);
+  return os;
 }
 
-llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
-                              const PortMappingInfo &pmi) {
-  if (pmi.identity)
-    return os << "(identity)";
-
-  os << "[[hw portion: ";
-  if (pmi.hwType)
-    os << pmi.hwType;
-  else
-    os << "(none)";
-  os << ", fields: ";
-  llvm::interleaveComma(pmi.fields, os);
-  return os << "]]";
+inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                     const PortMappingInfo &pmi) {
+  pmi.print(os);
+  return os;
 }
 
 } // namespace
 
-void NonHWField::dump() const { llvm::errs() << *this; }
-void PortMappingInfo::dump() const { llvm::errs() << *this; }
+void NonHWField::print(llvm::raw_ostream &os) const {
+  os << llvm::formatv("non-HW(type={0}, fieldID={1}, isFlip={2}, suffix={3})",
+                      type, fieldID, isFlip, suffix);
+}
+void PortMappingInfo::print(llvm::raw_ostream &os) const {
+  if (identity) {
+    os << "(identity)";
+    return;
+  }
+
+  os << "[[hw portion: ";
+  if (hwType)
+    os << hwType;
+  else
+    os << "(none)";
+  os << ", fields: ";
+  llvm::interleaveComma(fields, os);
+  os << "]]";
+}
 
 template <typename Range>
 LogicalResult walkPortMappings(
@@ -337,7 +358,7 @@ LogicalResult Visitor::visitExpr(OpenSubfieldOp op) {
   if (nonHWForResult != nonHWValues.end()) {
     auto newResult = nonHWForResult->second;
     assert(op.getResult().getType() == newResult.getType());
-    assert(!isa<FIRRTLBaseType>(newResult.getType()));
+    assert(!type_isa<FIRRTLBaseType>(newResult.getType()));
     op.getResult().replaceAllUsesWith(newResult);
     return success();
   }
@@ -351,7 +372,7 @@ LogicalResult Visitor::visitExpr(OpenSubfieldOp op) {
     return success();
   }
 
-  auto bundleType = cast<BundleType>(newInput->getType());
+  auto bundleType = type_cast<BundleType>(newInput->getType());
 
   // Recompute the "actual" index for this field, it may have changed.
   auto fieldName = op.getFieldName();
@@ -365,7 +386,7 @@ LogicalResult Visitor::visitExpr(OpenSubfieldOp op) {
 
   hwOnlyAggMap[op.getResult()] = newOp;
 
-  if (isa<FIRRTLBaseType>(op.getType()))
+  if (type_isa<FIRRTLBaseType>(op.getType()))
     op.getResult().replaceAllUsesWith(newOp.getResult());
 
   return success();
@@ -384,7 +405,7 @@ LogicalResult Visitor::visitExpr(OpenSubindexOp op) {
   if (nonHWForResult != nonHWValues.end()) {
     auto newResult = nonHWForResult->second;
     assert(op.getResult().getType() == newResult.getType());
-    assert(!isa<FIRRTLBaseType>(newResult.getType()));
+    assert(!type_isa<FIRRTLBaseType>(newResult.getType()));
     op.getResult().replaceAllUsesWith(newResult);
     return success();
   }
@@ -405,7 +426,7 @@ LogicalResult Visitor::visitExpr(OpenSubindexOp op) {
 
   hwOnlyAggMap[op.getResult()] = newOp;
 
-  if (isa<FIRRTLBaseType>(op.getType()))
+  if (type_isa<FIRRTLBaseType>(op.getType()))
     op.getResult().replaceAllUsesWith(newOp.getResult());
   return success();
 }
@@ -534,7 +555,7 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
 
 PortMappingInfo Visitor::mapPortType(Type type) {
   PortMappingInfo pi{false, {}, {}};
-  auto ftype = dyn_cast<FIRRTLType>(type);
+  auto ftype = type_dyn_cast<FIRRTLType>(type);
   // Ports that aren't open aggregates are left alone.
   if (!ftype || !isa<OpenBundleType, OpenVectorType>(ftype)) {
     pi.identity = true;

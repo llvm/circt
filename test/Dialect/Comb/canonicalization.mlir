@@ -325,6 +325,18 @@ hw.module @subCst(%a: i4) -> (o1: i4) {
   hw.output %b : i4
 }
 
+// CHECK-LABEL: @addConstAndConst
+hw.module @addConstAndConst(%a: i4) -> (o1: i4, o2: i4) {
+// CHECK: %c3_i4 = hw.constant 3 : i4
+// CHECK: [[RESULT:%.+]] = comb.add %a, %c3_i4 : i4
+// CHECK: hw.output [[RESULT]]
+  %c1 = hw.constant 1 : i4
+  %c2 = hw.constant 2 : i4
+  %b = comb.add %a, %c1 : i4
+  %c = comb.add %b, %c2 : i4
+  hw.output %c, %b : i4, i4
+}
+
 // Validates that when there is a matching suffix, and prefix, both of them are removed
 // appropriately, and strips of an unnecessary Cat where possible.
 // CHECK-LABEL: hw.module @compareStrengthReductionRemoveSuffixAndPrefix
@@ -1495,4 +1507,13 @@ hw.module @twoStateICmp(%arg: i4) -> (cond: i1) {
   %c-1_i4 = hw.constant -1 : i4
   %0 = comb.icmp bin eq %c-1_i4, %arg : i4
   hw.output %0 : i1
+}
+
+// https://github.com/llvm/circt/issues/5531
+// CHECK-LABEL: @Issue5531
+hw.module @Issue5531(%arg0: i64, %arg1: i64) -> (out: i32) {
+  // CHECK:  %2 = comb.mul %0, %1 {sv.namehint = "hint"} : i32
+  %2 = comb.mul %arg0, %arg1 {sv.namehint = "hint"} : i64
+  %3 = comb.extract %2 from 0 : (i64) -> i32
+  hw.output %3 : i32
 }

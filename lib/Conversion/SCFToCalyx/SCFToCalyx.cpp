@@ -114,7 +114,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
           TypeSwitch<mlir::Operation *, bool>(_op)
               .template Case<arith::ConstantOp, ReturnOp, BranchOpInterface,
                              /// SCF
-                             scf::YieldOp,
+                             scf::YieldOp, scf::WhileOp,
                              /// memref
                              memref::AllocOp, memref::AllocaOp, memref::LoadOp,
                              memref::StoreOp,
@@ -124,7 +124,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                              MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp,
                              IndexCastOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
-              .template Case<scf::WhileOp, FuncOp, scf::ConditionOp>([&](auto) {
+              .template Case<FuncOp, scf::ConditionOp>([&](auto) {
                 /// Skip: these special cases will be handled separately.
                 return true;
               })
@@ -170,6 +170,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, memref::AllocaOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::LoadOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::StoreOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, scf::WhileOp whileOp) const;
 
   /// buildLibraryOp will build a TCalyxLibOp inside a TGroupOp based on the
   /// source operation TSrcOp.
@@ -249,6 +250,7 @@ private:
         getState<ComponentLoweringState>().getUniqueName(opName));
     // Operation pipelines are not combinational, so a GroupOp is required.
     auto group = createGroupForOp<calyx::GroupOp>(rewriter, op);
+    OpBuilder builder(group->getRegion(0));
     getState<ComponentLoweringState>().addBlockScheduleable(op->getBlock(),
                                                             group);
 
@@ -259,9 +261,13 @@ private:
     rewriter.create<calyx::AssignOp>(loc, reg.getIn(), out);
     // The write enable port is high when the pipeline is done.
     rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(), opPipe.getDone());
+    // Set pipelineOp to high as long as its done signal is not high.
+    // This prevents the pipelineOP from executing for the cycle that we write
+    // to register. To get !(pipelineOp.done) we do 1 xor pipelineOp.done
+    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
     rewriter.create<calyx::AssignOp>(
-        loc, opPipe.getGo(),
-        createConstant(loc, rewriter, getComponent(), 1, 1));
+        loc, opPipe.getGo(), c1,
+        comb::createOrFoldNot(group.getLoc(), opPipe.getDone(), builder));
     // The group is done when the register write is complete.
     rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone());
 
@@ -284,12 +290,23 @@ private:
     IRRewriter::InsertionGuard guard(rewriter);
     rewriter.setInsertionPointToEnd(group.getBody());
     auto addrPorts = memoryInterface.addrPorts();
-    assert(addrPorts.size() == addressValues.size() &&
-           "Mismatch between number of address ports of the provided memory "
-           "and address assignment values");
-    for (auto address : enumerate(addressValues))
-      rewriter.create<calyx::AssignOp>(loc, addrPorts[address.index()],
-                                       address.value());
+    if (addressValues.empty()) {
+      assert(
+          addrPorts.size() == 1 &&
+          "We expected a 1 dimensional memory of size 1 because there were no "
+          "address assignment values");
+      // Assign to address 1'd0 in memory.
+      rewriter.create<calyx::AssignOp>(
+          loc, addrPorts[0],
+          createConstant(loc, rewriter, getComponent(), 1, 0));
+    } else {
+      assert(addrPorts.size() == addressValues.size() &&
+             "Mismatch between number of address ports of the provided memory "
+             "and address assignment values");
+      for (auto address : enumerate(addressValues))
+        rewriter.create<calyx::AssignOp>(loc, addrPorts[address.index()],
+                                         address.value());
+    }
   }
 };
 
@@ -446,6 +463,12 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   for (int64_t dim : memtype.getShape()) {
     sizes.push_back(dim);
     addrSizes.push_back(calyx::handleZeroWidth(dim));
+  }
+  // If memref has no size (e.g., memref<i32>) create a 1 dimensional memory of
+  // size 1.
+  if (sizes.empty() && addrSizes.empty()) {
+    sizes.push_back(1);
+    addrSizes.push_back(1);
   }
   auto memoryOp = rewriter.create<calyx::MemoryOp>(
       allocOp.getLoc(), componentState.getUniqueName("mem"),
@@ -656,6 +679,21 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   }
   rewriter.eraseOp(op);
   return res;
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     scf::WhileOp whileOp) const {
+  // Only need to add the whileOp to the BlockSchedulables scheduler interface.
+  // Everything else was handled in the `BuildWhileGroups` pattern.
+  ScfWhileOp scfWhileOp(whileOp);
+  SmallVector<calyx::GroupOp> initWhileGroups =
+      getState<ComponentLoweringState>().getLoopInitGroups(scfWhileOp);
+  getState<ComponentLoweringState>().addBlockScheduleable(
+      whileOp.getOperation()->getBlock(), WhileScheduleable{
+                                              scfWhileOp,
+                                              initWhileGroups,
+                                          });
+  return success();
 }
 
 /// Inlines Calyx ExecuteRegionOp operations within their parent blocks.
@@ -909,11 +947,8 @@ class BuildWhileGroups : public calyx::FuncOpPartialLoweringPattern {
         initGroups.push_back(initGroupOp);
       }
 
-      getState<ComponentLoweringState>().addBlockScheduleable(
-          whileOp.getOperation()->getBlock(), WhileScheduleable{
-                                                  whileOp,
-                                                  initGroups,
-                                              });
+      getState<ComponentLoweringState>().setLoopInitGroups(whileOp, initGroups);
+
       return WalkResult::advance();
     });
     return res;

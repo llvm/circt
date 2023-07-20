@@ -211,7 +211,9 @@ def PipelineToHW : Pass<"lower-pipeline-to-hw", "hw::HWModuleOp"> {
   ];
   let options = [
     Option<"outlineStages", "outline-stages", "bool", "false",
-      "Outline each stage to a separate `hw.module`.">
+      "Outline each stage to a separate `hw.module`.">,
+    Option<"clockGateRegs", "clock-gate-regs", "bool", "false",
+      "Clock gate each register instead of (default) input muxing  (ASIC optimization).">
   ];
 }
 
@@ -383,9 +385,7 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
            "bool", "false",
     "Emit warnings on unprocessed annotations during lower-to-hw pass">,
     Option<"emitChiselAssertsAsSVA", "emit-chisel-asserts-as-sva",
-           "bool", "false","Convert all Chisel asserts to SVA">,
-    Option<"addMuxPragmas", "add-mux-pragmas", "bool", "false",
-            "Annotate mux pragmas to multibit mux and subacess results">
+           "bool", "false","Convert all Chisel asserts to SVA">
   ];
 }
 
@@ -406,6 +406,24 @@ def HandshakeToDC : Pass<"lower-handshake-to-dc", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::createHandshakeToDCPass()";
   let dependentDialects = ["dc::DCDialect", "mlir::func::FuncDialect", "hw::HWDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// DCToHW
+//===----------------------------------------------------------------------===//
+
+def DCToHW : Pass<"lower-dc-to-hw", "mlir::ModuleOp"> {
+  let summary = "Lower DC to HW";
+  let description = [{
+    Lower DC to ESI/hw/comb/seq operations.
+    In case the IR contains DC operations that need to be clocked (fork, buffer),
+    there must exist a clock and reset signal in the parent `FunctionLike`
+    operation. These arguments are to be marked with a `dc.clock` and `dc.reset`
+    attribute, respectively.
+  }];
+  let constructor = "circt::createDCToHWPass()";
+  let dependentDialects = ["dc::DCDialect", "esi::ESIDialect", "hw::HWDialect",
+      "comb::CombDialect", "seq::SeqDialect"];
 }
 
 //===----------------------------------------------------------------------===//
@@ -506,6 +524,32 @@ def ConvertHWToSystemC : Pass<"convert-hw-to-systemc", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// HWToSV
+//===----------------------------------------------------------------------===//
+
+def LowerHWToSV : Pass<"lower-hw-to-sv", "hw::HWModuleOp"> {
+  let summary = "Convert HW to SV";
+  let description = [{
+    This pass converts various HW contructs to SV.
+  }];
+  let constructor = "circt::createLowerHWToSVPass()";
+  let dependentDialects = ["sv::SVDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// VerifToSV
+//===----------------------------------------------------------------------===//
+
+def LowerVerifToSV : Pass<"lower-verif-to-sv", "hw::HWModuleOp"> {
+  let summary = "Convert Verif to SV";
+  let description = [{
+    This pass converts various Verif contructs to SV.
+  }];
+  let constructor = "circt::createLowerVerifToSVPass()";
+  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // StandardToHandshake
 //===----------------------------------------------------------------------===//
 
@@ -593,6 +637,7 @@ def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "mlir::ModuleOp"> {
   let constructor = "circt::createLowerArcToLLVMPass()";
   let dependentDialects = [
     "arc::ArcDialect",
+    "mlir::cf::ControlFlowDialect",
     "mlir::LLVM::LLVMDialect",
     "mlir::scf::SCFDialect",
     "mlir::func::FuncDialect"

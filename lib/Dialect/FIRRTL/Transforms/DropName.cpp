@@ -34,8 +34,6 @@ struct DropNamesPass : public DropNameBase<DropNamesPass> {
       dropNamesIf(namesChanged, namesDropped, [](FNamableOp op) {
         if (isUselessName(op.getName()))
           return ModAction::Drop;
-        if (op.getName().starts_with("_"))
-          return ModAction::Drop;
         return ModAction::Demote;
       });
     } else if (preserveMode == PreserveValues::Named) {

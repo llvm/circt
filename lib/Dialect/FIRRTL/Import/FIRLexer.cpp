@@ -509,6 +509,8 @@ FIRToken FIRLexer::lexString(const char *tokStart, bool isRaw) {
 ///       ( '+' | '-' )? Digit+ '.' Digit+ ( 'E' ( '+' | '-' )? Digit+ )?
 ///   TripleLit ::=
 ///       Digit+ '.' Digit+ '.' Digit+
+///   Radix-specified Integer ::=
+///       ( '-' )? '0' ( 'b' | 'o' | 'd' | 'h' ) LegalDigit*
 ///
 FIRToken FIRLexer::lexNumber(const char *tokStart) {
   assert(llvm::isDigit(curPtr[-1]) || curPtr[-1] == '+' || curPtr[-1] == '-');
@@ -516,6 +518,40 @@ FIRToken FIRLexer::lexNumber(const char *tokStart) {
   // There needs to be at least one digit.
   if (!llvm::isDigit(*curPtr) && !llvm::isDigit(curPtr[-1]))
     return emitError(tokStart, "unexpected character after sign");
+
+  // If we encounter a "b", "o", "d", or "h", this is a radix-specified integer
+  // literal.  This is only supported for FIRRTL 2.4.0 or later.  This is always
+  // lexed, but rejected during parsing if the version is too old.
+  const char *oldPtr = curPtr;
+  if (curPtr[-1] == '-' && *curPtr == '0')
+    ++curPtr;
+  if (curPtr[-1] == '0') {
+    switch (*curPtr) {
+    case 'b':
+      ++curPtr;
+      while (*curPtr >= '0' && *curPtr <= '1')
+        ++curPtr;
+      return formToken(FIRToken::radix_specified_integer, tokStart);
+    case 'o':
+      ++curPtr;
+      while (*curPtr >= '0' && *curPtr <= '7')
+        ++curPtr;
+      return formToken(FIRToken::radix_specified_integer, tokStart);
+    case 'd':
+      ++curPtr;
+      while (llvm::isDigit(*curPtr))
+        ++curPtr;
+      return formToken(FIRToken::radix_specified_integer, tokStart);
+    case 'h':
+      ++curPtr;
+      while (llvm::isHexDigit(*curPtr))
+        ++curPtr;
+      return formToken(FIRToken::radix_specified_integer, tokStart);
+    default:
+      curPtr = oldPtr;
+      break;
+    }
+  }
 
   while (llvm::isDigit(*curPtr))
     ++curPtr;

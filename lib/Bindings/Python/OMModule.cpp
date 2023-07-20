@@ -8,7 +8,7 @@
 
 #include "DialectModules.h"
 #include "circt-c/Dialect/OM.h"
-#include "circt/Support/LLVM.h"
+#include "mlir-c/BuiltinAttributes.h"
 #include "mlir-c/IR.h"
 #include "mlir/Bindings/Python/PybindAdaptors.h"
 #include <pybind11/pybind11.h>
@@ -19,19 +19,27 @@ using namespace mlir;
 using namespace mlir::python;
 using namespace mlir::python::adaptors;
 
+namespace {
+
 /// Provides an Object class by simply wrapping the OMObject CAPI.
 struct Object {
   // Instantiate an Object with a reference to the underlying OMObject.
   Object(OMObject object) : object(object) {}
+  Object(const Object &object) : object(object.object) {}
 
   /// Get the Type from an Object, which will be a ClassType.
   MlirType getType() { return omEvaluatorObjectGetType(object); }
 
   // Get a field from the Object, using pybind's support for variant to return a
   // Python object that is either an Object or Attribute.
-  std::variant<Object, MlirAttribute> getField(MlirAttribute name) {
+  std::variant<Object, MlirAttribute> getField(const std::string &name) {
+    // Wrap the requested field name in an attribute.
+    MlirContext context = mlirTypeGetContext(omEvaluatorObjectGetType(object));
+    MlirStringRef cName = mlirStringRefCreateFromCString(name.c_str());
+    MlirAttribute nameAttr = mlirStringAttrGet(context, cName);
+
     // Get the field's ObjectValue via the CAPI.
-    OMObjectValue result = omEvaluatorObjectGetField(object, name);
+    OMObjectValue result = omEvaluatorObjectGetField(object, nameAttr);
 
     // If the ObjectValue is null, something failed. Diagnostic handling is
     // implemented in pure Python, so nothing to do here besides throwing an
@@ -46,6 +54,21 @@ struct Object {
     // If the field was a primitive, return the Attribute.
     assert(omEvaluatorObjectValueIsAPrimitive(result));
     return omEvaluatorObjectValueGetPrimitive(result);
+  }
+
+  // Get a list with the names of all the fields in the Object.
+  std::vector<std::string> getFieldNames() {
+    MlirAttribute fieldNames = omEvaluatorObjectGetFieldNames(object);
+    intptr_t numFieldNames = mlirArrayAttrGetNumElements(fieldNames);
+
+    std::vector<std::string> pyFieldNames;
+    for (intptr_t i = 0; i < numFieldNames; ++i) {
+      MlirAttribute fieldName = mlirArrayAttrGetElement(fieldNames, i);
+      MlirStringRef fieldNameStr = mlirStringAttrGetValue(fieldName);
+      pyFieldNames.emplace_back(fieldNameStr.data, fieldNameStr.length);
+    }
+
+    return pyFieldNames;
   }
 
 private:
@@ -63,7 +86,7 @@ struct Evaluator {
                      std::vector<MlirAttribute> actualParams) {
     // Instantiate the Object via the CAPI.
     OMObject result = omEvaluatorInstantiate(
-        evaluator, className, actualParams.size(), actualParams.begin().base());
+        evaluator, className, actualParams.size(), actualParams.data());
 
     // If the Object is null, something failed. Diagnostic handling is
     // implemented in pure Python, so nothing to do here besides throwing an
@@ -84,6 +107,32 @@ private:
   OMEvaluator evaluator;
 };
 
+class PyListAttrIterator {
+public:
+  PyListAttrIterator(MlirAttribute attr) : attr(std::move(attr)) {}
+
+  PyListAttrIterator &dunderIter() { return *this; }
+
+  MlirAttribute dunderNext() {
+    if (nextIndex >= omListAttrGetNumElements(attr))
+      throw py::stop_iteration();
+    return omListAttrGetElement(attr, nextIndex++);
+  }
+
+  static void bind(py::module &m) {
+    py::class_<PyListAttrIterator>(m, "ListAttributeIterator",
+                                   py::module_local())
+        .def("__iter__", &PyListAttrIterator::dunderIter)
+        .def("__next__", &PyListAttrIterator::dunderNext);
+  }
+
+private:
+  MlirAttribute attr;
+  intptr_t nextIndex = 0;
+};
+
+} // namespace
+
 /// Populate the OM Python module.
 void circt::python::populateDialectOMSubmodule(py::module &m) {
   m.doc() = "OM dialect Python native extension";
@@ -98,10 +147,27 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
 
   // Add the Object class definition.
   py::class_<Object>(m, "Object")
-      .def("get_field", &Object::getField, "Get a field from an Object",
+      .def(py::init<Object>(), py::arg("object"))
+      .def("__getattr__", &Object::getField, "Get a field from an Object",
            py::arg("name"))
+      .def_property_readonly("field_names", &Object::getFieldNames,
+                             "Get field names from an Object")
       .def_property_readonly("type", &Object::getType,
                              "The Type of the Object");
+
+  // Add the ReferenceAttr definition
+  mlir_attribute_subclass(m, "ReferenceAttr", omAttrIsAReferenceAttr)
+      .def_property_readonly("inner_ref", [](MlirAttribute self) {
+        return omReferenceAttrGetInnerRef(self);
+      });
+
+  // Add the OMListAttr definition
+  mlir_attribute_subclass(m, "ListAttr", omAttrIsAListAttr)
+      .def("__getitem__", &omListAttrGetElement)
+      .def("__len__", &omListAttrGetElement)
+      .def("__iter__",
+           [](MlirAttribute arr) { return PyListAttrIterator(arr); });
+  PyListAttrIterator::bind(m);
 
   // Add the ClassType class definition.
   mlir_type_subclass(m, "ClassType", omTypeIsAClassType);

@@ -128,7 +128,7 @@ class TransitionOp:
       guard_type = support.type_to_pytype(guard.type)
       if guard_type.width != 1:
         raise ValueError('The guard must be a single bit')
-      fsm.ReturnOp(operand=guard.value)
+      fsm.ReturnOp(operand=guard)
 
 
 class StateOp:

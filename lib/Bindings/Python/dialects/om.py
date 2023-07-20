@@ -5,10 +5,10 @@
 from __future__ import annotations
 
 from ._om_ops_gen import *
-from .._mlir_libs._circt._om import Evaluator as BaseEvaluator, Object, ClassType
+from .._mlir_libs._circt._om import Evaluator as BaseEvaluator, Object as BaseObject, ClassType, ReferenceAttr, ListAttr
 
-from circt.ir import Attribute, Diagnostic, DiagnosticSeverity, Module, StringAttr
-from circt.support import attribute_to_var, var_to_attribute
+from ..ir import Attribute, Diagnostic, DiagnosticSeverity, Module, StringAttr
+from ..support import attribute_to_var, var_to_attribute
 
 import sys
 import logging
@@ -17,6 +17,30 @@ from typing import TYPE_CHECKING, Any, Sequence, TypeVar
 
 if TYPE_CHECKING:
   from _typeshed.stdlib.dataclass import DataclassInstance
+
+
+# Define the Object class by inheriting from the base implementation in C++.
+class Object(BaseObject):
+
+  def __init__(self, obj: BaseObject) -> None:
+    super().__init__(obj)
+
+  def __getattr__(self, name: str):
+    # Call the base method to get a field.
+    field = super().__getattr__(name)
+
+    # For primitives, return a Python value.
+    if isinstance(field, Attribute):
+      return attribute_to_var(field)
+
+    # For objects, return an Object, wrapping the base implementation.
+    assert isinstance(field, BaseObject)
+    return Object(field)
+
+  # Support iterating over an Object by yielding its fields.
+  def __iter__(self):
+    for name in self.field_names:
+      yield (name, getattr(self, name))
 
 
 # Define the Evaluator class by inheriting from the base implementation in C++.
@@ -40,15 +64,14 @@ class Evaluator(BaseEvaluator):
     # Attach our Diagnostic handler.
     mod.context.attach_diagnostic_handler(self._handle_diagnostic)
 
-  def instantiate(self, cls: type["DataclassInstance"],
-                  *args: Any) -> "DataclassInstance":
-    """Instantiate an Object with a dataclass type and actual parameters."""
+  def instantiate(self, cls: str, *args: Any) -> Object:
+    """Instantiate an Object with a class name and actual parameters."""
 
     # Convert the class name and actual parameters to Attributes within the
     # Evaluator's context.
     with self.module.context:
-      # Get the class name from the provided dataclass name.
-      class_name = StringAttr.get(cls.__name__)
+      # Get the class name from the class name.
+      class_name = StringAttr.get(cls)
 
       # Get the actual parameter Attributes from the supplied variadic
       # arguments. This relies on the circt.support helpers to convert from
@@ -58,41 +81,8 @@ class Evaluator(BaseEvaluator):
     # Call the base instantiate method.
     obj = super().instantiate(class_name, actual_params)
 
-    # Wrap the Object in the provided dataclass.
-    return self._instantiate_dataclass(cls, obj)
-
-  def _instantiate_dataclass(self, cls: type["DataclassInstance"],
-                             obj: Object) -> "DataclassInstance":
-    # Convert the field names of the class we are instantiating to StringAttrs
-    # within the Evaluator's context.
-    with self.module.context:
-      class_fields = [
-          (StringAttr.get(field.name), field.type) for field in fields(cls)
-      ]
-
-    # Convert the instantiated Object fields to Python objects.
-    object_fields = {}
-
-    for field_name, field_type in class_fields:
-      # Get the field from the object.
-      field = obj.get_field(field_name)
-
-      # Handle primitives represented as Attributes and nested Objects.
-      if isinstance(field, Attribute):
-        # Convert the field value to a Python object. This relies on the
-        # circt.support helpers to convert from Attribute to Python objects.
-        field_value = attribute_to_var(field)
-      else:
-        # Convert the field value to a Python dataclass for the Object.
-        assert isinstance(field, Object)
-        field_value = self._instantiate_dataclass(field_type, field)
-
-      # Save this field in the keyword argument dictionary that will be passed
-      # to the dataclass constructor.
-      object_fields[field_name.value] = field_value
-
-    # Instantiate a Python object of the requested class.
-    return cls(**object_fields)
+    # Return the Object, wrapping the base implementation.
+    return Object(obj)
 
   def _handle_diagnostic(self, diagnostic: Diagnostic) -> bool:
     """Handle MLIR Diagnostics by logging them."""

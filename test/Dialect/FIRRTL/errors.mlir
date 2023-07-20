@@ -876,6 +876,16 @@ firrtl.circuit "Top"   {
 
 // -----
 
+firrtl.circuit "Top" {
+  firrtl.module @Top (in %in : !firrtl.uint) {
+    %a = firrtl.wire : !firrtl.uint
+    // expected-error @+1 {{op operand #0 must be a sized passive base type}}
+    firrtl.strictconnect %a, %in : !firrtl.uint
+  }
+}
+
+// -----
+
 firrtl.circuit "AnalogRegister" {
   firrtl.module @AnalogRegister(in %clock: !firrtl.clock) {
     // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.analog'}}
@@ -1109,7 +1119,7 @@ firrtl.circuit "Top" {
   firrtl.module @Foo (in %in: !firrtl.probe<uint<2>>) {}
   firrtl.module @Top (in %in: !firrtl.probe<uint<2>>) {
     %foo_in = firrtl.instance foo @Foo(in in: !firrtl.probe<uint<2>>)
-    // expected-error @below {{must be a passive base type}}
+    // expected-error @below {{must be a sized passive base type}}
     firrtl.strictconnect %foo_in, %in : !firrtl.probe<uint<2>>
   }
 }
@@ -1182,6 +1192,112 @@ firrtl.circuit "NoDefineIntoRefSub" {
     // expected-error @below {{destination reference cannot be a sub-element of a reference}}
     firrtl.ref.define %sub, %xref : !firrtl.probe<uint<1>>
   }
+}
+
+// -----
+// Can't define into a ref.cast.
+
+firrtl.circuit "NoDefineIntoRefCast" {
+  firrtl.module @NoDefineIntoRefCast(out %r: !firrtl.probe<uint<1>>) {
+    // expected-note @below {{the destination was defined here}}
+    %dest_cast = firrtl.ref.cast %r : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint>
+    %x = firrtl.wire : !firrtl.uint
+    %xref = firrtl.ref.send %x : !firrtl.uint
+    // expected-error @below {{has invalid flow: the destination expression has source flow, expected sink or duplex flow}}
+    firrtl.ref.define %dest_cast, %xref : !firrtl.probe<uint>
+  }
+}
+
+// -----
+// Can't cast to gain width information.
+
+firrtl.circuit "CastAwayRefWidth" {
+  firrtl.module @CastAwayRefWidth(out %r: !firrtl.probe<uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint
+    %xref = firrtl.ref.send %zero : !firrtl.uint
+    // expected-error @below {{reference result must be compatible with reference input: recursively same or uninferred of same}}
+    %source = firrtl.ref.cast %xref : (!firrtl.probe<uint>) -> !firrtl.probe<uint<1>>
+    firrtl.ref.define %r, %source : !firrtl.probe<uint<1>>
+  }
+}
+
+// -----
+// Can't promote to rwprobe.
+
+firrtl.circuit "CastPromoteToRWProbe" {
+  firrtl.module @CastPromoteToRWProbe(out %r: !firrtl.rwprobe<uint>) {
+    %zero = firrtl.constant 0 : !firrtl.uint
+    %xref = firrtl.ref.send %zero : !firrtl.uint
+    // expected-error @below {{reference result must be compatible with reference input: recursively same or uninferred of same}}
+    %source = firrtl.ref.cast %xref : (!firrtl.probe<uint>) -> !firrtl.rwprobe<uint>
+    firrtl.ref.define %r, %source : !firrtl.rwprobe<uint>
+  }
+}
+
+// -----
+// Can't add const-ness via ref.cast
+
+firrtl.circuit "CastToMoreConst" {
+  firrtl.module @CastToMoreConst(out %r: !firrtl.probe<const.uint<3>>) {
+    %zero = firrtl.wire : !firrtl.uint<3>
+    %zref = firrtl.ref.send %zero : !firrtl.uint<3>
+    // expected-error @below {{reference result must be compatible with reference input: recursively same or uninferred of same}}
+    %zconst_ref= firrtl.ref.cast %zref : (!firrtl.probe<uint<3>>) -> !firrtl.probe<const.uint<3>>
+    firrtl.ref.define %r, %zconst_ref : !firrtl.probe<const.uint<3>>
+  }
+}
+
+// -----
+// Check that you can't drive a source.
+
+firrtl.circuit "PropertyDriveSource" {
+  // @expected-note @below {{the destination was defined here}}
+  firrtl.module @PropertyDriveSource(in %in: !firrtl.string) {
+    %0 = firrtl.string "hello"
+    // expected-error @below {{connect has invalid flow: the destination expression "in" has source flow, expected sink or duplex flow}}
+    firrtl.propassign %in, %0 : !firrtl.string
+  }
+}
+
+// -----
+// Check that you can't drive a sink more than once.
+
+firrtl.circuit "PropertyDoubleDrive" {
+  firrtl.module @PropertyDriveSource(out %out: !firrtl.string) {
+    %0 = firrtl.string "hello"
+    // expected-error @below {{destination property cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    firrtl.propassign %out, %0 : !firrtl.string
+    firrtl.propassign %out, %0 : !firrtl.string
+  }
+}
+
+// -----
+// Check that you can't connect property types.
+
+firrtl.circuit "PropertyConnect" {
+  firrtl.module @PropertyConnect(out %out: !firrtl.string) {
+    %0 = firrtl.string "hello"
+    // expected-error @below {{must be a sized passive base type}}
+    firrtl.strictconnect %out, %0 : !firrtl.string
+  }
+}
+
+// -----
+// Property aggregates can only contain properties.
+// Check list.
+
+firrtl.circuit "ListOfHW" {
+  // expected-error @below {{expected property type, found '!firrtl.uint<2>'}}
+  firrtl.module @MapOfHW(in %in: !firrtl.list<uint<2>>) {}
+}
+
+// -----
+// Property aggregates can only contain properties.
+// Check map.
+
+firrtl.circuit "MapOfHW" {
+  // expected-error @below {{expected property type, found '!firrtl.uint<4>'}}
+  firrtl.module @MapOfHW(in %in: !firrtl.map<string,uint<4>>) {}
 }
 
 // -----
@@ -1513,16 +1629,6 @@ firrtl.circuit "BitcastNonConstToConstContaining" {
 
 // -----
 
-// Uninferred width cast non-const to const
-firrtl.circuit "UninferredWidthCastNonConstToConst" {
-  firrtl.module @UninferredWidthCastNonConstToConst(in %a: !firrtl.uint) {
-    // expected-error @+1 {{operand constness must match}}
-    %b = firrtl.widthCast %a : (!firrtl.uint) -> !firrtl.const.uint<1>
-  }
-}
-
-// -----
-
 // Uninferred reset cast non-const to const
 firrtl.circuit "UninferredWidthCastNonConstToConst" {
   firrtl.module @UninferredWidthCastNonConstToConst(in %a: !firrtl.reset) {
@@ -1607,4 +1713,46 @@ firrtl.circuit "EnumAnalog" {
 firrtl.circuit "NonConstEnumConstElements" {
 // expected-error @+1 {{enum with 'const' elements must be 'const'}}
 firrtl.module @NonConstEnumConstElements(in %a: !firrtl.enum<None: uint<0>, Some: const.uint<1>>) {}
+}
+
+// -----
+// No const with probes within.
+
+firrtl.circuit "ConstOpenVector" {
+  // expected-error @below {{vector cannot be const with references}}
+  firrtl.extmodule @ConstOpenVector(out out : !firrtl.const.openvector<probe<uint<1>>, 2>)
+}
+
+// -----
+// Elements must support FieldID's.
+
+firrtl.circuit "OpenVectorNotFieldID" {
+  // expected-error @below {{vector element type does not support fieldID's, type: '!firrtl.string'}}
+  firrtl.extmodule @OpenVectorNotFieldID(out out : !firrtl.openvector<string, 2>)
+}
+
+// -----
+// No const with probes within.
+
+firrtl.circuit "ConstOpenBundle" {
+  // expected-error @below {{'const' bundle cannot have references, but element "x" has type '!firrtl.probe<uint<1>>'}}
+  firrtl.extmodule @ConstOpenBundle(out out : !firrtl.const.openbundle<x: probe<uint<1>>>)
+}
+
+// -----
+// Elements must support FieldID's.
+
+firrtl.circuit "OpenBundleNotFieldID" {
+  // expected-error @below {{bundle element "a" has unsupported type that does not support fieldID's: '!firrtl.string'}}
+  firrtl.extmodule @OpenBundleNotFieldID(out out : !firrtl.openbundle<a: string>)
+}
+
+// -----
+// Strict connect between non-equivalent anonymous type operands.
+
+firrtl.circuit "NonEquivalenctStrictConnect" {
+  firrtl.module @NonEquivalenctStrictConnect(in %in: !firrtl.uint<1>, out %out: !firrtl.alias<foo, uint<2>>) {
+    // expected-error @below {{op failed to verify that operands must be structurally equivalent}}
+    firrtl.strictconnect %out, %in: !firrtl.alias<foo, uint<2>>, !firrtl.uint<1>
+  }
 }

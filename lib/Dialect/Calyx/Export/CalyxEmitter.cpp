@@ -22,6 +22,7 @@
 #include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/FormatVariadic.h"
 
 using namespace circt;
 using namespace calyx;
@@ -125,13 +126,13 @@ private:
   /// Returns the library name for a given Operation Type.
   FailureOr<StringRef> getLibraryFor(Operation *op) {
     return TypeSwitch<Operation *, FailureOr<StringRef>>(op)
-        .Case<MemoryOp, RegisterOp, NotLibOp, AndLibOp, OrLibOp, XorLibOp,
-              AddLibOp, SubLibOp, GtLibOp, LtLibOp, EqLibOp, NeqLibOp, GeLibOp,
-              LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp, WireLibOp>(
-            [&](auto op) -> FailureOr<StringRef> {
-              static constexpr std::string_view sCore = "core";
-              return {sCore};
-            })
+        .Case<MemoryOp, SeqMemoryOp, RegisterOp, NotLibOp, AndLibOp, OrLibOp,
+              XorLibOp, AddLibOp, SubLibOp, GtLibOp, LtLibOp, EqLibOp, NeqLibOp,
+              GeLibOp, LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp,
+              WireLibOp>([&](auto op) -> FailureOr<StringRef> {
+          static constexpr std::string_view sCore = "core";
+          return {sCore};
+        })
         .Case<SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp,
               SrshLibOp, MultPipeLibOp, RemUPipeLibOp, RemSPipeLibOp,
               DivUPipeLibOp, DivSPipeLibOp>(
@@ -245,6 +246,12 @@ struct Emitter {
 
   // Memory emission
   void emitMemory(MemoryOp memory);
+
+  // Seq Memory emission
+  void emitSeqMemory(SeqMemoryOp memory);
+
+  // Invoke emission
+  void emitInvoke(InvokeOp invoke);
 
   // Emits a library primitive with template parameters based on all in- and
   // output ports.
@@ -398,6 +405,17 @@ private:
     os << RParen();
   }
 
+  void emitCycleValue(CycleOp op) {
+    os << "%";
+    if (op.getEnd().has_value()) {
+      os << LSquare();
+      os << op.getStart() << ":" << op.getEnd();
+      os << RSquare();
+    } else {
+      os << op.getStart();
+    }
+  }
+
   /// Emits the value of a guard or assignment.
   void emitValue(Value value, bool isIndented) {
     if (auto blockArg = value.dyn_cast<BlockArgument>()) {
@@ -440,6 +458,7 @@ private:
           os << exclamationMark();
           emitValue(op.getInputs()[0], /*isIndented=*/false);
         })
+        .Case<CycleOp>([&](auto op) { emitCycleValue(op); })
         .Default(
             [&](auto op) { emitOpError(op, "not supported for emission"); });
   }
@@ -484,6 +503,10 @@ private:
             emitCalyxSection(prependAttributes(op, "seq"),
                              [&]() { emitCalyxControl(op.getBodyBlock()); });
           })
+          .Case<StaticSeqOp>([&](auto op) {
+            emitCalyxSection(prependAttributes(op, "static seq"),
+                             [&]() { emitCalyxControl(op.getBodyBlock()); });
+          })
           .Case<ParOp>([&](auto op) {
             emitCalyxSection(prependAttributes(op, "par"),
                              [&]() { emitCalyxControl(op.getBodyBlock()); });
@@ -509,7 +532,33 @@ private:
               emitCalyxSection("else",
                                [&]() { emitCalyxControl(op.getElseBody()); });
           })
+          .Case<StaticIfOp>([&](auto op) {
+            indent() << prependAttributes(op, "static if ");
+            emitValue(op.getCond(), /*isIndented=*/false);
+
+            emitCalyxBody([&]() { emitCalyxControl(op.getThenBody()); });
+            if (op.elseBodyExists())
+              emitCalyxSection("else",
+                               [&]() { emitCalyxControl(op.getElseBody()); });
+          })
+          .Case<RepeatOp>([&](auto op) {
+            indent() << prependAttributes(op, "repeat ");
+            os << op.getCount();
+
+            emitCalyxBody([&]() { emitCalyxControl(op.getBodyBlock()); });
+          })
+          .Case<StaticRepeatOp>([&](auto op) {
+            indent() << prependAttributes(op, "static repeat ");
+            os << op.getCount();
+
+            emitCalyxBody([&]() { emitCalyxControl(op.getBodyBlock()); });
+          })
+          .Case<StaticParOp>([&](auto op) {
+            emitCalyxSection(prependAttributes(op, "static par"),
+                             [&]() { emitCalyxControl(op.getBodyBlock()); });
+          })
           .Case<EnableOp>([&](auto op) { emitEnable(op); })
+          .Case<InvokeOp>([&](auto op) { emitInvoke(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside control.");
           });
@@ -566,6 +615,7 @@ void Emitter::emitComponent(ComponentInterface op) {
           .Case<PrimitiveOp>([&](auto op) { emitPrimitive(op); })
           .Case<RegisterOp>([&](auto op) { emitRegister(op); })
           .Case<MemoryOp>([&](auto op) { emitMemory(op); })
+          .Case<SeqMemoryOp>([&](auto op) { emitSeqMemory(op); })
           .Case<hw::ConstantOp>([&](auto op) { /*Do nothing*/ })
           .Case<SliceLibOp, PadLibOp>(
               [&](auto op) { emitLibraryPrimTypedByAllPorts(op); })
@@ -734,6 +784,85 @@ void Emitter::emitMemory(MemoryOp memory) {
   os << RParen() << semicolonEndL();
 }
 
+void Emitter::emitSeqMemory(SeqMemoryOp memory) {
+  size_t dimension = memory.getSizes().size();
+  if (dimension < 1 || dimension > 4) {
+    emitOpError(memory, "Only memories with dimensionality in range [1, 4] are "
+                        "supported by the native Calyx compiler.");
+    return;
+  }
+  indent() << getAttributes(memory) << memory.instanceName() << space()
+           << equals() << space() << "seq_mem_d" << std::to_string(dimension)
+           << LParen() << memory.getWidth() << comma();
+  for (Attribute size : memory.getSizes()) {
+    APInt memSize = size.cast<IntegerAttr>().getValue();
+    memSize.print(os, /*isSigned=*/false);
+    os << comma();
+  }
+
+  ArrayAttr addrSizes = memory.getAddrSizes();
+  for (size_t i = 0, e = addrSizes.size(); i != e; ++i) {
+    APInt addrSize = addrSizes[i].cast<IntegerAttr>().getValue();
+    addrSize.print(os, /*isSigned=*/false);
+    if (i + 1 == e)
+      continue;
+    os << comma();
+  }
+  os << RParen() << semicolonEndL();
+}
+
+void Emitter::emitInvoke(InvokeOp invoke) {
+  StringRef callee = invoke.getCallee();
+  indent() << "invoke " << callee;
+  ArrayAttr portNames = invoke.getPortNames();
+  ArrayAttr inputNames = invoke.getInputNames();
+  /// Because the ports of all components of calyx.invoke are inside a (),
+  /// here the input and output ports are divided, inputs and outputs store
+  /// the connections for a subset of input and output ports of the instance.
+  llvm::StringMap<std::string> inputsMap;
+  llvm::StringMap<std::string> outputsMap;
+  for (auto [portNameAttr, inputNameAttr, input] :
+       llvm::zip(portNames, inputNames, invoke.getInputs())) {
+    StringRef portName = cast<StringAttr>(portNameAttr).getValue();
+    StringRef inputName = cast<StringAttr>(inputNameAttr).getValue();
+    /// Classify the connection of ports,here's an example. calyx.invoke
+    /// @r(%r.in = %id.out, %out = %r.out) -> (i32, i32) %r.in = %id.out will be
+    /// stored in inputs, because %.r.in is the input port of the component, and
+    /// %out = %r.out will be stored in outputs, because %r.out is the output
+    /// port of the component, which is a bit different from calyx's native
+    /// compiler. Later on, the classified connection relations are outputted
+    /// uniformly and converted to calyx's native compiler format.
+    StringRef inputMapKey = portName.drop_front(2 + callee.size());
+    if (portName.substr(1, callee.size()) == callee) {
+      // If the input to the port is a number.
+      if (isa_and_nonnull<hw::ConstantOp>(input.getDefiningOp())) {
+        hw::ConstantOp constant = cast<hw::ConstantOp>(input.getDefiningOp());
+        APInt value = constant.getValue();
+        std::string mapValue = std::to_string(value.getBitWidth()) +
+                               apostrophe().data() + "d" +
+                               std::to_string(value.getZExtValue());
+        inputsMap[inputMapKey] = mapValue;
+        continue;
+      }
+      inputsMap[inputMapKey] = inputName.drop_front(1).str();
+    } else if (inputName.substr(1, callee.size()) == callee)
+      outputsMap[inputName.drop_front(2 + callee.size())] =
+          portName.drop_front(1).str();
+  }
+  /// Emit inputs
+  os << LParen();
+  llvm::interleaveComma(inputsMap, os, [&](const auto &iter) {
+    os << iter.getKey() << " = " << iter.getValue();
+  });
+  os << RParen();
+  /// Emit outputs
+  os << LParen();
+  llvm::interleaveComma(outputsMap, os, [&](const auto &iter) {
+    os << iter.getKey() << " = " << iter.getValue();
+  });
+  os << RParen() << semicolonEndL();
+}
+
 /// Calling getName() on a calyx operation will return "calyx.${opname}". This
 /// function returns whatever is left after the first '.' in the string,
 /// removing the 'calyx' prefix.
@@ -789,7 +918,7 @@ void Emitter::emitWires(WiresOp op) {
       TypeSwitch<Operation *>(&bodyOp)
           .Case<GroupInterface>([&](auto op) { emitGroup(op); })
           .Case<AssignOp>([&](auto op) { emitAssignment(op); })
-          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp>(
+          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp, CycleOp>(
               [&](auto op) { /* Do nothing. */ })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside wires section");
@@ -805,15 +934,20 @@ void Emitter::emitGroup(GroupInterface group) {
           .Case<AssignOp>([&](auto op) { emitAssignment(op); })
           .Case<GroupDoneOp>([&](auto op) { emitGroupPort(group, op, "done"); })
           .Case<GroupGoOp>([&](auto op) { emitGroupPort(group, op, "go"); })
-          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp>(
+          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp, CycleOp>(
               [&](auto op) { /* Do nothing. */ })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside group.");
           });
     }
   };
-
-  StringRef prefix = isa<CombGroupOp>(group) ? "comb group" : "group";
+  std::string prefix;
+  if (isa<StaticGroupOp>(group)) {
+    auto staticGroup = cast<StaticGroupOp>(group);
+    prefix = llvm::formatv("static<{0}> group", staticGroup.getLatency());
+  } else {
+    prefix = isa<CombGroupOp>(group) ? "comb group" : "group";
+  }
   auto groupHeader = (group.symName().getValue() + getAttributes(group)).str();
   emitCalyxSection(prefix, emitGroupBody, groupHeader);
 }

@@ -68,7 +68,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %arrCreated = hw.array_create %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone { sv.namehint="name_hint" } : i4
   %slice1 = hw.array_slice %arrCreated[%a] : (!hw.array<9xi4>) -> !hw.array<3xi4>
   %slice2 = hw.array_slice %arrCreated[%b] : (!hw.array<9xi4>) -> !hw.array<3xi4>
-  %35 = comb.mux %cond, %slice1, %slice2 : !hw.array<3xi4>
+  %35 = comb.mux %cond, %slice1, %slice2 {sv.attributes = [#sv.attribute<"svAttr">]} : !hw.array<3xi4>
 
   %ab = comb.add %a, %b : i4
   %subArr = hw.array_create %allone, %ab, %allone : i4
@@ -194,14 +194,14 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:      assign r31 = {{[{}][{}]}}5{a[3]}}, a};
 // CHECK-NEXT:      assign r33 = cond ? a : b;
 // CHECK-NEXT:      assign r34 = ~a;
-// CHECK-NEXT:      assign r35 = cond ? name_hint[a +: 3] : name_hint[b +: 3];
+// CHECK-NEXT:      assign r35 = cond ? (* svAttr *) name_hint[a +: 3] : name_hint[b +: 3];
 // CHECK-NEXT:      assign r36 = {[[WIRE0]], [[WIRE0]]};
 // CHECK-NEXT:      assign r37 = array2d[a][b] (* svAttr *);
 // CHECK-NEXT:      assign r38 = {3{a}};
 // CHECK-NEXT:      assign r39 = '{a: 1'h0, b: 1'h1};
-// CHECK-NEXT:      assign r40 = '{2'h0, 2'h1, 2'h2, 2'h3};
+// CHECK-NEXT:      assign r40 = {2'h0, 2'h1, 2'h2, 2'h3};
 // CHECK-NEXT:      assign r41 = '{1'h0};
-// CHECK-NEXT:      assign r42 = '{a: '{1'h0}};
+// CHECK-NEXT:      assign r42 = '{a: {1'h0}};
 // CHECK-NEXT:      assign r43 = structA.bar;
 // CHECK-NEXT:      assign r44 = '{foo: structA.foo, bar: a};
 // CHECK-NEXT:      assign r45 = _GEN_0;
@@ -1417,7 +1417,7 @@ hw.module @inline_bitcast_in_concat(%in1: i7, %in2: !hw.array<8xi4>) -> (out: i3
 }
 
 // CHECK-LABEL: module DontInlineAggregateConstantIntoPorts(
-// CHECK:         wire [1:0][3:0] _GEN = '{4'h0, 4'h1};
+// CHECK:         wire [1:0][3:0] _GEN = {4'h0, 4'h1};
 // CHECK-NEXT:    Array i0 (
 // CHECK-NEXT:     .a (_GEN)
 // CHECK-NEXT:    );
