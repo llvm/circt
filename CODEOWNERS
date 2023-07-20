@@ -5,10 +5,10 @@
 tools/arcilator @fabianschuiki @maerhart
 
 # Calyx
-**/Dialect/Calyx @rachitnigam @mortbopet @cgyurgyik @mikeurbach @andrewb1999
+**/Dialect/Calyx @rachitnigam @cgyurgyik @mikeurbach @andrewb1999
 **/Conversion/CalyxToFSM @mortbopet
 **/Conversion/CalyxToHW @mortbopet @mikeurbach
-**/Conversion/SCFToCalyx @mikeurbach
+**/Conversion/SCFToCalyx @mikeurbach @mortbopet
 **/Conversion/LoopScheduleToCalyx @andrewb1999 @mikeurbach
 
 # DC
