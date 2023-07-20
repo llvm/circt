@@ -37,6 +37,9 @@ tools/llhd-sim @fabianschuiki @maerhart
 # SV
 # **/Dialect/SV
 
+# Ibis
+**/Dialect/Ibis @teqdruid @mortbopet @blakep-msft
+
 ## Conversions
 
 lib/Conversion/ExportVerilog @dtzSiFive
