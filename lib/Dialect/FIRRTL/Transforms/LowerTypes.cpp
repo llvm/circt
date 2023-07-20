@@ -554,7 +554,6 @@ LogicalResult TypeLoweringVisitor::partitionSymbols(
 
   auto *context = sym.getContext();
 
-  // Required for rootChildFieldID.
   auto baseType = getBaseType(parentType);
   if (!baseType)
     return mlir::emitError(errorLoc,
