@@ -89,7 +89,10 @@ def IfOp : CalyxContainer<"if", [
       CArg<"bool", "false">:$initializeElseBody), [{
         $_state.addOperands(cond);
         if (groupName)
-          $_state.addAttribute("groupName", groupName);
+          $_state.addAttribute(
+            "groupName",
+            FlatSymbolRefAttr::get($_builder.getContext(), groupName)
+          );
 
         Region *thenRegion = $_state.addRegion();
         Region *elseRegion = $_state.addRegion();
