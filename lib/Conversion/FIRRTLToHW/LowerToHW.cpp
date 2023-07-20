@@ -295,10 +295,8 @@ struct CircuitLoweringState {
     // Get a unique typedecl name.
     // The bundleName can conflict with other symbols, but must be unique within
     // the TypeScopeOp.
-    typeName = StringAttr::get(
-        typeName.getContext(),
-        typeDeclNamespace.newName(typeName.getValue(), suffix,
-                                  /* Use suffix only on name conflict */ true));
+    typeName = StringAttr::get(typeName.getContext(),
+                               typeDeclNamespace.newName(typeName.getValue()));
 
     auto typeScopeBuilder =
         ImplicitLocOpBuilder::atBlockEnd(typeLoc, typeScope.getBodyBlock());

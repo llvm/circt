@@ -1429,47 +1429,50 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 // -----
 
 firrtl.circuit "TypeAlias" {
-//CHECK:   hw.type_scope @TypeAlias__TYPESCOPE_ {
-//CHECK:     hw.typedecl @bar : i1
-//CHECK:     hw.typedecl @bar_TypeAlias : i1
-//CHECK:     hw.typedecl @baz : i1
-//CHECK:     hw.typedecl @bar_0_TypeAlias : !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>
-//CHECK:     hw.typedecl @bar_SimpleStruct : !hw.struct<valid: i1, ready: i1, data: i64>
-//CHECK:     hw.typedecl @bar_0_SimpleStruct : i64
-//CHECK:     hw.typedecl @baf : i1
-//CHECK:   }
-//CHECK:   hw.module @TypeAlias
-//CHECK-SAME:   %in: !hw.typealias<@TypeAlias__TYPESCOPE_::@bar, i1>
-//CHECK-SAME:   %const: !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_TypeAlias, i1>)
-//CHECK-SAME:   out: !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_0_TypeAlias, !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>>
-//CHECK-SAME:   out2: !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_TypeAlias, i1>
-//CHECK:     %wire = hw.wire %[[v0:.+]]  : !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>
-//CHECK:     %[[v0]] = hw.bitcast %in : (!hw.typealias<@TypeAlias__TYPESCOPE_::@bar, i1>) -> !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>
-//CHECK:     %wire2 = hw.wire %[[v1:.+]]  : !hw.typealias<@TypeAlias__TYPESCOPE_::@baf, i1>
-//CHECK:     %[[v1]] = hw.bitcast %const : (!hw.typealias<@TypeAlias__TYPESCOPE_::@bar_TypeAlias, i1>) -> !hw.typealias<@TypeAlias__TYPESCOPE_::@baf, i1>
-//CHECK:     %[[v2:.+]] = hw.bitcast %in : (!hw.typealias<@TypeAlias__TYPESCOPE_::@bar, i1>) -> !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_0_TypeAlias, !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>>
-//CHECK:     %[[v3:.+]] = hw.bitcast %wire2 : (!hw.typealias<@TypeAlias__TYPESCOPE_::@baf, i1>) -> !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_TypeAlias, i1>
-//CHECK:     hw.output %[[v2]], %[[v3]] : !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_0_TypeAlias, !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>>, !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_TypeAlias, i1>
+// CHECK:  hw.type_scope @TypeAlias__TYPESCOPE_ {
+// CHECK:    hw.typedecl @A : i1
+// CHECK:    hw.typedecl @B : i1
+// CHECK:    hw.typedecl @baz : i1
+// CHECK:    hw.typedecl @C : !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>
+// CHECK:    hw.typedecl @D : i1
+// CHECK:    hw.typedecl @bar : !hw.struct<valid: i1, ready: i1, data: i64>
+// CHECK:    hw.typedecl @bar_0 : i64
+// CHECK:    hw.typedecl @baf : i1
+// CHECK:  }
+// CHECK:  hw.module @TypeAlias(
+// CHECK-SAME: %in: !hw.typealias<@TypeAlias__TYPESCOPE_::@A, i1>
+// CHECK-SAME: %const: !hw.typealias<@TypeAlias__TYPESCOPE_::@B, i1>
+// CHECK-SAME: out: !hw.typealias<@TypeAlias__TYPESCOPE_::@C, !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>>
+// CHECK-SAME: out2: !hw.typealias<@TypeAlias__TYPESCOPE_::@D, i1>)
+// CHECK:    %wire = hw.wire %0  : !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>
+// CHECK:    %0 = hw.bitcast %in : (!hw.typealias<@TypeAlias__TYPESCOPE_::@A, i1>) -> !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>
+// CHECK:    %wire2 = hw.wire %1  : !hw.typealias<@TypeAlias__TYPESCOPE_::@baf, i1>
+// CHECK:    %1 = hw.bitcast %const : (!hw.typealias<@TypeAlias__TYPESCOPE_::@B, i1>) -> !hw.typealias<@TypeAlias__TYPESCOPE_::@baf, i1>
+// CHECK:    %2 = hw.bitcast %in : (!hw.typealias<@TypeAlias__TYPESCOPE_::@A, i1>) -> !hw.typealias<@TypeAlias__TYPESCOPE_::@C, !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>>
+// CHECK:    %3 = hw.bitcast %wire2 : (!hw.typealias<@TypeAlias__TYPESCOPE_::@baf, i1>) -> !hw.typealias<@TypeAlias__TYPESCOPE_::@D, i1>
+// CHECK:    hw.output %2, %3 : !hw.typealias<@TypeAlias__TYPESCOPE_::@C, !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>>, !hw.typealias<@TypeAlias__TYPESCOPE_::@D, i1>
+// CHECK:  }
 
-// CHECK:   hw.module private @SimpleStruct
-// CHECK-SAME: %source: !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_SimpleStruct, !hw.struct<valid: i1, ready: i1, data: i64>>) -> 
-// CHECK-SAME: (fldout: !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_0_SimpleStruct, i64>)
-// CHECK:     %wire = hw.wire %0  : !hw.struct<valid: i1, ready: i1, data: i64>
-// CHECK:     %0 = hw.bitcast %source : (!hw.typealias<@TypeAlias__TYPESCOPE_::@bar_SimpleStruct, !hw.struct<valid: i1, ready: i1, data: i64>>) -> !hw.struct<valid: i1, ready: i1, data: i64>
-// CHECK:     %data = hw.struct_extract %wire["data"] : !hw.struct<valid: i1, ready: i1, data: i64>
-// CHECK:     %1 = hw.bitcast %data : (i64) -> !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_0_SimpleStruct, i64>
-// CHECK:     hw.output %1 : !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_0_SimpleStruct, i64>
+// CHECK:  hw.module private @SimpleStruct(
+// CHECK-SAME: %source: !hw.typealias<@TypeAlias__TYPESCOPE_::@bar, !hw.struct<valid: i1, ready: i1, data: i64>>
+// CHECK-SAME: fldout: !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_0, i64>
+// CHECK:    %wire = hw.wire %0  : !hw.struct<valid: i1, ready: i1, data: i64>
+// CHECK:    %0 = hw.bitcast %source : (!hw.typealias<@TypeAlias__TYPESCOPE_::@bar, !hw.struct<valid: i1, ready: i1, data: i64>>) -> !hw.struct<valid: i1, ready: i1, data: i64>
+// CHECK:    %data = hw.struct_extract %wire["data"] : !hw.struct<valid: i1, ready: i1, data: i64>
+// CHECK:    %1 = hw.bitcast %data : (i64) -> !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_0, i64>
+// CHECK:    hw.output %1 : !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_0, i64>
+// CHECK:  }
 
-  firrtl.module @TypeAlias(in %in: !firrtl.alias<bar, uint<1>>,
-                           in %const: !firrtl.const.alias<bar, const.uint<1>>,
-                           out %out: !firrtl.alias<bar, alias<baz, uint<1>>>,
-                           out %out2: !firrtl.const.alias<bar, const.uint<1>>) {
-    firrtl.strictconnect %out, %in: !firrtl.alias<bar, alias<baz, uint<1>>>,!firrtl.alias<bar, uint<1>> 
+  firrtl.module @TypeAlias(in %in: !firrtl.alias<A, uint<1>>,
+                           in %const: !firrtl.const.alias<B, const.uint<1>>,
+                           out %out: !firrtl.alias<C, alias<baz, uint<1>>>,
+                           out %out2: !firrtl.const.alias<D, const.uint<1>>) {
+    firrtl.strictconnect %out, %in: !firrtl.alias<C, alias<baz, uint<1>>>,!firrtl.alias<A, uint<1>> 
     %wire = firrtl.wire : !firrtl.alias<baz, uint<1>>
-    firrtl.connect %wire, %in :!firrtl.alias<baz, uint<1>> , !firrtl.alias<bar, uint<1>>
+    firrtl.connect %wire, %in :!firrtl.alias<baz, uint<1>> , !firrtl.alias<A, uint<1>>
     %wire2 = firrtl.wire : !firrtl.const.alias<baf, const.uint<1>>
-    firrtl.strictconnect %wire2, %const :!firrtl.const.alias<baf, const.uint<1>> , !firrtl.const.alias<bar, const.uint<1>>
-    firrtl.strictconnect %out2, %wire2 :!firrtl.const.alias<bar, const.uint<1>> , !firrtl.const.alias<baf, const.uint<1>>
+    firrtl.strictconnect %wire2, %const :!firrtl.const.alias<baf, const.uint<1>> , !firrtl.const.alias<B, const.uint<1>>
+    firrtl.strictconnect %out2, %wire2 :!firrtl.const.alias<D, const.uint<1>> , !firrtl.const.alias<baf, const.uint<1>>
   }
   firrtl.module private @SimpleStruct(in %source: !firrtl.alias<bar, bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>>,
                               out %fldout: !firrtl.alias<bar, uint<64>>) {
