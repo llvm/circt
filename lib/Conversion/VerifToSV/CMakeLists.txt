@@ -10,7 +10,5 @@ add_circt_conversion_library(CIRCTVerifToSV
   LINK_LIBS PUBLIC
   CIRCTSV
   CIRCTVerif
-  MLIRControlFlowDialect
-  MLIRFuncDialect
   MLIRTransforms
 )

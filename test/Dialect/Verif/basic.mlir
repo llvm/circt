@@ -43,9 +43,9 @@ verif.cover %p : !ltl.property
 
 hw.module @foo() {
 // CHECK:    %false = hw.constant false
-// CHECK:    %[[FSTR:.*]] = verif.fstr "Hi %x\0A"(%false) : i1
-// CHECK:    verif.printf %[[FSTR]]
+// CHECK:    %[[FSTR:.*]] = verif.format_verilog_string "Hi %x\0A"(%false) : i1
+// CHECK:    verif.print %[[FSTR]]
   %false = hw.constant false
-  %fstr = verif.fstr "Hi %x\0A" (%false) : i1
-  verif.printf %fstr
+  %fstr = verif.format_verilog_string "Hi %x\0A" (%false) : i1
+  verif.print %fstr
 }

@@ -28,22 +28,22 @@ struct VerifToSVPass : public LowerVerifToSVBase<VerifToSVPass> {
   void runOnOperation() override;
 };
 
-struct PrintfOpConversionPattern : public OpConversionPattern<PrintfOp> {
-  using OpConversionPattern<PrintfOp>::OpConversionPattern;
+struct PrintOpConversionPattern : public OpConversionPattern<PrintOp> {
+  using OpConversionPattern<PrintOp>::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(PrintfOp op, OpAdaptor operands,
+  matchAndRewrite(PrintOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
 
     // Printf's will be emitted to stdout (32'h8000_0001 in IEEE Std 1800-2012).
     Value fdStdout = rewriter.create<hw::ConstantOp>(
         op.getLoc(), APInt(32, 0x80000001, false));
 
-    auto fstrOp = dyn_cast_or_null<FormatStringOp>(
-        op.getFormattedString().getDefiningOp());
+    auto fstrOp =
+        dyn_cast_or_null<FormatVerilogStringOp>(op.getString().getDefiningOp());
     if (!fstrOp)
-      return op->emitOpError()
-             << "expected FormatStringOp as the source of the formatted string";
+      return op->emitOpError() << "expected FormatVerilogStringOp as the "
+                                  "source of the formatted string";
 
     rewriter.replaceOpWithNewOp<sv::FWriteOp>(
         op, fdStdout, fstrOp.getFormatString(), fstrOp.getSubstitutions());
@@ -60,9 +60,9 @@ void VerifToSVPass::runOnOperation() {
   ConversionTarget target(context);
   RewritePatternSet patterns(&context);
 
-  target.addIllegalOp<PrintfOp>();
+  target.addIllegalOp<PrintOp>();
   target.addLegalDialect<sv::SVDialect, hw::HWDialect>();
-  patterns.add<PrintfOpConversionPattern>(&context);
+  patterns.add<PrintOpConversionPattern>(&context);
 
   if (failed(applyPartialConversion(module, target, std::move(patterns))))
     signalPassFailure();
