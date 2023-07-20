@@ -703,50 +703,71 @@ void circt::firrtl::walkGroundTypes(
 
 /// Returns an operation's `inner_sym`, adding one if necessary.
 StringAttr circt::firrtl::getOrAddInnerSym(
-    Operation *op, FModuleOp mod,
+    const hw::InnerSymTarget &target,
     llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace) {
-  auto attr = getInnerSymName(op);
-  if (attr)
-    return attr;
 
-  auto name = getNamespace(mod).newName("sym");
-  attr = StringAttr::get(op->getContext(), name);
-  op->setAttr("inner_sym", hw::InnerSymAttr::get(attr));
-  return attr;
+  // Return InnerSymAttr with sym on specified fieldID.
+  auto getOrAdd = [&](auto mod, hw::InnerSymAttr attr,
+                      auto fieldID) -> std::pair<hw::InnerSymAttr, StringAttr> {
+    assert(mod);
+    auto *context = mod.getContext();
+
+    SmallVector<hw::InnerSymPropertiesAttr> props;
+    if (attr) {
+      // If already present, return it.
+      if (auto sym = attr.getSymIfExists(fieldID))
+        return {attr, sym};
+      llvm::append_range(props, attr.getProps());
+    }
+
+    // Otherwise, create symbol and add to list.
+    auto sym = StringAttr::get(context, getNamespace(mod).newName("sym"));
+    props.push_back(hw::InnerSymPropertiesAttr::get(
+        context, sym, fieldID, StringAttr::get(context, "public")));
+    // TODO: store/ensure always sorted, insert directly, faster search.
+    // For now, just be good and sort by fieldID.
+    llvm::sort(props, [](auto &p, auto &q) {
+      return p.getFieldID() < q.getFieldID();
+    });
+    return {hw::InnerSymAttr::get(context, props), sym};
+  };
+
+  if (target.isPort()) {
+    if (auto mod = dyn_cast<FModuleOp>(target.getOp())) {
+      auto portIdx = target.getPort();
+      assert(portIdx < mod.getNumPorts());
+      auto [attr, sym] =
+          getOrAdd(mod, mod.getPortSymbolAttr(portIdx), target.getField());
+      mod.setPortSymbolsAttr(portIdx, attr);
+      return sym;
+    }
+  } else {
+    // InnerSymbols only supported if op implements the interface.
+    if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(target.getOp())) {
+      auto mod = symOp->getParentOfType<FModuleOp>();
+      assert(mod);
+      auto [attr, sym] =
+          getOrAdd(mod, symOp.getInnerSymAttr(), target.getField());
+      symOp.setInnerSymbolAttr(attr);
+      return sym;
+    }
+  }
+
+  assert(0 && "target must be port of FModuleOp or InnerSymbol");
+  return {};
 }
 
 /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
 /// to that operation.
 hw::InnerRefAttr circt::firrtl::getInnerRefTo(
-    Operation *op,
+    const hw::InnerSymTarget &target,
     llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace) {
-  auto mod = op->getParentOfType<FModuleOp>();
-  assert(mod && "must be an operation inside an FModuleOp");
+  auto mod = target.isPort() ? dyn_cast<FModuleOp>(target.getOp())
+                             : target.getOp()->getParentOfType<FModuleOp>();
+  assert(mod &&
+         "must be an operation inside an FModuleOp or port of FModuleOp");
   return hw::InnerRefAttr::get(SymbolTable::getSymbolName(mod),
-                               getOrAddInnerSym(op, mod, getNamespace));
-}
-
-/// Returns a port's `inner_sym`, adding one if necessary.
-StringAttr circt::firrtl::getOrAddInnerSym(
-    FModuleLike mod, size_t portIdx,
-    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace) {
-
-  auto attr = cast<hw::HWModuleLike>(*mod).getPortSymbolAttr(portIdx);
-  if (attr)
-    return attr.getSymName();
-  auto name = getNamespace(mod).newName("sym");
-  auto sAttr = StringAttr::get(mod.getContext(), name);
-  mod.setPortSymbolAttr(portIdx, sAttr);
-  return sAttr;
-}
-
-/// Obtain an inner reference to a port, possibly adding an `inner_sym`
-/// to the port.
-hw::InnerRefAttr circt::firrtl::getInnerRefTo(
-    FModuleLike mod, size_t portIdx,
-    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace) {
-  return hw::InnerRefAttr::get(SymbolTable::getSymbolName(mod),
-                               getOrAddInnerSym(mod, portIdx, getNamespace));
+                               getOrAddInnerSym(target, getNamespace));
 }
 
 /// Parse a string that may encode a FIRRTL location into a LocationAttr.

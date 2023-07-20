@@ -1,6 +1,7 @@
 // RUN: circt-translate --export-calyx --split-input-file --verify-diagnostics %s | FileCheck %s --strict-whitespace
 
 module attributes {calyx.entrypoint = "main"} {
+  // CHECK: import "primitives/memories.futil";
   // CHECK-LABEL: component main<"static"=1>(in: 32, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 32, @done done: 1) {
   calyx.component @main(%in: i32, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i32, %done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1

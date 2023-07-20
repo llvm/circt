@@ -43,7 +43,7 @@ digraph G {
     Handshake [URL="https://circt.llvm.org/docs/Dialects/Handshake/"]
     Calyx [URL="https://circt.llvm.org/docs/Dialects/Calyx/"]
     FIRRTL [URL="https://circt.llvm.org/docs/Dialects/FIRRTL/"]
-    Pipeline [URL="https://circt.llvm.org/docs/Dialects/Pipeline/"]
+    LoopSchedule [URL="https://circt.llvm.org/docs/Dialects/LoopSchedule/"]
     SSP [URL="https://circt.llvm.org/docs/Dialects/SSP/"]
     MSFT [URL="https://circt.llvm.org/docs/Dialects/MSFT/"]
     ESI [URL="https://circt.llvm.org/docs/Dialects/ESI/"]
@@ -113,8 +113,8 @@ digraph G {
   // ===== Connections =====
   // Dialect conversions
   SCF -> Calyx
-  Affine -> Pipeline
-  Pipeline -> Calyx
+  Affine -> LoopSchedule
+  LoopSchedule -> Calyx
   Arith -> {Handshake Calyx} [ltail=cluster_std_arith_dialect]
 
   Handshake -> FIRRTL
@@ -135,7 +135,7 @@ digraph G {
   // Tool flows
   Arc -> Arcilator
   Arcilator -> SimBinary
-  Scheduling -> Pipeline [dir=both]
+  Scheduling -> LoopSchedule [dir=both]
   Chisel -> FIRFile
   FIRFile -> FIRRTLParser
   FIRRTLParser -> FIRRTL
