@@ -30,8 +30,6 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-#include <iostream>
-#include <utility>
 #include <variant>
 
 using namespace llvm;
@@ -589,42 +587,39 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     assert(forOp);
     ScfForOp forOpInterface(forOp);
 
-    // Get the ForLoop' Induction Register.
+    // Get the ForLoop's Induction Register.
     auto inductionReg =
         getState<ComponentLoweringState>().getForLoopIterReg(forOpInterface, 0);
 
-    // Trying to build a AddLibOp in Calyx.
-    // Mimics what is dones in `buildLibraryOp`. There may be a more concise way
-    // to do this.
-    SmallVector<Type> types;
+    // Building the ``Latch'' Group for the For loop, which increments
+    // inductionReg by the step of the For loop. Gets an adder by mimicking what
+    // is dones in `buildLibraryOp`. There may be a more concise way to do this.
     Type regWidth = inductionReg.getOut().getType();
-    types.push_back(regWidth);
-    types.push_back(regWidth);
-    types.push_back(regWidth);
-    auto calyxOp = getState<ComponentLoweringState>()
-                       .getNewLibraryOpInstance<calyx::AddLibOp>(
-                           rewriter, forOp.getLoc(), types);
+    // Adder should have same width as the inductionReg.
+    SmallVector<Type> types(3, regWidth);
+    auto addOp = getState<ComponentLoweringState>()
+                     .getNewLibraryOpInstance<calyx::AddLibOp>(
+                         rewriter, forOp.getLoc(), types);
 
-    auto directions = calyxOp.portDirections();
+    auto directions = addOp.portDirections();
     // For an add operation, we expect two input ports and one output port
     SmallVector<Value, 2> opInputPorts;
     Value opOutputPort;
     for (auto dir : enumerate(directions)) {
       if (dir.value() == calyx::Direction::Input)
-        opInputPorts.push_back(calyxOp.getResult(dir.index()));
+        opInputPorts.push_back(addOp.getResult(dir.index()));
       else {
         if (opOutputPort != nullptr) {
           assert(false &&
                  "Expected Calyx add operation to have only one output port");
         }
-        opOutputPort = calyxOp.getResult(dir.index());
+        opOutputPort = addOp.getResult(dir.index());
       }
     }
     assert(opInputPorts.size() == 2 &&
            "Expected an add Calyx operation to have 2 inputs");
 
-    // Create a "LatchGroup" for the For Loop that increments inductionReg by
-    // forLoop's step value.
+    // "Latch Group" increments inductionReg by forLoop's step value.
     calyx::ComponentOp componentOp =
         getState<ComponentLoweringState>().getComponentOp();
     auto groupOp = calyx::createGroup<calyx::GroupOp>(
@@ -851,7 +846,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      scf::ForOp forOp) const {
-
+  // Only need to add the forOp to the BlockSchedulables scheduler interface.
+  // Everything else was handled in the `BuildForGroups` pattern.
   ScfForOp scfForOp(forOp);
   getState<ComponentLoweringState>().addBlockScheduleable(
       forOp.getOperation()->getBlock(), ForScheduleable{
@@ -1121,9 +1117,8 @@ class BuildWhileGroups : public calyx::FuncOpPartialLoweringPattern {
 };
 
 /// In BuildForGroups, a register is created for the iteration argument of
-/// the for op. These registers are then written to on the for op
-/// terminating yield operation alongside before executing the forOp in the
-/// schedule, to set the initial values of the argument registers.
+/// the for op. This register is then initialized to the lowerBound of the for
+/// loop in a group that executes the for loop.
 class BuildForGroups : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
