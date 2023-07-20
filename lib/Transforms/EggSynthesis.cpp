@@ -14,6 +14,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Transforms/Passes.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
@@ -32,7 +33,11 @@ struct EggSynthesisPass : public EggSynthesisBase<EggSynthesisPass> {
 private:
   rust::Box<BooleanId> getExpr(Operation *op, BooleanEGraph &egraph);
   void generateCellInstance(llvm::SmallString<8> symbol,
-                            BooleanExpression &expr);
+                            BooleanExpression &expr, OpBuilder &builder,
+                            BackedgeBuilder &backedgeBuilder);
+  hw::HWModuleExternOp generateCellDeclaration(BooleanExpression &expr,
+                                               Location loc,
+                                               OpBuilder &builder);
   llvm::SmallString<8> getSymbol(Value value);
 
   // Value to Symbol mapping state.
@@ -132,7 +137,7 @@ void EggSynthesisPass::runOnOperation() {
     llvm::SmallString<8> symbol = valueToSymbol[output];
     BooleanExpression *expr = symbolToExpr[symbol];
     auto exprBox = rust::Box<BooleanExpression>::from_raw(expr);
-    generateCellInstance(symbol, *exprBox);
+    generateCellInstance(symbol, *exprBox, builder, backedgeBuilder);
 
     // Replace output with resolved backedge for symbol.
   }
@@ -205,12 +210,38 @@ void EggSynthesisPass::generateCellInstance(llvm::SmallString<8> symbol,
                                             OpBuilder &builder,
                                             BackedgeBuilder &backedgeBuilder) {
   // Declare extern module for the gate.
+  hw::HWModuleExternOp decl =
+      generateCellDeclaration(expr, symbolToValue[symbol].getLoc(), builder);
+
   // Get list of input names from declaration.
   // Get list of operands:
   //  if symbol, use generated value (might be a backedge)
   //  if nested instance, generate a symbol and backedge, and recurse
   // Make an instance of the gate.
   // Replace backedge with instance result.
+}
+
+hw::HWModuleExternOp
+EggSynthesisPass::generateCellDeclaration(BooleanExpression &expr, Location loc,
+                                          OpBuilder &builder) {
+  auto moduleOp = getOperation().getParentOp<ModuleOp>();
+
+  // Get the gate name.
+  StringAttr gateName =
+      builder.getStringAttr(std::string(expr_get_gate_name(expr)));
+
+  // Check if the declaration exists, and just return it.
+  if (auto decl = moduleOp.lookupSymbol<hw::HWModuleExternOp>(gateName))
+    return decl;
+
+  // Get the gate ports.
+  SmallVector<hw::PortInfo> ports;
+
+  // Build the gate declaration.
+  builder.setInsertionPointToStart(moduleOp.getBody());
+  auto decl = builder.create<hw::HWModuleExternOp>(loc, gateName, ports);
+
+  return decl;
 }
 
 llvm::SmallString<8> EggSynthesisPass::getSymbol(Value value) {

@@ -47,6 +47,7 @@ if(egg-netlist-synthesizer_FOUND)
     LINK_LIBS PUBLIC
     CIRCTArc
     CIRCTComb
+    CIRCTHW
     MLIRIR
     MLIRSupport
     MLIRTransforms
