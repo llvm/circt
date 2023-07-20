@@ -12,6 +12,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Support/BackedgeBuilder.h"
 #include "circt/Transforms/Passes.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -30,12 +31,18 @@ struct EggSynthesisPass : public EggSynthesisBase<EggSynthesisPass> {
 
 private:
   rust::Box<BooleanId> getExpr(Operation *op, BooleanEGraph &egraph);
+  void generateCellInstance(llvm::SmallString<8> symbol,
+                            BooleanExpression &expr);
   llvm::SmallString<8> getSymbol(Value value);
 
   // Value to Symbol mapping state.
   uint64_t valueId = 0;
   DenseMap<Value, llvm::SmallString<8>> valueToSymbol;
   llvm::StringMap<Value> symbolToValue;
+
+  // Symbol to expression and backedge mapping state.
+  llvm::StringMap<BooleanExpression *> symbolToExpr;
+  llvm::StringMap<Backedge> symbolToBackedge;
 };
 } // namespace
 
@@ -96,6 +103,42 @@ void EggSynthesisPass::runOnOperation() {
     print_expr(*result);
   });
 
+  // Create the OpBuilder and BackedgeBuilder.
+  auto builder = OpBuilder(defineOp);
+  auto backedgeBuilder = BackedgeBuilder(builder, defineOp.getLoc());
+
+  // Build a mapping from symbol to synthesized BooleanExpression.
+  rust::Vec<BooleanExpression> lets = expr_get_module_body(std::move(result));
+  for (BooleanExpression &let : llvm::make_range(lets.begin(), lets.end())) {
+    // Get the symbol defined by the let.
+    rust::String letSymbol = expr_get_let_symbol(let);
+    llvm::SmallString<8> symbol;
+    for (char c : llvm::make_range(letSymbol.begin(), letSymbol.end()))
+      symbol += c;
+
+    // Get the expression bound to the symbol.
+    rust::Box<BooleanExpression> expr = expr_get_let_expr(let);
+
+    // Map from symbol to a new backedge.
+    symbolToBackedge[symbol] = backedgeBuilder.get(
+        builder.getI1Type(), symbolToValue[symbol].getLoc());
+
+    // Map from symbol to the expression.
+    symbolToExpr[symbol] = expr.into_raw();
+  }
+
+  // Generate external module declarations and instantiations from the netlist.
+  for (auto output : defineOp.getBodyBlock().getTerminator()->getOperands()) {
+    llvm::SmallString<8> symbol = valueToSymbol[output];
+    BooleanExpression *expr = symbolToExpr[symbol];
+    auto exprBox = rust::Box<BooleanExpression>::from_raw(expr);
+    generateCellInstance(symbol, *exprBox);
+
+    // Replace output with resolved backedge for symbol.
+  }
+
+  // Run DCE to clean up.
+
   // Clean up state.
   valueId = 0;
   valueToSymbol.clear();
@@ -155,6 +198,19 @@ rust::Box<BooleanId> EggSynthesisPass::getExpr(Operation *op,
 
         return expr;
       });
+}
+
+void EggSynthesisPass::generateCellInstance(llvm::SmallString<8> symbol,
+                                            BooleanExpression &expr,
+                                            OpBuilder &builder,
+                                            BackedgeBuilder &backedgeBuilder) {
+  // Declare extern module for the gate.
+  // Get list of input names from declaration.
+  // Get list of operands:
+  //  if symbol, use generated value (might be a backedge)
+  //  if nested instance, generate a symbol and backedge, and recurse
+  // Make an instance of the gate.
+  // Replace backedge with instance result.
 }
 
 llvm::SmallString<8> EggSynthesisPass::getSymbol(Value value) {
