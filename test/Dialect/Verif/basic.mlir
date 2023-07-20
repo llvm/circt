@@ -34,3 +34,18 @@ verif.cover %true : i1
 verif.cover %true label "foo3" : i1
 verif.cover %s : !ltl.sequence
 verif.cover %p : !ltl.property
+
+
+//===----------------------------------------------------------------------===//
+// Print-related
+// Must be inside hw.module to ensure that the dialect is loaded.
+//===----------------------------------------------------------------------===//
+
+hw.module @foo() {
+// CHECK:    %false = hw.constant false
+// CHECK:    %[[FSTR:.*]] = verif.format_verilog_string "Hi %x\0A"(%false) : i1
+// CHECK:    verif.print %[[FSTR]]
+  %false = hw.constant false
+  %fstr = verif.format_verilog_string "Hi %x\0A" (%false) : i1
+  verif.print %fstr
+}
