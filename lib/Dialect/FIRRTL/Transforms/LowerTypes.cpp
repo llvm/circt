@@ -405,11 +405,9 @@ private:
   ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
                               FIRRTLType srcType, FlatBundleFieldEntry field);
 
-  /// Partition a symbol across the specified fields.  Fails if any symbols
+  /// Partition inner symbols on given type.  Fails if any symbols
   /// cannot be assigned to a field, such as inner symbol on root.
-  /// Expects fields to be in ascending fieldID order.
   LogicalResult partitionSymbols(hw::InnerSymAttr sym, FIRRTLType parentType,
-                                 ArrayRef<FlatBundleFieldEntry> fields,
                                  SmallVectorImpl<hw::InnerSymAttr> &newSyms,
                                  Location errorLoc);
 
@@ -548,7 +546,6 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
 
 LogicalResult TypeLoweringVisitor::partitionSymbols(
     hw::InnerSymAttr sym, FIRRTLType parentType,
-    ArrayRef<FlatBundleFieldEntry> fields,
     SmallVectorImpl<hw::InnerSymAttr> &newSyms, Location errorLoc) {
 
   // No symbol, nothing to partition.
@@ -561,64 +558,61 @@ LogicalResult TypeLoweringVisitor::partitionSymbols(
   auto baseType = getBaseType(parentType);
   if (!baseType)
     return mlir::emitError(errorLoc,
-                           "unstable to partition symbol on unsupported type ")
+                           "unable to partition symbol on unsupported type ")
            << parentType;
 
-  newSyms.resize(fields.size());
+  return TypeSwitch<FIRRTLType, LogicalResult>(baseType)
+      .Case<BundleType, FVectorType>([&](auto aggType) -> LogicalResult {
+        struct BinningInfo {
+          uint64_t index;
+          uint64_t relFieldID;
+          hw::InnerSymPropertiesAttr prop;
+        };
 
-  // Sort inner symbols by fieldID if not already sorted.
-  auto props = llvm::to_vector(sym);
-  llvm::stable_sort(props, [&](const auto &lhs, const auto &rhs) {
-    return lhs.getFieldID() < rhs.getFieldID();
-  });
+        // Walk each inner symbol, compute binning information/assignment.
+        SmallVector<BinningInfo> binning;
+        for (auto prop : sym) {
+          auto fieldID = prop.getFieldID();
+          // Special-case fieldID == 0, helper methods require non-zero fieldID.
+          if (fieldID == 0)
+            return mlir::emitError(errorLoc, "unable to lower due to symbol ")
+                   << prop.getName()
+                   << " with target not preserved by lowering";
+          auto [index, relFieldID] = aggType.getIndexAndSubfieldID(fieldID);
+          binning.push_back({index, relFieldID, prop});
+        }
 
-  // Double-check fields are in increasing order.
-  assert(llvm::is_sorted(fields, [&](const auto &lhs, const auto &rhs) {
-    return lhs.fieldID < rhs.fieldID;
-  }));
+        // Sort by index, fieldID.
+        llvm::stable_sort(binning, [&](auto &lhs, auto &rhs) {
+          return std::tuple(lhs.index, lhs.relFieldID) <
+                 std::tuple(rhs.index, rhs.relFieldID);
+        });
+        assert(!binning.empty());
 
-  // Walk fields, gather symbols that target each and assign with
-  // fieldID's updated to be relative.
-  // If any symbols target fieldID's not covered by these ranges,
-  // they cannot be preserved and generate an error.
-  auto propIt = props.begin(), propEnd = props.end();
-  for (auto [field, newSym] : llvm::zip(fields, newSyms)) {
-    // Error if inner symbol target is before this.
-    // Exit and let tail code produce diagnostic.
-    if (propIt->getFieldID() < field.fieldID)
-      break;
+        // Populate newSyms, group all symbols on same index.
+        newSyms.resize(aggType.getNumElements());
+        for (auto binIt = binning.begin(), binEnd = binning.end();
+             binIt != binEnd;) {
+          auto curIndex = binIt->index;
+          SmallVector<hw::InnerSymPropertiesAttr> propsForIndex;
+          // Gather all adjacent symbols for this index.
+          while (binIt != binEnd && binIt->index == curIndex) {
+            propsForIndex.push_back(hw::InnerSymPropertiesAttr::get(
+                context, binIt->prop.getName(), binIt->relFieldID,
+                binIt->prop.getSymVisibility()));
+            ++binIt;
+          }
 
-    // Consume inner_syms on this field.
-    SmallVector<hw::InnerSymPropertiesAttr> propsForField;
-    do {
-      assert(propIt->getFieldID() >= field.fieldID);
-      auto [relFieldID, contained] =
-          baseType.rootChildFieldID(propIt->getFieldID(), field.index);
-      // If skips this field, we're done.
-      if (!contained)
-        break;
-      // Otherwise, add to list and continue.
-      propsForField.push_back(hw::InnerSymPropertiesAttr::get(
-          context, propIt->getName(), relFieldID, propIt->getSymVisibility()));
-    } while (++propIt != propEnd);
-
-    // If symbols target this field or its children, set the inner sym attr.
-    if (!propsForField.empty())
-      newSym = hw::InnerSymAttr::get(context, propsForField);
-
-    // If all symbols are consumed, we're done.
-    if (propIt == propEnd)
-      return success();
-  }
-
-  // Report diagnostic on first non-consumed symbol.
-  if (propIt != propEnd) {
-    return mlir::emitError(errorLoc)
-           << "unable to lower due to symbol " << propIt->getName()
-           << " with target not preserved by lowering";
-  }
-
-  return success();
+          assert(!newSyms[curIndex]);
+          newSyms[curIndex] = hw::InnerSymAttr::get(context, propsForIndex);
+        }
+        return success();
+      })
+      .Default([&](auto ty) {
+        return mlir::emitError(
+                   errorLoc, "unable to partition symbol on unsupported type ")
+               << ty;
+      });
 }
 
 bool TypeLoweringVisitor::lowerProducer(
@@ -648,8 +642,8 @@ bool TypeLoweringVisitor::lowerProducer(
 
   SmallVector<hw::InnerSymAttr> fieldSyms(fieldTypes.size());
   if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op)) {
-    if (failed(partitionSymbols(symOp.getInnerSymAttr(), srcFType, fieldTypes,
-                                fieldSyms, symOp.getLoc()))) {
+    if (failed(partitionSymbols(symOp.getInnerSymAttr(), srcFType, fieldSyms,
+                                symOp.getLoc()))) {
       encounteredError = true;
       return false;
     }
@@ -801,8 +795,8 @@ bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
     return false;
 
   SmallVector<hw::InnerSymAttr> fieldSyms(fieldTypes.size());
-  if (failed(partitionSymbols(newArgs[argIndex].sym, srcType, fieldTypes,
-                              fieldSyms, newArgs[argIndex].loc))) {
+  if (failed(partitionSymbols(newArgs[argIndex].sym, srcType, fieldSyms,
+                              newArgs[argIndex].loc))) {
     encounteredError = true;
     return false;
   }
