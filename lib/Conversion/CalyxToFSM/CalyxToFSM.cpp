@@ -282,6 +282,11 @@ private:
   OpBuilder builder;
   // It is used to pass to the go port and assign a value to the go port.
   hw::ConstantOp constantOp = nullptr;
+  // The groupNameMap is used to help generate the names of calyx.group,
+  // for example, if key is reg, value is 0, then calyx.group is named
+  // calyx.group invoke_reg_0. When an invoke is encountered, if the
+  // callee is not in the groupNameMap, then the callee is added to
+  // the groupNameMap and the corresponding value is made to be 0.
   llvm::StringMap<size_t> groupNameMap;
 };
 
@@ -307,14 +312,13 @@ void CompileInvoke::lowerInvokeOp(InvokeOp invokeOp) {
   // Set the insertion point at the end of the wires block.
   builder.setInsertionPointToEnd(component.getWiresOp().getBodyBlock());
   llvm::StringRef callee = invokeOp.getCallee();
-  if (groupNameMap.find(callee) == groupNameMap.end())
-    groupNameMap[callee] = 0;
-  std::string groupName =
-      "invoke_" + callee.str() + "_" + std::to_string(groupNameMap[callee]);
+  std::string groupNameHead = "invoke_" + callee.str() + "_";
+  size_t &groupNameTail = groupNameMap[callee];
+  std::string groupName = groupNameHead + std::to_string(groupNameTail);
   // Check if the group name is correct.
   while (component.getWiresOp().lookupSymbol(groupName))
-    groupName =
-        "invoke_" + callee.str() + "_" + std::to_string(++groupNameMap[callee]);
+    groupName = groupNameHead + std::to_string(++groupNameTail);
+  ++groupNameTail;
   GroupOp groupOp = builder.create<GroupOp>(loc, groupName);
   builder.setInsertionPointToStart(groupOp.getBodyBlock());
   Value go = invokeOp.getInstGoValue();
