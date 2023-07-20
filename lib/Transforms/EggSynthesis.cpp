@@ -271,6 +271,8 @@ void EggSynthesisPass::generateCellInstance(SmallString<8> symbol,
   // Make an instance of the gate.
   auto instance =
       builder.create<hw::InstanceOp>(symbolLoc, decl, symbol, operands);
+  instance->setDiscardableAttr(builder.getStringAttr("pure"),
+                               builder.getUnitAttr());
 
   // Replace backedge with instance result.
   symbolToBackedge[symbol].setValue(instance.getResult(0));
