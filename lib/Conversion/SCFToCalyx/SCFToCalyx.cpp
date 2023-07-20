@@ -87,12 +87,6 @@ public:
                              getOperation().getUpperBound(),
                              getOperation().getStep());
   }
-
-  uint64_t getCertainBound() override {
-    return *constantTripCount(getOperation().getLowerBound(),
-                              getOperation().getUpperBound(),
-                              getOperation().getStep());
-  }
 };
 
 //===----------------------------------------------------------------------===//

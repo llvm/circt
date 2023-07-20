@@ -110,7 +110,7 @@ private:
   std::variant<calyx::MemoryOp, MemoryPortsImpl> impl;
 };
 
-// A common interface for loop operations that need to be lowered to Calyx.
+// A common interface for any loop operation that needs to be lowered to Calyx.
 class BasicLoopInterface {
   // virtual ~BasicLoopInterface();
 
@@ -127,7 +127,8 @@ class BasicLoopInterface {
   virtual std::optional<uint64_t> getBound() = 0;
 };
 
-// A common interface for loop operations that need to be lowered to Calyx.
+// A common interface for loop operations that have conditionals (e.g., while
+// loops) that need to be lowered to Calyx.
 class LoopInterface : BasicLoopInterface {
 public:
   virtual ~LoopInterface();
@@ -137,10 +138,6 @@ public:
 
   // Returns the condition as a Value.
   virtual Value getConditionValue() = 0;
-};
-
-class BoundedLoopInterface : BasicLoopInterface {
-  virtual uint64_t getCertainBound() = 0;
 };
 
 // Provides an interface for the control flow `while` operation across different
@@ -163,10 +160,10 @@ private:
   T impl;
 };
 
-// Provides an interface for the control flow `while` operation across different
+// Provides an interface for the control flow `forOp` operation across different
 // dialects.
 template <typename T>
-class RepeatOpInterface : BoundedLoopInterface {
+class RepeatOpInterface : BasicLoopInterface {
   static_assert(std::is_convertible_v<T, Operation *>);
 
 public:
