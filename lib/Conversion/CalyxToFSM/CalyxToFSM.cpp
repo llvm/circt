@@ -272,52 +272,50 @@ LogicalResult CompileFSMVisitor::visit(StateOp currentState, EnableOp enableOp,
 // enable operations.
 class CompileInvoke {
 public:
-  CompileInvoke(ComponentOp &component, OpBuilder &builder)
+  CompileInvoke(ComponentOp component, OpBuilder builder)
       : component(component), builder(builder) {}
   void compile();
 
 private:
-  void lowerInvokeOp(InvokeOp &invokeOp);
-  ComponentOp &component;
-  OpBuilder &builder;
+  void lowerInvokeOp(InvokeOp invokeOp);
+  ComponentOp component;
+  OpBuilder builder;
   // It is used to pass to the go port and assign a value to the go port.
   hw::ConstantOp constantOp = nullptr;
-  size_t label = 0;
+  llvm::StringMap<size_t> groupNameMap;
 };
 
 // Access all invokeOp.
 void CompileInvoke::compile() {
-  auto invokeOps = component.getControlOp().getInvokeOps();
-  for (auto op : invokeOps) {
+  llvm::SmallVector<InvokeOp> invokeOps =
+      component.getControlOp().getInvokeOps();
+  for (InvokeOp op : invokeOps) {
     lowerInvokeOp(op);
   }
 }
 
 // Convert an invoke operation to a group operation and an enable operation.
-void CompileInvoke::lowerInvokeOp(InvokeOp &invokeOp) {
+void CompileInvoke::lowerInvokeOp(InvokeOp invokeOp) {
+  // Create a ConstantOp to assign a value to the go port.
   if (!constantOp) {
-    WalkResult result = component.walk([&](hw::ConstantOp op) {
-      if (op.getType() == builder.getI1Type() &&
-          op.getValue().getZExtValue() == 1) {
-        constantOp = op;
-        return WalkResult::interrupt();
-      }
-      return WalkResult::advance();
-    });
-    if (!result.wasInterrupted()) {
-      // Create a ConstantOp to assign a value to the go port.
-      Operation *prevNode =
-          component.getWiresOp().getOperation()->getPrevNode();
-      builder.setInsertionPointAfter(prevNode);
-      constantOp = builder.create<hw::ConstantOp>(prevNode->getLoc(),
-                                                  builder.getI1Type(), 1);
-    }
+    Operation *prevNode = component.getWiresOp().getOperation()->getPrevNode();
+    builder.setInsertionPointAfter(prevNode);
+    constantOp = builder.create<hw::ConstantOp>(prevNode->getLoc(),
+                                                builder.getI1Type(), 1);
   }
   Location loc = component.getWiresOp().getLoc();
   // Set the insertion point at the end of the wires block.
   builder.setInsertionPointToEnd(component.getWiresOp().getBodyBlock());
-  GroupOp groupOp =
-      builder.create<GroupOp>(loc, "invoke_" + std::to_string(label));
+  llvm::StringRef callee = invokeOp.getCallee();
+  if (groupNameMap.find(callee) == groupNameMap.end())
+    groupNameMap[callee] = 0;
+  std::string groupName =
+      "invoke_" + callee.str() + "_" + std::to_string(groupNameMap[callee]);
+  // Check if the group name is correct.
+  while (component.getWiresOp().lookupSymbol(groupName))
+    groupName =
+        "invoke_" + callee.str() + "_" + std::to_string(++groupNameMap[callee]);
+  GroupOp groupOp = builder.create<GroupOp>(loc, groupName);
   builder.setInsertionPointToStart(groupOp.getBodyBlock());
   Value go = invokeOp.getInstGoValue();
   // Assign a value to the go port.
@@ -325,14 +323,13 @@ void CompileInvoke::lowerInvokeOp(InvokeOp &invokeOp) {
   auto ports = invokeOp.getPorts();
   auto inputs = invokeOp.getInputs();
   // Generate a series of assignment operations from a list of parameters.
-  for (size_t i = 0; i != ports.size(); ++i)
-    builder.create<AssignOp>(loc, ports[i], inputs[i]);
+  for (auto [port, input] : llvm::zip(ports, inputs))
+    builder.create<AssignOp>(loc, port, input);
   Value done = invokeOp.getInstDoneValue();
   // Generate a group_done operation with the instance's done port.
   builder.create<calyx::GroupDoneOp>(loc, done);
   builder.setInsertionPointAfter(invokeOp.getOperation());
-  builder.create<EnableOp>(invokeOp.getLoc(),
-                           "invoke_" + std::to_string(label++));
+  builder.create<EnableOp>(invokeOp.getLoc(), groupName);
   invokeOp.erase();
 }
 
