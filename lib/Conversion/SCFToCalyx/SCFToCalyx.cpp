@@ -649,6 +649,12 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                                                groupOp);
     return success();
   }
+  // If yieldOp for a for loop is not empty, then we do not transform for loop.
+  if (dyn_cast<scf::ForOp>(yieldOp->getParentOp())) {
+    yieldOp.getOperation()->emitError()
+        << "Currently do not support non-empty yield operations inside for "
+           "loops. Run --scf-for-to-while to before running --scf-to-calyx";
+  }
   auto whileOp = dyn_cast<scf::WhileOp>(yieldOp->getParentOp());
   assert(whileOp);
   ScfWhileOp whileOpInterface(whileOp);
