@@ -349,7 +349,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   std::pair<Value, PortInfo> addArg(Operation *module, unsigned insertPt,
                                     unsigned insertPtOffset, FIRRTLType srcType,
                                     FlatBundleFieldEntry field,
-                                    PortInfo &oldArg);
+                                    PortInfo &oldArg, hw::InnerSymAttr newSym);
 
   // Helpers to manage state.
   bool visitDecl(FExtModuleOp op);
@@ -400,10 +400,16 @@ private:
       llvm::function_ref<Value(const FlatBundleFieldEntry &, ArrayAttr)> clone,
       Type srcType = {});
 
-  /// Copy annotations from \p annotations to \p loweredAttrs, except
-  /// annotations with "target" key, that do not match the field suffix.
+  /// Filter out and return \p annotations that target includes \field,
+  /// modifying as needed to adjust fieldID's relative to to \field.
   ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
                               FIRRTLType srcType, FlatBundleFieldEntry field);
+
+  /// Partition inner symbols on given type.  Fails if any symbols
+  /// cannot be assigned to a field, such as inner symbol on root.
+  LogicalResult partitionSymbols(hw::InnerSymAttr sym, FIRRTLType parentType,
+                                 SmallVectorImpl<hw::InnerSymAttr> &newSyms,
+                                 Location errorLoc);
 
   PreserveAggregate::PreserveMode
   getPreservationModeForModule(FModuleLike moduleLike);
@@ -538,6 +544,77 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
   return ArrayAttr::get(ctxt, retval);
 }
 
+LogicalResult TypeLoweringVisitor::partitionSymbols(
+    hw::InnerSymAttr sym, FIRRTLType parentType,
+    SmallVectorImpl<hw::InnerSymAttr> &newSyms, Location errorLoc) {
+
+  // No symbol, nothing to partition.
+  if (!sym || sym.empty())
+    return success();
+
+  auto *context = sym.getContext();
+
+  // Required for rootChildFieldID.
+  auto baseType = getBaseType(parentType);
+  if (!baseType)
+    return mlir::emitError(errorLoc,
+                           "unable to partition symbol on unsupported type ")
+           << parentType;
+
+  return TypeSwitch<FIRRTLType, LogicalResult>(baseType)
+      .Case<BundleType, FVectorType>([&](auto aggType) -> LogicalResult {
+        struct BinningInfo {
+          uint64_t index;
+          uint64_t relFieldID;
+          hw::InnerSymPropertiesAttr prop;
+        };
+
+        // Walk each inner symbol, compute binning information/assignment.
+        SmallVector<BinningInfo> binning;
+        for (auto prop : sym) {
+          auto fieldID = prop.getFieldID();
+          // Special-case fieldID == 0, helper methods require non-zero fieldID.
+          if (fieldID == 0)
+            return mlir::emitError(errorLoc, "unable to lower due to symbol ")
+                   << prop.getName()
+                   << " with target not preserved by lowering";
+          auto [index, relFieldID] = aggType.getIndexAndSubfieldID(fieldID);
+          binning.push_back({index, relFieldID, prop});
+        }
+
+        // Sort by index, fieldID.
+        llvm::stable_sort(binning, [&](auto &lhs, auto &rhs) {
+          return std::tuple(lhs.index, lhs.relFieldID) <
+                 std::tuple(rhs.index, rhs.relFieldID);
+        });
+        assert(!binning.empty());
+
+        // Populate newSyms, group all symbols on same index.
+        newSyms.resize(aggType.getNumElements());
+        for (auto binIt = binning.begin(), binEnd = binning.end();
+             binIt != binEnd;) {
+          auto curIndex = binIt->index;
+          SmallVector<hw::InnerSymPropertiesAttr> propsForIndex;
+          // Gather all adjacent symbols for this index.
+          while (binIt != binEnd && binIt->index == curIndex) {
+            propsForIndex.push_back(hw::InnerSymPropertiesAttr::get(
+                context, binIt->prop.getName(), binIt->relFieldID,
+                binIt->prop.getSymVisibility()));
+            ++binIt;
+          }
+
+          assert(!newSyms[curIndex]);
+          newSyms[curIndex] = hw::InnerSymAttr::get(context, propsForIndex);
+        }
+        return success();
+      })
+      .Default([&](auto ty) {
+        return mlir::emitError(
+                   errorLoc, "unable to partition symbol on unsupported type ")
+               << ty;
+      });
+}
+
 bool TypeLoweringVisitor::lowerProducer(
     Operation *op,
     llvm::function_ref<Value(const FlatBundleFieldEntry &, ArrayAttr)> clone,
@@ -553,14 +630,6 @@ bool TypeLoweringVisitor::lowerProducer(
   if (!peelType(srcFType, fieldTypes, aggregatePreservationMode))
     return false;
 
-  // If an aggregate value has a symbol, emit errors.
-  if (op->hasAttr(cache.innerSymAttr)) {
-    op->emitError() << "has a symbol, but no symbols may exist on aggregates "
-                       "passed through LowerTypes";
-    encounteredError = true;
-    return false;
-  }
-
   SmallVector<Value> lowered;
   // Loop over the leaf aggregates.
   SmallString<16> loweredName;
@@ -571,7 +640,16 @@ bool TypeLoweringVisitor::lowerProducer(
   auto baseNameLen = loweredName.size();
   auto oldAnno = op->getAttr("annotations").dyn_cast_or_null<ArrayAttr>();
 
-  for (auto field : fieldTypes) {
+  SmallVector<hw::InnerSymAttr> fieldSyms(fieldTypes.size());
+  if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op)) {
+    if (failed(partitionSymbols(symOp.getInnerSymAttr(), srcFType, fieldSyms,
+                                symOp.getLoc()))) {
+      encounteredError = true;
+      return false;
+    }
+  }
+
+  for (const auto &[field, sym] : llvm::zip_equal(fieldTypes, fieldSyms)) {
     if (!loweredName.empty()) {
       loweredName.resize(baseNameLen);
       loweredName += field.suffix;
@@ -582,6 +660,17 @@ bool TypeLoweringVisitor::lowerProducer(
     ArrayAttr loweredAttrs =
         filterAnnotations(context, oldAnno, srcFType, field);
     auto newVal = clone(field, loweredAttrs);
+
+    // If inner symbols on this field, add to new op.
+    if (sym) {
+      // Splitting up something with symbols on it should lower to ops
+      // that also can have symbols on them.
+      auto newSymOp = newVal.getDefiningOp<hw::InnerSymbolOpInterface>();
+      assert(
+          newSymOp &&
+          "op with inner symbol lowered to op that cannot take inner symbol");
+      newSymOp.setInnerSymbolAttr(sym);
+    }
 
     // Carry over the name, if present.
     if (auto *newOp = newVal.getDefiningOp()) {
@@ -669,7 +758,8 @@ void TypeLoweringVisitor::lowerModule(FModuleLike op) {
 std::pair<Value, PortInfo>
 TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
                             unsigned insertPtOffset, FIRRTLType srcType,
-                            FlatBundleFieldEntry field, PortInfo &oldArg) {
+                            FlatBundleFieldEntry field, PortInfo &oldArg,
+                            hw::InnerSymAttr newSym) {
   Value newValue;
   FIRRTLType fieldType = mapBaseType(srcType, [&](auto) { return field.type; });
   if (auto mod = llvm::dyn_cast<FModuleOp>(module)) {
@@ -681,25 +771,15 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
   // Save the name attribute for the new argument.
   auto name = builder->getStringAttr(oldArg.name.getValue() + field.suffix);
 
-  if (oldArg.sym) {
-    mlir::emitError(newValue ? newValue.getLoc() : module->getLoc())
-        << "has a symbol, but no symbols may exist on aggregates "
-           "passed through LowerTypes";
-    encounteredError = true;
-  }
-
   // Populate the new arg attributes.
   auto newAnnotations = filterAnnotations(
       context, oldArg.annotations.getArrayAttr(), srcType, field);
   // Flip the direction if the field is an output.
   auto direction = (Direction)((unsigned)oldArg.direction ^ field.isOutput);
 
-  return std::make_pair(newValue, PortInfo{name,
-                                           fieldType,
-                                           direction,
-                                           {},
-                                           oldArg.loc,
-                                           AnnotationSet(newAnnotations)});
+  return std::make_pair(newValue,
+                        PortInfo{name, fieldType, direction, newSym, oldArg.loc,
+                                 AnnotationSet(newAnnotations)});
 }
 
 // Lower arguments with bundle type by flattening them.
@@ -714,11 +794,18 @@ bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
   if (!peelType(srcType, fieldTypes, getPreservationModeForModule(module)))
     return false;
 
-  for (const auto &field : llvm::enumerate(fieldTypes)) {
-    auto newValue = addArg(module, 1 + argIndex + field.index(), argsRemoved,
-                           srcType, field.value(), newArgs[argIndex]);
-    newArgs.insert(newArgs.begin() + 1 + argIndex + field.index(),
-                   newValue.second);
+  SmallVector<hw::InnerSymAttr> fieldSyms(fieldTypes.size());
+  if (failed(partitionSymbols(newArgs[argIndex].sym, srcType, fieldSyms,
+                              newArgs[argIndex].loc))) {
+    encounteredError = true;
+    return false;
+  }
+
+  for (const auto &[idx, field, fieldSym] :
+       llvm::enumerate(fieldTypes, fieldSyms)) {
+    auto newValue = addArg(module, 1 + argIndex + idx, argsRemoved, srcType,
+                           field, newArgs[argIndex], fieldSym);
+    newArgs.insert(newArgs.begin() + 1 + argIndex + idx, newValue.second);
     // Lower any other arguments by copying them to keep the relative order.
     lowering.push_back(newValue.first);
   }
