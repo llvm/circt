@@ -291,9 +291,18 @@ EggSynthesisPass::generateCellDeclaration(BooleanExpression &expr, Location loc,
   if (auto decl = moduleOp.lookupSymbol<hw::HWModuleExternOp>(gateName))
     return decl;
 
-  // Get the gate ports.
-  rust::Vec<rust::String> gateInputNames = expr_get_gate_input_names(expr);
+  // Build the port list. The names and order should match the library.
   SmallVector<hw::PortInfo> ports;
+
+  // Get the gate output port.
+  rust::String gateOutputName = expr_get_gate_output_name(expr);
+  auto portName = builder.getStringAttr(std::string(gateOutputName));
+  auto portDirection = hw::PortDirection::OUTPUT;
+  auto portType = builder.getI1Type();
+  ports.push_back(hw::PortInfo{portName, portDirection, portType});
+
+  // Get the gate input ports.
+  rust::Vec<rust::String> gateInputNames = expr_get_gate_input_names(expr);
   for (auto &gateInputName :
        llvm::make_range(gateInputNames.begin(), gateInputNames.end())) {
     auto portName = builder.getStringAttr(std::string(gateInputName));
@@ -301,10 +310,6 @@ EggSynthesisPass::generateCellDeclaration(BooleanExpression &expr, Location loc,
     auto portType = builder.getI1Type();
     ports.push_back(hw::PortInfo{portName, portDirection, portType});
   }
-
-  // TODO: this probably needs to match the gate's actual output name.
-  ports.push_back(hw::PortInfo{builder.getStringAttr("OUT"),
-                               hw::PortDirection::OUTPUT, builder.getI1Type()});
 
   // Build the gate declaration.
   OpBuilder::InsertionGuard g(builder);
