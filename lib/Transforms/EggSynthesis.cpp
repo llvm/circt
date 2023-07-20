@@ -235,7 +235,15 @@ EggSynthesisPass::generateCellDeclaration(BooleanExpression &expr, Location loc,
     return decl;
 
   // Get the gate ports.
+  rust::Vec<rust::String> gateInputNames = expr_get_gate_input_names(expr);
   SmallVector<hw::PortInfo> ports;
+  for (auto gateInputName :
+       llvm::make_range(gateInputNames.begin(), gateInputNames.end())) {
+    auto portName = builder.getStringAttr(std::string(gateInputName));
+    auto portDirection = hw::PortDirection::INPUT;
+    auto portType = builder.getI1Type();
+    ports.push_back(hw::PortInfo{portName, portDirection, portType});
+  }
 
   // Build the gate declaration.
   builder.setInsertionPointToStart(moduleOp.getBody());
