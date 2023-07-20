@@ -26,10 +26,13 @@ namespace detail {
 struct FIRRTLBaseTypeStorage;
 struct WidthTypeStorage;
 struct BundleTypeStorage;
-struct VectorTypeStorage;
+struct FVectorTypeStorage;
 struct FEnumTypeStorage;
 struct CMemoryTypeStorage;
 struct RefTypeStorage;
+struct BaseTypeAliasStorage;
+struct OpenBundleTypeStorage;
+struct OpenVectorTypeStorage;
 } // namespace detail.
 
 class ClockType;
