@@ -17,7 +17,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/Debug.h"
 
 #include "egg_netlist_synthesizer.h"
 
@@ -32,22 +32,24 @@ struct EggSynthesisPass : public EggSynthesisBase<EggSynthesisPass> {
 
 private:
   rust::Box<BooleanId> getExpr(Operation *op, BooleanEGraph &egraph);
-  void generateCellInstance(llvm::SmallString<8> symbol,
-                            BooleanExpression &expr, OpBuilder &builder,
+  void generateCellInstance(SmallString<8> symbol, BooleanExpression &expr,
+                            OpBuilder &builder,
                             BackedgeBuilder &backedgeBuilder);
   hw::HWModuleExternOp generateCellDeclaration(BooleanExpression &expr,
                                                Location loc,
                                                OpBuilder &builder);
-  llvm::SmallString<8> getSymbol(Value value);
+  SmallString<8> getSymbol(Value value);
 
   // Value to Symbol mapping state.
   uint64_t valueId = 0;
-  DenseMap<Value, llvm::SmallString<8>> valueToSymbol;
+  DenseMap<Value, SmallString<8>> valueToSymbol;
   llvm::StringMap<Value> symbolToValue;
 
   // Symbol to expression and backedge mapping state.
-  llvm::StringMap<BooleanExpression *> symbolToExpr;
   llvm::StringMap<Backedge> symbolToBackedge;
+
+  // Operations that are converted.
+  SmallVector<Operation *> opsToErase;
 };
 } // namespace
 
@@ -112,37 +114,49 @@ void EggSynthesisPass::runOnOperation() {
   auto builder = OpBuilder(defineOp);
   auto backedgeBuilder = BackedgeBuilder(builder, defineOp.getLoc());
 
-  // Build a mapping from symbol to synthesized BooleanExpression.
+  // Ensure block arguments' symbols have backedges, which just return the arg.
+  for (auto arg : defineOp.getArguments()) {
+    SmallString<8> symbol = valueToSymbol[arg];
+    symbolToBackedge[symbol] = backedgeBuilder.get(
+        builder.getI1Type(), symbolToValue[symbol].getLoc());
+    symbolToBackedge[symbol].setValue(arg);
+  }
+
+  // Iterate over each let, which binds a symbol to an expression.
   rust::Vec<BooleanExpression> lets = expr_get_module_body(std::move(result));
+  SmallVector<SmallString<8>> letSymbols;
+  SmallVector<BooleanExpression *> letExprs;
   for (BooleanExpression &let : llvm::make_range(lets.begin(), lets.end())) {
     // Get the symbol defined by the let.
     rust::String letSymbol = expr_get_let_symbol(let);
-    llvm::SmallString<8> symbol;
+    SmallString<8> symbol;
     for (char c : llvm::make_range(letSymbol.begin(), letSymbol.end()))
       symbol += c;
+
+    // We generate expressions for constants used in our formulation of not as
+    // xor, but we don't actually need to instantiate gates for the constant.
+    if (symbolToValue[symbol].getDefiningOp<hw::ConstantOp>())
+      continue;
 
     // Get the expression bound to the symbol.
     rust::Box<BooleanExpression> expr = expr_get_let_expr(let);
 
-    // Map from symbol to a new backedge.
+    // Map from the symbol to a new backedge.
     symbolToBackedge[symbol] = backedgeBuilder.get(
         builder.getI1Type(), symbolToValue[symbol].getLoc());
 
-    // Map from symbol to the expression.
-    symbolToExpr[symbol] = expr.into_raw();
+    // Replace uses of the original value with the backedge.
+    symbolToValue[symbol].replaceAllUsesWith(symbolToBackedge[symbol]);
+
+    // Generate the instance for this cell.
+    generateCellInstance(symbol, *expr, builder, backedgeBuilder);
   }
 
-  // Generate external module declarations and instantiations from the netlist.
-  for (auto output : defineOp.getBodyBlock().getTerminator()->getOperands()) {
-    llvm::SmallString<8> symbol = valueToSymbol[output];
-    BooleanExpression *expr = symbolToExpr[symbol];
-    auto exprBox = rust::Box<BooleanExpression>::from_raw(expr);
-    generateCellInstance(symbol, *exprBox, builder, backedgeBuilder);
-
-    // Replace output with resolved backedge for symbol.
+  // Clean up replaced ops.
+  for (auto *op : opsToErase) {
+    op->dropAllUses();
+    op->erase();
   }
-
-  // Run DCE to clean up.
 
   // Clean up state.
   valueId = 0;
@@ -152,6 +166,8 @@ void EggSynthesisPass::runOnOperation() {
 
 rust::Box<BooleanId> EggSynthesisPass::getExpr(Operation *op,
                                                BooleanEGraph &egraph) {
+  opsToErase.push_back(op);
+
   return llvm::TypeSwitch<Operation *, rust::Box<BooleanId>>(op)
       .Case([&](hw::ConstantOp c) {
         return build_num(egraph, c.getValue().getZExtValue());
@@ -205,20 +221,59 @@ rust::Box<BooleanId> EggSynthesisPass::getExpr(Operation *op,
       });
 }
 
-void EggSynthesisPass::generateCellInstance(llvm::SmallString<8> symbol,
+void EggSynthesisPass::generateCellInstance(SmallString<8> symbol,
                                             BooleanExpression &expr,
                                             OpBuilder &builder,
                                             BackedgeBuilder &backedgeBuilder) {
-  // Declare extern module for the gate.
-  hw::HWModuleExternOp decl =
-      generateCellDeclaration(expr, symbolToValue[symbol].getLoc(), builder);
+  // If the symbol is mapped to a know Value, get is Location and set insertion
+  // point to keep things in the same order.
+  Location symbolLoc = builder.getUnknownLoc();
+  auto symbolValue = symbolToValue.find(symbol);
+  if (symbolValue != symbolToValue.end()) {
+    symbolLoc = symbolValue->getValue().getLoc();
+    builder.setInsertionPoint(symbolValue->getValue().getDefiningOp());
+  }
 
-  // Get list of input names from declaration.
-  // Get list of operands:
-  //  if symbol, use generated value (might be a backedge)
-  //  if nested instance, generate a symbol and backedge, and recurse
+  // Declare extern module for the gate.
+  hw::HWModuleExternOp decl = generateCellDeclaration(expr, symbolLoc, builder);
+
+  // Get list of operands to the instance.
+  SmallVector<Value> operands;
+  rust::Vec<BooleanExpression> inputExprs = expr_get_gate_input_exprs(expr);
+  for (BooleanExpression &inputExpr :
+       llvm::make_range(inputExprs.begin(), inputExprs.end())) {
+    // If symbol, lookup the symbol and use its backedge.
+    if (expr_is_symbol(inputExpr)) {
+      rust::String inputExprSymbol = expr_get_symbol(inputExpr);
+      SmallString<8> inputSymbol;
+      for (char c :
+           llvm::make_range(inputExprSymbol.begin(), inputExprSymbol.end()))
+        inputSymbol += c;
+
+      operands.push_back(symbolToBackedge[inputSymbol]);
+
+      continue;
+    }
+
+    // If nested instance, generate a symbol and backedge, then recurse.
+    SmallString<8> inputSymbol("v");
+    inputSymbol += std::to_string(valueId);
+    valueId += 1;
+
+    symbolToBackedge[inputSymbol] =
+        backedgeBuilder.get(builder.getI1Type(), symbolLoc);
+
+    generateCellInstance(inputSymbol, inputExpr, builder, backedgeBuilder);
+
+    operands.push_back(symbolToBackedge[inputSymbol]);
+  }
+
   // Make an instance of the gate.
+  auto instance =
+      builder.create<hw::InstanceOp>(symbolLoc, decl, symbol, operands);
+
   // Replace backedge with instance result.
+  symbolToBackedge[symbol].setValue(instance.getResult(0));
 }
 
 hw::HWModuleExternOp
@@ -237,7 +292,7 @@ EggSynthesisPass::generateCellDeclaration(BooleanExpression &expr, Location loc,
   // Get the gate ports.
   rust::Vec<rust::String> gateInputNames = expr_get_gate_input_names(expr);
   SmallVector<hw::PortInfo> ports;
-  for (auto gateInputName :
+  for (auto &gateInputName :
        llvm::make_range(gateInputNames.begin(), gateInputNames.end())) {
     auto portName = builder.getStringAttr(std::string(gateInputName));
     auto portDirection = hw::PortDirection::INPUT;
@@ -245,14 +300,19 @@ EggSynthesisPass::generateCellDeclaration(BooleanExpression &expr, Location loc,
     ports.push_back(hw::PortInfo{portName, portDirection, portType});
   }
 
+  // TODO: this probably needs to match the gate's actual output name.
+  ports.push_back(hw::PortInfo{builder.getStringAttr("OUT"),
+                               hw::PortDirection::OUTPUT, builder.getI1Type()});
+
   // Build the gate declaration.
+  OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointToStart(moduleOp.getBody());
   auto decl = builder.create<hw::HWModuleExternOp>(loc, gateName, ports);
 
   return decl;
 }
 
-llvm::SmallString<8> EggSynthesisPass::getSymbol(Value value) {
+SmallString<8> EggSynthesisPass::getSymbol(Value value) {
   auto it = valueToSymbol.find(value);
   if (it != valueToSymbol.end())
     return it->getSecond();
