@@ -590,12 +590,12 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      scf::YieldOp yieldOp) const {
   if (yieldOp.getOperands().empty()) {
-    // If yiedOp operands are empty, we assume we have a for llop
+    // If yiedOp operands are empty, we assume we have a for loop.
     auto forOp = dyn_cast<scf::ForOp>(yieldOp->getParentOp());
     assert(forOp);
     ScfForOp forOpInterface(forOp);
 
-    // get the ForLoop' Induction Register
+    // Get the ForLoop' Induction Register.
     auto inductionReg =
         getState<ComponentLoweringState>().getForLoopIterReg(forOpInterface, 0);
 
