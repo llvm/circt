@@ -1273,6 +1273,16 @@ firrtl.module private @is1436_FOO() {
     %1 = firrtl.int.mux2cell(%sel1, %v1, %v0) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>) -> !firrtl.bundle<a: uint<5>>
     firrtl.strictconnect %out2, %0 : !firrtl.bundle<a: uint<5>>
   }
+
+  // CHECK-LABEL: firrtl.module @Groups
+  firrtl.declgroup @GroupFoo bind {}
+  firrtl.module @Groups() {
+    // CHECK-NEXT: firrtl.group @GroupFoo
+    firrtl.group @GroupFoo {
+      // CHECK-NEXT: %a_b = firrtl.wire : !firrtl.uint<1>
+      %a = firrtl.wire : !firrtl.bundle<b: uint<1>>
+    }
+  }
 } // CIRCUIT
 
 // Check that we don't lose the DontTouchAnnotation when it is not the last
