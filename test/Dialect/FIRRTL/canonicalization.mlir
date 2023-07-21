@@ -3086,4 +3086,15 @@ firrtl.module @ForceRelease(in %clock: !firrtl.clock, in %x: !firrtl.uint<4>) {
     // CHECK-NEXT: }
 }
 
+// Don't produce invalid IR (strictconnect w/flips).
+// CHECK-LABEL: @Issue5650(
+firrtl.module @Issue5650(in %io_y: !firrtl.uint<1>, out %io_x: !firrtl.uint<1>) {
+  %io = firrtl.wire : !firrtl.bundle<y flip: uint<1>, x: uint<1>>
+  %2 = firrtl.subfield %io[y] : !firrtl.bundle<y flip: uint<1>, x: uint<1>>
+  firrtl.strictconnect %2, %io_y : !firrtl.uint<1>
+  %3 = firrtl.subfield %io[x] : !firrtl.bundle<y flip: uint<1>, x: uint<1>>
+  firrtl.strictconnect %io_x, %3 : !firrtl.uint<1>
+  firrtl.strictconnect %3, %2 : !firrtl.uint<1>
+}
+
 }

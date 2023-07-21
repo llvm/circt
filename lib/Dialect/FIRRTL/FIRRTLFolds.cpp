@@ -1954,7 +1954,9 @@ struct AggOneShot : public mlir::RewritePattern {
   AggOneShot(StringRef name, uint32_t weight, MLIRContext *context)
       : RewritePattern(name, 0, context) {}
 
-  SmallVector<Value> getCompleteWrite(Operation *lhs) const {
+  SmallVector<Value>
+  getCompleteWrite(Operation *lhs,
+                   SmallVectorImpl<StrictConnectOp> &connects) const {
     auto lhsTy = lhs->getResult(0).getType();
     if (!isa<BundleType, FVectorType>(lhsTy))
       return {};
@@ -1973,6 +1975,7 @@ struct AggOneShot : public mlir::RewritePattern {
               if (fields.count(subField.getFieldIndex())) // duplicate write
                 return {};
               fields[subField.getFieldIndex()] = aConnect.getSrc();
+              connects.push_back(aConnect);
             }
             continue;
           }
@@ -1985,6 +1988,7 @@ struct AggOneShot : public mlir::RewritePattern {
               if (fields.count(subIndex.getIndex())) // duplicate write
                 return {};
               fields[subIndex.getIndex()] = aConnect.getSrc();
+              connects.push_back(aConnect);
             }
             continue;
           }
@@ -2009,32 +2013,26 @@ struct AggOneShot : public mlir::RewritePattern {
 
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
-    auto values = getCompleteWrite(op);
+    SmallVector<StrictConnectOp> connects;
+    auto values = getCompleteWrite(op, connects);
     if (values.empty())
       return failure();
     rewriter.setInsertionPointToEnd(op->getBlock());
-    Value newVal = type_isa<BundleType>(op->getResult(0).getType())
-                       ? rewriter.createOrFold<BundleCreateOp>(
-                             op->getLoc(), op->getResult(0).getType(), values)
+    auto dest = op->getResult(0);
+    auto destType = dest.getType();
+
+    // If not passive, cannot strictconnect.
+    if (!type_cast<FIRRTLBaseType>(destType).isPassive())
+      return failure();
+
+    Value newVal = type_isa<BundleType>(destType)
+                       ? rewriter.createOrFold<BundleCreateOp>(op->getLoc(),
+                                                               destType, values)
                        : rewriter.createOrFold<VectorCreateOp>(
-                             op->getLoc(), op->getResult(0).getType(), values);
-    rewriter.createOrFold<StrictConnectOp>(op->getLoc(), op->getResult(0),
-                                           newVal);
-    for (Operation *user : op->getResult(0).getUsers()) {
-      if (auto subIndex = dyn_cast<SubindexOp>(user)) {
-        for (Operation *subuser :
-             llvm::make_early_inc_range(subIndex.getResult().getUsers()))
-          if (auto aConnect = dyn_cast<StrictConnectOp>(subuser))
-            if (aConnect.getDest() == subIndex)
-              rewriter.eraseOp(aConnect);
-      } else if (auto subField = dyn_cast<SubfieldOp>(user)) {
-        for (Operation *subuser :
-             llvm::make_early_inc_range(subField.getResult().getUsers()))
-          if (auto aConnect = dyn_cast<StrictConnectOp>(subuser))
-            if (aConnect.getDest() == subField)
-              rewriter.eraseOp(aConnect);
-      }
-    }
+                             op->getLoc(), destType, values);
+    rewriter.createOrFold<StrictConnectOp>(op->getLoc(), dest, newVal);
+    for (auto connect : connects)
+      rewriter.eraseOp(connect);
     return success();
   }
 };
