@@ -74,7 +74,7 @@ bool isAnyModule(Operation *module);
 bool isAnyModuleOrInstance(Operation *module);
 
 /// Return the signature for the specified module as a function type.
-FunctionType getModuleType(Operation *module);
+ModuleType getModuleType(Operation *module);
 
 /// Return the signature for the specified module as a module type.
 ModuleType getModuleModType(Operation *module);

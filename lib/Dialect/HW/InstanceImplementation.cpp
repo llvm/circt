@@ -243,11 +243,11 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
   auto [modArgNames, modResultNames] =
       instance_like_impl::getHWModuleArgAndResultNames(module);
 
-  ArrayRef<Type> resolvedModInputTypesRef = getModuleType(module).getInputs();
+  auto resolvedModInputTypesRef = getModuleType(module).getInputTypes();
   SmallVector<Type> resolvedModInputTypes;
   if (parameters) {
     if (failed(instance_like_impl::resolveParametricTypes(
-            instance->getLoc(), parameters, getModuleType(module).getInputs(),
+            instance->getLoc(), parameters, getModuleType(module).getInputTypes(),
             resolvedModInputTypes, emitError)))
       return failure();
     resolvedModInputTypesRef = resolvedModInputTypes;
@@ -258,11 +258,11 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
     return failure();
 
   // Check that result types are consistent with the referenced module.
-  ArrayRef<Type> resolvedModResultTypesRef = getModuleType(module).getResults();
+  auto resolvedModResultTypesRef = getModuleType(module).getOutputTypes();
   SmallVector<Type> resolvedModResultTypes;
   if (parameters) {
     if (failed(instance_like_impl::resolveParametricTypes(
-            instance->getLoc(), parameters, getModuleType(module).getResults(),
+            instance->getLoc(), parameters, getModuleType(module).getOutputTypes(),
             resolvedModResultTypes, emitError)))
       return failure();
     resolvedModResultTypesRef = resolvedModResultTypes;

@@ -19,6 +19,8 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 
+using ::circt::hw::ModuleType;
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/FSM/FSM.h.inc"
 

@@ -24,12 +24,12 @@ using namespace fsm;
 //===----------------------------------------------------------------------===//
 
 void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
-                      StringRef initialStateName, FunctionType type,
+                      StringRef initialStateName, ModuleType type,
                       ArrayRef<NamedAttribute> attrs,
                       ArrayRef<DictionaryAttr> argAttrs) {
   state.addAttribute(mlir::SymbolTable::getSymbolAttrName(),
                      builder.getStringAttr(name));
-  state.addAttribute(MachineOp::getFunctionTypeAttrName(state.name),
+  state.addAttribute(MachineOp::getModuleTypeAttrName(state.name),
                      TypeAttr::get(type));
   state.addAttribute("initialState",
                      StringAttr::get(state.getContext(), initialStateName));
@@ -38,7 +38,7 @@ void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
   Block *body = new Block();
   region->push_back(body);
   body->addArguments(
-      type.getInputs(),
+      type.getInputTypes(),
       SmallVector<Location, 4>(type.getNumInputs(), builder.getUnknownLoc()));
 
   if (argAttrs.empty())
@@ -100,14 +100,14 @@ ParseResult MachineOp::parse(OpAsmParser &parser, OperationState &result) {
 
   return function_interface_impl::parseFunctionOp(
       parser, result, /*allowVariadic=*/false,
-      MachineOp::getFunctionTypeAttrName(result.name), buildFuncType,
+      MachineOp::getTypeAttrName(result.name), buildFuncType,
       MachineOp::getArgAttrsAttrName(result.name),
       MachineOp::getResAttrsAttrName(result.name));
 }
 
 void MachineOp::print(OpAsmPrinter &p) {
   function_interface_impl::printFunctionOp(
-      p, *this, /*isVariadic=*/false, getFunctionTypeAttrName(),
+      p, *this, /*isVariadic=*/false, getTypeAttrName(),
       getArgAttrsAttrName(), getResAttrsAttrName());
 }
 

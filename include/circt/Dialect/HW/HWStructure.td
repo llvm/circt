@@ -31,15 +31,12 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     HWOp<mnemonic, traits # [
       DeclareOpInterfaceMethods<HWModuleLike>,
       DeclareOpInterfaceMethods<HWMutableModuleLike>,
-      FunctionOpInterface, Symbol,
+      Symbol,
       OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
 
   let extraClassDeclaration = extraModuleClassDeclaration # [{
-
-    // Return the new ModuleType for this module.
-    ModuleType getModuleType();
 
     /// Insert and remove input and output ports of this module. Does not modify
     /// the block arguments of the module body. The insertion and removal
@@ -53,6 +50,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       ArrayRef<unsigned> eraseInputs,
       ArrayRef<unsigned> eraseOutputs
     );
+
   }];
 
   /// Additional class definitions inside the module op.
@@ -83,11 +81,9 @@ def HWModuleOp : HWModuleOpBase<"module",
     name, a list of ports, a list of parameters, and a body that represents the
     connections within the module.
   }];
-  let arguments = (ins TypeAttrOf<FunctionType>:$function_type,
+  let arguments = (ins TypeAttrOf<ModuleType>:$type,
                        OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
-                       StrArrayAttr:$argNames,
-                       StrArrayAttr:$resultNames,
                        LocationArrayAttr:$argLocs,
                        LocationArrayAttr:$resultLocs,
                        ParamDeclArrayAttr:$parameters,
@@ -114,9 +110,6 @@ def HWModuleOp : HWModuleOpBase<"module",
   ];
 
   let extraModuleClassDeclaration = [{
-    using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::front;
-    using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::getFunctionBody;
-
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
@@ -126,7 +119,7 @@ def HWModuleOp : HWModuleOpBase<"module",
     }
 
     /// Returns the number of in or inout ports.
-    size_t getNumInOrInoutPorts() { return getArgumentTypes().size(); }
+    size_t getNumInOrInoutPorts() { return getType().getNumInputs(); }
 
     /// Return the PortInfo for the specified input or inout port.
     PortInfo getInOrInoutPort(size_t i) {
@@ -176,12 +169,12 @@ def HWModuleOp : HWModuleOpBase<"module",
     /// Append an output with a given name and type to the port list.
     /// If the name is not unique, a unique name is created.
     void appendOutput(StringAttr name, Value value) {
-      return insertOutputs(getResultTypes().size(), {{name, value}});
+      return insertOutputs(getType().getNumOutputs(), {{name, value}});
     }
 
     void appendOutput(const Twine &name, Value value) {
       ::mlir::StringAttr nameAttr = ::mlir::StringAttr::get(getContext(), name);
-      return insertOutputs(getResultTypes().size(), {{nameAttr, value}});
+      appendOutput(nameAttr, value);
     }
 
     /// Prepend an output with a given name and type to the port list.
@@ -192,7 +185,7 @@ def HWModuleOp : HWModuleOpBase<"module",
 
     void prependOutput(const Twine &name, Value value) {
       ::mlir::StringAttr nameAttr = ::mlir::StringAttr::get(getContext(), name);
-      return insertOutputs(0, {{nameAttr, value}});
+      prependOutput(nameAttr, value);
     }
 
     /// Inserts a list of output ports into the port list at a specific
@@ -201,7 +194,7 @@ def HWModuleOp : HWModuleOpBase<"module",
     void insertOutputs(unsigned index,
                        ArrayRef<std::pair<StringAttr, Value>> outputs);
 
-    Block *getBodyBlock() { return &getFunctionBody().front(); }
+    Block *getBodyBlock() { return &getRegion().front(); }
 
     // Get the module's symbolic name as StringAttr.
     StringAttr getNameAttr() {
@@ -215,22 +208,6 @@ def HWModuleOp : HWModuleOpBase<"module",
     }
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
-
-    /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
-
-    /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
-
-    /// Verify the type attribute of this function. Returns failure and emits
-    /// an error if the attribute is invalid.
-    LogicalResult verifyType() {
-      auto type = getFunctionTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
-                           "' attribute of function type");
-      return success();
-    }
 
     /// Verifies the body of the function.
     LogicalResult verifyBody();
@@ -251,10 +228,9 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
     have proper parameterization in the hw.dialect.  We need a way to represent
     parameterized types instead of just concrete types.
   }];
-  let arguments = (ins TypeAttrOf<FunctionType>:$function_type,
+  let arguments = (ins TypeAttrOf<ModuleType>:$type,
 		       OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
-                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
@@ -314,21 +290,6 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-    /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
-
-    /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
-
-    /// Verify the type attribute of this function. Returns failure and emits
-    /// an error if the attribute is invalid.
-    LogicalResult verifyType() {
-      auto type = getFunctionTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
-                           "' attribute of function type");
-      return success();
-    }
   }];
 
   let hasCustomAssemblyFormat = 1;
@@ -371,10 +332,9 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
     module name in Verilog we can use.  See hw.module for an explanation.
   }];
   let arguments = (ins FlatSymbolRefAttr:$generatorKind,
-                       TypeAttrOf<FunctionType>:$function_type,
+                       TypeAttrOf<ModuleType>:$type,
 		       OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
-                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
@@ -412,7 +372,7 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
     /// here.  This is typically the symbol, but can be overridden with the
     /// verilogName attribute.
     StringAttr getVerilogModuleNameAttr();
-m
+
     /// Lookup the generator kind for the symbol.  This returns null on
     /// invalid IR.
     Operation *getGeneratorKindOp();
@@ -420,23 +380,6 @@ m
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-    /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
-
-    /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
-
-    /// Verify the type attribute of this function. Returns failure and emits
-    /// an error if the attribute is invalid.
-    LogicalResult verifyType() {
-      auto type = getFunctionTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
-                           "' attribute of function type");
-      return success();
-    }
-
-    TypeAttr getTypeAttr();
   }];
 
   let hasCustomAssemblyFormat = 1;

@@ -156,7 +156,7 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
 
   auto *ctxt = b.getContext();
   Location loc = pearl->getLoc();
-  FunctionType modType = hw::getModuleType(pearl);
+  auto modType = hw::getModuleType(pearl);
 
   // -----
   // First, build up a set of data structures to use throughout this function.

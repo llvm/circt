@@ -287,10 +287,10 @@ void CalyxToFSMPass::runOnOperation() {
   // ComponentOp. This makes for an intermediate step, which allows for
   // outlining the FSM (materializing FSM I/O) at a later point.
   auto machineName = ("control_" + component.getName()).str();
-  auto funcType = FunctionType::get(&getContext(), {}, {});
+  auto modType = ModuleType::get(&getContext(), {});
   auto machine =
       builder.create<MachineOp>(ctrlOp.getLoc(), machineName,
-                                /*initialState=*/"fsm_entry", funcType);
+                                /*initialState=*/"fsm_entry", modType);
   auto graph = FSMGraph(machine);
 
   SymbolCache sc;

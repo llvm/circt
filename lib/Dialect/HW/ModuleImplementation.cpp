@@ -84,10 +84,9 @@ parseFunctionResultList(OpAsmParser &parser,
 }
 
 ParseResult module_like_impl::parseModuleFunctionSignature(
-    OpAsmParser &parser, bool &isVariadic,
+    OpAsmParser &parser, 
     SmallVectorImpl<OpAsmParser::Argument> &args,
-    SmallVectorImpl<Attribute> &argNames, SmallVectorImpl<Attribute> &argLocs,
-    SmallVectorImpl<Attribute> &resultNames,
+    SmallVectorImpl<Attribute> &argLocs,
     SmallVectorImpl<DictionaryAttr> &resultAttrs,
     SmallVectorImpl<Attribute> &resultLocs, TypeAttr &type) {
 
@@ -101,30 +100,30 @@ ParseResult module_like_impl::parseModuleFunctionSignature(
 
   // Parse the result list.
   SmallVector<Type> resultTypes;
+  SmallVector<Attribute> resultNames;
   if (succeeded(parser.parseOptionalArrow()))
     if (failed(parseFunctionResultList(parser, resultNames, resultTypes,
                                        resultAttrs, resultLocs)))
       return failure();
 
   // Process the ssa args for the information we're looking for.
-  SmallVector<Type> argTypes;
+  SmallVector<ModulePort, 4> ports;
   for (auto &arg : args) {
-    argNames.push_back(getPortNameAttr(context, arg.ssaName.name));
-    argTypes.push_back(arg.type);
+    ports.push_back({getPortNameAttr(context, arg.ssaName.name), arg.type, ModulePort::Direction::Input});
     if (!arg.sourceLoc)
       arg.sourceLoc = parser.getEncodedSourceLoc(arg.ssaName.location);
     argLocs.push_back(*arg.sourceLoc);
   }
 
-  type = TypeAttr::get(FunctionType::get(context, argTypes, resultTypes));
+  for (auto [t, n] : llvm::zip(resultTypes, resultNames))
+    ports.push_back({cast<StringAttr>(n), t, ModulePort::Direction::Output});
 
+  type = TypeAttr::get(ModuleType::get(context, ports));
   return success();
 }
 
 void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
-                                            ArrayRef<Type> argTypes,
-                                            bool isVariadic,
-                                            ArrayRef<Type> resultTypes,
+                                            ModuleType type,
                                             bool &needArgNamesAttr) {
   using namespace mlir::function_interface_impl;
 
@@ -136,7 +135,7 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
   auto funcOp = cast<mlir::FunctionOpInterface>(op);
 
   p << '(';
-  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+  for (unsigned i = 0, e = type.getNumInputs(); i < e; ++i) {
     if (i > 0)
       p << ", ";
 
@@ -158,7 +157,7 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
       p << '%' << argName << ": ";
     }
 
-    p.printType(argTypes[i]);
+    p.printType(type.getInputType(i));
     p.printOptionalAttrDict(getArgAttrs(funcOp, i));
 
     // TODO: `printOptionalLocationSpecifier` will emit aliases for locations,
@@ -169,23 +168,17 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
         p.printOptionalLocationSpecifier(loc);
   }
 
-  if (isVariadic) {
-    if (!argTypes.empty())
-      p << ", ";
-    p << "...";
-  }
-
   p << ')';
 
   // We print result types specially since we support named arguments.
-  if (!resultTypes.empty()) {
+  if (type.getNumOutputs()) {
     p << " -> (";
-    for (size_t i = 0, e = resultTypes.size(); i < e; ++i) {
+    for (size_t i = 0, e = type.getNumOutputs(); i < e; ++i) {
       if (i != 0)
         p << ", ";
       p.printKeywordOrString(getModuleResultNameAttr(op, i).getValue());
       p << ": ";
-      p.printType(resultTypes[i]);
+      p.printType(type.getOutputType(i));
       p.printOptionalAttrDict(getResultAttrs(funcOp, i));
 
       // TODO: `printOptionalLocationSpecifier` will emit aliases for locations,

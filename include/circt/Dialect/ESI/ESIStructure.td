@@ -34,6 +34,8 @@ def ESIPureModuleOp : ESI_Op<"pure_module",
   let hasVerifier = 1;
 
   let extraClassDeclaration = [{
+    hw::ModuleType getType();
+
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
   }];

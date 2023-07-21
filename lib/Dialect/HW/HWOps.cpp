@@ -551,40 +551,11 @@ bool hw::isAnyModuleOrInstance(Operation *moduleOrInstance) {
 
 /// Return the signature for a module as a function type from the module itself
 /// or from an hw::InstanceOp.
-FunctionType hw::getModuleType(Operation *moduleOrInstance) {
+ModuleType hw::getModuleType(Operation *moduleOrInstance) {
   if (auto instance = dyn_cast<InstanceOp>(moduleOrInstance)) {
-    SmallVector<Type> inputs(instance->getOperandTypes());
-    SmallVector<Type> results(instance->getResultTypes());
-    return FunctionType::get(instance->getContext(), inputs, results);
+    return instance.getModuleType();
   }
-
-  assert(isAnyModule(moduleOrInstance) &&
-         "must be called on instance or module");
-  return cast<mlir::FunctionOpInterface>(moduleOrInstance)
-      .getFunctionType()
-      .cast<FunctionType>();
-}
-
-/// Return the signature for a module as a module type from the module itself
-/// or from an hw::InstanceOp.
-ModuleType hw::getModuleModType(Operation *moduleOrInstance) {
-  if (auto instance = dyn_cast<InstanceOp>(moduleOrInstance)) {
-    auto innames = instance.getArgNames();
-    auto resnames = instance.getResultNames();
-    return FnToMod(getModuleType(moduleOrInstance), innames, resnames);
-  }
-
-  auto an = cast<ArrayAttr>(moduleOrInstance->getAttr("argNames"));
-  auto rn = cast<ArrayAttr>(moduleOrInstance->getAttr("resultNames"));
-  assert(isAnyModule(moduleOrInstance) &&
-         "must be called on instance or module");
-    auto fnTy = cast<mlir::FunctionOpInterface>(moduleOrInstance)
-      .getFunctionType()
-      .cast<FunctionType>();
-//      fnTy.dump();
-//      an.dump();
-//      rn.dump();
-  return FnToMod(fnTy, an, rn );
+  return cast<HWModuleLike>(moduleOrInstance).getModuleType();
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -618,7 +589,7 @@ void hw::setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names) {
 
 void hw::setModuleResultNames(Operation *module, ArrayRef<Attribute> names) {
   assert(isAnyModule(module) && "Must be called on a module");
-  assert(getModuleType(module).getNumResults() == names.size() &&
+  assert(getModuleType(module).getNumOutputs() == names.size() &&
          "incorrect number of argument names specified");
   module->setAttr("resultNames", ArrayAttr::get(module->getContext(), names));
 }
@@ -648,7 +619,7 @@ void hw::setModuleArgumentLocs(Operation *module, ArrayRef<Attribute> locs) {
 
 void hw::setModuleResultLocs(Operation *module, ArrayRef<Attribute> locs) {
   assert(isAnyModule(module) && "Must be called on a module");
-  assert(getModuleType(module).getNumResults() == locs.size() &&
+  assert(getModuleType(module).getNumOutputs() == locs.size() &&
          "incorrect number of result locations specified");
   module->setAttr("resultLocs", ArrayAttr::get(module->getContext(), locs));
 }
@@ -703,12 +674,12 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   if (!parameters)
     parameters = builder.getArrayAttr({});
 
-  // Record the argument and result types as an attribute.
   auto type = builder.getFunctionType(argTypes, resultTypes);
-  result.addAttribute(ModuleTy::getFunctionTypeAttrName(result.name),
-                      TypeAttr::get(type));
-  result.addAttribute("argNames", builder.getArrayAttr(argNames));
-  result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
+  auto modTy = FnToMod(type, builder.getArrayAttr(argNames), builder.getArrayAttr(resultNames));
+
+  // Record the argument and result types as an attribute.
+  result.addAttribute(ModuleTy::getTypeAttrName(result.name),
+                      TypeAttr::get(modTy));
   result.addAttribute("argLocs", builder.getArrayAttr(argLocs));
   result.addAttribute("resultLocs", builder.getArrayAttr(resultLocs));
   result.addAttribute(ModuleTy::getArgAttrsAttrName(result.name),
@@ -918,10 +889,6 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &odsState,
   builder.create<hw::OutputOp>(odsState.location, outputOperands);
 }
 
-ModuleType HWModuleOp::getModuleType() {
-  return FnToMod(getFunctionType(), getArgNames(), getResultNames());
-}
-
 void HWModuleOp::modifyPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
@@ -1019,9 +986,9 @@ ModulePortInfo hw::getModulePortInfo(Operation *op) {
 
   SmallVector<PortInfo> inputs, outputs;
   auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
-  auto argTypes = getModuleType(op).getInputs();
+  auto argTypes = getModuleType(op).getInputTypes();
   auto argLocs = op->getAttrOfType<ArrayAttr>("argLocs");
-  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+  for (size_t i = 0, e = argTypes.size(); i < e; ++i) {
     bool isInOut = false;
     auto type = argTypes[i];
 
@@ -1060,7 +1027,7 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
          "Can only get module ports from an instance or module");
 
   SmallVector<PortInfo> results;
-  auto argTypes = getModuleType(op).getInputs();
+  auto argTypes = getModuleType(op).getInputTypes();
   auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
   auto argLocs = op->getAttrOfType<ArrayAttr>("argLocs");
 
@@ -1085,7 +1052,7 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
 
   auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
   auto resultLocs = op->getAttrOfType<ArrayAttr>("resultLocs");
-  auto resultTypes = getModuleType(op).getResults();
+  auto resultTypes = getModuleType(op).getOutputTypes();
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
 
     // Instance ops will not have port location information.
@@ -1101,11 +1068,10 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
 
 /// Return the PortInfo for the specified input or inout port.
 PortInfo hw::getModuleInOrInoutPort(Operation *op, size_t idx) {
-  auto argTypes = getModuleType(op).getInputs();
-  auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
+  auto modType = getModuleType(op);
   auto argLocs = op->getAttrOfType<ArrayAttr>("argLocs");
   bool isInOut = false;
-  auto type = argTypes[idx];
+  auto type = modType.getInputType(idx);
 
   if (auto inout = type.dyn_cast<InOutType>()) {
     isInOut = true;
@@ -1113,7 +1079,7 @@ PortInfo hw::getModuleInOrInoutPort(Operation *op, size_t idx) {
   }
 
   auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
-  return {argNames[idx].cast<StringAttr>(),
+  return {modType.getInputNameAttr(idx),
           direction,
           type,
           idx,
@@ -1123,13 +1089,12 @@ PortInfo hw::getModuleInOrInoutPort(Operation *op, size_t idx) {
 
 /// Return the PortInfo for the specified output port.
 PortInfo hw::getModuleOutputPort(Operation *op, size_t idx) {
-  auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
+  auto modType = getModuleType(op);
   auto resultLocs = op->getAttrOfType<ArrayAttr>("resultLocs");
-  auto resultTypes = getModuleType(op).getResults();
-  assert(idx < resultNames.size() && "invalid result number");
-  return {resultNames[idx].cast<StringAttr>(),
+  assert(idx < modType.getNumOutputs() && "invalid result number");
+  return {modType.getOutputNameAttr(idx),
           PortDirection::OUTPUT,
-          resultTypes[idx],
+          modType.getOutputType(idx),
           idx,
           getResultSym(op, idx),
           resultLocs[idx].cast<LocationAttr>()};
@@ -1173,27 +1138,23 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
     return failure();
 
   // Parse the function signature.
-  bool isVariadic = false;
   SmallVector<OpAsmParser::Argument, 4> entryArgs;
-  SmallVector<Attribute> argNames;
   SmallVector<Attribute> argLocs;
-  SmallVector<Attribute> resultNames;
   SmallVector<DictionaryAttr> resultAttrs;
   SmallVector<Attribute> resultLocs;
-  TypeAttr functionType;
+  TypeAttr moduleType;
   if (failed(module_like_impl::parseModuleFunctionSignature(
-          parser, isVariadic, entryArgs, argNames, argLocs, resultNames,
-          resultAttrs, resultLocs, functionType)))
+          parser, entryArgs, argLocs,
+          resultAttrs, resultLocs, moduleType)))
     return failure();
 
   // Parse the attribute dict.
   if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
     return failure();
 
-  if (hasAttribute("resultNames", result.attributes) ||
-      hasAttribute("parameters", result.attributes)) {
+  if (hasAttribute("parameters", result.attributes)) {
     parser.emitError(
-        loc, "explicit `resultNames` / `parameters` attributes not allowed");
+        loc, "explicit `parameters` attribute not allowed");
     return failure();
   }
 
@@ -1203,16 +1164,13 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   // we represent port names that aren't valid MLIR identifiers.  Result and
   // parameter names are printed quoted when they aren't valid identifiers, so
   // they don't need this affordance.
-  if (!hasAttribute("argNames", result.attributes))
-    result.addAttribute("argNames", ArrayAttr::get(context, argNames));
   result.addAttribute("argLocs", ArrayAttr::get(context, argLocs));
-  result.addAttribute("resultNames", ArrayAttr::get(context, resultNames));
   result.addAttribute("resultLocs", ArrayAttr::get(context, resultLocs));
   result.addAttribute("parameters", parameters);
   if (!hasAttribute("comment", result.attributes))
     result.addAttribute("comment", StringAttr::get(context, ""));
-  result.addAttribute(ModuleTy::getFunctionTypeAttrName(result.name),
-                      functionType);
+  result.addAttribute(ModuleTy::getTypeAttrName(result.name),
+                      moduleType);
 
   // Add the attributes to the function arguments.
   addArgAndResultAttrs(parser.getBuilder(), result, entryArgs, resultAttrs,
@@ -1244,20 +1202,12 @@ ParseResult HWModuleGeneratedOp::parse(OpAsmParser &parser,
   return parseHWModuleOp<HWModuleGeneratedOp>(parser, result, GenMod);
 }
 
-FunctionType getHWModuleOpType(Operation *op) {
-  return cast<mlir::FunctionOpInterface>(op)
-      .getFunctionType()
-      .cast<FunctionType>();
-}
-
 template <typename ModuleTy>
 static void printModuleOp(OpAsmPrinter &p, Operation *op,
                           ExternModKind modKind) {
   using namespace mlir::function_interface_impl;
 
-  FunctionType fnType = getHWModuleOpType(op);
-  auto argTypes = fnType.getInputs();
-  auto resultTypes = fnType.getResults();
+  ModuleType modType = cast<HWModuleLike>(op).getModuleType();
 
   p << ' ';
 
@@ -1277,19 +1227,15 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
   printOptionalParameterList(p, op, op->getAttrOfType<ArrayAttr>("parameters"));
 
   bool needArgNamesAttr = false;
-  module_like_impl::printModuleSignature(p, op, argTypes, /*isVariadic=*/false,
-                                         resultTypes, needArgNamesAttr);
+  module_like_impl::printModuleSignature(p, op, modType, needArgNamesAttr);
 
   SmallVector<StringRef, 3> omittedAttrs;
   if (modKind == GenMod)
     omittedAttrs.push_back("generatorKind");
-  if (!needArgNamesAttr)
-    omittedAttrs.push_back("argNames");
   omittedAttrs.push_back("argLocs");
-  omittedAttrs.push_back(ModuleTy::getFunctionTypeAttrName(op->getName()));
+  omittedAttrs.push_back(ModuleTy::getTypeAttrName(op->getName()));
   omittedAttrs.push_back(ModuleTy::getArgAttrsAttrName(op->getName()));
   omittedAttrs.push_back(ModuleTy::getResAttrsAttrName(op->getName()));
-  omittedAttrs.push_back("resultNames");
   omittedAttrs.push_back("resultLocs");
   omittedAttrs.push_back("parameters");
   omittedAttrs.push_back(visibilityAttrName);
@@ -1329,7 +1275,7 @@ static LogicalResult verifyModuleCommon(Operation *module) {
     return module->emitOpError("incorrect number of argument names");
 
   auto resultNames = module->getAttrOfType<ArrayAttr>("resultNames");
-  if (resultNames.size() != moduleType.getNumResults())
+  if (resultNames.size() != moduleType.getNumOutputs())
     return module->emitOpError("incorrect number of result names");
 
   auto argLocs = module->getAttrOfType<ArrayAttr>("argLocs");
@@ -1337,7 +1283,7 @@ static LogicalResult verifyModuleCommon(Operation *module) {
     return module->emitOpError("incorrect number of argument locations");
 
   auto resultLocs = module->getAttrOfType<ArrayAttr>("resultLocs");
-  if (resultLocs.size() != moduleType.getNumResults())
+  if (resultLocs.size() != moduleType.getNumOutputs())
     return module->emitOpError("incorrect number of result locations");
 
   SmallPtrSet<Attribute, 4> paramNames;
@@ -1524,8 +1470,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 
   auto [argNames, resultNames] =
       instance_like_impl::getHWModuleArgAndResultNames(module);
-  FunctionType modType = hw::getModuleType(module);
-  build(builder, result, modType.getResults(), name,
+  auto modType = hw::getModuleType(module);
+  build(builder, result, modType.getOutputTypes(), name,
         FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
         argNames, resultNames, parameters, sym_name);
 }
@@ -1676,8 +1622,8 @@ LogicalResult OutputOp::verify() {
   // Check that the we (hw.output) have the same number of operands as our
   // region has results.
   auto *opParent = (*this)->getParentOp();
-  FunctionType modType = getModuleType(opParent);
-  ArrayRef<Type> modResults = modType.getResults();
+  auto modType = getModuleType(opParent);
+  auto modResults = modType.getOutputTypes();
   OperandRange outputValues = getOperands();
   if (modResults.size() != outputValues.size()) {
     emitOpError("must have same number of operands as region results.");

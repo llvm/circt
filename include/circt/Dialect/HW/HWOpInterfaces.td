@@ -27,6 +27,11 @@ def HWModuleLike : OpInterface<"HWModuleLike"> {
              ::mlir::SymbolTable::Visibility::Public;
     }]>,
 
+    InterfaceMethod<"Get the module type",
+    "::circt::hw::ModuleType", "getModuleType", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{ return $_op.getType(); }]>,
+
     InterfaceMethod<"Get the module name",
     "::llvm::StringRef", "getModuleName", (ins),
     /*methodBody=*/[{}],

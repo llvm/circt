@@ -46,8 +46,8 @@ void StripSVPass::runOnOperation() {
           extModOp.getResultNames() != expectedClockGateOutputs) {
         extModOp.emitError("clock gate module `")
             << extModOp.getModuleName() << "` has incompatible port names "
-            << extModOp.getArgNamesAttr() << " -> "
-            << extModOp.getResultNamesAttr();
+            << extModOp.getArgNames() << " -> "
+            << extModOp.getResultNames();
         return signalPassFailure();
       }
       if (extModOp.getArgumentTypes() !=

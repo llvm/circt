@@ -112,6 +112,8 @@ def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
   ];
 
   let extraClassDeclaration = [{
+    hw::ModuleType getType();
+
     Block *getBodyBlock() { return &getBody().front(); }
 
     using iterator = Block::iterator;
@@ -172,6 +174,7 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
   ];
 
   let extraClassDeclaration = [{
+    hw::ModuleType getType();
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
   }];
@@ -206,6 +209,7 @@ def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
   ];
 
   let extraClassDeclaration = [{
+    hw::ModuleType getType();
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
   }];
@@ -243,6 +247,8 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
   ];
 
   let extraClassDeclaration = [{
+    hw::ModuleType getType();
+
     /// Return true if this memory has a mask.
     bool isMasked() { return getMaskBits() > 1; }
     void getAsmBlockArgumentNames(mlir::Region &region,

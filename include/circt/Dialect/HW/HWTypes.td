@@ -91,8 +91,15 @@ def ModuleType : HW_Type<"Module", "module"> {
   let genVerifyDecl = 1;
 
   let extraClassDeclaration = [{
+    // Many of these are transitional and will be removed when modules and instances
+    // have moved over to this type.
+
     size_t getNumInputs();
     size_t getNumOutputs();
+    SmallVector<Type> getInputTypes();
+    SmallVector<Type> getOutputTypes();
+    Type getInputType(size_t);
+    Type getOutputType(size_t);
     StringAttr getNameAttr(size_t);
     StringRef getName(size_t);
     StringAttr getInputNameAttr(size_t);

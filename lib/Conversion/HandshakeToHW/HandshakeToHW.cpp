@@ -317,7 +317,7 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
 
   for (auto [i, arg] : memrefPorts) {
     // Insert ports into the module
-    auto memName = mod.getArgNames()[i].cast<StringAttr>();
+    auto memName = mod.getType().getArgName(i);
 
     // Get the attached extmemory external module.
     auto extmemInstance = cast<hw::InstanceOp>(*arg.getUsers().begin());
@@ -345,7 +345,7 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
 
     // Add memory output - this is the inputs of the extmemory op (without the
     // first argument);
-    unsigned outArgI = mod.getNumResults();
+    unsigned outArgI = mod.getNumOutputs();
     auto outPortInfo =
         getMemoryIOInfo(arg.getLoc(), memName.strref() + "_out", outArgI,
                         portInfo.inputs, hw::PortDirection::OUTPUT);
@@ -1807,7 +1807,8 @@ public:
     } else {
       auto hwModuleOp = rewriter.create<hw::HWModuleOp>(
           op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
-      auto args = hwModuleOp.getArguments().drop_back(2);
+      auto args = hwModuleOp.getType().getInputTypes();
+      args.drop_back(2);
       rewriter.inlineBlockBefore(&op.getBody().front(),
                                  hwModuleOp.getBodyBlock()->getTerminator(),
                                  args);

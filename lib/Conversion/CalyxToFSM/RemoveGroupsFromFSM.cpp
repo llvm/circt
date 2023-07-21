@@ -157,8 +157,8 @@ LogicalResult CalyxRemoveGroupsFromFSM::outlineMachine() {
   // Add a new input to the machine for each referenced SSA value and replace
   // all uses of the value with the new input.
   DenseMap<Value, size_t> ssaInputIndices;
-  auto machineOutputTypes = machineOp.getFunctionType().getResults();
-  auto currentInputs = machineOp.getFunctionType().getInputs();
+  auto machineOutputTypes = machineOp.getModuleType().getOutputTypes();
+  auto currentInputs = machineOp.getModuleType().getInputTypes();
   llvm::SmallVector<Type> machineInputTypes(currentInputs);
 
   for (auto &[value, users] : referencedValues) {

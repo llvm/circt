@@ -351,7 +351,8 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
 
   bool updated = false;
 
-  SmallVector<Attribute> newArgNames, newArgLocs, newResultNames, newResultLocs;
+  SmallVector<Attribute> newArgLocs, newResultLocs;
+  SmallVector<hw::ModulePort> ports;
 
   // Reconstruct the list of operand types, changing the type whenever an ESI
   // port is found.
@@ -359,37 +360,35 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
   size_t nextArgNo = 0;
   for (auto argTy : mod.getArgumentTypes()) {
     auto chanTy = argTy.dyn_cast<ChannelType>();
-    newArgNames.push_back(getModuleArgumentNameAttr(mod, nextArgNo));
+    auto name = getModuleArgumentNameAttr(mod, nextArgNo);
     newArgLocs.push_back(getModuleArgumentLocAttr(mod, nextArgNo));
     nextArgNo++;
 
     if (!chanTy) {
-      newArgTypes.push_back(argTy);
+      ports.push_back({name,argTy, ModulePort::Direction::Input});
       continue;
     }
 
     // When we find one, construct an interface, and add the 'source' modport
     // to the type list.
     auto iface = build->getOrConstructInterface(chanTy);
-    newArgTypes.push_back(iface.getModportType(ESIHWBuilder::sourceStr));
+    auto type = iface.getModportType(ESIHWBuilder::sourceStr);
+      ports.push_back({name,type, ModulePort::Direction::Input});
     updated = true;
   }
 
   // Iterate through the results and append to one of the two below lists. The
   // first for non-ESI-ports. The second, ports which have been re-located to
   // an operand.
-  SmallVector<Type, 8> newResultTypes;
   SmallVector<DictionaryAttr, 4> newResultAttrs;
-  auto funcType = mod.getFunctionType();
-  for (size_t resNum = 0, numRes = mod.getNumResults(); resNum < numRes;
+  for (size_t resNum = 0, numRes = mod.getType().getNumOutputs(); resNum < numRes;
        ++resNum) {
-    Type resTy = funcType.getResult(resNum);
+    Type resTy = mod.getType().getOutputType(resNum);
     auto chanTy = resTy.dyn_cast<ChannelType>();
     auto resNameAttr = getModuleResultNameAttr(mod, resNum);
     auto resLocAttr = getModuleResultLocAttr(mod, resNum);
     if (!chanTy) {
-      newResultTypes.push_back(resTy);
-      newResultNames.push_back(resNameAttr);
+      ports.push_back({resNameAttr, resTy, ModulePort::Direction::Output});
       newResultLocs.push_back(resLocAttr);
       continue;
     }
@@ -398,8 +397,7 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
     // the type list.
     sv::InterfaceOp iface = build->getOrConstructInterface(chanTy);
     sv::ModportType sinkPort = iface.getModportType(ESIHWBuilder::sinkStr);
-    newArgTypes.push_back(sinkPort);
-    newArgNames.push_back(resNameAttr);
+    ports.push_back({resNameAttr, sinkPort, ModulePort::Direction::Output});
     newArgLocs.push_back(resLocAttr);
     updated = true;
   }
@@ -409,11 +407,9 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
     return false;
 
   // Set the new types.
-  auto newFuncType = FunctionType::get(ctxt, newArgTypes, newResultTypes);
-  mod.setType(newFuncType);
-  setModuleArgumentNames(mod, newArgNames);
+  auto newModType = ModuleType::get(ctxt, ports);
+  mod.setType(newModType);
   setModuleArgumentLocs(mod, newArgLocs);
-  setModuleResultNames(mod, newResultNames);
   setModuleResultLocs(mod, newResultLocs);
   return true;
 }

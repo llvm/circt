@@ -5579,16 +5579,15 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   };
   /// Collect any port marked as being referenced via symbol.
   auto collectPorts = [&](auto moduleOp) {
-    auto numArgs = moduleOp.getNumArguments();
+    auto numArgs = moduleOp.getType().getNumInputs();
     for (size_t p = 0; p != numArgs; ++p)
-      for (NamedAttribute argAttr :
-           mlir::function_interface_impl::getArgAttrs(moduleOp, p)) {
+      for (NamedAttribute argAttr : moduleOp.getArgAttrs()[p]) {
         if (auto sym = argAttr.getValue().dyn_cast<InnerSymAttr>()) {
           symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getSymName(),
                                     moduleOp, p);
         }
       }
-    for (size_t p = 0, e = moduleOp.getNumResults(); p != e; ++p)
+    for (size_t p = 0, e = moduleOp.getType().getNumOutputs(); p != e; ++p)
       for (NamedAttribute resultAttr :
            mlir::function_interface_impl::getResultAttrs(moduleOp, p))
         if (auto sym = resultAttr.getValue().dyn_cast<InnerSymAttr>())

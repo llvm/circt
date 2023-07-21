@@ -13,6 +13,7 @@ include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Dialect/HW/HWTypes.td"
 
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>;
 
@@ -28,7 +29,7 @@ def MachineOp : FSMOp<"machine", [
   }];
 
   let arguments = (ins StrAttr:$sym_name, StrAttr:$initialState,
-                       TypeAttrOf<FunctionType>:$function_type,
+                       TypeAttrOf<ModuleType>:$module_type,
                        OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
                        OptionalAttr<StrArrayAttr>:$argNames,
@@ -37,7 +38,7 @@ def MachineOp : FSMOp<"machine", [
 
   let builders = [
     OpBuilder<(ins "StringRef":$name, "StringRef":$initialState,
-      "FunctionType":$function_type,
+      "hw::ModuleType":$module_type,
       CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs,
       CArg<"ArrayRef<DictionaryAttr>", "{}">:$argAttrs)>
   ];
@@ -56,20 +57,10 @@ def MachineOp : FSMOp<"machine", [
     }
 
     /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
+    SmallVector<Type> getArgumentTypes() { return getModuleType().getInputTypes(); }
 
     /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
-
-    /// Verify the type attribute of this function. Returns failure and emits
-    /// an error if the attribute is invalid.
-    LogicalResult verifyType() {
-      auto type = getFunctionTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
-                           "' attribute of function type");
-      return success();
-    }
+    SmallVector<Type> getResultTypes() { return getModuleType().getOutputTypes(); }
 
     /// Return the name of the i'th input to this machine.
     StringAttr getArgName(size_t i);
@@ -80,8 +71,8 @@ def MachineOp : FSMOp<"machine", [
 
   let extraClassDefinition = [{
     size_t $cppClass::getNumPorts() {
-      auto machineType = getFunctionType();
-      return machineType.getNumInputs() + machineType.getNumResults();
+      auto machineType = getModuleType();
+      return machineType.getNumports();
     }
 
     circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
