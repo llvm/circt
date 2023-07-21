@@ -280,8 +280,6 @@ private:
   void lowerInvokeOp(InvokeOp invokeOp);
   ComponentOp component;
   OpBuilder builder;
-  // It is used to pass to the go port and assign a value to the go port.
-  hw::ConstantOp constantOp = nullptr;
   // The groupNameMap is used to help generate the names of calyx.group,
   // for example, if key is reg, value is 0, then calyx.group is named
   // calyx.group invoke_reg_0. When an invoke is encountered, if the
@@ -302,12 +300,10 @@ void CompileInvoke::compile() {
 // Convert an invoke operation to a group operation and an enable operation.
 void CompileInvoke::lowerInvokeOp(InvokeOp invokeOp) {
   // Create a ConstantOp to assign a value to the go port.
-  if (!constantOp) {
-    Operation *prevNode = component.getWiresOp().getOperation()->getPrevNode();
-    builder.setInsertionPointAfter(prevNode);
-    constantOp = builder.create<hw::ConstantOp>(prevNode->getLoc(),
-                                                builder.getI1Type(), 1);
-  }
+  Operation *prevNode = component.getWiresOp().getOperation()->getPrevNode();
+  builder.setInsertionPointAfter(prevNode);
+  hw::ConstantOp constantOp = builder.create<hw::ConstantOp>(
+      prevNode->getLoc(), builder.getI1Type(), 1);
   Location loc = component.getWiresOp().getLoc();
   // Set the insertion point at the end of the wires block.
   builder.setInsertionPointToEnd(component.getWiresOp().getBodyBlock());

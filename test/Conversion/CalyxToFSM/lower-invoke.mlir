@@ -1,5 +1,6 @@
 // RUN: circt-opt --split-input-file -pass-pipeline='builtin.module(calyx.component(lower-calyx-to-fsm))' %s | FileCheck %s
 
+
 // CHECK:      fsm.machine @control_identity() attributes {compiledGroups = [@invoke_r_0], initialState = "fsm_entry"} {
 // CHECK-NEXT:   fsm.state @fsm_entry output {
 // CHECK-NEXT:     fsm.output
@@ -35,8 +36,8 @@
 // CHECK-NEXT:       fsm.return %lt.out
 // CHECK-NEXT:     }
 // CHECK-NEXT:     fsm.transition @fsm_exit guard {
-// CHECK-NEXT:       %true_1 = hw.constant true
-// CHECK-NEXT:       %0 = comb.xor %lt.out, %true_1 : i1
+// CHECK-NEXT:       %true_2 = hw.constant true
+// CHECK-NEXT:       %0 = comb.xor %lt.out, %true_2 : i1
 // CHECK-NEXT:       fsm.return %0
 // CHECK-NEXT:     }
 // CHECK-NEXT:   }
