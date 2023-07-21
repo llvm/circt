@@ -310,7 +310,7 @@ void CompileInvoke::lowerInvokeOp(InvokeOp invokeOp) {
   do {
     groupName = groupNameHead + std::to_string(groupNameTail++);
   } while (component.getWiresOp().lookupSymbol(groupName));
-  ++ groupNameTail;
+  ++groupNameTail;
   GroupOp groupOp = builder.create<GroupOp>(loc, groupName);
   builder.setInsertionPointToStart(groupOp.getBodyBlock());
   Value go = invokeOp.getInstGoValue();
