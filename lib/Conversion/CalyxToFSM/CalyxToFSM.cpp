@@ -306,11 +306,11 @@ void CompileInvoke::lowerInvokeOp(InvokeOp invokeOp) {
   llvm::StringRef callee = invokeOp.getCallee();
   std::string groupNameHead = "invoke_" + callee.str() + "_";
   size_t groupNameTail = 0;
-  std::string groupName = groupNameHead + std::to_string(groupNameTail);
 
-  // Check if the group name is correct.
-  while (component.getWiresOp().lookupSymbol(groupName))
-    groupName = groupNameHead + std::to_string(++groupNameTail);
+std::string groupName;
+do {
+  groupName = groupNameHead + std::to_string(groupNameTail++);
+} while (component.getWiresOp().lookupSymbol(groupName))
   ++groupNameTail;
   GroupOp groupOp = builder.create<GroupOp>(loc, groupName);
   builder.setInsertionPointToStart(groupOp.getBodyBlock());
