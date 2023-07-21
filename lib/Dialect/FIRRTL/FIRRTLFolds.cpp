@@ -1954,9 +1954,7 @@ struct AggOneShot : public mlir::RewritePattern {
   AggOneShot(StringRef name, uint32_t weight, MLIRContext *context)
       : RewritePattern(name, 0, context) {}
 
-  SmallVector<Value>
-  getCompleteWrite(Operation *lhs,
-                   SmallVectorImpl<StrictConnectOp> &connects) const {
+  SmallVector<Value> getCompleteWrite(Operation *lhs) const {
     auto lhsTy = lhs->getResult(0).getType();
     if (!isa<BundleType, FVectorType>(lhsTy))
       return {};
@@ -1975,7 +1973,6 @@ struct AggOneShot : public mlir::RewritePattern {
               if (fields.count(subField.getFieldIndex())) // duplicate write
                 return {};
               fields[subField.getFieldIndex()] = aConnect.getSrc();
-              connects.push_back(aConnect);
             }
             continue;
           }
@@ -1988,7 +1985,6 @@ struct AggOneShot : public mlir::RewritePattern {
               if (fields.count(subIndex.getIndex())) // duplicate write
                 return {};
               fields[subIndex.getIndex()] = aConnect.getSrc();
-              connects.push_back(aConnect);
             }
             continue;
           }
@@ -2013,8 +2009,7 @@ struct AggOneShot : public mlir::RewritePattern {
 
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
-    SmallVector<StrictConnectOp> connects;
-    auto values = getCompleteWrite(op, connects);
+    auto values = getCompleteWrite(op);
     if (values.empty())
       return failure();
     rewriter.setInsertionPointToEnd(op->getBlock());
@@ -2031,8 +2026,21 @@ struct AggOneShot : public mlir::RewritePattern {
                        : rewriter.createOrFold<VectorCreateOp>(
                              op->getLoc(), destType, values);
     rewriter.createOrFold<StrictConnectOp>(op->getLoc(), dest, newVal);
-    for (auto connect : connects)
-      rewriter.eraseOp(connect);
+    for (Operation *user : dest.getUsers()) {
+      if (auto subIndex = dyn_cast<SubindexOp>(user)) {
+        for (Operation *subuser :
+             llvm::make_early_inc_range(subIndex.getResult().getUsers()))
+          if (auto aConnect = dyn_cast<StrictConnectOp>(subuser))
+            if (aConnect.getDest() == subIndex)
+              rewriter.eraseOp(aConnect);
+      } else if (auto subField = dyn_cast<SubfieldOp>(user)) {
+        for (Operation *subuser :
+             llvm::make_early_inc_range(subField.getResult().getUsers()))
+          if (auto aConnect = dyn_cast<StrictConnectOp>(subuser))
+            if (aConnect.getDest() == subField)
+              rewriter.eraseOp(aConnect);
+      }
+    }
     return success();
   }
 };
