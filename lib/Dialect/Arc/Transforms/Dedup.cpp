@@ -21,7 +21,6 @@ using llvm::SmallMapVector;
 using llvm::SmallSetVector;
 
 namespace {
-
 struct StructuralHash {
   using Hash = std::array<uint8_t, 32>;
   Hash hash;
