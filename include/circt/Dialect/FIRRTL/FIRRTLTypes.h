@@ -398,19 +398,26 @@ namespace firrtl {
 //===--------------------------------------------------------------------===//
 
 /// A struct to check if there is a type derived from FIRRTLBaseType.
-/// `ContainBaseSubTypes<BaseTy>::value` returns true if `BaseTy` is derived
-/// from `FIRRTLBaseType` and not `FIRRTLBaseType` itself.
+/// `ContainAliasableTypes<BaseTy>::value` returns true if `BaseTy` is derived
+/// from `FIRRTLBaseType` and not `FIRRTLBaseType` itself, or is not FIRRTL type
+/// to cover type interfaces.
 template <typename head, typename... tail>
-struct ContainBaseSubTypes {
-  static constexpr bool value =
-      ContainBaseSubTypes<head>::value || ContainBaseSubTypes<tail...>::value;
+class ContainAliasableTypes {
+public:
+  static constexpr bool value = ContainAliasableTypes<head>::value ||
+                                ContainAliasableTypes<tail...>::value;
 };
 
 template <typename BaseTy>
-struct ContainBaseSubTypes<BaseTy> {
-  static constexpr bool value =
+class ContainAliasableTypes<BaseTy> {
+  static constexpr bool isFIRRTLBaseType =
       std::is_base_of<FIRRTLBaseType, BaseTy>::value &&
       !std::is_same_v<FIRRTLBaseType, BaseTy>;
+  static constexpr bool isFIRRTLType =
+      std::is_base_of<FIRRTLType, BaseTy>::value;
+
+public:
+  static constexpr bool value = isFIRRTLBaseType || !isFIRRTLType;
 };
 
 template <typename... BaseTy>
@@ -421,7 +428,7 @@ bool type_isa(Type type) { // NOLINT(readability-identifier-naming)
 
   // If the requested type is a subtype of FIRRTLBaseType, then check if it is a
   // type alias wrapping the requested type.
-  if constexpr (ContainBaseSubTypes<BaseTy...>::value) {
+  if constexpr (ContainAliasableTypes<BaseTy...>::value) {
     if (auto alias = dyn_cast<BaseTypeAliasType>(type))
       return type_isa<BaseTy...>(alias.getInnerType());
   }
@@ -446,7 +453,7 @@ BaseTy type_cast(Type type) { // NOLINT(readability-identifier-naming)
     return cast<BaseTy>(type);
 
   // Otherwise, it must be a type alias wrapping the requested type.
-  if constexpr (ContainBaseSubTypes<BaseTy>::value) {
+  if constexpr (ContainAliasableTypes<BaseTy>::value) {
     if (auto alias = dyn_cast<BaseTypeAliasType>(type))
       return type_cast<BaseTy>(alias.getInnerType());
   }
