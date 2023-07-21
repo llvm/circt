@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --mlir-disable-threading | circt-opt | FileCheck %s
+// RUN: circt-opt %s | circt-opt | FileCheck %s
 
 // CHECK-LABEL: ibis.class @C {
 // CHECK:         ibis.func @getAndSet(%x: ui32) -> ui32 {
