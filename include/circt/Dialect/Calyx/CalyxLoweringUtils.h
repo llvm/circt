@@ -123,7 +123,8 @@ private:
 
 // A common interface for any loop operation that needs to be lowered to Calyx.
 class BasicLoopInterface {
-  // virtual ~BasicLoopInterface();
+public:
+  virtual ~BasicLoopInterface();
 
   // Returns the arguments to this loop operation.
   virtual Block::BlockArgListType getBodyArgs() = 0;
@@ -142,8 +143,6 @@ class BasicLoopInterface {
 // loops) that need to be lowered to Calyx.
 class LoopInterface : BasicLoopInterface {
 public:
-  virtual ~LoopInterface();
-
   // Returns the Block in which the condition exists.
   virtual Block *getConditionBlock() = 0;
 

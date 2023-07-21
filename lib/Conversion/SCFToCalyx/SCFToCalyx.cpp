@@ -1264,7 +1264,7 @@ private:
 
         if (res.failed())
           return res;
-      } else if (auto forSchedPtr = std::get_if<ForScheduleable>(&group);
+      } else if (auto *forSchedPtr = std::get_if<ForScheduleable>(&group);
                  forSchedPtr) {
         auto &forOp = forSchedPtr->forOp;
 
@@ -1410,7 +1410,7 @@ private:
   }
 
   calyx::RepeatOp buildForCtrlOp(ScfForOp forOp,
-                                 SmallVector<calyx::GroupOp> initGroups,
+                                 SmallVector<calyx::GroupOp> const &initGroups,
                                  PatternRewriter &rewriter) const {
     Location loc = forOp.getLoc();
     /// Insert for iter arg initialization group(s). Emit a
