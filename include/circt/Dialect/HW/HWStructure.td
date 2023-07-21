@@ -412,7 +412,7 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
     /// here.  This is typically the symbol, but can be overridden with the
     /// verilogName attribute.
     StringAttr getVerilogModuleNameAttr();
-
+m
     /// Lookup the generator kind for the symbol.  This returns null on
     /// invalid IR.
     Operation *getGeneratorKindOp();
@@ -482,6 +482,9 @@ def InstanceOp : HWOp<"instance", [
   ];
 
   let extraClassDeclaration = [{
+
+    ModuleType getModuleType();
+
     /// Return the name of the specified input port or null if it cannot be
     /// determined.
     StringAttr getArgumentName(size_t i);

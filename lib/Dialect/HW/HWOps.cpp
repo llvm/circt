@@ -601,21 +601,12 @@ StringAttr hw::getVerilogModuleNameAttr(Operation *module) {
 /// Return the port name for the specified argument or result.
 StringAttr hw::getModuleArgumentNameAttr(Operation *module, size_t argNo) {
   auto type = getModuleModType(module);
-  auto params = type.getParams();
-  // Tolerate malformed IR here to enable debug printing etc.
-  if (argNo < params.size())
-    return params[argNo].name;
-  return StringAttr();
+  return type.getInputNameAttr(argNo);
 }
 
 StringAttr hw::getModuleResultNameAttr(Operation *module, size_t resultNo) {
   auto type = getModuleModType(module);
-  auto params = type.getParams();
-  resultNo += getModuleType(module).getNumInputs();
-  // Tolerate malformed IR here to enable debug printing etc.
-  if (resultNo < params.size())
-    return params[resultNo].name;
-  return StringAttr();
+  return type.getOutputNameAttr(resultNo);
 }
 
 void hw::setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names) {
@@ -1533,10 +1524,23 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 
   auto [argNames, resultNames] =
       instance_like_impl::getHWModuleArgAndResultNames(module);
-  FunctionType modType = getModuleType(module);
+  FunctionType modType = hw::getModuleType(module);
   build(builder, result, modType.getResults(), name,
         FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
         argNames, resultNames, parameters, sym_name);
+}
+
+ModuleType InstanceOp::getModuleType() {
+    SmallVector<ModulePort, 4> ports;
+  for (auto [t, n] : llvm::zip(getInputs(), getArgNames()))
+  if (auto it = dyn_cast<InOutType>(t.getType()))
+  ports.push_back({cast<StringAttr>(n), it.getElementType(), ModulePort::Direction::InOut});    
+else
+  ports.push_back({cast<StringAttr>(n), t.getType(), ModulePort::Direction::Input});    
+  for (auto [t, n] : llvm::zip(getResults(), getResultNames()))
+  ports.push_back({cast<StringAttr>(n), t.getType(), ModulePort::Direction::Output});
+  return ModuleType::get(getContext(), ports);
+
 }
 
 /// Lookup the module or extmodule for the symbol.  This returns null on

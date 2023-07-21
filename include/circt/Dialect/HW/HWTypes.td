@@ -86,9 +86,21 @@ def ModuleType : HW_Type<"Module", "module"> {
   let description = [{
     Module types have ports.
   }];
-  let parameters = (ins ArrayRefParameter<"::circt::hw::ModulePort", "port list">:$params);
-  let assemblyFormat = "`(` $params `)`";
+  let parameters = (ins ArrayRefParameter<"::circt::hw::ModulePort", "port list">:$ports);
+  let assemblyFormat = "`(` $ports `)`";
   let genVerifyDecl = 1;
+
+  let extraClassDeclaration = [{
+    size_t getNumInputs();
+    size_t getNumOutputs();
+    StringAttr getNameAttr(size_t);
+    StringRef getName(size_t);
+    StringAttr getInputNameAttr(size_t);
+    StringRef getInputName(size_t);
+    StringAttr getOutputNameAttr(size_t);
+    StringRef getOutputName(size_t);
+    FunctionType getFuncType();
+  }];
 }
 
 def HWStringType : HW_Type<"String", "string"> {

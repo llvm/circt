@@ -603,6 +603,31 @@ LogicalResult ModuleType::verify(function_ref<InFlightDiagnostic()> emitError,
   return success();
 }
 
+StringAttr ModuleType::getInputNameAttr(size_t idx) {
+for (auto& p : getPorts()) {
+  if (p.dir == ModulePort::Direction::Input ||  p.dir == ModulePort::Direction::Output) {
+    if (!idx)
+      return p.name;
+    --idx;
+  }
+}
+ // Tolerate Malformed IR for debug printing
+return {};
+}
+
+StringAttr ModuleType::getOutputNameAttr(size_t idx) {
+for (auto& p : getPorts()) {
+  if (p.dir == ModulePort::Direction::Output) {
+    if (!idx)
+      return p.name;
+    --idx;
+  }
+}
+ // Tolerate Malformed IR for debug printing
+return {};
+
+}
+
 namespace mlir {
 template <>
 struct FieldParser<circt::hw::ModulePort> {
