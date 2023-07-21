@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Ibis/IbisOps.h"
+#include "circt/Dialect/HW/ModuleImplementation.h"
+
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
@@ -16,6 +18,124 @@ using namespace mlir;
 using namespace circt;
 using namespace ibis;
 
+ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse the name as a symbol.
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  // Parse the function signature.
+  SmallVector<OpAsmParser::Argument, 4> args;
+  SmallVector<Attribute> argNames;
+  SmallVector<Type> resultTypes;
+  TypeAttr functionType;
+
+  using namespace mlir::function_interface_impl;
+  auto *context = parser.getContext();
+
+  // Parse the argument list.
+  if (parser.parseArgumentList(args, OpAsmParser::Delimiter::Paren,
+                               /*allowTypes=*/true, /*allowAttrs=*/false))
+    return failure();
+
+  // Parse the result type.
+  if (succeeded(parser.parseOptionalArrow())) {
+    Type resultType;
+    if (parser.parseType(resultType))
+      return failure();
+    resultTypes.push_back(resultType);
+  }
+
+  // Process the ssa args for the information we're looking for.
+  SmallVector<Type> argTypes;
+  for (auto &arg : args) {
+    argNames.push_back(
+        hw::module_like_impl::getPortNameAttr(context, arg.ssaName.name));
+    argTypes.push_back(arg.type);
+    if (!arg.sourceLoc)
+      arg.sourceLoc = parser.getEncodedSourceLoc(arg.ssaName.location);
+  }
+
+  functionType =
+      TypeAttr::get(FunctionType::get(context, argTypes, resultTypes));
+
+  // Parse the attribute dict.
+  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
+    return failure();
+
+  result.addAttribute("argNames", ArrayAttr::get(context, argNames));
+  result.addAttribute(FuncOp::getFunctionTypeAttrName(result.name),
+                      functionType);
+
+  // Parse the function body.
+  auto *body = result.addRegion();
+  if (parser.parseRegion(*body, args))
+    return failure();
+
+  ensureTerminator(*body, parser.getBuilder(), result.location);
+  return success();
+}
+
+void FuncOp::print(OpAsmPrinter &p) {
+  FunctionType funcTy = getFunctionType();
+  p << ' ';
+  p.printSymbolName(getSymName());
+  function_interface_impl::printFunctionSignature(
+      p, *this, funcTy.getInputs(), /*isVariadic=*/false, funcTy.getResults());
+  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
+                                     getAttributeNames());
+  Region &body = getBody();
+  if (!body.empty()) {
+    p << ' ';
+    p.printRegion(body, /*printEntryBlockArgs=*/false,
+                  /*printBlockTerminators=*/true);
+  }
+}
+
+void FuncOp::getAsmBlockArgumentNames(mlir::Region &region,
+                                      OpAsmSetValueNameFn setNameFn) {
+  if (region.empty())
+    return;
+
+  auto func = cast<FuncOp>(region.getParentOp());
+  auto argNames = func.getArgNames().getAsRange<StringAttr>();
+  auto *block = &region.front();
+
+  for (auto [idx, argName] : llvm::enumerate(argNames))
+    if (!argName.getValue().empty())
+      setNameFn(block->getArgument(idx), argName);
+}
+
+void ReturnOp::build(OpBuilder &odsBuilder, OperationState &odsState) {}
+
+LogicalResult ReturnOp::verify() {
+  // Check that the return operand type matches the function return type.
+  auto func = cast<FuncOp>((*this)->getParentOp());
+  ArrayRef<Type> resTypes = func.getResultTypes();
+  assert(resTypes.size() <= 1);
+  assert(getNumOperands() <= 1);
+
+  if (resTypes.empty()) {
+    if (getNumOperands() == 0)
+      return success();
+    else
+      return emitOpError(
+          "cannot return a value from a function with no result type");
+  }
+
+  Value retValue = getRetValue();
+  if (!retValue)
+    return emitOpError("must return a value");
+
+  Type retType = retValue.getType();
+  if (retType != resTypes.front())
+    return emitOpError("return type (")
+           << retType << ") must match function return type ("
+           << resTypes.front() << ")";
+
+  return success();
+}
 //===----------------------------------------------------------------------===//
 // TableGen generated logic
 //===----------------------------------------------------------------------===//
