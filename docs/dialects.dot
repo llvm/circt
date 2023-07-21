@@ -44,6 +44,7 @@ digraph G {
     Calyx [URL="https://circt.llvm.org/docs/Dialects/Calyx/"]
     FIRRTL [URL="https://circt.llvm.org/docs/Dialects/FIRRTL/"]
     Pipeline [URL="https://circt.llvm.org/docs/Dialects/Pipeline/"]
+    LoopSchedule [URL="https://circt.llvm.org/docs/Dialects/LoopSchedule/"]
     SSP [URL="https://circt.llvm.org/docs/Dialects/SSP/"]
     MSFT [URL="https://circt.llvm.org/docs/Dialects/MSFT/"]
     ESI [URL="https://circt.llvm.org/docs/Dialects/ESI/"]
@@ -53,7 +54,10 @@ digraph G {
 
     // Intermediate node to target when lowering to both SV and Core dialects
     lower_to_sv_and_core [shape=point label="" fillcolor=black]
-
+    
+    // Intermediate node to target when lowering to Core dialects
+    lower_to_core [shape=point label="" fillcolor=black]
+    
     // Invisible node to make space for RTL cluster's incoming edges.
     space_above_RTL [style = invis, label=""]
 
@@ -113,8 +117,8 @@ digraph G {
   // ===== Connections =====
   // Dialect conversions
   SCF -> Calyx
-  Affine -> Pipeline
-  Pipeline -> Calyx
+  Affine -> LoopSchedule
+  LoopSchedule -> Calyx
   Arith -> {Handshake Calyx} [ltail=cluster_std_arith_dialect]
 
   Handshake -> FIRRTL
@@ -122,10 +126,11 @@ digraph G {
 
   // Things that lower into a subset of the RTL-like dialects. Cluster these
   // together to avoid a massive clutter.
-  {MSFT HWArith MooreMIR} -> HW [lhead=cluster_RTL]
+  {Pipeline MSFT HWArith MooreMIR} -> lower_to_core [arrowhead=none]
   {ESI FIRRTL FSM} -> lower_to_sv_and_core [arrowhead=none]
   lower_to_sv_and_core -> SV
-  lower_to_sv_and_core -> Seq [lhead=cluster_RTL]
+  lower_to_sv_and_core -> Comb [lhead=cluster_RTL]
+  lower_to_core -> Comb [lhead=cluster_RTL]
   Seq -> SV
   {HW MooreMIR} -> LLHD
   Interop -> Arc [ltail=cluster_RTL]
@@ -135,6 +140,7 @@ digraph G {
   // Tool flows
   Arc -> Arcilator
   Arcilator -> SimBinary
+  Scheduling -> LoopSchedule [dir=both]
   Scheduling -> Pipeline [dir=both]
   Chisel -> FIRFile
   FIRFile -> FIRRTLParser
@@ -166,10 +172,10 @@ digraph G {
   // Leave one rank free above the RTL cluster to improve routing of incoming
   // edges.
   {FIRRTL FSM ESI MSFT HWArith MooreMIR} -> space_above_RTL [weight=999, style=invis]
-  space_above_RTL -> {Seq HW Comb} [lhead=cluster_RTL, weight=999, style=invis]
+  {space_above_RTL} -> {Seq HW Comb} [lhead=cluster_RTL, weight=999, style=invis]
 
   // Fix the following sink nodes below the CIRCT cluster
-  SystemCFile -> {TCL ServiceDesc} [weight=999 style=invis]
+  SystemCFile -> {TCL ServiceDesc SVFile VCDTrace} [weight=999 style=invis]
 
   // Better organize the top.
   {PyTorch Polygeist Chisel} -> CF [weight=999 style=invis]

@@ -1182,8 +1182,8 @@ void Inliner::inlineInstances(FModuleOp parent) {
       for (auto sym : rootMap[target.getNameAttr()]) {
         auto &mnla = nlaMap[sym];
         sym = mnla.reTop(parent);
-        StringAttr instSym = getOrAddInnerSym(
-            instance, parent, [&](FModuleOp mod) -> ModuleNamespace & {
+        StringAttr instSym =
+            getOrAddInnerSym(instance, [&](FModuleOp mod) -> ModuleNamespace & {
               return moduleNamespace;
             });
         instOpHierPaths[InnerRefAttr::get(moduleName, instSym)].push_back(

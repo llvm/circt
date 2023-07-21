@@ -1302,3 +1302,17 @@ firrtl.circuit "Foo"  {
     firrtl.strictconnect %bar_a, %invalid : !firrtl.bundle<b: uint<1>>
   }
 }
+
+// Check handling of inner symbols.
+// COMMON-LABEL: circuit "InnerSym"
+firrtl.circuit "InnerSym" {
+  // COMMON-LABEL: module @InnerSym(
+  // CHECK-SAME:  in %x_a: !firrtl.uint<5>, in %x_b: !firrtl.uint<3> sym @x)
+  // AGGREGATE-SAME: in %x: !firrtl.bundle<a: uint<5>, b: uint<3>> sym [<@x,2,public>])
+  firrtl.module @InnerSym(in %x: !firrtl.bundle<a: uint<5>, b: uint<3>> sym [<@x,2,public>]) { }
+
+  // COMMON-LABEL: module @InnerSymMore(
+  // CHECK-SAME: in %x_a_x_1: !firrtl.uint<3> sym @x_1
+  // CHECK-SAME: in %x_a_y: !firrtl.uint<2> sym @y
+  firrtl.module @InnerSymMore(in %x: !firrtl.bundle<a: bundle<x: vector<uint<3>, 2>, y: uint<2>>, b: uint<3>> sym [<@y,5, public>,<@x_1,4,public>]) { }
+}

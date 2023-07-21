@@ -537,6 +537,19 @@ def LowerHWToSV : Pass<"lower-hw-to-sv", "hw::HWModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// VerifToSV
+//===----------------------------------------------------------------------===//
+
+def LowerVerifToSV : Pass<"lower-verif-to-sv", "hw::HWModuleOp"> {
+  let summary = "Convert Verif to SV";
+  let description = [{
+    This pass converts various Verif contructs to SV.
+  }];
+  let constructor = "circt::createLowerVerifToSVPass()";
+  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // StandardToHandshake
 //===----------------------------------------------------------------------===//
 

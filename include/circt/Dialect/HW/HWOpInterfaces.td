@@ -52,7 +52,7 @@ def HWModuleLike : OpInterface<"HWModuleLike"> {
   }];
 }
 
-def HWMutableModuleLike : OpInterface<"HWMutableModuleLike"> {
+def HWMutableModuleLike : OpInterface<"HWMutableModuleLike", [HWModuleLike]> {
   let cppNamespace = "circt::hw";
   let description = "Provide methods to mutate a module.";
 

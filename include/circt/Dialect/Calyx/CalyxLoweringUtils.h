@@ -84,11 +84,13 @@ void buildAssignmentsForRegisterWrite(OpBuilder &builder,
 // A structure representing a set of ports which act as a memory interface for
 // external memories.
 struct MemoryPortsImpl {
-  Value readData;
-  Value done;
-  Value writeData;
+  std::optional<Value> readData;
+  std::optional<Value> readEn;
+  std::optional<Value> readDone;
+  std::optional<Value> writeData;
+  std::optional<Value> writeEn;
+  std::optional<Value> writeDone;
   SmallVector<Value> addrPorts;
-  Value writeEn;
 };
 
 // Represents the interface of memory in Calyx. The various lowering passes
@@ -98,16 +100,25 @@ struct MemoryInterface {
   MemoryInterface();
   explicit MemoryInterface(const MemoryPortsImpl &ports);
   explicit MemoryInterface(calyx::MemoryOp memOp);
+  explicit MemoryInterface(calyx::SeqMemoryOp memOp);
 
   // Getter methods for each memory interface port.
   Value readData();
-  Value done();
+  Value readEn();
+  Value readDone();
   Value writeData();
   Value writeEn();
+  Value writeDone();
+  std::optional<Value> readDataOpt();
+  std::optional<Value> readEnOpt();
+  std::optional<Value> readDoneOpt();
+  std::optional<Value> writeDataOpt();
+  std::optional<Value> writeEnOpt();
+  std::optional<Value> writeDoneOpt();
   ValueRange addrPorts();
 
 private:
-  std::variant<calyx::MemoryOp, MemoryPortsImpl> impl;
+  std::variant<calyx::MemoryOp, calyx::SeqMemoryOp, MemoryPortsImpl> impl;
 };
 
 // A common interface for any loop operation that needs to be lowered to Calyx.
