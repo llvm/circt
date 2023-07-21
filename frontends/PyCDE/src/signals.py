@@ -479,7 +479,6 @@ class IntSignal(BitVectorSignal):
     return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_GE, "ge")
 
 
-
 class UIntSignal(IntSignal):
   pass
 
