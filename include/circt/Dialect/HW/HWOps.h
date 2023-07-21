@@ -76,6 +76,9 @@ bool isAnyModuleOrInstance(Operation *module);
 /// Return the signature for the specified module as a function type.
 FunctionType getModuleType(Operation *module);
 
+/// Return the signature for the specified module as a module type.
+ModuleType getModuleModType(Operation *module);
+
 /// Return the number of inputs for the specified module/instance.
 inline unsigned getModuleNumInputs(Operation *moduleOrInstance) {
   assert(isAnyModuleOrInstance(moduleOrInstance) &&

@@ -37,6 +37,10 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
   code extraModuleClassDeclaration = ?;
 
   let extraClassDeclaration = extraModuleClassDeclaration # [{
+
+    // Return the new ModuleType for this module.
+    ModuleType getModuleType();
+
     /// Insert and remove input and output ports of this module. Does not modify
     /// the block arguments of the module body. The insertion and removal
     /// indices must be in ascending order. The indices refer to the port
@@ -115,11 +119,6 @@ def HWModuleOp : HWModuleOpBase<"module",
 
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
-
-    /// Decode information about the input and output ports on this module.
-    ModulePortInfo getPorts() {
-      return getModulePortInfo(*this);
-    }
 
     /// Return all the module ports merged into one list.
     SmallVector<PortInfo> getAllPorts() {
@@ -396,10 +395,6 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
   ];
 
   let extraModuleClassDeclaration = [{
-    /// Decode information about the input and output ports on this module.
-    ModulePortInfo getPorts() {
-      return getModulePortInfo(*this);
-    }
 
     /// Return all the module ports merged into one list.
     SmallVector<PortInfo> getAllPorts() {

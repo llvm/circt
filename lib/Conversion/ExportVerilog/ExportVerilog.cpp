@@ -3661,7 +3661,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
   HWModuleOp parent = op->getParentOfType<HWModuleOp>();
 
   size_t operandIndex = 0;
-  for (PortInfo port : parent.getPorts().outputs) {
+  for (PortInfo port : getModulePortInfo(parent).outputs) {
     auto operand = op.getOperand(operandIndex);
     // Outputs that are set by the output port of an instance are handled
     // directly when the instance is emitted.
@@ -5175,7 +5175,7 @@ void ModuleEmitter::emitBind(BindOp op) {
      << PPExtString(getSymOpName(inst)) << " (";
   bool isFirst = true; // True until we print a port.
   ps.scopedBox(PP::bbox2, [&]() {
-    ModulePortInfo parentPortInfo = parentMod.getPorts();
+    ModulePortInfo parentPortInfo = getModulePortInfo(parentMod);
     SmallVector<PortInfo> childPortInfo = getAllModulePortInfos(inst);
 
     // Get the max port name length so we can align the '('.

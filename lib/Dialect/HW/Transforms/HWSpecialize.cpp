@@ -272,7 +272,7 @@ static LogicalResult specializeModule(
   auto *ctx = builder.getContext();
   // Update the types of the source module ports based on evaluating any
   // parametric in/output ports.
-  auto ports = source.getPorts();
+  auto ports = getModulePortInfo(source);
   for (auto in : llvm::enumerate(source.getFunctionType().getInputs())) {
     FailureOr<Type> resType =
         evaluateParametricType(source.getLoc(), parameters, in.value());

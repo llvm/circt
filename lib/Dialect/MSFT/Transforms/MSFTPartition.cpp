@@ -304,14 +304,11 @@ static StringRef getOperandName(OpOperand &oper, const SymbolCache &syms,
     Operation *modOp = syms.getDefinition(inst.getModuleNameAttr());
     if (modOp) { // If modOp isn't in the cache, it's probably a new module;
       assert(isAnyModule(modOp) && "Instance must point to a module");
-      hw::ModulePortInfo ports = getModulePortInfo(modOp);
-      return ports.inputs[oper.getOperandNumber()].name;
+      return hw::getModuleArgumentName(modOp, oper.getOperandNumber());
     }
   }
   if (auto blockArg = oper.get().dyn_cast<BlockArgument>()) {
-    auto portInfo =
-        getModulePortInfo(blockArg.getOwner()->getParent()->getParentOp());
-    return portInfo.inputs[blockArg.getArgNumber()].getName();
+    return hw::getModuleArgumentName(blockArg.getOwner()->getParent()->getParentOp(), blockArg.getArgNumber());
   }
 
   if (oper.getOwner()->getNumOperands() == 1)
