@@ -149,10 +149,10 @@ private:
   template <typename PortTy>
   LogicalResult
   collectPortInfo(ValueRange ports, ArrayAttr portNames,
-                  SmallVector<ModuleType::PortInfo> &portInfo) const {
+                  SmallVector<systemc::ModuleType::PortInfo> &portInfo) const {
     for (auto inPort : llvm::zip(ports, portNames)) {
       Type ty = std::get<0>(inPort).getType();
-      ModuleType::PortInfo info;
+      systemc::ModuleType::PortInfo info;
 
       if (ty.isa<hw::InOutType>())
         return failure();
@@ -183,7 +183,7 @@ public:
 
     // Collect the port types and names of the instantiated module and convert
     // them to appropriate systemc types.
-    SmallVector<ModuleType::PortInfo> portInfo;
+    SmallVector<systemc::ModuleType::PortInfo> portInfo;
     if (failed(collectPortInfo<InputType>(adaptor.getInputs(),
                                           adaptor.getArgNames(), portInfo)) ||
         failed(collectPortInfo<OutputType>(instanceOp->getResults(),

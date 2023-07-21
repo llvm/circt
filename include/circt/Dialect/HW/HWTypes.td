@@ -76,11 +76,24 @@ def HWAggregateType : DialectType<HWDialect,
 // Type Definitions
 //===----------------------------------------------------------------------===//
 
-def HWStringType : TypeDef<HWDialect, "String"> {
+class HW_Type<string name, string typeMnemonic, list<Trait> traits = []>
+    : TypeDef<HWDialect, name, traits> {
+  let mnemonic = typeMnemonic;
+}
+
+def ModuleType : HW_Type<"Module", "module"> {
+  let summary = "Module Type";
+  let description = [{
+    Module types have ports.
+  }];
+  let parameters = (ins ArrayRefParameter<"::circt::hw::ModulePort", "port list">:$params);
+  let assemblyFormat = "`(` $params `)`";
+  let genVerifyDecl = 1;
+}
+
+def HWStringType : HW_Type<"String", "string"> {
   let summary = "String type";
   let description = "Defines a string type for the hw-centric dialects";
-
-  let mnemonic = "string";
 }
 
 /// A flat symbol reference or a reference to a name within a module.

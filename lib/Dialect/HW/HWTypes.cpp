@@ -590,6 +590,79 @@ TypedeclOp TypeAliasType::getTypeDecl(const HWSymbolCache &cache) {
   return typeScope.lookupSymbol<TypedeclOp>(ref.getLeafReference());
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// ModuleType
+////////////////////////////////////////////////////////////////////////////////
+
+LogicalResult ModuleType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                 ArrayRef<ModulePort> ports) {
+  if (llvm::any_of(ports, [](const ModulePort &port) {
+        return hasHWInOutType(port.type);
+      }))
+    return emitError() << "Ports cannot be inout types";
+  return success();
+}
+
+namespace mlir {
+template <>
+struct FieldParser<circt::hw::ModulePort> {
+  static FailureOr<circt::hw::ModulePort> parse(AsmParser &parser) {
+    StringRef dir, name;
+    Type type;
+    if (parser.parseKeyword(&dir) || parser.parseKeyword(&name) ||
+        parser.parseColon() || parser.parseType(type))
+      return failure();
+    circt::hw::ModulePort::Direction d;
+    if (dir == "input")
+      d = circt::hw::ModulePort::Input;
+    else if (dir == "output")
+      d = circt::hw::ModulePort::Output;
+    else if (dir == "inout")
+      d = circt::hw::ModulePort::InOut;
+    else
+      return failure();
+    return circt::hw::ModulePort{parser.getBuilder().getStringAttr(name), type,
+                                 d};
+  }
+};
+} // namespace mlir
+
+namespace circt {
+namespace hw {
+
+static raw_ostream &operator<<(raw_ostream &printer, ModulePort port) {
+  StringRef dirstr;
+  switch (port.dir) {
+  case ModulePort::Direction::Input:
+    dirstr = "input";
+    break;
+  case ModulePort::Direction::Output:
+    dirstr = "output";
+    break;
+  case ModulePort::Direction::InOut:
+    dirstr = "inout";
+    break;
+  default:
+    assert(0 && "unknown direction");
+    dirstr = "unknown";
+    break;
+  }
+  printer << dirstr << " " << port.name << " : " << port.type;
+  return printer;
+}
+static bool operator==(const ModulePort &a, const ModulePort &b) {
+  return a.dir == b.dir && a.name == b.name && a.type == b.type;
+}
+static llvm::hash_code hash_value(const ModulePort &port) {
+  return llvm::hash_combine(port.dir, port.name, port.type);
+}
+} // namespace hw
+} // namespace circt
+
+////////////////////////////////////////////////////////////////////////////////
+// Boilerplate
+////////////////////////////////////////////////////////////////////////////////
+
 void HWDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST

@@ -257,6 +257,18 @@ InnerSymAttr hw::getResultSym(Operation *op, unsigned i) {
   return sym;
 }
 
+static ModuleType FnToMod(FunctionType fnty, ArrayAttr argNames, ArrayAttr resNames) {
+  SmallVector<ModulePort, 4> ports;
+  for (auto [t, n] : llvm::zip(fnty.getInputs(), argNames))
+  if (auto it = dyn_cast<InOutType>(t))
+  ports.push_back({cast<StringAttr>(n), it.getElementType(), ModulePort::Direction::InOut});    
+else
+  ports.push_back({cast<StringAttr>(n), t, ModulePort::Direction::Input});    
+  for (auto [t, n] : llvm::zip(fnty.getResults(), resNames))
+  ports.push_back({cast<StringAttr>(n), t, ModulePort::Direction::Output});
+  return ModuleType::get(fnty.getContext(), ports);
+}
+
 HWModulePortAccessor::HWModulePortAccessor(Location loc,
                                            const ModulePortInfo &info,
                                            Region &bodyRegion)
@@ -553,6 +565,28 @@ FunctionType hw::getModuleType(Operation *moduleOrInstance) {
       .cast<FunctionType>();
 }
 
+/// Return the signature for a module as a module type from the module itself
+/// or from an hw::InstanceOp.
+ModuleType hw::getModuleModType(Operation *moduleOrInstance) {
+  if (auto instance = dyn_cast<InstanceOp>(moduleOrInstance)) {
+    auto innames = instance.getArgNames();
+    auto resnames = instance.getResultNames();
+    return FnToMod(getModuleType(moduleOrInstance), innames, resnames);
+  }
+
+  auto an = cast<ArrayAttr>(moduleOrInstance->getAttr("argNames"));
+  auto rn = cast<ArrayAttr>(moduleOrInstance->getAttr("resultNames"));
+  assert(isAnyModule(moduleOrInstance) &&
+         "must be called on instance or module");
+    auto fnTy = cast<mlir::FunctionOpInterface>(moduleOrInstance)
+      .getFunctionType()
+      .cast<FunctionType>();
+//      fnTy.dump();
+//      an.dump();
+//      rn.dump();
+  return FnToMod(fnTy, an, rn );
+}
+
 /// Return the name to use for the Verilog module that we're referencing
 /// here.  This is typically the symbol, but can be overridden with the
 /// verilogName attribute.
@@ -566,18 +600,21 @@ StringAttr hw::getVerilogModuleNameAttr(Operation *module) {
 
 /// Return the port name for the specified argument or result.
 StringAttr hw::getModuleArgumentNameAttr(Operation *module, size_t argNo) {
-  auto argNames = module->getAttrOfType<ArrayAttr>("argNames");
+  auto type = getModuleModType(module);
+  auto params = type.getParams();
   // Tolerate malformed IR here to enable debug printing etc.
-  if (argNames && argNo < argNames.size())
-    return argNames[argNo].cast<StringAttr>();
+  if (argNo < params.size())
+    return params[argNo].name;
   return StringAttr();
 }
 
 StringAttr hw::getModuleResultNameAttr(Operation *module, size_t resultNo) {
-  auto resultNames = module->getAttrOfType<ArrayAttr>("resultNames");
+  auto type = getModuleModType(module);
+  auto params = type.getParams();
+  resultNo += getModuleType(module).getNumInputs();
   // Tolerate malformed IR here to enable debug printing etc.
-  if (resultNames && resultNo < resultNames.size())
-    return resultNames[resultNo].cast<StringAttr>();
+  if (resultNo < params.size())
+    return params[resultNo].name;
   return StringAttr();
 }
 
@@ -888,6 +925,10 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &odsState,
   // Create output operands.
   llvm::SmallVector<Value> outputOperands = accessor.getOutputOperands();
   builder.create<hw::OutputOp>(odsState.location, outputOperands);
+}
+
+ModuleType HWModuleOp::getModuleType() {
+  return FnToMod(getFunctionType(), getArgNames(), getResultNames());
 }
 
 void HWModuleOp::modifyPorts(

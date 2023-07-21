@@ -719,13 +719,14 @@ void HWMemSimImplPass::runOnOperation() {
       // The requirements for macro replacement:
       // 1. read latency and write latency of one.
       // 2. undefined read-under-write behavior.
+      auto pi = getModulePortInfo(oldModule);
       if (replSeqMem && ((mem.readLatency == 1 && mem.writeLatency == 1) &&
                          mem.dataWidth > 0)) {
         builder.create<HWModuleExternOp>(oldModule.getLoc(), nameAttr,
-                                         oldModule.getPorts());
+                                         pi);
       } else {
         auto newModule = builder.create<HWModuleOp>(
-            oldModule.getLoc(), nameAttr, oldModule.getPorts());
+            oldModule.getLoc(), nameAttr, pi);
         if (auto outdir = oldModule->getAttr("output_file"))
           newModule->setAttr("output_file", outdir);
         newModule.setCommentAttr(

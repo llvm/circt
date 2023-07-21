@@ -63,8 +63,9 @@ struct ModuleExternalizer : public OpReduction<HWModuleOp> {
 
   LogicalResult rewrite(HWModuleOp op) override {
     OpBuilder builder(op);
+    auto pi = getModulePortInfo(op);
     builder.create<HWModuleExternOp>(op->getLoc(), op.getModuleNameAttr(),
-                                     op.getPorts(), StringRef(),
+                                     pi, StringRef(),
                                      op.getParameters());
     op->erase();
     return success();

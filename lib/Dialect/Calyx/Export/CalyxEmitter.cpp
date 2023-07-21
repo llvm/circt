@@ -722,9 +722,10 @@ void Emitter::emitPrimitivePorts(hw::HWModuleExternOp op) {
     }
     os << RParen();
   };
-  emitPorts(op.getPorts().inputs, true);
+  auto pi = hw::getModulePortInfo(op);
+  emitPorts(pi.inputs, true);
   os << arrow();
-  emitPorts(op.getPorts().outputs, false);
+  emitPorts(pi.outputs, false);
 }
 
 void Emitter::emitInstance(InstanceOp op) {

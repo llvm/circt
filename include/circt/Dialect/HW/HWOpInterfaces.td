@@ -41,22 +41,8 @@ def HWModuleLike : OpInterface<"HWModuleLike"> {
     "size_t", "getNumPorts">,
 
     InterfaceMethod<"Get a port symbol attribute",
-    "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex)>
-  ];
+    "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex)>,
 
-  let verify = [{
-    static_assert(
-        ConcreteOp::template hasTrait<::mlir::SymbolOpInterface::Trait>(),
-        "expected operation to be a symbol");
-    return success();
-  }];
-}
-
-def HWMutableModuleLike : OpInterface<"HWMutableModuleLike"> {
-  let cppNamespace = "circt::hw";
-  let description = "Provide methods to mutate a module.";
-
-  let methods = [
     InterfaceMethod<"Return the number of inputs to this module",
     "unsigned", "getNumInputs", (ins),
     /*methodBody=*/[{}],
@@ -72,40 +58,61 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike"> {
     }]>,
 
     InterfaceMethod<"Return the names of the inputs to this module",
-    "mlir::ArrayAttr", "getArgNames", (ins),
+    "mlir::ArrayAttr", "getInputNames", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{
       return $_op->template getAttrOfType<ArrayAttr>("argNames");
     }]>,
 
     InterfaceMethod<"Return the names of the outputs this module",
-    "mlir::ArrayAttr", "getResultNames", (ins),
+    "mlir::ArrayAttr", "getOutputNames", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{
       return $_op->template getAttrOfType<ArrayAttr>("resultNames");
     }]>,
 
+    InterfaceMethod<"Return the names of the inputs to this module",
+    "mlir::StringAttr", "getInputNameAttr", (ins "unsigned":$idx),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return cast<StringAttr>($_op->template getAttrOfType<ArrayAttr>("argNames")[idx]);
+    }]>,
+
+    InterfaceMethod<"Return the names of the outputs this module",
+    "mlir::StringAttr", "getOutputNameAttr", (ins "unsigned":$idx),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return cast<StringAttr>($_op->template getAttrOfType<ArrayAttr>("resultNames")[idx]);
+    }]>,
+
     InterfaceMethod<"Return the locations of the inputs to this module",
-    "mlir::ArrayAttr", "getArgLocs", (ins),
+    "mlir::ArrayAttr", "getInputLocs", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{
       return $_op->template getAttrOfType<ArrayAttr>("argLocs");
     }]>,
 
     InterfaceMethod<"Return the locations of the outputs of this module",
-    "mlir::ArrayAttr", "getResultLocs", (ins),
+    "mlir::ArrayAttr", "getOutputLocs", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{
       return $_op->template getAttrOfType<ArrayAttr>("resultLocs");
     }]>,
+  ];
 
-    InterfaceMethod<
-    "Decode information about the input and output ports on this module.",
-    "::circt::hw::ModulePortInfo", "getPorts", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return getModulePortInfo($_op);
-    }]>,
+  let verify = [{
+    static_assert(
+        ConcreteOp::template hasTrait<::mlir::SymbolOpInterface::Trait>(),
+        "expected operation to be a symbol");
+    return success();
+  }];
+}
+
+def HWMutableModuleLike : OpInterface<"HWMutableModuleLike", [HWModuleLike]> {
+  let cppNamespace = "circt::hw";
+  let description = "Provide methods to mutate a module.";
+
+  let methods = [
 
     InterfaceMethod<"Get a handle to a utility class which provides by-name lookup of port indices. The returned object does _not_ update if the module is mutated.",
     "::circt::hw::ModulePortLookupInfo", "getPortLookupInfo", (ins),
@@ -113,7 +120,7 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike"> {
     /*defaultImplementation=*/[{
       return hw::ModulePortLookupInfo(
         $_op->getContext(),
-        this->getPorts());
+        getModulePortInfo($_op));
     }]>,
 
     /// Insert and remove input and output ports of this module. Does not modify
