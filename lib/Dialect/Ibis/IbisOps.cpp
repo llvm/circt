@@ -36,7 +36,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // Parse the argument list.
   if (parser.parseArgumentList(args, OpAsmParser::Delimiter::Paren,
-                               /*allowTypes=*/true, /*allowAttrs=*/false))
+                               /*allowType=*/true, /*allowAttrs=*/false))
     return failure();
 
   // Parse the result type.
@@ -117,11 +117,10 @@ LogicalResult ReturnOp::verify() {
   assert(getNumOperands() <= 1);
 
   if (resTypes.empty()) {
-    if (getNumOperands() == 0)
-      return success();
-    else
+    if (getNumOperands() != 0)
       return emitOpError(
           "cannot return a value from a function with no result type");
+    return success();
   }
 
   Value retValue = getRetValue();
