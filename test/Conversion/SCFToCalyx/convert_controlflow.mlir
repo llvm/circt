@@ -492,7 +492,7 @@ module {
 
 // Test the Compilation of simple scf.for loops into Calyx repeat statements 
  
-//CHECK:  module attributes {calyx.entrypoint = "main"} {
+//CHECK:       module attributes {calyx.entrypoint = "main"} {
 //CHECK-LABEL:   calyx.component @main(%clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%done: i1 {done}) {
 //CHECK-DAG:       %true = hw.constant true
 //CHECK-DAG:       %c2_i32 = hw.constant 2 : i32
@@ -503,7 +503,7 @@ module {
 //CHECK-DAG:       %std_add_1.left, %std_add_1.right, %std_add_1.out = calyx.std_add @std_add_1 : i32, i32, i32
 //CHECK-DAG:       %std_add_0.left, %std_add_0.right, %std_add_0.out = calyx.std_add @std_add_0 : i32, i32, i32
 //CHECK-DAG:       %load_0_reg.in, %load_0_reg.write_en, %load_0_reg.clk, %load_0_reg.reset, %load_0_reg.out, %load_0_reg.done = calyx.register @load_0_reg : i32, i1, i1, i1, i32, i1
-//CHECK-DAG:       %mem_0.addr0, %mem_0.write_data, %mem_0.write_en, %mem_0.clk, %mem_0.read_data, %mem_0.done = calyx.memory @mem_0 <[40] x 32> [6] {external = true} : i6, i32, i1, i1, i32, i1
+//CHECK-DAG:       %mem_0.addr0, %mem_0.write_data, %mem_0.write_en, %mem_0.write_done, %mem_0.clk, %mem_0.read_data, %mem_0.read_en, %mem_0.read_done = calyx.seq_mem @mem_0 <[40] x 32> [6] {external = true} : i6, i32, i1, i1, i1, i32, i1, i1
 //CHECK-DAG:       %for_0_induction_var_reg.in, %for_0_induction_var_reg.write_en, %for_0_induction_var_reg.clk, %for_0_induction_var_reg.reset, %for_0_induction_var_reg.out, %for_0_induction_var_reg.done = calyx.register @for_0_induction_var_reg : i32, i1, i1, i1, i32, i1
 //CHECK-NEXT:      calyx.wires {
 //CHECK-NEXT:        calyx.group @init_for_0_induction_var {
@@ -514,8 +514,9 @@ module {
 //CHECK-NEXT:        calyx.group @bb0_0 {
 //CHECK-NEXT:          calyx.assign %std_slice_1.in = %for_0_induction_var_reg.out : i32
 //CHECK-NEXT:          calyx.assign %mem_0.addr0 = %std_slice_1.out : i6
+//CHECK-NEXT:          calyx.assign %mem_0.read_en = %true : i1
 //CHECK-NEXT:          calyx.assign %load_0_reg.in = %mem_0.read_data : i32
-//CHECK-NEXT:          calyx.assign %load_0_reg.write_en = %true : i1
+//CHECK-NEXT:          calyx.assign %load_0_reg.write_en = %mem_0.read_done : i1
 //CHECK-NEXT:          calyx.group_done %load_0_reg.done : i1
 //CHECK-NEXT:        }
 //CHECK-NEXT:        calyx.group @bb0_2 {
@@ -525,7 +526,7 @@ module {
 //CHECK-NEXT:          calyx.assign %mem_0.write_en = %true : i1
 //CHECK-NEXT:          calyx.assign %std_add_0.left = %load_0_reg.out : i32
 //CHECK-NEXT:          calyx.assign %std_add_0.right = %c2_i32 : i32
-//CHECK-NEXT:          calyx.group_done %mem_0.done : i1
+//CHECK-NEXT:          calyx.group_done %mem_0.write_done : i1
 //CHECK-NEXT:        }
 //CHECK-NEXT:        calyx.group @incr_for_0_induction_var {
 //CHECK-NEXT:          calyx.assign %std_add_1.left = %for_0_induction_var_reg.out : i32
