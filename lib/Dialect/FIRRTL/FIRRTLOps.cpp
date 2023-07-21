@@ -2750,6 +2750,7 @@ static LogicalResult checkConnectConditionality(FConnectLike connect) {
           .Case<SubaccessOp>([&](SubaccessOp op) {
             if (op.getInput()
                     .getType()
+                    .get()
                     .getElementTypePreservingConst()
                     .isConst())
               originalFieldType = originalFieldType.getConstType(true);
@@ -2955,7 +2956,7 @@ void WhenOp::build(OpBuilder &builder, OperationState &result, Value condition,
 //===----------------------------------------------------------------------===//
 
 LogicalResult MatchOp::verify() {
-  auto type = getInput().getType();
+  FEnumType type = getInput().getType();
 
   // Make sure that the number of tags matches the number of regions.
   auto numCases = getTags().size();
@@ -3004,7 +3005,7 @@ LogicalResult MatchOp::verify() {
 
 void MatchOp::print(OpAsmPrinter &p) {
   auto input = getInput();
-  auto type = input.getType();
+  FEnumType type = input.getType();
   auto regions = getRegions();
   p << " " << input << " : " << type;
   SmallVector<StringRef> elided = {"tags"};
@@ -3216,7 +3217,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 
 LogicalResult ConstantOp::verify() {
   // If the result type has a bitwidth, then the attribute must match its width.
-  auto intType = getType();
+  IntType intType = getType();
   auto width = intType.getWidthOrSentinel();
   if (width != -1 && (int)getValue().getBitWidth() != width)
     return emitError(
@@ -3224,7 +3225,7 @@ LogicalResult ConstantOp::verify() {
 
   // The sign of the attribute's integer type must match our integer type sign.
   auto attrType = type_cast<IntegerType>(getValueAttr().getType());
-  if (attrType.isSignless() || attrType.isSigned() != getType().isSigned())
+  if (attrType.isSignless() || attrType.isSigned() != intType.isSigned())
     return emitError("firrtl.constant attribute has wrong sign");
 
   return success();
@@ -3257,7 +3258,7 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
 void ConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // For constants in particular, propagate the value into the result name to
   // make it easier to read the IR.
-  auto intTy = getType();
+  IntType intTy = getType();
   assert(intTy);
 
   // Otherwise, build a complex name with the value and type.
@@ -3421,23 +3422,25 @@ ParseResult FIntegerConstantOp::parse(OpAsmParser &parser,
 }
 
 LogicalResult BundleCreateOp::verify() {
-  if (getType().getNumElements() != getFields().size())
+  BundleType resultType = getType();
+  if (resultType.getNumElements() != getFields().size())
     return emitOpError("number of fields doesn't match type");
-  for (size_t i = 0; i < getType().getNumElements(); ++i)
+  for (size_t i = 0; i < resultType.getNumElements(); ++i)
     if (!areTypesConstCastable(
-            getType().getElementTypePreservingConst(i),
+            resultType.getElementTypePreservingConst(i),
             type_cast<FIRRTLBaseType>(getOperand(i).getType())))
       return emitOpError("type of element doesn't match bundle for field ")
-             << getType().getElement(i).name;
+             << resultType.getElement(i).name;
   // TODO: check flow
   return success();
 }
 
 LogicalResult VectorCreateOp::verify() {
-  if (getType().getNumElements() != getFields().size())
+  FVectorType resultType = getType();
+  if (resultType.getNumElements() != getFields().size())
     return emitOpError("number of fields doesn't match type");
-  auto elemTy = getType().getElementTypePreservingConst();
-  for (size_t i = 0; i < getType().getNumElements(); ++i)
+  auto elemTy = resultType.getElementTypePreservingConst();
+  for (size_t i = 0; i < resultType.getNumElements(); ++i)
     if (!areTypesConstCastable(
             elemTy, type_cast<FIRRTLBaseType>(getOperand(i).getType())))
       return emitOpError("type of element doesn't match vector element");
@@ -3450,13 +3453,14 @@ LogicalResult VectorCreateOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult FEnumCreateOp::verify() {
-  auto elementIndex = getResult().getType().getElementIndex(getFieldName());
+  FEnumType resultType = getResult().getType();
+  auto elementIndex = resultType.getElementIndex(getFieldName());
   if (!elementIndex)
     return emitOpError("label ")
            << getFieldName() << " is not a member of the enumeration type "
-           << getResult().getType();
+           << resultType;
   if (!areTypesConstCastable(
-          getResult().getType().getElementTypePreservingConst(*elementIndex),
+          resultType.getElementTypePreservingConst(*elementIndex),
           getInput().getType()))
     return emitOpError("type of element doesn't match enum element");
   return success();
@@ -3520,7 +3524,7 @@ ParseResult FEnumCreateOp::parse(OpAsmParser &parser, OperationState &result) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult IsTagOp::verify() {
-  if (getFieldIndex() >= getInput().getType().getNumElements())
+  if (getFieldIndex() >= getInput().getType().get().getNumElements())
     return emitOpError("element index is greater than the number of fields in "
                        "the bundle type");
   return success();
@@ -3591,7 +3595,7 @@ ParseResult parseSubfieldLikeOp(OpAsmParser &parser, OperationState &result) {
   if (parser.resolveOperand(input, inputType, result.operands))
     return failure();
 
-  auto bundleType = dyn_cast<typename OpTy::InputType>(inputType);
+  auto bundleType = type_dyn_cast<typename OpTy::InputType>(inputType);
   if (!bundleType)
     return parser.emitError(parser.getNameLoc(),
                             "input must be bundle type, got ")
@@ -3694,7 +3698,9 @@ void SubtagOp::print(::mlir::OpAsmPrinter &printer) {
 
 template <typename OpTy>
 static LogicalResult verifySubfieldLike(OpTy op) {
-  if (op.getFieldIndex() >= op.getInput().getType().getNumElements())
+  if (op.getFieldIndex() >=
+      firrtl::type_cast<typename OpTy::InputType>(op.getInput().getType())
+          .getNumElements())
     return op.emitOpError("subfield element index is greater than the number "
                           "of fields in the bundle type");
   return success();
@@ -3707,7 +3713,7 @@ LogicalResult OpenSubfieldOp::verify() {
 }
 
 LogicalResult SubtagOp::verify() {
-  if (getFieldIndex() >= getInput().getType().getNumElements())
+  if (getFieldIndex() >= getInput().getType().get().getNumElements())
     return emitOpError("subfield element index is greater than the number "
                        "of fields in the bundle type");
   return success();
@@ -3798,7 +3804,7 @@ FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
 }
 
 bool SubfieldOp::isFieldFlipped() {
-  auto bundle = getInput().getType();
+  BundleType bundle = getInput().getType();
   return bundle.getElement(getFieldIndex()).isFlip;
 }
 bool OpenSubfieldOp::isFieldFlipped() {
