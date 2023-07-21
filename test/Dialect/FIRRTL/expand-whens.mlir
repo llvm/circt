@@ -567,4 +567,20 @@ firrtl.module @PropInitOut(out %out : !firrtl.string) {
   firrtl.propassign %out, %0 : !firrtl.string
 }
 
+// Check that expand whens works for groups.
+firrtl.declgroup @GroupFoo bind {}
+// CHECK-LABEL: firrtl.module @WhenInGroup
+// CHECK-NOT:   firrtl.when
+firrtl.module @WhenInGroup(in %cond : !firrtl.uint<1>) {
+  firrtl.group @GroupFoo {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %a = firrtl.wire : !firrtl.uint<1>
+    firrtl.strictconnect %a, %c0_ui1 : !firrtl.uint<1>
+    firrtl.when %cond : !firrtl.uint<1> {
+      firrtl.strictconnect %a, %c1_ui1 : !firrtl.uint<1>
+    }
+  }
+}
+
 }

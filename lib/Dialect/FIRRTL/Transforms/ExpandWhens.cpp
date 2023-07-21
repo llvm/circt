@@ -627,6 +627,7 @@ public:
   void visitStmt(WhenOp whenOp);
   void visitStmt(ConnectOp connectOp);
   void visitStmt(StrictConnectOp connectOp);
+  void visitStmt(GroupOp groupOp);
 
   bool run(FModuleOp op);
   LogicalResult checkInitialization();
@@ -671,6 +672,12 @@ void ModuleVisitor::visitStmt(WhenOp whenOp) {
   // If we are deleting a WhenOp something definitely changed.
   anythingChanged = true;
   processWhenOp(whenOp, /*outerCondition=*/{});
+}
+
+void ModuleVisitor::visitStmt(GroupOp groupOp) {
+  for (auto &op : llvm::make_early_inc_range(*groupOp.getBody())) {
+    dispatchVisitor(&op);
+  }
 }
 
 /// Perform initialization checking.  This uses the built up state from
