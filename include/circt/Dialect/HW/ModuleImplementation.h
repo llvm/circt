@@ -23,9 +23,6 @@ namespace circt {
 namespace hw {
 
 namespace module_like_impl {
-/// Get the portname from an SSA value string, if said value name is not a
-/// number.
-StringAttr getPortNameAttr(MLIRContext *context, StringRef name);
 
 /// This is a variant of mlir::parseFunctionSignature that allows names on
 /// result arguments.
