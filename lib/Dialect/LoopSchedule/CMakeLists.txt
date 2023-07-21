@@ -17,6 +17,6 @@ add_circt_dialect_library(CIRCTLoopSchedule
   MLIRIR
 
   DEPENDS
-  MLIRArithOpsInterfacesIncGen
+  MLIRArithDialect
   MLIRLoopScheduleIncGen
 )

@@ -7,7 +7,7 @@ add_circt_dialect_library(CIRCTDC
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/DC
 
   DEPENDS
-  MLIRArithOpsInterfacesIncGen
+  MLIRArithDialect
   MLIRDCIncGen
 
   LINK_COMPONENTS

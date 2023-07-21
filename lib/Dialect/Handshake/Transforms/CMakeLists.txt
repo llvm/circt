@@ -9,7 +9,7 @@ add_circt_dialect_library(CIRCTHandshakeTransforms
 
   DEPENDS
   CIRCTHandshakeTransformsIncGen
-  MLIRArithOpsInterfacesIncGen
+  MLIRArithDialect
 
   LINK_LIBS PUBLIC
   CIRCTHW

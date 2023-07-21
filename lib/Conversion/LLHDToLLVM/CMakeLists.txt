@@ -3,7 +3,7 @@ add_circt_conversion_library(CIRCTLLHDToLLVM
 
   DEPENDS
   CIRCTConversionPassIncGen
-  MLIRArithOpsInterfacesIncGen
+  MLIRArithDialect
 
   LINK_COMPONENTS
   Core

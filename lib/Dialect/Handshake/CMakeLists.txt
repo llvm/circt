@@ -16,7 +16,7 @@ add_circt_dialect_library(CIRCTHandshake
   MLIRIR
 
   DEPENDS
-  MLIRArithOpsInterfacesIncGen
+  MLIRArithDialect
   MLIRHandshakeInterfacesIncGen
   MLIRHandshakeCanonicalizationIncGen
   MLIRHandshakeAttributesIncGen
