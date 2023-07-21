@@ -347,7 +347,7 @@ firrtl.module @InvalidValues(in %p: !firrtl.uint<1>, out %out0: !firrtl.uint<2>,
   }
   // CHECK: firrtl.connect %out5, %c2_ui2
 }
-    
+
 // Test that registers are multiplexed with themselves.
 firrtl.module @register_mux(in %p : !firrtl.uint<1>, in %clock: !firrtl.clock) {
   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
