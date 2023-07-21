@@ -19,7 +19,7 @@
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
   
-// CHECK:      fsm.machine @control_main() attributes {compiledGroups = [@incr, @invoke_r_0, @invoke_id_0, @init], initialState = "fsm_entry"} {
+// CHECK:      fsm.machine @control_main() attributes {compiledGroups = [@incr, @invoke_r_1, @invoke_id_0, @init], initialState = "fsm_entry"} {
 // CHECK-NEXT:   fsm.state @fsm_entry output {
 // CHECK-NEXT:     fsm.output
 // CHECK-NEXT:   } transitions {
@@ -52,8 +52,8 @@
 // CHECK-NEXT:   } transitions {
 // CHECK-NEXT:     fsm.transition @seq_1_while_header
 // CHECK-NEXT:   }
-// CHECK-NEXT:   fsm.state @seq_1_while_seq_1_invoke_r_0 output {
-// CHECK-NEXT:     calyx.enable @invoke_r_0
+// CHECK-NEXT:   fsm.state @seq_1_while_seq_1_invoke_r_1 output {
+// CHECK-NEXT:     calyx.enable @invoke_r_1
 // CHECK-NEXT:     fsm.output
 // CHECK-NEXT:   } transitions {
 // CHECK-NEXT:     fsm.transition @seq_1_while_seq_2_incr
@@ -62,7 +62,7 @@
 // CHECK-NEXT:     calyx.enable @invoke_id_0
 // CHECK-NEXT:     fsm.output
 // CHECK-NEXT:   } transitions {
-// CHECK-NEXT:     fsm.transition @seq_1_while_seq_1_invoke_r_0
+// CHECK-NEXT:     fsm.transition @seq_1_while_seq_1_invoke_r_1
 // CHECK-NEXT:   }
 // CHECK-NEXT:   fsm.state @seq_0_init output {
 // CHECK-NEXT:     calyx.enable @init
