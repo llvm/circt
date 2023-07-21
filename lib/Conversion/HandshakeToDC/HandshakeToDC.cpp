@@ -481,8 +481,8 @@ public:
   }
 };
 
-static hw::ModulePortInfo getModulePortInfo(TypeConverter &tc,
-                                            handshake::FuncOp funcOp) {
+static hw::ModulePortInfo getModulePortInfoHS(TypeConverter &tc,
+                                              handshake::FuncOp funcOp) {
   hw::ModulePortInfo ports({}, {});
   auto *ctx = funcOp->getContext();
   auto ft = funcOp.getFunctionType();
@@ -519,7 +519,7 @@ public:
   LogicalResult
   matchAndRewrite(handshake::FuncOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    ModulePortInfo ports = getModulePortInfo(*getTypeConverter(), op);
+    ModulePortInfo ports = getModulePortInfoHS(*getTypeConverter(), op);
 
     if (op.isExternal()) {
       rewriter.create<hw::HWModuleExternOp>(
