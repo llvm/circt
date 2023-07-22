@@ -1762,10 +1762,9 @@ firrtl.circuit "NonEquivalenctStrictConnect" {
 // A group definition, "@A::@B", is missing an outer nesting of a group
 // definition with symbol "@A".
 firrtl.circuit "GroupMissingNesting" {
-  firrtl.declgroup {
-    firrtl.declgroup {
-    } {sym_name = "B", convention = #firrtl<groupconvention bind>}
-  } {sym_name = "A", convention = #firrtl<groupconvention bind>}
+  firrtl.declgroup @A bind {
+    firrtl.declgroup @B bind {}
+  }
   // expected-note @below {{illegal parent op defined here}}
   firrtl.module @GroupMissingNesting() {
     // expected-error @below {{'firrtl.group' op has a nested group symbol, but does not have a 'firrtl.group' op as a parent}}
@@ -1778,10 +1777,8 @@ firrtl.circuit "GroupMissingNesting" {
 // A group definition with a legal symbol, "@B", is illegaly nested under
 // another group with a legal symbol, "@B".
 firrtl.circuit "UnnestedGroup" {
-  firrtl.declgroup {
-  } {sym_name = "A", convention = #firrtl<groupconvention bind>}
-  firrtl.declgroup {
-  } {sym_name = "B", convention = #firrtl<groupconvention bind>}
+  firrtl.declgroup @A bind {}
+  firrtl.declgroup @B bind {}
   firrtl.module @UnnestedGroup() {
     // expected-note @below {{illegal parent op defined here}}
     firrtl.group @A {
@@ -1795,12 +1792,10 @@ firrtl.circuit "UnnestedGroup" {
 
 // A group definition, "@B::@C", is nested under the wrong group, "@A".
 firrtl.circuit "WrongGroupNesting" {
-  firrtl.declgroup {
-  } {sym_name = "A", convention = #firrtl<groupconvention bind>}
-  firrtl.declgroup {
-    firrtl.declgroup {
-    } {sym_name = "C", convention = #firrtl<groupconvention bind>}
-  } {sym_name = "B", convention = #firrtl<groupconvention bind>}
+  firrtl.declgroup @A bind {}
+  firrtl.declgroup @B bind {
+    firrtl.declgroup @C bind {}
+  }
   firrtl.module @WrongGroupNesting() {
     // expected-note @below {{illegal parent group defined here}}
     firrtl.group @A {
@@ -1814,8 +1809,7 @@ firrtl.circuit "WrongGroupNesting" {
 
 // A group captures a type which is not a FIRRTL base type.
 firrtl.circuit "NonBaseTypeCapture" {
-  firrtl.declgroup {
-  } {sym_name = "A", convention = #firrtl<groupconvention bind>}
+  firrtl.declgroup @A bind {}
   // expected-note @below {{operand is defined here}}
   firrtl.module @NonBaseTypeCapture(in %a: !firrtl.probe<uint<1>>) {
     // expected-error @below {{'firrtl.group' op captures an operand which is not a FIRRTL base type}}
@@ -1830,8 +1824,7 @@ firrtl.circuit "NonBaseTypeCapture" {
 
 // A group captures a non-passive type.
 firrtl.circuit "NonPassiveCapture" {
-  firrtl.declgroup {
-  } {sym_name = "A", convention = #firrtl<groupconvention bind>}
+  firrtl.declgroup @A bind {}
   firrtl.module @NonPassiveCapture() {
     // expected-note @below {{operand is defined here}}
     %a = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
@@ -1848,8 +1841,7 @@ firrtl.circuit "NonPassiveCapture" {
 
 // A group may not drive sinks outside the group.
 firrtl.circuit "GroupDrivesSinksOutside" {
-  firrtl.declgroup {
-  } {sym_name = "A", convention = #firrtl<groupconvention bind>}
+  firrtl.declgroup @A bind {}
   firrtl.module @GroupDrivesSinksOutside(in %cond : !firrtl.uint<1>) {
     %a = firrtl.wire : !firrtl.uint<1>
     // expected-note @below {{destination is defined here}}

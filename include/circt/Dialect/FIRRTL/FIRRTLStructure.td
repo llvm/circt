@@ -268,11 +268,11 @@ def GroupDeclOp : FIRRTLOp<
     under the current declaration.  Functionality is added to modules using the
     `firrtl.group` operation.
   }];
-  let arguments = (ins StrAttr:$sym_name, GroupConventionAttr:$convention);
+  let arguments = (ins SymbolNameAttr:$sym_name, GroupConventionAttr:$convention);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
-    $body attr-dict
+    $sym_name $convention attr-dict-with-keyword $body
   }];
 }
 
