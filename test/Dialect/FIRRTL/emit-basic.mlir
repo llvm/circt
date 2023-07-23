@@ -436,6 +436,24 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:    parameter FORMAT = "xyz_timeout=%d\n"
   // CHECK-NEXT:    parameter WIDTH = 32
 
+  firrtl.intmodule private @MyIntModule<
+    FORMAT: none = "xyz_timeout=%d\0A",
+    DEFAULT: ui32 = 0,
+    WIDTH: ui32 = 32,
+    DEPTH: f64 = 3.242000e+01
+  >(
+    in in: !firrtl.uint,
+    out out: !firrtl.uint<8>
+  ) attributes {intrinsic = "testIntrinsic1"}
+  // CHECK-LABEL: intmodule MyIntModule :
+  // CHECK-NEXT:    input in : UInt
+  // CHECK-NEXT:    output out : UInt<8>
+  // CHECK-NEXT:    intrinsic = testIntrinsic1
+  // CHECK-NEXT:    parameter FORMAT = "xyz_timeout=%d\n"
+  // CHECK-NEXT:    parameter DEFAULT = 0
+  // CHECK-NEXT:    parameter WIDTH = 32
+  // CHECK-NEXT:    parameter DEPTH = 32.42
+
   // CHECK-LABEL: module ConstTypes :
   firrtl.module @ConstTypes(
     // CHECK-NEXT: input a00 : const Clock

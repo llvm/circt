@@ -54,6 +54,7 @@ struct Emitter {
   void emitCircuit(CircuitOp op);
   void emitModule(FModuleOp op);
   void emitModule(FExtModuleOp op);
+  void emitModule(FIntModuleOp op);
   void emitModulePorts(ArrayRef<PortInfo> ports,
                        Block::BlockArgListType arguments = {});
   void emitModuleParameters(Operation *op, ArrayAttr parameters);
@@ -333,7 +334,7 @@ void Emitter::emitCircuit(CircuitOp op) {
       if (encounteredError)
         break;
       TypeSwitch<Operation *>(&bodyOp)
-          .Case<FModuleOp, FExtModuleOp>([&](auto op) {
+          .Case<FModuleOp, FExtModuleOp, FIntModuleOp>([&](auto op) {
             emitModule(op);
             ps << PP::newline;
           })
@@ -381,6 +382,35 @@ void Emitter::emitModule(FExtModuleOp op) {
       startStatement();
       ps << "defname = " << PPExtString(*op.getDefname());
       setPendingNewline();
+    }
+
+    // Emit the parameters.
+    emitModuleParameters(op, op.getParameters());
+  });
+}
+
+/// Emit an intrinsic module
+void Emitter::emitModule(FIntModuleOp op) {
+  startStatement();
+  ps << "intmodule " << PPExtString(legalize(op.getNameAttr())) << " :";
+  ps.scopedBox(PP::bbox2, [&]() {
+    setPendingNewline();
+
+    // Emit the ports.
+    auto ports = op.getPorts();
+    emitModulePorts(ports);
+
+    // Emit the optional intrinsic.
+    //
+    // TODO: This really shouldn't be optional, but it is currently encoded like
+    // this.
+    if (op.getIntrinsic().has_value()) {
+      auto intrinsic = *op.getIntrinsic();
+      if (!intrinsic.empty()) {
+        startStatement();
+        ps << "intrinsic = " << PPExtString(*op.getIntrinsic());
+        setPendingNewline();
+      }
     }
 
     // Emit the parameters.
