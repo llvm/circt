@@ -41,7 +41,9 @@ private:
                                                OpBuilder &builder);
   SmallString<8> getSymbol(Value value);
 
-  // Value to Symbol mapping state.
+  // State.
+
+  // Value to Symbol mapping.
   uint64_t valueId = 0;
   DenseMap<Value, SmallString<8>> valueToSymbol;
   llvm::StringMap<Value> symbolToValue;
@@ -51,6 +53,9 @@ private:
 
   // Operations that are converted.
   SmallVector<Operation *> opsToErase;
+
+  // Synthesizer.
+  Synthesizer *synthesizer;
 };
 } // namespace
 
@@ -59,13 +64,19 @@ static bool isBoolean(Type type) {
 }
 
 void EggSynthesisPass::runOnOperation() {
-  if (lib.empty()) {
-    llvm::errs() << "lib option must be supplied\n";
-    return signalPassFailure();
-  }
-  if (metric.empty()) {
-    llvm::errs() << "metric option must be supplied\n";
-    return signalPassFailure();
+  // If necessary, create the synthesizer. Can't be dont in the constructor,
+  // since lib and metric don't exist.
+  if (!synthesizer) {
+    if (lib.empty()) {
+      llvm::errs() << "lib option must be supplied\n";
+      return signalPassFailure();
+    }
+    if (metric.empty()) {
+      llvm::errs() << "metric option must be supplied\n";
+      return signalPassFailure();
+    }
+
+    synthesizer = synthesizer_new(lib, metric).into_raw();
   }
 
   arc::DefineOp defineOp = getOperation();
@@ -101,9 +112,6 @@ void EggSynthesisPass::runOnOperation() {
   rust::Box<BooleanExpression> expression =
       build_module(*egraph, std::move(stmts));
 
-  // Create the synthesizer.
-  rust::Box<Synthesizer> synthesizer = synthesizer_new(lib, metric);
-
   LLVM_DEBUG({
     llvm::dbgs() << "Expression before synthesis:\n";
     print_expr(*expression);
@@ -111,7 +119,8 @@ void EggSynthesisPass::runOnOperation() {
 
   // Run the synthesizer.
   rust::Box<BooleanExpression> result = synthesizer_run(
-      std::move(egraph), std::move(synthesizer), std::move(expression));
+      std::move(egraph), rust::Box<Synthesizer>::from_raw(synthesizer),
+      std::move(expression));
 
   LLVM_DEBUG({
     llvm::dbgs() << "Expression after synthesis:\n";
@@ -170,6 +179,8 @@ void EggSynthesisPass::runOnOperation() {
   valueId = 0;
   valueToSymbol.clear();
   symbolToValue.clear();
+  symbolToBackedge.clear();
+  opsToErase.clear();
 }
 
 rust::Box<BooleanId> EggSynthesisPass::getExpr(Operation *op,
