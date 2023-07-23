@@ -56,6 +56,7 @@ struct Emitter {
   void emitModule(FExtModuleOp op);
   void emitModulePorts(ArrayRef<PortInfo> ports,
                        Block::BlockArgListType arguments = {});
+  void emitModuleParameters(Operation *op, ArrayAttr parameters);
 
   // Statement emission
   void emitStatementsInBlock(Block &block);
@@ -383,30 +384,7 @@ void Emitter::emitModule(FExtModuleOp op) {
     }
 
     // Emit the parameters.
-    for (auto param : llvm::map_range(op.getParameters(), [](Attribute attr) {
-           return cast<ParamDeclAttr>(attr);
-         })) {
-      startStatement();
-      // TODO: AssignLike ?
-      ps << "parameter " << PPExtString(param.getName().getValue()) << " = ";
-      TypeSwitch<Attribute>(param.getValue())
-          .Case<IntegerAttr>(
-              [&](auto attr) { ps.addAsString(attr.getValue()); })
-          .Case<FloatAttr>([&](auto attr) {
-            SmallString<16> str;
-            attr.getValue().toString(str);
-            ps << str;
-          })
-          .Case<StringAttr>(
-              [&](auto attr) { ps.writeQuotedEscaped(attr.getValue()); })
-          .Default([&](auto attr) {
-            emitOpError(op, "with unsupported parameter attribute: ") << attr;
-            ps << "<unsupported-attr ";
-            ps.addAsString(attr);
-            ps << ">";
-          });
-      setPendingNewline();
-    }
+    emitModuleParameters(op, op.getParameters());
   });
 }
 
@@ -424,6 +402,32 @@ void Emitter::emitModulePorts(ArrayRef<PortInfo> ports,
       addValueName(arguments[i], legalName);
     ps << PPExtString(legalName) << " : ";
     emitType(port.type);
+    setPendingNewline();
+  }
+}
+
+void Emitter::emitModuleParameters(Operation *op, ArrayAttr parameters) {
+  for (auto param : llvm::map_range(parameters, [](Attribute attr) {
+         return cast<ParamDeclAttr>(attr);
+       })) {
+    startStatement();
+    // TODO: AssignLike ?
+    ps << "parameter " << PPExtString(param.getName().getValue()) << " = ";
+    TypeSwitch<Attribute>(param.getValue())
+        .Case<IntegerAttr>([&](auto attr) { ps.addAsString(attr.getValue()); })
+        .Case<FloatAttr>([&](auto attr) {
+          SmallString<16> str;
+          attr.getValue().toString(str);
+          ps << str;
+        })
+        .Case<StringAttr>(
+            [&](auto attr) { ps.writeQuotedEscaped(attr.getValue()); })
+        .Default([&](auto attr) {
+          emitOpError(op, "with unsupported parameter attribute: ") << attr;
+          ps << "<unsupported-attr ";
+          ps.addAsString(attr);
+          ps << ">";
+        });
     setPendingNewline();
   }
 }
