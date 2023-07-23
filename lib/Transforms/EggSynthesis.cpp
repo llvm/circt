@@ -27,19 +27,29 @@
 using namespace mlir;
 using namespace circt;
 
+/// Pass definition.
+
 namespace {
 struct EggSynthesisPass : public EggSynthesisBase<EggSynthesisPass> {
   void runOnOperation() override;
 
 private:
-  rust::Box<BooleanId> getExpr(Operation *op, BooleanEGraph &egraph);
+  // CIRCT -> egg-netlist-synthesizer.
+
+  std::optional<rust::Box<BooleanId>> getExpr(Operation *op,
+                                              BooleanEGraph &egraph);
+
+  SmallString<8> getSymbol(Value value);
+
+  // egg-netlist-synthesizer -> CIRCT.
+
   void generateCellInstance(SmallString<8> symbol, BooleanExpression &expr,
                             OpBuilder &builder,
                             BackedgeBuilder &backedgeBuilder);
+
   hw::HWModuleExternOp generateCellDeclaration(BooleanExpression &expr,
                                                Location loc,
                                                OpBuilder &builder);
-  SmallString<8> getSymbol(Value value);
 
   // State.
 
@@ -58,6 +68,10 @@ private:
   Synthesizer *synthesizer;
 };
 } // namespace
+
+std::unique_ptr<mlir::Pass> circt::createEggSynthesisPass() {
+  return std::make_unique<EggSynthesisPass>();
+}
 
 static bool isBoolean(Type type) {
   return hw::isHWIntegerType(type) && hw::getBitWidth(type) == 1;
@@ -98,14 +112,10 @@ void EggSynthesisPass::runOnOperation() {
     assert(llvm::all_of(op.getResultTypes(), isBoolean));
     assert(llvm::all_of(op.getOperandTypes(), isBoolean));
 
-    // Create an egraph expression.
-    rust::Box<BooleanId> expr = getExpr(&op, *egraph);
-
-    // Create a let statement.
-    rust::Box<BooleanId> let = build_let(
-        *egraph, getSymbol(op.getResult(0)).str().str(), std::move(expr));
-
-    append_expr(stmts, std::move(let));
+    // Create an egraph expression, if possible and necessary.
+    std::optional<rust::Box<BooleanId>> expr = getExpr(&op, *egraph);
+    if (expr.has_value())
+      append_expr(stmts, std::move(expr.value()));
   }
 
   // Create the module to synthesize.
@@ -115,6 +125,7 @@ void EggSynthesisPass::runOnOperation() {
   LLVM_DEBUG({
     llvm::dbgs() << "Expression before synthesis:\n";
     print_expr(*expression);
+    llvm::dbgs() << '\n';
   });
 
   // Run the synthesizer.
@@ -125,6 +136,7 @@ void EggSynthesisPass::runOnOperation() {
   LLVM_DEBUG({
     llvm::dbgs() << "Expression after synthesis:\n";
     print_expr(*result);
+    llvm::dbgs() << '\n';
   });
 
   // Create the OpBuilder and BackedgeBuilder.
@@ -183,62 +195,113 @@ void EggSynthesisPass::runOnOperation() {
   opsToErase.clear();
 }
 
-rust::Box<BooleanId> EggSynthesisPass::getExpr(Operation *op,
-                                               BooleanEGraph &egraph) {
+/// CIRCT -> egg-netlist-synthesizer.
+
+std::optional<rust::Box<BooleanId>>
+EggSynthesisPass::getExpr(Operation *op, BooleanEGraph &egraph) {
+  // Map the op to the Id of a BooleanExpression if possible and necessary.
+  std::optional<rust::Box<BooleanId>> expr =
+      llvm::TypeSwitch<Operation *, std::optional<rust::Box<BooleanId>>>(op)
+          .Case([&](hw::ConstantOp c) {
+            // For constants only used in not operations, mark to be erased.
+            bool isOnlyUsedInNot = true;
+            for (auto *op : c->getUsers()) {
+              if (auto xorOp = dyn_cast<comb::XorOp>(op)) {
+                if (!xorOp.isBinaryNot()) {
+                  isOnlyUsedInNot = false;
+                  break;
+                }
+              }
+            }
+
+            if (isOnlyUsedInNot)
+              opsToErase.push_back(c);
+
+            return std::nullopt;
+          })
+          .Case([&](comb::AndOp a) {
+            auto numOperands = a.getNumOperands();
+            assert(numOperands >= 2);
+
+            SmallVector<rust::Box<BooleanId>> symbols;
+            for (Value operand : a.getOperands())
+              symbols.push_back(
+                  build_symbol(egraph, getSymbol(operand).str().str()));
+
+            rust::Box<BooleanId> expr =
+                build_and(egraph, std::move(symbols[numOperands - 2]),
+                          std::move(symbols[numOperands - 1]));
+
+            for (size_t i = 3, e = numOperands; i <= e; ++i)
+              expr = build_and(egraph, std::move(symbols[numOperands - i]),
+                               std::move(expr));
+
+            return expr;
+          })
+          .Case([&](comb::OrOp o) {
+            auto numOperands = o.getNumOperands();
+            assert(numOperands >= 2);
+
+            SmallVector<rust::Box<BooleanId>> symbols;
+            for (Value operand : o.getOperands())
+              symbols.push_back(
+                  build_symbol(egraph, getSymbol(operand).str().str()));
+
+            rust::Box<BooleanId> expr =
+                build_and(egraph, std::move(symbols[numOperands - 2]),
+                          std::move(symbols[numOperands - 1]));
+
+            for (size_t i = 3, e = numOperands; i <= e; ++i)
+              expr = build_and(egraph, std::move(symbols[numOperands - i]),
+                               std::move(expr));
+
+            return expr;
+          })
+          .Case([&](comb::XorOp n) {
+            assert(n.isBinaryNot());
+
+            rust::Box<BooleanId> symbol =
+                build_symbol(egraph, getSymbol(n.getOperand(0)).str().str());
+
+            rust::Box<BooleanId> expr = build_not(egraph, std::move(symbol));
+
+            return expr;
+          })
+          .Default([&](auto *op) { return std::nullopt; });
+
+  // If no expression, return;
+  if (!expr.has_value())
+    return expr;
+
+  // Mark the op to be erased.
   opsToErase.push_back(op);
 
-  return llvm::TypeSwitch<Operation *, rust::Box<BooleanId>>(op)
-      .Case([&](hw::ConstantOp c) {
-        return build_num(egraph, c.getValue().getZExtValue());
-      })
-      .Case([&](comb::AndOp a) {
-        auto numOperands = a.getNumOperands();
-        assert(numOperands >= 2);
+  // Create a let statement.
+  rust::Box<BooleanId> let = build_let(
+      egraph, getSymbol(op->getResult(0)).str().str(), std::move(expr.value()));
 
-        SmallVector<rust::Box<BooleanId>> symbols;
-        for (Value operand : a.getOperands())
-          symbols.push_back(
-              build_symbol(egraph, getSymbol(operand).str().str()));
-
-        rust::Box<BooleanId> expr =
-            build_and(egraph, std::move(symbols[numOperands - 2]),
-                      std::move(symbols[numOperands - 1]));
-
-        for (size_t i = 3, e = numOperands; i <= e; ++i)
-          expr = build_and(egraph, std::move(symbols[numOperands - i]),
-                           std::move(expr));
-
-        return expr;
-      })
-      .Case([&](comb::OrOp o) {
-        auto numOperands = o.getNumOperands();
-        assert(numOperands >= 2);
-
-        SmallVector<rust::Box<BooleanId>> symbols;
-        for (Value operand : o.getOperands())
-          symbols.push_back(
-              build_symbol(egraph, getSymbol(operand).str().str()));
-
-        rust::Box<BooleanId> expr =
-            build_and(egraph, std::move(symbols[numOperands - 2]),
-                      std::move(symbols[numOperands - 1]));
-
-        for (size_t i = 3, e = numOperands; i <= e; ++i)
-          expr = build_and(egraph, std::move(symbols[numOperands - i]),
-                           std::move(expr));
-
-        return expr;
-      })
-      .Case([&](comb::XorOp n) {
-        assert(n.isBinaryNot());
-        rust::Box<BooleanId> symbol =
-            build_symbol(egraph, getSymbol(n.getOperand(0)).str().str());
-
-        rust::Box<BooleanId> expr = build_not(egraph, std::move(symbol));
-
-        return expr;
-      });
+  return let;
 }
+
+SmallString<8> EggSynthesisPass::getSymbol(Value value) {
+  // If a symbol exists for this value, use it.
+  auto it = valueToSymbol.find(value);
+  if (it != valueToSymbol.end())
+    return it->getSecond();
+
+  // Allocate a new symbol.
+  SmallString<8> symbol("v");
+  symbol += std::to_string(valueId);
+  valueId += 1;
+
+  // Map to and from value.
+  valueToSymbol[value] = symbol;
+  symbolToValue[symbol] = value;
+
+  return symbol;
+}
+
+/// egg-netlist-synthesizer -> CIRCT.
 
 void EggSynthesisPass::generateCellInstance(SmallString<8> symbol,
                                             BooleanExpression &expr,
@@ -336,23 +399,4 @@ EggSynthesisPass::generateCellDeclaration(BooleanExpression &expr, Location loc,
   auto decl = builder.create<hw::HWModuleExternOp>(loc, gateName, ports);
 
   return decl;
-}
-
-SmallString<8> EggSynthesisPass::getSymbol(Value value) {
-  auto it = valueToSymbol.find(value);
-  if (it != valueToSymbol.end())
-    return it->getSecond();
-
-  SmallString<8> symbol("v");
-  symbol += std::to_string(valueId);
-  valueId += 1;
-
-  valueToSymbol[value] = symbol;
-  symbolToValue[symbol] = value;
-
-  return symbol;
-}
-
-std::unique_ptr<mlir::Pass> circt::createEggSynthesisPass() {
-  return std::make_unique<EggSynthesisPass>();
 }
