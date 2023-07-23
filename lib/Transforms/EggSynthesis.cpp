@@ -15,6 +15,7 @@
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Diagnostics.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
@@ -58,6 +59,15 @@ static bool isBoolean(Type type) {
 }
 
 void EggSynthesisPass::runOnOperation() {
+  if (lib.empty()) {
+    llvm::errs() << "lib option must be supplied\n";
+    return signalPassFailure();
+  }
+  if (metric.empty()) {
+    llvm::errs() << "metric option must be supplied\n";
+    return signalPassFailure();
+  }
+
   arc::DefineOp defineOp = getOperation();
 
   OpPrintingFlags flags;
@@ -92,9 +102,7 @@ void EggSynthesisPass::runOnOperation() {
       build_module(*egraph, std::move(stmts));
 
   // Create the synthesizer.
-  rust::Box<Synthesizer> synthesizer = synthesizer_new(
-      "/Users/mikeu/skywater-preparation/sky130_fd_sc_hd_tt_100C_1v80.json",
-      "Area");
+  rust::Box<Synthesizer> synthesizer = synthesizer_new(lib, metric);
 
   LLVM_DEBUG({
     llvm::dbgs() << "Expression before synthesis:\n";

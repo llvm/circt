@@ -166,6 +166,15 @@ def IndexSwitchToIf : Pass<"switch-to-if", "::mlir::ModuleOp"> {
 
 def EggSynthesis : Pass<"egg-synthesis", "::circt::arc::DefineOp"> {
   let constructor = "circt::createEggSynthesisPass()";
+  let options = [
+    Option<"lib", "lib", "std::string",
+           /*default=*/"",
+           "Cell library to use.">,
+    Option<"metric", "metric", "std::string",
+           /*default=*/"",
+           "Optimization to use. Can be Area, Power, or Timing.">
+  ];
+
 }
 
 #endif // CIRCT_TRANSFORMS_PASSES
