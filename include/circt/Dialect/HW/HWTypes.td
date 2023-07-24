@@ -100,6 +100,8 @@ def ModuleType : HW_Type<"Module", "module"> {
     SmallVector<Type> getOutputTypes();
     Type getInputType(size_t);
     Type getOutputType(size_t);
+    SmallVector<StringAttr> getInputNames();
+    SmallVector<StringAttr> getOutputNames();
     StringAttr getNameAttr(size_t);
     StringRef getName(size_t);
     StringAttr getInputNameAttr(size_t);

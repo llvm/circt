@@ -297,8 +297,8 @@ static DenseMap<Operation *, IOInfo> populateIOInfoMap(mlir::ModuleOp module) {
   DenseMap<Operation *, IOInfo> ioInfoMap;
   for (auto op : module.getOps<T>()) {
     IOInfo ioInfo;
-    ioInfo.argTypes = op.getArgumentTypes();
-    ioInfo.resTypes = op.getResultTypes();
+    ioInfo.argTypes = op.getType().getInputTypes();
+    ioInfo.resTypes = op.getType().getOutputTypes();
     for (auto [i, arg] : llvm::enumerate(ioInfo.argTypes)) {
       if (auto structType = getStructType(arg))
         ioInfo.argStructs[i] = structType;

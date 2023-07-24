@@ -317,7 +317,7 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
 
   for (auto [i, arg] : memrefPorts) {
     // Insert ports into the module
-    auto memName = mod.getType().getArgName(i);
+    auto memName = mod.getType().getInputNameAttr(i);
 
     // Get the attached extmemory external module.
     auto extmemInstance = cast<hw::InstanceOp>(*arg.getUsers().begin());
@@ -340,7 +340,7 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
     // Replace the extmemory submodule outputs with the newly created inputs.
     b.setInsertionPointToStart(mod.getBodyBlock());
     auto newInPortExploded = b.create<hw::StructExplodeOp>(
-        arg.getLoc(), extmemMod.getResultTypes(), newInPort);
+        arg.getLoc(), extmemMod.getType().getOutputTypes(), newInPort);
     extmemInstance.replaceAllUsesWith(newInPortExploded.getResults());
 
     // Add memory output - this is the inputs of the extmemory op (without the
@@ -1807,8 +1807,7 @@ public:
     } else {
       auto hwModuleOp = rewriter.create<hw::HWModuleOp>(
           op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
-      auto args = hwModuleOp.getType().getInputTypes();
-      args.drop_back(2);
+      auto args = hwModuleOp.getArguments().drop_back(2);
       rewriter.inlineBlockBefore(&op.getBody().front(),
                                  hwModuleOp.getBodyBlock()->getTerminator(),
                                  args);

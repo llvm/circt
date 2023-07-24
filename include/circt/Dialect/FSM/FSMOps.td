@@ -18,7 +18,6 @@ include "circt/Dialect/HW/HWTypes.td"
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>;
 
 def MachineOp : FSMOp<"machine", [
-      FunctionOpInterface,
       Symbol, SymbolTable, NoTerminator,
       DeclareOpInterfaceMethods<HWModuleLike>]> {
   let summary = "Define a finite-state machine";

@@ -63,7 +63,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
 
     ::circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
       for (::mlir::NamedAttribute argAttr :
-           ::mlir::function_interface_impl::getArgAttrs(*this, portIndex))
+           ::mlir::hwmodulelike_impl::getArgAttrs(*this, portIndex))
         if (auto sym = argAttr.getValue().dyn_cast<::circt::hw::InnerSymAttr>())
           return sym;
       return ::circt::hw::InnerSymAttr();
@@ -196,16 +196,6 @@ def HWModuleOp : HWModuleOpBase<"module",
 
     Block *getBodyBlock() { return &getRegion().front(); }
 
-    // Get the module's symbolic name as StringAttr.
-    StringAttr getNameAttr() {
-      return (*this)->getAttrOfType<StringAttr>(
-        ::mlir::SymbolTable::getSymbolAttrName());
-    }
-
-    // Get the module's symbolic name.
-    StringRef getName() {
-      return getNameAttr().getValue();
-    }
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 

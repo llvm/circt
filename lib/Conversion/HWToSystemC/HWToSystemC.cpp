@@ -60,12 +60,12 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
     scModule.setVisibility(module.getVisibility());
 
     SmallVector<Attribute> portAttrs;
-    if (auto argAttrs = module.getAllArgAttrs())
-      portAttrs.append(argAttrs.begin(), argAttrs.end());
+    if (auto argAttrs = module.getAllInputAttrs())
+      portAttrs.append(argAttrs->begin(), argAttrs->end());
     else
       portAttrs.append(module.getNumInputs(), Attribute());
-    if (auto resultAttrs = module.getAllResultAttrs())
-      portAttrs.append(resultAttrs.begin(), resultAttrs.end());
+    if (auto resultAttrs = module.getAllOutputAttrs())
+      portAttrs.append(resultAttrs->begin(), resultAttrs->end());
     else
       portAttrs.append(module.getNumOutputs(), Attribute());
 

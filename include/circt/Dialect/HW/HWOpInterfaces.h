@@ -131,6 +131,51 @@ namespace detail {
 LogicalResult verifyInnerRefNamespace(Operation *op);
 } // namespace detail
 
+class HWModuleLike;
+namespace hwmodulelike_impl {
+
+void setModuleType(HWModuleLike op, ModuleType type);
+
+/// Return all of the attributes for the argument at 'index'.
+ArrayRef<NamedAttribute> getArgAttrs(HWModuleLike op, unsigned index);
+
+/// Return all of the attributes for the result at 'index'.
+ArrayRef<NamedAttribute> getResultAttrs(HWModuleLike op, unsigned index);
+
+
+/// Returns the dictionary attribute corresponding to the argument at 'index'.
+/// If there are no argument attributes at 'index', a null attribute is
+/// returned.
+DictionaryAttr getArgAttrDict(HWModuleLike op, unsigned index);
+
+/// Returns the dictionary attribute corresponding to the result at 'index'.
+/// If there are no result attributes at 'index', a null attribute is
+/// returned.
+DictionaryAttr getResultAttrDict(HWModuleLike op, unsigned index);
+
+/// Set the attributes held by the argument at 'index'.
+void setArgAttrs(HWModuleLike op, unsigned index,
+                 ArrayRef<NamedAttribute> attributes);
+
+/// Set the attributes held by the result at 'index'.
+void setResultAttrs(HWModuleLike op, unsigned index,
+                    ArrayRef<NamedAttribute> attributes);
+
+/// If the an attribute exists with the specified name, change it to the new
+/// value. Otherwise, add a new attribute with the specified name/value.
+//template <typename ConcreteType>
+void setArgAttr(HWModuleLike op, unsigned index, StringAttr name,
+                Attribute value);
+
+/// If the an attribute exists with the specified name, change it to the new
+/// value. Otherwise, add a new attribute with the specified name/value.
+//template <typename ConcreteType>
+void setResultAttr(HWModuleLike op, unsigned index, StringAttr name,
+                   Attribute value);
+
+}
+
+
 } // namespace hw
 } // namespace circt
 

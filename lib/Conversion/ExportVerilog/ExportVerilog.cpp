@@ -5589,7 +5589,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       }
     for (size_t p = 0, e = moduleOp.getType().getNumOutputs(); p != e; ++p)
       for (NamedAttribute resultAttr :
-           mlir::function_interface_impl::getResultAttrs(moduleOp, p))
+           hwmodulelike_impl::getResultAttrs(moduleOp, p))
         if (auto sym = resultAttr.getValue().dyn_cast<InnerSymAttr>())
           symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getSymName(),
                                     moduleOp, p + numArgs);

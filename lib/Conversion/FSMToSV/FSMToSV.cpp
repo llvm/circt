@@ -42,7 +42,7 @@ static ClkRstIdxs getMachinePortInfo(SmallVectorImpl<hw::PortInfo> &ports,
   clock.name = b.getStringAttr("clk");
   clock.direction = hw::PortDirection::INPUT;
   clock.type = b.getI1Type();
-  clock.argNum = machine.getNumArguments();
+  clock.argNum = machine.getNumInputs();
   ports.push_back(clock);
   specialPorts.clockIdx = clock.argNum;
 
@@ -51,7 +51,7 @@ static ClkRstIdxs getMachinePortInfo(SmallVectorImpl<hw::PortInfo> &ports,
   reset.name = b.getStringAttr("rst");
   reset.direction = hw::PortDirection::INPUT;
   reset.type = b.getI1Type();
-  reset.argNum = machine.getNumArguments() + 1;
+  reset.argNum = machine.getNumInputs() + 1;
   ports.push_back(reset);
   specialPorts.resetIdx = reset.argNum;
 
@@ -339,7 +339,7 @@ MachineOpConverter::moveOps(Block *block,
     if (op.hasTrait<OpTrait::IsTerminator>())
       return &op;
 
-    op.moveBefore(&hwModuleOp.front(), b.getInsertionPoint());
+    op.moveBefore(hwModuleOp.getBodyBlock(), b.getInsertionPoint());
   }
   return nullptr;
 }
@@ -412,19 +412,19 @@ LogicalResult MachineOpConverter::dispatch() {
   SmallVector<hw::PortInfo, 16> ports;
   auto clkRstIdxs = getMachinePortInfo(ports, machineOp, b);
   hwModuleOp = b.create<hw::HWModuleOp>(loc, machineOp.getSymNameAttr(), ports);
-  b.setInsertionPointToStart(&hwModuleOp.front());
+  b.setInsertionPointToStart(hwModuleOp.getBodyBlock());
 
   // Replace all uses of the machine arguments with the arguments of the
   // new created HW module.
   for (auto args :
-       llvm::zip(machineOp.getArguments(), hwModuleOp.front().getArguments())) {
+       llvm::zip(machineOp.getArguments(), hwModuleOp.getBodyBlock()->getArguments())) {
     auto machineArg = std::get<0>(args);
     auto hwModuleArg = std::get<1>(args);
     machineArg.replaceAllUsesWith(hwModuleArg);
   }
 
-  auto clock = hwModuleOp.front().getArgument(clkRstIdxs.clockIdx);
-  auto reset = hwModuleOp.front().getArgument(clkRstIdxs.resetIdx);
+  auto clock = hwModuleOp.getBodyBlock()->getArgument(clkRstIdxs.clockIdx);
+  auto reset = hwModuleOp.getBodyBlock()->getArgument(clkRstIdxs.resetIdx);
 
   // 2) Build state and variable registers.
   encoding =

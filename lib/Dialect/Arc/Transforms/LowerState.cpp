@@ -292,11 +292,11 @@ void ModuleLowering::addStorageArg() {
 /// inputs in the model's storage.
 LogicalResult ModuleLowering::lowerPrimaryInputs() {
   builder.setInsertionPointToStart(moduleOp.getBodyBlock());
-  for (auto blockArg : moduleOp.getArguments()) {
+  for (auto blockArg : moduleOp.getBodyBlock()->getArguments()) {
     if (blockArg == storageArg)
       continue;
     auto name =
-        moduleOp.getArgNames()[blockArg.getArgNumber()].cast<StringAttr>();
+        moduleOp.getType().getInputName(blockArg.getArgNumber());
     auto intType = blockArg.getType().dyn_cast<IntegerType>();
     if (!intType)
       return mlir::emitError(blockArg.getLoc(), "input ")
@@ -315,7 +315,7 @@ LogicalResult ModuleLowering::lowerPrimaryOutputs() {
   if (outputOp.getNumOperands() > 0) {
     auto &passThrough = getOrCreatePassThrough();
     for (auto [value, name] :
-         llvm::zip(outputOp.getOperands(), moduleOp.getResultNames())) {
+         llvm::zip(outputOp.getOperands(), moduleOp.getType().getOutputNames())) {
       auto intType = value.getType().dyn_cast<IntegerType>();
       if (!intType)
         return mlir::emitError(outputOp.getLoc(), "output ")

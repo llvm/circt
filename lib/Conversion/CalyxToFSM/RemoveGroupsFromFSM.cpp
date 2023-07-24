@@ -174,7 +174,7 @@ LogicalResult CalyxRemoveGroupsFromFSM::outlineMachine() {
     }
   }
   // Update the machineOp type.
-  machineOp.setType(b->getFunctionType(machineInputTypes, machineOutputTypes));
+  machineOp.setType(ModuleType::get(machineInputTypes, machineOutputTypes));
 
   // Move the machine to module scope
   machineOp->moveBefore(componentOp);

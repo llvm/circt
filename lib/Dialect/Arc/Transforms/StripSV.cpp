@@ -32,31 +32,33 @@ void StripSVPass::runOnOperation() {
   opsToDelete.clear();
   clockGateModuleNames.clear();
 
-  auto expectedClockGateInputs =
-      ArrayAttr::get(&getContext(), {StringAttr::get(&getContext(), "in"),
+  SmallVector<StringAttr> expectedClockGateInputs =
+      {StringAttr::get(&getContext(), "in"),
                                      StringAttr::get(&getContext(), "test_en"),
-                                     StringAttr::get(&getContext(), "en")});
-  auto expectedClockGateOutputs =
-      ArrayAttr::get(&getContext(), {StringAttr::get(&getContext(), "out")});
+                                     StringAttr::get(&getContext(), "en")};
+  SmallVector<StringAttr> expectedClockGateOutputs =
+      {StringAttr::get(&getContext(), "out")};
   auto i1Type = IntegerType::get(&getContext(), 1);
 
   for (auto extModOp : mlirModule.getOps<hw::HWModuleExternOp>()) {
+    auto inputTypes = extModOp.getType().getInputTypes();
+    auto outputTypes = extModOp.getType().getOutputTypes();
     if (extModOp.getVerilogModuleName() == "EICG_wrapper") {
-      if (extModOp.getArgNames() != expectedClockGateInputs ||
-          extModOp.getResultNames() != expectedClockGateOutputs) {
+      if (expectedClockGateInputs != extModOp.getType().getInputNames() ||
+          expectedClockGateOutputs != extModOp.getType().getOutputNames()) {
         extModOp.emitError("clock gate module `")
             << extModOp.getModuleName() << "` has incompatible port names "
-            << extModOp.getArgNames() << " -> "
-            << extModOp.getResultNames();
+            << extModOp.getType().getInputNames() << " -> "
+            << extModOp.getType().getOutputNames();
         return signalPassFailure();
       }
-      if (extModOp.getArgumentTypes() !=
+      if (inputTypes !=
               ArrayRef<Type>{i1Type, i1Type, i1Type} ||
-          extModOp.getResultTypes() != ArrayRef<Type>{i1Type}) {
+          outputTypes != ArrayRef<Type>{i1Type}) {
         extModOp.emitError("clock gate module `")
             << extModOp.getModuleName() << "` has incompatible port types "
-            << extModOp.getArgumentTypes() << " -> "
-            << extModOp.getResultTypes();
+            << inputTypes << " -> "
+            << outputTypes;
         return signalPassFailure();
       }
       clockGateModuleNames.insert(extModOp.getModuleNameAttr());

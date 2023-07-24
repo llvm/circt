@@ -358,7 +358,7 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
   // port is found.
   SmallVector<Type, 16> newArgTypes;
   size_t nextArgNo = 0;
-  for (auto argTy : mod.getArgumentTypes()) {
+  for (auto argTy : mod.getType().getInputTypes()) {
     auto chanTy = argTy.dyn_cast<ChannelType>();
     auto name = getModuleArgumentNameAttr(mod, nextArgNo);
     newArgLocs.push_back(getModuleArgumentLocAttr(mod, nextArgNo));
@@ -460,7 +460,7 @@ static std::string &constructInstanceName(Value operand, sv::InterfaceOp iface,
 void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
   using namespace circt::sv;
   circt::ImplicitLocOpBuilder instBuilder(inst.getLoc(), inst);
-  FunctionType funcTy = mod.getFunctionType();
+  auto funcTy = mod.getModuleType();
 
   // op counter for error reporting purposes.
   size_t opNum = 0;

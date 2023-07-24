@@ -41,7 +41,7 @@ struct MaterializeCalyxToFSMPass
       outputOperands.push_back(
           getOrCreateConstant(b, APInt(1, enabledGroups.contains(group))));
 
-    assert(outputOperands.size() == machineOp.getNumArguments() - 1 &&
+    assert(outputOperands.size() == machineOp.getNumInputs() - 1 &&
            "Expected exactly one value for each uniquely referenced group in "
            "this machine");
     outputOperands.push_back(getOrCreateConstant(b, APInt(1, topLevelDone)));
@@ -156,7 +156,7 @@ void MaterializeCalyxToFSMPass::materializeGroupIO() {
   SmallVector<Type> ioTypes = SmallVector<Type>(
       referencedGroups.size() + /*top-level go/done*/ 1, b->getI1Type());
   size_t nGroups = ioTypes.size() - 1;
-  machineOp.setType(b->getFunctionType(ioTypes, ioTypes));
+  machineOp.setType(ModuleType::get(getContext(), ioTypes, ioTypes));
   assert(machineOp.getBody().getNumArguments() == 0 &&
          "expected no inputs to the FSM");
   machineOp.getBody().addArguments(

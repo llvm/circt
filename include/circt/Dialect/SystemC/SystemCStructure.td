@@ -14,7 +14,6 @@
 def SCModuleOp : SystemCOp<"module", [
     Symbol,
     DeclareOpInterfaceMethods<HWModuleLike>,
-    FunctionOpInterface,
     IsolatedFromAbove,
     SingleBlock,
     NoTerminator,
@@ -32,7 +31,7 @@ def SCModuleOp : SystemCOp<"module", [
   }];
 
   let arguments = (ins
-    TypeAttrOf<FunctionType>:$function_type,
+    TypeAttrOf<ModuleType>:$function_type,
     OptionalAttr<DictArrayAttr>:$arg_attrs,
     OptionalAttr<DictArrayAttr>:$res_attrs,
     StrArrayAttr:$portNames
@@ -62,16 +61,13 @@ def SCModuleOp : SystemCOp<"module", [
 
     /// Returns the argument types of this function.
     ArrayRef<mlir::Type> getArgumentTypes() {
-      return getFunctionType().getInputs();
+      return getModuleType().getInputTypes();
     }
 
     /// Returns the result types of this function.
     ArrayRef<mlir::Type> getResultTypes() {
       return getFunctionType().getResults();
     }
-
-    // Use FunctionOpInterface traits's getFunctionBody method.
-    using mlir::detail::FunctionOpInterfaceTrait<SCModuleOp>::getFunctionBody;
 
     /// Return the block corresponding to the region.
     Block *getBodyBlock() { return &getFunctionBody().front(); }

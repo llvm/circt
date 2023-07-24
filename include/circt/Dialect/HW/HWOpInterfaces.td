@@ -13,20 +13,14 @@
 #ifndef CIRCT_DIALECT_HW_HWOPINTERFACES
 #define CIRCT_DIALECT_HW_HWOPINTERFACES
 
+include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/OpBase.td"
 
-def HWModuleLike : OpInterface<"HWModuleLike"> {
+def HWModuleLike : OpInterface<"HWModuleLike", [Symbol]> {
   let cppNamespace = "circt::hw";
   let description = "Provide common module information.";
 
   let methods = [
-    InterfaceMethod<"Check whether the module is publicly visible",
-    "bool", "isPublic", (ins),
-    /*methodBody=*/[{
-      return ::mlir::SymbolTable::getSymbolVisibility($_op) ==
-             ::mlir::SymbolTable::Visibility::Public;
-    }]>,
-
     InterfaceMethod<"Get the module type",
     "::circt::hw::ModuleType", "getModuleType", (ins),
     /*methodBody=*/[{}],
@@ -103,7 +97,167 @@ def HWModuleLike : OpInterface<"HWModuleLike"> {
     /*defaultImplementation=*/[{
       return $_op->template getAttrOfType<ArrayAttr>("resultLocs");
     }]>,
+
+    // Formerly FunctionInterface
+    InterfaceMethod<[{
+      Get the array of argument attribute dictionaries. The method should return
+      an array attribute containing only dictionary attributes equal in number
+      to the number of function arguments. Alternatively, the method can return
+      null to indicate that the function has no argument attributes.
+    }],
+    "::mlir::ArrayAttr", "getArgAttrsAttr">,
+    InterfaceMethod<[{
+      Get the array of result attribute dictionaries. The method should return
+      an array attribute containing only dictionary attributes equal in number
+      to the number of function results. Alternatively, the method can return
+      null to indicate that the function has no result attributes.
+    }],
+    "::mlir::ArrayAttr", "getResAttrsAttr">,
+
   ];
+
+  let extraSharedClassDeclaration = [{
+    /// Block list iterator types.
+    using BlockListType = Region::BlockListType;
+    using iterator = BlockListType::iterator;
+    using reverse_iterator = BlockListType::reverse_iterator;
+
+    /// Block argument iterator types.
+    using BlockArgListType = Region::BlockArgListType;
+    using args_iterator = BlockArgListType::iterator;
+
+    //===------------------------------------------------------------------===//
+    // Body Handling
+    //===------------------------------------------------------------------===//
+
+    /// Return the region containing the body of this function.
+    Region &getModuleBody() { return $_op->getRegion(0); }
+
+    //===------------------------------------------------------------------===//
+    // Type Attribute Handling
+    //===------------------------------------------------------------------===//
+
+    /// Change the type of this function in place. This is an extremely dangerous
+    /// operation and it is up to the caller to ensure that this is legal for
+    /// this function, and to restore invariants:
+    ///  - the entry block args must be updated to match the function params.
+    ///  - the argument/result attributes may need an update: if the new type
+    ///    has less parameters we drop the extra attributes, if there are more
+    ///    parameters they won't have any attributes.
+    void setType(::circt::hw::ModuleType newType) {
+      ::circt::hw::hwmodulelike_impl::setModuleType($_op, newType);
+    }
+
+    //===------------------------------------------------------------------===//
+    // Argument and Result Handling
+    //===------------------------------------------------------------------===//
+
+    /// Returns the number of function arguments.
+    unsigned getNumArguments() { return $_op.getModuleType().getNumInputs(); }
+
+    /// Returns the number of function results.
+    unsigned getNumResults() { return $_op.getModuleType().getNumOutputs(); }
+
+    /// Returns the entry block function argument at the given index.
+    BlockArgument getArgument(unsigned idx) {
+      return getModuleBody().getArgument(idx);
+    }
+
+    /// Support argument iteration.
+    args_iterator args_begin() { return getModuleBody().args_begin(); }
+    args_iterator args_end() { return getModuleBody().args_end(); }
+    BlockArgListType getArguments() { return getModuleBody().getArguments(); }
+
+    //===------------------------------------------------------------------===//
+    // Argument Attributes
+    //===------------------------------------------------------------------===//
+
+    /// Return all of the attributes for the argument at 'index'.
+    ArrayRef<NamedAttribute> getArgAttrs(unsigned index) {
+      return ::circt::hw::hwmodulelike_impl::getArgAttrs($_op, index);
+    }
+
+    /// Return an ArrayAttr containing all argument attribute dictionaries of
+    /// this function, or nullptr if no arguments have attributes.
+    ArrayAttr getAllArgAttrs() { return $_op.getArgAttrsAttr(); }
+    
+    /// Return the specified attribute, if present, for the argument at 'index',
+    /// null otherwise.
+    Attribute getArgAttr(unsigned index, StringAttr name) {
+      auto argDict = getArgAttrDict(index);
+      return argDict ? argDict.get(name) : nullptr;
+    }
+
+    Attribute getArgAttr(unsigned index, StringRef name) {
+      auto argDict = getArgAttrDict(index);
+      return argDict ? argDict.get(name) : nullptr;
+    }
+
+    /// If the an attribute exists with the specified name, change it to the new
+    /// value. Otherwise, add a new attribute with the specified name/value.
+    void setArgAttr(unsigned index, StringAttr name, Attribute value) {
+      ::circt::hw::hwmodulelike_impl::setArgAttr($_op, index, name, value);
+    }
+    void setArgAttr(unsigned index, StringRef name, Attribute value) {
+      setArgAttr(index,
+                 StringAttr::get(this->getOperation()->getContext(), name),
+                 value);
+    }
+
+    /// Returns the dictionary attribute corresponding to the argument at
+    /// 'index'. If there are no argument attributes at 'index', a null
+    /// attribute is returned.
+    DictionaryAttr getArgAttrDict(unsigned index) {
+      assert(index < $_op.getNumArguments() && "invalid argument number");
+      return ::circt::hw::hwmodulelike_impl::getArgAttrDict($_op, index);
+    }
+
+    //===------------------------------------------------------------------===//
+    // Result Attributes
+    //===------------------------------------------------------------------===//
+
+    /// Return all of the attributes for the result at 'index'.
+    ArrayRef<NamedAttribute> getResultAttrs(unsigned index) {
+      return ::circt::hw::hwmodulelike_impl::getResultAttrs($_op, index);
+    }
+
+    /// Return an ArrayAttr containing all result attribute dictionaries of this
+    /// function, or nullptr if no result have attributes.
+    ArrayAttr getAllResultAttrs() { return $_op.getResAttrsAttr(); }
+
+    /// Return the specified attribute, if present, for the result at 'index',
+    /// null otherwise.
+    Attribute getResultAttr(unsigned index, StringAttr name) {
+      auto argDict = getResultAttrDict(index);
+      return argDict ? argDict.get(name) : nullptr;
+    }
+
+    Attribute getResultAttr(unsigned index, StringRef name) {
+      auto argDict = getResultAttrDict(index);
+      return argDict ? argDict.get(name) : nullptr;
+    }
+
+    /// If the an attribute exists with the specified name, change it to the new
+    /// value. Otherwise, add a new attribute with the specified name/value.
+    void setResultAttr(unsigned index, StringAttr name, Attribute value) {
+      ::circt::hw::hwmodulelike_impl::setResultAttr($_op, index, name, value);
+    }
+    void setResultAttr(unsigned index, StringRef name, Attribute value) {
+      setResultAttr(index,
+                    StringAttr::get(this->getOperation()->getContext(), name),
+                    value);
+    }
+
+    /// Returns the dictionary attribute corresponding to the result at 'index'.
+    /// If there are no result attributes at 'index', a null attribute is
+    /// returned.
+    DictionaryAttr getResultAttrDict(unsigned index) {
+      assert(index < $_op.getNumResults() && "invalid result number");
+      return ::circt::hw::hwmodulelike_impl::getResultAttrDict($_op, index);
+    }
+
+  }];
+
 
   let verify = [{
     static_assert(
