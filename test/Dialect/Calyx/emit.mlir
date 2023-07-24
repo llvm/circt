@@ -1,4 +1,4 @@
-// RUN: circt-translate --export-calyx --verify-diagnostics %s | FileCheck %s --strict-whitespace
+// RUN: circt-translate --export-calyx --split-input-file --verify-diagnostics %s | FileCheck %s --strict-whitespace
 
 module attributes {calyx.metadata = ["location1", "location2"], calyx.entrypoint = "main"} {
 
@@ -203,4 +203,38 @@ module attributes {calyx.metadata = ["location1", "location2"], calyx.entrypoint
 // CHECK-NEXT:  0: location1
 // CHECK-NEXT:  1: location2
 // CHECK-NEXT:  }#
+}
+
+// -----
+
+module attributes {calyx.entrypoint = "main"} {
+  // CHECK-LABEL: component main(@go go: 1, @clk clk: 1, @reset reset: 1) -> (@done done: 1) {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %p.in, %p.write_en, %p.clk, %p.reset, %p.out, %p.done = calyx.register @p : i3, i1, i1, i1, i3, i1
+    %incr.left, %incr.right, %incr.out = calyx.std_add @incr : i3, i3, i3
+    %l.left, %l.right, %l.out = calyx.std_lt @l : i3, i3, i1
+    %c1_3 = hw.constant 1 : i3
+    %c1_1 = hw.constant 1 : i1
+    %c6_3 = hw.constant 6 : i3
+
+    calyx.wires {
+      // CHECK: group A {
+      calyx.group @A {
+        calyx.assign %incr.left = %p.out : i3
+        calyx.assign %incr.right = %c1_3 : i3
+        calyx.assign %p.in = %incr.out : i3
+        calyx.assign %p.write_en = %c1_1 : i1
+        calyx.group_done %p.done : i1
+      }
+    }
+    calyx.control {
+      // CHECK: repeat 10 {
+      calyx.repeat 10 {
+        calyx.seq {
+          calyx.enable @A
+          calyx.enable @A
+        }
+      }
+    }
+  }
 }

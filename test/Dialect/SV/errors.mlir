@@ -229,3 +229,12 @@ hw.module @CaseEnum() {
       sv.fwrite %fd, "x"
     }
 }
+
+// -----
+
+hw.module @NoMessage(%clock: i1, %value : i4) -> () {
+  sv.always posedge %clock {
+    // expected-error @below {{failed to verify that has message if has substitutions}}
+   "sv.assert"(%clock, %value) { defer = 0 : i32 } : (i1, i4) -> ()
+  }
+}

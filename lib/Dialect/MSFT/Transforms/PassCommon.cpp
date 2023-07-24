@@ -41,11 +41,11 @@ StringRef circt::msft::getValueName(Value v, const SymbolCache &syms,
     if (modOp) { // If modOp isn't in the cache, it's probably a new module;
       assert(isAnyModule(modOp) && "Instance must point to a module");
       OpResult instResult = v.cast<OpResult>();
-      hw::ModulePortInfo ports = getModulePortInfo(modOp);
+      auto mod = cast<hw::HWModuleLike>(modOp);
       buff.clear();
       llvm::raw_string_ostream os(buff);
       os << inst.getSymName() << ".";
-      StringAttr name = ports.outputs[instResult.getResultNumber()].name;
+      StringAttr name = mod.getOutputNameAttr(instResult.getResultNumber());
       if (name)
         os << name.getValue();
       return buff;

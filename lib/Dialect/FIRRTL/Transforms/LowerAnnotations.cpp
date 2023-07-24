@@ -744,8 +744,8 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     builder.setInsertionPointToEnd(insertBlock);
 
     // Create RefSend/RefResolve if necessary.
-    if (isa<RefType>(dest.getType()) != isa<RefType>(src.getType())) {
-      if (isa<RefType>(dest.getType()))
+    if (type_isa<RefType>(dest.getType()) != type_isa<RefType>(src.getType())) {
+      if (type_isa<RefType>(dest.getType()))
         src = builder.create<RefSendOp>(src);
       else
         src = builder.create<RefResolveOp>(src);
@@ -896,8 +896,8 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       sinkType = sink.getType();
 
       // Types must be connectable, which means FIRRTLType's.
-      auto sourceFType = dyn_cast<FIRRTLType>(sourceType);
-      auto sinkFType = dyn_cast<FIRRTLType>(sinkType);
+      auto sourceFType = type_dyn_cast<FIRRTLType>(sourceType);
+      auto sinkFType = type_dyn_cast<FIRRTLType>(sinkType);
       if (!sourceFType)
         return emitError(source.getLoc())
                << "Wiring Problem source type \"" << sourceType
@@ -920,8 +920,8 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     }
     // If wiring using references, check that the sink value we connect to is
     // passive.
-    if (auto sinkFType = dyn_cast<FIRRTLType>(sink.getType());
-        sinkFType && isa<RefType>(sourceType) &&
+    if (auto sinkFType = type_dyn_cast<FIRRTLType>(sink.getType());
+        sinkFType && type_isa<RefType>(sourceType) &&
         !getBaseType(sinkFType).isPassive())
       return emitError(sink.getLoc())
              << "Wiring Problem sink type \"" << sink.getType()

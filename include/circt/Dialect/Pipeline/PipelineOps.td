@@ -258,15 +258,19 @@ def StageOp : Op<Pipeline_Dialect, "stage", [
     Variadic<AnyType>:$registers,
     Variadic<AnyType>:$passthroughs,
     Variadic<I1>:$clockGates,
-    I64ArrayAttr:$clockGatesPerRegister);
+    I64ArrayAttr:$clockGatesPerRegister,
+    OptionalAttr<StrArrayAttr>:$registerNames,
+    OptionalAttr<StrArrayAttr>:$passthroughNames);
   let successors = (successor AnySuccessor:$nextStage);
   let results = (outs);
   let hasVerifier = 1;
   let skipDefaultBuilders = 1;
 
   let assemblyFormat = [{
-    $nextStage custom<StageRegisters>($registers, type($registers), $clockGates, $clockGatesPerRegister)
-      (`pass` `(` $passthroughs^ `:` type($passthroughs) `)` )? attr-dict
+    $nextStage
+    custom<StageRegisters>($registers, type($registers), $clockGates, $clockGatesPerRegister, $registerNames)
+    custom<Passthroughs>($passthroughs, type($passthroughs), $passthroughNames)  
+    attr-dict
   }];
 
   let extraClassDeclaration = [{
@@ -277,6 +281,30 @@ def StageOp : Op<Pipeline_Dialect, "stage", [
 
     // Returns the list of clock gates for the given register.
     ValueRange getClockGatesForReg(unsigned regIdx);
+
+    // Returns the register name for a given register index.
+    StringAttr getRegisterName(unsigned regIdx) {
+      if(auto names = getOperation()->getAttrOfType<ArrayAttr>("registerNames")) {
+        auto name = names[regIdx].cast<StringAttr>();
+        if(!name.strref().empty())
+          return name;
+      }
+
+      return {};
+    }
+
+    // Returns the passthrough name for a given passthrough index.
+    StringAttr getPassthroughName(unsigned passthroughIdx) {
+      if(auto names = getOperation()->getAttrOfType<ArrayAttr>("passthroughNames")) {
+        auto name = names[passthroughIdx].cast<StringAttr>();
+        if(!name.strref().empty())
+          return name;
+      }
+
+      return {};
+    }
+
+
   }];
 
   let builders = [
@@ -284,7 +312,8 @@ def StageOp : Op<Pipeline_Dialect, "stage", [
     // Clock gate builder, which takes a mapping between the registers and
     // and their clock gate hierarchy.
     OpBuilder<(ins "Block*":$dest, "ValueRange":$registers, "ValueRange":$passthroughs,
-      "const llvm::DenseMap<Value, llvm::SmallVector<Value>>&":$clockGates)>
+      "const llvm::DenseMap<Value, llvm::SmallVector<Value>>&":$clockGates,
+      CArg<"mlir::ArrayAttr", "{}">:$registerNames, CArg<"mlir::ArrayAttr", "{}">:$passthroughNames)>
   ];
 }
 

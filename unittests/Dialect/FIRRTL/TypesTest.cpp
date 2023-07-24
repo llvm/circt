@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "gtest/gtest.h"
 
 using namespace mlir;
@@ -25,13 +26,14 @@ TEST(TypesTest, AnalogContainsAnalog) {
 TEST(TypesTest, TypeAliasCast) {
   MLIRContext context;
   context.loadDialect<FIRRTLDialect>();
-  // Check containBaseSubTypes.
-  static_assert(!ContainBaseSubTypes<FIRRTLType>::value);
+  // Check ContainAliasableTypes.
+  static_assert(!ContainAliasableTypes<FIRRTLType>::value);
   // Return false for FIRRTLBaseType.
-  static_assert(!ContainBaseSubTypes<FIRRTLBaseType>::value);
-  static_assert(!ContainBaseSubTypes<StringType>::value);
-  static_assert(ContainBaseSubTypes<FVectorType>::value);
-  static_assert(ContainBaseSubTypes<UIntType, StringType>::value);
+  static_assert(!ContainAliasableTypes<FIRRTLBaseType>::value);
+  static_assert(!ContainAliasableTypes<StringType>::value);
+  static_assert(ContainAliasableTypes<FVectorType>::value);
+  static_assert(ContainAliasableTypes<UIntType, StringType>::value);
+  static_assert(ContainAliasableTypes<hw::FieldIDTypeInterface>::value);
   AnalogType analog = AnalogType::get(&context);
   BaseTypeAliasType alias1 =
       BaseTypeAliasType::get(StringAttr::get(&context, "foo"), analog);

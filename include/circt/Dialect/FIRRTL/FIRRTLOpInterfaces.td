@@ -430,7 +430,7 @@ def Forceable : OpInterface<"Forceable"> {
     }]>,
     InterfaceMethod<"Return data type that will be referenced.",
     "FIRRTLBaseType", "getDataType", (ins), [{}], /*defaultImplementation=*/[{
-      return cast<FIRRTLBaseType>($_op.getDataRaw().getType());
+      return firrtl::type_cast<FIRRTLBaseType>($_op.getDataRaw().getType());
     }]>,
     InterfaceMethod<"Return reference result, or null if not active.",
     "mlir::TypedValue<RefType>", "getDataRef", (ins), [{}], /*defaultImplementation=*/[{

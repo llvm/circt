@@ -1756,3 +1756,103 @@ firrtl.circuit "NonEquivalenctStrictConnect" {
     firrtl.strictconnect %out, %in: !firrtl.alias<foo, uint<2>>, !firrtl.uint<1>
   }
 }
+
+// -----
+
+// A group definition, "@A::@B", is missing an outer nesting of a group
+// definition with symbol "@A".
+firrtl.circuit "GroupMissingNesting" {
+  firrtl.declgroup @A bind {
+    firrtl.declgroup @B bind {}
+  }
+  // expected-note @below {{illegal parent op defined here}}
+  firrtl.module @GroupMissingNesting() {
+    // expected-error @below {{'firrtl.group' op has a nested group symbol, but does not have a 'firrtl.group' op as a parent}}
+    firrtl.group @A::@B {}
+  }
+}
+
+// -----
+
+// A group definition with a legal symbol, "@B", is illegaly nested under
+// another group with a legal symbol, "@B".
+firrtl.circuit "UnnestedGroup" {
+  firrtl.declgroup @A bind {}
+  firrtl.declgroup @B bind {}
+  firrtl.module @UnnestedGroup() {
+    // expected-note @below {{illegal parent op defined here}}
+    firrtl.group @A {
+      // expected-error @below {{'firrtl.group' op has an un-nested group symbol, but does not have a 'firrtl.module' op as a parent}}
+      firrtl.group @B {}
+    }
+  }
+}
+
+// -----
+
+// A group definition, "@B::@C", is nested under the wrong group, "@A".
+firrtl.circuit "WrongGroupNesting" {
+  firrtl.declgroup @A bind {}
+  firrtl.declgroup @B bind {
+    firrtl.declgroup @C bind {}
+  }
+  firrtl.module @WrongGroupNesting() {
+    // expected-note @below {{illegal parent group defined here}}
+    firrtl.group @A {
+      // expected-error @below {{'firrtl.group' op is nested under an illegal group}}
+      firrtl.group @B::@C {}
+    }
+  }
+}
+
+// -----
+
+// A group captures a type which is not a FIRRTL base type.
+firrtl.circuit "NonBaseTypeCapture" {
+  firrtl.declgroup @A bind {}
+  // expected-note @below {{operand is defined here}}
+  firrtl.module @NonBaseTypeCapture(in %a: !firrtl.probe<uint<1>>) {
+    // expected-error @below {{'firrtl.group' op captures an operand which is not a FIRRTL base type}}
+    firrtl.group @A {
+      // expected-note @below {{operand is used here}}
+      %b = firrtl.ref.resolve %a : !firrtl.probe<uint<1>>
+    }
+  }
+}
+
+// -----
+
+// A group captures a non-passive type.
+firrtl.circuit "NonPassiveCapture" {
+  firrtl.declgroup @A bind {}
+  firrtl.module @NonPassiveCapture() {
+    // expected-note @below {{operand is defined here}}
+    %a = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
+    // expected-error @below {{'firrtl.group' op captures an operand which is not a passive type}}
+    firrtl.group @A {
+      %b = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
+      // expected-note @below {{operand is used here}}
+      firrtl.connect %b, %a : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
+    }
+  }
+}
+
+// -----
+
+// A group may not drive sinks outside the group.
+firrtl.circuit "GroupDrivesSinksOutside" {
+  firrtl.declgroup @A bind {}
+  firrtl.module @GroupDrivesSinksOutside(in %cond : !firrtl.uint<1>) {
+    %a = firrtl.wire : !firrtl.uint<1>
+    // expected-note @below {{destination is defined here}}
+    %b = firrtl.wire : !firrtl.bundle<c: uint<1>>
+    // expected-note @below {{enclosing group is defined here}}
+    firrtl.group @A {
+      firrtl.when %cond : !firrtl.uint<1> {
+        %b_c = firrtl.subfield %b[c] : !firrtl.bundle<c: uint<1>>
+        // expected-error @below {{'firrtl.strictconnect' op connects to a destination which is defined outside its enclosing group}}
+        firrtl.strictconnect %b_c, %a : !firrtl.uint<1>
+      }
+    }
+  }
+}

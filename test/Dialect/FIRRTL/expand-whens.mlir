@@ -347,7 +347,7 @@ firrtl.module @InvalidValues(in %p: !firrtl.uint<1>, out %out0: !firrtl.uint<2>,
   }
   // CHECK: firrtl.connect %out5, %c2_ui2
 }
-    
+
 // Test that registers are multiplexed with themselves.
 firrtl.module @register_mux(in %p : !firrtl.uint<1>, in %clock: !firrtl.clock) {
   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
@@ -565,6 +565,22 @@ firrtl.module @PropInitOut(out %out : !firrtl.string) {
   %0 = firrtl.string "hello"
   // CHECK: firrtl.propassign %out, %0 : !firrtl.string
   firrtl.propassign %out, %0 : !firrtl.string
+}
+
+// Check that expand whens works for groups.
+firrtl.declgroup @GroupFoo bind {}
+// CHECK-LABEL: firrtl.module @WhenInGroup
+// CHECK-NOT:   firrtl.when
+firrtl.module @WhenInGroup(in %cond : !firrtl.uint<1>) {
+  firrtl.group @GroupFoo {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %a = firrtl.wire : !firrtl.uint<1>
+    firrtl.strictconnect %a, %c0_ui1 : !firrtl.uint<1>
+    firrtl.when %cond : !firrtl.uint<1> {
+      firrtl.strictconnect %a, %c1_ui1 : !firrtl.uint<1>
+    }
+  }
 }
 
 }

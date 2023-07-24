@@ -54,8 +54,10 @@ struct Emitter {
   void emitCircuit(CircuitOp op);
   void emitModule(FModuleOp op);
   void emitModule(FExtModuleOp op);
+  void emitModule(FIntModuleOp op);
   void emitModulePorts(ArrayRef<PortInfo> ports,
                        Block::BlockArgListType arguments = {});
+  void emitModuleParameters(Operation *op, ArrayAttr parameters);
 
   // Statement emission
   void emitStatementsInBlock(Block &block);
@@ -332,7 +334,7 @@ void Emitter::emitCircuit(CircuitOp op) {
       if (encounteredError)
         break;
       TypeSwitch<Operation *>(&bodyOp)
-          .Case<FModuleOp, FExtModuleOp>([&](auto op) {
+          .Case<FModuleOp, FExtModuleOp, FIntModuleOp>([&](auto op) {
             emitModule(op);
             ps << PP::newline;
           })
@@ -383,30 +385,36 @@ void Emitter::emitModule(FExtModuleOp op) {
     }
 
     // Emit the parameters.
-    for (auto param : llvm::map_range(op.getParameters(), [](Attribute attr) {
-           return cast<ParamDeclAttr>(attr);
-         })) {
-      startStatement();
-      // TODO: AssignLike ?
-      ps << "parameter " << PPExtString(param.getName().getValue()) << " = ";
-      TypeSwitch<Attribute>(param.getValue())
-          .Case<IntegerAttr>(
-              [&](auto attr) { ps.addAsString(attr.getValue()); })
-          .Case<FloatAttr>([&](auto attr) {
-            SmallString<16> str;
-            attr.getValue().toString(str);
-            ps << str;
-          })
-          .Case<StringAttr>(
-              [&](auto attr) { ps.writeQuotedEscaped(attr.getValue()); })
-          .Default([&](auto attr) {
-            emitOpError(op, "with unsupported parameter attribute: ") << attr;
-            ps << "<unsupported-attr ";
-            ps.addAsString(attr);
-            ps << ">";
-          });
-      setPendingNewline();
+    emitModuleParameters(op, op.getParameters());
+  });
+}
+
+/// Emit an intrinsic module
+void Emitter::emitModule(FIntModuleOp op) {
+  startStatement();
+  ps << "intmodule " << PPExtString(legalize(op.getNameAttr())) << " :";
+  ps.scopedBox(PP::bbox2, [&]() {
+    setPendingNewline();
+
+    // Emit the ports.
+    auto ports = op.getPorts();
+    emitModulePorts(ports);
+
+    // Emit the optional intrinsic.
+    //
+    // TODO: This really shouldn't be optional, but it is currently encoded like
+    // this.
+    if (op.getIntrinsic().has_value()) {
+      auto intrinsic = *op.getIntrinsic();
+      if (!intrinsic.empty()) {
+        startStatement();
+        ps << "intrinsic = " << PPExtString(*op.getIntrinsic());
+        setPendingNewline();
+      }
     }
+
+    // Emit the parameters.
+    emitModuleParameters(op, op.getParameters());
   });
 }
 
@@ -424,6 +432,32 @@ void Emitter::emitModulePorts(ArrayRef<PortInfo> ports,
       addValueName(arguments[i], legalName);
     ps << PPExtString(legalName) << " : ";
     emitType(port.type);
+    setPendingNewline();
+  }
+}
+
+void Emitter::emitModuleParameters(Operation *op, ArrayAttr parameters) {
+  for (auto param : llvm::map_range(parameters, [](Attribute attr) {
+         return cast<ParamDeclAttr>(attr);
+       })) {
+    startStatement();
+    // TODO: AssignLike ?
+    ps << "parameter " << PPExtString(param.getName().getValue()) << " = ";
+    TypeSwitch<Attribute>(param.getValue())
+        .Case<IntegerAttr>([&](auto attr) { ps.addAsString(attr.getValue()); })
+        .Case<FloatAttr>([&](auto attr) {
+          SmallString<16> str;
+          attr.getValue().toString(str);
+          ps << str;
+        })
+        .Case<StringAttr>(
+            [&](auto attr) { ps.writeQuotedEscaped(attr.getValue()); })
+        .Default([&](auto attr) {
+          emitOpError(op, "with unsupported parameter attribute: ") << attr;
+          ps << "<unsupported-attr ";
+          ps.addAsString(attr);
+          ps << ">";
+        });
     setPendingNewline();
   }
 }
@@ -958,7 +992,8 @@ void Emitter::emitExpression(SpecialConstantOp op) {
     ps.addAsString(op.getValue());
     ps << ")";
   };
-  TypeSwitch<FIRRTLType>(cast<FIRRTLType>(op.getType()))
+  // TODO: Emit type decl for type alias.
+  FIRRTLTypeSwitch<FIRRTLType>(type_cast<FIRRTLType>(op.getType()))
       .Case<ClockType>([&](auto type) {
         ps << "asClock(";
         emitInner();
@@ -1022,7 +1057,7 @@ void Emitter::emitExpression(RefResolveOp op) {
 
 void Emitter::emitExpression(RefSubOp op) {
   emitExpression(op.getInput());
-  TypeSwitch<FIRRTLBaseType, void>(op.getInput().getType().getType())
+  FIRRTLTypeSwitch<FIRRTLBaseType, void>(op.getInput().getType().getType())
       .Case<FVectorType>([&](auto type) {
         ps << "[";
         ps.addAsString(op.getIndex());
@@ -1090,7 +1125,8 @@ void Emitter::emitType(Type type, bool includeConst) {
       ps << ">";
     }
   };
-  TypeSwitch<Type>(type)
+  // TODO: Emit type decl for type alias.
+  FIRRTLTypeSwitch<Type>(type)
       .Case<ClockType>([&](auto) { ps << "Clock"; })
       .Case<ResetType>([&](auto) { ps << "Reset"; })
       .Case<AsyncResetType>([&](auto) { ps << "AsyncReset"; })

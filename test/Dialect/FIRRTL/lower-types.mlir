@@ -1273,6 +1273,16 @@ firrtl.module private @is1436_FOO() {
     %1 = firrtl.int.mux2cell(%sel1, %v1, %v0) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>) -> !firrtl.bundle<a: uint<5>>
     firrtl.strictconnect %out2, %0 : !firrtl.bundle<a: uint<5>>
   }
+
+  // CHECK-LABEL: firrtl.module @Groups
+  firrtl.declgroup @GroupFoo bind {}
+  firrtl.module @Groups() {
+    // CHECK-NEXT: firrtl.group @GroupFoo
+    firrtl.group @GroupFoo {
+      // CHECK-NEXT: %a_b = firrtl.wire : !firrtl.uint<1>
+      %a = firrtl.wire : !firrtl.bundle<b: uint<1>>
+    }
+  }
 } // CIRCUIT
 
 // Check that we don't lose the DontTouchAnnotation when it is not the last
@@ -1301,4 +1311,18 @@ firrtl.circuit "Foo"  {
     %invalid = firrtl.invalidvalue : !firrtl.bundle<b: uint<1>>
     firrtl.strictconnect %bar_a, %invalid : !firrtl.bundle<b: uint<1>>
   }
+}
+
+// Check handling of inner symbols.
+// COMMON-LABEL: circuit "InnerSym"
+firrtl.circuit "InnerSym" {
+  // COMMON-LABEL: module @InnerSym(
+  // CHECK-SAME:  in %x_a: !firrtl.uint<5>, in %x_b: !firrtl.uint<3> sym @x)
+  // AGGREGATE-SAME: in %x: !firrtl.bundle<a: uint<5>, b: uint<3>> sym [<@x,2,public>])
+  firrtl.module @InnerSym(in %x: !firrtl.bundle<a: uint<5>, b: uint<3>> sym [<@x,2,public>]) { }
+
+  // COMMON-LABEL: module @InnerSymMore(
+  // CHECK-SAME: in %x_a_x_1: !firrtl.uint<3> sym @x_1
+  // CHECK-SAME: in %x_a_y: !firrtl.uint<2> sym @y
+  firrtl.module @InnerSymMore(in %x: !firrtl.bundle<a: bundle<x: vector<uint<3>, 2>, y: uint<2>>, b: uint<3>> sym [<@y,5, public>,<@x_1,4,public>]) { }
 }

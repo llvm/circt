@@ -582,7 +582,7 @@ void OpAnnoTarget::setAnnotations(AnnotationSet annotations) const {
 }
 
 StringAttr OpAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
-  return ::getOrAddInnerSym(getOp(), getOp()->getParentOfType<FModuleOp>(),
+  return ::getOrAddInnerSym(getOp(),
                             [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
                               return moduleNamespace;
                             });
@@ -609,12 +609,12 @@ FIRRTLType OpAnnoTarget::getType() const {
     auto result = is.getTargetResult();
     if (!result)
       return {};
-    return llvm::cast<FIRRTLType>(result.getType());
+    return type_cast<FIRRTLType>(result.getType());
   }
   // Fallback to assuming the single result is the target.
   if (op->getNumResults() != 1)
     return {};
-  return llvm::cast<FIRRTLType>(op->getResult(0).getType());
+  return type_cast<FIRRTLType>(op->getResult(0).getType());
 }
 
 PortAnnoTarget::PortAnnoTarget(FModuleLike op, unsigned portNo)
@@ -644,28 +644,22 @@ void PortAnnoTarget::setAnnotations(AnnotationSet annotations) const {
 StringAttr PortAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
   // If this is not a module, we just need to get an inner_sym on the operation
   // itself.
-  if (auto mod = ::llvm::dyn_cast<FModuleLike>(getOp()))
-    return ::getOrAddInnerSym(
-        mod, getPortNo(), [&moduleNamespace](FModuleLike) -> ModuleNamespace & {
-          return moduleNamespace;
-        });
-  return ::getOrAddInnerSym(getOp(), getOp()->getParentOfType<FModuleOp>(),
-                            [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
-                              return moduleNamespace;
-                            });
+  auto module = llvm::dyn_cast<FModuleLike>(getOp());
+  auto target = module ? hw::InnerSymTarget(getPortNo(), module)
+                       : hw::InnerSymTarget(getOp());
+  return ::getOrAddInnerSym(
+      target, [&moduleNamespace](FModuleLike) -> ModuleNamespace & {
+        return moduleNamespace;
+      });
 }
 
 Attribute
 PortAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
   auto module = llvm::dyn_cast<FModuleLike>(getOp());
-  if (!module)
-    return ::getInnerRefTo(getOp(),
-                           [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
-                             return moduleNamespace;
-                           });
-
-  return ::getInnerRefTo(module, getPortNo(),
-                         [&moduleNamespace](FModuleLike) -> ModuleNamespace & {
+  auto target = module ? hw::InnerSymTarget(getPortNo(), module)
+                       : hw::InnerSymTarget(getOp());
+  return ::getInnerRefTo(target,
+                         [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
                            return moduleNamespace;
                          });
 }
@@ -673,9 +667,9 @@ PortAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
 FIRRTLType PortAnnoTarget::getType() const {
   auto *op = getOp();
   if (auto module = llvm::dyn_cast<FModuleLike>(op))
-    return llvm::cast<FIRRTLType>(module.getPortType(getPortNo()));
+    return type_cast<FIRRTLType>(module.getPortType(getPortNo()));
   if (llvm::isa<MemOp, InstanceOp>(op))
-    return llvm::cast<FIRRTLType>(op->getResult(getPortNo()).getType());
+    return type_cast<FIRRTLType>(op->getResult(getPortNo()).getType());
   llvm_unreachable("unknow operation kind");
   return {};
 }

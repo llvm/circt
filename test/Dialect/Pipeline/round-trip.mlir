@@ -136,3 +136,23 @@ hw.module @withClockGates(%arg0 : i32, %stall : i1, %go : i1, %clk : i1, %rst : 
   }
   hw.output %0 : i32
 }
+
+// CHECK-LABEL: hw.module @withNames(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out: i32) {
+// CHECK-NEXT:     %out, %done = pipeline.scheduled "MyPipeline"(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out : i32) {
+// CHECK-NEXT:       %0 = comb.add %a0, %a1 : i32
+// CHECK-NEXT:       pipeline.stage ^bb1 regs("myAdd" = %0 : i32, %0 : i32, "myOtherAdd" = %0 : i32)
+// CHECK-NEXT:     ^bb1(%s1_arg0: i32, %s1_arg1: i32, %s1_arg2: i32, %s1_valid: i1):  // pred: ^bb0
+// CHECK-NEXT:       pipeline.return %s1_arg0 : i32
+// CHECK-NEXT:     }
+// CHECK-NEXT:     hw.output %out : i32
+// CHECK-NEXT:   }
+hw.module @withNames(%arg0 : i32, %arg1 : i32, %go : i1, %clk : i1, %rst : i1) -> (out: i32) {
+  %0:2 = pipeline.scheduled "MyPipeline"(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out: i32){
+    %0 = comb.add %a0, %a1 : i32
+    pipeline.stage ^bb1 regs("myAdd" = %0 : i32, %0 : i32, "myOtherAdd" = %0 : i32)
+
+   ^bb1(%r1 : i32, %r2 : i32, %r3 : i32, %s1_valid : i1):
+    pipeline.return %r1 : i32
+  }
+  hw.output %0 : i32
+}

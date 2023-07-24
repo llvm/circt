@@ -691,9 +691,10 @@ LogicalResult MSFTModuleOp::verify() {
 /// dialect.
 ///
 /// If `disallowParamRefs` is true, then parameter references are not allowed.
-static LogicalResult checkParameterInContext(Attribute value, Operation *module,
-                                             Operation *usingOp,
-                                             bool disallowParamRefs) {
+static LogicalResult checkParameterInContextMSFT(Attribute value,
+                                                 Operation *module,
+                                                 Operation *usingOp,
+                                                 bool disallowParamRefs) {
   // Literals are always ok.  Their types are already known to match
   // expectations.
   if (value.isa<IntegerAttr>() || value.isa<FloatAttr>() ||
@@ -703,8 +704,8 @@ static LogicalResult checkParameterInContext(Attribute value, Operation *module,
   // Check both subexpressions of an expression.
   if (auto expr = value.dyn_cast<hw::ParamExprAttr>()) {
     for (auto op : expr.getOperands())
-      if (failed(
-              checkParameterInContext(op, module, usingOp, disallowParamRefs)))
+      if (failed(checkParameterInContextMSFT(op, module, usingOp,
+                                             disallowParamRefs)))
         return failure();
     return success();
   }
@@ -898,8 +899,8 @@ LogicalResult MSFTModuleExternOp::verify() {
     // Verify that this is a valid parameter value, disallowing parameter
     // references.  We could allow parameters to refer to each other in the
     // future with lexical ordering if there is a need.
-    if (failed(checkParameterInContext(value, *this, *this,
-                                       /*disallowParamRefs=*/true)))
+    if (failed(checkParameterInContextMSFT(value, *this, *this,
+                                           /*disallowParamRefs=*/true)))
       return failure();
   }
   return success();
@@ -946,6 +947,12 @@ hw::ModulePortInfo MSFTModuleExternOp::getPorts() {
 
   return hw::ModulePortInfo(inputs, outputs);
 }
+
+size_t MSFTModuleExternOp::getNumPorts() {
+  return getArgNames().size() + getResultNames().size();
+}
+
+hw::InnerSymAttr MSFTModuleExternOp::getPortSymbolAttr(size_t) { return {}; }
 
 //===----------------------------------------------------------------------===//
 // OutputOp

@@ -778,7 +778,7 @@ void Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b, IRMapping &mapper,
   for (unsigned i = 0, e = getNumPorts(target); i < e; ++i) {
     auto arg = target.getArgument(i);
     // Get the type of the wire.
-    auto type = cast<FIRRTLType>(arg.getType());
+    auto type = type_cast<FIRRTLType>(arg.getType());
 
     // Compute a unique symbol if needed
     StringAttr newSym;
@@ -1182,8 +1182,8 @@ void Inliner::inlineInstances(FModuleOp parent) {
       for (auto sym : rootMap[target.getNameAttr()]) {
         auto &mnla = nlaMap[sym];
         sym = mnla.reTop(parent);
-        StringAttr instSym = getOrAddInnerSym(
-            instance, parent, [&](FModuleOp mod) -> ModuleNamespace & {
+        StringAttr instSym =
+            getOrAddInnerSym(instance, [&](FModuleOp mod) -> ModuleNamespace & {
               return moduleNamespace;
             });
         instOpHierPaths[InnerRefAttr::get(moduleName, instSym)].push_back(

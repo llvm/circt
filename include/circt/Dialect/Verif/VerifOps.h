@@ -9,6 +9,8 @@
 #ifndef CIRCT_DIALECT_VERIF_VERIFOPS_H
 #define CIRCT_DIALECT_VERIF_VERIFOPS_H
 
+#include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 
 #define GET_OP_CLASSES

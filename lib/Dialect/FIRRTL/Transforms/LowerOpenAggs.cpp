@@ -358,7 +358,7 @@ LogicalResult Visitor::visitExpr(OpenSubfieldOp op) {
   if (nonHWForResult != nonHWValues.end()) {
     auto newResult = nonHWForResult->second;
     assert(op.getResult().getType() == newResult.getType());
-    assert(!isa<FIRRTLBaseType>(newResult.getType()));
+    assert(!type_isa<FIRRTLBaseType>(newResult.getType()));
     op.getResult().replaceAllUsesWith(newResult);
     return success();
   }
@@ -372,7 +372,7 @@ LogicalResult Visitor::visitExpr(OpenSubfieldOp op) {
     return success();
   }
 
-  auto bundleType = cast<BundleType>(newInput->getType());
+  auto bundleType = type_cast<BundleType>(newInput->getType());
 
   // Recompute the "actual" index for this field, it may have changed.
   auto fieldName = op.getFieldName();
@@ -386,7 +386,7 @@ LogicalResult Visitor::visitExpr(OpenSubfieldOp op) {
 
   hwOnlyAggMap[op.getResult()] = newOp;
 
-  if (isa<FIRRTLBaseType>(op.getType()))
+  if (type_isa<FIRRTLBaseType>(op.getType()))
     op.getResult().replaceAllUsesWith(newOp.getResult());
 
   return success();
@@ -405,7 +405,7 @@ LogicalResult Visitor::visitExpr(OpenSubindexOp op) {
   if (nonHWForResult != nonHWValues.end()) {
     auto newResult = nonHWForResult->second;
     assert(op.getResult().getType() == newResult.getType());
-    assert(!isa<FIRRTLBaseType>(newResult.getType()));
+    assert(!type_isa<FIRRTLBaseType>(newResult.getType()));
     op.getResult().replaceAllUsesWith(newResult);
     return success();
   }
@@ -426,7 +426,7 @@ LogicalResult Visitor::visitExpr(OpenSubindexOp op) {
 
   hwOnlyAggMap[op.getResult()] = newOp;
 
-  if (isa<FIRRTLBaseType>(op.getType()))
+  if (type_isa<FIRRTLBaseType>(op.getType()))
     op.getResult().replaceAllUsesWith(newOp.getResult());
   return success();
 }
@@ -555,7 +555,7 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
 
 PortMappingInfo Visitor::mapPortType(Type type) {
   PortMappingInfo pi{false, {}, {}};
-  auto ftype = dyn_cast<FIRRTLType>(type);
+  auto ftype = type_dyn_cast<FIRRTLType>(type);
   // Ports that aren't open aggregates are left alone.
   if (!ftype || !isa<OpenBundleType, OpenVectorType>(ftype)) {
     pi.identity = true;

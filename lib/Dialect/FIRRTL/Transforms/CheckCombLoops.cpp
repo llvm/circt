@@ -202,7 +202,7 @@ public:
                           return op->getResult(0);
                         return {};
                       });
-              if (childVal && isa<FIRRTLType>(childVal.getType()))
+              if (childVal && type_isa<FIRRTLType>(childVal.getType()))
                 children.push_back(childVal);
             }
           }
@@ -248,8 +248,8 @@ public:
   void preprocess(SmallVector<Value> &worklist) {
     // All the input ports are added to the worklist.
     for (BlockArgument arg : module.getArguments()) {
-      auto argType = cast<FIRRTLType>(arg.getType());
-      if (isa<RefType>(argType))
+      auto argType = type_cast<FIRRTLType>(arg.getType());
+      if (type_isa<RefType>(argType))
         continue;
       if (module.getPortDirection(arg.getArgNumber()) == Direction::In)
         worklist.push_back(arg);
@@ -263,7 +263,7 @@ public:
           // Wire is added to the worklist
           .Case<WireOp>([&](WireOp wire) {
             worklist.push_back(wire.getResult());
-            auto ty = dyn_cast<FIRRTLBaseType>(wire.getResult().getType());
+            auto ty = type_dyn_cast<FIRRTLBaseType>(wire.getResult().getType());
             if (ty && !ty.isGround())
               setValRefsTo(wire.getResult(), FieldRef(wire.getResult(), 0));
           })
@@ -350,7 +350,7 @@ public:
               return;
             }
             for (auto memPort : mem.getResults()) {
-              if (!isa<FIRRTLBaseType>(memPort.getType()))
+              if (!type_isa<FIRRTLBaseType>(memPort.getType()))
                 continue;
               memPorts.insert(memPort);
             }
@@ -361,11 +361,11 @@ public:
 
   void handleInstanceOp(InstanceOp ins, SmallVector<Value> &worklist) {
     for (auto port : ins.getResults()) {
-      if (auto type = dyn_cast<FIRRTLBaseType>(port.getType())) {
+      if (auto type = type_dyn_cast<FIRRTLBaseType>(port.getType())) {
         worklist.push_back(port);
         if (!type.isGround())
           setValRefsTo(port, FieldRef(port, 0));
-      } else if (auto type = dyn_cast<PropertyType>(port.getType())) {
+      } else if (auto type = type_dyn_cast<PropertyType>(port.getType())) {
         worklist.push_back(port);
       }
     }
@@ -398,7 +398,7 @@ public:
       if (mem.getReadLatency() > 0)
         return;
       auto memPort = ref.getValue();
-      auto type = cast<BundleType>(memPort.getType());
+      auto type = type_cast<BundleType>(memPort.getType());
       auto enableFieldId = type.getFieldID((unsigned)ReadPortSubfield::en);
       auto dataFieldId = type.getFieldID((unsigned)ReadPortSubfield::data);
       auto addressFieldId = type.getFieldID((unsigned)ReadPortSubfield::addr);

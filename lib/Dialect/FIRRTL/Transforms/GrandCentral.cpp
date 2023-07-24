@@ -204,7 +204,7 @@ struct MappingContextTraits<DescribedSignal, Context> {
       // with a blind cast because we generated this type in this pass (and we
       // therefore cannot fail this cast).
       assert(isa<IntegerType>(tpe));
-      width = cast<IntegerType>(tpe).getWidth();
+      width = type_cast<IntegerType>(tpe).getWidth();
     }
 
     /// A no-argument constructor is necessary to work with LLVM's YAML library.
@@ -1269,7 +1269,7 @@ bool GrandCentralPass::traverseField(
         auto companionModule = companionIDMap.lookup(id).companion;
         HWModuleLike enclosing = getEnclosingModule(leafValue, sym);
 
-        auto tpe = cast<FIRRTLBaseType>(leafValue.getType());
+        auto tpe = type_cast<FIRRTLBaseType>(leafValue.getType());
 
         // If the type is zero-width then do not emit an XMR.
         if (!tpe.getBitWidthOrSentinel())
@@ -1412,7 +1412,7 @@ std::optional<TypeSum> GrandCentralPass::computeField(
             FieldRef fieldRef = leafMap.lookup(ground.getID()).field;
             auto value = fieldRef.getValue();
             auto fieldID = fieldRef.getFieldID();
-            auto tpe = cast<FIRRTLBaseType>(
+            auto tpe = firrtl::type_cast<FIRRTLBaseType>(
                 value.getType()
                     .cast<circt::hw::FieldIDTypeInterface>()
                     .getFinalTypeByFieldID(fieldID));

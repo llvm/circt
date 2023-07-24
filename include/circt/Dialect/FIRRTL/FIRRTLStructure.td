@@ -253,4 +253,27 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
   let hasCustomAssemblyFormat = 1;
 }
 
+def GroupDeclOp : FIRRTLOp<
+  "declgroup",
+  [IsolatedFromAbove, Symbol, SymbolTable, SingleBlock, NoTerminator,
+   ParentOneOf<["firrtl::CircuitOp", "firrtl::GroupDeclOp"]>]
+> {
+  let summary = "A declaration of an optional group";
+  let description = [{
+    The `firrtl.declgroup` operation declares an optional group and a lowering
+    convetion for that group.  Optional groups are a feature of FIRRTL that add
+    verification or debugging code to an existing module at runtime.
+
+    A `firrtl.declgroup` operation only declares the group and any groups nested
+    under the current declaration.  Functionality is added to modules using the
+    `firrtl.group` operation.
+  }];
+  let arguments = (ins SymbolNameAttr:$sym_name, GroupConventionAttr:$convention);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{
+    $sym_name $convention attr-dict-with-keyword $body
+  }];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLSTRUCTURE_TD

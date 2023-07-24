@@ -41,7 +41,6 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
   void runOnOperation() override {
     LLVM_DEBUG(llvm::dbgs() << "\n Running Infer Read Write on module:"
                             << getOperation().getName());
-    ModuleNamespace modNamespace(getOperation());
     SmallVector<Operation *> opsToErase;
     for (MemOp memOp : llvm::make_early_inc_range(
              getOperation().getBodyBlock()->getOps<MemOp>())) {
@@ -121,8 +120,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
         continue;
 
       // Create the merged rw port for the new memory.
-      resultNames.push_back(
-          StringAttr::get(memOp.getContext(), modNamespace.newName("rw")));
+      resultNames.push_back(StringAttr::get(memOp.getContext(), "rw"));
       // Set the type of the rw port.
       resultTypes.push_back(MemOp::getTypeForPort(
           memOp.getDepth(), memOp.getDataType(), MemOp::PortKind::ReadWrite,

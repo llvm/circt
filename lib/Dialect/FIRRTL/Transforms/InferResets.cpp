@@ -125,7 +125,7 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
         cache);
   };
   auto value =
-      TypeSwitch<FIRRTLBaseType, Value>(type)
+      FIRRTLTypeSwitch<FIRRTLBaseType, Value>(type)
           .Case<ClockType>([&](auto type) {
             return builder.create<AsClockPrimOp>(nullBit());
           })
@@ -593,7 +593,7 @@ ResetSignal InferResetsPass::guessRoot(ResetNetwork net) {
 // the element type is uniform across all elements.
 
 static unsigned getMaxFieldID(FIRRTLBaseType type) {
-  return TypeSwitch<FIRRTLBaseType, unsigned>(type)
+  return FIRRTLTypeSwitch<FIRRTLBaseType, unsigned>(type)
       .Case<BundleType>([](auto type) {
         unsigned id = 0;
         for (auto e : type.getElements())
@@ -636,7 +636,7 @@ static bool isUselessVec(FIRRTLBaseType oldType, unsigned fieldID) {
   }
 
   // If this is a bundle type, recurse.
-  if (auto bundleType = dyn_cast<BundleType>(oldType)) {
+  if (auto bundleType = type_dyn_cast<BundleType>(oldType)) {
     unsigned index = getIndexForFieldID(bundleType, fieldID);
     return isUselessVec(bundleType.getElementType(index),
                         fieldID - getFieldID(bundleType, index));
@@ -644,7 +644,7 @@ static bool isUselessVec(FIRRTLBaseType oldType, unsigned fieldID) {
 
   // If this is a vector type, check if it is zero length.  Anything in a
   // zero-length vector is useless.
-  if (auto vectorType = dyn_cast<FVectorType>(oldType)) {
+  if (auto vectorType = type_dyn_cast<FVectorType>(oldType)) {
     if (vectorType.getNumElements() == 0)
       return true;
     return isUselessVec(vectorType.getElementType(),
@@ -656,8 +656,9 @@ static bool isUselessVec(FIRRTLBaseType oldType, unsigned fieldID) {
 
 // If a field is pointing to a child of a zero-length vector, it is useless.
 static bool isUselessVec(FieldRef field) {
-  return isUselessVec(getBaseType(cast<FIRRTLType>(field.getValue().getType())),
-                      field.getFieldID());
+  return isUselessVec(
+      getBaseType(type_cast<FIRRTLType>(field.getValue().getType())),
+      field.getFieldID());
 }
 
 static bool getDeclName(Value value, SmallString<32> &string) {
@@ -692,7 +693,7 @@ static bool getFieldName(const FieldRef &fieldRef, SmallString<32> &string) {
   auto type = value.getType();
   auto localID = fieldRef.getFieldID();
   while (localID) {
-    if (auto bundleType = dyn_cast<BundleType>(type)) {
+    if (auto bundleType = type_dyn_cast<BundleType>(type)) {
       auto index = getIndexForFieldID(bundleType, localID);
       // Add the current field string, and recurse into a subfield.
       auto &element = bundleType.getElements()[index];
@@ -702,7 +703,7 @@ static bool getFieldName(const FieldRef &fieldRef, SmallString<32> &string) {
       // Recurse in to the element type.
       type = element.type;
       localID = localID - getFieldID(bundleType, index);
-    } else if (auto vecType = dyn_cast<FVectorType>(type)) {
+    } else if (auto vecType = type_dyn_cast<FVectorType>(type)) {
       string += "[]";
       // Recurse in to the element type.
       type = vecType.getElementType();
@@ -723,17 +724,11 @@ static bool getFieldName(const FieldRef &fieldRef, SmallString<32> &string) {
 //===----------------------------------------------------------------------===//
 
 /// Check whether a type contains a `ResetType`.
-static bool typeContainsReset(FIRRTLType type) {
-  return TypeSwitch<FIRRTLType, bool>(type)
-      .Case<BundleType>([](auto type) {
-        for (auto e : type.getElements())
-          if (typeContainsReset(e.type))
-            return true;
-        return false;
+static bool typeContainsReset(Type type) {
+  return TypeSwitch<Type, bool>(type)
+      .Case<FIRRTLType>([](auto type) {
+        return type.getRecursiveTypeProperties().hasUninferredReset;
       })
-      .Case<FVectorType>(
-          [](auto type) { return typeContainsReset(type.getElementType()); })
-      .Case<ResetType>([](auto) { return true; })
       .Default([](auto) { return false; });
 }
 
@@ -744,96 +739,122 @@ static bool typeContainsReset(FIRRTLType type) {
 void InferResetsPass::traceResets(CircuitOp circuit) {
   LLVM_DEBUG(
       llvm::dbgs() << "\n===----- Tracing uninferred resets -----===\n\n");
-  circuit.walk([&](Operation *op) {
-    TypeSwitch<Operation *>(op)
-        .Case<FConnectLike>([&](auto op) {
-          traceResets(op.getDest(), op.getSrc(), op.getLoc());
-        })
-        .Case<InstanceOp>([&](auto op) { traceResets(op); })
-        .Case<RefSendOp>([&](auto op) {
-          // Trace using base types.
-          traceResets(op.getType().getType(), op.getResult(), 0,
-                      op.getBase().getType().getPassiveType(), op.getBase(), 0,
-                      op.getLoc());
-        })
-        .Case<RefResolveOp>([&](auto op) {
-          // Trace using base types.
-          traceResets(op.getType(), op.getResult(), 0,
-                      op.getRef().getType().getType(), op.getRef(), 0,
-                      op.getLoc());
-        })
-        .Case<Forceable>([&](Forceable op) {
-          // Trace reset into rwprobe.  Avoid invalid IR.
-          if (op.isForceable())
-            traceResets(op.getDataType(), op.getData(), 0, op.getDataType(),
-                        op.getDataRef(), 0, op.getLoc());
-        })
-        .Case<UninferredResetCastOp, ConstCastOp, RefCastOp>([&](auto op) {
-          traceResets(op.getResult(), op.getInput(), op.getLoc());
-        })
-        .Case<InvalidValueOp>([&](auto op) {
-          // Uniquify `InvalidValueOp`s that are contributing to multiple reset
-          // networks. These are tricky to handle because passes like CSE will
-          // generally ensure that there is only a single `InvalidValueOp` per
-          // type. However, a `reset` invalid value may be connected to two
-          // reset networks that end up being inferred as `asyncreset` and
-          // `uint<1>`. In that case, we need a distinct `InvalidValueOp` for
-          // each reset network in order to assign it the correct type.
-          auto type = op.getType();
-          if (!typeContainsReset(type) || op->hasOneUse() || op->use_empty())
-            return;
-          LLVM_DEBUG(llvm::dbgs() << "Uniquify " << op << "\n");
-          ImplicitLocOpBuilder builder(op->getLoc(), op);
-          for (auto &use :
-               llvm::make_early_inc_range(llvm::drop_begin(op->getUses()))) {
-            // - `make_early_inc_range` since `getUses()` is invalidated upon
-            //   `use.set(...)`.
-            // - `drop_begin` such that the first use can keep the original op.
-            auto newOp = builder.create<InvalidValueOp>(type);
-            use.set(newOp);
-          }
-        })
 
-        .Case<SubfieldOp>([&](auto op) {
-          // Associate the input bundle's resets with the output field's resets.
-          auto bundleType = op.getInput().getType();
-          auto index = op.getFieldIndex();
-          traceResets(op.getType(), op.getResult(), 0,
-                      bundleType.getElements()[index].type, op.getInput(),
-                      getFieldID(bundleType, index), op.getLoc());
-        })
+  SmallVector<std::pair<FModuleOp, SmallVector<Operation *>>> moduleToOps;
 
-        .Case<SubindexOp, SubaccessOp>([&](auto op) {
-          // Associate the input vector's resets with the output field's resets.
-          //
-          // This collapses all elements in vectors into one shared element
-          // which will ensure that reset inference provides a uniform result
-          // for all elements.
-          //
-          // CAVEAT: This may infer reset networks that are too big, since
-          // unrelated resets in the same vector end up looking as if they were
-          // connected. However for the sake of type inference, this is
-          // indistinguishable from them having to share the same type (namely
-          // the vector element type).
-          auto vectorType = op.getInput().getType();
-          traceResets(op.getType(), op.getResult(), 0,
-                      vectorType.getElementType(), op.getInput(),
-                      getFieldID(vectorType), op.getLoc());
-        })
+  for (auto module : circuit.getOps<FModuleOp>())
+    moduleToOps.push_back({module, {}});
 
-        .Case<RefSubOp>([&](RefSubOp op) {
-          // Trace through ref.sub.
-          auto aggType = op.getInput().getType().getType();
-          uint64_t fieldID =
-              TypeSwitch<FIRRTLBaseType, uint64_t>(aggType)
-                  .Case<FVectorType>([](auto type) { return getFieldID(type); })
-                  .Case<BundleType>([&](auto type) {
-                    return getFieldID(type, op.getIndex());
-                  });
-          traceResets(op.getType(), op.getResult(), 0, op.getResult().getType(),
-                      op.getInput(), fieldID, op.getLoc());
-        });
+  mlir::parallelForEach(circuit.getContext(), moduleToOps, [](auto &e) {
+    e.first.walk([&](Operation *op) {
+      // We are only interested in operations which are related to abstract
+      // reset.
+      if (llvm::any_of(
+              op->getResultTypes(),
+              [](mlir::Type type) { return typeContainsReset(type); }) ||
+          llvm::any_of(op->getOperandTypes(), typeContainsReset))
+        e.second.push_back(op);
+    });
   });
+
+  for (auto &[_, ops] : moduleToOps)
+    for (auto *op : ops) {
+      TypeSwitch<Operation *>(op)
+          .Case<FConnectLike>([&](auto op) {
+            traceResets(op.getDest(), op.getSrc(), op.getLoc());
+          })
+          .Case<InstanceOp>([&](auto op) { traceResets(op); })
+          .Case<RefSendOp>([&](auto op) {
+            // Trace using base types.
+            traceResets(op.getType().getType(), op.getResult(), 0,
+                        op.getBase().getType().getPassiveType(), op.getBase(),
+                        0, op.getLoc());
+          })
+          .Case<RefResolveOp>([&](auto op) {
+            // Trace using base types.
+            traceResets(op.getType(), op.getResult(), 0,
+                        op.getRef().getType().getType(), op.getRef(), 0,
+                        op.getLoc());
+          })
+          .Case<Forceable>([&](Forceable op) {
+            // Trace reset into rwprobe.  Avoid invalid IR.
+            if (op.isForceable())
+              traceResets(op.getDataType(), op.getData(), 0, op.getDataType(),
+                          op.getDataRef(), 0, op.getLoc());
+          })
+          .Case<UninferredResetCastOp, ConstCastOp, RefCastOp>([&](auto op) {
+            traceResets(op.getResult(), op.getInput(), op.getLoc());
+          })
+          .Case<InvalidValueOp>([&](auto op) {
+            // Uniquify `InvalidValueOp`s that are contributing to multiple
+            // reset networks. These are tricky to handle because passes
+            // like CSE will generally ensure that there is only a single
+            // `InvalidValueOp` per type. However, a `reset` invalid value
+            // may be connected to two reset networks that end up being
+            // inferred as `asyncreset` and `uint<1>`. In that case, we need
+            // a distinct `InvalidValueOp` for each reset network in order
+            // to assign it the correct type.
+            auto type = op.getType();
+            if (!typeContainsReset(type) || op->hasOneUse() || op->use_empty())
+              return;
+            LLVM_DEBUG(llvm::dbgs() << "Uniquify " << op << "\n");
+            ImplicitLocOpBuilder builder(op->getLoc(), op);
+            for (auto &use :
+                 llvm::make_early_inc_range(llvm::drop_begin(op->getUses()))) {
+              // - `make_early_inc_range` since `getUses()` is invalidated
+              // upon
+              //   `use.set(...)`.
+              // - `drop_begin` such that the first use can keep the
+              // original op.
+              auto newOp = builder.create<InvalidValueOp>(type);
+              use.set(newOp);
+            }
+          })
+
+          .Case<SubfieldOp>([&](auto op) {
+            // Associate the input bundle's resets with the output field's
+            // resets.
+            auto bundleType = op.getInput().getType();
+            auto index = op.getFieldIndex();
+            traceResets(op.getType(), op.getResult(), 0,
+                        bundleType.getElements()[index].type, op.getInput(),
+                        getFieldID(bundleType, index), op.getLoc());
+          })
+
+          .Case<SubindexOp, SubaccessOp>([&](auto op) {
+            // Associate the input vector's resets with the output field's
+            // resets.
+            //
+            // This collapses all elements in vectors into one shared
+            // element which will ensure that reset inference provides a
+            // uniform result for all elements.
+            //
+            // CAVEAT: This may infer reset networks that are too big, since
+            // unrelated resets in the same vector end up looking as if they
+            // were connected. However for the sake of type inference, this
+            // is indistinguishable from them having to share the same type
+            // (namely the vector element type).
+            auto vectorType = op.getInput().getType();
+            traceResets(op.getType(), op.getResult(), 0,
+                        vectorType.getElementType(), op.getInput(),
+                        getFieldID(vectorType), op.getLoc());
+          })
+
+          .Case<RefSubOp>([&](RefSubOp op) {
+            // Trace through ref.sub.
+            auto aggType = op.getInput().getType().getType();
+            uint64_t fieldID = TypeSwitch<FIRRTLBaseType, uint64_t>(aggType)
+                                   .Case<FVectorType>([](auto type) {
+                                     return getFieldID(type);
+                                   })
+                                   .Case<BundleType>([&](auto type) {
+                                     return getFieldID(type, op.getIndex());
+                                   });
+            traceResets(op.getType(), op.getResult(), 0,
+                        op.getResult().getType(), op.getInput(), fieldID,
+                        op.getLoc());
+          });
+    }
 }
 
 /// Trace reset signals through an instance. This essentially associates the
@@ -869,8 +890,8 @@ void InferResetsPass::traceResets(Value dst, Value src, Location loc) {
 void InferResetsPass::traceResets(Type dstType, Value dst, unsigned dstID,
                                   Type srcType, Value src, unsigned srcID,
                                   Location loc) {
-  if (auto dstBundle = dyn_cast<BundleType>(dstType)) {
-    auto srcBundle = cast<BundleType>(srcType);
+  if (auto dstBundle = type_dyn_cast<BundleType>(dstType)) {
+    auto srcBundle = type_cast<BundleType>(srcType);
     for (unsigned dstIdx = 0, e = dstBundle.getNumElements(); dstIdx < e;
          ++dstIdx) {
       auto dstField = dstBundle.getElements()[dstIdx].name;
@@ -892,8 +913,8 @@ void InferResetsPass::traceResets(Type dstType, Value dst, unsigned dstID,
     return;
   }
 
-  if (auto dstVector = dyn_cast<FVectorType>(dstType)) {
-    auto srcVector = cast<FVectorType>(srcType);
+  if (auto dstVector = type_dyn_cast<FVectorType>(dstType)) {
+    auto srcVector = type_cast<FVectorType>(srcType);
     auto srcElType = srcVector.getElementType();
     auto dstElType = dstVector.getElementType();
     // Collapse all elements into one shared element. See comment in traceResets
@@ -914,18 +935,18 @@ void InferResetsPass::traceResets(Type dstType, Value dst, unsigned dstID,
   }
 
   // Handle connecting ref's.  Other uses trace using base type.
-  if (auto dstRef = dyn_cast<RefType>(dstType)) {
-    auto srcRef = cast<RefType>(srcType);
+  if (auto dstRef = type_dyn_cast<RefType>(dstType)) {
+    auto srcRef = type_cast<RefType>(srcType);
     return traceResets(dstRef.getType(), dst, dstID, srcRef.getType(), src,
                        srcID, loc);
   }
 
   // Handle reset connections.
-  auto dstBase = dyn_cast<FIRRTLBaseType>(dstType);
-  auto srcBase = dyn_cast<FIRRTLBaseType>(srcType);
+  auto dstBase = type_dyn_cast<FIRRTLBaseType>(dstType);
+  auto srcBase = type_dyn_cast<FIRRTLBaseType>(srcType);
   if (!dstBase || !srcBase)
     return;
-  if (!isa<ResetType>(dstBase) && !isa<ResetType>(srcBase))
+  if (!type_isa<ResetType>(dstBase) && !type_isa<ResetType>(srcBase))
     return;
 
   FieldRef dstField(dst, dstID);
@@ -1001,9 +1022,9 @@ FailureOr<ResetKind> InferResetsPass::inferReset(ResetNetwork net) {
   unsigned invalidDrives = 0;
   for (ResetSignal signal : net) {
     // Keep track of whether this signal contributes a vote for async or sync.
-    if (isa<AsyncResetType>(signal.type))
+    if (type_isa<AsyncResetType>(signal.type))
       ++asyncDrives;
-    else if (isa<UIntType>(signal.type))
+    else if (type_isa<UIntType>(signal.type))
       ++syncDrives;
     else if (isUselessVec(signal.field) ||
              isa_and_nonnull<InvalidValueOp>(
@@ -1038,12 +1059,12 @@ FailureOr<ResetKind> InferResetsPass::inferReset(ResetNetwork net) {
         << "majority of connections to this reset are "
         << (majorityAsync ? "async" : "sync");
     for (auto &drive : getResetDrives(net)) {
-      if ((isa<AsyncResetType>(drive.dst.type) && !majorityAsync) ||
-          (isa<AsyncResetType>(drive.src.type) && !majorityAsync) ||
-          (isa<UIntType>(drive.dst.type) && majorityAsync) ||
-          (isa<UIntType>(drive.src.type) && majorityAsync))
+      if ((type_isa<AsyncResetType>(drive.dst.type) && !majorityAsync) ||
+          (type_isa<AsyncResetType>(drive.src.type) && !majorityAsync) ||
+          (type_isa<UIntType>(drive.dst.type) && majorityAsync) ||
+          (type_isa<UIntType>(drive.src.type) && majorityAsync))
         diag.attachNote(drive.loc)
-            << (isa<AsyncResetType>(drive.src.type) ? "async" : "sync")
+            << (type_isa<AsyncResetType>(drive.src.type) ? "async" : "sync")
             << " drive here:";
     }
     return failure();
@@ -1183,7 +1204,7 @@ static FIRRTLBaseType updateType(FIRRTLBaseType oldType, unsigned fieldID,
   }
 
   // If this is a bundle type, update the corresponding field.
-  if (auto bundleType = dyn_cast<BundleType>(oldType)) {
+  if (auto bundleType = type_dyn_cast<BundleType>(oldType)) {
     unsigned index = getIndexForFieldID(bundleType, fieldID);
     SmallVector<BundleType::BundleElement> fields(bundleType.begin(),
                                                   bundleType.end());
@@ -1193,7 +1214,7 @@ static FIRRTLBaseType updateType(FIRRTLBaseType oldType, unsigned fieldID,
   }
 
   // If this is a vector type, update the element type.
-  if (auto vectorType = dyn_cast<FVectorType>(oldType)) {
+  if (auto vectorType = type_dyn_cast<FVectorType>(oldType)) {
     auto newType = updateType(vectorType.getElementType(),
                               fieldID - getFieldID(vectorType), fieldType);
     return FVectorType::get(newType, vectorType.getNumElements(),
@@ -1207,7 +1228,7 @@ static FIRRTLBaseType updateType(FIRRTLBaseType oldType, unsigned fieldID,
 /// Update the reset type of a specific field.
 bool InferResetsPass::updateReset(FieldRef field, FIRRTLBaseType resetType) {
   // Compute the updated type.
-  auto oldType = cast<FIRRTLType>(field.getValue().getType());
+  auto oldType = type_cast<FIRRTLType>(field.getValue().getType());
   FIRRTLType newType = mapBaseType(oldType, [&](auto base) {
     return updateType(base, field.getFieldID(), resetType);
   });
@@ -1740,7 +1761,8 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
 
       auto newInstOp = instOp.cloneAndInsertPorts(
           {{/*portIndex=*/0,
-            {domain.newPortName, cast<FIRRTLBaseType>(actualReset.getType()),
+            {domain.newPortName,
+             type_cast<FIRRTLBaseType>(actualReset.getType()),
              Direction::In}}});
       instReset = newInstOp.getResult(0);
 
@@ -1789,7 +1811,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
   // Handle registers with reset.
   if (auto regOp = dyn_cast<RegResetOp>(op)) {
     // If the register already has an async reset, leave it untouched.
-    if (isa<AsyncResetType>(regOp.getResetSignal().getType())) {
+    if (type_isa<AsyncResetType>(regOp.getResetSignal().getType())) {
       LLVM_DEBUG(llvm::dbgs()
                  << "- Skipping (has async reset) " << regOp << "\n");
       // The following performs the logic of `CheckResets` in the original

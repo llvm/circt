@@ -146,7 +146,7 @@ PortInfo calyx::getPortInfo(BlockArgument arg) {
 
 /// Returns whether the given operation has a control region.
 static bool hasControlRegion(Operation *op) {
-  return isa<ControlOp, SeqOp, IfOp, WhileOp, ParOp, StaticRepeatOp,
+  return isa<ControlOp, SeqOp, IfOp, RepeatOp, WhileOp, ParOp, StaticRepeatOp,
              StaticParOp, StaticSeqOp, StaticIfOp>(op);
 }
 
@@ -237,8 +237,8 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto &region = op->getRegion(0);
   // Operations that are allowed in the body of a ControlLike op.
   auto isValidBodyOp = [](Operation *operation) {
-    return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp, StaticParOp,
-               StaticRepeatOp, StaticSeqOp, StaticIfOp, InvokeOp>(operation);
+    return isa<EnableOp, InvokeOp, SeqOp, IfOp, RepeatOp, WhileOp, ParOp,
+               StaticParOp, StaticRepeatOp, StaticSeqOp, StaticIfOp>(operation);
   };
   for (auto &&bodyOp : region.front()) {
     if (isValidBodyOp(&bodyOp))
@@ -2524,7 +2524,10 @@ LogicalResult StaticRepeatOp::verify() {
   return success();
 }
 
-static LogicalResult zeroRepeat(StaticRepeatOp op, PatternRewriter &rewriter) {
+template <typename OpTy>
+static LogicalResult zeroRepeat(OpTy op, PatternRewriter &rewriter) {
+  static_assert(IsAny<OpTy, RepeatOp, StaticRepeatOp>(),
+                "Should be a RepeatOp or StaticPRepeatOp");
   if (op.getCount() == 0) {
     Block *controlBody = op.getBodyBlock();
     for (auto &op : make_early_inc_range(*controlBody))
@@ -2540,7 +2543,16 @@ static LogicalResult zeroRepeat(StaticRepeatOp op, PatternRewriter &rewriter) {
 void StaticRepeatOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                                  MLIRContext *context) {
   patterns.add(emptyControl<StaticRepeatOp>);
-  patterns.add(zeroRepeat);
+  patterns.add(zeroRepeat<StaticRepeatOp>);
+}
+
+//===----------------------------------------------------------------------===//
+// RepeatOp
+//===----------------------------------------------------------------------===//
+void RepeatOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                           MLIRContext *context) {
+  patterns.add(emptyControl<RepeatOp>);
+  patterns.add(zeroRepeat<RepeatOp>);
 }
 
 //===----------------------------------------------------------------------===//
