@@ -5571,7 +5571,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
     moduleOp.walk([&](Operation *op) {
       // Populate the symbolCache with all operations that can define a symbol.
       if (auto name = op->getAttrOfType<StringAttr>(
-              hw::InnerName::getInnerNameAttrName()))
+              hw::InnerSymbolTable::getInnerSymbolAttrName()))
         symbolCache.addDefinition(moduleOp.getNameAttr(), name, op);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);

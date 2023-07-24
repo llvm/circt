@@ -1548,7 +1548,8 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
     // Parsing an optional symbol name doesn't fail, so no need to check the
     // result.
     (void)parser.parseOptionalSymbolName(
-        symNameAttr, InnerName::getInnerNameAttrName(), result.attributes);
+        symNameAttr, InnerSymbolTable::getInnerSymbolAttrName(),
+        result.attributes);
   }
 
   llvm::SMLoc parametersLoc, inputsOperandsLoc;
@@ -1589,8 +1590,9 @@ void InstanceOp::print(OpAsmPrinter &p) {
 
   p.printOptionalAttrDict(
       (*this)->getAttrs(),
-      /*elidedAttrs=*/{"instanceName", InnerName::getInnerNameAttrName(),
-                       "moduleName", "argNames", "resultNames", "parameters"});
+      /*elidedAttrs=*/{"instanceName",
+                       InnerSymbolTable::getInnerSymbolAttrName(), "moduleName",
+                       "argNames", "resultNames", "parameters"});
 }
 
 /// Return the name of the specified input port or null if it cannot be

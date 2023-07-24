@@ -250,7 +250,8 @@ void RegOp::build(OpBuilder &builder, OperationState &odsState,
     name = builder.getStringAttr("");
   odsState.addAttribute("name", name);
   if (sym_name)
-    odsState.addAttribute(hw::InnerName::getInnerNameAttrName(), sym_name);
+    odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
+                          sym_name);
   odsState.addTypes(hw::InOutType::get(elementType));
 }
 
@@ -297,7 +298,8 @@ void LogicOp::build(OpBuilder &builder, OperationState &odsState,
     name = builder.getStringAttr("");
   odsState.addAttribute("name", name);
   if (sym_name)
-    odsState.addAttribute(hw::InnerName::getInnerNameAttrName(), sym_name);
+    odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
+                          sym_name);
   odsState.addTypes(hw::InOutType::get(elementType));
 }
 
@@ -1526,7 +1528,8 @@ void WireOp::build(OpBuilder &builder, OperationState &odsState,
   if (!name)
     name = builder.getStringAttr("");
   if (sym_name)
-    odsState.addAttribute(hw::InnerName::getInnerNameAttrName(), sym_name);
+    odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
+                          sym_name);
 
   odsState.addAttribute("name", name);
   odsState.addTypes(InOutType::get(elementType));
