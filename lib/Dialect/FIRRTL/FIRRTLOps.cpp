@@ -229,7 +229,7 @@ size_t firrtl::getNumPorts(Operation *op) {
 /// Check whether an operation has a `DontTouch` annotation, or a symbol that
 /// should prevent certain types of canonicalizations.
 bool firrtl::hasDontTouch(Operation *op) {
-  return op->getAttr(hw::InnerName::getInnerNameAttrName()) ||
+  return op->getAttr(hw::InnerSymbolTable::getInnerSymbolAttrName()) ||
          AnnotationSet(op).hasDontTouch();
 }
 
@@ -4374,7 +4374,7 @@ static ParseResult parseFIRRTLImplicitSSAName(OpAsmParser &parser,
 static void printFIRRTLImplicitSSAName(OpAsmPrinter &p, Operation *op,
                                        DictionaryAttr attrs) {
   SmallVector<StringRef, 4> elides;
-  elides.push_back(hw::InnerName::getInnerNameAttrName());
+  elides.push_back(hw::InnerSymbolTable::getInnerSymbolAttrName());
   elides.push_back(Forceable::getForceableAttrName());
   elideImplicitSSAName(p, op, attrs, elides);
   printElideAnnotations(p, op, attrs, elides);
