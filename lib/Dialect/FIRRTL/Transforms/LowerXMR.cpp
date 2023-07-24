@@ -141,6 +141,12 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             markForRemoval(send);
             return success();
           })
+          .Case<RWProbeOp>([&](RWProbeOp rwprobe) {
+            if (!isZeroWidth(rwprobe.getType()))
+              addReachingSendsEntry(rwprobe.getResult(), rwprobe.getTarget());
+            markForRemoval(rwprobe);
+            return success();
+          })
           .Case<MemOp>([&](MemOp mem) {
             // MemOp can produce debug ports of RefType. Each debug port
             // represents the RefType for the corresponding register of the

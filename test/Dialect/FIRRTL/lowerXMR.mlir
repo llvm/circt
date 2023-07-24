@@ -966,3 +966,21 @@ firrtl.circuit "RefSubZeroWidth" {
     firrtl.ref.define %rw, %sub : !firrtl.probe<vector<bundle<a: uint<0>, b: uint<1>>, 2>>
   }
 }
+
+// -----
+// Check resolving through rwprobe ops, particularly when pointing to specific field.
+// CHECK-LABEL: circuit "RWProbePort"
+
+firrtl.circuit "RWProbePort" {
+  // CHECK:  hw.hierpath private @[[XMRPATH:.+]] [@RWProbePort::@target]
+  // CHECK{LITERAL}: sv.macro.def @ref_RWProbePort_RWProbePort_p "{{0}}"
+  // CHECK-SAME: ([@[[XMRPATH]]])
+  // CHECK: module @RWProbePort(
+  // CHECK-NOT: firrtl.ref.rwprobe
+  // CHECK-NEXT: }
+  firrtl.module @RWProbePort(in %in: !firrtl.vector<uint<1>, 2> sym [<@target,2,public>], out %p: !firrtl.rwprobe<uint<1>>) {
+    %0 = firrtl.ref.rwprobe <@RWProbePort::@target> : !firrtl.uint<1>
+    firrtl.ref.define %p, %0 : !firrtl.rwprobe<uint<1>>
+  }
+}
+
