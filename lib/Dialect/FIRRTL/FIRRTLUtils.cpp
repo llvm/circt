@@ -707,8 +707,9 @@ StringAttr circt::firrtl::getOrAddInnerSym(
     llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace) {
 
   // Return InnerSymAttr with sym on specified fieldID.
-  auto getOrAdd = [&](auto mod, hw::InnerSymAttr attr,
-                      auto fieldID) -> std::pair<hw::InnerSymAttr, StringAttr> {
+  auto getOrAdd =
+      [&](auto mod, hw::InnerSymAttr attr, auto fieldID,
+          StringRef name) -> std::pair<hw::InnerSymAttr, StringAttr> {
     assert(mod);
     auto *context = mod.getContext();
 
@@ -721,7 +722,7 @@ StringAttr circt::firrtl::getOrAddInnerSym(
     }
 
     // Otherwise, create symbol and add to list.
-    auto sym = StringAttr::get(context, getNamespace(mod).newName("sym"));
+    auto sym = StringAttr::get(context, getNamespace(mod).newName(name));
     props.push_back(hw::InnerSymPropertiesAttr::get(
         context, sym, fieldID, StringAttr::get(context, "public")));
     // TODO: store/ensure always sorted, insert directly, faster search.
@@ -736,18 +737,24 @@ StringAttr circt::firrtl::getOrAddInnerSym(
     if (auto mod = dyn_cast<FModuleOp>(target.getOp())) {
       auto portIdx = target.getPort();
       assert(portIdx < mod.getNumPorts());
-      auto [attr, sym] =
-          getOrAdd(mod, mod.getPortSymbolAttr(portIdx), target.getField());
+      auto name = mod.getPorts()[portIdx].name.getValue();
+      auto [attr, sym] = getOrAdd(mod, mod.getPortSymbolAttr(portIdx),
+                                  target.getField(), name);
       mod.setPortSymbolsAttr(portIdx, attr);
       return sym;
     }
   } else {
     // InnerSymbols only supported if op implements the interface.
     if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(target.getOp())) {
+      // Attempt to infer a reasonable name for some ops.
+      StringRef name = "sym";
+      if (auto nameAttr = symOp->getAttrOfType<StringAttr>("name")) {
+        name = nameAttr.getValue();
+      }
       auto mod = symOp->getParentOfType<FModuleOp>();
       assert(mod);
       auto [attr, sym] =
-          getOrAdd(mod, symOp.getInnerSymAttr(), target.getField());
+          getOrAdd(mod, symOp.getInnerSymAttr(), target.getField(), name);
       symOp.setInnerSymbolAttr(attr);
       return sym;
     }
