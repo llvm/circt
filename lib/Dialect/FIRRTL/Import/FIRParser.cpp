@@ -2956,18 +2956,38 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
   // Not public port (verifier)
 
   // Check probe expression is base-type.
-  if (!type_isa<FIRRTLBaseType>(staticRef.getType()))
+  auto targetType = type_dyn_cast<FIRRTLBaseType>(staticRef.getType());
+  if (!targetType)
     return emitError(startTok.getLoc(),
                      "expected base-type expression in 'rwprobe', got ")
            << staticRef.getType();
 
-  // Check for other unsupported reference sources.
   auto fieldRef = getFieldRefFromValue(staticRef);
   auto target = fieldRef.getValue();
 
-  // TODO: Support for non-public ports.
-  if (isa<BlockArgument>(target))
-    return emitError(startTok.getLoc(), "rwprobe of port not yet supported");
+  // Ports are handled differently, emit a RWProbeOp with inner symbol.
+  if (auto arg = dyn_cast<BlockArgument>(target)) {
+    // Check target type.  Replicate inference/verification logic.
+    if (targetType.hasUninferredWidth() || targetType.hasUninferredReset())
+      return emitError(startTok.getLoc(),
+                       "must not have uninferred width or reset in type ")
+             << targetType;
+    auto forceableType =
+        firrtl::detail::getForceableResultType(true, targetType);
+    if (!forceableType)
+      return emitError(startTok.getLoc(), "cannot force target of type ")
+             << targetType;
+
+    // Get InnerRef for target field.
+    // TODO: use `modNameSpace.newName` / use distinct attr.
+    auto mod = cast<FModuleOp>(arg.getOwner()->getParentOp());
+    ModuleNamespace ns(mod);
+    auto sym = getInnerRefTo(
+        hw::InnerSymTarget(arg.getArgNumber(), mod, fieldRef.getFieldID()),
+        [&](FModuleOp mod) -> ModuleNamespace & { return ns; });
+    result = builder.create<RWProbeOp>(sym, targetType);
+    return success();
+  }
 
   auto *definingOp = target.getDefiningOp();
   if (!definingOp)
