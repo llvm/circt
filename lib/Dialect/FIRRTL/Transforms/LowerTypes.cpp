@@ -380,6 +380,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitStmt(StrictConnectOp op);
   bool visitStmt(RefDefineOp op);
   bool visitStmt(WhenOp op);
+  bool visitStmt(GroupOp op);
 
   bool isFailed() const { return encounteredError; }
 
@@ -927,6 +928,12 @@ bool TypeLoweringVisitor::visitStmt(WhenOp op) {
   if (op.hasElseRegion())
     lowerBlock(&op.getElseBlock());
   return false; // don't delete the when!
+}
+
+/// Lower any types declared in the group definition.
+bool TypeLoweringVisitor::visitStmt(GroupOp op) {
+  lowerBlock(op.getBody());
+  return false;
 }
 
 /// Lower memory operations. A new memory is created for every leaf
