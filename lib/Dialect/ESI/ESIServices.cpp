@@ -319,6 +319,10 @@ void ESIConnectServicesPass::runOnOperation() {
 }
 
 LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
+  // If 'mod' doesn't have a body, assume it's an external module.
+  if (mod->getNumRegions() == 0 || mod->getRegion(0).empty())
+    return success();
+
   Block &modBlock = mod->getRegion(0).front();
 
   // Index the local services and create blocks in which to put the requests.
