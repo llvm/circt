@@ -1409,7 +1409,7 @@ namespace {
 struct FIRStmtParser : public FIRParser {
   explicit FIRStmtParser(Block &blockToInsertInto,
                          FIRModuleContext &moduleContext,
-                         Namespace &modNameSpace, FIRVersion &version,
+                         ModuleNamespace &modNameSpace, FIRVersion &version,
                          SymbolRefAttr groupSym = {})
       : FIRParser(moduleContext.getConstants(), moduleContext.getLexer(),
                   version),
@@ -1520,7 +1520,7 @@ private:
   // Extra information maintained across a module.
   FIRModuleContext &moduleContext;
 
-  Namespace &modNameSpace;
+  ModuleNamespace &modNameSpace;
 
   // An optional symbol that contains the current group that we are in.  This is
   // used to construct a nested symbol for a group definition operation.
@@ -2979,12 +2979,10 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
              << targetType;
 
     // Get InnerRef for target field.
-    // TODO: use `modNameSpace.newName` / use distinct attr.
     auto mod = cast<FModuleOp>(arg.getOwner()->getParentOp());
-    ModuleNamespace ns(mod);
     auto sym = getInnerRefTo(
         hw::InnerSymTarget(arg.getArgNumber(), mod, fieldRef.getFieldID()),
-        [&](FModuleOp mod) -> ModuleNamespace & { return ns; });
+        [&](FModuleOp mod) -> ModuleNamespace & { return modNameSpace; });
     result = builder.create<RWProbeOp>(sym, targetType);
     return success();
   }
@@ -4381,19 +4379,18 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
-  Namespace modNameSpace;
   auto portList = moduleOp.getPorts();
   auto portArgs = moduleOp.getArguments();
   for (auto tuple : llvm::zip(portList, portLocs, portArgs)) {
     PortInfo &port = std::get<0>(tuple);
     llvm::SMLoc loc = std::get<1>(tuple);
     BlockArgument portArg = std::get<2>(tuple);
-    if (port.sym)
-      modNameSpace.newName(port.sym.getSymName().getValue());
+    assert(!port.sym);
     if (moduleContext.addSymbolEntry(port.getName(), portArg, loc))
       return failure();
   }
 
+  ModuleNamespace modNameSpace(moduleOp);
   FIRStmtParser stmtParser(*moduleOp.getBodyBlock(), moduleContext,
                            modNameSpace, version);
 
