@@ -2,7 +2,7 @@
 
 from pycde import Input, Output, generator, Module
 from pycde.testing import unittestmodule
-from pycde.types import types, UInt
+from pycde.types import types, UInt, SInt
 
 
 # CHECK: msft.module @InfixArith {} (%in0: si16, %in1: ui16)
@@ -64,8 +64,8 @@ class InfixLogic(Module):
 # CHECK-NEXT:    msft.output
 @unittestmodule(run_passes=True)
 class SignlessInfixComparison(Module):
-  in0 = Input(types.i16)
-  in1 = Input(types.i16)
+  in0 = Input(SInt(16))
+  in1 = Input(SInt(16))
 
   @generator
   def construct(ports):
@@ -90,8 +90,8 @@ class SignlessInfixComparison(Module):
 # CHECK-NEXT:    msft.output
 @unittestmodule(run_passes=False)
 class InfixComparison(Module):
-  in0 = Input(types.ui16)
-  in1 = Input(types.ui16)
+  in0 = Input(UInt(16))
+  in1 = Input(UInt(16))
 
   @generator
   def construct(ports):
