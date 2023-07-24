@@ -58,6 +58,7 @@ struct Emitter {
   void emitModulePorts(ArrayRef<PortInfo> ports,
                        Block::BlockArgListType arguments = {});
   void emitModuleParameters(Operation *op, ArrayAttr parameters);
+  void emitDeclaration(GroupDeclOp op);
 
   // Statement emission
   void emitStatementsInBlock(Block &block);
@@ -85,6 +86,7 @@ struct Emitter {
   void emitStatement(RefForceInitialOp op);
   void emitStatement(RefReleaseOp op);
   void emitStatement(RefReleaseInitialOp op);
+  void emitStatement(GroupOp op);
 
   template <class T>
   void emitVerifStatement(T op, StringRef mnemonic);
@@ -338,6 +340,7 @@ void Emitter::emitCircuit(CircuitOp op) {
             emitModule(op);
             ps << PP::newline;
           })
+          .Case<GroupDeclOp>([&](auto op) { emitDeclaration(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside circuit");
           });
@@ -462,6 +465,24 @@ void Emitter::emitModuleParameters(Operation *op, ArrayAttr parameters) {
   }
 }
 
+/// Emit an optional group declaration.
+void Emitter::emitDeclaration(GroupDeclOp op) {
+  startStatement();
+  ps << "declgroup " << PPExtString(op.getSymName()) << ", "
+     << PPExtString(stringifyGroupConvention(op.getConvention())) << " : ";
+  emitLocationAndNewLine(op);
+  ps.scopedBox(PP::bbox2, [&]() {
+    for (auto &bodyOp : op.getBody().getOps()) {
+      TypeSwitch<Operation *>(&bodyOp)
+          .Case<GroupDeclOp>([&](auto op) { emitDeclaration(op); })
+          .Default([&](auto op) {
+            emitOpError(op,
+                        "not supported for emission inside group declaration");
+          });
+    }
+  });
+}
+
 /// Check if an operation is inlined into the emission of their users. For
 /// example, subfields are always inlined.
 static bool isEmittedInline(Operation *op) {
@@ -479,8 +500,8 @@ void Emitter::emitStatementsInBlock(Block &block) {
               PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp, StrictConnectOp,
               InstanceOp, AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
               MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp,
-              RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp>(
-            [&](auto op) { emitStatement(op); })
+              RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
+              GroupOp>([&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           startStatement();
           ps << "// operation " << PPExtString(op->getName().getStringRef());
@@ -916,6 +937,14 @@ void Emitter::emitStatement(RefReleaseInitialOp op) {
   emitLocationAndNewLine(op);
 }
 
+void Emitter::emitStatement(GroupOp op) {
+  startStatement();
+  ps << "group " << op.getGroupName().getLeafReference() << " :";
+  emitLocationAndNewLine(op);
+  auto *body = op.getBody();
+  ps.scopedBox(PP::bbox2, [&]() { emitStatementsInBlock(*body); });
+}
+
 void Emitter::emitStatement(InvalidValueOp op) {
   // Only emit this invalid value if it is used somewhere else than the RHS of
   // a connect.
@@ -1228,7 +1257,7 @@ void circt::firrtl::registerToFIRFileTranslation() {
   static mlir::TranslateFromMLIRRegistration toFIR(
       "export-firrtl", "emit FIRRTL dialect operations to .fir output",
       [](ModuleOp module, llvm::raw_ostream &os) {
-        return exportFIRFile(module, os, targetLineLength, {3, 0, 0});
+        return exportFIRFile(module, os, targetLineLength, {3, 1, 0});
       },
       [](mlir::DialectRegistry &registry) {
         registry.insert<chirrtl::CHIRRTLDialect>();

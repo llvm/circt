@@ -12,7 +12,7 @@
 // Check if printing with very short line length, removing info locators (@[...]), no line is longer than 5x line length.
 // RUN: circt-translate --export-firrtl %s --target-line-length=10 | sed -e 's/ @\[.*\]//' | FileCheck %s --implicit-check-not "{{^(.{50})}}" --check-prefix PRETTY
 
-// CHECK-LABEL: FIRRTL version 3.0.0
+// CHECK-LABEL: FIRRTL version 3.1.0
 // CHECK-LABEL: circuit Foo :
 // PRETTY-LABEL: circuit Foo :
 firrtl.circuit "Foo" {
@@ -632,4 +632,47 @@ firrtl.circuit "Foo" {
     firrtl.ref.define %_12, %18 : !firrtl.probe<uint<1>>
     firrtl.ref.define %_13, %_15_ref : !firrtl.rwprobe<uint<1>>
   }
+
+  // Test optional group declaration and definition emission.
+  //
+  // CHECK-LABEL: declgroup GroupA, bind :
+  // CHECK-NEXT:    declgroup GroupB, bind :
+  // CHECK-NEXT:      declgroup GroupC, bind :
+  // CHECK-NEXT:      declgroup GroupD, bind :
+  // CHECK-NEXT:        declgroup GroupE, bind :
+  // CHECK-NEXT:    declgroup GroupF, bind :
+  firrtl.declgroup @GroupA bind {
+    firrtl.declgroup @GroupB bind {
+      firrtl.declgroup @GroupC bind {
+      }
+      firrtl.declgroup @GroupD bind {
+        firrtl.declgroup @GroupE bind {
+        }
+      }
+    }
+    firrtl.declgroup @GroupF bind {
+    }
+  }
+  // CHECK:      module ModuleWithGroups :
+  // CHECK-NEXT:   group GroupA :
+  // CHECK-NEXT:     group GroupB :
+  // CHECK-NEXT:       group GroupC :
+  // CHECK-NEXT:       group GroupD :
+  // CHECK-NEXT:         group GroupE :
+  // CHECK-NEXT:     group GroupF :
+  firrtl.module @ModuleWithGroups() {
+    firrtl.group @GroupA {
+      firrtl.group @GroupA::@GroupB {
+        firrtl.group @GroupA::@GroupB::@GroupC {
+        }
+        firrtl.group @GroupA::@GroupB::@GroupD {
+          firrtl.group @GroupA::@GroupB::@GroupD::@GroupE {
+          }
+        }
+      }
+      firrtl.group @GroupA::@GroupF {
+      }
+    }
+  }
+
 }
