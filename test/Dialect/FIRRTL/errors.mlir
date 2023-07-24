@@ -1856,3 +1856,46 @@ firrtl.circuit "GroupDrivesSinksOutside" {
     }
   }
 }
+
+// -----
+
+firrtl.circuit "RWProbeRemote" {
+  firrtl.module @Other() {
+    %w = firrtl.wire sym @x : !firrtl.uint<1>
+  }
+  firrtl.module @RWProbeRemote() {
+    // expected-error @below {{op has non-local target}}
+    %rw = firrtl.ref.rwprobe <@Other::@x> : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "RWProbeTypes" {
+  firrtl.module @RWProbeTypes() {
+    %w = firrtl.wire sym @x : !firrtl.sint<1>
+    // expected-error @below {{op has type mismatch: target resolves to '!firrtl.sint<1>' instead of expected '!firrtl.uint<1>'}}
+    %rw = firrtl.ref.rwprobe <@RWProbeTypes::@x> : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "RWProbeUninferred" {
+  firrtl.module @RWProbeUninferred() {
+    %w = firrtl.wire sym @x : !firrtl.uint
+    // expected-error @below {{must not have uninferred width or reset}}
+    %rw = firrtl.ref.rwprobe <@RWProbeUninferred::@x> : !firrtl.uint
+  }
+}
+
+// -----
+
+firrtl.circuit "RWProbeInstance" {
+  firrtl.extmodule @Ext()
+  firrtl.module @RWProbeInstance() {
+    firrtl.instance inst sym @inst @Ext()
+    // expected-error @below {{op has target that does not resolve to a result}}
+    %rw = firrtl.ref.rwprobe <@RWProbeInstance::@inst> : !firrtl.uint<1>
+  }
+}
