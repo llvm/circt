@@ -727,3 +727,18 @@ hw.module @NestedSubaccess(%clock: i1, %en_0: i1, %en_1: i1, %en_2: i1, %addr_0:
   // CHECK-NEXT: }
   hw.output
 }
+
+// CHECK-LABEL: @with_preset
+hw.module @with_preset(%clock: i1, %reset: i1, %next32: i32, %next16: i16) -> () {
+  %preset_0 = seq.firreg %next32 clock %clock preset 0 : i32
+  %preset_42 = seq.firreg %next16 clock %clock preset 42 : i16
+
+  // CHECK: %c42_i16 = hw.constant 42 : i16
+  // CHECK: %c0_i32 = hw.constant 0 : i32
+  // CHECK: sv.ordered {
+  // CHECK:   sv.initial {
+  // CHECK:     sv.bpassign %preset_0, %c0_i32 : i32
+  // CHECK:     sv.bpassign %preset_42, %c42_i16 : i16
+  // CHECK:   }
+  // CHECK: }
+}
