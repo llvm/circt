@@ -57,10 +57,6 @@ class InfixLogic(Module):
 # CHECK: msft.module @SignlessInfixComparison {} (%in0: i16, %in1: i16)
 # CHECK-NEXT:    %0 = comb.icmp bin eq %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
 # CHECK-NEXT:    %1 = comb.icmp bin ne %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
-# CHECK-NEXT:    %1 = comb.icmp bin lt %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
-# CHECK-NEXT:    %1 = comb.icmp bin gt %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
-# CHECK-NEXT:    %1 = comb.icmp bin le %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
-# CHECK-NEXT:    %1 = comb.icmp bin ge %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
 # CHECK-NEXT:    msft.output
 @unittestmodule(run_passes=True)
 class SignlessInfixComparison(Module):
@@ -71,10 +67,6 @@ class SignlessInfixComparison(Module):
   def construct(ports):
     eq = ports.in0 == ports.in1
     neq = ports.in0 != ports.in1
-    lt = ports.in0 < ports.in1
-    gt = ports.in0 > ports.in1
-    le = ports.in0 <= ports.in1
-    ge = ports.in0 >= ports.in1
 
 
 # -----
@@ -83,10 +75,6 @@ class SignlessInfixComparison(Module):
 # CHECK: msft.module @InfixComparison {} (%in0: ui16, %in1: ui16)
 # CHECK-NEXT:    %0 = hwarith.icmp eq %in0, %in1 {sv.namehint = "in0_eq_in1"} : ui16, ui16
 # CHECK-NEXT:    %1 = hwarith.icmp ne %in0, %in1 {sv.namehint = "in0_neq_in1"} : ui16, ui16
-# CHECK-NEXT:    %1 = hwarith.icmp lt %in0, %in1 {sv.namehint = "in0_lt_in1"} : ui16, ui16
-# CHECK-NEXT:    %1 = hwarith.icmp gt %in0, %in1 {sv.namehint = "in0_gt_in1"} : ui16, ui16
-# CHECK-NEXT:    %1 = hwarith.icmp le %in0, %in1 {sv.namehint = "in0_le_in1"} : ui16, ui16
-# CHECK-NEXT:    %1 = hwarith.icmp ge %in0, %in1 {sv.namehint = "in0_ge_in1"} : ui16, ui16
 # CHECK-NEXT:    msft.output
 @unittestmodule(run_passes=False)
 class InfixComparison(Module):
@@ -97,10 +85,6 @@ class InfixComparison(Module):
   def construct(ports):
     eq = ports.in0 == ports.in1
     neq = ports.in0 != ports.in1
-    lt = ports.in0 < ports.in1
-    gt = ports.in0 > ports.in1
-    le = ports.in0 <= ports.in1
-    ge = ports.in0 >= ports.in1
 
 
 # -----

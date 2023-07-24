@@ -462,21 +462,16 @@ class IntSignal(BitVectorSignal):
     from .circt.dialects import hwarith
     return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_NE, "neq")
 
-  def __lt__(self, other):
-    from .circt.dialects import hwarith
-    return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_LT, "lt")
+  # TODO: This class will contain comparison operators (<, >, <=, >=)
 
-  def __gt__(self, other):
-    from .circt.dialects import hwarith
-    return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_GT, "gt")
+  def __lt__(self, other):
+    assert False, "Unimplemented"
 
   def __le__(self, other):
-    from .circt.dialects import hwarith
-    return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_LE, "le")
+    assert False, "Unimplemented"
 
   def __ge__(self, other):
-    from .circt.dialects import hwarith
-    return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_GE, "ge")
+    assert False, "Unimplemented"
 
 
 class UIntSignal(IntSignal):
