@@ -9,29 +9,14 @@
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
+#include "circt/Support/ParsingUtils.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
-#include <mlir/IR/BuiltinAttributes.h>
 
 using namespace circt;
 using namespace circt::hw;
-
-/// Get the portname from an SSA value string, if said value name is not a
-/// number
-StringAttr module_like_impl::getPortNameAttr(MLIRContext *context,
-                                             StringRef name) {
-  if (!name.empty()) {
-    // Ignore numeric names like %42
-    assert(name.size() > 1 && name[0] == '%' && "Unknown MLIR name");
-    if (isdigit(name[1]))
-      name = StringRef();
-    else
-      name = name.drop_front();
-  }
-  return StringAttr::get(context, name);
-}
 
 /// Parse a function result list.
 ///
@@ -109,7 +94,7 @@ ParseResult module_like_impl::parseModuleFunctionSignature(
   // Process the ssa args for the information we're looking for.
   SmallVector<Type> argTypes;
   for (auto &arg : args) {
-    argNames.push_back(getPortNameAttr(context, arg.ssaName.name));
+    argNames.push_back(parsing_util::getNameFromSSA(context, arg.ssaName.name));
     argTypes.push_back(arg.type);
     if (!arg.sourceLoc)
       arg.sourceLoc = parser.getEncodedSourceLoc(arg.ssaName.location);
