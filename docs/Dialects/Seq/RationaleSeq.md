@@ -119,10 +119,13 @@ from the design.
 reset is asynchronous.
 - **isAsync**: Optional boolean flag indicating whether the reset is
 asynchronous.
+- **preset**: Optional attribute specifying a preset value. If no preset
+attribute is present, the register is random-initialized.
 
 ```mlir
 %reg = seq.firreg %input clock %clk [ sym @sym ]
-    [ reset (sync|async) %reset, %value ] : $type(input)
+    [ reset (sync|async) %reset, %value ]
+    [ preset value ] : $type(input)
 ```
 
 Examples of registers:
@@ -134,7 +137,9 @@ Examples of registers:
     reset sync %reset, %value : i64
 
 %reg_async_reset = seq.firreg %input clock %clk sym @sym
-    reset async %reset, %value : i1
+    reset async %reset, %value : i1f
+
+%reg_preset = seq.firreg %next clock %clock preset 123 : i32
 ```
 
 A register without a reset lowers directly to an always block:
@@ -158,7 +163,7 @@ end
 ```
 
 Additionally, `sv` operations are also included to provide the register with
-a randomized preset value.
+a randomized preset value or an explicit preset constant.
 Since items assigned in an `always_ff` block cannot be initialised in an
 `initial` block, this register lowers to `always`.
 

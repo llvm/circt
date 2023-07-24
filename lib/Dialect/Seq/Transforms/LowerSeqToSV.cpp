@@ -200,6 +200,7 @@ public:
 private:
   struct RegLowerInfo {
     sv::RegOp reg;
+    IntegerAttr preset;
     Value asyncResetSignal;
     Value asyncResetValue;
     int64_t randStart;
@@ -282,29 +283,34 @@ void FirRegLower::lower() {
   if (regs.empty())
     return;
 
-  // Lower the regs to SV regs.
-  SmallVector<RegLowerInfo> toInit;
-  for (auto reg : llvm::make_early_inc_range(regs))
-    toInit.push_back(lower(reg));
+  // Lower the regs to SV regs. Group them by initializer and reset kind.
+  SmallVector<RegLowerInfo> randomInit, presetInit;
+  llvm::MapVector<Value, SmallVector<RegLowerInfo>> asyncResets;
+  for (auto reg : llvm::make_early_inc_range(regs)) {
+    auto svReg = lower(reg);
+    if (svReg.preset)
+      presetInit.push_back(svReg);
+    else if (!disableRegRandomization)
+      randomInit.push_back(svReg);
+
+    if (svReg.asyncResetSignal)
+      asyncResets[svReg.asyncResetSignal].emplace_back(svReg);
+  }
 
   // Compute total width of random space.  Place non-chisel registers at the end
   // of the space.  The Random space is unique to the initial block, due to
   // verilog thread rules, so we can drop trailing random calls if they are
   // unused.
   uint64_t maxBit = 0;
-  for (auto reg : toInit)
+  for (auto reg : randomInit)
     if (reg.randStart >= 0)
       maxBit = std::max(maxBit, (uint64_t)reg.randStart + reg.width);
 
-  // This is a map from async reset signals to register info.
-  llvm::MapVector<Value, SmallVector<RegLowerInfo>> asyncResets;
-  for (auto &reg : toInit) {
+  for (auto &reg : randomInit) {
     if (reg.randStart == -1) {
       reg.randStart = maxBit;
       maxBit += reg.width;
     }
-    if (reg.asyncResetSignal)
-      asyncResets[reg.asyncResetSignal].emplace_back(reg);
   }
 
   // Create an initial block at the end of the module where random
@@ -319,7 +325,7 @@ void FirRegLower::lower() {
   //     `INIT_RANDOM_PROLOG_
   //     ... initBuilder ..
   // `endif
-  if (toInit.empty() || (disableRegRandomization && asyncResets.empty()))
+  if (randomInit.empty() && presetInit.empty() && asyncResets.empty())
     return;
 
   auto loc = module.getLoc();
@@ -336,7 +342,7 @@ void FirRegLower::lower() {
       });
 
       builder.create<sv::InitialOp>([&] {
-        if (!disableRegRandomization) {
+        if (!randomInit.empty()) {
           builder.create<sv::IfDefProceduralOp>("INIT_RANDOM_PROLOG_", [&] {
             builder.create<sv::VerbatimOp>("`INIT_RANDOM_PROLOG_");
           });
@@ -380,9 +386,17 @@ void FirRegLower::lower() {
             }
 
             // Create initialisers for all registers.
-            for (auto &svReg : toInit)
+            for (auto &svReg : randomInit)
               initialize(builder, svReg, randValues);
           });
+        }
+
+        if (!presetInit.empty()) {
+          for (auto &svReg : presetInit) {
+            auto loc = svReg.reg.getLoc();
+            auto cst = getOrCreateConstant(loc, svReg.preset.getValue());
+            builder.create<sv::BPAssignOp>(loc, svReg.reg, cst);
+          }
         }
 
         if (!asyncResets.empty()) {
@@ -629,7 +643,7 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
   Location loc = reg.getLoc();
 
   ImplicitLocOpBuilder builder(reg.getLoc(), reg);
-  RegLowerInfo svReg{nullptr, nullptr, nullptr, -1, 0};
+  RegLowerInfo svReg{nullptr, reg.getPresetAttr(), nullptr, nullptr, -1, 0};
   svReg.reg = builder.create<sv::RegOp>(loc, reg.getType(), reg.getNameAttr());
   svReg.width = hw::getBitWidth(reg.getResult().getType());
 

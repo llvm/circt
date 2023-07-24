@@ -114,7 +114,8 @@ def FirRegOp : SeqOp<"firreg",
 
     ```
     %name = seq.firreg %next clock %clk [ sym @sym ]
-        [ reset (sync|async) %reset, %value ] : type
+        [ reset (sync|async) %reset, %value ]
+        [ preset value ] : type
     ```
 
     Implicitly, all registers are pre-set to a randomized value.
@@ -132,6 +133,7 @@ def FirRegOp : SeqOp<"firreg",
 
   let arguments = (ins AnyType:$next, I1:$clk, StrAttr:$name,
                        OptionalAttr<SymbolNameAttr>:$inner_sym,
+                       OptionalAttr<APIntAttr>:$preset,
                        Optional<I1>:$reset, Optional<AnyType>:$resetValue,
                        UnitAttr:$isAsync);
   let results = (outs AnyType:$data);
@@ -156,6 +158,8 @@ def FirRegOp : SeqOp<"firreg",
   let extraClassDeclaration = [{
     /// Check whether the register has a reset value.
     bool hasReset() { return !!getReset(); }
+    /// Check whether the register has a preset value.
+    bool hasPresetValue() { return !!getPresetAttr(); }
   }];
 }
 
