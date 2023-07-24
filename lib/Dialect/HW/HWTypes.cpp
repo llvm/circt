@@ -590,6 +590,221 @@ TypedeclOp TypeAliasType::getTypeDecl(const HWSymbolCache &cache) {
   return typeScope.lookupSymbol<TypedeclOp>(ref.getLeafReference());
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// ModuleType
+////////////////////////////////////////////////////////////////////////////////
+
+LogicalResult ModuleType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                 ArrayRef<ModulePort> ports) {
+  if (llvm::any_of(ports, [](const ModulePort &port) {
+        return hasHWInOutType(port.type);
+      }))
+    return emitError() << "Ports cannot be inout types";
+  return success();
+}
+
+size_t ModuleType::getNumInputs() { return getInputTypes().size(); }
+
+size_t ModuleType::getNumOutputs() { return getOutputTypes().size(); }
+
+SmallVector<Type> ModuleType::getInputTypes() {
+  SmallVector<Type> retval;
+  for (auto &p : getPorts()) {
+    if (p.dir == ModulePort::Direction::Input ||
+        p.dir == ModulePort::Direction::InOut) {
+      retval.push_back(p.type);
+    }
+  }
+  return retval;
+}
+
+SmallVector<Type> ModuleType::getOutputTypes() {
+  SmallVector<Type> retval;
+  for (auto &p : getPorts()) {
+    if (p.dir == ModulePort::Direction::Output) {
+      retval.push_back(p.type);
+    }
+  }
+  return retval;
+}
+
+Type ModuleType::getInputType(size_t idx) {
+  for (auto &p : getPorts()) {
+    if (p.dir == ModulePort::Direction::Input ||
+        p.dir == ModulePort::Direction::InOut) {
+      if (!idx)
+        return p.type;
+      --idx;
+    }
+  }
+  // Tolerate Malformed IR for debug printing
+  return {};
+}
+
+Type ModuleType::getOutputType(size_t idx) {
+  for (auto &p : getPorts()) {
+    if (p.dir == ModulePort::Direction::Output) {
+      if (!idx)
+        return p.type;
+      --idx;
+    }
+  }
+  // Tolerate Malformed IR for debug printing
+  return {};
+}
+
+SmallVector<StringAttr> ModuleType::getInputNames() {
+  SmallVector<StringAttr> retval;
+  for (auto &p : getPorts()) {
+    if (p.dir == ModulePort::Direction::Input ||
+        p.dir == ModulePort::Direction::InOut) {
+      retval.push_back(p.name);
+    }
+  }
+  return retval;
+}
+
+SmallVector<StringAttr> ModuleType::getOutputNames() {
+  SmallVector<StringAttr> retval;
+  for (auto &p : getPorts()) {
+    if (p.dir == ModulePort::Direction::Output) {
+      retval.push_back(p.name);
+    }
+  }
+  return retval;
+}
+
+StringAttr ModuleType::getNameAttr(size_t idx) { return getPorts()[idx].name; }
+
+StringRef ModuleType::getName(size_t idx) {
+  auto sa = getNameAttr(idx);
+  if (sa)
+    return sa.getValue();
+  return {};
+}
+
+StringAttr ModuleType::getInputNameAttr(size_t idx) {
+  for (auto &p : getPorts()) {
+    if (p.dir == ModulePort::Direction::Input ||
+        p.dir == ModulePort::Direction::InOut) {
+      if (!idx)
+        return p.name;
+      --idx;
+    }
+  }
+  // Tolerate Malformed IR for debug printing
+  return {};
+}
+
+StringRef ModuleType::getInputName(size_t idx) {
+  auto sa = getInputNameAttr(idx);
+  if (sa)
+    return sa.getValue();
+  return {};
+}
+
+StringAttr ModuleType::getOutputNameAttr(size_t idx) {
+  for (auto &p : getPorts()) {
+    if (p.dir == ModulePort::Direction::Output) {
+      if (!idx)
+        return p.name;
+      --idx;
+    }
+  }
+  // Tolerate Malformed IR for debug printing
+  return {};
+}
+
+StringRef ModuleType::getOutputName(size_t idx) {
+  auto sa = getOutputNameAttr(idx);
+  if (sa)
+    return sa.getValue();
+  return {};
+}
+
+FunctionType ModuleType::getFuncType() { return nullptr; }
+
+namespace mlir {
+template <>
+struct FieldParser<circt::hw::ModulePort> {
+  static FailureOr<circt::hw::ModulePort> parse(AsmParser &parser) {
+    StringRef dir, name;
+    Type type;
+    if (parser.parseKeyword(&dir) || parser.parseKeyword(&name) ||
+        parser.parseColon() || parser.parseType(type))
+      return failure();
+    circt::hw::ModulePort::Direction d;
+    if (dir == "input")
+      d = circt::hw::ModulePort::Input;
+    else if (dir == "output")
+      d = circt::hw::ModulePort::Output;
+    else if (dir == "inout")
+      d = circt::hw::ModulePort::InOut;
+    else
+      return failure();
+    return circt::hw::ModulePort{parser.getBuilder().getStringAttr(name), type,
+                                 d};
+  }
+};
+} // namespace mlir
+
+namespace circt {
+namespace hw {
+
+static raw_ostream &operator<<(raw_ostream &printer, ModulePort port) {
+  StringRef dirstr;
+  switch (port.dir) {
+  case ModulePort::Direction::Input:
+    dirstr = "input";
+    break;
+  case ModulePort::Direction::Output:
+    dirstr = "output";
+    break;
+  case ModulePort::Direction::InOut:
+    dirstr = "inout";
+    break;
+  default:
+    assert(0 && "unknown direction");
+    dirstr = "unknown";
+    break;
+  }
+  printer << dirstr << " " << port.name << " : " << port.type;
+  return printer;
+}
+static bool operator==(const ModulePort &a, const ModulePort &b) {
+  return a.dir == b.dir && a.name == b.name && a.type == b.type;
+}
+static llvm::hash_code hash_value(const ModulePort &port) {
+  return llvm::hash_combine(port.dir, port.name, port.type);
+}
+} // namespace hw
+} // namespace circt
+
+ModuleType circt::hw::detail::FnToMod(Operation *op, ArrayAttr inputNames,
+                                      ArrayAttr outputNames) {
+  return FnToMod(
+      cast<FunctionType>(cast<mlir::FunctionOpInterface>(op).getFunctionType()),
+      inputNames, outputNames);
+}
+
+ModuleType circt::hw::detail::FnToMod(FunctionType fnty, ArrayAttr inputNames,
+                                      ArrayAttr outputNames) {
+  SmallVector<ModulePort> ports;
+  for (auto [t, n] : llvm::zip(fnty.getInputs(), inputNames))
+    if (auto iot = dyn_cast<hw::InOutType>(t))
+      ports.push_back({cast<StringAttr>(n), iot.getElementType(),
+                       ModulePort::Direction::InOut});
+    else
+      ports.push_back({cast<StringAttr>(n), t, ModulePort::Direction::Input});
+  for (auto [t, n] : llvm::zip(fnty.getResults(), outputNames))
+    ports.push_back({cast<StringAttr>(n), t, ModulePort::Direction::Output});
+  return ModuleType::get(fnty.getContext(), ports);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// BoilerPlate
+////////////////////////////////////////////////////////////////////////////////
+
 void HWDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST

@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_HW_HWOPINTERFACES_H
 #define CIRCT_DIALECT_HW_HWOPINTERFACES_H
 
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"

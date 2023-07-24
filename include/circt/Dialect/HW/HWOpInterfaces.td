@@ -38,6 +38,11 @@ def HWModuleLike : OpInterface<"HWModuleLike", [Symbol]> {
     InterfaceMethod<"Get a port symbol attribute",
     "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex)>,
 
+    InterfaceMethod<"Get the module type",
+    "::circt::hw::ModuleType", "getModuleType", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{ return ::circt::hw::detail::FnToMod($_op, getInputNames(), getOutputNames()); }]>,
+
     InterfaceMethod<"Return the number of inputs to this module",
     "unsigned", "getNumInputs", (ins),
     /*methodBody=*/[{}],
