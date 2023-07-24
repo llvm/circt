@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Ibis/IbisOps.h"
-#include "circt/Dialect/HW/ModuleImplementation.h"
+#include "circt/Support/ParsingUtils.h"
 
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -50,8 +50,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   // Process the ssa args for the information we're looking for.
   SmallVector<Type> argTypes;
   for (auto &arg : args) {
-    argNames.push_back(
-        hw::module_like_impl::getPortNameAttr(context, arg.ssaName.name));
+    argNames.push_back(parsing_util::getNameFromSSA(context, arg.ssaName.name));
     argTypes.push_back(arg.type);
     if (!arg.sourceLoc)
       arg.sourceLoc = parser.getEncodedSourceLoc(arg.ssaName.location);

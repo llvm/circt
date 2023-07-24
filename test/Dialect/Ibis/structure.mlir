@@ -3,9 +3,17 @@
 // CHECK-LABEL: ibis.class @C {
 // CHECK:         ibis.func @getAndSet(%x: ui32) -> ui32 {
 // CHECK:           ibis.return %x : ui32
+// CHECK:         ibis.func @returnNothing() {
+// CHECK:           ibis.return
+// CHECK:         ibis.func @returnNothingWithRet() {
+// CHECK:           ibis.return
 ibis.class @C {
   ibis.func @getAndSet(%x: ui32) -> ui32 {
     ibis.return %x : ui32
+  }
+  ibis.func @returnNothing() {}
+  ibis.func @returnNothingWithRet() {
+    ibis.return
   }
 }
 
