@@ -13,19 +13,14 @@
 #ifndef CIRCT_DIALECT_HW_HWOPINTERFACES
 #define CIRCT_DIALECT_HW_HWOPINTERFACES
 
+include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/OpBase.td"
 
-def HWModuleLike : OpInterface<"HWModuleLike"> {
+def HWModuleLike : OpInterface<"HWModuleLike", [Symbol]> {
   let cppNamespace = "circt::hw";
   let description = "Provide common module information.";
 
   let methods = [
-    InterfaceMethod<"Check whether the module is publicly visible",
-    "bool", "isPublic", (ins),
-    /*methodBody=*/[{
-      return ::mlir::SymbolTable::getSymbolVisibility($_op) ==
-             ::mlir::SymbolTable::Visibility::Public;
-    }]>,
 
     InterfaceMethod<"Get the module name",
     "::llvm::StringRef", "getModuleName", (ins),
