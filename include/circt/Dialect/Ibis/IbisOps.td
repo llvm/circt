@@ -29,7 +29,7 @@ def ClassOp : IbisOp<"class", [
 
   let summary = "Ibis class";
   let description = [{
-    Ibis has the notion of a class which can contain functions and member
+    Ibis has the notion of a class which can contain methods and member
     variables.
   }];
 
@@ -80,6 +80,7 @@ def FuncOp : IbisOp<"func", [
                        OptionalAttr<DictArrayAttr>:$res_attrs);
   let regions = (region SizedRegion<1>:$body);
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.

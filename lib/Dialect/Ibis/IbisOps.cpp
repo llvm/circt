@@ -106,6 +106,13 @@ void FuncOp::getAsmBlockArgumentNames(mlir::Region &region,
       setNameFn(block->getArgument(idx), argName);
 }
 
+LogicalResult FuncOp::verify() {
+  // Check that we have only one return value.
+  if (getFunctionType().getNumResults() > 1)
+    return failure();
+  return success();
+}
+
 void ReturnOp::build(OpBuilder &odsBuilder, OperationState &odsState) {}
 
 LogicalResult ReturnOp::verify() {
