@@ -157,7 +157,7 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
   llvm::transform(argReplacements, std::back_inserter(argReplacementsIdxs),
                   [](auto &pair) { return pair.first; });
   for (auto i : llvm::reverse(argReplacementsIdxs))
-    wrapperModPortInfo.inputs.erase(wrapperModPortInfo.inputs.begin() + i);
+    wrapperModPortInfo.eraseInput(i);
   auto wrapperMod = b.create<hw::HWModuleOp>(
       loc, StringAttr::get(ctx, func.getName() + "_esi_wrapper"),
       wrapperModPortInfo);
@@ -176,7 +176,7 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
 
   // Maintain which index we're currently at in the lowered handshake module's
   // return.
-  unsigned resIdx = origPorts.outputs.size();
+  unsigned resIdx = origPorts.sizeOutputs();
 
   // Maintain the arguments which each memory will add to the inner module
   // instance.
@@ -187,7 +187,7 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
     b.setInsertionPoint(wrapperMod);
     // Create a memory service declaration for each memref argument that was
     // served.
-    auto origPortInfo = origPorts.inputs[i];
+    auto origPortInfo = origPorts.atInput(i);
     auto memrefShape = memType.memRefType.getShape();
     auto dataType = memType.memRefType.getElementType();
     assert(memrefShape.size() == 1 && "Only 1D memrefs are supported");

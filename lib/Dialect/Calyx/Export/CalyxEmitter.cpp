@@ -698,9 +698,9 @@ void Emitter::emitPrimitiveExtern(hw::HWModuleExternOp op) {
 /// Emit the ports of a component.
 void Emitter::emitPrimitivePorts(hw::HWModuleExternOp op) {
   auto emitPorts = [&](auto ports, bool isInput) {
+    auto e = std::distance(ports.begin(), ports.end());
     os << LParen();
-    for (size_t i = 0, e = ports.size(); i < e; ++i) {
-      const hw::PortInfo &port = ports[i];
+    for (auto [i, port] : llvm::enumerate(ports)) {
       DictionaryAttr portAttr =
           isInput ? op.getArgAttrDict(i) : op.getResultAttrDict(i);
 
@@ -708,9 +708,10 @@ void Emitter::emitPrimitivePorts(hw::HWModuleExternOp op) {
       // We only care about the bit width in the emitted .futil file.
       // Emit parameterized or non-parameterized bit width.
       if (hw::isParametricType(port.type)) {
-        hw::ParamDeclRefAttr bitWidth = port.type.cast<hw::IntType>()
-                                            .getWidth()
-                                            .dyn_cast<hw::ParamDeclRefAttr>();
+        hw::ParamDeclRefAttr bitWidth =
+            port.type.template cast<hw::IntType>()
+                .getWidth()
+                .template dyn_cast<hw::ParamDeclRefAttr>();
         os << bitWidth.getName().str();
       } else {
         unsigned int bitWidth = port.type.getIntOrFloatBitWidth();
@@ -722,9 +723,10 @@ void Emitter::emitPrimitivePorts(hw::HWModuleExternOp op) {
     }
     os << RParen();
   };
-  emitPorts(op.getPorts().inputs, true);
+  auto ports = hw::getModulePortInfo(op);
+  emitPorts(ports.inputs(), true);
   os << arrow();
-  emitPorts(op.getPorts().outputs, false);
+  emitPorts(ports.outputs(), false);
 }
 
 void Emitter::emitInstance(InstanceOp op) {

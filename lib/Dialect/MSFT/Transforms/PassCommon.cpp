@@ -54,7 +54,7 @@ StringRef circt::msft::getValueName(Value v, const SymbolCache &syms,
   if (auto blockArg = v.dyn_cast<BlockArgument>()) {
     auto portInfo =
         getModulePortInfo(blockArg.getOwner()->getParent()->getParentOp());
-    return portInfo.inputs[blockArg.getArgNumber()].getName();
+    return portInfo.atInput(blockArg.getArgNumber()).getName();
   }
   if (auto constOp = dyn_cast<hw::ConstantOp>(defOp)) {
     buff.clear();

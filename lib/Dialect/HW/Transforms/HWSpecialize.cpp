@@ -278,14 +278,14 @@ static LogicalResult specializeModule(
         evaluateParametricType(source.getLoc(), parameters, in.value());
     if (failed(resType))
       return failure();
-    ports.inputs[in.index()].type = *resType;
+    ports.atInput(in.index()).type = *resType;
   }
   for (auto out : llvm::enumerate(source.getFunctionType().getResults())) {
     FailureOr<Type> resolvedType =
         evaluateParametricType(source.getLoc(), parameters, out.value());
     if (failed(resolvedType))
       return failure();
-    ports.outputs[out.index()].type = *resolvedType;
+    ports.atOutput(out.index()).type = *resolvedType;
   }
 
   // Create the specialized module using the evaluated port info.

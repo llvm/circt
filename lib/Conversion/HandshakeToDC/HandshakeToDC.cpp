@@ -483,29 +483,28 @@ public:
 
 static hw::ModulePortInfo getModulePortInfoHS(TypeConverter &tc,
                                               handshake::FuncOp funcOp) {
-  hw::ModulePortInfo ports({}, {});
+  SmallVector<hw::PortInfo> inputs, outputs;
   auto *ctx = funcOp->getContext();
   auto ft = funcOp.getFunctionType();
 
   // Add all inputs of funcOp.
   for (auto [index, type] : llvm::enumerate(ft.getInputs())) {
-    ports.inputs.push_back(
-        {{StringAttr::get(ctx, "in" + std::to_string(index)),
-          tc.convertType(type), hw::ModulePort::Direction::Input},
-         index,
-         hw::InnerSymAttr{}});
+    inputs.push_back({{StringAttr::get(ctx, "in" + std::to_string(index)),
+                       tc.convertType(type), hw::ModulePort::Direction::Input},
+                      index,
+                      hw::InnerSymAttr{}});
   }
 
   // Add all outputs of funcOp.
   for (auto [index, type] : llvm::enumerate(ft.getResults())) {
-    ports.outputs.push_back(
+    outputs.push_back(
         {{StringAttr::get(ctx, "out" + std::to_string(index)),
           tc.convertType(type), hw::ModulePort::Direction::Output},
          index,
          hw::InnerSymAttr{}});
   }
 
-  return ports;
+  return hw::ModulePortInfo{inputs, outputs};
 }
 
 class FuncOpConversion : public DCOpConversionPattern<handshake::FuncOp> {

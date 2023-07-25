@@ -269,9 +269,14 @@ void SCModuleOp::build(OpBuilder &odsBuilder, OperationState &odsState,
 void SCModuleOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                        StringAttr name, const hw::ModulePortInfo &ports,
                        ArrayRef<NamedAttribute> attributes) {
-  SmallVector<hw::PortInfo> portInfos(ports.inputs);
-  portInfos.append(ports.outputs);
-  build(odsBuilder, odsState, name, portInfos, attributes);
+  MLIRContext *ctxt = odsBuilder.getContext();
+  SmallVector<Attribute> portNames;
+  SmallVector<Type> portTypes;
+  for (auto port : ports) {
+    portNames.push_back(StringAttr::get(ctxt, port.getName()));
+    portTypes.push_back(wrapPortType(port.type, port.dir));
+  }
+  build(odsBuilder, odsState, name, ArrayAttr::get(ctxt, portNames), portTypes);
 }
 
 void SCModuleOp::getAsmBlockArgumentNames(mlir::Region &region,

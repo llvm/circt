@@ -256,7 +256,8 @@ private:
 
 hw::ModulePortInfo getPortInfoForOpTypes(Operation *op, TypeRange inputs,
                                          TypeRange outputs) {
-  hw::ModulePortInfo ports({}, {});
+  SmallVector<hw::PortInfo> pinputs, poutputs;
+
   HandshakePortNameGenerator portNames(op);
   auto *ctx = op->getContext();
 
@@ -265,7 +266,7 @@ hw::ModulePortInfo getPortInfoForOpTypes(Operation *op, TypeRange inputs,
   // Add all inputs of funcOp.
   unsigned inIdx = 0;
   for (auto arg : llvm::enumerate(inputs)) {
-    ports.inputs.push_back(
+    pinputs.push_back(
         {{portNames.inputName(arg.index()), esiWrapper(arg.value()),
           hw::ModulePort::Direction::Input},
          arg.index(),
@@ -275,7 +276,7 @@ hw::ModulePortInfo getPortInfoForOpTypes(Operation *op, TypeRange inputs,
 
   // Add all outputs of funcOp.
   for (auto res : llvm::enumerate(outputs)) {
-    ports.outputs.push_back(
+    poutputs.push_back(
         {{portNames.outputName(res.index()), esiWrapper(res.value()),
           hw::ModulePort::Direction::Output},
          res.index(),
@@ -284,17 +285,17 @@ hw::ModulePortInfo getPortInfoForOpTypes(Operation *op, TypeRange inputs,
 
   // Add clock and reset signals.
   if (op->hasTrait<mlir::OpTrait::HasClock>()) {
-    ports.inputs.push_back({{StringAttr::get(ctx, "clock"), i1Type,
-                             hw::ModulePort::Direction::Input},
-                            inIdx++,
-                            hw::InnerSymAttr{}});
-    ports.inputs.push_back({{StringAttr::get(ctx, "reset"), i1Type,
-                             hw::ModulePort::Direction::Input},
-                            inIdx,
-                            hw::InnerSymAttr{}});
+    pinputs.push_back({{StringAttr::get(ctx, "clock"), i1Type,
+                        hw::ModulePort::Direction::Input},
+                       inIdx++,
+                       hw::InnerSymAttr{}});
+    pinputs.push_back({{StringAttr::get(ctx, "reset"), i1Type,
+                        hw::ModulePort::Direction::Input},
+                       inIdx,
+                       hw::InnerSymAttr{}});
   }
 
-  return ports;
+  return hw::ModulePortInfo{pinputs, poutputs};
 }
 
 } // namespace handshake

@@ -42,11 +42,6 @@ ModulePort::Direction flip(ModulePort::Direction direction);
 /// the specified module or instance.
 ModulePortInfo getModulePortInfo(Operation *op);
 
-/// Return an encapsulated set of information about input and output ports of
-/// the specified module or instance.  The input ports always come before the
-/// output ports in the list.
-SmallVector<PortInfo> getAllModulePortInfos(Operation *op);
-
 /// Return the PortInfo for the specified input or inout port.
 PortInfo getModuleInOrInoutPort(Operation *op, size_t idx);
 
