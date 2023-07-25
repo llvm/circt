@@ -5429,11 +5429,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       }
 
       // Emit the port direction.
-<<<<<<< HEAD
       auto thisPortDirection = portInfo.at(portIdx).dir;
-=======
-      auto thisPortDirection = portInfo[portIdx].dir;
->>>>>>> origin/main
       switch (thisPortDirection) {
       case ModulePort::Direction::Output:
         ps << "output ";
