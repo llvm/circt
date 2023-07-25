@@ -638,7 +638,7 @@ circuit RWProbeUninferredPort:
   module RWProbeUninferredPort:
     input in : UInt[2]
     output p : RWProbe<UInt>
-    define p = rwprobe(in[1]) ; expected-error {{must not have uninferred width or reset in type}}
+    define p = rwprobe(in[1]) ; expected-error {{must have known width or concrete reset type in type}}
 
 ;// -----
 

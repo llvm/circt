@@ -2970,7 +2970,7 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
     // Check target type.  Replicate inference/verification logic.
     if (targetType.hasUninferredWidth() || targetType.hasUninferredReset())
       return emitError(startTok.getLoc(),
-                       "must not have uninferred width or reset in type ")
+                       "must have known width or concrete reset type in type ")
              << targetType;
     auto forceableType =
         firrtl::detail::getForceableResultType(true, targetType);
