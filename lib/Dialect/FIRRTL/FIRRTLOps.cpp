@@ -4778,15 +4778,14 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
     auto mod = cast<FModuleLike>(target.getOp());
     return checkFinalType(mod.getPortType(target.getPort()),
                           mod.getPortLocation(target.getPort()));
-  } else {
-    hw::InnerSymbolOpInterface symOp =
-        cast<hw::InnerSymbolOpInterface>(target.getOp());
-    if (!symOp.getTargetResult())
-      return emitOpError("has target that cannot be probed")
-          .attachNote(symOp.getLoc())
-          .append("target resolves here");
-    return checkFinalType(symOp.getTargetResult().getType(), symOp.getLoc());
   }
+  hw::InnerSymbolOpInterface symOp =
+      cast<hw::InnerSymbolOpInterface>(target.getOp());
+  if (!symOp.getTargetResult())
+    return emitOpError("has target that cannot be probed")
+        .attachNote(symOp.getLoc())
+        .append("target resolves here");
+  return checkFinalType(symOp.getTargetResult().getType(), symOp.getLoc());
 }
 
 //===----------------------------------------------------------------------===//
