@@ -31,14 +31,12 @@
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/BackedgeBuilder.h"
-#include "circt/Support/LLVM.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
-#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/Debug.h"
@@ -271,45 +269,14 @@ struct CircuitLoweringState {
   /// For a given Type Alias, return the corresponding AliasType. Create and
   /// record the AliasType, if it doesn't exist.
   hw::TypeAliasType getTypeAlias(Type rawType, BaseTypeAliasType firAliasType,
-                                 Location typeLoc, StringRef suffix) {
+                                 Location typeLoc) {
 
-    auto typeName = firAliasType.getName();
-    assert(typeName && "getTypeAlias can only be called for a named Type");
-    // If the lowered type already exists, return that.
-    auto iterT1 = firrtlTypeToAliasTypeMap.find(firAliasType);
-    if (iterT1 != firrtlTypeToAliasTypeMap.end())
-      return iterT1->second;
-    // Mutex, to update the top level Module, and add the TypeDeclOp inside the
-    // TypeDeclOp.
-    std::lock_guard<std::mutex> lock(typeScopeMutex);
-    // The typescope is created only at the top level module.
-    Block &topLevelBlock = circuitOp->getParentRegion()->getBlocks().back();
-    if (!typeScope) {
-      // Initialize typeScope.
-      auto b = ImplicitLocOpBuilder::atBlockBegin(circuitOp.getLoc(),
-                                                  &topLevelBlock);
-      typeScope = b.create<hw::TypeScopeOp>(
-          b.getStringAttr(circuitOp.getName() + "__TYPESCOPE_"));
-      typeScope.getBodyRegion().push_back(new Block());
-    }
-    // Get a unique typedecl name.
-    // The bundleName can conflict with other symbols, but must be unique within
-    // the TypeScopeOp.
-    typeName = StringAttr::get(typeName.getContext(),
-                               typeDeclNamespace.newName(typeName.getValue()));
-
-    auto typeScopeBuilder =
-        ImplicitLocOpBuilder::atBlockEnd(typeLoc, typeScope.getBodyBlock());
-    auto typeDecl = typeScopeBuilder.create<hw::TypedeclOp>(typeLoc, typeName,
-                                                            rawType, nullptr);
-    auto aliasType = hw::TypeAliasType::get(
-        SymbolRefAttr::get(typeScope.getSymNameAttr(),
-                           {FlatSymbolRefAttr::get(typeDecl)}),
-        rawType);
-    // Record the typaAlias for the corresponding FIRRTL type for later
-    // retrieval.
-    firrtlTypeToAliasTypeMap[firAliasType] = aliasType;
-    return aliasType;
+    auto hwAlias = typeAliases.getTypedecl(firAliasType);
+    if (hwAlias)
+      return hwAlias;
+    assert(!typeAliases.isFrozen() &&
+           "type aliases cannot be generated after its frozen");
+    return typeAliases.addTypedecl(firAliasType, rawType, typeLoc);
   }
 
   FModuleLike getDut() { return dut; }
@@ -335,12 +302,11 @@ struct CircuitLoweringState {
   /// Given a type, return the corresponding lowered type for the HW dialect.
   ///  A wrapper to the FIRRTLUtils::lowerType, required to ensure safe addition
   ///  of TypeScopeOp for all the TypeDecls.
-  Type lowerType(Type type, Location loc, StringRef suffix) {
+  Type lowerType(Type type, Location loc) {
     return ::lowerType(type, loc,
                        [&](Type rawType, BaseTypeAliasType firrtlType,
                            Location typeLoc) -> hw::TypeAliasType {
-                         return getTypeAlias(rawType, firrtlType, typeLoc,
-                                             suffix);
+                         return getTypeAlias(rawType, firrtlType, typeLoc);
                        });
   }
 
@@ -389,17 +355,78 @@ private:
   /// Cached nla table analysis.
   NLATable *nlaTable = nullptr;
 
-  /// Global typescope for all the typedecls in this module.
-  hw::TypeScopeOp typeScope;
+  /// FIRRTL::BaseTypeAliasType is lowered to hw::TypeAliasType, which requires
+  /// TypedeclOp inside a single global TypeScopeOp. This structure
+  /// maintains a map of FIRRTL alias types to HW alias type, which is populated
+  /// in the sequential phase and accessed during the read-only phase when its
+  /// frozen.
+  /// This structure ensures that
+  /// all TypeAliases are lowered as a prepass, before lowering all the modules
+  /// in parallel. Lowering of TypeAliases must be done sequentially to ensure
+  /// deteministic TypeDecls inside the global TypeScopeOp.
+  struct RecordTypeAlias {
 
-  /// Mutex, to add new global typedecls while lowering the FIRRTLModules.
-  std::mutex typeScopeMutex;
+    RecordTypeAlias(CircuitOp &c) : circuitOp(c) {}
 
-  /// Map of FIRRTL type to the lowered AliasType.
-  DenseMap<Type, hw::TypeAliasType> firrtlTypeToAliasTypeMap;
+    hw::TypeAliasType getTypedecl(BaseTypeAliasType firAlias) const {
+      auto iter = firrtlTypeToAliasTypeMap.find(firAlias);
+      if (iter != firrtlTypeToAliasTypeMap.end())
+        return iter->second;
+      return {};
+    }
 
-  /// Set to keep track of unique typedecl names.
-  Namespace typeDeclNamespace;
+    bool isFrozen() { return frozen; }
+
+    void freeze() { frozen = true; }
+
+    hw::TypeAliasType addTypedecl(BaseTypeAliasType firAlias, Type rawType,
+                                  Location typeLoc) {
+      assert(!frozen && "Record already frozen, cannot be updated");
+
+      if (!typeScope) {
+        auto b = ImplicitLocOpBuilder::atBlockBegin(
+            circuitOp.getLoc(),
+            &circuitOp->getParentRegion()->getBlocks().back());
+        typeScope = b.create<hw::TypeScopeOp>(
+            b.getStringAttr(circuitOp.getName() + "__TYPESCOPE_"));
+        typeScope.getBodyRegion().push_back(new Block());
+      }
+      auto typeName = firAlias.getName();
+      // Get a unique typedecl name.
+      // The bundleName can conflict with other symbols, but must be unique
+      // within the TypeScopeOp.
+      typeName =
+          StringAttr::get(typeName.getContext(),
+                          typeDeclNamespace.newName(typeName.getValue()));
+
+      auto typeScopeBuilder =
+          ImplicitLocOpBuilder::atBlockEnd(typeLoc, typeScope.getBodyBlock());
+      auto typeDecl = typeScopeBuilder.create<hw::TypedeclOp>(typeLoc, typeName,
+                                                              rawType, nullptr);
+      auto hwAlias = hw::TypeAliasType::get(
+          SymbolRefAttr::get(typeScope.getSymNameAttr(),
+                             {FlatSymbolRefAttr::get(typeDecl)}),
+          rawType);
+      auto insert = firrtlTypeToAliasTypeMap.try_emplace(firAlias, hwAlias);
+      assert(insert.second && "Entry already exists, insert failed");
+      return insert.first->second;
+    }
+
+  private:
+    bool frozen = false;
+    /// Global typescope for all the typedecls in this module.
+    hw::TypeScopeOp typeScope;
+
+    /// Map of FIRRTL type to the lowered AliasType.
+    DenseMap<Type, hw::TypeAliasType> firrtlTypeToAliasTypeMap;
+
+    /// Set to keep track of unique typedecl names.
+    Namespace typeDeclNamespace;
+
+    CircuitOp &circuitOp;
+  };
+
+  RecordTypeAlias typeAliases = RecordTypeAlias(circuitOp);
 };
 
 void CircuitLoweringState::processRemainingAnnotations(
@@ -556,6 +583,14 @@ void FIRRTLModuleLowering::runOnOperation() {
 
           state.oldToNewModuleMap[&op] = loweredMod;
           modulesToProcess.push_back(module);
+          // Lower all the alias types.
+          module.walk([&](Operation *op) {
+            for (auto res : op->getResults()) {
+              if (auto aliasType =
+                      type_dyn_cast<BaseTypeAliasType>(res.getType()))
+                state.lowerType(aliasType, op->getLoc());
+            }
+          });
         })
         .Case<FExtModuleOp>([&](auto extModule) {
           auto loweredMod = lowerExtModule(extModule, topLevelModule, state);
@@ -579,6 +614,8 @@ void FIRRTLModuleLowering::runOnOperation() {
             return signalPassFailure();
         });
   }
+  // Ensure no more TypeDecl can be added to the global TypeScope.
+  state.typeAliases.freeze();
   // Handle the creation of the module hierarchy metadata.
 
   // Collect the two sets of hierarchy files from the circuit. Some of them will
@@ -842,8 +879,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
   for (auto firrtlPort : firrtlPorts) {
     hw::PortInfo hwPort;
     hwPort.name = firrtlPort.name;
-    hwPort.type =
-        loweringState.lowerType(firrtlPort.type, firrtlPort.loc, moduleName);
+    hwPort.type = loweringState.lowerType(firrtlPort.type, firrtlPort.loc);
     if (firrtlPort.sym)
       if (firrtlPort.sym.size() > 1 ||
           (firrtlPort.sym.size() == 1 && !firrtlPort.sym.getSymName()))
@@ -1188,9 +1224,8 @@ tryEliminatingConnectsToValue(Value flipValue, Operation *insertPoint,
     return {}; // TODO: Emit an sv.constant here since it is unconnected.
 
   // Don't special case zero-bit results.
-  auto loweredType = loweringState.lowerType(
-      flipValue.getType(), flipValue.getLoc(),
-      connectOp->getParentOfType<FModuleOp>().getModuleName());
+  auto loweredType =
+      loweringState.lowerType(flipValue.getType(), flipValue.getLoc());
   if (loweredType.isInteger(0))
     return {};
 
@@ -1344,8 +1379,7 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
     oldArg.replaceAllUsesWith(newArg);
 
     // Don't output zero bit results or inouts.
-    auto resultHWType =
-        loweringState.lowerType(port.type, port.loc, newModule.getName());
+    auto resultHWType = loweringState.lowerType(port.type, port.loc);
     if (!resultHWType.isInteger(0)) {
       auto output = castFromFIRRTLType(newArg, resultHWType, outputBuilder);
       outputs.push_back(output);
@@ -1634,7 +1668,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult fixupLTLOps();
 
   Type lowerType(Type type) {
-    return circuitState.lowerType(type, builder.getLoc(), theModule.getName());
+    return circuitState.lowerType(type, builder.getLoc());
   }
 
 private:
@@ -2686,7 +2720,6 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(VectorCreateOp op) {
   auto resultType = lowerType(op.getResult().getType());
-
   SmallVector<Value> operands;
   // NOTE: The operand order must be inverted.
   for (auto oper : llvm::reverse(op.getOperands())) {
