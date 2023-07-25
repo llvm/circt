@@ -46,15 +46,15 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
       return emitError(module->getLoc(), "module parameters not supported yet");
 
     auto ports = getModulePortInfo(module);
-    if (llvm::any_of(ports.ports, [](auto &port) { return port.isInOut(); }))
+    if (llvm::any_of(ports, [](auto &port) { return port.isInOut(); }))
       return emitError(module->getLoc(), "inout arguments not supported yet");
 
     // Create the SystemC module.
-    for (size_t i = 0; i < ports.ports.size(); ++i)
-      ports.ports[i].type = typeConverter->convertType(ports.ports[i].type);
+    for (size_t i = 0; i < ports.size(); ++i)
+      ports.at(i).type = typeConverter->convertType(ports.at(i).type);
 
     auto scModule = rewriter.create<SCModuleOp>(
-        module.getLoc(), module.getNameAttr(), ports.ports);
+        module.getLoc(), module.getNameAttr(), ports);
     auto *outputOp = module.getBodyBlock()->getTerminator();
     scModule.setVisibility(module.getVisibility());
 
@@ -107,7 +107,7 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
               .create<SignalReadOp>(scFunc.getLoc(), scModule.getArgument(i))
               .getResult();
       auto converted = typeConverter->materializeSourceConversion(
-          rewriter, scModule.getLoc(), ports_local.ports[i].type, inputRead);
+          rewriter, scModule.getLoc(), ports_local.at(i).type, inputRead);
       scFuncBody.getArgument(0).replaceAllUsesWith(converted);
       scFuncBody.eraseArgument(0);
     }

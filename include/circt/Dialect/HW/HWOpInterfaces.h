@@ -104,6 +104,14 @@ struct ModulePortInfo {
   const PortInfo &at_input(size_t idx) const { return ports[idx]; }
   const PortInfo &at_output(size_t idx) const { return ports[idx + numInputs]; }
 
+  void erase_input(size_t idx) {
+    assert(numInputs);
+    assert(idx < numInputs);
+    ports.erase(ports.begin() + idx);
+    --numInputs;
+  }
+
+private:
   /// This contains a list of all ports.  Input first.
   SmallVector<PortInfo> ports;
 

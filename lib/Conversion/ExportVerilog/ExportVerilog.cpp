@@ -4644,8 +4644,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       bool shouldPrintComma = true;
       if (isZeroWidth) {
         shouldPrintComma = false;
-        for (size_t i = (&elt - portInfo.ports.data()) + 1,
-                    e = portInfo.ports.size();
+        for (size_t i = portNum + 1,
+                    e = portInfo.size();
              i != e; ++i)
           if (!isZeroBitType(portValues[i].getType())) {
             shouldPrintComma = true;
@@ -5192,7 +5192,7 @@ void ModuleEmitter::emitBind(BindOp op) {
     // Emit the argument and result ports.
     auto opArgs = inst.getInputs();
     auto opResults = inst.getResults();
-    for (auto &elt : childPortInfo) {
+    for (auto [idx, elt] : llvm::enumerate(childPortInfo)) {
       // Figure out which value we are emitting.
       Value portVal =
           elt.isOutput() ? opResults[elt.argNum] : opArgs[elt.argNum];
@@ -5204,8 +5204,8 @@ void ModuleEmitter::emitBind(BindOp op) {
         bool shouldPrintComma = true;
         if (isZeroWidth) {
           shouldPrintComma = false;
-          for (size_t i = (&elt - childPortInfo.ports.data()) + 1,
-                      e = childPortInfo.ports.size();
+          for (size_t i = idx + 1,
+                      e = childPortInfo.size();
                i != e; ++i)
             if (!isZeroBitType(childPortInfo.at(i).type)) {
               shouldPrintComma = true;
@@ -5380,7 +5380,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   }
 
   ps << "(";
-  if (!portInfo.ports.empty())
+  if (portInfo.size())
     emitLocationInfo(module->getLoc());
 
   // Determine the width of the widest type we have to print so everything
@@ -5532,7 +5532,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     }
   });
 
-  if (portInfo.ports.empty()) {
+  if (!portInfo.size()) {
     ps << ");";
     emitLocationInfoAndNewLine(moduleOpSet);
   } else {

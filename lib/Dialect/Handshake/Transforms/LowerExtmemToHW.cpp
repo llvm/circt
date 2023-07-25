@@ -156,10 +156,8 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
   llvm::SmallVector<unsigned> argReplacementsIdxs;
   llvm::transform(argReplacements, std::back_inserter(argReplacementsIdxs),
                   [](auto &pair) { return pair.first; });
-  for (auto i : llvm::reverse(argReplacementsIdxs)) {
-    wrapperModPortInfo.ports.erase(wrapperModPortInfo.begin_input() + i);
-    --wrapperModPortInfo.numInputs;
-  }
+  for (auto i : llvm::reverse(argReplacementsIdxs))
+    wrapperModPortInfo.erase_input(i);
   auto wrapperMod = b.create<hw::HWModuleOp>(
       loc, StringAttr::get(ctx, func.getName() + "_esi_wrapper"),
       wrapperModPortInfo);
@@ -189,7 +187,7 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
     b.setInsertionPoint(wrapperMod);
     // Create a memory service declaration for each memref argument that was
     // served.
-    auto origPortInfo = *(origPorts.begin_input() + i);
+    auto origPortInfo = origPorts.at_input(i);
     auto memrefShape = memType.memRefType.getShape();
     auto dataType = memType.memRefType.getElementType();
     assert(memrefShape.size() == 1 && "Only 1D memrefs are supported");

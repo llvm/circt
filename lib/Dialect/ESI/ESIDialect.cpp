@@ -106,7 +106,7 @@ void circt::esi::findValidReadySignals(
     Operation *modOp, SmallVectorImpl<ESIPortValidReadyMapping> &names) {
 
   auto ports = hw::getModulePortInfo(modOp);
-  llvm::StringMap<hw::PortInfo> nameMap(ports.ports.size());
+  llvm::StringMap<hw::PortInfo> nameMap(ports.size());
   for (auto port : ports)
     nameMap[port.getName()] = port;
   for (auto port : ports)
@@ -120,7 +120,7 @@ void circt::esi::resolvePortNames(
     SmallVectorImpl<ESIPortValidReadyMapping> &names) {
 
   auto ports = hw::getModulePortInfo(modOp);
-  llvm::StringMap<hw::PortInfo> nameMap(ports.ports.size());
+  llvm::StringMap<hw::PortInfo> nameMap(ports.size());
   for (auto port : ports)
     nameMap[port.getName()] = port;
 
