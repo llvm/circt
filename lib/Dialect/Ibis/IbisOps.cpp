@@ -18,7 +18,7 @@ using namespace mlir;
 using namespace circt;
 using namespace ibis;
 
-ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
+ParseResult MethodOp::parse(OpAsmParser &parser, OperationState &result) {
   // Parse the name as a symbol.
   StringAttr nameAttr;
   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
@@ -64,7 +64,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   result.addAttribute("argNames", ArrayAttr::get(context, argNames));
-  result.addAttribute(FuncOp::getFunctionTypeAttrName(result.name),
+  result.addAttribute(MethodOp::getFunctionTypeAttrName(result.name),
                       functionType);
 
   // Parse the function body.
@@ -76,7 +76,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-void FuncOp::print(OpAsmPrinter &p) {
+void MethodOp::print(OpAsmPrinter &p) {
   FunctionType funcTy = getFunctionType();
   p << ' ';
   p.printSymbolName(getSymName());
@@ -92,12 +92,12 @@ void FuncOp::print(OpAsmPrinter &p) {
   }
 }
 
-void FuncOp::getAsmBlockArgumentNames(mlir::Region &region,
-                                      OpAsmSetValueNameFn setNameFn) {
+void MethodOp::getAsmBlockArgumentNames(mlir::Region &region,
+                                        OpAsmSetValueNameFn setNameFn) {
   if (region.empty())
     return;
 
-  auto func = cast<FuncOp>(region.getParentOp());
+  auto func = cast<MethodOp>(region.getParentOp());
   auto argNames = func.getArgNames().getAsRange<StringAttr>();
   auto *block = &region.front();
 
@@ -106,7 +106,7 @@ void FuncOp::getAsmBlockArgumentNames(mlir::Region &region,
       setNameFn(block->getArgument(idx), argName);
 }
 
-LogicalResult FuncOp::verify() {
+LogicalResult MethodOp::verify() {
   // Check that we have only one return value.
   if (getFunctionType().getNumResults() > 1)
     return failure();
@@ -117,7 +117,7 @@ void ReturnOp::build(OpBuilder &odsBuilder, OperationState &odsState) {}
 
 LogicalResult ReturnOp::verify() {
   // Check that the return operand type matches the function return type.
-  auto func = cast<FuncOp>((*this)->getParentOp());
+  auto func = cast<MethodOp>((*this)->getParentOp());
   ArrayRef<Type> resTypes = func.getResultTypes();
   assert(resTypes.size() <= 1);
   assert(getNumOperands() <= 1);

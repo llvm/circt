@@ -58,7 +58,7 @@ def InstanceOp : IbisOp<"instance", [Symbol]> {
   }];
 }
 
-def FuncOp : IbisOp<"func", [
+def MethodOp : IbisOp<"method", [
       IsolatedFromAbove, RegionKindInterface,
       Symbol, FunctionOpInterface,
       DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
@@ -99,7 +99,7 @@ def FuncOp : IbisOp<"func", [
 }
 
 def ReturnOp : IbisOp<"return", [
-      Pure, ReturnLike, Terminator, HasParent<"FuncOp">]> {
+      Pure, ReturnLike, Terminator, HasParent<"MethodOp">]> {
   let summary = "Ibis function terminator";
 
   let arguments = (ins Optional<AnyType>:$retValue);
