@@ -785,3 +785,34 @@ circuit VecOfProps:
   module VecOfProps:
     input x : String[2]
     ; expected-error @above {{type '!firrtl.string' cannot be used in a vector}}
+
+;// -----
+
+FIRRTL version 3.0.0
+circuit UnsupportedVersionDeclGroups:
+  ; expected-error @below {{unexpected token}}
+  declgroup A, bind:
+
+;// -----
+
+FIRRTL version 3.0.0
+circuit UnsupportedVersionGroups:
+  module UnsupportedVersionGroups:
+    ; expected-error @below {{unexpected token}}
+    group A:
+
+;// -----
+
+FIRRTL version 3.1.0
+circuit UnsupportedGroupConvention:
+  ; expected-error @below {{unknown convention 'foo'}}
+  declgroup A, foo :
+
+;// -----
+
+FIRRTL version 3.1.0
+circuit GroupAndCircuitShareName:
+  ; expected-error @below {{cannot have the same name as the circuit}}
+  declgroup GroupAndCircuitShareName, bind :
+
+  module GroupAndCircuitShareName:

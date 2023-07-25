@@ -10,6 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_ESI_STRUCTURE_TD
+#define CIRCT_DIALECT_ESI_STRUCTURE_TD
+
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "mlir/IR/OpBase.td"
 
@@ -88,3 +91,5 @@ def ESIPureModuleParamOp : ESI_Op<"pure_module.param",
   let results = (outs);
   let assemblyFormat = [{ $name `:` $type attr-dict }];
 }
+
+#endif // CIRCT_DIALECT_ESI_STRUCTURE_TD

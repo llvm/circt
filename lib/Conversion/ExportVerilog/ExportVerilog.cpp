@@ -269,6 +269,7 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
   return isCombinational(op) || isExpression(op);
 }
 
+// NOLINTBEGIN(misc-no-recursion)
 /// Push this type's dimension into a vector.
 static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
                         Location loc) {
@@ -5428,7 +5429,11 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       }
 
       // Emit the port direction.
+<<<<<<< HEAD
       auto thisPortDirection = portInfo.at(portIdx).dir;
+=======
+      auto thisPortDirection = portInfo[portIdx].dir;
+>>>>>>> origin/main
       switch (thisPortDirection) {
       case ModulePort::Direction::Output:
         ps << "output ";

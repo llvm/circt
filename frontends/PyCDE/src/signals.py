@@ -272,6 +272,18 @@ class BitVectorSignal(Signal):
     return self._exec_cast(UIntSignal, ir.IntegerType.get_unsigned, width)
 
 
+def And(*items: List[BitVectorSignal]):
+  """Compute a bitwise 'and' of the arguments."""
+  from .dialects import comb
+  return comb.AndOp(*items)
+
+
+def Or(*items: List[BitVectorSignal]):
+  """Compute a bitwise 'or' of the arguments."""
+  from .dialects import comb
+  return comb.OrOp(*items)
+
+
 class BitsSignal(BitVectorSignal):
   """Operations on signless ints (bits). These will all return signless values -
   a user is expected to reapply signedness semantics if needed."""
@@ -331,6 +343,18 @@ class BitsSignal(BitVectorSignal):
     if self.name is not None:
       v.name = f"{self.name}_padto_{num_bits}"
     return v
+
+  def and_reduce(self):
+    from .types import types
+    bits = [self[i] for i in range(len(self))]
+    assert bits[0].type == types.i1
+    return And(*bits)
+
+  def or_reduce(self):
+    from .types import types
+    bits = [self[i] for i in range(len(self))]
+    assert bits[0].type == types.i1
+    return Or(*bits)
 
   # === Infix operators ===
 
@@ -462,16 +486,21 @@ class IntSignal(BitVectorSignal):
     from .circt.dialects import hwarith
     return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_NE, "neq")
 
-  # TODO: This class will contain comparison operators (<, >, <=, >=)
-
   def __lt__(self, other):
-    assert False, "Unimplemented"
+    from .circt.dialects import hwarith
+    return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_LT, "lt")
+
+  def __gt__(self, other):
+    from .circt.dialects import hwarith
+    return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_GT, "gt")
 
   def __le__(self, other):
-    assert False, "Unimplemented"
+    from .circt.dialects import hwarith
+    return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_LE, "le")
 
   def __ge__(self, other):
-    assert False, "Unimplemented"
+    from .circt.dialects import hwarith
+    return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_GE, "ge")
 
 
 class UIntSignal(IntSignal):
@@ -483,18 +512,6 @@ class SIntSignal(IntSignal):
   def __neg__(self):
     from .types import types
     return self * types.int(self.type.width)(-1).as_sint()
-
-
-def Or(*items: List[BitVectorSignal]):
-  """Compute a bitwise 'or' of the arguments."""
-  from .dialects import comb
-  return comb.OrOp(*items)
-
-
-def And(*items: List[BitVectorSignal]):
-  """Compute a bitwise 'and' of the arguments."""
-  from .dialects import comb
-  return comb.AndOp(*items)
 
 
 class ArraySignal(Signal):
@@ -544,6 +561,12 @@ class ArraySignal(Signal):
       if self.name and isinstance(low_idx, int):
         v.name = self.name + f"__{low_idx}upto{low_idx+num_elems}"
       return v
+
+  def and_reduce(self):
+    from .types import types
+    bits = [self[i] for i in range(len(self))]
+    assert bits[0].type == types.i1
+    return And(*bits)
 
   def or_reduce(self):
     from .types import types

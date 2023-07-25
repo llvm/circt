@@ -1603,3 +1603,63 @@ circuit Top:
   type ConstI1 = const UInt<1>
   module Const :
     input a: ConstI1
+
+;// -----
+
+; CHECK-LABEL: firrtl.circuit "Groups"
+FIRRTL version 3.1.0
+circuit Groups:
+  declgroup A, bind:
+    declgroup B, bind:
+      declgroup C, bind:
+      declgroup D, bind:
+        declgroup E, bind:
+    declgroup F, bind:
+    ; CHECK-NEXT: firrtl.declgroup @A bind {
+    ; CHECK-NEXT:   firrtl.declgroup @B bind {
+    ; CHECK-NEXT:     firrtl.declgroup @C bind {
+    ; CHECK-NEXT:     }
+    ; CHECK-NEXT:     firrtl.declgroup @D bind {
+    ; CHECK-NEXT:       firrtl.declgroup @E bind {
+    ; CHECK-NEXT:       }
+    ; CHECK-NEXT:     }
+    ; CHECK-NEXT:   }
+    ; CHECK-NEXT:   firrtl.declgroup @F bind {
+    ; CHECK-NEXT:   }
+    ; CHECK-NEXT: }
+
+  ; CHECK: firrtl.module @Groups
+  module Groups:
+    input a: UInt<1>
+
+    group A:
+      node A_a = a
+      group B:
+        node B_a = a
+        group C:
+          node C_a = a
+        group D:
+          node D_a = a
+          group E:
+            node E_a = a
+      group F:
+        node F_a = a
+
+    ; CHECK-NEXT: firrtl.group @A {
+    ; CHECK-NEXT:   %A_a = firrtl.node{{.*}} %a
+    ; CHECK-NEXT:   firrtl.group @A::@B {
+    ; CHECK-NEXT:     %B_a = firrtl.node{{.*}} %a
+    ; CHECK-NEXT:     firrtl.group @A::@B::@C {
+    ; CHECK-NEXT:       %C_a = firrtl.node{{.*}} %a
+    ; CHECK-NEXT:     }
+    ; CHECK-NEXT:     firrtl.group @A::@B::@D {
+    ; CHECK-NEXT:       %D_a = firrtl.node{{.*}} %a
+    ; CHECK-NEXT:       firrtl.group @A::@B::@D::@E {
+    ; CHECK-NEXT:         %E_a = firrtl.node{{.*}} %a
+    ; CHECK-NEXT:       }
+    ; CHECK-NEXT:     }
+    ; CHECK-NEXT:   }
+    ; CHECK-NEXT:   firrtl.group @A::@F {
+    ; CHECK-NEXT:     %F_a = firrtl.node{{.*}} %a
+    ; CHECK-NEXT:   }
+    ; CHECK-NEXT: }

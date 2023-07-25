@@ -71,6 +71,10 @@ struct PortMappingInfo {
   /// List of the individual non-hw fields to be split out.
   SmallVector<NonHWField, 0> fields;
 
+  /// List of fieldID's of interior nodes that map to nothing.
+  /// HW-only projection is empty, and not leaf.
+  SmallVector<uint64_t, 0> mapToNullInteriors;
+
   /// Determine number of types this argument maps to.
   size_t count(bool includeErased = false) const {
     if (identity)
@@ -116,9 +120,11 @@ void PortMappingInfo::print(llvm::raw_ostream &os) const {
     os << hwType;
   else
     os << "(none)";
-  os << ", fields: ";
+  os << ", fields: <";
   llvm::interleaveComma(fields, os);
-  os << "]]";
+  os << ">, mappedToNull: <";
+  llvm::interleaveComma(mapToNullInteriors, os);
+  os << ">]]";
 }
 
 template <typename Range>
@@ -178,10 +184,12 @@ private:
   MLIRContext *context;
 
   /// Map non-HW fields to their new Value.
+  /// Null value indicates no equivalent (dead).
+  /// These values are available wherever the root is used.
   DenseMap<FieldRef, Value> nonHWValues;
 
   /// Map from port to its hw-only aggregate equivalent.
-  DenseMap<Value, std::optional<Value>> hwOnlyAggMap;
+  DenseMap<Value, Value> hwOnlyAggMap;
 
   /// List of operations to erase at the end.
   SmallVector<Operation *> opsToErase;
@@ -232,6 +240,12 @@ LogicalResult Visitor::visit(FModuleLike mod) {
           auto newPort = port;
           newPort.type = pmi.hwType;
           newPorts.emplace_back(idxOfInsertPoint, newPort);
+
+          if (port.sym && llvm::any_of(port.sym, [&](auto &prop) {
+                return prop.getFieldID() != 0;
+              }))
+            return mlir::emitError(port.loc)
+                   << "symbols on fields of open aggregates not handled yet";
 
           // If want to run this pass later, need to fixup annotations.
           if (!port.annotations.empty())
@@ -293,14 +307,18 @@ LogicalResult Visitor::visit(FModuleLike mod) {
                            if (pmi.hwType)
                              hwOnlyAggMap[oldPort] =
                                  block->getArgument(++newPortIndex);
-                           else
-                             hwOnlyAggMap[oldPort] = std::nullopt;
 
                            for (auto &field : pmi.fields) {
                              auto ref = FieldRef(oldPort, field.fieldID);
                              auto newVal = block->getArgument(++newPortIndex);
                              nonHWValues[ref] = newVal;
                            }
+                           for (auto fieldID : pmi.mapToNullInteriors) {
+                             auto ref = FieldRef(oldPort, fieldID);
+                             assert(!nonHWValues.count(ref));
+                             nonHWValues[ref] = {};
+                           }
+
                            return success();
                          });
     if (failed(result))
@@ -356,23 +374,21 @@ LogicalResult Visitor::visitExpr(OpenSubfieldOp op) {
   auto resultRef = getFieldRefFromValue(op.getResult());
   auto nonHWForResult = nonHWValues.find(resultRef);
   if (nonHWForResult != nonHWValues.end()) {
-    auto newResult = nonHWForResult->second;
-    assert(op.getResult().getType() == newResult.getType());
-    assert(!type_isa<FIRRTLBaseType>(newResult.getType()));
-    op.getResult().replaceAllUsesWith(newResult);
+    // If has nonHW portion, RAUW to it.
+    if (auto newResult = nonHWForResult->second) {
+      assert(op.getResult().getType() == newResult.getType());
+      assert(!type_isa<FIRRTLBaseType>(newResult.getType()));
+      op.getResult().replaceAllUsesWith(newResult);
+    }
     return success();
   }
 
   assert(hwOnlyAggMap.count(op.getInput()));
 
   auto newInput = hwOnlyAggMap[op.getInput()];
-  // Skip if no hw-only portion.  This is dead.
-  if (!newInput.has_value()) {
-    hwOnlyAggMap[op.getResult()] = std::nullopt;
-    return success();
-  }
+  assert(newInput);
 
-  auto bundleType = type_cast<BundleType>(newInput->getType());
+  auto bundleType = type_cast<BundleType>(newInput.getType());
 
   // Recompute the "actual" index for this field, it may have changed.
   auto fieldName = op.getFieldName();
@@ -380,7 +396,7 @@ LogicalResult Visitor::visitExpr(OpenSubfieldOp op) {
   assert(newFieldIndex.has_value());
 
   ImplicitLocOpBuilder builder(op.getLoc(), op);
-  auto newOp = builder.create<SubfieldOp>(*newInput, *newFieldIndex);
+  auto newOp = builder.create<SubfieldOp>(newInput, *newFieldIndex);
   if (auto name = op->getAttrOfType<StringAttr>("name"))
     newOp->setAttr("name", name);
 
@@ -403,24 +419,22 @@ LogicalResult Visitor::visitExpr(OpenSubindexOp op) {
   auto resultRef = getFieldRefFromValue(op.getResult());
   auto nonHWForResult = nonHWValues.find(resultRef);
   if (nonHWForResult != nonHWValues.end()) {
-    auto newResult = nonHWForResult->second;
-    assert(op.getResult().getType() == newResult.getType());
-    assert(!type_isa<FIRRTLBaseType>(newResult.getType()));
-    op.getResult().replaceAllUsesWith(newResult);
+    // If has nonHW portion, RAUW to it.
+    if (auto newResult = nonHWForResult->second) {
+      assert(op.getResult().getType() == newResult.getType());
+      assert(!type_isa<FIRRTLBaseType>(newResult.getType()));
+      op.getResult().replaceAllUsesWith(newResult);
+    }
     return success();
   }
 
   assert(hwOnlyAggMap.count(op.getInput()));
 
   auto newInput = hwOnlyAggMap[op.getInput()];
-  // Skip if no hw-only portion.  This is dead.
-  if (!newInput.has_value()) {
-    hwOnlyAggMap[op.getResult()] = std::nullopt;
-    return success();
-  }
+  assert(newInput);
 
   ImplicitLocOpBuilder builder(op.getLoc(), op);
-  auto newOp = builder.create<SubindexOp>(*newInput, op.getIndex());
+  auto newOp = builder.create<SubindexOp>(newInput, op.getIndex());
   if (auto name = op->getAttrOfType<StringAttr>("name"))
     newOp->setAttr("name", name);
 
@@ -530,14 +544,17 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
         auto newPortIndex = newIndex;
         if (pmi.hwType)
           hwOnlyAggMap[oldResult] = newInst.getResult(newPortIndex++);
-        else
-          hwOnlyAggMap[oldResult] = std::nullopt;
 
         for (auto &field : pmi.fields) {
           auto ref = FieldRef(oldResult, field.fieldID);
           auto newVal = newInst.getResult(newPortIndex++);
           assert(newVal.getType() == field.type);
           nonHWValues[ref] = newVal;
+        }
+        for (auto fieldID : pmi.mapToNullInteriors) {
+          auto ref = FieldRef(oldResult, fieldID);
+          assert(!nonHWValues.count(ref));
+          nonHWValues[ref] = {};
         }
         return success();
       });
@@ -554,7 +571,7 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
 //===----------------------------------------------------------------------===//
 
 PortMappingInfo Visitor::mapPortType(Type type) {
-  PortMappingInfo pi{false, {}, {}};
+  PortMappingInfo pi{false, {}, {}, {}};
   auto ftype = type_dyn_cast<FIRRTLType>(type);
   // Ports that aren't open aggregates are left alone.
   if (!ftype || !isa<OpenBundleType, OpenVectorType>(ftype)) {
@@ -579,8 +596,10 @@ PortMappingInfo Visitor::mapPortType(Type type) {
                           fieldID + obTy.getFieldID(index)))
                   hwElements.emplace_back(element.name, element.isFlip, base);
 
-              if (hwElements.empty())
+              if (hwElements.empty()) {
+                pi.mapToNullInteriors.push_back(fieldID);
                 return FIRRTLBaseType{};
+              }
 
               return BundleType::get(context, hwElements, obTy.isConst());
             })
@@ -598,8 +617,10 @@ PortMappingInfo Visitor::mapPortType(Type type) {
                 convert = hwElementType;
               }
 
-              if (!convert)
+              if (!convert) {
+                pi.mapToNullInteriors.push_back(fieldID);
                 return FIRRTLBaseType{};
+              }
 
               return FVectorType::get(convert, ovTy.getNumElements(),
                                       ovTy.isConst());
@@ -611,7 +632,10 @@ PortMappingInfo Visitor::mapPortType(Type type) {
           pi.fields.emplace_back(std::move(f));
           return FIRRTLBaseType{};
         })
-        .Default(FIRRTLBaseType{});
+        .Default([&](auto _) {
+          pi.mapToNullInteriors.push_back(fieldID);
+          return FIRRTLBaseType{};
+        });
   };
 
   pi.hwType = recurse(recurse, ftype);

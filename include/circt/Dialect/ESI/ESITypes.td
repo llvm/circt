@@ -12,9 +12,61 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_ESI_TYPES_TD
+#define CIRCT_DIALECT_ESI_TYPES_TD
+
+include "circt/Dialect/ESI/ESIDialect.td"
 include "circt/Dialect/HW/HWTypes.td"
+include "mlir/IR/EnumAttr.td"
 
 class ESI_Type<string name> : TypeDef<ESI_Dialect, name> { }
+
+class ESI_Port<string name> : ESI_Type<name> {}
+
+// Standard valid-ready signaling.
+def ChannelSignalingValidReady : I32EnumAttrCase<"ValidReady", 0>;
+// FIFO interface with a read latency of zero. Very similiar to valid-ready, but
+// cannot assert ready if data is not available.
+def ChannelSignalingFIFO0      : I32EnumAttrCase<"FIFO0",      1>;
+def ChannelSignaling : I32EnumAttr<
+    "ChannelSignaling",
+    "ESI channel wire signaling standard",
+    [ChannelSignalingValidReady, ChannelSignalingFIFO0]>{
+  let cppNamespace = "::circt::esi";
+}
+
+def ChannelType : ESI_Port<"Channel"> {
+  let summary = "An ESI-compatible channel port";
+  let description = [{
+    An ESI port kind which models a latency-insensitive, unidirectional,
+    point-to-point data stream. Channels are typed (like all of ESI). Said
+    type can be any MLIR type, but must be lowered to something a backend
+    knows how to output (i.e. something emitVerilog knows about).
+
+    Example:
+
+    ```mlir
+    hw.module.extern @Sender() -> (%x: !esi.channel<i1>)
+    hw.module @Reciever(%a: !esi.channel<hw.array<5xi16>>) { }
+    ```
+  }];
+
+  let mnemonic = "channel";
+  let parameters = (ins
+      "Type":$inner,
+      DefaultValuedParameter<
+        "::circt::esi::ChannelSignaling",
+        "::circt::esi::ChannelSignaling::ValidReady">:$signaling);
+
+  let assemblyFormat = "`<` $inner (`,` $signaling^)? `>`";
+ 
+  let builders = [
+    TypeBuilder<(ins "Type":$type), [{
+        return Base::get(type.getContext(), type,
+                         ::circt::esi::ChannelSignaling::ValidReady);
+      }]>,
+  ];
+}
 
 def ESIAnyType : ESI_Type<"Any"> {
   let summary = "any type";
@@ -113,30 +165,4 @@ def WindowFieldType : ESI_Type<"WindowField"> {
   }];
 }
 
-def WrapWindow : ESI_Physical_Op<"window.wrap", [Pure]> {
-  let summary = "wrap a union into a data window";
-
-  let arguments = (ins UnionType:$frame);
-  let results = (outs ESIWindowType:$window);
-  let hasVerifier = 1;
-  let hasFolder = 1;
-
-  let assemblyFormat = [{
-     $frame attr-dict `:` custom<InferWindowRet>(type($frame), type($window))
-  }];
-}
-
-def UnwrapWindow : ESI_Physical_Op<"window.unwrap", [
-      Pure,
-      DeclareOpInterfaceMethods<InferTypeOpInterface>
-  ]> {
-  let summary = "unwrap a data window into a union";
-
-  let arguments = (ins ESIWindowType:$window);
-  let results = (outs UnionType:$frame);
-  let hasFolder = 1;
-
-  let assemblyFormat = [{
-     $window attr-dict `:` qualified(type($window))
-  }];
-}
+#endif // CIRCT_DIALECT_ESI_TYPES_TD

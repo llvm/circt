@@ -644,17 +644,17 @@ private:
 /// Run expand whens on the Module.  This will emit an error for each
 /// incomplete initialization found. If an initialiazation error was detected,
 /// this will return failure and leave the IR in an inconsistent state.
-bool ModuleVisitor::run(FModuleOp module) {
+bool ModuleVisitor::run(FModuleOp op) {
   // Track any results (flipped arguments) of the module for init coverage.
-  for (const auto &it : llvm::enumerate(module.getArguments())) {
-    auto flow = module.getPortDirection(it.index()) == Direction::In
+  for (const auto &it : llvm::enumerate(op.getArguments())) {
+    auto flow = op.getPortDirection(it.index()) == Direction::In
                     ? Flow::Source
                     : Flow::Sink;
     declareSinks(it.value(), flow);
   }
 
   // Process the body of the module.
-  for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
+  for (auto &op : llvm::make_early_inc_range(*op.getBodyBlock())) {
     dispatchVisitor(&op);
   }
   return anythingChanged;

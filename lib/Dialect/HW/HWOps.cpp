@@ -645,7 +645,11 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   SmallVector<Attribute> argLocs, resultLocs;
   auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
 
+<<<<<<< HEAD
   for (auto elt : ports.inputs()) {
+=======
+  for (auto elt : ports.inputs) {
+>>>>>>> origin/main
     if (elt.dir == ModulePort::Direction::InOut &&
         !elt.type.isa<hw::InOutType>())
       elt.type = hw::InOutType::get(elt.type);

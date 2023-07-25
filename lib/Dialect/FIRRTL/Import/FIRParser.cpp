@@ -1409,12 +1409,13 @@ namespace {
 struct FIRStmtParser : public FIRParser {
   explicit FIRStmtParser(Block &blockToInsertInto,
                          FIRModuleContext &moduleContext,
-                         Namespace &modNameSpace, FIRVersion &version)
+                         Namespace &modNameSpace, FIRVersion &version,
+                         SymbolRefAttr groupSym = {})
       : FIRParser(moduleContext.getConstants(), moduleContext.getLexer(),
                   version),
         builder(UnknownLoc::get(getContext()), getContext()),
         locationProcessor(this->builder), moduleContext(moduleContext),
-        modNameSpace(modNameSpace) {
+        modNameSpace(modNameSpace), groupSym(groupSym) {
     builder.setInsertionPointToEnd(&blockToInsertInto);
   }
 
@@ -1476,6 +1477,8 @@ private:
   std::optional<ParseResult> parseExpWithLeadingKeyword(FIRToken keyword);
 
   // Stmt Parsing
+  ParseResult parseSubBlock(Block &blockToInsertInto, unsigned indent,
+                            SymbolRefAttr groupSym);
   ParseResult parseAttach();
   ParseResult parseMemPort(MemDirAttr direction);
   ParseResult parsePrintf();
@@ -1498,6 +1501,7 @@ private:
   ParseResult parseLeadingExpStmt(Value lhs);
   ParseResult parseConnect();
   ParseResult parseInvalidate();
+  ParseResult parseGroup(unsigned indent);
 
   // Declarations
   ParseResult parseInstance();
@@ -1517,6 +1521,10 @@ private:
   FIRModuleContext &moduleContext;
 
   Namespace &modNameSpace;
+
+  // An optional symbol that contains the current group that we are in.  This is
+  // used to construct a nested symbol for a group definition operation.
+  SymbolRefAttr groupSym;
 };
 
 } // end anonymous namespace
@@ -2302,6 +2310,13 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseRefRelease();
   case FIRToken::lp_release_initial:
     return parseRefReleaseInitial();
+  case FIRToken::kw_group:
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError()
+             << "unexpected token: optional groups are a FIRRTL 3.1.0+ "
+                "feature, but the specified FIRRTL version was "
+             << version;
+    return parseGroup(stmtIndent);
 
   default: {
     // Statement productions that start with an expression.
@@ -2334,6 +2349,38 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   case FIRToken::kw_regreset:
     return parseRegisterWithReset();
   }
+}
+
+ParseResult FIRStmtParser::parseSubBlock(Block &blockToInsertInto,
+                                         unsigned indent,
+                                         SymbolRefAttr groupSym) {
+  // Declarations within the suite are scoped to within the suite.
+  auto suiteScope = std::make_unique<FIRModuleContext::ContextScope>(
+      moduleContext, &blockToInsertInto);
+
+  // After parsing the when region, we can release any new entries in
+  // unbundledValues since the symbol table entries that refer to them will be
+  // gone.
+  UnbundledValueRestorer x(moduleContext.unbundledValues);
+
+  // We parse the substatements into their own parser, so they get inserted
+  // into the specified 'when' region.
+  auto subParser = std::make_unique<FIRStmtParser>(
+      blockToInsertInto, moduleContext, modNameSpace, version, groupSym);
+
+  // Figure out whether the body is a single statement or a nested one.
+  auto stmtIndent = getIndentation();
+
+  // Parsing a single statment is straightforward.
+  if (!stmtIndent.has_value())
+    return subParser->parseSimpleStmt(indent);
+
+  if (*stmtIndent <= indent)
+    return emitError("statement must be indented more than previous statement"),
+           failure();
+
+  // Parse a block of statements that are indented more than the when.
+  return subParser->parseSimpleStmtBlock(indent);
 }
 
 /// attach ::= 'attach' '(' exp+ ')' info?
@@ -2578,39 +2625,8 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // Create the IR representation for the when.
   auto whenStmt = builder.create<WhenOp>(condition, /*createElse*/ false);
 
-  // This is a function to parse a suite body.
-  auto parseSuite = [&](Block &blockToInsertInto) -> ParseResult {
-    // Declarations within the suite are scoped to within the suite.
-    auto suiteScope = std::make_unique<FIRModuleContext::ContextScope>(
-        moduleContext, &blockToInsertInto);
-
-    // After parsing the when region, we can release any new entries in
-    // unbundledValues since the symbol table entries that refer to them will be
-    // gone.
-    UnbundledValueRestorer x(moduleContext.unbundledValues);
-
-    // We parse the substatements into their own parser, so they get inserted
-    // into the specified 'when' region.
-    auto subParser = std::make_unique<FIRStmtParser>(
-        blockToInsertInto, moduleContext, modNameSpace, version);
-
-    // Figure out whether the body is a single statement or a nested one.
-    auto stmtIndent = getIndentation();
-
-    // Parsing a single statment is straightforward.
-    if (!stmtIndent.has_value())
-      return subParser->parseSimpleStmt(whenIndent);
-
-    if (*stmtIndent <= whenIndent)
-      return emitError("statement must be indented more than 'when'"),
-             failure();
-
-    // Parse a block of statements that are indented more than the when.
-    return subParser->parseSimpleStmtBlock(whenIndent);
-  };
-
   // Parse the 'then' body into the 'then' region.
-  if (parseSuite(whenStmt.getThenBlock()))
+  if (parseSubBlock(whenStmt.getThenBlock(), whenIndent, groupSym))
     return failure();
 
   // If the else is present, handle it otherwise we're done.
@@ -2634,8 +2650,9 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // the outer 'when'.
   if (getToken().is(FIRToken::kw_when)) {
     // We create a sub parser for the else block.
-    auto subParser = std::make_unique<FIRStmtParser>(
-        whenStmt.getElseBlock(), moduleContext, modNameSpace, version);
+    auto subParser =
+        std::make_unique<FIRStmtParser>(whenStmt.getElseBlock(), moduleContext,
+                                        modNameSpace, version, groupSym);
 
     return subParser->parseSimpleStmt(whenIndent);
   }
@@ -2643,7 +2660,8 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // Parse the 'else' body into the 'else' region.
   LocationAttr elseLoc; // ignore the else locator.
   if (parseToken(FIRToken::colon, "expected ':' after 'else'") ||
-      parseOptionalInfoLocator(elseLoc) || parseSuite(whenStmt.getElseBlock()))
+      parseOptionalInfoLocator(elseLoc) ||
+      parseSubBlock(whenStmt.getElseBlock(), whenIndent, groupSym))
     return failure();
 
   // TODO(firrtl spec): There is no reason for the 'else :' grammar to take an
@@ -2772,8 +2790,8 @@ ParseResult FIRStmtParser::parseMatch(unsigned matchIndent) {
       return failure();
 
     // Parse a block of statements that are indented more than the case.
-    auto subParser = std::make_unique<FIRStmtParser>(*caseBlock, moduleContext,
-                                                     modNameSpace, version);
+    auto subParser = std::make_unique<FIRStmtParser>(
+        *caseBlock, moduleContext, modNameSpace, version, groupSym);
     if (subParser->parseSimpleStmtBlock(*caseIndent))
       return failure();
   }
@@ -3182,6 +3200,42 @@ ParseResult FIRStmtParser::parseInvalidate() {
 
   locationProcessor.setLoc(startTok.getLoc());
   emitInvalidate(lhs);
+  return success();
+}
+
+ParseResult FIRStmtParser::parseGroup(unsigned indent) {
+
+  auto startTok = consumeToken(FIRToken::kw_group);
+  auto loc = startTok.getLoc();
+
+  StringRef id;
+  if (parseId(id, "expected group identifer") ||
+      parseToken(FIRToken::colon, "expected ':' at end of group") ||
+      parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(loc);
+
+  StringRef rootGroup;
+  SmallVector<FlatSymbolRefAttr> nestedGroups;
+  if (!groupSym) {
+    rootGroup = id;
+  } else {
+    rootGroup = groupSym.getRootReference();
+    auto nestedRefs = groupSym.getNestedReferences();
+    nestedGroups.append(nestedRefs.begin(), nestedRefs.end());
+    nestedGroups.push_back(FlatSymbolRefAttr::get(builder.getContext(), id));
+  }
+
+  auto groupOp = builder.create<GroupOp>(
+      SymbolRefAttr::get(builder.getContext(), rootGroup, nestedGroups));
+  groupOp->getRegion(0).push_back(new Block());
+
+  if (getIndentation() > indent)
+    if (parseSubBlock(groupOp.getRegion().front(), indent,
+                      groupOp.getGroupName()))
+      return failure();
+
   return success();
 }
 
@@ -3784,6 +3838,8 @@ private:
 
   ParseResult parseTypeDecl();
 
+  ParseResult parseGroupDecl(CircuitOp circuit);
+
   struct DeferredModuleToParse {
     FModuleOp moduleOp;
     SmallVector<SMLoc> portLocs;
@@ -4018,7 +4074,8 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
       case FIRToken::error:
         return success();
 
-      // If we got to the next module or a type declaration, then we're done.
+      // If we got to another declaration, then we're done.
+      case FIRToken::kw_declgroup:
       case FIRToken::kw_type:
       case FIRToken::kw_module:
       case FIRToken::kw_extmodule:
@@ -4227,6 +4284,64 @@ ParseResult FIRCircuitParser::parseTypeDecl() {
   return success();
 }
 
+// Parse a group declaration.
+ParseResult FIRCircuitParser::parseGroupDecl(CircuitOp circuit) {
+  auto baseIndent = getIndentation();
+
+  // A stack of all groups that are possibly parents of the current group.
+  SmallVector<std::pair<std::optional<unsigned>, GroupDeclOp>> groupStack;
+
+  // Parse a single group and add it to the groupStack.
+  auto parseOne = [&](Block *block) -> ParseResult {
+    auto indent = getIndentation();
+    StringRef id, convention;
+    LocWithInfo info(getToken().getLoc(), this);
+    consumeToken();
+    if (parseId(id, "expected group name") || parseGetSpelling(convention))
+      return failure();
+    auto groupConvention = symbolizeGroupConvention(convention);
+    if (!groupConvention) {
+      emitError() << "unknown convention '" << convention
+                  << "' (did you misspell it?)";
+      return failure();
+    }
+    consumeToken();
+    if (parseToken(FIRToken::colon, "expected ':' after group definition") ||
+        info.parseOptionalInfo())
+      return failure();
+    auto builder = OpBuilder::atBlockEnd(block);
+    // Create the group declaration and give it an empty block.
+    auto groupDeclOp =
+        builder.create<GroupDeclOp>(info.getLoc(), id, *groupConvention);
+    groupDeclOp->getRegion(0).push_back(new Block());
+    groupStack.push_back({indent, groupDeclOp});
+    return success();
+  };
+
+  if (parseOne(circuit.getBodyBlock()))
+    return failure();
+
+  // Parse any nested groups.
+  while (getIndentation() > baseIndent) {
+    switch (getToken().getKind()) {
+    case FIRToken::kw_declgroup: {
+      // Pop nested groups off the stack until we find out what group to insert
+      // this into.
+      while (groupStack.back().first >= getIndentation())
+        groupStack.pop_back();
+      auto parentGroup = groupStack.back().second;
+      if (parseOne(&parentGroup.getBody().front()))
+        return failure();
+      break;
+    }
+    default:
+      return emitError("expected 'declgroup'"), failure();
+    }
+  }
+
+  return success();
+}
+
 // Parse the body of this module.
 ParseResult
 FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
@@ -4400,6 +4515,17 @@ ParseResult FIRCircuitParser::parseCircuit(
       break;
     }
 
+    case FIRToken::kw_declgroup: {
+      if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+        return emitError()
+               << "unexpected token: optional groups are a FIRRTL 3.1.0+ "
+                  "feature, but the specified FIRRTL version was "
+               << version;
+      if (parseGroupDecl(circuit))
+        return failure();
+      break;
+    }
+
     case FIRToken::kw_module:
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule: {
@@ -4443,6 +4569,10 @@ DoneParsing:
     if (circuit.getOps<FModuleLike>().empty()) {
       return mlir::emitError(circuit.getLoc())
              << "no modules found, circuit must contain one or more modules";
+    }
+    if (auto *notModule = circuit.lookupSymbol(circuit.getName())) {
+      return notModule->emitOpError()
+             << "cannot have the same name as the circuit";
     }
     return mlir::emitError(circuit.getLoc())
            << "no main module found, circuit '" << circuit.getName()
