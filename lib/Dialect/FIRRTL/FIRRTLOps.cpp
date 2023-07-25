@@ -4733,13 +4733,7 @@ FIRRTLType RWProbeOp::inferReturnType(ValueRange operands,
                                       std::optional<Location> loc) {
   auto typeAttr = getAttr<TypeAttr>(attrs, "type");
   auto type = typeAttr.getValue();
-  auto baseType = type_dyn_cast<FIRRTLBaseType>(type);
-  if (!baseType)
-    return emitInferRetTypeError(loc, "must be base type, not ", type);
-  if (baseType.hasUninferredWidth() || baseType.hasUninferredReset())
-    return emitInferRetTypeError(
-        loc, "must not have uninferred width or reset in type ", baseType);
-  auto forceableType = firrtl::detail::getForceableResultType(true, baseType);
+  auto forceableType = firrtl::detail::getForceableResultType(true, type);
   if (!forceableType)
     return emitInferRetTypeError(loc, "cannot force type ", type);
   return forceableType;

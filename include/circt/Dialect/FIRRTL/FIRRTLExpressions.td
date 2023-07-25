@@ -1169,7 +1169,7 @@ def RWProbeOp : FIRRTLExprOp<"ref.rwprobe",
     ```
   }];
 
-  let arguments = (ins InnerRefAttr:$target, TypeAttrOf<FIRRTLBaseType>:$type);
+  let arguments = (ins InnerRefAttr:$target, TypeAttrOf<RWProbeTarget>:$type);
   let results = (outs RefType:$result);
   let assemblyFormat = "$target attr-dict `:` $type";
 }

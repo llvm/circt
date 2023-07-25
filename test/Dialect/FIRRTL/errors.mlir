@@ -1871,6 +1871,15 @@ firrtl.circuit "RWProbeRemote" {
 
 // -----
 
+firrtl.circuit "RWProbeNonBase" {
+  firrtl.module @RWProbeNonBase() {
+    // expected-error @below {{cannot force type '!firrtl.string'}}
+    %rw = firrtl.ref.rwprobe <@RWProbeTypes::@invalid> : !firrtl.string
+  }
+}
+
+// -----
+
 firrtl.circuit "RWProbeTypes" {
   firrtl.module @RWProbeTypes() {
     // expected-note @below {{target resolves here}}
@@ -1885,8 +1894,18 @@ firrtl.circuit "RWProbeTypes" {
 firrtl.circuit "RWProbeUninferred" {
   firrtl.module @RWProbeUninferred() {
     %w = firrtl.wire sym @x : !firrtl.uint
-    // expected-error @below {{must not have uninferred width or reset}}
+    // expected-error @below {{op attribute 'type' failed to satisfy constraint: type attribute of a rwprobe-able type (base, no uninferred widths or resets)}}
     %rw = firrtl.ref.rwprobe <@RWProbeUninferred::@x> : !firrtl.uint
+  }
+}
+
+// -----
+
+firrtl.circuit "RWProbeUninferredReset" {
+  firrtl.module @RWProbeUninferredReset() {
+    %w = firrtl.wire sym @x : !firrtl.bundle<a: reset>
+    // expected-error @below {{op attribute 'type' failed to satisfy constraint: type attribute of a rwprobe-able type (base, no uninferred widths or resets)}}
+    %rw = firrtl.ref.rwprobe <@RWProbeUninferred::@x> : !firrtl.bundle<a: reset>
   }
 }
 
