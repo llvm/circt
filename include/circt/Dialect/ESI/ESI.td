@@ -19,21 +19,7 @@ include "mlir/IR/OpBase.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
-def ESI_Dialect : Dialect {
-  let name = "esi";
-  let cppNamespace = "::circt::esi";
-
-  let hasConstantMaterializer = 1;
-  let useDefaultTypePrinterParser = 1;
-
-  let extraClassDeclaration = [{
-    /// Register all ESI types.
-    void registerTypes();
-  }];
-}
-
-class ESI_Op<string mnemonic, list<Trait> traits = []> :
-    Op<ESI_Dialect, mnemonic, traits>;
+include "circt/Dialect/ESI/ESIDialect.td"
 
 // Divide all ESI ops into abstract and physical. Abstract ops are ones which
 // need to be lowered to physical ops before they get lowered further (into
