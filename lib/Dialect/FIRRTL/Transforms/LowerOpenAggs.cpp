@@ -658,17 +658,15 @@ struct LowerOpenAggsPass : public LowerOpenAggsBase<LowerOpenAggsPass> {
 
 // This is the main entrypoint for the lowering pass.
 void LowerOpenAggsPass::runOnOperation() {
+  auto mod = getOperation();
   LLVM_DEBUG(
-      llvm::dbgs() << "===- Running Lower Open Aggregates Pass "
-                      "------------------------------------------------===\n");
-  SmallVector<Operation *, 0> ops(getOperation().getOps<FModuleLike>());
+      llvm::dbgs() << "===- Running Lower Open Aggregates Pass on "
+                   << mod.getModuleName()
+                   << " ------------------------------------------------===\n");
 
-  auto result = failableParallelForEach(&getContext(), ops, [&](Operation *op) {
-    Visitor visitor(&getContext());
-    return visitor.visit(cast<FModuleLike>(op));
-  });
+  auto result = Visitor(&getContext()).visit(mod);
 
-  if (result.failed())
+  if (failed(result))
     signalPassFailure();
 }
 

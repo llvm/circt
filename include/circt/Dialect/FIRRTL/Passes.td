@@ -628,7 +628,7 @@ def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createLowerIntrinsicsPass()";
 }
 
-def LowerOpenAggs : Pass<"firrtl-lower-open-aggs", "firrtl::CircuitOp"> {
+def LowerOpenAggs : InterfacePass<"firrtl-lower-open-aggs", "firrtl::FModuleLike"> {
   let summary = "Lower 'Open' aggregates by splitting out non-hardware elements";
   let description = [{
      This pass lowers aggregates of the more open varieties into their equivalents

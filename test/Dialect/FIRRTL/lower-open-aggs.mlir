@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline="builtin.module(firrtl.circuit(firrtl-lower-open-aggs))" %s --split-input-file | FileCheck %s --implicit-check-not=openvector --implicit-check-not=openbundle --implicit-check-not=opensub
+// RUN: circt-opt --pass-pipeline="builtin.module(firrtl.circuit(any(firrtl-lower-open-aggs)))" %s --split-input-file | FileCheck %s --implicit-check-not=openvector --implicit-check-not=openbundle --implicit-check-not=opensub
 
 // CHECK-LABEL: circuit "Bundle"
 firrtl.circuit "Bundle" {

@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline="builtin.module(firrtl.circuit(firrtl-lower-open-aggs))" %s --split-input-file --verify-diagnostics
+// RUN: circt-opt --pass-pipeline="builtin.module(firrtl.circuit(any(firrtl-lower-open-aggs)))" %s --split-input-file --verify-diagnostics
 
 firrtl.circuit "Symbol" {
   // expected-error @below {{symbol found on aggregate with no HW}}
