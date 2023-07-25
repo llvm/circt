@@ -4751,15 +4751,14 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   if (!target)
     return emitOpError() << "has target that cannot be resolved: " << target;
 
-  auto getFinalType = [&](auto type, auto fieldID) -> mlir::Type {
-    auto fieldIDType = type_dyn_cast<hw::FieldIDTypeInterface>(type);
-    if (fieldIDType)
-      return fieldIDType.getFinalTypeByFieldID(fieldID);
-    assert(fieldID == 0);
-    return type;
-  };
   auto checkFinalType = [&](auto type, Location loc) -> LogicalResult {
-    auto fType = getFinalType(type, target.getField());
+    // Determine final type.
+    mlir::Type fType = type;
+    if (auto fieldIDType = type_dyn_cast<hw::FieldIDTypeInterface>(type))
+      fType = fieldIDType.getFinalTypeByFieldID(target.getField());
+    else
+      assert(target.getField() == 0);
+    // Check.
     if (fType != getType()) {
       auto diag = emitOpError("has type mismatch: target resolves to ")
                   << fType << " instead of expected " << getType();
