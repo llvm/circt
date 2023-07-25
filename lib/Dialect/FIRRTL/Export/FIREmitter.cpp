@@ -353,6 +353,7 @@ void Emitter::emitCircuit(CircuitOp op) {
 void Emitter::emitModule(FModuleOp op) {
   startStatement();
   ps << "module " << PPExtString(legalize(op.getNameAttr())) << " :";
+  emitLocation(op);
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
 
@@ -373,6 +374,7 @@ void Emitter::emitModule(FModuleOp op) {
 void Emitter::emitModule(FExtModuleOp op) {
   startStatement();
   ps << "extmodule " << PPExtString(legalize(op.getNameAttr())) << " :";
+  emitLocation(op);
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
 
@@ -396,6 +398,7 @@ void Emitter::emitModule(FExtModuleOp op) {
 void Emitter::emitModule(FIntModuleOp op) {
   startStatement();
   ps << "intmodule " << PPExtString(legalize(op.getNameAttr())) << " :";
+  emitLocation(op);
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
 
@@ -435,6 +438,7 @@ void Emitter::emitModulePorts(ArrayRef<PortInfo> ports,
       addValueName(arguments[i], legalName);
     ps << PPExtString(legalName) << " : ";
     emitType(port.type);
+    emitLocation(ports[i].loc);
     setPendingNewline();
   }
 }
