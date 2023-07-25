@@ -80,4 +80,39 @@ LogicalResult hw::verifyInnerSymAttr(InnerSymbolOpInterface op) {
   return success();
 }
 
+
+    mlir::ArrayAttr hwmodulelike_impl::getInputNamesAttr(HWModuleLike op) {
+      return op.getHWModuleType().getInputNamesAttr();
+    }
+
+    mlir::ArrayAttr hwmodulelike_impl::getOutputNamesAttr(HWModuleLike op) {
+      return op.getHWModuleType().getOutputNamesAttr();
+    }
+
+    StringRef hwmodulelike_impl::getInputName(HWModuleLike op, size_t idx) {
+      return op.getHWModuleType().getInputName(idx);
+    }
+
+    StringRef hwmodulelike_impl::getOutputName(HWModuleLike op, size_t idx) {
+      return op.getHWModuleType().getOutputName(idx);
+    }
+
+    mlir::StringAttr hwmodulelike_impl::getInputNameAttr(HWModuleLike op, size_t idx) {
+      return op.getHWModuleType().getInputNameAttr(idx);
+    }
+
+    mlir::StringAttr hwmodulelike_impl::getOutputNameAttr(HWModuleLike op, size_t idx) {
+      return op.getHWModuleType().getOutputNameAttr(idx);
+    }
+
+    unsigned hwmodulelike_impl::getNumInputs(HWModuleLike op) {
+      return op.getHWModuleType().getNumInputs();
+    }
+
+    unsigned hwmodulelike_impl::getNumOutputs(HWModuleLike op) {
+      return op.getHWModuleType().getNumOutputs();
+    }
+
+
+
 #include "circt/Dialect/HW/HWOpInterfaces.cpp.inc"

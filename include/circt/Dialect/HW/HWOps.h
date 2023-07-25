@@ -80,6 +80,9 @@ FunctionType getModuleType(Operation *module);
 inline unsigned getModuleNumInputs(Operation *moduleOrInstance) {
   assert(isAnyModuleOrInstance(moduleOrInstance) &&
          "must be called on instance or module");
+  if (auto mod = dyn_cast<HWModuleLike>(moduleOrInstance))
+    return mod.getNumInputs();
+
   return moduleOrInstance->getAttrOfType<ArrayAttr>("argNames").size();
 }
 
@@ -87,6 +90,9 @@ inline unsigned getModuleNumInputs(Operation *moduleOrInstance) {
 inline unsigned getModuleNumOutputs(Operation *moduleOrInstance) {
   assert(isAnyModuleOrInstance(moduleOrInstance) &&
          "must be called on instance or module");
+  if (auto mod = dyn_cast<HWModuleLike>(moduleOrInstance))
+    return mod.getNumOutputs();
+
   return moduleOrInstance->getAttrOfType<ArrayAttr>("resultNames").size();
 }
 

@@ -32,72 +32,16 @@ def HWModuleLike : OpInterface<"HWModuleLike", [Symbol]> {
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getNameAttr(); }]>,
 
+    InterfaceMethod<"Get the module type",
+    "::circt::hw::ModuleType", "getHWModuleType", (ins)>,
+
     InterfaceMethod<"Get the number of ports",
-    "size_t", "getNumPorts">,
+    "size_t", "getNumPorts", (ins), 
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{return $_op->getHWModuleType().getNumInputs() + $_op->getHWModuleType().getNumOutputs(); }]>,
 
     InterfaceMethod<"Get a port symbol attribute",
     "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex)>,
-
-    InterfaceMethod<"Get the module type",
-    "::circt::hw::ModuleType", "getModuleType", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return ::circt::hw::detail::FnToMod($_op, getInputNames(), getOutputNames()); }]>,
-
-    InterfaceMethod<"Return the number of inputs to this module",
-    "unsigned", "getNumInputs", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return $_op->template getAttrOfType<ArrayAttr>("argNames").size();
-    }]>,
-
-    InterfaceMethod<"Return the number of outputs from this module",
-    "unsigned", "getNumOutputs", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return $_op->template getAttrOfType<ArrayAttr>("resultNames").size();
-    }]>,
-
-    InterfaceMethod<"Return the names of the inputs to this module",
-    "mlir::ArrayAttr", "getInputNames", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return $_op->template getAttrOfType<ArrayAttr>("argNames");
-    }]>,
-
-    InterfaceMethod<"Return the names of the outputs this module",
-    "mlir::ArrayAttr", "getOutputNames", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return $_op->template getAttrOfType<ArrayAttr>("resultNames");
-    }]>,
-
-    InterfaceMethod<"Return the name of an input.",
-    "mlir::StringRef", "getInputName", (ins "unsigned":$idx),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return getInputNameAttr(idx).getValue();
-    }]>,
-
-    InterfaceMethod<"Return the name of an output.",
-    "mlir::StringRef", "getOutputName", (ins "unsigned":$idx),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return getOutputNameAttr(idx).getValue();
-    }]>,
-
-    InterfaceMethod<"Return the name of an input to this module",
-    "mlir::StringAttr", "getInputNameAttr", (ins "unsigned":$idx),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return cast<StringAttr>($_op->template getAttrOfType<ArrayAttr>("argNames")[idx]);
-    }]>,
-
-    InterfaceMethod<"Return the name of an output to this module",
-    "mlir::StringAttr", "getOutputNameAttr", (ins "unsigned":$idx),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return cast<StringAttr>($_op->template getAttrOfType<ArrayAttr>("resultNames")[idx]);
-    }]>,
 
     InterfaceMethod<"Return the locations of the inputs to this module",
     "mlir::ArrayAttr", "getInputLocs", (ins),
@@ -114,6 +58,50 @@ def HWModuleLike : OpInterface<"HWModuleLike", [Symbol]> {
     }]>,
 
   ];
+
+  let extraSharedClassDeclaration = [{
+    SmallVector<StringRef> getInputNames() {
+      return hw::hwmodulelike_impl::getInputNames($_op);
+    }
+
+    SmallVector<StringRef> getOutputNames() {
+      return hw::hwmodulelike_impl::getOutputNames($_op);
+    }
+
+    mlir::ArrayAttr getInputNamesAttr() {
+      return hw::hwmodulelike_impl::getInputNamesAttr($_op);
+    }
+
+    mlir::ArrayAttr getOutputNamesAttr() {
+      return hw::hwmodulelike_impl::getOutputNamesAttr($_op);
+    }
+
+    StringRef getInputName(size_t idx) {
+      return hw::hwmodulelike_impl::getInputName($_op, idx);
+    }
+
+    StringRef getOutputName(size_t idx) {
+      return hw::hwmodulelike_impl::getOutputName($_op, idx);
+    }
+
+    mlir::StringAttr getInputNameAttr(size_t idx) {
+      return hw::hwmodulelike_impl::getInputNameAttr($_op, idx);
+    }
+
+    mlir::StringAttr getOutputNameAttr(size_t idx) {
+      return hw::hwmodulelike_impl::getOutputNameAttr($_op, idx);
+    }
+
+    unsigned getNumInputs() {
+      return hw::hwmodulelike_impl::getNumInputs($_op);
+    }
+
+    unsigned getNumOutputs() {
+      return hw::hwmodulelike_impl::getNumOutputs($_op);
+    }
+
+
+  }];
 
   let verify = [{
     static_assert(

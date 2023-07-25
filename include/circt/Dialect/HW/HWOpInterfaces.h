@@ -131,6 +131,22 @@ namespace detail {
 LogicalResult verifyInnerRefNamespace(Operation *op);
 } // namespace detail
 
+class HWModuleLike;
+namespace hwmodulelike_impl {
+
+    SmallVector<StringRef> getInputNames(HWModuleLike op);
+    SmallVector<StringRef> getOutputNames(HWModuleLike op);
+    mlir::ArrayAttr getInputNamesAttr(HWModuleLike op);
+    mlir::ArrayAttr getOutputNamesAttr(HWModuleLike op);
+    StringRef getInputName(HWModuleLike op, size_t idx);
+    StringRef getOutputName(HWModuleLike op, size_t idx);
+    mlir::StringAttr getInputNameAttr(HWModuleLike op, size_t idx);
+    mlir::StringAttr getOutputNameAttr(HWModuleLike op, size_t idx);
+    unsigned getNumInputs(HWModuleLike op);
+    unsigned getNumOutputs(HWModuleLike op);
+
+} // namespace hwmodulelike_impl
+
 } // namespace hw
 } // namespace circt
 

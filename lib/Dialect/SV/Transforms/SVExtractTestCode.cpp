@@ -199,7 +199,7 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   // Construct the ports, this is just the input Values
   SmallVector<hw::PortInfo> ports;
   {
-    auto srcPorts = op.getArgNames();
+    auto srcPorts = op.getInputNames();
     for (auto port : llvm::enumerate(realInputs)) {
       auto name = getNameForPort(port.value(), srcPorts);
       ports.push_back({name, hw::PortDirection::INPUT, port.value().getType(),

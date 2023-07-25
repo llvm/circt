@@ -101,13 +101,15 @@ def ModuleType : HW_Type<"Module", "module"> {
     Type getOutputType(size_t);
     SmallVector<StringAttr> getInputNames();
     SmallVector<StringAttr> getOutputNames();
+    ArrayAttr getInputNamesAttr();
+    ArrayAttr getOutputNamesAttr();
     StringAttr getNameAttr(size_t);
     StringRef getName(size_t);
     StringAttr getInputNameAttr(size_t);
     StringRef getInputName(size_t);
     StringAttr getOutputNameAttr(size_t);
     StringRef getOutputName(size_t);
-    FunctionType getFuncType();
+    FunctionType getFunctionType();
   }];
 }
 

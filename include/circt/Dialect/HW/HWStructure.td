@@ -29,8 +29,8 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 /// the module-like operations.
 class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     HWOp<mnemonic, traits # [
-      DeclareOpInterfaceMethods<HWModuleLike>,
-      DeclareOpInterfaceMethods<HWMutableModuleLike>,
+      HWModuleLike,
+      HWMutableModuleLike,
       FunctionOpInterface, Symbol,
       OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
   /// Additional class declarations inside the module op.
@@ -55,6 +55,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
   code extraModuleClassDefinition = [{}];
 
   let extraClassDefinition = extraModuleClassDefinition # [{
+
     size_t $cppClass::getNumPorts() {
       return getAllPorts().size();
     }
@@ -66,6 +67,8 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
           return sym;
       return ::circt::hw::InnerSymAttr();
     }
+
+
   }];
 
 }
@@ -79,11 +82,9 @@ def HWModuleOp : HWModuleOpBase<"module",
     name, a list of ports, a list of parameters, and a body that represents the
     connections within the module.
   }];
-  let arguments = (ins TypeAttrOf<FunctionType>:$function_type,
+  let arguments = (ins TypeAttrOf<ModuleType>:$module_type,
                        OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
-                       StrArrayAttr:$argNames,
-                       StrArrayAttr:$resultNames,
                        LocationArrayAttr:$argLocs,
                        LocationArrayAttr:$resultLocs,
                        ParamDeclArrayAttr:$parameters,
@@ -113,8 +114,22 @@ def HWModuleOp : HWModuleOpBase<"module",
     using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::front;
     using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::getFunctionBody;
 
+    ModuleType getHWModuleType() {
+      return getModuleType();
+    }
+
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
+
+    // Implement FunctionOpInterface
+    FunctionType getFunctionType() {
+      return getHWModuleType().getFunctionType();
+    }
+    
+    void setFunctionTypeAttr(TypeAttr) {
+      assert(0 && "setfunctiontype direct bug");
+      abort();
+    }
 
     /// Decode information about the input and output ports on this module.
     ModulePortInfo getPorts() {
@@ -223,16 +238,6 @@ def HWModuleOp : HWModuleOpBase<"module",
     /// Returns the result types of this function.
     ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
 
-    /// Verify the type attribute of this function. Returns failure and emits
-    /// an error if the attribute is invalid.
-    LogicalResult verifyType() {
-      auto type = getFunctionTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
-                           "' attribute of function type");
-      return success();
-    }
-
     /// Verifies the body of the function.
     LogicalResult verifyBody();
   }];
@@ -252,10 +257,9 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
     have proper parameterization in the hw.dialect.  We need a way to represent
     parameterized types instead of just concrete types.
   }];
-  let arguments = (ins TypeAttrOf<FunctionType>:$function_type,
+  let arguments = (ins TypeAttrOf<ModuleType>:$module_type,
 		       OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
-                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
@@ -274,6 +278,20 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
   ];
 
   let extraModuleClassDeclaration = [{
+    ModuleType getHWModuleType() {
+      return getModuleType();
+    }
+
+    // Implement FunctionOpInterface
+    FunctionType getFunctionType() {
+      return getHWModuleType().getFunctionType();
+    }
+
+    void setFunctionTypeAttr(TypeAttr) {
+      assert(0 && "setfunctiontype direct bug");
+      abort();
+    }
+    
     /// Return all the module ports merged into one list.
     SmallVector<PortInfo> getAllPorts() {
       return getAllModulePortInfos(*this);
@@ -321,15 +339,6 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
     /// Returns the result types of this function.
     ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
 
-    /// Verify the type attribute of this function. Returns failure and emits
-    /// an error if the attribute is invalid.
-    LogicalResult verifyType() {
-      auto type = getFunctionTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
-                           "' attribute of function type");
-      return success();
-    }
   }];
 
   let hasCustomAssemblyFormat = 1;
@@ -372,10 +381,9 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
     module name in Verilog we can use.  See hw.module for an explanation.
   }];
   let arguments = (ins FlatSymbolRefAttr:$generatorKind,
-                       TypeAttrOf<FunctionType>:$function_type,
+                       TypeAttrOf<ModuleType>:$module_type,
 		       OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
-                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
@@ -396,6 +404,20 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
   ];
 
   let extraModuleClassDeclaration = [{
+    ModuleType getHWModuleType() {
+      return getModuleType();
+    }
+
+    // Implement FunctionOpInterface
+    FunctionType getFunctionType() {
+      return getHWModuleType().getFunctionType();
+    }
+    
+    void setFunctionTypeAttr(TypeAttr) {
+      assert(0 && "setfunctiontype direct bug");
+      abort();
+    }
+
     /// Decode information about the input and output ports on this module.
     ModulePortInfo getPorts() {
       return getModulePortInfo(*this);
@@ -430,16 +452,6 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
 
     /// Returns the result types of this function.
     ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
-
-    /// Verify the type attribute of this function. Returns failure and emits
-    /// an error if the attribute is invalid.
-    LogicalResult verifyType() {
-      auto type = getFunctionTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
-                           "' attribute of function type");
-      return success();
-    }
 
     TypeAttr getTypeAttr();
   }];

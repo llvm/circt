@@ -17,8 +17,13 @@ std::pair<ArrayAttr, ArrayAttr>
 instance_like_impl::getHWModuleArgAndResultNames(Operation *module) {
   assert(isAnyModule(module) && "Can only reference a module");
 
-  return {module->getAttrOfType<ArrayAttr>("argNames"),
-          module->getAttrOfType<ArrayAttr>("resultNames")};
+  auto mod = cast<HWModuleLike>(module);
+  auto argsT = mod.getModuleType().getInputNames();
+  auto resultsT = mod.getModuleType().getOutputNames();
+  SmallVector<Attribute> args(argsT.begin(), argsT.end());
+  SmallVector<Attribute> results(resultsT.begin(), resultsT.end());
+
+  return {ArrayAttr::get(module->getContext(), args), ArrayAttr::get(module->getContext(), results)};
 }
 
 Operation *

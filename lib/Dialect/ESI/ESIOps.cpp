@@ -528,7 +528,6 @@ LogicalResult ESIPureModuleOp::verify() {
   return success();
 }
 
-size_t ESIPureModuleOp::getNumPorts() { return 0; }
 hw::InnerSymAttr ESIPureModuleOp::getPortSymbolAttr(size_t portIndex) {
   assert(false);
   return {};

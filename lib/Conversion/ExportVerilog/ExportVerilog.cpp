@@ -216,7 +216,8 @@ static void emitZeroWidthIndexingValue(PPS &os) {
 
 /// Return the verilog name of the port for the module.
 StringRef getPortVerilogName(Operation *module, ssize_t portArgNum) {
-  auto numInputs = hw::getModuleNumInputs(module);
+  auto mod = cast<HWModuleLike>(module);
+  auto numInputs = mod.getNumInputs();
   // portArgNum is the index into the result of getAllModulePortInfos.
   // Also ensure the correct index into the input/output list is computed.
   ssize_t portId = portArgNum;
@@ -229,9 +230,7 @@ StringRef getPortVerilogName(Operation *module, ssize_t portArgNum) {
         if (auto updatedName = argDict.get(verilogNameAttr))
           return updatedName.cast<StringAttr>().getValue();
     // Get the original name of input port if no renaming.
-    return module->getAttrOfType<ArrayAttr>("argNames")[portArgNum]
-        .cast<StringAttr>()
-        .getValue();
+    return mod.getInputName(portArgNum);
   }
 
   // If its an output port, get the index into the output port array.
@@ -241,9 +240,7 @@ StringRef getPortVerilogName(Operation *module, ssize_t portArgNum) {
       if (auto updatedName = argDict.get(verilogNameAttr))
         return updatedName.cast<StringAttr>().getValue();
   // Get the original name of output port if no renaming.
-  return module->getAttrOfType<ArrayAttr>("resultNames")[portId]
-      .cast<StringAttr>()
-      .getValue();
+  return mod.getOutputName(portId);
 }
 
 StringRef getPortVerilogName(Operation *module, PortInfo port) {

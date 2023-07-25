@@ -72,9 +72,6 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
   code extraModuleClassDefinition = [{}];
 
   let extraClassDefinition = extraModuleClassDefinition # [{
-    size_t $cppClass::getNumPorts() {
-      return getPortTypesAttr().size();
-    }
 
     circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
       auto syms = getPortSymbols();

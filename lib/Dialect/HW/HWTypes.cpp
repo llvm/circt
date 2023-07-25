@@ -674,6 +674,27 @@ SmallVector<StringAttr> ModuleType::getOutputNames() {
   return retval;
 }
 
+ArrayAttr ModuleType::getInputNamesAttr() {
+  SmallVector<Attribute> retval;
+  for (auto &p : getPorts()) {
+    if (p.dir == ModulePort::Direction::Input ||
+        p.dir == ModulePort::Direction::InOut) {
+      retval.push_back(p.name);
+    }
+  }
+  return ArrayAttr::get(getContext(), retval);
+}
+
+ArrayAttr ModuleType::getOutputNamesAttr() {
+  SmallVector<Attribute> retval;
+  for (auto &p : getPorts()) {
+    if (p.dir == ModulePort::Direction::Output) {
+      retval.push_back(p.name);
+    }
+  }
+  return ArrayAttr::get(getContext(), retval);
+}
+
 StringAttr ModuleType::getNameAttr(size_t idx) { return getPorts()[idx].name; }
 
 StringRef ModuleType::getName(size_t idx) {
@@ -722,7 +743,19 @@ StringRef ModuleType::getOutputName(size_t idx) {
   return {};
 }
 
-FunctionType ModuleType::getFuncType() { return nullptr; }
+FunctionType ModuleType::getFunctionType() {
+     SmallVector<Type> inputs;
+     SmallVector<Type> outputs;
+     for (auto& p : getPorts())
+      if (p.dir == ModulePort::Direction::Input) {
+        inputs.push_back(p.type);
+      } else if (p.dir == ModulePort::Direction::Output) {
+        outputs.push_back(p.type);
+      } else {
+        inputs.push_back(InOutType::get(p.type));
+      }
+    return FunctionType::get(getContext(), inputs, outputs);   
+   }
 
 namespace mlir {
 template <>
@@ -780,14 +813,14 @@ static llvm::hash_code hash_value(const ModulePort &port) {
 } // namespace hw
 } // namespace circt
 
-ModuleType circt::hw::detail::FnToMod(Operation *op, ArrayAttr inputNames,
+ModuleType circt::hw::detail::fnToMod(Operation *op, ArrayAttr inputNames,
                                       ArrayAttr outputNames) {
-  return FnToMod(
+  return fnToMod(
       cast<FunctionType>(cast<mlir::FunctionOpInterface>(op).getFunctionType()),
       inputNames, outputNames);
 }
 
-ModuleType circt::hw::detail::FnToMod(FunctionType fnty, ArrayAttr inputNames,
+ModuleType circt::hw::detail::fnToMod(FunctionType fnty, ArrayAttr inputNames,
                                       ArrayAttr outputNames) {
   SmallVector<ModulePort> ports;
   for (auto [t, n] : llvm::zip(fnty.getInputs(), inputNames))

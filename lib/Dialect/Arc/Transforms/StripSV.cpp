@@ -42,12 +42,12 @@ void StripSVPass::runOnOperation() {
 
   for (auto extModOp : mlirModule.getOps<hw::HWModuleExternOp>()) {
     if (extModOp.getVerilogModuleName() == "EICG_wrapper") {
-      if (extModOp.getArgNames() != expectedClockGateInputs ||
-          extModOp.getResultNames() != expectedClockGateOutputs) {
+      if (extModOp.getInputNamesAttr() != expectedClockGateInputs ||
+          extModOp.getOutputNamesAttr() != expectedClockGateOutputs) {
         extModOp.emitError("clock gate module `")
             << extModOp.getModuleName() << "` has incompatible port names "
-            << extModOp.getArgNamesAttr() << " -> "
-            << extModOp.getResultNamesAttr();
+            << extModOp.getInputNamesAttr() << " -> "
+            << extModOp.getOutputNamesAttr();
         return signalPassFailure();
       }
       if (extModOp.getArgumentTypes() !=
