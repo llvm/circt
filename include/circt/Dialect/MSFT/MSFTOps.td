@@ -171,8 +171,9 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
 
   let extraClassDefinition = [{
     size_t $cppClass::getNumPorts() {
+      // This is excessively expensive
       auto ports = getPorts();
-      return ports.inputs.size() + ports.outputs.size();
+      return ports.size();
     }
 
     circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
