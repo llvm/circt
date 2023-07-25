@@ -4667,6 +4667,10 @@ void RWProbeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
+void RWProbeSSAOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
 FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
                                          ArrayRef<NamedAttribute> attrs,
                                          std::optional<Location> loc) {
@@ -4779,6 +4783,16 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
         .attachNote(symOp.getLoc())
         .append("target resolves here");
   return checkFinalType(symOp.getTargetResult().getType(), symOp.getLoc());
+}
+
+FIRRTLType RWProbeSSAOp::inferReturnType(ValueRange operands,
+                                         ArrayRef<NamedAttribute> attrs,
+                                         std::optional<Location> loc) {
+  auto type = operands[0].getType();
+  auto forceableType = firrtl::detail::getForceableResultType(true, type);
+  if (!forceableType)
+    return emitInferRetTypeError(loc, "cannot force type ", type);
+  return forceableType;
 }
 
 //===----------------------------------------------------------------------===//

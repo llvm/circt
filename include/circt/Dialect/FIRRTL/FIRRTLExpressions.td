@@ -1174,6 +1174,21 @@ def RWProbeOp : FIRRTLExprOp<"ref.rwprobe",
   let assemblyFormat = "$target attr-dict `:` $type";
 }
 
+def RWProbeSSAOp : FIRRTLExprOp<"ref.rwprobe.ssa"> {
+  let summary = "FIRRTL RWProbe";
+  let description = [{
+    Create a RWProbe for the op or port originating the target operand.
+    For temporary use, prefer `firrtl.ref.rwprobe`.
+    ```
+      %result = firrtl.ref.rwprobe.ssa %input : t
+    ```
+  }];
+
+  let arguments = (ins RWProbeTarget:$input);
+  let results = (outs RefType:$result);
+  let assemblyFormat = "$input attr-dict `:` type($input)";
+}
+
 //===----------------------------------------------------------------------===//
 // LTL Dialect Sequence and Property Intrinsics
 //===----------------------------------------------------------------------===//
