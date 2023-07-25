@@ -76,7 +76,7 @@ void MachineOp::getHWPortInfo(SmallVectorImpl<hw::PortInfo> &ports) {
   for (unsigned i = 0, e = machineType.getNumInputs(); i < e; ++i) {
     hw::PortInfo port;
     port.name = getArgName(i);
-    port.direction = circt::hw::PortDirection::INPUT;
+    port.dir = circt::hw::ModulePort::Direction::Input;
     port.type = machineType.getInput(i);
     port.argNum = i;
     ports.push_back(port);
@@ -85,7 +85,7 @@ void MachineOp::getHWPortInfo(SmallVectorImpl<hw::PortInfo> &ports) {
   for (unsigned i = 0, e = machineType.getNumResults(); i < e; ++i) {
     hw::PortInfo port;
     port.name = getResName(i);
-    port.direction = circt::hw::PortDirection::OUTPUT;
+    port.dir = circt::hw::ModulePort::Direction::Output;
     port.type = machineType.getResult(i);
     port.argNum = i;
     ports.push_back(port);

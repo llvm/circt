@@ -53,7 +53,7 @@ static void findValidReady(Operation *modOp,
                            const llvm::StringMap<hw::PortInfo> &nameMap,
                            hw::PortInfo dataPort, bool trimName, bool warn,
                            SmallVectorImpl<ESIPortValidReadyMapping> &names) {
-  if (dataPort.direction == hw::PortDirection::INOUT) {
+  if (dataPort.dir == hw::ModulePort::Direction::InOut) {
     if (warn)
       modOp->emitWarning("Data port '")
           << dataPort.getName() << "' cannot be inout direction.";
@@ -70,7 +70,7 @@ static void findValidReady(Operation *modOp,
   // Look for a 'valid' port.
   name.append("_valid");
   auto valid = nameMap.find(name);
-  if (valid == nameMap.end() || valid->second.direction != dataPort.direction ||
+  if (valid == nameMap.end() || valid->second.dir != dataPort.dir ||
       !valid->second.type.isSignlessInteger(1)) {
     if (warn)
       modOp->emitWarning("Could not find appropriate valid port for '")
@@ -81,11 +81,12 @@ static void findValidReady(Operation *modOp,
   // Try to find a corresponding 'ready' port.
   name.resize(nameLen);
   name.append("_ready");
-  hw::PortDirection readyDir = dataPort.direction == hw::PortDirection::INPUT
-                                   ? hw::PortDirection::OUTPUT
-                                   : hw::PortDirection::INPUT;
+  hw::ModulePort::Direction readyDir =
+      dataPort.dir == hw::ModulePort::Direction::Input
+          ? hw::ModulePort::Direction::Output
+          : hw::ModulePort::Direction::Input;
   auto ready = nameMap.find(name);
-  if (ready == nameMap.end() || ready->second.direction != readyDir ||
+  if (ready == nameMap.end() || ready->second.dir != readyDir ||
       !ready->second.type.isSignlessInteger(1)) {
     if (warn)
       modOp->emitWarning("Could not find appropriate ready port for '")
@@ -167,14 +168,14 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
                    // data port name.
   // Validate input and assemble lookup structures.
   for (const auto &esiPort : portsToConvert) {
-    if (esiPort.data.direction == hw::PortDirection::INOUT) {
+    if (esiPort.data.dir == hw::ModulePort::Direction::InOut) {
       pearl->emitError("Data signal '")
           << esiPort.data.name << "' must not be INOUT";
       return nullptr;
     }
     dataPortMap[esiPort.data.name.getValue()] = esiPort;
 
-    if (esiPort.valid.direction != esiPort.data.direction) {
+    if (esiPort.valid.dir != esiPort.data.dir) {
       pearl->emitError("Valid port '")
           << esiPort.valid.name << "' direction must match data port.";
       return nullptr;
@@ -186,9 +187,9 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
     }
     controlPorts.insert(esiPort.valid.name.getValue());
 
-    if (esiPort.ready.direction != (esiPort.data.isOutput()
-                                        ? hw::PortDirection::INPUT
-                                        : hw::PortDirection::OUTPUT)) {
+    if (esiPort.ready.dir != (esiPort.data.isOutput()
+                                  ? hw::ModulePort::Direction::Input
+                                  : hw::ModulePort::Direction::Output)) {
       pearl->emitError("Ready port '")
           << esiPort.ready.name
           << "' must be opposite direction to data signal.";

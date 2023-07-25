@@ -489,16 +489,19 @@ static hw::ModulePortInfo getModulePortInfoHS(TypeConverter &tc,
 
   // Add all inputs of funcOp.
   for (auto [index, type] : llvm::enumerate(ft.getInputs())) {
-    ports.inputs.push_back({StringAttr::get(ctx, "in" + std::to_string(index)),
-                            hw::PortDirection::INPUT, tc.convertType(type),
-                            index, hw::InnerSymAttr{}});
+    ports.inputs.push_back(
+        {{StringAttr::get(ctx, "in" + std::to_string(index)),
+          tc.convertType(type), hw::ModulePort::Direction::Input},
+         index,
+         hw::InnerSymAttr{}});
   }
 
   // Add all outputs of funcOp.
   for (auto [index, type] : llvm::enumerate(ft.getResults())) {
     ports.outputs.push_back(
-        {StringAttr::get(ctx, "out" + std::to_string(index)),
-         hw::PortDirection::OUTPUT, tc.convertType(type), index,
+        {{StringAttr::get(ctx, "out" + std::to_string(index)),
+          tc.convertType(type), hw::ModulePort::Direction::Output},
+         index,
          hw::InnerSymAttr{}});
   }
 

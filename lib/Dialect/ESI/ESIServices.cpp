@@ -546,9 +546,12 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
     if (!toClientType)
       continue;
     newInputs.push_back(std::make_pair(
-        origNumInputs, hw::PortInfo{getPortName(req.getClientNamePath()),
-                                    hw::PortDirection::INPUT, toClientType,
-                                    origNumInputs, nullptr, req->getLoc()}));
+        origNumInputs,
+        hw::PortInfo{{getPortName(req.getClientNamePath()), toClientType,
+                      hw::ModulePort::Direction::Input},
+                     origNumInputs,
+                     nullptr,
+                     req->getLoc()}));
 
     // Replace uses with new block args which will correspond to said ports.
     Value replValue = body->addArgument(toClientType, req->getLoc());

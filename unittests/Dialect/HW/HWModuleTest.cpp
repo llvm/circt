@@ -51,19 +51,19 @@ TEST(HWModuleOpTest, AddOutputs) {
   ASSERT_EQ(ports.size(), 4u);
 
   EXPECT_EQ(ports[0].name, builder.getStringAttr("a"));
-  EXPECT_EQ(ports[0].direction, PortDirection::OUTPUT);
+  EXPECT_EQ(ports[0].dir, ModulePort::Direction::Output);
   EXPECT_EQ(ports[0].type, wireTy);
 
   EXPECT_EQ(ports[1].name, builder.getStringAttr("b"));
-  EXPECT_EQ(ports[1].direction, PortDirection::OUTPUT);
+  EXPECT_EQ(ports[1].dir, ModulePort::Direction::Output);
   EXPECT_EQ(ports[1].type, wireTy);
 
   EXPECT_EQ(ports[2].name, builder.getStringAttr("c"));
-  EXPECT_EQ(ports[2].direction, PortDirection::OUTPUT);
+  EXPECT_EQ(ports[2].dir, ModulePort::Direction::Output);
   EXPECT_EQ(ports[2].type, wireTy);
 
   EXPECT_EQ(ports[3].name, builder.getStringAttr("d"));
-  EXPECT_EQ(ports[3].direction, PortDirection::OUTPUT);
+  EXPECT_EQ(ports[3].dir, ModulePort::Direction::Output);
   EXPECT_EQ(ports[3].type, wireTy);
 
   auto output = cast<OutputOp>(top.getBodyBlock()->getTerminator());

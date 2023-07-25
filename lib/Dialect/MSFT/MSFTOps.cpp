@@ -56,7 +56,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
 
   for (auto elt : ports.inputs) {
-    if (elt.direction == hw::PortDirection::INOUT &&
+    if (elt.dir == hw::ModulePort::Direction::InOut &&
         !elt.type.isa<hw::InOutType>())
       elt.type = hw::InOutType::get(elt.type);
     argTypes.push_back(elt.type);
@@ -467,24 +467,23 @@ hw::ModulePortInfo MSFTModuleOp::getPorts() {
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     bool isInOut = false;
     auto argName = argNames[i].cast<StringAttr>();
-    auto direction =
-        isInOut ? hw::PortDirection::INOUT : hw::PortDirection::INPUT;
+    auto direction = isInOut ? hw::ModulePort::Direction::InOut
+                             : hw::ModulePort::Direction::Input;
     auto type = argTypes[i];
     if (auto inout = type.dyn_cast<hw::InOutType>()) {
       isInOut = true;
       type = inout.getElementType();
     }
     auto argLoc = argLocs[i].cast<LocationAttr>();
-    inputs.push_back({argName, direction, type, i, {}, argLoc});
+    inputs.push_back({{argName, type, direction}, i, {}, argLoc});
   }
 
   auto resultNames = this->getResultNames();
   auto resultTypes = getResultTypes();
   auto resultLocs = getResultLocs();
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
-    outputs.push_back({resultNames[i].cast<StringAttr>(),
-                       hw::PortDirection::OUTPUT,
-                       resultTypes[i],
+    outputs.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
+                        hw::ModulePort::Direction::Output},
                        i,
                        {},
                        resultLocs[i].cast<LocationAttr>()});
@@ -930,10 +929,10 @@ hw::ModulePortInfo MSFTModuleExternOp::getPorts() {
       type = inout.getElementType();
     }
 
-    auto direction =
-        isInOut ? hw::PortDirection::INOUT : hw::PortDirection::INPUT;
+    auto direction = isInOut ? hw::ModulePort::Direction::InOut
+                             : hw::ModulePort::Direction::Input;
 
-    inputs.push_back({name, direction, type, i, {}, loc});
+    inputs.push_back({{name, type, direction}, i, {}, loc});
   }
 
   auto resultNames = getOperation()->getAttrOfType<ArrayAttr>("resultNames");
@@ -942,7 +941,10 @@ hw::ModulePortInfo MSFTModuleExternOp::getPorts() {
     auto name = resultNames[i].cast<StringAttr>();
     auto loc = resultLocs[i].cast<LocationAttr>();
     outputs.push_back(
-        {name, hw::PortDirection::OUTPUT, resultTypes[i], i, {}, loc});
+        {{name, resultTypes[i], hw::ModulePort::Direction::Output},
+         i,
+         {},
+         loc});
   }
 
   return hw::ModulePortInfo(inputs, outputs);

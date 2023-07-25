@@ -99,15 +99,16 @@ static LogicalResult verifyUniqueNamesInRegion(
 // SCModuleOp
 //===----------------------------------------------------------------------===//
 
-static hw::PortDirection getDirection(Type type) {
-  return TypeSwitch<Type, hw::PortDirection>(type)
-      .Case<InOutType>([](auto ty) { return hw::PortDirection::INOUT; })
-      .Case<InputType>([](auto ty) { return hw::PortDirection::INPUT; })
-      .Case<OutputType>([](auto ty) { return hw::PortDirection::OUTPUT; });
+static hw::ModulePort::Direction getDirection(Type type) {
+  return TypeSwitch<Type, hw::ModulePort::Direction>(type)
+      .Case<InOutType>([](auto ty) { return hw::ModulePort::Direction::InOut; })
+      .Case<InputType>([](auto ty) { return hw::ModulePort::Direction::Input; })
+      .Case<OutputType>(
+          [](auto ty) { return hw::ModulePort::Direction::Output; });
 }
 
 SCModuleOp::PortDirectionRange
-SCModuleOp::getPortsOfDirection(hw::PortDirection direction) {
+SCModuleOp::getPortsOfDirection(hw::ModulePort::Direction direction) {
   std::function<bool(const BlockArgument &)> predicateFn =
       [&](const BlockArgument &arg) -> bool {
     return getDirection(arg.getType()) == direction;
@@ -120,7 +121,7 @@ void SCModuleOp::getPortInfoList(SmallVectorImpl<hw::PortInfo> &portInfoList) {
     hw::PortInfo info;
     info.name = getPortNames()[i].cast<StringAttr>();
     info.type = getSignalBaseType(getArgument(i).getType());
-    info.direction = getDirection(info.type);
+    info.dir = getDirection(info.type);
     portInfoList.push_back(info);
   }
 }
@@ -218,16 +219,16 @@ void SCModuleOp::print(OpAsmPrinter &p) {
   p.printRegion(getBody(), false, false);
 }
 
-static Type wrapPortType(Type type, hw::PortDirection direction) {
+static Type wrapPortType(Type type, hw::ModulePort::Direction direction) {
   if (auto inoutTy = type.dyn_cast<hw::InOutType>())
     type = inoutTy.getElementType();
 
   switch (direction) {
-  case hw::PortDirection::INOUT:
+  case hw::ModulePort::Direction::InOut:
     return InOutType::get(type);
-  case hw::PortDirection::INPUT:
+  case hw::ModulePort::Direction::Input:
     return InputType::get(type);
-  case hw::PortDirection::OUTPUT:
+  case hw::ModulePort::Direction::Output:
     return OutputType::get(type);
   }
   llvm_unreachable("Impossible port direction");
@@ -260,7 +261,7 @@ void SCModuleOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   SmallVector<Type> portTypes;
   for (auto port : ports) {
     portNames.push_back(StringAttr::get(ctxt, port.getName()));
-    portTypes.push_back(wrapPortType(port.type, port.direction));
+    portTypes.push_back(wrapPortType(port.type, port.dir));
   }
   build(odsBuilder, odsState, name, ArrayAttr::get(ctxt, portNames), portTypes);
 }

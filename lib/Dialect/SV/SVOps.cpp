@@ -1365,10 +1365,8 @@ void InterfaceModportOp::build(OpBuilder &builder, OperationState &state,
                                ArrayRef<StringRef> outputs) {
   auto *ctxt = builder.getContext();
   SmallVector<Attribute, 8> directions;
-  ModportDirectionAttr inputDir =
-      ModportDirectionAttr::get(ctxt, ModportDirection::input);
-  ModportDirectionAttr outputDir =
-      ModportDirectionAttr::get(ctxt, ModportDirection::output);
+  auto inputDir = ModportDirectionAttr::get(ctxt, ModportDirection::input);
+  auto outputDir = ModportDirectionAttr::get(ctxt, ModportDirection::output);
   for (auto input : inputs)
     directions.push_back(ModportStructAttr::get(
         ctxt, inputDir, SymbolRefAttr::get(ctxt, input)));

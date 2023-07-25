@@ -47,7 +47,6 @@
 using namespace circt;
 using namespace firrtl;
 using circt::comb::ICmpPredicate;
-using hw::PortDirection;
 
 /// Attribute that indicates that the module hierarchy starting at the
 /// annotated module should be dumped to a file.
@@ -816,16 +815,16 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
 
     // Figure out the direction of the port.
     if (firrtlPort.isOutput()) {
-      hwPort.direction = hw::PortDirection::OUTPUT;
+      hwPort.dir = hw::ModulePort::Direction::Output;
       hwPort.argNum = numResults++;
     } else if (firrtlPort.isInput()) {
-      hwPort.direction = hw::PortDirection::INPUT;
+      hwPort.dir = hw::ModulePort::Direction::Input;
       hwPort.argNum = numArgs++;
     } else {
       // If the port is an inout bundle or contains an analog type, then it is
       // implicitly inout.
       hwPort.type = hw::InOutType::get(hwPort.type);
-      hwPort.direction = hw::PortDirection::INOUT;
+      hwPort.dir = hw::ModulePort::Direction::InOut;
       hwPort.argNum = numArgs++;
     }
     hwPort.loc = firrtlPort.loc;

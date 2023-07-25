@@ -74,12 +74,11 @@ PortConversionBuilder::build(hw::PortInfo port) {
 
 Value PortConverterImpl::createNewInput(PortInfo origPort, const Twine &suffix,
                                         Type type, PortInfo &newPort) {
-  newPort = PortInfo{append(origPort.name, suffix),
-                     PortDirection::INPUT,
-                     type,
-                     newInputs.size(),
-                     {},
-                     origPort.loc};
+  newPort = PortInfo{
+      {append(origPort.name, suffix), type, ModulePort::Direction::Input},
+      newInputs.size(),
+      {},
+      origPort.loc};
   newInputs.emplace_back(0, newPort);
 
   if (!body)
@@ -90,12 +89,11 @@ Value PortConverterImpl::createNewInput(PortInfo origPort, const Twine &suffix,
 void PortConverterImpl::createNewOutput(PortInfo origPort, const Twine &suffix,
                                         Type type, Value output,
                                         PortInfo &newPort) {
-  newPort = PortInfo{append(origPort.name, suffix),
-                     PortDirection::OUTPUT,
-                     type,
-                     newOutputs.size(),
-                     {},
-                     origPort.loc};
+  newPort = PortInfo{
+      {append(origPort.name, suffix), type, ModulePort::Direction::Output},
+      newOutputs.size(),
+      {},
+      origPort.loc};
   newOutputs.emplace_back(0, newPort);
 
   if (!body)
@@ -109,7 +107,7 @@ LogicalResult PortConverterImpl::run() {
   bool foundLoweredPorts = false;
 
   auto createPortLowering = [&](PortInfo port) {
-    auto &loweredPorts = port.direction == PortDirection::OUTPUT
+    auto &loweredPorts = port.dir == ModulePort::Direction::Output
                              ? loweredOutputs
                              : loweredInputs;
 
