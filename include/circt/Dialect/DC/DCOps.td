@@ -21,6 +21,7 @@ include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/BuiltinAttributes.td"
 include "mlir/IR/FunctionInterfaces.td"
+include "circt/Dialect/ESI/ESITypes.td"
 
 class DCOp<string mnemonic, list<Trait> traits = []> :
   Op<DCDialect, mnemonic, !listconcat(traits, [
@@ -173,7 +174,9 @@ def SourceOp : DCOp<"source"> {
         }]>];
 }
 
-def PackOp : DCOp<"pack", [InferTypeOpInterface]> {
+def PackOp : DCOp<"pack", [
+  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>
+]> {
     let summary = "Pack operation";
     let description = [{
         An operation which packs together a !dc.token value with some other
@@ -188,20 +191,11 @@ def PackOp : DCOp<"pack", [InferTypeOpInterface]> {
     let results = (outs ValueType:$output);
     let assemblyFormat = "$token `,` $input attr-dict `:` type($input)";
     let hasFolder = 1;
-
-    let extraClassDeclaration = [{
-      /// Infer the return types of this operation.
-      static LogicalResult inferReturnTypes(MLIRContext *context,
-                                            std::optional<Location> loc,
-                                            ValueRange operands,
-                                            DictionaryAttr attrs,
-                                            mlir::OpaqueProperties properties,
-                                            mlir::RegionRange regions,
-                                            SmallVectorImpl<Type> &results);
-    }];
 }
 
-def UnpackOp : DCOp<"unpack", [InferTypeOpInterface]> {
+def UnpackOp : DCOp<"unpack", [
+  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>
+]> {
     let summary = "Unpack operation";
     let description = [{
         An operation which unpacks a !dc.value value into a !dc.token value
@@ -213,17 +207,6 @@ def UnpackOp : DCOp<"unpack", [InferTypeOpInterface]> {
     let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
     let hasCanonicalizer = 1;
     let hasFolder = 1;
-  
-    let extraClassDeclaration = [{
-      /// Infer the return types of this operation.
-      static LogicalResult inferReturnTypes(MLIRContext *context,
-                                            std::optional<Location> loc,
-                                            ValueRange operands,
-                                            DictionaryAttr attrs,
-                                            mlir::OpaqueProperties properties,
-                                            mlir::RegionRange regions,
-                                            SmallVectorImpl<Type> &results);
-    }];
 }
 
 def MergeOp : DCOp<"merge"> {
@@ -238,6 +221,34 @@ def MergeOp : DCOp<"merge"> {
   let arguments = (ins TokenType:$first, TokenType:$second);
   let results = (outs I1ValueType:$output);
   let assemblyFormat = "$first `,` $second attr-dict";
+}
+
+def ToESIOp : DCOp<"to_esi", [
+  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>
+]> {
+  let summary = "Convert a DC-typed value to an ESI-typed value";
+  let description = [{
+    Convert a `dc.token/dc.value` to an ESI channel.
+  }];
+
+  let arguments = (ins
+    ValueOrTokenType:$input
+  );
+  let results = (outs ChannelType:$output);
+  let assemblyFormat = "$input attr-dict `:` type($input)";
+}
+
+def FromESIOp : DCOp<"from_esi", [
+  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>
+]> {
+  let summary = "Convert an ESI-typed value to a DC-typed value";
+  let description = [{
+    Convert an ESI channel to a `dc.token/dc.value`.
+  }];
+
+  let arguments = (ins ChannelType:$input);
+  let results = (outs ValueOrTokenType:$output);
+  let assemblyFormat = "$input attr-dict `:` type($input)";
 }
 
 #endif // CIRCT_DIALECT_DC_OPS_TD

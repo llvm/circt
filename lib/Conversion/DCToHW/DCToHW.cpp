@@ -54,16 +54,6 @@ static Type tupleToStruct(TupleType tuple) {
   return hw::StructType::get(ctx, hwfields);
 }
 
-/// Converts the range of 'types' into a `hw`-dialect type. The range will be
-/// converted to a `hw.struct` type.
-// NOLINTNEXTLINE(misc-no-recursion)
-static Type toHWType(Type t);
-static Type toHWType(TypeRange types) {
-  if (types.size() == 1)
-    return toHWType(types.front());
-  return toHWType(mlir::TupleType::get(types[0].getContext(), types));
-}
-
 /// Converts any type 't' into a `hw`-compatible type.
 /// tuple -> hw.struct
 /// none -> i0
@@ -116,13 +106,13 @@ public:
   ESITypeConverter() {
     addConversion([](Type type) -> Type { return toESIHWType(type); });
     addConversion([](esi::ChannelType t) -> Type { return t; });
-
     addTargetMaterialization(
         [](mlir::OpBuilder &builder, mlir::Type resultType,
            mlir::ValueRange inputs,
            mlir::Location loc) -> std::optional<mlir::Value> {
           if (inputs.size() != 1)
             return std::nullopt;
+
           return inputs[0];
         });
 
@@ -132,8 +122,45 @@ public:
            mlir::Location loc) -> std::optional<mlir::Value> {
           if (inputs.size() != 1)
             return std::nullopt;
+
           return inputs[0];
         });
+  }
+
+  // ToESI/FromESI special case:
+  // Struct compatability - since DC doesn't have named `dc.value` fields,
+  // we here in DCToHW have an inferred naming scheme (`field#`).
+  // However, users may provide `esi.channel<hw.struct<...>>`s with
+  // any field names. We need to convert these struct types to ensure that they
+  // compatible. For mismatched structs, we just do a bitcast and let the
+  // hw.bitcast verifiers do the rest of the work in case of actual bitwidth
+  // incompatability.
+  static Value structCompatabilityMaterialization(OpBuilder &builder,
+                                                  Type resultType, Value input,
+                                                  Location loc) {
+    esi::ChannelType srcChannel = input.getType().dyn_cast<esi::ChannelType>();
+    esi::ChannelType dstChannel = resultType.dyn_cast<esi::ChannelType>();
+    if (srcChannel && dstChannel) {
+      hw::StructType srcStruct =
+          srcChannel.getInner().dyn_cast<hw::StructType>();
+      hw::StructType dstStruct =
+          dstChannel.getInner().dyn_cast<hw::StructType>();
+      if (srcStruct && dstStruct && (srcStruct != dstStruct)) {
+        // Struct name mismatch - unpack the channel, bitcast the contents
+        // and repack.
+        BackedgeBuilder bb(builder, loc);
+        Backedge ready = bb.get(builder.getI1Type());
+        auto unwrapOp =
+            builder.create<esi::UnwrapValidReadyOp>(loc, input, ready);
+        auto bitcastOp = builder.create<hw::BitcastOp>(loc, dstStruct,
+                                                       unwrapOp.getRawOutput());
+        auto wrapOp = builder.create<esi::WrapValidReadyOp>(
+            loc, bitcastOp, unwrapOp.getValid());
+        ready.setValue(wrapOp.getReady());
+        return wrapOp.getChanOutput();
+      }
+    }
+    return Value();
   }
 };
 
@@ -667,6 +694,34 @@ public:
   }
 };
 
+class ToESIConversionPattern : public OpConversionPattern<ToESIOp> {
+  // Essentially a no-op, seeing as the type converter does the heavy
+  // lifting here.
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ToESIOp op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOp(op, operands.getOperands());
+    return success();
+  }
+};
+
+class FromESIConversionPattern : public OpConversionPattern<FromESIOp> {
+  // Essentially a no-op, seeing as the type converter does the heavy
+  // lifting here.
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FromESIOp op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOp(op, operands.getOperands());
+    return success();
+  }
+};
+
 class SinkConversionPattern : public OpConversionPattern<SinkOp> {
 public:
   using OpConversionPattern<SinkOp>::OpConversionPattern;
@@ -837,7 +892,8 @@ public:
                     SelectConversionPattern, BranchConversionPattern,
                     PackConversionPattern, UnpackConversionPattern,
                     BufferConversionPattern, SourceConversionPattern,
-                    SinkConversionPattern, TypeConversionPattern>(
+                    SinkConversionPattern, TypeConversionPattern,
+                    ToESIConversionPattern, FromESIConversionPattern>(
         typeConverter, mod.getContext());
 
     if (failed(applyPartialConversion(mod, target, std::move(patterns))))
