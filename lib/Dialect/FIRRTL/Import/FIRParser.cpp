@@ -1476,6 +1476,7 @@ private:
   std::optional<ParseResult> parseExpWithLeadingKeyword(FIRToken keyword);
 
   // Stmt Parsing
+  ParseResult parseSubBlock(Block &blockToInsertInto, unsigned indent);
   ParseResult parseAttach();
   ParseResult parseMemPort(MemDirAttr direction);
   ParseResult parsePrintf();
@@ -2336,6 +2337,37 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   }
 }
 
+ParseResult FIRStmtParser::parseSubBlock(Block &blockToInsertInto,
+                                         unsigned indent) {
+  // Declarations within the suite are scoped to within the suite.
+  auto suiteScope = std::make_unique<FIRModuleContext::ContextScope>(
+      moduleContext, &blockToInsertInto);
+
+  // After parsing the when region, we can release any new entries in
+  // unbundledValues since the symbol table entries that refer to them will be
+  // gone.
+  UnbundledValueRestorer x(moduleContext.unbundledValues);
+
+  // We parse the substatements into their own parser, so they get inserted
+  // into the specified 'when' region.
+  auto subParser = std::make_unique<FIRStmtParser>(
+      blockToInsertInto, moduleContext, modNameSpace, version);
+
+  // Figure out whether the body is a single statement or a nested one.
+  auto stmtIndent = getIndentation();
+
+  // Parsing a single statment is straightforward.
+  if (!stmtIndent.has_value())
+    return subParser->parseSimpleStmt(indent);
+
+  if (*stmtIndent <= indent)
+    return emitError("statement must be indented more than previous statement"),
+           failure();
+
+  // Parse a block of statements that are indented more than the when.
+  return subParser->parseSimpleStmtBlock(indent);
+}
+
 /// attach ::= 'attach' '(' exp+ ')' info?
 ParseResult FIRStmtParser::parseAttach() {
   auto startTok = consumeToken(FIRToken::kw_attach);
@@ -2578,39 +2610,8 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // Create the IR representation for the when.
   auto whenStmt = builder.create<WhenOp>(condition, /*createElse*/ false);
 
-  // This is a function to parse a suite body.
-  auto parseSuite = [&](Block &blockToInsertInto) -> ParseResult {
-    // Declarations within the suite are scoped to within the suite.
-    auto suiteScope = std::make_unique<FIRModuleContext::ContextScope>(
-        moduleContext, &blockToInsertInto);
-
-    // After parsing the when region, we can release any new entries in
-    // unbundledValues since the symbol table entries that refer to them will be
-    // gone.
-    UnbundledValueRestorer x(moduleContext.unbundledValues);
-
-    // We parse the substatements into their own parser, so they get inserted
-    // into the specified 'when' region.
-    auto subParser = std::make_unique<FIRStmtParser>(
-        blockToInsertInto, moduleContext, modNameSpace, version);
-
-    // Figure out whether the body is a single statement or a nested one.
-    auto stmtIndent = getIndentation();
-
-    // Parsing a single statment is straightforward.
-    if (!stmtIndent.has_value())
-      return subParser->parseSimpleStmt(whenIndent);
-
-    if (*stmtIndent <= whenIndent)
-      return emitError("statement must be indented more than 'when'"),
-             failure();
-
-    // Parse a block of statements that are indented more than the when.
-    return subParser->parseSimpleStmtBlock(whenIndent);
-  };
-
   // Parse the 'then' body into the 'then' region.
-  if (parseSuite(whenStmt.getThenBlock()))
+  if (parseSubBlock(whenStmt.getThenBlock(), whenIndent))
     return failure();
 
   // If the else is present, handle it otherwise we're done.
@@ -2643,7 +2644,8 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // Parse the 'else' body into the 'else' region.
   LocationAttr elseLoc; // ignore the else locator.
   if (parseToken(FIRToken::colon, "expected ':' after 'else'") ||
-      parseOptionalInfoLocator(elseLoc) || parseSuite(whenStmt.getElseBlock()))
+      parseOptionalInfoLocator(elseLoc) ||
+      parseSubBlock(whenStmt.getElseBlock(), whenIndent))
     return failure();
 
   // TODO(firrtl spec): There is no reason for the 'else :' grammar to take an
