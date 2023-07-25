@@ -273,13 +273,13 @@ class BitVectorSignal(Signal):
 
 
 def And(*items: List[BitVectorSignal]):
-  """Compute a bitwise 'or' of the arguments."""
+  """Compute a bitwise 'and' of the arguments."""
   from .dialects import comb
   return comb.AndOp(*items)
 
 
 def Or(*items: List[BitVectorSignal]):
-  """Compute a bitwise 'and' of the arguments."""
+  """Compute a bitwise 'or' of the arguments."""
   from .dialects import comb
   return comb.OrOp(*items)
 
