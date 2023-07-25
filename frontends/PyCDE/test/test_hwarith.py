@@ -2,7 +2,7 @@
 
 from pycde import Input, Output, generator, Module
 from pycde.testing import unittestmodule
-from pycde.types import types, UInt, SInt
+from pycde.types import types, UInt
 
 
 # CHECK: msft.module @InfixArith {} (%in0: si16, %in1: ui16)
@@ -57,41 +57,33 @@ class InfixLogic(Module):
 # CHECK: msft.module @SignlessInfixComparison {} (%in0: i16, %in1: i16)
 # CHECK-NEXT:    %0 = comb.icmp bin eq %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
 # CHECK-NEXT:    %1 = comb.icmp bin ne %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
-# CHECK-NEXT:    %1 = comb.icmp bin lt %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
-# CHECK-NEXT:    %1 = comb.icmp bin gt %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
-# CHECK-NEXT:    %1 = comb.icmp bin le %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
-# CHECK-NEXT:    %1 = comb.icmp bin ge %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
 # CHECK-NEXT:    msft.output
 @unittestmodule(run_passes=True)
 class SignlessInfixComparison(Module):
-  in0 = Input(SInt(16))
-  in1 = Input(SInt(16))
+  in0 = Input(types.i16)
+  in1 = Input(types.i16)
 
   @generator
   def construct(ports):
     eq = ports.in0 == ports.in1
     neq = ports.in0 != ports.in1
-    lt = ports.in0 < ports.in1
-    gt = ports.in0 > ports.in1
-    le = ports.in0 <= ports.in1
-    ge = ports.in0 >= ports.in1
 
 
 # -----
 
 
 # CHECK: msft.module @InfixComparison {} (%in0: ui16, %in1: ui16)
-# CHECK-NEXT:    %0 = hwarith.icmp eq %in0, %in1 {sv.namehint = "in0_eq_in1"} : ui16, ui16
-# CHECK-NEXT:    %1 = hwarith.icmp ne %in0, %in1 {sv.namehint = "in0_neq_in1"} : ui16, ui16
-# CHECK-NEXT:    %1 = hwarith.icmp lt %in0, %in1 {sv.namehint = "in0_lt_in1"} : ui16, ui16
-# CHECK-NEXT:    %1 = hwarith.icmp gt %in0, %in1 {sv.namehint = "in0_gt_in1"} : ui16, ui16
-# CHECK-NEXT:    %1 = hwarith.icmp le %in0, %in1 {sv.namehint = "in0_le_in1"} : ui16, ui16
-# CHECK-NEXT:    %1 = hwarith.icmp ge %in0, %in1 {sv.namehint = "in0_ge_in1"} : ui16, ui16
+# CHECK:  %0 = hwarith.icmp eq %in0, %in1 {sv.namehint = "in0_eq_in1"} : ui16, ui16
+# CHECK:  %1 = hwarith.icmp ne %in0, %in1 {sv.namehint = "in0_neq_in1"} : ui16, ui16
+# CHECK:  %2 = hwarith.icmp lt %in0, %in1 {sv.namehint = "in0_lt_in1"} : ui16, ui16
+# CHECK:  %3 = hwarith.icmp gt %in0, %in1 {sv.namehint = "in0_gt_in1"} : ui16, ui16
+# CHECK:  %4 = hwarith.icmp le %in0, %in1 {sv.namehint = "in0_le_in1"} : ui16, ui16
+# CHECK:  %5 = hwarith.icmp ge %in0, %in1 {sv.namehint = "in0_ge_in1"} : ui16, ui16
 # CHECK-NEXT:    msft.output
 @unittestmodule(run_passes=False)
 class InfixComparison(Module):
-  in0 = Input(UInt(16))
-  in1 = Input(UInt(16))
+  in0 = Input(types.ui16)
+  in1 = Input(types.ui16)
 
   @generator
   def construct(ports):
