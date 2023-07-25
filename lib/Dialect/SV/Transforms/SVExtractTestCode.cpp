@@ -202,8 +202,9 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
     auto srcPorts = op.getArgNames();
     for (auto port : llvm::enumerate(realInputs)) {
       auto name = getNameForPort(port.value(), srcPorts);
-      ports.push_back({name, hw::PortDirection::INPUT, port.value().getType(),
-                       port.index()});
+      ports.push_back(
+          {{name, port.value().getType(), hw::ModulePort::Direction::Input},
+           port.index()});
     }
   }
 

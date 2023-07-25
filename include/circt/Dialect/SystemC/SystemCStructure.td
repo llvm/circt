@@ -84,15 +84,15 @@ def SCModuleOp : SystemCOp<"module", [
                             std::function<bool(const BlockArgument &)>>>;
 
     void getPortInfoList(SmallVectorImpl<hw::PortInfo> &portInfoList);
-    PortDirectionRange getPortsOfDirection(hw::PortDirection direction);
+    PortDirectionRange getPortsOfDirection(hw::ModulePort::Direction direction);
     PortDirectionRange getInputPorts() {
-      return getPortsOfDirection(hw::PortDirection::INPUT);
+      return getPortsOfDirection(hw::ModulePort::Direction::Input);
     }
     PortDirectionRange getOutputPorts() {
-      return getPortsOfDirection(hw::PortDirection::OUTPUT);
+      return getPortsOfDirection(hw::ModulePort::Direction::Output);
     }
     PortDirectionRange getInOutPorts() {
-      return getPortsOfDirection(hw::PortDirection::INOUT);
+      return getPortsOfDirection(hw::ModulePort::Direction::InOut);
     }
 
     // Return the Ctor operation in this module's body or create one if none

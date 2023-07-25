@@ -714,43 +714,47 @@ private:
 
     // Data inputs
     for (auto [idx, in] : llvm::enumerate(inputs))
-      ports.push_back(hw::PortInfo{inputNames[idx].cast<StringAttr>(),
-                                   hw::PortDirection::INPUT, in});
+      ports.push_back(hw::PortInfo{{inputNames[idx].cast<StringAttr>(), in,
+                                    hw::ModulePort::Direction::Input}});
 
     // External inputs
     for (auto extIn : extInputs) {
-      ports.push_back(hw::PortInfo{extInputNames.at(extIn),
-                                   hw::PortDirection::INPUT, extIn.getType()});
+      ports.push_back(hw::PortInfo{{extInputNames.at(extIn), extIn.getType(),
+                                    hw::ModulePort::Direction::Input}});
     }
 
     // Enable input
-    ports.push_back(hw::PortInfo{builder.getStringAttr(kEnablePortName),
-                                 hw::PortDirection::INPUT,
-                                 builder.getI1Type()});
+    ports.push_back(
+        hw::PortInfo{{builder.getStringAttr(kEnablePortName),
+                      builder.getI1Type(), hw::ModulePort::Direction::Input}});
 
     if (withStall) {
       // Stall input
-      ports.push_back(hw::PortInfo{builder.getStringAttr(kStallPortName),
-                                   hw::PortDirection::INPUT,
-                                   builder.getI1Type()});
+      ports.push_back(hw::PortInfo{{builder.getStringAttr(kStallPortName),
+                                    builder.getI1Type(),
+                                    hw::ModulePort::Direction::Input}});
     }
 
     // clock and reset
-    ports.push_back(hw::PortInfo{builder.getStringAttr(kClockPortName),
-                                 hw::PortDirection::INPUT,
-                                 builder.getI1Type()});
-    ports.push_back(hw::PortInfo{builder.getStringAttr(kResetPortName),
-                                 hw::PortDirection::INPUT,
-                                 builder.getI1Type()});
+    ports.push_back(hw::PortInfo{{
+        builder.getStringAttr(kClockPortName),
+        builder.getI1Type(),
+        hw::ModulePort::Direction::Input,
+    }});
+    ports.push_back(hw::PortInfo{{
+        builder.getStringAttr(kResetPortName),
+        builder.getI1Type(),
+        hw::ModulePort::Direction::Input,
+    }});
 
     for (auto [idx, out] : llvm::enumerate(outputs))
-      ports.push_back(hw::PortInfo{outputNames[idx].cast<StringAttr>(),
-                                   hw::PortDirection::OUTPUT, out});
+      ports.push_back(hw::PortInfo{{outputNames[idx].cast<StringAttr>(), out,
+                                    hw::ModulePort::Direction::Output}});
 
     // Valid output
-    ports.push_back(hw::PortInfo{builder.getStringAttr(kValidPortName),
-                                 hw::PortDirection::OUTPUT,
-                                 builder.getI1Type()});
+    ports.push_back(
+        hw::PortInfo{{builder.getStringAttr(kValidPortName),
+                      builder.getI1Type(), hw::ModulePort::Direction::Output}});
 
     return builder.create<hw::HWModuleOp>(pipeline.getLoc(),
                                           builder.getStringAttr(name), ports);

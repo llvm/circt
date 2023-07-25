@@ -40,7 +40,7 @@ static ClkRstIdxs getMachinePortInfo(SmallVectorImpl<hw::PortInfo> &ports,
   // Add clock port.
   hw::PortInfo clock;
   clock.name = b.getStringAttr("clk");
-  clock.direction = hw::PortDirection::INPUT;
+  clock.dir = hw::ModulePort::Direction::Input;
   clock.type = b.getI1Type();
   clock.argNum = machine.getNumArguments();
   ports.push_back(clock);
@@ -49,7 +49,7 @@ static ClkRstIdxs getMachinePortInfo(SmallVectorImpl<hw::PortInfo> &ports,
   // Add reset port.
   hw::PortInfo reset;
   reset.name = b.getStringAttr("rst");
-  reset.direction = hw::PortDirection::INPUT;
+  reset.dir = hw::ModulePort::Direction::Input;
   reset.type = b.getI1Type();
   reset.argNum = machine.getNumArguments() + 1;
   ports.push_back(reset);

@@ -308,10 +308,10 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
 
   auto getMemoryIOInfo = [&](Location loc, Twine portName, unsigned argIdx,
                              ArrayRef<hw::PortInfo> info,
-                             hw::PortDirection direction) {
+                             hw::ModulePort::Direction direction) {
     auto type = hw::StructType::get(ctx, portToFieldInfo(info));
     auto portInfo =
-        hw::PortInfo{b.getStringAttr(portName), direction, type, argIdx};
+        hw::PortInfo{{b.getStringAttr(portName), type, direction}, argIdx};
     return portInfo;
   };
 
@@ -334,7 +334,7 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
     // Add memory input - this is the output of the extmemory op.
     auto inPortInfo =
         getMemoryIOInfo(arg.getLoc(), memName.strref() + "_in", i,
-                        portInfo.outputs, hw::PortDirection::INPUT);
+                        portInfo.outputs, hw::ModulePort::Direction::Input);
     mod.insertPorts({{i, inPortInfo}}, {});
     auto newInPort = mod.getArgument(i);
     // Replace the extmemory submodule outputs with the newly created inputs.
@@ -348,7 +348,7 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
     unsigned outArgI = mod.getNumResults();
     auto outPortInfo =
         getMemoryIOInfo(arg.getLoc(), memName.strref() + "_out", outArgI,
-                        portInfo.inputs, hw::PortDirection::OUTPUT);
+                        portInfo.inputs, hw::ModulePort::Direction::Output);
 
     auto memOutputArgs = extmemInstance.getOperands().drop_front();
     b.setInsertionPoint(mod.getBodyBlock()->getTerminator());

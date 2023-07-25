@@ -33,14 +33,14 @@ using namespace hw;
 using mlir::TypedAttr;
 
 /// Flip a port direction.
-PortDirection hw::flip(PortDirection direction) {
+ModulePort::Direction hw::flip(ModulePort::Direction direction) {
   switch (direction) {
-  case PortDirection::INPUT:
-    return PortDirection::OUTPUT;
-  case PortDirection::OUTPUT:
-    return PortDirection::INPUT;
-  case PortDirection::INOUT:
-    return PortDirection::INOUT;
+  case ModulePort::Direction::Input:
+    return ModulePort::Direction::Output;
+  case ModulePort::Direction::Output:
+    return ModulePort::Direction::Input;
+  case ModulePort::Direction::InOut:
+    return ModulePort::Direction::InOut;
   }
   llvm_unreachable("unknown PortDirection");
 }
@@ -646,7 +646,8 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
 
   for (auto elt : ports.inputs) {
-    if (elt.direction == PortDirection::INOUT && !elt.type.isa<hw::InOutType>())
+    if (elt.dir == ModulePort::Direction::InOut &&
+        !elt.type.isa<hw::InOutType>())
       elt.type = hw::InOutType::get(elt.type);
     argTypes.push_back(elt.type);
     argNames.push_back(elt.name);
@@ -735,7 +736,8 @@ static void modifyModuleArgs(
     // Insert new ports at this position.
     while (!insertArgs.empty() && insertArgs[0].first == argIdx) {
       auto port = insertArgs[0].second;
-      if (port.direction == PortDirection::INOUT && !port.type.isa<InOutType>())
+      if (port.dir == ModulePort::Direction::InOut &&
+          !port.type.isa<InOutType>())
         port.type = InOutType::get(port.type);
       Attribute attr =
           (port.sym && !port.sym.empty())
@@ -998,13 +1000,16 @@ ModulePortInfo hw::getModulePortInfo(Operation *op) {
       type = inout.getElementType();
     }
 
-    auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
+    auto direction =
+        isInOut ? ModulePort::Direction::InOut : ModulePort::Direction::Input;
     LocationAttr loc;
     if (argLocs)
       loc = argLocs[i].cast<LocationAttr>();
 
-    inputs.push_back({argNames[i].cast<StringAttr>(), direction, type, i,
-                      getArgSym(op, i), loc});
+    inputs.push_back({{argNames[i].cast<StringAttr>(), type, direction},
+                      i,
+                      getArgSym(op, i),
+                      loc});
   }
 
   auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
@@ -1014,8 +1019,11 @@ ModulePortInfo hw::getModulePortInfo(Operation *op) {
     LocationAttr loc;
     if (resultLocs)
       loc = resultLocs[i].cast<LocationAttr>();
-    outputs.push_back({resultNames[i].cast<StringAttr>(), PortDirection::OUTPUT,
-                       resultTypes[i], i, getResultSym(op, i), loc});
+    outputs.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
+                        ModulePort::Direction::Output},
+                       i,
+                       getResultSym(op, i),
+                       loc});
   }
   return ModulePortInfo(inputs, outputs);
 }
@@ -1046,9 +1054,12 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
     if (argLocs)
       argLoc = argLocs[i].cast<LocationAttr>();
 
-    auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
-    results.push_back({argNames[i].cast<StringAttr>(), direction, type, i,
-                       getArgSym(op, i), argLoc});
+    auto direction =
+        isInOut ? ModulePort::Direction::InOut : ModulePort::Direction::Input;
+    results.push_back({{argNames[i].cast<StringAttr>(), type, direction},
+                       i,
+                       getArgSym(op, i),
+                       argLoc});
   }
 
   auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
@@ -1061,8 +1072,11 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
     if (resultLocs)
       resultLoc = resultLocs[i].cast<mlir::LocationAttr>();
 
-    results.push_back({resultNames[i].cast<StringAttr>(), PortDirection::OUTPUT,
-                       resultTypes[i], i, getResultSym(op, i), resultLoc});
+    results.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
+                        ModulePort::Direction::Output},
+                       i,
+                       getResultSym(op, i),
+                       resultLoc});
   }
   return results;
 }
@@ -1080,10 +1094,9 @@ PortInfo hw::getModuleInOrInoutPort(Operation *op, size_t idx) {
     type = inout.getElementType();
   }
 
-  auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
-  return {argNames[idx].cast<StringAttr>(),
-          direction,
-          type,
+  auto direction =
+      isInOut ? ModulePort::Direction::InOut : ModulePort::Direction::Input;
+  return {{argNames[idx].cast<StringAttr>(), type, direction},
           idx,
           getArgSym(op, idx),
           argLocs[idx].cast<LocationAttr>()};
@@ -1095,9 +1108,8 @@ PortInfo hw::getModuleOutputPort(Operation *op, size_t idx) {
   auto resultLocs = op->getAttrOfType<ArrayAttr>("resultLocs");
   auto resultTypes = getModuleType(op).getResults();
   assert(idx < resultNames.size() && "invalid result number");
-  return {resultNames[idx].cast<StringAttr>(),
-          PortDirection::OUTPUT,
-          resultTypes[idx],
+  return {{resultNames[idx].cast<StringAttr>(), resultTypes[idx],
+           ModulePort::Direction::Output},
           idx,
           getResultSym(op, idx),
           resultLocs[idx].cast<LocationAttr>()};
@@ -1386,7 +1398,7 @@ HWModuleOp::insertInput(unsigned index, StringAttr name, Type ty) {
   // Create a new port for the host clock.
   PortInfo port;
   port.name = nameAttr;
-  port.direction = PortDirection::INPUT;
+  port.dir = ModulePort::Direction::Input;
   port.type = ty;
   hw::modifyModulePorts(getOperation(), {std::make_pair(index, port)}, {}, {},
                         {}, body);
@@ -1406,7 +1418,7 @@ void HWModuleOp::insertOutputs(unsigned index,
   for (auto &[name, value] : outputs) {
     PortInfo port;
     port.name = name;
-    port.direction = PortDirection::OUTPUT;
+    port.dir = ModulePort::Direction::Output;
     port.type = value.getType();
     indexedNewPorts.emplace_back(index, port);
   }

@@ -5426,15 +5426,15 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       }
 
       // Emit the port direction.
-      PortDirection thisPortDirection = portInfo[portIdx].direction;
+      auto thisPortDirection = portInfo[portIdx].dir;
       switch (thisPortDirection) {
-      case PortDirection::OUTPUT:
+      case ModulePort::Direction::Output:
         ps << "output ";
         break;
-      case PortDirection::INPUT:
+      case ModulePort::Direction::Input:
         ps << (hasOutputs ? "input  " : "input ");
         break;
-      case PortDirection::INOUT:
+      case ModulePort::Direction::InOut:
         ps << (hasOutputs ? "inout  " : "inout ");
         break;
       }
@@ -5482,8 +5482,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       // direction, emit them in a list one per line. Optionally skip this
       // behavior when requested by user.
       if (!state.options.disallowPortDeclSharing) {
-        while (portIdx != e &&
-               portInfo[portIdx].direction == thisPortDirection &&
+        while (portIdx != e && portInfo[portIdx].dir == thisPortDirection &&
                stripUnpackedTypes(portType) ==
                    stripUnpackedTypes(portInfo[portIdx].type)) {
           // Append this to the running port decl.

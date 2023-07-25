@@ -44,7 +44,7 @@ struct ConvertComponentOp : public OpConversionPattern<ComponentOp> {
     SmallVector<hw::PortInfo> hwInputInfo;
     auto portInfo = component.getPortInfo();
     for (auto [name, type, direction, _] : portInfo)
-      hwInputInfo.push_back({name, hwDirection(direction), type});
+      hwInputInfo.push_back({{name, type, hwDirection(direction)}});
     ModulePortInfo hwPortInfo(hwInputInfo);
 
     SmallVector<Value> argValues;
@@ -77,12 +77,12 @@ struct ConvertComponentOp : public OpConversionPattern<ComponentOp> {
   }
 
 private:
-  hw::PortDirection hwDirection(calyx::Direction dir) const {
+  hw::ModulePort::Direction hwDirection(calyx::Direction dir) const {
     switch (dir) {
     case calyx::Direction::Input:
-      return hw::PortDirection::INPUT;
+      return hw::ModulePort::Direction::Input;
     case calyx::Direction::Output:
-      return hw::PortDirection::OUTPUT;
+      return hw::ModulePort::Direction::Output;
     }
     llvm_unreachable("unknown direction");
   }

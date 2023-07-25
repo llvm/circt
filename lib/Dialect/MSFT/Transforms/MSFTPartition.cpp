@@ -695,11 +695,13 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
 
         instInputs.push_back(v);
         inputPorts.push_back(hw::PortInfo{
-            /*name*/ StringAttr::get(
-                ctxt, opName + (portName.empty() ? "" : "." + portName)),
-            /*direction*/ hw::PortDirection::INPUT,
-            /*type*/ v.getType(),
-            /*argNum*/ inputPorts.size(), /*sym*/ {}, /*location*/ loc});
+            {/*name*/ StringAttr::get(
+                 ctxt, opName + (portName.empty() ? "" : "." + portName)),
+             /*type*/ v.getType(),
+             /*direction*/ hw::ModulePort::Direction::Input},
+            /*argNum*/ inputPorts.size(),
+            /*sym*/ {},
+            /*location*/ loc});
       } else {
         // There's already an existing port. Just set it.
         oper.set(partBlock->getArgument(existingF->second));
@@ -718,10 +720,10 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
       newOutputs.push_back(res);
       StringRef portName = getResultName(res, topLevelSyms, nameBuffer);
       outputPorts.push_back(hw::PortInfo{
-          /*name*/ StringAttr::get(
-              ctxt, opName + (portName.empty() ? "" : "." + portName)),
-          /*direction*/ hw::PortDirection::OUTPUT,
-          /*type*/ res.getType(),
+          {/*name*/ StringAttr::get(
+               ctxt, opName + (portName.empty() ? "" : "." + portName)),
+           /*type*/ res.getType(),
+           /*direction*/ hw::ModulePort::Direction::Output},
           /*argNum*/ outputPorts.size()});
     }
   }

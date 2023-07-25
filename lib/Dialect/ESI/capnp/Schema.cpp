@@ -798,16 +798,20 @@ hw::HWModuleOp CapnpTypeSchemaImpl::buildEncoder(Value clk, Value valid,
   modName.append("encode");
   modName.append(base.name());
   SmallVector<hw::PortInfo, 4> ports;
-  ports.push_back(hw::PortInfo{b.getStringAttr("clk"), hw::PortDirection::INPUT,
-                               clk.getType(), 0});
-  ports.push_back(hw::PortInfo{b.getStringAttr("valid"),
-                               hw::PortDirection::INPUT, valid.getType(), 1});
-  ports.push_back(hw::PortInfo{b.getStringAttr("unencodedInput"),
-                               hw::PortDirection::INPUT, operandVal.getType(),
-                               2});
+  ports.push_back(hw::PortInfo{
+      {b.getStringAttr("clk"), clk.getType(), hw::ModulePort::Direction::Input},
+      0});
+  ports.push_back(hw::PortInfo{{b.getStringAttr("valid"), valid.getType(),
+                                hw::ModulePort::Direction::Input},
+                               1});
+  ports.push_back(
+      hw::PortInfo{{b.getStringAttr("unencodedInput"), operandVal.getType(),
+                    hw::ModulePort::Direction::Input},
+                   2});
   hw::ArrayType modOutputType = hw::ArrayType::get(b.getI1Type(), size());
-  ports.push_back(hw::PortInfo{b.getStringAttr("encoded"),
-                               hw::PortDirection::OUTPUT, modOutputType, 0});
+  ports.push_back(hw::PortInfo{{b.getStringAttr("encoded"), modOutputType,
+                                hw::ModulePort::Direction::Output},
+                               0});
   hw::HWModuleOp retMod = b.create<hw::HWModuleOp>(
       operandVal.getLoc(), b.getStringAttr(modName), ports);
 
@@ -973,15 +977,19 @@ hw::HWModuleOp CapnpTypeSchemaImpl::buildDecoder(Value clk, Value valid,
   modName.append("decode");
   modName.append(base.name());
   SmallVector<hw::PortInfo, 4> ports;
-  ports.push_back(hw::PortInfo{b.getStringAttr("clk"), hw::PortDirection::INPUT,
-                               clk.getType(), 0});
-  ports.push_back(hw::PortInfo{b.getStringAttr("valid"),
-                               hw::PortDirection::INPUT, valid.getType(), 1});
-  ports.push_back(hw::PortInfo{b.getStringAttr("encodedInput"),
-                               hw::PortDirection::INPUT, operandVal.getType(),
-                               2});
-  ports.push_back(hw::PortInfo{b.getStringAttr("decoded"),
-                               hw::PortDirection::OUTPUT, base.getType(), 0});
+  ports.push_back(hw::PortInfo{
+      {b.getStringAttr("clk"), clk.getType(), hw::ModulePort::Direction::Input},
+      0});
+  ports.push_back(hw::PortInfo{{b.getStringAttr("valid"), valid.getType(),
+                                hw::ModulePort::Direction::Input},
+                               1});
+  ports.push_back(
+      hw::PortInfo{{b.getStringAttr("encodedInput"), operandVal.getType(),
+                    hw::ModulePort::Direction::Input},
+                   2});
+  ports.push_back(hw::PortInfo{{b.getStringAttr("decoded"), base.getType(),
+                                hw::ModulePort::Direction::Output},
+                               0});
   hw::HWModuleOp retMod = b.create<hw::HWModuleOp>(
       operandVal.getLoc(), b.getStringAttr(modName), ports);
 

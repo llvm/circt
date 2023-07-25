@@ -1773,13 +1773,13 @@ SmallVector<StringRef> PrimitiveOp::portNames() {
   return portNames;
 }
 
-Direction convertHWDirectionToCalyx(hw::PortDirection direction) {
+Direction convertHWDirectionToCalyx(hw::ModulePort::Direction direction) {
   switch (direction) {
-  case hw::PortDirection::INPUT:
+  case hw::ModulePort::Direction::Input:
     return Direction::Input;
-  case hw::PortDirection::OUTPUT:
+  case hw::ModulePort::Direction::Output:
     return Direction::Output;
-  case hw::PortDirection::INOUT:
+  case hw::ModulePort::Direction::InOut:
     llvm_unreachable("InOut ports not supported by Calyx");
   }
   llvm_unreachable("Impossible port type");
@@ -1788,7 +1788,7 @@ Direction convertHWDirectionToCalyx(hw::PortDirection direction) {
 SmallVector<Direction> PrimitiveOp::portDirections() {
   SmallVector<Direction> portDirections;
   for (hw::PortInfo port : getReferencedPrimitive().getAllPorts())
-    portDirections.push_back(convertHWDirectionToCalyx(port.direction));
+    portDirections.push_back(convertHWDirectionToCalyx(port.dir));
   return portDirections;
 }
 

@@ -115,7 +115,7 @@ public:
   // should use the 'create*' methods in 'PortConverter' to create the
   // necessary ports.
   void lowerPort() {
-    if (origPort.direction == hw::PortDirection::OUTPUT)
+    if (origPort.dir == hw::ModulePort::Direction::Output)
       buildOutputSignals();
     else
       buildInputSignals();

@@ -34,7 +34,7 @@ namespace hw {
 class EnumFieldAttr;
 
 /// Flip a port direction.
-PortDirection flip(PortDirection direction);
+ModulePort::Direction flip(ModulePort::Direction direction);
 
 /// TODO: Move all these functions to a hw::ModuleLike interface.
 
