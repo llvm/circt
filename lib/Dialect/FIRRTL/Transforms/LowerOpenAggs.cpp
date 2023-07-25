@@ -233,6 +233,12 @@ LogicalResult Visitor::visit(FModuleLike mod) {
           newPort.type = pmi.hwType;
           newPorts.emplace_back(idxOfInsertPoint, newPort);
 
+          if (port.sym && llvm::any_of(port.sym, [&](auto &prop) {
+                return prop.getFieldID() != 0;
+              }))
+            return mlir::emitError(port.loc)
+                   << "symbols on fields of open aggregates not handled yet";
+
           // If want to run this pass later, need to fixup annotations.
           if (!port.annotations.empty())
             return mlir::emitError(port.loc)
