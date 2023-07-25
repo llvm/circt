@@ -53,8 +53,8 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
     for (size_t i = 0; i < ports.size(); ++i)
       ports.at(i).type = typeConverter->convertType(ports.at(i).type);
 
-    auto scModule = rewriter.create<SCModuleOp>(
-        module.getLoc(), module.getNameAttr(), ports);
+    auto scModule = rewriter.create<SCModuleOp>(module.getLoc(),
+                                                module.getNameAttr(), ports);
     auto *outputOp = module.getBodyBlock()->getTerminator();
     scModule.setVisibility(module.getVisibility());
 
