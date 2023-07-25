@@ -1895,7 +1895,7 @@ firrtl.circuit "RWProbeInstance" {
   firrtl.extmodule @Ext()
   firrtl.module @RWProbeInstance() {
     firrtl.instance inst sym @inst @Ext()
-    // expected-error @below {{op has target that does not resolve to a result}}
+    // expected-error @below {{op has target that cannot be probed}}
     %rw = firrtl.ref.rwprobe <@RWProbeInstance::@inst> : !firrtl.uint<1>
   }
 }

@@ -4782,7 +4782,7 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
     hw::InnerSymbolOpInterface symOp =
         cast<hw::InnerSymbolOpInterface>(target.getOp());
     if (!symOp.getTargetResult())
-      return emitOpError("has target that does not resolve to a result");
+      return emitOpError("has target that cannot be probed");
     return checkFinalType(symOp.getTargetResult().getType(), symOp.getLoc());
   }
 }
