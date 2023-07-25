@@ -261,13 +261,13 @@ HWModulePortAccessor::HWModulePortAccessor(Location loc,
                                            const ModulePortInfo &info,
                                            Region &bodyRegion)
     : info(info) {
-  inputArgs.resize(info.size_inputs());
+  inputArgs.resize(info.sizeInputs());
   for (auto [i, barg] : llvm::enumerate(bodyRegion.getArguments())) {
     inputIdx[info.at(i).name.str()] = i;
     inputArgs[i] = barg;
   }
 
-  outputOperands.resize(info.size_outputs());
+  outputOperands.resize(info.sizeOutputs());
   for (auto [i, outputInfo] : llvm::enumerate(info.outputs())) {
     outputIdx[outputInfo.name.str()] = i;
   }

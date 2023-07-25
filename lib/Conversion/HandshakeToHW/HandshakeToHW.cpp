@@ -329,7 +329,7 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
     // original handshake.extmemory operation in- and output types. Remove the
     // first input argument (the !esi.channel<memref> op) since that is what
     // we're replacing with a materialized interface.
-    portInfo.erase_input(0);
+    portInfo.eraseInput(0);
 
     // Add memory input - this is the output of the extmemory op.
     auto inPortInfo = getMemoryIOInfo(

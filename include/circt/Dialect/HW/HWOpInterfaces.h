@@ -93,18 +93,18 @@ struct ModulePortInfo {
   }
 
   size_t size() const { return ports.size(); }
-  size_t size_inputs() const { return numInputs; }
-  size_t size_outputs() const { return ports.size() - numInputs; }
+  size_t sizeInputs() const { return numInputs; }
+  size_t sizeOutputs() const { return ports.size() - numInputs; }
 
   PortInfo &at(size_t idx) { return ports[idx]; }
-  PortInfo &at_input(size_t idx) { return ports[idx]; }
-  PortInfo &at_output(size_t idx) { return ports[idx + numInputs]; }
+  PortInfo &atInput(size_t idx) { return ports[idx]; }
+  PortInfo &atOutput(size_t idx) { return ports[idx + numInputs]; }
 
   const PortInfo &at(size_t idx) const { return ports[idx]; }
-  const PortInfo &at_input(size_t idx) const { return ports[idx]; }
-  const PortInfo &at_output(size_t idx) const { return ports[idx + numInputs]; }
+  const PortInfo &atInput(size_t idx) const { return ports[idx]; }
+  const PortInfo &atOutput(size_t idx) const { return ports[idx + numInputs]; }
 
-  void erase_input(size_t idx) {
+  void eraseInput(size_t idx) {
     assert(numInputs);
     assert(idx < numInputs);
     ports.erase(ports.begin() + idx);

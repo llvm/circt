@@ -100,14 +100,14 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
     // Move the block arguments of the systemc.func (that we got from the
     // hw.module) to the systemc.module
     rewriter.setInsertionPointToStart(scFunc.getBodyBlock());
-    auto ports_local = getModulePortInfo(module);
+    auto portsLocal = getModulePortInfo(module);
     for (size_t i = 0, e = scFunc.getRegion().getNumArguments(); i < e; ++i) {
       auto inputRead =
           rewriter
               .create<SignalReadOp>(scFunc.getLoc(), scModule.getArgument(i))
               .getResult();
       auto converted = typeConverter->materializeSourceConversion(
-          rewriter, scModule.getLoc(), ports_local.at(i).type, inputRead);
+          rewriter, scModule.getLoc(), portsLocal.at(i).type, inputRead);
       scFuncBody.getArgument(0).replaceAllUsesWith(converted);
       scFuncBody.eraseArgument(0);
     }

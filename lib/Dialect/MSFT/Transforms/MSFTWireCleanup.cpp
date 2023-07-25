@@ -99,7 +99,7 @@ void MSFTPassCommon::bubbleWiresUp(MSFTModuleOp mod) {
   // Find all "passthough" internal wires, filling 'inputPortsToRemove' as a
   // side-effect.
   DenseMap<Value, hw::PortInfo> passThroughs;
-  llvm::BitVector inputPortsToRemove(ports.size_inputs());
+  llvm::BitVector inputPortsToRemove(ports.sizeInputs());
   for (hw::PortInfo inputPort : ports.inputs()) {
     BlockArgument portArg = body->getArgument(inputPort.argNum);
     bool removePort = true;
@@ -116,7 +116,7 @@ void MSFTPassCommon::bubbleWiresUp(MSFTModuleOp mod) {
   // Find all output ports which we can remove. Fill in 'outputToInputIdx' to
   // help rewire instantiations later on.
   DenseMap<unsigned, unsigned> outputToInputIdx;
-  llvm::BitVector outputPortsToRemove(ports.size_outputs());
+  llvm::BitVector outputPortsToRemove(ports.sizeOutputs());
   for (hw::PortInfo outputPort : ports.outputs()) {
     assert(outputPort.argNum < terminator->getNumOperands() && "Invalid IR");
     Value outputValue = terminator->getOperand(outputPort.argNum);

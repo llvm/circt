@@ -422,12 +422,12 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 LogicalResult
 InstanceOp::verifySignatureMatch(const hw::ModulePortInfo &ports) {
-  if (ports.size_inputs() != getNumOperands())
+  if (ports.sizeInputs() != getNumOperands())
     return emitOpError("wrong number of inputs (expected ")
-           << ports.size_inputs() << ")";
-  if (ports.size_outputs() != getNumResults())
+           << ports.sizeInputs() << ")";
+  if (ports.sizeOutputs() != getNumResults())
     return emitOpError("wrong number of outputs (expected ")
-           << ports.size_outputs() << ")";
+           << ports.sizeOutputs() << ")";
   for (auto port : ports.inputs())
     if (getOperand(port.argNum).getType() != port.type)
       return emitOpError("in input port ")
