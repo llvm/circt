@@ -1158,7 +1158,8 @@ def RefSubOp : FIRRTLExprOp<"ref.sub"> {
      "$input `[` $index `]` attr-dict `:` qualified(type($input))";
 }
 
-def RWProbeOp : FIRRTLExprOp<"ref.rwprobe", [DeclareOpInterfaceMethods<InnerRefUserOpInterface>]> {
+def RWProbeOp : FIRRTLExprOp<"ref.rwprobe",
+                  [DeclareOpInterfaceMethods<InnerRefUserOpInterface>]> {
   let summary = "FIRRTL RWProbe";
   let description = [{
     Create a RWProbe for the target.
