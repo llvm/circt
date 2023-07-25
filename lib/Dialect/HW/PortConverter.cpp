@@ -125,10 +125,10 @@ LogicalResult PortConverterImpl::run() {
   };
 
   // Dispatch the port conversion builder on the I/O of the module.
-  for (PortInfo port : ports.inputs)
+  for (PortInfo port : ports.inputs())
     if (failed(createPortLowering(port)))
       return failure();
-  for (PortInfo port : ports.outputs)
+  for (PortInfo port : ports.outputs())
     if (failed(createPortLowering(port)))
       return failure();
 
@@ -163,7 +163,7 @@ LogicalResult PortConverterImpl::run() {
     // We should only erase the original arguments. New ones were appended with
     // the `createInput` method call.
     body->eraseArguments([&ports](BlockArgument arg) {
-      return arg.getArgNumber() < ports.inputs.size();
+      return arg.getArgNumber() < ports.size_inputs();
     });
     // Set the new operands, overwriting the old ones.
     body->getTerminator()->setOperands(newOutputValues);
@@ -199,11 +199,11 @@ void PortConverterImpl::updateInstance(hw::InstanceOp inst) {
   // Create backedges for the future instance results so the signal mappers can
   // use the future results as values.
   SmallVector<Backedge> newResults;
-  for (PortInfo outputPort : ports.outputs)
+  for (PortInfo outputPort : ports.outputs())
     newResults.push_back(beb.get(outputPort.type));
 
   // Map the operands.
-  SmallVector<Value> newOperands(ports.inputs.size(), {});
+  SmallVector<Value> newOperands(ports.size_inputs(), {});
   for (size_t oldOpIdx = 0, e = inst.getNumOperands(); oldOpIdx < e; ++oldOpIdx)
     loweredInputs[oldOpIdx]->mapInputSignals(
         b, inst, inst->getOperand(oldOpIdx), newOperands, newResults);

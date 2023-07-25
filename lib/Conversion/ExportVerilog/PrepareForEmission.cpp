@@ -72,7 +72,8 @@ static void spillWiresForInstanceInputs(InstanceOp op) {
   auto namePrefixSize = nameTmp.size();
 
   size_t nextOpNo = 0;
-  for (auto &port : getModulePortInfo(op).inputs) {
+  auto ports = getModulePortInfo(op);
+  for (auto &port : ports.inputs()) {
     auto src = op.getOperand(nextOpNo);
     ++nextOpNo;
 
@@ -103,7 +104,8 @@ static void lowerInstanceResults(InstanceOp op) {
   auto namePrefixSize = nameTmp.size();
 
   size_t nextResultNo = 0;
-  for (auto &port : getModulePortInfo(op).outputs) {
+  auto ports = getModulePortInfo(op);
+  for (auto &port : ports.outputs()) {
     auto result = op.getResult(nextResultNo);
     ++nextResultNo;
 

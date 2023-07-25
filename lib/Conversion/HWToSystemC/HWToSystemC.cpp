@@ -45,17 +45,16 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
     if (!module.getParameters().empty())
       return emitError(module->getLoc(), "module parameters not supported yet");
 
-    if (llvm::any_of(module.getAllPorts(),
-                     [](auto port) { return port.isInOut(); }))
+    auto ports = getModulePortInfo(module);
+    if (llvm::any_of(ports.ports, [](auto &port) { return port.isInOut(); }))
       return emitError(module->getLoc(), "inout arguments not supported yet");
 
     // Create the SystemC module.
-    SmallVector<PortInfo> ports = module.getAllPorts();
-    for (size_t i = 0; i < ports.size(); ++i)
-      ports[i].type = typeConverter->convertType(ports[i].type);
+    for (size_t i = 0; i < ports.ports.size(); ++i)
+      ports.ports[i].type = typeConverter->convertType(ports.ports[i].type);
 
-    auto scModule = rewriter.create<SCModuleOp>(module.getLoc(),
-                                                module.getNameAttr(), ports);
+    auto scModule = rewriter.create<SCModuleOp>(
+        module.getLoc(), module.getNameAttr(), ports.ports);
     auto *outputOp = module.getBodyBlock()->getTerminator();
     scModule.setVisibility(module.getVisibility());
 
@@ -101,13 +100,14 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
     // Move the block arguments of the systemc.func (that we got from the
     // hw.module) to the systemc.module
     rewriter.setInsertionPointToStart(scFunc.getBodyBlock());
+    auto ports_local = getModulePortInfo(module);
     for (size_t i = 0, e = scFunc.getRegion().getNumArguments(); i < e; ++i) {
       auto inputRead =
           rewriter
               .create<SignalReadOp>(scFunc.getLoc(), scModule.getArgument(i))
               .getResult();
       auto converted = typeConverter->materializeSourceConversion(
-          rewriter, scModule.getLoc(), module.getAllPorts()[i].type, inputRead);
+          rewriter, scModule.getLoc(), ports_local.ports[i].type, inputRead);
       scFuncBody.getArgument(0).replaceAllUsesWith(converted);
       scFuncBody.eraseArgument(0);
     }

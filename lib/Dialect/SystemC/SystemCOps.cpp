@@ -269,9 +269,7 @@ void SCModuleOp::build(OpBuilder &odsBuilder, OperationState &odsState,
 void SCModuleOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                        StringAttr name, const hw::ModulePortInfo &ports,
                        ArrayRef<NamedAttribute> attributes) {
-  SmallVector<hw::PortInfo> portInfos(ports.inputs);
-  portInfos.append(ports.outputs);
-  build(odsBuilder, odsState, name, portInfos, attributes);
+  build(odsBuilder, odsState, name, ports.ports, attributes);
 }
 
 void SCModuleOp::getAsmBlockArgumentNames(mlir::Region &region,

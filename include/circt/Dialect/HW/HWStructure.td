@@ -56,7 +56,8 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
 
   let extraClassDefinition = extraModuleClassDefinition # [{
     size_t $cppClass::getNumPorts() {
-      return getAllPorts().size();
+      // This is wildly inefficient
+      return getModulePortInfo(*this).size();
     }
 
     ::circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
@@ -115,16 +116,6 @@ def HWModuleOp : HWModuleOpBase<"module",
 
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
-
-    /// Decode information about the input and output ports on this module.
-    ModulePortInfo getPorts() {
-      return getModulePortInfo(*this);
-    }
-
-    /// Return all the module ports merged into one list.
-    SmallVector<PortInfo> getAllPorts() {
-      return getAllModulePortInfos(*this);
-    }
 
     /// Returns the number of in or inout ports.
     size_t getNumInOrInoutPorts() { return getArgumentTypes().size(); }
@@ -274,10 +265,6 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
   ];
 
   let extraModuleClassDeclaration = [{
-    /// Return all the module ports merged into one list.
-    SmallVector<PortInfo> getAllPorts() {
-      return getAllModulePortInfos(*this);
-    }
 
     /// Return the PortInfo for the specified input or inout port.
     PortInfo getInOrInoutPort(size_t i) {
@@ -396,16 +383,6 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
   ];
 
   let extraModuleClassDeclaration = [{
-    /// Decode information about the input and output ports on this module.
-    ModulePortInfo getPorts() {
-      return getModulePortInfo(*this);
-    }
-
-    /// Return all the module ports merged into one list.
-    SmallVector<PortInfo> getAllPorts() {
-      return getAllModulePortInfos(*this);
-    }
-
     /// Return the name to use for the Verilog module that we're referencing
     /// here.  This is typically the symbol, but can be overridden with the
     /// verilogName attribute.

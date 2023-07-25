@@ -261,14 +261,14 @@ HWModulePortAccessor::HWModulePortAccessor(Location loc,
                                            const ModulePortInfo &info,
                                            Region &bodyRegion)
     : info(info) {
-  inputArgs.resize(info.inputs.size());
+  inputArgs.resize(info.size_inputs());
   for (auto [i, barg] : llvm::enumerate(bodyRegion.getArguments())) {
-    inputIdx[info.inputs[i].name.str()] = i;
+    inputIdx[info.at(i).name.str()] = i;
     inputArgs[i] = barg;
   }
 
-  outputOperands.resize(info.outputs.size());
-  for (auto [i, outputInfo] : llvm::enumerate(info.outputs)) {
+  outputOperands.resize(info.size_outputs());
+  for (auto [i, outputInfo] : llvm::enumerate(info.outputs())) {
     outputIdx[outputInfo.name.str()] = i;
   }
 }
@@ -645,7 +645,7 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   SmallVector<Attribute> argLocs, resultLocs;
   auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
 
-  for (auto elt : ports.inputs) {
+  for (auto elt : ports.inputs()) {
     if (elt.dir == ModulePort::Direction::InOut &&
         !elt.type.isa<hw::InOutType>())
       elt.type = hw::InOutType::get(elt.type);
@@ -660,7 +660,7 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
     argAttrs.push_back(attr);
   }
 
-  for (auto elt : ports.outputs) {
+  for (auto elt : ports.outputs()) {
     resultTypes.push_back(elt.type);
     resultNames.push_back(elt.name);
     resultLocs.push_back(elt.loc ? elt.loc : unknownLoc);
@@ -854,7 +854,7 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
 
   // Add arguments to the body block.
   auto unknownLoc = builder.getUnknownLoc();
-  for (auto port : ports.inputs) {
+  for (auto port : ports.inputs()) {
     auto loc = port.loc ? Location(port.loc) : unknownLoc;
     auto type = port.type;
     if (port.isInOut() && !type.isa<InOutType>())
@@ -1026,59 +1026,6 @@ ModulePortInfo hw::getModulePortInfo(Operation *op) {
                        loc});
   }
   return ModulePortInfo(inputs, outputs);
-}
-
-/// Return an encapsulated set of information about input and output ports of
-/// the specified module or instance.  The input ports always come before the
-/// output ports in the list.
-SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
-  assert(isAnyModuleOrInstance(op) &&
-         "Can only get module ports from an instance or module");
-
-  SmallVector<PortInfo> results;
-  auto argTypes = getModuleType(op).getInputs();
-  auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
-  auto argLocs = op->getAttrOfType<ArrayAttr>("argLocs");
-
-  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    bool isInOut = false;
-    auto type = argTypes[i];
-
-    if (auto inout = type.dyn_cast<InOutType>()) {
-      isInOut = true;
-      type = inout.getElementType();
-    }
-
-    // Instance ops will not have port location information.
-    LocationAttr argLoc;
-    if (argLocs)
-      argLoc = argLocs[i].cast<LocationAttr>();
-
-    auto direction =
-        isInOut ? ModulePort::Direction::InOut : ModulePort::Direction::Input;
-    results.push_back({{argNames[i].cast<StringAttr>(), type, direction},
-                       i,
-                       getArgSym(op, i),
-                       argLoc});
-  }
-
-  auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
-  auto resultLocs = op->getAttrOfType<ArrayAttr>("resultLocs");
-  auto resultTypes = getModuleType(op).getResults();
-  for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
-
-    // Instance ops will not have port location information.
-    LocationAttr resultLoc;
-    if (resultLocs)
-      resultLoc = resultLocs[i].cast<mlir::LocationAttr>();
-
-    results.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
-                        ModulePort::Direction::Output},
-                       i,
-                       getResultSym(op, i),
-                       resultLoc});
-  }
-  return results;
 }
 
 /// Return the PortInfo for the specified input or inout port.
@@ -1389,7 +1336,8 @@ std::pair<StringAttr, BlockArgument>
 HWModuleOp::insertInput(unsigned index, StringAttr name, Type ty) {
   // Find a unique name for the wire.
   Namespace ns;
-  for (auto port : getAllPorts())
+  auto ports = getModulePortInfo(*this);
+  for (auto port : ports)
     ns.newName(port.name.getValue());
   auto nameAttr = StringAttr::get(getContext(), ns.newName(name.getValue()));
 

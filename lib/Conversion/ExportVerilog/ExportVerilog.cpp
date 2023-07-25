@@ -3661,7 +3661,8 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
   HWModuleOp parent = op->getParentOfType<HWModuleOp>();
 
   size_t operandIndex = 0;
-  for (PortInfo port : parent.getPorts().outputs) {
+  auto ports = parent.getPorts();
+  for (PortInfo port : ports.outputs()) {
     auto operand = op.getOperand(operandIndex);
     // Outputs that are set by the output port of an instance are handled
     // directly when the instance is emitted.
@@ -4605,7 +4606,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
   ps << PP::nbsp << PPExtString(getSymOpName(op)) << " (";
 
-  SmallVector<PortInfo> portInfo = getAllModulePortInfos(op);
+  auto portInfo = getModulePortInfo(op);
 
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
@@ -4632,7 +4633,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
   for (size_t portNum = 0, e = portValues.size(); portNum < e; ++portNum) {
     // Figure out which value we are emitting.
-    auto &elt = portInfo[portNum];
+    auto &elt = portInfo.at(portNum);
     Value portVal = portValues[portNum];
     isZeroWidth = isZeroBitType(portVal.getType());
 
@@ -4642,7 +4643,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       bool shouldPrintComma = true;
       if (isZeroWidth) {
         shouldPrintComma = false;
-        for (size_t i = (&elt - portInfo.data()) + 1, e = portInfo.size();
+        for (size_t i = (&elt - portInfo.ports.data()) + 1,
+                    e = portInfo.ports.size();
              i != e; ++i)
           if (!isZeroBitType(portValues[i].getType())) {
             shouldPrintComma = true;
@@ -5176,7 +5178,7 @@ void ModuleEmitter::emitBind(BindOp op) {
   bool isFirst = true; // True until we print a port.
   ps.scopedBox(PP::bbox2, [&]() {
     ModulePortInfo parentPortInfo = parentMod.getPorts();
-    SmallVector<PortInfo> childPortInfo = getAllModulePortInfos(inst);
+    auto childPortInfo = getModulePortInfo(inst);
 
     // Get the max port name length so we can align the '('.
     size_t maxNameLength = 0;
@@ -5201,10 +5203,10 @@ void ModuleEmitter::emitBind(BindOp op) {
         bool shouldPrintComma = true;
         if (isZeroWidth) {
           shouldPrintComma = false;
-          for (size_t i = (&elt - childPortInfo.data()) + 1,
-                      e = childPortInfo.size();
+          for (size_t i = (&elt - childPortInfo.ports.data()) + 1,
+                      e = childPortInfo.ports.size();
                i != e; ++i)
-            if (!isZeroBitType(childPortInfo[i].type)) {
+            if (!isZeroBitType(childPortInfo.at(i).type)) {
               shouldPrintComma = true;
               break;
             }
@@ -5280,7 +5282,7 @@ void ModuleEmitter::emitBindInterface(BindInterfaceOp op) {
 void ModuleEmitter::emitHWModule(HWModuleOp module) {
   currentModuleOp = module;
 
-  SmallVector<PortInfo> portInfo = module.getAllPorts();
+  auto portInfo = getModulePortInfo(module);
 
   SmallPtrSet<Operation *, 8> moduleOpSet;
   moduleOpSet.insert(module);
@@ -5377,7 +5379,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   }
 
   ps << "(";
-  if (!portInfo.empty())
+  if (!portInfo.ports.empty())
     emitLocationInfo(module->getLoc());
 
   // Determine the width of the widest type we have to print so everything
@@ -5387,7 +5389,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   SmallVector<SmallString<8>, 16> portTypeStrings;
 
   for (size_t i = 0, e = portInfo.size(); i < e; ++i) {
-    auto port = portInfo[i];
+    auto port = portInfo.at(i);
     hasOutputs |= port.isOutput();
     hasZeroWidth |= isZeroBitType(port.type);
     if (!isZeroBitType(port.type))
@@ -5413,7 +5415,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       auto lastPort = e - 1;
 
       ps << PP::newline;
-      auto portType = portInfo[portIdx].type;
+      auto portType = portInfo.at(portIdx).type;
 
       // If this is a zero width type, emit the port as a comment and create a
       // neverbox to ensure we don't insert a line break.
@@ -5426,7 +5428,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       }
 
       // Emit the port direction.
-      auto thisPortDirection = portInfo[portIdx].dir;
+      auto thisPortDirection = portInfo.at(portIdx).dir;
       switch (thisPortDirection) {
       case ModulePort::Direction::Output:
         ps << "output ";
@@ -5452,17 +5454,17 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
           (hasOutputs ? 7 : 6) + (emitWireInPorts ? 5 : 0) + maxTypeWidth;
 
       // Emit the name.
-      ps << PPExtString(getPortVerilogName(module, portInfo[portIdx]));
+      ps << PPExtString(getPortVerilogName(module, portInfo.at(portIdx)));
 
       // Emit array dimensions.
       ps.invokeWithStringOS(
           [&](auto &os) { printUnpackedTypePostfix(portType, os); });
 
       // Emit the symbol.
-      if (state.options.printDebugInfo && portInfo[portIdx].sym &&
-          !portInfo[portIdx].sym.empty())
+      if (state.options.printDebugInfo && portInfo.at(portIdx).sym &&
+          !portInfo.at(portIdx).sym.empty())
         ps << " /* inner_sym: "
-           << PPExtString(portInfo[portIdx].sym.getSymName().getValue())
+           << PPExtString(portInfo.at(portIdx).sym.getSymName().getValue())
            << " */";
 
       // Emit the comma if this is not the last real port.
@@ -5470,7 +5472,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
         ps << ",";
 
       // Emit the location.
-      if (auto loc = portInfo[portIdx].loc)
+      if (auto loc = portInfo.at(portIdx).loc)
         emitLocationInfo(loc);
 
       if (isZeroWidth)
@@ -5482,9 +5484,10 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       // direction, emit them in a list one per line. Optionally skip this
       // behavior when requested by user.
       if (!state.options.disallowPortDeclSharing) {
-        while (portIdx != e && portInfo[portIdx].dir == thisPortDirection &&
+        while (portIdx != e && portInfo.at(portIdx).dir == thisPortDirection &&
                stripUnpackedTypes(portType) ==
-                   stripUnpackedTypes(portInfo[portIdx].type)) {
+                   stripUnpackedTypes(portInfo.at(portIdx).type)) {
+          auto port = portInfo.at(portIdx);
           // Append this to the running port decl.
           ps << PP::newline;
 
@@ -5499,27 +5502,24 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
           ps.nbsp(startOfNamePos);
 
           // Emit the name.
-          StringRef name = getPortVerilogName(module, portInfo[portIdx]);
+          StringRef name = getPortVerilogName(module, port);
           ps << PPExtString(name);
 
           // Emit array dimensions.
-          ps.invokeWithStringOS([&](auto &os) {
-            printUnpackedTypePostfix(portInfo[portIdx].type, os);
-          });
+          ps.invokeWithStringOS(
+              [&](auto &os) { printUnpackedTypePostfix(port.type, os); });
 
           // Emit the symbol.
-          if (state.options.printDebugInfo && portInfo[portIdx].sym &&
-              !portInfo[portIdx].sym.empty())
+          if (state.options.printDebugInfo && port.sym && !port.sym.empty())
             ps << " /* inner_sym: "
-               << PPExtString(portInfo[portIdx].sym.getSymName().getValue())
-               << " */";
+               << PPExtString(port.sym.getSymName().getValue()) << " */";
 
           // Emit the comma if this is not the last real port.
           if (portIdx != lastNonZeroPort && portIdx != lastPort)
             ps << ",";
 
           // Emit the location.
-          if (auto loc = portInfo[portIdx].loc)
+          if (auto loc = port.loc)
             emitLocationInfo(loc);
 
           if (isZeroWidth)
@@ -5531,7 +5531,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     }
   });
 
-  if (portInfo.empty()) {
+  if (portInfo.ports.empty()) {
     ps << ");";
     emitLocationInfoAndNewLine(moduleOpSet);
   } else {

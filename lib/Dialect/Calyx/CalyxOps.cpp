@@ -1674,8 +1674,8 @@ verifyPrimitiveOpType(PrimitiveOp instance,
            << "'.";
 
   // Verify the instance result ports with those of its referenced component.
-  SmallVector<hw::PortInfo> primitivePorts = referencedPrimitive.getAllPorts();
-  size_t numPorts = primitivePorts.size();
+  auto primitivePorts = getModulePortInfo(referencedPrimitive);
+  size_t numPorts = primitivePorts.ports.size();
 
   size_t numResults = instance.getNumResults();
   if (numResults != numPorts)
@@ -1717,7 +1717,7 @@ verifyPrimitiveOpType(PrimitiveOp instance,
 
   for (size_t i = 0; i != numResults; ++i) {
     auto resultType = instance.getResult(i).getType();
-    auto expectedType = primitivePorts[i].type;
+    auto expectedType = primitivePorts.ports[i].type;
     auto replacedType = hw::evaluateParametricType(
         instance.getLoc(), instance.getParametersAttr(), expectedType);
     if (failed(replacedType))
@@ -1725,7 +1725,7 @@ verifyPrimitiveOpType(PrimitiveOp instance,
     if (resultType == replacedType)
       continue;
     return instance.emitOpError()
-           << "result type for " << primitivePorts[i].name << " must be "
+           << "result type for " << primitivePorts.ports[i].name << " must be "
            << expectedType << ", but got " << resultType;
   }
   return success();
@@ -1767,7 +1767,8 @@ void PrimitiveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 SmallVector<StringRef> PrimitiveOp::portNames() {
   SmallVector<StringRef> portNames;
-  for (hw::PortInfo port : getReferencedPrimitive().getAllPorts())
+  auto ports = getModulePortInfo(getReferencedPrimitive());
+  for (auto port : ports)
     portNames.push_back(port.name.getValue());
 
   return portNames;
@@ -1787,7 +1788,8 @@ Direction convertHWDirectionToCalyx(hw::ModulePort::Direction direction) {
 
 SmallVector<Direction> PrimitiveOp::portDirections() {
   SmallVector<Direction> portDirections;
-  for (hw::PortInfo port : getReferencedPrimitive().getAllPorts())
+  auto ports = getModulePortInfo(getReferencedPrimitive());
+  for (hw::PortInfo port : ports)
     portDirections.push_back(convertHWDirectionToCalyx(port.dir));
   return portDirections;
 }
