@@ -4762,14 +4762,7 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
     auto fieldIDType = type_dyn_cast<hw::FieldIDTypeInterface>(type);
     if (fieldIDType)
       return fieldIDType.getFinalTypeByFieldID(fieldID);
-    // Verifier on target op should handle this, check to be safe anyway.
-    if (fieldID != 0) {
-      auto diag =
-          emitOpError()
-          << "has target that resolves to invalid per-field inner symbol";
-      return diag.attachNote(loc)
-             << "target does not support per-field inner symbols";
-    }
+    assert(fieldID == 0);
     return type;
   };
   auto checkFinalType = [&](auto type, Location loc) -> LogicalResult {
