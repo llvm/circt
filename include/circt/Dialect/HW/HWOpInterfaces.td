@@ -57,34 +57,6 @@ def HWModuleLike : OpInterface<"HWModuleLike", [Symbol]> {
       return $_op->template getAttrOfType<ArrayAttr>("resultNames");
     }]>,
 
-    InterfaceMethod<"Return the name of an input.",
-    "mlir::StringRef", "getInputName", (ins "unsigned":$idx),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return getInputNameAttr(idx).getValue();
-    }]>,
-
-    InterfaceMethod<"Return the name of an output.",
-    "mlir::StringRef", "getOutputName", (ins "unsigned":$idx),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return getOutputNameAttr(idx).getValue();
-    }]>,
-
-    InterfaceMethod<"Return the name of an input to this module",
-    "mlir::StringAttr", "getInputNameAttr", (ins "unsigned":$idx),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return cast<StringAttr>($_op->template getAttrOfType<ArrayAttr>("argNames")[idx]);
-    }]>,
-
-    InterfaceMethod<"Return the name of an output to this module",
-    "mlir::StringAttr", "getOutputNameAttr", (ins "unsigned":$idx),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return cast<StringAttr>($_op->template getAttrOfType<ArrayAttr>("resultNames")[idx]);
-    }]>,
-
     InterfaceMethod<"Return the locations of the inputs to this module",
     "mlir::ArrayAttr", "getInputLocs", (ins),
     /*methodBody=*/[{}],
@@ -112,6 +84,27 @@ def HWModuleLike : OpInterface<"HWModuleLike", [Symbol]> {
     unsigned getNumOutputs() {
       return getOutputNames().size();
     }
+
+    // Return the name of an input.
+    mlir::StringRef getInputName(unsigned idx) {
+      return getInputNameAttr(idx).getValue();
+    }
+
+    // Return the name of an output
+    mlir::StringRef getOutputName(unsigned idx) {
+      return getOutputNameAttr(idx).getValue();
+    }
+
+    // Return the name of an input to this module
+    mlir::StringAttr getInputNameAttr(unsigned idx) {
+      return cast<StringAttr>(getInputNames()[idx]);
+    }
+
+    // Return the name of an output to this module
+    mlir::StringAttr getOutputNameAttr(unsigned idx) {
+      return cast<StringAttr>(getOutputNames()[idx]);
+    }
+
   }];
 
   let verify = [{
