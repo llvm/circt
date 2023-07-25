@@ -4663,6 +4663,10 @@ void RefSubOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
+void RWProbeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
 FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
                                          ArrayRef<NamedAttribute> attrs,
                                          std::optional<Location> loc) {
@@ -4722,6 +4726,59 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
 
   return emitInferRetTypeError(
       loc, "ref.sub op requires a RefType of vector or bundle base type");
+}
+
+FIRRTLType RWProbeOp::inferReturnType(ValueRange operands,
+                                      ArrayRef<NamedAttribute> attrs,
+                                      std::optional<Location> loc) {
+  auto typeAttr = getAttr<TypeAttr>(attrs, "type");
+  auto type = typeAttr.getValue();
+  auto forceableType = firrtl::detail::getForceableResultType(true, type);
+  if (!forceableType)
+    return emitInferRetTypeError(loc, "cannot force type ", type);
+  return forceableType;
+}
+
+LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  auto targetRef = getTarget();
+  if (!targetRef)
+    return emitOpError("has invalid target reference");
+  if (targetRef.getModule() !=
+      (*this)->getParentOfType<FModuleLike>().getModuleNameAttr())
+    return emitOpError() << "has non-local target";
+
+  auto target = ns.lookup(targetRef);
+  if (!target)
+    return emitOpError() << "has target that cannot be resolved: " << target;
+
+  auto checkFinalType = [&](auto type, Location loc) -> LogicalResult {
+    // Determine final type.
+    mlir::Type fType = type;
+    if (auto fieldIDType = type_dyn_cast<hw::FieldIDTypeInterface>(type))
+      fType = fieldIDType.getFinalTypeByFieldID(target.getField());
+    else
+      assert(target.getField() == 0);
+    // Check.
+    if (fType != getType()) {
+      auto diag = emitOpError("has type mismatch: target resolves to ")
+                  << fType << " instead of expected " << getType();
+      diag.attachNote(loc) << "target resolves here";
+      return diag;
+    }
+    return success();
+  };
+  if (target.isPort()) {
+    auto mod = cast<FModuleLike>(target.getOp());
+    return checkFinalType(mod.getPortType(target.getPort()),
+                          mod.getPortLocation(target.getPort()));
+  }
+  hw::InnerSymbolOpInterface symOp =
+      cast<hw::InnerSymbolOpInterface>(target.getOp());
+  if (!symOp.getTargetResult())
+    return emitOpError("has target that cannot be probed")
+        .attachNote(symOp.getLoc())
+        .append("target resolves here");
+  return checkFinalType(symOp.getTargetResult().getType(), symOp.getLoc());
 }
 
 //===----------------------------------------------------------------------===//
