@@ -37,8 +37,8 @@ class ModuleType;
 
 namespace detail {
 
-ModuleType FnToMod(Operation *op, ArrayAttr inputNames, ArrayAttr outputNames);
-ModuleType FnToMod(FunctionType fn, ArrayAttr inputNames,
+ModuleType fnToMod(Operation *op, ArrayAttr inputNames, ArrayAttr outputNames);
+ModuleType fnToMod(FunctionType fn, ArrayAttr inputNames,
                    ArrayAttr outputNames);
 
 /// Struct defining a field. Used in structs.

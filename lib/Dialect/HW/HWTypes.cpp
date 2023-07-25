@@ -780,14 +780,14 @@ static llvm::hash_code hash_value(const ModulePort &port) {
 } // namespace hw
 } // namespace circt
 
-ModuleType circt::hw::detail::FnToMod(Operation *op, ArrayAttr inputNames,
+ModuleType circt::hw::detail::fnToMod(Operation *op, ArrayAttr inputNames,
                                       ArrayAttr outputNames) {
-  return FnToMod(
+  return fnToMod(
       cast<FunctionType>(cast<mlir::FunctionOpInterface>(op).getFunctionType()),
       inputNames, outputNames);
 }
 
-ModuleType circt::hw::detail::FnToMod(FunctionType fnty, ArrayAttr inputNames,
+ModuleType circt::hw::detail::fnToMod(FunctionType fnty, ArrayAttr inputNames,
                                       ArrayAttr outputNames) {
   SmallVector<ModulePort> ports;
   for (auto [t, n] : llvm::zip(fnty.getInputs(), inputNames))

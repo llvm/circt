@@ -39,23 +39,9 @@ def HWModuleLike : OpInterface<"HWModuleLike", [Symbol]> {
     "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex)>,
 
     InterfaceMethod<"Get the module type",
-    "::circt::hw::ModuleType", "getModuleType", (ins),
+    "::circt::hw::ModuleType", "getHWModuleType", (ins),
     /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return ::circt::hw::detail::FnToMod($_op, getInputNames(), getOutputNames()); }]>,
-
-    InterfaceMethod<"Return the number of inputs to this module",
-    "unsigned", "getNumInputs", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return $_op->template getAttrOfType<ArrayAttr>("argNames").size();
-    }]>,
-
-    InterfaceMethod<"Return the number of outputs from this module",
-    "unsigned", "getNumOutputs", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return $_op->template getAttrOfType<ArrayAttr>("resultNames").size();
-    }]>,
+    /*defaultImplementation=*/[{ return ::circt::hw::detail::fnToMod($_op, getInputNames(), getOutputNames()); }]>,
 
     InterfaceMethod<"Return the names of the inputs to this module",
     "mlir::ArrayAttr", "getInputNames", (ins),
@@ -114,6 +100,19 @@ def HWModuleLike : OpInterface<"HWModuleLike", [Symbol]> {
     }]>,
 
   ];
+
+  let extraSharedClassDeclaration = [{
+
+    // Return the number of inputs to this module
+    unsigned getNumInputs() {
+      return getInputNames().size();
+    }
+
+    // Return the number of outputs from this module
+    unsigned getNumOutputs() {
+      return getOutputNames().size();
+    }
+  }];
 
   let verify = [{
     static_assert(
