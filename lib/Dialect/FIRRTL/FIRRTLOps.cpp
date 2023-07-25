@@ -4757,8 +4757,7 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   if (!target)
     return emitOpError() << "has target that cannot be resolved: " << target;
 
-  auto getFinalType = [&](auto type, auto fieldID,
-                          Location loc) -> FailureOr<Type> {
+  auto getFinalType = [&](auto type, auto fieldID) -> mlir::Type {
     auto fieldIDType = type_dyn_cast<hw::FieldIDTypeInterface>(type);
     if (fieldIDType)
       return fieldIDType.getFinalTypeByFieldID(fieldID);
@@ -4766,12 +4765,13 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
     return type;
   };
   auto checkFinalType = [&](auto type, Location loc) -> LogicalResult {
-    auto fType = getFinalType(type, target.getField(), loc);
-    if (failed(fType))
-      return failure();
-    if (*fType != getType())
-      return emitOpError("has type mismatch: target resolves to ")
-             << *fType << " instead of expected " << getType();
+    auto fType = getFinalType(type, target.getField());
+    if (fType != getType()) {
+      auto diag = emitOpError("has type mismatch: target resolves to ")
+                  << fType << " instead of expected " << getType();
+      diag.attachNote(loc) << "target resolves here";
+      return diag;
+    }
     return success();
   };
   if (target.isPort()) {
@@ -4782,7 +4782,9 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
     hw::InnerSymbolOpInterface symOp =
         cast<hw::InnerSymbolOpInterface>(target.getOp());
     if (!symOp.getTargetResult())
-      return emitOpError("has target that cannot be probed");
+      return emitOpError("has target that cannot be probed")
+          .attachNote(symOp.getLoc())
+          .append("target resolves here");
     return checkFinalType(symOp.getTargetResult().getType(), symOp.getLoc());
   }
 }

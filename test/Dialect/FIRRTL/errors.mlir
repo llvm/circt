@@ -1873,6 +1873,7 @@ firrtl.circuit "RWProbeRemote" {
 
 firrtl.circuit "RWProbeTypes" {
   firrtl.module @RWProbeTypes() {
+    // expected-note @below {{target resolves here}}
     %w = firrtl.wire sym @x : !firrtl.sint<1>
     // expected-error @below {{op has type mismatch: target resolves to '!firrtl.sint<1>' instead of expected '!firrtl.uint<1>'}}
     %rw = firrtl.ref.rwprobe <@RWProbeTypes::@x> : !firrtl.uint<1>
@@ -1894,6 +1895,7 @@ firrtl.circuit "RWProbeUninferred" {
 firrtl.circuit "RWProbeInstance" {
   firrtl.extmodule @Ext()
   firrtl.module @RWProbeInstance() {
+    // expected-note @below {{target resolves here}}
     firrtl.instance inst sym @inst @Ext()
     // expected-error @below {{op has target that cannot be probed}}
     %rw = firrtl.ref.rwprobe <@RWProbeInstance::@inst> : !firrtl.uint<1>
