@@ -1292,6 +1292,20 @@ public:
                               VerilogPrecedence parenthesizeIfLooserThan,
                               function_ref<InFlightDiagnostic()> emitError);
 
+  /// Record the module local TypeScopeOp.
+  void addLocalTypescopeOp(TypeScopeOp ts) {
+    moduleLocalSymbolCache[ts.getNameAttr()] = ts;
+  }
+
+  /// Get the TypedeclOp from the module local TypeScopeOp.
+  TypedeclOp getLocalTypedeclOp(TypeAliasType typeRef) {
+    auto ref = typeRef.getRef();
+    auto iter = moduleLocalSymbolCache.find(ref.getRootReference());
+    if (iter != moduleLocalSymbolCache.end())
+      return iter->second.lookupSymbol<TypedeclOp>(ref.getLeafReference());
+    return {};
+  }
+
   //===--------------------------------------------------------------------===//
   // Mutable state while emitting a module body.
 
@@ -1309,6 +1323,9 @@ public:
 
   /// This keeps track of assignments folded into wire emissions
   SmallPtrSet<Operation *, 16> assignsInlined;
+
+  /// This keeps track of the module local typescope declarations.
+  llvm::DenseMap<mlir::Attribute, TypeScopeOp> moduleLocalSymbolCache;
 };
 
 } // end anonymous namespace
@@ -1500,6 +1517,10 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
       })
       .Case<TypeAliasType>([&](TypeAliasType typeRef) {
         auto typedecl = typeRef.getTypeDecl(emitter.state.symbolCache);
+        // Now check if this is a module local typealias.
+        if (!typedecl)
+          typedecl = emitter.getLocalTypedeclOp(typeRef);
+
         if (!typedecl) {
           mlir::emitError(loc, "unresolvable type reference");
           return false;
@@ -3286,6 +3307,8 @@ void NameCollector::collectNames(Block &block) {
       continue;
     if (isa<ltl::LTLDialect>(op.getDialect()))
       continue;
+    if (auto ts = dyn_cast<TypeScopeOp>(op))
+      moduleEmitter.addLocalTypescopeOp(ts);
 
     bool isExpr = isVerilogExpression(&op);
     assert((!isExpr ||
@@ -3703,6 +3726,9 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
 }
 
 LogicalResult StmtEmitter::visitStmt(TypeScopeOp op) {
+  // Note: This is relevant only when NameCollector has not already recorded the
+  // TypescopeOp.
+  emitter.addLocalTypescopeOp(op);
   startStatement();
   auto typescopeDef = ("_TYPESCOPE_" + op.getSymName()).str();
   ps << "`ifndef " << typescopeDef << PP::newline;

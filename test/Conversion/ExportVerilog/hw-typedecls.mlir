@@ -60,6 +60,25 @@ hw.module @testTypeAlias(
   %enumArg: !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<A, B, C>>) ->
   // CHECK: output foo      out
   (out: !hw.typealias<@__hw_typedecls::@foo, i1>) {
+  hw.type_scope @_hw_typescope {
+    hw.typedecl @A : i1
+    hw.typedecl @B : i2
+    hw.typedecl @C : !hw.struct<a: i1, b: i1>
+  }
+  // CHECK: `ifndef _TYPESCOPE__hw_typescope
+  // CHECK: `define _TYPESCOPE__hw_typescope
+  // CHECK:   typedef logic A;
+  // CHECK:   typedef logic [1:0] B;
+  // CHECK:   typedef struct packed {logic a; logic b; } C;
+  // CHECK: `endif // _TYPESCOPE__hw_typescope
+
+  %w = sv.reg  : !hw.inout<!hw.typealias<@_hw_typescope::@A, i1>>
+  %w1 = sv.reg : !hw.inout<!hw.typealias<@_hw_typescope::@B, i2>>
+  %w2 = sv.reg : !hw.inout<!hw.typealias<@_hw_typescope::@C,!hw.struct<a: i1, b: i1>>>
+  // CHECK: A w;
+  // CHECK: B w1;
+  // CHECK: C w2;
+
   // CHECK: out = arg0 + arg1
   %0 = comb.add %arg0, %arg1 : !hw.typealias<@__hw_typedecls::@foo, i1>
   hw.output %0 : !hw.typealias<@__hw_typedecls::@foo, i1>
