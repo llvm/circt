@@ -12,6 +12,13 @@ firrtl.circuit "Symbol" {
 
 // -----
 
+firrtl.circuit "SymbolOnField" {
+  // expected-error @below {{symbols on fields of open aggregates not handled yet}}
+  firrtl.extmodule @SymbolOnField(out r : !firrtl.openbundle<p: probe<uint<1>>, x: uint<1>> sym [<@bad,2,public>])
+}
+
+// -----
+
 firrtl.circuit "Annotation" {
   // expected-error @below {{annotations found on aggregate with no HW}}
   firrtl.module @Annotation(out %r : !firrtl.openbundle<p: probe<uint<1>>>) attributes {portAnnotations = [[{class = "circt.test"}]]} {
