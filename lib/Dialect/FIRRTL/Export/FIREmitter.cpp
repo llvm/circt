@@ -1215,6 +1215,7 @@ void Emitter::emitType(Type type, bool includeConst) {
 /// leading space.
 void Emitter::emitLocation(Location loc) {
   // TODO: Handle FusedLoc and uniquify locations, avoid repeated file names.
+  ps << PP::neverbreak;
   if (auto fileLoc = loc->dyn_cast_or_null<FileLineColLoc>()) {
     ps << " @[" << fileLoc.getFilename().getValue();
     if (auto line = fileLoc.getLine()) {
