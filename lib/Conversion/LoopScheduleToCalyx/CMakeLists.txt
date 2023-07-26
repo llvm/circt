@@ -3,6 +3,7 @@ add_circt_conversion_library(CIRCTLoopScheduleToCalyx
 
   DEPENDS
   CIRCTConversionPassIncGen
+  MLIRArithDialect
 
   LINK_COMPONENTS
   Core

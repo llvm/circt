@@ -19,4 +19,5 @@ add_circt_library(CIRCTTransforms
 
   DEPENDS
   CIRCTTransformsPassIncGen
+  MLIRArithDialect
 )

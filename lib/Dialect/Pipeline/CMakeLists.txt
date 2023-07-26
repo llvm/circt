@@ -18,6 +18,7 @@ add_circt_dialect_library(CIRCTPipelineOps
   MLIRIR
 
   DEPENDS
+  MLIRArithDialect
   MLIRPipelineIncGen
 )
 
