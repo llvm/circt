@@ -637,10 +637,12 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     // "Latch Group" increments inductionReg by forLoop's step value.
     calyx::ComponentOp componentOp =
         getState<ComponentLoweringState>().getComponentOp();
+    SmallVector<StringRef, 4> groupIdentifier = {
+        "incr", getState<ComponentLoweringState>().getUniqueName(forOp),
+        "induction", "var"};
     auto groupOp = calyx::createGroup<calyx::GroupOp>(
         rewriter, componentOp, forOp.getLoc(),
-        "incr_" + getState<ComponentLoweringState>().getUniqueName(forOp) +
-            "_induction_var");
+        llvm::join(groupIdentifier, "_"));
     rewriter.setInsertionPointToEnd(groupOp.getBodyBlock());
 
     // Assign inductionReg.out to the left port of the adder.
@@ -1171,10 +1173,12 @@ class BuildForGroups : public calyx::FuncOpPartialLoweringPattern {
       // Create a register for the InductionVar, and set that Register as the
       // only IterReg for the For Loop
       auto inductionVar = forOp.getOperation().getInductionVar();
-      std::string name = getState<ComponentLoweringState>()
-                             .getUniqueName(forOp.getOperation())
-                             .str() +
-                         "_induction_var";
+      SmallVector<std::string, 3> name_identifiers = {
+          getState<ComponentLoweringState>()
+              .getUniqueName(forOp.getOperation())
+              .str(),
+          "induction", "var"};
+      std::string name = llvm::join(name_identifiers, "_");
       auto reg =
           createRegister(inductionVar.getLoc(), rewriter, getComponent(),
                          inductionVar.getType().getIntOrFloatBitWidth(), name);
@@ -1185,11 +1189,13 @@ class BuildForGroups : public calyx::FuncOpPartialLoweringPattern {
       calyx::ComponentOp componentOp =
           getState<ComponentLoweringState>().getComponentOp();
       SmallVector<calyx::GroupOp> initGroups;
-      std::string groupName = "init_" +
-                              getState<ComponentLoweringState>()
-                                  .getUniqueName(forOp.getOperation())
-                                  .str() +
-                              "_induction_var";
+      SmallVector<std::string, 4> groupname_identifiers = {
+          "init",
+          getState<ComponentLoweringState>()
+              .getUniqueName(forOp.getOperation())
+              .str(),
+          "induction", "var"};
+      std::string groupName = llvm::join(groupname_identifiers, "_");
       auto groupOp = calyx::createGroup<calyx::GroupOp>(
           rewriter, componentOp, forOp.getLoc(), groupName);
       buildAssignmentsForRegisterWrite(rewriter, groupOp, componentOp, reg,
