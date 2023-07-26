@@ -21,10 +21,15 @@
 namespace circt {
 namespace hw {
 
+#define GEN_PASS_DECL_EXTERNALIZE
+#include "circt/Dialect/HW/Passes.h.inc"
+
 std::unique_ptr<mlir::Pass> createPrintInstanceGraphPass();
 std::unique_ptr<mlir::Pass> createHWSpecializePass();
 std::unique_ptr<mlir::Pass> createPrintHWModuleGraphPass();
 std::unique_ptr<mlir::Pass> createFlattenIOPass();
+std::unique_ptr<mlir::Pass>
+createExternalizePass(const ExternalizeOptions &options = {});
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

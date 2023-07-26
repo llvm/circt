@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/Seq/SeqAttributes.td"
 include "circt/Dialect/Seq/SeqOpInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
@@ -275,7 +276,10 @@ def WritePortOp : SeqOp<"write", [
 // Clock Gate
 //===----------------------------------------------------------------------===//
 
-def ClockGateOp : SeqOp<"clock_gate", [Pure]> {
+def ClockGateOp : SeqOp<"clock_gate", [
+    Pure,
+    DeclareOpInterfaceMethods<ExternalizeableOpInterface>
+  ]> {
   let summary = "Safely gates a clock with an enable signal";
   let description = [{
     The `seq.clock_gate` enables and disables a clock safely, without glitches,

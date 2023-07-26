@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
@@ -760,6 +761,59 @@ LogicalResult ClockGateOp::canonicalize(ClockGateOp op,
   }
 
   return failure();
+}
+
+llvm::SmallVector<hw::PortInfo> ClockGateOp::getRequiredPorts() {
+  llvm::SmallVector<hw::PortInfo> ports;
+  auto *ctx = getContext();
+  Type i1 = IntegerType::get(ctx, 1);
+  ports.push_back(hw::PortInfo{
+      {StringAttr::get(ctx, "input"), i1, hw::ModulePort::Direction::Input}});
+  ports.push_back(hw::PortInfo{
+      {StringAttr::get(ctx, "output"), i1, hw::ModulePort::Direction::Output}});
+  ports.push_back(hw::PortInfo{
+      {StringAttr::get(ctx, "enable"), i1, hw::ModulePort::Direction::Input}});
+  return ports;
+}
+
+llvm::SmallVector<hw::PortInfo> ClockGateOp::getOptionalPorts() {
+  llvm::SmallVector<hw::PortInfo> ports;
+  auto *ctx = getContext();
+  ports.push_back(hw::PortInfo{{StringAttr::get(ctx, "test-enable"),
+                                IntegerType::get(ctx, 1),
+                                hw::ModulePort::Direction::Input}});
+  return ports;
+}
+
+void ClockGateOp::doOperandAndResultMapping(
+    mlir::ImplicitLocOpBuilder &builder,
+    const hw::ModulePortLookupInfo &portLookup,
+    const llvm::DenseMap<mlir::StringAttr, mlir::StringAttr> &portMap,
+    llvm::SmallVector<Value> &instanceOperands,
+    llvm::SmallVector<Value> &instanceResults) {
+  bool hasTestEnable = succeeded(portLookup.getInputPortIndex(
+      portMap.at(builder.getStringAttr("test-enable"))));
+  Value enable = getEnable();
+  Value testEnable = getTestEnable();
+
+  // If the clock gate has a test enable operand but the module does not, add
+  // a `comb.or` to merge the two enable conditions.
+  if (hasTestEnable && !testEnable)
+    testEnable = builder.create<hw::ConstantOp>(builder.getI1Type(), 0);
+
+  // If the clock gate has no test enable operand but the module does, add a
+  // constant 0 input.
+  if (!hasTestEnable && testEnable) {
+    enable = builder.createOrFold<comb::OrOp>(enable, testEnable, true);
+    testEnable = {};
+  }
+
+  instanceOperands.push_back(getInput());
+  instanceOperands.push_back(enable);
+  if (testEnable)
+    instanceOperands.push_back(testEnable);
+
+  instanceResults.push_back(getOutput());
 }
 
 //===----------------------------------------------------------------------===//

@@ -338,4 +338,32 @@ def InnerRefUserOpInterface : OpInterface<"InnerRefUserOpInterface"> {
   ];
 }
 
+def ExternalizeableOpInterface : OpInterface<"ExternalizeableOpInterface"> {
+  let description = [{
+    This interface describes an operation that may be replaced by an external
+    module instantiation.P
+  }];
+  let cppNamespace = "::circt::hw";
+  let methods = [
+    InterfaceMethod<"Returns a list of required port names which must be specified by the user, as well as their types.",
+      "llvm::SmallVector<hw::PortInfo>", "getRequiredPorts",
+      (ins)>,
+    InterfaceMethod<"Returns a list of optional port names which must be specified by the user, as well as their types.",
+      "llvm::SmallVector<hw::PortInfo>", "getOptionalPorts",
+      (ins)>,
+    InterfaceMethod<"Get the operands to an instance of the externalized module, and a list of result values of this op which are to be replaced by the instance results (in order). The provided op builder can be used to create any shim operations required for instantiation.",
+      "void", "doOperandAndResultMapping",
+      (ins "mlir::ImplicitLocOpBuilder&":$builder,
+           // A handle to the port lookup info of the module to allow inspection
+           // of what ports actually got included in the external module.
+           "const hw::ModulePortLookupInfo&":$portLookup,
+           // A handle to the user-provided port mapping
+           "const llvm::DenseMap<mlir::StringAttr, mlir::StringAttr>&":$portMap,
+           // Operands that should be provided to the instance op
+           "llvm::SmallVector<Value>&":$instanceOperands,
+           // Results of this op that should be placed with the instace op.
+           "llvm::SmallVector<Value>&":$instanceResults)>
+  ];
+}
+
 #endif
