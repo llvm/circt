@@ -603,7 +603,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   if (yieldOp.getOperands().empty()) {
     // If yield operands are empty, we assume we have a for loop.
     auto forOp = dyn_cast<scf::ForOp>(yieldOp->getParentOp());
-    assert(forOp);
+    assert(forOp && "Empty yieldOps should only be located within ForOps");
     ScfForOp forOpInterface(forOp);
 
     // Get the ForLoop's Induction Register.
@@ -1280,7 +1280,7 @@ private:
           return res;
       } else if (auto *forSchedPtr = std::get_if<ForScheduleable>(&group);
                  forSchedPtr) {
-        auto &forOp = forSchedPtr->forOp;
+        auto forOp = forSchedPtr->forOp;
 
         auto forCtrlOp = buildForCtrlOp(
             forOp,
@@ -1291,11 +1291,11 @@ private:
             rewriter.create<calyx::SeqOp>(forOp.getOperation()->getLoc());
         auto *forBodyOpBlock = forBodyOp.getBodyBlock();
 
-        /// Schedule the body of the for loop
+        // Schedule the body of the for loop.
         LogicalResult res = buildCFGControl(path, rewriter, forBodyOpBlock,
                                             block, forOp.getBodyBlock());
 
-        // Insert loop-latch at the end of the while group
+        // Insert loop-latch at the end of the while group.
         rewriter.setInsertionPointToEnd(forBodyOpBlock);
         calyx::GroupOp forLatchGroup =
             getState<ComponentLoweringState>().getForLoopLatchGroup(forOp);
