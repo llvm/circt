@@ -25,13 +25,22 @@ include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
+/// A declaration that can be referred to by it's name/identity.
 class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
   FIRRTLOp<mnemonic, traits # [HasCustomSSAName,
                                DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>,
                                FNamableOp]> {
 }
 
-def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firrtl::WhenOp">,
+/// A referable declaration of some actual hardware object, which must be
+/// located in a hardware-creating context, such as the body of a module.
+class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
+  ReferableDeclOp<mnemonic, traits # [
+    ParentOneOf<[
+      "firrtl::FModuleOp", "firrtl::GroupOp",
+      "firrtl::WhenOp", "firrtl::MatchOp"]>]> {}
+
+def InstanceOp : HardwareDeclOp<"instance", [
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
     DeclareOpInterfaceMethods<HWInstanceLike>]> {
   let summary = "Instantiate an instance of a module";
@@ -122,7 +131,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
   }];
 }
 
-def MemOp : ReferableDeclOp<"mem"> {
+def MemOp : HardwareDeclOp<"mem"> {
   let summary = "Define a new mem";
   let arguments =
     (ins ConfinedAttr<I32Attr, [IntMinValue<0>]>:$readLatency,
@@ -216,7 +225,7 @@ def MemOp : ReferableDeclOp<"mem"> {
   }];
 }
 
-def NodeOp : ReferableDeclOp<"node", [
+def NodeOp : HardwareDeclOp<"node", [
       AllTypesMatch<["input","result"]>,
       DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>,
       Forceable]> {
@@ -272,7 +281,7 @@ def NodeOp : ReferableDeclOp<"node", [
   let hasFolder = 1;
 }
 
-def RegOp : ReferableDeclOp<"reg", [Forceable]> {
+def RegOp : HardwareDeclOp<"reg", [Forceable]> {
   let summary = "Define a new register";
   let description = [{
     Declare a new register:
@@ -364,7 +373,7 @@ def RegOp : ReferableDeclOp<"reg", [Forceable]> {
   let hasCanonicalizeMethod = true;
 }
 
-def RegResetOp : ReferableDeclOp<"regreset", [Forceable]> {
+def RegResetOp : HardwareDeclOp<"regreset", [Forceable]> {
   let summary = "Define a new register with a reset";
   let description = [{
     Declare a new register:
@@ -457,7 +466,7 @@ def RegResetOp : ReferableDeclOp<"regreset", [Forceable]> {
   let hasVerifier = 1;
 }
 
-def WireOp : ReferableDeclOp<"wire", [Forceable]> {
+def WireOp : HardwareDeclOp<"wire", [Forceable]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a new wire:
