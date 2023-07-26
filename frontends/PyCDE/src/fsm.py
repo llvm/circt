@@ -1,3 +1,4 @@
+import inspect
 from .dialects import fsm
 from .module import Module, ModuleLikeBuilderBase
 from .support import _obj_to_attribute
@@ -22,9 +23,19 @@ class State:
       if not isinstance(to_state, State):
         raise ValueError(
             f"to_state must be of State type but got {type(to_state)}")
+      def wrapper(*args, **kwargs):
+        result = condition(*args, **kwargs)
+        if result.type != types.i1:
+          outer_frames = inspect.getouterframes(inspect.currentframe())
+          from_state = outer_frames[4].frame.f_locals['self']
+          raise ValueError(
+            f"transitions condition: {from_state.name} -> {to_state.name} has "
+            f"width {result.type}. For now, FSMs only "
+            "support i1 transitions condition.")
+        return result
 
       self.to_state = to_state
-      self.condition = condition
+      self.condition = wrapper
 
     def _emit(self, ports):
       op = fsm.TransitionOp(self.to_state.name)
@@ -109,11 +120,6 @@ class MachineModuleBuilder(ModuleLikeBuilderBase):
               f"Multiple initial states specified ({name}, {initial_state}).")
         initial_state = name
 
-    for name, v in self.inputs:
-      if v.width != 1:
-        raise ValueError(
-            f"Input port {name} has width {v.width}. For now, FSMs only "
-            "support i1 inputs.")
 
     # At this point, the 'states' attribute should be considered an immutable,
     # ordered list of states.
