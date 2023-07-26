@@ -150,7 +150,7 @@ static LogicalResult executeOMLinker(MLIRContext &context) {
   }
 
   // Dump output.
-  if(failed(printOp(module.get(), outputFile->os())))
+  if (failed(printOp(module.get(), outputFile->os())))
     return failure();
 
   // If the result succeeded and we're emitting a file, close it.
