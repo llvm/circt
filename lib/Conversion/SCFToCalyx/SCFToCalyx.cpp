@@ -81,6 +81,8 @@ public:
   }
 
   std::optional<uint64_t> getBound() override {
+    // TODO: Consider making getBound() return a std::optional<int64_t> instead
+    // of std::optional<uint64_t>
     return constantTripCount(getOperation().getLowerBound(),
                              getOperation().getUpperBound(),
                              getOperation().getStep());
