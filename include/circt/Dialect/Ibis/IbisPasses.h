@@ -9,6 +9,8 @@
 #ifndef CIRCT_DIALECT_IBIS_IBISPASSES_H
 #define CIRCT_DIALECT_IBIS_IBISPASSES_H
 
+#include "circt/Dialect/Ibis/IbisOps.h"
+
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 #include <memory>
@@ -16,6 +18,8 @@
 
 namespace circt {
 namespace ibis {
+
+std::unique_ptr<Pass> createCallPrepPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

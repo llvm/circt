@@ -65,7 +65,7 @@ def MethodOp : IbisOp<"method", [
       SingleBlockImplicitTerminator<"ReturnOp">,
       HasParent<"ClassOp">]> {
 
-  let summary = "Ibis function";
+  let summary = "Ibis method";
   let description = [{
     Ibis functions are a lot like software functions: a list of named arguments
     and one unnamed return value.
@@ -99,7 +99,7 @@ def MethodOp : IbisOp<"method", [
 }
 
 def ReturnOp : IbisOp<"return", [
-      Pure, ReturnLike, Terminator, HasParent<"MethodOp">]> {
+      Pure, ReturnLike, Terminator, ParentOneOf<["MethodOp"]>]> {
   let summary = "Ibis function terminator";
 
   let arguments = (ins Optional<AnyType>:$retValue);
@@ -112,17 +112,16 @@ def ReturnOp : IbisOp<"return", [
 }
 
 def CallOp : IbisOp<"call", [CallOpInterface]> {
-
-  let summary = "Ibis function call";
+  let summary = "Ibis method call";
   let description = [{
-    Dispatch a call to an Ibis function.
+    Dispatch a call to an Ibis method.
   }];
 
   let arguments = (ins SymbolRefAttr:$callee, Variadic<AnyType>:$operands);
   let results = (outs Variadic<AnyType>);
 
   let extraClassDeclaration = [{
-    /// Get the argument operands to the called function.
+    /// Get the argument operands to the called method.
     operand_range getArgOperands() {
       return {arg_operand_begin(), arg_operand_end()};
     }
