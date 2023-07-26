@@ -121,10 +121,10 @@ private:
   std::variant<calyx::MemoryOp, calyx::SeqMemoryOp, MemoryPortsImpl> impl;
 };
 
-// A common interface for loop operations that need to be lowered to Calyx.
-class LoopInterface {
+// A common interface for any loop operation that needs to be lowered to Calyx.
+class BasicLoopInterface {
 public:
-  virtual ~LoopInterface();
+  virtual ~BasicLoopInterface();
 
   // Returns the arguments to this loop operation.
   virtual Block::BlockArgListType getBodyArgs() = 0;
@@ -132,17 +132,22 @@ public:
   // Returns body of this loop operation.
   virtual Block *getBodyBlock() = 0;
 
+  // Returns the location of the loop interface.
+  virtual Location getLoc() = 0;
+
+  // Returns the number of iterations the loop will conduct if known.
+  virtual std::optional<uint64_t> getBound() = 0;
+};
+
+// A common interface for loop operations that have conditionals (e.g., while
+// loops) that need to be lowered to Calyx.
+class LoopInterface : BasicLoopInterface {
+public:
   // Returns the Block in which the condition exists.
   virtual Block *getConditionBlock() = 0;
 
   // Returns the condition as a Value.
   virtual Value getConditionValue() = 0;
-
-  // Returns the number of iterations the loop will conduct if known.
-  virtual std::optional<uint64_t> getBound() = 0;
-
-  // Returns the location of the loop interface.
-  virtual Location getLoc() = 0;
 };
 
 // Provides an interface for the control flow `while` operation across different
@@ -154,6 +159,26 @@ class WhileOpInterface : LoopInterface {
 public:
   explicit WhileOpInterface(T op) : impl(op) {}
   explicit WhileOpInterface(Operation *op) : impl(dyn_cast_or_null<T>(op)) {}
+
+  // Returns the operation.
+  T getOperation() { return impl; }
+
+  // Returns the source location of the operation.
+  Location getLoc() override { return impl->getLoc(); }
+
+private:
+  T impl;
+};
+
+// Provides an interface for the control flow `forOp` operation across different
+// dialects.
+template <typename T>
+class RepeatOpInterface : BasicLoopInterface {
+  static_assert(std::is_convertible_v<T, Operation *>);
+
+public:
+  explicit RepeatOpInterface(T op) : impl(op) {}
+  explicit RepeatOpInterface(Operation *op) : impl(dyn_cast_or_null<T>(op)) {}
 
   // Returns the operation.
   T getOperation() { return impl; }
@@ -208,7 +233,7 @@ private:
 // several lowering patterns.
 template <typename Loop>
 class LoopLoweringStateInterface {
-  static_assert(std::is_base_of_v<LoopInterface, Loop>);
+  static_assert(std::is_base_of_v<BasicLoopInterface, Loop>);
 
 public:
   ~LoopLoweringStateInterface() = default;

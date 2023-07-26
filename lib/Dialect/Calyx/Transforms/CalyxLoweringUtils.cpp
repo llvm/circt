@@ -277,10 +277,10 @@ ValueRange MemoryInterface::addrPorts() {
 }
 
 //===----------------------------------------------------------------------===//
-// LoopInterface
+// BasicLoopInterface
 //===----------------------------------------------------------------------===//
 
-LoopInterface::~LoopInterface() = default;
+BasicLoopInterface::~BasicLoopInterface() = default;
 
 //===----------------------------------------------------------------------===//
 // ComponentLoweringStateInterface
