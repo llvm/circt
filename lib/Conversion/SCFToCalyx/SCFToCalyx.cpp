@@ -99,6 +99,8 @@ struct WhileScheduleable {
 struct ForScheduleable {
   /// For operation to schedule.
   ScfForOp forOp;
+  /// Bound
+  uint64_t bound;
 };
 
 /// A variant of types representing scheduleable operations.
@@ -599,7 +601,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      scf::YieldOp yieldOp) const {
   if (yieldOp.getOperands().empty()) {
-    // If yiedOp operands are empty, we assume we have a for loop.
+    // If yield operands are empty, we assume we have a for loop.
     auto forOp = dyn_cast<scf::ForOp>(yieldOp->getParentOp());
     assert(forOp);
     ScfForOp forOpInterface(forOp);
@@ -608,9 +610,6 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     auto inductionReg =
         getState<ComponentLoweringState>().getForLoopIterReg(forOpInterface, 0);
 
-    // Building the ``Latch'' Group for the For loop, which increments
-    // inductionReg by the step of the For loop. Gets an adder by mimicking what
-    // is dones in `buildLibraryOp`. There may be a more concise way to do this.
     Type regWidth = inductionReg.getOut().getType();
     // Adder should have same width as the inductionReg.
     SmallVector<Type> types(3, regWidth);
@@ -623,18 +622,17 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     SmallVector<Value, 2> opInputPorts;
     Value opOutputPort;
     for (auto dir : enumerate(directions)) {
-      if (dir.value() == calyx::Direction::Input)
+      switch (dir.value()) {
+      case calyx::Direction::Input: {
         opInputPorts.push_back(addOp.getResult(dir.index()));
-      else {
-        if (opOutputPort != nullptr) {
-          assert(false &&
-                 "Expected Calyx add operation to have only one output port");
-        }
+        break;
+      }
+      case calyx::Direction::Output: {
         opOutputPort = addOp.getResult(dir.index());
+        break;
+      }
       }
     }
-    assert(opInputPorts.size() == 2 &&
-           "Expected an add Calyx operation to have 2 inputs");
 
     // "Latch Group" increments inductionReg by forLoop's step value.
     calyx::ComponentOp componentOp =
@@ -646,11 +644,11 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     rewriter.setInsertionPointToEnd(groupOp.getBodyBlock());
 
     // Assign inductionReg.out to the left port of the adder.
-    auto leftOp = opInputPorts.front();
+    Value leftOp = opInputPorts.front();
     rewriter.create<calyx::AssignOp>(forOp.getLoc(), leftOp,
                                      inductionReg.getOut());
     // Assign forOp.getConstantStep to the right port of the adder.
-    auto rightOp = opInputPorts.back();
+    Value rightOp = opInputPorts.back();
     rewriter.create<calyx::AssignOp>(
         forOp.getLoc(), rightOp,
         createConstant(forOp->getLoc(), rewriter, componentOp,
@@ -668,9 +666,9 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   }
   // If yieldOp for a for loop is not empty, then we do not transform for loop.
   if (dyn_cast<scf::ForOp>(yieldOp->getParentOp())) {
-    yieldOp.getOperation()->emitError()
-        << "Currently do not support non-empty yield operations inside for "
-           "loops. Run --scf-for-to-while to before running --scf-to-calyx";
+    return yieldOp.getOperation()->emitError()
+           << "Currently do not support non-empty yield operations inside for "
+              "loops. Run --scf-for-to-while before running --scf-to-calyx.";
   }
   auto whileOp = dyn_cast<scf::WhileOp>(yieldOp->getParentOp());
   assert(whileOp);
@@ -872,9 +870,19 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   // Only need to add the forOp to the BlockSchedulables scheduler interface.
   // Everything else was handled in the `BuildForGroups` pattern.
   ScfForOp scfForOp(forOp);
+  // If we cannot compute the trip count of the for loop, then we should
+  // emit an error saying to use --scf-for-to-while
+  std::optional<uint64_t> bound = scfForOp.getBound();
+  if (!bound.has_value()) {
+    return scfForOp.getOperation()->emitError()
+           << "Loop bound not statically known. Should "
+              "transform into while loop using `--scf-for-to-while` before "
+              "running --lower-scf-to-calyx.";
+  }
   getState<ComponentLoweringState>().addBlockScheduleable(
       forOp.getOperation()->getBlock(), ForScheduleable{
                                             scfForOp,
+                                            bound.value(),
                                         });
   return success();
 }
@@ -1271,7 +1279,7 @@ private:
         auto forCtrlOp = buildForCtrlOp(
             forOp,
             getState<ComponentLoweringState>().getForLoopInitGroups(forOp),
-            rewriter);
+            forSchedPtr->bound, rewriter);
         rewriter.setInsertionPointToEnd(forCtrlOp.getBodyBlock());
         auto forBodyOp =
             rewriter.create<calyx::SeqOp>(forOp.getOperation()->getLoc());
@@ -1411,23 +1419,15 @@ private:
 
   calyx::RepeatOp buildForCtrlOp(ScfForOp forOp,
                                  SmallVector<calyx::GroupOp> const &initGroups,
+                                 uint64_t bound,
                                  PatternRewriter &rewriter) const {
     Location loc = forOp.getLoc();
-    /// Insert for iter arg initialization group(s). Emit a
-    /// parallel group to assign one or more registers all at once.
+    // Insert for iter arg initialization group(s). Emit a
+    // parallel group to assign one or more registers all at once.
     insertParInitGroups(rewriter, loc, initGroups);
 
     // Insert the repeatOp that corresponds to the For loop.
-    // If we cannot compute the trip count of the for loop, then we should
-    // emit an error saying to use --scf-for-to-while
-    std::optional<uint64_t> bound = forOp.getBound();
-    if (!(bound.has_value())) {
-      forOp.getOperation()->emitError()
-          << "Could not compute trip count of for loop. Should "
-             "transform into while loop using `--scf-for-to-while` before "
-             "running --lower-scf-to-calyx";
-    }
-    return rewriter.create<calyx::RepeatOp>(loc, bound.value());
+    return rewriter.create<calyx::RepeatOp>(loc, bound);
   }
 };
 
