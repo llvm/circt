@@ -716,4 +716,19 @@ def ExtractClasses : Pass<"firrtl-extract-classes", "mlir::ModuleOp"> {
   let dependentDialects = ["om::OMDialect"];
 }
 
+def RewriteRWProbes : Pass<"firrtl-rewrite-rwprobes", "firrtl::FModuleOp"> {
+  let summary = "Rewrite RWProbe's to more stable and manageable forms";
+  let description = [{
+    This pass promotes SSA-result rwprobe operations to the symbol variants,
+    inserting wires as needed.
+  }];
+  let constructor = "circt::firrtl::createRewriteRWProbesPass()";
+  let statistics = [
+    Statistic<"numSSAToSym", "num-ssa-to-sym",
+      "Number of rwprobe.ssa operations converted to rwprobe with sym">,
+    Statistic<"numInstanceResultToWire", "num-inst-to-wire",
+       "Number of instance results converted to declarations for forcing">
+  ];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
