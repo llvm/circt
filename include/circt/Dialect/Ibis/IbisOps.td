@@ -99,7 +99,7 @@ def MethodOp : IbisOp<"method", [
 }
 
 def ReturnOp : IbisOp<"return", [
-      Pure, ReturnLike, Terminator, ParentOneOf<["MethodOp"]>]> {
+      Pure, ReturnLike, Terminator, HasParent<"MethodOp">]> {
   let summary = "Ibis function terminator";
 
   let arguments = (ins Optional<AnyType>:$retValue);

@@ -9,8 +9,6 @@
 #ifndef CIRCT_DIALECT_IBIS_IBISPASSES_H
 #define CIRCT_DIALECT_IBIS_IBISPASSES_H
 
-#include "circt/Dialect/Ibis/IbisOps.h"
-
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 #include <memory>

@@ -117,7 +117,7 @@ void ReturnOp::build(OpBuilder &odsBuilder, OperationState &odsState) {}
 
 LogicalResult ReturnOp::verify() {
   // Check that the return operand type matches the function return type.
-  auto func = cast<FunctionOpInterface>((*this)->getParentOp());
+  auto func = cast<MethodOp>((*this)->getParentOp());
   ArrayRef<Type> resTypes = func.getResultTypes();
   assert(resTypes.size() <= 1);
   assert(getNumOperands() <= 1);

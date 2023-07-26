@@ -8,9 +8,6 @@ add_circt_dialect_library(CIRCTIbisTransforms
   CIRCTDC
   CIRCTIbis
   CIRCTHW
-  CIRCTSV
-  CIRCTSeq
-  CIRCTComb
   CIRCTSupport
   MLIRIR
   MLIRPass
