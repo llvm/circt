@@ -8,8 +8,10 @@ add_llvm_tool(om-linker
 llvm_update_compile_flags(om-linker)
 target_link_libraries(om-linker PRIVATE
   CIRCTOM
+  CIRCTSupport
 
   MLIRParser
   MLIRSupport
   MLIRIR
+  MLIROptLib
 )
