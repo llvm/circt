@@ -146,6 +146,65 @@ static void lowerInstanceResults(InstanceOp op) {
   }
 }
 
+/// Emit an explicit wire or logic to assign operation's result. This function
+/// is used to create a temporary to legalize a verilog expression or to
+/// resolve use-before-def in a graph region. If `emitWireAtBlockBegin` is true,
+/// a temporary wire will be created at the beginning of the block. Otherwise,
+/// a wire is created just after op's position so that we can inline the
+/// assignment into its wire declaration.
+static void lowerUsersToTemporaryWire(Operation &op,
+                                      bool emitWireAtBlockBegin = false) {
+  Block *block = op.getBlock();
+  auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
+  bool isProceduralRegion = op.getParentOp()->hasTrait<ProceduralRegion>();
+
+  auto createWireForResult = [&](Value result, StringAttr name) {
+    Value newWire;
+    // If the op is in a procedural region, use logic op.
+    if (isProceduralRegion)
+      newWire = builder.create<LogicOp>(result.getType(), name);
+    else
+      newWire = builder.create<sv::WireOp>(result.getType(), name);
+
+    while (!result.use_empty()) {
+      auto newWireRead = builder.create<ReadInOutOp>(newWire);
+      OpOperand &use = *result.getUses().begin();
+      use.set(newWireRead);
+      newWireRead->moveBefore(use.getOwner());
+    }
+
+    Operation *connect;
+    if (isProceduralRegion)
+      connect = builder.create<BPAssignOp>(newWire, result);
+    else
+      connect = builder.create<AssignOp>(newWire, result);
+    connect->moveAfter(&op);
+
+    // Move the temporary to the appropriate place.
+    if (!emitWireAtBlockBegin) {
+      // `emitWireAtBlockBegin` is intendend to be used for resovling cyclic
+      // dependencies. So when `emitWireAtBlockBegin` is true, we keep the
+      // position of the wire. Otherwise, we move the wire to immediately after
+      // the expression so that the wire and assignment are next to each other.
+      // This ordering will be used by the heurstic to inline assignments.
+      newWire.getDefiningOp()->moveAfter(&op);
+    }
+  };
+
+  // If the op has a single result, infer a meaningful name from the
+  // value.
+  if (op.getNumResults() == 1) {
+    auto namehint = inferStructuralNameForTemporary(op.getResult(0));
+    op.removeAttr("sv.namehint");
+    createWireForResult(op.getResult(0), namehint);
+    return;
+  }
+
+  // If the op has multiple results, create wires for each result.
+  for (auto result : op.getResults())
+    createWireForResult(result, StringAttr());
+}
+
 // Given a side effect free "always inline" operation, make sure that it
 // exists in the same block as its users and that it has one use for each one.
 static void lowerAlwaysInlineOperation(Operation *op) {
@@ -214,65 +273,6 @@ findLogicOpInsertionPoint(Operation *op) {
   if (isa<IfDefProceduralOp>(op->getParentOp()))
     return findLogicOpInsertionPoint(op->getParentOp());
   return {op->getBlock(), op->getBlock()->begin()};
-}
-
-/// Emit an explicit wire or logic to assign operation's result. This function
-/// is used to create a temporary to legalize a verilog expression or to
-/// resolve use-before-def in a graph region. If `emitWireAtBlockBegin` is true,
-/// a temporary wire will be created at the beginning of the block. Otherwise,
-/// a wire is created just after op's position so that we can inline the
-/// assignment into its wire declaration.
-static void lowerUsersToTemporaryWire(Operation &op,
-                                      bool emitWireAtBlockBegin = false) {
-  Block *block = op.getBlock();
-  auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
-  bool isProceduralRegion = op.getParentOp()->hasTrait<ProceduralRegion>();
-
-  auto createWireForResult = [&](Value result, StringAttr name) {
-    Value newWire;
-    // If the op is in a procedural region, use logic op.
-    if (isProceduralRegion)
-      newWire = builder.create<LogicOp>(result.getType(), name);
-    else
-      newWire = builder.create<sv::WireOp>(result.getType(), name);
-
-    while (!result.use_empty()) {
-      auto newWireRead = builder.create<ReadInOutOp>(newWire);
-      OpOperand &use = *result.getUses().begin();
-      use.set(newWireRead);
-      newWireRead->moveBefore(use.getOwner());
-    }
-
-    Operation *connect;
-    if (isProceduralRegion)
-      connect = builder.create<BPAssignOp>(newWire, result);
-    else
-      connect = builder.create<AssignOp>(newWire, result);
-    connect->moveAfter(&op);
-
-    // Move the temporary to the appropriate place.
-    if (!emitWireAtBlockBegin) {
-      // `emitWireAtBlockBegin` is intendend to be used for resovling cyclic
-      // dependencies. So when `emitWireAtBlockBegin` is true, we keep the
-      // position of the wire. Otherwise, we move the wire to immediately after
-      // the expression so that the wire and assignment are next to each other.
-      // This ordering will be used by the heurstic to inline assignments.
-      newWire.getDefiningOp()->moveAfter(&op);
-    }
-  };
-
-  // If the op has a single result, infer a meaningful name from the
-  // value.
-  if (op.getNumResults() == 1) {
-    auto namehint = inferStructuralNameForTemporary(op.getResult(0));
-    op.removeAttr("sv.namehint");
-    createWireForResult(op.getResult(0), namehint);
-    return;
-  }
-
-  // If the op has multiple results, create wires for each result.
-  for (auto result : op.getResults())
-    createWireForResult(result, StringAttr());
 }
 
 /// Lower a variadic fully-associative operation into an expression tree.  This
