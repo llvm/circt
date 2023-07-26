@@ -42,6 +42,37 @@ static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
                                            cl::init("-"),
                                            cl::cat(mainCategory));
 
+static cl::opt<bool>
+    emitBytecode("emit-bytecode",
+                 cl::desc("Emit bytecode when generating MLIR output"),
+                 cl::init(false), cl::cat(mainCategory));
+
+/// Check output stream before writing bytecode to it.
+/// Warn and return true if output is known to be displayed.
+static bool checkBytecodeOutputToConsole(raw_ostream &os) {
+  if (os.is_displayed()) {
+    errs() << "WARNING: You're attempting to print out a bytecode file.\n"
+              "This is inadvisable as it may cause display problems. If\n"
+              "you REALLY want to taste MLIR bytecode first-hand, you\n"
+              "can force output with the `-f' option.\n\n";
+    return true;
+  }
+  return false;
+}
+
+static cl::opt<bool> force("f", cl::desc("Enable binary output on terminals"),
+                           cl::init(false), cl::cat(mainCategory));
+
+/// Print the operation to the specified stream, emitting bytecode when
+/// requested and politely avoiding dumping to terminal unless forced.
+static LogicalResult printOp(Operation *op, raw_ostream &os) {
+  if (emitBytecode && (force || !checkBytecodeOutputToConsole(os)))
+    return writeBytecodeToFile(op, os,
+                               mlir::BytecodeWriterConfig(getCirctVersion()));
+  op->print(os);
+  return success();
+}
+
 /// This implements the top-level logic for the om-linker command, invoked once
 /// command line options are parsed and LLVM/MLIR are all set up and ready to
 /// go.
@@ -109,7 +140,8 @@ static LogicalResult executeOMLinker(MLIRContext &context) {
   }
 
   // Dump output.
-  module->print(outputFile->os());
+  if(failed(printOp(module.get(), outputFile->os())))
+    return failure();
 
   // If the result succeeded and we're emitting a file, close it.
   outputFile->keep();
