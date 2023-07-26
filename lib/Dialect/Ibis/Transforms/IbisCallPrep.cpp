@@ -134,7 +134,7 @@ struct MergeCallArgs : public OpConversionPattern<CallOp> {
 
   void rewrite(CallOp, OpAdaptor adaptor,
                ConversionPatternRewriter &rewriter) const final;
-  LogicalResult match(CallOp) const { return success(); }
+  LogicalResult match(CallOp) const override { return success(); }
 
 private:
   const CallPrepPrecomputed &info;
@@ -178,7 +178,7 @@ struct MergeMethodArgs : public OpConversionPattern<MethodOp> {
 
   void rewrite(MethodOp, OpAdaptor adaptor,
                ConversionPatternRewriter &rewriter) const final;
-  LogicalResult match(MethodOp) const { return success(); }
+  LogicalResult match(MethodOp) const override { return success(); }
 
 private:
   const CallPrepPrecomputed &info;
