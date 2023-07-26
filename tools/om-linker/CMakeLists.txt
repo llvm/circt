@@ -10,6 +10,8 @@ target_link_libraries(om-linker PRIVATE
   CIRCTOM
   CIRCTSupport
 
+  MLIRBytecodeReader
+  MLIRBytecodeWriter
   MLIRParser
   MLIRSupport
   MLIRIR
