@@ -1347,6 +1347,40 @@ circuit EnumTypes:
     output data : UInt<3>
     output r2 : Probe<{a : UInt<3>}[3]>
 
+  ; CHECK-LABEL: @RWProbePort(
+  module RWProbePort:
+    ; CHECK-SAME: in %in: !firrtl.vector<uint<1>, 2>,
+    input in : UInt<1>[2]
+    output p : RWProbe<UInt<1>>
+    ; CHECK: %[[IN_1:.+]] = firrtl.subindex %in[1]
+    ; CHECK:  firrtl.ref.rwprobe.ssa %[[IN_1]]
+    define p = rwprobe(in[1])
+
+  ; CHECK-LABEL: @RWProbeInst(
+  module RWProbeInst:
+    input x : UInt<5>[2]
+    output rw : RWProbe<UInt<5>>[3]
+
+    ; CHECK: %[[C_X:.+]], %[[C_Y:.+]] = firrtl.instance c
+    inst c of RWProbeInstChild
+    c.x <= x
+
+    ; CHECK-DAG: %[[CX0:.+]] = firrtl.subindex %[[C_X]][0]
+    ; CHECK-DAG: %[[CX1:.+]] = firrtl.subindex %[[C_X]][1]
+
+    ; CHECK-DAG: rwprobe.ssa %[[CX0]]
+    ; CHECK-DAG: rwprobe.ssa %[[CX1]]
+    ; CHECK-DAG: rwprobe.ssa %[[C_Y]]
+    define rw[0] = rwprobe(c.x[0])
+    define rw[1] = rwprobe(c.x[1])
+    define rw[2] = rwprobe(c.y)
+
+  ; (used in above RWProbeInst test, can't be external)
+  module RWProbeInstChild:
+    input x : UInt<5>[2]
+    output y : UInt<5>
+    y <= and(x[0], x[1])
+
 
   ; CHECK-LABEL: module private @ProbeInvalidate
   ; CHECK-NEXT: }

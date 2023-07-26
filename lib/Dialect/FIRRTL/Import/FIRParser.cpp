@@ -2956,18 +2956,31 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
   // Not public port (verifier)
 
   // Check probe expression is base-type.
-  if (!type_isa<FIRRTLBaseType>(staticRef.getType()))
+  auto targetType = type_dyn_cast<FIRRTLBaseType>(staticRef.getType());
+  if (!targetType)
     return emitError(startTok.getLoc(),
                      "expected base-type expression in 'rwprobe', got ")
            << staticRef.getType();
 
-  // Check for other unsupported reference sources.
   auto fieldRef = getFieldRefFromValue(staticRef);
   auto target = fieldRef.getValue();
 
-  // TODO: Support for non-public ports.
-  if (isa<BlockArgument>(target))
-    return emitError(startTok.getLoc(), "rwprobe of port not yet supported");
+  // Ports and instance results we emit as rwprobe.ssa.
+  if (isa<BlockArgument>(target) || target.getDefiningOp<InstanceOp>()) {
+    // Check target type.  Replicate inference/verification logic.
+    if (targetType.hasUninferredWidth() || targetType.hasUninferredReset())
+      return emitError(startTok.getLoc(),
+                       "must have known width or concrete reset type in type ")
+             << targetType;
+    auto forceableType =
+        firrtl::detail::getForceableResultType(true, targetType);
+    if (!forceableType)
+      return emitError(startTok.getLoc(), "cannot force target of type ")
+             << targetType;
+
+    result = builder.create<RWProbeSSAOp>(staticRef);
+    return success();
+  }
 
   auto *definingOp = target.getDefiningOp();
   if (!definingOp)
@@ -2983,7 +2996,6 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
     return emitError(startTok.getLoc(), "rwprobe target not forceable")
         .attachNote(definingOp->getLoc());
 
-  // TODO: do the ref.sub work while parsing the static expression.
   result =
       getValueByFieldID(builder, forceable.getDataRef(), fieldRef.getFieldID());
 

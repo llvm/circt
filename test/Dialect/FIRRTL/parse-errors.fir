@@ -626,11 +626,19 @@ circuit RWProbeConst:
 
 ;// -----
 
-circuit RWProbePort:
-  module RWProbePort:
-    input in : UInt<1>[2]
+circuit RWProbeConstPort:
+  module RWProbeConstPort:
+    input in : const UInt<1>[2]
     output p : RWProbe<UInt<1>>
-    define p = rwprobe(in[1]) ; expected-error {{rwprobe of port not yet supported}}
+    define p = rwprobe(in[1]) ; expected-error {{cannot force target of type '!firrtl.const.uint<1>'}}
+
+;// -----
+
+circuit RWProbeUninferredPort:
+  module RWProbeUninferredPort:
+    input in : UInt[2]
+    output p : RWProbe<UInt>
+    define p = rwprobe(in[1]) ; expected-error {{must have known width or concrete reset type in type}}
 
 ;// -----
 
