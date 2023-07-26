@@ -465,3 +465,54 @@ module {
     hw.output %true : i1
   }
 }
+
+// -----
+// Check that input only modules are inlined properly.
+
+module {
+  // @ShouldNotBeInlined cannot be inlined because there is a wire with an inner sym
+  // that is referred by hierpath op.
+  hw.hierpath private @Foo [@ShouldNotBeInlined::@foo]
+  hw.module private @ShouldNotBeInlined(%clock: i1, %a: i1) {
+    %w = sv.wire sym @foo: !hw.inout<i1>
+    sv.always posedge %clock {
+      sv.if %a {
+        sv.assert %a, immediate message "foo"
+      }
+    }
+    hw.output
+  }
+  hw.module private @Assert(%clock: i1, %a: i1) {
+    sv.always posedge %clock {
+      sv.if %a {
+        sv.assert %a, immediate message "foo"
+      }
+    }
+    hw.output
+  }
+
+  // CHECK-LABEL: hw.module private @AssertWrapper(%clock: i1, %a: i1) -> (b: i1) {
+  // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert @Assert_assert
+  // CHECK-SAME:  doNotPrint = true
+  hw.module private @AssertWrapper(%clock: i1, %a: i1) -> (b: i1) {
+    hw.instance "a3" @Assert(clock: %clock: i1, a: %a: i1) -> ()
+    hw.output %a: i1
+  }
+
+  // CHECK-LABEL: hw.module @Top(%clock: i1, %a: i1, %b: i1) {
+  // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert_0 @Assert_assert
+  // CHECK-SAME:  doNotPrint = true
+  // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert @Assert_assert
+  // CHECK-SAME:  doNotPrint = true
+  // CHECK-NEXT:  hw.instance "should_not_be_inlined" @ShouldNotBeInlined
+  // CHECK-NOT: doNotPrint
+  hw.module @Top(%clock: i1, %a: i1, %b: i1) {
+    hw.instance "a1" @Assert(clock: %clock: i1, a: %a: i1) -> ()
+    hw.instance "a2" @Assert(clock: %clock: i1, a: %b: i1) -> ()
+    hw.instance "should_not_be_inlined" @ShouldNotBeInlined (clock: %clock: i1, a: %b: i1) -> ()
+    hw.output
+  }
+  // CHECK:       sv.bind <@Top::@__ETC_Assert_assert>
+  // CHECK-NEXT:  sv.bind <@Top::@__ETC_Assert_assert_0>
+  // CHECK-NEXT:  sv.bind <@AssertWrapper::@__ETC_Assert_assert>
+}
