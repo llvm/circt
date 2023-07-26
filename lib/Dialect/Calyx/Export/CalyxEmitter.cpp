@@ -698,7 +698,7 @@ void Emitter::emitPrimitiveExtern(hw::HWModuleExternOp op) {
 /// Emit the ports of a component.
 void Emitter::emitPrimitivePorts(hw::HWModuleExternOp op) {
   auto emitPorts = [&](auto ports, bool isInput) {
-    auto e = std::distance(ports.begin(), ports.end());
+    auto e = static_cast<size_t>(llvm::size(ports));
     os << LParen();
     for (auto [i, port] : llvm::enumerate(ports)) {
       DictionaryAttr portAttr =
@@ -718,7 +718,7 @@ void Emitter::emitPrimitivePorts(hw::HWModuleExternOp op) {
         os << bitWidth;
       }
 
-      if (i + 1 < e)
+      if (i < e - 1)
         os << comma();
     }
     os << RParen();
