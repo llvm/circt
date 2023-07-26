@@ -207,18 +207,19 @@ static void lowerUsersToTemporaryWire(Operation &op,
 
 // Given a side effect free "always inline" operation, make sure that it
 // exists in the same block as its users and that it has one use for each one.
-static void lowerAlwaysInlineOperation(Operation *op) {
+static void lowerAlwaysInlineOperation(Operation *op,
+                                       const LoweringOptions &options) {
   assert(op->getNumResults() == 1 &&
          "only support 'always inline' ops with one result");
 
   // Moving/cloning an op should pull along its operand tree with it if they
   // are always inline.  This happens when an array index has a constant
   // operand for example.
-  auto recursivelyHandleOperands = [](Operation *op) {
+  auto recursivelyHandleOperands = [&](Operation *op) {
     for (auto operand : op->getOperands()) {
       if (auto *operandOp = operand.getDefiningOp())
         if (isExpressionAlwaysInline(operandOp))
-          lowerAlwaysInlineOperation(operandOp);
+          lowerAlwaysInlineOperation(operandOp, options);
     }
   };
 
@@ -565,7 +566,7 @@ EmittedExpressionStateManager::mergeOperandsStates(Operation *op) {
 /// If exactly one use of this op is an assign, replace the other uses with a
 /// read from the assigned wire or reg. This assumes the preconditions for doing
 /// so are met: op must be an expression in a non-procedural region.
-static bool reuseExistingInOut(Operation *op) {
+static bool reuseExistingInOut(Operation *op, const LoweringOptions &options) {
   // Try to collect a single assign and all the other uses of op.
   sv::AssignOp assign;
   SmallVector<OpOperand *> uses;
@@ -609,7 +610,7 @@ static bool reuseExistingInOut(Operation *op) {
   }
   if (auto *destOp = assign.getDest().getDefiningOp())
     if (isExpressionAlwaysInline(destOp))
-      lowerAlwaysInlineOperation(destOp);
+      lowerAlwaysInlineOperation(destOp, options);
   return true;
 }
 
@@ -894,7 +895,7 @@ static LogicalResult legalizeHWModule(Block &block,
       // Process the op only when the op is never processed from the top-level
       // loop.
       if (visitedAlwaysInlineOperations.insert(&op).second)
-        lowerAlwaysInlineOperation(&op);
+        lowerAlwaysInlineOperation(&op, options);
 
       continue;
     }
@@ -977,7 +978,7 @@ static LogicalResult legalizeHWModule(Block &block,
     if (shouldSpillWire(op, options)) {
       // We first check that it is possible to reuse existing wires as a spilled
       // wire. Otherwise, create a new wire op.
-      if (isProceduralRegion || !reuseExistingInOut(&op)) {
+      if (isProceduralRegion || !reuseExistingInOut(&op, options)) {
         if (options.disallowLocalVariables) {
           // If we're not in a procedural region, or we are, but we can hoist
           // out of it, we are good to generate a wire.
@@ -1052,7 +1053,7 @@ static LogicalResult legalizeHWModule(Block &block,
     // inout, and re-use an existing inout when possible. This is legal when op
     // is an expression in a non-procedural region.
     if (!isProceduralRegion && isVerilogExpression(&op))
-      (void)reuseExistingInOut(&op);
+      (void)reuseExistingInOut(&op, options);
   }
 
   if (isProceduralRegion) {
