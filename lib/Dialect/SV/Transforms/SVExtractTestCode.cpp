@@ -16,7 +16,6 @@
 #include "PassDetail.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
-#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/Namespace.h"
@@ -337,7 +336,7 @@ static void addExistingBinds(Block *topLevelModule, BindTable &bindTable) {
 static void
 inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
                 BindTable &bindTable, SmallPtrSetImpl<Operation *> &opsToErase,
-                DenseSet<hw::InnerRefAttr> &innerRefUsedByNonBindOp) {
+                llvm::DenseSet<hw::InnerRefAttr> &innerRefUsedByNonBindOp) {
 
   // Check if the module only has inputs.
   if (oldMod.getNumOutputs() != 0)
@@ -345,16 +344,17 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
 
   // Check if it's ok to inline. We cannot inline the module if there exists a
   // declaration with an inner symbol referred by non-bind ops (e.g. hierpath).
-  for (auto port : oldMod.getAllPorts()) {
+  for (auto port : oldMod.getPorts()) {
     if (port.sym) {
-      if (!port.sym.getSymName())
-        return;
-      if (innerRefUsedByNonBindOp.count(hw::InnerRefAttr::get(
+      // Reject if the inner sym is a per-field symbol, or its inner ref is used
+      // by non-bind op.
+      if (!port.sym.getSymName() || port.sym.size() != 1 ||
+          innerRefUsedByNonBindOp.count(hw::InnerRefAttr::get(
               oldMod.getModuleNameAttr(), port.sym.getSymName()))) {
-        emitWarning(oldMod.getLoc()) << "module " << oldMod.getModuleName()
-                                     << " is an input only module but cannot "
-                                        "be inlined because a signal "
-                                     << port.name << " is referred by names";
+        oldMod.emitWarning() << "module " << oldMod.getModuleName()
+                             << " is an input only module but cannot "
+                                "be inlined because a signal "
+                             << port.name << " is referred by name";
         return;
       }
     }
@@ -363,10 +363,10 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
     if (auto innerSym = op.getAttrOfType<StringAttr>("inner_sym"))
       if (innerRefUsedByNonBindOp.count(
               hw::InnerRefAttr::get(oldMod.getModuleNameAttr(), innerSym))) {
-        emitWarning(op.getLoc())
+        op.emitWarning()
             << "module " << oldMod.getModuleName()
             << " is an input only module but cannot be inlined because signals "
-               "are referred by names";
+               "are referred by name";
         return;
       }
   }
@@ -392,7 +392,7 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
     if (inst.getInnerSym().has_value()) {
       allInlined = false;
       auto diag =
-          emitWarning(oldMod.getLoc())
+          oldMod.emitWarning()
           << "module " << oldMod.getModuleName()
           << " cannot be inlined because there is an instance with a symbol";
       diag.attachNote(inst.getLoc());
@@ -426,7 +426,8 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
       if (auto innerSym = op.getAttrOfType<StringAttr>("inner_sym")) {
         auto newName = b.getStringAttr(nameSpace.newName(innerSym.getValue()));
         auto result = symMapping.insert({innerSym, newName});
-        assert(result.second);
+        (void)result;
+        assert(result.second && "inner symbols must be unique");
       }
 
       // For instances in the bind table, update the bind with the new parent.
@@ -683,7 +684,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
   // contain bound instances so create a set of inner refs used by non bind op
   // in order to allow bind ops.
   DenseSet<hw::InnerRefAttr> innerRefUsedByNonBindOp;
-  top.walk([&](hw::InnerRefUserOpInterface op) {
+  top.walk([&](Operation *op) {
     if (!isa<sv::BindOp>(op))
       for (auto attr : op->getAttrs())
         attr.getValue().walk([&](hw::InnerRefAttr attr) {

@@ -492,16 +492,20 @@ module {
   }
 
   // CHECK-LABEL: hw.module private @AssertWrapper(%clock: i1, %a: i1) -> (b: i1) {
-  // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert @Assert_assert(a: %a: i1, clock: %clock: i1) -> () {doNotPrint = true}
+  // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert @Assert_assert
+  // CHECK-SAME:  doNotPrint = true
   hw.module private @AssertWrapper(%clock: i1, %a: i1) -> (b: i1) {
     hw.instance "a3" @Assert(clock: %clock: i1, a: %a: i1) -> ()
     hw.output %a: i1
   }
 
   // CHECK-LABEL: hw.module @Top(%clock: i1, %a: i1, %b: i1) {
-  // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert_0 @Assert_assert(a: %a: i1, clock: %clock: i1) -> () {doNotPrint = true}
-  // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert @Assert_assert(a: %b: i1, clock: %clock: i1) -> () {doNotPrint = true}
-  // CHECK-NEXT:  hw.instance "should_not_be_inlined" @ShouldNotBeInlined(clock: %clock: i1, a: %b: i1) -> ()
+  // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert_0 @Assert_assert
+  // CHECK-SAME:  doNotPrint = true
+  // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert @Assert_assert
+  // CHECK-SAME:  doNotPrint = true
+  // CHECK-NEXT:  hw.instance "should_not_be_inlined" @ShouldNotBeInlined
+  // CHECK-NOT: doNotPrint
   hw.module @Top(%clock: i1, %a: i1, %b: i1) {
     hw.instance "a1" @Assert(clock: %clock: i1, a: %a: i1) -> ()
     hw.instance "a2" @Assert(clock: %clock: i1, a: %b: i1) -> ()
