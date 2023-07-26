@@ -212,14 +212,18 @@ static void lowerAlwaysInlineOperation(Operation *op,
   assert(op->getNumResults() == 1 &&
          "only support 'always inline' ops with one result");
 
-  // Moving/cloning an op should pull along its operand tree with it if they
-  // are always inline.  This happens when an array index has a constant
-  // operand for example.
+  // Moving/cloning an op should pull along its operand tree with it if they are
+  // always inline.  This happens when an array index has a constant operand for
+  // example.  If the operand is not always inline, then evaluate it to see if
+  // it should be spilled to a wire.
   auto recursivelyHandleOperands = [&](Operation *op) {
     for (auto operand : op->getOperands()) {
-      if (auto *operandOp = operand.getDefiningOp())
+      if (auto *operandOp = operand.getDefiningOp()) {
         if (isExpressionAlwaysInline(operandOp))
           lowerAlwaysInlineOperation(operandOp, options);
+        else if (shouldSpillWire(*operandOp, options))
+          lowerUsersToTemporaryWire(*operandOp);
+      }
     }
   };
 
