@@ -9,7 +9,6 @@
 #ifndef BINDINGS_PYTHON_ESI_OPS
 #define BINDINGS_PYTHON_ESI_OPS
 
-include "mlir/Bindings/Python/Attributes.td"
 include "circt/Dialect/ESI/ESI.td"
 
 #endif
