@@ -82,16 +82,26 @@ static LogicalResult executeOMLinker(MLIRContext &context) {
   applyDefaultTimingManagerCLOptions(tm);
   auto ts = tm.getRootScope();
 
-  auto numFiles = inputFilenames.size();
-
   // Set up the input files.
   struct ParsedInput {
     StringRef name;
     OwningOpRef<ModuleOp> mod;
     SourceMgr mgr;
   };
-  SmallVector<ParsedInput> srcs;
-  srcs.resize(numFiles);
+
+  struct LeakyInputs {
+    SmallVector<ParsedInput> inputs;
+    LeakyInputs(size_t n) { inputs.resize(n); }
+    ~LeakyInputs() {
+      // Leak
+      for (auto &input : inputs)
+        input.mod.release();
+    };
+  };
+
+  auto numFiles = inputFilenames.size();
+  LeakyInputs leakyInputs(numFiles);
+  auto &srcs = leakyInputs.inputs;
   auto parserTimer = ts.nest("Parsing inputs");
   auto loadFile = [&](size_t i) -> LogicalResult {
     auto &s = srcs[i];
@@ -149,8 +159,6 @@ static LogicalResult executeOMLinker(MLIRContext &context) {
   // We intentionally "leak" the Module into the MLIRContext instead of
   // deallocating it.  There is no need to deallocate it right before process
   // exit.
-  for (auto &src : srcs)
-    (void)src.mod.release();
   (void)module.release();
   return success();
 }
