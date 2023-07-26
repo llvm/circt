@@ -1173,12 +1173,12 @@ class BuildForGroups : public calyx::FuncOpPartialLoweringPattern {
       // Create a register for the InductionVar, and set that Register as the
       // only IterReg for the For Loop
       auto inductionVar = forOp.getOperation().getInductionVar();
-      SmallVector<std::string, 3> name_identifiers = {
+      SmallVector<std::string, 3> inductionVarIdentifiers = {
           getState<ComponentLoweringState>()
               .getUniqueName(forOp.getOperation())
               .str(),
           "induction", "var"};
-      std::string name = llvm::join(name_identifiers, "_");
+      std::string name = llvm::join(inductionVarIdentifiers, "_");
       auto reg =
           createRegister(inductionVar.getLoc(), rewriter, getComponent(),
                          inductionVar.getType().getIntOrFloatBitWidth(), name);
@@ -1189,13 +1189,13 @@ class BuildForGroups : public calyx::FuncOpPartialLoweringPattern {
       calyx::ComponentOp componentOp =
           getState<ComponentLoweringState>().getComponentOp();
       SmallVector<calyx::GroupOp> initGroups;
-      SmallVector<std::string, 4> groupname_identifiers = {
+      SmallVector<std::string, 4> groupIdentifiers = {
           "init",
           getState<ComponentLoweringState>()
               .getUniqueName(forOp.getOperation())
               .str(),
           "induction", "var"};
-      std::string groupName = llvm::join(groupname_identifiers, "_");
+      std::string groupName = llvm::join(groupIdentifiers, "_");
       auto groupOp = calyx::createGroup<calyx::GroupOp>(
           rewriter, componentOp, forOp.getLoc(), groupName);
       buildAssignmentsForRegisterWrite(rewriter, groupOp, componentOp, reg,
