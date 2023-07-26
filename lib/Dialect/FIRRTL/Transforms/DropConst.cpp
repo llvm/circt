@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "mlir/IR/Threading.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -42,45 +43,48 @@ static Type convertType(Type type) {
 namespace {
 class DropConstPass : public DropConstBase<DropConstPass> {
   void runOnOperation() override {
-    auto module = getOperation();
+    mlir::parallelForEach(
+        &getContext(), getOperation().getOps<firrtl::FModuleLike>(),
+        [](auto module) {
+          // Convert the module body if present
+          module->walk([](Operation *op) {
+            if (auto constCastOp = dyn_cast<ConstCastOp>(op)) {
+              // Remove any `ConstCastOp`, replacing results with inputs
+              constCastOp.getResult().replaceAllUsesWith(
+                  constCastOp.getInput());
+              constCastOp->erase();
+              return;
+            }
 
-    // Convert the module body if present
-    module->walk([](Operation *op) {
-      if (auto constCastOp = dyn_cast<ConstCastOp>(op)) {
-        // Remove any `ConstCastOp`, replacing results with inputs
-        constCastOp.getResult().replaceAllUsesWith(constCastOp.getInput());
-        constCastOp->erase();
-        return;
-      }
+            // Convert any block arguments
+            for (auto &region : op->getRegions())
+              for (auto &block : region.getBlocks())
+                for (auto argument : block.getArguments())
+                  if (auto convertedType = convertType(argument.getType()))
+                    argument.setType(convertedType);
 
-      // Convert any block arguments
-      for (auto &region : op->getRegions())
-        for (auto &block : region.getBlocks())
-          for (auto argument : block.getArguments())
-            if (auto convertedType = convertType(argument.getType()))
-              argument.setType(convertedType);
+            for (auto result : op->getResults())
+              if (auto convertedType = convertType(result.getType()))
+                result.setType(convertedType);
+          });
 
-      for (auto result : op->getResults())
-        if (auto convertedType = convertType(result.getType()))
-          result.setType(convertedType);
-    });
-
-    // Update the module signature with non-'const' ports
-    SmallVector<Attribute> portTypes;
-    portTypes.reserve(module.getNumPorts());
-    bool convertedAny = false;
-    llvm::transform(module.getPortTypes(), std::back_inserter(portTypes),
-                    [&](Attribute type) -> Attribute {
-                      if (auto convertedType =
-                              convertType(cast<TypeAttr>(type).getValue())) {
-                        convertedAny = true;
-                        return TypeAttr::get(convertedType);
-                      }
-                      return type;
-                    });
-    if (convertedAny)
-      module->setAttr(FModuleLike::getPortTypesAttrName(),
-                      ArrayAttr::get(module.getContext(), portTypes));
+          // Update the module signature with non-'const' ports
+          SmallVector<Attribute> portTypes;
+          portTypes.reserve(module.getNumPorts());
+          bool convertedAny = false;
+          llvm::transform(module.getPortTypes(), std::back_inserter(portTypes),
+                          [&](Attribute type) -> Attribute {
+                            if (auto convertedType = convertType(
+                                    cast<TypeAttr>(type).getValue())) {
+                              convertedAny = true;
+                              return TypeAttr::get(convertedType);
+                            }
+                            return type;
+                          });
+          if (convertedAny)
+            module->setAttr(FModuleLike::getPortTypesAttrName(),
+                            ArrayAttr::get(module.getContext(), portTypes));
+        });
   }
 };
 } // namespace

@@ -679,7 +679,7 @@ def VBToBV : Pass<"firrtl-vb-to-bv", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createVBToBVPass()";
 }
 
-def DropConst : InterfacePass<"firrtl-drop-const", "firrtl::FModuleLike"> {
+def DropConst : Pass<"firrtl-drop-const", "firrtl::CircuitOp"> {
   let summary = "Drop 'const' modifier from types";
   let description = [{
     This pass drops the 'const' modifier from all types and removes all
