@@ -24,8 +24,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
                                                   const FirtoolOptions &opt,
                                                   ModuleOp module,
                                                   StringRef inputFilename) {
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerIntrinsicsPass());
-
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
 
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(

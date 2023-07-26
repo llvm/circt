@@ -295,6 +295,10 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 
   extmodule Val:
      output v: UInt<1>
+  ; Make sure that intrinsics are lowered with `parser-only`.
+  ; ANNOTATIONS-LABEL: Mux2Cell
+  ; ANNOTATIONS: firrtl.int.mux2cell
+
   ; VERILOG-LABEL: Mux2Cell
   ; Make sure that mux annotations are emitted properly.
   ; VERILOG:      /* synopsys infer_mux_override */

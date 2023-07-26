@@ -327,6 +327,8 @@ static LogicalResult processBuffer(
       disableAnnotationsUnknown, disableAnnotationsClassless,
       lowerAnnotationsNoRefTypePorts));
 
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerIntrinsicsPass());
+
   // If the user asked for --parse-only, stop after running LowerAnnotations.
   if (outputFormat == OutputParseOnly) {
     if (failed(pm.run(module.get())))
