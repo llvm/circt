@@ -95,6 +95,7 @@ jobs:
             -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=.. \
             -DLLVM_TARGETS_TO_BUILD="host" \
             -DLLVM_USE_LINKER=lld \
+            -DLLVM_USE_SPLIT_DWARF=ON \
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
             -DLLVM_LIT_ARGS="-v --show-unsupported ${{ matrix.lit-flags }}"
