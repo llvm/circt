@@ -277,8 +277,8 @@ def MatchOp : FIRRTLOp<"match", [SingleBlock, NoTerminator,
   }];
 }
 
-def PropAssignOp : FIRRTLOp<"propassign", [FConnectLike, SameTypeOperands,
-                                           HasParent<"FModuleOp">]> {
+def PropAssignOp : FIRRTLOp<"propassign",
+  [FConnectLike, SameTypeOperands, ParentOneOf<["FModuleOp", "ClassOp"]>]> {
   let summary = "Assign to a sink property value.";
   let description = [{
     Assign an output property value. The types must match exactly.

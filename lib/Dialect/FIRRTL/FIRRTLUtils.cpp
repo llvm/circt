@@ -344,8 +344,9 @@ bool circt::firrtl::walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
 
       // The value is a port.
       if (auto blockArg = dyn_cast<BlockArgument>(val)) {
-        FModuleOp op = cast<FModuleOp>(val.getParentBlock()->getParentOp());
-        auto direction = op.getPortDirection(blockArg.getArgNumber());
+        auto *parent = val.getParentBlock()->getParentOp();
+        auto module = cast<FModuleLike>(parent);
+        auto direction = module.getPortDirection(blockArg.getArgNumber());
         // Base case: this is one of the module's input ports.
         if (direction == Direction::In) {
           if (!callback(original, fieldRef))
@@ -524,9 +525,11 @@ static void getDeclName(Value value, SmallString<64> &string, bool nameSafe) {
   while (value) {
     if (auto arg = dyn_cast<BlockArgument>(value)) {
       // Get the module ports and get the name.
-      auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
-      SmallVector<PortInfo> ports = module.getPorts();
-      string += ports[arg.getArgNumber()].name.getValue();
+      auto *op = arg.getOwner()->getParentOp();
+      TypeSwitch<Operation *>(op).Case<FModuleOp, ClassOp>([&](auto op) {
+        auto name = cast<StringAttr>(op.getPortNames()[arg.getArgNumber()]);
+        string += name.getValue();
+      });
       return;
     }
 
