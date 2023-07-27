@@ -65,7 +65,7 @@ public:
     return getOperation().getConditionOp().getOperand(0);
   }
 
-  std::optional<uint64_t> getBound() override { return std::nullopt; }
+  std::optional<int64_t> getBound() override { return std::nullopt; }
 };
 
 class ScfForOp : public calyx::RepeatOpInterface<scf::ForOp> {
@@ -80,9 +80,7 @@ public:
     return &getOperation().getLoopBody().getBlocks().front();
   }
 
-  std::optional<uint64_t> getBound() override {
-    // TODO: Consider making getBound() return a std::optional<int64_t> instead
-    // of std::optional<uint64_t>
+  std::optional<int64_t> getBound() override {
     return constantTripCount(getOperation().getLowerBound(),
                              getOperation().getUpperBound(),
                              getOperation().getStep());
