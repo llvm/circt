@@ -276,7 +276,7 @@ struct CircuitLoweringState {
       return hwAlias;
     assert(!typeAliases.isFrozen() &&
            "type aliases cannot be generated after its frozen");
-    return typeAliases.addTypedecl(firAliasType, rawType, typeLoc);
+    return typeAliases.addTypedecl(rawType, firAliasType, typeLoc);
   }
 
   FModuleLike getDut() { return dut; }
@@ -366,7 +366,7 @@ private:
   /// deteministic TypeDecls inside the global TypeScopeOp.
   struct RecordTypeAlias {
 
-    RecordTypeAlias(CircuitOp &c) : circuitOp(c) {}
+    RecordTypeAlias(CircuitOp c) : circuitOp(c) {}
 
     hw::TypeAliasType getTypedecl(BaseTypeAliasType firAlias) const {
       auto iter = firrtlTypeToAliasTypeMap.find(firAlias);
@@ -379,7 +379,7 @@ private:
 
     void freeze() { frozen = true; }
 
-    hw::TypeAliasType addTypedecl(BaseTypeAliasType firAlias, Type rawType,
+    hw::TypeAliasType addTypedecl(Type rawType, BaseTypeAliasType firAlias,
                                   Location typeLoc) {
       assert(!frozen && "Record already frozen, cannot be updated");
 
@@ -423,7 +423,7 @@ private:
     /// Set to keep track of unique typedecl names.
     Namespace typeDeclNamespace;
 
-    CircuitOp &circuitOp;
+    CircuitOp circuitOp;
   };
 
   RecordTypeAlias typeAliases = RecordTypeAlias(circuitOp);
