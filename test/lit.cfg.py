@@ -58,7 +58,8 @@ tool_dirs = [
 tools = [
     'arcilator', 'circt-as', 'circt-capi-ir-test', 'circt-capi-om-test',
     'circt-dis', 'circt-opt', 'circt-reduce', 'circt-translate', 'esi-tester',
-    'firtool', 'hlstool', 'om-linker']
+    'firtool', 'hlstool', 'om-linker'
+]
 
 # Enable Verilator if it has been detected.
 if config.verilator_path != "":
