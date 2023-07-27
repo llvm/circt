@@ -143,6 +143,19 @@ MlirStringRef hwTypeAliasTypeGetScope(MlirType typeAlias) {
 //===----------------------------------------------------------------------===//
 // Attribute API.
 //===----------------------------------------------------------------------===//
+//
+bool hwAttrIsAInnerSymAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<InnerSymAttr>();
+}
+
+MlirAttribute hwInnerSymAttrGet(MlirAttribute symName) {
+  return wrap(InnerSymAttr::get(unwrap(symName).cast<StringAttr>()));
+}
+
+MlirAttribute hwInnerSymAttrGetSymName(MlirAttribute innerSymAttr) {
+  return wrap(
+      (Attribute)unwrap(innerSymAttr).cast<InnerSymAttr>().getSymName());
+}
 
 bool hwAttrIsAInnerRefAttr(MlirAttribute attr) {
   return unwrap(attr).isa<InnerRefAttr>();
