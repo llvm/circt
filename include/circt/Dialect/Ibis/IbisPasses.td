@@ -11,4 +11,12 @@
 
 include "mlir/Pass/PassBase.td"
 
+def IbisCallPrep : Pass<"ibis-call-prep", "ModuleOp"> {
+  let summary = "Convert ibis method calls to use `dc.value`";
+
+  let constructor = "circt::ibis::createCallPrepPass()";
+  let dependentDialects = [
+    "circt::hw::HWDialect", "circt::dc::DCDialect"];
+}
+
 #endif // CIRCT_DIALECT_IBIS_PASSES_TD
