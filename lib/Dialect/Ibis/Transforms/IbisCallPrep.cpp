@@ -130,7 +130,7 @@ namespace {
 /// all the operands into a struct.
 struct MergeCallArgs : public OpConversionPattern<CallOp> {
   MergeCallArgs(MLIRContext *ctxt, const CallPrepPrecomputed &info)
-      : OpConversionPattern(ctxt, 1), info(info) {}
+      : OpConversionPattern(ctxt), info(info) {}
 
   void rewrite(CallOp, OpAdaptor adaptor,
                ConversionPatternRewriter &rewriter) const final;
@@ -174,7 +174,7 @@ namespace {
 /// all of the original arguments.
 struct MergeMethodArgs : public OpConversionPattern<MethodOp> {
   MergeMethodArgs(MLIRContext *ctxt, const CallPrepPrecomputed &info)
-      : OpConversionPattern(ctxt, 1), info(info) {}
+      : OpConversionPattern(ctxt), info(info) {}
 
   void rewrite(MethodOp, OpAdaptor adaptor,
                ConversionPatternRewriter &rewriter) const final;
