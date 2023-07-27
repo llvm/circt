@@ -362,8 +362,11 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
         false);
 
     auto val = getMemoryRead(b, reg, read_addr, addMuxPragmas);
-    Value x = b.create<sv::ConstantXOp>(val.getType());
-    b.create<sv::AssignOp>(rWire, b.create<comb::MuxOp>(rcond, val, x, false));
+    if (!ignoreReadEnable) {
+      Value x = b.create<sv::ConstantXOp>(val.getType());
+      val = b.create<comb::MuxOp>(rcond, val, x, false);
+    }
+    b.create<sv::AssignOp>(rWire, val);
 
     // Write logic gaurded by the corresponding mask bit.
     for (auto wmask : llvm::enumerate(maskValues)) {
