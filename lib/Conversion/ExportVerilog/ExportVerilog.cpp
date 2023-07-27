@@ -311,6 +311,58 @@ static bool haveMatchingDims(Type a, Type b, Location loc) {
   return aDims == bDims;
 }
 
+Value ExportVerilog::getSignExtendedValue(Value value) {
+  // Return a signed extended value  if the value is signed extension of
+  // returned value concat(replicate(a[msb]), a)
+  auto concat = value.getDefiningOp<comb::ConcatOp>();
+  if (!concat || concat.getOperands().size() != 2)
+    return {};
+  Value sign = concat.getOperand(0);
+  if (!sign.getType().isInteger(1)) {
+    auto replicate = sign.getDefiningOp<comb::ReplicateOp>();
+    if (!replicate || !replicate.getInput().getType().isInteger(1))
+      return {};
+    sign = replicate.getInput();
+  }
+
+  assert(sign.getType().isInteger(1));
+
+  auto extended = concat.getOperand(1);
+  // Check the msb of value is equal to `sign`.
+  if (extended == sign)
+    return extended;
+
+  auto extract = sign.getDefiningOp<comb::ExtractOp>();
+  if (!extract)
+    return {};
+  if (auto extendedExtract = extended.getDefiningOp<comb::ExtractOp>()) {
+    if (extract.getInput() == extendedExtract.getInput() &&
+        extendedExtract.getLowBit() +
+                extendedExtract.getType().getIntOrFloatBitWidth() ==
+            extract.getLowBit() + 1)
+      return extended;
+    return {};
+  }
+
+  // hw.wire?
+  if (extract.getInput() == extended &&
+      extract.getLowBit() + 1 == extended.getType().getIntOrFloatBitWidth())
+    return extended;
+  return {};
+}
+
+Value ExportVerilog::getExtendedValue(Value value) {
+  // Return a signed extended value  if the value is signed extension of
+  // returned value concat(0, a)
+  auto concat = value.getDefiningOp<comb::ConcatOp>();
+  if (!concat || concat.getOperands().size() != 2)
+    return {};
+  auto zero = concat.getOperand(0).getDefiningOp<hw::ConstantOp>();
+  if(!zero || !zero.getValue().isZero())
+    return {};
+  return concat.getOperand(1);
+}
+
 // NOLINTBEGIN(misc-no-recursion)
 bool ExportVerilog::isZeroBitType(Type type) {
   type = getCanonicalType(type);
@@ -607,6 +659,16 @@ static bool isExpressionUnableToInline(Operation *op,
   // are inferred properly by verilog
   if (isa<StructCreateOp, UnionCreateOp>(op))
     return true;
+
+  if (isa<MulOp, AddOp>(op) && op->getNumOperands() == 2) {
+    if (ExportVerilog::getSignExtendedValue(op->getOperand(0)) &&
+        ExportVerilog::getSignExtendedValue(op->getOperand(1)))
+      return true;
+
+    if (ExportVerilog::getExtendedValue(op->getOperand(0)) &&
+        ExportVerilog::getExtendedValue(op->getOperand(1)))
+      return true;
+  }
 
   // Aggregate literal syntax only works in an assignment expression, where
   // the Verilog expression's type is determined by the LHS.
@@ -1885,6 +1947,9 @@ private:
   /// EmitBinaryFlags.
   SubExprInfo emitBinary(Operation *op, VerilogPrecedence prec,
                          const char *syntax, unsigned emitBinaryFlags = 0);
+  SubExprInfo emitBinary(Operation *rootOp, Value lhs, Value rhs,
+                         bool isAssociative, VerilogPrecedence prec,
+                         const char *syntax, unsigned emitBinaryFlags = 0);
 
   SubExprInfo emitUnary(Operation *op, const char *syntax,
                         bool resultAlwaysUnsigned = false);
@@ -2013,6 +2078,16 @@ private:
   SubExprInfo visitComb(SubOp op) { return emitBinary(op, Addition, "-"); }
   SubExprInfo visitComb(MulOp op) {
     assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
+    if (auto lhs = ExportVerilog::getSignExtendedValue(op.getOperand(0)))
+      if (auto rhs = ExportVerilog::getSignExtendedValue(op.getOperand(1)))
+        return emitBinary(op, lhs, rhs, /*isAssociative=*/true, Multiply, "*",
+                          EB_RequireSignedOperands);
+
+    if (auto lhs = ExportVerilog::getExtendedValue(op.getOperand(0)))
+      if (auto rhs = ExportVerilog::getExtendedValue(op.getOperand(1)))
+        return emitBinary(op, lhs, rhs, /*isAssociative=*/true, Multiply, "*",
+                          EB_RequireUnsignedOperands);
+
     return emitBinary(op, Multiply, "*");
   }
   SubExprInfo visitComb(DivUOp op) {
@@ -2093,8 +2168,17 @@ private:
 SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
                                     const char *syntax,
                                     unsigned emitBinaryFlags) {
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
+  return emitBinary(op, op->getOperand(0), op->getOperand(1),
+                    isa<AddOp, MulOp, AndOp, XorOp, OrOp>(op), prec, syntax,
+                    emitBinaryFlags);
+}
+
+SubExprInfo ExprEmitter::emitBinary(Operation *rootOp, Value lhs, Value rhs,
+                                    bool isAssociative, VerilogPrecedence prec,
+                                    const char *syntax,
+                                    unsigned emitBinaryFlags) {
+  if (hasSVAttributes(rootOp))
+    emitError(rootOp, "SV attributes emission is unimplemented for the op");
 
   // It's tempting to wrap expressions in groups as we emit them,
   // but that can cause bad wrapping as-is:
@@ -2109,7 +2193,7 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
     ps << "$signed(" << PP::ibox0;
   auto operandSignReq =
       SubExprSignRequirement(emitBinaryFlags & EB_OperandSignRequirementMask);
-  auto lhsInfo = emitSubExpr(op->getOperand(0), prec, operandSignReq);
+  auto lhsInfo = emitSubExpr(lhs, prec, operandSignReq);
   // Bit of a kludge: if this is a comparison, don't break on either side.
   auto lhsSpace = prec == VerilogPrecedence::Comparison ? PP::nbsp : PP::space;
   // Use non-breaking space between op and RHS so breaking is consistent.
@@ -2121,7 +2205,7 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   // known-reassociative operators like +, ^, etc we don't need parens.
   // TODO: MLIR should have general "Associative" trait.
   auto rhsPrec = prec;
-  if (!isa<AddOp, MulOp, AndOp, OrOp, XorOp>(op))
+  if (!isAssociative)
     rhsPrec = VerilogPrecedence(prec - 1);
 
   // If the RHS operand has self-determined width and always treated as
@@ -2133,7 +2217,7 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
     operandSignReq = NoRequirement;
   }
 
-  auto rhsInfo = emitSubExpr(op->getOperand(1), rhsPrec, operandSignReq,
+  auto rhsInfo = emitSubExpr(rhs, rhsPrec, operandSignReq,
                              rhsIsUnsignedValueWithSelfDeterminedWidth);
 
   // SystemVerilog 11.8.1 says that the result of a binary expression is signed
