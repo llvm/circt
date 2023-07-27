@@ -48,7 +48,7 @@ struct PortInfo {
 
   /// Return true if this is a simple output-only port.  If you want the
   /// direction of the port, use the \p direction parameter.
-  bool isOutput() {
+  bool isOutput() const {
     if (direction != Direction::Out)
       return false;
     if (isa<FIRRTLType>(type))
@@ -58,7 +58,7 @@ struct PortInfo {
 
   /// Return true if this is a simple input-only port.  If you want the
   /// direction of the port, use the \p direction parameter.
-  bool isInput() {
+  bool isInput() const {
     if (direction != Direction::In)
       return false;
     if (isa<FIRRTLType>(type))
@@ -69,7 +69,7 @@ struct PortInfo {
   /// Return true if this is an inout port.  This will be true if the port
   /// contains either bi-directional signals or analog types.
   /// Non-HW types (e.g., ref types) are never considered InOut.
-  bool isInOut() {
+  bool isInOut() const {
     return TypeSwitch<Type, bool>(type)
         .Case<FIRRTLBaseType>([](auto type) {
           return !type.containsReference() &&
