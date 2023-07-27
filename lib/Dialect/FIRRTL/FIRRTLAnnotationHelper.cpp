@@ -199,6 +199,14 @@ firrtl::resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
         << "module doesn't exist '" << path.module << '\'';
     return {};
   }
+
+  // ClassOps may not participate in annotation targeting. Neither the class
+  // itself, nor any "named thing" defined under it, may be targeted by an anno.
+  if (isa<ClassOp>(mod)) {
+    mlir::emitError(mod.getLoc()) << "annotations cannot target classes";
+    return {};
+  }
+
   AnnoTarget ref;
   if (path.name.empty()) {
     assert(path.component.empty());

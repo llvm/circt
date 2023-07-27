@@ -313,3 +313,39 @@ firrtl.circuit "Anno" attributes {rawAnnotations = [{
   firrtl.extmodule @Ext()
   firrtl.module @Anno(in %in : !firrtl.uint<1>) {}
 }
+
+// -----
+// Reject annotation on a class.
+
+// expected-error @+1 {{Unable to resolve target of annotation: {class = "circt.test", target = "~Component|Class"}}}
+firrtl.circuit "Component"
+  attributes {
+    rawAnnotations = [
+      {
+        class = "circt.test",
+        target = "~Component|Class"
+      }
+    ]
+} {
+  firrtl.module @Component() {}
+  // expected-error @+1 {{annotations cannot target classes}}
+  firrtl.class @Class() {}
+}
+
+// -----
+// Reject annotation on a class's port.
+
+// expected-error @+1 {{Unable to resolve target of annotation: {class = "circt.test", target = "~Component|Class>port"}}}
+firrtl.circuit "Component"
+  attributes {
+    rawAnnotations = [
+      {
+        class = "circt.test",
+        target = "~Component|Class>port"
+      }
+    ]
+} {
+  firrtl.module @Component() {}
+  // expected-error @+1 {{annotations cannot target classes}}
+  firrtl.class @Class(in %port: !firrtl.string) {}
+}

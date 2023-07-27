@@ -331,17 +331,18 @@ LogicalResult CircuitOp::verifyRegions() {
 
   // Check that a module matching the "main" module exists in the circuit.
   auto mainModule = getMainModule(&symtbl);
-  if (!mainModule) {
-    emitOpError("must contain one module that matches main name '" + main +
-                "'");
-    return failure();
-  }
+  if (!mainModule)
+    return emitOpError("must contain one module that matches main name '" +
+                       main + "'");
+
+  // Even though ClassOps are FModuleLike, they are not a hardware entity, so
+  // we ban them from being our top-module in the design.
+  if (isa<ClassOp>(mainModule))
+    return emitOpError("must have a non-class top module");
 
   // Check that the main module is public.
-  if (!mainModule.isPublic()) {
-    emitOpError("main module '" + main + "' must be public");
-    return failure();
-  }
+  if (!mainModule.isPublic())
+    return emitOpError("main module '" + main + "' must be public");
 
   // Store a mapping of defname to either the first external module
   // that defines it or, preferentially, the first external module
@@ -653,7 +654,7 @@ void FMemModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
 
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<PortInfo> ports,
-                        ArrayAttr annotations) {
+                        ArrayAttr annotations, bool withAnnotations = true) {
   // Add an attribute for the name.
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 
@@ -687,15 +688,24 @@ static void buildModule(OpBuilder &builder, OperationState &result,
       direction::packAttribute(builder.getContext(), portDirections));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("portTypes", builder.getArrayAttr(portTypes));
-  result.addAttribute("portAnnotations", builder.getArrayAttr(portAnnotations));
   result.addAttribute("portSyms", builder.getArrayAttr(portSyms));
   result.addAttribute("portLocations", builder.getArrayAttr(portLocs));
 
-  if (!annotations)
-    annotations = builder.getArrayAttr({});
-  result.addAttribute("annotations", annotations);
+  if (withAnnotations) {
+    if (!annotations)
+      annotations = builder.getArrayAttr({});
+    result.addAttribute("annotations", annotations);
+    result.addAttribute("portAnnotations",
+                        builder.getArrayAttr(portAnnotations));
+  }
 
   result.addRegion();
+}
+
+static void buildModuleWithoutAnnos(OpBuilder &builder, OperationState &result,
+                                    StringAttr name, ArrayRef<PortInfo> ports) {
+  return buildModule(builder, result, name, ports, {},
+                     /*withAnnotations=*/false);
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -1299,6 +1309,181 @@ Convention FMemModuleOp::getConvention() { return Convention::Internal; }
 
 ConventionAttr FMemModuleOp::getConventionAttr() {
   return ConventionAttr::get(getContext(), getConvention());
+}
+
+//===----------------------------------------------------------------------===//
+// ClassOp
+//===----------------------------------------------------------------------===//
+
+void ClassOp::build(OpBuilder &builder, OperationState &result, StringAttr name,
+                    ArrayRef<PortInfo> ports) {
+  for (const auto &port : ports)
+    assert(port.annotations.empty() && "class ports may not have annotations");
+
+  buildModuleWithoutAnnos(builder, result, name, ports);
+
+  // Create a region and a block for the body.
+  auto *bodyRegion = result.regions[0].get();
+  Block *body = new Block();
+  bodyRegion->push_back(body);
+
+  // Add arguments to the body block.
+  for (auto &elt : ports)
+    body->addArgument(elt.type, elt.loc);
+}
+
+void ClassOp::print(OpAsmPrinter &p) {
+  p << " ";
+
+  // Print the visibility of the class.
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+
+  // Print the class name.
+  p.printSymbolName(getName());
+
+  auto portDirections = direction::unpackAttribute(getPortDirectionsAttr());
+
+  auto needPortNamesAttr =
+      printModulePorts(p, getBodyBlock(), portDirections, getPortNames(),
+                       getPortTypes(), {}, getPortSyms(), getPortLocations());
+
+  // Print the attr-dict.
+  SmallVector<StringRef, 8> omittedAttrs = {
+      "sym_name", "portNames",     "portTypes",       "portDirections",
+      "portSyms", "portLocations", visibilityAttrName};
+
+  // We can omit the portNames if they were able to be printed as properly as
+  // block arguments.
+  if (!needPortNamesAttr)
+    omittedAttrs.push_back("portNames");
+
+  p.printOptionalAttrDictWithKeyword((*this)->getAttrs(), omittedAttrs);
+
+  p << " ";
+  // Print the body.
+  p.printRegion(getBody(), /*printEntryBlockArgs=*/false,
+                /*printBlockTerminators=*/true);
+}
+
+ParseResult ClassOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto *context = result.getContext();
+  auto &builder = parser.getBuilder();
+
+  // Parse the visibility attribute.
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
+  // Parse the name as a symbol.
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, ::mlir::SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  // Parse the module ports.
+  SmallVector<OpAsmParser::Argument> entryArgs;
+  SmallVector<Direction, 4> portDirections;
+  SmallVector<Attribute, 4> portNames;
+  SmallVector<Attribute, 4> portTypes;
+  SmallVector<Attribute, 4> portAnnotations;
+  SmallVector<Attribute, 4> portSyms;
+  SmallVector<Attribute, 4> portLocs;
+  if (parseModulePorts(parser, /*hasSSAIdentifiers=*/true, entryArgs,
+                       portDirections, portNames, portTypes, portAnnotations,
+                       portSyms, portLocs))
+    return failure();
+
+  // Ports on ClassOp cannot have annotations
+  for (auto annos : portAnnotations)
+    if (!cast<ArrayAttr>(annos).empty())
+      return failure();
+
+  // If attributes are present, parse them.
+  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
+    return failure();
+
+  assert(portNames.size() == portTypes.size());
+
+  // Record the argument and result types as an attribute.  This is necessary
+  // for external modules.
+
+  // Add port directions.
+  if (!result.attributes.get("portDirections"))
+    result.addAttribute("portDirections",
+                        direction::packAttribute(context, portDirections));
+
+  // Add port names.
+  if (!result.attributes.get("portNames"))
+    result.addAttribute("portNames", builder.getArrayAttr(portNames));
+
+  // Add the port types.
+  if (!result.attributes.get("portTypes"))
+    result.addAttribute("portTypes", builder.getArrayAttr(portTypes));
+
+  // Add the port symbols.
+  if (!result.attributes.get("portSyms")) {
+    FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
+    result.addAttribute("portSyms", builder.getArrayAttr(portSyms));
+  }
+
+  // Add port locations.
+  if (!result.attributes.get("portLocations"))
+    result.addAttribute("portLocations", ArrayAttr::get(context, portLocs));
+
+  // Notably missing compared to other FModuleLike, we do not track port
+  // annotations, nor port symbols, on classes.
+
+  // Parse the optional function body.
+  auto *body = result.addRegion();
+  if (parser.parseRegion(*body, entryArgs))
+    return failure();
+  if (body->empty())
+    body->push_back(new Block());
+
+  return success();
+}
+
+LogicalResult ClassOp::verify() {
+
+  for (auto operand : getBodyBlock()->getArguments()) {
+    auto type = operand.getType();
+    if (!isa<PropertyType>(type)) {
+      emitOpError("ports on a class must be properties");
+      return failure();
+    }
+  }
+
+  return success();
+}
+
+void ClassOp::getAsmBlockArgumentNames(mlir::Region &region,
+                                       mlir::OpAsmSetValueNameFn setNameFn) {
+  getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
+}
+
+SmallVector<PortInfo> ClassOp::getPorts() {
+  return ::getPorts(cast<FModuleLike>((Operation *)*this));
+}
+
+void ClassOp::erasePorts(const llvm::BitVector &portIndices) {
+  ::erasePorts(cast<FModuleLike>((Operation *)*this), portIndices);
+  getBodyBlock()->eraseArguments(portIndices);
+}
+
+void ClassOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
+  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
+}
+
+Convention ClassOp::getConvention() { return Convention::Internal; }
+
+ConventionAttr ClassOp::getConventionAttr() {
+  return ConventionAttr::get(getContext(), getConvention());
+}
+
+ArrayAttr ClassOp::getParameters() { return {}; }
+
+ArrayAttr ClassOp::getPortAnnotationsAttr() {
+  return ArrayAttr::get(getContext(), {});
 }
 
 //===----------------------------------------------------------------------===//

@@ -1758,6 +1758,34 @@ firrtl.circuit "NonEquivalenctStrictConnect" {
 }
 
 // -----
+// Classes cannot be the top module.
+
+// expected-error @below {{'firrtl.circuit' op must have a non-class top module}}
+firrtl.circuit "TopModuleIsClass" {
+  firrtl.class @TopModuleIsClass() {}
+}
+
+// -----
+// Classes cannot have hardware ports.
+
+firrtl.circuit "ClassCannotHaveHardwarePorts" {
+  firrtl.module @ClassCannotHaveHardwarePorts() {}
+  // expected-error @below {{'firrtl.class' op ports on a class must be properties}}
+  firrtl.class @ClassWithHardwarePort(in %in: !firrtl.uint<8>) {}
+}
+
+// -----
+// Classes cannot hold hardware things.
+
+firrtl.circuit "ClassCannotHaveWires" {
+  firrtl.module @ClassCannotHaveWires() {}
+  firrtl.class @ClassWithWire() {
+    // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.module, firrtl.group, firrtl.when, firrtl.match'}}
+    %w = firrtl.wire : !firrtl.uint<8>
+  }
+}
+
+// -----
 
 // A group definition, "@A::@B", is missing an outer nesting of a group
 // definition with symbol "@A".

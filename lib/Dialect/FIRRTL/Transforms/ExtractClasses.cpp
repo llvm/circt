@@ -234,8 +234,8 @@ void ExtractClassesPass::extractClass(FModuleOp moduleOp) {
     formalParamNames.push_back(inputProperty.name);
 
   // Construct the ClassOp with the FModuleOp name and parameter names.
-  auto classOp = builder.create<ClassOp>(moduleOp.getLoc(), moduleOp.getName(),
-                                         formalParamNames);
+  auto classOp = builder.create<om::ClassOp>(
+      moduleOp.getLoc(), moduleOp.getName(), formalParamNames);
 
   // Construct the ClassOp body with block arguments for each input property,
   // updating the mapping to map from the input property to the block argument.
