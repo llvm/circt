@@ -174,7 +174,7 @@ static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry> &fields,
 
   if (auto refType = type_dyn_cast<RefType>(type))
     type = refType.getType();
-  return TypeSwitch<Type, bool>(type)
+  return FIRRTLTypeSwitch<Type, bool>(type)
       .Case<BundleType>([&](auto bundle) {
         SmallString<16> tmpSuffix;
         // Otherwise, we have a bundle type.  Break it down.
@@ -273,7 +273,7 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
         }
 
         // Handle aggregate sub-fields, including `(r/w)data` and `(w)mask`.
-        if (isa<BundleType>(oldPortType.getElement(targetIndex).type)) {
+        if (type_isa<BundleType>(oldPortType.getElement(targetIndex).type)) {
           // Check whether the annotation falls into the range of the current
           // field. Note that the `field` here is peeled from the `data`
           // sub-field of the memory port, thus we need to add the fieldID of
@@ -462,11 +462,11 @@ TypeLoweringVisitor::getPreservationModeForModule(FModuleLike module) {
 }
 
 Value TypeLoweringVisitor::getSubWhatever(Value val, size_t index) {
-  if (isa<BundleType>(val.getType()))
+  if (type_isa<BundleType>(val.getType()))
     return builder->create<SubfieldOp>(val, index);
-  if (isa<FVectorType>(val.getType()))
+  if (type_isa<FVectorType>(val.getType()))
     return builder->create<SubindexOp>(val, index);
-  if (isa<RefType>(val.getType()))
+  if (type_isa<RefType>(val.getType()))
     return builder->create<RefSubOp>(val, index);
   llvm_unreachable("Unknown aggregate type");
   return nullptr;
@@ -1319,7 +1319,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
   }
   // Now the input has been cast to srcLoweredVal, which is of UInt type.
   // If the result is an aggregate type, then use lowerProducer.
-  if (isa<BundleType, FVectorType>(op.getResult().getType())) {
+  if (type_isa<BundleType, FVectorType>(op.getResult().getType())) {
     // uptoBits is used to keep track of the bits that have been extracted.
     size_t uptoBits = 0;
     auto clone = [&](const FlatBundleFieldEntry &field,
@@ -1342,7 +1342,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
   }
 
   // If ground type, then replace the result.
-  if (isa<SIntType>(op.getType()))
+  if (type_isa<SIntType>(op.getType()))
     srcLoweredVal = builder->create<AsSIntPrimOp>(srcLoweredVal);
   op.getResult().replaceAllUsesWith(srcLoweredVal);
   return true;
@@ -1515,7 +1515,7 @@ bool TypeLoweringVisitor::visitExpr(ElementwiseOrPrimOp op) {
                    ArrayAttr attrs) -> Value {
     Value operands[] = {getSubWhatever(op.getLhs(), field.index),
                         getSubWhatever(op.getRhs(), field.index)};
-    return isa<BundleType, FVectorType>(field.type)
+    return type_isa<BundleType, FVectorType>(field.type)
                ? (Value)builder->create<ElementwiseOrPrimOp>(field.type,
                                                              operands)
                : (Value)builder->create<OrPrimOp>(operands);
@@ -1529,7 +1529,7 @@ bool TypeLoweringVisitor::visitExpr(ElementwiseAndPrimOp op) {
                    ArrayAttr attrs) -> Value {
     Value operands[] = {getSubWhatever(op.getLhs(), field.index),
                         getSubWhatever(op.getRhs(), field.index)};
-    return isa<BundleType, FVectorType>(field.type)
+    return type_isa<BundleType, FVectorType>(field.type)
                ? (Value)builder->create<ElementwiseAndPrimOp>(field.type,
                                                               operands)
                : (Value)builder->create<AndPrimOp>(operands);
@@ -1543,7 +1543,7 @@ bool TypeLoweringVisitor::visitExpr(ElementwiseXorPrimOp op) {
                    ArrayAttr attrs) -> Value {
     Value operands[] = {getSubWhatever(op.getLhs(), field.index),
                         getSubWhatever(op.getRhs(), field.index)};
-    return isa<BundleType, FVectorType>(field.type)
+    return type_isa<BundleType, FVectorType>(field.type)
                ? (Value)builder->create<ElementwiseXorPrimOp>(field.type,
                                                               operands)
                : (Value)builder->create<XorPrimOp>(operands);
