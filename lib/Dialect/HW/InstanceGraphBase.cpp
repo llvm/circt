@@ -85,7 +85,8 @@ InstanceGraphBase::InstanceGraphBase(Operation *parent) : parent(parent) {
 }
 
 InstanceGraphNode *InstanceGraphBase::addModule(ModuleLike module) {
-  assert(!nodeMap.count(module.getModuleLikeNameAttr()) && "module already added");
+  assert(!nodeMap.count(module.getModuleLikeNameAttr()) &&
+         "module already added");
   auto *node = new InstanceGraphNode();
   node->module = module;
   nodeMap[module.getModuleLikeNameAttr()] = node;

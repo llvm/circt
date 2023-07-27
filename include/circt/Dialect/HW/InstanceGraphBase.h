@@ -143,8 +143,7 @@ public:
 
   /// Record a new instance op in the body of this module. Returns a newly
   /// allocated InstanceRecord which will be owned by this node.
-  InstanceRecord *addInstance(InstanceLike instance,
-                              InstanceGraphNode *target);
+  InstanceRecord *addInstance(InstanceLike instance, InstanceGraphNode *target);
 
 private:
   friend class InstanceRecord;

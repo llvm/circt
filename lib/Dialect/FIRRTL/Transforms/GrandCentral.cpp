@@ -1527,7 +1527,7 @@ std::optional<StringAttr> GrandCentralPass::traverseBundle(
 /// Return the module that is associated with this value.  Use the cached/lazily
 /// constructed symbol table to make this fast.
 ModuleLike GrandCentralPass::getEnclosingModule(Value value,
-                                                  FlatSymbolRefAttr sym) {
+                                                FlatSymbolRefAttr sym) {
   if (auto blockArg = dyn_cast<BlockArgument>(value))
     return cast<ModuleLike>(blockArg.getOwner()->getParentOp());
 

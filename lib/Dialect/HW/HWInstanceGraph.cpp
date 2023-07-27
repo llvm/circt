@@ -14,7 +14,8 @@ using namespace hw;
 InstanceGraph::InstanceGraph(Operation *operation)
     : InstanceGraphBase(operation) {
   for (auto &node : nodes)
-    if (cast<mlir::SymbolOpInterface>(node.getModule().getOperation()).isPublic())
+    if (cast<mlir::SymbolOpInterface>(node.getModule().getOperation())
+            .isPublic())
       entry.addInstance({}, &node);
 }
 

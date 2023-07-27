@@ -583,8 +583,7 @@ void ExtractInstancesPass::extractInstances() {
     // Move the original instance one level up such that it is right next to
     // the instances of the parent module, and wire the instance ports up to
     // the newly added parent module ports.
-    auto *instParentNode =
-        instanceGraph->lookup(cast<hw::ModuleLike>(*parent));
+    auto *instParentNode = instanceGraph->lookup(cast<hw::ModuleLike>(*parent));
     for (auto *instRecord : instParentNode->uses()) {
       auto oldParentInst = cast<InstanceOp>(*instRecord->getInstance());
       auto newParent = oldParentInst->getParentOfType<FModuleLike>();

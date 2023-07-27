@@ -787,7 +787,8 @@ private:
   void replaceInstances(FModuleLike toModule, Operation *fromModule) {
     // Replace all instances of the other module.
     auto *fromNode = instanceGraph[::cast<hw::ModuleLike>(fromModule)];
-    auto *toNode = instanceGraph[::cast<hw::ModuleLike>(toModule.getOperation())];
+    auto *toNode =
+        instanceGraph[::cast<hw::ModuleLike>(toModule.getOperation())];
     auto toModuleRef = FlatSymbolRefAttr::get(toModule.getModuleNameAttr());
     for (auto *oldInstRec : llvm::make_early_inc_range(fromNode->uses())) {
       auto inst = ::cast<InstanceOp>(*oldInstRec->getInstance());
@@ -817,7 +818,8 @@ private:
     auto *fromNode = instanceGraph[cast<hw::ModuleLike>(fromModule)];
     SmallVector<FlatSymbolRefAttr> nlas;
     for (auto *instanceRecord : fromNode->uses()) {
-      auto parent = cast<FModuleOp>(*instanceRecord->getParent()->getModule().getOperation());
+      auto parent = cast<FModuleOp>(
+          *instanceRecord->getParent()->getModule().getOperation());
       auto inst = instanceRecord->getInstance();
       namepath[0] = OpAnnoTarget(inst).getNLAReference(getNamespace(parent));
       auto arrayAttr = ArrayAttr::get(context, namepath);
