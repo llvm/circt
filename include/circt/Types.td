@@ -26,4 +26,14 @@ def APSIntAttr : Attr<CPred<"$_self.isa<::mlir::IntegerAttr>()">,
   let convertFromStorage = "$_self.getAPSInt()";
 }
 
+// Compared to the standard ArrayAttr, the accessor to an ArrayRefAttr will
+// convert the attribute to an ArrayRef, while an ArrayAttr accessor just
+// returns itself.
+def ArrayRefAttr :
+  ArrayAttrBase<
+    CPred<"::llvm::isa<::mlir::ArrayAttr>($_self)">, "array attribute"> {
+  let returnType = [{ ::llvm::ArrayRef<Attribute> }];
+  let convertFromStorage = [{ $_self.getValue() }];
+}
+
 #endif // CIRCT_TYPES
