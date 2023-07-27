@@ -93,7 +93,7 @@ def SensitiveOp : SystemCOp<"sensitive", [HasParent<"CtorOp">]> {
 
 def InstanceDeclOp : SystemCOp<"instance.decl", [
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-  DeclareOpInterfaceMethods<HWInstanceLike>,
+  DeclareOpInterfaceMethods<InstanceLike>,
   HasCustomSSAName,
   SystemCNameDeclOpInterface,
   HasParent<"SCModuleOp">

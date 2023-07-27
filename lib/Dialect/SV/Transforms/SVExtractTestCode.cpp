@@ -314,7 +314,7 @@ static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
 }
 
 // Check if the module has already been bound.
-static bool isBound(hw::HWModuleLike op, hw::InstanceGraph &instanceGraph) {
+static bool isBound(hw::ModuleLike op, hw::InstanceGraph &instanceGraph) {
   auto *node = instanceGraph.lookup(op);
   return llvm::any_of(node->uses(), [](hw::InstanceRecord *a) {
     auto inst = a->getInstance();
@@ -381,7 +381,7 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
   bool allInlined = true;
   for (hw::InstanceRecord *use : llvm::make_early_inc_range(node->uses())) {
     // If there is no instance, move on.
-    hw::HWInstanceLike instLike = use->getInstance();
+    hw::InstanceLike instLike = use->getInstance();
     if (!instLike) {
       allInlined = false;
       continue;

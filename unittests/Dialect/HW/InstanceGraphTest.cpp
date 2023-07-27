@@ -64,13 +64,13 @@ TEST(InstanceGraphTest, PostOrderTraversal) {
   auto range = llvm::post_order(&graph);
 
   auto it = range.begin();
-  ASSERT_EQ("Cat", it->getModule().getModuleName());
+  ASSERT_EQ("Cat", it->getModule().getModuleLikeName());
   ++it;
-  ASSERT_EQ("Bear", it->getModule().getModuleName());
+  ASSERT_EQ("Bear", it->getModule().getModuleLikeName());
   ++it;
-  ASSERT_EQ("Alligator", it->getModule().getModuleName());
+  ASSERT_EQ("Alligator", it->getModule().getModuleLikeName());
   ++it;
-  ASSERT_EQ("Top", it->getModule().getModuleName());
+  ASSERT_EQ("Top", it->getModule().getModuleLikeName());
   ++it;
   ASSERT_EQ(graph.getTopLevelNode(), *it);
   ++it;

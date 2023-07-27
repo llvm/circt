@@ -14,13 +14,13 @@ using namespace hw;
 InstanceGraph::InstanceGraph(Operation *operation)
     : InstanceGraphBase(operation) {
   for (auto &node : nodes)
-    if (node.getModule().isPublic())
+    if (cast<mlir::SymbolOpInterface>(node.getModule().getOperation()).isPublic())
       entry.addInstance({}, &node);
 }
 
-InstanceGraphNode *InstanceGraph::addModule(HWModuleLike module) {
+InstanceGraphNode *InstanceGraph::addModule(ModuleLike module) {
   auto *node = InstanceGraphBase::addModule(module);
-  if (module.isPublic())
+  if (cast<mlir::SymbolOpInterface>(module.getOperation()).isPublic())
     entry.addInstance({}, node);
   return node;
 }

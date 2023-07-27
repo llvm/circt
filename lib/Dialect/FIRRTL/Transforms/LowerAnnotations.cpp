@@ -928,7 +928,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
              << "\" must be passive (no flips) when using references";
 
     // Record module modifications related to adding ports to modules.
-    auto addPorts = [&](ArrayRef<hw::HWInstanceLike> insts, Value val, Type tpe,
+    auto addPorts = [&](ArrayRef<hw::InstanceLike> insts, Value val, Type tpe,
                         Direction dir) {
       StringRef name, instName;
       for (auto inst : llvm::reverse(insts)) {

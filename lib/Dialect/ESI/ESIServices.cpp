@@ -580,7 +580,7 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
   };
 
   // Update the module instantiations.
-  SmallVector<hw::HWInstanceLike, 1> newModuleInstantiations;
+  SmallVector<hw::InstanceLike, 1> newModuleInstantiations;
   StringAttr argsAttrName = StringAttr::get(ctxt, "argNames");
   StringAttr resultsAttrName = StringAttr::get(ctxt, "resultNames");
   for (auto inst : moduleInstantiations[mod]) {
@@ -626,7 +626,7 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
         inst->getLoc(), inst->getName(), newResultTypes, newOperands,
         b.getDictionaryAttr(newAttrs), inst->getPropertiesStorage(),
         inst->getSuccessors(), inst->getRegions()));
-    newModuleInstantiations.push_back(cast<hw::HWInstanceLike>(newInst));
+    newModuleInstantiations.push_back(cast<hw::InstanceLike>(newInst));
 
     // Replace all uses of the instance being replaced.
     for (auto [newV, oldV] :

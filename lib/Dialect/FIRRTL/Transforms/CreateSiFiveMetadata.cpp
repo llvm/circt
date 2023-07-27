@@ -337,7 +337,7 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
           // situation where everything is deemed to be "in the DUT", i.e., when
           // the DUT is the top module or when no DUT is specified.
           if (everythingInDUT ||
-              llvm::any_of(p, [&](circt::hw::HWInstanceLike inst) {
+              llvm::any_of(p, [&](circt::hw::InstanceLike inst) {
                 return inst.getReferencedModule() == dutMod;
               }))
             jsonStream.value(hierName);
@@ -618,7 +618,7 @@ void CreateSiFiveMetadataPass::runOnOperation() {
   if (it != body->end()) {
     dutMod = dyn_cast<FModuleOp>(*it);
     auto &instanceGraph = getAnalysis<InstanceGraph>();
-    auto *node = instanceGraph.lookup(cast<hw::HWModuleLike>(*it));
+    auto *node = instanceGraph.lookup(cast<hw::ModuleLike>(*it));
     llvm::for_each(llvm::depth_first(node), [&](hw::InstanceGraphNode *node) {
       dutModuleSet.insert(node->getModule());
     });

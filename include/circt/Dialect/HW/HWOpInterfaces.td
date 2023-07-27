@@ -15,6 +15,22 @@
 
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/OpBase.td"
+def ModuleLike : OpInterface<"ModuleLike", []> {
+  let cppNamespace = "circt::hw";
+  let description = "Provide common module information.";
+
+  let methods = [
+    InterfaceMethod<"Get the module name",
+    "::llvm::StringRef", "getModuleLikeName", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{ return $_op.getName(); }]>,
+
+    InterfaceMethod<"Get the module name",
+    "::mlir::StringAttr", "getModuleLikeNameAttr", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{ return $_op.getNameAttr(); }]>,
+  ];
+}
 
 def HWModuleLike : OpInterface<"HWModuleLike", [Symbol]> {
   let cppNamespace = "circt::hw";
@@ -184,7 +200,7 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike", [HWModuleLike]> {
 }
 
 
-def HWInstanceLike : OpInterface<"HWInstanceLike"> {
+def InstanceLike : OpInterface<"InstanceLike"> {
   let cppNamespace = "circt::hw";
   let description = "Provide common  module information.";
 

@@ -786,8 +786,8 @@ private:
   /// of the "toModule".
   void replaceInstances(FModuleLike toModule, Operation *fromModule) {
     // Replace all instances of the other module.
-    auto *fromNode = instanceGraph[::cast<hw::HWModuleLike>(fromModule)];
-    auto *toNode = instanceGraph[toModule];
+    auto *fromNode = instanceGraph[::cast<hw::ModuleLike>(fromModule)];
+    auto *toNode = instanceGraph[::cast<hw::ModuleLike>(toModule.getOperation())];
     auto toModuleRef = FlatSymbolRefAttr::get(toModule.getModuleNameAttr());
     for (auto *oldInstRec : llvm::make_early_inc_range(fromNode->uses())) {
       auto inst = ::cast<InstanceOp>(*oldInstRec->getInstance());
@@ -814,10 +814,10 @@ private:
     namepath.append(baseNamepath.begin(), baseNamepath.end());
 
     auto loc = fromModule->getLoc();
-    auto *fromNode = instanceGraph[cast<hw::HWModuleLike>(fromModule)];
+    auto *fromNode = instanceGraph[cast<hw::ModuleLike>(fromModule)];
     SmallVector<FlatSymbolRefAttr> nlas;
     for (auto *instanceRecord : fromNode->uses()) {
-      auto parent = cast<FModuleOp>(*instanceRecord->getParent()->getModule());
+      auto parent = cast<FModuleOp>(*instanceRecord->getParent()->getModule().getOperation());
       auto inst = instanceRecord->getInstance();
       namepath[0] = OpAnnoTarget(inst).getNLAReference(getNamespace(parent));
       auto arrayAttr = ArrayAttr::get(context, namepath);
@@ -1238,7 +1238,7 @@ void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
 /// module.
 void fixupAllModules(InstanceGraph &instanceGraph) {
   for (auto *node : instanceGraph) {
-    auto module = cast<FModuleLike>(*node->getModule());
+    auto module = cast<FModuleLike>(*node->getModule().getOperation());
     for (auto *instRec : node->uses()) {
       auto inst = cast<InstanceOp>(instRec->getInstance());
       ImplicitLocOpBuilder builder(inst.getLoc(), inst->getContext());
@@ -1333,7 +1333,7 @@ class DedupPass : public DedupBase<DedupPass> {
     // to avoid iterator invalidation while we mutate the instance graph.
     SmallVector<FModuleLike, 0> modules(
         llvm::map_range(llvm::post_order(&instanceGraph), [](auto *node) {
-          return cast<FModuleLike>(*node->getModule());
+          return cast<FModuleLike>(*node->getModule().getOperation());
         }));
 
     SmallVector<std::optional<

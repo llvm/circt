@@ -27,14 +27,14 @@ using namespace hw;
 struct ModuleSizeCache {
   void clear() { moduleSizes.clear(); }
 
-  uint64_t getModuleSize(HWModuleLike module,
+  uint64_t getModuleSize(ModuleLike module,
                          InstanceGraphBase &instanceGraph) {
     if (auto it = moduleSizes.find(module); it != moduleSizes.end())
       return it->second;
     uint64_t size = 1;
     module->walk([&](Operation *op) {
       size += 1;
-      if (auto instOp = dyn_cast<HWInstanceLike>(op))
+      if (auto instOp = dyn_cast<InstanceLike>(op))
         if (auto instModule = instanceGraph.getReferencedModule(instOp))
           size += getModuleSize(instModule, instanceGraph);
     });

@@ -143,7 +143,7 @@ def TriggerOp : FSMOp<"trigger", []> {
 
 def HWInstanceOp : FSMOp<"hw_instance", [
     Symbol,
-    DeclareOpInterfaceMethods<HWInstanceLike>
+    DeclareOpInterfaceMethods<InstanceLike>
   ]> {
   let summary = "Create a hardware-style instance of a state machine";
   let description = [{

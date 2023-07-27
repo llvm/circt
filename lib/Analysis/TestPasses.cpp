@@ -140,7 +140,7 @@ void InferTopModulePass::runOnOperation() {
 
   llvm::SmallVector<Attribute, 4> attrs;
   for (auto *node : *res)
-    attrs.push_back(node->getModule().getModuleNameAttr());
+    attrs.push_back(node->getModule().getModuleLikeNameAttr());
 
   analysis.getParent()->setAttr("test.top",
                                 ArrayAttr::get(&getContext(), attrs));
