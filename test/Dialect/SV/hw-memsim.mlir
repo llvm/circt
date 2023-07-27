@@ -218,9 +218,16 @@ hw.module.generated @FIRRTLMemTwoAlways, @FIRRTLMem( %wo_addr_0: i4, %wo_en_0: i
   // CHECK-NEXT:      sv.passign %[[v220]], %[[v15]] : i8
 
   // IGNORE:      %[[Memory:.+]] = sv.reg : !hw.inout<uarray<16xi32>>
-  // IGNORE:      %[[slot:.+]] = sv.array_index_inout %Memory
-  // IGNORE-NEXT: %[[result:.+]] = sv.read_inout %[[slot]]
-  // IGNORE:      hw.output %[[result]]
+  // IGNORE-NEXT: %[[read_addr_inout:.+]] = sv.reg {{.*}} : !hw.inout<i4>
+  // IGNORE-NEXT: sv.always posedge %R0_clk {
+  // IGNORE-NEXT:   sv.if %R0_en {
+  // IGNORE-NEXT:     sv.passign %[[read_addr_inout]], %R0_addr
+  // IGNORE-NEXT:   }
+  // IGNORE-NEXT: }
+  // IGNORE-NEXT: %[[read_addr:.+]] = sv.read_inout %[[read_addr_inout]]
+  // IGNORE-NEXT: %[[slot_read:.+]] = sv.array_index_inout %Memory[%[[read_addr]]]
+  // IGNORE-NEXT: %[[result_read:.+]] = sv.read_inout %[[slot_read]]
+  // IGNORE:      hw.output %[[result_read]]
 
   hw.module.generated @FIRRTLMem_1_1_0_32_16_1_1_0_1_b, @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i32, %W0_mask: i2) -> (R0_data: i32) attributes {depth = 16 : i64, maskGran = 16 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : i32, width = 32 : ui32, writeClockIDs = [0 : i32], writeLatency = 3 : ui32, writeUnderWrite = 1 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
   hw.module @memTestBar(%clock: i1, %rAddr: i4, %rEn: i1, %wAddr: i4, %wEn: i1, %wMask: i2, %wData: i32) -> (rData: i32) attributes {firrtl.moduleHierarchyFile = #hw.output_file<"testharness_hier.json", excludeFromFileList>} {

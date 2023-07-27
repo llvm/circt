@@ -318,10 +318,22 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
         addPipelineStages(b, moduleNamespace, numCommonStages, clock, wmode);
 
     // Add read-only pipeline stages.
-    auto read_addr = addPipelineStages(
-        b, moduleNamespace, numReadStages - numCommonStages, clock, addr);
-    auto read_en = addPipelineStages(
-        b, moduleNamespace, numReadStages - numCommonStages, clock, en);
+    Value read_addr = addr;
+    Value read_en = en;
+    if (ignoreReadEnable) {
+      for (size_t j = 0, e = mem.readLatency; j != e; ++j) {
+        auto enLast = en;
+        if (j < e - 1)
+          read_en = addPipelineStages(b, moduleNamespace, 1, clock, en);
+        read_addr =
+            addPipelineStages(b, moduleNamespace, 1, clock, addr, enLast);
+      }
+    } else {
+      read_addr = addPipelineStages(
+          b, moduleNamespace, numReadStages - numCommonStages, clock, addr);
+      read_en = addPipelineStages(b, moduleNamespace,
+                                  numReadStages - numCommonStages, clock, en);
+    }
     auto read_wmode = addPipelineStages(
         b, moduleNamespace, numReadStages - numCommonStages, clock, wmode);
 
