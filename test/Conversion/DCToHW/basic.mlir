@@ -4,9 +4,9 @@
 // CHECK-SAME:          %[[VAL_0:.*]]: !esi.channel<i0>, %[[VAL_1:.*]]: !esi.channel<i64>, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: !esi.channel<!hw.struct<field0: i1, field1: i2>>) -> (out0: !esi.channel<i0>, out1: !esi.channel<i64>, out2: i1, out3: !esi.channel<!hw.struct<field0: i1, field1: i2>>) attributes {argNames = ["", "", "", ""]} {
 // CHECK:           hw.output %[[VAL_0]], %[[VAL_1]], %[[VAL_2]], %[[VAL_3]] : !esi.channel<i0>, !esi.channel<i64>, i1, !esi.channel<!hw.struct<field0: i1, field1: i2>>
 // CHECK:         }
-hw.module @simple(%0 : !dc.token, %1 : !dc.value<i64>, %2 : i1, %3 : !dc.value<i1, i2>)
-        -> (out0: !dc.token, out1: !dc.value<i64>, out2: i1, out3: !dc.value<i1, i2>) {
-    hw.output %0, %1, %2, %3 : !dc.token, !dc.value<i64>, i1, !dc.value<i1, i2>
+hw.module @simple(%0 : !dc.token, %1 : !dc.value<i64>, %2 : i1, %3 : !dc.value<i1>)
+        -> (out0: !dc.token, out1: !dc.value<i64>, out2: i1, out3: !dc.value<i1>) {
+    hw.output %0, %1, %2, %3 : !dc.token, !dc.value<i64>, i1, !dc.value<i1>
 }
 
 // CHECK-LABEL:   hw.module @pack(
@@ -16,9 +16,9 @@ hw.module @simple(%0 : !dc.token, %1 : !dc.value<i64>, %2 : i1, %3 : !dc.value<i
 // CHECK:           %[[VAL_7]] = hw.struct_create (%[[VAL_1]], %[[VAL_2]]) : !hw.struct<field0: i64, field1: i1>
 // CHECK:           hw.output %[[VAL_6]] : !esi.channel<!hw.struct<field0: i64, field1: i1>>
 // CHECK:         }
-hw.module @pack(%token : !dc.token, %v1 : i64, %v2 : i1) -> (out0: !dc.value<i64, i1>) {
-    %out = dc.pack %token [%v1, %v2] : i64, i1
-    hw.output %out : !dc.value<i64, i1>
+hw.module @pack(%token : !dc.token, %v1 : i64) -> (out0: !dc.value<i64>) {
+    %out = dc.pack %token, %v1 : i64
+    hw.output %out : !dc.value<i64>
 }
 
 // CHECK-LABEL:   hw.module @unpack(
@@ -29,9 +29,9 @@ hw.module @pack(%token : !dc.token, %v1 : i64, %v2 : i1) -> (out0: !dc.value<i64
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = hw.struct_explode %[[VAL_1]] : !hw.struct<field0: i64, field1: i1>
 // CHECK:           hw.output %[[VAL_5]], %[[VAL_6]], %[[VAL_7]] : !esi.channel<i0>, i64, i1
 // CHECK:         }
-hw.module @unpack(%v : !dc.value<i64, i1>) -> (out0: !dc.token, out1: i64, out2: i1) {
-    %out:3 = dc.unpack %v : !dc.value<i64, i1>
-    hw.output %out#0, %out#1, %out#2 : !dc.token, i64, i1
+hw.module @unpack(%v : !dc.value<i64>) -> (out0: !dc.token, out1: i64) {
+    %out:2 = dc.unpack %v : !dc.value<i64>
+    hw.output %out#0, %out#1 : !dc.token, i64
 }
 
 // CHECK-LABEL:   hw.module @join(

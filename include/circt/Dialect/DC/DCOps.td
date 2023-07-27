@@ -66,9 +66,9 @@ def BufferOp : DCOp<"buffer",
 
   let extraClassDeclaration = [{
     // Returns the data type of this buffer, if any.
-    std::optional<TypeRange> getInnerTypes() {
+    std::optional<TypeRange> getInnerType() {
       if(auto type = getInput().getType().dyn_cast<ValueType>())
-        return type.getInnerTypes();
+        return type.getInnerType();
       return std::nullopt;
     }
 
@@ -184,9 +184,9 @@ def PackOp : DCOp<"pack", [InferTypeOpInterface]> {
         signal for either a `dc.branch` or `dc.select` operation.
     }];
 
-    let arguments = (ins TokenType:$token, Variadic<AnyType>:$inputs);
+    let arguments = (ins TokenType:$token, AnyType:$input);
     let results = (outs ValueType:$output);
-    let assemblyFormat = "$token `[` $inputs `]` attr-dict `:` type($inputs)";
+    let assemblyFormat = "$token `,` $input attr-dict `:` type($input)";
     let hasFolder = 1;
 
     let extraClassDeclaration = [{
@@ -209,7 +209,7 @@ def UnpackOp : DCOp<"unpack", [InferTypeOpInterface]> {
     }];
 
     let arguments = (ins ValueType:$input);
-    let results = (outs TokenType:$token, Variadic<AnyType>:$outputs);
+    let results = (outs TokenType:$token, AnyType:$output);
     let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
     let hasCanonicalizer = 1;
     let hasFolder = 1;
