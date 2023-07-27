@@ -331,6 +331,7 @@ void pruneZeroValuedLogic(hw::HWModuleOp module);
 GlobalNameTable legalizeGlobalNames(ModuleOp topLevel,
                                     const LoweringOptions &options);
 
+Value getSignExtendedValue(Value v);
 } // namespace ExportVerilog
 } // namespace circt
 
