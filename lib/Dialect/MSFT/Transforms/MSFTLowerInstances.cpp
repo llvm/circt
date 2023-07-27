@@ -59,13 +59,11 @@ const SymbolCache &LowerInstancesPass::getSyms(MSFTModuleOp mod) {
 
   // Build the cache.
   SymbolCache &syms = perModSyms[mod];
-  mod.walk([&syms, mod](Operation *op) {
-    if (op == mod)
-      return;
-    if (auto name =
-            op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
-      syms.addDefinition(name, op);
-  });
+  hw::InnerSymbolTable::walkSymbols(
+      mod, [&](StringAttr symName, hw::InnerSymTarget target) {
+        if (!target.isPort())
+          syms.addDefinition(symName, target.getOp());
+      });
   return syms;
 }
 
@@ -117,7 +115,7 @@ LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst,
       // Since GlobalRefOp uses the `inner_sym` attribute, assign the
       // 'inner_sym' attribute if it's not already assigned.
       if (!tgtOp->hasAttr("inner_sym")) {
-        tgtOp->setAttr("inner_sym", innerRef.getName());
+        tgtOp->setAttr("inner_sym", hw::InnerSymAttr::get(innerRef.getName()));
       }
     }
     if (symNotFound)

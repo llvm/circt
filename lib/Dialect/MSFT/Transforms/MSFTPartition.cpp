@@ -266,18 +266,19 @@ static StringRef getOpName(Operation *op) {
   StringAttr name;
   if ((name = op->getAttrOfType<StringAttr>("name")) && name.size())
     return name.getValue();
-  if ((name = op->getAttrOfType<StringAttr>("sym_name")) && name.size())
-    return name.getValue();
+  if (auto innerSym = op->getAttrOfType<hw::InnerSymAttr>("inner_sym"))
+    return innerSym.getSymName().getValue();
   return op->getName().getStringRef();
 }
+
 /// Try to set the entity name.
 /// TODO: this needs to be more complex to deal with renaming symbols.
 static void setEntityName(Operation *op, const Twine &name) {
   StringAttr nameAttr = StringAttr::get(op->getContext(), name);
   if (op->hasAttrOfType<StringAttr>("name"))
     op->setAttr("name", nameAttr);
-  if (op->hasAttrOfType<StringAttr>("sym_name"))
-    op->setAttr("sym_name", nameAttr);
+  if (op->hasAttrOfType<hw::InnerSymAttr>("inner_sym"))
+    op->setAttr("inner_sym", hw::InnerSymAttr::get(nameAttr));
 }
 
 /// Heuristics to get the output name.
@@ -336,10 +337,7 @@ void PartitionPass::bubbleUpGlobalRefs(
   if (!globalRefs)
     return;
 
-  // GlobalRefs use the inner_sym attribute, so keep it up to date.
-  auto oldInnerSym = op->getAttrOfType<StringAttr>("inner_sym");
-  auto newInnerSym = StringAttr::get(op->getContext(), ::getOpName(op));
-  op->setAttr("inner_sym", newInnerSym);
+  auto innerSym = op->getAttrOfType<hw::InnerSymAttr>("inner_sym");
 
   for (auto globalRef : globalRefs.getAsRange<hw::GlobalRefAttr>()) {
     // Resolve the GlobalRefOp and get its path.
@@ -360,18 +358,13 @@ void PartitionPass::bubbleUpGlobalRefs(
     // Find the index of the node in the path that points to the opName. The
     // previous node in the path must point to parentName.
     size_t opIndex = 0;
-    bool found = false;
-    (void)found;
     for (; opIndex < oldPath.size(); ++opIndex) {
       auto oldNode = oldPath[opIndex].cast<hw::InnerRefAttr>();
-      if (oldNode.getModule() == parentMod &&
-          oldNode.getName() == oldInnerSym) {
-        found = true;
+      if (oldNode.getModule() == parentMod)
         break;
-      }
     }
 
-    assert(found && opIndex > 0);
+    assert(0 < opIndex && opIndex < oldPath.size());
     auto parentIndex = opIndex - 1;
     auto parentNode = oldPath[parentIndex].cast<hw::InnerRefAttr>();
     assert(parentNode.getName() == parentName);
@@ -384,7 +377,7 @@ void PartitionPass::bubbleUpGlobalRefs(
 
     // Splice together the nodes that parentName and opName point to.
     auto splicedNode =
-        hw::InnerRefAttr::get(parentNode.getModule(), newInnerSym);
+        hw::InnerRefAttr::get(parentNode.getModule(), innerSym.getSymName());
 
     // Construct a new path from the parentChunk, splicedNode, and childChunk.
     SmallVector<Attribute> newPath(parentChunk.begin(), parentChunk.end());
@@ -424,19 +417,14 @@ void PartitionPass::pushDownGlobalRefs(
     assert(partModName);
 
     // Find the index of the node in the path that points to the innerSym.
-    auto innerSym = op->getAttrOfType<StringAttr>("inner_sym");
+    auto innerSym = op->getAttrOfType<hw::InnerSymAttr>("inner_sym");
     size_t opIndex = 0;
-    bool found = false;
     for (; opIndex < oldPath.size(); ++opIndex) {
       auto oldNode = oldPath[opIndex].cast<hw::InnerRefAttr>();
-      if (oldNode.getModule() == partMod && oldNode.getName() == innerSym) {
-        found = true;
+      if (oldNode.getModule() == partMod)
         break;
-      }
     }
-
-    (void)found;
-    assert(found);
+    assert(opIndex < oldPath.size());
 
     // If this path already points to the design partition, we are done.
     if (oldPath[opIndex].cast<hw::InnerRefAttr>().getModule() == partModName)
@@ -451,7 +439,7 @@ void PartitionPass::pushDownGlobalRefs(
     // Create a new node for the partition within the partition's parent module,
     // and a new node for the op within the partition module.
     auto partRef = hw::InnerRefAttr::get(partMod, partName);
-    auto leafRef = hw::InnerRefAttr::get(partModName, innerSym);
+    auto leafRef = hw::InnerRefAttr::get(partModName, innerSym.getSymName());
 
     // Construct a new path from the parentChunk, partRef, leafRef, and
     // childChunk.
@@ -599,11 +587,12 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
     for (Operation &op : *partBlock) {
       Operation *newOp = b.insert(op.clone(map));
       newOps.push_back(newOp);
-      setEntityName(newOp, oldInst.getName() + "." + ::getOpName(&op));
+      setEntityName(newOp, oldInst.getInstanceName() + "." + ::getOpName(&op));
       auto *oldInstMod = oldInst.getReferencedModule();
       assert(oldInstMod);
       auto oldModName = oldInstMod->getAttrOfType<StringAttr>("sym_name");
-      bubbleUpGlobalRefs(newOp, oldModName, oldInst.getNameAttr(), movedRefs);
+      bubbleUpGlobalRefs(newOp, oldModName, oldInst.getInstanceNameAttr(),
+                         movedRefs);
     }
 
     // Remove the hoisted global refs from new instance.
@@ -767,7 +756,6 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
                                          newGlobalRefs.end());
   auto newRefsAttr = ArrayAttr::get(partInst->getContext(), newGlobalRefVec);
   partInst->setAttr(hw::GlobalRefAttr::DialectAttrName, newRefsAttr);
-  partInst->setAttr("inner_sym", partInst.getSymNameAttr());
 
   return partMod;
 }

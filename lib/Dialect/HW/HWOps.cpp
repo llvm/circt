@@ -394,6 +394,8 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), nameAttr.getValue());
 }
 
+std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
+
 OpFoldResult WireOp::fold(FoldAdaptor adaptor) {
   // If the wire has no additional attributes, no name, and no symbol, just
   // forward its input.
@@ -425,6 +427,15 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
   rewriter.replaceOp(wire, wire.getInput());
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ProbeOp
+//===----------------------------------------------------------------------===//
+
+std::optional<size_t> ProbeOp::getTargetResultIndex() {
+  // Inner symbols on probe operations target the op not any result.
+  return std::nullopt;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1446,7 +1457,7 @@ LogicalResult HWModuleOp::verifyBody() { return success(); }
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        Operation *module, StringAttr name,
                        ArrayRef<Value> inputs, ArrayAttr parameters,
-                       StringAttr sym_name) {
+                       InnerSymAttr inner_sym) {
   if (!parameters)
     parameters = builder.getArrayAttr({});
 
@@ -1455,7 +1466,12 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   FunctionType modType = getModuleType(module);
   build(builder, result, modType.getResults(), name,
         FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
-        argNames, resultNames, parameters, sym_name);
+        argNames, resultNames, parameters, inner_sym);
+}
+
+std::optional<size_t> InstanceOp::getTargetResultIndex() {
+  // Inner symbols on instance operations target the op not any result.
+  return std::nullopt;
 }
 
 /// Lookup the module or extmodule for the symbol.  This returns null on
@@ -1493,7 +1509,7 @@ LogicalResult InstanceOp::verify() {
 
 ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   StringAttr instanceNameAttr;
-  StringAttr symNameAttr;
+  InnerSymAttr innerSym;
   FlatSymbolRefAttr moduleNameAttr;
   SmallVector<OpAsmParser::UnresolvedOperand, 4> inputsOperands;
   SmallVector<Type, 1> inputsTypes, allResultTypes;
@@ -1507,9 +1523,9 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
     // Parsing an optional symbol name doesn't fail, so no need to check the
     // result.
-    (void)parser.parseOptionalSymbolName(
-        symNameAttr, InnerSymbolTable::getInnerSymbolAttrName(),
-        result.attributes);
+    if (parser.parseCustomAttributeWithFallback(innerSym))
+      return failure();
+    result.addAttribute(InnerSymbolTable::getInnerSymbolAttrName(), innerSym);
   }
 
   llvm::SMLoc parametersLoc, inputsOperandsLoc;
@@ -1538,7 +1554,7 @@ void InstanceOp::print(OpAsmPrinter &p) {
   p.printAttributeWithoutType(getInstanceNameAttr());
   if (auto attr = getInnerSymAttr()) {
     p << " sym ";
-    p.printSymbolName(attr.getValue());
+    attr.print(p);
   }
   p << ' ';
   p.printAttributeWithoutType(getModuleNameAttr());
@@ -1636,7 +1652,7 @@ GlobalRefOp::verifySymbolUses(mlir::SymbolTableCollection &symTables) {
   // GlobalRefAttr to this GlobalRefOp.
   for (auto innerRef : getNamepath().getAsRange<hw::InnerRefAttr>()) {
     StringAttr modName = innerRef.getModule();
-    StringAttr innerSym = innerRef.getName();
+    StringAttr symName = innerRef.getName();
     Operation *mod = symTable.lookup(modName);
     if (!mod) {
       (*this)->emitOpError("module:'" + modName.str() + "' not found");
@@ -1644,10 +1660,9 @@ GlobalRefOp::verifySymbolUses(mlir::SymbolTableCollection &symTables) {
     }
     bool glblSymNotFound = true;
     bool innerSymOpNotFound = true;
-    mod->walk([&](Operation *op) -> WalkResult {
-      StringAttr attr = op->getAttrOfType<StringAttr>("inner_sym");
+    mod->walk([&](InnerSymbolOpInterface op) -> WalkResult {
       // If this is one of the ops in the instance path for the GlobalRefOp.
-      if (attr && attr == innerSym) {
+      if (op.getInnerNameAttr() == symName) {
         innerSymOpNotFound = false;
         // Each op can have an array of GlobalRefAttr, check if this op is one
         // of them.
@@ -1669,7 +1684,7 @@ GlobalRefOp::verifySymbolUses(mlir::SymbolTableCollection &symTables) {
           for (auto attr :
                argAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
             if (auto symRef = attr.getAs<hw::InnerSymAttr>("hw.exportPort"))
-              if (symRef.getSymName() == innerSym)
+              if (symRef.getSymName() == symName)
                 if (hasGlobalRef(attr.get(GlobalRefAttr::DialectAttrName)))
                   return success();
 
@@ -1678,18 +1693,18 @@ GlobalRefOp::verifySymbolUses(mlir::SymbolTableCollection &symTables) {
           for (auto attr :
                resAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
             if (auto symRef = attr.getAs<hw::InnerSymAttr>("hw.exportPort"))
-              if (symRef.getSymName() == innerSym)
+              if (symRef.getSymName() == symName)
                 if (hasGlobalRef(attr.get(GlobalRefAttr::DialectAttrName)))
                   return success();
       }
     }
     if (innerSymOpNotFound)
-      return (*this)->emitOpError("operation:'" + innerSym.str() +
+      return (*this)->emitOpError("operation:'" + symName.str() +
                                   "' in module:'" + modName.str() +
                                   "' could not be found");
     if (glblSymNotFound)
       return (*this)->emitOpError(
-          "operation:'" + innerSym.str() + "' in module:'" + modName.str() +
+          "operation:'" + symName.str() + "' in module:'" + modName.str() +
           "' does not contain a reference to '" + symNameAttr.str() + "'");
   }
   return success();

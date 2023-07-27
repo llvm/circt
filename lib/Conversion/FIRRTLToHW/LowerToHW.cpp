@@ -2918,16 +2918,16 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
 
   // Add symbol if DontTouch annotation present.
   // For now, also ensure has symbol if forceable.
-  auto symName = getInnerSymName(op);
+  auto innerSym = op.getInnerSymAttr();
   if ((AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) ||
        op.getNameKind() == NameKindEnum::InterestingName || op.isForceable()) &&
-      !symName)
-    symName = op.getNameAttr();
+      !innerSym)
+    innerSym = hw::InnerSymAttr::get(op.getNameAttr());
 
   // Create a reg op, wiring itself to its input.
   Backedge inputEdge = backedgeBuilder.get(resultType);
   auto reg = builder.create<seq::FirRegOp>(inputEdge, clockVal,
-                                           op.getNameAttr(), symName);
+                                           op.getNameAttr(), innerSym);
 
   // Pass along the start and end random initialization bits for this register.
   if (auto randomRegister = op->getAttr("firrtl.random_init_register"))
@@ -2965,18 +2965,18 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
 
   // Add symbol if DontTouch annotation present.
   // For now, also ensure has symbol if forceable.
-  auto symName = getInnerSymName(op);
+  auto innerSym = op.getInnerSymAttr();
   if ((AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) ||
        op.getNameKind() == NameKindEnum::InterestingName || op.isForceable()) &&
-      !symName)
-    symName = op.getNameAttr();
+      !innerSym)
+    innerSym = hw::InnerSymAttr::get(op.getNameAttr());
 
   // Create a reg op, wiring itself to its input.
   bool isAsync = type_isa<AsyncResetType>(op.getResetSignal().getType());
   Backedge inputEdge = backedgeBuilder.get(resultType);
   auto reg =
       builder.create<seq::FirRegOp>(inputEdge, clockVal, op.getNameAttr(),
-                                    resetSignal, resetValue, symName, isAsync);
+                                    resetSignal, resetValue, innerSym, isAsync);
 
   // Pass along the start and end random initialization bits for this register.
   if (auto randomRegister = op->getAttr("firrtl.random_init_register"))
@@ -3024,7 +3024,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   auto memDecl = builder.create<seq::FirMemOp>(
       memType, memSummary.readLatency, memSummary.writeLatency,
       memSummary.readUnderWrite, memSummary.writeUnderWrite, op.getNameAttr(),
-      getInnerSymName(op), memInit, op.getPrefixAttr(), Attribute{});
+      op.getInnerSymAttr(), memInit, op.getPrefixAttr(), Attribute{});
 
   // If the module is outside the DUT, set the appropriate output directory for
   // the memory.
@@ -3204,11 +3204,13 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   // for it and generate a bind op.  Enter the bind into global
   // CircuitLoweringState so that this can be moved outside of module once
   // we're guaranteed to not be a parallel context.
-  StringAttr symbol = getInnerSymName(oldInstance);
+  auto innerSym = oldInstance.getInnerSymAttr();
   if (oldInstance.getLowerToBind()) {
-    if (!symbol)
-      symbol = builder.getStringAttr("__" + oldInstance.getName() + "__");
-    auto bindOp = builder.create<sv::BindOp>(theModule.getNameAttr(), symbol);
+    if (!innerSym)
+      innerSym = hw::InnerSymAttr::get(
+          builder.getStringAttr("__" + oldInstance.getName() + "__"));
+    auto bindOp = builder.create<sv::BindOp>(theModule.getNameAttr(),
+                                             innerSym.getSymName());
     // If the lowered op already had output file information, then use that.
     // Otherwise, generate some default bind information.
     if (auto outputFile = oldInstance->getAttr("output_file"))
@@ -3220,7 +3222,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
   // Create the new hw.instance operation.
   auto newInstance = builder.create<hw::InstanceOp>(
-      newModule, oldInstance.getNameAttr(), operands, parameters, symbol);
+      newModule, oldInstance.getNameAttr(), operands, parameters, innerSym);
 
   if (oldInstance.getLowerToBind())
     newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));
@@ -3228,7 +3230,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   if (newInstance.getInnerSymAttr())
     if (auto forceName = circuitState.instanceForceNames.lookup(
             {cast<hw::HWModuleOp>(newInstance->getParentOp()).getNameAttr(),
-             newInstance.getInnerSymAttr()}))
+             newInstance.getInnerNameAttr()}))
       newInstance->setAttr("hw.verilogName", forceName);
 
   // Now that we have the new hw.instance, we need to remap all of the users

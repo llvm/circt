@@ -199,7 +199,7 @@ void StateEncoding::setEncoding(StateOp state, Value v, bool wire) {
     auto stateType = getStateType();
     auto stateEncodingWire = b.create<sv::RegOp>(
         loc, stateType, b.getStringAttr("to_" + state.getName()),
-        /*inner_sym=*/state.getNameAttr());
+        hw::InnerSymAttr::get(state.getNameAttr()));
     b.create<sv::AssignOp>(loc, stateEncodingWire, v);
     encodedValue = b.create<sv::ReadInOutOp>(loc, stateEncodingWire);
   } else

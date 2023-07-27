@@ -367,6 +367,11 @@ ArrayAttr DynamicInstanceOp::globalRefPath() {
 // InstanceOp
 //===----------------------------------------------------------------------===//
 
+std::optional<size_t> InstanceOp::getTargetResultIndex() {
+  // Inner symbols on instance operations target the op not any result.
+  return std::nullopt;
+}
+
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto *module =
       symbolTable.lookupNearestSymbolFrom(*this, getModuleNameAttr());
@@ -384,8 +389,8 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 /// Instance name is the same as the symbol name. This may change in the
 /// future.
-StringRef InstanceOp::getInstanceName() { return getSymName(); }
-StringAttr InstanceOp::getInstanceNameAttr() { return getSymNameAttr(); }
+StringRef InstanceOp::getInstanceName() { return *getInnerName(); }
+StringAttr InstanceOp::getInstanceNameAttr() { return getInnerNameAttr(); }
 
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
@@ -445,8 +450,8 @@ InstanceOp::verifySignatureMatch(const hw::ModulePortInfo &ports) {
 void InstanceOp::build(OpBuilder &builder, OperationState &state,
                        ArrayRef<Type> resultTypes, StringAttr symName,
                        FlatSymbolRefAttr moduleName, ArrayRef<Value> inputs) {
-  build(builder, state, resultTypes, symName, moduleName, inputs, ArrayAttr(),
-        SymbolRefAttr());
+  build(builder, state, resultTypes, hw::InnerSymAttr::get(symName), moduleName,
+        inputs, ArrayAttr(), SymbolRefAttr());
 }
 
 //===----------------------------------------------------------------------===//

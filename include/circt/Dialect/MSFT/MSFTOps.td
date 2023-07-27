@@ -7,16 +7,17 @@
 //===----------------------------------------------------------------------===//
 
 include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Dialect/HW/HWTypes.td"
 
 def InstanceOp : MSFTOp<"instance", [
-        Symbol,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+        DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>,
         DeclareOpInterfaceMethods<HWInstanceLike>
     ]> {
   let summary = "Instantiate a module";
 
-  let arguments = (ins SymbolNameAttr:$sym_name,
+  let arguments = (ins InnerSymAttr:$inner_sym,
                        FlatSymbolRefAttr:$moduleName,
                        Variadic<AnyType>:$inputs,
                        OptionalAttr<ParamDeclArrayAttr>:$parameters,
@@ -24,7 +25,7 @@ def InstanceOp : MSFTOp<"instance", [
   let results = (outs Variadic<AnyType>);
 
   let builders = [
-    OpBuilder<(ins "ArrayRef<Type>":$resultTypes, "StringAttr":$sym_name,
+    OpBuilder<(ins "ArrayRef<Type>":$resultTypes, "StringAttr":$symName,
                    "FlatSymbolRefAttr":$moduleName, "ArrayRef<Value>":$inputs)>
   ];
 
@@ -43,7 +44,7 @@ def InstanceOp : MSFTOp<"instance", [
 
   /// sym keyword for optional symbol simplifies parsing
   let assemblyFormat = [{
-    $sym_name $moduleName `(` $inputs `)` custom<ParameterList>($parameters)
+    $inner_sym $moduleName `(` $inputs `)` custom<ParameterList>($parameters)
       attr-dict `:` functional-type($inputs, results)
   }];
 }

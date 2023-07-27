@@ -54,7 +54,9 @@ class InstanceBuilder(support.NamedValueOpView):
     module_name = FlatSymbolRefAttr.get(StringAttr(module.name).value)
     inst_param_array = create_parameters(parameters, module)
     if sym_name:
-      sym_name = StringAttr.get(sym_name)
+      inner_sym = hw.InnerSymAttr.get(StringAttr.get(sym_name))
+    else:
+      inner_sym = None
     pre_args = [instance_name, module_name]
     post_args = [
         ArrayAttr.get([StringAttr.get(x) for x in self.operand_names()]),
@@ -83,7 +85,7 @@ class InstanceBuilder(support.NamedValueOpView):
                      pre_args,
                      post_args,
                      needs_result_type=True,
-                     inner_sym=sym_name,
+                     inner_sym=inner_sym,
                      loc=loc,
                      ip=ip)
 

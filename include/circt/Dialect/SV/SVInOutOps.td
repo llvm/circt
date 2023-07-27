@@ -11,26 +11,28 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Types.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 
 // Note that net declarations like 'wire' should not appear in an always block.
 def WireOp : SVOp<"wire", [NonProceduralOp,
-          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+          DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a SystemVerilog Net Declaration of 'wire' type.
      See SV Spec 6.7, pp97.
     }];
 
-  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym);
+  let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
-                      CArg<"StringAttr", "StringAttr()">:$name,
-                      CArg<"StringAttr", "StringAttr()">:$inner_sym)>,
+                   CArg<"StringAttr", "StringAttr()">:$name,
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$inner_sym)>,
     OpBuilder<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name));
@@ -51,20 +53,21 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
 }
 
 def RegOp : SVOp<"reg", [
-          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+          DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>]> {
   let summary = "Define a new `reg` in SystemVerilog";
    let description = [{
      Declare a SystemVerilog Variable Declaration of 'reg' type.
      See SV Spec 6.8, pp100.
    }];
-  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym);
+  let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
                     CArg<"StringAttr", "StringAttr()">:$name,
-                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>
+                    CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$inner_sym)>
   ];
 
   // We handle the name in a custom way, so we use a customer parser/printer.
@@ -223,22 +226,23 @@ def StructFieldInOutOp : SVOp<"struct_field_inout",
 
 }
 
-def LogicOp : SVOp<"logic", [DeclareOpInterfaceMethods<OpAsmOpInterface,
-                                                       ["getAsmResultNames"]>]> {
+def LogicOp : SVOp<"logic", [
+      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+      DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>]> {
   let summary = "Define a logic";
   let description = [{
     Declare a SystemVerilog Variable Declaration of 'logic' type.
     See SV Spec 6.8, pp100.
     }];
 
-  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym);
+  let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
-                      CArg<"StringAttr", "StringAttr()">:$name,
-                      CArg<"StringAttr", "StringAttr()">:$inner_sym)>,
+                   CArg<"StringAttr", "StringAttr()">:$name,
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$inner_sym)>,
     OpBuilder<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name));

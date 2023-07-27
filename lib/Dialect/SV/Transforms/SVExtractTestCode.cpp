@@ -31,7 +31,7 @@ using namespace mlir;
 using namespace circt;
 using namespace sv;
 
-using BindTable = DenseMap<Attribute, SmallDenseMap<Attribute, sv::BindOp>>;
+using BindTable = DenseMap<StringAttr, SmallDenseMap<StringAttr, sv::BindOp>>;
 
 //===----------------------------------------------------------------------===//
 // StubExternalModules Helpers
@@ -229,15 +229,16 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   b = OpBuilder::atBlockTerminator(op.getBodyBlock());
   auto inst = b.create<hw::InstanceOp>(
       op.getLoc(), newMod, newMod.getName(), realInputs, ArrayAttr(),
-      b.getStringAttr(
-          ("__ETC_" + getVerilogModuleNameAttr(op).getValue() + suffix).str()));
+      hw::InnerSymAttr::get(b.getStringAttr(
+          ("__ETC_" + getVerilogModuleNameAttr(op).getValue() + suffix)
+              .str())));
   inst->setAttr("doNotPrint", b.getBoolAttr(true));
   b = OpBuilder::atBlockEnd(
       &op->getParentOfType<mlir::ModuleOp>()->getRegion(0).front());
 
   auto bindOp = b.create<sv::BindOp>(op.getLoc(), op.getNameAttr(),
-                                     inst.getInnerSymAttr());
-  bindTable[op.getNameAttr()][inst.getInnerSymAttr()] = bindOp;
+                                     inst.getInnerSymAttr().getSymName());
+  bindTable[op.getNameAttr()][inst.getInnerSymAttr().getSymName()] = bindOp;
   if (fileName)
     bindOp->setAttr("output_file", fileName);
   return newMod;
@@ -336,7 +337,7 @@ static void addExistingBinds(Block *topLevelModule, BindTable &bindTable) {
 static void
 inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
                 BindTable &bindTable, SmallPtrSetImpl<Operation *> &opsToErase,
-                llvm::DenseSet<hw::InnerRefAttr> &innerRefUsedByNonBindOp) {
+                llvm::DenseSet<StringAttr> &innerRefUsedByNonBindOp) {
 
   // Check if the module only has inputs.
   if (oldMod.getNumOutputs() != 0)
@@ -346,29 +347,30 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
   // declaration with an inner symbol referred by non-bind ops (e.g. hierpath).
   for (auto port : oldMod.getPorts()) {
     if (port.sym) {
-      // Reject if the inner sym is a per-field symbol, or its inner ref is used
-      // by non-bind op.
-      if (!port.sym.getSymName() || port.sym.size() != 1 ||
-          innerRefUsedByNonBindOp.count(hw::InnerRefAttr::get(
-              oldMod.getModuleNameAttr(), port.sym.getSymName()))) {
-        oldMod.emitWarning() << "module " << oldMod.getModuleName()
-                             << " is an input only module but cannot "
-                                "be inlined because a signal "
-                             << port.name << " is referred by name";
-        return;
+      for (auto property : port.sym) {
+        if (innerRefUsedByNonBindOp.count(property.getName())) {
+          oldMod.emitWarning() << "module " << oldMod.getModuleName()
+                               << " is an input only module but cannot "
+                                  "be inlined because a signal "
+                               << port.name << " is referred by name";
+          return;
+        }
       }
     }
   }
-  for (auto &op : *oldMod.getBodyBlock()) {
-    if (auto innerSym = op.getAttrOfType<StringAttr>("inner_sym"))
-      if (innerRefUsedByNonBindOp.count(
-              hw::InnerRefAttr::get(oldMod.getModuleNameAttr(), innerSym))) {
-        op.emitWarning()
-            << "module " << oldMod.getModuleName()
-            << " is an input only module but cannot be inlined because signals "
-               "are referred by name";
-        return;
+
+  for (auto op : oldMod.getBodyBlock()->getOps<hw::InnerSymbolOpInterface>()) {
+    if (auto innerSym = op.getInnerSymAttr()) {
+      for (auto property : innerSym) {
+        if (innerRefUsedByNonBindOp.count(property.getName())) {
+          op.emitWarning() << "module " << oldMod.getModuleName()
+                           << " is an input only module but cannot be inlined "
+                              "because signals "
+                              "are referred by name";
+          return;
+        }
       }
+    }
   }
 
   // Get the instance graph node for the old module.
@@ -423,17 +425,24 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
         continue;
 
       // If the op has an inner sym, first create a new inner sym for it.
-      if (auto innerSym = op.getAttrOfType<StringAttr>("inner_sym")) {
-        auto newName = b.getStringAttr(nameSpace.newName(innerSym.getValue()));
-        auto result = symMapping.insert({innerSym, newName});
-        (void)result;
-        assert(result.second && "inner symbols must be unique");
+      if (auto innerSymOp = dyn_cast<hw::InnerSymbolOpInterface>(op)) {
+        if (auto innerSym = innerSymOp.getInnerSymAttr()) {
+          for (auto property : innerSymOp.getInnerSymAttr()) {
+            auto oldName = property.getName();
+            auto newName =
+                b.getStringAttr(nameSpace.newName(oldName.getValue()));
+            auto result = symMapping.insert({oldName, newName});
+            (void)result;
+            assert(result.second && "inner symbols must be unique");
+          }
+        }
       }
 
       // For instances in the bind table, update the bind with the new parent.
       if (auto innerInst = dyn_cast<hw::InstanceOp>(op)) {
         if (auto innerInstSym = innerInst.getInnerSymAttr()) {
-          auto it = bindTable[oldMod.getNameAttr()].find(innerInstSym);
+          auto it =
+              bindTable[oldMod.getNameAttr()].find(innerInstSym.getSymName());
           if (it != bindTable[oldMod.getNameAttr()].end()) {
             sv::BindOp bind = it->second;
             auto oldInnerRef = bind.getInstanceAttr();
@@ -470,9 +479,18 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
           instParentNode->addInstance(innerInst, innerInstModule);
         }
 
-        // If the op has an inner sym, then attach an updated inner sym.
-        if (auto innerSym = op.getAttrOfType<StringAttr>("inner_sym"))
-          clonedOp->setAttr("inner_sym", symMapping[innerSym]);
+        // If the cloned op has an inner sym, then attach an updated inner sym.
+        if (auto innerSymOp = dyn_cast<hw::InnerSymbolOpInterface>(clonedOp)) {
+          SmallVector<hw::InnerSymPropertiesAttr> properties;
+          for (auto property : innerSymOp.getInnerSymAttr()) {
+            auto newSymName = symMapping[property.getName()];
+            properties.push_back(hw::InnerSymPropertiesAttr::get(
+                op.getContext(), newSymName, property.getFieldID(),
+                property.getSymVisibility()));
+          }
+          auto innerSym = hw::InnerSymAttr::get(op.getContext(), properties);
+          innerSymOp.setInnerSymbolAttr(innerSym);
+        }
       }
     }
 
@@ -551,9 +569,10 @@ bool isInDesign(hw::HWSymbolCache &symCache, Operation *op,
     return true;
 
   // If an op has an innner sym, don't extract.
-  if (auto innerSym = op->getAttrOfType<StringAttr>("inner_sym"))
-    if (!innerSym.getValue().empty())
-      return true;
+  if (auto innerSymOp = dyn_cast<hw::InnerSymbolOpInterface>(op))
+    if (auto innerSym = innerSymOp.getInnerSymAttr())
+      if (!innerSym.empty())
+        return true;
 
   // Check whether the operation is a verification construct. Instance op could
   // be used as verification construct so make sure to check this property
@@ -683,12 +702,12 @@ void SVExtractTestCodeImplPass::runOnOperation() {
   // inner refs users globally. However we do want to inline modules which
   // contain bound instances so create a set of inner refs used by non bind op
   // in order to allow bind ops.
-  DenseSet<hw::InnerRefAttr> innerRefUsedByNonBindOp;
+  DenseSet<StringAttr> innerRefUsedByNonBindOp;
   top.walk([&](Operation *op) {
     if (!isa<sv::BindOp>(op))
       for (auto attr : op->getAttrs())
         attr.getValue().walk([&](hw::InnerRefAttr attr) {
-          innerRefUsedByNonBindOp.insert(attr);
+          innerRefUsedByNonBindOp.insert(attr.getName());
         });
   });
 

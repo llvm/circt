@@ -5015,9 +5015,14 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
 
     // Print debug info.
     if (state.options.printDebugInfo) {
-      StringAttr sym = op->getAttr("inner_sym").dyn_cast_or_null<StringAttr>();
-      if (sym && !sym.getValue().empty())
-        ps << " /* inner_sym: " << PPExtString(sym.getValue()) << " */";
+      if (auto innerSymOp = dyn_cast<hw::InnerSymbolOpInterface>(op)) {
+        auto innerSym = innerSymOp.getInnerSymAttr();
+        if (innerSym && !innerSym.empty()) {
+          ps << " /* ";
+          ps.invokeWithStringOS([&](auto &os) { os << innerSym; });
+          ps << " */";
+        }
+      }
     }
 
     if (auto localparam = dyn_cast<LocalParamOp>(op)) {
@@ -5458,11 +5463,12 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
           [&](auto &os) { printUnpackedTypePostfix(portType, os); });
 
       // Emit the symbol.
-      if (state.options.printDebugInfo && portInfo.at(portIdx).sym &&
-          !portInfo.at(portIdx).sym.empty())
-        ps << " /* inner_sym: "
-           << PPExtString(portInfo.at(portIdx).sym.getSymName().getValue())
-           << " */";
+      auto innerSym = portInfo.at(portIdx).sym;
+      if (state.options.printDebugInfo && innerSym && !innerSym.empty()) {
+        ps << " /* ";
+        ps.invokeWithStringOS([&](auto &os) { os << innerSym; });
+        ps << " */";
+      }
 
       // Emit the comma if this is not the last real port.
       if (portIdx != lastNonZeroPort && portIdx != lastPort)
@@ -5566,9 +5572,10 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   auto collectInstanceSymbolsAndBinds = [&](HWModuleOp moduleOp) {
     moduleOp.walk([&](Operation *op) {
       // Populate the symbolCache with all operations that can define a symbol.
-      if (auto name = op->getAttrOfType<StringAttr>(
+      if (auto name = op->getAttrOfType<InnerSymAttr>(
               hw::InnerSymbolTable::getInnerSymbolAttrName()))
-        symbolCache.addDefinition(moduleOp.getNameAttr(), name, op);
+        symbolCache.addDefinition(moduleOp.getNameAttr(), name.getSymName(),
+                                  op);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
     });

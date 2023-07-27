@@ -99,8 +99,8 @@ public:
 
     // If the seq::CompRegOp has an inner_sym attribute, set this for the
     // sv::RegOp inner_sym attribute.
-    if (reg.getSymName().has_value())
-      svReg.setInnerSymAttr(reg.getSymNameAttr());
+    if (reg.getInnerSymAttr())
+      svReg.setInnerSymAttr(reg.getInnerSymAttr());
 
     circt::sv::setSVAttributes(svReg, circt::sv::getSVAttributes(reg));
 

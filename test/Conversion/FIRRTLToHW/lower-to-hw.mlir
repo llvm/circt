@@ -131,7 +131,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %out8 = firrtl.wire sym @__Simple__out8 : !firrtl.uint<4>
     firrtl.connect %out8, %in2 : !firrtl.uint<4>, !firrtl.uint<2>
 
-    // CHECK: %test-name = hw.wire {{%.+}} sym @"__Simple__test-name" : i4
+    // CHECK: %test-name = hw.wire {{%.+}} sym @__Simple__test-name : i4
     firrtl.wire {name = "test-name", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
 
     // CHECK: = hw.wire {{%.+}} : i2

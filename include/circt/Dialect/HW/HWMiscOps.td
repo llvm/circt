@@ -56,7 +56,8 @@ def ConstantOp
 
 def WireOp : HWOp<"wire", [
     SameOperandsAndResultType,
-    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+    DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
   let summary = "Assign a name or symbol to an SSA edge";
   let description = [{
     An `hw.wire` is used to assign a human-readable name or a symbol for remote
@@ -88,7 +89,7 @@ def WireOp : HWOp<"wire", [
 
   let arguments = (ins AnyType:$input,
                        OptionalAttr<StrAttr>:$name,
-                       OptionalAttr<SymbolNameAttr>:$inner_sym);
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs AnyType:$result);
 
   let hasFolder = true;
@@ -103,7 +104,8 @@ def WireOp : HWOp<"wire", [
       if (auto attr = name.get(context))
         odsState.addAttribute(getNameAttrName(odsState.name), attr);
       if (auto attr = inner_sym.get(context))
-        odsState.addAttribute(getInnerSymAttrName(odsState.name), attr);
+        odsState.addAttribute(getInnerSymAttrName(odsState.name),
+                              InnerSymAttr::get(attr));
       odsState.addTypes(input.getType());
     }]>
   ];

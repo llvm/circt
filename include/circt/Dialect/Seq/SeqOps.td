@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Seq/SeqAttributes.td"
 include "circt/Dialect/Seq/SeqOpInterfaces.td"
@@ -25,7 +26,8 @@ def CompRegOp : SeqOp<"compreg",
     [Pure, Clocked, Resettable,
      AllTypesMatch<["input", "data"/*, "resetValue"*/]>,
      SameVariadicOperandSize,
-     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]> ]> {
+     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+     DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>]> {
        // AllTypesMatch doesn't work with Optional types yet.
 
   let summary = "Register a value, storing it for one cycle";
@@ -33,22 +35,25 @@ def CompRegOp : SeqOp<"compreg",
 
   let arguments = (ins AnyType:$input, I1:$clk, StrAttr:$name,
     Optional<I1>:$reset, Optional<AnyType>:$resetValue,
-    OptionalAttr<SymbolNameAttr>:$sym_name);
+    OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs AnyType:$data);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 
   let builders = [
-    OpBuilder<(ins "Value":$input, "Value":$clk, "StringRef":$sym_name), [{
-      return build($_builder, $_state, input.getType(),
-                   input, clk, sym_name, Value(), Value(),
-                   StringAttr::get($_builder.getContext(), sym_name));
+    /// Create a register with an inner_sym matching the register's name.
+    OpBuilder<(ins "Value":$input, "Value":$clk, "StringRef":$name), [{
+      auto nameAttr = StringAttr::get($_builder.getContext(), name);
+      return build($_builder, $_state, input.getType(), input, clk, nameAttr,
+                   Value(), Value(), hw::InnerSymAttr::get(nameAttr));
     }]>,
+    /// Create a register with a reset, with an inner_sym matching the 
+    /// register's name.
     OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$reset,
-                   "Value":$rstValue, "StringRef":$sym_name), [{
-      return build($_builder, $_state, input.getType(),
-                   input, clk, sym_name, reset, rstValue,
-                   StringAttr::get($_builder.getContext(), sym_name));
+                   "Value":$rstValue, "StringRef":$name), [{
+      auto nameAttr = StringAttr::get($_builder.getContext(), name);
+      return build($_builder, $_state, input.getType(), input, clk, nameAttr,
+                   reset, rstValue, hw::InnerSymAttr::get(nameAttr));
     }]>,
   ];
 }
@@ -57,7 +62,8 @@ def CompRegClockEnabledOp : SeqOp<"compreg.ce",
     [Pure, Clocked, Resettable,
      AllTypesMatch<["input", "data"/*, "resetValue"*/]>,
      SameVariadicOperandSize,
-     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]> ]> {
+     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+     DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
        // AllTypesMatch doesn't work with Optional types yet.
 
   let summary = "When enabled, register a value";
@@ -65,24 +71,24 @@ def CompRegClockEnabledOp : SeqOp<"compreg.ce",
 
   let arguments = (ins AnyType:$input, I1:$clk, I1:$clockEnable, StrAttr:$name,
     Optional<I1>:$reset, Optional<AnyType>:$resetValue,
-    OptionalAttr<SymbolNameAttr>:$sym_name);
+    OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs AnyType:$data);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 
   let builders = [
     OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$ce,
-                   "StringRef":$sym_name), [{
-      return build($_builder, $_state, input.getType(),
-                   input, clk, ce, sym_name, Value(), Value(),
-                   StringAttr::get($_builder.getContext(), sym_name));
+                   "StringRef":$name), [{
+      auto nameAttr = StringAttr::get($_builder.getContext(), name);
+      return build($_builder, $_state, input.getType(), input, clk, ce,
+                   nameAttr, Value(), Value(), hw::InnerSymAttr::get(nameAttr));
     }]>,
     OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$ce,
-                   "Value":$reset, "Value":$rstValue, "StringRef":$sym_name),
+                   "Value":$reset, "Value":$rstValue, "StringRef":$name),
     [{
-      return build($_builder, $_state, input.getType(),
-                   input, clk, ce, sym_name, reset, rstValue,
-                   StringAttr::get($_builder.getContext(), sym_name));
+      auto nameAttr = StringAttr::get($_builder.getContext(), name);
+      return build($_builder, $_state, input.getType(), input, clk, ce,
+                   nameAttr, reset, rstValue, hw::InnerSymAttr::get(nameAttr));
     }]>,
   ];
 }
@@ -95,7 +101,8 @@ def FirRegOp : SeqOp<"firreg",
     [Pure, Clocked, Resettable,
      AllTypesMatch<["next", "data"/*, "resetValue"*/]>,
      SameVariadicOperandSize, MemoryEffects<[MemWrite, MemRead, MemAlloc]>,
-     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+     DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>]> {
       // AllTypesMatch doesn't work with Optional types yet.
 
   let summary = "Register with preset and sync or async reset";
@@ -132,7 +139,7 @@ def FirRegOp : SeqOp<"firreg",
   }];
 
   let arguments = (ins AnyType:$next, I1:$clk, StrAttr:$name,
-                       OptionalAttr<SymbolNameAttr>:$inner_sym,
+                       OptionalAttr<InnerSymAttr>:$inner_sym,
                        OptionalAttr<APIntAttr>:$preset,
                        Optional<I1>:$reset, Optional<AnyType>:$resetValue,
                        UnitAttr:$isAsync);
@@ -144,11 +151,11 @@ def FirRegOp : SeqOp<"firreg",
   let builders = [
     OpBuilder<(ins "Value":$next, "Value":$clk,
                    "StringAttr":$name,
-                   CArg<"StringAttr", "{}">:$inner_sym)>,
+                   CArg<"hw::InnerSymAttr", "{}">:$inner_sym)>,
     OpBuilder<(ins "Value":$next, "Value":$clk,
                    "StringAttr":$name,
                    "Value":$reset, "Value":$resetValue,
-                   CArg<"StringAttr", "{}">:$inner_sym,
+                   CArg<"hw::InnerSymAttr", "{}">:$inner_sym,
                    CArg<"bool", "false">:$isAsync)>
   ];
 
@@ -311,7 +318,8 @@ def ClockGateOp : SeqOp<"clock_gate", [Pure]> {
 
 def FirMemOp : SeqOp<"firmem", [
   MemoryEffects<[MemAlloc]>,
-  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+  DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>
 ]> {
   let summary = "A FIRRTL-flavored memory";
   let description = [{
@@ -331,7 +339,7 @@ def FirMemOp : SeqOp<"firmem", [
     RUWAttr:$ruw,
     WUWAttr:$wuw,
     OptionalAttr<StrAttr>:$name,
-    OptionalAttr<SymbolNameAttr>:$inner_sym,
+    OptionalAttr<InnerSymAttr>:$inner_sym,
     OptionalAttr<FirMemInitAttr>:$init,
     OptionalAttr<StrAttr>:$prefix,
     OptionalAttr<AnyAttr>:$output_file

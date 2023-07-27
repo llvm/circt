@@ -58,15 +58,15 @@ void HWExportModuleHierarchyPass::printHierarchy(
     if (moduleNamespaces.find(moduleOp) == moduleNamespaces.end())
       moduleNamespaces.insert({moduleOp, hw::ModuleNamespace(moduleOp)});
     hw::ModuleNamespace &ns = moduleNamespaces[moduleOp];
-    innerSym =
-        StringAttr::get(inst.getContext(), ns.newName(inst.getInstanceName()));
+    innerSym = hw::InnerSymAttr::get(
+        StringAttr::get(inst.getContext(), ns.newName(inst.getInstanceName())));
     inst->setAttr("inner_sym", innerSym);
   }
 
   j.object([&] {
     j.attribute("instance_name", ("{{" + Twine(id++) + "}}").str());
-    symbols.push_back(
-        hw::InnerRefAttr::get(moduleOp.getModuleNameAttr(), innerSym));
+    symbols.push_back(hw::InnerRefAttr::get(moduleOp.getModuleNameAttr(),
+                                            innerSym.getSymName()));
     j.attribute("module_name", ("{{" + Twine(id++) + "}}").str());
     symbols.push_back(inst.getModuleNameAttr());
     j.attributeArray("instances", [&] {

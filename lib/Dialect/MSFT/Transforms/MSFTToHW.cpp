@@ -87,7 +87,7 @@ InstanceOpLowering::matchAndRewrite(InstanceOp msftInst, OpAdaptor adaptor,
       auto instAppendParam = hw::ParamExprAttr::get(
           hw::PEO::StrConcat,
           {hw::ParamDeclRefAttr::get(instHierParamName, rewriter.getNoneType()),
-           rewriter.getStringAttr("."), msftInst.getSymNameAttr()});
+           rewriter.getStringAttr("."), msftInst.getInstanceNameAttr()});
       paramValues = rewriter.getArrayAttr(
           {hw::ParamDeclAttr::get("__INST_HIER", instAppendParam)});
     } else {
@@ -105,7 +105,7 @@ InstanceOpLowering::matchAndRewrite(InstanceOp msftInst, OpAdaptor adaptor,
       msftInst.getLoc(), referencedModule, msftInst.getInstanceNameAttr(),
       SmallVector<Value>(adaptor.getOperands().begin(),
                          adaptor.getOperands().end()),
-      paramValues, msftInst.getSymNameAttr());
+      paramValues, msftInst.getInnerSymAttr());
   hwInst->setDialectAttrs(msftInst->getDialectAttrs());
   rewriter.replaceOp(msftInst, hwInst.getResults());
   return success();
