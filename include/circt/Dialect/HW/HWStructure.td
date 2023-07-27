@@ -61,8 +61,16 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     }
 
     ::circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
-      for (::mlir::NamedAttribute argAttr :
-           ::mlir::function_interface_impl::getArgAttrs(*this, portIndex))
+      ArrayRef<NamedAttribute> portAttrs;
+      if (portIndex < getNumInputs()) {
+        portAttrs = ::mlir::function_interface_impl::getArgAttrs(*this,
+                                                                 portIndex);
+      } else {
+        portIndex -= getNumInputs();
+        portAttrs = ::mlir::function_interface_impl::getResultAttrs(*this,
+                                                                    portIndex);
+      }
+      for (auto argAttr : portAttrs)
         if (auto sym = argAttr.getValue().dyn_cast<::circt::hw::InnerSymAttr>())
           return sym;
       return ::circt::hw::InnerSymAttr();
