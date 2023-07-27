@@ -9,7 +9,6 @@
 #ifndef BINDINGS_PYTHON_OM_OPS
 #define BINDINGS_PYTHON_OM_OPS
 
-include "mlir/Bindings/Python/Attributes.td"
 include "circt/Dialect/OM/OM.td"
 
 #endif

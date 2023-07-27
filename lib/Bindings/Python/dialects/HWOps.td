@@ -9,7 +9,6 @@
 #ifndef BINDINGS_PYTHON_HW_OPS
 #define BINDINGS_PYTHON_HW_OPS
 
-include "mlir/Bindings/Python/Attributes.td"
 include "circt/Dialect/HW/HW.td"
 
 #endif
