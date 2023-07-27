@@ -1929,7 +1929,7 @@ void GrandCentralPass::runOnOperation() {
               LLVM_DEBUG({
                 llvm::dbgs()
                     << "Found companion module: "
-                    << companionNode->getModule().getModuleLikeName() << "\n"
+                    << companionNode->getModule().getModuleName() << "\n"
                     << "  submodules exclusively instantiated "
                        "(including companion):\n";
               });
@@ -1949,7 +1949,7 @@ void GrandCentralPass::runOnOperation() {
 
                 LLVM_DEBUG({
                   llvm::dbgs()
-                      << "    - module: " << mod.getModuleLikeName() << "\n";
+                      << "    - module: " << mod.getModuleName() << "\n";
                 });
 
                 if (auto extmodule = dyn_cast<FExtModuleOp>(*mod)) {

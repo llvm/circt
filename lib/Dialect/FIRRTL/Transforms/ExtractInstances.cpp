@@ -324,9 +324,9 @@ void ExtractInstancesPass::collectAnnos() {
     worklist.push_back(instanceGraph->lookup(cast<hw::ModuleLike>(op)));
   while (!worklist.empty()) {
     auto *module = worklist.pop_back_val();
-    dutModuleNames.insert(module->getModule().getModuleLikeNameAttr());
+    dutModuleNames.insert(module->getModule().getModuleNameAttr());
     LLVM_DEBUG(llvm::dbgs()
-               << "- " << module->getModule().getModuleLikeName() << "\n");
+               << "- " << module->getModule().getModuleName() << "\n");
     for (auto *instRecord : *module) {
       auto *target = instRecord->getTarget();
       if (dutModules.insert(target->getModule()).second)

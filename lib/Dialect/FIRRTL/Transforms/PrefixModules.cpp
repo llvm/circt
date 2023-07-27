@@ -188,7 +188,7 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, StringRef oldName,
         } else {
           auto target = instanceGraph->lookup(moduleName)->getModule();
           newTarget = StringAttr::get(context, prefix + getPrefix(target) +
-                                                   target.getModuleLikeName());
+                                                   target.getModuleName());
         }
         return {hw::InnerRefAttr::get(newTarget, symName), WalkResult::skip()};
       });

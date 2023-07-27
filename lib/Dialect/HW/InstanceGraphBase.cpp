@@ -73,7 +73,7 @@ InstanceGraphBase::InstanceGraphBase(Operation *parent) : parent(parent) {
 
   // Construct an instance graph sequentially.
   for (auto &[module, instances] : moduleToInstances) {
-    auto name = module.getModuleLikeNameAttr();
+    auto name = module.getModuleNameAttr();
     auto *currentNode = getOrAddNode(name);
     currentNode->module = module;
     for (auto instanceOp : instances) {
@@ -85,11 +85,10 @@ InstanceGraphBase::InstanceGraphBase(Operation *parent) : parent(parent) {
 }
 
 InstanceGraphNode *InstanceGraphBase::addModule(ModuleLike module) {
-  assert(!nodeMap.count(module.getModuleLikeNameAttr()) &&
-         "module already added");
+  assert(!nodeMap.count(module.getModuleNameAttr()) && "module already added");
   auto *node = new InstanceGraphNode();
   node->module = module;
-  nodeMap[module.getModuleLikeNameAttr()] = node;
+  nodeMap[module.getModuleNameAttr()] = node;
   nodes.push_back(node);
   return node;
 }
@@ -100,7 +99,7 @@ void InstanceGraphBase::erase(InstanceGraphNode *node) {
   // Erase all instances inside this module.
   for (auto *instance : llvm::make_early_inc_range(*node))
     instance->erase();
-  nodeMap.erase(node->getModule().getModuleLikeNameAttr());
+  nodeMap.erase(node->getModule().getModuleNameAttr());
   nodes.erase(node);
 }
 
@@ -111,7 +110,7 @@ InstanceGraphNode *InstanceGraphBase::lookup(StringAttr name) {
 }
 
 InstanceGraphNode *InstanceGraphBase::lookup(ModuleLike op) {
-  return lookup(cast<ModuleLike>(op).getModuleLikeNameAttr());
+  return lookup(cast<ModuleLike>(op).getModuleNameAttr());
 }
 
 ModuleLike InstanceGraphBase::getReferencedModule(InstanceLike op) {
@@ -210,7 +209,7 @@ InstanceGraphBase::getInferredTopLevelNodes() {
            "detected in instance graph (";
     llvm::interleave(
         cycleTrace, err,
-        [&](auto node) { err << node->getModule().getModuleLikeName(); }, "->");
+        [&](auto node) { err << node->getModule().getModuleName(); }, "->");
     err << ").";
     return err;
   }

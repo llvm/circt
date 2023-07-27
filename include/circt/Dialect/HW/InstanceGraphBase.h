@@ -381,7 +381,7 @@ struct llvm::DOTGraphTraits<circt::hw::InstanceGraphBase *>
   static std::string getNodeLabel(circt::hw::InstanceGraphNode *node,
                                   circt::hw::InstanceGraphBase *) {
     // The name of the graph node is the module name.
-    return node->getModule().getModuleLikeName().str();
+    return node->getModule().getModuleName().str();
   }
 
   template <typename Iterator>

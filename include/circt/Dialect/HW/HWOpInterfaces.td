@@ -21,24 +21,6 @@ def ModuleLike : OpInterface<"ModuleLike", []> {
 
   let methods = [
     InterfaceMethod<"Get the module name",
-    "::llvm::StringRef", "getModuleLikeName", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return $_op.getName(); }]>,
-
-    InterfaceMethod<"Get the module name",
-    "::mlir::StringAttr", "getModuleLikeNameAttr", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return $_op.getNameAttr(); }]>,
-  ];
-}
-
-def HWModuleLike : OpInterface<"HWModuleLike", [Symbol]> {
-  let cppNamespace = "circt::hw";
-  let description = "Provide common module information.";
-
-  let methods = [
-
-    InterfaceMethod<"Get the module name",
     "::llvm::StringRef", "getModuleName", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getName(); }]>,
@@ -47,6 +29,15 @@ def HWModuleLike : OpInterface<"HWModuleLike", [Symbol]> {
     "::mlir::StringAttr", "getModuleNameAttr", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getNameAttr(); }]>,
+  ];
+}
+
+def HWModuleLike : OpInterface<"HWModuleLike", [ModuleLike]> {
+  let cppNamespace = "circt::hw";
+  let description = "Provide common module information.";
+
+  let methods = [
+
 
     InterfaceMethod<"Get the number of ports",
     "size_t", "getNumPorts">,

@@ -16,7 +16,7 @@
 include "mlir/IR/OpBase.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 
-def FModuleLike : OpInterface<"FModuleLike", [ModuleLike, HWModuleLike]> {
+def FModuleLike : OpInterface<"FModuleLike", [HWModuleLike, Symbol]> {
   let cppNamespace = "circt::firrtl";
   let description = "Provide common module information.";
   let methods = [
