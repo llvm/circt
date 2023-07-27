@@ -2058,7 +2058,7 @@ OpenVectorType::getSubTypeByFieldID(uint64_t fieldID) {
   if (fieldID == 0)
     return {*this, 0};
   return {llvm::cast<circt::hw::FieldIDTypeInterface>(getElementType()),
-          getIndexForFieldID(fieldID)};
+          getIndexAndSubfieldID(fieldID).second};
 }
 
 uint64_t OpenVectorType::getMaxFieldID() {
