@@ -6,7 +6,7 @@ from pycde.signals import And, Or
 from pycde.testing import unittestmodule
 
 
-# CHECK-LABEL: msft.module @BitsMod {} (%inp: !hw.array<5xi1>)
+# CHECK-LABEL: msft.module @BitsMod {} (%inp: i5)
 @unittestmodule()
 class BitsMod(Module):
   inp = Input(types.i5)
