@@ -143,10 +143,10 @@ static void legalizeModuleLocalNames(HWModuleOp module,
     auto newName = nameResolver.getLegalName(port.name);
     if (newName != port.name.getValue()) {
       if (port.isOutput())
-        module.setResultAttr(port.argNum, verilogNameAttr,
+        module.setResultAttr_HWML(port.argNum, verilogNameAttr,
                              StringAttr::get(ctxt, newName));
       else
-        module.setArgAttr(port.argNum, verilogNameAttr,
+        module.setArgAttr_HWML(port.argNum, verilogNameAttr,
                           StringAttr::get(ctxt, newName));
     }
   }

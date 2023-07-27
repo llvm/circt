@@ -222,6 +222,96 @@ public:
 } // namespace OpTrait
 } // namespace mlir
 
+namespace circt {
+namespace hw {
+  class HWModuleLike;
+namespace HWModuleLike_impl {
+
+//===----------------------------------------------------------------------===//
+// Function Argument Attribute.
+//===----------------------------------------------------------------------===//
+
+/// Set the attributes held by the argument at 'index'.
+void setArgAttrs(HWModuleLike op, unsigned index,
+                 ArrayRef<NamedAttribute> attributes);
+void setArgAttrs(HWModuleLike op, unsigned index,
+                 DictionaryAttr attributes);
+
+/// If the an attribute exists with the specified name, change it to the new
+/// value. Otherwise, add a new attribute with the specified name/value.
+template <typename ConcreteType>
+void setArgAttr(ConcreteType op, unsigned index, StringAttr name,
+                Attribute value) {
+  NamedAttrList attributes(op.getArgAttrDict_HWML(index));
+  Attribute oldValue = attributes.set(name, value);
+
+  // If the attribute changed, then set the new arg attribute list.
+  if (value != oldValue)
+    op.setArgAttrs_HWML(index, attributes.getDictionary(value.getContext()));
+}
+
+/// Remove the attribute 'name' from the argument at 'index'. Returns the
+/// removed attribute, or nullptr if `name` was not a valid attribute.
+template <typename ConcreteType>
+Attribute removeArgAttr(ConcreteType op, unsigned index, StringAttr name) {
+  // Build an attribute list and remove the attribute at 'name'.
+  NamedAttrList attributes(op.getArgAttrDict_HWML(index));
+  Attribute removedAttr = attributes.erase(name);
+
+  // If the attribute was removed, then update the argument dictionary.
+  if (removedAttr)
+    op.setArgAttrs_HWML(index, attributes.getDictionary(removedAttr.getContext()));
+  return removedAttr;
+}
+
+DictionaryAttr getArgAttrDict(HWModuleLike op, unsigned index);
+ArrayRef<NamedAttribute> getArgAttrs(HWModuleLike op, unsigned index);
+
+
+
+//===----------------------------------------------------------------------===//
+// Function Result Attribute.
+//===----------------------------------------------------------------------===//
+
+/// Set the attributes held by the result at 'index'.
+void setResultAttrs(HWModuleLike op, unsigned index,
+                    ArrayRef<NamedAttribute> attributes);
+void setResultAttrs(HWModuleLike op, unsigned index,
+                    DictionaryAttr attributes);
+
+/// If the an attribute exists with the specified name, change it to the new
+/// value. Otherwise, add a new attribute with the specified name/value.
+template <typename ConcreteType>
+void setResultAttr(ConcreteType op, unsigned index, StringAttr name,
+                   Attribute value) {
+  NamedAttrList attributes(op.getResultAttrDict_HWML(index));
+  Attribute oldAttr = attributes.set(name, value);
+
+  // If the attribute changed, then set the new arg attribute list.
+  if (oldAttr != value)
+    op.setResultAttrs_HWML(index, attributes.getDictionary(value.getContext()));
+}
+
+/// Remove the attribute 'name' from the result at 'index'.
+template <typename ConcreteType>
+Attribute removeResultAttr(ConcreteType op, unsigned index, StringAttr name) {
+  // Build an attribute list and remove the attribute at 'name'.
+  NamedAttrList attributes(op.getResultAttrDict_HWML(index));
+  Attribute removedAttr = attributes.erase(name);
+
+  // If the attribute was removed, then update the result dictionary.
+  if (removedAttr)
+    op.setResultAttrs_HWML(index,
+                      attributes.getDictionary(removedAttr.getContext()));
+  return removedAttr;
+}
+
+DictionaryAttr getResultAttrDict(HWModuleLike op, unsigned index);
+ArrayRef<NamedAttribute> getResultAttrs(HWModuleLike op, unsigned index);
+
+} // namespace HWModuleLike_impl
+} // namespace hw
+} // namespace circt
 #include "circt/Dialect/HW/HWOpInterfaces.h.inc"
 
 #endif // CIRCT_DIALECT_HW_HWOPINTERFACES_H

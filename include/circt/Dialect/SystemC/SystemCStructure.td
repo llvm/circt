@@ -60,16 +60,6 @@ def SCModuleOp : SystemCOp<"module", [
       return RegionKind::Graph;
     }
 
-    /// Returns the argument types of this function.
-    ArrayRef<mlir::Type> getArgumentTypes() {
-      return getFunctionType().getInputs();
-    }
-
-    /// Returns the result types of this function.
-    ArrayRef<mlir::Type> getResultTypes() {
-      return getFunctionType().getResults();
-    }
-
     // Use FunctionOpInterface traits's getFunctionBody method.
     using mlir::detail::FunctionOpInterfaceTrait<SCModuleOp>::getFunctionBody;
 
@@ -105,6 +95,16 @@ def SCModuleOp : SystemCOp<"module", [
   }];
 
   let extraClassDefinition = [{
+    //===------------------------------------------------------------------===//
+    // FunctionOpInterface Methods
+    //===------------------------------------------------------------------===//
+
+    /// Returns the argument types of this function.
+    ArrayRef<Type> $cppClass::getArgumentTypes() { return getFunctionType().getInputs(); }
+
+    /// Returns the result types of this function.
+    ArrayRef<Type> $cppClass::getResultTypes() { return getFunctionType().getResults(); }
+
     size_t $cppClass::getNumPorts() {
       return getPortNames().size();
     }

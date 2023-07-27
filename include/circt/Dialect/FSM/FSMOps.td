@@ -55,12 +55,6 @@ def MachineOp : FSMOp<"machine", [
       return std::distance(stateOps.begin(), stateOps.end());
     }
 
-    /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
-
-    /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
-
     /// Verify the type attribute of this function. Returns failure and emits
     /// an error if the attribute is invalid.
     LogicalResult verifyType() {
@@ -79,6 +73,13 @@ def MachineOp : FSMOp<"machine", [
   }];
 
   let extraClassDefinition = [{
+    
+    /// Returns the argument types of this function.
+    ArrayRef<Type> $cppClass::getArgumentTypes() { return getFunctionType().getInputs(); }
+
+    /// Returns the result types of this function.
+    ArrayRef<Type> $cppClass::getResultTypes() { return getFunctionType().getResults(); }
+
     size_t $cppClass::getNumPorts() {
       auto machineType = getFunctionType();
       return machineType.getNumInputs() + machineType.getNumResults();

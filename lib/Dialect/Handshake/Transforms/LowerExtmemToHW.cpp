@@ -161,8 +161,8 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
   auto wrapperMod = b.create<hw::HWModuleOp>(
       loc, StringAttr::get(ctx, func.getName() + "_esi_wrapper"),
       wrapperModPortInfo);
-  Value clk = wrapperMod.getArgument(wrapperMod.getNumArguments() - 2);
-  Value rst = wrapperMod.getArgument(wrapperMod.getNumArguments() - 1);
+  Value clk = wrapperMod.getArgument_HWML(wrapperMod.getNumArguments_HWML() - 2);
+  Value rst = wrapperMod.getArgument_HWML(wrapperMod.getNumArguments_HWML() - 1);
   SmallVector<Value> clkRes = {clk, rst};
 
   b.setInsertionPointToStart(wrapperMod.getBodyBlock());
@@ -248,14 +248,14 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
       // Add the argument from the wrapper mod. This is maintained by its own
       // counter (memref arguments are removed, so if there was an argument at
       // this point, it needs to come from the wrapper module).
-      instanceArgs.push_back(wrapperMod.getArgument(wrapperArgIdx++));
+      instanceArgs.push_back(wrapperMod.getArgument_HWML(wrapperArgIdx++));
     }
   }
 
   // Add any missing arguments from the wrapper module (this will be clock and
   // reset)
-  for (; wrapperArgIdx < wrapperMod.getNumArguments(); ++wrapperArgIdx)
-    instanceArgs.push_back(wrapperMod.getArgument(wrapperArgIdx));
+  for (; wrapperArgIdx < wrapperMod.getNumArguments_HWML(); ++wrapperArgIdx)
+    instanceArgs.push_back(wrapperMod.getArgument_HWML(wrapperArgIdx));
 
   // Instantiate the inner module.
   auto instance =
@@ -271,7 +271,7 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
       cast<hw::OutputOp>(wrapperMod.getBodyBlock()->getTerminator());
   b.setInsertionPoint(outputOp);
   b.create<hw::OutputOp>(outputOp.getLoc(), instance.getResults().take_front(
-                                                wrapperMod.getNumResults()));
+                                                wrapperMod.getNumResults_HWML()));
   outputOp.erase();
 
   return success();

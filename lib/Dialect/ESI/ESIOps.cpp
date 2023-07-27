@@ -535,6 +535,24 @@ hw::InnerSymAttr ESIPureModuleOp::getPortSymbolAttr(size_t portIndex) {
   return {};
 }
 
+ArrayRef<Type> ESIPureModuleOp::getArgumentTypes() {
+  assert(false);
+  return {};
+}
+
+ArrayRef<Type> ESIPureModuleOp::getResultTypes() {
+  assert(false);
+  return {};
+}
+
+    ArrayAttr ESIPureModuleOp::getArgAttrsAttr() { assert(false); return {}; }
+    ArrayAttr ESIPureModuleOp::getResAttrsAttr() { assert(false); return {}; }
+    void ESIPureModuleOp::setArgAttrsAttr(ArrayAttr) { assert(false); }
+    void ESIPureModuleOp::setResAttrsAttr(ArrayAttr) { assert(false); }
+    Attribute ESIPureModuleOp::removeArgAttrsAttr() { assert(false); return {}; }
+    Attribute ESIPureModuleOp::removeResAttrsAttr() { assert(false); return {}; }
+
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"
 

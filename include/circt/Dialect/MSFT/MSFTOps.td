@@ -77,12 +77,6 @@ class MSFTModuleOpBase<string mnemonic, list<Trait> traits = []> :
       return getNameAttr().getValue();
     }
 
-    /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
-
-    /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
-
     /// Verify the type attribute of this function. Returns failure and emits
     /// an error if the attribute is invalid.
     LogicalResult verifyType() {
@@ -170,6 +164,12 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
   }];
 
   let extraClassDefinition = [{
+    /// Returns the argument types of this function.
+    ArrayRef<Type> $cppClass::getArgumentTypes() { return getFunctionType().getInputs(); }
+
+    /// Returns the result types of this function.
+    ArrayRef<Type> $cppClass::getResultTypes() { return getFunctionType().getResults(); }
+
     size_t $cppClass::getNumPorts() {
       // This is excessively expensive
       auto ports = getPorts();
@@ -220,11 +220,13 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
     /// Decode information about the input and output ports on this module.
     hw::ModulePortInfo getPorts();
 
+  }];
+  let extraClassDefinition = [{
     /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
+    ArrayRef<Type> $cppClass::getArgumentTypes() { return getFunctionType().getInputs(); }
 
     /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+    ArrayRef<Type> $cppClass::getResultTypes() { return getFunctionType().getResults(); }
   }];
 }
 

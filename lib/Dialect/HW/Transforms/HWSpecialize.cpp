@@ -302,7 +302,7 @@ static LogicalResult specializeModule(
   BackedgeBuilder bb(builder, source.getLoc());
   ValueMapper mapper(&bb);
   for (auto &&[src, dst] :
-       llvm::zip(source.getArguments(), target.getArguments()))
+       llvm::zip(source.getArguments_HWML(), target.getArguments_HWML()))
     mapper.set(src, dst);
   builder.setInsertionPointToStart(target.getBodyBlock());
 

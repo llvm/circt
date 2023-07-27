@@ -31,7 +31,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     HWOp<mnemonic, traits # [
       DeclareOpInterfaceMethods<HWModuleLike>,
       DeclareOpInterfaceMethods<HWMutableModuleLike>,
-      FunctionOpInterface, Symbol,
+      Symbol,
       OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
@@ -62,11 +62,18 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
 
     ::circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
       for (::mlir::NamedAttribute argAttr :
-           ::mlir::function_interface_impl::getArgAttrs(*this, portIndex))
+           ::circt::hw::HWModuleLike_impl::getArgAttrs(*this, portIndex))
         if (auto sym = argAttr.getValue().dyn_cast<::circt::hw::InnerSymAttr>())
           return sym;
       return ::circt::hw::InnerSymAttr();
     }
+
+        /// Returns the argument types of this function.
+    ArrayRef<Type> $cppClass::getArgumentTypes() { return getFunctionType().getInputs(); }
+
+    /// Returns the result types of this function.
+    ArrayRef<Type> $cppClass::getResultTypes() { return getFunctionType().getResults(); }
+
   }];
 
 }
@@ -111,8 +118,7 @@ def HWModuleOp : HWModuleOpBase<"module",
   ];
 
   let extraModuleClassDeclaration = [{
-    using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::front;
-    using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::getFunctionBody;
+    using detail::HWModuleLikeTrait<HWModuleOp>::getModuleBody;
 
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
@@ -193,7 +199,7 @@ def HWModuleOp : HWModuleOpBase<"module",
     void insertOutputs(unsigned index,
                        ArrayRef<std::pair<StringAttr, Value>> outputs);
 
-    Block *getBodyBlock() { return &getFunctionBody().front(); }
+    Block *getBodyBlock() { return &getModuleBody().front(); }
 
     // Get the module's symbolic name as StringAttr.
     StringAttr getNameAttr() {
@@ -207,12 +213,6 @@ def HWModuleOp : HWModuleOpBase<"module",
     }
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
-
-    /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
-
-    /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
 
     /// Verify the type attribute of this function. Returns failure and emits
     /// an error if the attribute is invalid.
@@ -301,12 +301,6 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
 
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
-
-    /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
-
-    /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
 
     /// Verify the type attribute of this function. Returns failure and emits
     /// an error if the attribute is invalid.
@@ -401,12 +395,6 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
 
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
-
-    /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
-
-    /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
 
     /// Verify the type attribute of this function. Returns failure and emits
     /// an error if the attribute is invalid.

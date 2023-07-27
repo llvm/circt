@@ -71,9 +71,73 @@ def HWModuleLike : OpInterface<"HWModuleLike", [Symbol]> {
       return $_op->template getAttrOfType<ArrayAttr>("resultLocs");
     }]>,
 
+    // Kill these eventually, inherited from FunctionInterface:
+    InterfaceMethod<[{
+      Returns the function argument types based exclusively on
+      the type (to allow for this method may be called on function
+      declarations).
+    }],
+    "::llvm::ArrayRef<::mlir::Type>", "getArgumentTypes">,
+
+    InterfaceMethod<[{
+      Returns the function result types based exclusively on
+      the type (to allow for this method may be called on function
+      declarations).
+    }],
+    "::llvm::ArrayRef<::mlir::Type>", "getResultTypes">,
+
+    InterfaceMethod<[{
+      Get the array of argument attribute dictionaries. The method should return
+      an array attribute containing only dictionary attributes equal in number
+      to the number of function arguments. Alternatively, the method can return
+      null to indicate that the function has no argument attributes.
+    }],
+    "::mlir::ArrayAttr", "getArgAttrsAttr">,
+
+    InterfaceMethod<[{
+      Get the array of result attribute dictionaries. The method should return
+      an array attribute containing only dictionary attributes equal in number
+      to the number of function results. Alternatively, the method can return
+      null to indicate that the function has no result attributes.
+    }],
+    "::mlir::ArrayAttr", "getResAttrsAttr">,
+
+    InterfaceMethod<[{
+      Set the array of argument attribute dictionaries.
+    }],
+    "void", "setArgAttrsAttr", (ins "::mlir::ArrayAttr":$attrs)>,
+
+    InterfaceMethod<[{
+      Set the array of result attribute dictionaries.
+    }],
+    "void", "setResAttrsAttr", (ins "::mlir::ArrayAttr":$attrs)>,
+    InterfaceMethod<[{
+      Remove the array of argument attribute dictionaries. This is the same as
+      setting all argument attributes to an empty dictionary. The method should
+      return the removed attribute.
+    }],
+    "::mlir::Attribute", "removeArgAttrsAttr">,
+    InterfaceMethod<[{
+      Remove the array of result attribute dictionaries. This is the same as
+      setting all result attributes to an empty dictionary. The method should
+      return the removed attribute.
+    }],
+    "::mlir::Attribute", "removeResAttrsAttr">,
+
   ];
 
   let extraSharedClassDeclaration = [{
+    /// Block list iterator types.
+    using BlockListType = Region::BlockListType;
+    using iterator = BlockListType::iterator;
+    using reverse_iterator = BlockListType::reverse_iterator;
+
+    /// Block argument iterator types.
+    using BlockArgListType = Region::BlockArgListType;
+    using args_iterator = BlockArgListType::iterator;
+
+    /// Return the region containing the body of this module.
+    Region &getModuleBody() { return $_op->getRegion(0); }
 
     // Return the number of inputs to this module
     unsigned getNumInputs() {
@@ -104,6 +168,150 @@ def HWModuleLike : OpInterface<"HWModuleLike", [Symbol]> {
     mlir::StringAttr getOutputNameAttr(unsigned idx) {
       return cast<StringAttr>(getOutputNames()[idx]);
     }
+
+    //===------------------------------------------------------------------===//
+    // Argument and Result Handling
+    //===------------------------------------------------------------------===//
+
+    /// Returns the number of function arguments.
+    unsigned getNumArguments_HWML() { return $_op.getArgumentTypes().size(); }
+
+    /// Returns the number of function results.
+    unsigned getNumResults_HWML() { return $_op.getResultTypes().size(); }
+
+    /// Returns the entry block function argument at the given index.
+    BlockArgument getArgument_HWML(unsigned idx) {
+      return getModuleBody().getArgument(idx);
+    }
+
+    /// Support argument iteration.
+    args_iterator args_begin_HWML() { return getModuleBody().args_begin(); }
+    args_iterator args_end_HWML() { return getModuleBody().args_end(); }
+    BlockArgListType getArguments_HWML() { return getModuleBody().getArguments(); }
+
+
+    //===------------------------------------------------------------------===//
+    // Argument Attributes
+    //===------------------------------------------------------------------===//
+
+    /// Return all of the attributes for the argument at 'index'.
+    ArrayRef<NamedAttribute> getArgAttrs_HWML(unsigned index) {
+      return ::circt::hw::HWModuleLike_impl::getArgAttrs($_op, index);
+    }
+
+    /// Return an ArrayAttr containing all argument attribute dictionaries of
+    /// this function, or nullptr if no arguments have attributes.
+    ArrayAttr getAllArgAttrs_HWML() { return $_op.getArgAttrsAttr(); }
+
+    /// Return all argument attributes of this function.
+    void getAllArgAttrs_HWML(SmallVectorImpl<DictionaryAttr> &result) {
+      if (ArrayAttr argAttrs = getAllArgAttrs_HWML()) {
+        auto argAttrRange = argAttrs.template getAsRange<DictionaryAttr>();
+        result.append(argAttrRange.begin(), argAttrRange.end());
+      } else {
+        result.append($_op.getNumArguments_HWML(),
+                      DictionaryAttr::get(this->getOperation()->getContext()));
+      }
+    }
+
+    /// Set the attributes held by the argument at 'index'.
+    void setArgAttrs_HWML(unsigned index, ArrayRef<NamedAttribute> attributes) {
+      ::circt::hw::HWModuleLike_impl::setArgAttrs($_op, index, attributes);
+    }
+
+    /// Set the attributes held by the argument at 'index'. `attributes` may be
+    /// null, in which case any existing argument attributes are removed.
+    void setArgAttrs_HWML(unsigned index, DictionaryAttr attributes) {
+      ::circt::hw::HWModuleLike_impl::setArgAttrs($_op, index, attributes);
+    }
+
+    /// If the an attribute exists with the specified name, change it to the new
+    /// value. Otherwise, add a new attribute with the specified name/value.
+    void setArgAttr_HWML(unsigned index, StringAttr name, Attribute value) {
+      ::circt::hw::HWModuleLike_impl::setArgAttr($_op, index, name, value);
+    }
+    void setArgAttr_HWML(unsigned index, StringRef name, Attribute value) {
+      setArgAttr_HWML(index,
+                 StringAttr::get(this->getOperation()->getContext(), name),
+                 value);
+    }
+
+    /// Returns the dictionary attribute corresponding to the argument at
+    /// 'index'. If there are no argument attributes at 'index', a null
+    /// attribute is returned.
+    DictionaryAttr getArgAttrDict_HWML(unsigned index) {
+      assert(index < $_op.getNumArguments_HWML() && "invalid argument number");
+      return ::circt::hw::HWModuleLike_impl::getArgAttrDict($_op, index);
+    }
+
+    /// Remove the attribute 'name' from the argument at 'index'. Return the
+    /// attribute that was erased, or nullptr if there was no attribute with
+    /// such name.
+    Attribute removeArgAttr(unsigned index, StringAttr name) {
+      return ::circt::hw::HWModuleLike_impl::removeArgAttr($_op, index, name);
+    }
+
+    //===------------------------------------------------------------------===//
+    // Result Attributes
+    //===------------------------------------------------------------------===//
+
+    /// Return all of the attributes for the result at 'index'.
+    ArrayRef<NamedAttribute> getResultAttrs_HWML(unsigned index) {
+      return ::circt::hw::HWModuleLike_impl::getResultAttrs($_op, index);
+    }
+
+    /// Return an ArrayAttr containing all result attribute dictionaries of this
+    /// function, or nullptr if no result have attributes.
+    ArrayAttr getAllResultAttrs_HWML() { return $_op.getResAttrsAttr(); }
+
+    /// Return all result attributes of this function.
+    void getAllResultAttrs_HWML(SmallVectorImpl<DictionaryAttr> &result) {
+      if (ArrayAttr argAttrs = getAllResultAttrs_HWML()) {
+        auto argAttrRange = argAttrs.template getAsRange<DictionaryAttr>();
+        result.append(argAttrRange.begin(), argAttrRange.end());
+      } else {
+        result.append($_op.getNumResults_HWML(),
+                      DictionaryAttr::get(this->getOperation()->getContext()));
+      }
+    }
+
+    /// Set the attributes held by the result at 'index'.
+    void setResultAttrs_HWML(unsigned index, ArrayRef<NamedAttribute> attributes) {
+      ::circt::hw::HWModuleLike_impl::setResultAttrs($_op, index, attributes);
+    }
+
+    /// Set the attributes held by the result at 'index'. `attributes` may be
+    /// null, in which case any existing argument attributes are removed.
+    void setResultAttrs_HWML(unsigned index, DictionaryAttr attributes) {
+      ::circt::hw::HWModuleLike_impl::setResultAttrs($_op, index, attributes);
+    }
+
+    /// If the an attribute exists with the specified name, change it to the new
+    /// value. Otherwise, add a new attribute with the specified name/value.
+    void setResultAttr_HWML(unsigned index, StringAttr name, Attribute value) {
+      ::circt::hw::HWModuleLike_impl::setResultAttr($_op, index, name, value);
+    }
+    void setResultAttr_HWML(unsigned index, StringRef name, Attribute value) {
+      setResultAttr_HWML(index,
+                    StringAttr::get(this->getOperation()->getContext(), name),
+                    value);
+    }
+
+    /// Returns the dictionary attribute corresponding to the result at 'index'.
+    /// If there are no result attributes at 'index', a null attribute is
+    /// returned.
+    DictionaryAttr getResultAttrDict_HWML(unsigned index) {
+      assert(index < $_op.getNumResults_HWML() && "invalid result number");
+      return ::circt::hw::HWModuleLike_impl::getResultAttrDict($_op, index);
+    }
+
+    /// Remove the attribute 'name' from the result at 'index'. Return the
+    /// attribute that was erased, or nullptr if there was no attribute with
+    /// such name.
+    Attribute removeResultAttr(unsigned index, StringAttr name) {
+      return ::circt::hw::HWModuleLike_impl::removeResultAttr($_op, index, name);
+    }
+
 
   }];
 

@@ -21,6 +21,7 @@
 #include "llvm/ADT/StringRef.h"
 
 using namespace circt;
+using namespace hw;
 
 LogicalResult hw::verifyInnerSymAttr(InnerSymbolOpInterface op) {
   auto innerSym = op.getInnerSymAttr();
@@ -78,6 +79,145 @@ LogicalResult hw::verifyInnerSymAttr(InnerSymbolOpInterface op) {
     return failure();
 
   return success();
+}
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// HWModuleLike Implementation helpers
+////////////////////////////////////////////////////////////////////////////////
+
+static bool isEmptyAttrDict(Attribute attr) {
+  return llvm::cast<DictionaryAttr>(attr).empty();
+}
+
+/// Get either the argument or result attributes array.
+template <bool isArg>
+static ArrayAttr getArgResAttrs(HWModuleLike op) {
+  if constexpr (isArg)
+    return op.getArgAttrsAttr();
+  else
+    return op.getResAttrsAttr();
+}
+
+/// Set either the argument or result attributes array.
+template <bool isArg>
+static void setArgResAttrs(HWModuleLike op, ArrayAttr attrs) {
+  if constexpr (isArg)
+    op.setArgAttrsAttr(attrs);
+  else
+    op.setResAttrsAttr(attrs);
+}
+
+/// Erase either the argument or result attributes array.
+template <bool isArg>
+static void removeArgResAttrs(HWModuleLike op) {
+  if constexpr (isArg)
+    op.removeArgAttrsAttr();
+  else
+    op.removeResAttrsAttr();
+}
+
+/// Update the given index into an argument or result attribute dictionary.
+template <bool isArg>
+static void setArgResAttrDict(HWModuleLike op, unsigned numTotalIndices,
+                              unsigned index, DictionaryAttr attrs) {
+  ArrayAttr allAttrs = getArgResAttrs<isArg>(op);
+  if (!allAttrs) {
+    if (attrs.empty())
+      return;
+
+    // If this attribute is not empty, we need to create a new attribute array.
+    SmallVector<Attribute, 8> newAttrs(numTotalIndices,
+                                       DictionaryAttr::get(op->getContext()));
+    newAttrs[index] = attrs;
+    setArgResAttrs<isArg>(op, ArrayAttr::get(op->getContext(), newAttrs));
+    return;
+  }
+  // Check to see if the attribute is different from what we already have.
+  if (allAttrs[index] == attrs)
+    return;
+
+  // If it is, check to see if the attribute array would now contain only empty
+  // dictionaries.
+  ArrayRef<Attribute> rawAttrArray = allAttrs.getValue();
+  if (attrs.empty() &&
+      llvm::all_of(rawAttrArray.take_front(index), isEmptyAttrDict) &&
+      llvm::all_of(rawAttrArray.drop_front(index + 1), isEmptyAttrDict))
+    return removeArgResAttrs<isArg>(op);
+
+  // Otherwise, create a new attribute array with the updated dictionary.
+  SmallVector<Attribute, 8> newAttrs(rawAttrArray.begin(), rawAttrArray.end());
+  newAttrs[index] = attrs;
+  setArgResAttrs<isArg>(op, ArrayAttr::get(op->getContext(), newAttrs));
+}
+
+
+
+DictionaryAttr HWModuleLike_impl::getArgAttrDict(HWModuleLike op,
+                                                       unsigned index) {
+  ArrayAttr attrs = op.getArgAttrsAttr();
+  DictionaryAttr argAttrs =
+      attrs ? llvm::cast<DictionaryAttr>(attrs[index]) : DictionaryAttr();
+  return argAttrs;
+}
+
+DictionaryAttr
+HWModuleLike_impl::getResultAttrDict(HWModuleLike op,
+                                           unsigned index) {
+  ArrayAttr attrs = op.getResAttrsAttr();
+  DictionaryAttr resAttrs =
+      attrs ? llvm::cast<DictionaryAttr>(attrs[index]) : DictionaryAttr();
+  return resAttrs;
+}
+
+ArrayRef<NamedAttribute>
+HWModuleLike_impl::getArgAttrs(HWModuleLike op, unsigned index) {
+  auto argDict = getArgAttrDict(op, index);
+  return argDict ? argDict.getValue() : std::nullopt;
+}
+
+ArrayRef<NamedAttribute>
+HWModuleLike_impl::getResultAttrs(HWModuleLike op,
+                                        unsigned index) {
+  auto resultDict = getResultAttrDict(op, index);
+  return resultDict ? resultDict.getValue() : std::nullopt;
+}
+
+
+void HWModuleLike_impl::setArgAttrs(HWModuleLike op,
+                                          unsigned index,
+                                          ArrayRef<NamedAttribute> attributes) {
+  assert(index < op.getNumArguments_HWML() && "invalid argument number");
+  return setArgResAttrDict</*isArg=*/true>(
+      op, op.getNumArguments_HWML(), index,
+      DictionaryAttr::get(op->getContext(), attributes));
+}
+
+void HWModuleLike_impl::setArgAttrs(HWModuleLike op,
+                                          unsigned index,
+                                          DictionaryAttr attributes) {
+  return setArgResAttrDict</*isArg=*/true>(
+      op, op.getNumArguments_HWML(), index,
+      attributes ? attributes : DictionaryAttr::get(op->getContext()));
+}
+
+void HWModuleLike_impl::setResultAttrs(
+    HWModuleLike op, unsigned index,
+    ArrayRef<NamedAttribute> attributes) {
+  assert(index < op.getNumResults_HWML() && "invalid result number");
+  return setArgResAttrDict</*isArg=*/false>(
+      op, op.getNumResults_HWML(), index,
+      DictionaryAttr::get(op->getContext(), attributes));
+}
+
+void HWModuleLike_impl::setResultAttrs(HWModuleLike op,
+                                             unsigned index,
+                                             DictionaryAttr attributes) {
+  assert(index < op.getNumResults_HWML() && "invalid result number");
+  return setArgResAttrDict</*isArg=*/false>(
+      op, op.getNumResults_HWML(), index,
+      attributes ? attributes : DictionaryAttr::get(op->getContext()));
 }
 
 #include "circt/Dialect/HW/HWOpInterfaces.cpp.inc"

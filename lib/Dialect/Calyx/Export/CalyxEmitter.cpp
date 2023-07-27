@@ -702,7 +702,7 @@ void Emitter::emitPrimitivePorts(hw::HWModuleExternOp op) {
     os << LParen();
     for (auto [i, port] : llvm::enumerate(ports)) {
       DictionaryAttr portAttr =
-          isInput ? op.getArgAttrDict(i) : op.getResultAttrDict(i);
+          isInput ? op.getArgAttrDict_HWML(i) : op.getResultAttrDict_HWML(i);
 
       os << getAttributes(op, portAttr) << port.name.getValue() << colon();
       // We only care about the bit width in the emitted .futil file.

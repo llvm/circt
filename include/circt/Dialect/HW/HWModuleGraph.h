@@ -151,12 +151,12 @@ struct llvm::DOTGraphTraits<circt::hw::HWModuleOp>
     os << "subgraph cluster_entry_args {\n";
     os << "label=\"Input arguments\";\n";
     auto iports = getModulePortInfo(mod);
-    for (auto [info, arg] : llvm::zip(iports.inputs(), mod.getArguments())) {
+    for (auto [info, arg] : llvm::zip(iports.inputs(), mod.getArguments_HWML())) {
       g.emitSimpleNode(reinterpret_cast<void *>(&arg), "",
                        info.getName().str());
     }
     os << "}\n";
-    for (auto [info, arg] : llvm::zip(iports.inputs(), mod.getArguments())) {
+    for (auto [info, arg] : llvm::zip(iports.inputs(), mod.getArguments_HWML())) {
       for (auto *user : arg.getUsers()) {
         g.emitEdge(reinterpret_cast<void *>(&arg), 0, user, -1, "");
       }

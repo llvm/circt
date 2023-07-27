@@ -24,7 +24,7 @@ static hw::StructType getStructType(Type type) {
 }
 
 // Legal if no in- or output type is a struct.
-static bool isLegalFuncLikeOp(FunctionOpInterface moduleLikeOp) {
+static bool isLegalFuncLikeOp(hw::HWModuleLike moduleLikeOp) {
   bool legalResults =
       llvm::none_of(moduleLikeOp.getResultTypes(), isStructType);
   bool legalArgs = llvm::none_of(moduleLikeOp.getArgumentTypes(), isStructType);
@@ -187,7 +187,7 @@ static void addSignatureConversion(DenseMap<Operation *, IOInfo> &ioMap,
   // top-level i/o. This ensures that only a single level of structs are
   // processed during signature conversion, which then allows us to use the
   // signature conversion in a recursive manner.
-  target.addDynamicallyLegalOp<TOp...>([&](FunctionOpInterface moduleLikeOp) {
+  target.addDynamicallyLegalOp<TOp...>([&](hw::HWModuleLike moduleLikeOp) {
     if (isLegalFuncLikeOp(moduleLikeOp))
       return true;
 
@@ -255,7 +255,7 @@ static void updateNameAttribute(Operation *op, StringRef attrName,
   op->setAttr(attrName, ArrayAttr::get(op->getContext(), newNames));
 }
 
-static void updateLocAttribute(FunctionOpInterface op, StringRef attrName,
+static void updateLocAttribute(hw::HWModuleLike op, StringRef attrName,
                                DenseMap<unsigned, hw::StructType> &structMap) {
   llvm::SmallVector<Attribute> newLocs;
   auto oldLocs = op.getOperation()->getAttrOfType<ArrayAttr>(attrName);
@@ -282,13 +282,13 @@ static void updateLocAttribute(FunctionOpInterface op, StringRef attrName,
 /// use this function to copy the location from the original argument to the
 /// set of flattened arguments.
 static void
-updateBlockLocations(FunctionOpInterface op, StringRef attrName,
+updateBlockLocations(hw::HWModuleLike op, StringRef attrName,
                      DenseMap<unsigned, hw::StructType> &structMap) {
   auto locs = op.getOperation()->getAttrOfType<ArrayAttr>(attrName);
   if (!locs)
     return;
   for (auto [arg, loc] :
-       llvm::zip(op.getArguments(), locs.getAsRange<LocationAttr>()))
+       llvm::zip(op.getArguments_HWML(), locs.getAsRange<LocationAttr>()))
     arg.setLoc(loc);
 }
 

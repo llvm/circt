@@ -292,7 +292,7 @@ void ModuleLowering::addStorageArg() {
 /// inputs in the model's storage.
 LogicalResult ModuleLowering::lowerPrimaryInputs() {
   builder.setInsertionPointToStart(moduleOp.getBodyBlock());
-  for (auto blockArg : moduleOp.getArguments()) {
+  for (auto blockArg : moduleOp.getArguments_HWML()) {
     if (blockArg == storageArg)
       continue;
     auto name =
