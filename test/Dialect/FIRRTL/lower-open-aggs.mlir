@@ -142,3 +142,13 @@ firrtl.circuit "RefsOnlyAggFirstLevel" {
     firrtl.ref.define %0, %3 : !firrtl.probe<uint<1>>
   }
 }
+
+// -----
+
+// CHECK-LABEL: circuit "SymbolOnField"
+firrtl.circuit "SymbolOnField" {
+  // CHECK: @SymbolOnField
+  // CHECK-SAME: (out r: !firrtl.bundle<x: uint<1>> sym [<@sym,1,public>],
+  // CHECK-SAME:  out r_p: !firrtl.probe<uint<1>>)
+  firrtl.extmodule @SymbolOnField(out r : !firrtl.openbundle<p: probe<uint<1>>, x: uint<1>> sym [<@sym,2,public>])
+}
