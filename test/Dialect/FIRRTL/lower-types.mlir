@@ -1283,6 +1283,13 @@ firrtl.module private @is1436_FOO() {
       %a = firrtl.wire : !firrtl.bundle<b: uint<1>>
     }
   }
+
+  // CHECK-LABEL:  firrtl.module @Alias
+  // CHECK-NOT: alias
+  // AGGREGATE-LABEL: firrtl.module @Alias
+  // AGGREGATE-SAME: alias<FooBundle, bundle<x: uint<32>, y: uint<32>>>
+  firrtl.module @Alias(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %io: !firrtl.bundle<in flip: alias<FooBundle, bundle<x: uint<32>, y: uint<32>>>, out: alias<FooBundle, bundle<x: uint<32>, y: uint<32>>>>) {
+  }
 } // CIRCUIT
 
 // Check that we don't lose the DontTouchAnnotation when it is not the last
