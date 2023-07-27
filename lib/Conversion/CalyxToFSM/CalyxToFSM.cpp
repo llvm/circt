@@ -278,8 +278,13 @@ public:
 
 private:
   void lowerInvokeOp(InvokeOp invokeOp);
+  std::string getGroupName(InvokeOp invokeOp);
   ComponentOp component;
   OpBuilder builder;
+  // Part of the group name.It is used to generate unique group names, the
+  // unique counter is reused across multiple calls to lowerInvokeOp, so the
+  // loop that's checking for name uniqueness usually finds a unique name on the
+  // first try.
   size_t groupNameTail = 0;
 };
 
@@ -287,14 +292,23 @@ private:
 void CompileInvoke::compile() {
   llvm::SmallVector<InvokeOp> invokeOps =
       component.getControlOp().getInvokeOps();
-  for (InvokeOp op : invokeOps) {
+  for (InvokeOp op : invokeOps)
     lowerInvokeOp(op);
-  }
+}
+
+// Get the name of the generation group.
+std::string CompileInvoke::getGroupName(InvokeOp invokeOp) {
+  llvm::StringRef callee = invokeOp.getCallee();
+  std::string groupNameHead = "invoke_" + callee.str() + "_";
+  std::string groupName;
+  do {
+    groupName = groupNameHead + std::to_string(groupNameTail++);
+  } while (component.getWiresOp().lookupSymbol(groupName));
+  return groupName;
 }
 
 // Convert an invoke operation to a group operation and an enable operation.
 void CompileInvoke::lowerInvokeOp(InvokeOp invokeOp) {
-
   // Create a ConstantOp to assign a value to the go port.
   Operation *prevNode = component.getWiresOp().getOperation()->getPrevNode();
   builder.setInsertionPointAfter(prevNode);
@@ -304,12 +318,7 @@ void CompileInvoke::lowerInvokeOp(InvokeOp invokeOp) {
 
   // Set the insertion point at the end of the wires block.
   builder.setInsertionPointToEnd(component.getWiresOp().getBodyBlock());
-  llvm::StringRef callee = invokeOp.getCallee();
-  std::string groupNameHead = "invoke_" + callee.str() + "_";
-  std::string groupName;
-  do {
-    groupName = groupNameHead + std::to_string(groupNameTail++);
-  } while (component.getWiresOp().lookupSymbol(groupName));
+  std::string groupName = getGroupName(invokeOp);
   GroupOp groupOp = builder.create<GroupOp>(loc, groupName);
   builder.setInsertionPointToStart(groupOp.getBodyBlock());
   Value go = invokeOp.getInstGoValue();
