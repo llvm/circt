@@ -3841,6 +3841,7 @@ private:
 
   ParseResult parseToplevelDefinition(CircuitOp circuit, unsigned indent);
 
+  ParseResult parseClass(CircuitOp circuit, unsigned indent);
   ParseResult parseExtModule(CircuitOp circuit, unsigned indent);
   ParseResult parseIntModule(CircuitOp circuit, unsigned indent);
   ParseResult parseModule(CircuitOp circuit, unsigned indent);
@@ -3861,7 +3862,7 @@ private:
   ParseResult parseGroupDecl(CircuitOp circuit);
 
   struct DeferredModuleToParse {
-    FModuleOp moduleOp;
+    FModuleLike moduleOp;
     SmallVector<SMLoc> portLocs;
     FIRLexerCursor lexerCursor;
     unsigned indent;
@@ -4108,11 +4109,12 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
       return success();
 
     // If we got to the next top-level declaration, then we're done.
-    case FIRToken::kw_type:
-    case FIRToken::kw_module:
+    case FIRToken::kw_class:
+    case FIRToken::kw_declgroup:
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:
-    case FIRToken::kw_declgroup:
+    case FIRToken::kw_module:
+    case FIRToken::kw_type:
       // All module declarations should have the same indentation
       // level. Use this fact to differentiate between module
       // declarations and usages of "module" as identifiers.
@@ -4209,6 +4211,36 @@ ParseResult FIRCircuitParser::parseParameterList(ArrayAttr &resultParameters) {
   }
   resultParameters = ArrayAttr::get(getContext(), parameters);
   return success();
+}
+
+/// class ::= 'class' id ':' info? INDENT portlist simple_stmt_block DEDENT
+ParseResult FIRCircuitParser::parseClass(CircuitOp circuit, unsigned indent) {
+  StringAttr name;
+  SmallVector<PortInfo, 8> portList;
+  SmallVector<SMLoc> portLocs;
+  LocWithInfo info(getToken().getLoc(), this);
+  consumeToken(FIRToken::kw_class);
+  if (parseId(name, "expected class name") ||
+      parseToken(FIRToken::colon, "expected ':' in class definition") ||
+      info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
+    return failure();
+
+  if (name == circuit.getName())
+    return mlir::emitError(info.getLoc(),
+                           "class cannot be the top of a circuit");
+
+  for (auto &portInfo : portList)
+    if (!isa<PropertyType>(portInfo.type))
+      return mlir::emitError(portInfo.loc,
+                             "ports on classes must be properties");
+
+  // build it
+  auto builder = circuit.getBodyBuilder();
+  auto classOp = builder.create<ClassOp>(info.getLoc(), name, portList);
+  deferredModules.emplace_back(
+      DeferredModuleToParse{classOp, portLocs, getLexer().getCursor(), indent});
+
+  return skipToModuleEnd(indent);
 }
 
 /// extmodule ::=
@@ -4324,14 +4356,8 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, unsigned indent) {
 ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
                                                       unsigned indent) {
   switch (getToken().getKind()) {
-  case FIRToken::kw_module:
-    return parseModule(circuit, indent);
-  case FIRToken::kw_extmodule:
-    return parseExtModule(circuit, indent);
-  case FIRToken::kw_intmodule:
-    return parseIntModule(circuit, indent);
-  case FIRToken::kw_type:
-    return parseTypeDecl();
+  case FIRToken::kw_class:
+    return parseClass(circuit, indent);
   case FIRToken::kw_declgroup:
     if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
       return emitError()
@@ -4339,6 +4365,14 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
                 "feature, but the specified FIRRTL version was "
              << version;
     return parseGroupDecl(circuit);
+  case FIRToken::kw_extmodule:
+    return parseExtModule(circuit, indent);
+  case FIRToken::kw_intmodule:
+    return parseIntModule(circuit, indent);
+  case FIRToken::kw_module:
+    return parseModule(circuit, indent);
+  case FIRToken::kw_type:
+    return parseTypeDecl();
   default:
     return emitError(getToken().getLoc(), "unknown toplevel definition");
   }
@@ -4431,7 +4465,8 @@ ParseResult FIRCircuitParser::parseGroupDecl(CircuitOp circuit) {
 // Parse the body of this module.
 ParseResult
 FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
-  FModuleOp moduleOp = deferredModule.moduleOp;
+  FModuleLike moduleOp = deferredModule.moduleOp;
+  auto &body = moduleOp->getRegion(0).front();
   auto &portLocs = deferredModule.portLocs;
 
   // We parse the body of this module with its own lexer, enabling parallel
@@ -4446,7 +4481,7 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
   auto portList = moduleOp.getPorts();
-  auto portArgs = moduleOp.getArguments();
+  auto portArgs = body.getArguments();
   for (auto tuple : llvm::zip(portList, portLocs, portArgs)) {
     PortInfo &port = std::get<0>(tuple);
     llvm::SMLoc loc = std::get<1>(tuple);
@@ -4457,8 +4492,7 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
   }
 
   ModuleNamespace modNameSpace(moduleOp);
-  FIRStmtParser stmtParser(*moduleOp.getBodyBlock(), moduleContext,
-                           modNameSpace, version);
+  FIRStmtParser stmtParser(body, moduleContext, modNameSpace, version);
 
   // Parse the moduleBlock.
   auto result = stmtParser.parseSimpleStmtBlock(deferredModule.indent);
@@ -4588,11 +4622,12 @@ ParseResult FIRCircuitParser::parseCircuit(
       emitError("unexpected token in circuit");
       return failure();
 
-    case FIRToken::kw_module:
+    case FIRToken::kw_class:
+    case FIRToken::kw_declgroup:
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:
-    case FIRToken::kw_type:
-    case FIRToken::kw_declgroup: {
+    case FIRToken::kw_module:
+    case FIRToken::kw_type: {
       auto indent = getIndentation();
       if (!indent.has_value())
         return emitError("'module' must be first token on its line"), failure();
