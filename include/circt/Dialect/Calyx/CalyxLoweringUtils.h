@@ -136,7 +136,7 @@ public:
   virtual Location getLoc() = 0;
 
   // Returns the number of iterations the loop will conduct if known.
-  virtual std::optional<uint64_t> getBound() = 0;
+  virtual std::optional<int64_t> getBound() = 0;
 };
 
 // A common interface for loop operations that have conditionals (e.g., while
