@@ -462,12 +462,12 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
 
       bool hasAggregateOperand =
           llvm::any_of(op.getOperandTypes(), [](Type type) {
-            return isa<FVectorType, BundleType>(type);
+            return type_isa<FVectorType, BundleType>(type);
           });
 
       for (auto result : op.getResults())
         if (hasAggregateOperand ||
-            isa<FVectorType, BundleType>(result.getType()))
+            type_isa<FVectorType, BundleType>(result.getType()))
           markOverdefined(result);
     }
 
