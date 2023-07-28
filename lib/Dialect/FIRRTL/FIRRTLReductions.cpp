@@ -947,6 +947,9 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   // prioritized). For example, things that can knock out entire modules while
   // being cheap should be tried first (and thus have higher benefit), before
   // trying to tweak operands of individual arithmetic ops.
+  patterns.add<PassReduction, 30>(
+      getContext(), firrtl::createDropNamesPass(PreserveValues::None), false,
+      true);
   patterns.add<PassReduction, 29>(getContext(),
                                   firrtl::createLowerCHIRRTLPass(), true, true);
   patterns.add<PassReduction, 28>(getContext(), firrtl::createInferWidthsPass(),
