@@ -824,3 +824,18 @@ circuit GroupAndCircuitShareName:
   declgroup GroupAndCircuitShareName, bind :
 
   module GroupAndCircuitShareName:
+
+
+;// -----
+
+circuit Top:
+  ; expected-error @below {{class cannot be the top of a circuit}}
+  class Top:
+
+;// -----
+
+circuit Top:
+  module Top:
+  class Foo:
+    ;; expected-error @below {{ports on classes must be properties}}
+    input a: UInt<8>

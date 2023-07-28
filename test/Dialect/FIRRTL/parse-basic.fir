@@ -1670,3 +1670,11 @@ circuit Groups:
     ; CHECK-NEXT:     %F_a = firrtl.node{{.*}} %a
     ; CHECK-NEXT:   }
     ; CHECK-NEXT: }
+
+; CHECK-LABEL firrtl.class @SimpleClass(in %a: !firrtl.string, out %b: !firrtl.string) {
+; CHECK-NEXT    firrtl.propassign %b, %a : !firrtl.string
+; CHECK-NEXT  }
+class SimpleClass:
+  input a: String
+  output b: String
+  propassign b, a
