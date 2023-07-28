@@ -40,6 +40,8 @@
 // CHECK-NEXT: connect-source-operand-1-forwarder
 // CHECK-NEXT: operation-pruner
 // CHECK-NEXT: connect-source-operand-2-forwarder
+// CHECK-NEXT: module-internal-name-sanitizer
+// CHECK-NEXT: module-name-sanitizer
 // CHECK-EMPTY:
 firrtl.circuit "Foo" {
   firrtl.module @Foo() {}
