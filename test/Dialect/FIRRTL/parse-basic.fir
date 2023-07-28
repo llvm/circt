@@ -1449,7 +1449,7 @@ circuit Foo_v3p0p0:
     ; Ensure that `a` is equivalent to a.
     ; CHECK-NEXT: %a = firrtl.node {{.+}}%_0
     node `a` = `0`
-    ; CHECK-NEXT %b = firrtl.node {{.+}}%a
+    ; CHECK-NEXT: %b = firrtl.node {{.+}}%a
     node b = a
 
 ;// -----

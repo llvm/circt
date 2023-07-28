@@ -1521,7 +1521,7 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
     firrtl.instance b2 interesting_name  @ExtBar()
     // CHECK: %b2_random_something_external = firrtl.instance b2 interesting_name  @ExtBar(out random_something_external: !firrtl.probe<uint<1>>)
   }
-  // CHECK-LABEL firrtl.module @Top()
+  // CHECK-LABEL: firrtl.module @Top()
   firrtl.module @Top() {
     firrtl.instance foo interesting_name  @Foo()
     %tap = firrtl.wire interesting_name  : !firrtl.uint<1>

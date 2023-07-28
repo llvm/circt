@@ -361,9 +361,9 @@ firrtl.circuit "Top" {
   // CHECK: @nla_2
   hw.hierpath private @nla_1 [@Foo1::@dead, @EncodingModule]
   hw.hierpath private @nla_2 [@Foo2::@live, @EncodingModule]
-  // CHECK-LABEL private @EncodingModule
+  // CHECK-LABEL: private @EncodingModule
   // CHECK-NOT: @nla_1
-  // CHECK-SAME @nla_2
+  // CHECK-SAME: @nla_2
   firrtl.module private @EncodingModule(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1> [{circt.nonlocal = @nla_1, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64, type = "OMReferenceTarget"}, {circt.nonlocal = @nla_2, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64, type = "OMReferenceTarget"}]) {
     firrtl.strictconnect %a, %in : !firrtl.uint<1>
   }

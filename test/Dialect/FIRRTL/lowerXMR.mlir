@@ -46,7 +46,7 @@ firrtl.circuit "Top" {
     %0 = firrtl.ref.resolve %bar_a : !firrtl.probe<uint<1>>
     // CHECK:      %[[#xmr:]] = sv.xmr.ref @[[path]] : !hw.inout<i1>
     // CHECK-NEXT: %[[#cast:]] = builtin.unrealized_conversion_cast %[[#xmr]] : !hw.inout<i1> to !firrtl.uint<1>
-    // CHECK-NEXT; firrtl.strictconnect %a, %[[#cast]] : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %a, %[[#cast]] : !firrtl.uint<1>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
   }
 }
@@ -905,7 +905,7 @@ firrtl.circuit "RefSubLayers" {
   // CHECK: hw.hierpath private @[[XMRPATH:.+]] [@RefSubLayers::@[[TOP_SYM:[^,]+]], @Mid::@[[MID_SYM:[^,]+]], @Leaf::@[[LEAF_SYM:.+]]]
   // CHECK-NEXT: sv.macro.decl @ref_RefSubLayers_RefSubLayers_rw
   // CHECK-NEXT{LITERAL}: sv.macro.def @ref_RefSubLayers_RefSubLayers_rw "{{0}}.`ref_ExtRef_ExtRef_out.b[1].a"
-  // CHECK-SAME ([@[[XMRPATH]]])
+  // CHECK-SAME: ([@[[XMRPATH]]])
    firrtl.extmodule @ExtRef(out out: !firrtl.probe<bundle<a: uint<1>, b: vector<bundle<a: uint<2>, b: uint<1>>, 2>>>)
   firrtl.module @RefSubLayers(out %rw : !firrtl.probe<uint<2>>) {
     %ref = firrtl.instance m @Mid(out rw: !firrtl.probe<bundle<a: uint<2>, b: uint<1>>>)

@@ -123,7 +123,7 @@ func.func @no_invert_if(%arg0: i1) {
   return
 }
 
-// CHECK-LABEL; @immediate_assert_canonicalization
+// CHECK-LABEL: @assert_canonicalization
 hw.module @assert_canonicalization(%clock: i1) {
   %true = hw.constant 1 : i1
   %false = hw.constant 0 : i1

@@ -612,7 +612,7 @@ firrtl.circuit "TopLevel" {
 
 // Test wire connection semantics.  Based on the flippedness of the destination
 // type, the connection may be reversed.
-// CHECK-LABEL firrtl.module private @WireSemantics
+// CHECK-LABEL: firrtl.module private @WireSemantics
   firrtl.module private @WireSemantics() {
     %a = firrtl.wire  : !firrtl.bundle<a: bundle<a: uint<1>>>
     %ax = firrtl.wire  : !firrtl.bundle<a: bundle<a: uint<1>>>
@@ -635,8 +635,8 @@ firrtl.circuit "TopLevel" {
     // CHECK: firrtl.connect %a_a_a, %ax_a_a
     %b = firrtl.wire  : !firrtl.bundle<a: bundle<a flip: uint<1>>>
     %bx = firrtl.wire  : !firrtl.bundle<a: bundle<a flip: uint<1>>>
-    // CHECK %b_a_a = firrtl.wire
-    // CHECK %bx_a_a = firrtl.wire
+    // CHECK: %b_a_a = firrtl.wire
+    // CHECK: %bx_a_a = firrtl.wire
     firrtl.connect %b, %bx : !firrtl.bundle<a: bundle<a flip: uint<1>>>, !firrtl.bundle<a: bundle<a flip: uint<1>>>
     // b <= bx
     // CHECK: firrtl.strictconnect %bx_a_a, %b_a_a
@@ -908,10 +908,10 @@ firrtl.circuit "TopLevel" {
   }
 
 // Test InstanceOp with port annotations.
-// CHECK-LABEL firrtl.module private @Bar3
+// CHECK-LABEL: firrtl.module private @Bar3
   firrtl.module private @Bar3(in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>>) {
   }
-  // CHECK-LABEL firrtl.module private @Foo3
+  // CHECK-LABEL: firrtl.module private @Foo3
   firrtl.module private @Foo3() {
     // CHECK: in a: !firrtl.uint<1> [{one}], out b_baz: !firrtl.uint<1> [{two}], out b_qux: !firrtl.uint<1>
     %bar_a, %bar_b = firrtl.instance bar @Bar3(
