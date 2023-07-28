@@ -222,6 +222,7 @@ Operation *InnerRefNamespace::lookupOp(hw::InnerRefAttr inner) {
 namespace detail {
 
 LogicalResult verifyInnerRefNamespace(Operation *op) {
+  llvm::outs() << "Runing IRN verifier on " << op->getName() << "\n";
   // Construct the symbol tables.
   InnerSymbolTableCollection innerSymTables;
   if (failed(innerSymTables.populateAndVerifyTables(op)))

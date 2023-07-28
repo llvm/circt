@@ -23,6 +23,8 @@ def IbisDialect : Dialect {
     of an internal hardware development language.
   }];
 
+  let dependentDialects = ["::circt::hw::HWDialect"];
+
   // TODO: uncomment this once we introduce some types. The default functions
   // aren't generated without typedefs.
   // let useDefaultTypePrinterParser = 1;

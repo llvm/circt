@@ -215,6 +215,7 @@ LogicalResult InnerSymbolTable<ConcreteType>::verifyRegionTrait(Operation *op) {
 
   return success();
 }
+
 } // namespace OpTrait
 } // namespace mlir
 
