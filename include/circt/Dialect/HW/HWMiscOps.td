@@ -15,6 +15,7 @@
 
 include "circt/Dialect/HW/HWAttributes.td"
 include "circt/Dialect/HW/HWDialect.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
