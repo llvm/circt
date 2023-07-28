@@ -1303,6 +1303,53 @@ LogicalResult FIntModuleOp::verify() {
   return success();
 }
 
+static LogicalResult verifyPortSymbolUses(FModuleLike module,
+                                          SymbolTableCollection &symbolTable) {
+  auto circuitOp = module->getParentOfType<CircuitOp>();
+
+  // verify types in ports.
+  for (size_t i = 0, e = module.getNumPorts(); i < e; ++i) {
+    auto type = module.getPortType(i);
+    auto classType = dyn_cast<ClassType>(type);
+    if (!classType)
+      continue;
+
+    // verify that the class exists.
+    auto className = classType.getNameAttr();
+    auto classOp = dyn_cast_or_null<ClassOp>(
+        symbolTable.lookupSymbolIn(circuitOp, className));
+    if (!classOp)
+      return module.emitOpError()
+             << "target class '" << className.getValue() << "' not found";
+
+    // verify that the result type agrees with the class definition.
+    if (failed(classOp.verifyType(classType,
+                                  [&]() { return module.emitOpError(); })))
+      return failure();
+  }
+
+  return success();
+}
+
+LogicalResult FModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+}
+
+LogicalResult
+FExtModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+}
+
+LogicalResult
+FIntModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+}
+
+LogicalResult
+FMemModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+}
+
 void FModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
                                          mlir::OpAsmSetValueNameFn setNameFn) {
   getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
@@ -1484,6 +1531,11 @@ LogicalResult ClassOp::verify() {
   return success();
 }
 
+LogicalResult
+ClassOp::verifySymbolUses(::mlir::SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+}
+
 void ClassOp::getAsmBlockArgumentNames(mlir::Region &region,
                                        mlir::OpAsmSetValueNameFn setNameFn) {
   getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
@@ -1515,6 +1567,60 @@ ArrayAttr ClassOp::getPortAnnotationsAttr() {
 }
 
 hw::ModulePortInfo ClassOp::getPortList() { return ::getPortListImpl(*this); }
+
+LogicalResult
+ClassOp::verifyType(ClassType type,
+                    function_ref<InFlightDiagnostic()> emitError) {
+  // This check is probably not required, but done for sanity.
+  auto name = type.getNameAttr().getAttr();
+  auto expectedName = getModuleNameAttr();
+  if (name != expectedName)
+    return emitError() << "type has wrong name, got " << name << ", expected "
+                       << expectedName;
+
+  auto elements = type.getElements();
+  auto numElements = elements.size();
+  auto expectedNumElements = getNumPorts();
+  if (numElements != expectedNumElements)
+    return emitError() << "has wrong number of ports, got " << numElements
+                       << ", expected " << expectedNumElements;
+
+  for (unsigned i = 0; i < numElements; ++i) {
+    auto element = elements[i];
+
+    auto name = element.name;
+    auto expectedName = getPortNameAttr(i);
+    if (name != expectedName)
+      return emitError() << "port #" << i << " has wrong name, got " << name
+                         << ", expected " << expectedName;
+
+    auto direction = element.direction;
+    auto expectedDirection = getPortDirection(i);
+    if (direction != expectedDirection)
+      return emitError() << "port " << name << " has wrong direction, got "
+                         << direction::toString(direction) << ", expected "
+                         << direction::toString(expectedDirection);
+
+    auto type = element.type;
+    auto expectedType = getPortType(i);
+    if (type != expectedType)
+      return emitError() << "port " << name << " has wrong type, got " << type
+                         << ", expected " << expectedType;
+  }
+
+  return success();
+}
+
+ClassType ClassOp::getInstanceType() {
+  auto n = getNumPorts();
+  SmallVector<ClassElement> elements;
+  elements.reserve(n);
+  for (size_t i = 0; i < n; ++i)
+    elements.push_back(
+        {getPortNameAttr(i), getPortType(i), getPortDirection(i)});
+  auto name = FlatSymbolRefAttr::get(getNameAttr());
+  return ClassType::get(name, elements);
+}
 
 //===----------------------------------------------------------------------===//
 // Declarations

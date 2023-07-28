@@ -544,6 +544,50 @@ def BaseTypeAliasImpl : FIRRTLImplType<"BaseTypeAlias", [FieldIDTypeInterface],
 // Non-Hardware Type Definitions
 //===----------------------------------------------------------------------===//
 
+def ClassImpl : FIRRTLImplType<"Class", [], "circt::firrtl::FIRRTLType"> {
+  let summary = [{
+    An instance of a class.
+
+    Example:
+    ```mlir
+    !firrtl.class<@Module(in p0: !firrtl.uint<8>, out p1: !firrtl.uint<8>)>
+    ```
+  }];
+  let parameters = (ins
+    "FlatSymbolRefAttr":$name,
+    ArrayRefParameter<"ClassElement">:$elements
+  );
+  let genStorageClass = true;
+  let genAccessors = false;
+  let builders = [
+    TypeBuilderWithInferredContext<(ins
+      "FlatSymbolRefAttr":$name,
+      "ArrayRef<ClassElement>":$elements
+    )>
+  ];
+  let extraClassDeclaration = [{
+    /// Helper to parse this type as a module interface.
+    static ParseResult parseInterface(
+      AsmParser &parser, ClassType &result);
+
+    StringRef getName() const;
+    FlatSymbolRefAttr getNameAttr() const;
+
+    ArrayRef<ClassElement> getElements() const;
+    size_t getNumElements() const { return getElements().size(); }
+    const ClassElement &getElement(IntegerAttr index) const;
+    const ClassElement &getElement(size_t index) const;
+    std::optional<uint64_t> getElementIndex(StringRef fieldName) const;
+
+    /// Helper to print this type as a module interface.
+    /// Example:
+    /// ```
+    /// @MyClass(in %port: !firrtl.uint<8>, out o: !firrtl.uint<8>)
+    /// ```
+    void printInterface(AsmPrinter &p) const;
+  }];
+}
+
 def StringImpl : FIRRTLImplType<"String", [], "circt::firrtl::FIRRTLType"> {
   let summary = [{
     An unlimited length string type. Not representable in hardware.

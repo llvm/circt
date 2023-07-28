@@ -202,6 +202,8 @@ def PropertyType : FIRRTLDialectTypeHelper<
     A FIRRTL property type, such as a string.
   }]>;
 
+def ClassType : FIRRTLDialectTypeHelper<"ClassType", "class type">;
+
 def StringType : FIRRTLDialectTypeHelper<"StringType", "string type">,
   BuildableType<"::circt::firrtl::StringType::get($_builder.getContext())">;
 
