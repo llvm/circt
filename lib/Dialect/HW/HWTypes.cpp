@@ -790,14 +790,28 @@ ModuleType circt::hw::detail::fnToMod(Operation *op, ArrayAttr inputNames,
 ModuleType circt::hw::detail::fnToMod(FunctionType fnty, ArrayAttr inputNames,
                                       ArrayAttr outputNames) {
   SmallVector<ModulePort> ports;
-  for (auto [t, n] : llvm::zip(fnty.getInputs(), inputNames))
-    if (auto iot = dyn_cast<hw::InOutType>(t))
-      ports.push_back({cast<StringAttr>(n), iot.getElementType(),
-                       ModulePort::Direction::InOut});
-    else
-      ports.push_back({cast<StringAttr>(n), t, ModulePort::Direction::Input});
-  for (auto [t, n] : llvm::zip(fnty.getResults(), outputNames))
-    ports.push_back({cast<StringAttr>(n), t, ModulePort::Direction::Output});
+  if (inputNames) {
+    for (auto [t, n] : llvm::zip(fnty.getInputs(), inputNames))
+      if (auto iot = dyn_cast<hw::InOutType>(t))
+        ports.push_back({cast<StringAttr>(n), iot.getElementType(),
+                         ModulePort::Direction::InOut});
+      else
+        ports.push_back({cast<StringAttr>(n), t, ModulePort::Direction::Input});
+  } else {
+    for (auto t : fnty.getInputs())
+      if (auto iot = dyn_cast<hw::InOutType>(t))
+        ports.push_back(
+            {{}, iot.getElementType(), ModulePort::Direction::InOut});
+      else
+        ports.push_back({{}, t, ModulePort::Direction::Input});
+  }
+  if (outputNames) {
+    for (auto [t, n] : llvm::zip(fnty.getResults(), outputNames))
+      ports.push_back({cast<StringAttr>(n), t, ModulePort::Direction::Output});
+  } else {
+    for (auto t : fnty.getResults())
+      ports.push_back({{}, t, ModulePort::Direction::Output});
+  }
   return ModuleType::get(fnty.getContext(), ports);
 }
 

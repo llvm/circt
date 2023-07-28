@@ -79,9 +79,9 @@ def MachineOp : FSMOp<"machine", [
   }];
 
   let extraClassDefinition = [{
-    size_t $cppClass::getNumPorts() {
-      auto machineType = getFunctionType();
-      return machineType.getNumInputs() + machineType.getNumResults();
+
+    ::circt::hw::ModuleType $cppClass::getHWModuleType() {
+      return ::circt::hw::detail::fnToMod(getFunctionType(), *getArgNames(), *getResNames());
     }
 
     circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {

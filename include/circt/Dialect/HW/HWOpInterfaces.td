@@ -32,78 +32,65 @@ def HWModuleLike : OpInterface<"HWModuleLike", [Symbol]> {
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getNameAttr(); }]>,
 
-    InterfaceMethod<"Get the number of ports",
-    "size_t", "getNumPorts">,
-
     InterfaceMethod<"Get a port symbol attribute",
     "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex)>,
 
     InterfaceMethod<"Get the module type",
-    "::circt::hw::ModuleType", "getHWModuleType", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return ::circt::hw::detail::fnToMod($_op, getInputNames(), getOutputNames()); }]>,
-
-    InterfaceMethod<"Return the names of the inputs to this module",
-    "mlir::ArrayAttr", "getInputNames", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return $_op->template getAttrOfType<ArrayAttr>("argNames");
-    }]>,
-
-    InterfaceMethod<"Return the names of the outputs this module",
-    "mlir::ArrayAttr", "getOutputNames", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return $_op->template getAttrOfType<ArrayAttr>("resultNames");
-    }]>,
-
-    InterfaceMethod<"Return the locations of the inputs to this module",
-    "mlir::ArrayAttr", "getInputLocs", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return $_op->template getAttrOfType<ArrayAttr>("argLocs");
-    }]>,
-
-    InterfaceMethod<"Return the locations of the outputs of this module",
-    "mlir::ArrayAttr", "getOutputLocs", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return $_op->template getAttrOfType<ArrayAttr>("resultLocs");
-    }]>,
-
+    "::circt::hw::ModuleType", "getHWModuleType", (ins)>,
   ];
 
   let extraSharedClassDeclaration = [{
 
-    // Return the number of inputs to this module
-    unsigned getNumInputs() {
-      return getInputNames().size();
+    size_t getNumPorts() {
+      return $_op.getHWModuleType().getPorts().size();
     }
 
-    // Return the number of outputs from this module
-    unsigned getNumOutputs() {
-      return getOutputNames().size();
+    size_t getNumInputs() {
+      return $_op.getHWModuleType().getNumInputs();
     }
 
-    // Return the name of an input.
-    mlir::StringRef getInputName(unsigned idx) {
-      return getInputNameAttr(idx).getValue();
+    size_t getNumOutputs() {
+      return $_op.getHWModuleType().getNumOutputs();
     }
 
-    // Return the name of an output
-    mlir::StringRef getOutputName(unsigned idx) {
-      return getOutputNameAttr(idx).getValue();
+    SmallVector<StringAttr> getInputNames() {
+      return $_op.getHWModuleType().getInputNames();
     }
 
-    // Return the name of an input to this module
-    mlir::StringAttr getInputNameAttr(unsigned idx) {
-      return cast<StringAttr>(getInputNames()[idx]);
+    SmallVector<StringAttr> getOutputNames() {
+      return $_op.getHWModuleType().getOutputNames();
     }
 
-    // Return the name of an output to this module
-    mlir::StringAttr getOutputNameAttr(unsigned idx) {
-      return cast<StringAttr>(getOutputNames()[idx]);
+    ArrayAttr getInputNamesAttr() {
+      auto ty = $_op.getHWModuleType();
+      auto names = ty.getInputNames();
+      SmallVector<Attribute> names_(names.begin(), names.end());
+      return ArrayAttr::get(ty.getContext(), names_);
     }
+
+    ArrayAttr getOutputNamesAttr() {
+      auto ty = $_op.getHWModuleType();
+      auto names = ty.getOutputNames();
+      SmallVector<Attribute> names_(names.begin(), names.end());
+      return ArrayAttr::get(ty.getContext(), names_);
+    }
+    
+    StringRef getInputName(size_t idx) {
+      return $_op.getHWModuleType().getInputName(idx);
+    }
+
+    StringRef getOutputName(size_t idx) {
+      return $_op.getHWModuleType().getOutputName(idx);
+    }
+
+    StringAttr getInputNameAttr(size_t idx) {
+      return $_op.getHWModuleType().getInputNameAttr(idx);
+    }
+
+    StringAttr getOutputNameAttr(size_t idx) {
+      return $_op.getHWModuleType().getOutputNameAttr(idx);
+    }
+
 
   }];
 

@@ -615,10 +615,11 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
     SmallVector<NamedAttribute> newAttrs;
     for (auto attr : inst->getAttrs()) {
       if (attr.getName() == argsAttrName)
-        newAttrs.push_back(b.getNamedAttr(argsAttrName, mod.getInputNames()));
+        newAttrs.push_back(
+            b.getNamedAttr(argsAttrName, mod.getInputNamesAttr()));
       else if (attr.getName() == resultsAttrName)
         newAttrs.push_back(
-            b.getNamedAttr(resultsAttrName, mod.getOutputNames()));
+            b.getNamedAttr(resultsAttrName, mod.getOutputNamesAttr()));
       else
         newAttrs.push_back(attr);
     }

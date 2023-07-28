@@ -105,8 +105,9 @@ def SCModuleOp : SystemCOp<"module", [
   }];
 
   let extraClassDefinition = [{
-    size_t $cppClass::getNumPorts() {
-      return getPortNames().size();
+
+    ::circt::hw::ModuleType $cppClass::getHWModuleType() {
+      return ::circt::hw::detail::fnToMod(getFunctionType(), getPortNames(), getPortNames());
     }
 
     circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {

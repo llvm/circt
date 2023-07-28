@@ -170,10 +170,9 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
   }];
 
   let extraClassDefinition = [{
-    size_t $cppClass::getNumPorts() {
-      // This is excessively expensive
-      auto ports = getPorts();
-      return ports.size();
+
+    ::circt::hw::ModuleType $cppClass::getHWModuleType() {
+      return ::circt::hw::detail::fnToMod(getFunctionType(), getArgNames(), getResultNames());
     }
 
     circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
@@ -217,6 +216,7 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
   let hasVerifier = 1;
 
   let extraClassDeclaration = [{
+
     /// Decode information about the input and output ports on this module.
     hw::ModulePortInfo getPorts();
 
@@ -225,6 +225,12 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
 
     /// Returns the result types of this function.
     ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+  }];
+
+  let extraClassDefinition = [{
+    ::circt::hw::ModuleType $cppClass::getHWModuleType() {
+      return ::circt::hw::detail::fnToMod(getFunctionType(), getArgNames(), getResultNames());
+    }
   }];
 }
 
