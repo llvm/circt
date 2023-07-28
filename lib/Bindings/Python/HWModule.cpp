@@ -172,6 +172,15 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
         return cls(hwParamVerbatimAttrGet(text));
       });
 
+  mlir_attribute_subclass(m, "InnerSymAttr", hwAttrIsAInnerSymAttr)
+      .def_classmethod("get",
+                       [](py::object cls, MlirAttribute symName) {
+                         return cls(hwInnerSymAttrGet(symName));
+                       })
+      .def_property_readonly("symName", [](MlirAttribute self) {
+        return hwInnerSymAttrGetSymName(self);
+      });
+
   mlir_attribute_subclass(m, "InnerRefAttr", hwAttrIsAInnerRefAttr)
       .def_classmethod(
           "get",
