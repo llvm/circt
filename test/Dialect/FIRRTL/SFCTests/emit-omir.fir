@@ -142,7 +142,7 @@ circuit Foo : %[[
 ; CHECK:       "name": "containingModule"
 ; CHECK-NEXT:  "value": "OMInstanceTarget:~Foo|Foo"
 ; CHECK:        "name": "portField",
-; CHECK-NEXT        "value": "OMReferenceTarget:~Foo|Foo/parameter_0:Bar>b_signed"
+; CHECK-NEXT:   "value": "OMReferenceTarget:~Foo|Foo/parameter_0:Bar>b_signed"
 ; CHECK:       "name": "ports"
 ; CHECK-NEXT:  "value": [
 ; CHECK-NEXT:    {
