@@ -1405,7 +1405,7 @@ namespace {
 struct FIRStmtParser : public FIRParser {
   explicit FIRStmtParser(Block &blockToInsertInto,
                          FIRModuleContext &moduleContext,
-                         Namespace &modNameSpace, FIRVersion &version,
+                         ModuleNamespace &modNameSpace, FIRVersion &version,
                          SymbolRefAttr groupSym = {})
       : FIRParser(moduleContext.getConstants(), moduleContext.getLexer(),
                   version),
@@ -1513,7 +1513,7 @@ private:
   // Extra information maintained across a module.
   FIRModuleContext &moduleContext;
 
-  Namespace &modNameSpace;
+  ModuleNamespace &modNameSpace;
 
   // An optional symbol that contains the current group that we are in.  This is
   // used to construct a nested symbol for a group definition operation.
@@ -2949,18 +2949,36 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
   // Not public port (verifier)
 
   // Check probe expression is base-type.
-  if (!type_isa<FIRRTLBaseType>(staticRef.getType()))
+  auto targetType = type_dyn_cast<FIRRTLBaseType>(staticRef.getType());
+  if (!targetType)
     return emitError(startTok.getLoc(),
                      "expected base-type expression in 'rwprobe', got ")
            << staticRef.getType();
 
-  // Check for other unsupported reference sources.
   auto fieldRef = getFieldRefFromValue(staticRef);
   auto target = fieldRef.getValue();
 
-  // TODO: Support for non-public ports.
-  if (isa<BlockArgument>(target))
-    return emitError(startTok.getLoc(), "rwprobe of port not yet supported");
+  // Ports are handled differently, emit a RWProbeOp with inner symbol.
+  if (auto arg = dyn_cast<BlockArgument>(target)) {
+    // Check target type.  Replicate inference/verification logic.
+    if (targetType.hasUninferredWidth() || targetType.hasUninferredReset())
+      return emitError(startTok.getLoc(),
+                       "must have known width or concrete reset type in type ")
+             << targetType;
+    auto forceableType =
+        firrtl::detail::getForceableResultType(true, targetType);
+    if (!forceableType)
+      return emitError(startTok.getLoc(), "cannot force target of type ")
+             << targetType;
+
+    // Get InnerRef for target field.
+    auto mod = cast<FModuleOp>(arg.getOwner()->getParentOp());
+    auto sym = getInnerRefTo(
+        hw::InnerSymTarget(arg.getArgNumber(), mod, fieldRef.getFieldID()),
+        [&](FModuleOp mod) -> ModuleNamespace & { return modNameSpace; });
+    result = builder.create<RWProbeOp>(sym, targetType);
+    return success();
+  }
 
   auto *definingOp = target.getDefiningOp();
   if (!definingOp)
@@ -4427,19 +4445,18 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
-  Namespace modNameSpace;
   auto portList = moduleOp.getPorts();
   auto portArgs = moduleOp.getArguments();
   for (auto tuple : llvm::zip(portList, portLocs, portArgs)) {
     PortInfo &port = std::get<0>(tuple);
     llvm::SMLoc loc = std::get<1>(tuple);
     BlockArgument portArg = std::get<2>(tuple);
-    if (port.sym)
-      modNameSpace.newName(port.sym.getSymName().getValue());
+    assert(!port.sym);
     if (moduleContext.addSymbolEntry(port.getName(), portArg, loc))
       return failure();
   }
 
+  ModuleNamespace modNameSpace(moduleOp);
   FIRStmtParser stmtParser(*moduleOp.getBodyBlock(), moduleContext,
                            modNameSpace, version);
 
