@@ -5,7 +5,7 @@
 // CHECK: [[BUSY]] [shape=record,label="{BUSY|fsm.output %false : i1}"];
 // CHECK: [[BUSY]] -> [[BUSY]][label="%0 = arith.cmpi ne, %cnt, %c0_i16 : i16\nfsm.return %0"];
 // CHECK: [[BUSY]] -> [[IDLE]]
-// CHECK{LITERAL}-SAME: [label="%0 = arith.cmpi eq, %cnt, %c0_i16 : i16\nfsm.return %0"];
+// CHECK-SAME{LITERAL}: [label="%0 = arith.cmpi eq, %cnt, %c0_i16 : i16\nfsm.return %0"];
 // CHECK: variables [shape=record,label="Variables|%c1_i16 = arith.constant 1 : i16\n%c0_i16 = arith.constant 0 : i16\n%false = arith.constant false\n%c256_i16 = arith.constant 256 : i16\n%true = arith.constant true\n%cnt = fsm.variable \"cnt\" \{initValue = 0 : i16\} : i16"]}
 
 fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
