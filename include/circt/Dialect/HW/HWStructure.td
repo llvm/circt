@@ -31,7 +31,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     HWOp<mnemonic, traits # [
       DeclareOpInterfaceMethods<HWModuleLike>,
       DeclareOpInterfaceMethods<HWMutableModuleLike>,
-      FunctionOpInterface, Symbol,
+      Symbol,
       OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
@@ -49,6 +49,25 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       ArrayRef<unsigned> eraseInputs,
       ArrayRef<unsigned> eraseOutputs
     );
+
+    FunctionType getFunctionType();
+
+    /// Returns the dictionary attribute corresponding to the argument at
+    /// 'index'. If there are no argument attributes at 'index', a null
+    /// attribute is returned.
+    DictionaryAttr getArgAttrDict(unsigned index) {
+      assert(index < getNumInputs() && "invalid argument number");
+      return HWModuleLike_impl::getArgAttrDict(*this, index);
+    }
+
+    /// Returns the dictionary attribute corresponding to the result at 'index'.
+    /// If there are no result attributes at 'index', a null attribute is
+    /// returned.
+    DictionaryAttr getResultAttrDict(unsigned index) {
+      assert(index < getNumOutputs() && "invalid result number");
+      return HWModuleLike_impl::getResultAttrDict(*this, index);
+    }
+
   }];
 
   /// Additional class definitions inside the module op.
@@ -57,16 +76,21 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
   let extraClassDefinition = extraModuleClassDefinition # [{
 
     ModuleType $cppClass::getHWModuleType() {
-      return detail::fnToMod(getFunctionType(), getArgNames(), getResultNames());
+      return getModuleType();
+    }
+
+    FunctionType $cppClass::getFunctionType() {
+      return getModuleType().getFuncType();
     }
 
     ::circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
       for (::mlir::NamedAttribute argAttr :
-           ::mlir::function_interface_impl::getArgAttrs(*this, portIndex))
+           HWModuleLike_impl::getArgAttrs(*this, portIndex))
         if (auto sym = argAttr.getValue().dyn_cast<::circt::hw::InnerSymAttr>())
           return sym;
       return ::circt::hw::InnerSymAttr();
     }
+
   }];
 
 }
@@ -80,11 +104,9 @@ def HWModuleOp : HWModuleOpBase<"module",
     name, a list of ports, a list of parameters, and a body that represents the
     connections within the module.
   }];
-  let arguments = (ins TypeAttrOf<FunctionType>:$function_type,
+  let arguments = (ins TypeAttrOf<ModuleType>:$module_type,
                        OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
-                       StrArrayAttr:$argNames,
-                       StrArrayAttr:$resultNames,
                        LocationArrayAttr:$argLocs,
                        LocationArrayAttr:$resultLocs,
                        ParamDeclArrayAttr:$parameters,
@@ -111,14 +133,29 @@ def HWModuleOp : HWModuleOpBase<"module",
   ];
 
   let extraModuleClassDeclaration = [{
-    using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::front;
-    using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::getFunctionBody;
+    /// Block list iterator types.
+    using BlockListType = Region::BlockListType;
+    using iterator = BlockListType::iterator;
+    using reverse_iterator = BlockListType::reverse_iterator;
+
+    /// Block argument iterator types.
+    using BlockArgListType = Region::BlockArgListType;
+    using args_iterator = BlockArgListType::iterator;
+
+    //===------------------------------------------------------------------===//
+    // Body Handling
+    //===------------------------------------------------------------------===//
+
+    /// Return the region containing the body of this function.
+    Region &getModuleBody() { return getRegion(); }
+
+    ///////
 
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
     /// Returns the number of in or inout ports.
-    size_t getNumInOrInoutPorts() { return getArgumentTypes().size(); }
+    size_t getNumInOrInoutPorts() { return getNumInputs(); }
 
     /// Return the PortInfo for the specified input or inout port.
     PortInfo getInOrInoutPort(size_t i) {
@@ -168,12 +205,12 @@ def HWModuleOp : HWModuleOpBase<"module",
     /// Append an output with a given name and type to the port list.
     /// If the name is not unique, a unique name is created.
     void appendOutput(StringAttr name, Value value) {
-      return insertOutputs(getResultTypes().size(), {{name, value}});
+      return insertOutputs(getNumOutputs(), {{name, value}});
     }
 
     void appendOutput(const Twine &name, Value value) {
       ::mlir::StringAttr nameAttr = ::mlir::StringAttr::get(getContext(), name);
-      return insertOutputs(getResultTypes().size(), {{nameAttr, value}});
+      return insertOutputs(getNumOutputs(), {{nameAttr, value}});
     }
 
     /// Prepend an output with a given name and type to the port list.
@@ -193,7 +230,7 @@ def HWModuleOp : HWModuleOpBase<"module",
     void insertOutputs(unsigned index,
                        ArrayRef<std::pair<StringAttr, Value>> outputs);
 
-    Block *getBodyBlock() { return &getFunctionBody().front(); }
+    Block *getBodyBlock() { return &getModuleBody().front(); }
 
     // Get the module's symbolic name as StringAttr.
     StringAttr getNameAttr() {
@@ -205,23 +242,100 @@ def HWModuleOp : HWModuleOpBase<"module",
     StringRef getName() {
       return getNameAttr().getValue();
     }
+
+
+    //===------------------------------------------------------------------===//
+    // Argument and Result Handling
+    //===------------------------------------------------------------------===//
+
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-    /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
+    BlockArgListType getArguments() { return getModuleBody().getArguments(); }
+    BlockArgument getArgument(size_t idx) { return getModuleBody().getArgument(idx); }
 
-    /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
 
-    /// Verify the type attribute of this function. Returns failure and emits
-    /// an error if the attribute is invalid.
-    LogicalResult verifyType() {
-      auto type = getFunctionTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
-                           "' attribute of function type");
-      return success();
+    //===------------------------------------------------------------------===//
+    // Argument Attributes
+    //===------------------------------------------------------------------===//
+
+    /// Return all of the attributes for the argument at 'index'.
+    ArrayRef<NamedAttribute> getArgAttrs(unsigned index) {
+      return HWModuleLike_impl::getArgAttrs(*this, index);
+    }
+
+    /// Return an ArrayAttr containing all argument attribute dictionaries of
+    /// this function, or nullptr if no arguments have attributes.
+    ArrayAttr getAllArgAttrs() { return getArgAttrsAttr(); }
+
+    /// If the an attribute exists with the specified name, change it to the new
+    /// value. Otherwise, add a new attribute with the specified name/value.
+    void setArgAttr(unsigned index, StringAttr name, Attribute value) {
+      HWModuleLike_impl::setArgAttr(*this, index, name, value);
+    }
+
+    void setArgAttr(unsigned index, StringRef name, Attribute value) {
+      setArgAttr(index,
+                 StringAttr::get(getContext(), name),
+                 value);
+    }
+
+    /// Set the attributes held by the argument at 'index'.
+    void setArgAttrs(unsigned index, ArrayRef<NamedAttribute> attributes) {
+      HWModuleLike_impl::setArgAttrs(*this, index, attributes);
+    }
+
+    /// Set the attributes held by the argument at 'index'. `attributes` may be
+    /// null, in which case any existing argument attributes are removed.
+    void setArgAttrs(unsigned index, DictionaryAttr attributes) {
+      HWModuleLike_impl::setArgAttrs(*this, index, attributes);
+    }
+
+    //===------------------------------------------------------------------===//
+    // Result Attributes
+    //===------------------------------------------------------------------===//
+
+    /// Return all of the attributes for the result at 'index'.
+    ArrayRef<NamedAttribute> getResultAttrs(unsigned index) {
+      return HWModuleLike_impl::getResultAttrs(*this, index);
+    }
+
+    /// Return an ArrayAttr containing all result attribute dictionaries of this
+    /// function, or nullptr if no result have attributes.
+    ArrayAttr getAllResultAttrs() { return getResAttrsAttr(); }
+
+    /// Return all result attributes of this function.
+    void getAllResultAttrs(SmallVectorImpl<DictionaryAttr> &result) {
+      if (ArrayAttr argAttrs = getAllResultAttrs()) {
+        auto argAttrRange = argAttrs.template getAsRange<DictionaryAttr>();
+        result.append(argAttrRange.begin(), argAttrRange.end());
+      } else {
+        result.append(getNumOutputs(),
+                      DictionaryAttr::get(getContext()));
+      }
+    }
+
+    /// If the an attribute exists with the specified name, change it to the new
+    /// value. Otherwise, add a new attribute with the specified name/value.
+    void setResultAttr(unsigned index, StringAttr name, Attribute value) {
+      HWModuleLike_impl::setResultAttr(*this, index, name, value);
+    }
+
+    void setResultAttr(unsigned index, StringRef name, Attribute value) {
+      setResultAttr(index,
+                    StringAttr::get(getContext(), name),
+                    value);
+    }
+
+    /// Set the attributes held by the result at 'index'.
+    void setResultAttrs(unsigned index, ArrayRef<NamedAttribute> attributes) {
+      HWModuleLike_impl::setResultAttrs(*this, index, attributes);
+    }
+
+    /// Set the attributes held by the result at 'index'. `attributes` may be
+    /// null, in which case any existing argument attributes are removed.
+    void setResultAttrs(unsigned index, DictionaryAttr attributes) {
+      HWModuleLike_impl::setResultAttrs(*this, index, attributes);
     }
 
     /// Verifies the body of the function.
@@ -243,10 +357,9 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
     have proper parameterization in the hw.dialect.  We need a way to represent
     parameterized types instead of just concrete types.
   }];
-  let arguments = (ins TypeAttrOf<FunctionType>:$function_type,
+  let arguments = (ins TypeAttrOf<ModuleType>:$module_type,
 		       OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
-                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
@@ -299,24 +412,19 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
       return getNameAttr().getValue();
     }
 
+    /// Return all of the attributes for the argument at 'index'.
+    ArrayRef<NamedAttribute> getArgAttrs(unsigned index) {
+      return HWModuleLike_impl::getArgAttrs(*this, index);
+    }
+
+    /// Return all of the attributes for the result at 'index'.
+    ArrayRef<NamedAttribute> getResultAttrs(unsigned index) {
+      return HWModuleLike_impl::getResultAttrs(*this, index);
+    }
+
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-    /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
-
-    /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
-
-    /// Verify the type attribute of this function. Returns failure and emits
-    /// an error if the attribute is invalid.
-    LogicalResult verifyType() {
-      auto type = getFunctionTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
-                           "' attribute of function type");
-      return success();
-    }
   }];
 
   let hasCustomAssemblyFormat = 1;
@@ -359,10 +467,9 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
     module name in Verilog we can use.  See hw.module for an explanation.
   }];
   let arguments = (ins FlatSymbolRefAttr:$generatorKind,
-                       TypeAttrOf<FunctionType>:$function_type,
+                       TypeAttrOf<ModuleType>:$module_type,
 		       OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
-                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
@@ -401,22 +508,6 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
 
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
-
-    /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
-
-    /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
-
-    /// Verify the type attribute of this function. Returns failure and emits
-    /// an error if the attribute is invalid.
-    LogicalResult verifyType() {
-      auto type = getFunctionTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
-                           "' attribute of function type");
-      return success();
-    }
 
     TypeAttr getTypeAttr();
   }];

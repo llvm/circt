@@ -534,8 +534,41 @@ hw::ModuleType ESIPureModuleOp::getHWModuleType() {
 }
 
 ::circt::hw::InnerSymAttr ESIPureModuleOp::getPortSymbolAttr(size_t) {
+  assert(false);
   return {};
 }
+
+    // satisify HWModuleLike
+    ArrayAttr ESIPureModuleOp::getArgAttrsAttr() {
+      assert(false);
+      return {};
+    }
+
+    // satisify HWModuleLike
+    ArrayAttr ESIPureModuleOp::getResAttrsAttr() {
+      assert(false);
+      return {};
+    }
+
+    // satisify HWModuleLike
+    void ESIPureModuleOp::setArgAttrsAttr(ArrayAttr) {
+      assert(false);
+    }    
+    // satisify HWModuleLike
+    void ESIPureModuleOp::setResAttrsAttr(ArrayAttr) {
+      assert(false);
+    }    
+    // satisify HWModuleLike
+    Attribute ESIPureModuleOp::removeArgAttrsAttr() {
+      assert(false);
+      return {};
+    }    
+
+    // satisify HWModuleLike
+    Attribute ESIPureModuleOp::removeResAttrsAttr() {
+      assert(false);
+      return {};
+    }    
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"

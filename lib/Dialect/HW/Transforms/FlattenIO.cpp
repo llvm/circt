@@ -24,10 +24,10 @@ static hw::StructType getStructType(Type type) {
 }
 
 // Legal if no in- or output type is a struct.
-static bool isLegalFuncLikeOp(FunctionOpInterface moduleLikeOp) {
+static bool isLegalFuncLikeOp(hw::HWModuleLike moduleLikeOp) {
   bool legalResults =
-      llvm::none_of(moduleLikeOp.getResultTypes(), isStructType);
-  bool legalArgs = llvm::none_of(moduleLikeOp.getArgumentTypes(), isStructType);
+      llvm::none_of(moduleLikeOp.getOutputTypes(), isStructType);
+  bool legalArgs = llvm::none_of(moduleLikeOp.getInputTypes(), isStructType);
 
   return legalResults && legalArgs;
 }
@@ -187,7 +187,7 @@ static void addSignatureConversion(DenseMap<Operation *, IOInfo> &ioMap,
   // top-level i/o. This ensures that only a single level of structs are
   // processed during signature conversion, which then allows us to use the
   // signature conversion in a recursive manner.
-  target.addDynamicallyLegalOp<TOp...>([&](FunctionOpInterface moduleLikeOp) {
+  target.addDynamicallyLegalOp<TOp...>([&](hw::HWModuleLike moduleLikeOp) {
     if (isLegalFuncLikeOp(moduleLikeOp))
       return true;
 
@@ -207,8 +207,8 @@ static void addSignatureConversion(DenseMap<Operation *, IOInfo> &ioMap,
         return oldType != newType;
       });
     };
-    if (compareTypes(moduleLikeOp.getResultTypes(), ioInfo.resTypes) ||
-        compareTypes(moduleLikeOp.getArgumentTypes(), ioInfo.argTypes))
+    if (compareTypes(moduleLikeOp.getOutputTypes(), ioInfo.resTypes) ||
+        compareTypes(moduleLikeOp.getInputTypes(), ioInfo.argTypes))
       return true;
 
     // We're pre-conversion for an op that was primed in the map - it will
@@ -255,7 +255,7 @@ static void updateNameAttribute(Operation *op, StringRef attrName,
   op->setAttr(attrName, ArrayAttr::get(op->getContext(), newNames));
 }
 
-static void updateLocAttribute(FunctionOpInterface op, StringRef attrName,
+static void updateLocAttribute(hw::HWModuleLike op, StringRef attrName,
                                DenseMap<unsigned, hw::StructType> &structMap) {
   llvm::SmallVector<Attribute> newLocs;
   auto oldLocs = op.getOperation()->getAttrOfType<ArrayAttr>(attrName);
@@ -282,13 +282,13 @@ static void updateLocAttribute(FunctionOpInterface op, StringRef attrName,
 /// use this function to copy the location from the original argument to the
 /// set of flattened arguments.
 static void
-updateBlockLocations(FunctionOpInterface op, StringRef attrName,
+updateBlockLocations(hw::HWModuleLike op, StringRef attrName,
                      DenseMap<unsigned, hw::StructType> &structMap) {
   auto locs = op.getOperation()->getAttrOfType<ArrayAttr>(attrName);
   if (!locs)
     return;
   for (auto [arg, loc] :
-       llvm::zip(op.getArguments(), locs.getAsRange<LocationAttr>()))
+       llvm::zip(op->getRegion(0).front().getArguments(), locs.getAsRange<LocationAttr>()))
     arg.setLoc(loc);
 }
 
@@ -297,8 +297,8 @@ static DenseMap<Operation *, IOInfo> populateIOInfoMap(mlir::ModuleOp module) {
   DenseMap<Operation *, IOInfo> ioInfoMap;
   for (auto op : module.getOps<T>()) {
     IOInfo ioInfo;
-    ioInfo.argTypes = op.getArgumentTypes();
-    ioInfo.resTypes = op.getResultTypes();
+    ioInfo.argTypes = op.getInputTypes();
+    ioInfo.resTypes = op.getOutputTypes();
     for (auto [i, arg] : llvm::enumerate(ioInfo.argTypes)) {
       if (auto structType = getStructType(arg))
         ioInfo.argStructs[i] = structType;

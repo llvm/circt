@@ -296,7 +296,7 @@ LogicalResult ModuleLowering::lowerPrimaryInputs() {
     if (blockArg == storageArg)
       continue;
     auto name =
-        moduleOp.getArgNames()[blockArg.getArgNumber()].cast<StringAttr>();
+        moduleOp.getInputNameAttr(blockArg.getArgNumber());
     auto intType = blockArg.getType().dyn_cast<IntegerType>();
     if (!intType)
       return mlir::emitError(blockArg.getLoc(), "input ")
@@ -315,7 +315,7 @@ LogicalResult ModuleLowering::lowerPrimaryOutputs() {
   if (outputOp.getNumOperands() > 0) {
     auto &passThrough = getOrCreatePassThrough();
     for (auto [value, name] :
-         llvm::zip(outputOp.getOperands(), moduleOp.getResultNames())) {
+         llvm::zip(outputOp.getOperands(), moduleOp.getOutputNames())) {
       auto intType = value.getType().dyn_cast<IntegerType>();
       if (!intType)
         return mlir::emitError(outputOp.getLoc(), "output ")

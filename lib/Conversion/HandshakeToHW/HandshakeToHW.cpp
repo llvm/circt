@@ -317,7 +317,7 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
 
   for (auto [i, arg] : memrefPorts) {
     // Insert ports into the module
-    auto memName = mod.getArgNames()[i].cast<StringAttr>();
+    auto memName = mod.getInputNameAttr(i);
 
     // Get the attached extmemory external module.
     auto extmemInstance = cast<hw::InstanceOp>(*arg.getUsers().begin());
@@ -341,12 +341,12 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
     // Replace the extmemory submodule outputs with the newly created inputs.
     b.setInsertionPointToStart(mod.getBodyBlock());
     auto newInPortExploded = b.create<hw::StructExplodeOp>(
-        arg.getLoc(), extmemMod.getResultTypes(), newInPort);
+        arg.getLoc(), extmemMod.getOutputTypes(), newInPort);
     extmemInstance.replaceAllUsesWith(newInPortExploded.getResults());
 
     // Add memory output - this is the inputs of the extmemory op (without the
     // first argument);
-    unsigned outArgI = mod.getNumResults();
+    unsigned outArgI = mod.getNumOutputs();
     auto outPortInfo =
         getMemoryIOInfo(arg.getLoc(), memName.strref() + "_out", outArgI,
                         ArrayRef{portInfo.begin_input(), portInfo.end_input()},
@@ -707,8 +707,8 @@ addSequentialIOOperandsIfNeeded(Operation *op,
     // Parent should at this point be a hw.module and have clock and reset
     // ports.
     auto parent = cast<hw::HWModuleOp>(op->getParentOp());
-    operands.push_back(parent.getArgument(parent.getNumArguments() - 2));
-    operands.push_back(parent.getArgument(parent.getNumArguments() - 1));
+    operands.push_back(parent.getArgument(parent.getNumInputs() - 2));
+    operands.push_back(parent.getArgument(parent.getNumInputs() - 1));
   }
 }
 

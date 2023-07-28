@@ -357,7 +357,7 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
   // port is found.
   SmallVector<Type, 16> newArgTypes;
   size_t nextArgNo = 0;
-  for (auto argTy : mod.getArgumentTypes()) {
+  for (auto argTy : mod.getInputTypes()) {
     auto chanTy = argTy.dyn_cast<ChannelType>();
     newArgNames.push_back(getModuleArgumentNameAttr(mod, nextArgNo));
     newArgLocs.push_back(getModuleArgumentLocAttr(mod, nextArgNo));
@@ -381,7 +381,7 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
   SmallVector<Type, 8> newResultTypes;
   SmallVector<DictionaryAttr, 4> newResultAttrs;
   auto funcType = mod.getFunctionType();
-  for (size_t resNum = 0, numRes = mod.getNumResults(); resNum < numRes;
+  for (size_t resNum = 0, numRes = mod.getNumOutputs(); resNum < numRes;
        ++resNum) {
     Type resTy = funcType.getResult(resNum);
     auto chanTy = resTy.dyn_cast<ChannelType>();
@@ -410,7 +410,8 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
 
   // Set the new types.
   auto newFuncType = FunctionType::get(ctxt, newArgTypes, newResultTypes);
-  mod.setType(newFuncType);
+  auto newModType = hw::detail::fnToMod(newFuncType, ArrayAttr::get(&getContext(), newArgNames), ArrayAttr::get(&getContext(), newResultNames));
+  mod.setModuleType(newModType);
   setModuleArgumentNames(mod, newArgNames);
   setModuleArgumentLocs(mod, newArgLocs);
   setModuleResultNames(mod, newResultNames);

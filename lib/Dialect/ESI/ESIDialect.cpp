@@ -247,7 +247,7 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
   BackedgeBuilder bb(modBuilder, modBuilder.getLoc());
 
   // Hold the operands for `hw.output` here.
-  SmallVector<Value, 64> outputs(shell.getNumResults());
+  SmallVector<Value, 64> outputs(shell.getNumOutputs());
 
   // -----
   // Fourth, assemble the inputs for the pearl module AND build all the ESI wrap

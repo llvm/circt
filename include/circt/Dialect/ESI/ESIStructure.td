@@ -39,6 +39,7 @@ def ESIPureModuleOp : ESI_Op<"pure_module",
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
+
   }];
 }
 

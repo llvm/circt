@@ -173,6 +173,88 @@ namespace detail {
 LogicalResult verifyInnerRefNamespace(Operation *op);
 } // namespace detail
 
+class HWModuleLike;
+namespace HWModuleLike_impl {
+
+/// Returns the dictionary attribute corresponding to the argument at 'index'.
+/// If there are no argument attributes at 'index', a null attribute is
+/// returned.
+DictionaryAttr getArgAttrDict(HWModuleLike op, unsigned index);
+
+/// Returns the dictionary attribute corresponding to the result at 'index'.
+/// If there are no result attributes at 'index', a null attribute is
+/// returned.
+DictionaryAttr getResultAttrDict(HWModuleLike op, unsigned index);
+
+/// Return all of the attributes for the argument at 'index'.
+ArrayRef<NamedAttribute> getArgAttrs(HWModuleLike op, unsigned index);
+
+/// Return all of the attributes for the result at 'index'.
+ArrayRef<NamedAttribute> getResultAttrs(HWModuleLike op, unsigned index);
+
+
+//===----------------------------------------------------------------------===//
+// Module Argument Attribute.
+//===----------------------------------------------------------------------===//
+
+/// Set the attributes held by the argument at 'index'.
+void setArgAttrs(HWModuleLike op, unsigned index,
+                 ArrayRef<NamedAttribute> attributes);
+void setArgAttrs(HWModuleLike op, unsigned index,
+                 DictionaryAttr attributes);
+
+/// If the an attribute exists with the specified name, change it to the new
+/// value. Otherwise, add a new attribute with the specified name/value.
+template <typename ConcreteType>
+void setArgAttr(ConcreteType op, unsigned index, StringAttr name,
+                Attribute value) {
+  NamedAttrList attributes(op.getArgAttrDict(index));
+  Attribute oldValue = attributes.set(name, value);
+
+  // If the attribute changed, then set the new arg attribute list.
+  if (value != oldValue)
+    op.setArgAttrs(index, attributes.getDictionary(value.getContext()));
+}
+
+/// Remove the attribute 'name' from the argument at 'index'. Returns the
+/// removed attribute, or nullptr if `name` was not a valid attribute.
+template <typename ConcreteType>
+Attribute removeArgAttr(ConcreteType op, unsigned index, StringAttr name) {
+  // Build an attribute list and remove the attribute at 'name'.
+  NamedAttrList attributes(op.getArgAttrDict(index));
+  Attribute removedAttr = attributes.erase(name);
+
+  // If the attribute was removed, then update the argument dictionary.
+  if (removedAttr)
+    op.setArgAttrs(index, attributes.getDictionary(removedAttr.getContext()));
+  return removedAttr;
+}
+
+//===----------------------------------------------------------------------===//
+// Module Result Attribute.
+//===----------------------------------------------------------------------===//
+
+/// Set the attributes held by the result at 'index'.
+void setResultAttrs(HWModuleLike op, unsigned index,
+                    ArrayRef<NamedAttribute> attributes);
+void setResultAttrs(HWModuleLike op, unsigned index,
+                    DictionaryAttr attributes);
+
+/// If the an attribute exists with the specified name, change it to the new
+/// value. Otherwise, add a new attribute with the specified name/value.
+template <typename ConcreteType>
+void setResultAttr(ConcreteType op, unsigned index, StringAttr name,
+                   Attribute value) {
+  NamedAttrList attributes(op.getResultAttrDict(index));
+  Attribute oldAttr = attributes.set(name, value);
+
+  // If the attribute changed, then set the new arg attribute list.
+  if (oldAttr != value)
+    op.setResultAttrs(index, attributes.getDictionary(value.getContext()));
+}
+
+
+} // namespace HWModuleLike_impl
 } // namespace hw
 } // namespace circt
 

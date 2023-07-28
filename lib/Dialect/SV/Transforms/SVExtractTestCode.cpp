@@ -135,7 +135,7 @@ getBackwardSlice(hw::HWModuleOp module,
   return getBackwardSlice(roots, filterFn);
 }
 
-static StringAttr getNameForPort(Value val, ArrayAttr modulePorts) {
+static StringAttr getNameForPort(Value val, ArrayRef<StringAttr> modulePorts) {
   if (auto bv = val.dyn_cast<BlockArgument>())
     return modulePorts[bv.getArgNumber()].cast<StringAttr>();
 
@@ -200,7 +200,7 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   // Construct the ports, this is just the input Values
   SmallVector<hw::PortInfo> ports;
   {
-    auto srcPorts = op.getArgNames();
+    auto srcPorts = op.getInputNames();
     for (auto port : llvm::enumerate(realInputs)) {
       auto name = getNameForPort(port.value(), srcPorts);
       ports.push_back(

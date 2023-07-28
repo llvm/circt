@@ -90,6 +90,39 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
         return hw::InnerSymAttr();
       return syms[portIndex].template cast<hw::InnerSymAttr>();
     }
+
+    // satisify HWModuleLike
+    ArrayAttr $cppClass::getArgAttrsAttr() {
+      assert(false);
+      return {};
+    }    
+
+    // satisify HWModuleLike
+    ArrayAttr $cppClass::getResAttrsAttr() {
+      assert(false);
+      return {};
+    }    
+
+    // satisify HWModuleLike
+    void $cppClass::setArgAttrsAttr(ArrayAttr) {
+      assert(false);
+    }    
+    // satisify HWModuleLike
+    void $cppClass::setResAttrsAttr(ArrayAttr) {
+      assert(false);
+    }    
+    // satisify HWModuleLike
+    Attribute $cppClass::removeArgAttrsAttr() {
+      assert(false);
+      return {};
+    }    
+
+    // satisify HWModuleLike
+    Attribute $cppClass::removeResAttrsAttr() {
+      assert(false);
+      return {};
+    }    
+
   }];
 
 }

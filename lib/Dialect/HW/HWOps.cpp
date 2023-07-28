@@ -678,7 +678,7 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
 
   // Record the argument and result types as an attribute.
   auto type = builder.getFunctionType(argTypes, resultTypes);
-  result.addAttribute(ModuleTy::getFunctionTypeAttrName(result.name),
+  result.addAttribute(ModuleTy::getModuleTypeAttrName(result.name),
                       TypeAttr::get(type));
   result.addAttribute("argNames", builder.getArrayAttr(argNames));
   result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
@@ -1107,10 +1107,10 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   SmallVector<Attribute> resultNames;
   SmallVector<DictionaryAttr> resultAttrs;
   SmallVector<Attribute> resultLocs;
-  TypeAttr functionType;
+  TypeAttr moduleType;
   if (failed(module_like_impl::parseModuleFunctionSignature(
           parser, isVariadic, entryArgs, argNames, argLocs, resultNames,
-          resultAttrs, resultLocs, functionType)))
+          resultAttrs, resultLocs, moduleType)))
     return failure();
 
   // Parse the attribute dict.
@@ -1138,8 +1138,8 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   result.addAttribute("parameters", parameters);
   if (!hasAttribute("comment", result.attributes))
     result.addAttribute("comment", StringAttr::get(context, ""));
-  result.addAttribute(ModuleTy::getFunctionTypeAttrName(result.name),
-                      functionType);
+  result.addAttribute(ModuleTy::getModuleTypeAttrName(result.name),
+                      moduleType);
 
   // Add the attributes to the function arguments.
   addArgAndResultAttrs(parser.getBuilder(), result, entryArgs, resultAttrs,
@@ -1178,19 +1178,15 @@ FunctionType getHWModuleOpType(Operation *op) {
 }
 
 template <typename ModuleTy>
-static void printModuleOp(OpAsmPrinter &p, Operation *op,
+static void printModuleOp(OpAsmPrinter &p, ModuleTy op,
                           ExternModKind modKind) {
   using namespace mlir::function_interface_impl;
-
-  FunctionType fnType = getHWModuleOpType(op);
-  auto argTypes = fnType.getInputs();
-  auto resultTypes = fnType.getResults();
 
   p << ' ';
 
   // Print the visibility of the module.
   StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
-  if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
+  if (auto visibility = op->template getAttrOfType<StringAttr>(visibilityAttrName))
     p << visibility.getValue() << ' ';
 
   // Print the operation and the function name.
@@ -1201,26 +1197,27 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
   }
 
   // Print the parameter list if present.
-  printOptionalParameterList(p, op, op->getAttrOfType<ArrayAttr>("parameters"));
+  printOptionalParameterList(p, op, op->template getAttrOfType<ArrayAttr>("parameters"));
 
-  bool needArgNamesAttr = false;
-  module_like_impl::printModuleSignature(p, op, argTypes, /*isVariadic=*/false,
-                                         resultTypes, needArgNamesAttr);
+  p << op.getModuleType();
+
+//  bool needArgNamesAttr = false;
+//  module_like_impl::printModuleSignature(p, op, argTypes, /*isVariadic=*/false,
+//                                         resultTypes, needArgNamesAttr);
 
   SmallVector<StringRef, 3> omittedAttrs;
   if (modKind == GenMod)
     omittedAttrs.push_back("generatorKind");
-  if (!needArgNamesAttr)
-    omittedAttrs.push_back("argNames");
+  omittedAttrs.push_back("argNames");
   omittedAttrs.push_back("argLocs");
-  omittedAttrs.push_back(ModuleTy::getFunctionTypeAttrName(op->getName()));
+  omittedAttrs.push_back(ModuleTy::getModuleTypeAttrName(op->getName()));
   omittedAttrs.push_back(ModuleTy::getArgAttrsAttrName(op->getName()));
   omittedAttrs.push_back(ModuleTy::getResAttrsAttrName(op->getName()));
   omittedAttrs.push_back("resultNames");
   omittedAttrs.push_back("resultLocs");
   omittedAttrs.push_back("parameters");
   omittedAttrs.push_back(visibilityAttrName);
-  if (op->getAttrOfType<StringAttr>("comment").getValue().empty())
+  if (op->template getAttrOfType<StringAttr>("comment").getValue().empty())
     omittedAttrs.push_back("comment");
 
   printFunctionAttributes(p, op, omittedAttrs);
@@ -1379,7 +1376,7 @@ void HWModuleOp::insertOutputs(unsigned index,
 }
 
 void HWModuleOp::appendOutputs(ArrayRef<std::pair<StringAttr, Value>> outputs) {
-  return insertOutputs(getResultTypes().size(), outputs);
+  return insertOutputs(getNumOutputs(), outputs);
 }
 
 void HWModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
