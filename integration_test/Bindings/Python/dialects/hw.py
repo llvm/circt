@@ -95,7 +95,7 @@ with Context() as ctx, Location.unknown():
   print(pverbatim)
 
   inner_sym = hw.InnerSymAttr.get(StringAttr.get("some_sym"))
-  # CHECK: #hw.innerSym<@some_sym>
+  # CHECK: #hw<innerSym@some_sym>
   print(inner_sym)
   # CHECK: "some_sym"
   print(inner_sym.symName)
