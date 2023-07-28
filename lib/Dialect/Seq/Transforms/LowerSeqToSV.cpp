@@ -93,14 +93,10 @@ public:
                   ConversionPatternRewriter &rewriter) const final {
     Location loc = reg.getLoc();
 
-    auto svReg = rewriter.create<sv::RegOp>(loc, reg.getResult().getType(),
-                                            reg.getNameAttr());
+    auto svReg =
+        rewriter.create<sv::RegOp>(loc, reg.getResult().getType(),
+                                   reg.getNameAttr(), reg.getInnerSymAttr());
     svReg->setDialectAttrs(reg->getDialectAttrs());
-
-    // If the seq::CompRegOp has an inner_sym attribute, set this for the
-    // sv::RegOp inner_sym attribute.
-    if (reg.getInnerSymAttr())
-      svReg.setInnerSymAttr(reg.getInnerSymAttr());
 
     circt::sv::setSVAttributes(svReg, circt::sv::getSVAttributes(reg));
 
