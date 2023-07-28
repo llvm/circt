@@ -28,5 +28,8 @@ def reg(value, clock, reset=None, reset_value=None, name=None, sym_name=None):
                             name=name,
                             sym_name=sym_name).data.value
   else:
-    return CompRegOp.create(value_type, input=value, clk=clock,
-                            name=name, sym_name=sym_name).data.value
+    return CompRegOp.create(value_type,
+                            input=value,
+                            clk=clock,
+                            name=name,
+                            sym_name=sym_name).data.value
