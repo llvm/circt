@@ -152,7 +152,7 @@ firrtl.circuit "Test" {
     %4 = firrtl.wire : !firrtl.vector<uint<8>, 2>
     // CHECK: %5 = firrtl.wire : !firrtl.bundle<a: vector<uint<8>, 2>
     %5 = firrtl.wire : !firrtl.bundle<a: vector<uint<8>, 2>>
-    // CHECK %6 = firrtl.wire : !firrtl.bundle<a: vector<uint<8>, 2>>
+    // CHECK: %6 = firrtl.wire : !firrtl.bundle<a: vector<uint<8>, 2>>
     %6 = firrtl.wire : !firrtl.vector<bundle<a: uint<8>>, 2>
     // CHECK: %7 = firrtl.wire : !firrtl.bundle<a: bundle<b: vector<uint<8>, 2>>>
     %7 = firrtl.wire : !firrtl.bundle<a: vector<bundle<b: uint<8>>, 2>>
@@ -681,7 +681,7 @@ firrtl.circuit "Test" {
     // CHECK: %8 = firrtl.bundlecreate %6, %7 : (!firrtl.vector<uint<8>, 2>, !firrtl.vector<uint<16>, 2>) -> !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>
     %vector  = firrtl.vectorcreate %bundle1, %bundle2 : (!firrtl.bundle<a: uint<8>, b: uint<16>>, !firrtl.bundle<a: uint<8>, b: uint<16>>) -> !firrtl.vector<bundle<a: uint<8>, b: uint<16>>, 2>
     
-    // CHECK firrtl.connect %out, %8 : !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>, !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>
+    // CHECK: firrtl.connect %out, %8 : !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>, !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>
     firrtl.connect %out, %vector : !firrtl.vector<bundle<a: uint<8>, b: uint<16>>, 2>, !firrtl.vector<bundle<a: uint<8>, b: uint<16>>, 2>
   }
 
