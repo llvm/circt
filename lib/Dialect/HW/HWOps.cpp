@@ -1457,7 +1457,7 @@ LogicalResult HWModuleOp::verifyBody() { return success(); }
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        Operation *module, StringAttr name,
                        ArrayRef<Value> inputs, ArrayAttr parameters,
-                       InnerSymAttr inner_sym) {
+                       InnerSymAttr innerSym) {
   if (!parameters)
     parameters = builder.getArrayAttr({});
 
@@ -1466,7 +1466,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   FunctionType modType = getModuleType(module);
   build(builder, result, modType.getResults(), name,
         FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
-        argNames, resultNames, parameters, inner_sym);
+        argNames, resultNames, parameters, innerSym);
 }
 
 std::optional<size_t> InstanceOp::getTargetResultIndex() {

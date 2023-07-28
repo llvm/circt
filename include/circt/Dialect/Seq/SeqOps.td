@@ -151,11 +151,11 @@ def FirRegOp : SeqOp<"firreg",
   let builders = [
     OpBuilder<(ins "Value":$next, "Value":$clk,
                    "StringAttr":$name,
-                   CArg<"hw::InnerSymAttr", "{}">:$inner_sym)>,
+                   CArg<"hw::InnerSymAttr", "{}">:$innerSym)>,
     OpBuilder<(ins "Value":$next, "Value":$clk,
                    "StringAttr":$name,
                    "Value":$reset, "Value":$resetValue,
-                   CArg<"hw::InnerSymAttr", "{}">:$inner_sym,
+                   CArg<"hw::InnerSymAttr", "{}">:$innerSym,
                    CArg<"bool", "false">:$isAsync)>
   ];
 

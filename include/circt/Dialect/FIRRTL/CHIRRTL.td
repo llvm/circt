@@ -120,7 +120,7 @@ def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName, DeclareOpInterfaceMethod
     OpBuilder<(ins "firrtl::FIRRTLBaseType":$elementType, "uint64_t":$numElements,
                    "mlir::StringRef":$name, "firrtl::NameKindEnum":$nameKind,
                    "ArrayAttr":$annotations,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                   CArg<"StringAttr", "StringAttr()">:$innerSym,
                    CArg<"firrtl::MemoryInitAttr", "firrtl::MemoryInitAttr{}">:$init)>
   ];
 }
@@ -142,7 +142,7 @@ def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName, DeclareOpInterfaceMethods<
     OpBuilder<(ins "firrtl::FIRRTLBaseType":$elementType, "uint64_t":$numElements,
                    "RUWAttr":$ruw, "mlir::StringRef":$name,
                    "firrtl::NameKindEnum":$nameKind, "ArrayAttr":$annotations,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                   CArg<"StringAttr", "StringAttr()">:$innerSym,
                    CArg<"firrtl::MemoryInitAttr", "firrtl::MemoryInitAttr{}">:$init)>
   ];
 }

@@ -32,7 +32,7 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
                    CArg<"StringAttr", "StringAttr()">:$name,
-                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$inner_sym)>,
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>,
     OpBuilder<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name));
@@ -67,7 +67,7 @@ def RegOp : SVOp<"reg", [
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
                     CArg<"StringAttr", "StringAttr()">:$name,
-                    CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$inner_sym)>
+                    CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>
   ];
 
   // We handle the name in a custom way, so we use a customer parser/printer.
@@ -242,7 +242,7 @@ def LogicOp : SVOp<"logic", [
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
                    CArg<"StringAttr", "StringAttr()">:$name,
-                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$inner_sym)>,
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>,
     OpBuilder<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name));

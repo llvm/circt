@@ -246,13 +246,13 @@ LogicalResult LocalParamOp::verify() {
 
 void RegOp::build(OpBuilder &builder, OperationState &odsState,
                   Type elementType, StringAttr name,
-                  hw::InnerSymAttr inner_sym) {
+                  hw::InnerSymAttr innerSym) {
   if (!name)
     name = builder.getStringAttr("");
   odsState.addAttribute("name", name);
-  if (inner_sym)
+  if (innerSym)
     odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
-                          inner_sym);
+                          innerSym);
   odsState.addTypes(hw::InOutType::get(elementType));
 }
 
@@ -297,13 +297,13 @@ LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
 
 void LogicOp::build(OpBuilder &builder, OperationState &odsState,
                     Type elementType, StringAttr name,
-                    hw::InnerSymAttr inner_sym) {
+                    hw::InnerSymAttr innerSym) {
   if (!name)
     name = builder.getStringAttr("");
   odsState.addAttribute("name", name);
-  if (inner_sym)
+  if (innerSym)
     odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
-                          inner_sym);
+                          innerSym);
   odsState.addTypes(hw::InOutType::get(elementType));
 }
 
@@ -1534,12 +1534,12 @@ LogicalResult ReadInterfaceSignalOp::verify() {
 
 void WireOp::build(OpBuilder &builder, OperationState &odsState,
                    Type elementType, StringAttr name,
-                   hw::InnerSymAttr inner_sym) {
+                   hw::InnerSymAttr innerSym) {
   if (!name)
     name = builder.getStringAttr("");
-  if (inner_sym)
+  if (innerSym)
     odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
-                          inner_sym);
+                          innerSym);
 
   odsState.addAttribute("name", name);
   odsState.addTypes(InOutType::get(elementType));
