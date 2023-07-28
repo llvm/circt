@@ -25,7 +25,13 @@ circuit Bundle :
   module Probe :
     input in : {a : UInt<1>, b : UInt<1>[2]}
     output r : {a : Probe<{a : UInt<1>, b : UInt<1>[2]}>, b : Probe<{a : UInt<1>, b : UInt<1>[2]}>} ; bundle of probes of bundles (of UInt, vec)
-    output mixed : {a : UInt<1>, flip x : {flip p: Probe<{a : UInt<1>, b : UInt<1>[2]}>, flip data: UInt<1>}[2], b : UInt<1>[2]} ; mixed
+    output mixed : {a : UInt<1>,
+                    flip x : {flip p: Probe<{a : UInt<1>,
+                                             b : UInt<1>[2]
+                                             }>,
+                              flip data: UInt<1>
+                             }[2],
+                    b : UInt<1>[2]} ; mixed
     output nohw : {x : {p: Probe<{a : UInt<1>, b : UInt<1>[2]}>}[2]} ; non-hw-only
 
     inst c1 of Child
