@@ -308,8 +308,6 @@ static ParseResult parseCompReg(OpAsmParser &parser, OperationState &result) {
     if (parser.parseCustomAttributeWithFallback(innerSym, /*type=*/nullptr,
                                                 "inner_sym", result.attributes))
       return failure();
-    // if (parser.parseSymbolName(symName, "sym_name", result.attributes))
-    //   return failure();
   }
 
   constexpr size_t ceOperandOffset = (size_t)ClockEnabled;
