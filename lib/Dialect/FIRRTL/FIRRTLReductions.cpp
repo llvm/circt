@@ -488,8 +488,7 @@ static bool isFlowSensitiveOp(Operation *op) {
 template <unsigned OpNum>
 struct FIRRTLOperandForwarder : public Reduction {
   uint64_t match(Operation *op) override {
-    if (op->getNumResults() != 1 || op->getNumOperands() < 2 ||
-        OpNum >= op->getNumOperands())
+    if (op->getNumResults() != 1 || OpNum >= op->getNumOperands())
       return 0;
     if (isFlowSensitiveOp(op))
       return 0;
