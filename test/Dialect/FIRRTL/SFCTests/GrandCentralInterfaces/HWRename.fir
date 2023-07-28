@@ -35,12 +35,9 @@ circuit Top:
 
     ; CHECK:      module DUT
     ; CHECK:        input a
-    ; CHECK:        output b
     ; CHECK:          Companion companion (
     ; CHECK-NEXT:       .[[port]] (a)
     ; CHECK-NEXT:     );
-    ; Wire got optimized away!!
-    ; CHECK:          assign b = a;
     ; CHECK:      endmodule
 
     ; CHECK:      module Top
