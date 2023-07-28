@@ -230,6 +230,7 @@ def InnerRefNamespace : OpInterface<"InnerRefNamespaceOpInterface"> {
     // Verify all InnerSymbolTable's and InnerRef users.
     return ::circt::hw::detail::verifyInnerRefNamespace(op);
   }];
+  let verifyWithRegions = 1;
 }
 
 def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
