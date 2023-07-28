@@ -163,7 +163,7 @@ firrtl.module @VerbatimExpr() {
   %2 = firrtl.add %0, %1 : (!firrtl.uint<42>, !firrtl.uint<32>) -> !firrtl.uint<43>
 }
 
-// CHECK-LABL: @LowerToBind
+// CHECK-LABEL: @LowerToBind
 // CHECK: firrtl.instance foo sym @s1 {lowerToBind} @InstanceLowerToBind()
 firrtl.module @InstanceLowerToBind() {}
 firrtl.module @LowerToBind() {

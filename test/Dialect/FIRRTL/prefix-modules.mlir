@@ -260,7 +260,7 @@ firrtl.circuit "NLATop" {
 // completely untrodden territory for Grand Central.  However, the behavior here
 // is the exact same as how normal modules are cloned.)
 //
-// CHECK-LABLE: firrtl.circuit "GCTDataMemTapsPrefix"
+// CHECK-LABEL: firrtl.circuit "GCTDataMemTapsPrefix"
 firrtl.circuit "GCTDataMemTapsPrefix" {
   // CHECK:      firrtl.extmodule @FOO_DataTap
   // CHECK-SAME:   defname = "FOO_DataTap"
