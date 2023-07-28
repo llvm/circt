@@ -88,7 +88,7 @@ static Type toESIHWType(Type t) {
       llvm::TypeSwitch<Type, Type>(t)
           .Case([](ValueType vt) {
             return esi::ChannelType::get(vt.getContext(),
-                                         toHWType(vt.getInnerTypes()));
+                                         toHWType(vt.getInnerType()));
           })
           .Case([](TokenType tt) {
             return esi::ChannelType::get(tt.getContext(),
@@ -320,24 +320,6 @@ struct RTLBuilder {
   Value concat(ValueRange values, StringRef name = {}) {
     return buildNamedOp([&]() { return b.create<comb::ConcatOp>(loc, values); },
                         name);
-  }
-
-  ///  Packs a list of values into a hw.struct.
-  Value pack(ValueRange values, Type structType = Type(), StringRef name = {}) {
-    if (!structType)
-      structType = toHWType(values.getTypes());
-
-    return buildNamedOp(
-        [&]() { return b.create<hw::StructCreateOp>(loc, structType, values); },
-        name);
-  }
-
-  ///  Unpacks a hw.struct into a list of values.
-  ValueRange unpack(Value value) {
-    auto structType = value.getType().cast<hw::StructType>();
-    llvm::SmallVector<Type> innerTypes;
-    structType.getInnerTypes(innerTypes);
-    return b.create<hw::StructExplodeOp>(loc, innerTypes, value).getResults();
   }
 
   llvm::SmallVector<Value> extractBits(Value v, StringRef name = {}) {
@@ -729,14 +711,7 @@ public:
     RTLBuilder rtlb(op.getLoc(), rewriter);
     auto &input = io.inputs[0];
     auto &output = io.outputs[0];
-
-    Value packedData;
-    if (operands.getInputs().size() > 1)
-      packedData = rtlb.pack(operands.getInputs());
-    else
-      packedData = operands.getInputs()[0];
-
-    output.data->setValue(packedData);
+    output.data->setValue(operands.getInput());
     connect(input, output);
     rewriter.replaceOp(op, output.channel);
     return success();
@@ -759,10 +734,7 @@ public:
     auto &output = io.outputs[0];
 
     llvm::SmallVector<Value> unpackedValues;
-    if (op.getInput().getType().cast<ValueType>().getInnerTypes().size() != 1)
-      unpackedValues = rtlb.unpack(input.data);
-    else
-      unpackedValues.push_back(input.data);
+    unpackedValues.push_back(input.data);
 
     connect(input, output);
     llvm::SmallVector<Value> outputs;

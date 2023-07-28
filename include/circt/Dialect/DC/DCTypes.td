@@ -23,15 +23,15 @@ def TokenType : DCTypeDef<"Token"> {
   }];
 }
 
-// A value type is a set of values which is wrapped with token semantics.
+// A value type is a value which is wrapped with token semantics.
 def ValueType : DCTypeDef<"Value"> {
   let mnemonic = "value";
-  let parameters = (ins ArrayRefParameter<"Type">:$innerTypes);
-  let assemblyFormat = "`<`$innerTypes`>`";
+  let parameters = (ins "Type":$innerType);
+  let assemblyFormat = "`<`$innerType`>`";
   let description = [{
-    A `!dc.value`-typed value represents a set of values which is wrapped with
+    A `!dc.value`-typed value represents a value which is wrapped with
     `!dc.token` semantics. This type is used to attach control semantics to
-    values. The inner values may be of any type.
+    values. The inner value may be of any type.
   }];
 }
 
