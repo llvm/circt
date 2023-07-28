@@ -3911,7 +3911,7 @@ ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
   return success();
 }
 
-/// pohwist ::= port*
+/// portlist ::= port*
 /// port     ::= dir id ':' type info? NEWLINE
 /// dir      ::= 'input' | 'output'
 ParseResult
@@ -4195,7 +4195,7 @@ ParseResult FIRCircuitParser::parseParameterList(ArrayAttr &resultParameters) {
 
 /// extmodule ::=
 ///        'extmodule' id ':' info?
-///        INDENT pohwist defname? parameter-list ref-list DEDENT
+///        INDENT portlist defname? parameter-list ref-list DEDENT
 /// defname   ::= 'defname' '=' id NEWLINE
 ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
                                              unsigned indent) {
@@ -4234,7 +4234,7 @@ ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
 
 /// intmodule ::=
 ///        'intmodule' id ':' info?
-///        INDENT pohwist intname parameter-list ref-list DEDENT
+///        INDENT portlist intname parameter-list ref-list DEDENT
 /// intname   ::= 'intrinsic' '=' id NEWLINE
 ParseResult FIRCircuitParser::parseIntModule(CircuitOp circuit,
                                              unsigned indent) {
@@ -4267,7 +4267,7 @@ ParseResult FIRCircuitParser::parseIntModule(CircuitOp circuit,
   return success();
 }
 
-/// module ::= 'module' id ':' info? INDENT pohwist simple_stmt_block DEDENT
+/// module ::= 'module' id ':' info? INDENT portlist simple_stmt_block DEDENT
 ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, unsigned indent) {
   StringAttr name;
   SmallVector<PortInfo, 8> portList;
