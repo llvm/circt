@@ -120,7 +120,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             auto nameKind = NameKindEnum::DroppableName;
 
             if (auto [name, rootKnown] = getFieldName(
-                    getFieldRefFromValue(xmrDef), /*nameSafe=*/true);
+                    getFieldRefFromValue(xmrDef, /*lookThroughCasts=*/true),
+                    /*nameSafe=*/true);
                 rootKnown) {
               opName = name + "_probe";
               nameKind = NameKindEnum::InterestingName;

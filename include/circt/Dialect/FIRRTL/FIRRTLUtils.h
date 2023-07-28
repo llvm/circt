@@ -84,8 +84,9 @@ bool walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
 
 /// Get the FieldRef from a value.  This will travel backwards to through the
 /// IR, following Subfield and Subindex to find the op which declares the
-/// location.
-FieldRef getFieldRefFromValue(Value value);
+/// location.  Optionally look through recognized cast operations, which
+/// likely will result in source having slightly different type.
+FieldRef getFieldRefFromValue(Value value, bool lookThroughCasts = false);
 
 /// Get a string identifier representing the FieldRef.  Return this string and a
 /// boolean indicating if a valid "root" for the identifier was found.  If

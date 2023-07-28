@@ -683,12 +683,19 @@ struct Equivalence {
       if (bValue != data.map.lookup(aValue)) {
         diag.attachNote(a->getLoc())
             << "operations use different operands, first operand is '"
-            << getFieldName(getFieldRefFromValue(aValue)).first << "'";
+            << getFieldName(
+                   getFieldRefFromValue(aValue, /*lookThroughCasts=*/true))
+                   .first
+            << "'";
         diag.attachNote(b->getLoc())
             << "second operand is '"
-            << getFieldName(getFieldRefFromValue(bValue)).first
+            << getFieldName(
+                   getFieldRefFromValue(bValue, /*lookThroughCasts=*/true))
+                   .first
             << "', but should have been '"
-            << getFieldName(getFieldRefFromValue(data.map.lookup(aValue))).first
+            << getFieldName(getFieldRefFromValue(data.map.lookup(aValue),
+                                                 /*lookThroughCasts=*/true))
+                   .first
             << "'";
         return failure();
       }
