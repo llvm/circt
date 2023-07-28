@@ -2879,9 +2879,7 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   // that we have a symbol name so we can keep the node as a wire.
   auto symName = getInnerSymName(op);
   auto name = op.getNameAttr();
-  if (AnnotationSet::removeAnnotations(
-          op, "firrtl.transforms.DontTouchAnnotation") &&
-      !symName) {
+  if (AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) && !symName) {
     // name may be empty
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
     symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
