@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/DC/DCOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
@@ -344,6 +345,44 @@ LogicalResult BufferOp::verify() {
       return emitOpError() << "expected " << getSize()
                            << " init values but got " << nInits << ".";
   }
+
+  return success();
+}
+
+// =============================================================================
+// ToESIOp
+// =============================================================================
+
+LogicalResult ToESIOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  Type channelEltType;
+  if (auto valueType = operands.front().getType().dyn_cast<ValueType>())
+    channelEltType = valueType.getInnerType();
+  else {
+    // dc.token => esi.channel<i0>
+    channelEltType = IntegerType::get(context, 0);
+  }
+
+  results.push_back(esi::ChannelType::get(context, channelEltType));
+  return success();
+}
+
+// =============================================================================
+// FromESIOp
+// =============================================================================
+
+LogicalResult FromESIOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  auto innerType =
+      operands.front().getType().cast<esi::ChannelType>().getInner();
+  if (auto intType = innerType.dyn_cast<IntegerType>(); intType.getWidth() == 0)
+    results.push_back(dc::TokenType::get(context));
+  else
+    results.push_back(dc::ValueType::get(context, innerType));
 
   return success();
 }

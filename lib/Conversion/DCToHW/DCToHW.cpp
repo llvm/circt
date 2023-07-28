@@ -54,16 +54,6 @@ static Type tupleToStruct(TupleType tuple) {
   return hw::StructType::get(ctx, hwfields);
 }
 
-/// Converts the range of 'types' into a `hw`-dialect type. The range will be
-/// converted to a `hw.struct` type.
-// NOLINTNEXTLINE(misc-no-recursion)
-static Type toHWType(Type t);
-static Type toHWType(TypeRange types) {
-  if (types.size() == 1)
-    return toHWType(types.front());
-  return toHWType(mlir::TupleType::get(types[0].getContext(), types));
-}
-
 /// Converts any type 't' into a `hw`-compatible type.
 /// tuple -> hw.struct
 /// none -> i0
@@ -116,13 +106,13 @@ public:
   ESITypeConverter() {
     addConversion([](Type type) -> Type { return toESIHWType(type); });
     addConversion([](esi::ChannelType t) -> Type { return t; });
-
     addTargetMaterialization(
         [](mlir::OpBuilder &builder, mlir::Type resultType,
            mlir::ValueRange inputs,
            mlir::Location loc) -> std::optional<mlir::Value> {
           if (inputs.size() != 1)
             return std::nullopt;
+
           return inputs[0];
         });
 
@@ -132,6 +122,7 @@ public:
            mlir::Location loc) -> std::optional<mlir::Value> {
           if (inputs.size() != 1)
             return std::nullopt;
+
           return inputs[0];
         });
   }
@@ -667,6 +658,34 @@ public:
   }
 };
 
+class ToESIConversionPattern : public OpConversionPattern<ToESIOp> {
+  // Essentially a no-op, seeing as the type converter does the heavy
+  // lifting here.
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ToESIOp op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOp(op, operands.getOperands());
+    return success();
+  }
+};
+
+class FromESIConversionPattern : public OpConversionPattern<FromESIOp> {
+  // Essentially a no-op, seeing as the type converter does the heavy
+  // lifting here.
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FromESIOp op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOp(op, operands.getOperands());
+    return success();
+  }
+};
+
 class SinkConversionPattern : public OpConversionPattern<SinkOp> {
 public:
   using OpConversionPattern<SinkOp>::OpConversionPattern;
@@ -837,7 +856,8 @@ public:
                     SelectConversionPattern, BranchConversionPattern,
                     PackConversionPattern, UnpackConversionPattern,
                     BufferConversionPattern, SourceConversionPattern,
-                    SinkConversionPattern, TypeConversionPattern>(
+                    SinkConversionPattern, TypeConversionPattern,
+                    ToESIConversionPattern, FromESIConversionPattern>(
         typeConverter, mod.getContext());
 
     if (failed(applyPartialConversion(mod, target, std::move(patterns))))

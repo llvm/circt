@@ -140,3 +140,16 @@ hw.module @select(%sel : !dc.value<i1>, %true : !dc.token, %false : !dc.token) -
     %0 = dc.select %sel, %true, %false
     hw.output %0 : !dc.token
 }
+
+// CHECK-LABEL:   hw.module @to_from_esi_noop(
+// CHECK-SAME:               %[[VAL_0:.*]]: !esi.channel<i0>, %[[VAL_1:.*]]: !esi.channel<i1>) -> (token: !esi.channel<i0>, value: !esi.channel<i1>) {
+// CHECK-NEXT:           hw.output %[[VAL_0]], %[[VAL_1]] : !esi.channel<i0>, !esi.channel<i1>
+// CHECK-NEXT:         }
+hw.module @to_from_esi_noop(%token : !esi.channel<i0>, %value : !esi.channel<i1>) ->
+    (token : !esi.channel<i0>, value : !esi.channel<i1>) {
+    %token_dc = dc.from_esi %token : !esi.channel<i0>
+    %value_dc = dc.from_esi %value : !esi.channel<i1>
+    %token_esi = dc.to_esi %token_dc : !dc.token
+    %value_esi = dc.to_esi %value_dc : !dc.value<i1>
+    hw.output %token_esi, %value_esi : !esi.channel<i0>, !esi.channel<i1>
+}
