@@ -25,6 +25,7 @@ def ClassOp : IbisOp<"class", [
     IsolatedFromAbove, RegionKindInterface,
     Symbol, SymbolTable, SingleBlock,
     NoTerminator, NoRegionArguments,
+    InnerRefNamespace,
     HasParent<"mlir::ModuleOp">]> {
 
   let summary = "Ibis class";

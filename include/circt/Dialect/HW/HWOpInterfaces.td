@@ -210,7 +210,27 @@ def HWInstanceLike : OpInterface<"HWInstanceLike"> {
   ];
 }
 
-def InnerRefNamespace : NativeOpTrait<"InnerRefNamespace">;
+def InnerRefNamespace : OpInterface<"InnerRefNamespaceOpInterface"> {
+  let cppNamespace = "circt::hw";
+  let description = [{
+    This trait is for operations that define a scope for resolving InnerRef's,
+    and provides verification for InnerRef users (via InnerRefUserOpInterface).
+  }];
+
+  let verify = [{
+    assert(
+        op->hasTrait<::mlir::OpTrait::SymbolTable>() &&
+        "expected operation to be a SymbolTable");
+
+    if (op->getNumRegions() != 1)
+      return op->emitError("expected operation to have a single region");
+    if (!op->getRegion(0).hasOneBlock())
+      return op->emitError("expected operation to have a single block");
+
+    // Verify all InnerSymbolTable's and InnerRef users.
+    return ::circt::hw::detail::verifyInnerRefNamespace(op);
+  }];
+}
 
 def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
   let description = [{

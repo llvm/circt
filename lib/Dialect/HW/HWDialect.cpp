@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/Builders.h"
@@ -79,6 +80,8 @@ void HWDialect::initialize() {
 
   // Register interface implementations.
   addInterfaces<HWOpAsmDialectInterface, HWInlinerInterface>();
+
+  mlir::ModuleOp::attachInterface<InnerRefNamespaceOpInterface>(*getContext());
 }
 
 // Registered hook to materialize a single constant operation from a given
