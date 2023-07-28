@@ -37,7 +37,7 @@ circuit Top :
 circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
-    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} @A(
+    ; CHECK-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
   ; CHECK: firrtl.module private @A
@@ -96,7 +96,7 @@ circuit Top :
 circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
-    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} @A(
+    ; CHECK-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
   module A : @[yy 2:2]
@@ -116,7 +116,7 @@ circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
     output out: UInt<1>
-    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} @A(
+    ; CHECK-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
     out <= and(a1.x, a2.y)
@@ -252,7 +252,7 @@ circuit FooAndBarModule :
   ; CHECK: firrtl.module @FooAndBarModule
   module FooAndBarModule :
     output io : {foo : {flip foo : UInt<1>, fuzz : UInt<1>}, bar : {flip foo : UInt<1>, fuzz : UInt<1>}}
-    ; CHECK-NEXT-COUNT-2: firrtl.instance {{(foo|bar)}} @FooModule
+    ; CHECK-COUNT-2: firrtl.instance {{(foo|bar)}} @FooModule
     inst foo of FooModule
     inst bar of BarModule
     io.foo <= foo.io
@@ -265,7 +265,7 @@ circuit FooAndBarModule :
 circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
-    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} @A(
+    ; CHECK-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
   module A :
@@ -293,7 +293,7 @@ circuit Top :
 circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
-    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} @A(
+    ; CHECK-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
   module A :
