@@ -1052,12 +1052,8 @@ namespace {
 /// currently parsing into.
 struct FIRModuleContext : public FIRParser {
   explicit FIRModuleContext(SharedParserConstants &constants, FIRLexer &lexer,
-                            std::string moduleTarget, FIRVersion &version)
-      : FIRParser(constants, lexer, version),
-        moduleTarget(std::move(moduleTarget)) {}
-
-  /// This is the module target used by annotations referring to this module.
-  std::string moduleTarget;
+                            FIRVersion &version)
+      : FIRParser(constants, lexer, version) {}
 
   // The expression-oriented nature of firrtl syntax produces tons of constant
   // nodes which are obviously redundant.  Instead of literally producing them
@@ -1423,9 +1419,6 @@ struct FIRStmtParser : public FIRParser {
   ParseResult parseSimpleStmtBlock(unsigned indent);
 
 private:
-  /// Return the current modulet target, e.g., "~Foo|Bar".
-  StringRef getModuleTarget() { return moduleContext.moduleTarget; }
-
   ParseResult parseSimpleStmtImpl(unsigned stmtIndent);
 
   /// Attach invalid values to every element of the value.
@@ -3820,24 +3813,19 @@ struct FIRCircuitParser : public FIRParser {
 private:
   /// Extract Annotations from a JSON-encoded Annotation array string and add
   /// them to a vector of attributes.
-  ParseResult importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
-                                   StringRef annotationsStr,
+  ParseResult importAnnotationsRaw(SMLoc loc, StringRef annotationsStr,
                                    SmallVectorImpl<Attribute> &attrs);
   /// Generate OMIR-derived annotations.  Report errors if the OMIR is malformed
   /// in any way.  This also performs scattering of the OMIR to introduce
   /// tracking annotations in the circuit.
-  ParseResult importOMIR(CircuitOp circuit, SMLoc loc, StringRef circuitTarget,
-                         StringRef omirStr, SmallVectorImpl<Attribute> &attrs);
+  ParseResult importOMIR(CircuitOp circuit, SMLoc loc, StringRef annotationStr,
+                         SmallVectorImpl<Attribute> &attrs);
 
-  ParseResult parseToplevelDefinition(CircuitOp circuit,
-                                      StringRef circuitTarget, unsigned indent);
+  ParseResult parseToplevelDefinition(CircuitOp circuit, unsigned indent);
 
-  ParseResult parseExtModule(CircuitOp circuit, StringRef circuitTarget,
-                             unsigned indent);
-  ParseResult parseIntModule(CircuitOp circuit, StringRef circuitTarget,
-                             unsigned indent);
-  ParseResult parseModule(CircuitOp circuit, StringRef circuitTarget,
-                          unsigned indent);
+  ParseResult parseExtModule(CircuitOp circuit, unsigned indent);
+  ParseResult parseIntModule(CircuitOp circuit, unsigned indent);
+  ParseResult parseModule(CircuitOp circuit, unsigned indent);
 
   ParseResult parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                             SmallVectorImpl<SMLoc> &resultPortLocs,
@@ -3858,7 +3846,6 @@ private:
     FModuleOp moduleOp;
     SmallVector<SMLoc> portLocs;
     FIRLexerCursor lexerCursor;
-    std::string moduleTarget;
     unsigned indent;
   };
 
@@ -3870,8 +3857,7 @@ private:
 
 } // end anonymous namespace
 ParseResult
-FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
-                                       StringRef annotationsStr,
+FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef annotationsStr,
                                        SmallVectorImpl<Attribute> &attrs) {
 
   auto annotations = json::parse(annotationsStr);
@@ -3885,8 +3871,7 @@ FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
 
   json::Path::Root root;
   llvm::StringMap<ArrayAttr> thisAnnotationMap;
-  if (!fromJSONRaw(annotations.get(), circuitTarget, attrs, root,
-                   getContext())) {
+  if (!fromJSONRaw(annotations.get(), attrs, root, getContext())) {
     auto diag = emitError(loc, "Invalid/unsupported annotation format");
     std::string jsonErrorMessage =
         "See inline comments for problem area in JSON:\n";
@@ -3900,7 +3885,6 @@ FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
 }
 
 ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
-                                         StringRef circuitTarget,
                                          StringRef annotationsStr,
                                          SmallVectorImpl<Attribute> &annos) {
 
@@ -3914,8 +3898,7 @@ ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
   }
 
   json::Path::Root root;
-  if (!fromOMIRJSON(annotations.get(), circuitTarget, annos, root,
-                    circuit.getContext())) {
+  if (!fromOMIRJSON(annotations.get(), annos, root, circuit.getContext())) {
     auto diag = emitError(loc, "Invalid/unsupported OMIR format");
     std::string jsonErrorMessage =
         "See inline comments for problem area in JSON:\n";
@@ -4215,7 +4198,6 @@ ParseResult FIRCircuitParser::parseParameterList(ArrayAttr &resultParameters) {
 ///        INDENT pohwist defname? parameter-list ref-list DEDENT
 /// defname   ::= 'defname' '=' id NEWLINE
 ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
-                                             StringRef circuitTarget,
                                              unsigned indent) {
   StringAttr name;
   SmallVector<PortInfo, 8> portList;
@@ -4255,7 +4237,6 @@ ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
 ///        INDENT pohwist intname parameter-list ref-list DEDENT
 /// intname   ::= 'intrinsic' '=' id NEWLINE
 ParseResult FIRCircuitParser::parseIntModule(CircuitOp circuit,
-                                             StringRef circuitTarget,
                                              unsigned indent) {
   StringAttr name;
   SmallVector<PortInfo, 8> portList;
@@ -4287,9 +4268,7 @@ ParseResult FIRCircuitParser::parseIntModule(CircuitOp circuit,
 }
 
 /// module ::= 'module' id ':' info? INDENT pohwist simple_stmt_block DEDENT
-ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
-                                          StringRef circuitTarget,
-                                          unsigned indent) {
+ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, unsigned indent) {
   StringAttr name;
   SmallVector<PortInfo, 8> portList;
   SmallVector<SMLoc> portLocs;
@@ -4316,10 +4295,8 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
 
   // Parse the body of this module after all prototypes have been parsed. This
   // allows us to handle forward references correctly.
-  auto moduleTarget = (circuitTarget + "|" + name.getValue()).str();
-  deferredModules.emplace_back(
-      DeferredModuleToParse{moduleOp, portLocs, getLexer().getCursor(),
-                            std::move(moduleTarget), indent});
+  deferredModules.emplace_back(DeferredModuleToParse{
+      moduleOp, portLocs, getLexer().getCursor(), indent});
 
   if (skipToModuleEnd(indent))
     return failure();
@@ -4327,15 +4304,14 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
 }
 
 ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
-                                                      StringRef circuitTarget,
                                                       unsigned indent) {
   switch (getToken().getKind()) {
   case FIRToken::kw_module:
-    return parseModule(circuit, circuitTarget, indent);
+    return parseModule(circuit, indent);
   case FIRToken::kw_extmodule:
-    return parseExtModule(circuit, circuitTarget, indent);
+    return parseExtModule(circuit, indent);
   case FIRToken::kw_intmodule:
-    return parseIntModule(circuit, circuitTarget, indent);
+    return parseIntModule(circuit, indent);
   case FIRToken::kw_type:
     return parseTypeDecl();
   case FIRToken::kw_declgroup:
@@ -4439,7 +4415,6 @@ ParseResult
 FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
   FModuleOp moduleOp = deferredModule.moduleOp;
   auto &portLocs = deferredModule.portLocs;
-  auto &moduleTarget = deferredModule.moduleTarget;
 
   // We parse the body of this module with its own lexer, enabling parallel
   // parsing with the rest of the other module bodies.
@@ -4448,8 +4423,7 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
   // Reset the parser/lexer state back to right after the port list.
   deferredModule.lexerCursor.restore(moduleBodyLexer);
 
-  FIRModuleContext moduleContext(getConstants(), moduleBodyLexer,
-                                 std::move(moduleTarget), version);
+  FIRModuleContext moduleContext(getConstants(), moduleBodyLexer, version);
 
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
@@ -4542,8 +4516,6 @@ ParseResult FIRCircuitParser::parseCircuit(
   OpBuilder b(mlirModule.getBodyRegion());
   auto circuit = b.create<CircuitOp>(info.getLoc(), name);
 
-  std::string circuitTarget = ("~" + name.getValue()).str();
-
   // A timer to get execution time of annotation parsing.
   auto parseAnnotationTimer = ts.nest("Parse annotations");
 
@@ -4553,14 +4525,13 @@ ParseResult FIRCircuitParser::parseCircuit(
   // "append" semantics.
   SmallVector<Attribute> annos;
   if (!inlineAnnotations.empty())
-    if (importAnnotationsRaw(inlineAnnotationsLoc, circuitTarget,
-                             inlineAnnotations, annos))
+    if (importAnnotationsRaw(inlineAnnotationsLoc, inlineAnnotations, annos))
       return failure();
 
   // Deal with the annotation file if one was specified
   for (auto *annotationsBuf : annotationsBufs)
-    if (importAnnotationsRaw(info.getFIRLoc(), circuitTarget,
-                             annotationsBuf->getBuffer(), annos))
+    if (importAnnotationsRaw(info.getFIRLoc(), annotationsBuf->getBuffer(),
+                             annos))
       return failure();
 
   parseAnnotationTimer.stop();
@@ -4569,8 +4540,7 @@ ParseResult FIRCircuitParser::parseCircuit(
   // Process OMIR files as annotations with a class of
   // "freechips.rocketchip.objectmodel.OMNode"
   for (auto *omirBuf : omirBufs)
-    if (importOMIR(circuit, info.getFIRLoc(), circuitTarget,
-                   omirBuf->getBuffer(), annos))
+    if (importOMIR(circuit, info.getFIRLoc(), omirBuf->getBuffer(), annos))
       return failure();
 
   parseOMIRTimer.stop();
@@ -4614,7 +4584,7 @@ ParseResult FIRCircuitParser::parseCircuit(
       if (definitionIndent <= circuitIndent)
         return emitError("module should be indented more"), failure();
 
-      if (parseToplevelDefinition(circuit, circuitTarget, definitionIndent))
+      if (parseToplevelDefinition(circuit, definitionIndent))
         return failure();
       break;
     }
