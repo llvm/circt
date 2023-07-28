@@ -152,3 +152,58 @@ firrtl.circuit "SymbolOnField" {
   // CHECK-SAME:  out r_p: !firrtl.probe<uint<1>>)
   firrtl.extmodule @SymbolOnField(out r : !firrtl.openbundle<p: probe<uint<1>>, x: uint<1>> sym [<@sym,2,public>])
 }
+
+// -----
+
+// CHECK-LABEL: circuit "ManySymbols"
+firrtl.circuit "ManySymbols" {
+   // Innner-syms on everything not a probe.
+   // (mixed.x[0].p and mixed.x[1].p are pulled out)
+  // CHECK: extmodule @ManySymbols(
+  // CHECK-SAME: <@mixed,0,public>,
+  // CHECK-SAME: <@a,1,public>,
+  // CHECK-SAME: <@xvec,2,public>,
+  // CHECK-SAME: <@x0,3,public>,
+  // CHECK-SAME: <@x0_data,4,public>,
+  // CHECK-SAME: <@x1,5,public>,
+  // CHECK-SAME: <@x1_data,6,public>,
+  // CHECK-SAME: <@b,7,public>
+  firrtl.extmodule @ManySymbols(
+    out mixed: !firrtl.openbundle<a: uint<1>,
+                                   x flip: openvector<openbundle<p flip: probe<bundle<a: uint<1>,
+                                                                                      b: vector<uint<1>, 2>>>,
+                                                                 data flip: uint<1>
+                                                      >, 2>,
+                                   b: vector<uint<1>, 2>>
+        sym [<@mixed,0,public>,
+               <@a,1,public>,
+               <@xvec,2,public>,
+                 <@x0,3,public>, <@x0_data,5,public>,
+                 <@x1,6,public>, <@x1_data,8,public>,
+               <@b,9,public>])
+
+  // Similar but with a refs-only agg between HW elements.
+  // Same HW-only contents as above.
+  // CHECK: extmodule @ManySymbols2(
+  // CHECK-SAME: <@mixed,0,public>,
+  // CHECK-SAME: <@a,1,public>,
+  // CHECK-SAME: <@xvec,2,public>,
+  // CHECK-SAME: <@x0,3,public>,
+  // CHECK-SAME: <@x0_data,4,public>,
+  // CHECK-SAME: <@x1,5,public>,
+  // CHECK-SAME: <@x1_data,6,public>,
+  // CHECK-SAME: <@b,7,public>
+  firrtl.extmodule @ManySymbols2(
+    out mixed: !firrtl.openbundle<a: uint<1>,
+                                   x flip: openvector<openbundle<refsonly : openbundle<p: probe<bundle<a: uint<1>,
+                                                                                                       b: vector<uint<1>, 2>>>>,
+                                                                 data flip: uint<1>
+                                                      >, 2>,
+                                   b: vector<uint<1>, 2>>
+        sym [<@mixed,0,public>,
+               <@a,1,public>,
+               <@xvec,2,public>,
+                 <@x0,3,public>, <@x0_data,6,public>,
+                 <@x1,7,public>, <@x1_data,10,public>,
+               <@b,11,public>])
+}
