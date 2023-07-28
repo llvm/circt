@@ -44,6 +44,6 @@ hw.module @top(%in0: !dc.value<i64>, %in1: !dc.value<i64>, %in2: !dc.value<i64>,
   %12 = comb.icmp sge %9, %11 : i64
   %14 = comb.mux %12, %9, %11 : i64
   %13 = dc.join %token, %token_0, %token_2, %token_4, %token_6, %token_8, %token_10, %token_12
-  %15 = dc.pack %13[%14] : i64
+  %15 = dc.pack %13, %14 : i64
   hw.output %15, %in8 : !dc.value<i64>, !dc.token
 }
