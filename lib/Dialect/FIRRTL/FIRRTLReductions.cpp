@@ -24,6 +24,7 @@ using namespace circt;
 // Utilities
 //===----------------------------------------------------------------------===//
 
+namespace detail {
 /// A utility doing lazy construction of `SymbolTable`s and `SymbolUserMap`s,
 /// which is handy for reductions that need to look up a lot of symbols.
 struct SymbolCache {
@@ -53,11 +54,13 @@ private:
   SymbolTableCollection tables;
   SmallDenseMap<Operation *, SymbolUserMap, 2> userMaps;
 };
+} // namespace detail
 
 /// Utility to easily get the instantiated firrtl::FModuleOp or an empty
 /// optional in case another type of module is instantiated.
 static std::optional<firrtl::FModuleOp>
-findInstantiatedModule(firrtl::InstanceOp instOp, SymbolCache &symbols) {
+findInstantiatedModule(firrtl::InstanceOp instOp,
+                       ::detail::SymbolCache &symbols) {
   auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
   auto moduleOp = dyn_cast<firrtl::FModuleOp>(
       instOp.getReferencedModule(symbols.getSymbolTable(tableOp))
@@ -69,7 +72,7 @@ findInstantiatedModule(firrtl::InstanceOp instOp, SymbolCache &symbols) {
 struct ModuleSizeCache {
   void clear() { moduleSizes.clear(); }
 
-  uint64_t getModuleSize(Operation *module, SymbolCache &symbols) {
+  uint64_t getModuleSize(Operation *module, ::detail::SymbolCache &symbols) {
     if (auto it = moduleSizes.find(module); it != moduleSizes.end())
       return it->second;
     uint64_t size = 1;
@@ -196,7 +199,7 @@ struct FIRRTLModuleExternalizer : public OpReduction<firrtl::FModuleOp> {
 
   std::string getName() const override { return "firrtl-module-externalizer"; }
 
-  SymbolCache symbols;
+  ::detail::SymbolCache symbols;
   NLARemover nlaRemover;
   ModuleSizeCache moduleSizes;
 };
@@ -394,7 +397,7 @@ struct InstanceStubber : public OpReduction<firrtl::InstanceOp> {
   std::string getName() const override { return "instance-stubber"; }
   bool acceptSizeIncrease() const override { return true; }
 
-  SymbolCache symbols;
+  ::detail::SymbolCache symbols;
   NLARemover nlaRemover;
   llvm::DenseSet<Operation *> erasedInsts;
   llvm::DenseSet<Operation *> erasedModules;
@@ -680,7 +683,7 @@ struct ExtmoduleInstanceRemover : public OpReduction<firrtl::InstanceOp> {
   std::string getName() const override { return "extmodule-instance-remover"; }
   bool acceptSizeIncrease() const override { return true; }
 
-  SymbolCache symbols;
+  ::detail::SymbolCache symbols;
   NLARemover nlaRemover;
 };
 
@@ -931,7 +934,7 @@ struct EagerInliner : public OpReduction<firrtl::InstanceOp> {
   std::string getName() const override { return "eager-inliner"; }
   bool acceptSizeIncrease() const override { return true; }
 
-  SymbolCache symbols;
+  ::detail::SymbolCache symbols;
   NLARemover nlaRemover;
 };
 
