@@ -187,10 +187,19 @@ public:
 } // namespace OpTrait
 } // namespace mlir
 
+//===----------------------------------------------------------------------===//
+// ODS-generated code.
+//===----------------------------------------------------------------------===//
+
 #include "circt/Dialect/HW/HWOpInterfaces.h.inc"
+
+//===----------------------------------------------------------------------===//
+// Code which needs the generated code declarations.
+//===----------------------------------------------------------------------===//
 
 namespace mlir {
 namespace OpTrait {
+
 template <typename ConcreteType>
 LogicalResult InnerSymbolTable<ConcreteType>::verifyRegionTrait(Operation *op) {
   // Insist that ops with InnerSymbolTable's provide a Symbol, this is

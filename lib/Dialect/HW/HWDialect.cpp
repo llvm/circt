@@ -81,6 +81,8 @@ void HWDialect::initialize() {
   // Register interface implementations.
   addInterfaces<HWOpAsmDialectInterface, HWInlinerInterface>();
 
+  // Attach the InnerRefNamespace interface to the default top level container
+  // op so that children can contain InnerRefNamespaces.
   mlir::ModuleOp::attachInterface<InnerRefNamespaceOpInterface>(*getContext());
 }
 

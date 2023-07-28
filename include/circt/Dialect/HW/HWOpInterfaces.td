@@ -218,8 +218,10 @@ def InnerRefNamespace : OpInterface<"InnerRefNamespaceOpInterface"> {
   }];
 
   let verify = [{
-    assert(
-        op->hasTrait<::mlir::OpTrait::SymbolTable>() &&
+    // Insist that ops with InnerSymbolTable's provide a SymbolTable, this is
+    // essential to how InnerRefNamespace's work.
+    static_assert(
+        ConcreteOp::template hasTrait<::mlir::OpTrait::SymbolTable>() &&
         "expected operation to be a SymbolTable");
 
     if (op->getNumRegions() != 1)
