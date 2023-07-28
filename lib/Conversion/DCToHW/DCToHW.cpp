@@ -126,42 +126,6 @@ public:
           return inputs[0];
         });
   }
-
-  // ToESI/FromESI special case:
-  // Struct compatability - since DC doesn't have named `dc.value` fields,
-  // we here in DCToHW have an inferred naming scheme (`field#`).
-  // However, users may provide `esi.channel<hw.struct<...>>`s with
-  // any field names. We need to convert these struct types to ensure that they
-  // compatible. For mismatched structs, we just do a bitcast and let the
-  // hw.bitcast verifiers do the rest of the work in case of actual bitwidth
-  // incompatability.
-  static Value structCompatabilityMaterialization(OpBuilder &builder,
-                                                  Type resultType, Value input,
-                                                  Location loc) {
-    esi::ChannelType srcChannel = input.getType().dyn_cast<esi::ChannelType>();
-    esi::ChannelType dstChannel = resultType.dyn_cast<esi::ChannelType>();
-    if (srcChannel && dstChannel) {
-      hw::StructType srcStruct =
-          srcChannel.getInner().dyn_cast<hw::StructType>();
-      hw::StructType dstStruct =
-          dstChannel.getInner().dyn_cast<hw::StructType>();
-      if (srcStruct && dstStruct && (srcStruct != dstStruct)) {
-        // Struct name mismatch - unpack the channel, bitcast the contents
-        // and repack.
-        BackedgeBuilder bb(builder, loc);
-        Backedge ready = bb.get(builder.getI1Type());
-        auto unwrapOp =
-            builder.create<esi::UnwrapValidReadyOp>(loc, input, ready);
-        auto bitcastOp = builder.create<hw::BitcastOp>(loc, dstStruct,
-                                                       unwrapOp.getRawOutput());
-        auto wrapOp = builder.create<esi::WrapValidReadyOp>(
-            loc, bitcastOp, unwrapOp.getValid());
-        ready.setValue(wrapOp.getReady());
-        return wrapOp.getChanOutput();
-      }
-    }
-    return Value();
-  }
 };
 
 } // namespace
