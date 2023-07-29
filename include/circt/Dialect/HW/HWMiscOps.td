@@ -93,7 +93,6 @@ def WireOp : HWOp<"wire", [
 
   let hasFolder = true;
   let hasCanonicalizeMethod = 1;
-  let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "mlir::Value":$input,
                    CArg<"const StringAttrOrRef &", "{}">:$name,
