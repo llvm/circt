@@ -638,9 +638,10 @@ firrtl.circuit "Foo" {
   }
   
   // CHECK-LABEL: module Properties :
-  firrtl.module @Properties(in %in : !firrtl.bigint, out %out : !firrtl.bigint) {
-    // CHECK: propassign out, in
-    firrtl.propassign %out, %in : !firrtl.bigint
+  firrtl.module @Properties(out %out : !firrtl.bigint) {
+    // CHECK: propassign out, Integer(99)
+    %0 = firrtl.bigint 99
+    firrtl.propassign %out, %0 : !firrtl.bigint
   }
 
   // Test optional group declaration and definition emission.
