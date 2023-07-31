@@ -973,6 +973,10 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     result = BigIntType::get(getContext());
     break;
   case FIRToken::kw_Path:
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError() << "unexpected token: Properties are a FIRRTL 3.1.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
     consumeToken(FIRToken::kw_Path);
     result = PathType::get(getContext());
     break;
