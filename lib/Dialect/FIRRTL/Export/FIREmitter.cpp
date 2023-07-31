@@ -1228,6 +1228,7 @@ void Emitter::emitType(Type type, bool includeConst) {
         emitType(type.getType());
         ps << ">";
       })
+      .Case<StringType>([&](StringType type) { ps << "String"; })
       .Case<BigIntType>([&](BigIntType type) { ps << "Integer"; })
       .Case<PathType>([&](PathType type) { ps << "Path"; })
       .Default([&](auto type) {
