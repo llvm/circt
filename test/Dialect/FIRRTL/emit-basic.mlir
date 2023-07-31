@@ -35,6 +35,7 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: output b0 : UInt
     // CHECK-NEXT: output b1 : Probe<UInt<1>>
     // CHECK-NEXT: output b2 : RWProbe<UInt<1>>
+    // CHECK-NEXT: input string : String
     // CHECK-NEXT: input integer : Integer
     // CHECK-NEXT: input path : Path
     in %a00: !firrtl.clock,
@@ -51,6 +52,7 @@ firrtl.circuit "Foo" {
     out %b0: !firrtl.uint,
     out %b1: !firrtl.probe<uint<1>>,
     out %b2: !firrtl.rwprobe<uint<1>>,
+    in %string: !firrtl.string,
     in %integer: !firrtl.bigint,
     in %path : !firrtl.path
   ) {}
