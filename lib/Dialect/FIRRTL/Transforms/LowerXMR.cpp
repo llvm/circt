@@ -267,7 +267,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         worklist.swap(indexingOps);
 
         for (auto op : worklist) {
-          auto inputEntry = getRemoteRefSend(op.getInput());
+          auto inputEntry =
+              getRemoteRefSend(op.getInput(), /*errorIfNotFound=*/false);
           // If we can't resolve, add back and move on.
           if (!inputEntry)
             indexingOps.push_back(op);
@@ -278,6 +279,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         // If nothing was resolved, give up.
         if (worklist.size() == indexingOps.size()) {
           auto op = worklist.front();
+          getRemoteRefSend(op.getInput());
           op.emitError(
                 "indexing through probe of unknown origin (input probe?)")
               .attachNote(op.getInput().getLoc())
@@ -662,10 +664,13 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   void markForRemoval(Operation *op) { opsToRemove.push_back(op); }
 
-  std::optional<size_t> getRemoteRefSend(Value val) {
+  std::optional<size_t> getRemoteRefSend(Value val,
+                                         bool errorIfNotFound = true) {
     auto iter = dataflowAt.find(dataFlowClasses->getOrInsertLeaderValue(val));
     if (iter != dataflowAt.end())
       return iter->getSecond();
+    if (!errorIfNotFound)
+      return std::nullopt;
     // The referenced module must have already been analyzed, error out if the
     // dataflow at the child module is not resolved.
     if (BlockArgument arg = dyn_cast<BlockArgument>(val))

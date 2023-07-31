@@ -1003,13 +1003,18 @@ firrtl.circuit "RefSubOutputPort" {
   }
   // CHECK: module @RefSubOutputPort
   firrtl.module @RefSubOutputPort(out %outRWBundleProbe: !firrtl.rwprobe<bundle<x: vector<uint<1>, 2>>>,
-                                  out %outElem: !firrtl.rwprobe<uint<1>>) attributes {convention = #firrtl<convention scalarized>} {
-    %0 = firrtl.ref.sub %outRWBundleProbe[0] : !firrtl.rwprobe<bundle<x: vector<uint<1>, 2>>>
-    %1 = firrtl.ref.sub %0[1] : !firrtl.rwprobe<vector<uint<1>, 2>>
+                                  out %outVec: !firrtl.rwprobe<vector<uint<1>, 2>>,
+                                  out %outElem: !firrtl.rwprobe<uint<1>>,
+                                  out %outElemDirect: !firrtl.rwprobe<uint<1>>) attributes {convention = #firrtl<convention scalarized>} {
+    %0 = firrtl.ref.sub %outVec[1] : !firrtl.rwprobe<vector<uint<1>, 2>>
+    %1 = firrtl.ref.sub %outRWBundleProbe[0] : !firrtl.rwprobe<bundle<x: vector<uint<1>, 2>>>
+    %2 = firrtl.ref.sub %1[1] : !firrtl.rwprobe<vector<uint<1>, 2>>
     // CHECK-NEXT: instance child sym @[[CHILD_SYM]] @Child
     // CHECK-NEXT: }
     %child_bore_1 = firrtl.instance child @Child(out bore_1: !firrtl.rwprobe<bundle<x: vector<uint<1>, 2>>>)
     firrtl.ref.define %outRWBundleProbe, %child_bore_1 : !firrtl.rwprobe<bundle<x: vector<uint<1>, 2>>>
-    firrtl.ref.define %outElem, %1 : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %outElemDirect, %2 : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %outVec, %1 : !firrtl.rwprobe<vector<uint<1>, 2>>
+    firrtl.ref.define %outElem, %0 : !firrtl.rwprobe<uint<1>>
   }
 }
