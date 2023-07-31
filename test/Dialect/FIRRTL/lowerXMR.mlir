@@ -991,7 +991,13 @@ firrtl.circuit "RWProbePort" {
 // CHECK-LABEL: circuit "RefSubOutputPort"
 firrtl.circuit "RefSubOutputPort" {
   // CHECK: hw.hierpath private @[[XMRPATH:.+]] [@RefSubOutputPort::@[[CHILD_SYM:.+]], @Child::@[[WIRE_SYM:.+]]]
+  // CHECK: sv.macro.def @ref_RefSubOutputPort_RefSubOutputPort_outVec
+  // CHECK-SAME{LITERAL}: "{{0}}.x"
+  // CHECK-SAME: ([@[[XMRPATH]]]) {output_file = #hw.output_file<"ref_RefSubOutputPort_RefSubOutputPort.sv">}
   // CHECK: sv.macro.def @ref_RefSubOutputPort_RefSubOutputPort_outElem
+  // CHECK-SAME{LITERAL}: "{{0}}.x[1]"
+  // CHECK-SAME: ([@[[XMRPATH]]]) {output_file = #hw.output_file<"ref_RefSubOutputPort_RefSubOutputPort.sv">}
+  // CHECK: sv.macro.def @ref_RefSubOutputPort_RefSubOutputPort_outElemDirect
   // CHECK-SAME{LITERAL}: "{{0}}.x[1]"
   // CHECK-SAME: ([@[[XMRPATH]]]) {output_file = #hw.output_file<"ref_RefSubOutputPort_RefSubOutputPort.sv">}
 
