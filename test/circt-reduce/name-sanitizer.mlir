@@ -1,5 +1,5 @@
 // UNSUPPORTED: system-windows
-// RUN: circt-reduce %s --include=module-internal-name-sanitizer --include=module-name-sanitizer --test /usr/bin/true --keep-best=0 | FileCheck %s
+// RUN: circt-reduce %s --include=module-internal-name-sanitizer --include=module-name-sanitizer --test /usr/bin/env --test-arg true --keep-best=0 | FileCheck %s
 
 // CHECK-LABEL: firrtl.circuit "Foo"
 firrtl.circuit "A" {
