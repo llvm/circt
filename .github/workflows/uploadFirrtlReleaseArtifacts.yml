@@ -4,6 +4,15 @@ on:
   release:
     types: [created]
   workflow_dispatch:
+    inputs:
+      os:
+        type: choice
+        description: Operating System target
+        default: linux
+        options:
+          - linux
+          - macos
+          - windows
   # Run every day at 0700 UTC which is:
   #   - 0000 PDT / 2300 PST
   #   - 0300 EDT / 0200 EST
@@ -47,6 +56,7 @@ jobs:
     steps:
       - name: Add Linux
         id: add-linux
+        if: github.event_name != 'workflow_dispatch' || inputs.os == 'linux'
         env:
           os: linux
           runner: ubuntu-20.04
@@ -63,7 +73,7 @@ jobs:
           echo "out=$json" >> $GITHUB_OUTPUT
       - name: Add macOS
         id: add-macos
-        if: github.event_name != 'schedule'
+        if: github.event_name == 'release' || ( github.event_name == 'workflow_dispatch' && inputs.os == 'macos' )
         env:
           os: macos
           runner: macos-11
@@ -80,7 +90,7 @@ jobs:
           echo "out=$json" >> $GITHUB_OUTPUT
       - name: Add Windows
         id: add-windows
-        if: github.event_name != 'schedule'
+        if: github.event_name == 'release' || ( github.event_name == 'workflow_dispatch' && inputs.os == 'windows' )
         env:
           os: windows
           runner: windows-2019
