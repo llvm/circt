@@ -622,7 +622,7 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
       .Case<BundleType, FVectorType, FEnumType, OpenBundleType, OpenVectorType,
             RefType, BaseTypeAliasType>(
           [](auto type) { return type.getRecursiveTypeProperties(); })
-      .Case<StringType, BigIntType>([](auto type) {
+      .Case<PropertyType>([](auto type) {
         return RecursiveTypeProperties{true,  false, false, false,
                                        false, false, false};
       })
