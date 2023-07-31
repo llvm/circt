@@ -1179,13 +1179,13 @@ circuit EnumTypes:
     ; CHECK: firrtl.propassign %a, %0 : !firrtl.string
     propassign a, String("hello")
 
-  ; CHECK-LABEL: module private @BigInt
-  module BigInt :
+  ; CHECK-LABEL: module private @Integer
+  module Integer :
     ; CHECK-SAME: out %a: !firrtl.bigint
-    output a : BigInt
+    output a : Integer
     ; CHECK: %0 = firrtl.bigint -10
     ; CHECK: firrtl.propassign %a, %0 : !firrtl.bigint
-    propassign a, BigInt(-10)
+    propassign a, Integer(-10)
 
   ; CHECK-LABEL: module private @RefsChild(
   ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>

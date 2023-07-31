@@ -960,8 +960,8 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     consumeToken(FIRToken::kw_String);
     result = StringType::get(getContext());
     break;
-  case FIRToken::kw_BigInt:
-    consumeToken(FIRToken::kw_BigInt);
+  case FIRToken::kw_Integer:
+    consumeToken(FIRToken::kw_Integer);
     result = BigIntType::get(getContext());
     break;
   }
@@ -1723,13 +1723,13 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
         builder.getStringAttr(FIRToken::getStringValue(spelling)));
     break;
   }
-  case FIRToken::kw_BigInt: {
+  case FIRToken::kw_Integer: {
     locationProcessor.setLoc(getToken().getLoc());
-    consumeToken(FIRToken::kw_BigInt);
+    consumeToken(FIRToken::kw_Integer);
     APInt value;
-    if (parseToken(FIRToken::l_paren, "expected '(' in BigInt expression") ||
-        parseIntLit(value, "expected integer literal in BigInt expression") ||
-        parseToken(FIRToken::r_paren, "expected ')' in BigInt expression"))
+    if (parseToken(FIRToken::l_paren, "expected '(' in Integer expression") ||
+        parseIntLit(value, "expected integer literal in Integer expression") ||
+        parseToken(FIRToken::r_paren, "expected ')' in Integer expression"))
       return failure();
     result =
         builder.create<BigIntConstantOp>(APSInt(value, /*isUnsigned=*/false));
