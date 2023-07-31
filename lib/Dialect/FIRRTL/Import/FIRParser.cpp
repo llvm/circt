@@ -964,6 +964,10 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     consumeToken(FIRToken::kw_Integer);
     result = BigIntType::get(getContext());
     break;
+  case FIRToken::kw_Path:
+    consumeToken(FIRToken::kw_Path);
+    result = PathType::get(getContext());
+    break;
   }
 
   // Handle postfix vector sizes.

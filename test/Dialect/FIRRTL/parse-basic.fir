@@ -1187,6 +1187,15 @@ circuit EnumTypes:
     ; CHECK: firrtl.propassign %a, %0 : !firrtl.bigint
     propassign a, Integer(-10)
 
+  ; CHECK-LABEL: module private @Path
+  module Path :
+    ; CHECK-SAME: in %a: !firrtl.path
+    ; CHECK-SAME: out %b: !firrtl.path
+    input a : Path
+    output b : Path
+    ; CHECK: firrtl.propassign %b, %a : !firrtl.path
+    propassign b, a
+
   ; CHECK-LABEL: module private @RefsChild(
   ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>
   ; CHECK-SAME: out %rw: !firrtl.rwprobe<uint<1>>
