@@ -34,6 +34,7 @@ namespace dc {
 // =============================================================================
 
 OpFoldResult JoinOp::fold(FoldAdaptor adaptor) {
+  llvm::errs() << "before folder: " << *this << "\n";
   // Fold simple joins (joins with 1 input).
   if (auto tokens = getTokens(); tokens.size() == 1)
     return tokens.front();
@@ -70,6 +71,7 @@ OpFoldResult JoinOp::fold(FoldAdaptor adaptor) {
     // DCE will take care of otherJoin in case it's no longer used.
     op->eraseOperand(operand.getOperandNumber());
     op->insertOperands(getNumOperands(), otherJoin.getTokens());
+    llvm::errs() << "after " << *this << "\n";
     return getOutput();
   }
 

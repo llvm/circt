@@ -802,6 +802,12 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedField) {
       operandConstants.push_back({});
   }
 
+  // Save the original operands and attributes just in case the operation
+  // folds in-place. The constant passed in may not correspond to the real
+  // runtime value, so in-place updates are not allowed.
+  SmallVector<Value, 8> originalOperands(op->getOperands());
+  DictionaryAttr originalAttrs = op->getAttrDictionary();
+
   // Simulate the result of folding this operation to a constant. If folding
   // fails or was an in-place fold, mark the results as overdefined.
   SmallVector<OpFoldResult, 8> foldResults;
@@ -838,6 +844,17 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedField) {
     logger.unindent();
     logger.getOStream() << "}\n";
   });
+
+  // If the folding was in-place, mark the results as overdefined and reset
+  // the operation. We don't allow in-place folds as the desire here is for
+  // simulated execution, and not general folding.
+  if (foldResults.empty()) {
+    op->setOperands(originalOperands);
+    op->setAttrs(originalAttrs);
+    for (auto value : op->getResults())
+      markOverdefined(value);
+    return;
+  }
 
   // Fold functions in general are allowed to do in-place updates, but FIRRTL
   // does not do this and supporting it costs more.
