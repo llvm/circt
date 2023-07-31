@@ -1210,6 +1210,7 @@ void Emitter::emitType(Type type, bool includeConst) {
         emitType(type.getType());
         ps << ">";
       })
+      .Case<BigIntType>([&](BigIntType type) { ps << "Integer"; })
       .Case<PathType>([&](PathType type) { ps << "Path"; })
       .Default([&](auto type) {
         llvm_unreachable("all types should be implemented");
