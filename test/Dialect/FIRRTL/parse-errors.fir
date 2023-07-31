@@ -705,6 +705,7 @@ circuit DefinePromoteToRW:
     define rw = r.ro
 
 ;// -----
+FIRRTL version 3.1.0
 
 circuit PropAssignNonProperty:
   module PropAssignNonProperty:
@@ -781,6 +782,7 @@ circuit DuplicateAlias:
 
 ;// -----
 ; https://github.com/llvm/circt/issues/5494
+FIRRTL version 3.1.0
 
 circuit BundleOfProps:
   module BundleOfProps:
@@ -788,6 +790,7 @@ circuit BundleOfProps:
     ; expected-error @above {{type '!firrtl.string' cannot be used as field in a bundle}}
 
 ;// -----
+FIRRTL version 3.1.0
 
 circuit VecOfProps:
   module VecOfProps:
@@ -839,3 +842,21 @@ circuit Top:
   class Foo:
     ;; expected-error @below {{ports on classes must be properties}}
     input a: UInt<8>
+
+;// -----
+FIRRTL version 3.0.0
+
+circuit Top:
+  module Top:
+    output s : String
+    ; expected-error @above {{Properties are a FIRRTL 3.1.0+ feature, but the specified FIRRTL version was 3.0.0}}
+
+;// -----
+FIRRTL version 3.0.0
+
+circuit Top:
+  module Top:
+    ; expected-error @below {{Integers are a FIRRTL 3.1.0+ feature, but the specified FIRRTL version was 3.0.0}}
+    input in : Integer
+    output out : Integer
+    propassign out, in
