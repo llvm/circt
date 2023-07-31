@@ -337,7 +337,7 @@ static void addExistingBinds(Block *topLevelModule, BindTable &bindTable) {
 static void
 inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
                 BindTable &bindTable, SmallPtrSetImpl<Operation *> &opsToErase,
-                llvm::DenseSet<StringAttr> &innerRefUsedByNonBindOp) {
+                llvm::DenseSet<hw::InnerRefAttr> &innerRefUsedByNonBindOp) {
 
   // Check if the module only has inputs.
   if (oldMod.getNumOutputs() != 0)
@@ -345,10 +345,12 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
 
   // Check if it's ok to inline. We cannot inline the module if there exists a
   // declaration with an inner symbol referred by non-bind ops (e.g. hierpath).
+  auto oldModName = oldMod.getModuleNameAttr();
   for (auto port : oldMod.getPorts()) {
     if (port.sym) {
       for (auto property : port.sym) {
-        if (innerRefUsedByNonBindOp.count(property.getName())) {
+        auto innerRef = hw::InnerRefAttr::get(oldModName, property.getName());
+        if (innerRefUsedByNonBindOp.count(innerRef)) {
           oldMod.emitWarning() << "module " << oldMod.getModuleName()
                                << " is an input only module but cannot "
                                   "be inlined because a signal "
@@ -362,7 +364,8 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
   for (auto op : oldMod.getBodyBlock()->getOps<hw::InnerSymbolOpInterface>()) {
     if (auto innerSym = op.getInnerSymAttr()) {
       for (auto property : innerSym) {
-        if (innerRefUsedByNonBindOp.count(property.getName())) {
+        auto innerRef = hw::InnerRefAttr::get(oldModName, property.getName());
+        if (innerRefUsedByNonBindOp.count(innerRef)) {
           op.emitWarning() << "module " << oldMod.getModuleName()
                            << " is an input only module but cannot be inlined "
                               "because signals "
@@ -702,12 +705,12 @@ void SVExtractTestCodeImplPass::runOnOperation() {
   // inner refs users globally. However we do want to inline modules which
   // contain bound instances so create a set of inner refs used by non bind op
   // in order to allow bind ops.
-  DenseSet<StringAttr> innerRefUsedByNonBindOp;
+  DenseSet<hw::InnerRefAttr> innerRefUsedByNonBindOp;
   top.walk([&](Operation *op) {
     if (!isa<sv::BindOp>(op))
       for (auto attr : op->getAttrs())
         attr.getValue().walk([&](hw::InnerRefAttr attr) {
-          innerRefUsedByNonBindOp.insert(attr.getName());
+          innerRefUsedByNonBindOp.insert(attr);
         });
   });
 

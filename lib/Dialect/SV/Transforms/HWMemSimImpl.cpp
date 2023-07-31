@@ -590,9 +590,9 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
           totalWidth += reg.getElementType().getIntOrFloatBitWidth();
         while (totalWidth > 0) {
           auto name = b.getStringAttr(moduleNamespace.newName("_RANDOM"));
-          auto symName = hw::InnerSymAttr::get(name);
+          auto innerSym = hw::InnerSymAttr::get(name);
           randRegs.push_back(b.create<sv::RegOp>(b.getIntegerType(randomWidth),
-                                                 name, symName));
+                                                 name, innerSym));
           totalWidth -= randomWidth;
         }
       });
