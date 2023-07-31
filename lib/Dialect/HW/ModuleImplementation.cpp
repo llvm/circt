@@ -159,7 +159,7 @@ ParseResult module_like_impl::parseModuleFunctionSignature(
 
   // Parse the argument list.
   if (parser.parseArgumentList(args, OpAsmParser::Delimiter::Paren,
-                               /*allowTypes=*/true, /*allowAttrs=*/true))
+                               /*allowType=*/true, /*allowAttrs=*/true))
     return failure();
 
   // Parse the result list.
@@ -263,6 +263,7 @@ static const char *directionAsString(ModulePort::Direction dir) {
     return "inout";
   assert(0 && "Unknown port direction");
   abort();
+  return "unknown";
 }
 
 void module_like_impl::printModuleSignatureNew(OpAsmPrinter &p, Operation *op) {
@@ -283,7 +284,8 @@ void module_like_impl::printModuleSignatureNew(OpAsmPrinter &p, Operation *op) {
     p.printKeywordOrString(port.name);
     p << " : ";
     p.printType(port.type);
-    //    p.printOptionalAttrDict(portAttrs[i]);
+    if (auto attr = dyn_cast<DictionaryAttr>(portAttrs[i]))
+      p.printOptionalAttrDict(attr.getValue());
 
     // TODO: `printOptionalLocationSpecifier` will emit aliases for locations,
     // even if they are not printed.  This will have to be fixed upstream.  For
