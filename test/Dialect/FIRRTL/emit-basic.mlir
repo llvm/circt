@@ -636,6 +636,12 @@ firrtl.circuit "Foo" {
     firrtl.ref.define %_12, %18 : !firrtl.probe<uint<1>>
     firrtl.ref.define %_13, %_15_ref : !firrtl.rwprobe<uint<1>>
   }
+  
+  // CHECK-LABEL: module Properties :
+  firrtl.module @Properties(in %in : !firrtl.bigint, out %out : !firrtl.bigint) {
+    // CHECK: propassign out, in
+    firrtl.propassign %out, %in : !firrtl.bigint
+  }
 
   // Test optional group declaration and definition emission.
   //

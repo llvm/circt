@@ -502,10 +502,11 @@ void Emitter::emitStatementsInBlock(Block &block) {
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
               PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp, StrictConnectOp,
-              InstanceOp, AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
-              MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp,
-              RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
-              GroupOp>([&](auto op) { emitStatement(op); })
+              PropAssignOp, InstanceOp, AttachOp, MemOp, InvalidValueOp,
+              SeqMemOp, CombMemOp, MemoryPortOp, MemoryDebugPortOp,
+              MemoryPortAccessOp, RefDefineOp, RefForceOp, RefForceInitialOp,
+              RefReleaseOp, RefReleaseInitialOp, GroupOp>(
+            [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           startStatement();
           ps << "// operation " << PPExtString(op->getName().getStringRef());
@@ -727,6 +728,15 @@ void Emitter::emitStatement(StrictConnectOp op) {
           emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
     }
   }
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(PropAssignOp op) {
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "propassign" << PP::space;
+    interleaveComma(op.getOperands());
+  });
   emitLocationAndNewLine(op);
 }
 
