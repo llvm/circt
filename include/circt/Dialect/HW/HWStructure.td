@@ -49,6 +49,13 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       ArrayRef<unsigned> eraseInputs,
       ArrayRef<unsigned> eraseOutputs
     );
+
+    /// Attribute name for port symbols.
+    static StringRef getPortSymbolAttrName() {
+      return "hw.exportPort";
+    }
+
+    void setPortSymbolAttr(size_t portIndex, ::circt::hw::InnerSymAttr sym);
   }];
 
   /// Additional class definitions inside the module op.
@@ -61,19 +68,35 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     }
 
     ::circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
-      ArrayRef<NamedAttribute> portAttrs;
+      DictionaryAttr portAttrs;
       if (portIndex < getNumInputs()) {
-        portAttrs = ::mlir::function_interface_impl::getArgAttrs(*this,
-                                                                 portIndex);
+         portAttrs = ::mlir::function_interface_impl::getArgAttrDict(*this,
+                                                                     portIndex);
       } else {
         portIndex -= getNumInputs();
-        portAttrs = ::mlir::function_interface_impl::getResultAttrs(*this,
-                                                                    portIndex);
+        portAttrs = ::mlir::function_interface_impl::getResultAttrDict(
+            *this, portIndex);
       }
-      for (auto argAttr : portAttrs)
-        if (auto sym = argAttr.getValue().dyn_cast<::circt::hw::InnerSymAttr>())
-          return sym;
-      return ::circt::hw::InnerSymAttr();
+      return portAttrs.getAs<::circt::hw::InnerSymAttr>(getPortSymbolAttrName());
+    }
+
+    void $cppClass::setPortSymbolAttr(size_t portIndex, ::circt::hw::InnerSymAttr sym) {
+      auto portSymAttr = StringAttr::get(getContext(), getPortSymbolAttrName());
+      if (portIndex < getNumInputs()) {
+        if (sym)
+          ::mlir::function_interface_impl::setArgAttr(*this, portIndex,
+                                                      portSymAttr, sym);
+        else
+          ::mlir::function_interface_impl::removeArgAttr(*this, portIndex,
+                                                         portSymAttr);
+        return;
+      }
+      if (sym)
+        ::mlir::function_interface_impl::setResultAttr(
+            *this, portIndex - getNumInputs(), portSymAttr, sym);
+      else
+        ::mlir::function_interface_impl::removeResultAttr(
+            *this, portIndex - getNumInputs(), portSymAttr);
     }
   }];
 

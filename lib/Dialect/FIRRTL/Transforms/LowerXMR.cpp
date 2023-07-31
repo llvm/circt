@@ -81,6 +81,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
     InstanceGraph &instanceGraph = getAnalysis<InstanceGraph>();
     SmallVector<RefResolveOp> resolveOps;
+    SmallVector<RefSubOp> indexingOps;
     SmallVector<Operation *> forceAndReleaseOps;
     // The dataflow function, that propagates the reachable RefSendOp across
     // RefType Ops.
@@ -193,17 +194,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             markForRemoval(op);
             if (isZeroWidth(op.getType().getType()))
               return success();
-            // TODO: May not work (getRemoteRefSend) if indexing input probe.
-            auto inputEntry = getRemoteRefSend(op.getInput());
-            if (!inputEntry)
-              return op
-                  .emitError(
-                      "indexing through probe of unknown origin (input probe?)")
-                  .attachNote(op.getInput().getLoc())
-                  .append("indexing through this reference");
-            addReachingSendsEntry(op.getResult(), op.getOperation(),
-                                  inputEntry);
 
+            // Enqueue for processing after visiting other operations.
+            indexingOps.push_back(op);
             return success();
           })
           .Case<RefResolveOp>([&](RefResolveOp resolve) {
@@ -261,6 +254,39 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       for (Operation &op : module.getBodyBlock()->getOperations())
         if (transferFunc(op).failed())
           return signalPassFailure();
+
+      // Since we walk operations pre-order and not along dataflow edges,
+      // ref.sub may not be resolvable when we encounter them (they're not just
+      // unification). This can happen when refs go through an output port or
+      // input instance result and back into the design. Handle these by walking
+      // them, resolving what we can, until all are handled or nothing can be
+      // resolved.
+      while (!indexingOps.empty()) {
+        // Grab the set of unresolved ref.sub's.
+        decltype(indexingOps) worklist;
+        worklist.swap(indexingOps);
+
+        for (auto op : worklist) {
+          auto inputEntry =
+              getRemoteRefSend(op.getInput(), /*errorIfNotFound=*/false);
+          // If we can't resolve, add back and move on.
+          if (!inputEntry)
+            indexingOps.push_back(op);
+          else
+            addReachingSendsEntry(op.getResult(), op.getOperation(),
+                                  inputEntry);
+        }
+        // If nothing was resolved, give up.
+        if (worklist.size() == indexingOps.size()) {
+          auto op = worklist.front();
+          getRemoteRefSend(op.getInput());
+          op.emitError(
+                "indexing through probe of unknown origin (input probe?)")
+              .attachNote(op.getInput().getLoc())
+              .append("indexing through this reference");
+          return signalPassFailure();
+        }
+      }
 
       // Record all the RefType ports to be removed later.
       size_t numPorts = module.getNumPorts();
@@ -638,10 +664,13 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   void markForRemoval(Operation *op) { opsToRemove.push_back(op); }
 
-  std::optional<size_t> getRemoteRefSend(Value val) {
+  std::optional<size_t> getRemoteRefSend(Value val,
+                                         bool errorIfNotFound = true) {
     auto iter = dataflowAt.find(dataFlowClasses->getOrInsertLeaderValue(val));
     if (iter != dataflowAt.end())
       return iter->getSecond();
+    if (!errorIfNotFound)
+      return std::nullopt;
     // The referenced module must have already been analyzed, error out if the
     // dataflow at the child module is not resolved.
     if (BlockArgument arg = dyn_cast<BlockArgument>(val))
