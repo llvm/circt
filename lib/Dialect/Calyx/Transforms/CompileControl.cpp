@@ -187,9 +187,9 @@ struct CompileControlPass : public CompileControlBase<CompileControlPass> {
 
 void CompileControlPass::runOnOperation() {
   ComponentOp component = getOperation();
-  CompileControlVisitor CompileControlVisitor(getAnalysisManager());
+  CompileControlVisitor compileControlVisitor(getAnalysisManager());
   component.getControlOp().walk(
-      [&](Operation *op) { CompileControlVisitor.dispatch(op, component); });
+      [&](Operation *op) { compileControlVisitor.dispatch(op, component); });
 
   // A post-condition of this pass is that all undefined GroupGoOps, created
   // in the Go Insertion pass, are now defined.
