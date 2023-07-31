@@ -1589,7 +1589,7 @@ void LowerTypesPass::runOnOperation() {
                       "------------------------------------------------===\n");
   std::vector<FModuleLike> ops;
   // Symbol Table
-  SymbolTable symTbl(getOperation());
+  auto &symTbl = getAnalysis<SymbolTable>();
   // Cached attr
   AttrCache cache(&getContext());
 

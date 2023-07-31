@@ -339,7 +339,7 @@ static ServiceDeclOpInterface getServiceDecl(Operation *op,
                                              SymbolTableCollection &symbolTable,
                                              hw::InnerRefAttr servicePort) {
   ModuleOp top = op->getParentOfType<mlir::ModuleOp>();
-  SymbolTable topSyms = symbolTable.getSymbolTable(top);
+  SymbolTable &topSyms = symbolTable.getSymbolTable(top);
 
   StringAttr modName = servicePort.getModule();
   return topSyms.lookup<ServiceDeclOpInterface>(modName);
@@ -454,10 +454,10 @@ void CustomServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
 LogicalResult ServiceHierarchyMetadataOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
   ModuleOp top = getOperation()->getParentOfType<mlir::ModuleOp>();
-  SymbolTable topSyms = symbolTable.getSymbolTable(top);
   auto sym = getServiceSymbol();
   if (!sym)
     return success();
+  SymbolTable &topSyms = symbolTable.getSymbolTable(top);
   auto serviceDeclOp = topSyms.lookup<ServiceDeclOpInterface>(*sym);
   if (!serviceDeclOp)
     return emitOpError("Could not find service declaration ") << *sym;
