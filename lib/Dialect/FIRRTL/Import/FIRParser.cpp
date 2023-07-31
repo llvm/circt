@@ -4384,6 +4384,14 @@ ParseResult FIRCircuitParser::parseTypeDecl() {
   FIRRTLType type;
   consumeToken();
   auto loc = getToken().getLoc();
+
+  if (getToken().isKeyword())
+    // The parseId will always succeed. Its required for parsing the name to
+    // print with error message.
+    if (parseId(id, "expected type name").succeeded())
+      return emitError(loc)
+             << "cannot use keyword '" << id << "' for type alias name";
+
   if (parseId(id, "expected type name") ||
       parseToken(FIRToken::equal, "expected '=' in type decl") ||
       parseType(type, "expected a type"))
