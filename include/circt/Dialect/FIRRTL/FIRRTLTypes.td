@@ -211,4 +211,7 @@ def BigIntType : FIRRTLDialectTypeHelper<"BigIntType", "big integer type">,
 def ListType : FIRRTLDialectTypeHelper<"ListType", "list type">;
 def MapType : FIRRTLDialectTypeHelper<"MapType", "map type">;
 
+def PathType : FIRRTLDialectTypeHelper<"PathType", "path type">,
+  BuildableType<"::circt::firrtl::PathType::get($_builder.getContext())">;
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD

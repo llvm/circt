@@ -35,6 +35,7 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: output b0 : UInt
     // CHECK-NEXT: output b1 : Probe<UInt<1>>
     // CHECK-NEXT: output b2 : RWProbe<UInt<1>>
+    // CHECK-NEXT: input path : Path
     in %a00: !firrtl.clock,
     in %a01: !firrtl.reset,
     in %a02: !firrtl.asyncreset,
@@ -48,7 +49,8 @@ firrtl.circuit "Foo" {
     in %a10: !firrtl.vector<uint, 42>,
     out %b0: !firrtl.uint,
     out %b1: !firrtl.probe<uint<1>>,
-    out %b2: !firrtl.rwprobe<uint<1>>
+    out %b2: !firrtl.rwprobe<uint<1>>,
+    in %path : !firrtl.path
   ) {}
 
   // CHECK-LABEL: module Simple :

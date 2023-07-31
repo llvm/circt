@@ -957,12 +957,28 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   }
 
   case FIRToken::kw_String:
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError() << "unexpected token: Properties are a FIRRTL 3.1.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
     consumeToken(FIRToken::kw_String);
     result = StringType::get(getContext());
     break;
-  case FIRToken::kw_BigInt:
-    consumeToken(FIRToken::kw_BigInt);
+  case FIRToken::kw_Integer:
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError() << "unexpected token: Integers are a FIRRTL 3.1.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
+    consumeToken(FIRToken::kw_Integer);
     result = BigIntType::get(getContext());
+    break;
+  case FIRToken::kw_Path:
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError() << "unexpected token: Properties are a FIRRTL 3.1.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
+    consumeToken(FIRToken::kw_Path);
+    result = PathType::get(getContext());
     break;
   }
 
@@ -1710,6 +1726,10 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     break;
   case FIRToken::kw_String: {
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError() << "unexpected token: Properties are a FIRRTL 3.1.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
     locationProcessor.setLoc(getToken().getLoc());
     consumeToken(FIRToken::kw_String);
     StringRef spelling;
@@ -1723,13 +1743,18 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
         builder.getStringAttr(FIRToken::getStringValue(spelling)));
     break;
   }
-  case FIRToken::kw_BigInt: {
+  case FIRToken::kw_Integer: {
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError() << "unexpected token: Integers are a FIRRTL 3.1.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
+
     locationProcessor.setLoc(getToken().getLoc());
-    consumeToken(FIRToken::kw_BigInt);
+    consumeToken(FIRToken::kw_Integer);
     APInt value;
-    if (parseToken(FIRToken::l_paren, "expected '(' in BigInt expression") ||
-        parseIntLit(value, "expected integer literal in BigInt expression") ||
-        parseToken(FIRToken::r_paren, "expected ')' in BigInt expression"))
+    if (parseToken(FIRToken::l_paren, "expected '(' in Integer expression") ||
+        parseIntLit(value, "expected integer literal in Integer expression") ||
+        parseToken(FIRToken::r_paren, "expected ')' in Integer expression"))
       return failure();
     result =
         builder.create<BigIntConstantOp>(APSInt(value, /*isUnsigned=*/false));
@@ -2274,6 +2299,10 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   case FIRToken::kw_connect:
     return parseConnect();
   case FIRToken::kw_propassign:
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError() << "unexpected token: Properties are a FIRRTL 3.1.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
     return parsePropAssign();
   case FIRToken::kw_invalidate:
     return parseInvalidate();

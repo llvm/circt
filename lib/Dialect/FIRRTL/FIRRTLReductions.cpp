@@ -7,7 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLReductions.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Reduce/ReductionUtils.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -24,6 +27,7 @@ using namespace circt;
 // Utilities
 //===----------------------------------------------------------------------===//
 
+namespace detail {
 /// A utility doing lazy construction of `SymbolTable`s and `SymbolUserMap`s,
 /// which is handy for reductions that need to look up a lot of symbols.
 struct SymbolCache {
@@ -53,11 +57,13 @@ private:
   SymbolTableCollection tables;
   SmallDenseMap<Operation *, SymbolUserMap, 2> userMaps;
 };
+} // namespace detail
 
 /// Utility to easily get the instantiated firrtl::FModuleOp or an empty
 /// optional in case another type of module is instantiated.
 static std::optional<firrtl::FModuleOp>
-findInstantiatedModule(firrtl::InstanceOp instOp, SymbolCache &symbols) {
+findInstantiatedModule(firrtl::InstanceOp instOp,
+                       ::detail::SymbolCache &symbols) {
   auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
   auto moduleOp = dyn_cast<firrtl::FModuleOp>(
       instOp.getReferencedModule(symbols.getSymbolTable(tableOp))
@@ -69,7 +75,7 @@ findInstantiatedModule(firrtl::InstanceOp instOp, SymbolCache &symbols) {
 struct ModuleSizeCache {
   void clear() { moduleSizes.clear(); }
 
-  uint64_t getModuleSize(Operation *module, SymbolCache &symbols) {
+  uint64_t getModuleSize(Operation *module, ::detail::SymbolCache &symbols) {
     if (auto it = moduleSizes.find(module); it != moduleSizes.end())
       return it->second;
     uint64_t size = 1;
@@ -196,7 +202,7 @@ struct FIRRTLModuleExternalizer : public OpReduction<firrtl::FModuleOp> {
 
   std::string getName() const override { return "firrtl-module-externalizer"; }
 
-  SymbolCache symbols;
+  ::detail::SymbolCache symbols;
   NLARemover nlaRemover;
   ModuleSizeCache moduleSizes;
 };
@@ -394,7 +400,7 @@ struct InstanceStubber : public OpReduction<firrtl::InstanceOp> {
   std::string getName() const override { return "instance-stubber"; }
   bool acceptSizeIncrease() const override { return true; }
 
-  SymbolCache symbols;
+  ::detail::SymbolCache symbols;
   NLARemover nlaRemover;
   llvm::DenseSet<Operation *> erasedInsts;
   llvm::DenseSet<Operation *> erasedModules;
@@ -488,8 +494,7 @@ static bool isFlowSensitiveOp(Operation *op) {
 template <unsigned OpNum>
 struct FIRRTLOperandForwarder : public Reduction {
   uint64_t match(Operation *op) override {
-    if (op->getNumResults() != 1 || op->getNumOperands() < 2 ||
-        OpNum >= op->getNumOperands())
+    if (op->getNumResults() != 1 || OpNum >= op->getNumOperands())
       return 0;
     if (isFlowSensitiveOp(op))
       return 0;
@@ -681,7 +686,7 @@ struct ExtmoduleInstanceRemover : public OpReduction<firrtl::InstanceOp> {
   std::string getName() const override { return "extmodule-instance-remover"; }
   bool acceptSizeIncrease() const override { return true; }
 
-  SymbolCache symbols;
+  ::detail::SymbolCache symbols;
   NLARemover nlaRemover;
 };
 
@@ -932,8 +937,155 @@ struct EagerInliner : public OpReduction<firrtl::InstanceOp> {
   std::string getName() const override { return "eager-inliner"; }
   bool acceptSizeIncrease() const override { return true; }
 
-  SymbolCache symbols;
+  ::detail::SymbolCache symbols;
   NLARemover nlaRemover;
+};
+
+/// Psuedo-reduction that sanitizes the names of things inside modules.  This is
+/// not an actual reduction, but often removes extraneous information that has
+/// no bearing on the actual reduction (and would likely be removed before
+/// sharing the reduction).  This makes the following changes:
+///
+///   - All wires are renamed to "wire"
+///   - All registers are renamed to "reg"
+///   - All nodes are renamed to "node"
+///   - All memories are renamed to "mem"
+///   - All verification messages and labels are dropped
+///
+struct ModuleInternalNameSanitizer : public Reduction {
+  uint64_t match(Operation *op) override {
+    // Only match operations with names.
+    return isa<firrtl::WireOp, firrtl::RegOp, firrtl::RegResetOp,
+               firrtl::NodeOp, firrtl::MemOp, chirrtl::CombMemOp,
+               chirrtl::SeqMemOp, firrtl::AssertOp, firrtl::AssumeOp,
+               firrtl::CoverOp>(op);
+  }
+  LogicalResult rewrite(Operation *op) override {
+    TypeSwitch<Operation *, void>(op)
+        .Case<firrtl::WireOp>([](auto op) { op.setName("wire"); })
+        .Case<firrtl::RegOp, firrtl::RegResetOp>(
+            [](auto op) { op.setName("reg"); })
+        .Case<firrtl::NodeOp>([](auto op) { op.setName("node"); })
+        .Case<firrtl::MemOp, chirrtl::CombMemOp, chirrtl::SeqMemOp>(
+            [](auto op) { op.setName("mem"); })
+        .Case<firrtl::AssertOp, firrtl::AssumeOp, firrtl::CoverOp>([](auto op) {
+          op->setAttr("message", StringAttr::get(op.getContext(), ""));
+          op->setAttr("name", StringAttr::get(op.getContext(), ""));
+        });
+    return success();
+  }
+
+  std::string getName() const override {
+    return "module-internal-name-sanitizer";
+  }
+
+  bool acceptSizeIncrease() const override { return true; }
+
+  bool isOneShot() const override { return true; }
+};
+
+/// Psuedo-reduction that sanitizes module, instance, and port names.  This
+/// makes the following changes:
+///
+///     - All modules are given metasyntactic names ("Foo", "Bar", etc.)
+///     - All instances are renamed to match the new module name
+///     - All module ports are renamed in the following way:
+///         - All clocks are reanemd to "clk"
+///         - All resets are renamed to "rst"
+///         - All references are renamed to "ref"
+///         - Anything else is renamed to "port"
+///
+struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
+
+  const char *names[48] = {
+      "Foo",    "Bar",    "Baz",    "Qux",      "Quux",   "Quuux",  "Quuuux",
+      "Quz",    "Corge",  "Grault", "Bazola",   "Ztesch", "Thud",   "Grunt",
+      "Bletch", "Fum",    "Fred",   "Jim",      "Sheila", "Barney", "Flarp",
+      "Zxc",    "Spqr",   "Wombat", "Shme",     "Bongo",  "Spam",   "Eggs",
+      "Snork",  "Zot",    "Blarg",  "Wibble",   "Toto",   "Titi",   "Tata",
+      "Tutu",   "Pippo",  "Pluto",  "Paperino", "Aap",    "Noot",   "Mies",
+      "Oogle",  "Foogle", "Boogle", "Zork",     "Gork",   "Bork"};
+
+  size_t nameIndex = 0;
+
+  const char *getName() {
+    if (nameIndex >= 48)
+      nameIndex = 0;
+    return names[nameIndex++];
+  };
+
+  size_t portNameIndex = 0;
+
+  char getPortName() {
+    if (portNameIndex >= 26)
+      portNameIndex = 0;
+    return 'a' + portNameIndex++;
+  }
+
+  void beforeReduction(mlir::ModuleOp op) override { nameIndex = 0; }
+
+  LogicalResult rewrite(firrtl::CircuitOp circuitOp) override {
+
+    firrtl::InstanceGraph iGraph(circuitOp);
+
+    auto *circuitName = getName();
+    iGraph.getTopLevelModule().setName(circuitName);
+    circuitOp.setName(circuitName);
+
+    for (auto *node : iGraph) {
+      auto module = node->getModule();
+
+      bool shouldReplacePorts = false;
+      SmallVector<Attribute> newNames;
+      if (auto fmodule = dyn_cast<firrtl::FModuleOp>(*module)) {
+        portNameIndex = 0;
+        // TODO: The namespace should be unnecessary. However, some FIRRTL
+        // passes expect that port names are unique.
+        circt::Namespace ns;
+        auto oldPorts = fmodule.getPorts();
+        shouldReplacePorts = !oldPorts.empty();
+        for (unsigned i = 0, e = fmodule.getNumPorts(); i != e; ++i) {
+          auto port = oldPorts[i];
+          auto newName = firrtl::FIRRTLTypeSwitch<Type, StringRef>(port.type)
+                             .Case<firrtl::ClockType>(
+                                 [&](auto a) { return ns.newName("clk"); })
+                             .Case<firrtl::ResetType, firrtl::AsyncResetType>(
+                                 [&](auto a) { return ns.newName("rst"); })
+                             .Case<firrtl::RefType>(
+                                 [&](auto a) { return ns.newName("ref"); })
+                             .Default([&](auto a) {
+                               return ns.newName(Twine(getPortName()));
+                             });
+          newNames.push_back(StringAttr::get(circuitOp.getContext(), newName));
+        }
+        fmodule->setAttr("portNames",
+                         ArrayAttr::get(fmodule.getContext(), newNames));
+      }
+
+      if (module == iGraph.getTopLevelModule())
+        continue;
+      auto newName = StringAttr::get(circuitOp.getContext(), getName());
+      module.setName(newName);
+      for (auto *use : node->uses()) {
+        auto instanceOp = dyn_cast<firrtl::InstanceOp>(*use->getInstance());
+        instanceOp.setModuleName(newName);
+        instanceOp.setName(newName);
+        if (shouldReplacePorts)
+          instanceOp.setPortNamesAttr(
+              ArrayAttr::get(circuitOp.getContext(), newNames));
+      }
+    }
+
+    circuitOp->dump();
+
+    return success();
+  }
+
+  std::string getName() const override { return "module-name-sanitizer"; }
+
+  bool acceptSizeIncrease() const override { return true; }
+
+  bool isOneShot() const override { return true; }
 };
 
 //===----------------------------------------------------------------------===//
@@ -984,6 +1136,8 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   patterns.add<ConnectSourceOperandForwarder<0>, 3>();
   patterns.add<ConnectSourceOperandForwarder<1>, 2>();
   patterns.add<ConnectSourceOperandForwarder<2>, 1>();
+  patterns.add<ModuleInternalNameSanitizer, 0>();
+  patterns.add<ModuleNameSanitizer, 0>();
 }
 
 void firrtl::registerReducePatternDialectInterface(

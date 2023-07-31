@@ -62,7 +62,8 @@ class HWMemSimImpl {
 
   Value addPipelineStages(ImplicitLocOpBuilder &b,
                           ModuleNamespace &moduleNamespace, size_t stages,
-                          Value clock, Value data, Twine name, Value gate = {});
+                          Value clock, Value data, const Twine &name,
+                          Value gate = {});
   sv::AlwaysOp lastPipelineAlwaysOp;
 
 public:
@@ -174,7 +175,7 @@ static Value getMemoryRead(ImplicitLocOpBuilder &b, Value memory, Value addr,
 Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
                                       ModuleNamespace &moduleNamespace,
                                       size_t stages, Value clock, Value data,
-                                      Twine name, Value gate) {
+                                      const Twine &name, Value gate) {
   if (!stages)
     return data;
 

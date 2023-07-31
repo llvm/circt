@@ -280,6 +280,12 @@ firrtl.module @PropertyNestedTest(in %in: !firrtl.map<bigint, list<map<string, b
   firrtl.propassign %out, %in : !firrtl.map<bigint, list<map<string, bigint>>>
 }
 
+// CHECK-LABEL: firrtl.module @PathTest
+// CHECK-SAME: (in %in: !firrtl.path, out %out: !firrtl.path)
+firrtl.module @PathTest(in %in: !firrtl.path, out %out: !firrtl.path) {
+  firrtl.propassign %out, %in : !firrtl.path
+}
+
 // CHECK-LABEL: TypeAlias
 // CHECK-SAME: %in: !firrtl.alias<bar, uint<1>>
 // CHECK-SAME: %const: !firrtl.const.alias<baz, const.uint<1>>

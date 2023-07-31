@@ -348,6 +348,12 @@ void IMConstPropPass::runOnOperation() {
       for (auto port : module.getBodyBlock()->getArguments())
         markOverdefined(port);
     }
+    // Also mark PlusArgs instrinsics as overdefined
+    for (auto &op : module.getOps()) {
+      if (isa<PlusArgsValueIntrinsicOp, PlusArgsTestIntrinsicOp>(op)) {
+        llvm::for_each(op.getResults(), [&](auto a) { markOverdefined(a); });
+      }
+    }
   }
 
   // If a value changed lattice state then reprocess any of its users.

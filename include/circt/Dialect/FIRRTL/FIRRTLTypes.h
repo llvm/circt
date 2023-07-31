@@ -52,6 +52,7 @@ class StringType;
 class BigIntType;
 class ListType;
 class MapType;
+class PathType;
 class BaseTypeAliasType;
 
 /// A collection of bits indicating the recursive properties of a type.
@@ -332,7 +333,7 @@ class PropertyType : public FIRRTLType {
 public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
-    return llvm::isa<StringType, BigIntType, ListType, MapType>(type);
+    return llvm::isa<StringType, BigIntType, ListType, MapType, PathType>(type);
   }
 
 protected:
