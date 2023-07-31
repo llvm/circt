@@ -722,7 +722,9 @@ StringRef ModuleType::getOutputName(size_t idx) {
   return {};
 }
 
-FunctionType ModuleType::getFuncType() { return nullptr; }
+FunctionType ModuleType::getFuncType() {
+  return FunctionType::get(getContext(), getInputTypes(), getOutputTypes());
+}
 
 namespace mlir {
 template <>
