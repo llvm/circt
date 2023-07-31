@@ -150,63 +150,45 @@ jobs:
         if: matrix.runner.os == 'macos'
         run: brew install ninja gnu-tar
 
-      - name: Build LLVM
-        run: |
-          ${{ matrix.runner.setup }}
-          mkdir -p llvm/build
-          cd llvm/build
-          cmake -G Ninja ../llvm ${{ matrix.runner.cont }}
-              ${{ matrix.runner.cmake-args }} ${{ matrix.runner.cont }}
-              -DCMAKE_BUILD_TYPE=${{ matrix.build_config.mode }} ${{ matrix.runner.cont }}
-              -DBUILD_SHARED_LIBS=${{ matrix.build_config.shared }} ${{ matrix.runner.cont }}
-              -DLLVM_BUILD_TOOLS=OFF ${{ matrix.runner.cont }}
-              -DLLVM_BUILD_EXAMPLES=OFF ${{ matrix.runner.cont }}
-              -DLLVM_ENABLE_ASSERTIONS=${{ matrix.build_config.assert }} ${{ matrix.runner.cont }}
-              -DLLVM_ENABLE_BINDINGS=OFF ${{ matrix.runner.cont }}
-              -DLLVM_ENABLE_OCAMLDOC=OFF ${{ matrix.runner.cont }}
-              -DLLVM_ENABLE_PROJECTS="mlir" ${{ matrix.runner.cont }}
-              -DLLVM_OPTIMIZED_TABLEGEN=ON ${{ matrix.runner.cont }}
-              -DLLVM_STATIC_LINK_CXX_STDLIB=ON ${{ matrix.runner.cont }}
-              -DLLVM_ENABLE_TERMINFO=OFF ${{ matrix.runner.cont }}
-              -DLLVM_PARALLEL_LINK_JOBS=1 ${{ matrix.runner.cont }}
-              -DLLVM_TARGETS_TO_BUILD="host" ${{ matrix.runner.cont }}
-              -DLLVM_FORCE_ENABLE_STATS=${{ matrix.build_config.stats }} ${{ matrix.runner.cont }}
-              -DLLVM_ENABLE_ZSTD=OFF
-          ninja
-          ninja check-mlir
-
-      # --------
-      # Build and test CIRCT
-      # --------
-
-      - name: Build and Test CIRCT
+      - name: Configure CIRCT
         run: |
           ${{ matrix.runner.setup }}
           mkdir build
           cd build
-          cmake -G Ninja .. ${{ matrix.runner.cont }}
+          echo $(pwd)
+          cmake -G Ninja -S "$(pwd)/../llvm/llvm" ${{ matrix.runner.cont }}
             ${{ matrix.runner.cmake-args }} ${{ matrix.runner.cont }}
-            -DBUILD_SHARED_LIBS=${{ matrix.build_config.shared }} ${{ matrix.runner.cont }}
             -DCMAKE_BUILD_TYPE=${{ matrix.build_config.mode }} ${{ matrix.runner.cont }}
+            -DBUILD_SHARED_LIBS=${{ matrix.build_config.shared }} ${{ matrix.runner.cont }}
+            -DLLVM_BUILD_TOOLS=ON ${{ matrix.runner.cont }}
+            -DLLVM_BUILD_EXAMPLES=OFF ${{ matrix.runner.cont }}
             -DLLVM_ENABLE_ASSERTIONS=${{ matrix.build_config.assert }} ${{ matrix.runner.cont }}
-            -DMLIR_DIR="$(pwd)/../llvm/build/lib/cmake/mlir" ${{ matrix.runner.cont }}
-            -DLLVM_DIR="$(pwd)/../llvm/build/lib/cmake/llvm" ${{ matrix.runner.cont }}
-            -DVERILATOR_DISABLE=ON ${{ matrix.runner.cont }}
-            -DLLVM_ENABLE_TERMINFO=OFF ${{ matrix.runner.cont }}
+            -DLLVM_ENABLE_PROJECTS=mlir ${{ matrix.runner.cont }}
+            -DLLVM_EXTERNAL_PROJECTS=circt ${{ matrix.runner.cont }}
+            -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=".." ${{ matrix.runner.cont }}
+            -DLLVM_OPTIMIZED_TABLEGEN=ON ${{ matrix.runner.cont }}
             -DLLVM_STATIC_LINK_CXX_STDLIB=ON ${{ matrix.runner.cont }}
+            -DLLVM_ENABLE_TERMINFO=OFF ${{ matrix.runner.cont }}
             -DLLVM_PARALLEL_LINK_JOBS=1 ${{ matrix.runner.cont }}
+            -DLLVM_TARGETS_TO_BUILD="host" ${{ matrix.runner.cont }}
             -DLLVM_FORCE_ENABLE_STATS=${{ matrix.build_config.stats }} ${{ matrix.runner.cont }}
+            -DLLVM_ENABLE_ZSTD=OFF ${{ matrix.runner.cont }}
+            -DVERILATOR_DISABLE=ON ${{ matrix.runner.cont }}
+            -DLLVM_PARALLEL_LINK_JOBS=1 ${{ matrix.runner.cont }}
             -DCIRCT_RELEASE_TAG_ENABLED=ON ${{ matrix.runner.cont }}
             -DCIRCT_RELEASE_TAG=firtool ${{ matrix.runner.cont }}
             -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF ${{ matrix.runner.cont }}
             -DCMAKE_INSTALL_PREFIX="$(pwd)/../install"
-          ninja
-          ninja check-circt check-circt-unit
-          ninja install-firtool
-          cd ..
 
-      - name: Display Files
+      - name: Build and Test CIRCT
         run: |
+          ${{ matrix.runner.setup }}
+          ninja -C build check-circt check-circt-unit
+
+      - name: Install firtool
+        run: |
+          ${{ matrix.runner.setup }}
+          ninja -C build install-firtool
           file install/*
           file install/bin/*
 
