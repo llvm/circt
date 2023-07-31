@@ -72,6 +72,7 @@ struct Emitter {
   void emitStatement(PrintFOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(StrictConnectOp op);
+  void emitStatement(PropAssignOp op);
   void emitStatement(InstanceOp op);
   void emitStatement(AttachOp op);
   void emitStatement(MemOp op);
@@ -108,6 +109,7 @@ struct Emitter {
   void emitExpression(RefSubOp op);
   void emitExpression(UninferredResetCastOp op);
   void emitExpression(ConstCastOp op);
+  void emitExpression(BigIntConstantOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -1008,7 +1010,7 @@ void Emitter::emitExpression(Value value) {
           CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
-          ShrPrimOp, UninferredResetCastOp, ConstCastOp,
+          ShrPrimOp, UninferredResetCastOp, ConstCastOp, BigIntConstantOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp>([&](auto op) {
         ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
@@ -1112,6 +1114,12 @@ void Emitter::emitExpression(RefSubOp op) {
 
 void Emitter::emitExpression(UninferredResetCastOp op) {
   emitExpression(op.getInput());
+}
+
+void Emitter::emitExpression(BigIntConstantOp op) {
+  ps << "Integer(";
+  ps.addAsString(op.getValue());
+  ps << ")";
 }
 
 void Emitter::emitExpression(ConstCastOp op) { emitExpression(op.getInput()); }
