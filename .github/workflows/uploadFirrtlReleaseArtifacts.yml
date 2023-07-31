@@ -13,6 +13,13 @@ on:
           - linux
           - macos
           - windows
+      runTests:
+        type: choice
+        description: Run CIRCT tests
+        default: false
+        options:
+          - true
+          - false
   # Run every day at 0700 UTC which is:
   #   - 0000 PDT / 2300 PST
   #   - 0300 EDT / 0200 EST
@@ -134,9 +141,25 @@ jobs:
           echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
           cat runners.json | jq >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+          case ${{ github.event_name }} in
+            workflow_dispatch)
+              ENV='{"runTests":${{ inputs.runTests }}}'
+            ;;
+            *)
+              ENV='{"runTests":true}'
+            ;;
+          esac
+          echo environment=$ENV >> $GITHUB_OUTPUT
+
+          echo "Environment Configuration:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+          echo $ENV | jq >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
     outputs:
       build_configs: ${{ steps.build-json-payloads.outputs.build_configs }}
       runners: ${{ steps.build-json-payloads.outputs.runners }}
+      environment: ${{ steps.build-json-payloads.outputs.environment }}
 
   publish:
     needs:
@@ -146,6 +169,7 @@ jobs:
         build_config: ${{ fromJSON(needs.choose-matrix.outputs.build_configs) }}
         runner: ${{ fromJSON(needs.choose-matrix.outputs.runners) }}
     runs-on: ${{ matrix.runner.runner }}
+    env: ${{ fromJSON(needs.choose-matrix.outputs.environment) }}
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -197,7 +221,8 @@ jobs:
             -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF ${{ matrix.runner.cont }}
             -DCMAKE_INSTALL_PREFIX="$(pwd)/../install"
 
-      - name: Build and Test CIRCT
+      - name: Test CIRCT
+        if: env.runTests == 'true'
         run: |
           ${{ matrix.runner.setup }}
           ninja -C build check-circt check-circt-unit
