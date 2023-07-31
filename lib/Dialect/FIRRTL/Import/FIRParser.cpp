@@ -957,10 +957,18 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   }
 
   case FIRToken::kw_String:
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError() << "unexpected token: Properties are a FIRRTL 3.1.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
     consumeToken(FIRToken::kw_String);
     result = StringType::get(getContext());
     break;
   case FIRToken::kw_Integer:
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError() << "unexpected token: Integers are a FIRRTL 3.1.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
     consumeToken(FIRToken::kw_Integer);
     result = BigIntType::get(getContext());
     break;
@@ -1710,6 +1718,10 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     break;
   case FIRToken::kw_String: {
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError() << "unexpected token: Properties are a FIRRTL 3.1.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
     locationProcessor.setLoc(getToken().getLoc());
     consumeToken(FIRToken::kw_String);
     StringRef spelling;
@@ -1724,6 +1736,11 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     break;
   }
   case FIRToken::kw_Integer: {
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError() << "unexpected token: Integers are a FIRRTL 3.1.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
+
     locationProcessor.setLoc(getToken().getLoc());
     consumeToken(FIRToken::kw_Integer);
     APInt value;
@@ -2274,6 +2291,10 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   case FIRToken::kw_connect:
     return parseConnect();
   case FIRToken::kw_propassign:
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError() << "unexpected token: Properties are a FIRRTL 3.1.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
     return parsePropAssign();
   case FIRToken::kw_invalidate:
     return parseInvalidate();

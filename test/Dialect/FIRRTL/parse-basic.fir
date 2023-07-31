@@ -1170,22 +1170,6 @@ circuit EnumTypes:
       ; CHECK: }
       None:
         o is invalid
-  ; CHECK-LABEL: module private @String
-
-  module String :
-    ; CHECK-SAME: out %a: !firrtl.string
-    output a : String
-    ; CHECK: %0 = firrtl.string "hello"
-    ; CHECK: firrtl.propassign %a, %0 : !firrtl.string
-    propassign a, String("hello")
-
-  ; CHECK-LABEL: module private @Integer
-  module Integer :
-    ; CHECK-SAME: out %a: !firrtl.bigint
-    output a : Integer
-    ; CHECK: %0 = firrtl.bigint -10
-    ; CHECK: firrtl.propassign %a, %0 : !firrtl.bigint
-    propassign a, Integer(-10)
 
   ; CHECK-LABEL: module private @RefsChild(
   ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>
@@ -1410,6 +1394,10 @@ circuit EnumTypes:
     ; CHECK-NEXT: [[CAST:%.+]] = firrtl.constCast %s4 : (!firrtl.const.sint<4>) -> !firrtl.sint<4>
     ; CHECK-NEXT: firrtl.strictconnect %nonconst_w, [[CAST]] : !firrtl.sint<4>
     nonconst_w <= s4
+
+  ; CHECK-LABEL firrtl.class @SimpleClass() { }
+  ; Not version-gated yet, not in spec.
+  class SimpleClass:
 
 ;// -----
 
@@ -1671,10 +1659,32 @@ circuit Groups:
     ; CHECK-NEXT:   }
     ; CHECK-NEXT: }
 
-; CHECK-LABEL firrtl.class @SimpleClass(in %a: !firrtl.string, out %b: !firrtl.string) {
-; CHECK-NEXT    firrtl.propassign %b, %a : !firrtl.string
-; CHECK-NEXT  }
-class SimpleClass:
-  input a: String
-  output b: String
-  propassign b, a
+
+;// -----
+; CHECK-LABEL: firrtl.circuit "BasicProps"
+FIRRTL version 3.1.0
+circuit BasicProps :
+  module BasicProps :
+  ; CHECK-LABEL: module private @Integer
+  module Integer :
+    ; CHECK-SAME: out %a: !firrtl.bigint
+    output a : Integer
+    ; CHECK: %0 = firrtl.bigint -10
+    ; CHECK: firrtl.propassign %a, %0 : !firrtl.bigint
+    propassign a, Integer(-10)
+
+  ; CHECK-LABEL: module private @String
+  module String :
+    ; CHECK-SAME: out %a: !firrtl.string
+    output a : String
+    ; CHECK: %0 = firrtl.string "hello"
+    ; CHECK: firrtl.propassign %a, %0 : !firrtl.string
+    propassign a, String("hello")
+
+  ; CHECK-LABEL firrtl.class @SimpleClass(in %a: !firrtl.string, out %b: !firrtl.string) {
+  ; CHECK-NEXT    firrtl.propassign %b, %a : !firrtl.string
+  ; CHECK-NEXT  }
+  class SimpleClass:
+    input a: String
+    output b: String
+    propassign b, a
