@@ -126,6 +126,7 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         printNestedType(mapType.getValueType(), os);
         os << '>';
       })
+      .Case<PathType>([&](auto pathType) { os << "path"; })
       .Case<BaseTypeAliasType>([&](BaseTypeAliasType alias) {
         os << "alias<" << alias.getName().getValue() << ", ";
         printNestedType(alias.getInnerType(), os);
@@ -396,6 +397,14 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     result = parser.getChecked<MapType>(context, keyType, valueType);
     if (!result)
       return failure();
+    return success();
+  }
+  if (name.equals("path")) {
+    if (isConst) {
+      parser.emitError(parser.getNameLoc(), "path cannot be const");
+      return failure();
+    }
+    result = PathType::get(parser.getContext());
     return success();
   }
   if (name.equals("alias")) {
@@ -2550,7 +2559,7 @@ void FIRRTLDialect::registerTypes() {
            // References and open aggregates
            RefType, OpenBundleType, OpenVectorType,
            // Non-Hardware types
-           StringType, BigIntType, ListType, MapType>();
+           StringType, BigIntType, ListType, MapType, PathType>();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike

@@ -579,4 +579,13 @@ def MapImpl : FIRRTLImplType<"Map", [], "circt::firrtl::FIRRTLType"> {
   let genAccessors = true;
 }
 
+def PathImpl : FIRRTLImplType<"Path", [], "circt::firrtl::FIRRTLType"> {
+  let summary = [{
+    A path to a hardware entity.  Not representable in hardware.
+  }];
+  let parameters = (ins);
+  let genStorageClass = true;
+  let genAccessors = true;
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD
