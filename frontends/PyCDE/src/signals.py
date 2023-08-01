@@ -162,7 +162,7 @@ class Signal:
 
   @appid.setter
   def appid(self, appid) -> None:
-    if "sym_name" not in self.value.owner.attributes:
+    if "inner_sym" not in self.value.owner.attributes:
       raise ValueError("AppIDs can only be attached to ops with symbols")
     from .module import AppID
     self.value.owner.attributes[AppID.AttributeName] = appid._appid
