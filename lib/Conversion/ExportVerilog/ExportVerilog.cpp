@@ -185,7 +185,7 @@ StringRef ExportVerilog::getSymOpName(Operation *symOp) {
   if (auto attr = symOp->getAttrOfType<StringAttr>("hw.verilogName"))
     return attr.getValue();
   return TypeSwitch<Operation *, StringRef>(symOp)
-      .Case<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp>(
+      .Case<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp, HWTestModuleOp>(
           [](Operation *op) { return getVerilogModuleName(op); })
       .Case<InterfaceOp>([&](InterfaceOp op) {
         return getVerilogModuleNameAttr(op).getValue();
@@ -1241,7 +1241,10 @@ public:
     ps.eof();
   };
 
+  void emitParameters(HWModuleOp module, ArrayAttr params);
+
   void emitHWModule(HWModuleOp module);
+  void emitHWTestModule(HWTestModuleOp module);
   void emitHWExternModule(HWModuleExternOp module);
   void emitHWGeneratedModule(HWModuleGeneratedOp module);
 
@@ -5276,6 +5279,93 @@ void ModuleEmitter::emitBindInterface(BindInterfaceOp op) {
   setPendingNewline();
 }
 
+void ModuleEmitter::emitParameters(HWModuleOp module, ArrayAttr params) {
+  if (params.empty())
+    return;
+
+  auto printParamType = [&](Type type, Attribute defaultValue,
+                            SmallString<8> &result) {
+    result.clear();
+    llvm::raw_svector_ostream sstream(result);
+
+    // If there is a default value like "32" then just print without type at
+    // all.
+    if (defaultValue) {
+      if (auto intAttr = defaultValue.dyn_cast<IntegerAttr>())
+        if (intAttr.getValue().getBitWidth() == 32)
+          return;
+      if (auto fpAttr = defaultValue.dyn_cast<FloatAttr>())
+        if (fpAttr.getType().isF64())
+          return;
+    }
+    if (type.isa<NoneType>())
+      return;
+
+    // Classic Verilog parser don't allow a type in the parameter declaration.
+    // For compatibility with them, we omit the type when it is implicit based
+    // on its initializer value, and print the type commented out when it is
+    // a 32-bit "integer" parameter.
+    if (auto intType = type_dyn_cast<IntegerType>(type))
+      if (intType.getWidth() == 32) {
+        sstream << "/*integer*/";
+        return;
+      }
+
+    printPackedType(type, sstream, module->getLoc(),
+                    /*optionalAliasType=*/Type(),
+                    /*implicitIntType=*/true,
+                    // Print single-bit values as explicit `[0:0]` type.
+                    /*singleBitDefaultType=*/false);
+  };
+
+  // Determine the max width of the parameter types so things are lined up.
+  size_t maxTypeWidth = 0;
+  SmallString<8> scratch;
+  for (auto param : module.getParameters()) {
+    auto paramAttr = param.cast<ParamDeclAttr>();
+    // Measure the type length by printing it to a temporary string.
+    printParamType(paramAttr.getType(), paramAttr.getValue(), scratch);
+    maxTypeWidth = std::max(scratch.size(), maxTypeWidth);
+  }
+
+  if (maxTypeWidth > 0) // add a space if any type exists.
+    maxTypeWidth += 1;
+
+  ps.scopedBox(PP::bbox2, [&]() {
+    ps << PP::newline << "#(";
+    ps.scopedBox(PP::cbox0, [&]() {
+      llvm::interleave(
+          module.getParameters(),
+          [&](Attribute param) {
+            auto paramAttr = param.cast<ParamDeclAttr>();
+            auto defaultValue = paramAttr.getValue(); // may be null if absent.
+            ps << "parameter ";
+            printParamType(paramAttr.getType(), defaultValue, scratch);
+            if (!scratch.empty())
+              ps << scratch;
+            if (scratch.size() < maxTypeWidth)
+              ps.nbsp(maxTypeWidth - scratch.size());
+
+            ps << PPExtString(state.globalNames.getParameterVerilogName(
+                module, paramAttr.getName()));
+
+            if (defaultValue) {
+              ps << " = ";
+              ps.invokeWithStringOS([&](auto &os) {
+                printParamValue(defaultValue, os, [&]() {
+                  return module->emitError("parameter '")
+                         << paramAttr.getName().getValue()
+                         << "' has invalid value";
+                });
+              });
+            }
+          },
+          [&]() { ps << "," << PP::newline; });
+      ps << ") ";
+    });
+  });
+}
+
 void ModuleEmitter::emitHWModule(HWModuleOp module) {
   currentModuleOp = module;
 
@@ -5290,90 +5380,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   ps << "module " << PPExtString(getVerilogModuleName(module));
 
   // If we have any parameters, print them on their own line.
-  if (!module.getParameters().empty()) {
-    auto printParamType = [&](Type type, Attribute defaultValue,
-                              SmallString<8> &result) {
-      result.clear();
-      llvm::raw_svector_ostream sstream(result);
-
-      // If there is a default value like "32" then just print without type at
-      // all.
-      if (defaultValue) {
-        if (auto intAttr = defaultValue.dyn_cast<IntegerAttr>())
-          if (intAttr.getValue().getBitWidth() == 32)
-            return;
-        if (auto fpAttr = defaultValue.dyn_cast<FloatAttr>())
-          if (fpAttr.getType().isF64())
-            return;
-      }
-      if (type.isa<NoneType>())
-        return;
-
-      // Classic Verilog parser don't allow a type in the parameter declaration.
-      // For compatibility with them, we omit the type when it is implicit based
-      // on its initializer value, and print the type commented out when it is
-      // a 32-bit "integer" parameter.
-      if (auto intType = type_dyn_cast<IntegerType>(type))
-        if (intType.getWidth() == 32) {
-          sstream << "/*integer*/";
-          return;
-        }
-
-      printPackedType(type, sstream, module->getLoc(),
-                      /*optionalAliasType=*/Type(),
-                      /*implicitIntType=*/true,
-                      // Print single-bit values as explicit `[0:0]` type.
-                      /*singleBitDefaultType=*/false);
-    };
-
-    // Determine the max width of the parameter types so things are lined up.
-    size_t maxTypeWidth = 0;
-    SmallString<8> scratch;
-    for (auto param : module.getParameters()) {
-      auto paramAttr = param.cast<ParamDeclAttr>();
-      // Measure the type length by printing it to a temporary string.
-      printParamType(paramAttr.getType(), paramAttr.getValue(), scratch);
-      maxTypeWidth = std::max(scratch.size(), maxTypeWidth);
-    }
-
-    if (maxTypeWidth > 0) // add a space if any type exists.
-      maxTypeWidth += 1;
-
-    ps.scopedBox(PP::bbox2, [&]() {
-      ps << PP::newline << "#(";
-      ps.scopedBox(PP::cbox0, [&]() {
-        llvm::interleave(
-            module.getParameters(),
-            [&](Attribute param) {
-              auto paramAttr = param.cast<ParamDeclAttr>();
-              auto defaultValue =
-                  paramAttr.getValue(); // may be null if absent.
-              ps << "parameter ";
-              printParamType(paramAttr.getType(), defaultValue, scratch);
-              if (!scratch.empty())
-                ps << scratch;
-              if (scratch.size() < maxTypeWidth)
-                ps.nbsp(maxTypeWidth - scratch.size());
-
-              ps << PPExtString(state.globalNames.getParameterVerilogName(
-                  module, paramAttr.getName()));
-
-              if (defaultValue) {
-                ps << " = ";
-                ps.invokeWithStringOS([&](auto &os) {
-                  printParamValue(defaultValue, os, [&]() {
-                    return module->emitError("parameter '")
-                           << paramAttr.getName().getValue()
-                           << "' has invalid value";
-                  });
-                });
-              }
-            },
-            [&]() { ps << "," << PP::newline; });
-        ps << ") ";
-      });
-    });
-  }
+  emitParameters(module, module.getParameters());
 
   ps << "(";
   if (portInfo.size())
