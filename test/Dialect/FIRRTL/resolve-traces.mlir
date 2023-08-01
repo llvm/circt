@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -firrtl-resolve-traces | FileCheck %s
+// RUN: circt-opt %s -firrtl-resolve-traces -split-input-file | FileCheck %s
 
 firrtl.circuit "Foo" {
   firrtl.module @Foo() attributes {annotations = [
@@ -11,13 +11,16 @@ firrtl.circuit "Foo" {
 
 // Test that a local module annotation is resolved.
 //
-// CHECK:      class{{.*}}:{{.*}}chisel3.experimental.Trace$TraceAnnotation
-// CHECK-SAME: target{{.*}}:{{.*}}~Foo|Foo
-// CHECK-SAME: chiselTarget{{.*}}:{{.*}}~Foo|Original
+// CHECK:               class{{.*}}:{{.*}}chisel3.experimental.Trace$TraceAnnotation
+// CHECK-SAME{LITERAL}:   \22target\22: \22~Foo|{{0}}\22
+// CHECK-SAME:            \22chiselTarget\22:  \22~Foo|Original\22
 
 // Test that the output file is set to include the circuit name.
 //
 // CHECK-SAME: #hw.output_file<{{.*}}Foo.anno.json
+
+// Test that the symbols are correct.
+// CHECK-SAME: symbols = [@Foo]
 
 // -----
 
@@ -37,7 +40,9 @@ firrtl.circuit "Foo" {
 
 // Test that a non-local module annotation is resolved.
 //
-// CHECK: ~Foo|Foo/bar:Bar{{.*}}~Foo|Original
+// CHECK{LITERAL}: ~Foo|{{0}}/{{1}}:{{2}}
+// CHECK-SAME:     ~Foo|Original
+// CHECK-SAME:     symbols = [@Foo, #hw.innerNameRef<@Foo::@bar>, @Bar]
 
 // -----
 
@@ -54,11 +59,13 @@ firrtl.circuit "Foo" {
 
 // Test that a local port annotation is resolved.
 //
-// CHECK: ~Foo|Foo>a{{.*}}~Foo|Foo>original
+// CHECK{LITERAL}: ~Foo|{{0}}>{{1}}
+// CHECK-SAME:     ~Foo|Foo>original
+// CHECK-SAME:     symbols = [@Foo, #hw.innerNameRef<@Foo::@[[a_sym:[a-zA-Z0-9_]+]]>]
 
 // Test that the port receives a symbol.
 //
-// CHECK: in %a: !firrtl.uint<1> sym
+// CHECK: in %a: !firrtl.uint<1> sym @[[a_sym]]
 
 // -----
 
@@ -75,11 +82,13 @@ firrtl.circuit "Foo" {
 
 // Test that a local wire annotation is resolved.
 //
-// CHECK: ~Foo|Foo>a{{.*}}~Foo|Foo>original
+// CHECK{LITERAL}: ~Foo|{{0}}>{{1}}
+// CHECK-SAME:     ~Foo|Foo>original
+// CHECK-SAME:     symbols = [@Foo, #hw.innerNameRef<@Foo::@[[a_sym:[a-zA-Z0-9_]+]]>]
 
 // Test that the wire receives a symbol.
 //
-// CHECK: %a = firrtl.wire sym
+// CHECK: %a = firrtl.wire sym @[[a_sym]]
 
 // -----
 
@@ -96,12 +105,15 @@ firrtl.circuit "Forceable" {
 
 // Test that a local wire annotation is resolved.
 //
-// CHECK: ~Forceable|Forceable>w{{.*}}~Forceable|Forceable>forced
+// CHECK:          sv.verbatim
+// CHECK{LITERAL}: ~Forceable|{{0}}>{{1}}
+// CHECK-SAME:     ~Forceable|Forceable>forced
+// CHECK-SAME:     symbols = [@Forceable, #hw.innerNameRef<@Forceable::@[[w_sym:[a-zA-Z0-9_]+]]>]
 
 // Test that the wire receives a symbol.
 //
-// CHECK-LABEL: firrtl.circuit "Forceable"
-// CHECK: %w, %w_ref = firrtl.wire sym
+// CHECK: firrtl.module @Forceable
+// CHECK:   %w, %w_ref = firrtl.wire sym @[[w_sym]]
 
 // -----
 
@@ -130,6 +142,12 @@ firrtl.circuit "Foo" {
 // Test that a local wire annotation on an aggregate is resolved for different
 // values of field ID.
 //
-// CHECK:      ~Foo|Foo>a{{.*}}~Foo|Foo>0
-// CHECK-SAME: ~Foo|Foo>a[1]{{.*}}~Foo|Foo>4
-// CHECK-SAME: ~Foo|Foo>a[1].b{{.*}}~Foo|Foo>5
+// CHECK{LITERAL}:      ~Foo|{{0}}>{{1}}
+// CHECK-SAME:            ~Foo|Foo>0
+// CHECK-SAME{LITERAL}: ~Foo|{{0}}>{{1}}[1]
+// CHECK-SAME:            ~Foo|Foo>4
+// CHECK-SAME{LITERAL}: ~Foo|{{0}}>{{1}}[1].b
+// CHECK-SAME:            ~Foo|Foo>5
+// CHECK-SAME:          symbols = [@Foo, #hw.innerNameRef<@Foo::@[[a_sym:[a-zA-Z0-9_]+]]>]
+//
+// CHECK: %a = firrtl.wire sym @[[a_sym]]
