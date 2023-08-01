@@ -1241,7 +1241,8 @@ public:
     ps.eof();
   };
 
-  void emitParameters(HWModuleOp module, ArrayAttr params);
+  void emitParameters(Operation *module, ArrayAttr params);
+  void emitPortList(Operation *module, const ModulePortInfo &portInfo);
 
   void emitHWModule(HWModuleOp module);
   void emitHWExternModule(HWModuleExternOp module);
@@ -5278,7 +5279,7 @@ void ModuleEmitter::emitBindInterface(BindInterfaceOp op) {
   setPendingNewline();
 }
 
-void ModuleEmitter::emitParameters(HWModuleOp module, ArrayAttr params) {
+void ModuleEmitter::emitParameters(Operation *module, ArrayAttr params) {
   if (params.empty())
     return;
 
@@ -5320,7 +5321,7 @@ void ModuleEmitter::emitParameters(HWModuleOp module, ArrayAttr params) {
   // Determine the max width of the parameter types so things are lined up.
   size_t maxTypeWidth = 0;
   SmallString<8> scratch;
-  for (auto param : module.getParameters()) {
+  for (auto param : params) {
     auto paramAttr = param.cast<ParamDeclAttr>();
     // Measure the type length by printing it to a temporary string.
     printParamType(paramAttr.getType(), paramAttr.getValue(), scratch);
@@ -5334,7 +5335,7 @@ void ModuleEmitter::emitParameters(HWModuleOp module, ArrayAttr params) {
     ps << PP::newline << "#(";
     ps.scopedBox(PP::cbox0, [&]() {
       llvm::interleave(
-          module.getParameters(),
+          params,
           [&](Attribute param) {
             auto paramAttr = param.cast<ParamDeclAttr>();
             auto defaultValue = paramAttr.getValue(); // may be null if absent.
@@ -5365,22 +5366,8 @@ void ModuleEmitter::emitParameters(HWModuleOp module, ArrayAttr params) {
   });
 }
 
-void ModuleEmitter::emitHWModule(HWModuleOp module) {
-  currentModuleOp = module;
-
-  auto portInfo = getModulePortInfo(module);
-
-  SmallPtrSet<Operation *, 8> moduleOpSet;
-  moduleOpSet.insert(module);
-
-  emitComment(module.getCommentAttr());
-  emitSVAttributes(module);
-  startStatement();
-  ps << "module " << PPExtString(getVerilogModuleName(module));
-
-  // If we have any parameters, print them on their own line.
-  emitParameters(module, module.getParameters());
-
+void ModuleEmitter::emitPortList(Operation *module,
+                                 const ModulePortInfo &portInfo) {
   ps << "(";
   if (portInfo.size())
     emitLocationInfo(module->getLoc());
@@ -5536,12 +5523,28 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
 
   if (!portInfo.size()) {
     ps << ");";
+    SmallPtrSet<Operation *, 8> moduleOpSet;
+    moduleOpSet.insert(module);
     emitLocationInfoAndNewLine(moduleOpSet);
   } else {
     ps << PP::newline;
     ps << ");" << PP::newline;
     setPendingNewline();
   }
+}
+
+void ModuleEmitter::emitHWModule(HWModuleOp module) {
+  currentModuleOp = module;
+
+  emitComment(module.getCommentAttr());
+  emitSVAttributes(module);
+  startStatement();
+  ps << "module " << PPExtString(getVerilogModuleName(module));
+
+  // If we have any parameters, print them on their own line.
+  emitParameters(module, module.getParameters());
+
+  emitPortList(module, module.getPorts());
 
   assert(state.pendingNewline);
 
