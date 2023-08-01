@@ -1265,3 +1265,12 @@ firrtl.circuit "CollidingSymbolsFields" {
     %collision_bar = firrtl.wire sym [<@bar,1,public>,<@bar_0,2,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>>
   }
 }
+
+// -----
+// Test that unused classes are NOT deleted.
+
+firrtl.circuit "Top" {
+  firrtl.module @Top () {}
+  // CHECK: firrtl.class private @MyClass()
+  firrtl.class private @MyClass() {}
+}
