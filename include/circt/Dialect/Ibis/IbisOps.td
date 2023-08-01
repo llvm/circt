@@ -17,6 +17,7 @@ include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Dialect/Ibis/IbisInterfaces.td"
 
 def HasCustomSSAName :
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>;
@@ -142,6 +143,116 @@ def CallOp : IbisOp<"call", [CallOpInterface]> {
 
   let assemblyFormat = [{
     $callee `(` $operands `)` attr-dict `:` functional-type($operands, results)
+  }];
+}
+
+
+// ===---------------------------------------------------------------------===//
+// Low-level Ibis operations
+// ===---------------------------------------------------------------------===//
+
+def ContainerOp : IbisOp<"container", [
+  IsolatedFromAbove, RegionKindInterface,
+  Symbol, SymbolTable, SingleBlock,
+  NoTerminator, NoRegionArguments,
+  ParentOneOf<["mlir::ModuleOp", "ContainerOp"]>
+]> {
+  let summary = "Ibis container";
+  let description = [{
+    An ibis container describes a collection of ports and logic. Containers
+    may be arbitrarily nested, and reference any parent containers' ports
+    and instances.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name);
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    $sym_name attr-dict-with-keyword $body
+  }];
+
+  let extraClassDeclaration = [{
+    // Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+
+    // Returns the top-level container that this container is nested inside of.
+    // If this container itself is a top-level container, returns itself.
+    ContainerOp getRootContainer() {
+      ContainerOp container = *this;
+      while (auto parentContainer = container.getOperation()->getParentOfType<ContainerOp>())
+        container = parentContainer;
+      return container;
+    }
+  }];
+}
+
+def ContainerInstanceOp : IbisOp<"container.instance", [
+    Symbol,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Ibis container instance";
+  let description = [{
+    Instantiates an Ibis container. Can only instantiate top-level Ibis containers
+    (i.e. containers that are not nested inside of other containers).
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name, FlatSymbolRefAttr:$containerName);
+  let assemblyFormat = [{
+    $sym_name `,` $containerName attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    // Get the referenced container.
+    ContainerOp getReferencedContainer();
+  }];
+}
+
+class PortLikeOp<string mnemonic, list<Trait> traits = []> :
+    IbisOp<mnemonic, !listconcat(traits, [PortOpInterface])> {
+  let arguments = (ins SymbolNameAttr:$sym_name, TypeAttrOf<AnyType>:$type);
+  let assemblyFormat = [{
+    $sym_name `:` $type attr-dict
+  }];
+}
+
+def InputPortOp : PortLikeOp<"port.input"> {
+  let summary = "Ibis input port";
+}
+
+def OutputPortOp : PortLikeOp<"port.output"> {
+  let summary = "Ibis output port";
+}
+
+def PortReadOp : IbisOp<"port.read", [
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Ibis port read";
+  let description = [{
+    Read the value of a port. The port can either be a local (in the current
+    or parent container hierarchy) or instance relative (relative to ports
+    of some instance in the current or parent container hierarchy).
+  }];
+
+  let arguments = (ins SymbolRefAttr:$sym_name);
+  let results = (outs AnyType:$output);
+  let assemblyFormat = [{
+    $sym_name attr-dict `:` type($output)
+  }];
+}
+
+def PortWriteOp : IbisOp<"port.write", [
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Ibis port write";
+  let description = [{
+    Write a value to a port. The port can either be a local (in the current
+    or parent container hierarchy) or instance relative (relative to ports
+    of some instance in the current or parent container hierarchy).
+  }];
+
+  let arguments = (ins SymbolRefAttr:$sym_name, AnyType:$input);
+  let assemblyFormat = [{
+    $sym_name `(` $input `)` attr-dict `:` type($input)
   }];
 }
 

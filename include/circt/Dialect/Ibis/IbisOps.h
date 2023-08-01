@@ -21,6 +21,14 @@
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 
+#include "circt/Dialect/Ibis/IbisInterfaces.h.inc"
+
+namespace circt {
+namespace ibis {
+class ContainerOp;
+} // namespace ibis
+} // namespace circt
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/Ibis/Ibis.h.inc"
 

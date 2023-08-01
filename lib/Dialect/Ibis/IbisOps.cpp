@@ -141,6 +141,108 @@ LogicalResult ReturnOp::verify() {
 
   return success();
 }
+
+//===----------------------------------------------------------------------===//
+// ContainerInstanceOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+ContainerInstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto container = getReferencedContainer();
+  if (!container)
+    return emitOpError() << "'" << getContainerName() << "' does not exist";
+
+  return success();
+}
+
+ContainerOp ContainerInstanceOp::getReferencedContainer() {
+  return getOperation()->getParentOfType<ModuleOp>().lookupSymbol<ContainerOp>(
+      getContainerName());
+}
+
+//===----------------------------------------------------------------------===//
+// PortReadOp
+//===----------------------------------------------------------------------===//
+
+static Operation *
+lookupSymbolInContainerHierarchy(SymbolTableCollection &symbolTable,
+                                 ContainerOp container, StringAttr symName) {
+  while (container) {
+    auto dst = symbolTable.lookupSymbolIn(container, symName);
+    if (dst)
+      return dst;
+    container = container->getParentOfType<ContainerOp>();
+  }
+  return nullptr;
+}
+
+template <typename TSrcOp, typename TTargetOp>
+LogicalResult verifyPortSymbolUses(TSrcOp op,
+                                   llvm::function_ref<Type(TSrcOp)> getPortType,
+                                   SymbolTableCollection &symbolTable) {
+  auto symName = op.getSymNameAttr();
+  auto localAccess = symName.getNestedReferences().empty();
+
+  ContainerOp parentContainer = op->template getParentOfType<ContainerOp>();
+  if (!parentContainer)
+    return op->emitOpError()
+           << op->getName() << " must be contained in a ContainerOp";
+
+  auto rootAccessOp = lookupSymbolInContainerHierarchy(
+      symbolTable, parentContainer, symName.getRootReference());
+  TTargetOp targetOp;
+
+  if (localAccess) {
+    // Access to some port in the parent container hierarchy.
+    targetOp = dyn_cast_or_null<TTargetOp>(rootAccessOp);
+    if (!targetOp)
+      return op->emitOpError()
+             << "expected '" << symName << "' to refer to a '"
+             << TTargetOp::getOperationName() << "' operation";
+  } else {
+    // Instance access.
+    auto targetInstance = dyn_cast_or_null<ContainerInstanceOp>(rootAccessOp);
+    if (!targetInstance)
+      return op->emitOpError()
+             << "expected " << symName.getRootReference() << " to refer to a '"
+             << ContainerInstanceOp::getOperationName() << "' operation";
+
+    // Lookup the port in the instance. For now, only allow top level accesses -
+    // can easily extend this to nested instances as well.
+    ContainerOp referencedContainer = targetInstance.getReferencedContainer();
+    targetOp = symbolTable.lookupSymbolIn<TTargetOp>(
+        referencedContainer, symName.getLeafReference());
+  }
+
+  if (!targetOp)
+    return op->emitOpError() << "'" << symName << "' does not exist";
+
+  Type expectedType = getPortType(op);
+  Type actualType = targetOp.getType();
+  if (actualType != expectedType)
+    return op->emitOpError() << "Expected type '" << expectedType
+                             << "' does not match actual port type, which was '"
+                             << actualType << "'";
+  return success();
+}
+
+LogicalResult PortReadOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses<PortReadOp, OutputPortOp>(
+      *this, [](PortReadOp op) { return op.getOutput().getType(); },
+      symbolTable);
+}
+
+//===----------------------------------------------------------------------===//
+// PortWriteOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+PortWriteOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses<PortWriteOp, InputPortOp>(
+      *this, [](PortWriteOp op) { return op.getInput().getType(); },
+      symbolTable);
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic
 //===----------------------------------------------------------------------===//
