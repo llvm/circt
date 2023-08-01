@@ -68,44 +68,6 @@ parseFunctionResultList(OpAsmParser &parser,
                                         parseElt);
 }
 
-ParseResult module_like_impl::parseModuleFunctionSignature(
-    OpAsmParser &parser, bool &isVariadic,
-    SmallVectorImpl<OpAsmParser::Argument> &args,
-    SmallVectorImpl<Attribute> &argNames, SmallVectorImpl<Attribute> &argLocs,
-    SmallVectorImpl<Attribute> &resultNames,
-    SmallVectorImpl<DictionaryAttr> &resultAttrs,
-    SmallVectorImpl<Attribute> &resultLocs, TypeAttr &type) {
-
-  using namespace mlir::function_interface_impl;
-  auto *context = parser.getContext();
-
-  // Parse the argument list.
-  if (parser.parseArgumentList(args, OpAsmParser::Delimiter::Paren,
-                               /*allowTypes=*/true, /*allowAttrs=*/true))
-    return failure();
-
-  // Parse the result list.
-  SmallVector<Type> resultTypes;
-  if (succeeded(parser.parseOptionalArrow()))
-    if (failed(parseFunctionResultList(parser, resultNames, resultTypes,
-                                       resultAttrs, resultLocs)))
-      return failure();
-
-  // Process the ssa args for the information we're looking for.
-  SmallVector<Type> argTypes;
-  for (auto &arg : args) {
-    argNames.push_back(parsing_util::getNameFromSSA(context, arg.ssaName.name));
-    argTypes.push_back(arg.type);
-    if (!arg.sourceLoc)
-      arg.sourceLoc = parser.getEncodedSourceLoc(arg.ssaName.location);
-    argLocs.push_back(*arg.sourceLoc);
-  }
-
-  type = TypeAttr::get(FunctionType::get(context, argTypes, resultTypes));
-
-  return success();
-}
-
 void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
                                             ArrayRef<Type> argTypes,
                                             bool isVariadic,
@@ -182,4 +144,156 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
     }
     p << ')';
   }
+}
+
+ParseResult module_like_impl::parseModuleFunctionSignature(
+    OpAsmParser &parser, bool &isVariadic,
+    SmallVectorImpl<OpAsmParser::Argument> &args,
+    SmallVectorImpl<Attribute> &argNames, SmallVectorImpl<Attribute> &argLocs,
+    SmallVectorImpl<Attribute> &resultNames,
+    SmallVectorImpl<DictionaryAttr> &resultAttrs,
+    SmallVectorImpl<Attribute> &resultLocs, TypeAttr &type) {
+
+  using namespace mlir::function_interface_impl;
+  auto *context = parser.getContext();
+
+  // Parse the argument list.
+  if (parser.parseArgumentList(args, OpAsmParser::Delimiter::Paren,
+                               /*allowType=*/true, /*allowAttrs=*/true))
+    return failure();
+
+  // Parse the result list.
+  SmallVector<Type> resultTypes;
+  if (succeeded(parser.parseOptionalArrow()))
+    if (failed(parseFunctionResultList(parser, resultNames, resultTypes,
+                                       resultAttrs, resultLocs)))
+      return failure();
+
+  // Process the ssa args for the information we're looking for.
+  SmallVector<Type> argTypes;
+  for (auto &arg : args) {
+    argNames.push_back(parsing_util::getNameFromSSA(context, arg.ssaName.name));
+    argTypes.push_back(arg.type);
+    if (!arg.sourceLoc)
+      arg.sourceLoc = parser.getEncodedSourceLoc(arg.ssaName.location);
+    argLocs.push_back(*arg.sourceLoc);
+  }
+
+  type = TypeAttr::get(FunctionType::get(context, argTypes, resultTypes));
+
+  return success();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// New Style
+////////////////////////////////////////////////////////////////////////////////
+
+static ParseResult parseDirection(OpAsmParser &p, ModulePort::Direction &dir) {
+  StringRef key;
+  if (failed(p.parseKeyword(&key)))
+    return p.emitError(p.getCurrentLocation(), "expected port direction");
+  if (key == "input")
+    dir = ModulePort::Direction::Input;
+  else if (key == "output")
+    dir = ModulePort::Direction::Output;
+  else if (key == "inout")
+    dir = ModulePort::Direction::InOut;
+  else
+    return p.emitError(p.getCurrentLocation(), "unknown port direction '")
+           << key << "'";
+  return success();
+}
+
+/// Parse a single argument with the following syntax:
+///
+///   direction `%ssaname : !type { optionalAttrDict} loc(optionalSourceLoc)`
+///
+/// If `allowType` is false or `allowAttrs` are false then the respective
+/// parts of the grammar are not parsed.
+static ParseResult parsePort(OpAsmParser &p,
+                             module_like_impl::PortParse &result) {
+  NamedAttrList attrs;
+  if (parseDirection(p, result.direction) ||
+      p.parseOperand(result.ssaName, /*allowResultNumber=*/false) ||
+      p.parseColonType(result.type) || p.parseOptionalAttrDict(attrs) ||
+      p.parseOptionalLocationSpecifier(result.sourceLoc))
+    return failure();
+  result.attrs = attrs.getDictionary(p.getContext());
+  return success();
+}
+
+static ParseResult
+parsePortList(OpAsmParser &p,
+              SmallVectorImpl<module_like_impl::PortParse> &result) {
+  auto parseOnePort = [&]() -> ParseResult {
+    return parsePort(p, result.emplace_back());
+  };
+  return p.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren, parseOnePort,
+                                   " in port list");
+}
+
+ParseResult module_like_impl::parseModuleSignature(
+    OpAsmParser &parser, SmallVectorImpl<PortParse> &args, TypeAttr &modType) {
+
+  auto *context = parser.getContext();
+
+  // Parse the port list.
+  if (parsePortList(parser, args))
+    return failure();
+
+  // Process the ssa args for the information we're looking for.
+  SmallVector<ModulePort> ports;
+  for (auto &arg : args) {
+    ports.push_back({parsing_util::getNameFromSSA(context, arg.ssaName.name),
+                     arg.type, arg.direction});
+    if (!arg.sourceLoc)
+      arg.sourceLoc = parser.getEncodedSourceLoc(arg.ssaName.location);
+  }
+  modType = TypeAttr::get(ModuleType::get(context, ports));
+
+  return success();
+}
+
+static const char *directionAsString(ModulePort::Direction dir) {
+  if (dir == ModulePort::Direction::Input)
+    return "input";
+  if (dir == ModulePort::Direction::Output)
+    return "output";
+  if (dir == ModulePort::Direction::InOut)
+    return "inout";
+  assert(0 && "Unknown port direction");
+  abort();
+  return "unknown";
+}
+
+void module_like_impl::printModuleSignatureNew(OpAsmPrinter &p, Operation *op) {
+
+  mlir::OpPrintingFlags flags;
+
+  auto typeAttr = op->getAttrOfType<TypeAttr>("module_type");
+  auto modType = cast<ModuleType>(typeAttr.getValue());
+  auto portAttrs = op->getAttrOfType<ArrayAttr>("port_attrs");
+  auto locAttrs = op->getAttrOfType<ArrayAttr>("port_locs");
+
+  p << '(';
+  for (auto [i, port] : llvm::enumerate(modType.getPorts())) {
+    if (i > 0)
+      p << ", ";
+    p.printKeywordOrString(directionAsString(port.dir));
+    p << " %";
+    p.printKeywordOrString(port.name);
+    p << " : ";
+    p.printType(port.type);
+    if (auto attr = dyn_cast<DictionaryAttr>(portAttrs[i]))
+      p.printOptionalAttrDict(attr.getValue());
+
+    // TODO: `printOptionalLocationSpecifier` will emit aliases for locations,
+    // even if they are not printed.  This will have to be fixed upstream.  For
+    // now, use what was specified on the command line.
+    if (flags.shouldPrintDebugInfo())
+      if (auto loc = locAttrs[i])
+        p.printOptionalLocationSpecifier(cast<Location>(loc));
+  }
+
+  p << ')';
 }

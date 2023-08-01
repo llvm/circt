@@ -15,14 +15,18 @@
 #ifndef CIRCT_DIALECT_HW_MODULEIMPLEMENTATION_H
 #define CIRCT_DIALECT_HW_MODULEIMPLEMENTATION_H
 
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/LLVM.h"
-
 #include "mlir/IR/DialectImplementation.h"
 
 namespace circt {
 namespace hw {
 
 namespace module_like_impl {
+
+struct PortParse : OpAsmParser::Argument {
+  ModulePort::Direction direction;
+};
 
 /// This is a variant of mlir::parseFunctionSignature that allows names on
 /// result arguments.
@@ -38,6 +42,12 @@ ParseResult parseModuleFunctionSignature(
 void printModuleSignature(OpAsmPrinter &p, Operation *op,
                           ArrayRef<Type> argTypes, bool isVariadic,
                           ArrayRef<Type> resultTypes, bool &needArgNamesAttr);
+
+/// New Style parsing
+ParseResult parseModuleSignature(OpAsmParser &parser,
+                                 SmallVectorImpl<PortParse> &args,
+                                 TypeAttr &modType);
+void printModuleSignatureNew(OpAsmPrinter &p, Operation *op);
 
 } // namespace module_like_impl
 } // namespace hw

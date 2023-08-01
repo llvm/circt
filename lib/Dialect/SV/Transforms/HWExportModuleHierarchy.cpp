@@ -108,7 +108,7 @@ void HWExportModuleHierarchyPass::extractHierarchyFromTop(
 /// and if they exist, emit a verbatim op with the module hierarchy for each.
 void HWExportModuleHierarchyPass::runOnOperation() {
   mlir::ModuleOp mlirModule = getOperation();
-  std::optional<SymbolTable> symbolTable;
+  std::optional<SymbolTable *> symbolTable;
 
   for (auto op : mlirModule.getOps<hw::HWModuleOp>()) {
     auto attr = op->getAttrOfType<ArrayAttr>("firrtl.moduleHierarchyFile");
@@ -116,13 +116,13 @@ void HWExportModuleHierarchyPass::runOnOperation() {
       continue;
     for (auto file : attr.getAsRange<hw::OutputFileAttr>()) {
       if (!symbolTable)
-        symbolTable = SymbolTable(mlirModule);
+        symbolTable = &getAnalysis<SymbolTable>();
 
       std::string jsonBuffer;
       llvm::raw_string_ostream os(jsonBuffer);
       SmallVector<Attribute> symbols;
 
-      extractHierarchyFromTop(op, *symbolTable, os, symbols);
+      extractHierarchyFromTop(op, **symbolTable, os, symbols);
 
       auto builder = ImplicitLocOpBuilder::atBlockEnd(
           UnknownLoc::get(mlirModule.getContext()), mlirModule.getBody());

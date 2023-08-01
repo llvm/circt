@@ -1371,18 +1371,25 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
 
     // Outputs need a temporary wire so they can be connect'd to, which we
     // then return.
-    Value newArg =
-        bodyBuilder
-            .create<WireOp>(port.type, "." + port.getName().str() + ".output")
-            .getResult();
+    auto newArg = bodyBuilder.create<WireOp>(
+        port.type, "." + port.getName().str() + ".output");
+
     // Switch all uses of the old operands to the new ones.
-    oldArg.replaceAllUsesWith(newArg);
+    oldArg.replaceAllUsesWith(newArg.getResult());
 
     // Don't output zero bit results or inouts.
     auto resultHWType = loweringState.lowerType(port.type, port.loc);
     if (!resultHWType.isInteger(0)) {
-      auto output = castFromFIRRTLType(newArg, resultHWType, outputBuilder);
+      auto output =
+          castFromFIRRTLType(newArg.getResult(), resultHWType, outputBuilder);
+      auto idx = newModule.getNumInputs() + outputs.size();
       outputs.push_back(output);
+
+      // If output port has symbol, move it to this wire.
+      if (auto sym = newModule.getPortSymbolAttr(idx)) {
+        newArg.setInnerSymAttr(sym);
+        newModule.setPortSymbolAttr(idx, {});
+      }
     }
   }
 

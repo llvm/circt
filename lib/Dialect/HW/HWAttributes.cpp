@@ -265,7 +265,7 @@ void InnerSymPropertiesAttr::print(AsmPrinter &odsPrinter) const {
              << getSymVisibility().getValue() << ">";
 }
 
-StringAttr InnerSymAttr::getSymIfExists(unsigned fieldId) const {
+StringAttr InnerSymAttr::getSymIfExists(uint64_t fieldId) const {
   const auto *it =
       llvm::find_if(getImpl()->props, [&](const InnerSymPropertiesAttr &p) {
         return p.getFieldID() == fieldId;
@@ -275,7 +275,7 @@ StringAttr InnerSymAttr::getSymIfExists(unsigned fieldId) const {
   return {};
 }
 
-InnerSymAttr InnerSymAttr::erase(unsigned fieldID) const {
+InnerSymAttr InnerSymAttr::erase(uint64_t fieldID) const {
   SmallVector<InnerSymPropertiesAttr> syms(getProps());
   const auto *it = llvm::find_if(syms, [fieldID](InnerSymPropertiesAttr p) {
     return p.getFieldID() == fieldID;
