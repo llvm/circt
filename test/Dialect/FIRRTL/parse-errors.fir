@@ -100,7 +100,7 @@ circuit subfield_of_ground_type :
   module subfield_of_ground_type :
     input a: UInt<1>
     output b: UInt<1>
-    ; expected-error @+1 {{subfield requires bundle operand}}
+    ; expected-error @+1 {{subfield requires bundle or object operand}}
     b <= a.a
 
 ;// -----
@@ -109,7 +109,7 @@ FIRRTL version 1.2.0
 circuit invalid_name :
   module invalid_name :
    input out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
-   ; expected-error @+1 {{unknown field 'xx' in bundle type '!firrtl.bundle<member: bundle<"0": bundle<clock: clock, reset: uint<1>>>>'}}
+   ; expected-error @+1 {{unknown field 'xx' in type '!firrtl.bundle<member: bundle<"0": bundle<clock: clock, reset: uint<1>>>>'}}
    out_0.xx <- out_0.yy
 
 ;// -----
@@ -862,3 +862,56 @@ circuit Top:
     input in : Integer
     output out : Integer
     propassign out, in
+
+;// -----
+FIRRTL version 3.2.0
+
+circuit Top:
+  module Top:
+    ; expected-error @below {{unknown class 'Missing'}}
+    input in : Inst<Missing>
+
+;// -----
+FIRRTL version 3.2.0
+
+circuit Top:
+  module Top:
+    ; expected-error @below {{use of undefined class name 'Missing' in object}}
+    object x of Missing
+
+;// -----
+FIRRTL version 3.2.0
+
+circuit Top:
+  class MyClass:
+    skip
+
+  module Top:
+    output str : String
+    object x of MyClass
+    ; expected-error @below {{unknown field 'missing' in type '!firrtl.class<@MyClass()>'}}
+    propassign str, x.missing
+
+;// -----
+FIRRTL version 3.0.0
+
+circuit Top:
+  class MyClass:
+    skip
+
+  module Top:
+    ; expected-error @below {{unexpected token: objects are a FIRRTL 3.2.0+ feature, but the specified FIRRTL version was 3.0.0}}
+    object x of MyClass
+
+;// -----
+FIRRTL version 3.0.0
+
+circuit Top:
+  class MyClass:
+    skip
+
+  module Top:
+    ; expected-error @below {{unexpected token: Inst types are a FIRRTL 3.2.0+ feature, but the specified FIRRTL version was 3.0.0}}
+    output o: Inst<MyClass>
+    object x of MyClass
+    propassign o, x
