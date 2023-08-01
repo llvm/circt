@@ -257,9 +257,9 @@ ParseResult module_like_impl::parseModuleSignature(
 static const char *directionAsString(ModulePort::Direction dir) {
   if (dir == ModulePort::Direction::Input)
     return "input";
-  else if (dir == ModulePort::Direction::Output)
+  if (dir == ModulePort::Direction::Output)
     return "output";
-  else if (dir == ModulePort::Direction::InOut)
+  if (dir == ModulePort::Direction::InOut)
     return "inout";
   assert(0 && "Unknown port direction");
   abort();
