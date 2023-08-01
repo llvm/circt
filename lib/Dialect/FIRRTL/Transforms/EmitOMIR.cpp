@@ -693,8 +693,7 @@ void EmitOMIRPass::runOnOperation() {
   tempSymInstances.clear();
 
   // Emit the OMIR JSON as a verbatim op.
-  auto builder = OpBuilder(circuitOp);
-  builder.setInsertionPointAfter(circuitOp);
+  auto builder = circuitOp.getBodyBuilder();
   auto verbatimOp =
       builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), jsonBuffer);
   auto fileAttr = hw::OutputFileAttr::getFromFilename(
