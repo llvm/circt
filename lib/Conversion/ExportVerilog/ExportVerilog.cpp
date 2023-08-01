@@ -185,7 +185,7 @@ StringRef ExportVerilog::getSymOpName(Operation *symOp) {
   if (auto attr = symOp->getAttrOfType<StringAttr>("hw.verilogName"))
     return attr.getValue();
   return TypeSwitch<Operation *, StringRef>(symOp)
-      .Case<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp, HWTestModuleOp>(
+      .Case<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp>(
           [](Operation *op) { return getVerilogModuleName(op); })
       .Case<InterfaceOp>([&](InterfaceOp op) {
         return getVerilogModuleNameAttr(op).getValue();
@@ -1244,7 +1244,6 @@ public:
   void emitParameters(HWModuleOp module, ArrayAttr params);
 
   void emitHWModule(HWModuleOp module);
-  void emitHWTestModule(HWTestModuleOp module);
   void emitHWExternModule(HWModuleExternOp module);
   void emitHWGeneratedModule(HWModuleGeneratedOp module);
 
