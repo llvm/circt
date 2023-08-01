@@ -1299,7 +1299,7 @@ public:
   // Mutable state while emitting a module body.
 
   /// This is the current module being emitted for a HWModuleOp.
-  HWModuleOp currentModuleOp;
+  Operation *currentModuleOp;
 
   /// This set keeps track of expressions that were emitted into their
   /// 'automatic logic' or 'localparam' declaration.  This is only used for
@@ -4699,7 +4699,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
           // Keep this synchronized with countStatements() and
           // visitStmt(OutputOp).
           size_t outputPortNo = portVal.getUses().begin()->getOperandNumber();
-          auto containingModule = emitter.currentModuleOp;
+          auto containingModule = cast<HWModuleOp>(emitter.currentModuleOp);
           ps << PPExtString(getPortVerilogName(
               containingModule, containingModule.getOutputPort(outputPortNo)));
         } else {
@@ -5551,7 +5551,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   ps << "endmodule" << PP::newline;
   setPendingNewline();
 
-  currentModuleOp = HWModuleOp();
+  currentModuleOp = nullptr;
 }
 
 //===----------------------------------------------------------------------===//
