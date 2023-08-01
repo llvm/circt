@@ -268,7 +268,7 @@ HWModulePortAccessor::HWModulePortAccessor(Location loc,
   }
 
   outputOperands.resize(info.sizeOutputs());
-  for (auto [i, outputInfo] : llvm::enumerate(info.outputs())) {
+  for (auto [i, outputInfo] : llvm::enumerate(info.getOutputs())) {
     outputIdx[outputInfo.name.str()] = i;
   }
 }
@@ -528,8 +528,7 @@ OpFoldResult ParamValueOp::fold(FoldAdaptor adaptor) {
 
 /// Return true if this is an hw.module, external module, generated module etc.
 bool hw::isAnyModule(Operation *module) {
-  return isa<HWModuleOp>(module) || isa<HWModuleExternOp>(module) ||
-         isa<HWModuleGeneratedOp>(module);
+  return isa<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp>(module);
 }
 
 /// Return true if isAnyModule or instance.
@@ -648,7 +647,7 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   SmallVector<Attribute> argLocs, resultLocs;
   auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
 
-  for (auto elt : ports.inputs()) {
+  for (auto elt : ports.getInputs()) {
     if (elt.dir == ModulePort::Direction::InOut &&
         !elt.type.isa<hw::InOutType>())
       elt.type = hw::InOutType::get(elt.type);
@@ -663,7 +662,7 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
     argAttrs.push_back(attr);
   }
 
-  for (auto elt : ports.outputs()) {
+  for (auto elt : ports.getOutputs()) {
     resultTypes.push_back(elt.type);
     resultNames.push_back(elt.name);
     resultLocs.push_back(elt.loc ? elt.loc : unknownLoc);
@@ -857,7 +856,7 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
 
   // Add arguments to the body block.
   auto unknownLoc = builder.getUnknownLoc();
-  for (auto port : ports.inputs()) {
+  for (auto port : ports.getInputs()) {
     auto loc = port.loc ? Location(port.loc) : unknownLoc;
     auto type = port.type;
     if (port.isInOut() && !type.isa<InOutType>())
@@ -1008,11 +1007,13 @@ static ModulePortInfo getModulePortListImpl(Operation *op) {
     LocationAttr loc;
     if (argLocs)
       loc = argLocs[i].cast<LocationAttr>();
-
+    DictionaryAttr attrs;
+    if (auto fi = dyn_cast<mlir::FunctionOpInterface>(op))
+      attrs = fi.getArgAttrDict(i);
     inputs.push_back({{argNames[i].cast<StringAttr>(), type, direction},
                       i,
                       getArgSym(op, i),
-                      {},
+                      attrs,
                       loc});
   }
 
@@ -1023,11 +1024,14 @@ static ModulePortInfo getModulePortListImpl(Operation *op) {
     LocationAttr loc;
     if (resultLocs)
       loc = resultLocs[i].cast<LocationAttr>();
+    DictionaryAttr attrs;
+    if (auto fi = dyn_cast<mlir::FunctionOpInterface>(op))
+      attrs = fi.getResultAttrDict(i);
     outputs.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
                         ModulePort::Direction::Output},
                        i,
                        getResultSym(op, i),
-                       {},
+                       attrs,
                        loc});
   }
   return ModulePortInfo(inputs, outputs);
@@ -1046,12 +1050,16 @@ PortInfo hw::getModuleInOrInoutPort(Operation *op, size_t idx) {
     type = inout.getElementType();
   }
 
+  DictionaryAttr attrs;
+  if (auto fi = dyn_cast<mlir::FunctionOpInterface>(op))
+    attrs = fi.getArgAttrDict(idx);
+
   auto direction =
       isInOut ? ModulePort::Direction::InOut : ModulePort::Direction::Input;
   return {{argNames[idx].cast<StringAttr>(), type, direction},
           idx,
           getArgSym(op, idx),
-          {},
+          attrs,
           argLocs[idx].cast<LocationAttr>()};
 }
 
@@ -1061,11 +1069,14 @@ PortInfo hw::getModuleOutputPort(Operation *op, size_t idx) {
   auto resultLocs = op->getAttrOfType<ArrayAttr>("resultLocs");
   auto resultTypes = getModuleType(op).getResults();
   assert(idx < resultNames.size() && "invalid result number");
+  DictionaryAttr attrs;
+  if (auto fi = dyn_cast<mlir::FunctionOpInterface>(op))
+    attrs = fi.getResultAttrDict(idx);
   return {{resultNames[idx].cast<StringAttr>(), resultTypes[idx],
            ModulePort::Direction::Output},
           idx,
           getResultSym(op, idx),
-          {},
+          attrs,
           resultLocs[idx].cast<LocationAttr>()};
 }
 
@@ -1400,15 +1411,15 @@ void HWModuleExternOp::getAsmBlockArgumentNames(
 }
 
 ModulePortInfo HWModuleOp::getPortList() {
-  return getModulePortListImpl(*this);
+  return getModulePortListImpl(getOperation());
 }
 
 ModulePortInfo HWModuleExternOp::getPortList() {
-  return getModulePortListImpl(*this);
+  return getModulePortListImpl(getOperation());
 }
 
 ModulePortInfo HWModuleGeneratedOp::getPortList() {
-  return getModulePortListImpl(*this);
+  return getModulePortListImpl(getOperation());
 }
 
 /// Lookup the generator for the symbol.  This returns null on
@@ -1605,6 +1616,19 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 ModulePortInfo InstanceOp::getPortList() {
   return getModulePortListImpl(*this);
+}
+
+Value InstanceOp::getValue(size_t idx) {
+  auto mpi = getPortList();
+  size_t inputPort = 0, outputPort = 0;
+  for (size_t x = 0; x < idx; ++x)
+    if (mpi.at(x).isOutput())
+      ++outputPort;
+    else
+      ++inputPort;
+  if (mpi.at(idx).isOutput())
+    return getResults()[outputPort];
+  return getInputs()[inputPort];
 }
 
 //===----------------------------------------------------------------------===//
@@ -3344,7 +3368,8 @@ void HWTestModuleOp::getAsmBlockArgumentNames(
 
 ModulePortInfo HWTestModuleOp::getPortList() {
   SmallVector<PortInfo> ports;
-  for (auto [i, port] : enumerate(getModuleType().getPorts())) {
+  auto refPorts = getModuleType().getPorts();
+  for (auto [i, port] : enumerate(refPorts)) {
     auto loc = getPortLocs() ? cast<LocationAttr>((*getPortLocs())[i])
                              : LocationAttr();
     auto attr = getPortAttrs() ? cast<DictionaryAttr>((*getPortAttrs())[i])
@@ -3352,6 +3377,7 @@ ModulePortInfo HWTestModuleOp::getPortList() {
     InnerSymAttr sym = {};
     ports.push_back({{port}, i, sym, attr, loc});
   }
+  return ModulePortInfo(ports);
 }
 
 //===----------------------------------------------------------------------===//

@@ -124,6 +124,8 @@ def HWTestModuleOp : HWOp<"testmodule", [Symbol, PortList,
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
+    Block *getBodyBlock() { return &getRegion().front(); }
+
     //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//
@@ -552,6 +554,9 @@ def InstanceOp : HWOp<"instance", [
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
     Operation *getReferencedModule(const HWSymbolCache *cache);
+
+    /// Return the value for a port in port order.
+    Value getValue(size_t idx);
 
     //===------------------------------------------------------------------===//
     // SymbolOpInterface Methods
