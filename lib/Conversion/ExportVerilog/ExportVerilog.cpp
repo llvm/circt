@@ -4631,11 +4631,9 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   // Emit the argument and result ports.
   bool isFirst = true; // True until we print a port.
   bool isZeroWidth = false;
-  bool lastWasZero = false;
 
   for (size_t portNum = 0, portEnd = instPortInfo.size(); portNum < portEnd;
        ++portNum) {
-    auto &instPort = instPortInfo.at(portNum);
     auto &modPort = modPortInfo.at(portNum);
     isZeroWidth = isZeroBitType(modPort.type);
     Value portVal = op.getValue(portNum);
