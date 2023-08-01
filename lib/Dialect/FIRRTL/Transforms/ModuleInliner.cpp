@@ -504,7 +504,7 @@ namespace {
 class Inliner {
 public:
   /// Initialize the inliner to run on this circuit.
-  Inliner(CircuitOp circuit);
+  Inliner(CircuitOp circuit, SymbolTable &symbolTable);
 
   /// Run the inliner.
   void run();
@@ -601,7 +601,7 @@ private:
   MLIRContext *context;
 
   // A symbol table with references to each module in a circuit.
-  SymbolTable symbolTable;
+  SymbolTable &symbolTable;
 
   /// The set of live modules.  Anything not recorded in this set will be
   /// removed by dead code elimination.
@@ -1296,8 +1296,9 @@ void Inliner::identifyNLAsTargetingOnlyModules() {
   }
 }
 
-Inliner::Inliner(CircuitOp circuit)
-    : circuit(circuit), context(circuit.getContext()), symbolTable(circuit) {}
+Inliner::Inliner(CircuitOp circuit, SymbolTable &symbolTable)
+    : circuit(circuit), context(circuit.getContext()),
+      symbolTable(symbolTable) {}
 
 void Inliner::run() {
   CircuitNamespace circuitNamespace(circuit);
@@ -1456,7 +1457,7 @@ class InlinerPass : public InlinerBase<InlinerPass> {
     LLVM_DEBUG(llvm::dbgs()
                << "===- Running Module Inliner Pass "
                   "--------------------------------------------===\n");
-    Inliner inliner(getOperation());
+    Inliner inliner(getOperation(), getAnalysis<SymbolTable>());
     inliner.run();
     LLVM_DEBUG(llvm::dbgs() << "===--------------------------------------------"
                                "------------------------------===\n");

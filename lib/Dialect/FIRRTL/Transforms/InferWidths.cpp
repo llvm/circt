@@ -2284,8 +2284,7 @@ class InferWidthsPass : public InferWidthsBase<InferWidthsPass> {
 void InferWidthsPass::runOnOperation() {
   // Collect variables and constraints
   ConstraintSolver solver;
-  SymbolTable symtbl(getOperation());
-  InferenceMapping mapping(solver, symtbl);
+  InferenceMapping mapping(solver, getAnalysis<SymbolTable>());
   if (failed(mapping.map(getOperation()))) {
     signalPassFailure();
     return;

@@ -35,6 +35,8 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: output b0 : UInt
     // CHECK-NEXT: output b1 : Probe<UInt<1>>
     // CHECK-NEXT: output b2 : RWProbe<UInt<1>>
+    // CHECK-NEXT: input string : String
+    // CHECK-NEXT: input integer : Integer
     // CHECK-NEXT: input path : Path
     in %a00: !firrtl.clock,
     in %a01: !firrtl.reset,
@@ -50,6 +52,8 @@ firrtl.circuit "Foo" {
     out %b0: !firrtl.uint,
     out %b1: !firrtl.probe<uint<1>>,
     out %b2: !firrtl.rwprobe<uint<1>>,
+    in %string: !firrtl.string,
+    in %integer: !firrtl.bigint,
     in %path : !firrtl.path
   ) {}
 
@@ -633,6 +637,18 @@ firrtl.circuit "Foo" {
     %18 = firrtl.ref.send %_14 : !firrtl.uint<1>
     firrtl.ref.define %_12, %18 : !firrtl.probe<uint<1>>
     firrtl.ref.define %_13, %_15_ref : !firrtl.rwprobe<uint<1>>
+  }
+  
+  // CHECK-LABEL: module Properties :
+  firrtl.module @Properties(out %string : !firrtl.string,
+                            out %integer : !firrtl.bigint) {
+    // CHECK: propassign string, String("hello")
+    %0 = firrtl.string "hello"
+    firrtl.propassign %string, %0 : !firrtl.string
+
+    // CHECK: propassign integer, Integer(99)
+    %1 = firrtl.bigint 99
+    firrtl.propassign %integer, %1 : !firrtl.bigint
   }
 
   // Test optional group declaration and definition emission.
