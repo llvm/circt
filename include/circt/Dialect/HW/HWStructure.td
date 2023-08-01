@@ -77,7 +77,10 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
         portAttrs = ::mlir::function_interface_impl::getResultAttrDict(
             *this, portIndex);
       }
-      return portAttrs.getAs<::circt::hw::InnerSymAttr>(getPortSymbolAttrName());
+      if (portAttrs)
+        return portAttrs.getAs<::circt::hw::InnerSymAttr>(
+          getPortSymbolAttrName());
+      return {};
     }
 
     void $cppClass::setPortSymbolAttr(size_t portIndex, ::circt::hw::InnerSymAttr sym) {

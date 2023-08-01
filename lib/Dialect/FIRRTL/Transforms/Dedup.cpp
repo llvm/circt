@@ -1312,7 +1312,7 @@ class DedupPass : public DedupBase<DedupPass> {
     auto circuit = getOperation();
     auto &instanceGraph = getAnalysis<InstanceGraph>();
     auto *nlaTable = &getAnalysis<NLATable>();
-    SymbolTable symbolTable(circuit);
+    auto &symbolTable = getAnalysis<SymbolTable>();
     Deduper deduper(instanceGraph, symbolTable, nlaTable, circuit);
     Equivalence equiv(context, instanceGraph);
     auto anythingChanged = false;

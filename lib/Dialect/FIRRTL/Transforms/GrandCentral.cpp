@@ -698,14 +698,14 @@ private:
 
   /// A symbol table associated with the circuit.  This is lazily constructed by
   /// `getSymbolTable`.
-  std::optional<SymbolTable> symbolTable;
+  std::optional<SymbolTable *> symbolTable;
 
   /// Return a reference to a circuit-level symbol table.  Lazily construct one
   /// if such a symbol table does not already exist.
   SymbolTable &getSymbolTable() {
     if (!symbolTable)
-      symbolTable = SymbolTable(getOperation());
-    return *symbolTable;
+      symbolTable = &getAnalysis<SymbolTable>();
+    return **symbolTable;
   }
 
   // Utility that acts like emitOpError, but does _not_ include a note.  The

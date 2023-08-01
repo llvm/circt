@@ -34,6 +34,7 @@ static size_t getNecessaryBitWidth(size_t numStates) {
 
 class CompileControlVisitor {
 public:
+  CompileControlVisitor(AnalysisManager am) : am(am){};
   void dispatch(Operation *op, ComponentOp component) {
     TypeSwitch<Operation *>(op)
         .template Case<SeqOp, EnableOp>(
@@ -49,6 +50,8 @@ private:
   void visit(EnableOp, ComponentOp &) {
     // nothing to do
   }
+
+  AnalysisManager am;
 };
 
 /// Generates a latency-insensitive FSM to realize a sequential operation.
@@ -88,7 +91,7 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
       builder.create<GroupOp>(wires->getLoc(), builder.getStringAttr("seq"));
 
   // Guarantees a unique SymbolName for the group.
-  SymbolTable symTable(wires);
+  auto &symTable = am.getChildAnalysis<SymbolTable>(wires);
   symTable.insert(seqGroup);
 
   size_t fsmIndex = 0;
@@ -184,9 +187,9 @@ struct CompileControlPass : public CompileControlBase<CompileControlPass> {
 
 void CompileControlPass::runOnOperation() {
   ComponentOp component = getOperation();
-  CompileControlVisitor CompileControlVisitor;
+  CompileControlVisitor compileControlVisitor(getAnalysisManager());
   component.getControlOp().walk(
-      [&](Operation *op) { CompileControlVisitor.dispatch(op, component); });
+      [&](Operation *op) { compileControlVisitor.dispatch(op, component); });
 
   // A post-condition of this pass is that all undefined GroupGoOps, created
   // in the Go Insertion pass, are now defined.
