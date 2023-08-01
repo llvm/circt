@@ -3307,6 +3307,11 @@ ParseResult HWTestModuleOp::parse(OpAsmParser &parser, OperationState &result) {
     return failure();
   }
 
+<<<<<<< HEAD
+=======
+  auto *context = result.getContext();
+
+>>>>>>> origin/main
   result.addAttribute("parameters", parameters);
   result.addAttribute(getModuleTypeAttrName(result.name), modType);
   addPortAttrsAndLocs(parser.getBuilder(), result, ports,
@@ -3333,6 +3338,11 @@ void HWTestModuleOp::getAsmBlockArgumentNames(
   if (region.empty())
     return;
   // Assign port names to the bbargs.
+<<<<<<< HEAD
+=======
+  auto *module = region.getParentOp();
+
+>>>>>>> origin/main
   auto *block = &region.front();
   auto mt = getModuleType();
   for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
@@ -3342,6 +3352,7 @@ void HWTestModuleOp::getAsmBlockArgumentNames(
   }
 }
 
+<<<<<<< HEAD
 ModulePortInfo HWTestModuleOp::getPortList() {
   SmallVector<PortInfo> ports;
   for (auto [i, port] : enumerate(getModuleType().getPorts())) {
@@ -3354,6 +3365,8 @@ ModulePortInfo HWTestModuleOp::getPortList() {
   }
 }
 
+=======
+>>>>>>> origin/main
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//

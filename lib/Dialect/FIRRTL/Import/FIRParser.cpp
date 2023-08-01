@@ -4413,6 +4413,11 @@ ParseResult FIRCircuitParser::parseTypeDecl() {
   FIRRTLType type;
   consumeToken();
   auto loc = getToken().getLoc();
+
+  if (getToken().isKeyword())
+    return emitError(loc) << "cannot use keyword '" << getToken().getSpelling()
+                          << "' for type alias name";
+
   if (parseId(id, "expected type name") ||
       parseToken(FIRToken::equal, "expected '=' in type decl") ||
       parseType(type, "expected a type"))
