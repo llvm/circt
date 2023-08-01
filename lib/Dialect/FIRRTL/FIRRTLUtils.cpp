@@ -344,8 +344,9 @@ bool circt::firrtl::walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
 
       // The value is a port.
       if (auto blockArg = dyn_cast<BlockArgument>(val)) {
-        FModuleOp op = cast<FModuleOp>(val.getParentBlock()->getParentOp());
-        auto direction = op.getPortDirection(blockArg.getArgNumber());
+        auto *parent = val.getParentBlock()->getParentOp();
+        auto module = cast<FModuleLike>(parent);
+        auto direction = module.getPortDirection(blockArg.getArgNumber());
         // Base case: this is one of the module's input ports.
         if (direction == Direction::In) {
           if (!callback(original, fieldRef))
@@ -524,9 +525,11 @@ static void getDeclName(Value value, SmallString<64> &string, bool nameSafe) {
   while (value) {
     if (auto arg = dyn_cast<BlockArgument>(value)) {
       // Get the module ports and get the name.
-      auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
-      SmallVector<PortInfo> ports = module.getPorts();
-      string += ports[arg.getArgNumber()].name.getValue();
+      auto *op = arg.getOwner()->getParentOp();
+      TypeSwitch<Operation *>(op).Case<FModuleOp, ClassOp>([&](auto op) {
+        auto name = cast<StringAttr>(op.getPortNames()[arg.getArgNumber()]);
+        string += name.getValue();
+      });
       return;
     }
 
@@ -703,50 +706,71 @@ void circt::firrtl::walkGroundTypes(
 
 /// Returns an operation's `inner_sym`, adding one if necessary.
 StringAttr circt::firrtl::getOrAddInnerSym(
-    Operation *op, FModuleOp mod,
+    const hw::InnerSymTarget &target,
     llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace) {
-  auto attr = getInnerSymName(op);
-  if (attr)
-    return attr;
 
-  auto name = getNamespace(mod).newName("sym");
-  attr = StringAttr::get(op->getContext(), name);
-  op->setAttr("inner_sym", hw::InnerSymAttr::get(attr));
-  return attr;
+  // Return InnerSymAttr with sym on specified fieldID.
+  auto getOrAdd = [&](auto mod, hw::InnerSymAttr attr,
+                      auto fieldID) -> std::pair<hw::InnerSymAttr, StringAttr> {
+    assert(mod);
+    auto *context = mod.getContext();
+
+    SmallVector<hw::InnerSymPropertiesAttr> props;
+    if (attr) {
+      // If already present, return it.
+      if (auto sym = attr.getSymIfExists(fieldID))
+        return {attr, sym};
+      llvm::append_range(props, attr.getProps());
+    }
+
+    // Otherwise, create symbol and add to list.
+    auto sym = StringAttr::get(context, getNamespace(mod).newName("sym"));
+    props.push_back(hw::InnerSymPropertiesAttr::get(
+        context, sym, fieldID, StringAttr::get(context, "public")));
+    // TODO: store/ensure always sorted, insert directly, faster search.
+    // For now, just be good and sort by fieldID.
+    llvm::sort(props, [](auto &p, auto &q) {
+      return p.getFieldID() < q.getFieldID();
+    });
+    return {hw::InnerSymAttr::get(context, props), sym};
+  };
+
+  if (target.isPort()) {
+    if (auto mod = dyn_cast<FModuleOp>(target.getOp())) {
+      auto portIdx = target.getPort();
+      assert(portIdx < mod.getNumPorts());
+      auto [attr, sym] =
+          getOrAdd(mod, mod.getPortSymbolAttr(portIdx), target.getField());
+      mod.setPortSymbolsAttr(portIdx, attr);
+      return sym;
+    }
+  } else {
+    // InnerSymbols only supported if op implements the interface.
+    if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(target.getOp())) {
+      auto mod = symOp->getParentOfType<FModuleOp>();
+      assert(mod);
+      auto [attr, sym] =
+          getOrAdd(mod, symOp.getInnerSymAttr(), target.getField());
+      symOp.setInnerSymbolAttr(attr);
+      return sym;
+    }
+  }
+
+  assert(0 && "target must be port of FModuleOp or InnerSymbol");
+  return {};
 }
 
 /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
 /// to that operation.
 hw::InnerRefAttr circt::firrtl::getInnerRefTo(
-    Operation *op,
+    const hw::InnerSymTarget &target,
     llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace) {
-  auto mod = op->getParentOfType<FModuleOp>();
-  assert(mod && "must be an operation inside an FModuleOp");
+  auto mod = target.isPort() ? dyn_cast<FModuleOp>(target.getOp())
+                             : target.getOp()->getParentOfType<FModuleOp>();
+  assert(mod &&
+         "must be an operation inside an FModuleOp or port of FModuleOp");
   return hw::InnerRefAttr::get(SymbolTable::getSymbolName(mod),
-                               getOrAddInnerSym(op, mod, getNamespace));
-}
-
-/// Returns a port's `inner_sym`, adding one if necessary.
-StringAttr circt::firrtl::getOrAddInnerSym(
-    FModuleLike mod, size_t portIdx,
-    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace) {
-
-  auto attr = cast<hw::HWModuleLike>(*mod).getPortSymbolAttr(portIdx);
-  if (attr)
-    return attr.getSymName();
-  auto name = getNamespace(mod).newName("sym");
-  auto sAttr = StringAttr::get(mod.getContext(), name);
-  mod.setPortSymbolAttr(portIdx, sAttr);
-  return sAttr;
-}
-
-/// Obtain an inner reference to a port, possibly adding an `inner_sym`
-/// to the port.
-hw::InnerRefAttr circt::firrtl::getInnerRefTo(
-    FModuleLike mod, size_t portIdx,
-    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace) {
-  return hw::InnerRefAttr::get(SymbolTable::getSymbolName(mod),
-                               getOrAddInnerSym(mod, portIdx, getNamespace));
+                               getOrAddInnerSym(target, getNamespace));
 }
 
 /// Parse a string that may encode a FIRRTL location into a LocationAttr.
@@ -874,18 +898,29 @@ circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
 /// Given a type, return the corresponding lowered type for the HW dialect.
 /// Non-FIRRTL types are simply passed through. This returns a null type if it
 /// cannot be lowered.
-Type circt::firrtl::lowerType(Type type) {
+Type circt::firrtl::lowerType(
+    Type type, std::optional<Location> loc,
+    llvm::function_ref<hw::TypeAliasType(Type, BaseTypeAliasType, Location)>
+        getTypeDeclFn) {
   auto firType = type_dyn_cast<FIRRTLBaseType>(type);
   if (!firType)
     return type;
 
+  // If not known how to lower alias types, then ignore the alias.
+  if (getTypeDeclFn)
+    if (BaseTypeAliasType aliasType = dyn_cast<BaseTypeAliasType>(firType)) {
+      if (!loc)
+        loc = UnknownLoc::get(type.getContext());
+      type = lowerType(aliasType.getInnerType(), loc, getTypeDeclFn);
+      return getTypeDeclFn(type, aliasType, *loc);
+    }
   // Ignore flip types.
   firType = firType.getPassiveType();
 
   if (auto bundle = type_dyn_cast<BundleType>(firType)) {
     mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
     for (auto element : bundle) {
-      Type etype = lowerType(element.type);
+      Type etype = lowerType(element.type, loc, getTypeDeclFn);
       if (!etype)
         return {};
       hwfields.push_back(hw::StructType::FieldInfo{element.name, etype});
@@ -893,7 +928,7 @@ Type circt::firrtl::lowerType(Type type) {
     return hw::StructType::get(type.getContext(), hwfields);
   }
   if (auto vec = type_dyn_cast<FVectorType>(firType)) {
-    auto elemTy = lowerType(vec.getElementType());
+    auto elemTy = lowerType(vec.getElementType(), loc, getTypeDeclFn);
     if (!elemTy)
       return {};
     return hw::ArrayType::get(elemTy, vec.getNumElements());
@@ -903,7 +938,7 @@ Type circt::firrtl::lowerType(Type type) {
     SmallVector<Attribute> names;
     bool simple = true;
     for (auto element : fenum) {
-      Type etype = lowerType(element.type);
+      Type etype = lowerType(element.type, loc, getTypeDeclFn);
       if (!etype)
         return {};
       hwfields.push_back(hw::UnionType::FieldInfo{element.name, etype, 0});

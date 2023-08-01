@@ -10,6 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_ESI_OPS_TD
+#define CIRCT_DIALECT_ESI_OPS_TD
+
 def ChannelBufferOp : ESI_Abstract_Op<"buffer", [
     Pure,
     DeclareOpInterfaceMethods<ChannelOpInterface>
@@ -129,3 +132,33 @@ def NullSourceOp : ESI_Physical_Op<"null", [Pure]> {
 
   let assemblyFormat = [{ attr-dict `:` qualified(type($out)) }];
 }
+
+def WrapWindow : ESI_Physical_Op<"window.wrap", [Pure]> {
+  let summary = "wrap a union into a data window";
+
+  let arguments = (ins UnionType:$frame);
+  let results = (outs ESIWindowType:$window);
+  let hasVerifier = 1;
+  let hasFolder = 1;
+
+  let assemblyFormat = [{
+     $frame attr-dict `:` custom<InferWindowRet>(type($frame), type($window))
+  }];
+}
+
+def UnwrapWindow : ESI_Physical_Op<"window.unwrap", [
+      Pure,
+      DeclareOpInterfaceMethods<InferTypeOpInterface>
+  ]> {
+  let summary = "unwrap a data window into a union";
+
+  let arguments = (ins ESIWindowType:$window);
+  let results = (outs UnionType:$frame);
+  let hasFolder = 1;
+
+  let assemblyFormat = [{
+     $window attr-dict `:` qualified(type($window))
+  }];
+}
+
+#endif // CIRCT_DIALECT_ESI_OPS_TD

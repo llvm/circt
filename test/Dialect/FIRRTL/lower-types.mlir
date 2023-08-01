@@ -612,7 +612,7 @@ firrtl.circuit "TopLevel" {
 
 // Test wire connection semantics.  Based on the flippedness of the destination
 // type, the connection may be reversed.
-// CHECK-LABEL firrtl.module private @WireSemantics
+// CHECK-LABEL: firrtl.module private @WireSemantics
   firrtl.module private @WireSemantics() {
     %a = firrtl.wire  : !firrtl.bundle<a: bundle<a: uint<1>>>
     %ax = firrtl.wire  : !firrtl.bundle<a: bundle<a: uint<1>>>
@@ -635,8 +635,8 @@ firrtl.circuit "TopLevel" {
     // CHECK: firrtl.connect %a_a_a, %ax_a_a
     %b = firrtl.wire  : !firrtl.bundle<a: bundle<a flip: uint<1>>>
     %bx = firrtl.wire  : !firrtl.bundle<a: bundle<a flip: uint<1>>>
-    // CHECK %b_a_a = firrtl.wire
-    // CHECK %bx_a_a = firrtl.wire
+    // CHECK: %b_a_a = firrtl.wire
+    // CHECK: %bx_a_a = firrtl.wire
     firrtl.connect %b, %bx : !firrtl.bundle<a: bundle<a flip: uint<1>>>, !firrtl.bundle<a: bundle<a flip: uint<1>>>
     // b <= bx
     // CHECK: firrtl.strictconnect %bx_a_a, %b_a_a
@@ -908,10 +908,10 @@ firrtl.circuit "TopLevel" {
   }
 
 // Test InstanceOp with port annotations.
-// CHECK-LABEL firrtl.module private @Bar3
+// CHECK-LABEL: firrtl.module private @Bar3
   firrtl.module private @Bar3(in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>>) {
   }
-  // CHECK-LABEL firrtl.module private @Foo3
+  // CHECK-LABEL: firrtl.module private @Foo3
   firrtl.module private @Foo3() {
     // CHECK: in a: !firrtl.uint<1> [{one}], out b_baz: !firrtl.uint<1> [{two}], out b_qux: !firrtl.uint<1>
     %bar_a, %bar_b = firrtl.instance bar @Bar3(
@@ -1273,6 +1273,23 @@ firrtl.module private @is1436_FOO() {
     %1 = firrtl.int.mux2cell(%sel1, %v1, %v0) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<5>>, !firrtl.bundle<a: uint<5>>) -> !firrtl.bundle<a: uint<5>>
     firrtl.strictconnect %out2, %0 : !firrtl.bundle<a: uint<5>>
   }
+
+  // CHECK-LABEL: firrtl.module @Groups
+  firrtl.declgroup @GroupFoo bind {}
+  firrtl.module @Groups() {
+    // CHECK-NEXT: firrtl.group @GroupFoo
+    firrtl.group @GroupFoo {
+      // CHECK-NEXT: %a_b = firrtl.wire : !firrtl.uint<1>
+      %a = firrtl.wire : !firrtl.bundle<b: uint<1>>
+    }
+  }
+
+  // CHECK-LABEL:  firrtl.module @Alias
+  // CHECK-NOT: alias
+  // AGGREGATE-LABEL: firrtl.module @Alias
+  // AGGREGATE-SAME: alias<FooBundle, bundle<x: uint<32>, y: uint<32>>>
+  firrtl.module @Alias(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %io: !firrtl.bundle<in flip: alias<FooBundle, bundle<x: uint<32>, y: uint<32>>>, out: alias<FooBundle, bundle<x: uint<32>, y: uint<32>>>>) {
+  }
 } // CIRCUIT
 
 // Check that we don't lose the DontTouchAnnotation when it is not the last
@@ -1301,4 +1318,18 @@ firrtl.circuit "Foo"  {
     %invalid = firrtl.invalidvalue : !firrtl.bundle<b: uint<1>>
     firrtl.strictconnect %bar_a, %invalid : !firrtl.bundle<b: uint<1>>
   }
+}
+
+// Check handling of inner symbols.
+// COMMON-LABEL: circuit "InnerSym"
+firrtl.circuit "InnerSym" {
+  // COMMON-LABEL: module @InnerSym(
+  // CHECK-SAME:  in %x_a: !firrtl.uint<5>, in %x_b: !firrtl.uint<3> sym @x)
+  // AGGREGATE-SAME: in %x: !firrtl.bundle<a: uint<5>, b: uint<3>> sym [<@x,2,public>])
+  firrtl.module @InnerSym(in %x: !firrtl.bundle<a: uint<5>, b: uint<3>> sym [<@x,2,public>]) { }
+
+  // COMMON-LABEL: module @InnerSymMore(
+  // CHECK-SAME: in %x_a_x_1: !firrtl.uint<3> sym @x_1
+  // CHECK-SAME: in %x_a_y: !firrtl.uint<2> sym @y
+  firrtl.module @InnerSymMore(in %x: !firrtl.bundle<a: bundle<x: vector<uint<3>, 2>, y: uint<2>>, b: uint<3>> sym [<@y,5, public>,<@x_1,4,public>]) { }
 }

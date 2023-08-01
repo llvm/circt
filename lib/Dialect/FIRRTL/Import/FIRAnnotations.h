@@ -35,11 +35,11 @@ class PrintFOp;
 
 /// Convert a JSON value containing OMIR JSON (an array of OMNodes), convert
 /// this to an OMIRAnnotation, and add it to a mutable `annotationMap` argument.
-bool fromOMIRJSON(llvm::json::Value &value, StringRef circuitTarget,
+bool fromOMIRJSON(llvm::json::Value &value,
                   SmallVectorImpl<Attribute> &annotations,
                   llvm::json::Path path, MLIRContext *context);
 
-bool fromJSONRaw(llvm::json::Value &value, StringRef circuitTarget,
+bool fromJSONRaw(llvm::json::Value &value,
                  SmallVectorImpl<Attribute> &annotations, llvm::json::Path path,
                  MLIRContext *context);
 

@@ -50,16 +50,16 @@ void ExternalizeClockGatePass::runOnOperation() {
   auto i1Type = builder.getI1Type();
 
   SmallVector<PortInfo, 4> modulePorts;
-  modulePorts.push_back(
-      {builder.getStringAttr(inputName), PortDirection::INPUT, i1Type});
-  modulePorts.push_back(
-      {builder.getStringAttr(outputName), PortDirection::OUTPUT, i1Type});
-  modulePorts.push_back(
-      {builder.getStringAttr(enableName), PortDirection::INPUT, i1Type});
+  modulePorts.push_back({{builder.getStringAttr(inputName), i1Type,
+                          ModulePort::Direction::Input}});
+  modulePorts.push_back({{builder.getStringAttr(outputName), i1Type,
+                          ModulePort::Direction::Output}});
+  modulePorts.push_back({{builder.getStringAttr(enableName), i1Type,
+                          ModulePort::Direction::Input}});
   bool hasTestEnable = !testEnableName.empty();
   if (hasTestEnable)
-    modulePorts.push_back(
-        {builder.getStringAttr(testEnableName), PortDirection::INPUT, i1Type});
+    modulePorts.push_back({{builder.getStringAttr(testEnableName), i1Type,
+                            ModulePort::Direction::Input}});
 
   auto moduleOp = builder.create<HWModuleExternOp>(
       getOperation().getLoc(), builder.getStringAttr(moduleName), modulePorts,

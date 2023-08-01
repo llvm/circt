@@ -30,6 +30,7 @@ set(CIRCT_TEST_DEPENDS
   handshake-runner
   firtool
   hlstool
+  om-linker
   )
 
 if (CIRCT_GTEST_AVAILABLE)

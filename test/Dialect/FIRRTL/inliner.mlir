@@ -691,7 +691,7 @@ firrtl.circuit "Inline"  {
 }
 
 firrtl.circuit "Inline2"  {
-  // CHECK-LABEL firrtl.circuit "Inline2"
+  // CHECK-LABEL: firrtl.circuit "Inline2"
   hw.hierpath private @nla_1 [@Inline2::@foo, @Foo::@bar, @Bar::@i]
   // CHECK:  hw.hierpath private @nla_1 [@Inline2::@[[bar_0:.+]], @Bar::@i]
   firrtl.module @Inline2(in %i: !firrtl.uint<1>, out %o: !firrtl.uint<1>) {

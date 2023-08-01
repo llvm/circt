@@ -250,7 +250,8 @@ void RegOp::build(OpBuilder &builder, OperationState &odsState,
     name = builder.getStringAttr("");
   odsState.addAttribute("name", name);
   if (sym_name)
-    odsState.addAttribute(hw::InnerName::getInnerNameAttrName(), sym_name);
+    odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
+                          sym_name);
   odsState.addTypes(hw::InOutType::get(elementType));
 }
 
@@ -297,7 +298,8 @@ void LogicOp::build(OpBuilder &builder, OperationState &odsState,
     name = builder.getStringAttr("");
   odsState.addAttribute("name", name);
   if (sym_name)
-    odsState.addAttribute(hw::InnerName::getInnerNameAttrName(), sym_name);
+    odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
+                          sym_name);
   odsState.addTypes(hw::InOutType::get(elementType));
 }
 
@@ -1363,10 +1365,8 @@ void InterfaceModportOp::build(OpBuilder &builder, OperationState &state,
                                ArrayRef<StringRef> outputs) {
   auto *ctxt = builder.getContext();
   SmallVector<Attribute, 8> directions;
-  ModportDirectionAttr inputDir =
-      ModportDirectionAttr::get(ctxt, ModportDirection::input);
-  ModportDirectionAttr outputDir =
-      ModportDirectionAttr::get(ctxt, ModportDirection::output);
+  auto inputDir = ModportDirectionAttr::get(ctxt, ModportDirection::input);
+  auto outputDir = ModportDirectionAttr::get(ctxt, ModportDirection::output);
   for (auto input : inputs)
     directions.push_back(ModportStructAttr::get(
         ctxt, inputDir, SymbolRefAttr::get(ctxt, input)));
@@ -1526,7 +1526,8 @@ void WireOp::build(OpBuilder &builder, OperationState &odsState,
   if (!name)
     name = builder.getStringAttr("");
   if (sym_name)
-    odsState.addAttribute(hw::InnerName::getInnerNameAttrName(), sym_name);
+    odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
+                          sym_name);
 
   odsState.addAttribute("name", name);
   odsState.addTypes(InOutType::get(elementType));

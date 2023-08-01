@@ -1026,7 +1026,7 @@ firrtl.circuit "ConstReset" {
 
 // -----
 
-// CHECK-LABEL "ConstAggReset"
+// CHECK-LABEL: "ConstAggReset"
 firrtl.circuit "ConstAggReset" {
   // CHECK-LABEL: module @ConstAggReset
   // CHECK-NOT: : reset
@@ -1044,7 +1044,7 @@ firrtl.circuit "ConstAggReset" {
 
 // -----
 
-// CHECK-LABEL "ConstAggCastReset"
+// CHECK-LABEL: "ConstAggCastReset"
 firrtl.circuit "ConstAggCastReset" {
   // CHECK-LABEL: module @ConstAggCastReset
   // CHECK-NOT: : reset

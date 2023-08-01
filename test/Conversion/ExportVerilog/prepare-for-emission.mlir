@@ -1,4 +1,5 @@
 // RUN: circt-opt %s -prepare-for-emission --split-input-file -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s -export-verilog -split-input-file
 
 // CHECK: @namehint_variadic
 hw.module @namehint_variadic(%a: i3) -> (b: i3) {
@@ -227,4 +228,43 @@ module attributes { circt.loweringOptions = "disallowPackedStructAssignments"} {
       %0 = hw.struct_create (%in) : !T
       hw.output %0, %0 : !T, !T
   }
+}
+
+// -----
+// LTL expressions that are used before being defined should not be spilled to
+// wires, where they crash the PrepareForEmission pass. They are always emitted
+// inline, so no need to restructure the IR.
+// CHECK-LABEL: hw.module @Issue5613
+hw.module @Issue5613(%a: i1, %b: i1) {
+  verif.assert %2 : !ltl.sequence
+  %0 = ltl.implication %2, %1 : !ltl.sequence, !ltl.property
+  %1 = ltl.or %b, %3 : i1, !ltl.property
+  %2 = ltl.and %b, %4 : i1, !ltl.sequence
+  %3 = ltl.not %b : i1
+  %4 = ltl.delay %a, 42 : i1
+  hw.output
+}
+
+// -----
+
+// If an operation is duplicated because it is always inline, make sure that the
+// recursive inlining of its operands (by splitting) may also duplicate an
+// operand which now needs to be spilled to a wire.
+//
+// See: https://github.com/llvm/circt/issues/5605
+// CHECK-LABEL: hw.module @Issue5605
+hw.module @Issue5605(%a: i1, %b: i1, %clock: i1, %reset: i1) {
+  %0 = comb.concat %a, %b : i1, i1
+  // CHECK:      %1 = sv.wire
+  // CHECK-NEXT: sv.assign %1, %0
+  %1 = sv.system.sampled %0 : i2
+  // CHECK-NEXT: %2 = sv.read_inout %1
+  // CHECK-NEXT: %3 = sv.system.sampled %2
+  // CHECK-NEXT: sv.assert.concurrent {{.*}}(%3)
+  sv.assert.concurrent posedge %clock, %reset label "assert_0" message "foo"(%1) : i2
+  // CHECK-NEXT: %4 = sv.read_inout %1
+  // CHECK-NEXT: %5 = sv.system.sampled %4
+  // CHECK-NEXT: sv.assert.concurrent {{.*}}(%5)
+  sv.assert.concurrent posedge %clock, %reset label "assert_1" message "bar"(%1) : i2
+  hw.output
 }

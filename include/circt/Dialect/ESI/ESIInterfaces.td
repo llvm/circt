@@ -10,6 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_ESI_INTERFACES_TD
+#define CIRCT_DIALECT_ESI_INTERFACES_TD
+
 include "mlir/IR/OpBase.td"
 
 def ChannelOpInterface : OpInterface<"ChannelOpInterface"> {
@@ -129,3 +132,5 @@ def ServiceReqOpInterface : OpInterface<"ServiceReqOpInterface"> {
       }]>
   ];
 }
+
+#endif // CIRCT_DIALECT_ESI_INTERFACES_TD

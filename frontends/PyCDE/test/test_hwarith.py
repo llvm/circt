@@ -73,8 +73,12 @@ class SignlessInfixComparison(Module):
 
 
 # CHECK: msft.module @InfixComparison {} (%in0: ui16, %in1: ui16)
-# CHECK-NEXT:    %0 = hwarith.icmp eq %in0, %in1 {sv.namehint = "in0_eq_in1"} : ui16, ui16
-# CHECK-NEXT:    %1 = hwarith.icmp ne %in0, %in1 {sv.namehint = "in0_neq_in1"} : ui16, ui16
+# CHECK:  %0 = hwarith.icmp eq %in0, %in1 {sv.namehint = "in0_eq_in1"} : ui16, ui16
+# CHECK:  %1 = hwarith.icmp ne %in0, %in1 {sv.namehint = "in0_neq_in1"} : ui16, ui16
+# CHECK:  %2 = hwarith.icmp lt %in0, %in1 {sv.namehint = "in0_lt_in1"} : ui16, ui16
+# CHECK:  %3 = hwarith.icmp gt %in0, %in1 {sv.namehint = "in0_gt_in1"} : ui16, ui16
+# CHECK:  %4 = hwarith.icmp le %in0, %in1 {sv.namehint = "in0_le_in1"} : ui16, ui16
+# CHECK:  %5 = hwarith.icmp ge %in0, %in1 {sv.namehint = "in0_ge_in1"} : ui16, ui16
 # CHECK-NEXT:    msft.output
 @unittestmodule(run_passes=False)
 class InfixComparison(Module):
@@ -85,6 +89,10 @@ class InfixComparison(Module):
   def construct(ports):
     eq = ports.in0 == ports.in1
     neq = ports.in0 != ports.in1
+    lt = ports.in0 < ports.in1
+    gt = ports.in0 > ports.in1
+    le = ports.in0 <= ports.in1
+    ge = ports.in0 >= ports.in1
 
 
 # -----

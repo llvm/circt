@@ -798,7 +798,7 @@ hw.module @instance_result_reuse_wires() -> (b: i3) {
 
 hw.module.extern @ExternDestMod(%a: i1, %b: i2) -> (c: i3, d: i4)
 hw.module @InternalDestMod(%a: i1, %b: i3, %c: i1) {}
-// CHECK-LABEL module ABC
+// CHECK-LABEL: module ABC
 hw.module @ABC(%a: i1, %b: i2) -> (c: i4) {
   %0,%1 = hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> (c: i3, d: i4) {doNotPrint=1}
   %2 = sv.xmr "whatever", "a" : !hw.inout<i1>

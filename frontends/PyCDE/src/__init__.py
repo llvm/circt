@@ -18,7 +18,8 @@ def __exit_ctxt():
   DefaultContext.__exit__(None, None, None)
 
 
-from .common import (AppID, Clock, Input, InputChannel, Output, OutputChannel)
+from .common import (AppID, Clock, Reset, Input, InputChannel, Output,
+                     OutputChannel)
 from .module import (generator, modparams, Module)
 from .system import (System)
 from .types import (dim, types)

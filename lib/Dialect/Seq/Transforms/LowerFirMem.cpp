@@ -386,16 +386,18 @@ LowerFirMemPass::createMemoryModule(UniqueConfig &config, OpBuilder &builder,
   size_t inputIdx = 0;
   auto addInput = [&](StringRef prefix, size_t idx, StringRef suffix,
                       Type type) {
-    ports.push_back({builder.getStringAttr(prefix + Twine(idx) + suffix),
-                     PortDirection::INPUT, type, inputIdx++});
+    ports.push_back({{builder.getStringAttr(prefix + Twine(idx) + suffix), type,
+                      ModulePort::Direction::Input},
+                     inputIdx++});
   };
 
   // Helper to add an output port.
   size_t outputIdx = 0;
   auto addOutput = [&](StringRef prefix, size_t idx, StringRef suffix,
                        Type type) {
-    ports.push_back({builder.getStringAttr(prefix + Twine(idx) + suffix),
-                     PortDirection::OUTPUT, type, outputIdx++});
+    ports.push_back({{builder.getStringAttr(prefix + Twine(idx) + suffix), type,
+                      ModulePort::Direction::Output},
+                     outputIdx++});
   };
 
   // Helper to add the ports common to read, read-write, and write ports.

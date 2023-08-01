@@ -957,12 +957,28 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   }
 
   case FIRToken::kw_String:
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError() << "unexpected token: Properties are a FIRRTL 3.1.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
     consumeToken(FIRToken::kw_String);
     result = StringType::get(getContext());
     break;
-  case FIRToken::kw_BigInt:
-    consumeToken(FIRToken::kw_BigInt);
+  case FIRToken::kw_Integer:
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError() << "unexpected token: Integers are a FIRRTL 3.1.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
+    consumeToken(FIRToken::kw_Integer);
     result = BigIntType::get(getContext());
+    break;
+  case FIRToken::kw_Path:
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError() << "unexpected token: Properties are a FIRRTL 3.1.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
+    consumeToken(FIRToken::kw_Path);
+    result = PathType::get(getContext());
     break;
   }
 
@@ -1028,8 +1044,7 @@ using SymbolValueEntry = llvm::PointerUnion<Value, UnbundledID>;
 
 using ModuleSymbolTable =
     llvm::StringMap<std::pair<SMLoc, SymbolValueEntry>, llvm::BumpPtrAllocator>;
-using ModuleSymbolTableEntry =
-    llvm::StringMapEntry<std::pair<SMLoc, SymbolValueEntry>>;
+using ModuleSymbolTableEntry = ModuleSymbolTable::MapEntryTy;
 
 using UnbundledValueEntry = SmallVector<std::pair<Attribute, Value>>;
 using UnbundledValuesList = std::vector<UnbundledValueEntry>;
@@ -1053,12 +1068,8 @@ namespace {
 /// currently parsing into.
 struct FIRModuleContext : public FIRParser {
   explicit FIRModuleContext(SharedParserConstants &constants, FIRLexer &lexer,
-                            std::string moduleTarget, FIRVersion &version)
-      : FIRParser(constants, lexer, version),
-        moduleTarget(std::move(moduleTarget)) {}
-
-  /// This is the module target used by annotations referring to this module.
-  std::string moduleTarget;
+                            FIRVersion &version)
+      : FIRParser(constants, lexer, version) {}
 
   // The expression-oriented nature of firrtl syntax produces tons of constant
   // nodes which are obviously redundant.  Instead of literally producing them
@@ -1410,12 +1421,13 @@ namespace {
 struct FIRStmtParser : public FIRParser {
   explicit FIRStmtParser(Block &blockToInsertInto,
                          FIRModuleContext &moduleContext,
-                         Namespace &modNameSpace, FIRVersion &version)
+                         ModuleNamespace &modNameSpace, FIRVersion &version,
+                         SymbolRefAttr groupSym = {})
       : FIRParser(moduleContext.getConstants(), moduleContext.getLexer(),
                   version),
         builder(UnknownLoc::get(getContext()), getContext()),
         locationProcessor(this->builder), moduleContext(moduleContext),
-        modNameSpace(modNameSpace) {
+        modNameSpace(modNameSpace), groupSym(groupSym) {
     builder.setInsertionPointToEnd(&blockToInsertInto);
   }
 
@@ -1423,9 +1435,6 @@ struct FIRStmtParser : public FIRParser {
   ParseResult parseSimpleStmtBlock(unsigned indent);
 
 private:
-  /// Return the current modulet target, e.g., "~Foo|Bar".
-  StringRef getModuleTarget() { return moduleContext.moduleTarget; }
-
   ParseResult parseSimpleStmtImpl(unsigned stmtIndent);
 
   /// Attach invalid values to every element of the value.
@@ -1477,6 +1486,8 @@ private:
   std::optional<ParseResult> parseExpWithLeadingKeyword(FIRToken keyword);
 
   // Stmt Parsing
+  ParseResult parseSubBlock(Block &blockToInsertInto, unsigned indent,
+                            SymbolRefAttr groupSym);
   ParseResult parseAttach();
   ParseResult parseMemPort(MemDirAttr direction);
   ParseResult parsePrintf();
@@ -1499,6 +1510,7 @@ private:
   ParseResult parseLeadingExpStmt(Value lhs);
   ParseResult parseConnect();
   ParseResult parseInvalidate();
+  ParseResult parseGroup(unsigned indent);
 
   // Declarations
   ParseResult parseInstance();
@@ -1517,7 +1529,11 @@ private:
   // Extra information maintained across a module.
   FIRModuleContext &moduleContext;
 
-  Namespace &modNameSpace;
+  ModuleNamespace &modNameSpace;
+
+  // An optional symbol that contains the current group that we are in.  This is
+  // used to construct a nested symbol for a group definition operation.
+  SymbolRefAttr groupSym;
 };
 
 } // end anonymous namespace
@@ -1710,6 +1726,10 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     break;
   case FIRToken::kw_String: {
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError() << "unexpected token: Properties are a FIRRTL 3.1.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
     locationProcessor.setLoc(getToken().getLoc());
     consumeToken(FIRToken::kw_String);
     StringRef spelling;
@@ -1723,13 +1743,18 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
         builder.getStringAttr(FIRToken::getStringValue(spelling)));
     break;
   }
-  case FIRToken::kw_BigInt: {
+  case FIRToken::kw_Integer: {
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError() << "unexpected token: Integers are a FIRRTL 3.1.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
+
     locationProcessor.setLoc(getToken().getLoc());
-    consumeToken(FIRToken::kw_BigInt);
+    consumeToken(FIRToken::kw_Integer);
     APInt value;
-    if (parseToken(FIRToken::l_paren, "expected '(' in BigInt expression") ||
-        parseIntLit(value, "expected integer literal in BigInt expression") ||
-        parseToken(FIRToken::r_paren, "expected ')' in BigInt expression"))
+    if (parseToken(FIRToken::l_paren, "expected '(' in Integer expression") ||
+        parseIntLit(value, "expected integer literal in Integer expression") ||
+        parseToken(FIRToken::r_paren, "expected ')' in Integer expression"))
       return failure();
     result =
         builder.create<BigIntConstantOp>(APSInt(value, /*isUnsigned=*/false));
@@ -2274,6 +2299,10 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   case FIRToken::kw_connect:
     return parseConnect();
   case FIRToken::kw_propassign:
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError() << "unexpected token: Properties are a FIRRTL 3.1.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
     return parsePropAssign();
   case FIRToken::kw_invalidate:
     return parseInvalidate();
@@ -2303,6 +2332,13 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseRefRelease();
   case FIRToken::lp_release_initial:
     return parseRefReleaseInitial();
+  case FIRToken::kw_group:
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError()
+             << "unexpected token: optional groups are a FIRRTL 3.1.0+ "
+                "feature, but the specified FIRRTL version was "
+             << version;
+    return parseGroup(stmtIndent);
 
   default: {
     // Statement productions that start with an expression.
@@ -2335,6 +2371,38 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   case FIRToken::kw_regreset:
     return parseRegisterWithReset();
   }
+}
+
+ParseResult FIRStmtParser::parseSubBlock(Block &blockToInsertInto,
+                                         unsigned indent,
+                                         SymbolRefAttr groupSym) {
+  // Declarations within the suite are scoped to within the suite.
+  auto suiteScope = std::make_unique<FIRModuleContext::ContextScope>(
+      moduleContext, &blockToInsertInto);
+
+  // After parsing the when region, we can release any new entries in
+  // unbundledValues since the symbol table entries that refer to them will be
+  // gone.
+  UnbundledValueRestorer x(moduleContext.unbundledValues);
+
+  // We parse the substatements into their own parser, so they get inserted
+  // into the specified 'when' region.
+  auto subParser = std::make_unique<FIRStmtParser>(
+      blockToInsertInto, moduleContext, modNameSpace, version, groupSym);
+
+  // Figure out whether the body is a single statement or a nested one.
+  auto stmtIndent = getIndentation();
+
+  // Parsing a single statment is straightforward.
+  if (!stmtIndent.has_value())
+    return subParser->parseSimpleStmt(indent);
+
+  if (*stmtIndent <= indent)
+    return emitError("statement must be indented more than previous statement"),
+           failure();
+
+  // Parse a block of statements that are indented more than the when.
+  return subParser->parseSimpleStmtBlock(indent);
 }
 
 /// attach ::= 'attach' '(' exp+ ')' info?
@@ -2579,39 +2647,8 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // Create the IR representation for the when.
   auto whenStmt = builder.create<WhenOp>(condition, /*createElse*/ false);
 
-  // This is a function to parse a suite body.
-  auto parseSuite = [&](Block &blockToInsertInto) -> ParseResult {
-    // Declarations within the suite are scoped to within the suite.
-    auto suiteScope = std::make_unique<FIRModuleContext::ContextScope>(
-        moduleContext, &blockToInsertInto);
-
-    // After parsing the when region, we can release any new entries in
-    // unbundledValues since the symbol table entries that refer to them will be
-    // gone.
-    UnbundledValueRestorer x(moduleContext.unbundledValues);
-
-    // We parse the substatements into their own parser, so they get inserted
-    // into the specified 'when' region.
-    auto subParser = std::make_unique<FIRStmtParser>(
-        blockToInsertInto, moduleContext, modNameSpace, version);
-
-    // Figure out whether the body is a single statement or a nested one.
-    auto stmtIndent = getIndentation();
-
-    // Parsing a single statment is straightforward.
-    if (!stmtIndent.has_value())
-      return subParser->parseSimpleStmt(whenIndent);
-
-    if (*stmtIndent <= whenIndent)
-      return emitError("statement must be indented more than 'when'"),
-             failure();
-
-    // Parse a block of statements that are indented more than the when.
-    return subParser->parseSimpleStmtBlock(whenIndent);
-  };
-
   // Parse the 'then' body into the 'then' region.
-  if (parseSuite(whenStmt.getThenBlock()))
+  if (parseSubBlock(whenStmt.getThenBlock(), whenIndent, groupSym))
     return failure();
 
   // If the else is present, handle it otherwise we're done.
@@ -2635,8 +2672,9 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // the outer 'when'.
   if (getToken().is(FIRToken::kw_when)) {
     // We create a sub parser for the else block.
-    auto subParser = std::make_unique<FIRStmtParser>(
-        whenStmt.getElseBlock(), moduleContext, modNameSpace, version);
+    auto subParser =
+        std::make_unique<FIRStmtParser>(whenStmt.getElseBlock(), moduleContext,
+                                        modNameSpace, version, groupSym);
 
     return subParser->parseSimpleStmt(whenIndent);
   }
@@ -2644,7 +2682,8 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // Parse the 'else' body into the 'else' region.
   LocationAttr elseLoc; // ignore the else locator.
   if (parseToken(FIRToken::colon, "expected ':' after 'else'") ||
-      parseOptionalInfoLocator(elseLoc) || parseSuite(whenStmt.getElseBlock()))
+      parseOptionalInfoLocator(elseLoc) ||
+      parseSubBlock(whenStmt.getElseBlock(), whenIndent, groupSym))
     return failure();
 
   // TODO(firrtl spec): There is no reason for the 'else :' grammar to take an
@@ -2773,8 +2812,8 @@ ParseResult FIRStmtParser::parseMatch(unsigned matchIndent) {
       return failure();
 
     // Parse a block of statements that are indented more than the case.
-    auto subParser = std::make_unique<FIRStmtParser>(*caseBlock, moduleContext,
-                                                     modNameSpace, version);
+    auto subParser = std::make_unique<FIRStmtParser>(
+        *caseBlock, moduleContext, modNameSpace, version, groupSym);
     if (subParser->parseSimpleStmtBlock(*caseIndent))
       return failure();
   }
@@ -2939,18 +2978,36 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
   // Not public port (verifier)
 
   // Check probe expression is base-type.
-  if (!type_isa<FIRRTLBaseType>(staticRef.getType()))
+  auto targetType = type_dyn_cast<FIRRTLBaseType>(staticRef.getType());
+  if (!targetType)
     return emitError(startTok.getLoc(),
                      "expected base-type expression in 'rwprobe', got ")
            << staticRef.getType();
 
-  // Check for other unsupported reference sources.
   auto fieldRef = getFieldRefFromValue(staticRef);
   auto target = fieldRef.getValue();
 
-  // TODO: Support for non-public ports.
-  if (isa<BlockArgument>(target))
-    return emitError(startTok.getLoc(), "rwprobe of port not yet supported");
+  // Ports are handled differently, emit a RWProbeOp with inner symbol.
+  if (auto arg = dyn_cast<BlockArgument>(target)) {
+    // Check target type.  Replicate inference/verification logic.
+    if (targetType.hasUninferredWidth() || targetType.hasUninferredReset())
+      return emitError(startTok.getLoc(),
+                       "must have known width or concrete reset type in type ")
+             << targetType;
+    auto forceableType =
+        firrtl::detail::getForceableResultType(true, targetType);
+    if (!forceableType)
+      return emitError(startTok.getLoc(), "cannot force target of type ")
+             << targetType;
+
+    // Get InnerRef for target field.
+    auto mod = cast<FModuleOp>(arg.getOwner()->getParentOp());
+    auto sym = getInnerRefTo(
+        hw::InnerSymTarget(arg.getArgNumber(), mod, fieldRef.getFieldID()),
+        [&](FModuleOp mod) -> ModuleNamespace & { return modNameSpace; });
+    result = builder.create<RWProbeOp>(sym, targetType);
+    return success();
+  }
 
   auto *definingOp = target.getDefiningOp();
   if (!definingOp)
@@ -3183,6 +3240,42 @@ ParseResult FIRStmtParser::parseInvalidate() {
 
   locationProcessor.setLoc(startTok.getLoc());
   emitInvalidate(lhs);
+  return success();
+}
+
+ParseResult FIRStmtParser::parseGroup(unsigned indent) {
+
+  auto startTok = consumeToken(FIRToken::kw_group);
+  auto loc = startTok.getLoc();
+
+  StringRef id;
+  if (parseId(id, "expected group identifer") ||
+      parseToken(FIRToken::colon, "expected ':' at end of group") ||
+      parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(loc);
+
+  StringRef rootGroup;
+  SmallVector<FlatSymbolRefAttr> nestedGroups;
+  if (!groupSym) {
+    rootGroup = id;
+  } else {
+    rootGroup = groupSym.getRootReference();
+    auto nestedRefs = groupSym.getNestedReferences();
+    nestedGroups.append(nestedRefs.begin(), nestedRefs.end());
+    nestedGroups.push_back(FlatSymbolRefAttr::get(builder.getContext(), id));
+  }
+
+  auto groupOp = builder.create<GroupOp>(
+      SymbolRefAttr::get(builder.getContext(), rootGroup, nestedGroups));
+  groupOp->getRegion(0).push_back(new Block());
+
+  if (getIndentation() > indent)
+    if (parseSubBlock(groupOp.getRegion().front(), indent,
+                      groupOp.getGroupName()))
+      return failure();
+
   return success();
 }
 
@@ -3767,29 +3860,40 @@ struct FIRCircuitParser : public FIRParser {
 private:
   /// Extract Annotations from a JSON-encoded Annotation array string and add
   /// them to a vector of attributes.
-  ParseResult importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
-                                   StringRef annotationsStr,
+  ParseResult importAnnotationsRaw(SMLoc loc, StringRef annotationsStr,
                                    SmallVectorImpl<Attribute> &attrs);
   /// Generate OMIR-derived annotations.  Report errors if the OMIR is malformed
   /// in any way.  This also performs scattering of the OMIR to introduce
   /// tracking annotations in the circuit.
-  ParseResult importOMIR(CircuitOp circuit, SMLoc loc, StringRef circuitTarget,
-                         StringRef omirStr, SmallVectorImpl<Attribute> &attrs);
+  ParseResult importOMIR(CircuitOp circuit, SMLoc loc, StringRef annotationStr,
+                         SmallVectorImpl<Attribute> &attrs);
 
-  ParseResult parseModule(CircuitOp circuit, StringRef circuitTarget,
-                          unsigned indent);
+  ParseResult parseToplevelDefinition(CircuitOp circuit, unsigned indent);
+
+  ParseResult parseClass(CircuitOp circuit, unsigned indent);
+  ParseResult parseExtModule(CircuitOp circuit, unsigned indent);
+  ParseResult parseIntModule(CircuitOp circuit, unsigned indent);
+  ParseResult parseModule(CircuitOp circuit, unsigned indent);
 
   ParseResult parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                             SmallVectorImpl<SMLoc> &resultPortLocs,
                             unsigned indent);
+  ParseResult parseParameterList(ArrayAttr &resultParameters);
+  ParseResult parseParameter(StringAttr &resultName, TypedAttr &resultValue,
+                             SMLoc &resultLoc);
+  ParseResult parseRefList(ArrayRef<PortInfo> portList,
+                           ArrayAttr &internalPathResults);
+
+  ParseResult skipToModuleEnd(unsigned indent);
 
   ParseResult parseTypeDecl();
 
+  ParseResult parseGroupDecl(CircuitOp circuit);
+
   struct DeferredModuleToParse {
-    FModuleOp moduleOp;
+    FModuleLike moduleOp;
     SmallVector<SMLoc> portLocs;
     FIRLexerCursor lexerCursor;
-    std::string moduleTarget;
     unsigned indent;
   };
 
@@ -3801,8 +3905,7 @@ private:
 
 } // end anonymous namespace
 ParseResult
-FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
-                                       StringRef annotationsStr,
+FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef annotationsStr,
                                        SmallVectorImpl<Attribute> &attrs) {
 
   auto annotations = json::parse(annotationsStr);
@@ -3816,8 +3919,7 @@ FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
 
   json::Path::Root root;
   llvm::StringMap<ArrayAttr> thisAnnotationMap;
-  if (!fromJSONRaw(annotations.get(), circuitTarget, attrs, root,
-                   getContext())) {
+  if (!fromJSONRaw(annotations.get(), attrs, root, getContext())) {
     auto diag = emitError(loc, "Invalid/unsupported annotation format");
     std::string jsonErrorMessage =
         "See inline comments for problem area in JSON:\n";
@@ -3831,7 +3933,6 @@ FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
 }
 
 ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
-                                         StringRef circuitTarget,
                                          StringRef annotationsStr,
                                          SmallVectorImpl<Attribute> &annos) {
 
@@ -3845,8 +3946,7 @@ ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
   }
 
   json::Path::Root root;
-  if (!fromOMIRJSON(annotations.get(), circuitTarget, annos, root,
-                    circuit.getContext())) {
+  if (!fromOMIRJSON(annotations.get(), annos, root, circuit.getContext())) {
     auto diag = emitError(loc, "Invalid/unsupported OMIR format");
     std::string jsonErrorMessage =
         "See inline comments for problem area in JSON:\n";
@@ -3859,7 +3959,7 @@ ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
   return success();
 }
 
-/// pohwist ::= port*
+/// portlist ::= port*
 /// port     ::= dir id ':' type info? NEWLINE
 /// dir      ::= 'input' | 'output'
 ParseResult
@@ -3903,50 +4003,6 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
     resultPortLocs.push_back(info.getFIRLoc());
   }
 
-  return success();
-}
-
-/// Parse an external or present module depending on what token we have.
-///
-/// module ::= 'module' id ':' info? INDENT pohwist simple_stmt_block DEDENT
-/// module ::=
-///        'extmodule' id ':' info? INDENT pohwist defname? parameter* ref*
-///        DEDENT
-/// module ::=
-///        'intmodule' id ':' info? INDENT pohwist intname parameter* ref*
-///        DEDENT
-/// defname   ::= 'defname' '=' id NEWLINE
-/// intname   ::= 'intrinsic' '=' id NEWLINE
-///
-/// parameter ::= 'parameter' id '=' intLit NEWLINE
-/// parameter ::= 'parameter' id '=' StringLit NEWLINE
-/// parameter ::= 'parameter' id '=' floatingpoint NEWLINE
-/// parameter ::= 'parameter' id '=' RawString NEWLINE
-/// ref ::= 'ref' static_reference 'is' StringLit NEWLINE
-ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
-                                          StringRef circuitTarget,
-                                          unsigned indent) {
-  auto circuitName = circuit.getName();
-  bool isExtModule = getToken().is(FIRToken::kw_extmodule);
-  bool isIntModule = getToken().is(FIRToken::kw_intmodule);
-  consumeToken();
-  StringAttr name;
-  SmallVector<PortInfo, 8> portList;
-  SmallVector<SMLoc> portLocs;
-
-  LocWithInfo info(getToken().getLoc(), this);
-  if (parseId(name, "expected module name"))
-    return failure();
-
-  auto moduleTarget = (circuitTarget + "|" + name.getValue()).str();
-  ArrayAttr annotations = getConstants().emptyArrayAttr;
-
-  if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
-      info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
-    return failure();
-
-  auto builder = circuit.getBodyBuilder();
-
   // Helper for the temporary check rejecting input-oriented refs.
   std::function<bool(Type, bool)> hasInputRef = [&](Type type,
                                                     bool output) -> bool {
@@ -3968,7 +4024,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
 
   // Check for port name collisions.
   SmallDenseMap<Attribute, SMLoc> portIds;
-  for (auto portAndLoc : llvm::zip(portList, portLocs)) {
+  for (auto portAndLoc : llvm::zip(resultPorts, resultPortLocs)) {
     PortInfo &port = std::get<0>(portAndLoc);
     // See #4812 and look through the reference input test collection
     // and ensure they work before allowing them from user input.
@@ -3988,144 +4044,24 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     return failure();
   }
 
-  auto isMainModule = (name == circuitName);
+  return success();
+}
 
-  // If this is a normal module, parse the body into an FModuleOp.
-  if (!isExtModule && !isIntModule) {
-    auto convention = Convention::Internal;
-    if (isMainModule && getConstants().options.scalarizeTopModule)
-      convention = Convention::Scalarized;
-    auto conventionAttr = ConventionAttr::get(getContext(), convention);
-
-    auto moduleOp = builder.create<FModuleOp>(
-        info.getLoc(), name, conventionAttr, portList, annotations);
-    auto visibility = isMainModule ? SymbolTable::Visibility::Public
-                                   : SymbolTable::Visibility::Private;
-    SymbolTable::setSymbolVisibility(moduleOp, visibility);
-
-    // Parse the body of this module after all prototypes have been parsed. This
-    // allows us to handle forward references correctly.
-    deferredModules.emplace_back(
-        DeferredModuleToParse{moduleOp, portLocs, getLexer().getCursor(),
-                              std::move(moduleTarget), indent});
-
-    // We're going to defer parsing this module, so just skip tokens until we
-    // get to the next module or the end of the file.
-    while (true) {
-      switch (getToken().getKind()) {
-
-      // End of file or invalid token will be handled by outer level.
-      case FIRToken::eof:
-      case FIRToken::error:
-        return success();
-
-      // If we got to the next module or a type declaration, then we're done.
-      case FIRToken::kw_type:
-      case FIRToken::kw_module:
-      case FIRToken::kw_extmodule:
-      case FIRToken::kw_intmodule:
-        // All module declarations should have the same indentation
-        // level. Use this fact to differentiate between module
-        // declarations and usages of "module" as identifiers.
-        if (getIndentation() == indent)
-          return success();
-        [[fallthrough]];
-      default:
-        consumeToken();
-        break;
-      }
-    }
-  }
-
-  // Otherwise, handle extmodule and intmodule specific features like
-  // parameters.
-
-  // Parse a defname if present and is an extmodule.
-  StringRef defName;
-  if (isExtModule && consumeIf(FIRToken::kw_defname)) {
-    if (parseToken(FIRToken::equal, "expected '=' in defname") ||
-        parseId(defName, "expected defname name"))
-      return failure();
-  }
-
-  // Parse a intname if is an intmodule.
-  StringRef intName;
-  if (isIntModule && consumeIf(FIRToken::kw_intrinsic)) {
-    if (parseToken(FIRToken::equal, "expected '=' in defname") ||
-        parseId(intName, "expected defname name"))
-      return failure();
-  }
-
-  SmallVector<Attribute> parameters;
+/// ref-list ::= ref*
+/// ref ::= 'ref' static_reference 'is' StringLit NEWLIN
+ParseResult FIRCircuitParser::parseRefList(ArrayRef<PortInfo> portList,
+                                           ArrayAttr &internalPathsResult) {
   struct RefStatementInfo {
     StringAttr refName;
     StringAttr resolvedPath;
     SMLoc loc;
   };
+
   SmallVector<RefStatementInfo> refStatements;
-  ArrayAttr internalPaths;
   SmallPtrSet<StringAttr, 8> seenNames;
   SmallPtrSet<StringAttr, 8> seenRefs;
 
-  // Parse the parameter list.
-  while (consumeIf(FIRToken::kw_parameter)) {
-    auto loc = getToken().getLoc();
-    StringRef paramName;
-    if (parseId(paramName, "expected parameter name") ||
-        parseToken(FIRToken::equal, "expected '=' in parameter"))
-      return failure();
-
-    TypedAttr value;
-    switch (getToken().getKind()) {
-    default:
-      return emitError("expected parameter value"), failure();
-
-    case FIRToken::integer:
-    case FIRToken::signed_integer: {
-
-      APInt result;
-      if (parseIntLit(result, "invalid integer parameter"))
-        return failure();
-
-      // If the integer parameter is less than 32-bits, sign extend this to a
-      // 32-bit value.  This needs to eventually emit as a 32-bit value in
-      // Verilog and we want to get the size correct immediately.
-      if (result.getBitWidth() < 32)
-        result = result.sext(32);
-
-      value = builder.getIntegerAttr(
-          builder.getIntegerType(result.getBitWidth(), result.isSignBitSet()),
-          result);
-      break;
-    }
-    case FIRToken::string: {
-      // Drop the double quotes and unescape.
-      value = builder.getStringAttr(getToken().getStringValue());
-      consumeToken(FIRToken::string);
-      break;
-    }
-    case FIRToken::raw_string: {
-      // Drop the single quotes and unescape the ones inside.
-      value = builder.getStringAttr(getToken().getRawStringValue());
-      consumeToken(FIRToken::raw_string);
-      break;
-    }
-
-    case FIRToken::floatingpoint:
-      double v;
-      if (!llvm::to_float(getTokenSpelling(), v))
-        return emitError("invalid float parameter syntax"), failure();
-
-      value = builder.getF64FloatAttr(v);
-      consumeToken(FIRToken::floatingpoint);
-      break;
-    }
-
-    auto nameId = builder.getStringAttr(paramName);
-    if (!seenNames.insert(nameId).second)
-      return emitError(loc, "redefinition of parameter '" + paramName + "'");
-    parameters.push_back(ParamDeclAttr::get(nameId, value));
-  }
+  // Parse the ref statements.
   while (consumeIf(FIRToken::kw_ref)) {
     auto loc = getToken().getLoc();
     // ref x is "a.b.c"
@@ -4146,14 +4082,14 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     auto kind = getToken().getKind();
     if (kind != FIRToken::string)
       return emitError(loc, "expected string in ref statement");
-    resolved = builder.getStringAttr(getToken().getStringValue());
+    resolved = StringAttr::get(getContext(), getToken().getStringValue());
     consumeToken(FIRToken::string);
 
     refStatements.push_back(RefStatementInfo{refName, resolved, loc});
   }
 
   // Build paths array.  One entry for each ref-type port.
-  SmallVector<Attribute> internalPathAttrs;
+  SmallVector<Attribute> internalPaths;
   auto refPorts = llvm::make_filter_range(
       portList, [&](auto &port) { return type_isa<RefType>(port.type); });
   llvm::SmallBitVector usedRefs(refStatements.size());
@@ -4161,8 +4097,8 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     // Reject input reftype ports on extmodule's per spec,
     // as well as on intmodule's which is not mentioned in spec.
     if (!port.isOutput())
-      return emitError(
-          portIds[port.name],
+      return mlir::emitError(
+          port.loc,
           "references in ports must be output on extmodule and intmodule");
     auto *refStmtIt = llvm::find_if(
         refStatements, [&](const auto &r) { return r.refName == port.name; });
@@ -4175,31 +4111,300 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     }
 
     usedRefs.set(std::distance(refStatements.begin(), refStmtIt));
-    internalPathAttrs.push_back(refStmtIt->resolvedPath);
+    internalPaths.push_back(refStmtIt->resolvedPath);
   }
-  if (!refStatements.empty() &&
-      internalPathAttrs.size() != refStatements.size()) {
-    assert(internalPathAttrs.size() < refStatements.size());
+
+  if (!refStatements.empty() && internalPaths.size() != refStatements.size()) {
+    assert(internalPaths.size() < refStatements.size());
     assert(!usedRefs.all());
     auto idx = usedRefs.find_first_unset();
     assert(idx != -1);
     return emitError(refStatements[idx].loc, "unused ref statement");
   }
-  internalPaths = builder.getArrayAttr(internalPathAttrs);
 
-  if (isExtModule) {
-    auto convention = getConstants().options.scalarizeExtModules
-                          ? Convention::Scalarized
-                          : Convention::Internal;
-    auto conventionAttr = ConventionAttr::get(builder.getContext(), convention);
-    builder.create<FExtModuleOp>(
-        info.getLoc(), name, conventionAttr, portList, defName, annotations,
-        builder.getArrayAttr(parameters), internalPaths);
-  } else
-    builder.create<FIntModuleOp>(info.getLoc(), name, portList, intName,
-                                 annotations, builder.getArrayAttr(parameters),
-                                 internalPaths);
+  internalPathsResult = ArrayAttr::get(getContext(), internalPaths);
   return success();
+}
+
+/// We're going to defer parsing this module, so just skip tokens until we
+/// get to the next module or the end of the file.
+ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
+  while (true) {
+    switch (getToken().getKind()) {
+
+    // End of file or invalid token will be handled by outer level.
+    case FIRToken::eof:
+    case FIRToken::error:
+      return success();
+
+    // If we got to the next top-level declaration, then we're done.
+    case FIRToken::kw_class:
+    case FIRToken::kw_declgroup:
+    case FIRToken::kw_extmodule:
+    case FIRToken::kw_intmodule:
+    case FIRToken::kw_module:
+    case FIRToken::kw_type:
+      // All module declarations should have the same indentation
+      // level. Use this fact to differentiate between module
+      // declarations and usages of "module" as identifiers.
+      if (getIndentation() == indent)
+        return success();
+      [[fallthrough]];
+    default:
+      consumeToken();
+      break;
+    }
+  }
+}
+
+/// parameter ::= 'parameter' id '=' intLit NEWLINE
+/// parameter ::= 'parameter' id '=' StringLit NEWLINE
+/// parameter ::= 'parameter' id '=' floatingpoint NEWLINE
+/// parameter ::= 'parameter' id '=' RawString NEWLINE
+ParseResult FIRCircuitParser::parseParameter(StringAttr &resultName,
+                                             TypedAttr &resultValue,
+                                             SMLoc &resultLoc) {
+  mlir::Builder builder(getContext());
+
+  consumeToken(FIRToken::kw_parameter);
+  auto loc = getToken().getLoc();
+
+  StringRef name;
+  if (parseId(name, "expected parameter name") ||
+      parseToken(FIRToken::equal, "expected '=' in parameter"))
+    return failure();
+
+  TypedAttr value;
+  switch (getToken().getKind()) {
+  default:
+    return emitError("expected parameter value"), failure();
+  case FIRToken::integer:
+  case FIRToken::signed_integer: {
+    APInt result;
+    if (parseIntLit(result, "invalid integer parameter"))
+      return failure();
+
+    // If the integer parameter is less than 32-bits, sign extend this to a
+    // 32-bit value.  This needs to eventually emit as a 32-bit value in
+    // Verilog and we want to get the size correct immediately.
+    if (result.getBitWidth() < 32)
+      result = result.sext(32);
+
+    value = builder.getIntegerAttr(
+        builder.getIntegerType(result.getBitWidth(), result.isSignBitSet()),
+        result);
+    break;
+  }
+  case FIRToken::string: {
+    // Drop the double quotes and unescape.
+    value = builder.getStringAttr(getToken().getStringValue());
+    consumeToken(FIRToken::string);
+    break;
+  }
+  case FIRToken::raw_string: {
+    // Drop the single quotes and unescape the ones inside.
+    value = builder.getStringAttr(getToken().getRawStringValue());
+    consumeToken(FIRToken::raw_string);
+    break;
+  }
+  case FIRToken::floatingpoint:
+    double v;
+    if (!llvm::to_float(getTokenSpelling(), v))
+      return emitError("invalid float parameter syntax"), failure();
+
+    value = builder.getF64FloatAttr(v);
+    consumeToken(FIRToken::floatingpoint);
+    break;
+  }
+
+  resultName = builder.getStringAttr(name);
+  resultValue = value;
+  resultLoc = loc;
+  return success();
+}
+
+/// parameter-list ::= parameter*
+ParseResult FIRCircuitParser::parseParameterList(ArrayAttr &resultParameters) {
+  SmallVector<Attribute, 8> parameters;
+  SmallPtrSet<StringAttr, 8> seen;
+  while (getToken().is(FIRToken::kw_parameter)) {
+    StringAttr name;
+    TypedAttr value;
+    SMLoc loc;
+    if (parseParameter(name, value, loc))
+      return failure();
+    if (!seen.insert(name).second)
+      return emitError(loc,
+                       "redefinition of parameter '" + name.getValue() + "'");
+    parameters.push_back(ParamDeclAttr::get(name, value));
+  }
+  resultParameters = ArrayAttr::get(getContext(), parameters);
+  return success();
+}
+
+/// class ::= 'class' id ':' info? INDENT portlist simple_stmt_block DEDENT
+ParseResult FIRCircuitParser::parseClass(CircuitOp circuit, unsigned indent) {
+  StringAttr name;
+  SmallVector<PortInfo, 8> portList;
+  SmallVector<SMLoc> portLocs;
+  LocWithInfo info(getToken().getLoc(), this);
+  consumeToken(FIRToken::kw_class);
+  if (parseId(name, "expected class name") ||
+      parseToken(FIRToken::colon, "expected ':' in class definition") ||
+      info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
+    return failure();
+
+  if (name == circuit.getName())
+    return mlir::emitError(info.getLoc(),
+                           "class cannot be the top of a circuit");
+
+  for (auto &portInfo : portList)
+    if (!isa<PropertyType>(portInfo.type))
+      return mlir::emitError(portInfo.loc,
+                             "ports on classes must be properties");
+
+  // build it
+  auto builder = circuit.getBodyBuilder();
+  auto classOp = builder.create<ClassOp>(info.getLoc(), name, portList);
+  deferredModules.emplace_back(
+      DeferredModuleToParse{classOp, portLocs, getLexer().getCursor(), indent});
+
+  return skipToModuleEnd(indent);
+}
+
+/// extmodule ::=
+///        'extmodule' id ':' info?
+///        INDENT portlist defname? parameter-list ref-list DEDENT
+/// defname   ::= 'defname' '=' id NEWLINE
+ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
+                                             unsigned indent) {
+  StringAttr name;
+  SmallVector<PortInfo, 8> portList;
+  SmallVector<SMLoc> portLocs;
+  LocWithInfo info(getToken().getLoc(), this);
+  consumeToken(FIRToken::kw_extmodule);
+  if (parseId(name, "expected extmodule name") ||
+      parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
+      info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
+    return failure();
+
+  StringRef defName;
+  if (consumeIf(FIRToken::kw_defname)) {
+    if (parseToken(FIRToken::equal, "expected '=' in defname") ||
+        parseId(defName, "expected defname name"))
+      return failure();
+  }
+
+  ArrayAttr parameters;
+  ArrayAttr internalPaths;
+  if (parseParameterList(parameters) || parseRefList(portList, internalPaths))
+    return failure();
+
+  auto builder = circuit.getBodyBuilder();
+  auto convention = getConstants().options.scalarizeExtModules
+                        ? Convention::Scalarized
+                        : Convention::Internal;
+  auto conventionAttr = ConventionAttr::get(getContext(), convention);
+  auto annotations = ArrayAttr::get(getContext(), {});
+  builder.create<FExtModuleOp>(info.getLoc(), name, conventionAttr, portList,
+                               defName, annotations, parameters, internalPaths);
+  return success();
+}
+
+/// intmodule ::=
+///        'intmodule' id ':' info?
+///        INDENT portlist intname parameter-list ref-list DEDENT
+/// intname   ::= 'intrinsic' '=' id NEWLINE
+ParseResult FIRCircuitParser::parseIntModule(CircuitOp circuit,
+                                             unsigned indent) {
+  StringAttr name;
+  SmallVector<PortInfo, 8> portList;
+  SmallVector<SMLoc> portLocs;
+  LocWithInfo info(getToken().getLoc(), this);
+  consumeToken(FIRToken::kw_intmodule);
+  if (parseId(name, "expected intmodule name") ||
+      parseToken(FIRToken::colon, "expected ':' in intmodule definition") ||
+      info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
+    return failure();
+
+  StringRef intName;
+  if (consumeIf(FIRToken::kw_intrinsic)) {
+    if (parseToken(FIRToken::equal, "expected '=' in intrinsic") ||
+        parseId(intName, "expected intrinsic name"))
+      return failure();
+  }
+
+  ArrayAttr parameters;
+  ArrayAttr internalPaths;
+  if (parseParameterList(parameters) || parseRefList(portList, internalPaths))
+    return failure();
+
+  ArrayAttr annotations = getConstants().emptyArrayAttr;
+  auto builder = circuit.getBodyBuilder();
+  builder.create<FIntModuleOp>(info.getLoc(), name, portList, intName,
+                               annotations, parameters, internalPaths);
+  return success();
+}
+
+/// module ::= 'module' id ':' info? INDENT portlist simple_stmt_block DEDENT
+ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, unsigned indent) {
+  StringAttr name;
+  SmallVector<PortInfo, 8> portList;
+  SmallVector<SMLoc> portLocs;
+  LocWithInfo info(getToken().getLoc(), this);
+  consumeToken(FIRToken::kw_module);
+  if (parseId(name, "expected module name") ||
+      parseToken(FIRToken::colon, "expected ':' in module definition") ||
+      info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
+    return failure();
+
+  auto circuitName = circuit.getName();
+  auto isMainModule = (name == circuitName);
+  ArrayAttr annotations = getConstants().emptyArrayAttr;
+  auto convention = Convention::Internal;
+  if (isMainModule && getConstants().options.scalarizeTopModule)
+    convention = Convention::Scalarized;
+  auto conventionAttr = ConventionAttr::get(getContext(), convention);
+  auto builder = circuit.getBodyBuilder();
+  auto moduleOp = builder.create<FModuleOp>(info.getLoc(), name, conventionAttr,
+                                            portList, annotations);
+  auto visibility = isMainModule ? SymbolTable::Visibility::Public
+                                 : SymbolTable::Visibility::Private;
+  SymbolTable::setSymbolVisibility(moduleOp, visibility);
+
+  // Parse the body of this module after all prototypes have been parsed. This
+  // allows us to handle forward references correctly.
+  deferredModules.emplace_back(DeferredModuleToParse{
+      moduleOp, portLocs, getLexer().getCursor(), indent});
+
+  if (skipToModuleEnd(indent))
+    return failure();
+  return success();
+}
+
+ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
+                                                      unsigned indent) {
+  switch (getToken().getKind()) {
+  case FIRToken::kw_class:
+    return parseClass(circuit, indent);
+  case FIRToken::kw_declgroup:
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError()
+             << "unexpected token: optional groups are a FIRRTL 3.1.0+ "
+                "feature, but the specified FIRRTL version was "
+             << version;
+    return parseGroupDecl(circuit);
+  case FIRToken::kw_extmodule:
+    return parseExtModule(circuit, indent);
+  case FIRToken::kw_intmodule:
+    return parseIntModule(circuit, indent);
+  case FIRToken::kw_module:
+    return parseModule(circuit, indent);
+  case FIRToken::kw_type:
+    return parseTypeDecl();
+  default:
+    return emitError(getToken().getLoc(), "unknown toplevel definition");
+  }
 }
 
 // Parse a type declaration.
@@ -4208,6 +4413,11 @@ ParseResult FIRCircuitParser::parseTypeDecl() {
   FIRRTLType type;
   consumeToken();
   auto loc = getToken().getLoc();
+
+  if (getToken().isKeyword())
+    return emitError(loc) << "cannot use keyword '" << getToken().getSpelling()
+                          << "' for type alias name";
+
   if (parseId(id, "expected type name") ||
       parseToken(FIRToken::equal, "expected '=' in type decl") ||
       parseType(type, "expected a type"))
@@ -4228,12 +4438,70 @@ ParseResult FIRCircuitParser::parseTypeDecl() {
   return success();
 }
 
+// Parse a group declaration.
+ParseResult FIRCircuitParser::parseGroupDecl(CircuitOp circuit) {
+  auto baseIndent = getIndentation();
+
+  // A stack of all groups that are possibly parents of the current group.
+  SmallVector<std::pair<std::optional<unsigned>, GroupDeclOp>> groupStack;
+
+  // Parse a single group and add it to the groupStack.
+  auto parseOne = [&](Block *block) -> ParseResult {
+    auto indent = getIndentation();
+    StringRef id, convention;
+    LocWithInfo info(getToken().getLoc(), this);
+    consumeToken();
+    if (parseId(id, "expected group name") || parseGetSpelling(convention))
+      return failure();
+    auto groupConvention = symbolizeGroupConvention(convention);
+    if (!groupConvention) {
+      emitError() << "unknown convention '" << convention
+                  << "' (did you misspell it?)";
+      return failure();
+    }
+    consumeToken();
+    if (parseToken(FIRToken::colon, "expected ':' after group definition") ||
+        info.parseOptionalInfo())
+      return failure();
+    auto builder = OpBuilder::atBlockEnd(block);
+    // Create the group declaration and give it an empty block.
+    auto groupDeclOp =
+        builder.create<GroupDeclOp>(info.getLoc(), id, *groupConvention);
+    groupDeclOp->getRegion(0).push_back(new Block());
+    groupStack.push_back({indent, groupDeclOp});
+    return success();
+  };
+
+  if (parseOne(circuit.getBodyBlock()))
+    return failure();
+
+  // Parse any nested groups.
+  while (getIndentation() > baseIndent) {
+    switch (getToken().getKind()) {
+    case FIRToken::kw_declgroup: {
+      // Pop nested groups off the stack until we find out what group to insert
+      // this into.
+      while (groupStack.back().first >= getIndentation())
+        groupStack.pop_back();
+      auto parentGroup = groupStack.back().second;
+      if (parseOne(&parentGroup.getBody().front()))
+        return failure();
+      break;
+    }
+    default:
+      return emitError("expected 'declgroup'"), failure();
+    }
+  }
+
+  return success();
+}
+
 // Parse the body of this module.
 ParseResult
 FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
-  FModuleOp moduleOp = deferredModule.moduleOp;
+  FModuleLike moduleOp = deferredModule.moduleOp;
+  auto &body = moduleOp->getRegion(0).front();
   auto &portLocs = deferredModule.portLocs;
-  auto &moduleTarget = deferredModule.moduleTarget;
 
   // We parse the body of this module with its own lexer, enabling parallel
   // parsing with the rest of the other module bodies.
@@ -4242,26 +4510,23 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
   // Reset the parser/lexer state back to right after the port list.
   deferredModule.lexerCursor.restore(moduleBodyLexer);
 
-  FIRModuleContext moduleContext(getConstants(), moduleBodyLexer,
-                                 std::move(moduleTarget), version);
+  FIRModuleContext moduleContext(getConstants(), moduleBodyLexer, version);
 
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
-  Namespace modNameSpace;
   auto portList = moduleOp.getPorts();
-  auto portArgs = moduleOp.getArguments();
+  auto portArgs = body.getArguments();
   for (auto tuple : llvm::zip(portList, portLocs, portArgs)) {
     PortInfo &port = std::get<0>(tuple);
     llvm::SMLoc loc = std::get<1>(tuple);
     BlockArgument portArg = std::get<2>(tuple);
-    if (port.sym)
-      modNameSpace.newName(port.sym.getSymName().getValue());
+    assert(!port.sym);
     if (moduleContext.addSymbolEntry(port.getName(), portArg, loc))
       return failure();
   }
 
-  FIRStmtParser stmtParser(*moduleOp.getBodyBlock(), moduleContext,
-                           modNameSpace, version);
+  ModuleNamespace modNameSpace(moduleOp);
+  FIRStmtParser stmtParser(body, moduleContext, modNameSpace, version);
 
   // Parse the moduleBlock.
   auto result = stmtParser.parseSimpleStmtBlock(deferredModule.indent);
@@ -4336,8 +4601,6 @@ ParseResult FIRCircuitParser::parseCircuit(
   OpBuilder b(mlirModule.getBodyRegion());
   auto circuit = b.create<CircuitOp>(info.getLoc(), name);
 
-  std::string circuitTarget = ("~" + name.getValue()).str();
-
   // A timer to get execution time of annotation parsing.
   auto parseAnnotationTimer = ts.nest("Parse annotations");
 
@@ -4347,14 +4610,13 @@ ParseResult FIRCircuitParser::parseCircuit(
   // "append" semantics.
   SmallVector<Attribute> annos;
   if (!inlineAnnotations.empty())
-    if (importAnnotationsRaw(inlineAnnotationsLoc, circuitTarget,
-                             inlineAnnotations, annos))
+    if (importAnnotationsRaw(inlineAnnotationsLoc, inlineAnnotations, annos))
       return failure();
 
   // Deal with the annotation file if one was specified
   for (auto *annotationsBuf : annotationsBufs)
-    if (importAnnotationsRaw(info.getFIRLoc(), circuitTarget,
-                             annotationsBuf->getBuffer(), annos))
+    if (importAnnotationsRaw(info.getFIRLoc(), annotationsBuf->getBuffer(),
+                             annos))
       return failure();
 
   parseAnnotationTimer.stop();
@@ -4363,8 +4625,7 @@ ParseResult FIRCircuitParser::parseCircuit(
   // Process OMIR files as annotations with a class of
   // "freechips.rocketchip.objectmodel.OMNode"
   for (auto *omirBuf : omirBufs)
-    if (importOMIR(circuit, info.getFIRLoc(), circuitTarget,
-                   omirBuf->getBuffer(), annos))
+    if (importOMIR(circuit, info.getFIRLoc(), omirBuf->getBuffer(), annos))
       return failure();
 
   parseOMIRTimer.stop();
@@ -4395,24 +4656,21 @@ ParseResult FIRCircuitParser::parseCircuit(
       emitError("unexpected token in circuit");
       return failure();
 
-    case FIRToken::kw_type: {
-      if (parseTypeDecl())
-        return failure();
-      break;
-    }
-
-    case FIRToken::kw_module:
+    case FIRToken::kw_class:
+    case FIRToken::kw_declgroup:
     case FIRToken::kw_extmodule:
-    case FIRToken::kw_intmodule: {
+    case FIRToken::kw_intmodule:
+    case FIRToken::kw_module:
+    case FIRToken::kw_type: {
       auto indent = getIndentation();
       if (!indent.has_value())
         return emitError("'module' must be first token on its line"), failure();
-      unsigned moduleIndent = *indent;
+      unsigned definitionIndent = *indent;
 
-      if (moduleIndent <= circuitIndent)
+      if (definitionIndent <= circuitIndent)
         return emitError("module should be indented more"), failure();
 
-      if (parseModule(circuit, circuitTarget, moduleIndent))
+      if (parseToplevelDefinition(circuit, definitionIndent))
         return failure();
       break;
     }
@@ -4444,6 +4702,10 @@ DoneParsing:
     if (circuit.getOps<FModuleLike>().empty()) {
       return mlir::emitError(circuit.getLoc())
              << "no modules found, circuit must contain one or more modules";
+    }
+    if (auto *notModule = circuit.lookupSymbol(circuit.getName())) {
+      return notModule->emitOpError()
+             << "cannot have the same name as the circuit";
     }
     return mlir::emitError(circuit.getLoc())
            << "no main module found, circuit '" << circuit.getName()

@@ -54,16 +54,6 @@ static Type tupleToStruct(TupleType tuple) {
   return hw::StructType::get(ctx, hwfields);
 }
 
-/// Converts the range of 'types' into a `hw`-dialect type. The range will be
-/// converted to a `hw.struct` type.
-// NOLINTNEXTLINE(misc-no-recursion)
-static Type toHWType(Type t);
-static Type toHWType(TypeRange types) {
-  if (types.size() == 1)
-    return toHWType(types.front());
-  return toHWType(mlir::TupleType::get(types[0].getContext(), types));
-}
-
 /// Converts any type 't' into a `hw`-compatible type.
 /// tuple -> hw.struct
 /// none -> i0
@@ -88,7 +78,7 @@ static Type toESIHWType(Type t) {
       llvm::TypeSwitch<Type, Type>(t)
           .Case([](ValueType vt) {
             return esi::ChannelType::get(vt.getContext(),
-                                         toHWType(vt.getInnerTypes()));
+                                         toHWType(vt.getInnerType()));
           })
           .Case([](TokenType tt) {
             return esi::ChannelType::get(tt.getContext(),
@@ -116,13 +106,13 @@ public:
   ESITypeConverter() {
     addConversion([](Type type) -> Type { return toESIHWType(type); });
     addConversion([](esi::ChannelType t) -> Type { return t; });
-
     addTargetMaterialization(
         [](mlir::OpBuilder &builder, mlir::Type resultType,
            mlir::ValueRange inputs,
            mlir::Location loc) -> std::optional<mlir::Value> {
           if (inputs.size() != 1)
             return std::nullopt;
+
           return inputs[0];
         });
 
@@ -132,6 +122,7 @@ public:
            mlir::Location loc) -> std::optional<mlir::Value> {
           if (inputs.size() != 1)
             return std::nullopt;
+
           return inputs[0];
         });
   }
@@ -320,24 +311,6 @@ struct RTLBuilder {
   Value concat(ValueRange values, StringRef name = {}) {
     return buildNamedOp([&]() { return b.create<comb::ConcatOp>(loc, values); },
                         name);
-  }
-
-  ///  Packs a list of values into a hw.struct.
-  Value pack(ValueRange values, Type structType = Type(), StringRef name = {}) {
-    if (!structType)
-      structType = toHWType(values.getTypes());
-
-    return buildNamedOp(
-        [&]() { return b.create<hw::StructCreateOp>(loc, structType, values); },
-        name);
-  }
-
-  ///  Unpacks a hw.struct into a list of values.
-  ValueRange unpack(Value value) {
-    auto structType = value.getType().cast<hw::StructType>();
-    llvm::SmallVector<Type> innerTypes;
-    structType.getInnerTypes(innerTypes);
-    return b.create<hw::StructExplodeOp>(loc, innerTypes, value).getResults();
   }
 
   llvm::SmallVector<Value> extractBits(Value v, StringRef name = {}) {
@@ -685,6 +658,34 @@ public:
   }
 };
 
+class ToESIConversionPattern : public OpConversionPattern<ToESIOp> {
+  // Essentially a no-op, seeing as the type converter does the heavy
+  // lifting here.
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ToESIOp op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOp(op, operands.getOperands());
+    return success();
+  }
+};
+
+class FromESIConversionPattern : public OpConversionPattern<FromESIOp> {
+  // Essentially a no-op, seeing as the type converter does the heavy
+  // lifting here.
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FromESIOp op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOp(op, operands.getOperands());
+    return success();
+  }
+};
+
 class SinkConversionPattern : public OpConversionPattern<SinkOp> {
 public:
   using OpConversionPattern<SinkOp>::OpConversionPattern;
@@ -729,14 +730,7 @@ public:
     RTLBuilder rtlb(op.getLoc(), rewriter);
     auto &input = io.inputs[0];
     auto &output = io.outputs[0];
-
-    Value packedData;
-    if (operands.getInputs().size() > 1)
-      packedData = rtlb.pack(operands.getInputs());
-    else
-      packedData = operands.getInputs()[0];
-
-    output.data->setValue(packedData);
+    output.data->setValue(operands.getInput());
     connect(input, output);
     rewriter.replaceOp(op, output.channel);
     return success();
@@ -759,10 +753,7 @@ public:
     auto &output = io.outputs[0];
 
     llvm::SmallVector<Value> unpackedValues;
-    if (op.getInput().getType().cast<ValueType>().getInnerTypes().size() != 1)
-      unpackedValues = rtlb.unpack(input.data);
-    else
-      unpackedValues.push_back(input.data);
+    unpackedValues.push_back(input.data);
 
     connect(input, output);
     llvm::SmallVector<Value> outputs;
@@ -865,7 +856,8 @@ public:
                     SelectConversionPattern, BranchConversionPattern,
                     PackConversionPattern, UnpackConversionPattern,
                     BufferConversionPattern, SourceConversionPattern,
-                    SinkConversionPattern, TypeConversionPattern>(
+                    SinkConversionPattern, TypeConversionPattern,
+                    ToESIConversionPattern, FromESIConversionPattern>(
         typeConverter, mod.getContext());
 
     if (failed(applyPartialConversion(mod, target, std::move(patterns))))

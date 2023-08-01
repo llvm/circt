@@ -55,7 +55,7 @@ firrtl.circuit "NLARenaming" attributes {
   // CHECK:      firrtl.module private @Foo
   // CHECK:      firrtl.module private @DUT
   // CHECK-SAME:   {circt.nonlocal = @[[nla_DUTLeafModule_clone]], class = "nla_DUTLeafModule"}
-  // CHECK-NEXT    firrtl.instance Foo sym @[[inst_sym]]
+  // CHECK-NEXT:    firrtl.instance Foo sym @[[inst_sym]]
   firrtl.module private @DUT(
     in %in: !firrtl.uint<1> sym @in [{circt.nonlocal = @nla_DUTLeafPort, class = "nla_DUTLeafPort"}]
   ) attributes {
@@ -117,7 +117,7 @@ firrtl.circuit "NLARenamingNewNLAs" attributes {
 
   // CHECK:      firrtl.module private @DUT
   // CHECK-SAME:   in %in{{.+}} [{circt.nonlocal = @[[nla_DUTLeafPort_clone]], class = "nla_DUTLeafPort"}]
-  // CHECK-NEXT    firrtl.instance Foo sym @[[inst_sym]]
+  // CHECK-NEXT:    firrtl.instance Foo sym @[[inst_sym]]
   firrtl.module private @DUT(
     in %in: !firrtl.uint<1> [{circt.nonlocal = @nla_DUTLeafPort, class = "nla_DUTLeafPort"}]
   ) attributes {

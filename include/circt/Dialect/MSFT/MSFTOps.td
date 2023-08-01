@@ -171,8 +171,9 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
 
   let extraClassDefinition = [{
     size_t $cppClass::getNumPorts() {
+      // This is excessively expensive
       auto ports = getPorts();
-      return ports.inputs.size() + ports.outputs.size();
+      return ports.size();
     }
 
     circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
@@ -189,7 +190,7 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
 }
 
 def MSFTModuleExternOp : MSFTOp<"module.extern",
-      [Symbol, FunctionOpInterface, HasParent<"mlir::ModuleOp">]> {
+      [Symbol, FunctionOpInterface, HasParent<"mlir::ModuleOp">, DeclareOpInterfaceMethods<HWModuleLike>]> {
   let summary = "MSFT external Module";
   let description = [{
     Identical to `hw.module.extern`, and trivially lowers to that. This op

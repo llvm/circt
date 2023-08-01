@@ -750,12 +750,12 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   // Assemble the module and name path for the NLA. Also attach an NLA reference
   // annotation to each instance participating in the path.
   SmallVector<Attribute> namepath;
-  auto addToPath = [&](Operation *op, StringAttr name) {
+  auto addToPath = [&](Operation *op) {
     namepath.push_back(getInnerRefTo(op));
   };
   // Add the path up to where the NLA starts.
   for (auto inst : paths[0])
-    addToPath(inst, inst.getInstanceNameAttr());
+    addToPath(inst);
   // Add the path from the NLA to the op.
   if (tracker.nla) {
     auto path = tracker.nla.getNamepath().getValue();
@@ -769,7 +769,7 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
       });
       assert(it != node->end() &&
              "Instance referenced by NLA does not exist in module");
-      addToPath((*it)->getInstance(), ref.getName());
+      addToPath((*it)->getInstance());
     }
   }
 

@@ -49,6 +49,12 @@ def Dedup : Pass<"arc-dedup", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::arc::createDedupPass()";
   let dependentDialects = ["arc::ArcDialect"];
+  let statistics = [
+    Statistic<"dedupPassNumArcsDeduped", "dedupPassNumArcsDeduped",
+      "Number of arcs deduped">,
+    Statistic<"dedupPassTotalOps", "dedupPassTotalOps",
+      "Total number of ops deduped">,
+  ];
 }
 
 def GroupResetsAndEnables : Pass<"arc-group-resets-and-enables",

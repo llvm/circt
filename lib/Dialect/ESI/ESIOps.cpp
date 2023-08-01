@@ -339,7 +339,7 @@ static ServiceDeclOpInterface getServiceDecl(Operation *op,
                                              SymbolTableCollection &symbolTable,
                                              hw::InnerRefAttr servicePort) {
   ModuleOp top = op->getParentOfType<mlir::ModuleOp>();
-  SymbolTable topSyms = symbolTable.getSymbolTable(top);
+  SymbolTable &topSyms = symbolTable.getSymbolTable(top);
 
   StringAttr modName = servicePort.getModule();
   return topSyms.lookup<ServiceDeclOpInterface>(modName);
@@ -454,10 +454,10 @@ void CustomServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
 LogicalResult ServiceHierarchyMetadataOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
   ModuleOp top = getOperation()->getParentOfType<mlir::ModuleOp>();
-  SymbolTable topSyms = symbolTable.getSymbolTable(top);
   auto sym = getServiceSymbol();
   if (!sym)
     return success();
+  SymbolTable &topSyms = symbolTable.getSymbolTable(top);
   auto serviceDeclOp = topSyms.lookup<ServiceDeclOpInterface>(*sym);
   if (!serviceDeclOp)
     return emitOpError("Could not find service declaration ") << *sym;
@@ -481,7 +481,8 @@ LogicalResult ESIPureModuleOp::verify() {
     });
   };
 
-  DenseMap<StringAttr, std::tuple<hw::PortDirection, Type, Operation *>> ports;
+  DenseMap<StringAttr, std::tuple<hw::ModulePort::Direction, Type, Operation *>>
+      ports;
   for (Operation &op : body.getOperations()) {
     if (hw::HWInstanceLike inst = dyn_cast<hw::HWInstanceLike>(op)) {
       if (llvm::any_of(op.getOperands(), [](Value v) {
@@ -507,13 +508,13 @@ LogicalResult ESIPureModuleOp::verify() {
       Type portType = port.getResult().getType();
       if (existing != ports.end()) {
         auto [dir, type, op] = existing->getSecond();
-        if (dir != hw::PortDirection::INPUT || type != portType)
+        if (dir != hw::ModulePort::Direction::Input || type != portType)
           return (port.emitOpError("port '")
                   << port.getName() << "' previously declared as type " << type)
               .attachNote(op->getLoc());
       }
       ports[port.getNameAttr()] = std::make_tuple(
-          hw::PortDirection::INPUT, portType, port.getOperation());
+          hw::ModulePort::Direction::Input, portType, port.getOperation());
     } else if (auto port = dyn_cast<ESIPureModuleOutputOp>(op)) {
       auto existing = ports.find(port.getNameAttr());
       if (existing != ports.end())
@@ -521,8 +522,8 @@ LogicalResult ESIPureModuleOp::verify() {
                 << port.getName() << "' previously declared")
             .attachNote(std::get<2>(existing->getSecond())->getLoc());
       ports[port.getNameAttr()] =
-          std::make_tuple(hw::PortDirection::INPUT, port.getValue().getType(),
-                          port.getOperation());
+          std::make_tuple(hw::ModulePort::Direction::Input,
+                          port.getValue().getType(), port.getOperation());
     }
   }
   return success();

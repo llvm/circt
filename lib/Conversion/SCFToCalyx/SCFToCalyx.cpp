@@ -23,6 +23,7 @@
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/Support/LogicalResult.h"
@@ -64,7 +65,26 @@ public:
     return getOperation().getConditionOp().getOperand(0);
   }
 
-  std::optional<uint64_t> getBound() override { return std::nullopt; }
+  std::optional<int64_t> getBound() override { return std::nullopt; }
+};
+
+class ScfForOp : public calyx::RepeatOpInterface<scf::ForOp> {
+public:
+  explicit ScfForOp(scf::ForOp op) : calyx::RepeatOpInterface<scf::ForOp>(op) {}
+
+  Block::BlockArgListType getBodyArgs() override {
+    return getOperation().getLoopBody().getArguments();
+  }
+
+  Block *getBodyBlock() override {
+    return &getOperation().getLoopBody().getBlocks().front();
+  }
+
+  std::optional<int64_t> getBound() override {
+    return constantTripCount(getOperation().getLowerBound(),
+                             getOperation().getUpperBound(),
+                             getOperation().getStep());
+  }
 };
 
 //===----------------------------------------------------------------------===//
@@ -74,21 +94,89 @@ public:
 struct WhileScheduleable {
   /// While operation to schedule.
   ScfWhileOp whileOp;
-  /// The group(s) to schedule before the while operation These groups should
-  /// set the initial value(s) of the loop init_args register(s).
-  SmallVector<calyx::GroupOp> initGroups;
+};
+
+struct ForScheduleable {
+  /// For operation to schedule.
+  ScfForOp forOp;
+  /// Bound
+  uint64_t bound;
 };
 
 /// A variant of types representing scheduleable operations.
-using Scheduleable = std::variant<calyx::GroupOp, WhileScheduleable>;
+using Scheduleable =
+    std::variant<calyx::GroupOp, WhileScheduleable, ForScheduleable>;
+
+class WhileLoopLoweringStateInterface
+    : calyx::LoopLoweringStateInterface<ScfWhileOp> {
+public:
+  SmallVector<calyx::GroupOp> getWhileLoopInitGroups(ScfWhileOp op) {
+    return getLoopInitGroups(std::move(op));
+  }
+  calyx::GroupOp buildWhileLoopIterArgAssignments(
+      OpBuilder &builder, ScfWhileOp op, calyx::ComponentOp componentOp,
+      Twine uniqueSuffix, MutableArrayRef<OpOperand> ops) {
+    return buildLoopIterArgAssignments(builder, std::move(op), componentOp,
+                                       uniqueSuffix, ops);
+  }
+  void addWhileLoopIterReg(ScfWhileOp op, calyx::RegisterOp reg, unsigned idx) {
+    return addLoopIterReg(std::move(op), reg, idx);
+  }
+  const DenseMap<unsigned, calyx::RegisterOp> &
+  getWhileLoopIterRegs(ScfWhileOp op) {
+    return getLoopIterRegs(std::move(op));
+  }
+  void setWhileLoopLatchGroup(ScfWhileOp op, calyx::GroupOp group) {
+    return setLoopLatchGroup(std::move(op), group);
+  }
+  calyx::GroupOp getWhileLoopLatchGroup(ScfWhileOp op) {
+    return getLoopLatchGroup(std::move(op));
+  }
+  void setWhileLoopInitGroups(ScfWhileOp op,
+                              SmallVector<calyx::GroupOp> groups) {
+    return setLoopInitGroups(std::move(op), std::move(groups));
+  }
+};
+
+class ForLoopLoweringStateInterface
+    : calyx::LoopLoweringStateInterface<ScfForOp> {
+public:
+  SmallVector<calyx::GroupOp> getForLoopInitGroups(ScfForOp op) {
+    return getLoopInitGroups(std::move(op));
+  }
+  calyx::GroupOp buildForLoopIterArgAssignments(
+      OpBuilder &builder, ScfForOp op, calyx::ComponentOp componentOp,
+      Twine uniqueSuffix, MutableArrayRef<OpOperand> ops) {
+    return buildLoopIterArgAssignments(builder, std::move(op), componentOp,
+                                       uniqueSuffix, ops);
+  }
+  void addForLoopIterReg(ScfForOp op, calyx::RegisterOp reg, unsigned idx) {
+    return addLoopIterReg(std::move(op), reg, idx);
+  }
+  const DenseMap<unsigned, calyx::RegisterOp> &getForLoopIterRegs(ScfForOp op) {
+    return getLoopIterRegs(std::move(op));
+  }
+  calyx::RegisterOp getForLoopIterReg(ScfForOp op, unsigned idx) {
+    return getLoopIterReg(std::move(op), idx);
+  }
+  void setForLoopLatchGroup(ScfForOp op, calyx::GroupOp group) {
+    return setLoopLatchGroup(std::move(op), group);
+  }
+  calyx::GroupOp getForLoopLatchGroup(ScfForOp op) {
+    return getLoopLatchGroup(std::move(op));
+  }
+  void setForLoopInitGroups(ScfForOp op, SmallVector<calyx::GroupOp> groups) {
+    return setLoopInitGroups(std::move(op), std::move(groups));
+  }
+};
 
 /// Handles the current state of lowering of a Calyx component. It is mainly
 /// used as a key/value store for recording information during partial lowering,
 /// which is required at later lowering passes.
-class ComponentLoweringState
-    : public calyx::ComponentLoweringStateInterface,
-      public calyx::LoopLoweringStateInterface<ScfWhileOp>,
-      public calyx::SchedulerInterface<Scheduleable> {
+class ComponentLoweringState : public calyx::ComponentLoweringStateInterface,
+                               public WhileLoopLoweringStateInterface,
+                               public ForLoopLoweringStateInterface,
+                               public calyx::SchedulerInterface<Scheduleable> {
 public:
   ComponentLoweringState(calyx::ComponentOp component)
       : calyx::ComponentLoweringStateInterface(component) {}
@@ -114,7 +202,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
           TypeSwitch<mlir::Operation *, bool>(_op)
               .template Case<arith::ConstantOp, ReturnOp, BranchOpInterface,
                              /// SCF
-                             scf::YieldOp, scf::WhileOp,
+                             scf::YieldOp, scf::WhileOp, scf::ForOp,
                              /// memref
                              memref::AllocOp, memref::AllocaOp, memref::LoadOp,
                              memref::StoreOp,
@@ -171,6 +259,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, memref::LoadOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::StoreOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, scf::WhileOp whileOp) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, scf::ForOp forOp) const;
 
   /// buildLibraryOp will build a TCalyxLibOp inside a TGroupOp based on the
   /// source operation TSrcOp.
@@ -315,52 +404,68 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   Value memref = loadOp.getMemref();
   auto memoryInterface =
       getState<ComponentLoweringState>().getMemoryInterface(memref);
-  if (calyx::noStoresToMemory(memref) && calyx::singleLoadFromMemory(memref)) {
-    // Single load from memory; we do not need to write the
-    // output to a register. This is essentially a "combinational read" under
-    // current Calyx semantics with memory, and thus can be done in a
-    // combinational group. Note that if any stores are done to this memory,
-    // we require that the load and store be in separate non-combinational
-    // groups to avoid reading and writing to the same memory in the same group.
-    auto combGroup = createGroupForOp<calyx::CombGroupOp>(rewriter, loadOp);
-    assignAddressPorts(rewriter, loadOp.getLoc(), combGroup, memoryInterface,
-                       loadOp.getIndices());
+  auto group = createGroupForOp<calyx::GroupOp>(rewriter, loadOp);
+  assignAddressPorts(rewriter, loadOp.getLoc(), group, memoryInterface,
+                     loadOp.getIndices());
 
-    // We refrain from replacing the loadOp result with
-    // memoryInterface.readData, since multiple loadOp's need to be converted
-    // to a single memory's ReadData. If this replacement is done now, we lose
-    // the link between which SSA memref::LoadOp values map to which groups for
-    // loading a value from the Calyx memory. At this point of lowering, we
-    // keep the memref::LoadOp SSA value, and do value replacement _after_
-    // control has been generated (see LateSSAReplacement). This is *vital* for
-    // things such as calyx::InlineCombGroups to be able to properly track which
-    // memory assignment groups belong to which accesses.
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        loadOp.getResult(), combGroup);
-  } else {
-    auto group = createGroupForOp<calyx::GroupOp>(rewriter, loadOp);
-    assignAddressPorts(rewriter, loadOp.getLoc(), group, memoryInterface,
-                       loadOp.getIndices());
+  rewriter.setInsertionPointToEnd(group.getBodyBlock());
 
+  bool needReg = true;
+  Value res;
+  Value regWriteEn =
+      createConstant(loadOp.getLoc(), rewriter, getComponent(), 1, 1);
+  if (memoryInterface.readEnOpt().has_value()) {
+    auto oneI1 =
+        calyx::createConstant(loadOp.getLoc(), rewriter, getComponent(), 1, 1);
+    rewriter.create<calyx::AssignOp>(loadOp.getLoc(), memoryInterface.readEn(),
+                                     oneI1);
+    regWriteEn = memoryInterface.readDone();
+    if (calyx::noStoresToMemory(memref) &&
+        calyx::singleLoadFromMemory(memref)) {
+      // Single load from memory; we do not need to write the output to a
+      // register. The readData value will be held until readEn is asserted
+      // again
+      needReg = false;
+      rewriter.create<calyx::GroupDoneOp>(loadOp.getLoc(),
+                                          memoryInterface.readDone());
+      // We refrain from replacing the loadOp result with
+      // memoryInterface.readData, since multiple loadOp's need to be converted
+      // to a single memory's ReadData. If this replacement is done now, we lose
+      // the link between which SSA memref::LoadOp values map to which groups
+      // for loading a value from the Calyx memory. At this point of lowering,
+      // we keep the memref::LoadOp SSA value, and do value replacement _after_
+      // control has been generated (see LateSSAReplacement). This is *vital*
+      // for things such as calyx::InlineCombGroups to be able to properly track
+      // which memory assignment groups belong to which accesses.
+      res = loadOp.getResult();
+    }
+  }
+
+  if (needReg) {
     // Multiple loads from the same memory; In this case, we _may_ have a
     // structural hazard in the design we generate. To get around this, we
     // conservatively place a register in front of each load operation, and
-    // replace all uses of the loaded value with the register output. Proper
-    // handling of this requires the combinational group inliner/scheduler to
-    // be aware of when a combinational expression references multiple loaded
-    // values from the same memory, and then schedule assignments to temporary
-    // registers to get around the structural hazard.
+    // replace all uses of the loaded value with the register output. Reading
+    // for sequential memories will cause a read to take at least 2 cycles,
+    // but it will usually be better because combinational reads on memories
+    // can significantly decrease the maximum achievable frequency.
     auto reg = createRegister(
         loadOp.getLoc(), rewriter, getComponent(),
         loadOp.getMemRefType().getElementTypeBitWidth(),
         getState<ComponentLoweringState>().getUniqueName("load"));
-    calyx::buildAssignmentsForRegisterWrite(
-        rewriter, group, getState<ComponentLoweringState>().getComponentOp(),
-        reg, memoryInterface.readData());
+    rewriter.setInsertionPointToEnd(group.getBodyBlock());
+    rewriter.create<calyx::AssignOp>(loadOp.getLoc(), reg.getIn(),
+                                     memoryInterface.readData());
+    rewriter.create<calyx::AssignOp>(loadOp.getLoc(), reg.getWriteEn(),
+                                     regWriteEn);
+    rewriter.create<calyx::GroupDoneOp>(loadOp.getLoc(), reg.getDone());
     loadOp.getResult().replaceAllUsesWith(reg.getOut());
-    getState<ComponentLoweringState>().addBlockScheduleable(loadOp->getBlock(),
-                                                            group);
+    res = reg.getOut();
   }
+
+  getState<ComponentLoweringState>().registerEvaluatingGroup(res, group);
+  getState<ComponentLoweringState>().addBlockScheduleable(loadOp->getBlock(),
+                                                          group);
   return success();
 }
 
@@ -382,7 +487,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   rewriter.create<calyx::AssignOp>(
       storeOp.getLoc(), memoryInterface.writeEn(),
       createConstant(storeOp.getLoc(), rewriter, getComponent(), 1, 1));
-  rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(), memoryInterface.done());
+  rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(),
+                                      memoryInterface.writeDone());
 
   return success();
 }
@@ -470,7 +576,7 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
     sizes.push_back(1);
     addrSizes.push_back(1);
   }
-  auto memoryOp = rewriter.create<calyx::MemoryOp>(
+  auto memoryOp = rewriter.create<calyx::SeqMemoryOp>(
       allocOp.getLoc(), componentState.getUniqueName("mem"),
       memtype.getElementType().getIntOrFloatBitWidth(), sizes, addrSizes);
   // Externalize memories by default. This makes it easier for the native
@@ -494,20 +600,90 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      scf::YieldOp yieldOp) const {
-  if (yieldOp.getOperands().size() == 0)
+  if (yieldOp.getOperands().empty()) {
+    // If yield operands are empty, we assume we have a for loop.
+    auto forOp = dyn_cast<scf::ForOp>(yieldOp->getParentOp());
+    assert(forOp && "Empty yieldOps should only be located within ForOps");
+    ScfForOp forOpInterface(forOp);
+
+    // Get the ForLoop's Induction Register.
+    auto inductionReg =
+        getState<ComponentLoweringState>().getForLoopIterReg(forOpInterface, 0);
+
+    Type regWidth = inductionReg.getOut().getType();
+    // Adder should have same width as the inductionReg.
+    SmallVector<Type> types(3, regWidth);
+    auto addOp = getState<ComponentLoweringState>()
+                     .getNewLibraryOpInstance<calyx::AddLibOp>(
+                         rewriter, forOp.getLoc(), types);
+
+    auto directions = addOp.portDirections();
+    // For an add operation, we expect two input ports and one output port
+    SmallVector<Value, 2> opInputPorts;
+    Value opOutputPort;
+    for (auto dir : enumerate(directions)) {
+      switch (dir.value()) {
+      case calyx::Direction::Input: {
+        opInputPorts.push_back(addOp.getResult(dir.index()));
+        break;
+      }
+      case calyx::Direction::Output: {
+        opOutputPort = addOp.getResult(dir.index());
+        break;
+      }
+      }
+    }
+
+    // "Latch Group" increments inductionReg by forLoop's step value.
+    calyx::ComponentOp componentOp =
+        getState<ComponentLoweringState>().getComponentOp();
+    SmallVector<StringRef, 4> groupIdentifier = {
+        "incr", getState<ComponentLoweringState>().getUniqueName(forOp),
+        "induction", "var"};
+    auto groupOp = calyx::createGroup<calyx::GroupOp>(
+        rewriter, componentOp, forOp.getLoc(),
+        llvm::join(groupIdentifier, "_"));
+    rewriter.setInsertionPointToEnd(groupOp.getBodyBlock());
+
+    // Assign inductionReg.out to the left port of the adder.
+    Value leftOp = opInputPorts.front();
+    rewriter.create<calyx::AssignOp>(forOp.getLoc(), leftOp,
+                                     inductionReg.getOut());
+    // Assign forOp.getConstantStep to the right port of the adder.
+    Value rightOp = opInputPorts.back();
+    rewriter.create<calyx::AssignOp>(
+        forOp.getLoc(), rightOp,
+        createConstant(forOp->getLoc(), rewriter, componentOp,
+                       regWidth.getIntOrFloatBitWidth(),
+                       forOp.getConstantStep().value().getSExtValue()));
+    // Assign adder's output port to inductionReg.
+    buildAssignmentsForRegisterWrite(rewriter, groupOp, componentOp,
+                                     inductionReg, opOutputPort);
+    // Set group as For Loop's "latch" group.
+    getState<ComponentLoweringState>().setForLoopLatchGroup(forOpInterface,
+                                                            groupOp);
+    getState<ComponentLoweringState>().registerEvaluatingGroup(opOutputPort,
+                                                               groupOp);
     return success();
+  }
+  // If yieldOp for a for loop is not empty, then we do not transform for loop.
+  if (dyn_cast<scf::ForOp>(yieldOp->getParentOp())) {
+    return yieldOp.getOperation()->emitError()
+           << "Currently do not support non-empty yield operations inside for "
+              "loops. Run --scf-for-to-while before running --scf-to-calyx.";
+  }
   auto whileOp = dyn_cast<scf::WhileOp>(yieldOp->getParentOp());
   assert(whileOp);
   ScfWhileOp whileOpInterface(whileOp);
 
   auto assignGroup =
-      getState<ComponentLoweringState>().buildLoopIterArgAssignments(
+      getState<ComponentLoweringState>().buildWhileLoopIterArgAssignments(
           rewriter, whileOpInterface,
           getState<ComponentLoweringState>().getComponentOp(),
           getState<ComponentLoweringState>().getUniqueName(whileOp) + "_latch",
           yieldOp->getOpOperands());
-  getState<ComponentLoweringState>().setLoopLatchGroup(whileOpInterface,
-                                                       assignGroup);
+  getState<ComponentLoweringState>().setWhileLoopLatchGroup(whileOpInterface,
+                                                            assignGroup);
   return success();
 }
 
@@ -686,13 +862,30 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   // Only need to add the whileOp to the BlockSchedulables scheduler interface.
   // Everything else was handled in the `BuildWhileGroups` pattern.
   ScfWhileOp scfWhileOp(whileOp);
-  SmallVector<calyx::GroupOp> initWhileGroups =
-      getState<ComponentLoweringState>().getLoopInitGroups(scfWhileOp);
   getState<ComponentLoweringState>().addBlockScheduleable(
-      whileOp.getOperation()->getBlock(), WhileScheduleable{
-                                              scfWhileOp,
-                                              initWhileGroups,
-                                          });
+      whileOp.getOperation()->getBlock(), WhileScheduleable{scfWhileOp});
+  return success();
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     scf::ForOp forOp) const {
+  // Only need to add the forOp to the BlockSchedulables scheduler interface.
+  // Everything else was handled in the `BuildForGroups` pattern.
+  ScfForOp scfForOp(forOp);
+  // If we cannot compute the trip count of the for loop, then we should
+  // emit an error saying to use --scf-for-to-while
+  std::optional<uint64_t> bound = scfForOp.getBound();
+  if (!bound.has_value()) {
+    return scfForOp.getOperation()->emitError()
+           << "Loop bound not statically known. Should "
+              "transform into while loop using `--scf-for-to-while` before "
+              "running --lower-scf-to-calyx.";
+  }
+  getState<ComponentLoweringState>().addBlockScheduleable(
+      forOp.getOperation()->getBlock(), ForScheduleable{
+                                            scfForOp,
+                                            bound.value(),
+                                        });
   return success();
 }
 
@@ -846,7 +1039,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
       unsigned outPortsIt = extMemPortIndices.getSecond().second +
                             compOp.getInputPortInfo().size();
       extMemPorts.readData = compOp.getArgument(inPortsIt++);
-      extMemPorts.done = compOp.getArgument(inPortsIt);
+      extMemPorts.writeDone = compOp.getArgument(inPortsIt);
       extMemPorts.writeData = compOp.getArgument(outPortsIt++);
       unsigned nAddresses = extMemPortIndices.getFirst()
                                 .getType()
@@ -922,8 +1115,8 @@ class BuildWhileGroups : public calyx::FuncOpPartialLoweringPattern {
         auto reg =
             createRegister(arg.value().getLoc(), rewriter, getComponent(),
                            arg.value().getType().getIntOrFloatBitWidth(), name);
-        getState<ComponentLoweringState>().addLoopIterReg(whileOp, reg,
-                                                          arg.index());
+        getState<ComponentLoweringState>().addWhileLoopIterReg(whileOp, reg,
+                                                               arg.index());
         arg.value().replaceAllUsesWith(reg.getOut());
 
         /// Also replace uses in the "before" region of the while loop
@@ -937,7 +1130,7 @@ class BuildWhileGroups : public calyx::FuncOpPartialLoweringPattern {
       auto numOperands = whileOp.getOperation()->getNumOperands();
       for (size_t i = 0; i < numOperands; ++i) {
         auto initGroupOp =
-            getState<ComponentLoweringState>().buildLoopIterArgAssignments(
+            getState<ComponentLoweringState>().buildWhileLoopIterArgAssignments(
                 rewriter, whileOp,
                 getState<ComponentLoweringState>().getComponentOp(),
                 getState<ComponentLoweringState>().getUniqueName(
@@ -947,7 +1140,69 @@ class BuildWhileGroups : public calyx::FuncOpPartialLoweringPattern {
         initGroups.push_back(initGroupOp);
       }
 
-      getState<ComponentLoweringState>().setLoopInitGroups(whileOp, initGroups);
+      getState<ComponentLoweringState>().setWhileLoopInitGroups(whileOp,
+                                                                initGroups);
+
+      return WalkResult::advance();
+    });
+    return res;
+  }
+};
+
+/// In BuildForGroups, a register is created for the iteration argument of
+/// the for op. This register is then initialized to the lowerBound of the for
+/// loop in a group that executes the for loop.
+class BuildForGroups : public calyx::FuncOpPartialLoweringPattern {
+  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+
+  LogicalResult
+  partiallyLowerFuncToComp(FuncOp funcOp,
+                           PatternRewriter &rewriter) const override {
+    LogicalResult res = success();
+    funcOp.walk([&](Operation *op) {
+      // Only work on ops that support the ScfForOp.
+      if (!isa<scf::ForOp>(op))
+        return WalkResult::advance();
+
+      auto scfForOp = cast<scf::ForOp>(op);
+      ScfForOp forOp(scfForOp);
+
+      getState<ComponentLoweringState>().setUniqueName(forOp.getOperation(),
+                                                       "for");
+
+      // Create a register for the InductionVar, and set that Register as the
+      // only IterReg for the For Loop
+      auto inductionVar = forOp.getOperation().getInductionVar();
+      SmallVector<std::string, 3> inductionVarIdentifiers = {
+          getState<ComponentLoweringState>()
+              .getUniqueName(forOp.getOperation())
+              .str(),
+          "induction", "var"};
+      std::string name = llvm::join(inductionVarIdentifiers, "_");
+      auto reg =
+          createRegister(inductionVar.getLoc(), rewriter, getComponent(),
+                         inductionVar.getType().getIntOrFloatBitWidth(), name);
+      getState<ComponentLoweringState>().addForLoopIterReg(forOp, reg, 0);
+      inductionVar.replaceAllUsesWith(reg.getOut());
+
+      // Create InitGroup that sets the InductionVar to LowerBound
+      calyx::ComponentOp componentOp =
+          getState<ComponentLoweringState>().getComponentOp();
+      SmallVector<calyx::GroupOp> initGroups;
+      SmallVector<std::string, 4> groupIdentifiers = {
+          "init",
+          getState<ComponentLoweringState>()
+              .getUniqueName(forOp.getOperation())
+              .str(),
+          "induction", "var"};
+      std::string groupName = llvm::join(groupIdentifiers, "_");
+      auto groupOp = calyx::createGroup<calyx::GroupOp>(
+          rewriter, componentOp, forOp.getLoc(), groupName);
+      buildAssignmentsForRegisterWrite(rewriter, groupOp, componentOp, reg,
+                                       forOp.getOperation().getLowerBound());
+      initGroups.push_back(groupOp);
+      getState<ComponentLoweringState>().setForLoopInitGroups(forOp,
+                                                              initGroups);
 
       return WalkResult::advance();
     });
@@ -1000,8 +1255,10 @@ private:
                  whileSchedPtr) {
         auto &whileOp = whileSchedPtr->whileOp;
 
-        auto whileCtrlOp =
-            buildWhileCtrlOp(whileOp, whileSchedPtr->initGroups, rewriter);
+        auto whileCtrlOp = buildWhileCtrlOp(
+            whileOp,
+            getState<ComponentLoweringState>().getWhileLoopInitGroups(whileOp),
+            rewriter);
         rewriter.setInsertionPointToEnd(whileCtrlOp.getBodyBlock());
         auto whileBodyOp =
             rewriter.create<calyx::SeqOp>(whileOp.getOperation()->getLoc());
@@ -1015,10 +1272,35 @@ private:
         // Insert loop-latch at the end of the while group
         rewriter.setInsertionPointToEnd(whileBodyOpBlock);
         calyx::GroupOp whileLatchGroup =
-            getState<ComponentLoweringState>().getLoopLatchGroup(whileOp);
+            getState<ComponentLoweringState>().getWhileLoopLatchGroup(whileOp);
         rewriter.create<calyx::EnableOp>(whileLatchGroup.getLoc(),
                                          whileLatchGroup.getName());
 
+        if (res.failed())
+          return res;
+      } else if (auto *forSchedPtr = std::get_if<ForScheduleable>(&group);
+                 forSchedPtr) {
+        auto forOp = forSchedPtr->forOp;
+
+        auto forCtrlOp = buildForCtrlOp(
+            forOp,
+            getState<ComponentLoweringState>().getForLoopInitGroups(forOp),
+            forSchedPtr->bound, rewriter);
+        rewriter.setInsertionPointToEnd(forCtrlOp.getBodyBlock());
+        auto forBodyOp =
+            rewriter.create<calyx::SeqOp>(forOp.getOperation()->getLoc());
+        auto *forBodyOpBlock = forBodyOp.getBodyBlock();
+
+        // Schedule the body of the for loop.
+        LogicalResult res = buildCFGControl(path, rewriter, forBodyOpBlock,
+                                            block, forOp.getBodyBlock());
+
+        // Insert loop-latch at the end of the while group.
+        rewriter.setInsertionPointToEnd(forBodyOpBlock);
+        calyx::GroupOp forLatchGroup =
+            getState<ComponentLoweringState>().getForLoopLatchGroup(forOp);
+        rewriter.create<calyx::EnableOp>(forLatchGroup.getLoc(),
+                                         forLatchGroup.getName());
         if (res.failed())
           return res;
       } else
@@ -1112,19 +1394,25 @@ private:
     return success();
   }
 
+  // Insert a Par of initGroups at Location loc. Used as helper for
+  // `buildWhileCtrlOp` and `buildForCtrlOp`.
+  void
+  insertParInitGroups(PatternRewriter &rewriter, Location loc,
+                      const SmallVector<calyx::GroupOp> &initGroups) const {
+    PatternRewriter::InsertionGuard g(rewriter);
+    auto parOp = rewriter.create<calyx::ParOp>(loc);
+    rewriter.setInsertionPointToStart(parOp.getBodyBlock());
+    for (calyx::GroupOp group : initGroups)
+      rewriter.create<calyx::EnableOp>(group.getLoc(), group.getName());
+  }
+
   calyx::WhileOp buildWhileCtrlOp(ScfWhileOp whileOp,
                                   SmallVector<calyx::GroupOp> initGroups,
                                   PatternRewriter &rewriter) const {
     Location loc = whileOp.getLoc();
     /// Insert while iter arg initialization group(s). Emit a
     /// parallel group to assign one or more registers all at once.
-    {
-      PatternRewriter::InsertionGuard g(rewriter);
-      auto parOp = rewriter.create<calyx::ParOp>(loc);
-      rewriter.setInsertionPointToStart(parOp.getBodyBlock());
-      for (calyx::GroupOp group : initGroups)
-        rewriter.create<calyx::EnableOp>(group.getLoc(), group.getName());
-    }
+    insertParInitGroups(rewriter, loc, initGroups);
 
     /// Insert the while op itself.
     auto cond = whileOp.getConditionValue();
@@ -1133,6 +1421,19 @@ private:
     auto symbolAttr = FlatSymbolRefAttr::get(
         StringAttr::get(getContext(), condGroup.getSymName()));
     return rewriter.create<calyx::WhileOp>(loc, cond, symbolAttr);
+  }
+
+  calyx::RepeatOp buildForCtrlOp(ScfForOp forOp,
+                                 SmallVector<calyx::GroupOp> const &initGroups,
+                                 uint64_t bound,
+                                 PatternRewriter &rewriter) const {
+    Location loc = forOp.getLoc();
+    // Insert for iter arg initialization group(s). Emit a
+    // parallel group to assign one or more registers all at once.
+    insertParInitGroups(rewriter, loc, initGroups);
+
+    // Insert the repeatOp that corresponds to the For loop.
+    return rewriter.create<calyx::RepeatOp>(loc, bound);
   }
 };
 
@@ -1152,7 +1453,7 @@ class LateSSAReplacement : public calyx::FuncOpPartialLoweringPattern {
       /// eliminated.
       ScfWhileOp whileOp(op);
       for (auto res :
-           getState<ComponentLoweringState>().getLoopIterRegs(whileOp))
+           getState<ComponentLoweringState>().getWhileLoopIterRegs(whileOp))
         whileOp.getOperation()->getResults()[res.first].replaceAllUsesWith(
             res.second.getOut());
     });
@@ -1252,9 +1553,6 @@ public:
     target.addLegalDialect<scf::SCFDialect>();
     target.addIllegalDialect<hw::HWDialect>();
     target.addIllegalDialect<comb::CombDialect>();
-
-    // For loops should have been lowered to while loops
-    target.addIllegalOp<scf::ForOp>();
 
     // Only accept std operations which we've added lowerings for
     target.addIllegalDialect<FuncDialect>();
@@ -1378,6 +1676,12 @@ void SCFToCalyxPass::runOnOperation() {
   /// value of the iteration argument registers.
   addOncePattern<BuildWhileGroups>(loweringPatterns, patternState, funcMap,
                                    *loweringState);
+
+  /// This pattern creates registers for iteration arguments of scf.for
+  /// operations. Additionally, creates a group for assigning the initial
+  /// value of the iteration argument registers.
+  addOncePattern<BuildForGroups>(loweringPatterns, patternState, funcMap,
+                                 *loweringState);
 
   /// This pattern converts operations within basic blocks to Calyx library
   /// operators. Combinational operations are assigned inside a

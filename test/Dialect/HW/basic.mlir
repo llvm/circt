@@ -227,3 +227,9 @@ module {
     hw.instance "h2" sym @inst_0 @C() -> () {circt.globalRef = [#hw.globalNameRef<@glbl_D_M1>, #hw.globalNameRef<@glbl_D_M2>, #hw.globalNameRef<@glbl_D_M3>]}
   }
 }
+
+module {
+  hw.testmodule @NewStyle (input %a : i3, output %b : i3, inout %c : i64 {hw.exportPort = #hw<innerSym@symA>}) {
+    hw.output %a : i3
+  }
+}

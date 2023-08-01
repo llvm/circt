@@ -76,11 +76,44 @@ def HWAggregateType : DialectType<HWDialect,
 // Type Definitions
 //===----------------------------------------------------------------------===//
 
-def HWStringType : TypeDef<HWDialect, "String"> {
+class HW_Type<string name, string typeMnemonic, list<Trait> traits = []>
+    : TypeDef<HWDialect, name, traits> {
+  let mnemonic = typeMnemonic;
+}
+
+def ModuleType : HW_Type<"Module", "module"> {
+  let summary = "Module Type";
+  let description = [{
+    Module types have ports.
+  }];
+  let parameters = (ins ArrayRefParameter<"::circt::hw::ModulePort", "port list">:$ports);
+  let assemblyFormat = "`(` $ports `)`";
+  let genVerifyDecl = 1;
+
+  let extraClassDeclaration = [{
+    // Many of these are transitional and will be removed when modules and instances
+    // have moved over to this type.
+    size_t getNumInputs();
+    size_t getNumOutputs();
+    SmallVector<Type> getInputTypes();
+    SmallVector<Type> getOutputTypes();
+    Type getInputType(size_t);
+    Type getOutputType(size_t);
+    SmallVector<StringAttr> getInputNames();
+    SmallVector<StringAttr> getOutputNames();
+    StringAttr getNameAttr(size_t);
+    StringRef getName(size_t);
+    StringAttr getInputNameAttr(size_t);
+    StringRef getInputName(size_t);
+    StringAttr getOutputNameAttr(size_t);
+    StringRef getOutputName(size_t);
+    FunctionType getFuncType();
+  }];
+}
+
+def HWStringType : HW_Type<"String", "string"> {
   let summary = "String type";
   let description = "Defines a string type for the hw-centric dialects";
-
-  let mnemonic = "string";
 }
 
 /// A flat symbol reference or a reference to a name within a module.
@@ -143,7 +176,7 @@ def InnerSymAttr : AttrDef<HWDialect, "InnerSym"> {
   ];
   let extraClassDeclaration = [{
     /// Get the inner sym name for fieldID, if it exists.
-    mlir::StringAttr getSymIfExists(unsigned fieldID) const;
+    mlir::StringAttr getSymIfExists(uint64_t fieldID) const;
 
     /// Get the inner sym name for fieldID=0, if it exists.
     mlir::StringAttr getSymName() const { return getSymIfExists(0); }
@@ -155,7 +188,7 @@ def InnerSymAttr : AttrDef<HWDialect, "InnerSym"> {
     bool empty() const { return getProps().empty(); }
 
     /// Return an InnerSymAttr with the inner symbol for the specified fieldID removed.
-    InnerSymAttr erase(unsigned fieldID) const;
+    InnerSymAttr erase(uint64_t fieldID) const;
 
     using iterator = mlir::ArrayRef<InnerSymPropertiesAttr>::iterator;
     /// Iterator begin for all the InnerSymProperties.

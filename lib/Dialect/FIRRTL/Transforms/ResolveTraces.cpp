@@ -261,8 +261,7 @@ void ResolveTracesPass::runOnOperation() {
         if (!updateTarget(moduleLike, component, anno))
           return false;
 
-        auto module = cast<FModuleOp>(moduleLike);
-        getOrAddInnerSym(component, module, getNamespace);
+        getOrAddInnerSym(component, getNamespace);
         outputAnnotations.push_back(anno);
         return true;
       });

@@ -126,13 +126,13 @@ private:
   /// Returns the library name for a given Operation Type.
   FailureOr<StringRef> getLibraryFor(Operation *op) {
     return TypeSwitch<Operation *, FailureOr<StringRef>>(op)
-        .Case<MemoryOp, SeqMemoryOp, RegisterOp, NotLibOp, AndLibOp, OrLibOp,
-              XorLibOp, AddLibOp, SubLibOp, GtLibOp, LtLibOp, EqLibOp, NeqLibOp,
-              GeLibOp, LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp,
-              WireLibOp>([&](auto op) -> FailureOr<StringRef> {
-          static constexpr std::string_view sCore = "core";
-          return {sCore};
-        })
+        .Case<MemoryOp, RegisterOp, NotLibOp, AndLibOp, OrLibOp, XorLibOp,
+              AddLibOp, SubLibOp, GtLibOp, LtLibOp, EqLibOp, NeqLibOp, GeLibOp,
+              LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp, WireLibOp>(
+            [&](auto op) -> FailureOr<StringRef> {
+              static constexpr std::string_view sCore = "core";
+              return {sCore};
+            })
         .Case<SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp,
               SrshLibOp, MultPipeLibOp, RemUPipeLibOp, RemSPipeLibOp,
               DivUPipeLibOp, DivSPipeLibOp>(
@@ -141,6 +141,10 @@ private:
                   "binary_operators";
               return {sBinaryOperators};
             })
+        .Case<SeqMemoryOp>([&](auto op) -> FailureOr<StringRef> {
+          static constexpr std::string_view sMemories = "memories";
+          return {sMemories};
+        })
         /*.Case<>([&](auto op) { library = "math"; })*/
         .Default([&](auto op) {
           auto diag = op->emitOpError() << "not supported for emission";
@@ -694,9 +698,9 @@ void Emitter::emitPrimitiveExtern(hw::HWModuleExternOp op) {
 /// Emit the ports of a component.
 void Emitter::emitPrimitivePorts(hw::HWModuleExternOp op) {
   auto emitPorts = [&](auto ports, bool isInput) {
+    auto e = static_cast<size_t>(llvm::size(ports));
     os << LParen();
-    for (size_t i = 0, e = ports.size(); i < e; ++i) {
-      const hw::PortInfo &port = ports[i];
+    for (auto [i, port] : llvm::enumerate(ports)) {
       DictionaryAttr portAttr =
           isInput ? op.getArgAttrDict(i) : op.getResultAttrDict(i);
 
@@ -704,23 +708,25 @@ void Emitter::emitPrimitivePorts(hw::HWModuleExternOp op) {
       // We only care about the bit width in the emitted .futil file.
       // Emit parameterized or non-parameterized bit width.
       if (hw::isParametricType(port.type)) {
-        hw::ParamDeclRefAttr bitWidth = port.type.cast<hw::IntType>()
-                                            .getWidth()
-                                            .dyn_cast<hw::ParamDeclRefAttr>();
+        hw::ParamDeclRefAttr bitWidth =
+            port.type.template cast<hw::IntType>()
+                .getWidth()
+                .template dyn_cast<hw::ParamDeclRefAttr>();
         os << bitWidth.getName().str();
       } else {
         unsigned int bitWidth = port.type.getIntOrFloatBitWidth();
         os << bitWidth;
       }
 
-      if (i + 1 < e)
+      if (i < e - 1)
         os << comma();
     }
     os << RParen();
   };
-  emitPorts(op.getPorts().inputs, true);
+  auto ports = hw::getModulePortInfo(op);
+  emitPorts(ports.inputs(), true);
   os << arrow();
-  emitPorts(op.getPorts().outputs, false);
+  emitPorts(ports.outputs(), false);
 }
 
 void Emitter::emitInstance(InstanceOp op) {

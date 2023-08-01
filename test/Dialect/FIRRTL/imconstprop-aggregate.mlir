@@ -182,7 +182,7 @@ firrtl.circuit "InputPortTop"  {
 
 // -----
 
-// CHECK-LABK: firrtl.circuit "rhs_sink_output_used_as_wire"
+// CHECK-LABEL: firrtl.circuit "rhs_sink_output_used_as_wire"
 // This test checks that an output port sink, used as a RHS of a connect, is not
 // optimized away.  This is similar to the oscillator tests above, but more
 // reduced. See:

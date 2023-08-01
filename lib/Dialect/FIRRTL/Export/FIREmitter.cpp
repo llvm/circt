@@ -54,8 +54,11 @@ struct Emitter {
   void emitCircuit(CircuitOp op);
   void emitModule(FModuleOp op);
   void emitModule(FExtModuleOp op);
+  void emitModule(FIntModuleOp op);
   void emitModulePorts(ArrayRef<PortInfo> ports,
                        Block::BlockArgListType arguments = {});
+  void emitModuleParameters(Operation *op, ArrayAttr parameters);
+  void emitDeclaration(GroupDeclOp op);
 
   // Statement emission
   void emitStatementsInBlock(Block &block);
@@ -69,6 +72,7 @@ struct Emitter {
   void emitStatement(PrintFOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(StrictConnectOp op);
+  void emitStatement(PropAssignOp op);
   void emitStatement(InstanceOp op);
   void emitStatement(AttachOp op);
   void emitStatement(MemOp op);
@@ -83,6 +87,7 @@ struct Emitter {
   void emitStatement(RefForceInitialOp op);
   void emitStatement(RefReleaseOp op);
   void emitStatement(RefReleaseInitialOp op);
+  void emitStatement(GroupOp op);
 
   template <class T>
   void emitVerifStatement(T op, StringRef mnemonic);
@@ -104,6 +109,8 @@ struct Emitter {
   void emitExpression(RefSubOp op);
   void emitExpression(UninferredResetCastOp op);
   void emitExpression(ConstCastOp op);
+  void emitExpression(StringConstantOp op);
+  void emitExpression(BigIntConstantOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -332,10 +339,11 @@ void Emitter::emitCircuit(CircuitOp op) {
       if (encounteredError)
         break;
       TypeSwitch<Operation *>(&bodyOp)
-          .Case<FModuleOp, FExtModuleOp>([&](auto op) {
+          .Case<FModuleOp, FExtModuleOp, FIntModuleOp>([&](auto op) {
             emitModule(op);
             ps << PP::newline;
           })
+          .Case<GroupDeclOp>([&](auto op) { emitDeclaration(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside circuit");
           });
@@ -348,6 +356,7 @@ void Emitter::emitCircuit(CircuitOp op) {
 void Emitter::emitModule(FModuleOp op) {
   startStatement();
   ps << "module " << PPExtString(legalize(op.getNameAttr())) << " :";
+  emitLocation(op);
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
 
@@ -368,6 +377,7 @@ void Emitter::emitModule(FModuleOp op) {
 void Emitter::emitModule(FExtModuleOp op) {
   startStatement();
   ps << "extmodule " << PPExtString(legalize(op.getNameAttr())) << " :";
+  emitLocation(op);
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
 
@@ -383,30 +393,37 @@ void Emitter::emitModule(FExtModuleOp op) {
     }
 
     // Emit the parameters.
-    for (auto param : llvm::map_range(op.getParameters(), [](Attribute attr) {
-           return cast<ParamDeclAttr>(attr);
-         })) {
-      startStatement();
-      // TODO: AssignLike ?
-      ps << "parameter " << PPExtString(param.getName().getValue()) << " = ";
-      TypeSwitch<Attribute>(param.getValue())
-          .Case<IntegerAttr>(
-              [&](auto attr) { ps.addAsString(attr.getValue()); })
-          .Case<FloatAttr>([&](auto attr) {
-            SmallString<16> str;
-            attr.getValue().toString(str);
-            ps << str;
-          })
-          .Case<StringAttr>(
-              [&](auto attr) { ps.writeQuotedEscaped(attr.getValue()); })
-          .Default([&](auto attr) {
-            emitOpError(op, "with unsupported parameter attribute: ") << attr;
-            ps << "<unsupported-attr ";
-            ps.addAsString(attr);
-            ps << ">";
-          });
-      setPendingNewline();
+    emitModuleParameters(op, op.getParameters());
+  });
+}
+
+/// Emit an intrinsic module
+void Emitter::emitModule(FIntModuleOp op) {
+  startStatement();
+  ps << "intmodule " << PPExtString(legalize(op.getNameAttr())) << " :";
+  emitLocation(op);
+  ps.scopedBox(PP::bbox2, [&]() {
+    setPendingNewline();
+
+    // Emit the ports.
+    auto ports = op.getPorts();
+    emitModulePorts(ports);
+
+    // Emit the optional intrinsic.
+    //
+    // TODO: This really shouldn't be optional, but it is currently encoded like
+    // this.
+    if (op.getIntrinsic().has_value()) {
+      auto intrinsic = *op.getIntrinsic();
+      if (!intrinsic.empty()) {
+        startStatement();
+        ps << "intrinsic = " << PPExtString(*op.getIntrinsic());
+        setPendingNewline();
+      }
     }
+
+    // Emit the parameters.
+    emitModuleParameters(op, op.getParameters());
   });
 }
 
@@ -424,8 +441,53 @@ void Emitter::emitModulePorts(ArrayRef<PortInfo> ports,
       addValueName(arguments[i], legalName);
     ps << PPExtString(legalName) << " : ";
     emitType(port.type);
+    emitLocation(ports[i].loc);
     setPendingNewline();
   }
+}
+
+void Emitter::emitModuleParameters(Operation *op, ArrayAttr parameters) {
+  for (auto param : llvm::map_range(parameters, [](Attribute attr) {
+         return cast<ParamDeclAttr>(attr);
+       })) {
+    startStatement();
+    // TODO: AssignLike ?
+    ps << "parameter " << PPExtString(param.getName().getValue()) << " = ";
+    TypeSwitch<Attribute>(param.getValue())
+        .Case<IntegerAttr>([&](auto attr) { ps.addAsString(attr.getValue()); })
+        .Case<FloatAttr>([&](auto attr) {
+          SmallString<16> str;
+          attr.getValue().toString(str);
+          ps << str;
+        })
+        .Case<StringAttr>(
+            [&](auto attr) { ps.writeQuotedEscaped(attr.getValue()); })
+        .Default([&](auto attr) {
+          emitOpError(op, "with unsupported parameter attribute: ") << attr;
+          ps << "<unsupported-attr ";
+          ps.addAsString(attr);
+          ps << ">";
+        });
+    setPendingNewline();
+  }
+}
+
+/// Emit an optional group declaration.
+void Emitter::emitDeclaration(GroupDeclOp op) {
+  startStatement();
+  ps << "declgroup " << PPExtString(op.getSymName()) << ", "
+     << PPExtString(stringifyGroupConvention(op.getConvention())) << " : ";
+  emitLocationAndNewLine(op);
+  ps.scopedBox(PP::bbox2, [&]() {
+    for (auto &bodyOp : op.getBody().getOps()) {
+      TypeSwitch<Operation *>(&bodyOp)
+          .Case<GroupDeclOp>([&](auto op) { emitDeclaration(op); })
+          .Default([&](auto op) {
+            emitOpError(op,
+                        "not supported for emission inside group declaration");
+          });
+    }
+  });
 }
 
 /// Check if an operation is inlined into the emission of their users. For
@@ -443,9 +505,10 @@ void Emitter::emitStatementsInBlock(Block &block) {
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
               PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp, StrictConnectOp,
-              InstanceOp, AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
-              MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp,
-              RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp>(
+              PropAssignOp, InstanceOp, AttachOp, MemOp, InvalidValueOp,
+              SeqMemOp, CombMemOp, MemoryPortOp, MemoryDebugPortOp,
+              MemoryPortAccessOp, RefDefineOp, RefForceOp, RefForceInitialOp,
+              RefReleaseOp, RefReleaseInitialOp, GroupOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           startStatement();
@@ -671,6 +734,15 @@ void Emitter::emitStatement(StrictConnectOp op) {
   emitLocationAndNewLine(op);
 }
 
+void Emitter::emitStatement(PropAssignOp op) {
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "propassign" << PP::space;
+    interleaveComma(op.getOperands());
+  });
+  emitLocationAndNewLine(op);
+}
+
 void Emitter::emitStatement(InstanceOp op) {
   startStatement();
   auto legalName = legalize(op.getNameAttr());
@@ -882,6 +954,14 @@ void Emitter::emitStatement(RefReleaseInitialOp op) {
   emitLocationAndNewLine(op);
 }
 
+void Emitter::emitStatement(GroupOp op) {
+  startStatement();
+  ps << "group " << op.getGroupName().getLeafReference() << " :";
+  emitLocationAndNewLine(op);
+  auto *body = op.getBody();
+  ps.scopedBox(PP::bbox2, [&]() { emitStatementsInBlock(*body); });
+}
+
 void Emitter::emitStatement(InvalidValueOp op) {
   // Only emit this invalid value if it is used somewhere else than the RHS of
   // a connect.
@@ -931,7 +1011,8 @@ void Emitter::emitExpression(Value value) {
           CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
-          ShrPrimOp, UninferredResetCastOp, ConstCastOp,
+          ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
+          BigIntConstantOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp>([&](auto op) {
         ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
@@ -1035,6 +1116,18 @@ void Emitter::emitExpression(RefSubOp op) {
 
 void Emitter::emitExpression(UninferredResetCastOp op) {
   emitExpression(op.getInput());
+}
+
+void Emitter::emitExpression(BigIntConstantOp op) {
+  ps << "Integer(";
+  ps.addAsString(op.getValue());
+  ps << ")";
+}
+
+void Emitter::emitExpression(StringConstantOp op) {
+  ps << "String(";
+  ps.writeQuotedEscaped(op.getValue());
+  ps << ")";
 }
 
 void Emitter::emitExpression(ConstCastOp op) { emitExpression(op.getInput()); }
@@ -1143,6 +1236,9 @@ void Emitter::emitType(Type type, bool includeConst) {
         emitType(type.getType());
         ps << ">";
       })
+      .Case<StringType>([&](StringType type) { ps << "String"; })
+      .Case<BigIntType>([&](BigIntType type) { ps << "Integer"; })
+      .Case<PathType>([&](PathType type) { ps << "Path"; })
       .Default([&](auto type) {
         llvm_unreachable("all types should be implemented");
       });
@@ -1152,6 +1248,7 @@ void Emitter::emitType(Type type, bool includeConst) {
 /// leading space.
 void Emitter::emitLocation(Location loc) {
   // TODO: Handle FusedLoc and uniquify locations, avoid repeated file names.
+  ps << PP::neverbreak;
   if (auto fileLoc = loc->dyn_cast_or_null<FileLineColLoc>()) {
     ps << " @[" << fileLoc.getFilename().getValue();
     if (auto line = fileLoc.getLine()) {
@@ -1194,7 +1291,7 @@ void circt::firrtl::registerToFIRFileTranslation() {
   static mlir::TranslateFromMLIRRegistration toFIR(
       "export-firrtl", "emit FIRRTL dialect operations to .fir output",
       [](ModuleOp module, llvm::raw_ostream &os) {
-        return exportFIRFile(module, os, targetLineLength, {3, 0, 0});
+        return exportFIRFile(module, os, targetLineLength, {3, 1, 0});
       },
       [](mlir::DialectRegistry &registry) {
         registry.insert<chirrtl::CHIRRTLDialect>();

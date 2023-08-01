@@ -59,7 +59,9 @@ public:
             RefResolveOp, RefSubOp,
             // Casts to deal with weird stuff
             UninferredResetCastOp, ConstCastOp, RefCastOp,
-            mlir::UnrealizedConversionCastOp>([&](auto expr) -> ResultType {
+            mlir::UnrealizedConversionCastOp,
+            // Property expressions.
+            StringConstantOp, BigIntConstantOp>([&](auto expr) -> ResultType {
           return thisCast->visitExpr(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -193,6 +195,10 @@ public:
   HANDLE(mlir::UnrealizedConversionCastOp, Unhandled);
   HANDLE(BitCastOp, Unhandled);
   HANDLE(RefCastOp, Unhandled);
+
+  // Property expressions.
+  HANDLE(StringConstantOp, Unhandled);
+  HANDLE(BigIntConstantOp, Unhandled);
 #undef HANDLE
 };
 
@@ -209,9 +215,10 @@ public:
                        AssumeOp, CoverOp, PropAssignOp, ProbeOp, RefForceOp,
                        RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
                        VerifAssertIntrinsicOp, VerifAssumeIntrinsicOp,
-                       VerifCoverIntrinsicOp>([&](auto opNode) -> ResultType {
-          return thisCast->visitStmt(opNode, args...);
-        })
+                       VerifCoverIntrinsicOp, GroupOp>(
+            [&](auto opNode) -> ResultType {
+              return thisCast->visitStmt(opNode, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidStmt(op, args...);
         });
@@ -255,6 +262,7 @@ public:
   HANDLE(VerifAssertIntrinsicOp);
   HANDLE(VerifAssumeIntrinsicOp);
   HANDLE(VerifCoverIntrinsicOp);
+  HANDLE(GroupOp);
 
 #undef HANDLE
 };

@@ -9,7 +9,6 @@
 #ifndef BINDINGS_PYTHON_FSM_OPS
 #define BINDINGS_PYTHON_FSM_OPS
 
-include "mlir/Bindings/Python/Attributes.td"
 include "circt/Dialect/FSM/FSM.td"
 
 #endif

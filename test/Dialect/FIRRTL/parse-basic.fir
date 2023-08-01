@@ -1170,22 +1170,6 @@ circuit EnumTypes:
       ; CHECK: }
       None:
         o is invalid
-  ; CHECK-LABEL: module private @String
-
-  module String :
-    ; CHECK-SAME: out %a: !firrtl.string
-    output a : String
-    ; CHECK: %0 = firrtl.string "hello"
-    ; CHECK: firrtl.propassign %a, %0 : !firrtl.string
-    propassign a, String("hello")
-
-  ; CHECK-LABEL: module private @BigInt
-  module BigInt :
-    ; CHECK-SAME: out %a: !firrtl.bigint
-    output a : BigInt
-    ; CHECK: %0 = firrtl.bigint -10
-    ; CHECK: firrtl.propassign %a, %0 : !firrtl.bigint
-    propassign a, BigInt(-10)
 
   ; CHECK-LABEL: module private @RefsChild(
   ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>
@@ -1347,6 +1331,13 @@ circuit EnumTypes:
     output data : UInt<3>
     output r2 : Probe<{a : UInt<3>}[3]>
 
+  ; CHECK-LABEL: @RWProbePort(
+  module RWProbePort:
+    ; CHECK: in %in: !firrtl.vector<uint<1>, 2> sym [<@sym,2,public>],
+    input in : UInt<1>[2]
+    output p : RWProbe<UInt<1>>
+    ; CHECK:  firrtl.ref.rwprobe <@RWProbePort::@sym> : !firrtl.uint<1>
+    define p = rwprobe(in[1])
 
   ; CHECK-LABEL: module private @ProbeInvalidate
   ; CHECK-NEXT: }
@@ -1404,6 +1395,10 @@ circuit EnumTypes:
     ; CHECK-NEXT: firrtl.strictconnect %nonconst_w, [[CAST]] : !firrtl.sint<4>
     nonconst_w <= s4
 
+  ; CHECK-LABEL firrtl.class @SimpleClass() { }
+  ; Not version-gated yet, not in spec.
+  class SimpleClass:
+
 ;// -----
 
 ; CHECK-LABEL: firrtl.circuit "Foo_v3p0p0"
@@ -1442,7 +1437,7 @@ circuit Foo_v3p0p0:
     ; Ensure that `a` is equivalent to a.
     ; CHECK-NEXT: %a = firrtl.node {{.+}}%_0
     node `a` = `0`
-    ; CHECK-NEXT %b = firrtl.node {{.+}}%a
+    ; CHECK-NEXT: %b = firrtl.node {{.+}}%a
     node b = a
 
 ;// -----
@@ -1603,3 +1598,102 @@ circuit Top:
   type ConstI1 = const UInt<1>
   module Const :
     input a: ConstI1
+
+;// -----
+
+; CHECK-LABEL: firrtl.circuit "Groups"
+FIRRTL version 3.1.0
+circuit Groups:
+  declgroup A, bind:
+    declgroup B, bind:
+      declgroup C, bind:
+      declgroup D, bind:
+        declgroup E, bind:
+    declgroup F, bind:
+    ; CHECK-NEXT: firrtl.declgroup @A bind {
+    ; CHECK-NEXT:   firrtl.declgroup @B bind {
+    ; CHECK-NEXT:     firrtl.declgroup @C bind {
+    ; CHECK-NEXT:     }
+    ; CHECK-NEXT:     firrtl.declgroup @D bind {
+    ; CHECK-NEXT:       firrtl.declgroup @E bind {
+    ; CHECK-NEXT:       }
+    ; CHECK-NEXT:     }
+    ; CHECK-NEXT:   }
+    ; CHECK-NEXT:   firrtl.declgroup @F bind {
+    ; CHECK-NEXT:   }
+    ; CHECK-NEXT: }
+
+  ; CHECK: firrtl.module @Groups
+  module Groups:
+    input a: UInt<1>
+
+    group A:
+      node A_a = a
+      group B:
+        node B_a = a
+        group C:
+          node C_a = a
+        group D:
+          node D_a = a
+          group E:
+            node E_a = a
+      group F:
+        node F_a = a
+
+    ; CHECK-NEXT: firrtl.group @A {
+    ; CHECK-NEXT:   %A_a = firrtl.node{{.*}} %a
+    ; CHECK-NEXT:   firrtl.group @A::@B {
+    ; CHECK-NEXT:     %B_a = firrtl.node{{.*}} %a
+    ; CHECK-NEXT:     firrtl.group @A::@B::@C {
+    ; CHECK-NEXT:       %C_a = firrtl.node{{.*}} %a
+    ; CHECK-NEXT:     }
+    ; CHECK-NEXT:     firrtl.group @A::@B::@D {
+    ; CHECK-NEXT:       %D_a = firrtl.node{{.*}} %a
+    ; CHECK-NEXT:       firrtl.group @A::@B::@D::@E {
+    ; CHECK-NEXT:         %E_a = firrtl.node{{.*}} %a
+    ; CHECK-NEXT:       }
+    ; CHECK-NEXT:     }
+    ; CHECK-NEXT:   }
+    ; CHECK-NEXT:   firrtl.group @A::@F {
+    ; CHECK-NEXT:     %F_a = firrtl.node{{.*}} %a
+    ; CHECK-NEXT:   }
+    ; CHECK-NEXT: }
+
+
+;// -----
+; CHECK-LABEL: firrtl.circuit "BasicProps"
+FIRRTL version 3.1.0
+circuit BasicProps :
+  module BasicProps :
+  ; CHECK-LABEL: module private @Integer
+  module Integer :
+    ; CHECK-SAME: out %a: !firrtl.bigint
+    output a : Integer
+    ; CHECK: %0 = firrtl.bigint -10
+    ; CHECK: firrtl.propassign %a, %0 : !firrtl.bigint
+    propassign a, Integer(-10)
+
+  ; CHECK-LABEL: module private @String
+  module String :
+    ; CHECK-SAME: out %a: !firrtl.string
+    output a : String
+    ; CHECK: %0 = firrtl.string "hello"
+    ; CHECK: firrtl.propassign %a, %0 : !firrtl.string
+    propassign a, String("hello")
+
+  ; CHECK-LABEL: module private @Path
+  module Path :
+    ; CHECK-SAME: in %a: !firrtl.path
+    ; CHECK-SAME: out %b: !firrtl.path
+    input a : Path
+    output b : Path
+    ; CHECK: firrtl.propassign %b, %a : !firrtl.path
+    propassign b, a
+
+  ; CHECK-LABEL firrtl.class @SimpleClass(in %a: !firrtl.string, out %b: !firrtl.string) {
+  ; CHECK-NEXT    firrtl.propassign %b, %a : !firrtl.string
+  ; CHECK-NEXT  }
+  class SimpleClass:
+    input a: String
+    output b: String
+    propassign b, a

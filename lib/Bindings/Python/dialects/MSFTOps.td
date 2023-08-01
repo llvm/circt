@@ -9,7 +9,6 @@
 #ifndef BINDINGS_PYTHON_MSFT_OPS
 #define BINDINGS_PYTHON_MSFT_OPS
 
-include "mlir/Bindings/Python/Attributes.td"
 include "circt/Dialect/MSFT/MSFT.td"
 
 #endif

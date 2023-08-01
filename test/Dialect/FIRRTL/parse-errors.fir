@@ -626,11 +626,19 @@ circuit RWProbeConst:
 
 ;// -----
 
-circuit RWProbePort:
-  module RWProbePort:
-    input in : UInt<1>[2]
+circuit RWProbeConstPort:
+  module RWProbeConstPort:
+    input in : const UInt<1>[2]
     output p : RWProbe<UInt<1>>
-    define p = rwprobe(in[1]) ; expected-error {{rwprobe of port not yet supported}}
+    define p = rwprobe(in[1]) ; expected-error {{cannot force target of type '!firrtl.const.uint<1>'}}
+
+;// -----
+
+circuit RWProbeUninferredPort:
+  module RWProbeUninferredPort:
+    input in : UInt[2]
+    output p : RWProbe<UInt>
+    define p = rwprobe(in[1]) ; expected-error {{must have known width or concrete reset type in type}}
 
 ;// -----
 
@@ -697,6 +705,7 @@ circuit DefinePromoteToRW:
     define rw = r.ro
 
 ;// -----
+FIRRTL version 3.1.0
 
 circuit PropAssignNonProperty:
   module PropAssignNonProperty:
@@ -772,7 +781,18 @@ circuit DuplicateAlias:
   module DuplicateAlias:
 
 ;// -----
+
+circuit KeywordTypeName:
+  type Clock = UInt; expected-error {{cannot use keyword 'Clock' for type alias name}}
+
+;// -----
+
+circuit KeywordTypeName:
+  type module = UInt; expected-error {{cannot use keyword 'module' for type alias name}}
+
+;// -----
 ; https://github.com/llvm/circt/issues/5494
+FIRRTL version 3.1.0
 
 circuit BundleOfProps:
   module BundleOfProps:
@@ -780,8 +800,73 @@ circuit BundleOfProps:
     ; expected-error @above {{type '!firrtl.string' cannot be used as field in a bundle}}
 
 ;// -----
+FIRRTL version 3.1.0
 
 circuit VecOfProps:
   module VecOfProps:
     input x : String[2]
     ; expected-error @above {{type '!firrtl.string' cannot be used in a vector}}
+
+;// -----
+
+FIRRTL version 3.0.0
+circuit UnsupportedVersionDeclGroups:
+  ; expected-error @below {{unexpected token}}
+  declgroup A, bind:
+
+;// -----
+
+FIRRTL version 3.0.0
+circuit UnsupportedVersionGroups:
+  module UnsupportedVersionGroups:
+    ; expected-error @below {{unexpected token}}
+    group A:
+
+;// -----
+
+FIRRTL version 3.1.0
+circuit UnsupportedGroupConvention:
+  ; expected-error @below {{unknown convention 'foo'}}
+  declgroup A, foo :
+
+;// -----
+
+FIRRTL version 3.1.0
+circuit GroupAndCircuitShareName:
+  ; expected-error @below {{cannot have the same name as the circuit}}
+  declgroup GroupAndCircuitShareName, bind :
+
+  module GroupAndCircuitShareName:
+
+
+;// -----
+
+circuit Top:
+  ; expected-error @below {{class cannot be the top of a circuit}}
+  class Top:
+
+;// -----
+
+circuit Top:
+  module Top:
+  class Foo:
+    ;; expected-error @below {{ports on classes must be properties}}
+    input a: UInt<8>
+
+;// -----
+FIRRTL version 3.0.0
+
+circuit Top:
+  module Top:
+    output s : String
+    ; expected-error @above {{Properties are a FIRRTL 3.1.0+ feature, but the specified FIRRTL version was 3.0.0}}
+
+;// -----
+FIRRTL version 3.0.0
+
+circuit Top:
+  module Top:
+    ; expected-error @below {{Integers are a FIRRTL 3.1.0+ feature, but the specified FIRRTL version was 3.0.0}}
+    input in : Integer
+    output out : Integer
+    propassign out, in

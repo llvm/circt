@@ -135,16 +135,20 @@ HWModuleExternOp ESIHWBuilder::declareStage(Operation *symTable,
   size_t argn = 0;
   size_t resn = 0;
   llvm::SmallVector<PortInfo> ports = {
-      {clk, PortDirection::INPUT, getI1Type(), argn++},
-      {rst, PortDirection::INPUT, getI1Type(), argn++}};
+      {{clk, getI1Type(), ModulePort::Direction::Input}, argn++},
+      {{rst, getI1Type(), ModulePort::Direction::Input}, argn++}};
 
-  ports.push_back({a, PortDirection::INPUT, dataType, argn++});
-  ports.push_back({aValid, PortDirection::INPUT, getI1Type(), argn++});
-  ports.push_back({aReady, PortDirection::OUTPUT, getI1Type(), resn++});
-  ports.push_back({x, PortDirection::OUTPUT, dataType, resn++});
+  ports.push_back({{a, dataType, ModulePort::Direction::Input}, argn++});
+  ports.push_back(
+      {{aValid, getI1Type(), ModulePort::Direction::Input}, argn++});
+  ports.push_back(
+      {{aReady, getI1Type(), ModulePort::Direction::Output}, resn++});
+  ports.push_back({{x, dataType, ModulePort::Direction::Output}, resn++});
 
-  ports.push_back({xValid, PortDirection::OUTPUT, getI1Type(), resn++});
-  ports.push_back({xReady, PortDirection::INPUT, getI1Type(), argn++});
+  ports.push_back(
+      {{xValid, getI1Type(), ModulePort::Direction::Output}, resn++});
+  ports.push_back(
+      {{xReady, getI1Type(), ModulePort::Direction::Input}, argn++});
 
   stageMod = create<HWModuleExternOp>(
       constructUniqueSymbol(symTable, "ESI_PipelineStage"), ports,
@@ -166,14 +170,15 @@ HWModuleExternOp ESIHWBuilder::declareCosimEndpointOp(Operation *symTable,
   // give the extern declation a None type since nothing else makes sense.
   // Will be refining this when we decide how to better handle parameterized
   // types and ops.
-  PortInfo ports[] = {{clk, PortDirection::INPUT, getI1Type(), 0},
-                      {rst, PortDirection::INPUT, getI1Type(), 1},
-                      {dataOutValid, PortDirection::OUTPUT, getI1Type(), 0},
-                      {dataOutReady, PortDirection::INPUT, getI1Type(), 2},
-                      {dataOut, PortDirection::OUTPUT, recvType, 1},
-                      {dataInValid, PortDirection::INPUT, getI1Type(), 3},
-                      {dataInReady, PortDirection::OUTPUT, getI1Type(), 2},
-                      {dataIn, PortDirection::INPUT, sendType, 4}};
+  PortInfo ports[] = {
+      {{clk, getI1Type(), ModulePort::Direction::Input}, 0},
+      {{rst, getI1Type(), ModulePort::Direction::Input}, 1},
+      {{dataOutValid, getI1Type(), ModulePort::Direction::Output}, 0},
+      {{dataOutReady, getI1Type(), ModulePort::Direction::Input}, 2},
+      {{dataOut, recvType, ModulePort::Direction::Output}, 1},
+      {{dataInValid, getI1Type(), ModulePort::Direction::Input}, 3},
+      {{dataInReady, getI1Type(), ModulePort::Direction::Output}, 2},
+      {{dataIn, sendType, ModulePort::Direction::Input}, 4}};
   SmallVector<Attribute, 8> params;
   params.push_back(ParamDeclAttr::get("ENDPOINT_ID_EXT", getStringAttr("")));
   params.push_back(

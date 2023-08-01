@@ -2013,14 +2013,20 @@ struct AggOneShot : public mlir::RewritePattern {
     if (values.empty())
       return failure();
     rewriter.setInsertionPointToEnd(op->getBlock());
-    Value newVal = type_isa<BundleType>(op->getResult(0).getType())
-                       ? rewriter.createOrFold<BundleCreateOp>(
-                             op->getLoc(), op->getResult(0).getType(), values)
+    auto dest = op->getResult(0);
+    auto destType = dest.getType();
+
+    // If not passive, cannot strictconnect.
+    if (!type_cast<FIRRTLBaseType>(destType).isPassive())
+      return failure();
+
+    Value newVal = type_isa<BundleType>(destType)
+                       ? rewriter.createOrFold<BundleCreateOp>(op->getLoc(),
+                                                               destType, values)
                        : rewriter.createOrFold<VectorCreateOp>(
-                             op->getLoc(), op->getResult(0).getType(), values);
-    rewriter.createOrFold<StrictConnectOp>(op->getLoc(), op->getResult(0),
-                                           newVal);
-    for (Operation *user : op->getResult(0).getUsers()) {
+                             op->getLoc(), destType, values);
+    rewriter.createOrFold<StrictConnectOp>(op->getLoc(), dest, newVal);
+    for (Operation *user : dest.getUsers()) {
       if (auto subIndex = dyn_cast<SubindexOp>(user)) {
         for (Operation *subuser :
              llvm::make_early_inc_range(subIndex.getResult().getUsers()))

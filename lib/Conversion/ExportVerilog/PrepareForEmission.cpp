@@ -72,7 +72,8 @@ static void spillWiresForInstanceInputs(InstanceOp op) {
   auto namePrefixSize = nameTmp.size();
 
   size_t nextOpNo = 0;
-  for (auto &port : getModulePortInfo(op).inputs) {
+  auto ports = getModulePortInfo(op);
+  for (auto &port : ports.inputs()) {
     auto src = op.getOperand(nextOpNo);
     ++nextOpNo;
 
@@ -103,7 +104,8 @@ static void lowerInstanceResults(InstanceOp op) {
   auto namePrefixSize = nameTmp.size();
 
   size_t nextResultNo = 0;
-  for (auto &port : getModulePortInfo(op).outputs) {
+  auto ports = getModulePortInfo(op);
+  for (auto &port : ports.outputs()) {
     auto result = op.getResult(nextResultNo);
     ++nextResultNo;
 
@@ -142,76 +144,6 @@ static void lowerInstanceResults(InstanceOp op) {
     auto connect = builder.create<AssignOp>(newWire, result);
     connect->moveAfter(op);
   }
-}
-
-// Given a side effect free "always inline" operation, make sure that it
-// exists in the same block as its users and that it has one use for each one.
-static void lowerAlwaysInlineOperation(Operation *op) {
-  assert(op->getNumResults() == 1 &&
-         "only support 'always inline' ops with one result");
-
-  // Moving/cloning an op should pull along its operand tree with it if they
-  // are always inline.  This happens when an array index has a constant
-  // operand for example.
-  auto recursivelyHandleOperands = [](Operation *op) {
-    for (auto operand : op->getOperands()) {
-      if (auto *operandOp = operand.getDefiningOp())
-        if (isExpressionAlwaysInline(operandOp))
-          lowerAlwaysInlineOperation(operandOp);
-    }
-  };
-
-  // If an operation is an assignment that immediately follows the declaration
-  // of its wire, return that wire. Otherwise return the original op. This
-  // ensures that the declaration and assignment don't get split apart by
-  // inlined operations, which allows `ExportVerilog` to trivially emit the
-  // expression inline in the declaration.
-  auto skipToWireImmediatelyBefore = [](Operation *user) {
-    if (!isa<BPAssignOp, AssignOp>(user))
-      return user;
-    auto *wireOp = user->getOperand(0).getDefiningOp();
-    if (wireOp && wireOp->getNextNode() == user)
-      return wireOp;
-    return user;
-  };
-
-  // If this operation has multiple uses, duplicate it into N-1 of them in
-  // turn.
-  while (!op->hasOneUse()) {
-    OpOperand &use = *op->getUses().begin();
-    Operation *user = skipToWireImmediatelyBefore(use.getOwner());
-
-    // Clone the op before the user.
-    auto *newOp = op->clone();
-    user->getBlock()->getOperations().insert(Block::iterator(user), newOp);
-    // Change the user to use the new op.
-    use.set(newOp->getResult(0));
-
-    // If any of the operations of the moved op are always inline, recursively
-    // handle them too.
-    recursivelyHandleOperands(newOp);
-  }
-
-  // Finally, ensures the op is in the same block as its user so it can be
-  // inlined.
-  Operation *user = skipToWireImmediatelyBefore(*op->getUsers().begin());
-  op->moveBefore(user);
-
-  // If any of the operations of the moved op are always inline, recursively
-  // move/clone them too.
-  recursivelyHandleOperands(op);
-  return;
-}
-
-// Find a nearest insertion point where logic op can be declared.
-// Logic ops are emitted as "automatic logic" in procedural regions, but
-// they must be declared at beginning of blocks.
-static std::pair<Block *, Block::iterator>
-findLogicOpInsertionPoint(Operation *op) {
-  // We have to skip `ifdef.procedural` because it is a just macro.
-  if (isa<IfDefProceduralOp>(op->getParentOp()))
-    return findLogicOpInsertionPoint(op->getParentOp());
-  return {op->getBlock(), op->getBlock()->begin()};
 }
 
 /// Emit an explicit wire or logic to assign operation's result. This function
@@ -271,6 +203,81 @@ static void lowerUsersToTemporaryWire(Operation &op,
   // If the op has multiple results, create wires for each result.
   for (auto result : op.getResults())
     createWireForResult(result, StringAttr());
+}
+
+// Given a side effect free "always inline" operation, make sure that it
+// exists in the same block as its users and that it has one use for each one.
+static void lowerAlwaysInlineOperation(Operation *op,
+                                       const LoweringOptions &options) {
+  assert(op->getNumResults() == 1 &&
+         "only support 'always inline' ops with one result");
+
+  // Moving/cloning an op should pull along its operand tree with it if they are
+  // always inline.  This happens when an array index has a constant operand for
+  // example.  If the operand is not always inline, then evaluate it to see if
+  // it should be spilled to a wire.
+  auto recursivelyHandleOperands = [&](Operation *op) {
+    for (auto operand : op->getOperands()) {
+      if (auto *operandOp = operand.getDefiningOp()) {
+        if (isExpressionAlwaysInline(operandOp))
+          lowerAlwaysInlineOperation(operandOp, options);
+        else if (shouldSpillWire(*operandOp, options))
+          lowerUsersToTemporaryWire(*operandOp);
+      }
+    }
+  };
+
+  // If an operation is an assignment that immediately follows the declaration
+  // of its wire, return that wire. Otherwise return the original op. This
+  // ensures that the declaration and assignment don't get split apart by
+  // inlined operations, which allows `ExportVerilog` to trivially emit the
+  // expression inline in the declaration.
+  auto skipToWireImmediatelyBefore = [](Operation *user) {
+    if (!isa<BPAssignOp, AssignOp>(user))
+      return user;
+    auto *wireOp = user->getOperand(0).getDefiningOp();
+    if (wireOp && wireOp->getNextNode() == user)
+      return wireOp;
+    return user;
+  };
+
+  // If this operation has multiple uses, duplicate it into N-1 of them in
+  // turn.
+  while (!op->hasOneUse()) {
+    OpOperand &use = *op->getUses().begin();
+    Operation *user = skipToWireImmediatelyBefore(use.getOwner());
+
+    // Clone the op before the user.
+    auto *newOp = op->clone();
+    user->getBlock()->getOperations().insert(Block::iterator(user), newOp);
+    // Change the user to use the new op.
+    use.set(newOp->getResult(0));
+
+    // If any of the operations of the moved op are always inline, recursively
+    // handle them too.
+    recursivelyHandleOperands(newOp);
+  }
+
+  // Finally, ensures the op is in the same block as its user so it can be
+  // inlined.
+  Operation *user = skipToWireImmediatelyBefore(*op->getUsers().begin());
+  op->moveBefore(user);
+
+  // If any of the operations of the moved op are always inline, recursively
+  // move/clone them too.
+  recursivelyHandleOperands(op);
+  return;
+}
+
+// Find a nearest insertion point where logic op can be declared.
+// Logic ops are emitted as "automatic logic" in procedural regions, but
+// they must be declared at beginning of blocks.
+static std::pair<Block *, Block::iterator>
+findLogicOpInsertionPoint(Operation *op) {
+  // We have to skip `ifdef.procedural` because it is a just macro.
+  if (isa<IfDefProceduralOp>(op->getParentOp()))
+    return findLogicOpInsertionPoint(op->getParentOp());
+  return {op->getBlock(), op->getBlock()->begin()};
 }
 
 /// Lower a variadic fully-associative operation into an expression tree.  This
@@ -563,7 +570,7 @@ EmittedExpressionStateManager::mergeOperandsStates(Operation *op) {
 /// If exactly one use of this op is an assign, replace the other uses with a
 /// read from the assigned wire or reg. This assumes the preconditions for doing
 /// so are met: op must be an expression in a non-procedural region.
-static bool reuseExistingInOut(Operation *op) {
+static bool reuseExistingInOut(Operation *op, const LoweringOptions &options) {
   // Try to collect a single assign and all the other uses of op.
   sv::AssignOp assign;
   SmallVector<OpOperand *> uses;
@@ -607,7 +614,7 @@ static bool reuseExistingInOut(Operation *op) {
   }
   if (auto *destOp = assign.getDest().getDefiningOp())
     if (isExpressionAlwaysInline(destOp))
-      lowerAlwaysInlineOperation(destOp);
+      lowerAlwaysInlineOperation(destOp, options);
   return true;
 }
 
@@ -827,6 +834,10 @@ static LogicalResult legalizeHWModule(Block &block,
       return failure();
     }
 
+    // Do not reorder LTL expressions, which are always emitted inline.
+    if (isa<ltl::LTLDialect>(op.getDialect()))
+      continue;
+
     // Name legalization should have happened in a different pass for these sv
     // elements and we don't want to change their name through re-legalization
     // (e.g. letting a temporary take the name of an unvisited wire). Adding
@@ -888,7 +899,7 @@ static LogicalResult legalizeHWModule(Block &block,
       // Process the op only when the op is never processed from the top-level
       // loop.
       if (visitedAlwaysInlineOperations.insert(&op).second)
-        lowerAlwaysInlineOperation(&op);
+        lowerAlwaysInlineOperation(&op, options);
 
       continue;
     }
@@ -971,7 +982,7 @@ static LogicalResult legalizeHWModule(Block &block,
     if (shouldSpillWire(op, options)) {
       // We first check that it is possible to reuse existing wires as a spilled
       // wire. Otherwise, create a new wire op.
-      if (isProceduralRegion || !reuseExistingInOut(&op)) {
+      if (isProceduralRegion || !reuseExistingInOut(&op, options)) {
         if (options.disallowLocalVariables) {
           // If we're not in a procedural region, or we are, but we can hoist
           // out of it, we are good to generate a wire.
@@ -1046,7 +1057,7 @@ static LogicalResult legalizeHWModule(Block &block,
     // inout, and re-use an existing inout when possible. This is legal when op
     // is an expression in a non-procedural region.
     if (!isProceduralRegion && isVerilogExpression(&op))
-      (void)reuseExistingInOut(&op);
+      (void)reuseExistingInOut(&op, options);
   }
 
   if (isProceduralRegion) {
@@ -1083,6 +1094,10 @@ static LogicalResult legalizeHWModule(Block &block,
   SmallPtrSet<Operation *, 32> seenOperations;
 
   for (auto &op : llvm::make_early_inc_range(block)) {
+    // Do not reorder LTL expressions, which are always emitted inline.
+    if (isa<ltl::LTLDialect>(op.getDialect()))
+      continue;
+
     // Check the users of any expressions to see if they are
     // lexically below the operation itself.  If so, it is being used out
     // of order.

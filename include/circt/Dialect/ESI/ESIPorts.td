@@ -14,57 +14,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_ESI_PORTS_TD
+#define CIRCT_DIALECT_ESI_PORTS_TD
+
 include "mlir/IR/AttrTypeBase.td"
-include "mlir/IR/EnumAttr.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
-
-
-class ESI_Port<string name> : TypeDef<ESI_Dialect, name> {}
-
-// Standard valid-ready signaling.
-def ChannelSignalingValidReady : I32EnumAttrCase<"ValidReady", 0>;
-// FIFO interface with a read latency of zero. Very similiar to valid-ready, but
-// cannot assert ready if data is not available.
-def ChannelSignalingFIFO0      : I32EnumAttrCase<"FIFO0",      1>;
-def ChannelSignaling : I32EnumAttr<
-    "ChannelSignaling",
-    "ESI channel wire signaling standard",
-    [ChannelSignalingValidReady, ChannelSignalingFIFO0]>{
-  let cppNamespace = "::circt::esi";
-}
-
-def ChannelType : ESI_Port<"Channel"> {
-  let summary = "An ESI-compatible channel port";
-  let description = [{
-    An ESI port kind which models a latency-insensitive, unidirectional,
-    point-to-point data stream. Channels are typed (like all of ESI). Said
-    type can be any MLIR type, but must be lowered to something a backend
-    knows how to output (i.e. something emitVerilog knows about).
-
-    Example:
-
-    ```mlir
-    hw.module.extern @Sender() -> (%x: !esi.channel<i1>)
-    hw.module @Reciever(%a: !esi.channel<hw.array<5xi16>>) { }
-    ```
-  }];
-
-  let mnemonic = "channel";
-  let parameters = (ins
-      "Type":$inner,
-      DefaultValuedParameter<
-        "::circt::esi::ChannelSignaling",
-        "::circt::esi::ChannelSignaling::ValidReady">:$signaling);
-
-  let assemblyFormat = "`<` $inner (`,` $signaling^)? `>`";
- 
-  let builders = [
-    TypeBuilder<(ins "Type":$type), [{
-        return Base::get(type.getContext(), type,
-                         ::circt::esi::ChannelSignaling::ValidReady);
-      }]>,
-  ];
-}
+include "circt/Dialect/ESI/ESIDialect.td"
+include "circt/Dialect/ESI/ESIInterfaces.td"
+include "circt/Dialect/ESI/ESITypes.td"
 
 //=========
 // Operations on ports.
@@ -188,3 +145,5 @@ def UnwrapSVInterfaceOp : ESI_Op<"unwrap.iface", [
 
   let hasVerifier = 1;
 }
+
+#endif // CIRCT_DIALECT_ESI_PORTS_TD

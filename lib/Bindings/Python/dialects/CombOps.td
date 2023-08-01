@@ -9,7 +9,6 @@
 #ifndef BINDINGS_PYTHON_COMB_OPS
 #define BINDINGS_PYTHON_COMB_OPS
 
-include "mlir/Bindings/Python/Attributes.td"
 include "circt/Dialect/Comb/Comb.td"
 
 #endif

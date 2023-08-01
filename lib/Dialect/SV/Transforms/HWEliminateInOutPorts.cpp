@@ -108,11 +108,12 @@ void HWInOutPortConversion::buildInputSignals() {
 }
 
 void HWInOutPortConversion::buildOutputSignals() {
-  assert(false && "`hw.inout` outputs not yet supported. Currently, `hw.inout` "
-                  "outputs are handled by UntouchedPortConversion, given that "
-                  "output `hw.inout` ports have a `PortDirection::Output` "
-                  "direction instead of `PortDirection::InOut`. If this for "
-                  "some reason changes, then this assert will fire.");
+  assert(false &&
+         "`hw.inout` outputs not yet supported. Currently, `hw.inout` "
+         "outputs are handled by UntouchedPortConversion, given that "
+         "output `hw.inout` ports have a `ModulePort::Direction::Output` "
+         "direction instead of `ModulePort::Direction::InOut`. If this for "
+         "some reason changes, then this assert will fire.");
 }
 
 void HWInOutPortConversion::mapInputSignals(OpBuilder &b, Operation *inst,
@@ -138,18 +139,19 @@ void HWInOutPortConversion::mapInputSignals(OpBuilder &b, Operation *inst,
 void HWInOutPortConversion::mapOutputSignals(
     OpBuilder &b, Operation *inst, Value instValue,
     SmallVectorImpl<Value> &newOperands, ArrayRef<Backedge> newResults) {
-  assert(false && "`hw.inout` outputs not yet supported. Currently, `hw.inout` "
-                  "outputs are handled by UntouchedPortConversion, given that "
-                  "output `hw.inout` ports have a `PortDirection::Output` "
-                  "direction instead of `PortDirection::InOut`. If this for "
-                  "some reason changes, then this assert will fire.");
+  assert(false &&
+         "`hw.inout` outputs not yet supported. Currently, `hw.inout` "
+         "outputs are handled by UntouchedPortConversion, given that "
+         "output `hw.inout` ports have a `ModulePort::Direction::Output` "
+         "direction instead of `ModulePort::Direction::InOut`. If this for "
+         "some reason changes, then this assert will fire.");
 }
 
 class HWInoutPortConversionBuilder : public PortConversionBuilder {
 public:
   using PortConversionBuilder::PortConversionBuilder;
   FailureOr<std::unique_ptr<PortConversion>> build(hw::PortInfo port) override {
-    if (port.direction == hw::PortDirection::INOUT)
+    if (port.dir == hw::ModulePort::Direction::InOut)
       return {std::make_unique<HWInOutPortConversion>(converter, port)};
     return PortConversionBuilder::build(port);
   }

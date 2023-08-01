@@ -319,6 +319,10 @@ void ESIConnectServicesPass::runOnOperation() {
 }
 
 LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
+  // If 'mod' doesn't have a body, assume it's an external module.
+  if (mod->getNumRegions() == 0 || mod->getRegion(0).empty())
+    return success();
+
   Block &modBlock = mod->getRegion(0).front();
 
   // Index the local services and create blocks in which to put the requests.
@@ -542,9 +546,12 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
     if (!toClientType)
       continue;
     newInputs.push_back(std::make_pair(
-        origNumInputs, hw::PortInfo{getPortName(req.getClientNamePath()),
-                                    hw::PortDirection::INPUT, toClientType,
-                                    origNumInputs, nullptr, req->getLoc()}));
+        origNumInputs,
+        hw::PortInfo{{getPortName(req.getClientNamePath()), toClientType,
+                      hw::ModulePort::Direction::Input},
+                     origNumInputs,
+                     nullptr,
+                     req->getLoc()}));
 
     // Replace uses with new block args which will correspond to said ports.
     Value replValue = body->addArgument(toClientType, req->getLoc());
@@ -608,10 +615,10 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
     SmallVector<NamedAttribute> newAttrs;
     for (auto attr : inst->getAttrs()) {
       if (attr.getName() == argsAttrName)
-        newAttrs.push_back(b.getNamedAttr(argsAttrName, mod.getArgNames()));
+        newAttrs.push_back(b.getNamedAttr(argsAttrName, mod.getInputNames()));
       else if (attr.getName() == resultsAttrName)
         newAttrs.push_back(
-            b.getNamedAttr(resultsAttrName, mod.getResultNames()));
+            b.getNamedAttr(resultsAttrName, mod.getOutputNames()));
       else
         newAttrs.push_back(attr);
     }

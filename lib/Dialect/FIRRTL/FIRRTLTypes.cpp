@@ -126,6 +126,7 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         printNestedType(mapType.getValueType(), os);
         os << '>';
       })
+      .Case<PathType>([&](auto pathType) { os << "path"; })
       .Case<BaseTypeAliasType>([&](BaseTypeAliasType alias) {
         os << "alias<" << alias.getName().getValue() << ", ";
         printNestedType(alias.getInnerType(), os);
@@ -398,6 +399,14 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       return failure();
     return success();
   }
+  if (name.equals("path")) {
+    if (isConst) {
+      parser.emitError(parser.getNameLoc(), "path cannot be const");
+      return failure();
+    }
+    result = PathType::get(parser.getContext());
+    return success();
+  }
   if (name.equals("alias")) {
     FIRRTLBaseType type;
     StringRef name;
@@ -613,7 +622,7 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
       .Case<BundleType, FVectorType, FEnumType, OpenBundleType, OpenVectorType,
             RefType, BaseTypeAliasType>(
           [](auto type) { return type.getRecursiveTypeProperties(); })
-      .Case<StringType, BigIntType>([](auto type) {
+      .Case<PropertyType>([](auto type) {
         return RecursiveTypeProperties{true,  false, false, false,
                                        false, false, false};
       })
@@ -2058,7 +2067,7 @@ OpenVectorType::getSubTypeByFieldID(uint64_t fieldID) {
   if (fieldID == 0)
     return {*this, 0};
   return {llvm::cast<circt::hw::FieldIDTypeInterface>(getElementType()),
-          getIndexForFieldID(fieldID)};
+          getIndexAndSubfieldID(fieldID).second};
 }
 
 uint64_t OpenVectorType::getMaxFieldID() {
@@ -2550,7 +2559,7 @@ void FIRRTLDialect::registerTypes() {
            // References and open aggregates
            RefType, OpenBundleType, OpenVectorType,
            // Non-Hardware types
-           StringType, BigIntType, ListType, MapType>();
+           StringType, BigIntType, ListType, MapType, PathType>();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike

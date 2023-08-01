@@ -62,7 +62,8 @@ class HWMemSimImpl {
 
   Value addPipelineStages(ImplicitLocOpBuilder &b,
                           ModuleNamespace &moduleNamespace, size_t stages,
-                          Value clock, Value data, Value gate = {});
+                          Value clock, Value data, const Twine &name,
+                          Value gate = {});
   sv::AlwaysOp lastPipelineAlwaysOp;
 
 public:
@@ -174,7 +175,7 @@ static Value getMemoryRead(ImplicitLocOpBuilder &b, Value memory, Value addr,
 Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
                                       ModuleNamespace &moduleNamespace,
                                       size_t stages, Value clock, Value data,
-                                      Value gate) {
+                                      const Twine &name, Value gate) {
   if (!stages)
     return data;
 
@@ -195,8 +196,9 @@ Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
   SmallVector<sv::RegOp> regs;
   b.setInsertionPoint(alwaysOp);
   for (unsigned i = 0; i < stages; ++i) {
-    auto regName = b.getStringAttr(moduleNamespace.newName("_GEN"));
-    auto reg = b.create<sv::RegOp>(data.getType(), StringAttr{}, regName);
+    auto regName =
+        b.getStringAttr(moduleNamespace.newName("_" + name + "_d" + Twine(i)));
+    auto reg = b.create<sv::RegOp>(data.getType(), regName, regName);
     regs.push_back(reg);
     registers.push_back(reg);
   }
@@ -276,13 +278,16 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       for (size_t j = 0, e = mem.readLatency; j != e; ++j) {
         auto enLast = en;
         if (j < e - 1)
-          en = addPipelineStages(b, moduleNamespace, 1, clock, en);
-        addr = addPipelineStages(b, moduleNamespace, 1, clock, addr, enLast);
+          en = addPipelineStages(b, moduleNamespace, 1, clock, en,
+                                 "R" + Twine(i) + "_en");
+        addr = addPipelineStages(b, moduleNamespace, 1, clock, addr,
+                                 "R" + Twine(i) + "_addr", enLast);
       }
     } else {
-      en = addPipelineStages(b, moduleNamespace, mem.readLatency, clock, en);
-      addr =
-          addPipelineStages(b, moduleNamespace, mem.readLatency, clock, addr);
+      en = addPipelineStages(b, moduleNamespace, mem.readLatency, clock, en,
+                             "R" + Twine(i) + "_en");
+      addr = addPipelineStages(b, moduleNamespace, mem.readLatency, clock, addr,
+                               "R" + Twine(i) + "_addr");
     }
 
     // Read Logic
@@ -312,31 +317,52 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       wmaskBits = b.create<ConstantOp>(b.getIntegerAttr(en.getType(), 1));
 
     // Add common pipeline stages.
-    addr = addPipelineStages(b, moduleNamespace, numCommonStages, clock, addr);
-    en = addPipelineStages(b, moduleNamespace, numCommonStages, clock, en);
-    wmode =
-        addPipelineStages(b, moduleNamespace, numCommonStages, clock, wmode);
+    addr = addPipelineStages(b, moduleNamespace, numCommonStages, clock, addr,
+                             "RW" + Twine(i) + "_addr");
+    en = addPipelineStages(b, moduleNamespace, numCommonStages, clock, en,
+                           "RW" + Twine(i) + "_en");
+    wmode = addPipelineStages(b, moduleNamespace, numCommonStages, clock, wmode,
+                              "RW" + Twine(i) + "_mode");
 
     // Add read-only pipeline stages.
-    auto read_addr = addPipelineStages(
-        b, moduleNamespace, numReadStages - numCommonStages, clock, addr);
-    auto read_en = addPipelineStages(
-        b, moduleNamespace, numReadStages - numCommonStages, clock, en);
-    auto read_wmode = addPipelineStages(
-        b, moduleNamespace, numReadStages - numCommonStages, clock, wmode);
+    Value readAddr = addr;
+    Value readEn = en;
+    if (ignoreReadEnable) {
+      for (size_t j = 0, e = mem.readLatency; j != e; ++j) {
+        auto enLast = en;
+        if (j < e - 1)
+          readEn = addPipelineStages(b, moduleNamespace, 1, clock, en,
+                                     "RW" + Twine(i) + "_ren");
+        readAddr = addPipelineStages(b, moduleNamespace, 1, clock, addr,
+                                     "RW" + Twine(i) + "_raddr", enLast);
+      }
+    } else {
+      readAddr =
+          addPipelineStages(b, moduleNamespace, numReadStages - numCommonStages,
+                            clock, addr, "RW" + Twine(i) + "_raddr");
+      readEn =
+          addPipelineStages(b, moduleNamespace, numReadStages - numCommonStages,
+                            clock, en, "RW" + Twine(i) + "_ren");
+    }
+    auto readWMode =
+        addPipelineStages(b, moduleNamespace, numReadStages - numCommonStages,
+                          clock, wmode, "RW" + Twine(i) + "_rmode");
 
     // Add write-only pipeline stages.
-    auto write_addr = addPipelineStages(
-        b, moduleNamespace, numWriteStages - numCommonStages, clock, addr);
-    auto write_en = addPipelineStages(
-        b, moduleNamespace, numWriteStages - numCommonStages, clock, en);
-    auto write_wmode = addPipelineStages(
-        b, moduleNamespace, numWriteStages - numCommonStages, clock, wmode);
-    wdataIn =
-        addPipelineStages(b, moduleNamespace, numWriteStages, clock, wdataIn);
+    auto writeAddr =
+        addPipelineStages(b, moduleNamespace, numWriteStages - numCommonStages,
+                          clock, addr, "RW" + Twine(i) + "_waddr");
+    auto writeEn =
+        addPipelineStages(b, moduleNamespace, numWriteStages - numCommonStages,
+                          clock, en, "RW" + Twine(i) + "_wen");
+    auto writeWMode =
+        addPipelineStages(b, moduleNamespace, numWriteStages - numCommonStages,
+                          clock, wmode, "RW" + Twine(i) + "_wmode");
+    wdataIn = addPipelineStages(b, moduleNamespace, numWriteStages, clock,
+                                wdataIn, "RW" + Twine(i) + "_wdata");
     if (isMasked)
       wmaskBits = addPipelineStages(b, moduleNamespace, numWriteStages, clock,
-                                    wmaskBits);
+                                    wmaskBits, "RW" + Twine(i) + "_wmask");
 
     SmallVector<Value, 4> maskValues(maskBits);
     SmallVector<Value, 4> dataValues(maskBits);
@@ -355,25 +381,28 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
 
     // Read logic.
     Value rcond = b.createOrFold<comb::AndOp>(
-        read_en,
+        readEn,
         b.createOrFold<comb::ICmpOp>(
-            comb::ICmpPredicate::eq, read_wmode,
-            b.createOrFold<ConstantOp>(read_wmode.getType(), 0), false),
+            comb::ICmpPredicate::eq, readWMode,
+            b.createOrFold<ConstantOp>(readWMode.getType(), 0), false),
         false);
 
-    auto val = getMemoryRead(b, reg, read_addr, addMuxPragmas);
-    Value x = b.create<sv::ConstantXOp>(val.getType());
-    b.create<sv::AssignOp>(rWire, b.create<comb::MuxOp>(rcond, val, x, false));
+    auto val = getMemoryRead(b, reg, readAddr, addMuxPragmas);
+    if (!ignoreReadEnable) {
+      Value x = b.create<sv::ConstantXOp>(val.getType());
+      val = b.create<comb::MuxOp>(rcond, val, x, false);
+    }
+    b.create<sv::AssignOp>(rWire, val);
 
     // Write logic gaurded by the corresponding mask bit.
     for (auto wmask : llvm::enumerate(maskValues)) {
       b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, [&]() {
         auto wcond = b.createOrFold<comb::AndOp>(
-            write_en,
-            b.createOrFold<comb::AndOp>(wmask.value(), write_wmode, false),
+            writeEn,
+            b.createOrFold<comb::AndOp>(wmask.value(), writeWMode, false),
             false);
         b.create<sv::IfOp>(wcond, [&]() {
-          Value slotReg = b.create<sv::ArrayIndexInOutOp>(reg, write_addr);
+          Value slotReg = b.create<sv::ArrayIndexInOutOp>(reg, writeAddr);
           b.create<sv::PAssignOp>(
               b.createOrFold<sv::IndexedPartSelectInOutOp>(
                   slotReg,
@@ -402,12 +431,15 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     else
       wmaskBits = b.create<ConstantOp>(b.getIntegerAttr(en.getType(), 1));
     // Add pipeline stages
-    addr = addPipelineStages(b, moduleNamespace, numStages, clock, addr);
-    en = addPipelineStages(b, moduleNamespace, numStages, clock, en);
-    wdataIn = addPipelineStages(b, moduleNamespace, numStages, clock, wdataIn);
+    addr = addPipelineStages(b, moduleNamespace, numStages, clock, addr,
+                             "W" + Twine(i) + "addr");
+    en = addPipelineStages(b, moduleNamespace, numStages, clock, en,
+                           "W" + Twine(i) + "en");
+    wdataIn = addPipelineStages(b, moduleNamespace, numStages, clock, wdataIn,
+                                "W" + Twine(i) + "data");
     if (isMasked)
-      wmaskBits =
-          addPipelineStages(b, moduleNamespace, numStages, clock, wmaskBits);
+      wmaskBits = addPipelineStages(b, moduleNamespace, numStages, clock,
+                                    wmaskBits, "W" + Twine(i) + "mask");
 
     SmallVector<Value, 4> maskValues(maskBits);
     SmallVector<Value, 4> dataValues(maskBits);

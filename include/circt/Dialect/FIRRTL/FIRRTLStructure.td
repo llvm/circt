@@ -253,4 +253,83 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
   let hasCustomAssemblyFormat = 1;
 }
 
+def ClassOp : FIRRTLModuleLike<"class", [
+  SingleBlock, NoTerminator,
+  DeclareOpInterfaceMethods<FModuleLike, [
+    // Class Ops do not support port annotations.
+    // Override this method to return an empty array attr.
+    "getPortAnnotationsAttr"]>
+]> {
+  let summary = "FIRRTL Class";
+  let description = [{
+    The "firrtl.class" operation defines a class of property-only objects,
+    including a given name, a list of ports, and a body that represents the
+    connections within the class.
+
+    A class may only have property ports, and its body may only be ops that act
+    on properties, such as propassign ops.
+  }];
+  let arguments = (ins SymbolNameAttr:$sym_name, APIntAttr:$portDirections,
+                       ArrayRefAttr:$portNames, ArrayRefAttr:$portTypes,
+                       ArrayRefAttr:$portSyms, ArrayRefAttr:$portLocations);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+
+  let skipDefaultBuilders = 1;
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+  let builders = [
+    OpBuilder<(ins
+      "StringAttr":$name,
+      "ArrayRef<PortInfo>":$ports)>];
+
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &getBody().front(); }
+
+    using iterator = Block::iterator;
+    iterator begin() { return getBodyBlock()->begin(); }
+    iterator end() { return getBodyBlock()->end(); }
+
+    Block::BlockArgListType getArguments() {
+      return getBodyBlock()->getArguments();
+    }
+
+    // Return the block argument for the port with the specified index.
+    BlockArgument getArgument(size_t portNumber);
+
+    OpBuilder getBodyBuilder() {
+      assert(!getBody().empty() && "Unexpected empty 'body' region.");
+      Block &bodyBlock = getBody().front();
+      return OpBuilder::atBlockEnd(&bodyBlock);
+    }
+
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
+    ArrayAttr getParameters();
+  }];
+}
+
+def GroupDeclOp : FIRRTLOp<
+  "declgroup",
+  [IsolatedFromAbove, Symbol, SymbolTable, SingleBlock, NoTerminator,
+   ParentOneOf<["firrtl::CircuitOp", "firrtl::GroupDeclOp"]>]
+> {
+  let summary = "A declaration of an optional group";
+  let description = [{
+    The `firrtl.declgroup` operation declares an optional group and a lowering
+    convetion for that group.  Optional groups are a feature of FIRRTL that add
+    verification or debugging code to an existing module at runtime.
+
+    A `firrtl.declgroup` operation only declares the group and any groups nested
+    under the current declaration.  Functionality is added to modules using the
+    `firrtl.group` operation.
+  }];
+  let arguments = (ins SymbolNameAttr:$sym_name, GroupConventionAttr:$convention);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{
+    $sym_name $convention attr-dict-with-keyword $body
+  }];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLSTRUCTURE_TD

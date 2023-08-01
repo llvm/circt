@@ -18,6 +18,7 @@
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
+#include "circt/Dialect/HW/Namespace.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -202,8 +203,9 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
     auto srcPorts = op.getArgNames();
     for (auto port : llvm::enumerate(realInputs)) {
       auto name = getNameForPort(port.value(), srcPorts);
-      ports.push_back({name, hw::PortDirection::INPUT, port.value().getType(),
-                       port.index()});
+      ports.push_back(
+          {{name, port.value().getType(), hw::ModulePort::Direction::Input},
+           port.index()});
     }
   }
 
@@ -331,13 +333,43 @@ static void addExistingBinds(Block *topLevelModule, BindTable &bindTable) {
 }
 
 // Inline any modules that only have inputs for test code.
-static void inlineInputOnly(hw::HWModuleOp oldMod,
-                            hw::InstanceGraph &instanceGraph,
-                            BindTable &bindTable,
-                            SmallPtrSetImpl<Operation *> &opsToErase) {
+static void
+inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
+                BindTable &bindTable, SmallPtrSetImpl<Operation *> &opsToErase,
+                llvm::DenseSet<hw::InnerRefAttr> &innerRefUsedByNonBindOp) {
+
   // Check if the module only has inputs.
   if (oldMod.getNumOutputs() != 0)
     return;
+
+  // Check if it's ok to inline. We cannot inline the module if there exists a
+  // declaration with an inner symbol referred by non-bind ops (e.g. hierpath).
+  for (auto port : oldMod.getPorts()) {
+    if (port.sym) {
+      // Reject if the inner sym is a per-field symbol, or its inner ref is used
+      // by non-bind op.
+      if (!port.sym.getSymName() || port.sym.size() != 1 ||
+          innerRefUsedByNonBindOp.count(hw::InnerRefAttr::get(
+              oldMod.getModuleNameAttr(), port.sym.getSymName()))) {
+        oldMod.emitWarning() << "module " << oldMod.getModuleName()
+                             << " is an input only module but cannot "
+                                "be inlined because a signal "
+                             << port.name << " is referred by name";
+        return;
+      }
+    }
+  }
+  for (auto &op : *oldMod.getBodyBlock()) {
+    if (auto innerSym = op.getAttrOfType<StringAttr>("inner_sym"))
+      if (innerRefUsedByNonBindOp.count(
+              hw::InnerRefAttr::get(oldMod.getModuleNameAttr(), innerSym))) {
+        op.emitWarning()
+            << "module " << oldMod.getModuleName()
+            << " is an input only module but cannot be inlined because signals "
+               "are referred by name";
+        return;
+      }
+  }
 
   // Get the instance graph node for the old module.
   hw::InstanceGraphNode *node = instanceGraph.lookup(oldMod);
@@ -359,6 +391,11 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
     hw::InstanceOp inst = cast<hw::InstanceOp>(instLike.getOperation());
     if (inst.getInnerSym().has_value()) {
       allInlined = false;
+      auto diag =
+          oldMod.emitWarning()
+          << "module " << oldMod.getModuleName()
+          << " cannot be inlined because there is an instance with a symbol";
+      diag.attachNote(inst.getLoc());
       continue;
     }
 
@@ -375,10 +412,23 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
     hw::InstanceGraphNode *instParentNode = instanceGraph.lookup(instParent);
     SmallVector<Operation *, 16> lateBoundOps;
     b.setInsertionPoint(inst);
+    // Namespace that tracks inner symbols in the parent module.
+    hw::ModuleNamespace nameSpace(instParent);
+    // A map from old inner symbols to new ones.
+    DenseMap<mlir::StringAttr, mlir::StringAttr> symMapping;
+
     for (auto &op : *oldMod.getBodyBlock()) {
       // If the op was erased by instance extraction, don't copy it over.
       if (opsToErase.contains(&op))
         continue;
+
+      // If the op has an inner sym, first create a new inner sym for it.
+      if (auto innerSym = op.getAttrOfType<StringAttr>("inner_sym")) {
+        auto newName = b.getStringAttr(nameSpace.newName(innerSym.getValue()));
+        auto result = symMapping.insert({innerSym, newName});
+        (void)result;
+        assert(result.second && "inner symbols must be unique");
+      }
 
       // For instances in the bind table, update the bind with the new parent.
       if (auto innerInst = dyn_cast<hw::InstanceOp>(op)) {
@@ -387,9 +437,19 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
           if (it != bindTable[oldMod.getNameAttr()].end()) {
             sv::BindOp bind = it->second;
             auto oldInnerRef = bind.getInstanceAttr();
-            auto newInnerRef = hw::InnerRefAttr::get(
-                instParent.getModuleNameAttr(), oldInnerRef.getName());
-            bind.setInstanceAttr(newInnerRef);
+            auto it = symMapping.find(oldInnerRef.getName());
+            assert(it != symMapping.end() &&
+                   "inner sym mapping must be already populated");
+            auto newName = it->second;
+            auto newInnerRef =
+                hw::InnerRefAttr::get(instParent.getModuleNameAttr(), newName);
+            OpBuilder::InsertionGuard g(b);
+            // Clone bind operations.
+            b.setInsertionPoint(bind);
+            sv::BindOp clonedBind = cast<sv::BindOp>(b.clone(*bind, mapping));
+            clonedBind.setInstanceAttr(newInnerRef);
+            bindTable[instParent.getModuleNameAttr()][newName] =
+                cast<sv::BindOp>(clonedBind);
           }
         }
       }
@@ -409,6 +469,10 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
               instanceGraph.lookup(innerInst.getModuleNameAttr().getAttr());
           instParentNode->addInstance(innerInst, innerInstModule);
         }
+
+        // If the op has an inner sym, then attach an updated inner sym.
+        if (auto innerSym = op.getAttrOfType<StringAttr>("inner_sym"))
+          clonedOp->setAttr("inner_sym", symMapping[innerSym]);
       }
     }
 
@@ -423,6 +487,10 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
 
   // If all instances were inlined, remove the module.
   if (allInlined) {
+    // Erase old bind statements.
+    for (auto [_, bind] : bindTable[oldMod.getNameAttr()])
+      bind.erase();
+    bindTable[oldMod.getNameAttr()].clear();
     instanceGraph.erase(node);
     opsToErase.insert(oldMod);
   }
@@ -609,6 +677,21 @@ void SVExtractTestCodeImplPass::runOnOperation() {
   this->instanceGraph = &getAnalysis<circt::hw::InstanceGraph>();
 
   auto top = getOperation();
+
+  // It takes extra effort to inline modules which contains inner symbols
+  // referred through hierpaths or unknown operations since we have to update
+  // inner refs users globally. However we do want to inline modules which
+  // contain bound instances so create a set of inner refs used by non bind op
+  // in order to allow bind ops.
+  DenseSet<hw::InnerRefAttr> innerRefUsedByNonBindOp;
+  top.walk([&](Operation *op) {
+    if (!isa<sv::BindOp>(op))
+      for (auto attr : op->getAttrs())
+        attr.getValue().walk([&](hw::InnerRefAttr attr) {
+          innerRefUsedByNonBindOp.insert(attr);
+        });
+  });
+
   auto *topLevelModule = top.getBody();
   auto assertDir =
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.assert");
@@ -723,7 +806,8 @@ void SVExtractTestCodeImplPass::runOnOperation() {
 
       // Inline any modules that only have inputs for test code.
       if (!disableModuleInlining && anyThingExtracted)
-        inlineInputOnly(rtlmod, *instanceGraph, bindTable, opsToErase);
+        inlineInputOnly(rtlmod, *instanceGraph, bindTable, opsToErase,
+                        innerRefUsedByNonBindOp);
 
       numOpsErased += opsToErase.size();
       while (!opsToErase.empty()) {

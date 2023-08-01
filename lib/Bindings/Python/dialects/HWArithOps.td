@@ -9,7 +9,6 @@
 #ifndef BINDINGS_PYTHON_HWARITH_OPS
 #define BINDINGS_PYTHON_HWARITH_OPS
 
-include "mlir/Bindings/Python/Attributes.td"
 include "circt/Dialect/HWArith/HWArith.td"
 
 #endif

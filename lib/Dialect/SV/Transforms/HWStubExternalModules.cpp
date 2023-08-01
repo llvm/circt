@@ -43,7 +43,7 @@ void HWStubExternalModulesPass::runOnOperation() {
       OpBuilder innerBuilder(outputOp);
       SmallVector<Value, 8> outputs;
       // All output ports need values, use x
-      for (auto &p : ports.outputs) {
+      for (auto &p : ports.outputs()) {
         outputs.push_back(
             innerBuilder.create<sv::ConstantXOp>(outputOp->getLoc(), p.type));
       }

@@ -1,6 +1,6 @@
 // RUN: circt-opt %s -export-verilog | FileCheck %s --strict-whitespace
 
-// CHECK-LABEL module Decl
+// CHECK-LABEL: module Decl
 hw.module @Decl() {
   // CHECK: wire [3:0] x;
   %x = sv.wire : !hw.inout<i4>

@@ -46,6 +46,29 @@ IR which already contains fork and sink operations, one may use the
 the `--dc-materialize-forks-sinks` pass.
 
 
+## Value (channel) semantics
+
+1. **Latency insensitive**:
+    * Any DC-typed value (`dc.token/dc.value<T...>`) has latency insensitive
+semantics.
+    * DC does **not** specify the implementation of this latency
+insensitivity, given that it strictly pertains to the **control** of latency
+insensitive values. This should reinforce the mental model that DC isn't
+strictly a hardware construct - that is, DC values could be implemented in
+hardware by e.g ready/valid semantics or by FIFO interfaces (read/write, full, empty, ...)
+or in software by e.g. message queues, RPC, or other streaming protocols.
+    * In the current state of the world (CIRCT), DC uses ESI to implement its
+latency insensitive hardware protocol. By doing so, we let DC do what DC does
+best (control language) and likewise with ESI (silicon interconnect).
+2. **Values are channels**:
+    * Given the above latency insensitivity, it is useful to think of DC values
+as channels, wherein a channel can be arbitrarily buffered without changing the
+semantics of the program.
+2. **FIFO semantics**:
+    * DC-typed values have FIFO semantics, meaning that the order of values in
+the 'channel' is preserved (i.e. the order of values written to the channel is
+the same as the order of values read from the channel).
+
 ## Canonicalization
 By explicitly separating data and control parts of a program, we allow for
 control-only canonicalization to take place.

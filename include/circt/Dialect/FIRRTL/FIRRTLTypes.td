@@ -99,6 +99,13 @@ def RWProbe : FIRRTLDialectType<
   CPred<"type_isa<RefType>($_self) && type_cast<RefType>($_self).getForceable()">,
    "rwprobe type", "::circt::firrtl::RefType">;
 
+def RWProbeTarget : FIRRTLDialectType<
+    CPred<"type_isa<FIRRTLBaseType>($_self) && "
+          "!type_cast<FIRRTLBaseType>($_self).hasUninferredReset() &&"
+          "!type_cast<FIRRTLBaseType>($_self).hasUninferredWidth()">,
+    "RWProbeTarget type (a FIRRTL base type with a known width and not abstract reset)",
+    "::circt::firrtl::FIRRTLBaseType">;
+
 def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;
 def StrictConnectableType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
 
@@ -203,5 +210,8 @@ def BigIntType : FIRRTLDialectTypeHelper<"BigIntType", "big integer type">,
 
 def ListType : FIRRTLDialectTypeHelper<"ListType", "list type">;
 def MapType : FIRRTLDialectTypeHelper<"MapType", "map type">;
+
+def PathType : FIRRTLDialectTypeHelper<"PathType", "path type">,
+  BuildableType<"::circt::firrtl::PathType::get($_builder.getContext())">;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD

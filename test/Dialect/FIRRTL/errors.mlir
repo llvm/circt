@@ -288,7 +288,7 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "Foo" {
   firrtl.extmodule @Foo()
-  // expected-error @+1 {{'firrtl.instance' op expects parent op to be one of 'firrtl.module, firrtl.when'}}
+  // expected-error @+1 {{'firrtl.instance' op expects parent op to be one of 'firrtl.module, firrtl.group, firrtl.when, firrtl.match'}}
   firrtl.instance "" @Foo()
 }
 
@@ -1754,5 +1754,197 @@ firrtl.circuit "NonEquivalenctStrictConnect" {
   firrtl.module @NonEquivalenctStrictConnect(in %in: !firrtl.uint<1>, out %out: !firrtl.alias<foo, uint<2>>) {
     // expected-error @below {{op failed to verify that operands must be structurally equivalent}}
     firrtl.strictconnect %out, %in: !firrtl.alias<foo, uint<2>>, !firrtl.uint<1>
+  }
+}
+
+// -----
+// Classes cannot be the top module.
+
+// expected-error @below {{'firrtl.circuit' op must have a non-class top module}}
+firrtl.circuit "TopModuleIsClass" {
+  firrtl.class @TopModuleIsClass() {}
+}
+
+// -----
+// Classes cannot have hardware ports.
+
+firrtl.circuit "ClassCannotHaveHardwarePorts" {
+  firrtl.module @ClassCannotHaveHardwarePorts() {}
+  // expected-error @below {{'firrtl.class' op ports on a class must be properties}}
+  firrtl.class @ClassWithHardwarePort(in %in: !firrtl.uint<8>) {}
+}
+
+// -----
+// Classes cannot hold hardware things.
+
+firrtl.circuit "ClassCannotHaveWires" {
+  firrtl.module @ClassCannotHaveWires() {}
+  firrtl.class @ClassWithWire() {
+    // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.module, firrtl.group, firrtl.when, firrtl.match'}}
+    %w = firrtl.wire : !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// A group definition, "@A::@B", is missing an outer nesting of a group
+// definition with symbol "@A".
+firrtl.circuit "GroupMissingNesting" {
+  firrtl.declgroup @A bind {
+    firrtl.declgroup @B bind {}
+  }
+  // expected-note @below {{illegal parent op defined here}}
+  firrtl.module @GroupMissingNesting() {
+    // expected-error @below {{'firrtl.group' op has a nested group symbol, but does not have a 'firrtl.group' op as a parent}}
+    firrtl.group @A::@B {}
+  }
+}
+
+// -----
+
+// A group definition with a legal symbol, "@B", is illegaly nested under
+// another group with a legal symbol, "@B".
+firrtl.circuit "UnnestedGroup" {
+  firrtl.declgroup @A bind {}
+  firrtl.declgroup @B bind {}
+  firrtl.module @UnnestedGroup() {
+    // expected-note @below {{illegal parent op defined here}}
+    firrtl.group @A {
+      // expected-error @below {{'firrtl.group' op has an un-nested group symbol, but does not have a 'firrtl.module' op as a parent}}
+      firrtl.group @B {}
+    }
+  }
+}
+
+// -----
+
+// A group definition, "@B::@C", is nested under the wrong group, "@A".
+firrtl.circuit "WrongGroupNesting" {
+  firrtl.declgroup @A bind {}
+  firrtl.declgroup @B bind {
+    firrtl.declgroup @C bind {}
+  }
+  firrtl.module @WrongGroupNesting() {
+    // expected-note @below {{illegal parent group defined here}}
+    firrtl.group @A {
+      // expected-error @below {{'firrtl.group' op is nested under an illegal group}}
+      firrtl.group @B::@C {}
+    }
+  }
+}
+
+// -----
+
+// A group captures a type which is not a FIRRTL base type.
+firrtl.circuit "NonBaseTypeCapture" {
+  firrtl.declgroup @A bind {}
+  // expected-note @below {{operand is defined here}}
+  firrtl.module @NonBaseTypeCapture(in %a: !firrtl.probe<uint<1>>) {
+    // expected-error @below {{'firrtl.group' op captures an operand which is not a FIRRTL base type}}
+    firrtl.group @A {
+      // expected-note @below {{operand is used here}}
+      %b = firrtl.ref.resolve %a : !firrtl.probe<uint<1>>
+    }
+  }
+}
+
+// -----
+
+// A group captures a non-passive type.
+firrtl.circuit "NonPassiveCapture" {
+  firrtl.declgroup @A bind {}
+  firrtl.module @NonPassiveCapture() {
+    // expected-note @below {{operand is defined here}}
+    %a = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
+    // expected-error @below {{'firrtl.group' op captures an operand which is not a passive type}}
+    firrtl.group @A {
+      %b = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
+      // expected-note @below {{operand is used here}}
+      firrtl.connect %b, %a : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
+    }
+  }
+}
+
+// -----
+
+// A group may not drive sinks outside the group.
+firrtl.circuit "GroupDrivesSinksOutside" {
+  firrtl.declgroup @A bind {}
+  firrtl.module @GroupDrivesSinksOutside(in %cond : !firrtl.uint<1>) {
+    %a = firrtl.wire : !firrtl.uint<1>
+    // expected-note @below {{destination is defined here}}
+    %b = firrtl.wire : !firrtl.bundle<c: uint<1>>
+    // expected-note @below {{enclosing group is defined here}}
+    firrtl.group @A {
+      firrtl.when %cond : !firrtl.uint<1> {
+        %b_c = firrtl.subfield %b[c] : !firrtl.bundle<c: uint<1>>
+        // expected-error @below {{'firrtl.strictconnect' op connects to a destination which is defined outside its enclosing group}}
+        firrtl.strictconnect %b_c, %a : !firrtl.uint<1>
+      }
+    }
+  }
+}
+
+// -----
+
+firrtl.circuit "RWProbeRemote" {
+  firrtl.module @Other() {
+    %w = firrtl.wire sym @x : !firrtl.uint<1>
+  }
+  firrtl.module @RWProbeRemote() {
+    // expected-error @below {{op has non-local target}}
+    %rw = firrtl.ref.rwprobe <@Other::@x> : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "RWProbeNonBase" {
+  firrtl.module @RWProbeNonBase() {
+    // expected-error @below {{cannot force type '!firrtl.string'}}
+    %rw = firrtl.ref.rwprobe <@RWProbeTypes::@invalid> : !firrtl.string
+  }
+}
+
+// -----
+
+firrtl.circuit "RWProbeTypes" {
+  firrtl.module @RWProbeTypes() {
+    // expected-note @below {{target resolves here}}
+    %w = firrtl.wire sym @x : !firrtl.sint<1>
+    // expected-error @below {{op has type mismatch: target resolves to '!firrtl.sint<1>' instead of expected '!firrtl.uint<1>'}}
+    %rw = firrtl.ref.rwprobe <@RWProbeTypes::@x> : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "RWProbeUninferred" {
+  firrtl.module @RWProbeUninferred() {
+    %w = firrtl.wire sym @x : !firrtl.uint
+    // expected-error @below {{op attribute 'type' failed to satisfy constraint: type attribute of RWProbeTarget type (a FIRRTL base type with a known width and not abstract reset)}}
+    %rw = firrtl.ref.rwprobe <@RWProbeUninferred::@x> : !firrtl.uint
+  }
+}
+
+// -----
+
+firrtl.circuit "RWProbeUninferredReset" {
+  firrtl.module @RWProbeUninferredReset() {
+    %w = firrtl.wire sym @x : !firrtl.bundle<a: reset>
+    // expected-error @below {{op attribute 'type' failed to satisfy constraint: type attribute of RWProbeTarget type (a FIRRTL base type with a known width and not abstract reset)}}
+    %rw = firrtl.ref.rwprobe <@RWProbeUninferred::@x> : !firrtl.bundle<a: reset>
+  }
+}
+
+// -----
+
+firrtl.circuit "RWProbeInstance" {
+  firrtl.extmodule @Ext()
+  firrtl.module @RWProbeInstance() {
+    // expected-note @below {{target resolves here}}
+    firrtl.instance inst sym @inst @Ext()
+    // expected-error @below {{op has target that cannot be probed}}
+    %rw = firrtl.ref.rwprobe <@RWProbeInstance::@inst> : !firrtl.uint<1>
   }
 }

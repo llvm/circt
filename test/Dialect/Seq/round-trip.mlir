@@ -64,3 +64,9 @@ hw.module @fifo2(%clk : i1, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> () 
   // CHECK: %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 3 almost_full 2 almost_empty 1 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
   %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 3 almost_full 2 almost_empty 1 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
 }
+
+
+hw.module @preset(%clock : i1, %reset : i1, %next : i32) -> () {
+  // CHECK: %reg = seq.firreg %next clock %clock preset 0 : i32
+  %reg = seq.firreg %next clock %clock preset 0 : i32
+}

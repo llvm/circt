@@ -163,7 +163,7 @@ firrtl.module @VerbatimExpr() {
   %2 = firrtl.add %0, %1 : (!firrtl.uint<42>, !firrtl.uint<32>) -> !firrtl.uint<43>
 }
 
-// CHECK-LABL: @LowerToBind
+// CHECK-LABEL: @LowerToBind
 // CHECK: firrtl.instance foo sym @s1 {lowerToBind} @InstanceLowerToBind()
 firrtl.module @InstanceLowerToBind() {}
 firrtl.module @LowerToBind() {
@@ -278,6 +278,12 @@ firrtl.module @MapTest(in %in: !firrtl.map<bigint, string>, out %out: !firrtl.ma
 // CHECK-SAME:  (in %in: !firrtl.map<bigint, list<map<string, bigint>>>, out %out: !firrtl.map<bigint, list<map<string, bigint>>>)
 firrtl.module @PropertyNestedTest(in %in: !firrtl.map<bigint, list<map<string, bigint>>>, out %out: !firrtl.map<bigint, list<map<string, bigint>>>) {
   firrtl.propassign %out, %in : !firrtl.map<bigint, list<map<string, bigint>>>
+}
+
+// CHECK-LABEL: firrtl.module @PathTest
+// CHECK-SAME: (in %in: !firrtl.path, out %out: !firrtl.path)
+firrtl.module @PathTest(in %in: !firrtl.path, out %out: !firrtl.path) {
+  firrtl.propassign %out, %in : !firrtl.path
 }
 
 // CHECK-LABEL: TypeAlias

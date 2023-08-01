@@ -9,7 +9,6 @@
 #ifndef BINDINGS_PYTHON_SEQ_OPS
 #define BINDINGS_PYTHON_SEQ_OPS
 
-include "mlir/Bindings/Python/Attributes.td"
 include "circt/Dialect/Seq/Seq.td"
 
 #endif

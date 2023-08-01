@@ -9,7 +9,6 @@
 #ifndef BINDINGS_PYTHON_SV_OPS
 #define BINDINGS_PYTHON_SV_OPS
 
-include "mlir/Bindings/Python/Attributes.td"
 include "circt/Dialect/SV/SV.td"
 
 #endif

@@ -25,6 +25,7 @@
 #include "circt/Dialect/FSM/FSMPasses.h"
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
+#include "circt/Dialect/Ibis/IbisPasses.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "circt/Dialect/MSFT/MSFTPasses.h"
 #include "circt/Dialect/Pipeline/PipelinePasses.h"
@@ -56,6 +57,7 @@ inline void registerAllPasses() {
   seq::registerPasses();
   sv::registerPasses();
   handshake::registerPasses();
+  ibis::registerPasses();
   hw::registerPasses();
   pipeline::registerPasses();
   ssp::registerPasses();

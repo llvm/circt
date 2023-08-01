@@ -46,6 +46,18 @@ def Convention : I32EnumAttr<"Convention", "lowering convention", [
 def ConventionAttr : EnumAttr<FIRRTLDialect, Convention, "convention">;
 
 //===----------------------------------------------------------------------===//
+// Group Lowering Conventions
+//===----------------------------------------------------------------------===//
+
+def GroupConvention : I32EnumAttr<"GroupConvention", "group convention", [
+  I32EnumAttrCase<"Bind", 0, "bind">]> {
+
+  let genSpecializedAttr = 0;
+}
+
+def GroupConventionAttr : EnumAttr<FIRRTLDialect, GroupConvention, "groupconvention">;
+
+//===----------------------------------------------------------------------===//
 // Read Under Write Behaviour
 //===----------------------------------------------------------------------===//
 

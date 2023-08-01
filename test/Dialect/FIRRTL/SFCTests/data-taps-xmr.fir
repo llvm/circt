@@ -100,7 +100,7 @@ circuit Top : %[[
 ; CHECK-NOT:   endmodule
 ; CHECK:         input [[Child_boredPort:[a-zA-Z0-9_]+]]
 ; CHECK:         wire tap = [[Child_boredPort]];
-; CHECK;       endmodule
+; CHECK:       endmodule
 
 ; CHECK-LABEL: module ChildWrapper(
 ; CHECK-NOT:   endmodule

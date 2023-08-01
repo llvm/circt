@@ -112,20 +112,20 @@ PureModuleLowering::matchAndRewrite(ESIPureModuleOp pureMod, OpAdaptor adaptor,
         continue;
       }
       // Normal port construction.
-      ports.push_back(hw::PortInfo{port.getNameAttr(),
-                                   hw::PortDirection::INPUT,
-                                   port.getResult().getType(),
-                                   inputs.size(),
-                                   {},
-                                   port.getLoc()});
+      ports.push_back(
+          hw::PortInfo{{port.getNameAttr(), port.getResult().getType(),
+                        hw::ModulePort::Direction::Input},
+                       inputs.size(),
+                       {},
+                       port.getLoc()});
       inputs.push_back(port);
     } else if (auto port = dyn_cast<ESIPureModuleOutputOp>(op)) {
-      ports.push_back(hw::PortInfo{port.getNameAttr(),
-                                   hw::PortDirection::OUTPUT,
-                                   port.getValue().getType(),
-                                   outputs.size(),
-                                   {},
-                                   port.getLoc()});
+      ports.push_back(
+          hw::PortInfo{{port.getNameAttr(), port.getValue().getType(),
+                        hw::ModulePort::Direction::Output},
+                       outputs.size(),
+                       {},
+                       port.getLoc()});
       outputs.push_back(port);
     } else if (auto param = dyn_cast<ESIPureModuleParamOp>(op)) {
       params.push_back(

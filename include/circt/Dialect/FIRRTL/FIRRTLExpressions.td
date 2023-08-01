@@ -16,6 +16,8 @@
 include "FIRRTLDialect.td"
 include "FIRRTLTypes.td"
 include "FIRRTLEnums.td"
+include "circt/Dialect/HW/HWAttributesNaming.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Types.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
@@ -1154,6 +1156,22 @@ def RefSubOp : FIRRTLExprOp<"ref.sub"> {
 
   let assemblyFormat =
      "$input `[` $index `]` attr-dict `:` qualified(type($input))";
+}
+
+def RWProbeOp : FIRRTLExprOp<"ref.rwprobe",
+                  [DeclareOpInterfaceMethods<InnerRefUserOpInterface>]> {
+  let summary = "FIRRTL RWProbe";
+  let description = [{
+    Create a RWProbe for the target.
+    Target must be local.
+    ```
+      %result = firrtl.ref.rwprobe @mod::@sym : t
+    ```
+  }];
+
+  let arguments = (ins InnerRefAttr:$target, TypeAttrOf<RWProbeTarget>:$type);
+  let results = (outs RefType:$result);
+  let assemblyFormat = "$target attr-dict `:` $type";
 }
 
 //===----------------------------------------------------------------------===//

@@ -12,7 +12,7 @@
 // Check if printing with very short line length, removing info locators (@[...]), no line is longer than 5x line length.
 // RUN: circt-translate --export-firrtl %s --target-line-length=10 | sed -e 's/ @\[.*\]//' | FileCheck %s --implicit-check-not "{{^(.{50})}}" --check-prefix PRETTY
 
-// CHECK-LABEL: FIRRTL version 3.0.0
+// CHECK-LABEL: FIRRTL version 3.1.0
 // CHECK-LABEL: circuit Foo :
 // PRETTY-LABEL: circuit Foo :
 firrtl.circuit "Foo" {
@@ -35,6 +35,9 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: output b0 : UInt
     // CHECK-NEXT: output b1 : Probe<UInt<1>>
     // CHECK-NEXT: output b2 : RWProbe<UInt<1>>
+    // CHECK-NEXT: input string : String
+    // CHECK-NEXT: input integer : Integer
+    // CHECK-NEXT: input path : Path
     in %a00: !firrtl.clock,
     in %a01: !firrtl.reset,
     in %a02: !firrtl.asyncreset,
@@ -48,7 +51,10 @@ firrtl.circuit "Foo" {
     in %a10: !firrtl.vector<uint, 42>,
     out %b0: !firrtl.uint,
     out %b1: !firrtl.probe<uint<1>>,
-    out %b2: !firrtl.rwprobe<uint<1>>
+    out %b2: !firrtl.rwprobe<uint<1>>,
+    in %string: !firrtl.string,
+    in %integer: !firrtl.bigint,
+    in %path : !firrtl.path
   ) {}
 
   // CHECK-LABEL: module Simple :
@@ -436,6 +442,24 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:    parameter FORMAT = "xyz_timeout=%d\n"
   // CHECK-NEXT:    parameter WIDTH = 32
 
+  firrtl.intmodule private @MyIntModule<
+    FORMAT: none = "xyz_timeout=%d\0A",
+    DEFAULT: ui32 = 0,
+    WIDTH: ui32 = 32,
+    DEPTH: f64 = 3.242000e+01
+  >(
+    in in: !firrtl.uint,
+    out out: !firrtl.uint<8>
+  ) attributes {intrinsic = "testIntrinsic1"}
+  // CHECK-LABEL: intmodule MyIntModule :
+  // CHECK-NEXT:    input in : UInt
+  // CHECK-NEXT:    output out : UInt<8>
+  // CHECK-NEXT:    intrinsic = testIntrinsic1
+  // CHECK-NEXT:    parameter FORMAT = "xyz_timeout=%d\n"
+  // CHECK-NEXT:    parameter DEFAULT = 0
+  // CHECK-NEXT:    parameter WIDTH = 32
+  // CHECK-NEXT:    parameter DEPTH = 32.42
+
   // CHECK-LABEL: module ConstTypes :
   firrtl.module @ConstTypes(
     // CHECK-NEXT: input a00 : const Clock
@@ -614,4 +638,59 @@ firrtl.circuit "Foo" {
     firrtl.ref.define %_12, %18 : !firrtl.probe<uint<1>>
     firrtl.ref.define %_13, %_15_ref : !firrtl.rwprobe<uint<1>>
   }
+  
+  // CHECK-LABEL: module Properties :
+  firrtl.module @Properties(out %string : !firrtl.string,
+                            out %integer : !firrtl.bigint) {
+    // CHECK: propassign string, String("hello")
+    %0 = firrtl.string "hello"
+    firrtl.propassign %string, %0 : !firrtl.string
+
+    // CHECK: propassign integer, Integer(99)
+    %1 = firrtl.bigint 99
+    firrtl.propassign %integer, %1 : !firrtl.bigint
+  }
+
+  // Test optional group declaration and definition emission.
+  //
+  // CHECK-LABEL: declgroup GroupA, bind :
+  // CHECK-NEXT:    declgroup GroupB, bind :
+  // CHECK-NEXT:      declgroup GroupC, bind :
+  // CHECK-NEXT:      declgroup GroupD, bind :
+  // CHECK-NEXT:        declgroup GroupE, bind :
+  // CHECK-NEXT:    declgroup GroupF, bind :
+  firrtl.declgroup @GroupA bind {
+    firrtl.declgroup @GroupB bind {
+      firrtl.declgroup @GroupC bind {
+      }
+      firrtl.declgroup @GroupD bind {
+        firrtl.declgroup @GroupE bind {
+        }
+      }
+    }
+    firrtl.declgroup @GroupF bind {
+    }
+  }
+  // CHECK:      module ModuleWithGroups :
+  // CHECK-NEXT:   group GroupA :
+  // CHECK-NEXT:     group GroupB :
+  // CHECK-NEXT:       group GroupC :
+  // CHECK-NEXT:       group GroupD :
+  // CHECK-NEXT:         group GroupE :
+  // CHECK-NEXT:     group GroupF :
+  firrtl.module @ModuleWithGroups() {
+    firrtl.group @GroupA {
+      firrtl.group @GroupA::@GroupB {
+        firrtl.group @GroupA::@GroupB::@GroupC {
+        }
+        firrtl.group @GroupA::@GroupB::@GroupD {
+          firrtl.group @GroupA::@GroupB::@GroupD::@GroupE {
+          }
+        }
+      }
+      firrtl.group @GroupA::@GroupF {
+      }
+    }
+  }
+
 }

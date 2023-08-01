@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
@@ -47,7 +48,6 @@
 using namespace circt;
 using namespace firrtl;
 using circt::comb::ICmpPredicate;
-using hw::PortDirection;
 
 /// Attribute that indicates that the module hierarchy starting at the
 /// annotated module should be dumped to a file.
@@ -266,6 +266,19 @@ struct CircuitLoweringState {
     binds.push_back(op);
   }
 
+  /// For a given Type Alias, return the corresponding AliasType. Create and
+  /// record the AliasType, if it doesn't exist.
+  hw::TypeAliasType getTypeAlias(Type rawType, BaseTypeAliasType firAliasType,
+                                 Location typeLoc) {
+
+    auto hwAlias = typeAliases.getTypedecl(firAliasType);
+    if (hwAlias)
+      return hwAlias;
+    assert(!typeAliases.isFrozen() &&
+           "type aliases cannot be generated after its frozen");
+    return typeAliases.addTypedecl(rawType, firAliasType, typeLoc);
+  }
+
   FModuleLike getDut() { return dut; }
   FModuleLike getTestHarness() { return testHarness; }
 
@@ -285,6 +298,17 @@ struct CircuitLoweringState {
   bool isInTestHarness(hw::HWModuleLike mod) { return !isInDUT(mod); }
 
   InstanceGraph *getInstanceGraph() { return instanceGraph; }
+
+  /// Given a type, return the corresponding lowered type for the HW dialect.
+  ///  A wrapper to the FIRRTLUtils::lowerType, required to ensure safe addition
+  ///  of TypeScopeOp for all the TypeDecls.
+  Type lowerType(Type type, Location loc) {
+    return ::lowerType(type, loc,
+                       [&](Type rawType, BaseTypeAliasType firrtlType,
+                           Location typeLoc) -> hw::TypeAliasType {
+                         return getTypeAlias(rawType, firrtlType, typeLoc);
+                       });
+  }
 
 private:
   friend struct FIRRTLModuleLowering;
@@ -330,6 +354,79 @@ private:
 
   /// Cached nla table analysis.
   NLATable *nlaTable = nullptr;
+
+  /// FIRRTL::BaseTypeAliasType is lowered to hw::TypeAliasType, which requires
+  /// TypedeclOp inside a single global TypeScopeOp. This structure
+  /// maintains a map of FIRRTL alias types to HW alias type, which is populated
+  /// in the sequential phase and accessed during the read-only phase when its
+  /// frozen.
+  /// This structure ensures that
+  /// all TypeAliases are lowered as a prepass, before lowering all the modules
+  /// in parallel. Lowering of TypeAliases must be done sequentially to ensure
+  /// deteministic TypeDecls inside the global TypeScopeOp.
+  struct RecordTypeAlias {
+
+    RecordTypeAlias(CircuitOp c) : circuitOp(c) {}
+
+    hw::TypeAliasType getTypedecl(BaseTypeAliasType firAlias) const {
+      auto iter = firrtlTypeToAliasTypeMap.find(firAlias);
+      if (iter != firrtlTypeToAliasTypeMap.end())
+        return iter->second;
+      return {};
+    }
+
+    bool isFrozen() { return frozen; }
+
+    void freeze() { frozen = true; }
+
+    hw::TypeAliasType addTypedecl(Type rawType, BaseTypeAliasType firAlias,
+                                  Location typeLoc) {
+      assert(!frozen && "Record already frozen, cannot be updated");
+
+      if (!typeScope) {
+        auto b = ImplicitLocOpBuilder::atBlockBegin(
+            circuitOp.getLoc(),
+            &circuitOp->getParentRegion()->getBlocks().back());
+        typeScope = b.create<hw::TypeScopeOp>(
+            b.getStringAttr(circuitOp.getName() + "__TYPESCOPE_"));
+        typeScope.getBodyRegion().push_back(new Block());
+      }
+      auto typeName = firAlias.getName();
+      // Get a unique typedecl name.
+      // The bundleName can conflict with other symbols, but must be unique
+      // within the TypeScopeOp.
+      typeName =
+          StringAttr::get(typeName.getContext(),
+                          typeDeclNamespace.newName(typeName.getValue()));
+
+      auto typeScopeBuilder =
+          ImplicitLocOpBuilder::atBlockEnd(typeLoc, typeScope.getBodyBlock());
+      auto typeDecl = typeScopeBuilder.create<hw::TypedeclOp>(typeLoc, typeName,
+                                                              rawType, nullptr);
+      auto hwAlias = hw::TypeAliasType::get(
+          SymbolRefAttr::get(typeScope.getSymNameAttr(),
+                             {FlatSymbolRefAttr::get(typeDecl)}),
+          rawType);
+      auto insert = firrtlTypeToAliasTypeMap.try_emplace(firAlias, hwAlias);
+      assert(insert.second && "Entry already exists, insert failed");
+      return insert.first->second;
+    }
+
+  private:
+    bool frozen = false;
+    /// Global typescope for all the typedecls in this module.
+    hw::TypeScopeOp typeScope;
+
+    /// Map of FIRRTL type to the lowered AliasType.
+    DenseMap<Type, hw::TypeAliasType> firrtlTypeToAliasTypeMap;
+
+    /// Set to keep track of unique typedecl names.
+    Namespace typeDeclNamespace;
+
+    CircuitOp circuitOp;
+  };
+
+  RecordTypeAlias typeAliases = RecordTypeAlias(circuitOp);
 };
 
 void CircuitLoweringState::processRemainingAnnotations(
@@ -486,6 +583,14 @@ void FIRRTLModuleLowering::runOnOperation() {
 
           state.oldToNewModuleMap[&op] = loweredMod;
           modulesToProcess.push_back(module);
+          // Lower all the alias types.
+          module.walk([&](Operation *op) {
+            for (auto res : op->getResults()) {
+              if (auto aliasType =
+                      type_dyn_cast<BaseTypeAliasType>(res.getType()))
+                state.lowerType(aliasType, op->getLoc());
+            }
+          });
         })
         .Case<FExtModuleOp>([&](auto extModule) {
           auto loweredMod = lowerExtModule(extModule, topLevelModule, state);
@@ -509,6 +614,8 @@ void FIRRTLModuleLowering::runOnOperation() {
             return signalPassFailure();
         });
   }
+  // Ensure no more TypeDecl can be added to the global TypeScope.
+  state.typeAliases.freeze();
   // Handle the creation of the module hierarchy metadata.
 
   // Collect the two sets of hierarchy files from the circuit. Some of them will
@@ -772,7 +879,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
   for (auto firrtlPort : firrtlPorts) {
     hw::PortInfo hwPort;
     hwPort.name = firrtlPort.name;
-    hwPort.type = lowerType(firrtlPort.type);
+    hwPort.type = loweringState.lowerType(firrtlPort.type, firrtlPort.loc);
     if (firrtlPort.sym)
       if (firrtlPort.sym.size() > 1 ||
           (firrtlPort.sym.size() == 1 && !firrtlPort.sym.getSymName()))
@@ -816,16 +923,16 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
 
     // Figure out the direction of the port.
     if (firrtlPort.isOutput()) {
-      hwPort.direction = hw::PortDirection::OUTPUT;
+      hwPort.dir = hw::ModulePort::Direction::Output;
       hwPort.argNum = numResults++;
     } else if (firrtlPort.isInput()) {
-      hwPort.direction = hw::PortDirection::INPUT;
+      hwPort.dir = hw::ModulePort::Direction::Input;
       hwPort.argNum = numArgs++;
     } else {
       // If the port is an inout bundle or contains an analog type, then it is
       // implicitly inout.
       hwPort.type = hw::InOutType::get(hwPort.type);
-      hwPort.direction = hw::PortDirection::INOUT;
+      hwPort.dir = hw::ModulePort::Direction::InOut;
       hwPort.argNum = numArgs++;
     }
     hwPort.loc = firrtlPort.loc;
@@ -1089,8 +1196,9 @@ static Value tryEliminatingAttachesToAnalogValue(Value value,
 ///
 /// This can happen when there are no connects to the value.  The 'mergePoint'
 /// location is where a 'hw.merge' operation should be inserted if needed.
-static Value tryEliminatingConnectsToValue(Value flipValue,
-                                           Operation *insertPoint) {
+static Value
+tryEliminatingConnectsToValue(Value flipValue, Operation *insertPoint,
+                              CircuitLoweringState &loweringState) {
   // Handle analog's separately.
   if (type_isa<AnalogType>(flipValue.getType()))
     return tryEliminatingAttachesToAnalogValue(flipValue, insertPoint);
@@ -1116,7 +1224,8 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
     return {}; // TODO: Emit an sv.constant here since it is unconnected.
 
   // Don't special case zero-bit results.
-  auto loweredType = lowerType(flipValue.getType());
+  auto loweredType =
+      loweringState.lowerType(flipValue.getType(), flipValue.getLoc());
   if (loweredType.isInteger(0))
     return {};
 
@@ -1145,6 +1254,12 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   // source may not match the destination width.
   auto destTy = type_cast<FIRRTLBaseType>(flipValue.getType()).getPassiveType();
 
+  if (destTy != connectSrc.getType() &&
+      (isa<BaseTypeAliasType>(connectSrc.getType()) ||
+       isa<BaseTypeAliasType>(destTy))) {
+    connectSrc =
+        builder.createOrFold<BitCastOp>(flipValue.getType(), connectSrc);
+  }
   if (!destTy.isGround()) {
     // If types are not ground type and they don't match, we give up.
     if (destTy != type_cast<FIRRTLType>(connectSrc.getType()))
@@ -1245,7 +1360,8 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
       continue;
     }
 
-    if (auto value = tryEliminatingConnectsToValue(oldArg, outputOp)) {
+    if (auto value =
+            tryEliminatingConnectsToValue(oldArg, outputOp, loweringState)) {
       // If we were able to find the value being connected to the output,
       // directly use it!
       outputs.push_back(value);
@@ -1255,18 +1371,25 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
 
     // Outputs need a temporary wire so they can be connect'd to, which we
     // then return.
-    Value newArg =
-        bodyBuilder
-            .create<WireOp>(port.type, "." + port.getName().str() + ".output")
-            .getResult();
+    auto newArg = bodyBuilder.create<WireOp>(
+        port.type, "." + port.getName().str() + ".output");
+
     // Switch all uses of the old operands to the new ones.
-    oldArg.replaceAllUsesWith(newArg);
+    oldArg.replaceAllUsesWith(newArg.getResult());
 
     // Don't output zero bit results or inouts.
-    auto resultHWType = lowerType(port.type);
+    auto resultHWType = loweringState.lowerType(port.type, port.loc);
     if (!resultHWType.isInteger(0)) {
-      auto output = castFromFIRRTLType(newArg, resultHWType, outputBuilder);
+      auto output =
+          castFromFIRRTLType(newArg.getResult(), resultHWType, outputBuilder);
+      auto idx = newModule.getNumInputs() + outputs.size();
       outputs.push_back(output);
+
+      // If output port has symbol, move it to this wire.
+      if (auto sym = newModule.getPortSymbolAttr(idx)) {
+        newArg.setInnerSymAttr(sym);
+        newModule.setPortSymbolAttr(idx, {});
+      }
     }
   }
 
@@ -1550,6 +1673,10 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   FailureOr<Value> lowerSubfield(SubfieldOp op, Value input);
 
   LogicalResult fixupLTLOps();
+
+  Type lowerType(Type type) {
+    return circuitState.lowerType(type, builder.getLoc());
+  }
 
 private:
   /// The module we're lowering into.
@@ -2032,7 +2159,16 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
     // always produces a zero value in the destination width.
     return getOrCreateIntConstant(destWidth, 0);
   }
-
+  if (destWidth ==
+      cast<FIRRTLBaseType>(value.getType()).getBitWidthOrSentinel()) {
+    // Lookup the lowered type of dest.
+    auto loweredDstType = lowerType(destType);
+    if (result.getType() != loweredDstType &&
+        (isa<hw::TypeAliasType>(result.getType()) ||
+         isa<hw::TypeAliasType>(loweredDstType))) {
+      return builder.createOrFold<hw::BitcastOp>(loweredDstType, result);
+    }
+  }
   // Aggregates values
   if (result.getType().isa<hw::ArrayType, hw::StructType>()) {
     // Types already match.
@@ -2750,9 +2886,7 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   // that we have a symbol name so we can keep the node as a wire.
   auto symName = getInnerSymName(op);
   auto name = op.getNameAttr();
-  if (AnnotationSet::removeAnnotations(
-          op, "firrtl.transforms.DontTouchAnnotation") &&
-      !symName) {
+  if (AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) && !symName) {
     // name may be empty
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
     symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
@@ -3455,7 +3589,7 @@ LogicalResult FIRRTLLowering::visitExpr(PlusArgsTestIntrinsicOp op) {
   addToInitialBlock([&]() {
     auto call = builder.create<sv::SystemFunctionOp>(
         resultType, "test$plusargs", ArrayRef<Value>{str});
-    builder.create<sv::PAssignOp>(reg, call);
+    builder.create<sv::BPAssignOp>(reg, call);
   });
   return setLoweringTo<sv::ReadInOutOp>(op, reg);
 }
@@ -3465,17 +3599,28 @@ LogicalResult FIRRTLLowering::visitExpr(PlusArgsValueIntrinsicOp op) {
   auto type = lowerType(op.getResult().getType());
   if (!type)
     return failure();
-
-  auto str = builder.create<sv::ConstantStrOp>(op.getFormatString());
   auto regv =
-      builder.create<sv::RegOp>(type, builder.getStringAttr("_pargs_v"));
+      builder.create<sv::RegOp>(type, builder.getStringAttr("_pargs_v_"));
   auto regf =
       builder.create<sv::RegOp>(resultType, builder.getStringAttr("_pargs_f"));
-  addToInitialBlock([&]() {
-    auto call = builder.create<sv::SystemFunctionOp>(
-        resultType, "value$plusargs", ArrayRef<Value>{str, regv});
-    builder.create<sv::PAssignOp>(regf, call);
-  });
+  builder.create<sv::IfDefOp>(
+      "SYNTHESIS",
+      [&]() {
+        auto cst0 = getOrCreateIntConstant(1, 0);
+        builder.create<sv::AssignOp>(regf, cst0);
+      },
+      [&]() {
+        addToInitialBlock([&]() {
+          auto zero32 = getOrCreateIntConstant(32, 0);
+          auto tmpResultType = builder.getIntegerType(32);
+          auto str = builder.create<sv::ConstantStrOp>(op.getFormatString());
+          auto call = builder.create<sv::SystemFunctionOp>(
+              tmpResultType, "value$plusargs", ArrayRef<Value>{str, regv});
+          auto truevalue = builder.create<comb::ICmpOp>(ICmpPredicate::ne, call,
+                                                        zero32, true);
+          builder.create<sv::BPAssignOp>(regf, truevalue);
+        });
+      });
   auto readf = builder.create<sv::ReadInOutOp>(regf);
   auto readv = builder.create<sv::ReadInOutOp>(regv);
 
@@ -3846,6 +3991,12 @@ LogicalResult FIRRTLLowering::visitStmt(SkipOp op) {
 /// Returns failure if the destination is a subaccess operation. These should be
 /// transposed to the right-hand-side by a pre-pass.
 FailureOr<bool> FIRRTLLowering::lowerConnect(Value destVal, Value srcVal) {
+  auto srcType = srcVal.getType();
+  auto dstType = destVal.getType();
+  if (srcType != dstType &&
+      (isa<hw::TypeAliasType>(srcType) || isa<hw::TypeAliasType>(dstType))) {
+    srcVal = builder.create<hw::BitcastOp>(destVal.getType(), srcVal);
+  }
   return TypeSwitch<Operation *, FailureOr<bool>>(destVal.getDefiningOp())
       .Case<hw::WireOp>([&](auto op) {
         maybeUnused(op.getInput());

@@ -13,19 +13,14 @@
 #ifndef CIRCT_DIALECT_HW_HWOPINTERFACES
 #define CIRCT_DIALECT_HW_HWOPINTERFACES
 
+include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/OpBase.td"
 
-def HWModuleLike : OpInterface<"HWModuleLike"> {
+def HWModuleLike : OpInterface<"HWModuleLike", [Symbol]> {
   let cppNamespace = "circt::hw";
   let description = "Provide common module information.";
 
   let methods = [
-    InterfaceMethod<"Check whether the module is publicly visible",
-    "bool", "isPublic", (ins),
-    /*methodBody=*/[{
-      return ::mlir::SymbolTable::getSymbolVisibility($_op) ==
-             ::mlir::SymbolTable::Visibility::Public;
-    }]>,
 
     InterfaceMethod<"Get the module name",
     "::llvm::StringRef", "getModuleName", (ins),
@@ -41,8 +36,76 @@ def HWModuleLike : OpInterface<"HWModuleLike"> {
     "size_t", "getNumPorts">,
 
     InterfaceMethod<"Get a port symbol attribute",
-    "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex)>
+    "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex)>,
+
+    InterfaceMethod<"Get the module type",
+    "::circt::hw::ModuleType", "getHWModuleType", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{ return ::circt::hw::detail::fnToMod($_op, getInputNames(), getOutputNames()); }]>,
+
+    InterfaceMethod<"Return the names of the inputs to this module",
+    "mlir::ArrayAttr", "getInputNames", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return $_op->template getAttrOfType<ArrayAttr>("argNames");
+    }]>,
+
+    InterfaceMethod<"Return the names of the outputs this module",
+    "mlir::ArrayAttr", "getOutputNames", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return $_op->template getAttrOfType<ArrayAttr>("resultNames");
+    }]>,
+
+    InterfaceMethod<"Return the locations of the inputs to this module",
+    "mlir::ArrayAttr", "getInputLocs", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return $_op->template getAttrOfType<ArrayAttr>("argLocs");
+    }]>,
+
+    InterfaceMethod<"Return the locations of the outputs of this module",
+    "mlir::ArrayAttr", "getOutputLocs", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return $_op->template getAttrOfType<ArrayAttr>("resultLocs");
+    }]>,
+
   ];
+
+  let extraSharedClassDeclaration = [{
+
+    // Return the number of inputs to this module
+    unsigned getNumInputs() {
+      return getInputNames().size();
+    }
+
+    // Return the number of outputs from this module
+    unsigned getNumOutputs() {
+      return getOutputNames().size();
+    }
+
+    // Return the name of an input.
+    mlir::StringRef getInputName(unsigned idx) {
+      return getInputNameAttr(idx).getValue();
+    }
+
+    // Return the name of an output
+    mlir::StringRef getOutputName(unsigned idx) {
+      return getOutputNameAttr(idx).getValue();
+    }
+
+    // Return the name of an input to this module
+    mlir::StringAttr getInputNameAttr(unsigned idx) {
+      return cast<StringAttr>(getInputNames()[idx]);
+    }
+
+    // Return the name of an output to this module
+    mlir::StringAttr getOutputNameAttr(unsigned idx) {
+      return cast<StringAttr>(getOutputNames()[idx]);
+    }
+
+  }];
 
   let verify = [{
     static_assert(
@@ -52,52 +115,11 @@ def HWModuleLike : OpInterface<"HWModuleLike"> {
   }];
 }
 
-def HWMutableModuleLike : OpInterface<"HWMutableModuleLike"> {
+def HWMutableModuleLike : OpInterface<"HWMutableModuleLike", [HWModuleLike]> {
   let cppNamespace = "circt::hw";
   let description = "Provide methods to mutate a module.";
 
   let methods = [
-    InterfaceMethod<"Return the number of inputs to this module",
-    "unsigned", "getNumInputs", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return $_op->template getAttrOfType<ArrayAttr>("argNames").size();
-    }]>,
-
-    InterfaceMethod<"Return the number of outputs from this module",
-    "unsigned", "getNumOutputs", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return $_op->template getAttrOfType<ArrayAttr>("resultNames").size();
-    }]>,
-
-    InterfaceMethod<"Return the names of the inputs to this module",
-    "mlir::ArrayAttr", "getArgNames", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return $_op->template getAttrOfType<ArrayAttr>("argNames");
-    }]>,
-
-    InterfaceMethod<"Return the names of the outputs this module",
-    "mlir::ArrayAttr", "getResultNames", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return $_op->template getAttrOfType<ArrayAttr>("resultNames");
-    }]>,
-
-    InterfaceMethod<"Return the locations of the inputs to this module",
-    "mlir::ArrayAttr", "getArgLocs", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return $_op->template getAttrOfType<ArrayAttr>("argLocs");
-    }]>,
-
-    InterfaceMethod<"Return the locations of the outputs of this module",
-    "mlir::ArrayAttr", "getResultLocs", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return $_op->template getAttrOfType<ArrayAttr>("resultLocs");
-    }]>,
 
     InterfaceMethod<
     "Decode information about the input and output ports on this module.",

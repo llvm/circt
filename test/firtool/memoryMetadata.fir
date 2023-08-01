@@ -90,7 +90,7 @@ circuit test:
     tbMemoryKind1.w.mask <= wMask
     tbMemoryKind1.w.data <= wData
 
-; CHECK=LABEL: module hier1
+; CHECK-LABEL: module hier1
 ; CHECK:  tbMemoryKind1_0 tbMemoryKind1
 
 

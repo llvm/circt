@@ -49,6 +49,13 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       ArrayRef<unsigned> eraseInputs,
       ArrayRef<unsigned> eraseOutputs
     );
+
+    /// Attribute name for port symbols.
+    static StringRef getPortSymbolAttrName() {
+      return "hw.exportPort";
+    }
+
+    void setPortSymbolAttr(size_t portIndex, ::circt::hw::InnerSymAttr sym);
   }];
 
   /// Additional class definitions inside the module op.
@@ -56,16 +63,65 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
 
   let extraClassDefinition = extraModuleClassDefinition # [{
     size_t $cppClass::getNumPorts() {
-      return getAllPorts().size();
+      // This is wildly inefficient
+      return getModulePortInfo(*this).size();
     }
 
     ::circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
-      for (::mlir::NamedAttribute argAttr :
-           ::mlir::function_interface_impl::getArgAttrs(*this, portIndex))
-        if (auto sym = argAttr.getValue().dyn_cast<::circt::hw::InnerSymAttr>())
-          return sym;
-      return ::circt::hw::InnerSymAttr();
+      DictionaryAttr portAttrs;
+      if (portIndex < getNumInputs()) {
+         portAttrs = ::mlir::function_interface_impl::getArgAttrDict(*this,
+                                                                     portIndex);
+      } else {
+        portIndex -= getNumInputs();
+        portAttrs = ::mlir::function_interface_impl::getResultAttrDict(
+            *this, portIndex);
+      }
+      if (portAttrs)
+        return portAttrs.getAs<::circt::hw::InnerSymAttr>(
+          getPortSymbolAttrName());
+      return {};
     }
+
+    void $cppClass::setPortSymbolAttr(size_t portIndex, ::circt::hw::InnerSymAttr sym) {
+      auto portSymAttr = StringAttr::get(getContext(), getPortSymbolAttrName());
+      if (portIndex < getNumInputs()) {
+        if (sym)
+          ::mlir::function_interface_impl::setArgAttr(*this, portIndex,
+                                                      portSymAttr, sym);
+        else
+          ::mlir::function_interface_impl::removeArgAttr(*this, portIndex,
+                                                         portSymAttr);
+        return;
+      }
+      if (sym)
+        ::mlir::function_interface_impl::setResultAttr(
+            *this, portIndex - getNumInputs(), portSymAttr, sym);
+      else
+        ::mlir::function_interface_impl::removeResultAttr(
+            *this, portIndex - getNumInputs(), portSymAttr);
+    }
+  }];
+
+}
+
+def HWTestModuleOp : HWOp<"testmodule", [Symbol, 
+                                         OpAsmOpInterface, 
+                                         HasParent<"mlir::ModuleOp">, 
+                                         IsolatedFromAbove,
+                                         SingleBlockImplicitTerminator<"OutputOp">]> {
+  let arguments = (ins TypeAttrOf<ModuleType>:$module_type,
+                       OptionalAttr<DictArrayAttr>:$port_attrs,
+                       OptionalAttr<LocationArrayAttr>:$port_locs,
+                       ParamDeclArrayAttr:$parameters,
+                       OptionalAttr<StrAttr>:$comment);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+  let hasCustomAssemblyFormat = 1;
+
+  let extraClassDeclaration = [{
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
   }];
 
 }
@@ -115,16 +171,6 @@ def HWModuleOp : HWModuleOpBase<"module",
 
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
-
-    /// Decode information about the input and output ports on this module.
-    ModulePortInfo getPorts() {
-      return getModulePortInfo(*this);
-    }
-
-    /// Return all the module ports merged into one list.
-    SmallVector<PortInfo> getAllPorts() {
-      return getAllModulePortInfos(*this);
-    }
 
     /// Returns the number of in or inout ports.
     size_t getNumInOrInoutPorts() { return getArgumentTypes().size(); }
@@ -274,10 +320,6 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
   ];
 
   let extraModuleClassDeclaration = [{
-    /// Return all the module ports merged into one list.
-    SmallVector<PortInfo> getAllPorts() {
-      return getAllModulePortInfos(*this);
-    }
 
     /// Return the PortInfo for the specified input or inout port.
     PortInfo getInOrInoutPort(size_t i) {
@@ -396,16 +438,6 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
   ];
 
   let extraModuleClassDeclaration = [{
-    /// Decode information about the input and output ports on this module.
-    ModulePortInfo getPorts() {
-      return getModulePortInfo(*this);
-    }
-
-    /// Return all the module ports merged into one list.
-    SmallVector<PortInfo> getAllPorts() {
-      return getAllModulePortInfos(*this);
-    }
-
     /// Return the name to use for the Verilog module that we're referencing
     /// here.  This is typically the symbol, but can be overridden with the
     /// verilogName attribute.
@@ -527,7 +559,7 @@ def InstanceOp : HWOp<"instance", [
   let hasVerifier = 1;
 }
 
-def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
+def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp, HWTestModuleOp">,
                                 Pure, ReturnLike]> {
   let summary = "HW termination operation";
   let description = [{

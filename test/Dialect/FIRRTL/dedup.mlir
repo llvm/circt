@@ -123,7 +123,6 @@ firrtl.circuit "Annotations" {
 
     // Dont touch on both ops should become local.
     // CHECK: %f = firrtl.wire  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
-    // CHECK %f = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {circt.nonlocal = @annos_nla2, class = "firrtl.transforms.DontTouchAnnotation"}]}
     %f = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
 
     // Subannotations should be handled correctly.

@@ -74,12 +74,11 @@ PortConversionBuilder::build(hw::PortInfo port) {
 
 Value PortConverterImpl::createNewInput(PortInfo origPort, const Twine &suffix,
                                         Type type, PortInfo &newPort) {
-  newPort = PortInfo{append(origPort.name, suffix),
-                     PortDirection::INPUT,
-                     type,
-                     newInputs.size(),
-                     {},
-                     origPort.loc};
+  newPort = PortInfo{
+      {append(origPort.name, suffix), type, ModulePort::Direction::Input},
+      newInputs.size(),
+      {},
+      origPort.loc};
   newInputs.emplace_back(0, newPort);
 
   if (!body)
@@ -90,12 +89,11 @@ Value PortConverterImpl::createNewInput(PortInfo origPort, const Twine &suffix,
 void PortConverterImpl::createNewOutput(PortInfo origPort, const Twine &suffix,
                                         Type type, Value output,
                                         PortInfo &newPort) {
-  newPort = PortInfo{append(origPort.name, suffix),
-                     PortDirection::OUTPUT,
-                     type,
-                     newOutputs.size(),
-                     {},
-                     origPort.loc};
+  newPort = PortInfo{
+      {append(origPort.name, suffix), type, ModulePort::Direction::Output},
+      newOutputs.size(),
+      {},
+      origPort.loc};
   newOutputs.emplace_back(0, newPort);
 
   if (!body)
@@ -109,7 +107,7 @@ LogicalResult PortConverterImpl::run() {
   bool foundLoweredPorts = false;
 
   auto createPortLowering = [&](PortInfo port) {
-    auto &loweredPorts = port.direction == PortDirection::OUTPUT
+    auto &loweredPorts = port.dir == ModulePort::Direction::Output
                              ? loweredOutputs
                              : loweredInputs;
 
@@ -127,10 +125,10 @@ LogicalResult PortConverterImpl::run() {
   };
 
   // Dispatch the port conversion builder on the I/O of the module.
-  for (PortInfo port : ports.inputs)
+  for (PortInfo port : ports.inputs())
     if (failed(createPortLowering(port)))
       return failure();
-  for (PortInfo port : ports.outputs)
+  for (PortInfo port : ports.outputs())
     if (failed(createPortLowering(port)))
       return failure();
 
@@ -165,7 +163,7 @@ LogicalResult PortConverterImpl::run() {
     // We should only erase the original arguments. New ones were appended with
     // the `createInput` method call.
     body->eraseArguments([&ports](BlockArgument arg) {
-      return arg.getArgNumber() < ports.inputs.size();
+      return arg.getArgNumber() < ports.sizeInputs();
     });
     // Set the new operands, overwriting the old ones.
     body->getTerminator()->setOperands(newOutputValues);
@@ -201,11 +199,11 @@ void PortConverterImpl::updateInstance(hw::InstanceOp inst) {
   // Create backedges for the future instance results so the signal mappers can
   // use the future results as values.
   SmallVector<Backedge> newResults;
-  for (PortInfo outputPort : ports.outputs)
+  for (PortInfo outputPort : ports.outputs())
     newResults.push_back(beb.get(outputPort.type));
 
   // Map the operands.
-  SmallVector<Value> newOperands(ports.inputs.size(), {});
+  SmallVector<Value> newOperands(ports.sizeInputs(), {});
   for (size_t oldOpIdx = 0, e = inst.getNumOperands(); oldOpIdx < e; ++oldOpIdx)
     loweredInputs[oldOpIdx]->mapInputSignals(
         b, inst, inst->getOperand(oldOpIdx), newOperands, newResults);
