@@ -3352,6 +3352,7 @@ ModulePortInfo HWTestModuleOp::getPortList() {
     InnerSymAttr sym = {};
     ports.push_back({{port}, i, sym, attr, loc});
   }
+  return ModulePortInfo(ports);
 }
 
 //===----------------------------------------------------------------------===//
