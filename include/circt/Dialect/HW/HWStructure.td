@@ -576,7 +576,7 @@ def GlobalRefOp : HWOp<"globalRef", [
 }
 
 def ProbeOp : HWOp<"probe", [
-      DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>
+      DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>
     ]> {
   let summary = "Probe values for use in remote references";
   let description = [{

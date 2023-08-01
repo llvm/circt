@@ -368,8 +368,7 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
         if (innerRefUsedByNonBindOp.count(innerRef)) {
           op.emitWarning() << "module " << oldMod.getModuleName()
                            << " is an input only module but cannot be inlined "
-                              "because signals "
-                              "are referred by name";
+                              "because signals are referred by name";
           return;
         }
       }
@@ -430,7 +429,7 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
       // If the op has an inner sym, first create a new inner sym for it.
       if (auto innerSymOp = dyn_cast<hw::InnerSymbolOpInterface>(op)) {
         if (auto innerSym = innerSymOp.getInnerSymAttr()) {
-          for (auto property : innerSymOp.getInnerSymAttr()) {
+          for (auto property : innerSym) {
             auto oldName = property.getName();
             auto newName =
                 b.getStringAttr(nameSpace.newName(oldName.getValue()));
@@ -484,15 +483,17 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
 
         // If the cloned op has an inner sym, then attach an updated inner sym.
         if (auto innerSymOp = dyn_cast<hw::InnerSymbolOpInterface>(clonedOp)) {
-          SmallVector<hw::InnerSymPropertiesAttr> properties;
-          for (auto property : innerSymOp.getInnerSymAttr()) {
-            auto newSymName = symMapping[property.getName()];
-            properties.push_back(hw::InnerSymPropertiesAttr::get(
-                op.getContext(), newSymName, property.getFieldID(),
-                property.getSymVisibility()));
+          if (auto oldInnerSym = innerSymOp.getInnerSymAttr()) {
+            SmallVector<hw::InnerSymPropertiesAttr> properties;
+            for (auto property : oldInnerSym) {
+              auto newSymName = symMapping[property.getName()];
+              properties.push_back(hw::InnerSymPropertiesAttr::get(
+                  op.getContext(), newSymName, property.getFieldID(),
+                  property.getSymVisibility()));
+            }
+            auto innerSym = hw::InnerSymAttr::get(op.getContext(), properties);
+            innerSymOp.setInnerSymbolAttr(innerSym);
           }
-          auto innerSym = hw::InnerSymAttr::get(op.getContext(), properties);
-          innerSymOp.setInnerSymbolAttr(innerSym);
         }
       }
     }

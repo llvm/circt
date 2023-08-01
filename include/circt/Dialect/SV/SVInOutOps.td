@@ -54,7 +54,7 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
 
 def RegOp : SVOp<"reg", [
           DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-          DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>]> {
+          DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
   let summary = "Define a new `reg` in SystemVerilog";
    let description = [{
      Declare a SystemVerilog Variable Declaration of 'reg' type.
@@ -228,7 +228,7 @@ def StructFieldInOutOp : SVOp<"struct_field_inout",
 
 def LogicOp : SVOp<"logic", [
       DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-      DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>]> {
+      DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
   let summary = "Define a logic";
   let description = [{
     Declare a SystemVerilog Variable Declaration of 'logic' type.

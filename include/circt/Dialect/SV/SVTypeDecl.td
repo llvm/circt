@@ -210,7 +210,8 @@ def ModportType : SVType<"Modport"> {
 // Other operations
 //===----------------------------------------------------------------------===//
 
-def InterfaceInstanceOp : SVOp<"interface.instance", [HasCustomSSAName,
+def InterfaceInstanceOp : SVOp<"interface.instance", [
+      HasCustomSSAName,
       DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>
     ]> {
   let summary = "Instantiate an interface";

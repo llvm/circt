@@ -27,7 +27,7 @@ def CompRegOp : SeqOp<"compreg",
      AllTypesMatch<["input", "data"/*, "resetValue"*/]>,
      SameVariadicOperandSize,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-     DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>]> {
+     DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
        // AllTypesMatch doesn't work with Optional types yet.
 
   let summary = "Register a value, storing it for one cycle";
@@ -102,7 +102,7 @@ def FirRegOp : SeqOp<"firreg",
      AllTypesMatch<["next", "data"/*, "resetValue"*/]>,
      SameVariadicOperandSize, MemoryEffects<[MemWrite, MemRead, MemAlloc]>,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-     DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>]> {
+     DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
       // AllTypesMatch doesn't work with Optional types yet.
 
   let summary = "Register with preset and sync or async reset";
