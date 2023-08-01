@@ -299,8 +299,8 @@ def ClassOp : FIRRTLModuleLike<"class", [
   DeclareOpInterfaceMethods<FModuleLike, [
     // Class Ops do not support port annotations.
     // Override this method to return an empty array attr.
-    "getPortAnnotationsAttr"]>
-]> {
+    "getPortAnnotationsAttr"]>,
+  DeclareOpInterfaceMethods<Symbol, ["canDiscardOnUseEmpty"]>]> {
   let summary = "FIRRTL Class";
   let description = [{
     The "firrtl.class" operation defines a class of property-only objects,

@@ -1631,6 +1631,13 @@ BlockArgument ClassOp::getArgument(size_t portNumber) {
   return getBodyBlock()->getArgument(portNumber);
 }
 
+bool ClassOp::canDiscardOnUseEmpty() {
+  // ClassOps are referenced by ClassTypes, and these uses are not
+  // discovereable by the symbol infrastructure. Return false here to prevent
+  // passes like symbolDCE from removing our classes.
+  return false;
+}
+
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//
