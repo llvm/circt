@@ -1487,3 +1487,37 @@ firrtl.circuit "TypeAlias" {
     firrtl.strictconnect %wire2, %0 : !firrtl.const.alias<baf, const.uint<1>>, !firrtl.const.uint<1>
   }
 }
+
+// -----
+
+// Check dontTouch goes on the wire generated for the output port, to preserve dontTouch behavior.
+firrtl.circuit "Issue5011" {
+  // CHECK-LABEL: module @Issue5011(
+  // CHECK-NOT: exportPort
+  firrtl.module @Issue5011(in %clock: !firrtl.clock, in %unused: !firrtl.uint<0>, out %out: !firrtl.uint<5> [{class = "firrtl.transforms.DontTouchAnnotation"}]) attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK: %[[OUT:.+]] = hw.wire %{{.+}} sym @
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %c1_ui5 = firrtl.constant 1 : !firrtl.uint<5>
+    firrtl.strictconnect %out, %c1_ui5 : !firrtl.uint<5>
+    %0 = firrtl.eq %out, %c1_ui5 : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<1>
+    firrtl.assert %clock, %0, %c1_ui1, "out was changed" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
+    // CHECK: hw.output %[[OUT]]
+  }
+}
+
+// -----
+
+// Check inner sym goes on wire created for output port.
+firrtl.circuit "Issue5011Sym" {
+  // CHECK-LABEL: module @Issue5011Sym(
+  // CHECK-NOT: exportPort
+  firrtl.module @Issue5011Sym(in %clock: !firrtl.clock, out %out: !firrtl.uint<5> sym @out_sym) attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK: %[[OUT:.+]] = hw.wire %{{.+}} sym @out_sym
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %c1_ui5 = firrtl.constant 1 : !firrtl.uint<5>
+    firrtl.strictconnect %out, %c1_ui5 : !firrtl.uint<5>
+    %0 = firrtl.eq %out, %c1_ui5 : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<1>
+    firrtl.assert %clock, %0, %c1_ui1, "out was changed" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
+    // CHECK: hw.output %[[OUT]]
+  }
+}
