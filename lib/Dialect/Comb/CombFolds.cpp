@@ -1184,24 +1184,26 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
   // .., c_n), a, 0)
   if (auto firstMux = op.getOperand(0).getDefiningOp<comb::MuxOp>()) {
     APInt value;
-    SmallVector<Value> conditions;
-    auto check = [&](Value v) {
-      auto mux = v.getDefiningOp<comb::MuxOp>();
-      if (!mux)
-        return false;
-      conditions.push_back(mux.getCond());
-      return firstMux.getTwoState() &&
-             firstMux.getTrueValue() == mux.getTrueValue() &&
-             matchPattern(mux.getFalseValue(), m_ConstantInt(&value)) &&
-             value.isZero();
-    };
-
-    if (op.getTwoState() && llvm::all_of(op.getOperands(), check)) {
-      auto cond = rewriter.create<comb::OrOp>(op.getLoc(), conditions, true);
-      replaceOpWithNewOpAndCopyName<comb::MuxOp>(
-          rewriter, op, cond, firstMux.getTrueValue(), firstMux.getFalseValue(),
-          true);
-      return success();
+    if (op.getTwoState() && firstMux.getTwoState() &&
+        matchPattern(firstMux.getFalseValue(), m_ConstantInt(&value)) &&
+        value.isZero()) {
+      SmallVector<Value> conditions{firstMux.getCond()};
+      auto check = [&](Value v) {
+        auto mux = v.getDefiningOp<comb::MuxOp>();
+        if (!mux)
+          return false;
+        conditions.push_back(mux.getCond());
+        return mux.getTwoState() &&
+               firstMux.getTrueValue() == mux.getTrueValue() &&
+               firstMux.getFalseValue() == mux.getFalseValue();
+      };
+      if (llvm::all_of(op.getOperands().drop_front(), check)) {
+        auto cond = rewriter.create<comb::OrOp>(op.getLoc(), conditions, true);
+        replaceOpWithNewOpAndCopyName<comb::MuxOp>(
+            rewriter, op, cond, firstMux.getTrueValue(),
+            firstMux.getFalseValue(), true);
+        return success();
+      }
     }
   }
 
