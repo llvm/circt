@@ -27,7 +27,7 @@ struct ModuleNamespace : Namespace {
   /// Populate the namespace from a module-like operation. This namespace will
   /// be composed of the `inner_sym`s of the module's ports and declarations.
   void add(hw::HWModuleOp module) {
-    auto ports = getModulePortInfo(module);
+    auto ports = module.getPortList();
     for (auto port : ports)
       if (port.sym && !port.sym.empty())
         nextIndex.insert({port.sym.getSymName().getValue(), 0});

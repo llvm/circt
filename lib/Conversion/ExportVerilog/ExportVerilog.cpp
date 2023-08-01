@@ -3662,7 +3662,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
   HWModuleOp parent = op->getParentOfType<HWModuleOp>();
 
   size_t operandIndex = 0;
-  auto ports = parent.getPorts();
+  auto ports = parent.getPortList();
   for (PortInfo port : ports.outputs()) {
     auto operand = op.getOperand(operandIndex);
     // Outputs that are set by the output port of an instance are handled
@@ -4607,7 +4607,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
   ps << PP::nbsp << PPExtString(getSymOpName(op)) << " (";
 
-  auto portInfo = getModulePortInfo(op);
+  auto portInfo = op.getPortList();
 
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
@@ -5176,8 +5176,8 @@ void ModuleEmitter::emitBind(BindOp op) {
      << PPExtString(getSymOpName(inst)) << " (";
   bool isFirst = true; // True until we print a port.
   ps.scopedBox(PP::bbox2, [&]() {
-    ModulePortInfo parentPortInfo = parentMod.getPorts();
-    auto childPortInfo = getModulePortInfo(inst);
+    ModulePortInfo parentPortInfo = parentMod.getPortList();
+    auto childPortInfo = inst.getPortList();
 
     // Get the max port name length so we can align the '('.
     size_t maxNameLength = 0;
@@ -5279,7 +5279,7 @@ void ModuleEmitter::emitBindInterface(BindInterfaceOp op) {
 void ModuleEmitter::emitHWModule(HWModuleOp module) {
   currentModuleOp = module;
 
-  auto portInfo = getModulePortInfo(module);
+  auto portInfo = module.getPortList();
 
   SmallPtrSet<Operation *, 8> moduleOpSet;
   moduleOpSet.insert(module);

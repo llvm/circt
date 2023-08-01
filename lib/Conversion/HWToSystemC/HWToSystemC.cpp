@@ -45,7 +45,7 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
     if (!module.getParameters().empty())
       return emitError(module->getLoc(), "module parameters not supported yet");
 
-    auto ports = getModulePortInfo(module);
+    auto ports = module.getPortList();
     if (llvm::any_of(ports, [](auto &port) { return port.isInOut(); }))
       return emitError(module->getLoc(), "inout arguments not supported yet");
 
@@ -100,7 +100,7 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
     // Move the block arguments of the systemc.func (that we got from the
     // hw.module) to the systemc.module
     rewriter.setInsertionPointToStart(scFunc.getBodyBlock());
-    auto portsLocal = getModulePortInfo(module);
+    auto portsLocal = module.getPortList();
     for (size_t i = 0, e = scFunc.getRegion().getNumArguments(); i < e; ++i) {
       auto inputRead =
           rewriter

@@ -31,6 +31,7 @@ struct PortInfo : public ModulePort {
 
   /// The optional symbol for this port.
   InnerSymAttr sym = {};
+  DictionaryAttr attrs = {};
   LocationAttr loc = {};
 
   StringRef getName() const { return name.getValue(); }

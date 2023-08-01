@@ -550,7 +550,8 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
         hw::PortInfo{{getPortName(req.getClientNamePath()), toClientType,
                       hw::ModulePort::Direction::Input},
                      origNumInputs,
-                     nullptr,
+                     {},
+                     {},
                      req->getLoc()}));
 
     // Replace uses with new block args which will correspond to said ports.

@@ -701,6 +701,7 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
              /*direction*/ hw::ModulePort::Direction::Input},
             /*argNum*/ inputPorts.size(),
             /*sym*/ {},
+            /*attr*/ {},
             /*location*/ loc});
       } else {
         // There's already an existing port. Just set it.

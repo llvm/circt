@@ -47,7 +47,7 @@ TEST(HWModuleOpTest, AddOutputs) {
   insertPorts.emplace_back(builder.getStringAttr("c"), wireC);
   top.insertOutputs(1, insertPorts);
 
-  auto ports = getModulePortInfo(top);
+  auto ports = top.getPortList();
   ASSERT_EQ(ports.size(), 4u);
 
   EXPECT_EQ(ports.at(0).name, builder.getStringAttr("a"));

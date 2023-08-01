@@ -344,7 +344,7 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
 
   // Check if it's ok to inline. We cannot inline the module if there exists a
   // declaration with an inner symbol referred by non-bind ops (e.g. hierpath).
-  for (auto port : oldMod.getPorts()) {
+  for (auto port : oldMod.getPortList()) {
     if (port.sym) {
       // Reject if the inner sym is a per-field symbol, or its inner ref is used
       // by non-bind op.
