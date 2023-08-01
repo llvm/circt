@@ -95,47 +95,44 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
               markForRemoval(send);
               return success();
             }
-            // Get an InnerRefAttr to the xmrDef op. If the operation does not
-            // take any InnerSym (like firrtl.add, firrtl.or etc) then create a
-            // NodeOp to add the InnerSym.
-            if (!isa<BlockArgument>(xmrDef)) {
-              Operation *xmrDefOp = xmrDef.getDefiningOp();
-              if (auto verbExpr = dyn_cast<VerbatimExprOp>(xmrDefOp))
-                if (verbExpr.getSymbolsAttr().empty() &&
-                    xmrDefOp->hasOneUse()) {
-                  // This represents the internal path into a module. For
-                  // generating the correct XMR, no node can be created in this
-                  // module. Create a null InnerRef and ensure the hierarchical
-                  // path ends at the parent that instantiates this module.
-                  auto inRef = InnerRefAttr();
-                  auto ind = addReachingSendsEntry(send.getResult(), inRef);
-                  xmrPathSuffix[ind] = verbExpr.getText();
-                  markForRemoval(verbExpr);
-                  markForRemoval(send);
-                  return success();
-                }
-              if (!isa<hw::InnerSymbolOpInterface>(xmrDefOp) ||
-                  /* No innner symbols for results of instances */
-                  isa<InstanceOp>(xmrDefOp) ||
-                  /* Similarly, anything with multiple results isn't named by
-                     the inner sym */
-                  xmrDefOp->getResults().size() > 1) {
-                // Add a node, for non-innerSym ops. Otherwise the sym will be
-                // dropped after LowerToHW.
-                // If the op has multiple results, we cannot add symbol to a
-                // single result, so create a node from the result and add
-                // symbol to the node.
-                ImplicitLocOpBuilder b(xmrDefOp->getLoc(), xmrDefOp);
-                b.setInsertionPointAfter(xmrDefOp);
-                StringRef opName;
-                auto nameKind = NameKindEnum::DroppableName;
-                if (auto name = xmrDefOp->getAttrOfType<StringAttr>("name")) {
-                  opName = name.getValue();
-                  nameKind = NameKindEnum::InterestingName;
-                }
-                xmrDef = b.create<NodeOp>(xmrDef, opName, nameKind).getResult();
+
+            if (auto verbExpr = xmrDef.getDefiningOp<VerbatimExprOp>())
+              if (verbExpr.getSymbolsAttr().empty() && verbExpr->hasOneUse()) {
+                // This represents the internal path into a module. For
+                // generating the correct XMR, no node can be created in this
+                // module. Create a null InnerRef and ensure the hierarchical
+                // path ends at the parent that instantiates this module.
+                auto inRef = InnerRefAttr();
+                auto ind = addReachingSendsEntry(send.getResult(), inRef);
+                xmrPathSuffix[ind] = verbExpr.getText();
+                markForRemoval(verbExpr);
+                markForRemoval(send);
+                return success();
+              }
+            // Get an InnerRefAttr to the value being sent.
+
+            // Add a node, don't need to have symbol on defining operation,
+            // just a way to send out the value.
+            ImplicitLocOpBuilder b(xmrDef.getLoc(), &getContext());
+            b.setInsertionPointAfterValue(xmrDef);
+            SmallString<32> opName;
+            auto nameKind = NameKindEnum::DroppableName;
+
+            if (auto [name, rootKnown] = getFieldName(
+                    getFieldRefFromValue(xmrDef), /*nameSafe=*/true);
+                rootKnown) {
+              opName = name + "_probe";
+              nameKind = NameKindEnum::InterestingName;
+            } else if (auto *xmrDefOp = xmrDef.getDefiningOp()) {
+              // Inspect "name" directly for ops that aren't named by above.
+              // (e.g., firrtl.constant)
+              if (auto name = xmrDefOp->getAttrOfType<StringAttr>("name")) {
+                (Twine(name.strref()) + "_probe").toVector(opName);
+                nameKind = NameKindEnum::InterestingName;
               }
             }
+            xmrDef = b.create<NodeOp>(xmrDef, opName, nameKind).getResult();
+
             // Create a new entry for this RefSendOp. The path is currently
             // local.
             addReachingSendsEntry(send.getResult(), getInnerRefTo(xmrDef));
