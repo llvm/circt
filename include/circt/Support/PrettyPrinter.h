@@ -29,6 +29,7 @@
 #include <cstdint>
 #include <deque>
 #include <limits>
+#include <variant>
 
 namespace circt {
 namespace pretty {
@@ -78,39 +79,60 @@ public:
   // values captured by the function object are valid out of scope.
   struct CallbackInfo : public TokenInfo {
     using CallbackTy = std::function<void()>;
-    CallbackTy *callback;
+    CallbackTy callback;
   };
 
 private:
-  union {
-    TokenInfo info;
-    StringInfo stringInfo;
-    BreakInfo breakInfo;
-    BeginInfo beginInfo;
-    EndInfo endInfo;
-    CallbackInfo callbackInfo;
-  } data;
+  std::variant<StringInfo, BreakInfo, BeginInfo, EndInfo, CallbackInfo> data;
 
 protected:
   template <Kind k, typename T>
   static auto &getInfoImpl(T &t) {
     if constexpr (k == Kind::String)
-      return t.data.stringInfo;
+      return std::get<StringInfo>(t.data);
     if constexpr (k == Kind::Break)
-      return t.data.breakInfo;
+      return std::get<BreakInfo>(t.data);
     if constexpr (k == Kind::Begin)
-      return t.data.beginInfo;
+      return std::get<BeginInfo>(t.data);
     if constexpr (k == Kind::End)
-      return t.data.endInfo;
+      return std::get<EndInfo>(t.data);
     if constexpr (k == Kind::Callback)
-      return t.data.callbackInfo;
+      return std::get<CallbackInfo>(t.data);
     llvm_unreachable("unhandled token kind");
   }
 
-  Token(Kind k) { data.info.kind = k; }
+  Token(Kind k) {
+    if (k == Kind::String)
+      data = StringInfo();
+    else if (k == Kind::Break)
+      data = BreakInfo();
+    else if (k == Kind::Begin)
+      data = BeginInfo();
+    else if (k == Kind::End)
+      data = EndInfo();
+    else if (k == Kind::Callback)
+      data = CallbackInfo();
+    else
+      llvm_unreachable("unhandled token kind");
+  }
 
 public:
-  Kind getKind() const { return data.info.kind; }
+  Kind getKind() const {
+
+    switch (data.index()) {
+    case 0:
+      return Kind::String;
+    case 1:
+      return Kind::Break;
+    case 2:
+      return Kind::Begin;
+    case 3:
+      return Kind::End;
+    case 4:
+      return Kind::Callback;
+    }
+    llvm_unreachable("unhandled token kind");
+  }
 };
 
 /// Helper class to CRTP-derive common functions.
@@ -168,9 +190,8 @@ struct BeginToken : public TokenBase<BeginToken, Token::Kind::Begin> {
 struct EndToken : public TokenBase<EndToken, Token::Kind::End> {};
 
 struct CallbackToken : public TokenBase<CallbackToken, Token::Kind::Callback> {
-  CallbackToken(Token::CallbackInfo::CallbackTy *c) { initialize(c); }
-  bool isValid() { return getInfo().callback; }
-  void invoke() const { std::invoke(*getInfo().callback); }
+  CallbackToken(Token::CallbackInfo::CallbackTy &c) { initialize(c); }
+  void invoke() const { std::invoke(getInfo().callback); }
 };
 
 //===----------------------------------------------------------------------===//

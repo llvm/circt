@@ -116,8 +116,6 @@ void PrettyPrinter::add(Token t) {
         addScanToken(-1);
       })
       .Case([&](CallbackToken *c) {
-        if (!c->isValid())
-          return;
         if (scanStack.empty())
           return print({t, 0});
         tokens.push_back({t, 0});
