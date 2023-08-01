@@ -42,7 +42,7 @@ class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
 
 def InstanceOp : HardwareDeclOp<"instance", [
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-    DeclareOpInterfaceMethods<HWInstanceLike>]> {
+    DeclareOpInterfaceMethods<InstanceLike>]> {
   let summary = "Instantiate an instance of a module";
   let description = [{
     This represents an instance of a module.  The results are the modules inputs

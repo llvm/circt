@@ -62,7 +62,7 @@ def CircuitOp : FIRRTLOp<"circuit",
 }
 
 class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
-  FIRRTLOp<mnemonic, traits # [
+  FIRRTLOp<mnemonic, traits # [ModuleLike,
     IsolatedFromAbove, Symbol, HasParent<"CircuitOp">,
     DeclareOpInterfaceMethods<FModuleLike>,
     DeclareOpInterfaceMethods<HWModuleLike>,

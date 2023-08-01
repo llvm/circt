@@ -3071,7 +3071,7 @@ LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
       return emitOpError() << "instance path is incorrect. Expected module: "
                            << expectedModuleName
                            << " instead found: " << innerRef.getModule();
-    HWInstanceLike instOp = ns.lookupOp<HWInstanceLike>(innerRef);
+    InstanceLike instOp = ns.lookupOp<InstanceLike>(innerRef);
     if (!instOp)
       return emitOpError() << " module: " << innerRef.getModule()
                            << " does not contain any instance with symbol: "

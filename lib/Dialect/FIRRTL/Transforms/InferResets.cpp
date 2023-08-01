@@ -45,7 +45,7 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 
 /// An absolute instance path.
-using InstanceLike = circt::hw::HWInstanceLike;
+using InstanceLike = circt::hw::InstanceLike;
 using InstancePathRef = ArrayRef<InstanceLike>;
 using InstancePathVec = SmallVector<InstanceLike>;
 

@@ -28,7 +28,7 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 /// Base class factoring out some of the additional class declarations common to
 /// the module-like operations.
 class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
-    HWOp<mnemonic, traits # [
+    HWOp<mnemonic, traits # [ModuleLike,
       DeclareOpInterfaceMethods<HWModuleLike>,
       DeclareOpInterfaceMethods<HWMutableModuleLike>,
       FunctionOpInterface, Symbol,
@@ -483,7 +483,7 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
 def InstanceOp : HWOp<"instance", [
         DeclareOpInterfaceMethods<SymbolUserOpInterface>,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-        DeclareOpInterfaceMethods<HWInstanceLike>]> {
+        DeclareOpInterfaceMethods<InstanceLike>]> {
   let summary = "Create an instance of a module";
   let description = [{
     This represents an instance of a module. The inputs and results are

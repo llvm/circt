@@ -33,7 +33,7 @@
 
 using namespace circt;
 using namespace firrtl;
-using hw::HWModuleLike;
+using hw::ModuleLike;
 
 //===----------------------------------------------------------------------===//
 // Collateral for generating a YAML representation of a SystemVerilog interface
@@ -647,7 +647,7 @@ private:
                  SmallVector<InterfaceElemsBuilder> &interfaceBuilder);
 
   /// Return the module associated with this value.
-  HWModuleLike getEnclosingModule(Value value, FlatSymbolRefAttr sym = {});
+  ModuleLike getEnclosingModule(Value value, FlatSymbolRefAttr sym = {});
 
   /// Inforamtion about how the circuit should be extracted.  This will be
   /// non-empty if an extraction annotation is found.
@@ -1267,7 +1267,7 @@ bool GrandCentralPass::traverseField(
         assert(leafValue && "leafValue not found");
 
         auto companionModule = companionIDMap.lookup(id).companion;
-        HWModuleLike enclosing = getEnclosingModule(leafValue, sym);
+        ModuleLike enclosing = getEnclosingModule(leafValue, sym);
 
         auto tpe = type_cast<FIRRTLBaseType>(leafValue.getType());
 
@@ -1526,17 +1526,17 @@ std::optional<StringAttr> GrandCentralPass::traverseBundle(
 
 /// Return the module that is associated with this value.  Use the cached/lazily
 /// constructed symbol table to make this fast.
-HWModuleLike GrandCentralPass::getEnclosingModule(Value value,
-                                                  FlatSymbolRefAttr sym) {
+ModuleLike GrandCentralPass::getEnclosingModule(Value value,
+                                                FlatSymbolRefAttr sym) {
   if (auto blockArg = dyn_cast<BlockArgument>(value))
-    return cast<HWModuleLike>(blockArg.getOwner()->getParentOp());
+    return cast<ModuleLike>(blockArg.getOwner()->getParentOp());
 
   auto *op = value.getDefiningOp();
   if (InstanceOp instance = dyn_cast<InstanceOp>(op))
-    return getSymbolTable().lookup<HWModuleLike>(
+    return getSymbolTable().lookup<ModuleLike>(
         instance.getModuleNameAttr().getValue());
 
-  return op->getParentOfType<HWModuleLike>();
+  return op->getParentOfType<ModuleLike>();
 }
 
 /// This method contains the business logic of this pass.
@@ -1732,7 +1732,7 @@ void GrandCentralPass::runOnOperation() {
   /// module as if it were the DUT.  This works by doing a depth-first walk of
   /// the instance graph, starting from the "effective" DUT and stopping the
   /// search at any modules which are known companions.
-  DenseSet<hw::HWModuleLike> dutModules;
+  DenseSet<hw::ModuleLike> dutModules;
   FModuleOp effectiveDUT = dut;
   if (!effectiveDUT)
     effectiveDUT = cast<FModuleOp>(
@@ -1929,7 +1929,7 @@ void GrandCentralPass::runOnOperation() {
               LLVM_DEBUG({
                 llvm::dbgs()
                     << "Found companion module: "
-                    << companionNode->getModule().getModuleName() << "\n"
+                    << companionNode->getModule().getModuleLikeName() << "\n"
                     << "  submodules exclusively instantiated "
                        "(including companion):\n";
               });
@@ -1949,7 +1949,7 @@ void GrandCentralPass::runOnOperation() {
 
                 LLVM_DEBUG({
                   llvm::dbgs()
-                      << "    - module: " << mod.getModuleName() << "\n";
+                      << "    - module: " << mod.getModuleLikeName() << "\n";
                 });
 
                 if (auto extmodule = dyn_cast<FExtModuleOp>(*mod)) {

@@ -12,7 +12,7 @@ def InstanceOp : MSFTOp<"instance", [
         Symbol,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-        DeclareOpInterfaceMethods<HWInstanceLike>
+        DeclareOpInterfaceMethods<InstanceLike>
     ]> {
   let summary = "Instantiate a module";
 

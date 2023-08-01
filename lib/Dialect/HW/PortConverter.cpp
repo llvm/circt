@@ -171,7 +171,7 @@ LogicalResult PortConverterImpl::run() {
 
   // Rewrite instances pointing to this module.
   for (auto *instance : moduleNode->uses()) {
-    hw::HWInstanceLike instanceLike = instance->getInstance();
+    hw::InstanceLike instanceLike = instance->getInstance();
     if (!instanceLike)
       continue;
     hw::InstanceOp hwInstance = dyn_cast_or_null<hw::InstanceOp>(*instanceLike);

@@ -34,7 +34,7 @@ struct AddSeqMemPortsPass : public AddSeqMemPortsBase<AddSeqMemPortsPass> {
   LogicalResult processFileAnno(Location loc, StringRef metadataDir,
                                 Annotation anno);
   LogicalResult processAnnos(CircuitOp circuit);
-  void createOutputFile(hw::HWModuleLike module);
+  void createOutputFile(hw::ModuleLike module);
   InstanceGraphNode *findDUT();
   void processMemModule(FMemModuleOp mem);
   LogicalResult processModule(FModuleOp module, bool isDUT);
@@ -273,7 +273,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
   return success();
 }
 
-void AddSeqMemPortsPass::createOutputFile(hw::HWModuleLike module) {
+void AddSeqMemPortsPass::createOutputFile(hw::ModuleLike module) {
   // Insert the verbatim at the bottom of the circuit.
   auto circuit = getOperation();
   auto builder = OpBuilder::atBlockEnd(circuit.getBodyBlock());
@@ -305,7 +305,7 @@ void AddSeqMemPortsPass::createOutputFile(hw::HWModuleLike module) {
 
   // The current sram we are processing.
   unsigned sramIndex = 0;
-  auto dutSymbol = FlatSymbolRefAttr::get(module.getModuleNameAttr());
+  auto dutSymbol = FlatSymbolRefAttr::get(module.getModuleLikeNameAttr());
   auto &instancePaths = memInfoMap[module].instancePaths;
   for (auto instancePath : instancePaths) {
     os << sramIndex++ << " -> ";
