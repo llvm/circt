@@ -29,21 +29,16 @@
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 
-ibis.container @A {
+ibis.class @A {
   ibis.port.input @A_in : i1
   ibis.port.output @A_out : i1
-
-  ibis.container @B {
-    ibis.port.input @B_in : i1
-    ibis.port.output @B_out : i1
-  }
 }
 
-ibis.container @C {
+ibis.class @C {
   ibis.port.input @C_in : i1
   ibis.port.output @C_out : i1
 
-  ibis.container.instance @My_A, @A
+  ibis.instance @My_A, @A
 
   // Test local read/writes
   %true = hw.constant true
@@ -55,15 +50,13 @@ ibis.container @C {
   %a_out = ibis.port.read @My_A::@A_out : i1
 
   ibis.container @D {
-    ibis.container @E {
-      // Test parent read/writes
-      %true_1 = hw.constant true
-      ibis.port.write @C_in(%true_1) : i1
-      %c_out_1 = ibis.port.read @C_out : i1
+    // Test parent read/writes
+    %true_1 = hw.constant true
+    ibis.port.write @C_in(%true_1) : i1
+    %c_out_1 = ibis.port.read @C_out : i1
 
-      // Test parent instance read/writes
-      ibis.port.write @My_A::@A_in(%c_out_1) : i1
-      %a_out_1 = ibis.port.read @My_A::@A_out : i1
-    }
+    // Test parent instance read/writes
+    ibis.port.write @My_A::@A_in(%c_out_1) : i1
+    %a_out_1 = ibis.port.read @My_A::@A_out : i1
   }
 }

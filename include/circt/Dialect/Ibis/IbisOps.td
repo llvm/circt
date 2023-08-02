@@ -47,7 +47,10 @@ def ClassOp : IbisOp<"class", [
   }];
 }
 
-def InstanceOp : IbisOp<"instance", [Symbol]> {
+def InstanceOp : IbisOp<"instance", [
+    Symbol,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
   let summary = "Ibis class instance";
   let description = [{
     Instantiates an Ibis class.
@@ -56,6 +59,17 @@ def InstanceOp : IbisOp<"instance", [Symbol]> {
   let arguments = (ins SymbolNameAttr:$sym_name, FlatSymbolRefAttr:$className);
   let assemblyFormat = [{
     $sym_name `,` $className attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    // Return the class this instance is instantiating.
+    ClassOp getClass(SymbolTableCollection *symbolTable = nullptr) {
+      auto mod = getOperation()->getParentOfType<mlir::ModuleOp>();
+      if(symbolTable)
+        return symbolTable->lookupSymbolIn<ClassOp>(mod, getClassNameAttr());
+
+      return mod.lookupSymbol<ClassOp>(getClassNameAttr());
+    }
   }];
 }
 
@@ -155,13 +169,11 @@ def ContainerOp : IbisOp<"container", [
   IsolatedFromAbove, RegionKindInterface,
   Symbol, SymbolTable, SingleBlock,
   NoTerminator, NoRegionArguments,
-  ParentOneOf<["mlir::ModuleOp", "ContainerOp"]>
+  HasParent<"ClassOp">
 ]> {
   let summary = "Ibis container";
   let description = [{
-    An ibis container describes a collection of ports and logic. Containers
-    may be arbitrarily nested, and reference any parent containers' ports
-    and instances.
+    An ibis container describes a collection of logic nested within an Ibis class.
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name);
@@ -174,41 +186,14 @@ def ContainerOp : IbisOp<"container", [
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
-
-    // Returns the top-level container that this container is nested inside of.
-    // If this container itself is a top-level container, returns itself.
-    ContainerOp getRootContainer() {
-      ContainerOp container = *this;
-      while (auto parentContainer = container.getOperation()->getParentOfType<ContainerOp>())
-        container = parentContainer;
-      return container;
-    }
-  }];
-}
-
-def ContainerInstanceOp : IbisOp<"container.instance", [
-    Symbol,
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>
-]> {
-  let summary = "Ibis container instance";
-  let description = [{
-    Instantiates an Ibis container. Can only instantiate top-level Ibis containers
-    (i.e. containers that are not nested inside of other containers).
-  }];
-
-  let arguments = (ins SymbolNameAttr:$sym_name, FlatSymbolRefAttr:$containerName);
-  let assemblyFormat = [{
-    $sym_name `,` $containerName attr-dict
-  }];
-
-  let extraClassDeclaration = [{
-    // Get the referenced container.
-    ContainerOp getReferencedContainer();
   }];
 }
 
 class PortLikeOp<string mnemonic, list<Trait> traits = []> :
-    IbisOp<mnemonic, !listconcat(traits, [PortOpInterface])> {
+    IbisOp<mnemonic, !listconcat(traits, [
+      PortOpInterface,
+      HasParent<"ClassOp">
+  ])> {
   let arguments = (ins SymbolNameAttr:$sym_name, TypeAttrOf<AnyType>:$type);
   let assemblyFormat = [{
     $sym_name `:` $type attr-dict

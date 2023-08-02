@@ -143,38 +143,20 @@ LogicalResult ReturnOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
-// ContainerInstanceOp
+// InstanceOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult
-ContainerInstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto container = getReferencedContainer();
-  if (!container)
-    return emitOpError() << "'" << getContainerName() << "' does not exist";
+LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto targetClass = getClass(&symbolTable);
+  if (!targetClass)
+    return emitOpError() << "'" << getClassName() << "' does not exist";
 
   return success();
-}
-
-ContainerOp ContainerInstanceOp::getReferencedContainer() {
-  return getOperation()->getParentOfType<ModuleOp>().lookupSymbol<ContainerOp>(
-      getContainerName());
 }
 
 //===----------------------------------------------------------------------===//
 // PortReadOp
 //===----------------------------------------------------------------------===//
-
-static Operation *
-lookupSymbolInContainerHierarchy(SymbolTableCollection &symbolTable,
-                                 ContainerOp container, StringAttr symName) {
-  while (container) {
-    auto dst = symbolTable.lookupSymbolIn(container, symName);
-    if (dst)
-      return dst;
-    container = container->getParentOfType<ContainerOp>();
-  }
-  return nullptr;
-}
 
 template <typename TSrcOp, typename TTargetOp>
 LogicalResult verifyPortSymbolUses(TSrcOp op,
@@ -183,13 +165,13 @@ LogicalResult verifyPortSymbolUses(TSrcOp op,
   auto symName = op.getSymNameAttr();
   auto localAccess = symName.getNestedReferences().empty();
 
-  ContainerOp parentContainer = op->template getParentOfType<ContainerOp>();
-  if (!parentContainer)
+  ClassOp parentClass = op->template getParentOfType<ClassOp>();
+  if (!parentClass)
     return op->emitOpError()
-           << op->getName() << " must be contained in a ContainerOp";
+           << op->getName() << " must be contained in a ClassOp";
 
-  auto rootAccessOp = lookupSymbolInContainerHierarchy(
-      symbolTable, parentContainer, symName.getRootReference());
+  Operation *rootAccessOp =
+      SymbolTable::lookupSymbolIn(parentClass, symName.getRootReference());
   TTargetOp targetOp;
 
   if (localAccess) {
@@ -201,17 +183,17 @@ LogicalResult verifyPortSymbolUses(TSrcOp op,
              << TTargetOp::getOperationName() << "' operation";
   } else {
     // Instance access.
-    auto targetInstance = dyn_cast_or_null<ContainerInstanceOp>(rootAccessOp);
+    auto targetInstance = dyn_cast_or_null<InstanceOp>(rootAccessOp);
     if (!targetInstance)
       return op->emitOpError()
              << "expected " << symName.getRootReference() << " to refer to a '"
-             << ContainerInstanceOp::getOperationName() << "' operation";
+             << InstanceOp::getOperationName() << "' operation";
 
     // Lookup the port in the instance. For now, only allow top level accesses -
     // can easily extend this to nested instances as well.
-    ContainerOp referencedContainer = targetInstance.getReferencedContainer();
+    ClassOp referencedClass = targetInstance.getClass();
     targetOp = symbolTable.lookupSymbolIn<TTargetOp>(
-        referencedContainer, symName.getLeafReference());
+        referencedClass, symName.getLeafReference());
   }
 
   if (!targetOp)
