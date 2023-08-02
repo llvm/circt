@@ -137,7 +137,6 @@ static void legalizeModuleLocalNames(HWModuleOp module,
 
   auto verilogNameAttr = StringAttr::get(ctxt, "hw.verilogName");
   // Legalize the port names.
-  SmallVector<Attribute, 4> argNames, resultNames;
   auto ports = module.getPortList();
   for (const PortInfo &port : ports) {
     auto newName = nameResolver.getLegalName(port.name);

@@ -32,13 +32,14 @@ struct AddTapsPass : public AddTapsBase<AddTapsPass> {
 
     // Add taps to inputs.
     auto builder = OpBuilder::atBlockBegin(moduleOp.getBodyBlock());
-    for (auto [port, arg] : llvm::zip(ports.inputs(), moduleOp.getArguments()))
+    for (auto [port, arg] :
+         llvm::zip(ports.getInputs(), moduleOp.getArguments()))
       builder.create<arc::TapOp>(arg.getLoc(), arg, port.getName());
 
     // Add taps to outputs.
     builder.setInsertionPoint(outputOp);
     for (auto [port, result] :
-         llvm::zip(ports.outputs(), outputOp->getOperands()))
+         llvm::zip(ports.getOutputs(), outputOp->getOperands()))
       builder.create<arc::TapOp>(result.getLoc(), result, port.getName());
   }
 
