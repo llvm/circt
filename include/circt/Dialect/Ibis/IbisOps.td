@@ -213,12 +213,10 @@ def PortReadOp : IbisOp<"port.read", [
 ]> {
   let summary = "Ibis port read";
   let description = [{
-    Read the value of a port. The port can either be a local (in the current
-    or parent container hierarchy) or instance relative (relative to ports
-    of some instance in the current or parent container hierarchy).
+    Read the value of a local port (i.e. a port of 'this' class).
   }];
 
-  let arguments = (ins SymbolRefAttr:$sym_name);
+  let arguments = (ins FlatSymbolRefAttr:$sym_name);
   let results = (outs AnyType:$output);
   let assemblyFormat = [{
     $sym_name attr-dict `:` type($output)
@@ -230,9 +228,36 @@ def PortWriteOp : IbisOp<"port.write", [
 ]> {
   let summary = "Ibis port write";
   let description = [{
-    Write a value to a port. The port can either be a local (in the current
-    or parent container hierarchy) or instance relative (relative to ports
-    of some instance in the current or parent container hierarchy).
+    Write a value to a local port (i.e. a port of 'this' class).
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$sym_name, AnyType:$input);
+  let assemblyFormat = [{
+    $sym_name `(` $input `)` attr-dict `:` type($input)
+  }];
+}
+
+def InstanceReadOp : IbisOp<"instance.read", [
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Ibis instance read";
+  let description = [{
+    Read the value of an instance port.
+  }];
+
+  let arguments = (ins SymbolRefAttr:$sym_name);
+  let results = (outs AnyType:$output);
+  let assemblyFormat = [{
+    $sym_name attr-dict `:` type($output)
+  }];
+}
+
+def InstanceWriteOp : IbisOp<"instance.write", [
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Ibis instance write";
+  let description = [{
+    Write a value to an instance port.
   }];
 
   let arguments = (ins SymbolRefAttr:$sym_name, AnyType:$input);

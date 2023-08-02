@@ -159,45 +159,23 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 //===----------------------------------------------------------------------===//
 
 template <typename TSrcOp, typename TTargetOp>
-LogicalResult verifyPortSymbolUses(TSrcOp op,
-                                   llvm::function_ref<Type(TSrcOp)> getPortType,
-                                   SymbolTableCollection &symbolTable) {
-  auto symName = op.getSymNameAttr();
-  auto localAccess = symName.getNestedReferences().empty();
+LogicalResult verifyPortSymbolUses(
+    TSrcOp op, StringAttr symName, llvm::function_ref<Type(TSrcOp)> getPortType,
+    SymbolTableCollection &symbolTable,
+    llvm::function_ref<FailureOr<TTargetOp>(Operation *)> getTargetOp) {
 
   ClassOp parentClass = op->template getParentOfType<ClassOp>();
   if (!parentClass)
     return op->emitOpError()
            << op->getName() << " must be contained in a ClassOp";
 
-  Operation *rootAccessOp =
-      SymbolTable::lookupSymbolIn(parentClass, symName.getRootReference());
+  Operation *rootAccessOp = SymbolTable::lookupSymbolIn(parentClass, symName);
+
   TTargetOp targetOp;
-
-  if (localAccess) {
-    // Access to some port in the parent container hierarchy.
-    targetOp = dyn_cast_or_null<TTargetOp>(rootAccessOp);
-    if (!targetOp)
-      return op->emitOpError()
-             << "expected '" << symName << "' to refer to a '"
-             << TTargetOp::getOperationName() << "' operation";
-  } else {
-    // Instance access.
-    auto targetInstance = dyn_cast_or_null<InstanceOp>(rootAccessOp);
-    if (!targetInstance)
-      return op->emitOpError()
-             << "expected " << symName.getRootReference() << " to refer to a '"
-             << InstanceOp::getOperationName() << "' operation";
-
-    // Lookup the port in the instance. For now, only allow top level accesses -
-    // can easily extend this to nested instances as well.
-    ClassOp referencedClass = targetInstance.getClass();
-    targetOp = symbolTable.lookupSymbolIn<TTargetOp>(
-        referencedClass, symName.getLeafReference());
-  }
-
-  if (!targetOp)
-    return op->emitOpError() << "'" << symName << "' does not exist";
+  if (auto getTargetRes = getTargetOp(rootAccessOp); succeeded(getTargetRes))
+    targetOp = *getTargetRes;
+  else
+    return failure();
 
   Type expectedType = getPortType(op);
   Type actualType = targetOp.getType();
@@ -208,8 +186,29 @@ LogicalResult verifyPortSymbolUses(TSrcOp op,
   return success();
 }
 
+// verifies that a local port access (non-nested symbol reference) is valid (the
+// target symbol exists) and that the types of the port and the access match.
+template <typename TSrcOp, typename TTargetOp>
+LogicalResult
+verifyLocalPortSymbolUse(TSrcOp op,
+                         llvm::function_ref<Type(TSrcOp)> getPortType,
+                         SymbolTableCollection &symbolTable) {
+  FlatSymbolRefAttr symName = op.getSymNameAttr();
+  auto getTargetOp = [&](Operation *rootAccessOp) -> FailureOr<TTargetOp> {
+    auto targetOp = dyn_cast_or_null<TTargetOp>(rootAccessOp);
+    if (!targetOp)
+      return op->emitOpError()
+             << "expected '" << symName << "' to refer to a '"
+             << TTargetOp::getOperationName() << "' operation";
+    return {targetOp};
+  };
+
+  return verifyPortSymbolUses<TSrcOp, TTargetOp>(
+      op, symName.getAttr(), getPortType, symbolTable, getTargetOp);
+}
+
 LogicalResult PortReadOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyPortSymbolUses<PortReadOp, OutputPortOp>(
+  return verifyLocalPortSymbolUse<PortReadOp, OutputPortOp>(
       *this, [](PortReadOp op) { return op.getOutput().getType(); },
       symbolTable);
 }
@@ -220,8 +219,62 @@ LogicalResult PortReadOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 LogicalResult
 PortWriteOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyPortSymbolUses<PortWriteOp, InputPortOp>(
+  return verifyLocalPortSymbolUse<PortWriteOp, InputPortOp>(
       *this, [](PortWriteOp op) { return op.getInput().getType(); },
+      symbolTable);
+}
+
+//===----------------------------------------------------------------------===//
+// InstanceReadOp
+//===----------------------------------------------------------------------===//
+
+// verifies that an instance port access (nested symbol reference) is valid
+// (the target instance exists, and the target port inside the referenced class
+// exists) and that the types of the port and the access match.
+template <typename TSrcOp, typename TTargetOp>
+LogicalResult
+verifyInstancePortSymbolUses(TSrcOp op,
+                             llvm::function_ref<Type(TSrcOp)> getPortType,
+                             SymbolTableCollection &symbolTable) {
+  auto symName = op.getSymNameAttr();
+  auto getTargetOp = [&](Operation *rootAccessOp) -> FailureOr<TTargetOp> {
+    auto targetInstance = dyn_cast_or_null<InstanceOp>(rootAccessOp);
+    if (!targetInstance)
+      return op->emitOpError()
+             << "expected " << symName.getRootReference() << " to refer to a '"
+             << InstanceOp::getOperationName() << "' operation";
+
+    // Lookup the port in the instance. For now, only allow top level accesses -
+    // can easily extend this to nested instances as well.
+    ClassOp referencedClass = targetInstance.getClass();
+    auto targetOp = symbolTable.lookupSymbolIn<TTargetOp>(
+        referencedClass, symName.getLeafReference());
+
+    if (!targetOp)
+      return op->emitOpError() << "'" << symName << "' does not exist";
+
+    return {targetOp};
+  };
+
+  return verifyPortSymbolUses<TSrcOp, TTargetOp>(
+      op, symName.getRootReference(), getPortType, symbolTable, getTargetOp);
+}
+
+LogicalResult
+InstanceReadOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyInstancePortSymbolUses<InstanceReadOp, OutputPortOp>(
+      *this, [](InstanceReadOp op) { return op.getOutput().getType(); },
+      symbolTable);
+}
+
+//===----------------------------------------------------------------------===//
+// InstanceWriteOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+InstanceWriteOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyInstancePortSymbolUses<InstanceWriteOp, InputPortOp>(
+      *this, [](InstanceWriteOp op) { return op.getInput().getType(); },
       symbolTable);
 }
 

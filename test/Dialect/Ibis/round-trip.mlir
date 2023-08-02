@@ -46,8 +46,8 @@ ibis.class @C {
   %c_out = ibis.port.read @C_out : i1
 
   // Test cross-container read/writes
-  ibis.port.write @My_A::@A_in(%c_out) : i1
-  %a_out = ibis.port.read @My_A::@A_out : i1
+  ibis.instance.write @My_A::@A_in(%c_out) : i1
+  %a_out = ibis.instance.read @My_A::@A_out : i1
 
   ibis.container @D {
     // Test parent read/writes
@@ -56,7 +56,7 @@ ibis.class @C {
     %c_out_1 = ibis.port.read @C_out : i1
 
     // Test parent instance read/writes
-    ibis.port.write @My_A::@A_in(%c_out_1) : i1
-    %a_out_1 = ibis.port.read @My_A::@A_out : i1
+    ibis.instance.write @My_A::@A_in(%c_out_1) : i1
+    %a_out_1 = ibis.instance.read @My_A::@A_out : i1
   }
 }
