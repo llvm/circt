@@ -613,26 +613,6 @@ def GlobalRefOp : HWOp<"globalRef", [
   let assemblyFormat = [{ $sym_name $namepath attr-dict }];
 }
 
-def ProbeOp : HWOp<"probe", [
-      DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>
-    ]> {
-  let summary = "Probe values for use in remote references";
-  let description = [{
-    Captures values without binding to any accidental name.  This allows
-    capturing names holding values of interest while allowing the name to
-    resolved only at emission time.
-  }];
-
-  let arguments = (ins InnerSymAttr:$inner_sym,
-                       Variadic<AnyType>:$captured);
-  let results = (outs);
-
-  let assemblyFormat = [{
-    $inner_sym attr-dict (`,` $captured^ `:` qualified(type($captured)))?
-  }];
-
-}
-
 def HierPathOp : HWOp<"hierpath",
       [IsolatedFromAbove, Symbol,
        DeclareOpInterfaceMethods<InnerRefUserOpInterface>]> {

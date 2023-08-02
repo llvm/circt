@@ -3405,7 +3405,6 @@ private:
   LogicalResult visitSV(ReleaseOp op);
   LogicalResult visitSV(AliasOp op);
   LogicalResult visitSV(InterfaceInstanceOp op);
-  LogicalResult visitStmt(ProbeOp op);
   LogicalResult visitStmt(OutputOp op);
   LogicalResult visitStmt(InstanceOp op);
   LogicalResult visitStmt(TypeScopeOp op);
@@ -4723,10 +4722,6 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   }
   return success();
 }
-
-// Probes only exist to provide naming to values.  They are handled in
-// the naming prepass.
-LogicalResult StmtEmitter::visitStmt(ProbeOp op) { return success(); }
 
 // This may be called in the top-level, not just in an hw.module.  Thus we can't
 // use the name map to find expression names for arguments to the instance, nor
