@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/HW/HWOpInterfaces.td"
 include "mlir/IR/EnumAttr.td"
 
 //===----------------------------------------------------------------------===//
@@ -209,7 +210,10 @@ def ModportType : SVType<"Modport"> {
 // Other operations
 //===----------------------------------------------------------------------===//
 
-def InterfaceInstanceOp : SVOp<"interface.instance", [HasCustomSSAName]> {
+def InterfaceInstanceOp : SVOp<"interface.instance", [
+      HasCustomSSAName,
+      DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>
+    ]> {
   let summary = "Instantiate an interface";
   let description = [{
     Use this to declare an instance of an interface:
@@ -219,7 +223,7 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [HasCustomSSAName]> {
   }];
 
   let arguments = (ins StrAttr:$name,
-                       OptionalAttr<SymbolNameAttr>:$inner_sym);
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs InterfaceType : $result);
 
   let assemblyFormat = [{

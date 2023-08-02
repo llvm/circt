@@ -83,7 +83,6 @@ def SCModuleOp : SystemCOp<"module", [
       llvm::filter_iterator<Region::BlockArgListType::iterator,
                             std::function<bool(const BlockArgument &)>>>;
 
-    void getPortInfoList(SmallVectorImpl<hw::PortInfo> &portInfoList);
     PortDirectionRange getPortsOfDirection(hw::ModulePort::Direction direction);
     PortDirectionRange getInputPorts() {
       return getPortsOfDirection(hw::ModulePort::Direction::Input);
@@ -102,6 +101,11 @@ def SCModuleOp : SystemCOp<"module", [
     // Return the Destructor operation in this module's body or create one if
     // none exists yet.
     systemc::DestructorOp getOrCreateDestructor();
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 
   let extraClassDefinition = [{

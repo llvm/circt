@@ -196,19 +196,18 @@ public:
 
     // Build valid register. The valid register is always reset to 0, and
     // clock enabled when not stalling.
-    auto validRegName =
-        builder.getStringAttr(stageRegPrefix.strref() + "_valid");
+    auto validRegName = (stageRegPrefix.strref() + "_valid").str();
     Value validRegResetVal =
         builder.create<hw::ConstantOp>(terminator->getLoc(), APInt(1, 0, false))
             .getResult();
     if (hasStall) {
       rets.valid = builder.create<seq::CompRegClockEnabledOp>(
-          loc, builder.getI1Type(), args.enable, args.clock, notStalled,
-          validRegName, args.reset, validRegResetVal, validRegName);
+          loc, args.enable, args.clock, notStalled, args.reset,
+          validRegResetVal, validRegName);
     } else {
-      rets.valid = builder.create<seq::CompRegOp>(
-          loc, builder.getI1Type(), args.enable, args.clock, validRegName,
-          args.reset, validRegResetVal, validRegName);
+      rets.valid = builder.create<seq::CompRegOp>(loc, args.enable, args.clock,
+                                                  args.reset, validRegResetVal,
+                                                  validRegName);
     }
 
     rets.passthroughs = stageOp.getPassthroughs();

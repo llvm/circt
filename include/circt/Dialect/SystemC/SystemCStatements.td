@@ -139,6 +139,11 @@ def InstanceDeclOp : SystemCOp<"instance.decl", [
 
     /// An InstanceDeclOp may not optionally define a symbol.
     bool isOptionalSymbol() { return false; }
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 }
 

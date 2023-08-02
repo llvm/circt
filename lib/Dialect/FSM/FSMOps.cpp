@@ -171,6 +171,46 @@ LogicalResult MachineOp::verify() {
   return success();
 }
 
+hw::ModulePortInfo MachineOp::getPortList() {
+  SmallVector<hw::PortInfo> inputs, outputs;
+  auto argNames = getArgNames();
+  auto argTypes = getFunctionType().getInputs();
+  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+    bool isInOut = false;
+    auto type = argTypes[i];
+
+    if (auto inout = type.dyn_cast<hw::InOutType>()) {
+      isInOut = true;
+      type = inout.getElementType();
+    }
+
+    auto direction = isInOut ? hw::ModulePort::Direction::InOut
+                             : hw::ModulePort::Direction::Input;
+
+    inputs.push_back(
+        {{argNames ? (*argNames)[i].cast<StringAttr>()
+                   : StringAttr::get(getContext(), Twine("input") + Twine(i)),
+          type, direction},
+         i,
+         {},
+         {}});
+  }
+
+  auto resultNames = getResNames();
+  auto resultTypes = getFunctionType().getResults();
+  for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
+    outputs.push_back(
+        {{resultNames
+              ? (*resultNames)[i].cast<StringAttr>()
+              : StringAttr::get(getContext(), Twine("output") + Twine(i)),
+          resultTypes[i], hw::ModulePort::Direction::Output},
+         i,
+         {},
+         {}});
+  }
+  return hw::ModulePortInfo(inputs, outputs);
+}
+
 //===----------------------------------------------------------------------===//
 // InstanceOp
 //===----------------------------------------------------------------------===//
@@ -254,6 +294,10 @@ MachineOp HWInstanceOp::getMachineOp() {
 }
 
 LogicalResult HWInstanceOp::verify() { return verifyCallerTypes(*this); }
+
+hw::ModulePortInfo HWInstanceOp::getPortList() {
+  return getMachineOp().getPortList();
+}
 
 //===----------------------------------------------------------------------===//
 // StateOp

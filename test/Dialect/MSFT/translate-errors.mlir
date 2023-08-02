@@ -7,6 +7,6 @@ hw.globalRef @ref [#hw.innerNameRef<@top::@foo1>]
 msft.pd.physregion @ref @region1
 
 msft.module @top {} () -> () {
-  msft.instance @foo1 @Foo() {circt.globalRef = [#hw.globalNameRef<@ref>], inner_sym = "foo1"} : () -> ()
+  msft.instance @foo1 @Foo() {circt.globalRef = [#hw.globalNameRef<@ref>]} : () -> ()
   msft.output
 }

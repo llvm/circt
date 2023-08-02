@@ -16,7 +16,16 @@
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/OpBase.td"
 
-def HWModuleLike : OpInterface<"HWModuleLike", [Symbol]> {
+def PortList : OpInterface<"PortList", []> {
+  let cppNamespace = "circt::hw";
+  let description = "Operations which produce a unified port list representation";
+  let methods = [
+    InterfaceMethod<"Get port list",
+    "::circt::hw::ModulePortInfo", "getPortList", (ins)>
+  ];
+}
+
+def HWModuleLike : OpInterface<"HWModuleLike", [Symbol, PortList]> {
   let cppNamespace = "circt::hw";
   let description = "Provide common module information.";
 
@@ -121,21 +130,13 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike", [HWModuleLike]> {
 
   let methods = [
 
-    InterfaceMethod<
-    "Decode information about the input and output ports on this module.",
-    "::circt::hw::ModulePortInfo", "getPorts", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return getModulePortInfo($_op);
-    }]>,
-
     InterfaceMethod<"Get a handle to a utility class which provides by-name lookup of port indices. The returned object does _not_ update if the module is mutated.",
     "::circt::hw::ModulePortLookupInfo", "getPortLookupInfo", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{
       return hw::ModulePortLookupInfo(
         $_op->getContext(),
-        this->getPorts());
+        $_op.getPortList());
     }]>,
 
     /// Insert and remove input and output ports of this module. Does not modify
@@ -184,7 +185,7 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike", [HWModuleLike]> {
 }
 
 
-def HWInstanceLike : OpInterface<"HWInstanceLike"> {
+def HWInstanceLike : OpInterface<"HWInstanceLike", [PortList]> {
   let cppNamespace = "circt::hw";
   let description = "Provide common  module information.";
 

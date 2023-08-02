@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/MSFT/MSFTPasses.h"
 
 using namespace mlir;
@@ -16,14 +17,6 @@ using namespace msft;
 bool circt::msft::isAnyModule(Operation *module) {
   return isa<MSFTModuleOp, MSFTModuleExternOp>(module) ||
          hw::isAnyModule(module);
-}
-
-hw::ModulePortInfo circt::msft::getModulePortInfo(Operation *op) {
-  if (auto mod = dyn_cast<MSFTModuleOp>(op))
-    return mod.getPorts();
-  if (auto mod = dyn_cast<MSFTModuleExternOp>(op))
-    return mod.getPorts();
-  return hw::getModulePortInfo(op);
 }
 
 SmallVector<unsigned> circt::msft::makeSequentialRange(unsigned size) {
@@ -44,7 +37,7 @@ StringRef circt::msft::getValueName(Value v, const SymbolCache &syms,
       auto mod = cast<hw::HWModuleLike>(modOp);
       buff.clear();
       llvm::raw_string_ostream os(buff);
-      os << inst.getSymName() << ".";
+      os << inst.getInstanceName() << ".";
       StringAttr name = mod.getOutputNameAttr(instResult.getResultNumber());
       if (name)
         os << name.getValue();
@@ -53,7 +46,8 @@ StringRef circt::msft::getValueName(Value v, const SymbolCache &syms,
   }
   if (auto blockArg = v.dyn_cast<BlockArgument>()) {
     auto portInfo =
-        getModulePortInfo(blockArg.getOwner()->getParent()->getParentOp());
+        cast<hw::PortList>(blockArg.getOwner()->getParent()->getParentOp())
+            .getPortList();
     return portInfo.atInput(blockArg.getArgNumber()).getName();
   }
   if (auto constOp = dyn_cast<hw::ConstantOp>(defOp)) {
@@ -82,7 +76,7 @@ LogicalResult PassCommon::verifyInstances(mlir::ModuleOp mod) {
     if (!isAnyModule(modOp))
       return WalkResult::interrupt();
 
-    hw::ModulePortInfo ports = getModulePortInfo(modOp);
+    hw::ModulePortInfo ports = cast<hw::PortList>(modOp).getPortList();
     return succeeded(inst.verifySignatureMatch(ports))
                ? WalkResult::advance()
                : WalkResult::interrupt();

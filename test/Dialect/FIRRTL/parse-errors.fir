@@ -781,6 +781,16 @@ circuit DuplicateAlias:
   module DuplicateAlias:
 
 ;// -----
+
+circuit KeywordTypeName:
+  type Clock = UInt; expected-error {{cannot use keyword 'Clock' for type alias name}}
+
+;// -----
+
+circuit KeywordTypeName:
+  type module = UInt; expected-error {{cannot use keyword 'module' for type alias name}}
+
+;// -----
 ; https://github.com/llvm/circt/issues/5494
 FIRRTL version 3.1.0
 

@@ -17,16 +17,13 @@ class InstanceBuilder(support.NamedValueOpView):
                name,
                input_port_mapping,
                *,
-               sym_name=None,
                parameters=None,
                target_design_partition=None,
                loc=None,
                ip=None):
     self.module = module
-    instance_name = _ir.StringAttr.get(name)
+    instance_name = hw.InnerSymAttr.get(_ir.StringAttr.get(name))
     module_name = _ir.FlatSymbolRefAttr.get(_ir.StringAttr(module.name).value)
-    if sym_name:
-      sym_name = _ir.StringAttr.get(sym_name)
     pre_args = [instance_name, module_name]
     if parameters is not None:
       parameters = _hw_ext.create_parameters(parameters, module)
@@ -137,7 +134,6 @@ class MSFTModuleExternOp(_hw_ext.ModuleLike):
     return InstanceBuilder(self,
                            name,
                            kwargs,
-                           sym_name=name,
                            parameters=parameters,
                            loc=loc,
                            ip=ip)

@@ -29,6 +29,7 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 /// the module-like operations.
 class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     HWOp<mnemonic, traits # [
+      DeclareOpInterfaceMethods<PortList>,
       DeclareOpInterfaceMethods<HWModuleLike>,
       DeclareOpInterfaceMethods<HWMutableModuleLike>,
       FunctionOpInterface, Symbol,
@@ -64,7 +65,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
   let extraClassDefinition = extraModuleClassDefinition # [{
     size_t $cppClass::getNumPorts() {
       // This is wildly inefficient
-      return getModulePortInfo(*this).size();
+      return getPortList().size();
     }
 
     ::circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
@@ -101,6 +102,34 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
         ::mlir::function_interface_impl::removeResultAttr(
             *this, portIndex - getNumInputs(), portSymAttr);
     }
+  }];
+
+}
+
+def HWTestModuleOp : HWOp<"testmodule", [Symbol, PortList,
+                                         OpAsmOpInterface, 
+                                         HasParent<"mlir::ModuleOp">, 
+                                         IsolatedFromAbove,
+                                         SingleBlockImplicitTerminator<"OutputOp">]> {
+  let arguments = (ins TypeAttrOf<ModuleType>:$module_type,
+                       OptionalAttr<DictArrayAttr>:$port_attrs,
+                       OptionalAttr<LocationArrayAttr>:$port_locs,
+                       ParamDeclArrayAttr:$parameters,
+                       OptionalAttr<StrAttr>:$comment);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+  let hasCustomAssemblyFormat = 1;
+
+  let extraClassDeclaration = [{
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
+
+    Block *getBodyBlock() { return &getRegion().front(); }
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 
 }
@@ -462,6 +491,7 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
 def InstanceOp : HWOp<"instance", [
         DeclareOpInterfaceMethods<SymbolUserOpInterface>,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+        DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
         DeclareOpInterfaceMethods<HWInstanceLike>]> {
   let summary = "Create an instance of a module";
   let description = [{
@@ -478,7 +508,7 @@ def InstanceOp : HWOp<"instance", [
                        Variadic<AnyType>:$inputs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
-                       OptionalAttr<SymbolNameAttr>:$inner_sym);
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs Variadic<AnyType>:$results);
 
   let builders = [
@@ -486,14 +516,14 @@ def InstanceOp : HWOp<"instance", [
     OpBuilder<(ins "Operation*":$module, "StringAttr":$name,
                    "ArrayRef<Value>":$inputs,
                    CArg<"ArrayAttr", "{}">:$parameters,
-                   CArg<"StringAttr", "{}">:$sym_name)>,
+                   CArg<"InnerSymAttr", "{}">:$innerSym)>,
     /// Create a instance that refers to a known module.
     OpBuilder<(ins "Operation*":$module, "StringRef":$name,
                    "ArrayRef<Value>":$inputs,
                    CArg<"ArrayAttr", "{}">:$parameters,
-                   CArg<"StringAttr", "{}">:$sym_name), [{
+                   CArg<"InnerSymAttr", "{}">:$innerSym), [{
       build($_builder, $_state, module, $_builder.getStringAttr(name), inputs,
-            parameters, sym_name);
+            parameters, innerSym);
     }]>,
   ];
 
@@ -526,19 +556,28 @@ def InstanceOp : HWOp<"instance", [
     /// invalid IR.
     Operation *getReferencedModule(const HWSymbolCache *cache);
 
+    /// Return the value for a port in port order.
+    Value getValue(size_t idx);
+
     //===------------------------------------------------------------------===//
     // SymbolOpInterface Methods
     //===------------------------------------------------------------------===//
 
     /// An InstanceOp may optionally define a symbol.
     bool isOptionalSymbol() { return true; }
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
+
   }];
 
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }
 
-def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
+def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp, HWTestModuleOp">,
                                 Pure, ReturnLike]> {
   let summary = "HW termination operation";
   let description = [{
@@ -574,7 +613,9 @@ def GlobalRefOp : HWOp<"globalRef", [
   let assemblyFormat = [{ $sym_name $namepath attr-dict }];
 }
 
-def ProbeOp : HWOp<"probe", []> {
+def ProbeOp : HWOp<"probe", [
+      DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>
+    ]> {
   let summary = "Probe values for use in remote references";
   let description = [{
     Captures values without binding to any accidental name.  This allows
@@ -582,7 +623,7 @@ def ProbeOp : HWOp<"probe", []> {
     resolved only at emission time.
   }];
 
-  let arguments = (ins SymbolNameAttr:$inner_sym,
+  let arguments = (ins InnerSymAttr:$inner_sym,
                        Variadic<AnyType>:$captured);
   let results = (outs);
 

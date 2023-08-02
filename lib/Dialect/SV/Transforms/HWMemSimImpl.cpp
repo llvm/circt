@@ -198,7 +198,8 @@ Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
   for (unsigned i = 0; i < stages; ++i) {
     auto regName =
         b.getStringAttr(moduleNamespace.newName("_" + name + "_d" + Twine(i)));
-    auto reg = b.create<sv::RegOp>(data.getType(), regName, regName);
+    auto reg = b.create<sv::RegOp>(data.getType(), regName,
+                                   hw::InnerSymAttr::get(regName));
     regs.push_back(reg);
     registers.push_back(reg);
   }
@@ -506,8 +507,8 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   if (!mem.initFilename.empty()) {
     // Set an inner symbol on the register if one does not exist.
     if (!reg.getInnerSymAttr())
-      reg.setInnerSymAttr(
-          b.getStringAttr(moduleNamespace.newName(reg.getName())));
+      reg.setInnerSymAttr(hw::InnerSymAttr::get(
+          b.getStringAttr(moduleNamespace.newName(reg.getName()))));
 
     if (mem.initIsInline) {
       b.create<sv::IfDefOp>("ENABLE_INITIAL_MEM_", [&]() {
@@ -544,7 +545,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       auto path = b.create<hw::HierPathOp>(
           mlirModuleNamespace.newName(op.getName() + "_path"),
           b.getArrayAttr(
-              ::InnerRefAttr::get(op.getNameAttr(), reg.getInnerSymAttr())));
+              ::InnerRefAttr::get(op.getNameAttr(), reg.getInnerNameAttr())));
 
       boundModule->setAttr("output_file", filename);
       b.setInsertionPointToStart(op.getBodyBlock());
@@ -560,15 +561,16 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       b.setInsertionPointAfter(reg);
       auto boundInstance = b.create<hw::InstanceOp>(
           boundModule, boundModule.getName(), ArrayRef<Value>());
-      boundInstance->setAttr("inner_sym",
-                             b.getStringAttr(moduleNamespace.newName(
-                                 boundInstance.getInstanceName())));
+      boundInstance->setAttr(
+          "inner_sym",
+          hw::InnerSymAttr::get(b.getStringAttr(
+              moduleNamespace.newName(boundInstance.getInstanceName()))));
       boundInstance->setAttr("doNotPrint", b.getBoolAttr(true));
 
       // Bind the new module.
       b.setInsertionPointAfter(boundModule);
       auto bind = b.create<sv::BindOp>(hw::InnerRefAttr::get(
-          op.getNameAttr(), boundInstance.getInnerSymAttr()));
+          op.getNameAttr(), boundInstance.getInnerSymAttr().getSymName()));
       bind->setAttr("output_file", filename);
     }
   }
@@ -588,10 +590,10 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
         for (sv::RegOp &reg : registers)
           totalWidth += reg.getElementType().getIntOrFloatBitWidth();
         while (totalWidth > 0) {
-          auto name =
-              b.getStringAttr(moduleNamespace.newName(Twine("_RANDOM")));
-          randRegs.push_back(
-              b.create<sv::RegOp>(b.getIntegerType(randomWidth), name, name));
+          auto name = b.getStringAttr(moduleNamespace.newName("_RANDOM"));
+          auto innerSym = hw::InnerSymAttr::get(name);
+          randRegs.push_back(b.create<sv::RegOp>(b.getIntegerType(randomWidth),
+                                                 name, innerSym));
           totalWidth -= randomWidth;
         }
       });
@@ -660,7 +662,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
             b.create<sv::VerbatimOp>(
                 b.getStringAttr("{{0}} = {`RANDOM};"), ValueRange{},
                 b.getArrayAttr(hw::InnerRefAttr::get(op.getNameAttr(),
-                                                     reg.getInnerSymAttr())));
+                                                     reg.getInnerNameAttr())));
           auto randRegIdx = 0;
           for (sv::RegOp &reg : registers) {
             SmallVector<std::pair<Attribute, std::pair<size_t, size_t>>> values;
@@ -672,7 +674,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
                 bits = 0;
               }
               auto innerRef = hw::InnerRefAttr::get(op.getNameAttr(),
-                                                    randReg.getInnerSymAttr());
+                                                    randReg.getInnerNameAttr());
               if (widthRemaining <= randomWidth - bits) {
                 values.push_back({innerRef, {bits + widthRemaining - 1, bits}});
                 bits += widthRemaining;
@@ -687,7 +689,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
             unsigned idx = 1;
             assert(reg.getInnerSymAttr());
             SmallVector<Attribute, 4> symbols({hw::InnerRefAttr::get(
-                op.getNameAttr(), reg.getInnerSymAttr())});
+                op.getNameAttr(), reg.getInnerNameAttr())});
             if (values.size() > 1)
               rhs.append("{");
             for (auto &v : values) {
@@ -754,10 +756,10 @@ void HWMemSimImplPass::runOnOperation() {
       if (replSeqMem && ((mem.readLatency == 1 && mem.writeLatency == 1) &&
                          mem.dataWidth > 0)) {
         builder.create<HWModuleExternOp>(oldModule.getLoc(), nameAttr,
-                                         oldModule.getPorts());
+                                         oldModule.getPortList());
       } else {
         auto newModule = builder.create<HWModuleOp>(
-            oldModule.getLoc(), nameAttr, oldModule.getPorts());
+            oldModule.getLoc(), nameAttr, oldModule.getPortList());
         if (auto outdir = oldModule->getAttr("output_file"))
           newModule->setAttr("output_file", outdir);
         newModule.setCommentAttr(

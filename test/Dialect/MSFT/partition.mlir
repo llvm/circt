@@ -19,8 +19,8 @@ hw.globalRef @ref4 [#hw.innerNameRef<@InnerPartLeafLoc::@inner>, #hw.innerNameRe
 msft.module @top {} (%clk : i1) -> (out1: i2, out2: i2, out3: i2) {
   msft.partition @part1, "dp"
 
-  %res1, %res4 = msft.instance @b @B(%clk) { circt.globalRef = [#hw.globalNameRef<@ref1>, #hw.globalNameRef<@ref2>], inner_sym = "b" } : (i1) -> (i2, i2)
-  %res3 = msft.instance @b2 @B2(%clk) { circt.globalRef = [#hw.globalNameRef<@ref3>], inner_sym = "b2" } : (i1) -> (i2)
+  %res1, %res4 = msft.instance @b @B(%clk) { circt.globalRef = [#hw.globalNameRef<@ref1>, #hw.globalNameRef<@ref2>]} : (i1) -> (i2, i2)
+  %res3 = msft.instance @b2 @B2(%clk) { circt.globalRef = [#hw.globalNameRef<@ref3>]} : (i1) -> (i2)
 
   %c0 = hw.constant 0 : i2
   %res2 = msft.instance @unit1 @Extern(%c0) { targetDesignPartition = @top::@part1 }: (i2) -> (i2)
@@ -34,25 +34,25 @@ msft.module @top {} (%clk : i1) -> (out1: i2, out2: i2, out3: i2) {
 // CHECK:  hw.globalRef @ref4 [#hw.innerNameRef<@InnerPartLeafLoc::@part>, #hw.innerNameRef<@InnerLeafPartition::@inner>, #hw.innerNameRef<@Inner::@leaf>] {loc = #msft.physloc<M20K, 0, 0, 0>}
 
 // CHECK-LABEL:  msft.module @dp {} (%b.seq.compreg.clk: i1) -> (b.unit2.b.unit2.foo_x: i2, unit1.unit1.foo_x: i2) {
-// CHECK:    %b.unit1.foo_x = msft.instance @b.unit1 @Extern(%c1_i2)  {circt.globalRef = [#hw.globalNameRef<@ref1>], inner_sym = "b.unit1", targetDesignPartition = @top::@part1} : (i2) -> i2
+// CHECK:    %b.unit1.foo_x = msft.instance @b.unit1 @Extern(%c1_i2)  {circt.globalRef = [#hw.globalNameRef<@ref1>], targetDesignPartition = @top::@part1} : (i2) -> i2
 // CHECK:    %b.seq.compreg = seq.compreg %b.unit1.foo_x, %b.seq.compreg.clk {targetDesignPartition = @top::@part1} : i2
-// CHECK:    %b.c.unit3.foo_x = msft.instance @b.c.unit3 @Extern(%b.seq.compreg)  {circt.globalRef = [#hw.globalNameRef<@ref2>], inner_sym = "b.c.unit3", targetDesignPartition = @top::@part1} : (i2) -> i2
+// CHECK:    %b.c.unit3.foo_x = msft.instance @b.c.unit3 @Extern(%b.seq.compreg)  {circt.globalRef = [#hw.globalNameRef<@ref2>], targetDesignPartition = @top::@part1} : (i2) -> i2
 // CHECK:    %b.unit2.foo_x = msft.instance @b.unit2 @Extern(%b.c.unit3.foo_x)  {targetDesignPartition = @top::@part1} : (i2) -> i2
-// CHECK:    %b2.unit1.foo_x = msft.instance @b2.unit1 @Extern(%c1_i2)  {circt.globalRef = [#hw.globalNameRef<@ref3>], inner_sym = "b2.unit1", targetDesignPartition = @top::@part1} : (i2) -> i2
+// CHECK:    %b2.unit1.foo_x = msft.instance @b2.unit1 @Extern(%c1_i2)  {circt.globalRef = [#hw.globalNameRef<@ref3>], targetDesignPartition = @top::@part1} : (i2) -> i2
 // CHECK:    %unit1.foo_x = msft.instance @unit1 @Extern(%c0_i2)  {targetDesignPartition = @top::@part1} : (i2) -> i2
 // CHECK:    %c1_i2 = hw.constant 1 : i2
 // CHECK:    %c0_i2 = hw.constant 0 : i2
 // CHECK:    msft.output %b.unit2.foo_x, %unit1.foo_x : i2, i2
 
 // CHECK-LABEL:  msft.module @top {} (%clk: i1) -> (out1: i2, out2: i2, out3: i2) {
-// CHECK:    %part1.b.unit2.b.unit2.foo_x, %part1.unit1.unit1.foo_x = msft.instance @part1 @dp(%clk) {circt.globalRef = [#hw.globalNameRef<@ref1>, #hw.globalNameRef<@ref2>, #hw.globalNameRef<@ref3>], inner_sym = "part1"} : (i1) -> (i2, i2)
-// CHECK:    %b.y = msft.instance @b @B()  {inner_sym = "b"} : () -> i2
-// CHECK:    msft.instance @b2 @B2()  {inner_sym = "b2"} : () -> ()
+// CHECK:    %part1.b.unit2.b.unit2.foo_x, %part1.unit1.unit1.foo_x = msft.instance @part1 @dp(%clk) {circt.globalRef = [#hw.globalNameRef<@ref1>, #hw.globalNameRef<@ref2>, #hw.globalNameRef<@ref3>]} : (i1) -> (i2, i2)
+// CHECK:    %b.y = msft.instance @b @B() : () -> i2
+// CHECK:    msft.instance @b2 @B2() : () -> ()
 // CHECK:    msft.output %part1.b.unit2.b.unit2.foo_x, %part1.unit1.unit1.foo_x, %b.y : i2, i2, i2
 
 // CHECK-LABEL:  msft.module @B {} () -> (y: i2) {
 // CHECK:    %c1_i2 = hw.constant 1 : i2
-// CHECK:    msft.instance @c @C()  {inner_sym = "c"} : () -> ()
+// CHECK:    msft.instance @c @C() : () -> ()
 // CHECK:    msft.output %c1_i2 : i2
 
 // CHECK-LABEL:  msft.module @B2 {} () {
@@ -64,10 +64,10 @@ msft.module.extern @Extern (%foo_a: i2) -> (foo_x: i2)
 
 msft.module @B {} (%clk : i1) -> (x: i2, y: i2)  {
   %c1 = hw.constant 1 : i2
-  %0 = msft.instance @unit1 @Extern(%c1) { targetDesignPartition = @top::@part1, circt.globalRef = [#hw.globalNameRef<@ref1>], inner_sym = "unit1" }: (i2) -> (i2)
+  %0 = msft.instance @unit1 @Extern(%c1) { targetDesignPartition = @top::@part1, circt.globalRef = [#hw.globalNameRef<@ref1>]}: (i2) -> (i2)
   %1 = seq.compreg %0, %clk { targetDesignPartition = @top::@part1 } : i2
 
-  %3 = msft.instance @c @C(%1) { circt.globalRef = [#hw.globalNameRef<@ref2>], inner_sym = "c" }: (i2) -> (i2)
+  %3 = msft.instance @c @C(%1) { circt.globalRef = [#hw.globalNameRef<@ref2>]}: (i2) -> (i2)
 
   %2 = msft.instance @unit2 @Extern(%3) { targetDesignPartition = @top::@part1 }: (i2) -> (i2)
 
@@ -76,12 +76,12 @@ msft.module @B {} (%clk : i1) -> (x: i2, y: i2)  {
 
 msft.module @B2 {} (%clk : i1) -> (x: i2) {
   %c1 = hw.constant 1 : i2
-  %0 = msft.instance @unit1 @Extern(%c1) { targetDesignPartition = @top::@part1, circt.globalRef = [#hw.globalNameRef<@ref3>], inner_sym = "unit1" }: (i2) -> (i2)
+  %0 = msft.instance @unit1 @Extern(%c1) { targetDesignPartition = @top::@part1, circt.globalRef = [#hw.globalNameRef<@ref3>]}: (i2) -> (i2)
   msft.output %0 : i2
 }
 
 msft.module @C {} (%in : i2) -> (out: i2)  {
-  %0 = msft.instance @unit3 @Extern(%in) { targetDesignPartition = @top::@part1, circt.globalRef = [#hw.globalNameRef<@ref2>], inner_sym = "unit3" } : (i2) -> (i2)
+  %0 = msft.instance @unit3 @Extern(%in) { targetDesignPartition = @top::@part1, circt.globalRef = [#hw.globalNameRef<@ref2>]} : (i2) -> (i2)
   msft.output %0 : i2
 }
 
@@ -154,7 +154,7 @@ msft.module @Struct {} (%in: !hw.struct<data: i5, valid: i1>) -> (out: !hw.struc
 // CHECK:    msft.output %0, %5 : i5, !hw.struct<data: i5, valid: i1>
 
 // CHECK-LABEL:  msft.module @TopComplex {} (%clk: i1, %arr_in: !hw.array<4xi5>, %datain: i5, %valid: i1) -> (out2: !hw.struct<data: i5, valid: i1>, out2: i5) {
-// CHECK:    %part2.comb.add, %part2.hw.struct_create = msft.instance @part2 @dp_complex(%datain, %arr_in, %valid)  {circt.globalRef = [], inner_sym = "part2"} : (i5, !hw.array<4xi5>, i1) -> (i5, !hw.struct<data: i5, valid: i1>)
+// CHECK:    %part2.comb.add, %part2.hw.struct_create = msft.instance @part2 @dp_complex(%datain, %arr_in, %valid)  {circt.globalRef = []} : (i5, !hw.array<4xi5>, i1) -> (i5, !hw.struct<data: i5, valid: i1>)
 // CHECK:    msft.instance @b @Array()  : () -> ()
 // CHECK:    msft.instance @structMod @Struct()  : () -> ()
 // CHECK:    msft.output %part2.hw.struct_create, %part2.comb.add : !hw.struct<data: i5, valid: i1>, i5
@@ -168,7 +168,7 @@ msft.module @Struct {} (%in: !hw.struct<data: i5, valid: i1>) -> (out: !hw.struc
 msft.module @InnerPartLeafLoc {} (%clk : i1) -> (out1: i2, out2: i2) {
   msft.partition @part, "InnerLeafPartition"
 
-  %res1, %res2 = msft.instance @inner @Inner(%clk) { targetDesignPartition = @InnerPartLeafLoc::@part, circt.globalRef = [#hw.globalNameRef<@ref4>], inner_sym = "inner" } : (i1) -> (i2, i2)
+  %res1, %res2 = msft.instance @inner @Inner(%clk) { targetDesignPartition = @InnerPartLeafLoc::@part, circt.globalRef = [#hw.globalNameRef<@ref4>] } : (i1) -> (i2, i2)
 
   msft.output %res1, %res2 : i2, i2
 }
@@ -176,16 +176,16 @@ msft.module @InnerPartLeafLoc {} (%clk : i1) -> (out1: i2, out2: i2) {
 msft.module @Inner {} (%clk: i1) -> (out1: i2, out2: i2) {
   %c0 = hw.constant 0 : i2
 
-  %0 = msft.instance @leaf @Extern(%c0) { circt.globalRef = [#hw.globalNameRef<@ref4>], inner_sym = "leaf" }: (i2) -> (i2)
+  %0 = msft.instance @leaf @Extern(%c0) { circt.globalRef = [#hw.globalNameRef<@ref4>] }: (i2) -> (i2)
 
   msft.output %0, %0 : i2, i2
 }
 
 // CHECK-LABEL: msft.module @InnerLeafPartition
-// CHECK: msft.instance @inner @Inner{{.+}}circt.globalRef = [#hw.globalNameRef<@ref4>], inner_sym = "inner"
+// CHECK: msft.instance @inner @Inner{{.+}}circt.globalRef = [#hw.globalNameRef<@ref4>]
 
 // CHECK-LABEL: msft.module @InnerPartLeafLoc
-// CHECK: msft.instance @part @InnerLeafPartition{{.+}}circt.globalRef = [#hw.globalNameRef<@ref4>], inner_sym = "part"
+// CHECK: msft.instance @part @InnerLeafPartition{{.+}}circt.globalRef = [#hw.globalNameRef<@ref4>]
 
 // CHECK-LABEL: msft.module @Inner
-// CHECK: msft.instance @leaf @Extern{{.+}}circt.globalRef = [#hw.globalNameRef<@ref4>], inner_sym = "leaf"
+// CHECK: msft.instance @leaf @Extern{{.+}}circt.globalRef = [#hw.globalNameRef<@ref4>]
