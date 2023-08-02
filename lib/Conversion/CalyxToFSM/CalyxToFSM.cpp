@@ -278,14 +278,14 @@ public:
 
 private:
   void lowerInvokeOp(InvokeOp invokeOp);
-  std::string getGroupName(InvokeOp invokeOp);
+  std::string getTransitionName(InvokeOp invokeOp);
   ComponentOp component;
   OpBuilder builder;
-  // Part of the group name.It is used to generate unique group names, the
+  // Part of the group name. It is used to generate unique group names, the
   // unique counter is reused across multiple calls to lowerInvokeOp, so the
   // loop that's checking for name uniqueness usually finds a unique name on the
   // first try.
-  size_t groupNameTail = 0;
+  size_t transitionNameTail = 0;
 };
 
 // Access all invokeOp.
@@ -297,14 +297,17 @@ void CompileInvoke::compile() {
 }
 
 // Get the name of the generation group.
-std::string CompileInvoke::getGroupName(InvokeOp invokeOp) {
+std::string CompileInvoke::getTransitionName(InvokeOp invokeOp) {
   llvm::StringRef callee = invokeOp.getCallee();
-  std::string groupNameHead = "invoke_" + callee.str() + "_";
-  std::string groupName;
+  std::string transitionNameHead = "invoke_" + callee.str() + "_";
+  std::string transitionName;
+
+  // The following loop is used to check if the transitionName already exists.
+  // If it does, the loop regenerates the transitionName.
   do {
-    groupName = groupNameHead + std::to_string(groupNameTail++);
-  } while (component.getWiresOp().lookupSymbol(groupName));
-  return groupName;
+    transitionName = transitionNameHead + std::to_string(transitionNameTail++);
+  } while (component.getWiresOp().lookupSymbol(transitionName));
+  return transitionName;
 }
 
 // Convert an invoke operation to a group operation and an enable operation.
@@ -318,8 +321,8 @@ void CompileInvoke::lowerInvokeOp(InvokeOp invokeOp) {
 
   // Set the insertion point at the end of the wires block.
   builder.setInsertionPointToEnd(component.getWiresOp().getBodyBlock());
-  std::string groupName = getGroupName(invokeOp);
-  GroupOp groupOp = builder.create<GroupOp>(loc, groupName);
+  std::string transitionName = getTransitionName(invokeOp);
+  GroupOp groupOp = builder.create<GroupOp>(loc, transitionName);
   builder.setInsertionPointToStart(groupOp.getBodyBlock());
   Value go = invokeOp.getInstGoValue();
 
@@ -336,7 +339,7 @@ void CompileInvoke::lowerInvokeOp(InvokeOp invokeOp) {
   // Generate a group_done operation with the instance's done port.
   builder.create<calyx::GroupDoneOp>(loc, done);
   builder.setInsertionPointAfter(invokeOp.getOperation());
-  builder.create<EnableOp>(invokeOp.getLoc(), groupName);
+  builder.create<EnableOp>(invokeOp.getLoc(), transitionName);
   invokeOp.erase();
 }
 
