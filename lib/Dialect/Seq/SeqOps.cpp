@@ -13,6 +13,7 @@
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
+#include "circt/Support/FoldUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/Matchers.h"
@@ -24,29 +25,6 @@
 using namespace mlir;
 using namespace circt;
 using namespace seq;
-
-/// Determine the integer value of a constant operand.
-static std::optional<APInt> getConstantInt(Attribute operand) {
-  if (!operand)
-    return {};
-  if (auto attr = dyn_cast<IntegerAttr>(operand))
-    return attr.getValue();
-  return {};
-}
-
-/// Determine whether a constant operand is a zero value.
-static bool isConstantZero(Attribute operand) {
-  if (auto cst = getConstantInt(operand))
-    return cst->isZero();
-  return false;
-}
-
-/// Determine whether a constant operand is a one value.
-static bool isConstantOne(Attribute operand) {
-  if (auto cst = getConstantInt(operand))
-    return cst->isOne();
-  return false;
-}
 
 bool circt::seq::isValidIndexValues(Value hlmemHandle, ValueRange addresses) {
   auto memType = hlmemHandle.getType().cast<seq::HLMemType>();
