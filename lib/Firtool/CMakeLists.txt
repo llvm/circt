@@ -9,6 +9,7 @@ add_circt_library(CIRCTFirtool
   CIRCTFIRRTLTransforms
   CIRCTTransforms
   CIRCTSeqTransforms
+  CIRCTVerifToSV
 
   MLIRIR
   MLIRSupport
