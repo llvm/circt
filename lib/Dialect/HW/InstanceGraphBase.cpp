@@ -103,7 +103,7 @@ void InstanceGraphBase::erase(InstanceGraphNode *node) {
   nodes.erase(node);
 }
 
-template<>
+template <>
 InstanceGraphNode *InstanceGraphBase::lookup(StringAttr name) {
   auto it = nodeMap.find(name);
   assert(it != nodeMap.end() && "Module not in InstanceGraph!");
@@ -205,8 +205,8 @@ InstanceGraphBase::getInferredTopLevelNodes() {
     err << "cannot deduce top level module - cycle "
            "detected in instance graph (";
     llvm::interleave(
-        cycleTrace, err,
-        [&](auto node) { err << node->getModule().getName(); }, "->");
+        cycleTrace, err, [&](auto node) { err << node->getModule().getName(); },
+        "->");
     err << ").";
     return err;
   }

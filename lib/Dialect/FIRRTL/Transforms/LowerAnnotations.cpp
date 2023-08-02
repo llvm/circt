@@ -827,16 +827,17 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     // We may not be able to handle this, but that is checked below while
     // connecting.
     if (sourceModule == sinkModule) {
-      LLVM_DEBUG(llvm::dbgs()
-                 << "    LCA: " << sourceModule.getName() << "\n");
+      LLVM_DEBUG(llvm::dbgs() << "    LCA: " << sourceModule.getName() << "\n");
       moduleModifications[sourceModule].connectionMap[index] = source;
       moduleModifications[sourceModule].uturns.push_back({index, sink});
       continue;
     }
 
     // Otherwise, get instance paths for source/sink, and compute LCA.
-    auto sourcePaths = state.instancePathCache.getAbsolutePaths(cast<hw::Instantiable>(*sourceModule));
-    auto sinkPaths = state.instancePathCache.getAbsolutePaths(cast<hw::Instantiable>(*sinkModule));
+    auto sourcePaths = state.instancePathCache.getAbsolutePaths(
+        cast<hw::Instantiable>(*sourceModule));
+    auto sinkPaths = state.instancePathCache.getAbsolutePaths(
+        cast<hw::Instantiable>(*sinkModule));
 
     if (sourcePaths.size() != 1 || sinkPaths.size() != 1) {
       auto diag =

@@ -183,13 +183,13 @@ public:
   virtual ~InstanceGraphBase();
 
   /// Look up an InstanceGraphNode for a module.
-  template<typename T>
+  template <typename T>
   InstanceGraphNode *lookup(T op) {
     return lookup(op.getNameAttr());
   }
 
   /// Lookup an module by name.
-  template<>
+  template <>
   InstanceGraphNode *lookup(StringAttr name);
 
   /// Lookup an InstanceGraphNode for a module.

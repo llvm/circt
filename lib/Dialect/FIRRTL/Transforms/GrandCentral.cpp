@@ -1927,11 +1927,10 @@ void GrandCentralPass::runOnOperation() {
                   instancePaths->instanceGraph.lookup(op);
 
               LLVM_DEBUG({
-                llvm::dbgs()
-                    << "Found companion module: "
-                    << companionNode->getModule().getName() << "\n"
-                    << "  submodules exclusively instantiated "
-                       "(including companion):\n";
+                llvm::dbgs() << "Found companion module: "
+                             << companionNode->getModule().getName() << "\n"
+                             << "  submodules exclusively instantiated "
+                                "(including companion):\n";
               });
 
               for (auto &node : llvm::depth_first(companionNode)) {
@@ -1948,8 +1947,7 @@ void GrandCentralPass::runOnOperation() {
                   continue;
 
                 LLVM_DEBUG({
-                  llvm::dbgs()
-                      << "    - module: " << mod.getName() << "\n";
+                  llvm::dbgs() << "    - module: " << mod.getName() << "\n";
                 });
 
                 if (auto extmodule = dyn_cast<FExtModuleOp>(*mod)) {

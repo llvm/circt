@@ -325,8 +325,7 @@ void ExtractInstancesPass::collectAnnos() {
   while (!worklist.empty()) {
     auto *module = worklist.pop_back_val();
     dutModuleNames.insert(module->getModule().getNameAttr());
-    LLVM_DEBUG(llvm::dbgs()
-               << "- " << module->getModule().getName() << "\n");
+    LLVM_DEBUG(llvm::dbgs() << "- " << module->getModule().getName() << "\n");
     for (auto *instRecord : *module) {
       auto *target = instRecord->getTarget();
       if (dutModules.insert(target->getModule()).second)
