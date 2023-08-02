@@ -28,7 +28,7 @@ public:
   InstanceGraphNode *getTopLevelNode() override { return &entry; }
 
   /// Adds a module, updating links to entry.
-  InstanceGraphNode *addModule(HWModuleLike module) override;
+  InstanceGraphNode *addModule(Instantiable module) override;
 
   /// Erases a module, updating links to entry.
   void erase(InstanceGraphNode *node) override;

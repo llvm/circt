@@ -18,11 +18,27 @@ include "mlir/IR/OpBase.td"
 
 def PortList : OpInterface<"PortList", []> {
   let cppNamespace = "circt::hw";
-  let description = "Operations which produce a unified port list representation";
+  let description = [{
+    Operations which produce a unified port list representation.
+    Users should override the port-indexed accessors.  No summary accessor is
+    provided by this interface as it is not assume that all ports have their
+    various constituent parts consecutive.  getPortList is the only summary 
+    accessor.  All per-port accessors are defaulted in terms of this, providing
+    simple use by dialects, but performance would likely be much improved by
+    implementing the full interface.
+  }];
   let methods = [
     InterfaceMethod<"Get port list",
     "::circt::hw::ModulePortInfo", "getPortList", (ins)>
   ];
+}
+
+def Instantiable : OpInterface<"Instantiable", [Symbol, PortList]> {
+  let cppNamespace = "circt::hw";
+  let description = [{
+    Operations which can be instantiated.  These provide a port list and a 
+    symbol.
+  }];
 }
 
 def HWModuleLike : OpInterface<"HWModuleLike", [Symbol, PortList]> {

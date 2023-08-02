@@ -1732,7 +1732,7 @@ void GrandCentralPass::runOnOperation() {
   /// module as if it were the DUT.  This works by doing a depth-first walk of
   /// the instance graph, starting from the "effective" DUT and stopping the
   /// search at any modules which are known companions.
-  DenseSet<hw::HWModuleLike> dutModules;
+  DenseSet<hw::Instantiable> dutModules;
   FModuleOp effectiveDUT = dut;
   if (!effectiveDUT)
     effectiveDUT = cast<FModuleOp>(
@@ -1929,7 +1929,7 @@ void GrandCentralPass::runOnOperation() {
               LLVM_DEBUG({
                 llvm::dbgs()
                     << "Found companion module: "
-                    << companionNode->getModule().getModuleName() << "\n"
+                    << companionNode->getModule().getName() << "\n"
                     << "  submodules exclusively instantiated "
                        "(including companion):\n";
               });
@@ -1949,7 +1949,7 @@ void GrandCentralPass::runOnOperation() {
 
                 LLVM_DEBUG({
                   llvm::dbgs()
-                      << "    - module: " << mod.getModuleName() << "\n";
+                      << "    - module: " << mod.getName() << "\n";
                 });
 
                 if (auto extmodule = dyn_cast<FExtModuleOp>(*mod)) {

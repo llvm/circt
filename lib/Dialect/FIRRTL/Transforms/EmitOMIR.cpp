@@ -721,7 +721,7 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   // Get all the paths instantiating this module. If there is an NLA already
   // attached to this tracker, we use it as a base to disambiguate the path to
   // the memory.
-  hw::HWModuleLike mod;
+  hw::Instantiable mod;
   if (tracker.nla)
     mod = instanceGraph->lookup(tracker.nla.root())->getModule();
   else

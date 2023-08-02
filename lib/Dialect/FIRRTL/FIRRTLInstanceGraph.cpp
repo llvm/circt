@@ -22,7 +22,7 @@ static CircuitOp findCircuitOp(Operation *operation) {
 
 InstanceGraph::InstanceGraph(Operation *operation)
     : InstanceGraphBase(findCircuitOp(operation)) {
-  topLevelNode = lookup(cast<CircuitOp>(getParent()).getNameAttr());
+  topLevelNode = InstanceGraphBase::lookup(cast<CircuitOp>(getParent()).getNameAttr());
 }
 
 bool circt::firrtl::allUnder(ArrayRef<InstanceRecord *> nodes,

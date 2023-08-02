@@ -355,7 +355,7 @@ InstanceOp firrtl::addPortsToModule(FModuleLike mod, InstanceOp instOnPath,
   PortInfo portInfo = {portName, portType, dir, {}, mod.getLoc()};
   mod.insertPorts({{portNo, portInfo}});
   // Now update all the instances of `mod`.
-  for (auto *use : instancePathcache.instanceGraph.lookup(mod)->uses()) {
+  for (auto *use : instancePathcache.instanceGraph.lookup(cast<hw::Instantiable>(*mod))->uses()) {
     InstanceOp useInst = cast<InstanceOp>(use->getInstance());
     auto clonedInst = useInst.cloneAndInsertPorts({{portNo, portInfo}});
     if (useInst == instOnPath)

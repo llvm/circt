@@ -807,10 +807,10 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     LLVM_DEBUG({
       llvm::dbgs() << "  - index: " << index << "\n"
                    << "    source:\n"
-                   << "      module: " << sourceModule.getModuleName() << "\n"
+                   << "      module: " << sourceModule.getName() << "\n"
                    << "      value: " << source << "\n"
                    << "    sink:\n"
-                   << "      module: " << sinkModule.getModuleName() << "\n"
+                   << "      module: " << sinkModule.getName() << "\n"
                    << "      value: " << sink << "\n"
                    << "    newNameHint: " << problem.newNameHint << "\n";
     });
@@ -828,15 +828,15 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     // connecting.
     if (sourceModule == sinkModule) {
       LLVM_DEBUG(llvm::dbgs()
-                 << "    LCA: " << sourceModule.getModuleName() << "\n");
+                 << "    LCA: " << sourceModule.getName() << "\n");
       moduleModifications[sourceModule].connectionMap[index] = source;
       moduleModifications[sourceModule].uturns.push_back({index, sink});
       continue;
     }
 
     // Otherwise, get instance paths for source/sink, and compute LCA.
-    auto sourcePaths = state.instancePathCache.getAbsolutePaths(sourceModule);
-    auto sinkPaths = state.instancePathCache.getAbsolutePaths(sinkModule);
+    auto sourcePaths = state.instancePathCache.getAbsolutePaths(cast<hw::Instantiable>(*sourceModule));
+    auto sinkPaths = state.instancePathCache.getAbsolutePaths(cast<hw::Instantiable>(*sinkModule));
 
     if (sourcePaths.size() != 1 || sinkPaths.size() != 1) {
       auto diag =

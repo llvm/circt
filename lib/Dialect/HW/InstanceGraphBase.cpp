@@ -54,10 +54,10 @@ InstanceGraphNode *InstanceGraphBase::getOrAddNode(StringAttr name) {
 InstanceGraphBase::InstanceGraphBase(Operation *parent) : parent(parent) {
   assert(parent->hasTrait<mlir::OpTrait::SingleBlock>() &&
          "top-level operation must have a single block");
-  SmallVector<std::pair<HWModuleLike, SmallVector<HWInstanceLike>>>
+  SmallVector<std::pair<Instantiable, SmallVector<HWInstanceLike>>>
       moduleToInstances;
   // First accumulate modules inside the parent op.
-  for (auto module : parent->getRegion(0).front().getOps<hw::HWModuleLike>())
+  for (auto module : parent->getRegion(0).front().getOps<Instantiable>())
     moduleToInstances.push_back({module, {}});
 
   // Populate instances in the module parallelly.
@@ -73,7 +73,7 @@ InstanceGraphBase::InstanceGraphBase(Operation *parent) : parent(parent) {
 
   // Construct an instance graph sequentially.
   for (auto &[module, instances] : moduleToInstances) {
-    auto name = module.getModuleNameAttr();
+    auto name = module.getNameAttr();
     auto *currentNode = getOrAddNode(name);
     currentNode->module = module;
     for (auto instanceOp : instances) {
@@ -84,11 +84,11 @@ InstanceGraphBase::InstanceGraphBase(Operation *parent) : parent(parent) {
   }
 }
 
-InstanceGraphNode *InstanceGraphBase::addModule(HWModuleLike module) {
-  assert(!nodeMap.count(module.getModuleNameAttr()) && "module already added");
+InstanceGraphNode *InstanceGraphBase::addModule(Instantiable module) {
+  assert(!nodeMap.count(module.getNameAttr()) && "module already added");
   auto *node = new InstanceGraphNode();
   node->module = module;
-  nodeMap[module.getModuleNameAttr()] = node;
+  nodeMap[module.getNameAttr()] = node;
   nodes.push_back(node);
   return node;
 }
@@ -99,21 +99,18 @@ void InstanceGraphBase::erase(InstanceGraphNode *node) {
   // Erase all instances inside this module.
   for (auto *instance : llvm::make_early_inc_range(*node))
     instance->erase();
-  nodeMap.erase(node->getModule().getModuleNameAttr());
+  nodeMap.erase(node->getModule().getNameAttr());
   nodes.erase(node);
 }
 
+template<>
 InstanceGraphNode *InstanceGraphBase::lookup(StringAttr name) {
   auto it = nodeMap.find(name);
   assert(it != nodeMap.end() && "Module not in InstanceGraph!");
   return it->second;
 }
 
-InstanceGraphNode *InstanceGraphBase::lookup(HWModuleLike op) {
-  return lookup(cast<HWModuleLike>(op).getModuleNameAttr());
-}
-
-HWModuleLike InstanceGraphBase::getReferencedModule(HWInstanceLike op) {
+Instantiable InstanceGraphBase::getReferencedModule(HWInstanceLike op) {
   return lookup(op.getReferencedModuleNameAttr())->getModule();
 }
 
@@ -136,7 +133,7 @@ void InstanceGraphBase::replaceInstance(HWInstanceLike inst,
   (*it)->instance = newInst;
 }
 
-bool InstanceGraphBase::isAncestor(HWModuleLike child, HWModuleLike parent) {
+bool InstanceGraphBase::isAncestor(Instantiable child, Instantiable parent) {
   DenseSet<InstanceGraphNode *> seen;
   SmallVector<InstanceGraphNode *> worklist;
   auto *cn = lookup(child);
@@ -209,7 +206,7 @@ InstanceGraphBase::getInferredTopLevelNodes() {
            "detected in instance graph (";
     llvm::interleave(
         cycleTrace, err,
-        [&](auto node) { err << node->getModule().getModuleName(); }, "->");
+        [&](auto node) { err << node->getModule().getName(); }, "->");
     err << ").";
     return err;
   }
@@ -221,7 +218,7 @@ InstanceGraphBase::getInferredTopLevelNodes() {
   return {inferredTopLevelNodes};
 }
 
-ArrayRef<InstancePath> InstancePathCache::getAbsolutePaths(HWModuleLike op) {
+ArrayRef<InstancePath> InstancePathCache::getAbsolutePaths(Instantiable op) {
   InstanceGraphNode *node = instanceGraph[op];
 
   // If we have reached the circuit root, we're done.

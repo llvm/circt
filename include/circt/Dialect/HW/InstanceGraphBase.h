@@ -96,7 +96,7 @@ public:
   InstanceGraphNode() : module(nullptr) {}
 
   /// Get the module that this node is tracking.
-  HWModuleLike getModule() const { return module; }
+  Instantiable getModule() const { return module; }
 
   /// Iterate the instance records in this module.
   using iterator = detail::AddressIterator<InstanceList::iterator>;
@@ -155,7 +155,7 @@ private:
   void recordUse(InstanceRecord *record);
 
   /// The module.
-  HWModuleLike module;
+  Instantiable module;
 
   /// List of instance operations in this module.  This member owns the
   /// InstanceRecords, which may be pointed to by other InstanceGraphNode's use
@@ -183,21 +183,25 @@ public:
   virtual ~InstanceGraphBase();
 
   /// Look up an InstanceGraphNode for a module.
-  InstanceGraphNode *lookup(HWModuleLike op);
+  template<typename T>
+  InstanceGraphNode *lookup(T op) {
+    return lookup(op.getNameAttr());
+  }
 
   /// Lookup an module by name.
+  template<>
   InstanceGraphNode *lookup(StringAttr name);
 
   /// Lookup an InstanceGraphNode for a module.
-  InstanceGraphNode *operator[](HWModuleLike op) { return lookup(op); }
+  InstanceGraphNode *operator[](Instantiable op) { return lookup(op); }
 
   /// Look up the referenced module from an InstanceOp. This will use a
   /// hashtable lookup to find the module, where
   /// InstanceOp.getReferencedModule() will be a linear search through the IR.
-  HWModuleLike getReferencedModule(HWInstanceLike op);
+  Instantiable getReferencedModule(HWInstanceLike op);
 
   /// Check if child is instantiated by a parent.
-  bool isAncestor(HWModuleLike child, HWModuleLike parent);
+  bool isAncestor(Instantiable child, Instantiable parent);
 
   /// Get the node corresponding to the top-level module of a circuit.
   virtual InstanceGraphNode *getTopLevelNode() = 0;
@@ -228,7 +232,7 @@ public:
   // on a CircuitOp or a ModuleOp.
 
   /// Add a newly created module to the instance graph.
-  virtual InstanceGraphNode *addModule(HWModuleLike module);
+  virtual InstanceGraphNode *addModule(Instantiable module);
 
   /// Remove this module from the instance graph. This will also remove all
   /// InstanceRecords in this module.  All instances of this module must have
@@ -256,7 +260,7 @@ protected:
   NodeList nodes;
 
   /// This maps each operation to its graph node.
-  llvm::DenseMap<Attribute, InstanceGraphNode *> nodeMap;
+  llvm::DenseMap<StringAttr, InstanceGraphNode *> nodeMap;
 
   /// A caching of the inferred top level module(s).
   llvm::SmallVector<InstanceGraphNode *> inferredTopLevelNodes;
@@ -287,7 +291,7 @@ struct InstancePathCache {
 
   explicit InstancePathCache(InstanceGraphBase &instanceGraph)
       : instanceGraph(instanceGraph) {}
-  ArrayRef<InstancePath> getAbsolutePaths(HWModuleLike op);
+  ArrayRef<InstancePath> getAbsolutePaths(Instantiable op);
 
   /// Replace an InstanceOp. This is required to keep the cache updated.
   void replaceInstance(HWInstanceLike oldOp, HWInstanceLike newOp);
@@ -382,7 +386,7 @@ struct llvm::DOTGraphTraits<circt::hw::InstanceGraphBase *>
   static std::string getNodeLabel(circt::hw::InstanceGraphNode *node,
                                   circt::hw::InstanceGraphBase *) {
     // The name of the graph node is the module name.
-    return node->getModule().getModuleName().str();
+    return node->getModule().getName().str();
   }
 
   template <typename Iterator>

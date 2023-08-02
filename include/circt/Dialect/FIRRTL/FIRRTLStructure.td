@@ -65,6 +65,7 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
   FIRRTLOp<mnemonic, traits # [
     IsolatedFromAbove, Symbol, HasParent<"CircuitOp">,
     DeclareOpInterfaceMethods<FModuleLike>,
+    DeclareOpInterfaceMethods<Instantiable>,
     DeclareOpInterfaceMethods<HWModuleLike>,
     OpAsmOpInterface, InnerSymbolTable]> {
 
