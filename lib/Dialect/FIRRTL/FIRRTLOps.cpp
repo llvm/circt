@@ -456,7 +456,7 @@ Block *CircuitOp::getBodyBlock() { return &getBody().front(); }
 // FExtModuleOp and FModuleOp
 //===----------------------------------------------------------------------===//
 
-static SmallVector<PortInfo> getPorts(FModuleLike module) {
+static SmallVector<PortInfo> getPortImpl(FModuleLike module) {
   SmallVector<PortInfo> results;
   for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
     results.push_back({module.getPortNameAttr(i), module.getPortType(i),
@@ -467,20 +467,48 @@ static SmallVector<PortInfo> getPorts(FModuleLike module) {
   return results;
 }
 
-SmallVector<PortInfo> FModuleOp::getPorts() {
-  return ::getPorts(cast<FModuleLike>((Operation *)*this));
+SmallVector<PortInfo> FModuleOp::getPorts() { return ::getPortImpl(*this); }
+
+SmallVector<PortInfo> FExtModuleOp::getPorts() { return ::getPortImpl(*this); }
+
+SmallVector<PortInfo> FIntModuleOp::getPorts() { return ::getPortImpl(*this); }
+
+SmallVector<PortInfo> FMemModuleOp::getPorts() { return ::getPortImpl(*this); }
+
+static hw::ModulePort::Direction dirFtoH(Direction dir) {
+  if (dir == Direction::In)
+    return hw::ModulePort::Direction::Input;
+  if (dir == Direction::Out)
+    return hw::ModulePort::Direction::Output;
+  assert(0 && "invalid direction");
+  abort();
 }
 
-SmallVector<PortInfo> FExtModuleOp::getPorts() {
-  return ::getPorts(cast<FModuleLike>((Operation *)*this));
+static hw::ModulePortInfo getPortListImpl(FModuleLike module) {
+  SmallVector<hw::PortInfo> results;
+  for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
+    results.push_back({{module.getPortNameAttr(i), module.getPortType(i),
+                        dirFtoH(module.getPortDirection(i))},
+                       i,
+                       module.getPortSymbolAttr(i),
+                       {},
+                       module.getPortLocation(i)});
+  }
+  return hw::ModulePortInfo(results);
 }
 
-SmallVector<PortInfo> FIntModuleOp::getPorts() {
-  return ::getPorts(cast<FModuleLike>((Operation *)*this));
+hw::ModulePortInfo FModuleOp::getPortList() { return ::getPortListImpl(*this); }
+
+hw::ModulePortInfo FExtModuleOp::getPortList() {
+  return ::getPortListImpl(*this);
 }
 
-SmallVector<PortInfo> FMemModuleOp::getPorts() {
-  return ::getPorts(cast<FModuleLike>((Operation *)*this));
+hw::ModulePortInfo FIntModuleOp::getPortList() {
+  return ::getPortListImpl(*this);
+}
+
+hw::ModulePortInfo FMemModuleOp::getPortList() {
+  return ::getPortListImpl(*this);
 }
 
 // Return the port with the specified name.
@@ -1462,7 +1490,7 @@ void ClassOp::getAsmBlockArgumentNames(mlir::Region &region,
 }
 
 SmallVector<PortInfo> ClassOp::getPorts() {
-  return ::getPorts(cast<FModuleLike>((Operation *)*this));
+  return ::getPortImpl(cast<FModuleLike>((Operation *)*this));
 }
 
 void ClassOp::erasePorts(const llvm::BitVector &portIndices) {
@@ -1486,6 +1514,8 @@ ArrayAttr ClassOp::getPortAnnotationsAttr() {
   return ArrayAttr::get(getContext(), {});
 }
 
+hw::ModulePortInfo ClassOp::getPortList() { return ::getPortListImpl(*this); }
+
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//
@@ -1498,6 +1528,10 @@ Operation *InstanceOp::getReferencedModule() {
     return nullptr;
 
   return circuit.lookupSymbol<FModuleLike>(getModuleNameAttr());
+}
+
+hw::ModulePortInfo InstanceOp::getPortList() {
+  return cast<hw::PortList>(getReferencedModule()).getPortList();
 }
 
 FModuleLike InstanceOp::getReferencedModule(SymbolTable &symbolTable) {

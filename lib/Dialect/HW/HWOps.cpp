@@ -997,7 +997,7 @@ void HWModuleGeneratedOp::appendOutputs(
 /// Return an encapsulated set of information about input and output ports of
 /// the specified module or instance.  The input ports always come before the
 /// output ports in the list.
-ModulePortInfo hw::getModulePortInfo(Operation *op) {
+static ModulePortInfo getModulePortListImpl(Operation *op) {
   assert(isAnyModuleOrInstance(op) &&
          "Can only get module ports from an instance or module");
 
@@ -1023,6 +1023,7 @@ ModulePortInfo hw::getModulePortInfo(Operation *op) {
     inputs.push_back({{argNames[i].cast<StringAttr>(), type, direction},
                       i,
                       getArgSym(op, i),
+                      {},
                       loc});
   }
 
@@ -1037,6 +1038,7 @@ ModulePortInfo hw::getModulePortInfo(Operation *op) {
                         ModulePort::Direction::Output},
                        i,
                        getResultSym(op, i),
+                       {},
                        loc});
   }
   return ModulePortInfo(inputs, outputs);
@@ -1060,6 +1062,7 @@ PortInfo hw::getModuleInOrInoutPort(Operation *op, size_t idx) {
   return {{argNames[idx].cast<StringAttr>(), type, direction},
           idx,
           getArgSym(op, idx),
+          {},
           argLocs[idx].cast<LocationAttr>()};
 }
 
@@ -1073,6 +1076,7 @@ PortInfo hw::getModuleOutputPort(Operation *op, size_t idx) {
            ModulePort::Direction::Output},
           idx,
           getResultSym(op, idx),
+          {},
           resultLocs[idx].cast<LocationAttr>()};
 }
 
@@ -1350,7 +1354,7 @@ std::pair<StringAttr, BlockArgument>
 HWModuleOp::insertInput(unsigned index, StringAttr name, Type ty) {
   // Find a unique name for the wire.
   Namespace ns;
-  auto ports = getModulePortInfo(*this);
+  auto ports = getPortList();
   for (auto port : ports)
     ns.newName(port.name.getValue());
   auto nameAttr = StringAttr::get(getContext(), ns.newName(name.getValue()));
@@ -1404,6 +1408,18 @@ void HWModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
 void HWModuleExternOp::getAsmBlockArgumentNames(
     mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
   getAsmBlockArgumentNamesImpl(region, setNameFn);
+}
+
+ModulePortInfo HWModuleOp::getPortList() {
+  return getModulePortListImpl(*this);
+}
+
+ModulePortInfo HWModuleExternOp::getPortList() {
+  return getModulePortListImpl(*this);
+}
+
+ModulePortInfo HWModuleGeneratedOp::getPortList() {
+  return getModulePortListImpl(*this);
 }
 
 /// Lookup the generator for the symbol.  This returns null on
@@ -1601,6 +1617,10 @@ void InstanceOp::setResultName(size_t i, StringAttr name) {
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   instance_like_impl::getAsmResultNames(setNameFn, getInstanceName(),
                                         getResultNames(), getResults());
+}
+
+ModulePortInfo InstanceOp::getPortList() {
+  return getModulePortListImpl(*this);
 }
 
 //===----------------------------------------------------------------------===//
@@ -3302,8 +3322,6 @@ ParseResult HWTestModuleOp::parse(OpAsmParser &parser, OperationState &result) {
     return failure();
   }
 
-  auto *context = result.getContext();
-
   result.addAttribute("parameters", parameters);
   result.addAttribute(getModuleTypeAttrName(result.name), modType);
   addPortAttrsAndLocs(parser.getBuilder(), result, ports,
@@ -3330,8 +3348,6 @@ void HWTestModuleOp::getAsmBlockArgumentNames(
   if (region.empty())
     return;
   // Assign port names to the bbargs.
-  auto *module = region.getParentOp();
-
   auto *block = &region.front();
   auto mt = getModuleType();
   for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
@@ -3339,6 +3355,19 @@ void HWTestModuleOp::getAsmBlockArgumentNames(
     if (!name.empty())
       setNameFn(block->getArgument(i), name);
   }
+}
+
+ModulePortInfo HWTestModuleOp::getPortList() {
+  SmallVector<PortInfo> ports;
+  for (auto [i, port] : enumerate(getModuleType().getPorts())) {
+    auto loc = getPortLocs() ? cast<LocationAttr>((*getPortLocs())[i])
+                             : LocationAttr();
+    auto attr = getPortAttrs() ? cast<DictionaryAttr>((*getPortAttrs())[i])
+                               : DictionaryAttr();
+    InnerSymAttr sym = {};
+    ports.push_back({{port}, i, sym, attr, loc});
+  }
+  return ModulePortInfo(ports);
 }
 
 //===----------------------------------------------------------------------===//

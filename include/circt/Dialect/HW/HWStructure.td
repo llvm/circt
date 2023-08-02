@@ -29,6 +29,7 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 /// the module-like operations.
 class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     HWOp<mnemonic, traits # [
+      DeclareOpInterfaceMethods<PortList>,
       DeclareOpInterfaceMethods<HWModuleLike>,
       DeclareOpInterfaceMethods<HWMutableModuleLike>,
       FunctionOpInterface, Symbol,
@@ -64,7 +65,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
   let extraClassDefinition = extraModuleClassDefinition # [{
     size_t $cppClass::getNumPorts() {
       // This is wildly inefficient
-      return getModulePortInfo(*this).size();
+      return getPortList().size();
     }
 
     ::circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
@@ -105,7 +106,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
 
 }
 
-def HWTestModuleOp : HWOp<"testmodule", [Symbol, 
+def HWTestModuleOp : HWOp<"testmodule", [Symbol, PortList,
                                          OpAsmOpInterface, 
                                          HasParent<"mlir::ModuleOp">, 
                                          IsolatedFromAbove,
@@ -122,6 +123,11 @@ def HWTestModuleOp : HWOp<"testmodule", [Symbol,
   let extraClassDeclaration = [{
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 
 }
@@ -554,6 +560,12 @@ def InstanceOp : HWOp<"instance", [
 
     /// An InstanceOp may optionally define a symbol.
     bool isOptionalSymbol() { return true; }
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
+
   }];
 
   let hasCustomAssemblyFormat = 1;

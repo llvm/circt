@@ -401,6 +401,10 @@ Operation *InstanceOp::getReferencedModule() {
   return topLevelModuleOp.lookupSymbol(getModuleName());
 }
 
+hw::ModulePortInfo InstanceOp::getPortList() {
+  return cast<hw::PortList>(getReferencedModule()).getPortList();
+}
+
 StringAttr InstanceOp::getResultName(size_t idx) {
   if (auto *refMod = getReferencedModule())
     return hw::getModuleResultNameAttr(refMod, idx);
@@ -463,7 +467,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &state,
 /// output ports in the list.
 /// TODO: This should really be shared with the HW dialect instead of cloned.
 /// Consider adding a `HasModulePorts` op interface to facilitate.
-hw::ModulePortInfo MSFTModuleOp::getPorts() {
+hw::ModulePortInfo MSFTModuleOp::getPortList() {
   SmallVector<hw::PortInfo> inputs, outputs;
   auto argNames = this->getArgNames();
   auto argTypes = getArgumentTypes();
@@ -480,7 +484,7 @@ hw::ModulePortInfo MSFTModuleOp::getPorts() {
       type = inout.getElementType();
     }
     auto argLoc = argLocs[i].cast<LocationAttr>();
-    inputs.push_back({{argName, type, direction}, i, {}, argLoc});
+    inputs.push_back({{argName, type, direction}, i, {}, {}, argLoc});
   }
 
   auto resultNames = this->getResultNames();
@@ -490,6 +494,7 @@ hw::ModulePortInfo MSFTModuleOp::getPorts() {
     outputs.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
                         hw::ModulePort::Direction::Output},
                        i,
+                       {},
                        {},
                        resultLocs[i].cast<LocationAttr>()});
   }
@@ -910,7 +915,7 @@ LogicalResult MSFTModuleExternOp::verify() {
   return success();
 }
 
-hw::ModulePortInfo MSFTModuleExternOp::getPorts() {
+hw::ModulePortInfo MSFTModuleExternOp::getPortList() {
   using namespace mlir::function_interface_impl;
 
   SmallVector<hw::PortInfo> inputs, outputs;
@@ -937,7 +942,7 @@ hw::ModulePortInfo MSFTModuleExternOp::getPorts() {
     auto direction = isInOut ? hw::ModulePort::Direction::InOut
                              : hw::ModulePort::Direction::Input;
 
-    inputs.push_back({{name, type, direction}, i, {}, loc});
+    inputs.push_back({{name, type, direction}, i, {}, {}, loc});
   }
 
   auto resultNames = getOperation()->getAttrOfType<ArrayAttr>("resultNames");
@@ -948,6 +953,7 @@ hw::ModulePortInfo MSFTModuleExternOp::getPorts() {
     outputs.push_back(
         {{name, resultTypes[i], hw::ModulePort::Direction::Output},
          i,
+         {},
          {},
          loc});
   }

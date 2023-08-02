@@ -1674,7 +1674,7 @@ verifyPrimitiveOpType(PrimitiveOp instance,
            << "'.";
 
   // Verify the instance result ports with those of its referenced component.
-  hw::ModulePortInfo primitivePorts = getModulePortInfo(referencedPrimitive);
+  hw::ModulePortInfo primitivePorts = referencedPrimitive.getPortList();
   size_t numPorts = primitivePorts.size();
 
   size_t numResults = instance.getNumResults();
@@ -1767,7 +1767,7 @@ void PrimitiveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 SmallVector<StringRef> PrimitiveOp::portNames() {
   SmallVector<StringRef> portNames;
-  auto ports = getModulePortInfo(getReferencedPrimitive());
+  auto ports = getReferencedPrimitive().getPortList();
   for (auto port : ports)
     portNames.push_back(port.name.getValue());
 
@@ -1788,7 +1788,7 @@ Direction convertHWDirectionToCalyx(hw::ModulePort::Direction direction) {
 
 SmallVector<Direction> PrimitiveOp::portDirections() {
   SmallVector<Direction> portDirections;
-  auto ports = getModulePortInfo(getReferencedPrimitive());
+  auto ports = getReferencedPrimitive().getPortList();
   for (hw::PortInfo port : ports)
     portDirections.push_back(convertHWDirectionToCalyx(port.dir));
   return portDirections;

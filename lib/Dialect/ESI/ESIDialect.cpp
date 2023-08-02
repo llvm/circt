@@ -13,7 +13,8 @@
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/ESITypes.h"
-#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
@@ -105,7 +106,7 @@ static void findValidReady(Operation *modOp,
 void circt::esi::findValidReadySignals(
     Operation *modOp, SmallVectorImpl<ESIPortValidReadyMapping> &names) {
 
-  auto ports = hw::getModulePortInfo(modOp);
+  auto ports = cast<hw::PortList>(modOp).getPortList();
   llvm::StringMap<hw::PortInfo> nameMap(ports.size());
   for (auto port : ports)
     nameMap[port.getName()] = port;
@@ -119,7 +120,7 @@ void circt::esi::resolvePortNames(
     Operation *modOp, ArrayRef<StringRef> portNames,
     SmallVectorImpl<ESIPortValidReadyMapping> &names) {
 
-  auto ports = hw::getModulePortInfo(modOp);
+  auto ports = cast<hw::PortList>(modOp).getPortList();
   llvm::StringMap<hw::PortInfo> nameMap(ports.size());
   for (auto port : ports)
     nameMap[port.getName()] = port;
@@ -214,7 +215,7 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
   // Map the shell result to the pearl port.
   SmallVector<hw::PortInfo, 64> outputPortMap;
 
-  auto pearlPorts = hw::getModulePortInfo(pearl);
+  auto pearlPorts = cast<hw::PortList>(pearl).getPortList();
   for (const auto &port : pearlPorts) {
     if (controlPorts.contains(port.name.getValue()))
       continue;

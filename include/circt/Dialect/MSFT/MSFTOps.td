@@ -40,6 +40,11 @@ def InstanceOp : MSFTOp<"instance", [
     // Update the results.
     InstanceOp getWithNewResults(MSFTModuleOp mod,
                                  ArrayRef<unsigned> newToOldMap);
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 
   /// sym keyword for optional symbol simplifies parsing
@@ -64,8 +69,6 @@ class MSFTModuleOpBase<string mnemonic, list<Trait> traits = []> :
   code extraModuleClassDeclaration = ?;
 
   let extraClassDeclaration = extraModuleClassDeclaration # [{
-    // Decode information about the input and output ports on this module.
-    ::circt::hw::ModulePortInfo getPorts();
 
     // Get the module's symbolic name as StringAttr.
     StringAttr getNameAttr() {
@@ -107,6 +110,11 @@ class MSFTModuleOpBase<string mnemonic, list<Trait> traits = []> :
           setNameFn(block->getArgument(i), name);
       }
     }
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 }
 
@@ -173,7 +181,7 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
   let extraClassDefinition = [{
     size_t $cppClass::getNumPorts() {
       // This is excessively expensive
-      auto ports = getPorts();
+      auto ports = getPortList();
       return ports.size();
     }
 
@@ -218,14 +226,16 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
   let hasVerifier = 1;
 
   let extraClassDeclaration = [{
-    /// Decode information about the input and output ports on this module.
-    hw::ModulePortInfo getPorts();
-
     /// Returns the argument types of this function.
     ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
     /// Returns the result types of this function.
     ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 }
 

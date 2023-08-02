@@ -128,6 +128,11 @@ def InstanceOp : HardwareDeclOp<"instance", [
     /// conjuction with adding ports to the referenced module. This will emit
     /// the new InstanceOp to the same location.
     InstanceOp cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 }
 

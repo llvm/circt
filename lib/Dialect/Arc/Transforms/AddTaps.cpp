@@ -28,7 +28,7 @@ struct AddTapsPass : public AddTapsBase<AddTapsPass> {
     if (!tapPorts)
       return;
     auto *outputOp = moduleOp.getBodyBlock()->getTerminator();
-    ModulePortInfo ports = moduleOp.getPorts();
+    ModulePortInfo ports = moduleOp.getPortList();
 
     // Add taps to inputs.
     auto builder = OpBuilder::atBlockBegin(moduleOp.getBodyBlock());

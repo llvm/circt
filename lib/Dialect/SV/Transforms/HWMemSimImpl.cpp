@@ -756,10 +756,10 @@ void HWMemSimImplPass::runOnOperation() {
       if (replSeqMem && ((mem.readLatency == 1 && mem.writeLatency == 1) &&
                          mem.dataWidth > 0)) {
         builder.create<HWModuleExternOp>(oldModule.getLoc(), nameAttr,
-                                         oldModule.getPorts());
+                                         oldModule.getPortList());
       } else {
         auto newModule = builder.create<HWModuleOp>(
-            oldModule.getLoc(), nameAttr, oldModule.getPorts());
+            oldModule.getLoc(), nameAttr, oldModule.getPortList());
         if (auto outdir = oldModule->getAttr("output_file"))
           newModule->setAttr("output_file", outdir);
         newModule.setCommentAttr(
