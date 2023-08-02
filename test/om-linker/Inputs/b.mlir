@@ -3,4 +3,5 @@ module {
   }
   om.class @B(%arg: i2) {
   }
+  om.class @Conflict(){}
 }

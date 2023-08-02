@@ -31,3 +31,4 @@ add_circt_dialect_library(
 add_dependencies(circt-headers MLIROMIncGen)
 
 add_subdirectory(Evaluator)
+add_subdirectory(Transforms)
