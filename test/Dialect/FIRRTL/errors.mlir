@@ -1948,3 +1948,50 @@ firrtl.circuit "RWProbeInstance" {
     %rw = firrtl.ref.rwprobe <@RWProbeInstance::@inst> : !firrtl.uint<1>
   }
 }
+
+// -----
+
+firrtl.circuit "MissingClassForObjectPortInModule" {
+  // expected-error @below {{'firrtl.module' op target class 'Missing' not found}}
+  firrtl.module @MissingClassForObjectPortInModule(out %o: !firrtl.class<@Missing()>) {}
+}
+
+// -----
+
+firrtl.circuit "MissingClassForObjectPortInClass" {
+  firrtl.module @MissingClassForObjectPortInClass() {}
+  // expected-error @below {{'firrtl.class' op target class 'Missing' not found}}
+  firrtl.class @MyClass(out %o: !firrtl.class<@Missing()>) {}
+}
+
+// -----
+
+firrtl.circuit "ClassTypeWrongPortName" {
+  firrtl.class @MyClass(out %str: !firrtl.string) {}
+  // expected-error @below {{'firrtl.module' op port #0 has wrong name, got "xxx", expected "str"}}
+  firrtl.module @ClassTypeWrongPortName(out %port: !firrtl.class<@MyClass(out xxx: !firrtl.string)>) {}
+}
+
+// -----
+
+firrtl.circuit "ClassTypeWrongPortDir" {
+  firrtl.class @MyClass(out %str: !firrtl.string) {}
+    // expected-error @below {{'firrtl.module' op port "str" has wrong direction, got in, expected out}}
+  firrtl.module @ClassTypeWrongPortDir(out %port: !firrtl.class<@MyClass(in str: !firrtl.string)>) {}
+}
+
+// -----
+
+firrtl.circuit "ClassTypeWrongPortType" {
+  firrtl.class @MyClass(out %str: !firrtl.string) {}
+  // expected-error @below {{'firrtl.module' op port "str" has wrong type, got '!firrtl.bigint', expected '!firrtl.string'}}
+  firrtl.module @ClassTypeWrongPortType(out %port: !firrtl.class<@MyClass(out str: !firrtl.bigint)>) {}
+}
+
+// -----
+
+firrtl.circuit "ConstClassType" {
+  firrtl.class @MyClass(out %str: !firrtl.string) {}
+  // expected-error @below {{classes cannot be const}}
+  firrtl.module @ConstClassType(out %port: !firrtl.const.class<@MyClass(in str: !firrtl.string)>) {}
+}

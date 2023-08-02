@@ -66,6 +66,7 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
     IsolatedFromAbove, Symbol, HasParent<"CircuitOp">,
     DeclareOpInterfaceMethods<FModuleLike>,
     DeclareOpInterfaceMethods<HWModuleLike>,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
     OpAsmOpInterface, InnerSymbolTable]> {
 
   /// Additional class definitions inside the module op.
@@ -315,6 +316,13 @@ def ClassOp : FIRRTLModuleLike<"class", [
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
     ArrayAttr getParameters();
+
+    /// Verify that the given type agrees with this class.
+    LogicalResult verifyType(
+      ClassType type, function_ref<InFlightDiagnostic()> emitError);
+
+    /// Get the type for instances of this class.
+    ClassType getInstanceType();
   }];
 }
 

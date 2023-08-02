@@ -180,7 +180,7 @@ ObjectOp ExtractClassesPass::getOrCreateObject(
 
   // Get the Object type.
   auto objectType =
-      ClassType::get(instance.getContext(), instance.getModuleNameAttr());
+      om::ClassType::get(instance.getContext(), instance.getModuleNameAttr());
 
   // Get the Object's class name.
   auto objectClass = instance.getModuleNameAttr().getAttr();
