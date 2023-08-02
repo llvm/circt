@@ -106,6 +106,110 @@ void ModuleInfo::postProcess(const SymMappingTy &symMapping) {
   });
 }
 
+// Return a failure if classes cannot be resolved. Return true if
+// it's necessary to rename symbols.
+static FailureOr<bool> resolveClasses(StringAttr name,
+                                      ArrayRef<ClassLike> classes) {
+  bool existExternalClass = false;
+  size_t countDefinition = 0;
+  ClassOp classOp;
+
+  for (auto op : classes) {
+    if (isa<ClassExternOp>(op))
+      existExternalClass = true;
+    else {
+      classOp = cast<ClassOp>(op);
+      ++countDefinition;
+    }
+  }
+
+  // There must be exactly one definition if the symbol was referred by an
+  // external class.
+  if (existExternalClass && countDefinition != 1) {
+    SmallVector<Location> classExternLocs;
+    SmallVector<Location> classLocs;
+    for (auto op : classes)
+      (isa<ClassExternOp>(op) ? classExternLocs : classLocs)
+          .push_back(op.getLoc());
+
+    auto diag = emitError(classExternLocs.front())
+                << "class " << name << " is declared as an external class but "
+                << (countDefinition == 0 ? "there is no definition"
+                                         : "there are multiple definitions");
+    for (auto loc : ArrayRef(classExternLocs).drop_front())
+      diag.attachNote(loc) << "class " << name << " is declared here as well";
+
+    if (countDefinition != 0) {
+      // There are multiple definitions.
+      for (auto loc : classLocs)
+        diag.attachNote(loc) << "class " << name << " is defined here";
+    }
+    return failure();
+  }
+
+  if (!existExternalClass)
+    return countDefinition != 1;
+
+  assert(classOp && countDefinition == 1);
+
+  // Raise errors if linked external modules are not compatible with the
+  // definition.
+  auto emitError = [&](Operation *op) {
+    auto diag = op->emitError()
+                << "failed to link class " << name
+                << " since declaration doesn't match the definition: ";
+    diag.attachNote(classOp.getLoc()) << "definition is here";
+    return diag;
+  };
+
+  llvm::MapVector<StringAttr, Type> classFields;
+  for (auto fieldOp : classOp.getOps<om::ClassFieldOp>())
+    classFields.insert({fieldOp.getNameAttr(), fieldOp.getType()});
+
+  for (auto op : classes) {
+    if (op == classOp)
+      continue;
+
+    if (classOp.getBodyBlock()->getNumArguments() !=
+        op.getBodyBlock()->getNumArguments())
+      return emitError(op) << "the number of arguments is not equal, "
+                           << classOp.getBodyBlock()->getNumArguments()
+                           << " vs " << op.getBodyBlock()->getNumArguments();
+    unsigned index = 0;
+    for (auto [l, r] : llvm::zip(classOp.getBodyBlock()->getArgumentTypes(),
+                                 op.getBodyBlock()->getArgumentTypes())) {
+      if (l != r)
+        return emitError(op) << index << "-th argument type is not equal, " << l
+                             << " vs " << r;
+      index++;
+    }
+    // Check declared fields.
+    llvm::DenseSet<StringAttr> declaredFields;
+    for (auto fieldOp : op.getBodyBlock()->getOps<om::ClassExternFieldOp>()) {
+      auto it = classFields.find(fieldOp.getNameAttr());
+
+      // Field not found in its definition.
+      if (it == classFields.end())
+        return emitError(op)
+               << "declaration has a field " << fieldOp.getNameAttr()
+               << " but not found in its definition";
+
+      if (it->second != fieldOp.getType())
+        return emitError(op)
+               << "declaration has a field " << fieldOp.getNameAttr()
+               << " but types don't match, " << it->second << " vs "
+               << fieldOp.getType();
+      declaredFields.insert(fieldOp.getNameAttr());
+    }
+
+    for (auto [fieldName, _] : classFields)
+      if (!declaredFields.count(fieldName))
+        return emitError(op) << "definition has a field " << fieldName
+                             << " but not found in this declaration";
+  }
+  return false;
+}
+
 void LinkModulesPass::runOnOperation() {
   auto toplevelModule = getOperation();
   // 1. Initialize ModuleInfo.
@@ -149,49 +253,16 @@ void LinkModulesPass::runOnOperation() {
   // require a public symbol to have exactly one definition so otherwise raise
   // an error.
   for (auto &[name, classes] : symbolToClasses) {
-    bool existExternalClass = false;
-    size_t countDefinition = 0;
-    for (auto op : classes) {
-      if (isa<ClassExternOp>(op))
-        existExternalClass = true;
-      else
-        ++countDefinition;
-    }
-
-    // There must be exactly one definition if the symbol was referred by an
-    // external class.
-    if (existExternalClass && countDefinition != 1) {
-      SmallVector<Location> classExternLocs;
-      SmallVector<Location> classLocs;
-      for (auto op : classes)
-        (isa<ClassExternOp>(op) ? classExternLocs : classLocs)
-            .push_back(op.getLoc());
-
-      auto diag = emitError(classExternLocs.front())
-                  << "OM linker error: class " << name
-                  << " is declared as an external class but "
-                  << (countDefinition == 0 ? "there is no definition"
-                                           : "there are multiple definitions");
-      for (auto loc : ArrayRef(classExternLocs).drop_front())
-        diag.attachNote(loc) << "class " << name << " is declared here as well";
-
-      if (countDefinition != 0) {
-        // There are multiple definitions.
-        for (auto loc : classLocs)
-          diag.attachNote(loc) << "class " << name << " is defined here";
-      }
-      signalPassFailure();
-      return;
-    }
-
-    // TODO: Raise errors if linked external modules are not compatible with the
-    // definition. Verifier is able to catch the mismatch, but it's better to
-    // emit nicer error here.
+    // Check if it's legal to link classes. `resolveClasses` returns true if
+    // it's necessary to rename symbols.
+    auto result = resolveClasses(name, classes);
+    if (failed(result))
+      return signalPassFailure();
 
     // We can resolve symbol collision for symbols not referred by external
-    // classes. Create a new name using `om.namespace` attributes as a suffix.
-    if (countDefinition != 1) {
-      assert(!existExternalClass);
+    // classes. Create a new name using `om.namespace` attributes as a
+    // suffix.
+    if (*result)
       for (auto op : classes) {
         auto enclosingModule = cast<mlir::ModuleOp>(op->getParentOp());
         auto nameSpaceId =
@@ -200,7 +271,6 @@ void LinkModulesPass::runOnOperation() {
             &getContext(),
             nameSpace.newName(name.getValue(), nameSpaceId.getValue()));
       }
-    }
   }
 
   // 3. Post-processing. Update class names and erase external classes.
