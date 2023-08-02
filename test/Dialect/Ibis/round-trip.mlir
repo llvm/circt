@@ -1,31 +1,25 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
-// CHECK-LABEL:  ibis.container @A {
+// CHECK-LABEL:  ibis.class @A {
 // CHECK-NEXT:    ibis.port.input @A_in : i1
 // CHECK-NEXT:    ibis.port.output @A_out : i1
-// CHECK-NEXT:    ibis.container @B {
-// CHECK-NEXT:      ibis.port.input @B_in : i1
-// CHECK-NEXT:      ibis.port.output @B_out : i1
-// CHECK-NEXT:    }
 // CHECK-NEXT:  }
 
-// CHECK-LABEL:  ibis.container @C {
+// CHECK-LABEL:  ibis.class @C {
 // CHECK-NEXT:    ibis.port.input @C_in : i1
 // CHECK-NEXT:    ibis.port.output @C_out : i1
-// CHECK-NEXT:    ibis.container.instance @My_A, @A
+// CHECK-NEXT:    ibis.instance @My_A, @A
 // CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    ibis.port.write @C_in(%true) : i1
 // CHECK-NEXT:    %0 = ibis.port.read @C_out : i1
-// CHECK-NEXT:    ibis.port.write @My_A::@A_in(%0) : i1
-// CHECK-NEXT:    %1 = ibis.port.read @My_A::@A_out : i1
+// CHECK-NEXT:    ibis.instance.write @My_A::@A_in(%0) : i1
+// CHECK-NEXT:    %1 = ibis.instance.read @My_A::@A_out : i1
 // CHECK-NEXT:    ibis.container @D {
-// CHECK-NEXT:      ibis.container @E {
-// CHECK-NEXT:        %true_0 = hw.constant true
-// CHECK-NEXT:        ibis.port.write @C_in(%true_0) : i1
-// CHECK-NEXT:        %2 = ibis.port.read @C_out : i1
-// CHECK-NEXT:        ibis.port.write @My_A::@A_in(%2) : i1
-// CHECK-NEXT:        %3 = ibis.port.read @My_A::@A_out : i1
-// CHECK-NEXT:      }
+// CHECK-NEXT:      %true_0 = hw.constant true
+// CHECK-NEXT:      ibis.port.write @C_in(%true_0) : i1
+// CHECK-NEXT:      %2 = ibis.port.read @C_out : i1
+// CHECK-NEXT:      ibis.instance.write @My_A::@A_in(%2) : i1
+// CHECK-NEXT:      %3 = ibis.instance.read @My_A::@A_out : i1
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 
