@@ -275,8 +275,8 @@ public:
   ResultType dispatchDeclVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp,
-                       VerbatimWireOp>([&](auto opNode) -> ResultType {
+        .template Case<InstanceOp, ObjectOp, MemOp, NodeOp, RegOp, RegResetOp,
+                       WireOp, VerbatimWireOp>([&](auto opNode) -> ResultType {
           return thisCast->visitDecl(opNode, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -302,6 +302,7 @@ public:
   }
 
   HANDLE(InstanceOp);
+  HANDLE(ObjectOp);
   HANDLE(MemOp);
   HANDLE(NodeOp);
   HANDLE(RegOp);

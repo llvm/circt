@@ -36,16 +36,16 @@ private:
                                     InstanceOp instance, OpBuilder &builder,
                                     IRMapping &mapping,
                                     SmallVectorImpl<Operation *> &opsToErase);
-  ObjectOp getOrCreateObject(InstanceOp instance, OpBuilder &builder,
-                             IRMapping &mapping,
-                             SmallVectorImpl<Operation *> &opsToErase);
+  om::ObjectOp getOrCreateObject(InstanceOp instance, OpBuilder &builder,
+                                 IRMapping &mapping,
+                                 SmallVectorImpl<Operation *> &opsToErase);
   void extractClass(FModuleOp moduleOp);
   void updateInstances(FModuleOp moduleOp);
 
   InstanceGraph *instanceGraph;
   DenseMap<Operation *, llvm::BitVector> portsToErase;
   DenseMap<OpResult, Value> cachedObjectValues;
-  DenseMap<InstanceOp, ObjectOp> cachedObjects;
+  DenseMap<InstanceOp, om::ObjectOp> cachedObjects;
 };
 } // namespace
 
@@ -118,7 +118,8 @@ Value ExtractClassesPass::getOrCreateObjectFieldValue(
   Type fieldType = instance.getResult(resultNum).getType();
 
   // Get the ObjectOp to extract a field from.
-  ObjectOp object = getOrCreateObject(instance, builder, mapping, opsToErase);
+  om::ObjectOp object =
+      getOrCreateObject(instance, builder, mapping, opsToErase);
 
   // Get the field path.
   StringAttr resultName = instance.getPortName(resultNum);
@@ -143,7 +144,7 @@ Value ExtractClassesPass::getOrCreateObjectFieldValue(
 /// Note that this is able to work locally with just the instance, and the rest
 /// of the pass ensures the correct ClassOp is created.
 /// NOLINTNEXTLINE(misc-no-recursion)
-ObjectOp ExtractClassesPass::getOrCreateObject(
+om::ObjectOp ExtractClassesPass::getOrCreateObject(
     InstanceOp instance, OpBuilder &builder, IRMapping &mapping,
     SmallVectorImpl<Operation *> &opsToErase) {
   // Check if this ObjectOp has already been created, and return it if so.
@@ -186,8 +187,8 @@ ObjectOp ExtractClassesPass::getOrCreateObject(
   auto objectClass = instance.getModuleNameAttr().getAttr();
 
   // Construct the ObjectOp.
-  auto object = builder.create<ObjectOp>(instance.getLoc(), objectType,
-                                         objectClass, actualParams);
+  auto object = builder.create<om::ObjectOp>(instance.getLoc(), objectType,
+                                             objectClass, actualParams);
 
   // Cache it for potential future lookups.
   cachedObjects[instance] = object;
