@@ -111,3 +111,27 @@ void circt::printOptionalBinaryOpTypes(OpAsmPrinter &p, Operation *op, Type lhs,
   if (lhs != rhs)
     p << ", " << rhs;
 }
+
+ParseResult circt::parseKeywordBool(OpAsmParser &parser, BoolAttr &attr,
+                                    StringRef trueKeyword,
+                                    StringRef falseKeyword) {
+  if (succeeded(parser.parseOptionalKeyword(trueKeyword))) {
+    attr = BoolAttr::get(parser.getContext(), true);
+  } else if (succeeded(parser.parseOptionalKeyword(falseKeyword))) {
+    attr = BoolAttr::get(parser.getContext(), false);
+  } else {
+    return parser.emitError(parser.getCurrentLocation())
+           << "expected keyword \"" << trueKeyword << "\" or \"" << falseKeyword
+           << "\"";
+  }
+  return success();
+}
+
+void circt::printKeywordBool(OpAsmPrinter &printer, Operation *op,
+                             BoolAttr attr, StringRef trueKeyword,
+                             StringRef falseKeyword) {
+  if (attr.getValue())
+    printer << trueKeyword;
+  else
+    printer << falseKeyword;
+}
