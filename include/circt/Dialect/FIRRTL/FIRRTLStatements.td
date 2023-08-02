@@ -309,19 +309,6 @@ def ForceOp : FIRRTLOp<"force", [SameTypeOperands]> {
     "$dest `,` $src attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
 }
 
-def ProbeOp : FIRRTLOp<"probe", [
-      DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
-  let summary = "FIRRTL Value Probe";
-  let description = [{
-    Captures values without binding to any accidental name.
-  }];
-  let arguments = (ins InnerSymAttr:$inner_sym,
-                       Variadic<FIRRTLBaseType>:$captured);
-  let results = (outs);
-
-  let assemblyFormat = "$inner_sym attr-dict ( `,` $captured^  `:` qualified(type($captured)))?";
-}
-
 //===- Reference force/release --------------------------------------------===//
 
 class ForceRefTypeConstraint<string ref, string base>
