@@ -1,7 +1,7 @@
 // This is such a large lowering that it doesn't really make that much sense to
 // inspect the test output. So this is mostly here for detecting regressions.
 // Canonicalize used to remove some of the constants introduced by the lowering.
-// RUN: circt-opt --lower-seq-fifo --canonicalize %s
+// RUN: circt-opt --lower-seq-fifo --canonicalize %s | FileCheck %s --implicit-check-not=seq.fifo
 
 
 // CHECK-LABEL:   hw.module @fifo1(
@@ -43,7 +43,6 @@
 // CHECK:           hw.output %[[VAL_17]] : i32
 // CHECK:         }
 hw.module @fifo1(%clk : i1, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> (out: i32) {
-  // CHECK: %out, %full, %empty = seq.fifo depth 3 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
   %out, %full, %empty = seq.fifo depth 3 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
   hw.output %out : i32
 }
@@ -96,7 +95,6 @@ hw.module @fifo1(%clk : i1, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> (ou
 // CHECK:           hw.output %[[VAL_20]], %[[VAL_22]], %[[VAL_21]], %[[VAL_45]], %[[VAL_44]] : i32, i1, i1, i1, i1
 // CHECK:         }
 hw.module @fifo2(%clk : i1, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> (out: i32, empty: i1, full: i1, almost_empty : i1, almost_full : i1) {
-  // CHECK: %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 3 almost_full 2 almost_empty 1 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
   %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 4 almost_full 2 almost_empty 1 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
   hw.output %out, %empty, %full, %almostEmpty, %almostFull : i32, i1, i1, i1, i1
 }
