@@ -127,10 +127,7 @@ LogicalResult PortConverterImpl::run() {
   };
 
   // Dispatch the port conversion builder on the I/O of the module.
-  for (PortInfo port : ports.inputs())
-    if (failed(createPortLowering(port)))
-      return failure();
-  for (PortInfo port : ports.outputs())
+  for (PortInfo port : ports)
     if (failed(createPortLowering(port)))
       return failure();
 
@@ -201,7 +198,7 @@ void PortConverterImpl::updateInstance(hw::InstanceOp inst) {
   // Create backedges for the future instance results so the signal mappers can
   // use the future results as values.
   SmallVector<Backedge> newResults;
-  for (PortInfo outputPort : ports.outputs())
+  for (PortInfo outputPort : ports.getOutputs())
     newResults.push_back(beb.get(outputPort.type));
 
   // Map the operands.

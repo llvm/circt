@@ -55,7 +55,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   SmallVector<Attribute> argLocs, resultLocs;
   auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
 
-  for (auto elt : ports.inputs()) {
+  for (auto elt : ports.getInputs()) {
     if (elt.dir == hw::ModulePort::Direction::InOut &&
         !elt.type.isa<hw::InOutType>())
       elt.type = hw::InOutType::get(elt.type);
@@ -70,7 +70,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
     argAttrs.push_back(attr);
   }
 
-  for (auto elt : ports.outputs()) {
+  for (auto elt : ports.getOutputs()) {
     resultTypes.push_back(elt.type);
     resultNames.push_back(elt.name);
     resultLocs.push_back(elt.loc ? elt.loc : unknownLoc);
@@ -437,12 +437,12 @@ InstanceOp::verifySignatureMatch(const hw::ModulePortInfo &ports) {
   if (ports.sizeOutputs() != getNumResults())
     return emitOpError("wrong number of outputs (expected ")
            << ports.sizeOutputs() << ")";
-  for (auto port : ports.inputs())
+  for (auto port : ports.getInputs())
     if (getOperand(port.argNum).getType() != port.type)
       return emitOpError("in input port ")
              << port.name << ", expected type " << port.type << " got "
              << getOperand(port.argNum).getType();
-  for (auto port : ports.outputs())
+  for (auto port : ports.getOutputs())
     if (getResult(port.argNum).getType() != port.type)
       return emitOpError("in output port ")
              << port.name << ", expected type " << port.type << " got "
@@ -644,7 +644,7 @@ void MSFTModuleOp::build(OpBuilder &builder, OperationState &result,
   auto unknownLoc = builder.getUnknownLoc();
 
   // Add arguments to the body block.
-  for (auto port : ports.inputs()) {
+  for (auto port : ports.getInputs()) {
     auto type = port.type;
     if (port.isInOut() && !type.isa<hw::InOutType>())
       type = hw::InOutType::get(type);
