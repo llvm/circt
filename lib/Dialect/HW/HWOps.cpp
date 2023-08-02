@@ -1013,11 +1013,7 @@ static ModulePortInfo getModulePortListImpl(Operation *op) {
     inputs.push_back({{argNames[i].cast<StringAttr>(), type, direction},
                       i,
                       getArgSym(op, i),
-<<<<<<< HEAD
                       attrs,
-=======
-                      {},
->>>>>>> origin/main
                       loc});
   }
 
@@ -1035,11 +1031,7 @@ static ModulePortInfo getModulePortListImpl(Operation *op) {
                         ModulePort::Direction::Output},
                        i,
                        getResultSym(op, i),
-<<<<<<< HEAD
                        attrs,
-=======
-                       {},
->>>>>>> origin/main
                        loc});
   }
   return ModulePortInfo(inputs, outputs);
@@ -1067,11 +1059,7 @@ PortInfo hw::getModuleInOrInoutPort(Operation *op, size_t idx) {
   return {{argNames[idx].cast<StringAttr>(), type, direction},
           idx,
           getArgSym(op, idx),
-<<<<<<< HEAD
           attrs,
-=======
-          {},
->>>>>>> origin/main
           argLocs[idx].cast<LocationAttr>()};
 }
 
@@ -1088,11 +1076,7 @@ PortInfo hw::getModuleOutputPort(Operation *op, size_t idx) {
            ModulePort::Direction::Output},
           idx,
           getResultSym(op, idx),
-<<<<<<< HEAD
           attrs,
-=======
-          {},
->>>>>>> origin/main
           resultLocs[idx].cast<LocationAttr>()};
 }
 
@@ -1427,7 +1411,6 @@ void HWModuleExternOp::getAsmBlockArgumentNames(
 }
 
 ModulePortInfo HWModuleOp::getPortList() {
-<<<<<<< HEAD
   return getModulePortListImpl(getOperation());
 }
 
@@ -1437,17 +1420,6 @@ ModulePortInfo HWModuleExternOp::getPortList() {
 
 ModulePortInfo HWModuleGeneratedOp::getPortList() {
   return getModulePortListImpl(getOperation());
-=======
-  return getModulePortListImpl(*this);
-}
-
-ModulePortInfo HWModuleExternOp::getPortList() {
-  return getModulePortListImpl(*this);
-}
-
-ModulePortInfo HWModuleGeneratedOp::getPortList() {
-  return getModulePortListImpl(*this);
->>>>>>> origin/main
 }
 
 /// Lookup the generator for the symbol.  This returns null on
@@ -1646,7 +1618,6 @@ ModulePortInfo InstanceOp::getPortList() {
   return getModulePortListImpl(*this);
 }
 
-<<<<<<< HEAD
 Value InstanceOp::getValue(size_t idx) {
   auto mpi = getPortList();
   size_t inputPort = 0, outputPort = 0;
@@ -1660,8 +1631,6 @@ Value InstanceOp::getValue(size_t idx) {
   return getInputs()[inputPort];
 }
 
-=======
->>>>>>> origin/main
 //===----------------------------------------------------------------------===//
 // HWOutputOp
 //===----------------------------------------------------------------------===//
@@ -3399,12 +3368,8 @@ void HWTestModuleOp::getAsmBlockArgumentNames(
 
 ModulePortInfo HWTestModuleOp::getPortList() {
   SmallVector<PortInfo> ports;
-<<<<<<< HEAD
   auto refPorts = getModuleType().getPorts();
   for (auto [i, port] : enumerate(refPorts)) {
-=======
-  for (auto [i, port] : enumerate(getModuleType().getPorts())) {
->>>>>>> origin/main
     auto loc = getPortLocs() ? cast<LocationAttr>((*getPortLocs())[i])
                              : LocationAttr();
     auto attr = getPortAttrs() ? cast<DictionaryAttr>((*getPortAttrs())[i])
