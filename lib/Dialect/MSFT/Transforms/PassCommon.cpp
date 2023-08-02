@@ -37,7 +37,7 @@ StringRef circt::msft::getValueName(Value v, const SymbolCache &syms,
       auto mod = cast<hw::HWModuleLike>(modOp);
       buff.clear();
       llvm::raw_string_ostream os(buff);
-      os << inst.getSymName() << ".";
+      os << inst.getInstanceName() << ".";
       StringAttr name = mod.getOutputNameAttr(instResult.getResultNumber());
       if (name)
         os << name.getValue();

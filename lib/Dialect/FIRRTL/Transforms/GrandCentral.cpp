@@ -2232,7 +2232,7 @@ void GrandCentralPass::runOnOperation() {
     builder.create<sv::InterfaceInstanceOp>(
         getOperation().getLoc(), topIface.getInterfaceType(),
         companionIDMap.lookup(bundle.getID()).name,
-        builder.getStringAttr(symbolName));
+        hw::InnerSymAttr::get(builder.getStringAttr(symbolName)));
 
     // If no extraction information was present, then just leave the interface
     // instantiated in the companion.  Otherwise, make it a bind.

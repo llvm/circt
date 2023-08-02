@@ -491,6 +491,7 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
 def InstanceOp : HWOp<"instance", [
         DeclareOpInterfaceMethods<SymbolUserOpInterface>,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+        DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
         DeclareOpInterfaceMethods<HWInstanceLike>]> {
   let summary = "Create an instance of a module";
   let description = [{
@@ -507,7 +508,7 @@ def InstanceOp : HWOp<"instance", [
                        Variadic<AnyType>:$inputs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
-                       OptionalAttr<SymbolNameAttr>:$inner_sym);
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs Variadic<AnyType>:$results);
 
   let builders = [
@@ -515,14 +516,14 @@ def InstanceOp : HWOp<"instance", [
     OpBuilder<(ins "Operation*":$module, "StringAttr":$name,
                    "ArrayRef<Value>":$inputs,
                    CArg<"ArrayAttr", "{}">:$parameters,
-                   CArg<"StringAttr", "{}">:$sym_name)>,
+                   CArg<"InnerSymAttr", "{}">:$innerSym)>,
     /// Create a instance that refers to a known module.
     OpBuilder<(ins "Operation*":$module, "StringRef":$name,
                    "ArrayRef<Value>":$inputs,
                    CArg<"ArrayAttr", "{}">:$parameters,
-                   CArg<"StringAttr", "{}">:$sym_name), [{
+                   CArg<"InnerSymAttr", "{}">:$innerSym), [{
       build($_builder, $_state, module, $_builder.getStringAttr(name), inputs,
-            parameters, sym_name);
+            parameters, innerSym);
     }]>,
   ];
 
@@ -612,7 +613,9 @@ def GlobalRefOp : HWOp<"globalRef", [
   let assemblyFormat = [{ $sym_name $namepath attr-dict }];
 }
 
-def ProbeOp : HWOp<"probe", []> {
+def ProbeOp : HWOp<"probe", [
+      DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>
+    ]> {
   let summary = "Probe values for use in remote references";
   let description = [{
     Captures values without binding to any accidental name.  This allows
@@ -620,7 +623,7 @@ def ProbeOp : HWOp<"probe", []> {
     resolved only at emission time.
   }];
 
-  let arguments = (ins SymbolNameAttr:$inner_sym,
+  let arguments = (ins InnerSymAttr:$inner_sym,
                        Variadic<AnyType>:$captured);
   let results = (outs);
 

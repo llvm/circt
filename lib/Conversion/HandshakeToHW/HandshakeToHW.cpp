@@ -500,7 +500,7 @@ struct RTLBuilder {
            "signal must be provided to the reg(...) function.");
 
     return b.create<seq::CompRegOp>(loc, in.getType(), in, resolvedClk, name,
-                                    resolvedRst, rstValue, StringAttr());
+                                    resolvedRst, rstValue, hw::InnerSymAttr());
   }
 
   Value cmp(Value lhs, Value rhs, comb::ICmpPredicate predicate,

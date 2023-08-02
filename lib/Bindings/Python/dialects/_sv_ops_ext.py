@@ -32,13 +32,13 @@ class WireOp:
                data_type,
                name,
                *,
-               inner_sym=None,
+               sym_name=None,
                svAttributes=None,
                loc=None,
                ip=None):
     attributes = {"name": StringAttr.get(name)}
-    if inner_sym is not None:
-      attributes["inner_sym"] = StringAttr.get(inner_sym)
+    if sym_name is not None:
+      attributes["inner_sym"] = hw.InnerSymAttr.get(StringAttr.get(sym_name))
     if svAttributes is not None:
       attributes["svAttributes"] = ArrayAttr.get(svAttributes)
     OpView.__init__(
@@ -52,10 +52,10 @@ class WireOp:
                            ip=ip))
 
   @staticmethod
-  def create(data_type, name=None, inner_sym=None):
+  def create(data_type, name=None, sym_name=None):
     if not isinstance(data_type, hw.InOutType):
       data_type = hw.InOutType.get(data_type)
-    return sv.WireOp(data_type, name, inner_sym=inner_sym)
+    return sv.WireOp(data_type, name, sym_name=sym_name)
 
 
 class RegOp:
@@ -64,13 +64,13 @@ class RegOp:
                data_type,
                name,
                *,
-               inner_sym=None,
+               sym_name=None,
                svAttributes=None,
                loc=None,
                ip=None):
     attributes = {"name": StringAttr.get(name)}
-    if inner_sym is not None:
-      attributes["inner_sym"] = FlatSymbolRefAttr.get(inner_sym)
+    if sym_name is not None:
+      attributes["inner_sym"] = hw.InnerSymAttr.get(StringAttr.get(sym_name))
     if svAttributes is not None:
       attributes["svAttributes"] = ArrayAttr.get(svAttributes)
     OpView.__init__(
