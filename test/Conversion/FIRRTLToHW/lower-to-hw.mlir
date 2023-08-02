@@ -83,7 +83,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %out5, %tmp1 : !firrtl.uint<4>, !firrtl.uint<4>
 
     // CHECK: [[ZEXT:%.+]] = comb.concat %false, %in1 : i1, i4
-    // CHECK: [[ADD:%.+]] = comb.add bin %c12_i5, [[ZEXT]] : i5
+    // CHECK: [[ADD:%.+]] = comb.add bin [[ZEXT]], %c12_i5 : i5
     %0 = firrtl.add %c12_ui4, %in1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
     %1 = firrtl.asUInt %in1 : (!firrtl.uint<4>) -> !firrtl.uint<4>
