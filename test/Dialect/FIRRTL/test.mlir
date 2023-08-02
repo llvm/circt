@@ -252,14 +252,14 @@ firrtl.module @StringTest(in %in: !firrtl.string, out %out: !firrtl.string) {
 }
 
 // CHECK-LABEL: BigIntTest
-// CHECK-SAME:  (in %in: !firrtl.bigint, out %out: !firrtl.bigint)
-firrtl.module @BigIntTest(in %in: !firrtl.bigint, out %out: !firrtl.bigint) {
-  firrtl.propassign %out, %in : !firrtl.bigint
+// CHECK-SAME:  (in %in: !firrtl.integer, out %out: !firrtl.integer)
+firrtl.module @BigIntTest(in %in: !firrtl.integer, out %out: !firrtl.integer) {
+  firrtl.propassign %out, %in : !firrtl.integer
 
-  // CHECK: %0 = firrtl.bigint 4
-  %0 = firrtl.bigint 4
-  // CHECK: %1 = firrtl.bigint -4
-  %1 = firrtl.bigint -4
+  // CHECK: %0 = firrtl.integer 4
+  %0 = firrtl.integer 4
+  // CHECK: %1 = firrtl.integer -4
+  %1 = firrtl.integer -4
 }
 
 // CHECK-LABEL: ListTest
@@ -269,15 +269,15 @@ firrtl.module @ListTest(in %in: !firrtl.list<string>, out %out: !firrtl.list<str
 }
 
 // CHECK-LABEL: MapTest
-// CHECK-SAME:  (in %in: !firrtl.map<bigint, string>, out %out: !firrtl.map<bigint, string>)
-firrtl.module @MapTest(in %in: !firrtl.map<bigint, string>, out %out: !firrtl.map<bigint, string>) {
-  firrtl.propassign %out, %in : !firrtl.map<bigint, string>
+// CHECK-SAME:  (in %in: !firrtl.map<integer, string>, out %out: !firrtl.map<integer, string>)
+firrtl.module @MapTest(in %in: !firrtl.map<integer, string>, out %out: !firrtl.map<integer, string>) {
+  firrtl.propassign %out, %in : !firrtl.map<integer, string>
 }
 
 // CHECK-LABEL: PropertyNestedTest
-// CHECK-SAME:  (in %in: !firrtl.map<bigint, list<map<string, bigint>>>, out %out: !firrtl.map<bigint, list<map<string, bigint>>>)
-firrtl.module @PropertyNestedTest(in %in: !firrtl.map<bigint, list<map<string, bigint>>>, out %out: !firrtl.map<bigint, list<map<string, bigint>>>) {
-  firrtl.propassign %out, %in : !firrtl.map<bigint, list<map<string, bigint>>>
+// CHECK-SAME:  (in %in: !firrtl.map<integer, list<map<string, integer>>>, out %out: !firrtl.map<integer, list<map<string, integer>>>)
+firrtl.module @PropertyNestedTest(in %in: !firrtl.map<integer, list<map<string, integer>>>, out %out: !firrtl.map<integer, list<map<string, integer>>>) {
+  firrtl.propassign %out, %in : !firrtl.map<integer, list<map<string, integer>>>
 }
 
 // CHECK-LABEL: firrtl.module @PathTest

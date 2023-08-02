@@ -1984,8 +1984,8 @@ firrtl.circuit "ClassTypeWrongPortDir" {
 
 firrtl.circuit "ClassTypeWrongPortType" {
   firrtl.class @MyClass(out %str: !firrtl.string) {}
-  // expected-error @below {{'firrtl.module' op port "str" has wrong type, got '!firrtl.bigint', expected '!firrtl.string'}}
-  firrtl.module @ClassTypeWrongPortType(out %port: !firrtl.class<@MyClass(out str: !firrtl.bigint)>) {}
+  // expected-error @below {{'firrtl.module' op port "str" has wrong type, got '!firrtl.integer', expected '!firrtl.string'}}
+  firrtl.module @ClassTypeWrongPortType(out %port: !firrtl.class<@MyClass(out str: !firrtl.integer)>) {}
 }
 
 // -----

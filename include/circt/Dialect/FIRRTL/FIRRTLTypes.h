@@ -51,7 +51,7 @@ class FEnumType;
 class RefType;
 class PropertyType;
 class StringType;
-class BigIntType;
+class FIntegerType;
 class ListType;
 class MapType;
 class PathType;
@@ -340,7 +340,7 @@ class PropertyType : public FIRRTLType {
 public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
-    return llvm::isa<ClassType, StringType, BigIntType, ListType, MapType,
+    return llvm::isa<ClassType, StringType, FIntegerType, ListType, MapType,
                      PathType>(type);
   }
 

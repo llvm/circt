@@ -1045,18 +1045,18 @@ def StringConstantOp : FIRRTLOp<"string", [Pure, ConstantLike]> {
   let assemblyFormat = "$value attr-dict";
 }
 
-def BigIntConstantOp : FIRRTLOp<"bigint", [Pure, ConstantLike]> {
-  let summary = "Produce a constant bigint value";
+def IntegerConstantOp : FIRRTLOp<"integer", [Pure, ConstantLike]> {
+  let summary = "Produce a constant integer value";
   let description = [{
-    Produces a constant value of bigint type.
+    Produces a constant value of integer type.
 
     Example:
     ```mlir
-    %0 = firrtl.bigint 42
+    %0 = firrtl.integer 42
     ```
   }];
   let arguments = (ins APSIntAttr:$value);
-  let results = (outs BigIntType:$result);
+  let results = (outs FIntegerType:$result);
   let hasCustomAssemblyFormat = true;
 }
 

@@ -596,7 +596,7 @@ def StringImpl : FIRRTLImplType<"String", [], "circt::firrtl::FIRRTLType"> {
   let genStorageClass = true;
 }
 
-def BigIntImpl : FIRRTLImplType<"BigInt", [], "circt::firrtl::FIRRTLType"> {
+def IntegerImpl : FIRRTLImplType<"FInteger", [], "circt::firrtl::FIRRTLType"> {
   let summary = [{
     An unlimited length signed integer type.  Not representable in hardware.
   }];

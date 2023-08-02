@@ -53,7 +53,7 @@ firrtl.circuit "Foo" {
     out %b1: !firrtl.probe<uint<1>>,
     out %b2: !firrtl.rwprobe<uint<1>>,
     in %string: !firrtl.string,
-    in %integer: !firrtl.bigint,
+    in %integer: !firrtl.integer,
     in %path : !firrtl.path
   ) {}
 
@@ -641,14 +641,14 @@ firrtl.circuit "Foo" {
   
   // CHECK-LABEL: module Properties :
   firrtl.module @Properties(out %string : !firrtl.string,
-                            out %integer : !firrtl.bigint) {
+                            out %integer : !firrtl.integer) {
     // CHECK: propassign string, String("hello")
     %0 = firrtl.string "hello"
     firrtl.propassign %string, %0 : !firrtl.string
 
     // CHECK: propassign integer, Integer(99)
-    %1 = firrtl.bigint 99
-    firrtl.propassign %integer, %1 : !firrtl.bigint
+    %1 = firrtl.integer 99
+    firrtl.propassign %integer, %1 : !firrtl.integer
   }
 
   // Test optional group declaration and definition emission.

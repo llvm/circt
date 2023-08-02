@@ -207,8 +207,8 @@ def ClassType : FIRRTLDialectTypeHelper<"ClassType", "class type">;
 def StringType : FIRRTLDialectTypeHelper<"StringType", "string type">,
   BuildableType<"::circt::firrtl::StringType::get($_builder.getContext())">;
 
-def BigIntType : FIRRTLDialectTypeHelper<"BigIntType", "big integer type">,
-  BuildableType<"::circt::firrtl::BigIntType::get($_builder.getContext())">;
+def FIntegerType : FIRRTLDialectTypeHelper<"FIntegerType", "integer type">,
+  BuildableType<"::circt::firrtl::FIntegerType::get($_builder.getContext())">;
 
 def ListType : FIRRTLDialectTypeHelper<"ListType", "list type">;
 def MapType : FIRRTLDialectTypeHelper<"MapType", "map type">;

@@ -1667,10 +1667,10 @@ circuit BasicProps :
   module BasicProps :
   ; CHECK-LABEL: module private @Integer
   module Integer :
-    ; CHECK-SAME: out %a: !firrtl.bigint
+    ; CHECK-SAME: out %a: !firrtl.integer
     output a : Integer
-    ; CHECK: %0 = firrtl.bigint -10
-    ; CHECK: firrtl.propassign %a, %0 : !firrtl.bigint
+    ; CHECK: %0 = firrtl.integer -10
+    ; CHECK: firrtl.propassign %a, %0 : !firrtl.integer
     propassign a, Integer(-10)
 
   ; CHECK-LABEL: module private @String
