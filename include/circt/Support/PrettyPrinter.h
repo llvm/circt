@@ -29,7 +29,6 @@
 #include <cstdint>
 #include <deque>
 #include <limits>
-#include <variant>
 
 namespace circt {
 namespace pretty {
@@ -74,65 +73,45 @@ public:
     // Nothing
   };
   // This can be used to associate a callback with the print event on the
-  // tokens stream. Note that the lambda used to create the function object will
-  // be out of scope when it is evoked. So extra care is required to ensure the
-  // values captured by the function object are valid out of scope.
+  // tokens stream. The id, is used to uniquely identify an intereseting event
+  // on the token stream.
   struct CallbackInfo : public TokenInfo {
-    using CallbackTy = std::function<void()>;
+    using CallbackTy = llvm::function_ref<void(unsigned)>;
     CallbackTy callback;
+    unsigned id;
   };
 
 private:
-  std::variant<StringInfo, BreakInfo, BeginInfo, EndInfo, CallbackInfo> data;
+  union TokenUnion {
+    TokenInfo info;
+    StringInfo stringInfo;
+    BreakInfo breakInfo;
+    BeginInfo beginInfo;
+    EndInfo endInfo;
+    CallbackInfo callbackInfo;
+    TokenUnion() : callbackInfo(){};
+  } data;
 
 protected:
   template <Kind k, typename T>
   static auto &getInfoImpl(T &t) {
     if constexpr (k == Kind::String)
-      return std::get<StringInfo>(t.data);
+      return t.data.stringInfo;
     if constexpr (k == Kind::Break)
-      return std::get<BreakInfo>(t.data);
+      return t.data.breakInfo;
     if constexpr (k == Kind::Begin)
-      return std::get<BeginInfo>(t.data);
+      return t.data.beginInfo;
     if constexpr (k == Kind::End)
-      return std::get<EndInfo>(t.data);
+      return t.data.endInfo;
     if constexpr (k == Kind::Callback)
-      return std::get<CallbackInfo>(t.data);
+      return t.data.callbackInfo;
     llvm_unreachable("unhandled token kind");
   }
 
-  Token(Kind k) {
-    if (k == Kind::String)
-      data = StringInfo();
-    else if (k == Kind::Break)
-      data = BreakInfo();
-    else if (k == Kind::Begin)
-      data = BeginInfo();
-    else if (k == Kind::End)
-      data = EndInfo();
-    else if (k == Kind::Callback)
-      data = CallbackInfo();
-    else
-      llvm_unreachable("unhandled token kind");
-  }
+  Token(Kind k) { data.info.kind = k; }
 
 public:
-  Kind getKind() const {
-
-    switch (data.index()) {
-    case 0:
-      return Kind::String;
-    case 1:
-      return Kind::Break;
-    case 2:
-      return Kind::Begin;
-    case 3:
-      return Kind::End;
-    case 4:
-      return Kind::Callback;
-    }
-    llvm_unreachable("unhandled token kind");
-  }
+  Kind getKind() const { return data.info.kind; }
 };
 
 /// Helper class to CRTP-derive common functions.
@@ -190,8 +169,10 @@ struct BeginToken : public TokenBase<BeginToken, Token::Kind::Begin> {
 struct EndToken : public TokenBase<EndToken, Token::Kind::End> {};
 
 struct CallbackToken : public TokenBase<CallbackToken, Token::Kind::Callback> {
-  CallbackToken(Token::CallbackInfo::CallbackTy &c) { initialize(c); }
-  void invoke() const { std::invoke(getInfo().callback); }
+  CallbackToken(Token::CallbackInfo::CallbackTy c, unsigned id) {
+    initialize(c, id);
+  }
+  void invoke() const { std::invoke(getInfo().callback, getInfo().id); }
 };
 
 //===----------------------------------------------------------------------===//

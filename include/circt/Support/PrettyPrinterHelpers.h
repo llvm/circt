@@ -166,17 +166,43 @@ public:
   void clear() override;
 };
 
-class TokenStringAndCallbackSaver : public TokenStringSaver {
-  llvm::SpecificBumpPtrAllocator<Token::CallbackInfo::CallbackTy> callbackAlloc;
+template <typename Callable, typename Data>
+class CallbackSaver {
 
+  /// List of all the unique data associated with each callback token.
+  SmallVector<Data *> list;
+  /// The storage for the callback, as a function object.
+  std::function<void(unsigned)> callbackObj;
+
+  /// Note: Callable class must implement a callable with signature::
+  /// void (Data*)
 public:
-  Token::CallbackInfo::CallbackTy *
-  save(const Token::CallbackInfo::CallbackTy &c) {
-    return new (callbackAlloc.Allocate()) Token::CallbackInfo::CallbackTy(c);
+  CallbackSaver() = default;
+  CallbackSaver(Callable &c) { init(c); }
+
+  /// Create and initialize a function object, capturing the callable object and
+  /// a poiner to the data vector. The callable object contains all the values
+  /// shared across the callback tokens. The Data list indexed by the parameter
+  /// provides the unique data for each clalback.
+  void init(Callable &c) {
+    // May result in heap allocation. Pointer to the callback object and data
+    // vector is captured by value.
+    callbackObj = decltype(callbackObj)(
+        [callbackObj = &c, dataPtr = &this->list](unsigned id) {
+          std::invoke(*callbackObj, (*dataPtr)[id]);
+        });
   }
-  void clear() override {
-    callbackAlloc.DestroyAll();
-    TokenStringSaver::clear();
+
+  /// Insert data onto the list.
+  void setData(Data &obj) { list.push_back(&obj); }
+  /// Get a token with the last item on the list.
+  CallbackToken getToken() {
+    return CallbackToken(callbackObj, (list.size() - 1));
+  }
+  /// Get a token with the obj data.
+  CallbackToken getToken(Data &obj) {
+    setData(obj);
+    return getToken();
   }
 };
 
