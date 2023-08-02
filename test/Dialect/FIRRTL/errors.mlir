@@ -1966,6 +1966,15 @@ firrtl.circuit "MissingClassForObjectPortInClass" {
 
 // -----
 
+firrtl.circuit "MissingClassForObjectDeclaration" {
+  firrtl.module @ObjectClassMissing() {
+    // expected-error @below {{'firrtl.object' op target class 'Missing' not found}}
+    %0 = firrtl.object @Missing()
+  }
+}
+
+// -----
+
 firrtl.circuit "ClassTypeWrongPortName" {
   firrtl.class @MyClass(out %str: !firrtl.string) {}
   // expected-error @below {{'firrtl.module' op port #0 has wrong name, got "xxx", expected "str"}}

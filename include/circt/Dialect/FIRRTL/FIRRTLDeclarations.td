@@ -587,4 +587,41 @@ def ClockGateIntrinsicOp : FIRRTLOp<"int.clock_gate", [Pure]> {
   }];
 }
 
+//===----------------------------------------------------------------------===//
+// Property Ops
+//===----------------------------------------------------------------------===//
+
+def ObjectOp :  FIRRTLOp<"object", [
+    ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+]> {
+  let summary = "Instantiate a class to produce an object";
+  let description = [{
+    This represents an instance of a class.  The results is the instantiated
+    object.
+
+    Examples:
+    ```mlir
+    %0 = firrtl.object @Foo(in io: !firrtl.uint)
+    ```
+  }];
+  let arguments = (ins
+    // The className is so that SymbolUserOpInterface can find the referenced 
+    // symbol.
+    FlatSymbolRefAttr:$className
+  );
+  let results = (outs ClassType:$results);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+  let builders = [
+    OpBuilder<(ins "ClassType":$type)>,
+    OpBuilder<(ins "ClassOp":$klass)>
+  ];
+  let extraClassDeclaration = [{
+    /// Lookup the module or extmodule for the symbol.  This returns null on
+    /// invalid IR.
+    ClassOp getReferencedClass(SymbolTable& symbolTable);
+  }];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLDECLARATIONS_TD

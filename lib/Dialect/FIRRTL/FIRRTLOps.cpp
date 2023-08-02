@@ -2595,6 +2595,55 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
 
+void ObjectOp::build(OpBuilder &builder, OperationState &state,
+                     ClassType type) {
+  build(builder, state, type, type.getNameAttr());
+}
+
+void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassOp klass) {
+  build(builder, state, klass.getInstanceType());
+}
+
+ParseResult ObjectOp::parse(OpAsmParser &parser, OperationState &result) {
+  ClassType type;
+  if (ClassType::parseInterface(parser, type))
+    return failure();
+
+  result.addTypes(type);
+  result.addAttribute("className", type.getNameAttr());
+  return success();
+}
+
+void ObjectOp::print(OpAsmPrinter &p) {
+  p << " ";
+  getType().printInterface(p);
+}
+
+LogicalResult ObjectOp::verify() { return success(); }
+
+LogicalResult ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
+  auto classType = getType();
+  auto className = classType.getNameAttr();
+
+  // verify that the class exists.
+  auto classOp = dyn_cast_or_null<ClassOp>(
+      symbolTable.lookupSymbolIn(circuitOp, className));
+  if (!classOp)
+    return emitOpError() << "target class '" << className.getValue()
+                         << "' not found";
+
+  // verify that the result type agrees with the class definition.
+  if (failed(classOp.verifyType(classType, [&]() { return emitOpError(); })))
+    return failure();
+
+  return success();
+}
+
+ClassOp ObjectOp::getReferencedClass(SymbolTable &symbolTable) {
+  return symbolTable.lookup<ClassOp>(getClassNameAttr().getLeafReference());
+}
+
 //===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//
