@@ -81,7 +81,7 @@ void ESILowerTypesPass::runOnOperation() {
           auto isWindowPort = [](hw::PortInfo p) {
             return hw::type_isa<WindowType>(p.type);
           };
-          return !(llvm::any_of(mod.getPorts(), isWindowPort));
+          return !(llvm::any_of(mod.getPortList(), isWindowPort));
         })
         .Default([](Operation *op) {
           if (op->hasTrait<OpTrait::ReturnLike>())

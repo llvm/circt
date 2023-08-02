@@ -94,7 +94,7 @@ void MSFTPassCommon::dedupOutputs(MSFTModuleOp mod) {
 void MSFTPassCommon::bubbleWiresUp(MSFTModuleOp mod) {
   Block *body = mod.getBodyBlock();
   Operation *terminator = body->getTerminator();
-  hw::ModulePortInfo ports = mod.getPorts();
+  hw::ModulePortInfo ports = mod.getPortList();
 
   // Find all "passthough" internal wires, filling 'inputPortsToRemove' as a
   // side-effect.

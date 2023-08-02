@@ -145,7 +145,7 @@ ModuleOpLowering::matchAndRewrite(MSFTModuleOp mod, OpAdaptor adaptor,
       rewriter.getStringAttr("__INST_HIER"),
       rewriter.getStringAttr("INSTANTIATE_WITH_INSTANCE_PATH"))});
   auto hwmod = rewriter.replaceOpWithNewOp<hw::HWModuleOp>(
-      mod, mod.getNameAttr(), mod.getPorts(), params);
+      mod, mod.getNameAttr(), mod.getPortList(), params);
   rewriter.eraseBlock(hwmod.getBodyBlock());
   rewriter.inlineRegionBefore(mod.getBody(), hwmod.getBody(),
                               hwmod.getBody().end());
@@ -186,8 +186,8 @@ LogicalResult ModuleExternOpLowering::matchAndRewrite(
     MSFTModuleExternOp mod, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
   auto hwMod = rewriter.replaceOpWithNewOp<hw::HWModuleExternOp>(
-      mod, mod.getNameAttr(), mod.getPorts(), mod.getVerilogName().value_or(""),
-      mod.getParameters());
+      mod, mod.getNameAttr(), mod.getPortList(),
+      mod.getVerilogName().value_or(""), mod.getParameters());
 
   if (!outputFile.empty()) {
     auto outputFileAttr = hw::OutputFileAttr::getFromFilename(

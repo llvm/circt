@@ -185,7 +185,7 @@ StringRef ExportVerilog::getSymOpName(Operation *symOp) {
   if (auto attr = symOp->getAttrOfType<StringAttr>("hw.verilogName"))
     return attr.getValue();
   return TypeSwitch<Operation *, StringRef>(symOp)
-      .Case<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp>(
+      .Case<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp, HWTestModuleOp>(
           [](Operation *op) { return getVerilogModuleName(op); })
       .Case<InterfaceOp>([&](InterfaceOp op) {
         return getVerilogModuleNameAttr(op).getValue();
@@ -1245,6 +1245,7 @@ public:
   void emitPortList(Operation *module, const ModulePortInfo &portInfo);
 
   void emitHWModule(HWModuleOp module);
+  void emitHWTestModule(HWTestModuleOp module);
   void emitHWExternModule(HWModuleExternOp module);
   void emitHWGeneratedModule(HWModuleGeneratedOp module);
 
@@ -3665,7 +3666,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
   HWModuleOp parent = op->getParentOfType<HWModuleOp>();
 
   size_t operandIndex = 0;
-  auto ports = parent.getPorts();
+  auto ports = parent.getPortList();
   for (PortInfo port : ports.outputs()) {
     auto operand = op.getOperand(operandIndex);
     // Outputs that are set by the output port of an instance are handled
@@ -4610,7 +4611,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
   ps << PP::nbsp << PPExtString(getSymOpName(op)) << " (";
 
-  auto portInfo = getModulePortInfo(op);
+  auto portInfo = op.getPortList();
 
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
@@ -5179,8 +5180,8 @@ void ModuleEmitter::emitBind(BindOp op) {
      << PPExtString(getSymOpName(inst)) << " (";
   bool isFirst = true; // True until we print a port.
   ps.scopedBox(PP::bbox2, [&]() {
-    ModulePortInfo parentPortInfo = parentMod.getPorts();
-    auto childPortInfo = getModulePortInfo(inst);
+    ModulePortInfo parentPortInfo = parentMod.getPortList();
+    auto childPortInfo = inst.getPortList();
 
     // Get the max port name length so we can align the '('.
     size_t maxNameLength = 0;
@@ -5544,7 +5545,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   // If we have any parameters, print them on their own line.
   emitParameters(module, module.getParameters());
 
-  emitPortList(module, module.getPorts());
+  emitPortList(module, module.getPortList());
 
   assert(state.pendingNewline);
 

@@ -290,7 +290,7 @@ portToFieldInfo(llvm::ArrayRef<hw::PortInfo *> portInfo) {
 // Convert any handshake.extmemory operations and the top-level I/O
 // associated with these.
 static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
-  auto ports = mod.getPorts();
+  auto ports = mod.getPortList();
   auto *ctx = mod.getContext();
 
   // Gather memref ports to be converted.
@@ -323,7 +323,7 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
     auto extmemInstance = cast<hw::InstanceOp>(*arg.getUsers().begin());
     auto extmemMod =
         cast<hw::HWModuleExternOp>(extmemInstance.getReferencedModule());
-    auto portInfo = extmemMod.getPorts();
+    auto portInfo = extmemMod.getPortList();
 
     // The extmemory external module's interface is a direct wrapping of the
     // original handshake.extmemory operation in- and output types. Remove the
@@ -747,7 +747,7 @@ public:
             }
 
             BackedgeBuilder bb(b, op.getLoc());
-            RTLBuilder s(ports.getModulePortInfo(), b, op.getLoc(), clk, rst);
+            RTLBuilder s(ports.getPortList(), b, op.getLoc(), clk, rst);
             this->buildModule(op, bb, s, ports);
           });
     }
@@ -781,7 +781,7 @@ public:
       hs.ready = ready;
       unwrapped.inputs.push_back(hs);
     }
-    for (auto &outputInfo : ports.getModulePortInfo().outputs()) {
+    for (auto &outputInfo : ports.getPortList().outputs()) {
       esi::ChannelType channelType =
           dyn_cast<esi::ChannelType>(outputInfo.type);
       if (!channelType)

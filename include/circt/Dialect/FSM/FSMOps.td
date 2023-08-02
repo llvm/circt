@@ -76,6 +76,11 @@ def MachineOp : FSMOp<"machine", [
 
     /// Return the name of the i'th result of this machine.
     StringAttr getResName(size_t i);
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 
   let extraClassDefinition = [{
@@ -113,6 +118,11 @@ def InstanceOp : FSMOp<"instance", [Symbol, HasCustomSSAName]> {
   let extraClassDeclaration = [{
     /// Lookup the machine for the symbol. This returns null on invalid IR.
     MachineOp getMachineOp();
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 
   let hasVerifier = 1;
@@ -173,6 +183,11 @@ def HWInstanceOp : FSMOp<"hw_instance", [
     FlatSymbolRefAttr getModuleNameAttr() {
       return getMachineAttr();
     }
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 
   let hasVerifier = 1;
