@@ -3087,11 +3087,6 @@ void MatchOp::build(OpBuilder &builder, OperationState &result, Value input,
   result.addRegions(regions);
 }
 
-std::optional<size_t> ProbeOp::getTargetResultIndex() {
-  // Inner symbols on probe operations target the op not any result.
-  return std::nullopt;
-}
-
 //===----------------------------------------------------------------------===//
 // Expressions
 //===----------------------------------------------------------------------===//
