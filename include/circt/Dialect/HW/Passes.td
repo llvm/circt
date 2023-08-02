@@ -53,4 +53,25 @@ def HWSpecialize : Pass<"hw-specialize", "mlir::ModuleOp"> {
   }];
 }
 
+def Externalize: Pass<"hw-externalize", "mlir::ModuleOp"> {
+  let summary = "Run module externalization on the target op";
+  let constructor = "circt::hw::createExternalizePass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
+  let options = [
+    Option<"opName", "op", "std::string", "",
+           "Name of the operation to externalize">,
+    Option<"moduleName", "module-name", "std::string", "",
+           "Name of the external module">,
+    Option<"instName", "instance-name", "std::string", "",
+           "Name of the generated instances">,
+    ListOption<"portNames", "port-names", "std::string",
+           "A 'id=name' list of interface-required ports (id) to provided external module port (name)s",
+           "llvm::cl::ZeroOrMore,">,
+  ];
+  let statistics = [
+    Statistic<"numOperationsCnverted", "num-ops-converted",
+      "Number of operations to external module instances">
+  ];
+}
+
 #endif // CIRCT_DIALECT_HW_PASSES_TD
