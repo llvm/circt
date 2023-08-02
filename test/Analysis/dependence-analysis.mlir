@@ -1,4 +1,5 @@
 // RUN: circt-opt %s -test-dependence-analysis | FileCheck %s
+
 // CHECK-LABEL: func @test1
 func.func @test1(%arg0: memref<?xi32>) -> i32 {
   %c0_i32 = arith.constant 0 : i32
@@ -10,6 +11,7 @@ func.func @test1(%arg0: memref<?xi32>) -> i32 {
   }
   return %0#1 : i32
 }
+
 // CHECK-LABEL: func @test2
 #set = affine_set<(d0) : (d0 - 3 >= 0)>
 func.func @test2(%arg0: memref<?xi32>, %arg1: memref<?xi32>) {
@@ -26,6 +28,7 @@ func.func @test2(%arg0: memref<?xi32>, %arg1: memref<?xi32>) {
   }
   return
 }
+
 // CHECK-LABEL: func @test3
 func.func @test3(%arg0: memref<?xi32>) {
   // CHECK: %[[A0:.+]] = memref.alloca
@@ -60,6 +63,7 @@ func.func @test3(%arg0: memref<?xi32>) {
   }
   return
 }
+
 // CHECK-LABEL: func @test4
 func.func @test4(%arg0: memref<?xi32>, %arg1: memref<?xi32>) {
   %c1_i32 = arith.constant 1 : i32
@@ -73,6 +77,7 @@ func.func @test4(%arg0: memref<?xi32>, %arg1: memref<?xi32>) {
   }
   return
 }
+
 // CHECK-LABEL: func @test5
 func.func @test5(%arg0: memref<?xi32>) {
   affine.for %arg1 = 2 to 10 {
@@ -86,6 +91,7 @@ func.func @test5(%arg0: memref<?xi32>) {
   }
   return
 }
+
 // CHECK-LABEL: func @test6
 #set1 = affine_set<(d0) : (d0 - 5 >= 0)>
 func.func @test6(%arg0: memref<?xi32>) {
@@ -103,6 +109,7 @@ func.func @test6(%arg0: memref<?xi32>) {
   }
   return
 }
+
 // CHECK-LABEL: func @test7
 #set2 = affine_set<(d0) : (d0 - 2 >= 0)>
 #set3 = affine_set<(d0) : (d0 - 6 >= 0)>
@@ -123,6 +130,7 @@ func.func @test7(%arg0: memref<?xi32>) {
   }
   return
 }
+
 // CHECK-LABEL: func @test8
 func.func @test8(%arg0: memref<?xi32>) {
   affine.for %arg1 = 0 to 10 {
@@ -142,6 +150,7 @@ func.func @test8(%arg0: memref<?xi32>) {
   }
   return
 }
+
 // CHECK-LABEL: func @test9
 func.func @test9(%arg0: memref<?xi32>, %arg1 : memref<?xi32>, %arg2 : memref<?xi32>) {
   %alloc = memref.alloc() : memref<256xi32>
