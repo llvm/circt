@@ -146,6 +146,9 @@ jobs:
             workflow_dispatch)
               ENV='{"runTests":${{ inputs.runTests }}}'
             ;;
+            schedule)
+              ENV='{"runTests":false}'
+            ;;
             *)
               ENV='{"runTests":true}'
             ;;
