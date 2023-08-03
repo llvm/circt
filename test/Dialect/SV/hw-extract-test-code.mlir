@@ -499,20 +499,29 @@ module {
     hw.output %a: i1
   }
 
+  // CHECK-NOT: @InputOnly
+  hw.module private @InputOnly(%clock: i1, %a: i1) -> () {
+    hw.instance "a4" @Assert(clock: %clock: i1, a: %a: i1) -> ()
+  }
+
   // CHECK-LABEL: hw.module @Top(%clock: i1, %a: i1, %b: i1) {
   // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert_0 @Assert_assert
   // CHECK-SAME:  doNotPrint = true
   // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert @Assert_assert
+  // CHECK-SAME:  doNotPrint = true
+  // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert_1 @Assert_assert
   // CHECK-SAME:  doNotPrint = true
   // CHECK-NEXT:  hw.instance "should_not_be_inlined" @ShouldNotBeInlined
   // CHECK-NOT: doNotPrint
   hw.module @Top(%clock: i1, %a: i1, %b: i1) {
     hw.instance "a1" @Assert(clock: %clock: i1, a: %a: i1) -> ()
     hw.instance "a2" @Assert(clock: %clock: i1, a: %b: i1) -> ()
+    hw.instance "a3" @InputOnly(clock: %clock: i1, a: %b: i1) -> ()
     hw.instance "should_not_be_inlined" @ShouldNotBeInlined (clock: %clock: i1, a: %b: i1) -> ()
     hw.output
   }
   // CHECK:       sv.bind <@Top::@__ETC_Assert_assert>
   // CHECK-NEXT:  sv.bind <@Top::@__ETC_Assert_assert_0>
+  // CHECK-NEXT:  sv.bind <@Top::@__ETC_Assert_assert_1>
   // CHECK-NEXT:  sv.bind <@AssertWrapper::@__ETC_Assert_assert>
 }
