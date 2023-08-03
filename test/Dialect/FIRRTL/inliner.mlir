@@ -1190,3 +1190,44 @@ firrtl.circuit "SimTop" {
     // CHECK:  firrtl.instance ctrlBlock_rob_difftest_3 sym @difftest_3_0 @DifftestLoadEvent()
   }
 }
+
+// -----
+
+// Check updating of module-local inner symbol users, handle per-field inner symbols.
+
+
+// CHECK-LABEL: circuit "RWProbePort"
+firrtl.circuit "RWProbePort" {
+  // CHECK-NOT: @Child
+  firrtl.module private @Child(in %in: !firrtl.vector<uint<1>, 2>
+                                 sym [<@sym,2,public>],
+                               out %p: !firrtl.rwprobe<uint<1>>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %0 = firrtl.ref.rwprobe <@Child::@sym> : !firrtl.uint<1>
+    firrtl.ref.define %p, %0 : !firrtl.rwprobe<uint<1>>
+  }
+  // CHECK: module @RWProbePort
+  firrtl.module @RWProbePort(in %in_0: !firrtl.uint<1>,
+                             in %in_1: !firrtl.uint<1>,
+                             out %p_0: !firrtl.rwprobe<uint<1>>,
+                             out %p_1: !firrtl.rwprobe<uint<1>>) attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK-NEXT: %[[C1_IN:.+]] = firrtl.wire sym [<@[[C1_IN_SYM:.+]],2,public>]
+    // CHECK-NEXT: %[[C1_P:.+]] = firrtl.ref.rwprobe <@RWProbePort::@[[C1_IN_SYM]]>
+    // CHECK-NEXT: %[[C2_IN:.+]] = firrtl.wire sym [<@[[C2_IN_SYM:.+]],2,public>]
+    // CHECK-NEXT: %[[C2_P:.+]] = firrtl.ref.rwprobe <@RWProbePort::@[[C2_IN_SYM]]>
+    // CHECK-NOT: firrtl.instance
+    %c1_in, %c1_p = firrtl.instance c1 @Child(in in: !firrtl.vector<uint<1>, 2>, out p: !firrtl.rwprobe<uint<1>>)
+    %c2_in, %c2_p = firrtl.instance c2 @Child(in in: !firrtl.vector<uint<1>, 2>, out p: !firrtl.rwprobe<uint<1>>)
+    %0 = firrtl.subindex %c1_in[0] : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %0, %in_0 : !firrtl.uint<1>
+    %1 = firrtl.subindex %c1_in[1] : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %1, %in_1 : !firrtl.uint<1>
+    %2 = firrtl.subindex %c2_in[0] : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %2, %in_0 : !firrtl.uint<1>
+    %3 = firrtl.subindex %c2_in[1] : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %3, %in_1 : !firrtl.uint<1>
+    // CHECK: firrtl.ref.define %p_0, %[[C1_P]]
+    firrtl.ref.define %p_0, %c1_p : !firrtl.rwprobe<uint<1>>
+    // CHECK: firrtl.ref.define %p_1, %[[C2_P]]
+    firrtl.ref.define %p_1, %c2_p : !firrtl.rwprobe<uint<1>>
+  }
+}
