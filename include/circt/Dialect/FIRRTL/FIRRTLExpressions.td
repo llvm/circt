@@ -891,7 +891,7 @@ def PlusArgsValueIntrinsicOp : FIRRTLOp<"int.plusargs.value",
 def HasBeenResetIntrinsicOp : FIRRTLOp<"int.has_been_reset", [Pure]> {
   let summary = "Check that a proper reset has been seen.";
   let description = [{
-    The result of `verif.has_been_reset` reads as 0 immediately after simulation
+    The result of `firrtl.int.has_been_reset` reads as 0 immediately after simulation
     startup and after each power-cycle in a power-aware simulation. The result
     remains 0 before and during reset and only switches to 1 after the reset is
     deasserted again.
