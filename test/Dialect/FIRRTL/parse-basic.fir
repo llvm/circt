@@ -899,11 +899,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     c <= mux(sel, a, b)
     z <= mux(sel, x, y)
 
-  ; CHECK-LABEL: firrtl.extmodule private @RawStringParam
-  ; CHECK-SAME:    <TYPE: none = "bit",
-  ; CHECK-SAME:     FORMAT: none = "xyz_timeout=%d\\n",
-  ; CHECK-SAME:     MIXED_QUOTES: none = "\22'\\\22">
-  extmodule RawStringParam :
+  ; CHECK-LABEL: firrtl.extmodule private @VerbatimStringParam
+  ; CHECK-SAME:    <TYPE: none = #hw.param.verbatim<"bit">,
+  ; CHECK-SAME:     FORMAT: none = #hw.param.verbatim<"xyz_timeout=%d\\n">,
+  ; CHECK-SAME:     MIXED_QUOTES: none = #hw.param.verbatim<"\22'\\\22">>
+  extmodule VerbatimStringParam :
     parameter TYPE = 'bit'
     parameter FORMAT = 'xyz_timeout=%d\n'
     parameter MIXED_QUOTES = '"\'\"'

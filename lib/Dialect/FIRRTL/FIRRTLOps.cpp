@@ -1269,7 +1269,7 @@ LogicalResult FExtModuleOp::verify() {
   auto checkParmValue = [&](Attribute elt) -> bool {
     auto param = cast<ParamDeclAttr>(elt);
     auto value = param.getValue();
-    if (isa<IntegerAttr, StringAttr, FloatAttr>(value))
+    if (isa<IntegerAttr, StringAttr, FloatAttr, hw::ParamVerbatimAttr>(value))
       return true;
     emitError() << "has unknown extmodule parameter value '"
                 << param.getName().getValue() << "' = " << value;

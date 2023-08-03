@@ -4160,7 +4160,7 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
 /// parameter ::= 'parameter' id '=' intLit NEWLINE
 /// parameter ::= 'parameter' id '=' StringLit NEWLINE
 /// parameter ::= 'parameter' id '=' floatingpoint NEWLINE
-/// parameter ::= 'parameter' id '=' RawString NEWLINE
+/// parameter ::= 'parameter' id '=' VerbatimStringLit NEWLINE
 ParseResult FIRCircuitParser::parseParameter(StringAttr &resultName,
                                              TypedAttr &resultValue,
                                              SMLoc &resultLoc) {
@@ -4201,10 +4201,11 @@ ParseResult FIRCircuitParser::parseParameter(StringAttr &resultName,
     consumeToken(FIRToken::string);
     break;
   }
-  case FIRToken::raw_string: {
+  case FIRToken::verbatim_string: {
     // Drop the single quotes and unescape the ones inside.
-    value = builder.getStringAttr(getToken().getRawStringValue());
-    consumeToken(FIRToken::raw_string);
+    auto text = builder.getStringAttr(getToken().getVerbatimStringValue());
+    value = hw::ParamVerbatimAttr::get(text);
+    consumeToken(FIRToken::verbatim_string);
     break;
   }
   case FIRToken::floatingpoint:
