@@ -21,6 +21,9 @@ def PortOpInterface : OpInterface<"PortOpInterface"> {
       [{"An interface for operations which describe ports."}];
 
   let methods = [
+    InterfaceMethod<
+      [{"Returns the data type of the port."}],
+      "mlir::Type", "getPortType">
   ];
 }
 
