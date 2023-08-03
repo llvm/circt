@@ -293,7 +293,7 @@ def UnwrapWindow : ESI_Physical_Op<"window.unwrap", [
 }
 
 //===----------------------------------------------------------------------===//
-// Data windows
+// Channel buffering and pipelining.
 //===----------------------------------------------------------------------===//
 
 def ChannelBufferOp : ESI_Abstract_Op<"buffer", [

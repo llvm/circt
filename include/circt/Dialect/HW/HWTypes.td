@@ -74,7 +74,7 @@ def HWAggregateType : DialectType<HWDialect,
 
 // A handle to refer to circt::hw::ModuleType in ODS.
 def ModuleType : DialectType<HWDialect,
-    CPred<"::circt::hw::type_isa<circt::hw::ModuleType>($_self)">,
+    CPred<"isa<circt::hw::ModuleType>($_self)">,
           "a module", "::circt::hw::ModuleType">;
 
 // A handle to refer to circt::hw::StringType in ODS.
