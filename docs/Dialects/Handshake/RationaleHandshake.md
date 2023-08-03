@@ -61,4 +61,4 @@ MLIR Handshake Dialect-[slides](https://drive.google.com/file/d/1UYQAfHrzcsdXUZ9
 
 ## Operation definitions
 
-[include "Dialects/HandshakeOps.md"]
+[include "Dialects/Handshake.md"]

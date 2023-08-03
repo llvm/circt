@@ -28,7 +28,7 @@ representation of HW outside of a particular use-case.
 
 ## Type Definitions
 
-[include "Dialects/HWTypeDecls.md"]
+[include "Dialects/HWTypeDeclsOps.md"]
 [include "Dialects/HWTypes.md"]
 [include "Dialects/HWTypesImpl.md"]
 

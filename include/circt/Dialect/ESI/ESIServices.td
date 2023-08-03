@@ -6,9 +6,18 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_ESI_SERVICES_TD
+#define CIRCT_DIALECT_ESI_SERVICES_TD
+
+include "mlir/IR/RegionKindInterface.td"
+include "mlir/IR/SymbolInterfaces.td"
+
+include "circt/Dialect/ESI/ESIDialect.td"
+include "circt/Dialect/ESI/ESIInterfaces.td"
+include "circt/Dialect/ESI/ESITypes.td"
+
 include "circt/Dialect/HW/HWAttributesNaming.td"
 include "circt/Dialect/HW/HWTypes.td"
-include "mlir/IR/RegionKindInterface.td"
 
 def CustomServiceDeclOp : ESI_Op<"service.decl",
           [SingleBlock, NoTerminator, HasParent<"::mlir::ModuleOp">,
@@ -65,6 +74,21 @@ def ServiceDeclInOutOp : ESI_Op<"service.inout",
   let assemblyFormat = [{
     $inner_sym attr-dict
     `:` qualified($toServerType) `->` qualified($toClientType)
+  }];
+}
+
+def ESIAnyType : ESI_Type<"Any"> {
+  let summary = "any type";
+  let description = [{
+    Used to state that any type is accepted in a service port declaration. The
+    specific type will be determined later in compilation.
+  }];
+
+  let mnemonic = "any";
+  let assemblyFormat = "";
+
+  let extraClassDeclaration = [{
+    static AnyType get(MLIRContext *context);
   }];
 }
 
@@ -202,3 +226,5 @@ def ServiceHierarchyMetadataOp : ESI_Op<"service.hierarchy.metadata", [
       `clients` $clients attr-dict 
   }];
 }
+
+#endif // CIRCT_DIALECT_ESI_SERVICES_TD

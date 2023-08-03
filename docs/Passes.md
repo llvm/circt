@@ -16,6 +16,14 @@ This document describes the available CIRCT passes and their contracts.
 
 [include "CalyxPasses.md"]
 
+## Comb Dialect Passes
+
+[include "CombPasses.md"]
+
+## DC Dialect Passes
+
+[include "DCPasses.md"]
+
 ## ESI Dialect Passes
 
 [include "ESIPasses.md"]
@@ -36,6 +44,10 @@ This document describes the available CIRCT passes and their contracts.
 
 [include "HWPasses.md"]
 
+## Ibis Dialect Passes
+
+[include "IbisPasses.md"]
+
 ## LLHD Dialect Passes
 
 [include "LLHDPasses.md"]
@@ -43,6 +55,10 @@ This document describes the available CIRCT passes and their contracts.
 ## MSFT Dialect Passes
 
 [include "MSFTPasses.md"]
+
+## OM Dialect Passes
+
+[include "OMPasses.md"]
 
 ## Pipeline Dialect Passes
 
