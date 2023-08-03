@@ -16,6 +16,8 @@
 
 include "mlir/Pass/PassBase.td"
 
+include "circt/Dialect/ESI/ESIDialect.td"
+
 def ESIConnectServices : Pass<"esi-connect-services", "mlir::ModuleOp"> {
   let summary = "Connect up ESI service requests to service providers";
   let constructor = "circt::esi::createESIConnectServicesPass()";

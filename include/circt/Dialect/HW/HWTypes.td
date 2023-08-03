@@ -72,49 +72,17 @@ def HWAggregateType : DialectType<HWDialect,
       ::circt::hw::UnpackedArrayType,
       ::circt::hw::StructType>}]>;
 
-//===----------------------------------------------------------------------===//
-// Type Definitions
-//===----------------------------------------------------------------------===//
+// A handle to refer to circt::hw::ModuleType in ODS.
+def ModuleType : DialectType<HWDialect,
+    CPred<"isa<circt::hw::ModuleType>($_self)">,
+          "a module", "::circt::hw::ModuleType">;
 
-class HW_Type<string name, string typeMnemonic, list<Trait> traits = []>
-    : TypeDef<HWDialect, name, traits> {
-  let mnemonic = typeMnemonic;
-}
-
-def ModuleType : HW_Type<"Module", "module"> {
-  let summary = "Module Type";
-  let description = [{
-    Module types have ports.
-  }];
-  let parameters = (ins ArrayRefParameter<"::circt::hw::ModulePort", "port list">:$ports);
-  let assemblyFormat = "`(` $ports `)`";
-  let genVerifyDecl = 1;
-
-  let extraClassDeclaration = [{
-    // Many of these are transitional and will be removed when modules and instances
-    // have moved over to this type.
-    size_t getNumInputs();
-    size_t getNumOutputs();
-    SmallVector<Type> getInputTypes();
-    SmallVector<Type> getOutputTypes();
-    Type getInputType(size_t);
-    Type getOutputType(size_t);
-    SmallVector<StringAttr> getInputNames();
-    SmallVector<StringAttr> getOutputNames();
-    StringAttr getNameAttr(size_t);
-    StringRef getName(size_t);
-    StringAttr getInputNameAttr(size_t);
-    StringRef getInputName(size_t);
-    StringAttr getOutputNameAttr(size_t);
-    StringRef getOutputName(size_t);
-    FunctionType getFuncType();
-  }];
-}
-
-def HWStringType : HW_Type<"String", "string"> {
-  let summary = "String type";
-  let description = "Defines a string type for the hw-centric dialects";
-}
+// A handle to refer to circt::hw::StringType in ODS.
+def HWStringType :
+    DialectType<HWDialect,
+      CPred<"::circt::hw::type_isa<circt::hw::StringType>($_self)">,
+      "a HW string", "::circt::hw::StringType">,
+    BuildableType<"::circt::hw::StringType::get($_builder.getContext())">;
 
 /// A flat symbol reference or a reference to a name within a module.
 def NameRefAttr : Attr<
