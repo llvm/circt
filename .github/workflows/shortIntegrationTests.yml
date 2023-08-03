@@ -45,8 +45,9 @@ jobs:
           submodules: true
 
       - name: ccache
-        uses: hendrikmuhs/ccache-action@v1
+        uses: hendrikmuhs/ccache-action@v1.2
         with:
+          key: shortintegration-${{ matrix.build-assert }}-${{ matrix.build-type }}-${{ matrix.compiler.cc }} 
           max-size: 1G
 
       # --------
