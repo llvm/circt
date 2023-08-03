@@ -888,6 +888,22 @@ def PlusArgsValueIntrinsicOp : FIRRTLOp<"int.plusargs.value",
   let assemblyFormat = "$formatString attr-dict `:` type($result)";
 }
 
+def HasBeenResetIntrinsicOp : FIRRTLOp<"int.has_been_reset", [Pure]> {
+  let summary = "Check that a proper reset has been seen.";
+  let description = [{
+    The result of `verif.has_been_reset` reads as 0 immediately after simulation
+    startup and after each power-cycle in a power-aware simulation. The result
+    remains 0 before and during reset and only switches to 1 after the reset is
+    deasserted again.
+
+    See the corresponding `verif.has_been_reset` operation.
+  }];
+  let arguments = (ins NonConstClockType:$clock, AnyResetType:$reset);
+  let results = (outs NonConstUInt1Type:$result);
+  let hasFolder = 1;
+  let assemblyFormat = "$clock `,` $reset attr-dict `:` type($reset)";
+}
+
 //===----------------------------------------------------------------------===//
 // Verbatim
 //===----------------------------------------------------------------------===//
