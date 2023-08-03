@@ -158,6 +158,8 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 // PortReadOp
 //===----------------------------------------------------------------------===//
 
+// Verifies that a given source operation (TSrcOp is a port access) access a
+// symbol defined by the expected target operation (TTargetOp).
 template <typename TSrcOp, typename TTargetOp>
 LogicalResult verifyPortSymbolUses(
     TSrcOp op, StringAttr symName, llvm::function_ref<Type(TSrcOp)> getPortType,
@@ -165,11 +167,9 @@ LogicalResult verifyPortSymbolUses(
     llvm::function_ref<FailureOr<TTargetOp>(Operation *)> getTargetOp) {
 
   ClassOp parentClass = op->template getParentOfType<ClassOp>();
-  if (!parentClass)
-    return op->emitOpError()
-           << op->getName() << " must be contained in a ClassOp";
-
-  Operation *rootAccessOp = SymbolTable::lookupSymbolIn(parentClass, symName);
+  assert(parentClass && " must be contained in a ClassOp");
+  // TODO @teqdruid: use innerSym when available.
+  Operation *rootAccessOp = symbolTable.lookupSymbolIn(parentClass, symName);
 
   TTargetOp targetOp;
   if (auto getTargetRes = getTargetOp(rootAccessOp); succeeded(getTargetRes))
@@ -247,6 +247,8 @@ verifyInstancePortSymbolUses(TSrcOp op,
     // Lookup the port in the instance. For now, only allow top level accesses -
     // can easily extend this to nested instances as well.
     ClassOp referencedClass = targetInstance.getClass();
+    // @teqdruid TODO: make this more efficient using
+    // innersymtablecollection when that's available to non-firrtl dialects.
     auto targetOp = symbolTable.lookupSymbolIn<TTargetOp>(
         referencedClass, symName.getLeafReference());
 

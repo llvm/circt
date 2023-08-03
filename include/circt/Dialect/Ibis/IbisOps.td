@@ -166,7 +166,7 @@ def CallOp : IbisOp<"call", [CallOpInterface]> {
 // ===---------------------------------------------------------------------===//
 
 def ContainerOp : IbisOp<"container", [
-  IsolatedFromAbove, RegionKindInterface,
+  IsolatedFromAbove,
   Symbol, SymbolTable, SingleBlock,
   NoTerminator, NoRegionArguments,
   HasParent<"ClassOp">
@@ -181,11 +181,6 @@ def ContainerOp : IbisOp<"container", [
 
   let assemblyFormat = [{
     $sym_name attr-dict-with-keyword $body
-  }];
-
-  let extraClassDeclaration = [{
-    // Implement RegionKindInterface.
-    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
   }];
 }
 
@@ -237,7 +232,7 @@ def PortWriteOp : IbisOp<"port.write", [
   }];
 }
 
-def InstanceReadOp : IbisOp<"instance.read", [
+def InstanceReadOp : IbisOp<"instance.port.read", [
       DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "Ibis instance read";
@@ -252,7 +247,7 @@ def InstanceReadOp : IbisOp<"instance.read", [
   }];
 }
 
-def InstanceWriteOp : IbisOp<"instance.write", [
+def InstanceWriteOp : IbisOp<"instance.port.write", [
       DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "Ibis instance write";
