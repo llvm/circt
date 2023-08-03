@@ -61,7 +61,7 @@ public:
             UninferredResetCastOp, ConstCastOp, RefCastOp,
             mlir::UnrealizedConversionCastOp,
             // Property expressions.
-            StringConstantOp, BigIntConstantOp>([&](auto expr) -> ResultType {
+            StringConstantOp, FIntegerConstantOp>([&](auto expr) -> ResultType {
           return thisCast->visitExpr(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -198,7 +198,7 @@ public:
 
   // Property expressions.
   HANDLE(StringConstantOp, Unhandled);
-  HANDLE(BigIntConstantOp, Unhandled);
+  HANDLE(FIntegerConstantOp, Unhandled);
 #undef HANDLE
 };
 

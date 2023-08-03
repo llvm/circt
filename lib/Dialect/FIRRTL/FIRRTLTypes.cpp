@@ -113,7 +113,7 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         os << '>';
       })
       .Case<StringType>([&](auto stringType) { os << "string"; })
-      .Case<BigIntType>([&](auto bigIntType) { os << "bigint"; })
+      .Case<FIntegerType>([&](auto integerType) { os << "integer"; })
       .Case<ListType>([&](auto listType) {
         os << "list<";
         printNestedType(listType.getElementType(), os);
@@ -377,12 +377,12 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     result = StringType::get(parser.getContext());
     return success();
   }
-  if (name.equals("bigint")) {
+  if (name.equals("integer")) {
     if (isConst) {
       parser.emitError(parser.getNameLoc(), "bigints cannot be const");
       return failure();
     }
-    result = BigIntType::get(parser.getContext());
+    result = FIntegerType::get(parser.getContext());
     return success();
   }
   if (name.equals("list")) {
@@ -2669,7 +2669,7 @@ void FIRRTLDialect::registerTypes() {
            // References and open aggregates
            RefType, OpenBundleType, OpenVectorType,
            // Non-Hardware types
-           ClassType, StringType, BigIntType, ListType, MapType, PathType>();
+           ClassType, StringType, FIntegerType, ListType, MapType, PathType>();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike
