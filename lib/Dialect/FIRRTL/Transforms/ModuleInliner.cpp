@@ -1128,27 +1128,27 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b, IRMapping &mapper,
   }
 }
 
-void Inliner::inlineInstances(FModuleOp parent) {
+void Inliner::inlineInstances(FModuleOp module) {
   // Generate a namespace for this module so that we can safely inline symbols.
-  ModuleNamespace moduleNamespace(parent);
-  auto moduleName = parent.getNameAttr();
+  ModuleNamespace moduleNamespace(module);
+  auto moduleName = module.getNameAttr();
 
   SmallVector<Value> wires;
   SmallVector<Backedge> edges;
-  OpBuilder b(parent.getContext());
-  BackedgeBuilder beb(b, parent.getLoc());
+  OpBuilder b(module.getContext());
+  BackedgeBuilder beb(b, module.getLoc());
 
-  for (auto &op : llvm::make_early_inc_range(*parent.getBodyBlock())) {
+  for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
     // If it's not an instance op, skip it.
     auto instance = dyn_cast<InstanceOp>(op);
     if (!instance)
       continue;
 
     // If it's not a regular module we can't inline it. Mark it as live.
-    auto *module = symbolTable.lookup(instance.getModuleName());
-    auto target = dyn_cast<FModuleOp>(module);
+    auto *childModule = symbolTable.lookup(instance.getModuleName());
+    auto target = dyn_cast<FModuleOp>(childModule);
     if (!target) {
-      liveModules.insert(module);
+      liveModules.insert(childModule);
       continue;
     }
 
@@ -1181,7 +1181,7 @@ void Inliner::inlineInstances(FModuleOp parent) {
     if (!rootMap[target.getNameAttr()].empty()) {
       for (auto sym : rootMap[target.getNameAttr()]) {
         auto &mnla = nlaMap[sym];
-        sym = mnla.reTop(parent);
+        sym = mnla.reTop(module);
         StringAttr instSym =
             getOrAddInnerSym(instance, [&](FModuleOp mod) -> ModuleNamespace & {
               return moduleNamespace;
@@ -1216,7 +1216,7 @@ void Inliner::inlineInstances(FModuleOp parent) {
     } else {
       // Recursively inline all the child modules under `parent`, that are
       // marked to be inlined.
-      inlineInto(nestedPrefix, b, mapper, beb, edges, target, parent,
+      inlineInto(nestedPrefix, b, mapper, beb, edges, target, module,
                  symbolRenames, moduleNamespace);
     }
     currentPath.pop_back();
