@@ -546,7 +546,8 @@ def LowerVerifToSV : Pass<"lower-verif-to-sv", "hw::HWModuleOp"> {
     This pass converts various Verif contructs to SV.
   }];
   let constructor = "circt::createLowerVerifToSVPass()";
-  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
+  let dependentDialects = [
+    "sv::SVDialect", "hw::HWDialect", "comb::CombDialect"];
 }
 
 //===----------------------------------------------------------------------===//

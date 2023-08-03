@@ -7,7 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Verif/VerifDialect.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/DialectImplementation.h"
 
 using namespace circt;
 using namespace verif;
@@ -17,6 +20,15 @@ void VerifDialect::initialize() {
 #define GET_OP_LIST
 #include "circt/Dialect/Verif/Verif.cpp.inc"
       >();
+}
+
+Operation *VerifDialect::materializeConstant(OpBuilder &builder,
+                                             Attribute value, Type type,
+                                             Location loc) {
+  if (auto intType = dyn_cast<IntegerType>(type))
+    if (auto attrValue = dyn_cast<IntegerAttr>(value))
+      return builder.create<hw::ConstantOp>(loc, type, attrValue);
+  return nullptr;
 }
 
 #include "circt/Dialect/Verif/VerifDialect.cpp.inc"
