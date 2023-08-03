@@ -1186,13 +1186,12 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output r : Probe<UInt<1>>
     output rw : RWProbe<UInt<1>>
 
-    ; CHECK-NEXT: %[[NODE:.+]], %[[NODE_RWREF:.+]] = firrtl.node
-    ; CHECK-SAME: forceable
+    ; CHECK-NEXT: %[[NODE:.+]] = firrtl.node sym @[[NODE_RW_SYM:[^ ]+]]
     node n = in
     ; CHECK-NEXT: %[[REF:.+]] = firrtl.ref.send %[[NODE]]
     ; CHECK-NEXT: ref.define %r, %[[REF]]
     define r = probe(n)
-    ; CHECK-NOT: ref.send
+    ; CHECK: %[[NODE_RWREF:.+]] = firrtl.ref.rwprobe <@RefsChild::@[[NODE_RW_SYM]]>
     ; CHECK-NEXT: ref.define %rw, %[[NODE_RWREF]]
     define rw = rwprobe(n)
 
@@ -1270,12 +1269,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-DAG: %[[SUM:.+]] = firrtl.and %[[READ_PROBE_IN]],
     outconst <= and(read(probe(in)), UInt(1))
 
-    ; CHECK: %[[AGG4:.+]], %[[AGG4_RWREF:.+]] = firrtl.wire
+    ; CHECK: %[[AGG4:.+]] = firrtl.wire sym [<@[[AGG4_0_b_x_SYM:[^ ]+]],4,public>]
     wire agg4 : { a : UInt, flip b : {x : UInt<1>} }[2]
     ; (static ref expr creates dead subfield accesses, skip)
-    ; CHECK: %[[AGG4_RW_0:.+]] = firrtl.ref.sub %[[AGG4_RWREF]][0]
-    ; CHECK-NEXT: %[[AGG4_RW_0_b:.+]] = firrtl.ref.sub %[[AGG4_RW_0]][1]
-    ; CHECK-NEXT: %[[AGG4_RW_0_b_x:.+]] = firrtl.ref.sub %[[AGG4_RW_0_b]][0]
+    ; CHECK: %[[AGG4_RW_0_b_x:.+]] = firrtl.ref.rwprobe <@Refs::@[[AGG4_0_b_x_SYM]]>
     ; CHECK-NEXT: firrtl.ref.define %field_rw, %[[AGG4_RW_0_b_x]]
     define field_rw = rwprobe(agg4[0].b.x)
 
@@ -1506,11 +1503,12 @@ circuit Probes_refexprs:
 
     out <= and(and(a, b), and(c, d))
 
-    ; CHECK: %[[TEST:.+]], %[[TEST_REF:.+]] = firrtl.wire
+    ; CHECK: %[[TEST:.+]] = firrtl.wire sym @[[TEST_SYM:[^ ]+]]
     wire `test`: {`0`: UInt<1>, `b`: UInt<1>}
     `test`.`0` <= a
     `test`.`b` <= b
-     ; CHECK: force_initial %{{.+}}, %[[TEST_REF]], %[[TEST]]
+    ; CHECK: %[[TEST_REF:.+]] = firrtl.ref.rwprobe <@Probes_refexprs::@[[TEST_SYM]]>
+    ; CHECK: force_initial %{{.+}}, %[[TEST_REF]], %[[TEST]]
     force_initial(rwprobe(`test`), `test`)
     ; CHECK: force_initial
     force_initial(`9`.`0`.rwprobe, `test`.`0`)
