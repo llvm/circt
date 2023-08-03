@@ -1757,7 +1757,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
         parseToken(FIRToken::r_paren, "expected ')' in Integer expression"))
       return failure();
     result =
-        builder.create<IntegerConstantOp>(APSInt(value, /*isUnsigned=*/false));
+        builder.create<FIntegerConstantOp>(APSInt(value, /*isUnsigned=*/false));
     break;
   }
 

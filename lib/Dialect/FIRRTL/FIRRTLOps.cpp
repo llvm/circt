@@ -3355,14 +3355,14 @@ Attribute AggregateConstantOp::getAttributeFromFieldID(uint64_t fieldID) {
   return value;
 }
 
-void IntegerConstantOp::print(OpAsmPrinter &p) {
+void FIntegerConstantOp::print(OpAsmPrinter &p) {
   p << " ";
   p.printAttributeWithoutType(getValueAttr());
   p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
 }
 
-ParseResult IntegerConstantOp::parse(OpAsmParser &parser,
-                                     OperationState &result) {
+ParseResult FIntegerConstantOp::parse(OpAsmParser &parser,
+                                      OperationState &result) {
   auto *context = parser.getContext();
   APInt value;
   if (parser.parseInteger(value) ||

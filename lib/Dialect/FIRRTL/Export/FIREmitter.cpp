@@ -110,7 +110,7 @@ struct Emitter {
   void emitExpression(UninferredResetCastOp op);
   void emitExpression(ConstCastOp op);
   void emitExpression(StringConstantOp op);
-  void emitExpression(IntegerConstantOp op);
+  void emitExpression(FIntegerConstantOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -1012,7 +1012,7 @@ void Emitter::emitExpression(Value value) {
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
-          IntegerConstantOp,
+          FIntegerConstantOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp>([&](auto op) {
         ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
@@ -1118,7 +1118,7 @@ void Emitter::emitExpression(UninferredResetCastOp op) {
   emitExpression(op.getInput());
 }
 
-void Emitter::emitExpression(IntegerConstantOp op) {
+void Emitter::emitExpression(FIntegerConstantOp op) {
   ps << "Integer(";
   ps.addAsString(op.getValue());
   ps << ")";

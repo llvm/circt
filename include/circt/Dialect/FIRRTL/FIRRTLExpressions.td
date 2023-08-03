@@ -1045,7 +1045,7 @@ def StringConstantOp : FIRRTLOp<"string", [Pure, ConstantLike]> {
   let assemblyFormat = "$value attr-dict";
 }
 
-def IntegerConstantOp : FIRRTLOp<"integer", [Pure, ConstantLike]> {
+def FIntegerConstantOp : FIRRTLOp<"integer", [Pure, ConstantLike]> {
   let summary = "Produce a constant integer value";
   let description = [{
     Produces a constant value of integer type.
