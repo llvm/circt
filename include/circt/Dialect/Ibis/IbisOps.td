@@ -17,6 +17,7 @@ include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Dialect/Ibis/IbisInterfaces.td"
 
 def HasCustomSSAName :
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>;
@@ -46,7 +47,10 @@ def ClassOp : IbisOp<"class", [
   }];
 }
 
-def InstanceOp : IbisOp<"instance", [Symbol]> {
+def InstanceOp : IbisOp<"instance", [
+    Symbol,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
   let summary = "Ibis class instance";
   let description = [{
     Instantiates an Ibis class.
@@ -55,6 +59,17 @@ def InstanceOp : IbisOp<"instance", [Symbol]> {
   let arguments = (ins SymbolNameAttr:$sym_name, FlatSymbolRefAttr:$className);
   let assemblyFormat = [{
     $sym_name `,` $className attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    // Return the class this instance is instantiating.
+    ClassOp getClass(SymbolTableCollection *symbolTable = nullptr) {
+      auto mod = getOperation()->getParentOfType<mlir::ModuleOp>();
+      if(symbolTable)
+        return symbolTable->lookupSymbolIn<ClassOp>(mod, getClassNameAttr());
+
+      return mod.lookupSymbol<ClassOp>(getClassNameAttr());
+    }
   }];
 }
 
@@ -142,6 +157,107 @@ def CallOp : IbisOp<"call", [CallOpInterface]> {
 
   let assemblyFormat = [{
     $callee `(` $operands `)` attr-dict `:` functional-type($operands, results)
+  }];
+}
+
+
+// ===---------------------------------------------------------------------===//
+// Low-level Ibis operations
+// ===---------------------------------------------------------------------===//
+
+def ContainerOp : IbisOp<"container", [
+  IsolatedFromAbove,
+  Symbol, SymbolTable, SingleBlock,
+  NoTerminator, NoRegionArguments,
+  HasParent<"ClassOp">
+]> {
+  let summary = "Ibis container";
+  let description = [{
+    An ibis container describes a collection of logic nested within an Ibis class.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name);
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    $sym_name attr-dict-with-keyword $body
+  }];
+}
+
+class PortLikeOp<string mnemonic, list<Trait> traits = []> :
+    IbisOp<mnemonic, !listconcat(traits, [
+      PortOpInterface,
+      HasParent<"ClassOp">
+  ])> {
+  let arguments = (ins SymbolNameAttr:$sym_name, TypeAttrOf<AnyType>:$type);
+  let assemblyFormat = [{
+    $sym_name `:` $type attr-dict
+  }];
+}
+
+def InputPortOp : PortLikeOp<"port.input"> {
+  let summary = "Ibis input port";
+}
+
+def OutputPortOp : PortLikeOp<"port.output"> {
+  let summary = "Ibis output port";
+}
+
+def PortReadOp : IbisOp<"port.read", [
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Ibis port read";
+  let description = [{
+    Read the value of a local port (i.e. a port of 'this' class).
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$sym_name);
+  let results = (outs AnyType:$output);
+  let assemblyFormat = [{
+    $sym_name attr-dict `:` type($output)
+  }];
+}
+
+def PortWriteOp : IbisOp<"port.write", [
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Ibis port write";
+  let description = [{
+    Write a value to a local port (i.e. a port of 'this' class).
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$sym_name, AnyType:$input);
+  let assemblyFormat = [{
+    $sym_name `(` $input `)` attr-dict `:` type($input)
+  }];
+}
+
+def InstanceReadOp : IbisOp<"instance.port.read", [
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Ibis instance read";
+  let description = [{
+    Read the value of an instance port.
+  }];
+
+  let arguments = (ins SymbolRefAttr:$sym_name);
+  let results = (outs AnyType:$output);
+  let assemblyFormat = [{
+    $sym_name attr-dict `:` type($output)
+  }];
+}
+
+def InstanceWriteOp : IbisOp<"instance.port.write", [
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Ibis instance write";
+  let description = [{
+    Write a value to an instance port.
+  }];
+
+  let arguments = (ins SymbolRefAttr:$sym_name, AnyType:$input);
+  let assemblyFormat = [{
+    $sym_name `(` $input `)` attr-dict `:` type($input)
   }];
 }
 
