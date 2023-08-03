@@ -32,11 +32,11 @@ instantiated module.
 Within a `firrtl` or `hw` module, many entities may exist which can be referenced 
 outside the module.  Operations and ports (and memory ports), need to define 
 symbol-like data to allow forming non-SSA linkage between disparate elements.  
-To accomplish this, an attribute named `inner_sym` is attached, providing a 
-scoped symbol-like name to the element.  An operation with an `inner_sym`
+To accomplish this, an attribute named `hw.inner_sym` is attached, providing a 
+scoped symbol-like name to the element.  An operation with an `hw.inner_sym`
 resides in arbitrarily-nested regions of a region that defines an
 `InnerSymbolTable` and a `Symbol` .  `InnerSymbolTable` operations must reside
-within an `InnerRefNamespace`.  The `inner_sym` attribute must be an `InnerSymAttr`
+within an `InnerRefNamespace`.  The `hw.inner_sym` attribute must be an `InnerSymAttr`
 which defines the inner symbols attached to the operation and its fields.
 Operations containing an inner symbol must implement the `InnerSymbol` interface.
 
@@ -51,8 +51,8 @@ symbol would start from their own module, never seeing other modules (since
 resolution would start in the parent module of the instance and be unable to go 
 to the global scope).  The second problem arises from nesting.  Symbol 
 defining operations must be immediate children of a symbol table.  FIRRTL and HW/SV 
-operations which define an `inner_sym` are grandchildren, at least, of a symbol 
-table and may be much further nested.  Lastly, ports need to define `inner_sym`, 
+operations which define an `hw.inner_sym` are grandchildren, at least, of a symbol 
+table and may be much further nested.  Lastly, ports need to define `hw.inner_sym`, 
 something not allowed by normal symbols.
 
 ## Inner Symbol Reference Attribute
@@ -115,7 +115,7 @@ Presently the only user is `CircuitOp`.
 
 Inner symbols are more costly than normal symbols, precisely from the 
 relaxation of MLIR symbol constraints.  Since nested regions are allowed, 
-finding all operations defining an `inner_sym` requires a recursive IR scan.  
+finding all operations defining an `hw.inner_sym` requires a recursive IR scan.  
 Verification is likewise trickier, partly due the significant increase in 
 non-local references.
 

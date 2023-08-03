@@ -456,10 +456,10 @@ Block *CircuitOp::getBodyBlock() { return &getBody().front(); }
 // FExtModuleOp and FModuleOp
 //===----------------------------------------------------------------------===//
 
-static SmallVector<PortInfo> getPortImpl(FModuleLike module) {
-  SmallVector<PortInfo> results;
+static SmallVector<firrtl::PortInfo> getPortImpl(FModuleLike module) {
+  SmallVector<firrtl::PortInfo> results;
   for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
-    results.push_back({module.getPortNameAttr(i), module.getPortType(i),
+    results.push_back({module.getPortNameAttr(i), module.getPortType(i), 
                        module.getPortDirection(i), module.getPortSymbolAttr(i),
                        module.getPortLocation(i),
                        AnnotationSet::forPort(module, i)});
@@ -1018,7 +1018,7 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
     p << visibility.getValue() << ' ';
 
   // Print the operation and the function name.
-  p.printSymbolName(op.getModuleName());
+  p.printSymbolName(op.getName());
 
   // Print the parameter list (if non-empty).
   printParameterList(op->getAttrOfType<ArrayAttr>("parameters"), p);
@@ -1522,16 +1522,12 @@ hw::ModulePortInfo ClassOp::getPortList() { return ::getPortListImpl(*this); }
 
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
-Operation *InstanceOp::getReferencedModule() {
+hw::InstantiableLike InstanceOp::getReferencedModule() {
   auto circuit = (*this)->getParentOfType<CircuitOp>();
   if (!circuit)
     return nullptr;
 
   return circuit.lookupSymbol<FModuleLike>(getModuleNameAttr());
-}
-
-hw::ModulePortInfo InstanceOp::getPortList() {
-  return cast<hw::PortList>(getReferencedModule()).getPortList();
 }
 
 FModuleLike InstanceOp::getReferencedModule(SymbolTable &symbolTable) {
@@ -1572,7 +1568,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   if (lowerToBind)
     result.addAttribute("lowerToBind", builder.getUnitAttr());
   if (innerSym)
-    result.addAttribute("inner_sym", innerSym);
+    result.addAttribute("hw.inner_sym", innerSym);
   result.addAttribute("nameKind",
                       NameKindEnumAttr::get(builder.getContext(), nameKind));
 
@@ -1596,7 +1592,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 
   // Gather the result types.
   SmallVector<Type> resultTypes;
-  resultTypes.reserve(getNumPorts(module));
+  resultTypes.reserve(module.getNumPorts());
   llvm::transform(
       module.getPortTypes(), std::back_inserter(resultTypes),
       [](Attribute typeAttr) { return cast<TypeAttr>(typeAttr).getValue(); });
@@ -1612,7 +1608,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 
   return build(
       builder, result, resultTypes,
-      SymbolRefAttr::get(builder.getContext(), module.getModuleNameAttr()),
+      SymbolRefAttr::get(builder.getContext(), module.getNameAttr()),
       builder.getStringAttr(name),
       NameKindEnumAttr::get(builder.getContext(), nameKind),
       module.getPortDirectionsAttr(), module.getPortNamesAttr(),
@@ -1746,7 +1742,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // Check that all the attribute arrays are the right length up front.  This
   // lets us safely use the port name in error messages below.
   size_t numResults = getNumResults();
-  size_t numExpected = getNumPorts(referencedModule);
+  size_t numExpected = referencedModule.getNumPorts();
   if (numResults != numExpected) {
     return emitNote(emitOpError() << "has a wrong number of results; expected "
                                   << numExpected << " but got " << numResults);
@@ -1845,7 +1841,7 @@ void InstanceOp::print(OpAsmPrinter &p) {
   SmallVector<StringRef, 9> omittedAttrs = {"moduleName",     "name",
                                             "portDirections", "portNames",
                                             "portTypes",      "portAnnotations",
-                                            "inner_sym",      "nameKind"};
+                                            "hw.inner_sym",      "nameKind"};
   if (getAnnotations().empty())
     omittedAttrs.push_back("annotations");
   p.printOptionalAttrDict((*this)->getAttrs(), omittedAttrs);
@@ -1966,7 +1962,7 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
                       NameKindEnumAttr::get(builder.getContext(), nameKind));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
   if (innerSym)
-    result.addAttribute("inner_sym", innerSym);
+    result.addAttribute("hw.inner_sym", innerSym);
   result.addTypes(resultTypes);
 
   if (portAnnotations.empty()) {
@@ -4614,8 +4610,8 @@ static ParseResult parseMemOp(OpAsmParser &parser, NamedAttrList &resultAttrs) {
 
 /// Always elide "ruw" and elide "annotations" if it exists or if it is empty.
 static void printMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
-  // "ruw" and "inner_sym" is always elided.
-  printElidePortAnnotations(p, op, attr, {"ruw", "inner_sym"});
+  // "ruw" and "hw.inner_sym" is always elided.
+  printElidePortAnnotations(p, op, attr, {"ruw", "hw.inner_sym"});
 }
 
 //===----------------------------------------------------------------------===//
@@ -4968,7 +4964,7 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   if (!targetRef)
     return emitOpError("has invalid target reference");
   if (targetRef.getModule() !=
-      (*this)->getParentOfType<FModuleLike>().getModuleNameAttr())
+      (*this)->getParentOfType<FModuleLike>().getNameAttr())
     return emitOpError() << "has non-local target";
 
   auto target = ns.lookup(targetRef);

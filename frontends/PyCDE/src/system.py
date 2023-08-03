@@ -500,7 +500,7 @@ class _OpCache:
     the instance doesn't have a static op in the IR."""
 
     # Check static op existence.
-    inside_of_syms = self.get_inner_sym_ops_in_module(inst.inside_of)
+    inside_of_syms = self.get_hw.inner_sym_ops_in_module(inst.inside_of)
     if inst.symbol not in inside_of_syms:
       return None
 
@@ -537,9 +537,9 @@ class _OpCache:
     raise TypeError(
         "Can only resolve from InstanceHierarchyOp or DynamicInstanceOp")
 
-  def get_inner_sym_ops_in_module(
+  def get_hw.inner_sym_ops_in_module(
       self, module: Module) -> Dict[ir.Attribute, ir.Operation]:
-    """Look into the IR inside 'module' for any ops which have an `inner_sym`
+    """Look into the IR inside 'module' for any ops which have an `hw.inner_sym`
     attribute. Cached."""
 
     if module is None:
@@ -550,9 +550,9 @@ class _OpCache:
 
     if circt_mod not in self._module_inside_sym_cache:
       self._module_inside_sym_cache[circt_mod] = \
-        {op.attributes["inner_sym"]: op
+        {op.attributes["hw.inner_sym"]: op
          for op in circt_mod.entry_block
-         if "inner_sym" in op.attributes}
+         if "hw.inner_sym" in op.attributes}
 
     return self._module_inside_sym_cache[circt_mod]
 

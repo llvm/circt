@@ -12,7 +12,7 @@ hw.module @TestHarness() attributes {firrtl.moduleHierarchyFile = [#hw.output_fi
 
 // CHECK:      hw.module @MainDesign()
 // CHECK-NEXT:   hw.instance "inner"
-// CHECK-SAME:     sym @[[MainDesign_inner_sym:[_a-zA-Z0-9]+]]
+// CHECK-SAME:     sym @[[MainDesign_hw.inner_sym:[_a-zA-Z0-9]+]]
 
 // CHECK:      hw.module @TestHarness()
 // CHECK-NEXT:   hw.instance "main_design"
@@ -38,5 +38,5 @@ hw.module @TestHarness() attributes {firrtl.moduleHierarchyFile = [#hw.output_fi
 // CHECK-SAME:         symbols = [@TestHarness,
 // CHECK-SAME:           #hw.innerNameRef<@TestHarness::@[[TestHarness_main_design_sym]]>,
 // CHECK-SAME:           @MainDesign,
-// CHECK-SAME:           #hw.innerNameRef<@MainDesign::@[[MainDesign_inner_sym]]>,
+// CHECK-SAME:           #hw.innerNameRef<@MainDesign::@[[MainDesign_hw.inner_sym]]>,
 // CHECK-SAME:           @InnerModule]

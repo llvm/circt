@@ -65,7 +65,6 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
   FIRRTLOp<mnemonic, traits # [
     IsolatedFromAbove, Symbol, HasParent<"CircuitOp">,
     DeclareOpInterfaceMethods<FModuleLike>,
-    DeclareOpInterfaceMethods<Instantiable>,
     DeclareOpInterfaceMethods<HWModuleLike>,
     OpAsmOpInterface, InnerSymbolTable]> {
 
@@ -78,12 +77,23 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
     //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
-  }];
+    circt::hw::ModuleType getHWModuleType();
+    size_t getNumPorts();
+
+    //===------------------------------------------------------------------===//
+    // Instantiable Methods
+    //===------------------------------------------------------------------===//
+    circt::hw::ModulePortInfo getPortList();
+    circt::hw::InnerSymAttr getPortSymbolAttr(size_t portIndex);
+    }];
 
   let extraClassDefinition = extraModuleClassDefinition # [{
     size_t $cppClass::getNumPorts() {
       return getPortTypesAttr().size();
+    }
+
+    circt::hw::ModuleType $cppClass::getHWModuleType() {
+      return {};
     }
 
     circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {

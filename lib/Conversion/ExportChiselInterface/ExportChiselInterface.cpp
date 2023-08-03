@@ -39,7 +39,7 @@ public:
 
   /// Emits an `ExtModule` class with port declarations for `module`.
   LogicalResult emitModule(FModuleLike module) {
-    os << "class " << module.getModuleName() << " extends ExtModule {\n";
+    os << "class " << module.getName() << " extends ExtModule {\n";
 
     for (const auto &port : module.getPorts()) {
       if (failed(emitPort(port)))

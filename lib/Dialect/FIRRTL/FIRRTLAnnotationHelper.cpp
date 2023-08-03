@@ -215,7 +215,7 @@ firrtl::resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
     ref = cache.lookup(mod, path.name);
     if (!ref) {
       mlir::emitError(circuit.getLoc()) << "cannot find name '" << path.name
-                                        << "' in " << mod.getModuleName();
+                                        << "' in " << mod.getName();
       return {};
     }
     // AnnoTarget::getType() is not safe (CHIRRTL ops crash, null if instance),
@@ -224,7 +224,7 @@ firrtl::resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
     if (ref.isa<PortAnnoTarget>() && isa<RefType>(ref.getType())) {
       mlir::emitError(circuit.getLoc())
           << "cannot target reference-type '" << path.name << "' in "
-          << mod.getModuleName();
+          << mod.getName();
       return {};
     }
   }
@@ -258,14 +258,14 @@ firrtl::resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
       if (!ref) {
         mlir::emitError(circuit.getLoc())
             << "cannot find port '" << field << "' in module "
-            << target.getModuleName();
+            << target.getName();
         return {};
       }
       // TODO: containsReference().
       if (isa<RefType>(ref.getType())) {
         mlir::emitError(circuit.getLoc())
             << "annotation cannot target reference-type port '" << field
-            << "' in module " << target.getModuleName();
+            << "' in module " << target.getName();
         return {};
       }
       component = component.drop_front();
@@ -356,7 +356,7 @@ InstanceOp firrtl::addPortsToModule(FModuleLike mod, InstanceOp instOnPath,
   mod.insertPorts({{portNo, portInfo}});
   // Now update all the instances of `mod`.
   for (auto *use :
-       instancePathcache.instanceGraph.lookup(cast<hw::Instantiable>(*mod))
+       instancePathcache.instanceGraph.lookup(cast<hw::InstantiableLike>(*mod))
            ->uses()) {
     InstanceOp useInst = cast<InstanceOp>(use->getInstance());
     auto clonedInst = useInst.cloneAndInsertPorts({{portNo, portInfo}});

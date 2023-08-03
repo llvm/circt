@@ -43,7 +43,7 @@ struct ModuleNamespace : public Namespace {
   ModuleNamespace(FModuleLike module) : module(module) { add(module); }
 
   /// Populate the namespace from a module-like operation. This namespace will
-  /// be composed of the `inner_sym`s of the module's ports and declarations.
+  /// be composed of the `hw.inner_sym`s of the module's ports and declarations.
   void add(FModuleLike module) {
     addPorts(module);
     addBody(module);

@@ -214,6 +214,7 @@ def LLHD_InstOp : LLHD_Op<"inst", [
     void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
       (*this)->setAttr(getCalleeAttrName(), callee.get<mlir::SymbolRefAttr>());
     }
+    
   }];
 
   let hasVerifier = 1;

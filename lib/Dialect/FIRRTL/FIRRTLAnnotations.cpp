@@ -592,8 +592,8 @@ Attribute
 OpAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
   // If the op is a module, just return the module name.
   if (auto module = llvm::dyn_cast<FModuleLike>(getOp())) {
-    assert(module.getModuleNameAttr() && "invalid NLA reference");
-    return FlatSymbolRefAttr::get(module.getModuleNameAttr());
+    assert(module.getNameAttr() && "invalid NLA reference");
+    return FlatSymbolRefAttr::get(module.getNameAttr());
   }
   // Return an inner-ref to the target.
   return ::getInnerRefTo(getOp(),
@@ -642,7 +642,7 @@ void PortAnnoTarget::setAnnotations(AnnotationSet annotations) const {
 }
 
 StringAttr PortAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
-  // If this is not a module, we just need to get an inner_sym on the operation
+  // If this is not a module, we just need to get an hw.inner_sym on the operation
   // itself.
   auto module = llvm::dyn_cast<FModuleLike>(getOp());
   auto target = module ? hw::InnerSymTarget(getPortNo(), module)

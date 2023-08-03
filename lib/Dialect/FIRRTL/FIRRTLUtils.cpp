@@ -704,7 +704,7 @@ void circt::firrtl::walkGroundTypes(
   recurse(recurse, type);
 }
 
-/// Returns an operation's `inner_sym`, adding one if necessary.
+/// Returns an operation's `hw.inner_sym`, adding one if necessary.
 StringAttr circt::firrtl::getOrAddInnerSym(
     const hw::InnerSymTarget &target,
     llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace) {
@@ -760,7 +760,7 @@ StringAttr circt::firrtl::getOrAddInnerSym(
   return {};
 }
 
-/// Obtain an inner reference to an operation, possibly adding an `inner_sym`
+/// Obtain an inner reference to an operation, possibly adding an `hw.inner_sym`
 /// to that operation.
 hw::InnerRefAttr circt::firrtl::getInnerRefTo(
     const hw::InnerSymTarget &target,

@@ -344,8 +344,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   /// Generate the ABI ref_<circuit>_<module> prefix string into `prefix`.
   void getRefABIPrefix(FModuleLike mod, SmallVectorImpl<char> &prefix) {
     (Twine("ref_") +
-     (isa<FExtModuleOp>(mod) ? mod.getModuleName() : getOperation().getName()) +
-     "_" + mod.getModuleName())
+     (isa<FExtModuleOp>(mod) ? mod.getName() : getOperation().getName()) +
+     "_" + mod.getName())
         .toVector(prefix);
   }
 

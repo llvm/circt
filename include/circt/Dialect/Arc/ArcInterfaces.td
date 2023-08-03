@@ -19,13 +19,7 @@ def CallOpMutableInterface : OpInterface<"CallOpMutableInterface", [CallOpInterf
   }];
   let cppNamespace = "::circt::arc";
 
-  let methods = [
-    InterfaceMethod<[{
-        Returns the operands within this call that are used as arguments to the
-        callee as a mutable range.
-      }],
-      "::mlir::MutableOperandRange", "getArgOperandsMutable">,
-  ];
+  let methods = [];
 }
 
 def ClockedOpInterface : OpInterface<"ClockedOpInterface"> {

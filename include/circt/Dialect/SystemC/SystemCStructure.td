@@ -105,7 +105,15 @@ def SCModuleOp : SystemCOp<"module", [
     //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
+    circt::hw::ModuleType getHWModuleType();
+    size_t getNumPorts();
+
+    //===------------------------------------------------------------------===//
+    // Instantiable Methods
+    //===------------------------------------------------------------------===//
+    circt::hw::ModulePortInfo getPortList();
+    circt::hw::InnerSymAttr getPortSymbolAttr(size_t portIndex);
+
   }];
 
   let extraClassDefinition = [{

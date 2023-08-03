@@ -138,6 +138,9 @@ def CallOp : IbisOp<"call", [CallOpInterface]> {
     void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
       (*this)->setAttr(getCalleeAttrName(), callee.get<mlir::SymbolRefAttr>());
     }
+
+    ::mlir::MutableOperandRange getArgOperandsMutable();
+
   }];
 
   let assemblyFormat = [{

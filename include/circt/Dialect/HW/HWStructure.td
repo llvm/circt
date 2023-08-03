@@ -29,11 +29,8 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 /// the module-like operations.
 class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     HWOp<mnemonic, traits # [
-      DeclareOpInterfaceMethods<PortList>,
-      DeclareOpInterfaceMethods<Instantiable>,
-      DeclareOpInterfaceMethods<HWModuleLike>,
       DeclareOpInterfaceMethods<HWMutableModuleLike>,
-      FunctionOpInterface, Symbol,
+      FunctionOpInterface, 
       OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
@@ -52,22 +49,26 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       ArrayRef<unsigned> eraseOutputs
     );
 
-    /// Attribute name for port symbols.
-    static StringRef getPortSymbolAttrName() {
-      return "hw.exportPort";
-    }
-
     void setPortSymbolAttr(size_t portIndex, ::circt::hw::InnerSymAttr sym);
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    circt::hw::ModuleType getHWModuleType();
+    size_t getNumPorts();
+
+    //===------------------------------------------------------------------===//
+    // Instantiable Methods
+    //===------------------------------------------------------------------===//
+    circt::hw::ModulePortInfo getPortList();
+    circt::hw::InnerSymAttr getPortSymbolAttr(size_t portIndex);
+  
   }];
 
   /// Additional class definitions inside the module op.
   code extraModuleClassDefinition = [{}];
 
   let extraClassDefinition = extraModuleClassDefinition # [{
-    size_t $cppClass::getNumPorts() {
-      // This is wildly inefficient
-      return getPortList().size();
-    }
 
     ::circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
       DictionaryAttr portAttrs;
@@ -81,12 +82,12 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       }
       if (portAttrs)
         return portAttrs.getAs<::circt::hw::InnerSymAttr>(
-          getPortSymbolAttrName());
+          InnerSymbolTable::getInnerSymbolAttrName());
       return {};
     }
 
     void $cppClass::setPortSymbolAttr(size_t portIndex, ::circt::hw::InnerSymAttr sym) {
-      auto portSymAttr = StringAttr::get(getContext(), getPortSymbolAttrName());
+      auto portSymAttr = StringAttr::get(getContext(), InnerSymbolTable::getInnerSymbolAttrName());
       if (portIndex < getNumInputs()) {
         if (sym)
           ::mlir::function_interface_impl::setArgAttr(*this, portIndex,
@@ -103,11 +104,21 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
         ::mlir::function_interface_impl::removeResultAttr(
             *this, portIndex - getNumInputs(), portSymAttr);
     }
+
+    ModuleType $cppClass::getHWModuleType() {
+      return detail::fnToMod(getFunctionType(), getArgNames(), getResultNames());
+    }
+
+    size_t $cppClass::getNumPorts() {
+      auto ft = getFunctionType();
+      return ft.getNumInputs() + ft.getNumResults();
+    }
+
   }];
 
 }
 
-def HWTestModuleOp : HWOp<"testmodule", [Symbol, PortList,
+def HWTestModuleOp : HWOp<"testmodule", [Symbol, InstantiableLike,
                                          OpAsmOpInterface, 
                                          HasParent<"mlir::ModuleOp">, 
                                          IsolatedFromAbove,
@@ -130,7 +141,14 @@ def HWTestModuleOp : HWOp<"testmodule", [Symbol, PortList,
     //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
+    circt::hw::ModuleType getHWModuleType();
+    size_t getNumPorts();
+
+    //===------------------------------------------------------------------===//
+    // Instantiable Methods
+    //===------------------------------------------------------------------===//
+    circt::hw::ModulePortInfo getPortList();
+    circt::hw::InnerSymAttr getPortSymbolAttr(size_t portIndex);
   }];
 
 }
@@ -555,10 +573,13 @@ def InstanceOp : HWOp<"instance", [
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    Operation *getReferencedModule(const HWSymbolCache *cache);
+    InstantiableLike getReferencedModule(const HWSymbolCache *cache);
+   
+    /// Return the value for an input port index by input port order.
+    Value getInputValue(size_t idx);
 
-    /// Return the value for a port in port order.
-    Value getValue(size_t idx);
+    /// Return the value for an output port index by output port number .
+    Value getOutputValue(size_t idx);
 
     //===------------------------------------------------------------------===//
     // SymbolOpInterface Methods
@@ -566,12 +587,7 @@ def InstanceOp : HWOp<"instance", [
 
     /// An InstanceOp may optionally define a symbol.
     bool isOptionalSymbol() { return true; }
-
-    //===------------------------------------------------------------------===//
-    // PortList Methods
-    //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
-
+ 
   }];
 
   let hasCustomAssemblyFormat = 1;

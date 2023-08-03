@@ -44,7 +44,8 @@ def InstanceOp : MSFTOp<"instance", [
     //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
+    circt::hw::ModuleType getHWModuleType();
+    size_t getNumPorts();
   }];
 
   /// sym keyword for optional symbol simplifies parsing
@@ -114,8 +115,15 @@ class MSFTModuleOpBase<string mnemonic, list<Trait> traits = []> :
     //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
-  }];
+    circt::hw::ModuleType getHWModuleType();
+    size_t getNumPorts();
+
+    //===------------------------------------------------------------------===//
+    // Instantiable Methods
+    //===------------------------------------------------------------------===//
+    circt::hw::ModulePortInfo getPortList();
+    circt::hw::InnerSymAttr getPortSymbolAttr(size_t portIndex);
+    }];
 }
 
 def MSFTModuleOp : MSFTModuleOpBase<"module",
@@ -235,7 +243,15 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
     //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
+    circt::hw::ModuleType getHWModuleType();
+    size_t getNumPorts();
+
+    //===------------------------------------------------------------------===//
+    // Instantiable Methods
+    //===------------------------------------------------------------------===//
+    circt::hw::ModulePortInfo getPortList();
+    circt::hw::InnerSymAttr getPortSymbolAttr(size_t portIndex);
+  
   }];
 }
 

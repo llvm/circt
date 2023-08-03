@@ -534,9 +534,15 @@ hw::ModulePortInfo ESIPureModuleOp::getPortList() {
 }
 
 size_t ESIPureModuleOp::getNumPorts() { return 0; }
+
 hw::InnerSymAttr ESIPureModuleOp::getPortSymbolAttr(size_t portIndex) {
   assert(false);
   return {};
+}
+
+hw::ModuleType ESIPureModuleOp::getHWModuleType() {
+  SmallVector<hw::ModulePort> ports;
+  return hw::ModuleType::get(getContext(), ports);
 }
 
 #define GET_OP_CLASSES

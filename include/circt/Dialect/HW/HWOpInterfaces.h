@@ -141,6 +141,24 @@ struct ModulePortInfo {
     return port;
   }
 
+  size_t inputNumForPort(size_t idx) const {
+    size_t port = 0;
+    for (size_t x = 0; x <= idx; ++x)
+      if (!ports[x].isOutput())
+        ++port;
+    assert(port); // must have found an input port
+    return port - 1;
+  }
+
+  size_t outputNumForPort(size_t idx) const {
+    size_t port = 0;
+    for (size_t x = 0; x <= idx; ++x)
+      if (ports[x].isOutput())
+        ++port;
+    assert(port); // must have found an output port
+    return port - 1;
+  }
+
   PortInfo &at(size_t idx) { return ports[idx]; }
   PortInfo &atInput(size_t idx) { return ports[portNumForInput(idx)]; }
   PortInfo &atOutput(size_t idx) { return ports[portNumForOutput(idx)]; }

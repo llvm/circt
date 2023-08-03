@@ -697,12 +697,12 @@ LogicalResult ModuleVisitor::checkInitialization() {
     if (auto mod = dyn_cast<FModuleLike>(definingOp))
       mlir::emitError(loc) << "port \"" << getFieldName(dest).first
                            << "\" not fully initialized in module \""
-                           << mod.getModuleName() << "\"";
+                           << mod.getName() << "\"";
     else
       mlir::emitError(loc)
           << "sink \"" << getFieldName(dest).first
           << "\" not fully initialized in module \""
-          << definingOp->getParentOfType<FModuleLike>().getModuleName() << "\"";
+          << definingOp->getParentOfType<FModuleLike>().getName() << "\"";
     failed = true;
   }
   if (failed)

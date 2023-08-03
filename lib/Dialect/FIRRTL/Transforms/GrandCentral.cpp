@@ -736,10 +736,10 @@ private:
   /// A store of the YAML representation of interfaces.
   DenseMap<Attribute, sv::InterfaceOp> interfaceMap;
 
-  /// Returns an operation's `inner_sym`, adding one if necessary.
+  /// Returns an operation's `hw.inner_sym`, adding one if necessary.
   StringAttr getOrAddInnerSym(Operation *op);
 
-  /// Returns a port's `inner_sym`, adding one if necessary.
+  /// Returns a port's `hw.inner_sym`, adding one if necessary.
   StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
 };
 
@@ -1732,7 +1732,7 @@ void GrandCentralPass::runOnOperation() {
   /// module as if it were the DUT.  This works by doing a depth-first walk of
   /// the instance graph, starting from the "effective" DUT and stopping the
   /// search at any modules which are known companions.
-  DenseSet<hw::Instantiable> dutModules;
+  DenseSet<hw::InstantiableLike> dutModules;
   FModuleOp effectiveDUT = dut;
   if (!effectiveDUT)
     effectiveDUT = cast<FModuleOp>(

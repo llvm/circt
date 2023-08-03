@@ -84,7 +84,7 @@ struct StructuralHasherSharedConstants {
     nonessentialAttributes.insert(StringAttr::get(context, "portSyms"));
     nonessentialAttributes.insert(StringAttr::get(context, "portLocations"));
     nonessentialAttributes.insert(StringAttr::get(context, "sym_name"));
-    nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
+    nonessentialAttributes.insert(StringAttr::get(context, "hw.inner_sym"));
   };
 
   // This is a cached "portTypes" string attr.
@@ -249,7 +249,7 @@ struct Equivalence {
     nonessentialAttributes.insert(StringAttr::get(context, "portSyms"));
     nonessentialAttributes.insert(StringAttr::get(context, "portLocations"));
     nonessentialAttributes.insert(StringAttr::get(context, "sym_name"));
-    nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
+    nonessentialAttributes.insert(StringAttr::get(context, "hw.inner_sym"));
   }
 
   std::string prettyPrint(Attribute attr) {
@@ -733,8 +733,8 @@ struct Deduper {
     if (auto to = dyn_cast<FModuleOp>(*toModule))
       rewriteModuleNLAs(renameMap, to, cast<FModuleOp>(*fromModule));
     else
-      rewriteExtModuleNLAs(renameMap, toModule.getModuleNameAttr(),
-                           fromModule.getModuleNameAttr());
+      rewriteExtModuleNLAs(renameMap, toModule.getNameAttr(),
+                           fromModule.getNameAttr());
 
     replaceInstances(toModule, fromModule);
   }
@@ -786,9 +786,9 @@ private:
   /// of the "toModule".
   void replaceInstances(FModuleLike toModule, Operation *fromModule) {
     // Replace all instances of the other module.
-    auto *fromNode = instanceGraph[::cast<hw::Instantiable>(fromModule)];
-    auto *toNode = instanceGraph[::cast<hw::Instantiable>(*toModule)];
-    auto toModuleRef = FlatSymbolRefAttr::get(toModule.getModuleNameAttr());
+    auto *fromNode = instanceGraph[::cast<hw::InstantiableLike>(fromModule)];
+    auto *toNode = instanceGraph[::cast<hw::InstantiableLike>(*toModule)];
+    auto toModuleRef = FlatSymbolRefAttr::get(toModule.getNameAttr());
     for (auto *oldInstRec : llvm::make_early_inc_range(fromNode->uses())) {
       auto inst = ::cast<InstanceOp>(*oldInstRec->getInstance());
       inst.setModuleNameAttr(toModuleRef);
@@ -814,7 +814,7 @@ private:
     namepath.append(baseNamepath.begin(), baseNamepath.end());
 
     auto loc = fromModule->getLoc();
-    auto *fromNode = instanceGraph[cast<hw::Instantiable>(fromModule)];
+    auto *fromNode = instanceGraph[cast<hw::InstantiableLike>(fromModule)];
     SmallVector<FlatSymbolRefAttr> nlas;
     for (auto *instanceRecord : fromNode->uses()) {
       auto parent = cast<FModuleOp>(*instanceRecord->getParent()->getModule());
@@ -1021,7 +1021,7 @@ private:
         continue;
       }
       // Otherwise make the annotation non-local and add it to the set.
-      makeAnnotationNonLocal(toModule.getModuleNameAttr(), to, fromModule, anno,
+      makeAnnotationNonLocal(toModule.getNameAttr(), to, fromModule, anno,
                              newAnnotations);
     }
   }
@@ -1082,8 +1082,8 @@ private:
   void recordSymRenames(RenameMap &renameMap, FModuleLike toModule,
                         Operation *to, FModuleLike fromModule,
                         Operation *from) {
-    // If the "from" operation has an inner_sym, we need to make sure the
-    // "to" operation also has an `inner_sym` and then record the renaming.
+    // If the "from" operation has an hw.inner_sym, we need to make sure the
+    // "to" operation also has an `hw.inner_sym` and then record the renaming.
     if (auto fromSym = getInnerSymName(from)) {
       auto toSym = OpAnnoTarget(to).getInnerSym(getNamespace(toModule));
       renameMap[fromSym] = toSym;
@@ -1117,7 +1117,7 @@ private:
       hw::InnerSymAttr toSym;
       if (!newPortSyms[portNo]) {
         // Get a reasonable base name for the port.
-        StringRef symName = "inner_sym";
+        StringRef symName = "hw.inner_sym";
         if (portNames)
           symName = cast<StringAttr>(portNames[portNo]).getValue();
         // Create the symbol and store it into the array.
@@ -1148,7 +1148,7 @@ private:
       mergeRegions(renameMap, toModule, std::get<0>(regions), fromModule,
                    std::get<1>(regions));
 
-    // Record any inner_sym renamings that happened.
+    // Record any hw.inner_sym renamings that happened.
     recordSymRenames(renameMap, toModule, to, fromModule, from);
 
     // Merge the annotations.
@@ -1358,7 +1358,7 @@ class DedupPass : public DedupBase<DedupPass> {
     });
 
     for (auto [i, module] : llvm::enumerate(modules)) {
-      auto moduleName = module.getModuleNameAttr();
+      auto moduleName = module.getNameAttr();
       auto &hashAndModuleNamesOpt = hashesAndModuleNames[i];
       // If the hash was not calculated, we need to skip it.
       if (!hashAndModuleNamesOpt) {
@@ -1386,7 +1386,7 @@ class DedupPass : public DedupBase<DedupPass> {
       if (it != moduleInfoToModule.end()) {
         auto original = cast<FModuleLike>(it->second);
         // Record the group ID of the other module.
-        dedupMap[moduleName] = original.getModuleNameAttr();
+        dedupMap[moduleName] = original.getNameAttr();
         deduper.dedup(original, module);
         ++erasedModules;
         anythingChanged = true;

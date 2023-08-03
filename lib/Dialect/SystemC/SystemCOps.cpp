@@ -128,6 +128,14 @@ hw::ModulePortInfo SCModuleOp::getPortList() {
   return hw::ModulePortInfo{ports};
 }
 
+hw::ModuleType SCModuleOp::getHWModuleType() {
+  auto ports = getPortList();
+  SmallVector<hw::ModulePort> modPorts; 
+  for (auto& p : ports)
+    modPorts.push_back(p);
+  return hw::ModuleType::get(getContext(), modPorts);
+}
+
 mlir::Region *SCModuleOp::getCallableRegion() { return &getBody(); }
 
 ArrayRef<mlir::Type> SCModuleOp::getCallableResults() {
@@ -459,16 +467,16 @@ void InstanceDeclOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 StringRef InstanceDeclOp::getInstanceName() { return getName(); }
 StringAttr InstanceDeclOp::getInstanceNameAttr() { return getNameAttr(); }
 
-Operation *InstanceDeclOp::getReferencedModule(const hw::HWSymbolCache *cache) {
+hw::InstantiableLike InstanceDeclOp::getReferencedModule(const hw::HWSymbolCache *cache) {
   if (cache)
     if (auto *result = cache->getDefinition(getModuleNameAttr()))
-      return result;
+      return cast<hw::InstantiableLike>(result);
 
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-  return topLevelModuleOp.lookupSymbol(getModuleName());
+  return topLevelModuleOp.lookupSymbol<hw::InstantiableLike>(getModuleName());
 }
 
-Operation *InstanceDeclOp::getReferencedModule() {
+hw::InstantiableLike InstanceDeclOp::getReferencedModule() {
   return getReferencedModule(/*cache=*/nullptr);
 }
 
@@ -536,7 +544,7 @@ InstanceDeclOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 hw::ModulePortInfo InstanceDeclOp::getPortList() {
-  return cast<hw::PortList>(getReferencedModule()).getPortList();
+  return getReferencedModule().getPortList();
 }
 
 //===----------------------------------------------------------------------===//

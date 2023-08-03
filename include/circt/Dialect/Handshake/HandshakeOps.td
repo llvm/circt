@@ -183,6 +183,9 @@ def InstanceOp : Handshake_Op<"instance", [
     Value getControl() {
       return getOperands().back();
     }
+
+    ::mlir::MutableOperandRange getArgOperandsMutable();
+
   }];
 
   let assemblyFormat = [{

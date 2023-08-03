@@ -112,10 +112,10 @@ LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst,
       // Add the backref to the list of attributes to apply.
       globalRefsToApply[tgtOp].push_back(refAttr);
 
-      // Since GlobalRefOp uses the `inner_sym` attribute, assign the
-      // 'inner_sym' attribute if it's not already assigned.
-      if (!tgtOp->hasAttr("inner_sym")) {
-        tgtOp->setAttr("inner_sym", hw::InnerSymAttr::get(innerRef.getName()));
+      // Since GlobalRefOp uses the `hw.inner_sym` attribute, assign the
+      // 'hw.inner_sym' attribute if it's not already assigned.
+      if (!tgtOp->hasAttr("hw.inner_sym")) {
+        tgtOp->setAttr("hw.inner_sym", hw::InnerSymAttr::get(innerRef.getName()));
       }
     }
     if (symNotFound)

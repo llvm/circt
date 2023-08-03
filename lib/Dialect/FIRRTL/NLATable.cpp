@@ -25,7 +25,7 @@ NLATable::NLATable(Operation *operation) {
   // a large number of options.
   for (auto &op : *circuit.getBodyBlock()) {
     if (auto module = dyn_cast<FModuleLike>(op))
-      symToOp[module.getModuleNameAttr()] = module;
+      symToOp[module.getNameAttr()] = module;
     if (auto nla = dyn_cast<hw::HierPathOp>(op))
       addNLA(nla);
   }

@@ -100,7 +100,7 @@ private:
         newTarget.append(":");
       }
     }
-    newTarget.append(module.getModuleName());
+    newTarget.append(module.getName());
     newTarget.append(">");
 
     newTarget.append(name);
@@ -192,7 +192,7 @@ private:
         newTarget.append(":");
       }
     }
-    newTarget.append(module.getModuleName());
+    newTarget.append(module.getName());
 
     anno.setMember("target", StringAttr::get(module->getContext(), newTarget));
 

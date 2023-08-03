@@ -284,8 +284,8 @@ struct CircuitLoweringState {
 
   // Return true if this module is the DUT or is instantiated by the DUT.
   // Returns false if the module is not instantiated by the DUT.
-  bool isInDUT(hw::Instantiable child) {
-    if (auto parent = dyn_cast<hw::Instantiable>(*dut))
+  bool isInDUT(hw::InstantiableLike child) {
+    if (auto parent = dyn_cast<hw::InstantiableLike>(*dut))
       return getInstanceGraph()->isAncestor(child, parent);
     return dut == child;
   }
@@ -295,7 +295,7 @@ struct CircuitLoweringState {
   // Return true if this module is instantiated by the Test Harness.  Returns
   // false if the module is not instantiated by the Test Harness or if the Test
   // Harness is not known.
-  bool isInTestHarness(hw::Instantiable mod) { return !isInDUT(mod); }
+  bool isInTestHarness(hw::InstantiableLike mod) { return !isInDUT(mod); }
 
   InstanceGraph *getInstanceGraph() { return instanceGraph; }
 

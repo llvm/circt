@@ -96,7 +96,7 @@ inline MemDirAttr &operator|=(MemDirAttr &lhs, MemDirAttr rhs) {
   return lhs;
 }
 
-/// Return the StringAttr for the inner_sym name, if it exists.
+/// Return the StringAttr for the hw.inner_sym name, if it exists.
 inline StringAttr getInnerSymName(Operation *op) {
   auto s = op->getAttrOfType<hw::InnerSymAttr>(
       hw::InnerSymbolTable::getInnerSymbolAttrName());

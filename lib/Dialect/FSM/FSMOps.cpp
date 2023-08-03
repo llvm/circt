@@ -211,6 +211,14 @@ hw::ModulePortInfo MachineOp::getPortList() {
   return hw::ModulePortInfo(inputs, outputs);
 }
 
+hw::ModuleType MachineOp::getHWModuleType() {
+  auto ports = getPortList();
+  SmallVector<hw::ModulePort> modPorts; 
+  for (auto& p : ports)
+    modPorts.push_back(p);
+  return hw::ModuleType::get(getContext(), modPorts);
+}
+
 //===----------------------------------------------------------------------===//
 // InstanceOp
 //===----------------------------------------------------------------------===//
@@ -285,7 +293,7 @@ StringRef HWInstanceOp::getInstanceName() { return getSymName(); }
 
 StringAttr HWInstanceOp::getInstanceNameAttr() { return getSymNameAttr(); }
 
-Operation *HWInstanceOp::getReferencedModule() { return getMachineOp(); }
+hw::InstantiableLike HWInstanceOp::getReferencedModule() { return getMachineOp(); }
 
 /// Lookup the machine for the symbol.  This returns null on invalid IR.
 MachineOp HWInstanceOp::getMachineOp() {
@@ -294,10 +302,6 @@ MachineOp HWInstanceOp::getMachineOp() {
 }
 
 LogicalResult HWInstanceOp::verify() { return verifyCallerTypes(*this); }
-
-hw::ModulePortInfo HWInstanceOp::getPortList() {
-  return getMachineOp().getPortList();
-}
 
 //===----------------------------------------------------------------------===//
 // StateOp

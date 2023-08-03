@@ -94,11 +94,11 @@ with Context() as ctx, Location.unknown():
   # CHECK: #hw.param.verbatim<"this is verbatim">
   print(pverbatim)
 
-  inner_sym = hw.InnerSymAttr.get(StringAttr.get("some_sym"))
+  hw.inner_sym = hw.InnerSymAttr.get(StringAttr.get("some_sym"))
   # CHECK: #hw<innerSym@some_sym>
-  print(inner_sym)
+  print(hw.inner_sym)
   # CHECK: "some_sym"
-  print(inner_sym.symName)
+  print(hw.inner_sym.symName)
 
   inner_ref = hw.InnerRefAttr.get(StringAttr.get("some_module"),
                                   StringAttr.get("some_instance"))

@@ -34,7 +34,7 @@ struct AddSeqMemPortsPass : public AddSeqMemPortsBase<AddSeqMemPortsPass> {
   LogicalResult processFileAnno(Location loc, StringRef metadataDir,
                                 Annotation anno);
   LogicalResult processAnnos(CircuitOp circuit);
-  void createOutputFile(hw::Instantiable module);
+  void createOutputFile(hw::InstantiableLike module);
   InstanceGraphNode *findDUT();
   void processMemModule(FMemModuleOp mem);
   LogicalResult processModule(FModuleOp module, bool isDUT);
@@ -44,7 +44,7 @@ struct AddSeqMemPortsPass : public AddSeqMemPortsBase<AddSeqMemPortsPass> {
     return moduleNamespaces.try_emplace(module, module).first->second;
   }
 
-  /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
+  /// Obtain an inner reference to an operation, possibly adding an `hw.inner_sym`
   /// to that operation.
   hw::InnerRefAttr getInnerRefTo(Operation *op) {
     return ::getInnerRefTo(op, [&](FModuleOp mod) -> ModuleNamespace & {
@@ -238,7 +238,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
         values.push_back(inst.getResult(firstSubIndex + i));
       }
 
-      // We don't want to collect the instance paths or attach inner_syms to
+      // We don't want to collect the instance paths or attach hw.inner_syms to
       // the instance path if we aren't creating the output file.
       if (outputFile) {
         // We record any instance paths to memories which are rooted at the
@@ -273,7 +273,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
   return success();
 }
 
-void AddSeqMemPortsPass::createOutputFile(hw::Instantiable module) {
+void AddSeqMemPortsPass::createOutputFile(hw::InstantiableLike module) {
   // Insert the verbatim at the bottom of the circuit.
   auto circuit = getOperation();
   auto builder = OpBuilder::atBlockEnd(circuit.getBodyBlock());

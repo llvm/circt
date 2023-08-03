@@ -74,7 +74,7 @@ struct ExtractInstancesPass
         .first->second;
   }
 
-  /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
+  /// Obtain an inner reference to an operation, possibly adding an `hw.inner_sym`
   /// to that operation.
   InnerRefAttr getInnerRefTo(Operation *op) {
     return ::getInnerRefTo(op, [&](FModuleOp mod) -> ModuleNamespace & {
@@ -261,7 +261,7 @@ void ExtractInstancesPass::collectAnnos() {
     AnnotationSet::removeAnnotations(module, [&](Annotation anno) {
       if (anno.isClass(dutAnnoClass)) {
         LLVM_DEBUG(llvm::dbgs()
-                   << "Marking DUT `" << module.getModuleName() << "`\n");
+                   << "Marking DUT `" << module.getName() << "`\n");
         dutRootModules.insert(module);
         dutModules.insert(module);
         if (auto prefix = anno.getMember<StringAttr>("prefix"))
@@ -270,7 +270,7 @@ void ExtractInstancesPass::collectAnnos() {
       }
       if (!isAnnoInteresting(anno))
         return false;
-      LLVM_DEBUG(llvm::dbgs() << "Annotated module `" << module.getModuleName()
+      LLVM_DEBUG(llvm::dbgs() << "Annotated module `" << module.getName()
                               << "`:\n  " << anno.getDict() << "\n");
       annotatedModules[module].push_back(anno);
       return true;
@@ -321,7 +321,7 @@ void ExtractInstancesPass::collectAnnos() {
   LLVM_DEBUG(llvm::dbgs() << "Marking DUT hierarchy\n");
   SmallVector<InstanceGraphNode *> worklist;
   for (Operation *op : dutModules)
-    worklist.push_back(instanceGraph->lookup(cast<hw::Instantiable>(op)));
+    worklist.push_back(instanceGraph->lookup(cast<hw::InstantiableLike>(op)));
   while (!worklist.empty()) {
     auto *module = worklist.pop_back_val();
     dutModuleNames.insert(module->getModule().getNameAttr());
@@ -358,7 +358,7 @@ void ExtractInstancesPass::collectAnnos() {
         if (auto inst = dyn_cast<InstanceOp>(*instRecord->getInstance())) {
           LLVM_DEBUG(llvm::dbgs()
                      << "- Marking `"
-                     << inst->getParentOfType<FModuleLike>().getModuleName()
+                     << inst->getParentOfType<FModuleLike>().getName()
                      << "." << inst.getName() << "`\n");
           extractionWorklist.push_back({inst, info});
         }
@@ -398,7 +398,7 @@ void ExtractInstancesPass::collectAnnos() {
         if (auto inst = dyn_cast<InstanceOp>(*instRecord->getInstance())) {
           LLVM_DEBUG(llvm::dbgs()
                      << "- Marking `"
-                     << inst->getParentOfType<FModuleLike>().getModuleName()
+                     << inst->getParentOfType<FModuleLike>().getName()
                      << "." << inst.getName() << "`\n");
           extractionWorklist.push_back({inst, info});
         }
@@ -478,7 +478,7 @@ void ExtractInstancesPass::extractInstances() {
   // Keep track of where the instance was originally.
   for (auto &[inst, info] : extractionWorklist)
     originalInstanceParents[inst] =
-        inst->getParentOfType<FModuleLike>().getModuleNameAttr();
+        inst->getParentOfType<FModuleLike>().getNameAttr();
 
   while (!extractionWorklist.empty()) {
     InstanceOp inst;
@@ -583,7 +583,7 @@ void ExtractInstancesPass::extractInstances() {
     // the instances of the parent module, and wire the instance ports up to
     // the newly added parent module ports.
     auto *instParentNode =
-        instanceGraph->lookup(cast<hw::Instantiable>(*parent));
+        instanceGraph->lookup(cast<hw::InstantiableLike>(*parent));
     for (auto *instRecord : instParentNode->uses()) {
       auto oldParentInst = cast<InstanceOp>(*instRecord->getInstance());
       auto newParent = oldParentInst->getParentOfType<FModuleLike>();
@@ -600,7 +600,7 @@ void ExtractInstancesPass::extractInstances() {
       auto newInst = inst.cloneAndInsertPorts({});
       newInst->remove();
 
-      // Ensure that the `inner_sym` of the instance is unique within the parent
+      // Ensure that the `hw.inner_sym` of the instance is unique within the parent
       // module we're extracting it to.
       if (auto instSym = getInnerSymName(inst)) {
         auto newName =
@@ -676,7 +676,7 @@ void ExtractInstancesPass::extractInstances() {
         if (nlaIdx > 0) {
           auto innerRef = dyn_cast<InnerRefAttr>(nlaPath[nlaIdx - 1]);
           if (innerRef &&
-              !(innerRef.getModule() == newParent.getModuleNameAttr() &&
+              !(innerRef.getModule() == newParent.getNameAttr() &&
                 innerRef.getName() == getInnerSymName(newParentInst))) {
             LLVM_DEBUG(llvm::dbgs()
                        << "    - Ignored since NLA parent " << innerRef
@@ -702,7 +702,7 @@ void ExtractInstancesPass::extractInstances() {
           assert(isa<InnerRefAttr>(nlaPath[0]) &&
                  "head of hierpath must be an InnerRefAttr");
           nlaPath[0] =
-              InnerRefAttr::get(newParent.getModuleNameAttr(),
+              InnerRefAttr::get(newParent.getNameAttr(),
                                 cast<InnerRefAttr>(nlaPath[0]).getName());
 
           if (instParentNode->hasOneUse()) {

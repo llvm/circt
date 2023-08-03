@@ -3667,7 +3667,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceInstanceOp op) {
 /// assign the module outputs to intermediate wires.
 LogicalResult StmtEmitter::visitStmt(OutputOp op) {
   SmallPtrSet<Operation *, 8> ops;
-  auto parent = op->getParentOfType<PortList>();
+  auto parent = op->getParentOfType<InstantiableLike>();
 
   size_t operandIndex = 0;
   auto ports = parent.getPortList();
@@ -4571,7 +4571,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   ops.insert(op);
 
   // Use the specified name or the symbol name as appropriate.
-  auto *moduleOp = op.getReferencedModule(&state.symbolCache);
+  auto moduleOp = op.getReferencedModule(&state.symbolCache);
   assert(moduleOp && "Invalid IR");
   ps << PPExtString(getVerilogModuleName(moduleOp));
 
@@ -4615,8 +4615,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
   ps << PP::nbsp << PPExtString(getSymOpName(op)) << " (";
 
-  auto instPortInfo = op.getPortList();
-  auto modPortInfo = cast<PortList>(op.getReferencedModule()).getPortList();
+  auto modPortInfo = moduleOp.getPortList();
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
   for (auto &elt : modPortInfo) {
@@ -4632,11 +4631,12 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   bool isFirst = true; // True until we print a port.
   bool isZeroWidth = false;
 
-  for (size_t portNum = 0, portEnd = instPortInfo.size(); portNum < portEnd;
+  for (size_t portNum = 0, portEnd = modPortInfo.size(); portNum < portEnd;
        ++portNum) {
     auto &modPort = modPortInfo.at(portNum);
     isZeroWidth = isZeroBitType(modPort.type);
-    Value portVal = op.getValue(portNum);
+    Value portVal = modPort.isOutput() ? op.getOutputValue(modPortInfo.outputNumForPort(portNum))
+    : op.getInputValue(modPortInfo.inputNumForPort(portNum));
 
     // Decide if we should print a comma.  We can't do this if we're the first
     // port or if all the subsequent ports are zero width.
@@ -4644,7 +4644,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       bool shouldPrintComma = true;
       if (isZeroWidth) {
         shouldPrintComma = false;
-        for (size_t i = portNum + 1, e = instPortInfo.size(); i != e; ++i)
+        for (size_t i = portNum + 1, e = modPortInfo.size(); i != e; ++i)
           if (!isZeroBitType(modPortInfo.at(i).type)) {
             shouldPrintComma = true;
             break;
@@ -5182,7 +5182,7 @@ void ModuleEmitter::emitBind(BindOp op) {
   bool isFirst = true; // True until we print a port.
   ps.scopedBox(PP::bbox2, [&]() {
     auto parentPortInfo = parentMod.getPortList();
-    auto childPortInfo = cast<PortList>(childMod).getPortList();
+    auto childPortInfo = cast<InstantiableLike>(childMod).getPortList();
 
     // Get the max port name length so we can align the '('.
     size_t maxNameLength = 0;
@@ -5195,7 +5195,8 @@ void ModuleEmitter::emitBind(BindOp op) {
     // Emit the argument and result ports.
     for (auto [idx, elt] : llvm::enumerate(childPortInfo)) {
       // Figure out which value we are emitting.
-      Value portVal = inst.getValue(idx);
+      Value portVal = elt.isOutput() ? inst.getOutputValue(childPortInfo.outputNumForPort(idx)) :
+      inst.getInputValue(childPortInfo.inputNumForPort((idx)));
       bool isZeroWidth = isZeroBitType(elt.type);
 
       // Decide if we should print a comma.  We can't do this if we're the
@@ -5501,7 +5502,7 @@ void ModuleEmitter::emitPortList(Operation *module,
 
           // Emit the symbol.
           if (state.options.printDebugInfo && port.sym && !port.sym.empty())
-            ps << " /* inner_sym: "
+            ps << " /* hw.inner_sym: "
                << PPExtString(port.sym.getSymName().getValue()) << " */";
 
           // Emit the comma if this is not the last real port.

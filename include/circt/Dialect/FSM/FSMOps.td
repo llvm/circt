@@ -80,7 +80,14 @@ def MachineOp : FSMOp<"machine", [
     //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
+    circt::hw::ModuleType getHWModuleType();
+    size_t getNumPorts();
+
+    //===------------------------------------------------------------------===//
+    // Instantiable Methods
+    //===------------------------------------------------------------------===//
+    circt::hw::ModulePortInfo getPortList();
+    circt::hw::InnerSymAttr getPortSymbolAttr(size_t portIndex);
   }];
 
   let extraClassDefinition = [{
@@ -119,10 +126,6 @@ def InstanceOp : FSMOp<"instance", [Symbol, HasCustomSSAName]> {
     /// Lookup the machine for the symbol. This returns null on invalid IR.
     MachineOp getMachineOp();
 
-    //===------------------------------------------------------------------===//
-    // PortList Methods
-    //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
   }];
 
   let hasVerifier = 1;
@@ -187,7 +190,8 @@ def HWInstanceOp : FSMOp<"hw_instance", [
     //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
+    circt::hw::ModuleType getHWModuleType();
+    size_t getNumPorts();
   }];
 
   let hasVerifier = 1;

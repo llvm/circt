@@ -96,7 +96,7 @@ public:
   InstanceGraphNode() : module(nullptr) {}
 
   /// Get the module that this node is tracking.
-  Instantiable getModule() const { return module; }
+  InstantiableLike getModule() const { return module; }
 
   /// Iterate the instance records in this module.
   using iterator = detail::AddressIterator<InstanceList::iterator>;
@@ -155,7 +155,7 @@ private:
   void recordUse(InstanceRecord *record);
 
   /// The module.
-  Instantiable module;
+  InstantiableLike module;
 
   /// List of instance operations in this module.  This member owns the
   /// InstanceRecords, which may be pointed to by other InstanceGraphNode's use
@@ -193,15 +193,15 @@ public:
   InstanceGraphNode *lookup(StringAttr name);
 
   /// Lookup an InstanceGraphNode for a module.
-  InstanceGraphNode *operator[](Instantiable op) { return lookup(op); }
+  InstanceGraphNode *operator[](InstantiableLike op) { return lookup(op); }
 
   /// Look up the referenced module from an InstanceOp. This will use a
   /// hashtable lookup to find the module, where
   /// InstanceOp.getReferencedModule() will be a linear search through the IR.
-  Instantiable getReferencedModule(HWInstanceLike op);
+  InstantiableLike getReferencedModule(HWInstanceLike op);
 
   /// Check if child is instantiated by a parent.
-  bool isAncestor(Instantiable child, Instantiable parent);
+  bool isAncestor(InstantiableLike child, InstantiableLike parent);
 
   /// Get the node corresponding to the top-level module of a circuit.
   virtual InstanceGraphNode *getTopLevelNode() = 0;
@@ -232,7 +232,7 @@ public:
   // on a CircuitOp or a ModuleOp.
 
   /// Add a newly created module to the instance graph.
-  virtual InstanceGraphNode *addModule(Instantiable module);
+  virtual InstanceGraphNode *addModule(InstantiableLike module);
 
   /// Remove this module from the instance graph. This will also remove all
   /// InstanceRecords in this module.  All instances of this module must have
@@ -291,7 +291,7 @@ struct InstancePathCache {
 
   explicit InstancePathCache(InstanceGraphBase &instanceGraph)
       : instanceGraph(instanceGraph) {}
-  ArrayRef<InstancePath> getAbsolutePaths(Instantiable op);
+  ArrayRef<InstancePath> getAbsolutePaths(InstantiableLike op);
 
   /// Replace an InstanceOp. This is required to keep the cache updated.
   void replaceInstance(HWInstanceLike oldOp, HWInstanceLike newOp);

@@ -122,7 +122,7 @@ public:
 
   /// Record a new FModuleLike operation. This updates the Module name to Module
   /// operation map.
-  void addModule(FModuleLike mod) { symToOp[mod.getModuleNameAttr()] = mod; }
+  void addModule(FModuleLike mod) { symToOp[mod.getNameAttr()] = mod; }
 
   /// Stop tracking a module. Remove the module from two internal records,
   /// 1. Module name to Module op map.
@@ -157,7 +157,7 @@ public:
   /// Replace the module `oldModName` with `newModName` in the namepath of any
   /// NLA. Since the module is being updated, the symbols inside the module
   /// should also be renamed. Use the rename map `innerSymRenameMap` to update
-  /// the inner_sym names in the namepath.
+  /// the hw.inner_sym names in the namepath.
   void renameModuleAndInnerRef(
       StringAttr newModName, StringAttr oldModName,
       const DenseMap<StringAttr, StringAttr> &innerSymRenameMap);

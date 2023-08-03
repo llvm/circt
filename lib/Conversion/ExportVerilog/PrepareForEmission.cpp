@@ -72,8 +72,7 @@ static void spillWiresForInstanceInputs(InstanceOp op) {
   auto namePrefixSize = nameTmp.size();
 
   size_t nextOpNo = 0;
-  auto ports = op.getPortList();
-  for (auto &port : ports.getInputs()) {
+  for (auto port : op.getArgNames()) {
     auto src = op.getOperand(nextOpNo);
     ++nextOpNo;
 
@@ -81,8 +80,8 @@ static void spillWiresForInstanceInputs(InstanceOp op) {
       continue;
 
     nameTmp.resize(namePrefixSize);
-    if (port.name)
-      nameTmp += port.name.getValue().str();
+    if (port)
+      nameTmp += cast<StringAttr>(port).getValue().str();
     else
       nameTmp += std::to_string(nextOpNo - 1);
 
@@ -104,8 +103,7 @@ static void lowerInstanceResults(InstanceOp op) {
   auto namePrefixSize = nameTmp.size();
 
   size_t nextResultNo = 0;
-  auto ports = op.getPortList();
-  for (auto &port : ports.getOutputs()) {
+  for (auto port : op.getResultNames()) {
     auto result = op.getResult(nextResultNo);
     ++nextResultNo;
 
@@ -128,8 +126,8 @@ static void lowerInstanceResults(InstanceOp op) {
     }
 
     nameTmp.resize(namePrefixSize);
-    if (port.name)
-      nameTmp += port.name.getValue().str();
+    if (port)
+      nameTmp += cast<StringAttr>(port).getValue().str();
     else
       nameTmp += std::to_string(nextResultNo - 1);
     Value newWire = builder.create<sv::WireOp>(result.getType(), nameTmp);

@@ -99,7 +99,7 @@ class Instance:
   def appid(self) -> Optional[AppID]:
     """Get the appid assigned to this instance or None if one was not assigned
     during generation."""
-    static_op = self._op_cache.get_inner_sym_ops_in_module(
+    static_op = self._op_cache.get_hw.inner_sym_ops_in_module(
         self.inside_of)[self.symbol]
     if AppID.AttributeName in static_op.attributes:
       return AppID(static_op.attributes[AppID.AttributeName])
@@ -138,24 +138,24 @@ class ModuleInstance(Instance):
     hierarchy and corresponds to the given static operation. The static
     operation need not be a module instantiation."""
 
-    inner_sym = static_op.attributes["inner_sym"]
+    hw.inner_sym = static_op.attributes["hw.inner_sym"]
     if isinstance(static_op, msft.InstanceOp):
       tgt_mod = self._op_cache.get_symbol_pyproxy(static_op.moduleName)
       return ModuleInstance(self,
-                            instance_sym=inner_sym,
+                            instance_sym=hw.inner_sym,
                             inside_of=self.tgt_mod,
                             tgt_mod=tgt_mod)
     if isinstance(static_op, seq.CompRegOp):
-      return RegInstance(self, self.tgt_mod, inner_sym, static_op)
+      return RegInstance(self, self.tgt_mod, hw.inner_sym, static_op)
 
-    return Instance(self, self.tgt_mod, inner_sym)
+    return Instance(self, self.tgt_mod, hw.inner_sym)
 
   def _children(self) -> Dict[hw.InnerSymAttr, Instance]:
     """Return a dict of MLIR StringAttr this instances' children. Cache said
     list."""
     if self._child_cache is not None:
       return self._child_cache
-    symbols_in_mod = self._op_cache.get_inner_sym_ops_in_module(self.tgt_mod)
+    symbols_in_mod = self._op_cache.get_hw.inner_sym_ops_in_module(self.tgt_mod)
     children = {
         sym: self._create_instance(op) for (sym, op) in symbols_in_mod.items()
     }
@@ -223,7 +223,7 @@ class _AppIDInstance:
     self.appid_name = appid_name
 
   def _search(self) -> Iterator[AppID, Instance]:
-    inner_sym_ops = self.owner_instance._op_cache.get_inner_sym_ops_in_module(
+    hw.inner_sym_ops = self.owner_instance._op_cache.get_hw.inner_sym_ops_in_module(
         self.owner_instance.tgt_mod)
     for child in self.owner_instance._children().values():
       # "Look through" instance hierarchy levels if the child has an AppID
@@ -236,7 +236,7 @@ class _AppIDInstance:
           yield c
 
       # Check if the AppID is local, then return the instance if it is.
-      instance_op = inner_sym_ops[child.symbol]
+      instance_op = hw.inner_sym_ops[child.symbol]
       if AppID.AttributeName in instance_op.attributes:
         try:
           # This is the only way to test that a certain attribute is a certain

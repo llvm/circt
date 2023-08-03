@@ -21,16 +21,16 @@ instance_like_impl::getHWModuleArgAndResultNames(Operation *module) {
           module->getAttrOfType<ArrayAttr>("resultNames")};
 }
 
-Operation *
+InstantiableLike
 instance_like_impl::getReferencedModule(const HWSymbolCache *cache,
                                         Operation *instanceOp,
                                         mlir::FlatSymbolRefAttr moduleName) {
   if (cache)
     if (auto *result = cache->getDefinition(moduleName))
-      return result;
+      return cast<InstantiableLike>(result);
 
   auto topLevelModuleOp = instanceOp->getParentOfType<ModuleOp>();
-  return topLevelModuleOp.lookupSymbol(moduleName.getValue());
+  return topLevelModuleOp.lookupSymbol<InstantiableLike>(moduleName.getValue());
 }
 
 LogicalResult instance_like_impl::verifyReferencedModule(

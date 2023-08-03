@@ -22,6 +22,7 @@ namespace circt {
 namespace hw {
 // Forward declarations.
 class HWSymbolCache;
+class InstantiableLike;
 
 namespace instance_like_impl {
 
@@ -35,7 +36,7 @@ using EmitErrorFn =
 std::pair<ArrayAttr, ArrayAttr> getHWModuleArgAndResultNames(Operation *module);
 
 /// Return a pointer to the referenced module operation.
-Operation *getReferencedModule(const HWSymbolCache *cache,
+InstantiableLike getReferencedModule(const HWSymbolCache *cache,
                                Operation *instanceOp,
                                mlir::FlatSymbolRefAttr moduleName);
 

@@ -26,7 +26,7 @@ struct ModuleNamespace : Namespace {
   ModuleNamespace(hw::HWModuleOp module) { add(module); }
 
   /// Populate the namespace from a module-like operation. This namespace will
-  /// be composed of the `inner_sym`s of the module's ports and declarations.
+  /// be composed of the `hw.inner_sym`s of the module's ports and declarations.
   void add(hw::HWModuleOp module) {
     hw::InnerSymbolTable::walkSymbols(
         module, [&](StringAttr name, const InnerSymTarget &target) {

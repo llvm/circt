@@ -603,6 +603,8 @@ LogicalResult ModuleType::verify(function_ref<InFlightDiagnostic()> emitError,
   return success();
 }
 
+size_t ModuleType::getNumPorts() { return getPorts().size(); }
+
 size_t ModuleType::getNumInputs() { return getInputTypes().size(); }
 
 size_t ModuleType::getNumOutputs() { return getOutputTypes().size(); }

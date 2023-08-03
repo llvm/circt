@@ -315,7 +315,7 @@ static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
 }
 
 // Check if the module has already been bound.
-static bool isBound(hw::Instantiable op, hw::InstanceGraph &instanceGraph) {
+static bool isBound(hw::InstantiableLike op, hw::InstanceGraph &instanceGraph) {
   auto *node = instanceGraph.lookup(op);
   return llvm::any_of(node->uses(), [](hw::InstanceRecord *a) {
     auto inst = a->getInstance();

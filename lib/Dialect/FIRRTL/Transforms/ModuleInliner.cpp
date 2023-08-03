@@ -330,8 +330,8 @@ public:
 
   /// Return true if this NLA has a root that originates from a specific module.
   bool hasRoot(FModuleLike mod) {
-    return (isDead() && nla.root() == mod.getModuleNameAttr()) ||
-           rootSet.contains(mod.getModuleNameAttr());
+    return (isDead() && nla.root() == mod.getNameAttr()) ||
+           rootSet.contains(mod.getNameAttr());
   }
 
   /// Return true if either this NLA is rooted at modName, or is retoped to it.
@@ -657,7 +657,7 @@ bool Inliner::rename(StringRef prefix, Operation *op,
     auto newSym = moduleNamespace.newName(sym.getValue());
     if (newSym != sym.getValue()) {
       auto newSymAttr = StringAttr::get(op->getContext(), newSym);
-      op->setAttr("inner_sym", hw::InnerSymAttr::get(newSymAttr));
+      op->setAttr("hw.inner_sym", hw::InnerSymAttr::get(newSymAttr));
       for (Annotation anno : AnnotationSet(op)) {
         auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
         if (!sym)
@@ -670,7 +670,7 @@ bool Inliner::rename(StringRef prefix, Operation *op,
         auto &mnla = nlaMap[sym.getAttr()];
         if (!doesNLAMatchCurrentPath(mnla.getNLA()))
           continue;
-        mnla.setInnerSym(moduleNamespace.module.getModuleNameAttr(),
+        mnla.setInnerSym(moduleNamespace.module.getNameAttr(),
                          newSymAttr);
       }
       // Indicate symbol was changed.
@@ -741,8 +741,8 @@ bool Inliner::renameInstance(
         continue;
       auto &mnla = nlaMap[nla];
       assert(newInnerRef.getModule() ==
-             moduleNamespace.module.getModuleNameAttr());
-      mnla.setInnerSym(moduleNamespace.module.getModuleNameAttr(), newSymAttr);
+             moduleNamespace.module.getNameAttr());
+      mnla.setInnerSym(moduleNamespace.module.getNameAttr(), newSymAttr);
     }
   }
 
@@ -798,7 +798,7 @@ void Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b, IRMapping &mapper,
           continue;
         // Update any NLAs with the new symbol name.
         if (oldSym != newSym)
-          mnla.setInnerSym(moduleNamespace.module.getModuleNameAttr(), newSym);
+          mnla.setInnerSym(moduleNamespace.module.getNameAttr(), newSym);
         // If all paths of the NLA have been inlined, make it local.
         if (mnla.isLocal() || localSymbols.count(sym.getAttr()))
           anno.removeMember("circt.nonlocal");
@@ -1346,7 +1346,7 @@ void Inliner::run() {
            circuit.getBodyBlock()->getOps<FModuleLike>())) {
     if (liveModules.count(mod))
       continue;
-    for (auto nla : rootMap[mod.getModuleNameAttr()])
+    for (auto nla : rootMap[mod.getNameAttr()])
       nlaMap[nla].markDead();
     mod.erase();
   }

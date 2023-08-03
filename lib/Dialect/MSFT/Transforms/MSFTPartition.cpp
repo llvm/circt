@@ -266,7 +266,7 @@ static StringRef getOpName(Operation *op) {
   StringAttr name;
   if ((name = op->getAttrOfType<StringAttr>("name")) && name.size())
     return name.getValue();
-  if (auto innerSym = op->getAttrOfType<hw::InnerSymAttr>("inner_sym"))
+  if (auto innerSym = op->getAttrOfType<hw::InnerSymAttr>("hw.inner_sym"))
     return innerSym.getSymName().getValue();
   return op->getName().getStringRef();
 }
@@ -277,8 +277,8 @@ static void setEntityName(Operation *op, const Twine &name) {
   StringAttr nameAttr = StringAttr::get(op->getContext(), name);
   if (op->hasAttrOfType<StringAttr>("name"))
     op->setAttr("name", nameAttr);
-  if (op->hasAttrOfType<hw::InnerSymAttr>("inner_sym"))
-    op->setAttr("inner_sym", hw::InnerSymAttr::get(nameAttr));
+  if (op->hasAttrOfType<hw::InnerSymAttr>("hw.inner_sym"))
+    op->setAttr("hw.inner_sym", hw::InnerSymAttr::get(nameAttr));
 }
 
 /// Heuristics to get the output name.
@@ -337,7 +337,7 @@ void PartitionPass::bubbleUpGlobalRefs(
   if (!globalRefs)
     return;
 
-  auto innerSym = op->getAttrOfType<hw::InnerSymAttr>("inner_sym");
+  auto innerSym = op->getAttrOfType<hw::InnerSymAttr>("hw.inner_sym");
 
   for (auto globalRef : globalRefs.getAsRange<hw::GlobalRefAttr>()) {
     // Resolve the GlobalRefOp and get its path.
@@ -417,7 +417,7 @@ void PartitionPass::pushDownGlobalRefs(
     assert(partModName);
 
     // Find the index of the node in the path that points to the innerSym.
-    auto innerSym = op->getAttrOfType<hw::InnerSymAttr>("inner_sym");
+    auto innerSym = op->getAttrOfType<hw::InnerSymAttr>("hw.inner_sym");
     size_t opIndex = 0;
     for (; opIndex < oldPath.size(); ++opIndex) {
       auto oldNode = oldPath[opIndex].cast<hw::InnerRefAttr>();
@@ -588,7 +588,7 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
       Operation *newOp = b.insert(op.clone(map));
       newOps.push_back(newOp);
       setEntityName(newOp, oldInst.getInstanceName() + "." + ::getOpName(&op));
-      auto *oldInstMod = oldInst.getReferencedModule();
+      auto oldInstMod = oldInst.getReferencedModule();
       assert(oldInstMod);
       auto oldModName = oldInstMod->getAttrOfType<StringAttr>("sym_name");
       bubbleUpGlobalRefs(newOp, oldModName, oldInst.getInstanceNameAttr(),
@@ -749,7 +749,7 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
         oper.set(partInst.getResult(outputNum));
 
   // Push down any global refs to include the partition. Update the
-  // partition to include the new set of global refs, and set its inner_sym.
+  // partition to include the new set of global refs, and set its hw.inner_sym.
   llvm::SetVector<Attribute> newGlobalRefs;
   for (Operation &op : *partBlock)
     pushDownGlobalRefs(&op, partOp, newGlobalRefs);

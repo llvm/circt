@@ -114,7 +114,7 @@ static FlatSymbolRefAttr buildNLA(const AnnoPathValue &target,
   }
 
   insts.push_back(
-      FlatSymbolRefAttr::get(target.ref.getModule().getModuleNameAttr()));
+      FlatSymbolRefAttr::get(target.ref.getModule().getNameAttr()));
 
   auto instAttr = ArrayAttr::get(state.circuit.getContext(), insts);
 
@@ -835,9 +835,9 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
 
     // Otherwise, get instance paths for source/sink, and compute LCA.
     auto sourcePaths = state.instancePathCache.getAbsolutePaths(
-        cast<hw::Instantiable>(*sourceModule));
+        cast<hw::InstantiableLike>(*sourceModule));
     auto sinkPaths = state.instancePathCache.getAbsolutePaths(
-        cast<hw::Instantiable>(*sinkModule));
+        cast<hw::InstantiableLike>(*sinkModule));
 
     if (sourcePaths.size() != 1 || sinkPaths.size() != 1) {
       auto diag =

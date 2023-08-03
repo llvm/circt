@@ -424,7 +424,7 @@ struct AnnoTarget {
   /// Get the parent module of the target.
   FModuleLike getModule() const;
 
-  /// Get the inner_sym attribute of an op.  If there is no attached inner_sym,
+  /// Get the hw.inner_sym attribute of an op.  If there is no attached hw.inner_sym,
   /// then one will be created and attached to the op.
   StringAttr getInnerSym(ModuleNamespace &moduleNamespace) const;
 

@@ -95,7 +95,7 @@ struct ObjectModelIR {
     auto object = builderOM.create<om::ObjectOp>(retimeModulesSchemaClass,
                                                  ValueRange({modEntry}));
     builderOM.create<om::ClassFieldOp>(
-        builderOM.getStringAttr("mod_" + module.getModuleName()), object);
+        builderOM.getStringAttr("mod_" + module.getName()), object);
   }
 
   void addBlackBoxModulesSchema() {
@@ -472,7 +472,7 @@ CreateSiFiveMetadataPass::emitRetimeModulesMetadata(ObjectModelIR &omir) {
       // We use symbol substitution to make sure we output the correct thing
       // when the module goes through renaming.
       j.value(("{{" + Twine(index++) + "}}").str());
-      symbols.push_back(SymbolRefAttr::get(module.getModuleNameAttr()));
+      symbols.push_back(SymbolRefAttr::get(module.getNameAttr()));
       omir.addRetimeModule(module);
     }
   });
@@ -618,7 +618,7 @@ void CreateSiFiveMetadataPass::runOnOperation() {
   if (it != body->end()) {
     dutMod = dyn_cast<FModuleOp>(*it);
     auto &instanceGraph = getAnalysis<InstanceGraph>();
-    auto *node = instanceGraph.lookup(cast<hw::Instantiable>(*it));
+    auto *node = instanceGraph.lookup(cast<hw::InstantiableLike>(*it));
     llvm::for_each(llvm::depth_first(node), [&](hw::InstanceGraphNode *node) {
       dutModuleSet.insert(node->getModule());
     });

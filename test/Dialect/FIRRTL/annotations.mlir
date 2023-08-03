@@ -105,8 +105,8 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
 
 // Test result annotations of InstanceOp.
 //
-// Must add inner_sym, if any subfield of a bundle type has nonlocal anchor.
-// Otherwise, the nla will be illegal, without any inner_sym.
+// Must add hw.inner_sym, if any subfield of a bundle type has nonlocal anchor.
+// Otherwise, the nla will be illegal, without any hw.inner_sym.
 // Test on port and wire.
 //
 // CHECK-LABEL: firrtl.circuit "Foo"

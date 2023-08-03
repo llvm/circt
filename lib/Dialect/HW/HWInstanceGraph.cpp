@@ -18,7 +18,7 @@ InstanceGraph::InstanceGraph(Operation *operation)
       entry.addInstance({}, &node);
 }
 
-InstanceGraphNode *InstanceGraph::addModule(Instantiable module) {
+InstanceGraphNode *InstanceGraph::addModule(InstantiableLike module) {
   auto *node = InstanceGraphBase::addModule(module);
   if (module.isPublic())
     entry.addInstance({}, node);

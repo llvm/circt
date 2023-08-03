@@ -16,32 +16,35 @@
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/OpBase.td"
 
-def PortList : OpInterface<"PortList", []> {
-  let cppNamespace = "circt::hw";
-  let description = [{
-    Operations which produce a unified port list representation.
-    Users should override the port-indexed accessors.  No summary accessor is
-    provided by this interface as it is not assume that all ports have their
-    various constituent parts consecutive.  getPortList is the only summary 
-    accessor.  All per-port accessors are defaulted in terms of this, providing
-    simple use by dialects, but performance would likely be much improved by
-    implementing the full interface.
-  }];
-  let methods = [
-    InterfaceMethod<"Get port list",
-    "::circt::hw::ModulePortInfo", "getPortList", (ins)>
-  ];
-}
 
-def Instantiable : OpInterface<"Instantiable", [Symbol, PortList]> {
+def InstantiableLike : OpInterface<"InstantiableLike", [Symbol]> {
   let cppNamespace = "circt::hw";
   let description = [{
     Operations which can be instantiated.  These provide a port list and a 
-    symbol.
+    symbol.  Port lists on instantiable things include symbols, attributes, and
+    locations.
   }];
+
+  let methods = [
+    InterfaceMethod<"Get ModuleType for names, directions, order, and types",
+    "::circt::hw::ModuleType", "getHWModuleType", (ins)>,
+
+    InterfaceMethod<"Get number of ports",
+    "size_t", "getNumPorts", (ins), [{}],
+    " return $_op.getHWModuleType().getNumPorts(); "
+    >,
+
+    InterfaceMethod<"Get port list",
+    "::circt::hw::ModulePortInfo", "getPortList", (ins)>,
+
+    InterfaceMethod<"Get the port symbol",
+    "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex),
+    "", " return $_op.getPortList().at(portIndex).sym; ">,
+
+  ];
 }
 
-def HWModuleLike : OpInterface<"HWModuleLike", [Symbol, PortList]> {
+def HWModuleLike : OpInterface<"HWModuleLike", [InstantiableLike]> {
   let cppNamespace = "circt::hw";
   let description = "Provide common module information.";
 
@@ -56,17 +59,6 @@ def HWModuleLike : OpInterface<"HWModuleLike", [Symbol, PortList]> {
     "::mlir::StringAttr", "getModuleNameAttr", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getNameAttr(); }]>,
-
-    InterfaceMethod<"Get the number of ports",
-    "size_t", "getNumPorts">,
-
-    InterfaceMethod<"Get a port symbol attribute",
-    "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex)>,
-
-    InterfaceMethod<"Get the module type",
-    "::circt::hw::ModuleType", "getHWModuleType", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return ::circt::hw::detail::fnToMod($_op, getInputNames(), getOutputNames()); }]>,
 
     InterfaceMethod<"Return the names of the inputs to this module",
     "mlir::ArrayAttr", "getInputNames", (ins),
@@ -201,7 +193,7 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike", [HWModuleLike]> {
 }
 
 
-def HWInstanceLike : OpInterface<"HWInstanceLike", [PortList]> {
+def HWInstanceLike : OpInterface<"HWInstanceLike", []> {
   let cppNamespace = "circt::hw";
   let description = "Provide common  module information.";
 
@@ -223,7 +215,7 @@ def HWInstanceLike : OpInterface<"HWInstanceLike", [PortList]> {
     /*defaultImplementation=*/[{ return $_op.getModuleNameAttr().getAttr(); }]>,
 
     InterfaceMethod<"Get the referenced module",
-    "::mlir::Operation *", "getReferencedModule", (ins)>,
+    "::circt::hw::InstantiableLike", "getReferencedModule", (ins)>,
   ];
 }
 

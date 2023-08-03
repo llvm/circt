@@ -54,10 +54,10 @@ InstanceGraphNode *InstanceGraphBase::getOrAddNode(StringAttr name) {
 InstanceGraphBase::InstanceGraphBase(Operation *parent) : parent(parent) {
   assert(parent->hasTrait<mlir::OpTrait::SingleBlock>() &&
          "top-level operation must have a single block");
-  SmallVector<std::pair<Instantiable, SmallVector<HWInstanceLike>>>
+  SmallVector<std::pair<InstantiableLike, SmallVector<HWInstanceLike>>>
       moduleToInstances;
   // First accumulate modules inside the parent op.
-  for (auto module : parent->getRegion(0).front().getOps<Instantiable>())
+  for (auto module : parent->getRegion(0).front().getOps<InstantiableLike>())
     moduleToInstances.push_back({module, {}});
 
   // Populate instances in the module parallelly.
@@ -84,7 +84,7 @@ InstanceGraphBase::InstanceGraphBase(Operation *parent) : parent(parent) {
   }
 }
 
-InstanceGraphNode *InstanceGraphBase::addModule(Instantiable module) {
+InstanceGraphNode *InstanceGraphBase::addModule(InstantiableLike module) {
   assert(!nodeMap.count(module.getNameAttr()) && "module already added");
   auto *node = new InstanceGraphNode();
   node->module = module;
@@ -110,7 +110,7 @@ InstanceGraphNode *InstanceGraphBase::lookup(StringAttr name) {
   return it->second;
 }
 
-Instantiable InstanceGraphBase::getReferencedModule(HWInstanceLike op) {
+InstantiableLike InstanceGraphBase::getReferencedModule(HWInstanceLike op) {
   return lookup(op.getReferencedModuleNameAttr())->getModule();
 }
 
@@ -133,7 +133,7 @@ void InstanceGraphBase::replaceInstance(HWInstanceLike inst,
   (*it)->instance = newInst;
 }
 
-bool InstanceGraphBase::isAncestor(Instantiable child, Instantiable parent) {
+bool InstanceGraphBase::isAncestor(InstantiableLike child, InstantiableLike parent) {
   DenseSet<InstanceGraphNode *> seen;
   SmallVector<InstanceGraphNode *> worklist;
   auto *cn = lookup(child);
@@ -218,7 +218,7 @@ InstanceGraphBase::getInferredTopLevelNodes() {
   return {inferredTopLevelNodes};
 }
 
-ArrayRef<InstancePath> InstancePathCache::getAbsolutePaths(Instantiable op) {
+ArrayRef<InstancePath> InstancePathCache::getAbsolutePaths(InstantiableLike op) {
   InstanceGraphNode *node = instanceGraph[op];
 
   // If we have reached the circuit root, we're done.

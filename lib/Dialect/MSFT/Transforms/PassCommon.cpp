@@ -46,7 +46,7 @@ StringRef circt::msft::getValueName(Value v, const SymbolCache &syms,
   }
   if (auto blockArg = v.dyn_cast<BlockArgument>()) {
     auto portInfo =
-        cast<hw::PortList>(blockArg.getOwner()->getParent()->getParentOp())
+        cast<hw::InstantiableLike>(blockArg.getOwner()->getParent()->getParentOp())
             .getPortList();
     return portInfo.atInput(blockArg.getArgNumber()).getName();
   }
@@ -76,7 +76,7 @@ LogicalResult PassCommon::verifyInstances(mlir::ModuleOp mod) {
     if (!isAnyModule(modOp))
       return WalkResult::interrupt();
 
-    hw::ModulePortInfo ports = cast<hw::PortList>(modOp).getPortList();
+    hw::ModulePortInfo ports = cast<hw::InstantiableLike>(modOp).getPortList();
     return succeeded(inst.verifySignatureMatch(ports))
                ? WalkResult::advance()
                : WalkResult::interrupt();

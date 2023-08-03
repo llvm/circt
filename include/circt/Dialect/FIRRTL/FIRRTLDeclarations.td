@@ -132,7 +132,8 @@ def InstanceOp : HardwareDeclOp<"instance", [
     //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
+    circt::hw::ModuleType getHWModuleType();
+    size_t getNumPorts();
   }];
 }
 

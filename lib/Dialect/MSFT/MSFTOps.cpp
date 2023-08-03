@@ -53,7 +53,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   SmallVector<Type, 4> argTypes, resultTypes;
   SmallVector<Attribute> argAttrs, resultAttrs;
   SmallVector<Attribute> argLocs, resultLocs;
-  auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
+  auto exportPortIdent = StringAttr::get(builder.getContext(), hw::InnerSymbolTable::getInnerSymbolAttrName());
 
   for (auto elt : ports.getInputs()) {
     if (elt.dir == hw::ModulePort::Direction::InOut &&
@@ -394,19 +394,15 @@ StringAttr InstanceOp::getInstanceNameAttr() { return getInnerNameAttr(); }
 
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
-Operation *InstanceOp::getReferencedModule() {
+hw::InstantiableLike InstanceOp::getReferencedModule() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
   if (!topLevelModuleOp)
     return nullptr;
-  return topLevelModuleOp.lookupSymbol(getModuleName());
-}
-
-hw::ModulePortInfo InstanceOp::getPortList() {
-  return cast<hw::PortList>(getReferencedModule()).getPortList();
+  return cast<hw::InstantiableLike>(topLevelModuleOp.lookupSymbol(getModuleName()));
 }
 
 StringAttr InstanceOp::getResultName(size_t idx) {
-  if (auto *refMod = getReferencedModule())
+  if (auto refMod = getReferencedModule())
     return hw::getModuleResultNameAttr(refMod, idx);
   return StringAttr();
 }
@@ -499,6 +495,14 @@ hw::ModulePortInfo MSFTModuleOp::getPortList() {
                        resultLocs[i].cast<LocationAttr>()});
   }
   return hw::ModulePortInfo(inputs, outputs);
+}
+
+hw::ModuleType MSFTModuleOp::getHWModuleType() {
+  auto ports = getPortList();
+  SmallVector<hw::ModulePort> modPorts; 
+  for (auto& p : ports)
+    modPorts.push_back(p);
+  return hw::ModuleType::get(getContext(), modPorts);
 }
 
 SmallVector<BlockArgument>
@@ -959,6 +963,14 @@ hw::ModulePortInfo MSFTModuleExternOp::getPortList() {
   }
 
   return hw::ModulePortInfo(inputs, outputs);
+}
+
+hw::ModuleType MSFTModuleExternOp::getHWModuleType() {
+  auto ports = getPortList();
+  SmallVector<hw::ModulePort> modPorts; 
+  for (auto& p : ports)
+    modPorts.push_back(p);
+  return hw::ModuleType::get(getContext(), modPorts);
 }
 
 size_t MSFTModuleExternOp::getNumPorts() {

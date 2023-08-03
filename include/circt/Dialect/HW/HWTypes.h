@@ -28,6 +28,7 @@ struct ModulePort {
   mlir::StringAttr name;
   mlir::Type type;
   Direction dir;
+  bool isOutput() const { return dir == Output; }
 };
 
 class HWSymbolCache;

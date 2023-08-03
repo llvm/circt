@@ -222,12 +222,12 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, StringRef oldName,
       }
 
       // Record that we must prefix the target module with the current prefix.
-      recordPrefix(prefixMap, target.getModuleName(), prefix);
+      recordPrefix(prefixMap, target.getName(), prefix);
 
       // Fixup this instance op to use the prefixed module name.  Note that the
       // referenced FModuleOp will be renamed later.
       auto newTarget = StringAttr::get(context, prefix + getPrefix(target) +
-                                                    target.getModuleName());
+                                                    target.getName());
       AnnotationSet instAnnos(instanceOp);
       // If the instance has HierPathOp, then update its module name also.
       // There can be multiple HierPathOps attached to the instance op.
@@ -452,7 +452,7 @@ void PrefixModulesPass::runOnOperation() {
   auto mainModule = instanceGraph->getTopLevelModule();
   auto prefix = getPrefix(mainModule);
   if (!prefix.empty()) {
-    auto oldModName = mainModule.getModuleNameAttr();
+    auto oldModName = mainModule.getNameAttr();
     auto newMainModuleName =
         StringAttr::get(context, (prefix + circuitOp.getName()).str());
     circuitOp.setNameAttr(newMainModuleName);

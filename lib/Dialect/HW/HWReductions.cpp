@@ -27,7 +27,7 @@ using namespace hw;
 struct ModuleSizeCache {
   void clear() { moduleSizes.clear(); }
 
-  uint64_t getModuleSize(Instantiable module,
+  uint64_t getModuleSize(InstantiableLike module,
                          InstanceGraphBase &instanceGraph) {
     if (auto it = moduleSizes.find(module); it != moduleSizes.end())
       return it->second;
