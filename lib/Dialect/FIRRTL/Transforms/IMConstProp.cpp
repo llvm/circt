@@ -840,7 +840,7 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedField) {
   });
 
   // If the folding was in-place, keep going.  This is surprising, but since
-  // only folder that will do inplace updates is the communative folder, we 
+  // only folder that will do inplace updates is the communative folder, we
   // aren't going to stop.  We don't update the results, since they didn't
   // change, the op just got shuffled around.
   if (foldResults.empty())
@@ -863,7 +863,7 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedField) {
     }
 
     mergeLatticeValue(getOrCacheFieldRefFromValue(op->getResult(i)),
-                    resultLattice);
+                      resultLattice);
   }
 }
 
