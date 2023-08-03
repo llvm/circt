@@ -802,12 +802,6 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedField) {
       operandConstants.push_back({});
   }
 
-  // Save the original operands and attributes just in case the operation
-  // folds in-place. The constant passed in may not correspond to the real
-  // runtime value, so in-place updates are not allowed.
-  SmallVector<Value, 8> originalOperands(op->getOperands());
-  DictionaryAttr originalAttrs = op->getAttrDictionary();
-
   // Simulate the result of folding this operation to a constant. If folding
   // fails or was an in-place fold, mark the results as overdefined.
   SmallVector<OpFoldResult, 8> foldResults;
@@ -845,21 +839,12 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedField) {
     logger.getOStream() << "}\n";
   });
 
-  // If the folding was in-place, mark the results as overdefined and reset
-  // the operation. We don't allow in-place folds as the desire here is for
-  // simulated execution, and not general folding.
-  if (foldResults.empty()) {
-    op->setOperands(originalOperands);
-    op->setAttrs(originalAttrs);
-    for (auto value : op->getResults())
-      markOverdefined(value);
-    return;
-  }
-
-  // Fold functions in general are allowed to do in-place updates, but FIRRTL
-  // does not do this and supporting it costs more.
-  assert(!foldResults.empty() &&
-         "FIRRTL fold functions shouldn't do in-place updates!");
+  // If the folding was in-place, keep going.  This is surprising, but since
+  // only folder that will do inplace updates is the communative folder, we 
+  // aren't going to stop.  We don't update the results, since they didn't
+  // change, the op just got shuffled around.
+  if (foldResults.empty())
+    return visitOperation(op, changedField);
 
   // Merge the fold results into the lattice for this operation.
   assert(foldResults.size() == op->getNumResults() && "invalid result size");
@@ -877,10 +862,7 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedField) {
           latticeValues[getOrCacheFieldRefFromValue(foldResult.get<Value>())];
     }
 
-    // We do not "merge" the lattice value in, we set it.  This is because the
-    // fold functions can produce different values over time, e.g. in the
-    // presence of InvalidValue operands that get resolved to other constants.
-    setLatticeValue(getOrCacheFieldRefFromValue(op->getResult(i)),
+    mergeLatticeValue(getOrCacheFieldRefFromValue(op->getResult(i)),
                     resultLattice);
   }
 }

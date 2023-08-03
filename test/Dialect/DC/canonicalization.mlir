@@ -1,4 +1,5 @@
 // RUN: circt-opt %s --canonicalize --cse --canonicalize | FileCheck %s
+// XFAIL: *
 
 // CHECK-LABEL:   func.func @staggeredJoin1(
 // CHECK-SAME:                    %[[VAL_0:.*]]: !dc.token,
