@@ -107,7 +107,7 @@ private:
 
     auto addSymbol = [&](Attribute attr) -> void {
       newTarget.append("{{");
-      newTarget.append(std::to_string(getSymbolIndex(attr)));
+      Twine(getSymbolIndex(attr)).toVector(newTarget);
       newTarget.append("}}");
     };
 
@@ -140,23 +140,24 @@ private:
         path.isOpOfType<FModuleOp, FExtModuleOp, InstanceOp>())
       return;
 
+    std::optional<ModuleNamespace> moduleNamespace;
+
     newTarget.append(">");
-    auto innerSym =
-        TypeSwitch<AnnoTarget, hw::InnerSymAttr>(path.ref)
+    auto innerSymStr =
+        TypeSwitch<AnnoTarget, StringAttr>(path.ref)
             .Case<PortAnnoTarget>([&](PortAnnoTarget portTarget) {
-              return portTarget.getModule().getPortSymbolAttr(
-                  portTarget.getPortNo());
+              return hw::InnerSymbolTable::getInnerSymbol(hw::InnerSymTarget(
+                  portTarget.getPortNo(), portTarget.getModule(), 0));
             })
             .Case<OpAnnoTarget>([&](OpAnnoTarget opTarget) {
-              return opTarget.getOp()->getAttrOfType<hw::InnerSymAttr>(
-                  "inner_sym");
+              return hw::InnerSymbolTable::getInnerSymbol(opTarget.getOp());
             })
             .Default([](auto) {
               assert(false && "unexpected annotation target type");
-              return hw::InnerSymAttr{};
+              return StringAttr{};
             });
     addSymbol(hw::InnerRefAttr::get(path.ref.getModule().getModuleNameAttr(),
-                                    innerSym.getSymName()));
+                                    innerSymStr));
 
     auto type = dyn_cast<FIRRTLBaseType>(path.ref.getType());
     assert(type && "expected a FIRRTLBaseType");
@@ -166,7 +167,7 @@ private:
           .Case<FVectorType>([&](FVectorType vector) {
             auto index = vector.getIndexForFieldID(targetFieldID);
             newTarget.append("[");
-            newTarget.append(std::to_string(index));
+            Twine(index).toVector(newTarget);
             newTarget.append("]");
             type = vector.getElementType();
             targetFieldID -= vector.getFieldID(index);
@@ -212,25 +213,20 @@ private:
 
   /// Add a "target" field to a port Annotation that indicates the current
   /// location of the port in the circuit.
-  std::optional<AnnoPathValue>
-  updatePortTarget(FModuleLike &module, Annotation &anno, unsigned portIdx) {
+  std::optional<AnnoPathValue> updatePortTarget(FModuleLike &module,
+                                                Annotation &anno,
+                                                unsigned portIdx,
+                                                hw::InnerRefAttr innerRef) {
     auto type = getBaseType(type_cast<FIRRTLType>(module.getPortType(portIdx)));
-    return updateTargetImpl(
-        anno, module, type,
-        hw::InnerRefAttr::get(module.getModuleNameAttr(),
-                              module.getPortSymbolAttr(portIdx).getSymName()),
-        PortAnnoTarget(module, portIdx));
+    return updateTargetImpl(anno, module, type, innerRef,
+                            PortAnnoTarget(module, portIdx));
   }
 
   /// Add a "target" field to an Annotation that indicates the current location
   /// of a component in the circuit.
   std::optional<AnnoPathValue> updateTarget(FModuleLike &module, Operation *op,
-                                            Annotation &anno) {
-
-    // If this operation doesn't have a name, then do nothing.
-    auto innerSym = op->getAttrOfType<hw::InnerSymAttr>("inner_sym");
-    if (!innerSym)
-      return std::nullopt;
+                                            Annotation &anno,
+                                            hw::InnerRefAttr innerRef) {
 
     // Get the type of the operation either by checking for the
     // result targeted by symbols on it (which are used to track the op)
@@ -246,10 +242,7 @@ private:
     }
 
     auto baseType = getBaseType(type_cast<FIRRTLType>(type));
-    return updateTargetImpl(anno, module, baseType,
-                            hw::InnerRefAttr::get(module.getModuleNameAttr(),
-                                                  innerSym.getSymName()),
-                            OpAnnoTarget(op));
+    return updateTargetImpl(anno, module, baseType, innerRef, OpAnnoTarget(op));
   }
 
   /// Add a "target" field to an Annotation on a Module that indicates the
@@ -329,9 +322,9 @@ void ResolveTracesPass::runOnOperation() {
           if (!anno.isClass(traceAnnoClass))
             return false;
 
-          getOrAddInnerSym(moduleLike, portIdx, getNamespace);
-
-          auto path = updatePortTarget(moduleLike, anno, portIdx);
+          hw::InnerRefAttr innerRef =
+              getInnerRefTo(moduleLike, portIdx, getNamespace);
+          auto path = updatePortTarget(moduleLike, anno, portIdx, innerRef);
           if (!path)
             return false;
 
@@ -345,9 +338,8 @@ void ResolveTracesPass::runOnOperation() {
         if (!anno.isClass(traceAnnoClass))
           return false;
 
-        getOrAddInnerSym(component, getNamespace);
-
-        auto path = updateTarget(moduleLike, component, anno);
+        hw::InnerRefAttr innerRef = getInnerRefTo(component, getNamespace);
+        auto path = updateTarget(moduleLike, component, anno, innerRef);
         if (!path)
           return false;
 
