@@ -72,9 +72,10 @@ def HWAggregateType : DialectType<HWDialect,
       ::circt::hw::UnpackedArrayType,
       ::circt::hw::StructType>}]>;
 
-//===----------------------------------------------------------------------===//
-// Type Definitions
-//===----------------------------------------------------------------------===//
+// A handle to refer to circt::hw::ModuleType in ODS.
+def ModuleType : DialectType<HWDialect,
+    CPred<"isa<circt::hw::ModuleType>($_self)">,
+          "a module", "::circt::hw::ModuleType">;
 
 class HW_Type<string name, string typeMnemonic, list<Trait> traits = []>
     : TypeDef<HWDialect, name, traits> {
@@ -114,10 +115,12 @@ def ModuleType : HW_Type<"Module", "module"> {
   }];
 }
 
-def HWStringType : HW_Type<"String", "string"> {
-  let summary = "String type";
-  let description = "Defines a string type for the hw-centric dialects";
-}
+// A handle to refer to circt::hw::StringType in ODS.
+def HWStringType :
+    DialectType<HWDialect,
+      CPred<"::circt::hw::type_isa<circt::hw::StringType>($_self)">,
+      "a HW string", "::circt::hw::StringType">,
+    BuildableType<"::circt::hw::StringType::get($_builder.getContext())">;
 
 /// A flat symbol reference or a reference to a name within a module.
 def NameRefAttr : Attr<

@@ -83,7 +83,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %out5, %tmp1 : !firrtl.uint<4>, !firrtl.uint<4>
 
     // CHECK: [[ZEXT:%.+]] = comb.concat %false, %in1 : i1, i4
-    // CHECK: [[ADD:%.+]] = comb.add bin %c12_i5, [[ZEXT]] : i5
+    // CHECK: [[ADD:%.+]] = comb.add bin [[ZEXT]], %c12_i5 : i5
     %0 = firrtl.add %c12_ui4, %in1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
     %1 = firrtl.asUInt %in1 : (!firrtl.uint<4>) -> !firrtl.uint<4>
@@ -564,10 +564,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: }
   }
 
-  firrtl.module private @bar(in %io_cpu_flush: !firrtl.uint<1>) {
-    // CHECK: hw.probe @baz, %io_cpu_flush, %io_cpu_flush : i1, i1
-    firrtl.probe @baz, %io_cpu_flush, %io_cpu_flush  : !firrtl.uint<1>, !firrtl.uint<1>
-  }
+  firrtl.module private @bar(in %io_cpu_flush: !firrtl.uint<1>) { }
 
   // CHECK-LABEL: hw.module private @foo
   firrtl.module private @foo() {

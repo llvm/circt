@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/ESI/ESIServices.td"
 include "circt/Dialect/HW/HWTypes.td"
 
 def RandomAccessMemoryDeclOp: ESI_Op<"mem.ram",

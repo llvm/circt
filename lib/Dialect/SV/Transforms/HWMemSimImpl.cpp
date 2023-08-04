@@ -640,7 +640,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
                 // Truncate the induction variable if necessary.
                 if (!outerIndVar.getType().isInteger(
                         llvm::Log2_64_Ceil(mem.depth)))
-                  iterValue = b.create<comb::ExtractOp>(
+                  iterValue = b.createOrFold<comb::ExtractOp>(
                       iterValue, 0, llvm::Log2_64_Ceil(mem.depth));
                 auto lhs = b.create<sv::ArrayIndexInOutOp>(reg, iterValue);
                 auto rhs = b.createOrFold<comb::ExtractOp>(

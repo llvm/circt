@@ -12,6 +12,7 @@
 include "circt/Dialect/Verif/VerifDialect.td"
 include "circt/Dialect/LTL/LTLTypes.td"
 include "circt/Dialect/HW/HWTypes.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 class VerifOp<string mnemonic, list<Trait> traits = []> :
@@ -42,6 +43,10 @@ def CoverOp : AssertLikeOp<"cover"> {
   let summary = "Ensure that a property can hold.";
 }
 
+//===----------------------------------------------------------------------===//
+// Printing Formatted Messages
+//===----------------------------------------------------------------------===//
+
 def FormatVerilogStringOp : VerifOp<"format_verilog_string", [
     Pure
   ]> {
@@ -70,6 +75,38 @@ def PrintOp : VerifOp<"print", []> {
   let assemblyFormat = [{
     $string attr-dict
   }];
+}
+
+//===----------------------------------------------------------------------===//
+// Reset and Power-Cycling Detection
+//===----------------------------------------------------------------------===//
+
+def HasBeenResetOp : VerifOp<"has_been_reset", [Pure]> {
+  let summary = "Check that a proper reset has been seen.";
+  let description = [{
+    The result of `verif.has_been_reset` reads as 0 immediately after simulation
+    startup and after each power-cycle in a power-aware simulation. The result
+    remains 0 before and during reset and only switches to 1 after the reset is
+    deasserted again.
+
+    This is a useful utility to disable the evaluation of assertions and other
+    verification constructs in the IR before the circuit being tested has been
+    properly reset. Verification failures due to uninitialized or randomized
+    initial state can thus be prevented.
+
+    Using the result of `verif.has_been_reset` to enable verification is more
+    powerful and proper than just disabling verification during reset. The
+    latter does not properly handle the period of time between simulation
+    startup or power-cycling and the start of reset. `verif.has_been_reset` is
+    guaranteed to produce a 0 value in that period, as well as during the reset.
+  }];
+  let arguments = (ins I1:$clock, I1:$reset, BoolAttr:$async);
+  let results = (outs I1:$result);
+  let assemblyFormat = [{
+    $clock `,` custom<KeywordBool>($async, "\"async\"", "\"sync\"")
+    $reset attr-dict
+  }];
+  let hasFolder = true;
 }
 
 #endif // CIRCT_DIALECT_VERIF_VERIFOPS_TD

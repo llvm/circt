@@ -111,7 +111,7 @@ circuit Top : %[[
 
 ; CHECK-LABEL: module Top(
 ; CHECK-NOT:   endmodule
-; CHECK:         tap = Top.foo.b.inv;
+; CHECK:         tap = Top.foo.b.inv_probe;
 ; CHECK-NEXT:    tap2 = Top.unsigned_0.signed_0.localparam_0.random.something;
 ; CHECK-NEXT:    tap3 = Top.unsigned_0.signed_0.localparam_0.random.something_else;
 ; CHECK:         ChildWrapper unsigned_0 (

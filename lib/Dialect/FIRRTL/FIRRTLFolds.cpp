@@ -462,7 +462,7 @@ OpFoldResult DivPrimOp::fold(FoldAdaptor adaptor) {
   /// supersede any division with invalid or zero.  Division of invalid by
   /// invalid should be one.
   if (getLhs() == getRhs()) {
-    auto width = getType().getWidthOrSentinel();
+    auto width = getType().get().getWidthOrSentinel();
     if (width == -1)
       width = 2;
     // Only fold if we have at least 1 bit of width to represent the `1` value.
@@ -541,8 +541,8 @@ OpFoldResult DShrPrimOp::fold(FoldAdaptor adaptor) {
   return constFoldFIRRTLBinaryOp(
       *this, adaptor.getOperands(), BinOpKind::DivideOrShift,
       [=](const APSInt &a, const APSInt &b) -> APInt {
-        return getType().isUnsigned() || !a.getBitWidth() ? a.lshr(b)
-                                                          : a.ashr(b);
+        return getType().get().isUnsigned() || !a.getBitWidth() ? a.lshr(b)
+                                                                : a.ashr(b);
       });
 }
 
@@ -629,18 +629,20 @@ void OrPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 OpFoldResult XorPrimOp::fold(FoldAdaptor adaptor) {
   /// xor(x, 0) -> x
   if (auto rhsCst = getConstant(adaptor.getRhs()))
-    if (rhsCst->isZero() && getLhs().getType() == getType())
+    if (rhsCst->isZero() &&
+        firrtl::areAnonymousTypesEquivalent(getLhs().getType(), getType()))
       return getLhs();
 
   /// xor(x, 0) -> x
   if (auto lhsCst = getConstant(adaptor.getLhs()))
-    if (lhsCst->isZero() && getRhs().getType() == getType())
+    if (lhsCst->isZero() &&
+        firrtl::areAnonymousTypesEquivalent(getRhs().getType(), getType()))
       return getRhs();
 
   /// xor(x, x) -> 0
   if (getLhs() == getRhs())
-    return getIntAttr(getType(),
-                      APInt(std::max(getType().getWidthOrSentinel(), 0), 0));
+    return getIntAttr(
+        getType(), APInt(std::max(getType().get().getWidthOrSentinel(), 0), 0));
 
   return constFoldFIRRTLBinaryOp(
       *this, adaptor.getOperands(), BinOpKind::Normal,
@@ -660,14 +662,14 @@ void LEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 OpFoldResult LEQPrimOp::fold(FoldAdaptor adaptor) {
-  bool isUnsigned = getLhs().getType().isUnsigned();
+  bool isUnsigned = getLhs().getType().get().isUnsigned();
 
   // leq(x, x) -> 1
   if (getLhs() == getRhs())
     return getIntAttr(getType(), APInt(1, 1));
 
   // Comparison against constant outside type bounds.
-  if (auto width = getLhs().getType().getWidth()) {
+  if (auto width = getLhs().getType().get().getWidth()) {
     if (auto rhsCst = getConstant(adaptor.getRhs())) {
       auto commonWidth = std::max<int32_t>(*width, rhsCst->getBitWidth());
       commonWidth = std::max(commonWidth, 1);
@@ -705,7 +707,8 @@ void LTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 OpFoldResult LTPrimOp::fold(FoldAdaptor adaptor) {
-  bool isUnsigned = getLhs().getType().isUnsigned();
+  IntType lhsType = getLhs().getType();
+  bool isUnsigned = lhsType.isUnsigned();
 
   // lt(x, x) -> 0
   if (getLhs() == getRhs())
@@ -713,12 +716,12 @@ OpFoldResult LTPrimOp::fold(FoldAdaptor adaptor) {
 
   // lt(x, 0) -> 0 when x is unsigned
   if (auto rhsCst = getConstant(adaptor.getRhs())) {
-    if (rhsCst->isZero() && getLhs().getType().isUnsigned())
+    if (rhsCst->isZero() && lhsType.isUnsigned())
       return getIntAttr(getType(), APInt(1, 0));
   }
 
   // Comparison against constant outside type bounds.
-  if (auto width = getLhs().getType().getWidth()) {
+  if (auto width = lhsType.getWidth()) {
     if (auto rhsCst = getConstant(adaptor.getRhs())) {
       auto commonWidth = std::max<int32_t>(*width, rhsCst->getBitWidth());
       commonWidth = std::max(commonWidth, 1);
@@ -756,7 +759,8 @@ void GEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 OpFoldResult GEQPrimOp::fold(FoldAdaptor adaptor) {
-  bool isUnsigned = getLhs().getType().isUnsigned();
+  IntType lhsType = getLhs().getType();
+  bool isUnsigned = lhsType.isUnsigned();
 
   // geq(x, x) -> 1
   if (getLhs() == getRhs())
@@ -769,7 +773,7 @@ OpFoldResult GEQPrimOp::fold(FoldAdaptor adaptor) {
   }
 
   // Comparison against constant outside type bounds.
-  if (auto width = getLhs().getType().getWidth()) {
+  if (auto width = lhsType.getWidth()) {
     if (auto rhsCst = getConstant(adaptor.getRhs())) {
       auto commonWidth = std::max<int32_t>(*width, rhsCst->getBitWidth());
       commonWidth = std::max(commonWidth, 1);
@@ -807,14 +811,15 @@ void GTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 OpFoldResult GTPrimOp::fold(FoldAdaptor adaptor) {
-  bool isUnsigned = getLhs().getType().isUnsigned();
+  IntType lhsType = getLhs().getType();
+  bool isUnsigned = lhsType.isUnsigned();
 
   // gt(x, x) -> 0
   if (getLhs() == getRhs())
     return getIntAttr(getType(), APInt(1, 0));
 
   // Comparison against constant outside type bounds.
-  if (auto width = getLhs().getType().getWidth()) {
+  if (auto width = lhsType.getWidth()) {
     if (auto rhsCst = getConstant(adaptor.getRhs())) {
       auto commonWidth = std::max<int32_t>(*width, rhsCst->getBitWidth());
       commonWidth = std::max(commonWidth, 1);
@@ -969,13 +974,13 @@ OpFoldResult IsXIntrinsicOp::fold(FoldAdaptor adaptor) {
 
 OpFoldResult AsSIntPrimOp::fold(FoldAdaptor adaptor) {
   // No effect.
-  if (getInput().getType() == getType())
+  if (areAnonymousTypesEquivalent(getInput().getType(), getType()))
     return getInput();
 
   // Be careful to only fold the cast into the constant if the size is known.
   // Otherwise width inference may produce differently-sized constants if the
   // sign changes.
-  if (getType().hasWidth())
+  if (getType().get().hasWidth())
     if (auto cst = getConstant(adaptor.getInput()))
       return getIntAttr(getType(), *cst);
 
@@ -989,13 +994,13 @@ void AsSIntPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 OpFoldResult AsUIntPrimOp::fold(FoldAdaptor adaptor) {
   // No effect.
-  if (getInput().getType() == getType())
+  if (areAnonymousTypesEquivalent(getInput().getType(), getType()))
     return getInput();
 
   // Be careful to only fold the cast into the constant if the size is known.
   // Otherwise width inference may produce differently-sized constants if the
   // sign changes.
-  if (getType().hasWidth())
+  if (getType().get().hasWidth())
     if (auto cst = getConstant(adaptor.getInput()))
       return getIntAttr(getType(), *cst);
 
@@ -1037,7 +1042,7 @@ OpFoldResult CvtPrimOp::fold(FoldAdaptor adaptor) {
 
   // Signed to signed is a noop, unsigned operands prepend a zero bit.
   if (auto cst = getExtendedConstant(getOperand(), adaptor.getInput(),
-                                     getType().getWidthOrSentinel()))
+                                     getType().get().getWidthOrSentinel()))
     return getIntAttr(getType(), *cst);
 
   return {};
@@ -1055,7 +1060,7 @@ OpFoldResult NegPrimOp::fold(FoldAdaptor adaptor) {
   // FIRRTL negate always adds a bit.
   // -x ---> 0-sext(x) or 0-zext(x)
   if (auto cst = getExtendedConstant(getOperand(), adaptor.getInput(),
-                                     getType().getWidthOrSentinel()))
+                                     getType().get().getWidthOrSentinel()))
     return getIntAttr(getType(), APInt((*cst).getBitWidth(), 0) - *cst);
 
   return {};
@@ -1066,7 +1071,7 @@ OpFoldResult NotPrimOp::fold(FoldAdaptor adaptor) {
     return {};
 
   if (auto cst = getExtendedConstant(getOperand(), adaptor.getInput(),
-                                     getType().getWidthOrSentinel()))
+                                     getType().get().getWidthOrSentinel()))
     return getIntAttr(getType(), ~*cst);
 
   return {};
@@ -1161,11 +1166,11 @@ OpFoldResult CatPrimOp::fold(FoldAdaptor adaptor) {
   // cat(x, 0-width) -> x
   // cat(0-width, x) -> x
   // Limit to unsigned (result type), as cannot insert cast here.
-  if (getLhs().getType().getBitWidthOrSentinel() == 0 &&
-      getRhs().getType().isUnsigned())
+  IntType lhsType = getLhs().getType();
+  IntType rhsType = getRhs().getType();
+  if (lhsType.getBitWidthOrSentinel() == 0 && rhsType.isUnsigned())
     return getRhs();
-  if (getRhs().getType().getBitWidthOrSentinel() == 0 &&
-      getLhs().getType().isUnsigned())
+  if (rhsType.getBitWidthOrSentinel() == 0 && rhsType.isUnsigned())
     return getLhs();
 
   if (!hasKnownWidthIntTypes(*this))
@@ -1237,15 +1242,16 @@ OpFoldResult BitCastOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult BitsPrimOp::fold(FoldAdaptor adaptor) {
-  auto inputType = getInput().getType();
+  IntType inputType = getInput().getType();
+  IntType resultType = getType();
   // If we are extracting the entire input, then return it.
-  if (inputType == getType() && getType().hasWidth())
+  if (inputType == getType() && resultType.hasWidth())
     return getInput();
 
   // Constant fold.
   if (hasKnownWidthIntTypes(*this))
     if (auto cst = getConstant(adaptor.getInput()))
-      return getIntAttr(getType(),
+      return getIntAttr(resultType,
                         cst->extractBits(getHi() - getLo() + 1, getLo()));
 
   return {};
@@ -1483,14 +1489,14 @@ OpFoldResult PadPrimOp::fold(FoldAdaptor adaptor) {
     return input;
 
   // Need to know the input width.
-  auto inputType = input.getType();
+  auto inputType = input.getType().get();
   int32_t width = inputType.getWidthOrSentinel();
   if (width == -1)
     return {};
 
   // Constant fold.
   if (auto cst = getConstant(adaptor.getInput())) {
-    auto destWidth = getType().getWidthOrSentinel();
+    auto destWidth = getType().get().getWidthOrSentinel();
     if (destWidth == -1)
       return {};
 
@@ -1504,7 +1510,7 @@ OpFoldResult PadPrimOp::fold(FoldAdaptor adaptor) {
 
 OpFoldResult ShlPrimOp::fold(FoldAdaptor adaptor) {
   auto input = this->getInput();
-  auto inputType = input.getType();
+  IntType inputType = input.getType();
   int shiftAmount = getAmount();
 
   // shl(x, 0) -> x
@@ -1525,7 +1531,7 @@ OpFoldResult ShlPrimOp::fold(FoldAdaptor adaptor) {
 
 OpFoldResult ShrPrimOp::fold(FoldAdaptor adaptor) {
   auto input = this->getInput();
-  auto inputType = input.getType();
+  IntType inputType = input.getType();
   int shiftAmount = getAmount();
 
   // shr(x, 0) -> x
@@ -1557,7 +1563,7 @@ OpFoldResult ShrPrimOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ShrPrimOp::canonicalize(ShrPrimOp op, PatternRewriter &rewriter) {
-  auto inputWidth = op.getInput().getType().getWidthOrSentinel();
+  auto inputWidth = op.getInput().getType().get().getWidthOrSentinel();
   if (inputWidth <= 0)
     return failure();
 
@@ -1565,7 +1571,7 @@ LogicalResult ShrPrimOp::canonicalize(ShrPrimOp op, PatternRewriter &rewriter) {
   unsigned shiftAmount = op.getAmount();
   if (int(shiftAmount) >= inputWidth) {
     // shift(x, 32) => 0 when x has 32 bits.  This is handled by fold().
-    if (op.getType().isUnsigned())
+    if (op.getType().get().isUnsigned())
       return failure();
 
     // Shifting a signed value by the full width is actually taking the
@@ -1580,7 +1586,7 @@ LogicalResult ShrPrimOp::canonicalize(ShrPrimOp op, PatternRewriter &rewriter) {
 
 LogicalResult HeadPrimOp::canonicalize(HeadPrimOp op,
                                        PatternRewriter &rewriter) {
-  auto inputWidth = op.getInput().getType().getWidthOrSentinel();
+  auto inputWidth = op.getInput().getType().get().getWidthOrSentinel();
   if (inputWidth <= 0)
     return failure();
 
@@ -1595,7 +1601,8 @@ LogicalResult HeadPrimOp::canonicalize(HeadPrimOp op,
 OpFoldResult HeadPrimOp::fold(FoldAdaptor adaptor) {
   if (hasKnownWidthIntTypes(*this))
     if (auto cst = getConstant(adaptor.getInput())) {
-      int shiftAmount = getInput().getType().getWidthOrSentinel() - getAmount();
+      int shiftAmount =
+          getInput().getType().get().getWidthOrSentinel() - getAmount();
       return getIntAttr(getType(), cst->lshr(shiftAmount).trunc(getAmount()));
     }
 
@@ -1605,13 +1612,14 @@ OpFoldResult HeadPrimOp::fold(FoldAdaptor adaptor) {
 OpFoldResult TailPrimOp::fold(FoldAdaptor adaptor) {
   if (hasKnownWidthIntTypes(*this))
     if (auto cst = getConstant(adaptor.getInput()))
-      return getIntAttr(getType(), cst->trunc(getType().getWidthOrSentinel()));
+      return getIntAttr(getType(),
+                        cst->trunc(getType().get().getWidthOrSentinel()));
   return {};
 }
 
 LogicalResult TailPrimOp::canonicalize(TailPrimOp op,
                                        PatternRewriter &rewriter) {
-  auto inputWidth = op.getInput().getType().getWidthOrSentinel();
+  auto inputWidth = op.getInput().getType().get().getWidthOrSentinel();
   if (inputWidth <= 0)
     return failure();
 
@@ -3233,4 +3241,25 @@ void RefReleaseOp::getCanonicalizationPatterns(RewritePatternSet &results,
 void RefReleaseInitialOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
   results.add(eraseIfPredFalse<RefReleaseInitialOp>);
+}
+
+//===----------------------------------------------------------------------===//
+// HasBeenResetIntrinsicOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult HasBeenResetIntrinsicOp::fold(FoldAdaptor adaptor) {
+  // The folds in here should reflect the ones for `verif::HasBeenResetOp`.
+
+  // Fold to zero if the reset is a constant. In this case the op is either
+  // permanently in reset or never resets. Both mean that the reset never
+  // finishes, so this op never returns true.
+  if (adaptor.getReset())
+    return getIntZerosAttr(UIntType::get(getContext(), 1));
+
+  // Fold to zero if the clock is a constant and the reset is synchronous. In
+  // that case the reset will never be started.
+  if (isUInt1(getReset().getType()) && adaptor.getClock())
+    return getIntZerosAttr(UIntType::get(getContext(), 1));
+
+  return {};
 }

@@ -53,6 +53,7 @@ public:
             LTLNotIntrinsicOp, LTLImplicationIntrinsicOp,
             LTLEventuallyIntrinsicOp, LTLClockIntrinsicOp,
             LTLDisableIntrinsicOp, Mux2CellIntrinsicOp, Mux4CellIntrinsicOp,
+            HasBeenResetIntrinsicOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
@@ -61,7 +62,7 @@ public:
             UninferredResetCastOp, ConstCastOp, RefCastOp,
             mlir::UnrealizedConversionCastOp,
             // Property expressions.
-            StringConstantOp, BigIntConstantOp>([&](auto expr) -> ResultType {
+            StringConstantOp, FIntegerConstantOp>([&](auto expr) -> ResultType {
           return thisCast->visitExpr(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -173,6 +174,7 @@ public:
   HANDLE(LTLDisableIntrinsicOp, Unhandled);
   HANDLE(Mux4CellIntrinsicOp, Unhandled);
   HANDLE(Mux2CellIntrinsicOp, Unhandled);
+  HANDLE(HasBeenResetIntrinsicOp, Unhandled);
 
   // Miscellaneous.
   HANDLE(BitsPrimOp, Unhandled);
@@ -198,7 +200,7 @@ public:
 
   // Property expressions.
   HANDLE(StringConstantOp, Unhandled);
-  HANDLE(BigIntConstantOp, Unhandled);
+  HANDLE(FIntegerConstantOp, Unhandled);
 #undef HANDLE
 };
 
@@ -212,7 +214,7 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<AttachOp, ConnectOp, StrictConnectOp, RefDefineOp,
                        ForceOp, PrintFOp, SkipOp, StopOp, WhenOp, AssertOp,
-                       AssumeOp, CoverOp, PropAssignOp, ProbeOp, RefForceOp,
+                       AssumeOp, CoverOp, PropAssignOp, RefForceOp,
                        RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
                        VerifAssertIntrinsicOp, VerifAssumeIntrinsicOp,
                        VerifCoverIntrinsicOp, GroupOp>(
@@ -253,7 +255,6 @@ public:
   HANDLE(AssertOp);
   HANDLE(AssumeOp);
   HANDLE(CoverOp);
-  HANDLE(ProbeOp);
   HANDLE(PropAssignOp);
   HANDLE(RefForceOp);
   HANDLE(RefForceInitialOp);
@@ -275,8 +276,8 @@ public:
   ResultType dispatchDeclVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp,
-                       VerbatimWireOp>([&](auto opNode) -> ResultType {
+        .template Case<InstanceOp, ObjectOp, MemOp, NodeOp, RegOp, RegResetOp,
+                       WireOp, VerbatimWireOp>([&](auto opNode) -> ResultType {
           return thisCast->visitDecl(opNode, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -302,6 +303,7 @@ public:
   }
 
   HANDLE(InstanceOp);
+  HANDLE(ObjectOp);
   HANDLE(MemOp);
   HANDLE(NodeOp);
   HANDLE(RegOp);

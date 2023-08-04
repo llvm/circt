@@ -1586,12 +1586,18 @@ circuit Top:
   ; CHECK-SAME:                                         valid: alias<ValidType, uint<1>>, ready flip: uint<1>>>,
   ; CHECK-SAME: in %in_complex: !firrtl.alias<Complex, bundle<real: sint<10>, imag: sint<10>>>
   ; CHECK-SAME: out %out: !firrtl.probe<alias<Complex, bundle<real: sint<10>, imag: sint<10>>>>
+  ; CHECK-SAME: out %out_valid: !firrtl.alias<ValidType, uint<1>>
+
+  ; CHECK-NEXT: %[[RESULT:.+]] = firrtl.subfield %in_data[valid] : !firrtl.alias<Data, bundle<w: const.vector<const.alias<WordType, const.uint<32>>, 2>, valid: alias<ValidType, uint<1>>, ready flip: uint<1>>>
   ; CHECK-NEXT: %c = firrtl.wire interesting_name : !firrtl.alias<Complex_id, alias<Complex, bundle<real: sint<10>, imag: sint<10>>>>
+  ; CHECK-NEXT: firrtl.strictconnect %out_valid, %[[RESULT]] : !firrtl.alias<ValidType, uint<1>>
   module Top:
     input in_data: Data
     input in_complex: Complex
     output out: ProbeComplex
+    output out_valid: ValidType
     wire c: Complex_id
+    out_valid <= in_data.valid
 
   ; CHECK-LABEL: firrtl.module private @Const
   ; CHECK-SAME: (in %a: !firrtl.const.alias<ConstI1, const.uint<1>>)
@@ -1667,10 +1673,10 @@ circuit BasicProps :
   module BasicProps :
   ; CHECK-LABEL: module private @Integer
   module Integer :
-    ; CHECK-SAME: out %a: !firrtl.bigint
+    ; CHECK-SAME: out %a: !firrtl.integer
     output a : Integer
-    ; CHECK: %0 = firrtl.bigint -10
-    ; CHECK: firrtl.propassign %a, %0 : !firrtl.bigint
+    ; CHECK: %0 = firrtl.integer -10
+    ; CHECK: firrtl.propassign %a, %0 : !firrtl.integer
     propassign a, Integer(-10)
 
   ; CHECK-LABEL: module private @String

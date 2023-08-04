@@ -1341,7 +1341,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // If the constant has a known width, use that. Otherwise pick the
         // smallest number of bits necessary to represent the constant.
         Expr *e;
-        if (auto width = op.getType().getWidth())
+        if (auto width = op.getType().get().getWidth())
           e = solver.known(*width);
         else {
           auto v = op.getValue();
@@ -1398,7 +1398,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 
       // Aggregate Values
       .Case<SubfieldOp>([&](auto op) {
-        auto bundleType = op.getInput().getType();
+        BundleType bundleType = op.getInput().getType();
         auto fieldID = bundleType.getFieldID(op.getFieldIndex());
         unifyTypes(FieldRef(op.getResult(), 0),
                    FieldRef(op.getInput(), fieldID), op.getType());
@@ -1410,7 +1410,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
                    op.getType());
       })
       .Case<SubtagOp>([&](auto op) {
-        auto enumType = op.getInput().getType();
+        FEnumType enumType = op.getInput().getType();
         auto fieldID = enumType.getFieldID(op.getFieldIndex());
         unifyTypes(FieldRef(op.getResult(), 0),
                    FieldRef(op.getInput(), fieldID), op.getType());
@@ -1443,7 +1443,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       .Case<DivPrimOp>([&](auto op) {
         auto lhs = getExpr(op.getLhs());
         Expr *e;
-        if (op.getType().isSigned()) {
+        if (op.getType().get().isSigned()) {
           e = solver.add(lhs, solver.known(1));
         } else {
           e = lhs;
@@ -1489,7 +1489,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
       .Case<CvtPrimOp>([&](auto op) {
         auto input = getExpr(op.getInput());
-        auto e = op.getInput().getType().isSigned()
+        auto e = op.getInput().getType().get().isSigned()
                      ? input
                      : solver.add(input, solver.known(1));
         setExpr(op.getResult(), e);

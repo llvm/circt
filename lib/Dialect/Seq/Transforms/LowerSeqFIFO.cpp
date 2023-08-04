@@ -77,59 +77,57 @@ public:
     fifoEmpty->setAttr("sv.namehint", rewriter.getStringAttr("fifo_empty"));
 
     // ====== Next-state count ======
-    Value rdEnNandWrEn = rewriter.create<comb::AndOp>(
-        loc, comb::createOrFoldNot(loc, adaptor.getRdEn(), rewriter),
-        comb::createOrFoldNot(loc, adaptor.getWrEn(), rewriter));
-    Value rdEnAndNotWrEn = rewriter.create<comb::AndOp>(
-        loc, adaptor.getRdEn(),
-        comb::createOrFoldNot(loc, adaptor.getWrEn(), rewriter));
-    Value wrEnAndNotRdEn = rewriter.create<comb::AndOp>(
-        loc, adaptor.getWrEn(),
-        comb::createOrFoldNot(loc, adaptor.getRdEn(), rewriter));
+    auto notRdEn = comb::createOrFoldNot(loc, adaptor.getRdEn(), rewriter);
+    auto notWrEn = comb::createOrFoldNot(loc, adaptor.getWrEn(), rewriter);
+    Value rdEnNandWrEn = rewriter.create<comb::AndOp>(loc, notRdEn, notWrEn);
+    Value rdEnAndNotWrEn =
+        rewriter.create<comb::AndOp>(loc, adaptor.getRdEn(), notWrEn);
+    Value wrEnAndNotRdEn =
+        rewriter.create<comb::AndOp>(loc, adaptor.getWrEn(), notRdEn);
 
-    Value wrEnNext = rewriter.create<comb::MuxOp>(
-        loc,
-        rewriter.create<comb::ICmpOp>(loc, comb::ICmpPredicate::eq, count,
-                                      countTcFull),
-        // keep value
-        count,
-        // increment
-        rewriter.create<comb::AddOp>(loc, count, countTc1));
+    auto countEqTcFull = rewriter.create<comb::ICmpOp>(
+        loc, comb::ICmpPredicate::eq, count, countTcFull);
+    auto addCountTc1 = rewriter.create<comb::AddOp>(loc, count, countTc1);
+    Value wrEnNext = rewriter.create<comb::MuxOp>(loc, countEqTcFull,
+                                                  // keep value
+                                                  count,
+                                                  // increment
+                                                  addCountTc1);
+    auto countEqTc0 = rewriter.create<comb::ICmpOp>(
+        loc, comb::ICmpPredicate::eq, count, countTc0);
+    auto subCountTc1 = rewriter.create<comb::SubOp>(loc, count, countTc1);
 
-    Value rdEnNext = rewriter.create<comb::MuxOp>(
-        loc,
-        rewriter.create<comb::ICmpOp>(loc, comb::ICmpPredicate::eq, count,
-                                      countTc0),
-        // keep value
-        count,
-        // decrement
-        rewriter.create<comb::SubOp>(loc, count, countTc1));
+    Value rdEnNext = rewriter.create<comb::MuxOp>(loc, countEqTc0,
+                                                  // keep value
+                                                  count,
+                                                  // decrement
+                                                  subCountTc1);
 
+    auto nextInnerMux =
+        rewriter.create<comb::MuxOp>(loc, rdEnAndNotWrEn, rdEnNext, count);
+    auto nextMux = rewriter.create<comb::MuxOp>(loc, wrEnAndNotRdEn, wrEnNext,
+                                                nextInnerMux);
     nextCount.setValue(rewriter.create<comb::MuxOp>(
-        loc, rdEnNandWrEn, /*keep value*/ count,
-        rewriter.create<comb::MuxOp>(
-            loc, wrEnAndNotRdEn, wrEnNext,
-            rewriter.create<comb::MuxOp>(loc, rdEnAndNotWrEn, rdEnNext,
-                                         count))));
+        loc, rdEnNandWrEn, /*keep value*/ count, nextMux));
     static_cast<Value>(nextCount).getDefiningOp()->setAttr(
         "sv.namehint", rewriter.getStringAttr("fifo_count_next"));
 
     // ====== Read/write pointers ======
     Value wrAndNotFull = rewriter.create<comb::AndOp>(
         loc, adaptor.getWrEn(), comb::createOrFoldNot(loc, fifoFull, rewriter));
-    wrAddrNext.setValue(rewriter.create<comb::MuxOp>(
-        loc, wrAndNotFull, rewriter.create<comb::AddOp>(loc, wrAddr, ptrTc1),
-        wrAddr));
+    auto addWrAddrPtrTc1 = rewriter.create<comb::AddOp>(loc, wrAddr, ptrTc1);
+    wrAddrNext.setValue(rewriter.create<comb::MuxOp>(loc, wrAndNotFull,
+                                                     addWrAddrPtrTc1, wrAddr));
     static_cast<Value>(wrAddrNext)
         .getDefiningOp()
         ->setAttr("sv.namehint", rewriter.getStringAttr("fifo_wr_addr_next"));
 
-    Value rdAndNotEmpty = rewriter.create<comb::AndOp>(
-        loc, adaptor.getRdEn(),
-        comb::createOrFoldNot(loc, fifoEmpty, rewriter));
-    rdAddrNext.setValue(rewriter.create<comb::MuxOp>(
-        loc, rdAndNotEmpty, rewriter.create<comb::AddOp>(loc, rdAddr, ptrTc1),
-        rdAddr));
+    auto notFifoEmpty = comb::createOrFoldNot(loc, fifoEmpty, rewriter);
+    Value rdAndNotEmpty =
+        rewriter.create<comb::AndOp>(loc, adaptor.getRdEn(), notFifoEmpty);
+    auto addRdAddrPtrTc1 = rewriter.create<comb::AddOp>(loc, rdAddr, ptrTc1);
+    rdAddrNext.setValue(rewriter.create<comb::MuxOp>(loc, rdAndNotEmpty,
+                                                     addRdAddrPtrTc1, rdAddr));
     static_cast<Value>(rdAddrNext)
         .getDefiningOp()
         ->setAttr("sv.namehint", rewriter.getStringAttr("fifo_rd_addr_next"));

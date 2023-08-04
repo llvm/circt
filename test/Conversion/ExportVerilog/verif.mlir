@@ -259,3 +259,14 @@ hw.module @LivenessExample(%clock: i1, %reset: i1, %isLive: i1) {
   verif.assert %liveness_after_fall : !ltl.property
   verif.assume %liveness_after_fall : !ltl.property
 }
+
+// https://github.com/llvm/circt/issues/5763
+// CHECK-LABEL: module Issue5763
+hw.module @Issue5763(%a: i3) {
+  // CHECK: assert property ((&a) & a[0]);
+  %c-1_i3 = hw.constant -1 : i3
+  %0 = comb.extract %a from 0 : (i3) -> i1
+  %1 = comb.icmp bin eq %a, %c-1_i3 : i3
+  %2 = comb.and bin %1, %0 : i1
+  verif.assert %2 : i1
+}

@@ -170,18 +170,6 @@ firrtl.module @LowerToBind() {
   firrtl.instance foo sym @s1 {lowerToBind} @InstanceLowerToBind()
 }
 
-// CHECK-LABEL: @ProbeTest
-firrtl.module @ProbeTest(in %in1 : !firrtl.uint<2>, in %in2 : !firrtl.uint<3>, out %out3: !firrtl.uint<3>) {
-  %w1 = firrtl.wire  : !firrtl.uint<4>
-  // CHECK: %[[TMP3:.+]] = firrtl.cat
-  %w2 = firrtl.cat %in1, %in1 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
-  firrtl.connect %w1, %w2 : !firrtl.uint<4>, !firrtl.uint<4>
-  firrtl.connect %out3, %in2 : !firrtl.uint<3>, !firrtl.uint<3>
-  %someNode = firrtl.node %in1 : !firrtl.uint<2>
-  // CHECK: firrtl.probe @foobar, %in1, %in2, %out3, %w1, %[[TMP3]], %someNode : !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<3>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<2>
-  firrtl.probe @foobar, %in1, %in2, %out3, %w1, %w2, %someNode : !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<3>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<2>
-}
-
 // CHECK-LABEL: firrtl.module @InnerSymAttr
 firrtl.module @InnerSymAttr() {
   %w = firrtl.wire sym [<@w,2,public>,<@x,1,private>,<@syh,4,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
@@ -252,14 +240,14 @@ firrtl.module @StringTest(in %in: !firrtl.string, out %out: !firrtl.string) {
 }
 
 // CHECK-LABEL: BigIntTest
-// CHECK-SAME:  (in %in: !firrtl.bigint, out %out: !firrtl.bigint)
-firrtl.module @BigIntTest(in %in: !firrtl.bigint, out %out: !firrtl.bigint) {
-  firrtl.propassign %out, %in : !firrtl.bigint
+// CHECK-SAME:  (in %in: !firrtl.integer, out %out: !firrtl.integer)
+firrtl.module @BigIntTest(in %in: !firrtl.integer, out %out: !firrtl.integer) {
+  firrtl.propassign %out, %in : !firrtl.integer
 
-  // CHECK: %0 = firrtl.bigint 4
-  %0 = firrtl.bigint 4
-  // CHECK: %1 = firrtl.bigint -4
-  %1 = firrtl.bigint -4
+  // CHECK: %0 = firrtl.integer 4
+  %0 = firrtl.integer 4
+  // CHECK: %1 = firrtl.integer -4
+  %1 = firrtl.integer -4
 }
 
 // CHECK-LABEL: ListTest
@@ -269,15 +257,15 @@ firrtl.module @ListTest(in %in: !firrtl.list<string>, out %out: !firrtl.list<str
 }
 
 // CHECK-LABEL: MapTest
-// CHECK-SAME:  (in %in: !firrtl.map<bigint, string>, out %out: !firrtl.map<bigint, string>)
-firrtl.module @MapTest(in %in: !firrtl.map<bigint, string>, out %out: !firrtl.map<bigint, string>) {
-  firrtl.propassign %out, %in : !firrtl.map<bigint, string>
+// CHECK-SAME:  (in %in: !firrtl.map<integer, string>, out %out: !firrtl.map<integer, string>)
+firrtl.module @MapTest(in %in: !firrtl.map<integer, string>, out %out: !firrtl.map<integer, string>) {
+  firrtl.propassign %out, %in : !firrtl.map<integer, string>
 }
 
 // CHECK-LABEL: PropertyNestedTest
-// CHECK-SAME:  (in %in: !firrtl.map<bigint, list<map<string, bigint>>>, out %out: !firrtl.map<bigint, list<map<string, bigint>>>)
-firrtl.module @PropertyNestedTest(in %in: !firrtl.map<bigint, list<map<string, bigint>>>, out %out: !firrtl.map<bigint, list<map<string, bigint>>>) {
-  firrtl.propassign %out, %in : !firrtl.map<bigint, list<map<string, bigint>>>
+// CHECK-SAME:  (in %in: !firrtl.map<integer, list<map<string, integer>>>, out %out: !firrtl.map<integer, list<map<string, integer>>>)
+firrtl.module @PropertyNestedTest(in %in: !firrtl.map<integer, list<map<string, integer>>>, out %out: !firrtl.map<integer, list<map<string, integer>>>) {
+  firrtl.propassign %out, %in : !firrtl.map<integer, list<map<string, integer>>>
 }
 
 // CHECK-LABEL: firrtl.module @PathTest

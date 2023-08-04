@@ -1287,7 +1287,8 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
   for (auto *op : structValue.getUsers()) {
     assert(isa<SubfieldOp>(op));
     auto fieldAccess = cast<SubfieldOp>(op);
-    auto elemIndex = fieldAccess.getInput().getType().getElementIndex(field);
+    auto elemIndex =
+        fieldAccess.getInput().getType().get().getElementIndex(field);
     if (elemIndex && *elemIndex == fieldAccess.getFieldIndex())
       accesses.push_back(fieldAccess);
   }
@@ -1621,6 +1622,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(VerifAssertIntrinsicOp op);
   LogicalResult visitStmt(VerifAssumeIntrinsicOp op);
   LogicalResult visitStmt(VerifCoverIntrinsicOp op);
+  LogicalResult visitExpr(HasBeenResetIntrinsicOp op);
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
@@ -1662,7 +1664,6 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(AssumeOp op);
   LogicalResult visitStmt(CoverOp op);
   LogicalResult visitStmt(AttachOp op);
-  LogicalResult visitStmt(ProbeOp op);
   LogicalResult visitStmt(RefForceOp op);
   LogicalResult visitStmt(RefForceInitialOp op);
   LogicalResult visitStmt(RefReleaseOp op);
@@ -3712,6 +3713,25 @@ LogicalResult FIRRTLLowering::visitStmt(VerifCoverIntrinsicOp op) {
   return success();
 }
 
+LogicalResult FIRRTLLowering::visitExpr(HasBeenResetIntrinsicOp op) {
+  auto clock = getLoweredValue(op.getClock());
+  auto reset = getLoweredValue(op.getReset());
+  if (!clock || !reset)
+    return failure();
+  auto resetType = op.getReset().getType();
+  auto uintResetType = dyn_cast<UIntType>(resetType);
+  auto isSync = uintResetType && uintResetType.getWidth() == 1;
+  auto isAsync = isa<AsyncResetType>(resetType);
+  if (!isAsync && !isSync) {
+    auto d = op.emitError("uninferred reset passed to 'has_been_reset'; "
+                          "requires sync or async reset");
+    d.attachNote() << "reset is of type " << resetType
+                   << ", should be '!firrtl.uint<1>' or '!firrtl.asyncreset'";
+    return failure();
+  }
+  return setLoweringTo<verif::HasBeenResetOp>(op, clock, reset, isAsync);
+}
+
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
@@ -4571,24 +4591,6 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
             },
             [&]() { builder.create<sv::AliasOp>(inoutValues); });
       });
-
-  return success();
-}
-
-LogicalResult FIRRTLLowering::visitStmt(ProbeOp op) {
-  SmallVector<Value, 4> operands;
-  operands.reserve(op.getCaptured().size());
-  for (auto operand : op.getCaptured()) {
-    operands.push_back(getLoweredValue(operand));
-    if (!operands.back()) {
-      // If this is a zero bit operand, just pass a one bit zero.
-      if (!isZeroBitFIRRTLType(operand.getType()))
-        return failure();
-      operands.back() = getOrCreateIntConstant(1, 0);
-    }
-  }
-
-  builder.create<hw::ProbeOp>(op.getInnerSym(), operands);
 
   return success();
 }

@@ -68,6 +68,24 @@ void printOptionalBinaryOpTypes(OpAsmPrinter &p, Operation *op, Type lhs,
 ParseResult parseOptionalBinaryOpTypes(OpAsmParser &parser, Type &lhs,
                                        Type &rhs);
 
+//===----------------------------------------------------------------------===//
+// KeywordBool Custom Directive
+//===----------------------------------------------------------------------===//
+
+/// Parse a boolean as one of two keywords. The `trueKeyword` will result in a
+/// true boolean; the `falseKeyword` will result in a false boolean.
+///
+/// labeled-bool ::= (true-label | false-label)
+ParseResult parseKeywordBool(OpAsmParser &parser, BoolAttr &attr,
+                             StringRef trueKeyword, StringRef falseKeyword);
+
+/// Print a boolean as one of two keywords. If the boolean is true, the
+/// `trueKeyword` is used; if it is false, the `falseKeyword` is used.
+///
+/// labeled-bool ::= (true-label | false-label)
+void printKeywordBool(OpAsmPrinter &printer, Operation *op, BoolAttr attr,
+                      StringRef trueKeyword, StringRef falseKeyword);
+
 } // namespace circt
 
 #endif // CIRCT_SUPPORT_CUSTOMDIRECTIVEIMPL_H

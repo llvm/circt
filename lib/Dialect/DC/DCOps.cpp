@@ -38,6 +38,10 @@ OpFoldResult JoinOp::fold(FoldAdaptor adaptor) {
   if (auto tokens = getTokens(); tokens.size() == 1)
     return tokens.front();
 
+  // These folders are disabled to work around MLIR bugs when changing
+  // the number of operands.  https://github.com/llvm/llvm-project/issues/64280
+  return {};
+
   // Remove operands which originate from a dc.source op (redundant).
   auto *op = getOperation();
   for (OpOperand &operand : llvm::make_early_inc_range(op->getOpOperands())) {

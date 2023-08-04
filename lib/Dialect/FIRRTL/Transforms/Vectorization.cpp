@@ -43,8 +43,8 @@ public:
   matchAndRewrite(Operation *op,
                   mlir::PatternRewriter &rewriter) const override {
     auto vectorCreateOp = cast<VectorCreateOp>(op);
-    auto type = vectorCreateOp.getType();
-    if (type.hasUninferredWidth() || !isa<UIntType>(type.getElementType()))
+    FVectorType type = vectorCreateOp.getType();
+    if (type.hasUninferredWidth() || !type_isa<UIntType>(type.getElementType()))
       return failure();
 
     SmallVector<Value> lhs, rhs;

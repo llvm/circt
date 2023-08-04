@@ -1303,6 +1303,53 @@ LogicalResult FIntModuleOp::verify() {
   return success();
 }
 
+static LogicalResult verifyPortSymbolUses(FModuleLike module,
+                                          SymbolTableCollection &symbolTable) {
+  auto circuitOp = module->getParentOfType<CircuitOp>();
+
+  // verify types in ports.
+  for (size_t i = 0, e = module.getNumPorts(); i < e; ++i) {
+    auto type = module.getPortType(i);
+    auto classType = dyn_cast<ClassType>(type);
+    if (!classType)
+      continue;
+
+    // verify that the class exists.
+    auto className = classType.getNameAttr();
+    auto classOp = dyn_cast_or_null<ClassOp>(
+        symbolTable.lookupSymbolIn(circuitOp, className));
+    if (!classOp)
+      return module.emitOpError()
+             << "target class '" << className.getValue() << "' not found";
+
+    // verify that the result type agrees with the class definition.
+    if (failed(classOp.verifyType(classType,
+                                  [&]() { return module.emitOpError(); })))
+      return failure();
+  }
+
+  return success();
+}
+
+LogicalResult FModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+}
+
+LogicalResult
+FExtModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+}
+
+LogicalResult
+FIntModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+}
+
+LogicalResult
+FMemModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+}
+
 void FModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
                                          mlir::OpAsmSetValueNameFn setNameFn) {
   getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
@@ -1484,6 +1531,11 @@ LogicalResult ClassOp::verify() {
   return success();
 }
 
+LogicalResult
+ClassOp::verifySymbolUses(::mlir::SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+}
+
 void ClassOp::getAsmBlockArgumentNames(mlir::Region &region,
                                        mlir::OpAsmSetValueNameFn setNameFn) {
   getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
@@ -1515,6 +1567,60 @@ ArrayAttr ClassOp::getPortAnnotationsAttr() {
 }
 
 hw::ModulePortInfo ClassOp::getPortList() { return ::getPortListImpl(*this); }
+
+LogicalResult
+ClassOp::verifyType(ClassType type,
+                    function_ref<InFlightDiagnostic()> emitError) {
+  // This check is probably not required, but done for sanity.
+  auto name = type.getNameAttr().getAttr();
+  auto expectedName = getModuleNameAttr();
+  if (name != expectedName)
+    return emitError() << "type has wrong name, got " << name << ", expected "
+                       << expectedName;
+
+  auto elements = type.getElements();
+  auto numElements = elements.size();
+  auto expectedNumElements = getNumPorts();
+  if (numElements != expectedNumElements)
+    return emitError() << "has wrong number of ports, got " << numElements
+                       << ", expected " << expectedNumElements;
+
+  for (unsigned i = 0; i < numElements; ++i) {
+    auto element = elements[i];
+
+    auto name = element.name;
+    auto expectedName = getPortNameAttr(i);
+    if (name != expectedName)
+      return emitError() << "port #" << i << " has wrong name, got " << name
+                         << ", expected " << expectedName;
+
+    auto direction = element.direction;
+    auto expectedDirection = getPortDirection(i);
+    if (direction != expectedDirection)
+      return emitError() << "port " << name << " has wrong direction, got "
+                         << direction::toString(direction) << ", expected "
+                         << direction::toString(expectedDirection);
+
+    auto type = element.type;
+    auto expectedType = getPortType(i);
+    if (type != expectedType)
+      return emitError() << "port " << name << " has wrong type, got " << type
+                         << ", expected " << expectedType;
+  }
+
+  return success();
+}
+
+ClassType ClassOp::getInstanceType() {
+  auto n = getNumPorts();
+  SmallVector<ClassElement> elements;
+  elements.reserve(n);
+  for (size_t i = 0; i < n; ++i)
+    elements.push_back(
+        {getPortNameAttr(i), getPortType(i), getPortDirection(i)});
+  auto name = FlatSymbolRefAttr::get(getNameAttr());
+  return ClassType::get(name, elements);
+}
 
 //===----------------------------------------------------------------------===//
 // Declarations
@@ -2485,6 +2591,55 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
 
+void ObjectOp::build(OpBuilder &builder, OperationState &state,
+                     ClassType type) {
+  build(builder, state, type, type.getNameAttr());
+}
+
+void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassOp klass) {
+  build(builder, state, klass.getInstanceType());
+}
+
+ParseResult ObjectOp::parse(OpAsmParser &parser, OperationState &result) {
+  ClassType type;
+  if (ClassType::parseInterface(parser, type))
+    return failure();
+
+  result.addTypes(type);
+  result.addAttribute("className", type.getNameAttr());
+  return success();
+}
+
+void ObjectOp::print(OpAsmPrinter &p) {
+  p << " ";
+  getType().printInterface(p);
+}
+
+LogicalResult ObjectOp::verify() { return success(); }
+
+LogicalResult ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
+  auto classType = getType();
+  auto className = classType.getNameAttr();
+
+  // verify that the class exists.
+  auto classOp = dyn_cast_or_null<ClassOp>(
+      symbolTable.lookupSymbolIn(circuitOp, className));
+  if (!classOp)
+    return emitOpError() << "target class '" << className.getValue()
+                         << "' not found";
+
+  // verify that the result type agrees with the class definition.
+  if (failed(classOp.verifyType(classType, [&]() { return emitOpError(); })))
+    return failure();
+
+  return success();
+}
+
+ClassOp ObjectOp::getReferencedClass(SymbolTable &symbolTable) {
+  return symbolTable.lookup<ClassOp>(getClassNameAttr().getLeafReference());
+}
+
 //===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//
@@ -2591,6 +2746,7 @@ static LogicalResult checkConnectConditionality(FConnectLike connect) {
           .Case<SubaccessOp>([&](SubaccessOp op) {
             if (op.getInput()
                     .getType()
+                    .get()
                     .getElementTypePreservingConst()
                     .isConst())
               originalFieldType = originalFieldType.getConstType(true);
@@ -2796,7 +2952,7 @@ void WhenOp::build(OpBuilder &builder, OperationState &result, Value condition,
 //===----------------------------------------------------------------------===//
 
 LogicalResult MatchOp::verify() {
-  auto type = getInput().getType();
+  FEnumType type = getInput().getType();
 
   // Make sure that the number of tags matches the number of regions.
   auto numCases = getTags().size();
@@ -2845,7 +3001,7 @@ LogicalResult MatchOp::verify() {
 
 void MatchOp::print(OpAsmPrinter &p) {
   auto input = getInput();
-  auto type = input.getType();
+  FEnumType type = input.getType();
   auto regions = getRegions();
   p << " " << input << " : " << type;
   SmallVector<StringRef> elided = {"tags"};
@@ -2926,11 +3082,6 @@ void MatchOp::build(OpBuilder &builder, OperationState &result, Value input,
   result.addOperands(input);
   result.addAttribute("tags", tags);
   result.addRegions(regions);
-}
-
-std::optional<size_t> ProbeOp::getTargetResultIndex() {
-  // Inner symbols on probe operations target the op not any result.
-  return std::nullopt;
 }
 
 //===----------------------------------------------------------------------===//
@@ -3062,7 +3213,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 
 LogicalResult ConstantOp::verify() {
   // If the result type has a bitwidth, then the attribute must match its width.
-  auto intType = getType();
+  IntType intType = getType();
   auto width = intType.getWidthOrSentinel();
   if (width != -1 && (int)getValue().getBitWidth() != width)
     return emitError(
@@ -3070,7 +3221,7 @@ LogicalResult ConstantOp::verify() {
 
   // The sign of the attribute's integer type must match our integer type sign.
   auto attrType = type_cast<IntegerType>(getValueAttr().getType());
-  if (attrType.isSignless() || attrType.isSigned() != getType().isSigned())
+  if (attrType.isSignless() || attrType.isSigned() != intType.isSigned())
     return emitError("firrtl.constant attribute has wrong sign");
 
   return success();
@@ -3103,7 +3254,7 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
 void ConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // For constants in particular, propagate the value into the result name to
   // make it easier to read the IR.
-  auto intTy = getType();
+  IntType intTy = getType();
   assert(intTy);
 
   // Otherwise, build a complex name with the value and type.
@@ -3245,20 +3396,20 @@ Attribute AggregateConstantOp::getAttributeFromFieldID(uint64_t fieldID) {
   return value;
 }
 
-void BigIntConstantOp::print(OpAsmPrinter &p) {
+void FIntegerConstantOp::print(OpAsmPrinter &p) {
   p << " ";
   p.printAttributeWithoutType(getValueAttr());
   p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
 }
 
-ParseResult BigIntConstantOp::parse(OpAsmParser &parser,
-                                    OperationState &result) {
+ParseResult FIntegerConstantOp::parse(OpAsmParser &parser,
+                                      OperationState &result) {
   auto *context = parser.getContext();
   APInt value;
   if (parser.parseInteger(value) ||
       parser.parseOptionalAttrDict(result.attributes))
     return failure();
-  result.addTypes(BigIntType::get(context));
+  result.addTypes(FIntegerType::get(context));
   auto intType =
       IntegerType::get(context, value.getBitWidth(), IntegerType::Signed);
   auto valueAttr = parser.getBuilder().getIntegerAttr(intType, value);
@@ -3267,23 +3418,25 @@ ParseResult BigIntConstantOp::parse(OpAsmParser &parser,
 }
 
 LogicalResult BundleCreateOp::verify() {
-  if (getType().getNumElements() != getFields().size())
+  BundleType resultType = getType();
+  if (resultType.getNumElements() != getFields().size())
     return emitOpError("number of fields doesn't match type");
-  for (size_t i = 0; i < getType().getNumElements(); ++i)
+  for (size_t i = 0; i < resultType.getNumElements(); ++i)
     if (!areTypesConstCastable(
-            getType().getElementTypePreservingConst(i),
+            resultType.getElementTypePreservingConst(i),
             type_cast<FIRRTLBaseType>(getOperand(i).getType())))
       return emitOpError("type of element doesn't match bundle for field ")
-             << getType().getElement(i).name;
+             << resultType.getElement(i).name;
   // TODO: check flow
   return success();
 }
 
 LogicalResult VectorCreateOp::verify() {
-  if (getType().getNumElements() != getFields().size())
+  FVectorType resultType = getType();
+  if (resultType.getNumElements() != getFields().size())
     return emitOpError("number of fields doesn't match type");
-  auto elemTy = getType().getElementTypePreservingConst();
-  for (size_t i = 0; i < getType().getNumElements(); ++i)
+  auto elemTy = resultType.getElementTypePreservingConst();
+  for (size_t i = 0; i < resultType.getNumElements(); ++i)
     if (!areTypesConstCastable(
             elemTy, type_cast<FIRRTLBaseType>(getOperand(i).getType())))
       return emitOpError("type of element doesn't match vector element");
@@ -3296,13 +3449,14 @@ LogicalResult VectorCreateOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult FEnumCreateOp::verify() {
-  auto elementIndex = getResult().getType().getElementIndex(getFieldName());
+  FEnumType resultType = getResult().getType();
+  auto elementIndex = resultType.getElementIndex(getFieldName());
   if (!elementIndex)
     return emitOpError("label ")
            << getFieldName() << " is not a member of the enumeration type "
-           << getResult().getType();
+           << resultType;
   if (!areTypesConstCastable(
-          getResult().getType().getElementTypePreservingConst(*elementIndex),
+          resultType.getElementTypePreservingConst(*elementIndex),
           getInput().getType()))
     return emitOpError("type of element doesn't match enum element");
   return success();
@@ -3366,7 +3520,7 @@ ParseResult FEnumCreateOp::parse(OpAsmParser &parser, OperationState &result) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult IsTagOp::verify() {
-  if (getFieldIndex() >= getInput().getType().getNumElements())
+  if (getFieldIndex() >= getInput().getType().get().getNumElements())
     return emitOpError("element index is greater than the number of fields in "
                        "the bundle type");
   return success();
@@ -3437,7 +3591,7 @@ ParseResult parseSubfieldLikeOp(OpAsmParser &parser, OperationState &result) {
   if (parser.resolveOperand(input, inputType, result.operands))
     return failure();
 
-  auto bundleType = dyn_cast<typename OpTy::InputType>(inputType);
+  auto bundleType = type_dyn_cast<typename OpTy::InputType>(inputType);
   if (!bundleType)
     return parser.emitError(parser.getNameLoc(),
                             "input must be bundle type, got ")
@@ -3540,7 +3694,9 @@ void SubtagOp::print(::mlir::OpAsmPrinter &printer) {
 
 template <typename OpTy>
 static LogicalResult verifySubfieldLike(OpTy op) {
-  if (op.getFieldIndex() >= op.getInput().getType().getNumElements())
+  if (op.getFieldIndex() >=
+      firrtl::type_cast<typename OpTy::InputType>(op.getInput().getType())
+          .getNumElements())
     return op.emitOpError("subfield element index is greater than the number "
                           "of fields in the bundle type");
   return success();
@@ -3553,7 +3709,7 @@ LogicalResult OpenSubfieldOp::verify() {
 }
 
 LogicalResult SubtagOp::verify() {
-  if (getFieldIndex() >= getInput().getType().getNumElements())
+  if (getFieldIndex() >= getInput().getType().get().getNumElements())
     return emitOpError("subfield element index is greater than the number "
                        "of fields in the bundle type");
   return success();
@@ -3644,7 +3800,7 @@ FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
 }
 
 bool SubfieldOp::isFieldFlipped() {
-  auto bundle = getInput().getType();
+  BundleType bundle = getInput().getType();
   return bundle.getElement(getFieldIndex()).isFlip;
 }
 bool OpenSubfieldOp::isFieldFlipped() {

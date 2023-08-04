@@ -132,7 +132,7 @@ def OutputOp : ArcOp<"output", [
 
 def StateOp : ArcOp<"state", [
   MemRefsNormalizable,
-  CallOpMutableInterface,
+  CallOpInterface,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
   AttrSizedOperandSegments,
   DeclareOpInterfaceMethods<ClockedOpInterface, ["isClocked"]>,
@@ -232,7 +232,7 @@ def StateOp : ArcOp<"state", [
 
 def CallOp : ArcOp<"call", [
   MemRefsNormalizable, Pure,
-  CallOpMutableInterface,
+  CallOpInterface,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "calls an arc";
@@ -312,7 +312,7 @@ def MemoryReadPortOp : ArcOp<"memory_read_port", [
 
 def MemoryWritePortOp : ArcOp<"memory_write_port", [
   MemoryEffects<[MemWrite]>,
-  CallOpMutableInterface,
+  CallOpInterface,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
   AttrSizedOperandSegments,
   ClockedOpInterface

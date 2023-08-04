@@ -110,7 +110,7 @@ struct Emitter {
   void emitExpression(UninferredResetCastOp op);
   void emitExpression(ConstCastOp op);
   void emitExpression(StringConstantOp op);
-  void emitExpression(BigIntConstantOp op);
+  void emitExpression(FIntegerConstantOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -1012,7 +1012,7 @@ void Emitter::emitExpression(Value value) {
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
-          BigIntConstantOp,
+          FIntegerConstantOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp>([&](auto op) {
         ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
@@ -1056,7 +1056,7 @@ void Emitter::emitExpression(SpecialConstantOp op) {
 
 // NOLINTNEXTLINE(misc-no-recursion)
 void Emitter::emitExpression(SubfieldOp op) {
-  auto type = op.getInput().getType();
+  BundleType type = op.getInput().getType();
   emitExpression(op.getInput());
   ps << "." << legalize(type.getElementNameAttr(op.getFieldIndex()));
 }
@@ -1118,7 +1118,7 @@ void Emitter::emitExpression(UninferredResetCastOp op) {
   emitExpression(op.getInput());
 }
 
-void Emitter::emitExpression(BigIntConstantOp op) {
+void Emitter::emitExpression(FIntegerConstantOp op) {
   ps << "Integer(";
   ps.addAsString(op.getValue());
   ps << ")";
@@ -1237,7 +1237,7 @@ void Emitter::emitType(Type type, bool includeConst) {
         ps << ">";
       })
       .Case<StringType>([&](StringType type) { ps << "String"; })
-      .Case<BigIntType>([&](BigIntType type) { ps << "Integer"; })
+      .Case<FIntegerType>([&](FIntegerType type) { ps << "Integer"; })
       .Case<PathType>([&](PathType type) { ps << "Path"; })
       .Default([&](auto type) {
         llvm_unreachable("all types should be implemented");

@@ -197,6 +197,10 @@ def LLHD_InstOp : LLHD_Op<"inst", [
   let extraClassDeclaration = [{
     FunctionType getCalleeType();
 
+    MutableOperandRange getArgOperandsMutable() {
+      return getInputsMutable();
+    }
+
     /// Get the argument operands to the called function.
     operand_range getArgOperands() {
       return {arg_operand_begin(), arg_operand_end()};

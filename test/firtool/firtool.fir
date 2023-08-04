@@ -46,17 +46,19 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 
 ; VERILOG-IR: sv.verbatim{{.*}}Standard header to adapt well known macros to our needs
 ; VERILOG-IR: sv.macro.def @INIT_RANDOM_PROLOG_
+  type V3 = UInt<1>[3]
+  type V2 = UInt<1>[2]
 
   module test_mod :
     input clock : Clock
     input a: UInt<1>
     input b: UInt<2>
     output c: UInt<1>
-    input vec: UInt<1>[3]
+    input vec: V3
     output out_implicitTrunc: UInt<1>
     output out_prettifyExample: UInt<1>
     output out_multibitMux: UInt<1>
-    output out_mux2cell: UInt<1>[2]
+    output out_mux2cell: V2
 
     inst cat of Cat
     cat.a <= b

@@ -184,7 +184,9 @@ def InstanceOp : Handshake_Op<"instance", [
       return getOperands().back();
     }
 
-    ::mlir::MutableOperandRange getArgOperandsMutable();
+    MutableOperandRange getArgOperandsMutable() {
+      return getOpOperandsMutable();
+    }
 
   }];
 

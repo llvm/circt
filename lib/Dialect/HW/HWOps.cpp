@@ -430,15 +430,6 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
-// ProbeOp
-//===----------------------------------------------------------------------===//
-
-std::optional<size_t> ProbeOp::getTargetResultIndex() {
-  // Inner symbols on probe operations target the op not any result.
-  return std::nullopt;
-}
-
-//===----------------------------------------------------------------------===//
 // AggregateConstantOp
 //===----------------------------------------------------------------------===//
 

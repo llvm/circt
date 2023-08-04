@@ -85,6 +85,18 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
         return {};
       return inferReturnType(operands, attrs, loc);
     }
+
+    // Returns when two result types are compatible for this op; method used by
+    // InferTypeOpInterface.
+    static bool isCompatibleReturnTypes(TypeRange l, TypeRange r) {
+      if (l.size () != r.size())
+        return false;
+      for (auto [l, r] : llvm::zip(l, r)) {
+        if (!areAnonymousTypesEquivalent(l, r))
+          return false;
+      }
+      return true;
+    }
   }];
 }
 
@@ -221,7 +233,7 @@ def FEnumCreateOp : FIRRTLOp<"enumcreate"> {
   let extraClassDeclaration = [{
     /// Return the name attribute of the accessed field.
     StringAttr getFieldNameAttr() {
-      return getResult().getType().getElementNameAttr(getFieldIndex());
+      return getResult().getType().get().getElementNameAttr(getFieldIndex());
     }
 
     /// Return the name of the accessed field.
@@ -285,13 +297,13 @@ class BaseSubfieldOp<string name, Type btype, Type rtype> : FIRRTLExprOp<name> {
 
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType()
+      return FieldRef(getInput(), firrtl::type_cast<InputType>(getInput().getType())
                                             .getFieldID(getFieldIndex()));
     }
 
     /// Return the name of the accessed field.
     StringRef getFieldName() {
-      return getInput().getType().getElementName(getFieldIndex());
+      return firrtl::type_cast<InputType>(getInput().getType()).getElementName(getFieldIndex());
     }
   }];
 }
@@ -325,8 +337,9 @@ def SubindexOp : FIRRTLExprOp<"subindex"> {
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType().getFieldID(getIndex()));
+      return FieldRef(getInput(), getInput().getType().get().getFieldID(getIndex()));
     }
+    using InputType = FVectorType;
   }];
 }
 
@@ -353,6 +366,8 @@ def OpenSubindexOp : FIRRTLExprOp<"opensubindex"> {
     FieldRef getAccessedField() {
       return FieldRef(getInput(), getInput().getType().getFieldID(getIndex()));
     }
+
+    using InputType = OpenVectorType;
   }];
 }
 
@@ -449,13 +464,13 @@ def SubtagOp : FIRRTLExprOp<"subtag"> {
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType()
+      return FieldRef(getInput(), getInput().getType().get()
                                             .getFieldID(getFieldIndex()));
     }
 
     /// Return the name of the accessed field.
     StringAttr getFieldNameAttr() {
-      return getInput().getType().getElementNameAttr(getFieldIndex());
+      return getInput().getType().get().getElementNameAttr(getFieldIndex());
     }
 
     /// Return the name of the accessed field.
@@ -888,6 +903,22 @@ def PlusArgsValueIntrinsicOp : FIRRTLOp<"int.plusargs.value",
   let assemblyFormat = "$formatString attr-dict `:` type($result)";
 }
 
+def HasBeenResetIntrinsicOp : FIRRTLOp<"int.has_been_reset", [Pure]> {
+  let summary = "Check that a proper reset has been seen.";
+  let description = [{
+    The result of `firrtl.int.has_been_reset` reads as 0 immediately after simulation
+    startup and after each power-cycle in a power-aware simulation. The result
+    remains 0 before and during reset and only switches to 1 after the reset is
+    deasserted again.
+
+    See the corresponding `verif.has_been_reset` operation.
+  }];
+  let arguments = (ins NonConstClockType:$clock, AnyResetType:$reset);
+  let results = (outs NonConstUInt1Type:$result);
+  let hasFolder = 1;
+  let assemblyFormat = "$clock `,` $reset attr-dict `:` type($reset)";
+}
+
 //===----------------------------------------------------------------------===//
 // Verbatim
 //===----------------------------------------------------------------------===//
@@ -1045,18 +1076,18 @@ def StringConstantOp : FIRRTLOp<"string", [Pure, ConstantLike]> {
   let assemblyFormat = "$value attr-dict";
 }
 
-def BigIntConstantOp : FIRRTLOp<"bigint", [Pure, ConstantLike]> {
-  let summary = "Produce a constant bigint value";
+def FIntegerConstantOp : FIRRTLOp<"integer", [Pure, ConstantLike]> {
+  let summary = "Produce a constant integer value";
   let description = [{
-    Produces a constant value of bigint type.
+    Produces a constant value of integer type.
 
     Example:
     ```mlir
-    %0 = firrtl.bigint 42
+    %0 = firrtl.integer 42
     ```
   }];
   let arguments = (ins APSIntAttr:$value);
-  let results = (outs BigIntType:$result);
+  let results = (outs FIntegerType:$result);
   let hasCustomAssemblyFormat = true;
 }
 

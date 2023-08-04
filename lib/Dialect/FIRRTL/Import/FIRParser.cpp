@@ -970,7 +970,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
                             "feature, but the specified FIRRTL version was "
                          << version;
     consumeToken(FIRToken::kw_Integer);
-    result = BigIntType::get(getContext());
+    result = FIntegerType::get(getContext());
     break;
   case FIRToken::kw_Path:
     if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
@@ -1757,7 +1757,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
         parseToken(FIRToken::r_paren, "expected ')' in Integer expression"))
       return failure();
     result =
-        builder.create<BigIntConstantOp>(APSInt(value, /*isUnsigned=*/false));
+        builder.create<FIntegerConstantOp>(APSInt(value, /*isUnsigned=*/false));
     break;
   }
 

@@ -839,10 +839,12 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedField) {
     logger.getOStream() << "}\n";
   });
 
-  // Fold functions in general are allowed to do in-place updates, but FIRRTL
-  // does not do this and supporting it costs more.
-  assert(!foldResults.empty() &&
-         "FIRRTL fold functions shouldn't do in-place updates!");
+  // If the folding was in-place, keep going.  This is surprising, but since
+  // only folder that will do inplace updates is the communative folder, we
+  // aren't going to stop.  We don't update the results, since they didn't
+  // change, the op just got shuffled around.
+  if (foldResults.empty())
+    return visitOperation(op, changedField);
 
   // Merge the fold results into the lattice for this operation.
   assert(foldResults.size() == op->getNumResults() && "invalid result size");
@@ -860,11 +862,8 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedField) {
           latticeValues[getOrCacheFieldRefFromValue(foldResult.get<Value>())];
     }
 
-    // We do not "merge" the lattice value in, we set it.  This is because the
-    // fold functions can produce different values over time, e.g. in the
-    // presence of InvalidValue operands that get resolved to other constants.
-    setLatticeValue(getOrCacheFieldRefFromValue(op->getResult(i)),
-                    resultLattice);
+    mergeLatticeValue(getOrCacheFieldRefFromValue(op->getResult(i)),
+                      resultLattice);
   }
 }
 

@@ -264,6 +264,10 @@ def CallIndirectOp : SystemCOp<"cpp.call_indirect", [
     }]>];
 
   let extraClassDeclaration = [{
+    MutableOperandRange getArgOperandsMutable() {
+      return getCalleeOperandsMutable();
+    }
+
     /// Get the argument operands to the called function.
     operand_range getArgOperands() {
       return {arg_operand_begin(), arg_operand_end()};
@@ -336,6 +340,10 @@ def CallOp : SystemCOp<"cpp.call", [
 
   let extraClassDeclaration = [{
     FunctionType getCalleeType();
+    
+    MutableOperandRange getArgOperandsMutable() {
+      return getCalleeOperandsMutable();
+    }
 
     /// Get the argument operands to the called function.
     operand_range getArgOperands() {

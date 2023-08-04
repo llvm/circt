@@ -16,6 +16,7 @@ def VerifDialect : Dialect {
   let summary = "Verification constructs and utilities.";
   // See `docs/Dialect/Verif.md` for detailed dialect documentation.
   let cppNamespace = "circt::verif";
+  let hasConstantMaterializer = 1;
 }
 
 #endif // CIRCT_DIALECT_VERIF_VERIFDIALECT_TD

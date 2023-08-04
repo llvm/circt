@@ -790,8 +790,8 @@ void SVExtractTestCodeImplPass::runOnOperation() {
           doModule(rtlmod, isCover, "_cover", coverDir, coverBindFile,
                    bindTable, opsToErase, opsInDesign);
 
-      // If nothing is extracted, we are done.
-      if (!anyThingExtracted)
+      // If nothing is extracted and the module has an output, we are done.
+      if (!anyThingExtracted && rtlmod.getNumOutputs() != 0)
         continue;
 
       // Here, erase extracted operations as well as dead operations.
@@ -828,7 +828,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       });
 
       // Inline any modules that only have inputs for test code.
-      if (!disableModuleInlining && anyThingExtracted)
+      if (!disableModuleInlining)
         inlineInputOnly(rtlmod, *instanceGraph, bindTable, opsToErase,
                         innerRefUsedByNonBindOp);
 
