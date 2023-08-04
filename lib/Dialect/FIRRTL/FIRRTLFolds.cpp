@@ -1735,8 +1735,7 @@ static LogicalResult canonicalizeSingleSetConnect(MatchingConnectOp op,
     return failure();
   if (hasDontTouch(connectedDecl) ||
       !AnnotationSet(connectedDecl).canBeDeleted() ||
-      !hasDroppableName(connectedDecl) ||
-      cast<Forceable>(connectedDecl).isForceable())
+      !hasDroppableName(connectedDecl))
     return failure();
 
   // Only forward if the types exactly match and there is one connect.

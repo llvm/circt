@@ -769,12 +769,6 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
                         op.getRef().getType().getType(), op.getRef(), 0,
                         op.getLoc());
           })
-          .Case<Forceable>([&](Forceable op) {
-            // Trace reset into rwprobe.  Avoid invalid IR.
-            if (op.isForceable())
-              traceResets(op.getDataType(), op.getData(), 0, op.getDataType(),
-                          op.getDataRef(), 0, op.getLoc());
-          })
           .Case<RWProbeOp>([&](RWProbeOp op) {
             auto ist = irn.lookup(op.getTarget());
             assert(ist);
