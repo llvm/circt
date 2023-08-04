@@ -167,11 +167,11 @@ def CallOp : IbisOp<"call", [CallOpInterface]> {
   }];
 }
 
-def GetParentOp : IbisOp<"get_parent"> {
-  let summary = "Ibis get parent";
+def GetParentOfRefOp : IbisOp<"get_parent_of_ref"> {
+  let summary = "Ibis get classref parent op";
   let description = [{
-    Given an Ibis class reference, returns the parent of said class. The
-    returned `ibis.classref` will be an opaque type.
+    Given an Ibis class reference, returns a class reference to the parent of
+    said class. The returned `ibis.classref` will be an opaque type.
   }];
 
   let arguments = (ins AnyClassRefType:$src);
@@ -182,25 +182,25 @@ def GetParentOp : IbisOp<"get_parent"> {
   }];
 }
 
-def GetChildOp : IbisOp<"get_child"> {
-  let summary = "Ibis get child";
+def GetInstanceInRefOp : IbisOp<"get_instance_in_ref"> {
+  let summary = "Ibis get instance";
   let description = [{
-    Given an Ibis class reference, returns a child of said class. The child
-    is specified by the symbol name of the instance of that child in the referenced
+    Given an Ibis class reference, returns a instance of said class. The instance
+    is specified by the symbol name of the instance of that instance in the referenced
     class. In case of an opaque reference to the containing class, no type
     validation is performed, and it is up to lowering passes to determine whether
-    the child of the given classref actually exists.
+    the instance of the given classref actually exists.
     The returned classref, however, is typed, given that one must specify the
-    symbol of the class which the child is an instance of.
+    symbol of the class which the instance is an instance of.
   }];
 
   let arguments = (ins
     AnyClassRefType:$src,
-    FlatSymbolRefAttr:$childName,
-    FlatSymbolRefAttr:$childSymbol);
-  let results = (outs ClassRefType:$child);
+    FlatSymbolRefAttr:$instanceName,
+    FlatSymbolRefAttr:$instanceSymbol);
+  let results = (outs ClassRefType:$instance);
   let assemblyFormat = [{
-    $childName `:` $childSymbol `in` $src `:` qualified(type($src)) attr-dict custom<ClassRefFromName>(type($child), ref($childSymbol))
+    $instanceName `:` $instanceSymbol `in` $src `:` qualified(type($src)) attr-dict custom<ClassRefFromName>(type($instance), ref($instanceSymbol))
   }];
 }
 

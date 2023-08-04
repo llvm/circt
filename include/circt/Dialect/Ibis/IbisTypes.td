@@ -17,7 +17,7 @@ class IbisTypeDef<string name> : TypeDef<IbisDialect, name> { }
 def ClassRefType : IbisTypeDef<"ClassRef"> {
   let mnemonic = "classref";
   let parameters = (ins OptionalParameter<"mlir::FlatSymbolRefAttr">:$classRef);
-  let assemblyFormat = "`<` ($classRef^)?  `>`";
+  let assemblyFormat = "(`<` $classRef^  `>`)?";
   let description = [{
     A reference to an Ibis class. May be either a reference to a specific
     class (given a `$classRef` argument) or an opaque reference.

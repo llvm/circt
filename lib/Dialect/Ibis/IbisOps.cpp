@@ -233,9 +233,13 @@ LogicalResult GetPortOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // Lookup the target module type of the instance class reference.
   ModuleOp mod = getOperation()->getParentOfType<ModuleOp>();
   ClassRefType crt = getInstance().getType().cast<ClassRefType>();
+  // @teqdruid TODO: make this more efficient using
+  // innersymtablecollection when that's available to non-firrtl dialects.
   auto targetClass =
       symbolTable.lookupSymbolIn<ClassOp>(mod, crt.getClassRef());
   assert(targetClass && "should have been verified by the type system");
+  // @teqdruid TODO: make this more efficient using
+  // innersymtablecollection when that's available to non-firrtl dialects.
   Operation *targetOp =
       symbolTable.lookupSymbolIn(targetClass, getPortSymbolAttr());
 
