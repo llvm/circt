@@ -108,6 +108,7 @@ struct Emitter {
   void emitExpression(RefSendOp op);
   void emitExpression(RefSubOp op);
   void emitExpression(RWProbeOp op);
+  void emitExpression(RefCastOp op);
   void emitExpression(UninferredResetCastOp op);
   void emitExpression(ConstCastOp op);
   void emitExpression(StringConstantOp op);
@@ -310,6 +311,14 @@ private:
   void addValueName(Value value, StringRef str) {
     auto it = valueNamesStorage.insert(str);
     valueNames.insert({value, it.first->getKey()});
+  }
+  void addForceable(Forceable op, StringAttr attr) {
+    addValueName(op.getData(), attr);
+    if (op.isForceable()) {
+      SmallString<32> rwName;
+      (Twine("rwprobe(") + attr.strref() + ")").toVector(rwName);
+      addValueName(op.getDataRef(), rwName);
+    }
   }
 
   /// The current circuit namespace valid within the call to `emitCircuit`.
@@ -562,7 +571,7 @@ void Emitter::emitStatement(WhenOp op) {
 
 void Emitter::emitStatement(WireOp op) {
   auto legalName = legalize(op.getNameAttr());
-  addValueName(op.getResult(), legalName);
+  addForceable(op, legalName);
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "wire " << PPExtString(legalName);
@@ -573,7 +582,7 @@ void Emitter::emitStatement(WireOp op) {
 
 void Emitter::emitStatement(RegOp op) {
   auto legalName = legalize(op.getNameAttr());
-  addValueName(op.getResult(), legalName);
+  addForceable(op, legalName);
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "reg " << PPExtString(legalName);
@@ -586,7 +595,7 @@ void Emitter::emitStatement(RegOp op) {
 
 void Emitter::emitStatement(RegResetOp op) {
   auto legalName = legalize(op.getNameAttr());
-  addValueName(op.getResult(), legalName);
+  addForceable(op, legalName);
   startStatement();
   if (FIRVersion::compare(version, {3, 0, 0}) >= 0) {
     ps.scopedBox(PP::ibox2, [&]() {
@@ -622,7 +631,7 @@ void Emitter::emitStatement(RegResetOp op) {
 
 void Emitter::emitStatement(NodeOp op) {
   auto legalName = legalize(op.getNameAttr());
-  addValueName(op.getResult(), legalName);
+  addForceable(op, legalName);
   startStatement();
   emitAssignLike([&]() { ps << "node " << PPExtString(legalName); },
                  [&]() { emitExpression(op.getInput()); });
@@ -902,22 +911,9 @@ void Emitter::emitStatement(MemoryPortAccessOp op) {
 
 void Emitter::emitStatement(RefDefineOp op) {
   startStatement();
-  emitAssignLike(
-      [&]() {
-        ps << "define ";
-        emitExpression(op.getDest());
-      },
-      [&]() {
-        auto src = op.getSrc();
-        if (auto forceable = src.getDefiningOp<Forceable>();
-            forceable && forceable.isForceable() &&
-            forceable.getDataRef() == src) {
-          ps << "rwprobe(";
-          emitExpression(forceable.getData());
-          ps << ")";
-        } else
-          emitExpression(src);
-      });
+  emitAssignLike([&]() { emitExpression(op.getDest()); },
+                 [&]() { emitExpression(op.getSrc()); }, PPExtString("="),
+                 PPExtString("define"));
   emitLocationAndNewLine(op);
 }
 
@@ -1027,9 +1023,10 @@ void Emitter::emitExpression(Value value) {
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp,
           // Reference expressions
-          RefSendOp, RefResolveOp, RefSubOp, RWProbeOp>([&](auto op) {
-        ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
-      })
+          RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp>(
+          [&](auto op) {
+            ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
+          })
       .Default([&](auto op) {
         emitOpError(op, "not supported as expression");
         ps << "<unsupported-expr-" << PPExtString(op->getName().stripDialect())
@@ -1167,6 +1164,8 @@ void Emitter::emitExpression(RWProbeOp op) {
   }
   ps << ")";
 }
+
+void Emitter::emitExpression(RefCastOp op) { emitExpression(op.getInput()); }
 
 void Emitter::emitExpression(UninferredResetCastOp op) {
   emitExpression(op.getInput());
