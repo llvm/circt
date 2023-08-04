@@ -107,6 +107,7 @@ struct Emitter {
   void emitExpression(RefResolveOp op);
   void emitExpression(RefSendOp op);
   void emitExpression(RefSubOp op);
+  void emitExpression(RWProbeOp op);
   void emitExpression(UninferredResetCastOp op);
   void emitExpression(ConstCastOp op);
   void emitExpression(StringConstantOp op);
@@ -314,6 +315,15 @@ private:
   /// The current circuit namespace valid within the call to `emitCircuit`.
   CircuitNamespace circuitNamespace;
 
+  /// Symbol and Inner Symbol analyses, valid within the call to `emitCircuit`.
+  struct SymInfos {
+    SymbolTable symbolTable;
+    hw::InnerSymbolTableCollection istc;
+    hw::InnerRefNamespace irn{symbolTable, istc};
+    SymInfos(Operation *op) : symbolTable(op), istc(op){};
+  };
+  std::optional<std::reference_wrapper<SymInfos>> symInfos;
+
   /// The version of the FIRRTL spec that should be emitted.
   FIRVersion version;
 };
@@ -324,6 +334,8 @@ LogicalResult Emitter::finalize() { return failure(encounteredError); }
 /// Emit an entire circuit.
 void Emitter::emitCircuit(CircuitOp op) {
   circuitNamespace.add(op);
+  SymInfos circuitSymInfos(op);
+  symInfos = circuitSymInfos;
   startStatement();
   ps << "FIRRTL version ";
   ps.addAsString(version.major);
@@ -350,6 +362,7 @@ void Emitter::emitCircuit(CircuitOp op) {
     }
   });
   circuitNamespace.clear();
+  symInfos = std::nullopt;
 }
 
 /// Emit an entire module.
@@ -1014,7 +1027,7 @@ void Emitter::emitExpression(Value value) {
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp,
           // Reference expressions
-          RefSendOp, RefResolveOp, RefSubOp>([&](auto op) {
+          RefSendOp, RefResolveOp, RefSubOp, RWProbeOp>([&](auto op) {
         ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
       })
       .Default([&](auto op) {
@@ -1112,6 +1125,47 @@ void Emitter::emitExpression(RefSubOp op) {
       })
       .Case<BundleType>(
           [&](auto type) { ps << "." << type.getElementName(op.getIndex()); });
+}
+
+void Emitter::emitExpression(RWProbeOp op) {
+  ps << "rwprobe(";
+
+  // Find the probe target.
+  auto target = symInfos->get().irn.lookup(op.getTarget());
+  Value base;
+  if (target.isPort()) {
+    auto mod = cast<FModuleOp>(target.getOp());
+    auto port = target.getPort();
+    base = mod.getArgument(port);
+  } else
+    base = cast<hw::InnerSymbolOpInterface>(target.getOp()).getTargetResult();
+
+  // Print target.  Needs this to have a name already.
+  emitExpression(base);
+
+  // Print indexing for the target field.
+  auto fieldID = target.getField();
+  auto type = base.getType();
+  while (fieldID) {
+    FIRRTLTypeSwitch<Type, void>(type)
+        .Case<FVectorType>([&](auto vecTy) {
+          auto index = vecTy.getIndexForFieldID(fieldID);
+          ps << "[";
+          ps.addAsString(index);
+          ps << "]";
+          auto [subtype, subfieldID] = vecTy.getSubTypeByFieldID(fieldID);
+          type = subtype;
+          fieldID = subfieldID;
+        })
+        .Case<BundleType>([&](auto bundleTy) {
+          auto index = bundleTy.getIndexForFieldID(fieldID);
+          ps << "." << bundleTy.getElementName(index);
+          auto [subtype, subfieldID] = bundleTy.getSubTypeByFieldID(fieldID);
+          type = subtype;
+          fieldID = subfieldID;
+        });
+  }
+  ps << ")";
 }
 
 void Emitter::emitExpression(UninferredResetCastOp op) {
