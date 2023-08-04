@@ -3234,3 +3234,24 @@ void RefReleaseInitialOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
   results.add(eraseIfPredFalse<RefReleaseInitialOp>);
 }
+
+//===----------------------------------------------------------------------===//
+// HasBeenResetIntrinsicOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult HasBeenResetIntrinsicOp::fold(FoldAdaptor adaptor) {
+  // The folds in here should reflect the ones for `verif::HasBeenResetOp`.
+
+  // Fold to zero if the reset is a constant. In this case the op is either
+  // permanently in reset or never resets. Both mean that the reset never
+  // finishes, so this op never returns true.
+  if (adaptor.getReset())
+    return getIntZerosAttr(UIntType::get(getContext(), 1));
+
+  // Fold to zero if the clock is a constant and the reset is synchronous. In
+  // that case the reset will never be started.
+  if (isUInt1(getReset().getType()) && adaptor.getClock())
+    return getIntZerosAttr(UIntType::get(getContext(), 1));
+
+  return {};
+}

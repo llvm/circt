@@ -1621,6 +1621,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(VerifAssertIntrinsicOp op);
   LogicalResult visitStmt(VerifAssumeIntrinsicOp op);
   LogicalResult visitStmt(VerifCoverIntrinsicOp op);
+  LogicalResult visitExpr(HasBeenResetIntrinsicOp op);
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
@@ -3709,6 +3710,25 @@ LogicalResult FIRRTLLowering::visitStmt(VerifCoverIntrinsicOp op) {
   builder.create<verif::CoverOp>(getLoweredValue(op.getProperty()),
                                  op.getLabelAttr());
   return success();
+}
+
+LogicalResult FIRRTLLowering::visitExpr(HasBeenResetIntrinsicOp op) {
+  auto clock = getLoweredValue(op.getClock());
+  auto reset = getLoweredValue(op.getReset());
+  if (!clock || !reset)
+    return failure();
+  auto resetType = op.getReset().getType();
+  auto uintResetType = dyn_cast<UIntType>(resetType);
+  auto isSync = uintResetType && uintResetType.getWidth() == 1;
+  auto isAsync = isa<AsyncResetType>(resetType);
+  if (!isAsync && !isSync) {
+    auto d = op.emitError("uninferred reset passed to 'has_been_reset'; "
+                          "requires sync or async reset");
+    d.attachNote() << "reset is of type " << resetType
+                   << ", should be '!firrtl.uint<1>' or '!firrtl.asyncreset'";
+    return failure();
+  }
+  return setLoweringTo<verif::HasBeenResetOp>(op, clock, reset, isAsync);
 }
 
 //===----------------------------------------------------------------------===//

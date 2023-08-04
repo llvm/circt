@@ -12,6 +12,7 @@
 include "circt/Dialect/Verif/VerifDialect.td"
 include "circt/Dialect/LTL/LTLTypes.td"
 include "circt/Dialect/HW/HWTypes.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 class VerifOp<string mnemonic, list<Trait> traits = []> :

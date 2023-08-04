@@ -152,4 +152,21 @@ firrtl.circuit "Intrinsics" {
     %0 = firrtl.int.ltl.delay %a, 42 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.strictconnect %c, %0 : !firrtl.uint<1>
   }
+
+  // CHECK-LABEL: hw.module @HasBeenReset
+  firrtl.module @HasBeenReset(
+    in %clock: !firrtl.clock,
+    in %reset1: !firrtl.uint<1>,
+    in %reset2: !firrtl.asyncreset,
+    out %hbr1: !firrtl.uint<1>,
+    out %hbr2: !firrtl.uint<1>
+  ) {
+    // CHECK-NEXT: [[TMP1:%.+]] = verif.has_been_reset %clock, sync %reset1
+    // CHECK-NEXT: [[TMP2:%.+]] = verif.has_been_reset %clock, async %reset2
+    // CHECK-NEXT: hw.output [[TMP1]], [[TMP2]]
+    %0 = firrtl.int.has_been_reset %clock, %reset1 : !firrtl.uint<1>
+    %1 = firrtl.int.has_been_reset %clock, %reset2 : !firrtl.asyncreset
+    firrtl.strictconnect %hbr1, %0 : !firrtl.uint<1>
+    firrtl.strictconnect %hbr2, %1 : !firrtl.uint<1>
+  }
 }
