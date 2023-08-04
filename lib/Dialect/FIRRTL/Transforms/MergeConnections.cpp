@@ -227,7 +227,14 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
   if (!merged)
     return false;
 
-  builder->create<StrictConnectOp>(connect.getLoc(), parent, merged);
+  // Emit strict connect if possible, fallback to normal connect.
+  // Don't use emitConnect(), will split the connect apart.
+  auto parentBaseTy = type_cast<FIRRTLBaseType>(parentType);
+  if (parentBaseTy.isPassive() && !parentBaseTy.hasUninferredWidth())
+    builder->create<StrictConnectOp>(connect.getLoc(), parent, merged);
+  else
+    builder->create<ConnectOp>(connect.getLoc(), parent, merged);
+
   return true;
 }
 
