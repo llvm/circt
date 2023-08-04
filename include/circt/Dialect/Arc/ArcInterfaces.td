@@ -12,22 +12,6 @@
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/CallInterfaces.td"
 
-def CallOpMutableInterface : OpInterface<"CallOpMutableInterface", [CallOpInterface]> {
-  let description = [{
-    Can be implemented in addition to `CallOpInterface` to allow mutation of the
-    call operation.
-  }];
-  let cppNamespace = "::circt::arc";
-
-  let methods = [
-    InterfaceMethod<[{
-        Returns the operands within this call that are used as arguments to the
-        callee as a mutable range.
-      }],
-      "::mlir::MutableOperandRange", "getArgOperandsMutable">,
-  ];
-}
-
 def ClockedOpInterface : OpInterface<"ClockedOpInterface"> {
   let description = [{
     This interface should be implemented by operations that have clocked

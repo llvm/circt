@@ -136,6 +136,10 @@ def CallOp : IbisOp<"call", [CallOpInterface]> {
   let results = (outs Variadic<AnyType>);
 
   let extraClassDeclaration = [{
+    MutableOperandRange getArgOperandsMutable() {
+      return getOperandsMutable();
+    }
+
     /// Get the argument operands to the called method.
     operand_range getArgOperands() {
       return {arg_operand_begin(), arg_operand_end()};

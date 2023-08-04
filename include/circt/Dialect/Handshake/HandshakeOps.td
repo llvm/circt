@@ -183,6 +183,11 @@ def InstanceOp : Handshake_Op<"instance", [
     Value getControl() {
       return getOperands().back();
     }
+
+    MutableOperandRange getArgOperandsMutable() {
+      return getOpOperandsMutable();
+    }
+
   }];
 
   let assemblyFormat = [{

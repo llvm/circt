@@ -120,6 +120,9 @@ func.func @test7(%arg0: memref<?xi32>) {
         // CHECK: affine.load %arg0[%arg1] {dependences = []}
         %1 = affine.load %arg0[%arg1] : memref<?xi32>
         affine.yield %1 : i32
+      } else {
+        %1 = arith.constant 0 : i32
+        affine.yield %1 : i32
       }
       // CHECK{LITERAL}: affine.store %0, %arg0[%arg1] {dependences = [[[0, 0]]]}
       affine.store %0, %arg0[%arg1] : memref<?xi32>
