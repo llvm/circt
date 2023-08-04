@@ -29,6 +29,11 @@ class FIRRTLDialectTypeHelper<string typeName, string summary, string desc = "">
   : FIRRTLDialectType<CPred<"isa<" # typeName # ">($_self)">, summary,
                       "::circt::firrtl::" # typeName, desc>;
 
+// Helper class to define firrtl types which allows alias types to be used as well.
+class FIRRTLDialectAliasTypeHelper<string typeName, string summary, string desc = "">
+  : FIRRTLDialectType<CPred<"type_isa<" # typeName # ">($_self)">, summary,
+                      "::circt::firrtl::BaseTypeAliasOr<::circt::firrtl::" # typeName #">", desc>;
+
 def FIRRTLType : FIRRTLDialectTypeHelper<"FIRRTLType", "FIRRTLType", [{
     Any FIRRTL dialect type, represented by FIRRTLType.
   }]>;
@@ -48,29 +53,29 @@ def FIRRTLBaseType : FIRRTLDialectType<
 def ForeignType : FIRRTLDialectType<CPred<"!isa<FIRRTLType>($_self)">,
                                     "foreign type", "::mlir::Type">;
 
-def ClockType : FIRRTLDialectTypeHelper<"ClockType", "clock">;
+def ClockType : FIRRTLDialectAliasTypeHelper<"ClockType", "clock">;
 
 def NonConstClockType :
-  FIRRTLDialectTypeHelper<"ClockType", "clock">,
+  FIRRTLDialectAliasTypeHelper<"ClockType", "clock">,
   BuildableType<"::circt::firrtl::ClockType::get($_builder.getContext())">;
 
-def IntType : FIRRTLDialectTypeHelper<"IntType", "sint or uint type">;
+def IntType : FIRRTLDialectAliasTypeHelper<"IntType", "sint or uint type">;
 
-def SIntType : FIRRTLDialectTypeHelper<"SIntType", "sint type">;
+def SIntType : FIRRTLDialectAliasTypeHelper<"SIntType", "sint type">;
 
-def UIntType : FIRRTLDialectTypeHelper<"UIntType", "uint type">;
+def UIntType : FIRRTLDialectAliasTypeHelper<"UIntType", "uint type">;
 
-def AnalogType : FIRRTLDialectTypeHelper<"AnalogType", "analog type">;
+def AnalogType : FIRRTLDialectAliasTypeHelper<"AnalogType", "analog type">;
 
-def BundleType : FIRRTLDialectTypeHelper<"BundleType", "bundle type">;
+def BundleType : FIRRTLDialectAliasTypeHelper<"BundleType", "bundle type">;
 
 def OpenBundleType : FIRRTLDialectTypeHelper<"OpenBundleType", "open bundle type">;
 
-def FVectorType : FIRRTLDialectTypeHelper<"FVectorType", "vector type">;
+def FVectorType : FIRRTLDialectAliasTypeHelper<"FVectorType", "vector type">;
 
 def OpenVectorType : FIRRTLDialectTypeHelper<"OpenVectorType", "open vector type">;
 
-def FEnumType : FIRRTLDialectTypeHelper<"FEnumType", "enum type">;
+def FEnumType : FIRRTLDialectAliasTypeHelper<"FEnumType", "enum type">;
 
 def AggregateType : FIRRTLDialectType<
   CPred<"type_isa<FVectorType, BundleType, FEnumType>($_self)">,
@@ -88,9 +93,9 @@ def SizedPassiveType : FIRRTLDialectType<And<[SizedType.predicate,PassiveType.pr
     "a sized passive base type (contains no uninferred widths, or flips)", "::circt::firrtl::FIRRTLType">;
 def SizedPassiveOrForeignType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
 
-def AsyncResetType : FIRRTLDialectTypeHelper<"AsyncResetType", "async reset type">;
+def AsyncResetType : FIRRTLDialectAliasTypeHelper<"AsyncResetType", "async reset type">;
 
-def ResetType : FIRRTLDialectTypeHelper<"ResetType", "reset type">;
+def ResetType : FIRRTLDialectAliasTypeHelper<"ResetType", "reset type">;
 
 
 def RefType : FIRRTLDialectTypeHelper<"RefType", "reference type">;

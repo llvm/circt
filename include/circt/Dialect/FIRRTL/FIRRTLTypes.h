@@ -620,6 +620,24 @@ private:
   bool foundMatch = false;
 };
 
+template <typename BaseTy>
+class BaseTypeAliasOr
+    : public ::mlir::Type::TypeBase<BaseTypeAliasOr<BaseTy>,
+                                    firrtl::FIRRTLBaseType,
+                                    detail::FIRRTLBaseTypeStorage> {
+
+public:
+  using mlir::Type::TypeBase<BaseTypeAliasOr<BaseTy>, firrtl::FIRRTLBaseType,
+                             detail::FIRRTLBaseTypeStorage>::Base::Base;
+  // Support LLVM isa/cast/dyn_cast to BaseTy.
+  static bool classof(Type other) { return type_isa<BaseTy>(other); }
+
+  // Support C++ implicit conversions to BaseTy.
+  operator BaseTy() const { return circt::firrtl::type_cast<BaseTy>(*this); }
+
+  BaseTy get() const { return circt::firrtl::type_cast<BaseTy>(*this); }
+};
+
 } // namespace firrtl
 } // namespace circt
 
