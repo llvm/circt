@@ -118,17 +118,17 @@ private:
 
     if (path.isLocal()) {
       addSymbol(
-          FlatSymbolRefAttr::get(path.ref.getModule().getModuleNameAttr()));
+          FlatSymbolRefAttr::get(path.ref.getModule().getNameAttr()));
     } else {
       addSymbol(FlatSymbolRefAttr::get(path.instances.front()
                                            ->getParentOfType<FModuleLike>()
-                                           .getModuleNameAttr()));
+                                           .getNameAttr()));
     }
 
     for (auto inst : path.instances) {
       newTarget.append("/");
       addSymbol(hw::InnerRefAttr::get(
-          inst->getParentOfType<FModuleLike>().getModuleNameAttr(),
+          inst->getParentOfType<FModuleLike>().getNameAttr(),
           inst.getInnerSymAttr().getSymName()));
       newTarget.append(":");
       addSymbol(inst.getModuleNameAttr());
@@ -156,7 +156,7 @@ private:
               assert(false && "unexpected annotation target type");
               return StringAttr{};
             });
-    addSymbol(hw::InnerRefAttr::get(path.ref.getModule().getModuleNameAttr(),
+    addSymbol(hw::InnerRefAttr::get(path.ref.getModule().getNameAttr(),
                                     innerSymStr));
 
     auto type = dyn_cast<FIRRTLBaseType>(path.ref.getType());
@@ -261,10 +261,6 @@ private:
                 .lookupOp(inst.getName())));
       }
     }
-<<<<<<< HEAD
-    newTarget.append(module.getName());
-=======
->>>>>>> origin/main
 
     AnnoPathValue path(instances, OpAnnoTarget(module), 0);
 

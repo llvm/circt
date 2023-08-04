@@ -281,6 +281,14 @@ InstanceWriteOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// CallOp
+//===----------------------------------------------------------------------===//
+
+MutableOperandRange CallOp::getArgOperandsMutable() {
+      return getOperandsMutable();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic
 //===----------------------------------------------------------------------===//
 

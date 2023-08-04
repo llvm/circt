@@ -363,8 +363,6 @@ def CallOp : SystemCOp<"cpp.call", [
       (*this)->setAttr(getCalleeAttrName(), callee.get<mlir::SymbolRefAttr>());
     }
 
-    ::mlir::MutableOperandRange getArgOperandsMutable();
-
   }];
 
   let assemblyFormat = [{
