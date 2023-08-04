@@ -110,7 +110,7 @@ register and lower it to SystemVerilog.
 signal.
 - **clk**: Clock signal driving the register.
 - **name**: A name for the register, passed directly to the `sv.reg`.
-- **hw.inner_sym**: A optional symbol for the register, passed directly to the
+- **inner_sym**: A optional symbol for the register, passed directly to the
 `sv.reg`. Is a symbol is not specified and the register is randomised, one is
 created during the lowering to SV. Registers without symbols can be removed
 from the design.

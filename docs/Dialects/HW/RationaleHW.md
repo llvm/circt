@@ -192,7 +192,7 @@ and also for metadata emission.
     %c0 = hw.constant 0 : i1
     %2 = hw.instance "ab" sym @SF  @F (a1: %c0: i1) -> (a2 : i1) {circt.globalRef = [#hw.globalNameRef<@glbl_D_M2>, #hw.globalNameRef<@glbl_D_M3>]}
   }
-  hw.module.extern  @F(%a1: i1 {hw.inner_sym = @symA, circt.globalRef = [#hw.globalNameRef<@glbl_D_M2>]}) -> (a2: i1 {hw.inner_sym = @symB, circt.globalRef = [#hw.globalNameRef<@glbl_D_M3>]}) attributes {}
+  hw.module.extern  @F(%a1: i1 {hw.exportPort = @symA, circt.globalRef = [#hw.globalNameRef<@glbl_D_M2>]}) -> (a2: i1 {hw.exportPort = @symB, circt.globalRef = [#hw.globalNameRef<@glbl_D_M3>]}) attributes {}
 
 sv.verbatim "{{0}}" { symbols = [@glbl_D_M1] }
 sv.verbatim "{{0}}" { symbols = [@glbl_B_M1] }

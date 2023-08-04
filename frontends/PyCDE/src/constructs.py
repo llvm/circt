@@ -37,7 +37,7 @@ def NamedWire(type_or_value: Union[Type, Signal], name: str):
       self.assigned_value = None
       # TODO: We assume here that names are unique within a module, which isn't
       # necessarily the case. We may have to introduce a module-scope list of
-      # hw.inner_symbols purely for the purpose of disallowing the SV
+      # inner_symbols purely for the purpose of disallowing the SV
       # canonicalizers to eliminate wires!
       uniq_name = _BlockContext.current().uniquify_symbol(name)
       self.wire_op = sv.WireOp(InOut(type), name, sym_name=uniq_name)
