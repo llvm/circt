@@ -693,4 +693,14 @@ firrtl.circuit "Foo" {
     }
   }
 
+  // CHECK: module RWProbe :
+  // CHECK-NEXT: input in : { a : UInt<1> }[2]
+  // CHECK-NEXT: output p : RWProbe<UInt<1>>
+  // CHECK-EMPTY:
+  // CHECK-NEXT: define p = rwprobe(in[1].a)
+  firrtl.module private @RWProbe(in %in: !firrtl.vector<bundle<a: uint<1>>, 2> sym [<@sym,4,public>],
+                                 out %p: !firrtl.rwprobe<uint<1>>) {
+      %0 = firrtl.ref.rwprobe <@RWProbe::@sym> : !firrtl.uint<1>
+      firrtl.ref.define %p, %0 : !firrtl.rwprobe<uint<1>>
+  }
 }
