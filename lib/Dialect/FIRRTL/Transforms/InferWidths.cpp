@@ -56,7 +56,6 @@ static void diagnoseUninferredType(InFlightDiagnostic &diag, Type t,
   else if (auto bundleType = type_dyn_cast<BundleType>(basetype))
     for (auto &elem : bundleType.getElements())
       diagnoseUninferredType(diag, elem.type, str + "." + elem.name.getValue());
-  return;
 }
 
 //===----------------------------------------------------------------------===//
