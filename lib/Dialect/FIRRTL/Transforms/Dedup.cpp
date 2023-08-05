@@ -84,7 +84,7 @@ struct StructuralHasherSharedConstants {
     nonessentialAttributes.insert(StringAttr::get(context, "portSyms"));
     nonessentialAttributes.insert(StringAttr::get(context, "portLocations"));
     nonessentialAttributes.insert(StringAttr::get(context, "sym_name"));
-    nonessentialAttributes.insert(StringAttr::get(context, "hw.inner_sym"));
+    nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
   };
 
   // This is a cached "portTypes" string attr.
@@ -249,7 +249,7 @@ struct Equivalence {
     nonessentialAttributes.insert(StringAttr::get(context, "portSyms"));
     nonessentialAttributes.insert(StringAttr::get(context, "portLocations"));
     nonessentialAttributes.insert(StringAttr::get(context, "sym_name"));
-    nonessentialAttributes.insert(StringAttr::get(context, "hw.inner_sym"));
+    nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
   }
 
   std::string prettyPrint(Attribute attr) {
@@ -1117,7 +1117,7 @@ private:
       hw::InnerSymAttr toSym;
       if (!newPortSyms[portNo]) {
         // Get a reasonable base name for the port.
-        StringRef symName = "hw.inner_sym";
+        StringRef symName = "inner_sym";
         if (portNames)
           symName = cast<StringAttr>(portNames[portNo]).getValue();
         // Create the symbol and store it into the array.

@@ -284,7 +284,7 @@ static ParseResult parseCompReg(OpAsmParser &parser, OperationState &result) {
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
     hw::InnerSymAttr innerSym;
     if (parser.parseCustomAttributeWithFallback(innerSym, /*type=*/nullptr,
-                                                "hw.inner_sym", result.attributes))
+                                                "inner_sym", result.attributes))
       return failure();
   }
 
@@ -341,7 +341,7 @@ template <class Op>
 static void printCompReg(::mlir::OpAsmPrinter &p, Op op) {
   SmallVector<StringRef> elidedAttrs;
   if (auto sym = op.getInnerSymAttr()) {
-    elidedAttrs.push_back("hw.inner_sym");
+    elidedAttrs.push_back("inner_sym");
     p << ' ' << "sym ";
     sym.print(p);
   }
@@ -465,7 +465,7 @@ ParseResult FirRegOp::parse(OpAsmParser &parser, OperationState &result) {
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
     hw::InnerSymAttr innerSym;
     if (parser.parseCustomAttributeWithFallback(innerSym, /*type=*/nullptr,
-                                                "hw.inner_sym", result.attributes))
+                                                "inner_sym", result.attributes))
       return failure();
   }
 

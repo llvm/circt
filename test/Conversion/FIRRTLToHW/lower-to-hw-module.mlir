@@ -291,8 +291,8 @@ firrtl.circuit "Simple" {
 
   // DontTouch on ports becomes symbol.
   // CHECK-LABEL: hw.module.extern private @PortDT
-  // CHECK-SAME: (%a: i1 {hw.inner_sym = #hw<innerSym@__PortDT__a>}, %hassym: i1 {hw.inner_sym = #hw<innerSym@hassym>})
-  // CHECK-SAME: -> (b: i2 {hw.inner_sym = #hw<innerSym@__PortDT__b>})
+  // CHECK-SAME: (%a: i1 {hw.exportPort = #hw<innerSym@__PortDT__a>}, %hassym: i1 {hw.exportPort = #hw<innerSym@hassym>})
+  // CHECK-SAME: -> (b: i2 {hw.exportPort = #hw<innerSym@__PortDT__b>})
   firrtl.extmodule private @PortDT(
     in a: !firrtl.uint<1> [{class = "firrtl.transforms.DontTouchAnnotation"}],
     in hassym: !firrtl.uint<1> sym @hassym [{class = "firrtl.transforms.DontTouchAnnotation"}],

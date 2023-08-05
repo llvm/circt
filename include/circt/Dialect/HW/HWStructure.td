@@ -51,6 +51,9 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
 
     void setPortSymbolAttr(size_t portIndex, ::circt::hw::InnerSymAttr sym);
 
+    static StringRef getPortSymbolAttrName() {
+      return "hw.exportPort";
+    }
     //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//
@@ -82,12 +85,12 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       }
       if (portAttrs)
         return portAttrs.getAs<::circt::hw::InnerSymAttr>(
-          InnerSymbolTable::getInnerSymbolAttrName());
+          getPortSymbolAttrName());
       return {};
     }
 
     void $cppClass::setPortSymbolAttr(size_t portIndex, ::circt::hw::InnerSymAttr sym) {
-      auto portSymAttr = StringAttr::get(getContext(), InnerSymbolTable::getInnerSymbolAttrName());
+      auto portSymAttr = StringAttr::get(getContext(), getPortSymbolAttrName());
       if (portIndex < getNumInputs()) {
         if (sym)
           ::mlir::function_interface_impl::setArgAttr(*this, portIndex,

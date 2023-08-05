@@ -53,7 +53,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   SmallVector<Type, 4> argTypes, resultTypes;
   SmallVector<Attribute> argAttrs, resultAttrs;
   SmallVector<Attribute> argLocs, resultLocs;
-  auto exportPortIdent = StringAttr::get(builder.getContext(), hw::InnerSymbolTable::getInnerSymbolAttrName());
+  auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
 
   for (auto elt : ports.getInputs()) {
     if (elt.dir == hw::ModulePort::Direction::InOut &&

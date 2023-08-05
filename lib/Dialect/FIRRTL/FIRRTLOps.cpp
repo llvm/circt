@@ -1674,7 +1674,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   if (lowerToBind)
     result.addAttribute("lowerToBind", builder.getUnitAttr());
   if (innerSym)
-    result.addAttribute("hw.inner_sym", innerSym);
+    result.addAttribute("inner_sym", innerSym);
   result.addAttribute("nameKind",
                       NameKindEnumAttr::get(builder.getContext(), nameKind));
 
@@ -1947,7 +1947,7 @@ void InstanceOp::print(OpAsmPrinter &p) {
   SmallVector<StringRef, 9> omittedAttrs = {"moduleName",     "name",
                                             "portDirections", "portNames",
                                             "portTypes",      "portAnnotations",
-                                            "hw.inner_sym",      "nameKind"};
+                                            "inner_sym",      "nameKind"};
   if (getAnnotations().empty())
     omittedAttrs.push_back("annotations");
   p.printOptionalAttrDict((*this)->getAttrs(), omittedAttrs);
@@ -2068,7 +2068,7 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
                       NameKindEnumAttr::get(builder.getContext(), nameKind));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
   if (innerSym)
-    result.addAttribute("hw.inner_sym", innerSym);
+    result.addAttribute("inner_sym", innerSym);
   result.addTypes(resultTypes);
 
   if (portAnnotations.empty()) {
@@ -4767,7 +4767,7 @@ static ParseResult parseMemOp(OpAsmParser &parser, NamedAttrList &resultAttrs) {
 /// Always elide "ruw" and elide "annotations" if it exists or if it is empty.
 static void printMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
   // "ruw" and "hw.inner_sym" is always elided.
-  printElidePortAnnotations(p, op, attr, {"ruw", "hw.inner_sym"});
+  printElidePortAnnotations(p, op, attr, {"ruw", "inner_sym"});
 }
 
 //===----------------------------------------------------------------------===//

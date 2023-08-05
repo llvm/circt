@@ -305,7 +305,7 @@ namespace {
 struct AttrCache {
   AttrCache(MLIRContext *context) {
     i64ty = IntegerType::get(context, 64);
-    innerSymAttr = StringAttr::get(context, "hw.inner_sym");
+    innerSymAttr = StringAttr::get(context, "inner_sym");
     nameAttr = StringAttr::get(context, "name");
     nameKindAttr = StringAttr::get(context, "nameKind");
     sPortDirections = StringAttr::get(context, "portDirections");

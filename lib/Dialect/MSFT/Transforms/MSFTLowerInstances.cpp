@@ -114,8 +114,8 @@ LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst,
 
       // Since GlobalRefOp uses the `hw.inner_sym` attribute, assign the
       // 'hw.inner_sym' attribute if it's not already assigned.
-      if (!tgtOp->hasAttr("hw.inner_sym")) {
-        tgtOp->setAttr("hw.inner_sym", hw::InnerSymAttr::get(innerRef.getName()));
+      if (!tgtOp->hasAttr("inner_sym")) {
+        tgtOp->setAttr("inner_sym", hw::InnerSymAttr::get(innerRef.getName()));
       }
     }
     if (symNotFound)

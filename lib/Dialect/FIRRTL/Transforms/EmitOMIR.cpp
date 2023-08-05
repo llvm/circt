@@ -689,7 +689,7 @@ void EmitOMIRPass::runOnOperation() {
 
   // Remove the temp symbol from instances.
   for (auto *op : tempSymInstances)
-    cast<InstanceOp>(op)->removeAttr("hw.inner_sym");
+    cast<InstanceOp>(op)->removeAttr("inner_sym");
   tempSymInstances.clear();
 
   // Emit the OMIR JSON as a verbatim op.

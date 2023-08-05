@@ -141,7 +141,7 @@ public:
   static StringAttr getInnerSymbol(const InnerSymTarget &target);
 
   /// Return the name of the attribute used for inner symbol names.
-  static StringRef getInnerSymbolAttrName() { return "hw.hw.inner_sym"; }
+  static StringRef getInnerSymbolAttrName() { return "inner_sym"; }
 
   /// Construct an InnerSymbolTable, checking for verification failure.
   /// Emits diagnostics describing encountered issues.

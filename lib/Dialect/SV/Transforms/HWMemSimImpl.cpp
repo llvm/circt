@@ -562,7 +562,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       auto boundInstance = b.create<hw::InstanceOp>(
           boundModule, boundModule.getName(), ArrayRef<Value>());
       boundInstance->setAttr(
-          "hw.inner_sym",
+          "inner_sym",
           hw::InnerSymAttr::get(b.getStringAttr(
               moduleNamespace.newName(boundInstance.getInstanceName()))));
       boundInstance->setAttr("doNotPrint", b.getBoolAttr(true));

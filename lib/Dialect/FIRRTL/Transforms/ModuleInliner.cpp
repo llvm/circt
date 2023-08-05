@@ -657,7 +657,7 @@ bool Inliner::rename(StringRef prefix, Operation *op,
     auto newSym = moduleNamespace.newName(sym.getValue());
     if (newSym != sym.getValue()) {
       auto newSymAttr = StringAttr::get(op->getContext(), newSym);
-      op->setAttr("hw.inner_sym", hw::InnerSymAttr::get(newSymAttr));
+      op->setAttr("inner_sym", hw::InnerSymAttr::get(newSymAttr));
       for (Annotation anno : AnnotationSet(op)) {
         auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
         if (!sym)

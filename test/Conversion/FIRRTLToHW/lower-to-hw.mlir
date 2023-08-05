@@ -806,9 +806,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module.extern @InnerNamesExt
   // CHECK-SAME:  (
-  // CHECK-SAME:    clockIn: i1 {hw.inner_sym = #hw<innerSym@extClockInSym>}
+  // CHECK-SAME:    clockIn: i1 {hw.exportPort = #hw<innerSym@extClockInSym>}
   // CHECK-SAME:  ) -> (
-  // CHECK-SAME:    clockOut: i1 {hw.inner_sym = #hw<innerSym@extClockOutSym>}
+  // CHECK-SAME:    clockOut: i1 {hw.exportPort = #hw<innerSym@extClockOutSym>}
   // CHECK-SAME:  )
   firrtl.extmodule @InnerNamesExt(
     in clockIn: !firrtl.clock sym @extClockInSym,
@@ -870,11 +870,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @InnerNames
   // CHECK-SAME:  (
-  // CHECK-SAME:    %value: i42 {hw.inner_sym = #hw<innerSym@portValueSym>}
-  // CHECK-SAME:    %clock: i1 {hw.inner_sym = #hw<innerSym@portClockSym>}
-  // CHECK-SAME:    %reset: i1 {hw.inner_sym = #hw<innerSym@portResetSym>}
+  // CHECK-SAME:    %value: i42 {hw.exportPort = #hw<innerSym@portValueSym>}
+  // CHECK-SAME:    %clock: i1 {hw.exportPort = #hw<innerSym@portClockSym>}
+  // CHECK-SAME:    %reset: i1 {hw.exportPort = #hw<innerSym@portResetSym>}
   // CHECK-SAME:  ) -> (
-  // CHECK-SAME:    out: i1 {hw.inner_sym = #hw<innerSym@portOutSym>}
+  // CHECK-SAME:    out: i1 {hw.exportPort = #hw<innerSym@portOutSym>}
   // CHECK-SAME:  )
   firrtl.module private @InnerNames(
     in %value: !firrtl.uint<42> sym @portValueSym,

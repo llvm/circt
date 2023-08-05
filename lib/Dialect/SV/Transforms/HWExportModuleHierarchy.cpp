@@ -60,7 +60,7 @@ void HWExportModuleHierarchyPass::printHierarchy(
     hw::ModuleNamespace &ns = moduleNamespaces[moduleOp];
     innerSym = hw::InnerSymAttr::get(
         StringAttr::get(inst.getContext(), ns.newName(inst.getInstanceName())));
-    inst->setAttr("hw.inner_sym", innerSym);
+    inst->setAttr("inner_sym", innerSym);
   }
 
   j.object([&] {
