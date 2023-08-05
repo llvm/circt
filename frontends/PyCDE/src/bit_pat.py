@@ -5,7 +5,7 @@ https://github.com/phanrahan/magma/blob/master/magma/types/bit_pattern.py
 import string
 
 from .types import Bits
-from .signals import BitVectorSignal
+from .signals import BitVectorSignal, BitsSignal
 from .constructs import Mux
 
 
@@ -23,7 +23,7 @@ class BitPat:
                 underscores
     """
     if pattern[0] != "b":
-      raise ValueError("BitPattern must be in binary and prefixed with "
+      raise ValueError("BitPat must be in binary and prefixed with "
                        "'b'")
     bits = 0
     mask = 0
@@ -33,7 +33,7 @@ class BitPat:
         continue
       if digit not in "01?":
         raise ValueError(
-            f"BitPattern {pattern} contains illegal character: {digit}")
+            f"BitPat {pattern} contains illegal character: {digit}")
       mask = (mask << 1) + (0 if digit == "?" else 1)
       bits = (bits << 1) + (1 if digit == "1" else 0)
       count += 1
@@ -45,12 +45,21 @@ class BitPat:
 
   def __eq__(self, other):
     if not isinstance(other, BitVectorSignal):
-      raise TypeError("BitPattern can only be compared to Bits")
-    return self.bits == (other & self.mask)
+      raise TypeError("BitPat can only be compared to BitVectorSignal")
+    if not isinstance(other, BitsSignal):
+      other = other.as_bits(self.width)
+    return self.mask == (other & self.mask)
+
+  def __ne__(self, other):
+    if not isinstance(other, BitVectorSignal):
+      raise TypeError("BitPat can only be compared to BitVectorSignal")
+    if not isinstance(other, BitsSignal):
+      other = other.as_bits(self.width)
+    return self.bits != (other & self.mask)
 
   def as_bits(self):
     if not self.const:
-      raise TypeError("Can only convert BitPattern with no don't cares to int")
+      raise TypeError("Can only convert BitPat with no don't cares to int")
     return self.bits
 
   def __hash__(self):
@@ -61,9 +70,8 @@ def dict_lookup(dict_, select, default):
   """
     Use `select` as an index into `dict` (similar to a case statement)
 
-    `default` is used when `select` does not match any of the keys and has a
-    default value of 0
-    """
+    `default` is used when `select` does not match any of the keys
+  """
   output = default
   for key, value in dict_.items():
     output = Mux(key == select, output, value)
