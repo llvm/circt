@@ -188,17 +188,17 @@ def Mux(sel: BitVectorSignal, *data_inputs: typing.List[Signal]):
   if sel.type.width != (num_inputs - 1).bit_length():
     raise TypeError("'Sel' bit width must be clog2 of number of inputs")
 
-  if num_inputs == 2:
-    m = comb.MuxOp(sel, data_inputs[1], data_inputs[0])
-  else:
-    a = ArraySignal.create(data_inputs)
-    a.name = "arr_" + "_".join([i.name for i in data_inputs])
-    m = a[sel]
-
   input_names = [
       i.name if i.name is not None else f"in{idx}"
       for idx, i in enumerate(data_inputs)
   ]
+  if num_inputs == 2:
+    m = comb.MuxOp(sel, data_inputs[1], data_inputs[0])
+  else:
+    a = ArraySignal.create(data_inputs)
+    a.name = "arr_" + "_".join(input_names)
+    m = a[sel]
+
   m.name = f"mux_{sel.name}_" + "_".join(input_names)
   return m
 
