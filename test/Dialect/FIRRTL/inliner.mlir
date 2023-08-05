@@ -1231,3 +1231,29 @@ firrtl.circuit "RWProbePort" {
     firrtl.ref.define %p_1, %c2_p : !firrtl.rwprobe<uint<1>>
   }
 }
+
+// -----
+
+// https://github.com/llvm/circt/issues/5598
+
+// CHECK-LABEL: "CollidingSymbolsFields"
+firrtl.circuit "CollidingSymbolsFields" {
+  // CHECK-NEXT: hw.hierpath private @nla1 [@CollidingSymbolsFields::@[[FoobarSym:[_a-zA-Z0-9]+]], @Bar]
+  hw.hierpath private @nla1 [@CollidingSymbolsFields::@foo, @Foo::@bar, @Bar]
+  firrtl.module @Bar() attributes {annotations = [{circt.nonlocal = @nla1, class = "nla1"}]} {}
+  firrtl.module @Foo() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %b = firrtl.wire sym [<@b,1,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    firrtl.instance bar sym @bar @Bar()
+  }
+  // CHECK: module @CollidingSymbolsFields()
+  firrtl.module @CollidingSymbolsFields() {
+    // CHECK-NEXT: firrtl.wire sym [<@[[B_SYM:.+]],1,public>]
+    // CHECK-NEXT: firrtl.instance foo_bar sym @[[FoobarSym]]
+    // CHECK-NEXT: firrtl.wire sym @b
+    // CHECK-NEXT: firrtl.wire sym [<@bar,1,public>]
+    // CHECK-NEXT: }
+    firrtl.instance foo sym @foo @Foo()
+    %collision_b = firrtl.wire sym @b : !firrtl.uint<1>
+    %collision_bar = firrtl.wire sym [<@bar,1,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+  }
+}
