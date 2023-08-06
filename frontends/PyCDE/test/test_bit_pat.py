@@ -1,13 +1,13 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 from pycde import Input, Output, generator, Module
-from pycde.types import Bits, UInt
+from pycde.types import Bits, SInt, UInt
 from pycde.testing import unittestmodule
 
 from pycde.bit_pat import BitPat, dict_lookup
 
 
-# CHECK-LABEL:  msft.module @TestBitPat {} (%inp1: ui26, %inp2: ui25, %inp3: i32) -> (out1: i32, out2: i32, match: i1, no_match: i1)
+# CHECK-LABEL:  msft.module @TestBitPat {} (%inp1: ui36, %inp2: si25, %inp3: i32) -> (out1: i32, out2: i32, match: i1, no_match: i1)
 # CHECK-NEXT:     %c3_i32 = hw.constant 3 : i32
 # CHECK-NEXT:     %c28799_i32 = hw.constant 28799 : i32
 # CHECK-NEXT:     %c-1_i32 = hw.constant -1 : i32
@@ -33,10 +33,10 @@ from pycde.bit_pat import BitPat, dict_lookup
 # CHECK-NEXT:     %c3054_i32 = hw.constant 3054 : i32
 # CHECK-NEXT:     %c48879_i32 = hw.constant 48879 : i32
 # CHECK-NEXT:     %c3245_i32 = hw.constant 3245 : i32
-# CHECK-NEXT:     %5 = hwarith.cast %inp1 : (ui26) -> i32
+# CHECK-NEXT:     %5 = hwarith.cast %inp1 : (ui36) -> i32
 # CHECK-NEXT:     %6 = comb.and bin %5, %c28799_i32 : i32
 # CHECK-NEXT:     %7 = comb.icmp bin eq %c28799_i32, %6 : i32
-# CHECK-NEXT:     %8 = hwarith.cast %inp2 : (ui25) -> i32
+# CHECK-NEXT:     %8 = hwarith.cast %inp2 : (si25) -> i32
 # CHECK-NEXT:     %9 = comb.and bin %8, %c28799_i32 : i32
 # CHECK-NEXT:     %10 = comb.icmp bin ne %c3_i32, %9 : i32
 # CHECK-NEXT:     %c19_i32 = hw.constant 19 : i32
@@ -62,8 +62,8 @@ from pycde.bit_pat import BitPat, dict_lookup
 # CHECK-NEXT:     msft.output %c19_i32, %26, %7, %10 : i32, i32, i1, i1
 @unittestmodule()
 class TestBitPat(Module):
-  inp1 = Input(UInt(26))
-  inp2 = Input(UInt(25))
+  inp1 = Input(UInt(36))
+  inp2 = Input(SInt(25))
   inp3 = Input(Bits(32))
   out1 = Output(Bits(32))
   out2 = Output(Bits(32))
@@ -72,19 +72,19 @@ class TestBitPat(Module):
 
   @generator
   def build(self):
-    LB  = BitPat("b?????????????????000?????0000011")
-    LH  = BitPat("b?????????????????001?????0000011")
-    LW  = BitPat("b?????????????????010?????0000011")
+    LB = BitPat("b?????????????????000?????0000011")
+    LH = BitPat("b?????????????????001?????0000011")
+    LW = BitPat("b?????????????????010?????0000011")
     LBU = BitPat("b?????????????????100?????0000011")
     LHU = BitPat("b?????????????????101?????0000011")
     inst_map = {
-      LB: Bits(32)(0xBAD), 
-      LH: Bits(32)(0xFACE), 
-      LW: Bits(32)(0xBEE), 
-      LBU: Bits(32)(0xBEEF), 
-      LHU: Bits(32)(0xCAD)}
+        LB: Bits(32)(0xBAD),
+        LH: Bits(32)(0xFACE),
+        LW: Bits(32)(0xBEE),
+        LBU: Bits(32)(0xBEEF),
+        LHU: Bits(32)(0xCAD)
+    }
     self.match = LB == self.inp1
     self.no_match = LB != self.inp2
     self.out1 = BitPat("b00000000000000000000000000010011").as_bits()
     self.out2 = dict_lookup(inst_map, self.inp3, Bits(32)(0x0))
-
