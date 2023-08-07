@@ -359,6 +359,19 @@ firrtl.circuit "Foo" {
 
 // -----
 
+// https://github.com/llvm/circt/issues/5788
+firrtl.circuit "InstanceCannotHavePortSymbols" {
+  firrtl.extmodule @Ext(in in : !firrtl.uint<1>)
+  firrtl.module @InstanceCannotHavePortSymbols() {
+    // Not great diagnostic, but this should never happen so don't bother checking for it.
+    // expected-error @below {{expected ')'}}
+    %foo_in = firrtl.instance foo @Ext(in in : !firrtl.uint<1> sym @sym)
+  }
+}
+
+
+// -----
+
 firrtl.circuit "X" {
 
 firrtl.module @X(in %a : !firrtl.uint<4>) {
@@ -1783,6 +1796,16 @@ firrtl.circuit "ClassCannotHaveWires" {
     // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.module, firrtl.group, firrtl.when, firrtl.match'}}
     %w = firrtl.wire : !firrtl.uint<8>
   }
+}
+
+// -----
+
+// #5788, but for class operations.
+firrtl.circuit "ClassCannotHavePortSymbols" {
+  firrtl.module @ClassCannotHavePortSymbols() {}
+  // Not great diagnostic, but this should never happen so don't bother checking for it.
+  // expected-error @below {{expected ')'}}
+  firrtl.class @ClassWithPortSymbol(in %in: !firrtl.string sym @foo, in %in2 : !firrtl.string) {}
 }
 
 // -----
