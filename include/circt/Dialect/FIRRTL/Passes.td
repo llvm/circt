@@ -716,4 +716,15 @@ def ExtractClasses : Pass<"firrtl-extract-classes", "mlir::ModuleOp"> {
   let dependentDialects = ["om::OMDialect"];
 }
 
+def LowerGroups : Pass<"firrtl-lower-groups", "firrtl::CircuitOp"> {
+  let summary = "Lower optional groups to instances";
+  let description = [{
+    This pass converts FIRRTL optional groups to new modules and instantiations.
+    Referenced SSA values captured by a group are converted to ports of the
+    created module.
+  }];
+  let constructor = "circt::firrtl::createLowerGroupsPass()";
+  let dependentDialects = ["sv::SVDialect"];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
