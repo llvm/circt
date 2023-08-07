@@ -5,6 +5,7 @@ set(CIRCT_HW_Sources
   HWInstanceGraph.cpp
   HWOpInterfaces.cpp
   HWOps.cpp
+  HWRLELogic.cpp
   HWTypeInterfaces.cpp
   HWTypes.cpp
   InstanceImplementation.cpp
