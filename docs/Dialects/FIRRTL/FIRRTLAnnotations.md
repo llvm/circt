@@ -631,6 +631,27 @@ Example:
 }
 ```
 
+### DedupGroupAnnotation
+
+| Property   | Type   | Description                                |
+| ---------- | ------ | -------------                              |
+| class      | string | `firrtl.transforms.DedupGroupAnnotation`   |
+| target     | string | Module target                              |
+| group      | string | The dedup group that the module belongs to |
+
+This annotation assigns the targeted module to a dedup group. Modules that
+belong to a dedup group may only be deduplicated with modules that are part of
+the same group.
+
+Example:
+```json
+{
+  "class":"firrtl.transforms.DedupGroupAnnotation",
+  "target": "~Top|A",
+  "group": "foo"
+}
+```
+
 ### NestedPrefixModulesAnnotation
 
 | Property   | Type   | Description                                              |
