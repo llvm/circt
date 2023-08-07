@@ -48,7 +48,7 @@ RLELogic::AnalyzePassResult RLELogic::analyze(ArrayRef<LogicDigit> digits) {
 
 RLELogic RLELogic::encode(ArrayRef<LogicDigit> digits,
                           std::optional<AnalyzePassResult> analysisResult) {
-  if (digits.size() == 0)
+  if (digits.empty())
     return RLELogic(InvalidTag::ZeroLength);
 
   // Run analysis pass if not already done
@@ -109,14 +109,12 @@ RLELogic RLELogic::encode(ArrayRef<LogicDigit> digits,
   // Hand over the buffer (pointer) to a newly created instance
   if (isSelfContained(byteCount))
     return RLELogic(rleBuffer, byteCount, analysisResult->foundDigitsMask);
-  else
-    return RLELogic((RawType)rlePtr, byteCount,
-                    analysisResult->foundDigitsMask);
+  return RLELogic((RawType)rlePtr, byteCount, analysisResult->foundDigitsMask);
 }
 
 void RLELogic::seek(SizeType digitSkip, Offset &offset) {
   assert(isValid() && "cannot seek on invalid value");
-  auto ptr = getCodePointer();
+  const auto *ptr = getCodePointer();
   assert(offset.bytes < byteCount && "byte offset exceeds bounds");
   assert(((offset.bytes == byteCount - 1) ||
           (offset.runLength < getRunLength(ptr[offset.bytes]))) &&
@@ -140,13 +138,13 @@ void RLELogic::seek(SizeType digitSkip, Offset &offset) {
   }
 }
 
-llvm::hash_code circt::hw::hash_value(const RLELogic &rlelog) {
+llvm::hash_code circt::hw::hashValue(const RLELogic &rlelog) {
   // The digit mask is not included in the hash since it can be directly derived
   // from the value
   if (rlelog.isSelfContained())
-    return hash_combine(rlelog.byteCount, rlelog.U._raw);
-  else
-    return hash_combine(
-        rlelog.byteCount,
-        hash_combine_range(rlelog.U.ptr, rlelog.U.ptr + rlelog.byteCount));
+    return hash_combine(rlelog.byteCount, rlelog.valPtrUnion.raw);
+  return hash_combine(
+      rlelog.byteCount,
+      hash_combine_range(rlelog.valPtrUnion.ptr,
+                         rlelog.valPtrUnion.ptr + rlelog.byteCount));
 }

@@ -21,23 +21,23 @@ static uint8_t getRunLength(RLELogic::RunLengthCode code) {
 }
 static uint8_t getRawDigit(RLELogic::RunLengthCode code) { return code & 0x0F; }
 
-static constexpr char L9VALUES[10] = "UX01ZWLH-";
+static constexpr char l9Values[10] = "UX01ZWLH-";
 
-static const char RANDOML9[401] =
+static const char randomL9[401] =
     "1-XU1WZZWULWHU0Z00WLZXU0-ZLH1LH--1-UUZ01WX1WWLZWZW0LH-X1U111-WULZ-"
     "WZWHH1111H1U1L-1W-ZUHL0XZL-0W1X0UZXLL-00ZUUXLZ10L0L0ZUH1HXXZLLWL0-010-"
     "X0ZWU0X1ZX-XWL1XLH--0WL001ZLLLUXUZ-XZ-ZL-UZW1HW-U-U-W-"
     "HUUZWZ1U10HXZ0ZH1HLUH-1ZLLULU0HWUUHHHH0HZLU1L0110-UWZ1L01XHXHH---X0HLXZ-"
     "LHHLL-WLU-W-H-WZUXHZX-0XWLU1UU0UX1H-XW1XH-1WHLZXZWH1-ULXWZ1ZUL01WX0W1L-"
     "XHHZ10W-1HWHLXLX0HZWWULWWZZ-00-LXUUW0XX1-Z1-UW-ZLZZLLU1UULLWLWX0H1U";
-static const char RANDOML4[401] =
+static const char randomL4[401] =
     "00XZ11Z1X010ZZ10XZX0X11Z0110X0Z1Z1ZZ010ZXX1XXZ001ZXX10ZXZ00X1XXXZXZXZX11Z1"
     "1Z110XZ0ZX00XZZ0101XXZ01XZ110ZZ11ZX1XZZZXXZXZ1XX110XX0XZZX0011ZZZ1101X1ZZX"
     "Z0Z1Z0X11101Z1XXZ11ZXX0ZZ0Z1XXZ1X001ZZ0Z1ZX1XXZZ1011XZZXZZXX1010XX0ZX00ZZ0"
     "00ZXX00Z0XZZZX0ZXXZ1ZXZ1X0XZXX01X11XX01ZZZXZZ01ZZ000XX1X00X0Z11ZXXXXXX10X0"
     "0100ZXZZXX11X1Z0ZX01011XXX11ZZZXX11X1X10XZZZ100X0Z1XX0ZZZZXXZ0XZZXZ1XXZ01Z"
     "100Z001X0X1ZZ00X10Z01ZZZ1ZXX1X";
-static const char RANDOML2[401] =
+static const char randomL2[401] =
     "00000101011001101000111111111000110001110011001111010111010000011011111000"
     "10111011010100000101000111101110001101110011110001010111101000110000010010"
     "11100100011100001000010000110001001000011010100011011011110011100111000011"
@@ -65,7 +65,7 @@ static const RLELogic &verif(const RLELogic &rlelog) {
   auto bytes = rlelog.getByteCount();
   EXPECT_NE(bytes, 0U);
   EXPECT_NE(rlelog.getDigitMask(), 0U);
-  auto ptr = rlelog.getCodePointer();
+  const auto *ptr = rlelog.getCodePointer();
 
   uint16_t verifMask = 0;
   for (size_t i = 0; i < bytes; i++) {
@@ -93,7 +93,7 @@ static const RLELogic &verif(const RLELogic &rlelog) {
   return rlelog;
 }
 
-static void parsePrintTest(std::string str) {
+static void parsePrintTest(const std::string &str) {
   auto rlelog = verif(RLELogic::encode(StringRef(str)));
   EXPECT_STREQ(rlelog.toString(str.size()).c_str(), str.c_str());
 }
@@ -115,9 +115,9 @@ TEST(RLELogicTest, ParsePrintTest) {
     parsePrintTest(std::string(n, 'L') + std::string(n, 'H') +
                    std::string(n, 'X') + std::string(n, 'L'));
 
-    std::string randl9(RANDOML9 + n, n);
-    std::string randl4(RANDOML4 + n, n);
-    std::string randl2(RANDOML2 + n, n);
+    std::string randl9(randomL9 + n, n);
+    std::string randl4(randomL4 + n, n);
+    std::string randl2(randomL2 + n, n);
     parsePrintTest(randl9);
     parsePrintTest(randl4);
     parsePrintTest(randl2);
@@ -170,15 +170,15 @@ TEST(RLELogicTest, ContainsTest) {
 }
 
 TEST(RLELogicTest, FilledTest) {
-  auto rle0 = verif(RLELogic::filled<L9VALUES[2]>());
-  auto rle1 = verif(RLELogic::filled<L9VALUES[3]>());
-  auto rleX = verif(RLELogic::filled<L9VALUES[1]>());
-  auto rleZ = verif(RLELogic::filled<L9VALUES[4]>());
-  auto rleU = verif(RLELogic::filled<L9VALUES[0]>());
-  auto rleW = verif(RLELogic::filled<L9VALUES[5]>());
-  auto rleL = verif(RLELogic::filled<L9VALUES[6]>());
-  auto rleH = verif(RLELogic::filled<L9VALUES[7]>());
-  auto rleDC = verif(RLELogic::filled<L9VALUES[8]>());
+  auto rle0 = verif(RLELogic::filled<l9Values[2]>());
+  auto rle1 = verif(RLELogic::filled<l9Values[3]>());
+  auto rleX = verif(RLELogic::filled<l9Values[1]>());
+  auto rleZ = verif(RLELogic::filled<l9Values[4]>());
+  auto rleU = verif(RLELogic::filled<l9Values[0]>());
+  auto rleW = verif(RLELogic::filled<l9Values[5]>());
+  auto rleL = verif(RLELogic::filled<l9Values[6]>());
+  auto rleH = verif(RLELogic::filled<l9Values[7]>());
+  auto rleDC = verif(RLELogic::filled<l9Values[8]>());
 
   EXPECT_TRUE(rle0.isInteger());
   EXPECT_TRUE(rle0.isIntegerLike());
@@ -225,7 +225,7 @@ TEST(RLELogicTest, FilledTest) {
   EXPECT_FALSE(rleH.containsAnyUnknownDigits());
   EXPECT_FALSE(rleH.containsOnlyUnknownDigits());
 
-  for (auto c : std::string(L9VALUES)) {
+  for (auto c : std::string(l9Values)) {
     auto filled = verif(RLELogic::filled(charToLogicDigit(c)));
     auto rep = verif(RLELogic::encode(std::string(1022, c)));
     EXPECT_EQ(rep.getByteCount(), 1U);
@@ -250,8 +250,8 @@ TEST(RLELogicTest, FilledTest) {
 }
 
 TEST(RLELogicTest, CopyAndMoveTest) {
-  auto smallRef = std::string(RANDOML2, 63);
-  auto largeRef = std::string(RANDOML9 + 7, 300);
+  auto smallRef = std::string(randomL2, 63);
+  auto largeRef = std::string(randomL9 + 7, 300);
   RLELogic smallOrig = verif(RLELogic::encode(smallRef));
   RLELogic largeOrig = verif(RLELogic::encode(largeRef));
   RLELogic smallCopy(smallOrig);
@@ -317,7 +317,7 @@ static void expectEqual(const RLELogic &a, const RLELogic &b) {
   EXPECT_TRUE(b == a);
   EXPECT_FALSE(a != b);
   EXPECT_FALSE(b != a);
-  EXPECT_EQ(hash_value(a), hash_value(b));
+  EXPECT_EQ(hashValue(a), hashValue(b));
 }
 
 static void expectNotEqual(const RLELogic &a, const RLELogic &b) {
@@ -328,7 +328,7 @@ static void expectNotEqual(const RLELogic &a, const RLELogic &b) {
   EXPECT_TRUE(a != b);
   EXPECT_TRUE(b != a);
   // Assume we don't hit a collision by accident
-  EXPECT_NE(hash_value(a), hash_value(b));
+  EXPECT_NE(hashValue(a), hashValue(b));
 }
 
 TEST(RLELogicTest, EqualsTest) {
@@ -428,7 +428,7 @@ TEST(RLELogicTest, BoundedIteratorTest) {
   }
   EXPECT_EQ(logWIter25Cont, logWIter25.end());
 
-  std::string refString(RANDOML2, 200);
+  std::string refString(randomL2, 200);
   auto randLog = RLELogic::encode(refString);
   size_t i = 0;
   for (auto digit : randLog.boundedIterator(175)) {
@@ -503,71 +503,70 @@ TEST(RLELogicTest, SeekTest) {
 }
 
 TEST(RLELogicTest, XORTest) {
-  std::string l9str(L9VALUES);
+  std::string l9str(l9Values);
   RLELogic l9log = RLELogic::encode(l9str);
 
   SmallVector<LogicDigit, 9> buffer;
 
-  RLELogic::binaryOp(logicdigits::LUT_IEEE1164_XOR, buffer, 9, l9log,
+  RLELogic::binaryOp(logicdigits::lutIeee1164Xor, buffer, 9, l9log,
                      RLELogic::filled<'U'>());
   EXPECT_STREQ(RLELogic::encode(buffer).toString(9).c_str(), "UUUUUUUUU");
 
   buffer.clear();
-  RLELogic::binaryOp(logicdigits::LUT_IEEE1164_XOR, buffer, 9, l9log,
+  RLELogic::binaryOp(logicdigits::lutIeee1164Xor, buffer, 9, l9log,
                      RLELogic::filled<'X'>());
   EXPECT_STREQ(RLELogic::encode(buffer).toString(9).c_str(), "UXXXXXXXX");
 
   buffer.clear();
-  RLELogic::binaryOp(logicdigits::LUT_IEEE1164_XOR, buffer, 9, l9log,
+  RLELogic::binaryOp(logicdigits::lutIeee1164Xor, buffer, 9, l9log,
                      RLELogic::filled<'0'>());
   EXPECT_STREQ(RLELogic::encode(buffer).toString(9).c_str(), "UX01XX01X");
 
   buffer.clear();
-  RLELogic::binaryOp(logicdigits::LUT_IEEE1164_XOR, buffer, 9, l9log,
+  RLELogic::binaryOp(logicdigits::lutIeee1164Xor, buffer, 9, l9log,
                      RLELogic::filled<'1'>());
   EXPECT_STREQ(RLELogic::encode(buffer).toString(9).c_str(), "UX10XX10X");
 
   buffer.clear();
-  RLELogic::binaryOp(logicdigits::LUT_IEEE1164_XOR, buffer, 9, l9log,
+  RLELogic::binaryOp(logicdigits::lutIeee1164Xor, buffer, 9, l9log,
                      RLELogic::filled<'Z'>());
   EXPECT_STREQ(RLELogic::encode(buffer).toString(9).c_str(), "UXXXXXXXX");
 
   buffer.clear();
-  RLELogic::binaryOp(logicdigits::LUT_IEEE1164_XOR, buffer, 9, l9log,
+  RLELogic::binaryOp(logicdigits::lutIeee1164Xor, buffer, 9, l9log,
                      RLELogic::filled<'W'>());
   EXPECT_STREQ(RLELogic::encode(buffer).toString(9).c_str(), "UXXXXXXXX");
 
   buffer.clear();
-  RLELogic::binaryOp(logicdigits::LUT_IEEE1164_XOR, buffer, 9, l9log,
+  RLELogic::binaryOp(logicdigits::lutIeee1164Xor, buffer, 9, l9log,
                      RLELogic::filled<'L'>());
   EXPECT_STREQ(RLELogic::encode(buffer).toString(9).c_str(), "UX01XX01X");
 
   buffer.clear();
-  RLELogic::binaryOp(logicdigits::LUT_IEEE1164_XOR, buffer, 9, l9log,
+  RLELogic::binaryOp(logicdigits::lutIeee1164Xor, buffer, 9, l9log,
                      RLELogic::filled<'H'>());
   EXPECT_STREQ(RLELogic::encode(buffer).toString(9).c_str(), "UX10XX10X");
 
   buffer.clear();
-  RLELogic::binaryOp(logicdigits::LUT_IEEE1164_XOR, buffer, 9, l9log,
+  RLELogic::binaryOp(logicdigits::lutIeee1164Xor, buffer, 9, l9log,
                      RLELogic::filled<'-'>());
   EXPECT_STREQ(RLELogic::encode(buffer).toString(9).c_str(), "UXXXXXXXX");
 
   buffer.clear();
-  RLELogic::unaryOp(logicdigits::LUT_IEEE1164_XOR[(unsigned)LogicDigit::LD_1],
+  RLELogic::unaryOp(logicdigits::lutIeee1164Xor[(unsigned)LogicDigit::LD_1],
                     buffer, 9, l9log);
   EXPECT_STREQ(RLELogic::encode(buffer).toString(9).c_str(), "UX10XX10X");
 
   buffer.clear();
-  std::string l2RandStr(RANDOML2, 128);
+  std::string l2RandStr(randomL2, 128);
   RLELogic l2Rand = RLELogic::encode(l2RandStr);
-  RLELogic::binaryOp(logicdigits::LUT_IEEE1164_XOR, buffer, 200, l2Rand,
-                     l2Rand);
+  RLELogic::binaryOp(logicdigits::lutIeee1164Xor, buffer, 200, l2Rand, l2Rand);
   EXPECT_EQ(RLELogic::encode(buffer), RLELogic::filled<'0'>());
 
   buffer.clear();
-  RLELogic l9RandA = RLELogic::encode(std::string(RANDOML9, 100));
-  RLELogic l9RandB = RLELogic::encode(std::string(RANDOML9 + 100, 73));
-  RLELogic::binaryOp(logicdigits::LUT_IEEE1164_XOR, buffer, 128, l9RandA,
+  RLELogic l9RandA = RLELogic::encode(std::string(randomL9, 100));
+  RLELogic l9RandB = RLELogic::encode(std::string(randomL9 + 100, 73));
+  RLELogic::binaryOp(logicdigits::lutIeee1164Xor, buffer, 128, l9RandA,
                      l9RandB);
   RLELogic l9Xor = RLELogic::encode(buffer);
   EXPECT_TRUE((l9Xor.containsOnly<'0', '1', 'X', 'U'>()));

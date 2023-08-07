@@ -13,8 +13,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_HW_LOGIC_DIGITS_H
-#define CIRCT_DIALECT_HW_LOGIC_DIGITS_H
+#ifndef CIRCT_DIALECT_HW_HWLOGICDIGITS_H
+#define CIRCT_DIALECT_HW_HWLOGICDIGITS_H
+
+#include "llvm/Support/ErrorHandling.h"
 
 #include <stdint.h>
 
@@ -37,17 +39,17 @@ enum LogicDigit : uint8_t {
 };
 
 /// LUT type for unary logic operations
-typedef LogicDigit UnaryLogicLUT[10];
+using UnaryLogicLUT = LogicDigit[10];
 /// LUT type for binary logic operations
-typedef UnaryLogicLUT BinaryLogicLUT[10];
+using BinaryLogicLUT = UnaryLogicLUT[10];
 
 /// Returns true if the given digit is a valid 9-valued logic digit
-constexpr bool isValidLogicDigit(LogicDigit digit) {
+inline constexpr bool isValidLogicDigit(LogicDigit digit) {
   return (digit != LogicDigit::Invalid) && (digit <= LogicDigit::LD_DC);
 }
 
 /// Convert a (uppercase) character to its matching 9-valued logic digit
-static constexpr LogicDigit charToLogicDigit(char c) {
+inline constexpr LogicDigit charToLogicDigit(char c) {
   switch (c) {
   case 'U':
     return LogicDigit::LD_U;
@@ -73,7 +75,7 @@ static constexpr LogicDigit charToLogicDigit(char c) {
 };
 
 /// Convert a binary-encoded 9-valued logic digit to a human readable character
-static constexpr char logicDigitToChar(LogicDigit ld) {
+inline constexpr char logicDigitToChar(LogicDigit ld) {
   switch (ld) {
   case Invalid:
     return '#';
@@ -95,9 +97,8 @@ static constexpr char logicDigitToChar(LogicDigit ld) {
     return 'H';
   case LD_DC:
     return '-';
-  default:
-    return '?';
   }
+  llvm_unreachable("logic digit not an enum value");
 }
 
 // --------------
@@ -105,7 +106,7 @@ static constexpr char logicDigitToChar(LogicDigit ld) {
 // --------------
 
 /// IEEE1164 XOR operation
-static constexpr BinaryLogicLUT LUT_IEEE1164_XOR = {
+static constexpr BinaryLogicLUT lutIeee1164Xor = {
     {Invalid, Invalid, Invalid, Invalid, Invalid, Invalid, Invalid, Invalid,
      Invalid, Invalid},
     {Invalid, LD_U, LD_U, LD_U, LD_U, LD_U, LD_U, LD_U, LD_U, LD_U},
@@ -124,4 +125,4 @@ static constexpr BinaryLogicLUT LUT_IEEE1164_XOR = {
 } // namespace hw
 } // namespace circt
 
-#endif // CIRCT_DIALECT_HW_LOGIC_DIGITS_H
+#endif // CIRCT_DIALECT_HW_HWLOGICDIGITS_H

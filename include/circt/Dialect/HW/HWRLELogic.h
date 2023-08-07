@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_HW_RLE_LOGIC_H
-#define CIRCT_DIALECT_HW_RLE_LOGIC_H
+#ifndef CIRCT_DIALECT_HW_HWRLELOGIC_H
+#define CIRCT_DIALECT_HW_HWRLELOGIC_H
 
 #include "circt/Dialect/HW/HWLogicDigits.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -37,9 +37,9 @@ namespace hw {
 
 class RLELogic {
 public:
-  typedef uint8_t RunLengthCode;
-  typedef uintptr_t RawType;
-  typedef unsigned SizeType;
+  using RunLengthCode = uint8_t;
+  using RawType = uintptr_t;
+  using SizeType = unsigned int;
 
   /// Tag type to discriminate between various (zero-length) non-value encodings
   enum InvalidTag : RawType {
@@ -77,10 +77,10 @@ public:
   /// Copy constructor
   RLELogic(const RLELogic &rlelog) {
     if (rlelog.isSelfContained()) {
-      U._raw = rlelog.U._raw;
+      valPtrUnion.raw = rlelog.valPtrUnion.raw;
     } else {
-      U.ptr = new RunLengthCode[rlelog.byteCount];
-      memcpy(U.ptr, rlelog.U.ptr, rlelog.byteCount);
+      valPtrUnion.ptr = new RunLengthCode[rlelog.byteCount];
+      memcpy(valPtrUnion.ptr, rlelog.valPtrUnion.ptr, rlelog.byteCount);
     }
     byteCount = rlelog.byteCount;
     digitMask = rlelog.digitMask;
@@ -88,14 +88,14 @@ public:
 
   /// Move constructor
   RLELogic(RLELogic &&rlelog)
-      : U({rlelog.U._raw}), byteCount(rlelog.byteCount),
+      : valPtrUnion({rlelog.valPtrUnion.raw}), byteCount(rlelog.byteCount),
         digitMask(rlelog.digitMask) {
     rlelog.invalidate(false);
   }
 
   /// Constructor for zero-length encodings
   constexpr explicit RLELogic(InvalidTag invalidTag)
-      : U({(RawType)invalidTag}), byteCount(0), digitMask(0){};
+      : valPtrUnion({(RawType)invalidTag}), byteCount(0), digitMask(0){};
 
   /// Destructor
   ~RLELogic() { invalidate(true); }
@@ -143,21 +143,18 @@ public:
     if (byteCount != rlelog.byteCount)
       return false;
     if (isSelfContained())
-      return U._raw == rlelog.U._raw;
-    else
-      return memcmp(U.ptr, rlelog.U.ptr, byteCount) == 0;
+      return valPtrUnion.raw == rlelog.valPtrUnion.raw;
+    return memcmp(valPtrUnion.ptr, rlelog.valPtrUnion.ptr, byteCount) == 0;
   }
 
   /// Not-equals operator
   bool operator!=(const RLELogic &rlelog) const { return !(*this == rlelog); }
 
   /// Helper to get the run-length specified by the given code byte
-  static constexpr uint8_t getRunLength(RunLengthCode code) {
-    return (code >> 4) + 1;
-  }
+  static uint8_t getRunLength(RunLengthCode code) { return (code >> 4) + 1; }
 
   /// Helper to get the logic digit specified by the given code byte
-  static constexpr logicdigits::LogicDigit getDigit(RunLengthCode code) {
+  static logicdigits::LogicDigit getDigit(RunLengthCode code) {
     return static_cast<logicdigits::LogicDigit>(code & 0xF);
   }
 
@@ -182,8 +179,8 @@ public:
   /// Retuns true iff the encoded value contains any of the given logic digits
   /// at least once.
   template <typename... Args>
-  static constexpr bool
-  containsAny(uint16_t digMask, logicdigits::LogicDigit logDig, Args... args) {
+  static bool containsAny(uint16_t digMask, logicdigits::LogicDigit logDig,
+                          Args... args) {
     return (digMask & makeDigitMask(logDig, args...)) != 0;
   };
 
@@ -204,8 +201,8 @@ public:
   /// Retuns true iff the encoded value contains no other than the given logic
   /// digits.
   template <typename... Args>
-  static constexpr bool
-  containsOnly(uint16_t digMask, logicdigits::LogicDigit logDig, Args... args) {
+  static bool containsOnly(uint16_t digMask, logicdigits::LogicDigit logDig,
+                           Args... args) {
     return (digMask & ~makeDigitMask(logDig, args...)) == 0;
   };
 
@@ -231,7 +228,7 @@ public:
 
   /// Returns a pointer to the run-length encoded buffer
   const RunLengthCode *getCodePointer() const {
-    return isSelfContained() ? U.digits : U.ptr;
+    return isSelfContained() ? valPtrUnion.digits : valPtrUnion.ptr;
   }
 
   /// Returns the size of the encoded value in bytes or zero for non-values.
@@ -318,18 +315,17 @@ public:
   void seek(SizeType digitSkip, Offset &offset);
 
   /// Iterator over the encoded digits with an optional bound
-  struct digit_iterator
-      : public llvm::iterator_facade_base<digit_iterator,
-                                          std::forward_iterator_tag,
-                                          logicdigits::LogicDigit> {
+  struct DigitIterator
+      : public llvm::iterator_facade_base<
+            DigitIterator, std::forward_iterator_tag, logicdigits::LogicDigit> {
 
-    digit_iterator() = delete;
-    digit_iterator(const RunLengthCode *ptr, SizeType bytes, Offset startOffset,
-                   std::optional<SizeType> limit)
+    DigitIterator() = delete;
+    DigitIterator(const RunLengthCode *ptr, SizeType bytes, Offset startOffset,
+                  std::optional<SizeType> limit)
         : basePtr(ptr), totalBytes(bytes), offset(startOffset),
           digitLimit(limit){};
 
-    using llvm::iterator_facade_base<digit_iterator, std::forward_iterator_tag,
+    using llvm::iterator_facade_base<DigitIterator, std::forward_iterator_tag,
                                      logicdigits::LogicDigit>::operator++;
 
     logicdigits::LogicDigit operator*() const {
@@ -338,7 +334,7 @@ public:
       return getDigit(basePtr[offset.bytes]);
     }
 
-    digit_iterator &operator++() {
+    DigitIterator &operator++() {
 
       if (digitLimit.has_value()) {
         assert(*digitLimit > 0 && "incrementing past end");
@@ -361,7 +357,7 @@ public:
       return *this;
     }
 
-    bool operator==(const digit_iterator &other) const {
+    bool operator==(const DigitIterator &other) const {
       if (digitLimit.has_value() != other.digitLimit.has_value())
         return false;
       if (digitLimit.has_value())
@@ -382,20 +378,20 @@ public:
   /// Returns an unbounded iterator allowing to step over the encoded logic
   /// digits. A start offset from the least significant digit can be optionally
   /// specified.
-  digit_iterator infiniteIterator(Offset startOffset = {0, 0}) const {
+  DigitIterator infiniteIterator(Offset startOffset = {0, 0}) const {
     assert((!isValid() || startOffset.bytes < byteCount) &&
            "start byte offset exceeeds bounds");
     assert((!isValid() || (startOffset.bytes == byteCount - 1) ||
             (startOffset.runLength <
              getRunLength(getCodePointer()[startOffset.bytes]))) &&
            "start run-lenght offset exceeeds bounds");
-    return digit_iterator(getCodePointer(), byteCount, startOffset, {});
+    return DigitIterator(getCodePointer(), byteCount, startOffset, {});
   }
 
   /// Returns a bounded iterator range allowing to step over 'digitCount'
   /// encoded digits. A start offset from the least significant digit can be
   /// optionally specified.
-  llvm::iterator_range<digit_iterator>
+  llvm::iterator_range<DigitIterator>
   boundedIterator(unsigned digitCount, Offset startOffset = {0, 0}) const {
     assert((!isValid() || startOffset.bytes < byteCount) &&
            "start byte offset exceeeds bounds");
@@ -404,13 +400,13 @@ public:
              getRunLength(getCodePointer()[startOffset.bytes]))) &&
            "start run-lenght offset exceeeds bounds");
     return llvm::make_range(
-        digit_iterator(getCodePointer(), byteCount, startOffset, digitCount),
-        digit_iterator(getCodePointer(), byteCount, Offset(), 0));
+        DigitIterator(getCodePointer(), byteCount, startOffset, digitCount),
+        DigitIterator(getCodePointer(), byteCount, Offset(), 0));
   }
 
   // Helpers for storing an RLELogic in attributes
   friend struct llvm::DenseMapInfo<RLELogic, void>;
-  friend llvm::hash_code hash_value(const RLELogic &Arg);
+  friend llvm::hash_code hashValue(const RLELogic &rlelog);
 
 private:
   static constexpr SizeType maxSelfContainedBytes = sizeof(RawType);
@@ -423,25 +419,25 @@ private:
 
   /// Raw constructor
   constexpr RLELogic(RawType raw, SizeType size, uint16_t mask)
-      : U({raw}), byteCount(size), digitMask(mask){};
+      : valPtrUnion({raw}), byteCount(size), digitMask(mask){};
 
   /// Construct a filled value
   constexpr explicit RLELogic(logicdigits::LogicDigit fillDigit)
-      : U({(RawType)fillDigit}), byteCount(1),
+      : valPtrUnion({(RawType)fillDigit}), byteCount(1),
         digitMask(makeDigitMask(fillDigit)){};
 
   /// Invalidates the instance and optionally deallocates its heap buffer.
   void invalidate(bool freePtr) {
     if (freePtr && !isSelfContained())
-      delete[] U.ptr;
-    U._raw = (RawType)InvalidTag::Deleted;
+      delete[] valPtrUnion.ptr;
+    valPtrUnion.raw = (RawType)InvalidTag::Deleted;
     byteCount = 0;
     digitMask = 0;
   }
 
   /// Swaps the values of this instance and the given instance
   void swap(RLELogic &rlelog) {
-    std::swap(U._raw, rlelog.U._raw);
+    std::swap(valPtrUnion.raw, rlelog.valPtrUnion.raw);
     std::swap(byteCount, rlelog.byteCount);
     std::swap(digitMask, rlelog.digitMask);
   };
@@ -469,12 +465,12 @@ private:
   /// Value/Pointer union containing the value buffer directly or providing a
   /// pointer to it.
   union {
-    RawType _raw;
+    RawType raw;
     RunLengthCode digits[maxSelfContainedBytes];
     RunLengthCode *ptr;
-  } U;
-  static_assert(sizeof(U._raw) == sizeof(U.digits));
-  static_assert(sizeof(U._raw) == sizeof(U.ptr));
+  } valPtrUnion;
+  static_assert(sizeof(valPtrUnion.raw) == sizeof(valPtrUnion.digits));
+  static_assert(sizeof(valPtrUnion.raw) == sizeof(valPtrUnion.ptr));
 
   /// Size of the value buffer in bytes
   SizeType byteCount;
@@ -483,7 +479,7 @@ private:
   uint16_t digitMask;
 };
 
-llvm::hash_code hash_value(const RLELogic &Arg);
+llvm::hash_code hashValue(const RLELogic &rlelog);
 
 } // namespace hw
 } // namespace circt
@@ -501,15 +497,15 @@ struct DenseMapInfo<circt::hw::RLELogic, void> {
     return circt::hw::RLELogic(circt::hw::RLELogic::InvalidTag::KeyTombstone);
   }
 
-  static unsigned getHashValue(const circt::hw::RLELogic &Key) {
-    return static_cast<unsigned>(circt::hw::hash_value(Key));
+  static unsigned getHashValue(const circt::hw::RLELogic &key) {
+    return static_cast<unsigned>(circt::hw::hashValue(key));
   }
 
-  static bool isEqual(const circt::hw::RLELogic &LHS,
-                      const circt::hw::RLELogic &RHS) {
-    return LHS == RHS;
+  static bool isEqual(const circt::hw::RLELogic &lhs,
+                      const circt::hw::RLELogic &rhs) {
+    return lhs == rhs;
   }
 };
 
 } // namespace llvm
-#endif // CIRCT_DIALECT_HW_RLE_LOGIC_H
+#endif // CIRCT_DIALECT_HW_HWRLELOGIC_H
