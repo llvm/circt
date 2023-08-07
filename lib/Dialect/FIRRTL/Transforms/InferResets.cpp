@@ -629,26 +629,35 @@ static unsigned getIndexForFieldID(BundleType type, unsigned fieldID) {
 }
 
 // If a field is pointing to a child of a zero-length vector, it is useless.
-static bool isUselessVec(FIRRTLBaseType oldType, unsigned fieldID) {
-  if (oldType.isGround()) {
-    assert(fieldID == 0);
-    return false;
-  }
+static bool isUselessVec(hw::FieldIDTypeInterface oldType, unsigned fieldID) {
 
   // If this is a bundle type, recurse.
-  if (auto bundleType = type_dyn_cast<BundleType>(oldType)) {
+  if (auto bundleType = firrtl::type_dyn_cast<BundleType>(oldType)) {
     unsigned index = getIndexForFieldID(bundleType, fieldID);
-    return isUselessVec(bundleType.getElementType(index),
-                        fieldID - getFieldID(bundleType, index));
+    return isUselessVec(
+        type_cast<hw::FieldIDTypeInterface>(bundleType.getElementType(index)),
+        fieldID - getFieldID(bundleType, index));
   }
 
   // If this is a vector type, check if it is zero length.  Anything in a
   // zero-length vector is useless.
-  if (auto vectorType = type_dyn_cast<FVectorType>(oldType)) {
+  if (auto vectorType = firrtl::type_dyn_cast<FVectorType>(oldType)) {
     if (vectorType.getNumElements() == 0)
       return true;
-    return isUselessVec(vectorType.getElementType(),
-                        fieldID - getFieldID(vectorType));
+    return isUselessVec(
+        type_cast<hw::FieldIDTypeInterface>(vectorType.getElementType()),
+        fieldID - getFieldID(vectorType));
+  }
+
+  if (auto refType = firrtl::type_dyn_cast<RefType>(oldType)) {
+    assert(refType.getType() == refType.getSubTypeByFieldID(1).first);
+    return isUselessVec(refType.getSubTypeByFieldID(1).first, fieldID - 1);
+  }
+
+  if (auto baseType = firrtl::type_dyn_cast<FIRRTLBaseType>(oldType);
+      baseType && baseType.isGround()) {
+    assert(fieldID == 0);
+    return false;
   }
 
   return false;
@@ -657,7 +666,7 @@ static bool isUselessVec(FIRRTLBaseType oldType, unsigned fieldID) {
 // If a field is pointing to a child of a zero-length vector, it is useless.
 static bool isUselessVec(FieldRef field) {
   return isUselessVec(
-      getBaseType(type_cast<FIRRTLType>(field.getValue().getType())),
+      type_cast<hw::FieldIDTypeInterface>(field.getValue().getType()),
       field.getFieldID());
 }
 
@@ -766,12 +775,14 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
           .Case<InstanceOp>([&](auto op) { traceResets(op); })
           .Case<RefSendOp>([&](auto op) {
             // Trace using base types.
+            assert(0 && "NYI");
             traceResets(op.getType().getType(), op.getResult(), 0,
                         op.getBase().getType().getPassiveType(), op.getBase(),
                         0, op.getLoc());
           })
           .Case<RefResolveOp>([&](auto op) {
             // Trace using base types.
+            assert(0 && "NYI");
             traceResets(op.getType(), op.getResult(), 0,
                         op.getRef().getType().getType(), op.getRef(), 0,
                         op.getLoc());
@@ -937,8 +948,8 @@ void InferResetsPass::traceResets(Type dstType, Value dst, unsigned dstID,
   // Handle connecting ref's.  Other uses trace using base type.
   if (auto dstRef = type_dyn_cast<RefType>(dstType)) {
     auto srcRef = type_cast<RefType>(srcType);
-    return traceResets(dstRef.getType(), dst, dstID, srcRef.getType(), src,
-                       srcID, loc);
+    return traceResets(dstRef.getType(), dst, dstID + 1, srcRef.getType(), src,
+                       srcID + 1, loc);
   }
 
   // Handle reset connections.
