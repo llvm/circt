@@ -13,10 +13,81 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/SymbolTable.h"
 
 using namespace mlir;
 using namespace circt;
 using namespace ibis;
+
+template <typename TSymAttr>
+ParseResult parseClassRefFromName(OpAsmParser &parser, Type &classRefType,
+                                  TSymAttr sym) {
+  // Nothing to parse, since this is already encoded in the child symbol.
+  classRefType = ClassRefType::get(parser.getContext(), sym);
+  return success();
+}
+
+template <typename TSymAttr>
+void printClassRefFromName(OpAsmPrinter &p, Operation *op, Type type,
+                           TSymAttr sym) {
+  // Nothing to print since this information is already encoded in the child
+  // symbol.
+}
+
+//===----------------------------------------------------------------------===//
+// ClassOp
+//===----------------------------------------------------------------------===//
+
+ParseResult ClassOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse signature
+  StringAttr className;
+  if (parser.parseSymbolName(className, mlir::SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  // parse "this"
+  OpAsmParser::Argument thisArg;
+  if (parser.parseLParen() ||
+      parser.parseArgument(thisArg, /*allowType=*/false) ||
+      parser.parseRParen())
+    return failure();
+
+  thisArg.type = parser.getBuilder().getType<ClassRefType>(className);
+
+  // Parse the attribute dict.
+  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
+    return failure();
+
+  // Parse the class body.
+  auto *body = result.addRegion();
+  if (parser.parseRegion(*body, {thisArg}))
+    return failure();
+
+  return success();
+}
+
+void ClassOp::print(OpAsmPrinter &p) {
+  p << " ";
+  p.printSymbolName(getSymName());
+  p << '(';
+  p.printRegionArgument(getThis(), {}, /*omitType*/ true);
+  p << ')';
+  llvm::SmallVector<::llvm::StringRef, 2> elidedAttrs;
+  elidedAttrs.push_back("sym_name");
+  p.printOptionalAttrDictWithKeyword((*this)->getAttrs(), elidedAttrs);
+  p << " ";
+  p.printRegion(getBody(), /*printEntryBlockArgs=*/false,
+                /*printBlockTerminators=*/true);
+}
+
+void ClassOp::getAsmBlockArgumentNames(mlir::Region &region,
+                                       OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getThis(), "this");
+}
+
+//===----------------------------------------------------------------------===//
+// MethodOp
+//===----------------------------------------------------------------------===//
 
 ParseResult MethodOp::parse(OpAsmParser &parser, OperationState &result) {
   // Parse the name as a symbol.
@@ -155,134 +226,47 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
-// PortReadOp
+// InstanceOp
 //===----------------------------------------------------------------------===//
 
-// Verifies that a given source operation (TSrcOp is a port access) access a
-// symbol defined by the expected target operation (TTargetOp).
-template <typename TSrcOp, typename TTargetOp>
-LogicalResult verifyPortSymbolUses(
-    TSrcOp op, StringAttr symName, llvm::function_ref<Type(TSrcOp)> getPortType,
-    SymbolTableCollection &symbolTable,
-    llvm::function_ref<FailureOr<TTargetOp>(Operation *)> getTargetOp) {
+LogicalResult GetPortOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Lookup the target module type of the instance class reference.
+  ModuleOp mod = getOperation()->getParentOfType<ModuleOp>();
+  ClassRefType crt = getInstance().getType().cast<ClassRefType>();
+  // @teqdruid TODO: make this more efficient using
+  // innersymtablecollection when that's available to non-firrtl dialects.
+  auto targetClass =
+      symbolTable.lookupSymbolIn<ClassOp>(mod, crt.getClassRef());
+  assert(targetClass && "should have been verified by the type system");
+  // @teqdruid TODO: make this more efficient using
+  // innersymtablecollection when that's available to non-firrtl dialects.
+  Operation *targetOp =
+      symbolTable.lookupSymbolIn(targetClass, getPortSymbolAttr());
 
-  ClassOp parentClass = op->template getParentOfType<ClassOp>();
-  assert(parentClass && " must be contained in a ClassOp");
-  // TODO @teqdruid: use innerSym when available.
-  Operation *rootAccessOp = symbolTable.lookupSymbolIn(parentClass, symName);
+  if (!targetOp)
+    return emitOpError() << "port '" << getPortSymbolAttr()
+                         << "' does not exist in " << targetClass.getName();
 
-  TTargetOp targetOp;
-  if (auto getTargetRes = getTargetOp(rootAccessOp); succeeded(getTargetRes))
-    targetOp = *getTargetRes;
-  else
-    return failure();
+  auto portOp = dyn_cast<PortOpInterface>(targetOp);
+  if (!portOp)
+    return emitOpError() << "symbol '" << getPortSymbolAttr()
+                         << "' does not refer to a port";
 
-  Type expectedType = getPortType(op);
-  Type actualType = targetOp.getType();
-  if (actualType != expectedType)
-    return op->emitOpError() << "Expected type '" << expectedType
-                             << "' does not match actual port type, which was '"
-                             << actualType << "'";
+  Type targetPortType = portOp.getPortType();
+  Type thisPortType = getType().getPortType();
+  if (targetPortType != thisPortType)
+    return emitOpError() << "symbol '" << getPortSymbolAttr()
+                         << "' refers to a port of type " << targetPortType
+                         << ", but this op has type " << thisPortType;
+
   return success();
-}
-
-// verifies that a local port access (non-nested symbol reference) is valid (the
-// target symbol exists) and that the types of the port and the access match.
-template <typename TSrcOp, typename TTargetOp>
-LogicalResult
-verifyLocalPortSymbolUse(TSrcOp op,
-                         llvm::function_ref<Type(TSrcOp)> getPortType,
-                         SymbolTableCollection &symbolTable) {
-  FlatSymbolRefAttr symName = op.getSymNameAttr();
-  auto getTargetOp = [&](Operation *rootAccessOp) -> FailureOr<TTargetOp> {
-    auto targetOp = dyn_cast_or_null<TTargetOp>(rootAccessOp);
-    if (!targetOp)
-      return op->emitOpError()
-             << "expected '" << symName << "' to refer to a '"
-             << TTargetOp::getOperationName() << "' operation";
-    return {targetOp};
-  };
-
-  return verifyPortSymbolUses<TSrcOp, TTargetOp>(
-      op, symName.getAttr(), getPortType, symbolTable, getTargetOp);
-}
-
-LogicalResult PortReadOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyLocalPortSymbolUse<PortReadOp, OutputPortOp>(
-      *this, [](PortReadOp op) { return op.getOutput().getType(); },
-      symbolTable);
-}
-
-//===----------------------------------------------------------------------===//
-// PortWriteOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult
-PortWriteOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyLocalPortSymbolUse<PortWriteOp, InputPortOp>(
-      *this, [](PortWriteOp op) { return op.getInput().getType(); },
-      symbolTable);
-}
-
-//===----------------------------------------------------------------------===//
-// InstanceReadOp
-//===----------------------------------------------------------------------===//
-
-// verifies that an instance port access (nested symbol reference) is valid
-// (the target instance exists, and the target port inside the referenced class
-// exists) and that the types of the port and the access match.
-template <typename TSrcOp, typename TTargetOp>
-LogicalResult
-verifyInstancePortSymbolUses(TSrcOp op,
-                             llvm::function_ref<Type(TSrcOp)> getPortType,
-                             SymbolTableCollection &symbolTable) {
-  auto symName = op.getSymNameAttr();
-  auto getTargetOp = [&](Operation *rootAccessOp) -> FailureOr<TTargetOp> {
-    auto targetInstance = dyn_cast_or_null<InstanceOp>(rootAccessOp);
-    if (!targetInstance)
-      return op->emitOpError()
-             << "expected " << symName.getRootReference() << " to refer to a '"
-             << InstanceOp::getOperationName() << "' operation";
-
-    // Lookup the port in the instance. For now, only allow top level accesses -
-    // can easily extend this to nested instances as well.
-    ClassOp referencedClass = targetInstance.getClass();
-    // @teqdruid TODO: make this more efficient using
-    // innersymtablecollection when that's available to non-firrtl dialects.
-    auto targetOp = symbolTable.lookupSymbolIn<TTargetOp>(
-        referencedClass, symName.getLeafReference());
-
-    if (!targetOp)
-      return op->emitOpError() << "'" << symName << "' does not exist";
-
-    return {targetOp};
-  };
-
-  return verifyPortSymbolUses<TSrcOp, TTargetOp>(
-      op, symName.getRootReference(), getPortType, symbolTable, getTargetOp);
-}
-
-LogicalResult
-InstanceReadOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyInstancePortSymbolUses<InstanceReadOp, OutputPortOp>(
-      *this, [](InstanceReadOp op) { return op.getOutput().getType(); },
-      symbolTable);
-}
-
-//===----------------------------------------------------------------------===//
-// InstanceWriteOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult
-InstanceWriteOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyInstancePortSymbolUses<InstanceWriteOp, InputPortOp>(
-      *this, [](InstanceWriteOp op) { return op.getInput().getType(); },
-      symbolTable);
 }
 
 //===----------------------------------------------------------------------===//
 // TableGen generated logic
 //===----------------------------------------------------------------------===//
+
+#include "circt/Dialect/Ibis/IbisInterfaces.cpp.inc"
 
 // Provide the autogenerated implementation guts for the Op classes.
 #define GET_OP_CLASSES

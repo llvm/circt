@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Ibis/IbisTypes.h"
+#include "circt/Dialect/Ibis/IbisDialect.h"
 #include "circt/Dialect/Ibis/IbisOps.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/StringExtras.h"
@@ -16,5 +17,21 @@
 using namespace circt;
 using namespace ibis;
 
+bool circt::ibis::isOpaqueClassRefType(mlir::Type type) {
+  auto classRef = type.dyn_cast<ClassRefType>();
+  if (!classRef)
+    return false;
+
+  return classRef.isOpaque();
+}
+
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/Ibis/IbisTypes.cpp.inc"
+
+void IbisDialect::registerTypes() {
+  // Register types.
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "circt/Dialect/Ibis/IbisTypes.cpp.inc"
+      >();
+}

@@ -18,9 +18,12 @@ include "mlir/IR/OpBase.td"
 def PortOpInterface : OpInterface<"PortOpInterface"> {
   let cppNamespace = "circt::ibis";
   let description =
-      [{"An interface for operations which describe ports."}];
+      "An interface for operations which describe ports.";
 
   let methods = [
+    InterfaceMethod<
+      "Returns the data type of the port.",
+      "mlir::Type", "getPortType">
   ];
 }
 

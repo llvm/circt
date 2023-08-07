@@ -16,11 +16,7 @@ using namespace ibis;
 #include "circt/Dialect/Ibis/IbisDialect.cpp.inc"
 
 void IbisDialect::initialize() {
-  // Register types.
-  addTypes<
-#define GET_TYPEDEF_LIST
-#include "circt/Dialect/Ibis/IbisTypes.cpp.inc"
-      >();
+  registerTypes();
 
   // Register operations.
   addOperations<
