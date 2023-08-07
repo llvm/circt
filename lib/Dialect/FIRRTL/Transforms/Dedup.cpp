@@ -102,10 +102,10 @@ struct StructuralHasher {
       : constants(constants){};
 
   std::pair<std::array<uint8_t, 32>, SmallVector<StringAttr>>
-  getHashAndModuleNames(FModuleLike module, std::optional<StringAttr> group) {
+  getHashAndModuleNames(FModuleLike module, StringAttr group) {
     update(&(*module));
     if (group)
-      sha.update(group->str());
+      sha.update(group.str());
     auto hash = sha.final();
     return {hash, referredModuleNames};
   }
@@ -619,23 +619,23 @@ struct Equivalence {
       return;
     }
     auto aGroup = aAnnos.hasAnnotation(dedupGroupClass)
-                      ? std::optional{aAnnos.getAnnotation(dedupGroupClass)
-                                          .getMember<StringAttr>("group")}
-                      : std::nullopt;
+                      ? aAnnos.getAnnotation(dedupGroupClass)
+                            .getMember<StringAttr>("group")
+                      : StringAttr();
     auto bGroup = bAnnos.hasAnnotation(dedupGroupClass)
-                      ? std::optional{bAnnos.getAnnotation(dedupGroupClass)
-                                          .getMember<StringAttr>("group")}
-                      : std::nullopt;
+                      ? bAnnos.getAnnotation(dedupGroupClass)
+                            .getMember<StringAttr>("group")
+                      : StringAttr();
     if (aGroup != bGroup) {
       if (bGroup) {
         diag.attachNote(b->getLoc())
-            << "module is in dedup group '" << bGroup->str() << "'";
+            << "module is in dedup group '" << bGroup.str() << "'";
       } else {
         diag.attachNote(b->getLoc()) << "module is not part of a dedup group";
       }
       if (aGroup) {
         diag.attachNote(a->getLoc())
-            << "module is in dedup group '" << aGroup->str() << "'";
+            << "module is in dedup group '" << aGroup.str() << "'";
       } else {
         diag.attachNote(a->getLoc()) << "module is not part of a dedup group";
       }
@@ -1350,6 +1350,10 @@ class DedupPass : public DedupBase<DedupPass> {
     // Modules annotated with this should not be considered for deduplication.
     auto noDedupClass = StringAttr::get(context, noDedupAnnoClass);
 
+    // Only modules within the same group may be deduplicated.
+    auto dedupGroupClass = StringAttr::get(context, dedupGroupAnnoClass);
+    ;
+
     // A map of all the module moduleInfo that we have calculated so far.
     llvm::DenseMap<ModuleInfo, Operation *> moduleInfoToModule;
 
@@ -1385,11 +1389,10 @@ class DedupPass : public DedupBase<DedupPass> {
         return;
 
       StructuralHasher hasher(hasherConstants);
-      auto dedupGroup =
-          annotations.hasAnnotation(dedupGroupAnnoClass)
-              ? std::optional{annotations.getAnnotation(dedupGroupAnnoClass)
-                                  .getMember<StringAttr>("group")}
-              : std::nullopt;
+      auto dedupGroup = annotations.hasAnnotation(dedupGroupClass)
+                            ? annotations.getAnnotation(dedupGroupAnnoClass)
+                                  .getMember<StringAttr>("group")
+                            : StringAttr();
       // Calculate the hash of the module and referred module names.
       hashesAndModuleNames[idx] =
           hasher.getHashAndModuleNames(module, dedupGroup);
