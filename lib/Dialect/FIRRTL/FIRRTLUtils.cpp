@@ -490,6 +490,9 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
               value = subfieldOp.getInput();
               typename decltype(subfieldOp)::InputType bundleType =
                   subfieldOp.getInput().getType();
+              // Extra ID if indexing through ref.
+              if (id != 0 && type_isa<RefType>(subfieldOp.getType()))
+                ++id;
               // Rebase the current index on the parent field's
               // index.
               id += bundleType.getFieldID(subfieldOp.getFieldIndex());
@@ -499,6 +502,8 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
               value = subindexOp.getInput();
               typename decltype(subindexOp)::InputType vecType =
                   subindexOp.getInput().getType();
+              if (id != 0 && type_isa<RefType>(subindexOp.getType()))
+                ++id;
               // Rebase the current index on the parent field's
               // index.
               id += vecType.getFieldID(subindexOp.getIndex());
