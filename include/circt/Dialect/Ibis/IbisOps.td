@@ -171,7 +171,8 @@ def GetParentOfRefOp : IbisOp<"get_parent_of_ref"> {
   let summary = "Ibis get classref parent op";
   let description = [{
     Given an Ibis class reference, returns a class reference to the parent of
-    said class. The returned `ibis.classref` will be an opaque type.
+    said class. The returned `ibis.classref` will be an opaque type, given that
+    any given Ibis class may be instantiated by multiple different parent classes.
   }];
 
   let arguments = (ins AnyClassRefType:$src);
