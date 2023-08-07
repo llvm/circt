@@ -1241,19 +1241,27 @@ firrtl.circuit "CollidingSymbolsFields" {
   // CHECK-NEXT: hw.hierpath private @nla1 [@CollidingSymbolsFields::@[[FoobarSym:[_a-zA-Z0-9]+]], @Bar]
   hw.hierpath private @nla1 [@CollidingSymbolsFields::@foo, @Foo::@bar, @Bar]
   firrtl.module @Bar() attributes {annotations = [{circt.nonlocal = @nla1, class = "nla1"}]} {}
-  firrtl.module @Foo() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
-    %b = firrtl.wire sym [<@b,1,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+  firrtl.module @Foo(in %x : !firrtl.bundle<a: uint<1>, b: uint<1>> sym [<@b_0,1,public>,<@foo,2,public>]) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %b = firrtl.wire sym [<@b,1,public>,<@bar_0,2,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>>
     firrtl.instance bar sym @bar @Bar()
+    %1 = firrtl.ref.rwprobe <@Foo::@b_0> : !firrtl.uint<1>
+    %2 = firrtl.ref.rwprobe <@Foo::@bar_0> : !firrtl.uint<1>
+    %3 = firrtl.ref.rwprobe <@Foo::@foo> : !firrtl.uint<1>
   }
-  // CHECK: module @CollidingSymbolsFields()
-  firrtl.module @CollidingSymbolsFields() {
-    // CHECK-NEXT: firrtl.wire sym [<@[[B_SYM:.+]],1,public>]
-    // CHECK-NEXT: firrtl.instance foo_bar sym @[[FoobarSym]]
+  // CHECK: module @CollidingSymbolsFields(
+  // CHECK-SAME: sym [<@b_0
+  firrtl.module @CollidingSymbolsFields(in %x : !firrtl.bundle<a: uint<1>> sym [<@b_0,1,public>]) {
+    // CHECK-NEXT: firrtl.wire sym [<@[[FOO_X_A_SYM:.+]],1,public>, <@[[FOO_X_B_SYM:.+]],2,public>]
+    // CHECK-NEXT: firrtl.wire sym [<@[[FOO_B_A_SYM:.+]],1,public>, <@[[FOO_B_B_SYM:.+]],2,public>]
+    // CHECK-NEXT: firrtl.instance foo_bar sym @[[FoobarSym]] @Bar
+    // CHECK-NEXT: firrtl.ref.rwprobe <@CollidingSymbolsFields::@[[FOO_X_A_SYM]]>
+    // CHECK-NEXT: firrtl.ref.rwprobe <@CollidingSymbolsFields::@[[FOO_B_B_SYM]]>
+    // CHECK-NEXT: firrtl.ref.rwprobe <@CollidingSymbolsFields::@[[FOO_X_B_SYM]]>
     // CHECK-NEXT: firrtl.wire sym @b
-    // CHECK-NEXT: firrtl.wire sym [<@bar,1,public>]
+    // CHECK-NEXT: firrtl.wire sym [<@bar,1,public>, <@bar_0,2,public>]
     // CHECK-NEXT: }
-    firrtl.instance foo sym @foo @Foo()
+    firrtl.instance foo sym @foo @Foo(in x : !firrtl.bundle<a: uint<1>, b: uint<1>>)
     %collision_b = firrtl.wire sym @b : !firrtl.uint<1>
-    %collision_bar = firrtl.wire sym [<@bar,1,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %collision_bar = firrtl.wire sym [<@bar,1,public>,<@bar_0,2,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>>
   }
 }
