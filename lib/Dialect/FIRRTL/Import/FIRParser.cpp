@@ -2984,8 +2984,8 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
                      "expected base-type expression in 'rwprobe', got ")
            << staticRef.getType();
 
-  auto fieldRef = getFieldRefFromValue(staticRef);
-  auto target = fieldRef.getValue();
+  auto fieldRefBase = getFieldRefFromValue(staticRef);
+  auto target = fieldRefBase.getValue();
 
   // Ports are handled differently, emit a RWProbeOp with inner symbol.
   if (auto arg = dyn_cast<BlockArgument>(target)) {
@@ -3003,7 +3003,7 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
     // Get InnerRef for target field.
     auto mod = cast<FModuleOp>(arg.getOwner()->getParentOp());
     auto sym = getInnerRefTo(
-        hw::InnerSymTarget(arg.getArgNumber(), mod, fieldRef.getFieldID()),
+        hw::InnerSymTarget(arg.getArgNumber(), mod, fieldRefBase.getFieldID()),
         [&](FModuleOp mod) -> ModuleNamespace & { return modNameSpace; });
     result = builder.create<RWProbeOp>(sym, targetType);
     return success();
@@ -3023,9 +3023,12 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
     return emitError(startTok.getLoc(), "rwprobe target not forceable")
         .attachNote(definingOp->getLoc());
 
-  // TODO: do the ref.sub work while parsing the static expression.
-  result =
-      getValueByFieldID(builder, forceable.getDataRef(), fieldRef.getFieldID());
+  // FieldID of 0 is same for references, but if non-zero insert an extra to
+  // index through the ref part.
+  auto adjustedFieldRef =
+      fieldRefBase.getFieldID() ? fieldRefBase.getSubField(1) : fieldRefBase;
+  result = getValueByFieldID(builder, forceable.getDataRef(),
+                             adjustedFieldRef.getFieldID());
 
   return success();
 }
