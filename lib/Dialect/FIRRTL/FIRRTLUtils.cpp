@@ -666,41 +666,44 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
 void circt::firrtl::walkGroundTypes(
     FIRRTLType firrtlType,
     llvm::function_ref<void(uint64_t, FIRRTLBaseType)> fn) {
-  auto type = getBaseType(firrtlType);
+  auto type = type_dyn_cast<hw::FieldIDTypeInterface>(firrtlType);
 
-  // If this is not a base type, return.
+  // If this is not a fieldID type, return.
   if (!type)
     return;
 
   // If this is a ground type, don't call recursive functions.
-  if (type.isGround())
-    return fn(0, type);
+  auto baseType = firrtl::type_dyn_cast<FIRRTLBaseType>(type);
+  if (baseType && baseType.isGround())
+    return fn(0, baseType);
 
   uint64_t fieldID = 0;
-  auto recurse = [&](auto &&f, FIRRTLBaseType type) -> void {
-    FIRRTLTypeSwitch<FIRRTLBaseType>(type)
-        .Case<BundleType>([&](BundleType bundle) {
-          for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
+  auto recurse = [&](auto &&f, hw::FieldIDTypeInterface type) -> void {
+    FIRRTLTypeSwitch<hw::FieldIDTypeInterface>(type)
+        .Case<BundleType, OpenBundleType, FEnumType>([&](auto bundleLike) {
+          for (size_t i = 0, e = bundleLike.getNumElements(); i < e; ++i) {
             fieldID++;
-            f(f, bundle.getElementType(i));
+            f(f, type_cast<hw::FieldIDTypeInterface>(
+                     bundleLike.getElementType(i)));
           }
         })
-        .template Case<FVectorType>([&](FVectorType vector) {
-          for (size_t i = 0, e = vector.getNumElements(); i < e; ++i) {
+        .template Case<FVectorType, OpenVectorType>([&](auto vec) {
+          for (size_t i = 0, e = vec.getNumElements(); i < e; ++i) {
             fieldID++;
-            f(f, vector.getElementType());
+            f(f, type_cast<hw::FieldIDTypeInterface>(vec.getElementType()));
           }
         })
-        .template Case<FEnumType>([&](FEnumType fenum) {
-          for (size_t i = 0, e = fenum.getNumElements(); i < e; ++i) {
-            fieldID++;
-            f(f, fenum.getElementType(i));
-          }
+        .template Case<RefType>([&](RefType ref) {
+          fieldID++;
+          f(f, type_cast<hw::FieldIDTypeInterface>(ref.getType()));
         })
-        .Default([&](FIRRTLBaseType groundType) {
+        .template Case([&](FIRRTLBaseType groundType) {
           assert(groundType.isGround() &&
                  "only ground types are expected here");
           fn(fieldID, groundType);
+        })
+        .template Default([&](auto unsupported) {
+          assert(0 && "unsupported type encountered");
         });
   };
   recurse(recurse, type);
