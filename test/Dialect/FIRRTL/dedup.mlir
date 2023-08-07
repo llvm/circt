@@ -677,12 +677,14 @@ firrtl.circuit "Foo"  {
 firrtl.circuit "DedupGroup" {
   // CHECK: @Foo0
   firrtl.module @Foo0() attributes {annotations = [{
+    // CHECK-NOT: class = "firrtl.transforms.DedupGroupAnnotation"
     class = "firrtl.transforms.DedupGroupAnnotation",
     group = "foo"
   }]} { }
 
   // CHECK-NOT: @Foo1
   firrtl.module @Foo1() attributes {annotations = [{
+    // CHECK-NOT: class = "firrtl.transforms.DedupGroupAnnotation"
     class = "firrtl.transforms.DedupGroupAnnotation",
     group = "foo"
   }]} { }

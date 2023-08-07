@@ -1511,6 +1511,10 @@ class DedupPass : public DedupBase<DedupPass> {
     if (failed)
       return signalPassFailure();
 
+    for (auto module : modules) {
+      AnnotationSet::removeAnnotations(module, dedupGroupClass);
+    }
+
     // Walk all the modules and fixup the instance operation to return the
     // correct type. We delay this fixup until the end because doing it early
     // can block the deduplication of the parent modules.
