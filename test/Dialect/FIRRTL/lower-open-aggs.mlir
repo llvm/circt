@@ -150,7 +150,7 @@ firrtl.circuit "SymbolOnField" {
   // CHECK: @SymbolOnField
   // CHECK-SAME: (out r: !firrtl.bundle<x: uint<1>> sym [<@sym,1,public>],
   // CHECK-SAME:  out r_p: !firrtl.probe<uint<1>>)
-  firrtl.extmodule @SymbolOnField(out r : !firrtl.openbundle<p: probe<uint<1>>, x: uint<1>> sym [<@sym,2,public>])
+  firrtl.extmodule @SymbolOnField(out r : !firrtl.openbundle<p: probe<uint<1>>, x: uint<1>> sym [<@sym,3,public>])
 }
 
 // -----
@@ -178,9 +178,9 @@ firrtl.circuit "ManySymbols" {
         sym [<@mixed,0,public>,
                <@a,1,public>,
                <@xvec,2,public>,
-                 <@x0,3,public>, <@x0_data,5,public>,
-                 <@x1,6,public>, <@x1_data,8,public>,
-               <@b,9,public>])
+                 <@x0,3,public>, <@x0_data,10,public>,
+                 <@x1,11,public>, <@x1_data,18,public>,
+               <@b,19,public>])
 
   // Similar but with a refs-only agg between HW elements.
   // Same HW-only contents as above.
@@ -203,7 +203,7 @@ firrtl.circuit "ManySymbols" {
         sym [<@mixed,0,public>,
                <@a,1,public>,
                <@xvec,2,public>,
-                 <@x0,3,public>, <@x0_data,6,public>,
-                 <@x1,7,public>, <@x1_data,10,public>,
-               <@b,11,public>])
+                 <@x0,3,public>, <@x0_data,11,public>,
+                 <@x1,12,public>, <@x1_data,20,public>,
+               <@b,21,public>])
 }
