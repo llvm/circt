@@ -2215,7 +2215,7 @@ FailureOr<bool> InferenceTypeUpdate::updateValue(Value value) {
       for (auto &element : bundleType) {
         auto updatedBase = firrtl::type_dyn_cast_or_null<FIRRTLBaseType>(
             updateBase(type_cast<hw::FieldIDTypeInterface>(element.type)));
-        if (!updateBase)
+        if (!updatedBase)
           return {};
         elements.emplace_back(element.name, element.isFlip, updatedBase);
       }
@@ -2246,7 +2246,7 @@ FailureOr<bool> InferenceTypeUpdate::updateValue(Value value) {
             firrtl::type_dyn_cast_or_null<FIRRTLBaseType>(updateBase(
                 firrtl::type_cast<hw::FieldIDTypeInterface>(element.type)));
 
-        if (!updateBase)
+        if (!updatedBase)
           return {};
         elements.emplace_back(element.name, updatedBase);
       }
