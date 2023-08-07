@@ -1598,12 +1598,14 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 
           auto fml = cast<FModuleLike>(&*refdModule);
           auto ports = fml.getPorts();
-          for (auto &port : ports)
-            if (type_cast<FIRRTLBaseType>(port.type).hasUninferredWidth()) {
+          for (auto &port : ports) {
+            auto baseType = getBaseType(port.type);
+            if (baseType && baseType.hasUninferredWidth()) {
               diag.attachNote(op.getLoc()) << "Port: " << port.name;
-              if (!type_cast<FIRRTLBaseType>(port.type).isGround())
-                diagnoseUninferredType(diag, port.type, port.name.getValue());
+              if (!baseType.isGround())
+                diagnoseUninferredType(diag, baseType, port.name.getValue());
             }
+          }
 
           diag.attachNote(op.getLoc())
               << "Only non-extern FIRRTL modules may contain unspecified "
