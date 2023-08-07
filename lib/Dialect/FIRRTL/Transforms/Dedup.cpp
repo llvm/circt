@@ -102,8 +102,10 @@ struct StructuralHasher {
       : constants(constants){};
 
   std::pair<std::array<uint8_t, 32>, SmallVector<StringAttr>>
-  getHashAndModuleNames(FModuleLike module) {
+  getHashAndModuleNames(FModuleLike module, std::optional<StringAttr> group) {
     update(&(*module));
+    if (group)
+      sha.update(group->str());
     auto hash = sha.final();
     return {hash, referredModuleNames};
   }
@@ -240,6 +242,7 @@ struct Equivalence {
   Equivalence(MLIRContext *context, InstanceGraph &instanceGraph)
       : instanceGraph(instanceGraph) {
     noDedupClass = StringAttr::get(context, noDedupAnnoClass);
+    dedupGroupClass = StringAttr::get(context, dedupGroupAnnoClass);
     portTypesAttr = StringAttr::get(context, "portTypes");
     nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "name"));
@@ -605,12 +608,37 @@ struct Equivalence {
   // NOLINTNEXTLINE(misc-no-recursion)
   void check(InFlightDiagnostic &diag, Operation *a, Operation *b) {
     IRMapping map;
-    if (AnnotationSet(a).hasAnnotation(noDedupClass)) {
+    AnnotationSet aAnnos(a);
+    AnnotationSet bAnnos(b);
+    if (aAnnos.hasAnnotation(noDedupClass)) {
       diag.attachNote(a->getLoc()) << "module marked NoDedup";
       return;
     }
-    if (AnnotationSet(b).hasAnnotation(noDedupClass)) {
+    if (bAnnos.hasAnnotation(noDedupClass)) {
       diag.attachNote(b->getLoc()) << "module marked NoDedup";
+      return;
+    }
+    auto aGroup = aAnnos.hasAnnotation(dedupGroupClass)
+                      ? std::optional{aAnnos.getAnnotation(dedupGroupClass)
+                                          .getMember<StringAttr>("group")}
+                      : std::nullopt;
+    auto bGroup = bAnnos.hasAnnotation(dedupGroupClass)
+                      ? std::optional{bAnnos.getAnnotation(dedupGroupClass)
+                                          .getMember<StringAttr>("group")}
+                      : std::nullopt;
+    if (aGroup != bGroup) {
+      if (bGroup) {
+        diag.attachNote(b->getLoc())
+            << "module is in dedup group '" << bGroup->str() << "'";
+      } else {
+        diag.attachNote(b->getLoc()) << "module is not part of a dedup group";
+      }
+      if (aGroup) {
+        diag.attachNote(a->getLoc())
+            << "module is in dedup group '" << aGroup->str() << "'";
+      } else {
+        diag.attachNote(a->getLoc()) << "module is not part of a dedup group";
+      }
       return;
     }
     if (failed(check(diag, map, a, b)))
@@ -623,6 +651,8 @@ struct Equivalence {
   StringAttr portTypesAttr;
   // This is a cached "NoDedup" annotation class string attr.
   StringAttr noDedupClass;
+  // This is a cached "DedupGroup" annotation class string attr.
+  StringAttr dedupGroupClass;
   // This is a set of every attribute we should ignore.
   DenseSet<Attribute> nonessentialAttributes;
   InstanceGraph &instanceGraph;
@@ -1343,9 +1373,11 @@ class DedupPass : public DedupBase<DedupPass> {
     // Calculate module information parallelly.
     mlir::parallelFor(context, 0, modules.size(), [&](unsigned idx) {
       auto module = modules[idx];
+      AnnotationSet annotations(module);
       // If the module is marked with NoDedup, just skip it.
-      if (AnnotationSet(module).hasAnnotation(noDedupClass))
+      if (annotations.hasAnnotation(noDedupClass))
         return;
+
       // If the module has input RefType ports, also skip it.
       if (llvm::any_of(module.getPorts(), [&](PortInfo port) {
             return type_isa<RefType>(port.type) && port.isInput();
@@ -1353,8 +1385,14 @@ class DedupPass : public DedupBase<DedupPass> {
         return;
 
       StructuralHasher hasher(hasherConstants);
+      auto dedupGroup =
+          annotations.hasAnnotation(dedupGroupAnnoClass)
+              ? std::optional{annotations.getAnnotation(dedupGroupAnnoClass)
+                                  .getMember<StringAttr>("group")}
+              : std::nullopt;
       // Calculate the hash of the module and referred module names.
-      hashesAndModuleNames[idx] = hasher.getHashAndModuleNames(module);
+      hashesAndModuleNames[idx] =
+          hasher.getHashAndModuleNames(module, dedupGroup);
     });
 
     for (auto [i, module] : llvm::enumerate(modules)) {

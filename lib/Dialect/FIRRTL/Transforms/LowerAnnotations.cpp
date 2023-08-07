@@ -520,6 +520,8 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {inlineAnnoClass, {stdResolve, applyWithoutTarget<false, FModuleOp>}},
     {noDedupAnnoClass,
      {stdResolve, applyWithoutTarget<false, FModuleOp, FExtModuleOp>}},
+    {dedupGroupAnnoClass,
+     {stdResolve, applyWithoutTarget<false, FModuleOp, FExtModuleOp>}},
     {blackBoxInlineAnnoClass,
      {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
     {blackBoxPathAnnoClass,
