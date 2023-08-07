@@ -581,7 +581,8 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
 }
 
 static std::optional<uint64_t>
-getFieldIDOffset(FieldRef changedFieldRef, FIRRTLBaseType connectionType,
+getFieldIDOffset(FieldRef changedFieldRef,
+                 hw::FieldIDTypeInterface connectionType,
                  FieldRef connectedValueFieldRef) {
   if (changedFieldRef.getValue() != connectedValueFieldRef.getValue())
     return {};
@@ -602,20 +603,22 @@ void IMConstPropPass::mergeOnlyChangedLatticeValue(Value dest, Value src,
     return markOverdefined(dest);
   }
 
-  FIRRTLBaseType baseType = getBaseType(destTypeFIRRTL);
+  auto destFieldIDType =
+      type_dyn_cast<hw::FieldIDTypeInterface>(destTypeFIRRTL);
 
   auto fieldRefSrc = getOrCacheFieldRefFromValue(src);
   auto fieldRefDest = getOrCacheFieldRefFromValue(dest);
   // If a changed field ref is included the source value, find an offset in the
   // connection.
-  if (auto srcOffset = getFieldIDOffset(changedFieldRef, baseType, fieldRefSrc))
+  if (auto srcOffset =
+          getFieldIDOffset(changedFieldRef, destFieldIDType, fieldRefSrc))
     mergeLatticeValue(fieldRefDest.getSubField(*srcOffset),
                       fieldRefSrc.getSubField(*srcOffset));
 
   // If a changed field ref is included the dest value, find an offset in the
   // connection.
   if (auto destOffset =
-          getFieldIDOffset(changedFieldRef, baseType, fieldRefDest))
+          getFieldIDOffset(changedFieldRef, destFieldIDType, fieldRefDest))
     mergeLatticeValue(fieldRefDest.getSubField(*destOffset),
                       fieldRefSrc.getSubField(*destOffset));
 }
@@ -628,8 +631,6 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
     markOverdefined(connect.getSrc());
     return markOverdefined(connect.getDest());
   }
-
-  FIRRTLBaseType baseType = getBaseType(destTypeFIRRTL);
 
   auto fieldRefSrc = getOrCacheFieldRefFromValue(connect.getSrc());
   auto fieldRefDest = getOrCacheFieldRefFromValue(connect.getDest());
@@ -645,8 +646,12 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
   }
 
   auto propagateElementLattice = [&](uint64_t fieldID,
-                                     FIRRTLBaseType destType) {
+                                     hw::FieldIDTypeInterface destFieldIDType) {
     auto fieldRefDestConnected = fieldRefDest.getSubField(fieldID);
+    auto destType = firrtl::type_dyn_cast<FIRRTLBaseType>(destFieldIDType);
+    if (!destType) // No lattice value for non-base types.
+      return;
+
     assert(destType.isGround());
 
     // Handle implicit extensions.
@@ -700,30 +705,38 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
         << "connect destination is here";
   };
 
-  if (auto srcOffset = getFieldIDOffset(changedFieldRef, baseType, fieldRefSrc))
-    propagateElementLattice(
-        *srcOffset,
-        cast<FIRRTLBaseType>(baseType.getFinalTypeByFieldID(*srcOffset)));
+  auto destFieldIDType =
+      type_dyn_cast<hw::FieldIDTypeInterface>(destTypeFIRRTL);
+  if (auto srcOffset =
+          getFieldIDOffset(changedFieldRef, destFieldIDType, fieldRefSrc))
+    propagateElementLattice(*srcOffset,
+                            destFieldIDType.getFinalTypeByFieldID(*srcOffset));
 
   if (auto relativeDest =
-          getFieldIDOffset(changedFieldRef, baseType, fieldRefDest))
+          getFieldIDOffset(changedFieldRef, destFieldIDType, fieldRefDest))
     propagateElementLattice(
-        *relativeDest,
-        cast<FIRRTLBaseType>(baseType.getFinalTypeByFieldID(*relativeDest)));
+        *relativeDest, destFieldIDType.getFinalTypeByFieldID(*relativeDest));
 }
 
 void IMConstPropPass::visitRefSend(RefSendOp send, FieldRef changedFieldRef) {
-  // Send connects the base value (source) to the result (dest).
-  return mergeOnlyChangedLatticeValue(send.getResult(), send.getBase(),
-                                      changedFieldRef);
+  auto dest = send.getResult();
+  auto src = send.getBase();
+
+  auto fieldRefSrc = getOrCacheFieldRefFromValue(src);
+  auto fieldRefDest = getOrCacheFieldRefFromValue(dest);
+  // Source to dest at fieldID 1.
+  mergeLatticeValue(fieldRefDest.getSubField(1), fieldRefSrc);
 }
 
 void IMConstPropPass::visitRefResolve(RefResolveOp resolve,
                                       FieldRef changedFieldRef) {
-  // Resolve connects the ref value (source) to result (dest).
-  // If writes are ever supported, this will need to work differently!
-  return mergeOnlyChangedLatticeValue(resolve.getResult(), resolve.getRef(),
-                                      changedFieldRef);
+  auto dest = resolve.getResult();
+  auto src = resolve.getRef();
+
+  auto fieldRefSrc = getOrCacheFieldRefFromValue(src);
+  auto fieldRefDest = getOrCacheFieldRefFromValue(dest);
+  // Source fieldID 1 to dest.
+  mergeLatticeValue(fieldRefDest, fieldRefSrc.getSubField(1));
 }
 
 void IMConstPropPass::visitNode(NodeOp node, FieldRef changedFieldRef) {
