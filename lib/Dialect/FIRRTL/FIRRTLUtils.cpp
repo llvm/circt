@@ -642,9 +642,12 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
         .Case<RefType>([&](auto reftype) {
           FIRRTLTypeSwitch<FIRRTLBaseType, void>(reftype.getType())
               .template Case<BundleType, FVectorType>([&](auto type) {
-                auto index = type.getIndexForFieldID(fieldID);
+                assert(fieldID >= 1);
+                auto index = type.getIndexForFieldID(fieldID - 1);
                 value = builder.create<RefSubOp>(value, index);
                 fieldID -= type.getFieldID(index);
+                if (fieldID == 1)
+                  fieldID = 0;
               })
               .Default([&](auto _) {
                 llvm::report_fatal_error(
