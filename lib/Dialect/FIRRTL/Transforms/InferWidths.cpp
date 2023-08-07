@@ -2166,7 +2166,7 @@ FailureOr<bool> InferenceTypeUpdate::updateValue(Value value) {
       llvm::SmallVector<BundleType::BundleElement, 3> elements;
       for (auto &element : bundleType) {
         auto updatedBase = updateBase(element.type);
-        if (!updateBase)
+        if (!updatedBase)
           return {};
         elements.emplace_back(element.name, element.isFlip, updatedBase);
       }
@@ -2192,7 +2192,7 @@ FailureOr<bool> InferenceTypeUpdate::updateValue(Value value) {
       llvm::SmallVector<FEnumType::EnumElement> elements;
       for (auto &element : enumType.getElements()) {
         auto updatedBase = updateBase(element.type);
-        if (!updateBase)
+        if (!updatedBase)
           return {};
         elements.emplace_back(element.name, updatedBase);
       }
