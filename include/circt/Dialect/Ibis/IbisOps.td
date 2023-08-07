@@ -186,8 +186,8 @@ def GetInstanceInRefOp : IbisOp<"get_instance_in_ref"> {
   let summary = "Ibis get instance";
   let description = [{
     Given an Ibis class reference, returns a instance of said class. The instance
-    is specified by the symbol name of the instance of that instance in the referenced
-    class. In case of an opaque reference to the containing class, no type
+    is specified by the symbol name of the target child instance in the referenced
+    class instance. In case of an opaque reference to the containing class, no type
     validation is performed, and it is up to lowering passes to determine whether
     the instance of the given classref actually exists.
     The returned classref, however, is typed, given that one must specify the
