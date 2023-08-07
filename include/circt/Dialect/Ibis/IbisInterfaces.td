@@ -27,4 +27,39 @@ def PortOpInterface : OpInterface<"PortOpInterface"> {
   ];
 }
 
+def ScopeOpInterface : OpInterface<"ScopeOpInterface"> {
+  let cppNamespace = "circt::ibis";
+  let description = [{
+    An interface for operations which define Ibis scopes, that can be referenced
+    by an `ibis.this` operation.
+  }];
+
+  let verify = "return detail::verifyScopeOpInterface($_op);";
+
+  let methods = [
+    InterfaceMethod<
+      "Returns the body of the scope",
+      "mlir::Block*", "getBodyBlock",
+      (ins), [{
+        return &$_op->getRegions().front().front();
+      }]
+    >,
+    InterfaceMethod<
+      "Returns `%this` of the scope",
+      "mlir::Value", "getThis",
+      (ins), [{
+        return *detail::getThisFromScope($_op);
+      }]
+    >,
+    InterfaceMethod<
+      "Returns the symbol name of the scope",
+      "mlir::StringAttr", "getScopeName",
+      (ins), [{
+        auto symbolOp = cast<mlir::SymbolOpInterface>(&*$_op);
+        return symbolOp.getNameAttr();
+      }]
+    >
+  ];
+}
+
 #endif // CIRCT_DIALECT_IBIS_INTERFACES_TD

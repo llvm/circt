@@ -16,7 +16,7 @@
 namespace circt {
 namespace ibis {
 // Returns true if the given type is an opaque reference to an ibis class.
-bool isOpaqueClassRefType(mlir::Type type);
+bool isOpaqueScopeRefType(mlir::Type type);
 } // namespace ibis
 } // namespace circt
 

@@ -17,12 +17,12 @@
 using namespace circt;
 using namespace ibis;
 
-bool circt::ibis::isOpaqueClassRefType(mlir::Type type) {
-  auto classRef = type.dyn_cast<ClassRefType>();
-  if (!classRef)
+bool circt::ibis::isOpaqueScopeRefType(mlir::Type type) {
+  auto scopeRef = type.dyn_cast<ScopeRefType>();
+  if (!scopeRef)
     return false;
 
-  return classRef.isOpaque();
+  return scopeRef.isOpaque();
 }
 
 #define GET_TYPEDEF_CLASSES
