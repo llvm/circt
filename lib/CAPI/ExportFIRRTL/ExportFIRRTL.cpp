@@ -17,8 +17,8 @@ using namespace circt;
 using namespace firrtl;
 
 MlirLogicalResult mlirExportFIRRTL(MlirModule module,
-                                   MlirStringCallback callback, void *userData,
-                                   FIRVersion version) {
+                                   MlirStringCallback callback,
+                                   void *userData) {
   mlir::detail::CallbackOstream stream(callback, userData);
   return wrap(exportFIRFile(unwrap(module), stream, {}, {3, 0, 0}));
 }
