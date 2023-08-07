@@ -578,10 +578,6 @@ circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
   auto type = value.getType();
   auto localID = fieldRef.getFieldID();
   while (localID) {
-    // Index directly into ref inner type.
-    if (auto refTy = type_dyn_cast<RefType>(type))
-      type = refTy.getType();
-
     if (auto bundleType = type_dyn_cast<BundleType>(type)) {
       auto index = bundleType.getIndexForFieldID(localID);
       // Add the current field string, and recurse into a subfield.
@@ -608,6 +604,10 @@ circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
       name += element.name.getValue();
       type = element.type;
       localID = localID - enumType.getFieldID(index);
+    } else if (auto refType = type_dyn_cast<RefType>(type)) {
+      // Index through refs, but account for fieldID.
+      localID--;
+      type = refType.getType();
     } else {
       // If we reach here, the field ref is pointing inside some aggregate type
       // that isn't a bundle or a vector. If the type is a ground type, then the
