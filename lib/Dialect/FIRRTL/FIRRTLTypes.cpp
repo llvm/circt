@@ -2487,23 +2487,31 @@ auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
 //- RefType implementations of FieldIDTypeInterface --------------------------//
 // Needs to be implemented to be used in a FIRRTL aggregate.
 
-uint64_t RefType::getMaxFieldID() const { return 0; }
+uint64_t RefType::getMaxFieldID() const {
+  return 1 + getType().getMaxFieldID();
+}
 
 circt::hw::FieldIDTypeInterface
 RefType::getFinalTypeByFieldID(uint64_t fieldID) const {
-  assert(fieldID == 0);
-  return *this;
+  if (fieldID == 0)
+    return *this;
+  return getType().getFinalTypeByFieldID(fieldID - 1);
 }
 
 std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
 RefType::getSubTypeByFieldID(uint64_t fieldID) const {
-  assert(fieldID == 0);
-  return {*this, 0};
+  if (fieldID == 0)
+    return {*this, 0};
+  auto retval = getType().getSubTypeByFieldID(fieldID - 1);
+  return {retval.first, retval.second + 1};
 }
 
 std::pair<uint64_t, bool> RefType::rootChildFieldID(uint64_t fieldID,
                                                     uint64_t index) const {
-  return {0, fieldID == 0};
+  // RefType's don't support 'index'.
+  uint64_t childRoot = 1;
+  return {fieldID - childRoot,
+          index == 0 && fieldID >= childRoot && fieldID <= getMaxFieldID()};
 }
 
 RecursiveTypeProperties RefType::getRecursiveTypeProperties() const {
