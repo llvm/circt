@@ -1091,6 +1091,23 @@ def FIntegerConstantOp : FIRRTLOp<"integer", [Pure, ConstantLike]> {
   let hasCustomAssemblyFormat = true;
 }
 
+def PathOp : FIRRTLOp<"path", [Pure,
+                  DeclareOpInterfaceMethods<InnerRefUserOpInterface>]> {
+  let summary = "Produce a path value";
+  let description = [{
+    Produces a value which represents a path to the target in a design.
+
+    Example:
+    ```mlir
+    %w = firrtl.wire sym @wire : !firrtl.uint<1>
+    %0 = firrtl.path <@foo::@wire>
+    ```
+  }];
+  let arguments = (ins InnerRefAttr:$target);
+  let results = (outs PathType:$result);
+  let assemblyFormat = "$target attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // RefOperations: Operations on the RefType.
 //
