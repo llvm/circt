@@ -282,7 +282,10 @@ def WritePortOp : SeqOp<"write", [
 // Clock Gate
 //===----------------------------------------------------------------------===//
 
-def ClockGateOp : SeqOp<"clock_gate", [Pure]> {
+def ClockGateOp : SeqOp<"clock_gate", [
+  Pure,
+  DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>
+]> {
   let summary = "Safely gates a clock with an enable signal";
   let description = [{
     The `seq.clock_gate` enables and disables a clock safely, without glitches,
@@ -297,18 +300,27 @@ def ClockGateOp : SeqOp<"clock_gate", [Pure]> {
     The `test_enable` operand is optional and if present is OR'd together with
     the `enable` operand to determine whether the output clock is gated or not.
 
+    The op can be referred to using an inner symbol. Upon translation, the
+    symbol will target the instance to the external module it lowers to.
+
     ```
     %gatedClock = seq.clock_gate %clock, %enable : i1
     %gatedClock = seq.clock_gate %clock, %enable, %test_enable : i1, i1
     ```
   }];
 
-  let arguments = (ins I1:$input, I1:$enable, Optional<I1>:$test_enable);
+  let arguments = (ins
+    I1:$input,
+    I1:$enable,
+    Optional<I1>:$test_enable,
+    OptionalAttr<InnerSymAttr>:$inner_sym
+  );
+
   let results = (outs I1:$output);
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
   let assemblyFormat = [{
-    $input `,` $enable (`,` $test_enable^)? attr-dict
+    $input `,` $enable (`,` $test_enable^)? (`sym` $inner_sym^)? attr-dict
   }];
 }
 

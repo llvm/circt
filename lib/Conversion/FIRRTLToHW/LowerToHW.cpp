@@ -3640,9 +3640,9 @@ LogicalResult FIRRTLLowering::visitExpr(ClockGateIntrinsicOp op) {
   Value testEnable;
   if (op.getTestEnable())
     testEnable = getLoweredValue(op.getTestEnable());
-  return setLoweringTo<seq::ClockGateOp>(op, getLoweredValue(op.getInput()),
-                                         getLoweredValue(op.getEnable()),
-                                         testEnable);
+  return setLoweringTo<seq::ClockGateOp>(
+      op, getLoweredValue(op.getInput()), getLoweredValue(op.getEnable()),
+      testEnable, /*inner_sym=*/hw::InnerSymAttr{});
 }
 
 LogicalResult FIRRTLLowering::visitExpr(LTLAndIntrinsicOp op) {

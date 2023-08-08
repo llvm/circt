@@ -160,7 +160,8 @@ public:
     if (this->clockGateRegs) {
       // Create the top-level clock gate.
       notStalledClockGate = builder.create<seq::ClockGateOp>(
-          loc, args.clock, stageValidAndNotStalled, /*test_enable=*/Value());
+          loc, args.clock, stageValidAndNotStalled, /*test_enable=*/Value(),
+          /*inner_sym=*/hw::InnerSymAttr());
     }
 
     for (auto it : llvm::enumerate(stageOp.getRegisters())) {
@@ -175,7 +176,8 @@ public:
         for (auto hierClockGateEnable : stageOp.getClockGatesForReg(regIdx)) {
           // Create clock gates for any hierarchically nested clock gates.
           currClockGate = builder.create<seq::ClockGateOp>(
-              loc, currClockGate, hierClockGateEnable, /*test_enable=*/Value());
+              loc, currClockGate, hierClockGateEnable, /*test_enable=*/Value(),
+              /*inner_sym=*/hw::InnerSymAttr());
         }
         dataReg = builder.create<seq::CompRegOp>(stageOp->getLoc(), regIn,
                                                  currClockGate, regName);

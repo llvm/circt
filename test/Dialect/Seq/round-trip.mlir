@@ -51,8 +51,10 @@ hw.module @d0(%clk : i1, %rst : i1) -> () {
 hw.module @ClockGate(%clock: i1, %enable: i1, %test_enable: i1) {
   // CHECK-NEXT: seq.clock_gate %clock, %enable
   // CHECK-NEXT: seq.clock_gate %clock, %enable, %test_enable
+  // CHECK-NEXT: seq.clock_gate %clock, %enable, %test_enable sym @gate_sym
   %cg0 = seq.clock_gate %clock, %enable
   %cg1 = seq.clock_gate %clock, %enable, %test_enable
+  %cg2 = seq.clock_gate %clock, %enable, %test_enable sym @gate_sym
 }
 
 hw.module @fifo1(%clk : i1, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> () {
