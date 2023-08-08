@@ -1389,7 +1389,6 @@ class DedupPass : public DedupBase<DedupPass> {
               }))
             return success();
 
-          StructuralHasher hasher(hasherConstants);
           llvm::SmallSetVector<StringAttr, 1> groups;
           for (auto annotation : annotations) {
             if (annotation.getClass() == dedupGroupClass)
@@ -1401,6 +1400,8 @@ class DedupPass : public DedupBase<DedupPass> {
             return failure();
           }
           auto dedupGroup = groups.empty() ? StringAttr() : groups.front();
+
+          StructuralHasher hasher(hasherConstants);
           // Calculate the hash of the module and referred module names.
           hashesAndModuleNames[idx] =
               hasher.getHashAndModuleNames(module, dedupGroup);
@@ -1523,7 +1524,7 @@ class DedupPass : public DedupBase<DedupPass> {
     if (failed)
       return signalPassFailure();
 
-    for (auto module : modules)
+    for (auto module : circuit.getOps<FModuleOp>())
       AnnotationSet::removeAnnotations(module, dedupGroupClass);
 
     // Walk all the modules and fixup the instance operation to return the
