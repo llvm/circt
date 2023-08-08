@@ -2,7 +2,7 @@
 
 // Test 1: default lowering (input muxing)
 
-// RUN: circt-opt %s -pass-pipeline='builtin.module(hw.module(pipeline.scheduled(pipeline-explicit-regs), lower-pipeline-to-hw{outline-stages}), lower-seq-to-sv, sv-trace-iverilog, export-verilog)' \
+// RUN: circt-opt %s -pipeline-explicit-regs -lower-pipeline-to-hw="outline-stages" -lower-seq-to-sv -sv-trace-iverilog -export-verilog \
 // RUN:     -o %t.mlir > %t.sv
 
 // RUN: circt-cocotb-driver.py --objdir=%T --topLevel=stallTest \
@@ -10,7 +10,7 @@
 
 // Test 2: Clock-gate implementation
 
-// RUN: circt-opt %s -pass-pipeline='builtin.module(hw.module(pipeline.scheduled(pipeline-explicit-regs), lower-pipeline-to-hw{outline-stages clock-gate-regs}), lower-seq-to-sv, sv-trace-iverilog, export-verilog)' \
+// RUN: circt-opt %s -pipeline-explicit-regs -lower-pipeline-to-hw="outline-stages clock-gate-regs" -lower-seq-to-sv -sv-trace-iverilog -export-verilog \
 // RUN:     -o %t_clockgated.mlir > %t.sv
 
 // RUN: circt-cocotb-driver.py --objdir=%T --topLevel=stallTest \

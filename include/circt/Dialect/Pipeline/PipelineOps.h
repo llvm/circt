@@ -24,6 +24,14 @@ namespace pipeline {
 class StageOp;
 class ScheduledPipelineOp;
 
+namespace detail {
+
+// Returns the set of values defined outside of the given region, and the
+// operation that defines the region. This will walk the entire region so
+// should be used with care (or cache the results).
+llvm::SmallVector<Value> getValuesDefinedOutsideRegion(Region &region);
+} // namespace detail
+
 // Determines the stage which 'op' resides in within the pipeline. This is
 // useful for analysis of the pipeline, wherein ops may reside in nested
 // regions within different stages of the pipeline.

@@ -26,6 +26,19 @@ using namespace circt::pipeline;
 
 #define DEBUG_TYPE "pipeline-ops"
 
+llvm::SmallVector<Value>
+circt::pipeline::detail::getValuesDefinedOutsideRegion(Region &region) {
+  llvm::SetVector<Value> values;
+  region.walk([&](Operation *op) {
+    for (auto operand : op->getOperands()) {
+      if (region.isAncestor(operand.getParentRegion()))
+        continue;
+      values.insert(operand);
+    }
+  });
+  return values.takeVector();
+}
+
 Block *circt::pipeline::getParentStageInPipeline(ScheduledPipelineOp pipeline,
                                                  Block *block) {
   // Optional debug check - ensure that 'block' eventually leads to the
@@ -107,28 +120,6 @@ static void printInitializerList(OpAsmPrinter &p, ValueRange ins,
   p << ")";
 }
 
-// Like parseInitializerList, but is an optional group based on an 'ext'
-// keyword.
-static ParseResult parseExtInitializerList(
-    OpAsmParser &parser, llvm::SmallVector<OpAsmParser::Argument> &extArguments,
-    llvm::SmallVector<OpAsmParser::UnresolvedOperand> &extInputOperands,
-    llvm::SmallVector<Type> &extInputTypes, mlir::ArrayAttr &extInputNames) {
-  if (parser.parseOptionalKeyword("ext"))
-    return success();
-
-  return parseInitializerList(parser, extArguments, extInputOperands,
-                              extInputTypes, extInputNames);
-}
-
-static void printExtInitializerList(OpAsmPrinter &p, ValueRange extInputs,
-                                    ArrayRef<BlockArgument> extArgs) {
-  if (extInputs.empty())
-    return;
-
-  p << "ext";
-  printInitializerList(p, extInputs, extArgs);
-}
-
 // Parses a list of operands on the format:
 //   (name : type, ...)
 static ParseResult parseOutputList(OpAsmParser &parser,
@@ -185,7 +176,7 @@ parseKeywordArgAssignment(OpAsmParser &p, StringRef keyword,
 }
 
 // Assembly format is roughly:
-// ( $name )? initializer-list (ext-initializer list)? (%stall = $stall)?
+// ( $name )? initializer-list (%stall = $stall)?
 //   ($clock = %clock) ($reset = %reset) ($valid = %valid) {
 //   --- elided inner block ---
 static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
@@ -202,16 +193,6 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
                            inputNames))
     return failure();
   result.addAttribute("inputNames", inputNames);
-
-  llvm::SmallVector<OpAsmParser::UnresolvedOperand> extInputOperands;
-  llvm::SmallVector<Type> extInputTypes;
-  llvm::SmallVector<OpAsmParser::Argument> extInputArguments;
-  ArrayAttr extInputNames;
-  if (parseExtInitializerList(parser, extInputArguments, extInputOperands,
-                              extInputTypes, extInputNames))
-    return failure();
-  if (!extInputOperands.empty())
-    result.addAttribute("extInputNames", extInputNames);
 
   Type i1 = parser.getBuilder().getI1Type();
   // Parse optional 'stall %innerStall = %stallArg'
@@ -252,9 +233,7 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
 
   // All operands have been parsed - resolve.
   if (parser.resolveOperands(inputOperands, inputTypes, parser.getNameLoc(),
-                             result.operands) ||
-      parser.resolveOperands(extInputOperands, extInputTypes,
-                             parser.getNameLoc(), result.operands))
+                             result.operands))
     return failure();
 
   Type i1Type = parser.getBuilder().getI1Type();
@@ -272,10 +251,10 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
   // and why we're doing a custom printer/parser - if the user had to magically
   // know the order of these block arguments, we're asking for issues.
   SmallVector<OpAsmParser::Argument> regionArgs;
+
   // First we add the input arguments.
   llvm::append_range(regionArgs, inputArguments);
-  // Then the external input arguments.
-  llvm::append_range(regionArgs, extInputArguments);
+
   // then the optional stall argument.
   if (withStall)
     regionArgs.push_back(stallArg);
@@ -292,7 +271,6 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
       "operand_segment_sizes",
       parser.getBuilder().getDenseI32ArrayAttr(
           {static_cast<int32_t>(inputTypes.size()),
-           static_cast<int32_t>(extInputTypes.size()),
            static_cast<int32_t>(withStall ? 1 : 0),
            /*clock*/ static_cast<int32_t>(1),
            /*reset*/ static_cast<int32_t>(1), /*go*/ static_cast<int32_t>(1)}));
@@ -319,12 +297,6 @@ static void printPipelineOp(OpAsmPrinter &p, TPipelineOp op) {
   printInitializerList(p, op.getInputs(), op.getInnerInputs());
   p << " ";
 
-  // Print the external input list.
-  if (!op.getExtInputs().empty()) {
-    printExtInitializerList(p, op.getExtInputs(), op.getInnerExtInputs());
-    p << " ";
-  }
-
   // Print the optional stall.
   if (op.hasStall()) {
     printKeywordAssignment(p, "stall", op.getInnerStall(), op.getStall());
@@ -345,8 +317,7 @@ static void printPipelineOp(OpAsmPrinter &p, TPipelineOp op) {
   // Print the optional attribute dict.
   p.printOptionalAttrDict(op->getAttrs(),
                           /*elidedAttrs=*/{"name", "operand_segment_sizes",
-                                           "outputNames", "inputNames",
-                                           "extInputNames"});
+                                           "outputNames", "inputNames"});
   p << " ";
 
   // Print the inner region, eliding the entry block arguments - we've already
@@ -381,12 +352,10 @@ ParseResult ScheduledPipelineOp::parse(OpAsmParser &parser,
 
 void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                                 TypeRange dataOutputs, ValueRange inputs,
-                                ValueRange extInputs, ArrayAttr inputNames,
-                                ArrayAttr outputNames, ArrayAttr extInputNames,
+                                ArrayAttr inputNames, ArrayAttr outputNames,
                                 Value clock, Value reset, Value go, Value stall,
                                 StringAttr name) {
   odsState.addOperands(inputs);
-  odsState.addOperands(extInputs);
   if (stall)
     odsState.addOperands(stall);
   odsState.addOperands(clock);
@@ -399,14 +368,11 @@ void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
       "operand_segment_sizes",
       odsBuilder.getDenseI32ArrayAttr(
           {static_cast<int32_t>(inputs.size()),
-           static_cast<int32_t>(extInputs.size()),
            static_cast<int32_t>(stall ? 1 : 0), static_cast<int32_t>(1),
            static_cast<int32_t>(1), static_cast<int32_t>(1)}));
 
   odsState.addAttribute("inputNames", inputNames);
   odsState.addAttribute("outputNames", outputNames);
-  if (extInputNames)
-    odsState.addAttribute("extInputNames", extInputNames);
 
   auto *region = odsState.addRegion();
   odsState.addTypes(dataOutputs);
@@ -417,19 +383,15 @@ void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
 
   // Add the entry stage - arguments order:
   // 1. Inputs
-  // 2. External inputs (opt)
-  // 3. Stall (opt)
-  // 4. Clock
-  // 5. Reset
-  // 6. Go
+  // 2. Stall (opt)
+  // 3. Clock
+  // 4. Reset
+  // 5. Go
   auto &entryBlock = region->emplaceBlock();
   llvm::SmallVector<Location> entryArgLocs(inputs.size(), odsState.location);
   entryBlock.addArguments(
       inputs.getTypes(),
       llvm::SmallVector<Location>(inputs.size(), odsState.location));
-  entryBlock.addArguments(
-      extInputs.getTypes(),
-      llvm::SmallVector<Location>(extInputs.size(), odsState.location));
   if (stall)
     entryBlock.addArgument(i1, odsState.location);
   entryBlock.addArgument(i1, odsState.location);
@@ -455,13 +417,6 @@ void ScheduledPipelineOp::getAsmBlockArgumentNames(
       for (auto [inputArg, inputName] : llvm::zip(
                getInnerInputs(), getInputNames().getAsValueRange<StringAttr>()))
         setNameFn(inputArg, inputName);
-
-      auto extInputs = getInnerExtInputs();
-      if (!extInputs.empty()) {
-        for (auto [extArg, extName] : llvm::zip(
-                 extInputs, getExtInputNames()->getAsValueRange<StringAttr>()))
-          setNameFn(extArg, extName);
-      }
 
       if (hasStall())
         setNameFn(getInnerStall(), "s");
@@ -563,8 +518,9 @@ LogicalResult ScheduledPipelineOp::verify() {
   // Cache external inputs in a set for fast lookup (also includes clock, reset,
   // and stall).
   llvm::DenseSet<Value> extLikeInputs;
-  for (auto extInput : getInnerExtInputs())
+  for (auto extInput : getExtInputs())
     extLikeInputs.insert(extInput);
+
   extLikeInputs.insert(getInnerClock());
   extLikeInputs.insert(getInnerReset());
   if (hasStall())

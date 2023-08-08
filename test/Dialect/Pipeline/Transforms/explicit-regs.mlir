@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(hw.module(pipeline.scheduled(pipeline-explicit-regs)))' --allow-unregistered-dialect %s | FileCheck %s
+// RUN: circt-opt -pipeline-explicit-regs --allow-unregistered-dialect %s | FileCheck %s
 
 // CHECK-LABEL:   hw.module @testRegsOnly(
 // CHECK-SAME:            %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, out1: i1) {
@@ -223,23 +223,23 @@ hw.module @test_arbitrary_nesting(%arg0 : i32, %arg1 : i32, %go : i1, %clk : i1,
 
 // CHECK-LABEL:   hw.module @testExtInput(
 // CHECK-SAME:            %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, out1: i32) {
-// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]], %[[VAL_7:.*]] = pipeline.scheduled(%[[VAL_8:.*]] : i32 = %[[VAL_0]]) ext(%[[VAL_9:.*]] : i32 = %[[VAL_1]]) clock(%[[VAL_10:.*]] = %[[VAL_3]]) reset(%[[VAL_11:.*]] = %[[VAL_4]]) go(%[[VAL_12:.*]] = %[[VAL_2]]) -> (out0 : i32, out1 : i32) {
+// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]], %[[VAL_7:.*]] = pipeline.scheduled(%[[VAL_8:.*]] : i32 = %[[VAL_0]]) clock(%[[VAL_10:.*]] = %[[VAL_3]]) reset(%[[VAL_11:.*]] = %[[VAL_4]]) go(%[[VAL_12:.*]] = %[[VAL_2]]) -> (out0 : i32, out1 : i32) {
 // CHECK:             %[[VAL_13:.*]] = hw.constant true
-// CHECK:             %[[VAL_14:.*]] = comb.add %[[VAL_8]], %[[VAL_9]] : i32
+// CHECK:             %[[VAL_14:.*]] = comb.add %[[VAL_8]], %[[VAL_1]] : i32
 // CHECK:             pipeline.stage ^bb1 regs(%[[VAL_14]] : i32)
 // CHECK:           ^bb1(%[[VAL_15:.*]]: i32, %[[VAL_16:.*]]: i1):
-// CHECK:             pipeline.return %[[VAL_15]], %[[VAL_9]] : i32, i32
+// CHECK:             pipeline.return %[[VAL_15]], %[[VAL_1]] : i32, i32
 // CHECK:           }
 // CHECK:           hw.output %[[VAL_17:.*]], %[[VAL_18:.*]] : i32, i32
 // CHECK:         }
 hw.module @testExtInput(%arg0 : i32, %ext1 : i32, %go : i1, %clk : i1, %rst : i1) -> (out0: i32, out1: i32) {
-  %out:3 = pipeline.scheduled(%a0 : i32 = %arg0) ext(%e0 : i32 = %ext1) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out0: i32, out1: i32) {
+  %out:3 = pipeline.scheduled(%a0 : i32 = %arg0) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out0: i32, out1: i32) {
       %true = hw.constant true
-      %add0 = comb.add %a0, %e0 : i32
+      %add0 = comb.add %a0, %ext1 : i32
       pipeline.stage ^bb1
 
     ^bb1(%s1_valid : i1):
-      pipeline.return %add0, %e0 : i32, i32
+      pipeline.return %add0, %ext1 : i32, i32
   }
   hw.output %out#0, %out#1 : i32, i32
 }

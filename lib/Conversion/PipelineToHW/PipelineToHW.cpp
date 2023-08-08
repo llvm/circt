@@ -337,11 +337,6 @@ public:
          llvm::zip(pipeline.getInputs(), pipeline.getInnerInputs()))
       inner.replaceAllUsesWith(outer);
 
-    // Replace uses of the external inputs with the inner external inputs.
-    for (auto [outer, inner] :
-         llvm::zip(pipeline.getExtInputs(), pipeline.getInnerExtInputs()))
-      inner.replaceAllUsesWith(outer);
-
     // All operations should go directly before the pipeline op, into the
     // parent module.
     builder.setInsertionPoint(pipeline);
@@ -460,7 +455,7 @@ public:
   // stages actually reference them. This will be used to generate the stage
   // module signatures.
   void gatherExtInputsToStages() {
-    for (auto extIn : pipeline.getInnerExtInputs()) {
+    for (auto extIn : pipelineExtInputs) {
       for (auto *user : extIn.getUsers())
         stageExtInputs[user->getBlock()].insert(extIn);
     }
@@ -472,22 +467,19 @@ public:
                                        getPipelineBaseName().strref());
     cloneConstantsToStages();
 
-    // Map external inputs to names - we use this to generate nicer names for
-    // the stage module arguments.
-    if (!pipeline.getExtInputs().empty()) {
-      for (auto [extIn, extName] :
-           llvm::zip(pipeline.getInnerExtInputs(),
-                     pipeline.getExtInputNames()->getAsRange<StringAttr>())) {
-        extInputNames[extIn] = extName;
-      }
-    }
+    // Cache the external inputs of the pipeline.
+    pipelineExtInputs = pipeline.getExtInputs();
+
+    // Generate names for the external inputs.
+    for (auto [i, extIn] : llvm::enumerate(pipelineExtInputs))
+      extInputNames[extIn] = builder.getStringAttr("e" + Twine(i));
 
     // Build the top-level pipeline module.
     bool withStall = static_cast<bool>(pipeline.getStall());
     pipelineMod = buildPipelineLike(
         pipelineName.strref(), pipeline.getInputs().getTypes(),
-        pipeline.getInnerExtInputs(), pipeline.getDataOutputs().getTypes(),
-        withStall, pipeline.getInputNames().getValue(),
+        pipelineExtInputs, pipeline.getDataOutputs().getTypes(), withStall,
+        pipeline.getInputNames().getValue(),
         pipeline.getOutputNames().getValue());
     auto portLookup = pipelineMod.getPortLookupInfo();
     pipelineClk = pipelineMod.getBody().front().getArgument(
@@ -501,13 +493,15 @@ public:
 
     if (!pipeline.getExtInputs().empty()) {
       // Maintain a mapping between external inputs and their corresponding
-      // block argument in the top-level pipeline.
+      // block argument in the top-level pipeline. This places some hard
+      // assumptions on the order which the external inputs are declared in the
+      // top-level module, as defined by buildPipelineLike.
       auto modInnerExtInputs =
           pipelineMod.getBody().front().getArguments().slice(
-              pipeline.getExtInputs().getBeginOperandIndex(),
-              pipeline.getExtInputs().size());
+              // External inputs start after the regular inputs.
+              pipeline.getInputs().size(), pipelineExtInputs.size());
       for (auto [extIn, barg] :
-           llvm::zip(pipeline.getInnerExtInputs(), modInnerExtInputs)) {
+           llvm::zip(pipelineExtInputs, modInnerExtInputs)) {
         toplevelExtInputs[extIn] = barg;
       }
     }
@@ -828,6 +822,9 @@ private:
 
   // Handle to the PipelineStageMod for the parent pipeline module.
   PipelineStageMod pipelineStageMod;
+
+  // Caching of the external inputs of the pipeline.
+  llvm::SmallVector<Value> pipelineExtInputs;
 
   // A mapping between stages and the external inputs which they reference.
   // A SetVector is used to ensure determinism in the order of the external
