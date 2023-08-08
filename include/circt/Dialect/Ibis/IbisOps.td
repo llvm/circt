@@ -28,7 +28,7 @@ def HasCustomSSAName :
 
 def ClassOp : IbisOp<"class", [
     IsolatedFromAbove, RegionKindInterface,
-    Symbol, SymbolTable, SingleBlock,
+    SymbolTable, SingleBlock,
     NoTerminator, ScopeOpInterface,
     HasParent<"mlir::ModuleOp">]> {
 
@@ -38,7 +38,7 @@ def ClassOp : IbisOp<"class", [
     variables.
 
     In the low-level Ibis representation, the ClassOp becomes a container for
-    `ibis.port`s and `ibis.container`s.
+    `ibis.port`s, `ibis.container`s, and contain logic for member variables.
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name);
@@ -228,7 +228,7 @@ def ThisOp : IbisOp<"this", [
 // ===---------------------------------------------------------------------===//
 
 def ContainerOp : IbisOp<"container", [
-  Symbol, SymbolTable, SingleBlock,
+  SymbolTable, SingleBlock,
   NoTerminator, NoRegionArguments,
   ScopeOpInterface, IsolatedFromAbove
 ]> {

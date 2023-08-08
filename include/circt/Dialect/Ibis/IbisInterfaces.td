@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_IBIS_INTERFACES_TD
 
 include "mlir/IR/OpBase.td"
+include "mlir/IR/SymbolInterfaces.td"
 
 def PortOpInterface : OpInterface<"PortOpInterface"> {
   let cppNamespace = "circt::ibis";
@@ -27,7 +28,7 @@ def PortOpInterface : OpInterface<"PortOpInterface"> {
   ];
 }
 
-def ScopeOpInterface : OpInterface<"ScopeOpInterface"> {
+def ScopeOpInterface : OpInterface<"ScopeOpInterface", [Symbol]> {
   let cppNamespace = "circt::ibis";
   let description = [{
     An interface for operations which define Ibis scopes, that can be referenced
@@ -46,7 +47,7 @@ def ScopeOpInterface : OpInterface<"ScopeOpInterface"> {
     >,
     InterfaceMethod<
       "Returns `%this` of the scope",
-      "mlir::Value", "getThis",
+      "mlir::TypedValue<ScopeRefType>", "getThis",
       (ins), [{
         return *detail::getThisFromScope($_op);
       }]
@@ -55,8 +56,7 @@ def ScopeOpInterface : OpInterface<"ScopeOpInterface"> {
       "Returns the symbol name of the scope",
       "mlir::StringAttr", "getScopeName",
       (ins), [{
-        auto symbolOp = cast<mlir::SymbolOpInterface>(&*$_op);
-        return symbolOp.getNameAttr();
+        return $_op.getNameAttr();
       }]
     >
   ];

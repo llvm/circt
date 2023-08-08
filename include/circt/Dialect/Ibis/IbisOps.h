@@ -33,7 +33,7 @@ LogicalResult verifyScopeOpInterface(Operation *op);
 // Returns the %this value of an ibis scope-defining operation. Implemented
 // here to hide the dependence on `ibis.this`, which is not defined before the
 // interface definition.
-mlir::FailureOr<Value> getThisFromScope(Operation *op);
+mlir::FailureOr<mlir::TypedValue<ScopeRefType>> getThisFromScope(Operation *op);
 
 } // namespace detail
 } // namespace ibis

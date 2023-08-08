@@ -20,10 +20,10 @@ using namespace circt;
 using namespace ibis;
 
 template <typename TSymAttr>
-ParseResult parseScopeRefFromName(OpAsmParser &parser, Type &ScopeRefType,
+ParseResult parseScopeRefFromName(OpAsmParser &parser, Type &scopeRefType,
                                   TSymAttr sym) {
   // Nothing to parse, since this is already encoded in the child symbol.
-  ScopeRefType = ScopeRefType::get(parser.getContext(), sym);
+  scopeRefType = ScopeRefType::get(parser.getContext(), sym);
   return success();
 }
 
@@ -38,7 +38,8 @@ void printScopeRefFromName(OpAsmPrinter &p, Operation *op, Type type,
 // ScopeOpInterface
 //===----------------------------------------------------------------------===//
 
-FailureOr<Value> circt::ibis::detail::getThisFromScope(Operation *op) {
+FailureOr<mlir::TypedValue<ScopeRefType>>
+circt::ibis::detail::getThisFromScope(Operation *op) {
   auto scopeOp = cast<ScopeOpInterface>(op);
   auto thisOps = scopeOp.getBodyBlock()->getOps<ibis::ThisOp>();
   if (thisOps.empty())

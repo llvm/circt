@@ -16,13 +16,13 @@ class IbisTypeDef<string name> : TypeDef<IbisDialect, name> { }
 
 def ScopeRefType : IbisTypeDef<"ScopeRef"> {
   let mnemonic = "scoperef";
-  let parameters = (ins OptionalParameter<"mlir::FlatSymbolRefAttr">:$scopeRef);
-  let assemblyFormat = "(`<` $scopeRef^  `>`)?";
   let description = [{
     A reference to an Ibis scope. May be either a reference to a specific
     scope (given a `$scopeName` argument) or an opaque reference.
   }];
 
+  let parameters = (ins OptionalParameter<"mlir::FlatSymbolRefAttr">:$scopeRef);
+  let assemblyFormat = "(`<` $scopeRef^  `>`)?";
   let extraClassDeclaration = [{
     bool isOpaque() {
       return !getScopeRef();
