@@ -57,7 +57,8 @@ jobs:
             -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_BUILD_EXAMPLES=OFF `
             -DLLVM_TARGETS_TO_BUILD="host" `
             -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON `
-            -DLLVM_INSTALL_UTILS=ON -DCMAKE_INSTALL_PREFIX="$(pwd)/../install"
+            -DLLVM_INSTALL_GTEST=ON -DLLVM_INSTALL_UTILS=ON `
+            -DCMAKE_INSTALL_PREFIX="$(pwd)/../install"
           cmake --build . --target install --config Release
           # Grab llvm-lit.py from build tree, we need it.
           cp -v bin/llvm-lit.py ../install/bin/
