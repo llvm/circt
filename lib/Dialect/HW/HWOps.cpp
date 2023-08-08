@@ -987,8 +987,8 @@ void HWModuleGeneratedOp::appendOutputs(
 /// Return an encapsulated set of information about input and output ports of
 /// the specified module or instance.  The input ports always come before the
 /// output ports in the list.
-static ModulePortInfo getModulePortListImpl(Operation *op) {
-  assert(isAnyModuleOrInstance(op) &&
+ModulePortInfo hw::getOperationPortList(Operation *op) {
+  assert((isa<HWModuleLike>(op) || isa<HWInstanceLike>(op)) &&
          "Can only get module ports from an instance or module");
 
   SmallVector<PortInfo> inputs, outputs;
@@ -1413,15 +1413,15 @@ void HWModuleExternOp::getAsmBlockArgumentNames(
 }
 
 ModulePortInfo HWModuleOp::getPortList() {
-  return getModulePortListImpl(getOperation());
+  return getOperationPortList(getOperation());
 }
 
 ModulePortInfo HWModuleExternOp::getPortList() {
-  return getModulePortListImpl(getOperation());
+  return getOperationPortList(getOperation());
 }
 
 ModulePortInfo HWModuleGeneratedOp::getPortList() {
-  return getModulePortListImpl(getOperation());
+  return getOperationPortList(getOperation());
 }
 
 /// Lookup the generator for the symbol.  This returns null on
@@ -1621,9 +1621,7 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
                                         getResultNames(), getResults());
 }
 
-ModulePortInfo InstanceOp::getPortList() {
-  return getModulePortListImpl(*this);
-}
+ModulePortInfo InstanceOp::getPortList() { return getOperationPortList(*this); }
 
 Value InstanceOp::getValue(size_t idx) {
   auto mpi = getPortList();

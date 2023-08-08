@@ -44,6 +44,9 @@ PortInfo getModuleInOrInoutPort(Operation *op, size_t idx);
 /// Return the PortInfo for the specified output port.
 PortInfo getModuleOutputPort(Operation *op, size_t idx);
 
+/// Return all the ports of a module or an instance.
+ModulePortInfo getOperationPortList(Operation *op);
+
 /// Insert and remove ports of a module. The insertion and removal indices must
 /// be in ascending order. The indices refer to the port positions before any
 /// insertion or removal occurs. Ports inserted at the same index will appear in
