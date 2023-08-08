@@ -106,6 +106,12 @@ MlirAttribute firrtlAttrGetPortDirs(MlirContext ctx, size_t count,
       unwrap(ctx), ArrayRef(reinterpret_cast<const Direction *>(dirs), count)));
 }
 
+MlirAttribute firrtlAttrGetParamDecl(MlirContext ctx, MlirIdentifier name,
+                                     MlirType type, MlirAttribute value) {
+  return wrap(ParamDeclAttr::get(unwrap(ctx), unwrap(name), unwrap(type),
+                                 unwrap(value)));
+}
+
 MlirAttribute firrtlAttrGetNameKind(MlirContext ctx, FIRRTLNameKind nameKind) {
   NameKindEnum value;
 
