@@ -11,12 +11,23 @@ jobs:
   # integration testing prerequisite installed.
   build-circt:
     name: Build and Test
-    runs-on: ubuntu-latest
+    # Run on an internal MSFT subscription. Please DO NOT use this for any other
+    # workflows without talking to John Demme (john.demme@microsoft.com, GH
+    # teqdruid) first. We may lose funding for this if it ends up costing too
+    # much.
+    # If individual jobs fail due to timeouts or disconnects, please report to
+    # John and re-run the job.
+    runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds"]
     container:
       image: ghcr.io/circt/images/circt-integration-test:v12.2
+      volumes:
+        - /mnt:/__w/circt
     strategy:
       fail-fast: false
       matrix:
+        # Please clear all new builds with John first. Any changes to this
+        # matrix could result in a drastically increased number of builds, which
+        # in turn costs more. Changes which don't result in new builds are OK.
         build-assert: [ON, OFF]
         build-shared: [ON, OFF]
         build-type: [Debug, Release]
