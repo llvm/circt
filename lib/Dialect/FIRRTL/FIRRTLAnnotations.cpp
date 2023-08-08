@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/Operation.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -552,14 +553,16 @@ void AnnoTarget::setAnnotations(AnnotationSet annotations) const {
       [&](auto target) { target.setAnnotations(annotations); });
 }
 
-StringAttr AnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
+StringAttr
+AnnoTarget::getInnerSym(hw::InnerSymbolNamespace &moduleNamespace) const {
   return TypeSwitch<AnnoTarget, StringAttr>(*this)
       .Case<OpAnnoTarget, PortAnnoTarget>(
           [&](auto target) { return target.getInnerSym(moduleNamespace); })
       .Default([](auto target) { return StringAttr(); });
 }
 
-Attribute AnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
+Attribute
+AnnoTarget::getNLAReference(hw::InnerSymbolNamespace &moduleNamespace) const {
   return TypeSwitch<AnnoTarget, Attribute>(*this)
       .Case<OpAnnoTarget, PortAnnoTarget>(
           [&](auto target) { return target.getNLAReference(moduleNamespace); })
@@ -581,25 +584,26 @@ void OpAnnoTarget::setAnnotations(AnnotationSet annotations) const {
   annotations.applyToOperation(getOp());
 }
 
-StringAttr OpAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
-  return ::getOrAddInnerSym(getOp(),
-                            [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
-                              return moduleNamespace;
-                            });
+StringAttr
+OpAnnoTarget::getInnerSym(hw::InnerSymbolNamespace &moduleNamespace) const {
+  return ::getOrAddInnerSym(
+      getOp(), [&moduleNamespace](auto _) -> hw::InnerSymbolNamespace & {
+        return moduleNamespace;
+      });
 }
 
 Attribute
-OpAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
+OpAnnoTarget::getNLAReference(hw::InnerSymbolNamespace &moduleNamespace) const {
   // If the op is a module, just return the module name.
   if (auto module = llvm::dyn_cast<FModuleLike>(getOp())) {
     assert(module.getModuleNameAttr() && "invalid NLA reference");
     return FlatSymbolRefAttr::get(module.getModuleNameAttr());
   }
   // Return an inner-ref to the target.
-  return ::getInnerRefTo(getOp(),
-                         [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
-                           return moduleNamespace;
-                         });
+  return ::getInnerRefTo(
+      getOp(), [&moduleNamespace](auto _) -> hw::InnerSymbolNamespace & {
+        return moduleNamespace;
+      });
 }
 
 FIRRTLType OpAnnoTarget::getType() const {
@@ -641,27 +645,28 @@ void PortAnnoTarget::setAnnotations(AnnotationSet annotations) const {
     llvm_unreachable("unknown port target");
 }
 
-StringAttr PortAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
+StringAttr
+PortAnnoTarget::getInnerSym(hw::InnerSymbolNamespace &moduleNamespace) const {
   // If this is not a module, we just need to get an inner_sym on the operation
   // itself.
   auto module = llvm::dyn_cast<FModuleLike>(getOp());
   auto target = module ? hw::InnerSymTarget(getPortNo(), module)
                        : hw::InnerSymTarget(getOp());
   return ::getOrAddInnerSym(
-      target, [&moduleNamespace](FModuleLike) -> ModuleNamespace & {
+      target, [&moduleNamespace](auto _) -> hw::InnerSymbolNamespace & {
         return moduleNamespace;
       });
 }
 
-Attribute
-PortAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
+Attribute PortAnnoTarget::getNLAReference(
+    hw::InnerSymbolNamespace &moduleNamespace) const {
   auto module = llvm::dyn_cast<FModuleLike>(getOp());
   auto target = module ? hw::InnerSymTarget(getPortNo(), module)
                        : hw::InnerSymTarget(getOp());
-  return ::getInnerRefTo(target,
-                         [&moduleNamespace](FModuleOp) -> ModuleNamespace & {
-                           return moduleNamespace;
-                         });
+  return ::getInnerRefTo(
+      target, [&moduleNamespace](auto _) -> hw::InnerSymbolNamespace & {
+        return moduleNamespace;
+      });
 }
 
 FIRRTLType PortAnnoTarget::getType() const {

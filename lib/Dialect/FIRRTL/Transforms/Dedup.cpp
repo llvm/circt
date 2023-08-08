@@ -18,9 +18,9 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
-#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -783,10 +783,9 @@ struct Deduper {
 
 private:
   /// Get a cached namespace for a module.
-  ModuleNamespace &getNamespace(Operation *module) {
-    auto [it, inserted] =
-        moduleNamespaces.try_emplace(module, cast<FModuleLike>(module));
-    return it->second;
+  hw::InnerSymbolNamespace &getNamespace(Operation *module) {
+    return moduleNamespaces.try_emplace(module, cast<FModuleLike>(module))
+        .first->second;
   }
 
   /// For a specific annotation target, record all the unique NLAs which
@@ -1230,7 +1229,7 @@ private:
   StringAttr classString;
 
   /// A module namespace cache.
-  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
+  DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;
 };
 
 //===----------------------------------------------------------------------===//

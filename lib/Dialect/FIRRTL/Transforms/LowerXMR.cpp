@@ -13,7 +13,9 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -635,28 +637,26 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   }
 
   /// Get the cached namespace for a module.
-  ModuleNamespace &getModuleNamespace(FModuleLike module) {
-    auto it = moduleNamespaces.find(module);
-    if (it != moduleNamespaces.end())
-      return it->second;
-    return moduleNamespaces.insert({module, ModuleNamespace(module)})
-        .first->second;
+  hw::InnerSymbolNamespace &getModuleNamespace(FModuleLike module) {
+    return moduleNamespaces.try_emplace(module, module).first->second;
   }
 
   InnerRefAttr getInnerRefTo(Value val) {
     if (auto arg = dyn_cast<BlockArgument>(val))
       return ::getInnerRefTo(
           cast<FModuleLike>(arg.getParentBlock()->getParentOp()),
-          arg.getArgNumber(), [&](FModuleLike mod) -> ModuleNamespace & {
+          arg.getArgNumber(),
+          [&](FModuleLike mod) -> hw::InnerSymbolNamespace & {
             return getModuleNamespace(mod);
           });
     return getInnerRefTo(val.getDefiningOp());
   }
 
   InnerRefAttr getInnerRefTo(Operation *op) {
-    return ::getInnerRefTo(op, [&](FModuleOp mod) -> ModuleNamespace & {
-      return getModuleNamespace(mod);
-    });
+    return ::getInnerRefTo(op,
+                           [&](FModuleLike mod) -> hw::InnerSymbolNamespace & {
+                             return getModuleNamespace(mod);
+                           });
   }
 
   void markForRemoval(Operation *op) { opsToRemove.push_back(op); }
@@ -782,7 +782,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
 private:
   /// Cached module namespaces.
-  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
+  DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;
 
   DenseSet<Operation *> visitedModules;
   /// Map of a reference value to an entry into refSendPathList. Each entry in

@@ -16,7 +16,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
-#include "circt/Dialect/HW/Namespace.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqAttributes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -61,9 +61,9 @@ class HWMemSimImpl {
   SmallVector<sv::RegOp> registers;
 
   Value addPipelineStages(ImplicitLocOpBuilder &b,
-                          ModuleNamespace &moduleNamespace, size_t stages,
-                          Value clock, Value data, const Twine &name,
-                          Value gate = {});
+                          hw::InnerSymbolNamespace &moduleNamespace,
+                          size_t stages, Value clock, Value data,
+                          const Twine &name, Value gate = {});
   sv::AlwaysOp lastPipelineAlwaysOp;
 
 public:
@@ -173,7 +173,7 @@ static Value getMemoryRead(ImplicitLocOpBuilder &b, Value memory, Value addr,
 }
 
 Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
-                                      ModuleNamespace &moduleNamespace,
+                                      hw::InnerSymbolNamespace &moduleNamespace,
                                       size_t stages, Value clock, Value data,
                                       const Twine &name, Value gate) {
   if (!stages)
@@ -227,7 +227,7 @@ Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
 void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   ImplicitLocOpBuilder b(op.getLoc(), op.getBody());
 
-  ModuleNamespace moduleNamespace(op);
+  InnerSymbolNamespace moduleNamespace(op);
 
   // Compute total number of mask bits.
   if (mem.maskGran == 0)

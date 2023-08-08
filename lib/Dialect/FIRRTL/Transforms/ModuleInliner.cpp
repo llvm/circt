@@ -22,6 +22,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/IRMapping.h"
@@ -502,7 +503,7 @@ static void replaceInnerRefUsers(ArrayRef<Operation *> newOps,
 /// and an appropriate namespace for creating unique names for each.
 static hw::InnerSymAttr uniqueInNamespace(hw::InnerSymAttr old,
                                           InnerRefToNewNameMap &map,
-                                          ModuleNamespace &ns,
+                                          hw::InnerSymbolNamespace &ns,
                                           StringAttr istName) {
   if (!old || old.empty())
     return old;
@@ -576,7 +577,7 @@ private:
     /// Top-level module for current inlining task.
     FModuleOp module;
     /// Namespace for generating new names in `module`.
-    ModuleNamespace modNamespace;
+    hw::InnerSymbolNamespace modNamespace;
     /// Builder, insertion point into module.
     OpBuilder b;
     /// Track back-edges to replace when done.
@@ -1262,8 +1263,8 @@ void Inliner::inlineInstances(FModuleOp module) {
       for (auto sym : rootMap[target.getNameAttr()]) {
         auto &mnla = nlaMap[sym];
         sym = mnla.reTop(module);
-        StringAttr instSym =
-            getOrAddInnerSym(instance, [&](FModuleOp mod) -> ModuleNamespace & {
+        StringAttr instSym = getOrAddInnerSym(
+            instance, [&](FModuleLike mod) -> hw::InnerSymbolNamespace & {
               return mic.modNamespace;
             });
         instOpHierPaths[InnerRefAttr::get(moduleName, instSym)].push_back(

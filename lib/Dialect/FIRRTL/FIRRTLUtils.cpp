@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -707,9 +708,8 @@ void circt::firrtl::walkGroundTypes(
 }
 
 /// Returns an operation's `inner_sym`, adding one if necessary.
-StringAttr circt::firrtl::getOrAddInnerSym(
-    const hw::InnerSymTarget &target,
-    llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace) {
+StringAttr circt::firrtl::getOrAddInnerSym(const hw::InnerSymTarget &target,
+                                           GetNamespaceCallback getNamespace) {
 
   // Return InnerSymAttr with sym on specified fieldID.
   auto getOrAdd = [&](auto mod, hw::InnerSymAttr attr,
@@ -764,9 +764,9 @@ StringAttr circt::firrtl::getOrAddInnerSym(
 
 /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
 /// to that operation.
-hw::InnerRefAttr circt::firrtl::getInnerRefTo(
-    const hw::InnerSymTarget &target,
-    llvm::function_ref<ModuleNamespace &(FModuleOp)> getNamespace) {
+hw::InnerRefAttr
+circt::firrtl::getInnerRefTo(const hw::InnerSymTarget &target,
+                             GetNamespaceCallback getNamespace) {
   auto mod = target.isPort() ? dyn_cast<FModuleOp>(target.getOp())
                              : target.getOp()->getParentOfType<FModuleOp>();
   assert(mod &&
