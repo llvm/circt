@@ -1373,6 +1373,9 @@ class DedupPass : public DedupBase<DedupPass> {
         std::pair<std::array<uint8_t, 32>, SmallVector<StringAttr>>>>
         hashesAndModuleNames(modules.size());
     StructuralHasherSharedConstants hasherConstants(&getContext());
+
+    auto failed = false;
+
     // Calculate module information parallelly.
     mlir::parallelFor(context, 0, modules.size(), [&](unsigned idx) {
       auto module = modules[idx];
@@ -1388,14 +1391,24 @@ class DedupPass : public DedupBase<DedupPass> {
         return;
 
       StructuralHasher hasher(hasherConstants);
-      auto dedupGroup = annotations.hasAnnotation(dedupGroupClass)
-                            ? annotations.getAnnotation(dedupGroupAnnoClass)
-                                  .getMember<StringAttr>("group")
-                            : StringAttr();
+      llvm::SmallSetVector<StringAttr, 1> groups;
+      for (auto annotation : annotations) {
+        if (annotation.getClass() == dedupGroupClass)
+          groups.insert(annotation.getMember<StringAttr>("group"));
+      }
+      if (groups.size() > 1) {
+        module.emitError("module belongs to multiple dedup groups: ") << groups;
+        failed = true;
+        return;
+      }
+      auto dedupGroup = groups.empty() ? StringAttr() : groups.front();
       // Calculate the hash of the module and referred module names.
       hashesAndModuleNames[idx] =
           hasher.getHashAndModuleNames(module, dedupGroup);
     });
+
+    if (failed)
+      return signalPassFailure();
 
     for (auto [i, module] : llvm::enumerate(modules)) {
       auto moduleName = module.getModuleNameAttr();
@@ -1445,7 +1458,6 @@ class DedupPass : public DedupBase<DedupPass> {
     // have to been deduped to the same module. It is possible that a module was
     // deduped with the wrong thing.
 
-    auto failed = false;
     // This parses the module name out of a target string.
     auto parseModule = [&](Attribute path) -> StringAttr {
       // Each module is listed as a target "~Circuit|Module" which we have to

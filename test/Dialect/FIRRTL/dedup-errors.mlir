@@ -516,3 +516,20 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
     firrtl.instance bar  @Bar()
   }
 }
+
+// -----
+
+firrtl.circuit "MustDedup" attributes {} {
+
+  // expected-error@below {{module belongs to multiple dedup groups: "foo", "bar"}}
+  firrtl.module @MustDedup() attributes {annotations = [
+    {
+      class = "firrtl.transforms.DedupGroupAnnotation",
+      group = "foo"
+    },
+    {
+      class = "firrtl.transforms.DedupGroupAnnotation",
+      group = "bar"
+    }
+  ]} { }
+}
