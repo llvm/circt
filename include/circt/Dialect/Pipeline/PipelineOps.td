@@ -24,15 +24,14 @@ include "circt/Dialect/Pipeline/PipelineDialect.td"
 
 class PipelineBase<string mnemonic, list<Trait> traits = []> : 
   Op<Pipeline_Dialect, mnemonic, !listconcat(traits, [
-      IsolatedFromAbove,
       Pure,
       RegionKindInterface,
       AttrSizedOperandSegments])> {
 
   let arguments = (ins
-    OptionalAttr<StrAttr>:$name, Variadic<AnyType>:$inputs, Variadic<AnyType>:$extInputs, Optional<I1>:$stall,
+    OptionalAttr<StrAttr>:$name, Variadic<AnyType>:$inputs, Optional<I1>:$stall,
     I1:$clock, I1:$reset, I1:$go, StrArrayAttr:$inputNames,
-    OptionalAttr<StrArrayAttr>:$extInputNames, StrArrayAttr:$outputNames
+    StrArrayAttr:$outputNames
   );
   let results = (outs Variadic<AnyType>:$dataOutputs, I1:$done);
   let hasCustomAssemblyFormat = 1;
@@ -45,11 +44,10 @@ class PipelineBase<string mnemonic, list<Trait> traits = []> :
   // in the printer/parser.
   // Order:
   // 1. Inputs
-  // 2. External inputs (opt)
-  // 3. Stall (opt)
-  // 4. Clock
-  // 5. Reset
-  // 6. Go
+  // 2. Stall (opt)
+  // 3. Clock
+  // 4. Reset
+  // 5. Go
   let extraClassDeclaration = extraModuleClassDeclaration # [{
     // Returns the entry stage of this pipeline.
     Block* getEntryStage() {
@@ -91,10 +89,12 @@ class PipelineBase<string mnemonic, list<Trait> traits = []> :
       return getEntryStage()->getArguments().take_front(getInputs().size());
     }
 
-    llvm::ArrayRef<BlockArgument> getInnerExtInputs() {
-      return getEntryStage()->getArguments().slice(
-          getInputs().size(), getExtInputs().size()
-      );
+    // Returns a list of external inputs to the pipeline. These are defined
+    // as any value which is defined outside the inner pipeline region.
+    // This will walk the entire pipeline, so it is recommended to cache the
+    // result if it is used multiple times.
+    llvm::SmallVector<Value> getExtInputs() {
+      return detail::getValuesDefinedOutsideRegion(getRegion());
     }
   }];
 }
@@ -145,6 +145,9 @@ def ScheduledPipelineOp : PipelineBase<"scheduled", [
     pipelines with II>1, a user must themselves maintain state about when
     the pipeline is ready to accept new inputs. We plan to add support for
     head-of-pipeline backpressure in the future.
+
+    Any value defined outside the pipeline is considered an external input. An
+    external input will _not_ be registered.
   }];
 
   let regions = (region AnyRegion:$body);
@@ -152,8 +155,8 @@ def ScheduledPipelineOp : PipelineBase<"scheduled", [
   let skipDefaultBuilders = 1;
 
   let builders = [
-    OpBuilder<(ins "TypeRange":$dataOutputs, "ValueRange":$inputs, "ValueRange":$extInputs,
-      "ArrayAttr":$inputNames, "ArrayAttr":$outputNames, "ArrayAttr":$extInputNames,
+    OpBuilder<(ins "TypeRange":$dataOutputs, "ValueRange":$inputs,
+      "ArrayAttr":$inputNames, "ArrayAttr":$outputNames,
       "Value":$clock, "Value":$reset, "Value":$go, CArg<"Value", "{}">:$stall, CArg<"StringAttr", "{}">:$name)>
   ];
 

@@ -132,19 +132,19 @@ hw.module @testMultiple(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> 
 // CHECK:           hw.output %[[VAL_11]], %[[VAL_1]] : i32, i32
 // CHECK:         }
 hw.module @testSingleWithExt(%arg0: i32, %ext1: i32, %go : i1, %clk: i1, %rst: i1) -> (out0: i32, out1: i32) {
-  %0:3 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg0) ext (%e0 : i32 = %ext1) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out0: i32, out1: i32) {
+  %0:3 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg0) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out0: i32, out1: i32) {
     %true = hw.constant true
     %1 = comb.sub %a0, %a0 : i32
     pipeline.stage ^bb1 regs(%1 : i32)
 
   ^bb1(%6: i32, %s1_valid: i1):
     // Use the external value inside a stage
-    %8 = comb.add %6, %e0 : i32
+    %8 = comb.add %6, %ext1 : i32
     pipeline.stage ^bb2 regs(%8 : i32)
   
   ^bb2(%9 : i32, %s2_valid: i1):
   // Use the external value in the exit stage.
-    pipeline.return %9, %e0 : i32, i32
+    pipeline.return %9, %ext1 : i32, i32
   }
   hw.output %0#0, %0#1 : i32, i32
 }
