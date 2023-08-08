@@ -570,4 +570,14 @@ TEST(RLELogicTest, XORTest) {
                      l9RandB);
   RLELogic l9Xor = RLELogic::encode(buffer);
   EXPECT_TRUE((l9Xor.containsOnly<'0', '1', 'X', 'U'>()));
+
+  LogicDigit inplaceBuffer[128];
+  RLELogic::filled<'H'>().unroll(inplaceBuffer, 128);
+  for (const LogicDigit dig : inplaceBuffer)
+    EXPECT_EQ(dig, LogicDigit::LD_H);
+
+  l9RandA.binaryOpInplace(lutIeee1164Xor, inplaceBuffer, 128);
+  l9RandB.binaryOpInplace(lutIeee1164Xor, inplaceBuffer, 128);
+  RLELogic::filled<'1'>().binaryOpInplace(lutIeee1164Xor, inplaceBuffer, 128);
+  EXPECT_EQ(l9Xor, RLELogic::encode(ArrayRef(inplaceBuffer, 128)));
 }

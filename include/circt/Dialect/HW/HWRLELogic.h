@@ -262,10 +262,10 @@ public:
 
   /// Unrolls 'length' digits of the encoded value into the given buffer, LSB
   /// first.
-  void unroll(logicdigits::LogicDigit *buffer, size_t length) const {
+  void unroll(logicdigits::LogicDigit *dest, size_t length) const {
     auto iter = infiniteIterator();
     for (size_t i = 0; i < length; i++) {
-      buffer[i] = *iter;
+      dest[i] = *iter;
       iter++;
     }
   }
@@ -308,6 +308,18 @@ public:
       dest.push_back(lut[(unsigned)*iterA][(unsigned)*iterB]);
       iterA++;
       iterB++;
+    }
+  }
+
+  /// Applies a binary-operation LUT operation inplace on the given buffer
+  /// using 'length' digits of this instance's value as second operand.
+  void binaryOpInplace(const logicdigits::BinaryLogicLUT &lut,
+                       logicdigits::LogicDigit *destAndOperandA,
+                       unsigned length) const {
+    auto iter = infiniteIterator();
+    for (unsigned i = 0; i < length; i++) {
+      destAndOperandA[i] = lut[(unsigned)destAndOperandA[i]][(unsigned)*iter];
+      iter++;
     }
   }
 
