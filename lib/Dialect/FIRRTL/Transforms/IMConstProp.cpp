@@ -348,12 +348,6 @@ void IMConstPropPass::runOnOperation() {
       for (auto port : module.getBodyBlock()->getArguments())
         markOverdefined(port);
     }
-    // Also mark PlusArgs instrinsics as overdefined
-    for (auto &op : module.getOps()) {
-      if (isa<PlusArgsValueIntrinsicOp, PlusArgsTestIntrinsicOp>(op)) {
-        llvm::for_each(op.getResults(), [&](auto a) { markOverdefined(a); });
-      }
-    }
   }
 
   // If a value changed lattice state then reprocess any of its users.
@@ -448,15 +442,14 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markInstanceOp(instance);
     else if (auto mem = dyn_cast<MemOp>(op))
       markMemOp(mem);
-    else if (auto cast = dyn_cast<mlir::UnrealizedConversionCastOp>(op))
-      for (auto result : cast.getResults())
+    else if (isa<mlir::UnrealizedConversionCastOp, VerbatimExprOp,
+                 VerbatimWireOp, SubaccessOp>(op) ||
+             op.getNumOperands() == 0) {
+      // Mark operations whose results cannot be tracked as overdefined. Mark
+      // unhandled operations with no operand as well since otherwise they will
+      // remain unknown states until the end.
+      for (auto result : op.getResults())
         markOverdefined(result);
-    else if (auto verbatim = dyn_cast<VerbatimExprOp>(op))
-      markOverdefined(verbatim.getResult());
-    else if (auto verbatim = dyn_cast<VerbatimWireOp>(op))
-      markOverdefined(verbatim.getResult());
-    else if (auto subaccess = dyn_cast<SubaccessOp>(op)) {
-      markOverdefined(subaccess);
     } else if (!isa<SubindexOp, SubfieldOp, NodeOp>(&op) &&
                op.getNumResults() > 0) {
       // If an unknown operation has an aggregate operand, mark results as
