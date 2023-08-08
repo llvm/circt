@@ -305,7 +305,6 @@ namespace {
 struct AttrCache {
   AttrCache(MLIRContext *context) {
     i64ty = IntegerType::get(context, 64);
-    innerSymAttr = StringAttr::get(context, "inner_sym");
     nameAttr = StringAttr::get(context, "name");
     nameKindAttr = StringAttr::get(context, "nameKind");
     sPortDirections = StringAttr::get(context, "portDirections");
@@ -319,8 +318,8 @@ struct AttrCache {
   AttrCache(const AttrCache &) = default;
 
   Type i64ty;
-  StringAttr innerSymAttr, nameAttr, nameKindAttr, sPortDirections, sPortNames,
-      sPortTypes, sPortSyms, sPortLocations, sPortAnnotations, sEmpty;
+  StringAttr nameAttr, nameKindAttr, sPortDirections, sPortNames, sPortTypes,
+      sPortSyms, sPortLocations, sPortAnnotations, sEmpty;
 };
 
 // The visitors all return true if the operation should be deleted, false if
