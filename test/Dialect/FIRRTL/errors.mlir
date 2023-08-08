@@ -1974,6 +1974,21 @@ firrtl.circuit "RWProbeInstance" {
 
 // -----
 
+firrtl.circuit "RWProbeUseDef" {
+  firrtl.extmodule @Ext()
+  firrtl.module @RWProbeUseDef(in %cond : !firrtl.uint<1>) {
+    firrtl.when %cond : !firrtl.uint<1> {
+      // expected-note @below {{target here}}
+      %w = firrtl.wire sym @x : !firrtl.uint<1>
+    } else {
+      // expected-error @below {{not dominated by target}}
+      %rw = firrtl.ref.rwprobe <@RWProbeUseDef::@x> : !firrtl.uint<1>
+    }
+  }
+}
+
+// -----
+
 firrtl.circuit "MissingClassForObjectPortInModule" {
   // expected-error @below {{'firrtl.module' op target class 'Missing' not found}}
   firrtl.module @MissingClassForObjectPortInModule(out %o: !firrtl.class<@Missing()>) {}

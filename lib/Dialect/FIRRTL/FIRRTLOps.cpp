@@ -5163,6 +5163,12 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
     return emitOpError("has target that cannot be probed")
         .attachNote(symOp.getLoc())
         .append("target resolves here");
+  auto *ancestor =
+      symOp.getTargetResult().getParentBlock()->findAncestorOpInBlock(**this);
+  if (!ancestor || !symOp->isBeforeInBlock(ancestor))
+    return emitOpError("is not dominated by target")
+        .attachNote(symOp.getLoc())
+        .append("target here");
   return checkFinalType(symOp.getTargetResult().getType(), symOp.getLoc());
 }
 
