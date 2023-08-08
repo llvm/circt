@@ -19,8 +19,6 @@
 using namespace circt;
 using namespace ibis;
 
-namespace {
-
 // Iterates the symbolcache until a unique name is found.
 static StringAttr getUniqueName(mlir::MLIRContext *ctx, StringAttr baseName,
                                 SymbolCache &symCache) {
@@ -31,6 +29,7 @@ static StringAttr getUniqueName(mlir::MLIRContext *ctx, StringAttr baseName,
         StringAttr::get(ctx, baseName.strref() + "_" + Twine(uniqueCntr++));
   return uniqueName;
 }
+namespace {
 
 struct OutlineContainerPattern : public OpConversionPattern<ContainerOp> {
   OutlineContainerPattern(MLIRContext *context, SymbolCache *symCache)
