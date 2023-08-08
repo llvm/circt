@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
-#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/Namespace.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Parallel.h"
