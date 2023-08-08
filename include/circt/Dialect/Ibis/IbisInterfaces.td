@@ -42,7 +42,7 @@ def ScopeOpInterface : OpInterface<"ScopeOpInterface", [Symbol]> {
       "Returns the body of the scope",
       "mlir::Block*", "getBodyBlock",
       (ins), [{
-        return &$_op->getRegions().front().front();
+        return $_op.getBodyBlock();
       }]
     >,
     InterfaceMethod<

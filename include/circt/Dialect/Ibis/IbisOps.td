@@ -50,6 +50,8 @@ def ClassOp : IbisOp<"class", [
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+  
+    Block* getBodyBlock() { return &getBody().front(); }
   }];
 }
 
@@ -221,6 +223,12 @@ def ThisOp : IbisOp<"this", [
   let assemblyFormat = [{
     $scopeName attr-dict custom<ScopeRefFromName>(type($thisRef), ref($scopeName))
   }];
+
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name), [{
+      build($_builder, $_state, $_builder.getType<ScopeRefType>(name), name);
+    }]>
+  ];
 }
 
 // ===---------------------------------------------------------------------===//
@@ -243,12 +251,25 @@ def ContainerOp : IbisOp<"container", [
   let assemblyFormat = [{
     $sym_name attr-dict-with-keyword $body
   }];
+
+  let extraClassDeclaration = [{
+    Block* getBodyBlock() { return &getBody().front(); }
+  }];
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name), [{
+      auto region = $_state.addRegion();
+      region->push_back(new Block());
+      $_state.addAttribute(getSymNameAttrName($_state.name), name);
+    }]>
+  ];
 }
 
 class PortLikeOp<string mnemonic, list<Trait> traits = []> :
     IbisOp<mnemonic, !listconcat(traits, [
       PortOpInterface,
-      HasParent<"ClassOp">
+      ParentOneOf<["ClassOp", "ContainerOp"]>
   ])> {
   let arguments = (ins SymbolNameAttr:$sym_name, TypeAttrOf<AnyType>:$type);
   let assemblyFormat = [{
