@@ -36,11 +36,12 @@ void ExternalizeClockGatePass::runOnOperation() {
   SymbolTable &symtbl = getAnalysis<SymbolTable>();
 
   // Collect all clock gate ops.
-  std::vector<ClockGateOp> clockGatesToReplace;
-  getOperation().walk(
-      [&](ClockGateOp op) { clockGatesToReplace.push_back(op); });
+  DenseMap<HWModuleOp, SmallVector<ClockGateOp>> gatesInModule;
+  for (auto module : getOperation().getOps<HWModuleOp>()) {
+    module.walk([&](ClockGateOp op) { gatesInModule[module].push_back(op); });
+  }
 
-  if (clockGatesToReplace.empty()) {
+  if (gatesInModule.empty()) {
     markAllAnalysesPreserved();
     return;
   }
@@ -61,43 +62,52 @@ void ExternalizeClockGatePass::runOnOperation() {
     modulePorts.push_back({{builder.getStringAttr(testEnableName), i1Type,
                             ModulePort::Direction::Input}});
 
-  auto moduleOp = builder.create<HWModuleExternOp>(
+  auto externModuleOp = builder.create<HWModuleExternOp>(
       getOperation().getLoc(), builder.getStringAttr(moduleName), modulePorts,
       moduleName);
-  symtbl.insert(moduleOp);
+  symtbl.insert(externModuleOp);
 
   // Replace all clock gates with an instance of the external module.
   SmallVector<Value, 4> instPorts;
-  for (auto ckgOp : clockGatesToReplace) {
-    ImplicitLocOpBuilder builder(ckgOp.getLoc(), ckgOp);
+  for (auto &[module, clockGatesToReplace] : gatesInModule) {
+    Value cstFalse;
+    for (auto ckgOp : clockGatesToReplace) {
+      ImplicitLocOpBuilder builder(ckgOp.getLoc(), ckgOp);
 
-    Value enable = ckgOp.getEnable();
-    Value testEnable = ckgOp.getTestEnable();
+      Value enable = ckgOp.getEnable();
+      Value testEnable = ckgOp.getTestEnable();
 
-    // If the clock gate has a test enable operand but the module does not, add
-    // a `comb.or` to merge the two enable conditions.
-    if (hasTestEnable && !testEnable)
-      testEnable = builder.create<ConstantOp>(i1Type, 0);
+      // If the clock gate has no test enable operand but the module does, add a
+      // constant 0 input.
+      if (hasTestEnable && !testEnable) {
+        if (!cstFalse) {
+          cstFalse = builder.create<ConstantOp>(i1Type, 0);
+        }
+        testEnable = cstFalse;
+      }
 
-    // If the clock gate has no test enable operand but the module does, add a
-    // constant 0 input.
-    if (!hasTestEnable && testEnable) {
-      enable = builder.createOrFold<comb::OrOp>(enable, testEnable, true);
-      testEnable = {};
+      // If the clock gate has a test enable operand but the module does not,
+      // add a `comb.or` to merge the two enable conditions.
+      if (!hasTestEnable && testEnable) {
+        enable = builder.createOrFold<comb::OrOp>(enable, testEnable, true);
+        testEnable = {};
+      }
+
+      instPorts.push_back(ckgOp.getInput());
+      instPorts.push_back(enable);
+      if (testEnable)
+        instPorts.push_back(testEnable);
+
+      auto instOp = builder.create<InstanceOp>(
+          externModuleOp, builder.getStringAttr(instName), instPorts,
+          builder.getArrayAttr({}), ckgOp.getInnerSymAttr());
+
+      ckgOp.replaceAllUsesWith(instOp);
+      ckgOp.erase();
+
+      instPorts.clear();
+      ++numClockGatesConverted;
     }
-
-    instPorts.push_back(ckgOp.getInput());
-    instPorts.push_back(enable);
-    if (testEnable)
-      instPorts.push_back(testEnable);
-
-    auto instOp = builder.create<InstanceOp>(
-        moduleOp, builder.getStringAttr(instName), instPorts);
-    ckgOp.replaceAllUsesWith(instOp);
-    ckgOp.erase();
-
-    instPorts.clear();
-    ++numClockGatesConverted;
   }
 }
 

@@ -750,6 +750,10 @@ LogicalResult ClockGateOp::canonicalize(ClockGateOp op,
   return failure();
 }
 
+std::optional<size_t> ClockGateOp::getTargetResultIndex() {
+  return std::nullopt;
+}
+
 //===----------------------------------------------------------------------===//
 // FirMemOp
 //===----------------------------------------------------------------------===//
