@@ -85,3 +85,14 @@ om.class @List() {
   %0 = om.constant #om.list< i32, [42 : i64]> : !om.list<i32>
   om.class.field @list, %0 : !om.list<i32>
 }
+
+// -----
+
+// CHECK-LABEL: @ListCreate
+om.class @ListCreate() {
+  %0 = om.constant 0 : i64
+  %1 = om.constant 1 : i32
+  // expected-error @+2 {{use of value '%1' expects different type than prior uses: 'i64' vs 'i32'}}
+  // expected-note @-2 {{prior use here}}
+  %lst = om.list_create %0, %1 : i64
+}

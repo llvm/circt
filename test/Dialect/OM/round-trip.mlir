@@ -134,6 +134,30 @@ om.class @ListConstant() {
   om.class.field @list_i32, %1 : !om.list<i32>
 }
 
+// CHECK-LABEL: @ListCreate
+om.class @ListCreate() {
+  // CHECK: [[cst5_i8:%.+]] = om.constant 5 : i8
+  %cst5_i8 = om.constant 5 : i8
+  // CHECK: [[cst6_i8:%.+]] = om.constant 6 : i8
+  %cst6_i8 = om.constant 6 : i8
+  // CHECK: [[cst5_i32:%.+]] = om.constant 5 : i32
+  %cst5_i32 = om.constant 5 : i32
+  // CHECK: [[cst6_i32:%.+]] = om.constant 6 : i32
+  %cst6_i32 = om.constant 6 : i32
+
+  // CHECK: [[obj0:%.+]] = om.object @Widget([[cst5_i8]], [[cst6_i32]]) : (i8, i32) -> !om.class.type<@Widget>
+  %obj0 = om.object @Widget(%cst5_i8, %cst6_i32) : (i8, i32) -> !om.class.type<@Widget>
+
+  // CHECK: [[obj1:%.+]] = om.object @Widget([[cst6_i8]], [[cst5_i32]]) : (i8, i32) -> !om.class.type<@Widget>
+  %obj1 = om.object @Widget(%cst6_i8, %cst5_i32) : (i8, i32) -> !om.class.type<@Widget>
+
+  // CHECK: [[list:%.+]] = om.list_create [[obj0]], [[obj1]] : !om.class.type<@Widget>
+  %list = om.list_create %obj0, %obj1 : !om.class.type<@Widget>
+
+  // CHECK: om.class.field @list_field, [[list]] : !om.list<!om.class.type<@Widget>>
+  om.class.field @list_field, %list : !om.list<!om.class.type<@Widget>>
+}
+
 // CHECK-LABEL: @String
 om.class @StringConstant() {
   // CHECK: %[[const1:.+]] = om.constant "foo" : !om.string

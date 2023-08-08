@@ -43,6 +43,12 @@ def ListType : TypeDef<OMDialect, "List", []> {
   let assemblyFormat = [{
     `<` $elementType `>`
   }];
+
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "::mlir::Type":$elementType), [{
+      return $_get(elementType.getContext(), elementType);
+    }]>
+  ];
 }
 
 def SymbolRefType : TypeDef<OMDialect, "SymbolRef", []> {

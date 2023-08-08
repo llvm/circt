@@ -353,6 +353,34 @@ OpFoldResult circt::om::ConstantOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// ListCreateOp
+//===----------------------------------------------------------------------===//
+
+void circt::om::ListCreateOp::print(OpAsmPrinter &p) {
+  p << " ";
+  p.printOperands(getInputs());
+  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " : " << getType().getElementType();
+}
+
+ParseResult circt::om::ListCreateOp::parse(OpAsmParser &parser,
+                                           OperationState &result) {
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 16> operands;
+  Type elemType;
+
+  if (parser.parseOperandList(operands) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(elemType))
+    return failure();
+  result.addTypes({circt::om::ListType::get(elemType)});
+
+  for (auto operand : operands)
+    if (parser.resolveOperand(operand, elemType, result.operands))
+      return failure();
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
