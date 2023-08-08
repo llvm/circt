@@ -1922,6 +1922,16 @@ firrtl.circuit "RWProbeRemote" {
 
 // -----
 
+firrtl.circuit "RWProbeBadTarget" {
+  firrtl.module @RWProbeBadTarget() {
+    // expected-error @below {{has target that cannot be resolved: #hw.innerNameRef<@RWProbeBadTarget::@x>}}
+    %rw = firrtl.ref.rwprobe <@RWProbeBadTarget::@x> : !firrtl.uint<1>
+  }
+}
+
+
+// -----
+
 firrtl.circuit "RWProbeNonBase" {
   firrtl.module @RWProbeNonBase() {
     // expected-error @below {{cannot force type '!firrtl.string'}}

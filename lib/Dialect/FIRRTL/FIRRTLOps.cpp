@@ -5126,15 +5126,13 @@ FIRRTLType RWProbeOp::inferReturnType(ValueRange operands,
 
 LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   auto targetRef = getTarget();
-  if (!targetRef)
-    return emitOpError("has invalid target reference");
   if (targetRef.getModule() !=
       (*this)->getParentOfType<FModuleLike>().getModuleNameAttr())
     return emitOpError() << "has non-local target";
 
   auto target = ns.lookup(targetRef);
   if (!target)
-    return emitOpError() << "has target that cannot be resolved: " << target;
+    return emitOpError() << "has target that cannot be resolved: " << targetRef;
 
   auto checkFinalType = [&](auto type, Location loc) -> LogicalResult {
     // Determine final type.
