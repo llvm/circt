@@ -1374,40 +1374,40 @@ class DedupPass : public DedupBase<DedupPass> {
         hashesAndModuleNames(modules.size());
     StructuralHasherSharedConstants hasherConstants(&getContext());
 
-    auto failed = false;
-
     // Calculate module information parallelly.
-    mlir::parallelFor(context, 0, modules.size(), [&](unsigned idx) {
-      auto module = modules[idx];
-      AnnotationSet annotations(module);
-      // If the module is marked with NoDedup, just skip it.
-      if (annotations.hasAnnotation(noDedupClass))
-        return;
+    auto result = mlir::failableParallelForEach(
+        context, llvm::seq(modules.size()), [&](unsigned idx) {
+          auto module = modules[idx];
+          AnnotationSet annotations(module);
+          // If the module is marked with NoDedup, just skip it.
+          if (annotations.hasAnnotation(noDedupClass))
+            return success();
 
-      // If the module has input RefType ports, also skip it.
-      if (llvm::any_of(module.getPorts(), [&](PortInfo port) {
-            return type_isa<RefType>(port.type) && port.isInput();
-          }))
-        return;
+          // If the module has input RefType ports, also skip it.
+          if (llvm::any_of(module.getPorts(), [&](PortInfo port) {
+                return type_isa<RefType>(port.type) && port.isInput();
+              }))
+            return success();
 
-      StructuralHasher hasher(hasherConstants);
-      llvm::SmallSetVector<StringAttr, 1> groups;
-      for (auto annotation : annotations) {
-        if (annotation.getClass() == dedupGroupClass)
-          groups.insert(annotation.getMember<StringAttr>("group"));
-      }
-      if (groups.size() > 1) {
-        module.emitError("module belongs to multiple dedup groups: ") << groups;
-        failed = true;
-        return;
-      }
-      auto dedupGroup = groups.empty() ? StringAttr() : groups.front();
-      // Calculate the hash of the module and referred module names.
-      hashesAndModuleNames[idx] =
-          hasher.getHashAndModuleNames(module, dedupGroup);
-    });
+          StructuralHasher hasher(hasherConstants);
+          llvm::SmallSetVector<StringAttr, 1> groups;
+          for (auto annotation : annotations) {
+            if (annotation.getClass() == dedupGroupClass)
+              groups.insert(annotation.getMember<StringAttr>("group"));
+          }
+          if (groups.size() > 1) {
+            module.emitError("module belongs to multiple dedup groups: ")
+                << groups;
+            return failure();
+          }
+          auto dedupGroup = groups.empty() ? StringAttr() : groups.front();
+          // Calculate the hash of the module and referred module names.
+          hashesAndModuleNames[idx] =
+              hasher.getHashAndModuleNames(module, dedupGroup);
+          return success();
+        });
 
-    if (failed)
+    if (result.failed())
       return signalPassFailure();
 
     for (auto [i, module] : llvm::enumerate(modules)) {
@@ -1458,6 +1458,7 @@ class DedupPass : public DedupBase<DedupPass> {
     // have to been deduped to the same module. It is possible that a module was
     // deduped with the wrong thing.
 
+    auto failed = false;
     // This parses the module name out of a target string.
     auto parseModule = [&](Attribute path) -> StringAttr {
       // Each module is listed as a target "~Circuit|Module" which we have to
