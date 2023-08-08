@@ -765,10 +765,6 @@ static raw_ostream &operator<<(raw_ostream &printer, ModulePort port) {
   case ModulePort::Direction::InOut:
     dirstr = "inout";
     break;
-  default:
-    assert(0 && "unknown direction");
-    dirstr = "unknown";
-    break;
   }
   printer << dirstr << " " << port.name << " : " << port.type;
   return printer;

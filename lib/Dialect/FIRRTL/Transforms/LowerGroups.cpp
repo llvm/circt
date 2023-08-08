@@ -55,7 +55,7 @@ FModuleOp LowerGroupsPass::buildNewModule(OpBuilder &builder, Location location,
       ArrayAttr{});
   SymbolTable::setSymbolVisibility(newModule, SymbolTable::Visibility::Private);
   return newModule;
-};
+}
 
 /// Process amodule to remove any groups it has.
 void LowerGroupsPass::runOnModule(FModuleOp moduleOp) {
