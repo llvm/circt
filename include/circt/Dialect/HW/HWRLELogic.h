@@ -54,7 +54,7 @@ public:
   /// Container for the results of a pre-encoding analysis run
   struct AnalyzePassResult {
     SizeType requiredBytes = 0;
-    unsigned lastDigitTrim = 0;
+    SizeType lastDigitTrim = 0;
     uint16_t foundDigitsMask = 0;
 
     bool isInteger() const {
@@ -94,7 +94,7 @@ public:
   }
 
   /// Constructor for zero-length encodings
-  constexpr explicit RLELogic(InvalidTag invalidTag)
+  explicit RLELogic(InvalidTag invalidTag)
       : valPtrUnion({(RawType)invalidTag}), byteCount(0), digitMask(0){};
 
   /// Destructor
@@ -105,7 +105,7 @@ public:
   template <char C>
   typename std::enable_if<
       logicdigits::isValidLogicDigit(logicdigits::charToLogicDigit(C)),
-      RLELogic>::type constexpr static filled() {
+      RLELogic>::type static filled() {
     return RLELogic(logicdigits::charToLogicDigit(C));
   };
 
@@ -262,7 +262,7 @@ public:
 
   /// Unrolls 'length' digits of the encoded value into the given buffer, LSB
   /// first.
-  void unroll(logicdigits::LogicDigit *buffer, size_t length) {
+  void unroll(logicdigits::LogicDigit *buffer, size_t length) const {
     auto iter = infiniteIterator();
     for (size_t i = 0; i < length; i++) {
       buffer[i] = *iter;
@@ -312,7 +312,7 @@ public:
   }
 
   /// Advance an offset struct by the given amount of digits
-  void seek(SizeType digitSkip, Offset &offset);
+  void seek(SizeType digitSkip, Offset &offset) const;
 
   /// Iterator over the encoded digits with an optional bound
   struct DigitIterator
@@ -418,11 +418,11 @@ private:
   bool isSelfContained() const { return isSelfContained(byteCount); };
 
   /// Raw constructor
-  constexpr RLELogic(RawType raw, SizeType size, uint16_t mask)
+  RLELogic(RawType raw, SizeType size, uint16_t mask)
       : valPtrUnion({raw}), byteCount(size), digitMask(mask){};
 
   /// Construct a filled value
-  constexpr explicit RLELogic(logicdigits::LogicDigit fillDigit)
+  explicit RLELogic(logicdigits::LogicDigit fillDigit)
       : valPtrUnion({(RawType)fillDigit}), byteCount(1),
         digitMask(makeDigitMask(fillDigit)){};
 

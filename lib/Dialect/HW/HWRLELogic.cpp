@@ -112,7 +112,7 @@ RLELogic RLELogic::encode(ArrayRef<LogicDigit> digits,
   return RLELogic((RawType)rlePtr, byteCount, analysisResult->foundDigitsMask);
 }
 
-void RLELogic::seek(SizeType digitSkip, Offset &offset) {
+void RLELogic::seek(SizeType digitSkip, Offset &offset) const {
   assert(isValid() && "cannot seek on invalid value");
   const auto *ptr = getCodePointer();
   assert(offset.bytes < byteCount && "byte offset exceeds bounds");
