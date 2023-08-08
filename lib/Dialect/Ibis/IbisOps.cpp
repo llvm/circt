@@ -20,69 +20,45 @@ using namespace circt;
 using namespace ibis;
 
 template <typename TSymAttr>
-ParseResult parseClassRefFromName(OpAsmParser &parser, Type &classRefType,
+ParseResult parseScopeRefFromName(OpAsmParser &parser, Type &scopeRefType,
                                   TSymAttr sym) {
   // Nothing to parse, since this is already encoded in the child symbol.
-  classRefType = ClassRefType::get(parser.getContext(), sym);
+  scopeRefType = ScopeRefType::get(parser.getContext(), sym);
   return success();
 }
 
 template <typename TSymAttr>
-void printClassRefFromName(OpAsmPrinter &p, Operation *op, Type type,
+void printScopeRefFromName(OpAsmPrinter &p, Operation *op, Type type,
                            TSymAttr sym) {
   // Nothing to print since this information is already encoded in the child
   // symbol.
 }
 
 //===----------------------------------------------------------------------===//
-// ClassOp
+// ScopeOpInterface
 //===----------------------------------------------------------------------===//
 
-ParseResult ClassOp::parse(OpAsmParser &parser, OperationState &result) {
-  // Parse signature
-  StringAttr className;
-  if (parser.parseSymbolName(className, mlir::SymbolTable::getSymbolAttrName(),
-                             result.attributes))
+FailureOr<mlir::TypedValue<ScopeRefType>>
+circt::ibis::detail::getThisFromScope(Operation *op) {
+  auto scopeOp = cast<ScopeOpInterface>(op);
+  auto thisOps = scopeOp.getBodyBlock()->getOps<ibis::ThisOp>();
+  if (thisOps.empty())
+    return op->emitOpError("must contain a 'ibis.this' operation");
+
+  if (std::next(thisOps.begin()) != thisOps.end())
+    return op->emitOpError("must contain only one 'ibis.this' operation");
+
+  return {*thisOps.begin()};
+}
+
+LogicalResult circt::ibis::detail::verifyScopeOpInterface(Operation *op) {
+  if (failed(getThisFromScope(op)))
     return failure();
 
-  // parse "this"
-  OpAsmParser::Argument thisArg;
-  if (parser.parseLParen() ||
-      parser.parseArgument(thisArg, /*allowType=*/false) ||
-      parser.parseRParen())
-    return failure();
-
-  thisArg.type = parser.getBuilder().getType<ClassRefType>(className);
-
-  // Parse the attribute dict.
-  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
-    return failure();
-
-  // Parse the class body.
-  auto *body = result.addRegion();
-  if (parser.parseRegion(*body, {thisArg}))
-    return failure();
+  if (!isa<SymbolOpInterface>(op))
+    return op->emitOpError("must implement 'SymbolOpInterface'");
 
   return success();
-}
-
-void ClassOp::print(OpAsmPrinter &p) {
-  p << " ";
-  p.printSymbolName(getSymName());
-  p << '(';
-  p.printRegionArgument(getThis(), {}, /*omitType*/ true);
-  p << ')';
-  llvm::SmallVector<::llvm::StringRef, 2> elidedAttrs;
-  elidedAttrs.push_back("sym_name");
-  p.printOptionalAttrDictWithKeyword((*this)->getAttrs(), elidedAttrs);
-  p << " ";
-  p.printRegion(getBody(), /*printEntryBlockArgs=*/false,
-                /*printBlockTerminators=*/true);
-}
-
-void ClassOp::getAsmBlockArgumentNames(mlir::Region &region,
-                                       OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getThis(), "this");
 }
 
 //===----------------------------------------------------------------------===//
@@ -232,11 +208,11 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 LogicalResult GetPortOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // Lookup the target module type of the instance class reference.
   ModuleOp mod = getOperation()->getParentOfType<ModuleOp>();
-  ClassRefType crt = getInstance().getType().cast<ClassRefType>();
+  ScopeRefType crt = getInstance().getType().cast<ScopeRefType>();
   // @teqdruid TODO: make this more efficient using
   // innersymtablecollection when that's available to non-firrtl dialects.
   auto targetClass =
-      symbolTable.lookupSymbolIn<ClassOp>(mod, crt.getClassRef());
+      symbolTable.lookupSymbolIn<ClassOp>(mod, crt.getScopeRef());
   assert(targetClass && "should have been verified by the type system");
   // @teqdruid TODO: make this more efficient using
   // innersymtablecollection when that's available to non-firrtl dialects.
@@ -258,6 +234,26 @@ LogicalResult GetPortOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitOpError() << "symbol '" << getPortSymbolAttr()
                          << "' refers to a port of type " << targetPortType
                          << ", but this op has type " << thisPortType;
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ThisOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ThisOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // A thisOp should always refer to the parent operation, which in turn should
+  // be an Ibis ScopeOpInterface.
+  auto parentScope =
+      dyn_cast_or_null<ScopeOpInterface>(getOperation()->getParentOp());
+  if (!parentScope)
+    return emitOpError() << "thisOp must be nested in a scope op";
+
+  if (parentScope.getScopeName() != getScopeName())
+    return emitOpError() << "thisOp refers to a parent scope of name "
+                         << getScopeName() << ", but the parent scope is named "
+                         << parentScope.getScopeName();
 
   return success();
 }

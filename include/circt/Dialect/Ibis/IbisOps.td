@@ -28,27 +28,28 @@ def HasCustomSSAName :
 
 def ClassOp : IbisOp<"class", [
     IsolatedFromAbove, RegionKindInterface,
-    Symbol, SymbolTable, SingleBlock,
-    NoTerminator,
-    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
+    SymbolTable, SingleBlock,
+    NoTerminator, ScopeOpInterface,
     HasParent<"mlir::ModuleOp">]> {
 
   let summary = "Ibis class";
   let description = [{
     Ibis has the notion of a class which can contain methods and member
     variables.
+
+    In the low-level Ibis representation, the ClassOp becomes a container for
+    `ibis.port`s, `ibis.container`s, and contain logic for member variables.
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name);
   let regions = (region SizedRegion<1>:$body);
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{
+    $sym_name attr-dict-with-keyword $body
+  }];
 
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
-
-    // Returns the inner 'this' argument of the class.
-    BlockArgument getThis() { return getBody().front().getArgument(0); }
   }];
 }
 
@@ -62,10 +63,10 @@ def InstanceOp : IbisOp<"instance", [
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name, FlatSymbolRefAttr:$className);
-  let results = (outs ClassRefType:$classRef);
+  let results = (outs ScopeRefType:$scopeRef);
   let assemblyFormat = [{
     $sym_name `,` $className attr-dict
-    custom<ClassRefFromName>(type($classRef), ref($className))
+    custom<ScopeRefFromName>(type($scopeRef), ref($className))
   }];
 
   let extraClassDeclaration = [{
@@ -179,11 +180,11 @@ def GetParentOfRefOp : IbisOp<"get_parent_of_ref"> {
     any given Ibis class may be instantiated by multiple different parent classes.
   }];
 
-  let arguments = (ins AnyClassRefType:$src);
-  let results = (outs OpaqueClassRefType:$parent);
+  let arguments = (ins AnyScopeRefType:$src);
+  let results = (outs ScopeRefType:$parent);
 
   let assemblyFormat = [{
-    $src `:` qualified(type($src)) attr-dict
+    $src `:` qualified(type($src)) `->` qualified(type($parent)) attr-dict
   }];
 }
 
@@ -200,12 +201,25 @@ def GetInstanceInRefOp : IbisOp<"get_instance_in_ref"> {
   }];
 
   let arguments = (ins
-    AnyClassRefType:$src,
+    AnyScopeRefType:$src,
     FlatSymbolRefAttr:$instanceName,
     FlatSymbolRefAttr:$instanceSymbol);
-  let results = (outs ClassRefType:$instance);
+  let results = (outs ScopeRefType:$instance);
   let assemblyFormat = [{
-    $instanceName `:` $instanceSymbol `in` $src `:` qualified(type($src)) attr-dict custom<ClassRefFromName>(type($instance), ref($instanceSymbol))
+    $instanceName `:` $instanceSymbol `in` $src
+      `:`qualified(type($src)) attr-dict custom<ScopeRefFromName>(type($instance), ref($instanceSymbol))
+  }];
+}
+
+def ThisOp : IbisOp<"this", [
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Return a handle to the current scope `!ibis.scoperef`";
+  let arguments = (ins FlatSymbolRefAttr:$scopeName);
+  let results = (outs ScopeRefType:$thisRef);
+
+  let assemblyFormat = [{
+    $scopeName attr-dict custom<ScopeRefFromName>(type($thisRef), ref($scopeName))
   }];
 }
 
@@ -214,9 +228,9 @@ def GetInstanceInRefOp : IbisOp<"get_instance_in_ref"> {
 // ===---------------------------------------------------------------------===//
 
 def ContainerOp : IbisOp<"container", [
-  Symbol, SymbolTable, SingleBlock,
+  SymbolTable, SingleBlock,
   NoTerminator, NoRegionArguments,
-  HasParent<"ClassOp">
+  ScopeOpInterface, IsolatedFromAbove
 ]> {
   let summary = "Ibis container";
   let description = [{
@@ -258,7 +272,7 @@ def GetPortOp : IbisOp<"get_port", [
   }];
 
   let arguments = (ins
-    ClassRefType:$instance,
+    ScopeRefType:$instance,
     FlatSymbolRefAttr:$portSymbol);
   let results = (outs PortRefType:$port);
   let assemblyFormat = [{

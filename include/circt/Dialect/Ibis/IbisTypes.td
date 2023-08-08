@@ -14,18 +14,18 @@ include "mlir/IR/AttrTypeBase.td"
 
 class IbisTypeDef<string name> : TypeDef<IbisDialect, name> { }
 
-def ClassRefType : IbisTypeDef<"ClassRef"> {
-  let mnemonic = "classref";
-  let parameters = (ins OptionalParameter<"mlir::FlatSymbolRefAttr">:$classRef);
-  let assemblyFormat = "(`<` $classRef^  `>`)?";
+def ScopeRefType : IbisTypeDef<"ScopeRef"> {
+  let mnemonic = "scoperef";
   let description = [{
-    A reference to an Ibis class. May be either a reference to a specific
-    class (given a `$classRef` argument) or an opaque reference.
+    A reference to an Ibis scope. May be either a reference to a specific
+    scope (given a `$scopeName` argument) or an opaque reference.
   }];
 
+  let parameters = (ins OptionalParameter<"mlir::FlatSymbolRefAttr">:$scopeRef);
+  let assemblyFormat = "(`<` $scopeRef^  `>`)?";
   let extraClassDeclaration = [{
     bool isOpaque() {
-      return !getClassRef();
+      return !getScopeRef();
     }
   }];
 
@@ -34,22 +34,22 @@ def ClassRefType : IbisTypeDef<"ClassRef"> {
     TypeBuilder<(ins), [{
       return $_get($_ctxt, nullptr);
     }]>,
-    TypeBuilder<(ins "StringAttr":$classRef), [{
-      return $_get($_ctxt, FlatSymbolRefAttr::get(classRef));
+    TypeBuilder<(ins "StringAttr":$scopeRef), [{
+      return $_get($_ctxt, FlatSymbolRefAttr::get(scopeRef));
     }]>
   ];
 }
 
-def AnyClassRefType : Type<
-  CPred<"$_self.isa<ibis::ClassRefType>()">,
+def AnyScopeRefType : Type<
+  CPred<"$_self.isa<ibis::ScopeRefType>()">,
   "must be a !dc.classref<T?> type",
-  "ibis::ClassRefType">{
+  "ibis::ScopeRefType">{
 }
 
-def OpaqueClassRefType : Type<
-  CPred<"ibis::isOpaqueClassRefType($_self)">,
+def OpaqueScopeRefType : Type<
+  CPred<"ibis::isOpaqueScopeRefType($_self)">,
   "must be a !dc.classref<> type">,
-  BuildableType<"$_builder.getType<ibis::ClassRefType>()"> {
+  BuildableType<"$_builder.getType<ibis::ScopeRefType>()"> {
 }
 
 def PortRefType : IbisTypeDef<"PortRef"> {

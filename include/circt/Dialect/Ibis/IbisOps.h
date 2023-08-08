@@ -21,13 +21,25 @@
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 
-#include "circt/Dialect/Ibis/IbisInterfaces.h.inc"
-
 namespace circt {
 namespace ibis {
 class ContainerOp;
+class ThisOp;
+
+namespace detail {
+// Verify that `op` conforms to the ScopeOpInterface.
+LogicalResult verifyScopeOpInterface(Operation *op);
+
+// Returns the %this value of an ibis scope-defining operation. Implemented
+// here to hide the dependence on `ibis.this`, which is not defined before the
+// interface definition.
+mlir::FailureOr<mlir::TypedValue<ScopeRefType>> getThisFromScope(Operation *op);
+
+} // namespace detail
 } // namespace ibis
 } // namespace circt
+
+#include "circt/Dialect/Ibis/IbisInterfaces.h.inc"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Ibis/Ibis.h.inc"
