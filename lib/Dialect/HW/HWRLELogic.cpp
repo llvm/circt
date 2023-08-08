@@ -137,14 +137,3 @@ void RLELogic::seek(SizeType digitSkip, Offset &offset) const {
     offset.runLength += digitSkip;
   }
 }
-
-llvm::hash_code circt::hw::hashValue(const RLELogic &rlelog) {
-  // The digit mask is not included in the hash since it can be directly derived
-  // from the value
-  if (rlelog.isSelfContained())
-    return hash_combine(rlelog.byteCount, rlelog.valPtrUnion.raw);
-  return hash_combine(
-      rlelog.byteCount,
-      hash_combine_range(rlelog.valPtrUnion.ptr,
-                         rlelog.valPtrUnion.ptr + rlelog.byteCount));
-}

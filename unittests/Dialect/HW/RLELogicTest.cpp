@@ -317,7 +317,7 @@ static void expectEqual(const RLELogic &a, const RLELogic &b) {
   EXPECT_TRUE(b == a);
   EXPECT_FALSE(a != b);
   EXPECT_FALSE(b != a);
-  EXPECT_EQ(hashValue(a), hashValue(b));
+  EXPECT_EQ(hash_value(a), hash_value(b));
 }
 
 static void expectNotEqual(const RLELogic &a, const RLELogic &b) {
@@ -328,7 +328,7 @@ static void expectNotEqual(const RLELogic &a, const RLELogic &b) {
   EXPECT_TRUE(a != b);
   EXPECT_TRUE(b != a);
   // Assume we don't hit a collision by accident
-  EXPECT_NE(hashValue(a), hashValue(b));
+  EXPECT_NE(hash_value(a), hash_value(b));
 }
 
 TEST(RLELogicTest, EqualsTest) {

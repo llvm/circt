@@ -418,7 +418,9 @@ public:
 
   // Helpers for storing an RLELogic in attributes
   friend struct llvm::DenseMapInfo<RLELogic, void>;
-  friend llvm::hash_code hashValue(const RLELogic &rlelog);
+
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  friend llvm::hash_code hash_value(const RLELogic &rlelog);
 
 private:
   static constexpr SizeType maxSelfContainedBytes = sizeof(RawType);
@@ -491,7 +493,17 @@ private:
   uint16_t digitMask;
 };
 
-llvm::hash_code hashValue(const RLELogic &rlelog);
+// NOLINTNEXTLINE(readability-identifier-naming)
+inline llvm::hash_code hash_value(const RLELogic &rlelog) {
+  // The digit mask is not included in the hash since it can be directly derived
+  // from the value
+  if (rlelog.isSelfContained())
+    return llvm::hash_combine(rlelog.byteCount, rlelog.valPtrUnion.raw);
+  return hash_combine(
+      rlelog.byteCount,
+      llvm::hash_combine_range(rlelog.valPtrUnion.ptr,
+                               rlelog.valPtrUnion.ptr + rlelog.byteCount));
+}
 
 } // namespace hw
 } // namespace circt
@@ -510,7 +522,7 @@ struct DenseMapInfo<circt::hw::RLELogic, void> {
   }
 
   static unsigned getHashValue(const circt::hw::RLELogic &key) {
-    return static_cast<unsigned>(circt::hw::hashValue(key));
+    return static_cast<unsigned>(circt::hw::hash_value(key));
   }
 
   static bool isEqual(const circt::hw::RLELogic &lhs,
