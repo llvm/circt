@@ -54,4 +54,37 @@ def FirMemInitAttr : AttrDef<SeqDialect, "FirMemInit"> {
   let assemblyFormat = "`<` $filename `,` $isBinary `,` $isInline `>`";
 }
 
+/// An attribute holding information about rom initialization.
+def FirRomInitAttr : AttrDef<SeqDialect, "FirRomInit"> {
+  let mnemonic = "firrom.init";
+  let summary = "ROM initialization information";
+  let description = [{
+    This attribute captures what the initial content of the ROM should be.
+    Currently, this property is used in simulation, FPGA XPM ROM initialization,
+    and memory compiler to generate physical ROM. If this is the case in a
+    simulation where the memory contents are preloaded from a file when the
+    simulation starts. If it is used in the case of XPM ROM initialization, the
+    path string will be passed in the parameter of the black box. If it is used
+    in the memory compiler to generate a physical ROM, the parameters will be
+    passed to the configuration file.
+
+    The `filename` specifies a file on disk that contains the initial contents
+    for this ROM. If `isBinary` is set, the file is interpreted as a binary
+    file, otherwise it is treated as hexadecimal. This is modeled after the
+    `$readmemh` and `$readmemb` SystemVerilog functions. For some fpga may
+    not support isBinary is set, additional conversion is required. For memory
+    compilers, depending on the vendor, some only support `isBinary` to be
+    true, and some only support `isBinary` to be false, and additional
+    conversion may be necessary. If `isInline` is set, the initialization is
+    emitted directly in the ROM model; otherwise it is split out into a separate
+    module that can be bound in.
+  }];
+  let parameters = (ins
+    "mlir::StringAttr":$filename,
+    "bool":$isBinary,
+    "bool":$isInline
+  );
+  let assemblyFormat = "`<` $filename `,` $isBinary `,` $isInline `>`";
+}
+
 #endif // CIRCT_DIALECT_SEQ_SEQATTRIBUTES_TD
