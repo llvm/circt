@@ -49,14 +49,11 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
 # Options and settings
 #-------------------------------------------------------------------------------
 
-  option(LLVM_INCLUDE_TOOLS "Generate build targets for the LLVM tools." ON)
-  option(LLVM_BUILD_TOOLS "Build the LLVM tools. If OFF, just generate build targets." ON)
-
-if (MSVC)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHs-c- /GR-")
-else ()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -fno-rtti")
-endif ()
+  if (MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHs-c- /GR-")
+  else ()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -fno-rtti")
+  endif ()
 
 #-------------------------------------------------------------------------------
 # MLIR/LLVM Configuration
@@ -172,6 +169,12 @@ set(CIRCT_LIBRARY_DIR ${CMAKE_BINARY_DIR}/lib)
 set(CIRCT_TOOLS_DIR ${CMAKE_BINARY_DIR}/bin)
 set(CIRCT_UTILS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/utils)
 set(CIRCT_PYTHON_PACKAGES_DIR ${CIRCT_BINARY_DIR}/python_packages)
+
+
+option(CIRCT_INCLUDE_TOOLS "Generate build targets for the CIRCT tools." ON)
+option(CIRCT_BUILD_TOOLS "Build the CIRCT tools. If OFF, just generate build targets." ON)
+set(CIRCT_TOOLS_INSTALL_DIR "${CMAKE_INSTALL_BINDIR}" CACHE PATH
+    "Path for binary subdirectory (defaults to '${CMAKE_INSTALL_BINDIR}')")
 
 list(APPEND CMAKE_MODULE_PATH "${MLIR_MAIN_SRC_DIR}/cmake/modules")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
@@ -563,7 +566,9 @@ endif()
 
 add_subdirectory(include/circt)
 add_subdirectory(lib)
-add_subdirectory(tools)
+if(CIRCT_INCLUDE_TOOLS)
+  add_subdirectory(tools)
+endif()
 if (CIRCT_GTEST_AVAILABLE)
   add_subdirectory(unittests)
 endif()

@@ -2,7 +2,7 @@ set(LLVM_LINK_COMPONENTS
   Support
 )
 
-add_llvm_tool(om-linker
+add_circt_tool(om-linker
   om-linker.cpp
 )
 llvm_update_compile_flags(om-linker)
