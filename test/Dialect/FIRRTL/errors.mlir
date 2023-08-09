@@ -1779,6 +1779,27 @@ firrtl.circuit "TopModuleIsClass" {
 }
 
 // -----
+
+firrtl.circuit "PathNonLocalTarget" {
+  firrtl.module @Other() {
+    %w = firrtl.wire sym @x : !firrtl.uint<1>
+  }
+  firrtl.module @PathNonLocalTarget() {
+    // expected-error @below {{op has non-local target}}
+    %rw = firrtl.path <@Other::@x>
+  }
+}
+
+// -----
+
+firrtl.circuit "PathBadTarget" {
+  firrtl.module @PathBadTarget() {
+    // expected-error @below {{has target that cannot be resolved: #hw.innerNameRef<@PathBadTarget::@x>}}
+    %rw = firrtl.path <@PathBadTarget::@x>
+  }
+}
+
+// -----
 // Classes cannot have hardware ports.
 
 firrtl.circuit "ClassCannotHaveHardwarePorts" {

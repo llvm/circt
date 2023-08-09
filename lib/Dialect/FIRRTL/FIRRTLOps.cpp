@@ -4558,6 +4558,26 @@ FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
 }
 
 //===----------------------------------------------------------------------===//
+// Properties
+//===----------------------------------------------------------------------===//
+
+LogicalResult PathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  auto targetRef = getTarget();
+
+  // Check if the target is local.
+  if (targetRef.getModule() !=
+      (*this)->getParentOfType<FModuleLike>().getModuleNameAttr())
+    return emitOpError() << "has non-local target";
+
+  // Check that the target exists.
+  auto target = ns.lookup(targetRef);
+  if (!target)
+    return emitOpError() << "has target that cannot be resolved: " << targetRef;
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // VerbatimExprOp
 //===----------------------------------------------------------------------===//
 
