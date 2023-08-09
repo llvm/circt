@@ -510,9 +510,9 @@ private:
                                       CircuitLoweringState &loweringState);
 
   LogicalResult
-  lowerModulePortsAndMoveBody(FModuleOp oldModule,
+  lowerModulePortsAndMoveBody(FModuleOp oldModule, hw::HWModuleOp newModule,
                               CircuitLoweringState &loweringState);
-  LogicalResult lowerModuleOperations(FModuleOp oldModule,
+  LogicalResult lowerModuleOperations(hw::HWModuleOp module,
                                       CircuitLoweringState &loweringState);
 };
 
@@ -560,7 +560,7 @@ void FIRRTLModuleLowering::runOnOperation() {
       circuit, enableAnnotationWarning, emitChiselAssertsAsSVA,
       &getAnalysis<InstanceGraph>(), &getAnalysis<NLATable>());
 
-  SmallVector<FModuleOp, 32> modulesToProcess;
+  SmallVector<hw::HWModuleOp, 32> modulesToProcess;
 
   AnnotationSet circuitAnno(circuit);
   moveVerifAnno(getOperation(), circuitAnno, extractAssertAnnoClass,
@@ -576,44 +576,53 @@ void FIRRTLModuleLowering::runOnOperation() {
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across. If any module fails to lower, return early.
   for (auto &op : make_early_inc_range(circuitBody->getOperations())) {
-    TypeSwitch<Operation *>(&op)
-        .Case<FModuleOp>([&](auto module) {
-          auto loweredMod = lowerModule(module, topLevelModule, state);
-          if (!loweredMod)
-            return signalPassFailure();
+    auto result =
+        TypeSwitch<Operation *, LogicalResult>(&op)
+            .Case<FModuleOp>([&](auto module) {
+              auto loweredMod = lowerModule(module, topLevelModule, state);
+              if (!loweredMod)
+                return failure();
 
-          state.oldToNewModuleMap[&op] = loweredMod;
-          modulesToProcess.push_back(module);
-          // Lower all the alias types.
-          module.walk([&](Operation *op) {
-            for (auto res : op->getResults()) {
-              if (auto aliasType =
-                      type_dyn_cast<BaseTypeAliasType>(res.getType()))
-                state.lowerType(aliasType, op->getLoc());
-            }
-          });
-        })
-        .Case<FExtModuleOp>([&](auto extModule) {
-          auto loweredMod = lowerExtModule(extModule, topLevelModule, state);
-          if (!loweredMod)
-            return signalPassFailure();
-          state.oldToNewModuleMap[&op] = loweredMod;
-        })
-        .Case<FMemModuleOp>([&](auto memModule) {
-          auto loweredMod = lowerMemModule(memModule, topLevelModule, state);
-          if (!loweredMod)
-            return signalPassFailure();
-          state.oldToNewModuleMap[&op] = loweredMod;
-        })
-        .Default([&](Operation *op) {
-          // We don't know what this op is.  If it has no illegal FIRRTL types,
-          // we can forward the operation.  Otherwise, we emit an error and drop
-          // the operation from the circuit.
-          if (succeeded(verifyOpLegality(op)))
-            op->moveBefore(topLevelModule, topLevelModule->end());
-          else
-            return signalPassFailure();
-        });
+              state.oldToNewModuleMap[&op] = loweredMod;
+              modulesToProcess.push_back(loweredMod);
+              // Lower all the alias types.
+              module.walk([&](Operation *op) {
+                for (auto res : op->getResults()) {
+                  if (auto aliasType =
+                          type_dyn_cast<BaseTypeAliasType>(res.getType()))
+                    state.lowerType(aliasType, op->getLoc());
+                }
+              });
+              return lowerModulePortsAndMoveBody(module, loweredMod, state);
+            })
+            .Case<FExtModuleOp>([&](auto extModule) {
+              auto loweredMod =
+                  lowerExtModule(extModule, topLevelModule, state);
+              if (!loweredMod)
+                return failure();
+              state.oldToNewModuleMap[&op] = loweredMod;
+              return success();
+            })
+            .Case<FMemModuleOp>([&](auto memModule) {
+              auto loweredMod =
+                  lowerMemModule(memModule, topLevelModule, state);
+              if (!loweredMod)
+                return failure();
+              state.oldToNewModuleMap[&op] = loweredMod;
+              return success();
+            })
+            .Default([&](Operation *op) {
+              // We don't know what this op is.  If it has no illegal FIRRTL
+              // types, we can forward the operation.  Otherwise, we emit an
+              // error and drop the operation from the circuit.
+              if (succeeded(verifyOpLegality(op)))
+                op->moveBefore(topLevelModule, topLevelModule->end());
+              else
+                return failure();
+              return success();
+            });
+    if (failed(result))
+      return signalPassFailure();
   }
   // Ensure no more TypeDecl can be added to the global TypeScope.
   state.typeAliases.freeze();
@@ -657,19 +666,8 @@ void FIRRTLModuleLowering::runOnOperation() {
         moduleHierarchyFileAttrName,
         ArrayAttr::get(&getContext(), testHarnessHierarchyFiles));
 
-  // Now that we've lowered all of the modules, move the bodies over and
-  // handle port conversions.
-  auto result = mlir::failableParallelForEachN(
-      &getContext(), 0, modulesToProcess.size(), [&](auto index) {
-        return lowerModulePortsAndMoveBody(modulesToProcess[index], state);
-      });
-
-  // If any module failed to process ports, return early.
-  if (failed(result))
-    return signalPassFailure();
-
   // Finally, lower all operations.
-  result = mlir::failableParallelForEachN(
+  auto result = mlir::failableParallelForEachN(
       &getContext(), 0, modulesToProcess.size(), [&](auto index) {
         return lowerModuleOperations(modulesToProcess[index], state);
       });
@@ -1308,15 +1306,10 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
 
 /// Now that we have the operations for the hw.module's corresponding to the
 /// firrtl.module's, we can go through and move the bodies over, updating the
-/// ports.  Operations within the body will be processed separately.
+/// ports and output op.
 LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
-    FModuleOp oldModule, CircuitLoweringState &loweringState) {
-  auto newModule =
-      dyn_cast_or_null<hw::HWModuleOp>(loweringState.getNewModule(oldModule));
-  // Don't touch modules if we failed to lower ports.
-  if (!newModule)
-    return success();
-
+    FModuleOp oldModule, hw::HWModuleOp newModule,
+    CircuitLoweringState &loweringState) {
   ImplicitLocOpBuilder bodyBuilder(oldModule.getLoc(), newModule.getBody());
 
   // Use a placeholder instruction be a cursor that indicates where we want to
@@ -1772,14 +1765,8 @@ private:
 } // end anonymous namespace
 
 LogicalResult FIRRTLModuleLowering::lowerModuleOperations(
-    FModuleOp oldModule, CircuitLoweringState &loweringState) {
-  auto newModule =
-      dyn_cast_or_null<hw::HWModuleOp>(loweringState.getNewModule(oldModule));
-  // Don't touch modules if we failed to lower ports.
-  if (!newModule)
-    return success();
-
-  return FIRRTLLowering(newModule, loweringState).run();
+    hw::HWModuleOp module, CircuitLoweringState &loweringState) {
+  return FIRRTLLowering(module, loweringState).run();
 }
 
 // This is the main entrypoint for the lowering pass.
