@@ -127,6 +127,7 @@ TEST(RLELogicTest, ParsePrintTest) {
 TEST(RLELogicTest, ContainsTest) {
   RLELogic rlelog = verif(RLELogic::encode("Z0XHZZZZZ000-ZXXXXXXXZZZHHHHH"));
 
+  // Char template interface
   EXPECT_FALSE((rlelog.containsOnly<'U'>()));
   EXPECT_FALSE((rlelog.containsOnly<'0'>()));
   EXPECT_TRUE((rlelog.containsOnly<'0', 'Z', 'X', 'H', '-'>()));
@@ -141,32 +142,63 @@ TEST(RLELogicTest, ContainsTest) {
   EXPECT_TRUE((rlelog.containsAny<'0', 'Z', 'X', 'H', '-'>()));
   EXPECT_TRUE((rlelog.containsAny<'0', 'Z', 'U'>()));
 
-  EXPECT_FALSE(rlelog.containsOnly(rlelog.getDigitMask(), LogicDigit::LD_U));
-  EXPECT_FALSE(rlelog.containsOnly(rlelog.getDigitMask(), LogicDigit::LD_0));
-  EXPECT_TRUE(rlelog.containsOnly(rlelog.getDigitMask(), LogicDigit::LD_0,
-                                  LogicDigit::LD_Z, LogicDigit::LD_X,
+  // Argument list interface
+  EXPECT_FALSE(rlelog.containsOnly(LogicDigit::LD_U));
+  EXPECT_FALSE(rlelog.containsOnly(LogicDigit::LD_0));
+  EXPECT_TRUE(rlelog.containsOnly(LogicDigit::LD_0, LogicDigit::LD_Z,
+                                  LogicDigit::LD_X, LogicDigit::LD_H,
+                                  LogicDigit::LD_DC));
+  EXPECT_TRUE(rlelog.containsOnly(LogicDigit::LD_0, LogicDigit::LD_Z,
+                                  LogicDigit::LD_X, LogicDigit::LD_U,
                                   LogicDigit::LD_H, LogicDigit::LD_DC));
-  EXPECT_TRUE(rlelog.containsOnly(
-      rlelog.getDigitMask(), LogicDigit::LD_0, LogicDigit::LD_Z,
-      LogicDigit::LD_X, LogicDigit::LD_U, LogicDigit::LD_H, LogicDigit::LD_DC));
-  EXPECT_FALSE(rlelog.containsOnly(rlelog.getDigitMask(), LogicDigit::LD_0,
-                                   LogicDigit::LD_Z, LogicDigit::LD_X,
-                                   LogicDigit::LD_U, LogicDigit::LD_H));
-  EXPECT_FALSE(rlelog.containsOnly(rlelog.getDigitMask(), LogicDigit::LD_Z,
+  EXPECT_FALSE(rlelog.containsOnly(LogicDigit::LD_0, LogicDigit::LD_Z,
                                    LogicDigit::LD_X, LogicDigit::LD_U,
-                                   LogicDigit::LD_H, LogicDigit::LD_DC));
+                                   LogicDigit::LD_H));
+  EXPECT_FALSE(rlelog.containsOnly(LogicDigit::LD_Z, LogicDigit::LD_X,
+                                   LogicDigit::LD_U, LogicDigit::LD_H,
+                                   LogicDigit::LD_DC));
 
-  EXPECT_TRUE(rlelog.containsAny(rlelog.getDigitMask(), LogicDigit::LD_DC));
-  EXPECT_FALSE(rlelog.containsAny(rlelog.getDigitMask(), LogicDigit::LD_U));
-  EXPECT_FALSE(rlelog.containsAny(rlelog.getDigitMask(), LogicDigit::LD_U,
-                                  LogicDigit::LD_W));
-  EXPECT_TRUE(rlelog.containsAny(rlelog.getDigitMask(), LogicDigit::LD_U,
-                                 LogicDigit::LD_W, LogicDigit::LD_DC));
-  EXPECT_TRUE(rlelog.containsAny(rlelog.getDigitMask(), LogicDigit::LD_0,
-                                 LogicDigit::LD_Z, LogicDigit::LD_X,
-                                 LogicDigit::LD_H, LogicDigit::LD_DC));
-  EXPECT_TRUE(rlelog.containsAny(rlelog.getDigitMask(), LogicDigit::LD_0,
-                                 LogicDigit::LD_Z, LogicDigit::LD_U));
+  EXPECT_TRUE(rlelog.containsAny(LogicDigit::LD_DC));
+  EXPECT_FALSE(rlelog.containsAny(LogicDigit::LD_U));
+  EXPECT_FALSE(rlelog.containsAny(LogicDigit::LD_U, LogicDigit::LD_W));
+  EXPECT_TRUE(rlelog.containsAny(LogicDigit::LD_U, LogicDigit::LD_W,
+                                 LogicDigit::LD_DC));
+  EXPECT_TRUE(rlelog.containsAny(LogicDigit::LD_0, LogicDigit::LD_Z,
+                                 LogicDigit::LD_X, LogicDigit::LD_H,
+                                 LogicDigit::LD_DC));
+  EXPECT_TRUE(
+      rlelog.containsAny(LogicDigit::LD_0, LogicDigit::LD_Z, LogicDigit::LD_U));
+
+  // ArrayRef interface
+  EXPECT_FALSE(rlelog.containsAny(ArrayRef<LogicDigit>()));
+  EXPECT_FALSE(rlelog.containsOnly(ArrayRef<LogicDigit>()));
+
+  EXPECT_FALSE(rlelog.containsOnly(ArrayRef<LogicDigit>({LogicDigit::LD_U})));
+  EXPECT_FALSE(rlelog.containsOnly(ArrayRef<LogicDigit>({LogicDigit::LD_0})));
+  EXPECT_TRUE(rlelog.containsOnly(ArrayRef<LogicDigit>(
+      {LogicDigit::LD_0, LogicDigit::LD_Z, LogicDigit::LD_X, LogicDigit::LD_H,
+       LogicDigit::LD_DC})));
+  EXPECT_TRUE(rlelog.containsOnly(ArrayRef<LogicDigit>(
+      {LogicDigit::LD_0, LogicDigit::LD_Z, LogicDigit::LD_X, LogicDigit::LD_U,
+       LogicDigit::LD_H, LogicDigit::LD_DC})));
+  EXPECT_FALSE(rlelog.containsOnly(ArrayRef<LogicDigit>(
+      {LogicDigit::LD_0, LogicDigit::LD_Z, LogicDigit::LD_X, LogicDigit::LD_U,
+       LogicDigit::LD_H})));
+  EXPECT_FALSE(rlelog.containsOnly(ArrayRef<LogicDigit>(
+      {LogicDigit::LD_Z, LogicDigit::LD_X, LogicDigit::LD_U, LogicDigit::LD_H,
+       LogicDigit::LD_DC})));
+
+  EXPECT_TRUE(rlelog.containsAny(ArrayRef<LogicDigit>({LogicDigit::LD_DC})));
+  EXPECT_FALSE(rlelog.containsAny(ArrayRef<LogicDigit>({LogicDigit::LD_U})));
+  EXPECT_FALSE(rlelog.containsAny(
+      ArrayRef<LogicDigit>({LogicDigit::LD_U, LogicDigit::LD_W})));
+  EXPECT_TRUE(rlelog.containsAny(ArrayRef<LogicDigit>(
+      {LogicDigit::LD_U, LogicDigit::LD_W, LogicDigit::LD_DC})));
+  EXPECT_TRUE(rlelog.containsAny(ArrayRef<LogicDigit>(
+      {LogicDigit::LD_0, LogicDigit::LD_Z, LogicDigit::LD_X, LogicDigit::LD_H,
+       LogicDigit::LD_DC})));
+  EXPECT_TRUE(rlelog.containsAny(ArrayRef<LogicDigit>(
+      {LogicDigit::LD_0, LogicDigit::LD_Z, LogicDigit::LD_U})));
 }
 
 TEST(RLELogicTest, FilledTest) {

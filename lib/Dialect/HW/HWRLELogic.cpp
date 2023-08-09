@@ -69,13 +69,12 @@ RLELogic RLELogic::encode(ArrayRef<LogicDigit> digits,
 
   LogicDigit prevDigit = digits.front();
   uint8_t runLength = 1;
-  assert(containsAny(analysisResult->foundDigitsMask, prevDigit) &&
+  assert(maskContainsAny(analysisResult->foundDigitsMask,
+                         makeDigitMask(prevDigit)) &&
          "digit did not occur during analysis");
   SizeType byteCount = 1;
 
   for (auto digit : digits.drop_front()) {
-    assert(containsAny(analysisResult->foundDigitsMask, digit) &&
-           "digit did not occur during analysis");
 
     if (byteCount == analysisResult->requiredBytes)
       break;
@@ -91,6 +90,9 @@ RLELogic RLELogic::encode(ArrayRef<LogicDigit> digits,
       }
     } else {
       // Digit changed
+      assert(maskContainsAny(analysisResult->foundDigitsMask,
+                             makeDigitMask(digit)) &&
+             "digit did not occur during analysis");
       rlePtr[byteCount - 1] = toCode(prevDigit, runLength);
       byteCount++;
       runLength = 1;

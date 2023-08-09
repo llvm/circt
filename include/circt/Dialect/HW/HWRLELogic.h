@@ -27,7 +27,7 @@ namespace hw {
 /// RLELogic uses run-length encoding to reduce the encoded size of values
 /// containing long stretches of identical digits.
 /// The run-length of the most siginificant encoded digit is always implicitly
-/// indefinite. Thus, an RLELogic always has either infinite length
+/// infinite. Thus, an RLELogic always has either indefinite length
 /// or zero length for special non-value encodings. E.g., the RLELogic values
 /// "[msb] ...XXXXXXXXL01 [lsb]" and "[msb] ...XL01 [lsb]" are equal.
 /// Encodings that do not require more than eight bytes are stored directly
@@ -58,8 +58,9 @@ public:
     uint16_t foundDigitsMask = 0;
 
     bool isInteger() const {
-      return containsOnly(foundDigitsMask, logicdigits::LogicDigit::LD_0,
-                          logicdigits::LogicDigit::LD_1);
+      if (!isValid())
+        return false;
+      return maskContainsOnly(foundDigitsMask, makeDigitMask<'0', '1'>());
     };
 
     bool isValid() const { return requiredBytes != 0; };
@@ -165,46 +166,54 @@ public:
   /// Retuns true iff the encoded value contains any of the given character-
   /// represented logic digits at least once.
   template <char... Cs>
-  typename std::enable_if<
-      (logicdigits::isValidLogicDigit(logicdigits::charToLogicDigit(Cs)) &&
-       ...),
-      bool>::type
-  containsAny() const {
+  bool containsAny() const {
     if (!isValid())
       return false;
-    uint16_t mask = (makeDigitMask(logicdigits::charToLogicDigit(Cs)) | ...);
-    return (digitMask & mask) != 0;
+    return maskContainsAny(digitMask, makeDigitMask<Cs...>());
   }
 
   /// Retuns true iff the encoded value contains any of the given logic digits
   /// at least once.
   template <typename... Args>
-  static bool containsAny(uint16_t digMask, logicdigits::LogicDigit logDig,
-                          Args... args) {
-    return (digMask & makeDigitMask(logDig, args...)) != 0;
+  bool containsAny(Args... args) const {
+    if (!isValid())
+      return false;
+    return maskContainsAny(digitMask, makeDigitMask(args...));
   };
+
+  /// Retuns true iff the encoded value contains any of the given logic digits
+  /// at least once.
+  bool containsAny(llvm::ArrayRef<logicdigits::LogicDigit> digits) const {
+    if (!isValid())
+      return false;
+    return maskContainsAny(digitMask, makeDigitMask(digits));
+  }
 
   /// Retuns true iff the encoded value contains no other than the given
   /// character-represented logic digits.
   template <char... Cs>
-  typename std::enable_if<
-      (logicdigits::isValidLogicDigit(logicdigits::charToLogicDigit(Cs)) &&
-       ...),
-      bool>::type
-  containsOnly() const {
+  bool containsOnly() const {
     if (!isValid())
       return false;
-    uint16_t mask = (makeDigitMask(logicdigits::charToLogicDigit(Cs)) | ...);
-    return (digitMask & ~mask) == 0;
+    return maskContainsOnly(digitMask, makeDigitMask<Cs...>());
   }
 
   /// Retuns true iff the encoded value contains no other than the given logic
   /// digits.
   template <typename... Args>
-  static bool containsOnly(uint16_t digMask, logicdigits::LogicDigit logDig,
-                           Args... args) {
-    return (digMask & ~makeDigitMask(logDig, args...)) == 0;
+  bool containsOnly(Args... args) const {
+    if (!isValid())
+      return false;
+    return maskContainsOnly(digitMask, makeDigitMask(args...));
   };
+
+  /// Retuns true iff the encoded value contains no other than the given logic
+  /// digits.
+  bool containsOnly(llvm::ArrayRef<logicdigits::LogicDigit> digits) const {
+    if (!isValid())
+      return false;
+    return maskContainsOnly(digitMask, makeDigitMask(digits));
+  }
 
   /// Retuns true iff the encoded value is an integer. I.e., it contains only
   /// '0' or '1' digits.
@@ -251,7 +260,7 @@ public:
 
   /// Parse an RLELogic value from a string
   static RLELogic encode(llvm::StringRef str) {
-    // Could be done more nicely with rages/views in C++20
+    // Could be done more nicely with ranges/views in C++20
     llvm::SmallVector<logicdigits::LogicDigit, 32> digitVector;
     const auto length = str.size();
     digitVector.resize_for_overwrite(length);
@@ -428,6 +437,7 @@ private:
   static constexpr bool isSelfContained(SizeType byteCount) {
     return byteCount <= maxSelfContainedBytes;
   };
+
   /// Returns true iff the encoded value does not require a heap allocation
   bool isSelfContained() const { return isSelfContained(byteCount); };
 
@@ -460,7 +470,7 @@ private:
   static RunLengthCode toCode(logicdigits::LogicDigit digit,
                               uint8_t runLength) {
     assert((runLength > 0 && runLength <= 16) && "invalid run-length");
-    assert(isValidLogicDigit(digit) && "attemtmpt to encode invalid digit");
+    assert(isValidLogicDigit(digit) && "attempt to encode invalid digit");
     return static_cast<RunLengthCode>(digit) | ((runLength - 1) << 4);
   }
 
@@ -475,6 +485,39 @@ private:
                                           Args... args) {
     return makeDigitMask(logDig) | makeDigitMask(args...);
   };
+
+  /// Creates a bit mask of the given logic digits
+  static uint16_t
+  makeDigitMask(llvm::ArrayRef<logicdigits::LogicDigit> logDigits) {
+    uint16_t mask = 0;
+    for (auto digit : logDigits)
+      mask |= makeDigitMask(digit);
+    return mask;
+  };
+
+  /// Creates a bit mask of the given character represented logic digits.
+  /// Only enabled if all character template arguments represent a valid
+  /// logic digit.
+  template <char... Cs>
+  typename std::enable_if<
+      (logicdigits::isValidLogicDigit(logicdigits::charToLogicDigit(Cs)) &&
+       ...),
+      uint16_t>::type static constexpr makeDigitMask() {
+    return (makeDigitMask(logicdigits::charToLogicDigit(Cs)) | ...);
+  }
+
+  /// Helper function checking if digit bit mask 'thisMask' contains no
+  /// other digits than those indicated in digit bit mask 'otherMask'.
+  static constexpr bool maskContainsAny(uint16_t thisMask, uint16_t otherMask) {
+    return (thisMask & otherMask) != 0;
+  }
+
+  /// Helper function checking if digit bit mask 'thisMask' contains any
+  /// of the digits indicated in digit bit mask 'otherMask'
+  static constexpr bool maskContainsOnly(uint16_t thisMask,
+                                         uint16_t otherMask) {
+    return (thisMask & ~otherMask) == 0;
+  }
 
   /// Value/Pointer union containing the value buffer directly or providing a
   /// pointer to it.
