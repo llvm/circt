@@ -6,7 +6,7 @@ from pycde.testing import unittestmodule
 
 from pycde.bit_pat import BitPat, dict_lookup
 
-# CHECK:  msft.module @TestBitPat {} (%inp1: ui36, %inp2: si25, %inp3: i32) -> (out1: i32, out2: i32, match: i1, no_match: i1)
+# CHECK-LABEL:  msft.module @TestBitPat {} (%inp1: ui36, %inp2: si25, %inp3: i32) -> (out1: i32, out2: i32, match: i1, no_match: i1)
 # CHECK-NEXT:     %c3_i32 = hw.constant 3 : i32
 # CHECK-NEXT:     %c28799_i32 = hw.constant 28799 : i32
 # CHECK-NEXT:     %c4099_i32 = hw.constant 4099 : i32
