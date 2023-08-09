@@ -26,10 +26,18 @@ ModuleOp circt::om::Evaluator::getModule() {
   return cast<ModuleOp>(symbolTable.getOp());
 }
 
+SmallVector<evaluator::EvaluatorValuePtr>
+circt::om::getEvaluatorValuesFromAttributes(ArrayRef<Attribute> attributes) {
+  SmallVector<evaluator::EvaluatorValuePtr> values;
+  values.reserve(attributes.size());
+  for (auto attr : attributes)
+    values.push_back(std::make_shared<evaluator::AttributeValue>(attr));
+  return values;
+}
+
 /// Instantiate an Object with its class name and actual parameters.
-FailureOr<std::shared_ptr<Object>>
-circt::om::Evaluator::instantiate(StringAttr className,
-                                  ArrayRef<ObjectValue> actualParams) {
+FailureOr<std::shared_ptr<evaluator::ObjectValue>> circt::om::Evaluator::instantiate(
+    StringAttr className, ArrayRef<evaluator::EvaluatorValuePtr> actualParams) {
   ClassOp cls = symbolTable.lookup<ClassOp>(className);
   if (!cls)
     return symbolTable.getOp()->emitError("unknown class name ") << className;
@@ -42,7 +50,16 @@ circt::om::Evaluator::instantiate(StringAttr className,
     auto error = cls.emitError("actual parameter list length (")
                  << actualParams.size() << ") does not match formal "
                  << "parameter list length (" << formalParamTypes.size() << ")";
-    error.attachNote() << "actual parameters: " << actualParams;
+    auto &diag = error.attachNote() << "actual parameters: ";
+    // FIXME: `diag << actualParams` doesn't work for some reason.
+    bool isFirst = true;
+    for (auto param : actualParams) {
+      if (isFirst)
+        isFirst = false;
+      else
+        diag << ", ";
+      diag << param;
+    }
     error.attachNote(cls.getLoc()) << "formal parameters: " << formalParamTypes;
     return error;
   }
@@ -51,11 +68,11 @@ circt::om::Evaluator::instantiate(StringAttr className,
   for (auto [actualParam, formalParamName, formalParamType] :
        llvm::zip(actualParams, formalParamNames, formalParamTypes)) {
     Type actualParamType;
-    if (auto *attr = std::get_if<Attribute>(&actualParam))
-      if (auto typedActualParam = attr->dyn_cast_or_null<TypedAttr>())
+    if (auto *attr = dyn_cast<evaluator::AttributeValue>(actualParam.get()))
+      if (auto typedActualParam = attr->getAttr().dyn_cast_or_null<TypedAttr>())
         actualParamType = typedActualParam.getType();
-    if (auto *object = std::get_if<std::shared_ptr<Object>>(&actualParam))
-      actualParamType = object->get()->getType();
+    if (auto *object = dyn_cast<evaluator::ObjectValue>(actualParam.get()))
+      actualParamType = object->getType();
 
     if (!actualParamType)
       return cls.emitError("actual parameter for ")
@@ -64,19 +81,20 @@ circt::om::Evaluator::instantiate(StringAttr className,
     if (actualParamType != formalParamType) {
       auto error = cls.emitError("actual parameter for ")
                    << formalParamName << " has invalid type";
-      error.attachNote() << "actual parameter: " << actualParam;
+      error.attachNote() << "actual parameter: " << *actualParam;
       error.attachNote() << "format parameter type: " << formalParamType;
       return error;
     }
   }
 
   // Instantiate the fields.
-  ObjectFields fields;
+  evaluator::ObjectFields fields;
   for (auto field : cls.getOps<ClassFieldOp>()) {
     StringAttr name = field.getSymNameAttr();
     Value value = field.getValue();
 
-    FailureOr<ObjectValue> result = evaluateValue(value, actualParams);
+    FailureOr<evaluator::EvaluatorValuePtr> result =
+        evaluateValue(value, actualParams);
     if (failed(result))
       return failure();
 
@@ -84,23 +102,22 @@ circt::om::Evaluator::instantiate(StringAttr className,
   }
 
   // Allocate the Object. Further refinement is expected.
-  auto *object = new Object(cls, fields);
+  auto *object = new evaluator::ObjectValue(cls, fields);
 
-  return success(std::shared_ptr<Object>(object));
+  return success(std::shared_ptr<evaluator::ObjectValue>(object));
 }
 
 /// Evaluate a Value in a Class body according to the semantics of the IR. The
 /// actual parameters are the values supplied at the current instantiation of
 /// the Class being evaluated.
-FailureOr<ObjectValue>
-circt::om::Evaluator::evaluateValue(Value value,
-                                    ArrayRef<ObjectValue> actualParams) {
-  return TypeSwitch<Value, FailureOr<ObjectValue>>(value)
+FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateValue(
+    Value value, ArrayRef<evaluator::EvaluatorValuePtr> actualParams) {
+  return TypeSwitch<Value, FailureOr<evaluator::EvaluatorValuePtr>>(value)
       .Case([&](BlockArgument arg) {
         return evaluateParameter(arg, actualParams);
       })
       .Case([&](OpResult result) {
-        return TypeSwitch<Operation *, FailureOr<ObjectValue>>(
+        return TypeSwitch<Operation *, FailureOr<evaluator::EvaluatorValuePtr>>(
                    result.getDefiningOp())
             .Case([&](ConstantOp op) {
               return evaluateConstant(op, actualParams);
@@ -111,6 +128,9 @@ circt::om::Evaluator::evaluateValue(Value value,
             .Case([&](ObjectFieldOp op) {
               return evaluateObjectField(op, actualParams);
             })
+            .Case([&](ListCreateOp op) {
+              return evaluateListCreate(op, actualParams);
+            })
             .Default([&](Operation *op) {
               auto error = op->emitError("unable to evaluate value");
               error.attachNote() << "value: " << value;
@@ -120,22 +140,25 @@ circt::om::Evaluator::evaluateValue(Value value,
 }
 
 /// Evaluator dispatch function for parameters.
-FailureOr<ObjectValue>
-circt::om::Evaluator::evaluateParameter(BlockArgument formalParam,
-                                        ArrayRef<ObjectValue> actualParams) {
+FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateParameter(
+    BlockArgument formalParam,
+    ArrayRef<evaluator::EvaluatorValuePtr> actualParams) {
   return success(actualParams[formalParam.getArgNumber()]);
 }
 
 /// Evaluator dispatch function for constants.
-FailureOr<ObjectValue>
-circt::om::Evaluator::evaluateConstant(ConstantOp op,
-                                       ArrayRef<ObjectValue> actualParams) {
-  return success(op.getValue());
+FailureOr<circt::om::evaluator::EvaluatorValuePtr>
+circt::om::Evaluator::evaluateConstant(
+    ConstantOp op,
+    ArrayRef<circt::om::evaluator::EvaluatorValuePtr> actualParams) {
+  return success(
+      std::make_shared<circt::om::evaluator::AttributeValue>(op.getValue()));
 }
 
 /// Evaluator dispatch function for Object instances.
-FailureOr<ObjectValue> circt::om::Evaluator::evaluateObjectInstance(
-    ObjectOp op, ArrayRef<ObjectValue> actualParams) {
+FailureOr<evaluator::EvaluatorValuePtr>
+circt::om::Evaluator::evaluateObjectInstance(
+    ObjectOp op, ArrayRef<evaluator::EvaluatorValuePtr> actualParams) {
   // First, check if we have already evaluated this object, and return it if so.
   auto existingInstance = objects.find(op);
   if (existingInstance != objects.end())
@@ -144,9 +167,10 @@ FailureOr<ObjectValue> circt::om::Evaluator::evaluateObjectInstance(
   // If we need to instantiate a new object, evaluate values for all of its
   // actual parameters. Note that this is eager evaluation, which precludes
   // creating cycles in the object model. Further refinement is expected.
-  SmallVector<ObjectValue> objectParams;
+  SmallVector<evaluator::EvaluatorValuePtr> objectParams;
   for (auto param : op.getActualParams()) {
-    FailureOr<ObjectValue> result = evaluateValue(param, actualParams);
+    FailureOr<evaluator::EvaluatorValuePtr> result =
+        evaluateValue(param, actualParams);
     if (failed(result))
       return result;
     objectParams.push_back(result.value());
@@ -160,44 +184,54 @@ FailureOr<ObjectValue> circt::om::Evaluator::evaluateObjectInstance(
 }
 
 /// Evaluator dispatch function for Object fields.
-FailureOr<ObjectValue>
-circt::om::Evaluator::evaluateObjectField(ObjectFieldOp op,
-                                          ArrayRef<ObjectValue> actualParams) {
+FailureOr<evaluator::EvaluatorValuePtr>
+circt::om::Evaluator::evaluateObjectField(
+    ObjectFieldOp op, ArrayRef<evaluator::EvaluatorValuePtr> actualParams) {
   // Evaluate the Object itself, in case it hasn't been evaluated yet.
-  FailureOr<ObjectValue> currentObjectResult =
+  FailureOr<evaluator::EvaluatorValuePtr> currentObjectResult =
       evaluateValue(op.getObject(), actualParams);
   if (failed(currentObjectResult))
     return currentObjectResult;
 
-  std::shared_ptr<Object> currentObject =
-      std::get<std::shared_ptr<Object>>(currentObjectResult.value());
+  auto *currentObject =
+      llvm::cast<evaluator::ObjectValue>(currentObjectResult.value().get());
 
   // Iteratively access nested fields through the path until we reach the final
   // field in the path.
-  ObjectValue finalField;
+  evaluator::EvaluatorValuePtr finalField;
   for (auto field : op.getFieldPath().getAsRange<FlatSymbolRefAttr>()) {
     auto currentField = currentObject->getField(field.getAttr());
     finalField = currentField.value();
-    if (auto *nextObject = std::get_if<std::shared_ptr<Object>>(&finalField))
-      currentObject = *nextObject;
+    if (auto *nextObject = llvm::dyn_cast<evaluator::ObjectValue>(finalField.get()))
+      currentObject = nextObject;
   }
 
   // Return the field being accessed.
   return finalField;
 }
 
-/// Construct an Object of the given type with the given fields.
-circt::om::Object::Object(ClassOp cls, ObjectFields &fields)
-    : cls(cls), fields(fields) {}
+/// Evaluator dispatch function for List creation.
+FailureOr<evaluator::EvaluatorValuePtr>
+circt::om::Evaluator::evaluateListCreate(
+    ListCreateOp op, ArrayRef<evaluator::EvaluatorValuePtr> actualParams) {
+  // Evaluate the Object itself, in case it hasn't been evaluated yet.
+  SmallVector<evaluator::EvaluatorValuePtr> values;
+  for (auto operand : op.getOperands()) {
+    auto result = evaluateValue(operand, actualParams);
+    if (failed(result))
+      return result;
+    values.push_back(result.value());
+  }
 
-/// Get the type of the Object.
-Type circt::om::Object::getType() {
-  return ClassType::get(cls.getContext(),
-                        FlatSymbolRefAttr::get(cls.getNameAttr()));
+  // Return the list.
+  evaluator::EvaluatorValuePtr result =
+      std::make_shared<evaluator::ListValue>(op.getType(), std::move(values));
+  return result;
 }
 
 /// Get a field of the Object by name.
-FailureOr<ObjectValue> circt::om::Object::getField(StringAttr name) {
+FailureOr<EvaluatorValuePtr>
+circt::om::evaluator::ObjectValue::getField(StringAttr name) {
   auto field = fields.find(name);
   if (field == fields.end())
     return cls.emitError("field ") << name << " does not exist";
