@@ -855,17 +855,28 @@ private:
 namespace {
 struct PipelineToHWPass : public PipelineToHWBase<PipelineToHWPass> {
   void runOnOperation() override;
+
+private:
+  // Lowers pipelines within HWModules. This pass is currently expecting that
+  // Pipelines are always nested with HWModule's but could be written to be more
+  // generic.
+  void runOnHWModule(hw::HWModuleOp mod);
 };
 
 void PipelineToHWPass::runOnOperation() {
+  for (auto hwMod : getOperation().getOps<hw::HWModuleOp>())
+    runOnHWModule(hwMod);
+}
+
+void PipelineToHWPass::runOnHWModule(hw::HWModuleOp mod) {
   OpBuilder builder(&getContext());
   // Iterate over each pipeline op in the module and convert.
   // Note: This pass matches on `hw::ModuleOp`s and not directly on the
   // `ScheduledPipelineOp` due to the `ScheduledPipelineOp` being erased during
   // this pass.
   size_t pipelinesSeen = 0;
-  for (auto pipeline : llvm::make_early_inc_range(
-           getOperation().getOps<ScheduledPipelineOp>())) {
+  for (auto pipeline :
+       llvm::make_early_inc_range(mod.getOps<ScheduledPipelineOp>())) {
     if (outlineStages) {
       if (failed(PipelineOutlineLowering(pipelinesSeen, pipeline, builder,
                                          clockGateRegs)
