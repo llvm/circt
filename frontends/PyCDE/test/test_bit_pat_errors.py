@@ -19,7 +19,7 @@ class BitPatError(Module):
 
 # -----
 
-    
+
 @unittestmodule()
 class BitPatError(Module):
   out1 = Output(Bits(1))
@@ -32,7 +32,7 @@ class BitPatError(Module):
 
 # -----
 
-    
+
 @unittestmodule()
 class BitPatError(Module):
   out1 = Output(Bits(1))

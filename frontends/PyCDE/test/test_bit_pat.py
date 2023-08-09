@@ -77,4 +77,3 @@ class TestBitPat(Module):
     self.no_match = LB != self.inp2
     self.out1 = BitPat("b00000000000000000000000000010011").as_bits()
     self.out2 = dict_lookup(inst_map, self.inp3, Bits(32)(0x0))
-
