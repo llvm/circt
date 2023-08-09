@@ -509,9 +509,10 @@ private:
                                       Block *topLevelModule,
                                       CircuitLoweringState &loweringState);
 
-  LogicalResult lowerModuleBody(FModuleOp oldModule,
-                                CircuitLoweringState &loweringState);
-  LogicalResult lowerModuleOperations(hw::HWModuleOp module,
+  LogicalResult
+  lowerModulePortsAndMoveBody(FModuleOp oldModule,
+                              CircuitLoweringState &loweringState);
+  LogicalResult lowerModuleOperations(FModuleOp oldModule,
                                       CircuitLoweringState &loweringState);
 };
 
@@ -657,10 +658,20 @@ void FIRRTLModuleLowering::runOnOperation() {
         ArrayAttr::get(&getContext(), testHarnessHierarchyFiles));
 
   // Now that we've lowered all of the modules, move the bodies over and
-  // update any instances that refer to the old modules.
+  // handle port conversions.
   auto result = mlir::failableParallelForEachN(
       &getContext(), 0, modulesToProcess.size(), [&](auto index) {
-        return lowerModuleBody(modulesToProcess[index], state);
+        return lowerModulePortsAndMoveBody(modulesToProcess[index], state);
+      });
+
+  // If any module failed to process ports, return early.
+  if (failed(result))
+    return signalPassFailure();
+
+  // Finally, lower all operations.
+  result = mlir::failableParallelForEachN(
+      &getContext(), 0, modulesToProcess.size(), [&](auto index) {
+        return lowerModuleOperations(modulesToProcess[index], state);
       });
 
   // If any module bodies failed to lower, return early.
@@ -1297,10 +1308,9 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
 
 /// Now that we have the operations for the hw.module's corresponding to the
 /// firrtl.module's, we can go through and move the bodies over, updating the
-/// ports and instances.
-LogicalResult
-FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
-                                      CircuitLoweringState &loweringState) {
+/// ports.  Operations within the body will be processed separately.
+LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
+    FModuleOp oldModule, CircuitLoweringState &loweringState) {
   auto newModule =
       dyn_cast_or_null<hw::HWModuleOp>(loweringState.getNewModule(oldModule));
   // Don't touch modules if we failed to lower ports.
@@ -1406,8 +1416,7 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
   // We are done with our cursor op.
   cursor.erase();
 
-  // Lower all of the other operations.
-  return lowerModuleOperations(newModule, loweringState);
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1763,8 +1772,14 @@ private:
 } // end anonymous namespace
 
 LogicalResult FIRRTLModuleLowering::lowerModuleOperations(
-    hw::HWModuleOp module, CircuitLoweringState &loweringState) {
-  return FIRRTLLowering(module, loweringState).run();
+    FModuleOp oldModule, CircuitLoweringState &loweringState) {
+  auto newModule =
+      dyn_cast_or_null<hw::HWModuleOp>(loweringState.getNewModule(oldModule));
+  // Don't touch modules if we failed to lower ports.
+  if (!newModule)
+    return success();
+
+  return FIRRTLLowering(newModule, loweringState).run();
 }
 
 // This is the main entrypoint for the lowering pass.
