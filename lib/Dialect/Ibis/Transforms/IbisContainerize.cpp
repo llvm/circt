@@ -13,27 +13,18 @@
 #include "circt/Dialect/Ibis/IbisPasses.h"
 #include "circt/Dialect/Ibis/IbisTypes.h"
 
+#include "circt/Support/Namespace.h"
 #include "circt/Support/SymCache.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 using namespace circt;
 using namespace ibis;
 
-// Iterates the symbolcache until a unique name is found.
-static StringAttr getUniqueName(mlir::MLIRContext *ctx, StringAttr baseName,
-                                SymbolCache &symCache) {
-  StringAttr uniqueName = baseName;
-  int uniqueCntr = 0;
-  while (symCache.getDefinition(uniqueName))
-    uniqueName =
-        StringAttr::get(ctx, baseName.strref() + "_" + Twine(uniqueCntr++));
-  return uniqueName;
-}
 namespace {
 
 struct OutlineContainerPattern : public OpConversionPattern<ContainerOp> {
-  OutlineContainerPattern(MLIRContext *context, SymbolCache *symCache)
-      : OpConversionPattern<ContainerOp>(context), symCache(symCache) {}
+  OutlineContainerPattern(MLIRContext *context, Namespace &ns)
+      : OpConversionPattern<ContainerOp>(context), ns(ns) {}
 
   using OpAdaptor = typename OpConversionPattern<ContainerOp>::OpAdaptor;
 
@@ -44,18 +35,14 @@ struct OutlineContainerPattern : public OpConversionPattern<ContainerOp> {
     // parent class name.
     auto parentClass =
         dyn_cast_or_null<ClassOp>(op.getOperation()->getParentOp());
-    if (!parentClass)
-      return failure();
+    assert(parentClass && "This pattern should never be called on a container "
+                          "that is not nested within a class.");
 
     rewriter.setInsertionPoint(parentClass);
-    auto newContainerName =
-        rewriter.getStringAttr(parentClass.getName() + "_" + op.getName());
-    // unique it...
-    newContainerName =
-        getUniqueName(rewriter.getContext(), newContainerName, *symCache);
+    auto newContainerName = rewriter.getStringAttr(
+        ns.newName(parentClass.getName() + "_" + op.getName()));
     auto newContainer =
         rewriter.create<ContainerOp>(op.getLoc(), newContainerName);
-    symCache->addDefinition(newContainerName, newContainer);
 
     rewriter.mergeBlocks(op.getBodyBlock(), newContainer.getBodyBlock(), {});
     rewriter.eraseOp(op);
@@ -70,7 +57,7 @@ struct OutlineContainerPattern : public OpConversionPattern<ContainerOp> {
     return success();
   }
 
-  SymbolCache *symCache;
+  Namespace &ns;
 };
 
 struct ClassToContainerPattern : public OpConversionPattern<ClassOp> {
@@ -106,11 +93,15 @@ LogicalResult ContainerizePass::outlineContainers() {
   ConversionTarget target(*context);
   target.addLegalDialect<IbisDialect>();
   target.addDynamicallyLegalOp<ContainerOp>(
-      [&](auto *op) { return isa<mlir::ModuleOp>(op->getParentOp()); });
+      [&](auto *op) { return !isa<ibis::ClassOp>(op->getParentOp()); });
   RewritePatternSet patterns(context);
+
+  // Setup a namespace to ensure that the new container names are unique.
   SymbolCache symCache;
+  Namespace ns;
   symCache.addDefinitions(getOperation());
-  patterns.insert<OutlineContainerPattern>(context, &symCache);
+  ns.add(symCache);
+  patterns.insert<OutlineContainerPattern>(context, ns);
   return applyPartialConversion(getOperation(), target, std::move(patterns));
 }
 

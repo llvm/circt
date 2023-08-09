@@ -20,7 +20,10 @@ def IbisCallPrep : Pass<"ibis-call-prep", "ModuleOp"> {
 }
 
 def IbisContainerize : Pass<"ibis-containerize", "ModuleOp"> {
-  let summary = "Convert Ibis classes to containers, and outlines containers inside classes";
+  let summary = "Ibis containerization pass";
+  let description = [{
+    Convert Ibis classes to containers, and outlines containers inside classes.
+  }];
   let constructor = "circt::ibis::createContainerizePass()";
 }
 
