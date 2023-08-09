@@ -24,7 +24,6 @@ namespace circt {
 namespace om {
 
 namespace evaluator {
-struct ObjectValue;
 struct EvaluatorValue;
 
 /// A value of an object in memory. It is either a composite Object, or a
@@ -40,6 +39,7 @@ using ObjectFields = SmallDenseMap<StringAttr, EvaluatorValuePtr>;
 /// through the CAPI and unwrapped back into C++ smart pointers with the
 /// appropriate reference count.
 struct EvaluatorValue : std::enable_shared_from_this<EvaluatorValue> {
+  // Implement LLVM RTTI.
   enum class Kind { Attr, Object, List };
   EvaluatorValue(Kind kind) : kind(kind) {}
   Kind getKind() const { return kind; }
@@ -48,6 +48,7 @@ private:
   const Kind kind;
 };
 
+/// Values which can be directly representable by MLIR attributes.
 struct AttributeValue : EvaluatorValue {
   AttributeValue(Attribute attr) : EvaluatorValue(Kind::Attr), attr(attr) {}
   Attribute getAttr() const { return attr; }
@@ -63,19 +64,23 @@ private:
   Attribute attr;
 };
 
+/// A List which contains variadic length of elements with the same type.
 struct ListValue : EvaluatorValue {
-  ListValue(mlir::Type elementType, SmallVector<EvaluatorValuePtr> elements)
-      : EvaluatorValue(Kind::List), elementType(elementType),
-        elements(std::move(elements)) {}
+  ListValue(om::ListType type, SmallVector<EvaluatorValuePtr> elements)
+      : EvaluatorValue(Kind::List), type(type), elements(std::move(elements)) {}
+
   const auto &getElements() const { return elements; }
+
+  /// Return the type of the value, which is a ListType.
+  om::ListType getType() const { return type; }
+
+  /// Implement LLVM RTTI.
   static bool classof(const EvaluatorValue *e) {
     return e->getKind() == Kind::List;
   }
 
-  Type getType() { return ListType::get(elementType); }
-
 private:
-  Type elementType;
+  om::ListType type;
   SmallVector<EvaluatorValuePtr> elements;
 };
 
@@ -85,22 +90,27 @@ struct ObjectValue : EvaluatorValue {
       : EvaluatorValue(Kind::Object), cls(cls), fields(std::move(fields)) {}
   om::ClassOp getClassOp() const { return cls; }
   const auto &getFields() const { return fields; }
+
+  /// Return the type of the value, which is a ClassType.
+  om::ClassType getType() const {
+    auto clsConst = const_cast<ClassOp &>(cls);
+    return ClassType::get(clsConst.getContext(),
+                          FlatSymbolRefAttr::get(clsConst.getNameAttr()));
+  }
+
+  /// Implement LLVM RTTI.
   static bool classof(const EvaluatorValue *e) {
     return e->getKind() == Kind::Object;
   }
 
-  Type getType() {
-    return ClassType::get(cls.getContext(),
-                          FlatSymbolRefAttr::get(cls.getNameAttr()));
-  }
-
+  /// Get a field of the Object by name.
   FailureOr<EvaluatorValuePtr> getField(StringAttr field);
 
   /// Get all the field names of the Object.
   ArrayAttr getFieldNames();
 
 private:
-  circt::om::ClassOp cls;
+  om::ClassOp cls;
   llvm::SmallDenseMap<StringAttr, EvaluatorValuePtr> fields;
 };
 
@@ -151,23 +161,31 @@ private:
   /// Used to look up class definitions.
   SymbolTable symbolTable;
 
-  /// Object storage. Currently used for memoizing calls to evaluateValue.
-  /// Further refinement is expected.
-  mlir::DenseMap<Value, std::shared_ptr<evaluator::ObjectValue>> objects;
+  /// Object storage. Currently used for memoizing calls to
+  /// evaluateObjectInstance. Further refinement is expected.
+  DenseMap<Value, std::shared_ptr<evaluator::EvaluatorValue>> objects;
 };
 
 /// Helper to enable printing objects in Diagnostics.
 static inline mlir::Diagnostic &
 operator<<(mlir::Diagnostic &diag,
-           const evaluator::EvaluatorValue &objectValue) {
-  // TODO:
+           const evaluator::EvaluatorValue &evaluatorValue) {
+  if (auto *attr = llvm::dyn_cast<evaluator::AttributeValue>(&evaluatorValue))
+    diag << attr->getAttr();
+  else if (auto *object =
+               llvm::dyn_cast<evaluator::ObjectValue>(&evaluatorValue))
+    diag << "Object(" << object->getType() << ")";
+  else if (auto *list = llvm::dyn_cast<evaluator::ListValue>(&evaluatorValue))
+    diag << "List(" << list->getType() << ")";
+  else
+    assert(false && "unhandled evaluator value");
   return diag;
 }
 
 /// Helper to enable printing objects in Diagnostics.
 static inline mlir::Diagnostic &
-operator<<(mlir::Diagnostic &diag, const EvaluatorValuePtr &objectValue) {
-  return diag << *objectValue.get();
+operator<<(mlir::Diagnostic &diag, const EvaluatorValuePtr &evaluatorValue) {
+  return diag << *evaluatorValue.get();
 }
 
 } // namespace om

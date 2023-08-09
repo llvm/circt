@@ -36,7 +36,8 @@ circt::om::getEvaluatorValuesFromAttributes(ArrayRef<Attribute> attributes) {
 }
 
 /// Instantiate an Object with its class name and actual parameters.
-FailureOr<std::shared_ptr<evaluator::ObjectValue>> circt::om::Evaluator::instantiate(
+FailureOr<std::shared_ptr<evaluator::ObjectValue>>
+circt::om::Evaluator::instantiate(
     StringAttr className, ArrayRef<evaluator::EvaluatorValuePtr> actualParams) {
   ClassOp cls = symbolTable.lookup<ClassOp>(className);
   if (!cls)
@@ -53,7 +54,7 @@ FailureOr<std::shared_ptr<evaluator::ObjectValue>> circt::om::Evaluator::instant
     auto &diag = error.attachNote() << "actual parameters: ";
     // FIXME: `diag << actualParams` doesn't work for some reason.
     bool isFirst = true;
-    for (auto param : actualParams) {
+    for (const auto &param : actualParams) {
       if (isFirst)
         isFirst = false;
       else
@@ -68,11 +69,14 @@ FailureOr<std::shared_ptr<evaluator::ObjectValue>> circt::om::Evaluator::instant
   for (auto [actualParam, formalParamName, formalParamType] :
        llvm::zip(actualParams, formalParamNames, formalParamTypes)) {
     Type actualParamType;
-    if (auto *attr = dyn_cast<evaluator::AttributeValue>(actualParam.get()))
+    if (auto *attr = dyn_cast<evaluator::AttributeValue>(actualParam.get())) {
       if (auto typedActualParam = attr->getAttr().dyn_cast_or_null<TypedAttr>())
         actualParamType = typedActualParam.getType();
-    if (auto *object = dyn_cast<evaluator::ObjectValue>(actualParam.get()))
+    } else if (auto *object =
+                   dyn_cast<evaluator::ObjectValue>(actualParam.get()))
       actualParamType = object->getType();
+    else if (auto *list = dyn_cast<evaluator::ListValue>(actualParam.get()))
+      actualParamType = list->getType();
 
     if (!actualParamType)
       return cls.emitError("actual parameter for ")
@@ -202,7 +206,8 @@ circt::om::Evaluator::evaluateObjectField(
   for (auto field : op.getFieldPath().getAsRange<FlatSymbolRefAttr>()) {
     auto currentField = currentObject->getField(field.getAttr());
     finalField = currentField.value();
-    if (auto *nextObject = llvm::dyn_cast<evaluator::ObjectValue>(finalField.get()))
+    if (auto *nextObject =
+            llvm::dyn_cast<evaluator::ObjectValue>(finalField.get()))
       currentObject = nextObject;
   }
 

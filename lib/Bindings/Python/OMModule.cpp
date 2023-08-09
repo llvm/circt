@@ -21,44 +21,56 @@ using namespace mlir::python::adaptors;
 
 namespace {
 
+struct Object;
+struct List;
+
+using PythonValue = std::variant<MlirAttribute, Object, List>;
+
+/// Map an opaque OMEvaluatorValue into a python value.
+PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result);
+OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result);
+
+/// Provides a List class by simply wrapping the OMObject CAPI.
+struct List {
+  // Instantiate a List with a reference to the underlying OMEvaluatorValue.
+  List(OMEvaluatorValue value) : value(value) {}
+
+  /// Return the number of elements.
+  intptr_t getNumElements() { return omListGetNumElements(value); }
+
+  PythonValue getElement(intptr_t i);
+  OMEvaluatorValue getValue() const { return value; }
+
+private:
+  // The underlying CAPI value.
+  OMEvaluatorValue value;
+};
+
 /// Provides an Object class by simply wrapping the OMObject CAPI.
 struct Object {
   // Instantiate an Object with a reference to the underlying OMObject.
-  Object(OMObject object) : object(object) {}
-  Object(const Object &object) : object(object.object) {}
+  Object(OMEvaluatorValue value) : value(value) {}
 
   /// Get the Type from an Object, which will be a ClassType.
-  MlirType getType() { return omEvaluatorObjectGetType(object); }
+  MlirType getType() { return omEvaluatorObjectGetType(value); }
 
   // Get a field from the Object, using pybind's support for variant to return a
   // Python object that is either an Object or Attribute.
-  std::variant<Object, MlirAttribute> getField(const std::string &name) {
+  PythonValue getField(const std::string &name) {
     // Wrap the requested field name in an attribute.
-    MlirContext context = mlirTypeGetContext(omEvaluatorObjectGetType(object));
+    MlirContext context = mlirTypeGetContext(omEvaluatorObjectGetType(value));
     MlirStringRef cName = mlirStringRefCreateFromCString(name.c_str());
     MlirAttribute nameAttr = mlirStringAttrGet(context, cName);
 
     // Get the field's ObjectValue via the CAPI.
-    OMObjectValue result = omEvaluatorObjectGetField(object, nameAttr);
+    OMEvaluatorValue result = omEvaluatorObjectGetField(value, nameAttr);
 
-    // If the ObjectValue is null, something failed. Diagnostic handling is
-    // implemented in pure Python, so nothing to do here besides throwing an
-    // error to halt execution.
-    if (omEvaluatorObjectValueIsNull(result))
-      throw py::value_error("unable to get field, see previous error(s)");
-
-    // If the field was an Object, return a new Object.
-    if (omEvaluatorObjectValueIsAObject(result))
-      return Object(omEvaluatorObjectValueGetObject(result));
-
-    // If the field was a primitive, return the Attribute.
-    assert(omEvaluatorObjectValueIsAPrimitive(result));
-    return omEvaluatorObjectValueGetPrimitive(result);
+    return omEvaluatorValueToPythonValue(result);
   }
 
   // Get a list with the names of all the fields in the Object.
   std::vector<std::string> getFieldNames() {
-    MlirAttribute fieldNames = omEvaluatorObjectGetFieldNames(object);
+    MlirAttribute fieldNames = omEvaluatorObjectGetFieldNames(value);
     intptr_t numFieldNames = mlirArrayAttrGetNumElements(fieldNames);
 
     std::vector<std::string> pyFieldNames;
@@ -71,9 +83,11 @@ struct Object {
     return pyFieldNames;
   }
 
+  OMEvaluatorValue getValue() const { return value; }
+
 private:
   // The underlying CAPI OMObject.
-  OMObject object;
+  OMEvaluatorValue value;
 };
 
 /// Provides an Evaluator class by simply wrapping the OMEvaluator CAPI.
@@ -83,10 +97,14 @@ struct Evaluator {
 
   // Instantiate an Object.
   Object instantiate(MlirAttribute className,
-                     std::vector<MlirAttribute> actualParams) {
+                     std::vector<PythonValue> actualParams) {
+    std::vector<OMEvaluatorValue> values;
+    for (auto &param : actualParams)
+      values.push_back(pythonValueToOMEvaluatorValue(param));
+
     // Instantiate the Object via the CAPI.
-    OMObject result = omEvaluatorInstantiate(
-        evaluator, className, actualParams.size(), actualParams.data());
+    OMEvaluatorValue result = omEvaluatorInstantiate(
+        evaluator, className, values.size(), values.data());
 
     // If the Object is null, something failed. Diagnostic handling is
     // implemented in pure Python, so nothing to do here besides throwing an
@@ -131,6 +149,40 @@ private:
   intptr_t nextIndex = 0;
 };
 
+PythonValue List::getElement(intptr_t i) {
+  return omEvaluatorValueToPythonValue(omListGetElement(value, i));
+}
+
+PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
+  // If the result is null, something failed. Diagnostic handling is
+  // implemented in pure Python, so nothing to do here besides throwing an
+  // error to halt execution.
+  if (omEvaluatorValueIsNull(result))
+    throw py::value_error("unable to get field, see previous error(s)");
+
+  // If the field was an Object, return a new Object.
+  if (omEvaluatorValueIsAObject(result))
+    return Object(result);
+
+  // If the field was a list, return a new List.
+  if (omEvaluatorValueIsAList(result))
+    return List(result);
+
+  // If the field was a primitive, return the Attribute.
+  assert(omEvaluatorValueIsAPrimitive(result));
+  return omEvaluatorValueGetPrimitive(result);
+}
+
+OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result) {
+  if (auto *attr = std::get_if<MlirAttribute>(&result))
+    return omEvaluatorValueFromPrimitive(*attr);
+
+  if (auto *list = std::get_if<List>(&result))
+    return list->getValue();
+
+  return std::get<Object>(result).getValue();
+}
+
 } // namespace
 
 /// Populate the OM Python module.
@@ -144,6 +196,12 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
            py::arg("class_name"), py::arg("actual_params"))
       .def_property_readonly("module", &Evaluator::getModule,
                              "The Module the Evaluator is built from");
+
+  // Add the List class definition.
+  py::class_<List>(m, "List")
+      .def(py::init<List>(), py::arg("list"))
+      .def("__getitem__", &List::getElement)
+      .def("__len__", &List::getNumElements);
 
   // Add the Object class definition.
   py::class_<Object>(m, "Object")
