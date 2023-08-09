@@ -201,6 +201,14 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
+ClassOp InstanceOp::getClass(SymbolTableCollection *symbolTable) {
+  auto mod = getOperation()->getParentOfType<mlir::ModuleOp>();
+  if (symbolTable)
+    return symbolTable->lookupSymbolIn<ClassOp>(mod, getTargetNameAttr());
+
+  return mod.lookupSymbol<ClassOp>(getTargetNameAttr());
+}
+
 //===----------------------------------------------------------------------===//
 // GetPortOp
 //===----------------------------------------------------------------------===//

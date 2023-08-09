@@ -45,7 +45,6 @@ struct OutlineContainerPattern : public OpConversionPattern<ContainerOp> {
         rewriter.create<ContainerOp>(op.getLoc(), newContainerName);
 
     rewriter.mergeBlocks(op.getBodyBlock(), newContainer.getBodyBlock(), {});
-    rewriter.eraseOp(op);
 
     // Rename the ibis.this operation to refer to the proper op.
     auto thisOp =
@@ -56,10 +55,10 @@ struct OutlineContainerPattern : public OpConversionPattern<ContainerOp> {
     rewriter.replaceOpWithNewOp<ThisOp>(thisOp, newContainer.getNameAttr());
 
     // Create a container instance op in the parent class.
-    rewriter.setInsertionPointToEnd(parentClass.getBodyBlock());
+    rewriter.setInsertionPoint(op);
     rewriter.create<ContainerInstanceOp>(parentClass.getLoc(), newContainerName,
                                          newContainer.getNameAttr());
-
+    rewriter.eraseOp(op);
     return success();
   }
 

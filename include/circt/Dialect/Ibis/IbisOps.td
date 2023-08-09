@@ -55,7 +55,7 @@ def ClassOp : IbisOp<"class", [
   }];
 }
 
-class InstanceLikeOp<string mnemonic> : IbisOp<mnemonic, [
+class InstanceOpBase<string mnemonic> : IbisOp<mnemonic, [
     Symbol,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
@@ -75,7 +75,7 @@ class InstanceLikeOp<string mnemonic> : IbisOp<mnemonic, [
   ];
 }
 
-def InstanceOp : InstanceLikeOp<"instance"> {
+def InstanceOp : InstanceOpBase<"instance"> {
   let summary = "Ibis class instance";
   let description = [{
     Instantiates an Ibis class.
@@ -83,13 +83,7 @@ def InstanceOp : InstanceLikeOp<"instance"> {
 
   let extraClassDeclaration = [{
     // Return the class this instance is instantiating.
-    ClassOp getClass(SymbolTableCollection *symbolTable = nullptr) {
-      auto mod = getOperation()->getParentOfType<mlir::ModuleOp>();
-      if(symbolTable)
-        return symbolTable->lookupSymbolIn<ClassOp>(mod, getTargetNameAttr());
-
-      return mod.lookupSymbol<ClassOp>(getTargetNameAttr());
-    }
+    ClassOp getClass(SymbolTableCollection *symbolTable = nullptr);
   }];
 }
 
@@ -276,7 +270,7 @@ def ContainerOp : IbisOp<"container", [
   ];
 }
 
-def ContainerInstanceOp : InstanceLikeOp<"container.instance"> {
+def ContainerInstanceOp : InstanceOpBase<"container.instance"> {
   let summary = "Ibis container instance";
   let description = [{
     Instantiates an Ibis container.
