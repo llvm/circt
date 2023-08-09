@@ -39,8 +39,6 @@ jobs:
         lit-flags: ['', '--vg']
         exclude:
           - build-type: Debug
-            compiler: {cc: gcc, cxx: g++}
-          - build-type: Debug
             lit-flags: --vg
           - build-type: Release
             lit-flags: --vg
