@@ -1107,8 +1107,7 @@ FIRRTLModuleLowering::lowerMemModule(FMemModuleOp oldModule,
   return newModule;
 }
 
-/// Run on each firrtl.module, transforming it from an firrtl.module into an
-/// hw.module, then deleting the old one.
+/// Run on each firrtl.module, creating a basic hw.module for the firrtl module.
 hw::HWModuleOp
 FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
                                   CircuitLoweringState &loweringState) {
