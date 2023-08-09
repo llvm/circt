@@ -55,20 +55,30 @@ def ClassOp : IbisOp<"class", [
   }];
 }
 
-def InstanceOp : IbisOp<"instance", [
+class InstanceLikeOp<string mnemonic> : IbisOp<mnemonic, [
     Symbol,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
+
+  let arguments = (ins SymbolNameAttr:$sym_name, FlatSymbolRefAttr:$targetName);
+  let results = (outs ScopeRefType:$scopeRef);
+  let assemblyFormat = [{
+    $sym_name `,` $targetName attr-dict
+    custom<ScopeRefFromName>(type($scopeRef), ref($targetName))
+  }];
+
+  let builders = [
+    OpBuilder<(ins "StringAttr":$instanceName, "StringAttr":$targetName), [{
+      build($_builder, $_state, $_builder.getType<ScopeRefType>(targetName),
+        instanceName, targetName);
+    }]>
+  ];
+}
+
+def InstanceOp : InstanceLikeOp<"instance"> {
   let summary = "Ibis class instance";
   let description = [{
     Instantiates an Ibis class.
-  }];
-
-  let arguments = (ins SymbolNameAttr:$sym_name, FlatSymbolRefAttr:$className);
-  let results = (outs ScopeRefType:$scopeRef);
-  let assemblyFormat = [{
-    $sym_name `,` $className attr-dict
-    custom<ScopeRefFromName>(type($scopeRef), ref($className))
   }];
 
   let extraClassDeclaration = [{
@@ -76,9 +86,9 @@ def InstanceOp : IbisOp<"instance", [
     ClassOp getClass(SymbolTableCollection *symbolTable = nullptr) {
       auto mod = getOperation()->getParentOfType<mlir::ModuleOp>();
       if(symbolTable)
-        return symbolTable->lookupSymbolIn<ClassOp>(mod, getClassNameAttr());
+        return symbolTable->lookupSymbolIn<ClassOp>(mod, getTargetNameAttr());
 
-      return mod.lookupSymbol<ClassOp>(getClassNameAttr());
+      return mod.lookupSymbol<ClassOp>(getTargetNameAttr());
     }
   }];
 }
@@ -264,6 +274,18 @@ def ContainerOp : IbisOp<"container", [
       $_state.addAttribute(getSymNameAttrName($_state.name), name);
     }]>
   ];
+}
+
+def ContainerInstanceOp : InstanceLikeOp<"container.instance"> {
+  let summary = "Ibis container instance";
+  let description = [{
+    Instantiates an Ibis container.
+  }];
+
+  let extraClassDeclaration = [{
+    // Return the container this instance is instantiating.
+    ContainerOp getContainer(SymbolTableCollection *symbolTable = nullptr);
+  }];
 }
 
 class PortLikeOp<string mnemonic, list<Trait> traits = []> :

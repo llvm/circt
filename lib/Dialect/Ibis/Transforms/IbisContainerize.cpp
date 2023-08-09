@@ -54,6 +54,12 @@ struct OutlineContainerPattern : public OpConversionPattern<ContainerOp> {
                          .getDefiningOp());
     rewriter.setInsertionPoint(thisOp);
     rewriter.replaceOpWithNewOp<ThisOp>(thisOp, newContainer.getNameAttr());
+
+    // Create a container instance op in the parent class.
+    rewriter.setInsertionPointToEnd(parentClass.getBodyBlock());
+    rewriter.create<ContainerInstanceOp>(parentClass.getLoc(), newContainerName,
+                                         newContainer.getNameAttr());
+
     return success();
   }
 
@@ -71,6 +77,20 @@ struct ClassToContainerPattern : public OpConversionPattern<ClassOp> {
         rewriter.create<ContainerOp>(op.getLoc(), op.getNameAttr());
     rewriter.mergeBlocks(op.getBodyBlock(), newContainer.getBodyBlock(), {});
     rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct InstanceToContainerInstancePattern
+    : public OpConversionPattern<InstanceOp> {
+  using OpConversionPattern<InstanceOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(InstanceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Replace the instance by a container instance of the same name.
+    rewriter.replaceOpWithNewOp<ContainerInstanceOp>(
+        op, op.getNameAttr(), op.getTargetNameAttr().getAttr());
     return success();
   }
 };
@@ -109,9 +129,10 @@ LogicalResult ContainerizePass::containerizeClasses() {
   auto *context = &getContext();
   ConversionTarget target(*context);
   target.addLegalDialect<IbisDialect>();
-  target.addIllegalOp<ClassOp>();
+  target.addIllegalOp<ClassOp, InstanceOp>();
   RewritePatternSet patterns(context);
-  patterns.insert<ClassToContainerPattern>(context);
+  patterns.insert<ClassToContainerPattern, InstanceToContainerInstancePattern>(
+      context);
   return applyPartialConversion(getOperation(), target, std::move(patterns));
 }
 
