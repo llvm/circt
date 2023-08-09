@@ -671,3 +671,31 @@ firrtl.circuit "Foo"  {
     firrtl.instance y1 @Y()
   }
 }
+
+// Check that modules marked with different DedupGroups have not been deduped.
+// CHECK-LABEL: firrtl.circuit "DedupGroup"
+firrtl.circuit "DedupGroup" {
+  // CHECK: @Foo0
+  firrtl.module @Foo0() attributes {annotations = [{
+    // CHECK-NOT: class = "firrtl.transforms.DedupGroupAnnotation"
+    class = "firrtl.transforms.DedupGroupAnnotation",
+    group = "foo"
+  }]} { }
+
+  // CHECK-NOT: @Foo1
+  firrtl.module @Foo1() attributes {annotations = [{
+    // CHECK-NOT: class = "firrtl.transforms.DedupGroupAnnotation"
+    class = "firrtl.transforms.DedupGroupAnnotation",
+    group = "foo"
+  }]} { }
+
+  // CHECK: @Bar
+  firrtl.module @Bar() { }
+
+  // CHECK: firrtl.module @DedupGroup
+  firrtl.module @DedupGroup() {
+    firrtl.instance foo0 @Foo0()
+    firrtl.instance foo1 @Foo1()
+    firrtl.instance bar  @Bar()
+  }
+}
