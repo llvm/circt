@@ -11,4 +11,6 @@ add_circt_dialect_library(CIRCTIbis
   CIRCTHW
   )
 
+add_subdirectory(Analysis)
 add_subdirectory(Transforms)
+

@@ -652,4 +652,17 @@ def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "mlir::ModuleOp"> {
   ];
 }
 
+//===----------------------------------------------------------------------===//
+// ConvertIbisToHW
+//===----------------------------------------------------------------------===//
+
+def ConvertIbisToHW : Pass<"convert-ibis-to-hw", "mlir::ModuleOp"> {
+  let summary = "Convert Ibis to HW";
+  let description = [{
+    This pass converts Ibis to HW.
+  }];
+  let constructor = "circt::createConvertIbisToHWPass()";
+  let dependentDialects = ["hw::HWDialect"];
+}
+
 #endif // CIRCT_CONVERSION_PASSES_TD

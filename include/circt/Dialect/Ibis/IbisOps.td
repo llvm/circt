@@ -182,6 +182,7 @@ def GetParentOfRefOp : IbisOp<"get_parent_of_ref"> {
 
   let arguments = (ins AnyScopeRefType:$src);
   let results = (outs ScopeRefType:$parent);
+  let hasCanonicalizeMethod = 1;
 
   let assemblyFormat = [{
     $src `:` qualified(type($src)) `->` qualified(type($parent)) attr-dict
@@ -200,11 +201,13 @@ def GetInstanceInRefOp : IbisOp<"get_instance_in_ref"> {
     symbol of the class which the instance is an instance of.
   }];
 
+
   let arguments = (ins
     AnyScopeRefType:$src,
     FlatSymbolRefAttr:$instanceName,
     FlatSymbolRefAttr:$instanceSymbol);
   let results = (outs ScopeRefType:$instance);
+  let hasCanonicalizeMethod = 1;
   let assemblyFormat = [{
     $instanceName `:` $instanceSymbol `in` $src
       `:`qualified(type($src)) attr-dict custom<ScopeRefFromName>(type($instance), ref($instanceSymbol))

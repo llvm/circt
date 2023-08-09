@@ -259,6 +259,50 @@ LogicalResult ThisOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// GetParentOfRefOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult GetParentOfRefOp::canonicalize(GetParentOfRefOp op,
+                                             PatternRewriter &rewriter) {
+  // parent_of_ref(instance) -> this
+  auto instanceOp = dyn_cast<InstanceOp>(op.getSrc().getDefiningOp());
+  if (instanceOp) {
+    auto instanceParent = instanceOp->getParentOp();
+    auto thisParent = op.getOperation()->getParentOp();
+    auto thisScope = dyn_cast<ScopeOpInterface>(thisParent);
+    if ((instanceParent == thisParent) && thisScope) {
+      rewriter.replaceAllUsesWith(op, thisScope.getThis());
+      rewriter.eraseOp(op);
+      return success();
+    }
+  }
+
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// GetInstanceInRefOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult GetInstanceInRefOp::canonicalize(GetInstanceInRefOp op,
+                                               PatternRewriter &rewriter) {
+  // instance_in_ref(this) -> instance
+  auto thisOp = dyn_cast<ThisOp>(op.getSrc().getDefiningOp());
+  if (thisOp) {
+    // Lookup the instance name in the parent scope.
+    auto parentScope = cast<ScopeOpInterface>(thisOp->getParentOp());
+    auto instance = cast<InstanceOp>(
+        SymbolTable::lookupSymbolIn(parentScope, op.getInstanceNameAttr()));
+    assert(instance && "instance should be present in the parent scope");
+    rewriter.replaceAllUsesWith(op, instance);
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic
 //===----------------------------------------------------------------------===//
 

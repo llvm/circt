@@ -7,6 +7,7 @@ add_circt_dialect_library(CIRCTIbisTransforms
   LINK_LIBS PUBLIC
   CIRCTDC
   CIRCTIbis
+  CIRCTIbisAnalysis
   CIRCTHW
   CIRCTSupport
   MLIRIR
