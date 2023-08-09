@@ -196,13 +196,21 @@ LogicalResult ReturnOp::verify() {
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto targetClass = getClass(&symbolTable);
   if (!targetClass)
-    return emitOpError() << "'" << getClassName() << "' does not exist";
+    return emitOpError() << "'" << getTargetName() << "' does not exist";
 
   return success();
 }
 
+ClassOp InstanceOp::getClass(SymbolTableCollection *symbolTable) {
+  auto mod = getOperation()->getParentOfType<mlir::ModuleOp>();
+  if (symbolTable)
+    return symbolTable->lookupSymbolIn<ClassOp>(mod, getTargetNameAttr());
+
+  return mod.lookupSymbol<ClassOp>(getTargetNameAttr());
+}
+
 //===----------------------------------------------------------------------===//
-// InstanceOp
+// GetPortOp
 //===----------------------------------------------------------------------===//
 
 LogicalResult GetPortOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
@@ -254,6 +262,28 @@ LogicalResult ThisOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitOpError() << "thisOp refers to a parent scope of name "
                          << getScopeName() << ", but the parent scope is named "
                          << parentScope.getScopeName();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ContainerInstanceOp
+//===----------------------------------------------------------------------===//
+
+ContainerOp
+ContainerInstanceOp::getContainer(SymbolTableCollection *symbolTable) {
+  auto mod = getOperation()->getParentOfType<mlir::ModuleOp>();
+  if (symbolTable)
+    return symbolTable->lookupSymbolIn<ContainerOp>(mod, getTargetNameAttr());
+
+  return mod.lookupSymbol<ContainerOp>(getTargetNameAttr());
+}
+
+LogicalResult
+ContainerInstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto targetContainer = getContainer(&symbolTable);
+  if (!targetContainer)
+    return emitOpError() << "'" << getTargetName() << "' does not exist";
 
   return success();
 }

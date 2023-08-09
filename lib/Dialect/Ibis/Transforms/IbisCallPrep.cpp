@@ -92,7 +92,7 @@ CallPrepPrecomputed::CallPrepPrecomputed(ModuleOp mod) {
 
     // Populate the instances table.
     for (auto inst : cls.getOps<InstanceOp>()) {
-      auto clsEntry = classSymbols.find(inst.getClassNameAttr().getAttr());
+      auto clsEntry = classSymbols.find(inst.getTargetNameAttr().getAttr());
       assert(clsEntry != classSymbols.end() &&
              "class being instantiated doesn't exist");
       instanceMap[std::make_pair(cls, inst.getSymNameAttr())] =

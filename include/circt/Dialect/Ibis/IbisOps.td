@@ -50,34 +50,40 @@ def ClassOp : IbisOp<"class", [
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+  
+    Block* getBodyBlock() { return &getBody().front(); }
   }];
 }
 
-def InstanceOp : IbisOp<"instance", [
+class InstanceOpBase<string mnemonic> : IbisOp<mnemonic, [
     Symbol,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
+
+  let arguments = (ins SymbolNameAttr:$sym_name, FlatSymbolRefAttr:$targetName);
+  let results = (outs ScopeRefType:$scopeRef);
+  let assemblyFormat = [{
+    $sym_name `,` $targetName attr-dict
+    custom<ScopeRefFromName>(type($scopeRef), ref($targetName))
+  }];
+
+  let builders = [
+    OpBuilder<(ins "StringAttr":$instanceName, "StringAttr":$targetName), [{
+      build($_builder, $_state, $_builder.getType<ScopeRefType>(targetName),
+        instanceName, targetName);
+    }]>
+  ];
+}
+
+def InstanceOp : InstanceOpBase<"instance"> {
   let summary = "Ibis class instance";
   let description = [{
     Instantiates an Ibis class.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name, FlatSymbolRefAttr:$className);
-  let results = (outs ScopeRefType:$scopeRef);
-  let assemblyFormat = [{
-    $sym_name `,` $className attr-dict
-    custom<ScopeRefFromName>(type($scopeRef), ref($className))
-  }];
-
   let extraClassDeclaration = [{
     // Return the class this instance is instantiating.
-    ClassOp getClass(SymbolTableCollection *symbolTable = nullptr) {
-      auto mod = getOperation()->getParentOfType<mlir::ModuleOp>();
-      if(symbolTable)
-        return symbolTable->lookupSymbolIn<ClassOp>(mod, getClassNameAttr());
-
-      return mod.lookupSymbol<ClassOp>(getClassNameAttr());
-    }
+    ClassOp getClass(SymbolTableCollection *symbolTable = nullptr);
   }];
 }
 
@@ -221,6 +227,12 @@ def ThisOp : IbisOp<"this", [
   let assemblyFormat = [{
     $scopeName attr-dict custom<ScopeRefFromName>(type($thisRef), ref($scopeName))
   }];
+
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name), [{
+      build($_builder, $_state, $_builder.getType<ScopeRefType>(name), name);
+    }]>
+  ];
 }
 
 // ===---------------------------------------------------------------------===//
@@ -243,12 +255,37 @@ def ContainerOp : IbisOp<"container", [
   let assemblyFormat = [{
     $sym_name attr-dict-with-keyword $body
   }];
+
+  let extraClassDeclaration = [{
+    Block* getBodyBlock() { return &getBody().front(); }
+  }];
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name), [{
+      auto region = $_state.addRegion();
+      region->push_back(new Block());
+      $_state.addAttribute(getSymNameAttrName($_state.name), name);
+    }]>
+  ];
+}
+
+def ContainerInstanceOp : InstanceOpBase<"container.instance"> {
+  let summary = "Ibis container instance";
+  let description = [{
+    Instantiates an Ibis container.
+  }];
+
+  let extraClassDeclaration = [{
+    // Return the container this instance is instantiating.
+    ContainerOp getContainer(SymbolTableCollection *symbolTable = nullptr);
+  }];
 }
 
 class PortLikeOp<string mnemonic, list<Trait> traits = []> :
     IbisOp<mnemonic, !listconcat(traits, [
       PortOpInterface,
-      HasParent<"ClassOp">
+      ParentOneOf<["ClassOp", "ContainerOp"]>
   ])> {
   let arguments = (ins SymbolNameAttr:$sym_name, TypeAttrOf<AnyType>:$type);
   let assemblyFormat = [{

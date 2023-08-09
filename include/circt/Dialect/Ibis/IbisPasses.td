@@ -19,4 +19,12 @@ def IbisCallPrep : Pass<"ibis-call-prep", "ModuleOp"> {
     "circt::hw::HWDialect", "circt::dc::DCDialect"];
 }
 
+def IbisContainerize : Pass<"ibis-containerize", "ModuleOp"> {
+  let summary = "Ibis containerization pass";
+  let description = [{
+    Convert Ibis classes to containers, and outlines containers inside classes.
+  }];
+  let constructor = "circt::ibis::createContainerizePass()";
+}
+
 #endif // CIRCT_DIALECT_IBIS_PASSES_TD
