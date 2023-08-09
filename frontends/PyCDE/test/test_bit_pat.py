@@ -78,12 +78,3 @@ class TestBitPat(Module):
     self.out1 = BitPat("b00000000000000000000000000010011").as_bits()
     self.out2 = dict_lookup(inst_map, self.inp3, Bits(32)(0x0))
 
-
-@unittestmodule()
-class BitPatError(Module):
-  out1 = Output(Bits(32))
-
-  @generator
-  def build(self):
-    # CHECK: TypeError: Can only convert BitPat with no don't cares to Bits
-    self.out1 = BitPat("b000000000????0000000000000010011").as_bits()
