@@ -1,6 +1,5 @@
 add_subdirectory(lib)
 add_subdirectory(CAPI)
-add_subdirectory(Dialect)
 
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
@@ -26,7 +25,6 @@ set(CIRCT_TEST_DEPENDS
   circt-opt
   circt-translate
   circt-reduce
-  esi-tester
   handshake-runner
   firtool
   hlstool

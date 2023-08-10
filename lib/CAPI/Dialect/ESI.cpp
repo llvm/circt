@@ -67,19 +67,6 @@ MlirType circtESIListTypeGetElementType(MlirType list) {
   return wrap(unwrap(list).cast<ListType>().getElementType());
 }
 
-MlirOperation circtESIWrapModule(MlirOperation cModOp, long numPorts,
-                                 const MlirStringRef *ports) {
-  mlir::Operation *modOp = unwrap(cModOp);
-  llvm::SmallVector<llvm::StringRef, 8> portNamesRefs;
-  for (long i = 0; i < numPorts; ++i)
-    portNamesRefs.push_back(ports[i].data);
-  llvm::SmallVector<ESIPortValidReadyMapping, 8> portTriples;
-  resolvePortNames(modOp, portNamesRefs, portTriples);
-  mlir::OpBuilder b(modOp);
-  mlir::Operation *wrapper = buildESIWrapper(b, modOp, portTriples);
-  return wrap(wrapper);
-}
-
 void circtESIAppendMlirFile(MlirModule cMod, MlirStringRef filename) {
   ModuleOp modOp = unwrap(cMod);
   auto loadedMod =
