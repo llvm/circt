@@ -1689,12 +1689,42 @@ circuit BasicProps :
 
   ; CHECK-LABEL: module private @Path
   module Path :
-    ; CHECK-SAME: in %a: !firrtl.path
-    ; CHECK-SAME: out %b: !firrtl.path
-    input a : Path
-    output b : Path
-    ; CHECK: firrtl.propassign %b, %a : !firrtl.path
-    propassign b, a
+    output psimple : Path
+    output pbundle : Path
+    output pvector : Path
+    output pinst : Path
+    output pmodport : Path
+    output pport : Path
+    ; CHECK: in %port: !firrtl.uint<8> sym @[[PORTSYM:[a-zA-Z0-9_]+]]
+    input port : UInt<8>
+
+    ; CHECK: %simple = firrtl.wire sym @[[SIMPLESYM:[a-zA-Z0-9_]+]] interesting_name : !firrtl.uint<8>
+    ; CHECK: %[[SIMPLEPATH:.+]] = firrtl.path <@Path::@[[SIMPLESYM]]>
+    ; CHECK: firrtl.propassign %psimple, %[[SIMPLEPATH]] : !firrtl.path
+    wire simple : UInt<8>
+    propassign psimple, path(simple)
+
+    ; CHECK: %bundle = firrtl.wire sym [<@[[BUNDLESYM:[a-zA-Z0-9_]+]],1,public>] interesting_name : !firrtl.bundle<a: uint<8>>
+    ; CHECK: %[[BUNDLEPATH:.+]] = firrtl.path <@Path::@[[BUNDLESYM]]>
+    ; CHECK: firrtl.propassign %pbundle, %[[BUNDLEPATH]] : !firrtl.path
+    wire bundle : {a: UInt<8>}
+    propassign pbundle, path(bundle.a)
+
+    ; CHECK: %vector = firrtl.wire sym [<@[[VECTORSYM:[a-zA-Z0-9_]+]],3,public>] interesting_name : !firrtl.vector<uint<8>, 10>
+    ; CHECK: %[[VECTORPATH:.+]] = firrtl.path <@Path::@[[VECTORSYM]]>
+    ; CHECK: firrtl.propassign %pvector, %[[VECTORPATH]] : !firrtl.path
+    wire vector : UInt<8>[10]
+    propassign pvector, path(vector[2])
+    
+    ; CHECK: %child_a = firrtl.instance child sym @[[INSTSYM:[a-zA-Z0-9_]+]] interesting_name @String(out a: !firrtl.string)
+    ; CHECK: %[[INSTPATH:.+]] = firrtl.path <@Path::@[[INSTSYM]]>
+    ; CHECK: firrtl.propassign %pinst, %[[INSTPATH]] : !firrtl.path
+    inst child of String
+    propassign pinst, path(child)
+
+    ; CHECK: %[[MODPORTPATH:.+]] = firrtl.path <@Path::@[[PORTSYM]]>
+    ; CHECK: firrtl.propassign %pmodport, %[[MODPORTPATH]] : !firrtl.path
+    propassign pmodport, path(port)
 
   ; CHECK-LABEL firrtl.class @SimpleClass(in %a: !firrtl.string, out %b: !firrtl.string) {
   ; CHECK-NEXT    firrtl.propassign %b, %a : !firrtl.string

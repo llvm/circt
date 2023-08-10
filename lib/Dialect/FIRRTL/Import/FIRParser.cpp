@@ -1046,7 +1046,12 @@ using ModuleSymbolTable =
     llvm::StringMap<std::pair<SMLoc, SymbolValueEntry>, llvm::BumpPtrAllocator>;
 using ModuleSymbolTableEntry = ModuleSymbolTable::MapEntryTy;
 
-using UnbundledValueEntry = SmallVector<std::pair<Attribute, Value>>;
+namespace {
+struct UnbundledValueEntry {
+  Operation *op;
+  SmallVector<std::pair<Attribute, Value>> results;
+};
+} // namespace
 using UnbundledValuesList = std::vector<UnbundledValueEntry>;
 namespace {
 /// This structure is used to track which entries are added while inside a scope
@@ -1283,7 +1288,7 @@ ParseResult FIRModuleContext::resolveSymbolEntry(Value &result,
   unsigned unbundledId = entry.get<UnbundledID>() - 1;
   assert(unbundledId < unbundledValues.size());
   UnbundledValueEntry &ubEntry = unbundledValues[unbundledId];
-  for (auto elt : ubEntry) {
+  for (auto elt : ubEntry.results) {
     if (elt.first == fieldAttr) {
       result = elt.second;
       break;
@@ -1468,6 +1473,7 @@ private:
     return parseExpImpl(result, message, /*isLeadingStmt:*/ true);
   }
   ParseResult parseEnumExp(Value &result);
+  ParseResult parsePathExp(Value &result);
   ParseResult parseRefExp(Value &result, const Twine &message);
   ParseResult parseStaticRefExp(Value &result, const Twine &message);
 
@@ -1760,6 +1766,17 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
         builder.create<FIntegerConstantOp>(APSInt(value, /*isUnsigned=*/false));
     break;
   }
+  case FIRToken::lp_path:
+    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
+      return emitError() << "unexpected token: Integers are a FIRRTL 3.1.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
+
+    if (isLeadingStmt)
+      return emitError("unexpected path() as start of statement");
+    if (parsePathExp(result))
+      return failure();
+    break;
 
     // Otherwise there are a bunch of keywords that are treated as identifiers
     // try them.
@@ -1792,7 +1809,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       unsigned unbundledId = symtabEntry.get<UnbundledID>() - 1;
       UnbundledValueEntry &ubEntry =
           moduleContext.getUnbundledEntry(unbundledId);
-      for (auto elt : ubEntry)
+      for (auto elt : ubEntry.results)
         emitInvalidate(elt.second);
 
       // Signify that we parsed the whole statement.
@@ -2868,6 +2885,117 @@ ParseResult FIRStmtParser::parseStaticRefExp(Value &result,
                  parseOptionalExpPostscript(result, false));
 }
 
+/// path ::= 'path(' static_reference ')'
+// NOLINTNEXTLINE(misc-no-recursion)
+ParseResult FIRStmtParser::parsePathExp(Value &result) {
+  auto startTok = consumeToken(FIRToken::lp_path);
+  auto loc = getToken().getLoc();
+
+  StringRef id;
+  SymbolValueEntry symtabEntry;
+  if (parseId(id, "expected static reference expression in 'path'") ||
+      moduleContext.lookupSymbolEntry(symtabEntry, id, loc))
+    return failure();
+
+  hw::InnerSymTarget target;
+  Type type;
+  if (auto unbundledId = symtabEntry.dyn_cast<UnbundledID>()) {
+    // It is targeting the operation itself, not a port.
+    auto &ubEntry = moduleContext.getUnbundledEntry(unbundledId - 1);
+    target = hw::InnerSymTarget(ubEntry.op);
+  } else {
+    // This target can be a port or a regular value.
+    auto value = symtabEntry.get<Value>();
+    type = value.getType();
+    if (isa<OpResult>(value)) {
+      // This target is a regular value, such as a wire or node.
+      target = hw::InnerSymTarget(value.getDefiningOp());
+    } else {
+      // This target is a module port.
+      auto blockArg = cast<BlockArgument>(value);
+      auto *module = blockArg.getOwner()->getParentOp();
+      auto portNo = blockArg.getArgNumber();
+      target = hw::InnerSymTarget(portNo, module);
+    }
+
+    // We have our target operation, we just need to parse the field id.
+    uint64_t fieldID = 0;
+    while (true) {
+      if (consumeIf(FIRToken::period)) {
+        SmallVector<StringRef, 3> fields;
+        if (parseFieldIdSeq(fields, "expected field name"))
+          return failure();
+        for (auto fieldName : fields) {
+          if (auto bundle = type_dyn_cast<BundleType>(type)) {
+            if (auto index = bundle.getElementIndex(fieldName)) {
+              fieldID += bundle.getFieldID(*index);
+              continue;
+            }
+          } else if (auto bundle = type_dyn_cast<OpenBundleType>(type)) {
+            if (auto index = bundle.getElementIndex(fieldName)) {
+              fieldID += bundle.getFieldID(*index);
+              continue;
+            }
+          } else {
+            return emitError(loc, "subfield requires bundle operand");
+          }
+          return emitError(loc,
+                           "unknown field '" + fieldName + "' in bundle type ")
+                 << type;
+        }
+      } else if (consumeIf(FIRToken::l_square)) {
+        auto loc = getToken().getLoc();
+        int32_t index;
+        if (parseIntLit(index, "expected index") ||
+            parseToken(FIRToken::r_square, "expected ']'"))
+          return failure();
+
+        if (index < 0)
+          return emitError(loc, "invalid index specifier");
+
+        if (auto vector = type_dyn_cast<FVectorType>(type)) {
+          if ((unsigned)index < vector.getNumElements()) {
+            fieldID += vector.getFieldID(index);
+            continue;
+          }
+        } else if (auto vector = type_dyn_cast<OpenVectorType>(type)) {
+          if ((unsigned)index < vector.getNumElements()) {
+            fieldID += vector.getFieldID(index);
+            continue;
+          }
+        } else {
+          return emitError(loc, "subindex requires vector operand");
+        }
+        return emitError(loc, "invalid index specifier");
+      } else {
+        break;
+      }
+    }
+    target = hw::InnerSymTarget::getTargetForSubfield(target, fieldID);
+  }
+
+  if (parseToken(FIRToken::r_paren, "expected ')' in 'path'"))
+    return failure();
+
+  // Verify that the target is valid hardware.
+  if (auto innerSym = dyn_cast<hw::InnerSymbolOpInterface>(target.getOp())) {
+    if (auto resultNo = innerSym.getTargetResultIndex())
+      if (!type_isa<FIRRTLBaseType>(innerSym->getResult(*resultNo).getType()))
+        return emitError(loc, "cannot get the path of a non-hardware element");
+  } else if (auto module = dyn_cast<FModuleLike>(target.getOp())) {
+    assert(target.isPort() && "modules only support InnerSyms on ports");
+    if (!type_isa<FIRRTLBaseType>(module.getPortType(target.getPort())))
+      return emitError(loc, "cannot get the path of a non-hardware element");
+  }
+
+  locationProcessor.setLoc(startTok.getLoc());
+  auto sym = getInnerRefTo(target, [&](auto _) -> hw::InnerSymbolNamespace & {
+    return modNameSpace;
+  });
+  result = builder.create<PathOp>(sym);
+  return success();
+}
+
 /// define ::= 'define' static_reference '=' ref_expr info?
 ParseResult FIRStmtParser::parseRefDefine() {
   auto startTok = consumeToken(FIRToken::kw_define);
@@ -3398,9 +3526,11 @@ ParseResult FIRStmtParser::parseInstance() {
   // track of the mapping from bundle fields to results in the unbundledValues
   // data structure.  Build our entry now.
   UnbundledValueEntry unbundledValueEntry;
-  unbundledValueEntry.reserve(modulePorts.size());
+  unbundledValueEntry.op = result;
+  unbundledValueEntry.results.reserve(modulePorts.size());
   for (size_t i = 0, e = modulePorts.size(); i != e; ++i)
-    unbundledValueEntry.push_back({modulePorts[i].name, result.getResult(i)});
+    unbundledValueEntry.results.push_back(
+        {modulePorts[i].name, result.getResult(i)});
 
   // Add it to unbundledValues and add an entry to the symbol table to remember
   // it.
@@ -3608,9 +3738,11 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
       MemoryInitAttr(), StringAttr());
 
   UnbundledValueEntry unbundledValueEntry;
-  unbundledValueEntry.reserve(result.getNumResults());
+  unbundledValueEntry.op = result;
+  unbundledValueEntry.results.reserve(result.getNumResults());
   for (size_t i = 0, e = result.getNumResults(); i != e; ++i)
-    unbundledValueEntry.push_back({resultNames[i], result.getResult(i)});
+    unbundledValueEntry.results.push_back(
+        {resultNames[i], result.getResult(i)});
 
   moduleContext.unbundledValues.push_back(std::move(unbundledValueEntry));
   auto entryID = UnbundledID(moduleContext.unbundledValues.size());
