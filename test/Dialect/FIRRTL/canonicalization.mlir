@@ -476,6 +476,31 @@ firrtl.module @Bits(in %in1: !firrtl.uint<1>,
   firrtl.strictconnect %out2b, %7 : !firrtl.uint<2>
 }
 
+// CHECK-LABEL: firrtl.module @BitsOfAnd
+firrtl.module @BitsOfAnd(in %in0: !firrtl.uint<3>,
+                         in %in1: !firrtl.uint<3>,
+                         out %out0: !firrtl.uint<2>,
+                         out %out1: !firrtl.uint<3>) {
+  %0 = firrtl.and %in0, %in1 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
+  %1 = firrtl.bits %0 1 to 0 : (!firrtl.uint<3>) -> !firrtl.uint<2>
+  firrtl.strictconnect %out0, %1 : !firrtl.uint<2>
+  // CHECK: %0 = firrtl.bits %in0 1 to 0 : (!firrtl.uint<3>) -> !firrtl.uint<2>
+  // CHECK: %1 = firrtl.bits %in1 1 to 0 : (!firrtl.uint<3>) -> !firrtl.uint<2>
+  // CHECK: %2 = firrtl.and %0, %1 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK: firrtl.strictconnect %out0, %2 : !firrtl.uint<2>
+  
+  // Should not canonicalize if there is more than one use of the inner and
+  // expression.
+  %2 = firrtl.and %in0, %in1 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
+  %3 = firrtl.bits %2 1 to 0 : (!firrtl.uint<3>) -> !firrtl.uint<2>
+  firrtl.strictconnect %out0, %3 : !firrtl.uint<2>
+  firrtl.strictconnect %out1, %2 : !firrtl.uint<3>
+  // CHECK: %3 = firrtl.and %in0, %in1 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
+  // CHECK: %4 = firrtl.bits %3 1 to 0 : (!firrtl.uint<3>) -> !firrtl.uint<2>
+  // CHECK: firrtl.strictconnect %out0, %4 : !firrtl.uint<2>
+  // CHECK: firrtl.strictconnect %out1, %3 : !firrtl.uint<3>
+}
+
 // CHECK-LABEL: firrtl.module @Head
 firrtl.module @Head(in %in4u: !firrtl.uint<4>,
                     out %out1u: !firrtl.uint<1>,

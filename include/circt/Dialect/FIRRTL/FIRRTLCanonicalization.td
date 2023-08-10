@@ -32,6 +32,9 @@ def NonConstantOp : Constraint<CPred<[{
     ($0.getDefiningOp())
   }]>>;
 
+/// Constraint that dictates a value has a single use.
+def HasOneUse : Constraint<CPred<"$0.hasOneUse()">, "has one use">;
+
 // Constraint that matches empty attribute dictionaries.  Used to ensure that
 // there are no FIRRTL annotation on an operation.
 def EmptyAttrDict : Constraint<CPred<"$0.empty()">>;
@@ -491,11 +494,11 @@ def BitsOfAsUInt : Pat<
   (MoveNameHint $old, (BitsPrimOp $x, $oHigh, $oLow)),
   [(KnownWidth $x)]>;
 
-// bits(asUInt) -> bits
+// bits(and(x, y)) -> and(bits(x), bits(y))
 def BitsOfAnd : Pat<
-  (BitsPrimOp:$old (AndPrimOp $x, $y), I32Attr:$oHigh, I32Attr:$oLow),
+  (BitsPrimOp:$old (AndPrimOp:$andOld $x, $y), I32Attr:$oHigh, I32Attr:$oLow),
   (MoveNameHint $old, (AndPrimOp (BitsPrimOp $x, $oHigh, $oLow), (BitsPrimOp $y, $oHigh, $oLow))),
-  [(KnownWidth $x), (EqualTypes $x, $y)]>;
+  [(KnownWidth $x), (EqualTypes $x, $y), (HasOneUse $andOld)]>;
 
 // bits(pad(x)) -> x when they cancel out
 def AttrIsZero : Constraint<CPred<"$0.getValue().isZero()">>;
