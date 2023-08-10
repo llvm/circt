@@ -115,7 +115,7 @@ ParseResult ReadPortOp::parse(OpAsmParser &parser, OperationState &result) {
   operandSizes.push_back(1); // memory handle
   operandSizes.push_back(addressOperands.size());
   operandSizes.push_back(hasRdEn ? 1 : 0);
-  result.addAttribute("operand_segment_sizes",
+  result.addAttribute("operandSegmentSizes",
                       parser.getBuilder().getDenseI32ArrayAttr(operandSizes));
   return success();
 }
@@ -124,7 +124,7 @@ void ReadPortOp::print(OpAsmPrinter &p) {
   p << " " << getMemory() << "[" << getAddresses() << "]";
   if (getRdEn())
     p << " rden " << getRdEn();
-  p.printOptionalAttrDict((*this)->getAttrs(), {"operand_segment_sizes"});
+  p.printOptionalAttrDict((*this)->getAttrs(), {"operandSegmentSizes"});
   p << " : " << getMemory().getType();
 }
 

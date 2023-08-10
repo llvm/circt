@@ -268,7 +268,7 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
     return failure();
 
   result.addAttribute(
-      "operand_segment_sizes",
+      "operandSegmentSizes",
       parser.getBuilder().getDenseI32ArrayAttr(
           {static_cast<int32_t>(inputTypes.size()),
            static_cast<int32_t>(withStall ? 1 : 0),
@@ -316,7 +316,7 @@ static void printPipelineOp(OpAsmPrinter &p, TPipelineOp op) {
 
   // Print the optional attribute dict.
   p.printOptionalAttrDict(op->getAttrs(),
-                          /*elidedAttrs=*/{"name", "operand_segment_sizes",
+                          /*elidedAttrs=*/{"name", "operandSegmentSizes",
                                            "outputNames", "inputNames"});
   p << " ";
 
@@ -365,7 +365,7 @@ void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
     odsState.addAttribute("name", name);
 
   odsState.addAttribute(
-      "operand_segment_sizes",
+      "operandSegmentSizes",
       odsBuilder.getDenseI32ArrayAttr(
           {static_cast<int32_t>(inputs.size()),
            static_cast<int32_t>(stall ? 1 : 0), static_cast<int32_t>(1),
@@ -777,7 +777,7 @@ void StageOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   odsState.addSuccessors(dest);
   odsState.addOperands(registers);
   odsState.addOperands(passthroughs);
-  odsState.addAttribute("operand_segment_sizes",
+  odsState.addAttribute("operandSegmentSizes",
                         odsBuilder.getDenseI32ArrayAttr(
                             {static_cast<int32_t>(registers.size()),
                              static_cast<int32_t>(passthroughs.size()),
