@@ -64,6 +64,7 @@ jobs:
         run: |
           export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
           mkdir build && cd build
+          # In order for ccache to be effective, these flags should be kept in sync with nighly.
           cmake -GNinja ../llvm/llvm \
             -DBUILD_SHARED_LIBS=$BUILD_SHARED \
             -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
@@ -74,6 +75,8 @@ jobs:
             -DLLVM_ENABLE_PROJECTS=mlir \
             -DLLVM_EXTERNAL_PROJECTS=circt \
             -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=.. \
+            -DLLVM_TARGETS_TO_BUILD="host" \
+            -DLLVM_USE_SPLIT_DWARF \
             -DLLVM_USE_LINKER=lld \
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
