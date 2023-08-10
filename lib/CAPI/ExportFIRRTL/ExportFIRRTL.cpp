@@ -20,5 +20,6 @@ MlirLogicalResult mlirExportFIRRTL(MlirModule module,
                                    MlirStringCallback callback,
                                    void *userData) {
   mlir::detail::CallbackOstream stream(callback, userData);
-  return wrap(exportFIRFile(unwrap(module), stream, {}, {3, 0, 0}));
+  return wrap(exportFIRFile(unwrap(module), stream, {},
+                            FIRVersion::latestFIRVersion()));
 }
