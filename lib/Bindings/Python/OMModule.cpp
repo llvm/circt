@@ -164,7 +164,7 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
   // Add the OMListAttr definition
   mlir_attribute_subclass(m, "ListAttr", omAttrIsAListAttr)
       .def("__getitem__", &omListAttrGetElement)
-      .def("__len__", &omListAttrGetElement)
+      .def("__len__", &omListAttrGetNumElements)
       .def("__iter__",
            [](MlirAttribute arr) { return PyListAttrIterator(arr); });
   PyListAttrIterator::bind(m);
