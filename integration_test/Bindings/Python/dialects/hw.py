@@ -3,6 +3,7 @@
 
 import circt
 from circt.dialects import hw
+from circt.support import attribute_to_var
 
 from circt.ir import (Context, Location, InsertionPoint, IntegerType,
                       IntegerAttr, Module, StringAttr, TypeAttr)
@@ -99,6 +100,8 @@ with Context() as ctx, Location.unknown():
   print(inner_sym)
   # CHECK: "some_sym"
   print(inner_sym.symName)
+  # CHECK: some_sym
+  print(attribute_to_var(inner_sym))
 
   inner_ref = hw.InnerRefAttr.get(StringAttr.get("some_module"),
                                   StringAttr.get("some_instance"))
