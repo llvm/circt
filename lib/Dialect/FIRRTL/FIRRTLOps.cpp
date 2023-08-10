@@ -5204,17 +5204,6 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
       loc, "ref.sub op requires a RefType of vector or bundle base type");
 }
 
-FIRRTLType RWProbeOp::inferReturnType(ValueRange operands,
-                                      ArrayRef<NamedAttribute> attrs,
-                                      std::optional<Location> loc) {
-  auto typeAttr = getAttr<TypeAttr>(attrs, "type");
-  auto type = typeAttr.getValue();
-  auto forceableType = firrtl::detail::getForceableResultType(true, type);
-  if (!forceableType)
-    return emitInferRetTypeError(loc, "cannot force type ", type);
-  return forceableType;
-}
-
 LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   auto targetRef = getTarget();
   if (targetRef.getModule() !=
@@ -5233,9 +5222,10 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
     else
       assert(target.getField() == 0);
     // Check.
-    if (fType != getType()) {
+    auto baseType = type_dyn_cast<FIRRTLBaseType>(fType);
+    if (!baseType || baseType.getPassiveType() != getType().getType()) {
       auto diag = emitOpError("has type mismatch: target resolves to ")
-                  << fType << " instead of expected " << getType();
+                  << fType << " instead of expected " << getType().getType();
       diag.attachNote(loc) << "target resolves here";
       return diag;
     }

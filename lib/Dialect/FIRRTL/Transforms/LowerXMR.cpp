@@ -142,7 +142,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             return success();
           })
           .Case<RWProbeOp>([&](RWProbeOp rwprobe) {
-            if (!isZeroWidth(rwprobe.getType()))
+            if (!isZeroWidth(rwprobe.getType().getType()))
               addReachingSendsEntry(rwprobe.getResult(), rwprobe.getTarget());
             markForRemoval(rwprobe);
             return success();

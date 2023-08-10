@@ -985,7 +985,7 @@ firrtl.circuit "RWProbePort" {
   // CHECK-NOT: firrtl.ref.rwprobe
   // CHECK-NEXT: }
   firrtl.module @RWProbePort(in %in: !firrtl.vector<uint<1>, 2> sym [<@target,2,public>], out %p: !firrtl.rwprobe<uint<1>>) {
-    %0 = firrtl.ref.rwprobe <@RWProbePort::@target> : !firrtl.uint<1>
+    %0 = firrtl.ref.rwprobe <@RWProbePort::@target> : !firrtl.rwprobe<uint<1>>
     firrtl.ref.define %p, %0 : !firrtl.rwprobe<uint<1>>
   }
 }

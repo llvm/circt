@@ -2989,10 +2989,10 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
 
   // Ports are handled differently, emit a RWProbeOp with inner symbol.
   if (auto arg = dyn_cast<BlockArgument>(target)) {
-    // Check target type.  Replicate inference/verification logic.
-    if (targetType.hasUninferredWidth() || targetType.hasUninferredReset())
+    // Check target type.
+    if (targetType.hasUninferredReset())
       return emitError(startTok.getLoc(),
-                       "must have known width or concrete reset type in type ")
+                       "must have concrete reset type in type ")
              << targetType;
     auto forceableType =
         firrtl::detail::getForceableResultType(true, targetType);
@@ -3005,7 +3005,7 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
     auto sym = getInnerRefTo(
         hw::InnerSymTarget(arg.getArgNumber(), mod, fieldRef.getFieldID()),
         [&](auto _) -> hw::InnerSymbolNamespace & { return modNameSpace; });
-    result = builder.create<RWProbeOp>(sym, targetType);
+    result = builder.create<RWProbeOp>(forceableType, sym);
     return success();
   }
 
