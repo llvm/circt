@@ -2006,7 +2006,7 @@ firrtl.circuit "RWProbeInstance" {
 // -----
 
 firrtl.circuit "MissingClassForObjectPortInModule" {
-  // expected-error @below {{'firrtl.module' op target class 'Missing' not found}}
+  // expected-error @below {{'firrtl.module' op references unknown class @Missing}}
   firrtl.module @MissingClassForObjectPortInModule(out %o: !firrtl.class<@Missing()>) {}
 }
 
@@ -2014,7 +2014,7 @@ firrtl.circuit "MissingClassForObjectPortInModule" {
 
 firrtl.circuit "MissingClassForObjectPortInClass" {
   firrtl.module @MissingClassForObjectPortInClass() {}
-  // expected-error @below {{'firrtl.class' op target class 'Missing' not found}}
+  // expected-error @below {{'firrtl.class' op references unknown class @Missing}}
   firrtl.class @MyClass(out %o: !firrtl.class<@Missing()>) {}
 }
 
@@ -2022,7 +2022,7 @@ firrtl.circuit "MissingClassForObjectPortInClass" {
 
 firrtl.circuit "MissingClassForObjectDeclaration" {
   firrtl.module @ObjectClassMissing() {
-    // expected-error @below {{'firrtl.object' op target class 'Missing' not found}}
+    // expected-error @below {{'firrtl.object' op references unknown class @Missing}}
     %0 = firrtl.object @Missing()
   }
 }
@@ -2057,4 +2057,15 @@ firrtl.circuit "ConstClassType" {
   firrtl.class @MyClass(out %str: !firrtl.string) {}
   // expected-error @below {{classes cannot be const}}
   firrtl.module @ConstClassType(out %port: !firrtl.const.class<@MyClass(in str: !firrtl.string)>) {}
+}
+
+// -----
+
+firrtl.circuit "ObjectFieldDoesntExist" {
+  firrtl.class @MyClass(out %str: !firrtl.string) {}
+  firrtl.module @ConstClassType(out %port: !firrtl.integer) {
+    %0 = firrtl.object @MyClass(out str: !firrtl.string)
+    // expected-error @below {{'firrtl.object.subfield' unknown field bad_field in class type '!firrtl.class<@MyClass(out str: !firrtl.string)>'}}
+    %1 = firrtl.object.subfield %0[bad_field] : !firrtl.class<@MyClass(out str: !firrtl.string)>
+  }
 }
