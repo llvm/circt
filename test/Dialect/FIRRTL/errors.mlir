@@ -1975,7 +1975,6 @@ firrtl.circuit "RWProbeInstance" {
 // -----
 
 firrtl.circuit "RWProbeUseDef" {
-  firrtl.extmodule @Ext()
   firrtl.module @RWProbeUseDef(in %cond : !firrtl.uint<1>) {
     firrtl.when %cond : !firrtl.uint<1> {
       // expected-note @below {{target here}}
