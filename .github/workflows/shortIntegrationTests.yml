@@ -47,8 +47,9 @@ jobs:
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: shortintegration-${{ matrix.build-assert }}-${{ matrix.build-type }}-${{ matrix.compiler.cc }} 
-          max-size: 1G
+          key: ${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}
+          append-timestamp: false
+          max-size: 500M
 
       # --------
       # Build and test CIRCT
