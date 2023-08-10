@@ -161,7 +161,7 @@ void BlackBoxReaderPass::runOnOperation() {
                           << resourceFileName << "\n");
 
   // Newly generated IR will be placed at the end of the circuit.
-  auto builder = OpBuilder::atBlockEnd(circuitOp->getBlock());
+  auto builder = circuitOp.getBodyBuilder();
 
   // Do a shallow walk of the circuit to collect information necessary before we
   // do real work.
