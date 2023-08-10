@@ -5,9 +5,9 @@ set(LLVM_LINK_COMPONENTS
   Support
   )
 
-add_llvm_tool(circt-translate
+add_circt_tool(circt-translate
   circt-translate.cpp
-)
+  )
 
 llvm_update_compile_flags(circt-translate)
 

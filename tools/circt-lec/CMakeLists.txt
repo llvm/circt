@@ -1,6 +1,6 @@
 # circt-lec builds if a logic backend is found
 if(CIRCT_LEC_ENABLED)
-  add_llvm_tool(circt-lec
+  add_circt_tool(circt-lec
     circt-lec.cpp
   )
 
