@@ -15,7 +15,7 @@
 #include "PassDetail.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/HW/Namespace.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/Path.h"
 #include "mlir/IR/Builders.h"
@@ -35,7 +35,7 @@ class HWExportModuleHierarchyPass
     : public sv::HWExportModuleHierarchyBase<HWExportModuleHierarchyPass> {
 
 private:
-  DenseMap<Operation *, hw::ModuleNamespace> moduleNamespaces;
+  DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;
 
   void printHierarchy(hw::InstanceOp &inst, SymbolTable &symbolTable,
                       llvm::json::OStream &j,
@@ -55,9 +55,7 @@ void HWExportModuleHierarchyPass::printHierarchy(
   auto moduleOp = inst->getParentOfType<hw::HWModuleOp>();
   auto innerSym = inst.getInnerSymAttr();
   if (!innerSym) {
-    if (moduleNamespaces.find(moduleOp) == moduleNamespaces.end())
-      moduleNamespaces.insert({moduleOp, hw::ModuleNamespace(moduleOp)});
-    hw::ModuleNamespace &ns = moduleNamespaces[moduleOp];
+    auto &ns = moduleNamespaces.try_emplace(moduleOp, moduleOp).first->second;
     innerSym = hw::InnerSymAttr::get(
         StringAttr::get(inst.getContext(), ns.newName(inst.getInstanceName())));
     inst->setAttr("inner_sym", innerSym);

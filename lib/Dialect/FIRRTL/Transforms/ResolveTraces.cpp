@@ -140,8 +140,6 @@ private:
         path.isOpOfType<FModuleOp, FExtModuleOp, InstanceOp>())
       return;
 
-    std::optional<ModuleNamespace> moduleNamespace;
-
     newTarget.append(">");
     auto innerSymStr =
         TypeSwitch<AnnoTarget, StringAttr>(path.ref)
@@ -294,12 +292,12 @@ void ResolveTracesPass::runOnOperation() {
     SmallVector<std::pair<Annotation, AnnoPathValue>> outputAnnotations;
 
     // A lazily constructed module namespace.
-    std::optional<ModuleNamespace> moduleNamespace;
+    std::optional<hw::InnerSymbolNamespace> moduleNamespace;
 
     // Return a cached module namespace, lazily constructing it if needed.
-    auto getNamespace = [&](FModuleLike module) -> ModuleNamespace & {
+    auto getNamespace = [&](auto module) -> hw::InnerSymbolNamespace & {
       if (!moduleNamespace)
-        moduleNamespace = ModuleNamespace(module);
+        moduleNamespace = hw::InnerSymbolNamespace(module);
       return *moduleNamespace;
     };
 

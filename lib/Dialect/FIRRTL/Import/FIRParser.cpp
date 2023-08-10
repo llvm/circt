@@ -18,8 +18,8 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
-#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -1421,8 +1421,8 @@ namespace {
 struct FIRStmtParser : public FIRParser {
   explicit FIRStmtParser(Block &blockToInsertInto,
                          FIRModuleContext &moduleContext,
-                         ModuleNamespace &modNameSpace, FIRVersion &version,
-                         SymbolRefAttr groupSym = {})
+                         hw::InnerSymbolNamespace &modNameSpace,
+                         FIRVersion &version, SymbolRefAttr groupSym = {})
       : FIRParser(moduleContext.getConstants(), moduleContext.getLexer(),
                   version),
         builder(UnknownLoc::get(getContext()), getContext()),
@@ -1529,7 +1529,7 @@ private:
   // Extra information maintained across a module.
   FIRModuleContext &moduleContext;
 
-  ModuleNamespace &modNameSpace;
+  hw::InnerSymbolNamespace &modNameSpace;
 
   // An optional symbol that contains the current group that we are in.  This is
   // used to construct a nested symbol for a group definition operation.
@@ -3004,7 +3004,7 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
     auto mod = cast<FModuleOp>(arg.getOwner()->getParentOp());
     auto sym = getInnerRefTo(
         hw::InnerSymTarget(arg.getArgNumber(), mod, fieldRef.getFieldID()),
-        [&](FModuleOp mod) -> ModuleNamespace & { return modNameSpace; });
+        [&](auto _) -> hw::InnerSymbolNamespace & { return modNameSpace; });
     result = builder.create<RWProbeOp>(sym, targetType);
     return success();
   }
@@ -4526,7 +4526,7 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
       return failure();
   }
 
-  ModuleNamespace modNameSpace(moduleOp);
+  hw::InnerSymbolNamespace modNameSpace(moduleOp);
   FIRStmtParser stmtParser(body, moduleContext, modNameSpace, version);
 
   // Parse the moduleBlock.

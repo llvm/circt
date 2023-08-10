@@ -18,7 +18,7 @@
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
-#include "circt/Dialect/HW/Namespace.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -417,7 +417,7 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
     SmallVector<Operation *, 16> lateBoundOps;
     b.setInsertionPoint(inst);
     // Namespace that tracks inner symbols in the parent module.
-    hw::ModuleNamespace nameSpace(instParent);
+    hw::InnerSymbolNamespace nameSpace(instParent);
     // A map from old inner symbols to new ones.
     DenseMap<mlir::StringAttr, mlir::StringAttr> symMapping;
 

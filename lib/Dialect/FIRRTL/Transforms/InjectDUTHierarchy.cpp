@@ -20,6 +20,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-inject-dut-hier"
@@ -189,7 +190,7 @@ void InjectDUTHierarchy::runOnOperation() {
 
   // Instantiate the wrapper inside the DUT and wire it up.
   b.setInsertionPointToStart(dut.getBodyBlock());
-  ModuleNamespace dutNS(dut);
+  hw::InnerSymbolNamespace dutNS(dut);
   auto wrapperInst = b.create<InstanceOp>(
       b.getUnknownLoc(), wrapper, wrapper.getModuleName(),
       NameKindEnum::DroppableName, ArrayRef<Attribute>{}, ArrayRef<Attribute>{},

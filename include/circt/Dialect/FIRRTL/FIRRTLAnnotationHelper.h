@@ -16,7 +16,7 @@
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
-#include "circt/Dialect/FIRRTL/Namespace.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
@@ -329,10 +329,10 @@ struct ApplyState {
   DenseMap<StringAttr, LegacyWiringProblem> legacyWiringProblems;
   SmallVector<WiringProblem> wiringProblems;
 
-  ModuleNamespace &getNamespace(FModuleLike module) {
+  hw::InnerSymbolNamespace &getNamespace(FModuleLike module) {
     auto &ptr = namespaces[module];
     if (!ptr)
-      ptr = std::make_unique<ModuleNamespace>(module);
+      ptr = std::make_unique<hw::InnerSymbolNamespace>(module);
     return *ptr;
   }
 
@@ -342,7 +342,7 @@ struct ApplyState {
   };
 
 private:
-  DenseMap<Operation *, std::unique_ptr<ModuleNamespace>> namespaces;
+  DenseMap<Operation *, std::unique_ptr<hw::InnerSymbolNamespace>> namespaces;
   unsigned annotationID = 0;
 };
 

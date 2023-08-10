@@ -25,7 +25,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
-#include "circt/Dialect/HW/Namespace.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -1421,8 +1421,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState)
       : theModule(module), circuitState(circuitState),
-        builder(module.getLoc(), module.getContext()),
-        moduleNamespace(hw::ModuleNamespace(module)),
+        builder(module.getLoc(), module.getContext()), moduleNamespace(module),
         backedgeBuilder(builder, module.getLoc()) {}
 
   LogicalResult run();
@@ -1727,7 +1726,7 @@ private:
 
   /// A namespace that can be used to generte new symbol names that are unique
   /// within this module.
-  hw::ModuleNamespace moduleNamespace;
+  hw::InnerSymbolNamespace moduleNamespace;
 
   /// A backedge builder to directly materialize values during the lowering
   /// without requiring temporary wires.
