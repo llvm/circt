@@ -173,7 +173,7 @@ class PrintEventListener : public PrettyPrinter::Listener {
   /// Note: Doesn't own Data !
   SmallVector<Data *> list;
   /// The storage for the callback, as a function object.
-  std::function<void(unsigned)> callbackObj;
+  std::function<void(uint32_t)> callbackObj;
 
   /// Note: Callable class must implement a callable with signature:
   /// void (Data*)
@@ -188,7 +188,7 @@ class PrintEventListener : public PrettyPrinter::Listener {
     // May result in heap allocation. Pointer to the callback object and data
     // vector is captured by value.
     callbackObj =
-        decltype(callbackObj)([c = &c, dataPtr = &this->list](unsigned id) {
+        decltype(callbackObj)([c = &c, dataPtr = &this->list](uint32_t id) {
           std::invoke(*c, (*dataPtr)[id]);
         });
   }
@@ -197,7 +197,7 @@ public:
   PrintEventListener(Callable &c) { init(c); }
 
   /// This is invoked when the CallbackToken is printed.
-  void print(unsigned id) override { std::invoke(callbackObj, id); }
+  void print(uint32_t id) override { std::invoke(callbackObj, id); }
 
   /// Insert data onto the list.
   void setData(Data *obj) { list.push_back(obj); }

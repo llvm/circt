@@ -76,7 +76,7 @@ public:
   // tokens stream. The id is used to uniquely identify an interesting event
   // on the token stream.
   struct CallbackInfo : public TokenInfo {
-    unsigned id;
+    uint32_t id;
   };
 
 private:
@@ -166,8 +166,8 @@ struct BeginToken : public TokenBase<BeginToken, Token::Kind::Begin> {
 struct EndToken : public TokenBase<EndToken, Token::Kind::End> {};
 
 struct CallbackToken : public TokenBase<CallbackToken, Token::Kind::Callback> {
-  CallbackToken(unsigned id) { initialize(id); }
-  unsigned id() const { return getInfo().id; }
+  CallbackToken(uint32_t id) { initialize(id); }
+  uint32_t id() const { return getInfo().id; }
 };
 
 //===----------------------------------------------------------------------===//
@@ -182,7 +182,7 @@ public:
     /// No tokens referencing external memory are present.
     virtual void clear(){};
     /// Listener for print event.
-    virtual void print(unsigned){};
+    virtual void print(uint32_t){};
   };
 
   /// PrettyPrinter for specified stream.
