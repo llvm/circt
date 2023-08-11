@@ -114,14 +114,11 @@ jobs:
           echo "out=$json" >> $GITHUB_OUTPUT
       - name: Add Build Options
         id: add-build-options
-        env:
-          mode: release
-          assert: OFF
-          shared: OFF
-          stats: ON
         run: |
-          json=$(echo '${{ toJSON(env) }}' | jq -c)
-          echo $json
+          json='{"mode":"release","assert":"OFF","shared":"OFF","stats":"ON"}'
+          if [[ ${{ github.event_name }} == 'schedule' ]] || [[ ${{ github.event_name }} == 'workflow_dispatch' ]]; then
+            json=$(echo $json | jq -c '.assert = "ON" | .mode = "relwithdebinfo"')
+          fi
           echo "out=$json" >> $GITHUB_OUTPUT
       - name: Build JSON Payloads
         id: build-json-payloads
