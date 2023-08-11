@@ -210,7 +210,6 @@ jobs:
             -DLLVM_ENABLE_PROJECTS=mlir ${{ matrix.runner.cont }}
             -DLLVM_EXTERNAL_PROJECTS=circt ${{ matrix.runner.cont }}
             -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=".." ${{ matrix.runner.cont }}
-            -DLLVM_OPTIMIZED_TABLEGEN=ON ${{ matrix.runner.cont }}
             -DLLVM_STATIC_LINK_CXX_STDLIB=ON ${{ matrix.runner.cont }}
             -DLLVM_ENABLE_TERMINFO=OFF ${{ matrix.runner.cont }}
             -DLLVM_PARALLEL_LINK_JOBS=1 ${{ matrix.runner.cont }}
