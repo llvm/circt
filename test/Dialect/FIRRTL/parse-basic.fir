@@ -1333,10 +1333,18 @@ circuit EnumTypes:
 
   ; CHECK-LABEL: @RWProbePort(
   module RWProbePort:
-    ; CHECK: in %in: !firrtl.vector<uint<1>, 2> sym [<@sym,2,public>],
+    ; CHECK: in %in: !firrtl.vector<uint<1>, 2> sym [<@[[IN_SYM:.+]],2,public>],
     input in : UInt<1>[2]
     output p : RWProbe<UInt<1>>
-    ; CHECK:  firrtl.ref.rwprobe <@RWProbePort::@sym> : !firrtl.uint<1>
+    ; CHECK:  firrtl.ref.rwprobe <@RWProbePort::@[[IN_SYM]]> : !firrtl.rwprobe<uint<1>>
+    define p = rwprobe(in[1])
+
+  ; CHECK-LABEL: @RWProbeUninferredPort(
+  module RWProbeUninferredPort:
+    ; CHECK: in %in: !firrtl.vector<uint, 2> sym [<@[[IN_SYM:.+]],2,public>],
+    input in : UInt[2]
+    output p : RWProbe<UInt>
+    ; CHECK:  firrtl.ref.rwprobe <@RWProbeUninferredPort::@[[IN_SYM]]> : !firrtl.rwprobe<uint>
     define p = rwprobe(in[1])
 
   ; CHECK-LABEL: module private @ProbeInvalidate

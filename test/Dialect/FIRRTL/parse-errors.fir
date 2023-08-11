@@ -634,14 +634,6 @@ circuit RWProbeConstPort:
 
 ;// -----
 
-circuit RWProbeUninferredPort:
-  module RWProbeUninferredPort:
-    input in : UInt[2]
-    output p : RWProbe<UInt>
-    define p = rwprobe(in[1]) ; expected-error {{must have known width or concrete reset type in type}}
-
-;// -----
-
 FIRRTL version 2.0.0
 circuit PartialConnect_v2p0p0:
   module PartialConnect_v2p0p0:

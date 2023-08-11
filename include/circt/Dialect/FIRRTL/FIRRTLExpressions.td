@@ -1233,20 +1233,23 @@ def RefSubOp : FIRRTLExprOp<"ref.sub"> {
      "$input `[` $index `]` attr-dict `:` qualified(type($input))";
 }
 
-def RWProbeOp : FIRRTLExprOp<"ref.rwprobe",
-                  [DeclareOpInterfaceMethods<InnerRefUserOpInterface>]> {
+def RWProbeOp : FIRRTLOp<"ref.rwprobe",
+                  [DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
+                   HasCustomSSAName,
+                   Pure
+                  ]> {
   let summary = "FIRRTL RWProbe";
   let description = [{
     Create a RWProbe for the target.
     Target must be local.
     ```
-      %result = firrtl.ref.rwprobe @mod::@sym : t
+      %result = firrtl.ref.rwprobe @mod::@sym : firrtl.rwprobe<t>
     ```
   }];
 
-  let arguments = (ins InnerRefAttr:$target, TypeAttrOf<RWProbeTarget>:$type);
-  let results = (outs RefType:$result);
-  let assemblyFormat = "$target attr-dict `:` $type";
+  let arguments = (ins InnerRefAttr:$target);
+  let results = (outs RWProbeConcreteReset:$result);
+  let assemblyFormat = "$target attr-dict `:` type($result)";
 }
 
 //===----------------------------------------------------------------------===//

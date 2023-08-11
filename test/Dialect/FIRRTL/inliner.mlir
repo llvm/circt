@@ -1202,7 +1202,7 @@ firrtl.circuit "RWProbePort" {
   firrtl.module private @Child(in %in: !firrtl.vector<uint<1>, 2>
                                  sym [<@sym,2,public>],
                                out %p: !firrtl.rwprobe<uint<1>>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
-    %0 = firrtl.ref.rwprobe <@Child::@sym> : !firrtl.uint<1>
+    %0 = firrtl.ref.rwprobe <@Child::@sym> : !firrtl.rwprobe<uint<1>>
     firrtl.ref.define %p, %0 : !firrtl.rwprobe<uint<1>>
   }
   // CHECK: module @RWProbePort
@@ -1244,9 +1244,9 @@ firrtl.circuit "CollidingSymbolsFields" {
   firrtl.module @Foo(in %x : !firrtl.bundle<a: uint<1>, b: uint<1>> sym [<@b_0,1,public>,<@foo,2,public>]) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
     %b = firrtl.wire sym [<@b,1,public>,<@bar_0,2,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>>
     firrtl.instance bar sym @bar @Bar()
-    %1 = firrtl.ref.rwprobe <@Foo::@b_0> : !firrtl.uint<1>
-    %2 = firrtl.ref.rwprobe <@Foo::@bar_0> : !firrtl.uint<1>
-    %3 = firrtl.ref.rwprobe <@Foo::@foo> : !firrtl.uint<1>
+    %1 = firrtl.ref.rwprobe <@Foo::@b_0> : !firrtl.rwprobe<uint<1>>
+    %2 = firrtl.ref.rwprobe <@Foo::@bar_0> : !firrtl.rwprobe<uint<1>>
+    %3 = firrtl.ref.rwprobe <@Foo::@foo> : !firrtl.rwprobe<uint<1>>
   }
   // CHECK: module @CollidingSymbolsFields(
   // CHECK-SAME: sym [<@b_0

@@ -58,6 +58,47 @@ static void diagnoseUninferredType(InFlightDiagnostic &diag, Type t,
       diagnoseUninferredType(diag, elem.type, str + "." + elem.name.getValue());
 }
 
+/// Get FieldRef pointing to the specified inner symbol target, which must be
+/// valid. Returns null FieldRef if target points to something with no value,
+/// such as a port of an external module.
+static FieldRef getRefForIST(const hw::InnerSymTarget &ist) {
+  if (ist.isPort()) {
+    return TypeSwitch<Operation *, FieldRef>(ist.getOp())
+        .Case<FModuleOp>([&](auto fmod) {
+          return FieldRef(fmod.getArgument(ist.getPort()), ist.getField());
+        })
+        .Default({});
+  }
+
+  auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(ist.getOp());
+  assert(symOp && symOp.getTargetResultIndex() &&
+         (symOp.supportsPerFieldSymbols() || ist.getField() == 0));
+  return FieldRef(symOp.getTargetResult(), ist.getField());
+}
+
+/// Calculate the "InferWidths-fieldID" equivalent for the given fieldID + type.
+static uint64_t convertFieldIDToOurVersion(uint64_t fieldID, FIRRTLType type) {
+  auto fType = getBaseOfType<hw::FieldIDTypeInterface>(type);
+  if (!fType)
+    return fieldID;
+
+  uint64_t convertedFieldID = 0;
+
+  auto curFID = fieldID;
+  auto curFType = fType;
+  while (curFID != 0) {
+    auto [child, subID] = curFType.getSubTypeByFieldID(curFID);
+    if (isa<FVectorType>(curFType))
+      convertedFieldID++; // Vector fieldID is 1.
+    else
+      convertedFieldID += curFID - subID; // Add consumed portion.
+    curFID = subID;
+    curFType = child;
+  }
+
+  return convertedFieldID;
+}
+
 //===----------------------------------------------------------------------===//
 // Constraint Expressions
 //===----------------------------------------------------------------------===//
@@ -1169,8 +1210,9 @@ namespace {
 /// variables and constraints to be solved later.
 class InferenceMapping {
 public:
-  InferenceMapping(ConstraintSolver &solver, SymbolTable &symtbl)
-      : solver(solver), symtbl(symtbl) {}
+  InferenceMapping(ConstraintSolver &solver, SymbolTable &symtbl,
+                   hw::InnerSymbolTableCollection &istc)
+      : solver(solver), symtbl(symtbl), irn{symtbl, istc} {}
 
   LogicalResult map(CircuitOp op);
   LogicalResult mapOperation(Operation *op);
@@ -1245,6 +1287,9 @@ private:
 
   /// Cache of module symbols
   SymbolTable &symtbl;
+
+  /// Full design inner symbol information.
+  hw::InnerRefNamespace irn;
 };
 
 } // namespace
@@ -1695,6 +1740,25 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       .Case<RefCastOp>([&](auto op) {
         declareVars(op.getResult(), op.getLoc());
         constrainTypes(op.getResult(), op.getInput(), true);
+      })
+      .Case<RWProbeOp>([&](auto op) {
+        declareVars(op.getResult(), op.getLoc());
+        auto ist = irn.lookup(op.getTarget());
+        if (!ist) {
+          op->emitError("target of rwprobe could not be resolved");
+          mappingFailed = true;
+          return;
+        }
+        auto ref = getRefForIST(ist);
+        if (!ref) {
+          op->emitError("target of rwprobe resolved to unsupported target");
+          mappingFailed = true;
+          return;
+        }
+        auto newFID = convertFieldIDToOurVersion(
+            ref.getFieldID(), type_cast<FIRRTLType>(ref.getValue().getType()));
+        unifyTypes(FieldRef(op.getResult(), 0),
+                   FieldRef(ref.getValue(), newFID), op.getType());
       })
       .Case<mlir::UnrealizedConversionCastOp>([&](auto op) {
         for (Value result : op.getResults()) {
@@ -2285,7 +2349,8 @@ class InferWidthsPass : public InferWidthsBase<InferWidthsPass> {
 void InferWidthsPass::runOnOperation() {
   // Collect variables and constraints
   ConstraintSolver solver;
-  InferenceMapping mapping(solver, getAnalysis<SymbolTable>());
+  InferenceMapping mapping(solver, getAnalysis<SymbolTable>(),
+                           getAnalysis<hw::InnerSymbolTableCollection>());
   if (failed(mapping.map(getOperation()))) {
     signalPassFailure();
     return;
