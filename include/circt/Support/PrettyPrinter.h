@@ -73,23 +73,20 @@ public:
     // Nothing
   };
   // This can be used to associate a callback with the print event on the
-  // tokens stream. The id, is used to uniquely identify an intereseting event
+  // tokens stream. The id is used to uniquely identify an interesting event
   // on the token stream.
   struct CallbackInfo : public TokenInfo {
-    using CallbackTy = llvm::function_ref<void(unsigned)>;
-    CallbackTy callback;
     unsigned id;
   };
 
 private:
-  union TokenUnion {
+  union {
     TokenInfo info;
     StringInfo stringInfo;
     BreakInfo breakInfo;
     BeginInfo beginInfo;
     EndInfo endInfo;
     CallbackInfo callbackInfo;
-    TokenUnion() : callbackInfo(){};
   } data;
 
 protected:
@@ -169,10 +166,8 @@ struct BeginToken : public TokenBase<BeginToken, Token::Kind::Begin> {
 struct EndToken : public TokenBase<EndToken, Token::Kind::End> {};
 
 struct CallbackToken : public TokenBase<CallbackToken, Token::Kind::Callback> {
-  CallbackToken(Token::CallbackInfo::CallbackTy c, unsigned id) {
-    initialize(c, id);
-  }
-  void invoke() const { std::invoke(getInfo().callback, getInfo().id); }
+  CallbackToken(unsigned id) { initialize(id); }
+  unsigned id() const { return getInfo().id; }
 };
 
 //===----------------------------------------------------------------------===//
@@ -186,6 +181,8 @@ public:
     virtual ~Listener();
     /// No tokens referencing external memory are present.
     virtual void clear(){};
+    /// Listener for print event.
+    virtual void print(unsigned){};
   };
 
   /// PrettyPrinter for specified stream.
@@ -196,11 +193,11 @@ public:
   PrettyPrinter(llvm::raw_ostream &os, uint32_t margin, uint32_t baseIndent = 0,
                 uint32_t currentColumn = 0,
                 uint32_t maxStartingIndent = kInfinity / 4,
-                Listener *listener = nullptr)
+                Listener *listener = nullptr, Listener *printListener = nullptr)
       : space(margin - std::max(currentColumn, baseIndent)),
         defaultFrame{baseIndent, PrintBreaks::Inconsistent}, indent(baseIndent),
         margin(margin), maxStartingIndent(std::max(maxStartingIndent, margin)),
-        os(os), listener(listener) {
+        os(os), listener(listener), printListener(printListener) {
     assert(maxStartingIndent < kInfinity / 2);
     assert(maxStartingIndent > baseIndent);
     assert(margin > currentColumn);
@@ -232,6 +229,8 @@ public:
   void setListener(Listener *newListener) { listener = newListener; };
   auto *getListener() const { return listener; }
 
+  void setPrintListener(Listener *newListener) { printListener = newListener; };
+  auto *getPrintListener() const { return printListener; }
   static constexpr uint32_t kInfinity = (1U << 15) - 1;
 
 private:
@@ -319,6 +318,9 @@ private:
 
   /// Hook for Token storage events.
   Listener *listener = nullptr;
+
+  /// Manage and record print events on the token stream.
+  Listener *printListener = nullptr;
 
   /// Threshold for walking scan state and "rebasing" totals/offsets.
   static constexpr decltype(leftTotal) rebaseThreshold =

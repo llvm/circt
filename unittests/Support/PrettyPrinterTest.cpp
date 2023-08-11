@@ -25,10 +25,11 @@ class RecordLocation {
   formatted_raw_ostream *fStream;
 
 public:
-  void operator()(SmallString<128> *locationStr) {
-    locationStr->append(("line <" + Twine(fStream->getLine()) + "," +
-                         Twine(fStream->getColumn()) + ">,")
-                            .str());
+  void operator()(SmallVectorImpl<char> *locationStr) {
+    auto str = ("line <" + Twine(fStream->getLine()) + "," +
+                Twine(fStream->getColumn()) + ">,")
+                   .str();
+    locationStr->append(str.begin(), str.end());
   }
   void setStream(formatted_raw_ostream *&f) { fStream = f; }
   RecordLocation(formatted_raw_ostream *f) : fStream(f) {}
@@ -43,7 +44,8 @@ protected:
   SmallVector<Token> indentNestedTokens;
   formatted_raw_ostream *fStream = nullptr;
   RecordLocation recordLoc;
-  CallbackSaver<RecordLocation, SmallString<128>> callbacks;
+  PrintEventListener<RecordLocation, SmallString<128>> callbacks =
+      PrintEventListener<RecordLocation, SmallString<128>>(recordLoc);
 
   /// Scratch buffer used by print.
   SmallString<256> out;
@@ -80,7 +82,6 @@ protected:
 
   void SetUp() override {
 
-    callbacks.init(recordLoc);
     buildArgs();
     {
       // foooooo(ARGS)
@@ -88,15 +89,15 @@ protected:
       funcTokens.append({StringToken("foooooo"), StringToken("("),
                          BeginToken(0, Breaks::Inconsistent), BreakToken(0)});
 
-      funcTokens.append({callbacks.getToken(locationOut1)});
+      funcTokens.append({callbacks.getToken(&locationOut1)});
       funcTokens.append(argTokens);
-      funcTokens.append({callbacks.getToken(locationOut1)});
+      funcTokens.append({callbacks.getToken(&locationOut1)});
       funcTokens.append({BreakToken(0), EndToken(), StringToken(");"),
                          BreakToken(PrettyPrinter::kInfinity)});
-      funcTokens.append({callbacks.getToken(locationOut1)});
+      funcTokens.append({callbacks.getToken(&locationOut1)});
     }
     {
-      auto callbackToken = callbacks.getToken(locationOut2);
+      auto callbackToken = callbacks.getToken(&locationOut2);
       // baroo(AR..  barooga(ARGS) .. GS)
       // Nested function call, nested method wrapped in cbox(0) w/breaks.
       nestedTokens.append({StringToken("baroo"), StringToken("("),
@@ -125,7 +126,7 @@ protected:
                            BreakToken(PrettyPrinter::kInfinity)});
     }
     {
-      auto callbackToken = callbacks.getToken(locationOut3);
+      auto callbackToken = callbacks.getToken(&locationOut3);
       // wahoo(ARGS)
       // If wrap args, indent on next line
       indentNestedTokens.append(
@@ -170,6 +171,7 @@ protected:
     recordLoc.setStream(fStream);
     locationOut1.clear();
     PrettyPrinter pp(formattedStream, margin);
+    pp.setPrintListener(&callbacks);
     pp.addTokens(tokens);
     pp.eof();
   }
@@ -578,8 +580,8 @@ TEST(PrettyPrinterTest, Expr) {
   formatted_raw_ostream formattedStream(os);
   SmallString<128> locationOut;
   RecordLocation recordLoc(&formattedStream);
-  CallbackSaver<RecordLocation, SmallString<128>> callbacks(recordLoc);
-  auto token = callbacks.getToken(locationOut);
+  PrintEventListener<RecordLocation, SmallString<128>> callbacks(recordLoc);
+  auto token = callbacks.getToken(&locationOut);
 
   auto sumExpr = [&token](auto &ps) {
     ps << token << "(";
@@ -596,6 +598,7 @@ TEST(PrettyPrinterTest, Expr) {
 
   auto test = [&](const char *id, auto margin) {
     PrettyPrinter pp(formattedStream, margin);
+    pp.setPrintListener(&callbacks);
     TokenStringSaver saver;
     TokenStream<> ps(pp, saver);
     out = "\n";
@@ -762,13 +765,14 @@ TEST(PrettyPrinterTest, NeverBreakGroup) {
   formatted_raw_ostream formattedStream(os);
   SmallString<128> locationOut;
   RecordLocation recordLoc(&formattedStream);
-  CallbackSaver<RecordLocation, SmallString<128>> callbacks(recordLoc);
+  PrintEventListener<RecordLocation, SmallString<128>> callbacks(recordLoc);
   // Mostly checking location after break tokens.
-  auto callbackToken = callbacks.getToken(locationOut);
+  auto callbackToken = callbacks.getToken(&locationOut);
 
   auto test = [&](Breaks breaks1, Breaks breaks2) {
     out = "\n";
     PrettyPrinter pp(formattedStream, 8);
+    pp.setPrintListener(&callbacks);
     pp.add(callbackToken);
     pp.add(BeginToken(2, breaks1));
     pp.add(StringToken("test"));
@@ -833,8 +837,8 @@ TEST(PrettyPrinterTest, MaxStartingIndent) {
 
   // Mostly checking location after break tokens.
   RecordLocation recordLoc(&formattedStream);
-  CallbackSaver<RecordLocation, SmallString<128>> callbacks(recordLoc);
-  auto callbackToken = callbacks.getToken(locationOut);
+  PrintEventListener<RecordLocation, SmallString<128>> callbacks(recordLoc);
+  auto callbackToken = callbacks.getToken(&locationOut);
 
   auto test = [&](PrettyPrinter &pp) {
     out = "\n";
@@ -865,10 +869,12 @@ TEST(PrettyPrinterTest, MaxStartingIndent) {
   };
   auto testDefault = [&]() {
     PrettyPrinter pp(formattedStream, 4);
+    pp.setPrintListener(&callbacks);
     test(pp);
   };
   auto testValue = [&](auto maxStartingIndent) {
     PrettyPrinter pp(formattedStream, 4, 0, 0, maxStartingIndent);
+    pp.setPrintListener(&callbacks);
     test(pp);
   };
 
@@ -929,7 +935,8 @@ protected:
 
   formatted_raw_ostream formattedStream = formatted_raw_ostream(ppOS);
   RecordLocation recordLoc = RecordLocation(&formattedStream);
-  CallbackSaver<RecordLocation, SmallString<128>> callbacks;
+  PrintEventListener<RecordLocation, SmallVectorImpl<char>> callbacks =
+      PrintEventListener<RecordLocation, SmallVectorImpl<char>>(recordLoc);
   TokenStringSaver saver;
 
   template <typename Callable>
@@ -937,12 +944,12 @@ protected:
                    std::optional<StringRef> data = std::nullopt,
                    unsigned margin = 10) {
     SmallString<128> locationOut;
-    callbacks.init(recordLoc);
-    callbacks.setData(locationOut);
+    callbacks.setData(&locationOut);
     // Mostly checking location after break tokens.
     out.clear();
     compare.clear();
     PrettyPrinter pp(formattedStream, margin);
+    pp.setPrintListener(&callbacks);
     TokenStream<> ps(pp, saver);
 
     std::invoke(test, ps, os);

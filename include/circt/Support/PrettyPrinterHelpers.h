@@ -167,40 +167,49 @@ public:
 };
 
 template <typename Callable, typename Data>
-class CallbackSaver {
+class PrintEventListener : public PrettyPrinter::Listener {
 
   /// List of all the unique data associated with each callback token.
+  /// Note: Doesn't own Data !
   SmallVector<Data *> list;
   /// The storage for the callback, as a function object.
   std::function<void(unsigned)> callbackObj;
 
-  /// Note: Callable class must implement a callable with signature::
+  /// Note: Callable class must implement a callable with signature:
   /// void (Data*)
-public:
-  CallbackSaver() = default;
-  CallbackSaver(Callable &c) { init(c); }
-
   /// Create and initialize a function object, capturing the callable object and
-  /// a poiner to the data vector. The callable object contains all the values
+  /// a pointer to the data vector. The callable object contains all the values
   /// shared across the callback tokens. The Data list indexed by the parameter
-  /// provides the unique data for each clalback.
+  /// provides the unique data for each callback.
   void init(Callable &c) {
+    // Ensure init is called only once.
+    assert(!callbackObj);
+    assert(list.empty());
     // May result in heap allocation. Pointer to the callback object and data
     // vector is captured by value.
-    callbackObj = decltype(callbackObj)(
-        [callbackObj = &c, dataPtr = &this->list](unsigned id) {
-          std::invoke(*callbackObj, (*dataPtr)[id]);
+    callbackObj =
+        decltype(callbackObj)([c = &c, dataPtr = &this->list](unsigned id) {
+          std::invoke(*c, (*dataPtr)[id]);
         });
   }
 
+public:
+  PrintEventListener(Callable &c) { init(c); }
+
+  /// This is invoked when the CallbackToken is printed.
+  void print(unsigned id) override { std::invoke(callbackObj, id); }
+
   /// Insert data onto the list.
-  void setData(Data &obj) { list.push_back(&obj); }
+  void setData(Data *obj) { list.push_back(obj); }
   /// Get a token with the last item on the list.
   CallbackToken getToken() {
-    return CallbackToken(callbackObj, (list.size() - 1));
+    // Callback function must be allocated.
+    assert(callbackObj);
+    assert(!list.empty());
+    return CallbackToken((list.size() - 1));
   }
   /// Get a token with the obj data.
-  CallbackToken getToken(Data &obj) {
+  CallbackToken getToken(Data *obj) {
     setData(obj);
     return getToken();
   }
