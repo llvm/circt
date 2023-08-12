@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/Seq/SeqAttributes.h"
 #include "mlir/IR/Dominance.h"
@@ -523,7 +524,7 @@ void LowerMemoryPass::runOnOperation() {
 
   // The set of all modules underneath the design under test module.
   DenseSet<Operation *> dutModuleSet;
-  llvm::for_each(llvm::depth_first(dut), [&](hw::InstanceGraphNode *node) {
+  llvm::for_each(llvm::depth_first(dut), [&](igraph::InstanceGraphNode *node) {
     dutModuleSet.insert(node->getModule());
   });
 

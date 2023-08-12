@@ -294,7 +294,7 @@ static void updateOoOArgs(SmallVectorImpl<Operation *> &lateBoundOps,
 static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
                        SetVector<Operation *> &depOps, IRMapping &cutMap,
                        hw::InstanceGraph &instanceGraph) {
-  hw::InstanceGraphNode *newModNode = instanceGraph.lookup(newMod);
+  igraph::InstanceGraphNode *newModNode = instanceGraph.lookup(newMod);
   SmallVector<Operation *, 16> lateBoundOps;
   OpBuilder b = OpBuilder::atBlockBegin(newMod.getBodyBlock());
   oldMod.walk<WalkOrder::PreOrder>([&](Operation *op) {
@@ -305,7 +305,7 @@ static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
       if (hasOoOArgs(newMod, newOp))
         lateBoundOps.push_back(newOp);
       if (auto instance = dyn_cast<hw::InstanceOp>(op)) {
-        hw::InstanceGraphNode *instMod =
+        igraph::InstanceGraphNode *instMod =
             instanceGraph.lookup(instance.getModuleNameAttr().getAttr());
         newModNode->addInstance(instance, instMod);
       }
@@ -317,7 +317,7 @@ static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
 // Check if the module has already been bound.
 static bool isBound(hw::HWModuleLike op, hw::InstanceGraph &instanceGraph) {
   auto *node = instanceGraph.lookup(op);
-  return llvm::any_of(node->uses(), [](hw::InstanceRecord *a) {
+  return llvm::any_of(node->uses(), [](igraph::InstanceRecord *a) {
     auto inst = a->getInstance();
     if (!inst)
       return false;
@@ -376,16 +376,16 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
   }
 
   // Get the instance graph node for the old module.
-  hw::InstanceGraphNode *node = instanceGraph.lookup(oldMod);
+  igraph::InstanceGraphNode *node = instanceGraph.lookup(oldMod);
   assert(!node->noUses() &&
          "expected module for inlining to be instantiated at least once");
 
   // Iterate through each instance of the module.
   OpBuilder b(oldMod);
   bool allInlined = true;
-  for (hw::InstanceRecord *use : llvm::make_early_inc_range(node->uses())) {
+  for (igraph::InstanceRecord *use : llvm::make_early_inc_range(node->uses())) {
     // If there is no instance, move on.
-    hw::HWInstanceLike instLike = use->getInstance();
+    auto instLike = use->getInstance<hw::HWInstanceLike>();
     if (!instLike) {
       allInlined = false;
       continue;
@@ -413,7 +413,8 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
     // Inline the body at the instantiation site.
     hw::HWModuleOp instParent =
         cast<hw::HWModuleOp>(use->getParent()->getModule());
-    hw::InstanceGraphNode *instParentNode = instanceGraph.lookup(instParent);
+    igraph::InstanceGraphNode *instParentNode =
+        instanceGraph.lookup(instParent);
     SmallVector<Operation *, 16> lateBoundOps;
     b.setInsertionPoint(inst);
     // Namespace that tracks inner symbols in the parent module.
@@ -476,7 +477,7 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
         // If the cloned op is an instance, record it within the new parent in
         // the instance graph.
         if (auto innerInst = dyn_cast<hw::InstanceOp>(clonedOp)) {
-          hw::InstanceGraphNode *innerInstModule =
+          igraph::InstanceGraphNode *innerInstModule =
               instanceGraph.lookup(innerInst.getModuleNameAttr().getAttr());
           instParentNode->addInstance(innerInst, innerInstModule);
         }
@@ -676,7 +677,7 @@ private:
                                    bindFile, bindTable);
 
     // Register the newly created module in the instance graph.
-    instanceGraph->addModule(bmod);
+    instanceGraph->addHWModule(bmod);
 
     // do the clone
     migrateOps(module, bmod, opsToClone, cutMap, *instanceGraph);

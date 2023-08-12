@@ -556,6 +556,9 @@ def InstanceOp : HWOp<"instance", [
     /// invalid IR.
     Operation *getReferencedModule(const HWSymbolCache *cache);
 
+
+    Operation *getReferencedModule();
+
     /// Return the value for a port in port order.
     Value getValue(size_t idx);
 

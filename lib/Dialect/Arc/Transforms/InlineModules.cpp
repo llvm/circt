@@ -19,6 +19,7 @@
 using namespace circt;
 using namespace arc;
 using namespace hw;
+using namespace igraph;
 using mlir::InlinerInterface;
 
 namespace {
@@ -79,7 +80,7 @@ struct PrefixingInliner : public InlinerInterface {
 } // namespace
 
 void InlineModulesPass::runOnOperation() {
-  auto &instanceGraph = getAnalysis<InstanceGraph>();
+  auto &instanceGraph = getAnalysis<hw::InstanceGraph>();
   DenseSet<Operation *> handled;
 
   // Iterate over all instances in the instance graph. This ensures we visit

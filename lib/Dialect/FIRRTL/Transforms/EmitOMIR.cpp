@@ -720,7 +720,8 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   // the memory.
   hw::HWModuleLike mod;
   if (tracker.nla)
-    mod = instanceGraph->lookup(tracker.nla.root())->getModule();
+    mod = instanceGraph->lookup(tracker.nla.root())
+              ->getModule<hw::HWModuleLike>();
   else
     mod = tracker.op->getParentOfType<FModuleOp>();
 
@@ -759,8 +760,8 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
       auto ref = attr.cast<hw::InnerRefAttr>();
       // Find the instance referenced by the NLA.
       auto *node = instanceGraph->lookup(ref.getModule());
-      auto it = llvm::find_if(*node, [&](hw::InstanceRecord *record) {
-        return getInnerSymName(cast<InstanceOp>(*record->getInstance())) ==
+      auto it = llvm::find_if(*node, [&](igraph::InstanceRecord *record) {
+        return getInnerSymName(record->getInstance<InstanceOp>()) ==
                ref.getName();
       });
       assert(it != node->end() &&

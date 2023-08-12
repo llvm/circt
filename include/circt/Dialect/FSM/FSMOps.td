@@ -184,6 +184,16 @@ def HWInstanceOp : FSMOp<"hw_instance", [
       return getMachineAttr();
     }
 
+    mlir::StringAttr getInstanceNameAttr() {
+      return getSymNameAttr();
+    }
+
+    llvm::StringRef getInstanceName() {
+      return getSymName();
+    }
+
+    Operation* getReferencedModule();
+
     //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//

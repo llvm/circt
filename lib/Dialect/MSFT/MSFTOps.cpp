@@ -387,13 +387,6 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
-/// Instance name is the same as the symbol name. This may change in the
-/// future.
-StringRef InstanceOp::getInstanceName() { return *getInnerName(); }
-StringAttr InstanceOp::getInstanceNameAttr() { return getInnerNameAttr(); }
-
-/// Lookup the module or extmodule for the symbol.  This returns null on
-/// invalid IR.
 Operation *InstanceOp::getReferencedModule() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
   if (!topLevelModuleOp)

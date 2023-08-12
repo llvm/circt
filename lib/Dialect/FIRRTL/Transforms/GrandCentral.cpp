@@ -1742,7 +1742,7 @@ void GrandCentralPass::runOnOperation() {
       i.skipChildren();
       continue;
     }
-    dutModules.insert(i->getModule());
+    dutModules.insert(i->getModule<hw::HWModuleLike>());
     // Manually increment the iterator to avoid walking off the end from
     // skipChildren.
     ++i;
@@ -1941,7 +1941,7 @@ void GrandCentralPass::runOnOperation() {
                 auto *modNode = instancePaths->instanceGraph.lookup(mod);
                 SmallVector<InstanceRecord *> instances(modNode->uses());
                 if (modNode != companionNode &&
-                    dutModules.count(modNode->getModule()))
+                    dutModules.count(modNode->getModule<hw::HWModuleLike>()))
                   continue;
 
                 LLVM_DEBUG({

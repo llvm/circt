@@ -1034,7 +1034,7 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
     circuitOp.setName(circuitName);
 
     for (auto *node : iGraph) {
-      auto module = node->getModule();
+      auto module = node->getModule<firrtl::FModuleLike>();
 
       bool shouldReplacePorts = false;
       SmallVector<Attribute> newNames;
