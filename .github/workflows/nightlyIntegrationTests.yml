@@ -64,8 +64,7 @@ jobs:
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           max-size: 300M
-          key: ${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}
-          append-timestamp: false
+          key: nightly-${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}
 
       # --------
       # Build and test CIRCT
