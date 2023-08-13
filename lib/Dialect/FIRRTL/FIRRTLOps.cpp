@@ -1625,6 +1625,10 @@ ClassType ClassOp::getInstanceType() {
   return ClassType::get(name, elements);
 }
 
+BlockArgument ClassOp::getArgument(size_t portNumber) {
+  return getBodyBlock()->getArgument(portNumber);
+}
+
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//
