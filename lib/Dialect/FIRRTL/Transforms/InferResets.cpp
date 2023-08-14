@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/FieldRef.h"
+#include "circt/Support/InstanceGraphInterface.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
@@ -45,7 +46,7 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 
 /// An absolute instance path.
-using InstanceLike = circt::hw::HWInstanceLike;
+using InstanceLike = ::circt::igraph::InstanceOpInterface;
 using InstancePathRef = ArrayRef<InstanceLike>;
 using InstancePathVec = SmallVector<InstanceLike>;
 
