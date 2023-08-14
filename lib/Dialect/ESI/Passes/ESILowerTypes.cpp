@@ -72,7 +72,7 @@ void ESILowerTypesPass::runOnOperation() {
   // We need to lower instances, modules, and outputs with data windows.
   target.markUnknownOpDynamicallyLegal([](Operation *op) {
     return TypeSwitch<Operation *, bool>(op)
-        .Case([](hw::HWInstanceLike inst) {
+        .Case([](igraph::InstanceOpInterface inst) {
           return !(
               llvm::any_of(inst->getOperandTypes(), hw::type_isa<WindowType>) ||
               llvm::any_of(inst->getResultTypes(), hw::type_isa<WindowType>));

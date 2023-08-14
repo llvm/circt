@@ -407,6 +407,13 @@ StringAttr InstanceOp::getResultName(size_t idx) {
     return hw::getModuleResultNameAttr(refMod, idx);
   return StringAttr();
 }
+/// Instance name is the same as the symbol name. This may change in the
+/// future.
+mlir::StringAttr InstanceOp::getInstanceNameAttr() {
+  return getInnerNameAttr();
+}
+
+llvm::StringRef InstanceOp::getInstanceName() { return *getInnerName(); }
 
 /// Suggest a name for each result value based on the saved result names
 /// attribute.

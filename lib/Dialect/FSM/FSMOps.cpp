@@ -280,7 +280,7 @@ LogicalResult TriggerOp::verify() { return verifyCallerTypes(*this); }
 // HWInstanceOp
 //===----------------------------------------------------------------------===//
 
-// HWInstanceLike interface
+// InstanceOpInterface interface
 Operation *HWInstanceOp::getReferencedModuleSlow() { return getMachineOp(); }
 
 Operation *HWInstanceOp::getReferencedModule(SymbolTable &symtbl) {

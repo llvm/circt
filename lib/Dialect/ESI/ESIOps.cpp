@@ -484,7 +484,8 @@ LogicalResult ESIPureModuleOp::verify() {
   DenseMap<StringAttr, std::tuple<hw::ModulePort::Direction, Type, Operation *>>
       ports;
   for (Operation &op : body.getOperations()) {
-    if (hw::HWInstanceLike inst = dyn_cast<hw::HWInstanceLike>(op)) {
+    if (igraph::InstanceOpInterface inst =
+            dyn_cast<igraph::InstanceOpInterface>(op)) {
       if (llvm::any_of(op.getOperands(), [](Value v) {
             return !(v.getType().isa<ChannelType>() ||
                      isa<ESIPureModuleInputOp>(v.getDefiningOp()));

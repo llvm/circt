@@ -13,7 +13,7 @@ def InstanceOp : MSFTOp<"instance", [
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
         DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-        DeclareOpInterfaceMethods<HWInstanceLike>
+        DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface>
     ]> {
   let summary = "Instantiate a module";
 
@@ -40,21 +40,6 @@ def InstanceOp : MSFTOp<"instance", [
     // Update the results.
     InstanceOp getWithNewResults(MSFTModuleOp mod,
                                  ArrayRef<unsigned> newToOldMap);
-
-    /// Instance name is the same as the symbol name. This may change in the
-    /// future.
-    mlir::StringAttr getInstanceNameAttr() {
-      return getInnerNameAttr();
-    }
-
-    llvm::StringRef getInstanceName() {
-      return *getInnerName();
-    }
-
-    /// Lookup the module or extmodule for the symbol.  This returns null on
-    /// invalid IR.
-    Operation* getReferencedModule(SymbolTable& tbl);
-    Operation* getReferencedModuleSlow();
 
     //===------------------------------------------------------------------===//
     // PortList Methods

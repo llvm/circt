@@ -92,7 +92,7 @@ void PassCommon::getAndSortModulesVisitor(
     return;
   modsSeen.insert(mod);
 
-  mod.walk([&](hw::HWInstanceLike inst) {
+  mod.walk([&](igraph::InstanceOpInterface inst) {
     Operation *modOp =
         topLevelSyms.getDefinition(inst.getReferencedModuleNameAttr());
     assert(modOp);
