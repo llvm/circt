@@ -13,7 +13,7 @@
 
 def SCModuleOp : SystemCOp<"module", [
     Symbol,
-    DeclareOpInterfaceMethods<HWModuleLike>,
+    DeclareOpInterfaceMethods<InstanceGraphModuleOpInterface>,
     FunctionOpInterface,
     IsolatedFromAbove,
     SingleBlock,
@@ -106,20 +106,6 @@ def SCModuleOp : SystemCOp<"module", [
     // PortList Methods
     //===------------------------------------------------------------------===//
     ::circt::hw::ModulePortInfo getPortList();
-  }];
-
-  let extraClassDefinition = [{
-    size_t $cppClass::getNumPorts() {
-      return getPortNames().size();
-    }
-
-    circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
-      for (NamedAttribute argAttr :
-           mlir::function_interface_impl::getArgAttrs(*this, portIndex))
-        if (auto sym = argAttr.getValue().dyn_cast<circt::hw::InnerSymAttr>())
-          return sym;
-      return circt::hw::InnerSymAttr();
-    }
   }];
 }
 
