@@ -194,7 +194,7 @@ class InstanceGraph {
   using NodeList = llvm::iplist<InstanceGraphNode>;
 
 public:
-  virtual ~InstanceGraph();
+  virtual ~InstanceGraph() = default;
 
   /// Look up an InstanceGraphNode for a module.
   InstanceGraphNode *lookup(ModuleOpInterface op);

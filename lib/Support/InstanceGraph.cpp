@@ -119,8 +119,6 @@ InstanceGraph::getReferencedModuleImpl(InstanceOpInterface op) {
   return lookup(op.getReferencedModuleNameAttr())->getModule();
 }
 
-InstanceGraph::~InstanceGraph() {}
-
 void InstanceGraph::replaceInstance(InstanceOpInterface inst,
                                     InstanceOpInterface newInst) {
   assert(inst.getReferencedModuleName() == newInst.getReferencedModuleName() &&
@@ -224,6 +222,7 @@ InstanceGraph::getInferredTopLevelNodes() {
   return {inferredTopLevelNodes};
 }
 
+// NOLINTBEGIN(misc-no-recursion)
 ArrayRef<InstancePath>
 InstancePathCache::getAbsolutePaths(ModuleOpInterface op) {
   InstanceGraphNode *node = instanceGraph[op];
@@ -263,6 +262,7 @@ InstancePathCache::getAbsolutePaths(ModuleOpInterface op) {
   absolutePathsCache.insert({op, pathList});
   return pathList;
 }
+// NOLINTEND(misc-no-recursion)
 
 InstancePath InstancePathCache::appendInstance(InstancePath path,
                                                InstanceOpInterface inst) {
