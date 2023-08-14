@@ -44,8 +44,8 @@ protected:
   SmallVector<Token> indentNestedTokens;
   formatted_raw_ostream *fStream = nullptr;
   RecordLocation recordLoc;
-  PrintEventListener<RecordLocation, SmallString<128>> callbacks =
-      PrintEventListener<RecordLocation, SmallString<128>>(recordLoc);
+  PrintEventAndStorageListener<RecordLocation, SmallString<128>> callbacks =
+      PrintEventAndStorageListener<RecordLocation, SmallString<128>>(recordLoc);
 
   /// Scratch buffer used by print.
   SmallString<256> out;
@@ -97,64 +97,65 @@ protected:
       funcTokens.append({callbacks.getToken(&locationOut1)});
     }
     {
-      auto callbackToken = callbacks.getToken(&locationOut2);
       // baroo(AR..  barooga(ARGS) .. GS)
       // Nested function call, nested method wrapped in cbox(0) w/breaks.
       nestedTokens.append({StringToken("baroo"), StringToken("("),
                            BeginToken(0, Breaks::Inconsistent), BreakToken(0)});
-      nestedTokens.append({callbackToken});
+      nestedTokens.append({callbacks.getToken(&locationOut2)});
       SmallVectorImpl<Token>::iterator argMiddle =
           argTokens.begin() + argTokens.size() / 2;
       nestedTokens.append(argTokens.begin(), argMiddle);
-      nestedTokens.append({callbackToken});
+      nestedTokens.append({callbacks.getToken(&locationOut2)});
 
       nestedTokens.append({
           BeginToken(0, Breaks::Consistent),
           StringToken("barooga"),
           StringToken("("),
-          callbackToken,
+          callbacks.getToken(&locationOut2),
           BeginToken(0, Breaks::Inconsistent),
           BreakToken(0),
       });
-      nestedTokens.append({callbackToken});
+      nestedTokens.append({callbacks.getToken(&locationOut2)});
       nestedTokens.append(argTokens);
-      nestedTokens.append({BreakToken(0), callbackToken, EndToken(),
-                           StringToken("),"), BreakToken(), EndToken(),
+      nestedTokens.append({BreakToken(0), callbacks.getToken(&locationOut2),
+                           EndToken(), StringToken("),"), BreakToken(),
+                           EndToken(),
                            /* BreakToken(0), */});
       nestedTokens.append(argMiddle, argTokens.end());
       nestedTokens.append({BreakToken(0), EndToken(), StringToken(");"),
                            BreakToken(PrettyPrinter::kInfinity)});
     }
     {
-      auto callbackToken = callbacks.getToken(&locationOut3);
       // wahoo(ARGS)
       // If wrap args, indent on next line
       indentNestedTokens.append(
-          {callbackToken, BeginToken(2, Breaks::Consistent),
-           /*No change in location*/ callbackToken, StringToken("wahoo"),
-           callbackToken, StringToken("("), BreakToken(0), callbackToken,
+          {callbacks.getToken(&locationOut3), BeginToken(2, Breaks::Consistent),
+           /*No change in location*/ callbacks.getToken(&locationOut3),
+           StringToken("wahoo"), callbacks.getToken(&locationOut3),
+           StringToken("("), BreakToken(0), callbacks.getToken(&locationOut3),
            BeginToken(0, Breaks::Inconsistent),
-           /*No change in location*/ callbackToken});
+           /*No change in location*/ callbacks.getToken(&locationOut3)});
 
       SmallVectorImpl<Token>::iterator argMiddle =
           argTokens.begin() + argTokens.size() / 2;
       indentNestedTokens.append(argTokens.begin(), argMiddle);
 
       indentNestedTokens.append({
-          callbackToken,
+          callbacks.getToken(&locationOut3),
           BeginToken(0, Breaks::Consistent),
-          callbackToken,
+          callbacks.getToken(&locationOut3),
           StringToken("yahooooooo"),
           StringToken("("),
           BeginToken(0, Breaks::Inconsistent),
-          callbackToken,
+          callbacks.getToken(&locationOut3),
           BreakToken(0),
       });
       indentNestedTokens.append(argTokens);
       indentNestedTokens.append({
-          callbackToken, BreakToken(0), EndToken(), callbackToken,
-          StringToken("),"), BreakToken(), callbackToken, EndToken(),
-          callbackToken, /* BreakToken(0), */
+          callbacks.getToken(&locationOut3), BreakToken(0), EndToken(),
+          callbacks.getToken(&locationOut3), StringToken("),"), BreakToken(),
+          callbacks.getToken(&locationOut3), EndToken(),
+          callbacks.getToken(&locationOut3), /* BreakToken(0), */
       });
       indentNestedTokens.append(argMiddle, argTokens.end());
       indentNestedTokens.append({EndToken(), BreakToken(0, -2),
@@ -171,7 +172,7 @@ protected:
     recordLoc.setStream(fStream);
     locationOut1.clear();
     PrettyPrinter pp(formattedStream, margin);
-    pp.setPrintListener(&callbacks);
+    pp.setListener(&callbacks);
     pp.addTokens(tokens);
     pp.eof();
   }
@@ -580,30 +581,33 @@ TEST(PrettyPrinterTest, Expr) {
   formatted_raw_ostream formattedStream(os);
   SmallString<128> locationOut;
   RecordLocation recordLoc(&formattedStream);
-  PrintEventListener<RecordLocation, SmallString<128>> callbacks(recordLoc);
-  auto token = callbacks.getToken(&locationOut);
+  PrintEventAndStorageListener<RecordLocation, SmallString<128>> callbacks(
+      recordLoc);
 
-  auto sumExpr = [&token](auto &ps) {
-    ps << token << "(";
+  auto sumExpr = [&callbacks, &locationOut](auto &ps) {
+    ps << callbacks.getToken(&locationOut) << "(";
     {
       ps << PP::ibox0;
       auto vars = {"a", "b", "c", "d", "e", "f"};
       llvm::interleave(
           vars, [&](const char *each) { ps << each; },
-          [&]() { ps << PP::space << "+" << token << PP::space; });
-      ps << PP::end << token;
+          [&]() {
+            ps << PP::space << "+" << callbacks.getToken(&locationOut)
+               << PP::space;
+          });
+      ps << PP::end << callbacks.getToken(&locationOut);
     }
-    ps << ")" << token;
+    ps << ")" << callbacks.getToken(&locationOut);
   };
 
   auto test = [&](const char *id, auto margin) {
     PrettyPrinter pp(formattedStream, margin);
-    pp.setPrintListener(&callbacks);
+    pp.setListener(&callbacks);
     TokenStringSaver saver;
     TokenStream<> ps(pp, saver);
     out = "\n";
     ps.scopedBox(PP::ibox2, [&]() {
-      ps << token;
+      ps << callbacks.getToken(&locationOut);
       ps << "assign" << PP::nbsp << id << PP::nbsp << "=";
       ps << PP::space;
       ps.scopedBox(PP::ibox0, [&]() {
@@ -765,32 +769,31 @@ TEST(PrettyPrinterTest, NeverBreakGroup) {
   formatted_raw_ostream formattedStream(os);
   SmallString<128> locationOut;
   RecordLocation recordLoc(&formattedStream);
-  PrintEventListener<RecordLocation, SmallString<128>> callbacks(recordLoc);
+  PrintEventAndStorageListener<RecordLocation, SmallString<128>> callbacks(
+      recordLoc);
   // Mostly checking location after break tokens.
-  auto callbackToken = callbacks.getToken(&locationOut);
-
   auto test = [&](Breaks breaks1, Breaks breaks2) {
     out = "\n";
     PrettyPrinter pp(formattedStream, 8);
-    pp.setPrintListener(&callbacks);
-    pp.add(callbackToken);
+    pp.setListener(&callbacks);
+    pp.add(callbacks.getToken(&locationOut));
     pp.add(BeginToken(2, breaks1));
     pp.add(StringToken("test"));
-    pp.add(callbackToken);
+    pp.add(callbacks.getToken(&locationOut));
     pp.add(BreakToken());
-    pp.add(callbackToken);
+    pp.add(callbacks.getToken(&locationOut));
     pp.add(StringToken("test"));
     {
       pp.add(BeginToken(2, breaks2));
-      pp.add(callbackToken);
+      pp.add(callbacks.getToken(&locationOut));
       pp.add(BreakToken());
-      pp.add(callbackToken);
+      pp.add(callbacks.getToken(&locationOut));
       pp.add(StringToken("test"));
       pp.add(BreakToken());
-      pp.add(callbackToken);
+      pp.add(callbacks.getToken(&locationOut));
       pp.add(StringToken("test"));
       pp.add(EndToken());
-      pp.add(callbackToken);
+      pp.add(callbacks.getToken(&locationOut));
     }
     pp.add(BreakToken());
     pp.add(StringToken("test"));
@@ -837,30 +840,30 @@ TEST(PrettyPrinterTest, MaxStartingIndent) {
 
   // Mostly checking location after break tokens.
   RecordLocation recordLoc(&formattedStream);
-  PrintEventListener<RecordLocation, SmallString<128>> callbacks(recordLoc);
-  auto callbackToken = callbacks.getToken(&locationOut);
+  PrintEventAndStorageListener<RecordLocation, SmallString<128>> callbacks(
+      recordLoc);
 
   auto test = [&](PrettyPrinter &pp) {
     out = "\n";
-    pp.add(callbackToken);
+    pp.add(callbacks.getToken(&locationOut));
     pp.add(BeginToken(2));
     pp.add(StringToken("test"));
-    pp.add(callbackToken);
+    pp.add(callbacks.getToken(&locationOut));
     pp.add(BreakToken());
     pp.add(BeginToken(2));
     pp.add(StringToken("test"));
     pp.add(BreakToken());
     pp.add(BeginToken(2));
-    pp.add(callbackToken);
+    pp.add(callbacks.getToken(&locationOut));
     pp.add(StringToken("test"));
-    pp.add(callbackToken);
+    pp.add(callbacks.getToken(&locationOut));
     pp.add(BreakToken());
     pp.add(BeginToken(2));
     pp.add(StringToken("test"));
-    pp.add(callbackToken);
+    pp.add(callbacks.getToken(&locationOut));
     pp.add(BreakToken());
     pp.add(StringToken("test"));
-    pp.add(callbackToken);
+    pp.add(callbacks.getToken(&locationOut));
     pp.add(EndToken());
     pp.add(EndToken());
     pp.add(EndToken());
@@ -869,12 +872,12 @@ TEST(PrettyPrinterTest, MaxStartingIndent) {
   };
   auto testDefault = [&]() {
     PrettyPrinter pp(formattedStream, 4);
-    pp.setPrintListener(&callbacks);
+    pp.setListener(&callbacks);
     test(pp);
   };
   auto testValue = [&](auto maxStartingIndent) {
     PrettyPrinter pp(formattedStream, 4, 0, 0, maxStartingIndent);
-    pp.setPrintListener(&callbacks);
+    pp.setListener(&callbacks);
     test(pp);
   };
 
@@ -935,21 +938,22 @@ protected:
 
   formatted_raw_ostream formattedStream = formatted_raw_ostream(ppOS);
   RecordLocation recordLoc = RecordLocation(&formattedStream);
-  PrintEventListener<RecordLocation, SmallVectorImpl<char>> callbacks =
-      PrintEventListener<RecordLocation, SmallVectorImpl<char>>(recordLoc);
+  PrintEventAndStorageListener<RecordLocation, SmallVectorImpl<char>>
+      callbacks =
+          PrintEventAndStorageListener<RecordLocation, SmallVectorImpl<char>>(
+              recordLoc);
   TokenStringSaver saver;
+  SmallString<128> locationOut;
 
   template <typename Callable>
   void testStreams(Callable &&test,
                    std::optional<StringRef> data = std::nullopt,
                    unsigned margin = 10) {
-    SmallString<128> locationOut;
-    callbacks.setData(&locationOut);
     // Mostly checking location after break tokens.
     out.clear();
     compare.clear();
     PrettyPrinter pp(formattedStream, margin);
-    pp.setPrintListener(&callbacks);
+    pp.setListener(&callbacks);
     TokenStream<> ps(pp, saver);
 
     std::invoke(test, ps, os);
@@ -992,7 +996,7 @@ TEST_F(TokenStreamCompareTest, NBSPs) {
     testStreams([&](auto &ps, auto &os) {
       ps.nbsp(i);
       // This just checks there is no change in output stream.
-      ps << callbacks.getToken();
+      ps << callbacks.getToken(&locationOut);
       os.indent(i);
     });
 }

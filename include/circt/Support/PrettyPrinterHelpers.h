@@ -20,6 +20,7 @@
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/StringSaver.h"
 #include "llvm/Support/raw_ostream.h"
+#include <queue>
 
 namespace circt {
 namespace pretty {
@@ -166,52 +167,35 @@ public:
   void clear() override;
 };
 
+/// Note: Callable class must implement a callable with signature:
+/// void (Data*)
 template <typename Callable, typename Data>
-class PrintEventListener : public PrettyPrinter::Listener {
+class PrintEventAndStorageListener : public TokenStringSaver {
 
   /// List of all the unique data associated with each callback token.
+  /// The fact that tokens on a stream can never be printed out of order,
+  /// ensures that CallbackTokens are always added and invoked in FIFO order,
+  /// hence no need to record an index into the Data list.
   /// Note: Doesn't own Data !
-  SmallVector<Data *> list;
+  std::queue<Data *> dataQ;
   /// The storage for the callback, as a function object.
-  std::function<void(uint32_t)> callbackObj;
-
-  /// Note: Callable class must implement a callable with signature:
-  /// void (Data*)
-  /// Create and initialize a function object, capturing the callable object and
-  /// a pointer to the data vector. The callable object contains all the values
-  /// shared across the callback tokens. The Data list indexed by the parameter
-  /// provides the unique data for each callback.
-  void init(Callable &c) {
-    // Ensure init is called only once.
-    assert(!callbackObj);
-    assert(list.empty());
-    // May result in heap allocation. Pointer to the callback object and data
-    // vector is captured by value.
-    callbackObj =
-        decltype(callbackObj)([c = &c, dataPtr = &this->list](uint32_t id) {
-          std::invoke(*c, (*dataPtr)[id]);
-        });
-  }
+  Callable &callable;
 
 public:
-  PrintEventListener(Callable &c) { init(c); }
+  PrintEventAndStorageListener(Callable &c) : callable(c) {}
 
+  /// PrettyPrinter::Listener::print -- indicates all the preceding tokens on
+  /// the stream have been printed.
   /// This is invoked when the CallbackToken is printed.
-  void print(uint32_t id) override { std::invoke(callbackObj, id); }
-
-  /// Insert data onto the list.
-  void setData(Data *obj) { list.push_back(obj); }
-  /// Get a token with the last item on the list.
-  CallbackToken getToken() {
-    // Callback function must be allocated.
-    assert(callbackObj);
-    assert(!list.empty());
-    return CallbackToken((list.size() - 1));
+  void print() override {
+    std::invoke(callable, dataQ.front());
+    dataQ.pop();
   }
   /// Get a token with the obj data.
   CallbackToken getToken(Data *obj) {
-    setData(obj);
-    return getToken();
+    // Insert data onto the list.
+    dataQ.push(obj);
+    return CallbackToken();
   }
 };
 
