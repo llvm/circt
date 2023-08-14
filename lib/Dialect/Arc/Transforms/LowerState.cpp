@@ -130,7 +130,7 @@ static bool shouldMaterialize(Operation *op) {
 
   if (isa<MemoryOp, AllocStateOp, AllocMemoryOp, AllocStorageOp, ClockTreeOp,
           PassThroughOp, RootInputOp, RootOutputOp, StateWriteOp,
-          MemoryWritePortOp, HWInstanceLike>(op))
+          MemoryWritePortOp, igraph::InstanceOpInterface>(op))
     return false;
 
   return true;

@@ -93,12 +93,9 @@ def SensitiveOp : SystemCOp<"sensitive", [HasParent<"CtorOp">]> {
 
 def InstanceDeclOp : SystemCOp<"instance.decl", [
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-  DeclareOpInterfaceMethods<HWInstanceLike>,
+  DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface>,
   HasCustomSSAName,
   SystemCNameDeclOpInterface,
-  // InstanceGraphInstanceOpInterface inherits from HWInstanceLike but
-  // DeclareOpInterfaceMethods doesn't currently consider inheritance.
-  DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface>,
   HasParent<"SCModuleOp">
 ]> {
   let summary = "Declares a SystemC module instance.";
