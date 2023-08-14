@@ -105,7 +105,7 @@ namespace {
 /// things like types and helper logic.
 struct FIRParser {
   FIRParser(SharedParserConstants &constants, FIRLexer &lexer,
-            FIRVersion &version)
+            FIRVersion version)
       : version(version), constants(constants), lexer(lexer),
         locatorFilenameCache(constants.loIdentifier /*arbitrary non-null id*/) {
   }
@@ -161,6 +161,18 @@ struct FIRParser {
   /// Parse an optional name that may appear in Stop, Printf, or Verification
   /// statements.
   ParseResult parseOptionalName(StringAttr &name);
+
+  //===--------------------------------------------------------------------===//
+  // Version and Feature Checking
+  //===--------------------------------------------------------------------===//
+
+  ParseResult requireFeature(FIRVersion minimum, StringRef feature) {
+    if (version < minimum)
+      return emitError() << feature << " are a FIRRTL " << minimum
+                         << "+ feature, but the specified FIRRTL version was "
+                         << version;
+    return success();
+  }
 
   //===--------------------------------------------------------------------===//
   // Annotation Parsing
@@ -249,7 +261,7 @@ struct FIRParser {
   ParseResult parseOptionalRUW(RUWAttr &result);
 
   /// The version of FIRRTL to use for this parser.
-  FIRVersion &version;
+  FIRVersion version;
 
 private:
   FIRParser(const FIRParser &) = delete;
@@ -494,10 +506,8 @@ ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
     consumeToken();
     return success();
   case FIRToken::radix_specified_integer: {
-    if (FIRVersion::compare(version, FIRVersion({2, 4, 0})) < 0)
-      return emitError("Radix-specified integer literals are a FIRRTL 2.4.0 "
-                       "feature, but the specified FIRRTL version was ")
-             << version;
+    if (requireFeature({2, 4, 0}, "radix-specified integer literals"))
+      return failure();
     if (spelling[0] == '-') {
       isNegative = true;
       spelling = spelling.drop_front();
@@ -518,7 +528,7 @@ ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
     return success();
   }
   case FIRToken::string: {
-    if (FIRVersion::compare(version, FIRVersion({3, 0, 0})) >= 0)
+    if (FIRVersion(3, 0, 0) <= version)
       return emitError(
           "String-encoded integer literals are unsupported after FIRRTL 3.0.0");
 
@@ -620,9 +630,8 @@ ParseResult FIRParser::parseVersionLit(const Twine &message) {
   version.patch = cInt.getLimitedValue(UINT32_MAX);
   if (version.major != aInt || version.minor != bInt || version.patch != cInt)
     return emitError("integers out of range"), failure();
-  if (FIRVersion::compare(version, FIRVersion::minimumFIRVersion()) < 0)
-    return emitError() << "FIRRTL version must be >="
-                       << FIRVersion::minimumFIRVersion(),
+  if (version < minimumFIRVersion)
+    return emitError() << "FIRRTL version must be >=" << minimumFIRVersion,
            failure();
   consumeToken(FIRToken::version);
   return success();
@@ -813,10 +822,8 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     break;
 
   case FIRToken::kw_Inst: {
-    if (FIRVersion::compare(version, {3, 2, 0}) < 0)
-      return emitError() << "unexpected token: Inst types are a FIRRTL 3.2.0+ "
-                            "feature, but the specified FIRRTL version was "
-                         << version;
+    if (requireFeature({3, 2, 0}, "Inst types"))
+      return failure();
 
     consumeToken(FIRToken::kw_Inst);
     if (parseToken(FIRToken::less, "expected < in Inst type"))
@@ -985,26 +992,20 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   }
 
   case FIRToken::kw_String:
-    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
-      return emitError() << "unexpected token: Properties are a FIRRTL 3.1.0+ "
-                            "feature, but the specified FIRRTL version was "
-                         << version;
+    if (requireFeature({3, 1, 0}, "Strings"))
+      return failure();
     consumeToken(FIRToken::kw_String);
     result = StringType::get(getContext());
     break;
   case FIRToken::kw_Integer:
-    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
-      return emitError() << "unexpected token: Integers are a FIRRTL 3.1.0+ "
-                            "feature, but the specified FIRRTL version was "
-                         << version;
+    if (requireFeature({3, 1, 0}, "Integers"))
+      return failure();
     consumeToken(FIRToken::kw_Integer);
     result = FIntegerType::get(getContext());
     break;
   case FIRToken::kw_Path:
-    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
-      return emitError() << "unexpected token: Properties are a FIRRTL 3.1.0+ "
-                            "feature, but the specified FIRRTL version was "
-                         << version;
+    if (requireFeature({3, 1, 0}, "Paths"))
+      return failure();
     consumeToken(FIRToken::kw_Path);
     result = PathType::get(getContext());
     break;
@@ -1096,7 +1097,7 @@ namespace {
 /// currently parsing into.
 struct FIRModuleContext : public FIRParser {
   explicit FIRModuleContext(SharedParserConstants &constants, FIRLexer &lexer,
-                            FIRVersion &version)
+                            FIRVersion version)
       : FIRParser(constants, lexer, version) {}
 
   // The expression-oriented nature of firrtl syntax produces tons of constant
@@ -1450,7 +1451,7 @@ struct FIRStmtParser : public FIRParser {
   explicit FIRStmtParser(Block &blockToInsertInto,
                          FIRModuleContext &moduleContext,
                          hw::InnerSymbolNamespace &modNameSpace,
-                         FIRVersion &version, SymbolRefAttr groupSym = {})
+                         FIRVersion version, SymbolRefAttr groupSym = {})
       : FIRParser(moduleContext.getConstants(), moduleContext.getLexer(),
                   version),
         builder(UnknownLoc::get(getContext()), getContext()),
@@ -1755,10 +1756,8 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     break;
   case FIRToken::kw_String: {
-    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
-      return emitError() << "unexpected token: Properties are a FIRRTL 3.1.0+ "
-                            "feature, but the specified FIRRTL version was "
-                         << version;
+    if (requireFeature({3, 1, 0}, "Strings"))
+      return failure();
     locationProcessor.setLoc(getToken().getLoc());
     consumeToken(FIRToken::kw_String);
     StringRef spelling;
@@ -1773,11 +1772,8 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     break;
   }
   case FIRToken::kw_Integer: {
-    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
-      return emitError() << "unexpected token: Integers are a FIRRTL 3.1.0+ "
-                            "feature, but the specified FIRRTL version was "
-                         << version;
-
+    if (requireFeature({3, 1, 0}, "Integers"))
+      return failure();
     locationProcessor.setLoc(getToken().getLoc());
     consumeToken(FIRToken::kw_Integer);
     APInt value;
@@ -2314,7 +2310,7 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   case FIRToken::kw_regreset:
     /// The "invalidate", "connect", and "regreset" keywords were added
     /// in 3.0.0.
-    if (FIRVersion::compare(version, FIRVersion({3, 0, 0})) < 0)
+    if (version < FIRVersion(3, 0, 0))
       kind = FIRToken::identifier;
     break;
   default:
@@ -2335,10 +2331,8 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   case FIRToken::kw_connect:
     return parseConnect();
   case FIRToken::kw_propassign:
-    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
-      return emitError() << "unexpected token: Properties are a FIRRTL 3.1.0+ "
-                            "feature, but the specified FIRRTL version was "
-                         << version;
+    if (requireFeature({3, 1, 0}, "properties"))
+      return failure();
     return parsePropAssign();
   case FIRToken::kw_invalidate:
     return parseInvalidate();
@@ -2369,11 +2363,8 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   case FIRToken::lp_release_initial:
     return parseRefReleaseInitial();
   case FIRToken::kw_group:
-    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
-      return emitError()
-             << "unexpected token: optional groups are a FIRRTL 3.1.0+ "
-                "feature, but the specified FIRRTL version was "
-             << version;
+    if (requireFeature({3, 1, 0}, "optional groups"))
+      return failure();
     return parseGroup(stmtIndent);
 
   default: {
@@ -3340,7 +3331,7 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
     break;
   case FIRToken::less_minus:
     // Partial connect ("<-") was removed in FIRRTL version 2.0.0.
-    if (FIRVersion::compare(version, FIRVersion({2, 0, 0})) < 0)
+    if (version < FIRVersion(2, 0, 0))
       break;
     [[fallthrough]];
   default:
@@ -3456,10 +3447,8 @@ ParseResult FIRStmtParser::parseObject() {
   if (auto isExpr = parseExpWithLeadingKeyword(startTok))
     return *isExpr;
 
-  if (FIRVersion::compare(version, {3, 2, 0}) < 0)
-    return emitError() << "unexpected token: objects are a FIRRTL 3.2.0+ "
-                          "feature, but the specified FIRRTL version was "
-                       << version;
+  if (requireFeature({3, 2, 0}, "object statements"))
+    return failure();
 
   StringRef id;
   StringRef className;
@@ -3921,7 +3910,7 @@ namespace {
 /// like circuit and module.
 struct FIRCircuitParser : public FIRParser {
   explicit FIRCircuitParser(SharedParserConstants &state, FIRLexer &lexer,
-                            ModuleOp mlirModule, FIRVersion &version)
+                            ModuleOp mlirModule, FIRVersion version)
       : FIRParser(state, lexer, version), mlirModule(mlirModule) {}
 
   ParseResult
@@ -4463,11 +4452,8 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
   case FIRToken::kw_class:
     return parseClass(circuit, indent);
   case FIRToken::kw_declgroup:
-    if (FIRVersion::compare(version, FIRVersion({3, 1, 0})) < 0)
-      return emitError()
-             << "unexpected token: optional groups are a FIRRTL 3.1.0+ "
-                "feature, but the specified FIRRTL version was "
-             << version;
+    if (requireFeature({3, 1, 0}, "optional groups"))
+      return failure();
     return parseGroupDecl(circuit);
   case FIRToken::kw_extmodule:
     return parseExtModule(circuit, indent);
@@ -4835,7 +4821,7 @@ circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
                           /*column=*/0)));
   SharedParserConstants state(context, options);
   FIRLexer lexer(sourceMgr, context);
-  FIRVersion version = FIRVersion::defaultFIRVersion();
+  FIRVersion version = defaultFIRVersion;
   if (FIRCircuitParser(state, lexer, *module, version)
           .parseCircuit(annotationsBufs, omirBufs, ts))
     return nullptr;
