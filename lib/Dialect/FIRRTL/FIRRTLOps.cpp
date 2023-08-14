@@ -3007,9 +3007,116 @@ LogicalResult RefDefineOp::verify() {
   return success();
 }
 
+static LogicalResult checkPropAssignSrc(PropAssignOp propAssign) {
+  Value src = propAssign.getSrc();
+  while (true) {
+    // If we are reading from a block argument, it must be an input port.
+    if (auto blockArg = dyn_cast<BlockArgument>(src)) {
+      auto *definingOp = src.getParentBlock()->getParentOp();
+      if (auto moduleLike = dyn_cast<FModuleLike>(definingOp)) {
+        auto direction = moduleLike.getPortDirection(blockArg.getArgNumber());
+        if (direction == Direction::Out)
+          return emitError(propAssign->getLoc(),
+                           "cannot read from an output port");
+      }
+      return success();
+    }
+
+    auto result = cast<OpResult>(src);
+    auto *definingOp = result.getDefiningOp();
+
+    // If we are reading from an instance's ports, it must be an output.
+    if (auto instanceOp = dyn_cast<InstanceOp>(definingOp)) {
+      auto direction = instanceOp.getPortDirection(result.getResultNumber());
+      if (direction == Direction::In)
+        return emitError(propAssign->getLoc(),
+                         "cannot read from an instance's input port");
+      return success();
+    }
+
+    // An object subfield must be an output port of a valid source object.
+    if (auto subfieldOp =
+            dyn_cast<ObjectSubfieldOp>(cast<OpResult>(src).getDefiningOp())) {
+      auto input = subfieldOp.getInput();
+      auto classType = input.getType();
+      const auto &element = classType.getElement(subfieldOp.getIndex());
+      // We can never read from the inputs of an object.
+      if (element.direction == Direction::In)
+        return emitError(propAssign->getLoc(),
+                         "cannot read from an object's input port");
+      // the object itself must also be a valid source.
+      src = input;
+      continue;
+    }
+
+    // Otherwise, we assume the src is some value-producing expression.
+    return success();
+  }
+}
+
+static LogicalResult checkPropAssignDest(PropAssignOp propAssign) {
+  auto dest = propAssign.getDest();
+
+  // if we are writing to a block argument directly, the block argument
+  // must be an output port.
+  if (auto blockArg = dyn_cast<BlockArgument>(dest)) {
+    auto *definingOp = dest.getParentBlock()->getParentOp();
+    if (auto moduleLike = dyn_cast<FModuleLike>(definingOp)) {
+      auto direction = moduleLike.getPortDirection(blockArg.getArgNumber());
+      if (direction == Direction::In)
+        return emitError(propAssign->getLoc(),
+                         "cannot propassign to an input port");
+    }
+    return success();
+  }
+
+  auto result = cast<OpResult>(dest);
+  auto *definingOp = result.getDefiningOp();
+
+  // If we are writing to an instance's port, the port must be an input.
+  if (auto instanceOp = dyn_cast<InstanceOp>(definingOp)) {
+    auto direction = instanceOp.getPortDirection(result.getResultNumber());
+    if (direction == Direction::Out)
+      return emitError(propAssign->getLoc(),
+                       "cannot propassign to an instance's output port");
+    return success();
+  }
+
+  // if we are writing to an object.subfield op, the base object must be a
+  // local object declaration. We do not allow writing through multiple
+  // object subfield ops (eg `propassign object.p.q.r, "foo"`).
+  if (auto objectSubfieldOp = dyn_cast<ObjectSubfieldOp>(definingOp)) {
+    auto input = objectSubfieldOp.getInput();
+
+    // Fail if we are writing to a specific field on a port. We can only
+    // write an entire object to the port, we cannot assign output objects
+    // piecemeal.
+    if (auto blockArg = dyn_cast<BlockArgument>(input))
+      return emitError(propAssign->getLoc(),
+                       "cannot propassign to a subfield of a port");
+
+    auto *inputDefiningOp = input.getDefiningOp();
+
+    // We can assign to a local object's port, if the flow is correct.
+    if (auto objectOp = dyn_cast<ObjectOp>(inputDefiningOp)) {
+      auto objectType = objectOp.getType();
+      const auto &element = objectType.getElement(objectSubfieldOp.getIndex());
+      if (element.direction != Direction::In)
+        return emitError(propAssign.getLoc(),
+                         "cannot propassign to an object's output port");
+      return success();
+    }
+  }
+
+  // Otherwise, we assume the dest is some intermediate expression which
+  // cannot be assigned.
+  return emitError(propAssign->getLoc(),
+                   "cannot propassign to an intermediate expression");
+}
+
 LogicalResult PropAssignOp::verify() {
-  // Check that the flows make sense.
-  if (failed(checkConnectFlow(*this)))
+  // Check the flow for the source and destination.
+  if (failed(checkPropAssignSrc(*this)) || failed(checkPropAssignDest(*this)))
     return failure();
 
   // Verify that there is a single value driving the destination.

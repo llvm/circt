@@ -1264,10 +1264,9 @@ firrtl.circuit "CastToMoreConst" {
 // Check that you can't drive a source.
 
 firrtl.circuit "PropertyDriveSource" {
-  // @expected-note @below {{the destination was defined here}}
   firrtl.module @PropertyDriveSource(in %in: !firrtl.string) {
     %0 = firrtl.string "hello"
-    // expected-error @below {{connect has invalid flow: the destination expression "in" has source flow, expected sink or duplex flow}}
+    // expected-error @below {{cannot propassign to an input port}}
     firrtl.propassign %in, %0 : !firrtl.string
   }
 }
@@ -2089,4 +2088,136 @@ firrtl.circuit "InternalPathForNonRefType" {
     // expected-note @below {{this port}}
     in in : !firrtl.uint<1>
     ) attributes { internalPaths = [ #firrtl.internalpath<"x.y"> ] }
+}
+
+// -----
+// Try to read from a local object's input port. This fails because we cannot
+// read from the input ports of an object.
+
+firrtl.circuit "Top" {
+  firrtl.class @MyClass(in %input: !firrtl.string) {}
+
+  firrtl.module @Top(out %port: !firrtl.string) {
+    %0 = firrtl.object @MyClass(in input: !firrtl.string)
+    %1 = firrtl.object.subfield %0[input] : !firrtl.class<@MyClass(in input: !firrtl.string)>
+    // expected-error @below {{cannot read from an object's input port}}
+    firrtl.propassign %port, %1 : !firrtl.string
+  }
+}
+
+// -----
+// Try to read from an output object's input ports.
+
+firrtl.circuit "Top" {
+  firrtl.class @MyClass(in %input: !firrtl.string) {}
+
+  firrtl.module @Top(out %object: !firrtl.class<@MyClass(in input : !firrtl.string)>,  out %str: !firrtl.string) {
+    %0 = firrtl.object.subfield %object[input] : !firrtl.class<@MyClass(in input: !firrtl.string)>
+    // expected-error @below {{cannot read from an object's input port}}
+    firrtl.propassign %str, %0 : !firrtl.string
+  }
+}
+
+// -----
+// Try to read from an input object's input port.
+
+firrtl.circuit "Top" {
+  firrtl.class @MyClass(in %input: !firrtl.string) {}
+
+  firrtl.module @Top(out %port: !firrtl.string) {
+    %0 = firrtl.object @MyClass(in input: !firrtl.string)
+    %1 = firrtl.object.subfield %0[input] : !firrtl.class<@MyClass(in input: !firrtl.string)>
+    // expected-error @below {{cannot read from an object's input port}}
+    firrtl.propassign %port, %1 : !firrtl.string
+  }
+}
+
+// -----
+// Try to assign to an output object's inputs. This fails because we can only
+// assign to the input ports of a local object declaration. An output object
+// must be wholly assigned.
+
+firrtl.circuit "Top" {
+  firrtl.class @MyClass(in %input: !firrtl.string) {}
+
+  firrtl.module @Top(out %port: !firrtl.class<@MyClass(in input : !firrtl.string)>) {
+    %0 = firrtl.string "foo"
+    %1 = firrtl.object.subfield %port[input] : !firrtl.class<@MyClass(in input: !firrtl.string)>
+    // expected-error @below {{cannot propassign to a subfield of a port}}
+    firrtl.propassign %1, %0 : !firrtl.string
+  }
+}
+
+// -----
+// Try to assign to an input object's inputs.
+
+firrtl.circuit "Top" {
+  firrtl.class @MyClass(in %input: !firrtl.string) {}
+
+  firrtl.module @Top(out %port: !firrtl.class<@MyClass(in input : !firrtl.string)>) {
+    %0 = firrtl.string "foo"
+    %1 = firrtl.object.subfield %port[input] : !firrtl.class<@MyClass(in input: !firrtl.string)>
+    // expected-error @below {{cannot propassign to a subfield of a port}}
+    firrtl.propassign %1, %0 : !firrtl.string
+  }
+}
+
+// -----
+// Try to assign to the input port of an output object of a local object.
+// This fails because we can only assign directly to the ports of a local object
+// declaration.
+
+firrtl.circuit "Top" {
+  firrtl.class @B(in %input : !firrtl.string) {}
+
+  firrtl.class @A(out %b: !firrtl.class<@B(in input: !firrtl.string)>) {}
+
+  firrtl.module @Top(out %port: !firrtl.class<@MyClass(in input : !firrtl.string)>) {
+    %a = firrtl.object @A(out b: !firrtl.class<@B(in input: !firrtl.string)>)
+    %b = firrtl.object.subfield %a[b] : !firrtl.class<@A(out b: !firrtl.class<@B(in input: !firrtl.string)>)>
+    %input = firrtl.object.subfield %b[input] : !firrtl.class<@B(in input: !firrtl.string)>
+    %value = firrtl.string "foo"
+    // expected-error @below {{cannot propassign to an intermediate expression}}
+    firrtl.propassign %input, %value : !firrtl.string
+  }
+}
+
+// -----
+// Try to read from an output object's outputs. This fails because we can only
+// read from input object ports or local object declarations.
+
+firrtl.circuit "Top" {
+  firrtl.class @MyClass(out %output: !firrtl.string) {}
+
+  firrtl.module @Top(out %object: !firrtl.class<@MyClass(out output : !firrtl.string)>,  out %str: !firrtl.string) {
+    %0 = firrtl.object.subfield %object[output] : !firrtl.class<@MyClass(out output: !firrtl.string)>
+    // expected-error @below {{cannot read from an output port}}
+    firrtl.propassign %str, %0 : !firrtl.string
+  }
+}
+
+// -----
+// Try to read from an instance's input property.
+
+firrtl.circuit "Top" {
+  firrtl.module @MyModule(in %input: !firrtl.string) {}
+
+  firrtl.module @Top(out %output: !firrtl.string) {
+    %input = firrtl.instance foo @MyModule(in input: !firrtl.string)
+    // expected-error @below {{cannot read from an instance's input port}}
+    firrtl.propassign %output, %input : !firrtl.string
+  }
+}
+
+// -----
+// Try to write to an instance's output property.
+
+firrtl.circuit "Top" {
+  firrtl.module @MyModule(out %output: !firrtl.string) {}
+
+  firrtl.module @Top(in %input: !firrtl.string) {
+    %output = firrtl.instance foo @MyModule(out output: !firrtl.string)
+    // expected-error @below {{cannot propassign to an instance's output port}}
+    firrtl.propassign %output, %input : !firrtl.string
+  }
 }
