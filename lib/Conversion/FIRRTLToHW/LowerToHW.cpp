@@ -1426,8 +1426,6 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   LogicalResult run();
 
-  void optimizeTemporaryWire(sv::WireOp wire);
-
   // Helpers.
   Value getOrCreateIntConstant(const APInt &value);
   Value getOrCreateIntConstant(unsigned numBits, uint64_t val,
@@ -1477,16 +1475,6 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                                     bool allowTruncate);
   Value createArrayIndexing(Value array, Value index);
   Value createValueWithMuxAnnotation(Operation *op, bool isMux2);
-
-  // Create a temporary wire at the current insertion point, and try to
-  // eliminate it later as part of lowering post processing.
-  sv::WireOp createTmpWireOp(Type type, StringRef name) {
-    // This is a locally visible, private wire created by the compiler, so do
-    // not attach a symbol name.
-    auto result = builder.create<sv::WireOp>(type, name);
-    tmpWiresToOptimize.push_back(result);
-    return result;
-  }
 
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitExpr;
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitDecl;
@@ -1719,11 +1707,6 @@ private:
   llvm::SmallDenseMap<std::pair<Block *, Attribute>, sv::IfDefOp> ifdefBlocks;
   llvm::SmallDenseMap<Block *, sv::InitialOp> initialBlocks;
 
-  /// This is a set of wires that get inserted as an artifact of the
-  /// lowering process.  LowerToHW should attempt to clean these up after
-  /// lowering.
-  SmallVector<sv::WireOp> tmpWiresToOptimize;
-
   /// A namespace that can be used to generte new symbol names that are unique
   /// within this module.
   hw::ModuleNamespace moduleNamespace;
@@ -1854,58 +1837,12 @@ LogicalResult FIRRTLLowering::run() {
     op->erase();
   }
 
-  // Now that the IR is in a stable form, try to eliminate temporary wires
-  // inserted by MemOp insertions.
-  for (auto wire : tmpWiresToOptimize)
-    optimizeTemporaryWire(wire);
-
   // Determine the actual types of lowered LTL operations and remove any
   // intermediate wires among them.
   if (failed(fixupLTLOps()))
     return failure();
 
   return backedgeBuilder.clearOrEmitError();
-}
-
-// Try to optimize out temporary wires introduced during lowering.
-void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
-  // Wires have inout type, so they'll have connects and read_inout operations
-  // that work on them.  If anything unexpected is found then leave it alone.
-  SmallVector<sv::ReadInOutOp> reads;
-  sv::AssignOp write;
-
-  for (auto *user : wire->getUsers()) {
-    if (auto read = dyn_cast<sv::ReadInOutOp>(user)) {
-      reads.push_back(read);
-      continue;
-    }
-
-    // Otherwise must be a connect, and we must not have seen a write yet.
-    auto assign = dyn_cast<sv::AssignOp>(user);
-    if (!assign || write)
-      return;
-    write = assign;
-  }
-
-  // Must have found the write!
-  if (!write)
-    return;
-
-  // If the write is happening at the module level then we don't have any
-  // use-before-def checking to do, so we only handle that for now.
-  if (!isa<hw::HWModuleOp>(write->getParentOp()))
-    return;
-
-  auto connected = write.getSrc();
-
-  // Ok, we can do this.  Replace all the reads with the connected value.
-  for (auto read : reads) {
-    read.replaceAllUsesWith(connected);
-    read.erase();
-  }
-  // And remove the write and wire itself.
-  write.erase();
-  wire.erase();
 }
 
 //===----------------------------------------------------------------------===//
@@ -3199,8 +3136,10 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     }
 
     // Create a wire for each inout operand, so there is something to connect
-    // to.
-    auto wire = createTmpWireOp(portType, "." + port.getName().str() + ".wire");
+    // to. The instance becomes the sole driver of this wire.
+    auto wire = builder.create<sv::WireOp>(
+        portType, "." + port.getName().str() + ".wire");
+
     // Know that the argument FIRRTL value is equal to this wire, allowing
     // connects to it to be lowered.
     (void)setLowering(portResult, wire);
