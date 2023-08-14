@@ -642,8 +642,8 @@ void PortAnnoTarget::setAnnotations(AnnotationSet annotations) const {
 }
 
 StringAttr PortAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
-  // If this is not a module, we just need to get an hw.inner_sym on the operation
-  // itself.
+  // If this is not a module, we just need to get an hw.inner_sym on the
+  // operation itself.
   auto module = llvm::dyn_cast<FModuleLike>(getOp());
   auto target = module ? hw::InnerSymTarget(getPortNo(), module)
                        : hw::InnerSymTarget(getOp());

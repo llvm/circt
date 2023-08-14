@@ -45,9 +45,9 @@ StringRef circt::msft::getValueName(Value v, const SymbolCache &syms,
     }
   }
   if (auto blockArg = v.dyn_cast<BlockArgument>()) {
-    auto portInfo =
-        cast<hw::InstantiableLike>(blockArg.getOwner()->getParent()->getParentOp())
-            .getPortList();
+    auto portInfo = cast<hw::InstantiableLike>(
+                        blockArg.getOwner()->getParent()->getParentOp())
+                        .getPortList();
     return portInfo.atInput(blockArg.getArgNumber()).getName();
   }
   if (auto constOp = dyn_cast<hw::ConstantOp>(defOp)) {

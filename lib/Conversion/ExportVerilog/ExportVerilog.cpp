@@ -4635,8 +4635,10 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
        ++portNum) {
     auto &modPort = modPortInfo.at(portNum);
     isZeroWidth = isZeroBitType(modPort.type);
-    Value portVal = modPort.isOutput() ? op.getOutputValue(modPortInfo.outputNumForPort(portNum))
-    : op.getInputValue(modPortInfo.inputNumForPort(portNum));
+    Value portVal =
+        modPort.isOutput()
+            ? op.getOutputValue(modPortInfo.outputNumForPort(portNum))
+            : op.getInputValue(modPortInfo.inputNumForPort(portNum));
 
     // Decide if we should print a comma.  We can't do this if we're the first
     // port or if all the subsequent ports are zero width.
@@ -5191,8 +5193,10 @@ void ModuleEmitter::emitBind(BindOp op) {
     // Emit the argument and result ports.
     for (auto [idx, elt] : llvm::enumerate(childPortInfo)) {
       // Figure out which value we are emitting.
-      Value portVal = elt.isOutput() ? inst.getOutputValue(childPortInfo.outputNumForPort(idx)) :
-      inst.getInputValue(childPortInfo.inputNumForPort((idx)));
+      Value portVal =
+          elt.isOutput()
+              ? inst.getOutputValue(childPortInfo.outputNumForPort(idx))
+              : inst.getInputValue(childPortInfo.inputNumForPort((idx)));
       bool isZeroWidth = isZeroBitType(elt.type);
 
       // Decide if we should print a comma.  We can't do this if we're the

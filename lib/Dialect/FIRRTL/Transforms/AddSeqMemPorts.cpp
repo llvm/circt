@@ -44,8 +44,8 @@ struct AddSeqMemPortsPass : public AddSeqMemPortsBase<AddSeqMemPortsPass> {
     return moduleNamespaces.try_emplace(module, module).first->second;
   }
 
-  /// Obtain an inner reference to an operation, possibly adding an `hw.inner_sym`
-  /// to that operation.
+  /// Obtain an inner reference to an operation, possibly adding an
+  /// `hw.inner_sym` to that operation.
   hw::InnerRefAttr getInnerRefTo(Operation *op) {
     return ::getInnerRefTo(op, [&](FModuleOp mod) -> ModuleNamespace & {
       return getModuleNamespace(mod);

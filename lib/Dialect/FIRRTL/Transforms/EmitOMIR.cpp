@@ -103,11 +103,11 @@ private:
     return addSymbol(SymbolTable::getSymbolName(op));
   }
 
-  /// Obtain an inner reference to an operation, possibly adding an `hw.inner_sym`
-  /// to that operation.
+  /// Obtain an inner reference to an operation, possibly adding an
+  /// `hw.inner_sym` to that operation.
   hw::InnerRefAttr getInnerRefTo(Operation *op);
-  /// Obtain an inner reference to a module port, possibly adding an `hw.inner_sym`
-  /// to that port.
+  /// Obtain an inner reference to a module port, possibly adding an
+  /// `hw.inner_sym` to that port.
   hw::InnerRefAttr getInnerRefTo(FModuleLike module, size_t portIdx);
 
   // Obtain the result type of an Operation.

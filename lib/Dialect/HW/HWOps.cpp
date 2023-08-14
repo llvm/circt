@@ -1621,13 +1621,9 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
                                         getResultNames(), getResults());
 }
 
-Value InstanceOp::getOutputValue(size_t idx) {
-    return getResults()[idx];
-}
+Value InstanceOp::getOutputValue(size_t idx) { return getResults()[idx]; }
 
-Value InstanceOp::getInputValue(size_t idx) {
-  return getInputs()[idx];
-}
+Value InstanceOp::getInputValue(size_t idx) { return getInputs()[idx]; }
 
 //===----------------------------------------------------------------------===//
 // HWOutputOp
@@ -3377,19 +3373,16 @@ ModulePortInfo HWTestModuleOp::getPortList() {
   return ModulePortInfo(ports);
 }
 
-size_t HWTestModuleOp::getNumPorts() {
-  return getModuleType().getNumPorts();
-}
+size_t HWTestModuleOp::getNumPorts() { return getModuleType().getNumPorts(); }
 
-ModuleType HWTestModuleOp::getHWModuleType() {
-  return getModuleType();
-}
+ModuleType HWTestModuleOp::getHWModuleType() { return getModuleType(); }
 
 InnerSymAttr HWTestModuleOp::getPortSymbolAttr(size_t portIndex) {
   auto portAttrs = getPortAttrs();
   if (portAttrs)
-    return cast<DictionaryAttr>(*portAttrs).getAs<::circt::hw::InnerSymAttr>(
-          InnerSymbolTable::getInnerSymbolAttrName());
+    return cast<DictionaryAttr>(*portAttrs)
+        .getAs<::circt::hw::InnerSymAttr>(
+            InnerSymbolTable::getInnerSymbolAttrName());
   return {};
 }
 

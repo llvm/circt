@@ -113,8 +113,7 @@ static FlatSymbolRefAttr buildNLA(const AnnoPathValue &target,
         state.getNamespace(inst->getParentOfType<FModuleLike>())));
   }
 
-  insts.push_back(
-      FlatSymbolRefAttr::get(target.ref.getModule().getNameAttr()));
+  insts.push_back(FlatSymbolRefAttr::get(target.ref.getModule().getNameAttr()));
 
   auto instAttr = ArrayAttr::get(state.circuit.getContext(), insts);
 

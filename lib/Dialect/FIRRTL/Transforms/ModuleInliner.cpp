@@ -670,8 +670,7 @@ bool Inliner::rename(StringRef prefix, Operation *op,
         auto &mnla = nlaMap[sym.getAttr()];
         if (!doesNLAMatchCurrentPath(mnla.getNLA()))
           continue;
-        mnla.setInnerSym(moduleNamespace.module.getNameAttr(),
-                         newSymAttr);
+        mnla.setInnerSym(moduleNamespace.module.getNameAttr(), newSymAttr);
       }
       // Indicate symbol was changed.
       return true;
@@ -740,8 +739,7 @@ bool Inliner::renameInstance(
       if (!nlaMap.count(nla))
         continue;
       auto &mnla = nlaMap[nla];
-      assert(newInnerRef.getModule() ==
-             moduleNamespace.module.getNameAttr());
+      assert(newInnerRef.getModule() == moduleNamespace.module.getNameAttr());
       mnla.setInnerSym(moduleNamespace.module.getNameAttr(), newSymAttr);
     }
   }

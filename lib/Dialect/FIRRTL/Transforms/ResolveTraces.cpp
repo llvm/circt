@@ -117,8 +117,7 @@ private:
     newTarget.append("|");
 
     if (path.isLocal()) {
-      addSymbol(
-          FlatSymbolRefAttr::get(path.ref.getModule().getNameAttr()));
+      addSymbol(FlatSymbolRefAttr::get(path.ref.getModule().getNameAttr()));
     } else {
       addSymbol(FlatSymbolRefAttr::get(path.instances.front()
                                            ->getParentOfType<FModuleLike>()
@@ -156,8 +155,8 @@ private:
               assert(false && "unexpected annotation target type");
               return StringAttr{};
             });
-    addSymbol(hw::InnerRefAttr::get(path.ref.getModule().getNameAttr(),
-                                    innerSymStr));
+    addSymbol(
+        hw::InnerRefAttr::get(path.ref.getModule().getNameAttr(), innerSymStr));
 
     auto type = dyn_cast<FIRRTLBaseType>(path.ref.getType());
     assert(type && "expected a FIRRTLBaseType");

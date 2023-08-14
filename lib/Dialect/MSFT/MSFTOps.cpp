@@ -398,7 +398,8 @@ hw::InstantiableLike InstanceOp::getReferencedModule() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
   if (!topLevelModuleOp)
     return nullptr;
-  return cast<hw::InstantiableLike>(topLevelModuleOp.lookupSymbol(getModuleName()));
+  return cast<hw::InstantiableLike>(
+      topLevelModuleOp.lookupSymbol(getModuleName()));
 }
 
 StringAttr InstanceOp::getResultName(size_t idx) {
@@ -499,8 +500,8 @@ hw::ModulePortInfo MSFTModuleOp::getPortList() {
 
 hw::ModuleType MSFTModuleOp::getHWModuleType() {
   auto ports = getPortList();
-  SmallVector<hw::ModulePort> modPorts; 
-  for (auto& p : ports)
+  SmallVector<hw::ModulePort> modPorts;
+  for (auto &p : ports)
     modPorts.push_back(p);
   return hw::ModuleType::get(getContext(), modPorts);
 }
@@ -967,8 +968,8 @@ hw::ModulePortInfo MSFTModuleExternOp::getPortList() {
 
 hw::ModuleType MSFTModuleExternOp::getHWModuleType() {
   auto ports = getPortList();
-  SmallVector<hw::ModulePort> modPorts; 
-  for (auto& p : ports)
+  SmallVector<hw::ModulePort> modPorts;
+  for (auto &p : ports)
     modPorts.push_back(p);
   return hw::ModuleType::get(getContext(), modPorts);
 }

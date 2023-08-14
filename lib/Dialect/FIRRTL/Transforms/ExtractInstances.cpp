@@ -74,8 +74,8 @@ struct ExtractInstancesPass
         .first->second;
   }
 
-  /// Obtain an inner reference to an operation, possibly adding an `hw.inner_sym`
-  /// to that operation.
+  /// Obtain an inner reference to an operation, possibly adding an
+  /// `hw.inner_sym` to that operation.
   InnerRefAttr getInnerRefTo(Operation *op) {
     return ::getInnerRefTo(op, [&](FModuleOp mod) -> ModuleNamespace & {
       return getModuleNamespace(mod);
@@ -358,8 +358,8 @@ void ExtractInstancesPass::collectAnnos() {
         if (auto inst = dyn_cast<InstanceOp>(*instRecord->getInstance())) {
           LLVM_DEBUG(llvm::dbgs()
                      << "- Marking `"
-                     << inst->getParentOfType<FModuleLike>().getName()
-                     << "." << inst.getName() << "`\n");
+                     << inst->getParentOfType<FModuleLike>().getName() << "."
+                     << inst.getName() << "`\n");
           extractionWorklist.push_back({inst, info});
         }
       }
@@ -398,8 +398,8 @@ void ExtractInstancesPass::collectAnnos() {
         if (auto inst = dyn_cast<InstanceOp>(*instRecord->getInstance())) {
           LLVM_DEBUG(llvm::dbgs()
                      << "- Marking `"
-                     << inst->getParentOfType<FModuleLike>().getName()
-                     << "." << inst.getName() << "`\n");
+                     << inst->getParentOfType<FModuleLike>().getName() << "."
+                     << inst.getName() << "`\n");
           extractionWorklist.push_back({inst, info});
         }
       }
@@ -600,8 +600,8 @@ void ExtractInstancesPass::extractInstances() {
       auto newInst = inst.cloneAndInsertPorts({});
       newInst->remove();
 
-      // Ensure that the `hw.inner_sym` of the instance is unique within the parent
-      // module we're extracting it to.
+      // Ensure that the `hw.inner_sym` of the instance is unique within the
+      // parent module we're extracting it to.
       if (auto instSym = getInnerSymName(inst)) {
         auto newName =
             getModuleNamespace(newParent).newName(instSym.getValue());

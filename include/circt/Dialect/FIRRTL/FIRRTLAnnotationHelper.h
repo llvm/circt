@@ -80,9 +80,7 @@ static T &operator<<(T &os, const AnnoPathValue &path) {
   if (path.isLocal()) {
     os << path.ref.getModule().getName();
   } else {
-    os << path.instances.front()
-              ->getParentOfType<FModuleLike>()
-              .getName();
+    os << path.instances.front()->getParentOfType<FModuleLike>().getName();
   }
   for (auto inst : path.instances)
     os << "/" << inst.getName() << ":" << inst.getModuleName();

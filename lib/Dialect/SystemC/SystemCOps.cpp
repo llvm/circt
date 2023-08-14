@@ -130,8 +130,8 @@ hw::ModulePortInfo SCModuleOp::getPortList() {
 
 hw::ModuleType SCModuleOp::getHWModuleType() {
   auto ports = getPortList();
-  SmallVector<hw::ModulePort> modPorts; 
-  for (auto& p : ports)
+  SmallVector<hw::ModulePort> modPorts;
+  for (auto &p : ports)
     modPorts.push_back(p);
   return hw::ModuleType::get(getContext(), modPorts);
 }
@@ -467,7 +467,8 @@ void InstanceDeclOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 StringRef InstanceDeclOp::getInstanceName() { return getName(); }
 StringAttr InstanceDeclOp::getInstanceNameAttr() { return getNameAttr(); }
 
-hw::InstantiableLike InstanceDeclOp::getReferencedModule(const hw::HWSymbolCache *cache) {
+hw::InstantiableLike
+InstanceDeclOp::getReferencedModule(const hw::HWSymbolCache *cache) {
   if (cache)
     if (auto *result = cache->getDefinition(getModuleNameAttr()))
       return cast<hw::InstantiableLike>(result);

@@ -37,8 +37,8 @@ std::pair<ArrayAttr, ArrayAttr> getHWModuleArgAndResultNames(Operation *module);
 
 /// Return a pointer to the referenced module operation.
 InstantiableLike getReferencedModule(const HWSymbolCache *cache,
-                               Operation *instanceOp,
-                               mlir::FlatSymbolRefAttr moduleName);
+                                     Operation *instanceOp,
+                                     mlir::FlatSymbolRefAttr moduleName);
 
 /// Verify that the instance refers to a valid HW module as determined by the
 /// 'hw::isAnyModule' function.

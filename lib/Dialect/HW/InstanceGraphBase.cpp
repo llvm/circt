@@ -133,7 +133,8 @@ void InstanceGraphBase::replaceInstance(HWInstanceLike inst,
   (*it)->instance = newInst;
 }
 
-bool InstanceGraphBase::isAncestor(InstantiableLike child, InstantiableLike parent) {
+bool InstanceGraphBase::isAncestor(InstantiableLike child,
+                                   InstantiableLike parent) {
   DenseSet<InstanceGraphNode *> seen;
   SmallVector<InstanceGraphNode *> worklist;
   auto *cn = lookup(child);
@@ -218,7 +219,8 @@ InstanceGraphBase::getInferredTopLevelNodes() {
   return {inferredTopLevelNodes};
 }
 
-ArrayRef<InstancePath> InstancePathCache::getAbsolutePaths(InstantiableLike op) {
+ArrayRef<InstancePath>
+InstancePathCache::getAbsolutePaths(InstantiableLike op) {
   InstanceGraphNode *node = instanceGraph[op];
 
   // If we have reached the circuit root, we're done.

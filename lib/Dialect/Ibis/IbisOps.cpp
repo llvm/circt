@@ -285,7 +285,7 @@ InstanceWriteOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 //===----------------------------------------------------------------------===//
 
 MutableOperandRange CallOp::getArgOperandsMutable() {
-      return getOperandsMutable();
+  return getOperandsMutable();
 }
 
 //===----------------------------------------------------------------------===//

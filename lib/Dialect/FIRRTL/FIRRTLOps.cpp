@@ -459,7 +459,7 @@ Block *CircuitOp::getBodyBlock() { return &getBody().front(); }
 static SmallVector<firrtl::PortInfo> getPortImpl(FModuleLike module) {
   SmallVector<firrtl::PortInfo> results;
   for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
-    results.push_back({module.getPortNameAttr(i), module.getPortType(i), 
+    results.push_back({module.getPortNameAttr(i), module.getPortType(i),
                        module.getPortDirection(i), module.getPortSymbolAttr(i),
                        module.getPortLocation(i),
                        AnnotationSet::forPort(module, i)});
@@ -1712,15 +1712,14 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
     portAnnotationsAttr = builder.getArrayAttr(portAnnotations);
   }
 
-  return build(
-      builder, result, resultTypes,
-      SymbolRefAttr::get(builder.getContext(), module.getNameAttr()),
-      builder.getStringAttr(name),
-      NameKindEnumAttr::get(builder.getContext(), nameKind),
-      module.getPortDirectionsAttr(), module.getPortNamesAttr(),
-      builder.getArrayAttr(annotations), portAnnotationsAttr,
-      lowerToBind ? builder.getUnitAttr() : UnitAttr(),
-      innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
+  return build(builder, result, resultTypes,
+               SymbolRefAttr::get(builder.getContext(), module.getNameAttr()),
+               builder.getStringAttr(name),
+               NameKindEnumAttr::get(builder.getContext(), nameKind),
+               module.getPortDirectionsAttr(), module.getPortNamesAttr(),
+               builder.getArrayAttr(annotations), portAnnotationsAttr,
+               lowerToBind ? builder.getUnitAttr() : UnitAttr(),
+               innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
 }
 
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
