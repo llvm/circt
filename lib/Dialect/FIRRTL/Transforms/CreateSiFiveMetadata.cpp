@@ -338,7 +338,8 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
           // the DUT is the top module or when no DUT is specified.
           if (everythingInDUT ||
               llvm::any_of(p, [&](circt::igraph::InstanceOpInterface inst) {
-                return inst.getReferencedModule() == dutMod;
+                return inst.getReferencedModuleNameAttr() ==
+                       dutMod.getNameAttr();
               }))
             jsonStream.value(hierName);
         }

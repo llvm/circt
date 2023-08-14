@@ -192,7 +192,8 @@ def HWInstanceOp : FSMOp<"hw_instance", [
       return getSymName();
     }
 
-    Operation* getReferencedModule();
+    Operation* getReferencedModule(SymbolTable& tbl);
+    Operation* getReferencedModuleSlow();
 
     //===------------------------------------------------------------------===//
     // PortList Methods

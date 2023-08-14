@@ -49,7 +49,7 @@ public:
 LogicalResult
 InstanceOpLowering::matchAndRewrite(InstanceOp msftInst, OpAdaptor adaptor,
                                     ConversionPatternRewriter &rewriter) const {
-  Operation *referencedModule = msftInst.getReferencedModule();
+  Operation *referencedModule = msftInst.getReferencedModuleSlow();
   if (!referencedModule)
     return rewriter.notifyMatchFailure(msftInst,
                                        "Could not find referenced module");

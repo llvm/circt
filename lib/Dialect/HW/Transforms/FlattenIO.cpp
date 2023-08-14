@@ -98,7 +98,7 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
 
     // Create the new instance...
     auto newInstance = rewriter.create<hw::InstanceOp>(
-        loc, op.getReferencedModule(), op.getInstanceName(), convOperands);
+        loc, op.getReferencedModuleSlow(), op.getInstanceName(), convOperands);
 
     // re-create any structs in the result.
     llvm::SmallVector<Value> convResults;
@@ -367,7 +367,7 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
 
     // And likewise with the converted instance ops.
     for (auto instanceOp : convertedInstances) {
-      Operation *targetModule = instanceOp.getReferencedModule();
+      Operation *targetModule = instanceOp.getReferencedModuleSlow();
       auto ioInfo = ioInfoMap[targetModule];
       updateNameAttribute(instanceOp, "argNames", ioInfo.argStructs);
       updateNameAttribute(instanceOp, "resultNames", ioInfo.resStructs);

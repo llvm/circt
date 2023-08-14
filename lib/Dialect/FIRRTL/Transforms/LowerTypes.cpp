@@ -1387,8 +1387,8 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<Direction> newDirs;
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
-  PreserveAggregate::PreserveMode mode =
-      getPreservationModeForModule(op.getReferencedModule(symTbl));
+  PreserveAggregate::PreserveMode mode = getPreservationModeForModule(
+      cast<FModuleLike>(op.getReferencedModule(symTbl)));
 
   endFields.push_back(0);
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {

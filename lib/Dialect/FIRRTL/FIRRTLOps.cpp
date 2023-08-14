@@ -1635,7 +1635,7 @@ BlockArgument ClassOp::getArgument(size_t portNumber) {
 
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
-Operation *InstanceOp::getReferencedModule() {
+Operation *InstanceOp::getReferencedModuleSlow() {
   auto circuit = (*this)->getParentOfType<CircuitOp>();
   if (!circuit)
     return nullptr;
@@ -1644,12 +1644,11 @@ Operation *InstanceOp::getReferencedModule() {
 }
 
 hw::ModulePortInfo InstanceOp::getPortList() {
-  return cast<hw::PortList>(getReferencedModule()).getPortList();
+  return cast<hw::PortList>(getReferencedModuleSlow()).getPortList();
 }
 
-FModuleLike InstanceOp::getReferencedModule(SymbolTable &symbolTable) {
-  return symbolTable.lookup<FModuleLike>(
-      getModuleNameAttr().getLeafReference());
+Operation *InstanceOp::getReferencedModule(SymbolTable &symbolTable) {
+  return symbolTable.lookup(getModuleNameAttr().getLeafReference());
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &result,

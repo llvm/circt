@@ -387,19 +387,23 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
-Operation *InstanceOp::getReferencedModule() {
+Operation *InstanceOp::getReferencedModuleSlow() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
   if (!topLevelModuleOp)
     return nullptr;
   return topLevelModuleOp.lookupSymbol(getModuleName());
 }
 
+Operation *InstanceOp::getReferencedModule(SymbolTable &symtbl) {
+  return symtbl.lookup(getModuleNameAttr().getValue());
+}
+
 hw::ModulePortInfo InstanceOp::getPortList() {
-  return cast<hw::PortList>(getReferencedModule()).getPortList();
+  return cast<hw::PortList>(getReferencedModuleSlow()).getPortList();
 }
 
 StringAttr InstanceOp::getResultName(size_t idx) {
-  if (auto *refMod = getReferencedModule())
+  if (auto *refMod = getReferencedModuleSlow())
     return hw::getModuleResultNameAttr(refMod, idx);
   return StringAttr();
 }

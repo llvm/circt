@@ -281,7 +281,11 @@ LogicalResult TriggerOp::verify() { return verifyCallerTypes(*this); }
 //===----------------------------------------------------------------------===//
 
 // HWInstanceLike interface
-Operation *HWInstanceOp::getReferencedModule() { return getMachineOp(); }
+Operation *HWInstanceOp::getReferencedModuleSlow() { return getMachineOp(); }
+
+Operation *HWInstanceOp::getReferencedModule(SymbolTable &symtbl) {
+  return symtbl.lookup(getMachineAttr().getValue());
+}
 
 /// Lookup the machine for the symbol.  This returns null on invalid IR.
 MachineOp HWInstanceOp::getMachineOp() {

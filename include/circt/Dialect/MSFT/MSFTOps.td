@@ -53,7 +53,8 @@ def InstanceOp : MSFTOp<"instance", [
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    Operation *getReferencedModule();
+    Operation* getReferencedModule(SymbolTable& tbl);
+    Operation* getReferencedModuleSlow();
 
     //===------------------------------------------------------------------===//
     // PortList Methods

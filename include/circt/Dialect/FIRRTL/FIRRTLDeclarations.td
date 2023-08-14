@@ -102,10 +102,6 @@ def InstanceOp : HardwareDeclOp<"instance", [
   ];
 
   let extraClassDeclaration = [{
-    /// Lookup the module or extmodule for the symbol.  This returns null on
-    /// invalid IR.
-    FModuleLike getReferencedModule(SymbolTable& symtbl);
-
     /// Return the port direction for the specified result number.
     Direction getPortDirection(size_t resultNo) {
       return direction::get(getPortDirections()[resultNo]);
