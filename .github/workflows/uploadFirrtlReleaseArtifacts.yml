@@ -73,7 +73,8 @@ jobs:
           sha256: shasum -a 256
           cont: '\'
           setup:
-          cmake-args: -DCMAKE_C_COMPILER=clang-12 -DCMAKE_CXX_COMPILER=clang++-12
+          cmake_c_compiler: clang-12
+          cmake_cxx_compiler: clang++-12
         run: |
           json=$(echo '${{ toJSON(env) }}' | jq -c)
           echo $json
@@ -91,6 +92,8 @@ jobs:
           cont: '\'
           setup:
           cmake-args:
+          cmake_c_compiler: clang
+          cmake_cxx_compiler: clang++
         run: |
           json=$(echo '${{ toJSON(env) }}' | jq -c)
           echo $json
@@ -108,6 +111,8 @@ jobs:
           cont: '`'
           setup: ./utils/find-vs.ps1
           cmake-args:
+          cmake_c_compiler: cl
+          cmake_cxx_compiler: cl
         run: |
           json=$(echo '${{ toJSON(env) }}' | jq -c)
           echo $json
@@ -141,13 +146,13 @@ jobs:
 
           case ${{ github.event_name }} in
             workflow_dispatch)
-              ENV='{"runTests":${{ inputs.runTests }}}'
+              ENV='[{"runTests":${{ inputs.runTests }}}]'
             ;;
             schedule)
-              ENV='{"runTests":false}'
+              ENV='[{"runTests":false}]'
             ;;
             *)
-              ENV='{"runTests":true}'
+              ENV='[{"runTests":true}]'
             ;;
           esac
           echo environment=$ENV >> $GITHUB_OUTPUT
@@ -168,127 +173,15 @@ jobs:
       matrix:
         build_config: ${{ fromJSON(needs.choose-matrix.outputs.build_configs) }}
         runner: ${{ fromJSON(needs.choose-matrix.outputs.runners) }}
-    runs-on: ${{ matrix.runner.runner }}
-    env: ${{ fromJSON(needs.choose-matrix.outputs.environment) }}
-    steps:
-      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
-      # time.
-      - name: Get CIRCT
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 2
-          submodules: "true"
-      # We need unshallow CIRCT for later "git describe"
-      - name: Unshallow CIRCT (but not LLVM)
-        run: |
-          git fetch --unshallow --no-recurse-submodules
-
-      - name: Setup Linux
-        if: matrix.runner.os == 'linux'
-        run: sudo apt-get install ninja-build
-
-      - name: Setup Ninja and GNU Tar Mac
-        if: matrix.runner.os == 'macos'
-        run: brew install ninja gnu-tar
-
-      - name: Configure CIRCT
-        run: |
-          ${{ matrix.runner.setup }}
-          mkdir build
-          cd build
-          echo $(pwd)
-          cmake -G Ninja -S "$(pwd)/../llvm/llvm" ${{ matrix.runner.cont }}
-            ${{ matrix.runner.cmake-args }} ${{ matrix.runner.cont }}
-            -DCMAKE_BUILD_TYPE=${{ matrix.build_config.mode }} ${{ matrix.runner.cont }}
-            -DBUILD_SHARED_LIBS=${{ matrix.build_config.shared }} ${{ matrix.runner.cont }}
-            -DLLVM_BUILD_TOOLS=ON ${{ matrix.runner.cont }}
-            -DLLVM_BUILD_EXAMPLES=OFF ${{ matrix.runner.cont }}
-            -DLLVM_ENABLE_ASSERTIONS=${{ matrix.build_config.assert }} ${{ matrix.runner.cont }}
-            -DLLVM_ENABLE_PROJECTS=mlir ${{ matrix.runner.cont }}
-            -DLLVM_EXTERNAL_PROJECTS=circt ${{ matrix.runner.cont }}
-            -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=".." ${{ matrix.runner.cont }}
-            -DLLVM_STATIC_LINK_CXX_STDLIB=ON ${{ matrix.runner.cont }}
-            -DLLVM_ENABLE_TERMINFO=OFF ${{ matrix.runner.cont }}
-            -DLLVM_PARALLEL_LINK_JOBS=1 ${{ matrix.runner.cont }}
-            -DLLVM_TARGETS_TO_BUILD="host" ${{ matrix.runner.cont }}
-            -DLLVM_FORCE_ENABLE_STATS=${{ matrix.build_config.stats }} ${{ matrix.runner.cont }}
-            -DLLVM_ENABLE_ZSTD=OFF ${{ matrix.runner.cont }}
-            -DVERILATOR_DISABLE=ON ${{ matrix.runner.cont }}
-            -DLLVM_PARALLEL_LINK_JOBS=1 ${{ matrix.runner.cont }}
-            -DCIRCT_RELEASE_TAG_ENABLED=ON ${{ matrix.runner.cont }}
-            -DCIRCT_RELEASE_TAG=firtool ${{ matrix.runner.cont }}
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF ${{ matrix.runner.cont }}
-            -DCMAKE_INSTALL_PREFIX="$(pwd)/../install"
-
-      - name: Test CIRCT
-        if: env.runTests == 'true'
-        run: |
-          ${{ matrix.runner.setup }}
-          ninja -C build check-circt check-circt-unit
-
-      - name: Install firtool
-        run: |
-          ${{ matrix.runner.setup }}
-          ninja -C build install-firtool
-          file install/*
-          file install/bin/*
-
-      # Specify bash for the Windows runner to work
-      - name: Name Install Directory
-        id: name_dir
-        shell: bash
-        run: |
-          BASE=$(git describe --tag)
-          SANITIZED=$(echo -n $BASE | tr '/' '-')
-          echo "value=$SANITIZED" >> "$GITHUB_OUTPUT"
-
-      - name: Name Archive
-        id: name_archive
-        shell: bash
-        run: |
-          NAME=firrtl-bin-${{ matrix.runner.os }}-${{ matrix.runner.arch }}.${{ matrix.runner.archive }}
-          echo "name=$NAME" >> "$GITHUB_OUTPUT"
-
-      - name: Package Binaries Linux and MacOS
-        if: matrix.runner.os == 'macos' || matrix.runner.os == 'linux'
-        run: |
-          mv install ${{ steps.name_dir.outputs.value }}
-          ${{ matrix.runner.tar }} ${{ steps.name_archive.outputs.name }} ${{ steps.name_dir.outputs.value }}
-
-      # Not sure how to create a zip in bash on Windows so using powershell
-      - name: Package Binaries Windows
-        if: matrix.runner.os == 'windows'
-        shell: pwsh
-        run: |
-          mv install ${{ steps.name_dir.outputs.value }}
-          Compress-Archive -Path ${{ steps.name_dir.outputs.value }} -DestinationPath ${{ steps.name_archive.outputs.name }}
-
-      # Specify bash for the Windows runner to work
-      - name: Show Tarball
-        shell: bash
-        run: |
-          ls -l ${{ steps.name_archive.outputs.name }}
-          ${{ matrix.runner.sha256 }} ${{ steps.name_archive.outputs.name }} | cut -d ' ' -f1 > ${{ steps.name_archive.outputs.name }}.sha256
-
-      - name: Upload Binary (Non-Tag)
-        uses: actions/upload-artifact@v3
-        if: github.ref_type != 'tag'
-        with:
-          name: ${{ steps.name_archive.outputs.name }}
-          path: ${{ steps.name_archive.outputs.name }}
-          retention-days: 7
-      - name: Upload SHA256 (Non-Tag)
-        uses: actions/upload-artifact@v3
-        if: github.ref_type != 'tag'
-        with:
-          name: ${{ steps.name_archive.outputs.name }}.sha256
-          path: ${{ steps.name_archive.outputs.name }}.sha256
-          retention-days: 7
-
-      - name: Upload Binaries (Tag)
-        uses: AButler/upload-release-assets@v2.0
-        if: github.ref_type == 'tag'
-        with:
-          # The * will grab the .sha256 as well
-          files: ${{ steps.name_archive.outputs.name }}*
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        env: ${{ fromJSON(needs.choose-matrix.outputs.environment) }}
+    uses: ./.github/workflows/unifiedBuildTestAndInstall.yml
+    with:
+      runner: ${{ matrix.runner.runner }}
+      cmake_build_type: ${{ matrix.build_config.mode }}
+      build_shared_libs: ${{ matrix.build_config.shared }}
+      llvm_enable_assertions: ${{ matrix.build_config.assert }}
+      llvm_force_enable_stats: ${{ matrix.build_config.stats }}
+      runTests: ${{ matrix.env.runTests }}
+      install: install-firtool
+      cmake_c_compiler: ${{ matrix.runner.cmake_c_compiler }}
+      cmake_cxx_compiler: ${{ matrix.runner.cmake_cxx_compiler }}
