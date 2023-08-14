@@ -11,7 +11,7 @@
 using namespace circt;
 
 // Converts a function type wrt. the given type converter.
-static FunctionType convertFunctionType(TypeConverter &typeConverter,
+static FunctionType convertFunctionType(const TypeConverter &typeConverter,
                                         FunctionType type) {
   // Convert the original function types.
   llvm::SmallVector<Type> res, arg;

@@ -478,7 +478,7 @@ public:
   }
 };
 
-static hw::ModulePortInfo getModulePortInfoHS(TypeConverter &tc,
+static hw::ModulePortInfo getModulePortInfoHS(const TypeConverter &tc,
                                               handshake::FuncOp funcOp) {
   SmallVector<hw::PortInfo> inputs, outputs;
   auto *ctx = funcOp->getContext();
