@@ -153,7 +153,7 @@ def TriggerOp : FSMOp<"trigger", []> {
 
 def HWInstanceOp : FSMOp<"hw_instance", [
     Symbol,
-    DeclareOpInterfaceMethods<HWInstanceLike>
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface>
   ]> {
   let summary = "Create a hardware-style instance of a state machine";
   let description = [{
@@ -177,23 +177,9 @@ def HWInstanceOp : FSMOp<"hw_instance", [
     MachineOp getMachineOp();
 
     /// Module name is the same as the machine name.
-    StringRef getModuleName() {
-      return getMachine();
-    }
-    FlatSymbolRefAttr getModuleNameAttr() {
-      return getMachineAttr();
-    }
+    StringRef getModuleName();
 
-    mlir::StringAttr getInstanceNameAttr() {
-      return getSymNameAttr();
-    }
-
-    llvm::StringRef getInstanceName() {
-      return getSymName();
-    }
-
-    Operation* getReferencedModule(SymbolTable& tbl);
-    Operation* getReferencedModuleSlow();
+    FlatSymbolRefAttr getModuleNameAttr();
 
     //===------------------------------------------------------------------===//
     // PortList Methods

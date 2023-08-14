@@ -299,6 +299,16 @@ hw::ModulePortInfo HWInstanceOp::getPortList() {
   return getMachineOp().getPortList();
 }
 
+/// Module name is the same as the machine name.
+StringRef HWInstanceOp::getModuleName() { return getMachine(); }
+FlatSymbolRefAttr HWInstanceOp::getModuleNameAttr() { return getMachineAttr(); }
+
+mlir::StringAttr HWInstanceOp::getInstanceNameAttr() {
+  return getSymNameAttr();
+}
+
+llvm::StringRef HWInstanceOp::getInstanceName() { return getSymName(); }
+
 //===----------------------------------------------------------------------===//
 // StateOp
 //===----------------------------------------------------------------------===//
