@@ -1394,8 +1394,10 @@ ConventionAttr FMemModuleOp::getConventionAttr() {
 
 void ClassOp::build(OpBuilder &builder, OperationState &result, StringAttr name,
                     ArrayRef<PortInfo> ports) {
-  for (const auto &port : ports)
-    assert(port.annotations.empty() && "class ports may not have annotations");
+  assert(
+      llvm::all_of(ports,
+                   [](const auto &port) { return port.annotations.empty(); }) &&
+      "class ports may not have annotations");
 
   buildModuleWithoutAnnos(builder, result, name, ports);
 

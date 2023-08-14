@@ -39,8 +39,8 @@ void testExport(MlirContext ctx) {
   MlirModule module =
       mlirModuleCreateParse(ctx, mlirStringRefCreateFromCString(testFIR));
 
-  assert(mlirLogicalResultIsSuccess(
-      mlirExportFIRRTL(module, exportCallback, NULL)));
+  MlirLogicalResult result = mlirExportFIRRTL(module, exportCallback, NULL);
+  assert(mlirLogicalResultIsSuccess(result));
 
   // CHECK: FIRRTL version 3.0.0
   // CHECK-NEXT: circuit ExportTestSimpleModule :
