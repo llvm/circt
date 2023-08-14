@@ -282,16 +282,6 @@ circuit Top :
     ; CHECK-NEXT:           .source_1 ([[ExtModuleWithPort_source_1_wire]])
     ; CHECK-NEXT:         );
 
-    ; EXTRACT:        FILE ".{{[/\]}}BlackBox_DUT.v"
-    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}BlackBox_GCT.v"
-    ; EXTRACT:        FILE ".{{[/\]}}BlackBox_DUTAndGCT.v"
-
-    ; EXTRACT:        FILE "firrtl_black_box_resource_files.f"
-    ; EXTRACT-NOT:    FILE
-    ; EXTRACT:          BlackBox_DUT.v
-    ; EXTRACT-NEXT:     BlackBox_DUTAndGCT.v
-    ; EXTRACT-NEXT:     Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}BlackBox_GCT.v
-
     ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}MyView_companion.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}MyView_companion.sv
     ; EXTRACT:        module MyView_companion(
@@ -487,3 +477,14 @@ circuit Top :
     ; YAML-NEXT:                    dimensions: [  ]
     ; YAML-NEXT:                    width: 4
     ; YAML-NEXT:                instances: []
+
+    ; EXTRACT:        FILE ".{{[/\]}}BlackBox_DUT.v"
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}BlackBox_GCT.v"
+    ; EXTRACT:        FILE ".{{[/\]}}BlackBox_DUTAndGCT.v"
+
+    ; EXTRACT:        FILE "firrtl_black_box_resource_files.f"
+    ; EXTRACT-NOT:    FILE
+    ; EXTRACT:          BlackBox_DUT.v
+    ; EXTRACT-NEXT:     BlackBox_DUTAndGCT.v
+    ; EXTRACT-NEXT:     Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}BlackBox_GCT.v
+
