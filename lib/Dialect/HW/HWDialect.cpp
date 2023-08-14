@@ -102,7 +102,7 @@ Operation *HWDialect::materializeConstant(OpBuilder &builder, Attribute value,
   }
 
   // Parameter expressions materialize into hw.param.value.
-  auto parentOp = builder.getBlock()->getParentOp();
+  auto *parentOp = builder.getBlock()->getParentOp();
   auto curModule = dyn_cast<HWModuleOp>(parentOp);
   if (!curModule)
     curModule = parentOp->getParentOfType<HWModuleOp>();

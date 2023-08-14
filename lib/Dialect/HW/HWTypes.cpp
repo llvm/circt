@@ -54,10 +54,7 @@ bool circt::hw::isHWIntegerType(mlir::Type type) {
     return true;
 
   auto intType = canonicalType.dyn_cast<IntegerType>();
-  if (!intType || !intType.isSignless())
-    return false;
-
-  return true;
+  return intType && intType.isSignless();
 }
 
 bool circt::hw::isHWEnumType(mlir::Type type) {
@@ -203,20 +200,21 @@ Type IntType::get(mlir::TypedAttr width) {
   return Base::get(width.getContext(), width);
 }
 
-Type IntType::parse(AsmParser &p) {
+Type IntType::parse(AsmParser &odsParser) {
   // The bitwidth of the parameter size is always 32 bits.
-  auto int32Type = p.getBuilder().getIntegerType(32);
+  auto int32Type = odsParser.getBuilder().getIntegerType(32);
 
   mlir::TypedAttr width;
-  if (p.parseLess() || p.parseAttribute(width, int32Type) || p.parseGreater())
+  if (odsParser.parseLess() || odsParser.parseAttribute(width, int32Type) ||
+      odsParser.parseGreater())
     return Type();
   return get(width);
 }
 
-void IntType::print(AsmPrinter &p) const {
-  p << "<";
-  p.printAttributeWithoutType(getWidth());
-  p << '>';
+void IntType::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << "<";
+  odsPrinter.printAttributeWithoutType(getWidth());
+  odsPrinter << '>';
 }
 
 //===----------------------------------------------------------------------===//
@@ -229,6 +227,7 @@ namespace detail {
 bool operator==(const FieldInfo &a, const FieldInfo &b) {
   return a.name == b.name && a.type == b.type;
 }
+// NOLINTNEXTLINE(readability-identifier-naming)
 llvm::hash_code hash_value(const FieldInfo &fi) {
   return llvm::hash_combine(fi.name, fi.type);
 }
@@ -261,14 +260,16 @@ static void printFields(AsmPrinter &p, ArrayRef<FieldInfo> fields) {
   p << ">";
 }
 
-Type StructType::parse(AsmParser &p) {
+Type StructType::parse(AsmParser &odsParser) {
   llvm::SmallVector<FieldInfo, 4> parameters;
-  if (parseFields(p, parameters))
+  if (parseFields(odsParser, parameters))
     return Type();
-  return get(p.getContext(), parameters);
+  return get(odsParser.getContext(), parameters);
 }
 
-void StructType::print(AsmPrinter &p) const { printFields(p, getElements()); }
+void StructType::print(AsmPrinter &odsPrinter) const {
+  printFields(odsPrinter, getElements());
+}
 
 Type StructType::getFieldType(mlir::StringRef fieldName) {
   for (const auto &field : getElements())
@@ -316,24 +317,25 @@ llvm::hash_code hash_value(const OffsetFieldInfo &fi) {
 } // namespace hw
 } // namespace circt
 
-Type UnionType::parse(AsmParser &p) {
+Type UnionType::parse(AsmParser &odsParser) {
   llvm::SmallVector<FieldInfo, 4> parameters;
-  if (p.parseCommaSeparatedList(
+  if (odsParser.parseCommaSeparatedList(
           mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
             StringRef name;
             Type type;
-            if (p.parseKeyword(&name) || p.parseColon() || p.parseType(type))
+            if (odsParser.parseKeyword(&name) || odsParser.parseColon() ||
+                odsParser.parseType(type))
               return failure();
             size_t offset = 0;
-            if (succeeded(p.parseOptionalKeyword("offset")))
-              if (p.parseInteger(offset))
+            if (succeeded(odsParser.parseOptionalKeyword("offset")))
+              if (odsParser.parseInteger(offset))
                 return failure();
             parameters.push_back(UnionType::FieldInfo{
-                StringAttr::get(p.getContext(), name), type, offset});
+                StringAttr::get(odsParser.getContext(), name), type, offset});
             return success();
           }))
     return Type();
-  return get(p.getContext(), parameters);
+  return get(odsParser.getContext(), parameters);
 }
 
 void UnionType::print(AsmPrinter &odsPrinter) const {
@@ -362,27 +364,29 @@ Type UnionType::getFieldType(mlir::StringRef fieldName) {
 // Enum Type
 //===----------------------------------------------------------------------===//
 
-Type EnumType::parse(AsmParser &p) {
+Type EnumType::parse(AsmParser &odsParser) {
   llvm::SmallVector<Attribute> fields;
 
-  if (p.parseCommaSeparatedList(AsmParser::Delimiter::LessGreater, [&]() {
-        StringRef name;
-        if (p.parseKeyword(&name))
-          return failure();
-        fields.push_back(StringAttr::get(p.getContext(), name));
-        return success();
-      }))
+  if (odsParser.parseCommaSeparatedList(
+          AsmParser::Delimiter::LessGreater, [&]() {
+            StringRef name;
+            if (odsParser.parseKeyword(&name))
+              return failure();
+            fields.push_back(StringAttr::get(odsParser.getContext(), name));
+            return success();
+          }))
     return Type();
 
-  return get(p.getContext(), ArrayAttr::get(p.getContext(), fields));
+  return get(odsParser.getContext(),
+             ArrayAttr::get(odsParser.getContext(), fields));
 }
 
-void EnumType::print(AsmPrinter &p) const {
-  p << '<';
-  llvm::interleaveComma(getFields(), p, [&](Attribute enumerator) {
-    p << enumerator.cast<StringAttr>().getValue();
+void EnumType::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << '<';
+  llvm::interleaveComma(getFields(), odsPrinter, [&](Attribute enumerator) {
+    odsPrinter << enumerator.cast<StringAttr>().getValue();
   });
-  p << ">";
+  odsPrinter << ">";
 }
 
 bool EnumType::contains(mlir::StringRef field) {
@@ -431,26 +435,26 @@ static LogicalResult parseArray(AsmParser &p, Attribute &dim, Type &inner) {
   return success();
 }
 
-Type ArrayType::parse(AsmParser &p) {
+Type ArrayType::parse(AsmParser &odsParser) {
   Attribute dim;
   Type inner;
 
-  if (failed(parseArray(p, dim, inner)))
+  if (failed(parseArray(odsParser, dim, inner)))
     return Type();
 
-  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
+  auto loc = odsParser.getEncodedSourceLoc(odsParser.getCurrentLocation());
   if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner, dim)))
     return Type();
 
   return get(inner.getContext(), inner, dim);
 }
 
-void ArrayType::print(AsmPrinter &p) const {
-  p << "<";
-  p.printAttributeWithoutType(getSizeAttr());
-  p << "x";
-  printHWElementType(getElementType(), p);
-  p << '>';
+void ArrayType::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << "<";
+  odsPrinter.printAttributeWithoutType(getSizeAttr());
+  odsPrinter << "x";
+  printHWElementType(getElementType(), odsPrinter);
+  odsPrinter << '>';
 }
 
 size_t ArrayType::getSize() const {
@@ -460,8 +464,8 @@ size_t ArrayType::getSize() const {
 }
 
 LogicalResult ArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
-                                Type innerType, Attribute size) {
-  if (hasHWInOutType(innerType))
+                                Type elementType, Attribute size) {
+  if (hasHWInOutType(elementType))
     return emitError() << "hw.array cannot contain InOut types";
   return success();
 }
@@ -470,32 +474,32 @@ LogicalResult ArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
 // UnpackedArrayType
 //===----------------------------------------------------------------------===//
 
-Type UnpackedArrayType::parse(AsmParser &p) {
+Type UnpackedArrayType::parse(AsmParser &odsParser) {
   Attribute dim;
   Type inner;
 
-  if (failed(parseArray(p, dim, inner)))
+  if (failed(parseArray(odsParser, dim, inner)))
     return Type();
 
-  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
+  auto loc = odsParser.getEncodedSourceLoc(odsParser.getCurrentLocation());
   if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner, dim)))
     return Type();
 
   return get(inner.getContext(), inner, dim);
 }
 
-void UnpackedArrayType::print(AsmPrinter &p) const {
-  p << "<";
-  p.printAttributeWithoutType(getSizeAttr());
-  p << "x";
-  printHWElementType(getElementType(), p);
-  p << '>';
+void UnpackedArrayType::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << "<";
+  odsPrinter.printAttributeWithoutType(getSizeAttr());
+  odsPrinter << "x";
+  printHWElementType(getElementType(), odsPrinter);
+  odsPrinter << '>';
 }
 
 LogicalResult
 UnpackedArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
-                          Type innerType, Attribute size) {
-  if (!isHWValueType(innerType))
+                          Type elementType, Attribute size) {
+  if (!isHWValueType(elementType))
     return emitError() << "invalid element for uarray type";
   return success();
 }
@@ -508,28 +512,29 @@ size_t UnpackedArrayType::getSize() const {
 // InOutType
 //===----------------------------------------------------------------------===//
 
-Type InOutType::parse(AsmParser &p) {
+Type InOutType::parse(AsmParser &odsParser) {
   Type inner;
-  if (p.parseLess() || parseHWElementType(inner, p) || p.parseGreater())
+  if (odsParser.parseLess() || parseHWElementType(inner, odsParser) ||
+      odsParser.parseGreater())
     return Type();
 
-  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
+  auto loc = odsParser.getEncodedSourceLoc(odsParser.getCurrentLocation());
   if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner)))
     return Type();
 
-  return get(p.getContext(), inner);
+  return get(odsParser.getContext(), inner);
 }
 
-void InOutType::print(AsmPrinter &p) const {
-  p << "<";
-  printHWElementType(getElementType(), p);
-  p << '>';
+void InOutType::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << "<";
+  printHWElementType(getElementType(), odsPrinter);
+  odsPrinter << '>';
 }
 
 LogicalResult InOutType::verify(function_ref<InFlightDiagnostic()> emitError,
-                                Type innerType) {
-  if (!isHWValueType(innerType))
-    return emitError() << "invalid element for hw.inout type " << innerType;
+                                Type elementType) {
+  if (!isHWValueType(elementType))
+    return emitError() << "invalid element for hw.inout type " << elementType;
   return success();
 }
 
@@ -564,18 +569,19 @@ TypeAliasType TypeAliasType::get(SymbolRefAttr ref, Type innerType) {
   return get(ref.getContext(), ref, innerType, computeCanonicalType(innerType));
 }
 
-Type TypeAliasType::parse(AsmParser &p) {
+Type TypeAliasType::parse(AsmParser &odsParser) {
   SymbolRefAttr ref;
   Type type;
-  if (p.parseLess() || p.parseAttribute(ref) || p.parseComma() ||
-      p.parseType(type) || p.parseGreater())
+  if (odsParser.parseLess() || odsParser.parseAttribute(ref) ||
+      odsParser.parseComma() || odsParser.parseType(type) ||
+      odsParser.parseGreater())
     return Type();
 
   return get(ref, type);
 }
 
-void TypeAliasType::print(AsmPrinter &p) const {
-  p << "<" << getRef() << ", " << getInnerType() << ">";
+void TypeAliasType::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << "<" << getRef() << ", " << getInnerType() << ">";
 }
 
 /// Return the Typedecl referenced by this TypeAlias, given the module to look

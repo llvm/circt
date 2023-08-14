@@ -132,9 +132,9 @@ bool OutputFileAttr::isDirectory() {
 
 /// Option         ::= 'excludeFromFileList' | 'includeReplicatedOp'
 /// OutputFileAttr ::= 'output_file<' directory ',' name (',' Option)* '>'
-Attribute OutputFileAttr::parse(AsmParser &p, Type type) {
+Attribute OutputFileAttr::parse(AsmParser &odsParser, Type type) {
   StringAttr filename;
-  if (p.parseLess() || p.parseAttribute<StringAttr>(filename))
+  if (odsParser.parseLess() || odsParser.parseAttribute<StringAttr>(filename))
     return Attribute();
 
   // Parse the additional keyword attributes.  Its easier to let people specify
@@ -142,32 +142,32 @@ Attribute OutputFileAttr::parse(AsmParser &p, Type type) {
   bool excludeFromFileList = false;
   bool includeReplicatedOps = false;
   while (true) {
-    if (p.parseOptionalComma())
+    if (odsParser.parseOptionalComma())
       break;
-    if (!p.parseOptionalKeyword("excludeFromFileList"))
+    if (!odsParser.parseOptionalKeyword("excludeFromFileList"))
       excludeFromFileList = true;
-    else if (!p.parseKeyword("includeReplicatedOps",
-                             "or 'excludeFromFileList'"))
+    else if (!odsParser.parseKeyword("includeReplicatedOps",
+                                     "or 'excludeFromFileList'"))
       includeReplicatedOps = true;
     else
       return Attribute();
   }
 
-  if (p.parseGreater())
+  if (odsParser.parseGreater())
     return Attribute();
 
-  return OutputFileAttr::getFromFilename(p.getContext(), filename.getValue(),
-                                         excludeFromFileList,
-                                         includeReplicatedOps);
+  return OutputFileAttr::getFromFilename(
+      odsParser.getContext(), filename.getValue(), excludeFromFileList,
+      includeReplicatedOps);
 }
 
-void OutputFileAttr::print(AsmPrinter &p) const {
-  p << "<" << getFilename();
+void OutputFileAttr::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << "<" << getFilename();
   if (getExcludeFromFilelist().getValue())
-    p << ", excludeFromFileList";
+    odsPrinter << ", excludeFromFileList";
   if (getIncludeReplicatedOps().getValue())
-    p << ", includeReplicatedOps";
-  p << ">";
+    odsPrinter << ", includeReplicatedOps";
+  odsPrinter << ">";
 }
 
 //===----------------------------------------------------------------------===//
@@ -184,20 +184,22 @@ FileListAttr FileListAttr::getFromFilename(MLIRContext *context,
 // EnumFieldAttr
 //===----------------------------------------------------------------------===//
 
-Attribute EnumFieldAttr::parse(AsmParser &p, Type) {
+Attribute EnumFieldAttr::parse(AsmParser &odsParser, Type) {
   StringRef field;
   Type type;
-  if (p.parseLess() || p.parseKeyword(&field) || p.parseComma() ||
-      p.parseType(type) || p.parseGreater())
+  if (odsParser.parseLess() || odsParser.parseKeyword(&field) ||
+      odsParser.parseComma() || odsParser.parseType(type) ||
+      odsParser.parseGreater())
     return Attribute();
-  return EnumFieldAttr::get(p.getEncodedSourceLoc(p.getCurrentLocation()),
-                            StringAttr::get(p.getContext(), field), type);
+  return EnumFieldAttr::get(
+      odsParser.getEncodedSourceLoc(odsParser.getCurrentLocation()),
+      StringAttr::get(odsParser.getContext(), field), type);
 }
 
-void EnumFieldAttr::print(AsmPrinter &p) const {
-  p << "<" << getField().getValue() << ", ";
-  p.printType(getType().getValue());
-  p << ">";
+void EnumFieldAttr::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << "<" << getField().getValue() << ", ";
+  odsPrinter.printType(getType().getValue());
+  odsPrinter << ">";
 }
 
 EnumFieldAttr EnumFieldAttr::get(Location loc, StringAttr value,
@@ -220,22 +222,22 @@ EnumFieldAttr EnumFieldAttr::get(Location loc, StringAttr value,
 // InnerRefAttr
 //===----------------------------------------------------------------------===//
 
-Attribute InnerRefAttr::parse(AsmParser &p, Type type) {
+Attribute InnerRefAttr::parse(AsmParser &odsParser, Type type) {
   SymbolRefAttr attr;
-  if (p.parseLess() || p.parseAttribute<SymbolRefAttr>(attr) ||
-      p.parseGreater())
+  if (odsParser.parseLess() || odsParser.parseAttribute<SymbolRefAttr>(attr) ||
+      odsParser.parseGreater())
     return Attribute();
   if (attr.getNestedReferences().size() != 1)
     return Attribute();
   return InnerRefAttr::get(attr.getRootReference(), attr.getLeafReference());
 }
 
-void InnerRefAttr::print(AsmPrinter &p) const {
-  p << "<";
-  p.printSymbolName(getModule().getValue());
-  p << "::";
-  p.printSymbolName(getName().getValue());
-  p << ">";
+void InnerRefAttr::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << "<";
+  odsPrinter.printSymbolName(getModule().getValue());
+  odsPrinter << "::";
+  odsPrinter.printSymbolName(getName().getValue());
+  odsPrinter << ">";
 }
 
 //===----------------------------------------------------------------------===//
@@ -353,71 +355,75 @@ void InnerSymAttr::print(AsmPrinter &odsPrinter) const {
 // ParamDeclAttr
 //===----------------------------------------------------------------------===//
 
-Attribute ParamDeclAttr::parse(AsmParser &p, Type trailing) {
+Attribute ParamDeclAttr::parse(AsmParser &odsParser, Type odsType) {
   std::string name;
   Type type;
   Attribute value;
   // < "FOO" : i32 > : i32
   // < "FOO" : i32 = 0 > : i32
   // < "FOO" : none >
-  if (p.parseLess() || p.parseString(&name) || p.parseColonType(type))
+  if (odsParser.parseLess() || odsParser.parseString(&name) ||
+      odsParser.parseColonType(type))
     return Attribute();
 
-  if (succeeded(p.parseOptionalEqual())) {
-    if (p.parseAttribute(value, type))
+  if (succeeded(odsParser.parseOptionalEqual())) {
+    if (odsParser.parseAttribute(value, type))
       return Attribute();
   }
 
-  if (p.parseGreater())
+  if (odsParser.parseGreater())
     return Attribute();
 
   if (value)
-    return ParamDeclAttr::get(p.getContext(),
-                              p.getBuilder().getStringAttr(name), type, value);
+    return ParamDeclAttr::get(odsParser.getContext(),
+                              odsParser.getBuilder().getStringAttr(name), type,
+                              value);
   return ParamDeclAttr::get(name, type);
 }
 
-void ParamDeclAttr::print(AsmPrinter &p) const {
-  p << "<" << getName() << ": " << getType();
+void ParamDeclAttr::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << "<" << getName() << ": " << getType();
   if (getValue()) {
-    p << " = ";
-    p.printAttributeWithoutType(getValue());
+    odsPrinter << " = ";
+    odsPrinter.printAttributeWithoutType(getValue());
   }
-  p << ">";
+  odsPrinter << ">";
 }
 
 //===----------------------------------------------------------------------===//
 // ParamDeclRefAttr
 //===----------------------------------------------------------------------===//
 
-Attribute ParamDeclRefAttr::parse(AsmParser &p, Type type) {
+Attribute ParamDeclRefAttr::parse(AsmParser &odsParser, Type type) {
   StringAttr name;
-  if (p.parseLess() || p.parseAttribute(name) || p.parseGreater() ||
-      (!type && (p.parseColon() || p.parseType(type))))
+  if (odsParser.parseLess() || odsParser.parseAttribute(name) ||
+      odsParser.parseGreater() ||
+      (!type && (odsParser.parseColon() || odsParser.parseType(type))))
     return Attribute();
 
   return ParamDeclRefAttr::get(name, type);
 }
 
-void ParamDeclRefAttr::print(AsmPrinter &p) const {
-  p << "<" << getName() << ">";
+void ParamDeclRefAttr::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << "<" << getName() << ">";
 }
 
 //===----------------------------------------------------------------------===//
 // ParamVerbatimAttr
 //===----------------------------------------------------------------------===//
 
-Attribute ParamVerbatimAttr::parse(AsmParser &p, Type type) {
+Attribute ParamVerbatimAttr::parse(AsmParser &odsParser, Type type) {
   StringAttr text;
-  if (p.parseLess() || p.parseAttribute(text) || p.parseGreater() ||
-      (!type && (p.parseColon() || p.parseType(type))))
+  if (odsParser.parseLess() || odsParser.parseAttribute(text) ||
+      odsParser.parseGreater() ||
+      (!type && (odsParser.parseColon() || odsParser.parseType(type))))
     return Attribute();
 
-  return ParamVerbatimAttr::get(p.getContext(), text, type);
+  return ParamVerbatimAttr::get(odsParser.getContext(), text, type);
 }
 
-void ParamVerbatimAttr::print(AsmPrinter &p) const {
-  p << "<" << getValue() << ">";
+void ParamVerbatimAttr::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << "<" << getValue() << ">";
 }
 
 //===----------------------------------------------------------------------===//
@@ -886,10 +892,11 @@ TypedAttr ParamExprAttr::get(PEO opcode, ArrayRef<TypedAttr> operandsIn) {
   return Base::get(operands[0].getContext(), opcode, operands, type);
 }
 
-Attribute ParamExprAttr::parse(AsmParser &p, Type type) {
+Attribute ParamExprAttr::parse(AsmParser &odsParser, Type type) {
   // We require an opcode suffix like `#hw.param.expr.add`, we don't allow
   // parsing a plain `#hw.param.expr` on its own.
-  p.emitError(p.getNameLoc(), "#hw.param.expr should have opcode suffix");
+  odsParser.emitError(odsParser.getNameLoc(),
+                      "#hw.param.expr should have opcode suffix");
   return {};
 }
 
@@ -914,11 +921,12 @@ static Attribute parseParamExprWithOpcode(StringRef opcodeStr,
   return ParamExprAttr::get(*opcode, operands);
 }
 
-void ParamExprAttr::print(AsmPrinter &p) const {
-  p << "." << stringifyPEO(getOpcode()) << '<';
-  llvm::interleaveComma(getOperands(), p.getStream(),
-                        [&](Attribute op) { p.printAttributeWithoutType(op); });
-  p << '>';
+void ParamExprAttr::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << "." << stringifyPEO(getOpcode()) << '<';
+  llvm::interleaveComma(
+      getOperands(), odsPrinter.getStream(),
+      [&](Attribute op) { odsPrinter.printAttributeWithoutType(op); });
+  odsPrinter << '>';
 }
 
 // Replaces any ParamDeclRefAttr within a parametric expression with its
