@@ -693,4 +693,23 @@ firrtl.circuit "Foo" {
     }
   }
 
+  // CHECK: module RWProbe :
+  // CHECK-NEXT: input in : { a : UInt<1> }[2]
+  // CHECK-NEXT: output p : RWProbe<UInt<1>>
+  // CHECK-NEXT: output p2 : RWProbe<UInt>
+  // CHECK-EMPTY:
+  // CHECK-NEXT: define p = rwprobe(in[1].a)
+  // CHECK-NEXT: node q = read(p)
+  // CHECK-NEXT: define p2 = rwprobe(q)
+  firrtl.module private @RWProbe(in %in: !firrtl.vector<bundle<a: uint<1>>, 2> sym [<@sym,4,public>],
+                                 out %p: !firrtl.rwprobe<uint<1>>,
+                                 out %p2 : !firrtl.rwprobe<uint>) {
+    %0 = firrtl.ref.rwprobe <@RWProbe::@sym> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %p, %0 : !firrtl.rwprobe<uint<1>>
+
+    %read = firrtl.ref.resolve %p : !firrtl.rwprobe<uint<1>>
+    %q, %q_ref = firrtl.node interesting_name %read forceable : !firrtl.uint<1>
+    %refcast = firrtl.ref.cast %q_ref : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint>
+    firrtl.ref.define %p2, %refcast : !firrtl.rwprobe<uint>
+  }
 }
