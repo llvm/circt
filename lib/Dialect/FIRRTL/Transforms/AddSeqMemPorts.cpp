@@ -422,7 +422,7 @@ void AddSeqMemPortsPass::runOnOperation() {
 
   // If there is an output file, create it.
   if (outputFile)
-    createOutputFile(dutNode->getModule());
+    createOutputFile(dutNode->getModule<hw::HWModuleLike>());
 
   if (anythingChanged)
     markAnalysesPreserved<InstanceGraph>();

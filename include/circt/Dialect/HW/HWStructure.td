@@ -555,6 +555,8 @@ def InstanceOp : HWOp<"instance", [
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
     Operation *getReferencedModule(const HWSymbolCache *cache);
+    Operation *getReferencedModule(SymbolTable& tbl);
+    Operation *getReferencedModuleSlow();
 
     /// Return the value for a port in port order.
     Value getValue(size_t idx);

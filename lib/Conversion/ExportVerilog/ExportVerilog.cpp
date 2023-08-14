@@ -4616,7 +4616,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   ps << PP::nbsp << PPExtString(getSymOpName(op)) << " (";
 
   auto instPortInfo = op.getPortList();
-  auto modPortInfo = cast<PortList>(op.getReferencedModule()).getPortList();
+  auto modPortInfo =
+      cast<PortList>(op.getReferencedModule(&state.symbolCache)).getPortList();
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
   for (auto &elt : modPortInfo) {

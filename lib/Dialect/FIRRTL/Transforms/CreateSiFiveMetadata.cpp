@@ -33,7 +33,7 @@
 
 using namespace circt;
 using namespace firrtl;
-using circt::hw::InstancePath;
+using circt::igraph::InstancePath;
 
 namespace {
 
@@ -337,8 +337,9 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
           // situation where everything is deemed to be "in the DUT", i.e., when
           // the DUT is the top module or when no DUT is specified.
           if (everythingInDUT ||
-              llvm::any_of(p, [&](circt::hw::HWInstanceLike inst) {
-                return inst.getReferencedModule() == dutMod;
+              llvm::any_of(p, [&](circt::igraph::InstanceOpInterface inst) {
+                return inst.getReferencedModuleNameAttr() ==
+                       dutMod.getNameAttr();
               }))
             jsonStream.value(hierName);
         }
@@ -619,9 +620,10 @@ void CreateSiFiveMetadataPass::runOnOperation() {
     dutMod = dyn_cast<FModuleOp>(*it);
     auto &instanceGraph = getAnalysis<InstanceGraph>();
     auto *node = instanceGraph.lookup(cast<hw::HWModuleLike>(*it));
-    llvm::for_each(llvm::depth_first(node), [&](hw::InstanceGraphNode *node) {
-      dutModuleSet.insert(node->getModule());
-    });
+    llvm::for_each(llvm::depth_first(node),
+                   [&](igraph::InstanceGraphNode *node) {
+                     dutModuleSet.insert(node->getModule());
+                   });
   }
   ObjectModelIR omir(moduleOp);
 

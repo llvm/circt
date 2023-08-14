@@ -36,7 +36,7 @@ static constexpr std::string_view kValidPortName = "valid";
 // inlined module(!). Should probably implement some more generic inlining code
 // for this, but it's simple enough to do when we know that the module is empty.
 static void inlineAndEraseIfEmpty(hw::InstanceOp inst) {
-  auto mod = cast<hw::HWModuleLike>(inst.getReferencedModule());
+  auto mod = cast<hw::HWModuleLike>(inst.getReferencedModuleSlow());
   if (mod->getNumRegions() == 0)
     return; // Nothing to do.
 

@@ -1,4 +1,4 @@
-//===- InstanceGraphBase.cpp - Instance Graph -------------------*- C++ -*-===//
+//===- InstanceGraph.cpp - Instance Graph -----------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,12 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/HW/InstanceGraphBase.h"
+#include "circt/Support/InstanceGraph.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Threading.h"
 
 using namespace circt;
-using namespace hw;
+using namespace igraph;
 
 void InstanceRecord::erase() {
   // Update the prev node to point to the next node.
@@ -25,7 +25,7 @@ void InstanceRecord::erase() {
   getParent()->instances.erase(this);
 }
 
-InstanceRecord *InstanceGraphNode::addInstance(HWInstanceLike instance,
+InstanceRecord *InstanceGraphNode::addInstance(InstanceOpInterface instance,
                                                InstanceGraphNode *target) {
   auto *instanceRecord = new InstanceRecord(this, instance, target);
   target->recordUse(instanceRecord);
@@ -40,7 +40,7 @@ void InstanceGraphNode::recordUse(InstanceRecord *record) {
   firstUse = record;
 }
 
-InstanceGraphNode *InstanceGraphBase::getOrAddNode(StringAttr name) {
+InstanceGraphNode *InstanceGraph::getOrAddNode(StringAttr name) {
   // Try to insert an InstanceGraphNode. If its not inserted, it returns
   // an iterator pointing to the node.
   auto *&node = nodeMap[name];
@@ -51,13 +51,14 @@ InstanceGraphNode *InstanceGraphBase::getOrAddNode(StringAttr name) {
   return node;
 }
 
-InstanceGraphBase::InstanceGraphBase(Operation *parent) : parent(parent) {
+InstanceGraph::InstanceGraph(Operation *parent) : parent(parent) {
   assert(parent->hasTrait<mlir::OpTrait::SingleBlock>() &&
          "top-level operation must have a single block");
-  SmallVector<std::pair<HWModuleLike, SmallVector<HWInstanceLike>>>
+  SmallVector<std::pair<ModuleOpInterface, SmallVector<InstanceOpInterface>>>
       moduleToInstances;
   // First accumulate modules inside the parent op.
-  for (auto module : parent->getRegion(0).front().getOps<hw::HWModuleLike>())
+  for (auto module :
+       parent->getRegion(0).front().getOps<igraph::ModuleOpInterface>())
     moduleToInstances.push_back({module, {}});
 
   // Populate instances in the module parallelly.
@@ -66,7 +67,7 @@ InstanceGraphBase::InstanceGraphBase(Operation *parent) : parent(parent) {
                       auto module = moduleToInstances[idx].first;
                       auto &instances = moduleToInstances[idx].second;
                       // Find all instance operations in the module body.
-                      module.walk([&](HWInstanceLike instanceOp) {
+                      module.walk([&](InstanceOpInterface instanceOp) {
                         instances.push_back(instanceOp);
                       });
                     });
@@ -84,7 +85,7 @@ InstanceGraphBase::InstanceGraphBase(Operation *parent) : parent(parent) {
   }
 }
 
-InstanceGraphNode *InstanceGraphBase::addModule(HWModuleLike module) {
+InstanceGraphNode *InstanceGraph::addModule(ModuleOpInterface module) {
   assert(!nodeMap.count(module.getModuleNameAttr()) && "module already added");
   auto *node = new InstanceGraphNode();
   node->module = module;
@@ -93,7 +94,7 @@ InstanceGraphNode *InstanceGraphBase::addModule(HWModuleLike module) {
   return node;
 }
 
-void InstanceGraphBase::erase(InstanceGraphNode *node) {
+void InstanceGraph::erase(InstanceGraphNode *node) {
   assert(node->noUses() &&
          "all instances of this module must have been erased.");
   // Erase all instances inside this module.
@@ -103,24 +104,23 @@ void InstanceGraphBase::erase(InstanceGraphNode *node) {
   nodes.erase(node);
 }
 
-InstanceGraphNode *InstanceGraphBase::lookup(StringAttr name) {
+InstanceGraphNode *InstanceGraph::lookup(StringAttr name) {
   auto it = nodeMap.find(name);
   assert(it != nodeMap.end() && "Module not in InstanceGraph!");
   return it->second;
 }
 
-InstanceGraphNode *InstanceGraphBase::lookup(HWModuleLike op) {
-  return lookup(cast<HWModuleLike>(op).getModuleNameAttr());
+InstanceGraphNode *InstanceGraph::lookup(ModuleOpInterface op) {
+  return lookup(cast<ModuleOpInterface>(op).getModuleNameAttr());
 }
 
-HWModuleLike InstanceGraphBase::getReferencedModule(HWInstanceLike op) {
+ModuleOpInterface
+InstanceGraph::getReferencedModuleImpl(InstanceOpInterface op) {
   return lookup(op.getReferencedModuleNameAttr())->getModule();
 }
 
-InstanceGraphBase::~InstanceGraphBase() {}
-
-void InstanceGraphBase::replaceInstance(HWInstanceLike inst,
-                                        HWInstanceLike newInst) {
+void InstanceGraph::replaceInstance(InstanceOpInterface inst,
+                                    InstanceOpInterface newInst) {
   assert(inst.getReferencedModuleName() == newInst.getReferencedModuleName() &&
          "Both instances must be targeting the same module");
 
@@ -136,7 +136,8 @@ void InstanceGraphBase::replaceInstance(HWInstanceLike inst,
   (*it)->instance = newInst;
 }
 
-bool InstanceGraphBase::isAncestor(HWModuleLike child, HWModuleLike parent) {
+bool InstanceGraph::isAncestor(ModuleOpInterface child,
+                               ModuleOpInterface parent) {
   DenseSet<InstanceGraphNode *> seen;
   SmallVector<InstanceGraphNode *> worklist;
   auto *cn = lookup(child);
@@ -159,7 +160,7 @@ bool InstanceGraphBase::isAncestor(HWModuleLike child, HWModuleLike parent) {
 }
 
 FailureOr<llvm::ArrayRef<InstanceGraphNode *>>
-InstanceGraphBase::getInferredTopLevelNodes() {
+InstanceGraph::getInferredTopLevelNodes() {
   if (!inferredTopLevelNodes.empty())
     return {inferredTopLevelNodes};
 
@@ -221,7 +222,9 @@ InstanceGraphBase::getInferredTopLevelNodes() {
   return {inferredTopLevelNodes};
 }
 
-ArrayRef<InstancePath> InstancePathCache::getAbsolutePaths(HWModuleLike op) {
+// NOLINTBEGIN(misc-no-recursion)
+ArrayRef<InstancePath>
+InstancePathCache::getAbsolutePaths(ModuleOpInterface op) {
   InstanceGraphNode *node = instanceGraph[op];
 
   // If we have reached the circuit root, we're done.
@@ -243,8 +246,8 @@ ArrayRef<InstancePath> InstancePathCache::getAbsolutePaths(HWModuleLike op) {
       auto instPaths = getAbsolutePaths(module);
       extendedPaths.reserve(instPaths.size());
       for (auto path : instPaths) {
-        extendedPaths.push_back(
-            appendInstance(path, cast<HWInstanceLike>(*inst->getInstance())));
+        extendedPaths.push_back(appendInstance(
+            path, cast<InstanceOpInterface>(*inst->getInstance())));
       }
     }
   }
@@ -259,24 +262,25 @@ ArrayRef<InstancePath> InstancePathCache::getAbsolutePaths(HWModuleLike op) {
   absolutePathsCache.insert({op, pathList});
   return pathList;
 }
+// NOLINTEND(misc-no-recursion)
 
 InstancePath InstancePathCache::appendInstance(InstancePath path,
-                                               HWInstanceLike inst) {
+                                               InstanceOpInterface inst) {
   size_t n = path.size() + 1;
-  auto *newPath = allocator.Allocate<HWInstanceLike>(n);
+  auto *newPath = allocator.Allocate<InstanceOpInterface>(n);
   std::copy(path.begin(), path.end(), newPath);
   newPath[path.size()] = inst;
   return InstancePath(newPath, n);
 }
 
-void InstancePathCache::replaceInstance(HWInstanceLike oldOp,
-                                        HWInstanceLike newOp) {
+void InstancePathCache::replaceInstance(InstanceOpInterface oldOp,
+                                        InstanceOpInterface newOp) {
 
   instanceGraph.replaceInstance(oldOp, newOp);
 
-  // Iterate over all the paths, and search for the old HWInstanceLike. If
-  // found, then replace it with the new HWInstanceLike, and create a new copy
-  // of the paths and update the cache.
+  // Iterate over all the paths, and search for the old InstanceOpInterface. If
+  // found, then replace it with the new InstanceOpInterface, and create a new
+  // copy of the paths and update the cache.
   auto instanceExists = [&](const ArrayRef<InstancePath> &paths) -> bool {
     return llvm::any_of(
         paths, [&](InstancePath p) { return llvm::is_contained(p, oldOp); });
@@ -293,7 +297,7 @@ void InstancePathCache::replaceInstance(HWInstanceLike oldOp,
         updatedPaths.push_back(path);
         continue;
       }
-      auto *newPath = allocator.Allocate<HWInstanceLike>(path.size());
+      auto *newPath = allocator.Allocate<InstanceOpInterface>(path.size());
       llvm::copy(path, newPath);
       newPath[iter - path.begin()] = newOp;
       updatedPaths.push_back(InstancePath(newPath, path.size()));
@@ -305,3 +309,5 @@ void InstancePathCache::replaceInstance(HWInstanceLike oldOp,
     iter.getSecond() = ArrayRef<InstancePath>(paths, updatedPaths.size());
   }
 }
+
+#include "circt/Support/InstanceGraphInterface.cpp.inc"

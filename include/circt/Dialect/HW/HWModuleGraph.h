@@ -14,8 +14,8 @@
 #define CIRCT_DIALECT_HW_HWMODULEGRAPH_H
 
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/HW/InstanceGraphBase.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/GraphTraits.h"

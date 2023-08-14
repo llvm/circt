@@ -15,6 +15,7 @@
 
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/OpBase.td"
+include "circt/Support/InstanceGraphInterface.td"
 
 def PortList : OpInterface<"PortList", []> {
   let cppNamespace = "circt::hw";
@@ -25,22 +26,12 @@ def PortList : OpInterface<"PortList", []> {
   ];
 }
 
-def HWModuleLike : OpInterface<"HWModuleLike", [Symbol, PortList]> {
+def HWModuleLike : OpInterface<"HWModuleLike", [
+  Symbol, PortList, InstanceGraphModuleOpInterface]> {
   let cppNamespace = "circt::hw";
   let description = "Provide common module information.";
 
   let methods = [
-
-    InterfaceMethod<"Get the module name",
-    "::llvm::StringRef", "getModuleName", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return $_op.getName(); }]>,
-
-    InterfaceMethod<"Get the module name",
-    "::mlir::StringAttr", "getModuleNameAttr", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return $_op.getNameAttr(); }]>,
-
     InterfaceMethod<"Get the number of ports",
     "size_t", "getNumPorts">,
 
@@ -185,30 +176,10 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike", [HWModuleLike]> {
 }
 
 
-def HWInstanceLike : OpInterface<"HWInstanceLike", [PortList]> {
+def HWInstanceLike : OpInterface<"HWInstanceLike", [
+    PortList, InstanceGraphInstanceOpInterface]> {
   let cppNamespace = "circt::hw";
   let description = "Provide common  module information.";
-
-  let methods = [
-    InterfaceMethod<"Get the name of the instance",
-    "::llvm::StringRef", "getInstanceName", (ins)>,
-
-    InterfaceMethod<"Get the name of the instance",
-    "::mlir::StringAttr", "getInstanceNameAttr", (ins)>,
-
-    InterfaceMethod<"Get the name of the instantiated module",
-    "::llvm::StringRef", "getReferencedModuleName", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return $_op.getModuleName(); }]>,
-
-    InterfaceMethod<"Get the name of the instantiated module",
-    "::mlir::StringAttr", "getReferencedModuleNameAttr", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return $_op.getModuleNameAttr().getAttr(); }]>,
-
-    InterfaceMethod<"Get the referenced module",
-    "::mlir::Operation *", "getReferencedModule", (ins)>,
-  ];
 }
 
 def InnerRefNamespace : NativeOpTrait<"InnerRefNamespace">;

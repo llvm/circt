@@ -14,7 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLINSTANCEGRAPH_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
-#include "circt/Dialect/HW/InstanceGraphBase.h"
+#include "circt/Support/InstanceGraph.h"
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/STLExtras.h"
@@ -22,9 +22,9 @@
 
 namespace circt {
 namespace firrtl {
-using InstanceRecord = hw::InstanceRecord;
-using InstanceGraphNode = hw::InstanceGraphNode;
-using InstancePathCache = hw::InstancePathCache;
+using InstanceRecord = igraph::InstanceRecord;
+using InstanceGraphNode = igraph::InstanceGraphNode;
+using InstancePathCache = igraph::InstancePathCache;
 
 /// This graph tracks modules and where they are instantiated. This is intended
 /// to be used as a cached analysis on FIRRTL circuits.  This class can be used
@@ -32,14 +32,14 @@ using InstancePathCache = hw::InstancePathCache;
 ///
 /// To use this class, retrieve a cached copy from the analysis manager:
 ///   auto &instanceGraph = getAnalysis<InstanceGraph>(getOperation());
-class InstanceGraph : public hw::InstanceGraphBase {
+class InstanceGraph : public igraph::InstanceGraph {
 public:
   /// Create a new module graph of a circuit.  This must be called on a FIRRTL
   /// CircuitOp or MLIR ModuleOp.
   explicit InstanceGraph(Operation *operation);
 
   /// Get the node corresponding to the top-level module of a circuit.
-  InstanceGraphNode *getTopLevelNode() override { return topLevelNode; }
+  igraph::InstanceGraphNode *getTopLevelNode() override { return topLevelNode; }
 
   /// Get the module corresponding to the top-level module of a circuit.
   FModuleLike getTopLevelModule() {
@@ -57,12 +57,12 @@ bool allUnder(ArrayRef<InstanceRecord *> nodes, InstanceGraphNode *top);
 
 template <>
 struct llvm::GraphTraits<circt::firrtl::InstanceGraph *>
-    : public llvm::GraphTraits<circt::hw::InstanceGraphBase *> {};
+    : public llvm::GraphTraits<circt::igraph::InstanceGraph *> {};
 
 template <>
 struct llvm::DOTGraphTraits<circt::firrtl::InstanceGraph *>
-    : public llvm::DOTGraphTraits<circt::hw::InstanceGraphBase *> {
-  using llvm::DOTGraphTraits<circt::hw::InstanceGraphBase *>::DOTGraphTraits;
+    : public llvm::DOTGraphTraits<circt::igraph::InstanceGraph *> {
+  using llvm::DOTGraphTraits<circt::igraph::InstanceGraph *>::DOTGraphTraits;
 };
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLINSTANCEGRAPH_H

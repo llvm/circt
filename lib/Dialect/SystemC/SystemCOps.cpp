@@ -468,7 +468,11 @@ Operation *InstanceDeclOp::getReferencedModule(const hw::HWSymbolCache *cache) {
   return topLevelModuleOp.lookupSymbol(getModuleName());
 }
 
-Operation *InstanceDeclOp::getReferencedModule() {
+Operation *InstanceDeclOp::getReferencedModule(SymbolTable &symtbl) {
+  return symtbl.lookup(getModuleNameAttr().getValue());
+}
+
+Operation *InstanceDeclOp::getReferencedModuleSlow() {
   return getReferencedModule(/*cache=*/nullptr);
 }
 
@@ -536,7 +540,7 @@ InstanceDeclOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 hw::ModulePortInfo InstanceDeclOp::getPortList() {
-  return cast<hw::PortList>(getReferencedModule()).getPortList();
+  return cast<hw::PortList>(getReferencedModuleSlow()).getPortList();
 }
 
 //===----------------------------------------------------------------------===//

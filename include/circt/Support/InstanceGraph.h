@@ -1,4 +1,4 @@
-//===- InstanceGraphBase.h - Instance graph ---------------------*- C++ -*-===//
+//===- InstanceGraph.h - Instance graph -------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,18 +10,22 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_HW_INSTANCEGRAPHBASE_H
-#define CIRCT_DIALECT_HW_INSTANCEGRAPHBASE_H
+#ifndef CIRCT_SUPPORT_INSTANCEGRAPH_H
+#define CIRCT_SUPPORT_INSTANCEGRAPH_H
 
-#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/OpDefinition.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/Support/DOTGraphTraits.h"
 
+/// The InstanceGraph op interface, see InstanceGraphInterface.td for more
+/// details.
+#include "circt/Support/InstanceGraphInterface.h"
+
 namespace circt {
-namespace hw {
+namespace igraph {
 
 namespace detail {
 /// This just maps a iterator of references to an iterator of addresses.
@@ -51,7 +55,12 @@ class InstanceRecord
     : public llvm::ilist_node_with_parent<InstanceRecord, InstanceGraphNode> {
 public:
   /// Get the instance-like op that this is tracking.
-  HWInstanceLike getInstance() const { return instance; }
+  template <typename TTarget = InstanceOpInterface>
+  auto getInstance() {
+    if constexpr (std::is_same<TTarget, InstanceOpInterface>::value)
+      return instance;
+    return dyn_cast_or_null<TTarget>(instance.getOperation());
+  }
 
   /// Get the module where the instantiation lives.
   InstanceGraphNode *getParent() const { return parent; }
@@ -64,10 +73,10 @@ public:
   void erase();
 
 private:
-  friend class InstanceGraphBase;
+  friend class InstanceGraph;
   friend class InstanceGraphNode;
 
-  InstanceRecord(InstanceGraphNode *parent, HWInstanceLike instance,
+  InstanceRecord(InstanceGraphNode *parent, InstanceOpInterface instance,
                  InstanceGraphNode *target)
       : parent(parent), instance(instance), target(target) {}
   InstanceRecord(const InstanceRecord &) = delete;
@@ -76,7 +85,7 @@ private:
   InstanceGraphNode *parent;
 
   /// The InstanceLike that this is tracking.
-  HWInstanceLike instance;
+  InstanceOpInterface instance;
 
   /// This is the module which the instance-like is instantiating.
   InstanceGraphNode *target;
@@ -96,7 +105,12 @@ public:
   InstanceGraphNode() : module(nullptr) {}
 
   /// Get the module that this node is tracking.
-  HWModuleLike getModule() const { return module; }
+  template <typename TTarget = ModuleOpInterface>
+  auto getModule() {
+    if constexpr (std::is_same<TTarget, ModuleOpInterface>::value)
+      return module;
+    return cast<TTarget>(module.getOperation());
+  }
 
   /// Iterate the instance records in this module.
   using iterator = detail::AddressIterator<InstanceList::iterator>;
@@ -143,7 +157,7 @@ public:
 
   /// Record a new instance op in the body of this module. Returns a newly
   /// allocated InstanceRecord which will be owned by this node.
-  InstanceRecord *addInstance(HWInstanceLike instance,
+  InstanceRecord *addInstance(InstanceOpInterface instance,
                               InstanceGraphNode *target);
 
 private:
@@ -155,7 +169,7 @@ private:
   void recordUse(InstanceRecord *record);
 
   /// The module.
-  HWModuleLike module;
+  ModuleOpInterface module;
 
   /// List of instance operations in this module.  This member owns the
   /// InstanceRecords, which may be pointed to by other InstanceGraphNode's use
@@ -166,7 +180,7 @@ private:
   InstanceRecord *firstUse = nullptr;
 
   // Provide access to the constructor.
-  friend class InstanceGraphBase;
+  friend class InstanceGraph;
 };
 
 /// This graph tracks modules and where they are instantiated. This is intended
@@ -175,29 +189,32 @@ private:
 ///
 /// To use this class, retrieve a cached copy from the analysis manager:
 ///   auto &instanceGraph = getAnalysis<InstanceGraph>(getOperation());
-class InstanceGraphBase {
+class InstanceGraph {
   /// This is the list of InstanceGraphNodes in the graph.
   using NodeList = llvm::iplist<InstanceGraphNode>;
 
 public:
-  virtual ~InstanceGraphBase();
+  virtual ~InstanceGraph() = default;
 
   /// Look up an InstanceGraphNode for a module.
-  InstanceGraphNode *lookup(HWModuleLike op);
+  InstanceGraphNode *lookup(ModuleOpInterface op);
 
   /// Lookup an module by name.
   InstanceGraphNode *lookup(StringAttr name);
 
   /// Lookup an InstanceGraphNode for a module.
-  InstanceGraphNode *operator[](HWModuleLike op) { return lookup(op); }
+  InstanceGraphNode *operator[](ModuleOpInterface op) { return lookup(op); }
 
   /// Look up the referenced module from an InstanceOp. This will use a
   /// hashtable lookup to find the module, where
   /// InstanceOp.getReferencedModule() will be a linear search through the IR.
-  HWModuleLike getReferencedModule(HWInstanceLike op);
+  template <typename TTarget = ModuleOpInterface>
+  auto getReferencedModule(InstanceOpInterface op) {
+    return cast<TTarget>(getReferencedModuleImpl(op).getOperation());
+  }
 
   /// Check if child is instantiated by a parent.
-  bool isAncestor(HWModuleLike child, HWModuleLike parent);
+  bool isAncestor(ModuleOpInterface child, ModuleOpInterface parent);
 
   /// Get the node corresponding to the top-level module of a circuit.
   virtual InstanceGraphNode *getTopLevelNode() = 0;
@@ -210,8 +227,8 @@ public:
   Operation *getParent() { return parent; }
 
   /// Returns pointer to member of operation list.
-  static NodeList InstanceGraphBase::*getSublistAccess(Operation *) {
-    return &InstanceGraphBase::nodes;
+  static NodeList InstanceGraph::*getSublistAccess(Operation *) {
+    return &InstanceGraph::nodes;
   }
 
   /// Iterate through all modules.
@@ -228,7 +245,7 @@ public:
   // on a CircuitOp or a ModuleOp.
 
   /// Add a newly created module to the instance graph.
-  virtual InstanceGraphNode *addModule(HWModuleLike module);
+  virtual InstanceGraphNode *addModule(ModuleOpInterface module);
 
   /// Remove this module from the instance graph. This will also remove all
   /// InstanceRecords in this module.  All instances of this module must have
@@ -237,13 +254,16 @@ public:
 
   /// Replaces an instance of a module with another instance. The target module
   /// of both InstanceOps must be the same.
-  virtual void replaceInstance(HWInstanceLike inst, HWInstanceLike newInst);
+  virtual void replaceInstance(InstanceOpInterface inst,
+                               InstanceOpInterface newInst);
 
 protected:
   /// Create a new module graph of a circuit.  Must be called on the parent
-  /// operation of HWModuleLike ops.
-  InstanceGraphBase(Operation *parent);
-  InstanceGraphBase(const InstanceGraphBase &) = delete;
+  /// operation of ModuleOpInterface ops.
+  InstanceGraph(Operation *parent);
+  InstanceGraph(const InstanceGraph &) = delete;
+
+  ModuleOpInterface getReferencedModuleImpl(InstanceOpInterface op);
 
   /// Get the node corresponding to the module.  If the node has does not exist
   /// yet, it will be created.
@@ -263,7 +283,7 @@ protected:
 };
 
 /// An absolute instance path.
-using InstancePath = ArrayRef<HWInstanceLike>;
+using InstancePath = ArrayRef<InstanceOpInterface>;
 
 template <typename T>
 inline static T &formatInstancePath(T &into, const InstancePath &path) {
@@ -283,14 +303,14 @@ static T &operator<<(T &os, const InstancePath &path) {
 /// in the IR.
 struct InstancePathCache {
   /// The instance graph of the IR.
-  InstanceGraphBase &instanceGraph;
+  InstanceGraph &instanceGraph;
 
-  explicit InstancePathCache(InstanceGraphBase &instanceGraph)
+  explicit InstancePathCache(InstanceGraph &instanceGraph)
       : instanceGraph(instanceGraph) {}
-  ArrayRef<InstancePath> getAbsolutePaths(HWModuleLike op);
+  ArrayRef<InstancePath> getAbsolutePaths(ModuleOpInterface op);
 
   /// Replace an InstanceOp. This is required to keep the cache updated.
-  void replaceInstance(HWInstanceLike oldOp, HWInstanceLike newOp);
+  void replaceInstance(InstanceOpInterface oldOp, InstanceOpInterface newOp);
 
 private:
   /// An allocator for individual instance paths and entire path lists.
@@ -300,20 +320,20 @@ private:
   DenseMap<Operation *, ArrayRef<InstancePath>> absolutePathsCache;
 
   /// Append an instance to a path.
-  InstancePath appendInstance(InstancePath path, HWInstanceLike inst);
+  InstancePath appendInstance(InstancePath path, InstanceOpInterface inst);
 };
 
-} // namespace hw
+} // namespace igraph
 } // namespace circt
 
 // Graph traits for modules.
 template <>
-struct llvm::GraphTraits<circt::hw::InstanceGraphNode *> {
-  using NodeType = circt::hw::InstanceGraphNode;
+struct llvm::GraphTraits<circt::igraph::InstanceGraphNode *> {
+  using NodeType = circt::igraph::InstanceGraphNode;
   using NodeRef = NodeType *;
 
   // Helper for getting the module referenced by the instance op.
-  static NodeRef getChild(const circt::hw::InstanceRecord *record) {
+  static NodeRef getChild(const circt::igraph::InstanceRecord *record) {
     return record->getTarget();
   }
 
@@ -331,12 +351,12 @@ struct llvm::GraphTraits<circt::hw::InstanceGraphNode *> {
 
 // Provide graph traits for iterating the modules in inverse order.
 template <>
-struct llvm::GraphTraits<llvm::Inverse<circt::hw::InstanceGraphNode *>> {
-  using NodeType = circt::hw::InstanceGraphNode;
+struct llvm::GraphTraits<llvm::Inverse<circt::igraph::InstanceGraphNode *>> {
+  using NodeType = circt::igraph::InstanceGraphNode;
   using NodeRef = NodeType *;
 
   // Helper for getting the module containing the instance op.
-  static NodeRef getParent(const circt::hw::InstanceRecord *record) {
+  static NodeRef getParent(const circt::igraph::InstanceRecord *record) {
     return record->getParent();
   }
 
@@ -356,39 +376,39 @@ struct llvm::GraphTraits<llvm::Inverse<circt::hw::InstanceGraphNode *>> {
 
 // Graph traits for the common instance graph.
 template <>
-struct llvm::GraphTraits<circt::hw::InstanceGraphBase *>
-    : public llvm::GraphTraits<circt::hw::InstanceGraphNode *> {
-  using nodes_iterator = circt::hw::InstanceGraphBase::iterator;
+struct llvm::GraphTraits<circt::igraph::InstanceGraph *>
+    : public llvm::GraphTraits<circt::igraph::InstanceGraphNode *> {
+  using nodes_iterator = circt::igraph::InstanceGraph::iterator;
 
-  static NodeRef getEntryNode(circt::hw::InstanceGraphBase *graph) {
+  static NodeRef getEntryNode(circt::igraph::InstanceGraph *graph) {
     return graph->getTopLevelNode();
   }
   // NOLINTNEXTLINE(readability-identifier-naming)
-  static nodes_iterator nodes_begin(circt::hw::InstanceGraphBase *graph) {
+  static nodes_iterator nodes_begin(circt::igraph::InstanceGraph *graph) {
     return graph->begin();
   }
   // NOLINTNEXTLINE(readability-identifier-naming)
-  static nodes_iterator nodes_end(circt::hw::InstanceGraphBase *graph) {
+  static nodes_iterator nodes_end(circt::igraph::InstanceGraph *graph) {
     return graph->end();
   }
 };
 
 // Graph traits for DOT labeling.
 template <>
-struct llvm::DOTGraphTraits<circt::hw::InstanceGraphBase *>
+struct llvm::DOTGraphTraits<circt::igraph::InstanceGraph *>
     : public llvm::DefaultDOTGraphTraits {
   using DefaultDOTGraphTraits::DefaultDOTGraphTraits;
 
-  static std::string getNodeLabel(circt::hw::InstanceGraphNode *node,
-                                  circt::hw::InstanceGraphBase *) {
+  static std::string getNodeLabel(circt::igraph::InstanceGraphNode *node,
+                                  circt::igraph::InstanceGraph *) {
     // The name of the graph node is the module name.
     return node->getModule().getModuleName().str();
   }
 
   template <typename Iterator>
-  static std::string getEdgeAttributes(const circt::hw::InstanceGraphNode *node,
-                                       Iterator it,
-                                       circt::hw::InstanceGraphBase *) {
+  static std::string
+  getEdgeAttributes(const circt::igraph::InstanceGraphNode *node, Iterator it,
+                    circt::igraph::InstanceGraph *) {
     // Set an edge label that is the name of the instance.
     auto *instanceRecord = *it.getCurrent();
     auto instanceOp = instanceRecord->getInstance();
@@ -396,4 +416,4 @@ struct llvm::DOTGraphTraits<circt::hw::InstanceGraphBase *>
   }
 };
 
-#endif // CIRCT_DIALECT_HW_INSTANCEGRAPHBASE_H
+#endif // CIRCT_SUPPORT_INSTANCEGRAPH_H

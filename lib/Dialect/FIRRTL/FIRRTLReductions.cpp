@@ -67,8 +67,7 @@ findInstantiatedModule(firrtl::InstanceOp instOp,
                        ::detail::SymbolCache &symbols) {
   auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
   auto moduleOp = dyn_cast<firrtl::FModuleOp>(
-      instOp.getReferencedModule(symbols.getSymbolTable(tableOp))
-          .getOperation());
+      instOp.getReferencedModule(symbols.getSymbolTable(tableOp)));
   return moduleOp ? std::optional(moduleOp) : std::nullopt;
 }
 
@@ -338,8 +337,8 @@ struct InstanceStubber : public OpReduction<firrtl::InstanceOp> {
       auto *op = worklist.pop_back_val();
       auto *tableOp = SymbolTable::getNearestSymbolTable(op);
       op->walk([&](firrtl::InstanceOp instOp) {
-        auto moduleOp =
-            instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
+        auto moduleOp = cast<firrtl::FModuleLike>(
+            instOp.getReferencedModule(symbols.getSymbolTable(tableOp)));
         deadInsts.insert(instOp);
         if (llvm::all_of(
                 symbols.getSymbolUserMap(tableOp).getUsers(moduleOp),
@@ -385,7 +384,8 @@ struct InstanceStubber : public OpReduction<firrtl::InstanceOp> {
       result.replaceAllUsesWith(wire);
     }
     auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
-    auto moduleOp = instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
+    auto moduleOp = cast<firrtl::FModuleLike>(
+        instOp.getReferencedModule(symbols.getSymbolTable(tableOp)));
     nlaRemover.markNLAsInOperation(instOp);
     erasedInsts.insert(instOp);
     if (llvm::all_of(
@@ -662,7 +662,8 @@ struct ExtmoduleInstanceRemover : public OpReduction<firrtl::InstanceOp> {
   }
   LogicalResult rewrite(firrtl::InstanceOp instOp) override {
     auto portInfo =
-        instOp.getReferencedModule(symbols.getNearestSymbolTable(instOp))
+        cast<firrtl::FModuleLike>(
+            instOp.getReferencedModule(symbols.getNearestSymbolTable(instOp)))
             .getPorts();
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
     SmallVector<Value> replacementWires;
@@ -895,7 +896,7 @@ struct EagerInliner : public OpReduction<firrtl::InstanceOp> {
   uint64_t match(firrtl::InstanceOp instOp) override {
     auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
-    if (!isa<firrtl::FModuleOp>(moduleOp.getOperation()))
+    if (!isa<firrtl::FModuleOp>(moduleOp))
       return 0;
     return symbols.getSymbolUserMap(tableOp).getUsers(moduleOp).size() == 1;
   }
@@ -920,8 +921,7 @@ struct EagerInliner : public OpReduction<firrtl::InstanceOp> {
     }
     auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = cast<firrtl::FModuleOp>(
-        instOp.getReferencedModule(symbols.getSymbolTable(tableOp))
-            .getOperation());
+        instOp.getReferencedModule(symbols.getSymbolTable(tableOp)));
     for (auto &op : llvm::make_early_inc_range(*moduleOp.getBodyBlock())) {
       op.remove();
       builder.insert(&op);
@@ -1034,7 +1034,7 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
     circuitOp.setName(circuitName);
 
     for (auto *node : iGraph) {
-      auto module = node->getModule();
+      auto module = node->getModule<firrtl::FModuleLike>();
 
       bool shouldReplacePorts = false;
       SmallVector<Attribute> newNames;

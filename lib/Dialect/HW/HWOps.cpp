@@ -1501,7 +1501,11 @@ Operation *InstanceOp::getReferencedModule(const HWSymbolCache *cache) {
                                                  getModuleNameAttr());
 }
 
-Operation *InstanceOp::getReferencedModule() {
+Operation *InstanceOp::getReferencedModule(SymbolTable &symtbl) {
+  return symtbl.lookup(getModuleNameAttr().getValue());
+}
+
+Operation *InstanceOp::getReferencedModuleSlow() {
   return getReferencedModule(/*cache=*/nullptr);
 }
 
