@@ -12,14 +12,14 @@
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
-include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Support/InstanceGraphInterface.td"
 
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>;
 
 def MachineOp : FSMOp<"machine", [
       FunctionOpInterface,
       Symbol, SymbolTable, NoTerminator,
-      DeclareOpInterfaceMethods<HWModuleLike>]> {
+      DeclareOpInterfaceMethods<InstanceGraphModuleOpInterface>]> {
   let summary = "Define a finite-state machine";
   let description = [{
     `fsm.machine` represents a finite-state machine, including a machine name,
@@ -81,21 +81,6 @@ def MachineOp : FSMOp<"machine", [
     // PortList Methods
     //===------------------------------------------------------------------===//
     ::circt::hw::ModulePortInfo getPortList();
-  }];
-
-  let extraClassDefinition = [{
-    size_t $cppClass::getNumPorts() {
-      auto machineType = getFunctionType();
-      return machineType.getNumInputs() + machineType.getNumResults();
-    }
-
-    circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
-      for (NamedAttribute argAttr :
-           mlir::function_interface_impl::getArgAttrs(*this, portIndex))
-        if (auto sym = argAttr.getValue().dyn_cast<circt::hw::InnerSymAttr>())
-          return sym;
-      return circt::hw::InnerSymAttr();
-    }
   }];
 
   let skipDefaultBuilders = 1;
