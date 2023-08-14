@@ -153,11 +153,6 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
           },
           {
             info = "",
-            name = "h",
-            value = "OMConstant:UInt<2>(\22h1\22)"
-          },
-          {
-            info = "",
             name = "i",
             value = 42 : i64
           },
@@ -189,10 +184,9 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
 // CHECK-SAME:    e = {index = 4 {{[^{}]+}} value = "OMDouble:3.14"},
 // CHECK-SAME:    f = {index = 5 {{[^{}]+}} value = "OMBigDecimal:10.5"},
 // CHECK-SAME:    g = {index = 6 {{[^{}]+}} value = "OMDeleted:"},
-// CHECK-SAME:    h = {index = 7 {{[^{}]+}} value = "OMConstant:UInt<2>(\22h1\22)"},
-// CHECK-SAME:    i = {index = 8 {{[^{}]+}} value = 42 : i64},
-// CHECK-SAME:    j = {index = 9 {{[^{}]+}} value = true},
-// CHECK-SAME:    k = {index = 10 {{[^{}]+}} value = 3.14{{0+e\+0+}} : f64}
+// CHECK-SAME:    i = {index = 7 {{[^{}]+}} value = 42 : i64},
+// CHECK-SAME:    j = {index = 8 {{[^{}]+}} value = true},
+// CHECK-SAME:    k = {index = 9 {{[^{}]+}} value = 3.14{{0+e\+0+}} : f64}
 
 // -----
 

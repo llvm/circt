@@ -99,7 +99,6 @@ firrtl.circuit "AllTypesSupported" attributes {annotations = [{
     OMString = {info = #loc, index = 9, value = "OMString:hello"},
     OMBigDecimal = {info = #loc, index = 10, value = "OMBigDecimal:10.5"},
     OMDeleted = {info = #loc, index = 11, value = "OMDeleted"},
-    OMConstant = {info = #loc, index = 12, value = "OMConstant:UInt<2>(\"h1\")"},
     OMArray = {info = #loc, index = 13, value = [true, 9001, "OMString:bar"]},
     OMMap = {info = #loc, index = 14, value = {foo = true, bar = 9001}}
   }}]
@@ -133,8 +132,6 @@ firrtl.circuit "AllTypesSupported" attributes {annotations = [{
 // CHECK-SAME:    \22value\22: \22OMBigDecimal:10.5\22
 // CHECK-SAME:    \22name\22: \22OMDeleted\22
 // CHECK-SAME:    \22value\22: \22OMDeleted\22
-// CHECK-SAME:    \22name\22: \22OMConstant\22
-// CHECK-SAME:    \22value\22: \22OMConstant:UInt<2>(\\\22h1\\\22)\22
 // CHECK-SAME:    \22name\22: \22OMArray\22
 // CHECK-SAME:    \22value\22: [
 // CHECK-SAME:      true

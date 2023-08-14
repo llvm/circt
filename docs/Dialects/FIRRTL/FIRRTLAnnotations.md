@@ -735,7 +735,6 @@ The `value` field can be a JSON array or dictionary (corresponding to the `OMArr
 - `OMBigDecimal:<value>`
 - `OMFrozenTarget:<omir>`
 - `OMDeleted`
-- `OMConstant:<literal>`
 - `OMReferenceTarget:<target>`
 - `OMMemberReferenceTarget:<target>`
 - `OMMemberInstanceTarget:<target>`
@@ -757,7 +756,6 @@ Example:
         {"info": "", "name": "d", "value": "OMString:hello"},
         {"info": "", "name": "f", "value": "OMBigDecimal:10.5"},
         {"info": "", "name": "g", "value": "OMDeleted:"},
-        {"info": "", "name": "h", "value": "OMConstant:UInt<2>(\"h1\")"},
         {"info": "", "name": "i", "value": 42},
         {"info": "", "name": "j", "value": true},
         {"info": "", "name": "k", "value": 3.14}

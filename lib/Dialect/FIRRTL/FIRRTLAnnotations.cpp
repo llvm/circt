@@ -688,7 +688,7 @@ FIRRTLType PortAnnoTarget::getType() const {
 bool circt::firrtl::isOMIRStringEncodedPassthrough(StringRef type) {
   return type == "OMID" || type == "OMReference" || type == "OMBigInt" ||
          type == "OMLong" || type == "OMString" || type == "OMDouble" ||
-         type == "OMBigDecimal" || type == "OMDeleted" || type == "OMConstant";
+         type == "OMBigDecimal" || type == "OMDeleted";
 }
 
 //===----------------------------------------------------------------------===//
