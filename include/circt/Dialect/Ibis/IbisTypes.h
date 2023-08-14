@@ -9,6 +9,7 @@
 #ifndef CIRCT_DIALECT_IBIS_IBISTYPES_H
 #define CIRCT_DIALECT_IBIS_IBISTYPES_H
 
+#include "circt/Dialect/Ibis/IbisDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Types.h"

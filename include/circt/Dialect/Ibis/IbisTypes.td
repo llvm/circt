@@ -11,6 +11,7 @@
 
 include "circt/Dialect/Ibis/IbisDialect.td"
 include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/EnumAttr.td"
 
 class IbisTypeDef<string name> : TypeDef<IbisDialect, name> { }
 
@@ -52,10 +53,17 @@ def OpaqueScopeRefType : Type<
   BuildableType<"$_builder.getType<ibis::ScopeRefType>()"> {
 }
 
+def Input : I32EnumAttrCase<"Input", 0, "in">;
+def Output : I32EnumAttrCase<"Output", 1, "out">;
+def Direction : I32EnumAttr<"Direction", "Ibis port direction",
+  [Input, Output]> {
+  let cppNamespace = "::circt::ibis";
+}
+
 def PortRefType : IbisTypeDef<"PortRef"> {
   let mnemonic = "portref";
-  let parameters = (ins "TypeAttr":$portTypeAttr);
-  let assemblyFormat = "`<` $portTypeAttr  `>`";
+  let parameters = (ins "TypeAttr":$portTypeAttr, "ibis::Direction":$direction);
+  let assemblyFormat = "`<` $direction $portTypeAttr  `>`";
   let description = [{
     A reference to an Ibis port.
   }];
@@ -67,8 +75,8 @@ def PortRefType : IbisTypeDef<"PortRef"> {
   }];
 
   let builders = [
-    TypeBuilder<(ins "Type":$t), [{
-      return $_get($_ctxt, TypeAttr::get(t));
+    TypeBuilder<(ins "Type":$t, "ibis::Direction":$d), [{
+      return $_get($_ctxt, TypeAttr::get(t), d);
     }]>
   ];
 }

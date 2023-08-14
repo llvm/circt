@@ -346,7 +346,7 @@ def PortReadOp : IbisOp<"port.read", [
 
 class InnerTypeToPortRefTypeConstraint<string lhs, string rhs>
   : TypesMatchWith<"the type of the lhs value dictates the rhs portref type",
-    lhs, rhs, "PortRefType::get($_ctxt, $_self)">;
+    lhs, rhs, "PortRefType::get($_ctxt, $_self, ibis::Direction::Input)">;
 
 def PortWriteOp : IbisOp<"port.write", [
       InnerTypeToPortRefTypeConstraint<"value", "port">

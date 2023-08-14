@@ -24,3 +24,6 @@ void IbisDialect::initialize() {
 #include "circt/Dialect/Ibis/Ibis.cpp.inc"
       >();
 }
+
+// Provide implementations for the enums we use.
+#include "circt/Dialect/Ibis/IbisEnums.cpp.inc"

@@ -34,7 +34,7 @@ ibis.class @C {
 ibis.class @MissingPort {
   %this = ibis.this @MissingPort
   // expected-error @+1 {{'ibis.get_port' op port '@C_in' does not exist in MissingPort}}
-  %c_in = ibis.get_port %this, @C_in : !ibis.scoperef<@MissingPort> -> !ibis.portref<i1>
+  %c_in = ibis.get_port %this, @C_in : !ibis.scoperef<@MissingPort> -> !ibis.portref<in i1>
 }
 
 // -----
@@ -43,7 +43,7 @@ ibis.class @PortTypeMismatch {
   %this = ibis.this @PortTypeMismatch
   ibis.port.input @in : i1
   // expected-error @+1 {{'ibis.get_port' op symbol '@in' refers to a port of type 'i1', but this op has type 'i2'}}
-  %c_in = ibis.get_port %this, @in : !ibis.scoperef<@PortTypeMismatch> -> !ibis.portref<i2>
+  %c_in = ibis.get_port %this, @in : !ibis.scoperef<@PortTypeMismatch> -> !ibis.portref<in i2>
 }
 
 // -----
