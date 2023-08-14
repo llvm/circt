@@ -76,11 +76,6 @@ struct SharedParserConstants {
   // Options that control the behavior of the parser.
   const FIRParserOptions options;
 
-  /// A mapping of targets to annotations.
-  /// NOTE: Clients (other than the top level Circuit parser) should not mutate
-  /// this.  Do not use `annotationMap[key]`, use `aM.lookup(key)` instead.
-  llvm::StringMap<ArrayAttr> annotationMap;
-
   /// A map from identifiers to type aliases.
   llvm::StringMap<FIRRTLType> aliasMap;
 
