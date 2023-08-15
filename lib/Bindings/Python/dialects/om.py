@@ -53,11 +53,11 @@ class List(BaseList):
   def __init__(self, obj: BaseList) -> None:
     super().__init__(obj)
 
-  # Support iterating over a List by yielding its fields.
   def __getitem__(self, i):
     val = super().__getitem__(i)
     return wrap_mlir_object(val)
 
+  # Support iterating over a List by yielding its elements.
   def __iter__(self):
     for i in range(0, self.__len__()):
       yield self.__getitem__(i)
