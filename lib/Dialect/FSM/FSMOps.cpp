@@ -76,6 +76,8 @@ void MachineOp::getHWPortInfo(SmallVectorImpl<hw::PortInfo> &ports) {
   for (unsigned i = 0, e = machineType.getNumInputs(); i < e; ++i) {
     hw::PortInfo port;
     port.name = getArgName(i);
+    if (!port.name)
+      port.name = StringAttr::get(getContext(), "in" + std::to_string(i));
     port.dir = circt::hw::ModulePort::Direction::Input;
     port.type = machineType.getInput(i);
     port.argNum = i;
@@ -85,6 +87,8 @@ void MachineOp::getHWPortInfo(SmallVectorImpl<hw::PortInfo> &ports) {
   for (unsigned i = 0, e = machineType.getNumResults(); i < e; ++i) {
     hw::PortInfo port;
     port.name = getResName(i);
+    if (!port.name)
+      port.name = StringAttr::get(getContext(), "out" + std::to_string(i));
     port.dir = circt::hw::ModulePort::Direction::Output;
     port.type = machineType.getResult(i);
     port.argNum = i;
@@ -94,9 +98,9 @@ void MachineOp::getHWPortInfo(SmallVectorImpl<hw::PortInfo> &ports) {
 
 ParseResult MachineOp::parse(OpAsmParser &parser, OperationState &result) {
   auto buildFuncType =
-      [](Builder &builder, ArrayRef<Type> argTypes, ArrayRef<Type> results,
-         function_interface_impl::VariadicFlag,
-         std::string &) { return builder.getFunctionType(argTypes, results); };
+      [&](Builder &builder, ArrayRef<Type> argTypes, ArrayRef<Type> results,
+          function_interface_impl::VariadicFlag,
+          std::string &) { return builder.getFunctionType(argTypes, results); };
 
   return function_interface_impl::parseFunctionOp(
       parser, result, /*allowVariadic=*/false,

@@ -82,8 +82,17 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
   }];
 
   let extraClassDefinition = extraModuleClassDefinition # [{
-    size_t $cppClass::getNumPorts() {
-      return getPortTypesAttr().size();
+
+    circt::hw::ModuleType $cppClass::getHWModuleType() {
+      SmallVector<hw::ModulePort> newPorts;
+      auto num = getPortNames().size();
+      newPorts.reserve(num);
+      for (unsigned i = 0; i < num; ++i)
+        newPorts.push_back({getPortNameAttr(i), getPortType(i),
+                       getPortDirection(i) == Direction::In ? 
+                         hw::ModulePort::Direction::Input : 
+                         hw::ModulePort::Direction::Output});
+      return hw::ModuleType::get(getContext(), newPorts);
     }
 
     circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {

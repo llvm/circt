@@ -965,10 +965,6 @@ hw::ModulePortInfo MSFTModuleExternOp::getPortList() {
   return hw::ModulePortInfo(inputs, outputs);
 }
 
-size_t MSFTModuleExternOp::getNumPorts() {
-  return getArgNames().size() + getResultNames().size();
-}
-
 hw::InnerSymAttr MSFTModuleExternOp::getPortSymbolAttr(size_t) { return {}; }
 
 //===----------------------------------------------------------------------===//

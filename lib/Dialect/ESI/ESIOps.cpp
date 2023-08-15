@@ -530,14 +530,16 @@ LogicalResult ESIPureModuleOp::verify() {
   return success();
 }
 
-hw::ModulePortInfo ESIPureModuleOp::getPortList() {
-  return hw::ModulePortInfo({});
+hw::ModuleType ESIPureModuleOp::getHWModuleType() {
+  return hw::ModuleType::get(getContext(), {});
 }
 
-size_t ESIPureModuleOp::getNumPorts() { return 0; }
-hw::InnerSymAttr ESIPureModuleOp::getPortSymbolAttr(size_t portIndex) {
-  assert(false);
+::circt::hw::InnerSymAttr ESIPureModuleOp::getPortSymbolAttr(size_t) {
   return {};
+}
+
+::circt::hw::ModulePortInfo ESIPureModuleOp::getPortList() {
+  return hw::ModulePortInfo(ArrayRef<hw::PortInfo>{});
 }
 
 #define GET_OP_CLASSES

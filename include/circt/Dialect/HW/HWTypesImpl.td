@@ -241,6 +241,7 @@ def ModuleTypeImpl : HWType<"Module"> {
   let extraClassDeclaration = [{
     // Many of these are transitional and will be removed when modules and instances
     // have moved over to this type.
+    size_t getNumPorts();
     size_t getNumInputs();
     size_t getNumOutputs();
     SmallVector<Type> getInputTypes();
