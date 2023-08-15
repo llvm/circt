@@ -11,6 +11,12 @@ add_circt_conversion_library(CIRCTLoopScheduleToCalyx
   LINK_LIBS PUBLIC
   CIRCTCalyx
   CIRCTCalyxTransforms
+  CIRCTCalyxToHW
+  CIRCTCalyxToFSM
+  CIRCTFSM
+  CIRCTFSMTransforms
+  CIRCTFSMToSV
+  CIRCTSCFToCalyx
   CIRCTLoopSchedule
   MLIRIR
   MLIRPass

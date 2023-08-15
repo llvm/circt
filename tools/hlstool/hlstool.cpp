@@ -39,8 +39,12 @@
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 
+#include "circt/Conversion/CalyxToFSM.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/Passes.h"
+#include "circt/Conversion/SCFToCalyx.h"
+#include "circt/Dialect/Calyx/CalyxDialect.h"
+#include "circt/Dialect/Calyx/CalyxPasses.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/ESI/ESIPasses.h"
 #include "circt/Dialect/SV/SVDialect.h"
@@ -100,12 +104,19 @@ static cl::opt<bool>
                               cl::init(false), cl::Hidden,
                               cl::cat(mainCategory));
 
-enum HLSFlow { HLSFlowDynamicHW };
+enum HLSFlow {
+  // Compilation through the dynamically scheduled handshake dialect.
+  HLSFlowDynamicHW,
+  // Compilation through Calyx's CIRCT lowering implementation.
+  HLSFlowCalyxHW,
+};
 
 static cl::opt<HLSFlow>
     hlsFlow(cl::desc("HLS flow"),
             cl::values(clEnumValN(HLSFlowDynamicHW, "dynamic-hw",
-                                  "Dynamically scheduled (HW path)")),
+                                  "Dynamically scheduled (HW path)"),
+                       clEnumValN(HLSFlowCalyxHW, "calyx-hw",
+                                  "Statically scheduled (Calyx path)")),
             cl::cat(mainCategory));
 
 enum DynamicParallelismKind {
@@ -349,6 +360,54 @@ static LogicalResult doHLSFlowDynamic(
   return success();
 }
 
+static LogicalResult doHLSFlowCalyx(
+    PassManager &pm, ModuleOp module,
+    std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+
+  if (irInputLevel < 0) {
+    irInputLevel = HLSFlowDynamicIRLevel::High; // Default to highest level
+  }
+  if (irOutputLevel < 0) {
+    irOutputLevel = HLSFlowDynamicIRLevel::Sv; // Default to lowest level
+  }
+
+  if (irInputLevel != HLSFlowDynamicIRLevel::High) {
+    llvm::errs() << "Error: Calyx flow only supports 'high' IR input\n";
+    return failure();
+  }
+
+  if (irOutputLevel != HLSFlowDynamicIRLevel::Sv) {
+    llvm::errs() << "Error: Calyx flow only supports 'sv' IR output\n";
+    return failure();
+  }
+
+  pm.addPass(circt::createSCFToCalyxPass());
+  pm.addPass(createSimpleCanonicalizerPass());
+
+  // Eliminate Calyx's comb group abstraction
+  pm.nest<calyx::ComponentOp>().addPass(
+      circt::calyx::createRemoveCombGroupsPass());
+
+  // Compile to FSM
+  pm.addPass(circt::createCalyxToFSMPass());
+  pm.addPass(circt::createMaterializeCalyxToFSMPass());
+
+  // Eliminate Calyx's group abstraction
+  pm.addPass(circt::calyx::createRemoveGroupsPass());
+
+  // Compile to HW
+  pm.addPass(circt::createCalyxToHWPass());
+  pm.addPass(circt::createConvertFSMToSVPass());
+
+  if (failed(pm.run(module)))
+    return failure();
+
+  if (outputFormat == OutputIR)
+    module->print((*outputFile)->os());
+
+  return success();
+}
+
 /// Process a single buffer of the input.
 static LogicalResult processBuffer(
     MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
@@ -381,9 +440,17 @@ static LogicalResult processBuffer(
   if (failed(applyPassManagerCLOptions(pm)))
     return failure();
 
-  if (hlsFlow == HLSFlow::HLSFlowDynamicHW) {
+  switch (hlsFlow) {
+  case HLSFlowDynamicHW: {
     if (failed(doHLSFlowDynamic(pm, module.get(), outputFile)))
       return failure();
+    break;
+  }
+  case HLSFlowCalyxHW: {
+    if (failed(doHLSFlowCalyx(pm, module.get(), outputFile)))
+      return failure();
+    break;
+  }
   }
 
   // We intentionally "leak" the Module into the MLIRContext instead of
@@ -507,9 +574,9 @@ int main(int argc, char **argv) {
   mlir::registerCanonicalizerPass();
 
   // Register CIRCT dialects.
-  registry
-      .insert<hw::HWDialect, comb::CombDialect, seq::SeqDialect, sv::SVDialect,
-              handshake::HandshakeDialect, esi::ESIDialect>();
+  registry.insert<hw::HWDialect, comb::CombDialect, seq::SeqDialect,
+                  sv::SVDialect, handshake::HandshakeDialect, esi::ESIDialect,
+                  calyx::CalyxDialect>();
 
   // Do the guts of the hlstool process.
   MLIRContext context(registry);

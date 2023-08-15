@@ -22,6 +22,14 @@ target_link_libraries(hlstool
   CIRCTStandardToHandshake
   CIRCTSV
   CIRCTSVTransforms
+  CIRCTSCFToCalyx
+  CIRCTCalyx
+  CIRCTCalyxTransforms
+  CIRCTCalyxToHW
+  CIRCTCalyxToFSM
+  CIRCTFSM
+  CIRCTFSMTransforms
+  CIRCTFSMToSV
   CIRCTTransforms
 
   MLIRIR
