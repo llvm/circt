@@ -106,7 +106,3 @@ jobs:
         if: ${{ matrix.lit-flags == '' }}
         run: |
           ninja -C build check-circt-integration -j$(nproc)
-
-      - name: Ccache stats
-        run: |
-          ccache -s
