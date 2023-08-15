@@ -410,6 +410,11 @@ OpFoldResult StringConstantOp::fold(FoldAdaptor adaptor) {
   return getValueAttr();
 }
 
+OpFoldResult FIntegerConstantOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "constant has no operands");
+  return getValueAttr();
+}
+
 //===----------------------------------------------------------------------===//
 // Binary Operators
 //===----------------------------------------------------------------------===//

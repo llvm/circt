@@ -1115,6 +1115,7 @@ def FIntegerConstantOp : FIRRTLOp<"integer", [Pure, ConstantLike]> {
   }];
   let arguments = (ins APSIntAttr:$value);
   let results = (outs FIntegerType:$result);
+  let hasFolder = 1;
   let hasCustomAssemblyFormat = true;
 }
 
