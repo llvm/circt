@@ -68,17 +68,13 @@ public:
     for (auto port : module.getArguments()) {
       if (module.getPortDirection(port.getArgNumber()) != Direction::Out)
         continue;
-      auto portNode = getOrAddNode(port);
-      auto portField = reachingDefGraph[portNode].first;
-      // If aggregate type, then add all the ground type fields to the graph.
-      if (auto bType = getBaseType(port.getType()))
-        if (!bType.isGround())
-          walkGroundTypes(bType, [&](uint64_t index, FIRRTLBaseType t) {
-            getOrAddNode(portField.getSubField(index));
-          });
+      walkGroundTypes(port.getType().cast<FIRRTLType>(),
+                      [&](uint64_t index, FIRRTLBaseType t) {
+                        getOrAddNode(FieldRef(port, index));
+                      });
     }
-    for (auto &op : module) {
-      llvm::TypeSwitch<Operation *>(&op)
+    walk(module, [&](Operation *op) {
+      llvm::TypeSwitch<Operation *>(op)
           .Case<RegOp, RegResetOp>([&](auto) {})
           .Case<Forceable>([&](Forceable forceableOp) {
             // Any declaration that can be forced.
@@ -163,7 +159,7 @@ public:
                 recordDataflow(res, src);
             }
           });
-    }
+    });
   }
 
   std::string getName(FieldRef v) { return getFieldName(v).first; };
@@ -408,19 +404,18 @@ public:
 
   // Record the FieldRef, corresponding to the result of the sub op
   // `result = base[index]`
-  void recordValueRefersToFieldRef(Value base, unsigned index, Value result) {
-    auto add = [&](Value v, unsigned i) {
-      valToFieldRefs[result].emplace_back(v, i);
-    };
+  void recordValueRefersToFieldRef(Value base, unsigned fieldID, Value result) {
 
     // Check if base is itself field of an aggregate.
     auto it = valToFieldRefs.find(base);
     if (it != valToFieldRefs.end()) {
       // Rebase it to the original aggregate.
       // Because of subaccess op, each value can refer to multiple FieldRefs.
+      SmallVector<FieldRef> entry;
       for (auto &sub : it->second)
-        add(sub.getValue(), sub.getFieldID() + index);
-
+        entry.emplace_back(sub.getValue(), sub.getFieldID() + fieldID);
+      // Update the map at the end, to avoid invaliding the iterator.
+      valToFieldRefs[result].append(entry.begin(), entry.end());
       return;
     }
     // Break cycles from registers.
@@ -428,8 +423,7 @@ public:
       if (isa<RegOp, RegResetOp, SubfieldOp, SubindexOp, SubaccessOp>(def))
         return;
     }
-
-    add(base, index);
+    valToFieldRefs[result].emplace_back(base, fieldID);
   }
 
   void handleMemory(MemOp mem) {
