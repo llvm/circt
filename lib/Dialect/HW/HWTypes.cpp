@@ -789,7 +789,7 @@ ModuleType circt::hw::detail::fnToMod(FunctionType fnty, ArrayAttr inputNames,
                                       ArrayAttr outputNames) {
   SmallVector<ModulePort> ports;
   if (inputNames) {
-    for (auto [t, n] : llvm::zip(fnty.getInputs(), inputNames))
+    for (auto [t, n] : llvm::zip_equal(fnty.getInputs(), inputNames))
       if (auto iot = dyn_cast<hw::InOutType>(t))
         ports.push_back({cast<StringAttr>(n), iot.getElementType(),
                          ModulePort::Direction::InOut});
@@ -804,7 +804,7 @@ ModuleType circt::hw::detail::fnToMod(FunctionType fnty, ArrayAttr inputNames,
         ports.push_back({{}, t, ModulePort::Direction::Input});
   }
   if (outputNames) {
-    for (auto [t, n] : llvm::zip(fnty.getResults(), outputNames))
+    for (auto [t, n] : llvm::zip_equal(fnty.getResults(), outputNames))
       ports.push_back({cast<StringAttr>(n), t, ModulePort::Direction::Output});
   } else {
     for (auto t : fnty.getResults())
