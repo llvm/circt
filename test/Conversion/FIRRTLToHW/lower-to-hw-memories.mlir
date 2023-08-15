@@ -107,8 +107,9 @@ firrtl.circuit "Foo" {
 
   // CHECK-LABEL: hw.module @ZeroDataWidth
   firrtl.module @ZeroDataWidth(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, in %addr: !firrtl.uint<4>, in %data: !firrtl.uint<0>, in %mask: !firrtl.uint<1>) {
+    // CHECK: [[CONST_X:%.+]] = sv.constantX : i1
     // CHECK: %mem = seq.firmem 0, 1, undefined, port_order : <12 x 0>
-    // CHECK: seq.firmem.write_port %mem[{{%.+}}] = {{%.+}}, clock {{.+}} enable {{%.+}} : <12 x 0>
+    // CHECK: seq.firmem.write_port %mem[{{%.+}}] = [[CONST_X]], clock {{.+}} enable {{%.+}} : <12 x 0>
     %mem_w = firrtl.mem Undefined {depth = 12 : i64, name = "mem", portNames = ["w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>
 
     %mem_w.clk = firrtl.subfield %mem_w[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>

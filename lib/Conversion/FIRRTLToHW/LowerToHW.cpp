@@ -2980,13 +2980,19 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   // Memories return multiple structs, one for each port, which means we
   // have two layers of type to split apart.
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-    auto addInput = [&](StringRef field, size_t width,
-                        StringRef field2 = "") -> Value {
-      auto portType =
-          IntegerType::get(op.getContext(), std::max<size_t>(1, width));
-
-      Value backedge = createBackedge(builder.getLoc(), portType);
+    auto addInput = [&](StringRef field, size_t width) -> Value {
       auto accesses = getAllFieldAccesses(op.getResult(i), field);
+
+      // If the memory is 0-width, do not materialize any connections to it.
+      // However, `seq.firmem` now requires a 1-bit input, so materialize
+      // a dummy x value to provide it with.
+      Value backedge, portValue;
+      if (width == 0) {
+        portValue = getOrCreateXConstant(1);
+      } else {
+        auto portType = IntegerType::get(op.getContext(), width);
+        backedge = portValue = createBackedge(builder.getLoc(), portType);
+      }
 
       for (auto a : accesses) {
         if (a.getType()
@@ -2997,23 +3003,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         else
           a->eraseOperand(0);
       }
-
-      // This handles the case, when the single bit mask field is removed,
-      // and the enable is updated after 'And' with mask bit.
-      if (!field2.empty()) {
-        Value backedge2 = createBackedge(builder.getLoc(), portType);
-        auto accesses2 = getAllFieldAccesses(op.getResult(i), field2);
-        for (auto a : accesses2) {
-          if (type_cast<FIRRTLBaseType>(a.getType())
-                  .getPassiveType()
-                  .getBitWidthOrSentinel() > 0)
-            (void)setLowering(a, backedge2);
-          else
-            a->eraseOperand(0);
-        }
-        backedge = builder.createOrFold<comb::AndOp>(backedge, backedge2, true);
-      }
-      return backedge;
+      return portValue;
     };
 
     auto addOutput = [&](StringRef field, size_t width, Value value) {
@@ -3028,18 +3018,21 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
     auto memportKind = op.getPortKind(i);
     if (memportKind == MemOp::PortKind::Read) {
-      auto addr = addInput("addr", llvm::Log2_64_Ceil(memSummary.depth));
+      auto addr = addInput("addr", op.getAddrBits());
       auto en = addInput("en", 1);
       auto clk = addInput("clk", 1);
       auto data = builder.create<seq::FirMemReadOp>(memDecl, addr, clk, en);
       addOutput("data", memSummary.dataWidth, data);
     } else if (memportKind == MemOp::PortKind::ReadWrite) {
-      auto addr = addInput("addr", llvm::Log2_64_Ceil(memSummary.depth));
+      auto addr = addInput("addr", op.getAddrBits());
       auto en = addInput("en", 1);
       auto clk = addInput("clk", 1);
       // If maskBits =1, then And the mask field with enable, and update the
       // enable. Else keep mask port.
-      auto mode = addInput("wmode", 1, memSummary.isMasked ? "" : "wmask");
+      auto mode = addInput("wmode", 1);
+      if (!memSummary.isMasked)
+        mode =
+            builder.createOrFold<comb::AndOp>(mode, addInput("wmask", 1), true);
       auto wdata = addInput("wdata", memSummary.dataWidth);
       // Ignore mask port, if maskBits =1
       Value mask;
@@ -3049,10 +3042,12 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
           memDecl, addr, clk, en, wdata, mode, mask);
       addOutput("rdata", memSummary.dataWidth, rdata);
     } else {
-      auto addr = addInput("addr", llvm::Log2_64_Ceil(memSummary.depth));
+      auto addr = addInput("addr", op.getAddrBits());
       // If maskBits =1, then And the mask field with enable, and update the
       // enable. Else keep mask port.
-      auto en = addInput("en", 1, memSummary.isMasked ? "" : "mask");
+      auto en = addInput("en", 1);
+      if (!memSummary.isMasked)
+        en = builder.createOrFold<comb::AndOp>(en, addInput("mask", 1), true);
       auto clk = addInput("clk", 1);
       auto data = addInput("data", memSummary.dataWidth);
       // Ignore mask port, if maskBits =1
