@@ -1,6 +1,6 @@
 // This test lowers an SCF construct through Calyx, FSM and (TODO)
 // to RTL.
-// RUN: hls-tool --calyx-hw --ir-output-level=2 %s | FileCheck %s
+// RUN: hlstool --calyx-hw --ir-output-level=2 %s | FileCheck %s
 
 // This is the end of the road for this example since there (as of writing)
 // does not yet exist a lowering for calyx.memory operations.
