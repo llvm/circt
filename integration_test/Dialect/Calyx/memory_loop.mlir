@@ -1,11 +1,6 @@
 // This test lowers an SCF construct through Calyx, FSM and (TODO)
 // to RTL.
-// RUN: circt-opt %s \
-// RUN:     --lower-scf-to-calyx -canonicalize \
-// RUN:     --calyx-remove-comb-groups --canonicalize \
-// RUN:     --lower-calyx-to-fsm --canonicalize \
-// RUN:     --materialize-calyx-to-fsm --canonicalize \
-// RUN:     --calyx-remove-groups-fsm --canonicalize | FileCheck %s
+// RUN: hls-tool --calyx-hw --ir-output-level=2 %s | FileCheck %s
 
 // This is the end of the road for this example since there (as of writing)
 // does not yet exist a lowering for calyx.memory operations.
