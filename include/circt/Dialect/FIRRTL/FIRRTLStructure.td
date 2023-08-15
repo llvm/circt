@@ -85,7 +85,9 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
 
     circt::hw::ModuleType $cppClass::getHWModuleType() {
       SmallVector<hw::ModulePort> newPorts;
-      for (unsigned i = 0, e = getPortNames().size(); i < e; ++i)
+      auto num = getPortNames().size();
+      newPorts.reserve(num);
+      for (unsigned i = 0; i < num; ++i)
         newPorts.push_back({getPortNameAttr(i), getPortType(i),
                        getPortDirection(i) == Direction::In ? 
                          hw::ModulePort::Direction::Input : 

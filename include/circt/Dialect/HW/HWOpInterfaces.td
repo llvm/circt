@@ -42,44 +42,37 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
 
   let extraSharedClassDeclaration = [{
 
+    /// Return the total number of ports in the module
     size_t getNumPorts() {
-      return $_op.getHWModuleType().getPorts().size();
+      return $_op.getHWModuleType().getNumPorts();
     }
 
+    /// Return the total number of input and inout ports in the module
     size_t getNumInputs() {
       return $_op.getHWModuleType().getNumInputs();
     }
 
+    /// Return the total number of output ports in the module
     size_t getNumOutputs() {
       return $_op.getHWModuleType().getNumOutputs();
     }
 
+    /// Return the set of names on input and inout ports
     SmallVector<StringAttr> getInputNames() {
       return $_op.getHWModuleType().getInputNames();
     }
 
+    /// Return the set of names on output ports
     SmallVector<StringAttr> getOutputNames() {
       return $_op.getHWModuleType().getOutputNames();
     }
-
-    ArrayAttr getInputNamesAttr() {
-      auto ty = $_op.getHWModuleType();
-      auto names = ty.getInputNames();
-      SmallVector<Attribute> names_(names.begin(), names.end());
-      return ArrayAttr::get(ty.getContext(), names_);
-    }
-
-    ArrayAttr getOutputNamesAttr() {
-      auto ty = $_op.getHWModuleType();
-      auto names = ty.getOutputNames();
-      SmallVector<Attribute> names_(names.begin(), names.end());
-      return ArrayAttr::get(ty.getContext(), names_);
-    }
     
+    // Get the name for the specified input or inout port
     StringRef getInputName(size_t idx) {
       return $_op.getHWModuleType().getInputName(idx);
     }
 
+    // Get the name for the specified output port
     StringRef getOutputName(size_t idx) {
       return $_op.getHWModuleType().getOutputName(idx);
     }

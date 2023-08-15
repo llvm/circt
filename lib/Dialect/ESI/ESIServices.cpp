@@ -615,14 +615,19 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
     // Create a replacement instance of the same operation type.
     SmallVector<NamedAttribute> newAttrs;
     for (auto attr : inst->getAttrs()) {
-      if (attr.getName() == argsAttrName)
+      if (attr.getName() == argsAttrName) {
+        auto names = mod.getInputNames();
+        SmallVector<Attribute> names_(names.begin(), names.end());
         newAttrs.push_back(
-            b.getNamedAttr(argsAttrName, mod.getInputNamesAttr()));
-      else if (attr.getName() == resultsAttrName)
+            b.getNamedAttr(argsAttrName, b.getArrayAttr(names_)));
+      } else if (attr.getName() == resultsAttrName) {
+        auto names = mod.getOutputNames();
+        SmallVector<Attribute> names_(names.begin(), names.end());
         newAttrs.push_back(
-            b.getNamedAttr(resultsAttrName, mod.getOutputNamesAttr()));
-      else
+            b.getNamedAttr(resultsAttrName, b.getArrayAttr(names_)));
+      } else {
         newAttrs.push_back(attr);
+      }
     }
     auto *newInst = b.insert(Operation::create(
         inst->getLoc(), inst->getName(), newResultTypes, newOperands,

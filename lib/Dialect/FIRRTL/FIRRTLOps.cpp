@@ -458,7 +458,7 @@ Block *CircuitOp::getBodyBlock() { return &getBody().front(); }
 
 static SmallVector<PortInfo> getPortImpl(FModuleLike module) {
   SmallVector<PortInfo> results;
-  for (unsigned i = 0, e = module.getPortNames().size(); i < e; ++i) {
+  for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i) {
     results.push_back({module.getPortNameAttr(i), module.getPortType(i),
                        module.getPortDirection(i), module.getPortSymbolAttr(i),
                        module.getPortLocation(i),

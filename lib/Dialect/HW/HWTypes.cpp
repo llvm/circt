@@ -603,9 +603,19 @@ LogicalResult ModuleType::verify(function_ref<InFlightDiagnostic()> emitError,
   return success();
 }
 
-size_t ModuleType::getNumInputs() { return getInputTypes().size(); }
+size_t ModuleType::getNumInputs() {
+  return std::count_if(getPorts().begin(), getPorts().end(), [](auto &p) {
+    return p.dir != ModulePort::Direction::Output;
+  });
+}
 
-size_t ModuleType::getNumOutputs() { return getOutputTypes().size(); }
+size_t ModuleType::getNumOutputs() {
+  return std::count_if(getPorts().begin(), getPorts().end(), [](auto &p) {
+    return p.dir == ModulePort::Direction::Output;
+  });
+}
+
+size_t ModuleType::getNumPorts() { return getPorts().size(); }
 
 SmallVector<Type> ModuleType::getInputTypes() {
   SmallVector<Type> retval;
