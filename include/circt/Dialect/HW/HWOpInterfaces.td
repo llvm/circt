@@ -33,16 +33,6 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
 
   let methods = [
 
-    InterfaceMethod<"Get the module name",
-    "::llvm::StringRef", "getModuleName", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return $_op.getName(); }]>,
-
-    InterfaceMethod<"Get the module name",
-    "::mlir::StringAttr", "getModuleNameAttr", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return $_op.getNameAttr(); }]>,
-
     InterfaceMethod<"Get a port symbol attribute",
     "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex)>,
 
