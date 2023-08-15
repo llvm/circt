@@ -96,3 +96,9 @@ om.class @ListCreate() {
   // expected-note @-2 {{prior use here}}
   %lst = om.list_create %0, %1 : i64
 }
+
+// -----
+
+// expected-error @+1 {{map key type must be either string or integer but got '!om.list<!om.string>'}}
+om.class @Map(%map: !om.map<!om.list<!om.string>, !om.string>) {
+}
