@@ -385,18 +385,25 @@ static LogicalResult doHLSFlowCalyx(
   pm.addPass(createSimpleCanonicalizerPass());
 
   // Eliminate Calyx's comb group abstraction
-  pm.nest<calyx::ComponentOp>().addPass(
+  pm.addNestedPass<calyx::ComponentOp>(
       circt::calyx::createRemoveCombGroupsPass());
+  pm.addPass(createSimpleCanonicalizerPass());
 
   // Compile to FSM
-  pm.addPass(circt::createCalyxToFSMPass());
-  pm.addPass(circt::createMaterializeCalyxToFSMPass());
+  pm.addNestedPass<calyx::ComponentOp>(circt::createCalyxToFSMPass());
+  pm.addPass(createSimpleCanonicalizerPass());
+  pm.addNestedPass<calyx::ComponentOp>(
+      circt::createMaterializeCalyxToFSMPass());
+  pm.addPass(createSimpleCanonicalizerPass());
 
   // Eliminate Calyx's group abstraction
-  pm.addPass(circt::calyx::createRemoveGroupsPass());
+  pm.addNestedPass<calyx::ComponentOp>(circt::createRemoveGroupsFromFSMPass());
+  pm.addPass(createSimpleCanonicalizerPass());
 
   // Compile to HW
   pm.addPass(circt::createCalyxToHWPass());
+  pm.addPass(createSimpleCanonicalizerPass());
+
   pm.addPass(circt::createConvertFSMToSVPass());
 
   if (failed(pm.run(module)))
