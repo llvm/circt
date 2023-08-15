@@ -48,7 +48,8 @@
 
       // Circt
       "-DLLVM_EXTERNAL_PROJECTS=circt",
-      "-DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=${workspaceFolder:CIRCT}"
+      "-DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=${workspaceFolder:CIRCT}",
+      "-DCIRCT_ENABLE_LLHD_SIM=OFF",
     ]
   },
   "extensions": {
