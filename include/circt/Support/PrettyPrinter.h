@@ -176,8 +176,6 @@ class PrettyPrinter {
 public:
   /// Listener to Token storage events.
   struct Listener {
-    /// Flag to identify a state when the clear cannot be called.
-    bool donotClear = false;
     virtual ~Listener();
     /// No tokens referencing external memory are present.
     virtual void clear(){};
@@ -215,12 +213,9 @@ public:
   void addTokens(R &&tokens) {
     // Don't invoke listener until range processed, we own it now.
     {
-      if (listener)
-        listener->donotClear = true;
+      llvm::SaveAndRestore<bool> save(donotClear, true);
       for (Token &t : tokens)
         add(t);
-      if (listener)
-        listener->donotClear = false;
     }
     // Invoke it now if appropriate.
     if (scanStack.empty())
@@ -319,6 +314,9 @@ private:
 
   /// Hook for Token storage events.
   Listener *listener = nullptr;
+
+  /// Flag to identify a state when the clear cannot be called.
+  bool donotClear = false;
 
   /// Threshold for walking scan state and "rebasing" totals/offsets.
   static constexpr decltype(leftTotal) rebaseThreshold =

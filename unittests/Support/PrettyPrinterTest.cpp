@@ -44,8 +44,10 @@ protected:
   SmallVector<Token> indentNestedTokens;
   formatted_raw_ostream *fStream = nullptr;
   RecordLocation recordLoc;
-  PrintEventAndStorageListener<RecordLocation, SmallString<128>> callbacks =
-      PrintEventAndStorageListener<RecordLocation, SmallString<128>>(recordLoc);
+  PrintEventAndStorageListener<RecordLocation, SmallVectorImpl<char> *>
+      callbacks =
+          PrintEventAndStorageListener<RecordLocation, SmallVectorImpl<char> *>(
+              recordLoc);
 
   /// Scratch buffer used by print.
   SmallString<256> out;
@@ -581,8 +583,8 @@ TEST(PrettyPrinterTest, Expr) {
   formatted_raw_ostream formattedStream(os);
   SmallString<128> locationOut;
   RecordLocation recordLoc(&formattedStream);
-  PrintEventAndStorageListener<RecordLocation, SmallString<128>> callbacks(
-      recordLoc);
+  PrintEventAndStorageListener<RecordLocation, SmallVectorImpl<char> *>
+      callbacks(recordLoc);
 
   auto sumExpr = [&callbacks, &locationOut](auto &ps) {
     ps << callbacks.getToken(&locationOut) << "(";
@@ -769,8 +771,8 @@ TEST(PrettyPrinterTest, NeverBreakGroup) {
   formatted_raw_ostream formattedStream(os);
   SmallString<128> locationOut;
   RecordLocation recordLoc(&formattedStream);
-  PrintEventAndStorageListener<RecordLocation, SmallString<128>> callbacks(
-      recordLoc);
+  PrintEventAndStorageListener<RecordLocation, SmallVectorImpl<char> *>
+      callbacks(recordLoc);
   // Mostly checking location after break tokens.
   auto test = [&](Breaks breaks1, Breaks breaks2) {
     out = "\n";
@@ -840,8 +842,8 @@ TEST(PrettyPrinterTest, MaxStartingIndent) {
 
   // Mostly checking location after break tokens.
   RecordLocation recordLoc(&formattedStream);
-  PrintEventAndStorageListener<RecordLocation, SmallString<128>> callbacks(
-      recordLoc);
+  PrintEventAndStorageListener<RecordLocation, SmallVectorImpl<char> *>
+      callbacks(recordLoc);
 
   auto test = [&](PrettyPrinter &pp) {
     out = "\n";
@@ -938,9 +940,9 @@ protected:
 
   formatted_raw_ostream formattedStream = formatted_raw_ostream(ppOS);
   RecordLocation recordLoc = RecordLocation(&formattedStream);
-  PrintEventAndStorageListener<RecordLocation, SmallVectorImpl<char>>
+  PrintEventAndStorageListener<RecordLocation, SmallVectorImpl<char> *>
       callbacks =
-          PrintEventAndStorageListener<RecordLocation, SmallVectorImpl<char>>(
+          PrintEventAndStorageListener<RecordLocation, SmallVectorImpl<char> *>(
               recordLoc);
   TokenStringSaver saver;
   SmallString<128> locationOut;

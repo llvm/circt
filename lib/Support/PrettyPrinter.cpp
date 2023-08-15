@@ -171,7 +171,7 @@ void PrettyPrinter::clear() {
   leftTotal = rightTotal = 1;
   tokens.clear();
   tokenOffset = 0;
-  if (listener && !listener->donotClear)
+  if (listener && !donotClear)
     listener->clear();
 }
 

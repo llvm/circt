@@ -168,21 +168,20 @@ public:
 };
 
 /// Note: Callable class must implement a callable with signature:
-/// void (Data*)
-template <typename Callable, typename Data>
+/// void (Data)
+template <typename CallableTy, typename DataTy>
 class PrintEventAndStorageListener : public TokenStringSaver {
 
   /// List of all the unique data associated with each callback token.
   /// The fact that tokens on a stream can never be printed out of order,
   /// ensures that CallbackTokens are always added and invoked in FIFO order,
   /// hence no need to record an index into the Data list.
-  /// Note: Doesn't own Data !
-  std::queue<Data *> dataQ;
+  std::queue<DataTy> dataQ;
   /// The storage for the callback, as a function object.
-  Callable &callable;
+  CallableTy &callable;
 
 public:
-  PrintEventAndStorageListener(Callable &c) : callable(c) {}
+  PrintEventAndStorageListener(CallableTy &c) : callable(c) {}
 
   /// PrettyPrinter::Listener::print -- indicates all the preceding tokens on
   /// the stream have been printed.
@@ -192,7 +191,7 @@ public:
     dataQ.pop();
   }
   /// Get a token with the obj data.
-  CallbackToken getToken(Data *obj) {
+  CallbackToken getToken(DataTy obj) {
     // Insert data onto the list.
     dataQ.push(obj);
     return CallbackToken();
