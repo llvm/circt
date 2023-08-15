@@ -36,7 +36,7 @@ struct List {
   List(OMEvaluatorValue value) : value(value) {}
 
   /// Return the number of elements.
-  intptr_t getNumElements() { return omListGetNumElements(value); }
+  intptr_t getNumElements() { return omEvaluatorListGetNumElements(value); }
 
   PythonValue getElement(intptr_t i);
   OMEvaluatorValue getValue() const { return value; }
@@ -150,7 +150,7 @@ private:
 };
 
 PythonValue List::getElement(intptr_t i) {
-  return omEvaluatorValueToPythonValue(omListGetElement(value, i));
+  return omEvaluatorValueToPythonValue(omEvaluatorListGetElement(value, i));
 }
 
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {

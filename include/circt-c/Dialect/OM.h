@@ -126,11 +126,11 @@ omEvaluatorValueIsAList(OMEvaluatorValue evaluatorValue);
 
 /// Get the length of the list.
 MLIR_CAPI_EXPORTED intptr_t
-omListGetNumElements(OMEvaluatorValue evaluatorValue);
+omEvaluatorListGetNumElements(OMEvaluatorValue evaluatorValue);
 
 /// Get an element of the list.
 MLIR_CAPI_EXPORTED OMEvaluatorValue
-omListGetElement(OMEvaluatorValue evaluatorValue, intptr_t pos);
+omEvaluatorListGetElement(OMEvaluatorValue evaluatorValue, intptr_t pos);
 
 //===----------------------------------------------------------------------===//
 // ReferenceAttr API

@@ -33,7 +33,6 @@ def wrap_mlir_object(value):
   return Object(value)
 
 
-# Wrap a base mlir object with high-level object.
 def unwrap_python_object(value):
   # Check if the value is a Primitive.
   try:
@@ -54,7 +53,7 @@ class List(BaseList):
   def __init__(self, obj: BaseList) -> None:
     super().__init__(obj)
 
-  # Support iterating over an Object by yielding its fields.
+  # Support iterating over a List by yielding its fields.
   def __getitem__(self, i):
     val = super().__getitem__(i)
     return wrap_mlir_object(val)
@@ -114,7 +113,6 @@ class Evaluator(BaseEvaluator):
       # Get the actual parameter Values from the supplied variadic
       # arguments.
       actual_params = [unwrap_python_object(arg) for arg in args]
-      print(actual_params)
 
     # Call the base instantiate method.
     obj = super().instantiate(class_name, actual_params)

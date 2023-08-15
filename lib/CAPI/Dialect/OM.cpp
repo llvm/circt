@@ -189,15 +189,15 @@ OMEvaluatorValue omEvaluatorValueGetList(OMEvaluatorValue evaluatorValue) {
 }
 
 /// Get the length of the List.
-intptr_t omListGetNumElements(OMEvaluatorValue evaluatorValue) {
+intptr_t omEvaluatorListGetNumElements(OMEvaluatorValue evaluatorValue) {
   return cast<evaluator::ListValue>(unwrap(evaluatorValue).get())
       ->getElements()
       .size();
 }
 
 /// Get an element of the List.
-OMEvaluatorValue omListGetElement(OMEvaluatorValue evaluatorValue,
-                                  intptr_t pos) {
+OMEvaluatorValue omEvaluatorListGetElement(OMEvaluatorValue evaluatorValue,
+                                           intptr_t pos) {
   return wrap(cast<evaluator::ListValue>(unwrap(evaluatorValue).get())
                   ->getElements()[pos]);
 }

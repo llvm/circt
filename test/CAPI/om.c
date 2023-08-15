@@ -141,7 +141,8 @@ void testEvaluator(MlirContext ctx) {
           omEvaluatorValueIsAList(bar));
 
   // CHECK: 15 : i64
-  mlirAttributeDump(omEvaluatorValueGetPrimitive(omListGetElement(bar, 1)));
+  mlirAttributeDump(
+      omEvaluatorValueGetPrimitive(omEvaluatorListGetElement(bar, 1)));
 }
 
 int main(void) {
