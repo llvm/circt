@@ -48,6 +48,8 @@ jobs:
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: short-${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}
+          restore-keys: |
+            short-${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}
           max-size: 500M
 
       # --------

@@ -65,6 +65,9 @@ jobs:
         with:
           max-size: 300M
           key: nightly-${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}
+          append-timestamp: false
+          restore-keys: |
+            short-${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}
 
       # --------
       # Build and test CIRCT
