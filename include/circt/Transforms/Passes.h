@@ -29,6 +29,8 @@ std::unique_ptr<mlir::Pass> createFlattenMemRefPass();
 std::unique_ptr<mlir::Pass> createFlattenMemRefCallsPass();
 std::unique_ptr<mlir::Pass> createStripDebugInfoWithPredPass(
     const std::function<bool(mlir::Location)> &pred);
+std::unique_ptr<mlir::Pass>
+createStateStructGeneratePass(bool emitNoneInfo = false);
 
 //===----------------------------------------------------------------------===//
 // Utility functions.

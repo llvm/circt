@@ -36,6 +36,10 @@ class ControlFlowDialect;
 namespace func {
 class FuncDialect;
 } // namespace func
+
+namespace LLVM {
+class LLVMDialect;
+} // namespace LLVM
 } // end namespace mlir
 
 namespace circt {
