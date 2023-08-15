@@ -2286,6 +2286,12 @@ LogicalResult MemOp::verify() {
   return success();
 }
 
+static size_t getAddressWidth(size_t depth) {
+  return std::max(1U, llvm::Log2_64_Ceil(depth));
+}
+
+size_t MemOp::getAddrBits() { return getAddressWidth(getDepth()); }
+
 FIRRTLType MemOp::getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
                                  PortKind portKind, size_t maskBits) {
 
@@ -2305,8 +2311,7 @@ FIRRTLType MemOp::getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
 
   SmallVector<BundleType::BundleElement, 7> portFields;
 
-  auto addressType =
-      UIntType::get(context, std::max(1U, llvm::Log2_64_Ceil(depth)));
+  auto addressType = UIntType::get(context, getAddressWidth(depth));
 
   portFields.push_back({getId("addr"), false, addressType});
   portFields.push_back({getId("en"), false, UIntType::get(context, 1)});
