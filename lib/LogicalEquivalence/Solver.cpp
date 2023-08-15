@@ -96,7 +96,7 @@ void Solver::printModel() {
       Operation *parentOp = value.getParentRegion()->getParentOp();
       if (auto op = llvm::dyn_cast<hw::HWModuleOp>(parentOp)) {
         // Argument of a `hw.module`.
-        lec::outs() << "argument name: " << op.getArgNames()[arg.getArgNumber()]
+        lec::outs() << "argument name: " << op.getArgName(arg.getArgNumber())
                     << "\n";
       } else {
         // Argument of a different operation.

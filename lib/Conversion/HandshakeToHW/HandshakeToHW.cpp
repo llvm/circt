@@ -317,7 +317,7 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
 
   for (auto [i, arg] : memrefPorts) {
     // Insert ports into the module
-    auto memName = mod.getArgNames()[i].cast<StringAttr>();
+    auto memName = mod.getArgName(i);
 
     // Get the attached extmemory external module.
     auto extmemInstance = cast<hw::InstanceOp>(*arg.getUsers().begin());

@@ -57,6 +57,10 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     }
 
     void setPortSymbolAttr(size_t portIndex, ::circt::hw::InnerSymAttr sym);
+
+    StringAttr getArgName(size_t index) {
+      return dyn_cast<StringAttr>(getArgNames()[index]);
+    }
   }];
 
   /// Additional class definitions inside the module op.
