@@ -17,12 +17,12 @@
 #include "circt/Dialect/OM/OMOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/IRMapping.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/raw_ostream.h"
-#include <mlir/IR/PatternMatch.h>
-#include <mlir/Support/LogicalResult.h>
 
 using namespace mlir;
 using namespace circt;
