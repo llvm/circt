@@ -583,12 +583,15 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NOT: output_file
   // CHECK-NEXT: sv.bind <@bindTest::@[[quxSymbol:.+]]> {
   // CHECK-SAME: output_file = #hw.output_file<"bindings.sv", excludeFromFileList>
-  // CHECK-NEXT: hw.module private @bindTest()
-  firrtl.module private @bindTest() {
+  // CHECK-NEXT: hw.module private @bindTest(%dummy: i1)
+  firrtl.module private @bindTest(in %dummy: !firrtl.uint<1>) {
     // CHECK: hw.instance "baz" sym @[[bazSymbol]] @bar
     %baz = firrtl.instance baz {lowerToBind} @bar(in io_cpu_flush: !firrtl.uint<1>)
+    firrtl.connect %baz, %dummy : !firrtl.uint<1>, !firrtl.uint<1>
+
     // CHECK: hw.instance "qux" sym @[[quxSymbol]] @bar
     %qux = firrtl.instance qux {lowerToBind, output_file = #hw.output_file<"bindings.sv", excludeFromFileList>} @bar(in io_cpu_flush: !firrtl.uint<1>)
+    firrtl.connect %qux, %dummy : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
 
@@ -817,9 +820,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
 
   // CHECK-LABEL: hw.module private @FooDUT
-  firrtl.module private @FooDUT() attributes {annotations = [
+  firrtl.module private @FooDUT(in %clock: !firrtl.clock) attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     %chckcoverAnno_clock = firrtl.instance chkcoverAnno @chkcoverAnno(in clock: !firrtl.clock)
+    firrtl.connect %chckcoverAnno_clock, %clock : !firrtl.clock, !firrtl.clock
   }
 
   // CHECK-LABEL: hw.module private @AsyncResetBasic(
@@ -883,16 +887,31 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     out %out: !firrtl.uint<1> sym @portOutSym
   ) {
     firrtl.instance instName sym @instSym @BitCast1()
+
     // CHECK: hw.instance "instName" sym @instSym @BitCast1
     %nodeName = firrtl.node sym @nodeSym %value : !firrtl.uint<42>
+
     // CHECK: %nodeName = hw.wire %value sym @nodeSym : i42
     %wireName = firrtl.wire sym @wireSym : !firrtl.uint<42>
+
     // CHECK: %wireName = hw.wire %z_i42 sym @wireSym : i42
     %regName = firrtl.reg sym @regSym %clock : !firrtl.clock, !firrtl.uint<42>
+
     // CHECK: %regName = seq.firreg %regName clock %clock sym @regSym : i42
     %regResetName = firrtl.regreset sym @regResetSym %clock, %reset, %value : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
+
     // CHECK: %regResetName = seq.firreg %regResetName clock %clock sym @regResetSym reset sync %reset, %value : i42
     %memName_port = firrtl.mem sym @memSym Undefined {depth = 12 : i64, name = "memName", portNames = ["port"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %memName_port.clk = firrtl.subfield %memName_port[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %memName_port.en = firrtl.subfield %memName_port[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %memName_port.addr = firrtl.subfield %memName_port[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %memName_port.data = firrtl.subfield %memName_port[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    firrtl.strictconnect %memName_port.clk, %clock : !firrtl.clock
+    %en = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.strictconnect %memName_port.en, %en : !firrtl.uint<1>
+    %addr = firrtl.constant 0 : !firrtl.uint<4>
+    firrtl.strictconnect %memName_port.addr, %addr : !firrtl.uint<4>
+
     // CHECK: %memName = seq.firmem sym @memSym 0, 1, undefined, port_order : <12 x 42>
     firrtl.connect %out, %reset : !firrtl.uint<1>, !firrtl.uint<1>
   }
