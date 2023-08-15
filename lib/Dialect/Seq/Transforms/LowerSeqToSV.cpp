@@ -14,7 +14,6 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/HW/Namespace.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -93,14 +92,10 @@ public:
                   ConversionPatternRewriter &rewriter) const final {
     Location loc = reg.getLoc();
 
-    auto svReg = rewriter.create<sv::RegOp>(loc, reg.getResult().getType(),
-                                            reg.getNameAttr());
+    auto svReg =
+        rewriter.create<sv::RegOp>(loc, reg.getResult().getType(),
+                                   reg.getNameAttr(), reg.getInnerSymAttr());
     svReg->setDialectAttrs(reg->getDialectAttrs());
-
-    // If the seq::CompRegOp has an inner_sym attribute, set this for the
-    // sv::RegOp inner_sym attribute.
-    if (reg.getSymName().has_value())
-      svReg.setInnerSymAttr(reg.getSymNameAttr());
 
     circt::sv::setSVAttributes(svReg, circt::sv::getSVAttributes(reg));
 

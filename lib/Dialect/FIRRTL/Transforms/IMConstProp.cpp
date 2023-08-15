@@ -442,15 +442,14 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markInstanceOp(instance);
     else if (auto mem = dyn_cast<MemOp>(op))
       markMemOp(mem);
-    else if (auto cast = dyn_cast<mlir::UnrealizedConversionCastOp>(op))
-      for (auto result : cast.getResults())
+    else if (isa<mlir::UnrealizedConversionCastOp, VerbatimExprOp,
+                 VerbatimWireOp, SubaccessOp>(op) ||
+             op.getNumOperands() == 0) {
+      // Mark operations whose results cannot be tracked as overdefined. Mark
+      // unhandled operations with no operand as well since otherwise they will
+      // remain unknown states until the end.
+      for (auto result : op.getResults())
         markOverdefined(result);
-    else if (auto verbatim = dyn_cast<VerbatimExprOp>(op))
-      markOverdefined(verbatim.getResult());
-    else if (auto verbatim = dyn_cast<VerbatimWireOp>(op))
-      markOverdefined(verbatim.getResult());
-    else if (auto subaccess = dyn_cast<SubaccessOp>(op)) {
-      markOverdefined(subaccess);
     } else if (!isa<SubindexOp, SubfieldOp, NodeOp>(&op) &&
                op.getNumResults() > 0) {
       // If an unknown operation has an aggregate operand, mark results as
@@ -462,12 +461,12 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
 
       bool hasAggregateOperand =
           llvm::any_of(op.getOperandTypes(), [](Type type) {
-            return isa<FVectorType, BundleType>(type);
+            return type_isa<FVectorType, BundleType>(type);
           });
 
       for (auto result : op.getResults())
         if (hasAggregateOperand ||
-            isa<FVectorType, BundleType>(result.getType()))
+            type_isa<FVectorType, BundleType>(result.getType()))
           markOverdefined(result);
     }
 
@@ -833,10 +832,12 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedField) {
     logger.getOStream() << "}\n";
   });
 
-  // Fold functions in general are allowed to do in-place updates, but FIRRTL
-  // does not do this and supporting it costs more.
-  assert(!foldResults.empty() &&
-         "FIRRTL fold functions shouldn't do in-place updates!");
+  // If the folding was in-place, keep going.  This is surprising, but since
+  // only folder that will do inplace updates is the communative folder, we
+  // aren't going to stop.  We don't update the results, since they didn't
+  // change, the op just got shuffled around.
+  if (foldResults.empty())
+    return visitOperation(op, changedField);
 
   // Merge the fold results into the lattice for this operation.
   assert(foldResults.size() == op->getNumResults() && "invalid result size");
@@ -854,11 +855,8 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedField) {
           latticeValues[getOrCacheFieldRefFromValue(foldResult.get<Value>())];
     }
 
-    // We do not "merge" the lattice value in, we set it.  This is because the
-    // fold functions can produce different values over time, e.g. in the
-    // presence of InvalidValue operands that get resolved to other constants.
-    setLatticeValue(getOrCacheFieldRefFromValue(op->getResult(i)),
-                    resultLattice);
+    mergeLatticeValue(getOrCacheFieldRefFromValue(op->getResult(i)),
+                      resultLattice);
   }
 }
 

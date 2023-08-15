@@ -19,6 +19,8 @@
 
 #include "circt/Dialect/DC/DCDialect.h"
 #include "circt/Dialect/DC/DCTypes.h"
+#include "circt/Dialect/ESI/ESIOps.h"
+#include "circt/Dialect/ESI/ESITypes.h"
 
 namespace circt {
 namespace dc {

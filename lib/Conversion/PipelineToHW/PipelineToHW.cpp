@@ -36,7 +36,7 @@ static constexpr std::string_view kValidPortName = "valid";
 // inlined module(!). Should probably implement some more generic inlining code
 // for this, but it's simple enough to do when we know that the module is empty.
 static void inlineAndEraseIfEmpty(hw::InstanceOp inst) {
-  auto mod = cast<hw::HWModuleLike>(inst.getReferencedModule());
+  auto mod = cast<hw::HWModuleLike>(inst.getReferencedModuleSlow());
   if (mod->getNumRegions() == 0)
     return; // Nothing to do.
 
@@ -160,7 +160,8 @@ public:
     if (this->clockGateRegs) {
       // Create the top-level clock gate.
       notStalledClockGate = builder.create<seq::ClockGateOp>(
-          loc, args.clock, stageValidAndNotStalled, /*test_enable=*/Value());
+          loc, args.clock, stageValidAndNotStalled, /*test_enable=*/Value(),
+          /*inner_sym=*/hw::InnerSymAttr());
     }
 
     for (auto it : llvm::enumerate(stageOp.getRegisters())) {
@@ -175,7 +176,8 @@ public:
         for (auto hierClockGateEnable : stageOp.getClockGatesForReg(regIdx)) {
           // Create clock gates for any hierarchically nested clock gates.
           currClockGate = builder.create<seq::ClockGateOp>(
-              loc, currClockGate, hierClockGateEnable, /*test_enable=*/Value());
+              loc, currClockGate, hierClockGateEnable, /*test_enable=*/Value(),
+              /*inner_sym=*/hw::InnerSymAttr());
         }
         dataReg = builder.create<seq::CompRegOp>(stageOp->getLoc(), regIn,
                                                  currClockGate, regName);
@@ -196,19 +198,18 @@ public:
 
     // Build valid register. The valid register is always reset to 0, and
     // clock enabled when not stalling.
-    auto validRegName =
-        builder.getStringAttr(stageRegPrefix.strref() + "_valid");
+    auto validRegName = (stageRegPrefix.strref() + "_valid").str();
     Value validRegResetVal =
         builder.create<hw::ConstantOp>(terminator->getLoc(), APInt(1, 0, false))
             .getResult();
     if (hasStall) {
       rets.valid = builder.create<seq::CompRegClockEnabledOp>(
-          loc, builder.getI1Type(), args.enable, args.clock, notStalled,
-          validRegName, args.reset, validRegResetVal, validRegName);
+          loc, args.enable, args.clock, notStalled, args.reset,
+          validRegResetVal, validRegName);
     } else {
-      rets.valid = builder.create<seq::CompRegOp>(
-          loc, builder.getI1Type(), args.enable, args.clock, validRegName,
-          args.reset, validRegResetVal, validRegName);
+      rets.valid = builder.create<seq::CompRegOp>(loc, args.enable, args.clock,
+                                                  args.reset, validRegResetVal,
+                                                  validRegName);
     }
 
     rets.passthroughs = stageOp.getPassthroughs();
@@ -338,11 +339,6 @@ public:
          llvm::zip(pipeline.getInputs(), pipeline.getInnerInputs()))
       inner.replaceAllUsesWith(outer);
 
-    // Replace uses of the external inputs with the inner external inputs.
-    for (auto [outer, inner] :
-         llvm::zip(pipeline.getExtInputs(), pipeline.getInnerExtInputs()))
-      inner.replaceAllUsesWith(outer);
-
     // All operations should go directly before the pipeline op, into the
     // parent module.
     builder.setInsertionPoint(pipeline);
@@ -461,7 +457,7 @@ public:
   // stages actually reference them. This will be used to generate the stage
   // module signatures.
   void gatherExtInputsToStages() {
-    for (auto extIn : pipeline.getInnerExtInputs()) {
+    for (auto extIn : pipelineExtInputs) {
       for (auto *user : extIn.getUsers())
         stageExtInputs[user->getBlock()].insert(extIn);
     }
@@ -473,22 +469,19 @@ public:
                                        getPipelineBaseName().strref());
     cloneConstantsToStages();
 
-    // Map external inputs to names - we use this to generate nicer names for
-    // the stage module arguments.
-    if (!pipeline.getExtInputs().empty()) {
-      for (auto [extIn, extName] :
-           llvm::zip(pipeline.getInnerExtInputs(),
-                     pipeline.getExtInputNames()->getAsRange<StringAttr>())) {
-        extInputNames[extIn] = extName;
-      }
-    }
+    // Cache the external inputs of the pipeline.
+    pipelineExtInputs = pipeline.getExtInputs();
+
+    // Generate names for the external inputs.
+    for (auto [i, extIn] : llvm::enumerate(pipelineExtInputs))
+      extInputNames[extIn] = builder.getStringAttr("e" + Twine(i));
 
     // Build the top-level pipeline module.
     bool withStall = static_cast<bool>(pipeline.getStall());
     pipelineMod = buildPipelineLike(
         pipelineName.strref(), pipeline.getInputs().getTypes(),
-        pipeline.getInnerExtInputs(), pipeline.getDataOutputs().getTypes(),
-        withStall, pipeline.getInputNames().getValue(),
+        pipelineExtInputs, pipeline.getDataOutputs().getTypes(), withStall,
+        pipeline.getInputNames().getValue(),
         pipeline.getOutputNames().getValue());
     auto portLookup = pipelineMod.getPortLookupInfo();
     pipelineClk = pipelineMod.getBody().front().getArgument(
@@ -502,13 +495,15 @@ public:
 
     if (!pipeline.getExtInputs().empty()) {
       // Maintain a mapping between external inputs and their corresponding
-      // block argument in the top-level pipeline.
+      // block argument in the top-level pipeline. This places some hard
+      // assumptions on the order which the external inputs are declared in the
+      // top-level module, as defined by buildPipelineLike.
       auto modInnerExtInputs =
           pipelineMod.getBody().front().getArguments().slice(
-              pipeline.getExtInputs().getBeginOperandIndex(),
-              pipeline.getExtInputs().size());
+              // External inputs start after the regular inputs.
+              pipeline.getInputs().size(), pipelineExtInputs.size());
       for (auto [extIn, barg] :
-           llvm::zip(pipeline.getInnerExtInputs(), modInnerExtInputs)) {
+           llvm::zip(pipelineExtInputs, modInnerExtInputs)) {
         toplevelExtInputs[extIn] = barg;
       }
     }
@@ -830,6 +825,9 @@ private:
   // Handle to the PipelineStageMod for the parent pipeline module.
   PipelineStageMod pipelineStageMod;
 
+  // Caching of the external inputs of the pipeline.
+  llvm::SmallVector<Value> pipelineExtInputs;
+
   // A mapping between stages and the external inputs which they reference.
   // A SetVector is used to ensure determinism in the order of the external
   // inputs to a stage.
@@ -857,17 +855,28 @@ private:
 namespace {
 struct PipelineToHWPass : public PipelineToHWBase<PipelineToHWPass> {
   void runOnOperation() override;
+
+private:
+  // Lowers pipelines within HWModules. This pass is currently expecting that
+  // Pipelines are always nested with HWModule's but could be written to be more
+  // generic.
+  void runOnHWModule(hw::HWModuleOp mod);
 };
 
 void PipelineToHWPass::runOnOperation() {
+  for (auto hwMod : getOperation().getOps<hw::HWModuleOp>())
+    runOnHWModule(hwMod);
+}
+
+void PipelineToHWPass::runOnHWModule(hw::HWModuleOp mod) {
   OpBuilder builder(&getContext());
   // Iterate over each pipeline op in the module and convert.
   // Note: This pass matches on `hw::ModuleOp`s and not directly on the
   // `ScheduledPipelineOp` due to the `ScheduledPipelineOp` being erased during
   // this pass.
   size_t pipelinesSeen = 0;
-  for (auto pipeline : llvm::make_early_inc_range(
-           getOperation().getOps<ScheduledPipelineOp>())) {
+  for (auto pipeline :
+       llvm::make_early_inc_range(mod.getOps<ScheduledPipelineOp>())) {
     if (outlineStages) {
       if (failed(PipelineOutlineLowering(pipelinesSeen, pipeline, builder,
                                          clockGateRegs)

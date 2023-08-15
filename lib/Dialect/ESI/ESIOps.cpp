@@ -339,7 +339,7 @@ static ServiceDeclOpInterface getServiceDecl(Operation *op,
                                              SymbolTableCollection &symbolTable,
                                              hw::InnerRefAttr servicePort) {
   ModuleOp top = op->getParentOfType<mlir::ModuleOp>();
-  SymbolTable topSyms = symbolTable.getSymbolTable(top);
+  SymbolTable &topSyms = symbolTable.getSymbolTable(top);
 
   StringAttr modName = servicePort.getModule();
   return topSyms.lookup<ServiceDeclOpInterface>(modName);
@@ -454,10 +454,10 @@ void CustomServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
 LogicalResult ServiceHierarchyMetadataOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
   ModuleOp top = getOperation()->getParentOfType<mlir::ModuleOp>();
-  SymbolTable topSyms = symbolTable.getSymbolTable(top);
   auto sym = getServiceSymbol();
   if (!sym)
     return success();
+  SymbolTable &topSyms = symbolTable.getSymbolTable(top);
   auto serviceDeclOp = topSyms.lookup<ServiceDeclOpInterface>(*sym);
   if (!serviceDeclOp)
     return emitOpError("Could not find service declaration ") << *sym;
@@ -484,7 +484,8 @@ LogicalResult ESIPureModuleOp::verify() {
   DenseMap<StringAttr, std::tuple<hw::ModulePort::Direction, Type, Operation *>>
       ports;
   for (Operation &op : body.getOperations()) {
-    if (hw::HWInstanceLike inst = dyn_cast<hw::HWInstanceLike>(op)) {
+    if (igraph::InstanceOpInterface inst =
+            dyn_cast<igraph::InstanceOpInterface>(op)) {
       if (llvm::any_of(op.getOperands(), [](Value v) {
             return !(v.getType().isa<ChannelType>() ||
                      isa<ESIPureModuleInputOp>(v.getDefiningOp()));
@@ -529,11 +530,21 @@ LogicalResult ESIPureModuleOp::verify() {
   return success();
 }
 
+<<<<<<< HEAD
 hw::ModuleType ESIPureModuleOp::getHWModuleType() {
   return hw::ModuleType::get(getContext(), {});
 }
 
 ::circt::hw::InnerSymAttr ESIPureModuleOp::getPortSymbolAttr(size_t) {
+=======
+hw::ModulePortInfo ESIPureModuleOp::getPortList() {
+  return hw::ModulePortInfo({});
+}
+
+size_t ESIPureModuleOp::getNumPorts() { return 0; }
+hw::InnerSymAttr ESIPureModuleOp::getPortSymbolAttr(size_t portIndex) {
+  assert(false);
+>>>>>>> origin/main
   return {};
 }
 

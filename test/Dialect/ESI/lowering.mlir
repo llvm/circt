@@ -67,7 +67,7 @@ hw.module @add11(%clk: i1, %ints: !esi.channel<i32>) -> (mutatedInts: !esi.chann
 }
 // HW-LABEL: hw.module @add11(%clk: i1, %ints: i32, %ints_valid: i1, %mutatedInts_ready: i1) -> (ints_ready: i1, mutatedInts: i32, mutatedInts_valid: i1, c4: i4) {
 // HW:   %{{.+}} = hw.constant 11 : i32
-// HW:   [[RES0:%.+]] = comb.add %{{.+}}, %ints : i32
+// HW:   [[RES0:%.+]] = comb.add %ints, %{{.+}} : i32
 // HW:   %{{.+}} = hw.constant 0 : i4
 // HW:   hw.output %mutatedInts_ready, [[RES0]], %ints_valid, %{{.+}} : i1, i32, i1, i4
 

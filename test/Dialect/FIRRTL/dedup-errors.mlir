@@ -493,3 +493,43 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
     firrtl.instance test1 @Test0(in a : !firrtl.probe<uint<1>>)
   }
 }
+
+// -----
+
+// expected-error@below {{module "Bar" not deduplicated with "Foo"}}
+firrtl.circuit "MustDedup" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~MustDedup|Foo", "~MustDedup|Bar"]
+    }]} {
+
+  // expected-note@below {{module is in dedup group 'foo'}}
+  firrtl.module @Foo() attributes {annotations = [{
+    class = "firrtl.transforms.DedupGroupAnnotation",
+    group = "foo"
+  }]} { }
+
+  // expected-note@below {{module is not part of a dedup group}}
+  firrtl.module @Bar() { }
+
+  firrtl.module @MustDedup() {
+    firrtl.instance foo @Foo()
+    firrtl.instance bar  @Bar()
+  }
+}
+
+// -----
+
+firrtl.circuit "MustDedup" attributes {} {
+
+  // expected-error@below {{module belongs to multiple dedup groups: "foo", "bar"}}
+  firrtl.module @MustDedup() attributes {annotations = [
+    {
+      class = "firrtl.transforms.DedupGroupAnnotation",
+      group = "foo"
+    },
+    {
+      class = "firrtl.transforms.DedupGroupAnnotation",
+      group = "bar"
+    }
+  ]} { }
+}

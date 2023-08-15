@@ -20,6 +20,7 @@
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/StringExtras.h"
@@ -86,6 +87,21 @@ static ParseResult sizedPort(StringRef name, FModuleLike mod, unsigned n,
     return failure();
   }
   return success();
+}
+
+static ParseResult resetPort(StringRef name, FModuleLike mod, unsigned n) {
+  auto ports = mod.getPorts();
+  if (n >= ports.size()) {
+    mod.emitError(name) << " missing port " << n;
+    return failure();
+  }
+  if (isa<ResetType, AsyncResetType>(ports[n].type))
+    return success();
+  if (auto uintType = dyn_cast<UIntType>(ports[n].type))
+    if (uintType.getWidth() == 1)
+      return success();
+  mod.emitError(name) << " port " << n << " not of correct type";
+  return failure();
 }
 
 static ParseResult hasNParam(StringRef name, FModuleLike mod, unsigned n,
@@ -560,6 +576,33 @@ static bool lowerCirctVerif(InstanceGraph &ig, FModuleLike mod) {
   return true;
 }
 
+static bool lowerCirctHasBeenReset(InstanceGraph &ig, FModuleLike mod) {
+  if (hasNPorts("circt.has_been_reset", mod, 3) ||
+      namedPort("circt.has_been_reset", mod, 0, "clock") ||
+      namedPort("circt.has_been_reset", mod, 1, "reset") ||
+      namedPort("circt.has_been_reset", mod, 2, "out") ||
+      typedPort<ClockType>("circt.has_been_reset", mod, 0) ||
+      resetPort("circt.has_been_reset", mod, 1) ||
+      sizedPort<UIntType>("circt.has_been_reset", mod, 2, 1) ||
+      hasNParam("circt.has_been_reset", mod, 0))
+    return false;
+
+  for (auto *use : ig.lookup(mod)->uses()) {
+    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto clock =
+        builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    auto reset =
+        builder.create<WireOp>(inst.getResult(1).getType()).getResult();
+    inst.getResult(0).replaceAllUsesWith(clock);
+    inst.getResult(1).replaceAllUsesWith(reset);
+    auto out = builder.create<HasBeenResetIntrinsicOp>(clock, reset);
+    inst.getResult(2).replaceAllUsesWith(out);
+    inst.erase();
+  }
+  return true;
+}
+
 std::pair<const char *, std::function<bool(InstanceGraph &, FModuleLike)>>
     intrinsics[] = {
         {"circt.sizeof", lowerCirctSizeof},
@@ -599,7 +642,9 @@ std::pair<const char *, std::function<bool(InstanceGraph &, FModuleLike)>>
         {"circt.mux2cell", lowerCirctMuxCell<true>},
         {"circt_mux2cell", lowerCirctMuxCell<true>},
         {"circt.mux4cell", lowerCirctMuxCell<false>},
-        {"circt_mux4cell", lowerCirctMuxCell<false>}};
+        {"circt_mux4cell", lowerCirctMuxCell<false>},
+        {"circt.has_been_reset", lowerCirctHasBeenReset},
+        {"circt_has_been_reset", lowerCirctHasBeenReset}};
 
 // This is the main entrypoint for the lowering pass.
 void LowerIntrinsicsPass::runOnOperation() {

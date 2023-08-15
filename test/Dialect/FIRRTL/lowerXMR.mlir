@@ -12,7 +12,8 @@ firrtl.circuit "xmr" {
     %x2 = firrtl.ref.resolve %2 : !firrtl.probe<uint<0>>
     // CHECK-NOT: firrtl.ref.resolve
     firrtl.strictconnect %o, %x : !firrtl.uint<2>
-    // CHECK:      %w = firrtl.wire sym @[[wSym:[a-zA-Z0-9_]+]] : !firrtl.uint<2>
+    // CHECK:      %w = firrtl.wire : !firrtl.uint<2>
+    // CHECK:      %w_probe = firrtl.node sym @[[wSym:[a-zA-Z0-9_]+]] interesting_name %w : !firrtl.uint<2>
     // CHECK-NEXT: %[[#xmr:]] = sv.xmr.ref @xmrPath : !hw.inout<i2>
     // CHECK-NEXT: %[[#cast:]] = builtin.unrealized_conversion_cast %[[#xmr]] : !hw.inout<i2> to !firrtl.uint<2>
     // CHECK:      firrtl.strictconnect %o, %[[#cast]] : !firrtl.uint<2>
@@ -46,7 +47,7 @@ firrtl.circuit "Top" {
     %0 = firrtl.ref.resolve %bar_a : !firrtl.probe<uint<1>>
     // CHECK:      %[[#xmr:]] = sv.xmr.ref @[[path]] : !hw.inout<i1>
     // CHECK-NEXT: %[[#cast:]] = builtin.unrealized_conversion_cast %[[#xmr]] : !hw.inout<i1> to !firrtl.uint<1>
-    // CHECK-NEXT; firrtl.strictconnect %a, %[[#cast]] : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %a, %[[#cast]] : !firrtl.uint<1>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
   }
 }
@@ -78,7 +79,8 @@ firrtl.circuit "Top" {
 firrtl.circuit "Top" {
   // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@bar, @Bar::@barXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
   firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1>, out %_a: !firrtl.probe<uint<1>>) {
-    // CHECK: firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1> sym @[[xmrSym]]) {
+    // CHECK: firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1>) {
+    // CHECK-NEXT: firrtl.node sym @[[xmrSym]]
     %1 = firrtl.ref.send %pa : !firrtl.uint<1>
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
@@ -213,7 +215,8 @@ firrtl.circuit "Top" {
 firrtl.circuit "Top" {
   // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@bar, @Bar::@barXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
   firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1>, out %_a: !firrtl.probe<uint<1>>) {
-    // CHECK: firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1> sym @[[xmrSym]]) {
+    // CHECK: firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1>) {
+    // CHECK: firrtl.node sym @[[xmrSym]]
     %1 = firrtl.ref.send %pa : !firrtl.uint<1>
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
@@ -738,7 +741,7 @@ firrtl.circuit "Top" {
   // CHECK-SAME:          ([@[[XMR4:.+]]]) {output_file = #hw.output_file<"ref_Top_Top.sv">}
 
   // CHECK-NOT:   sv.macro.decl @ref_Top_Top_e
-  // CHECK:  hw.hierpath private @[[XMR5:.+]] [@Foo::@x]
+  // CHECK:  hw.hierpath private @[[XMR5:.+]] [@Foo::@[[FOO_X_SYM:.+]]]
   // CHECK:  sv.macro.decl @ref_Top_Foo_x
   // CHECK-NEXT{LITERAL}: sv.macro.def @ref_Top_Foo_x "{{0}}"
   // CHECK-SAME:          ([@[[XMR5]]]) {output_file = #hw.output_file<"ref_Top_Foo.sv">}
@@ -748,8 +751,8 @@ firrtl.circuit "Top" {
   // CHECK-NOT:           ([
   // CHECK-SAME:          {output_file = #hw.output_file<"ref_Top_Foo.sv">}
 
-  // CHECK:        hw.hierpath private @[[XMR1]] [@Top::@w]
-  // CHECK:        hw.hierpath private @[[XMR2]] [@Top::@foo, @Foo::@x]
+  // CHECK:        hw.hierpath private @[[XMR1]] [@Top::@[[TOP_W_SYM:.+]]]
+  // CHECK:        hw.hierpath private @[[XMR2]] [@Top::@foo, @Foo::@[[FOO_X_SYM]]]
   // CHECK:        hw.hierpath private @[[XMR3]] [@Top::@foo]
   // CHECK:        hw.hierpath private @[[XMR4]] [@Top::@{{.+}}]
   
@@ -760,6 +763,7 @@ firrtl.circuit "Top" {
                      out %d: !firrtl.probe<uint<1>>,
                      in %e: !firrtl.probe<uint<1>>) {
     %w = firrtl.wire sym @w : !firrtl.uint<1>
+    // CHECK: firrtl.node sym @[[TOP_W_SYM]] interesting_name %w
     %0 = firrtl.ref.send %w : !firrtl.uint<1>
     firrtl.ref.define %a, %0 : !firrtl.probe<uint<1>>
     
@@ -775,6 +779,7 @@ firrtl.circuit "Top" {
   // CHECK-LABEL: firrtl.module @Foo()
   firrtl.module @Foo(out %x: !firrtl.probe<uint<1>>, out %y: !firrtl.probe<uint<1>>) {
     %w = firrtl.wire sym @x : !firrtl.uint<1>
+    // CHECK: firrtl.node sym @[[FOO_X_SYM]] interesting_name %w
     %0 = firrtl.ref.send %w : !firrtl.uint<1>
     firrtl.ref.define %x, %0 : !firrtl.probe<uint<1>>
 
@@ -857,8 +862,9 @@ firrtl.circuit "RefABI" {
 firrtl.circuit "BasicRefSub" {
   // CHECK:  hw.hierpath private @[[XMRPATH:.+]] [@BasicRefSub::@[[C_SYM:[^,]+]], @Child::@[[REF_SYM:[^,]+]]]
   // CHECK-LABEL: firrtl.module private @Child
-  // CHECK-SAME: in %in: !firrtl.bundle<a: uint<1>, b: uint<2>> sym @[[REF_SYM]])
+  // CHECK-SAME: in %in: !firrtl.bundle<a: uint<1>, b: uint<2>>)
   firrtl.module private @Child(in %in : !firrtl.bundle<a: uint<1>, b: uint<2>>, out %out : !firrtl.probe<uint<2>>) {
+    // CHECK-NEXT: firrtl.node sym @[[REF_SYM]] interesting_name %in
     %ref = firrtl.ref.send %in : !firrtl.bundle<a: uint<1>, b: uint<2>>
     %sub = firrtl.ref.sub %ref[1] : !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>
     firrtl.ref.define %out, %sub : !firrtl.probe<uint<2>>
@@ -905,7 +911,7 @@ firrtl.circuit "RefSubLayers" {
   // CHECK: hw.hierpath private @[[XMRPATH:.+]] [@RefSubLayers::@[[TOP_SYM:[^,]+]], @Mid::@[[MID_SYM:[^,]+]], @Leaf::@[[LEAF_SYM:.+]]]
   // CHECK-NEXT: sv.macro.decl @ref_RefSubLayers_RefSubLayers_rw
   // CHECK-NEXT{LITERAL}: sv.macro.def @ref_RefSubLayers_RefSubLayers_rw "{{0}}.`ref_ExtRef_ExtRef_out.b[1].a"
-  // CHECK-SAME ([@[[XMRPATH]]])
+  // CHECK-SAME: ([@[[XMRPATH]]])
    firrtl.extmodule @ExtRef(out out: !firrtl.probe<bundle<a: uint<1>, b: vector<bundle<a: uint<2>, b: uint<1>>, 2>>>)
   firrtl.module @RefSubLayers(out %rw : !firrtl.probe<uint<2>>) {
     %ref = firrtl.instance m @Mid(out rw: !firrtl.probe<bundle<a: uint<2>, b: uint<1>>>)
@@ -979,8 +985,48 @@ firrtl.circuit "RWProbePort" {
   // CHECK-NOT: firrtl.ref.rwprobe
   // CHECK-NEXT: }
   firrtl.module @RWProbePort(in %in: !firrtl.vector<uint<1>, 2> sym [<@target,2,public>], out %p: !firrtl.rwprobe<uint<1>>) {
-    %0 = firrtl.ref.rwprobe <@RWProbePort::@target> : !firrtl.uint<1>
+    %0 = firrtl.ref.rwprobe <@RWProbePort::@target> : !firrtl.rwprobe<uint<1>>
     firrtl.ref.define %p, %0 : !firrtl.rwprobe<uint<1>>
   }
 }
 
+// -----
+// Test resolving through output ports through points that aren't handled by unification.
+// (ref.sub).
+
+// CHECK-LABEL: circuit "RefSubOutputPort"
+firrtl.circuit "RefSubOutputPort" {
+  // CHECK: hw.hierpath private @[[XMRPATH:.+]] [@RefSubOutputPort::@[[CHILD_SYM:.+]], @Child::@[[WIRE_SYM:.+]]]
+  // CHECK: sv.macro.def @ref_RefSubOutputPort_RefSubOutputPort_outVec
+  // CHECK-SAME{LITERAL}: "{{0}}.x"
+  // CHECK-SAME: ([@[[XMRPATH]]]) {output_file = #hw.output_file<"ref_RefSubOutputPort_RefSubOutputPort.sv">}
+  // CHECK: sv.macro.def @ref_RefSubOutputPort_RefSubOutputPort_outElem
+  // CHECK-SAME{LITERAL}: "{{0}}.x[1]"
+  // CHECK-SAME: ([@[[XMRPATH]]]) {output_file = #hw.output_file<"ref_RefSubOutputPort_RefSubOutputPort.sv">}
+  // CHECK: sv.macro.def @ref_RefSubOutputPort_RefSubOutputPort_outElemDirect
+  // CHECK-SAME{LITERAL}: "{{0}}.x[1]"
+  // CHECK-SAME: ([@[[XMRPATH]]]) {output_file = #hw.output_file<"ref_RefSubOutputPort_RefSubOutputPort.sv">}
+
+  // CHECK: module private @Child
+  // CHECK-NEXT: firrtl.wire sym @[[WIRE_SYM]] forceable
+  firrtl.module private @Child(out %bore_1: !firrtl.rwprobe<bundle<x: vector<uint<1>, 2>>>) {
+    %b, %b_ref = firrtl.wire forceable : !firrtl.bundle<x: vector<uint<1>, 2>>, !firrtl.rwprobe<bundle<x: vector<uint<1>, 2>>>
+    firrtl.ref.define %bore_1, %b_ref : !firrtl.rwprobe<bundle<x: vector<uint<1>, 2>>>
+  }
+  // CHECK: module @RefSubOutputPort
+  firrtl.module @RefSubOutputPort(out %outRWBundleProbe: !firrtl.rwprobe<bundle<x: vector<uint<1>, 2>>>,
+                                  out %outVec: !firrtl.rwprobe<vector<uint<1>, 2>>,
+                                  out %outElem: !firrtl.rwprobe<uint<1>>,
+                                  out %outElemDirect: !firrtl.rwprobe<uint<1>>) attributes {convention = #firrtl<convention scalarized>} {
+    %0 = firrtl.ref.sub %outVec[1] : !firrtl.rwprobe<vector<uint<1>, 2>>
+    %1 = firrtl.ref.sub %outRWBundleProbe[0] : !firrtl.rwprobe<bundle<x: vector<uint<1>, 2>>>
+    %2 = firrtl.ref.sub %1[1] : !firrtl.rwprobe<vector<uint<1>, 2>>
+    // CHECK-NEXT: instance child sym @[[CHILD_SYM]] @Child
+    // CHECK-NEXT: }
+    %child_bore_1 = firrtl.instance child @Child(out bore_1: !firrtl.rwprobe<bundle<x: vector<uint<1>, 2>>>)
+    firrtl.ref.define %outRWBundleProbe, %child_bore_1 : !firrtl.rwprobe<bundle<x: vector<uint<1>, 2>>>
+    firrtl.ref.define %outElemDirect, %2 : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %outVec, %1 : !firrtl.rwprobe<vector<uint<1>, 2>>
+    firrtl.ref.define %outElem, %0 : !firrtl.rwprobe<uint<1>>
+  }
+}

@@ -28,3 +28,17 @@ target_link_libraries(circt-capi-om-test
   MLIRCAPIIR
   CIRCTCAPIOM
 )
+
+add_llvm_executable(circt-capi-firrtl-test
+  PARTIAL_SOURCES_INTENDED
+  firrtl.c
+)
+llvm_update_compile_flags(circt-capi-firrtl-test)
+
+target_link_libraries(circt-capi-firrtl-test
+  PRIVATE
+
+  MLIRCAPIIR
+  CIRCTCAPIFIRRTL
+  CIRCTCAPIExportFIRRTL
+)

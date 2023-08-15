@@ -722,7 +722,9 @@ StringRef ModuleType::getOutputName(size_t idx) {
   return {};
 }
 
-FunctionType ModuleType::getFuncType() { return nullptr; }
+FunctionType ModuleType::getFuncType() {
+  return FunctionType::get(getContext(), getInputTypes(), getOutputTypes());
+}
 
 namespace mlir {
 template <>
@@ -762,10 +764,6 @@ static raw_ostream &operator<<(raw_ostream &printer, ModulePort port) {
     break;
   case ModulePort::Direction::InOut:
     dirstr = "inout";
-    break;
-  default:
-    assert(0 && "unknown direction");
-    dirstr = "unknown";
     break;
   }
   printer << dirstr << " " << port.name << " : " << port.type;

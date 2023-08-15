@@ -115,15 +115,15 @@ circuit test:
 ; CHECK:      FILE "metadata/tb_seq_mems.json"
 ; CHECK:      [{"module_name":"memory","depth":16,"width":8,"masked":"true",
 ; CHECK-SAME: "read":"true","write":"true","readwrite":"false",
-; CHECK_SAME: "mask_granularity":8,"extra_ports":[],
+; CHECK-SAME: "mask_granularity":8,"extra_ports":[],
 ; CHECK-SAME: "hierarchy":["test.[[m]]"]}]
 
 ; CHECK:       FILE "metadata/seq_mems.json"
 ; CHECK:       [{"module_name":"memory","depth":16,"width":8,"masked":"true",
 ; CHECK-SAME:  "read":"true","write":"true","readwrite":"false",
-; CHECK_SAME:  "mask_granularity":8,"extra_ports":[],
+; CHECK-SAME:  "mask_granularity":8,"extra_ports":[],
 ; CHECK-SAME:  "hierarchy":["test.[[signed]].[[m]]"],
 ; CHECK-SAME:  "verification_only_data":{
 ; CHECK-SAME:  "test.[[signed]].[[m]]":{"baseAddress":1073741824,
- ; CHECK-SAME: "dataBits":8,"eccBits":0,"eccIndices":[],"eccScheme":"none"}}}]
+; CHECK-SAME:  "dataBits":8,"eccBits":0,"eccIndices":[],"eccScheme":"none"}}}]
 

@@ -129,6 +129,7 @@ class NoneType;
 class OpAsmDialectInterface;
 class OpAsmParser;
 class OpAsmPrinter;
+class OpaqueProperties;
 class OpBuilder;
 class OperandRange;
 class Operation;
@@ -238,6 +239,7 @@ using mlir::MutableOperandRange;       // NOLINT(misc-unused-using-decls)
 using mlir::NamedAttribute;            // NOLINT(misc-unused-using-decls)
 using mlir::NamedAttrList;             // NOLINT(misc-unused-using-decls)
 using mlir::NoneType;                  // NOLINT(misc-unused-using-decls)
+using mlir::OpaqueProperties;          // NOLINT(misc-unused-using-decls)
 using mlir::OpAsmDialectInterface;     // NOLINT(misc-unused-using-decls)
 using mlir::OpAsmParser;               // NOLINT(misc-unused-using-decls)
 using mlir::OpAsmPrinter;              // NOLINT(misc-unused-using-decls)

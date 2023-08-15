@@ -10,6 +10,7 @@
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
@@ -309,17 +310,20 @@ void IMDeadCodeElimPass::runOnOperation() {
     return;
 
   auto circuit = *circuits.begin();
-  InstanceGraph theInstanceGraph(circuit);
-  instanceGraph = &theInstanceGraph;
 
-  mlir::SymbolTable theSymbolTable(circuit);
-  circt::hw::InnerSymbolTableCollection innerSymTables;
-  if (failed(innerSymTables.populateAndVerifyTables(circuit)))
+  if (!llvm::hasSingleElement(circuits)) {
+    mlir::emitError(circuit.getLoc(),
+                    "cannot process multiple circuit operations")
+            .attachNote((*std::next(circuits.begin())).getLoc())
+        << "second circuit here";
     return signalPassFailure();
+  }
 
-  circt::hw::InnerRefNamespace theInnerRefNamespace{theSymbolTable,
-                                                    innerSymTables};
-  symbolTable = &theSymbolTable;
+  instanceGraph = &getChildAnalysis<InstanceGraph>(circuit);
+  symbolTable = &getChildAnalysis<SymbolTable>(circuit);
+  auto &istc = getChildAnalysis<hw::InnerSymbolTableCollection>(circuit);
+
+  circt::hw::InnerRefNamespace theInnerRefNamespace{*symbolTable, istc};
   innerRefNamespace = &theInnerRefNamespace;
 
   // Walk attributes and find unknown uses of inner symbols or hierpaths.

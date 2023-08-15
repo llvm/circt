@@ -17,9 +17,9 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
-#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/OM/OMAttributes.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/OM/OMOps.h"
@@ -33,7 +33,7 @@
 
 using namespace circt;
 using namespace firrtl;
-using circt::hw::InstancePath;
+using circt::igraph::InstancePath;
 
 namespace {
 
@@ -173,13 +173,13 @@ class CreateSiFiveMetadataPass
   void runOnOperation() override;
 
   /// Get the cached namespace for a module.
-  ModuleNamespace &getModuleNamespace(FModuleLike module) {
+  hw::InnerSymbolNamespace &getModuleNamespace(FModuleLike module) {
     return moduleNamespaces.try_emplace(module, module).first->second;
   }
   // The set of all modules underneath the design under test module.
   DenseSet<Operation *> dutModuleSet;
   /// Cached module namespaces.
-  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
+  DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;
   // The design under test module.
   FModuleOp dutMod;
   CircuitOp circuitOp;
@@ -216,8 +216,8 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
     if (auto module = dyn_cast<FModuleLike>(op))
       symbol = FlatSymbolRefAttr::get(module);
     else
-      symbol =
-          firrtl::getInnerRefTo(op, [&](FModuleOp mod) -> ModuleNamespace & {
+      symbol = firrtl::getInnerRefTo(
+          op, [&](auto mod) -> hw::InnerSymbolNamespace & {
             return getModuleNamespace(mod);
           });
 
@@ -337,8 +337,9 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
           // situation where everything is deemed to be "in the DUT", i.e., when
           // the DUT is the top module or when no DUT is specified.
           if (everythingInDUT ||
-              llvm::any_of(p, [&](circt::hw::HWInstanceLike inst) {
-                return inst.getReferencedModule() == dutMod;
+              llvm::any_of(p, [&](circt::igraph::InstanceOpInterface inst) {
+                return inst.getReferencedModuleNameAttr() ==
+                       dutMod.getNameAttr();
               }))
             jsonStream.value(hierName);
         }
@@ -619,9 +620,10 @@ void CreateSiFiveMetadataPass::runOnOperation() {
     dutMod = dyn_cast<FModuleOp>(*it);
     auto &instanceGraph = getAnalysis<InstanceGraph>();
     auto *node = instanceGraph.lookup(cast<hw::HWModuleLike>(*it));
-    llvm::for_each(llvm::depth_first(node), [&](hw::InstanceGraphNode *node) {
-      dutModuleSet.insert(node->getModule());
-    });
+    llvm::for_each(llvm::depth_first(node),
+                   [&](igraph::InstanceGraphNode *node) {
+                     dutModuleSet.insert(node->getModule());
+                   });
   }
   ObjectModelIR omir(moduleOp);
 

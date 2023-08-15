@@ -99,7 +99,7 @@ firrtl.circuit "Test" {
     %v3 = firrtl.vectorcreate %b1 : (!firrtl.bundle<a: vector<uint<8>, 2>>) -> !firrtl.vector<bundle<a: vector<uint<8>, 2>>, 1>
   }
 
-    // CHECK-LABEL @TestVBAggregate
+    // CHECK-LABEL: @TestVBAggregate
   firrtl.module @TestVBAggregate() {
     // CHECK: %0 = firrtl.aggregateconstant [1, 2] : !firrtl.bundle<a: uint<8>, b: uint<5>>
     // CHECK: %1 = firrtl.subfield %0[b] : !firrtl.bundle<a: uint<8>, b: uint<5>>
@@ -152,7 +152,7 @@ firrtl.circuit "Test" {
     %4 = firrtl.wire : !firrtl.vector<uint<8>, 2>
     // CHECK: %5 = firrtl.wire : !firrtl.bundle<a: vector<uint<8>, 2>
     %5 = firrtl.wire : !firrtl.bundle<a: vector<uint<8>, 2>>
-    // CHECK %6 = firrtl.wire : !firrtl.bundle<a: vector<uint<8>, 2>>
+    // CHECK: %6 = firrtl.wire : !firrtl.bundle<a: vector<uint<8>, 2>>
     %6 = firrtl.wire : !firrtl.vector<bundle<a: uint<8>>, 2>
     // CHECK: %7 = firrtl.wire : !firrtl.bundle<a: bundle<b: vector<uint<8>, 2>>>
     %7 = firrtl.wire : !firrtl.bundle<a: vector<bundle<b: uint<8>>, 2>>
@@ -166,7 +166,7 @@ firrtl.circuit "Test" {
     %n = firrtl.node %w : !firrtl.vector<bundle<a: uint<8>>, 2>
   }
 
-  // CHECK-LABEL @TestNodeMaterializedFromExplodedBundle
+  // CHECK-LABEL: @TestNodeMaterializedFromExplodedBundle
   firrtl.module @TestNodeMaterializedFromExplodedBundle() {
     // CHECK: %w = firrtl.wire : !firrtl.bundle<a: vector<uint<8>, 2>>
     // CHECK: %0 = firrtl.subfield %w[a] : !firrtl.bundle<a: vector<uint<8>, 2>>
@@ -681,7 +681,7 @@ firrtl.circuit "Test" {
     // CHECK: %8 = firrtl.bundlecreate %6, %7 : (!firrtl.vector<uint<8>, 2>, !firrtl.vector<uint<16>, 2>) -> !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>
     %vector  = firrtl.vectorcreate %bundle1, %bundle2 : (!firrtl.bundle<a: uint<8>, b: uint<16>>, !firrtl.bundle<a: uint<8>, b: uint<16>>) -> !firrtl.vector<bundle<a: uint<8>, b: uint<16>>, 2>
     
-    // CHECK firrtl.connect %out, %8 : !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>, !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>
+    // CHECK: firrtl.connect %out, %8 : !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>, !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>
     firrtl.connect %out, %vector : !firrtl.vector<bundle<a: uint<8>, b: uint<16>>, 2>, !firrtl.vector<bundle<a: uint<8>, b: uint<16>>, 2>
   }
 
@@ -689,7 +689,7 @@ firrtl.circuit "Test" {
   // Ref Type Tests
   //===--------------------------------------------------------------------===//
 
-  // CHECK-LABEL @RefSender
+  // CHECK-LABEL: @RefSender
   firrtl.module @RefSender(out %port: !firrtl.probe<vector<bundle<a: uint<4>, b: uint<8>>, 2>>) {
    // CHECK: %w = firrtl.wire : !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>
     // CHECK: %0 = firrtl.ref.send %w : !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>

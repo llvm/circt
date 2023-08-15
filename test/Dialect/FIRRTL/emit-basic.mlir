@@ -35,6 +35,9 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: output b0 : UInt
     // CHECK-NEXT: output b1 : Probe<UInt<1>>
     // CHECK-NEXT: output b2 : RWProbe<UInt<1>>
+    // CHECK-NEXT: input string : String
+    // CHECK-NEXT: input integer : Integer
+    // CHECK-NEXT: input path : Path
     in %a00: !firrtl.clock,
     in %a01: !firrtl.reset,
     in %a02: !firrtl.asyncreset,
@@ -48,7 +51,10 @@ firrtl.circuit "Foo" {
     in %a10: !firrtl.vector<uint, 42>,
     out %b0: !firrtl.uint,
     out %b1: !firrtl.probe<uint<1>>,
-    out %b2: !firrtl.rwprobe<uint<1>>
+    out %b2: !firrtl.rwprobe<uint<1>>,
+    in %string: !firrtl.string,
+    in %integer: !firrtl.integer,
+    in %path : !firrtl.path
   ) {}
 
   // CHECK-LABEL: module Simple :
@@ -632,6 +638,18 @@ firrtl.circuit "Foo" {
     firrtl.ref.define %_12, %18 : !firrtl.probe<uint<1>>
     firrtl.ref.define %_13, %_15_ref : !firrtl.rwprobe<uint<1>>
   }
+  
+  // CHECK-LABEL: module Properties :
+  firrtl.module @Properties(out %string : !firrtl.string,
+                            out %integer : !firrtl.integer) {
+    // CHECK: propassign string, String("hello")
+    %0 = firrtl.string "hello"
+    firrtl.propassign %string, %0 : !firrtl.string
+
+    // CHECK: propassign integer, Integer(99)
+    %1 = firrtl.integer 99
+    firrtl.propassign %integer, %1 : !firrtl.integer
+  }
 
   // Test optional group declaration and definition emission.
   //
@@ -675,4 +693,23 @@ firrtl.circuit "Foo" {
     }
   }
 
+  // CHECK: module RWProbe :
+  // CHECK-NEXT: input in : { a : UInt<1> }[2]
+  // CHECK-NEXT: output p : RWProbe<UInt<1>>
+  // CHECK-NEXT: output p2 : RWProbe<UInt>
+  // CHECK-EMPTY:
+  // CHECK-NEXT: define p = rwprobe(in[1].a)
+  // CHECK-NEXT: node q = read(p)
+  // CHECK-NEXT: define p2 = rwprobe(q)
+  firrtl.module private @RWProbe(in %in: !firrtl.vector<bundle<a: uint<1>>, 2> sym [<@sym,4,public>],
+                                 out %p: !firrtl.rwprobe<uint<1>>,
+                                 out %p2 : !firrtl.rwprobe<uint>) {
+    %0 = firrtl.ref.rwprobe <@RWProbe::@sym> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %p, %0 : !firrtl.rwprobe<uint<1>>
+
+    %read = firrtl.ref.resolve %p : !firrtl.rwprobe<uint<1>>
+    %q, %q_ref = firrtl.node interesting_name %read forceable : !firrtl.uint<1>
+    %refcast = firrtl.ref.cast %q_ref : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint>
+    firrtl.ref.define %p2, %refcast : !firrtl.rwprobe<uint>
+  }
 }

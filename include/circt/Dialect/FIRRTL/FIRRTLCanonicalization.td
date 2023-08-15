@@ -42,18 +42,18 @@ def NonEmptyAttr : Constraint<CPred<"!$0.getValue().empty()">>;
 def NullAttr : Constraint<CPred<"!$0">>;
 
 // Constraint that enforces equal types
-def EqualTypes : Constraint<CPred<"$0.getType() == $1.getType()">>;
+def EqualTypes : Constraint<CPred<"areAnonymousTypesEquivalent($0.getType(), $1.getType())">>;
 
 // Constraint that enforces equal type sizes
-def EqualIntSize : Constraint<CPred<"cast<IntType>($0.getType()).getWidth() == cast<IntType>($1.getType()).getWidth()">>;
+def EqualIntSize : Constraint<CPred<"type_cast<IntType>($0.getType()).getWidth() == type_cast<IntType>($1.getType()).getWidth()">>;
 
 // sizeof(0) >= sizeof(1)
 def IntTypeWidthGEQ32 : Constraint<CPred<
-  "cast<IntType>($0.getType()).getBitWidthOrSentinel() >= cast<IntType>($1.getType()).getBitWidthOrSentinel()">>;
+  "type_cast<IntType>($0.getType()).getBitWidthOrSentinel() >= type_cast<IntType>($1.getType()).getBitWidthOrSentinel()">>;
 
 // sizeof(0) > sizeof(1)
 def IntTypeWidthGT32 : Constraint<CPred<
-  "cast<IntType>($0.getType()).getBitWidthOrSentinel() > cast<IntType>($1.getType()).getBitWidthOrSentinel()">>;
+  "type_cast<IntType>($0.getType()).getBitWidthOrSentinel() > type_cast<IntType>($1.getType()).getBitWidthOrSentinel()">>;
 
 // Constraint that enforces int types
 def IntTypes : Constraint<CPred<"type_isa<IntType>($0.getType())">>;
@@ -65,7 +65,7 @@ def SIntTypes : Constraint<CPred<"type_isa<SIntType>($0.getType())">>;
 def UIntTypes : Constraint<CPred<"type_isa<UIntType>($0.getType())">>;
 
 // Constraint that enforces types mismatches
-def mismatchTypes : Constraint<CPred<"$0.getType() != $1.getType()">>;
+def mismatchTypes : Constraint<CPred<"!areAnonymousTypesEquivalent($0.getType(), $1.getType())">>;
 
 // Constraint that enforces types of known width
 def KnownWidth : Constraint<CPred<[{
@@ -443,7 +443,7 @@ def AndRCatZeroL : Pat <
 /// andr(cat(x, *0*)) -> 0
 def AndRCatZeroR : Pat <
   (AndRPrimOp:$old (CatPrimOp $x, $z)),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
+  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), type_cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
   [(NotAllOneConstantOp $z)]>;
 
 /// andr(cat(1, x)) -> andr(x)
@@ -461,7 +461,7 @@ def AndRCatOneR : Pat <
 /// andr(pad(x:U,n)) -> 0 (where pad is doing something)
 def AndRPadU : Pat <
   (AndRPrimOp:$old (PadPrimOp:$pad $x, $n)),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
+  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), type_cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x), (UIntTypes $x), (IntTypeWidthGT32 $pad, $x)]>;
 
 /// andr(pad(x:S,n)) -> andr(x)
@@ -579,7 +579,7 @@ def CVTUnSigned : Pat<
   (MoveNameHint $old,
     (AsSIntPrimOp
       (PadPrimOp $x,
-        (NativeCodeCall<"$_builder.getI32IntegerAttr(cast<SIntType>($0.getType()).getBitWidthOrSentinel())"> $old)))),
+        (NativeCodeCall<"$_builder.getI32IntegerAttr(type_cast<SIntType>($0.getType()).getBitWidthOrSentinel())"> $old)))),
   [(UIntType $x), (KnownWidth $old)]>;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD

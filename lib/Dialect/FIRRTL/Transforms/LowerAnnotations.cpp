@@ -26,6 +26,7 @@
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "llvm/ADT/APSInt.h"
@@ -520,6 +521,8 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {inlineAnnoClass, {stdResolve, applyWithoutTarget<false, FModuleOp>}},
     {noDedupAnnoClass,
      {stdResolve, applyWithoutTarget<false, FModuleOp, FExtModuleOp>}},
+    {dedupGroupAnnoClass,
+     {stdResolve, applyWithoutTarget<false, FModuleOp, FExtModuleOp>}},
     {blackBoxInlineAnnoClass,
      {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
     {blackBoxPathAnnoClass,
@@ -928,11 +931,11 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
              << "\" must be passive (no flips) when using references";
 
     // Record module modifications related to adding ports to modules.
-    auto addPorts = [&](ArrayRef<hw::HWInstanceLike> insts, Value val, Type tpe,
-                        Direction dir) {
+    auto addPorts = [&](ArrayRef<igraph::InstanceOpInterface> insts, Value val,
+                        Type tpe, Direction dir) {
       StringRef name, instName;
       for (auto inst : llvm::reverse(insts)) {
-        auto mod = cast<FModuleOp>(instanceGraph.getReferencedModule(inst));
+        auto mod = instanceGraph.getReferencedModule<FModuleOp>(inst);
         if (name.empty()) {
           if (problem.newNameHint.empty())
             name = state.getNamespace(mod).newName(

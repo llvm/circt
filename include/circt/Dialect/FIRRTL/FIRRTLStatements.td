@@ -17,6 +17,7 @@ include "FIRRTLDialect.td"
 include "FIRRTLEnums.td"
 include "FIRRTLOpInterfaces.td"
 include "FIRRTLTypes.td"
+include "circt/Dialect/HW/HWTypes.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
@@ -306,17 +307,6 @@ def ForceOp : FIRRTLOp<"force", [SameTypeOperands]> {
   let results = (outs);
   let assemblyFormat =
     "$dest `,` $src attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
-}
-
-def ProbeOp : FIRRTLOp<"probe"> {
-  let summary = "FIRRTL Value Probe";
-  let description = [{
-    Captures values without binding to any accidental name.
-  }];
-  let arguments = (ins SymbolNameAttr:$inner_sym, Variadic<FIRRTLBaseType>:$captured);
-  let results = (outs);
-
-  let assemblyFormat = "$inner_sym attr-dict ( `,` $captured^  `:` qualified(type($captured)))?";
 }
 
 //===- Reference force/release --------------------------------------------===//

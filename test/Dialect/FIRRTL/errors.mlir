@@ -359,6 +359,19 @@ firrtl.circuit "Foo" {
 
 // -----
 
+// https://github.com/llvm/circt/issues/5788
+firrtl.circuit "InstanceCannotHavePortSymbols" {
+  firrtl.extmodule @Ext(in in : !firrtl.uint<1>)
+  firrtl.module @InstanceCannotHavePortSymbols() {
+    // Not great diagnostic, but this should never happen so don't bother checking for it.
+    // expected-error @below {{expected ')'}}
+    %foo_in = firrtl.instance foo @Ext(in in : !firrtl.uint<1> sym @sym)
+  }
+}
+
+
+// -----
+
 firrtl.circuit "X" {
 
 firrtl.module @X(in %a : !firrtl.uint<4>) {
@@ -1766,6 +1779,27 @@ firrtl.circuit "TopModuleIsClass" {
 }
 
 // -----
+
+firrtl.circuit "PathNonLocalTarget" {
+  firrtl.module @Other() {
+    %w = firrtl.wire sym @x : !firrtl.uint<1>
+  }
+  firrtl.module @PathNonLocalTarget() {
+    // expected-error @below {{op has non-local target}}
+    %rw = firrtl.path <@Other::@x>
+  }
+}
+
+// -----
+
+firrtl.circuit "PathBadTarget" {
+  firrtl.module @PathBadTarget() {
+    // expected-error @below {{has target that cannot be resolved: #hw.innerNameRef<@PathBadTarget::@x>}}
+    %rw = firrtl.path <@PathBadTarget::@x>
+  }
+}
+
+// -----
 // Classes cannot have hardware ports.
 
 firrtl.circuit "ClassCannotHaveHardwarePorts" {
@@ -1783,6 +1817,16 @@ firrtl.circuit "ClassCannotHaveWires" {
     // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.module, firrtl.group, firrtl.when, firrtl.match'}}
     %w = firrtl.wire : !firrtl.uint<8>
   }
+}
+
+// -----
+
+// #5788, but for class operations.
+firrtl.circuit "ClassCannotHavePortSymbols" {
+  firrtl.module @ClassCannotHavePortSymbols() {}
+  // Not great diagnostic, but this should never happen so don't bother checking for it.
+  // expected-error @below {{expected ')'}}
+  firrtl.class @ClassWithPortSymbol(in %in: !firrtl.string sym @foo, in %in2 : !firrtl.string) {}
 }
 
 // -----
@@ -1893,16 +1937,26 @@ firrtl.circuit "RWProbeRemote" {
   }
   firrtl.module @RWProbeRemote() {
     // expected-error @below {{op has non-local target}}
-    %rw = firrtl.ref.rwprobe <@Other::@x> : !firrtl.uint<1>
+    %rw = firrtl.ref.rwprobe <@Other::@x> : !firrtl.rwprobe<uint<1>>
   }
 }
 
 // -----
 
+firrtl.circuit "RWProbeBadTarget" {
+  firrtl.module @RWProbeBadTarget() {
+    // expected-error @below {{has target that cannot be resolved: #hw.innerNameRef<@RWProbeBadTarget::@x>}}
+    %rw = firrtl.ref.rwprobe <@RWProbeBadTarget::@x> : !firrtl.rwprobe<uint<1>>
+  }
+}
+
+
+// -----
+
 firrtl.circuit "RWProbeNonBase" {
   firrtl.module @RWProbeNonBase() {
-    // expected-error @below {{cannot force type '!firrtl.string'}}
-    %rw = firrtl.ref.rwprobe <@RWProbeTypes::@invalid> : !firrtl.string
+    // expected-error @below {{expected base type, found '!firrtl.string'}}
+    %rw = firrtl.ref.rwprobe <@RWProbeTypes::@invalid> : !firrtl.rwprobe<string>
   }
 }
 
@@ -1913,17 +1967,7 @@ firrtl.circuit "RWProbeTypes" {
     // expected-note @below {{target resolves here}}
     %w = firrtl.wire sym @x : !firrtl.sint<1>
     // expected-error @below {{op has type mismatch: target resolves to '!firrtl.sint<1>' instead of expected '!firrtl.uint<1>'}}
-    %rw = firrtl.ref.rwprobe <@RWProbeTypes::@x> : !firrtl.uint<1>
-  }
-}
-
-// -----
-
-firrtl.circuit "RWProbeUninferred" {
-  firrtl.module @RWProbeUninferred() {
-    %w = firrtl.wire sym @x : !firrtl.uint
-    // expected-error @below {{op attribute 'type' failed to satisfy constraint: type attribute of RWProbeTarget type (a FIRRTL base type with a known width and not abstract reset)}}
-    %rw = firrtl.ref.rwprobe <@RWProbeUninferred::@x> : !firrtl.uint
+    %rw = firrtl.ref.rwprobe <@RWProbeTypes::@x> : !firrtl.rwprobe<uint<1>>
   }
 }
 
@@ -1932,8 +1976,8 @@ firrtl.circuit "RWProbeUninferred" {
 firrtl.circuit "RWProbeUninferredReset" {
   firrtl.module @RWProbeUninferredReset() {
     %w = firrtl.wire sym @x : !firrtl.bundle<a: reset>
-    // expected-error @below {{op attribute 'type' failed to satisfy constraint: type attribute of RWProbeTarget type (a FIRRTL base type with a known width and not abstract reset)}}
-    %rw = firrtl.ref.rwprobe <@RWProbeUninferred::@x> : !firrtl.bundle<a: reset>
+    // expected-error @below {{op result #0 must be rwprobe type (with concrete resets only), but got '!firrtl.rwprobe<bundle<a: reset>>}}
+    %rw = firrtl.ref.rwprobe <@RWProbeUninferredReset::@x> : !firrtl.rwprobe<bundle<a: reset>>
   }
 }
 
@@ -1945,6 +1989,87 @@ firrtl.circuit "RWProbeInstance" {
     // expected-note @below {{target resolves here}}
     firrtl.instance inst sym @inst @Ext()
     // expected-error @below {{op has target that cannot be probed}}
-    %rw = firrtl.ref.rwprobe <@RWProbeInstance::@inst> : !firrtl.uint<1>
+    %rw = firrtl.ref.rwprobe <@RWProbeInstance::@inst> : !firrtl.rwprobe<uint<1>>
+  }
+}
+
+// -----
+
+firrtl.circuit "RWProbeUseDef" {
+  firrtl.module @RWProbeUseDef(in %cond : !firrtl.uint<1>) {
+    firrtl.when %cond : !firrtl.uint<1> {
+      // expected-note @below {{target here}}
+      %w = firrtl.wire sym @x : !firrtl.uint<1>
+    } else {
+      // expected-error @below {{not dominated by target}}
+      %rw = firrtl.ref.rwprobe <@RWProbeUseDef::@x> : !firrtl.rwprobe<uint<1>>
+    }
+  }
+}
+
+// -----
+
+firrtl.circuit "MissingClassForObjectPortInModule" {
+  // expected-error @below {{'firrtl.module' op references unknown class @Missing}}
+  firrtl.module @MissingClassForObjectPortInModule(out %o: !firrtl.class<@Missing()>) {}
+}
+
+// -----
+
+firrtl.circuit "MissingClassForObjectPortInClass" {
+  firrtl.module @MissingClassForObjectPortInClass() {}
+  // expected-error @below {{'firrtl.class' op references unknown class @Missing}}
+  firrtl.class @MyClass(out %o: !firrtl.class<@Missing()>) {}
+}
+
+// -----
+
+firrtl.circuit "MissingClassForObjectDeclaration" {
+  firrtl.module @ObjectClassMissing() {
+    // expected-error @below {{'firrtl.object' op references unknown class @Missing}}
+    %0 = firrtl.object @Missing()
+  }
+}
+
+// -----
+
+firrtl.circuit "ClassTypeWrongPortName" {
+  firrtl.class @MyClass(out %str: !firrtl.string) {}
+  // expected-error @below {{'firrtl.module' op port #0 has wrong name, got "xxx", expected "str"}}
+  firrtl.module @ClassTypeWrongPortName(out %port: !firrtl.class<@MyClass(out xxx: !firrtl.string)>) {}
+}
+
+// -----
+
+firrtl.circuit "ClassTypeWrongPortDir" {
+  firrtl.class @MyClass(out %str: !firrtl.string) {}
+    // expected-error @below {{'firrtl.module' op port "str" has wrong direction, got in, expected out}}
+  firrtl.module @ClassTypeWrongPortDir(out %port: !firrtl.class<@MyClass(in str: !firrtl.string)>) {}
+}
+
+// -----
+
+firrtl.circuit "ClassTypeWrongPortType" {
+  firrtl.class @MyClass(out %str: !firrtl.string) {}
+  // expected-error @below {{'firrtl.module' op port "str" has wrong type, got '!firrtl.integer', expected '!firrtl.string'}}
+  firrtl.module @ClassTypeWrongPortType(out %port: !firrtl.class<@MyClass(out str: !firrtl.integer)>) {}
+}
+
+// -----
+
+firrtl.circuit "ConstClassType" {
+  firrtl.class @MyClass(out %str: !firrtl.string) {}
+  // expected-error @below {{classes cannot be const}}
+  firrtl.module @ConstClassType(out %port: !firrtl.const.class<@MyClass(in str: !firrtl.string)>) {}
+}
+
+// -----
+
+firrtl.circuit "ObjectFieldDoesntExist" {
+  firrtl.class @MyClass(out %str: !firrtl.string) {}
+  firrtl.module @ConstClassType(out %port: !firrtl.integer) {
+    %0 = firrtl.object @MyClass(out str: !firrtl.string)
+    // expected-error @below {{'firrtl.object.subfield' unknown field bad_field in class type '!firrtl.class<@MyClass(out str: !firrtl.string)>'}}
+    %1 = firrtl.object.subfield %0[bad_field] : !firrtl.class<@MyClass(out str: !firrtl.string)>
   }
 }

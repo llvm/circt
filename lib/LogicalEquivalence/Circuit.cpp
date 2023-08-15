@@ -68,6 +68,7 @@ void Solver::Circuit::addInstance(llvm::StringRef instanceName,
   // Export logic to the instance's circuit by visiting the IR of the
   // instanced module.
   auto res = LogicExporter(op.getModuleName(), &instance).run(op);
+  (void)res; // Suppress Warning
   assert(res.succeeded() && "Instance visit failed");
 
   // Constrain the inputs and outputs of the instanced circuit to, respectively,
@@ -393,10 +394,12 @@ z3::expr Solver::Circuit::allocateValue(Value value) {
   LLVM_DEBUG(lec::printExpr(expr));
   LLVM_DEBUG(lec::printValue(value));
   auto exprInsertion = exprTable.insert(std::pair(value, expr));
+  (void)exprInsertion; // Suppress Warning
   assert(exprInsertion.second && "Value not inserted in expression table");
   Builder builder(solver.mlirCtx);
   StringAttr symbol = builder.getStringAttr(valueName);
   auto symInsertion = solver.symbolTable.insert(std::pair(symbol, value));
+  (void)symInsertion; // Suppress Warning
   assert(symInsertion.second && "Value not inserted in symbol table");
   return expr;
 }
@@ -409,6 +412,7 @@ void Solver::Circuit::allocateConstant(Value result, const APInt &value) {
   const z3::expr constant =
       solver.context.bv_val(value.getZExtValue(), value.getBitWidth());
   auto insertion = exprTable.insert(std::pair(result, constant));
+  (void)insertion; // suppress warning
   assert(insertion.second && "Constant not inserted in expression table");
   LLVM_DEBUG(lec::printExpr(constant));
   LLVM_DEBUG(lec::printValue(result));

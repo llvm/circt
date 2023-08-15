@@ -53,18 +53,6 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
   m.doc() = "ESI Python Native Extension";
   ::registerESIPasses();
 
-  m.def(
-      "buildWrapper",
-      [](MlirOperation cModOp, std::vector<std::string> cPortNames) {
-        llvm::SmallVector<MlirStringRef, 8> portNames;
-        for (auto portName : cPortNames)
-          portNames.push_back({portName.c_str(), portName.length()});
-        return circtESIWrapModule(cModOp, portNames.size(), portNames.data());
-      },
-      "Construct an ESI wrapper around HW module 'op' given a list of "
-      "latency-insensitive ports.",
-      py::arg("op"), py::arg("name_list"));
-
   m.def("registerServiceGenerator", registerServiceGenerator,
         "Register a service generator for a given service name.",
         py::arg("impl_type"), py::arg("generator"));

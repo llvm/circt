@@ -899,11 +899,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     c <= mux(sel, a, b)
     z <= mux(sel, x, y)
 
-  ; CHECK-LABEL: firrtl.extmodule private @RawStringParam
-  ; CHECK-SAME:    <TYPE: none = "bit",
-  ; CHECK-SAME:     FORMAT: none = "xyz_timeout=%d\\n",
-  ; CHECK-SAME:     MIXED_QUOTES: none = "\22'\\\22">
-  extmodule RawStringParam :
+  ; CHECK-LABEL: firrtl.extmodule private @VerbatimStringParam
+  ; CHECK-SAME:    <TYPE: none = #hw.param.verbatim<"bit">,
+  ; CHECK-SAME:     FORMAT: none = #hw.param.verbatim<"xyz_timeout=%d\\n">,
+  ; CHECK-SAME:     MIXED_QUOTES: none = #hw.param.verbatim<"\22'\\\22">>
+  extmodule VerbatimStringParam :
     parameter TYPE = 'bit'
     parameter FORMAT = 'xyz_timeout=%d\n'
     parameter MIXED_QUOTES = '"\'\"'
@@ -1170,22 +1170,6 @@ circuit EnumTypes:
       ; CHECK: }
       None:
         o is invalid
-  ; CHECK-LABEL: module private @String
-
-  module String :
-    ; CHECK-SAME: out %a: !firrtl.string
-    output a : String
-    ; CHECK: %0 = firrtl.string "hello"
-    ; CHECK: firrtl.propassign %a, %0 : !firrtl.string
-    propassign a, String("hello")
-
-  ; CHECK-LABEL: module private @BigInt
-  module BigInt :
-    ; CHECK-SAME: out %a: !firrtl.bigint
-    output a : BigInt
-    ; CHECK: %0 = firrtl.bigint -10
-    ; CHECK: firrtl.propassign %a, %0 : !firrtl.bigint
-    propassign a, BigInt(-10)
 
   ; CHECK-LABEL: module private @RefsChild(
   ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>
@@ -1347,6 +1331,21 @@ circuit EnumTypes:
     output data : UInt<3>
     output r2 : Probe<{a : UInt<3>}[3]>
 
+  ; CHECK-LABEL: @RWProbePort(
+  module RWProbePort:
+    ; CHECK: in %in: !firrtl.vector<uint<1>, 2> sym [<@[[IN_SYM:.+]],2,public>],
+    input in : UInt<1>[2]
+    output p : RWProbe<UInt<1>>
+    ; CHECK:  firrtl.ref.rwprobe <@RWProbePort::@[[IN_SYM]]> : !firrtl.rwprobe<uint<1>>
+    define p = rwprobe(in[1])
+
+  ; CHECK-LABEL: @RWProbeUninferredPort(
+  module RWProbeUninferredPort:
+    ; CHECK: in %in: !firrtl.vector<uint, 2> sym [<@[[IN_SYM:.+]],2,public>],
+    input in : UInt[2]
+    output p : RWProbe<UInt>
+    ; CHECK:  firrtl.ref.rwprobe <@RWProbeUninferredPort::@[[IN_SYM]]> : !firrtl.rwprobe<uint>
+    define p = rwprobe(in[1])
 
   ; CHECK-LABEL: module private @ProbeInvalidate
   ; CHECK-NEXT: }
@@ -1404,6 +1403,10 @@ circuit EnumTypes:
     ; CHECK-NEXT: firrtl.strictconnect %nonconst_w, [[CAST]] : !firrtl.sint<4>
     nonconst_w <= s4
 
+  ; CHECK-LABEL firrtl.class @SimpleClass() { }
+  ; Not version-gated yet, not in spec.
+  class SimpleClass:
+
 ;// -----
 
 ; CHECK-LABEL: firrtl.circuit "Foo_v3p0p0"
@@ -1442,7 +1445,7 @@ circuit Foo_v3p0p0:
     ; Ensure that `a` is equivalent to a.
     ; CHECK-NEXT: %a = firrtl.node {{.+}}%_0
     node `a` = `0`
-    ; CHECK-NEXT %b = firrtl.node {{.+}}%a
+    ; CHECK-NEXT: %b = firrtl.node {{.+}}%a
     node b = a
 
 ;// -----
@@ -1591,12 +1594,18 @@ circuit Top:
   ; CHECK-SAME:                                         valid: alias<ValidType, uint<1>>, ready flip: uint<1>>>,
   ; CHECK-SAME: in %in_complex: !firrtl.alias<Complex, bundle<real: sint<10>, imag: sint<10>>>
   ; CHECK-SAME: out %out: !firrtl.probe<alias<Complex, bundle<real: sint<10>, imag: sint<10>>>>
+  ; CHECK-SAME: out %out_valid: !firrtl.alias<ValidType, uint<1>>
+
+  ; CHECK-NEXT: %[[RESULT:.+]] = firrtl.subfield %in_data[valid] : !firrtl.alias<Data, bundle<w: const.vector<const.alias<WordType, const.uint<32>>, 2>, valid: alias<ValidType, uint<1>>, ready flip: uint<1>>>
   ; CHECK-NEXT: %c = firrtl.wire interesting_name : !firrtl.alias<Complex_id, alias<Complex, bundle<real: sint<10>, imag: sint<10>>>>
+  ; CHECK-NEXT: firrtl.strictconnect %out_valid, %[[RESULT]] : !firrtl.alias<ValidType, uint<1>>
   module Top:
     input in_data: Data
     input in_complex: Complex
     output out: ProbeComplex
+    output out_valid: ValidType
     wire c: Complex_id
+    out_valid <= in_data.valid
 
   ; CHECK-LABEL: firrtl.module private @Const
   ; CHECK-SAME: (in %a: !firrtl.const.alias<ConstI1, const.uint<1>>)
@@ -1663,3 +1672,42 @@ circuit Groups:
     ; CHECK-NEXT:     %F_a = firrtl.node{{.*}} %a
     ; CHECK-NEXT:   }
     ; CHECK-NEXT: }
+
+
+;// -----
+; CHECK-LABEL: firrtl.circuit "BasicProps"
+FIRRTL version 3.1.0
+circuit BasicProps :
+  module BasicProps :
+  ; CHECK-LABEL: module private @Integer
+  module Integer :
+    ; CHECK-SAME: out %a: !firrtl.integer
+    output a : Integer
+    ; CHECK: %0 = firrtl.integer -10
+    ; CHECK: firrtl.propassign %a, %0 : !firrtl.integer
+    propassign a, Integer(-10)
+
+  ; CHECK-LABEL: module private @String
+  module String :
+    ; CHECK-SAME: out %a: !firrtl.string
+    output a : String
+    ; CHECK: %0 = firrtl.string "hello"
+    ; CHECK: firrtl.propassign %a, %0 : !firrtl.string
+    propassign a, String("hello")
+
+  ; CHECK-LABEL: module private @Path
+  module Path :
+    ; CHECK-SAME: in %a: !firrtl.path
+    ; CHECK-SAME: out %b: !firrtl.path
+    input a : Path
+    output b : Path
+    ; CHECK: firrtl.propassign %b, %a : !firrtl.path
+    propassign b, a
+
+  ; CHECK-LABEL firrtl.class @SimpleClass(in %a: !firrtl.string, out %b: !firrtl.string) {
+  ; CHECK-NEXT    firrtl.propassign %b, %a : !firrtl.string
+  ; CHECK-NEXT  }
+  class SimpleClass:
+    input a: String
+    output b: String
+    propassign b, a

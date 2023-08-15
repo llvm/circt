@@ -16,11 +16,7 @@ using namespace ibis;
 #include "circt/Dialect/Ibis/IbisDialect.cpp.inc"
 
 void IbisDialect::initialize() {
-  // Register types.
-  addTypes<
-#define GET_TYPEDEF_LIST
-#include "circt/Dialect/Ibis/IbisTypes.cpp.inc"
-      >();
+  registerTypes();
 
   // Register operations.
   addOperations<
@@ -28,3 +24,6 @@ void IbisDialect::initialize() {
 #include "circt/Dialect/Ibis/Ibis.cpp.inc"
       >();
 }
+
+// Provide implementations for the enums we use.
+#include "circt/Dialect/Ibis/IbisEnums.cpp.inc"

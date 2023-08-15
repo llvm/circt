@@ -113,7 +113,7 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         os << '>';
       })
       .Case<StringType>([&](auto stringType) { os << "string"; })
-      .Case<BigIntType>([&](auto bigIntType) { os << "bigint"; })
+      .Case<FIntegerType>([&](auto integerType) { os << "integer"; })
       .Case<ListType>([&](auto listType) {
         os << "list<";
         printNestedType(listType.getElementType(), os);
@@ -126,10 +126,16 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         printNestedType(mapType.getValueType(), os);
         os << '>';
       })
+      .Case<PathType>([&](auto pathType) { os << "path"; })
       .Case<BaseTypeAliasType>([&](BaseTypeAliasType alias) {
         os << "alias<" << alias.getName().getValue() << ", ";
         printNestedType(alias.getInnerType(), os);
         os << '>';
+      })
+      .Case<ClassType>([&](ClassType type) {
+        os << "class<";
+        type.printInterface(os);
+        os << ">";
       })
       .Default([&](auto) { anyFailed = true; });
   return failure(anyFailed);
@@ -353,6 +359,16 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
 
     return result = RefType::get(type, true), success();
   }
+  if (name.equals("class")) {
+    if (isConst)
+      return parser.emitError(parser.getNameLoc(), "classes cannot be const");
+    ClassType classType;
+    if (parser.parseLess() || ClassType::parseInterface(parser, classType) ||
+        parser.parseGreater())
+      return failure();
+    result = classType;
+    return success();
+  }
   if (name.equals("string")) {
     if (isConst) {
       parser.emitError(parser.getNameLoc(), "strings cannot be const");
@@ -361,12 +377,12 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     result = StringType::get(parser.getContext());
     return success();
   }
-  if (name.equals("bigint")) {
+  if (name.equals("integer")) {
     if (isConst) {
       parser.emitError(parser.getNameLoc(), "bigints cannot be const");
       return failure();
     }
-    result = BigIntType::get(parser.getContext());
+    result = FIntegerType::get(parser.getContext());
     return success();
   }
   if (name.equals("list")) {
@@ -396,6 +412,14 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     result = parser.getChecked<MapType>(context, keyType, valueType);
     if (!result)
       return failure();
+    return success();
+  }
+  if (name.equals("path")) {
+    if (isConst) {
+      parser.emitError(parser.getNameLoc(), "path cannot be const");
+      return failure();
+    }
+    result = PathType::get(parser.getContext());
     return success();
   }
   if (name.equals("alias")) {
@@ -613,7 +637,7 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
       .Case<BundleType, FVectorType, FEnumType, OpenBundleType, OpenVectorType,
             RefType, BaseTypeAliasType>(
           [](auto type) { return type.getRecursiveTypeProperties(); })
-      .Case<StringType, BigIntType>([](auto type) {
+      .Case<PropertyType>([](auto type) {
         return RecursiveTypeProperties{true,  false, false, false,
                                        false, false, false};
       })
@@ -1235,6 +1259,15 @@ bool firrtl::areAnonymousTypesEquivalent(mlir::Type lhs, mlir::Type rhs) {
 /// top level for ODS constraint usage
 Type firrtl::getPassiveType(Type anyBaseFIRRTLType) {
   return type_cast<FIRRTLBaseType>(anyBaseFIRRTLType).getPassiveType();
+}
+
+bool firrtl::isTypeInOut(Type type) {
+  return llvm::TypeSwitch<Type, bool>(type)
+      .Case<FIRRTLBaseType>([](auto type) {
+        return !type.containsReference() &&
+               (!type.isPassive() || type.containsAnalog());
+      })
+      .Default(false);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2540,6 +2573,92 @@ AsyncResetType AsyncResetType::getConstType(bool isConst) {
 }
 
 //===----------------------------------------------------------------------===//
+// InstanceType
+//===----------------------------------------------------------------------===//
+
+ClassType ClassType::get(FlatSymbolRefAttr name,
+                         ArrayRef<ClassElement> elements) {
+  return get(name.getContext(), name, elements);
+}
+
+StringRef ClassType::getName() const {
+  return getNameAttr().getAttr().getValue();
+}
+
+FlatSymbolRefAttr ClassType::getNameAttr() const { return getImpl()->name; }
+
+ArrayRef<ClassElement> ClassType::getElements() const {
+  return getImpl()->elements;
+}
+
+const ClassElement &ClassType::getElement(IntegerAttr index) const {
+  return getElement(index.getValue().getZExtValue());
+}
+
+const ClassElement &ClassType::getElement(size_t index) const {
+  return getElements()[index];
+}
+
+std::optional<uint64_t> ClassType::getElementIndex(StringRef fieldName) const {
+  for (const auto [i, e] : llvm::enumerate(getElements()))
+    if (fieldName == e.name)
+      return i;
+  return {};
+}
+
+void ClassType::printInterface(AsmPrinter &p) const {
+  p.printSymbolName(getName());
+  p << "(";
+  bool first = true;
+  for (const auto &element : getElements()) {
+    if (!first)
+      p << ", ";
+    p << element.direction << " ";
+    p.printKeywordOrString(element.name);
+    p << ": " << element.type;
+    first = false;
+  }
+  p << ")";
+}
+
+ParseResult ClassType::parseInterface(AsmParser &parser, ClassType &result) {
+  StringAttr className;
+  if (parser.parseSymbolName(className))
+    return failure();
+
+  SmallVector<ClassElement> elements;
+  if (parser.parseCommaSeparatedList(
+          OpAsmParser::Delimiter::Paren, [&]() -> ParseResult {
+            // Parse port direction.
+            Direction direction;
+            if (succeeded(parser.parseOptionalKeyword("out")))
+              direction = Direction::Out;
+            else if (succeeded(parser.parseKeyword("in", "or 'out'")))
+              direction = Direction::In;
+            else
+              return failure();
+
+            // Parse port name.
+            std::string keyword;
+            if (parser.parseKeywordOrString(&keyword))
+              return failure();
+            StringAttr name = StringAttr::get(parser.getContext(), keyword);
+
+            // Parse port type.
+            Type type;
+            if (parser.parseColonType(type))
+              return failure();
+
+            elements.emplace_back(name, type, direction);
+            return success();
+          }))
+    return failure();
+
+  result = ClassType::get(FlatSymbolRefAttr::get(className), elements);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTLDialect
 //===----------------------------------------------------------------------===//
 
@@ -2550,7 +2669,7 @@ void FIRRTLDialect::registerTypes() {
            // References and open aggregates
            RefType, OpenBundleType, OpenVectorType,
            // Non-Hardware types
-           StringType, BigIntType, ListType, MapType>();
+           ClassType, StringType, FIntegerType, ListType, MapType, PathType>();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike

@@ -18,9 +18,9 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
-#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -102,8 +102,10 @@ struct StructuralHasher {
       : constants(constants){};
 
   std::pair<std::array<uint8_t, 32>, SmallVector<StringAttr>>
-  getHashAndModuleNames(FModuleLike module) {
+  getHashAndModuleNames(FModuleLike module, StringAttr group) {
     update(&(*module));
+    if (group)
+      sha.update(group.str());
     auto hash = sha.final();
     return {hash, referredModuleNames};
   }
@@ -240,6 +242,7 @@ struct Equivalence {
   Equivalence(MLIRContext *context, InstanceGraph &instanceGraph)
       : instanceGraph(instanceGraph) {
     noDedupClass = StringAttr::get(context, noDedupAnnoClass);
+    dedupGroupClass = StringAttr::get(context, dedupGroupAnnoClass);
     portTypesAttr = StringAttr::get(context, "portTypes");
     nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "name"));
@@ -605,12 +608,37 @@ struct Equivalence {
   // NOLINTNEXTLINE(misc-no-recursion)
   void check(InFlightDiagnostic &diag, Operation *a, Operation *b) {
     IRMapping map;
-    if (AnnotationSet(a).hasAnnotation(noDedupClass)) {
+    AnnotationSet aAnnos(a);
+    AnnotationSet bAnnos(b);
+    if (aAnnos.hasAnnotation(noDedupClass)) {
       diag.attachNote(a->getLoc()) << "module marked NoDedup";
       return;
     }
-    if (AnnotationSet(b).hasAnnotation(noDedupClass)) {
+    if (bAnnos.hasAnnotation(noDedupClass)) {
       diag.attachNote(b->getLoc()) << "module marked NoDedup";
+      return;
+    }
+    auto aGroup = aAnnos.hasAnnotation(dedupGroupClass)
+                      ? aAnnos.getAnnotation(dedupGroupClass)
+                            .getMember<StringAttr>("group")
+                      : StringAttr();
+    auto bGroup = bAnnos.hasAnnotation(dedupGroupClass)
+                      ? bAnnos.getAnnotation(dedupGroupClass)
+                            .getMember<StringAttr>("group")
+                      : StringAttr();
+    if (aGroup != bGroup) {
+      if (bGroup) {
+        diag.attachNote(b->getLoc())
+            << "module is in dedup group '" << bGroup.str() << "'";
+      } else {
+        diag.attachNote(b->getLoc()) << "module is not part of a dedup group";
+      }
+      if (aGroup) {
+        diag.attachNote(a->getLoc())
+            << "module is in dedup group '" << aGroup.str() << "'";
+      } else {
+        diag.attachNote(a->getLoc()) << "module is not part of a dedup group";
+      }
       return;
     }
     if (failed(check(diag, map, a, b)))
@@ -623,6 +651,8 @@ struct Equivalence {
   StringAttr portTypesAttr;
   // This is a cached "NoDedup" annotation class string attr.
   StringAttr noDedupClass;
+  // This is a cached "DedupGroup" annotation class string attr.
+  StringAttr dedupGroupClass;
   // This is a set of every attribute we should ignore.
   DenseSet<Attribute> nonessentialAttributes;
   InstanceGraph &instanceGraph;
@@ -753,10 +783,9 @@ struct Deduper {
 
 private:
   /// Get a cached namespace for a module.
-  ModuleNamespace &getNamespace(Operation *module) {
-    auto [it, inserted] =
-        moduleNamespaces.try_emplace(module, cast<FModuleLike>(module));
-    return it->second;
+  hw::InnerSymbolNamespace &getNamespace(Operation *module) {
+    return moduleNamespaces.try_emplace(module, cast<FModuleLike>(module))
+        .first->second;
   }
 
   /// For a specific annotation target, record all the unique NLAs which
@@ -1200,7 +1229,7 @@ private:
   StringAttr classString;
 
   /// A module namespace cache.
-  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
+  DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;
 };
 
 //===----------------------------------------------------------------------===//
@@ -1312,13 +1341,16 @@ class DedupPass : public DedupBase<DedupPass> {
     auto circuit = getOperation();
     auto &instanceGraph = getAnalysis<InstanceGraph>();
     auto *nlaTable = &getAnalysis<NLATable>();
-    SymbolTable symbolTable(circuit);
+    auto &symbolTable = getAnalysis<SymbolTable>();
     Deduper deduper(instanceGraph, symbolTable, nlaTable, circuit);
     Equivalence equiv(context, instanceGraph);
     auto anythingChanged = false;
 
     // Modules annotated with this should not be considered for deduplication.
     auto noDedupClass = StringAttr::get(context, noDedupAnnoClass);
+
+    // Only modules within the same group may be deduplicated.
+    auto dedupGroupClass = StringAttr::get(context, dedupGroupAnnoClass);
 
     // A map of all the module moduleInfo that we have calculated so far.
     llvm::DenseMap<ModuleInfo, Operation *> moduleInfoToModule;
@@ -1340,22 +1372,43 @@ class DedupPass : public DedupBase<DedupPass> {
         std::pair<std::array<uint8_t, 32>, SmallVector<StringAttr>>>>
         hashesAndModuleNames(modules.size());
     StructuralHasherSharedConstants hasherConstants(&getContext());
-    // Calculate module information parallelly.
-    mlir::parallelFor(context, 0, modules.size(), [&](unsigned idx) {
-      auto module = modules[idx];
-      // If the module is marked with NoDedup, just skip it.
-      if (AnnotationSet(module).hasAnnotation(noDedupClass))
-        return;
-      // If the module has input RefType ports, also skip it.
-      if (llvm::any_of(module.getPorts(), [&](PortInfo port) {
-            return type_isa<RefType>(port.type) && port.isInput();
-          }))
-        return;
 
-      StructuralHasher hasher(hasherConstants);
-      // Calculate the hash of the module and referred module names.
-      hashesAndModuleNames[idx] = hasher.getHashAndModuleNames(module);
-    });
+    // Calculate module information parallelly.
+    auto result = mlir::failableParallelForEach(
+        context, llvm::seq(modules.size()), [&](unsigned idx) {
+          auto module = modules[idx];
+          AnnotationSet annotations(module);
+          // If the module is marked with NoDedup, just skip it.
+          if (annotations.hasAnnotation(noDedupClass))
+            return success();
+
+          // If the module has input RefType ports, also skip it.
+          if (llvm::any_of(module.getPorts(), [&](PortInfo port) {
+                return type_isa<RefType>(port.type) && port.isInput();
+              }))
+            return success();
+
+          llvm::SmallSetVector<StringAttr, 1> groups;
+          for (auto annotation : annotations) {
+            if (annotation.getClass() == dedupGroupClass)
+              groups.insert(annotation.getMember<StringAttr>("group"));
+          }
+          if (groups.size() > 1) {
+            module.emitError("module belongs to multiple dedup groups: ")
+                << groups;
+            return failure();
+          }
+          auto dedupGroup = groups.empty() ? StringAttr() : groups.front();
+
+          StructuralHasher hasher(hasherConstants);
+          // Calculate the hash of the module and referred module names.
+          hashesAndModuleNames[idx] =
+              hasher.getHashAndModuleNames(module, dedupGroup);
+          return success();
+        });
+
+    if (result.failed())
+      return signalPassFailure();
 
     for (auto [i, module] : llvm::enumerate(modules)) {
       auto moduleName = module.getModuleNameAttr();
@@ -1469,6 +1522,9 @@ class DedupPass : public DedupBase<DedupPass> {
     });
     if (failed)
       return signalPassFailure();
+
+    for (auto module : circuit.getOps<FModuleOp>())
+      AnnotationSet::removeAnnotations(module, dedupGroupClass);
 
     // Walk all the modules and fixup the instance operation to return the
     // correct type. We delay this fixup until the end because doing it early

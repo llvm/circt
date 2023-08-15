@@ -55,7 +55,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   SmallVector<Attribute> argLocs, resultLocs;
   auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
 
-  for (auto elt : ports.inputs()) {
+  for (auto elt : ports.getInputs()) {
     if (elt.dir == hw::ModulePort::Direction::InOut &&
         !elt.type.isa<hw::InOutType>())
       elt.type = hw::InOutType::get(elt.type);
@@ -70,7 +70,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
     argAttrs.push_back(attr);
   }
 
-  for (auto elt : ports.outputs()) {
+  for (auto elt : ports.getOutputs()) {
     resultTypes.push_back(elt.type);
     resultNames.push_back(elt.name);
     resultLocs.push_back(elt.loc ? elt.loc : unknownLoc);
@@ -367,6 +367,11 @@ ArrayAttr DynamicInstanceOp::globalRefPath() {
 // InstanceOp
 //===----------------------------------------------------------------------===//
 
+std::optional<size_t> InstanceOp::getTargetResultIndex() {
+  // Inner symbols on instance operations target the op not any result.
+  return std::nullopt;
+}
+
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto *module =
       symbolTable.lookupNearestSymbolFrom(*this, getModuleNameAttr());
@@ -382,25 +387,33 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
-/// Instance name is the same as the symbol name. This may change in the
-/// future.
-StringRef InstanceOp::getInstanceName() { return getSymName(); }
-StringAttr InstanceOp::getInstanceNameAttr() { return getSymNameAttr(); }
-
-/// Lookup the module or extmodule for the symbol.  This returns null on
-/// invalid IR.
-Operation *InstanceOp::getReferencedModule() {
+Operation *InstanceOp::getReferencedModuleSlow() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
   if (!topLevelModuleOp)
     return nullptr;
   return topLevelModuleOp.lookupSymbol(getModuleName());
 }
 
+Operation *InstanceOp::getReferencedModule(SymbolTable &symtbl) {
+  return symtbl.lookup(getModuleNameAttr().getValue());
+}
+
+hw::ModulePortInfo InstanceOp::getPortList() {
+  return cast<hw::PortList>(getReferencedModuleSlow()).getPortList();
+}
+
 StringAttr InstanceOp::getResultName(size_t idx) {
-  if (auto *refMod = getReferencedModule())
+  if (auto *refMod = getReferencedModuleSlow())
     return hw::getModuleResultNameAttr(refMod, idx);
   return StringAttr();
 }
+/// Instance name is the same as the symbol name. This may change in the
+/// future.
+mlir::StringAttr InstanceOp::getInstanceNameAttr() {
+  return getInnerNameAttr();
+}
+
+llvm::StringRef InstanceOp::getInstanceName() { return *getInnerName(); }
 
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
@@ -428,12 +441,12 @@ InstanceOp::verifySignatureMatch(const hw::ModulePortInfo &ports) {
   if (ports.sizeOutputs() != getNumResults())
     return emitOpError("wrong number of outputs (expected ")
            << ports.sizeOutputs() << ")";
-  for (auto port : ports.inputs())
+  for (auto port : ports.getInputs())
     if (getOperand(port.argNum).getType() != port.type)
       return emitOpError("in input port ")
              << port.name << ", expected type " << port.type << " got "
              << getOperand(port.argNum).getType();
-  for (auto port : ports.outputs())
+  for (auto port : ports.getOutputs())
     if (getResult(port.argNum).getType() != port.type)
       return emitOpError("in output port ")
              << port.name << ", expected type " << port.type << " got "
@@ -445,8 +458,8 @@ InstanceOp::verifySignatureMatch(const hw::ModulePortInfo &ports) {
 void InstanceOp::build(OpBuilder &builder, OperationState &state,
                        ArrayRef<Type> resultTypes, StringAttr symName,
                        FlatSymbolRefAttr moduleName, ArrayRef<Value> inputs) {
-  build(builder, state, resultTypes, symName, moduleName, inputs, ArrayAttr(),
-        SymbolRefAttr());
+  build(builder, state, resultTypes, hw::InnerSymAttr::get(symName), moduleName,
+        inputs, ArrayAttr(), SymbolRefAttr());
 }
 
 //===----------------------------------------------------------------------===//
@@ -458,7 +471,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &state,
 /// output ports in the list.
 /// TODO: This should really be shared with the HW dialect instead of cloned.
 /// Consider adding a `HasModulePorts` op interface to facilitate.
-hw::ModulePortInfo MSFTModuleOp::getPorts() {
+hw::ModulePortInfo MSFTModuleOp::getPortList() {
   SmallVector<hw::PortInfo> inputs, outputs;
   auto argNames = this->getArgNames();
   auto argTypes = getArgumentTypes();
@@ -475,7 +488,7 @@ hw::ModulePortInfo MSFTModuleOp::getPorts() {
       type = inout.getElementType();
     }
     auto argLoc = argLocs[i].cast<LocationAttr>();
-    inputs.push_back({{argName, type, direction}, i, {}, argLoc});
+    inputs.push_back({{argName, type, direction}, i, {}, {}, argLoc});
   }
 
   auto resultNames = this->getResultNames();
@@ -485,6 +498,7 @@ hw::ModulePortInfo MSFTModuleOp::getPorts() {
     outputs.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
                         hw::ModulePort::Direction::Output},
                        i,
+                       {},
                        {},
                        resultLocs[i].cast<LocationAttr>()});
   }
@@ -634,7 +648,7 @@ void MSFTModuleOp::build(OpBuilder &builder, OperationState &result,
   auto unknownLoc = builder.getUnknownLoc();
 
   // Add arguments to the body block.
-  for (auto port : ports.inputs()) {
+  for (auto port : ports.getInputs()) {
     auto type = port.type;
     if (port.isInOut() && !type.isa<hw::InOutType>())
       type = hw::InOutType::get(type);
@@ -905,7 +919,7 @@ LogicalResult MSFTModuleExternOp::verify() {
   return success();
 }
 
-hw::ModulePortInfo MSFTModuleExternOp::getPorts() {
+hw::ModulePortInfo MSFTModuleExternOp::getPortList() {
   using namespace mlir::function_interface_impl;
 
   SmallVector<hw::PortInfo> inputs, outputs;
@@ -932,7 +946,7 @@ hw::ModulePortInfo MSFTModuleExternOp::getPorts() {
     auto direction = isInOut ? hw::ModulePort::Direction::InOut
                              : hw::ModulePort::Direction::Input;
 
-    inputs.push_back({{name, type, direction}, i, {}, loc});
+    inputs.push_back({{name, type, direction}, i, {}, {}, loc});
   }
 
   auto resultNames = getOperation()->getAttrOfType<ArrayAttr>("resultNames");
@@ -943,6 +957,7 @@ hw::ModulePortInfo MSFTModuleExternOp::getPorts() {
     outputs.push_back(
         {{name, resultTypes[i], hw::ModulePort::Direction::Output},
          i,
+         {},
          {},
          loc});
   }

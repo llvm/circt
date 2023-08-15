@@ -1,5 +1,6 @@
 add_circt_dialect_library(CIRCTIbisTransforms
   IbisCallPrep.cpp
+  IbisContainerize.cpp
 
   DEPENDS
   CIRCTIbisTransformsIncGen

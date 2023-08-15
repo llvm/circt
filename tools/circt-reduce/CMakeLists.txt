@@ -20,9 +20,9 @@ set(LIBS
   MLIRReduceLib
 )
 
-add_llvm_tool(circt-reduce
- circt-reduce.cpp
- DEPENDS ${LIBS}
+add_circt_tool(circt-reduce
+  circt-reduce.cpp
+  DEPENDS ${LIBS}
 )
 target_link_libraries(circt-reduce PRIVATE ${LIBS})
 

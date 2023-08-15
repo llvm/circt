@@ -1,5 +1,6 @@
 from ..support import BackedgeBuilder, NamedValueOpView
 from ..ir import IntegerType, OpView, StringAttr
+from . import hw
 
 
 class CompRegLikeBuilder(NamedValueOpView):
@@ -53,7 +54,7 @@ class CompRegLike:
     else:
       attributes["name"] = StringAttr.get(name)
     if sym_name is not None:
-      attributes["sym_name"] = StringAttr.get(sym_name)
+      attributes["inner_sym"] = hw.InnerSymAttr.get(StringAttr.get(sym_name))
 
     OpView.__init__(
         self,

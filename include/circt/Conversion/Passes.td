@@ -200,7 +200,14 @@ def LoopScheduleToCalyx : Pass<"lower-loopschedule-to-calyx", "mlir::ModuleOp"> 
 // PipelineTHW
 //===----------------------------------------------------------------------===//
 
-def PipelineToHW : Pass<"lower-pipeline-to-hw", "hw::HWModuleOp"> {
+// TODO: @mortbopet: There is a possible non-neglible speedup that can be achieved
+// here by allowing this pass to run on a per-hwmodule/whatever container the
+// pipeline is nested within-granularity. However, this conversion adds (and removes)
+// new modules to the top-level mlir::ModuleOp scope, which technically violates
+// hw::HWModuleLike's IsolatedFromAbove (and thus has previously caused
+// concurrency issues via. concurrent additions and removals to the mlir::ModuleOp
+// symboltable).
+def PipelineToHW : Pass<"lower-pipeline-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower Pipeline to HW";
   let description = [{
     This pass lowers `pipeline.rtp` operations to HW.
@@ -546,7 +553,8 @@ def LowerVerifToSV : Pass<"lower-verif-to-sv", "hw::HWModuleOp"> {
     This pass converts various Verif contructs to SV.
   }];
   let constructor = "circt::createLowerVerifToSVPass()";
-  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
+  let dependentDialects = [
+    "sv::SVDialect", "hw::HWDialect", "comb::CombDialect"];
 }
 
 //===----------------------------------------------------------------------===//

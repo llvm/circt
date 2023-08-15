@@ -16,6 +16,8 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/Seq/SeqAttributes.h"
 #include "mlir/IR/Dominance.h"
 #include "llvm/ADT/DepthFirstIterator.h"
@@ -94,7 +96,7 @@ namespace {
 struct LowerMemoryPass : public LowerMemoryBase<LowerMemoryPass> {
 
   /// Get the cached namespace for a module.
-  ModuleNamespace &getModuleNamespace(FModuleLike module) {
+  hw::InnerSymbolNamespace &getModuleNamespace(FModuleLike module) {
     return moduleNamespaces.try_emplace(module, module).first->second;
   }
 
@@ -113,7 +115,7 @@ struct LowerMemoryPass : public LowerMemoryBase<LowerMemoryPass> {
   void runOnOperation() override;
 
   /// Cached module namespaces.
-  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
+  DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;
   CircuitNamespace circuitNamespace;
   SymbolTable *symbolTable;
 
@@ -287,7 +289,7 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
       SmallVector<Attribute> newNamepath(namepath.begin(), namepath.end());
       if (!nla.isComponent())
         newNamepath.back() =
-            getInnerRefTo(inst, [&](FModuleOp mod) -> ModuleNamespace & {
+            getInnerRefTo(inst, [&](auto mod) -> hw::InnerSymbolNamespace & {
               return getModuleNamespace(mod);
             });
       newNamepath.push_back(leafAttr);
@@ -322,7 +324,8 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
   for (auto *op : structValue.getUsers()) {
     assert(isa<SubfieldOp>(op));
     auto fieldAccess = cast<SubfieldOp>(op);
-    auto elemIndex = fieldAccess.getInput().getType().getElementIndex(field);
+    auto elemIndex =
+        fieldAccess.getInput().getType().get().getElementIndex(field);
     if (elemIndex && *elemIndex == fieldAccess.getFieldIndex())
       accesses.push_back(fieldAccess);
   }
@@ -521,7 +524,7 @@ void LowerMemoryPass::runOnOperation() {
 
   // The set of all modules underneath the design under test module.
   DenseSet<Operation *> dutModuleSet;
-  llvm::for_each(llvm::depth_first(dut), [&](hw::InstanceGraphNode *node) {
+  llvm::for_each(llvm::depth_first(dut), [&](igraph::InstanceGraphNode *node) {
     dutModuleSet.insert(node->getModule());
   });
 

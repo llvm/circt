@@ -3097,4 +3097,61 @@ firrtl.module @Issue5650(in %io_y: !firrtl.uint<1>, out %io_x: !firrtl.uint<1>) 
   firrtl.strictconnect %3, %2 : !firrtl.uint<1>
 }
 
+// CHECK-LABEL: @HasBeenReset
+firrtl.module @HasBeenReset(in %clock: !firrtl.clock, in %reset1: !firrtl.uint<1>, in %reset2: !firrtl.asyncreset, in %reset3: !firrtl.reset) {
+  // CHECK-NEXT: %c0_ui1 = firrtl.constant 0
+  // CHECK-NEXT: %c0_clock = firrtl.specialconstant 0
+  // CHECK-NEXT: %c1_clock = firrtl.specialconstant 1
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %c0_asyncreset = firrtl.specialconstant 0 : !firrtl.asyncreset
+  %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.asyncreset
+  %c0_reset = firrtl.specialconstant 0 : !firrtl.reset
+  %c1_reset = firrtl.specialconstant 1 : !firrtl.reset
+  %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
+  %c1_clock = firrtl.specialconstant 1 : !firrtl.clock
+
+  // CHECK-NEXT: firrtl.node sym @constResetS0 %c0_ui1
+  // CHECK-NEXT: firrtl.node sym @constResetS1 %c0_ui1
+  // CHECK-NEXT: firrtl.node sym @constResetA0 %c0_ui1
+  // CHECK-NEXT: firrtl.node sym @constResetA1 %c0_ui1
+  // CHECK-NEXT: firrtl.node sym @constResetR0 %c0_ui1
+  // CHECK-NEXT: firrtl.node sym @constResetR1 %c0_ui1
+  %r0 = firrtl.int.has_been_reset %clock, %c0_ui1 : !firrtl.uint<1>
+  %r1 = firrtl.int.has_been_reset %clock, %c1_ui1 : !firrtl.uint<1>
+  %r2 = firrtl.int.has_been_reset %clock, %c0_asyncreset : !firrtl.asyncreset
+  %r3 = firrtl.int.has_been_reset %clock, %c1_asyncreset : !firrtl.asyncreset
+  %r4 = firrtl.int.has_been_reset %clock, %c0_reset : !firrtl.reset
+  %r5 = firrtl.int.has_been_reset %clock, %c1_reset : !firrtl.reset
+  %constResetS0 = firrtl.node sym @constResetS0 %r0 : !firrtl.uint<1>
+  %constResetS1 = firrtl.node sym @constResetS1 %r1 : !firrtl.uint<1>
+  %constResetA0 = firrtl.node sym @constResetA0 %r2 : !firrtl.uint<1>
+  %constResetA1 = firrtl.node sym @constResetA1 %r3 : !firrtl.uint<1>
+  %constResetR0 = firrtl.node sym @constResetR0 %r4 : !firrtl.uint<1>
+  %constResetR1 = firrtl.node sym @constResetR1 %r5 : !firrtl.uint<1>
+
+  // CHECK-NEXT: [[TMP1:%.+]] = firrtl.int.has_been_reset %c0_clock, %reset2
+  // CHECK-NEXT: [[TMP2:%.+]] = firrtl.int.has_been_reset %c1_clock, %reset2
+  // CHECK-NEXT: [[TMP3:%.+]] = firrtl.int.has_been_reset %c0_clock, %reset3
+  // CHECK-NEXT: [[TMP4:%.+]] = firrtl.int.has_been_reset %c1_clock, %reset3
+  // CHECK-NEXT: firrtl.node sym @constClockS0 %c0_ui1
+  // CHECK-NEXT: firrtl.node sym @constClockS1 %c0_ui1
+  // CHECK-NEXT: firrtl.node sym @constClockA0 [[TMP1]]
+  // CHECK-NEXT: firrtl.node sym @constClockA1 [[TMP2]]
+  // CHECK-NEXT: firrtl.node sym @constClockR0 [[TMP3]]
+  // CHECK-NEXT: firrtl.node sym @constClockR1 [[TMP4]]
+  %c0 = firrtl.int.has_been_reset %c0_clock, %reset1 : !firrtl.uint<1>
+  %c1 = firrtl.int.has_been_reset %c1_clock, %reset1 : !firrtl.uint<1>
+  %c2 = firrtl.int.has_been_reset %c0_clock, %reset2 : !firrtl.asyncreset
+  %c3 = firrtl.int.has_been_reset %c1_clock, %reset2 : !firrtl.asyncreset
+  %c4 = firrtl.int.has_been_reset %c0_clock, %reset3 : !firrtl.reset
+  %c5 = firrtl.int.has_been_reset %c1_clock, %reset3 : !firrtl.reset
+  %constClockS0 = firrtl.node sym @constClockS0 %c0 : !firrtl.uint<1>
+  %constClockS1 = firrtl.node sym @constClockS1 %c1 : !firrtl.uint<1>
+  %constClockA0 = firrtl.node sym @constClockA0 %c2 : !firrtl.uint<1>
+  %constClockA1 = firrtl.node sym @constClockA1 %c3 : !firrtl.uint<1>
+  %constClockR0 = firrtl.node sym @constClockR0 %c4 : !firrtl.uint<1>
+  %constClockR1 = firrtl.node sym @constClockR1 %c5 : !firrtl.uint<1>
+}
+
 }

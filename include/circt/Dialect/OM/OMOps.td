@@ -177,4 +177,22 @@ def ConstantOp : OMOp<"constant",
   let hasFolder = true;
 }
 
+def ListCreateOp : OMOp<"list_create", [Pure, SameTypeOperands]> {
+  let summary = "Create a list of values";
+  let description = [{
+    Creates a list from a sequence of inputs.
+
+    ```
+    %list = om.list_create %a, %b, %c : !om.ref
+    ```
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs
+    ListType:$result
+  );
+
+  let hasCustomAssemblyFormat = 1;
+}
+
 #endif // CIRCT_DIALECT_OM_OMOPS_TD

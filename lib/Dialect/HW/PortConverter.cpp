@@ -78,6 +78,7 @@ Value PortConverterImpl::createNewInput(PortInfo origPort, const Twine &suffix,
       {append(origPort.name, suffix), type, ModulePort::Direction::Input},
       newInputs.size(),
       {},
+      {},
       origPort.loc};
   newInputs.emplace_back(0, newPort);
 
@@ -93,6 +94,7 @@ void PortConverterImpl::createNewOutput(PortInfo origPort, const Twine &suffix,
       {append(origPort.name, suffix), type, ModulePort::Direction::Output},
       newOutputs.size(),
       {},
+      {},
       origPort.loc};
   newOutputs.emplace_back(0, newPort);
 
@@ -102,7 +104,7 @@ void PortConverterImpl::createNewOutput(PortInfo origPort, const Twine &suffix,
 }
 
 LogicalResult PortConverterImpl::run() {
-  ModulePortInfo ports = mod.getPorts();
+  ModulePortInfo ports = mod.getPortList();
 
   bool foundLoweredPorts = false;
 
@@ -125,10 +127,7 @@ LogicalResult PortConverterImpl::run() {
   };
 
   // Dispatch the port conversion builder on the I/O of the module.
-  for (PortInfo port : ports.inputs())
-    if (failed(createPortLowering(port)))
-      return failure();
-  for (PortInfo port : ports.outputs())
+  for (PortInfo port : ports)
     if (failed(createPortLowering(port)))
       return failure();
 
@@ -171,7 +170,7 @@ LogicalResult PortConverterImpl::run() {
 
   // Rewrite instances pointing to this module.
   for (auto *instance : moduleNode->uses()) {
-    hw::HWInstanceLike instanceLike = instance->getInstance();
+    auto instanceLike = instance->getInstance<hw::HWInstanceLike>();
     if (!instanceLike)
       continue;
     hw::InstanceOp hwInstance = dyn_cast_or_null<hw::InstanceOp>(*instanceLike);
@@ -194,12 +193,12 @@ LogicalResult PortConverterImpl::run() {
 void PortConverterImpl::updateInstance(hw::InstanceOp inst) {
   ImplicitLocOpBuilder b(inst.getLoc(), inst);
   BackedgeBuilder beb(b, inst.getLoc());
-  ModulePortInfo ports = mod.getPorts();
+  ModulePortInfo ports = mod.getPortList();
 
   // Create backedges for the future instance results so the signal mappers can
   // use the future results as values.
   SmallVector<Backedge> newResults;
-  for (PortInfo outputPort : ports.outputs())
+  for (PortInfo outputPort : ports.getOutputs())
     newResults.push_back(beb.get(outputPort.type));
 
   // Map the operands.

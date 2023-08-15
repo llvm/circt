@@ -550,7 +550,8 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
         hw::PortInfo{{getPortName(req.getClientNamePath()), toClientType,
                       hw::ModulePort::Direction::Input},
                      origNumInputs,
-                     nullptr,
+                     {},
+                     {},
                      req->getLoc()}));
 
     // Replace uses with new block args which will correspond to said ports.
@@ -580,7 +581,7 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
   };
 
   // Update the module instantiations.
-  SmallVector<hw::HWInstanceLike, 1> newModuleInstantiations;
+  SmallVector<igraph::InstanceOpInterface, 1> newModuleInstantiations;
   StringAttr argsAttrName = StringAttr::get(ctxt, "argNames");
   StringAttr resultsAttrName = StringAttr::get(ctxt, "resultNames");
   for (auto inst : moduleInstantiations[mod]) {
@@ -627,7 +628,8 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
         inst->getLoc(), inst->getName(), newResultTypes, newOperands,
         b.getDictionaryAttr(newAttrs), inst->getPropertiesStorage(),
         inst->getSuccessors(), inst->getRegions()));
-    newModuleInstantiations.push_back(cast<hw::HWInstanceLike>(newInst));
+    newModuleInstantiations.push_back(
+        cast<igraph::InstanceOpInterface>(newInst));
 
     // Replace all uses of the instance being replaced.
     for (auto [newV, oldV] :

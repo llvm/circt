@@ -21,7 +21,7 @@ static CircuitOp findCircuitOp(Operation *operation) {
 }
 
 InstanceGraph::InstanceGraph(Operation *operation)
-    : InstanceGraphBase(findCircuitOp(operation)) {
+    : igraph::InstanceGraph(findCircuitOp(operation)) {
   topLevelNode = lookup(cast<CircuitOp>(getParent()).getNameAttr());
 }
 

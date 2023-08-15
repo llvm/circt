@@ -2,7 +2,7 @@ set(LLVM_LINK_COMPONENTS
   Support
 )
 
-add_llvm_tool(firtool
+add_circt_tool(firtool
   firtool.cpp
 )
 llvm_update_compile_flags(firtool)

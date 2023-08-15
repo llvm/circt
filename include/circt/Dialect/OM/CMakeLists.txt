@@ -15,3 +15,8 @@ mlir_tablegen(OMAttributes.cpp.inc -gen-attrdef-defs)
 add_public_tablegen_target(MLIROMAttrIncGen)
 add_dependencies(circt-headers MLIROMAttrIncGen)
 add_circt_interface(OMOpInterfaces)
+
+set(LLVM_TARGET_DEFINITIONS OMPasses.td)
+mlir_tablegen(OMPasses.h.inc -gen-pass-decls)
+add_public_tablegen_target(CIRCTOMTransformsIncGen)
+add_circt_doc(OMPasses OMPasses -gen-pass-doc)

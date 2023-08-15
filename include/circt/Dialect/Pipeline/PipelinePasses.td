@@ -16,7 +16,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def ExplicitRegs : Pass<"pipeline-explicit-regs", "pipeline::ScheduledPipelineOp"> {
+def ExplicitRegs : Pass<"pipeline-explicit-regs"> {
   let summary = "Makes stage registers explicit.";
   let description = [{
     Makes all stage-crossing def-use chains into explicit registers.

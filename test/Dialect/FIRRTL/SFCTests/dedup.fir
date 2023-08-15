@@ -37,7 +37,7 @@ circuit Top :
 circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
-    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} @A(
+    ; CHECK-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
   ; CHECK: firrtl.module private @A
@@ -96,7 +96,7 @@ circuit Top :
 circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
-    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} @A(
+    ; CHECK-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
   module A : @[yy 2:2]
@@ -116,7 +116,7 @@ circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
     output out: UInt<1>
-    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} @A(
+    ; CHECK-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
     out <= and(a1.x, a2.y)
@@ -252,7 +252,7 @@ circuit FooAndBarModule :
   ; CHECK: firrtl.module @FooAndBarModule
   module FooAndBarModule :
     output io : {foo : {flip foo : UInt<1>, fuzz : UInt<1>}, bar : {flip foo : UInt<1>, fuzz : UInt<1>}}
-    ; CHECK-NEXT-COUNT-2: firrtl.instance {{(foo|bar)}} @FooModule
+    ; CHECK-COUNT-2: firrtl.instance {{(foo|bar)}} @FooModule
     inst foo of FooModule
     inst bar of BarModule
     io.foo <= foo.io
@@ -265,7 +265,7 @@ circuit FooAndBarModule :
 circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
-    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} @A(
+    ; CHECK-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
   module A :
@@ -293,7 +293,7 @@ circuit Top :
 circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
-    ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} @A(
+    ; CHECK-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
   module A :
@@ -326,9 +326,10 @@ circuit Top : %[[
   module Top :
     inst a1 of A
     inst a2 of A_
+  ; CHECK: module private @A(
   module A :
     output x: UInt<1>
-    ; CHECk-NEXT: firrtl.wire {annotations = [{circt.nonlocal = @[[nlaSym]], class = "circt.test"}]}
+    ; CHECK-NEXT: firrtl.wire {annotations = [{circt.nonlocal = @[[nlaSym]], class = "circt.test"}]}
     wire b: UInt<1>
     b is invalid
     x <= b
@@ -364,9 +365,10 @@ circuit Top : %[[
   module Top :
     inst a1 of A
     inst a2 of A_
+  ; CHECK: module private @A(
   module A :
     output x: UInt<1>
-    ; CHECk-NEXT: firrtl.wire {annotations = [{circt.nonlocal = @[[nlaSym1]], class = "circt.test", data = "world"}, {circt.nonlocal = @[[nlaSym2]], class = "circt.test", data = "hello"}]}
+    ; CHECK-NEXT: firrtl.wire {annotations = [{circt.nonlocal = @[[nlaSym1]], class = "circt.test", data = "hello"}, {circt.nonlocal = @[[nlaSym2]], class = "circt.test", data = "world"}]}
     wire b: UInt<1>
     b is invalid
     x <= b
@@ -802,3 +804,112 @@ circuit top : %[[
     input q: {a: {b: {c: UInt<1>}}, z: UInt<1>}
     output r: {a: {b: {c: UInt<1>}}, z: UInt<1>}
     r <= q
+
+; // -----
+; "The module A and A_ should be deduped even with different port names and info,
+; and annotations should be remapped".
+;
+; CHECK-LABEL: firrtl.circuit "Top"
+circuit Top : %[[
+  {
+    "class": "circt.test",
+     "target": "Top.Top.a2.y",
+     "pin": "pin"
+  }
+]]
+  ; CHECK: firrtl.module @Top
+  module Top :
+    output out: UInt<1>
+    ; CHECK: instance a1 @A(
+    ; CHECK-NOT: SourceAnnotation
+    ; CHECK: instance a2 {{.+}} @A(
+    inst a1 of A
+    inst a2 of A_
+    out <= and(a1.x, a2.y)
+  ; CHECK: module private @A
+  ; CHECK-SAME: [{circt.nonlocal = {{[^,]+}}, class = "circt.test", pin = "pin"}]
+  module A : @[yy 2:2]
+    output x: UInt<1> @[yy 2:2]
+    x <= UInt(1)
+  module A_ : @[xx 1:1]
+    output y: UInt<1> @[xx 1:1]
+    y <= UInt(1)
+
+; CHECK-NOT: firrtl.module private @A_
+
+
+; // -----
+; "The module A and A_ should dedup with different annotation targets."
+;
+; This test is checking that a "DontTouchAnnotation" has the same behavior as
+; any other annotation due to deduplication.
+;
+; CHECK-LABEL: firrtl.circuit "Top"
+circuit Top : %[[
+  {
+    "class":"firrtl.transforms.DontTouchAnnotation",
+    "target":"~Top|Top/a1:A>b"
+  }
+]]
+  ; CHECK: firrtl.module @Top
+  ; CHECK-NEXT: firrtl.instance a1 @A(
+  ; CHECK-NEXT: firrtl.instance a2 @A(
+  module Top :
+    inst a1 of A
+    inst a2 of A_
+  ; CHECK: module private @A(
+  module A :
+    output x: UInt<1>
+    ; CHECK-NEXT: firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
+    wire b: UInt<1>
+    b is invalid
+    x <= b
+  module A_ :
+    output x: UInt<1>
+    wire b: UInt<1>
+    b is invalid
+    x <= b
+
+; CHECK-NOT: firrtl.module private @A_
+
+; // -----
+; "The module A and A_ should dedup with the same annotation targets."
+;
+; This is the same situation as the previous test, except that two
+; "DontTouchAnnotation"s apply to the same deduplicated wire.  It is arguable
+; that generating a symbol here is fine.  However, this is different from the
+; Scala FIRRTL Compiler and we should make a decision on what to do with this.
+;
+; CHECK-LABEL: firrtl.circuit "Top"
+circuit Top : %[[
+  {
+    "class":"firrtl.transforms.DontTouchAnnotation",
+    "target":"Top.A.b"
+  },
+  {
+    "class":"firrtl.transforms.DontTouchAnnotation",
+    "target":"~Top|A_>b"
+  }
+]]
+  ; CHECK: firrtl.module @Top
+  ; CHECK-NEXT: firrtl.instance a1 @A(
+  ; CHECK-NEXT: firrtl.instance a2 @A(
+  module Top :
+    inst a1 of A
+    inst a2 of A_
+  ; CHECK: module private @A(
+  module A :
+    output x: UInt<1>
+    ; CHECK-NEXT: firrtl.wire
+    ; CHECK-SAME: [{class = "firrtl.transforms.DontTouchAnnotation"}]
+    wire b: UInt<1>
+    b is invalid
+    x <= b
+  module A_ :
+    output x: UInt<1>
+    wire b: UInt<1>
+    b is invalid
+    x <= b
+
+; CHECK-NOT: firrtl.module private @A_
+

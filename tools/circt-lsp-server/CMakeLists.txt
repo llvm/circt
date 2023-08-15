@@ -42,7 +42,7 @@ set(LIBS
   MLIRIR
   )
 
-add_llvm_tool(circt-lsp-server
+add_circt_tool(circt-lsp-server
   circt-lsp-server.cpp
 
   DEPENDS

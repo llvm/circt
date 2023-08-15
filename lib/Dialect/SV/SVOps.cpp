@@ -245,13 +245,14 @@ LogicalResult LocalParamOp::verify() {
 //===----------------------------------------------------------------------===//
 
 void RegOp::build(OpBuilder &builder, OperationState &odsState,
-                  Type elementType, StringAttr name, StringAttr sym_name) {
+                  Type elementType, StringAttr name,
+                  hw::InnerSymAttr innerSym) {
   if (!name)
     name = builder.getStringAttr("");
   odsState.addAttribute("name", name);
-  if (sym_name)
+  if (innerSym)
     odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
-                          sym_name);
+                          innerSym);
   odsState.addTypes(hw::InOutType::get(elementType));
 }
 
@@ -263,6 +264,8 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   if (!nameAttr.getValue().empty())
     setNameFn(getResult(), nameAttr.getValue());
 }
+
+std::optional<size_t> RegOp::getTargetResultIndex() { return 0; }
 
 // If this reg is only written to, delete the reg and all writers.
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
@@ -293,13 +296,14 @@ LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 
 void LogicOp::build(OpBuilder &builder, OperationState &odsState,
-                    Type elementType, StringAttr name, StringAttr sym_name) {
+                    Type elementType, StringAttr name,
+                    hw::InnerSymAttr innerSym) {
   if (!name)
     name = builder.getStringAttr("");
   odsState.addAttribute("name", name);
-  if (sym_name)
+  if (innerSym)
     odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
-                          sym_name);
+                          innerSym);
   odsState.addTypes(hw::InOutType::get(elementType));
 }
 
@@ -311,6 +315,8 @@ void LogicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   if (!nameAttr.getValue().empty())
     setNameFn(getResult(), nameAttr.getValue());
 }
+
+std::optional<size_t> LogicOp::getTargetResultIndex() { return 0; }
 
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
@@ -1376,6 +1382,11 @@ void InterfaceModportOp::build(OpBuilder &builder, OperationState &state,
   build(builder, state, name, ArrayAttr::get(ctxt, directions));
 }
 
+std::optional<size_t> InterfaceInstanceOp::getTargetResultIndex() {
+  // Inner symbols on instance operations target the op not any result.
+  return std::nullopt;
+}
+
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void InterfaceInstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -1522,12 +1533,13 @@ LogicalResult ReadInterfaceSignalOp::verify() {
 //===----------------------------------------------------------------------===//
 
 void WireOp::build(OpBuilder &builder, OperationState &odsState,
-                   Type elementType, StringAttr name, StringAttr sym_name) {
+                   Type elementType, StringAttr name,
+                   hw::InnerSymAttr innerSym) {
   if (!name)
     name = builder.getStringAttr("");
-  if (sym_name)
+  if (innerSym)
     odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
-                          sym_name);
+                          innerSym);
 
   odsState.addAttribute("name", name);
   odsState.addTypes(InOutType::get(elementType));
@@ -1541,6 +1553,8 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   if (!nameAttr.getValue().empty())
     setNameFn(getResult(), nameAttr.getValue());
 }
+
+std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
 
 // If this wire is only written to, delete the wire and all writers.
 LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
@@ -1748,9 +1762,9 @@ template <class Op>
 static Op findInstanceSymbolInBlock(StringAttr name, Block *body) {
   for (auto &op : llvm::reverse(body->getOperations())) {
     if (auto instance = dyn_cast<Op>(op)) {
-      if (instance.getInnerSym() &&
-          instance.getInnerSym().value() == name.getValue())
-        return instance;
+      if (auto innerSym = instance.getInnerSym())
+        if (innerSym->getSymName() == name)
+          return instance;
     }
 
     if (auto ifdef = dyn_cast<IfDefOp>(op)) {

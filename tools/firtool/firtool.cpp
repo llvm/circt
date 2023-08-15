@@ -22,11 +22,13 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/OM/OMOps.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/LoweringOptionsParser.h"
 #include "circt/Support/Passes.h"
@@ -582,7 +584,8 @@ static LogicalResult executeFirtool(MLIRContext &context) {
   // Register our dialects.
   context.loadDialect<chirrtl::CHIRRTLDialect, firrtl::FIRRTLDialect,
                       hw::HWDialect, comb::CombDialect, seq::SeqDialect,
-                      om::OMDialect, sv::SVDialect>();
+                      om::OMDialect, sv::SVDialect, verif::VerifDialect,
+                      ltl::LTLDialect>();
 
   // Process the input.
   if (failed(processInput(context, ts, std::move(input), outputFile)))

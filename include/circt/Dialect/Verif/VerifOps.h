@@ -12,6 +12,7 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
+#include "mlir/Interfaces/InferTypeOpInterface.h"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Verif/Verif.h.inc"

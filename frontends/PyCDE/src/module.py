@@ -471,14 +471,14 @@ class ModuleBuilder(ModuleLikeBuilderBase):
     if len(self.generators) == 0 and self.parameters is not None:
       parameters = ir.ArrayAttr.get(
           hwext.create_parameters(self.parameters, circt_mod))
-    inst = msft.InstanceOp(circt_mod.type.results,
-                           instance_name,
-                           ir.FlatSymbolRefAttr.get(
-                               ir.StringAttr(
-                                   circt_mod.attributes["sym_name"]).value),
-                           [sig.value for sig in input_values],
-                           parameters=parameters,
-                           loc=get_user_loc())
+    inst = msft.InstanceOp(
+        circt_mod.type.results,
+        hw.InnerSymAttr.get(ir.StringAttr.get(instance_name)),
+        ir.FlatSymbolRefAttr.get(
+            ir.StringAttr(circt_mod.attributes["sym_name"]).value),
+        [sig.value for sig in input_values],
+        parameters=parameters,
+        loc=get_user_loc())
     inst.verify()
     return inst
 

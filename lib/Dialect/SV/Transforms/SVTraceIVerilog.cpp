@@ -40,7 +40,7 @@ void SVTraceIVerilogPass::runOnOperation() {
   mlir::ModuleOp mod = getOperation();
 
   if (topOnly) {
-    auto graph = InstanceGraph(mod);
+    auto &graph = getAnalysis<InstanceGraph>();
     auto topLevelNodes = graph.getInferredTopLevelNodes();
     if (failed(topLevelNodes) || topLevelNodes->size() != 1) {
       mod.emitError("Expected exactly one top level node");

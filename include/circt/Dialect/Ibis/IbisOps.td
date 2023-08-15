@@ -17,25 +17,32 @@ include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Dialect/Ibis/IbisInterfaces.td"
+include "circt/Dialect/Ibis/IbisTypes.td"
+
+class IbisOp<string mnemonic, list<Trait> traits = []> :
+    Op<IbisDialect, mnemonic, traits>;
 
 def HasCustomSSAName :
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>;
 
 def ClassOp : IbisOp<"class", [
     IsolatedFromAbove, RegionKindInterface,
-    Symbol, SymbolTable, SingleBlock,
-    NoTerminator, NoRegionArguments,
+    SymbolTable, SingleBlock,
+    NoTerminator, ScopeOpInterface,
     HasParent<"mlir::ModuleOp">]> {
 
   let summary = "Ibis class";
   let description = [{
     Ibis has the notion of a class which can contain methods and member
     variables.
+
+    In the low-level Ibis representation, the ClassOp becomes a container for
+    `ibis.port`s, `ibis.container`s, and contain logic for member variables.
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name);
   let regions = (region SizedRegion<1>:$body);
-
   let assemblyFormat = [{
     $sym_name attr-dict-with-keyword $body
   }];
@@ -43,18 +50,40 @@ def ClassOp : IbisOp<"class", [
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+  
+    Block* getBodyBlock() { return &getBody().front(); }
   }];
 }
 
-def InstanceOp : IbisOp<"instance", [Symbol]> {
+class InstanceOpBase<string mnemonic> : IbisOp<mnemonic, [
+    Symbol,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+
+  let arguments = (ins SymbolNameAttr:$sym_name, FlatSymbolRefAttr:$targetName);
+  let results = (outs ScopeRefType:$scopeRef);
+  let assemblyFormat = [{
+    $sym_name `,` $targetName attr-dict
+    custom<ScopeRefFromName>(type($scopeRef), ref($targetName))
+  }];
+
+  let builders = [
+    OpBuilder<(ins "StringAttr":$instanceName, "StringAttr":$targetName), [{
+      build($_builder, $_state, $_builder.getType<ScopeRefType>(targetName),
+        instanceName, targetName);
+    }]>
+  ];
+}
+
+def InstanceOp : InstanceOpBase<"instance"> {
   let summary = "Ibis class instance";
   let description = [{
     Instantiates an Ibis class.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name, FlatSymbolRefAttr:$className);
-  let assemblyFormat = [{
-    $sym_name `,` $className attr-dict
+  let extraClassDeclaration = [{
+    // Return the class this instance is instantiating.
+    ClassOp getClass(SymbolTableCollection *symbolTable = nullptr);
   }];
 }
 
@@ -121,6 +150,10 @@ def CallOp : IbisOp<"call", [CallOpInterface]> {
   let results = (outs Variadic<AnyType>);
 
   let extraClassDeclaration = [{
+    MutableOperandRange getArgOperandsMutable() {
+      return getOperandsMutable();
+    }
+
     /// Get the argument operands to the called method.
     operand_range getArgOperands() {
       return {arg_operand_begin(), arg_operand_end()};
@@ -142,6 +175,190 @@ def CallOp : IbisOp<"call", [CallOpInterface]> {
 
   let assemblyFormat = [{
     $callee `(` $operands `)` attr-dict `:` functional-type($operands, results)
+  }];
+}
+
+def GetParentOfRefOp : IbisOp<"get_parent_of_ref"> {
+  let summary = "Ibis get classref parent op";
+  let description = [{
+    Given an Ibis class reference, returns a class reference to the parent of
+    said class. The returned `ibis.classref` will be an opaque type, given that
+    any given Ibis class may be instantiated by multiple different parent classes.
+  }];
+
+  let arguments = (ins AnyScopeRefType:$src);
+  let results = (outs ScopeRefType:$parent);
+
+  let assemblyFormat = [{
+    $src `:` qualified(type($src)) `->` qualified(type($parent)) attr-dict
+  }];
+}
+
+def GetInstanceInRefOp : IbisOp<"get_instance_in_ref"> {
+  let summary = "Ibis get instance";
+  let description = [{
+    Given an Ibis class reference, returns a instance of said class. The instance
+    is specified by the symbol name of the target child instance in the referenced
+    class instance. In case of an opaque reference to the containing class, no type
+    validation is performed, and it is up to lowering passes to determine whether
+    the instance of the given classref actually exists.
+    The returned classref, however, is typed, given that one must specify the
+    symbol of the class which the instance is an instance of.
+  }];
+
+  let arguments = (ins
+    AnyScopeRefType:$src,
+    FlatSymbolRefAttr:$instanceName,
+    FlatSymbolRefAttr:$instanceSymbol);
+  let results = (outs ScopeRefType:$instance);
+  let assemblyFormat = [{
+    $instanceName `:` $instanceSymbol `in` $src
+      `:`qualified(type($src)) attr-dict custom<ScopeRefFromName>(type($instance), ref($instanceSymbol))
+  }];
+}
+
+def ThisOp : IbisOp<"this", [
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Return a handle to the current scope `!ibis.scoperef`";
+  let arguments = (ins FlatSymbolRefAttr:$scopeName);
+  let results = (outs ScopeRefType:$thisRef);
+
+  let assemblyFormat = [{
+    $scopeName attr-dict custom<ScopeRefFromName>(type($thisRef), ref($scopeName))
+  }];
+
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name), [{
+      build($_builder, $_state, $_builder.getType<ScopeRefType>(name), name);
+    }]>
+  ];
+}
+
+// ===---------------------------------------------------------------------===//
+// Low-level Ibis operations
+// ===---------------------------------------------------------------------===//
+
+def ContainerOp : IbisOp<"container", [
+  SymbolTable, SingleBlock,
+  NoTerminator, NoRegionArguments,
+  ScopeOpInterface, IsolatedFromAbove
+]> {
+  let summary = "Ibis container";
+  let description = [{
+    An ibis container describes a collection of logic nested within an Ibis class.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name);
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    $sym_name attr-dict-with-keyword $body
+  }];
+
+  let extraClassDeclaration = [{
+    Block* getBodyBlock() { return &getBody().front(); }
+  }];
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name), [{
+      auto region = $_state.addRegion();
+      region->push_back(new Block());
+      $_state.addAttribute(getSymNameAttrName($_state.name), name);
+    }]>
+  ];
+}
+
+def ContainerInstanceOp : InstanceOpBase<"container.instance"> {
+  let summary = "Ibis container instance";
+  let description = [{
+    Instantiates an Ibis container.
+  }];
+
+  let extraClassDeclaration = [{
+    // Return the container this instance is instantiating.
+    ContainerOp getContainer(SymbolTableCollection *symbolTable = nullptr);
+  }];
+}
+
+class PortLikeOp<string mnemonic, list<Trait> traits = []> :
+    IbisOp<mnemonic, !listconcat(traits, [
+      PortOpInterface,
+      ParentOneOf<["ClassOp", "ContainerOp"]>
+  ])> {
+  let arguments = (ins SymbolNameAttr:$sym_name, TypeAttrOf<AnyType>:$type);
+  let assemblyFormat = [{
+    $sym_name `:` $type attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    Type getPortType() {
+      return getTypeAttr().getValue();
+    }
+  }];
+}
+
+def GetPortOp : IbisOp<"get_port", [
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Ibis get port";
+  let description = [{
+    Given an Ibis class reference, returns a port of said class. The port
+    is specified by the symbol name of the port in the referenced class.
+  }];
+
+  let arguments = (ins
+    ScopeRefType:$instance,
+    FlatSymbolRefAttr:$portSymbol);
+  let results = (outs PortRefType:$port);
+  let assemblyFormat = [{
+    $instance `,` $portSymbol `:` qualified(type($instance)) `->` qualified(type($port)) attr-dict
+  }];
+}
+
+def InputPortOp : PortLikeOp<"port.input"> {
+  let summary = "Ibis input port";
+}
+
+def OutputPortOp : PortLikeOp<"port.output"> {
+  let summary = "Ibis output port";
+}
+
+class PortRefToInnerTypeConstraint<string lhs, string rhs>
+  : TypesMatchWith<"the lhs portref dictates the rhs type",
+    lhs, rhs, "$_self.cast<PortRefType>().getPortType()">;
+
+def PortReadOp : IbisOp<"port.read", [
+      PortRefToInnerTypeConstraint<"port", "output">
+]> {
+  let summary = "Ibis port read";
+  let description = [{
+    Read the value of a local port (i.e. a port of 'this' class).
+  }];
+
+  let arguments = (ins PortRefType:$port);
+  let results = (outs AnyType:$output);
+  let assemblyFormat = [{
+    $port attr-dict `:` qualified(type($port))
+  }];
+}
+
+class InnerTypeToPortRefTypeConstraint<string lhs, string rhs>
+  : TypesMatchWith<"the type of the lhs value dictates the rhs portref type",
+    lhs, rhs, "PortRefType::get($_ctxt, $_self, ibis::Direction::Input)">;
+
+def PortWriteOp : IbisOp<"port.write", [
+      InnerTypeToPortRefTypeConstraint<"value", "port">
+]> {
+  let summary = "Ibis port write";
+  let description = [{
+    Write a value to a local port (i.e. a port of 'this' class).
+  }];
+
+  let arguments = (ins PortRefType:$port, AnyType:$value);
+  let assemblyFormat = [{
+    $port `,` $value attr-dict `:` type($value)
   }];
 }
 

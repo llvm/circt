@@ -49,3 +49,11 @@ hw.module @foo() {
   %fstr = verif.format_verilog_string "Hi %x\0A" (%false) : i1
   verif.print %fstr
 }
+
+// CHECK-LABEL: hw.module @HasBeenReset
+hw.module @HasBeenReset(%clock: i1, %reset: i1) {
+  // CHECK-NEXT: verif.has_been_reset %clock, async %reset
+  // CHECK-NEXT: verif.has_been_reset %clock, sync %reset
+  %hbr0 = verif.has_been_reset %clock, async %reset
+  %hbr1 = verif.has_been_reset %clock, sync %reset
+}

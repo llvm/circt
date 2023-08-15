@@ -208,7 +208,7 @@ static bool isNotSubAccess(Operation *op) {
     return true;
   ConstantOp arg =
       llvm::dyn_cast_or_null<ConstantOp>(sao.getIndex().getDefiningOp());
-  return arg && sao.getInput().getType().getNumElements() != 0;
+  return arg && sao.getInput().getType().get().getNumElements() != 0;
 }
 
 /// Look through and collect subfields leading to a subaccess.
@@ -305,7 +305,6 @@ namespace {
 struct AttrCache {
   AttrCache(MLIRContext *context) {
     i64ty = IntegerType::get(context, 64);
-    innerSymAttr = StringAttr::get(context, "inner_sym");
     nameAttr = StringAttr::get(context, "name");
     nameKindAttr = StringAttr::get(context, "nameKind");
     sPortDirections = StringAttr::get(context, "portDirections");
@@ -319,8 +318,8 @@ struct AttrCache {
   AttrCache(const AttrCache &) = default;
 
   Type i64ty;
-  StringAttr innerSymAttr, nameAttr, nameKindAttr, sPortDirections, sPortNames,
-      sPortTypes, sPortSyms, sPortLocations, sPortAnnotations, sEmpty;
+  StringAttr nameAttr, nameKindAttr, sPortDirections, sPortNames, sPortTypes,
+      sPortSyms, sPortLocations, sPortAnnotations, sEmpty;
 };
 
 // The visitors all return true if the operation should be deleted, false if
@@ -827,7 +826,7 @@ static Value cloneAccess(ImplicitLocOpBuilder *builder, Operation *op,
 void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
                                            ArrayRef<Operation *> writePath) {
   SubaccessOp sao = cast<SubaccessOp>(writePath.back());
-  auto saoType = sao.getInput().getType();
+  FVectorType saoType = sao.getInput().getType();
   auto selectWidth = llvm::Log2_64_Ceil(saoType.getNumElements());
 
   for (size_t index = 0, e = saoType.getNumElements(); index < e; ++index) {
@@ -1388,8 +1387,8 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<Direction> newDirs;
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
-  PreserveAggregate::PreserveMode mode =
-      getPreservationModeForModule(op.getReferencedModule(symTbl));
+  PreserveAggregate::PreserveMode mode = getPreservationModeForModule(
+      cast<FModuleLike>(op.getReferencedModule(symTbl)));
 
   endFields.push_back(0);
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
@@ -1465,7 +1464,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
 bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   auto input = op.getInput();
-  auto vType = input.getType();
+  FVectorType vType = input.getType();
 
   // Check for empty vectors
   if (vType.getNumElements() == 0) {
@@ -1589,7 +1588,7 @@ void LowerTypesPass::runOnOperation() {
                       "------------------------------------------------===\n");
   std::vector<FModuleLike> ops;
   // Symbol Table
-  SymbolTable symTbl(getOperation());
+  auto &symTbl = getAnalysis<SymbolTable>();
   // Cached attr
   AttrCache cache(&getContext());
 

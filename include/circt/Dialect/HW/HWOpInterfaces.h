@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
+#include "circt/Support/InstanceGraphInterface.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/SymbolTable.h"
@@ -31,6 +32,7 @@ struct PortInfo : public ModulePort {
 
   /// The optional symbol for this port.
   InnerSymAttr sym = {};
+  DictionaryAttr attrs = {};
   LocationAttr loc = {};
 
   StringRef getName() const { return name.getValue(); }
@@ -48,75 +50,118 @@ struct ModulePortInfo {
   explicit ModulePortInfo(ArrayRef<PortInfo> inputs,
                           ArrayRef<PortInfo> outputs) {
     ports.insert(ports.end(), inputs.begin(), inputs.end());
-    numInputs = ports.size();
     ports.insert(ports.end(), outputs.begin(), outputs.end());
   }
 
   explicit ModulePortInfo(ArrayRef<PortInfo> mergedPorts)
-      : ports(mergedPorts.begin(), mergedPorts.end()), numInputs(0) {
-    std::stable_sort(ports.begin(), ports.end(),
-                     [](const PortInfo &lhs, const PortInfo &rhs) {
-                       return !lhs.isOutput() && rhs.isOutput();
-                     });
-    while (numInputs < ports.size() && !ports[numInputs].isOutput())
-      ++numInputs;
-  }
+      : ports(mergedPorts.begin(), mergedPorts.end()) {}
 
   using iterator = SmallVector<PortInfo>::iterator;
   using const_iterator = SmallVector<PortInfo>::const_iterator;
-  iterator begin_input() { return ports.begin(); }
-  iterator end_input() { return ports.begin() + numInputs; }
-  const_iterator begin_input() const { return ports.begin(); }
-  const_iterator end_input() const { return ports.begin() + numInputs; }
-  iterator begin_output() { return end_input(); }
-  iterator end_output() { return ports.end(); }
-  const_iterator begin_output() const { return end_input(); }
-  const_iterator end_output() const { return ports.end(); }
+
   iterator begin() { return ports.begin(); }
   iterator end() { return ports.end(); }
   const_iterator begin() const { return ports.begin(); }
   const_iterator end() const { return ports.end(); }
 
-  llvm::iterator_range<iterator> all() { return {begin(), end()}; }
-  llvm::iterator_range<const_iterator> all() const { return {begin(), end()}; }
-  llvm::iterator_range<iterator> inputs() {
-    return {begin_input(), end_input()};
+  using PortDirectionRange = llvm::iterator_range<
+      llvm::filter_iterator<iterator, std::function<bool(const PortInfo &)>>>;
+
+  using ConstPortDirectionRange = llvm::iterator_range<llvm::filter_iterator<
+      const_iterator, std::function<bool(const PortInfo &)>>>;
+
+  PortDirectionRange getPortsOfDirection(bool input) {
+    std::function<bool(const PortInfo &)> predicateFn;
+    if (input) {
+      predicateFn = [](const PortInfo &port) -> bool {
+        return port.dir == ModulePort::Direction::Input ||
+               port.dir == ModulePort::Direction::InOut;
+      };
+    } else {
+      predicateFn = [](const PortInfo &port) -> bool {
+        return port.dir == ModulePort::Direction::Output;
+      };
+    }
+    return llvm::make_filter_range(ports, predicateFn);
   }
-  llvm::iterator_range<const_iterator> inputs() const {
-    return {begin_input(), end_input()};
+
+  ConstPortDirectionRange getPortsOfDirection(bool input) const {
+    std::function<bool(const PortInfo &)> predicateFn;
+    if (input) {
+      predicateFn = [](const PortInfo &port) -> bool {
+        return port.dir == ModulePort::Direction::Input ||
+               port.dir == ModulePort::Direction::InOut;
+      };
+    } else {
+      predicateFn = [](const PortInfo &port) -> bool {
+        return port.dir == ModulePort::Direction::Output;
+      };
+    }
+    return llvm::make_filter_range(ports, predicateFn);
   }
-  llvm::iterator_range<iterator> outputs() {
-    return {begin_output(), end_output()};
+
+  PortDirectionRange getInputs() { return getPortsOfDirection(true); }
+
+  PortDirectionRange getOutputs() { return getPortsOfDirection(false); }
+
+  ConstPortDirectionRange getInputs() const {
+    return getPortsOfDirection(true);
   }
-  llvm::iterator_range<const_iterator> outputs() const {
-    return {begin_output(), end_output()};
+
+  ConstPortDirectionRange getOutputs() const {
+    return getPortsOfDirection(false);
   }
 
   size_t size() const { return ports.size(); }
-  size_t sizeInputs() const { return numInputs; }
-  size_t sizeOutputs() const { return ports.size() - numInputs; }
+  size_t sizeInputs() const {
+    auto r = getInputs();
+    return std::distance(r.begin(), r.end());
+  }
+  size_t sizeOutputs() const {
+    auto r = getOutputs();
+    return std::distance(r.begin(), r.end());
+  }
+
+  size_t portNumForInput(size_t idx) const {
+    size_t port = 0;
+    while (idx || ports[port].isOutput()) {
+      if (!ports[port].isOutput())
+        --idx;
+      ++port;
+    }
+    return port;
+  }
+
+  size_t portNumForOutput(size_t idx) const {
+    size_t port = 0;
+    while (idx || !ports[port].isOutput()) {
+      if (ports[port].isOutput())
+        --idx;
+      ++port;
+    }
+    return port;
+  }
 
   PortInfo &at(size_t idx) { return ports[idx]; }
-  PortInfo &atInput(size_t idx) { return ports[idx]; }
-  PortInfo &atOutput(size_t idx) { return ports[idx + numInputs]; }
+  PortInfo &atInput(size_t idx) { return ports[portNumForInput(idx)]; }
+  PortInfo &atOutput(size_t idx) { return ports[portNumForOutput(idx)]; }
 
   const PortInfo &at(size_t idx) const { return ports[idx]; }
-  const PortInfo &atInput(size_t idx) const { return ports[idx]; }
-  const PortInfo &atOutput(size_t idx) const { return ports[idx + numInputs]; }
+  const PortInfo &atInput(size_t idx) const {
+    return ports[portNumForInput(idx)];
+  }
+  const PortInfo &atOutput(size_t idx) const {
+    return ports[portNumForOutput(idx)];
+  }
 
   void eraseInput(size_t idx) {
-    assert(numInputs);
-    assert(idx < numInputs);
-    ports.erase(ports.begin() + idx);
-    --numInputs;
+    assert(idx < sizeInputs());
+    ports.erase(ports.begin() + portNumForInput(idx));
   }
 
 private:
   /// This contains a list of all ports.  Input first.
   SmallVector<PortInfo> ports;
-
-  /// This is the index of the first output port
-  size_t numInputs;
 };
 
 // This provides capability for looking up port indices based on port names.
@@ -134,10 +179,10 @@ public:
   explicit ModulePortLookupInfo(MLIRContext *ctx,
                                 const ModulePortInfo &portInfo)
       : ctx(ctx) {
-    for (auto &in : portInfo.inputs())
+    for (auto &in : portInfo.getInputs())
       inputPortMap[in.name] = in.argNum;
 
-    for (auto &out : portInfo.outputs())
+    for (auto &out : portInfo.getOutputs())
       outputPortMap[out.name] = out.argNum;
   }
 

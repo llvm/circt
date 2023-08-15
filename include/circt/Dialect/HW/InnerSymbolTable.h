@@ -14,9 +14,9 @@
 #ifndef CIRCT_DIALECT_HW_INNERSYMBOLTABLE_H
 #define CIRCT_DIALECT_HW_INNERSYMBOLTABLE_H
 
-#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
-#include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Support/LLVM.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/StringRef.h"
 

@@ -25,7 +25,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
-#include "circt/Dialect/HW/Namespace.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -509,8 +509,9 @@ private:
                                       Block *topLevelModule,
                                       CircuitLoweringState &loweringState);
 
-  LogicalResult lowerModuleBody(FModuleOp oldModule,
-                                CircuitLoweringState &loweringState);
+  LogicalResult
+  lowerModulePortsAndMoveBody(FModuleOp oldModule, hw::HWModuleOp newModule,
+                              CircuitLoweringState &loweringState);
   LogicalResult lowerModuleOperations(hw::HWModuleOp module,
                                       CircuitLoweringState &loweringState);
 };
@@ -559,7 +560,7 @@ void FIRRTLModuleLowering::runOnOperation() {
       circuit, enableAnnotationWarning, emitChiselAssertsAsSVA,
       &getAnalysis<InstanceGraph>(), &getAnalysis<NLATable>());
 
-  SmallVector<FModuleOp, 32> modulesToProcess;
+  SmallVector<hw::HWModuleOp, 32> modulesToProcess;
 
   AnnotationSet circuitAnno(circuit);
   moveVerifAnno(getOperation(), circuitAnno, extractAssertAnnoClass,
@@ -575,44 +576,53 @@ void FIRRTLModuleLowering::runOnOperation() {
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across. If any module fails to lower, return early.
   for (auto &op : make_early_inc_range(circuitBody->getOperations())) {
-    TypeSwitch<Operation *>(&op)
-        .Case<FModuleOp>([&](auto module) {
-          auto loweredMod = lowerModule(module, topLevelModule, state);
-          if (!loweredMod)
-            return signalPassFailure();
+    auto result =
+        TypeSwitch<Operation *, LogicalResult>(&op)
+            .Case<FModuleOp>([&](auto module) {
+              auto loweredMod = lowerModule(module, topLevelModule, state);
+              if (!loweredMod)
+                return failure();
 
-          state.oldToNewModuleMap[&op] = loweredMod;
-          modulesToProcess.push_back(module);
-          // Lower all the alias types.
-          module.walk([&](Operation *op) {
-            for (auto res : op->getResults()) {
-              if (auto aliasType =
-                      type_dyn_cast<BaseTypeAliasType>(res.getType()))
-                state.lowerType(aliasType, op->getLoc());
-            }
-          });
-        })
-        .Case<FExtModuleOp>([&](auto extModule) {
-          auto loweredMod = lowerExtModule(extModule, topLevelModule, state);
-          if (!loweredMod)
-            return signalPassFailure();
-          state.oldToNewModuleMap[&op] = loweredMod;
-        })
-        .Case<FMemModuleOp>([&](auto memModule) {
-          auto loweredMod = lowerMemModule(memModule, topLevelModule, state);
-          if (!loweredMod)
-            return signalPassFailure();
-          state.oldToNewModuleMap[&op] = loweredMod;
-        })
-        .Default([&](Operation *op) {
-          // We don't know what this op is.  If it has no illegal FIRRTL types,
-          // we can forward the operation.  Otherwise, we emit an error and drop
-          // the operation from the circuit.
-          if (succeeded(verifyOpLegality(op)))
-            op->moveBefore(topLevelModule, topLevelModule->end());
-          else
-            return signalPassFailure();
-        });
+              state.oldToNewModuleMap[&op] = loweredMod;
+              modulesToProcess.push_back(loweredMod);
+              // Lower all the alias types.
+              module.walk([&](Operation *op) {
+                for (auto res : op->getResults()) {
+                  if (auto aliasType =
+                          type_dyn_cast<BaseTypeAliasType>(res.getType()))
+                    state.lowerType(aliasType, op->getLoc());
+                }
+              });
+              return lowerModulePortsAndMoveBody(module, loweredMod, state);
+            })
+            .Case<FExtModuleOp>([&](auto extModule) {
+              auto loweredMod =
+                  lowerExtModule(extModule, topLevelModule, state);
+              if (!loweredMod)
+                return failure();
+              state.oldToNewModuleMap[&op] = loweredMod;
+              return success();
+            })
+            .Case<FMemModuleOp>([&](auto memModule) {
+              auto loweredMod =
+                  lowerMemModule(memModule, topLevelModule, state);
+              if (!loweredMod)
+                return failure();
+              state.oldToNewModuleMap[&op] = loweredMod;
+              return success();
+            })
+            .Default([&](Operation *op) {
+              // We don't know what this op is.  If it has no illegal FIRRTL
+              // types, we can forward the operation.  Otherwise, we emit an
+              // error and drop the operation from the circuit.
+              if (succeeded(verifyOpLegality(op)))
+                op->moveBefore(topLevelModule, topLevelModule->end());
+              else
+                return failure();
+              return success();
+            });
+    if (failed(result))
+      return signalPassFailure();
   }
   // Ensure no more TypeDecl can be added to the global TypeScope.
   state.typeAliases.freeze();
@@ -656,11 +666,10 @@ void FIRRTLModuleLowering::runOnOperation() {
         moduleHierarchyFileAttrName,
         ArrayAttr::get(&getContext(), testHarnessHierarchyFiles));
 
-  // Now that we've lowered all of the modules, move the bodies over and
-  // update any instances that refer to the old modules.
+  // Finally, lower all operations.
   auto result = mlir::failableParallelForEachN(
       &getContext(), 0, modulesToProcess.size(), [&](auto index) {
-        return lowerModuleBody(modulesToProcess[index], state);
+        return lowerModuleOperations(modulesToProcess[index], state);
       });
 
   // If any module bodies failed to lower, return early.
@@ -1098,8 +1107,7 @@ FIRRTLModuleLowering::lowerMemModule(FMemModuleOp oldModule,
   return newModule;
 }
 
-/// Run on each firrtl.module, transforming it from an firrtl.module into an
-/// hw.module, then deleting the old one.
+/// Run on each firrtl.module, creating a basic hw.module for the firrtl module.
 hw::HWModuleOp
 FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
                                   CircuitLoweringState &loweringState) {
@@ -1287,7 +1295,8 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
   for (auto *op : structValue.getUsers()) {
     assert(isa<SubfieldOp>(op));
     auto fieldAccess = cast<SubfieldOp>(op);
-    auto elemIndex = fieldAccess.getInput().getType().getElementIndex(field);
+    auto elemIndex =
+        fieldAccess.getInput().getType().get().getElementIndex(field);
     if (elemIndex && *elemIndex == fieldAccess.getFieldIndex())
       accesses.push_back(fieldAccess);
   }
@@ -1296,16 +1305,10 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
 
 /// Now that we have the operations for the hw.module's corresponding to the
 /// firrtl.module's, we can go through and move the bodies over, updating the
-/// ports and instances.
-LogicalResult
-FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
-                                      CircuitLoweringState &loweringState) {
-  auto newModule =
-      dyn_cast_or_null<hw::HWModuleOp>(loweringState.getNewModule(oldModule));
-  // Don't touch modules if we failed to lower ports.
-  if (!newModule)
-    return success();
-
+/// ports and output op.
+LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
+    FModuleOp oldModule, hw::HWModuleOp newModule,
+    CircuitLoweringState &loweringState) {
   ImplicitLocOpBuilder bodyBuilder(oldModule.getLoc(), newModule.getBody());
 
   // Use a placeholder instruction be a cursor that indicates where we want to
@@ -1371,18 +1374,25 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
 
     // Outputs need a temporary wire so they can be connect'd to, which we
     // then return.
-    Value newArg =
-        bodyBuilder
-            .create<WireOp>(port.type, "." + port.getName().str() + ".output")
-            .getResult();
+    auto newArg = bodyBuilder.create<WireOp>(
+        port.type, "." + port.getName().str() + ".output");
+
     // Switch all uses of the old operands to the new ones.
-    oldArg.replaceAllUsesWith(newArg);
+    oldArg.replaceAllUsesWith(newArg.getResult());
 
     // Don't output zero bit results or inouts.
     auto resultHWType = loweringState.lowerType(port.type, port.loc);
     if (!resultHWType.isInteger(0)) {
-      auto output = castFromFIRRTLType(newArg, resultHWType, outputBuilder);
+      auto output =
+          castFromFIRRTLType(newArg.getResult(), resultHWType, outputBuilder);
+      auto idx = newModule.getNumInputs() + outputs.size();
       outputs.push_back(output);
+
+      // If output port has symbol, move it to this wire.
+      if (auto sym = newModule.getPortSymbolAttr(idx)) {
+        newArg.setInnerSymAttr(sym);
+        newModule.setPortSymbolAttr(idx, {});
+      }
     }
   }
 
@@ -1398,8 +1408,7 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
   // We are done with our cursor op.
   cursor.erase();
 
-  // Lower all of the other operations.
-  return lowerModuleOperations(newModule, loweringState);
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1412,13 +1421,10 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState)
       : theModule(module), circuitState(circuitState),
-        builder(module.getLoc(), module.getContext()),
-        moduleNamespace(hw::ModuleNamespace(module)),
+        builder(module.getLoc(), module.getContext()), moduleNamespace(module),
         backedgeBuilder(builder, module.getLoc()) {}
 
   LogicalResult run();
-
-  void optimizeTemporaryWire(sv::WireOp wire);
 
   // Helpers.
   Value getOrCreateIntConstant(const APInt &value);
@@ -1469,16 +1475,6 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                                     bool allowTruncate);
   Value createArrayIndexing(Value array, Value index);
   Value createValueWithMuxAnnotation(Operation *op, bool isMux2);
-
-  // Create a temporary wire at the current insertion point, and try to
-  // eliminate it later as part of lowering post processing.
-  sv::WireOp createTmpWireOp(Type type, StringRef name) {
-    // This is a locally visible, private wire created by the compiler, so do
-    // not attach a symbol name.
-    auto result = builder.create<sv::WireOp>(type, name);
-    tmpWiresToOptimize.push_back(result);
-    return result;
-  }
 
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitExpr;
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitDecl;
@@ -1614,6 +1610,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(VerifAssertIntrinsicOp op);
   LogicalResult visitStmt(VerifAssumeIntrinsicOp op);
   LogicalResult visitStmt(VerifCoverIntrinsicOp op);
+  LogicalResult visitExpr(HasBeenResetIntrinsicOp op);
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
@@ -1655,7 +1652,6 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(AssumeOp op);
   LogicalResult visitStmt(CoverOp op);
   LogicalResult visitStmt(AttachOp op);
-  LogicalResult visitStmt(ProbeOp op);
   LogicalResult visitStmt(RefForceOp op);
   LogicalResult visitStmt(RefForceInitialOp op);
   LogicalResult visitStmt(RefReleaseOp op);
@@ -1711,14 +1707,9 @@ private:
   llvm::SmallDenseMap<std::pair<Block *, Attribute>, sv::IfDefOp> ifdefBlocks;
   llvm::SmallDenseMap<Block *, sv::InitialOp> initialBlocks;
 
-  /// This is a set of wires that get inserted as an artifact of the
-  /// lowering process.  LowerToHW should attempt to clean these up after
-  /// lowering.
-  SmallVector<sv::WireOp> tmpWiresToOptimize;
-
   /// A namespace that can be used to generte new symbol names that are unique
   /// within this module.
-  hw::ModuleNamespace moduleNamespace;
+  hw::InnerSymbolNamespace moduleNamespace;
 
   /// A backedge builder to directly materialize values during the lowering
   /// without requiring temporary wires.
@@ -1846,58 +1837,12 @@ LogicalResult FIRRTLLowering::run() {
     op->erase();
   }
 
-  // Now that the IR is in a stable form, try to eliminate temporary wires
-  // inserted by MemOp insertions.
-  for (auto wire : tmpWiresToOptimize)
-    optimizeTemporaryWire(wire);
-
   // Determine the actual types of lowered LTL operations and remove any
   // intermediate wires among them.
   if (failed(fixupLTLOps()))
     return failure();
 
   return backedgeBuilder.clearOrEmitError();
-}
-
-// Try to optimize out temporary wires introduced during lowering.
-void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
-  // Wires have inout type, so they'll have connects and read_inout operations
-  // that work on them.  If anything unexpected is found then leave it alone.
-  SmallVector<sv::ReadInOutOp> reads;
-  sv::AssignOp write;
-
-  for (auto *user : wire->getUsers()) {
-    if (auto read = dyn_cast<sv::ReadInOutOp>(user)) {
-      reads.push_back(read);
-      continue;
-    }
-
-    // Otherwise must be a connect, and we must not have seen a write yet.
-    auto assign = dyn_cast<sv::AssignOp>(user);
-    if (!assign || write)
-      return;
-    write = assign;
-  }
-
-  // Must have found the write!
-  if (!write)
-    return;
-
-  // If the write is happening at the module level then we don't have any
-  // use-before-def checking to do, so we only handle that for now.
-  if (!isa<hw::HWModuleOp>(write->getParentOp()))
-    return;
-
-  auto connected = write.getSrc();
-
-  // Ok, we can do this.  Replace all the reads with the connected value.
-  for (auto read : reads) {
-    read.replaceAllUsesWith(connected);
-    read.erase();
-  }
-  // And remove the write and wire itself.
-  write.erase();
-  wire.erase();
 }
 
 //===----------------------------------------------------------------------===//
@@ -2879,9 +2824,7 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   // that we have a symbol name so we can keep the node as a wire.
   auto symName = getInnerSymName(op);
   auto name = op.getNameAttr();
-  if (AnnotationSet::removeAnnotations(
-          op, "firrtl.transforms.DontTouchAnnotation") &&
-      !symName) {
+  if (AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) && !symName) {
     // name may be empty
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
     symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
@@ -2920,16 +2863,16 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
 
   // Add symbol if DontTouch annotation present.
   // For now, also ensure has symbol if forceable.
-  auto symName = getInnerSymName(op);
+  auto innerSym = op.getInnerSymAttr();
   if ((AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) ||
        op.getNameKind() == NameKindEnum::InterestingName || op.isForceable()) &&
-      !symName)
-    symName = op.getNameAttr();
+      !innerSym)
+    innerSym = hw::InnerSymAttr::get(op.getNameAttr());
 
   // Create a reg op, wiring itself to its input.
   Backedge inputEdge = backedgeBuilder.get(resultType);
   auto reg = builder.create<seq::FirRegOp>(inputEdge, clockVal,
-                                           op.getNameAttr(), symName);
+                                           op.getNameAttr(), innerSym);
 
   // Pass along the start and end random initialization bits for this register.
   if (auto randomRegister = op->getAttr("firrtl.random_init_register"))
@@ -2967,18 +2910,18 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
 
   // Add symbol if DontTouch annotation present.
   // For now, also ensure has symbol if forceable.
-  auto symName = getInnerSymName(op);
+  auto innerSym = op.getInnerSymAttr();
   if ((AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) ||
        op.getNameKind() == NameKindEnum::InterestingName || op.isForceable()) &&
-      !symName)
-    symName = op.getNameAttr();
+      !innerSym)
+    innerSym = hw::InnerSymAttr::get(op.getNameAttr());
 
   // Create a reg op, wiring itself to its input.
   bool isAsync = type_isa<AsyncResetType>(op.getResetSignal().getType());
   Backedge inputEdge = backedgeBuilder.get(resultType);
   auto reg =
       builder.create<seq::FirRegOp>(inputEdge, clockVal, op.getNameAttr(),
-                                    resetSignal, resetValue, symName, isAsync);
+                                    resetSignal, resetValue, innerSym, isAsync);
 
   // Pass along the start and end random initialization bits for this register.
   if (auto randomRegister = op->getAttr("firrtl.random_init_register"))
@@ -3026,7 +2969,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   auto memDecl = builder.create<seq::FirMemOp>(
       memType, memSummary.readLatency, memSummary.writeLatency,
       memSummary.readUnderWrite, memSummary.writeUnderWrite, op.getNameAttr(),
-      getInnerSymName(op), memInit, op.getPrefixAttr(), Attribute{});
+      op.getInnerSymAttr(), memInit, op.getPrefixAttr(), Attribute{});
 
   // If the module is outside the DUT, set the appropriate output directory for
   // the memory.
@@ -3193,8 +3136,10 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     }
 
     // Create a wire for each inout operand, so there is something to connect
-    // to.
-    auto wire = createTmpWireOp(portType, "." + port.getName().str() + ".wire");
+    // to. The instance becomes the sole driver of this wire.
+    auto wire = builder.create<sv::WireOp>(
+        portType, "." + port.getName().str() + ".wire");
+
     // Know that the argument FIRRTL value is equal to this wire, allowing
     // connects to it to be lowered.
     (void)setLowering(portResult, wire);
@@ -3206,11 +3151,13 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   // for it and generate a bind op.  Enter the bind into global
   // CircuitLoweringState so that this can be moved outside of module once
   // we're guaranteed to not be a parallel context.
-  StringAttr symbol = getInnerSymName(oldInstance);
+  auto innerSym = oldInstance.getInnerSymAttr();
   if (oldInstance.getLowerToBind()) {
-    if (!symbol)
-      symbol = builder.getStringAttr("__" + oldInstance.getName() + "__");
-    auto bindOp = builder.create<sv::BindOp>(theModule.getNameAttr(), symbol);
+    if (!innerSym)
+      innerSym = hw::InnerSymAttr::get(
+          builder.getStringAttr("__" + oldInstance.getName() + "__"));
+    auto bindOp = builder.create<sv::BindOp>(theModule.getNameAttr(),
+                                             innerSym.getSymName());
     // If the lowered op already had output file information, then use that.
     // Otherwise, generate some default bind information.
     if (auto outputFile = oldInstance->getAttr("output_file"))
@@ -3222,7 +3169,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
   // Create the new hw.instance operation.
   auto newInstance = builder.create<hw::InstanceOp>(
-      newModule, oldInstance.getNameAttr(), operands, parameters, symbol);
+      newModule, oldInstance.getNameAttr(), operands, parameters, innerSym);
 
   if (oldInstance.getLowerToBind())
     newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));
@@ -3230,7 +3177,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   if (newInstance.getInnerSymAttr())
     if (auto forceName = circuitState.instanceForceNames.lookup(
             {cast<hw::HWModuleOp>(newInstance->getParentOp()).getNameAttr(),
-             newInstance.getInnerSymAttr()}))
+             newInstance.getInnerNameAttr()}))
       newInstance->setAttr("hw.verilogName", forceName);
 
   // Now that we have the new hw.instance, we need to remap all of the users
@@ -3632,9 +3579,9 @@ LogicalResult FIRRTLLowering::visitExpr(ClockGateIntrinsicOp op) {
   Value testEnable;
   if (op.getTestEnable())
     testEnable = getLoweredValue(op.getTestEnable());
-  return setLoweringTo<seq::ClockGateOp>(op, getLoweredValue(op.getInput()),
-                                         getLoweredValue(op.getEnable()),
-                                         testEnable);
+  return setLoweringTo<seq::ClockGateOp>(
+      op, getLoweredValue(op.getInput()), getLoweredValue(op.getEnable()),
+      testEnable, /*inner_sym=*/hw::InnerSymAttr{});
 }
 
 LogicalResult FIRRTLLowering::visitExpr(LTLAndIntrinsicOp op) {
@@ -3703,6 +3650,25 @@ LogicalResult FIRRTLLowering::visitStmt(VerifCoverIntrinsicOp op) {
   builder.create<verif::CoverOp>(getLoweredValue(op.getProperty()),
                                  op.getLabelAttr());
   return success();
+}
+
+LogicalResult FIRRTLLowering::visitExpr(HasBeenResetIntrinsicOp op) {
+  auto clock = getLoweredValue(op.getClock());
+  auto reset = getLoweredValue(op.getReset());
+  if (!clock || !reset)
+    return failure();
+  auto resetType = op.getReset().getType();
+  auto uintResetType = dyn_cast<UIntType>(resetType);
+  auto isSync = uintResetType && uintResetType.getWidth() == 1;
+  auto isAsync = isa<AsyncResetType>(resetType);
+  if (!isAsync && !isSync) {
+    auto d = op.emitError("uninferred reset passed to 'has_been_reset'; "
+                          "requires sync or async reset");
+    d.attachNote() << "reset is of type " << resetType
+                   << ", should be '!firrtl.uint<1>' or '!firrtl.asyncreset'";
+    return failure();
+  }
+  return setLoweringTo<verif::HasBeenResetOp>(op, clock, reset, isAsync);
 }
 
 //===----------------------------------------------------------------------===//
@@ -4564,24 +4530,6 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
             },
             [&]() { builder.create<sv::AliasOp>(inoutValues); });
       });
-
-  return success();
-}
-
-LogicalResult FIRRTLLowering::visitStmt(ProbeOp op) {
-  SmallVector<Value, 4> operands;
-  operands.reserve(op.getCaptured().size());
-  for (auto operand : op.getCaptured()) {
-    operands.push_back(getLoweredValue(operand));
-    if (!operands.back()) {
-      // If this is a zero bit operand, just pass a one bit zero.
-      if (!isZeroBitFIRRTLType(operand.getType()))
-        return failure();
-      operands.back() = getOrCreateIntConstant(1, 0);
-    }
-  }
-
-  builder.create<hw::ProbeOp>(op.getInnerSym(), operands);
 
   return success();
 }

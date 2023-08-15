@@ -72,6 +72,7 @@ struct Emitter {
   void emitStatement(PrintFOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(StrictConnectOp op);
+  void emitStatement(PropAssignOp op);
   void emitStatement(InstanceOp op);
   void emitStatement(AttachOp op);
   void emitStatement(MemOp op);
@@ -106,8 +107,12 @@ struct Emitter {
   void emitExpression(RefResolveOp op);
   void emitExpression(RefSendOp op);
   void emitExpression(RefSubOp op);
+  void emitExpression(RWProbeOp op);
+  void emitExpression(RefCastOp op);
   void emitExpression(UninferredResetCastOp op);
   void emitExpression(ConstCastOp op);
+  void emitExpression(StringConstantOp op);
+  void emitExpression(FIntegerConstantOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -307,9 +312,26 @@ private:
     auto it = valueNamesStorage.insert(str);
     valueNames.insert({value, it.first->getKey()});
   }
+  void addForceable(Forceable op, StringAttr attr) {
+    addValueName(op.getData(), attr);
+    if (op.isForceable()) {
+      SmallString<32> rwName;
+      (Twine("rwprobe(") + attr.strref() + ")").toVector(rwName);
+      addValueName(op.getDataRef(), rwName);
+    }
+  }
 
   /// The current circuit namespace valid within the call to `emitCircuit`.
   CircuitNamespace circuitNamespace;
+
+  /// Symbol and Inner Symbol analyses, valid within the call to `emitCircuit`.
+  struct SymInfos {
+    SymbolTable symbolTable;
+    hw::InnerSymbolTableCollection istc;
+    hw::InnerRefNamespace irn{symbolTable, istc};
+    SymInfos(Operation *op) : symbolTable(op), istc(op){};
+  };
+  std::optional<std::reference_wrapper<SymInfos>> symInfos;
 
   /// The version of the FIRRTL spec that should be emitted.
   FIRVersion version;
@@ -321,6 +343,8 @@ LogicalResult Emitter::finalize() { return failure(encounteredError); }
 /// Emit an entire circuit.
 void Emitter::emitCircuit(CircuitOp op) {
   circuitNamespace.add(op);
+  SymInfos circuitSymInfos(op);
+  symInfos = circuitSymInfos;
   startStatement();
   ps << "FIRRTL version ";
   ps.addAsString(version.major);
@@ -347,6 +371,7 @@ void Emitter::emitCircuit(CircuitOp op) {
     }
   });
   circuitNamespace.clear();
+  symInfos = std::nullopt;
 }
 
 /// Emit an entire module.
@@ -502,10 +527,11 @@ void Emitter::emitStatementsInBlock(Block &block) {
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
               PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp, StrictConnectOp,
-              InstanceOp, AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
-              MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp,
-              RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
-              GroupOp>([&](auto op) { emitStatement(op); })
+              PropAssignOp, InstanceOp, AttachOp, MemOp, InvalidValueOp,
+              SeqMemOp, CombMemOp, MemoryPortOp, MemoryDebugPortOp,
+              MemoryPortAccessOp, RefDefineOp, RefForceOp, RefForceInitialOp,
+              RefReleaseOp, RefReleaseInitialOp, GroupOp>(
+            [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           startStatement();
           ps << "// operation " << PPExtString(op->getName().getStringRef());
@@ -545,7 +571,7 @@ void Emitter::emitStatement(WhenOp op) {
 
 void Emitter::emitStatement(WireOp op) {
   auto legalName = legalize(op.getNameAttr());
-  addValueName(op.getResult(), legalName);
+  addForceable(op, legalName);
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "wire " << PPExtString(legalName);
@@ -556,7 +582,7 @@ void Emitter::emitStatement(WireOp op) {
 
 void Emitter::emitStatement(RegOp op) {
   auto legalName = legalize(op.getNameAttr());
-  addValueName(op.getResult(), legalName);
+  addForceable(op, legalName);
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "reg " << PPExtString(legalName);
@@ -569,7 +595,7 @@ void Emitter::emitStatement(RegOp op) {
 
 void Emitter::emitStatement(RegResetOp op) {
   auto legalName = legalize(op.getNameAttr());
-  addValueName(op.getResult(), legalName);
+  addForceable(op, legalName);
   startStatement();
   if (FIRVersion::compare(version, {3, 0, 0}) >= 0) {
     ps.scopedBox(PP::ibox2, [&]() {
@@ -605,7 +631,7 @@ void Emitter::emitStatement(RegResetOp op) {
 
 void Emitter::emitStatement(NodeOp op) {
   auto legalName = legalize(op.getNameAttr());
-  addValueName(op.getResult(), legalName);
+  addForceable(op, legalName);
   startStatement();
   emitAssignLike([&]() { ps << "node " << PPExtString(legalName); },
                  [&]() { emitExpression(op.getInput()); });
@@ -727,6 +753,15 @@ void Emitter::emitStatement(StrictConnectOp op) {
           emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
     }
   }
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(PropAssignOp op) {
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "propassign" << PP::space;
+    interleaveComma(op.getOperands());
+  });
   emitLocationAndNewLine(op);
 }
 
@@ -876,22 +911,9 @@ void Emitter::emitStatement(MemoryPortAccessOp op) {
 
 void Emitter::emitStatement(RefDefineOp op) {
   startStatement();
-  emitAssignLike(
-      [&]() {
-        ps << "define ";
-        emitExpression(op.getDest());
-      },
-      [&]() {
-        auto src = op.getSrc();
-        if (auto forceable = src.getDefiningOp<Forceable>();
-            forceable && forceable.isForceable() &&
-            forceable.getDataRef() == src) {
-          ps << "rwprobe(";
-          emitExpression(forceable.getData());
-          ps << ")";
-        } else
-          emitExpression(src);
-      });
+  emitAssignLike([&]() { emitExpression(op.getDest()); },
+                 [&]() { emitExpression(op.getSrc()); }, PPExtString("="),
+                 PPExtString("define"));
   emitLocationAndNewLine(op);
 }
 
@@ -998,11 +1020,13 @@ void Emitter::emitExpression(Value value) {
           CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
-          ShrPrimOp, UninferredResetCastOp, ConstCastOp,
+          ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
+          FIntegerConstantOp,
           // Reference expressions
-          RefSendOp, RefResolveOp, RefSubOp>([&](auto op) {
-        ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
-      })
+          RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp>(
+          [&](auto op) {
+            ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
+          })
       .Default([&](auto op) {
         emitOpError(op, "not supported as expression");
         ps << "<unsupported-expr-" << PPExtString(op->getName().stripDialect())
@@ -1042,7 +1066,7 @@ void Emitter::emitExpression(SpecialConstantOp op) {
 
 // NOLINTNEXTLINE(misc-no-recursion)
 void Emitter::emitExpression(SubfieldOp op) {
-  auto type = op.getInput().getType();
+  BundleType type = op.getInput().getType();
   emitExpression(op.getInput());
   ps << "." << legalize(type.getElementNameAttr(op.getFieldIndex()));
 }
@@ -1100,8 +1124,63 @@ void Emitter::emitExpression(RefSubOp op) {
           [&](auto type) { ps << "." << type.getElementName(op.getIndex()); });
 }
 
+void Emitter::emitExpression(RWProbeOp op) {
+  ps << "rwprobe(";
+
+  // Find the probe target.
+  auto target = symInfos->get().irn.lookup(op.getTarget());
+  Value base;
+  if (target.isPort()) {
+    auto mod = cast<FModuleOp>(target.getOp());
+    auto port = target.getPort();
+    base = mod.getArgument(port);
+  } else
+    base = cast<hw::InnerSymbolOpInterface>(target.getOp()).getTargetResult();
+
+  // Print target.  Needs this to have a name already.
+  emitExpression(base);
+
+  // Print indexing for the target field.
+  auto fieldID = target.getField();
+  auto type = base.getType();
+  while (fieldID) {
+    FIRRTLTypeSwitch<Type, void>(type)
+        .Case<FVectorType, OpenVectorType>([&](auto vecTy) {
+          auto index = vecTy.getIndexForFieldID(fieldID);
+          ps << "[";
+          ps.addAsString(index);
+          ps << "]";
+          auto [subtype, subfieldID] = vecTy.getSubTypeByFieldID(fieldID);
+          type = subtype;
+          fieldID = subfieldID;
+        })
+        .Case<BundleType, OpenBundleType>([&](auto bundleTy) {
+          auto index = bundleTy.getIndexForFieldID(fieldID);
+          ps << "." << bundleTy.getElementName(index);
+          auto [subtype, subfieldID] = bundleTy.getSubTypeByFieldID(fieldID);
+          type = subtype;
+          fieldID = subfieldID;
+        });
+  }
+  ps << ")";
+}
+
+void Emitter::emitExpression(RefCastOp op) { emitExpression(op.getInput()); }
+
 void Emitter::emitExpression(UninferredResetCastOp op) {
   emitExpression(op.getInput());
+}
+
+void Emitter::emitExpression(FIntegerConstantOp op) {
+  ps << "Integer(";
+  ps.addAsString(op.getValue());
+  ps << ")";
+}
+
+void Emitter::emitExpression(StringConstantOp op) {
+  ps << "String(";
+  ps.writeQuotedEscaped(op.getValue());
+  ps << ")";
 }
 
 void Emitter::emitExpression(ConstCastOp op) { emitExpression(op.getInput()); }
@@ -1210,6 +1289,9 @@ void Emitter::emitType(Type type, bool includeConst) {
         emitType(type.getType());
         ps << ">";
       })
+      .Case<StringType>([&](StringType type) { ps << "String"; })
+      .Case<FIntegerType>([&](FIntegerType type) { ps << "Integer"; })
+      .Case<PathType>([&](PathType type) { ps << "Path"; })
       .Default([&](auto type) {
         llvm_unreachable("all types should be implemented");
       });
@@ -1262,7 +1344,8 @@ void circt::firrtl::registerToFIRFileTranslation() {
   static mlir::TranslateFromMLIRRegistration toFIR(
       "export-firrtl", "emit FIRRTL dialect operations to .fir output",
       [](ModuleOp module, llvm::raw_ostream &os) {
-        return exportFIRFile(module, os, targetLineLength, {3, 1, 0});
+        return exportFIRFile(module, os, targetLineLength,
+                             FIRVersion::latestFIRVersion());
       },
       [](mlir::DialectRegistry &registry) {
         registry.insert<chirrtl::CHIRRTLDialect>();

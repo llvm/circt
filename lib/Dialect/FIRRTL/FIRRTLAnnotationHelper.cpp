@@ -240,9 +240,9 @@ firrtl::resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
   ArrayRef<TargetToken> component(path.component);
   if (auto instance = dyn_cast<InstanceOp>(ref.getOp())) {
     instances.push_back(instance);
-    auto target = instance.getReferencedModule(symTbl);
+    auto target = cast<FModuleLike>(instance.getReferencedModule(symTbl));
     if (component.empty()) {
-      ref = OpAnnoTarget(instance.getReferencedModule(symTbl));
+      ref = OpAnnoTarget(target);
     } else if (component.front().isIndex) {
       mlir::emitError(circuit.getLoc())
           << "illegal target '" << path.str() << "' indexes into an instance";

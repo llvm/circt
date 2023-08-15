@@ -58,11 +58,11 @@ hw.module @testBasic(%arg0: i1, %clk: i1, %rst: i1) -> (out: i1) {
 // CHECK:         }
 
 // CHECK-LABEL:   hw.module @testLatency1(
-// CHECK-SAME:            %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out: i32, done: i1) {
+// CHECK-SAME:            %[[VAL_0:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out: i32, done: i1) {
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = hw.instance "testLatency1_p0" @testLatency1_p0(a0: %[[VAL_0]]: i32, enable: %[[VAL_2]]: i1, clk: %[[VAL_3]]: i1, rst: %[[VAL_4]]: i1) -> (out: i32, valid: i1)
 // CHECK:           hw.output %[[VAL_5]], %[[VAL_6]] : i32, i1
 // CHECK:         }
-hw.module @testLatency1(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out: i32, done: i1) {
+hw.module @testLatency1(%arg0: i32, %go: i1, %clk: i1, %rst: i1) -> (out: i32, done: i1) {
   %out, %done = pipeline.scheduled(%a0 : i32 = %arg0) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out: i32) {
     %1 = pipeline.latency 2 -> (i32) {
       %6 = comb.add %a0, %a0 : i32
@@ -252,19 +252,19 @@ hw.module @testMultiple(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> 
 // CHECK:           hw.output %[[VAL_5]], %[[VAL_6]] : i32, i32
 // CHECK:         }
 hw.module @testSingleWithExt(%arg0: i32, %ext1: i32, %go : i1, %clk: i1, %rst: i1) -> (out0: i32, out1: i32) {
-  %0:3 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg0) ext (%e0 : i32 = %ext1) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out0: i32, out1: i32) {
+  %0:3 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg0) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out0: i32, out1: i32) {
     %true = hw.constant true
     %1 = comb.sub %a0, %a0 : i32
     pipeline.stage ^bb1 regs(%1 : i32)
 
   ^bb1(%6: i32, %s1_valid: i1):
     // Use the external value inside a stage
-    %8 = comb.add %6, %e0 : i32
+    %8 = comb.add %6, %ext1 : i32
     pipeline.stage ^bb2 regs(%8 : i32)
   
   ^bb2(%9 : i32, %s2_valid: i1):
   // Use the external value in the exit stage.
-    pipeline.return %9, %e0  : i32, i32
+    pipeline.return %9, %ext1  : i32, i32
   }
   hw.output %0#0, %0#1 : i32, i32
 }

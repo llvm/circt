@@ -349,14 +349,14 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
 
   // Create the memory.
   ImplicitLocOpBuilder memBuilder(cmem->getLoc(), cmem);
+  auto symOp = cast<hw::InnerSymbolOpInterface>(cmem);
   auto memory = memBuilder.create<MemOp>(
       resultTypes, readLatency, writeLatency, depth, ruw,
       memBuilder.getArrayAttr(resultNames), name,
       cmem->getAttrOfType<firrtl::NameKindEnumAttr>("nameKind").getValue(),
-      annotations, memBuilder.getArrayAttr(portAnnotations), hw::InnerSymAttr(),
+      annotations, memBuilder.getArrayAttr(portAnnotations),
+      symOp.getInnerSymAttr(),
       cmem->getAttrOfType<firrtl::MemoryInitAttr>("init"), StringAttr());
-  if (auto innerSym = cmem->getAttr("inner_sym"))
-    memory->setAttr("inner_sym", innerSym);
   ++numCreatedMems;
 
   // Process each memory port, initializing the memory port and inferring when

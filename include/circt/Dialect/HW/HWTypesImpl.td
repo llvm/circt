@@ -228,4 +228,41 @@ def TypeAliasType : HWType<"TypeAlias"> {
   }];
 }
 
+def ModuleTypeImpl : HWType<"Module"> {
+  let summary = "Module Type";
+  let description = [{
+    Module types have ports.
+  }];
+  let parameters = (ins ArrayRefParameter<"::circt::hw::ModulePort", "port list">:$ports);
+  let assemblyFormat = "`(` $ports `)`";
+  let genVerifyDecl = 1;
+  let mnemonic = "module";
+
+  let extraClassDeclaration = [{
+    // Many of these are transitional and will be removed when modules and instances
+    // have moved over to this type.
+    size_t getNumInputs();
+    size_t getNumOutputs();
+    SmallVector<Type> getInputTypes();
+    SmallVector<Type> getOutputTypes();
+    Type getInputType(size_t);
+    Type getOutputType(size_t);
+    SmallVector<StringAttr> getInputNames();
+    SmallVector<StringAttr> getOutputNames();
+    StringAttr getNameAttr(size_t);
+    StringRef getName(size_t);
+    StringAttr getInputNameAttr(size_t);
+    StringRef getInputName(size_t);
+    StringAttr getOutputNameAttr(size_t);
+    StringRef getOutputName(size_t);
+    FunctionType getFuncType();
+  }];
+}
+
+def HWStringTypeImpl : HWType<"String"> {
+  let summary = "String type";
+  let description = "Defines a string type for the hw-centric dialects";
+  let mnemonic = "string";
+}
+
 #endif // CIRCT_DIALECT_HW_HWTYPESIMPL_TD

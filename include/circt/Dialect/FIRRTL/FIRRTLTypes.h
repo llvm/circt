@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_TYPES_H
 #define CIRCT_DIALECT_FIRRTL_TYPES_H
 
+#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "circt/Support/LLVM.h"
@@ -35,6 +36,7 @@ struct OpenBundleTypeStorage;
 struct OpenVectorTypeStorage;
 } // namespace detail.
 
+class ClassType;
 class ClockType;
 class ResetType;
 class AsyncResetType;
@@ -49,9 +51,10 @@ class FEnumType;
 class RefType;
 class PropertyType;
 class StringType;
-class BigIntType;
+class FIntegerType;
 class ListType;
 class MapType;
+class PathType;
 class BaseTypeAliasType;
 
 /// A collection of bits indicating the recursive properties of a type.
@@ -266,6 +269,11 @@ bool areAnonymousTypesEquivalent(mlir::Type lhs, mlir::Type rhs);
 
 mlir::Type getPassiveType(mlir::Type anyBaseFIRRTLType);
 
+/// Returns true if the given type has some flipped (aka unaligned) dataflow.
+/// This will be true if the port contains either bi-directional signals or
+/// analog types. Non-HW types (e.g., ref types) are never considered InOut.
+bool isTypeInOut(mlir::Type type);
+
 //===----------------------------------------------------------------------===//
 // Width Qualified Ground Types
 //===----------------------------------------------------------------------===//
@@ -332,12 +340,52 @@ class PropertyType : public FIRRTLType {
 public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
-    return llvm::isa<StringType, BigIntType, ListType, MapType>(type);
+    return llvm::isa<ClassType, StringType, FIntegerType, ListType, MapType,
+                     PathType>(type);
   }
 
 protected:
   using FIRRTLType::FIRRTLType;
 };
+
+//===----------------------------------------------------------------------===//
+// ClassElement
+//===----------------------------------------------------------------------===//
+
+struct ClassElement {
+  ClassElement(StringAttr name, Type type, Direction direction)
+      : name(name), type(type), direction(direction) {}
+
+  StringAttr name;
+  Type type;
+  Direction direction;
+
+  StringRef getName() const { return name.getValue(); }
+
+  /// Return true if this is a simple output-only element.  If you want the
+  /// direction of the port, use the \p direction field directly.
+  bool isInput() const { return direction == Direction::In && !isInOut(); }
+
+  /// Return true if this is a simple input-only element.  If you want the
+  /// direction of the port, use the \p direction field directly.
+  bool isOutput() const { return direction == Direction::Out && !isInOut(); }
+
+  /// Return true if this is an inout port.  This will be true if the port
+  /// contains either bi-directional signals or analog types.
+  /// Non-HW types (e.g., ref types) are never considered InOut.
+  bool isInOut() const { return isTypeInOut(type); }
+
+  bool operator==(const ClassElement &rhs) const {
+    return name == rhs.name && type == rhs.type;
+  }
+
+  bool operator!=(const ClassElement &rhs) const { return !(*this == rhs); }
+};
+
+// NOLINTNEXTLINE(readability-identifier-naming)
+inline llvm::hash_code hash_value(const ClassElement &element) {
+  return llvm::hash_combine(element.name, element.type, element.direction);
+}
 
 //===----------------------------------------------------------------------===//
 // Type helpers
@@ -570,6 +618,24 @@ public:
 private:
   /// A flag detailing if we have already found a match.
   bool foundMatch = false;
+};
+
+template <typename BaseTy>
+class BaseTypeAliasOr
+    : public ::mlir::Type::TypeBase<BaseTypeAliasOr<BaseTy>,
+                                    firrtl::FIRRTLBaseType,
+                                    detail::FIRRTLBaseTypeStorage> {
+
+public:
+  using mlir::Type::TypeBase<BaseTypeAliasOr<BaseTy>, firrtl::FIRRTLBaseType,
+                             detail::FIRRTLBaseTypeStorage>::Base::Base;
+  // Support LLVM isa/cast/dyn_cast to BaseTy.
+  static bool classof(Type other) { return type_isa<BaseTy>(other); }
+
+  // Support C++ implicit conversions to BaseTy.
+  operator BaseTy() const { return circt::firrtl::type_cast<BaseTy>(*this); }
+
+  BaseTy get() const { return circt::firrtl::type_cast<BaseTy>(*this); }
 };
 
 } // namespace firrtl

@@ -85,5 +85,31 @@ firrtl.circuit "Test"   {
     firrtl.strictconnect %2, %1 : !firrtl.uint<1>
     firrtl.strictconnect %0, %s2 : !firrtl.uint<1>
   }
+
+
+  // Check that we don't use strictconnect when merging connections into non-passive type.
+  // COMMON-LABEL:   firrtl.module private @DUT
+  // COMMON-NEXT:     %p = firrtl.wire
+  // COMMON-NEXT:     %0 = firrtl.subfield
+  // CHECK-NEXT:      firrtl.strictconnect %0, %x_a
+  // COMMON-NEXT:     %1 = firrtl.subfield
+  // COMMON-NEXT:     firrtl.strictconnect %x_b, %1
+  // COMMON-NEXT:     firrtl.strictconnect %y_a, %0
+  // CHECK-NEXT:      firrtl.strictconnect %1, %y_b
+  // AGGRESSIVE-NEXT: %[[AGG:.+]] = firrtl.bundlecreate
+  // AGGRESSIVE-NEXT: firrtl.connect %p, %[[AGG]]
+  // COMMON-NEXT:   }
+  firrtl.module private @DUT(in %x_a: !firrtl.uint<2>,
+                             out %x_b: !firrtl.uint<2>,
+                             out %y_a: !firrtl.uint<2>,
+                             in %y_b: !firrtl.uint<2>) {
+    %p = firrtl.wire : !firrtl.bundle<a: uint<2>, b flip: uint<2>>
+    %0 = firrtl.subfield %p[a] : !firrtl.bundle<a: uint<2>, b flip: uint<2>>
+    firrtl.strictconnect %0, %x_a : !firrtl.uint<2>
+    %1 = firrtl.subfield %p[b] : !firrtl.bundle<a: uint<2>, b flip: uint<2>>
+    firrtl.strictconnect %x_b, %1 : !firrtl.uint<2>
+    firrtl.strictconnect %y_a, %0 : !firrtl.uint<2>
+    firrtl.strictconnect %1, %y_b : !firrtl.uint<2>
+  }
 }
 

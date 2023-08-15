@@ -15,7 +15,7 @@
 #include "PassDetail.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/HW/Namespace.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/Path.h"
 #include "mlir/IR/Builders.h"
@@ -35,7 +35,7 @@ class HWExportModuleHierarchyPass
     : public sv::HWExportModuleHierarchyBase<HWExportModuleHierarchyPass> {
 
 private:
-  DenseMap<Operation *, hw::ModuleNamespace> moduleNamespaces;
+  DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;
 
   void printHierarchy(hw::InstanceOp &inst, SymbolTable &symbolTable,
                       llvm::json::OStream &j,
@@ -55,18 +55,16 @@ void HWExportModuleHierarchyPass::printHierarchy(
   auto moduleOp = inst->getParentOfType<hw::HWModuleOp>();
   auto innerSym = inst.getInnerSymAttr();
   if (!innerSym) {
-    if (moduleNamespaces.find(moduleOp) == moduleNamespaces.end())
-      moduleNamespaces.insert({moduleOp, hw::ModuleNamespace(moduleOp)});
-    hw::ModuleNamespace &ns = moduleNamespaces[moduleOp];
-    innerSym =
-        StringAttr::get(inst.getContext(), ns.newName(inst.getInstanceName()));
+    auto &ns = moduleNamespaces.try_emplace(moduleOp, moduleOp).first->second;
+    innerSym = hw::InnerSymAttr::get(
+        StringAttr::get(inst.getContext(), ns.newName(inst.getInstanceName())));
     inst->setAttr("inner_sym", innerSym);
   }
 
   j.object([&] {
     j.attribute("instance_name", ("{{" + Twine(id++) + "}}").str());
-    symbols.push_back(
-        hw::InnerRefAttr::get(moduleOp.getModuleNameAttr(), innerSym));
+    symbols.push_back(hw::InnerRefAttr::get(moduleOp.getModuleNameAttr(),
+                                            innerSym.getSymName()));
     j.attribute("module_name", ("{{" + Twine(id++) + "}}").str());
     symbols.push_back(inst.getModuleNameAttr());
     j.attributeArray("instances", [&] {
@@ -108,7 +106,7 @@ void HWExportModuleHierarchyPass::extractHierarchyFromTop(
 /// and if they exist, emit a verbatim op with the module hierarchy for each.
 void HWExportModuleHierarchyPass::runOnOperation() {
   mlir::ModuleOp mlirModule = getOperation();
-  std::optional<SymbolTable> symbolTable;
+  std::optional<SymbolTable *> symbolTable;
 
   for (auto op : mlirModule.getOps<hw::HWModuleOp>()) {
     auto attr = op->getAttrOfType<ArrayAttr>("firrtl.moduleHierarchyFile");
@@ -116,13 +114,13 @@ void HWExportModuleHierarchyPass::runOnOperation() {
       continue;
     for (auto file : attr.getAsRange<hw::OutputFileAttr>()) {
       if (!symbolTable)
-        symbolTable = SymbolTable(mlirModule);
+        symbolTable = &getAnalysis<SymbolTable>();
 
       std::string jsonBuffer;
       llvm::raw_string_ostream os(jsonBuffer);
       SmallVector<Attribute> symbols;
 
-      extractHierarchyFromTop(op, *symbolTable, os, symbols);
+      extractHierarchyFromTop(op, **symbolTable, os, symbols);
 
       auto builder = ImplicitLocOpBuilder::atBlockEnd(
           UnknownLoc::get(mlirModule.getContext()), mlirModule.getBody());

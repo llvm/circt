@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
-#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/Namespace.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Parallel.h"
@@ -105,7 +104,7 @@ namespace {
 struct LowerFirMemPass : public impl::LowerFirMemBase<LowerFirMemPass> {
   /// A vector of unique `FirMemConfig`s and all the `FirMemOp`s that use it.
   using UniqueConfig = std::pair<FirMemConfig, SmallVector<FirMemOp, 1>>;
-  using UniqueConfigs = std::vector<UniqueConfig>;
+  using UniqueConfigs = SmallVector<UniqueConfig>;
 
   void runOnOperation() override;
 

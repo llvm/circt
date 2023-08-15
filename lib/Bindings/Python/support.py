@@ -144,6 +144,10 @@ def attribute_to_var(attr):
   except ValueError:
     pass
   try:
+    return ir.StringAttr(hw.InnerSymAttr(attr).symName).value
+  except ValueError:
+    pass
+  try:
     return ir.StringAttr(attr).value
   except ValueError:
     pass

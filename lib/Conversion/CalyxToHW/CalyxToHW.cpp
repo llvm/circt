@@ -399,20 +399,18 @@ private:
     return b.create<ReadInOutOp>(wire);
   }
 
-  CompRegOp reg(Value source, Value clock, Value reset, Twine name,
+  CompRegOp reg(Value source, Value clock, Value reset, const Twine &name,
                 ImplicitLocOpBuilder &b) const {
     auto resetValue = b.create<hw::ConstantOp>(source.getType(), 0);
-    auto regName = b.getStringAttr(name);
-    return b.create<CompRegOp>(source.getType(), source, clock, regName, reset,
-                               resetValue, regName);
+    return b.create<CompRegOp>(source, clock, reset, resetValue, name.str());
   }
 
   CompRegClockEnabledOp regCe(Value source, Value clock, Value ce, Value reset,
-                              Twine name, ImplicitLocOpBuilder &b) const {
+                              const Twine &name,
+                              ImplicitLocOpBuilder &b) const {
     auto resetValue = b.create<hw::ConstantOp>(source.getType(), 0);
-    auto regName = b.getStringAttr(name);
-    return b.create<CompRegClockEnabledOp>(source.getType(), source, clock, ce,
-                                           regName, reset, resetValue, regName);
+    return b.create<CompRegClockEnabledOp>(source, clock, ce, reset, resetValue,
+                                           name.str());
   }
 
   std::string createName(StringRef instanceName, StringRef portName) const {

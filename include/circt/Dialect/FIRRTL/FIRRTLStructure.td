@@ -66,10 +66,20 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
     IsolatedFromAbove, Symbol, HasParent<"CircuitOp">,
     DeclareOpInterfaceMethods<FModuleLike>,
     DeclareOpInterfaceMethods<HWModuleLike>,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
     OpAsmOpInterface, InnerSymbolTable]> {
 
   /// Additional class definitions inside the module op.
   code extraModuleClassDefinition = [{}];
+  code extraModuleClassDeclaration = [{}];
+
+  let extraClassDeclaration = extraModuleClassDeclaration # [{
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
+  }];
 
   let extraClassDefinition = extraModuleClassDefinition # [{
 
@@ -118,7 +128,7 @@ def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
                CArg<"ArrayAttr", "ArrayAttr()">:$annotations)>,
   ];
 
-  let extraClassDeclaration = [{
+  let extraModuleClassDeclaration = [{
     Block *getBodyBlock() { return &getBody().front(); }
 
     using iterator = Block::iterator;
@@ -178,7 +188,7 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
                       CArg<"ArrayAttr", "ArrayAttr()">:$internalPaths)>
   ];
 
-  let extraClassDeclaration = [{
+  let extraModuleClassDeclaration = [{
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
   }];
@@ -212,7 +222,7 @@ def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
                       CArg<"ArrayAttr", "ArrayAttr()">:$internalPaths)>
   ];
 
-  let extraClassDeclaration = [{
+  let extraModuleClassDeclaration = [{
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
   }];
@@ -249,7 +259,7 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
                    CArg<"ArrayAttr", "ArrayAttr()">:$annotations)>
   ];
 
-  let extraClassDeclaration = [{
+  let extraModuleClassDeclaration = [{
     /// Return true if this memory has a mask.
     bool isMasked() { return getMaskBits() > 1; }
     void getAsmBlockArgumentNames(mlir::Region &region,
@@ -290,7 +300,7 @@ def ClassOp : FIRRTLModuleLike<"class", [
       "StringAttr":$name,
       "ArrayRef<PortInfo>":$ports)>];
 
-  let extraClassDeclaration = [{
+  let extraModuleClassDeclaration = [{
     Block *getBodyBlock() { return &getBody().front(); }
 
     using iterator = Block::iterator;
@@ -313,6 +323,13 @@ def ClassOp : FIRRTLModuleLike<"class", [
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
     ArrayAttr getParameters();
+
+    /// Verify that the given type agrees with this class.
+    LogicalResult verifyType(
+      ClassType type, function_ref<InFlightDiagnostic()> emitError);
+
+    /// Get the type for instances of this class.
+    ClassType getInstanceType();
   }];
 }
 

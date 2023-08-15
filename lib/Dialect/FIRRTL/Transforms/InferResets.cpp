@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/FieldRef.h"
+#include "circt/Support/InstanceGraphInterface.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
@@ -45,7 +46,7 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 
 /// An absolute instance path.
-using InstanceLike = circt::hw::HWInstanceLike;
+using InstanceLike = ::circt::igraph::InstanceOpInterface;
 using InstancePathRef = ArrayRef<InstanceLike>;
 using InstancePathVec = SmallVector<InstanceLike>;
 
@@ -814,7 +815,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
           .Case<SubfieldOp>([&](auto op) {
             // Associate the input bundle's resets with the output field's
             // resets.
-            auto bundleType = op.getInput().getType();
+            BundleType bundleType = op.getInput().getType();
             auto index = op.getFieldIndex();
             traceResets(op.getType(), op.getResult(), 0,
                         bundleType.getElements()[index].type, op.getInput(),
@@ -834,7 +835,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
             // were connected. However for the sake of type inference, this
             // is indistinguishable from them having to share the same type
             // (namely the vector element type).
-            auto vectorType = op.getInput().getType();
+            FVectorType vectorType = op.getInput().getType();
             traceResets(op.getType(), op.getResult(), 0,
                         vectorType.getElementType(), op.getInput(),
                         getFieldID(vectorType), op.getLoc());

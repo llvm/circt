@@ -16,7 +16,7 @@
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
-#include "circt/Dialect/FIRRTL/Namespace.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
@@ -71,6 +71,69 @@ struct AnnoPathValue {
     return false;
   }
 };
+
+template <typename T>
+static T &operator<<(T &os, const AnnoPathValue &path) {
+  os << "~" << path.ref.getModule()->getParentOfType<CircuitOp>().getName()
+     << "|";
+
+  if (path.isLocal()) {
+    os << path.ref.getModule().getModuleName();
+  } else {
+    os << path.instances.front()
+              ->getParentOfType<FModuleLike>()
+              .getModuleName();
+  }
+  for (auto inst : path.instances)
+    os << "/" << inst.getName() << ":" << inst.getModuleName();
+  if (!path.isOpOfType<FModuleOp, FExtModuleOp, InstanceOp>()) {
+    os << ">" << path.ref;
+    auto type = dyn_cast<FIRRTLBaseType>(path.ref.getType());
+    if (!type)
+      return os;
+    auto targetFieldID = path.fieldIdx;
+    while (targetFieldID) {
+      FIRRTLTypeSwitch<FIRRTLBaseType>(type)
+          .Case<FVectorType>([&](FVectorType vector) {
+            auto index = vector.getIndexForFieldID(targetFieldID);
+            os << "[" << index << "]";
+            type = vector.getElementType();
+            targetFieldID -= vector.getFieldID(index);
+          })
+          .template Case<BundleType>([&](BundleType bundle) {
+            auto index = bundle.getIndexForFieldID(targetFieldID);
+            os << "." << bundle.getElementName(index);
+            type = bundle.getElementType(index);
+            targetFieldID -= bundle.getFieldID(index);
+          })
+          .Default([&](auto) { targetFieldID = 0; });
+    }
+  }
+  return os;
+}
+
+template <typename T>
+static T &operator<<(T &os, const OpAnnoTarget &target) {
+  os << target.getOp()->getAttrOfType<StringAttr>("name").getValue();
+  return os;
+}
+
+template <typename T>
+static T &operator<<(T &os, const PortAnnoTarget &target) {
+  os << target.getModule().getPortName(target.getPortNo());
+  return os;
+}
+
+template <typename T>
+static T &operator<<(T &os, const AnnoTarget &target) {
+  if (auto op = target.dyn_cast<OpAnnoTarget>())
+    os << op;
+  else if (auto port = target.dyn_cast<PortAnnoTarget>())
+    os << port;
+  else
+    os << "<<Unknown Anno Target>>";
+  return os;
+}
 
 /// Cache AnnoTargets for a module's named things.
 struct AnnoTargetCache {
@@ -266,10 +329,10 @@ struct ApplyState {
   DenseMap<StringAttr, LegacyWiringProblem> legacyWiringProblems;
   SmallVector<WiringProblem> wiringProblems;
 
-  ModuleNamespace &getNamespace(FModuleLike module) {
+  hw::InnerSymbolNamespace &getNamespace(FModuleLike module) {
     auto &ptr = namespaces[module];
     if (!ptr)
-      ptr = std::make_unique<ModuleNamespace>(module);
+      ptr = std::make_unique<hw::InnerSymbolNamespace>(module);
     return *ptr;
   }
 
@@ -279,7 +342,7 @@ struct ApplyState {
   };
 
 private:
-  DenseMap<Operation *, std::unique_ptr<ModuleNamespace>> namespaces;
+  DenseMap<Operation *, std::unique_ptr<hw::InnerSymbolNamespace>> namespaces;
   unsigned annotationID = 0;
 };
 

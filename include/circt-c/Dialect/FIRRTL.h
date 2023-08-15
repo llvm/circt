@@ -95,6 +95,11 @@ firrtlAttrGetConvention(MlirContext ctx, FIRRTLConvention convention);
 MLIR_CAPI_EXPORTED MlirAttribute
 firrtlAttrGetPortDirs(MlirContext ctx, size_t count, const FIRRTLPortDir *dirs);
 
+MLIR_CAPI_EXPORTED MlirAttribute firrtlAttrGetParamDecl(MlirContext ctx,
+                                                        MlirIdentifier name,
+                                                        MlirType type,
+                                                        MlirAttribute value);
+
 MLIR_CAPI_EXPORTED MlirAttribute firrtlAttrGetNameKind(MlirContext ctx,
                                                        FIRRTLNameKind nameKind);
 

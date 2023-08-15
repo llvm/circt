@@ -15,7 +15,6 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
-#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -34,7 +33,6 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
   void runOnOperation() override {
     LLVM_DEBUG(llvm::dbgs() << "\n Running lower memory on module:"
                             << getOperation().getName());
-    ModuleNamespace modNamespace(getOperation());
     SmallVector<Operation *> opsToErase;
     auto hasSubAnno = [&](MemOp op) -> bool {
       for (size_t portIdx = 0, e = op.getNumResults(); portIdx < e; ++portIdx)

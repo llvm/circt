@@ -116,14 +116,16 @@ SCModuleOp::getPortsOfDirection(hw::ModulePort::Direction direction) {
   return llvm::make_filter_range(getArguments(), predicateFn);
 }
 
-void SCModuleOp::getPortInfoList(SmallVectorImpl<hw::PortInfo> &portInfoList) {
+hw::ModulePortInfo SCModuleOp::getPortList() {
+  SmallVector<hw::PortInfo> ports;
   for (int i = 0, e = getNumArguments(); i < e; ++i) {
     hw::PortInfo info;
     info.name = getPortNames()[i].cast<StringAttr>();
     info.type = getSignalBaseType(getArgument(i).getType());
     info.dir = getDirection(info.type);
-    portInfoList.push_back(info);
+    ports.push_back(info);
   }
+  return hw::ModulePortInfo{ports};
 }
 
 mlir::Region *SCModuleOp::getCallableRegion() { return &getBody(); }
@@ -466,7 +468,11 @@ Operation *InstanceDeclOp::getReferencedModule(const hw::HWSymbolCache *cache) {
   return topLevelModuleOp.lookupSymbol(getModuleName());
 }
 
-Operation *InstanceDeclOp::getReferencedModule() {
+Operation *InstanceDeclOp::getReferencedModule(SymbolTable &symtbl) {
+  return symtbl.lookup(getModuleNameAttr().getValue());
+}
+
+Operation *InstanceDeclOp::getReferencedModuleSlow() {
   return getReferencedModule(/*cache=*/nullptr);
 }
 
@@ -531,6 +537,10 @@ InstanceDeclOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   }
 
   return success();
+}
+
+hw::ModulePortInfo InstanceDeclOp::getPortList() {
+  return cast<hw::PortList>(getReferencedModuleSlow()).getPortList();
 }
 
 //===----------------------------------------------------------------------===//

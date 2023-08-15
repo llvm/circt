@@ -123,7 +123,6 @@ firrtl.circuit "Annotations" {
 
     // Dont touch on both ops should become local.
     // CHECK: %f = firrtl.wire  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
-    // CHECK %f = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {circt.nonlocal = @annos_nla2, class = "firrtl.transforms.DontTouchAnnotation"}]}
     %f = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
 
     // Subannotations should be handled correctly.
@@ -670,5 +669,33 @@ firrtl.circuit "Foo"  {
     firrtl.instance x0 @X()
     firrtl.instance y0 @Y()
     firrtl.instance y1 @Y()
+  }
+}
+
+// Check that modules marked with different DedupGroups have not been deduped.
+// CHECK-LABEL: firrtl.circuit "DedupGroup"
+firrtl.circuit "DedupGroup" {
+  // CHECK: @Foo0
+  firrtl.module @Foo0() attributes {annotations = [{
+    // CHECK-NOT: class = "firrtl.transforms.DedupGroupAnnotation"
+    class = "firrtl.transforms.DedupGroupAnnotation",
+    group = "foo"
+  }]} { }
+
+  // CHECK-NOT: @Foo1
+  firrtl.module @Foo1() attributes {annotations = [{
+    // CHECK-NOT: class = "firrtl.transforms.DedupGroupAnnotation"
+    class = "firrtl.transforms.DedupGroupAnnotation",
+    group = "foo"
+  }]} { }
+
+  // CHECK: @Bar
+  firrtl.module @Bar() { }
+
+  // CHECK: firrtl.module @DedupGroup
+  firrtl.module @DedupGroup() {
+    firrtl.instance foo0 @Foo0()
+    firrtl.instance foo1 @Foo1()
+    firrtl.instance bar  @Bar()
   }
 }

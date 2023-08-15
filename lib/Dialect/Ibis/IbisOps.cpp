@@ -13,10 +13,57 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/SymbolTable.h"
 
 using namespace mlir;
 using namespace circt;
 using namespace ibis;
+
+template <typename TSymAttr>
+ParseResult parseScopeRefFromName(OpAsmParser &parser, Type &scopeRefType,
+                                  TSymAttr sym) {
+  // Nothing to parse, since this is already encoded in the child symbol.
+  scopeRefType = ScopeRefType::get(parser.getContext(), sym);
+  return success();
+}
+
+template <typename TSymAttr>
+void printScopeRefFromName(OpAsmPrinter &p, Operation *op, Type type,
+                           TSymAttr sym) {
+  // Nothing to print since this information is already encoded in the child
+  // symbol.
+}
+
+//===----------------------------------------------------------------------===//
+// ScopeOpInterface
+//===----------------------------------------------------------------------===//
+
+FailureOr<mlir::TypedValue<ScopeRefType>>
+circt::ibis::detail::getThisFromScope(Operation *op) {
+  auto scopeOp = cast<ScopeOpInterface>(op);
+  auto thisOps = scopeOp.getBodyBlock()->getOps<ibis::ThisOp>();
+  if (thisOps.empty())
+    return op->emitOpError("must contain a 'ibis.this' operation");
+
+  if (std::next(thisOps.begin()) != thisOps.end())
+    return op->emitOpError("must contain only one 'ibis.this' operation");
+
+  return {*thisOps.begin()};
+}
+
+LogicalResult circt::ibis::detail::verifyScopeOpInterface(Operation *op) {
+  if (failed(getThisFromScope(op)))
+    return failure();
+
+  if (!isa<SymbolOpInterface>(op))
+    return op->emitOpError("must implement 'SymbolOpInterface'");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// MethodOp
+//===----------------------------------------------------------------------===//
 
 ParseResult MethodOp::parse(OpAsmParser &parser, OperationState &result) {
   // Parse the name as a symbol.
@@ -141,9 +188,111 @@ LogicalResult ReturnOp::verify() {
 
   return success();
 }
+
+//===----------------------------------------------------------------------===//
+// InstanceOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto targetClass = getClass(&symbolTable);
+  if (!targetClass)
+    return emitOpError() << "'" << getTargetName() << "' does not exist";
+
+  return success();
+}
+
+ClassOp InstanceOp::getClass(SymbolTableCollection *symbolTable) {
+  auto mod = getOperation()->getParentOfType<mlir::ModuleOp>();
+  if (symbolTable)
+    return symbolTable->lookupSymbolIn<ClassOp>(mod, getTargetNameAttr());
+
+  return mod.lookupSymbol<ClassOp>(getTargetNameAttr());
+}
+
+//===----------------------------------------------------------------------===//
+// GetPortOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult GetPortOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Lookup the target module type of the instance class reference.
+  ModuleOp mod = getOperation()->getParentOfType<ModuleOp>();
+  ScopeRefType crt = getInstance().getType().cast<ScopeRefType>();
+  // @teqdruid TODO: make this more efficient using
+  // innersymtablecollection when that's available to non-firrtl dialects.
+  auto targetClass =
+      symbolTable.lookupSymbolIn<ClassOp>(mod, crt.getScopeRef());
+  assert(targetClass && "should have been verified by the type system");
+  // @teqdruid TODO: make this more efficient using
+  // innersymtablecollection when that's available to non-firrtl dialects.
+  Operation *targetOp =
+      symbolTable.lookupSymbolIn(targetClass, getPortSymbolAttr());
+
+  if (!targetOp)
+    return emitOpError() << "port '" << getPortSymbolAttr()
+                         << "' does not exist in " << targetClass.getName();
+
+  auto portOp = dyn_cast<PortOpInterface>(targetOp);
+  if (!portOp)
+    return emitOpError() << "symbol '" << getPortSymbolAttr()
+                         << "' does not refer to a port";
+
+  Type targetPortType = portOp.getPortType();
+  Type thisPortType = getType().getPortType();
+  if (targetPortType != thisPortType)
+    return emitOpError() << "symbol '" << getPortSymbolAttr()
+                         << "' refers to a port of type " << targetPortType
+                         << ", but this op has type " << thisPortType;
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ThisOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ThisOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // A thisOp should always refer to the parent operation, which in turn should
+  // be an Ibis ScopeOpInterface.
+  auto parentScope =
+      dyn_cast_or_null<ScopeOpInterface>(getOperation()->getParentOp());
+  if (!parentScope)
+    return emitOpError() << "thisOp must be nested in a scope op";
+
+  if (parentScope.getScopeName() != getScopeName())
+    return emitOpError() << "thisOp refers to a parent scope of name "
+                         << getScopeName() << ", but the parent scope is named "
+                         << parentScope.getScopeName();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ContainerInstanceOp
+//===----------------------------------------------------------------------===//
+
+ContainerOp
+ContainerInstanceOp::getContainer(SymbolTableCollection *symbolTable) {
+  auto mod = getOperation()->getParentOfType<mlir::ModuleOp>();
+  if (symbolTable)
+    return symbolTable->lookupSymbolIn<ContainerOp>(mod, getTargetNameAttr());
+
+  return mod.lookupSymbol<ContainerOp>(getTargetNameAttr());
+}
+
+LogicalResult
+ContainerInstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto targetContainer = getContainer(&symbolTable);
+  if (!targetContainer)
+    return emitOpError() << "'" << getTargetName() << "' does not exist";
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic
 //===----------------------------------------------------------------------===//
+
+#include "circt/Dialect/Ibis/IbisInterfaces.cpp.inc"
 
 // Provide the autogenerated implementation guts for the Op classes.
 #define GET_OP_CLASSES

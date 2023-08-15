@@ -104,6 +104,8 @@ struct FIRVersion {
 
   static FIRVersion defaultFIRVersion() { return {1, 0, 0}; }
 
+  static FIRVersion latestFIRVersion() { return {3, 1, 0}; }
+
 }; // namespace firrtl
 
 /// Method to enable printing of FIRVersions

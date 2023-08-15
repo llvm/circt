@@ -137,9 +137,9 @@ SmallVector<InstanceOp, 1> MSFTPassCommon::updateInstances(
     llvm::function_ref<void(InstanceOp, InstanceOp, SmallVectorImpl<Value> &)>
         getOperandsFunc) {
 
-  SmallVector<hw::HWInstanceLike, 1> newInstances;
+  SmallVector<igraph::InstanceOpInterface, 1> newInstances;
   SmallVector<InstanceOp, 1> newMsftInstances;
-  for (hw::HWInstanceLike instLike : moduleInstantiations[mod]) {
+  for (igraph::InstanceOpInterface instLike : moduleInstantiations[mod]) {
     assert(instLike->getParentOp());
     auto inst = dyn_cast<InstanceOp>(instLike.getOperation());
     if (!inst) {

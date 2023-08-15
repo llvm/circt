@@ -130,7 +130,7 @@ static bool shouldMaterialize(Operation *op) {
 
   if (isa<MemoryOp, AllocStateOp, AllocMemoryOp, AllocStorageOp, ClockTreeOp,
           PassThroughOp, RootInputOp, RootOutputOp, StateWriteOp,
-          MemoryWritePortOp, HWInstanceLike>(op))
+          MemoryWritePortOp, igraph::InstanceOpInterface>(op))
     return false;
 
   return true;
@@ -295,8 +295,7 @@ LogicalResult ModuleLowering::lowerPrimaryInputs() {
   for (auto blockArg : moduleOp.getArguments()) {
     if (blockArg == storageArg)
       continue;
-    auto name =
-        moduleOp.getArgNames()[blockArg.getArgNumber()].cast<StringAttr>();
+    auto name = moduleOp.getArgName(blockArg.getArgNumber());
     auto intType = blockArg.getType().dyn_cast<IntegerType>();
     if (!intType)
       return mlir::emitError(blockArg.getLoc(), "input ")

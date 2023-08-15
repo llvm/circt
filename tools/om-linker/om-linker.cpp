@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/OM/OMDialect.h"
+#include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Support/Version.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Threading.h"
@@ -80,7 +81,11 @@ static LogicalResult executeOMLinker(MLIRContext &context) {
   // Create the timing manager we use to sample execution times.
   DefaultTimingManager tm;
   applyDefaultTimingManagerCLOptions(tm);
+  PassManager pm(&context);
   auto ts = tm.getRootScope();
+  pm.enableTiming(ts);
+  if (failed(applyPassManagerCLOptions(pm)))
+    return failure();
 
   // Set up the input files.
   struct ParsedInput {
@@ -110,6 +115,11 @@ static LogicalResult executeOMLinker(MLIRContext &context) {
     s.mod = parseSourceFile<ModuleOp>(s.name, s.mgr, &context);
     if (!s.mod)
       return failure();
+    // Use a file name (w/o extension) as a linker namespace.
+    // e.g. "/tmp/work/foo.mlir" -> "foo"
+    auto fileName = StringAttr::get(
+        &context, llvm::sys::path::filename(s.name).split(".").first);
+    s.mod.get()->setAttr("om.namespace", fileName);
     return success();
   };
 
@@ -139,7 +149,10 @@ static LogicalResult executeOMLinker(MLIRContext &context) {
   for (auto &in : srcs)
     builder.insert(in.mod.get());
 
-  // TODO: Apply a linking pass here.
+  // Construct a linker pipeline.
+  pm.addPass(om::createOMLinkModulesPass());
+  if (failed(pm.run(module.get())))
+    return failure();
 
   // Create the output file.
   std::string errorMessage;

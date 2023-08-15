@@ -36,53 +36,6 @@ struct CircuitNamespace : public Namespace {
   }
 };
 
-/// The namespace of a `FModuleLike` operation, generally inhabited by its ports
-/// and declarations.
-struct ModuleNamespace : public Namespace {
-  ModuleNamespace() {}
-  ModuleNamespace(FModuleLike module) : module(module) { add(module); }
-
-  /// Populate the namespace from a module-like operation. This namespace will
-  /// be composed of the `inner_sym`s of the module's ports and declarations.
-  void add(FModuleLike module) {
-    addPorts(module);
-    addBody(module);
-  }
-
-  /// Populate the namespace with the ports of a module-like operation.
-  void addPorts(FModuleLike module) {
-    for (auto portSymbol : module.getPortSymbolsAttr())
-      if (portSymbol)
-        static_cast<void>(portSymbol.cast<hw::InnerSymAttr>().walkSymbols(
-            [&](StringAttr sName) {
-              nextIndex.insert({sName.getValue(), 0});
-              return success();
-            }));
-  }
-
-  void addPorts(ArrayRef<PortInfo> ports) {
-    for (auto port : ports)
-      if (port.sym)
-        static_cast<void>(port.sym.cast<hw::InnerSymAttr>().walkSymbols(
-            [&](StringAttr symName) {
-              nextIndex.insert({symName.getValue(), 0});
-              return success();
-            }));
-  }
-
-  /// Populate the namespace with the body of a module-like operation.
-  void addBody(FModuleLike module) {
-    module.walk([&](Operation *op) {
-      auto attr = getInnerSymName(op);
-      if (attr)
-        nextIndex.insert({attr.getValue(), 0});
-    });
-  }
-
-  /// The module associated with this namespace.
-  FModuleLike module;
-};
-
 } // namespace firrtl
 } // namespace circt
 

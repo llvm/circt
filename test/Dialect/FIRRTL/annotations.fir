@@ -96,5 +96,5 @@ circuit RawAnnotations: %[[
     ; CHECK-LABEL: firrtl.circuit "RawAnnotations"
     ; CHECK-SAME:    rawAnnotations = [
     ; CHECK-SAME:      "circt.test"
-    ; Check-SAME:      "circt.testNT"
-    ; Check-SAME:      "circt.missing"
+    ; CHECK-SAME:      "circt.testNT"
+    ; CHECK-SAME:      "circt.missing"

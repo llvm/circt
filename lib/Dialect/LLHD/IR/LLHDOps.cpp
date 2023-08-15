@@ -915,7 +915,7 @@ ParseResult llhd::RegOp::parse(OpAsmParser &parser, OperationState &result) {
   operandSizes.push_back(triggerOperands.size());
   operandSizes.push_back(delayOperands.size());
   operandSizes.push_back(gateOperands.size());
-  result.addAttribute("operand_segment_sizes",
+  result.addAttribute("operandSegmentSizes",
                       parser.getBuilder().getDenseI32ArrayAttr(operandSizes));
 
   return success();
@@ -938,7 +938,7 @@ void llhd::RegOp::print(OpAsmPrinter &printer) {
     printer << " : " << getValues()[i].getType() << ")";
   }
   printer.printOptionalAttrDict((*this)->getAttrs(),
-                                {"modes", "gateMask", "operand_segment_sizes"});
+                                {"modes", "gateMask", "operandSegmentSizes"});
   printer << " : " << getSignal().getType();
 }
 

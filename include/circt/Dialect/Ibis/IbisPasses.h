@@ -18,6 +18,7 @@ namespace circt {
 namespace ibis {
 
 std::unique_ptr<Pass> createCallPrepPass();
+std::unique_ptr<Pass> createContainerizePass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

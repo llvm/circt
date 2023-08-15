@@ -392,9 +392,8 @@ CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
       clk, rst, recvReady, unwrapSend.getValid(), encodeData.getCapnpBits(),
   };
 
-  auto cosimEpModule =
-      rewriter.create<InstanceOp>(loc, endpoint, name, epInstInputs,
-                                  ArrayAttr::get(ctxt, params), StringAttr());
+  auto cosimEpModule = rewriter.create<InstanceOp>(
+      loc, endpoint, name, epInstInputs, ArrayAttr::get(ctxt, params));
   sendReady.setValue(cosimEpModule.getResult(2));
 
   // Set up the injest path.

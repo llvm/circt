@@ -27,7 +27,7 @@ using namespace firrtl;
 
 /// Convert a JSON value containing OMIR JSON (an array of OMNodes), convert
 /// this to an OMIRAnnotation, and add it to a mutable `annotationMap` argument.
-bool circt::firrtl::fromOMIRJSON(json::Value &value, StringRef circuitTarget,
+bool circt::firrtl::fromOMIRJSON(json::Value &value,
                                  SmallVectorImpl<Attribute> &annotations,
                                  json::Path path, MLIRContext *context) {
   // The JSON value must be an array of objects.  Anything else is reported as
@@ -53,7 +53,7 @@ bool circt::firrtl::fromOMIRJSON(json::Value &value, StringRef circuitTarget,
 /// represented as a Target-keyed arrays of attributes.  The input JSON value is
 /// checked, at runtime, to be an array of objects.  Returns true if successful,
 /// false if unsuccessful.
-bool circt::firrtl::fromJSONRaw(json::Value &value, StringRef circuitTarget,
+bool circt::firrtl::fromJSONRaw(json::Value &value,
                                 SmallVectorImpl<Attribute> &annotations,
                                 json::Path path, MLIRContext *context) {
 

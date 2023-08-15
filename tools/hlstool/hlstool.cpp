@@ -39,8 +39,12 @@
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 
+#include "circt/Conversion/CalyxToFSM.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/Passes.h"
+#include "circt/Conversion/SCFToCalyx.h"
+#include "circt/Dialect/Calyx/CalyxDialect.h"
+#include "circt/Dialect/Calyx/CalyxPasses.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/ESI/ESIPasses.h"
 #include "circt/Dialect/SV/SVDialect.h"
@@ -100,12 +104,19 @@ static cl::opt<bool>
                               cl::init(false), cl::Hidden,
                               cl::cat(mainCategory));
 
-enum HLSFlow { HLSFlowDynamicHW };
+enum HLSFlow {
+  // Compilation through the dynamically scheduled handshake dialect.
+  HLSFlowDynamicHW,
+  // Compilation through Calyx's CIRCT lowering implementation.
+  HLSFlowCalyxHW,
+};
 
 static cl::opt<HLSFlow>
     hlsFlow(cl::desc("HLS flow"),
             cl::values(clEnumValN(HLSFlowDynamicHW, "dynamic-hw",
-                                  "Dynamically scheduled (HW path)")),
+                                  "Dynamically scheduled (HW path)"),
+                       clEnumValN(HLSFlowCalyxHW, "calyx-hw",
+                                  "Statically scheduled (Calyx path)")),
             cl::cat(mainCategory));
 
 enum DynamicParallelismKind {
@@ -255,19 +266,19 @@ static void loadHWLoweringPipeline(OpPassManager &pm) {
 // Tool driver code
 // --------------------------------------------------------------------------
 
-enum HLSFlowDynamicIRLevel {
+enum HLSFlowIRLevel {
   High,
-  Handshake,
+  Mid,
   Rtl,
   Sv,
 };
 
 static void printHLSFlowDynamic() {
   llvm::errs() << "Valid levels are:\n";
-  llvm::errs() << HLSFlowDynamicIRLevel::High << ": 'cf/scf/affine' level IR\n";
-  llvm::errs() << HLSFlowDynamicIRLevel::Handshake << ": 'handshake' IR\n";
-  llvm::errs() << HLSFlowDynamicIRLevel::Rtl << ": 'hw/comb/seq' IR\n";
-  llvm::errs() << HLSFlowDynamicIRLevel::Sv << ": 'hw/comb/sv' IR\n";
+  llvm::errs() << HLSFlowIRLevel::High << ": 'cf/scf/affine' level IR\n";
+  llvm::errs() << HLSFlowIRLevel::Mid << ": 'handshake/calyx' IR\n";
+  llvm::errs() << HLSFlowIRLevel::Rtl << ": 'hw/comb/seq' IR\n";
+  llvm::errs() << HLSFlowIRLevel::Sv << ": 'hw/comb/sv' IR\n";
 }
 
 static LogicalResult doHLSFlowDynamic(
@@ -275,18 +286,18 @@ static LogicalResult doHLSFlowDynamic(
     std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
 
   if (irInputLevel < 0)
-    irInputLevel = HLSFlowDynamicIRLevel::High; // Default to highest level
+    irInputLevel = HLSFlowIRLevel::High; // Default to highest level
 
   if (irOutputLevel < 0)
-    irOutputLevel = HLSFlowDynamicIRLevel::Sv; // Default to lowest level
+    irOutputLevel = HLSFlowIRLevel::Sv; // Default to lowest level
 
-  if (irInputLevel > HLSFlowDynamicIRLevel::Sv) {
+  if (irInputLevel > HLSFlowIRLevel::Sv) {
     llvm::errs() << "Invalid IR input level: " << irInputLevel << "\n";
     printHLSFlowDynamic();
     return failure();
   }
 
-  if (outputFormat == OutputIR && (irOutputLevel > HLSFlowDynamicIRLevel::Sv)) {
+  if (outputFormat == OutputIR && (irOutputLevel > HLSFlowIRLevel::Sv)) {
     llvm::errs() << "Invalid IR output level: " << irOutputLevel << "\n";
     printHLSFlowDynamic();
     return failure();
@@ -313,20 +324,20 @@ static LogicalResult doHLSFlowDynamic(
     });
   };
 
-  addIRLevel(HLSFlowDynamicIRLevel::High, [&]() { loadDHLSPipeline(pm); });
-  addIRLevel(HLSFlowDynamicIRLevel::Handshake,
+  addIRLevel(HLSFlowIRLevel::High, [&]() { loadDHLSPipeline(pm); });
+  addIRLevel(HLSFlowIRLevel::Mid,
              [&]() { loadHandshakeTransformsPipeline(pm); });
 
   // HW path.
 
-  addIRLevel(HLSFlowDynamicIRLevel::Rtl, [&]() {
+  addIRLevel(HLSFlowIRLevel::Rtl, [&]() {
     pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
     pm.addPass(circt::createHandshakeToHWPass());
     pm.addPass(createSimpleCanonicalizerPass());
     loadESILoweringPipeline(pm);
   });
 
-  addIRLevel(HLSFlowDynamicIRLevel::Sv, [&]() { loadHWLoweringPipeline(pm); });
+  addIRLevel(HLSFlowIRLevel::Sv, [&]() { loadHWLoweringPipeline(pm); });
 
   if (traceIVerilog)
     pm.addPass(circt::sv::createSVTraceIVerilogPass());
@@ -340,6 +351,108 @@ static LogicalResult doHLSFlowDynamic(
   }
 
   // Go execute!
+  if (failed(pm.run(module)))
+    return failure();
+
+  if (outputFormat == OutputIR)
+    module->print((*outputFile)->os());
+
+  return success();
+}
+
+static LogicalResult doHLSFlowCalyx(
+    PassManager &pm, ModuleOp module,
+    std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+
+  if (irInputLevel < 0) {
+    irInputLevel = HLSFlowIRLevel::High; // Default to highest level
+  }
+
+  if (irOutputLevel < 0) {
+    irOutputLevel = HLSFlowIRLevel::Sv; // Default to lowest level
+  }
+
+  // Lower than SV cannot be the input
+  if (irInputLevel > HLSFlowIRLevel::Sv) {
+    llvm::errs() << "Invalid IR input level: " << irInputLevel << "\n";
+    printHLSFlowDynamic();
+    return failure();
+  }
+
+  // Lower than SV cannot be an output
+  if (outputFormat == OutputIR && (irOutputLevel > HLSFlowIRLevel::Sv)) {
+    llvm::errs() << "Invalid IR output level: " << irOutputLevel << "\n";
+    printHLSFlowDynamic();
+    return failure();
+  }
+
+  // XXX(rachitnigam): Duplicated from doHLSFlowDynamic. We should probably
+  // abstract this pattern. The only problem is that addIRLevel captures this
+  // mutable variable.
+  bool suppressLaterPasses = false;
+  auto notSuppressed = [&]() { return !suppressLaterPasses; };
+  auto addIfNeeded = [&](llvm::function_ref<bool()> predicate,
+                         llvm::function_ref<void()> passAdder) {
+    if (predicate())
+      passAdder();
+  };
+
+  auto addIRLevel = [&](int level, llvm::function_ref<void()> passAdder) {
+    addIfNeeded(notSuppressed, [&]() {
+      // Add the pass if the input IR level is at least the current
+      // abstraction.
+      if (irInputLevel <= level)
+        passAdder();
+      // Suppresses later passes if we're emitting IR and the output IR level is
+      // the current level.
+      if (outputFormat == OutputIR && irOutputLevel == level)
+        suppressLaterPasses = true;
+    });
+  };
+
+  addIRLevel(HLSFlowIRLevel::High, [&]() {
+    pm.addPass(circt::createSCFToCalyxPass());
+    pm.addPass(createSimpleCanonicalizerPass());
+  });
+
+  addIRLevel(HLSFlowIRLevel::Mid, [&]() {
+    // Eliminate Calyx's comb group abstraction
+    pm.addNestedPass<calyx::ComponentOp>(
+        circt::calyx::createRemoveCombGroupsPass());
+    pm.addPass(createSimpleCanonicalizerPass());
+
+    // Compile to FSM
+    pm.addNestedPass<calyx::ComponentOp>(circt::createCalyxToFSMPass());
+    pm.addPass(createSimpleCanonicalizerPass());
+    pm.addNestedPass<calyx::ComponentOp>(
+        circt::createMaterializeCalyxToFSMPass());
+    pm.addPass(createSimpleCanonicalizerPass());
+
+    // Eliminate Calyx's group abstraction
+    pm.addNestedPass<calyx::ComponentOp>(
+        circt::createRemoveGroupsFromFSMPass());
+    pm.addPass(createSimpleCanonicalizerPass());
+  });
+
+  // HW path.
+
+  addIRLevel(HLSFlowIRLevel::Rtl, [&]() {
+    // Compile to HW
+    pm.addPass(circt::createCalyxToHWPass());
+    pm.addPass(createSimpleCanonicalizerPass());
+  });
+
+  addIRLevel(HLSFlowIRLevel::Sv, [&]() {
+    pm.addPass(circt::createConvertFSMToSVPass());
+    loadHWLoweringPipeline(pm);
+  });
+
+  if (outputFormat == OutputVerilog) {
+    pm.addPass(createExportVerilogPass((*outputFile)->os()));
+  } else if (outputFormat == OutputSplitVerilog) {
+    pm.addPass(createExportSplitVerilogPass(outputFilename));
+  }
+
   if (failed(pm.run(module)))
     return failure();
 
@@ -381,9 +494,17 @@ static LogicalResult processBuffer(
   if (failed(applyPassManagerCLOptions(pm)))
     return failure();
 
-  if (hlsFlow == HLSFlow::HLSFlowDynamicHW) {
+  switch (hlsFlow) {
+  case HLSFlowDynamicHW: {
     if (failed(doHLSFlowDynamic(pm, module.get(), outputFile)))
       return failure();
+    break;
+  }
+  case HLSFlowCalyxHW: {
+    if (failed(doHLSFlowCalyx(pm, module.get(), outputFile)))
+      return failure();
+    break;
+  }
   }
 
   // We intentionally "leak" the Module into the MLIRContext instead of
@@ -507,9 +628,9 @@ int main(int argc, char **argv) {
   mlir::registerCanonicalizerPass();
 
   // Register CIRCT dialects.
-  registry
-      .insert<hw::HWDialect, comb::CombDialect, seq::SeqDialect, sv::SVDialect,
-              handshake::HandshakeDialect, esi::ESIDialect>();
+  registry.insert<hw::HWDialect, comb::CombDialect, seq::SeqDialect,
+                  sv::SVDialect, handshake::HandshakeDialect, esi::ESIDialect,
+                  calyx::CalyxDialect>();
 
   // Do the guts of the hlstool process.
   MLIRContext context(registry);

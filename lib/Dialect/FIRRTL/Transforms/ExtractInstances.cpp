@@ -22,6 +22,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/Path.h"
 #include "mlir/IR/Attributes.h"
@@ -66,20 +67,17 @@ struct ExtractInstancesPass
   void createTraceFiles();
 
   /// Get the cached namespace for a module.
-  ModuleNamespace &getModuleNamespace(FModuleLike module) {
-    auto it = moduleNamespaces.find(module);
-    if (it != moduleNamespaces.end())
-      return it->second;
-    return moduleNamespaces.try_emplace(module, ModuleNamespace(module))
-        .first->second;
+  hw::InnerSymbolNamespace &getModuleNamespace(FModuleLike module) {
+    return moduleNamespaces.try_emplace(module, module).first->second;
   }
 
   /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
   /// to that operation.
   InnerRefAttr getInnerRefTo(Operation *op) {
-    return ::getInnerRefTo(op, [&](FModuleOp mod) -> ModuleNamespace & {
-      return getModuleNamespace(mod);
-    });
+    return ::getInnerRefTo(op,
+                           [&](FModuleLike mod) -> hw::InnerSymbolNamespace & {
+                             return getModuleNamespace(mod);
+                           });
   }
 
   /// Create a clone of a `HierPathOp` with a new uniquified name.
@@ -137,7 +135,7 @@ struct ExtractInstancesPass
   /// The current circuit namespace valid within the call to `runOnOperation`.
   CircuitNamespace circuitNamespace;
   /// Cached module namespaces.
-  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
+  DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;
 };
 } // end anonymous namespace
 

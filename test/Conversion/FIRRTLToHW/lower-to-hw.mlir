@@ -83,7 +83,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %out5, %tmp1 : !firrtl.uint<4>, !firrtl.uint<4>
 
     // CHECK: [[ZEXT:%.+]] = comb.concat %false, %in1 : i1, i4
-    // CHECK: [[ADD:%.+]] = comb.add bin %c12_i5, [[ZEXT]] : i5
+    // CHECK: [[ADD:%.+]] = comb.add bin [[ZEXT]], %c12_i5 : i5
     %0 = firrtl.add %c12_ui4, %in1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
     %1 = firrtl.asUInt %in1 : (!firrtl.uint<4>) -> !firrtl.uint<4>
@@ -131,7 +131,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %out8 = firrtl.wire sym @__Simple__out8 : !firrtl.uint<4>
     firrtl.connect %out8, %in2 : !firrtl.uint<4>, !firrtl.uint<2>
 
-    // CHECK: %test-name = hw.wire {{%.+}} sym @"__Simple__test-name" : i4
+    // CHECK: %test-name = hw.wire {{%.+}} sym @__Simple__test-name : i4
     firrtl.wire {name = "test-name", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
 
     // CHECK: = hw.wire {{%.+}} : i2
@@ -564,10 +564,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: }
   }
 
-  firrtl.module private @bar(in %io_cpu_flush: !firrtl.uint<1>) {
-    // CHECK: hw.probe @baz, %io_cpu_flush, %io_cpu_flush : i1, i1
-    firrtl.probe @baz, %io_cpu_flush, %io_cpu_flush  : !firrtl.uint<1>, !firrtl.uint<1>
-  }
+  firrtl.module private @bar(in %io_cpu_flush: !firrtl.uint<1>) { }
 
   // CHECK-LABEL: hw.module private @foo
   firrtl.module private @foo() {
@@ -586,12 +583,15 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NOT: output_file
   // CHECK-NEXT: sv.bind <@bindTest::@[[quxSymbol:.+]]> {
   // CHECK-SAME: output_file = #hw.output_file<"bindings.sv", excludeFromFileList>
-  // CHECK-NEXT: hw.module private @bindTest()
-  firrtl.module private @bindTest() {
+  // CHECK-NEXT: hw.module private @bindTest(%dummy: i1)
+  firrtl.module private @bindTest(in %dummy: !firrtl.uint<1>) {
     // CHECK: hw.instance "baz" sym @[[bazSymbol]] @bar
     %baz = firrtl.instance baz {lowerToBind} @bar(in io_cpu_flush: !firrtl.uint<1>)
+    firrtl.connect %baz, %dummy : !firrtl.uint<1>, !firrtl.uint<1>
+
     // CHECK: hw.instance "qux" sym @[[quxSymbol]] @bar
     %qux = firrtl.instance qux {lowerToBind, output_file = #hw.output_file<"bindings.sv", excludeFromFileList>} @bar(in io_cpu_flush: !firrtl.uint<1>)
+    firrtl.connect %qux, %dummy : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
 
@@ -820,9 +820,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
 
   // CHECK-LABEL: hw.module private @FooDUT
-  firrtl.module private @FooDUT() attributes {annotations = [
+  firrtl.module private @FooDUT(in %clock: !firrtl.clock) attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     %chckcoverAnno_clock = firrtl.instance chkcoverAnno @chkcoverAnno(in clock: !firrtl.clock)
+    firrtl.connect %chckcoverAnno_clock, %clock : !firrtl.clock, !firrtl.clock
   }
 
   // CHECK-LABEL: hw.module private @AsyncResetBasic(
@@ -886,16 +887,31 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     out %out: !firrtl.uint<1> sym @portOutSym
   ) {
     firrtl.instance instName sym @instSym @BitCast1()
+
     // CHECK: hw.instance "instName" sym @instSym @BitCast1
     %nodeName = firrtl.node sym @nodeSym %value : !firrtl.uint<42>
+
     // CHECK: %nodeName = hw.wire %value sym @nodeSym : i42
     %wireName = firrtl.wire sym @wireSym : !firrtl.uint<42>
+
     // CHECK: %wireName = hw.wire %z_i42 sym @wireSym : i42
     %regName = firrtl.reg sym @regSym %clock : !firrtl.clock, !firrtl.uint<42>
+
     // CHECK: %regName = seq.firreg %regName clock %clock sym @regSym : i42
     %regResetName = firrtl.regreset sym @regResetSym %clock, %reset, %value : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
+
     // CHECK: %regResetName = seq.firreg %regResetName clock %clock sym @regResetSym reset sync %reset, %value : i42
     %memName_port = firrtl.mem sym @memSym Undefined {depth = 12 : i64, name = "memName", portNames = ["port"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %memName_port.clk = firrtl.subfield %memName_port[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %memName_port.en = firrtl.subfield %memName_port[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %memName_port.addr = firrtl.subfield %memName_port[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %memName_port.data = firrtl.subfield %memName_port[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    firrtl.strictconnect %memName_port.clk, %clock : !firrtl.clock
+    %en = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.strictconnect %memName_port.en, %en : !firrtl.uint<1>
+    %addr = firrtl.constant 0 : !firrtl.uint<4>
+    firrtl.strictconnect %memName_port.addr, %addr : !firrtl.uint<4>
+
     // CHECK: %memName = seq.firmem sym @memSym 0, 1, undefined, port_order : <12 x 42>
     firrtl.connect %out, %reset : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -1485,5 +1501,39 @@ firrtl.circuit "TypeAlias" {
     firrtl.connect %fldout, %2 : !firrtl.alias<bar, uint<64>>, !firrtl.uint<64>
     %0 = firrtl.subfield %wire[valid] : !firrtl.bundle<valid: const.uint<1>, ready: uint<1>, data: uint<64>> 
     firrtl.strictconnect %wire2, %0 : !firrtl.const.alias<baf, const.uint<1>>, !firrtl.const.uint<1>
+  }
+}
+
+// -----
+
+// Check dontTouch goes on the wire generated for the output port, to preserve dontTouch behavior.
+firrtl.circuit "Issue5011" {
+  // CHECK-LABEL: module @Issue5011(
+  // CHECK-NOT: exportPort
+  firrtl.module @Issue5011(in %clock: !firrtl.clock, in %unused: !firrtl.uint<0>, out %out: !firrtl.uint<5> [{class = "firrtl.transforms.DontTouchAnnotation"}]) attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK: %[[OUT:.+]] = hw.wire %{{.+}} sym @
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %c1_ui5 = firrtl.constant 1 : !firrtl.uint<5>
+    firrtl.strictconnect %out, %c1_ui5 : !firrtl.uint<5>
+    %0 = firrtl.eq %out, %c1_ui5 : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<1>
+    firrtl.assert %clock, %0, %c1_ui1, "out was changed" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
+    // CHECK: hw.output %[[OUT]]
+  }
+}
+
+// -----
+
+// Check inner sym goes on wire created for output port.
+firrtl.circuit "Issue5011Sym" {
+  // CHECK-LABEL: module @Issue5011Sym(
+  // CHECK-NOT: exportPort
+  firrtl.module @Issue5011Sym(in %clock: !firrtl.clock, out %out: !firrtl.uint<5> sym @out_sym) attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK: %[[OUT:.+]] = hw.wire %{{.+}} sym @out_sym
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %c1_ui5 = firrtl.constant 1 : !firrtl.uint<5>
+    firrtl.strictconnect %out, %c1_ui5 : !firrtl.uint<5>
+    %0 = firrtl.eq %out, %c1_ui5 : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<1>
+    firrtl.assert %clock, %0, %c1_ui1, "out was changed" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
+    // CHECK: hw.output %[[OUT]]
   }
 }

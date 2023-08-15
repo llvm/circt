@@ -75,49 +75,102 @@ private:
   /// runOnOperation.
   NLATable *nlaTable;
 
-  /// Internal implementation that updates an Annotation to add a "target" field
-  /// based on the current location of the annotation in the circuit.  The value
-  /// of the "target" will be a local target if the Annotation is local and a
-  /// non-local target if the Annotation is non-local.
-  bool updateTargetImpl(Annotation &anno, FModuleLike &module,
-                        FIRRTLBaseType type, StringRef name) {
-    if (!anno.isClass(traceAnnoClass))
-      return false;
+  /// Stores a pointer to an inner symbol table collection.
+  hw::InnerSymbolTableCollection *istc;
 
-    LLVM_DEBUG(llvm::dbgs() << "  - before: " << anno.getDict() << "\n");
+  /// Global symbol index used for substitutions, e.g., "{{42}}".  This value is
+  /// the _next_ index that will be used.
+  unsigned symbolIdx = 0;
 
-    SmallString<64> newTarget("~");
-    newTarget.append(module->getParentOfType<CircuitOp>().getName());
+  /// Map of symbol to symbol index.  This is used to reuse symbol
+  /// substitutions.
+  DenseMap<Attribute, unsigned> symbolMap;
+
+  /// Symbol substitutions for the JSON verbatim op.
+  SmallVector<Attribute> symbols;
+
+  /// Get a symbol index and update symbol datastructures.
+  unsigned getSymbolIndex(Attribute attr) {
+    auto iterator = symbolMap.find(attr);
+    if (iterator != symbolMap.end())
+      return iterator->getSecond();
+
+    auto idx = symbolIdx++;
+    symbolMap.insert({attr, idx});
+    symbols.push_back(attr);
+
+    return idx;
+  }
+
+  /// Convert an annotation path to a string with symbol substitutions.
+  void buildTarget(AnnoPathValue &path, SmallString<64> &newTarget) {
+
+    auto addSymbol = [&](Attribute attr) -> void {
+      newTarget.append("{{");
+      Twine(getSymbolIndex(attr)).toVector(newTarget);
+      newTarget.append("}}");
+    };
+
+    newTarget.append("~");
+    newTarget.append(
+        path.ref.getModule()->getParentOfType<CircuitOp>().getName());
     newTarget.append("|");
 
-    if (auto nla = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-      hw::HierPathOp path = nlaTable->getNLA(nla.getAttr());
-      for (auto part : path.getNamepath().getValue().drop_back()) {
-        auto inst = cast<hw::InnerRefAttr>(part);
-        newTarget.append(inst.getModule());
-        newTarget.append("/");
-        newTarget.append(inst.getName());
-        newTarget.append(":");
-      }
+    if (path.isLocal()) {
+      addSymbol(
+          FlatSymbolRefAttr::get(path.ref.getModule().getModuleNameAttr()));
+    } else {
+      addSymbol(FlatSymbolRefAttr::get(path.instances.front()
+                                           ->getParentOfType<FModuleLike>()
+                                           .getModuleNameAttr()));
     }
-    newTarget.append(module.getModuleName());
+
+    for (auto inst : path.instances) {
+      newTarget.append("/");
+      addSymbol(hw::InnerRefAttr::get(
+          inst->getParentOfType<FModuleLike>().getModuleNameAttr(),
+          inst.getInnerSymAttr().getSymName()));
+      newTarget.append(":");
+      addSymbol(inst.getModuleNameAttr());
+    }
+
+    // If this targets a module or an instance, then we're done.  There is no
+    // "reference" part of the FIRRTL target.
+    if (path.ref.isa<OpAnnoTarget>() &&
+        path.isOpOfType<FModuleOp, FExtModuleOp, InstanceOp>())
+      return;
+
     newTarget.append(">");
+    auto innerSymStr =
+        TypeSwitch<AnnoTarget, StringAttr>(path.ref)
+            .Case<PortAnnoTarget>([&](PortAnnoTarget portTarget) {
+              return hw::InnerSymbolTable::getInnerSymbol(hw::InnerSymTarget(
+                  portTarget.getPortNo(), portTarget.getModule(), 0));
+            })
+            .Case<OpAnnoTarget>([&](OpAnnoTarget opTarget) {
+              return hw::InnerSymbolTable::getInnerSymbol(opTarget.getOp());
+            })
+            .Default([](auto) {
+              assert(false && "unexpected annotation target type");
+              return StringAttr{};
+            });
+    addSymbol(hw::InnerRefAttr::get(path.ref.getModule().getModuleNameAttr(),
+                                    innerSymStr));
 
-    newTarget.append(name);
-
-    // Add information if this is an aggregate.
-    auto targetFieldID = anno.getFieldID();
+    auto type = dyn_cast<FIRRTLBaseType>(path.ref.getType());
+    assert(type && "expected a FIRRTLBaseType");
+    auto targetFieldID = path.fieldIdx;
     while (targetFieldID) {
       FIRRTLTypeSwitch<FIRRTLBaseType>(type)
           .Case<FVectorType>([&](FVectorType vector) {
             auto index = vector.getIndexForFieldID(targetFieldID);
             newTarget.append("[");
-            newTarget.append(Twine(index).str());
+            Twine(index).toVector(newTarget);
             newTarget.append("]");
             type = vector.getElementType();
             targetFieldID -= vector.getFieldID(index);
           })
-          .Case<BundleType>([&](BundleType bundle) {
+          .template Case<BundleType>([&](BundleType bundle) {
             auto index = bundle.getIndexForFieldID(targetFieldID);
             newTarget.append(".");
             newTarget.append(bundle.getElementName(index));
@@ -126,30 +179,52 @@ private:
           })
           .Default([&](auto) { targetFieldID = 0; });
     }
+  }
 
-    anno.setMember("target", StringAttr::get(module->getContext(), newTarget));
+  /// Internal implementation that updates an Annotation to add a "target" field
+  /// based on the current location of the annotation in the circuit.  The value
+  /// of the "target" will be a local target if the Annotation is local and a
+  /// non-local target if the Annotation is non-local.
+  AnnoPathValue updateTargetImpl(Annotation &anno, FModuleLike &module,
+                                 FIRRTLBaseType type, hw::InnerRefAttr name,
+                                 AnnoTarget target) {
+    SmallString<64> newTarget("~");
+    newTarget.append(module->getParentOfType<CircuitOp>().getName());
+    newTarget.append("|");
 
-    LLVM_DEBUG(llvm::dbgs() << "    after:  " << anno.getDict() << "\n");
+    SmallVector<InstanceOp> instances;
 
-    return true;
+    if (auto nla = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
+      hw::HierPathOp path = nlaTable->getNLA(nla.getAttr());
+      for (auto part : path.getNamepath().getValue().drop_back()) {
+        auto inst = cast<hw::InnerRefAttr>(part);
+        instances.push_back(dyn_cast<InstanceOp>(
+            istc->getInnerSymbolTable(nlaTable->getModule(inst.getModule()))
+                .lookupOp(inst.getName())));
+      }
+    }
+
+    AnnoPathValue path(instances, target, anno.getFieldID());
+
+    return path;
   }
 
   /// Add a "target" field to a port Annotation that indicates the current
   /// location of the port in the circuit.
-  bool updatePortTarget(FModuleLike &module, Annotation &anno,
-                        unsigned portIdx) {
+  std::optional<AnnoPathValue> updatePortTarget(FModuleLike &module,
+                                                Annotation &anno,
+                                                unsigned portIdx,
+                                                hw::InnerRefAttr innerRef) {
     auto type = getBaseType(type_cast<FIRRTLType>(module.getPortType(portIdx)));
-    return updateTargetImpl(anno, module, type, module.getPortName(portIdx));
+    return updateTargetImpl(anno, module, type, innerRef,
+                            PortAnnoTarget(module, portIdx));
   }
 
   /// Add a "target" field to an Annotation that indicates the current location
   /// of a component in the circuit.
-  bool updateTarget(FModuleLike &module, Operation *op, Annotation &anno) {
-
-    // If this operation doesn't have a name, then do nothing.
-    StringAttr name = op->getAttrOfType<StringAttr>("name");
-    if (!name)
-      return false;
+  std::optional<AnnoPathValue> updateTarget(FModuleLike &module, Operation *op,
+                                            Annotation &anno,
+                                            hw::InnerRefAttr innerRef) {
 
     // Get the type of the operation either by checking for the
     // result targeted by symbols on it (which are used to track the op)
@@ -160,59 +235,50 @@ private:
       type = is.getTargetResult().getType();
     else {
       if (op->getNumResults() != 1)
-        return false;
+        return std::nullopt;
       type = op->getResultTypes().front();
     }
 
     auto baseType = getBaseType(type_cast<FIRRTLType>(type));
-    return updateTargetImpl(anno, module, baseType, name);
+    return updateTargetImpl(anno, module, baseType, innerRef, OpAnnoTarget(op));
   }
 
   /// Add a "target" field to an Annotation on a Module that indicates the
   /// current location of the module.  This will be local or non-local depending
   /// on the Annotation.
-  bool updateModuleTarget(FModuleLike &module, Annotation &anno) {
-
-    if (!anno.isClass(traceAnnoClass))
-      return false;
-
-    LLVM_DEBUG(llvm::dbgs() << "  - before: " << anno.getDict() << "\n");
-
-    SmallString<64> newTarget("~");
-    newTarget.append(module->getParentOfType<CircuitOp>().getName());
-    newTarget.append("|");
+  std::optional<AnnoPathValue> updateModuleTarget(FModuleLike &module,
+                                                  Annotation &anno) {
+    SmallVector<InstanceOp> instances;
 
     if (auto nla = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
       hw::HierPathOp path = nlaTable->getNLA(nla.getAttr());
       for (auto part : path.getNamepath().getValue().drop_back()) {
         auto inst = cast<hw::InnerRefAttr>(part);
-        newTarget.append(inst.getModule());
-        newTarget.append("/");
-        newTarget.append(inst.getName());
-        newTarget.append(":");
+        instances.push_back(cast<InstanceOp>(
+            istc->getInnerSymbolTable(nlaTable->getModule(inst.getModule()))
+                .lookupOp(inst.getName())));
       }
     }
-    newTarget.append(module.getModuleName());
 
-    anno.setMember("target", StringAttr::get(module->getContext(), newTarget));
+    AnnoPathValue path(instances, OpAnnoTarget(module), 0);
 
-    LLVM_DEBUG(llvm::dbgs() << "    after:  " << anno.getDict() << "\n");
-
-    return true;
+    return path;
   }
 };
 
 void ResolveTracesPass::runOnOperation() {
   LLVM_DEBUG(
       llvm::dbgs() << "==----- Running ResolveTraces "
-                      "-----------------------------------------------===\n");
-
-  // Populate the NLA Table.
-  nlaTable = &getAnalysis<NLATable>();
+                      "-----------------------------------------------===\n"
+                   << "Annotation Modifications:\n");
 
   // Grab the circuit (as this is used a few times below).
   CircuitOp circuit = getOperation();
   MLIRContext *context = circuit.getContext();
+
+  // Populate pointer datastructures.
+  nlaTable = &getAnalysis<NLATable>();
+  istc = &getAnalysis<hw::InnerSymbolTableCollection>();
 
   // Function to find all Trace Annotations in the circuit, add a "target" field
   // to them indicating the current local/non-local target of the operation/port
@@ -223,46 +289,59 @@ void ResolveTracesPass::runOnOperation() {
   // later optimization.
   auto onModule = [&](FModuleLike moduleLike) {
     // Output Trace Annotations from this module only.
-    SmallVector<Annotation> outputAnnotations;
+    SmallVector<std::pair<Annotation, AnnoPathValue>> outputAnnotations;
 
     // A lazily constructed module namespace.
-    std::optional<ModuleNamespace> moduleNamespace;
+    std::optional<hw::InnerSymbolNamespace> moduleNamespace;
 
     // Return a cached module namespace, lazily constructing it if needed.
-    auto getNamespace = [&](FModuleLike module) -> ModuleNamespace & {
+    auto getNamespace = [&](auto module) -> hw::InnerSymbolNamespace & {
       if (!moduleNamespace)
-        moduleNamespace = ModuleNamespace(module);
+        moduleNamespace = hw::InnerSymbolNamespace(module);
       return *moduleNamespace;
     };
 
     // Visit the module.
     AnnotationSet::removeAnnotations(moduleLike, [&](Annotation anno) {
-      if (!updateModuleTarget(moduleLike, anno))
+      if (!anno.isClass(traceAnnoClass))
         return false;
 
-      outputAnnotations.push_back(anno);
+      auto path = updateModuleTarget(moduleLike, anno);
+      if (!path)
+        return false;
+
+      outputAnnotations.push_back({anno, *path});
       return true;
     });
 
     // Visit port annotations.
     AnnotationSet::removePortAnnotations(
         moduleLike, [&](unsigned portIdx, Annotation anno) {
-          if (!updatePortTarget(moduleLike, anno, portIdx))
+          if (!anno.isClass(traceAnnoClass))
             return false;
 
-          getOrAddInnerSym(moduleLike, portIdx, getNamespace);
-          outputAnnotations.push_back(anno);
+          hw::InnerRefAttr innerRef =
+              getInnerRefTo(moduleLike, portIdx, getNamespace);
+          auto path = updatePortTarget(moduleLike, anno, portIdx, innerRef);
+          if (!path)
+            return false;
+
+          outputAnnotations.push_back({anno, *path});
           return true;
         });
 
     // Visit component annotations.
     moduleLike.walk([&](Operation *component) {
       AnnotationSet::removeAnnotations(component, [&](Annotation anno) {
-        if (!updateTarget(moduleLike, component, anno))
+        if (!anno.isClass(traceAnnoClass))
           return false;
 
-        getOrAddInnerSym(component, getNamespace);
-        outputAnnotations.push_back(anno);
+        hw::InnerRefAttr innerRef = getInnerRefTo(component, getNamespace);
+        auto path = updateTarget(moduleLike, component, anno, innerRef);
+        if (!path)
+          return false;
+
+        outputAnnotations.push_back({anno, *path});
         return true;
       });
     });
@@ -281,7 +360,8 @@ void ResolveTracesPass::runOnOperation() {
   // multithreading context.
   SmallVector<FModuleLike, 0> mods(circuit.getOps<FModuleLike>());
   auto outputAnnotations = transformReduce(
-      context, mods, SmallVector<Annotation>{}, appendVecs, onModule);
+      context, mods, SmallVector<std::pair<Annotation, AnnoPathValue>>{},
+      appendVecs, onModule);
 
   // Do not generate an output Annotation file if no Annotations exist.
   if (outputAnnotations.empty())
@@ -292,21 +372,37 @@ void ResolveTracesPass::runOnOperation() {
   llvm::raw_string_ostream jsonStream(jsonBuffer);
   llvm::json::OStream json(jsonStream, /*IndentSize=*/2);
   json.arrayBegin();
-  for (auto anno : outputAnnotations) {
+  for (auto &[anno, path] : outputAnnotations) {
     json.objectBegin();
     json.attribute("class", anno.getClass());
-    json.attribute("target", anno.getMember<StringAttr>("target").getValue());
+    SmallString<64> targetStr;
+    buildTarget(path, targetStr);
+    LLVM_DEBUG({
+      llvm::dbgs()
+          << "  - chiselTarget: "
+          << anno.getDict().getAs<StringAttr>("chiselTarget").getValue() << "\n"
+          << "    target:       " << targetStr << "\n"
+          << "    translated:   " << path << "\n";
+    });
+    json.attribute("target", targetStr);
     json.attribute("chiselTarget",
                    anno.getMember<StringAttr>("chiselTarget").getValue());
     json.objectEnd();
   }
   json.arrayEnd();
 
+  LLVM_DEBUG({
+    llvm::dbgs() << "Symbols:\n";
+    for (auto [id, symbol] : llvm::enumerate(symbols))
+      llvm::errs() << "  - " << id << ": " << symbol << "\n";
+  });
+
   // Write the JSON-encoded Trace Annotation to a file called
   // "$circuitName.anno.json".  (This is implemented via an SVVerbatimOp that is
   // inserted before the FIRRTL circuit.
-  OpBuilder b(circuit);
-  auto verbatimOp = b.create<sv::VerbatimOp>(b.getUnknownLoc(), jsonBuffer);
+  auto b = OpBuilder::atBlockBegin(circuit.getBodyBlock());
+  auto verbatimOp = b.create<sv::VerbatimOp>(
+      b.getUnknownLoc(), jsonBuffer, ValueRange{}, b.getArrayAttr(symbols));
   hw::OutputFileAttr fileAttr;
   if (this->outputAnnotationFilename.empty())
     fileAttr = hw::OutputFileAttr::getFromFilename(

@@ -106,10 +106,21 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: hw.module @ZeroDataWidth
-  firrtl.module @ZeroDataWidth(in %data: !firrtl.uint<0>) {
+  firrtl.module @ZeroDataWidth(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, in %addr: !firrtl.uint<4>, in %data: !firrtl.uint<0>, in %mask: !firrtl.uint<1>) {
     // CHECK: %mem = seq.firmem 0, 1, undefined, port_order : <12 x 0>
     // CHECK: seq.firmem.write_port %mem[{{%.+}}] = {{%.+}}, clock {{.+}} enable {{%.+}} : <12 x 0>
     %mem_w = firrtl.mem Undefined {depth = 12 : i64, name = "mem", portNames = ["w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>
+
+    %mem_w.clk = firrtl.subfield %mem_w[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>
+    %mem_w.en = firrtl.subfield %mem_w[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>
+    %mem_w.addr = firrtl.subfield %mem_w[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>
+    %mem_w.data = firrtl.subfield %mem_w[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>
+    %mem_w.mask = firrtl.subfield %mem_w[mask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>
+    firrtl.strictconnect %mem_w.clk, %clk : !firrtl.clock
+    firrtl.strictconnect %mem_w.en, %en : !firrtl.uint<1>
+    firrtl.strictconnect %mem_w.addr, %addr : !firrtl.uint<4>
+    firrtl.strictconnect %mem_w.data, %data : !firrtl.uint<0>
+    firrtl.strictconnect %mem_w.mask, %mask : !firrtl.uint<1>
   }
 
   // FIRRTL memories with a single mask bit for the entire word should lower to
@@ -117,14 +128,21 @@ firrtl.circuit "Foo" {
   // into the enable condition on the write port.
   //
   // CHECK-LABEL: hw.module @FoldSingleMaskBitIntoEnable
-  firrtl.module @FoldSingleMaskBitIntoEnable(in %en: !firrtl.uint<1>, in %mask: !firrtl.uint<1>) {
+  firrtl.module @FoldSingleMaskBitIntoEnable(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, in %addr: !firrtl.uint<4>, in %data: !firrtl.uint<42>, in %mask: !firrtl.uint<1>) {
     // CHECK: %mem = seq.firmem 0, 1, undefined, port_order : <12 x 42>
     // CHECK: [[TMP:%.+]] = comb.and bin %en, %mask :
     // CHECK: seq.firmem.write_port %mem[{{%.+}}] = {{%.+}}, clock {{%.+}} enable [[TMP]] :
     %mem_w = firrtl.mem Undefined {depth = 12 : i64, name = "mem", portNames = ["w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+    %mem_w.clk = firrtl.subfield %mem_w[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
     %mem_w.en = firrtl.subfield %mem_w[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+    %mem_w.addr = firrtl.subfield %mem_w[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+    %mem_w.data = firrtl.subfield %mem_w[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
     %mem_w.mask = firrtl.subfield %mem_w[mask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+
+    firrtl.strictconnect %mem_w.clk, %clk : !firrtl.clock
     firrtl.strictconnect %mem_w.en, %en : !firrtl.uint<1>
+    firrtl.strictconnect %mem_w.addr, %addr : !firrtl.uint<4>
+    firrtl.strictconnect %mem_w.data, %data : !firrtl.uint<42>
     firrtl.strictconnect %mem_w.mask, %mask : !firrtl.uint<1>
   }
 
@@ -133,28 +151,57 @@ firrtl.circuit "Foo" {
   // into the mode operand on the read-write port.
   //
   // CHECK-LABEL: hw.module @FoldSingleMaskBitIntoMode
-  firrtl.module @FoldSingleMaskBitIntoMode(in %mode: !firrtl.uint<1>, in %mask: !firrtl.uint<1>) {
+  firrtl.module @FoldSingleMaskBitIntoMode(in %clk : !firrtl.clock, in %en : !firrtl.uint<1>, in %addr : !firrtl.uint<4>, in %wdata : !firrtl.uint<42>, in %wmode: !firrtl.uint<1>, in %wmask: !firrtl.uint<1>) {
     // CHECK: %mem = seq.firmem 0, 1, undefined, port_order : <12 x 42>
-    // CHECK: [[TMP:%.+]] = comb.and bin %mode, %mask :
+    // CHECK: [[TMP:%.+]] = comb.and bin %wmode, %wmask :
     // CHECK: seq.firmem.read_write_port %mem[{{%.+}}] = {{%.+}} if [[TMP]], clock {{%.+}} enable {{%.+}} :
     %mem_rw = firrtl.mem Undefined {depth = 12 : i64, name = "mem", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
-    %mem_rw.wmode = firrtl.subfield %mem_rw[wmode] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
+    %mem_rw.clk = firrtl.subfield %mem_rw[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
+    %mem_rw.en = firrtl.subfield %mem_rw[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
+    %mem_rw.addr = firrtl.subfield %mem_rw[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
+    %mem_rw.wdata = firrtl.subfield %mem_rw[wdata] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
+    %mem_rw.rdata = firrtl.subfield %mem_rw[rdata] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
     %mem_rw.wmask = firrtl.subfield %mem_rw[wmask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
-    firrtl.strictconnect %mem_rw.wmode, %mode : !firrtl.uint<1>
-    firrtl.strictconnect %mem_rw.wmask, %mask : !firrtl.uint<1>
+    %mem_rw.wmode = firrtl.subfield %mem_rw[wmode] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
+    firrtl.strictconnect %mem_rw.clk, %clk : !firrtl.clock
+    firrtl.strictconnect %mem_rw.en, %en : !firrtl.uint<1>
+    firrtl.strictconnect %mem_rw.addr, %addr : !firrtl.uint<4>
+    firrtl.strictconnect %mem_rw.wdata, %wdata : !firrtl.uint<42>
+    firrtl.strictconnect %mem_rw.wmask, %wmask : !firrtl.uint<1>
+    firrtl.strictconnect %mem_rw.wmode, %wmode : !firrtl.uint<1>
   }
 
   // CHECK-LABEL: hw.module @MemInit
-  firrtl.module @MemInit() {
+  firrtl.module @MemInit(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, in %addr: !firrtl.uint<4>, in %data: !firrtl.uint<42>) {
     // CHECK: %mem1 = seq.firmem
     // CHECK-SAME: init = #seq.firmem.init<"mem.txt", false, false>
     %mem1_r = firrtl.mem Undefined {depth = 12 : i64, name = "mem1", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32, init = #firrtl.meminit<"mem.txt", false, false>} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %mem1_r.clk = firrtl.subfield %mem1_r[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %mem1_r.en = firrtl.subfield %mem1_r[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %mem1_r.addr = firrtl.subfield %mem1_r[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    firrtl.strictconnect %mem1_r.clk, %clk : !firrtl.clock
+    firrtl.strictconnect %mem1_r.en, %en : !firrtl.uint<1>
+    firrtl.strictconnect %mem1_r.addr, %addr : !firrtl.uint<4>
+
     // CHECK: %mem2 = seq.firmem
     // CHECK-SAME: init = #seq.firmem.init<"mem.txt", false, true>
     %mem2_r = firrtl.mem Undefined {depth = 12 : i64, name = "mem2", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32, init = #firrtl.meminit<"mem.txt", false, true>} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %mem2_r.clk = firrtl.subfield %mem2_r[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %mem2_r.en = firrtl.subfield %mem2_r[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %mem2_r.addr = firrtl.subfield %mem2_r[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    firrtl.strictconnect %mem2_r.clk, %clk : !firrtl.clock
+    firrtl.strictconnect %mem2_r.en, %en : !firrtl.uint<1>
+    firrtl.strictconnect %mem2_r.addr, %addr : !firrtl.uint<4>
+
     // CHECK: %mem3 = seq.firmem
     // CHECK-SAME: init = #seq.firmem.init<"mem.txt", true, false>
     %mem3_r = firrtl.mem Undefined {depth = 12 : i64, name = "mem3", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32, init = #firrtl.meminit<"mem.txt", true, false>} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %mem3_r.clk = firrtl.subfield %mem3_r[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %mem3_r.en = firrtl.subfield %mem3_r[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %mem3_r.addr = firrtl.subfield %mem3_r[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    firrtl.strictconnect %mem3_r.clk, %clk : !firrtl.clock
+    firrtl.strictconnect %mem3_r.en, %en : !firrtl.uint<1>
+    firrtl.strictconnect %mem3_r.addr, %addr : !firrtl.uint<4>
   }
 
   // CHECK-LABEL: hw.module @IncompleteRead
@@ -198,10 +245,23 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: hw.module @ExcessiveDepth
-  firrtl.module @ExcessiveDepth() {
+  firrtl.module @ExcessiveDepth(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, in %addr31: !firrtl.uint<31>, in %addr33: !firrtl.uint<33>, in %data: !firrtl.uint<42>) {
     // CHECK: seq.firmem 0, 1, undefined, port_order : <2147483648 x 42>
     // CHECK: seq.firmem 0, 1, undefined, port_order : <8589934592 x 42>
-    %0 = firrtl.mem Undefined {depth = 2147483648 : i64, name = "mem31", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<31>, en: uint<1>, clk: clock, data flip: uint<42>>
-    %1 = firrtl.mem Undefined {depth = 8589934592 : i64, name = "mem33", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<33>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %mem_0 = firrtl.mem Undefined {depth = 2147483648 : i64, name = "mem31", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<31>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %mem_0.clk = firrtl.subfield %mem_0[clk] : !firrtl.bundle<addr: uint<31>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %mem_0.en = firrtl.subfield %mem_0[en] : !firrtl.bundle<addr: uint<31>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %mem_0.addr = firrtl.subfield %mem_0[addr] : !firrtl.bundle<addr: uint<31>, en: uint<1>, clk: clock, data flip: uint<42>>
+    firrtl.strictconnect %mem_0.clk, %clk : !firrtl.clock
+    firrtl.strictconnect %mem_0.en, %en : !firrtl.uint<1>
+    firrtl.strictconnect %mem_0.addr, %addr31 : !firrtl.uint<31>
+
+    %mem_1 = firrtl.mem Undefined {depth = 8589934592 : i64, name = "mem33", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<33>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %mem_1.clk = firrtl.subfield %mem_1[clk] : !firrtl.bundle<addr: uint<33>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %mem_1.en = firrtl.subfield %mem_1[en] : !firrtl.bundle<addr: uint<33>, en: uint<1>, clk: clock, data flip: uint<42>>
+    %mem_1.addr = firrtl.subfield %mem_1[addr] : !firrtl.bundle<addr: uint<33>, en: uint<1>, clk: clock, data flip: uint<42>>
+    firrtl.strictconnect %mem_1.clk, %clk : !firrtl.clock
+    firrtl.strictconnect %mem_1.en, %en : !firrtl.uint<1>
+    firrtl.strictconnect %mem_1.addr, %addr33 : !firrtl.uint<33>
   }
 }

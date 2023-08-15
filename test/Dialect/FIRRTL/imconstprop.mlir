@@ -613,3 +613,35 @@ firrtl.circuit "Ordering" {
   }
   // CHECK: firrtl.strictconnect %b, %c0_ui1
 }
+
+// -----
+
+// Checking that plusargs intrinsics are properly marked overdefined in IMCP,
+// see:
+//   - https://github.com/llvm/circt/issues/5722
+//
+// CHECK-LABEL: "Issue5722Test"
+firrtl.circuit "Issue5722Test"  {
+  firrtl.module @Issue5722Test(out %a: !firrtl.uint<1>) {
+    %b = firrtl.wire : !firrtl.uint<1>
+    %0 = firrtl.int.plusargs.test "parg"
+    firrtl.strictconnect %b, %0 : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %b, %0
+    firrtl.strictconnect %a, %b : !firrtl.uint<1>
+  }
+}
+
+// CHECK-LABEL: "Issue5722Value"
+firrtl.circuit "Issue5722Value"  {
+  firrtl.module @Issue5722Value(out %a: !firrtl.uint<1>, out %v: !firrtl.uint<32>) {
+    %b = firrtl.wire : !firrtl.uint<1>
+    %c = firrtl.wire : !firrtl.uint<32>
+    %0:2 = firrtl.int.plusargs.value "parg" : !firrtl.uint<32>
+    firrtl.strictconnect %b, %0#0 : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %b, %0#0
+    firrtl.strictconnect %c, %0#1 : !firrtl.uint<32>
+    // CHECK: firrtl.strictconnect %c, %0#1
+    firrtl.strictconnect %a, %b : !firrtl.uint<1>
+    firrtl.strictconnect %v, %c : !firrtl.uint<32>
+  }
+}

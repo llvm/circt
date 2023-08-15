@@ -55,7 +55,7 @@ public:
                        Value output, hw::PortInfo &newPort);
 
 protected:
-  PortConverterImpl(hw::InstanceGraphNode *moduleNode)
+  PortConverterImpl(igraph::InstanceGraphNode *moduleNode)
       : moduleNode(moduleNode) {
     mod = dyn_cast<hw::HWMutableModuleLike>(*moduleNode->getModule());
     assert(mod && "PortConverter only works on HWMutableModuleLike");
@@ -78,7 +78,7 @@ private:
   // non-null.
   Block *body = nullptr;
 
-  hw::InstanceGraphNode *moduleNode;
+  igraph::InstanceGraphNode *moduleNode;
   hw::HWMutableModuleLike mod;
 
   // Keep around a reference to the specific port conversion classes to

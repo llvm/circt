@@ -21,6 +21,13 @@ func.func private @test_and() {
 
 // -----
 
+hw.module @InnerSymVisibility() {
+  // expected-error @+1 {{expected 'public', 'private', or 'nested'}}
+  %wire = hw.wire %wire sym [<@x, 1, oops>] : i1
+}
+
+// -----
+
 func.func private @notModule () {
   return
 }

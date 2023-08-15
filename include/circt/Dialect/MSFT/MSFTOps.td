@@ -7,16 +7,17 @@
 //===----------------------------------------------------------------------===//
 
 include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Dialect/HW/HWTypes.td"
 
 def InstanceOp : MSFTOp<"instance", [
-        Symbol,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+        DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-        DeclareOpInterfaceMethods<HWInstanceLike>
+        DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface>
     ]> {
   let summary = "Instantiate a module";
 
-  let arguments = (ins SymbolNameAttr:$sym_name,
+  let arguments = (ins InnerSymAttr:$inner_sym,
                        FlatSymbolRefAttr:$moduleName,
                        Variadic<AnyType>:$inputs,
                        OptionalAttr<ParamDeclArrayAttr>:$parameters,
@@ -24,7 +25,7 @@ def InstanceOp : MSFTOp<"instance", [
   let results = (outs Variadic<AnyType>);
 
   let builders = [
-    OpBuilder<(ins "ArrayRef<Type>":$resultTypes, "StringAttr":$sym_name,
+    OpBuilder<(ins "ArrayRef<Type>":$resultTypes, "StringAttr":$symName,
                    "FlatSymbolRefAttr":$moduleName, "ArrayRef<Value>":$inputs)>
   ];
 
@@ -39,11 +40,16 @@ def InstanceOp : MSFTOp<"instance", [
     // Update the results.
     InstanceOp getWithNewResults(MSFTModuleOp mod,
                                  ArrayRef<unsigned> newToOldMap);
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 
   /// sym keyword for optional symbol simplifies parsing
   let assemblyFormat = [{
-    $sym_name $moduleName `(` $inputs `)` custom<ParameterList>($parameters)
+    $inner_sym $moduleName `(` $inputs `)` custom<ParameterList>($parameters)
       attr-dict `:` functional-type($inputs, results)
   }];
 }
@@ -63,8 +69,6 @@ class MSFTModuleOpBase<string mnemonic, list<Trait> traits = []> :
   code extraModuleClassDeclaration = ?;
 
   let extraClassDeclaration = extraModuleClassDeclaration # [{
-    // Decode information about the input and output ports on this module.
-    ::circt::hw::ModulePortInfo getPorts();
 
     // Get the module's symbolic name as StringAttr.
     StringAttr getNameAttr() {
@@ -106,6 +110,11 @@ class MSFTModuleOpBase<string mnemonic, list<Trait> traits = []> :
           setNameFn(block->getArgument(i), name);
       }
     }
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 }
 
@@ -225,6 +234,11 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
 
     /// Returns the result types of this function.
     ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 
   let extraClassDefinition = [{

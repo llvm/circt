@@ -18,6 +18,8 @@
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
+#include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Seq/SeqAttributes.h"
 #include "circt/Dialect/Seq/SeqDialect.h"

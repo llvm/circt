@@ -42,7 +42,7 @@ using namespace circt::llhd;
 
 /// Get an existing global string.
 static Value getGlobalString(Location loc, OpBuilder &builder,
-                             TypeConverter *typeConverter,
+                             const TypeConverter *typeConverter,
                              LLVM::GlobalOp &str) {
   auto voidPtrTy = LLVM::LLVMPointerType::get(builder.getContext());
   auto i32Ty = IntegerType::get(builder.getContext(), 32);
@@ -194,7 +194,7 @@ static Type unwrapLLVMPtr(Type ty) {
 /// defined in. An LLVMType structure containing those types, in order of
 /// appearance, is returned.
 static Type getProcPersistenceTy(LLVM::LLVMDialect *dialect,
-                                 TypeConverter *converter, ProcOp &proc) {
+                                 const TypeConverter *converter, ProcOp &proc) {
   SmallVector<Type, 3> types = SmallVector<Type, 3>();
   proc.walk([&](Operation *op) -> void {
     if (op->isUsedOutsideOfBlock(op->getBlock()) || isWaitDestArg(op)) {
@@ -276,7 +276,7 @@ static Value gepPersistenceState(LLVM::LLVMDialect *dialect, Location loc,
 /// substituting the uses that escape the block the operation is defined in with
 /// a load from the persistence table.
 static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
-                         TypeConverter *converter,
+                         const TypeConverter *converter,
                          ConversionPatternRewriter &rewriter, Type stateTy,
                          int &i, Value state, Value persist) {
   auto elemTy = stateTy.cast<LLVM::LLVMStructType>()
@@ -351,7 +351,7 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
 
 /// Insert the blocks and operations needed to persist values across suspension,
 /// as well as ones needed to resume execution at the right spot.
-static void insertPersistence(TypeConverter *converter,
+static void insertPersistence(const TypeConverter *converter,
                               ConversionPatternRewriter &rewriter,
                               LLVM::LLVMDialect *dialect, Location loc,
                               ProcOp &proc, Type &stateTy,

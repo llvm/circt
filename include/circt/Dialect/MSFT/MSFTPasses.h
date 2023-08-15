@@ -34,7 +34,7 @@ std::unique_ptr<mlir::Pass> createDiscoverAppIDsPass();
 struct PassCommon {
 protected:
   SymbolCache topLevelSyms;
-  DenseMap<Operation *, SmallVector<hw::HWInstanceLike, 1>>
+  DenseMap<Operation *, SmallVector<igraph::InstanceOpInterface, 1>>
       moduleInstantiations;
 
   LogicalResult verifyInstances(ModuleOp topMod);

@@ -1,9 +1,9 @@
 ; RUN: firtool %s -split-verilog -o %t
 ; RUN: cat %t/ref_Top_Top.sv | FileCheck %s
 
-; CHECK:      `define ref_Top_Top_direct_probe direct
-; CHECK-NEXT: `define ref_Top_Top_inner_probe inner.x
-; CHECK-NEXT: `define ref_Top_Top_keyword_probe always_0
+; CHECK:      `define ref_Top_Top_direct_probe direct_probe
+; CHECK-NEXT: `define ref_Top_Top_inner_probe inner.x_probe
+; CHECK-NEXT: `define ref_Top_Top_keyword_probe always_probe
 
 FIRRTL version 3.0.0
 circuit Top:

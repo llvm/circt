@@ -18,6 +18,7 @@
 using namespace circt;
 using namespace sv;
 using namespace hw;
+using namespace igraph;
 
 namespace {
 

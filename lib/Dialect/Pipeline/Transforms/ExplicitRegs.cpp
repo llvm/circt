@@ -25,6 +25,8 @@ public:
   void runOnOperation() override;
 
 private:
+  void runOnPipeline(ScheduledPipelineOp p);
+
   // Recursively routes value v backwards through the pipeline, adding new
   // registers to 'stage' if the value was not already registered in the stage.
   // Returns the registerred version of 'v' through 'stage'.
@@ -105,15 +107,14 @@ Value ExplicitRegsPass::routeThroughStage(Value v, Block *stage) {
   return retVal;
 }
 
-void ExplicitRegsPass::runOnOperation() {
-  ScheduledPipelineOp pipeline = getOperation();
-  OpBuilder b(getOperation().getContext());
-  bb = std::make_shared<BackedgeBuilder>(b, getOperation().getLoc());
+void ExplicitRegsPass::runOnPipeline(ScheduledPipelineOp pipeline) {
+  OpBuilder b(pipeline.getContext());
+  bb = std::make_shared<BackedgeBuilder>(b, pipeline.getLoc());
 
   // Cache external-like inputs in a set for fast lookup. This also includes
   // clock, reset, and stall.
   llvm::DenseSet<Value> extLikeInputs;
-  for (auto extInput : pipeline.getInnerExtInputs())
+  for (auto extInput : pipeline.getExtInputs())
     extLikeInputs.insert(extInput);
   extLikeInputs.insert(pipeline.getInnerClock());
   extLikeInputs.insert(pipeline.getInnerReset());
@@ -202,6 +203,11 @@ void ExplicitRegsPass::runOnOperation() {
 
   // Clear internal state. See https://github.com/llvm/circt/issues/3235
   stageRegOrPassMap.clear();
+}
+
+void ExplicitRegsPass::runOnOperation() {
+  getOperation()->walk(
+      [&](ScheduledPipelineOp pipeline) { runOnPipeline(pipeline); });
 }
 
 std::unique_ptr<mlir::Pass> circt::pipeline::createExplicitRegsPass() {

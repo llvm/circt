@@ -11,9 +11,9 @@ firrtl.circuit "NoOMIR" {
 // CHECK-LABEL: firrtl.circuit "NoOMIR" {
 // CHECK-NEXT:    firrtl.module @NoOMIR() {
 // CHECK-NEXT:    }
+// CHECK-NEXT:    sv.verbatim "[]"
+// CHECK-SAME:    #hw.output_file<"omir.json", excludeFromFileList>}
 // CHECK-NEXT:  }
-// CHECK-NEXT:  sv.verbatim "[]"
-// CHECK-SAME:  #hw.output_file<"omir.json", excludeFromFileList>
 
 //===----------------------------------------------------------------------===//
 // Empty OMIR data
@@ -26,8 +26,9 @@ firrtl.circuit "NoNodes" attributes {annotations = [{class = "freechips.rocketch
 // CHECK-LABEL: firrtl.circuit "NoNodes" {
 // CHECK-NEXT:    firrtl.module @NoNodes() {
 // CHECK-NEXT:    }
+// CHECK-NEXT:    sv.verbatim "[]"
+// CHECK-SAME:    excludeFromFileList>}
 // CHECK-NEXT:  }
-// CHECK-NEXT:  sv.verbatim "[]"
 
 //===----------------------------------------------------------------------===//
 // Empty node
@@ -41,11 +42,12 @@ firrtl.circuit "EmptyNode" attributes {annotations = [{class = "freechips.rocket
 // CHECK-LABEL: firrtl.circuit "EmptyNode" {
 // CHECK-NEXT:    firrtl.module @EmptyNode() {
 // CHECK-NEXT:    }
+// CHECK-NEXT:    sv.verbatim
+// CHECK-SAME:    \22info\22: \22UnlocatableSourceInfo\22
+// CHECK-SAME:    \22id\22: \22OMID:0\22
+// CHECK-SAME:    \22fields\22: []
+// CHECK-SAME:    excludeFromFileList>}
 // CHECK-NEXT:  }
-// CHECK-NEXT:  sv.verbatim
-// CHECK-SAME:  \22info\22: \22UnlocatableSourceInfo\22
-// CHECK-SAME:  \22id\22: \22OMID:0\22
-// CHECK-SAME:  \22fields\22: []
 
 //===----------------------------------------------------------------------===//
 // Source locator serialization
@@ -61,22 +63,23 @@ firrtl.circuit "SourceLocators" attributes {annotations = [{class = "freechips.r
 // CHECK-LABEL: firrtl.circuit "SourceLocators" {
 // CHECK-NEXT:    firrtl.module @SourceLocators() {
 // CHECK-NEXT:    }
+// CHECK-NEXT:    sv.verbatim
+// CHECK-SAME:    \22info\22: \22@[A 0:1]\22
+// CHECK-SAME:    \22id\22: \22OMID:0\22
+// CHECK-SAME:    \22fields\22: [
+// CHECK-SAME:      {
+// CHECK-SAME:        \22info\22: \22@[C 4:5 D 6:7]\22
+// CHECK-SAME:        \22name\22: \22y\22
+// CHECK-SAME:        \22value\22: \22OMReference:0\22
+// CHECK-SAME:      }
+// CHECK-SAME:      {
+// CHECK-SAME:        \22info\22: \22@[B 2:3]\22
+// CHECK-SAME:        \22name\22: \22x\22
+// CHECK-SAME:        \22value\22: \22OMReference:0\22
+// CHECK-SAME:      }
+// CHECK-SAME:    ]
+// CHECK-SAME:    excludeFromFileList>}
 // CHECK-NEXT:  }
-// CHECK-NEXT:  sv.verbatim
-// CHECK-SAME:  \22info\22: \22@[A 0:1]\22
-// CHECK-SAME:  \22id\22: \22OMID:0\22
-// CHECK-SAME:  \22fields\22: [
-// CHECK-SAME:    {
-// CHECK-SAME:      \22info\22: \22@[C 4:5 D 6:7]\22
-// CHECK-SAME:      \22name\22: \22y\22
-// CHECK-SAME:      \22value\22: \22OMReference:0\22
-// CHECK-SAME:    }
-// CHECK-SAME:    {
-// CHECK-SAME:      \22info\22: \22@[B 2:3]\22
-// CHECK-SAME:      \22name\22: \22x\22
-// CHECK-SAME:      \22value\22: \22OMReference:0\22
-// CHECK-SAME:    }
-// CHECK-SAME:  ]
 
 //===----------------------------------------------------------------------===//
 // Check that all the OMIR types support serialization
@@ -96,7 +99,6 @@ firrtl.circuit "AllTypesSupported" attributes {annotations = [{
     OMString = {info = #loc, index = 9, value = "OMString:hello"},
     OMBigDecimal = {info = #loc, index = 10, value = "OMBigDecimal:10.5"},
     OMDeleted = {info = #loc, index = 11, value = "OMDeleted"},
-    OMConstant = {info = #loc, index = 12, value = "OMConstant:UInt<2>(\"h1\")"},
     OMArray = {info = #loc, index = 13, value = [true, 9001, "OMString:bar"]},
     OMMap = {info = #loc, index = 14, value = {foo = true, bar = 9001}}
   }}]
@@ -107,43 +109,42 @@ firrtl.circuit "AllTypesSupported" attributes {annotations = [{
 // CHECK-LABEL: firrtl.circuit "AllTypesSupported" {
 // CHECK-NEXT:    firrtl.module @AllTypesSupported() {
 // CHECK-NEXT:    }
+// CHECK-NEXT:    sv.verbatim
+// CHECK-SAME:    \22name\22: \22OMBoolean\22
+// CHECK-SAME:    \22value\22: true
+// CHECK-SAME:    \22name\22: \22OMInt1\22
+// CHECK-SAME:    \22value\22: 9001
+// CHECK-SAME:    \22name\22: \22OMInt2\22
+// CHECK-SAME:    \22value\22: -42
+// CHECK-SAME:    \22name\22: \22OMDouble\22
+// CHECK-SAME:    \22value\22: 3.14
+// CHECK-SAME:    \22name\22: \22OMID\22
+// CHECK-SAME:    \22value\22: \22OMID:1337\22
+// CHECK-SAME:    \22name\22: \22OMReference\22
+// CHECK-SAME:    \22value\22: \22OMReference:0\22
+// CHECK-SAME:    \22name\22: \22OMBigInt\22
+// CHECK-SAME:    \22value\22: \22OMBigInt:42\22
+// CHECK-SAME:    \22name\22: \22OMLong\22
+// CHECK-SAME:    \22value\22: \22OMLong:ff\22
+// CHECK-SAME:    \22name\22: \22OMString\22
+// CHECK-SAME:    \22value\22: \22OMString:hello\22
+// CHECK-SAME:    \22name\22: \22OMBigDecimal\22
+// CHECK-SAME:    \22value\22: \22OMBigDecimal:10.5\22
+// CHECK-SAME:    \22name\22: \22OMDeleted\22
+// CHECK-SAME:    \22value\22: \22OMDeleted\22
+// CHECK-SAME:    \22name\22: \22OMArray\22
+// CHECK-SAME:    \22value\22: [
+// CHECK-SAME:      true
+// CHECK-SAME:      9001
+// CHECK-SAME:      \22OMString:bar\22
+// CHECK-SAME:    ]
+// CHECK-SAME:    \22name\22: \22OMMap\22
+// CHECK-SAME:    \22value\22: {
+// CHECK-SAME:      \22bar\22: 9001
+// CHECK-SAME:      \22foo\22: true
+// CHECK-SAME:    }
+// CHECK-SAME:    excludeFromFileList>}
 // CHECK-NEXT:  }
-// CHECK-NEXT:  sv.verbatim
-// CHECK-SAME:  \22name\22: \22OMBoolean\22
-// CHECK-SAME:  \22value\22: true
-// CHECK-SAME:  \22name\22: \22OMInt1\22
-// CHECK-SAME:  \22value\22: 9001
-// CHECK-SAME:  \22name\22: \22OMInt2\22
-// CHECK-SAME:  \22value\22: -42
-// CHECK-SAME:  \22name\22: \22OMDouble\22
-// CHECK-SAME:  \22value\22: 3.14
-// CHECK-SAME:  \22name\22: \22OMID\22
-// CHECK-SAME:  \22value\22: \22OMID:1337\22
-// CHECK-SAME:  \22name\22: \22OMReference\22
-// CHECK-SAME:  \22value\22: \22OMReference:0\22
-// CHECK-SAME:  \22name\22: \22OMBigInt\22
-// CHECK-SAME:  \22value\22: \22OMBigInt:42\22
-// CHECK-SAME:  \22name\22: \22OMLong\22
-// CHECK-SAME:  \22value\22: \22OMLong:ff\22
-// CHECK-SAME:  \22name\22: \22OMString\22
-// CHECK-SAME:  \22value\22: \22OMString:hello\22
-// CHECK-SAME:  \22name\22: \22OMBigDecimal\22
-// CHECK-SAME:  \22value\22: \22OMBigDecimal:10.5\22
-// CHECK-SAME:  \22name\22: \22OMDeleted\22
-// CHECK-SAME:  \22value\22: \22OMDeleted\22
-// CHECK-SAME:  \22name\22: \22OMConstant\22
-// CHECK-SAME:  \22value\22: \22OMConstant:UInt<2>(\\\22h1\\\22)\22
-// CHECK-SAME:  \22name\22: \22OMArray\22
-// CHECK-SAME:  \22value\22: [
-// CHECK-SAME:    true
-// CHECK-SAME:    9001
-// CHECK-SAME:    \22OMString:bar\22
-// CHECK-SAME:  ]
-// CHECK-SAME:  \22name\22: \22OMMap\22
-// CHECK-SAME:  \22value\22: {
-// CHECK-SAME:    \22bar\22: 9001
-// CHECK-SAME:    \22foo\22: true
-// CHECK-SAME:  }
 
 //===----------------------------------------------------------------------===//
 // Trackers as Local Annotations
@@ -174,8 +175,7 @@ firrtl.circuit "LocalTrackers" attributes {annotations = [{
 // CHECK-NEXT:      firrtl.instance a sym [[SYMA:@[a-zA-Z0-9_]+]] @A()
 // CHECK-NEXT:      %b = firrtl.wire sym [[SYMB:@[a-zA-Z0-9_]+]] : !firrtl.uint<42>
 // CHECK-NEXT:    }
-// CHECK-NEXT:  }
-// CHECK-NEXT:  sv.verbatim
+// CHECK-NEXT:    sv.verbatim
 // CHECK-SAME:           \22name\22: \22OMReferenceTarget1\22
 // CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{0}}\22
 // CHECK-SAME:           \22name\22: \22OMReferenceTarget2\22
@@ -184,13 +184,14 @@ firrtl.circuit "LocalTrackers" attributes {annotations = [{
 // CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{2}}>{{3}}\22
 // CHECK-SAME:           \22name\22: \22OMReferenceTarget4\22
 // CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{2}}>{{4}}\22
-// CHECK-SAME:  symbols = [
-// CHECK-SAME:    @A,
-// CHECK-SAME:    #hw.innerNameRef<@A::[[SYMC]]>,
-// CHECK-SAME:    @LocalTrackers,
-// CHECK-SAME:    #hw.innerNameRef<@LocalTrackers::[[SYMB]]>,
-// CHECK-SAME:    #hw.innerNameRef<@LocalTrackers::[[SYMA]]>
-// CHECK-SAME:  ]
+// CHECK-SAME:           symbols = [
+// CHECK-SAME:             @A,
+// CHECK-SAME:             #hw.innerNameRef<@A::[[SYMC]]>,
+// CHECK-SAME:             @LocalTrackers,
+// CHECK-SAME:             #hw.innerNameRef<@LocalTrackers::[[SYMB]]>,
+// CHECK-SAME:             #hw.innerNameRef<@LocalTrackers::[[SYMA]]>
+// CHECK-SAME:           ]}
+// CHECK-NEXT:  }
 
 //===----------------------------------------------------------------------===//
 // Trackers as Non-Local Annotations
@@ -509,8 +510,7 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // CHECK-NOT:         circt.nonlocal
 // CHECK-SAME:        @Submodule()
 // CHECK-NEXT:    }
-// CHECK-NEXT:  }
-// CHECK-NEXT:  sv.verbatim
+// CHECK-NEXT:    sv.verbatim
 
 // CHECK-SAME:           \22id\22: \22OMID:0\22
 // CHECK-SAME:             \22name\22: \22omType\22
@@ -532,14 +532,15 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // CHECK-NOT:                {{.+}}
 // CHECK-SAME:               {{[^\\]+}}\22
 
-// CHECK-SAME:  symbols = [
-// CHECK-SAME:    @SRAMPaths,
-// CHECK-SAME:    #hw.innerNameRef<@SRAMPaths::[[SYMSUB]]>,
-// CHECK-SAME:    @Submodule,
-// CHECK-SAME:    #hw.innerNameRef<@Submodule::[[SYMMEM1]]>,
-// CHECK-SAME:    @MySRAM,
-// CHECK-SAME:    #hw.innerNameRef<@Submodule::[[SYMMEM2]]>
-// CHECK-SAME:  ]
+// CHECK-SAME:    symbols = [
+// CHECK-SAME:      @SRAMPaths,
+// CHECK-SAME:      #hw.innerNameRef<@SRAMPaths::[[SYMSUB]]>,
+// CHECK-SAME:      @Submodule,
+// CHECK-SAME:      #hw.innerNameRef<@Submodule::[[SYMMEM1]]>,
+// CHECK-SAME:      @MySRAM,
+// CHECK-SAME:      #hw.innerNameRef<@Submodule::[[SYMMEM2]]>
+// CHECK-SAME:    ]}
+// CHECK-NEXT:  }
 
 //===----------------------------------------------------------------------===//
 // Make SRAM Paths Absolute with existing absolute NLA (`SetOMIRSRAMPaths`)

@@ -1250,8 +1250,8 @@ firrtl.circuit "GCTDataTap" attributes {rawAnnotations = [{
 }
 
 // CHECK-LABEL: firrtl.extmodule private @BlackBox
-// CHECK-SAME:    out [[tap_4:[a-zA-Z0-9_]+]]: !firrtl.probe<uint<1>>
-// CHECk-SAME:    out [[tap_5_0:[[a-zA-Z09-_]+]]]: !firrtl.probe<uint<1>>
+// CHECK-SAME:    out {{[a-zA-Z0-9_]+}}: !firrtl.probe<uint<1>>
+// CHECK-SAME:    out {{[a-zA-Z0-9_]+}}: !firrtl.probe<uint<1>>
 // CHECK-SAME:    internalPaths = ["baz.qux", "baz.quz"]
 
 // CHECK-LABEL: firrtl.module private @InnerMod
@@ -1521,7 +1521,7 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
     firrtl.instance b2 interesting_name  @ExtBar()
     // CHECK: %b2_random_something_external = firrtl.instance b2 interesting_name  @ExtBar(out random_something_external: !firrtl.probe<uint<1>>)
   }
-  // CHECK-LABEL firrtl.module @Top()
+  // CHECK-LABEL: firrtl.module @Top()
   firrtl.module @Top() {
     firrtl.instance foo interesting_name  @Foo()
     %tap = firrtl.wire interesting_name  : !firrtl.uint<1>

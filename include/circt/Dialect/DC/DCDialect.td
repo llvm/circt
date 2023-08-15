@@ -21,6 +21,7 @@ def DCDialect : Dialect {
   let cppNamespace = "circt::dc";
 
   let useDefaultTypePrinterParser = 1;
+  let dependentDialects = ["circt::esi::ESIDialect"];
 
   let extraClassDeclaration = [{
     void registerTypes();

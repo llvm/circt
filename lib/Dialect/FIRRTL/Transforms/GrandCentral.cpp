@@ -21,6 +21,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/DepthFirstIterator.h"
@@ -677,7 +678,7 @@ private:
 
   /// The module namespaces. These are lazily constructed by
   /// `getModuleNamespace`.
-  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
+  DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;
 
   /// Return a reference to the circuit namespace.  This will lazily construct a
   /// namespace if one does not exist.
@@ -688,24 +689,20 @@ private:
   }
 
   /// Get the cached namespace for a module.
-  ModuleNamespace &getModuleNamespace(FModuleLike module) {
-    auto it = moduleNamespaces.find(module);
-    if (it != moduleNamespaces.end())
-      return it->second;
-    return moduleNamespaces.insert({module, ModuleNamespace(module)})
-        .first->second;
+  hw::InnerSymbolNamespace &getModuleNamespace(FModuleLike module) {
+    return moduleNamespaces.try_emplace(module, module).first->second;
   }
 
   /// A symbol table associated with the circuit.  This is lazily constructed by
   /// `getSymbolTable`.
-  std::optional<SymbolTable> symbolTable;
+  std::optional<SymbolTable *> symbolTable;
 
   /// Return a reference to a circuit-level symbol table.  Lazily construct one
   /// if such a symbol table does not already exist.
   SymbolTable &getSymbolTable() {
     if (!symbolTable)
-      symbolTable = SymbolTable(getOperation());
-    return *symbolTable;
+      symbolTable = &getAnalysis<SymbolTable>();
+    return **symbolTable;
   }
 
   // Utility that acts like emitOpError, but does _not_ include a note.  The
@@ -1745,7 +1742,7 @@ void GrandCentralPass::runOnOperation() {
       i.skipChildren();
       continue;
     }
-    dutModules.insert(i->getModule());
+    dutModules.insert(i->getModule<hw::HWModuleLike>());
     // Manually increment the iterator to avoid walking off the end from
     // skipChildren.
     ++i;
@@ -1944,7 +1941,7 @@ void GrandCentralPass::runOnOperation() {
                 auto *modNode = instancePaths->instanceGraph.lookup(mod);
                 SmallVector<InstanceRecord *> instances(modNode->uses());
                 if (modNode != companionNode &&
-                    dutModules.count(modNode->getModule()))
+                    dutModules.count(modNode->getModule<hw::HWModuleLike>()))
                   continue;
 
                 LLVM_DEBUG({
@@ -2232,7 +2229,7 @@ void GrandCentralPass::runOnOperation() {
     builder.create<sv::InterfaceInstanceOp>(
         getOperation().getLoc(), topIface.getInterfaceType(),
         companionIDMap.lookup(bundle.getID()).name,
-        builder.getStringAttr(symbolName));
+        hw::InnerSymAttr::get(builder.getStringAttr(symbolName)));
 
     // If no extraction information was present, then just leave the interface
     // instantiated in the companion.  Otherwise, make it a bind.

@@ -13,6 +13,7 @@
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
+#include "circt/Support/FoldUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/Matchers.h"
@@ -24,29 +25,6 @@
 using namespace mlir;
 using namespace circt;
 using namespace seq;
-
-/// Determine the integer value of a constant operand.
-static std::optional<APInt> getConstantInt(Attribute operand) {
-  if (!operand)
-    return {};
-  if (auto attr = dyn_cast<IntegerAttr>(operand))
-    return attr.getValue();
-  return {};
-}
-
-/// Determine whether a constant operand is a zero value.
-static bool isConstantZero(Attribute operand) {
-  if (auto cst = getConstantInt(operand))
-    return cst->isZero();
-  return false;
-}
-
-/// Determine whether a constant operand is a one value.
-static bool isConstantOne(Attribute operand) {
-  if (auto cst = getConstantInt(operand))
-    return cst->isOne();
-  return false;
-}
 
 bool circt::seq::isValidIndexValues(Value hlmemHandle, ValueRange addresses) {
   auto memType = hlmemHandle.getType().cast<seq::HLMemType>();
@@ -137,7 +115,7 @@ ParseResult ReadPortOp::parse(OpAsmParser &parser, OperationState &result) {
   operandSizes.push_back(1); // memory handle
   operandSizes.push_back(addressOperands.size());
   operandSizes.push_back(hasRdEn ? 1 : 0);
-  result.addAttribute("operand_segment_sizes",
+  result.addAttribute("operandSegmentSizes",
                       parser.getBuilder().getDenseI32ArrayAttr(operandSizes));
   return success();
 }
@@ -146,7 +124,7 @@ void ReadPortOp::print(OpAsmPrinter &p) {
   p << " " << getMemory() << "[" << getAddresses() << "]";
   if (getRdEn())
     p << " rden " << getRdEn();
-  p.printOptionalAttrDict((*this)->getAttrs(), {"operand_segment_sizes"});
+  p.printOptionalAttrDict((*this)->getAttrs(), {"operandSegmentSizes"});
   p << " : " << getMemory().getType();
 }
 
@@ -304,8 +282,9 @@ static ParseResult parseCompReg(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc loc = parser.getCurrentLocation();
 
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
-    StringAttr symName;
-    if (parser.parseSymbolName(symName, "sym_name", result.attributes))
+    hw::InnerSymAttr innerSym;
+    if (parser.parseCustomAttributeWithFallback(innerSym, /*type=*/nullptr,
+                                                "inner_sym", result.attributes))
       return failure();
   }
 
@@ -361,10 +340,10 @@ static void printClockEnable(::mlir::OpAsmPrinter &p,
 template <class Op>
 static void printCompReg(::mlir::OpAsmPrinter &p, Op op) {
   SmallVector<StringRef> elidedAttrs;
-  if (auto sym = op.getSymName()) {
-    elidedAttrs.push_back("sym_name");
+  if (auto sym = op.getInnerSymAttr()) {
+    elidedAttrs.push_back("inner_sym");
     p << ' ' << "sym ";
-    p.printSymbolName(*sym);
+    sym.print(p);
   }
 
   p << ' ' << op.getInput() << ", " << op.getClk();
@@ -388,6 +367,8 @@ void CompRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), getName());
 }
 
+std::optional<size_t> CompRegOp::getTargetResultIndex() { return 0; }
+
 LogicalResult CompRegOp::verify() {
   if ((getReset() == nullptr) ^ (getResetValue() == nullptr))
     return emitOpError(
@@ -407,6 +388,10 @@ void CompRegClockEnabledOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the wire has an optional 'name' attribute, use it.
   if (!getName().empty())
     setNameFn(getResult(), getName());
+}
+
+std::optional<size_t> CompRegClockEnabledOp::getTargetResultIndex() {
+  return 0;
 }
 
 LogicalResult CompRegClockEnabledOp::verify() {
@@ -430,7 +415,7 @@ void CompRegClockEnabledOp::print(::mlir::OpAsmPrinter &p) {
 //===----------------------------------------------------------------------===//
 
 void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
-                     Value clk, StringAttr name, StringAttr innerSym) {
+                     Value clk, StringAttr name, hw::InnerSymAttr innerSym) {
 
   OpBuilder::InsertionGuard guard(builder);
 
@@ -447,7 +432,7 @@ void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
 
 void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
                      Value clk, StringAttr name, Value reset, Value resetValue,
-                     StringAttr innerSym, bool isAsync) {
+                     hw::InnerSymAttr innerSym, bool isAsync) {
 
   OpBuilder::InsertionGuard guard(builder);
 
@@ -478,8 +463,9 @@ ParseResult FirRegOp::parse(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
-    StringAttr symName;
-    if (parser.parseSymbolName(symName, "inner_sym", result.attributes))
+    hw::InnerSymAttr innerSym;
+    if (parser.parseCustomAttributeWithFallback(innerSym, /*type=*/nullptr,
+                                                "inner_sym", result.attributes))
       return failure();
   }
 
@@ -538,9 +524,9 @@ void FirRegOp::print(::mlir::OpAsmPrinter &p) {
 
   p << ' ' << getNext() << " clock " << getClk();
 
-  if (auto sym = getInnerSym()) {
+  if (auto sym = getInnerSymAttr()) {
     p << " sym ";
-    p.printSymbolName(*sym);
+    sym.print(p);
   }
 
   if (hasReset()) {
@@ -582,6 +568,8 @@ void FirRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   if (!getName().empty())
     setNameFn(getResult(), getName());
 }
+
+std::optional<size_t> FirRegOp::getTargetResultIndex() { return 0; }
 
 LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
   // If the register has a constant zero reset, drop the reset and reset value
@@ -762,6 +750,10 @@ LogicalResult ClockGateOp::canonicalize(ClockGateOp op,
   return failure();
 }
 
+std::optional<size_t> ClockGateOp::getTargetResultIndex() {
+  return std::nullopt;
+}
+
 //===----------------------------------------------------------------------===//
 // FirMemOp
 //===----------------------------------------------------------------------===//
@@ -771,6 +763,8 @@ void FirMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   if (!nameAttr.getValue().empty())
     setNameFn(getResult(), nameAttr.getValue());
 }
+
+std::optional<size_t> FirMemOp::getTargetResultIndex() { return 0; }
 
 template <class Op>
 static LogicalResult verifyFirMemMask(Op op) {

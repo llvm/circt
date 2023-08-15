@@ -31,12 +31,6 @@ void registerESIPasses();
 void registerESITranslations();
 LogicalResult exportCosimSchema(ModuleOp module, llvm::raw_ostream &os);
 
-/// A triple of signals which represent a latency insensitive interface with
-/// valid/ready semantics.
-struct ESIPortValidReadyMapping {
-  hw::PortInfo data, valid, ready;
-};
-
 /// Name of dialect attribute which governs whether or not to bundle (i.e. use
 /// SystemVerilog interfaces) channel signal wires on external modules.
 constexpr StringRef extModBundleSignalsAttrName = "esi.bundle";
@@ -61,21 +55,6 @@ constexpr StringRef extModPortRdenSuffix = "esi.portRdenSuffix";
 /// Suffix lowered empty ports with this suffix. Defaults to "_empty". Applies
 /// only to FIFO channels.
 constexpr StringRef extModPortEmptySuffix = "esi.portEmptySuffix";
-
-/// Find all the port triples on a module which fit the
-/// <name>/<name>_valid/<name>_ready pattern. Ready must be the opposite
-/// direction of the other two.
-void findValidReadySignals(Operation *modOp,
-                           SmallVectorImpl<ESIPortValidReadyMapping> &names);
-
-/// Given a list of logical port names, find the data/valid/ready port triples.
-void resolvePortNames(Operation *modOp, ArrayRef<StringRef> portNames,
-                      SmallVectorImpl<ESIPortValidReadyMapping> &names);
-
-/// Build an ESI module wrapper, converting the wires with latency-insensitive
-/// semantics to ESI channels and passing through the rest.
-Operation *buildESIWrapper(OpBuilder &b, Operation *pearl,
-                           ArrayRef<ESIPortValidReadyMapping> portsToConvert);
 
 } // namespace esi
 } // namespace circt

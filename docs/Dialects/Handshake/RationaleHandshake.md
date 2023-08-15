@@ -55,10 +55,13 @@ output stream (modeled as an MLIR result).
 The Handshake dialect adopts the following conventions for IR:
 - The prefix for all Handshake types and operations are `handshake.`.
 
-## Resources
+## Talks, Resources and Related Publications
 
-MLIR Handshake Dialect-[slides](https://drive.google.com/file/d/1UYQAfHrzcsdXUZ93bHPTPNwrscwx89M-/view?usp=sharing) by Stephen Neuendorffer (Xilinx) + Lana Josipović (EPFL)
+- (10/2022) [Multi-Level Rewriting for Stream Processing to RTL compilation (M.Sc. Thesis) - Christian Ulmann](https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/578713/1/Ulmann_Christian.pdf)
+- (03/2022) [HLS from PyTorch to System Verilog with MLIR and CIRCT (Workshop paper) - Mike Urbach, Morten Borup Petersen](https://capra.cs.cornell.edu/latte22/paper/2.pdf)
+- (01/2022) [A Dynamically Scheduled HLS Flow in MLIR (M.Sc. Thesis) - Morten Borup Petersen](https://infoscience.epfl.ch/record/292189)
+- (06/2020) MLIR Handshake Dialect-[slides](https://drive.google.com/file/d/1UYQAfHrzcsdXUZ93bHPTPNwrscwx89M-/view?usp=sharing) by Stephen Neuendorffer (Xilinx) + Lana Josipović (EPFL) 
 
 ## Operation definitions
 
-[include "Dialects/HandshakeOps.md"]
+[include "Dialects/Handshake.md"]

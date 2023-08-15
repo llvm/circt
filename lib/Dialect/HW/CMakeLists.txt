@@ -7,7 +7,6 @@ set(CIRCT_HW_Sources
   HWOps.cpp
   HWTypeInterfaces.cpp
   HWTypes.cpp
-  InstanceGraphBase.cpp
   InstanceImplementation.cpp
   ModuleImplementation.cpp
   InnerSymbolTable.cpp

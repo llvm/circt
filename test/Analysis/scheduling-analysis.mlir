@@ -109,6 +109,9 @@ func.func @test7(%arg0: memref<?xi32>) {
       %0 = affine.if #set3(%arg1) -> i32 {
         %1 = affine.load %arg0[%arg1] : memref<?xi32>
         affine.yield %1 : i32
+      } else {
+        %1 = arith.constant 0 : i32
+        affine.yield %1 : i32
       }
       // CHECK: } {dependence}
       // CHECK: affine.store %0, %arg0[%arg1] {dependence}

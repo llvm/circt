@@ -13,7 +13,7 @@
 
 def SCModuleOp : SystemCOp<"module", [
     Symbol,
-    DeclareOpInterfaceMethods<HWModuleLike>,
+    DeclareOpInterfaceMethods<InstanceGraphModuleOpInterface>,
     FunctionOpInterface,
     IsolatedFromAbove,
     SingleBlock,
@@ -83,7 +83,6 @@ def SCModuleOp : SystemCOp<"module", [
       llvm::filter_iterator<Region::BlockArgListType::iterator,
                             std::function<bool(const BlockArgument &)>>>;
 
-    void getPortInfoList(SmallVectorImpl<hw::PortInfo> &portInfoList);
     PortDirectionRange getPortsOfDirection(hw::ModulePort::Direction direction);
     PortDirectionRange getInputPorts() {
       return getPortsOfDirection(hw::ModulePort::Direction::Input);
@@ -102,21 +101,11 @@ def SCModuleOp : SystemCOp<"module", [
     // Return the Destructor operation in this module's body or create one if
     // none exists yet.
     systemc::DestructorOp getOrCreateDestructor();
-  }];
 
-  let extraClassDefinition = [{
-
-    ::circt::hw::ModuleType $cppClass::getHWModuleType() {
-      return ::circt::hw::detail::fnToMod(getFunctionType(), getPortNames(), getPortNames());
-    }
-
-    circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
-      for (NamedAttribute argAttr :
-           mlir::function_interface_impl::getArgAttrs(*this, portIndex))
-        if (auto sym = argAttr.getValue().dyn_cast<circt::hw::InnerSymAttr>())
-          return sym;
-      return circt::hw::InnerSymAttr();
-    }
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 }
 

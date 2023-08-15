@@ -1,0 +1,240 @@
+name: Build, Test, and Install
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "The GitHub runner to use"
+        required: true
+        type: choice
+        options:
+          - ubuntu-20.04
+          - macos-11
+          - windows-2019
+      cmake_build_type:
+        required: true
+        type: choice
+        options:
+          - release
+          - relwithdebinfo
+          - debug
+        default: relwithdebinfo
+      build_shared_libs:
+        required: true
+        type: choice
+        options:
+          - on
+          - off
+        default: off
+      llvm_enable_assertions:
+        required: true
+        type: choice
+        options:
+          - on
+          - off
+      llvm_force_enable_stats:
+        required: true
+        type: choice
+        options:
+          - on
+          - off
+      runTests:
+        description: "If true, then run tests, otherwise skip tests"
+        required: true
+        type: choice
+        options:
+          - true
+          - false
+        default: false
+      install:
+        description: "Install steps to run"
+        required: false
+        type: string
+        default: install-firtool
+      cmake_c_compiler:
+        description: "The C compiler to use"
+        required: true
+        type: choice
+        options:
+          - clang
+          - gcc
+          - cl
+        default: clang
+      cmake_cxx_compiler:
+        description: "The C++ compiler to use"
+        required: true
+        type: choice
+        options:
+          - clang++
+          - gcc++
+          - cl
+        default: clang++
+  workflow_call:
+    inputs:
+      runner:
+        description: "The GitHub runner to use"
+        required: true
+        type: string
+      cmake_build_type:
+        required: true
+        type: string
+      build_shared_libs:
+        required: true
+        type: string
+      llvm_enable_assertions:
+        required: true
+        type: string
+      llvm_force_enable_stats:
+        required: true
+        type: string
+      runTests:
+        description: "If true, then run tests, otherwise skip tests"
+        required: true
+        type: boolean
+      install:
+        description: "Install steps to run"
+        required: false
+        type: string
+      cmake_c_compiler:
+        description: "The C compiler to use"
+        required: false
+        type: string
+        default: clang
+      cmake_cxx_compiler:
+        description: "The C++ compiler to use"
+        required: false
+        type: string
+        default: clang++
+
+jobs:
+  build-test-and-install:
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - name: Clone llvm/circt
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+          submodules: "true"
+      - name: Unshallow llvm/circt
+        run: |
+          git fetch --unshallow --no-recurse-submodules
+# Per-operating system setup
+      - name: Setup (linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install ninja-build
+      - name: Setup (macos)
+        if: runner.os == 'macOS'
+        run: |
+          brew install ninja gnu-tar
+      - name: Setup (windows)
+        id: setup-windows
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo setup=./utils/find-vs.ps1 >> "$GITHUB_OUTPUT"
+# Configure
+      - name: Configure CIRCT
+        run: |
+          ${{ steps.setup-windows.outputs.setup }}
+          mkdir build
+          cd build
+          cmake -G Ninja -S "$(pwd)/../llvm/llvm" $EXTRA_CMAKE_ARGS -DCMAKE_BUILD_TYPE=${{ inputs.cmake_build_type }} -DBUILD_SHARED_LIBS=${{ inputs.build_shared_libs }} -DLLVM_BUILD_TOOLS=ON -DLLVM_BUILD_EXAMPLES=OFF -DLLVM_ENABLE_ASSERTIONS=${{ inputs.llvm_enable_assertions }} -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_EXTERNAL_PROJECTS=circt -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=".." -DLLVM_STATIC_LINK_CXX_STDLIB=ON -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_PARALLEL_LINK_JOBS=1 -DLLVM_TARGETS_TO_BUILD="host" -DLLVM_FORCE_ENABLE_STATS=${{ inputs.llvm_force_enable_stats }} -DLLVM_ENABLE_ZSTD=OFF -DVERILATOR_DISABLE=ON -DLLVM_PARALLEL_LINK_JOBS=1 -DCIRCT_RELEASE_TAG_ENABLED=ON -DCIRCT_RELEASE_TAG=firtool -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF -DCMAKE_C_COMPILER=${{ inputs.cmake_c_compiler }} -DCMAKE_CXX_COMPILER=${{ inputs.cmake_cxx_compiler }} -DCMAKE_INSTALL_PREFIX="$(pwd)/../install"
+# Optionally test
+      - name: Test CIRCT
+        if: inputs.runTests == 'true'
+        run: |
+          ${{ steps.setup-windows.outputs.setup }}
+          ninja -C build check-circt check-circt-unit
+      - name: Install
+        if: inputs.install
+        run: |
+          ${{ steps.setup-windows.outputs.setup }}
+          ninja -C build ${{ inputs.install }}
+          file install/*
+          file install/bin/*
+      - name: Name Install Directory
+        id: name_dir
+        if: inputs.install
+        shell: bash
+        run: |
+          BASE=$(git describe --tag)
+          SANITIZED=$(echo -n $BASE | tr '/' '-')
+          echo "value=$SANITIZED" >> "$GITHUB_OUTPUT"
+
+          ARCH=$(echo ${{ runner.arch }} | tr '[:upper:]' '[:lower:]')
+          echo arch="$ARCH" >> $GITHUB_OUTPUT
+
+          OS=$(echo ${{ runner.os }} | tr '[:upper:]' '[:lower:]')
+          echo os="$OS" >> $GITHUB_OUTPUT
+
+          ARCHIVE=
+          if [[ ${{ runner.os }} == 'Windows' ]]; then
+            ARCHIVE="zip"
+          else
+            ARCHIVE="tar.gz"
+          fi
+          echo archive="$ARCHIVE" >> $GITHUB_OUTPUT
+
+          TAR=
+          if [[ ${{ runner.os }} == 'macOS' ]]; then
+            TAR="gtar czf"
+          else
+            TAR="tar czf"
+          fi
+          echo tar="$TAR" >> $GITHUB_OUTPUT
+
+          SHA256=
+          if [[ ${{ runner.os }} == 'Windows' ]]; then
+            SHA256="sha256sum"
+          else
+            SHA256="shasum -a 256"
+          fi
+          echo sha256="$SHA256" >> $GITHUB_OUTPUT
+      - name: Name Archive
+        id: name_archive
+        if: inputs.install
+        shell: bash
+        run: |
+          NAME=firrtl-bin-${{ steps.name_dir.outputs.os }}-${{ steps.name_dir.outputs.arch }}.${{ steps.name_dir.outputs.archive }}
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+      - name: Package Binaries Linux and MacOS
+        if: runner.os == 'macOS' || runner.os == 'Linux'
+        run: |
+          mv install ${{ steps.name_dir.outputs.value }}
+          ${{ steps.name_dir.outputs.tar }} ${{ steps.name_archive.outputs.name }} ${{ steps.name_dir.outputs.value }}
+      - name: Package Binaries Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          mv install ${{ steps.name_dir.outputs.value }}
+          Compress-Archive -Path ${{ steps.name_dir.outputs.value }} -DestinationPath ${{ steps.name_archive.outputs.name }}
+      - name: Show Tarball
+        shell: bash
+        run: |
+          ls -l ${{ steps.name_archive.outputs.name }}
+          ${{ steps.name_dir.outputs.sha256 }} ${{ steps.name_archive.outputs.name }} | cut -d ' ' -f1 > ${{ steps.name_archive.outputs.name }}.sha256
+
+# Upload build artifacts
+      - name: Upload Binary (Non-Tag)
+        uses: actions/upload-artifact@v3
+        if: github.ref_type != 'tag'
+        with:
+          name: ${{ steps.name_archive.outputs.name }}
+          path: ${{ steps.name_archive.outputs.name }}
+          retention-days: 7
+      - name: Upload SHA256 (Non-Tag)
+        uses: actions/upload-artifact@v3
+        if: github.ref_type != 'tag'
+        with:
+          name: ${{ steps.name_archive.outputs.name }}.sha256
+          path: ${{ steps.name_archive.outputs.name }}.sha256
+          retention-days: 7
+
+      - name: Upload Binaries (Tag)
+        uses: AButler/upload-release-assets@v2.0
+        if: github.ref_type == 'tag'
+        with:
+          # The * will grab the .sha256 as well
+          files: ${{ steps.name_archive.outputs.name }}*
+          repo-token: ${{ secrets.GITHUB_TOKEN }}

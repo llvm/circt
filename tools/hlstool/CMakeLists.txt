@@ -2,9 +2,9 @@ set(LLVM_LINK_COMPONENTS
   Support
   )
 
-add_llvm_tool(hlstool
- hlstool.cpp
-)
+add_circt_tool(hlstool
+  hlstool.cpp
+  )
 llvm_update_compile_flags(hlstool)
 target_link_libraries(hlstool
   PRIVATE
@@ -22,8 +22,16 @@ target_link_libraries(hlstool
   CIRCTStandardToHandshake
   CIRCTSV
   CIRCTSVTransforms
+  CIRCTSCFToCalyx
+  CIRCTCalyx
+  CIRCTCalyxTransforms
+  CIRCTCalyxToHW
+  CIRCTCalyxToFSM
+  CIRCTFSM
+  CIRCTFSMTransforms
+  CIRCTFSMToSV
   CIRCTTransforms
-  
+
   MLIRIR
   MLIRLLVMDialect
   MLIRMemRefDialect
