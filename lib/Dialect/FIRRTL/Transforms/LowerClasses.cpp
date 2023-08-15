@@ -71,8 +71,11 @@ void LowerClassesPass::runOnOperation() {
 
   // Get the CircuitOp.
   auto circuits = getOperation().getOps<CircuitOp>();
-  if (circuits.empty())
-    return;
+  if (std::distance(circuits.begin(), circuits.end()) != 1) {
+    getOperation().emitError("expected exactly one CircuitOp, but found ")
+        << std::distance(circuits.begin(), circuits.end());
+    return signalPassFailure();
+  }
   CircuitOp circuit = *circuits.begin();
 
   // Create new OM Class ops seriallly.
