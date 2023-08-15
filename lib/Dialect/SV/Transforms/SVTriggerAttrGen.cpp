@@ -73,9 +73,8 @@ static void genTriggerAttribute(ModuleOp module, OpsToEventsMap &opsMap) {
         // whether the operation is hw::InstanceOp or not. If it is instanceOp
         // in hw dialect, additional offset will be added to the index from the
         // number of ports in referenced module.
-        if (isa<hw::InstanceOp>(signalOp)) {
-          auto *refedModule =
-              cast<hw::InstanceOp>(signalOp).getReferencedModule();
+        if (auto inst = dyn_cast<hw::InstanceOp>(signalOp)) {
+          auto *refedModule = inst.getReferencedModuleSlow();
 
           if (auto ref = dyn_cast<HWModuleOp>(refedModule))
             index += ref.getNumArguments();
