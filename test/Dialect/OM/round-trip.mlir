@@ -165,3 +165,9 @@ om.class @StringConstant() {
   // CHECK: om.class.field @string, %[[const1]] : !om.string
   om.class.field @string, %0 : !om.string
 }
+
+// CHECK-LABEL: @Map
+// CHECK-SAME: !om.map<!om.string, !om.string>
+om.class @Map(%map: !om.map<!om.string, !om.string>) {
+  om.class.field @field, %map : !om.map<!om.string, !om.string>
+}
