@@ -149,6 +149,29 @@ firrtl.circuit "strictConnectAndConnect" {
 
 // -----
 
+firrtl.circuit "outputPortCycle"   {
+  // expected-error @below {{outputPortCycle.{reg[0].a <- w.a <- reg[0].a}}}
+  firrtl.module @outputPortCycle(out %reg: !firrtl.vector<bundle<a: uint<8>>, 2>) {
+    %0 = firrtl.subindex %reg[0] : !firrtl.vector<bundle<a: uint<8>>, 2>
+    %1 = firrtl.subindex %reg[0] : !firrtl.vector<bundle<a: uint<8>>, 2>
+    %w = firrtl.wire : !firrtl.bundle<a:uint<8>>
+    firrtl.connect %w, %0 : !firrtl.bundle<a:uint<8>>, !firrtl.bundle<a:uint<8>>
+    firrtl.connect %1, %w : !firrtl.bundle<a:uint<8>>, !firrtl.bundle<a:uint<8>>
+  }
+}
+
+// -----
+
+firrtl.circuit "outputRead"   {
+  firrtl.module @outputRead(out %reg: !firrtl.vector<bundle<a: uint<8>>, 2>) {
+    %0 = firrtl.subindex %reg[0] : !firrtl.vector<bundle<a: uint<8>>, 2>
+    %1 = firrtl.subindex %reg[1] : !firrtl.vector<bundle<a: uint<8>>, 2>
+    firrtl.connect %1, %0 : !firrtl.bundle<a:uint<8>>, !firrtl.bundle<a:uint<8>>
+  }
+}
+
+// -----
+
 firrtl.circuit "vectorRegInit"   {
   firrtl.module @vectorRegInit(in %clk: !firrtl.clock) {
     %reg = firrtl.reg %clk : !firrtl.clock, !firrtl.vector<bundle<a: uint<8>>, 2>
@@ -189,6 +212,20 @@ firrtl.circuit "Foo"  {
     %bar_a = firrtl.instance bar interesting_name  @Bar(in a: !firrtl.uint<1>)
     firrtl.strictconnect %bar_a, %a : !firrtl.uint<1>
     firrtl.strictconnect %a, %bar_a : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "outputPortCycle"   {
+  firrtl.module private @Bar(in %a: !firrtl.bundle<a: uint<8>, b: uint<4>>) {}
+  // expected-error @below {{outputPortCycle.{bar.a.a <- port[0].a <- bar.a.a}}}
+  firrtl.module @outputPortCycle(out %port: !firrtl.vector<bundle<a: uint<8>, b: uint<4>>, 2>) {
+    %0 = firrtl.subindex %port[0] : !firrtl.vector<bundle<a: uint<8>, b: uint<4>>, 2>
+    %1 = firrtl.subindex %port[0] : !firrtl.vector<bundle<a: uint<8>, b: uint<4>>, 2>
+    %w = firrtl.instance bar interesting_name  @Bar(in a: !firrtl.bundle<a: uint<8>, b: uint<4>>)
+    firrtl.connect %w, %0 : !firrtl.bundle<a: uint<8>, b: uint<4>>, !firrtl.bundle<a: uint<8>, b: uint<4>>
+    firrtl.connect %1, %w : !firrtl.bundle<a: uint<8>, b: uint<4>>, !firrtl.bundle<a: uint<8>, b: uint<4>>
   }
 }
 
