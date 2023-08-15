@@ -59,14 +59,14 @@ StringAttr MachineOp::getArgName(size_t i) {
   if (auto args = getArgNames())
     return (*args)[i].cast<StringAttr>();
   else
-    return {};
+    return StringAttr::get(getContext(), "in" + std::to_string(i));
 }
 
 StringAttr MachineOp::getResName(size_t i) {
   if (auto resNameAttrs = getResNames())
     return (*resNameAttrs)[i].cast<StringAttr>();
   else
-    return {};
+    return StringAttr::get(getContext(), "out" + std::to_string(i));
 }
 
 /// Get the port information of the machine.
