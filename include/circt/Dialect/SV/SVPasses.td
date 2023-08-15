@@ -117,6 +117,21 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
    ];
 }
 
+def SVTriggerAttrGen : Pass<"sv-trigger-attr-gen", "ModuleOp"> {
+  let summary = "Generate trigger attributes of function arguments.";
+  let description = [{
+    This pass generates trigger attributes of arguments which will
+    be used by Trigger circuit like alwaysOp block.
+  }];
+  let constructor = "circt::sv::createSVTriggerAttrGenPass()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+
+  let options = [
+    Option<"resetTriggerValue", "reset-trigger-value", "bool", "false",
+           "Reset the trigger attribute values with the setted order in module">,
+  ];
+}
+
 def SVExtractTestCode : Pass<"sv-extract-test-code", "ModuleOp"> {
   let summary = "Extract simulation only constructs to modules and bind";
   let description = [{

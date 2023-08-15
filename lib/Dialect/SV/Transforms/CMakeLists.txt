@@ -5,6 +5,7 @@ add_circt_dialect_library(CIRCTSVTransforms
   HWLegalizeModules.cpp
   HWMemSimImpl.cpp
   PrettifyVerilog.cpp
+  SVTriggerAttrGen.cpp
   SVExtractTestCode.cpp
   HWExportModuleHierarchy.cpp
   SVTraceIVerilog.cpp
@@ -21,5 +22,8 @@ add_circt_dialect_library(CIRCTSVTransforms
   CIRCTSV
   MLIRIR
   MLIRPass
+  MLIRSupport
   MLIRTransformUtils
+  MLIRFuncDialect
+  MLIRLLVMDialect
 )

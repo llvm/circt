@@ -24,6 +24,8 @@ std::unique_ptr<mlir::Pass> createHWCleanupPass(bool mergeAlwaysBlocks = true);
 std::unique_ptr<mlir::Pass> createHWStubExternalModulesPass();
 std::unique_ptr<mlir::Pass> createHWLegalizeModulesPass();
 std::unique_ptr<mlir::Pass> createSVTraceIVerilogPass();
+std::unique_ptr<mlir::Pass>
+createSVTriggerAttrGenPass(bool resetTriggerValue = false);
 std::unique_ptr<mlir::Pass> createHWGeneratorCalloutPass();
 std::unique_ptr<mlir::Pass> createHWEliminateInOutPortsPass();
 std::unique_ptr<mlir::Pass> createHWMemSimImplPass(
