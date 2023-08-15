@@ -62,6 +62,7 @@ target_link_libraries(circt-opt
   CIRCTSCFToCalyx
   CIRCTScheduling
   CIRCTSeq
+  CIRCTSeqToSV
   CIRCTSeqTransforms
   CIRCTSSP
   CIRCTSSPTransforms
