@@ -161,7 +161,7 @@ std::unique_ptr<mlir::Pass> createInnerSymbolDCEPass();
 
 std::unique_ptr<mlir::Pass> createFinalizeIRPass();
 
-std::unique_ptr<mlir::Pass> createExtractClassesPass();
+std::unique_ptr<mlir::Pass> createLowerClassesPass();
 
 std::unique_ptr<mlir::Pass> createLowerGroupsPass();
 
