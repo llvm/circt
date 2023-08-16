@@ -77,7 +77,7 @@ class GenStateStruct {
   bool isleafModule(Operation *op);
 
   /// The function to convert the port direction to the integer data.
-  int convertPortDirection(PortDirection direction);
+  int convertPortDirection(PortInfo &pInfo);
 
   /// The function to check whether this register is connected to the output
   /// port, which we call it output register.
@@ -186,22 +186,19 @@ bool GenStateStruct::isOutputReg(sv::RegOp op) {
   return outputReg;
 }
 
-int GenStateStruct::convertPortDirection(PortDirection direction) {
+int GenStateStruct::convertPortDirection(PortInfo &pInfo) {
   // The value 0 is used to represent the port direction is unknown.
   // when other function handle the value 0, it will hit the assertion.
-  int i = 0;
-  switch (direction) {
-  case (PortDirection::INPUT):
-    i = 1;
-    break;
-  case (PortDirection::OUTPUT):
-    i = 2;
-    break;
-  case (PortDirection::INOUT):
-    i = 3;
-    break;
-  }
-  return i;
+  if (pInfo.isInput())
+    return 1;
+
+  if (pInfo.isOutput())
+    return 2;
+
+  if (pInfo.isInOut())
+    return 3;
+
+  return 0;
 }
 
 // Check the value is stored in the Container or not.
@@ -270,7 +267,7 @@ LLVM::LLVMStructType
 GenStateStruct::getExternModulePortTy(MLIRContext *ctx, bool noOpaqueTy,
                                       HWModuleExternOp op) {
   SmallVector<Type> extModuleTy;
-  SmallVector<PortInfo> externPInfo = op.getAllPorts();
+  ModulePortInfo externPInfo = op.getPortList();
 
   // The noOpaqueTy decides whether to create a opaque type or not.
   if (noOpaqueTy) {
@@ -350,14 +347,14 @@ LLVM::LLVMStructType GenStateStruct::createStructType(
 
   // Generate the pointer type for the submodule part.
   for (auto inst : llvm::make_early_inc_range(op.getOps<hw::InstanceOp>())) {
-    auto refedModule = instGraph.getReferencedModule(inst);
-    if (isa<HWModuleOp>(refedModule)) {
+    if (auto refedModule =
+            dyn_cast<HWModuleOp>(*instGraph.getReferencedModule(inst)))
       innerStructTy = LLVM::LLVMStructType::getIdentified(
-          ctx, addPrefixToName(dyn_cast<HWModuleOp>(refedModule).getName()));
-    } else {
+          ctx, addPrefixToName(refedModule.getName()));
+    else
       innerStructTy = getExternModulePortTy(
-          ctx, false, dyn_cast<HWModuleExternOp>(refedModule));
-    }
+          ctx, false,
+          dyn_cast<HWModuleExternOp>(*instGraph.getReferencedModule(inst)));
     packedStructTy.push_back(LLVM::LLVMPointerType::get(innerStructTy));
   }
 
@@ -564,20 +561,21 @@ void GenStateStruct::initializeGlobalStruct(OpBuilder &builder, HWModuleOp op,
   }
   // Create operations which initialize the submodule part.
   for (auto inst : llvm::make_early_inc_range(op.getOps<hw::InstanceOp>())) {
-    auto refedModule = instGraph.getReferencedModule(inst);
-    if (isa<HWModuleOp>(refedModule))
+    if (auto refedModule =
+            dyn_cast<HWModuleOp>(*instGraph.getReferencedModule(inst)))
       innerStructTy = LLVM::LLVMStructType::getIdentified(
-          ctx, addPrefixToName(dyn_cast<HWModuleOp>(refedModule).getName()));
+          ctx, addPrefixToName(refedModule.getName()));
     else
       innerStructTy = getExternModulePortTy(
-          ctx, false, dyn_cast<HWModuleExternOp>(refedModule));
+          ctx, false,
+          dyn_cast<HWModuleExternOp>(*instGraph.getReferencedModule(inst)));
 
     Value nullPtr = builder.create<LLVM::NullOp>(
         loc, LLVM::LLVMPointerType::get(innerStructTy));
     allInfo.push_back(nullPtr);
   }
 
-  // Combine all the operations that are used for initialization in order.
+  // Combine all the operations that are used for initializing in order.
   Value finalStruct = builder.create<LLVM::UndefOp>(loc, type);
   allPortReg.insert(allPortReg.end(), allDelayed.begin(), allDelayed.end());
   allPortReg.insert(allPortReg.end(), allInfo.begin(), allInfo.end());
@@ -601,26 +599,25 @@ void GenStateStruct::collectPortInfo(HWModuleOp op,
       triIndexCollect.push_back(
           cast<IntegerAttr>(triAttr).getValue().getZExtValue());
 
-  SmallVector<PortInfo> port = getAllModulePortInfos(op);
+  ModulePortInfo port = op.getPortList();
   // Get and store the port information, if it is trigger signal, then duplicate
   // it in the port list.
   for (size_t i = 0; i < argSize; i++) {
     bool isContain = false;
-
     if (arrayAttr != nullptr)
       isContain = std::find(triIndexCollect.begin(), triIndexCollect.end(),
                             i) != triIndexCollect.end();
 
     if (isContain)
-      pInfo.push_back({port[i].name, port[i].type,
-                       convertPortDirection(port[i].direction), true});
+      pInfo.push_back({port.at(i).name, port.at(i).type,
+                       convertPortDirection(port.at(i)), true});
     else
-      pInfo.push_back({port[i].name, port[i].type,
-                       convertPortDirection(port[i].direction), false});
+      pInfo.push_back({port.at(i).name, port.at(i).type,
+                       convertPortDirection(port.at(i)), false});
   }
   for (size_t j = argSize; j < argSize + resSize; j++) {
-    pInfo.push_back({port[j].name, port[j].type,
-                     convertPortDirection(port[j].direction), false});
+    pInfo.push_back({port.at(j).name, port.at(j).type,
+                     convertPortDirection(port.at(j)), false});
   }
 }
 
@@ -823,10 +820,16 @@ void GenStateStruct::overrideExternModule(
   externTypeCollect.push_back(pair);
 
   // Prepare basic info for newly added input port in PortInfo form.
-  StringAttr strAttr = StringAttr::get(ctx, "ptr_struct_" + op.getName());
-  hw::PortInfo structPInfo = {
-      strAttr, hw::PortDirection::INPUT,
-      LLVM::LLVMPointerType::get(getExternModulePortTy(ctx, false, op)), 0};
+  hw::PortInfo structPInfo = PortInfo{
+      {/*name*/ StringAttr::get(ctx, "ptr_struct_" + op.getName()),
+       /*type*/
+       LLVM::LLVMPointerType::get(getExternModulePortTy(ctx, false, op)),
+       /*direction*/ ModulePort::Direction::Input},
+      /*argNum*/ 1,
+      /*sym*/ {},
+      /*attr*/ {},
+      /*location*/ op.getLoc()};
+
   std::pair<unsigned, PortInfo> arrInsertIn = {0, structPInfo};
   SmallVector<unsigned> arrEraseIn, arrEraseOut;
 
