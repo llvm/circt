@@ -39,7 +39,7 @@ using namespace hw;
 // StateStructGenerate Pass
 //===----------------------------------------------------------------------===//
 /// The Structure stores the information of the port of the module.
-struct portInfo {
+struct PortInfoCollect {
   StringRef portName;
   Type portType;
   int direction;
@@ -47,7 +47,7 @@ struct portInfo {
 };
 
 /// The Structure stores the information of the reg of the module.
-struct regInfo {
+struct RegInfoCollect {
   StringRef regName;
   Type regType;
   bool isOutputReg;
@@ -125,8 +125,8 @@ public:
   /// opaque struct type for it.
   LLVM::LLVMStructType createStructType(MLIRContext *ctx, HWModuleOp op,
                                         InstanceGraph &instGraph,
-                                        SmallVector<portInfo> &pInfo,
-                                        SmallVector<regInfo> &rInfo);
+                                        SmallVector<PortInfoCollect> &pInfo,
+                                        SmallVector<RegInfoCollect> &rInfo);
 
   /// The function to create the global struct that is used to store all state
   /// values and ports infomation.
@@ -140,17 +140,17 @@ public:
                               LLVM::GlobalOp globalOp,
                               LLVM::LLVMStructType type,
                               InstanceGraph &instGraph,
-                              SmallVector<portInfo> &pInfo,
-                              SmallVector<regInfo> &rInfo);
+                              SmallVector<PortInfoCollect> &pInfo,
+                              SmallVector<RegInfoCollect> &rInfo);
 
   /// The function is used to collect all ports info above the given module.
   /// The collected info: port name, port type, port direction and whether it is
   /// trigger signal.
-  void collectPortInfo(HWModuleOp op, SmallVector<portInfo> &pInfo);
+  void collectPortInfo(HWModuleOp op, SmallVector<PortInfoCollect> &pInfo);
 
   /// The function is used to collect all regs info in the given module.
   /// The collected info: reg name, reg type and whether it is output reg.
-  void collectRegInfo(HWModuleOp op, SmallVector<regInfo> &rInfo);
+  void collectRegInfo(HWModuleOp op, SmallVector<RegInfoCollect> &rInfo);
 
   /// The function to override all modules in InstanceGraph based on a
   /// depth-first algorithm.
@@ -229,12 +229,13 @@ T GenStateStruct::findOperationType(
 }
 
 bool GenStateStruct::isleafModule(Operation *op) {
+  bool isLeaf = false;
   if (isa<hw::HWModuleOp>(op))
-    return dyn_cast<hw::HWModuleOp>(op).getOps<hw::InstanceOp>().empty();
+    isLeaf = dyn_cast<hw::HWModuleOp>(op).getOps<hw::InstanceOp>().empty();
   if (isa<hw::HWModuleExternOp>(op))
-    return true;
+    isLeaf = true;
 
-  return false;
+  return isLeaf;
 }
 
 std::string GenStateStruct::addPrefixToName(StringRef name) {
@@ -283,7 +284,7 @@ GenStateStruct::getExternModulePortTy(MLIRContext *ctx, bool noOpaqueTy,
 
 LLVM::LLVMStructType GenStateStruct::createStructType(
     MLIRContext *ctx, HWModuleOp op, InstanceGraph &instGraph,
-    SmallVector<portInfo> &pInfo, SmallVector<regInfo> &rInfo) {
+    SmallVector<PortInfoCollect> &pInfo, SmallVector<RegInfoCollect> &rInfo) {
   auto i1Ty = IntegerType::get(ctx, 1);
   auto i2Ty = IntegerType::get(ctx, 2);
   auto i8Ty = IntegerType::get(ctx, 8);
@@ -298,7 +299,7 @@ LLVM::LLVMStructType GenStateStruct::createStructType(
   LLVM::LLVMStructType innerStructTy;
 
   // Generate the type of the port part.
-  for (portInfo pstruct : pInfo) {
+  for (PortInfoCollect pstruct : pInfo) {
     if (pstruct.portType.isa<InOutType>())
       pstruct.portType =
           convertInOutType(dyn_cast<hw::InOutType>(pstruct.portType));
@@ -327,7 +328,7 @@ LLVM::LLVMStructType GenStateStruct::createStructType(
     delayedTy.push_back(i1Ty);
 
   // Generate the type for register part.
-  for (regInfo rstruct : rInfo) {
+  for (RegInfoCollect rstruct : rInfo) {
     if (rstruct.regType.isa<InOutType>())
       rstruct.regType =
           convertInOutType(dyn_cast<hw::InOutType>(rstruct.regType));
@@ -393,12 +394,10 @@ LLVM::GlobalOp GenStateStruct::createGlobalStruct(Location loc,
 
 // TODO: initialize the global struct with completely random value. Maybe it is
 // a new option for this pass.
-void GenStateStruct::initializeGlobalStruct(OpBuilder &builder, HWModuleOp op,
-                                            LLVM::GlobalOp globalOp,
-                                            LLVM::LLVMStructType type,
-                                            InstanceGraph &instGraph,
-                                            SmallVector<portInfo> &pInfo,
-                                            SmallVector<regInfo> &rInfo) {
+void GenStateStruct::initializeGlobalStruct(
+    OpBuilder &builder, HWModuleOp op, LLVM::GlobalOp globalOp,
+    LLVM::LLVMStructType type, InstanceGraph &instGraph,
+    SmallVector<PortInfoCollect> &pInfo, SmallVector<RegInfoCollect> &rInfo) {
   // Initialize the global struct with specified information.
   Location loc = globalOp.getLoc();
   MLIRContext *ctx = builder.getContext();
@@ -416,7 +415,7 @@ void GenStateStruct::initializeGlobalStruct(OpBuilder &builder, HWModuleOp op,
   SmallVector<Value> allPortReg;
 
   // Create operations which initialize the port part.
-  for (portInfo pstruct : pInfo) {
+  for (PortInfoCollect pstruct : pInfo) {
     if (pstruct.portType.isa<InOutType>())
       pstruct.portType =
           convertInOutType(dyn_cast<hw::InOutType>(pstruct.portType));
@@ -481,7 +480,7 @@ void GenStateStruct::initializeGlobalStruct(OpBuilder &builder, HWModuleOp op,
     allDelayed.push_back(builder.create<LLVM::ConstantOp>(loc, i1Ty, 0));
 
   // Create operations which initialize the register part.
-  for (regInfo rstruct : rInfo) {
+  for (RegInfoCollect rstruct : rInfo) {
     if (rstruct.regType.isa<InOutType>())
       rstruct.regType =
           convertInOutType(dyn_cast<hw::InOutType>(rstruct.regType));
@@ -588,7 +587,7 @@ void GenStateStruct::initializeGlobalStruct(OpBuilder &builder, HWModuleOp op,
 }
 
 void GenStateStruct::collectPortInfo(HWModuleOp op,
-                                     SmallVector<portInfo> &pInfo) {
+                                     SmallVector<PortInfoCollect> &pInfo) {
   SmallVector<unsigned> triIndexCollect;
   auto argSize = op.getNumInOrInoutPorts();
   auto resSize = op.getResultTypes().size();
@@ -622,7 +621,7 @@ void GenStateStruct::collectPortInfo(HWModuleOp op,
 }
 
 void GenStateStruct::collectRegInfo(HWModuleOp op,
-                                    SmallVector<regInfo> &rInfo) {
+                                    SmallVector<RegInfoCollect> &rInfo) {
   for (auto regOp : llvm::make_early_inc_range(op.getOps<sv::RegOp>())) {
     bool outputReg = isOutputReg(regOp);
     rInfo.push_back({regOp.getName(), regOp.getType(), outputReg});
@@ -978,8 +977,8 @@ void StateStructGeneratePass::runOnOperation() {
     auto loc = op.getLoc();
     auto module = op->getParentOfType<mlir::ModuleOp>();
 
-    SmallVector<portInfo> pInfo;
-    SmallVector<regInfo> rInfo;
+    SmallVector<PortInfoCollect> pInfo;
+    SmallVector<RegInfoCollect> rInfo;
 
     // Collect all the port and reg information.
     gstateStruct.collectPortInfo(op, pInfo);
