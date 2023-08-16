@@ -8,7 +8,6 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   DropName.cpp
   EmitOMIR.cpp
   ExpandWhens.cpp
-  ExtractClasses.cpp
   ExtractInstances.cpp
   FlattenMemory.cpp
   FinalizeIR.cpp
@@ -23,6 +22,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LegacyWiring.cpp
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp
+  LowerClasses.cpp
   LowerGroups.cpp
   LowerIntrinsics.cpp
   LowerMatches.cpp
