@@ -544,6 +544,7 @@ static void insertPorts(FModuleLike op,
       llvm::append_range(internalPaths, internalPathsAttr);
     else
       internalPaths.resize(oldNumArgs, emptyInternalPath);
+    assert(internalPaths.size() == oldNumArgs);
   }
 
   SmallVector<Direction> newDirections;
@@ -605,9 +606,9 @@ static void insertPorts(FModuleLike op,
   op.setPortSymbols(newSyms);
   op->setAttr("portLocations", ArrayAttr::get(op.getContext(), newLocs));
   if (supportsInternalPaths) {
-    // Clear if no internal paths, otherwise ensure no null entries.
+    // Drop if all-empty, otherwise set to new array.
     auto empty = llvm::all_of(newInternalPaths, [](Attribute attr) {
-      return !attr || !cast<InternalPathAttr>(attr).getPath();
+      return !cast<InternalPathAttr>(attr).getPath();
     });
     if (empty)
       op->removeAttr("internalPaths");
@@ -658,28 +659,34 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   op->setAttr("portLocations", ArrayAttr::get(op.getContext(), newPortLocs));
 }
 
+template <typename T>
+static void eraseInternalPaths(T op, const llvm::BitVector &portIndices) {
+  // Fixup internalPaths array.
+  auto internalPaths = op.getInternalPaths();
+  if (!internalPaths)
+    return;
+
+  auto newPaths =
+      removeElementsAtIndices(internalPaths->getValue(), portIndices);
+
+  // Drop if all-empty, otherwise set to new array.
+  auto empty = llvm::all_of(newPaths, [](Attribute attr) {
+    return !cast<InternalPathAttr>(attr).getPath();
+  });
+  if (empty)
+    op.removeInternalPathsAttr();
+  else
+    op.setInternalPathsAttr(ArrayAttr::get(op.getContext(), newPaths));
+}
+
 void FExtModuleOp::erasePorts(const llvm::BitVector &portIndices) {
   ::erasePorts(cast<FModuleLike>((Operation *)*this), portIndices);
-
-  // Fixup internalPaths array.
-  auto internalPaths = getInternalPaths();
-  if (internalPaths) {
-    auto newPaths =
-        removeElementsAtIndices(internalPaths->getValue(), portIndices);
-    setInternalPathsAttr(ArrayAttr::get(getContext(), newPaths));
-  }
+  eraseInternalPaths(*this, portIndices);
 }
 
 void FIntModuleOp::erasePorts(const llvm::BitVector &portIndices) {
   ::erasePorts(cast<FModuleLike>((Operation *)*this), portIndices);
-
-  // Fixup internalPaths array.
-  auto internalPaths = getInternalPaths();
-  if (internalPaths) {
-    auto newPaths =
-        removeElementsAtIndices(internalPaths->getValue(), portIndices);
-    setInternalPathsAttr(ArrayAttr::get(getContext(), newPaths));
-  }
+  eraseInternalPaths(*this, portIndices);
 }
 
 void FMemModuleOp::erasePorts(const llvm::BitVector &portIndices) {

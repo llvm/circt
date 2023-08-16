@@ -705,10 +705,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     for (auto iter : refPortsToRemoveMap)
       if (auto mod = dyn_cast<FModuleOp>(iter.getFirst()))
         mod.erasePorts(iter.getSecond());
-      else if (auto mod = dyn_cast<FExtModuleOp>(iter.getFirst())) {
+      else if (auto mod = dyn_cast<FExtModuleOp>(iter.getFirst()))
         mod.erasePorts(iter.getSecond());
-        mod.removeInternalPathsAttr();
-      } else if (auto inst = dyn_cast<InstanceOp>(iter.getFirst())) {
+      else if (auto inst = dyn_cast<InstanceOp>(iter.getFirst())) {
         ImplicitLocOpBuilder b(inst.getLoc(), inst);
         inst.erasePorts(b, iter.getSecond());
         inst.erase();
