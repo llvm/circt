@@ -124,7 +124,7 @@ public:
   /// If the module is an extern module which only have a declaration, generate
   /// opaque struct type for it.
   LLVM::LLVMStructType createStructType(MLIRContext *ctx, HWModuleOp op,
-                                        unsigned secondaryTriggerNum,
+                                        InstanceGraph &instGraph,
                                         SmallVector<portInfo> &pInfo,
                                         SmallVector<regInfo> &rInfo);
 
@@ -139,7 +139,7 @@ public:
   void initializeGlobalStruct(OpBuilder &builder, HWModuleOp op,
                               LLVM::GlobalOp globalOp,
                               LLVM::LLVMStructType type,
-                              unsigned secondaryTriggerNum,
+                              InstanceGraph &instGraph,
                               SmallVector<portInfo> &pInfo,
                               SmallVector<regInfo> &rInfo);
 
@@ -285,7 +285,7 @@ GenStateStruct::getExternModulePortTy(MLIRContext *ctx, bool noOpaqueTy,
 }
 
 LLVM::LLVMStructType GenStateStruct::createStructType(
-    MLIRContext *ctx, HWModuleOp op, unsigned secondaryTriggerNum,
+    MLIRContext *ctx, HWModuleOp op, InstanceGraph &instGraph,
     SmallVector<portInfo> &pInfo, SmallVector<regInfo> &rInfo) {
   auto i1Ty = IntegerType::get(ctx, 1);
   auto i2Ty = IntegerType::get(ctx, 2);
@@ -326,7 +326,7 @@ LLVM::LLVMStructType GenStateStruct::createStructType(
   }
 
   // Generate the type for the secondary trigger signal part.
-  for (size_t i = 0; i < secondaryTriggerNum; i++)
+  for (size_t i = 0, e = getNumOfSecondaryTriggerNum(op); i < e; i++)
     delayedTy.push_back(i1Ty);
 
   // Generate the type for register part.
@@ -350,13 +350,13 @@ LLVM::LLVMStructType GenStateStruct::createStructType(
 
   // Generate the pointer type for the submodule part.
   for (auto inst : llvm::make_early_inc_range(op.getOps<hw::InstanceOp>())) {
-    if (isa<HWModuleOp>(inst.getReferencedModule())) {
+    auto refedModule = instGraph.getReferencedModule(inst);
+    if (isa<HWModuleOp>(refedModule)) {
       innerStructTy = LLVM::LLVMStructType::getIdentified(
-          ctx, addPrefixToName(
-                   dyn_cast<HWModuleOp>(inst.getReferencedModule()).getName()));
+          ctx, addPrefixToName(dyn_cast<HWModuleOp>(refedModule).getName()));
     } else {
       innerStructTy = getExternModulePortTy(
-          ctx, false, dyn_cast<HWModuleExternOp>(inst.getReferencedModule()));
+          ctx, false, dyn_cast<HWModuleExternOp>(refedModule));
     }
     packedStructTy.push_back(LLVM::LLVMPointerType::get(innerStructTy));
   }
@@ -399,7 +399,7 @@ LLVM::GlobalOp GenStateStruct::createGlobalStruct(Location loc,
 void GenStateStruct::initializeGlobalStruct(OpBuilder &builder, HWModuleOp op,
                                             LLVM::GlobalOp globalOp,
                                             LLVM::LLVMStructType type,
-                                            unsigned secondaryTriggerNum,
+                                            InstanceGraph &instGraph,
                                             SmallVector<portInfo> &pInfo,
                                             SmallVector<regInfo> &rInfo) {
   // Initialize the global struct with specified information.
@@ -480,7 +480,7 @@ void GenStateStruct::initializeGlobalStruct(OpBuilder &builder, HWModuleOp op,
   }
 
   // Create operations which initialize the register part.
-  for (size_t i = 0; i < secondaryTriggerNum; i++)
+  for (size_t i = 0, e = getNumOfSecondaryTriggerNum(op); i < e; i++)
     allDelayed.push_back(builder.create<LLVM::ConstantOp>(loc, i1Ty, 0));
 
   // Create operations which initialize the register part.
@@ -564,13 +564,13 @@ void GenStateStruct::initializeGlobalStruct(OpBuilder &builder, HWModuleOp op,
   }
   // Create operations which initialize the submodule part.
   for (auto inst : llvm::make_early_inc_range(op.getOps<hw::InstanceOp>())) {
-    if (isa<HWModuleOp>(inst.getReferencedModule()))
+    auto refedModule = instGraph.getReferencedModule(inst);
+    if (isa<HWModuleOp>(refedModule))
       innerStructTy = LLVM::LLVMStructType::getIdentified(
-          ctx, addPrefixToName(
-                   dyn_cast<HWModuleOp>(inst.getReferencedModule()).getName()));
+          ctx, addPrefixToName(dyn_cast<HWModuleOp>(refedModule).getName()));
     else
       innerStructTy = getExternModulePortTy(
-          ctx, false, dyn_cast<HWModuleExternOp>(inst.getReferencedModule()));
+          ctx, false, dyn_cast<HWModuleExternOp>(refedModule));
 
     Value nullPtr = builder.create<LLVM::NullOp>(
         loc, LLVM::LLVMPointerType::get(innerStructTy));
@@ -778,8 +778,8 @@ void GenStateStruct::overrideModule(
     if (!instStructTy.isOpaque()) {
       bitcast = load;
     } else {
-      auto exPtrTy =
-          findOperationType(externTypeCollect, inst.getReferencedModule());
+      auto exPtrTy = findOperationType(externTypeCollect,
+                                       instanceGraph.getReferencedModule(inst));
       bitcast = builder.create<LLVM::BitcastOp>(loc, exPtrTy, load);
     }
 
@@ -849,7 +849,7 @@ void GenStateStruct::overrideInstance(
   // Get necessary info from the original instance
   auto loc = inst.getLoc();
   auto *ctx = builder.getContext();
-  auto *subModule = inst.getReferencedModule();
+  auto subModule = instanceGraph.getReferencedModule(inst);
   auto i32Ty = IntegerType::get(ctx, 32);
   auto instName = StringAttr::get(ctx, inst.getInstanceName());
   auto instArgNums = inst.getNumOperands();
@@ -941,7 +941,7 @@ void GenStateStruct::dfsOverrideModules(
   for (auto inst : llvm::make_early_inc_range(
            cast<HWModuleOp>(op).getOps<hw::InstanceOp>())) {
     // Get the child module of the current instance.
-    auto *childModule = inst.getReferencedModule();
+    auto childModule = instanceGraph.getReferencedModule(inst);
     dfsOverrideModules(ctx, typeCollect, externTypeCollect, instanceGraph,
                        overrided, childModule);
   }
@@ -984,20 +984,17 @@ void StateStructGeneratePass::runOnOperation() {
     gstateStruct.collectPortInfo(op, pInfo);
     gstateStruct.collectRegInfo(op, rInfo);
 
-    // Collect the secondary trigger number.
-    unsigned secondaryTriggerNum = gstateStruct.getNumOfSecondaryTriggerNum(op);
-
     // Create struct type for current module.
-    LLVM::LLVMStructType type = gstateStruct.createStructType(
-        ctx, op, secondaryTriggerNum, pInfo, rInfo);
+    LLVM::LLVMStructType type =
+        gstateStruct.createStructType(ctx, op, instGraph, pInfo, rInfo);
 
     // Deal with current module contents and create corresponding struct
     LLVM::GlobalOp global = gstateStruct.createGlobalStruct(
         loc, builder, module, gstateStruct.addPrefixToName(op.getName()), type);
 
     // Initialize the global struct.
-    gstateStruct.initializeGlobalStruct(builder, op, global, type,
-                                        secondaryTriggerNum, pInfo, rInfo);
+    gstateStruct.initializeGlobalStruct(builder, op, global, type, instGraph,
+                                        pInfo, rInfo);
 
     // Collect all struct types with their operation pointer.
     std::pair<Operation *, LLVM::LLVMStructType> pairType =
