@@ -48,6 +48,20 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
 
   let extraSharedClassDeclaration = [{
 
+    /// Return the region containing the body of this function.
+    Region &getModuleBody() { return $_op->getRegion(0); }
+    Block *getBodyBlock() { return &getModuleBody().front(); }
+
+    /// Returns the entry block argument at the given index.
+    BlockArgument getArgumentForInput(unsigned idx) {
+      return $_op.getModuleBody().getArgument(idx);
+    }
+
+    /// Returns the entry block argument for the given port.  May be null.
+    BlockArgument getArgumentForPort(unsigned idx) {
+      return $_op.getModuleBody().getArgument($_op.getHWModuleType().getInputIdForPortId(idx));
+    }
+
     /// Return the total number of ports in the module
     size_t getNumPorts() {
       return $_op.getHWModuleType().getNumPorts();
@@ -91,6 +105,13 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       return $_op.getHWModuleType().getOutputNameAttr(idx);
     }
 
+    ArrayAttr getPortAttr(size_t idx) {
+      return $_op.getPortAttrs()[idx];
+    }
+
+    Location getPortLoc(size_t idx) {
+      return $_op.getPortLocs()[idx];
+    }
 
   }];
 

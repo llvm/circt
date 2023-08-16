@@ -295,7 +295,7 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
 
   // Gather memref ports to be converted.
   llvm::DenseMap<unsigned, Value> memrefPorts;
-  for (auto [i, arg] : llvm::enumerate(mod.getArguments())) {
+  for (auto [i, arg] : llvm::enumerate(mod.getBodyBlock()->getArguments())) {
     auto channel = arg.getType().dyn_cast<esi::ChannelType>();
     if (channel && channel.getInner().isa<MemRefType>())
       memrefPorts[i] = arg;
@@ -337,7 +337,7 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
         getMemoryIOInfo(arg.getLoc(), memName.strref() + "_in", i, outputs,
                         hw::ModulePort::Direction::Input);
     mod.insertPorts({{i, inPortInfo}}, {});
-    auto newInPort = mod.getArgument(i);
+    auto newInPort = mod.getArgumentForInput(i);
     // Replace the extmemory submodule outputs with the newly created inputs.
     b.setInsertionPointToStart(mod.getBodyBlock());
     auto newInPortExploded = b.create<hw::StructExplodeOp>(
@@ -346,7 +346,7 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
 
     // Add memory output - this is the inputs of the extmemory op (without the
     // first argument);
-    unsigned outArgI = mod.getNumResults();
+    unsigned outArgI = mod.getNumOutputs();
     SmallVector<PortInfo> inputs(portInfo.getInputs());
     auto outPortInfo =
         getMemoryIOInfo(arg.getLoc(), memName.strref() + "_out", outArgI,
@@ -707,8 +707,8 @@ addSequentialIOOperandsIfNeeded(Operation *op,
     // Parent should at this point be a hw.module and have clock and reset
     // ports.
     auto parent = cast<hw::HWModuleOp>(op->getParentOp());
-    operands.push_back(parent.getArgument(parent.getNumArguments() - 2));
-    operands.push_back(parent.getArgument(parent.getNumArguments() - 1));
+    operands.push_back(parent.getArgumentForInput(parent.getNumInputs() - 2));
+    operands.push_back(parent.getArgumentForInput(parent.getNumInputs() - 1));
   }
 }
 
@@ -1809,7 +1809,7 @@ public:
     } else {
       auto hwModuleOp = rewriter.create<hw::HWModuleOp>(
           op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
-      auto args = hwModuleOp.getArguments().drop_back(2);
+      auto args = hwModuleOp.getBodyBlock()->getArguments().drop_back(2);
       rewriter.inlineBlockBefore(&op.getBody().front(),
                                  hwModuleOp.getBodyBlock()->getTerminator(),
                                  args);

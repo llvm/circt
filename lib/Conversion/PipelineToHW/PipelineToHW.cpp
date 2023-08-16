@@ -425,24 +425,28 @@ public:
                      hw::HWModuleOp mod, bool withStall,
                      bool isParentPipeline = false) {
       size_t nStageDataArgs = parent.pipeline.getStageDataArgs(stage).size();
-      inputs = mod.getArguments().take_front(nStageDataArgs);
+      inputs = mod.getBodyBlock()->getArguments().take_front(nStageDataArgs);
       if (isParentPipeline) {
         // The parent pipeline should always have all external inputs available.
-        extInputs = mod.getArguments().slice(
+        extInputs = mod.getBodyBlock()->getArguments().slice(
             nStageDataArgs, parent.pipeline.getExtInputs().size());
       } else {
         llvm::SmallVector<Value> stageExtInputs;
         parent.getStageExtInputs(stage, stageExtInputs);
-        extInputs =
-            mod.getArguments().slice(nStageDataArgs, stageExtInputs.size());
+        extInputs = mod.getBodyBlock()->getArguments().slice(
+            nStageDataArgs, stageExtInputs.size());
       }
 
       auto portLookup = mod.getPortLookupInfo();
       if (withStall)
-        stall = mod.getArgument(*portLookup.getInputPortIndex(kStallPortName));
-      enable = mod.getArgument(*portLookup.getInputPortIndex(kEnablePortName));
-      clock = mod.getArgument(*portLookup.getInputPortIndex(kClockPortName));
-      reset = mod.getArgument(*portLookup.getInputPortIndex(kResetPortName));
+        stall = mod.getArgumentForInput(
+            *portLookup.getInputPortIndex(kStallPortName));
+      enable = mod.getArgumentForInput(
+          *portLookup.getInputPortIndex(kEnablePortName));
+      clock = mod.getArgumentForInput(
+          *portLookup.getInputPortIndex(kClockPortName));
+      reset = mod.getArgumentForInput(
+          *portLookup.getInputPortIndex(kResetPortName));
     }
 
     ValueRange inputs;

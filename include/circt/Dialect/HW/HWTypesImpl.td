@@ -257,6 +257,11 @@ def ModuleTypeImpl : HWType<"Module"> {
     StringAttr getOutputNameAttr(size_t);
     StringRef getOutputName(size_t);
     FunctionType getFuncType();
+    bool isOutput(size_t);
+    size_t getInputIdForPortId(size_t);
+    size_t getOutputIdForPortId(size_t);
+    size_t getPortIdForInputId(size_t);
+    size_t getPortIdForOutputId(size_t);
   }];
 }
 
