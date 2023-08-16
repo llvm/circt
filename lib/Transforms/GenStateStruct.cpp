@@ -737,9 +737,7 @@ void GenStateStruct::overrideModule(
 
   // Modify ports list of the module to make the pointer of struct beacome the
   // only input value in the module.
-  op.modifyPorts(/*insertInputs*/ {}, /*insertOutputs*/ {},
-                 /*eraseInputs*/ arrEraseIn,
-                 /*eraseOutputs*/ arrEraseOut);
+  modifyModulePorts(op, {}, {}, arrEraseIn, arrEraseOut, op.getBodyBlock());
 
   // Remove the original outputOp and replace it with outputOp that do not
   // output any value.
