@@ -628,6 +628,8 @@ void Emitter::emitComponent(ComponentInterface op) {
                 SubLibOp, ShruLibOp, RshLibOp, SrshLibOp, LshLibOp, AndLibOp,
                 NotLibOp, OrLibOp, XorLibOp, WireLibOp>(
               [&](auto op) { emitLibraryPrimTypedByFirstInputPort(op); })
+          .Case<MuxLibOp>(
+              [&](auto op) { emitLibraryPrimTypedByFirstOutputPort(op); })
           .Case<MultPipeLibOp>(
               [&](auto op) { emitLibraryPrimTypedByFirstOutputPort(op); })
           .Case<RemUPipeLibOp, DivUPipeLibOp>([&](auto op) {
