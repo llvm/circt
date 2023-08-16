@@ -1,4 +1,4 @@
-//===- LowerClasses.cpp - Extract OM classes ----------------------------===//
+//===- LowerClasses.cpp - Lower to OM classes and objects -----------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -29,6 +29,8 @@ using namespace circt;
 using namespace circt::firrtl;
 using namespace circt::om;
 
+namespace {
+
 /// Helper class to capture details about a property.
 struct Property {
   size_t index;
@@ -43,7 +45,6 @@ struct ClassLoweringState {
   om::ClassOp classOp;
 };
 
-namespace {
 struct LowerClassesPass : public LowerClassesBase<LowerClassesPass> {
   void runOnOperation() override;
 
@@ -63,6 +64,7 @@ private:
   // Convert to OM ops and types in Classes or Modules.
   LogicalResult dialectConversion(Operation *op);
 };
+
 } // namespace
 
 /// Lower FIRRTL Class and Object ops to OM Class and Object ops
@@ -78,7 +80,7 @@ void LowerClassesPass::runOnOperation() {
   }
   CircuitOp circuit = *circuits.begin();
 
-  // Create new OM Class ops seriallly.
+  // Create new OM Class ops serially.
   SmallVector<ClassLoweringState> loweringState;
   for (auto moduleLike : circuit.getOps<FModuleLike>())
     if (shouldCreateClass(moduleLike))
