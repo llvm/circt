@@ -1301,14 +1301,36 @@ LogicalResult FModuleOp::verify() {
   return success();
 }
 
-LogicalResult FExtModuleOp::verify() {
+static LogicalResult
+verifyInternalPaths(FModuleLike op,
+                    std::optional<::mlir::ArrayAttr> internalPaths) {
+  if (!internalPaths)
+    return success();
+
   // If internal paths are present, should cover all ports.
-  if (auto internalPaths = getInternalPaths()) {
-    if (internalPaths->size() != getNumPorts())
-      return emitError("has inconsistent internal path array with ")
-             << internalPaths->size() << " entries for " << getNumPorts()
-             << " ports";
+  if (internalPaths->size() != op.getNumPorts())
+    return op.emitError("module has inconsistent internal path array with ")
+           << internalPaths->size() << " entries for " << op.getNumPorts()
+           << " ports";
+
+  // No internal paths for non-ref-type ports.
+  for (auto [idx, path, type] :
+       llvm::enumerate(internalPaths->getValue(), op.getPortTypes())) {
+    if (cast<InternalPathAttr>(path).getPath() &&
+        !type_isa<RefType>(cast<TypeAttr>(type).getValue())) {
+      auto diag =
+          op.emitError("module has internal path for non-ref-type port ")
+          << op.getPortNameAttr(idx);
+      return diag.attachNote(op.getPortLocation(idx)) << "this port";
+    }
   }
+
+  return success();
+}
+
+LogicalResult FExtModuleOp::verify() {
+  if (failed(verifyInternalPaths(*this, getInternalPaths())))
+    return failure();
 
   auto params = getParameters();
   if (params.empty())
@@ -1331,13 +1353,8 @@ LogicalResult FExtModuleOp::verify() {
 }
 
 LogicalResult FIntModuleOp::verify() {
-  // If internal paths are present, should cover all ports.
-  if (auto internalPaths = getInternalPaths()) {
-    if (internalPaths->size() != getNumPorts())
-      return emitError("has inconsistent internal path array with ")
-             << internalPaths->size() << " entries for " << getNumPorts()
-             << " ports";
-  }
+  if (failed(verifyInternalPaths(*this, getInternalPaths())))
+    return failure();
 
   auto params = getParameters();
   if (params.empty())
