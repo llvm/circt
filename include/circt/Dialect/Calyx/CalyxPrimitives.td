@@ -267,8 +267,8 @@ def AndLibOp  : CombinationalArithBinaryLibraryOp<"and"> {}
 def OrLibOp   : CombinationalArithBinaryLibraryOp<"or"> {}
 def XorLibOp  : CombinationalArithBinaryLibraryOp<"xor"> {}
 
-def MuxLibOp : CalyxLibraryOp<"mux", [Combinational, SameTypeConstraint<"tru", "fal">]> {
-  let results = (outs AnyType:$sel, AnyType:$tru, AnyType:$fal, AnyType:$out);
+def MuxLibOp : CalyxLibraryOp<"mux", [Combinational, SameTypeConstraint<"tru", "fal">, SameTypeConstraint<"tru", "out">]> {
+  let results = (outs I1:$sel, AnyType:$tru, AnyType:$fal, AnyType:$out);
 }
 
 class ArithBinaryPipeLibraryOp<string mnemonic> : ArithBinaryLibraryOp<mnemonic # "_pipe", [
