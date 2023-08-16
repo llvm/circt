@@ -128,11 +128,11 @@ private:
     return TypeSwitch<Operation *, FailureOr<StringRef>>(op)
         .Case<MemoryOp, RegisterOp, NotLibOp, AndLibOp, OrLibOp, XorLibOp,
               AddLibOp, SubLibOp, GtLibOp, LtLibOp, EqLibOp, NeqLibOp, GeLibOp,
-              LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp, WireLibOp>(
-            [&](auto op) -> FailureOr<StringRef> {
-              static constexpr std::string_view sCore = "core";
-              return {sCore};
-            })
+              LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp, WireLibOp,
+              MuxLibOp>([&](auto op) -> FailureOr<StringRef> {
+          static constexpr std::string_view sCore = "core";
+          return {sCore};
+        })
         .Case<SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp,
               SrshLibOp, MultPipeLibOp, RemUPipeLibOp, RemSPipeLibOp,
               DivUPipeLibOp, DivSPipeLibOp>(
