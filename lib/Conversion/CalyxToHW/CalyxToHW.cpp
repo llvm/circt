@@ -237,6 +237,20 @@ private:
         .Case([&](XorLibOp op) {
           convertArithBinaryOp<XorLibOp, XorOp>(op, wires, b);
         })
+        .Case([&](MuxLibOp op) {
+          auto sel = wireIn(op.getSel(), op.instanceName(),
+                            op.portName(op.getSel()), b);
+          auto tru = wireIn(op.getTru(), op.instanceName(),
+                            op.portName(op.getTru()), b);
+          auto fal = wireIn(op.getFal(), op.instanceName(),
+                            op.portName(op.getFal()), b);
+
+          auto mux = b.create<MuxOp>(sel, tru, fal);
+
+          auto out =
+              wireOut(mux, op.instanceName(), op.portName(op.getOut()), b);
+          wires.append({sel.getInput(), tru.getInput(), fal.getInput(), out});
+        })
         // Pipelined arithmetic operations.
         .Case([&](MultPipeLibOp op) {
           convertPipelineOp<MultPipeLibOp, comb::MulOp>(op, wires, b);
