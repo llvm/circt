@@ -38,6 +38,12 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
 
     InterfaceMethod<"Get the module type",
     "::circt::hw::ModuleType", "getHWModuleType", (ins)>,
+
+    InterfaceMethod<"Get the port Attributes",
+    "SmallVector<ArrayAttr>", "getPortAttrs", (ins)>,
+
+    InterfaceMethod<"Get the port Locations",
+    "SmallVector<Location>", "getPortLocs", (ins)>,
   ];
 
   let extraSharedClassDeclaration = [{

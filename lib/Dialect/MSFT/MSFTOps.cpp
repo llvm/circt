@@ -693,6 +693,46 @@ LogicalResult MSFTModuleOp::verify() {
   return success();
 }
 
+SmallVector<Location> MSFTModuleOp::getPortLocs() {
+  SmallVector<Location> retval;
+  if (auto locs = getArgLocs()) {
+    for (auto l : locs)
+      retval.push_back(cast<Location>(l));
+  } else {
+    auto empty = UnknownLoc::get(getContext());
+    for (unsigned i = 0, e = getNumInputs(); i < e; ++i)
+      retval.push_back(empty);
+  }
+  if (auto locs = getResultLocs()) {
+    for (auto l : locs)
+      retval.push_back(cast<Location>(l));
+  } else {
+    auto empty = UnknownLoc::get(getContext());
+    for (unsigned i = 0, e = getNumOutputs(); i < e; ++i)
+      retval.push_back(empty);
+  }
+  return retval;
+}
+
+SmallVector<ArrayAttr> MSFTModuleOp::getPortAttrs() {
+  SmallVector<ArrayAttr> retval;
+  if (auto attrs = getArgAttrs()) {
+    for (auto a : *attrs)
+      retval.push_back(cast<ArrayAttr>(a));
+  } else {
+    for (unsigned i = 0, e = getNumInputs(); i < e; ++i)
+      retval.push_back({});
+  }
+  if (auto attrs = getResAttrs()) {
+    for (auto a : *attrs)
+      retval.push_back(cast<ArrayAttr>(a));
+  } else {
+    for (unsigned i = 0, e = getNumOutputs(); i < e; ++i)
+      retval.push_back({});
+  }
+  return retval;
+}
+
 //===----------------------------------------------------------------------===//
 // MSFTModuleExternOp
 //===----------------------------------------------------------------------===//
@@ -966,6 +1006,33 @@ hw::ModulePortInfo MSFTModuleExternOp::getPortList() {
 }
 
 hw::InnerSymAttr MSFTModuleExternOp::getPortSymbolAttr(size_t) { return {}; }
+
+SmallVector<Location> MSFTModuleExternOp::getPortLocs() {
+  SmallVector<Location> retval;
+  auto empty = UnknownLoc::get(getContext());
+  for (unsigned i = 0, e = getNumPorts(); i < e; ++i)
+    retval.push_back(empty);
+  return retval;
+}
+
+SmallVector<ArrayAttr> MSFTModuleExternOp::getPortAttrs() {
+  SmallVector<ArrayAttr> retval(getNumPorts());
+  if (auto attrs = getArgAttrs()) {
+    for (auto a : *attrs)
+      retval.push_back(cast<ArrayAttr>(a));
+  } else {
+    for (unsigned i = 0, e = getNumInputs(); i < e; ++i)
+      retval.push_back({});
+  }
+  if (auto attrs = getResAttrs()) {
+    for (auto a : *attrs)
+      retval.push_back(cast<ArrayAttr>(a));
+  } else {
+    for (unsigned i = 0, e = getNumOutputs(); i < e; ++i)
+      retval.push_back({});
+  }
+  return retval;
+}
 
 //===----------------------------------------------------------------------===//
 // OutputOp

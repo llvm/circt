@@ -1423,6 +1423,63 @@ ModulePortInfo HWModuleGeneratedOp::getPortList() {
   return getOperationPortList(getOperation());
 }
 
+SmallVector<Location> HWModuleOp::getPortLocs() {
+  SmallVector<Location> retval;
+  if (auto locs = getArgLocs()) {
+    for (auto l : locs)
+      retval.push_back(cast<Location>(l));
+  } else {
+    auto empty = UnknownLoc::get(getContext());
+    for (unsigned i = 0, e = getNumInputs(); i < e; ++i)
+      retval.push_back(empty);
+  }
+  if (auto locs = getResultLocs()) {
+    for (auto l : locs)
+      retval.push_back(cast<Location>(l));
+  } else {
+    auto empty = UnknownLoc::get(getContext());
+    for (unsigned i = 0, e = getNumOutputs(); i < e; ++i)
+      retval.push_back(empty);
+  }
+  return retval;
+}
+
+SmallVector<Location> HWModuleExternOp::getPortLocs() { return {}; }
+
+SmallVector<Location> HWModuleGeneratedOp::getPortLocs() { return {}; }
+
+template <typename ModTy>
+static SmallVector<ArrayAttr> getPortAttrs(ModTy &mod) {
+  SmallVector<ArrayAttr> retval;
+  if (auto attrs = mod.getArgAttrs()) {
+    for (auto a : *attrs)
+      retval.push_back(cast<ArrayAttr>(a));
+  } else {
+    for (unsigned i = 0, e = mod.getNumInputs(); i < e; ++i)
+      retval.push_back({});
+  }
+  if (auto attrs = mod.getResAttrs()) {
+    for (auto a : *attrs)
+      retval.push_back(cast<ArrayAttr>(a));
+  } else {
+    for (unsigned i = 0, e = mod.getNumOutputs(); i < e; ++i)
+      retval.push_back({});
+  }
+  return retval;
+}
+
+SmallVector<ArrayAttr> HWModuleOp::getPortAttrs() {
+  return ::getPortAttrs(*this);
+}
+
+SmallVector<ArrayAttr> HWModuleExternOp::getPortAttrs() {
+  return ::getPortAttrs(*this);
+}
+
+SmallVector<ArrayAttr> HWModuleGeneratedOp::getPortAttrs() {
+  return ::getPortAttrs(*this);
+}
+
 /// Lookup the generator for the symbol.  This returns null on
 /// invalid IR.
 Operation *HWModuleGeneratedOp::getGeneratorKindOp() {
