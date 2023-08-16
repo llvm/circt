@@ -6,12 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This pass collects elements: output reg of module, local reg / mem  in
-// current module and signal with attribute of trigger. Form a struct with these
-// elements and their clone member which will be used to represent previous one
-// of the member state. The struct will be stored in the global variable and the
-// pointer of the struct will be passed to the module. The module will be
-// overrided with the new struct pointer.
+// This pass collects elements: module ports, output reg of the module, local
+// register in the current module, signal with attribute of the trigger, and
+// instance pointer. Form a struct with these elements and their clone member
+// which will be used to represent previous one of the member state. The struct
+// will be stored in the global variable and the pointer of the struct will be
+// passed to the module. The module will be overridden with the new struct
+// pointer.
 //
 //===----------------------------------------------------------------------===//
 
