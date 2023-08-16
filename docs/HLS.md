@@ -28,7 +28,7 @@ CIRCT homes multiple actively developed HLS flows, each with their own approach 
 How flow documentation is structured:
 * **Description**: A brief description/rationale of the flow, what it is and why it is how it is.
 * **Relevant dialects**: A listing of the dialects used in the flow (preferably in order), as well as links to the dialect rationales. We encourage the user to read the dialect rationales to understand the design decisions behind the dialects.
-* **Example usage/relevant tests**:  A vast majority of CIRCTs flow-specific knowledge is (unfortunately) tribal. However, users are often referred to the CIRCT tests to understand what different passes do, and how to drive the various CIRCT tools to achieve their goals. This section thus lists some relevant tests that may serve as important references of how to use the flow.
+* **Example usage/relevant tests**:  A vast majority of CIRCTs flow-specific knowledge is (unfortunately) institutional. However, users are often referred to the CIRCT tests to understand what different passes do, and how to drive the various CIRCT tools to achieve their goals. This section thus lists some relevant tests that may serve as important references of how to use the flow.
 
 ## Dynamically scheduled HLS (DHLS)
 
