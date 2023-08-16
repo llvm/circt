@@ -79,6 +79,9 @@ struct SharedParserConstants {
   /// A map from identifiers to type aliases.
   llvm::StringMap<FIRRTLType> aliasMap;
 
+  /// A map from identifiers to class ops.
+  llvm::DenseMap<StringRef, ClassOp> classMap;
+
   /// An empty array attribute.
   const ArrayAttr emptyArrayAttr;
 
@@ -809,6 +812,36 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     result = ClockType::get(getContext());
     break;
 
+  case FIRToken::kw_Inst: {
+    if (FIRVersion::compare(version, {3, 2, 0}) < 0)
+      return emitError() << "unexpected token: Inst types are a FIRRTL 3.2.0+ "
+                            "feature, but the specified FIRRTL version was "
+                         << version;
+
+    consumeToken(FIRToken::kw_Inst);
+    if (parseToken(FIRToken::less, "expected < in Inst type"))
+      return failure();
+
+    auto loc = getToken().getLoc();
+    StringRef id;
+    if (parseId(id, "expected class name in Inst type"))
+      return failure();
+
+    // Look up the class that is being referenced.
+    const auto &classMap = getConstants().classMap;
+    auto lookup = classMap.find(id);
+    if (lookup == classMap.end())
+      return emitError(loc) << "unknown class '" << id << "'";
+
+    auto classOp = lookup->second;
+
+    if (parseToken(FIRToken::greater, "expected > in Inst type"))
+      return failure();
+
+    result = classOp.getInstanceType();
+    break;
+  }
+
   case FIRToken::kw_Reset:
     consumeToken(FIRToken::kw_Reset);
     result = ResetType::get(getContext());
@@ -1509,6 +1542,7 @@ private:
 
   // Declarations
   ParseResult parseInstance();
+  ParseResult parseObject();
   ParseResult parseCombMem();
   ParseResult parseSeqMem();
   ParseResult parseMem(unsigned memIndent);
@@ -1894,10 +1928,12 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
       indexV = bundle.getElementIndex(fieldName);
     else if (auto bundle = type_dyn_cast<OpenBundleType>(type))
       indexV = bundle.getElementIndex(fieldName);
+    else if (auto klass = type_dyn_cast<ClassType>(type))
+      indexV = klass.getElementIndex(fieldName);
     else
-      return emitError(loc, "subfield requires bundle operand ");
+      return emitError(loc, "subfield requires bundle or object operand ");
     if (!indexV)
-      return emitError(loc, "unknown field '" + fieldName + "' in bundle type ")
+      return emitError(loc, "unknown field '" + fieldName + "' in type ")
              << result.getType();
     auto indexNo = *indexV;
 
@@ -1906,6 +1942,11 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
       NamedAttribute attrs = {getConstants().indexIdentifier,
                               builder.getI32IntegerAttr(indexNo)};
       subResult = emitCachedSubAccess<RefSubOp>(result, attrs, indexNo, loc);
+    } else if (type_isa<ClassType>(type)) {
+      NamedAttribute attrs = {getConstants().indexIdentifier,
+                              builder.getI32IntegerAttr(indexNo)};
+      subResult =
+          emitCachedSubAccess<ObjectSubfieldOp>(result, attrs, indexNo, loc);
     } else {
       NamedAttribute attrs = {getConstants().fieldIndexIdentifier,
                               builder.getI32IntegerAttr(indexNo)};
@@ -2351,6 +2392,8 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     // Declarations
   case FIRToken::kw_inst:
     return parseInstance();
+  case FIRToken::kw_object:
+    return parseObject();
   case FIRToken::kw_cmem:
     return parseCombMem();
   case FIRToken::kw_smem:
@@ -3404,6 +3447,40 @@ ParseResult FIRStmtParser::parseInstance() {
   return moduleContext.addSymbolEntry(id, entryId, startTok.getLoc());
 }
 
+/// object ::= 'object' id 'of' id info?
+ParseResult FIRStmtParser::parseObject() {
+  auto startTok = consumeToken(FIRToken::kw_object);
+
+  // If this was actually the start of a connect or something else handle
+  // that.
+  if (auto isExpr = parseExpWithLeadingKeyword(startTok))
+    return *isExpr;
+
+  if (FIRVersion::compare(version, {3, 2, 0}) < 0)
+    return emitError() << "unexpected token: objects are a FIRRTL 3.2.0+ "
+                          "feature, but the specified FIRRTL version was "
+                       << version;
+
+  StringRef id;
+  StringRef className;
+  if (parseId(id, "expected object name") ||
+      parseToken(FIRToken::kw_of, "expected 'of' in object") ||
+      parseId(className, "expected class name") || parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  // Look up the class that is being referenced.
+  auto circuit =
+      builder.getBlock()->getParentOp()->getParentOfType<CircuitOp>();
+  auto referencedClass = circuit.lookupSymbol<ClassOp>(className);
+  if (!referencedClass)
+    return emitError(startTok.getLoc(), "use of undefined class name '" +
+                                            className + "' in object");
+  auto result = builder.create<ObjectOp>(referencedClass);
+  return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
+}
+
 /// cmem ::= 'cmem' id ':' type info?
 ParseResult FIRStmtParser::parseCombMem() {
   // TODO(firrtl spec) cmem is completely undocumented.
@@ -4265,6 +4342,8 @@ ParseResult FIRCircuitParser::parseClass(CircuitOp circuit, unsigned indent) {
   deferredModules.emplace_back(
       DeferredModuleToParse{classOp, portLocs, getLexer().getCursor(), indent});
 
+  // Stash the class name -> op in the constants, so we can resolve Inst types.
+  getConstants().classMap[name.getValue()] = classOp;
   return skipToModuleEnd(indent);
 }
 

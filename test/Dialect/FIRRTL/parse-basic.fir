@@ -1676,7 +1676,7 @@ circuit Groups:
 
 ;// -----
 ; CHECK-LABEL: firrtl.circuit "BasicProps"
-FIRRTL version 3.1.0
+FIRRTL version 3.2.0
 circuit BasicProps :
   module BasicProps :
   ; CHECK-LABEL: module private @Integer
@@ -1704,10 +1704,26 @@ circuit BasicProps :
     ; CHECK: firrtl.propassign %b, %a : !firrtl.path
     propassign b, a
 
-  ; CHECK-LABEL firrtl.class @SimpleClass(in %a: !firrtl.string, out %b: !firrtl.string) {
-  ; CHECK-NEXT    firrtl.propassign %b, %a : !firrtl.string
-  ; CHECK-NEXT  }
+  ; CHECK-LABEL: firrtl.class private @SimpleClass(in %a: !firrtl.string, out %b: !firrtl.string) {
+  ; CHECK-NEXT:     firrtl.propassign %b, %a : !firrtl.string
+  ; CHECK-NEXT:  }
   class SimpleClass:
     input a: String
     output b: String
     propassign b, a
+
+  ; CHECK-LABEL: firrtl.class private @Client(out %a: !firrtl.class<@SimpleClass(in a: !firrtl.string, out b: !firrtl.string)>)
+  class Client:
+    output a: Inst<SimpleClass>
+    ; CHECK-NEXT:  %0 = firrtl.object @SimpleClass(in a: !firrtl.string, out b: !firrtl.string)
+    object b of SimpleClass
+    ; CHECK-NEXT: firrtl.propassign %a, %0 : !firrtl.class<@SimpleClass(in a: !firrtl.string, out b: !firrtl.string)>
+    propassign a, b
+
+  ; CHECK-LABEL firrtl.class private @OtherClient(in %a: !firrtl.string, out %b: !firrtl.string)
+  class OtherClient:
+    input a : String
+    output b : String
+    object o of SimpleClass
+    ; TODO: This test needs to be fixed up once flow-checking for objects is implemented correctly.
+    propassign b, o.b
