@@ -4048,7 +4048,7 @@ ParseResult FIRCircuitParser::parseRefList(ArrayRef<PortInfo> portList,
                                            ArrayAttr &internalPathsResult) {
   struct RefStatementInfo {
     StringAttr refName;
-    StringAttr resolvedPath;
+    InternalPathAttr resolvedPath;
     SMLoc loc;
   };
 
@@ -4061,7 +4061,7 @@ ParseResult FIRCircuitParser::parseRefList(ArrayRef<PortInfo> portList,
     auto loc = getToken().getLoc();
     // ref x is "a.b.c"
     // Support "ref x.y is " once aggregate-of-ref supported.
-    StringAttr refName, resolved;
+    StringAttr refName;
     if (parseId(refName, "expected ref name"))
       return failure();
     if (consumeIf(FIRToken::period) || consumeIf(FIRToken::l_square))
@@ -4077,26 +4077,34 @@ ParseResult FIRCircuitParser::parseRefList(ArrayRef<PortInfo> portList,
     auto kind = getToken().getKind();
     if (kind != FIRToken::string)
       return emitError(loc, "expected string in ref statement");
-    resolved = StringAttr::get(getContext(), getToken().getStringValue());
+    auto resolved = InternalPathAttr::get(
+        getContext(),
+        StringAttr::get(getContext(), getToken().getStringValue()));
     consumeToken(FIRToken::string);
 
     refStatements.push_back(RefStatementInfo{refName, resolved, loc});
   }
 
-  // Build paths array.  One entry for each ref-type port.
-  SmallVector<Attribute> internalPaths;
-  auto refPorts = llvm::make_filter_range(
-      portList, [&](auto &port) { return type_isa<RefType>(port.type); });
+  // Build paths array.  One entry for each ref-type port, empty for others.
+  SmallVector<Attribute> internalPaths(portList.size(),
+                                       InternalPathAttr::get(getContext()));
+
   llvm::SmallBitVector usedRefs(refStatements.size());
-  for (auto &port : refPorts) {
+  size_t matchedPaths = 0;
+  for (auto [idx, port] : llvm::enumerate(portList)) {
+    if (!type_isa<RefType>(port.type))
+      continue;
+
     // Reject input reftype ports on extmodule's per spec,
     // as well as on intmodule's which is not mentioned in spec.
     if (!port.isOutput())
       return mlir::emitError(
           port.loc,
           "references in ports must be output on extmodule and intmodule");
-    auto *refStmtIt = llvm::find_if(
-        refStatements, [&](const auto &r) { return r.refName == port.name; });
+    auto *refStmtIt =
+        llvm::find_if(refStatements, [pname = port.name](const auto &r) {
+          return r.refName == pname;
+        });
     // Error if ref statements are present but none found for this port.
     if (refStmtIt == refStatements.end()) {
       if (!refStatements.empty())
@@ -4106,18 +4114,20 @@ ParseResult FIRCircuitParser::parseRefList(ArrayRef<PortInfo> portList,
     }
 
     usedRefs.set(std::distance(refStatements.begin(), refStmtIt));
-    internalPaths.push_back(refStmtIt->resolvedPath);
+    internalPaths[idx] = refStmtIt->resolvedPath;
+    ++matchedPaths;
   }
 
-  if (!refStatements.empty() && internalPaths.size() != refStatements.size()) {
-    assert(internalPaths.size() < refStatements.size());
+  if (!refStatements.empty() && matchedPaths != refStatements.size()) {
+    assert(matchedPaths < refStatements.size());
     assert(!usedRefs.all());
     auto idx = usedRefs.find_first_unset();
     assert(idx != -1);
     return emitError(refStatements[idx].loc, "unused ref statement");
   }
 
-  internalPathsResult = ArrayAttr::get(getContext(), internalPaths);
+  if (matchedPaths)
+    internalPathsResult = ArrayAttr::get(getContext(), internalPaths);
   return success();
 }
 

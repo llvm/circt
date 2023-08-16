@@ -455,8 +455,12 @@ static Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
   if (auto extMod = dyn_cast<FExtModuleOp>((Operation *)mod)) {
     // The extern module can have other internal paths attached to it,
     // append this to them.
-    SmallVector<Attribute> paths(extMod.getInternalPathsAttr().getValue());
-    paths.push_back(internalPathAttr);
+    SmallVector<Attribute> paths;
+    if (auto internalPaths = extMod.getInternalPaths())
+      llvm::append_range(paths, internalPaths->getValue());
+    else
+      paths.resize(extMod.getNumPorts(), builder.getAttr<InternalPathAttr>());
+    paths.back() = builder.getAttr<InternalPathAttr>(internalPathAttr);
     extMod.setInternalPathsAttr(builder.getArrayAttr(paths));
   } else if (auto intMod = dyn_cast<FModuleOp>((Operation *)mod)) {
     auto builder = ImplicitLocOpBuilder::atBlockEnd(
