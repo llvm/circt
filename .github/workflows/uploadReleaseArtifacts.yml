@@ -1,4 +1,4 @@
-name: Upload Firrtl Release Artifacts
+name: Upload Release Artifacts
 
 on:
   release:
@@ -117,10 +117,18 @@ jobs:
           json=$(echo '${{ toJSON(env) }}' | jq -c)
           echo $json
           echo "out=$json" >> $GITHUB_OUTPUT
-      - name: Add Build Options
-        id: add-build-options
+      - name: Add Build Options for firtool
+        id: add-build-options-firtool
         run: |
-          json='{"mode":"release","assert":"OFF","shared":"OFF","stats":"ON"}'
+          json='{"name":"firtool","install_target":"install-firtool","package_name_prefix":"firtool-bin","mode":"release","assert":"OFF","shared":"OFF","stats":"ON"}'
+          if [[ ${{ github.event_name }} == 'schedule' ]] || [[ ${{ github.event_name }} == 'workflow_dispatch' ]]; then
+            json=$(echo $json | jq -c '.assert = "ON" | .mode = "relwithdebinfo"')
+          fi
+          echo "out=$json" >> $GITHUB_OUTPUT
+      - name: Add Build Options for CIRCT-full shared libs
+        id: add-build-options-circt-full-shared-libs
+        run: |
+          json='{"name":"CIRCT-full shared libs","install_target":"install","package_name_prefix":"circt-full-shared-libs","mode":"release","assert":"OFF","shared":"ON","stats":"ON"}'
           if [[ ${{ github.event_name }} == 'schedule' ]] || [[ ${{ github.event_name }} == 'workflow_dispatch' ]]; then
             json=$(echo $json | jq -c '.assert = "ON" | .mode = "relwithdebinfo"')
           fi
@@ -128,7 +136,7 @@ jobs:
       - name: Build JSON Payloads
         id: build-json-payloads
         run: |
-          echo '${{ steps.add-build-options.outputs.out }}' | jq -sc . > options.json
+          echo '${{ steps.add-build-options-firtool.outputs.out }}' '${{ steps.add-build-options-circt-full-shared-libs.outputs.out }}' | jq -sc . > options.json
           echo build_configs=`cat options.json` >> $GITHUB_OUTPUT
 
           echo "Build Config Matrix" >> $GITHUB_STEP_SUMMARY
@@ -142,6 +150,17 @@ jobs:
           echo "Runner/Operating System Matrix:" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
           cat runners.json | jq >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+          echo '${{ steps.add-build-options-circt-full-shared-libs.outputs.out }}' | jq -c . > exclude_1_build_config.json
+          echo '${{ steps.add-windows.outputs.out }}' | jq -c . > exclude_1_runner.json
+          echo exclude_1_build_config=`cat exclude_1_build_config.json` >> $GITHUB_OUTPUT
+          echo exclude_1_runner=`cat exclude_1_runner.json` >> $GITHUB_OUTPUT
+
+          echo "Exclude matrix 1:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+          cat exclude_1_build_config.json | jq >> $GITHUB_STEP_SUMMARY
+          cat exclude_1_runner.json | jq >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
           case ${{ github.event_name }} in
@@ -164,6 +183,8 @@ jobs:
     outputs:
       build_configs: ${{ steps.build-json-payloads.outputs.build_configs }}
       runners: ${{ steps.build-json-payloads.outputs.runners }}
+      exclude_1_build_config: ${{ steps.build-json-payloads.outputs.exclude_1_build_config }}
+      exclude_1_runner: ${{ steps.build-json-payloads.outputs.exclude_1_runner }}
       environment: ${{ steps.build-json-payloads.outputs.environment }}
 
   publish:
@@ -174,6 +195,10 @@ jobs:
         build_config: ${{ fromJSON(needs.choose-matrix.outputs.build_configs) }}
         runner: ${{ fromJSON(needs.choose-matrix.outputs.runners) }}
         env: ${{ fromJSON(needs.choose-matrix.outputs.environment) }}
+        exclude:
+          # `BUILD_SHARED_LIBS` option is not supported on Windows
+          - build_config: ${{ fromJSON(needs.choose-matrix.outputs.exclude_1_build_config) }}
+            runner: ${{ fromJSON(needs.choose-matrix.outputs.exclude_1_runner) }}
     uses: ./.github/workflows/unifiedBuildTestAndInstall.yml
     with:
       runner: ${{ matrix.runner.runner }}
@@ -182,6 +207,7 @@ jobs:
       llvm_enable_assertions: ${{ matrix.build_config.assert }}
       llvm_force_enable_stats: ${{ matrix.build_config.stats }}
       runTests: ${{ matrix.env.runTests }}
-      install: install-firtool
+      install: ${{ matrix.build_config.install_target }}
+      package_name_prefix: ${{ matrix.build_config.package_name_prefix }}
       cmake_c_compiler: ${{ matrix.runner.cmake_c_compiler }}
       cmake_cxx_compiler: ${{ matrix.runner.cmake_cxx_compiler }}
