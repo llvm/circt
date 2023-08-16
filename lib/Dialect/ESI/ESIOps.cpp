@@ -542,6 +542,16 @@ hw::ModuleType ESIPureModuleOp::getHWModuleType() {
   return hw::ModulePortInfo(ArrayRef<hw::PortInfo>{});
 }
 
+SmallVector<Location> ESIPureModuleOp::getPortLocs() {
+  SmallVector<Location> retval;
+  return retval;
+}
+
+SmallVector<ArrayAttr> ESIPureModuleOp::getPortAttrs() {
+  SmallVector<ArrayAttr> retval;
+  return retval;
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"
 

@@ -97,7 +97,7 @@ firrtl.circuit "foo" {
 // -----
 
 firrtl.circuit "foo" {
-// expected-error @+1 {{requires valid port locations}}
+// expected-error @+1 {{'firrtl.module' op requires attribute 'portLocations'}}
 "firrtl.module"() ( {
   ^entry:
 }) { sym_name = "foo", convention = #firrtl<convention internal>,

@@ -102,6 +102,23 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
         return hw::InnerSymAttr();
       return syms[portIndex].template cast<hw::InnerSymAttr>();
     }
+
+
+    SmallVector<Location> $cppClass::getPortLocs() {
+      SmallVector<Location> retval;
+        for (auto l : getPortLocations())
+          retval.push_back(cast<Location>(l));
+      return retval;
+    }
+
+    // Don't count annotations as attributes
+    SmallVector<ArrayAttr> $cppClass::getPortAttrs() {
+      SmallVector<ArrayAttr> retval;
+      for (unsigned i = 0, e = getNumPorts(); i < e; ++i)
+          retval.push_back({});
+      return retval;
+    }
+
   }];
 
 }
@@ -116,6 +133,7 @@ def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
   }];
   let arguments =
             (ins ConventionAttr:$convention,
+                 ArrayRefAttr:$portLocations,
                  DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
 
   let results = (outs);
@@ -171,6 +189,7 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
   let arguments = (ins
                    OptionalAttr<StrAttr>:$defname,
                    ConventionAttr:$convention,
+                   ArrayRefAttr:$portLocations,
                    ParamDeclArrayAttr:$parameters,
                    DefaultValuedAttr<AnnotationArrayAttr,
                    "ArrayAttr()">:$annotations,
@@ -206,6 +225,7 @@ def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
   }];
   let arguments = (ins
                    OptionalAttr<StrAttr>:$intrinsic,
+                   ArrayRefAttr:$portLocations,
                    ParamDeclArrayAttr:$parameters,
                    DefaultValuedAttr<AnnotationArrayAttr,
                    "ArrayAttr()">:$annotations,
@@ -247,7 +267,9 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
     (ins UI32Attr:$numReadPorts, UI32Attr:$numWritePorts,
          UI32Attr:$numReadWritePorts, UI32Attr:$dataWidth, UI32Attr:$maskBits,
          UI32Attr:$readLatency, UI32Attr:$writeLatency, UI64Attr:$depth,
-         ArrayAttr:$extraPorts, AnnotationArrayAttr:$annotations);
+         ArrayAttr:$extraPorts,
+         ArrayRefAttr:$portLocations,
+         AnnotationArrayAttr:$annotations);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
