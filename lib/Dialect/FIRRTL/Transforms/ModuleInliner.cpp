@@ -1395,7 +1395,7 @@ void Inliner::run() {
 
   // Mark the top module as live, so it doesn't get deleted.
   for (auto module : circuit.getOps<FModuleLike>()) {
-    if (!module.isPublic())
+    if (module.canDiscardOnUseEmpty())
       continue;
     liveModules.insert(module);
     if (isa<FModuleOp>(module))
