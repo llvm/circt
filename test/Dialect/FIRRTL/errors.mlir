@@ -389,6 +389,15 @@ firrtl.circuit "EmptySymField" {
 
 // -----
 
+firrtl.circuit "NoSymsSym" {
+  firrtl.module @NoSymsSym() {
+    // expected-error @below {{has empty list of inner symbols}}
+    %w = firrtl.wire sym [] : !firrtl.uint<5>
+  }
+}
+
+// -----
+
 firrtl.circuit "X" {
 
 firrtl.module @X(in %a : !firrtl.uint<4>) {
