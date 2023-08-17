@@ -102,7 +102,7 @@ def NameRefArrayAttr : TypedArrayAttrBase<NameRefAttr,
 def InnerSymProperties : AttrDef<HWDialect, "InnerSymProperties"> {
   let mnemonic = "innerSymProps";
   let parameters = (ins
-         "mlir::StringAttr":$name,
+         "::mlir::StringAttr":$name,
          DefaultValuedParameter<"uint64_t", "0">:$fieldID,
          DefaultValuedParameter<"::mlir::StringAttr", "public">:$sym_visibility
                      );
@@ -115,6 +115,7 @@ def InnerSymProperties : AttrDef<HWDialect, "InnerSymProperties"> {
   let hasCustomAssemblyFormat = 1;
   // The assembly format is as follows:
   // "`<` `@` $name `,` $fieldID `,` $sym_visibility `>`";
+  let genVerifyDecl = 1;
 }
 
 
@@ -132,7 +133,6 @@ def InnerSymAttr : AttrDef<HWDialect, "InnerSym"> {
   let parameters = (ins ArrayRefParameter<"InnerSymPropertiesAttr">:$props);
   let builders = [
     AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$sym),[{
-      assert(!sym.getValue().empty() && "symbol name must be non-empty");
       return get(sym.getContext(),
       {InnerSymPropertiesAttr::get(sym.getContext(), sym, 0,
                         mlir::StringAttr::get(sym.getContext(), "public"))});

@@ -239,7 +239,7 @@ void InnerRefAttr::print(AsmPrinter &p) const {
 }
 
 //===----------------------------------------------------------------------===//
-// InnerSymAttr
+// InnerSymAttr and InnerSymPropertiesAttr
 //===----------------------------------------------------------------------===//
 
 Attribute InnerSymPropertiesAttr::parse(AsmParser &parser, Type type) {
@@ -263,13 +263,22 @@ Attribute InnerSymPropertiesAttr::parse(AsmParser &parser, Type type) {
   if (parser.parseGreater())
     return Attribute();
 
-  return InnerSymPropertiesAttr::get(parser.getContext(), name, fieldId,
-                                     visibilityAttr);
+  return parser.getChecked<InnerSymPropertiesAttr>(parser.getContext(), name,
+                                                   fieldId, visibilityAttr);
 }
 
 void InnerSymPropertiesAttr::print(AsmPrinter &odsPrinter) const {
   odsPrinter << "<@" << getName().getValue() << "," << getFieldID() << ","
              << getSymVisibility().getValue() << ">";
+}
+
+LogicalResult InnerSymPropertiesAttr::verify(
+    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+    ::mlir::StringAttr name, uint64_t fieldID,
+    ::mlir::StringAttr symVisibility) {
+  if (!name || name.getValue().empty())
+    return emitError() << "inner symbol cannot have empty name";
+  return success();
 }
 
 StringAttr InnerSymAttr::getSymIfExists(uint64_t fieldId) const {
@@ -304,19 +313,24 @@ Attribute InnerSymAttr::parse(AsmParser &parser, Type type) {
   StringAttr sym;
   NamedAttrList dummyList;
   SmallVector<InnerSymPropertiesAttr, 4> names;
-  if (!parser.parseOptionalSymbolName(sym, "dummy", dummyList))
-    names.push_back(InnerSymPropertiesAttr::get(sym));
-  else if (parser.parseCommaSeparatedList(
-               OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
-                 InnerSymPropertiesAttr prop;
-                 if (parser.parseCustomAttributeWithFallback(
-                         prop, mlir::Type{}, "dummy", dummyList))
-                   return failure();
+  if (!parser.parseOptionalSymbolName(sym, "dummy", dummyList)) {
+    auto prop = parser.getChecked<InnerSymPropertiesAttr>(
+        parser.getContext(), sym, 0,
+        StringAttr::get(parser.getContext(), "public"));
+    if (!prop)
+      return {};
+    names.push_back(prop);
+  } else if (parser.parseCommaSeparatedList(
+                 OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
+                   InnerSymPropertiesAttr prop;
+                   if (parser.parseCustomAttributeWithFallback(
+                           prop, mlir::Type{}, "dummy", dummyList))
+                     return failure();
 
-                 names.push_back(prop);
+                   names.push_back(prop);
 
-                 return success();
-               }))
+                   return success();
+                 }))
     return Attribute();
 
   std::sort(names.begin(), names.end(),

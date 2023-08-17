@@ -28,6 +28,9 @@ LogicalResult hw::verifyInnerSymAttr(InnerSymbolOpInterface op) {
   if (!innerSym)
     return success();
 
+  if (innerSym.empty())
+    return op->emitOpError("has empty list of inner symbols");
+
   if (!op.supportsPerFieldSymbols()) {
     // The inner sym can only be specified on fieldID=0.
     if (innerSym.size() > 1 || !innerSym.getSymName()) {

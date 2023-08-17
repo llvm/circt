@@ -369,6 +369,32 @@ firrtl.circuit "InstanceCannotHavePortSymbols" {
   }
 }
 
+// -----
+
+firrtl.circuit "EmptySym" {
+  firrtl.module @EmptySym() {
+    // expected-error @below {{inner symbol cannot have empty name}}
+    %w = firrtl.wire sym @"" : !firrtl.uint<5>
+  }
+}
+
+// -----
+
+firrtl.circuit "EmptySymField" {
+  firrtl.module @EmptySymField() {
+    // expected-error @below {{inner symbol cannot have empty name}}
+    %w = firrtl.wire sym [<@"",0,public>] : !firrtl.uint<5>
+  }
+}
+
+// -----
+
+firrtl.circuit "NoSymsSym" {
+  firrtl.module @NoSymsSym() {
+    // expected-error @below {{has empty list of inner symbols}}
+    %w = firrtl.wire sym [] : !firrtl.uint<5>
+  }
+}
 
 // -----
 
