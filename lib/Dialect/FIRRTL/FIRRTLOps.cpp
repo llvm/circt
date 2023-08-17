@@ -1321,10 +1321,10 @@ verifyInternalPaths(FModuleLike op,
            << " ports";
 
   // No internal paths for non-ref-type ports.
-  for (auto [idx, path, type] :
-       llvm::enumerate(internalPaths->getValue(), op.getPortTypes())) {
-    if (cast<InternalPathAttr>(path).getPath() &&
-        !type_isa<RefType>(cast<TypeAttr>(type).getValue())) {
+  for (auto [idx, path, typeattr] : llvm::enumerate(
+           internalPaths->getAsRange<InternalPathAttr>(), op.getPortTypes())) {
+    if (path.getPath() &&
+        !type_isa<RefType>(cast<TypeAttr>(typeattr).getValue())) {
       auto diag =
           op.emitError("module has internal path for non-ref-type port ")
           << op.getPortNameAttr(idx);

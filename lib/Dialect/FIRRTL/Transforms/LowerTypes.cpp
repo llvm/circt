@@ -802,6 +802,14 @@ bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
   if (!peelType(srcType, fieldTypes, getPreservationModeForModule(module)))
     return false;
 
+  // Ports with internalPath set cannot be lowered.
+  if (auto ip = newArgs[argIndex].internalPath; ip && ip->getPath()) {
+    ::mlir::emitError(newArgs[argIndex].pi.loc,
+                      "cannot lower port with internal path");
+    encounteredError = true;
+    return false;
+  }
+
   SmallVector<hw::InnerSymAttr> fieldSyms(fieldTypes.size());
   if (failed(partitionSymbols(newArgs[argIndex].pi.sym, srcType, fieldSyms,
                               newArgs[argIndex].pi.loc))) {
