@@ -701,10 +701,10 @@ void Emitter::emitPrimitivePorts(hw::HWModuleExternOp op) {
     auto e = static_cast<size_t>(std::distance(ports.begin(), ports.end()));
     os << LParen();
     for (auto [i, port] : llvm::enumerate(ports)) {
-      DictionaryAttr portAttr =
-          isInput ? op.getArgAttrDict(i) : op.getResultAttrDict(i);
+      Attribute portAttr =
+          isInput ? op.getInputAttrs(i) : op.getOutputAttrs(i);
 
-      os << getAttributes(op, portAttr) << port.name.getValue() << colon();
+      os << getAttributes(op, cast_or_null<DictionaryAttr>(portAttr)) << port.name.getValue() << colon();
       // We only care about the bit width in the emitted .futil file.
       // Emit parameterized or non-parameterized bit width.
       if (hw::isParametricType(port.type)) {

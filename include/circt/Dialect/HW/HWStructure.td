@@ -32,7 +32,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       DeclareOpInterfaceMethods<PortList>,
       DeclareOpInterfaceMethods<HWModuleLike>,
       DeclareOpInterfaceMethods<HWMutableModuleLike>,
-      Symbol, FunctionOpInterface,
+      Symbol, 
       OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
@@ -73,15 +73,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     }
 
     ::circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
-      DictionaryAttr portAttrs;
-      if (portIndex < getNumInputs()) {
-         portAttrs = ::mlir::function_interface_impl::getArgAttrDict(*this,
-                                                                     portIndex);
-      } else {
-        portIndex -= getNumInputs();
-        portAttrs = ::mlir::function_interface_impl::getResultAttrDict(
-            *this, portIndex);
-      }
+      DictionaryAttr portAttrs = cast_or_null<DictionaryAttr>(getPortAttrs(portIndex));
       if (portAttrs)
         return portAttrs.getAs<::circt::hw::InnerSymAttr>(
           getPortSymbolAttrName());
@@ -90,21 +82,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
 
     void $cppClass::setPortSymbolAttr(size_t portIndex, ::circt::hw::InnerSymAttr sym) {
       auto portSymAttr = StringAttr::get(getContext(), getPortSymbolAttrName());
-      if (portIndex < getNumInputs()) {
-        if (sym)
-          ::mlir::function_interface_impl::setArgAttr(*this, portIndex,
-                                                      portSymAttr, sym);
-        else
-          ::mlir::function_interface_impl::removeArgAttr(*this, portIndex,
-                                                         portSymAttr);
-        return;
-      }
-      if (sym)
-        ::mlir::function_interface_impl::setResultAttr(
-            *this, portIndex - getNumInputs(), portSymAttr, sym);
-      else
-        ::mlir::function_interface_impl::removeResultAttr(
-            *this, portIndex - getNumInputs(), portSymAttr);
+      setPortAttr(portIndex, portSymAttr, sym);
     }
   }];
 

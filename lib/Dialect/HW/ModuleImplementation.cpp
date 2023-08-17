@@ -68,19 +68,14 @@ parseFunctionResultList(OpAsmParser &parser,
                                         parseElt);
 }
 
-void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
-                                            ArrayRef<Type> argTypes,
-                                            bool isVariadic,
-                                            ArrayRef<Type> resultTypes,
-                                            bool &needArgNamesAttr) {
-  using namespace mlir::function_interface_impl;
-
+void module_like_impl::printModuleSignature(
+    OpAsmPrinter &p, Operation *op, ArrayRef<Type> argTypes, bool isVariadic,
+    ArrayRef<Type> resultTypes, ArrayRef<Attribute> argAttrs,
+    ArrayRef<Attribute> resAttrs, bool &needArgNamesAttr) {
   Region &body = op->getRegion(0);
   bool isExternal = body.empty();
   SmallString<32> resultNameStr;
   mlir::OpPrintingFlags flags;
-
-  auto funcOp = cast<mlir::FunctionOpInterface>(op);
 
   p << '(';
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
@@ -106,7 +101,10 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
     }
 
     p.printType(argTypes[i]);
-    p.printOptionalAttrDict(getArgAttrs(funcOp, i));
+    auto attrs = argAttrs.empty()
+                     ? ArrayRef<NamedAttribute>()
+                     : cast<DictionaryAttr>(argAttrs[i]).getValue();
+    p.printOptionalAttrDict(attrs);
 
     // TODO: `printOptionalLocationSpecifier` will emit aliases for locations,
     // even if they are not printed.  This will have to be fixed upstream.  For
@@ -133,7 +131,10 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
       p.printKeywordOrString(getModuleResultNameAttr(op, i).getValue());
       p << ": ";
       p.printType(resultTypes[i]);
-      p.printOptionalAttrDict(getResultAttrs(funcOp, i));
+      auto attrs = resAttrs.empty()
+                       ? ArrayRef<NamedAttribute>()
+                       : cast<DictionaryAttr>(resAttrs[i]).getValue();
+      p.printOptionalAttrDict(attrs);
 
       // TODO: `printOptionalLocationSpecifier` will emit aliases for locations,
       // even if they are not printed.  This will have to be fixed upstream. For

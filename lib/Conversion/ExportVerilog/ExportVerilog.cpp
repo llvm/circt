@@ -226,35 +226,17 @@ static StringRef getPortVerilogName(Operation *module, PortInfo port) {
 static StringRef getPortVerilogName(Operation *module, size_t portArgNum) {
   if (auto htmo = dyn_cast<HWTestModuleOp>(module))
     return getPortVerilogName(module, htmo.getPortList().at(portArgNum));
-  auto numInputs = hw::getModuleNumInputs(module);
   // portArgNum is the index into the result of getAllModulePortInfos.
   // Also ensure the correct index into the input/output list is computed.
-  ssize_t portId = portArgNum;
   char verilogNameAttr[] = "hw.verilogName";
-  // Check for input ports.
-  if (portArgNum < numInputs) {
-    if (auto argAttr =
-            cast<mlir::FunctionOpInterface>(module).getArgAttrsAttr())
-      if (auto argDict = argAttr[portArgNum].cast<DictionaryAttr>())
-        if (auto updatedName = argDict.get(verilogNameAttr))
+   auto portAttr =
+            cast<HWModuleLike>(module).getAllPortAttrs();
+      if (auto portDict = cast_or_null<DictionaryAttr>(portAttr[portArgNum]))
+        if (auto updatedName = portDict.get(verilogNameAttr))
           return updatedName.cast<StringAttr>().getValue();
     // Get the original name of input port if no renaming.
-    return module->getAttrOfType<ArrayAttr>("argNames")[portArgNum]
-        .cast<StringAttr>()
-        .getValue();
+    return cast<HWModuleLike>(module).getHWModuleType().getName(portArgNum);
   }
-
-  // If its an output port, get the index into the output port array.
-  portId = portArgNum - numInputs;
-  if (auto argAttr = cast<mlir::FunctionOpInterface>(module).getResAttrsAttr())
-    if (auto argDict = argAttr[portId].cast<DictionaryAttr>())
-      if (auto updatedName = argDict.get(verilogNameAttr))
-        return updatedName.cast<StringAttr>().getValue();
-  // Get the original name of output port if no renaming.
-  return module->getAttrOfType<ArrayAttr>("resultNames")[portId]
-      .cast<StringAttr>()
-      .getValue();
-}
 
 /// This predicate returns true if the specified operation is considered a
 /// potentially inlinable Verilog expression.  These nodes always have a single

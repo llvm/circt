@@ -211,7 +211,10 @@ void SCModuleOp::print(OpAsmPrinter &p) {
 
   bool needArgNamesAttr = false;
   hw::module_like_impl::printModuleSignature(
-      p, *this, getFunctionType().getInputs(), false, {}, needArgNamesAttr);
+      p, *this, getFunctionType().getInputs(), false, {},
+      getArgAttrs() ? getArgAttrs()->getValue() : ArrayRef<Attribute>{},
+      getResAttrs() ? getResAttrs()->getValue() : ArrayRef<Attribute>{},
+      needArgNamesAttr);
   mlir::function_interface_impl::printFunctionAttributes(
       p, *this,
       {"portNames", getFunctionTypeAttrName(), getArgAttrsAttrName(),

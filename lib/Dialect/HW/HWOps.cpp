@@ -234,7 +234,7 @@ InnerSymAttr hw::getArgSym(Operation *op, unsigned i) {
   InnerSymAttr sym = {};
   auto argAttrs =
       op->getAttrOfType<ArrayAttr>(getArgAttrsName(op->getContext()));
-  if (argAttrs && (i < argAttrs.size()))
+  if (argAttrs && (i < argAttrs.size()) && argAttrs[i])
     if (auto s = argAttrs[i].cast<DictionaryAttr>())
       if (auto symRef = s.get("hw.exportPort"))
         sym = symRef.cast<InnerSymAttr>();
@@ -249,7 +249,7 @@ InnerSymAttr hw::getResultSym(Operation *op, unsigned i) {
   InnerSymAttr sym = {};
   auto resAttrs =
       op->getAttrOfType<ArrayAttr>(getResAttrsName(op->getContext()));
-  if (resAttrs && (i < resAttrs.size()))
+  if (resAttrs && (i < resAttrs.size()) && resAttrs[i])
     if (auto s = resAttrs[i].cast<DictionaryAttr>())
       if (auto symRef = s.get("hw.exportPort"))
         sym = symRef.cast<InnerSymAttr>();
@@ -551,6 +551,10 @@ FunctionType hw::getModuleType(Operation *moduleOrInstance) {
 
   assert(isAnyModule(moduleOrInstance) &&
          "must be called on instance or module");
+
+  if (auto mod = dyn_cast<HWModuleLike>(moduleOrInstance))
+    return mod.getHWModuleType().getFuncType();
+
   return cast<mlir::FunctionOpInterface>(moduleOrInstance)
       .getFunctionType()
       .cast<FunctionType>();
@@ -797,23 +801,19 @@ void hw::modifyModulePorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
     ArrayRef<unsigned> removeInputs, ArrayRef<unsigned> removeOutputs,
     Block *body) {
-  auto moduleOp = cast<mlir::FunctionOpInterface>(op);
+  auto moduleOp = cast<HWModuleLike>(op);
   auto *context = moduleOp.getContext();
-
-  auto arrayOrEmpty = [](ArrayAttr attr) {
-    return attr ? attr.getValue() : ArrayRef<Attribute>{};
-  };
 
   // Dig up the old argument and result data.
   auto oldArgNames = moduleOp->getAttrOfType<ArrayAttr>("argNames").getValue();
-  auto oldArgTypes = moduleOp.getArgumentTypes();
-  auto oldArgAttrs = arrayOrEmpty(moduleOp.getArgAttrsAttr());
+  auto oldArgTypes = moduleOp.getHWModuleType().getInputTypes();
+  auto oldArgAttrs = moduleOp.getAllInputAttrs();
   auto oldArgLocs = moduleOp->getAttrOfType<ArrayAttr>("argLocs").getValue();
 
   auto oldResultNames =
       moduleOp->getAttrOfType<ArrayAttr>("resultNames").getValue();
-  auto oldResultTypes = moduleOp.getResultTypes();
-  auto oldResultAttrs = arrayOrEmpty(moduleOp.getResAttrsAttr());
+  auto oldResultTypes = moduleOp.getHWModuleType().getOutputTypes();
+  auto oldResultAttrs = moduleOp.getAllOutputAttrs();
   auto oldResultLocs =
       moduleOp->getAttrOfType<ArrayAttr>("resultLocs").getValue();
 
@@ -833,12 +833,12 @@ void hw::modifyModulePorts(
                    newResultLocs);
 
   // Update the module operation types and attributes.
-  moduleOp.setType(FunctionType::get(context, newArgTypes, newResultTypes));
+  moduleOp.setFnType(FunctionType::get(context, newArgTypes, newResultTypes));
   moduleOp->setAttr("argNames", ArrayAttr::get(context, newArgNames));
-  moduleOp.setArgAttrsAttr(ArrayAttr::get(context, newArgAttrs));
+  moduleOp.setAllInputAttrs(ArrayAttr::get(context, newArgAttrs));
   moduleOp->setAttr("argLocs", ArrayAttr::get(context, newArgLocs));
   moduleOp->setAttr("resultNames", ArrayAttr::get(context, newResultNames));
-  moduleOp.setResAttrsAttr(ArrayAttr::get(context, newResultAttrs));
+  moduleOp.setAllOutputAttrs(ArrayAttr::get(context, newResultAttrs));
   moduleOp->setAttr("resultLocs", ArrayAttr::get(context, newResultLocs));
 }
 
@@ -1009,8 +1009,8 @@ ModulePortInfo hw::getOperationPortList(Operation *op) {
     if (argLocs)
       loc = argLocs[i].cast<LocationAttr>();
     DictionaryAttr attrs;
-    if (auto fi = dyn_cast<mlir::FunctionOpInterface>(op))
-      attrs = fi.getArgAttrDict(i);
+    if (auto fi = dyn_cast<HWModuleLike>(op))
+      attrs = cast_or_null<DictionaryAttr>(fi.getInputAttrs(i));
     inputs.push_back({{argNames[i].cast<StringAttr>(), type, direction},
                       i,
                       getArgSym(op, i),
@@ -1026,8 +1026,8 @@ ModulePortInfo hw::getOperationPortList(Operation *op) {
     if (resultLocs)
       loc = resultLocs[i].cast<LocationAttr>();
     DictionaryAttr attrs;
-    if (auto fi = dyn_cast<mlir::FunctionOpInterface>(op))
-      attrs = fi.getResultAttrDict(i);
+    if (auto fi = dyn_cast<HWModuleLike>(op))
+      attrs = cast_or_null<DictionaryAttr>(fi.getOutputAttrs(i));
     outputs.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
                         ModulePort::Direction::Output},
                        i,
@@ -1190,18 +1190,12 @@ ParseResult HWModuleGeneratedOp::parse(OpAsmParser &parser,
   return parseHWModuleOp<HWModuleGeneratedOp>(parser, result, GenMod);
 }
 
-FunctionType getHWModuleOpType(Operation *op) {
-  return cast<mlir::FunctionOpInterface>(op)
-      .getFunctionType()
-      .cast<FunctionType>();
-}
-
 template <typename ModuleTy>
 static void printModuleOp(OpAsmPrinter &p, Operation *op,
                           ExternModKind modKind) {
   using namespace mlir::function_interface_impl;
 
-  FunctionType fnType = getHWModuleOpType(op);
+  FunctionType fnType = cast<ModuleTy>(op).getFunctionType();
   auto argTypes = fnType.getInputs();
   auto resultTypes = fnType.getResults();
 
@@ -1223,8 +1217,14 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
   printOptionalParameterList(p, op, op->getAttrOfType<ArrayAttr>("parameters"));
 
   bool needArgNamesAttr = false;
-  module_like_impl::printModuleSignature(p, op, argTypes, /*isVariadic=*/false,
-                                         resultTypes, needArgNamesAttr);
+  auto mod = cast<ModuleTy>(op);
+  module_like_impl::printModuleSignature(
+      p, op, argTypes, /*isVariadic=*/false, resultTypes,
+      !mod.getArgAttrs() || mod.getArgAttrs()->empty() ? ArrayRef<Attribute>()
+                                : mod.getArgAttrs()->getValue(),
+      !mod.getResAttrs() || mod.getResAttrs()->empty() ? ArrayRef<Attribute>()
+                                : mod.getResAttrs()->getValue(),
+      needArgNamesAttr);
 
   SmallVector<StringRef, 3> omittedAttrs;
   if (modKind == GenMod)
@@ -1337,8 +1337,8 @@ LogicalResult HWModuleOp::verify() {
            << numInputs << " arguments to match module signature";
 
   // Verify that the block arguments match the op's attributes.
-  for (auto [arg, type, loc] :
-       llvm::zip(getArguments(), type.getInputs(), getArgLocs())) {
+  for (auto [arg, type, loc] : llvm::zip(getBodyBlock()->getArguments(),
+                                         type.getInputs(), getArgLocs())) {
     if (arg.getType() != type)
       return emitOpError("block argument types should match signature types");
     if (arg.getLoc() != loc.cast<LocationAttr>())
@@ -1423,7 +1423,7 @@ ModulePortInfo HWModuleGeneratedOp::getPortList() {
   return getOperationPortList(getOperation());
 }
 
-SmallVector<Location> HWModuleOp::getPortLocs() {
+SmallVector<Location> HWModuleOp::getAllPortLocs() {
   SmallVector<Location> retval;
   if (auto locs = getArgLocs()) {
     for (auto l : locs)
@@ -1444,23 +1444,39 @@ SmallVector<Location> HWModuleOp::getPortLocs() {
   return retval;
 }
 
-SmallVector<Location> HWModuleExternOp::getPortLocs() { return {}; }
+SmallVector<Location> HWModuleExternOp::getAllPortLocs() { return {}; }
 
-SmallVector<Location> HWModuleGeneratedOp::getPortLocs() { return {}; }
+SmallVector<Location> HWModuleGeneratedOp::getAllPortLocs() { return {}; }
+
+void HWModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
+  auto numInputs = getNumInputs();
+  SmallVector<Attribute> argLocs(locs.begin(), locs.begin() + numInputs);
+  SmallVector<Attribute> resLocs(locs.begin() + numInputs, locs.end());
+  setArgLocsAttr(ArrayAttr::get(getContext(), argLocs));
+  setResultLocsAttr(ArrayAttr::get(getContext(), resLocs));
+}
+
+void HWModuleExternOp::setAllPortLocs(ArrayRef<Location> locs) {
+  emitError("Locations on external modules not supported");
+}
+
+void HWModuleGeneratedOp::setAllPortLocs(ArrayRef<Location> locs) {
+  emitError("Locations on external modules not supported");
+}
 
 template <typename ModTy>
-static SmallVector<ArrayAttr> getPortAttrs(ModTy &mod) {
-  SmallVector<ArrayAttr> retval;
+static SmallVector<Attribute> getAllPortAttrs(ModTy &mod) {
+  SmallVector<Attribute> retval;
   if (auto attrs = mod.getArgAttrs()) {
     for (auto a : *attrs)
-      retval.push_back(cast<ArrayAttr>(a));
+      retval.push_back(a);
   } else {
     for (unsigned i = 0, e = mod.getNumInputs(); i < e; ++i)
       retval.push_back({});
   }
   if (auto attrs = mod.getResAttrs()) {
     for (auto a : *attrs)
-      retval.push_back(cast<ArrayAttr>(a));
+      retval.push_back(a);
   } else {
     for (unsigned i = 0, e = mod.getNumOutputs(); i < e; ++i)
       retval.push_back({});
@@ -1468,16 +1484,37 @@ static SmallVector<ArrayAttr> getPortAttrs(ModTy &mod) {
   return retval;
 }
 
-SmallVector<ArrayAttr> HWModuleOp::getPortAttrs() {
-  return ::getPortAttrs(*this);
+SmallVector<Attribute> HWModuleOp::getAllPortAttrs() {
+  return ::getAllPortAttrs(*this);
 }
 
-SmallVector<ArrayAttr> HWModuleExternOp::getPortAttrs() {
-  return ::getPortAttrs(*this);
+SmallVector<Attribute> HWModuleExternOp::getAllPortAttrs() {
+  return ::getAllPortAttrs(*this);
 }
 
-SmallVector<ArrayAttr> HWModuleGeneratedOp::getPortAttrs() {
-  return ::getPortAttrs(*this);
+SmallVector<Attribute> HWModuleGeneratedOp::getAllPortAttrs() {
+  return ::getAllPortAttrs(*this);
+}
+
+template <typename ModTy>
+static void setAllPortAttrs(ModTy &mod, ArrayRef<Attribute> attrs) {
+  auto numInputs = mod.getNumInputs();
+  SmallVector<Attribute> argAttrs(attrs.begin(), attrs.begin() + numInputs);
+  SmallVector<Attribute> resAttrs(attrs.begin() + numInputs, attrs.end());
+  mod.setArgAttrsAttr(ArrayAttr::get(mod.getContext(), argAttrs));
+  mod.setResAttrsAttr(ArrayAttr::get(mod.getContext(), resAttrs));
+}
+
+void HWModuleOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
+  return ::setAllPortAttrs(*this, attrs);
+}
+
+void HWModuleExternOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
+  return ::setAllPortAttrs(*this, attrs);
+}
+
+void HWModuleGeneratedOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
+  return ::setAllPortAttrs(*this, attrs);
 }
 
 /// Lookup the generator for the symbol.  This returns null on
@@ -1775,22 +1812,22 @@ GlobalRefOp::verifySymbolUses(mlir::SymbolTableCollection &symTables) {
       // TODO: Doesn't yet work for symbls on FIRRTL module ports. Need to
       // implement an interface.
       if (isa<HWModuleOp, HWModuleExternOp>(mod)) {
-        if (auto argAttrs =
-                cast<mlir::FunctionOpInterface>(mod).getArgAttrsAttr())
+        auto argAttrs =
+                cast<HWModuleLike>(mod).getAllInputAttrs();
           for (auto attr :
-               argAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
-            if (auto symRef = attr.getAs<hw::InnerSymAttr>("hw.exportPort"))
+               argAttrs)
+            if (auto symRef = cast<DictionaryAttr>(attr).getAs<hw::InnerSymAttr>("hw.exportPort"))
               if (symRef.getSymName() == symName)
-                if (hasGlobalRef(attr.get(GlobalRefAttr::DialectAttrName)))
+                if (hasGlobalRef(cast<DictionaryAttr>(attr).get(GlobalRefAttr::DialectAttrName)))
                   return success();
 
-        if (auto resAttrs =
-                cast<mlir::FunctionOpInterface>(mod).getResAttrsAttr())
+        auto resAttrs =
+                cast<HWModuleLike>(mod).getAllOutputAttrs();
           for (auto attr :
-               resAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
-            if (auto symRef = attr.getAs<hw::InnerSymAttr>("hw.exportPort"))
+               resAttrs)
+            if (auto symRef = cast<DictionaryAttr>(attr).getAs<hw::InnerSymAttr>("hw.exportPort"))
               if (symRef.getSymName() == symName)
-                if (hasGlobalRef(attr.get(GlobalRefAttr::DialectAttrName)))
+                if (hasGlobalRef(cast<DictionaryAttr>(attr).get(GlobalRefAttr::DialectAttrName)))
                   return success();
       }
     }

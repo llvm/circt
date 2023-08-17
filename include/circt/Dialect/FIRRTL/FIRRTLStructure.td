@@ -104,7 +104,7 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
     }
 
 
-    SmallVector<Location> $cppClass::getPortLocs() {
+    SmallVector<Location> $cppClass::getAllPortLocs() {
       SmallVector<Location> retval;
         for (auto l : getPortLocations())
           retval.push_back(cast<Location>(l));
@@ -112,8 +112,8 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
     }
 
     // Don't count annotations as attributes
-    SmallVector<ArrayAttr> $cppClass::getPortAttrs() {
-      SmallVector<ArrayAttr> retval;
+    SmallVector<Attribute> $cppClass::getAllPortAttrs() {
+      SmallVector<Attribute> retval;
       for (unsigned i = 0, e = getNumPorts(); i < e; ++i)
           retval.push_back({});
       return retval;

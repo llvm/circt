@@ -40,13 +40,47 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     "::circt::hw::ModuleType", "getHWModuleType", (ins)>,
 
     InterfaceMethod<"Get the port Attributes",
-    "SmallVector<ArrayAttr>", "getPortAttrs", (ins)>,
+    "SmallVector<Attribute>", "getAllPortAttrs", (ins)>,
+
+    InterfaceMethod<"Set the port Attributes",
+    "void", "setAllPortAttrs", (ins "ArrayRef<Attribute>":$attrs)>,
 
     InterfaceMethod<"Get the port Locations",
-    "SmallVector<Location>", "getPortLocs", (ins)>,
+    "SmallVector<Location>", "getAllPortLocs", (ins)>,
+
+    InterfaceMethod<"Set the port Locations",
+    "void", "setAllPortLocs", (ins "ArrayRef<Location>":$locs)>,
+
   ];
 
   let extraSharedClassDeclaration = [{
+
+    void setFnType(Type newType) {
+      unsigned oldNumArgs = getNumInputs();
+      unsigned oldNumResults = getNumOutputs();
+      $_op->setAttr("function_type", TypeAttr::get(newType));
+      unsigned newNumArgs = getNumInputs();
+      unsigned newNumResults = getNumOutputs();
+
+      if (oldNumArgs == newNumArgs && oldNumResults == newNumResults)
+        return;
+
+      // Functor used to update the argument and result attributes of the function.
+      auto emptyDict = DictionaryAttr::get($_op->getContext());
+
+      SmallVector<Attribute> attrs, oldArgAttrs, oldResAttrs;
+      oldArgAttrs = $_op.getAllInputAttrs();
+      oldResAttrs = $_op.getAllOutputAttrs();
+
+      // The new type has less arguments/results, take the first N attributes.
+      oldArgAttrs.resize(newNumArgs, emptyDict);
+      oldResAttrs.resize(newNumResults, emptyDict);
+      for (auto a : oldArgAttrs)
+        attrs.push_back(cast_or_null<DictionaryAttr>(a));
+      for (auto a : oldResAttrs)
+        attrs.push_back(cast_or_null<DictionaryAttr>(a));
+      $_op.setAllPortAttrs(attrs);
+    }
 
     /// Return the region containing the body of this function.
     Region &getModuleBody() { return $_op->getRegion(0); }
@@ -86,7 +120,7 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     SmallVector<StringAttr> getOutputNames() {
       return $_op.getHWModuleType().getOutputNames();
     }
-    
+
     // Get the name for the specified input or inout port
     StringRef getInputName(size_t idx) {
       return $_op.getHWModuleType().getInputName(idx);
@@ -105,12 +139,76 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       return $_op.getHWModuleType().getOutputNameAttr(idx);
     }
 
-    ArrayAttr getPortAttr(size_t idx) {
-      return $_op.getPortAttrs()[idx];
+    Attribute getPortAttrs(size_t idx) {
+      return $_op.getAllPortAttrs()[idx];
+    }
+
+    SmallVector<Attribute> getAllInputAttrs() {
+      auto attrs = $_op.getAllPortAttrs();
+      SmallVector<Attribute> retval;
+      for (unsigned x = 0, e = $_op.getNumInputs(); x < e; ++x)
+        retval.push_back(attrs[$_op.getHWModuleType().getPortIdForInputId(x)]);
+      return retval;
+    }
+
+    SmallVector<Attribute> getAllOutputAttrs() {
+      auto attrs = $_op.getAllPortAttrs();
+      SmallVector<Attribute> retval;
+      for (unsigned x = 0, e = $_op.getNumOutputs(); x < e; ++x)
+        retval.push_back(attrs[$_op.getHWModuleType().getPortIdForOutputId(x)]);
+      return retval;
+    }
+
+    void setAllInputAttrs(ArrayRef<Attribute> attrs) {
+      SmallVector<Attribute> retval(attrs.begin(), attrs.end());
+      auto resAttrs = $_op.getAllOutputAttrs();
+      retval.append(resAttrs.begin(), resAttrs.end());
+      $_op.setAllPortAttrs(retval);
+    }
+
+    void setAllOutputAttrs(ArrayRef<Attribute> attrs) {
+      SmallVector<Attribute> retval = $_op.getAllInputAttrs();
+      auto argAttrs = $_op.getAllInputAttrs();
+      retval.append(argAttrs.begin(), argAttrs.end());
+      $_op.setAllPortAttrs(retval);
+    }
+
+    Attribute getInputAttrs(size_t idx) {
+      return $_op.getAllPortAttrs()[$_op.getHWModuleType().getPortIdForInputId(idx)];
+    }
+
+    Attribute getOutputAttrs(size_t idx) {
+      return $_op.getAllPortAttrs()[$_op.getHWModuleType().getPortIdForOutputId(idx)];
+    }
+
+    void setPortAttrs(size_t idx, DictionaryAttr attr) {
+      auto attrs = $_op.getAllPortAttrs();
+      attrs[idx] = attr;
+      $_op.setAllPortAttrs(attrs);
+    }
+
+    void setPortAttr(size_t idx, StringAttr name, Attribute value) {
+      auto attrs = $_op.getAllPortAttrs();
+      NamedAttrList pattr(cast_or_null<DictionaryAttr>(attrs[idx]));
+      Attribute oldValue;
+      if (!value)
+        oldValue = pattr.erase(name);
+      else
+        oldValue = pattr.set(name, value);
+      if (oldValue != value) {
+        attrs[idx] = pattr.getDictionary($_op.getContext());
+        $_op.setAllPortAttrs(attrs);
+      }
     }
 
     Location getPortLoc(size_t idx) {
-      return $_op.getPortLocs()[idx];
+      return $_op.getAllPortLocs()[idx];
+    }
+
+    void setPortLoc(size_t idx, Location loc) {
+      auto locs = $_op.getAllPortLocs();
+      locs[idx] = loc;
+      return $_op.setAllPortLocs(locs);
     }
 
   }];

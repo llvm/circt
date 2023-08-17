@@ -24,10 +24,11 @@ static hw::StructType getStructType(Type type) {
 }
 
 // Legal if no in- or output type is a struct.
-static bool isLegalFuncLikeOp(FunctionOpInterface moduleLikeOp) {
-  bool legalResults =
-      llvm::none_of(moduleLikeOp.getResultTypes(), isStructType);
-  bool legalArgs = llvm::none_of(moduleLikeOp.getArgumentTypes(), isStructType);
+static bool isLegalFuncLikeOp(hw::HWModuleLike moduleLikeOp) {
+  bool legalResults = llvm::none_of(
+      moduleLikeOp.getHWModuleType().getOutputTypes(), isStructType);
+  bool legalArgs = llvm::none_of(moduleLikeOp.getHWModuleType().getInputTypes(),
+                                 isStructType);
 
   return legalResults && legalArgs;
 }
@@ -187,7 +188,7 @@ static void addSignatureConversion(DenseMap<Operation *, IOInfo> &ioMap,
   // top-level i/o. This ensures that only a single level of structs are
   // processed during signature conversion, which then allows us to use the
   // signature conversion in a recursive manner.
-  target.addDynamicallyLegalOp<TOp...>([&](FunctionOpInterface moduleLikeOp) {
+  target.addDynamicallyLegalOp<TOp...>([&](hw::HWModuleLike moduleLikeOp) {
     if (isLegalFuncLikeOp(moduleLikeOp))
       return true;
 
@@ -207,8 +208,10 @@ static void addSignatureConversion(DenseMap<Operation *, IOInfo> &ioMap,
         return oldType != newType;
       });
     };
-    if (compareTypes(moduleLikeOp.getResultTypes(), ioInfo.resTypes) ||
-        compareTypes(moduleLikeOp.getArgumentTypes(), ioInfo.argTypes))
+    if (compareTypes(moduleLikeOp.getHWModuleType().getOutputTypes(),
+                     ioInfo.resTypes) ||
+        compareTypes(moduleLikeOp.getHWModuleType().getInputTypes(),
+                     ioInfo.argTypes))
       return true;
 
     // We're pre-conversion for an op that was primed in the map - it will
@@ -255,10 +258,10 @@ static void updateNameAttribute(Operation *op, StringRef attrName,
   op->setAttr(attrName, ArrayAttr::get(op->getContext(), newNames));
 }
 
-static void updateLocAttribute(FunctionOpInterface op, StringRef attrName,
+static void updateLocAttribute(Operation *op, StringRef attrName,
                                DenseMap<unsigned, hw::StructType> &structMap) {
   llvm::SmallVector<Attribute> newLocs;
-  auto oldLocs = op.getOperation()->getAttrOfType<ArrayAttr>(attrName);
+  auto oldLocs = op->getAttrOfType<ArrayAttr>(attrName);
   if (!oldLocs)
     return;
   for (auto [i, oldLoc] : llvm::enumerate(oldLocs)) {
@@ -274,21 +277,20 @@ static void updateLocAttribute(FunctionOpInterface op, StringRef attrName,
     for (size_t i = 0, e = structType.getElements().size(); i < e; ++i)
       newLocs.push_back(oldLoc);
   }
-  op.getOperation()->setAttr(attrName,
-                             ArrayAttr::get(op.getContext(), newLocs));
+  op->setAttr(attrName, ArrayAttr::get(op->getContext(), newLocs));
 }
 
 /// The conversion framework seems to throw away block argument locations.  We
 /// use this function to copy the location from the original argument to the
 /// set of flattened arguments.
 static void
-updateBlockLocations(FunctionOpInterface op, StringRef attrName,
+updateBlockLocations(hw::HWModuleLike op, StringRef attrName,
                      DenseMap<unsigned, hw::StructType> &structMap) {
   auto locs = op.getOperation()->getAttrOfType<ArrayAttr>(attrName);
   if (!locs)
     return;
-  for (auto [arg, loc] :
-       llvm::zip(op.getArguments(), locs.getAsRange<LocationAttr>()))
+  for (auto [arg, loc] : llvm::zip(op.getBodyBlock()->getArguments(),
+                                   locs.getAsRange<LocationAttr>()))
     arg.setLoc(loc);
 }
 

@@ -41,7 +41,9 @@ ParseResult parseModuleFunctionSignature(
 /// Print a module signature with named results.
 void printModuleSignature(OpAsmPrinter &p, Operation *op,
                           ArrayRef<Type> argTypes, bool isVariadic,
-                          ArrayRef<Type> resultTypes, bool &needArgNamesAttr);
+                          ArrayRef<Type> resultTypes,
+                          ArrayRef<Attribute> argAttrs,
+                          ArrayRef<Attribute> resAttrs, bool &needArgNamesAttr);
 
 /// New Style parsing
 ParseResult parseModuleSignature(OpAsmParser &parser,
